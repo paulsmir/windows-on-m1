@@ -72,6 +72,17 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertNotIn("\nFS3:\\", text)
         self.assertNotIn("clean\n", text.lower())
 
+    def test_asahi_installer_owns_the_initial_disk_resize(self):
+        text = (ROOT / "documentation/INSTALL.md").read_text(encoding="utf-8")
+        normalized = " ".join(text.split())
+        self.assertIn("The Asahi installer performs the APFS shrink", normalized)
+        self.assertIn("Do not shrink the APFS container manually", normalized)
+        self.assertNotIn("Use macOS tools to shrink", text)
+        self.assertLess(
+            text.index("Run the official Asahi installer"),
+            text.index("create partition msr size=16"),
+        )
+
     def test_run_guide_preserves_both_modes_and_truthful_status(self):
         text = (ROOT / "documentation/RUN.md").read_text(encoding="utf-8")
         standalone = text.index("## Standalone mode")

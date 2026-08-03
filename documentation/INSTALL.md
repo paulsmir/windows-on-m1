@@ -11,13 +11,16 @@ but is not a standalone runtime dependency.
 ## Safety model
 
 Back up all data before starting. Keep macOS and Apple Recovery intact. The Windows
-partitions must be created only in space that macOS already reports as unallocated.
+partitions must be created only in the unallocated space produced by the official Asahi
+installer. Do not resize the APFS container separately with Disk Utility or `diskutil`.
 
 Never run DiskPart `clean` on the internal SSD. Never delete or format an existing Apple,
 macOS, Recovery, or Asahi partition because its type is shown as `Unknown` by WinPE. Disk
 and partition numbers in the examples are observations, not identifiers.
 
-The project intentionally does not automate internal-SSD repartitioning.
+The project intentionally does not automate internal-SSD repartitioning. The official Asahi
+installer owns the initial APFS resize and creation of the Apple-authorized boot environment;
+WinPE later partitions only the unallocated Windows extent.
 
 ## What the installation media does
 
@@ -31,36 +34,40 @@ two purposes:
 and open Command Prompt with `Shift+F10`. Partitioning, image application, and boot-file
 creation are performed manually in that command prompt.
 
-## 1. Back up and reserve free space from macOS
+## 1. Back up and provision the Apple-authorized UEFI environment
 
-Create a tested external backup. Inspect the current container and partitions:
+Before preparing Windows media or running any Windows partitioning command, create a tested
+external backup. Run the official Asahi installer from macOS. The Asahi installer performs
+the APFS shrink; this is the step that reduces the macOS allocation and makes room for the
+UEFI boot environment and Windows. Do not shrink the APFS container manually before or after
+this step.
+
+Inspect the starting layout for reference only:
 
 ```sh
 diskutil list
 diskutil apfs list
 ```
 
-Use macOS tools to shrink the macOS allocation and leave the intended Windows capacity as
-unallocated space. Do not create an exFAT Windows target in macOS; WinPE will create the
-required GPT partitions in the free extent.
+In the Asahi installer, select the option that provisions a UEFI environment for another
+operating system (the UEFI-only installation, not an Asahi Linux desktop or minimal Linux
+system). Use the installer's sizing flow to free the total capacity intended for the small
+Asahi boot environment plus Windows. The installer creates the required boot container and
+ESP; the remaining intended Windows capacity must stay unallocated. Do not create an exFAT
+Windows target in macOS because WinPE will create the Windows GPT partitions later.
 
 Record the sizes and roles of every existing partition. Photographs or a text capture of
 `diskutil list` are useful during WinPE, where Apple partitions may be reported as unknown.
 
-## 2. Provision the Apple-authorized UEFI boot entry
-
-Run the official Asahi installer from macOS and select an installation mode that provisions
-the UEFI environment for another operating system. Allocate only the boot-container space
-requested by Asahi and preserve the separate unallocated extent intended for Windows.
-
 Complete the reboot requested by the Asahi installer. This reboot establishes the boot
 policy and second-stage files; stopping before it leaves an incomplete boot entry. Once the
-UEFI entry has booted successfully, return to macOS.
+UEFI entry has booted successfully, return to macOS and verify the resulting layout with
+`diskutil list` before continuing.
 
 Linux is not required as the Windows runtime. Asahi is used here to create an
 Apple-authorized boot chain and ESP layout.
 
-## 3. Obtain the project
+## 2. Obtain the project
 
 Either unpack a checksummed release or clone the coordinator and both pinned forks:
 
@@ -73,7 +80,7 @@ git submodule status --recursive
 Build `dist/j313/boot.bin` by following [BUILD.md](BUILD.md), or place the matching release
 artifact there and verify its published SHA-256 checksum.
 
-## 4. Identify the Asahi ESP and install the standalone image
+## 3. Identify the Asahi ESP and install the standalone image
 
 List disks from macOS:
 
@@ -102,7 +109,7 @@ Rollback from macOS is:
 sudo scripts/install-esp.sh restore --disk diskXsY
 ```
 
-## 5. Prepare the Windows ARM64 USB device
+## 4. Prepare the Windows ARM64 USB device
 
 On macOS, use Disk Utility to erase the USB device as GUID Partition Map plus exFAT. Mount a
 Windows 11 ARM64 ISO and copy every file and directory from the mounted ISO to the USB root.
@@ -120,7 +127,7 @@ Verify at least these paths:
 <USB>/sources/install.wim
 ```
 
-## 6. Start the USB WinPE environment
+## 5. Start the USB WinPE environment
 
 Connect the USB device through the guest-visible USB-C port or hub and boot the Asahi UEFI
 entry. If Mu does not select the USB loader automatically, use its shell:
@@ -152,7 +159,7 @@ the USB or Windows ESP was sometimes `FS3:`, but that value is not stable.
 When graphical Windows Setup appears, press `Shift+F10`. Some compact keyboards require
 `Fn+Shift+F10`. The remaining installation is performed in Command Prompt.
 
-## 7. Identify disks and existing partitions
+## 6. Identify disks and existing partitions
 
 Start DiskPart:
 
@@ -170,9 +177,10 @@ size and existing partition layout. On the validated 256 GB machine WinPE report
 233 GB total, about 111 GB free, and the USB as a separate roughly 14 GB disk.
 
 Existing Apple/Asahi partitions appeared as `Unknown`; this is not permission to alter them.
-Continue only when the unallocated extent matches the space reserved earlier in macOS.
+Continue only when the unallocated extent matches the Windows space created by the Asahi
+installer.
 
-## 8. Create the Windows partitions in the free extent
+## 7. Create the Windows partitions in the free extent
 
 The following commands assume the reviewed internal SSD is currently selected and its
 unallocated extent is large enough. They create a 16 MiB Microsoft Reserved partition, a
@@ -213,7 +221,7 @@ assign letter=S
 exit
 ```
 
-## 9. Locate the WIM and choose the Windows edition
+## 8. Locate the WIM and choose the Windows edition
 
 Drive letters can change after every boot. Locate the USB source by inspecting likely
 volumes with `dir`, then verify the file explicitly. For example:
@@ -232,7 +240,7 @@ Choose the index whose `Name` matches the desired Windows edition. Index 3 happe
 select the intended edition in one ISO, but indexes are ISO-specific and must not be copied
 from another installation.
 
-## 10. Apply Windows to the NTFS partition
+## 9. Apply Windows to the NTFS partition
 
 Replace `N` with the index obtained above and replace `C:` if the USB has another letter:
 
@@ -251,7 +259,7 @@ Verify the target:
 dir W:\Windows\System32\winload.efi
 ```
 
-## 11. Create BCD and the architecture fallback loader
+## 10. Create BCD and the architecture fallback loader
 
 Create Windows boot files on the new Windows ESP:
 
@@ -274,7 +282,7 @@ bcdedit /store S:\EFI\Microsoft\Boot\BCD /enum {bootmgr}
 The fallback path is important because Mu's installed-system policy searches internal block
 devices for `\EFI\BOOT\BOOTAA64.EFI` and does not depend on persistent UEFI `BootOrder`.
 
-## 12. Boot the installed Windows system
+## 11. Boot the installed Windows system
 
 Remove the Windows USB device and reboot the Air. The intended standalone chain is:
 
@@ -295,7 +303,7 @@ dir EFI\BOOT\BOOTAA64.EFI
 EFI\BOOT\BOOTAA64.EFI
 ```
 
-## 13. Complete OOBE with a local account
+## 12. Complete OOBE with a local account
 
 The validated installation could not complete the online Microsoft-account path reliably.
 At the OOBE screen, press `Shift+F10` or `Fn+Shift+F10` and run:
