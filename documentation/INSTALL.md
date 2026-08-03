@@ -37,32 +37,109 @@ creation are performed manually in that command prompt.
 ## 1. Back up and provision the Apple-authorized UEFI environment
 
 Before preparing Windows media or running any Windows partitioning command, create a tested
-external backup. Run the official Asahi installer from macOS. The Asahi installer performs
-the APFS shrink; this is the step that reduces the macOS allocation and makes room for the
-UEFI boot environment and Windows. Do not shrink the APFS container manually before or after
-this step.
-
-Inspect the starting layout for reference only:
+external backup. Connect the MacBook to power and make sure macOS has a working internet
+connection. Record the starting layout before downloading the installer:
 
 ```sh
 diskutil list
 diskutil apfs list
 ```
 
-In the Asahi installer, select the option that provisions a UEFI environment for another
-operating system (the UEFI-only installation, not an Asahi Linux desktop or minimal Linux
-system). Use the installer's sizing flow to free the total capacity intended for the small
-Asahi boot environment plus Windows. The installer creates the required boot container and
-ESP; the remaining intended Windows capacity must stay unallocated. Do not create an exFAT
-Windows target in macOS because WinPE will create the Windows GPT partitions later.
+Save this output with the backup notes; it is the reference used later to distinguish Apple,
+Asahi, and free-space extents. The Asahi installer is an online bootstrap rather than a DMG
+or an application download. Open Terminal in macOS and run the command published by the
+[official Asahi m1n1 guide](https://asahilinux.org/docs/sw/tethered-boot/):
 
-Record the sizes and roles of every existing partition. Photographs or a text capture of
-`diskutil list` are useful during WinPE, where Apple partitions may be reported as unknown.
+```sh
+curl https://alx.sh | sh
+```
 
-Complete the reboot requested by the Asahi installer. This reboot establishes the boot
-policy and second-stage files; stopping before it leaves an incomplete boot entry. Once the
-UEFI entry has booted successfully, return to macOS and verify the resulting layout with
-`diskutil list` before continuing.
+This command downloads the current installer and starts it immediately. Read its warnings
+and press Return only after confirming that the displayed machine and system disk are the
+expected ones. Do not enable Expert Mode; the normal UEFI-only profile provides everything
+this project needs.
+
+### Stage A: resize APFS and create the UEFI-only installation from macOS
+
+The online catalog and its numeric indexes can change. Match the labels below instead of
+copying an option number from this guide.
+
+1. At `Choose what to do`, select `Resize an existing partition to make space for a new OS`.
+2. Select the existing macOS APFS container that contains `Macintosh HD`. Do not select the
+   system Recovery container, an EFI partition, or an external disk.
+3. The installer shows the allowed size range. Enter the new size to retain for macOS. The
+   amount released must cover both the UEFI-only environment and the desired Windows
+   capacity. In other words:
+
+   ```text
+   released space = UEFI-only minimum shown by Asahi + desired Windows size
+   ```
+
+4. Review the old size, new macOS size, and resulting free space, then confirm the resize.
+   Wait for it to finish. Do not interrupt the Mac and do not run a second resize command.
+5. When the installer returns to `Choose what to do`, select `Install an OS into free space`.
+6. At `Choose an OS to install`, select
+   `UEFI environment only (m1n1 + U-Boot + ESP)`. Do not select Fedora, a desktop image, a
+   minimal Linux image, or tethered/proxy-only developer mode.
+7. Give the new entry a recognizable name such as `Windows`. This is the name to look for in
+   Apple Startup Options later.
+8. When the UEFI-only profile offers to reserve space for the future OS, leave the intended
+   Windows capacity unpartitioned. Allocate only the boot environment requested by the
+   installer. The official platform documentation explicitly describes this mode as creating
+   a UEFI environment while leaving unpartitioned space for another OS installer:
+   [Open OS Platform Interoperability](https://asahilinux.org/docs/platform/open-os-interop/).
+9. Review the final partition summary. It must preserve macOS and Recovery, create the small
+   Asahi stub/boot container and ESP, and leave the Windows extent free. Confirm only when
+   that summary matches the intended layout.
+
+The Asahi installer performs the APFS shrink; this is the step that reduces the macOS
+allocation and makes room for the UEFI boot environment and Windows. Do not shrink the APFS
+container manually before or after this step.
+
+Do not create an exFAT Windows target in macOS because WinPE will create the Windows GPT
+partitions later.
+
+### Stage B: finish the installation in paired 1TR recovery
+
+Partitioning is only the first stage. m1n1 stage 1 and the Apple boot policy are installed
+from One True Recovery (1TR); merely running the Terminal command and returning to macOS
+does not create a complete bootable entry.
+
+1. Follow the installer's final instructions and fully shut down the Mac. Do not choose a
+   normal restart. Wait about 15 seconds after the display and keyboard backlight turn off.
+2. Press and keep holding the physical power/Touch ID button. Release it only after
+   `Loading startup options` appears.
+3. In Startup Options, select the newly created volume named `Windows` (or the name entered
+   in Stage A). Do not select `Macintosh HD`, and do not select the generic `Options` item for
+   this step.
+4. The selected volume enters its paired recovery environment and launches
+   `Finish Installation`. Authenticate with the requested macOS machine-owner credentials.
+   This must be an administrator who is registered as an owner of the Mac.
+5. Follow every `Finish Installation` prompt. Allow it to create the reduced/permissive boot
+   policy and install m1n1 stage 1. Do not close the window, power off, or return to Startup
+   Options while it is writing the policy.
+6. Let the finishing stage reboot or shut down the machine when it says it is complete.
+   If it returns to macOS instead of entering UEFI, shut down, hold the power button to open
+   Startup Options again, and select the new `Windows` volume. Do not repeat Stage A.
+
+Entering 1TR by holding the physical power button and authenticating is an Apple security
+requirement for changing a boot policy; an ordinary Recovery boot is not equivalent. See
+[Apple Silicon Platform Security](https://asahilinux.org/docs/platform/security/).
+
+### First stock UEFI boot and return to macOS
+
+The first successful boot must use the stock Asahi UEFI environment before this project's
+stage 2 is installed. The UEFI-only profile contains m1n1, U-Boot, and an ESP. Without a
+bootable USB device it may stop at a U-Boot/UEFI menu or shell; seeing that output confirms
+that the Apple-authorized stage 1 and boot policy work.
+
+To return to macOS after this check:
+
+1. Shut down the Mac completely.
+2. Hold the power button until `Loading startup options` appears.
+3. Select `Macintosh HD` and let macOS boot normally.
+4. Run `diskutil list` and verify that the small Asahi boot container/ESP exists and that the
+   intended Windows extent is still unallocated.
 
 Linux is not required as the Windows runtime. Asahi is used here to create an
 Apple-authorized boot chain and ESP layout.
@@ -96,6 +173,13 @@ sudo scripts/install-esp.sh inspect --disk diskXsY
 sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin
 ```
 
+The `inspect` command must show the existing stock Asahi `m1n1/boot.bin`. If that path is
+absent, the selected partition is not the expected ESP; stop and inspect the layout again.
+
+This replacement does not modify the Apple-authorized stage 1 or repeat the 1TR boot-policy
+operation. Stage 1 remains in the Asahi stub environment. The script replaces only stage 2
+at `<ESP>/m1n1/boot.bin`, which is why the change is reversible from macOS.
+
 `install` validates the embedded standalone manifest, creates the original backup once at
 `/var/backups/m1n1-windows/diskXsY.boot.bin.original`, writes through a temporary sibling,
 renames atomically, synchronizes, and verifies SHA-256.
@@ -108,6 +192,20 @@ Rollback from macOS is:
 ```sh
 sudo scripts/install-esp.sh restore --disk diskXsY
 ```
+
+### First boot with this project's stage 2
+
+1. Shut down the Air. For a standalone test, disconnect the development host USB cable. For
+   Windows installation, connect only the prepared Windows ARM64 USB device and the required
+   keyboard/mouse hub.
+2. Hold the power button until `Loading startup options` appears and select the `Windows`
+   UEFI entry created by Asahi. If that entry is already the default, subsequent ordinary
+   power-on boots can enter it automatically.
+3. The project `boot.bin` opens a short debug-host maintenance window. With no host attached,
+   it automatically starts the embedded Mu firmware. Mu then boots the Windows USB installer
+   or, after Windows has been installed, the internal `\\EFI\\BOOT\\BOOTAA64.EFI`.
+4. If the project image does not start, return to `Macintosh HD` through Startup Options and
+   run the rollback command above. Do not repartition the disk to recover stage 2.
 
 ## 4. Prepare the Windows ARM64 USB device
 

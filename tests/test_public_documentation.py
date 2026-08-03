@@ -75,13 +75,39 @@ class PublicDocumentationTests(unittest.TestCase):
     def test_asahi_installer_owns_the_initial_disk_resize(self):
         text = (ROOT / "documentation/INSTALL.md").read_text(encoding="utf-8")
         normalized = " ".join(text.split())
-        self.assertIn("The Asahi installer performs the APFS shrink", normalized)
-        self.assertIn("Do not shrink the APFS container manually", normalized)
-        self.assertNotIn("Use macOS tools to shrink", text)
-        self.assertLess(
-            text.index("Run the official Asahi installer"),
-            text.index("create partition msr size=16"),
+        required = (
+            "curl https://alx.sh | sh",
+            "Resize an existing partition to make space for a new OS",
+            "Install an OS into free space",
+            "UEFI environment only (m1n1 + U-Boot + ESP)",
+            "Do not enable Expert Mode",
+            "The Asahi installer performs the APFS shrink",
+            "Do not shrink the APFS container manually",
+            "Loading startup options",
+            "Finish Installation",
+            "machine-owner credentials",
+            "stock Asahi UEFI environment",
+            "Macintosh HD",
+            "sudo scripts/install-esp.sh inspect --disk diskXsY",
+            "sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin",
+            "sudo scripts/install-esp.sh restore --disk diskXsY",
         )
+        for token in required:
+            self.assertIn(token, normalized)
+        self.assertNotIn("Use macOS tools to shrink", text)
+        order = tuple(normalized.index(token) for token in (
+            "curl https://alx.sh | sh",
+            "Resize an existing partition to make space for a new OS",
+            "Install an OS into free space",
+            "UEFI environment only (m1n1 + U-Boot + ESP)",
+            "Loading startup options",
+            "Finish Installation",
+            "stock Asahi UEFI environment",
+            "Select `Macintosh HD` and let macOS boot normally",
+            "sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin",
+            "create partition msr size=16",
+        ))
+        self.assertEqual(order, tuple(sorted(order)))
 
     def test_run_guide_preserves_both_modes_and_truthful_status(self):
         text = (ROOT / "documentation/RUN.md").read_text(encoding="utf-8")
