@@ -1,0 +1,53 @@
+Windows 11 ARM64 manual deployment command reference
+====================================================
+
+This is a typing reference for the procedure explained in documentation/INSTALL.md. Review disk,
+partition, volume, and drive-letter identities before running any command.
+
+Disk inspection
+---------------
+diskpart
+list disk
+list volume
+select disk 0
+detail disk
+list partition
+
+Create partitions only in the pre-reviewed unallocated extent
+--------------------------------------------------------------
+create partition msr size=16
+create partition efi size=512
+format quick fs=fat32 label=WINESP
+assign letter=S
+create partition primary
+format quick fs=ntfs label=Windows
+assign letter=W
+list partition
+list volume
+exit
+
+Select an edition and apply it
+------------------------------
+dism /Get-WimInfo /WimFile:C:\sources\install.wim
+dism /Apply-Image /ImageFile:C:\sources\install.wim /Index:N /ApplyDir:W:\
+
+Create and verify boot files
+----------------------------
+bcdboot W:\Windows /s S: /f UEFI /v
+mkdir S:\EFI\BOOT
+copy /y S:\EFI\Microsoft\Boot\bootmgfw.efi S:\EFI\BOOT\BOOTAA64.EFI
+dir S:\EFI\BOOT\BOOTAA64.EFI
+dir S:\EFI\Microsoft\Boot\BCD
+bcdedit /store S:\EFI\Microsoft\Boot\BCD /enum {bootmgr}
+
+UEFI Shell recovery
+-------------------
+map -r
+FSn:
+dir EFI\Microsoft\Boot\BCD
+dir EFI\BOOT\BOOTAA64.EFI
+EFI\BOOT\BOOTAA64.EFI
+
+Local-account OOBE
+------------------
+start ms-cxh:localonly

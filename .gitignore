@@ -1,0 +1,44 @@
+# Local development evidence is intentionally retained outside the public index.
+.local/
+
+# Editor and operating-system metadata.
+.idea/
+.vscode/
+.DS_Store
+
+# Python venv for the m1n1 proxyclient
+proxyenv/
+
+# Firmware images: 30 MB each. Kept on disk, not in git.
+*.fd
+firmware/
+archive/
+
+# Runtime state and logs.
+*.log
+*.out
+*.pid
+*.tlog
+*-fb-info.json
+*.raw
+*.raw.part
+frames/
+screenshots/
+
+__pycache__/
+*.py[cod]
+
+# Large disk images preloaded into guest RAM (rebuild from the ISO, see ARCHITECTURE.md)
+winpe.img
+*.img
+*.png
+
+# Local source bundle used for review hand-offs
+m1n1-code-for-review.tar.gz
+
+# Isolated implementation worktrees managed by Codex/Superpowers
+.worktrees/
+
+# Reproducible local build and release outputs
+.build/
+dist/

@@ -1,0 +1,57 @@
+# Known limitations
+
+## Validation status
+
+- Internal Windows installation, OOBE, USB input, internal-NVMe boot, desktop, and RDP were
+  validated on one 2020 M1 MacBook Air (`j313`).
+- The current self-contained standalone packed image is implemented and host-tested, but
+  cold-boot hardware validation is pending.
+- Physical internal-panel handoff is implemented but unverified because the development
+  Air's panel is physically unavailable.
+
+## Hardware scope
+
+Only J313/T8103 is supported. Device addresses, interrupt routes, ACPI, firmware packaging,
+and memory layout are machine-specific. Other M1 models are not expected to work by merely
+changing a board name.
+
+There is no accelerated GPU driver, internal keyboard/trackpad driver, audio driver, Wi-Fi,
+Bluetooth, camera, sleep, battery-management integration, or production power management.
+USB keyboard/mouse and RDP are the practical input/display paths today.
+
+## Storage
+
+The synthetic NVMe bridge performs correctness-first synchronous I/O. A measured sequential
+read was roughly 300 MB/s, far below the several-GB/s native device capability. Queue depth,
+parallel command execution, batching, and reduced proxy instrumentation remain future work.
+
+The controller exposes the physical SSD namespace. Firmware or hypervisor defects can
+corrupt any partition, not only Windows.
+
+## Memory
+
+Windows reports 8 GB installed on the development machine but approximately 5-6 GB is
+practically available. Large fixed guest reservations, m1n1 heap/backing regions, firmware,
+low-memory alias backing, framebuffer, and hardware windows account for the gap. The map has
+not yet been compacted for production use.
+
+## SMP and timing
+
+All eight cores can enter Windows, but the vGIC, SGI, timer, and list-register paths remain
+experimental. Earlier runs produced `CLOCK_WATCHDOG_TIMEOUT` and `IPI_WATCHDOG_TIMEOUT`.
+Sustained RDP operation is a milestone, not a guarantee of workstation stability.
+
+## USB and debugging
+
+The assisted framebuffer is intentionally paced to avoid starving proxy commands and guest
+timers. It is not a high-frame-rate remote desktop. Losing the proxy can leave the last frame
+visible while Windows continues running.
+
+KD helpers contain offsets and protocol assumptions for the tested Windows ARM64 build.
+They are diagnostic tools, not a general Windows debugger implementation.
+
+## Installation
+
+There is no automated GPT validator or partition installer. The manual DISM flow is
+documented for experienced users and remains destructive if applied to the wrong disk.
+Windows Setup's online account and hardware-requirement paths are not relied upon.

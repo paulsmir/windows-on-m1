@@ -1,0 +1,6 @@
+[submodule "m1n1_windows"]
+	path = m1n1_windows
+	url = https://github.com/paulsmir/m1n1_windows.git
+[submodule "mu"]
+	path = mu
+	url = https://github.com/paulsmir/apple_silicon_platforms_mu.git

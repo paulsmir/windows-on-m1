@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>M1 guest display</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #dce6ec;
+      --muted: #82949f;
+      --shell: #0d151a;
+      --panel: #121e25;
+      --line: #29404c;
+      --live: #62d2b0;
+      --warn: #e5b96f;
+      --dead: #e27676;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--shell); color: var(--ink); }
+    body {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-image: linear-gradient(rgba(255,255,255,.016) 1px, transparent 1px);
+      background-size: 100% 4px;
+    }
+    header {
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) repeat(5, auto);
+      align-items: stretch;
+      border-bottom: 1px solid var(--line);
+      background: rgba(13, 21, 26, .94);
+    }
+    .identity, .metric { padding: 10px 18px; }
+    .identity { display: flex; align-items: center; gap: 12px; }
+    .mark {
+      width: 26px; height: 26px; border: 1px solid var(--live); position: relative;
+      box-shadow: inset 0 0 0 4px var(--shell);
+    }
+    .mark::after {
+      content: ""; position: absolute; left: 5px; right: 5px; top: 12px;
+      border-top: 1px solid var(--live);
+    }
+    h1 { margin: 0; font: 600 15px/1.1 "Arial Narrow", "Helvetica Neue", sans-serif;
+         letter-spacing: .08em; text-transform: uppercase; }
+    .subtitle { margin-top: 3px; color: var(--muted); font: 11px/1.2 ui-monospace, monospace; }
+    .metric { min-width: 108px; border-left: 1px solid var(--line); }
+    .metric dt { color: var(--muted); font: 10px/1.2 ui-monospace, monospace;
+                 letter-spacing: .1em; text-transform: uppercase; }
+    .metric dd { margin: 4px 0 0; font: 15px/1 ui-monospace, monospace; white-space: nowrap; }
+    #status { color: var(--warn); }
+    #status.live { color: var(--live); }
+    #status.dead { color: var(--dead); }
+    #diagnostic { min-width: 150px; color: var(--muted); }
+    #diagnostic.live { color: var(--live); }
+    #diagnostic.warn { color: var(--warn); }
+    #diagnostic.dead { color: var(--dead); }
+    main { min-height: 0; padding: 18px; display: grid; place-items: center; overflow: hidden; }
+    .viewport {
+      position: relative;
+      display: grid;
+      place-items: center;
+      max-width: 100%; max-height: 100%;
+      background: #020303;
+      border: 1px solid #344c58;
+      box-shadow: 0 20px 70px rgba(0, 0, 0, .48), 0 0 0 6px rgba(41, 64, 76, .14);
+    }
+    .viewport::before {
+      content: ""; position: absolute; inset: -7px; pointer-events: none;
+      background:
+        linear-gradient(var(--live), var(--live)) left top/18px 1px no-repeat,
+        linear-gradient(var(--live), var(--live)) left top/1px 18px no-repeat,
+        linear-gradient(var(--live), var(--live)) right bottom/18px 1px no-repeat,
+        linear-gradient(var(--live), var(--live)) right bottom/1px 18px no-repeat;
+      opacity: .55;
+    }
+    canvas {
+      display: block;
+      width: auto; height: auto;
+      max-width: calc(100vw - 38px);
+      max-height: calc(100vh - 96px);
+      object-fit: contain;
+      image-rendering: pixelated;
+      background: #000;
+    }
+    #empty {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      color: var(--muted); font: 12px ui-monospace, monospace;
+      letter-spacing: .05em; background: #030506;
+    }
+    #empty.hidden { display: none; }
+    @media (max-width: 760px) {
+      header { grid-template-columns: 1fr 1fr; }
+      .identity { grid-column: 1 / -1; border-bottom: 1px solid var(--line); }
+      .metric { min-width: 0; padding: 8px 12px; }
+      main { padding: 10px; }
+      canvas { max-width: calc(100vw - 22px); max-height: calc(100vh - 164px); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="identity">
+      <span class="mark" aria-hidden="true"></span>
+      <div><h1>M1 guest display</h1><div class="subtitle">B8G8R8X8 · async USB stream</div></div>
+    </div>
+    <dl class="metric"><dt>link</dt><dd id="status">waiting</dd></dl>
+    <dl class="metric"><dt>generation</dt><dd id="generation">—</dd></dl>
+    <dl class="metric"><dt>frame rate</dt><dd id="fps">0.0 fps</dd></dl>
+    <dl class="metric"><dt>frame age</dt><dd id="age">—</dd></dl>
+    <dl class="metric"><dt>guest diagnostic</dt><dd id="diagnostic">—</dd></dl>
+  </header>
+  <main>
+    <div class="viewport">
+      <canvas id="screen" width="1280" height="800" aria-label="Virtual guest screen"></canvas>
+      <div id="empty">waiting for the first complete frame</div>
+    </div>
+  </main>
+  <script>
+    const canvas = document.getElementById('screen');
+    const context = canvas.getContext('2d', {alpha: false});
+    const statusEl = document.getElementById('status');
+    const generationEl = document.getElementById('generation');
+    const fpsEl = document.getElementById('fps');
+    const ageEl = document.getElementById('age');
+    const diagnosticEl = document.getElementById('diagnostic');
+    const emptyEl = document.getElementById('empty');
+    let shownGeneration = -1;
+    let currentEtag = '';
+    let lastFrameAt = 0;
+    let arrivals = [];
+
+    function setStatus(text, className = '') {
+      statusEl.textContent = text;
+      statusEl.className = className;
+    }
+
+    function paintBgrx(raw, meta) {
+      if (raw.byteLength !== meta.size || meta.format !== 'B8G8R8X8')
+        throw new Error('unsupported framebuffer publication');
+      if (canvas.width !== meta.width || canvas.height !== meta.height) {
+        canvas.width = meta.width;
+        canvas.height = meta.height;
+      }
+      const source = new Uint8Array(raw);
+      const image = context.createImageData(meta.width, meta.height);
+      const target = image.data;
+      let dst = 0;
+      for (let y = 0; y < meta.height; y++) {
+        let src = y * meta.stride;
+        for (let x = 0; x < meta.width; x++, src += 4) {
+          target[dst++] = source[src + 2];
+          target[dst++] = source[src + 1];
+          target[dst++] = source[src];
+          target[dst++] = 255;
+        }
+      }
+      context.putImageData(image, 0, 0);
+    }
+
+    async function poll() {
+      try {
+        const metaResponse = await fetch('/meta', {cache: 'no-store'});
+        if (!metaResponse.ok) throw new Error(`metadata ${metaResponse.status}`);
+        const meta = await metaResponse.json();
+        if (meta.generation !== shownGeneration) {
+          const headers = currentEtag ? {'If-None-Match': currentEtag} : {};
+          const frameResponse = await fetch('/frame', {cache: 'no-store', headers});
+          if (frameResponse.status !== 304) {
+            if (!frameResponse.ok) throw new Error(`frame ${frameResponse.status}`);
+            paintBgrx(await frameResponse.arrayBuffer(), meta);
+            currentEtag = frameResponse.headers.get('ETag') || '';
+            shownGeneration = meta.generation;
+            generationEl.textContent = String(meta.generation);
+            lastFrameAt = performance.now();
+            arrivals.push(lastFrameAt);
+            emptyEl.classList.add('hidden');
+          }
+        }
+        const frameAge = lastFrameAt ? performance.now() - lastFrameAt : Infinity;
+        if (frameAge <= 3000) setStatus('streaming', 'live');
+        else if (shownGeneration >= 0) setStatus('stale', 'dead');
+      } catch (error) {
+        setStatus(shownGeneration < 0 ? 'waiting' : 'retrying', shownGeneration < 0 ? '' : 'dead');
+      } finally {
+        setTimeout(poll, 100);
+      }
+    }
+
+    async function pollTelemetry() {
+      try {
+        const response = await fetch('/telemetry', {cache: 'no-store'});
+        if (!response.ok) throw new Error(`telemetry ${response.status}`);
+        const telemetry = await response.json();
+        const age = telemetry.updated_at
+          ? Math.max(0, Date.now() / 1000 - telemetry.updated_at)
+          : Infinity;
+        if (telemetry.state !== 'available') {
+          diagnosticEl.textContent = 'link unavailable';
+          diagnosticEl.className = 'dead';
+        } else {
+          const findings = telemetry.findings || ['insufficient-evidence'];
+          const ageText = Number.isFinite(age) ? ` · ${age.toFixed(0)}s` : '';
+          diagnosticEl.textContent = `${findings.join(', ')}${ageText}`;
+          diagnosticEl.className = findings.includes('running') ? 'live' : 'warn';
+          if (age > 15) diagnosticEl.className = 'dead';
+        }
+      } catch (error) {
+        diagnosticEl.textContent = '—';
+        diagnosticEl.className = '';
+      } finally {
+        setTimeout(pollTelemetry, 1000);
+      }
+    }
+
+    setInterval(() => {
+      const now = performance.now();
+      arrivals = arrivals.filter(value => now - value <= 3000);
+      const span = arrivals.length > 1 ? (arrivals.at(-1) - arrivals[0]) / 1000 : 0;
+      const fps = span > 0 ? (arrivals.length - 1) / span : 0;
+      fpsEl.textContent = `${fps.toFixed(1)} fps`;
+      if (!lastFrameAt) return;
+      const seconds = (now - lastFrameAt) / 1000;
+      ageEl.textContent = seconds < 1 ? `${Math.round(seconds * 1000)} ms` : `${seconds.toFixed(1)} s`;
+      if (seconds > 3) setStatus('stale', 'dead');
+    }, 250);
+
+    poll();
+    pollTelemetry();
+  </script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# Reproducible build environment for the self-contained J313 boot.bin.
+#
+# Native arm64. Upstream targets x86-64 Linux and pulls binary tools (nasm, iasl,
+# uncrustify) from NuGet, but none of them are needed to build an AArch64 platform:
+#   - iasl / uncrustify are scope "cibuild" only (iasl_ext_dep.yaml says so outright)
+#   - nasm is an x86 assembler, never invoked for an AArch64 target
+# Emulating x86-64 to satisfy them does not work anyway: NuGet.exe runs under mono,
+# whose JIT trampolines crash under qemu ("Assertion: should not be reached at
+# tramp-amd64.c:606"). So we install native equivalents and drop the ext-deps.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      uuid-dev clang llvm lld \
+      gcc binutils gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+      acpica-tools nasm bison flex \
+      python3 python3-venv python3-pip \
+      git ca-certificates make \
+      curl cpio zstd device-tree-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+# m1n1 has Rust components (build/librust.a), so cargo is required to build it.
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && /root/.cargo/bin/rustup target add aarch64-unknown-none-softfloat
+ENV PATH=/root/.cargo/bin:$PATH
+
+# stuart / Project Mu expect these; llvm dir is versioned on Ubuntu 24.04
+ENV CLANGPDB_BIN=/usr/lib/llvm-18/bin/
+ENV CLANGPDB_AARCH64_PREFIX=aarch64-linux-gnu-
+
+WORKDIR /work
+# Mount the repository at /work. The script builds Mu + m1n1, runs host tests,
+# validates the shared guest layout, and writes dist/j313 with checksums.
+CMD ["./scripts/build-standalone.sh"]
