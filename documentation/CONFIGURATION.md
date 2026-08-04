@@ -1,0 +1,120 @@
+# Windows launch profiles
+
+Windows-on-M1 exposes three independent launch decisions: how the guest starts, where its
+framebuffer is consumed, and how much diagnostic work runs beside it. Keeping these decisions
+orthogonal makes a quiet standalone boot possible without removing the assisted development
+path.
+
+## Profile axes
+
+### Execution
+
+- `standalone` starts the firmware embedded in the installed `boot.bin` after the bounded
+  maintenance window. It does not require a debugging host.
+- `assisted` chainloads the selected m1n1 build from a host and starts a replaceable Mu firmware
+  image through `run_uefi.py`.
+
+### Display
+
+- `physical` attaches the guest BGRA framebuffer to the internal J313 DCP scanout.
+- `virtual` publishes the guest framebuffer through the asynchronous USB stream for the web
+  viewer.
+- `both` enables the physical DCP scanout and asynchronous USB stream for the same framebuffer.
+- `none` keeps the guest GOP framebuffer allocated but enables neither consumer. This supports
+  headless Windows and RDP without removing the firmware display contract.
+
+Mu and Windows always use one reserved 1280x800, 5120-byte-stride,
+`PixelBlueGreenRedReserved8BitPerColor` framebuffer. Physical display support maps this buffer as
+the DCP surface; it does not expose iBoot's possibly 30-bit framebuffer to Windows and does not
+copy complete frames in EL2. Virtual display support reads the same guest buffer. Therefore
+`both` does not add a second guest framebuffer or a frame-copy loop.
+
+An explicitly requested `physical` or `both` profile is strict. If DCP cannot map or present the
+guest surface, m1n1 must report the failing stage and remain recoverable through its proxy
+instead of silently changing the requested profile.
+
+### Debug
+
+- `off` disables the virtual-UART reader, persistent host logs, telemetry polling, KD helpers,
+  and optional framebuffer transport not requested by the display profile.
+- `uart` records the host/hypervisor output and opens the guest virtual UART before Mu starts,
+  producing `hv.log`, `guest-uart.log`, and `guest-uart.tlog`.
+- `full` includes `uart` and enables hang telemetry plus the diagnostic hooks used by the KD and
+  device bring-up tools.
+
+Display and debug remain independent. For example, `--display virtual --debug off` still sends
+frames because the user requested a virtual display, but it does not run telemetry or retain
+text logs.
+
+## User interface
+
+The host-assisted entry point is:
+
+```sh
+scripts/run-windows.sh \
+  --execution assisted \
+  --display both \
+  --debug full
+```
+
+A low-overhead assisted launch is:
+
+```sh
+scripts/run-windows.sh \
+  --execution assisted \
+  --display physical \
+  --debug off
+```
+
+The installed image defaults to:
+
+```text
+execution=standalone
+display=physical
+debug=off
+```
+
+Standalone display and debug choices are encoded in the packed-image manifest by the build
+command. Profiles that require an attached host remain explicit and never become a hidden
+runtime dependency of a normal power-on boot.
+
+`--dry-run` resolves and prints the complete profile without touching USB, starting a guest, or
+writing the ESP. Invalid combinations are rejected before any target state changes.
+
+## Runtime ordering
+
+For assisted mode the launcher performs these stages:
+
+1. Parse and validate the complete profile.
+2. Discover or validate the proxy and virtual-UART endpoints required by that profile.
+3. Chainload the matching m1n1 image when requested and wait for USB re-enumeration.
+4. Open the virtual UART only for `uart` or `full`.
+5. Construct the guest boot arguments for the shared BGRA framebuffer.
+6. Ask m1n1 to attach the framebuffer to DCP for `physical` or `both`.
+7. Enable asynchronous framebuffer events for `virtual` or `both`.
+8. Enable telemetry and full diagnostics only for `full`.
+9. Enter Mu and Windows.
+
+Standalone mode consumes the same validated display/debug values from its manifest before guest
+entry. Physical-display preparation happens before the final boot arguments are handed to Mu.
+
+## Performance and failure rules
+
+- `debug=off` must not open the virtual-UART endpoint, poll telemetry, or write continuously
+  growing log files.
+- `physical` must not enable USB framebuffer events.
+- `virtual` must not initialize or reconfigure DCP for guest scanout.
+- `both` uses one buffer and enables two consumers; it must not mirror frames in software.
+- USB backpressure may skip a virtual frame but must never pause Windows or the physical DCP
+  scanout.
+- A physical handoff failure aborts before guest entry and leaves proxy recovery available.
+- A missing optional web viewer does not stop a guest whose framebuffer stream is otherwise
+  valid.
+
+## Verification contract
+
+Host tests cover profile parsing, defaults, rejected combinations, dry-run behavior, manifest
+flags, DCP surface validation, strict physical failure, and the absence of debug workers in the
+quiet profile. Hardware acceptance requires all four display profiles, both assisted debug
+extremes, standalone physical boot, correct colors and geometry on the internal panel, live web
+frames in `both`, and an extended `physical + off` run without USB diagnostic load.
