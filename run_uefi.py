@@ -16,6 +16,7 @@ PHYS_BASE must sit above m1n1 + its 768 MB heap and below the top of RAM.
 import os, sys, pathlib, argparse
 
 from guest_layout import DEFAULT_LAYOUT_PATH, load_layout
+from launch_profile import parse_profile
 from virtual_display import FrameReceiver, VirtualDisplayConfig
 from hang_telemetry import TelemetryRecorder
 
@@ -26,6 +27,10 @@ ap.add_argument("--dry-run", action="store_true",
 ap.add_argument("--layout", type=pathlib.Path, default=DEFAULT_LAYOUT_PATH,
                 help="canonical J313 guest-layout JSON")
 ap.add_argument("--device", default=os.environ.get("M1N1DEVICE"))
+ap.add_argument("--display-mode", choices=("none", "physical", "virtual", "both"),
+                default="virtual", help="guest framebuffer consumers")
+ap.add_argument("--debug-mode", choices=("off", "uart", "full"), default="uart",
+                help="diagnostic work performed beside the guest")
 ap.add_argument("--phys-base", type=lambda x: int(x, 0))
 ap.add_argument("--ramdisk", type=pathlib.Path,
                 help="disk image to preload into guest RAM at --ramdisk-base. Anything past a "
@@ -56,6 +61,7 @@ ap.add_argument("--wdt-cpu", type=int, choices=range(8), default=None,
                 help="reserve one physical CPU for the hypervisor watchdog (0..7). Omit this "
                      "for an eight-core guest; a reserved CPU must not also be enabled in MADT.")
 args = ap.parse_args()
+profile = parse_profile("assisted", args.display_mode, args.debug_mode)
 
 layout = load_layout(args.layout)
 defaults = {
@@ -96,6 +102,11 @@ fb.validate((args.phys_base, args.guest_ram_end), preflight_windows)
 print("=" * 60)
 print(f"virtual framebuffer       : 0x{fb.base:x}..0x{fb.end:x}")
 print(f"geometry / stride / size  : {fb.width}x{fb.height} / {fb.stride} / 0x{fb.size:x}")
+print(f"display mode             : {profile.display.value}")
+print(f"debug mode               : {profile.debug.value}")
+print(f"physical DCP             : {'enabled' if profile.physical_display else 'disabled'}")
+print(f"USB framebuffer          : {'enabled' if profile.virtual_display else 'disabled'}")
+print(f"telemetry                : {'enabled' if profile.telemetry else 'disabled'}")
 print("preflight validation      : OK")
 print("=" * 60)
 
@@ -209,11 +220,12 @@ if args.low_mem:
 
 # The ordinary proxy event loop is the only USB reader. EL2 opportunistically appends chunks
 # to the USB IN ring and skips a tick under backpressure; it never interrupts or pauses Windows.
-receiver = FrameReceiver(fb)
-telemetry = TelemetryRecorder(p)
-telemetry_inline = os.environ.get("HANG_TELEMETRY_INLINE") == "1"
+receiver = FrameReceiver(fb) if profile.virtual_display else None
+telemetry = TelemetryRecorder(p) if profile.telemetry else None
+telemetry_inline = profile.telemetry and os.environ.get("HANG_TELEMETRY_INLINE") == "1"
 
 def handle_framebuffer_event(data):
+    assert receiver is not None
     receiver.accept(data)
     #
     # Do NOT issue proxy requests from here by default. A FRAMEBUFFER event is delivered from
@@ -227,17 +239,26 @@ def handle_framebuffer_event(data):
     if telemetry_inline:
         telemetry.maybe_poll()
 
-iface.set_event_handler(EVENT.FRAMEBUFFER, handle_framebuffer_event)
+if profile.virtual_display:
+    iface.set_event_handler(EVENT.FRAMEBUFFER, handle_framebuffer_event)
 
-def configure_framebuffer_stream():
+def configure_display_consumers():
     # hv_fb_stream_config() validates the IPA through the live stage-2 tables.
     # HV.start() invokes this hook only after its final pt_update().
     p.memset32(fb.base, 0, fb.size)
-    if p.hv_fb_stream_config(fb.base, fb.size, fb.width, fb.height, fb.stride) != 1:
-        raise RuntimeError("m1n1 rejected the virtual framebuffer mapping")
-    print(f"Asynchronous framebuffer stream enabled: {fb.size / (1 << 20):.2f} MiB/frame")
+    if profile.physical_display:
+        prepare = getattr(p, "display_prepare_guest_surface", None)
+        if prepare is None:
+            raise RuntimeError("m1n1 does not implement physical guest display handoff")
+        if prepare(fb.base, fb.size, fb.width, fb.height, fb.stride, 32) != 1:
+            raise RuntimeError("m1n1 rejected physical guest display handoff")
+        print("Internal DCP guest surface enabled")
+    if profile.virtual_display:
+        if p.hv_fb_stream_config(fb.base, fb.size, fb.width, fb.height, fb.stride) != 1:
+            raise RuntimeError("m1n1 rejected the virtual framebuffer mapping")
+        print(f"Asynchronous framebuffer stream enabled: {fb.size / (1 << 20):.2f} MiB/frame")
 
-hv.pre_guest_start = configure_framebuffer_stream
+hv.pre_guest_start = configure_display_consumers
 
 print("Starting guest...")
 hv.start()

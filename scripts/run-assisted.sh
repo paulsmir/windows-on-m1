@@ -9,9 +9,12 @@ FIRMWARE="$ROOT/dist/j313/J313_EFI.fd"
 RAMDISK=
 DRY_RUN=0
 LOW_MEM=1
+DISPLAY=virtual
+DEBUG=uart
 
 usage() {
     echo "usage: $0 [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
+    echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
     echo "          [--ramdisk FILE] [--no-low-mem] [--dry-run]" >&2
     exit 2
 }
@@ -21,6 +24,8 @@ while [ "$#" -gt 0 ]; do
         --proxy) [ "$#" -ge 2 ] || usage; PROXY=$2; shift 2 ;;
         --vuart) [ "$#" -ge 2 ] || usage; VUART=$2; shift 2 ;;
         --firmware) [ "$#" -ge 2 ] || usage; FIRMWARE=$2; shift 2 ;;
+        --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
+        --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
         --ramdisk) [ "$#" -ge 2 ] || usage; RAMDISK=$2; shift 2 ;;
         --no-low-mem) LOW_MEM=0; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
@@ -29,8 +34,11 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+
 discover_ports() {
-    [ -n "$PROXY" ] && [ -n "$VUART" ] && return
+    [ -n "$PROXY" ] && { [ "$DEBUG" = off ] || [ -n "$VUART" ]; } && return
     set -- /dev/cu.usbmodem*
     if [ "$1" = '/dev/cu.usbmodem*' ] || [ "$#" -ne 2 ]; then
         echo "Unable to select proxy/vUART automatically." >&2
@@ -38,14 +46,18 @@ discover_ports() {
         exit 1
     fi
     [ -n "$PROXY" ] || PROXY=$1
-    [ -n "$VUART" ] || VUART=$2
+    if [ "$DEBUG" != off ]; then
+        [ -n "$VUART" ] || VUART=$2
+    fi
 }
 
 if [ "$DRY_RUN" -eq 0 ]; then
     discover_ports
 else
     [ -n "$PROXY" ] || PROXY='<proxy-device>'
-    [ -n "$VUART" ] || VUART='<vuart-device>'
+    if [ "$DEBUG" != off ]; then
+        [ -n "$VUART" ] || VUART='<vuart-device>'
+    fi
 fi
 
 PYTHON="$ROOT/proxyenv/bin/python"
@@ -53,12 +65,20 @@ PYTHON="$ROOT/proxyenv/bin/python"
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "mode: assisted development"
-    echo "ordering: reader-before-guest"
+    echo "display: $DISPLAY"
+    echo "debug: $DEBUG"
     echo "proxy: $PROXY"
-    echo "virtual UART: $VUART"
+    if [ "$DEBUG" = off ]; then
+        echo "virtual UART: disabled"
+    else
+        echo "ordering: reader-before-guest"
+        echo "virtual UART: $VUART"
+    fi
+    case "$DISPLAY" in virtual|both) echo "USB framebuffer: enabled" ;; *) echo "USB framebuffer: disabled" ;; esac
+    [ "$DEBUG" = full ] && echo "telemetry: enabled" || echo "telemetry: disabled"
     echo "firmware: $FIRMWARE"
     [ -z "$RAMDISK" ] || echo "RAM disk: $RAMDISK"
-    echo "logs: $ROOT/hv.log and $ROOT/guest-uart.log"
+    [ "$DEBUG" = off ] || echo "logs: $ROOT/hv.log and $ROOT/guest-uart.log"
     exit 0
 fi
 
@@ -76,21 +96,31 @@ fi
 cd "$ROOT"
 rm -f guest-uart.log guest-uart.tlog guest-uart-reader.log hv.log guest.pid
 
-# The reader must hold the virtual UART open before Mu emits its first byte.
-"$PYTHON" -u "$ROOT/extra/uart-reader.py" "$VUART" 2400 \
-    2>guest-uart-reader.log &
-READER=$!
-sleep 2
+READER=
+if [ "$DEBUG" != off ]; then
+    # The reader must hold the virtual UART open before Mu emits its first byte.
+    "$PYTHON" -u "$ROOT/extra/uart-reader.py" "$VUART" 2400 \
+        2>guest-uart-reader.log &
+    READER=$!
+    sleep 2
+fi
 
-set -- "$FIRMWARE" --device "$PROXY"
+set -- "$FIRMWARE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DEBUG"
 [ -z "$RAMDISK" ] || set -- "$@" --ramdisk "$RAMDISK"
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
 
-PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
-    "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >hv.log 2>&1 &
+if [ "$DEBUG" = off ]; then
+    PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+        "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >/dev/null 2>&1 &
+else
+    PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+        "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >hv.log 2>&1 &
+fi
 RUNNER=$!
 echo "$RUNNER" >guest.pid
 
-echo "reader=$READER runner=$RUNNER"
-echo "hypervisor log: $ROOT/hv.log"
-echo "guest UART log: $ROOT/guest-uart.log"
+[ -z "$READER" ] && echo "runner=$RUNNER" || echo "reader=$READER runner=$RUNNER"
+if [ "$DEBUG" != off ]; then
+    echo "hypervisor log: $ROOT/hv.log"
+    echo "guest UART log: $ROOT/guest-uart.log"
+fi

@@ -74,6 +74,100 @@ class PublicScriptTests(unittest.TestCase):
             )
             self.assertIn(expected, result.stdout)
 
+    def test_run_windows_defaults_to_quiet_standalone_physical(self):
+        result = subprocess.run(
+            ["sh", str(ROOT / "scripts/run-windows.sh"), "--dry-run"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("execution: standalone", result.stdout)
+        self.assertIn("display: physical", result.stdout)
+        self.assertIn("debug: off", result.stdout)
+        self.assertIn("virtual UART: disabled", result.stdout)
+        self.assertIn("USB framebuffer: disabled", result.stdout)
+        self.assertIn("telemetry: disabled", result.stdout)
+
+    def test_quiet_assisted_physical_does_not_require_vuart(self):
+        result = subprocess.run(
+            [
+                "sh",
+                str(ROOT / "scripts/run-assisted.sh"),
+                "--dry-run",
+                "--proxy",
+                "/dev/cu.test-proxy",
+                "--display",
+                "physical",
+                "--debug",
+                "off",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("display: physical", result.stdout)
+        self.assertIn("debug: off", result.stdout)
+        self.assertIn("virtual UART: disabled", result.stdout)
+        self.assertIn("USB framebuffer: disabled", result.stdout)
+        self.assertIn("telemetry: disabled", result.stdout)
+        self.assertNotIn("reader-before-guest", result.stdout)
+
+    def test_both_full_resolves_every_observer(self):
+        result = subprocess.run(
+            [
+                "sh",
+                str(ROOT / "scripts/run-windows.sh"),
+                "--execution",
+                "assisted",
+                "--display",
+                "both",
+                "--debug",
+                "full",
+                "--proxy",
+                "/dev/cu.test-proxy",
+                "--vuart",
+                "/dev/cu.test-vuart",
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("execution: assisted", result.stdout)
+        self.assertIn("display: both", result.stdout)
+        self.assertIn("debug: full", result.stdout)
+        self.assertIn("virtual UART: /dev/cu.test-vuart", result.stdout)
+        self.assertIn("USB framebuffer: enabled", result.stdout)
+        self.assertIn("telemetry: enabled", result.stdout)
+
+    def test_launchers_reject_unknown_profile_values(self):
+        cases = (
+            ("--execution", "remote"),
+            ("--display", "mirror"),
+            ("--debug", "yes"),
+        )
+        for option, value in cases:
+            with self.subTest(option=option, value=value):
+                result = subprocess.run(
+                    [
+                        "sh",
+                        str(ROOT / "scripts/run-windows.sh"),
+                        option,
+                        value,
+                        "--dry-run",
+                    ],
+                    cwd=ROOT,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
