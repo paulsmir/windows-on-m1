@@ -5,6 +5,8 @@ import binascii
 import lzma
 import struct
 
+from launch_profile import parse_profile, profile_from_manifest_flags
+
 
 IMAGE_MAGIC = b"ASIWINGU"
 FORMAT_VERSION = 1
@@ -12,6 +14,7 @@ IMAGE_ALIGNMENT = 0x4000
 MANIFEST_SIZE = 64
 _SUPPORTED_LAYOUT_VERSION = 1
 _MANIFEST = struct.Struct("<8sHHIIIQQQII8s")
+DEFAULT_FLAGS = parse_profile().manifest_flags
 
 
 class ImageError(ValueError):
@@ -35,7 +38,9 @@ def _align_up(value: int, alignment: int = IMAGE_ALIGNMENT) -> int:
     return (value + alignment - 1) & ~(alignment - 1)
 
 
-def pack_image(m1n1: bytes, firmware: bytes, layout_version: int) -> bytes:
+def pack_image(
+    m1n1: bytes, firmware: bytes, layout_version: int, flags: int = DEFAULT_FLAGS
+) -> bytes:
     """Return a boot image without modifying either input buffer."""
     if not m1n1:
         raise ImageError("m1n1 image is empty")
@@ -43,6 +48,10 @@ def pack_image(m1n1: bytes, firmware: bytes, layout_version: int) -> bytes:
         raise ImageError("firmware image is empty")
     if layout_version != _SUPPORTED_LAYOUT_VERSION:
         raise ImageError(f"unsupported layout version {layout_version}")
+    try:
+        profile_from_manifest_flags(flags)
+    except ValueError as exc:
+        raise ImageError(f"unsupported manifest flags {flags:#x}") from exc
 
     manifest_offset = _align_up(len(m1n1))
     payload_offset = IMAGE_ALIGNMENT
@@ -52,7 +61,7 @@ def pack_image(m1n1: bytes, firmware: bytes, layout_version: int) -> bytes:
         IMAGE_MAGIC,
         FORMAT_VERSION,
         MANIFEST_SIZE,
-        0,
+        flags,
         layout_version,
         0,
         payload_offset,
@@ -116,8 +125,12 @@ def parse_image(image: bytes) -> tuple[Manifest, bytes]:
         raise ImageError(f"unsupported manifest version {format_version}")
     if header_size != MANIFEST_SIZE:
         raise ImageError(f"invalid manifest size {header_size}")
-    if flags or reserved or reserved2 or reserved_tail != b"\0" * 8:
-        raise ImageError("unsupported manifest flags or nonzero reserved field")
+    try:
+        profile_from_manifest_flags(flags)
+    except ValueError as exc:
+        raise ImageError(f"unsupported manifest flags {flags:#x}") from exc
+    if reserved or reserved2 or reserved_tail != b"\0" * 8:
+        raise ImageError("nonzero reserved manifest field")
     if layout_version != _SUPPORTED_LAYOUT_VERSION:
         raise ImageError(f"unsupported layout version {layout_version}")
     if payload_offset < header_size or payload_offset % IMAGE_ALIGNMENT:

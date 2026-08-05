@@ -6,8 +6,8 @@
   validated on one 2020 M1 MacBook Air (`j313`).
 - The current self-contained standalone packed image is implemented and host-tested, but
   cold-boot hardware validation is pending.
-- Physical internal-panel handoff is implemented but unverified because the development
-  Air's panel is physically unavailable.
+- Physical internal-panel handoff and a full-panel 2560x1600 Windows desktop were validated in
+  assisted mode. Cold-boot validation of the quiet standalone image remains separate.
 
 ## Hardware scope
 

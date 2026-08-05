@@ -10,13 +10,15 @@ PROXY=
 VUART=
 FIRMWARE=
 RAMDISK=
+CHAINLOAD=0
+M1N1=
 DRY_RUN=0
 
 usage() {
     echo "usage: $0 [--execution standalone|assisted]" >&2
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
     echo "          [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
-    echo "          [--ramdisk FILE] [--dry-run]" >&2
+    echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE] [--dry-run]" >&2
     exit 2
 }
 
@@ -29,6 +31,8 @@ while [ "$#" -gt 0 ]; do
         --vuart) [ "$#" -ge 2 ] || usage; VUART=$2; shift 2 ;;
         --firmware) [ "$#" -ge 2 ] || usage; FIRMWARE=$2; shift 2 ;;
         --ramdisk) [ "$#" -ge 2 ] || usage; RAMDISK=$2; shift 2 ;;
+        --chainload) CHAINLOAD=1; shift ;;
+        --m1n1) [ "$#" -ge 2 ] || usage; M1N1=$2; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
         *) usage ;;
@@ -53,6 +57,11 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "virtual UART: $vuart_summary"
     echo "USB framebuffer: $virtual"
     echo "telemetry: $telemetry"
+    if [ "$CHAINLOAD" -eq 1 ]; then
+        echo "chainload: ${M1N1:-dist/j313/m1n1.macho}"
+    else
+        echo "chainload: disabled"
+    fi
     exit 0
 fi
 
@@ -67,4 +76,6 @@ set -- "$ROOT/scripts/run-assisted.sh" --display "$DISPLAY" --debug "$DEBUG"
 [ -z "$VUART" ] || set -- "$@" --vuart "$VUART"
 [ -z "$FIRMWARE" ] || set -- "$@" --firmware "$FIRMWARE"
 [ -z "$RAMDISK" ] || set -- "$@" --ramdisk "$RAMDISK"
+[ "$CHAINLOAD" -eq 0 ] || set -- "$@" --chainload
+[ -z "$M1N1" ] || set -- "$@" --m1n1 "$M1N1"
 exec "$@"

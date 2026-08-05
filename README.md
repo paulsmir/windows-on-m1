@@ -40,6 +40,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Standalone installation](documentation/INSTALL.md)
 - [Build and packaging](documentation/BUILD.md)
 - [Standalone and assisted operation](documentation/RUN.md)
+- [Launch profiles](documentation/CONFIGURATION.md)
 - [Architecture](documentation/ARCHITECTURE.md)
 - [Debugging and KD tools](documentation/DEBUGGING.md)
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
@@ -75,5 +76,6 @@ Documentation distinguishes three states:
 - **implemented:** present in source and host-tested but awaiting the relevant hardware run;
 - **planned:** not yet implemented.
 
-The physical internal-panel handoff and the latest standalone packed image are currently in
-the implemented category, not the validated category.
+The physical internal-panel handoff and full-panel 2560x1600 Windows framebuffer have been
+validated on J313 in assisted mode. The latest standalone packed image remains implemented and
+host-tested, not yet cold-boot validated.

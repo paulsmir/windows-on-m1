@@ -5,6 +5,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "m1n1_windows" / "proxyclient"))
+
+from m1n1.proxy import M1N1Proxy
 
 
 class DisplayModeContractTests(unittest.TestCase):
@@ -35,6 +38,26 @@ class DisplayModeContractTests(unittest.TestCase):
         self.assertIn("USB framebuffer          : disabled", result.stdout)
         self.assertIn("telemetry                : disabled", result.stdout)
 
+    def test_proxy_forwards_complete_physical_surface_descriptor(self):
+        class FakeProxy:
+            P_DISPLAY_PREPARE_GUEST_SURFACE = M1N1Proxy.P_DISPLAY_PREPARE_GUEST_SURFACE
+
+            def request(self, *args):
+                self.args = args
+                return 1
+
+        proxy = FakeProxy()
+        result = M1N1Proxy.display_prepare_guest_surface(
+            proxy, 0x85F000000, 0xFA0000, 2560, 1600, 10240, 32
+        )
+
+        self.assertEqual(result, 1)
+        self.assertEqual(
+            proxy.args,
+            (M1N1Proxy.P_DISPLAY_PREPARE_GUEST_SURFACE,
+             0x85F000000, 0xFA0000, 2560, 1600, 10240, 32),
+        )
+
     def test_both_full_enables_both_consumers_and_telemetry(self):
         result = self.run_dry("both", "full")
 
@@ -49,6 +72,21 @@ class DisplayModeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("physical DCP             : disabled", result.stdout)
         self.assertIn("USB framebuffer          : disabled", result.stdout)
+
+    def test_mu_does_not_replace_gop_console_at_ready_to_boot(self):
+        source = (
+            ROOT
+            / "mu"
+            / "Silicon"
+            / "Apple"
+            / "T810XFamilyPkg"
+            / "Library"
+            / "MsPlatformDevicesLib"
+            / "MsPlatformDevicesLib.c"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("gST->ConsoleOutHandle = Handle", source)
+        self.assertNotIn("gST->ConOut           = TextOut", source)
 
 
 if __name__ == "__main__":

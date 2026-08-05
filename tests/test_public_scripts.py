@@ -37,6 +37,21 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("J313_EFI.fd", result.stdout)
         self.assertIn("chainload.py", result.stdout)
 
+    def test_development_build_forwards_standalone_profile(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/build-development.sh"),
+                "--dry-run", "--display", "virtual", "--debug", "uart",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--display virtual --debug uart", result.stdout)
+
     def test_run_assisted_dry_run_describes_order_and_selected_paths(self):
         command = [
             "sh",
@@ -57,6 +72,12 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("/dev/cu.test-vuart", result.stdout)
         self.assertIn("firmware/test.fd", result.stdout)
         self.assertIn("images/test.img", result.stdout)
+
+    def test_assisted_workers_are_detached_from_launcher_shell(self):
+        text = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
+
+        self.assertGreaterEqual(text.count("nohup "), 2)
+        self.assertGreaterEqual(text.count("</dev/null"), 2)
 
     def test_display_and_log_dry_runs_are_hardware_free(self):
         cases = {
@@ -145,6 +166,28 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("virtual UART: /dev/cu.test-vuart", result.stdout)
         self.assertIn("USB framebuffer: enabled", result.stdout)
         self.assertIn("telemetry: enabled", result.stdout)
+
+    def test_assisted_dry_run_can_include_matching_m1n1_chainload(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted",
+                "--display", "both",
+                "--debug", "full",
+                "--proxy", "/dev/cu.test-proxy",
+                "--vuart", "/dev/cu.test-vuart",
+                "--chainload",
+                "--m1n1", "dist/j313/test.macho",
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("chainload: dist/j313/test.macho", result.stdout)
 
     def test_launchers_reject_unknown_profile_values(self):
         cases = (

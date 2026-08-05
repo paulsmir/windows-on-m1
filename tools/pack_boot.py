@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from guest_layout import load_layout
+from launch_profile import Debug, Display, parse_profile
 from standalone_image import IMAGE_ALIGNMENT, ImageError, pack_image, parse_image
 
 
@@ -21,9 +22,12 @@ def main() -> int:
     parser.add_argument("--firmware", type=Path, required=True)
     parser.add_argument("--layout", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--display", choices=[value.value for value in Display], default="physical")
+    parser.add_argument("--debug", choices=[value.value for value in Debug], default="off")
     args = parser.parse_args()
 
     layout = load_layout(args.layout)
+    profile = parse_profile(display=args.display, debug=args.debug)
     m1n1 = args.m1n1.read_bytes()
     if len(m1n1) % IMAGE_ALIGNMENT:
         raise ImageError(
@@ -34,6 +38,7 @@ def main() -> int:
         m1n1,
         args.firmware.read_bytes(),
         layout_version=layout.layout_version,
+        flags=profile.manifest_flags,
     )
     manifest, _ = parse_image(image)
 
@@ -60,6 +65,7 @@ def main() -> int:
     print(f"manifest offset: 0x{manifest.manifest_offset:x}")
     print(f"payload offset: 0x{manifest.payload_offset:x}")
     print(f"firmware CRC32: {manifest.crc32:08x}")
+    print(f"profile: display={profile.display.value} debug={profile.debug.value}")
     print(f"SHA-256: {digest}")
     return 0
 

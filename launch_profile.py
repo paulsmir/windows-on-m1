@@ -1,5 +1,7 @@
 """Canonical Windows launch-profile values shared by public host tools."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 

@@ -3,6 +3,8 @@
 This project has two intentional modes. Standalone mode is the final user-facing boot path.
 Assisted development mode remains a first-class path for changing m1n1, Mu, ACPI, device
 models, and Windows-facing firmware while observing the target from another Mac.
+The second Mac is optional: it is only required for assisted development and debugging, not
+for normal standalone Windows boot.
 
 ## Standalone mode
 
@@ -19,13 +21,15 @@ iBoot
   -> Windows 11 ARM64
 ```
 
-The packed image opens its USB debug transport for a three-second maintenance window. If no
-debug host connects, m1n1 starts the embedded firmware automatically. A second Mac is optional
-and is not consulted during this normal path.
+The default packed image (`display=physical`, `debug=off`) does not initialize the USB debug
+transport and does not wait for a maintenance window. m1n1 prepares the internal DCP surface
+and starts the embedded firmware immediately. A second computer is not consulted during this
+normal path.
 
-If a debug host opens the proxy during the three-second window, m1n1 transfers control to
-the proxy loop instead of starting Windows. This provides a recovery route for chainloading
-another build without writing the ESP again.
+Images explicitly built with `debug=uart`, `debug=full`, or a virtual display open the USB
+transport and retain the bounded proxy window. If a debug host opens the proxy during that
+window, m1n1 transfers control to the proxy loop instead of starting Windows. This provides a
+recovery route for chainloading another build without writing the ESP again.
 
 Status: the self-contained path is implemented and host-tested; hardware validation pending
 for the current packed image. Do not interpret build or parser tests as proof of cold boot.
@@ -38,7 +42,7 @@ target. USB transports two ACM endpoints: the m1n1 proxy and the guest virtual U
 This path is used for:
 
 - early m1n1 and Mu logs;
-- the 1280x800 virtual framebuffer;
+- the native 2560x1600 virtual framebuffer;
 - testing replacement m1n1 or Mu builds without rewriting the Air ESP;
 - Windows KD and PnP/ACPI/storage diagnostics;
 - hang telemetry and framebuffer/proxy backpressure analysis.
@@ -64,18 +68,27 @@ ls -l /dev/cu.usbmodem*
 With exactly two project endpoints, `scripts/run-assisted.sh` can select them in lexical
 order. If any other modem devices are present, pass both explicitly.
 
-### 2. Chainload the matching m1n1
+### 2. Chainload matching m1n1 and launch Windows
 
-Stop if another `run_uefi.py` owns the proxy. Then chainload the build produced with the
-current proxyclient:
+Stop if another `run_uefi.py` owns the proxy. The recommended single command chainloads the
+matching m1n1, waits for re-enumeration, and starts Mu/Windows:
 
 ```sh
-M1N1DEVICE=/dev/cu.PROXY proxyenv/bin/python \
-  m1n1_windows/proxyclient/tools/chainload.py dist/j313/m1n1.macho
+scripts/run-windows.sh \
+  --execution assisted \
+  --display both \
+  --debug full \
+  --chainload \
+  --proxy /dev/cu.PROXY \
+  --vuart /dev/cu.VUART
 ```
 
-Wait for USB to re-enumerate and list the ports again. A `Bad Command` at the first PCI or
-framebuffer operation normally means the chainload did not happen or used a different build.
+Use `--m1n1 path/to/m1n1.macho` or `--firmware path/to/J313_EFI.fd` to replace one component.
+Internally, `--chainload` invokes
+`m1n1_windows/proxyclient/tools/chainload.py`; normally use the wrapper so endpoint discovery
+and the reconnect wait remain consistent.
+A `Bad Command` at the first PCI or framebuffer operation normally means the chainload did not
+happen or used a different build.
 
 ### 3. Start log and framebuffer viewers
 
@@ -87,7 +100,7 @@ scripts/display-assisted.sh
 The live hypervisor log is served at `http://127.0.0.1:8765/`. The virtual framebuffer is
 served at `http://127.0.0.1:8766/`. Both servers reconnect to new files across guest runs.
 
-### 4. Start Mu and Windows
+### 4. Start Mu and Windows without another chainload
 
 Review the exact command first:
 
@@ -106,6 +119,9 @@ scripts/run-assisted.sh \
   --vuart /dev/cu.VUART \
   --firmware dist/j313/J313_EFI.fd
 ```
+
+This lower-level form assumes matching m1n1 is already running. For the usual development
+cycle, prefer the `run-windows.sh ... --chainload` command above.
 
 For WinPE experiments that intentionally preload an image into guest RAM, add
 `--ramdisk path/to/winpe.img`. Installed Windows normally boots from internal NVMe and does

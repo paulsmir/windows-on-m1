@@ -6,21 +6,28 @@ DRY_RUN=${BUILD_STANDALONE_DRY_RUN:-0}
 BUILD_TARGET=DEBUG
 M1N1_RELEASE=
 CHECK_PYTHON=0
+DISPLAY=physical
+DEBUG=off
 
-case "${1:-}" in
-    "") ;;
-    --release)
-        BUILD_TARGET=RELEASE
-        M1N1_RELEASE=1
-        ;;
-    --check-python)
-        CHECK_PYTHON=1
-        ;;
-    *)
-        echo "usage: $0 [--release|--check-python]" >&2
-        exit 2
-        ;;
-esac
+usage() {
+    echo "usage: $0 [--release] [--check-python]" >&2
+    echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
+    exit 2
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --release) BUILD_TARGET=RELEASE; M1N1_RELEASE=1; shift ;;
+        --check-python) CHECK_PYTHON=1; shift ;;
+        --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
+        --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
+        -h|--help) usage ;;
+        *) usage ;;
+    esac
+done
+
+case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
 
 CONTAINER_MODE=${STANDALONE_BUILD_CONTAINER:-auto}
 USE_CONTAINER=0
@@ -44,7 +51,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
     IMAGE=windows-on-m1-build:local
     if [ "$DRY_RUN" = 1 ]; then
         echo "docker build -t $IMAGE -f <repository-root>/Dockerfile.build <repository-root>"
-        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${1:-}"
+        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG"
     else
         COMMON_DIR=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
         MOUNT_ROOT=$(dirname "$COMMON_DIR")
@@ -57,21 +64,15 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
                 ;;
         esac
         docker build -t "$IMAGE" -f "$ROOT/Dockerfile.build" "$ROOT"
-        if [ "$BUILD_TARGET" = RELEASE ]; then
-            docker run --rm \
-                -e STANDALONE_IN_CONTAINER=1 \
-                -v "$MOUNT_ROOT:/work" \
-                -v "$MOUNT_ROOT:$MOUNT_ROOT" \
-                -w "$CONTAINER_ROOT" \
-                "$IMAGE" "$CONTAINER_ROOT/scripts/build-standalone.sh" --release
-        else
-            docker run --rm \
-                -e STANDALONE_IN_CONTAINER=1 \
-                -v "$MOUNT_ROOT:/work" \
-                -v "$MOUNT_ROOT:$MOUNT_ROOT" \
-                -w "$CONTAINER_ROOT" \
-                "$IMAGE" "$CONTAINER_ROOT/scripts/build-standalone.sh"
-        fi
+        set -- "$CONTAINER_ROOT/scripts/build-standalone.sh"
+        [ "$BUILD_TARGET" != RELEASE ] || set -- "$@" --release
+        set -- "$@" --display "$DISPLAY" --debug "$DEBUG"
+        docker run --rm \
+            -e STANDALONE_IN_CONTAINER=1 \
+            -v "$MOUNT_ROOT:/work" \
+            -v "$MOUNT_ROOT:$MOUNT_ROOT" \
+            -w "$CONTAINER_ROOT" \
+            "$IMAGE" "$@"
         exit
     fi
 fi
@@ -127,7 +128,7 @@ $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE
 make -j$JOBS ${M1N1_RELEASE:+RELEASE=1}
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --m1n1 m1n1_windows/build/m1n1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin
+python3 tools/pack_boot.py --m1n1 m1n1_windows/build/m1n1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG
 copy m1n1.macho and J313_EFI.fd to dist/j313
 write dist/j313/SHA256SUMS
 EOF
@@ -176,7 +177,9 @@ python3 "$ROOT/tools/pack_boot.py" \
     --m1n1 "$ROOT/m1n1_windows/build/m1n1.bin" \
     --firmware "$FD" \
     --layout "$ROOT/config/j313-guest-layout.json" \
-    --output "$DIST/boot.bin"
+    --output "$DIST/boot.bin" \
+    --display "$DISPLAY" \
+    --debug "$DEBUG"
 cp "$ROOT/m1n1_windows/build/m1n1.macho" "$DIST/m1n1.macho"
 cp "$FD" "$DIST/J313_EFI.fd"
 

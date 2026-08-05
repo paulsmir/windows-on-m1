@@ -131,6 +131,24 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("STANDALONE_BUILD_CONTAINER must be auto, always, or never", result.stderr)
 
+    def test_dry_run_forwards_standalone_display_and_debug_profile_to_packer(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+        )
+        result = subprocess.run(
+            [str(SCRIPT), "--display", "both", "--debug", "full"],
+            cwd="/tmp",
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--display both --debug full", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

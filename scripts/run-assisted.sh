@@ -11,11 +11,14 @@ DRY_RUN=0
 LOW_MEM=1
 DISPLAY=virtual
 DEBUG=uart
+CHAINLOAD=0
+M1N1="$ROOT/dist/j313/m1n1.macho"
 
 usage() {
     echo "usage: $0 [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
-    echo "          [--ramdisk FILE] [--no-low-mem] [--dry-run]" >&2
+    echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE]" >&2
+    echo "          [--no-low-mem] [--dry-run]" >&2
     exit 2
 }
 
@@ -27,6 +30,8 @@ while [ "$#" -gt 0 ]; do
         --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
         --ramdisk) [ "$#" -ge 2 ] || usage; RAMDISK=$2; shift 2 ;;
+        --chainload) CHAINLOAD=1; shift ;;
+        --m1n1) [ "$#" -ge 2 ] || usage; M1N1=$2; shift 2 ;;
         --no-low-mem) LOW_MEM=0; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
@@ -76,6 +81,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     fi
     case "$DISPLAY" in virtual|both) echo "USB framebuffer: enabled" ;; *) echo "USB framebuffer: disabled" ;; esac
     [ "$DEBUG" = full ] && echo "telemetry: enabled" || echo "telemetry: disabled"
+    [ "$CHAINLOAD" -eq 0 ] && echo "chainload: disabled" || echo "chainload: $M1N1"
     echo "firmware: $FIRMWARE"
     [ -z "$RAMDISK" ] || echo "RAM disk: $RAMDISK"
     [ "$DEBUG" = off ] || echo "logs: $ROOT/hv.log and $ROOT/guest-uart.log"
@@ -83,6 +89,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 [ -f "$FIRMWARE" ] || { echo "Firmware not found: $FIRMWARE" >&2; exit 1; }
+[ "$CHAINLOAD" -eq 0 ] || [ -f "$M1N1" ] || {
+    echo "m1n1 image not found: $M1N1" >&2
+    exit 1
+}
 [ -z "$RAMDISK" ] || [ -f "$RAMDISK" ] || {
     echo "RAM disk not found: $RAMDISK" >&2
     exit 1
@@ -96,11 +106,17 @@ fi
 cd "$ROOT"
 rm -f guest-uart.log guest-uart.tlog guest-uart-reader.log hv.log guest.pid
 
+if [ "$CHAINLOAD" -eq 1 ]; then
+    echo "Chainloading matching m1n1: $M1N1"
+    M1N1DEVICE="$PROXY" "$PYTHON" \
+        "$ROOT/m1n1_windows/proxyclient/tools/chainload.py" "$M1N1"
+fi
+
 READER=
 if [ "$DEBUG" != off ]; then
     # The reader must hold the virtual UART open before Mu emits its first byte.
-    "$PYTHON" -u "$ROOT/extra/uart-reader.py" "$VUART" 2400 \
-        2>guest-uart-reader.log &
+    nohup "$PYTHON" -u "$ROOT/extra/uart-reader.py" "$VUART" 2400 \
+        </dev/null >guest-uart-reader.log 2>&1 &
     READER=$!
     sleep 2
 fi
@@ -111,10 +127,10 @@ set -- "$FIRMWARE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DE
 
 if [ "$DEBUG" = off ]; then
     PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
-        "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >/dev/null 2>&1 &
+        nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >/dev/null 2>&1 &
 else
     PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
-        "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >hv.log 2>&1 &
+        nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >hv.log 2>&1 &
 fi
 RUNNER=$!
 echo "$RUNNER" >guest.pid

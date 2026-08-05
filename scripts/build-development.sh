@@ -5,22 +5,37 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DRY_RUN=0
 RELEASE=
+DISPLAY=physical
+DEBUG=off
 
-case "${1:-}" in
-    "") ;;
-    --dry-run) DRY_RUN=1 ;;
-    --release) RELEASE=--release ;;
-    *) echo "usage: $0 [--dry-run|--release]" >&2; exit 2 ;;
-esac
+usage() {
+    echo "usage: $0 [--dry-run] [--release]" >&2
+    echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
+    exit 2
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --release) RELEASE=--release; shift ;;
+        --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
+        --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
+        -h|--help) usage ;;
+        *) usage ;;
+    esac
+done
+
+case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+
+set --
+[ -z "$RELEASE" ] || set -- "$@" "$RELEASE"
+set -- "$@" --display "$DISPLAY" --debug "$DEBUG"
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    BUILD_STANDALONE_DRY_RUN=1 "$ROOT/scripts/build-standalone.sh"
+    BUILD_STANDALONE_DRY_RUN=1 "$ROOT/scripts/build-standalone.sh" "$@"
 else
-    if [ -n "$RELEASE" ]; then
-        "$ROOT/scripts/build-standalone.sh" "$RELEASE"
-    else
-        "$ROOT/scripts/build-standalone.sh"
-    fi
+    "$ROOT/scripts/build-standalone.sh" "$@"
 fi
 
 echo "development m1n1: $ROOT/dist/j313/m1n1.macho"

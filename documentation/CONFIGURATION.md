@@ -23,7 +23,7 @@ path.
 - `none` keeps the guest GOP framebuffer allocated but enables neither consumer. This supports
   headless Windows and RDP without removing the firmware display contract.
 
-Mu and Windows always use one reserved 1280x800, 5120-byte-stride,
+Mu and Windows always use one reserved 2560x1600, 10240-byte-stride,
 `PixelBlueGreenRedReserved8BitPerColor` framebuffer. Physical display support maps this buffer as
 the DCP surface; it does not expose iBoot's possibly 30-bit framebuffer to Windows and does not
 copy complete frames in EL2. Virtual display support reads the same guest buffer. Therefore
@@ -54,7 +54,8 @@ The host-assisted entry point is:
 scripts/run-windows.sh \
   --execution assisted \
   --display both \
-  --debug full
+  --debug full \
+  --chainload
 ```
 
 A low-overhead assisted launch is:
@@ -63,7 +64,8 @@ A low-overhead assisted launch is:
 scripts/run-windows.sh \
   --execution assisted \
   --display physical \
-  --debug off
+  --debug off \
+  --chainload
 ```
 
 The installed image defaults to:
@@ -75,8 +77,14 @@ debug=off
 ```
 
 Standalone display and debug choices are encoded in the packed-image manifest by the build
-command. Profiles that require an attached host remain explicit and never become a hidden
-runtime dependency of a normal power-on boot.
+command:
+
+```sh
+scripts/build-standalone.sh --display physical --debug off
+```
+
+Profiles that require an attached host remain explicit and never become a hidden runtime
+dependency of a normal power-on boot.
 
 `--dry-run` resolves and prints the complete profile without touching USB, starting a guest, or
 writing the ESP. Invalid combinations are rejected before any target state changes.
@@ -87,7 +95,7 @@ For assisted mode the launcher performs these stages:
 
 1. Parse and validate the complete profile.
 2. Discover or validate the proxy and virtual-UART endpoints required by that profile.
-3. Chainload the matching m1n1 image when requested and wait for USB re-enumeration.
+3. With `--chainload`, load `dist/j313/m1n1.macho` and wait for USB re-enumeration.
 4. Open the virtual UART only for `uart` or `full`.
 5. Construct the guest boot arguments for the shared BGRA framebuffer.
 6. Ask m1n1 to attach the framebuffer to DCP for `physical` or `both`.
@@ -97,6 +105,10 @@ For assisted mode the launcher performs these stages:
 
 Standalone mode consumes the same validated display/debug values from its manifest before guest
 entry. Physical-display preparation happens before the final boot arguments are handed to Mu.
+On J313, the GOP source rectangle matches the native 2560x1600 internal timing rectangle. This
+is required for the Windows Basic Display handoff; advertising a smaller GOP mode allowed
+winload output but produced a black display after the installed OS took ownership. The web
+viewer consumes the same native framebuffer.
 
 ## Performance and failure rules
 

@@ -71,17 +71,17 @@ the debug cable remains attached to the host.
 
 ## Display
 
-Mu publishes GOP over a reserved framebuffer. Development mode uses a fixed 1280x800,
-32-bit B8G8R8X8 RAM buffer. Windows Boot Manager and Basic Display write pixels without
-knowing that the buffer is observed remotely.
+Mu publishes GOP over a reserved native 2560x1600, 32-bit B8G8R8X8 RAM framebuffer. Windows
+Boot Manager and Basic Display write pixels without knowing that the buffer is scanned out by
+DCP, observed remotely, or both.
 
 m1n1 streams complete framebuffer generations asynchronously over the existing proxy event
 loop. Chunks are ordered and checksummed; only a complete generation replaces `fb.raw`.
 Backpressure skips observer work rather than blocking Windows.
 
-Standalone physical-display support reuses an iBoot/DCP framebuffer behind the same GOP
-contract. Its code path is implemented but remains awaiting validation on a J313 with a
-working internal panel.
+Physical-display support maps the reserved GOP framebuffer into DCP scanout without exposing
+iBoot's 30-bit framebuffer to Windows. The shared framebuffer path is validated in assisted
+mode; quiet standalone cold-boot validation remains pending.
 
 ## Virtual UART and KD
 

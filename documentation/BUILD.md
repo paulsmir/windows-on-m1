@@ -54,6 +54,18 @@ Build the debug artifacts and self-contained image:
 scripts/build-standalone.sh
 ```
 
+The no-argument image is the production-oriented profile: internal physical display and no
+host diagnostics. Other manifest profiles are explicit build options:
+
+```sh
+scripts/build-standalone.sh --display physical --debug off
+scripts/build-standalone.sh --display both --debug full
+```
+
+`none`, `physical`, `virtual`, and `both` are valid display values. `off`, `uart`, and `full`
+are valid debug values. A virtual display still requires a USB host-side consumer; a normal
+standalone power-on should use `physical --debug off`.
+
 Set `STANDALONE_BUILD_CONTAINER=always` to use the container on another host, or `never` only
 when a complete native Project Mu BaseTools environment is already available.
 
@@ -117,11 +129,14 @@ python3 tools/pack_boot.py \
   --m1n1 m1n1_windows/build/m1n1.bin \
   --firmware mu/Build/MacBookAirMid2020-AARCH64/DEBUG_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd \
   --layout config/j313-guest-layout.json \
-  --output dist/j313/boot.bin
+  --output dist/j313/boot.bin \
+  --display physical \
+  --debug off
 ```
 
-It validates alignment, offsets, decompressed size, layout version, and CRC32. The native
-m1n1 parser repeats those checks before touching guest memory.
+It validates alignment, offsets, decompressed size, layout version, CRC32, and launch-profile
+flags. The native m1n1 parser repeats those checks before touching guest memory. The profile
+is carried by `boot.bin`; there is no second configuration file on the ESP.
 
 ## Verification
 

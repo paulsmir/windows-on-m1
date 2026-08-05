@@ -29,7 +29,24 @@ class StandaloneImageTests(unittest.TestCase):
         self.assertEqual(manifest.manifest_offset % api.IMAGE_ALIGNMENT, 0)
         self.assertEqual(manifest.payload_offset % api.IMAGE_ALIGNMENT, 0)
         self.assertEqual(manifest.layout_version, 1)
+        self.assertEqual(manifest.flags, 1)
         self.assertEqual(unpacked, firmware)
+
+    def test_pack_preserves_supported_launch_profile_flags(self):
+        api = self.load_api()
+
+        image = api.pack_image(b"m1n1", b"firmware", layout_version=1, flags=0xA)
+        manifest, _ = api.parse_image(image)
+
+        self.assertEqual(manifest.flags, 0xA)
+
+    def test_pack_and_parse_reject_unknown_or_ambiguous_profile_flags(self):
+        api = self.load_api()
+
+        for flags in (0x10, 0xC, 0xF):
+            with self.subTest(flags=flags):
+                with self.assertRaisesRegex(api.ImageError, "flags"):
+                    api.pack_image(b"m1n1", b"firmware", layout_version=1, flags=flags)
 
     def test_parse_rejects_payload_corruption(self):
         api = self.load_api()
@@ -143,6 +160,38 @@ class StandaloneImageTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(output.stat().st_mode & 0o777, 0o644)
+
+    def test_cli_embeds_requested_display_and_debug_profile(self):
+        api = self.load_api()
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            m1n1 = directory / "m1n1.bin"
+            firmware = directory / "firmware.fd"
+            output = directory / "boot.bin"
+            m1n1.write_bytes(b"m" * 0x4000)
+            firmware.write_bytes(b"firmware")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools/pack_boot.py"),
+                    "--m1n1", str(m1n1),
+                    "--firmware", str(firmware),
+                    "--layout", str(ROOT / "config/j313-guest-layout.json"),
+                    "--output", str(output),
+                    "--display", "both",
+                    "--debug", "full",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest, _ = api.parse_image(output.read_bytes())
+            self.assertEqual(manifest.flags, 0xB)
+            self.assertIn("profile: display=both debug=full", result.stdout)
 
 
 if __name__ == "__main__":

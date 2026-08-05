@@ -20,6 +20,8 @@ archive/
 *.pid
 *.tlog
 *-fb-info.json
+fb-info.json
+proxyenv
 *.raw
 *.raw.part
 frames/
