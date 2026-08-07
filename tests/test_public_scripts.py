@@ -25,6 +25,38 @@ class PublicScriptTests(unittest.TestCase):
             self.assertNotIn("C02HDNCCQ6L43", text)
             self.assertIn('dirname -- "$0"', text)
 
+    def test_standalone_monitor_wrapper_is_location_independent_and_dry_run_safe(self):
+        path = ROOT / "scripts/log-standalone.sh"
+        self.assertTrue(path.is_file())
+        text = path.read_text(encoding="utf-8")
+        self.assertIn('dirname -- "$0"', text)
+        self.assertNotIn("/Users/pavel", text)
+        self.assertNotIn("C02HDNCCQ6L41", text)
+
+        result = subprocess.run(
+            [
+                "sh",
+                str(path),
+                "--console",
+                "/dev/cu.test-console",
+                "--vuart",
+                "/dev/cu.test-vuart",
+                "--output",
+                "test-captures",
+                "--dry-run",
+            ],
+            cwd="/tmp",
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("tools/standalone_monitor.py", result.stdout)
+        self.assertIn("--console /dev/cu.test-console", result.stdout)
+        self.assertIn("--vuart /dev/cu.test-vuart", result.stdout)
+        self.assertIn("--output test-captures", result.stdout)
+
     def test_development_build_dry_run_names_replaceable_components(self):
         result = subprocess.run(
             ["sh", str(ROOT / "scripts/build-development.sh"), "--dry-run"],
