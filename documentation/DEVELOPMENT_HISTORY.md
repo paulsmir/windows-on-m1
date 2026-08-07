@@ -213,3 +213,47 @@ and added a bounded debug-host maintenance window.
 The image parser, layout generation, native boot state machine, build, and reversible ESP
 installer are host-tested. The current image has not yet completed its final physical
 cold-boot validation, so standalone is described as implemented rather than validated.
+
+## Standalone CPU1 toolchain control
+
+The first passive standalone monitor capture reset while Windows issued PSCI `CPU_ON` for
+CPU1. The GCC 13.3.0 image published the guest entry but raised an EL2 synchronous exception
+before `HV: Entering guest secondary 1`. This left two variables relative to the successful
+assisted path: compiler code generation and execution directly from the first m1n1 entered
+by iBoot.
+
+A controlled image rebuilt every m1n1 C and assembly object with Homebrew Clang 22.1.8,
+while retaining the same m1n1 sources, Mu firmware, guest layout, and physical/monitor launch
+profile. Its immutable identifiers were:
+
+- `boot.bin` SHA-256: `f6df78592dc4c6b395c99e9cc6a6cd961e59001282355532adad74fcc9239ef1`;
+- Mu FD SHA-256: `64763cc61e0fdba693438386ea2125d3fe750ee1c1ff8845b8d62f63e7ea462a`;
+- m1n1 commit: `c6dc965a4d3312e4aa437835236e6b0e98c32c16`;
+- manifest flags: `0x11` (`display=physical`, `debug=monitor`).
+
+Two consecutive cold-boot generations reproduced the same failure:
+
+```text
+PSCI DEBUG: turning on CPU1 MPIDR: 0x1
+HV: Initializing secondary 1
+HV: Secondary 1 published entry=... x0=0x10e000
+Exception: SYNC
+MPIDR: 0x80000001
+PC: ... (rel: 0x12d54)
+ESR: 0x2000000 (unknown)
+L2C_ERR_STS: 0x11000ffc00000000
+Unhandled exception, rebooting...
+```
+
+The exact Clang ELF maps relative PC `0x12d54` to `display_configure()` at the assertion on
+`display.c:580`; `hv_init_secondary()` is at relative address `0x16cb8`. CPU1 therefore did
+not reach the function submitted by `smp_call4()`. The PC may be where an L2/context error
+was reported rather than its original cause, so this result does not yet prove corruption of
+the spin-table target. It does prove that GCC code generation is not the trigger and that the
+failure precedes Windows guest entry on CPU1.
+
+The remaining controlled difference is startup context. Assisted boot first uses `P_VECTOR`
+to enter a fresh m1n1 image and then initializes the hypervisor; direct standalone performs
+display, payload, and hypervisor work in the first m1n1 entered by iBoot. The next checkpoint
+is therefore a native Stage 0 self-chainload that preserves the same inner image and Mu
+firmware, then verifies CPU1 from a fresh Stage 1 context before any shared-engine refactor.
