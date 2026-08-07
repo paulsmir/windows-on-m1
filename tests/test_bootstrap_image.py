@@ -1,5 +1,6 @@
 import importlib
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -151,6 +152,24 @@ class BootstrapImageTests(unittest.TestCase):
             self.assertEqual(decoded_firmware, b"firmware")
             self.assertIn("outer manifest offset", result.stdout)
             self.assertIn("inner manifest offset", result.stdout)
+
+    def test_python_and_c_manifest_constants_match(self):
+        api = self.load_api()
+        header = (ROOT / "m1n1_windows/src/hv_bootstrap_manifest.h").read_text()
+
+        def macro(name):
+            match = re.search(rf"^#define {name} +(.+)$", header, re.MULTILINE)
+            self.assertIsNotNone(match, f"missing C macro {name}")
+            return match.group(1).strip()
+
+        self.assertEqual(macro("HV_BOOTSTRAP_MAGIC").strip('"'),
+                         api.BOOTSTRAP_MAGIC.decode("ascii"))
+        self.assertEqual(int(macro("HV_BOOTSTRAP_FORMAT_VERSION").rstrip("u"), 0),
+                         api.BOOTSTRAP_FORMAT_VERSION)
+        self.assertEqual(int(macro("HV_BOOTSTRAP_IMAGE_ALIGNMENT").rstrip("u"), 0),
+                         api.BOOTSTRAP_ALIGNMENT)
+        self.assertEqual(int(macro("HV_BOOTSTRAP_MANIFEST_SIZE").rstrip("u"), 0),
+                         api.BOOTSTRAP_HEADER_SIZE)
 
 
 if __name__ == "__main__":
