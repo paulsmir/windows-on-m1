@@ -19,6 +19,7 @@ class LaunchProfileTests(unittest.TestCase):
         self.assertFalse(profile.virtual_display)
         self.assertFalse(profile.capture_uart)
         self.assertFalse(profile.telemetry)
+        self.assertFalse(profile.proxy_takeover)
         self.assertEqual(profile.manifest_flags, 0x1)
 
     def test_display_modes_derive_independent_consumers(self):
@@ -41,16 +42,22 @@ class LaunchProfileTests(unittest.TestCase):
     def test_debug_modes_derive_workers_and_manifest_bits(self):
         api = self.load_api()
         expected = {
-            "off": (False, False, 0x1),
-            "uart": (True, False, 0x5),
-            "full": (True, True, 0x9),
+            "off": (False, False, False, 0x1),
+            "uart": (True, False, True, 0x5),
+            "full": (True, True, True, 0x9),
+            "monitor": (True, False, False, 0x11),
         }
 
         for name, want in expected.items():
             with self.subTest(name=name):
                 profile = api.parse_profile(debug=name)
                 self.assertEqual(
-                    (profile.capture_uart, profile.telemetry, profile.manifest_flags),
+                    (
+                        profile.capture_uart,
+                        profile.telemetry,
+                        profile.proxy_takeover,
+                        profile.manifest_flags,
+                    ),
                     want,
                 )
 
@@ -58,7 +65,7 @@ class LaunchProfileTests(unittest.TestCase):
         api = self.load_api()
 
         for display in ("none", "physical", "virtual", "both"):
-            for debug in ("off", "uart", "full"):
+            for debug in ("off", "uart", "full", "monitor"):
                 with self.subTest(display=display, debug=debug):
                     profile = api.parse_profile(display=display, debug=debug)
                     decoded = api.profile_from_manifest_flags(profile.manifest_flags)
@@ -76,7 +83,7 @@ class LaunchProfileTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     api.parse_profile(**kwargs)
 
-        for flags in (0xC, 0x10, 0xFFFFFFFF):
+        for flags in (0xC, 0x14, 0x18, 0x1C, 0x20, 0xFFFFFFFF):
             with self.subTest(flags=flags):
                 with self.assertRaises(ValueError):
                     api.profile_from_manifest_flags(flags)

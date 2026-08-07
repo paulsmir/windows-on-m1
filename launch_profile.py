@@ -22,6 +22,7 @@ class Debug(str, Enum):
     OFF = "off"
     UART = "uart"
     FULL = "full"
+    MONITOR = "monitor"
 
 
 _DISPLAY_FLAGS = {
@@ -34,8 +35,9 @@ _DEBUG_FLAGS = {
     Debug.OFF: 0x0,
     Debug.UART: 0x4,
     Debug.FULL: 0x8,
+    Debug.MONITOR: 0x10,
 }
-_KNOWN_FLAGS = 0xF
+_KNOWN_FLAGS = 0x1F
 
 
 @dataclass(frozen=True)
@@ -54,11 +56,15 @@ class LaunchProfile:
 
     @property
     def capture_uart(self) -> bool:
-        return self.debug in (Debug.UART, Debug.FULL)
+        return self.debug in (Debug.UART, Debug.FULL, Debug.MONITOR)
 
     @property
     def telemetry(self) -> bool:
         return self.debug is Debug.FULL
+
+    @property
+    def proxy_takeover(self) -> bool:
+        return self.debug in (Debug.UART, Debug.FULL)
 
     @property
     def manifest_flags(self) -> int:
@@ -80,7 +86,7 @@ def profile_from_manifest_flags(flags: int) -> LaunchProfile:
         raise ValueError(f"unsupported launch-profile flags {flags:#x}")
 
     display_bits = flags & 0x3
-    debug_bits = flags & 0xC
+    debug_bits = flags & ~0x3
     display = next(value for value, bits in _DISPLAY_FLAGS.items() if bits == display_bits)
     try:
         debug = next(value for value, bits in _DEBUG_FLAGS.items() if bits == debug_bits)

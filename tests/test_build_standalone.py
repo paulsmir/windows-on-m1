@@ -149,6 +149,24 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--display both --debug full", result.stdout)
 
+    def test_dry_run_accepts_and_forwards_monitor_profile(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+        )
+        result = subprocess.run(
+            [str(SCRIPT), "--display", "physical", "--debug", "monitor"],
+            cwd="/tmp",
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--display physical --debug monitor", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

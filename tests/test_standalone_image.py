@@ -40,10 +40,18 @@ class StandaloneImageTests(unittest.TestCase):
 
         self.assertEqual(manifest.flags, 0xA)
 
+    def test_pack_preserves_physical_monitor_profile(self):
+        api = self.load_api()
+
+        image = api.pack_image(b"m1n1", b"firmware", layout_version=1, flags=0x11)
+        manifest, _ = api.parse_image(image)
+
+        self.assertEqual(manifest.flags, 0x11)
+
     def test_pack_and_parse_reject_unknown_or_ambiguous_profile_flags(self):
         api = self.load_api()
 
-        for flags in (0x10, 0xC, 0xF):
+        for flags in (0xC, 0x14, 0x18, 0x1C, 0x20):
             with self.subTest(flags=flags):
                 with self.assertRaisesRegex(api.ImageError, "flags"):
                     api.pack_image(b"m1n1", b"firmware", layout_version=1, flags=flags)

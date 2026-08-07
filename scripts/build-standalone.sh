@@ -11,7 +11,7 @@ DEBUG=off
 
 usage() {
     echo "usage: $0 [--release] [--check-python]" >&2
-    echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
+    echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     exit 2
 }
 
@@ -27,7 +27,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
-case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
 
 CONTAINER_MODE=${STANDALONE_BUILD_CONTAINER:-auto}
 USE_CONTAINER=0
