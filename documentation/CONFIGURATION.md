@@ -41,6 +41,9 @@ instead of silently changing the requested profile.
   producing `hv.log`, `guest-uart.log`, and `guest-uart.tlog`.
 - `full` includes `uart` and enables hang telemetry plus the diagnostic hooks used by the KD and
   device bring-up tools.
+- `monitor` is a standalone-only diagnostic profile. It exposes the m1n1 console and guest
+  virtual UART over USB, but it disables proxy takeover and telemetry. A `debug=monitor` image
+  always starts Windows even when the recording host already has both USB endpoints open.
 
 Display and debug remain independent. For example, `--display virtual --debug off` still sends
 frames because the user requested a virtual display, but it does not run telemetry or retain
@@ -81,10 +84,16 @@ command:
 
 ```sh
 scripts/build-standalone.sh --display physical --debug off
+scripts/build-standalone.sh --display physical --debug monitor
 ```
 
 Profiles that require an attached host remain explicit and never become a hidden runtime
 dependency of a normal power-on boot.
+
+`monitor` is the exception to the legacy maintenance-window behavior: it services USB once,
+never enters the proxy loop, and proceeds directly into the same autonomous guest launch. This
+makes it suitable for observing a cold-boot reset without changing the timing by waiting three
+seconds or handing control to `uartproxy_run()`.
 
 `--dry-run` resolves and prints the complete profile without touching USB, starting a guest, or
 writing the ESP. Invalid combinations are rejected before any target state changes.
@@ -114,6 +123,8 @@ viewer consumes the same native framebuffer.
 
 - `debug=off` must not open the virtual-UART endpoint, poll telemetry, or write continuously
   growing log files.
+- `debug=monitor` may expose console and vUART, but host presence must never hold guest entry or
+  transfer control to the proxy.
 - `physical` must not enable USB framebuffer events.
 - `virtual` must not initialize or reconfigure DCP for guest scanout.
 - `both` uses one buffer and enables two consumers; it must not mirror frames in software.

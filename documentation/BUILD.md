@@ -60,11 +60,14 @@ host diagnostics. Other manifest profiles are explicit build options:
 ```sh
 scripts/build-standalone.sh --display physical --debug off
 scripts/build-standalone.sh --display both --debug full
+scripts/build-standalone.sh --display physical --debug monitor
 ```
 
-`none`, `physical`, `virtual`, and `both` are valid display values. `off`, `uart`, and `full`
-are valid debug values. A virtual display still requires a USB host-side consumer; a normal
-standalone power-on should use `physical --debug off`.
+`none`, `physical`, `virtual`, and `both` are valid display values. `off`, `uart`, `full`, and
+`monitor` are valid debug values. A virtual display still requires a USB host-side consumer;
+a normal standalone power-on should use `physical --debug off`. `monitor` is a diagnostic
+profile that exposes console/vUART while always continuing into Windows instead of allowing
+proxy takeover.
 
 Set `STANDALONE_BUILD_CONTAINER=always` to use the container on another host, or `never` only
 when a complete native Project Mu BaseTools environment is already available.
@@ -137,6 +140,11 @@ python3 tools/pack_boot.py \
 It validates alignment, offsets, decompressed size, layout version, CRC32, and launch-profile
 flags. The native m1n1 parser repeats those checks before touching guest memory. The profile
 is carried by `boot.bin`; there is no second configuration file on the ESP.
+
+The monitor flag is manifest ABI value `0x10`; combined with physical display it produces flags
+`0x11`. Do not append a monitor manifest to an older `m1n1.bin`: exact decoding intentionally
+rejects unknown or combined debug values. Always build and install `boot.bin` as one artifact
+from a single recursive checkout.
 
 ## Verification
 

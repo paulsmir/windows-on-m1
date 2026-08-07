@@ -27,12 +27,52 @@ and starts the embedded firmware immediately. A second computer is not consulted
 normal path.
 
 Images explicitly built with `debug=uart`, `debug=full`, or a virtual display open the USB
-transport and retain the bounded proxy window. If a debug host opens the proxy during that
-window, m1n1 transfers control to the proxy loop instead of starting Windows. This provides a
-recovery route for chainloading another build without writing the ESP again.
+transport and normally retain the bounded proxy window. If a debug host opens a legacy debug
+profile during that window, m1n1 transfers control to the proxy loop instead of starting
+Windows. This provides a recovery route for chainloading another build without writing the ESP
+again. `debug=monitor` deliberately does not have that behavior.
 
 Status: the self-contained path is implemented and host-tested; hardware validation pending
 for the current packed image. Do not interpret build or parser tests as proof of cold boot.
+
+### Cold-boot USB monitor
+
+Use the monitor profile when autonomous Windows reaches the logo and resets before assisted
+tools can inspect it. It is a diagnostic profile, not the final low-overhead configuration.
+Build it from the same checkout that supplies the target m1n1 manifest ABI:
+
+```sh
+scripts/build-standalone.sh --display physical --debug monitor
+```
+
+Install the resulting `dist/j313/boot.bin` on the target while macOS is running, using the ESP
+identifier previously confirmed by `inspect`:
+
+```sh
+sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin
+```
+
+Before powering on the target, start the passive recorder on the host:
+
+```sh
+scripts/log-standalone.sh --output standalone-monitor-logs
+```
+
+Then attach the debug USB cable and cold-power the target. The monitor image always starts
+Windows; opening either endpoint never enters the proxy loop. If the target resets, the recorder
+waits for USB re-enumeration and creates `generation-002`, `generation-003`, and so on instead of
+overwriting `generation-001`. Stop it with Ctrl-C after the reset has been captured.
+
+When automatic discovery is ambiguous, pass both endpoints explicitly:
+
+```sh
+scripts/log-standalone.sh \
+  --console /dev/cu.CONSOLE \
+  --vuart /dev/cu.VUART \
+  --output standalone-monitor-logs
+```
+
+After diagnosis, rebuild and install `--display physical --debug off` or restore the ESP backup.
 
 ## Assisted development mode
 

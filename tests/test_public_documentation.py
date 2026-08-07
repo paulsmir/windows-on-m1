@@ -139,6 +139,26 @@ class PublicDocumentationTests(unittest.TestCase):
         ):
             self.assertIn(token, text)
 
+    def test_standalone_monitor_workflow_is_explicit_and_abi_safe(self):
+        paths = (
+            ROOT / "documentation/CONFIGURATION.md",
+            ROOT / "documentation/RUN.md",
+            ROOT / "documentation/DEBUGGING.md",
+            ROOT / "documentation/BUILD.md",
+        )
+        text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+        for token in (
+            "debug=monitor",
+            "scripts/build-standalone.sh --display physical --debug monitor",
+            "scripts/log-standalone.sh --output standalone-monitor-logs",
+            "generation-001",
+            "manifest ABI",
+        ):
+            self.assertIn(token, text)
+        self.assertIn("always starts Windows", text)
+        self.assertIn("never enters the proxy loop", text)
+        self.assertIn("diagnostic profile", text)
+
     def test_kd_tools_have_one_canonical_directory(self):
         names = {
             "kd_acpi.py",

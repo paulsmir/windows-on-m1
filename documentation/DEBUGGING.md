@@ -4,6 +4,44 @@ The optional second Mac exposes four independent observations: hypervisor log, v
 virtual framebuffer, and Windows KD. Treat them as separate signals. Losing one does not
 prove that the target or the other transports stopped.
 
+## Autonomous reset capture
+
+Assisted mode owns the proxy and therefore changes the startup path. To observe a failure that
+only occurs from the installed `boot.bin`, build `debug=monitor` and start the passive recorder
+before cold power-on:
+
+```sh
+scripts/build-standalone.sh --display physical --debug monitor
+scripts/log-standalone.sh --output standalone-monitor-logs
+```
+
+Unlike `debug=uart` and `debug=full`, monitor mode never enters the proxy loop when a host is
+connected. It always starts Windows after initializing the two USB ACM channels. The recorder
+does not issue proxy commands and never writes to either serial endpoint.
+
+Each USB lifetime is stored separately:
+
+```text
+standalone-monitor-logs/
+  generation-001/
+    console.raw
+    console.tlog
+    vuart.raw
+    vuart.tlog
+    events.log
+  generation-002/
+    ...
+```
+
+The raw files preserve exact bytes. The `.tlog` files add host UTC timestamps, while
+`events.log` identifies open, disconnect, and close boundaries. A new generation proves USB
+re-enumeration; it does not by itself distinguish a guest-requested reboot from an EL2 exception
+or platform reset. Compare the final console and vUART lines immediately before the boundary.
+
+The monitor flag is part of the packed manifest ABI. The packer, installed m1n1 parser, and host
+recorder must come from matching repository revisions. An older target correctly rejects the
+new flag rather than guessing its meaning.
+
 ## Port ownership
 
 List current endpoints after every target reboot:
