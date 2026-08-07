@@ -24,7 +24,8 @@ class InstallEspTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         output = result.stdout
         for item in (
-            "validate standalone manifest",
+            "validate outer bootstrap manifest",
+            "validate nested standalone manifest",
             "diskutil mount disk9s4",
             "/m1n1/boot.bin",
             "create backup once",

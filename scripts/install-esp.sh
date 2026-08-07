@@ -42,7 +42,10 @@ if [ "$ACTION" = install ] && [ -z "$IMAGE" ]; then
 fi
 
 if [ "$DRY_RUN" = 1 ]; then
-    [ "$ACTION" = install ] && echo "validate standalone manifest: $IMAGE"
+    if [ "$ACTION" = install ]; then
+        echo "validate outer bootstrap manifest: $IMAGE"
+        echo "validate nested standalone manifest: $IMAGE"
+    fi
     echo "diskutil mount $DISK"
     echo "resolve mounted target: <mount-point>/m1n1/boot.bin"
     case "$ACTION" in
@@ -76,7 +79,7 @@ esac
 if [ "$ACTION" = install ]; then
     [ -f "$IMAGE" ] || { echo "image not found: $IMAGE" >&2; exit 1; }
     PYTHONPATH="$ROOT" python3 -c \
-        'import pathlib, sys; from standalone_image import parse_image; parse_image(pathlib.Path(sys.argv[1]).read_bytes())' \
+        'import pathlib, sys; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(pathlib.Path(sys.argv[1]).read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags' \
         "$IMAGE"
 fi
 

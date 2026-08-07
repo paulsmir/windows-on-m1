@@ -30,7 +30,11 @@ class BuildStandaloneTests(unittest.TestCase):
             "make -j",
             "tools/generate_guest_layout.py --check",
             "tools/pack_boot.py",
+            "--stage0-m1n1 m1n1_windows/build/m1n1.bin",
+            "--stage1-m1n1 m1n1_windows/build/m1n1.bin",
             "dist/j313/boot.bin",
+            "parse_bootstrap",
+            "parse_image",
             "SHA256SUMS",
         )
         cursor = 0
@@ -166,6 +170,7 @@ class BuildStandaloneTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--display physical --debug monitor", result.stdout)
+        self.assertNotIn("--m1n1 m1n1_windows/build/m1n1.bin", result.stdout)
 
 
 if __name__ == "__main__":

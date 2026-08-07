@@ -211,8 +211,9 @@ manifest, embedded compressed Mu after m1n1, implemented the native guest prepar
 and added a bounded debug-host maintenance window.
 
 The image parser, layout generation, native boot state machine, build, and reversible ESP
-installer are host-tested. The current image has not yet completed its final physical
-cold-boot validation, so standalone is described as implemented rather than validated.
+installer are host-tested. A two-stage image has now completed physical cold-boot validation
+through Stage 1, Mu, the Windows loader, and the first Windows `CPU_ON` request. Windows SMP
+still fails at the CPU1 boundary described below, so standalone is not yet stable.
 
 ## Standalone CPU1 toolchain control
 
@@ -257,3 +258,68 @@ to enter a fresh m1n1 image and then initializes the hypervisor; direct standalo
 display, payload, and hypervisor work in the first m1n1 entered by iBoot. The next checkpoint
 is therefore a native Stage 0 self-chainload that preserves the same inner image and Mu
 firmware, then verifies CPU1 from a fresh Stage 1 context before any shared-engine refactor.
+
+## Stage 0 self-chainload hardware checkpoint
+
+The native chainload path was brought to parity with the working Python loader before the
+hardware test. It now preserves `SEPFW`, optional `preoslog`, and `BootArgs`, uses checked
+16-KiB layout arithmetic, prepares every secondary CPU RVBAR, and publishes `next_stage`
+only after all fallible preparation has succeeded. A versioned outer `ASIBOOT0` manifest
+contains a compressed, independently validated autonomous Stage 1 image.
+
+The immutable checkpoint identifiers were:
+
+- outer `boot.bin` SHA-256: `bb718eea9caf1edcc245c6358ba5421430834cf2c44fba81c9bb21684116eccd`;
+- nested `inner.bin` SHA-256: `6accd9ae98e5b3a244785309682cbfa29bd3f870224f63ebf20e979f18d39b3a`;
+- exact Stage 1 ELF SHA-256: `ec93f123be0d688acef36c8123280f34722ab39187ccc1bc29659f6a86d901ad`;
+- Mu FD SHA-256: `64763cc61e0fdba693438386ea2125d3fe750ee1c1ff8845b8d62f63e7ea462a`;
+- root commit: `0de5c9b074f505aee2d506d2588ee2ff63332321`;
+- m1n1 commit: `0e532a95f3e848f220836937beb9160fcafef386`;
+- outer and nested flags: `0x11` (`display=physical`, `debug=monitor`).
+
+The passive recorder observed two distinct USB generations. Stage 0 validated and began
+decompressing the exact inner image:
+
+```text
+Initialization complete.
+BOOTSTRAP_VALIDATE compressed=0x12da40 inner=0x232424 flags=0x11
+BOOTSTRAP_MONITOR passive USB window=3 seconds
+BOOTSTRAP_DECOMPRESS source=0x12da40 destination=0x232424
+```
+
+The final verify/chainload messages were queued immediately before Stage 0 disconnected its
+USB gadget and were not delivered to the host. The USB generation transition followed by a
+fresh m1n1 banner and nested-manifest discovery is direct evidence that both operations
+succeeded:
+
+```text
+generation 2
+Initialization complete.
+Standalone: image valid layout=1 compressed=0x102424 firmware=0x1d88000
+```
+
+Stage 1 then initialized Mu, NVMe, xHCI, the Windows loader, and reached the same CPU1
+boundary as the direct Clang control:
+
+```text
+PSCI DEBUG: turning on CPU1 MPIDR: 0x1
+HV: Initializing secondary 1
+HV: Secondary 1 published entry=0x8edef7010 x0=0x10e000
+Exception: SYNC
+MPIDR: 0x80000001
+PC: 0x804ba7bbc (rel: 0x13bbc)
+ESR: 0x2000000 (unknown)
+L2C_ERR_STS: 0x11000ffc00000000
+Unhandled exception, rebooting...
+```
+
+The checkpoint ELF maps relative PC `0x13bbc` to `display_configure()` at
+`display.c:580`, exactly as the earlier control did after accounting for code-size changes.
+There is still no `HV: Entering guest secondary 1` or `HV: Secondary 1 consumed entry`.
+
+This result validates the two-stage self-chainload mechanism but falsifies the hypothesis
+that direct execution from the first iBoot-entered m1n1 was sufficient to cause the CPU1
+failure. The remaining controlled difference is now the public m1n1/configuration history
+relative to the older assisted known-good tree. The next investigation should bisect or
+compare that delta at the secondary reset/context boundary; it should not add more guest
+features or refactor the shared guest engine first.

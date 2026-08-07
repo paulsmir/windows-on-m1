@@ -128,7 +128,8 @@ $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE
 make -j$JOBS ${M1N1_RELEASE:+RELEASE=1}
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --m1n1 m1n1_windows/build/m1n1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG
+python3 tools/pack_boot.py --stage0-m1n1 m1n1_windows/build/m1n1.bin --stage1-m1n1 m1n1_windows/build/m1n1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG
+PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
 copy m1n1.macho and J313_EFI.fd to dist/j313
 write dist/j313/SHA256SUMS
 EOF
@@ -174,12 +175,16 @@ DIST="$ROOT/dist/j313"
 FD="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd"
 mkdir -p "$DIST"
 python3 "$ROOT/tools/pack_boot.py" \
-    --m1n1 "$ROOT/m1n1_windows/build/m1n1.bin" \
+    --stage0-m1n1 "$ROOT/m1n1_windows/build/m1n1.bin" \
+    --stage1-m1n1 "$ROOT/m1n1_windows/build/m1n1.bin" \
     --firmware "$FD" \
     --layout "$ROOT/config/j313-guest-layout.json" \
     --output "$DIST/boot.bin" \
     --display "$DISPLAY" \
     --debug "$DEBUG"
+PYTHONPATH="$ROOT" python3 -c \
+    'from pathlib import Path; import sys; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path(sys.argv[1]).read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print(f"Validated outer flags={outer.flags:#x}, nested flags={nested.flags:#x}, firmware={len(firmware)} bytes")' \
+    "$DIST/boot.bin"
 cp "$ROOT/m1n1_windows/build/m1n1.macho" "$DIST/m1n1.macho"
 cp "$FD" "$DIST/J313_EFI.fd"
 
