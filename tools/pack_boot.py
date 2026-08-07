@@ -13,12 +13,19 @@ sys.path.insert(0, str(ROOT))
 
 from guest_layout import load_layout
 from launch_profile import Debug, Display, parse_profile
+from bootstrap_image import pack_bootstrap, parse_bootstrap
 from standalone_image import IMAGE_ALIGNMENT, ImageError, pack_image, parse_image
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--m1n1", type=Path, required=True)
+    m1n1_group = parser.add_mutually_exclusive_group(required=True)
+    m1n1_group.add_argument("--m1n1", type=Path,
+                            help="raw m1n1 for the legacy direct standalone image")
+    m1n1_group.add_argument("--stage1-m1n1", type=Path,
+                            help="raw inner m1n1 for a two-stage image")
+    parser.add_argument("--stage0-m1n1", type=Path,
+                        help="raw outer m1n1 that validates and chainloads Stage 1")
     parser.add_argument("--firmware", type=Path, required=True)
     parser.add_argument("--layout", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -28,19 +35,40 @@ def main() -> int:
 
     layout = load_layout(args.layout)
     profile = parse_profile(display=args.display, debug=args.debug)
-    m1n1 = args.m1n1.read_bytes()
+    if args.stage0_m1n1 is not None and args.stage1_m1n1 is None:
+        parser.error("--stage0-m1n1 requires --stage1-m1n1")
+    if args.stage1_m1n1 is not None and args.stage0_m1n1 is None:
+        parser.error("--stage1-m1n1 requires --stage0-m1n1")
+
+    m1n1_path = args.stage1_m1n1 or args.m1n1
+    m1n1 = m1n1_path.read_bytes()
     if len(m1n1) % IMAGE_ALIGNMENT:
         raise ImageError(
             "m1n1 input does not end at its 16 KiB-aligned _payload_start; "
             "use the raw m1n1.bin build artifact"
         )
-    image = pack_image(
+    inner = pack_image(
         m1n1,
         args.firmware.read_bytes(),
         layout_version=layout.layout_version,
         flags=profile.manifest_flags,
     )
-    manifest, _ = parse_image(image)
+    inner_manifest, firmware = parse_image(inner)
+    outer_manifest = None
+    if args.stage0_m1n1 is not None:
+        stage0 = args.stage0_m1n1.read_bytes()
+        if len(stage0) % IMAGE_ALIGNMENT:
+            raise ImageError(
+                "Stage 0 input does not end at its 16 KiB-aligned _payload_start; "
+                "use the raw m1n1.bin build artifact"
+            )
+        image = pack_bootstrap(stage0, inner, flags=profile.manifest_flags)
+        outer_manifest, decoded_inner = parse_bootstrap(image)
+        decoded_manifest, decoded_firmware = parse_image(decoded_inner)
+        assert decoded_manifest == inner_manifest
+        assert decoded_firmware == firmware
+    else:
+        image = inner
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
@@ -62,9 +90,16 @@ def main() -> int:
     digest = hashlib.sha256(image).hexdigest()
     print(f"output: {args.output}")
     print(f"size: {len(image)} bytes")
-    print(f"manifest offset: 0x{manifest.manifest_offset:x}")
-    print(f"payload offset: 0x{manifest.payload_offset:x}")
-    print(f"firmware CRC32: {manifest.crc32:08x}")
+    if outer_manifest is not None:
+        print(f"outer manifest offset: 0x{outer_manifest.manifest_offset:x}")
+        print(f"outer payload offset: 0x{outer_manifest.payload_offset:x}")
+        print(f"outer CRC32: {outer_manifest.crc32:08x}")
+        print(f"inner manifest offset: 0x{inner_manifest.manifest_offset:x}")
+        print(f"inner payload offset: 0x{inner_manifest.payload_offset:x}")
+    else:
+        print(f"manifest offset: 0x{inner_manifest.manifest_offset:x}")
+        print(f"payload offset: 0x{inner_manifest.payload_offset:x}")
+    print(f"firmware CRC32: {inner_manifest.crc32:08x}")
     print(f"profile: display={profile.display.value} debug={profile.debug.value}")
     print(f"SHA-256: {digest}")
     return 0
