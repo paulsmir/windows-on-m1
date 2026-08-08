@@ -81,6 +81,25 @@ a normal standalone power-on should use `physical --debug off`. `monitor` is a d
 profile that exposes console/vUART while always continuing into Windows instead of allowing
 proxy takeover.
 
+Each invocation replaces `dist/j313/boot.bin`. Preserve named copies before building the next
+profile so a known-good diagnostic image cannot be confused with the quiet production image:
+
+```sh
+mkdir -p .local/validated-artifacts
+
+scripts/build-standalone.sh --display physical --debug monitor
+cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-monitor.bin
+shasum -a 256 .local/validated-artifacts/boot-physical-monitor.bin
+
+scripts/build-standalone.sh --display physical --debug off
+cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-production.bin
+shasum -a 256 .local/validated-artifacts/boot-physical-production.bin
+```
+
+The production profile is the only normal-use and performance profile. The monitor image keeps
+USB console endpoints active and may emit verbose synchronous USB logging; it is deliberately
+observable, not deliberately low overhead.
+
 `STANDALONE_BUILD_CONTAINER=auto` is the supported macOS mode. It runs only the Mu portion in
 the container and returns to macOS for both m1n1 stages. `never` requires native Project Mu
 BaseTools, which the pinned tree does not provide for Apple Silicon macOS. `always` is a
@@ -159,6 +178,15 @@ python3 tools/pack_boot.py \
 It validates alignment, offsets, decompressed size, layout version, CRC32, and launch-profile
 flags. The native m1n1 parser repeats those checks before touching guest memory. The profile
 is carried by `boot.bin`; there is no second configuration file on the ESP.
+
+Inspect a preserved image before installation:
+
+```sh
+python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path(".local/validated-artifacts/boot-physical-production.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print(outer); print(nested); print(f"firmware={len(firmware)}")'
+```
+
+The production copy must report `display=physical`, `debug=off`; the monitor copy must report
+`display=physical`, `debug=monitor`. Reject an image whose parser and filename disagree.
 
 The monitor flag is manifest ABI value `0x10`; combined with physical display it produces flags
 `0x11`. Do not append a monitor manifest to an older `m1n1.bin`: exact decoding intentionally

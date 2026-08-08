@@ -153,11 +153,20 @@ class PublicDocumentationTests(unittest.TestCase):
             "scripts/log-standalone.sh --output standalone-monitor-logs",
             "generation-001",
             "manifest ABI",
+            "boot-physical-monitor.bin",
+            "boot-physical-production.bin",
+            "attach after Windows has started",
+            "verbose synchronous USB logging",
+            "USB backpressure",
+            "production profile",
+            "tools/kd/kd_liveness.py",
+            "sudo scripts/install-esp.sh restore --disk",
         ):
             self.assertIn(token, text)
         self.assertIn("always starts Windows", text)
         self.assertIn("never enters the proxy loop", text)
         self.assertIn("diagnostic profile", text)
+        self.assertIn("does not prove that Windows crashed", text)
 
     def test_kd_tools_have_one_canonical_directory(self):
         names = {

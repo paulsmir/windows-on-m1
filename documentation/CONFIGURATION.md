@@ -125,6 +125,9 @@ viewer consumes the same native framebuffer.
   growing log files.
 - `debug=monitor` may expose console and vUART, but host presence must never hold guest entry or
   transfer control to the proxy.
+- Monitor diagnostics may use verbose synchronous USB logging. USB backpressure from an endpoint
+  that is not being drained can perturb timing, so the production profile is required for normal
+  performance and stability measurements.
 - `physical` must not enable USB framebuffer events.
 - `virtual` must not initialize or reconfigure DCP for guest scanout.
 - `both` uses one buffer and enables two consumers; it must not mirror frames in software.

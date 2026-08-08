@@ -32,8 +32,10 @@ profile during that window, m1n1 transfers control to the proxy loop instead of 
 Windows. This provides a recovery route for chainloading another build without writing the ESP
 again. `debug=monitor` deliberately does not have that behavior.
 
-Status: the self-contained path is implemented and host-tested; hardware validation pending
-for the current packed image. Do not interpret build or parser tests as proof of cold boot.
+Status: the self-contained monitor path has completed a cold boot into the Windows kernel with
+all eight CPU-entry records and live NVMe. The final quiet production profile still requires its
+separate no-host smoke test; hardware validation pending for that production artifact. Do not
+interpret build or parser tests as proof of that test.
 
 ### Cold-boot USB monitor
 
@@ -43,13 +45,17 @@ Build it from the same checkout that supplies the target m1n1 manifest ABI:
 
 ```sh
 scripts/build-standalone.sh --display physical --debug monitor
+mkdir -p .local/validated-artifacts
+cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-monitor.bin
+shasum -a 256 .local/validated-artifacts/boot-physical-monitor.bin
 ```
 
 Install the resulting `dist/j313/boot.bin` on the target while macOS is running, using the ESP
 identifier previously confirmed by `inspect`:
 
 ```sh
-sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin
+sudo scripts/install-esp.sh install --disk diskXsY \
+  --image .local/validated-artifacts/boot-physical-monitor.bin
 ```
 
 Before powering on the target, start the passive recorder on the host:
@@ -63,6 +69,17 @@ Windows; opening either endpoint never enters the proxy loop. If the target rese
 waits for USB re-enumeration and creates `generation-002`, `generation-003`, and so on instead of
 overwriting `generation-001`. Stop it with Ctrl-C after the reset has been captured.
 
+You may also attach after Windows has started. This is useful for a long-running driver test:
+
+```sh
+scripts/log-standalone.sh --output standalone-monitor-logs-late
+```
+
+A late attachment records only bytes emitted after the endpoints are opened, so missing early
+preflight lines are expected. Successfully opening the passive recorder does not prove that
+Windows crashed, paused, or restarted; correlate the captured counters with the physical UI,
+KD, and any USB generation boundary.
+
 When automatic discovery is ambiguous, pass both endpoints explicitly:
 
 ```sh
@@ -72,7 +89,25 @@ scripts/log-standalone.sh \
   --output standalone-monitor-logs
 ```
 
-After diagnosis, rebuild and install `--display physical --debug off` or restore the ESP backup.
+Monitor mode is intentionally noisy. Its verbose synchronous USB logging can encounter USB
+backpressure when no host drains the endpoint, which may add visible latency. Do not use monitor
+mode to measure production performance or classify a temporary UI stall by itself.
+
+After diagnosis, return to the production profile explicitly:
+
+```sh
+scripts/build-standalone.sh --display physical --debug off
+cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-production.bin
+shasum -a 256 .local/validated-artifacts/boot-physical-production.bin
+sudo scripts/install-esp.sh install --disk diskXsY \
+  --image .local/validated-artifacts/boot-physical-production.bin
+```
+
+To return to the stock Asahi payload instead, use:
+
+```sh
+sudo scripts/install-esp.sh restore --disk diskXsY
+```
 
 ## Assisted development mode
 
@@ -86,6 +121,11 @@ This path is used for:
 - testing replacement m1n1 or Mu builds without rewriting the Air ESP;
 - Windows KD and PnP/ACPI/storage diagnostics;
 - hang telemetry and framebuffer/proxy backpressure analysis.
+
+For driver and device-model work, start with `--display both --debug full`: the physical panel
+shows Windows independently of the web viewer, while the host retains hypervisor logs, virtual
+UART, framebuffer generations, and KD access. Once the change is stable, repeat the test with
+`--display physical --debug off` to expose dependencies on diagnostic timing or USB traffic.
 
 Prepare the host environment once after cloning:
 

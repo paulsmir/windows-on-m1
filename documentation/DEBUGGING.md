@@ -4,6 +4,21 @@ The optional second Mac exposes four independent observations: hypervisor log, v
 virtual framebuffer, and Windows KD. Treat them as separate signals. Losing one does not
 prove that the target or the other transports stopped.
 
+## Choose the observation level
+
+- Use the production profile (`display=physical`, `debug=off`) for ordinary autonomous boot and
+  performance measurements. It exposes no USB debug stream.
+- Use standalone monitor (`display=physical`, `debug=monitor`) when the failure exists only in
+  the installed cold-boot path. It records console/vUART but never accepts proxy takeover.
+- Use assisted full mode (`display=both`, `debug=full`) while developing firmware, ACPI, virtual
+  devices, or Windows drivers. It provides the widest set of independent observations and makes
+  it easy to chainload a replacement without rewriting the ESP.
+
+Monitor output is diagnostic overhead. The current hypervisor can produce verbose synchronous
+USB logging; if the host is not draining it, USB backpressure can add latency visible inside the
+guest. A temporary UI pause while using monitor mode does not prove that Windows crashed. Repeat
+performance or stability conclusions with the production profile.
+
 ## Autonomous reset capture
 
 Assisted mode owns the proxy and therefore changes the startup path. To observe a failure that
@@ -18,6 +33,15 @@ scripts/log-standalone.sh --output standalone-monitor-logs
 Unlike `debug=uart` and `debug=full`, monitor mode never enters the proxy loop when a host is
 connected. It always starts Windows after initializing the two USB ACM channels. The recorder
 does not issue proxy commands and never writes to either serial endpoint.
+
+It is valid to attach after Windows has started:
+
+```sh
+scripts/log-standalone.sh --output standalone-monitor-logs-late
+```
+
+This captures future messages only. Start before cold power-on when boot-stage checkpoints or the
+first reset boundary matter.
 
 Each USB lifetime is stored separately:
 
@@ -142,6 +166,24 @@ proxyenv/bin/python tools/kd/kd_liveness.py
 proxyenv/bin/python tools/kd/kd_devnodes.py
 proxyenv/bin/python tools/kd/kd_reboot.py
 ```
+
+For a repeatable driver-development session, use assisted full mode:
+
+```sh
+scripts/run-windows.sh \
+  --execution assisted \
+  --display both \
+  --debug full \
+  --chainload \
+  --proxy /dev/cu.PROXY \
+  --vuart /dev/cu.VUART
+export M1N1VUART=/dev/cu.VUART
+proxyenv/bin/python tools/kd/kd_liveness.py
+```
+
+Replace the two device names with the current pair reported by `ls -l /dev/cu.usbmodem*`.
+Only one process may read the vUART at a time: stop `scripts/log-standalone.sh` before attaching a
+KD helper to the same endpoint.
 
 Every inspection that breaks into the kernel must resume it on success, error, and timeout.
 A paused KD target looks exactly like a frozen Windows UI from the framebuffer side.

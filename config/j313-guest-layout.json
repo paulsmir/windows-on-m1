@@ -6,7 +6,7 @@
   "firmware_max_size": "0x1e00000",
   "adt_base": "0x851000000",
   "adt_max_size": "0xb4000",
-  "boot_args_base": "0x854000000",
+  "boot_args_base": "0x8533e8000",
   "boot_args_size": "0x4000",
   "ramdisk_base": "0x860000000",
   "ramdisk_max_size": "0x40000000",

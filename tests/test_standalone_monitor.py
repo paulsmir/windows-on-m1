@@ -10,6 +10,7 @@ from tools.standalone_monitor import (
     PortSelectionError,
     capture_generation,
     generation_directory,
+    monitor_pair_present,
     MonitorSummary,
     select_monitor_ports,
 )
@@ -68,6 +69,18 @@ class MonitorPortSelectionTests(unittest.TestCase):
         self.assertEqual(
             generation_directory(Path("captures"), 7), Path("captures/generation-007")
         )
+
+    def test_pair_presence_requires_both_current_acm_endpoints(self):
+        pair = MonitorPair(
+            MonitorPort("/dev/cu.console", "test", "1-1"),
+            MonitorPort("/dev/cu.vuart", "test", "1-1"),
+        )
+        current = lambda device, serial="test": port(device, serial=serial, location="1-1")
+        self.assertTrue(monitor_pair_present(pair, [current("/dev/cu.console"),
+                                                    current("/dev/cu.vuart")]))
+        self.assertFalse(monitor_pair_present(pair, [current("/dev/cu.console")]))
+        self.assertFalse(monitor_pair_present(pair, [current("/dev/cu.console"),
+                                                     current("/dev/cu.vuart", serial="other")]))
 
 
 class FakeSerial:

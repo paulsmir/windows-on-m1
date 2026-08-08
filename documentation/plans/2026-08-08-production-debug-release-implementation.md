@@ -272,10 +272,10 @@ Run:
 scripts/build-standalone.sh --display physical --debug off
 cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-production.bin
 shasum -a 256 .local/validated-artifacts/boot-physical-production.bin
-python3 -c 'from standalone_image import parse_image; print(parse_image(open("dist/j313/boot.bin", "rb").read()))'
+python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print(outer); print(nested); print(f"firmware={len(firmware)}")'
 ```
 
-Expected current production hash: `1843a39f94a70ade119dea5571696ced7af9df5b5e5121f22fb4921c37f30568`; outer and inner flags are `0x1`.
+Expected current production hash: `1f748492d2af679cba9cc01892cc71ecde94e6458c702499c61f4caeb64dc6e4`; outer and inner flags are `0x1`.
 
 - [ ] **Step 3: Run the complete root test suite**
 

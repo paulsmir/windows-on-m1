@@ -130,6 +130,20 @@ def select_monitor_ports(
     )
 
 
+def monitor_pair_present(pair: MonitorPair, ports: Iterable[object]) -> bool:
+    """Return true only while both endpoints still describe this USB generation."""
+    by_device = {str(port.device): port for port in ports}
+    for expected in (pair.console, pair.vuart):
+        current = by_device.get(expected.device)
+        if current is None:
+            return False
+        if expected.serial_number is not None and current.serial_number != expected.serial_number:
+            return False
+        if expected.location is not None and current.location != expected.location:
+            return False
+    return True
+
+
 def generation_directory(root: Path, number: int) -> Path:
     if number < 1:
         raise ValueError("generation number must be positive")
@@ -148,6 +162,7 @@ def capture_generation(
     serial_factory: Callable[..., object] = serial.Serial,
     timestamp: Callable[[], str] = utc_timestamp,
     emit: Callable[[str, bytes], None] | None = None,
+    port_supplier: Callable[[], Iterable[object]] = list_ports.comports,
 ) -> list[str]:
     """Capture one connected generation until either ACM endpoint disappears."""
     directory = generation_directory(Path(root), number)
@@ -181,6 +196,14 @@ def capture_generation(
                 while True:
                     chunk = device.read(4096)
                     if not chunk:
+                        # pyserial on macOS may return repeated timeout-sized
+                        # empty reads after a USB ACM disconnect instead of
+                        # raising. Poll the device metadata so a fast stage0 ->
+                        # stage1 re-enumeration starts a fresh capture rather
+                        # than leaving both reader threads attached to dead
+                        # file descriptors forever.
+                        if not monitor_pair_present(pair, port_supplier()):
+                            raise serial.SerialException("USB monitor pair disappeared")
                         continue
                     raw.write(chunk)
                     raw.flush()

@@ -55,7 +55,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - `tools/` — deterministic layout and image-packaging tools.
 - `config/j313-guest-layout.json` — canonical guest physical-memory contract.
 - `run_uefi.py` — Python-assisted guest launcher used for development.
-- `kd_*.py` — focused Windows serial kernel-debug utilities.
+- `tools/kd/` — focused Windows serial kernel-debug utilities.
 - `extra/` — framebuffer, UART, and source-level diagnostic helpers.
 
 ## Upstream projects
@@ -77,5 +77,6 @@ Documentation distinguishes three states:
 - **planned:** not yet implemented.
 
 The physical internal-panel handoff and full-panel 2560x1600 Windows framebuffer have been
-validated on J313 in assisted mode. The latest standalone packed image remains implemented and
-host-tested, not yet cold-boot validated.
+validated on J313 in assisted mode. The standalone monitor image has cold-booted through all
+launch checkpoints into the Windows kernel with eight CPUs and live NVMe. The quiet production
+image remains a separate no-host acceptance test; monitor-mode timing is not production timing.

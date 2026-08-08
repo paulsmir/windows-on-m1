@@ -30,7 +30,7 @@ class GuestLayoutGenerationTests(unittest.TestCase):
 
         self.assertEqual(layout.layout_version, 1)
         self.assertEqual(layout.phys_base, 0x850000000)
-        self.assertEqual(layout.boot_args_base, 0x854000000)
+        self.assertEqual(layout.boot_args_base, 0x8533E8000)
         self.assertEqual(layout.adt_base, 0x851000000)
         self.assertEqual(layout.low_mem_ipa, 0x100000)
         self.assertEqual(layout.low_mem_pa, 0x8A0100000)
