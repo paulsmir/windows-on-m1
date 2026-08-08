@@ -27,15 +27,19 @@ class BuildStandaloneTests(unittest.TestCase):
             "git submodule update --init --recursive",
             "stuart_build",
             "BLD_*_AIC_BUILD=FALSE",
-            "make -j",
+            "-DM1N1_STAGE0",
+            "dist/j313/m1n1-stage0.bin",
+            "-DM1N1_STAGE1",
+            "dist/j313/m1n1-stage1.bin",
             "tools/generate_guest_layout.py --check",
             "tools/pack_boot.py",
-            "--stage0-m1n1 m1n1_windows/build/m1n1.bin",
-            "--stage1-m1n1 m1n1_windows/build/m1n1.bin",
+            "--stage0-m1n1 dist/j313/m1n1-stage0.bin",
+            "--stage1-m1n1 dist/j313/m1n1-stage1.bin",
             "dist/j313/boot.bin",
             "parse_bootstrap",
             "parse_image",
             "SHA256SUMS",
+            "BUILD-METADATA.json",
         )
         cursor = 0
         for item in expected_in_order:

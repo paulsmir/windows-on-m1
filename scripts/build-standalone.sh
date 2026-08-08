@@ -126,12 +126,18 @@ $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE
-make -j$JOBS ${M1N1_RELEASE:+RELEASE=1}
+mkdir -p dist/j313
+make -C m1n1_windows clean
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE0
+copy m1n1_windows/build/m1n1.bin to dist/j313/m1n1-stage0.bin
+make -C m1n1_windows clean
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE1
+copy m1n1_windows/build/m1n1.bin to dist/j313/m1n1-stage1.bin
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --stage0-m1n1 m1n1_windows/build/m1n1.bin --stage1-m1n1 m1n1_windows/build/m1n1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG
+python3 tools/pack_boot.py --stage0-m1n1 dist/j313/m1n1-stage0.bin --stage1-m1n1 dist/j313/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG
 PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
 copy m1n1.macho and J313_EFI.fd to dist/j313
-write dist/j313/SHA256SUMS
+write dist/j313/SHA256SUMS and dist/j313/BUILD-METADATA.json
 EOF
     exit 0
 fi
@@ -159,24 +165,36 @@ PLATFORM=Platform/MacBookAirMid2020Pkg/PlatformBuild.py
         "TARGET=$BUILD_TARGET" 'BLD_*_AIC_BUILD=FALSE'
 )
 
+DIST="$ROOT/dist/j313"
+mkdir -p "$DIST"
+
 (
     cd "$ROOT/m1n1_windows"
+    make clean
     if [ -n "$M1N1_RELEASE" ]; then
-        make -j"$JOBS" RELEASE=1
+        make -j"$JOBS" RELEASE=1 EXTRA_CFLAGS=-DM1N1_STAGE0
     else
-        make -j"$JOBS"
+        make -j"$JOBS" EXTRA_CFLAGS=-DM1N1_STAGE0
     fi
+    cp build/m1n1.bin "$DIST/m1n1-stage0.bin"
+
+    make clean
+    if [ -n "$M1N1_RELEASE" ]; then
+        make -j"$JOBS" RELEASE=1 EXTRA_CFLAGS=-DM1N1_STAGE1
+    else
+        make -j"$JOBS" EXTRA_CFLAGS=-DM1N1_STAGE1
+    fi
+    cp build/m1n1.bin "$DIST/m1n1-stage1.bin"
+    cp build/m1n1.macho "$DIST/m1n1.macho"
     ./tests/run_host_tests.sh
 )
 
 python3 "$ROOT/tools/generate_guest_layout.py" --check
 
-DIST="$ROOT/dist/j313"
 FD="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd"
-mkdir -p "$DIST"
 python3 "$ROOT/tools/pack_boot.py" \
-    --stage0-m1n1 "$ROOT/m1n1_windows/build/m1n1.bin" \
-    --stage1-m1n1 "$ROOT/m1n1_windows/build/m1n1.bin" \
+    --stage0-m1n1 "$DIST/m1n1-stage0.bin" \
+    --stage1-m1n1 "$DIST/m1n1-stage1.bin" \
     --firmware "$FD" \
     --layout "$ROOT/config/j313-guest-layout.json" \
     --output "$DIST/boot.bin" \
@@ -185,15 +203,14 @@ python3 "$ROOT/tools/pack_boot.py" \
 PYTHONPATH="$ROOT" python3 -c \
     'from pathlib import Path; import sys; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path(sys.argv[1]).read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print(f"Validated outer flags={outer.flags:#x}, nested flags={nested.flags:#x}, firmware={len(firmware)} bytes")' \
     "$DIST/boot.bin"
-cp "$ROOT/m1n1_windows/build/m1n1.macho" "$DIST/m1n1.macho"
 cp "$FD" "$DIST/J313_EFI.fd"
 
 (
     cd "$DIST"
     if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum boot.bin m1n1.macho J313_EFI.fd >SHA256SUMS
+        sha256sum boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd >SHA256SUMS
     else
-        shasum -a 256 boot.bin m1n1.macho J313_EFI.fd >SHA256SUMS
+        shasum -a 256 boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd >SHA256SUMS
     fi
 )
 echo "Standalone artifacts: $DIST"

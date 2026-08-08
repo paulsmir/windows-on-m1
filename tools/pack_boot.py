@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import sys
@@ -15,6 +16,17 @@ from guest_layout import load_layout
 from launch_profile import Debug, Display, parse_profile
 from bootstrap_image import pack_bootstrap, parse_bootstrap
 from standalone_image import IMAGE_ALIGNMENT, ImageError, pack_image, parse_image
+
+
+def describe_stages(stage0: bytes, stage1: bytes) -> dict:
+    stage0_hash = hashlib.sha256(stage0).hexdigest()
+    stage1_hash = hashlib.sha256(stage1).hexdigest()
+    if stage0_hash == stage1_hash:
+        raise ImageError("stage-0 and stage-1 identities must differ")
+    return {
+        "stage0": {"role": "bootstrap", "sha256": stage0_hash, "size": len(stage0)},
+        "stage1": {"role": "hypervisor", "sha256": stage1_hash, "size": len(stage1)},
+    }
 
 
 def main() -> int:
@@ -55,6 +67,7 @@ def main() -> int:
     )
     inner_manifest, firmware = parse_image(inner)
     outer_manifest = None
+    stages = None
     if args.stage0_m1n1 is not None:
         stage0 = args.stage0_m1n1.read_bytes()
         if len(stage0) % IMAGE_ALIGNMENT:
@@ -62,6 +75,7 @@ def main() -> int:
                 "Stage 0 input does not end at its 16 KiB-aligned _payload_start; "
                 "use the raw m1n1.bin build artifact"
             )
+        stages = describe_stages(stage0, m1n1)
         image = pack_bootstrap(stage0, inner, flags=profile.manifest_flags)
         outer_manifest, decoded_inner = parse_bootstrap(image)
         decoded_manifest, decoded_firmware = parse_image(decoded_inner)
@@ -88,6 +102,15 @@ def main() -> int:
             temporary_path.unlink(missing_ok=True)
 
     digest = hashlib.sha256(image).hexdigest()
+    if stages is not None:
+        metadata = {
+            "format_version": 1,
+            "image": {"sha256": digest, "size": len(image)},
+            **stages,
+        }
+        (args.output.parent / "BUILD-METADATA.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
     print(f"output: {args.output}")
     print(f"size: {len(image)} bytes")
     if outer_manifest is not None:
