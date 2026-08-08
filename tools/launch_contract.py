@@ -16,7 +16,16 @@ FRAME_MAGIC = b"J313CONTRACT"
 FRAME_VERSION = 1
 CONTRACT_MAGIC = 0x4A43314C
 CONTRACT_VERSION = 1
-SNAPSHOT_SIZE = 2456
+MAX_REGIONS = 16
+MAX_MAPPINGS = 64
+MAX_CPUS = 8
+MAX_IRQ_ROUTES = 16
+REGIONS_OFFSET = 152
+MAPPINGS_OFFSET = REGIONS_OFFSET + MAX_REGIONS * 24
+CPUS_OFFSET = MAPPINGS_OFFSET + MAX_MAPPINGS * 32
+IRQ_ROUTES_OFFSET = CPUS_OFFSET + MAX_CPUS * 72
+DEVICES_OFFSET = IRQ_ROUTES_OFFSET + MAX_IRQ_ROUTES * 16
+SNAPSHOT_SIZE = DEVICES_OFFSET + 64
 FRAME = struct.Struct("<12sHHIIII")
 SNAPSHOT_HEADER = struct.Struct("<IHHIIII")
 COUNTS = struct.Struct("<IIII")
@@ -86,7 +95,8 @@ class Decoder:
         if zlib.crc32(payload[header_size:]) != crc:
             raise ContractDecodeError("contract CRC mismatch")
         _, mapping_count, cpu_count, irq_count = COUNTS.unpack_from(payload, 96)
-        if mapping_count > 32 or cpu_count > 8 or irq_count > 16:
+        if (mapping_count > MAX_MAPPINGS or cpu_count > MAX_CPUS or
+                irq_count > MAX_IRQ_ROUTES):
             raise ContractDecodeError("contract count overflow")
 
 
@@ -128,12 +138,16 @@ def normalize(snapshot: Snapshot) -> dict:
 
     regions = []
     for index in range(region_count):
-        kind, flags, base, size = struct.unpack_from("<IIQQ", payload, 152 + index * 24)
+        kind, flags, base, size = struct.unpack_from(
+            "<IIQQ", payload, REGIONS_OFFSET + index * 24
+        )
         regions.append({"kind": kind, "flags": flags, "base": _hex(base), "size": _hex(size)})
 
     mappings = []
     for index in range(mapping_count):
-        ipa, pa, size, attributes = struct.unpack_from("<4Q", payload, 536 + index * 32)
+        ipa, pa, size, attributes = struct.unpack_from(
+            "<4Q", payload, MAPPINGS_OFFSET + index * 32
+        )
         mappings.append(
             {"ipa": _hex(ipa), "pa": _hex(pa), "size": _hex(size), "attributes": _hex(attributes)}
         )
@@ -141,17 +155,19 @@ def normalize(snapshot: Snapshot) -> dict:
     cpus = []
     cpu_fields = ("mpidr", "hacr", "mdcr", "mdscr", "amx_config", "apvmkeylo", "apvmkeyhi", "apsts", "actlr")
     for index in range(cpu_count):
-        values = struct.unpack_from("<9Q", payload, 1560 + index * 72)
+        values = struct.unpack_from("<9Q", payload, CPUS_OFFSET + index * 72)
         cpus.append({name: _hex(value) for name, value in zip(cpu_fields, values)})
 
     irq_routes = []
     for index in range(irq_count):
-        physical_irq, vintid, flags, device = struct.unpack_from("<4I", payload, 2136 + index * 16)
+        physical_irq, vintid, flags, device = struct.unpack_from(
+            "<4I", payload, IRQ_ROUTES_OFFSET + index * 16
+        )
         irq_routes.append(
             {"physical_irq": physical_irq, "vintid": vintid, "flags": flags, "device": device}
         )
 
-    device_values = struct.unpack_from("<6Q4I", payload, 2392)
+    device_values = struct.unpack_from("<6Q4I", payload, DEVICES_OFFSET)
     devices = {
         "pci_ecam_base": _hex(device_values[0]),
         "nvme_bar_base": _hex(device_values[1]),

@@ -5,6 +5,7 @@ import zlib
 from tools.launch_contract import (
     ContractDecodeError,
     Decoder,
+    MAPPINGS_OFFSET,
     SNAPSHOT_SIZE,
     compare,
     decode_records,
@@ -79,7 +80,8 @@ class LaunchContractDecoderTests(unittest.TestCase):
         struct.pack_into("<QQQQQQQ", payload, 40, 0x800000000, 0x200000000, 0x8510B4000,
                          0x854000000, 0, 0, 0)
         struct.pack_into("<IIII", payload, 96, 0, 1, 0, 0)
-        struct.pack_into("<QQQQ", payload, 536, 0x100000, 0x8A0100000, 0x200000, 1)
+        struct.pack_into("<QQQQ", payload, MAPPINGS_OFFSET,
+                         0x100000, 0x8A0100000, 0x200000, 1)
         struct.pack_into("<I", payload, 20, zlib.crc32(payload[24:]))
         frame = FRAME.pack(MAGIC, 1, FRAME.size, len(payload), 3, 4, zlib.crc32(payload)) + payload
         item = Decoder().feed(frame)[0]
@@ -87,6 +89,25 @@ class LaunchContractDecoderTests(unittest.TestCase):
         self.assertEqual(value["identity"]["target"], "J313")
         self.assertEqual(value["boot"]["guest_entry"], "0x8510b4000")
         self.assertEqual(value["mappings"][0]["pa"], "0x8a0100000")
+
+    def test_accepts_the_full_assisted_stage2_operation_set(self):
+        payload = bytearray(snapshot(2, 3))
+        struct.pack_into("<IIII", payload, 96, 0, 33, 0, 0)
+        for index in range(33):
+            struct.pack_into(
+                "<4Q", payload, MAPPINGS_OFFSET + index * 32,
+                0x200000000 + index * 0x4000,
+                0x200000000 + index * 0x4000,
+                0x4000,
+                1,
+            )
+        struct.pack_into("<I", payload, 20, zlib.crc32(payload[24:]))
+        frame = FRAME.pack(MAGIC, 1, FRAME.size, len(payload), 2, 3, zlib.crc32(payload)) + payload
+
+        value = normalize(Decoder().feed(frame)[0])
+
+        self.assertEqual(len(value["mappings"]), 33)
+        self.assertEqual(value["mappings"][-1]["ipa"], "0x200080000")
 
     def test_compare_returns_stable_field_paths(self):
         expected = {"boot": {"guest_entry": "0x1000"}, "cpus": [{"mpidr": "0x0"}]}
