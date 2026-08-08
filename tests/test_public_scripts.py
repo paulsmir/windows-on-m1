@@ -97,6 +97,8 @@ class PublicScriptTests(unittest.TestCase):
             "firmware/test.fd",
             "--ramdisk",
             "images/test.img",
+            "--contract-output",
+            ".local/contracts/test/capture.bin",
         ]
         result = subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True)
         self.assertIn("reader-before-guest", result.stdout)
@@ -104,6 +106,7 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("/dev/cu.test-vuart", result.stdout)
         self.assertIn("firmware/test.fd", result.stdout)
         self.assertIn("images/test.img", result.stdout)
+        self.assertIn(".local/contracts/test/capture.bin", result.stdout)
 
     def test_assisted_workers_are_detached_from_launcher_shell(self):
         text = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")

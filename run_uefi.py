@@ -13,7 +13,7 @@ firmware can be built to match it.
 
 PHYS_BASE must sit above m1n1 + its 768 MB heap and below the top of RAM.
 """
-import os, sys, pathlib, argparse
+import hashlib, os, sys, pathlib, argparse
 
 from guest_layout import DEFAULT_LAYOUT_PATH, load_layout
 from launch_profile import parse_profile
@@ -60,6 +60,8 @@ ap.add_argument("--no-pin", action="store_true",
 ap.add_argument("--wdt-cpu", type=int, choices=range(8), default=None,
                 help="reserve one physical CPU for the hypervisor watchdog (0..7). Omit this "
                      "for an eight-core guest; a reserved CPU must not also be enabled in MADT.")
+ap.add_argument("--contract-output", type=pathlib.Path,
+                help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
 profile = parse_profile("assisted", args.display_mode, args.debug_mode)
 
@@ -125,6 +127,8 @@ from m1n1.proxy import *
 from m1n1.proxyutils import *
 from m1n1.utils import *
 from m1n1.hv import HV, TraceMode
+from tools.j313_launch_descriptor import pack_descriptor
+from tools.launch_contract import encode_record
 
 iface = UartInterface()
 p = M1N1Proxy(iface, debug=False)
@@ -142,6 +146,60 @@ else:
 # Mirror load_raw()'s arithmetic so we can predict the image base without loading.
 tc_start, tc_size = u.adt["chosen"]["memory-map"].TrustCache
 guest_base = args.phys_base + (16 << 20) + align(u.ba.devtree_size) + align(tc_size)
+
+# Publish the same fixed-width descriptor used by autonomous Stage 1 before
+# hv_init() mutates any state. The address arithmetic is deliberately copied
+# from HV.load_raw(); the assertion below keeps both implementations locked.
+payload_bytes = args.payload.read_bytes()
+_, sepfw_size = u.adt["chosen"]["memory-map"].SEPFW
+preoslog_size = 0
+if hasattr(u.adt["chosen"]["memory-map"], "preoslog"):
+    _, preoslog_size = u.adt["chosen"]["memory-map"].preoslog
+bootargs_off = align(len(payload_bytes)) + align(sepfw_size) + preoslog_size
+bootargs_base = guest_base + bootargs_off
+mem_top = u.ba.phys_base + u.ba.mem_size
+adt_blob = u.adt.build()
+uart_base = u.adt["/arm-io/uart0"].get_reg(0)[0]
+dart_base = u.adt["/arm-io/dart-usb1"].get_reg(0)[0]
+descriptor = pack_descriptor(
+    boot=(args.phys_base, mem_top - args.phys_base, guest_base,
+          (bootargs_base, 0, 0, 0)),
+    regions=(
+        (0, 0, args.phys_base, mem_top - args.phys_base),
+        (1, 0, args.phys_base, 16 << 20),
+        (2, 0, guest_base, align(len(payload_bytes))),
+        (3, 0, args.phys_base + (16 << 20), align(u.ba.devtree_size)),
+        (4, 0, bootargs_base, 0x4000),
+        (5, 0, fb.base, fb.size),
+        (6, 0, args.low_mem_backing, args.low_mem_size if args.low_mem else 0),
+        # A bounded getter for the dynamically allocated DART page tables is
+        # still pending. Zero size + UNOBSERVED is explicit, never guessed.
+        (7, 1, args.phys_base, 0),
+    ),
+    devices=(layout.pci_ecam, 0, layout.xhci_base, dart_base, uart_base,
+             fb.base, fb.width, fb.height, fb.stride, 0),
+    adt_size=len(adt_blob),
+    adt_digest=hashlib.sha256(adt_blob).digest(),
+)
+if not p.hv_launch_publish(descriptor):
+    raise RuntimeError("m1n1 rejected the J313 launch descriptor")
+
+if args.contract_output:
+    args.contract_output.parent.mkdir(parents=True, exist_ok=True)
+    args.contract_output.write_bytes(b"")
+
+def capture_contract(checkpoint, sequence):
+    payload = p.hv_launch_capture(checkpoint, sequence)
+    if payload is None:
+        raise RuntimeError(f"launch contract checkpoint {checkpoint} failed")
+    if args.contract_output:
+        with args.contract_output.open("ab") as stream:
+            stream.write(encode_record(payload))
+            stream.flush()
+            os.fsync(stream.fileno())
+    print(f"LAUNCH_CONTRACT checkpoint={checkpoint} sequence={sequence} captured")
+
+capture_contract(0, 1)
 
 print("=" * 60)
 print(f"m1n1 base (varies per boot) : 0x{u.base:x}")
@@ -161,6 +219,7 @@ hv.wdt_cpu = args.wdt_cpu
 hv.run_shell = lambda *a, **k: True   # unattended: never stop in a REPL
 
 hv.init()
+capture_contract(1, 2)
 # hv_init() installs the in-hypervisor xHCI MMIO diagnostic hook.  Keep the final
 # pt_update() from replacing its 16 KiB stage-2 entry with the broad /arm-io hardware
 # pass-through mapping (the same ordering rule as the PCI ECAM C hook).
@@ -171,7 +230,7 @@ hv.tba.video.height = fb.height
 hv.tba.video.stride = fb.stride
 hv.tba.video.depth = 32
 hv.tba.video.display = 1
-hv.load_raw(args.payload.read_bytes(), entryoffset=0)
+hv.load_raw(payload_bytes, entryoffset=0)
 assert args.no_pin or hv.guest_base == guest_base, \
     f"predicted 0x{guest_base:x} but loader chose 0x{hv.guest_base:x}"
 print("Firmware address matches the prediction.")
@@ -257,6 +316,8 @@ def configure_display_consumers():
         if p.hv_fb_stream_config(fb.base, fb.size, fb.width, fb.height, fb.stride) != 1:
             raise RuntimeError("m1n1 rejected the virtual framebuffer mapping")
         print(f"Asynchronous framebuffer stream enabled: {fb.size / (1 << 20):.2f} MiB/frame")
+    capture_contract(2, 3)
+    capture_contract(3, 4)
 
 hv.pre_guest_start = configure_display_consumers
 

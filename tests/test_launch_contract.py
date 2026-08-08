@@ -2,7 +2,15 @@ import struct
 import unittest
 import zlib
 
-from tools.launch_contract import ContractDecodeError, Decoder, SNAPSHOT_SIZE, compare, normalize
+from tools.launch_contract import (
+    ContractDecodeError,
+    Decoder,
+    SNAPSHOT_SIZE,
+    compare,
+    decode_records,
+    encode_record,
+    normalize,
+)
 
 
 FRAME = struct.Struct("<12sHHIIII")
@@ -47,6 +55,11 @@ class LaunchContractDecoderTests(unittest.TestCase):
             decoded.extend(decoder.feed(stream[offset : offset + 13]))
         decoder.finish()
         self.assertEqual([(item.checkpoint, item.sequence) for item in decoded], [(0, 1), (3, 4)])
+
+    def test_host_encoder_matches_decoder(self):
+        payload = snapshot(3, 4)
+        decoded = decode_records(encode_record(payload))
+        self.assertEqual([(item.checkpoint, item.sequence) for item in decoded], [(3, 4)])
 
     def test_rejects_corrupt_payload(self):
         stream = bytearray(record(3, 4))

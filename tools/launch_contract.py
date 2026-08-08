@@ -97,6 +97,23 @@ def decode_records(data: bytes) -> list[Snapshot]:
     return records
 
 
+def encode_record(payload: bytes) -> bytes:
+    """Frame one proxy-returned snapshot using the C transport ABI."""
+    if len(payload) != SNAPSHOT_SIZE:
+        raise ContractDecodeError("invalid payload length")
+    _, _, _, _, checkpoint, sequence, _ = SNAPSHOT_HEADER.unpack_from(payload)
+    Decoder._validate_snapshot(payload, checkpoint, sequence)
+    return FRAME.pack(
+        FRAME_MAGIC,
+        FRAME_VERSION,
+        FRAME.size,
+        len(payload),
+        checkpoint,
+        sequence,
+        zlib.crc32(payload),
+    ) + payload
+
+
 def _hex(value: int) -> str:
     return f"0x{value:x}"
 

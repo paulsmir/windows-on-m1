@@ -13,11 +13,13 @@ DISPLAY=virtual
 DEBUG=uart
 CHAINLOAD=0
 M1N1="$ROOT/dist/j313/m1n1.macho"
+CONTRACT_OUTPUT=
 
 usage() {
     echo "usage: $0 [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
     echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE]" >&2
+    echo "          [--contract-output FILE]" >&2
     echo "          [--no-low-mem] [--dry-run]" >&2
     exit 2
 }
@@ -32,6 +34,7 @@ while [ "$#" -gt 0 ]; do
         --ramdisk) [ "$#" -ge 2 ] || usage; RAMDISK=$2; shift 2 ;;
         --chainload) CHAINLOAD=1; shift ;;
         --m1n1) [ "$#" -ge 2 ] || usage; M1N1=$2; shift 2 ;;
+        --contract-output) [ "$#" -ge 2 ] || usage; CONTRACT_OUTPUT=$2; shift 2 ;;
         --no-low-mem) LOW_MEM=0; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
@@ -84,6 +87,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     [ "$CHAINLOAD" -eq 0 ] && echo "chainload: disabled" || echo "chainload: $M1N1"
     echo "firmware: $FIRMWARE"
     [ -z "$RAMDISK" ] || echo "RAM disk: $RAMDISK"
+    [ -z "$CONTRACT_OUTPUT" ] || echo "launch contract: $CONTRACT_OUTPUT"
     [ "$DEBUG" = off ] || echo "logs: $ROOT/hv.log and $ROOT/guest-uart.log"
     exit 0
 fi
@@ -123,6 +127,7 @@ fi
 
 set -- "$FIRMWARE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DEBUG"
 [ -z "$RAMDISK" ] || set -- "$@" --ramdisk "$RAMDISK"
+[ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
 
 if [ "$DEBUG" = off ]; then
