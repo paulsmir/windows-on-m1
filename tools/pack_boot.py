@@ -41,6 +41,8 @@ def main() -> int:
     parser.add_argument("--firmware", type=Path, required=True)
     parser.add_argument("--layout", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--source-commit")
+    parser.add_argument("--compiler")
     parser.add_argument("--display", choices=[value.value for value in Display], default="physical")
     parser.add_argument("--debug", choices=[value.value for value in Debug], default="off")
     args = parser.parse_args()
@@ -106,6 +108,8 @@ def main() -> int:
         metadata = {
             "format_version": 1,
             "image": {"sha256": digest, "size": len(image)},
+            "source_commit": args.source_commit,
+            "compiler": args.compiler,
             **stages,
         }
         (args.output.parent / "BUILD-METADATA.json").write_text(

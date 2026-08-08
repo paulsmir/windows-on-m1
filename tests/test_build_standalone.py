@@ -36,6 +36,8 @@ class BuildStandaloneTests(unittest.TestCase):
             "--stage0-m1n1 dist/j313/m1n1-stage0.bin",
             "--stage1-m1n1 dist/j313/m1n1-stage1.bin",
             "dist/j313/boot.bin",
+            "--source-commit <m1n1-source-commit>",
+            "--compiler <compiler-identity>",
             "parse_bootstrap",
             "parse_image",
             "SHA256SUMS",

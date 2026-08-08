@@ -8,6 +8,7 @@ M1N1_RELEASE=
 CHECK_PYTHON=0
 DISPLAY=physical
 DEBUG=off
+VALIDATED_DARWIN_CLANG='Homebrew clang version 22.1.8'
 
 usage() {
     echo "usage: $0 [--release] [--check-python]" >&2
@@ -30,6 +31,8 @@ case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
 
 CONTAINER_MODE=${STANDALONE_BUILD_CONTAINER:-auto}
+SKIP_MU=${STANDALONE_SKIP_MU:-0}
+MU_ONLY=${STANDALONE_BUILD_MU_ONLY:-0}
 USE_CONTAINER=0
 case "$CONTAINER_MODE" in
     auto)
@@ -51,7 +54,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
     IMAGE=windows-on-m1-build:local
     if [ "$DRY_RUN" = 1 ]; then
         echo "docker build -t $IMAGE -f <repository-root>/Dockerfile.build <repository-root>"
-        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG"
+        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -e STANDALONE_BUILD_MU_ONLY=1 -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG"
     else
         COMMON_DIR=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
         MOUNT_ROOT=$(dirname "$COMMON_DIR")
@@ -69,12 +72,19 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
         set -- "$@" --display "$DISPLAY" --debug "$DEBUG"
         docker run --rm \
             -e STANDALONE_IN_CONTAINER=1 \
+            -e STANDALONE_BUILD_MU_ONLY=1 \
             -v "$MOUNT_ROOT:/work" \
             -v "$MOUNT_ROOT:$MOUNT_ROOT" \
             -w "$CONTAINER_ROOT" \
             "$IMAGE" "$@"
-        exit
+        SKIP_MU=1
     fi
+fi
+
+if [ "$(uname -s)" = Darwin ]; then
+    RUSTUP_BIN=$(brew --prefix rustup 2>/dev/null)/bin
+    [ ! -d "$RUSTUP_BIN" ] || PATH="$RUSTUP_BIN:$PATH"
+    export PATH
 fi
 
 python_is_compatible() {
@@ -134,7 +144,7 @@ make -C m1n1_windows clean
 make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE1
 copy m1n1_windows/build/m1n1.bin to dist/j313/m1n1-stage1.bin
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --stage0-m1n1 dist/j313/m1n1-stage0.bin --stage1-m1n1 dist/j313/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG
+python3 tools/pack_boot.py --stage0-m1n1 dist/j313/m1n1-stage0.bin --stage1-m1n1 dist/j313/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG --source-commit <m1n1-source-commit> --compiler <compiler-identity>
 PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
 copy m1n1.macho and J313_EFI.fd to dist/j313
 write dist/j313/SHA256SUMS and dist/j313/BUILD-METADATA.json
@@ -145,25 +155,44 @@ fi
 cd "$ROOT"
 git submodule update --init --recursive
 
-VENV="$ROOT/.build/mu-venv"
-if [ ! -x "$VENV/bin/python" ] || ! python_is_compatible "$VENV/bin/python"; then
-    "$MU_PYTHON_SELECTED" -m venv --clear "$VENV"
+M1N1_SOURCE_COMMIT=$(git -C "$ROOT/m1n1_windows" rev-parse HEAD)
+if [ "$(uname -s)" = Darwin ]; then
+    M1N1_COMPILER=$("$(brew --prefix llvm)/bin/clang" --version | sed -n '1p')
+    if [ "$M1N1_COMPILER" != "$VALIDATED_DARWIN_CLANG" ]; then
+        if [ "$BUILD_TARGET" = RELEASE ] || [ "${ALLOW_UNVALIDATED_CLANG:-0}" != 1 ]; then
+            echo "m1n1 requires $VALIDATED_DARWIN_CLANG; found: $M1N1_COMPILER" >&2
+            exit 2
+        fi
+        echo "WARNING: unvalidated development compiler: $M1N1_COMPILER" >&2
+    fi
+else
+    M1N1_COMPILER=$(clang --version 2>/dev/null | sed -n '1p' || true)
 fi
-"$VENV/bin/pip" install -q --upgrade pip
-"$VENV/bin/pip" install -q -r "$ROOT/mu/pip-requirements.txt"
-"$VENV/bin/pip" install -q "setuptools<81" wheel
+[ -n "$M1N1_COMPILER" ] || M1N1_COMPILER=unknown
 
-PLATFORM=Platform/MacBookAirMid2020Pkg/PlatformBuild.py
-(
-    cd "$ROOT/mu"
-    "$VENV/bin/stuart_setup" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB
-    rm -f MU_BASECORE/BaseTools/Bin/nasm_ext_dep.yaml \
-        MU_BASECORE/BaseTools/Bin/iasl_ext_dep.yaml \
-        MU_BASECORE/.pytool/Plugin/UncrustifyCheck/uncrustify_ext_dep.yaml
-    "$VENV/bin/stuart_update" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB
-    "$VENV/bin/stuart_build" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB \
-        "TARGET=$BUILD_TARGET" 'BLD_*_AIC_BUILD=FALSE'
-)
+if [ "$SKIP_MU" != 1 ]; then
+    VENV="$ROOT/.build/mu-venv"
+    if [ ! -x "$VENV/bin/python" ] || ! python_is_compatible "$VENV/bin/python"; then
+        "$MU_PYTHON_SELECTED" -m venv --clear "$VENV"
+    fi
+    "$VENV/bin/pip" install -q --upgrade pip
+    "$VENV/bin/pip" install -q -r "$ROOT/mu/pip-requirements.txt"
+    "$VENV/bin/pip" install -q "setuptools<81" wheel
+
+    PLATFORM=Platform/MacBookAirMid2020Pkg/PlatformBuild.py
+    (
+        cd "$ROOT/mu"
+        "$VENV/bin/stuart_setup" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB
+        rm -f MU_BASECORE/BaseTools/Bin/nasm_ext_dep.yaml \
+            MU_BASECORE/BaseTools/Bin/iasl_ext_dep.yaml \
+            MU_BASECORE/.pytool/Plugin/UncrustifyCheck/uncrustify_ext_dep.yaml
+        "$VENV/bin/stuart_update" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB
+        "$VENV/bin/stuart_build" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB \
+            "TARGET=$BUILD_TARGET" 'BLD_*_AIC_BUILD=FALSE'
+    )
+fi
+
+[ "$MU_ONLY" != 1 ] || exit 0
 
 DIST="$ROOT/dist/j313"
 mkdir -p "$DIST"
@@ -199,7 +228,9 @@ python3 "$ROOT/tools/pack_boot.py" \
     --layout "$ROOT/config/j313-guest-layout.json" \
     --output "$DIST/boot.bin" \
     --display "$DISPLAY" \
-    --debug "$DEBUG"
+    --debug "$DEBUG" \
+    --source-commit "$M1N1_SOURCE_COMMIT" \
+    --compiler "$M1N1_COMPILER"
 PYTHONPATH="$ROOT" python3 -c \
     'from pathlib import Path; import sys; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path(sys.argv[1]).read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print(f"Validated outer flags={outer.flags:#x}, nested flags={nested.flags:#x}, firmware={len(firmware)} bytes")' \
     "$DIST/boot.bin"
