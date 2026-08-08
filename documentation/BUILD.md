@@ -10,13 +10,16 @@ The supported build host is Apple Silicon macOS with:
 
 - Git and Git submodules;
 - Xcode command-line tools and an AArch64-capable LLVM toolchain;
-- `make`, `dtc`, Rust, and the m1n1 host dependencies;
+- `make`, `dtc`, Homebrew `rustup`, and the m1n1 host dependencies;
+- Homebrew LLVM whose first version line is exactly `Homebrew clang version 22.1.8`;
+- Python 3.10 through 3.12 (Homebrew `python@3.12` is the tested choice);
 - a running Docker-compatible engine such as Docker Desktop or Colima.
 
-On Apple Silicon macOS, `scripts/build-standalone.sh` automatically builds and enters the
-Linux/ARM image from `Dockerfile.build`. This is required because the pinned Project Mu
-release does not publish its prebuilt BaseTools for `MacOs-ARM-64`. Native Linux/ARM builds
-use Python 3.10 through 3.12 with `venv` and run the same inner pipeline directly.
+On Apple Silicon macOS, `scripts/build-standalone.sh` uses a hybrid pipeline. Project Mu is
+built in the Linux/ARM image because the pinned release does not publish BaseTools for
+`MacOs-ARM-64`. Both m1n1 stages are then built natively with the validated Homebrew Clang.
+Do not build the whole image inside the container: that selects Ubuntu GCC for m1n1 and has
+already produced a target that failed to reconnect after chainload.
 
 Clone all repositories:
 
@@ -32,6 +35,15 @@ Create the host-side proxy/KD environment:
 ```sh
 python3 -m venv proxyenv
 proxyenv/bin/pip install -r m1n1_windows/requirements.txt
+```
+
+Install and initialize the native Rust target used by m1n1:
+
+```sh
+brew install llvm rustup python@3.12
+export PATH="$(brew --prefix rustup)/bin:$PATH"
+rustup default stable
+rustup target add aarch64-unknown-none-softfloat
 ```
 
 For a native Linux build, the script selects a compatible Mu interpreter automatically.
@@ -69,8 +81,10 @@ a normal standalone power-on should use `physical --debug off`. `monitor` is a d
 profile that exposes console/vUART while always continuing into Windows instead of allowing
 proxy takeover.
 
-Set `STANDALONE_BUILD_CONTAINER=always` to use the container on another host, or `never` only
-when a complete native Project Mu BaseTools environment is already available.
+`STANDALONE_BUILD_CONTAINER=auto` is the supported macOS mode. It runs only the Mu portion in
+the container and returns to macOS for both m1n1 stages. `never` requires native Project Mu
+BaseTools, which the pinned tree does not provide for Apple Silicon macOS. `always` is a
+development escape hatch and is not a qualified release path.
 
 For release optimization:
 
@@ -82,10 +96,15 @@ The script:
 
 1. prepares a private Mu virtual environment under `.build/`;
 2. builds the J313 Mu firmware with the virtual GIC backend;
-3. builds m1n1 and runs its host tests;
-4. verifies that generated layout constants match `config/j313-guest-layout.json`;
-5. packs the compressed Mu FD and versioned manifest after `m1n1.bin`;
-6. writes `dist/j313/boot.bin`, `m1n1.macho`, `J313_EFI.fd`, and `SHA256SUMS`.
+3. verifies the native m1n1 compiler identity;
+4. builds distinct bootstrap-only stage-0 and hypervisor stage-1 binaries and runs host tests;
+5. verifies that generated layout constants match `config/j313-guest-layout.json`;
+6. packs the compressed Mu FD and versioned manifest;
+7. writes `boot.bin`, both stage binaries, `m1n1.macho`, `J313_EFI.fd`, `SHA256SUMS`, and
+   `BUILD-METADATA.json` under `dist/j313/`.
+
+`BUILD-METADATA.json` records the exact m1n1 source commit, compiler identity, image hash,
+and separate role/hash/size records. Packaging aborts if the stage hashes are identical.
 
 Review the commands without changing the tree:
 

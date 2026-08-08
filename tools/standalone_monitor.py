@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import re
 from typing import Callable, Iterable
 
 import serial
@@ -35,6 +36,49 @@ class MonitorPort:
 class MonitorPair:
     console: MonitorPort
     vuart: MonitorPort
+
+
+class MonitorSummary:
+    """Summarize explicit telemetry; never infer progress from framebuffer text."""
+
+    REQUIRED = ("PRE_HV_INIT", "POST_HV_INIT", "POST_MAPS", "PRE_GUEST")
+
+    def __init__(self) -> None:
+        self.checkpoints: list[str] = []
+        self.cpus: set[int] = set()
+        self.failed = False
+        self.transport_lost = False
+
+    def feed(self, _role: str, text: str) -> None:
+        for checkpoint in re.findall(r"PREFLIGHT PASS checkpoint=([A-Z0-9_]+)", text):
+            if checkpoint not in self.checkpoints:
+                self.checkpoints.append(checkpoint)
+        if "PREFLIGHT FAIL" in text:
+            self.failed = True
+        for cpu in re.findall(r"CPU_ENTRY cpu=([0-7])(?:\D|$)", text):
+            self.cpus.add(int(cpu))
+
+    def disconnect(self, _role: str) -> None:
+        self.transport_lost = True
+
+    def render(self) -> str:
+        complete = all(item in self.checkpoints for item in self.REQUIRED)
+        preflight = "FAIL" if self.failed else "PASS" if complete else "INCOMPLETE"
+        ordered = [item for item in self.REQUIRED if item in self.checkpoints]
+        missing = sorted(set(range(8)) - self.cpus)
+        if self.transport_lost:
+            suffix = ordered[-1] if ordered else "no-checkpoint"
+            transport = f"lost-after-{suffix}"
+        else:
+            transport = "connected"
+        return "\n".join((
+            f"preflight: {preflight}",
+            "checkpoints: " + " ".join(ordered),
+            "cpu_entry: " + " ".join(map(str, sorted(self.cpus))),
+            "missing_cpu_entry: " + " ".join(map(str, missing)),
+            f"transport: {transport}",
+            "windows_progress: telemetry-only; framebuffer is informational",
+        )) + "\n"
 
 
 def _describe_ports(ports: Iterable[object]) -> str:
@@ -111,6 +155,7 @@ def capture_generation(
     events_path = directory / "events.log"
     event_lock = threading.Lock()
     reasons: list[str] = []
+    summary = MonitorSummary()
 
     def event(message: str) -> None:
         with event_lock, events_path.open("a", encoding="utf-8") as output:
@@ -140,6 +185,7 @@ def capture_generation(
                     raw.write(chunk)
                     raw.flush()
                     text = chunk.decode("utf-8", errors="replace")
+                    summary.feed(role, text)
                     tlog.write(f"{timestamp()} {text}")
                     if not text.endswith("\n"):
                         tlog.write("\n")
@@ -150,6 +196,7 @@ def capture_generation(
             reason = f"disconnect {role}: {type(exc).__name__}: {exc}"
             with event_lock:
                 reasons.append(reason)
+                summary.disconnect(role)
             event(reason)
             # Both interfaces belong to one composite USB device. Closing the
             # pair makes the sibling reader leave promptly while still letting
@@ -167,6 +214,7 @@ def capture_generation(
         thread.join()
     for device in opened.values():
         device.close()
+    (directory / "summary.txt").write_text(summary.render(), encoding="utf-8")
     event("generation closed")
     return reasons
 

@@ -10,6 +10,7 @@ from tools.standalone_monitor import (
     PortSelectionError,
     capture_generation,
     generation_directory,
+    MonitorSummary,
     select_monitor_ports,
 )
 
@@ -147,6 +148,31 @@ class MonitorCaptureTests(unittest.TestCase):
 
         self.assertIn(b"console-1-one", (self.root / "generation-001/console.raw").read_bytes())
         self.assertIn(b"console-2-one", (self.root / "generation-002/console.raw").read_bytes())
+
+
+class MonitorSummaryTests(unittest.TestCase):
+    def test_reports_contract_checkpoints_cpu_entries_and_transport_loss(self):
+        summary = MonitorSummary()
+        summary.feed("console", "PREFLIGHT PASS checkpoint=PRE_HV_INIT\n")
+        summary.feed("console", "PREFLIGHT PASS checkpoint=POST_HV_INIT\n")
+        summary.feed("console", "PREFLIGHT PASS checkpoint=POST_MAPS\n")
+        summary.feed("console", "PREFLIGHT PASS checkpoint=PRE_GUEST\n")
+        for cpu in (0, 1, 2, 4, 6, 7):
+            summary.feed("console", f"CPU_ENTRY cpu={cpu} mpidr=0x{cpu:x}\n")
+        summary.disconnect("console")
+
+        text = summary.render()
+        self.assertIn("preflight: PASS", text)
+        self.assertIn("checkpoints: PRE_HV_INIT POST_HV_INIT POST_MAPS PRE_GUEST", text)
+        self.assertIn("cpu_entry: 0 1 2 4 6 7", text)
+        self.assertIn("missing_cpu_entry: 3 5", text)
+        self.assertIn("transport: lost-after-PRE_GUEST", text)
+
+    def test_static_windows_logo_is_not_counted_as_progress(self):
+        summary = MonitorSummary()
+        summary.feed("console", "Windows logo visible\n")
+        self.assertIn("windows_progress: telemetry-only; framebuffer is informational",
+                      summary.render())
 
 
 if __name__ == "__main__":
