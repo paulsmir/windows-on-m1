@@ -8,6 +8,20 @@
 
 **Tech Stack:** freestanding C11 in m1n1, existing m1n1 host-test runner, Python 3.10–3.12 standard library, existing UART proxy/USB monitor transport, Homebrew Clang 22.1.8 for the validated stage-1 build.
 
+## Implementation checkpoint (2026-08-08)
+
+- Complete: versioned contract/CRC/comparator and deterministic provider boundary.
+- Complete: J313 CPU register image, explicit base-state validation, live IRQ enumeration,
+  live PCI/NVMe state, and a common assisted/standalone stage-2 operation recorder.
+- Complete: stage-2 mappings participate in the fail-closed contract as an order-independent
+  set; overflow or invalid mapping/IRQ counts invalidate the snapshot.
+- Next: publish the same boot/region/device descriptor from assisted Python and standalone C,
+  add remaining display/xHCI/DART/VUART getters, then implement framed transport and capture the
+  first assisted golden contract. The capture API is deliberately not called before this shared
+  publication boundary exists.
+- Validation at this checkpoint: complete host suite passes; changed freestanding objects compile.
+  The existing Makefile still emits its pre-existing duplicate target `&` warnings.
+
 ## Global Constraints
 
 - The assisted launch is the golden behavioral reference.
