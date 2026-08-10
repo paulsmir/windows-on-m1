@@ -32,10 +32,11 @@ profile during that window, m1n1 transfers control to the proxy loop instead of 
 Windows. This provides a recovery route for chainloading another build without writing the ESP
 again. `debug=monitor` deliberately does not have that behavior.
 
-Status: the self-contained monitor path has completed a cold boot into the Windows kernel with
-all eight CPU-entry records and live NVMe. The final quiet production profile still requires its
-separate no-host smoke test; hardware validation pending for that production artifact. Do not
-interpret build or parser tests as proof of that test.
+Status: both the monitor and quiet physical-only standalone profiles have cold-booted the
+installed Windows system on the development J313. The quiet run reproduced the same intermittent
+approximately 20-second whole-system pause as the monitor run, so virtual framebuffer streaming
+and verbose monitor output are not sufficient explanations. Standalone boot works, but Phase 0
+stability is not complete. See [the stability checkpoint](PLATFORM_STABILITY.md).
 
 ### Cold-boot USB monitor
 
@@ -121,6 +122,10 @@ This path is used for:
 - testing replacement m1n1 or Mu builds without rewriting the Air ESP;
 - Windows KD and PnP/ACPI/storage diagnostics;
 - hang telemetry and framebuffer/proxy backpressure analysis.
+
+It is also the required rapid iteration path for the current freeze investigation. Every candidate
+must first be tested here without changing the ESP, then rebuilt from the same commits and launch
+contract as a standalone image. A result observed only in assisted mode is not a standalone fix.
 
 For driver and device-model work, start with `--display both --debug full`: the physical panel
 shows Windows independently of the web viewer, while the host retains hypervisor logs, virtual

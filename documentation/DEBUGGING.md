@@ -1,5 +1,8 @@
 # Assisted debugging
 
+For the current SMP freeze baseline, artifact identities, capture rules, and the assisted-to-
+standalone promotion gate, read [Platform stability](PLATFORM_STABILITY.md) first.
+
 The optional second Mac exposes four independent observations: hypervisor log, virtual UART,
 virtual framebuffer, and Windows KD. Treat them as separate signals. Losing one does not
 prove that the target or the other transports stopped.
