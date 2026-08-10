@@ -42,6 +42,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Standalone and assisted operation](documentation/RUN.md)
 - [Launch profiles](documentation/CONFIGURATION.md)
 - [Architecture](documentation/ARCHITECTURE.md)
+- [Platform roadmap and milestone gates](documentation/ROADMAP.md)
 - [Debugging and KD tools](documentation/DEBUGGING.md)
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
 - [Known limitations](documentation/LIMITATIONS.md)
