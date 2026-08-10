@@ -20,9 +20,10 @@ session long enough to install software. The working development configuration e
 - a Project Mu GOP framebuffer and a remotely observable virtual framebuffer;
 - virtual UART and Windows kernel-debug transport for assisted development.
 
-The self-contained standalone `boot.bin` path is implemented and covered by host-side
-tests, but cold-boot hardware validation of the current packed image is still pending. The
-host-assisted path remains the verified development and recovery workflow.
+The self-contained standalone `boot.bin` path has cold-booted the installed Windows system
+on the development J313. Eight-core operation is substantially more stable than the first
+SMP builds, but intermittent whole-system pauses of about 20 seconds still occur and remain
+the current blocking defect. The host-assisted path is the development and recovery workflow.
 
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
 
@@ -43,6 +44,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Launch profiles](documentation/CONFIGURATION.md)
 - [Architecture](documentation/ARCHITECTURE.md)
 - [Platform roadmap and milestone gates](documentation/ROADMAP.md)
+- [Current stability checkpoint and iteration workflow](documentation/PLATFORM_STABILITY.md)
 - [Debugging and KD tools](documentation/DEBUGGING.md)
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
 - [Known limitations](documentation/LIMITATIONS.md)

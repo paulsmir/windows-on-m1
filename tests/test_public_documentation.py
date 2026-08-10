@@ -123,7 +123,12 @@ class PublicDocumentationTests(unittest.TestCase):
             "reader-before-guest",
         ):
             self.assertIn(token, text)
-        self.assertIn("hardware validation pending", text.lower())
+        for token in (
+            "cold-booted",
+            "20-second whole-system pause",
+            "stability is not complete",
+        ):
+            self.assertIn(token, text.lower())
 
     def test_debugging_guide_indexes_kd_and_framebuffer_tools(self):
         text = (ROOT / "documentation/DEBUGGING.md").read_text(encoding="utf-8")
