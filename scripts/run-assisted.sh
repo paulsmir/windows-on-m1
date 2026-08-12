@@ -5,14 +5,14 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 PROXY=${M1N1DEVICE:-}
 VUART=${M1N1VUART:-}
-FIRMWARE="$ROOT/dist/j313/J313_EFI.fd"
+FIRMWARE=
 RAMDISK=
 DRY_RUN=0
 LOW_MEM=1
 DISPLAY=virtual
 DEBUG=uart
 CHAINLOAD=0
-M1N1="$ROOT/dist/j313/m1n1.macho"
+M1N1=
 CONTRACT_OUTPUT=
 
 usage() {
@@ -44,6 +44,11 @@ done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+
+PROFILE=debug
+[ "$DEBUG" != off ] || PROFILE=release
+[ -n "$FIRMWARE" ] || FIRMWARE="$ROOT/dist/j313/$PROFILE/J313_EFI.fd"
+[ -n "$M1N1" ] || M1N1="$ROOT/dist/j313/$PROFILE/m1n1.macho"
 
 discover_ports() {
     [ -n "$PROXY" ] && { [ "$DEBUG" = off ] || [ -n "$VUART" ]; } && return
@@ -101,6 +106,14 @@ fi
     echo "RAM disk not found: $RAMDISK" >&2
     exit 1
 }
+
+MANIFEST=$(dirname "$FIRMWARE")/MANIFEST.json
+[ -f "$MANIFEST" ] || { echo "Artifact manifest not found: $MANIFEST" >&2; exit 1; }
+"$PYTHON" "$ROOT/tools/artifact_manifest.py" verify "$MANIFEST" --profile "$PROFILE"
+if [ "$CHAINLOAD" -eq 1 ] && [ "$(dirname "$M1N1")" != "$(dirname "$FIRMWARE")" ]; then
+    echo "m1n1 and Mu must come from the same artifact profile directory" >&2
+    exit 1
+fi
 
 if pgrep -f '[r]un_uefi.py' >/dev/null; then
     echo "A guest runner already owns the proxy. Use scripts/reset-assisted.sh." >&2

@@ -38,6 +38,8 @@ else
     "$ROOT/scripts/build-standalone.sh" "$@"
 fi
 
-echo "development m1n1: $ROOT/dist/j313/m1n1.macho"
-echo "development Mu: $ROOT/dist/j313/J313_EFI.fd"
-echo "chainload with: m1n1_windows/proxyclient/tools/chainload.py dist/j313/m1n1.macho"
+PROFILE=debug
+[ -z "$RELEASE" ] || PROFILE=release
+echo "development m1n1: $ROOT/dist/j313/$PROFILE/m1n1.macho"
+echo "development Mu: $ROOT/dist/j313/$PROFILE/J313_EFI.fd"
+echo "chainload with: m1n1_windows/proxyclient/tools/chainload.py dist/j313/$PROFILE/m1n1.macho"

@@ -84,6 +84,23 @@ class PublicScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--display virtual --debug uart", result.stdout)
 
+    def test_builds_and_launches_use_separate_profile_directories(self):
+        release = subprocess.run(
+            ["sh", str(ROOT / "scripts/build-development.sh"), "--dry-run", "--release"],
+            cwd=ROOT, check=True, capture_output=True, text=True,
+        )
+        debug = subprocess.run(
+            ["sh", str(ROOT / "scripts/build-development.sh"), "--dry-run"],
+            cwd=ROOT, check=True, capture_output=True, text=True,
+        )
+        quiet = subprocess.run(
+            ["sh", str(ROOT / "scripts/run-assisted.sh"), "--dry-run", "--debug", "off"],
+            cwd=ROOT, check=True, capture_output=True, text=True,
+        )
+        self.assertIn("dist/j313/release/m1n1.macho", release.stdout)
+        self.assertIn("dist/j313/debug/m1n1.macho", debug.stdout)
+        self.assertIn("dist/j313/release/J313_EFI.fd", quiet.stdout)
+
     def test_run_assisted_dry_run_describes_order_and_selected_paths(self):
         command = [
             "sh",

@@ -58,7 +58,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "USB framebuffer: $virtual"
     echo "telemetry: $telemetry"
     if [ "$CHAINLOAD" -eq 1 ]; then
-        echo "chainload: ${M1N1:-dist/j313/m1n1.macho}"
+        profile=debug
+        [ "$DEBUG" != off ] || profile=release
+        echo "chainload: ${M1N1:-dist/j313/$profile/m1n1.macho}"
     else
         echo "chainload: disabled"
     fi

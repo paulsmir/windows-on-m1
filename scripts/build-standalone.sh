@@ -5,6 +5,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DRY_RUN=${BUILD_STANDALONE_DRY_RUN:-0}
 BUILD_TARGET=DEBUG
 M1N1_RELEASE=
+PROFILE=debug
 CHECK_PYTHON=0
 DISPLAY=physical
 DEBUG=off
@@ -18,7 +19,7 @@ usage() {
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --release) BUILD_TARGET=RELEASE; M1N1_RELEASE=1; shift ;;
+        --release) BUILD_TARGET=RELEASE; M1N1_RELEASE=1; PROFILE=release; shift ;;
         --check-python) CHECK_PYTHON=1; shift ;;
         --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
@@ -136,18 +137,18 @@ $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE
-mkdir -p dist/j313
+mkdir -p dist/j313/$PROFILE
 make -C m1n1_windows clean
 make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE0
-copy m1n1_windows/build/m1n1.bin to dist/j313/m1n1-stage0.bin
+copy m1n1_windows/build/m1n1.bin to dist/j313/$PROFILE/m1n1-stage0.bin
 make -C m1n1_windows clean
 make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE1
-copy m1n1_windows/build/m1n1.bin to dist/j313/m1n1-stage1.bin
+copy m1n1_windows/build/m1n1.bin to dist/j313/$PROFILE/m1n1-stage1.bin
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --stage0-m1n1 dist/j313/m1n1-stage0.bin --stage1-m1n1 dist/j313/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/boot.bin --display $DISPLAY --debug $DEBUG --source-commit <m1n1-source-commit> --compiler <compiler-identity>
-PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
-copy m1n1.macho and J313_EFI.fd to dist/j313
-write dist/j313/SHA256SUMS and dist/j313/BUILD-METADATA.json
+python3 tools/pack_boot.py --stage0-m1n1 dist/j313/$PROFILE/m1n1-stage0.bin --stage1-m1n1 dist/j313/$PROFILE/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/$PROFILE/boot.bin --display $DISPLAY --debug $DEBUG --source-commit <m1n1-source-commit> --compiler <compiler-identity>
+PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/$PROFILE/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
+copy m1n1.macho and J313_EFI.fd to dist/j313/$PROFILE
+write dist/j313/$PROFILE/SHA256SUMS and dist/j313/$PROFILE/MANIFEST.json
 EOF
     exit 0
 fi
@@ -194,7 +195,7 @@ fi
 
 [ "$MU_ONLY" != 1 ] || exit 0
 
-DIST="$ROOT/dist/j313"
+DIST="$ROOT/dist/j313/$PROFILE"
 mkdir -p "$DIST"
 
 (
@@ -236,6 +237,10 @@ PYTHONPATH="$ROOT" python3 -c \
     "$DIST/boot.bin"
 cp "$FD" "$DIST/J313_EFI.fd"
 
+if [ "$PROFILE" = release ]; then
+    python3 "$ROOT/tools/check_release_binary.py" "$DIST/m1n1.macho"
+fi
+
 (
     cd "$DIST"
     if command -v sha256sum >/dev/null 2>&1; then
@@ -244,4 +249,8 @@ cp "$FD" "$DIST/J313_EFI.fd"
         shasum -a 256 boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd >SHA256SUMS
     fi
 )
+python3 "$ROOT/tools/artifact_manifest.py" create \
+    --root "$ROOT" --directory "$DIST" --profile "$PROFILE" \
+    --display "$DISPLAY" --debug "$DEBUG" \
+    boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd
 echo "Standalone artifacts: $DIST"
