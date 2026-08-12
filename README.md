@@ -47,6 +47,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Current stability checkpoint and iteration workflow](documentation/PLATFORM_STABILITY.md)
 - [Debugging and KD tools](documentation/DEBUGGING.md)
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
+- [Historical artifact provenance](documentation/history/ARTIFACT_PROVENANCE.md)
 - [Known limitations](documentation/LIMITATIONS.md)
 - [Changelog](CHANGELOG.md)
 

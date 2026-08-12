@@ -89,7 +89,7 @@ class PublicDocumentationTests(unittest.TestCase):
             "stock Asahi UEFI environment",
             "Macintosh HD",
             "sudo scripts/install-esp.sh inspect --disk diskXsY",
-            "sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin",
+            "sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/release/boot.bin",
             "sudo scripts/install-esp.sh restore --disk diskXsY",
         )
         for token in required:
@@ -104,7 +104,7 @@ class PublicDocumentationTests(unittest.TestCase):
             "Finish Installation",
             "stock Asahi UEFI environment",
             "Select `Macintosh HD` and let macOS boot normally",
-            "sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin",
+            "sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/release/boot.bin",
             "create partition msr size=16",
         ))
         self.assertEqual(order, tuple(sorted(order)))
@@ -154,12 +154,12 @@ class PublicDocumentationTests(unittest.TestCase):
         text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
         for token in (
             "debug=monitor",
-            "scripts/build-standalone.sh --display physical --debug monitor",
+            "scripts/build-standalone.sh --debug-build --display physical --debug monitor",
             "scripts/log-standalone.sh --output standalone-monitor-logs",
             "generation-001",
             "manifest ABI",
-            "boot-physical-monitor.bin",
-            "boot-physical-production.bin",
+            "dist/j313/debug/boot.bin",
+            "dist/j313/release/boot.bin",
             "attach after Windows has started",
             "verbose synchronous USB logging",
             "USB backpressure",

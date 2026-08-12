@@ -154,8 +154,8 @@ cd windows-on-m1
 git submodule status --recursive
 ```
 
-Build `dist/j313/boot.bin` by following [BUILD.md](BUILD.md), or place the matching release
-artifact there and verify its published SHA-256 checksum.
+Build `dist/j313/release/boot.bin` by following [BUILD.md](BUILD.md), or unpack a matching
+release profile together with its `MANIFEST.json` and verify it before installation.
 
 ## 3. Identify the Asahi ESP and install the standalone image
 
@@ -170,7 +170,7 @@ identifier depends on the current GPT layout. Substitute the reviewed identifier
 
 ```sh
 sudo scripts/install-esp.sh inspect --disk diskXsY
-sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin
+sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/release/boot.bin
 ```
 
 The `inspect` command must show the existing stock Asahi `m1n1/boot.bin`. If that path is
@@ -419,6 +419,29 @@ telemetry described in [DEBUGGING.md](DEBUGGING.md).
 removed or disabled in newer media. Hardware-requirement registry changes used to enter
 Setup are a separate mechanism and do not create a local account.
 
+## Guarded redeployment of an existing Windows layout
+
+For a machine that already has exactly one NTFS volume labelled `Windows` and one FAT32
+volume labelled `WINESP`, copy `scripts\reinstall-windows.cmd` to the root of the extracted
+installer USB. At the first Setup screen press `Shift+F10`, use `diskpart` and `list volume`
+to identify the current USB letter, exit DiskPart, and run—for example:
+
+```cmd
+D:\reinstall-windows.cmd
+```
+
+The script discovers drive letters on every run, requires a unique `sources\install.wim`,
+lists and validates the selected image index, and waits for the literal confirmation
+`ERASE WINDOWS`. Only then does it format the existing `Windows` and `WINESP` volumes, apply
+the image, run BCDBoot, create `EFI\BOOT\BOOTAA64.EFI`, and verify all three boot artifacts.
+It never selects a disk or creates, deletes, or converts a partition. Minimal WinPE builds
+without `findstr.exe` are supported.
+
+All data on those two Windows volumes is erased. The script writes phase and DISM logs to
+the installer USB. The manual commands in
+[`reference/windows-install-commands.txt`](reference/windows-install-commands.txt) remain
+the recovery path if automated discovery cannot prove the layout safely.
+
 ## Recovery
 
 If the packed image does not start, hold the Mac power button to enter Apple startup options
@@ -436,5 +459,5 @@ or use the assisted KD reboot procedure rather than repeatedly removing power. R
 ## Validation status
 
 The manual WinPE, DISM, BCDBoot, fallback-loader, and local-account procedure above was
-validated on the development J313. The current self-contained standalone image is built and
-host-tested, but its final cold-boot hardware validation is pending.
+validated on the development J313. Standalone Windows has cold-booted on that machine, but
+each newly generated release profile still requires its own manifest check and cold-boot gate.

@@ -42,7 +42,7 @@ mkdir -p .local/platform-stability/baseline
 git rev-parse HEAD
 git -C m1n1_windows rev-parse HEAD
 git -C mu rev-parse HEAD
-shasum -a 256 dist/j313/boot.bin
+python3 tools/artifact_manifest.py verify dist/j313/release/MANIFEST.json --profile release
 ```
 
 On the target, keep the ESP backup created by `scripts/install-esp.sh inspect`. Do not overwrite the
@@ -112,8 +112,8 @@ Example:
 
 ```sh
 scripts/build-standalone.sh --display physical --debug off
-shasum -a 256 dist/j313/boot.bin
-sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/boot.bin
+python3 tools/artifact_manifest.py verify dist/j313/release/MANIFEST.json --profile release
+sudo scripts/install-esp.sh install --disk diskXsY --image dist/j313/release/boot.bin
 ```
 
 The candidate is complete only when assisted and standalone runs expose the same hardware contract,

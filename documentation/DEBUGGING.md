@@ -29,7 +29,7 @@ only occurs from the installed `boot.bin`, build `debug=monitor` and start the p
 before cold power-on:
 
 ```sh
-scripts/build-standalone.sh --display physical --debug monitor
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
 scripts/log-standalone.sh --output standalone-monitor-logs
 ```
 
@@ -133,7 +133,7 @@ partially replaced frame.
 ## Matching target and proxy binaries
 
 `m1n1.proxy.ProxyCommandError: Reply error: Bad Command` means the target does not implement
-the opcode requested by the host-side Python code. Chainload `dist/j313/m1n1.macho` built
+the opcode requested by the host-side Python code. Chainload `dist/j313/debug/m1n1.macho` built
 from the same checkout, wait for re-enumeration, and then start the guest.
 
 A timeout on the first NOP usually means the wrong endpoint, a stale target, or another

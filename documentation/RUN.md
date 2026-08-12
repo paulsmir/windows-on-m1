@@ -45,18 +45,16 @@ tools can inspect it. It is a diagnostic profile, not the final low-overhead con
 Build it from the same checkout that supplies the target m1n1 manifest ABI:
 
 ```sh
-scripts/build-standalone.sh --display physical --debug monitor
-mkdir -p .local/validated-artifacts
-cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-monitor.bin
-shasum -a 256 .local/validated-artifacts/boot-physical-monitor.bin
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
+python3 tools/artifact_manifest.py verify dist/j313/debug/MANIFEST.json --profile debug
 ```
 
-Install the resulting `dist/j313/boot.bin` on the target while macOS is running, using the ESP
+Install the resulting debug image on the target while macOS is running, using the ESP
 identifier previously confirmed by `inspect`:
 
 ```sh
 sudo scripts/install-esp.sh install --disk diskXsY \
-  --image .local/validated-artifacts/boot-physical-monitor.bin
+  --image dist/j313/debug/boot.bin
 ```
 
 Before powering on the target, start the passive recorder on the host:
@@ -97,11 +95,10 @@ mode to measure production performance or classify a temporary UI stall by itsel
 After diagnosis, return to the production profile explicitly:
 
 ```sh
-scripts/build-standalone.sh --display physical --debug off
-cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-production.bin
-shasum -a 256 .local/validated-artifacts/boot-physical-production.bin
+scripts/build-standalone.sh --release --display physical --debug off
+python3 tools/artifact_manifest.py verify dist/j313/release/MANIFEST.json --profile release
 sudo scripts/install-esp.sh install --disk diskXsY \
-  --image .local/validated-artifacts/boot-physical-production.bin
+  --image dist/j313/release/boot.bin
 ```
 
 To return to the stock Asahi payload instead, use:
@@ -193,7 +190,7 @@ Review the exact command first:
 scripts/run-assisted.sh --dry-run \
   --proxy /dev/cu.PROXY \
   --vuart /dev/cu.VUART \
-  --firmware dist/j313/J313_EFI.fd
+  --firmware dist/j313/debug/J313_EFI.fd
 ```
 
 Then launch:
@@ -202,7 +199,7 @@ Then launch:
 scripts/run-assisted.sh \
   --proxy /dev/cu.PROXY \
   --vuart /dev/cu.VUART \
-  --firmware dist/j313/J313_EFI.fd
+  --firmware dist/j313/release/J313_EFI.fd
 ```
 
 This lower-level form assumes matching m1n1 is already running. For the usual development
@@ -255,7 +252,7 @@ SSH is not part of either boot chain. It is merely a convenient way to copy `boo
 the repository to the Air while the Air is running macOS:
 
 ```sh
-scp dist/j313/boot.bin air-host:~/boot.bin
+scp dist/j313/release/boot.bin air-host:~/boot.bin
 ```
 
 The ESP replacement itself must run locally on the Air with `sudo` because it mounts and

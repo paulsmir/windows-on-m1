@@ -60,7 +60,7 @@ through Python 3.12. The container already supplies a compatible interpreter.
 
 ## Canonical build
 
-Build the debug artifacts and self-contained image:
+Build the production artifacts and self-contained image:
 
 ```sh
 scripts/build-standalone.sh
@@ -71,8 +71,8 @@ host diagnostics. Other manifest profiles are explicit build options:
 
 ```sh
 scripts/build-standalone.sh --display physical --debug off
-scripts/build-standalone.sh --display both --debug full
-scripts/build-standalone.sh --display physical --debug monitor
+scripts/build-standalone.sh --debug-build --display both --debug full
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
 ```
 
 `none`, `physical`, `virtual`, and `both` are valid display values. `off`, `uart`, `full`, and
@@ -81,19 +81,15 @@ a normal standalone power-on should use `physical --debug off`. `monitor` is a d
 profile that exposes console/vUART while always continuing into Windows instead of allowing
 proxy takeover.
 
-Each invocation replaces `dist/j313/boot.bin`. Preserve named copies before building the next
-profile so a known-good diagnostic image cannot be confused with the quiet production image:
+Each invocation atomically replaces only its canonical profile directory. Debug and release
+artifacts cannot overwrite or masquerade as each other:
 
 ```sh
-mkdir -p .local/validated-artifacts
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
+python3 tools/artifact_manifest.py verify dist/j313/debug/MANIFEST.json --profile debug
 
-scripts/build-standalone.sh --display physical --debug monitor
-cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-monitor.bin
-shasum -a 256 .local/validated-artifacts/boot-physical-monitor.bin
-
-scripts/build-standalone.sh --display physical --debug off
-cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-production.bin
-shasum -a 256 .local/validated-artifacts/boot-physical-production.bin
+scripts/build-standalone.sh --release --display physical --debug off
+python3 tools/artifact_manifest.py verify dist/j313/release/MANIFEST.json --profile release
 ```
 
 The production profile is the only normal-use and performance profile. The monitor image keeps
@@ -120,10 +116,11 @@ The script:
 5. verifies that generated layout constants match `config/j313-guest-layout.json`;
 6. packs the compressed Mu FD and versioned manifest;
 7. writes `boot.bin`, both stage binaries, `m1n1.macho`, `J313_EFI.fd`, `SHA256SUMS`, and
-   `BUILD-METADATA.json` under `dist/j313/`.
+   `MANIFEST.json` under `dist/j313/release/` or `dist/j313/debug/`.
 
-`BUILD-METADATA.json` records the exact m1n1 source commit, compiler identity, image hash,
-and separate role/hash/size records. Packaging aborts if the stage hashes are identical.
+`MANIFEST.json` records root, m1n1, and Mu commits, compiler identity, the complete J313 guest
+memory/display contract, and the profile and artifact hashes.
+Packaging aborts on dirty tracked sources or identical stage hashes.
 
 Review the commands without changing the tree:
 
@@ -136,14 +133,14 @@ BUILD_STANDALONE_DRY_RUN=1 scripts/build-standalone.sh
 The assisted path uses the same source revisions and guest layout:
 
 ```sh
-scripts/build-development.sh
+scripts/build-development.sh --display both --debug full
 ```
 
 This produces:
 
-- `dist/j313/m1n1.macho` for `chainload.py`;
-- `dist/j313/J313_EFI.fd` for `run_uefi.py`;
-- the standalone `dist/j313/boot.bin` from the same components.
+- `dist/j313/debug/m1n1.macho` for `chainload.py`;
+- `dist/j313/debug/J313_EFI.fd` for `run_uefi.py`;
+- `dist/j313/debug/boot.bin` from the same components.
 
 Keeping these together prevents the `Bad Command` failure caused by running a newly built
 Python proxy against an older target binary that lacks its proxy opcode.
@@ -170,7 +167,7 @@ python3 tools/pack_boot.py \
   --m1n1 m1n1_windows/build/m1n1.bin \
   --firmware mu/Build/MacBookAirMid2020-AARCH64/DEBUG_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd \
   --layout config/j313-guest-layout.json \
-  --output dist/j313/boot.bin \
+  --output dist/j313/release/boot.bin \
   --display physical \
   --debug off
 ```
@@ -182,7 +179,7 @@ is carried by `boot.bin`; there is no second configuration file on the ESP.
 Inspect a preserved image before installation:
 
 ```sh
-python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path(".local/validated-artifacts/boot-physical-production.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print(outer); print(nested); print(f"firmware={len(firmware)}")'
+python3 tools/artifact_manifest.py verify dist/j313/release/MANIFEST.json --profile release
 ```
 
 The production copy must report `display=physical`, `debug=off`; the monitor copy must report
@@ -210,7 +207,7 @@ m1n1_windows/tests/run_host_tests.sh
 Compare release hashes:
 
 ```sh
-cd dist/j313
+cd dist/j313/release
 shasum -a 256 -c SHA256SUMS
 ```
 

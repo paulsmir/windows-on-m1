@@ -84,7 +84,7 @@ command:
 
 ```sh
 scripts/build-standalone.sh --display physical --debug off
-scripts/build-standalone.sh --display physical --debug monitor
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
 ```
 
 Profiles that require an attached host remain explicit and never become a hidden runtime
@@ -104,7 +104,7 @@ For assisted mode the launcher performs these stages:
 
 1. Parse and validate the complete profile.
 2. Discover or validate the proxy and virtual-UART endpoints required by that profile.
-3. With `--chainload`, load `dist/j313/m1n1.macho` and wait for USB re-enumeration.
+3. With `--chainload`, load `dist/j313/debug/m1n1.macho` and wait for USB re-enumeration.
 4. Open the virtual UART only for `uart` or `full`.
 5. Construct the guest boot arguments for the shared BGRA framebuffer.
 6. Ask m1n1 to attach the framebuffer to DCP for `physical` or `both`.
