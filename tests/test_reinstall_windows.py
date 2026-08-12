@@ -15,8 +15,9 @@ class ReinstallWindowsContractTests(unittest.TestCase):
 
     def test_discovers_source_and_exact_target_labels(self):
         self.assertIn(r"\sources\install.wim", self.lower)
-        self.assertIn(' is windows$"', self.lower)
-        self.assertIn(' is winesp$"', self.lower)
+        self.assertIn('"!volume_label!"=="windows"', self.lower)
+        self.assertIn('"!volume_label!"=="winesp"', self.lower)
+        self.assertIn('"volume in drive %%l is"', self.lower)
         self.assertIn("source_count", self.lower)
         self.assertIn("windows_count", self.lower)
         self.assertIn("winesp_count", self.lower)
@@ -94,6 +95,9 @@ class ReinstallWindowsContractTests(unittest.TestCase):
         confirmation = self.lower.index('if not "!confirm!"=="erase windows"')
         first_diskpart_file = self.lower.index("reinstall-windows-os.txt")
         self.assertLess(confirmation, first_diskpart_file)
+
+    def test_does_not_depend_on_findstr_in_minimal_winpe(self):
+        self.assertNotIn("findstr", self.lower)
 
 
 if __name__ == "__main__":

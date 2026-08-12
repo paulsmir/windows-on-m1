@@ -22,11 +22,15 @@ for %%L in (C D E F G H I J K L M N O P Q R S T U V W Y Z) do (
         set /a SOURCE_COUNT+=1
         set "SOURCE_DRIVE=%%L:"
     )
-    for /f "delims=" %%V in ('vol %%L: 2^>nul ^| findstr /R /C:" is Windows$"') do (
+    set "VOLUME_LABEL="
+    for /f "tokens=1-5,*" %%A in ('vol %%L: 2^>nul') do (
+        if /i "%%A %%B %%C %%D %%E"=="Volume in drive %%L is" set "VOLUME_LABEL=%%F"
+    )
+    if /i "!VOLUME_LABEL!"=="Windows" (
         set /a WINDOWS_COUNT+=1
         set "WINDOWS_DRIVE=%%L:"
     )
-    for /f "delims=" %%V in ('vol %%L: 2^>nul ^| findstr /R /C:" is WINESP$"') do (
+    if /i "!VOLUME_LABEL!"=="WINESP" (
         set /a WINESP_COUNT+=1
         set "WINESP_DRIVE=%%L:"
     )
@@ -91,8 +95,13 @@ if not defined IMAGE_INDEX (
     echo ERROR: no image index was entered.
     exit /b 21
 )
-echo(!IMAGE_INDEX!| findstr /R /X "[1-9][0-9]*" >nul
-if errorlevel 1 (
+set "INDEX_REMAINDER=!IMAGE_INDEX!"
+for %%D in (0 1 2 3 4 5 6 7 8 9) do set "INDEX_REMAINDER=!INDEX_REMAINDER:%%D=!"
+if defined INDEX_REMAINDER (
+    echo ERROR: the image index must be a positive integer.
+    exit /b 22
+)
+if "!IMAGE_INDEX!"=="0" (
     echo ERROR: the image index must be a positive integer.
     exit /b 22
 )
