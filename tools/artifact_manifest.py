@@ -9,6 +9,17 @@ import json
 import subprocess
 from pathlib import Path
 
+J313_GUEST_CONTRACT = {
+    "layout_version": 1,
+    "phys_base": "0x850000000",
+    "ram_end": "0xa00000000",
+    "virtual_fb_base": "0x85f000000",
+    "virtual_fb_width": 2560,
+    "virtual_fb_height": 1600,
+    "virtual_fb_stride": 10240,
+    "cpu_count": 8,
+}
+
 
 class ManifestError(RuntimeError):
     pass
@@ -44,11 +55,23 @@ def create_manifest(
     display: str,
     debug: str,
     artifact_names: list[str],
+    *,
+    compiler: str,
 ) -> Path:
     root = root.resolve()
     artifact_dir = artifact_dir.resolve()
     if profile not in {"release", "debug"}:
         raise ManifestError(f"unsupported profile: {profile}")
+    if not compiler.strip():
+        raise ManifestError("compiler identity is empty")
+    layout_path = root / "config" / "j313-guest-layout.json"
+    try:
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ManifestError(f"cannot read guest layout: {layout_path}") from error
+    guest_contract = {key: layout.get(key) for key in J313_GUEST_CONTRACT}
+    if guest_contract != J313_GUEST_CONTRACT:
+        raise ManifestError("guest layout does not match the J313 release contract")
     revisions = {"root_commit": _clean_revision(root)}
     for name in ("m1n1_windows", "mu"):
         path = root / name
@@ -61,11 +84,14 @@ def create_manifest(
             raise ManifestError(f"artifact is missing: {path}")
         artifacts[name] = {"size": path.stat().st_size, "sha256": _sha256(path)}
     data = {
-        "format_version": 1,
+        "format_version": 2,
         "platform": "j313",
         "profile": profile,
         "display": display,
         "debug": debug,
+        "compiler": compiler,
+        "guest_layout_sha256": _sha256(layout_path),
+        "guest_contract": guest_contract,
         **revisions,
         "artifacts": artifacts,
     }
@@ -82,12 +108,16 @@ def verify_manifest(path: Path, expected_profile: str | None = None) -> dict:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ManifestError(f"cannot read manifest: {path}") from error
-    if data.get("format_version") != 1 or data.get("platform") != "j313":
+    if data.get("format_version") != 2 or data.get("platform") != "j313":
         raise ManifestError("unsupported artifact manifest")
     if expected_profile is not None and data.get("profile") != expected_profile:
         raise ManifestError(
             f"profile mismatch: expected {expected_profile}, got {data.get('profile')}"
         )
+    if not data.get("compiler") or len(data.get("guest_layout_sha256", "")) != 64:
+        raise ManifestError("incomplete artifact provenance")
+    if data.get("guest_contract") != J313_GUEST_CONTRACT:
+        raise ManifestError("guest contract mismatch")
     for name, record in data.get("artifacts", {}).items():
         artifact = path.parent / name
         if not artifact.is_file():
@@ -108,6 +138,7 @@ def main() -> int:
     create.add_argument("--profile", choices=("release", "debug"), required=True)
     create.add_argument("--display", required=True)
     create.add_argument("--debug", required=True)
+    create.add_argument("--compiler", required=True)
     create.add_argument("artifacts", nargs="+")
     verify = subparsers.add_parser("verify")
     verify.add_argument("manifest", type=Path)
@@ -115,7 +146,17 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "create":
-            print(create_manifest(args.root, args.directory, args.profile, args.display, args.debug, args.artifacts))
+            print(
+                create_manifest(
+                    args.root,
+                    args.directory,
+                    args.profile,
+                    args.display,
+                    args.debug,
+                    args.artifacts,
+                    compiler=args.compiler,
+                )
+            )
         else:
             data = verify_manifest(args.manifest, args.profile)
             print(f"validated {data['platform']} {data['profile']} artifacts")

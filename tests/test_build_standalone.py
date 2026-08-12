@@ -10,6 +10,25 @@ SCRIPT = ROOT / "scripts/build-standalone.sh"
 
 
 class BuildStandaloneTests(unittest.TestCase):
+    def test_no_argument_build_is_the_release_physical_off_profile(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+        )
+        result = subprocess.run(
+            [str(SCRIPT)],
+            cwd="/tmp",
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("dist/j313/release/boot.bin", result.stdout)
+        self.assertIn("--display physical --debug off", result.stdout)
+
     def test_dry_run_has_the_complete_location_independent_pipeline(self):
         environment = dict(os.environ, BUILD_STANDALONE_DRY_RUN="1")
         result = subprocess.run(
@@ -27,6 +46,7 @@ class BuildStandaloneTests(unittest.TestCase):
             "git submodule update --init --recursive",
             "stuart_build",
             "BLD_*_AIC_BUILD=FALSE",
+            "temporary sibling for dist/j313/release",
             "-DM1N1_STAGE0",
             "dist/j313/release/m1n1-stage0.bin",
             "-DM1N1_STAGE1",
@@ -42,6 +62,7 @@ class BuildStandaloneTests(unittest.TestCase):
             "parse_image",
             "SHA256SUMS",
             "MANIFEST.json",
+            "publish complete profile atomically to dist/j313/release",
         )
         cursor = 0
         for item in expected_in_order:
@@ -148,7 +169,7 @@ class BuildStandaloneTests(unittest.TestCase):
             STANDALONE_BUILD_CONTAINER="never",
         )
         result = subprocess.run(
-            [str(SCRIPT), "--display", "both", "--debug", "full"],
+            [str(SCRIPT), "--debug-build", "--display", "both", "--debug", "full"],
             cwd="/tmp",
             env=environment,
             text=True,
@@ -166,7 +187,7 @@ class BuildStandaloneTests(unittest.TestCase):
             STANDALONE_BUILD_CONTAINER="never",
         )
         result = subprocess.run(
-            [str(SCRIPT), "--display", "physical", "--debug", "monitor"],
+            [str(SCRIPT), "--debug-build", "--display", "physical", "--debug", "monitor"],
             cwd="/tmp",
             env=environment,
             text=True,
