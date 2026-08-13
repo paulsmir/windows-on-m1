@@ -25,6 +25,15 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("ARM64", project)
         for source in ("driver.c", "device.c", "apple_input_hw.c", "spi.c", "gpio.c"):
             self.assertIn(source, project)
+        for source in (
+            "apple_spi_plan.c",
+            "apple_spihid_crc.c",
+            "apple_spihid_discovery.c",
+            "apple_spihid_packet.c",
+            "apple_spihid_reassembly.c",
+            "apple_spihid_transport.c",
+        ):
+            self.assertIn(source, project)
         self.assertIn("j313_apple_input.generated.h", project)
         self.assertIn("vhfkm.lib", project.lower())
 
@@ -65,6 +74,21 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             build,
         )
         self.assertIn('(Join-Path $root "AppleInput.vcxproj")', build)
+
+    def test_official_wdk_arm64_ci_is_pinned_and_publishes_package(self):
+        packages = (ROOT / "packages.config").read_text(encoding="utf-8")
+        props = (ROOT / "Directory.Build.props").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "apple-input-wdk.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Microsoft.Windows.WDK.x64", packages)
+        self.assertIn("Microsoft.Windows.WDK.arm64", packages)
+        self.assertIn("Microsoft.Windows.SDK.CPP.arm64", packages)
+        self.assertIn("Microsoft.Windows.WDK.arm64.props", props)
+        self.assertIn("nuget restore", workflow.lower())
+        self.assertIn("AppleInput.vcxproj", workflow)
+        self.assertIn("Platform=ARM64", workflow)
+        self.assertIn("actions/upload-artifact", workflow)
 
 
 if __name__ == "__main__":
