@@ -1,9 +1,29 @@
 #ifndef APPLE_SPIHID_H
 #define APPLE_SPIHID_H
 
+#ifdef AI_KERNEL_MODE
+#include <ntddk.h>
+typedef UCHAR uint8_t;
+typedef USHORT uint16_t;
+typedef ULONG uint32_t;
+typedef ULONGLONG uint64_t;
+typedef unsigned char bool;
+#define true 1
+#define false 0
+#define AI_MEMCPY RtlCopyMemory
+#define AI_MEMSET RtlZeroMemory
+#define AI_UINT16_MAX MAXUSHORT
+#define AI_UINT64_MAX MAXULONGLONG
+#else
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+#define AI_MEMCPY memcpy
+#define AI_MEMSET(ptr, size) memset((ptr), 0, (size))
+#define AI_UINT16_MAX UINT16_MAX
+#define AI_UINT64_MAX UINT64_MAX
+#endif
 
 #define AI_PACKET_SIZE 256u
 #define AI_PACKET_DATA_SIZE 246u

@@ -1,11 +1,9 @@
 #include "apple_spihid.h"
 
-#include <string.h>
-
 void ai_transport_queue_reset(struct ai_transport_queue *queue)
 {
     if (queue)
-        memset(queue, 0, sizeof(*queue));
+        AI_MEMSET(queue, sizeof(*queue));
 }
 
 bool ai_transport_irq(struct ai_transport_queue *queue)

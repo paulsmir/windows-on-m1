@@ -14,7 +14,7 @@
   <PropertyGroup><ConfigurationType>Driver</ConfigurationType><DriverType>KMDF</DriverType><PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup>
-    <ClCompile><AdditionalIncludeDirectories>include;..\protocol\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><TreatWarningAsError>true</TreatWarningAsError></ClCompile>
+    <ClCompile><AdditionalIncludeDirectories>include;..\protocol\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>AI_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><TreatWarningAsError>true</TreatWarningAsError></ClCompile>
     <Link><AdditionalDependencies>vhfkm.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>

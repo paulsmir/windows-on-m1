@@ -11,7 +11,7 @@ enum ai_status ai_spi_plan_transfer(uint32_t reference_hz, uint32_t target_hz,
     uint8_t bytes_per_word = bits_per_word > 16 ? 4 :
                              bits_per_word > 8 ? 2 : 1;
     if (byte_length % bytes_per_word ||
-        byte_length / bytes_per_word > UINT16_MAX)
+        byte_length / bytes_per_word > AI_UINT16_MAX)
         return AI_ERR_LENGTH;
 
     uint64_t divider = ((uint64_t)reference_hz + target_hz - 1) / target_hz;

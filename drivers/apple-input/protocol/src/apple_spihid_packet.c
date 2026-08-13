@@ -1,7 +1,5 @@
 #include "apple_spihid.h"
 
-#include <string.h>
-
 static uint16_t get_le16(const uint8_t *bytes)
 {
     return (uint16_t)bytes[0] | (uint16_t)((uint16_t)bytes[1] << 8);
@@ -65,7 +63,7 @@ enum ai_status ai_discovery_request_encode(const struct ai_discovery_request *re
     if (!request || !raw)
         return AI_ERR_ARGUMENT;
 
-    memset(raw, 0, AI_PACKET_SIZE);
+    AI_MEMSET(raw, AI_PACKET_SIZE);
     raw[0] = AI_PACKET_WRITE;
     raw[1] = request->target;
     put_le16(raw + 6, 10);

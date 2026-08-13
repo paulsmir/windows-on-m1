@@ -1,7 +1,13 @@
 #pragma once
 
+#ifdef AI_KERNEL_MODE
+#include <ntddk.h>
+typedef UINT32 uint32_t;
+typedef UINT64 uint64_t;
+#else
 #include <stddef.h>
 #include <stdint.h>
+#endif
 
 #define AI_SPI_REG_CONTROL       0x000u
 #define AI_SPI_REG_CONFIG        0x004u

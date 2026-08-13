@@ -5,7 +5,7 @@ static void arm_request(struct ai_discovery *state, uint64_t now_us, uint64_t ti
     state->request_id++;
     state->deadline_us = now_us + timeout_us;
     if (state->deadline_us < now_us)
-        state->deadline_us = UINT64_MAX;
+        state->deadline_us = AI_UINT64_MAX;
 }
 
 void ai_discovery_start(struct ai_discovery *state, uint64_t now_us,

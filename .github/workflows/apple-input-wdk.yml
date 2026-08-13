@@ -24,6 +24,8 @@ jobs:
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
 
       - name: Add NuGet to PATH
         uses: NuGet/setup-nuget@v2

@@ -1,11 +1,9 @@
 #include "apple_spihid.h"
 
-#include <string.h>
-
 void ai_reassembler_reset(struct ai_reassembler *state)
 {
     if (state)
-        memset(state, 0, sizeof(*state));
+        AI_MEMSET(state, sizeof(*state));
 }
 
 enum ai_status ai_reassembler_push(struct ai_reassembler *state,
@@ -37,7 +35,7 @@ enum ai_status ai_reassembler_push(struct ai_reassembler *state,
     }
 
     if (packet->length)
-        memcpy(state->data + packet->offset, packet->data, packet->length);
+        AI_MEMCPY(state->data + packet->offset, packet->data, packet->length);
     state->used = end;
     if (packet->remaining)
         return AI_OK;

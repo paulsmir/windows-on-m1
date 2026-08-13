@@ -45,7 +45,7 @@ NTSTATUS AiDeviceParseResources(WDFCMRESLIST Raw, WDFCMRESLIST Translated,
         if (resource == NULL)
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         if (resource->Type == CmResourceTypeMemory) {
-            if (memory >= RTL_NUMBER_OF(AiExpectedBases) ||
+            if (memory >= (ULONG)RTL_NUMBER_OF(AiExpectedBases) ||
                 resource->u.Memory.Start.QuadPart != AiExpectedBases[memory] ||
                 resource->u.Memory.Length != AiExpectedSizes[memory])
                 return STATUS_DEVICE_CONFIGURATION_ERROR;

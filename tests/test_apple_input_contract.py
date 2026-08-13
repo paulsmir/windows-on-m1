@@ -154,6 +154,27 @@ class AppleInputContractTests(unittest.TestCase):
         self.assertIn("contract.ap_gpio.size", source)
         self.assertIn("related = [spi, hid, ap_gpio, nub]", source)
 
+    def test_kmdf_build_uses_kernel_compatible_portable_headers(self):
+        project = (ROOT / "drivers" / "apple-input" / "windows" /
+                   "AppleInput.vcxproj").read_text()
+        protocol = (ROOT / "drivers" / "apple-input" / "protocol" /
+                    "include" / "apple_spihid.h").read_text()
+        hardware = (ROOT / "drivers" / "apple-input" / "windows" /
+                    "include" / "apple_input_hw.h").read_text()
+        self.assertIn("AI_KERNEL_MODE", project)
+        self.assertIn("#ifdef AI_KERNEL_MODE", protocol)
+        self.assertIn("#ifdef AI_KERNEL_MODE", hardware)
+        self.assertIn("RtlCopyMemory", protocol)
+        self.assertNotIn("#include <string.h>",
+                         "\n".join(path.read_text() for path in
+                                   (ROOT / "drivers" / "apple-input" /
+                                    "protocol" / "src").glob("*.c")))
+
+    def test_wdk_ci_selects_native_x64_msbuild_host(self):
+        workflow = (ROOT / ".github" / "workflows" /
+                    "apple-input-wdk.yml").read_text()
+        self.assertIn("msbuild-architecture: x64", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
