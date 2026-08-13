@@ -376,6 +376,61 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("virtual UART: /dev/cu.test-vuart", result.stdout)
         self.assertIn("USB framebuffer: enabled", result.stdout)
         self.assertIn("telemetry: enabled", result.stdout)
+        self.assertIn("chainload: dist/j313/debug-forensic/m1n1.macho", result.stdout)
+
+    def test_assisted_public_entrypoint_chainloads_by_default(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted",
+                "--display", "physical",
+                "--debug", "off",
+                "--proxy", "/dev/cu.test-proxy",
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("chainload: dist/j313/release/m1n1.macho", result.stdout)
+
+    def test_assisted_proxy_reuse_requires_explicit_flag(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted",
+                "--display", "physical",
+                "--debug", "off",
+                "--proxy", "/dev/cu.test-proxy",
+                "--reuse-proxy",
+                "--dry-run",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("chainload: disabled (explicit proxy reuse)", result.stdout)
+
+    def test_chainload_and_proxy_reuse_are_mutually_exclusive(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted",
+                "--chainload", "--reuse-proxy", "--dry-run",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 2)
 
     def test_assisted_dry_run_can_include_matching_m1n1_chainload(self):
         result = subprocess.run(

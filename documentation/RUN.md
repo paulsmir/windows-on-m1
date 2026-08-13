@@ -160,13 +160,13 @@ scripts/run-windows.sh \
   --execution assisted \
   --display both \
   --debug full \
-  --chainload \
   --proxy /dev/cu.PROXY \
   --vuart /dev/cu.VUART
 ```
 
-Use `--m1n1 path/to/m1n1.macho` or `--firmware path/to/J313_EFI.fd` to replace one component.
-Internally, `--chainload` invokes
+Assisted mode chainloads the matching m1n1 by default. Use
+`--m1n1 path/to/m1n1.macho` or `--firmware path/to/J313_EFI.fd` to replace one component.
+Internally, the default chainload invokes
 `m1n1_windows/proxyclient/tools/chainload.py`; normally use the wrapper so endpoint discovery
 and the reconnect wait remain consistent.
 A `Bad Command` at the first PCI or framebuffer operation normally means the chainload did not
@@ -203,7 +203,9 @@ scripts/run-assisted.sh \
 ```
 
 This lower-level form assumes matching m1n1 is already running. For the usual development
-cycle, prefer the `run-windows.sh ... --chainload` command above.
+cycle, prefer the `run-windows.sh` command above. The equivalent explicit fast path is
+`run-windows.sh --execution assisted --reuse-proxy ...`; use it only after checking the
+already-running m1n1 against the same artifact manifest.
 
 For WinPE experiments that intentionally preload an image into guest RAM, add
 `--ramdisk path/to/winpe.img`. Installed Windows normally boots from internal NVMe and does

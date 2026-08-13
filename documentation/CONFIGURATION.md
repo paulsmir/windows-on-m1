@@ -61,6 +61,13 @@ scripts/run-windows.sh \
   --chainload
 ```
 
+`run-windows.sh --execution assisted` chainloads the matching profile by
+default. This fail-closed behavior prevents a Mu image from being launched on
+top of an unknown or stale m1n1 that merely happens to be waiting in the proxy.
+Use `--reuse-proxy` only for an intentional fast iteration after independently
+verifying that the running m1n1 came from the same artifact manifest. The
+`--chainload` and `--reuse-proxy` options are mutually exclusive.
+
 A low-overhead assisted launch is:
 
 ```sh

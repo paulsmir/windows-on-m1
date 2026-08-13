@@ -11,6 +11,7 @@ VUART=
 FIRMWARE=
 RAMDISK=
 CHAINLOAD=0
+REUSE_PROXY=0
 M1N1=
 DRY_RUN=0
 
@@ -18,7 +19,8 @@ usage() {
     echo "usage: $0 [--execution standalone|assisted]" >&2
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
     echo "          [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
-    echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE] [--dry-run]" >&2
+    echo "          [--ramdisk FILE] [--chainload|--reuse-proxy]" >&2
+    echo "          [--m1n1 FILE] [--dry-run]" >&2
     exit 2
 }
 
@@ -32,6 +34,7 @@ while [ "$#" -gt 0 ]; do
         --firmware) [ "$#" -ge 2 ] || usage; FIRMWARE=$2; shift 2 ;;
         --ramdisk) [ "$#" -ge 2 ] || usage; RAMDISK=$2; shift 2 ;;
         --chainload) CHAINLOAD=1; shift ;;
+        --reuse-proxy) REUSE_PROXY=1; shift ;;
         --m1n1) [ "$#" -ge 2 ] || usage; M1N1=$2; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
@@ -42,6 +45,14 @@ done
 case "$EXECUTION" in standalone|assisted) ;; *) usage ;; esac
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+[ "$CHAINLOAD" -eq 0 ] || [ "$REUSE_PROXY" -eq 0 ] || usage
+
+# The public assisted entry point owns the complete launch contract.  Reusing
+# whatever happens to be waiting in the proxy is an expert operation and must
+# be requested explicitly; otherwise always chainload the matching artifact.
+if [ "$EXECUTION" = assisted ] && [ "$REUSE_PROXY" -eq 0 ]; then
+    CHAINLOAD=1
+fi
 
 virtual=disabled
 case "$DISPLAY" in virtual|both) virtual=enabled ;; esac
@@ -58,9 +69,14 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "USB framebuffer: $virtual"
     echo "telemetry: $telemetry"
     if [ "$CHAINLOAD" -eq 1 ]; then
-        profile=debug
-        [ "$DEBUG" != off ] || profile=release
+        case "$DEBUG" in
+            off) profile=release ;;
+            uart) profile=debug-uart ;;
+            full) profile=debug-forensic ;;
+        esac
         echo "chainload: ${M1N1:-dist/j313/$profile/m1n1.macho}"
+    elif [ "$REUSE_PROXY" -eq 1 ]; then
+        echo "chainload: disabled (explicit proxy reuse)"
     else
         echo "chainload: disabled"
     fi

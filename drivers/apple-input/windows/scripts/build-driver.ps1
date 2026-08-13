@@ -2,7 +2,7 @@ param([ValidateSet("Debug", "Release")][string]$Configuration = "Debug",
       [ValidateSet("ARM64")][string]$Platform = "ARM64",
       [switch]$CodeAnalysis)
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$root = Split-Path -Parent $PSScriptRoot
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 if (!(Test-Path $vswhere)) { throw "vswhere.exe was not found" }
 $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1

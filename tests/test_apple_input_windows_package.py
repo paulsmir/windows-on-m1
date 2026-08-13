@@ -57,6 +57,15 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         combined = build + install + uninstall
         self.assertNotRegex(combined, re.compile(r"/Users/|C:\\Users\\pavel", re.I))
 
+    def test_build_script_resolves_project_from_windows_directory(self):
+        build = self.read("scripts/build-driver.ps1")
+        self.assertIn('$root = Split-Path -Parent $PSScriptRoot', build)
+        self.assertNotIn(
+            '$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)',
+            build,
+        )
+        self.assertIn('(Join-Path $root "AppleInput.vcxproj")', build)
+
 
 if __name__ == "__main__":
     unittest.main()
