@@ -20,10 +20,13 @@ session long enough to install software. The working development configuration e
 - a Project Mu GOP framebuffer and a remotely observable virtual framebuffer;
 - virtual UART and Windows kernel-debug transport for assisted development.
 
-The self-contained standalone `boot.bin` path has cold-booted the installed Windows system
-on the development J313. Eight-core operation is substantially more stable than the first
-SMP builds, but intermittent whole-system pauses of about 20 seconds still occur and remain
-the current blocking defect. The host-assisted path is the development and recovery workflow.
+The current eight-core development baseline boots the installed Windows system, reaches the
+desktop, survives bounded CPU and NVMe stress, and keeps SSH responsive. The earlier recurrent
+watchdog failures and long global pauses were traced to EL2 timer/IPI and vGIC fast-path defects;
+the current candidate corrected those defects and was accepted on the development J313 as the
+baseline for built-in input work. This is still an experimental checkpoint, not a production
+release: repeated cold-boot and long-duration acceptance gates remain intentionally stricter than
+one successful development session.
 
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
 
@@ -81,6 +84,6 @@ Documentation distinguishes three states:
 - **planned:** not yet implemented.
 
 The physical internal-panel handoff and full-panel 2560x1600 Windows framebuffer have been
-validated on J313 in assisted mode. The standalone monitor image has cold-booted through all
-launch checkpoints into the Windows kernel with eight CPUs and live NVMe. The quiet production
-image remains a separate no-host acceptance test; monitor-mode timing is not production timing.
+validated on J313. The accepted assisted checkpoint ran all eight CPUs, the synthetic NVMe bridge,
+physical USB, networking, and the internal panel. Built-in Apple keyboard/trackpad and GPU
+acceleration remain implementation milestones; they are not claimed as working here.

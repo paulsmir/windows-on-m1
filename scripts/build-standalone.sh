@@ -6,9 +6,12 @@ DRY_RUN=${BUILD_STANDALONE_DRY_RUN:-0}
 BUILD_TARGET=RELEASE
 M1N1_RELEASE=1
 PROFILE=release
+ARTIFACT_PROFILE=release
+MANIFEST_DIRTY=
 CHECK_PYTHON=0
 DISPLAY=physical
 DEBUG=off
+M1N1_DIAG=
 VALIDATED_DARWIN_CLANG='Homebrew clang version 22.1.8'
 
 usage() {
@@ -20,7 +23,7 @@ usage() {
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --release) BUILD_TARGET=RELEASE; M1N1_RELEASE=1; PROFILE=release; shift ;;
-        --debug-build) BUILD_TARGET=DEBUG; M1N1_RELEASE=; PROFILE=debug; shift ;;
+        --debug-build) BUILD_TARGET=DEBUG; M1N1_RELEASE=; PROFILE=debug; MANIFEST_DIRTY=--allow-dirty; shift ;;
         --check-python) CHECK_PYTHON=1; shift ;;
         --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
@@ -31,6 +34,17 @@ done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
+if [ "$PROFILE" = debug ] && [ "$DEBUG" = full ]; then
+    M1N1_DIAG="DIAG_TRAP_WFX=1 RUNTIME_DIAG_VERBOSE=1"
+fi
+if [ "$PROFILE" = debug ]; then
+    case "$DEBUG" in
+        off) ARTIFACT_PROFILE=debug-off ;;
+        uart) ARTIFACT_PROFILE=debug-uart ;;
+        full) ARTIFACT_PROFILE=debug-forensic ;;
+        monitor) ARTIFACT_PROFILE=debug-monitor ;;
+    esac
+fi
 if [ "$PROFILE" = release ] && { [ "$DISPLAY" != physical ] || [ "$DEBUG" != off ]; }; then
     echo "release profile is fixed to --display physical --debug off; use --debug-build for diagnostics" >&2
     exit 2
@@ -146,20 +160,25 @@ $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE
-mkdir -p dist/j313/$PROFILE
-create temporary sibling for dist/j313/$PROFILE
+mkdir -p dist/j313/$ARTIFACT_PROFILE
+create temporary sibling for dist/j313/$ARTIFACT_PROFILE
 make -C m1n1_windows clean
-make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE0
-copy m1n1_windows/build/m1n1.bin to dist/j313/$PROFILE/m1n1-stage0.bin
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE0
+copy m1n1_windows/build/m1n1.bin to dist/j313/$ARTIFACT_PROFILE/m1n1-stage0.bin
 make -C m1n1_windows clean
-make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} EXTRA_CFLAGS=-DM1N1_STAGE1
-copy m1n1_windows/build/m1n1.bin to dist/j313/$PROFILE/m1n1-stage1.bin
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE1
+copy m1n1_windows/build/m1n1.bin to dist/j313/$ARTIFACT_PROFILE/m1n1-stage1.bin
+make -C m1n1_windows clean
+build plain chainload m1n1.macho
+make -C m1n1_windows -j$JOBS ${M1N1_RELEASE:+RELEASE=1} $M1N1_DIAG
+copy plain m1n1.macho to dist/j313/$ARTIFACT_PROFILE/m1n1.macho
 python3 tools/generate_guest_layout.py --check
-python3 tools/pack_boot.py --stage0-m1n1 dist/j313/$PROFILE/m1n1-stage0.bin --stage1-m1n1 dist/j313/$PROFILE/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/$PROFILE/boot.bin --display $DISPLAY --debug $DEBUG --source-commit <m1n1-source-commit> --compiler <compiler-identity>
-PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/$PROFILE/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
-copy m1n1.macho and J313_EFI.fd to dist/j313/$PROFILE
-write dist/j313/$PROFILE/SHA256SUMS and dist/j313/$PROFILE/MANIFEST.json
-publish complete profile atomically to dist/j313/$PROFILE
+python3 tools/pack_boot.py --stage0-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage0.bin --stage1-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage1.bin --firmware mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd --layout config/j313-guest-layout.json --output dist/j313/$ARTIFACT_PROFILE/boot.bin --display $DISPLAY --debug $DEBUG --source-commit <m1n1-source-commit> --compiler <compiler-identity>
+PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/$ARTIFACT_PROFILE/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
+copy m1n1.macho and J313_EFI.fd to dist/j313/$ARTIFACT_PROFILE
+write dist/j313/$ARTIFACT_PROFILE/SHA256SUMS and dist/j313/$ARTIFACT_PROFILE/MANIFEST.json
+python3 tools/artifact_manifest.py create ${MANIFEST_DIRTY:+--allow-dirty }--root <repository-root> --directory dist/j313/$ARTIFACT_PROFILE --profile $PROFILE
+publish complete profile atomically to dist/j313/$ARTIFACT_PROFILE
 EOF
     exit 0
 fi
@@ -207,9 +226,9 @@ fi
 [ "$MU_ONLY" != 1 ] || exit 0
 
 PROFILE_PARENT="$ROOT/dist/j313"
-FINAL_DIST="$PROFILE_PARENT/$PROFILE"
+FINAL_DIST="$PROFILE_PARENT/$ARTIFACT_PROFILE"
 mkdir -p "$PROFILE_PARENT"
-DIST=$(mktemp -d "$PROFILE_PARENT/.${PROFILE}.new.XXXXXX")
+DIST=$(mktemp -d "$PROFILE_PARENT/.${ARTIFACT_PROFILE}.new.XXXXXX")
 cleanup_staging() {
     [ ! -d "$DIST" ] || rm -rf "$DIST"
 }
@@ -221,7 +240,7 @@ trap cleanup_staging EXIT HUP INT TERM
     if [ -n "$M1N1_RELEASE" ]; then
         make -j"$JOBS" RELEASE=1 EXTRA_CFLAGS=-DM1N1_STAGE0
     else
-        make -j"$JOBS" EXTRA_CFLAGS=-DM1N1_STAGE0
+        make -j"$JOBS" $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE0
     fi
     cp build/m1n1.bin "$DIST/m1n1-stage0.bin"
 
@@ -229,9 +248,19 @@ trap cleanup_staging EXIT HUP INT TERM
     if [ -n "$M1N1_RELEASE" ]; then
         make -j"$JOBS" RELEASE=1 EXTRA_CFLAGS=-DM1N1_STAGE1
     else
-        make -j"$JOBS" EXTRA_CFLAGS=-DM1N1_STAGE1
+        make -j"$JOBS" $M1N1_DIAG EXTRA_CFLAGS=-DM1N1_STAGE1
     fi
     cp build/m1n1.bin "$DIST/m1n1-stage1.bin"
+
+    # The stage1 Mach-O is not a chainload image.  Build the assisted-launch
+    # artifact separately so the host can never accidentally chainload a
+    # binary compiled with M1N1_STAGE1 semantics.
+    make clean
+    if [ -n "$M1N1_RELEASE" ]; then
+        make -j"$JOBS" RELEASE=1
+    else
+        make -j"$JOBS" $M1N1_DIAG
+    fi
     cp build/m1n1.macho "$DIST/m1n1.macho"
     ./tests/run_host_tests.sh
 )
@@ -266,7 +295,7 @@ fi
         shasum -a 256 boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd >SHA256SUMS
     fi
 )
-python3 "$ROOT/tools/artifact_manifest.py" create \
+python3 "$ROOT/tools/artifact_manifest.py" create $MANIFEST_DIRTY \
     --root "$ROOT" --directory "$DIST" --profile "$PROFILE" \
     --display "$DISPLAY" --debug "$DEBUG" --compiler "$M1N1_COMPILER" \
     boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd

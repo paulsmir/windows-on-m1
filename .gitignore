@@ -26,6 +26,7 @@ proxyenv
 *.raw.part
 frames/
 screenshots/
+investigation/**/*.dmp
 
 __pycache__/
 *.py[cod]

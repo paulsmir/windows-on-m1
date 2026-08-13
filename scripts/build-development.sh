@@ -6,7 +6,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DRY_RUN=0
 BUILD_MODE=--debug-build
 DISPLAY=physical
-DEBUG=off
+DEBUG=uart
 
 usage() {
     echo "usage: $0 [--dry-run] [--release]" >&2
@@ -17,7 +17,7 @@ usage() {
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1; shift ;;
-        --release) BUILD_MODE=--release; shift ;;
+        --release) BUILD_MODE=--release; DISPLAY=physical; DEBUG=off; shift ;;
         --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
         -h|--help) usage ;;
@@ -26,7 +26,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
-case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
 
 set -- "$BUILD_MODE" --display "$DISPLAY" --debug "$DEBUG"
 
@@ -38,6 +38,14 @@ fi
 
 PROFILE=debug
 [ "$BUILD_MODE" != --release ] || PROFILE=release
+if [ "$BUILD_MODE" != --release ]; then
+    case "$DEBUG" in
+        off) PROFILE=debug-off ;;
+        uart) PROFILE=debug-uart ;;
+        full) PROFILE=debug-forensic ;;
+        monitor) PROFILE=debug-monitor ;;
+    esac
+fi
 echo "development m1n1: $ROOT/dist/j313/$PROFILE/m1n1.macho"
 echo "development Mu: $ROOT/dist/j313/$PROFILE/J313_EFI.fd"
 echo "chainload with: m1n1_windows/proxyclient/tools/chainload.py dist/j313/$PROFILE/m1n1.macho"

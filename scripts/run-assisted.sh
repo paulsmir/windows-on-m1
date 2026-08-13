@@ -14,13 +14,14 @@ DEBUG=uart
 CHAINLOAD=0
 M1N1=
 CONTRACT_OUTPUT=
+FOREGROUND=0
 
 usage() {
     echo "usage: $0 [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
-    echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
+    echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE]" >&2
     echo "          [--contract-output FILE]" >&2
-    echo "          [--no-low-mem] [--dry-run]" >&2
+    echo "          [--no-low-mem] [--foreground] [--dry-run]" >&2
     exit 2
 }
 
@@ -36,6 +37,7 @@ while [ "$#" -gt 0 ]; do
         --m1n1) [ "$#" -ge 2 ] || usage; M1N1=$2; shift 2 ;;
         --contract-output) [ "$#" -ge 2 ] || usage; CONTRACT_OUTPUT=$2; shift 2 ;;
         --no-low-mem) LOW_MEM=0; shift ;;
+        --foreground) FOREGROUND=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
         *) usage ;;
@@ -43,10 +45,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
-case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
 
-PROFILE=debug
-[ "$DEBUG" != off ] || PROFILE=release
+MANIFEST_PROFILE=debug
+case "$DEBUG" in
+    off) PROFILE=release; MANIFEST_PROFILE=release ;;
+    uart) PROFILE=debug-uart ;;
+    full) PROFILE=debug-forensic ;;
+    monitor) PROFILE=debug-monitor ;;
+esac
 [ -n "$FIRMWARE" ] || FIRMWARE="$ROOT/dist/j313/$PROFILE/J313_EFI.fd"
 [ -n "$M1N1" ] || M1N1="$ROOT/dist/j313/$PROFILE/m1n1.macho"
 
@@ -58,11 +65,17 @@ discover_ports() {
         echo "Connect the Air, list /dev/cu.usbmodem*, then pass --proxy and --vuart." >&2
         exit 1
     fi
-    [ -n "$PROXY" ] || PROXY=$1
+    roles=$("$PYTHON" "$ROOT/tools/proxy_port_roles.py" "$@") || exit 1
+    detected_proxy=$(printf '%s\n' "$roles" | sed -n '1p')
+    detected_vuart=$(printf '%s\n' "$roles" | sed -n '2p')
+    [ -n "$PROXY" ] || PROXY=$detected_proxy
     if [ "$DEBUG" != off ]; then
-        [ -n "$VUART" ] || VUART=$2
+        [ -n "$VUART" ] || VUART=$detected_vuart
     fi
 }
+
+PYTHON="$ROOT/proxyenv/bin/python"
+[ -x "$PYTHON" ] || PYTHON=python3
 
 if [ "$DRY_RUN" -eq 0 ]; then
     discover_ports
@@ -73,13 +86,11 @@ else
     fi
 fi
 
-PYTHON="$ROOT/proxyenv/bin/python"
-[ -x "$PYTHON" ] || PYTHON=python3
-
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "mode: assisted development"
     echo "display: $DISPLAY"
     echo "debug: $DEBUG"
+    [ "$FOREGROUND" -eq 0 ] && echo "execution: detached" || echo "execution: foreground"
     echo "proxy: $PROXY"
     if [ "$DEBUG" = off ]; then
         echo "virtual UART: disabled"
@@ -109,7 +120,12 @@ fi
 
 MANIFEST=$(dirname "$FIRMWARE")/MANIFEST.json
 [ -f "$MANIFEST" ] || { echo "Artifact manifest not found: $MANIFEST" >&2; exit 1; }
-"$PYTHON" "$ROOT/tools/artifact_manifest.py" verify "$MANIFEST" --profile "$PROFILE"
+set -- "$PYTHON" "$ROOT/tools/artifact_manifest.py" verify "$MANIFEST" \
+    --profile "$MANIFEST_PROFILE" --display "$DISPLAY" --debug "$DEBUG"
+if [ "$CHAINLOAD" -eq 1 ]; then
+    set -- "$@" --require-role m1n1.macho=assisted-chainload
+fi
+"$@"
 if [ "$CHAINLOAD" -eq 1 ] && [ "$(dirname "$M1N1")" != "$(dirname "$FIRMWARE")" ]; then
     echo "m1n1 and Mu must come from the same artifact profile directory" >&2
     exit 1
@@ -143,7 +159,21 @@ set -- "$FIRMWARE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DE
 [ -z "$CONTRACT_OUTPUT" ] || set -- "$@" --contract-output "$CONTRACT_OUTPUT"
 [ "$LOW_MEM" -eq 0 ] || set -- "$@" --low-mem
 
-if [ "$DEBUG" = off ]; then
+if [ "$FOREGROUND" -eq 1 ]; then
+    echo "runner: foreground (Ctrl-C remains a diagnostic snapshot in debug modes)"
+    if [ "$DEBUG" = off ]; then
+        PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+            exec "$PYTHON" -u "$ROOT/run_uefi.py" "$@"
+    else
+        # Keep run_uefi.py as the foreground process (and therefore the direct
+        # SIGINT/SIGTERM owner), while the persistent log/viewer remains the
+        # single source of truth.  A pipeline would make another process the
+        # foreground PID and route
+        # diagnostic signals wrongly.
+        PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+            exec "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >hv.log 2>&1
+    fi
+elif [ "$DEBUG" = off ]; then
     PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
         nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >/dev/null 2>&1 &
 else
@@ -152,6 +182,13 @@ else
 fi
 RUNNER=$!
 echo "$RUNNER" >guest.pid
+
+sleep 2
+if ! kill -0 "$RUNNER" 2>/dev/null; then
+    echo "runner exited before initialization; inspect $ROOT/hv.log" >&2
+    [ -z "$READER" ] || kill "$READER" 2>/dev/null || true
+    exit 1
+fi
 
 [ -z "$READER" ] && echo "runner=$RUNNER" || echo "reader=$READER runner=$RUNNER"
 if [ "$DEBUG" != off ]; then

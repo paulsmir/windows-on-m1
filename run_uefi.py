@@ -13,7 +13,7 @@ firmware can be built to match it.
 
 PHYS_BASE must sit above m1n1 + its 768 MB heap and below the top of RAM.
 """
-import hashlib, os, sys, pathlib, argparse
+import hashlib, os, sys, pathlib, argparse, signal
 
 from guest_layout import DEFAULT_LAYOUT_PATH, load_layout
 from launch_profile import parse_profile
@@ -29,7 +29,7 @@ ap.add_argument("--layout", type=pathlib.Path, default=DEFAULT_LAYOUT_PATH,
 ap.add_argument("--device", default=os.environ.get("M1N1DEVICE"))
 ap.add_argument("--display-mode", choices=("none", "physical", "virtual", "both"),
                 default="virtual", help="guest framebuffer consumers")
-ap.add_argument("--debug-mode", choices=("off", "uart", "full"), default="uart",
+ap.add_argument("--debug-mode", choices=("off", "uart", "full", "monitor"), default="uart",
                 help="diagnostic work performed beside the guest")
 ap.add_argument("--phys-base", type=lambda x: int(x, 0))
 ap.add_argument("--ramdisk", type=pathlib.Path,
@@ -133,6 +133,10 @@ from tools.launch_contract import encode_record
 iface = UartInterface()
 p = M1N1Proxy(iface, debug=False)
 bootstrap_port(iface, p)
+cpufreq_result = p.cpufreq_init()
+if cpufreq_result != 0:
+    raise RuntimeError(f"CPU frequency preflight failed: cpufreq_init={cpufreq_result}")
+print("CPU frequency preflight: clusters raised to their configured performance states")
 u = ProxyUtils(p, heap_size=768 * 1024 * 1024)
 hv = HV(iface, p, u)
 
@@ -216,7 +220,32 @@ print("=" * 60)
 # PSCI CPU_ON for a core that can never enter the guest.
 hv.wdt_cpu = args.wdt_cpu
 
-hv.run_shell = lambda *a, **k: True   # unattended: never stop in a REPL
+snapshot_reboot_requested = False
+
+def request_snapshot_reboot(signum, frame):
+    global snapshot_reboot_requested
+    snapshot_reboot_requested = True
+    # Reuse m1n1's USER_INTERRUPT path so the C side publishes the same
+    # pre-rendezvous lock-free records before the host chooses recovery policy.
+    hv._handle_sigint(signum, frame)
+
+signal.signal(signal.SIGTERM, request_snapshot_reboot)
+
+def unattended_control(*_args, **_kwargs):
+    # The C side prints lock-free per-vCPU records before attempting its SMP
+    # rendezvous.  Do not issue nested proxy commands from this handler: a
+    # partially wedged guest cannot service them reliably.  A diagnostic signal
+    # is deliberately non-destructive; recovery/reboot is a separate explicit
+    # operation so repeated snapshots can prove whether CPUs still advance.
+    global snapshot_reboot_requested
+    if snapshot_reboot_requested:
+        snapshot_reboot_requested = False
+        print("HOST CONTROL: diagnostic snapshot captured; rebooting Air")
+        return EXC_RET.UNHANDLED
+    print("HOST CONTROL: diagnostic snapshot captured; continuing guest")
+    return EXC_RET.HANDLED
+
+hv.run_shell = unattended_control
 
 hv.init()
 capture_contract(1, 2)

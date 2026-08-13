@@ -13,7 +13,17 @@ class ReleaseBinaryTests(unittest.TestCase):
             check(path)
 
     def test_rejects_each_periodic_diagnostic_family(self):
-        for diagnostic in (b"HV FIQ:", b"HV TIMER:", b"HV SGI DIAG:", b"HV WATCHDOG PERIODIC:"):
+        for diagnostic in (
+            b"HV FIQ:",
+            b"HV TIMER:",
+            b"HV SGI DIAG:",
+            b"HV WATCHDOG PERIODIC:",
+            b"FW> ",
+            b"HV SGI QUEUE:",
+            b"HV PMUv3 Redirect:",
+            b"HV: PCI cfg 00:00.0",
+            b"HV: NVMe SQ q=",
+        ):
             with self.subTest(diagnostic=diagnostic):
                 with tempfile.TemporaryDirectory() as directory:
                     path = Path(directory) / "m1n1.macho"

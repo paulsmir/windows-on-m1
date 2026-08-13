@@ -113,13 +113,16 @@ frame rate, and frame age at `http://127.0.0.1:8766/`.
 
 Interpret frame rate carefully:
 
-- positive frame rate proves new complete framebuffer generations arrive;
+- positive frame rate proves complete framebuffer generations arrive, but repeated generations
+  may contain identical pixels and therefore do not prove that the guest UI is advancing;
 - zero frame rate can mean a static screen, proxy backpressure, a dead observer, or a hung
   guest;
 - a moving hardware mouse cursor can be independent of GDI progress;
 - the last good frame intentionally remains visible when the link becomes stale.
 
-Use KD liveness and EL2 counters before classifying a zero frame rate as a Windows hang.
+Compare the frame CRC/hash or visible clock/cursor position, then use SSH/KD liveness and EL2
+counters before classifying a zero or repeating frame as a Windows hang. The streamer snapshots
+each USB chunk before calculating its checksum so guest writes cannot corrupt an in-flight event.
 
 Save the most recent complete generation as a PNG:
 
@@ -131,6 +134,15 @@ The helper rechecks metadata and CRC before publishing the output, so it never e
 partially replaced frame.
 
 ## Matching target and proxy binaries
+
+The standalone stage binaries and the assisted Mach-O are different roles. The build publishes:
+
+- `m1n1-stage0.bin` and `m1n1-stage1.bin` only for packing `boot.bin`;
+- `m1n1.macho`, rebuilt without `M1N1_STAGE0` or `M1N1_STAGE1`, only for host chainload.
+
+Never extract or rename a stage Mach-O for assisted use. `scripts/build-standalone.sh` rebuilds the
+plain image separately and `scripts/run-assisted.sh` verifies that m1n1 and Mu come from the same
+manifested artifact directory.
 
 `m1n1.proxy.ProxyCommandError: Reply error: Bad Command` means the target does not implement
 the opcode requested by the host-side Python code. Chainload `dist/j313/debug/m1n1.macho` built

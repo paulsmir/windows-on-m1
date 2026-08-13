@@ -23,6 +23,23 @@ def function_body(source, name):
 
 
 class VgicIrqQueueContractTest(unittest.TestCase):
+    def test_virtual_irq_recompute_is_not_on_every_serialized_exception(self):
+        exc = HV_EXC.read_text()
+        exit_body = function_body(exc, "static void hv_exc_exit(struct exc_info *ctx)")
+
+        self.assertIn("hv_update_fiq();", exit_body)
+        self.assertNotIn("hv_vgic3_update_vi();", exit_body)
+
+    def test_maintenance_lr_clear_recomputes_virtual_irq_line(self):
+        exc = HV_EXC.read_text()
+        irq = function_body(exc, "void hv_exc_irq(struct exc_info *ctx)")
+        maintenance = irq.split("if(irq == 0 || type == 0)", 1)[1].split(
+            "return;", 1)[0]
+        self.assertIn("hv_vgic3_write_lr(lr, 0);", maintenance)
+        self.assertIn("hv_vgic3_update_vi();", maintenance)
+        self.assertLess(maintenance.index("hv_vgic3_write_lr(lr, 0);"),
+                        maintenance.index("hv_vgic3_update_vi();"))
+
     def test_software_eoi_drains_pending_hardware_irq_queue(self):
         exc = HV_EXC.read_text()
         vgic = HV_VGIC.read_text()

@@ -13,6 +13,11 @@ FORBIDDEN = (
     b"HV TIMER EOI:",
     b"HV SGI DIAG:",
     b"HV WATCHDOG PERIODIC:",
+    b"FW> ",
+    b"HV SGI QUEUE:",
+    b"HV PMUv3 Redirect:",
+    b"HV: PCI cfg 00:00.0",
+    b"HV: NVMe SQ q=",
 )
 
 

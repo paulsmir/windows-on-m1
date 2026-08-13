@@ -22,10 +22,11 @@ contract, firmware build, and hardware acceptance record.
 7. Internal audio.
 8. External-display output.
 
-Built-in input was originally the next user-facing feature. Reproducible whole-
-system freezes and `CLOCK_WATCHDOG_TIMEOUT` / `IPI_WATCHDOG_TIMEOUT` now make
-platform stability Phase 0: developing and validating any kernel driver on an
-unstable SMP substrate would produce ambiguous failures and unsafe recovery.
+Built-in input is the active next user-facing feature. The 2026-08-13 eight-core
+checkpoint is the accepted development baseline after correcting the recurrent
+timer/IPI and vGIC fast-path defects. Phase 0 remains a regression gate while
+input is developed; its full production acceptance criteria are deliberately
+stricter than this single accepted hardware session.
 
 ## Project-wide rules
 
