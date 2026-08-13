@@ -298,6 +298,12 @@ Do not push until root tests and the launch-contract tests in Task 4 pass.
 
 ### Task 4: Add m1n1 Apple input preflight, mapping, and launch contract
 
+**Checkpoint status (2026-08-13):** implemented and host/AArch64 build verified.
+The common `hv_init` path resolves and validates live ADT resources, maps only
+the three contract regions, and registers the level route `330 -> 865`. No
+SPI/GPIO data-path write is performed. Hardware validation of the resulting
+Windows devnode remains pending, so this is not promoted to the stable release.
+
 **Files:**
 - Create: `m1n1_windows/src/hv_apple_input.h`
 - Create: `m1n1_windows/src/hv_apple_input.c`

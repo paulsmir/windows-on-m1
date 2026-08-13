@@ -87,3 +87,8 @@ The physical internal-panel handoff and full-panel 2560x1600 Windows framebuffer
 validated on J313. The accepted assisted checkpoint ran all eight CPUs, the synthetic NVMe bridge,
 physical USB, networking, and the internal panel. Built-in Apple keyboard/trackpad and GPU
 acceleration remain implementation milestones; they are not claimed as working here.
+
+Native built-in input bring-up is tracked in
+[`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md). The platform,
+ACPI, and protocol foundations exist, but the current Windows driver does not
+yet perform hardware transactions or publish working input devices.
