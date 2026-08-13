@@ -31,6 +31,17 @@ jobs:
       - name: Restore official SDK and WDK packages
         run: nuget restore packages.config -PackagesDirectory packages
 
+      - name: Expose WDK host tools
+        shell: pwsh
+        run: |
+          $stampInf = Get-ChildItem packages -Recurse -Filter stampinf.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (!$stampInf) { throw "stampinf.exe was not found in the restored WDK" }
+          $toolDirectory = $stampInf.Directory.FullName
+          Write-Host "WDK host tools: $toolDirectory"
+          $toolDirectory | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
       - name: Build AppleInput for ARM64
         run: >-
           msbuild drivers\apple-input\windows\AppleInput.vcxproj
