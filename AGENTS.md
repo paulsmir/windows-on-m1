@@ -82,3 +82,26 @@ Do not overwrite or silently reinterpret an old result. Append a correction that
 references the original experiment ID. Do not call a build "working", "stable", or
 "release" without linking the hardware experiment that demonstrated that claim.
 Do not install or launch an artifact whose SHA-256 and manifest were not recorded.
+
+## Machine-readable change ledger
+
+Every feature, correction, or workflow change must have a row in
+`investigation/CHANGES.csv`.  The CSV is the durable index for answering what
+changed, why it changed, how the old behavior can be reproduced, how the change
+was verified, and which exact artifact or hardware experiment supports it.
+
+Required workflow:
+
+1. Implement and verify one independently reviewable change.
+2. Commit that implementation without assistant attribution trailers.
+3. Append a CSV row containing the resulting 40-character commit hash.  A
+   ledger-only bookkeeping commit does not require a row for itself.
+4. Use `status=validated` only with a non-empty hardware result and related
+   experiment ID.  Software-only verification uses `status=implemented`.
+5. Never edit an old result to make it look successful.  Add a new row and mark
+   the old row `rejected` or `superseded` when later evidence changes the verdict.
+
+Keep every field single-line and valid RFC 4180 CSV.  Record artifact paths
+relative to the repository where practical, and include SHA-256 whenever an
+artifact exists.  The automated schema contract is
+`tests/test_change_ledger.py`.

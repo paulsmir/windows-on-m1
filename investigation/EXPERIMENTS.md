@@ -726,3 +726,38 @@ Hardware result:
 - Local clean hardware transcript SHA-256:
   `668690622096b14c6258e40f52b7280550576cca4a00404b71851cfb3c0c5308`
   (`investigation/artifacts/EXP-20260813-016/hv-clean.log`, ignored by Git).
+
+### EXP-20260814-017 — operator responsiveness test of unchanged EXP-016
+
+Status: in progress; operator verdict pending
+Created (UTC): 2026-08-14
+
+Purpose: give the operator an unmodified, already-recorded EXP-016 assisted boot
+for a subjective responsiveness and stability test before any Apple keyboard or
+trackpad work begins.  There is no changed firmware variable relative to
+EXP-016.  Physical display is enabled; USB framebuffer and external telemetry
+observer are disabled.  Debug mode is `monitor` only so no competing proxy owner
+is attached after guest handoff.
+
+Artifacts:
+- `investigation/artifacts/EXP-20260813-016/m1n1.macho`
+- SHA-256 `dd019e4c34db3241bd4e9d1ed6d6bd3db772160b082685da8d1a6410f485be64`
+- `investigation/artifacts/EXP-20260813-016/J313_EFI.fd`
+- SHA-256 `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`
+- Runtime: root `5d827ba` materialized at
+  `/private/tmp/wom1-root-5d827ba.WCgcVM`
+
+Launch result so far:
+- Launch-contract preflight passed with physical 2560x1600 framebuffer and no
+  USB framebuffer or telemetry.
+- Mu opened the installed `\\EFI\\BOOT\\BOOTAA64.EFI` and transferred control to
+  Windows Boot Manager.
+- CPUs 0 through 7 emitted `CPU_ENTRY`; NVMe and xHCI initialized.
+- No bugcheck, watchdog, reset, panic, or exception was observed during the
+  captured startup window.
+- Responsiveness, sustained stability, display, USB input, SSH and RDP results
+  remain pending the operator's test and must not be inferred from boot logs.
+
+Process correction: this entry was appended immediately after launch instead of
+before it.  That violates the intended pre-run ordering but does not change the
+artifact or result.  Future hardware launches must create the entry first.
