@@ -263,6 +263,27 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertNotIn("DIAG_TRAP_WFX=1", release.stdout)
         self.assertNotIn("RUNTIME_DIAG_VERBOSE=1", release.stdout)
 
+    def test_debug_build_can_disable_apple_input_passthrough_for_ab_testing(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+        )
+        disabled = subprocess.run(
+            [str(SCRIPT), "--debug-build", "--display", "physical", "--debug", "monitor",
+             "--apple-input", "off"],
+            env=environment, text=True, capture_output=True, check=False,
+        )
+        enabled = subprocess.run(
+            [str(SCRIPT), "--debug-build", "--display", "physical", "--debug", "monitor"],
+            env=environment, text=True, capture_output=True, check=False,
+        )
+
+        self.assertEqual(disabled.returncode, 0, disabled.stderr)
+        self.assertEqual(disabled.stdout.count("APPLE_INPUT=0"), 3)
+        self.assertEqual(enabled.returncode, 0, enabled.stderr)
+        self.assertNotIn("APPLE_INPUT=0", enabled.stdout)
+
     def test_pipeline_builds_a_distinct_plain_chainload_image_after_stages(self):
         environment = dict(
             os.environ,

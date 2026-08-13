@@ -45,6 +45,7 @@ enum ai_status {
 
 enum ai_discovery_phase {
     AI_DISCOVERY_IDLE,
+    AI_DISCOVERY_WAIT_BOOT,
     AI_DISCOVERY_IDENTITY,
     AI_DISCOVERY_INTERFACE_MANAGEMENT,
     AI_DISCOVERY_INTERFACE_KEYBOARD,
@@ -150,6 +151,9 @@ void ai_discovery_start(struct ai_discovery *state, uint64_t now_us,
 enum ai_status ai_discovery_accept(struct ai_discovery *state, uint32_t request_id,
                                    bool response_valid, uint64_t now_us,
                                    uint64_t timeout_us);
+enum ai_status ai_discovery_accept_boot(struct ai_discovery *state,
+                                        const uint8_t *marker, size_t size,
+                                        uint64_t now_us, uint64_t timeout_us);
 enum ai_status ai_discovery_poll(struct ai_discovery *state, uint64_t now_us,
                                  uint64_t timeout_us);
 enum ai_status ai_discovery_request_for_phase(enum ai_discovery_phase phase,
@@ -160,6 +164,7 @@ bool ai_discovery_response_matches(enum ai_discovery_phase phase,
 enum ai_status ai_discovery_request_encode(const struct ai_discovery_request *request,
                                            uint8_t message_id,
                                            uint8_t raw[AI_PACKET_SIZE]);
+bool ai_write_status_valid(const uint8_t *status, size_t size);
 enum ai_status ai_spi_plan_transfer(uint32_t reference_hz, uint32_t target_hz,
                                     uint8_t bits_per_word, size_t byte_length,
                                     struct ai_spi_transfer_plan *out);

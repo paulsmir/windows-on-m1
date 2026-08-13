@@ -30,6 +30,23 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertIn("hv_update_fiq();", exit_body)
         self.assertNotIn("hv_vgic3_update_vi();", exit_body)
 
+    def test_secondary_fiq_resynchronizes_vi_before_early_return(self):
+        exc = HV_EXC.read_text()
+        fiq = function_body(exc, "void hv_exc_fiq(struct exc_info *ctx)")
+        fast = fiq.split("if (secondary_fast) {", 1)[1].split(
+            "// Slow (single threaded) path", 1
+        )[0]
+
+        # A timer can become Pending in an LR while HCR.VI still contains the value
+        # computed before the local timer/IPI work.  The abbreviated return must use
+        # a line resynchronised from the live LRs, otherwise a sleeping Windows vCPU
+        # never observes that timer and the whole guest eventually watchdogs.
+        self.assertIn("hv_vgic3_update_vi();", fast)
+        self.assertLess(fast.index("hv_update_fiq();"),
+                        fast.index("hv_vgic3_update_vi();"))
+        self.assertLess(fast.index("hv_vgic3_update_vi();"),
+                        fast.index("mrs(HCR_EL2) & HCR_VI"))
+
     def test_maintenance_lr_clear_recomputes_virtual_irq_line(self):
         exc = HV_EXC.read_text()
         irq = function_body(exc, "void hv_exc_irq(struct exc_info *ctx)")
@@ -60,6 +77,30 @@ class VgicIrqQueueContractTest(unittest.TestCase):
             r"\s*&&\s*route\s*&&\s*route->level\)"
             r"(?s:.*?)aic_set_mask\(route->hw_irq, false\)",
         )
+
+    def test_sgi_queue_console_trace_requires_explicit_hot_path_tracing(self):
+        exc = HV_EXC.read_text()
+        queue = function_body(exc, "static void hv_vgic3_queue_sgi(int cpu, u32 intid)")
+
+        self.assertIn("hv_runtime_trace_enabled()", queue)
+        self.assertNotIn("hv_runtime_diag_enabled()", queue)
+
+    def test_timer_rate_console_trace_requires_explicit_hot_path_tracing(self):
+        exc = HV_EXC.read_text()
+        update = function_body(exc, "static void hv_update_fiq(void)")
+
+        self.assertIn("hv_runtime_trace_enabled()", update)
+        self.assertNotIn("hv_runtime_diag_enabled() && (++dbg_inj_count", update)
+
+    def test_spurious_iar_console_trace_requires_explicit_hot_path_tracing(self):
+        vgic = HV_VGIC.read_text()
+        iar = function_body(vgic, "int hv_vgic3_do_iar1(void)")
+        guarded = re.search(
+            r"if\s*\(hv_runtime_trace_enabled\(\)\s*&&\s*"
+            r"__atomic_fetch_add\(&spurious_iar,\s*1,\s*__ATOMIC_RELAXED\)\s*<\s*16\)",
+            iar,
+        )
+        self.assertIsNotNone(guarded)
 
 
 if __name__ == "__main__":

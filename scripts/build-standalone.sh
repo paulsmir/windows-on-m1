@@ -12,11 +12,13 @@ CHECK_PYTHON=0
 DISPLAY=physical
 DEBUG=off
 M1N1_DIAG=
+APPLE_INPUT=on
 VALIDATED_DARWIN_CLANG='Homebrew clang version 22.1.8'
 
 usage() {
     echo "usage: $0 [--release|--debug-build] [--check-python]" >&2
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
+    echo "          [--apple-input on|off]" >&2
     exit 2
 }
 
@@ -27,6 +29,7 @@ while [ "$#" -gt 0 ]; do
         --check-python) CHECK_PYTHON=1; shift ;;
         --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
+        --apple-input) [ "$#" -ge 2 ] || usage; APPLE_INPUT=$2; shift 2 ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -34,8 +37,19 @@ done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
+case "$APPLE_INPUT" in
+    on) ;;
+    off)
+        [ "$PROFILE" = debug ] || {
+            echo "--apple-input off is an A/B diagnostic option and requires --debug-build" >&2
+            exit 2
+        }
+        M1N1_DIAG="APPLE_INPUT=0"
+        ;;
+    *) usage ;;
+esac
 if [ "$PROFILE" = debug ] && [ "$DEBUG" = full ]; then
-    M1N1_DIAG="DIAG_TRAP_WFX=1 RUNTIME_DIAG_VERBOSE=1"
+    M1N1_DIAG="$M1N1_DIAG DIAG_TRAP_WFX=1 RUNTIME_DIAG_VERBOSE=1"
 fi
 if [ "$PROFILE" = debug ]; then
     case "$DEBUG" in

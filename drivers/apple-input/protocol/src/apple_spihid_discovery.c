@@ -8,16 +8,47 @@ static void arm_request(struct ai_discovery *state, uint64_t now_us, uint64_t ti
         state->deadline_us = AI_UINT64_MAX;
 }
 
+static void arm_deadline(struct ai_discovery *state, uint64_t now_us,
+                         uint64_t timeout_us)
+{
+    state->deadline_us = now_us + timeout_us;
+    if (state->deadline_us < now_us)
+        state->deadline_us = AI_UINT64_MAX;
+}
+
 void ai_discovery_start(struct ai_discovery *state, uint64_t now_us,
                         uint64_t timeout_us, uint8_t retry_limit)
 {
     if (!state)
         return;
     *state = (struct ai_discovery){
-        .phase = AI_DISCOVERY_IDENTITY,
+        .phase = AI_DISCOVERY_WAIT_BOOT,
         .retry_limit = retry_limit,
     };
+    arm_deadline(state, now_us, timeout_us);
+}
+
+enum ai_status ai_discovery_accept_boot(struct ai_discovery *state,
+                                        const uint8_t *marker, size_t size,
+                                        uint64_t now_us, uint64_t timeout_us)
+{
+    static const uint8_t expected[] = {0xa0, 0x80, 0x00, 0x00};
+
+    if (!state || !marker)
+        return AI_ERR_ARGUMENT;
+    if (state->phase != AI_DISCOVERY_WAIT_BOOT)
+        return AI_ERR_SEQUENCE;
+    if (size != sizeof(expected))
+        return AI_ERR_LENGTH;
+    for (size_t index = 0; index < sizeof(expected); index++) {
+        if (marker[index] != expected[index])
+            return AI_ERR_PROTOCOL;
+    }
+
+    state->retry_count = 0;
+    state->phase = AI_DISCOVERY_IDENTITY;
     arm_request(state, now_us, timeout_us);
+    return AI_OK;
 }
 
 enum ai_status ai_discovery_accept(struct ai_discovery *state, uint32_t request_id,
@@ -49,7 +80,7 @@ enum ai_status ai_discovery_poll(struct ai_discovery *state, uint64_t now_us,
 {
     if (!state)
         return AI_ERR_ARGUMENT;
-    if (state->phase < AI_DISCOVERY_IDENTITY ||
+    if (state->phase < AI_DISCOVERY_WAIT_BOOT ||
         state->phase > AI_DISCOVERY_TRACKPAD_DESCRIPTOR)
         return state->phase == AI_DISCOVERY_READY ? AI_COMPLETE : AI_ERR_SEQUENCE;
     if (now_us < state->deadline_us)
@@ -60,7 +91,10 @@ enum ai_status ai_discovery_poll(struct ai_discovery *state, uint64_t now_us,
         return AI_ERR_TIMEOUT;
     }
     state->retry_count++;
-    arm_request(state, now_us, timeout_us);
+    if (state->phase == AI_DISCOVERY_WAIT_BOOT)
+        arm_deadline(state, now_us, timeout_us);
+    else
+        arm_request(state, now_us, timeout_us);
     return AI_ERR_TIMEOUT;
 }
 

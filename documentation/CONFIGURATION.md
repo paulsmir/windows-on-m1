@@ -49,6 +49,14 @@ Display and debug remain independent. For example, `--display virtual --debug of
 frames because the user requested a virtual display, but it does not run telemetry or retain
 text logs.
 
+Hang telemetry must share the launcher's existing proxy event loop. The m1n1 USB
+proxy is a single-owner transport and emits asynchronous hypervisor callbacks;
+opening `hang_telemetry.py` as a second client while Windows is live can
+desynchronise callback replies and reset EL2. The standalone CLI therefore
+refuses to attach by default. `--unsafe-direct-attach` is reserved for an idle
+proxy with no guest or launcher running, never for observing a live Windows
+session.
+
 ## User interface
 
 The host-assisted entry point is:

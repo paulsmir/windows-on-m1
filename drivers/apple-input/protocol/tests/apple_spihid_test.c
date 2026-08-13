@@ -105,8 +105,13 @@ static void test_discovery(void)
 {
     struct ai_discovery state;
     ai_discovery_start(&state, 100, 50, 2);
+    assert(state.phase == AI_DISCOVERY_WAIT_BOOT);
+    assert(state.request_id == 0 && state.deadline_us == 150);
+    assert(ai_discovery_accept_boot(&state,
+                                    (const uint8_t[]){0xa0, 0x80, 0x00, 0x00},
+                                    4, 105, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_IDENTITY);
-    assert(state.request_id == 1 && state.deadline_us == 150);
+    assert(state.request_id == 1 && state.deadline_us == 155);
     assert(ai_discovery_accept(&state, 99, true, 110, 50) == AI_ERR_SEQUENCE);
     assert(ai_discovery_accept(&state, 1, true, 110, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_INTERFACE_MANAGEMENT && state.request_id == 2);
@@ -124,13 +129,43 @@ static void test_discovery(void)
     ai_discovery_start(&state, 0, 10, 1);
     assert(ai_discovery_poll(&state, 9, 10) == AI_OK);
     assert(ai_discovery_poll(&state, 10, 10) == AI_ERR_TIMEOUT);
-    assert(state.retry_count == 1 && state.request_id == 2);
+    assert(state.retry_count == 1 && state.request_id == 0);
     assert(ai_discovery_poll(&state, 20, 10) == AI_ERR_TIMEOUT);
     assert(state.phase == AI_DISCOVERY_OFFLINE);
 
     ai_discovery_start(&state, 0, 10, 0);
-    assert(ai_discovery_accept(&state, 1, false, 1, 10) == AI_ERR_PROTOCOL);
+    assert(ai_discovery_accept_boot(&state,
+                                    (const uint8_t[]){0xa0, 0x80, 0x00, 0x00},
+                                    4, 1, 10) == AI_OK);
+    assert(ai_discovery_accept(&state, 1, false, 2, 10) == AI_ERR_PROTOCOL);
     assert(state.phase == AI_DISCOVERY_OFFLINE);
+}
+
+static void test_boot_and_write_status_contract(void)
+{
+    struct ai_discovery state;
+    static const uint8_t booted[] = {0xa0, 0x80, 0x00, 0x00};
+    static const uint8_t not_booted[] = {0xa0, 0x80, 0x00, 0x01};
+    static const uint8_t status_ok[] = {0xac, 0x27, 0x68, 0xd5};
+    static const uint8_t status_bad[] = {0xac, 0x27, 0x68, 0x00};
+
+    ai_discovery_start(&state, 10, 100, 2);
+    assert(ai_discovery_accept_boot(&state, not_booted, sizeof(not_booted),
+                                    20, 100) == AI_ERR_PROTOCOL);
+    assert(state.phase == AI_DISCOVERY_WAIT_BOOT);
+    assert(ai_discovery_accept_boot(&state, booted, sizeof(booted) - 1,
+                                    20, 100) == AI_ERR_LENGTH);
+    assert(state.phase == AI_DISCOVERY_WAIT_BOOT);
+    assert(ai_discovery_accept_boot(&state, booted, sizeof(booted),
+                                    20, 100) == AI_OK);
+    assert(state.phase == AI_DISCOVERY_IDENTITY);
+    assert(ai_discovery_accept_boot(&state, booted, sizeof(booted),
+                                    21, 100) == AI_ERR_SEQUENCE);
+
+    assert(ai_write_status_valid(status_ok, sizeof(status_ok)));
+    assert(!ai_write_status_valid(status_bad, sizeof(status_bad)));
+    assert(!ai_write_status_valid(status_ok, sizeof(status_ok) - 1));
+    assert(!ai_write_status_valid(NULL, sizeof(status_ok)));
 }
 
 static void test_discovery_request_contract(void)
@@ -330,6 +365,7 @@ int main(void)
     test_reassembly();
     test_message_decode();
     test_discovery();
+    test_boot_and_write_status_contract();
     test_discovery_request_contract();
     test_discovery_request_encoding();
     test_discovery_response_matching();

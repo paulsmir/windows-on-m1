@@ -27,6 +27,8 @@ proxyenv
 frames/
 screenshots/
 investigation/**/*.dmp
+investigation/artifacts/
+investigation/*.contract
 
 __pycache__/
 *.py[cod]

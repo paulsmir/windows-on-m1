@@ -51,3 +51,34 @@ compatibility review.
   explicitly measured diagnostics.
 - Do not add assistant attribution, session URLs, or `Co-Authored-By` trailers to
   commits.
+
+## Persistent experiment ledger
+
+Every hardware build, launch, diagnostic run, and recovery attempt must be recorded
+in `investigation/EXPERIMENTS.md`. This is mandatory even when the experiment fails,
+hangs, reboots, or produces an inconclusive result. Update the entry twice: once
+before the run with the intended experiment, and once after the run with the actual
+result. Never rely on chat history as the only record.
+
+Before a hardware run, record:
+
+- a unique experiment ID and UTC timestamp;
+- the falsifiable hypothesis and the single variable changed;
+- repository, branch, root/m1n1/Mu commits, and dirty-state diff hashes;
+- exact build command and launch/install command;
+- artifact path, manifest profile, SHA-256, and recovery artifact;
+- expected checkpoint, failure criterion, and evidence collection paths.
+
+After the run, record:
+
+- the observed boot phases and elapsed times;
+- exact Windows stop code and parameters, relevant CPU, IRQ/timer state, and log or
+  dump paths;
+- whether display, USB input, SSH, RDP, storage, and all CPUs were alive;
+- the verdict: confirmed, rejected, inconclusive, or superseded;
+- the next experiment justified by the evidence.
+
+Do not overwrite or silently reinterpret an old result. Append a correction that
+references the original experiment ID. Do not call a build "working", "stable", or
+"release" without linking the hardware experiment that demonstrated that claim.
+Do not install or launch an artifact whose SHA-256 and manifest were not recorded.

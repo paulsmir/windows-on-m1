@@ -11,6 +11,19 @@ static void put_le16(uint8_t *bytes, uint16_t value)
     bytes[1] = (uint8_t)(value >> 8);
 }
 
+bool ai_write_status_valid(const uint8_t *status, size_t size)
+{
+    static const uint8_t expected[] = {0xac, 0x27, 0x68, 0xd5};
+
+    if (!status || size != sizeof(expected))
+        return false;
+    for (size_t index = 0; index < sizeof(expected); index++) {
+        if (status[index] != expected[index])
+            return false;
+    }
+    return true;
+}
+
 enum ai_status ai_packet_decode(const uint8_t raw[AI_PACKET_SIZE], struct ai_packet_view *out)
 {
     if (!raw || !out)

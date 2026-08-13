@@ -280,6 +280,7 @@ class TelemetryRecorderTests(unittest.TestCase):
         ), mock.patch("sys.stdout", output):
             result = hang_telemetry.main([
                 "--once",
+                "--unsafe-direct-attach",
                 "--device", "fake",
                 "--jsonl", str(self.log_path),
                 "--status", str(self.status_path),
@@ -289,6 +290,21 @@ class TelemetryRecorderTests(unittest.TestCase):
         self.assertTrue(interface.dev.closed)
         self.assertIn("seq=3", output.getvalue())
         self.assertIn("pc=0x0000000000001234", output.getvalue())
+
+    def test_cli_refuses_second_proxy_owner_without_explicit_unsafe_flag(self):
+        error = io.StringIO()
+        with mock.patch.object(hang_telemetry, "connect_proxy") as connect, \
+             mock.patch("sys.stderr", error):
+            result = hang_telemetry.main([
+                "--once",
+                "--device", "fake",
+                "--jsonl", str(self.log_path),
+                "--status", str(self.status_path),
+            ])
+
+        self.assertEqual(result, 2)
+        connect.assert_not_called()
+        self.assertIn("single-owner", error.getvalue())
 
 
 if __name__ == "__main__":
