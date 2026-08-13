@@ -37,6 +37,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             self.assertIn(source, project)
         self.assertIn("j313_apple_input.generated.h", project)
         self.assertIn("vhfkm.lib", project.lower())
+        self.assertIn('<FilesToPackage Include="$(TargetPath)"', project)
 
     def test_driver_maps_validated_resources_but_does_not_write_mmio(self):
         driver = self.read("src/driver.c")

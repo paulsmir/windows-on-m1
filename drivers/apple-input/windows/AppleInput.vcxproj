@@ -35,6 +35,9 @@
     <ClInclude Include="include\apple_input_hw.h" />
     <ClInclude Include="include\j313_apple_input.generated.h" />
   </ItemGroup>
-  <ItemGroup><Inf Include="AppleInput.inf" /></ItemGroup>
+  <ItemGroup>
+    <Inf Include="AppleInput.inf" />
+    <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
