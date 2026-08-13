@@ -224,6 +224,22 @@ if [ "$HANDOFF" -ne 1 ]; then
     exit 1
 fi
 
+HARDWARE_GATE_FAILURE=
+if grep -Eq "Starting CPU [0-9]+ .*Failed!" "$RUNNER_LOG"; then
+    HARDWARE_GATE_FAILURE="secondary CPU startup failed"
+elif grep -q "Apple ANS initialization failed" "$RUNNER_LOG"; then
+    HARDWARE_GATE_FAILURE="Apple ANS initialization failed"
+elif grep -q "backend=0" "$RUNNER_LOG"; then
+    HARDWARE_GATE_FAILURE="NVMe backend=0"
+fi
+if [ -n "$HARDWARE_GATE_FAILURE" ]; then
+    echo "runner failed a hardware bootstrap gate: $HARDWARE_GATE_FAILURE" >&2
+    kill -TERM "$RUNNER" 2>/dev/null || true
+    tail -n 80 "$RUNNER_LOG" >&2 || true
+    [ -z "$READER" ] || kill "$READER" 2>/dev/null || true
+    exit 1
+fi
+
 [ -z "$READER" ] && echo "runner=$RUNNER" || echo "reader=$READER runner=$RUNNER"
 if [ "$DEBUG" = off ]; then
     echo "host bootstrap log: $ROOT/assisted-runner.log"

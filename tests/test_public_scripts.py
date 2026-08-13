@@ -223,6 +223,14 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("runner did not reach guest handoff", text)
         self.assertIn("BOOTSTRAP_TIMEOUT", text)
 
+    def test_assisted_launcher_rejects_failed_hardware_gates(self):
+        text = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
+
+        self.assertIn("Apple ANS initialization failed", text)
+        self.assertIn("backend=0", text)
+        self.assertIn("secondary CPU startup failed", text)
+        self.assertIn("runner failed a hardware bootstrap gate", text)
+
     def test_assisted_foreground_keeps_runner_owned_and_observable(self):
         result = subprocess.run(
             [
