@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM64"><Configuration>Debug</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{5D96A49D-95CD-4AF6-B7D3-70892FB15507}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>AppleInput</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup><ConfigurationType>Driver</ConfigurationType><DriverType>KMDF</DriverType><PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ItemDefinitionGroup>
+    <ClCompile><AdditionalIncludeDirectories>include;..\protocol\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>AI_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><TreatWarningAsError>true</TreatWarningAsError></ClCompile>
+    <Link><AdditionalDependencies>vhfkm.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\driver.c" />
+    <ClCompile Include="src\device.c" />
+    <ClCompile Include="src\apple_input_hw.c" />
+    <ClCompile Include="src\spi.c" />
+    <ClCompile Include="src\gpio.c" />
+    <ClCompile Include="..\protocol\src\apple_spi_plan.c" />
+    <ClCompile Include="..\protocol\src\apple_spihid_crc.c" />
+    <ClCompile Include="..\protocol\src\apple_spihid_discovery.c" />
+    <ClCompile Include="..\protocol\src\apple_spihid_packet.c" />
+    <ClCompile Include="..\protocol\src\apple_spihid_reassembly.c" />
+    <ClCompile Include="..\protocol\src\apple_spihid_transport.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\apple_input_device.h" />
+    <ClInclude Include="include\apple_input_hw.h" />
+    <ClInclude Include="include\j313_apple_input.generated.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="AppleInput.inf" />
+    <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

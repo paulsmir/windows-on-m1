@@ -332,11 +332,27 @@ def main(argv=None):
     parser.add_argument(
         "--status", type=Path, default=Path("hang-telemetry-status.json")
     )
+    parser.add_argument(
+        "--unsafe-direct-attach",
+        action="store_true",
+        help=(
+            "attach as a standalone proxy owner; unsafe while an assisted guest is live "
+            "because asynchronous HV callbacks require the launcher's registered handlers"
+        ),
+    )
     args = parser.parse_args(argv)
     if not args.device:
         parser.error("--device or M1N1DEVICE is required")
     if args.interval <= 0:
         parser.error("--interval must be positive")
+    if not args.unsafe_direct_attach:
+        print(
+            "refusing direct telemetry attach: m1n1 USB is a single-owner transport; "
+            "use the telemetry integrated into run_uefi.py, or pass "
+            "--unsafe-direct-attach only when no guest/launcher is active",
+            file=sys.stderr,
+        )
+        return 2
 
     follow = args.follow
     recorder = None

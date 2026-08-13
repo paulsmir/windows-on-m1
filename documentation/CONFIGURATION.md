@@ -49,6 +49,14 @@ Display and debug remain independent. For example, `--display virtual --debug of
 frames because the user requested a virtual display, but it does not run telemetry or retain
 text logs.
 
+Hang telemetry must share the launcher's existing proxy event loop. The m1n1 USB
+proxy is a single-owner transport and emits asynchronous hypervisor callbacks;
+opening `hang_telemetry.py` as a second client while Windows is live can
+desynchronise callback replies and reset EL2. The standalone CLI therefore
+refuses to attach by default. `--unsafe-direct-attach` is reserved for an idle
+proxy with no guest or launcher running, never for observing a live Windows
+session.
+
 ## User interface
 
 The host-assisted entry point is:
@@ -60,6 +68,13 @@ scripts/run-windows.sh \
   --debug full \
   --chainload
 ```
+
+`run-windows.sh --execution assisted` chainloads the matching profile by
+default. This fail-closed behavior prevents a Mu image from being launched on
+top of an unknown or stale m1n1 that merely happens to be waiting in the proxy.
+Use `--reuse-proxy` only for an intentional fast iteration after independently
+verifying that the running m1n1 came from the same artifact manifest. The
+`--chainload` and `--reuse-proxy` options are mutually exclusive.
 
 A low-overhead assisted launch is:
 
@@ -84,7 +99,7 @@ command:
 
 ```sh
 scripts/build-standalone.sh --display physical --debug off
-scripts/build-standalone.sh --display physical --debug monitor
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
 ```
 
 Profiles that require an attached host remain explicit and never become a hidden runtime
@@ -104,7 +119,7 @@ For assisted mode the launcher performs these stages:
 
 1. Parse and validate the complete profile.
 2. Discover or validate the proxy and virtual-UART endpoints required by that profile.
-3. With `--chainload`, load `dist/j313/m1n1.macho` and wait for USB re-enumeration.
+3. With `--chainload`, load `dist/j313/debug/m1n1.macho` and wait for USB re-enumeration.
 4. Open the virtual UART only for `uart` or `full`.
 5. Construct the guest boot arguments for the shared BGRA framebuffer.
 6. Ask m1n1 to attach the framebuffer to DCP for `physical` or `both`.

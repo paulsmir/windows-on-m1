@@ -66,6 +66,15 @@ class DisplayModeContractTests(unittest.TestCase):
         self.assertIn("USB framebuffer          : enabled", result.stdout)
         self.assertIn("telemetry                : enabled", result.stdout)
 
+    def test_monitor_is_accepted_without_full_telemetry(self):
+        result = self.run_dry("physical", "monitor")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("debug mode               : monitor", result.stdout)
+        self.assertIn("physical DCP             : enabled", result.stdout)
+        self.assertIn("USB framebuffer          : disabled", result.stdout)
+        self.assertIn("telemetry                : disabled", result.stdout)
+
     def test_none_off_keeps_gop_without_consumers(self):
         result = self.run_dry("none", "off")
 

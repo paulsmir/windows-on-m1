@@ -32,10 +32,11 @@ profile during that window, m1n1 transfers control to the proxy loop instead of 
 Windows. This provides a recovery route for chainloading another build without writing the ESP
 again. `debug=monitor` deliberately does not have that behavior.
 
-Status: the self-contained monitor path has completed a cold boot into the Windows kernel with
-all eight CPU-entry records and live NVMe. The final quiet production profile still requires its
-separate no-host smoke test; hardware validation pending for that production artifact. Do not
-interpret build or parser tests as proof of that test.
+Status: both the monitor and quiet physical-only standalone profiles have cold-booted the
+installed Windows system on the development J313. The quiet run reproduced the same intermittent
+approximately 20-second whole-system pause as the monitor run, so virtual framebuffer streaming
+and verbose monitor output are not sufficient explanations. Standalone boot works, but Phase 0
+stability is not complete. See [the stability checkpoint](PLATFORM_STABILITY.md).
 
 ### Cold-boot USB monitor
 
@@ -44,18 +45,16 @@ tools can inspect it. It is a diagnostic profile, not the final low-overhead con
 Build it from the same checkout that supplies the target m1n1 manifest ABI:
 
 ```sh
-scripts/build-standalone.sh --display physical --debug monitor
-mkdir -p .local/validated-artifacts
-cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-monitor.bin
-shasum -a 256 .local/validated-artifacts/boot-physical-monitor.bin
+scripts/build-standalone.sh --debug-build --display physical --debug monitor
+python3 tools/artifact_manifest.py verify dist/j313/debug/MANIFEST.json --profile debug
 ```
 
-Install the resulting `dist/j313/boot.bin` on the target while macOS is running, using the ESP
+Install the resulting debug image on the target while macOS is running, using the ESP
 identifier previously confirmed by `inspect`:
 
 ```sh
 sudo scripts/install-esp.sh install --disk diskXsY \
-  --image .local/validated-artifacts/boot-physical-monitor.bin
+  --image dist/j313/debug/boot.bin
 ```
 
 Before powering on the target, start the passive recorder on the host:
@@ -96,11 +95,10 @@ mode to measure production performance or classify a temporary UI stall by itsel
 After diagnosis, return to the production profile explicitly:
 
 ```sh
-scripts/build-standalone.sh --display physical --debug off
-cp dist/j313/boot.bin .local/validated-artifacts/boot-physical-production.bin
-shasum -a 256 .local/validated-artifacts/boot-physical-production.bin
+scripts/build-standalone.sh --release --display physical --debug off
+python3 tools/artifact_manifest.py verify dist/j313/release/MANIFEST.json --profile release
 sudo scripts/install-esp.sh install --disk diskXsY \
-  --image .local/validated-artifacts/boot-physical-production.bin
+  --image dist/j313/release/boot.bin
 ```
 
 To return to the stock Asahi payload instead, use:
@@ -121,6 +119,10 @@ This path is used for:
 - testing replacement m1n1 or Mu builds without rewriting the Air ESP;
 - Windows KD and PnP/ACPI/storage diagnostics;
 - hang telemetry and framebuffer/proxy backpressure analysis.
+
+It is also the required rapid iteration path for the current freeze investigation. Every candidate
+must first be tested here without changing the ESP, then rebuilt from the same commits and launch
+contract as a standalone image. A result observed only in assisted mode is not a standalone fix.
 
 For driver and device-model work, start with `--display both --debug full`: the physical panel
 shows Windows independently of the web viewer, while the host retains hypervisor logs, virtual
@@ -158,17 +160,26 @@ scripts/run-windows.sh \
   --execution assisted \
   --display both \
   --debug full \
-  --chainload \
   --proxy /dev/cu.PROXY \
   --vuart /dev/cu.VUART
 ```
 
-Use `--m1n1 path/to/m1n1.macho` or `--firmware path/to/J313_EFI.fd` to replace one component.
-Internally, `--chainload` invokes
+Assisted mode chainloads the matching m1n1 by default. Use
+`--m1n1 path/to/m1n1.macho` or `--firmware path/to/J313_EFI.fd` to replace one component.
+Internally, the default chainload invokes
 `m1n1_windows/proxyclient/tools/chainload.py`; normally use the wrapper so endpoint discovery
 and the reconnect wait remain consistent.
 A `Bad Command` at the first PCI or framebuffer operation normally means the chainload did not
 happen or used a different build.
+
+The launcher reports `runner=PID` only after `run_uefi.py` reaches its explicit
+`Starting guest...` handoff. A live Python process by itself is not success. The default handoff
+deadline is 45 seconds and can be changed for diagnosis with
+`ASSISTED_BOOTSTRAP_TIMEOUT=SECONDS`. Release mode still disables guest UART, USB framebuffer
+streaming, and telemetry, but retains the bounded host bootstrap transcript in
+`assisted-runner.log`. If CPU startup, ANS/NVMe initialization, USB ownership, or another
+pre-guest step fails, the launcher exits non-zero and prints the tail of that transcript instead
+of silently leaving a firmware shell or stale physical frame.
 
 ### 3. Start log and framebuffer viewers
 
@@ -188,7 +199,7 @@ Review the exact command first:
 scripts/run-assisted.sh --dry-run \
   --proxy /dev/cu.PROXY \
   --vuart /dev/cu.VUART \
-  --firmware dist/j313/J313_EFI.fd
+  --firmware dist/j313/debug/J313_EFI.fd
 ```
 
 Then launch:
@@ -197,11 +208,13 @@ Then launch:
 scripts/run-assisted.sh \
   --proxy /dev/cu.PROXY \
   --vuart /dev/cu.VUART \
-  --firmware dist/j313/J313_EFI.fd
+  --firmware dist/j313/release/J313_EFI.fd
 ```
 
 This lower-level form assumes matching m1n1 is already running. For the usual development
-cycle, prefer the `run-windows.sh ... --chainload` command above.
+cycle, prefer the `run-windows.sh` command above. The equivalent explicit fast path is
+`run-windows.sh --execution assisted --reuse-proxy ...`; use it only after checking the
+already-running m1n1 against the same artifact manifest.
 
 For WinPE experiments that intentionally preload an image into guest RAM, add
 `--ramdisk path/to/winpe.img`. Installed Windows normally boots from internal NVMe and does
@@ -250,7 +263,7 @@ SSH is not part of either boot chain. It is merely a convenient way to copy `boo
 the repository to the Air while the Air is running macOS:
 
 ```sh
-scp dist/j313/boot.bin air-host:~/boot.bin
+scp dist/j313/release/boot.bin air-host:~/boot.bin
 ```
 
 The ESP replacement itself must run locally on the Air with `sudo` because it mounts and

@@ -1,0 +1,65 @@
+name: Apple input ARM64 WDK
+
+on:
+  push:
+    paths:
+      - ".github/workflows/apple-input-wdk.yml"
+      - "Directory.Build.props"
+      - "packages.config"
+      - "drivers/apple-input/**"
+  pull_request:
+    paths:
+      - ".github/workflows/apple-input-wdk.yml"
+      - "Directory.Build.props"
+      - "packages.config"
+      - "drivers/apple-input/**"
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    runs-on: windows-2025-vs2026
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Add NuGet to PATH
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore official SDK and WDK packages
+        run: nuget restore packages.config -PackagesDirectory packages
+
+      - name: Expose WDK host tools
+        shell: pwsh
+        run: |
+          $stampInf = Get-ChildItem packages -Recurse -Filter stampinf.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (!$stampInf) { throw "stampinf.exe was not found in the restored WDK" }
+          $toolDirectory = $stampInf.Directory.FullName
+          Write-Host "WDK host tools: $toolDirectory"
+          $toolDirectory | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build AppleInput for ARM64
+        run: >-
+          msbuild drivers\apple-input\windows\AppleInput.vcxproj
+          /m
+          /t:Clean,Build
+          /p:Configuration=Debug
+          /p:Platform=ARM64
+          /p:RunCodeAnalysis=true
+
+      - name: Upload unsigned test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppleInput-ARM64-Debug
+          if-no-files-found: error
+          path: |
+            drivers/apple-input/windows/ARM64/Debug/**/*.sys
+            drivers/apple-input/windows/ARM64/Debug/**/*.inf
+            drivers/apple-input/windows/ARM64/Debug/**/*.cat
+            drivers/apple-input/windows/ARM64/Debug/**/*.pdb

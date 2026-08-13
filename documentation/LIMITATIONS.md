@@ -4,10 +4,10 @@
 
 - Internal Windows installation, OOBE, USB input, internal-NVMe boot, desktop, and RDP were
   validated on one 2020 M1 MacBook Air (`j313`).
-- The current self-contained standalone packed image is implemented and host-tested, but
-  cold-boot hardware validation is pending.
+- The current self-contained standalone packed image has cold-booted installed Windows on the
+  development J313. Intermittent whole-system pauses of about 20 seconds remain unresolved.
 - Physical internal-panel handoff and a full-panel 2560x1600 Windows desktop were validated in
-  assisted mode. Cold-boot validation of the quiet standalone image remains separate.
+  assisted and quiet standalone operation on the development machine.
 
 ## Hardware scope
 
@@ -39,7 +39,9 @@ not yet been compacted for production use.
 
 All eight cores can enter Windows, but the vGIC, SGI, timer, and list-register paths remain
 experimental. Earlier runs produced `CLOCK_WATCHDOG_TIMEOUT` and `IPI_WATCHDOG_TIMEOUT`.
-Sustained RDP operation is a milestone, not a guarantee of workstation stability.
+The current build substantially reduces immediate watchdog failures and boot latency, but can
+still stop all visible input and UI progress for roughly 20 seconds before recovering. Sustained
+RDP or SSH operation is evidence of progress, not a guarantee of workstation stability.
 
 ## USB and debugging
 

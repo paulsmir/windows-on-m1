@@ -1,0 +1,30 @@
+{
+  "spi": {
+    "path": "/arm-io/spi3",
+    "compatible": "spi-1,spimc",
+    "base": "0x23510c000",
+    "size": "0x4000",
+    "source_hz": 120000000
+  },
+  "device": {
+    "path": "/arm-io/spi3/hid-transport@0",
+    "compatible": "hid-transport,spi",
+    "reg": 0,
+    "bus_hz": 8000000,
+    "ap_gpio_pin": 195,
+    "nub_gpio_pin": 13,
+    "interrupt_parent_irq": 333
+  },
+  "ap_gpio": {
+    "path": "/arm-io/gpio",
+    "base": "0x23c100000",
+    "size": "0x100000",
+    "pin_count": 212
+  },
+  "nub_gpio": {
+    "path": "/arm-io/nub-gpio",
+    "base": "0x23d1f0000",
+    "size": "0x4000",
+    "pin_count": 32
+  }
+}

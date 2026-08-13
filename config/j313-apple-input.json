@@ -1,0 +1,36 @@
+{
+  "contract_version": 1,
+  "acpi_hid": "APPL0001",
+  "spi": {
+    "base": "0x23510c000",
+    "size": "0x4000",
+    "source_hz": 120000000,
+    "bus_hz": 8000000
+  },
+  "ap_gpio": {
+    "base": "0x23c100000",
+    "size": "0x100000",
+    "pin": 195
+  },
+  "nub_gpio": {
+    "base": "0x23d1f0000",
+    "size": "0x4000",
+    "pin": 13
+  },
+  "interrupt": {
+    "active_low": true,
+    "parent_candidates": [330, 331, 332, 333, 334, 335, 336],
+    "startup_group": 0,
+    "startup_parent": 330,
+    "guest_vintid": 865
+  },
+  "timings_us": {
+    "reset_high": 5000,
+    "reset_low": 5000,
+    "boot_wait": 50000,
+    "cs_setup": 65,
+    "cs_hold": 65,
+    "cs_inactive": 250,
+    "transfer_timeout": 200000
+  }
+}
