@@ -242,7 +242,7 @@ class PublicScriptTests(unittest.TestCase):
             ],
             cwd=ROOT, check=True, capture_output=True, text=True,
         )
-        self.assertIn("execution: foreground", result.stdout)
+        self.assertIn("runner: foreground", result.stdout)
         self.assertIn("USB framebuffer: enabled", result.stdout)
 
         source = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
@@ -354,6 +354,37 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("debug: monitor", result.stdout)
         self.assertIn("telemetry: disabled", result.stdout)
         self.assertIn("dist/j313/debug-monitor/J313_EFI.fd", result.stdout)
+
+    def test_public_entrypoint_accepts_assisted_monitor_profile(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted", "--display", "physical",
+                "--debug", "monitor", "--proxy", "/dev/cu.test-proxy",
+                "--vuart", "/dev/cu.test-vuart", "--dry-run",
+            ],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("debug: monitor", result.stdout)
+        self.assertIn("virtual UART: /dev/cu.test-vuart", result.stdout)
+        self.assertIn("telemetry: disabled", result.stdout)
+        self.assertIn("chainload: dist/j313/debug-monitor/m1n1.macho", result.stdout)
+
+    def test_public_entrypoint_exposes_foreground_runner_lifecycle(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted", "--display", "physical",
+                "--debug", "monitor", "--proxy", "/dev/cu.test-proxy",
+                "--vuart", "/dev/cu.test-vuart", "--foreground", "--dry-run",
+            ],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("runner: foreground", result.stdout)
 
     def test_supervisor_selects_forensic_or_monitor_diagnostics(self):
         for diagnostics, wire_mode in (("forensic", "full"), ("monitor", "monitor")):

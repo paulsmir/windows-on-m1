@@ -14,13 +14,14 @@ CHAINLOAD=0
 REUSE_PROXY=0
 M1N1=
 DRY_RUN=0
+FOREGROUND=0
 
 usage() {
     echo "usage: $0 [--execution standalone|assisted]" >&2
-    echo "          [--display none|physical|virtual|both] [--debug off|uart|full]" >&2
+    echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
     echo "          [--ramdisk FILE] [--chainload|--reuse-proxy]" >&2
-    echo "          [--m1n1 FILE] [--dry-run]" >&2
+    echo "          [--m1n1 FILE] [--foreground] [--dry-run]" >&2
     exit 2
 }
 
@@ -36,6 +37,7 @@ while [ "$#" -gt 0 ]; do
         --chainload) CHAINLOAD=1; shift ;;
         --reuse-proxy) REUSE_PROXY=1; shift ;;
         --m1n1) [ "$#" -ge 2 ] || usage; M1N1=$2; shift 2 ;;
+        --foreground) FOREGROUND=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
         *) usage ;;
@@ -44,7 +46,7 @@ done
 
 case "$EXECUTION" in standalone|assisted) ;; *) usage ;; esac
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
-case "$DEBUG" in off|uart|full) ;; *) usage ;; esac
+case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
 [ "$CHAINLOAD" -eq 0 ] || [ "$REUSE_PROXY" -eq 0 ] || usage
 
 # The public assisted entry point owns the complete launch contract.  Reusing
@@ -63,6 +65,7 @@ vuart_summary=disabled
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "execution: $EXECUTION"
+    [ "$FOREGROUND" -eq 0 ] || echo "runner: foreground"
     echo "display: $DISPLAY"
     echo "debug: $DEBUG"
     echo "virtual UART: $vuart_summary"
@@ -73,6 +76,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
             off) profile=release ;;
             uart) profile=debug-uart ;;
             full) profile=debug-forensic ;;
+            monitor) profile=debug-monitor ;;
         esac
         echo "chainload: ${M1N1:-dist/j313/$profile/m1n1.macho}"
     elif [ "$REUSE_PROXY" -eq 1 ]; then
@@ -96,4 +100,5 @@ set -- "$ROOT/scripts/run-assisted.sh" --display "$DISPLAY" --debug "$DEBUG"
 [ -z "$RAMDISK" ] || set -- "$@" --ramdisk "$RAMDISK"
 [ "$CHAINLOAD" -eq 0 ] || set -- "$@" --chainload
 [ -z "$M1N1" ] || set -- "$@" --m1n1 "$M1N1"
+[ "$FOREGROUND" -eq 0 ] || set -- "$@" --foreground
 exec "$@"
