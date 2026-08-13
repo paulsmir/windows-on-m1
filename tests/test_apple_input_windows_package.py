@@ -19,6 +19,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
                          "LowerFilters", "Vhf", "appleinput.sys"):
             self.assertIn(required.lower(), inf.lower())
         self.assertNotRegex(inf.lower(), r"ntamd64|ntx86")
+        self.assertIn("NTarm64.10.0...22000", inf)
 
     def test_project_lists_generated_contract_and_sources(self):
         project = self.read("AppleInput.vcxproj")

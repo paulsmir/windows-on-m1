@@ -11,9 +11,9 @@ PnpLockdown=1
 DefaultDestDir = 13
 
 [Manufacturer]
-%ProviderName%=AppleInputModels,NTarm64
+%ProviderName%=AppleInputModels,NTarm64.10.0...22000
 
-[AppleInputModels.NTarm64]
+[AppleInputModels.NTarm64.10.0...22000]
 %AppleInput.DeviceDesc%=AppleInput_Install,ACPI\APPL0001
 
 [AppleInput_Install.NT]
