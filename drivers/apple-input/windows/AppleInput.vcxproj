@@ -20,9 +20,13 @@
   <ItemGroup>
     <ClCompile Include="src\driver.c" />
     <ClCompile Include="src\device.c" />
+    <ClCompile Include="src\apple_input_hw.c" />
+    <ClCompile Include="src\spi.c" />
+    <ClCompile Include="src\gpio.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_input_device.h" />
+    <ClInclude Include="include\apple_input_hw.h" />
     <ClInclude Include="include\j313_apple_input.generated.h" />
   </ItemGroup>
   <ItemGroup><Inf Include="AppleInput.inf" /></ItemGroup>

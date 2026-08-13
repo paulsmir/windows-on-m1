@@ -20,8 +20,14 @@ The following foundation is implemented:
 - no m1n1 input emulation and no m1n1 SPI/GPIO data-path writes are used;
 - the portable Apple SPI HID packet, CRC, reassembly, discovery, and bounded
   recovery core has host tests;
-- an ARM64 KMDF resource-validation scaffold exists, but it does not yet
-  initialize SPI3 or publish VHF input devices.
+- an ARM64 KMDF resource-validation scaffold maps the three translated MMIO
+  resources, performs bounded read-only SPI/GPIO register sanity checks, and
+  unmaps every partial allocation on failure or release;
+- portable tests lock the Apple SPI register layout, FIFO depth, 200 ms maximum
+  transfer deadline, clock-divider calculation, and GPIO pin/group offsets.
+
+The driver still performs no register write, creates no interrupt object, and
+publishes no VHF input device.
 
 Consequently, external USB keyboard and mouse remain mandatory for recovery
 and for all current Windows operation.
@@ -51,7 +57,8 @@ advances in this order:
 1. read-only live ADT inventory;
 2. ACPI enumeration and resource validation;
 3. stage-2 mappings and level IRQ route;
-4. read-only SPI register sanity checks;
+4. read-only SPI/GPIO register sanity checks (implemented; ARM64 WDK build and
+   live devnode validation pending);
 5. bounded GPIO reset and one SPI boot transaction;
 6. descriptor discovery and transport-only packet capture;
 7. VHF keyboard;

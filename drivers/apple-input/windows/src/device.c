@@ -67,14 +67,45 @@ NTSTATUS AiDeviceParseResources(WDFCMRESLIST Raw, WDFCMRESLIST Translated,
 NTSTATUS AppleInputEvtDevicePrepareHardware(WDFDEVICE Device, WDFCMRESLIST Raw,
                                              WDFCMRESLIST Translated)
 {
-    return AiDeviceParseResources(Raw, Translated, AiGetDeviceContext(Device));
+    PAI_DEVICE_CONTEXT context = AiGetDeviceContext(Device);
+    NTSTATUS status = AiDeviceParseResources(Raw, Translated, context);
+    if (!NT_SUCCESS(status))
+        return status;
+
+    context->SpiRegisters = MmMapIoSpaceEx(context->MemoryBase[0],
+        context->MemoryLength[0], PAGE_READWRITE | PAGE_NOCACHE);
+    context->ApGpioRegisters = MmMapIoSpaceEx(context->MemoryBase[1],
+        context->MemoryLength[1], PAGE_READWRITE | PAGE_NOCACHE);
+    context->NubGpioRegisters = MmMapIoSpaceEx(context->MemoryBase[2],
+        context->MemoryLength[2], PAGE_READWRITE | PAGE_NOCACHE);
+    if (!context->SpiRegisters || !context->ApGpioRegisters || !context->NubGpioRegisters) {
+        AppleInputEvtDeviceReleaseHardware(Device, Translated);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    status = AiSpiValidateReadOnly(context);
+    if (NT_SUCCESS(status))
+        status = AiGpioValidateReadOnly(context);
+    if (!NT_SUCCESS(status))
+        AppleInputEvtDeviceReleaseHardware(Device, Translated);
+    return status;
 }
 
 NTSTATUS AppleInputEvtDeviceReleaseHardware(WDFDEVICE Device,
                                              WDFCMRESLIST Translated)
 {
     UNREFERENCED_PARAMETER(Translated);
-    AiGetDeviceContext(Device)->ResourcesValidated = FALSE;
+    PAI_DEVICE_CONTEXT context = AiGetDeviceContext(Device);
+    if (context->NubGpioRegisters)
+        MmUnmapIoSpace(context->NubGpioRegisters, context->MemoryLength[2]);
+    if (context->ApGpioRegisters)
+        MmUnmapIoSpace(context->ApGpioRegisters, context->MemoryLength[1]);
+    if (context->SpiRegisters)
+        MmUnmapIoSpace(context->SpiRegisters, context->MemoryLength[0]);
+    context->SpiRegisters = NULL;
+    context->ApGpioRegisters = NULL;
+    context->NubGpioRegisters = NULL;
+    context->ResourcesValidated = FALSE;
     return STATUS_SUCCESS;
 }
 

@@ -23,20 +23,27 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
     def test_project_lists_generated_contract_and_sources(self):
         project = self.read("AppleInput.vcxproj")
         self.assertIn("ARM64", project)
-        for source in ("driver.c", "device.c"):
+        for source in ("driver.c", "device.c", "apple_input_hw.c", "spi.c", "gpio.c"):
             self.assertIn(source, project)
         self.assertIn("j313_apple_input.generated.h", project)
         self.assertIn("vhfkm.lib", project.lower())
 
-    def test_driver_parses_resources_but_does_not_write_mmio(self):
+    def test_driver_maps_validated_resources_but_does_not_write_mmio(self):
         driver = self.read("src/driver.c")
         device = self.read("src/device.c")
+        spi = self.read("src/spi.c")
+        gpio = self.read("src/gpio.c")
         self.assertIn("WdfDriverCreate", driver)
         self.assertIn("AiDeviceParseResources", device)
         self.assertIn("STATUS_DEVICE_CONFIGURATION_ERROR", device)
         self.assertIn("J313_APPLE_INPUT_GUEST_VINTID", device)
-        for forbidden in ("WRITE_REGISTER", "MmMapIoSpace", "WdfInterruptCreate"):
-            self.assertNotIn(forbidden, device)
+        self.assertIn("MmMapIoSpaceEx", device)
+        self.assertIn("MmUnmapIoSpace", device)
+        self.assertIn("READ_REGISTER", spi)
+        self.assertIn("READ_REGISTER", gpio)
+        combined = device + spi + gpio
+        for forbidden in ("WRITE_REGISTER", "WdfInterruptCreate"):
+            self.assertNotIn(forbidden, combined)
 
     def test_build_and_recovery_scripts_are_location_independent(self):
         build = self.read("scripts/build-driver.ps1")
