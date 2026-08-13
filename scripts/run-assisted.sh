@@ -15,6 +15,7 @@ CHAINLOAD=0
 M1N1=
 CONTRACT_OUTPUT=
 FOREGROUND=0
+BOOTSTRAP_TIMEOUT=${ASSISTED_BOOTSTRAP_TIMEOUT:-45}
 
 usage() {
     echo "usage: $0 [--proxy DEVICE] [--vuart DEVICE] [--firmware FILE]" >&2
@@ -46,6 +47,7 @@ done
 
 case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
+case "$BOOTSTRAP_TIMEOUT" in ''|*[!0-9]*|0) usage ;; esac
 
 MANIFEST_PROFILE=debug
 case "$DEBUG" in
@@ -137,7 +139,7 @@ if pgrep -f '[r]un_uefi.py' >/dev/null; then
 fi
 
 cd "$ROOT"
-rm -f guest-uart.log guest-uart.tlog guest-uart-reader.log hv.log guest.pid
+rm -f assisted-runner.log guest-uart.log guest-uart.tlog guest-uart-reader.log hv.log guest.pid
 
 if [ "$CHAINLOAD" -eq 1 ]; then
     echo "Chainloading matching m1n1: $M1N1"
@@ -174,8 +176,11 @@ if [ "$FOREGROUND" -eq 1 ]; then
             exec "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >hv.log 2>&1
     fi
 elif [ "$DEBUG" = off ]; then
+    # Release mode disables guest UART, framebuffer streaming and telemetry,
+    # but the host bootstrap must remain observable.  Without this log a
+    # post-launch failure is indistinguishable from a running Windows guest.
     PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
-        nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >/dev/null 2>&1 &
+        nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >assisted-runner.log 2>&1 &
 else
     PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
         nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >hv.log 2>&1 &
@@ -183,15 +188,46 @@ fi
 RUNNER=$!
 echo "$RUNNER" >guest.pid
 
-sleep 2
-if ! kill -0 "$RUNNER" 2>/dev/null; then
-    echo "runner exited before initialization; inspect $ROOT/hv.log" >&2
+if [ "$DEBUG" = off ]; then
+    RUNNER_LOG="$ROOT/assisted-runner.log"
+else
+    RUNNER_LOG="$ROOT/hv.log"
+fi
+
+# A live PID only proves that Python has not exited.  Do not announce a guest
+# until run_uefi.py has completed CPU, NVMe, stage-2 and framebuffer setup and
+# reached the explicit handoff immediately before hv.start().
+deadline=$(( $(date +%s) + BOOTSTRAP_TIMEOUT ))
+HANDOFF=0
+while [ "$(date +%s)" -lt "$deadline" ]; do
+    if grep -q "Starting guest..." "$RUNNER_LOG" 2>/dev/null; then
+        HANDOFF=1
+        break
+    fi
+    kill -0 "$RUNNER" 2>/dev/null || break
+    sleep 1
+done
+
+if [ "$HANDOFF" -ne 1 ]; then
+    if kill -0 "$RUNNER" 2>/dev/null; then
+        echo "runner did not reach guest handoff within ${BOOTSTRAP_TIMEOUT}s; inspect $RUNNER_LOG" >&2
+        kill -TERM "$RUNNER" 2>/dev/null || true
+    else
+        echo "runner exited before initialization (guest handoff); inspect $RUNNER_LOG" >&2
+    fi
+    if [ "$DEBUG" = off ]; then
+        tail -n 40 "$RUNNER_LOG" >&2 || true
+    else
+        tail -n 80 "$RUNNER_LOG" >&2 || true
+    fi
     [ -z "$READER" ] || kill "$READER" 2>/dev/null || true
     exit 1
 fi
 
 [ -z "$READER" ] && echo "runner=$RUNNER" || echo "reader=$READER runner=$RUNNER"
-if [ "$DEBUG" != off ]; then
+if [ "$DEBUG" = off ]; then
+    echo "host bootstrap log: $ROOT/assisted-runner.log"
+else
     echo "hypervisor log: $ROOT/hv.log"
     echo "guest UART log: $ROOT/guest-uart.log"
 fi

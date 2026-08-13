@@ -172,6 +172,15 @@ and the reconnect wait remain consistent.
 A `Bad Command` at the first PCI or framebuffer operation normally means the chainload did not
 happen or used a different build.
 
+The launcher reports `runner=PID` only after `run_uefi.py` reaches its explicit
+`Starting guest...` handoff. A live Python process by itself is not success. The default handoff
+deadline is 45 seconds and can be changed for diagnosis with
+`ASSISTED_BOOTSTRAP_TIMEOUT=SECONDS`. Release mode still disables guest UART, USB framebuffer
+streaming, and telemetry, but retains the bounded host bootstrap transcript in
+`assisted-runner.log`. If CPU startup, ANS/NVMe initialization, USB ownership, or another
+pre-guest step fails, the launcher exits non-zero and prints the tail of that transcript instead
+of silently leaving a firmware shell or stale physical frame.
+
 ### 3. Start log and framebuffer viewers
 
 ```sh

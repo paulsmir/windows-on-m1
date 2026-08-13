@@ -207,6 +207,22 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("runner exited before initialization", text)
         self.assertIn("m1n1.macho=assisted-chainload", text)
 
+    def test_release_runner_keeps_a_host_bootstrap_log(self):
+        text = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
+
+        self.assertIn("assisted-runner.log", text)
+        self.assertNotIn(
+            'nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >/dev/null 2>&1 &',
+            text,
+        )
+
+    def test_assisted_launcher_waits_for_guest_handoff(self):
+        text = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
+
+        self.assertIn("Starting guest...", text)
+        self.assertIn("runner did not reach guest handoff", text)
+        self.assertIn("BOOTSTRAP_TIMEOUT", text)
+
     def test_assisted_foreground_keeps_runner_owned_and_observable(self):
         result = subprocess.run(
             [
