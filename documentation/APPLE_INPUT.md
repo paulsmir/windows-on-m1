@@ -23,6 +23,9 @@ The following foundation is implemented:
 - an ARM64 KMDF resource-validation scaffold maps the three translated MMIO
   resources, performs bounded read-only SPI/GPIO register sanity checks, and
   unmaps every partial allocation on failure or release;
+- the official pinned WDK NuGet toolchain builds the scaffold as a test-signed
+  ARM64 PE, passes strict INF/catalog verification, and publishes the complete
+  `.sys`/`.inf`/`.cat`/`.cer`/PDB package in GitHub Actions run `31697195976`;
 - portable tests lock the Apple SPI register layout, FIFO depth, 200 ms maximum
   transfer deadline, clock-divider calculation, and GPIO pin/group offsets.
 
@@ -57,8 +60,8 @@ advances in this order:
 1. read-only live ADT inventory;
 2. ACPI enumeration and resource validation;
 3. stage-2 mappings and level IRQ route;
-4. read-only SPI/GPIO register sanity checks (implemented; ARM64 WDK build and
-   live devnode validation pending);
+4. read-only SPI/GPIO register sanity checks and ARM64 WDK package build
+   (implemented; live devnode validation pending);
 5. bounded GPIO reset and one SPI boot transaction;
 6. descriptor discovery and transport-only packet capture;
 7. VHF keyboard;
@@ -85,9 +88,11 @@ Build the matching assisted diagnostic artifacts without installing them:
 scripts/build-development.sh --display physical --debug monitor
 ```
 
-The first hardware driver build is test-signed ARM64. Build and install it only
-after the corresponding implementation checkpoint supplies exact commands;
-the current resource-only scaffold is not useful to install.
+The first hardware driver package is now reproducibly built and test-signed as
+ARM64. Do not install it merely to obtain input: this checkpoint deliberately
+performs only resource validation and read-only register sanity checks. Live
+devnode validation remains the next reversible hardware checkpoint and must be
+performed with external USB input attached.
 
 The detailed design and implementation sequence are in
 `documentation/design/2026-08-09-native-apple-input.md` and
