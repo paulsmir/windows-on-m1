@@ -1,0 +1,57 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=HIDClass
+ClassGuid={745A17A0-74D3-11D0-B6FE-00A0C90F57DA}
+Provider=%ProviderName%
+DriverVer=08/13/2026,0.1.0.0
+CatalogFile=AppleInput.cat
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[Manufacturer]
+%ProviderName%=AppleInputModels,NTarm64
+
+[AppleInputModels.NTarm64]
+%AppleInput.DeviceDesc%=AppleInput_Install,ACPI\APPL0001
+
+[AppleInput_Install.NT]
+CopyFiles=AppleInput_CopyFiles
+
+[AppleInput_CopyFiles]
+AppleInput.sys
+
+[AppleInput_Install.NT.HW]
+AddReg=AppleInput_Hardware
+
+[AppleInput_Hardware]
+HKR,,LowerFilters,0x00010000,"Vhf"
+
+[AppleInput_Install.NT.Services]
+AddService=AppleInput,0x00000002,AppleInput_Service
+
+[AppleInput_Service]
+DisplayName=%AppleInput.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%13%\AppleInput.sys
+
+[AppleInput_Install.NT.Wdf]
+KmdfService=AppleInput,AppleInput_Wdf
+
+[AppleInput_Wdf]
+KmdfLibraryVersion=1.33
+
+[SourceDisksFiles]
+AppleInput.sys=1
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[Strings]
+ProviderName="Windows on M1 Project"
+DiskName="Apple Input Driver"
+AppleInput.DeviceDesc="Apple J313 Built-in Keyboard and Trackpad"
+AppleInput.ServiceDesc="Apple J313 SPI HID Transport"
