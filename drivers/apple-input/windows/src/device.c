@@ -1,7 +1,7 @@
 #include "apple_input_device.h"
 #include "j313_apple_input.generated.h"
 
-static const ULONGLONG AiExpectedBases[3] = {
+static const LONGLONG AiExpectedBases[3] = {
     J313_APPLE_INPUT_SPI_BASE,
     J313_APPLE_INPUT_AP_GPIO_BASE,
     J313_APPLE_INPUT_NUB_GPIO_BASE,

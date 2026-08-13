@@ -47,6 +47,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("AiDeviceParseResources", device)
         self.assertIn("STATUS_DEVICE_CONFIGURATION_ERROR", device)
         self.assertIn("J313_APPLE_INPUT_GUEST_VINTID", device)
+        self.assertIn("static const LONGLONG AiExpectedBases", device)
         self.assertIn("MmMapIoSpaceEx", device)
         self.assertIn("MmUnmapIoSpace", device)
         self.assertIn("READ_REGISTER", spi)
