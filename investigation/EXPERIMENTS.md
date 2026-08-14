@@ -3335,7 +3335,7 @@ of the new Windows dump before changing timer or vGIC policy again.
 
 ### EXP-20260814-044 — accepted-runtime A/B with only the proven SMP wake fix
 
-Status: planned; immutable historical artifact and manifest recorded before launch
+Status: rejected after hardware test
 Created (UTC): 2026-08-14T18:53:41Z
 
 Hypothesis: the recurrent freezes and EXP-043 cumulative high-IRQL watchdog are
@@ -3416,3 +3416,52 @@ least ten continuous responsive minutes and compare its timer/IAR/EOI cadence
 with EXP-043.  Recovery is the unchanged installed Stage 1 `b791225`; terminate
 only the verified foreground runner and confirm the proxy reports eight CPUs and
 8 GiB after any failed run.
+
+Hardware result (completed UTC 2026-08-14T19:00:59Z):
+- the exact artifact reported `m1n1 55531e9-dirty`; every secondary mailbox was
+  published, entered and consumed, and CPUs 0 through 7 emitted `CPU_ENTRY`.
+  NVMe became ready and xHCI enabled its route.  This confirms that EXP-015's
+  isolated SMP correction removes the old startup race.
+- Windows then remained on a byte-identical black framebuffer for more than two
+  minutes.  The last valid frame advanced from generation 40 to 118 while its
+  SHA-256 stayed
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`;
+  TCP/22 was absent and no autonomous bugcheck or reset appeared.
+- Two post-failure snapshots showed CPU0 and CPUs 3 through 7 at the same Windows
+  idle PCs with unchanged virtual IAR/EOI counters.  CPU3 remained at
+  `17005/17005`; CPU4 at `12189/12189`; CPU5 at `12357/12357`; CPU6 at
+  `12374/12374`; and CPU7 at `12260/12260`.  Only each requested physical
+  diagnostic IPI advanced.  CPUs 1 and 2 sampled newer timer acknowledgements,
+  but did not restore system progress.
+- CPU0 and CPUs 3 through 7 retained expired INTID 18 Active-only LRs
+  (`0x9020020000000012`) with `CNTV_CTL=0x5`, `vinj=1` and empty queues.  Their
+  `HCR_EL2` values ended in `0x039` or `0x0b9` and therefore lacked architectural
+  `TWI|TWE` (`bits 13|14`) in this plain historical build.  Windows could stay in
+  physical WFI even though a virtual timer level needed another delivery phase.
+- The old 16 KiB framebuffer event path began emitting the previously documented
+  checksum corruption only after the first diagnostic snapshot.  The valid
+  byte-identical black-frame failure preceded it, so observer corruption is not
+  the guest freeze cause.
+- SIGTERM targeted only verified `run_uefi.py` PID 4304.  Its documented
+  unhandled diagnostic return produced the printed guest exception and reboot;
+  that exception is recovery-induced, not the initiating freeze.  Stage 1
+  `b791225` then answered the proxy probe with eight CPUs and 8 GiB.
+
+Evidence:
+- raw UART/observer log
+  `investigation/artifacts/EXP-20260814-044/evidence/hv.log`, SHA-256
+  `3212a48c30fd0048a9d16168ad55f4e17132e374d719ad9c61be63d65862220c`;
+- final valid black framebuffer, SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`;
+- rendered PNG, SHA-256
+  `880a9a589539b7d9aaeeca93fe1eb9662b5e17e95f2c753d688e72975162af2e`;
+- framebuffer metadata, SHA-256
+  `ac12ee80e79e99ca08af64199f036538eaff34a592173e4e77e04b8d5b5bef75`.
+
+Verdict: rejected, and the post-`55531e9` regression hypothesis is disproved.
+The intermittent freeze exists in the accepted source contract itself.  The A/B
+instead exposes a build-contract defect: documentation claims the accepted
+checkpoint makes WFI/WFE trapping non-optional, but source keeps `TWI|TWE` behind
+`DIAG_TRAP_WFX=1`, and the recorded monitor/plain build does not set that flag.
+The next single-variable control is the same exact runtime with only
+`DIAG_TRAP_WFX=1`; no timer, vGIC, Mu, Windows or input behavior may change.
