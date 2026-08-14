@@ -3468,7 +3468,7 @@ The next single-variable control is the same exact runtime with only
 
 ### EXP-20260814-045 — make the documented WFI/WFE trap policy real
 
-Status: planned; clean build, artifact and manifest recorded before launch
+Status: rejected after hardware test
 Created (UTC): 2026-08-14T19:04:01Z
 
 Hypothesis: EXP-044 freezes because its plain build omits `HCR_EL2.TWI|TWE`, so
@@ -3537,3 +3537,52 @@ invariant panic rejects the hypothesis.  If it passes, require at least ten
 responsive minutes and preserve the Windows crash dump before any stress.  The
 unchanged recovery is installed Stage 1 `b791225`, verified with eight CPUs and
 8 GiB after every failed run.
+
+Hardware result (completed UTC 2026-08-14T19:09:09Z):
+- preflight printed `HV: diagnostic WFI/WFE traps active
+  HCR=0x32480046039`; all secondary mailbox operations completed, CPUs 0 through
+  7 entered, and NVMe and xHCI reached runtime.  No WFI/WFE invariant panic
+  occurred, so the single build variable was present and remained set.
+- Windows autonomously advanced to the disk-check `1 second(s)` frame, SHA-256
+  `b70e58f84d430c02c6113ca5822e662b25beb0ca1681c8c3489d8bd02855161e`,
+  then remained byte-identical for more than two minutes with no TCP/22,
+  bugcheck or reset.  This met the recorded failure criterion without any host
+  input.
+- the first post-failure snapshot showed every sampled HCR retaining bits
+  `0x6000`.  Nevertheless CPUs 1 through 6 still had a Pending-only or
+  Active-only INTID 18 LR; CPUs 4 through 6 specifically retained
+  `0x9020020000000012` Active-only timers while the comparator was far overdue.
+  Those CPUs also had one Pending SGI0, `vinj=1` and one fewer IAR/EOI than queue
+  entry.  Trapping idle therefore brings the core to EL2 but the accepted vGIC
+  path still does not reflect an asserted level into an already Active timer LR.
+- the large queue/IAR/EOI counts (about 45k on CPUs 4 through 7 and 158k-311k on
+  CPUs 0 through 3) show that treating every guest WFI/WFE as a no-op creates a
+  high exception cadence, but counters remained nearly balanced and no physical
+  self-IPI code exists in this artifact.  This is not sufficient as a standalone
+  production correction.
+- one diagnostic snapshot was requested only after failure.  The old 16 KiB
+  observer then corrupted the live raw frame, so the preserved PNG is the last
+  valid pre-snapshot `1 second(s)` frame while the preserved raw is explicitly a
+  post-snapshot transport artifact.  SIGTERM targeted verified PID 9193 and the
+  resulting printed exception is the documented recovery path, not the freeze.
+  Stage 1 `b791225` again answered with eight CPUs and 8 GiB.
+
+Evidence:
+- `investigation/artifacts/EXP-20260814-045/evidence/hv.log`, SHA-256
+  `51c9758f9fae4d931dc0d6e464051e79e1918f31bbd51ce65a844cbfde41a714`;
+- valid pre-snapshot rendered frame, SHA-256
+  `9707a54053bd499e9c68552a64d3a7a10a24eecaa5204f0ac5827635fc82ef04`;
+- post-snapshot raw observer artifact, SHA-256
+  `38ee2af1b06f88da8169712e1585dd5e1f39f037e0cd28aa61d555038cfbb327`;
+- post-snapshot metadata, SHA-256
+  `72f097d231d87871ff4ce42cd460cc14ad436b398c45f37f1ec397dc33bde07f`.
+
+Verdict: rejected as a standalone fix, while confirming one half of the final
+contract.  Mandatory TWI/TWE alone cannot correct a timer LR already Active when
+the physical level reasserts.  EXP-039/040 proved the complementary level-state
+correction (`Active + asserted -> Active+Pending`), and EXP-041 through EXP-043
+proved that adding physical self-IPIs creates either a storm or cumulative
+high-IRQL watchdog.  The next implementation must combine mandatory WFI/WFE
+trapping with live timer level synchronization and remove the entire physical
+self-IPI wake experiment.  This is an architectural correction, not a fourth
+variation of that rejected wake mechanism.
