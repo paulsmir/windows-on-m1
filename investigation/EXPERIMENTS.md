@@ -2005,6 +2005,111 @@ Exact launch command:
   --chainload --foreground
 ```
 
+### EXP-20260814-038 result — LR state preserved and timer stall classified
+
+Completed (UTC): 2026-08-14T16:43:09Z
+Status: confirmed diagnostic contract and confirmed root cause
+
+The exact pre-recorded artifact reported m1n1 `3aeef41`; all eight CPUs, NVMe,
+guest runtime and xHCI reached their checkpoints.  Windows then remained on the
+eight-second disk-check countdown while observer generations advanced from 43
+to 64 and the complete framebuffer remained byte-identical at SHA-256
+`53b7558e0a93482b4a10570e2efa73a5f1e01eff24278b703965a6106150efa8`.
+TCP/22 remained unavailable.  Two explicit diagnostic boundaries advanced the
+guest from that timer-dependent screen to black, after which observer generations
+continued to 120 with a second byte-identical framebuffer SHA-256
+`6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`.
+
+The bounded dump change succeeded: every CPU record contains `lrc=8` and
+`lr0..lr7`.  Two late snapshots more than ten seconds apart independently show:
+- every CPU host tick counter advanced, queues were empty and bhl was not stuck;
+- `CNTV_CTL=0x5` and `vinj=1` on the stalled vCPUs: the virtual timer remained
+  enabled and expired while m1n1 still considered delivery owned;
+- CPUs 1, 2, 4, 6 and 7 held pure Pending INTID 18 LRs
+  (`0x5020020000000012`) and HCR.VI was asserted where sampled;
+- CPUs 0, 3 and 5 held Active-only INTID 18 LRs
+  (`0x9020020000000012`) with HCR.VI clear.  Those Active-only values and stale
+  timer IAR/EOI timestamps persisted across both late snapshots;
+- therefore the accepted latch's `timer_*_injected == true` branch incorrectly
+  treats any live LR as sufficient.  It never reflects the still-asserted timer
+  level into the architecturally required Active+Pending state, so EOI cannot
+  expose a next Pending interrupt and Windows can wait indefinitely for time.
+
+Preserved evidence:
+- `investigation/artifacts/EXP-20260814-038/evidence/hv.log`, SHA-256
+  `3429fb6cb7bceb28844b62808d09a1fa9a0f0a4ebd1fa16db1eeecb683882188`;
+- `frame-a.raw` and `frame-b.raw`, both SHA-256 `53b7558e...`;
+- `frame-c.raw`, `frame-d.raw` and `final-frame.raw`, all SHA-256
+  `6992296c...`;
+- `final-meta.json`, SHA-256
+  `f344216fc22668196f7ee46be62cd423122702fe6d6e8d4489d982ebe0eebec1`.
+
+Verdict: EXP-037's ambiguous timer-delivery hypotheses are resolved.  The
+freeze is not caused by Apple Input, observer transport, a global hypervisor
+lock, host-tick loss, LR scarcity or a missing timer LR.  It is a violated
+level-sensitive PPI state transition in m1n1's vGIC owner: asserted+Active must
+become Active+Pending, and deassertion must withdraw that Pending state.  The
+diagnostic formatting change is hardware-validated; it is not itself the fix.
+
+Recovery succeeded after the recorded SIGTERM boundary.  Installed Stage 1
+`b791225` answered the live probe and reported eight CPUs and 8.0 GiB DRAM.
+
+### EXP-20260814-039 — synchronize live virtual-timer LR level
+
+Status: planned
+Created (UTC): 2026-08-14T16:43:09Z
+
+Hypothesis: synchronizing only the live virtual-timer INTID 18 LR with the
+sampled CNTV assertion will close the demonstrated stall without restoring the
+rejected 1-ms recovery source, changing CPU cadence, or replacing the accepted
+timer queue/latch architecture.  Asserted+Active becomes Active+Pending;
+deasserted+Active+Pending becomes Active.  Pending, Active+Pending and unrelated
+LRs remain unchanged.
+
+Source-first contract inspected:
+- live J313 EXP-038 records above are the primary evidence and show the same
+  Active-only INTID 18 on CPUs 0, 3 and 5 twice while `CNTV_CTL=0x5`;
+- Arm GICv3/v4 Software Overview DAI0492 section 4.2 defines Pending, Active and
+  Active+Pending and requires a level-sensitive source to retain its asserted
+  state until the peripheral deasserts; the Generic Timer is a per-PE PPI;
+- current m1n1 `src/hv_exc.c` masks Apple's virtual-timer FIQ route after expiry,
+  then skips LR mutation whenever `timer_v_injected` is already true;
+  `src/hv_vgic_diag.c` already has a tested, currently production-unused
+  `hv_vgic_diag_sync_level_lr()` transition primitive;
+- historical m1n1 `2ead84d` proved Active+Pending and advancing IAR/EOI on all
+  CPUs in EXP-019, but it also replaced the queue, both INTID 17 and 18 paths,
+  deactivation drains and ownership model.  EXP-039 does not restore that broad
+  patch;
+- Mu exposes the standard Arm Generic Timer/GIC contract to Windows; Microsoft
+  documents that Windows uses built-in Arm Generic Timer support through GTDT.
+  Mu, ACPI and Windows do not own m1n1's LR state machine and will not change;
+- the Asahi/Linux side uses the architectural per-CPU Generic Timer/GIC PPI
+  contract and contains no J313-specific substitute for virtual LR ownership.
+
+Ownership: Windows programs CNTV and acknowledges/EOIs INTID 18; m1n1 owns the
+Apple FIQ route, synthetic vGIC LR state, VI output and recovery from LR state;
+Mu only describes the standard timer.  The correction therefore belongs in
+m1n1's local timer-to-vGIC boundary.
+
+Single changed runtime variable relative to EXP-038:
+- reflect CNTV asserted/deasserted level into an already-live INTID 18 LR using
+  the existing four-state helper.  Do not change INTID 17, deferred queue
+  ownership, tick rates, fast-return policy or diagnostics.
+
+TDD checkpoint: first require the production virtual-timer asserted branch to
+synchronize a live LR even while `timer_v_injected` is true and require the
+deasserted branch to withdraw a pending bit; observe RED on `3aeef41`.  Add a
+mutation-sensitive host test for Active+asserted -> Active+Pending and
+Active+Pending+deasserted -> Active, then implement the smallest call-site and
+run focused, complete nested and root suites.
+
+Hardware checkpoint after a clean RELEASE `APPLE_INPUT=0` build: boot through
+the disk-check countdown without a diagnostic boundary, reach login and TCP/22,
+then maintain continuously changing UI/time and IAR/EOI progress for at least
+ten minutes.  Any static frame over two minutes, timer Active-only while
+`CNTV_CTL=0x5`, `0x101`, `0x133`, reset or pause over five seconds rejects the
+fix.  Recovery remains the unchanged Stage 1 and EXP-038 artifacts.
+
 ### EXP-20260814-038 pre-launch continuation and ledger correction
 
 Recorded (UTC): 2026-08-14T16:33:41Z
