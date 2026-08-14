@@ -3586,3 +3586,88 @@ high-IRQL watchdog.  The next implementation must combine mandatory WFI/WFE
 trapping with live timer level synchronization and remove the entire physical
 self-IPI wake experiment.  This is an architectural correction, not a fourth
 variation of that rejected wake mechanism.
+
+### EXP-20260814-046 — trapped idle plus architectural timer level
+
+Status: planned; artifact recorded before hardware launch
+Created (UTC): 2026-08-14T19:18:19Z
+
+Hypothesis: the freeze requires both halves measured independently in EXP-040
+and EXP-045.  If every guest WFI/WFE enters EL2 and `hv_update_fiq()` reflects an
+asserted CNTV level into an already-live INTID 18 LR, then Windows will receive
+the next virtual timer after EOI without a physical self-IPI.  The guest will
+pass the disk-check and black-frame stalls, avoid 0x133 P1=1, and remain
+responsive for at least ten minutes.
+
+Single changed variable relative to EXP-045: replace its historical runtime with
+committed m1n1 `a20425c60786533bd3061eba1cd7bc331608d086`, which retains the
+hardware-observed live timer level correction, makes the already-tested TWI/TWE
+idle contract unconditional, and removes the complete EXP-041/042/043 timer
+self-IPI mechanism.  Mu, Windows, NVMe, xHCI, display, CPU/memory layout, absent
+Apple Input mapping, firmware hash and monitor launch profile are unchanged.
+
+Primary contract inspected before implementation:
+- live J313 traces from EXP-040 showed CNTV asserted with INTID 18
+  Active+Pending and HCR.VI, and one external physical boundary caused Windows
+  IAR/EOI progress; EXP-044 showed sleeping cores without TWI/TWE; EXP-045 showed
+  trapped entries but stale Active-only timer LRs; EXP-041 through EXP-043
+  rejected all three physical self-IPI variants;
+- Asahi timer/interrupt and J313 device-tree behavior, current m1n1 exception,
+  timer, GXF-HCR, SMP and vGIC implementations, current Mu ACPI/no-AINP exposure,
+  and the Microsoft DPC watchdog contract were reviewed in the preceding source
+  audit.  Microsoft 0x133 P1=1 means cumulative prolonged execution at or above
+  DISPATCH_LEVEL, matching the rejected EXP-043 outcome;
+- m1n1 owns HCR idle trapping, physical timer FIQ, live LR state, HCR.VI and
+  recovery.  Mu owns enumeration and remains unchanged.  Windows owns CNTV
+  programming, idle, IAR/EOI and scheduling.  No timer DMA exists, and the
+  unenumerated Apple Input driver owns none of this path.
+
+Implementation and software checkpoint:
+- nested implementation commit
+  `a20425c60786533bd3061eba1cd7bc331608d086`; root contract commit
+  `fbb6c01afaedc11a7f0d54bc93ebb1dc4f73e790`; Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- root, nested m1n1 and Mu tracked diff SHA-256 are all the empty diff
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- RED source tests first failed on optional `HV_DIAG_TRAP_WFX` and the physical
+  self-IPI latch/flush.  Focused timer/WFX/vGIC tests, the complete nested host
+  suite, the complete root suite (258 tests), RFC 4180 change-ledger checks and a
+  clean freestanding build all passed;
+- exact build command:
+
+```sh
+cd /Users/pavel/public_windows/m1n1_windows
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" make clean
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" make -j8 APPLE_INPUT=0
+```
+
+Artifacts:
+- `investigation/artifacts/EXP-20260814-046/m1n1.macho`, 917504 bytes,
+  SHA-256 `9ec416751707c0a0dcc33c43e047682514a44be8d31b0fe631998afd3baf0eca`;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict DEBUG/monitor/both `MANIFEST.json`, SHA-256
+  `a8369f5a9551bd0e096b87a9d6821edfa7c2255fd4a9cb6e9f3ce13e392d6e75`,
+  passed profile and assisted-chainload role verification; compiler is Homebrew
+  clang 22.1.8 and `build_cfg.h` contains only `HV_DISABLE_APPLE_INPUT`.
+
+Exact launch command:
+
+```sh
+scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-046/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-046/m1n1.macho \
+  --display both --debug monitor --chainload --foreground
+```
+
+Smallest falsifiable checkpoint: preflight prints guest WFI/WFE traps with
+HCR bits `0x6000`; all eight CPUs enter once; NVMe and xHCI reach runtime; and
+Windows autonomously passes both earlier static frames.  Any missing CPU,
+two-minute byte-identical frame, self-IPI growth without virtual IAR/EOI,
+bugcheck/reset or HCR-policy panic rejects the hypothesis.  If the checkpoint
+passes, require at least ten continuous minutes of changing framebuffer or
+responsive SSH/UI and no 0x133.  Evidence paths are
+`investigation/artifacts/EXP-20260814-046/evidence/`.  Recovery is the unchanged
+installed Stage 1 `b791225`; terminate only the verified foreground runner, then
+confirm the proxy reports eight CPUs and 8 GiB.
