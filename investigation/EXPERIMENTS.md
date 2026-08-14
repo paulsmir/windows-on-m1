@@ -2296,3 +2296,28 @@ TDD and implementation checkpoint before artifact build:
 The exact build now being run is the previously recorded clean Docker RELEASE
 build.  No hardware launch is authorized until its artifact and manifest hashes
 are appended below.
+
+Recorded artifact before launch:
+- root source commit `cd4cc923e2acfe09d6f2c3279f8cc52555ce04af`, m1n1
+  `0cde15ea76e84e64b8effb37bec4308c2f211c59`, Mu `63942398`;
+- `investigation/artifacts/EXP-20260814-036/m1n1.macho`, SHA-256
+  `8f545c136ef77ca7226b66dbf6c16e0e035b0052380fd0743e9487785947afcb`;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `38b85ceb72eb507064a4a791c1f69553675bd4b13739eb2d9d3e9573e3876dea`;
+  strict release/display-both/debug-off role verification passed and records
+  clean source revisions;
+- build completed successfully; emitted warnings are pre-existing and unrelated
+  to the single added call.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug off \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-036/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-036/m1n1.macho \
+  --chainload --foreground
+```
