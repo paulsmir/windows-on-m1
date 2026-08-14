@@ -2261,6 +2261,32 @@ diagnostics can perturb timing.  A `0x101`, `0x133`, reset or exception rejects
 the diagnostic as a clean reproduction.  Recovery remains installed Stage 1
 and the immutable EXP-039 artifacts.
 
+Recorded artifact before launch (UTC 2026-08-14T17:01:58Z):
+- clean Docker monitor build completed from m1n1
+  `ca6ab37ce0dbbb7c18da40102887aebb58cc9dbb` with `APPLE_INPUT=0`; warnings
+  are the pre-existing signedness/unused-variable families recorded by prior
+  monitor builds;
+- root manifest commit `9ff74abb2503defb3cc129f35c06424cec9fcac4`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`, all tracked sources clean;
+- `investigation/artifacts/EXP-20260814-040/m1n1.macho`, SHA-256
+  `2556c430863a1e8b40715e91d1f8b37ef4c6a7ee1e956665df52bd903b102517`;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- `MANIFEST.json`, SHA-256
+  `9986ab43b07a4f53bcde08dece1a037b67fb3d9ed052f41128b4cb54a4a979d3`;
+  strict DEBUG/monitor/both and artifact-role verification passed.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug monitor \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-040/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-040/m1n1.macho \
+  --chainload --foreground
+```
+
 ### EXP-20260814-038 pre-launch continuation and ledger correction
 
 Recorded (UTC): 2026-08-14T16:33:41Z
