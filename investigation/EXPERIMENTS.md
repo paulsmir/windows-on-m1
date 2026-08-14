@@ -3465,3 +3465,75 @@ checkpoint makes WFI/WFE trapping non-optional, but source keeps `TWI|TWE` behin
 `DIAG_TRAP_WFX=1`, and the recorded monitor/plain build does not set that flag.
 The next single-variable control is the same exact runtime with only
 `DIAG_TRAP_WFX=1`; no timer, vGIC, Mu, Windows or input behavior may change.
+
+### EXP-20260814-045 — make the documented WFI/WFE trap policy real
+
+Status: planned; clean build, artifact and manifest recorded before launch
+Created (UTC): 2026-08-14T19:04:01Z
+
+Hypothesis: EXP-044 freezes because its plain build omits `HCR_EL2.TWI|TWE`, so
+Windows can remain in physical WFI with an expired Active-only virtual timer LR.
+Compiling the byte-identical accepted runtime plus SMP fix with only
+`DIAG_TRAP_WFX=1` will enforce the already-documented WFI/WFE trap invariant on
+all boot and secondary HCR writers and restore autonomous timer progress without
+a physical self-IPI or polling-rate change.
+
+Single changed variable relative to EXP-044:
+- build flag `DIAG_TRAP_WFX`: absent -> `1`.  Source diff, timer rates, vGIC LR
+  algorithms, SMP correction, Mu, Windows, storage, USB, display, input absence,
+  CPU/memory layout and launch profile are unchanged.
+
+Source contract and ownership:
+- `src/arm_cpu_regs.h` defines `HCR_TWI=BIT(13)` and `HCR_TWE=BIT(14)`;
+- `src/hv.c` applies and verifies those bits in initial HCR, guest preflight,
+  secondary HCR state and every `hv_write_hcr()` only when
+  `HV_DIAG_TRAP_WFX` is compiled.  `Makefile` maps that macro only from
+  `DIAG_TRAP_WFX=1`;
+- the accepted platform document says this policy is non-optional, but the old
+  build pipeline enables it only for `debug=full`, not `debug=monitor`.  EXP-044
+  directly measured HCR without bits 13/14 on every frozen core;
+- m1n1 owns WFI trapping and virtual-timer wake.  Windows still owns comparator,
+  idle and IAR/EOI; Mu and the unbound Apple Input driver remain uninvolved.
+  Timer DMA does not exist.
+
+Software/build checkpoint:
+- the complete historical nested host suite passed with the exact EXP-044 source
+  diff before build;
+- exact build command:
+
+```sh
+cd /private/tmp/wom1-root-5d827ba.WCgcVM/m1n1_windows
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" make clean
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" make -j8 DIAG_TRAP_WFX=1
+```
+
+- `build/build_cfg.h` contains exactly `#define HV_DIAG_TRAP_WFX`; compiler is
+  Homebrew clang 22.1.8;
+- runtime source remains root `5d827ba6b7f50daf538df0a167ed123c9a1f5731`,
+  m1n1 `55531e9d9443e2543e172ed4c7f6ef8a7173a54e` plus SMP diff SHA-256
+  `a474fde3e9bbb12ec17e2bab217a36eafce1df584aedb99f6d1a282937c64f25`,
+  and Mu `9dccb0133f244f2e4de7e3862dcb9f0ef7ba4776`;
+- current ledger root `764612f12584789abbefbd66ec1f660eb0da3622` and
+  current tracked root/m1n1/Mu diffs are empty.
+
+Artifacts:
+- `investigation/artifacts/EXP-20260814-045/m1n1.macho`, SHA-256
+  `a4d4a85af2ec08d288fe42c86244f735fadff66e0bb9f1cfdba89772bd396655`,
+  size 917504 bytes;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict DEBUG/monitor/both `MANIFEST.json`, SHA-256
+  `3f16d164e9975fdcee1a5a743af5f5017cb3831083cf071c655947fb53bc27ab`,
+  records compiler plus `DIAG_TRAP_WFX=1` and passed both artifact-role checks.
+
+Exact launch command is EXP-044's matching root `run-assisted.sh` with only both
+artifact paths changed to `EXP-20260814-045`.
+
+Smallest checkpoint: preflight must print active diagnostic WFI/WFE traps with
+HCR bits `0x6000` set on boot and secondary CPUs, all eight CPUs must enter, and
+the framebuffer must autonomously change from EXP-044's black hash without a
+host SIGINT.  A two-minute identical frame, watchdog/reset, missing CPU or trap
+invariant panic rejects the hypothesis.  If it passes, require at least ten
+responsive minutes and preserve the Windows crash dump before any stress.  The
+unchanged recovery is installed Stage 1 `b791225`, verified with eight CPUs and
+8 GiB after every failed run.
