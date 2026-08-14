@@ -2191,6 +2191,76 @@ EOI/deactivation and physical wake boundary; it must not restore the rejected
 
 Finalized (UTC): 2026-08-14T16:55:05Z.
 
+### EXP-20260814-040 — observe corrected timer level at the release freeze
+
+Status: planned
+Created (UTC): 2026-08-14T17:00:05Z
+
+Hypothesis: EXP-039 rejected the sufficiency of the narrow INTID 18 level
+correction, but its RELEASE profile could not prove which LR state survived at
+the frozen disk-check countdown.  A monitor build of the exact same runtime
+source will show either (a) `Active+Pending` now persists and the remaining
+failure is after level synchronization, most likely at guest EOI/physical idle
+wake, or (b) `Active-only` persists and the new production call site was not
+reached for the sampled path.
+
+Source-first contract inspected before the run:
+- live EXP-038 J313 records show expired `CNTV_CTL=0x5` with both Pending-only
+  `0x502...12` and Active-only `0x902...12` LRs, empty queues, advancing host
+  ticks and idle-loop Windows PCs; diagnostic IPIs temporarily advanced the
+  guest;
+- EXP-039 used m1n1 `ca6ab37` and froze for over two minutes at the same
+  countdown while observer generations advanced, but RELEASE intentionally
+  omitted LR/IAR/EOI telemetry;
+- current `src/hv_exc.c` maps asserted+Active INTID 18 to Active+Pending and
+  current `src/hv_vgic.c` maps EOI Active+Pending to Pending before recomputing
+  HCR.VI; it deliberately does not signal VI while the LR is still Active;
+- upstream Asahi m1n1 keeps Apple's physical virtual-timer FIQ route enabled
+  until the comparator asserts, then masks the route while reflecting timer
+  state to the guest.  The Windows fork additionally owns synthetic vGIC LR and
+  HCR.VI delivery;
+- Mu's J313 DSDT contains only commented-out `_LPI` methods, while its GTDT/MADT
+  expose the architectural Arm timer/GIC.  Windows therefore uses its inbox Arm
+  timer/HAL path; Apple Input remains absent and cannot own CPU wake.
+
+Ownership: Windows owns CNTV programming and IAR/EOI; m1n1 owns Apple timer FIQ
+routing, LR state, synthetic VI and the physical wake boundary; Mu owns only
+enumeration.  The smallest falsifiable checkpoint is two complete per-CPU
+snapshots at least ten seconds apart during the reproduced static frame.
+
+Single changed experimental variable relative to EXP-039:
+- RELEASE/debug-off -> DEBUG/monitor, enabling sampled counters and complete LR
+  snapshots.  Source commit `ca6ab37`, timer/vGIC policy, cadence, disabled
+  recovery timer, disabled Apple Input, Mu/no-AINP firmware, topology, storage,
+  xHCI and display layout remain unchanged.
+
+Pre-run provenance: root `298e2c3b6396099af0c215e21acc743e0b64586d`,
+m1n1 `ca6ab37ce0dbbb7c18da40102887aebb58cc9dbb`, Mu
+`63942398cccbd98127cfecbd7f936af99c837d6f`; all three tracked diffs are empty
+at SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+Exact planned build:
+
+```sh
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make clean
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make -j8 APPLE_INPUT=0
+```
+
+After the clean build, copy `m1n1.macho` and the unchanged EXP-039 firmware to
+`investigation/artifacts/EXP-20260814-040`, create and strictly verify a
+DEBUG/monitor/both manifest, and append all hashes before launch.  The assisted
+launch will use `--observed --debug monitor` and the same proxy/vUART devices.
+
+Expected checkpoint: reproduce the byte-identical countdown or later freeze,
+capture two complete LR banks and counter deltas, then request the final
+snapshot/recovery.  Failure to reproduce is inconclusive because monitor
+diagnostics can perturb timing.  A `0x101`, `0x133`, reset or exception rejects
+the diagnostic as a clean reproduction.  Recovery remains installed Stage 1
+and the immutable EXP-039 artifacts.
+
 ### EXP-20260814-038 pre-launch continuation and ledger correction
 
 Recorded (UTC): 2026-08-14T16:33:41Z
