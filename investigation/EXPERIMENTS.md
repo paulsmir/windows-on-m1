@@ -1713,3 +1713,47 @@ Software evidence:
 - clean `RELEASE=1 APPLE_INPUT=0` build completed and produced m1n1 SHA-256
   `0ed330e5da17e0c64b35c2ce46efd41985c405a163bc416c19cf455528e63c77`;
 - `build_cfg.h` contains both `RELEASE` and `HV_DISABLE_APPLE_INPUT`.
+
+Hardware result: observation-incomplete.  The clean artifact reached all eight
+Windows CPUs, NVMe controller reinitialisation and xHCI discovery without a
+recorded reset or EL2 exception.  The known Windows address did not answer on
+the network during the bounded interval, but the physical-only profile provided
+no independent framebuffer evidence to distinguish a slow boot from a frozen
+logo, spinner, login screen or desktop.  This run is not used to accept or
+reject the runtime hypothesis.  All subsequent problem investigation must use
+the guarded `--observed` launcher mode and `display=both`.
+
+### EXP-20260814-032 — zero-cost release runtime with mandatory framebuffer observation
+
+Status: planned; launcher and software verified before artifact creation
+Created (UTC): 2026-08-14
+
+Purpose: repeat EXP-031 without changing m1n1, Mu, Windows, CPU cadence, timer
+delivery, storage or USB.  The sole profile change is `physical` -> `both`, so
+the same guest framebuffer is consumed by the internal DCP scanout and the
+asynchronous USB viewer.  This closes the Windows-logo-to-network blind spot.
+
+Process guard:
+- canonical launch uses `--observed`, which defaults to `display=both`, starts
+  the viewer at `http://127.0.0.1:8766/`, and rejects an explicit non-`both`
+  display;
+- code commit `4abdf3996b319b7dd498b734a0a8591d922522f1`;
+- RED test rejected the previously unknown `--observed` option; GREEN focused
+  test and complete public launcher suite 34/34 passed.
+
+Unchanged artifact payloads:
+- m1n1 commit `f397d93abbebb0444df731b55148318652db3228`, SHA-256
+  `0ed330e5da17e0c64b35c2ce46efd41985c405a163bc416c19cf455528e63c77`;
+- Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- `RELEASE=1`, `APPLE_INPUT=0`, debug off, CPU0 5000 Hz and secondaries 100 Hz.
+
+Expected checkpoint: the viewer visibly progresses through firmware, Windows
+logo/spinner, login and desktop; frame generation remains live during animation;
+physical display shows the same surface; network becomes available; pointer and
+SSH remain continuously responsive without a BSOD, reset or long pause.
+
+Failure classification: a stale viewer generation while the physical screen is
+also unchanged is a guest/transport freeze; a live viewer with a stale physical
+panel is a DCP issue; a stale viewer with a changing physical panel is a USB
+observation failure and does not classify Windows runtime behavior.
