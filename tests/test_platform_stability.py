@@ -143,8 +143,14 @@ class HcrMutationPolicyTests(unittest.TestCase):
         )
         hv = (source_root / "hv.c").read_text(encoding="utf-8")
         self.assertIn("void hv_write_hcr(u64 val)", hv)
-        self.assertIn("val = hv_wfx_apply_hcr(val);", hv)
-        self.assertIn("msr(HCR_EL2, hv_wfx_apply_hcr(info->hcr));", hv)
+        self.assertIn(
+            "val = hv_wfx_apply_pending_hcr(val, !!(val & HCR_VI));", hv
+        )
+        self.assertIn(
+            "msr(HCR_EL2, hv_wfx_apply_pending_hcr(info->hcr, "
+            "!!(info->hcr & HCR_VI)));",
+            hv,
+        )
 
 
 class AssistedSupervisorPolicyTests(unittest.TestCase):

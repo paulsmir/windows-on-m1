@@ -135,7 +135,12 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("HV_DIAG_TRAP_WFX", hv)
         self.assertNotIn("HV_DIAG_TRAP_WFX", exc)
         self.assertNotIn("HV_DIAG_TRAP_WFX", M1N1_MAKEFILE.read_text())
-        self.assertIn("HCR_TWI | HCR_TWE", hv)
+        initial_hcr = hv.split("hv_write_hcr(HCR_API", 1)[1].split("HCR_VM);", 1)[0]
+        write_hcr = function_body(hv, "void hv_write_hcr(u64 val)")
+        self.assertNotIn("HCR_TWI | HCR_TWE", initial_hcr)
+        self.assertIn(
+            "hv_wfx_apply_pending_hcr(val, !!(val & HCR_VI))", write_hcr
+        )
         self.assertIn("hv_update_fiq();", wfi)
         self.assertIn("hv_wfx_resume_pc", wfi)
 
