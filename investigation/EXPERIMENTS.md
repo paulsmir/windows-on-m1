@@ -2125,6 +2125,34 @@ ten minutes.  Any static frame over two minutes, timer Active-only while
 `CNTV_CTL=0x5`, `0x101`, `0x133`, reset or pause over five seconds rejects the
 fix.  Recovery remains the unchanged Stage 1 and EXP-038 artifacts.
 
+Pre-launch artifact record (UTC 2026-08-14T16:48:22Z):
+- root `fc0a7b922f99beef34c5f42d934ea6af4386e99a`, m1n1
+  `ca6ab37ce0dbbb7c18da40102887aebb58cc9dbb`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; strict manifest records clean
+  tracked source;
+- exact clean build: Docker `make clean`, then
+  `make -j8 RELEASE=1 APPLE_INPUT=0`; build succeeded with pre-existing warnings
+  plus the same signedness warning family as the adjacent bounded LR scans;
+- `investigation/artifacts/EXP-20260814-039/m1n1.macho`, SHA-256
+  `74bbaf481875897e79b673b2813de40e351c019f08a6cd00abf7ece14099c554`;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- `MANIFEST.json`, SHA-256
+  `3ac93f65dd7a4a696ed7c70bc618b0f219609d077bdcd4cb1806c6b4768a4f5f`;
+  release/display-both/debug-off and both artifact roles verified;
+- recovery: installed Stage 1 plus immutable EXP-038 artifacts.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug off \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-039/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-039/m1n1.macho \
+  --chainload --foreground
+```
+
 ### EXP-20260814-038 pre-launch continuation and ledger correction
 
 Recorded (UTC): 2026-08-14T16:33:41Z
