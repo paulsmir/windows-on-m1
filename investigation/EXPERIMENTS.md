@@ -2885,3 +2885,112 @@ Exact launch command:
   --m1n1 investigation/artifacts/EXP-20260814-036/m1n1.macho \
   --chainload --foreground
 ```
+
+### EXP-20260814-041 — wake a newly deliverable timer VI with one physical edge
+
+Status: planned; implementation and software verification complete
+Created (UTC): 2026-08-14T18:11:50Z
+
+Hypothesis: EXP-040 established that Windows can remain indefinitely in its idle
+path with a priority-deliverable Pending INTID 18 LR and HCR.VI asserted, while
+one physical IPI immediately causes a fresh timer IAR/EOI cycle and guest
+progress.  Publishing HCR.VI followed by exactly one local physical IPI on the
+clear-to-set edge of a deliverable architectural timer VI will supply the missing
+J313 wake event without changing timer cadence, polling, trapping WFI, or
+repeatedly interrupting a core while VI remains asserted.
+
+Primary evidence and implementations inspected:
+- live J313 EXP-040 telemetry: CPUs 1, 3, 4, 5 and 7 retained Pending-only INTID
+  18 (`0x5020020000000012`) with HCR.VI set, empty queues, no LR shortage and
+  advancing host ticks; a physical diagnostic IPI produced new timer IAR/EOI
+  timestamps and framebuffer progress;
+- current fork `m1n1_windows/src/hv_exc.c`, `src/hv_vgic.c`, `src/smp.c` and
+  `src/cpu.c`: the fork owns Apple timer FIQ capture, LR state, HCR.VI synthesis,
+  local physical IPI send/acknowledgement and the EL2-to-guest return boundary;
+- current upstream Asahi m1n1 `src/hv_exc.c`: Apple timer FIQ routing and the
+  physical exception boundary establish that a physical event enters EL2 before
+  guest virtual interrupt delivery; no source was copied;
+- current Mu J313 MADT/GTDT/DSDT generation: firmware exposes the architectural
+  Arm GIC/timer contract to Windows and does not own runtime timer delivery;
+- Arm GICv3/v4 architecture guidance: a Pending virtual interrupt in an LR and
+  the virtual interrupt signal describe virtual distributor/CPU-interface state,
+  while physical core wake is a separate implementation boundary;
+- Microsoft ACPI system-description guidance and the generated Mu tables:
+  Windows consumes the firmware-described architectural timer/GIC path; AINP and
+  APPL0001 are absent from the artifact, so the unfinished Apple Input driver
+  cannot bind in this experiment.
+
+Observed ownership contract:
+- Mu/ACPI owns enumeration; Windows programs CNTV, enters idle/WFI and performs
+  virtual IAR/EOI; m1n1 owns physical timer routing, vGIC LR/HCR state and the
+  physical wake needed to re-enter the guest;
+- DMA is not involved in architectural timer delivery; storage, xHCI, DART and
+  display mappings remain unchanged;
+- Windows owns guest power policy, but m1n1 must turn a newly deliverable virtual
+  timer into a hardware-visible wake edge on this Apple core;
+- recovery remains the installed Stage 1 plus the immutable EXP-040 firmware and
+  m1n1 artifacts.
+
+Differences reconciled: Asahi/Linux handles its physical timer and idle wake in a
+native kernel interrupt path; upstream m1n1 provides the physical EL2 boundary;
+this Windows fork additionally virtualizes the GIC and must bridge HCR.VI to a
+sleeping guest core.  Mu can describe the timer but cannot repair that runtime
+EL2 wake contract, and a Windows input driver is outside the path.
+
+Single changed runtime variable relative to EXP-040:
+- when `hv_vgic3_update_vi()` finds Pending INTID 17 or 18 priority-deliverable
+  and the previous HCR.VI value is clear, it writes HCR.VI, executes ISB, then
+  sends one local physical self-IPI.  An already asserted VI, a non-timer IRQ,
+  a masked timer and Active+Pending do not issue a wake.
+
+Unchanged: 5000/100-Hz host cadence, timer comparator programming, live-LR level
+synchronization, LR EOI transitions, recovery timer disabled, secondary fast
+return, Mu/no-AINP firmware, Windows image, all eight CPUs, NVMe, xHCI, display
+layout and observed monitor profile.
+
+TDD and software checkpoint:
+- RED: the new helper test failed to compile before the edge predicate existed,
+  and the root integration test failed because `hv_vgic3_update_vi()` contained
+  no timer edge wake;
+- GREEN: the helper covers the true edge and all four suppressed cases; the
+  integration contract requires HCR.VI write -> ISB -> local IPI ordering;
+- focused root suites passed 49/49, the complete nested host suite passed, the
+  complete root suite passed 258/258 in the project environment, and both diff
+  checks passed;
+- implementation commit `fa42daad5a4e047ed6c9e854f89410bd6b5d723e`;
+  root contract/ledger commit `7466592e8011b521fea0ac9b008f5b7eca7b169d`;
+  Mu `63942398cccbd98127cfecbd7f936af99c837d6f`; all tracked diff hashes are
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+Exact planned clean build:
+
+```sh
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make clean
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make -j8 APPLE_INPUT=0
+```
+
+After the clean build, copy `m1n1.macho` and the unchanged EXP-040 firmware to
+`investigation/artifacts/EXP-20260814-041`, create and strictly verify a
+DEBUG/monitor/both manifest, and append all SHA-256 values before launch.  The
+planned launch is:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug monitor \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-041/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-041/m1n1.macho \
+  --chainload --foreground
+```
+
+Smallest falsifiable hardware checkpoint: at the first previously freezing
+countdown/black/login frame, require autonomous framebuffer change and fresh
+timer IAR/EOI activity without a manually requested diagnostic IPI.  Acceptance
+then requires all eight CPUs, NVMe and xHCI alive plus continuous UI and TCP/22
+progress for at least ten minutes with no pause over five seconds.  A
+byte-identical frame for two minutes, dead network, bugcheck/reset, repeated
+physical-wake storm or long pause rejects the hypothesis.  On failure, capture
+two complete snapshots and frames, terminate only the verified runner PID, and
+confirm Stage 1 recovery before any further change.
