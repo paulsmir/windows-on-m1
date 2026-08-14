@@ -2287,6 +2287,52 @@ Exact launch command:
   --chainload --foreground
 ```
 
+Hardware result (UTC 2026-08-14T17:08:16Z):
+- the exact monitor artifact reported m1n1 `ca6ab37`; CPUs 0 through 7 entered,
+  NVMe and xHCI reached runtime, and no bugcheck or initiating EL2 exception was
+  captured;
+- observer generation advanced from 30 to 71 while two full 16,384,000-byte
+  frames remained byte-identical at SHA-256
+  `49d3595690a1571dc937594effd1f7a81846c1b3b8a3aa199e55915495f2e165`;
+  TCP/22 was absent, confirming the visible countdown was a guest freeze rather
+  than a stopped observer;
+- after a diagnostic physical IPI boundary, the guest advanced from that
+  countdown to a black frame, SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`.
+  This repeats EXP-035/038's wake-assisted progress;
+- the first useful complete snapshot proved the EXP-039 correction executes:
+  CPU0 and CPU2 contained INTID 18 `Active+Pending` LRs
+  (`0xd020020000000012`), while CPUs 1, 3, 4, 5 and 7 contained Pending-only
+  `0x5020020000000012` with HCR.VI asserted; queues were empty and no LR
+  shortage existed;
+- over the next 38.84 seconds, CPU1's host tick count advanced 22378 -> 26260
+  at the expected approximately 100-Hz cadence, while its Pending INTID 18 and
+  guest SGI lifecycle counts remained unchanged.  Other secondaries showed the
+  same live host/idle-Pending pattern;
+- each requested physical diagnostic IPI moved timer state: the immediately
+  following records show fresh INTID 18 IAR/EOI timestamps, and CPU2 changed
+  from Active+Pending to Pending before the next stall.  The guest then returned
+  to its idle path with another correctly represented Pending timer;
+- complete evidence is
+  `investigation/artifacts/EXP-20260814-040/evidence/hv.log`, SHA-256
+  `729dda825353a4da58be72d80e5a16a42311b3cf79288a93079ecd612cdb78aa`;
+  `frame-a.raw` and `frame-b.raw` have the countdown hash above, while
+  `frame-c.raw` has the black-frame hash;
+- SIGTERM targeted only the verified `run_uefi.py` PID after the failure
+  criterion.  The final guest exception followed the requested recovery reboot
+  and is not the initiating failure.  Stage 1 `b791225` then responded with all
+  eight CPUs and 8.0 GiB DRAM.
+
+Verdict: confirmed for the missing physical wake classification.  EXP-039's
+level correction is effective and must remain, but LR+HCR.VI alone does not
+reliably cause an Apple core in the Windows idle/WFI path to enter the virtual
+IRQ.  A physical IPI boundary consumes the pending timer and advances the guest.
+The next correction will issue one local physical IPI only on the false-to-true
+edge of a priority-deliverable timer VI.  It will not poll, trap/skip WFI, signal
+Active+Pending, alter timer cadence, or change Windows/Mu/input behavior.
+
+Finalized (UTC): 2026-08-14T17:08:16Z.
+
 ### EXP-20260814-038 pre-launch continuation and ledger correction
 
 Recorded (UTC): 2026-08-14T16:33:41Z
