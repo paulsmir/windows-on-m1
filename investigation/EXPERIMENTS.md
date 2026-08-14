@@ -2039,6 +2039,60 @@ accepted timer policy.
 
 Finalized (UTC): 2026-08-14T16:15:48Z.
 
+### EXP-20260814-037 — classify the later lock-screen stall with monitor snapshots
+
+Status: planned
+Created (UTC): 2026-08-14T16:15:48Z
+
+Hypothesis: the remaining EXP-036 lock-screen stall is one of three distinguishable
+states: (a) a deliverable Pending timer LR with HCR.VI asserted but no physical idle
+wake, (b) an expired guest timer with no live/queued delivery, or (c) vCPUs blocked
+behind the global hypervisor lock.  A normal monitor build of the exact EXP-036
+runtime code will publish enough lock-free per-CPU state to select among these
+without changing timer/vGIC policy.
+
+Single changed experimental variable relative to EXP-036:
+- RELEASE diagnostics off -> monitor diagnostics on, enabling sampled per-CPU
+  snapshots and diagnostic counters but not verbose synchronous hot-path tracing.
+
+Unchanged: m1n1 source commit `0cde15e`, restored fast-boundary VI recomputation,
+5000/100-Hz cadence, accepted timer latch/repend path, disabled recovery timer,
+Apple Input disabled, Mu/no-AINP firmware, eight CPUs, storage, xHCI and both
+display consumers.  This is a diagnostic classification run, not a performance
+acceptance build; any observer effect will be recorded.
+
+Source contracts inspected:
+- `src/hv_runtime_diag.h`: non-RELEASE enables counters and sampled snapshots;
+  `HV_RUNTIME_DIAG_VERBOSE` remains absent, so timer/vGIC console formatting stays
+  disabled;
+- `src/hv_exc.c`: snapshot records host CNTP, guest CNTP/CNTV, VM timer routing,
+  HCR/ICH state, ISR, timer latches/queues, SGI lifecycle, last IAR/EOI, all live
+  LRs and breadcrumb; dump reads records without acquiring bhl;
+- EXP-026 already validated that these counters distinguish host timer firing from
+  guest delivery, while its 1-ms recovery policy is not present here.
+
+Exact planned clean build:
+
+```sh
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make clean
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local \
+  make -j8 APPLE_INPUT=0
+```
+
+Planned artifact directory:
+`investigation/artifacts/EXP-20260814-037`; record a DEBUG/monitor/both manifest,
+artifact SHA-256 and exact revisions before launch.  The assisted command will use
+`--observed --debug monitor` and the same ports, firmware and foreground lifecycle
+as EXP-036.
+
+Expected checkpoint: reproduce the later static lock-screen frame, capture two
+snapshots at least 10 seconds apart, then classify by deltas.  Failure to reproduce
+is inconclusive because diagnostics can perturb timing; a dump with no current
+per-CPU records also rejects the instrumentation.  Recovery remains Stage 1 and
+the immutable EXP-036 artifacts.
+
 Expected checkpoint: with valid observer framing, Windows must advance beyond
 the EXP-033 frozen framebuffer, reach the lock/login screen, acquire the known
 network address and remain continuously responsive for at least ten minutes.
