@@ -2006,6 +2006,76 @@ Exact launch command:
 ```
 
 Hardware result:
+- exact recorded monitor artifact launched and reported m1n1 `0cde15e`; all
+  eight CPUs, NVMe, guest-runtime cadence and xHCI route checkpoints completed;
+- Windows entered automatic disk checking after the preceding forced recovery,
+  then the observed framebuffer became black and remained byte-identical for
+  more than three minutes at SHA-256
+  `cdbfca1d7d5370ff64fc999c807efa85048ad951c56dd573eb7ffdbf263ae08a`;
+  the known TCP/22 endpoint remained unavailable;
+- three diagnostic boundaries produced current records for all eight CPUs.
+  Between samples every CPU's host tick arm/fire counters advanced and guest PCs
+  moved; bhl reported only CPU0's expected print-time ownership, excluding a
+  global EL2 deadlock;
+- CPUs 2-5 continued updating timer INTID 18 IAR/EOI timestamps.  CPUs 0, 1, 6
+  and 7 repeatedly showed `CNTV_CTL=0x5` (enabled and expired), `vinj=1`, the
+  virtual-timer physical FIQ route disabled, HCR.VI clear, empty queues and stale
+  timer IAR/EOI timestamps.  This localizes the late stall to an owned virtual
+  timer delivery whose wake/acknowledgement state no longer progresses on those
+  vCPUs;
+- the monitor dump's single formatted CPU record exceeded the console formatting
+  budget and truncated exactly after `marker`, before `lrc/lr0..lr7`.  Therefore
+  the preserved run cannot distinguish a Pending-only LR from Active or
+  Active+Pending, the distinction required before changing delivery semantics;
+- evidence: `investigation/artifacts/EXP-20260814-037/evidence/hv.log`, SHA-256
+  `f9a3c438013ce5c89a2ccae381d21e37d05bdcc949caa07512fc8d82012c9bba`;
+  `stall.raw`, SHA-256
+  `cdbfca1d7d5370ff64fc999c807efa85048ad951c56dd573eb7ffdbf263ae08a`;
+  `final-meta.json`, SHA-256
+  `ce215f1157e552373a5a6fad561526aae71defc9b32ceb0a36e82aa1a3111a76`;
+- explicit recovery succeeded and the Stage-1 probe again verified eight CPUs
+  and 8 GiB DRAM.
+
+Verdict: hypothesis (c), global-lock deadlock, is rejected; host timer loss is
+also rejected.  The run confirms a per-vCPU virtual-timer delivery stall but is
+inconclusive between hypotheses (a) and (b) because the LR payload was truncated.
+Do not alter timer state handling until that final state is captured.
+
+Finalized (UTC): 2026-08-14T16:28:00Z.
+
+### EXP-20260814-038 — preserve LR bank in bounded monitor snapshot records
+
+Status: planned
+Created (UTC): 2026-08-14T16:28:00Z
+
+Hypothesis: splitting the existing watchdog CPU record into two bounded `printf`
+formatting calls while keeping one newline-delimited logical record will preserve
+`lrc/lr0..lr7` without changing sampled data or guest runtime behavior.  Repeating
+the monitor run will then determine whether EXP-037's stalled `vinj=1`, VI-clear
+vCPUs own a Pending, Active, Active+Pending, or no timer LR.
+
+Single changed variable relative to EXP-037:
+- diagnostic snapshot formatting only: CPU/timer/IRQ fields and LR fields are
+  formatted in two bounded calls and terminated by the same single newline.
+
+Unchanged: all runtime code and policies, snapshot cadence/content, m1n1 timer and
+vGIC delivery, host tick rates, Apple Input disabled, Mu, Windows, CPUs, NVMe,
+xHCI and displays.  The formatting executes only after an explicit diagnostic
+request and cannot be a production fix.
+
+Falsifiable software checkpoint: update the focused source contract first so the
+summary must end after `marker` without a newline and a second call must emit
+`lrc/lr0..lr7` plus the newline; observe RED on `0cde15e`, implement only the
+split, then run the focused/root and complete nested suites.  The existing
+line-oriented stability parser must continue accepting a synthetic split-call
+logical record.
+
+After the implementation commit, build the same clean non-RELEASE
+`APPLE_INPUT=0` monitor artifact, record all hashes and launch command before
+hardware use.  Capture two complete LR-bearing snapshots at the reproduced stall
+and recover to Stage 1.
+
+Hardware result:
 - exact recorded artifacts launched and m1n1 reported `0cde15e`; all eight CPUs,
   NVMe and xHCI discovery initialized normally;
 - unlike EXP-035, the guest advanced without any host diagnostic request from the
