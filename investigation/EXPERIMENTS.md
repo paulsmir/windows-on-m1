@@ -3589,7 +3589,7 @@ variation of that rejected wake mechanism.
 
 ### EXP-20260814-046 — trapped idle plus architectural timer level
 
-Status: planned; artifact recorded before hardware launch
+Status: rejected after hardware test
 Created (UTC): 2026-08-14T19:18:19Z
 
 Hypothesis: the freeze requires both halves measured independently in EXP-040
@@ -3671,3 +3671,49 @@ responsive SSH/UI and no 0x133.  Evidence paths are
 `investigation/artifacts/EXP-20260814-046/evidence/`.  Recovery is the unchanged
 installed Stage 1 `b791225`; terminate only the verified foreground runner, then
 confirm the proxy reports eight CPUs and 8 GiB.
+
+Hardware result (completed UTC 2026-08-14T19:26:43Z):
+- preflight printed `HV: guest WFI/WFE traps active HCR=0x32480046039`;
+  every secondary mailbox completed, CPUs 0 through 7 entered, NVMe became ready,
+  and xHCI enabled its route.  No HCR-policy panic, guest bugcheck or reset
+  occurred;
+- the framebuffer published at least 62 complete generations but remained
+  byte-identical to the EXP-044 black frame for more than two minutes, SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`.
+  The known `192.168.1.35` TCP/22 endpoint did not appear;
+- the first post-failure snapshot showed Pending-only INTID 18
+  (`0x5020020000000012`) on CPUs 1 and 3 through 7, Active+Pending INTID 18 on
+  CPU0, HCR.VI asserted, open VPMR, empty software queues and expired CNTV on
+  those CPUs.  This proves both proposed halves were active at the failure;
+- a second snapshot more than 30 seconds later showed every virtual queue,
+  IAR and EOI counter exactly unchanged: CPU1 `151471`, CPU3 `106606`, CPU4
+  `19875`, CPU5 `19072`, CPU6 `19731`, CPU7 `17244`, and CPU0 `266852`.
+  Host ticks advanced substantially and each diagnostic boundary added exactly
+  one physical IPI to the secondary CPUs, but neither boundary caused a virtual
+  acknowledgement or guest progress;
+- the static WFI/WFE policy therefore creates a tight idle-return regime while
+  a software-signalled virtual IRQ remains pending.  Correct LR level and a
+  permanently asserted trap are jointly insufficient; the physical self-IPI
+  path remains absent and no storm occurred;
+- SIGTERM targeted only verified `run_uefi.py` PID 19460.  USB re-enumerated and
+  installed recovery Stage 1 `b791225` reported eight CPUs and 8 GiB.
+
+Evidence:
+- final raw UART/observer log
+  `investigation/artifacts/EXP-20260814-046/evidence/hv.log`, SHA-256
+  `38118a67274d3dfb219cdb665012f605c5cf878674445f538e01478aef437ca4`;
+- valid pre-snapshot raw framebuffer, SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`;
+- pre-snapshot metadata, SHA-256
+  `e3c061aa4116c64d9322da82ff4b3f1482ab90ee037848aba1b61318ee1d2256`;
+- rendered pre-snapshot PNG, SHA-256
+  `16d4591d9bba12f935e2fa088b788c4b7937c78fb17fc99742d29004fe0eef55`.
+
+Verdict: rejected.  The combined static policy does not restore the EL2-to-guest
+virtual IRQ boundary.  It also reconfirms EXP-022's warning that continuously
+skipping architectural idle is not a production contract.  The next smallest
+falsifiable correction is dynamic: preserve real WFI/WFE while no virtual IRQ is
+deliverable, and set TWI/TWE only together with HCR.VI.  A physical timer FIQ can
+then wake the core normally; if Windows attempts to sleep again while VI is
+pending, exactly that WFI/WFE is trapped and returned to the guest.  No polling,
+physical self-IPI, timer-rate or LR-state change is justified.
