@@ -3206,3 +3206,65 @@ and replace only the HCR-derived edge with a per-CPU deliverability latch that
 resets when the timer ceases to be Pending and deliverable.
 
 Finalized (UTC): 2026-08-14T18:34:32Z.
+
+### EXP-20260814-043 — one deferred wake per deliverable Pending interval
+
+Status: planned; implementation and software verification complete
+Created (UTC): 2026-08-14T18:38:41Z
+
+Hypothesis: EXP-042 proved that an IPI deferred past `hv_exc_exit()` survives the
+EL2 return boundary, but HCR.VI is not a stable delivery identity and generated
+over 25000 physical FIQs while one Pending timer remained unacknowledged.  A
+per-CPU latch driven by the computed condition `signal && timer_signal` will emit
+one deferred physical wake when a Pending INTID 17/18 first becomes
+priority-deliverable, suppress all repeats while that exact condition persists,
+and re-arm only after IAR, masking or LR removal ends the interval.
+
+Primary evidence/source contract:
+- EXP-042 snapshots show Pending-only INTID 18, empty queues and HCR.VI alongside
+  CPU1 IPI 22065 -> 48374 with IAR/EOI fixed at 14516, and CPU5 IPI 19961 ->
+  45404 with IAR/EOI fixed at 9286;
+- `m1n1_windows/src/hv_vgic.c` already computes exact Pending state, VMCR group
+  enable, PMR and timer INTID before publishing VI; that computed deliverability
+  is the authoritative lifecycle input, not a reread of HCR.VI;
+- `src/hv_vgic_diag.c` now models the two-state transition independently, while
+  `src/hv_exc.c` retains EXP-042's proven final-FIQ deferred placement;
+- J313 live state, upstream Asahi m1n1 physical timer path, Arm GIC guidance, Mu
+  MADT/GTDT/DSDT and Microsoft ACPI expectations are unchanged from EXP-040
+  through EXP-042.  No external implementation is copied.
+
+Ownership remains m1n1 for physical FIQ, LR/VI, wake identity and recovery;
+Windows for comparator, idle and IAR/EOI; Mu for enumeration.  Timer DMA does not
+exist.  The input driver and its absent ACPI node remain outside this path.
+
+Single changed runtime variable relative to EXP-042:
+- the wake edge source changes from the observed HCR.VI bit to a per-CPU latch of
+  continuous priority-deliverable Pending timer state.  Deferred placement, IPI
+  primitive and every timer/vGIC policy input remain unchanged.
+
+TDD/software checkpoint:
+- RED: the host test failed on the missing transition type/function and the root
+  contract failed on the missing per-CPU deliverability state;
+- GREEN: false->true defers once, true->true suppresses, loss of deliverability
+  resets, and the next false->true defers again;
+- vGIC/platform suites passed 37/37, complete nested host tests passed, complete
+  root tests passed 258/258 and diff checks passed;
+- implementation commit `bce59a28ff72ae750bee52de87c2c3ff03593943`, root
+  contract/ledger commit `74d64f0c62477b47b7acd1f6b3e46c7eb9366ae0`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; tracked diffs are empty at
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+Exact planned build and launch are EXP-042's clean Docker monitor build and
+assisted observed command with only EXP-043 paths changed.  Freeze m1n1, the
+unchanged no-AINP firmware and a strict DEBUG/monitor/both manifest before use.
+Recovery remains Stage 1 and the immutable earlier artifacts.
+
+Smallest checkpoint: autonomously pass both EXP-041's `6 second(s)` frame and
+EXP-042's next disk-check frame.  Two idle snapshots must show IAR/EOI progress
+or stable physical IPI counts for an unchanged Pending interval; an IPI-only
+increase greater than one rejects the latch.  Final acceptance is login/TCP/22
+and ten continuous minutes with all eight CPUs, NVMe, xHCI and UI responsive and
+no pause over five seconds.  A two-minute frame, bugcheck/reset or exception is
+failure.  After this third bounded wake-correction experiment, any rejection
+requires an architectural reassessment rather than another incremental wake
+patch.
