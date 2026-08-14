@@ -3717,3 +3717,63 @@ deliverable, and set TWI/TWE only together with HCR.VI.  A physical timer FIQ ca
 then wake the core normally; if Windows attempts to sleep again while VI is
 pending, exactly that WFI/WFE is trapped and returned to the guest.  No polling,
 physical self-IPI, timer-rate or LR-state change is justified.
+
+### EXP-20260814-047 — trap only a sleep attempted with VI pending
+
+Status: planned; artifact recorded before hardware launch
+Created (UTC): 2026-08-14T19:31:04Z
+
+Hypothesis: EXP-046 failed because TWI/TWE converted every Windows idle cycle
+into a tight synchronous-exception loop.  Coupling TWI/TWE exactly to HCR.VI will
+retain architectural WFI/WFE while idle, let the existing physical timer FIQ
+wake the Apple core, and trap only a subsequent sleep attempted after a virtual
+IRQ is deliverable.  That bounded trap window will produce fresh IAR/EOI and let
+Windows pass the earlier black and disk-check stalls without a physical IPI.
+
+Single changed variable relative to EXP-046: HCR idle policy changes from static
+TWI/TWE to `TWI|TWE iff VI`.  Live CNTV level synchronization, WFI/WFE handler,
+timer rates, LR/priority algorithms, SMP, Mu, Windows, NVMe, xHCI, display,
+absent Apple Input mapping, CPU/memory layout and launch profile are unchanged.
+
+Ownership and source contract:
+- EXP-046 supplied the live observation: Pending INTID 18 and VI persisted while
+  every IAR/EOI counter remained fixed under static traps; EXP-040 supplied the
+  complementary observation that an ordinary physical boundary wakes the no-trap
+  guest.  No new register value, interrupt number or power sequence is guessed;
+- m1n1 owns HCR, WFI/WFE trapping, the physical timer FIQ and LR/VI publication.
+  Windows retains idle, CNTV, IAR/EOI and scheduler ownership.  Mu/no-AINP and all
+  hardware drivers remain unchanged.  Recovery remains Stage 1 `b791225`.
+
+Software/build checkpoint:
+- m1n1 `f7297e948600371604c7935b0e62fa0333f1ee51`; root
+  `b0b4ee5a7d60364026f2844067ee68edc57c7dc7`; Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; all three tracked diff hashes are
+  the empty SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- RED helper and source-contract tests failed before implementation; focused
+  WFX/timer/vGIC tests, complete nested host suite, complete root suite (258),
+  change-ledger tests, diff checks and clean freestanding build passed;
+- exact build command is EXP-046's `make clean` then
+  `make -j8 APPLE_INPUT=0` with the same Homebrew clang 22.1.8.
+
+Artifacts:
+- `investigation/artifacts/EXP-20260814-047/m1n1.macho`, SHA-256
+  `6bec6ee34341d49be861cce7829b105aee24da28ccabe2f769e12c5aa471c7c6`;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict DEBUG/monitor/both `MANIFEST.json`, SHA-256
+  `ec0a7537c663823b7acdd2088aa9cade17548c7d19cdf3d7b2560ce8d554a863`,
+  passed the assisted-chainload role check; `build_cfg.h` contains only
+  `HV_DISABLE_APPLE_INPUT` and build tag is `f7297e9`.
+
+Exact launch command is EXP-046's command with both artifact paths changed to
+`EXP-20260814-047`.
+
+Smallest checkpoint: guest preflight HCR must lack `0x6000` because VI is clear;
+all eight CPUs, NVMe and xHCI must reach runtime; Windows must autonomously pass
+the black frame.  A two-minute static frame, bugcheck/reset or invariant panic
+rejects the hypothesis.  If a later pause occurs, one snapshot must show TWI/TWE
+present exactly on CPUs with VI and absent on CPUs without VI.  Acceptance still
+requires login/TCP/22 and ten continuous responsive minutes without a physical
+self-IPI.  Evidence is stored under
+`investigation/artifacts/EXP-20260814-047/evidence/`.
