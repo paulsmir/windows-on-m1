@@ -157,6 +157,15 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertIn("host_pctl=", dump)
         self.assertIn("tick_arm=", dump)
 
+    def test_watchdog_snapshot_formats_lr_bank_without_overflowing_cpu_record(self):
+        exc = HV_EXC.read_text()
+        dump = function_body(exc, "void hv_watchdog_snapshot_dump(void)")
+
+        self.assertIn('"marker=0x%lx ",', dump)
+        self.assertIn('printf("lrc=%lu lr0=0x%lx lr1=0x%lx lr2=0x%lx "', dump)
+        self.assertIn('lr7=0x%lx\\n",', dump)
+        self.assertNotIn('"marker=0x%lx lrc=%lu', dump)
+
     def test_release_build_skips_snapshot_hot_path_before_sampling(self):
         exc = HV_EXC.read_text()
         sample = function_body(exc, "void hv_watchdog_snapshot_tick(struct exc_info *ctx)")

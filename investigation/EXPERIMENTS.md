@@ -2075,6 +2075,17 @@ After the implementation commit, build the same clean non-RELEASE
 hardware use.  Capture two complete LR-bearing snapshots at the reproduced stall
 and recover to Stage 1.
 
+TDD and implementation checkpoint:
+- RED: the focused source-contract test failed because the CPU record still
+  formatted `marker`, `lrc` and all eight LRs in one oversized call;
+- GREEN: the summary call now ends after `marker` with no newline, and a second
+  bounded call appends `lrc/lr0..lr7` and the sole newline, preserving the exact
+  logical record consumed by the line-oriented parser;
+- focused vGIC/platform-stability suites passed 35/35, the complete nested C host
+  suite passed, and both diffs passed checks;
+- m1n1 implementation commit
+  `3aeef41261ee51d7eaa922721773c0d199a44780`; no runtime path changed.
+
 Hardware result:
 - exact recorded artifacts launched and m1n1 reported `0cde15e`; all eight CPUs,
   NVMe and xHCI discovery initialized normally;
