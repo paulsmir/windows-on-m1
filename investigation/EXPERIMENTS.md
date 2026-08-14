@@ -1780,8 +1780,9 @@ zero-cost release hypothesis.
 
 ### EXP-20260814-033 — bounded framebuffer events with unchanged guest runtime
 
-Status: ready for assisted hardware run
+Status: observer transport confirmed; guest runtime rejected after reproduced freeze
 Created (UTC): 2026-08-14
+Completed (UTC): 2026-08-14T15:30:00Z
 
 Hypothesis: the framebuffer observer loses CDC framing because its maximum
 16360-byte proxy event leaves only 24 bytes below the 16-KiB DWC3 transfer
@@ -1841,3 +1842,315 @@ use trustworthy evidence.
 Failure criterion: any checksum error, parser desynchronisation, stale web
 frame while the physical display continues, EL2 exception, reset, or inability
 to reach the same Windows state as EXP-032.
+
+Hardware result:
+- the recorded hashes and manifest passed preflight from a freshly probed Stage 1;
+  m1n1 `72b2aab` chainloaded once and remained the sole proxy/event owner;
+- the J313 hardware reached the guest handoff, all seven secondary PSCI entries,
+  NVMe ready and the xHCI route-enable checkpoint with Apple Input disabled;
+- the bounded observer remained correctly framed throughout the run.  Metadata
+  advanced from generation 16/frame 15 to generation 75/frame 74 without a
+  checksum error, a zero-wire checksum, a NUL run or parser desynchronisation;
+- the published framebuffer itself remained byte-identical at CRC32
+  `0x99875e96` for more than two minutes and showed the Windows boot logo and
+  spinner.  The known guest address `192.168.1.35` answered neither ICMP nor a
+  bounded TCP/22 probe;
+- no Windows bugcheck, EL2 exception, spontaneous reset or PSCI reset occurred
+  before recovery.  Physical display, internal input, RDP and Windows CPU
+  enumeration were not independently observed in this clean run and are not
+  inferred;
+- SIGTERM requested the documented final snapshot/reboot recovery.  The snapshot
+  reported `HV WATCHDOG BHL: owner=0 count=1`, the same expected CPU0-owned state
+  classified by EXP-023; it is not evidence of a leaked global lock.  The target
+  returned to Stage 1 and a post-recovery probe succeeded.
+
+Evidence:
+- `investigation/artifacts/EXP-20260814-033/evidence/freeze-fb-info.json`,
+  SHA-256 `390909f418fa05ef030c6bea97f83a5a46a870f7266bc6bd585b9a9db44e14ff`;
+- `investigation/artifacts/EXP-20260814-033/evidence/freeze-fb.raw`, SHA-256
+  `cdbfca1d7d5370ff64fc999c807efa85048ad951c56dd573eb7ffdbf263ae08a`;
+- `investigation/artifacts/EXP-20260814-033/evidence/freeze-frame.png`, SHA-256
+  `ab3689cd9b2a4a97059eb4e548e9462f492254573169e30509bdb7b4e02f6340`.
+
+Verdict: confirmed for the observer-transport hypothesis and rejected as a
+usable Windows runtime.  Keeping complete proxy events below 4 KiB eliminates
+the EXP-032 CDC framing failure, while the unchanged release guest still freezes
+with a correct, continuously published but byte-identical Windows framebuffer.
+This independently excludes Apple Input (compiled out), a stale physical-only
+DCP surface, and observer corruption as the root cause.  The next experiment
+must retain the validated 4-KiB observer while collecting a bounded, zero-hot-path
+CPU/vGIC/timer state transition at the first unchanged-frame interval.
+
+### CORRECTION-20260814-003 — EXP-033 did not fully exclude Apple Input
+
+EXP-033 compiled `HV_DISABLE_APPLE_INPUT` into m1n1, which skipped the
+Apple-input ADT preflight, stage-2 identity mappings and physical-to-virtual IRQ
+route.  It did **not** remove `AINP` from the unchanged Mu DSDT: firmware still
+reported `_HID=APPL0001` and `_STA=0x0F`.  Therefore an already installed
+Windows driver could still bind and perform its prepare-hardware MMIO reads.
+The sentence claiming that EXP-033 independently excluded Apple Input is
+superseded by this correction.  Observer validation remains valid.
+
+### EXP-20260814-034 — true AINP-enumeration exclusion control
+
+Status: confirmed build-pipeline defect; no hardware launch
+Created (UTC): 2026-08-14T15:38:05Z
+Completed (UTC): 2026-08-14T15:45:00Z
+
+Hypothesis: the regression that began with the J313 keyboard/trackpad work is
+caused by Mu advertising `AINP` as present before the Apple SPI3 power, clock,
+pinctrl and reset contract is owned by any layer.  An installed Windows
+`ACPI\\APPL0001` driver can consequently bind and read SPI/GPIO MMIO even when
+m1n1 was built with `APPLE_INPUT=0`.  Removing only the ACPI enumeration should
+allow the otherwise identical EXP-033 guest to progress past the frozen Windows
+logo.
+
+Single changed variable relative to EXP-033:
+- Mu DSDT no longer includes `J313AppleInput.asl.inc`; m1n1, timer/vGIC policy,
+  CPU count, Windows disk, NVMe, xHCI, display and observer are unchanged.
+
+Source-first evidence inspected before build:
+- live J313 ADT/register read is the first planned diagnostic command below;
+- Asahi Linux `arch/arm64/boot/dts/apple/t8103.dtsi` describes SPI3 at
+  `0x23510c000`, IRQ 617, a 120-MHz clock, SPI3 pinctrl and `ps_spi3` power
+  domain; `t8103-j313.dts` adds the SPI HID transport, AP GPIO 195 and active-low
+  nub GPIO interrupt 13;
+- Asahi `drivers/spi/spi-apple.c` enables the controller clock before register
+  initialization and initializes/reset FIFOs before registering the bus;
+- current m1n1 `src/hv_apple_input.c` observes ADT, maps the three MMIO ranges
+  and registers a level route, but does not own power, clock, pinctrl or reset;
+- current Mu `DSDT.asl` unconditionally includes `AINP` with `_STA=0x0F`;
+- current Windows AppleInput driver binds `ACPI\\APPL0001` and reads SPI/GPIO
+  registers in `EvtDevicePrepareHardware`; it has no KMDF interrupt object or
+  runtime DPC loop;
+- official Arm generic-timer guidance, Mu GTDT/AIC sources and Microsoft
+  `0x101`/`0x133` documentation were also checked because earlier failures were
+  timer-shaped; Mu's only change since the pre-input commit is this DSDT include.
+
+Observed ownership contract before the experiment:
+- Mu owns ACPI enumeration and must not report a device usable until its
+  dependencies are prepared;
+- m1n1 currently owns stage-2 visibility and IRQ virtualization only;
+- Windows would own SPI transactions, HID protocol and runtime recovery after
+  a supported prepare/start contract exists;
+- no current layer owns SPI3 power/clock/pinctrl/reset preparation for Windows.
+
+Source contract before artifact build:
+- root `/Users/pavel/public_windows`, branch
+  `codex/canonical-public-release`, commit
+  `c324955b87b0d4a04c26ba1ac4eb26961c011995`; tracked source outside the
+  append-only ledgers is unchanged;
+- m1n1 commit `72b2aab8a6089b2099242f3bdb4a8cfd08e1113b`, clean tracked
+  diff SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- Mu commit `63942398cccbd98127cfecbd7f936af99c837d6f`, one experimental
+  tracked DSDT diff SHA-256
+  `60a5e432ff53016969382c268fa2ca62eeaba9dcb6b3529db61e2f3a5583a41f`;
+  existing nested checkout markers are not source changes.
+
+Live evidence before build (read-only, Stage 1):
+- the first diagnostic fetched the complete live ADT but stopped after using a
+  nonexistent `ProxyUtils.read32` method; it made no controller-MMIO access;
+- the corrected read observed `/arm-io/spi3` compatible `spi-1,spimc`, range
+  `0x23510c000+0x4000`, child compatible `hid-transport,spi`, AP GPIO phandle
+  106/pin 195, nub GPIO parent phandle 108 and interrupt pin 13;
+- PMGR device `SPI3` resolves to pstate register `0x23b700258`, value
+  `0x000000ff`: desired `0xf`, actual `0xf` (active) in the inherited Stage-1
+  state;
+- direct SPI controller reads were deliberately skipped: the PMGR observation
+  is sufficient to disprove a simple already-powered-off explanation without
+  risking an unowned peripheral access.  The narrower remaining hypothesis is
+  Windows binding/prepare activity or a later ownership transition, not merely
+  an SPI3 domain that was off at this sample.
+
+Exact build command:
+
+```sh
+STANDALONE_BUILD_MU_ONLY=1 ./scripts/build-standalone.sh \
+  --debug-build --display both --debug off
+```
+
+Build checkpoint: the first sandboxed attempt failed before build because Docker
+API access was denied.  The approved retry compiled a new `DSDT.aml` without
+`APPL0001`, but EDK2's incremental dependency graph left the final FD at its old
+August 8 timestamp and old SHA-256 `0dba13c...`; that cached FD is rejected and
+must not be launched.  The planned retry adds only Stuart's supported `--clean`
+flag to the same DEBUG Mu build:
+
+```sh
+docker run --rm -e STANDALONE_IN_CONTAINER=1 \
+  -v /Users/pavel/public_windows:/work -w /work/mu \
+  windows-on-m1-build:local \
+  /work/.build/mu-venv/bin/stuart_build --clean \
+  -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py \
+  TOOL_CHAIN_TAG=CLANGPDB TARGET=DEBUG 'BLD_*_AIC_BUILD=FALSE'
+```
+
+Planned artifact:
+- directory `investigation/artifacts/EXP-20260814-034`;
+- unchanged m1n1 copied from EXP-033, SHA-256
+  `aff6ffc54594ac41b2841fc4bada47c0a39e908bfcba15f74bf788ec5ca0b932`;
+- experimental `J313_EFI.fd` and manifest hashes will be recorded after build
+  and before launch;
+- recovery artifact: unchanged ESP/Stage 1 plus EXP-033 assisted artifacts.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug off \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-034/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-034/m1n1.macho \
+  --chainload --foreground
+```
+
+Expected checkpoint: with valid observer framing, Windows must advance beyond
+the EXP-033 frozen framebuffer, reach the lock/login screen, acquire the known
+network address and remain continuously responsive for at least ten minutes.
+
+Failure criterion: the same byte-identical Windows-logo interval for two minutes,
+loss of observer framing, EL2 exception/reset, Windows bugcheck, or any new
+failure before the EXP-033 checkpoint.
+
+Planned evidence: `investigation/artifacts/EXP-20260814-034/evidence/`, viewer
+metadata/frame, launcher/UART log, bounded ICMP/TCP checks and any Windows dump.
+On failure, terminate the sole assisted runner to request the documented final
+snapshot and reboot, then verify the Stage-1 probe.
+
+Build and provenance result:
+- the clean no-AINP `DSDT.aml` has SHA-256
+  `78f50ccf35327f8c98358514bf65befc04fbd14e0ead12a335e11cafe5eca102`
+  and contains no `APPL0001` string;
+- the clean final FD nevertheless has SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`,
+  exactly equal byte-for-byte to EXP-033 and all other assisted freeze artifacts;
+- the EXP-033 FD timestamp is August 8, while Mu commit `63942398` adding AINP
+  is dated August 13.  A clean build from the same Mu tree with the AINP include
+  removed deterministically reproduces that old FD.
+
+Verdict: superseded without a hardware launch.  EXP-033 already ran the
+no-AINP firmware control; launching this identical binary again would change no
+variable.  The AppleInput Windows driver cannot explain the reproduced EXP-033
+freeze because the guest firmware artifact did not enumerate its ACPI hardware
+ID.  The root problem remains in the common runtime path.
+
+Recovery: no image was launched or installed; the target remained in Stage 1.
+
+Next falsifiable checkpoint: restore the committed AINP include and perform a
+clean Mu build without launching it.  The embedded ACPI payload and final FD
+must change.  This packaging check determines whether the input work was merely
+absent from artifacts or whether Mu also fails to carry rebuilt ACPI into the
+firmware volume.
+
+### CORRECTION-20260814-004 — artifact evidence restores EXP-033 input exclusion
+
+CORRECTION-20260814-003 inferred the guest ACPI contract from Mu source commit
+`63942398`, but the actual EXP-033 FD was a cached August 8 artifact.  The clean
+no-AINP reproduction above proves that the launched FD was byte-identical to the
+pre-input firmware.  Therefore EXP-033 did exclude AppleInput at the guest
+artifact boundary, though not for the reason its manifest claimed.  The
+observer result remains valid; the provenance/build-cache defect must be fixed
+separately and future conclusions must inspect the built ACPI, not only source
+commit metadata.
+
+### CORRECTION-20260814-005 — commented ASL include was still expanded
+
+The first EXP-034 control used `// #include`.  Mu's ASL preprocessing pipeline
+preserved/exposed that directive in its intermediate input; the subsequent
+clean AINP-on build produced the same `DSDT.aml` SHA-256 `78f50cc...`, and
+`DSDT.iii` proved that `J313AppleInput.asl.inc` had been expanded.  Therefore
+the claimed clean no-AINP reproduction and CORRECTION-004 conclusion are
+invalid and superseded.  No hardware image was launched.
+
+EXP-034 is reopened with a real preprocessor guard:
+
+```asl
+#if 0
+#include "J313AppleInput.asl.inc"
+#endif
+```
+
+The new Mu tracked diff SHA-256 is
+`8fbfc301f9f64885565f621f1de035294fa45ffa419f82b0ee2b9be3385da90b`.
+The next clean build uses the already recorded Docker/Stuart `--clean` command.
+It is acceptable only if `DSDT.iii` contains neither `Device (AINP)` nor
+`APPL0001`, `DSDT.aml` changes hash, and the final FD changes hash relative to
+EXP-033.  Otherwise the artifact is rejected before launch.
+
+### CORRECTION-20260814-006 — final EXP-034 packaging verdict
+
+The true `#if 0` build produced `DSDT.iii` with no AINP.  After restoring the
+committed include, a final clean build produced:
+- `DSDT.iii` SHA-256 `dfd297910e2dbb4f0eaa4c5b1818d88e7736bc273edc36e591eaf7bc717c4d9e`,
+  with `Device (AINP)` and `APPL0001` present;
+- actual iasl input `DSDT.iiii` SHA-256
+  `1734ce548c9ac8e2f115db5a52e1401432f4a1af4cd93173046dfbb724771c55`,
+  with both AINP identifiers absent;
+- final `DSDT.aml` SHA-256 `78f50ccf...` and FD SHA-256 `0dba13c...`,
+  unchanged from the true no-AINP build and EXP-033.
+
+Final verdict: Mu's `Trim --source-code -l` drops the body of the quoted ASL
+include between C preprocessing and iasl.  AINP has never entered the tested
+firmware artifact, so AppleInput is conclusively excluded as the cause of the
+EXP-033 freeze.  CORRECTION-004's conclusion is restored by stronger pipeline
+evidence; its earlier reasoning is not reused.  This packaging defect must get
+its own TDD fix after runtime stability is restored.
+
+Finalized (UTC): 2026-08-14T15:50:00Z.  No image was launched; Stage 1 remains
+the recovery state.
+
+### EXP-20260814-035 — zero-cost release tick diagnostics
+
+Status: planned
+Created (UTC): 2026-08-14T15:50:00Z
+
+Hypothesis: commit `89d41fac` added diagnostic writes to every host tick after
+the last responsive baseline.  In the release artifact CPU0 atomically updates
+one element of a shared counter array at 5000 Hz, all seven secondaries update
+adjacent elements at 100 Hz, and every CPU also updates `host_tick_fires`.
+These measurements are never consumed because release snapshots return before
+sampling.  Eliminating only those release writes should remove the shared-cache
+and EL2 hot-path regression while preserving timer/vGIC behavior and all debug
+observability.
+
+Single changed variable relative to EXP-033:
+- diagnostic tick counters become compile-time no-ops in RELEASE; no timer
+  interval, interrupt delivery, guest state, Mu, ACPI, storage, USB, CPU count,
+  display or observer change.
+
+Source contract before TDD:
+- root commit `c324955b87b0d4a04c26ba1ac4eb26961c011995`, branch
+  `codex/canonical-public-release`; only append-only ledgers are dirty;
+- m1n1 commit `72b2aab8a6089b2099242f3bdb4a8cfd08e1113b`, clean;
+- Mu commit `63942398cccbd98127cfecbd7f936af99c837d6f`, tracked source clean;
+- EXP-033 Mu/Windows artifact remains unchanged and already excludes AINP by
+  CORRECTION-006.
+
+Falsifiable software checkpoint: extend the real host runtime-diagnostics tests
+so a diagnostic counter increments in debug and remains unchanged in RELEASE;
+observe RED before adding the helper, then GREEN.  The RELEASE disassembly of
+`hv_arm_tick`/FIQ must contain no counter RMW/store while retaining CNTP writes.
+
+Planned build: clean Docker `make -j8 RELEASE=1 APPLE_INPUT=0`; artifact,
+manifest, exact hashes and launch command will be recorded before hardware use.
+Recovery remains the unchanged ESP/Stage 1 and EXP-033 artifacts.
+
+TDD checkpoint before artifact build:
+- RED: focused host compilation failed exactly because
+  `HV_RUNTIME_DIAG_COUNT` did not exist;
+- GREEN: debug behavior incremented a real counter from 41 to 42, while the
+  RELEASE build left it at 41; both focused binaries passed;
+- production now routes the two arm counters and `host_tick_fires` through the
+  compile-time diagnostic counter contract; timer register writes are unchanged;
+- root vGIC/runtime source-contract suite passed 16/16;
+- current m1n1 tracked diff SHA-256
+  `a3ac7c1d6d4b891696af03596bc0a29116d190e51e884851a5a9dd465387556b`.
+
+Implementation commit and exact post-commit build:
+- m1n1 `46c2240df2df467b9ee3d89b86f740f63a452acb`, tracked source clean;
+- `docker run --rm -v /Users/pavel/public_windows:/work -w
+  /work/m1n1_windows windows-on-m1-build:local make clean`;
+- `docker run --rm -v /Users/pavel/public_windows:/work -w
+  /work/m1n1_windows windows-on-m1-build:local make -j8 RELEASE=1
+  APPLE_INPUT=0`.
