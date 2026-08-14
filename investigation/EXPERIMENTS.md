@@ -1780,7 +1780,7 @@ zero-cost release hypothesis.
 
 ### EXP-20260814-033 — bounded framebuffer events with unchanged guest runtime
 
-Status: planned; software verified before artifact publication
+Status: ready for assisted hardware run
 Created (UTC): 2026-08-14
 
 Hypothesis: the framebuffer observer loses CDC framing because its maximum
@@ -1809,6 +1809,28 @@ Software evidence:
   passed 54/54;
 - clean Docker release build completed with `RELEASE=1` and
   `HV_DISABLE_APPLE_INPUT` in `build_cfg.h`.
+
+Provenance and commands:
+- root commit `c471d6cba22ca012a8cf7df9af6b94bc8e82ad78`, m1n1
+  commit `72b2aab8a6089b2099242f3bdb4a8cfd08e1113b`, Mu commit
+  `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- build: `docker run --rm -v /Users/pavel/public_windows:/work -w
+  /work/m1n1_windows windows-on-m1-build:local sh -lc 'make clean && make
+  -j8 RELEASE=1 APPLE_INPUT=0'`;
+- artifact directory `investigation/artifacts/EXP-20260814-033`, m1n1 SHA-256
+  `aff6ffc54594ac41b2841fc4bada47c0a39e908bfcba15f74bf788ec5ca0b932`,
+  unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`,
+  manifest SHA-256
+  `c714885a1a5aa52ef598575e68c8274213ecb667dd694908b08d468dc7af3d5d`;
+- launch: `./scripts/run-windows.sh --execution assisted --observed --debug
+  off --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart
+  /dev/cu.usbmodemC02HDNCCQ6L43 --firmware
+  investigation/artifacts/EXP-20260814-033/J313_EFI.fd --m1n1
+  investigation/artifacts/EXP-20260814-033/m1n1.macho --chainload
+  --foreground`;
+- recovery artifact: the existing ESP remains unchanged; terminate the sole
+  assisted runner and reboot to return to Stage 1.
 
 Expected checkpoint: physical and web displays both advance through firmware,
 Windows logo and lock screen without proxy checksum errors or NUL runs.  If
