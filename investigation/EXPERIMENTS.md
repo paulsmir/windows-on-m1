@@ -1725,7 +1725,7 @@ the guarded `--observed` launcher mode and `display=both`.
 
 ### EXP-20260814-032 — zero-cost release runtime with mandatory framebuffer observation
 
-Status: planned; launcher and software verified before artifact creation
+Status: rejected as a performance verdict; observer transport failed and guest froze
 Created (UTC): 2026-08-14
 
 Purpose: repeat EXP-031 without changing m1n1, Mu, Windows, CPU cadence, timer
@@ -1757,3 +1757,65 @@ Failure classification: a stale viewer generation while the physical screen is
 also unchanged is a guest/transport freeze; a live viewer with a stale physical
 panel is a DCP issue; a stale viewer with a changing physical panel is a USB
 observation failure and does not classify Windows runtime behavior.
+
+Hardware result:
+- the unchanged release payload reached all eight CPUs, NVMe and xHCI, and the
+  internal DCP surface progressed through firmware and Windows to the lock
+  screen;
+- the operator observed Windows freeze at the lock screen and the known guest
+  address did not answer a bounded SSH probe, so this was not merely a stale
+  physical panel;
+- the USB viewer stopped earlier at Windows boot logo generation 31/frame 30;
+  the sole proxy owner then reported repeated corrupted framebuffer events with
+  `type=3 length=16348 wire=0x00000000` followed by long NUL runs;
+- 16348 is exactly the data length of a maximum framebuffer chunk: the 28-byte
+  framebuffer header plus the current 16320-byte payload.  The complete proxy
+  event is 16360 bytes, only 24 bytes below the 16-KiB DWC3 transfer boundary.
+
+Verdict: the Windows freeze is real, but EXP-032 cannot classify its cause or
+measure release responsiveness because the mandatory observer itself lost USB
+framing before the freeze.  Fix and validate the observer transport before the
+next CPU/timer experiment.  Do not use this run to accept or reject the
+zero-cost release hypothesis.
+
+### EXP-20260814-033 — bounded framebuffer events with unchanged guest runtime
+
+Status: planned; software verified before artifact publication
+Created (UTC): 2026-08-14
+
+Hypothesis: the framebuffer observer loses CDC framing because its maximum
+16360-byte proxy event leaves only 24 bytes below the 16-KiB DWC3 transfer
+boundary.  Keeping complete framebuffer events below 4 KiB should preserve the
+same frames and cadence while allowing the sole proxy owner and web viewer to
+remain synchronized through the Windows freeze.
+
+Single changed variable relative to EXP-032:
+- framebuffer payload per proxy event: 16320 -> 4032 bytes; complete maximum
+  event: 16360 -> 4072 bytes.
+
+Unchanged:
+- m1n1 release runtime, CPU0 5000-Hz cadence, secondary 100-Hz cadence, timer
+  delivery, Mu, Windows, NVMe, xHCI, eight CPUs, Apple Input disabled, debug
+  off and display `both`;
+- ESP remains unchanged and the run is assisted through the sole proxy owner.
+
+Software evidence:
+- RED: `hv_fb_stream_usb_limit_test` aborted because the old 16360-byte event
+  exceeded the literal 4096-byte safe budget;
+- implementation commit `72b2aab8a6089b2099242f3bdb4a8cfd08e1113b` reduces
+  only `HV_FB_STREAM_PAYLOAD_SIZE` to 4032 bytes;
+- GREEN: focused framebuffer, USB-limit and proxy-event tests passed; the
+  complete nested host suite passed; root display/receiver/launcher suite
+  passed 54/54;
+- clean Docker release build completed with `RELEASE=1` and
+  `HV_DISABLE_APPLE_INPUT` in `build_cfg.h`.
+
+Expected checkpoint: physical and web displays both advance through firmware,
+Windows logo and lock screen without proxy checksum errors or NUL runs.  If
+Windows freezes, the web viewer must stop on the same visible state and the
+sole launcher must retain valid framing so the next CPU/timer diagnosis can
+use trustworthy evidence.
+
+Failure criterion: any checksum error, parser desynchronisation, stale web
+frame while the physical display continues, EL2 exception, reset, or inability
+to reach the same Windows state as EXP-032.
