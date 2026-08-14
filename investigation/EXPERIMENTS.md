@@ -2976,6 +2976,25 @@ After the clean build, copy `m1n1.macho` and the unchanged EXP-040 firmware to
 DEBUG/monitor/both manifest, and append all SHA-256 values before launch.  The
 planned launch is:
 
+Recorded artifact before launch (UTC 2026-08-14T18:14:03Z):
+- the exact clean Docker monitor build completed from m1n1
+  `fa42daad5a4e047ed6c9e854f89410bd6b5d723e` with `APPLE_INPUT=0`; emitted
+  signedness, unused-variable, lifetime and stack warnings are the pre-existing
+  warning families also present in EXP-040;
+- source manifest root `7720645e2abb5c884f0263c4aad0887a55ff9d82`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; tracked root, m1n1 and Mu diffs
+  were empty before the build;
+- `investigation/artifacts/EXP-20260814-041/m1n1.macho`, SHA-256
+  `e8ab3d56817d1b1e8223235c0a2de3afa29b5f9af7c210de12768341575c9c7a`, size
+  901120 bytes;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`,
+  size 30965760 bytes;
+- `MANIFEST.json`, SHA-256
+  `e0700dbe9147678f1bdcb917ca8b0746d133799d17e163caa413252b68c78834`;
+  strict DEBUG/monitor/both verification passed for both required artifact
+  roles.  No guest image has been launched at this checkpoint.
+
 ```sh
 ./scripts/run-windows.sh --execution assisted --observed --debug monitor \
   --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
