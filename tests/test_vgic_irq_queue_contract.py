@@ -30,22 +30,19 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertIn("hv_update_fiq();", exit_body)
         self.assertNotIn("hv_vgic3_update_vi();", exit_body)
 
-    def test_secondary_fiq_resynchronizes_vi_before_early_return(self):
+    def test_secondary_fiq_uses_accepted_virtual_irq_exit_contract(self):
         exc = HV_EXC.read_text()
         fiq = function_body(exc, "void hv_exc_fiq(struct exc_info *ctx)")
         fast = fiq.split("if (secondary_fast) {", 1)[1].split(
             "// Slow (single threaded) path", 1
         )[0]
 
-        # A timer can become Pending in an LR while HCR.VI still contains the value
-        # computed before the local timer/IPI work.  The abbreviated return must use
-        # a line resynchronised from the live LRs, otherwise a sleeping Windows vCPU
-        # never observes that timer and the whole guest eventually watchdogs.
-        self.assertIn("hv_vgic3_update_vi();", fast)
-        self.assertLess(fast.index("hv_update_fiq();"),
-                        fast.index("hv_vgic3_update_vi();"))
-        self.assertLess(fast.index("hv_vgic3_update_vi();"),
-                        fast.index("mrs(HCR_EL2) & HCR_VI"))
+        self.assertNotIn("hv_vgic3_update_vi();", fast)
+        self.assertIn(
+            "hv_fiq_secondary_fast_complete(true, !!(mrs(ISR_EL1) & 0x40),",
+            fast,
+        )
+        self.assertIn("!!(mrs(HCR_EL2) & HCR_VI)", fast)
 
     def test_maintenance_lr_clear_recomputes_virtual_irq_line(self):
         exc = HV_EXC.read_text()
@@ -92,6 +89,27 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertIn("hv_runtime_trace_enabled()", update)
         self.assertNotIn("hv_runtime_diag_enabled() && (++dbg_inj_count", update)
 
+    def test_timer_delivery_uses_the_accepted_latch_and_repend_path(self):
+        exc = HV_EXC.read_text()
+        update = function_body(exc, "static void hv_update_fiq(void)")
+
+        self.assertIn("timer_irq_outstanding", update)
+        self.assertIn("timer_repend_live_irq", update)
+        self.assertNotIn("hv_sync_timer_level", update)
+
+    def test_timer_deassertion_clears_the_accepted_delivery_latch(self):
+        exc = HV_EXC.read_text()
+        update = function_body(exc, "static void hv_update_fiq(void)")
+
+        self.assertIn("timer_p_injected[tcpu] = false;", update)
+        self.assertIn("timer_v_injected[tcpu] = false;", update)
+
+    def test_timer_eoi_does_not_add_the_rejected_level_state_drain(self):
+        vgic = HV_VGIC.read_text()
+        eoi = function_body(vgic, "void hv_vgic3_do_eoir1(u64 reg)")
+
+        self.assertNotIn("hv_vgic3_drain_timer_queue();", eoi)
+
     def test_spurious_iar_console_trace_requires_explicit_hot_path_tracing(self):
         vgic = HV_VGIC.read_text()
         iar = function_body(vgic, "int hv_vgic3_do_iar1(void)")
@@ -101,6 +119,51 @@ class VgicIrqQueueContractTest(unittest.TestCase):
             iar,
         )
         self.assertIsNotNone(guarded)
+
+    def test_xhci_route_marks_the_end_of_boot_tick_cadence(self):
+        vgic = HV_VGIC.read_text()
+        dist = function_body(vgic, "static bool handle_vgic_dist_access(")
+
+        self.assertIn("hv_mark_guest_runtime_ready();", dist)
+        self.assertLess(dist.index("hv_prepare_j313_xhci_handoff();"),
+                        dist.index("hv_mark_guest_runtime_ready();"))
+        self.assertLess(dist.index("hv_mark_guest_runtime_ready();"),
+                        dist.index("aic_set_mask(route->hw_irq, false);"))
+
+    def test_watchdog_snapshot_reports_global_bhl_owner_and_depth(self):
+        exc = HV_EXC.read_text()
+        dump = function_body(exc, "void hv_watchdog_snapshot_dump(void)")
+
+        self.assertIn("HV WATCHDOG BHL: owner=", dump)
+        self.assertIn("__atomic_load_n(&bhl.lock", dump)
+        self.assertIn("__atomic_load_n(&bhl.count", dump)
+
+    def test_watchdog_snapshot_reports_host_tick_arm_and_fire_counters(self):
+        exc = HV_EXC.read_text()
+        sample = function_body(exc, "void hv_watchdog_snapshot_tick(struct exc_info *ctx)")
+        dump = function_body(exc, "void hv_watchdog_snapshot_dump(void)")
+
+        self.assertIn("CNTP_CTL_EL0", sample)
+        self.assertIn("CNTP_CVAL_EL0", sample)
+        self.assertIn("hv_tick_arm_count", sample)
+        self.assertIn("hv_recovery_tick_arm_count", sample)
+        self.assertIn("host_tick_fires", sample)
+        self.assertIn("host_pctl=", dump)
+        self.assertIn("tick_arm=", dump)
+
+    def test_release_build_skips_snapshot_hot_path_before_sampling(self):
+        exc = HV_EXC.read_text()
+        sample = function_body(exc, "void hv_watchdog_snapshot_tick(struct exc_info *ctx)")
+
+        self.assertIn("if (!hv_runtime_diag_enabled())", sample)
+        self.assertLess(sample.index("if (!hv_runtime_diag_enabled())"),
+                        sample.index("watchdog_sample_ticks"))
+
+    def test_fiq_does_not_arm_the_rejected_one_millisecond_recovery_tick(self):
+        exc = HV_EXC.read_text()
+        fiq = function_body(exc, "void hv_exc_fiq(struct exc_info *ctx)")
+
+        self.assertNotIn("hv_arm_guest_irq_recovery_tick();", fiq)
 
 
 if __name__ == "__main__":

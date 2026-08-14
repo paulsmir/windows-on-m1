@@ -761,3 +761,955 @@ Launch result so far:
 Process correction: this entry was appended immediately after launch instead of
 before it.  That violates the intended pre-run ordering but does not change the
 artifact or result.  Future hardware launches must create the entry first.
+
+Operator result:
+- Windows reached the desktop but booted much more slowly than the accepted
+  morning baseline.
+- Continuous pointer micro-stutter returned during ordinary mouse movement.
+- The operator classifies this as a definite CPU-path performance regression,
+  not an acceptable stability improvement.
+
+Verdict: rejected for performance.  EXP-018 tests the only continuous-rate CPU
+policy difference identified against the responsive baseline while retaining
+EXP-016's successful secondary-mailbox wake correction.
+
+### EXP-20260814-018 — restore sparse secondary recovery tick
+
+Status: rejected; responsiveness improved but minute-scale timer-progress stall reproduced
+Created (UTC): 2026-08-14
+
+Hypothesis: EXP-017's continuous micro-stutter is caused by raising the non-ECV
+secondary housekeeping tick from 100 Hz to 1000 Hz.  On J313 this creates about
+7000 additional EL2 entries per second across seven secondary CPUs, and the
+current secondary FIQ path also performs vGIC resynchronisation.  Restoring the
+accepted 100 Hz fallback should restore interactive responsiveness without
+reintroducing the intermittent secondary-mailbox startup race.
+
+Single changed variable relative to EXP-017:
+- `HV_FALLBACK_SECONDARY_TICK_RATE`: 1000 Hz -> 100 Hz.
+
+Unchanged:
+- dual IPI+SEV mailbox notification and unconditional IPI acknowledgement;
+- all eight CPUs, secondary FIQ/vGIC correctness path, boot CPU 1000 Hz tick;
+- Mu, ACPI, NVMe, xHCI, display, Apple-input passthrough and Windows install;
+- physical display, monitor debug profile, no USB framebuffer, no external
+  telemetry observer.
+
+Source and artifacts:
+- m1n1 commit `90f8545c818ba7bd70063e5ecf3e7711e51c6aa2`;
+- `investigation/artifacts/EXP-20260814-018/m1n1.macho`;
+- SHA-256 `67773a1c86ca4d41424e217b83ea74fcd39c10c331403b025853741909d60dc4`;
+- `investigation/artifacts/EXP-20260814-018/J313_EFI.fd`;
+- SHA-256 `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- recovery artifact: EXP-016 m1n1 SHA-256
+  `dd019e4c34db3241bd4e9d1ed6d6bd3db772160b082685da8d1a6410f485be64`.
+
+Software verification:
+- RED: the tick-policy test failed while the implementation still returned
+  1000 Hz.
+- GREEN: the complete nested C host suite passed after the change.
+- The focused secondary-launch Python suite passed 10/10.
+- Clean `make -j8` completed with the canonical Rust path and produced the
+  recorded Mach-O hash.
+
+Expected checkpoint: CPUs 0 through 7 enter Windows exactly once, Windows boot
+and pointer movement are materially smoother than EXP-017, and no watchdog,
+bugcheck, reset, or long global freeze appears during the operator test.
+
+Failure criterion: any missing secondary CPU, boot-time reset, watchdog, or no
+observable improvement in the slow boot and continuous pointer micro-stutter.
+Recovery: assisted launch only; the ESP is unchanged and EXP-016 remains the
+recorded recovery image.
+
+Hardware result:
+- Launch-contract preflight passed and CPUs 0 through 7 entered Windows exactly
+  once.  NVMe and xHCI both initialized.
+- The operator initially observed an improvement over EXP-017, then Windows
+  stopped responding completely for at least one minute.  It later recovered
+  without a reboot.
+- The UART log was quiescent after xHCI route enable.  Two non-destructive
+  snapshots were requested through the existing launcher; no second proxy owner
+  was attached.
+- Across both snapshots, the physical counters advanced but Windows remained in
+  a narrow kernel PC range.  The SGI diagnostic queue/IAR/EOI counts did not
+  advance between samples (apart from the one diagnostic IPI used to request the
+  second snapshot).
+- Several CPUs retained a live virtual-timer INTID 18 LR.  The raw LR state must
+  be decoded from bits 63:62: `0x502...` is Pending-only, `0x902...` is
+  Active-only, and Active+Pending would be `0xd02...`.  EXP-018 contained both
+  Pending-only and Active-only timer LRs, but no sampled Active+Pending LR.  Other
+  CPUs had no live timer LR, yet none showed normal interrupt progress in either
+  sampled interval.
+  Queue depth and `no_lr` remained zero.  This excludes NVMe queue exhaustion and
+  LR scarcity as the immediate cause.
+- The diagnostic IPI briefly advanced the last timer IAR/EOI timestamps and moved
+  the live timer LR state between CPUs, but sustained execution was not visible
+  during the sampled interval.  The operator later confirmed that Windows did
+  recover after a pause of one minute or more.  Because that recovery occurred
+  after the diagnostic IPIs, this run cannot distinguish spontaneous timeout
+  recovery from recovery assisted by the external wake.
+
+Verdict: rejected for stability.  The A/B establishes that the 1000 Hz secondary
+heartbeat in EXP-017 was masking a lost timer/vGIC progress condition while also
+creating continuous micro-stutter.  Reducing it to 100 Hz improves responsiveness
+but exposes a minute-scale full-system stall.  The next correction must repair event-driven
+timer progress; selecting another polling frequency is not an acceptable fix.
+
+Evidence:
+- preserved log: `investigation/artifacts/EXP-20260814-018/hv-freeze.log`,
+  SHA-256 `7fde0975539dee80628591470687fd3c1b19256ba6e4edfa3efa57ba5ba12289`;
+- first and second lock-free snapshots: `HV WATCHDOG CPU` records following the
+  two `HV: User interrupt; pre-rendezvous watchdog snapshot` markers.
+
+Decoder correction: earlier experiment prose called raw `0x902...` timer LRs
+Active+Pending.  That label is incorrect under `ICH_LR_STATE_SHIFT=62` and
+`ICH_LR_STATE_MASK=3`: the sampled state value is 2 (Active-only).  Raw values in
+the old records remain valid evidence, but future analysis must use the corrected
+decoder above.
+
+### EXP-20260814-019 — level-sensitive guest timer synchronization
+
+Status: rejected after hardware test
+Created (UTC): 2026-08-13T23:43:58Z
+
+Hypothesis: EXP-018's minute-scale global stall occurs because the production
+timer path treats a live Active INTID 17/18 LR as sufficient ownership and skips
+the required level reassertion transition to Active+Pending.  Synchronizing each
+sampled timer line directly with LR state, withdrawing stale Pending state on
+deassertion, and using one unique deferred owner per timer will preserve every
+expiry without a high-frequency recovery heartbeat.
+
+Single changed variable relative to EXP-018:
+- event-driven timer/vGIC delivery ownership and LR state synchronization for
+  architectural timer INTIDs 17 and 18.
+
+Unchanged:
+- all eight CPUs and the race-safe secondary mailbox IPI+SEV protocol;
+- boot CPU 1000 Hz and non-ECV secondary 100 Hz heartbeat policy;
+- Mu, ACPI, Windows installation, NVMe, xHCI, display, Apple input and memory
+  layout;
+- physical display, monitor diagnostics, assisted launch, and one USB owner.
+
+Source contract before artifact build:
+- root repository `/Users/pavel/public_windows`, branch
+  `codex/canonical-public-release`, commit
+  `efb93c6be3f362d64eedf2d22ad787cad005d256`;
+- root dirty diff SHA-256
+  `e110dd7850110333712048a8afbad00de977e7116c4f6bf395f033d553357166`;
+- m1n1 commit `2ead84d25644316cb59c552b420396dcbd9d07c2`, clean diff
+  SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- Mu commit `63942398cccbd98127cfecbd7f936af99c837d6f`, tracked-source
+  diff SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+  nested Mu checkout markers remain and are not source changes.
+
+Software evidence before artifact build:
+- RED `hv_vgic_diag_test`: missing level-result type and sync API;
+- GREEN plus mutation check: the test fails when Active+asserted incorrectly
+  remains Active-only and passes when it becomes Active+Pending;
+- RED `hv_timer_delivery_test`: missing deferred-owner source;
+- GREEN unique ownership, withdrawal, FIFO and invalid-INTID tests;
+- RED root integration suite: missing synchronizer and EOI timer-drain boundary;
+- GREEN root integration suite 11/11, complete nested C host suite, focused SMP
+  Python suite 10/10, and complete root Python suite 247/247;
+- clean freestanding `make -j8` completed from the canonical public tree.
+- the final hot-path refactor removed a redundant second LR-bank scan and VI
+  recomputation after `hv_vgic3_inject_irq()`; the complete nested C host suite
+  remained green before the recorded post-commit artifact build.
+
+Recorded artifact:
+- `investigation/artifacts/EXP-20260814-019/m1n1.macho`;
+- SHA-256 `7c9c5a400b3a14cc842119fa7663ef36ab2390bf0b41d3292e75c52963e056c5`;
+- provenance manifest
+  `investigation/artifacts/EXP-20260814-019/MANIFEST.json`, SHA-256
+  `4dc45bc768bee43e688d87f8f5cdba28e3fc19bf0706b628272881c7d1580502`;
+- manifest root commit `5c585245162a39d0e0f632a6e8a062c019692838`, root
+  diff SHA-256
+  `dc75ba5d62525f016d3fbd9dd6b5e7e6e1c7160c455dc94de961f19cfda8ffab`,
+  m1n1 commit `2ead84d25644316cb59c552b420396dcbd9d07c2`, and Mu
+  commit `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- unchanged `investigation/artifacts/EXP-20260814-019/J313_EFI.fd`, copied from
+  EXP-018 Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- recovery artifact EXP-016 m1n1 SHA-256
+  `dd019e4c34db3241bd4e9d1ed6d6bd3db772160b082685da8d1a6410f485be64`.
+
+Exact build command:
+
+```sh
+cd /Users/pavel/public_windows/m1n1_windows
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" make clean
+PATH="/opt/homebrew/opt/rustup/bin:$PATH" make -j8
+```
+
+Post-commit build result: successful.  The warnings are pre-existing in the
+tree; the linker produced the recorded Mach-O from clean m1n1 commit
+`2ead84d25644316cb59c552b420396dcbd9d07c2`.
+
+Planned launch: canonical `scripts/run-windows.sh` assisted execution with the
+recorded EXP-019 m1n1 and unchanged Mu artifacts, physical display, monitor
+diagnostics, explicit proxy/vUART devices, and no second observer.
+
+Expected checkpoint: launch preflight passes; CPUs 0 through 7 enter exactly
+once; NVMe, xHCI and external USB input remain alive; Windows reaches login or
+desktop; timer IAR/EOI progress continues without diagnostic IPIs; no asserted
+Active-only timer survives synchronization; and no global pause, watchdog,
+reset, or EXP-017 continuous micro-stutter occurs through a bounded ordinary and
+CPU/storage stress window longer than the EXP-018 pause interval.
+
+Failure criterion: missing CPU_ENTRY, Windows failing to reach login, any global
+pause, `CLOCK_WATCHDOG_TIMEOUT`, reset, timer-progress loss, stale asserted
+Active-only LR, or continuous micro-stutter.  Recovery is assisted-only; ESP is
+unchanged and EXP-016 remains available.
+
+Evidence paths after launch:
+- `investigation/artifacts/EXP-20260814-019/hv.log`;
+- existing-launcher SIGINT lock-free snapshots only if progress stalls;
+- no standalone `hang_telemetry.py` or competing proxy owner.
+
+Hardware attempt 1: infrastructure-aborted before Windows.  The exact artifact
+and manifest preflight passed, all secondaries started in m1n1, guest handoff
+occurred, NVMe ECAM/BAR initialized, and Mu reached
+`AppleUsbTypeCBringupDxeBringupCallback`.  The host command session then reaped
+the detached `run_uefi.py` and UART-reader children; `hv.log` ended mid-line and
+both recorded PIDs were gone, with no guest exception or reset record.  Because
+the runner disappeared before secondary Windows `CPU_ENTRY`, this attempt says
+nothing about the timer correction.  Repeat with the same artifacts and the
+canonical launcher held in foreground; do not change the guest variable.
+
+Hardware attempt 2: infrastructure-aborted before guest initialization.  The
+proxy was still owned by the live Windows hypervisor left by attempt 1 rather
+than by a clean Stage 1.  Chainloading through that live guest raised an EL1
+exception and rebooted the target; after reconnect, the launcher continued
+against the installed old Stage 1 (`b791225`), which correctly rejected the new
+launch-publish opcode as `Bad Command`.  The resulting fresh `Running proxy`
+state was verified with `probe.py`.  Repeat unchanged from that confirmed Stage
+1; do not classify this as timer behavior.
+
+Hardware attempt 3: clean run in progress.  The exact frozen artifacts passed
+manifest verification, m1n1 `2ead84d` chainloaded once from a confirmed fresh
+Stage 1, and the foreground runner remained the sole proxy owner.  Mu started
+the installed Windows fallback loader; CPUs 0 through 7 entered exactly once;
+NVMe reached ready state and xHCI enabled its Windows route.  No bugcheck,
+exception, reset, LR shortage, or deferred timer backlog was recorded.
+
+After a passive interval longer than EXP-018's original pause, two lock-free
+snapshots showed all eight physical counters advancing and substantial forward
+progress in `q`, `iar`, and `eoi` on every CPU.  Live INTID 18 LRs included the
+new `0xd02...` Active+Pending state, and `ap_eoi` was nonzero on the CPUs that
+had consumed reassertions.  Between snapshots CPU0 `iar/eoi` advanced from
+17973/17973 to 41437/41437, CPU1 from 20383/20383 to 55491/55491, and the other
+CPUs advanced similarly.  `no_lr=0`, timer queue depth remained zero, and guest
+PCs changed.  This directly validates the corrected level transition and shows
+that the minute-scale timer-progress loss did not recur in the observed window.
+
+Partial evidence: `investigation/artifacts/EXP-20260814-019/hv-progress.log`,
+SHA-256
+`7de57f58349fad9c4d313e1669a2488b971769cc72fa9abd2d81be707b9a85de`.
+Final verdict remains pending operator confirmation of the physical login or
+desktop, pointer/input responsiveness, and the bounded ordinary/stress window.
+
+### EXP-20260814-020 — remove the boot-CPU 1 kHz recovery tax
+
+Status: rejected; early Windows boot requires the 1 kHz boot heartbeat
+Created (UTC): 2026-08-14
+
+Hypothesis: after EXP-019 repaired event-driven architectural-timer delivery,
+CPU0's remaining 1 kHz EL2 recovery heartbeat is unnecessary and causes the
+observable interactive latency.  CPU0 is the only vCPU using 1 kHz; CPU1-7 use
+100 Hz.  A Windows QPC affinity test measured CPU0 at 5344.4 ms for a 5000 ms
+window with p95 overshoot 56.465 ms and maximum 169.936 ms, while CPU4 completed
+in 5000.4 ms with zero measured overshoot.  A follow-up all-core test again
+isolated the only non-zero delay to CPU0.
+
+Single changed variable relative to EXP-019:
+- boot CPU EL2 recovery tick: 1000 Hz -> 100 Hz.
+
+Unchanged:
+- EXP-019 level-sensitive INTID 17/18 synchronization and deferred ownership;
+- all eight CPUs, mailbox IPI+SEV protocol, Mu, Windows, NVMe, xHCI, display,
+  memory layout, assisted launch and monitor diagnostics;
+- secondary non-ECV recovery tick remains 100 Hz.
+
+Pre-change evidence from the live EXP-019 guest:
+- Windows Stopwatch/QPC frequency: 24 MHz;
+- 100 x 100 ms scheduler waits: total 14264 ms, median 111 ms, p95 168.4 ms,
+  maximum 1544.5 ms;
+- idle CPU about 1%, DPC 0%, processor queue 0, disk latency 0 ms;
+- CPU0 affinity test showed timing loss while CPU4-P was exact;
+- the post-test lock-free snapshot showed empty software queues, no LR shortage,
+  and continuing IAR/EOI progress on all CPUs.
+
+Expected checkpoint: CPUs 0-7 enter Windows; the same CPU0 and CPU4 affinity
+test both complete 5000 ms with negligible overshoot; the 100 x 100 ms scheduler
+test no longer contains a large outlier; no timer stall, watchdog, reset or
+bugcheck occurs.
+
+Failure criterion: CPU0 remains uniquely delayed, any vCPU loses timer progress,
+or Windows fails to reach the desktop.  Recovery uses the immutable EXP-019
+artifact; the ESP is unchanged.
+
+Hardware result:
+- artifact `m1n1.macho` SHA-256
+  `2b9a073435f0f481621e38a7b36f45ab9dc38864c6af7dfb918f8b844194ef1b`
+  from m1n1 commit `cf9770180e0122d92b2274081eb7ecebda5a7d2d` passed manifest
+  preflight and chainloaded from a clean Stage 1;
+- CPUs 0-7 entered once and NVMe reached ready;
+- Windows then raised bugcheck `0x7e` with parameter 1 `0xffffffffc0000094`
+  (integer divide by zero) at `0xfffff803a06935d0` before reaching login;
+- the snapshot placed CPU0 in the stall-check path and showed INTID 18 pending
+  on every vCPU; Windows requested PSCI reset immediately afterward.
+
+Verdict: rejected.  The unique 1 kHz CPU0 heartbeat correlates with the measured
+CPU0 latency, but reducing it from reset is unsafe.  A valid correction must
+retain the startup cadence and switch to sparse/event-driven service only after
+an explicit guest-ready milestone; do not tune the static constant again.
+
+### EXP-20260814-021 — two-phase boot CPU heartbeat
+
+Status: rejected as a complete fix; CPU0 tax improved but global pauses remain
+Created (UTC): 2026-08-14
+
+Hypothesis: Windows requires CPU0's 1 kHz EL2 heartbeat during early SMP/timer
+initialization, but retaining it after device initialization causes the measured
+CPU0-only scheduling gaps.  Keep 1 kHz through early boot, then atomically switch
+CPU0 to 100 Hz when Windows enables the J313 xHCI hardware IRQ route.  In every
+successful EXP-019 boot this milestone occurs after CPUs 0-7 enter and NVMe is
+ready; EXP-020 failed before reaching it.
+
+Single changed variable relative to EXP-019:
+- CPU0 tick policy becomes two-phase: startup 1000 Hz, post-xHCI-route 100 Hz.
+
+Unchanged:
+- secondary ticks and EXP-019 timer delivery state machine;
+- Mu, Windows, NVMe/xHCI implementation, display, memory layout and launch mode.
+
+Expected checkpoint: early Windows boot reaches the xHCI route without the
+EXP-020 `0x7e`; the log records one cadence transition; SSH returns; CPU0's
+5-second affinity timing converges with CPU4; no large scheduler-wait outlier,
+bugcheck, watchdog or reset occurs.
+
+Failure criterion: transition occurs before all CPUs/NVMe are ready, Windows
+fails to reach SSH, CPU0 remains uniquely delayed, or timer progress is lost.
+Recovery is immutable EXP-019; the ESP remains unchanged.
+
+Frozen assisted artifact before launch:
+- m1n1 commit `ec7dd42b` (`hv: lower boot tick after guest runtime handoff`);
+- `investigation/artifacts/EXP-20260814-021/m1n1.macho`, SHA-256
+  `0928ec0a8c342aecca1bf0526059aea5d39a3c647fbc533ef943cb6c6efe9b8f`;
+- unchanged Mu `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `e5a66d86266c18d10ab6d4608e24ea58f0e5038dea7cc2703196b39f088e39a6`.
+
+Preflight result: manifest roles/profile/layout validated; focused RED tests
+failed before the runtime-ready API and xHCI hook existed; after implementation
+the complete nested C host suite and the focused root vGIC contract passed.  No
+hardware result has been inferred from those host tests.
+
+Hardware result:
+- all eight CPUs entered, NVMe reached ready, and the one-time
+  `boot tick 1000Hz -> 100Hz` transition occurred only after the Windows xHCI
+  route; the EXP-020 early `0x7e` did not recur and SSH reached the desktop;
+- CPU0's 5-second affinity window improved from 5344.4 ms to 5002.789 ms;
+  CPU0 p95/max overshoot became 30.184/102.074 ms while CPU4 completed in
+  5000.009 ms;
+- the system scheduler test did not converge: 100 x 100 ms waits still took
+  14222.120 ms, median 110.576 ms, p95 364.678 ms and maximum 799.383 ms;
+- SSH twice stopped accepting a connection for about 20 seconds and then
+  recovered without a reset or bugcheck;
+- the snapshot taken during the second timeout showed all eight Windows PCs in
+  the idle/WFI path, empty software delivery queues, no LR shortage, and live
+  Pending or Active+Pending INTID 18 LRs.  Several CPUs had HCR.VI asserted but
+  ISR_EL1 clear.  Timer and SGI counters continued between snapshots.
+
+Verdict: the 1 kHz boot-CPU heartbeat was a measurable CPU0 tax, but changing
+its steady-state cadence is not the root fix.  The remaining pause signature is
+an idle-wakeup/delivery failure: a virtual timer can be represented in the vGIC
+while the physical Apple core remains asleep.  Do not ship EXP-021 as the
+stability fix.
+
+### EXP-20260814-022 — trap guest WFI/WFE to isolate idle-wakeup loss
+
+Status: rejected after hardware test
+Created (UTC): 2026-08-14
+
+Hypothesis: the long recoverable pauses occur after Windows enters physical WFI
+with a deliverable timer LR; changing HCR.VI/LR state does not reliably wake the
+Apple core.  The tree already contains the bounded `HV_DIAG_TRAP_WFX` path.
+Trapping WFI/WFE and advancing the guest PC prevents physical sleep while
+leaving timer, vGIC, NVMe, Mu, Windows, topology and display unchanged.
+
+Single changed variable relative to EXP-021:
+- build m1n1 with `DIAG_TRAP_WFX=1`.
+
+Expected checkpoint: the exact CPU0/CPU4 and 100 x 100 ms probes complete
+without the 20-second SSH/UI pause, and repeated SSH probes remain responsive.
+This build is diagnostic only because idle CPUs busy-poll and power consumption
+will increase.
+
+Failure criterion: any global pause remains, Windows bugchecks/resets, or the
+WFI trap policy is lost after guest handoff.  Recovery remains immutable
+EXP-019; the ESP is unchanged.
+
+Frozen assisted artifact before launch:
+- source commit `ec7dd42b`, built with `DIAG_TRAP_WFX=1` and no source change;
+- `investigation/artifacts/EXP-20260814-022/m1n1.macho`, SHA-256
+  `7c787f54035586d2aa8679e889e0385be41d6ac09358842bb5410d54213703c6`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `ced7652f769c9b5b6a769f42c084642ed6525d9cab9d8aba0e99b922ea25cfc8`.
+
+Preflight result: clean build completed and manifest roles/profile/layout
+validated.  This entry intentionally precedes the hardware launch.
+
+Hardware result:
+- all eight CPUs entered, NVMe reached ready, the runtime tick transition and
+  xHCI route completed, and the log confirmed that TWI/TWE were active;
+- two snapshots roughly 30 seconds apart showed Windows CPUs in idle paths
+  with live Pending or Active+Pending timer LRs, but every CPU's timer
+  queue/IAR/EOI counters remained unchanged; only the diagnostic snapshot IPI
+  counter advanced;
+- Windows then bugchecked with `INTERNAL_POWER_ERROR` (`0xa0`):
+  `P1=0x618`, `P2=0xffffa20d52c2cb40`,
+  `P3=0xffffa603c169a080`, `P4=0x0`.
+
+Verdict: rejected.  Advancing guest WFI/WFE as a busy-poll changes Windows
+power-idle semantics, does not restore timer/vGIC progress, and produces a
+power-manager bugcheck.  Never enable `DIAG_TRAP_WFX` in a production or
+stability candidate.  Continue the investigation at virtual interrupt
+delivery/deactivation without replacing architectural WFI/WFE behavior.
+
+### EXP-20260814-023 — identify the global EL2 lock owner during a freeze
+
+Status: completed; hypothesis not confirmed by sampled lock state
+Created (UTC): 2026-08-14
+
+Hypothesis: the apparently idle vCPU/timer signature is secondary evidence of
+global EL2 lock contention.  In two EXP-021 snapshots CPU0's breadcrumb ended
+in `X`, which is emitted immediately before `spin_lock(&bhl)`, while its INTID
+18 and INTID 64 LRs and last IAR/EOI state remained byte-for-byte unchanged.
+If `bhl` is leaked or held by another CPU, all serialized vCPUs can stop while
+physical counters and the lock-free snapshot mechanism remain alive.
+
+Single changed variable relative to immutable EXP-021:
+- the lock-free watchdog dump prints the live `bhl.lock` owner and recursive
+  `bhl.count`; no timer, vGIC, WFI/WFE, tick, NVMe or guest behavior changes.
+
+Expected checkpoint: during the next operator-visible pause, a non-destructive
+snapshot identifies either a concrete owner/count or proves that CPU0's `X`
+breadcrumb was not a live bhl wait.  Repeated snapshots must distinguish a
+long holder from a permanently leaked lock.
+
+Failure criterion: diagnostic output perturbs boot, the bhl fields cannot be
+read locklessly, or no pause occurs during the bounded observation.  Recovery
+is immutable EXP-021; the ESP remains unchanged.
+
+Preflight result so far: the focused source-contract test fails because the
+watchdog dump does not yet publish bhl owner/count.  This entry intentionally
+precedes implementation, artifact creation and hardware launch.
+
+Implementation and frozen artifact:
+- m1n1 commit `922bb87` (`diag: expose global hypervisor lock owner`);
+- the RED source-contract test failed before implementation and passed after;
+- complete nested C host suite passed and the post-commit freestanding build
+  completed; `HV_DIAG_TRAP_WFX` is absent from the build configuration;
+- `investigation/artifacts/EXP-20260814-023/m1n1.macho`, SHA-256
+  `fe0ac8041e5dcb280cb70d40c1212527ed48eb3c6ec1f40e46499a4dc9b7ceda`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `09d864ad14ce3390b4c04f2bac8986ce1e63fc326a5bd82a21e690d8a5452c34`.
+
+No hardware result is inferred from software tests.  This update is recorded
+before the assisted launch.
+
+Hardware result:
+- EXP-023 reached the same all-CPU, NVMe and xHCI checkpoints as EXP-021;
+- Windows again failed to reach SSH during the bounded boot interval;
+- a non-destructive snapshot reported `HV WATCHDOG BHL: owner=0 count=1`.
+  The dump itself runs from CPU0 while it legitimately owns bhl, proving that
+  CPU0 acquired the lock after the earlier `X` breadcrumb; it does not show a
+  permanent leak or a different CPU holding the lock.
+
+Verdict: the snapshot falsifies a permanently leaked bhl at the sampled time.
+The `X` breadcrumb is a transient wait marker, not sufficient evidence of the
+root cause.  Do not change spinlock semantics from this result.
+
+### EXP-20260814-024 — demand-driven guest IRQ recovery heartbeat
+
+Status: planned; artifact frozen before hardware launch
+Created (UTC): 2026-08-14
+
+Hypothesis: on T8103, a synthetic virtual IRQ represented by an LR plus HCR.VI
+does not always provide a physical wake after Windows has entered idle.  The
+static 1 kHz secondary heartbeat bounded this loss but imposed continuous EL2
+overhead; the 100 Hz version restored responsiveness but exposed long stalls.
+A 1 ms EL2 recovery tick only while INTID 17/18 is owned by an LR/deferred
+delivery should preserve wake progress without polling idle vCPUs at 1 kHz.
+
+Single changed variable relative to EXP-023/EXP-021:
+- at the end of a physical FIQ, re-arm the local EL2 tick for 1 ms when that
+  CPU still owns an undelivered guest physical/virtual timer interrupt;
+- once Windows EOIs and rearms the guest timer, the existing 10 ms secondary
+  and 10 ms runtime boot-CPU cadence resumes automatically.
+
+Unchanged: WFI/WFE semantics, vGIC LR state machine, priorities, Mu, Windows,
+NVMe, xHCI, display and all eight CPUs.
+
+Expected checkpoint: boot reaches SSH without the long spinner pause; repeated
+100 x 100 ms waits have no multi-second outlier; no 0x101, 0xa0, reset or
+minute-scale UI freeze occurs.  Normal idle does not pay a continuous 1 kHz
+heartbeat because the recovery cadence is conditional on live timer ownership.
+
+Failure criterion: early bugcheck/reset, unchanged long pause, or evidence that
+the recovery tick remains at 1 kHz after timer ownership clears.  Recovery is
+immutable EXP-021; ESP remains unchanged.
+
+Preflight result so far: the pure tick-policy test and root integration test
+fail because the recovery rate/API and conditional FIQ re-arm do not exist.
+This entry intentionally precedes implementation, artifact creation and launch.
+
+Implementation and frozen artifact:
+- m1n1 commit `0cad7b2` (`hv: bound pending guest timer wake latency`);
+- the pure tick-policy test and root FIQ integration test failed before the
+  recovery API/calls existed and passed afterward;
+- complete nested C host suite, diff check and post-commit freestanding build
+  passed;
+- `investigation/artifacts/EXP-20260814-024/m1n1.macho`, SHA-256
+  `95e0be58ef28430eb7ab9e06ba2a8d760d72ef9db87dd45d35ce4afd4f42eb8d`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `606c9f70db4465dd899351446a3e0c092b73eac75e9af77b1d7e27fb26e6aded`.
+
+No hardware result is inferred from software verification.  This update is
+recorded before the assisted launch.
+
+Hardware result:
+- all eight CPUs entered Windows; NVMe reached ready and xHCI routing was
+  enabled, with no hypervisor reset or captured bugcheck;
+- Windows remained materially slow and did not answer on its previously known
+  SSH address during the bounded observation window;
+- the non-destructive snapshot showed converged SGI accounting and no queued
+  LR exhaustion, but CPU2 held INTID 18 `Active+Pending` while CPU3 held INTID
+  18 `Pending`;
+- the EXP-024 predicate armed the same 1 ms recovery tick for both states.
+  `Pending` may require a physical wake before guest acknowledgement, whereas
+  `Active` and `Active+Pending` mean Windows has already acknowledged the IRQ;
+  polling EL2 at 1 kHz cannot finish that handler and adds avoidable latency.
+
+Verdict: rejected as the final performance fix.  Demand-driven recovery is
+retained, but ownership is too broad; EXP-025 narrows it to an unmasked,
+Pending-only timer LR.
+
+### EXP-20260814-025 — pending-only guest timer recovery wake
+
+Status: planned; artifact frozen before hardware launch
+Created (UTC): 2026-08-14
+
+Hypothesis: EXP-024 removed continuous 1 kHz polling from completely idle
+vCPUs, but continued polling at 1 kHz throughout `Active` and
+`Active+Pending` timer handling.  Recovery is useful only while an unmasked
+INTID 17/18 LR is exactly `Pending` and HCR.VI is asserted.  Once the guest has
+acknowledged the IRQ, the normal 100 Hz secondary cadence must resume until a
+new Pending-only delivery actually needs a wake.
+
+Single changed variable relative to EXP-024:
+- `hv_guest_timer_recovery_needed()` now scans the live LR bank and selects
+  only a priority-deliverable, Pending-only INTID 17/18 while HCR.VI is set;
+- Active and Active+Pending timer LRs no longer select the 1 ms recovery tick.
+
+Unchanged: the 1 ms recovery interval itself, 100 Hz normal secondary cadence,
+WFI/WFE semantics, LR level state machine, priorities, Mu, Windows, NVMe,
+xHCI, display and all eight CPUs.
+
+Expected checkpoint: all eight CPUs, NVMe and xHCI reach their established
+markers; Windows reaches the login/desktop materially faster than EXP-024;
+there is no long spinner pause, 0x101, 0xa0, reset or minute-scale freeze.
+
+Failure criterion: early bugcheck/reset, unchanged slow boot, or repeated long
+stalls with a Pending-only timer LR.  Recovery is immutable EXP-024; ESP
+remains unchanged.
+
+Preflight and frozen artifact:
+- RED pure-policy and source-contract tests failed before the pending-only
+  predicate existed and passed after implementation;
+- m1n1 commit `ab3fda9` (`hv: limit recovery wake to pending timers`);
+- complete nested C host suite, focused root vGIC contract suite, diff check
+  and post-commit freestanding build passed;
+- `investigation/artifacts/EXP-20260814-025/m1n1.macho`, SHA-256
+  `4c21fe02bf45078949e9821f3b953ef2fc214851f62603d4691b2c6631800b5e`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `e1e83760881ae8616228da0d38ed49eec8aade1a29682493576eb41f27b1d058`.
+
+No hardware result is inferred from software verification.  This entry is
+recorded before the assisted launch.
+
+Hardware result:
+- all eight CPUs, NVMe and xHCI reached the expected markers with no captured
+  reset or bugcheck;
+- Windows remained slow and did not reach its previously known SSH address in
+  the bounded interval;
+- two non-destructive snapshots 20 seconds apart showed essentially frozen
+  guest SGI/IAR/EOI progress.  A timer IAR/EOI advanced only adjacent to the
+  diagnostic IPI, while Pending and Active+Pending INTID 18 LRs persisted.
+
+Verdict: rejected as a root fix.  The narrower predicate removes unnecessary
+recovery polling after acknowledgement, but the recovery source itself is not
+proven to fire while the vCPU is stalled.  EXP-026 measures the host EL2 CNTP
+state and arm/fire counts directly.
+
+### EXP-20260814-026 — measure host recovery timer arm and expiry
+
+Status: planned; artifact frozen before hardware launch
+Created (UTC): 2026-08-14
+
+Hypothesis: the normal/recovery EL2 CNTP is programmed but either does not
+expire, is masked, or expires without producing guest timer progress.  Earlier
+snapshots exposed only `CNTP_*_EL02`, which is the guest physical timer view;
+they could not distinguish those cases.
+
+Single changed variable relative to EXP-025:
+- add per-CPU counters for normal tick arms, recovery tick arms and observed
+  host CNTP expiries;
+- publish `CNTP_CTL_EL0` and `CNTP_CVAL_EL0` alongside the existing guest
+  `CNTP_*_EL02` state in the lock-free watchdog snapshot.
+
+No scheduling, timer interval, vGIC, WFI/WFE, Mu, Windows, NVMe, xHCI, display
+or CPU behavior is intentionally changed.
+
+Expected checkpoint: two snapshots identify exactly one of three cases:
+recovery is never armed, it is armed but host CNTP does not expire, or it
+expires while the pending timer LR/IAR/EOI remains unchanged.
+
+Failure criterion: diagnostic fields perturb boot or cannot distinguish arm
+from expiry.  Recovery is immutable EXP-025; ESP remains unchanged.
+
+Preflight and frozen artifact:
+- the focused source-contract test failed before the fields/counters existed
+  and passed after implementation;
+- m1n1 commit `89d41fa` (`diag: measure host timer recovery progress`);
+- complete nested C host suite, root vGIC contract suite, diff check and
+  successful post-amend freestanding build passed;
+- an earlier failed compile could not resolve `MAX_CPUS` through `hv.h`; its
+  stale copied binary was detected by the unchanged EXP-025 hash and was
+  overwritten.  The artifact below is from the successful post-amend build;
+- `investigation/artifacts/EXP-20260814-026/m1n1.macho`, SHA-256
+  `ee29ddccd0a96f6aff2994db5e1f33046280324bbd5ba04c3f591b0a8919f6be`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `0d005d1789327a134ce330288e9362b62fc492fa8fc32292f4b9bc1c8a39f2e5`.
+
+No hardware result is inferred from software verification.  This entry is
+recorded before the assisted launch.
+
+Hardware result:
+- all eight CPUs, NVMe and xHCI reached their expected checkpoints; no reset or
+  bugcheck was captured during the bounded observation window;
+- two non-destructive snapshots proved that the host `CNTP_EL0` recovery source
+  is armed and expires.  On several secondary CPUs its arm/fire counters grew
+  at nearly the 1-ms recovery cadence;
+- deliverable Pending timer LRs persisted while the recovery source repeatedly
+  fired.  Every such virtual-pending secondary FIQ was forced into the legacy
+  slow path and global `bhl`, creating thousands of serialized EL2 entries per
+  second across the guest;
+- Windows remained slow.  The operator later reported an
+  `INTERNAL_POWER_ERROR`; its exact parameters were not captured by this run,
+  so it is not attributed as a measured EXP-026 bugcheck.  A prior captured
+  `0xA0 / P1=0x618` has the Microsoft-defined meaning "runtime power worker
+  blocked too long" and is consistent with, but does not by itself prove, this
+  contention mechanism.
+
+Verdict: diagnostic succeeded; rejected as a performance fix.  The missing
+event is not the host recovery timer.  EXP-027 removes already-completed local
+virtual-interrupt delivery from the global lock path while preserving the live
+LR, freshly recomputed HCR.VI and recovery safety net.
+
+### EXP-20260814-027 — return completed local virtual IRQs without global bhl
+
+Status: planned; artifact frozen before hardware launch
+Created (UTC): 2026-08-14
+
+Hypothesis: Windows stalls and runtime-power watchdogs because every deliverable
+secondary timer IRQ enters the global `bhl` slow path.  EXP-026 measured nearly
+continuous 1-ms recovery FIQs on several vCPUs; serializing each one can starve
+guest scheduling and power workers even though timer state itself is valid.
+
+Single changed variable relative to EXP-026:
+- after local guest-timer/IPI handling and live-LR `HCR.VI` recomputation, allow
+  an otherwise eligible secondary to return directly even when a virtual IRQ
+  is pending.  Physical FIQs, rendezvous, proxy CPU switches and the
+  interruptible CPU retain the serialized path.  Pending timers retain the
+  short recovery wake until Windows acknowledges/rearms them.
+
+No timer level-state machine, recovery interval, Mu, NVMe, xHCI, display, CPU
+topology, Windows installation, WFI mode or guest memory layout is changed.
+
+Expected checkpoint: normal-duration boot and responsive desktop without the
+20-second/minute stalls, `CLOCK_WATCHDOG_TIMEOUT`, or `INTERNAL_POWER_ERROR`.
+The host recovery counters may still advance, but completed secondary local
+FIQs must no longer contend for `bhl` merely because HCR.VI is asserted.
+
+Failure criterion: early watchdog/reset, lost timer delivery, unchanged slow
+boot, or a long stall.  Recovery is immutable EXP-026; ESP remains unchanged.
+
+Preflight and frozen artifact:
+- the focused fast-path test failed before Pending virtual IRQs were removed
+  from the completion predicate and passed after implementation;
+- m1n1 commit `7e84a84` (`hv: keep local virtual IRQs off the global lock`);
+- complete nested C host suite, focused root vGIC contract suite, diff check and
+  successful post-commit freestanding build passed;
+- `investigation/artifacts/EXP-20260814-027/m1n1.macho`, SHA-256
+  `d83b0cfa7d44cd5f83b4cf927918b20d7696dd5167692587f179879c02406515`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `aa9bead3a0928c4e1588428d8020da0d6e55eb17df453f444165838cfedb9d0a`.
+
+No hardware result is inferred from software verification.  This entry is
+recorded before the assisted launch.
+
+Preliminary hardware observation (final operator verdict pending):
+- the exact frozen artifact reported m1n1 `7e84a84`, reached NVMe ready, xHCI
+  route enable and guest runtime cadence; a lock-free snapshot contained live
+  state for all eight vCPUs;
+- Windows reached its known network address and port 22 responded, although
+  the post-reinstallation host key no longer authorized the existing SSH key;
+- no bugcheck, reset or hypervisor exception was captured during the initial
+  observation plus a subsequent 45-second passive window;
+- desktop responsiveness and sustained stability remain unclaimed until the
+  operator reports the physical-screen result and a longer workload passes.
+
+Final operator result:
+- Windows booted, but was extremely slow and froze immediately after reaching
+  the desktop.  The target later returned to proxy and the assisted runner lost
+  its USB device; no successful sustained session was observed.
+- A lock-free snapshot measured roughly 29,000 host tick expiries and 35,000
+  separate recovery-timer arms on several secondaries.  CPU4 and CPU6 did not
+  emit their Windows `CPU_ENTRY` diagnostics until after the manual snapshot.
+- Five preserved Windows dumps from the same regression family decode as
+  `CLOCK_WATCHDOG_TIMEOUT (0x101)` with hung CPU indices 3, 1, 5, 2 and 5.  The
+  failure is therefore not tied to one physical core; arbitrary secondary CPUs
+  stop processing clock interrupts.
+
+Verdict: rejected.  Letting Pending virtual IRQs bypass the global lock did not
+repair delivery and retained the near-continuous 1-ms recovery source.  EXP-028
+returns to the accepted virtual-IRQ exit contract and disables that source while
+retaining only the independently validated secondary-mailbox wake correction.
+
+### EXP-20260814-028 — accepted timer exit contract plus race-safe SMP wake
+
+Status: planned; software verification complete, hardware not launched
+Created (UTC): 2026-08-14
+
+Hypothesis: the responsiveness regression is caused by the post-baseline 1-ms
+guest-IRQ recovery source and modified secondary FIQ early-return policy, not by
+the independently validated dual IPI+SEV secondary-mailbox fix.  Disabling the
+extra recovery source and restoring the accepted rule that both physical FIQ and
+HCR.VI must be clear before the abbreviated return will remove continuous EL2
+work without restoring the intermittent secondary-start race.
+
+Single changed runtime variables relative to rejected EXP-027:
+- guest IRQ recovery tick rate: 1000 Hz -> disabled;
+- secondary fast completion again requires no physical FIQ and no HCR.VI;
+- the extra fast-boundary `hv_vgic3_update_vi()` scan is removed;
+- Apple-input passthrough is disabled for this A/B build only.
+
+Unchanged:
+- race-safe secondary mailbox publication using targeted IPI plus SEV and
+  unconditional physical IPI acknowledgement;
+- eight CPUs, 100 Hz ordinary secondary heartbeat, Mu, ACPI, NVMe, xHCI,
+  physical display, Windows installation and guest memory layout;
+- assisted launch, one proxy owner and monitor diagnostics.
+
+Software evidence:
+- RED: focused fast-path tests failed to compile with the accepted three-input
+  completion contract and the tick-policy test failed at recovery rate 1000;
+- GREEN: both focused tests passed after the minimal change;
+- complete nested C host suite passed;
+- focused secondary-start Python suite passed 10/10;
+- focused root vGIC contract suite passed 15/15 and both diffs passed checks;
+- clean freestanding build with `APPLE_INPUT=0` completed successfully and
+  `build/build_cfg.h` contains `HV_DISABLE_APPLE_INPUT`.
+
+Recorded artifacts:
+- m1n1 commit `2ae94afc82bbf7667c9959f47bf515b381288343`;
+- `investigation/artifacts/EXP-20260814-028/m1n1.macho`, SHA-256
+  `d57df4625b3f5e0e760b2c54dc79565d96e53d051d420a43e437974a663816ae`;
+- unchanged Mu firmware SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`.
+
+Expected checkpoint: normal-duration boot, CPUs 0 through 7 enter exactly once,
+pointer and desktop remain responsive, recovery-arm counters stay zero, and no
+long pause, `0x101`, `INTERNAL_POWER_ERROR`, reset or lost SSH occurs during the
+bounded interactive test.  ESP remains unchanged; this is assisted-only.
+
+Hardware result:
+- all CPUs 0 through 7 entered Windows independently before any diagnostic
+  snapshot, NVMe and xHCI reached their ready checkpoints, and every recorded
+  guest-IRQ recovery-arm counter remained zero;
+- Windows then stopped with `DPC_WATCHDOG_VIOLATION (0x133)`, parameter 1 equal
+  to 1.  This parameter means cumulative time at DISPATCH_LEVEL or above
+  exceeded the watchdog period, rather than one isolated long-running DPC;
+- the reset that followed was a Windows PSCI reset.  No EL2 exception or m1n1
+  panic preceded it.
+
+Verdict: rejected as a usable build, but the experiment isolated the next
+regression layer.  Continuous 1-ms recovery work was removed successfully; the
+post-baseline timer level-state synchronizer still differs from the accepted
+morning path and is the only timer-delivery variable removed by EXP-029.
+
+### EXP-20260814-029 — accepted timer delivery plus race-safe SMP wake
+
+Status: rejected after hardware test
+Created (UTC): 2026-08-14
+
+Hypothesis: the post-baseline timer level-state synchronizer keeps Windows at
+elevated IRQL long enough to trigger cumulative DPC watchdog violations.  The
+accepted morning timer latch/re-pend path did not contain that synchronizer.
+Restoring it while retaining only the independently proven secondary-mailbox
+wake correction should recover the responsive baseline without restoring the
+secondary-start race.
+
+Single changed runtime variable relative to rejected EXP-028:
+- timer delivery is restored to the accepted `timer_irq_outstanding` latch,
+  `timer_repend_live_irq` and maintenance-drain implementation;
+- the later `hv_sync_timer_level` state machine and timer-specific EOI drain are
+  removed from production.
+
+Unchanged:
+- targeted IPI plus SEV mailbox publication and unconditional physical IPI
+  acknowledgement;
+- disabled 1-ms guest-IRQ recovery source and accepted secondary fast-exit
+  predicate;
+- eight CPUs, ordinary 100-Hz secondary heartbeat, Mu, ACPI, NVMe, xHCI,
+  physical display, Windows installation, guest memory layout and Apple Input
+  disabled for this A/B build.
+
+Software evidence:
+- RED: focused source-contract tests failed at the level-state synchronizer and
+  timer-specific EOI drain;
+- GREEN: focused root vGIC tests passed 15/15, the complete nested C host suite
+  passed, focused SMP Python tests passed 10/10, and both diffs passed checks;
+- m1n1 commit `7f8061c` (`hv: restore accepted timer delivery path`);
+- clean freestanding `APPLE_INPUT=0` build SHA-256
+  `df8c9127b191317d8ea4ddd795f0e95834eff436b7b4a910c8fa790d90d77efd`.
+
+Expected checkpoint: Windows reaches the login/desktop in normal time, physical
+pointer motion is smooth, all CPUs remain live, recovery-arm counters remain
+zero, and neither `0x101`, `0x133`, `INTERNAL_POWER_ERROR`, spontaneous reset nor
+a long global pause occurs.  ESP remains unchanged; assisted launch only.
+
+Hardware result:
+- all CPUs 0 through 7 entered Windows, NVMe and xHCI reached their runtime
+  checkpoints, no recovery tick was armed, and no EL2 exception or immediate
+  bugcheck occurred;
+- Windows reached the lock screen, then repeatedly paused for tens of seconds.
+  The operator could enter a password only between pauses; SSH never became
+  reachable;
+- two in-place snapshots proved that the host heartbeat and guest IAR/EOI
+  counters advanced on every CPU, queues remained empty, and the global lock
+  was not contended.  The guest therefore was not a dead hypervisor or a single
+  permanently stopped secondary;
+- the log marks the exact runtime transition `boot tick 1000Hz -> 100Hz`.  This
+  policy is not present in accepted baseline `55531e9`, which keeps CPU0 at
+  5000 Hz while only the secondaries use the sparse 100-Hz cadence.
+
+Verdict: rejected.  Restoring the accepted timer delivery removed the early
+`0x133`, but did not restore responsiveness because the CPU0 service cadence
+was still a post-baseline runtime change.  EXP-030 restores that final runtime
+difference while retaining the proven SMP wake correction.
+
+### EXP-20260814-030 — exact accepted cadence plus race-safe SMP wake
+
+Status: rejected after hardware test
+Created (UTC): 2026-08-14
+
+Hypothesis: reducing CPU0's EL2 service cadence from the accepted fixed 5000 Hz
+to 1000 Hz during boot and 100 Hz at guest runtime allows global guest progress
+to occur only in bursts.  Restoring the fixed accepted CPU0 cadence while
+leaving secondaries at 100 Hz should remove the lock-screen pauses without the
+all-core polling overhead that earlier 1000-Hz secondary experiments caused.
+
+Single changed runtime variable relative to rejected EXP-029:
+- CPU0 boot and runtime service cadence: 1000/100 Hz -> fixed 5000 Hz.
+
+Unchanged:
+- secondary cadence 100 Hz on T8103, guest IRQ recovery disabled, accepted
+  timer latch/re-pend delivery, and race-safe IPI+SEV mailbox publication;
+- eight CPUs, Mu, ACPI, NVMe, xHCI, physical display, Windows installation,
+  guest memory layout and Apple Input disabled for this A/B build.
+
+Expected checkpoint: Windows crosses the lock screen without a long pause,
+reaches a responsive desktop, and remains free of `0x101`, `0x133`, power
+bugchecks, spontaneous reset and minute-scale freezes.  ESP remains unchanged.
+
+Software evidence:
+- RED: focused tick-policy test failed because boot/runtime CPU0 rates were
+  still 1000/100 Hz rather than the accepted fixed 5000 Hz;
+- GREEN: focused test and complete nested C host suite passed; root vGIC suite
+  passed 15/15, focused SMP Python suite passed 10/10, and both diffs passed;
+- m1n1 commit `f4dfb0e` (`hv: restore accepted CPU0 service cadence`);
+- clean freestanding `APPLE_INPUT=0` build SHA-256
+  `847412d2c8e1ebe66052fc0594d394bfd8c3aa5d8999e59d91692219c02423d6`.
+
+Hardware result:
+- the artifact reported the required fixed `boot tick 5000Hz -> 5000Hz`, all
+  eight CPUs entered, NVMe/xHCI completed, and Windows reached both the network
+  and an authenticated SSH session;
+- boot progressed faster than EXP-029, but the guest again paused.  SSH stopped
+  before the first read-only command and later recovered after a physical
+  rendezvous snapshot;
+- the freeze snapshot showed CPU1 executing a user virtual address while the
+  other CPUs were in Windows idle paths.  Every CPU's host heartbeat and guest
+  IAR/EOI counters remained live, queues were empty, recovery remained zero,
+  and no EL2 exception or bugcheck occurred.
+
+Verdict: fixed 5000-Hz CPU0 cadence improves boot progress but is not sufficient
+to eliminate the pause.  The monitor image samples a large watchdog record and
+all virtual LRs every 64 ticks; at 5000 Hz this is about 78 heavy samples per
+second on CPU0.  EXP-031 tests the identical runtime in RELEASE, where that
+monitor-only hot path must be truly zero-cost.
+
+### EXP-20260814-031 — production runtime without monitor hot-path sampling
+
+Status: software-verified; frozen artifact pending clean provenance manifest
+Created (UTC): 2026-08-14
+
+Hypothesis: the clean installer/release profile was visibly smoother because it
+did not require monitor snapshots, but the implementation still executes the
+snapshot sampler regardless of `RELEASE`.  At the restored 5000-Hz CPU0 cadence
+this repeatedly reads architectural timer registers, all LRs and publishes a
+large record.  Returning before even the sample counter in RELEASE should make
+production diagnostics zero-cost while preserving the monitor build unchanged.
+
+Single source variable relative to rejected EXP-030:
+- `hv_watchdog_snapshot_tick()` returns immediately when runtime diagnostics
+  are disabled.
+
+Build/profile variable required by the hypothesis:
+- `RELEASE=1`, `APPLE_INPUT=0`, assisted physical display, debug off.
+
+Unchanged:
+- fixed CPU0 5000 Hz, secondary 100 Hz, accepted timer delivery, disabled
+  recovery source, race-safe SMP wake, Mu, NVMe, xHCI and Windows installation.
+
+Expected checkpoint: fast lock-screen/desktop entry and continuous pointer/SSH
+responsiveness without monitor sampling overhead, BSOD or reset.  This build
+cannot provide an in-place watchdog snapshot by design; failure is judged from
+the foreground launcher lifecycle, physical screen and network continuity.
+
+Software evidence:
+- RED: the root source-contract test failed while the release path still
+  incremented the snapshot sampler before checking runtime diagnostics;
+- implementation commit `f397d93abbebb0444df731b55148318652db3228` returns
+  before the sampler when runtime diagnostics are disabled;
+- GREEN: root vGIC contract suite 16/16, focused release/watchdog/fast-path/tick
+  tests, and the complete nested host suite passed;
+- clean `RELEASE=1 APPLE_INPUT=0` build completed and produced m1n1 SHA-256
+  `0ed330e5da17e0c64b35c2ce46efd41985c405a163bc416c19cf455528e63c77`;
+- `build_cfg.h` contains both `RELEASE` and `HV_DISABLE_APPLE_INPUT`.
