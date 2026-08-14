@@ -126,7 +126,11 @@ class VgicIrqQueueContractTest(unittest.TestCase):
 
         self.assertIn("bool timer_signal = false;", update)
         self.assertIn("intid == 17 || intid == 18", update)
-        self.assertIn("hv_vgic_diag_needs_timer_edge_wake", update)
+        self.assertIn("hv_vgic_diag_timer_wake_transition", update)
+        self.assertIn("timer_wake_state[cpu].deliverable", update)
+        self.assertIn(
+            "timer_wake_state[cpu].deliverable = next.deliverable_latched", update
+        )
         self.assertIn("hv_vgic3_defer_timer_wake();", update)
         self.assertNotIn("smp_send_ipi", update)
         self.assertIn('sysop("isb");', flush)
