@@ -37,7 +37,13 @@ class VgicIrqQueueContractTest(unittest.TestCase):
             "// Slow (single threaded) path", 1
         )[0]
 
-        self.assertNotIn("hv_vgic3_update_vi();", fast)
+        self.assertEqual(fast.count("hv_vgic3_update_vi();"), 1)
+        self.assertLess(fast.index("hv_update_fiq();"),
+                        fast.index("hv_vgic3_update_vi();"))
+        self.assertLess(fast.index("hv_handle_local_ipi();"),
+                        fast.index("hv_vgic3_update_vi();"))
+        self.assertLess(fast.index("hv_vgic3_update_vi();"),
+                        fast.index("hv_fiq_secondary_fast_complete("))
         self.assertIn(
             "hv_fiq_secondary_fast_complete(true, !!(mrs(ISR_EL1) & 0x40),",
             fast,

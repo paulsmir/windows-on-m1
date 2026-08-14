@@ -2154,3 +2154,145 @@ Implementation commit and exact post-commit build:
 - `docker run --rm -v /Users/pavel/public_windows:/work -w
   /work/m1n1_windows windows-on-m1-build:local make -j8 RELEASE=1
   APPLE_INPUT=0`.
+
+Recorded artifact before launch:
+- root `7c299066cc62133e9e44661af8042b2d12759aa9`, m1n1
+  `46c2240df2df467b9ee3d89b86f740f63a452acb`, Mu `63942398`;
+- `investigation/artifacts/EXP-20260814-035/m1n1.macho`, SHA-256
+  `30d4c5fdcf724a4f0e516e1b11a349d71349506ebf57bf198c8a69d9c919f08c`;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `f494d13c13d64096e128434cb96ed688c3f5356671286fe1d78583e03ed242f5`;
+  strict release/display-both/debug-off role verification passed;
+- RELEASE object disassembly retains `CNTP_TVAL_EL0`/`CNTP_CTL_EL0` in
+  `hv_arm_tick` and has no tick-counter reference or RMW/store.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug off \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-035/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-035/m1n1.macho \
+  --chainload --foreground
+```
+
+Expected checkpoint: all eight CPUs, NVMe and xHCI initialize; the valid viewer
+advances beyond EXP-033's Windows-logo CRC, Windows reaches login/network, and
+UI/SSH remain continuously responsive for ten minutes.  Failure is a two-minute
+byte-identical framebuffer, any checksum loss, bugcheck/reset, or a pause longer
+than five seconds.  Evidence goes under the artifact `evidence/` directory;
+SIGTERM requests the final snapshot/reboot recovery.
+
+Hardware result:
+- the exact recorded m1n1 and Mu artifacts launched through the recorded assisted
+  observed command; m1n1 reported commit `46c2240`, all eight CPUs entered, NVMe
+  initialized, and xHCI discovery completed;
+- the observer remained structurally healthy: metadata advanced from generation
+  18/frame 17 to generation 60/frame 59, but the framebuffer stayed byte-identical
+  at SHA-256
+  `494fe4af7deeecdc4347e1ea314e6c742015f56ba59b181e892c75d96b539f7b`;
+- the metadata evidence is
+  `investigation/artifacts/EXP-20260814-035/evidence/freeze-fb-info.json`,
+  SHA-256
+  `219a14cfe23014c743fd80283ba6f517bd9530fa88c1be7c627b5ca7459a81bc`;
+  the raw frozen frame is `freeze-fb.raw` with the framebuffer hash above;
+- Windows did not reach its known TCP/22 endpoint.  The unchanged frame exceeded
+  the two-minute failure criterion, so the release diagnostic writes are not the
+  root cause of the freeze;
+- when the host requested a diagnostic/recovery boundary, the guest immediately
+  advanced far enough for m1n1 to print `guest runtime ready` and the xHCI route
+  enable.  This repeats EXP-029's observation that an external EL2 wake can
+  temporarily restore guest progress;
+- the final control request observed the known diagnostic condition
+  `BHL owner=0 count=1` while CPU0 was printing.  The exception dump appeared only
+  during the forced recovery/reboot and is not attributed as the initiating guest
+  failure;
+- recovery completed successfully: the target returned to Stage 1, the probe
+  responded, and both USB serial functions reappeared.
+
+Verdict: rejected as the freeze root cause.  The change remains a correct
+zero-cost RELEASE cleanup, but EXP-035 proves it is insufficient.  The reproduced
+failure and wake-assisted progress localize the next check to the secondary FIQ
+return boundary and its synthetic HCR.VI wake contract.
+
+Finalized (UTC): 2026-08-14T16:02:28Z.
+
+### EXP-20260814-036 — resynchronize synthetic VI before secondary idle return
+
+Status: planned
+Created (UTC): 2026-08-14T16:02:28Z
+
+Hypothesis: EXP-028 removed the last `hv_vgic3_update_vi()` at the secondary FIQ
+fast-return boundary.  `HCR_EL2.VI` is a software-cached output on this Apple-vGIC
+implementation.  Most fresh injections update it, but the accepted timer latch
+path deliberately does nothing while the same INTID remains live.  If another
+guest vGIC transition cleared VI while a timer LR remained Pending, the current
+fast path reads the stale clear value, returns to a Windows idle vCPU, and has no
+physical event that guarantees a wake.  Recomputing VI from live LR/VMCR state
+immediately after local timer/IPI handling should prevent that lost wake without
+restoring the rejected 1-ms recovery timer or a global exit scan.
+
+Evidence and source contract inspected before implementation:
+- EXP-029 and EXP-035 both show that an external diagnostic wake temporarily
+  restores progress; EXP-035 reproduces the freeze with Apple Input absent and
+  RELEASE diagnostic writes compiled out;
+- m1n1 `src/hv_exc.c`: the secondary fast path services `hv_update_fiq()` and
+  `hv_handle_local_ipi()`, then decides from the current physical FIQ and cached
+  HCR.VI bits whether to return directly;
+- m1n1 `src/hv_vgic.c`: `hv_vgic3_update_vi()` derives the synthetic VI output
+  from live Pending LR state, VMCR group enable, PMR, and running priority;
+- m1n1 commit `091caeed` performed this recomputation only at the fast-return
+  boundary and reached the desktop in EXP-017; commit `2ae94afc` removed it while
+  restoring the accepted completion predicate, and the later no-recovery builds
+  retain that removal;
+- fresh inject/repend helpers update VI, but the `timer_*_injected == true` live-LR
+  branch can legitimately retain the LR without recomputing VI.
+
+Ownership contract: m1n1 owns Apple timer FIQ capture, virtual LR state and the
+synthetic HCR.VI signal used to wake Windows.  Mu/ACPI owns enumeration only;
+Windows owns timer programming and EOI/rearm after delivery.  Therefore the fix
+belongs at m1n1's local FIQ-to-guest boundary, not in the input driver, Mu or
+Windows.
+
+Single changed runtime variable relative to EXP-035:
+- after local timer/IPI service and before testing HCR.VI, recompute the synthetic
+  VI line once from live local vGIC state.
+
+Unchanged: 5000/100-Hz host cadence, accepted timer latch/repend path, disabled
+guest recovery timer, global serialized exit policy, RELEASE diagnostics, Mu,
+ACPI/no-AINP artifact, eight CPUs, storage, xHCI, display and observer profile.
+
+Falsifiable software checkpoint: first change the focused source-contract test to
+require one `hv_vgic3_update_vi()` after both local-source helpers and before the
+HCR.VI completion read; observe RED on m1n1 `46c2240`, add only that production
+call, then require GREEN plus the complete nested host and root vGIC suites.
+
+Planned clean build: Docker `make clean`, then `make -j8 RELEASE=1 APPLE_INPUT=0`.
+Record the implementation commit, artifact SHA-256 and strict manifest before
+launch.  The exact assisted observed launch shape remains EXP-035 with only the
+EXP-036 m1n1/artifact paths changed.  Recovery is the unchanged ESP/Stage 1 plus
+the recorded EXP-035 artifacts.
+
+Expected hardware checkpoint: advance past the frozen EXP-035 framebuffer, reach
+login and the known network endpoint, then sustain continuous UI/SSH progress for
+at least ten minutes with no pause over five seconds.  A byte-identical frame for
+two minutes, dead network, bugcheck/reset or long pause rejects the hypothesis.
+
+TDD and implementation checkpoint before artifact build:
+- RED: the focused root contract failed on m1n1 `46c2240` because the secondary
+  fast boundary contained zero `hv_vgic3_update_vi()` calls;
+- GREEN: after adding exactly one recomputation after both local-source helpers
+  and before the completion predicate, the focused test and root vGIC suite 16/16
+  passed;
+- the complete nested C host suite passed, the complete root suite passed 255/255
+  when allowed to bind its loopback test server, and both repository diff checks
+  passed;
+- implementation commit:
+  `0cde15ea76e84e64b8effb37bec4308c2f211c59`; m1n1 tracked source is clean.
+
+The exact build now being run is the previously recorded clean Docker RELEASE
+build.  No hardware launch is authorized until its artifact and manifest hashes
+are appended below.
