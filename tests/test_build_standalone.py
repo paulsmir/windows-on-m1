@@ -243,7 +243,7 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertIn("artifact_manifest.py create --allow-dirty", debug.stdout)
         self.assertNotIn("--allow-dirty", release.stdout)
 
-    def test_full_debug_enables_wfx_invariant_in_both_m1n1_stages_only(self):
+    def test_wfx_policy_is_not_an_optional_debug_build_flag(self):
         environment = dict(
             os.environ,
             BUILD_STANDALONE_DRY_RUN="1",
@@ -258,7 +258,7 @@ class BuildStandaloneTests(unittest.TestCase):
             env=environment, text=True, capture_output=True, check=False,
         )
         self.assertEqual(full.returncode, 0, full.stderr)
-        self.assertEqual(full.stdout.count("DIAG_TRAP_WFX=1"), 3)
+        self.assertNotIn("DIAG_TRAP_WFX=1", full.stdout)
         self.assertEqual(full.stdout.count("RUNTIME_DIAG_VERBOSE=1"), 3)
         self.assertNotIn("DIAG_TRAP_WFX=1", release.stdout)
         self.assertNotIn("RUNTIME_DIAG_VERBOSE=1", release.stdout)

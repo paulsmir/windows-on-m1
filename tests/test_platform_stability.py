@@ -138,7 +138,7 @@ class HcrMutationPolicyTests(unittest.TestCase):
         # only policy-aware runtime helper and secondary-entry restore.
         self.assertEqual(
             sorted(name for name, _line in direct_writes),
-            ["exception.c", "hv.c", "hv.c", "hv.c"],
+            ["exception.c", "hv.c", "hv.c"],
             direct_writes,
         )
         hv = (source_root / "hv.c").read_text(encoding="utf-8")

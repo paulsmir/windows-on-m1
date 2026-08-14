@@ -5,7 +5,11 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "m1n1_windows" / "src"
 HV_EXC = ROOT / "hv_exc.c"
+HV = ROOT / "hv.c"
 HV_VGIC = ROOT / "hv_vgic.c"
+HV_VGIC_HEADER = ROOT / "hv_vgic.h"
+HV_VGIC_DIAG = ROOT / "hv_vgic_diag.c"
+M1N1_MAKEFILE = ROOT.parent / "Makefile"
 
 
 def function_body(source, name):
@@ -117,28 +121,30 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("timer_sync_live_irq(17", update)
         self.assertNotIn("hv_sync_timer_level", update)
 
-    def test_deliverable_timer_vi_edge_defers_wake_until_final_fiq_return(self):
+    def test_idle_timer_progress_uses_wfx_trap_and_lr_level_not_physical_ipi(self):
         exc = HV_EXC.read_text()
+        hv = HV.read_text()
         vgic = HV_VGIC.read_text()
+        vgic_header = HV_VGIC_HEADER.read_text()
+        vgic_diag = HV_VGIC_DIAG.read_text()
         update = function_body(vgic, "void hv_vgic3_update_vi(void)")
-        flush = function_body(vgic, "void hv_vgic3_flush_timer_wake(void)")
-        fiq = function_body(exc, "void hv_exc_fiq(struct exc_info *ctx)")
+        wfi = exc.split("case ESR_EC_WFI:", 1)[1].split(
+            "case ESR_EC_DABORT_LOWER:", 1
+        )[0]
 
-        self.assertIn("bool timer_signal = false;", update)
-        self.assertIn("intid == 17 || intid == 18", update)
-        self.assertIn("hv_vgic_diag_timer_wake_transition", update)
-        self.assertIn("timer_wake_state[cpu].deliverable", update)
-        self.assertIn(
-            "timer_wake_state[cpu].deliverable = next.deliverable_latched", update
-        )
-        self.assertIn("hv_vgic3_defer_timer_wake();", update)
+        self.assertNotIn("HV_DIAG_TRAP_WFX", hv)
+        self.assertNotIn("HV_DIAG_TRAP_WFX", exc)
+        self.assertNotIn("HV_DIAG_TRAP_WFX", M1N1_MAKEFILE.read_text())
+        self.assertIn("HCR_TWI | HCR_TWE", hv)
+        self.assertIn("hv_update_fiq();", wfi)
+        self.assertIn("hv_wfx_resume_pc", wfi)
+
+        self.assertNotIn("timer_wake_state", vgic)
+        self.assertNotIn("hv_vgic3_flush_timer_wake", vgic)
+        self.assertNotIn("hv_vgic3_flush_timer_wake", vgic_header)
+        self.assertNotIn("hv_vgic_diag_timer_wake_transition", vgic_diag)
         self.assertNotIn("smp_send_ipi", update)
-        self.assertIn('sysop("isb");', flush)
-        self.assertIn("smp_send_ipi(cpu);", flush)
-        self.assertLess(fiq.rindex("hv_handle_local_ipi();"),
-                        fiq.rindex("hv_exc_exit(ctx);"))
-        self.assertLess(fiq.rindex("hv_exc_exit(ctx);"),
-                        fiq.rindex("hv_vgic3_flush_timer_wake();"))
+        self.assertNotIn("hv_vgic3_flush_timer_wake", exc)
 
     def test_timer_deassertion_clears_the_accepted_delivery_latch(self):
         exc = HV_EXC.read_text()

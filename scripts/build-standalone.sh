@@ -49,7 +49,7 @@ case "$APPLE_INPUT" in
     *) usage ;;
 esac
 if [ "$PROFILE" = debug ] && [ "$DEBUG" = full ]; then
-    M1N1_DIAG="$M1N1_DIAG DIAG_TRAP_WFX=1 RUNTIME_DIAG_VERBOSE=1"
+    M1N1_DIAG="$M1N1_DIAG RUNTIME_DIAG_VERBOSE=1"
 fi
 if [ "$PROFILE" = debug ]; then
     case "$DEBUG" in
