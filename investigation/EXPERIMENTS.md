@@ -2888,7 +2888,7 @@ Exact launch command:
 
 ### EXP-20260814-041 — wake a newly deliverable timer VI with one physical edge
 
-Status: planned; implementation and software verification complete
+Status: rejected after hardware test
 Created (UTC): 2026-08-14T18:11:50Z
 
 Hypothesis: EXP-040 established that Windows can remain indefinitely in its idle
@@ -3063,7 +3063,7 @@ Finalized (UTC): 2026-08-14T18:21:48Z.
 
 ### EXP-20260814-042 — defer timer wake across the FIQ return boundary
 
-Status: planned; implementation and software verification complete
+Status: rejected after hardware test
 Created (UTC): 2026-08-14T18:27:34Z
 
 Hypothesis: EXP-041 did generate the intended physical self-IPIs, but source and
@@ -3209,7 +3209,7 @@ Finalized (UTC): 2026-08-14T18:34:32Z.
 
 ### EXP-20260814-043 — one deferred wake per deliverable Pending interval
 
-Status: planned; implementation and software verification complete
+Status: rejected after hardware test
 Created (UTC): 2026-08-14T18:38:41Z
 
 Hypothesis: EXP-042 proved that an IPI deferred past `hv_exc_exit()` survives the
@@ -3295,3 +3295,40 @@ Exact launch command:
   --m1n1 investigation/artifacts/EXP-20260814-043/m1n1.macho \
   --chainload --foreground
 ```
+
+Hardware result (completed UTC 2026-08-14T18:44:10Z):
+- Windows autonomously passed both previously frozen disk-check frames from
+  EXP-041 and EXP-042 without a host SIGINT or diagnostic IPI.  All eight CPUs,
+  NVMe, xHCI and the framebuffer reached guest runtime.
+- After the black transition the guest remained active long enough to issue its
+  own bugcheck: `DPC_WATCHDOG_VIOLATION (0x133)`, parameters
+  `P1=0x1 P2=0x1e00 P3=0xfffff802972083b0 P4=0x0`, seen by CPU0.  Microsoft
+  defines parameter 1 value 1 as cumulative extended time at IRQL
+  `DISPATCH_LEVEL` or above; this is not evidence for one individually long DPC.
+- The bugcheck snapshot no longer shows a persistent Pending architectural
+  timer on CPUs 1 through 7: their timer controls are inactive or masked,
+  `vinj=0`, virtual queues are empty, and all live LR slots are empty.  CPU0 has
+  one active SGI LR.  This rejects the prior repeated-wake storm as the immediate
+  final failure while proving that the broader high-IRQL latency defect remains.
+- Windows requested PSCI system reset after displaying the blue-screen frame;
+  the reset was guest-initiated, not a host recovery action.  The public runner
+  then lost the re-enumerating serial endpoint and exited.  Stage 1 recovery was
+  subsequently confirmed at commit `b791225` with eight CPUs and 8 GiB.
+
+Evidence:
+- `investigation/artifacts/EXP-20260814-043/evidence/hv.log`, SHA-256
+  `4b02330d77a0dec1561018e2d220adf5a3825d6ed402deb6972afff58107eb7a`;
+- final raw framebuffer, SHA-256
+  `a8954ee6116dc33e731281af7d462bbb8d2511670a41a3211a14e6d6a26fb580`;
+- rendered blue-screen PNG, SHA-256
+  `c3556a02bf04a00ddbe6f4f7f5d868cc566fc54ecb4525a04c6bef59823a1d7a`;
+- framebuffer metadata, SHA-256
+  `f3f0de08644bdbb8cefe2be7191eba8cb99e6771c3c65ff816532909d4b173d9`.
+
+Verdict: rejected for stability.  The explicit deliverability latch is a valid
+classification improvement over EXP-042 and eliminated its repeated physical
+IPI storm, but the artifact failed the no-bugcheck acceptance criterion with a
+Windows cumulative high-IRQL watchdog.  Per the pre-recorded three-attempt bound,
+no further incremental wake patch is justified.  The next step is an
+architectural A/B against the exact accepted 2026-08-13 contract and collection
+of the new Windows dump before changing timer or vGIC policy again.
