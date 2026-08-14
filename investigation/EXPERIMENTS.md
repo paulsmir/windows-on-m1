@@ -3013,3 +3013,50 @@ byte-identical frame for two minutes, dead network, bugcheck/reset, repeated
 physical-wake storm or long pause rejects the hypothesis.  On failure, capture
 two complete snapshots and frames, terminate only the verified runner PID, and
 confirm Stage 1 recovery before any further change.
+
+Hardware result (UTC 2026-08-14T18:21:48Z):
+- the exact recorded artifact reported m1n1 `fa42daa`; CPUs 0 through 7 entered,
+  NVMe initialized, xHCI reached runtime, and `guest runtime ready` appeared
+  without any manual diagnostic boundary;
+- Windows then remained at the disk-check `6 second(s)` frame.  Observer
+  generation advanced 34 -> 77 while both full frames were byte-identical at
+  SHA-256
+  `19b3aa768ab56c507b7e63f709f9e1053dc91e0fe1f2a87b737f8b602a3fc947`;
+  TCP/22 did not become available.  This exceeded the two-minute failure
+  criterion;
+- the first controlled physical diagnostic boundary advanced the framebuffer
+  to a distinct SHA-256
+  `910b80e2b0f62a66922e12c61894ac2e3894656911d5affbd132d7095ec695a9`,
+  but the guest stalled again;
+- the first snapshot still contained Pending-only INTID 18 with HCR.VI asserted
+  on CPUs 1, 4 and 7, and Active+Pending INTID 18 on CPUs 5 and 6.  Queues were
+  empty and host ticks advanced;
+- between the second and final snapshots CPU1's physical IPI receive count rose
+  82698 -> 101283 and CPU2's rose 120324 -> 138970, while their virtual IAR/EOI
+  counts remained exactly 44574/44574 and 79472/79472.  CPUs 3, 4, 5 and 7 each
+  received approximately 17800 additional physical IPIs with no virtual IAR/EOI
+  progress.  CPU6, whose timer remained Active+Pending rather than Pending-only,
+  received only one additional IPI, matching the tested suppression rule;
+- current source explains the hardware trace: the new self-IPI is emitted inside
+  `hv_vgic3_update_vi()` called by the secondary fast FIQ path, then
+  `hv_handle_local_ipi()` acknowledges it in the same EL2 exception before the
+  eventual guest ERET.  The IPI counter grows, but no wake remains pending at the
+  physical return boundary;
+- complete final UART evidence is
+  `investigation/artifacts/EXP-20260814-041/evidence/hv-final.log`, SHA-256
+  `f44417d9da7fa023a0a42fe4d07770119622f534ff28583097a7d4eb99f485f1`;
+  the pre-termination snapshot log is `hv.log`, SHA-256
+  `17e623c35cba39d4e11407285304c43784c58d97d28b231da56c752210b6bb92`;
+- SIGTERM targeted only verified `run_uefi.py` PID 54380 after the failure
+  criterion.  The printed guest exception followed the requested recovery
+  reboot and is not the initiating freeze.  Stage 1 `b791225` then answered the
+  proxy with eight CPUs and 8.0 GiB DRAM.
+
+Verdict: rejected and superseded.  EXP-041 validates the timer-only edge
+predicate but falsifies immediate self-IPI emission inside LR/VI publication.
+It both consumes the wake before ERET and produces a high-rate EL2 IPI load.  No
+release artifact may retain this placement.  The next falsifiable correction is
+to latch the same edge, drain current physical sources normally, and emit at
+most one deferred IPI at the common final EL2-to-guest return boundary.
+
+Finalized (UTC): 2026-08-14T18:21:48Z.
