@@ -2005,6 +2005,51 @@ Exact launch command:
   --chainload --foreground
 ```
 
+### EXP-20260814-038 pre-launch continuation and ledger correction
+
+Recorded (UTC): 2026-08-14T16:33:41Z
+
+Correction: the historical EXP-036 hardware-result block that follows the first
+EXP-038 planning text above was inserted out of chronological order; it describes
+only EXP-036 (`0cde15e`, release artifact `8f545c13...`) and is not an EXP-038
+result.  This appended correction preserves the old text while preventing it from
+being interpreted as evidence for the not-yet-launched EXP-038 artifact.
+
+Exact pre-launch source and artifact contract:
+- root `d35bbfda6b6182c0c81ecd2a9f90a05ad340e376`, m1n1
+  `3aeef41261ee51d7eaa922721773c0d199a44780`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; manifest records clean tracked
+  source (Mu's existing untracked nested markers are not included);
+- clean Docker monitor build: `make clean`, then
+  `make -j8 APPLE_INPUT=0`; build succeeded with only pre-existing warnings;
+- `investigation/artifacts/EXP-20260814-038/m1n1.macho`, SHA-256
+  `7a900c9120506b1a47a3740c2b7edd3dcee0b752c285ba82bd75f08d3bae796b`;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- `MANIFEST.json`, SHA-256
+  `c28a7a279be1b5de09b376bb346ed59d8f25dd86e4d007b2f633b1ae14a73a69`;
+  strict debug/display-both/monitor and artifact-role verification passed;
+- recovery artifact: unchanged ESP/Stage 1 and the recorded EXP-037 artifacts.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug monitor \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-038/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-038/m1n1.macho \
+  --chainload --foreground
+```
+
+Expected checkpoint: reproduce the late static framebuffer with advancing
+observer generations, capture at least two watchdog snapshots ten seconds apart,
+and verify that every CPU record now includes `lrc/lr0..lr7`.  Decode INTID 18's
+LR state (Pending, Active, Active+Pending, or absent) on the stalled vCPUs.  A
+missing LR bank, failure to reproduce, reset, or inconsistent snapshot is
+inconclusive.  The final control action is an explicit SIGTERM snapshot/reboot,
+followed by a Stage-1 eight-CPU/8-GiB recovery probe.
+
 Hardware result:
 - exact recorded monitor artifact launched and reported m1n1 `0cde15e`; all
   eight CPUs, NVMe, guest-runtime cadence and xHCI route checkpoints completed;
