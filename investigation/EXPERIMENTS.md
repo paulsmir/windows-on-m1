@@ -2093,6 +2093,28 @@ is inconclusive because diagnostics can perturb timing; a dump with no current
 per-CPU records also rejects the instrumentation.  Recovery remains Stage 1 and
 the immutable EXP-036 artifacts.
 
+Recorded artifact before launch:
+- root `6b1ad9f4ccb9f0d265bd08d8d2aa5e7019c3fb6a`, m1n1
+  `0cde15ea76e84e64b8effb37bec4308c2f211c59`, Mu `63942398`;
+- `investigation/artifacts/EXP-20260814-037/m1n1.macho`, SHA-256
+  `ea8b66aee0aad0629b38debd7b16ff86b22c7ae82d093645ccc50ec027a0ef3e`;
+- unchanged no-AINP firmware SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- DEBUG/monitor/both manifest SHA-256
+  `152437aeb44c9adb10b3561da80d20352fa963f30fb1f0b515291af590126181`;
+  strict role verification passed and all tracked source revisions are clean.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug monitor \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-037/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-037/m1n1.macho \
+  --chainload --foreground
+```
+
 Expected checkpoint: with valid observer framing, Windows must advance beyond
 the EXP-033 frozen framebuffer, reach the lock/login screen, acquire the known
 network address and remain continuously responsive for at least ten minutes.
