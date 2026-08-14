@@ -3165,3 +3165,44 @@ login/TCP/22 and ten continuous minutes without a pause over five seconds.  A
 two-minute identical frame, dead network, IPI-only growth, bugcheck/reset or
 exception rejects the change.  Failure recovery is two snapshots/frames,
 verified runner termination and Stage 1 probe before another modification.
+
+Hardware result (UTC 2026-08-14T18:34:32Z):
+- the exact artifact reported m1n1 `bf78a76`; all eight CPUs entered, NVMe and
+  xHCI reached runtime, and Windows autonomously advanced beyond EXP-041's
+  `6 second(s)` frame to the next disk-check phase;
+- it then remained on one full frame from observer generation 27 through 80,
+  SHA-256
+  `b20c0b4f1f8150e0ad52a5dd7750e40c3d81c3464a323e2015197932a0fec5b6`,
+  for more than two minutes.  A physical diagnostic boundary immediately
+  changed the frame to the known black-screen SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`,
+  after which it stalled again;
+- the first snapshot showed correctly represented timer state: CPUs 4, 5, 6
+  and 7 held Pending-only INTID 18 with HCR.VI asserted, while CPUs 0, 2 and 3
+  held Active+Pending.  Queues were empty and host ticks advanced;
+- across the two snapshots CPU1 physical IPI receives rose 22065 -> 48374 with
+  virtual IAR/EOI fixed at 14516/14516; CPU5 rose 19961 -> 45404 with IAR/EOI
+  fixed at 9286/9286.  CPU4 received 25438 extra physical IPIs for only 41
+  virtual acknowledgements, and CPU7 received 25452 for only seven.  By
+  contrast CPU2 remained Active+Pending and received only one additional IPI;
+- therefore deferred placement preserves physical events across ERET, but the
+  HCR.VI-bit edge is not a stable one-wake-per-delivery identity.  It repeatedly
+  re-arms while the same Pending timer remains unconsumed and creates a physical
+  FIQ storm that can itself starve guest execution;
+- complete final evidence is
+  `investigation/artifacts/EXP-20260814-042/evidence/hv-final.log`, SHA-256
+  `459948ab3ef3af2df731fbea89cf5e9a7d747d692c11e66ebdb27d4809cdbcc4`;
+  the two-snapshot pre-termination log is `hv.log`, SHA-256
+  `78a94bd23dc1edc8b87d9a4faf5d4c4c63d2d200a924a60b7e493e729e84d8db`;
+- SIGTERM targeted only verified runner PID 74280.  The recovery exception was
+  requested, not initiating; Stage 1 `b791225` returned and reported eight CPUs
+  and 8.0 GiB DRAM.
+
+Verdict: rejected as a complete fix, but it confirms correct deferred placement.
+The remaining violated contract is edge identity: one physical wake must be
+associated with one continuous priority-deliverable Pending timer interval, not
+with the observable HCR.VI bit.  The next change will retain deferred placement
+and replace only the HCR-derived edge with a per-CPU deliverability latch that
+resets when the timer ceases to be Pending and deliverable.
+
+Finalized (UTC): 2026-08-14T18:34:32Z.
