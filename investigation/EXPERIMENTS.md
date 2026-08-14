@@ -2153,6 +2153,44 @@ Exact launch command:
   --chainload --foreground
 ```
 
+Hardware result (UTC 2026-08-14T16:55:05Z):
+- the exact recorded RELEASE artifact launched and reported m1n1 commit
+  `ca6ab37`; all eight CPUs entered, NVMe reached runtime, and xHCI discovery
+  completed;
+- Windows froze on the same `To skip disk checking, press any key within 8
+  seconds` screen.  Observer generations continued from 22 through 49 and 69,
+  but the captured framebuffer remained byte-identical for more than two
+  minutes at SHA-256
+  `bcbcef15c93229fde86d0a5d0f8815ed5e1dae073a1c5056d5acf25feccff742`;
+- the 30-, 60- and 120-second raw frames and final frame are under
+  `investigation/artifacts/EXP-20260814-039/evidence/`; the 30-second PNG is
+  SHA-256
+  `31b8857f1a67637dabe72e69620bfdd0ff391217b5877b1d328c54060ea04484`;
+- metadata SHA-256 values are
+  `f3e5eb076bd38d1a5d7288163cff7c054ae3cacd38bb275d60a52b1fade658a2`
+  at 30 seconds,
+  `4b1004ed4680017752a0021d6ff9dd859b1a1c9ea47e42b88f7f683544d2b108`
+  at 60 seconds, and
+  `b3e04ccc36f66a179f01c99b0c73813d75e40d7e7fd6bf9f2b119ed6d62be7ed`
+  at 120 seconds/final;
+- TCP/22 never appeared.  Occasional observer transport checksum corruption
+  appeared in the release console, but generation continued and independently
+  saved frames remained byte-identical, so it is not used as the freeze
+  criterion;
+- SIGTERM was sent only to the verified launcher PID after the failure criterion.
+  The final control path printed `BHL owner=0 count=1`; the later guest exception
+  occurred during forced reboot and is not attributed as the initiating failure;
+- recovery completed successfully: Stage 1 `b791225` responded after reboot and
+  reported J313, all eight CPUs and 8.0 GiB DRAM.
+
+Verdict: rejected.  Correcting Active to Active+Pending for an asserted live
+INTID 18 is architecturally necessary but is not sufficient to wake/progress the
+Windows vCPU.  The next experiment must preserve this correction and observe the
+EOI/deactivation and physical wake boundary; it must not restore the rejected
+1-ms polling source, trap WFI, or signal HCR.VI for an Active+Pending LR.
+
+Finalized (UTC): 2026-08-14T16:55:05Z.
+
 ### EXP-20260814-038 pre-launch continuation and ledger correction
 
 Recorded (UTC): 2026-08-14T16:33:41Z
