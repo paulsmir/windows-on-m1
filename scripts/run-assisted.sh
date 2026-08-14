@@ -92,7 +92,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "mode: assisted development"
     echo "display: $DISPLAY"
     echo "debug: $DEBUG"
-    [ "$FOREGROUND" -eq 0 ] && echo "execution: detached" || echo "execution: foreground"
+    [ "$FOREGROUND" -eq 0 ] && echo "execution: detached" || echo "runner: foreground"
     echo "proxy: $PROXY"
     if [ "$DEBUG" = off ]; then
         echo "virtual UART: disabled"

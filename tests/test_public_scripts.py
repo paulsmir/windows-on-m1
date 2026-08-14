@@ -386,6 +386,34 @@ class PublicScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("runner: foreground", result.stdout)
 
+    def test_observed_investigation_requires_both_displays_and_viewer(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted", "--observed",
+                "--debug", "off", "--proxy", "/dev/cu.test-proxy",
+                "--dry-run",
+            ],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("observation: required", result.stdout)
+        self.assertIn("display: both", result.stdout)
+        self.assertIn("USB framebuffer: enabled", result.stdout)
+        self.assertIn("virtual framebuffer: http://127.0.0.1:8766/", result.stdout)
+
+        rejected = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-windows.sh"),
+                "--execution", "assisted", "--observed",
+                "--display", "physical", "--dry-run",
+            ],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+        self.assertEqual(rejected.returncode, 2)
+        self.assertIn("observed investigations require --display both", rejected.stderr)
+
     def test_supervisor_selects_forensic_or_monitor_diagnostics(self):
         for diagnostics, wire_mode in (("forensic", "full"), ("monitor", "monitor")):
             result = subprocess.run(
