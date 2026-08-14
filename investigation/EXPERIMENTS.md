@@ -2103,6 +2103,21 @@ mutation-sensitive host test for Active+asserted -> Active+Pending and
 Active+Pending+deasserted -> Active, then implement the smallest call-site and
 run focused, complete nested and root suites.
 
+TDD and implementation result:
+- RED: the new production-path contract failed on m1n1 `3aeef41` because
+  `timer_sync_live_irq` did not exist;
+- GREEN: the existing mutation-sensitive four-state host test and the new root
+  call-site test pass.  Only the already-live virtual INTID 18 LR is synchronized;
+  INTID 17, queue ownership, tick cadence and recovery remain unchanged;
+- synchronization writes the LR and recomputes VI only when the level transition
+  changes the state, avoiding extra LR writes for stable Pending or
+  Active+Pending values;
+- focused root tests passed 20/20, the complete nested C host suite passed, the
+  complete root suite passed 257/257 in the project environment, and both diff
+  checks passed;
+- m1n1 implementation commit
+  `ca6ab37ce0dbbb7c18da40102887aebb58cc9dbb`.
+
 Hardware checkpoint after a clean RELEASE `APPLE_INPUT=0` build: boot through
 the disk-check countdown without a diagnostic boundary, reach login and TCP/22,
 then maintain continuously changing UI/time and IAR/EOI progress for at least

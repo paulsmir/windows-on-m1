@@ -101,6 +101,20 @@ class VgicIrqQueueContractTest(unittest.TestCase):
 
         self.assertIn("timer_irq_outstanding", update)
         self.assertIn("timer_repend_live_irq", update)
+
+    def test_live_virtual_timer_lr_tracks_asserted_and_deasserted_level(self):
+        exc = HV_EXC.read_text()
+        sync = function_body(exc, "static bool timer_sync_live_irq")
+        update = function_body(exc, "static void hv_update_fiq(void)")
+        virtual = update.split("if (mrs(CNTV_CTL_EL02)", 1)[1]
+
+        self.assertIn("hv_vgic_diag_sync_level_lr", sync)
+        self.assertIn("if (next.changed)", sync)
+        self.assertIn("hv_vgic3_write_lr", sync)
+        self.assertIn("hv_vgic3_update_vi();", sync)
+        self.assertIn("timer_sync_live_irq(18, true)", virtual)
+        self.assertIn("timer_sync_live_irq(18, false);", virtual)
+        self.assertNotIn("timer_sync_live_irq(17", update)
         self.assertNotIn("hv_sync_timer_level", update)
 
     def test_timer_deassertion_clears_the_accepted_delivery_latch(self):
