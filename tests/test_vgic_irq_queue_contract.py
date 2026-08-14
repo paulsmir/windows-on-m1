@@ -117,6 +117,19 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("timer_sync_live_irq(17", update)
         self.assertNotIn("hv_sync_timer_level", update)
 
+    def test_deliverable_timer_vi_edge_issues_one_ordered_physical_wake(self):
+        vgic = HV_VGIC.read_text()
+        update = function_body(vgic, "void hv_vgic3_update_vi(void)")
+
+        self.assertIn("bool timer_signal = false;", update)
+        self.assertIn("intid == 17 || intid == 18", update)
+        self.assertIn("hv_vgic_diag_needs_timer_edge_wake", update)
+        self.assertIn("smp_send_ipi(smp_id());", update)
+        self.assertLess(update.index("hv_write_hcr(hcr | HCR_VI);"),
+                        update.index('sysop("isb");'))
+        self.assertLess(update.index('sysop("isb");'),
+                        update.index("smp_send_ipi(smp_id());"))
+
     def test_timer_deassertion_clears_the_accepted_delivery_latch(self):
         exc = HV_EXC.read_text()
         update = function_body(exc, "static void hv_update_fiq(void)")
