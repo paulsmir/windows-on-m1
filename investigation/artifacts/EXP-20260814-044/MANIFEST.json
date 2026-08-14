@@ -1,0 +1,37 @@
+{
+  "artifacts": {
+    "J313_EFI.fd": {
+      "role": "guest-firmware",
+      "sha256": "0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5",
+      "size": 30965760
+    },
+    "m1n1.macho": {
+      "role": "assisted-chainload",
+      "sha256": "f34bbc2cb8d5ef7b4b45b5daa9b233f04ed4acd6c1ac33a905e9c5e9cd552fb7",
+      "size": 917504
+    }
+  },
+  "compiler": "historical-local-build-compiler-not-recorded",
+  "debug": "monitor",
+  "display": "both",
+  "format_version": 2,
+  "guest_contract": {
+    "cpu_count": 8,
+    "layout_version": 1,
+    "phys_base": "0x850000000",
+    "ram_end": "0xa00000000",
+    "virtual_fb_base": "0x85f000000",
+    "virtual_fb_height": 1600,
+    "virtual_fb_stride": 10240,
+    "virtual_fb_width": 2560
+  },
+  "guest_layout_sha256": "c1d3206b6f04ae3e11038d22010ad760b031c55bed8f121574ca19e0cad5b358",
+  "m1n1_windows_commit": "55531e9d9443e2543e172ed4c7f6ef8a7173a54e",
+  "m1n1_windows_diff_sha256": "a474fde3e9bbb12ec17e2bab217a36eafce1df584aedb99f6d1a282937c64f25",
+  "m1n1_windows_dirty": true,
+  "platform": "j313",
+  "profile": "debug",
+  "root_commit": "5d827ba6b7f50daf538df0a167ed123c9a1f5731",
+  "root_diff_sha256": "14b7270f308f03991316a8c050e7af120bc89f2851cfdbc333a64a871d9e8c0c",
+  "source_dirty": true
+}

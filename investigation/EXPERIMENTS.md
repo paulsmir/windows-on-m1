@@ -3332,3 +3332,87 @@ Windows cumulative high-IRQL watchdog.  Per the pre-recorded three-attempt bound
 no further incremental wake patch is justified.  The next step is an
 architectural A/B against the exact accepted 2026-08-13 contract and collection
 of the new Windows dump before changing timer or vGIC policy again.
+
+### EXP-20260814-044 — accepted-runtime A/B with only the proven SMP wake fix
+
+Status: planned; immutable historical artifact and manifest recorded before launch
+Created (UTC): 2026-08-14T18:53:41Z
+
+Hypothesis: the recurrent freezes and EXP-043 cumulative high-IRQL watchdog are
+caused by the m1n1 timer/vGIC runtime changes after the accepted 2026-08-13
+checkpoint, not by Mu, Windows, NVMe, xHCI or the unbound Apple Input driver.
+Running exact m1n1 `55531e9` plus only EXP-015's hardware-proven dual IPI+SEV
+mailbox wake and unconditional acknowledgement will restore the accepted timer,
+vGIC and FIQ contract while removing that checkpoint's intermittent secondary
+startup race.
+
+Single changed variable relative to EXP-043:
+- the complete m1n1 runtime is replaced by the accepted `55531e9` source contract
+  plus the one `src/smp.c` mailbox correction from EXP-015.  Firmware, Windows
+  installation, eight-CPU layout, NVMe, xHCI, physical machine and
+  DEBUG/monitor/both observation profile are unchanged.  This exact-source A/B
+  deliberately removes all later timer/vGIC and Apple-input mapping work as one
+  bounded version variable; it is not a new incremental wake patch.
+
+Sources and observed contract inspected before launch:
+- live EXP-043 UART/LR/timer snapshot and 0x133 parameters; Microsoft documents
+  `P1=1` as cumulative extended time at IRQL `DISPATCH_LEVEL` or above;
+- accepted root `5d827ba6b7f50daf538df0a167ed123c9a1f5731`, m1n1
+  `55531e9d9443e2543e172ed4c7f6ef8a7173a54e` and Mu gitlink
+  `9dccb0133f244f2e4de7e3862dcb9f0ef7ba4776`;
+- accepted and current `src/hv.c`, `src/hv_exc.c`, `src/hv_vgic.c`,
+  `src/hv_fiq_fast_path.c`, `src/hv_tick_policy.c` and `src/smp.c`;
+- EXP-006 through EXP-016 hardware history.  EXP-006 rejected unmodified
+  `55531e9` only for the intermittent secondary mailbox race; EXP-014 proved
+  dual IPI+SEV wake on all secondaries, and EXP-015 moved acknowledgement outside
+  both sleep paths without changing timers or vGIC.
+
+Ownership: m1n1 owns physical FIQ, architectural-timer virtualization, vGIC LR/VI,
+secondary mailbox wake and recovery; Windows owns comparator programming,
+IAR/EOI, DPC accounting and the crash dump; Mu owns ACPI enumeration and remains
+byte-identical.  Timer DMA does not exist.  This m1n1 predates Apple Input
+passthrough, and the unchanged no-AINP firmware gives its Windows driver no node
+to bind, so input cannot execute in this control.
+
+Artifact provenance:
+- historical build command recorded by EXP-015: clean plain `make -j8` from
+  `55531e9` with only the exact `src/smp.c` diff SHA-256
+  `a474fde3e9bbb12ec17e2bab217a36eafce1df584aedb99f6d1a282937c64f25`;
+  the historical compiler version was not recorded and is explicitly marked as
+  unknown rather than guessed;
+- byte-identical copy of `investigation/artifacts/EXP-20260813-015/m1n1.macho`
+  at `investigation/artifacts/EXP-20260814-044/m1n1.macho`, SHA-256
+  `f34bbc2cb8d5ef7b4b45b5daa9b233f04ed4acd6c1ac33a905e9c5e9cd552fb7`,
+  size 917504 bytes;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`,
+  size 30965760 bytes;
+- `investigation/artifacts/EXP-20260814-044/MANIFEST.json`, SHA-256
+  `37bdb095ac779e8fddbb6efc68f594936d061e4e91d441e63731cba5397379b4`,
+  records root `5d827ba`, m1n1 `55531e9`, the exact dirty diff and the full
+  eight-CPU guest layout.  Strict assisted and firmware role verification passed.
+- current ledger repository is root `dda63f8fd40d40e1e8ea1aba2f2b8cdb314ad630`,
+  m1n1 `bce59a28ff72ae750bee52de87c2c3ff03593943`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; all tracked diffs are empty.
+
+Exact launch command:
+
+```sh
+/private/tmp/wom1-root-5d827ba.WCgcVM/scripts/run-assisted.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware /Users/pavel/public_windows/investigation/artifacts/EXP-20260814-044/J313_EFI.fd \
+  --display both --debug monitor --chainload \
+  --m1n1 /Users/pavel/public_windows/investigation/artifacts/EXP-20260814-044/m1n1.macho \
+  --foreground
+```
+
+Smallest falsifiable checkpoint: all seven secondary mailboxes complete, CPUs 0
+through 7 enter once, and Windows autonomously passes the EXP-041/042 frames to
+desktop or network without a manual physical IPI.  A mailbox stall, two-minute
+static frame, bugcheck/reset or physical-wake storm rejects the control.  If the
+guest reaches SSH, preserve the new `MEMORY.DMP` before workload, then require at
+least ten continuous responsive minutes and compare its timer/IAR/EOI cadence
+with EXP-043.  Recovery is the unchanged installed Stage 1 `b791225`; terminate
+only the verified foreground runner and confirm the proxy reports eight CPUs and
+8 GiB after any failed run.
