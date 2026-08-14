@@ -117,18 +117,24 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("timer_sync_live_irq(17", update)
         self.assertNotIn("hv_sync_timer_level", update)
 
-    def test_deliverable_timer_vi_edge_issues_one_ordered_physical_wake(self):
+    def test_deliverable_timer_vi_edge_defers_wake_until_final_fiq_return(self):
+        exc = HV_EXC.read_text()
         vgic = HV_VGIC.read_text()
         update = function_body(vgic, "void hv_vgic3_update_vi(void)")
+        flush = function_body(vgic, "void hv_vgic3_flush_timer_wake(void)")
+        fiq = function_body(exc, "void hv_exc_fiq(struct exc_info *ctx)")
 
         self.assertIn("bool timer_signal = false;", update)
         self.assertIn("intid == 17 || intid == 18", update)
         self.assertIn("hv_vgic_diag_needs_timer_edge_wake", update)
-        self.assertIn("smp_send_ipi(smp_id());", update)
-        self.assertLess(update.index("hv_write_hcr(hcr | HCR_VI);"),
-                        update.index('sysop("isb");'))
-        self.assertLess(update.index('sysop("isb");'),
-                        update.index("smp_send_ipi(smp_id());"))
+        self.assertIn("hv_vgic3_defer_timer_wake();", update)
+        self.assertNotIn("smp_send_ipi", update)
+        self.assertIn('sysop("isb");', flush)
+        self.assertIn("smp_send_ipi(cpu);", flush)
+        self.assertLess(fiq.rindex("hv_handle_local_ipi();"),
+                        fiq.rindex("hv_exc_exit(ctx);"))
+        self.assertLess(fiq.rindex("hv_exc_exit(ctx);"),
+                        fiq.rindex("hv_vgic3_flush_timer_wake();"))
 
     def test_timer_deassertion_clears_the_accepted_delivery_latch(self):
         exc = HV_EXC.read_text()
