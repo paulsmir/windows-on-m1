@@ -2005,6 +2005,40 @@ Exact launch command:
   --chainload --foreground
 ```
 
+Hardware result:
+- exact recorded artifacts launched and m1n1 reported `0cde15e`; all eight CPUs,
+  NVMe and xHCI discovery initialized normally;
+- unlike EXP-035, the guest advanced without any host diagnostic request from the
+  Windows-logo frame SHA-256 `1b02574b...` to `guest runtime ready`, xHCI route
+  enable and the Windows lock screen.  This confirms that the restored local VI
+  recomputation closes a real early lost-wake window;
+- the guest then stopped at the lock-screen frame showing 5:22.  From
+  2026-08-14T16:11:48Z through 16:13:47Z, observer generations advanced from 127
+  through 182 while the complete framebuffer remained byte-identical at SHA-256
+  `6bccade3bf50e472a3b62ba4cac9a15d71a694a38570911d18fa36bdfe373260`;
+- TCP/22 at the known guest address remained unavailable throughout.  A manual
+  diagnostic boundary did not change the framebuffer hash or restore the network;
+- preserved evidence:
+  `investigation/artifacts/EXP-20260814-036/evidence/lock-screen.raw` and
+  `post-wake.raw`, both with the framebuffer hash above; `final-meta.json`,
+  SHA-256
+  `a7ff2862fd2c85a16102badbce15480195452f1ee6b9e15da239dfdf26b68455`;
+- the release profile intentionally contained no per-CPU watchdog records; the
+  control boundary reported only the known CPU0 print-time lock ownership.  The
+  exception dump again occurred after the explicit reboot request and is not
+  treated as the initiating failure;
+- recovery succeeded: both USB serial functions returned, Stage-1 m1n1 `b791225`
+  answered, and the live probe verified eight CPUs and 8 GiB DRAM.
+
+Verdict: rejected as the complete freeze fix, but confirmed as a partial
+correction.  It moves the independently observed failure from early Windows boot
+to the lock screen, proving one stale-VI boundary existed.  A second wake/progress
+failure remains and requires a diagnostic-profile run that records live per-CPU
+timer, LR, VI, ISR and lock state at the later checkpoint without changing the
+accepted timer policy.
+
+Finalized (UTC): 2026-08-14T16:15:48Z.
+
 Expected checkpoint: with valid observer framing, Windows must advance beyond
 the EXP-033 frozen framebuffer, reach the lock/login screen, acquire the known
 network address and remain continuously responsive for at least ten minutes.
