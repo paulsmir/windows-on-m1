@@ -3131,6 +3131,23 @@ docker run --rm -v /Users/pavel/public_windows:/work \
 Freeze the monitor m1n1, unchanged no-AINP firmware and strict manifest under
 `investigation/artifacts/EXP-20260814-042` before launch.  The planned command is:
 
+Recorded artifact before launch (UTC 2026-08-14T18:29:03Z):
+- clean Docker monitor build completed from m1n1
+  `bf78a7675480bd1182d261e51c0f8bde15f95587` with `APPLE_INPUT=0`; warnings
+  match the pre-existing families recorded for EXP-041;
+- source manifest root `01e7677bd40a61ba138cb6fc1578942a49be9136`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; tracked source diffs were empty;
+- `investigation/artifacts/EXP-20260814-042/m1n1.macho`, SHA-256
+  `d93b7a14db08c39c75d93466bbe3a38ad722c0fd34e292491c692ff22571666c`, size
+  901120 bytes;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`,
+  size 30965760 bytes;
+- `MANIFEST.json`, SHA-256
+  `8acb3498f8598c3ef0437ca35c5afb0769e46651bd1748c5a19d090bc315afdf`;
+  strict DEBUG/monitor/both verification passed for both roles.  No guest has
+  been launched at this checkpoint.
+
 ```sh
 ./scripts/run-windows.sh --execution assisted --observed --debug monitor \
   --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
