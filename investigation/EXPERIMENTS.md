@@ -3060,3 +3060,91 @@ to latch the same edge, drain current physical sources normally, and emit at
 most one deferred IPI at the common final EL2-to-guest return boundary.
 
 Finalized (UTC): 2026-08-14T18:21:48Z.
+
+### EXP-20260814-042 — defer timer wake across the FIQ return boundary
+
+Status: planned; implementation and software verification complete
+Created (UTC): 2026-08-14T18:27:34Z
+
+Hypothesis: EXP-041 did generate the intended physical self-IPIs, but source and
+hardware counters prove that `hv_handle_local_ipi()` acknowledged them inside the
+same FIQ before guest ERET.  Retaining the identical timer/priority/HCR.VI edge
+classification while deferring the actual self-IPI until after the last local
+source drain and `hv_exc_exit()` will leave a physical event pending across ERET;
+Windows will then enter its already-published Pending timer interrupt instead of
+returning indefinitely to idle.
+
+Sources and contracts inspected before implementation:
+- EXP-041 `hv-final.log`: on CPU1 physical IPI receive advanced 82698 -> 101283
+  and on CPU2 120324 -> 138970 while virtual IAR/EOI did not advance at all;
+- `m1n1_windows/src/hv_exc.c`: the secondary FIQ fast path called
+  `hv_update_fiq()` before `hv_handle_local_ipi()`, and the slow tail performed a
+  final `hv_handle_local_ipi()` before `hv_exc_exit()`;
+- `m1n1_windows/src/hv_vgic.c`: EXP-041 emitted the self-IPI synchronously from
+  `hv_vgic3_update_vi()`, placing it before both possible drains;
+- `m1n1_windows/src/hv_asm.S`: the C FIQ handler returns directly through saved
+  guest-register restoration to ERET, so a send after `hv_exc_exit()` has no
+  later C-level IPI acknowledgement before guest entry;
+- current upstream Asahi m1n1 physical exception handling, Arm GICv3/v4
+  guidance, Mu MADT/GTDT/DSDT generation and Microsoft ACPI timer/GIC contract
+  remain as recorded by EXP-041.  No external code is copied.
+
+Ownership is unchanged: Mu enumerates; Windows programs CNTV, idles and performs
+IAR/EOI; m1n1 owns physical timer FIQ, LR/HCR.VI state, physical local IPI and the
+final EL2 return.  No timer DMA exists.  Windows owns guest power policy while
+m1n1 must preserve a physical wake until ERET.  Recovery remains installed Stage
+1 plus immutable EXP-040/041 artifacts.
+
+Single changed runtime variable relative to EXP-041:
+- immediate `smp_send_ipi()` inside VI publication becomes a per-CPU deferred
+  bit; the FIQ tail consumes that bit after `hv_exc_exit()`, performs ISB and
+  sends the same local IPI.  The timer edge predicate and all other policy are
+  byte-for-byte unchanged.
+
+Unchanged: INTID 17/18 selection, exact Pending-only requirement, VMCR priority
+masking, HCR.VI publication, Active+Pending suppression, 5000/100-Hz host cadence,
+guest timer comparator and latch behavior, live-level synchronization, disabled
+recovery polling/WFI trap, Mu/no-AINP firmware, Windows image, CPUs, NVMe, xHCI,
+display and monitor profile.
+
+TDD/software checkpoint:
+- RED: the root ordering test failed because no deferred flush function existed;
+- GREEN requires VI code to contain no physical send, the flush to order ISB
+  before the send, and the final FIQ order to be local IPI drain ->
+  `hv_exc_exit()` -> deferred wake flush;
+- vGIC/platform suites passed 37/37, the complete nested host suite passed, the
+  complete root suite passed 258/258 and diff checks passed;
+- implementation commit `bf78a7675480bd1182d261e51c0f8bde15f95587`, root
+  contract/ledger commit `d7a2a7ac6c0a7a7d10fc07c211d843a24ebf137b`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; all tracked diff hashes are
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+Exact planned clean build:
+
+```sh
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make clean
+docker run --rm -v /Users/pavel/public_windows:/work \
+  -w /work/m1n1_windows windows-on-m1-build:local make -j8 APPLE_INPUT=0
+```
+
+Freeze the monitor m1n1, unchanged no-AINP firmware and strict manifest under
+`investigation/artifacts/EXP-20260814-042` before launch.  The planned command is:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug monitor \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-042/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-042/m1n1.macho \
+  --chainload --foreground
+```
+
+Smallest falsifiable checkpoint: the `6 second(s)` disk-check frame must change
+autonomously without host SIGINT.  At the first later idle point, two snapshots
+must show virtual timer IAR/EOI progress rather than physical IPI growth with
+unchanged IAR/EOI.  Acceptance requires all eight CPUs, NVMe, xHCI, autonomous
+login/TCP/22 and ten continuous minutes without a pause over five seconds.  A
+two-minute identical frame, dead network, IPI-only growth, bugcheck/reset or
+exception rejects the change.  Failure recovery is two snapshots/frames,
+verified runner termination and Stage 1 probe before another modification.
