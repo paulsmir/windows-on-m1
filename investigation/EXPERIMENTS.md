@@ -3268,3 +3268,30 @@ no pause over five seconds.  A two-minute frame, bugcheck/reset or exception is
 failure.  After this third bounded wake-correction experiment, any rejection
 requires an architectural reassessment rather than another incremental wake
 patch.
+
+Recorded artifact before launch (UTC 2026-08-14T18:40:08Z):
+- clean Docker monitor build completed from m1n1
+  `bce59a28ff72ae750bee52de87c2c3ff03593943` with `APPLE_INPUT=0`; only the
+  pre-existing warning families were emitted;
+- source manifest root `8e20ad298f7fb85355916830ec1ac06eab0a2dfa`, Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`; tracked source diffs were empty;
+- `investigation/artifacts/EXP-20260814-043/m1n1.macho`, SHA-256
+  `5de49b72c1028bdd7a35f328173abed3e7b764be6fb8a3ddb5b0ccb3f3cb8bd5`, size
+  901120 bytes;
+- unchanged no-AINP `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`,
+  size 30965760 bytes;
+- strict DEBUG/monitor/both `MANIFEST.json`, SHA-256
+  `ff230a72213f528f49f40e5874b097876bb0283493ebbca8dfe15e42720aebc5`,
+  passed both artifact-role checks.  No launch occurred before this record.
+
+Exact launch command:
+
+```sh
+./scripts/run-windows.sh --execution assisted --observed --debug monitor \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --vuart /dev/cu.usbmodemC02HDNCCQ6L43 \
+  --firmware investigation/artifacts/EXP-20260814-043/J313_EFI.fd \
+  --m1n1 investigation/artifacts/EXP-20260814-043/m1n1.macho \
+  --chainload --foreground
+```
