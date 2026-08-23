@@ -218,15 +218,17 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
     status = AiSpiInitialize(Context);
     if (!NT_SUCCESS(status))
         return status;
-    status = AiGpioResetInputController(Context);
-    AiCounterIncrement(&Context->Diagnostics.ResetCount);
-    if (!NT_SUCCESS(status))
-        return status;
-
     ai_discovery_start(&Context->Discovery, AiNowMicroseconds(),
                        AI_TRANSPORT_DISCOVERY_TIMEOUT_US,
                        AI_TRANSPORT_DISCOVERY_RETRY_LIMIT);
     Context->HardwareStarted = TRUE;
+    status = AiGpioResetInputController(Context);
+    AiCounterIncrement(&Context->Diagnostics.ResetCount);
+    if (!NT_SUCCESS(status)) {
+        Context->HardwareStarted = FALSE;
+        Context->Stopping = TRUE;
+        return status;
+    }
     AiDiagnosticsPublish(Context);
     return STATUS_SUCCESS;
 }

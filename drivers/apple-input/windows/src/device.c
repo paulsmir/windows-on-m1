@@ -27,7 +27,10 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
     callbacks.EvtDevicePrepareHardware = AppleInputEvtDevicePrepareHardware;
     callbacks.EvtDeviceReleaseHardware = AppleInputEvtDeviceReleaseHardware;
     callbacks.EvtDeviceD0Entry = AppleInputEvtDeviceD0Entry;
-    callbacks.EvtDeviceD0Exit = AppleInputEvtDeviceD0Exit;
+    callbacks.EvtDeviceD0EntryPostInterruptsEnabled =
+        AppleInputEvtDeviceD0EntryPostInterruptsEnabled;
+    callbacks.EvtDeviceD0ExitPreInterruptsDisabled =
+        AppleInputEvtDeviceD0ExitPreInterruptsDisabled;
     WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &callbacks);
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, AI_DEVICE_CONTEXT);
@@ -150,11 +153,18 @@ NTSTATUS AppleInputEvtDeviceD0Entry(WDFDEVICE Device,
     PAI_DEVICE_CONTEXT context = AiGetDeviceContext(Device);
     if (!context->ResourcesValidated)
         return STATUS_DEVICE_NOT_READY;
-    return AiTransportStart(context);
+    return STATUS_SUCCESS;
 }
 
-NTSTATUS AppleInputEvtDeviceD0Exit(WDFDEVICE Device,
-                                   WDF_POWER_DEVICE_STATE TargetState)
+NTSTATUS AppleInputEvtDeviceD0EntryPostInterruptsEnabled(
+    WDFDEVICE Device, WDF_POWER_DEVICE_STATE PreviousState)
+{
+    UNREFERENCED_PARAMETER(PreviousState);
+    return AiTransportStart(AiGetDeviceContext(Device));
+}
+
+NTSTATUS AppleInputEvtDeviceD0ExitPreInterruptsDisabled(
+    WDFDEVICE Device, WDF_POWER_DEVICE_STATE TargetState)
 {
     UNREFERENCED_PARAMETER(TargetState);
     AiTransportStop(AiGetDeviceContext(Device));

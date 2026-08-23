@@ -197,6 +197,32 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, isr)
 
+    def test_transport_starts_only_after_framework_enables_interrupts(self):
+        device = self.read("src/device.c")
+        header = self.read("include/apple_input_device.h")
+        transport = self.read("src/transport.c")
+
+        self.assertIn("EvtDeviceD0EntryPostInterruptsEnabled", device)
+        self.assertIn("EvtDeviceD0ExitPreInterruptsDisabled", device)
+        self.assertIn("EVT_WDF_DEVICE_D0_ENTRY_POST_INTERRUPTS_ENABLED", header)
+        self.assertIn("EVT_WDF_DEVICE_D0_EXIT_PRE_INTERRUPTS_DISABLED", header)
+        d0_entry = self.c_function_body(device, "AppleInputEvtDeviceD0Entry")
+        post_enabled = self.c_function_body(
+            device, "AppleInputEvtDeviceD0EntryPostInterruptsEnabled"
+        )
+        pre_disabled = self.c_function_body(
+            device, "AppleInputEvtDeviceD0ExitPreInterruptsDisabled"
+        )
+        self.assertNotIn("AiTransportStart", d0_entry)
+        self.assertIn("AiTransportStart", post_enabled)
+        self.assertIn("AiTransportStop", pre_disabled)
+
+        start = self.c_function_body(transport, "AiTransportStart")
+        self.assertLess(start.index("ai_discovery_start"),
+                        start.index("AiGpioResetInputController"))
+        self.assertLess(start.index("HardwareStarted = TRUE"),
+                        start.index("AiGpioResetInputController"))
+
     def test_transport_worker_has_a_hard_packet_budget_and_protocol_validation(self):
         transport = self.read("src/transport.c")
         self.assertIn("AI_TRANSPORT_MAX_PACKETS_PER_WORKER 32u", transport)
