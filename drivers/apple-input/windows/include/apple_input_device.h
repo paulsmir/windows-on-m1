@@ -27,3 +27,9 @@ NTSTATUS AiDeviceParseResources(WDFCMRESLIST Raw, WDFCMRESLIST Translated,
                                 PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiSpiValidateReadOnly(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiGpioValidateReadOnly(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiSpiInitialize(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiSpiTransfer(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx, UCHAR *Rx,
+                       SIZE_T Length, ULONGLONG DeadlineQpc);
+NTSTATUS AiGpioResetInputController(PAI_DEVICE_CONTEXT Context);
+BOOLEAN AiGpioInputAsserted(PAI_DEVICE_CONTEXT Context);
+VOID AiGpioAcknowledge(PAI_DEVICE_CONTEXT Context);

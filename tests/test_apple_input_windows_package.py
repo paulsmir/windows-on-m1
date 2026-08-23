@@ -39,7 +39,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("vhfkm.lib", project.lower())
         self.assertIn('<FilesToPackage Include="$(TargetPath)"', project)
 
-    def test_driver_maps_validated_resources_but_does_not_write_mmio(self):
+    def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")
         device = self.read("src/device.c")
         spi = self.read("src/spi.c")
@@ -53,9 +53,28 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("MmUnmapIoSpace", device)
         self.assertIn("READ_REGISTER", spi)
         self.assertIn("READ_REGISTER", gpio)
-        combined = device + spi + gpio
-        for forbidden in ("WRITE_REGISTER", "WdfInterruptCreate"):
-            self.assertNotIn(forbidden, combined)
+        self.assertNotIn("WRITE_REGISTER", device)
+        self.assertNotIn("WdfInterruptCreate", device + spi + gpio)
+
+    def test_bounded_spi_and_gpio_primitive_contract(self):
+        header = self.read("include/apple_input_device.h")
+        hw_header = self.read("include/apple_input_hw.h")
+        spi = self.read("src/spi.c")
+        gpio = self.read("src/gpio.c")
+        for symbol in (
+            "AiSpiInitialize",
+            "AiSpiTransfer",
+            "AiGpioResetInputController",
+            "AiGpioInputAsserted",
+            "AiGpioAcknowledge",
+        ):
+            self.assertIn(symbol, header)
+        self.assertIn("AI_SPI_MAX_TRANSFER_BYTES", hw_header)
+        self.assertIn("AiSpiDeadlineExpired", spi)
+        self.assertIn("WRITE_REGISTER_NOFENCE_ULONG", spi)
+        self.assertIn("WRITE_REGISTER_NOFENCE_ULONG", gpio)
+        self.assertIn("J313_APPLE_INPUT_AP_GPIO_PIN", gpio)
+        self.assertIn("J313_APPLE_INPUT_NUB_GPIO_PIN", gpio)
 
     def test_irq_contract_uses_raw_gsi_and_keeps_translated_vector(self):
         device = self.read("src/device.c")

@@ -37,3 +37,52 @@ int AiSpiRegisterRangeValid(uint32_t offset, size_t width, size_t resource_size)
 {
     return width && offset <= resource_size && width <= resource_size - offset;
 }
+
+int AiSpiTransferLengthValid(size_t length)
+{
+    return length > 0 && length <= AI_SPI_MAX_TRANSFER_BYTES;
+}
+
+int AiSpiDeadlineExpired(uint64_t now_qpc, uint64_t deadline_qpc)
+{
+    return now_qpc >= deadline_qpc;
+}
+
+uint64_t AiSpiBoundDeadline(uint64_t now_qpc, uint64_t counts_per_second,
+                            uint64_t requested_deadline_qpc)
+{
+    uint64_t whole;
+    uint64_t remainder;
+    uint64_t limit;
+    uint64_t maximum = ~(uint64_t)0;
+
+    if (!counts_per_second)
+        return now_qpc;
+    if (counts_per_second / 1000u > maximum / AI_SPI_TRANSFER_TIMEOUT_MS)
+        return requested_deadline_qpc;
+    whole = (counts_per_second / 1000u) * AI_SPI_TRANSFER_TIMEOUT_MS;
+    remainder = ((counts_per_second % 1000u) * AI_SPI_TRANSFER_TIMEOUT_MS +
+                 999u) / 1000u;
+    if (whole > maximum - remainder)
+        return requested_deadline_qpc;
+    limit = whole + remainder;
+    if (now_qpc > maximum - limit)
+        limit = maximum;
+    else
+        limit += now_qpc;
+    return requested_deadline_qpc < limit ? requested_deadline_qpc : limit;
+}
+
+uint32_t AiGpioOutputValue(uint32_t current, int high)
+{
+    current &= ~(AI_GPIO_MODE_MASK | 1u);
+    current |= AI_GPIO_MODE_OUTPUT << AI_GPIO_MODE_SHIFT;
+    if (high)
+        current |= 1u;
+    return current;
+}
+
+int AiGpioInputAssertedValue(uint32_t value)
+{
+    return !(value & 1u);
+}
