@@ -34,28 +34,37 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 NTSTATUS AiDeviceParseResources(WDFCMRESLIST Raw, WDFCMRESLIST Translated,
                                 PAI_DEVICE_CONTEXT Context)
 {
-    UNREFERENCED_PARAMETER(Raw);
     ULONG memory = 0;
     ULONG interrupts = 0;
+    ULONG raw_count = WdfCmResourceListGetCount(Raw);
+    ULONG translated_count = WdfCmResourceListGetCount(Translated);
 
     RtlZeroMemory(Context, sizeof(*Context));
-    for (ULONG index = 0; index < WdfCmResourceListGetCount(Translated); index++) {
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR resource =
+    if (raw_count != translated_count)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+
+    for (ULONG index = 0; index < translated_count; index++) {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR raw_resource =
+            WdfCmResourceListGetDescriptor(Raw, index);
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR translated_resource =
             WdfCmResourceListGetDescriptor(Translated, index);
-        if (resource == NULL)
+        if (raw_resource == NULL || translated_resource == NULL ||
+            raw_resource->Type != translated_resource->Type)
             return STATUS_DEVICE_CONFIGURATION_ERROR;
-        if (resource->Type == CmResourceTypeMemory) {
+        if (translated_resource->Type == CmResourceTypeMemory) {
             if (memory >= (ULONG)RTL_NUMBER_OF(AiExpectedBases) ||
-                resource->u.Memory.Start.QuadPart != AiExpectedBases[memory] ||
-                resource->u.Memory.Length != AiExpectedSizes[memory])
+                raw_resource->u.Memory.Start.QuadPart != AiExpectedBases[memory] ||
+                raw_resource->u.Memory.Length != AiExpectedSizes[memory] ||
+                translated_resource->u.Memory.Length != AiExpectedSizes[memory])
                 return STATUS_DEVICE_CONFIGURATION_ERROR;
-            Context->MemoryBase[memory] = resource->u.Memory.Start;
-            Context->MemoryLength[memory++] = resource->u.Memory.Length;
-        } else if (resource->Type == CmResourceTypeInterrupt) {
+            Context->MemoryBase[memory] = translated_resource->u.Memory.Start;
+            Context->MemoryLength[memory++] = translated_resource->u.Memory.Length;
+        } else if (translated_resource->Type == CmResourceTypeInterrupt) {
             if (interrupts++ != 0 ||
-                resource->u.Interrupt.Vector != (ULONG)J313_APPLE_INPUT_GUEST_VINTID)
+                raw_resource->u.Interrupt.Vector !=
+                    (ULONG)J313_APPLE_INPUT_GUEST_VINTID)
                 return STATUS_DEVICE_CONFIGURATION_ERROR;
-            Context->InterruptVector = resource->u.Interrupt.Vector;
+            Context->InterruptVector = translated_resource->u.Interrupt.Vector;
         }
     }
     if (memory != 3 || interrupts != 1)

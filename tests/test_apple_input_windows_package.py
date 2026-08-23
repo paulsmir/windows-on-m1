@@ -57,6 +57,29 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         for forbidden in ("WRITE_REGISTER", "WdfInterruptCreate"):
             self.assertNotIn(forbidden, combined)
 
+    def test_irq_contract_uses_raw_gsi_and_keeps_translated_vector(self):
+        device = self.read("src/device.c")
+        self.assertNotIn("UNREFERENCED_PARAMETER(Raw)", device)
+        self.assertIn("WdfCmResourceListGetCount(Raw)", device)
+        self.assertIn("WdfCmResourceListGetCount(Translated)", device)
+        self.assertIn("raw_resource->u.Interrupt.Vector", device)
+        self.assertIn("translated_resource->u.Interrupt.Vector", device)
+        self.assertRegex(
+            device,
+            r"raw_resource->u\.Interrupt\.Vector\s*!=\s*"
+            r"\(ULONG\)J313_APPLE_INPUT_GUEST_VINTID",
+        )
+        self.assertRegex(
+            device,
+            r"Context->InterruptVector\s*=\s*"
+            r"translated_resource->u\.Interrupt\.Vector",
+        )
+        self.assertNotRegex(
+            device,
+            r"translated_resource->u\.Interrupt\.Vector\s*!=\s*"
+            r"\(ULONG\)J313_APPLE_INPUT_GUEST_VINTID",
+        )
+
     def test_build_and_recovery_scripts_are_location_independent(self):
         build = self.read("scripts/build-driver.ps1")
         install = self.read("scripts/install-driver.ps1")
