@@ -260,6 +260,46 @@ class TelemetryRecorderTests(unittest.TestCase):
         self.assertTrue(recorder.maybe_poll())
         self.assertEqual(proxy.status_calls, 1)
 
+    def test_async_event_records_sample_without_proxy_request(self):
+        proxy = FakeProxy(RuntimeError("must not be called"), {})
+        recorder = self.make_recorder(proxy)
+
+        self.assertTrue(recorder.accept_event(packed_sample(
+            sequence=7,
+            guest_pc=0x1234,
+            host_fiq_count=100,
+            host_tick_count=90,
+        )))
+
+        self.assertEqual(proxy.status_calls, 0)
+        self.assertEqual(proxy.sample_calls, [])
+        records = [json.loads(line) for line in self.log_path.read_text().splitlines()]
+        self.assertEqual([record["sequence"] for record in records], [7])
+        published = json.loads(self.status_path.read_text())
+        self.assertEqual(published["state"], "streaming")
+        self.assertEqual(published["last_sequence"], 7)
+
+    def test_async_event_rejects_duplicate_or_out_of_order_sequence(self):
+        proxy = FakeProxy(RuntimeError("must not be called"), {})
+        recorder = self.make_recorder(proxy)
+        payload = packed_sample(sequence=11)
+
+        self.assertTrue(recorder.accept_event(payload))
+        self.assertFalse(recorder.accept_event(payload))
+        self.assertFalse(recorder.accept_event(packed_sample(sequence=10)))
+        self.assertEqual(len(self.log_path.read_text().splitlines()), 1)
+
+    def test_launcher_registers_dedicated_async_telemetry_event(self):
+        root = Path(__file__).resolve().parents[1]
+        proxy_source = (root / "m1n1_windows/proxyclient/m1n1/proxy.py").read_text()
+        launcher_source = (root / "run_uefi.py").read_text()
+        uart_source = (root / "m1n1_windows/src/uartproxy.h").read_text()
+
+        self.assertIn("TELEMETRY = 4", proxy_source)
+        self.assertIn("EVT_TELEMETRY = 4", uart_source)
+        self.assertIn("iface.set_event_handler(EVENT.TELEMETRY", launcher_source)
+        self.assertIn("telemetry.accept_event(data)", launcher_source)
+
     def test_once_cli_attaches_reads_prints_and_closes(self):
         proxy = FakeProxy(
             STATUS.pack(1, 176, 256, 1, 3, 4),

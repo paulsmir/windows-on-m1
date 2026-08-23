@@ -198,7 +198,7 @@
         const age = telemetry.updated_at
           ? Math.max(0, Date.now() / 1000 - telemetry.updated_at)
           : Infinity;
-        if (telemetry.state !== 'available') {
+        if (telemetry.state !== 'available' && telemetry.state !== 'streaming') {
           diagnosticEl.textContent = 'link unavailable';
           diagnosticEl.className = 'dead';
         } else {

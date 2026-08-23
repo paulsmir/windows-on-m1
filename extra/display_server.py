@@ -55,7 +55,7 @@ class DisplayRequestHandler(http.server.BaseHTTPRequestHandler):
         )
         if not isinstance(telemetry, dict):
             raise ValueError("telemetry status is not an object")
-        if telemetry.get("state") not in {"available", "unavailable"}:
+        if telemetry.get("state") not in {"available", "streaming", "unavailable"}:
             raise ValueError("invalid telemetry state")
         return telemetry
 

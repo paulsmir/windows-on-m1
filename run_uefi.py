@@ -327,8 +327,14 @@ def handle_framebuffer_event(data):
     if telemetry_inline:
         telemetry.maybe_poll()
 
+def handle_telemetry_event(data):
+    assert telemetry is not None
+    telemetry.accept_event(data)
+
 if profile.virtual_display:
     iface.set_event_handler(EVENT.FRAMEBUFFER, handle_framebuffer_event)
+if profile.telemetry:
+    iface.set_event_handler(EVENT.TELEMETRY, handle_telemetry_event)
 
 def configure_display_consumers():
     # hv_fb_stream_config() validates the IPA through the live stage-2 tables.

@@ -3720,7 +3720,7 @@ physical self-IPI, timer-rate or LR-state change is justified.
 
 ### EXP-20260814-047 — trap only a sleep attempted with VI pending
 
-Status: planned; artifact recorded before hardware launch
+Status: rejected on hardware; Stage 1 recovered
 Created (UTC): 2026-08-14T19:31:04Z
 
 Hypothesis: EXP-046 failed because TWI/TWE converted every Windows idle cycle
@@ -3777,3 +3777,429 @@ present exactly on CPUs with VI and absent on CPUs without VI.  Acceptance still
 requires login/TCP/22 and ten continuous responsive minutes without a physical
 self-IPI.  Evidence is stored under
 `investigation/artifacts/EXP-20260814-047/evidence/`.
+
+Hardware result (2026-08-23 retest): rejected.  The strict preflight passed,
+all eight vCPUs entered the guest, and NVMe plus xHCI reached runtime, but the
+guest never produced a non-black framebuffer and TCP/22 never appeared.  Two
+bounded watchdog snapshots taken more than 30 seconds apart showed advancing
+host tick counters and physical timers while affected vCPUs remained in the
+same Windows idle region.  Their INTID 18 LR was Pending and priority
+deliverable, VMCR admitted priority 0x20, HCR.VI was set, and TWI/TWE followed
+VI exactly.  Nevertheless every virtual IAR and EOI counter remained bit-for-bit
+unchanged across the interval.  Dynamic WFI/WFE trapping therefore obeyed its
+source contract but did not wake a core that was already asleep.
+
+The result closes the no-doorbell architectural A/B: EXP-044 through EXP-047
+all leave a valid virtual interrupt pending without a physical wake boundary.
+The next controlled run must restore exactly the one-wake-per-continuous-
+deliverable-timer interval from EXP-043 on top of the current bounded observer,
+then treat its later 0x133 P1=1 as a separate high-IRQL defect rather than
+changing wake classification again.
+
+Frozen evidence:
+- `evidence/20260823-retest/fb-final.raw`, SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`;
+- `evidence/20260823-retest/fb-info.json`, SHA-256
+  `470dc70b3c9f604c437800928f229353a1ef34e3fbf79e1cf819f4f8ae289b8d`;
+- `evidence/20260823-retest/frame-black.png`, SHA-256
+  `16d4591d9bba12f935e2fa088b788c4b7937c78fb17fc99742d29004fe0eef55`;
+- `evidence/20260823-retest/hv-pre-recovery.log`, SHA-256
+  `c8e242fba2091574999105d41bd578e046feb795faa17f99ff31a5364bd406be`.
+
+Recovery was intentional: the exact runner received SIGTERM, captured its
+final diagnostic snapshot, requested an Air reboot, and Stage 1 re-enumerated
+on the same proxy/vUART pair.  Checksum errors printed only during that oversized
+final recovery snapshot are not runtime framebuffer evidence; all frozen files
+listed above were captured before recovery and verified independently.
+
+### EXP-20260814-048 — one physical doorbell per deliverable timer interval
+
+Status: rejected on hardware; Stage 1 recovered
+Created (UTC): 2026-08-23T11:11:35Z
+
+Hypothesis: EXP-047 demonstrates that a correctly Pending and priority-
+deliverable INTID 18, HCR.VI, and a dynamically trapped subsequent WFI/WFE do
+not wake an Apple core that entered WFI before VI was published.  EXP-043
+already demonstrated the missing boundary: one physical self-IPI deferred
+until the final EL2-to-guest return passes both earlier frozen frames without
+the repeated IPI storm of EXP-041/042.  Reintroducing exactly that one-shot
+doorbell on the current bounded observer should reach Windows autonomously.
+
+Single changed variable relative to EXP-047: a per-vCPU state machine requests
+one deferred local physical IPI when INTID 17 or 18 first becomes Pending-only
+and priority-deliverable.  Continuous deliverability cannot request another;
+masking, IAR, Active/Active+Pending, or removal closes the interval.  Emission
+occurs only after the last local-source drain and `hv_exc_exit`, immediately
+before guest return.  Dynamic TWI/TWE coupling, live timer level sync, all timer
+rates, LR/priority behavior, Mu, Windows, NVMe, xHCI, display, CPU/memory layout,
+and launch profile remain unchanged.
+
+This experiment addresses only the lost physical wake.  If Windows later
+reproduces EXP-043's `DPC_WATCHDOG_VIOLATION (0x133)` with parameter 1, that is
+a distinct cumulative high-IRQL defect; EXP-048 must capture it without
+changing the doorbell lifecycle or guessing another wake policy.
+
+Ownership and safety contract:
+- m1n1 owns virtual IRQ publication and the Apple local physical wake; Windows
+  continues to own CNTV programming, IAR/EOI, PMR/IRQL, and scheduling;
+- the doorbell never carries the Windows virtual INTID and never substitutes
+  for GIC acknowledgement; it only creates one physical exception boundary;
+- the send is deferred past EL2 source draining so m1n1 cannot acknowledge its
+  own wake before ERET, the exact EXP-041 failure;
+- per-interval latching prevents the 25,000-IPI storm measured in EXP-042.
+
+Starting checkpoint:
+- root `f9f372521a74999197d5531b7ed6b3d7e17fbd7a`; m1n1
+  `f7297e948600371604c7935b0e62fa0333f1ee51`; Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- Mu tracked diff is empty SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- the root ledger-only diff before this entry is
+  `48400766833f2a10aed7139ee13e2b472885d18056685de6e225b53fdf122382`;
+- the nested RED-test diff is
+  `e7bcdc918d2bdba9a18c5cd60da7b75f0b77babeeaa6d1e23ee6809f586cd9dd`.
+
+RED evidence:
+- `hv_vgic_diag_test` fails to compile because
+  `hv_vgic_timer_wake_state` and
+  `hv_vgic_diag_timer_wake_transition` do not exist;
+- the focused public integration contract fails because current production
+  contains no `timer_wake_state`, deferred flag, flush API, or post-exit flush.
+
+Smallest checkpoint: both RED tests must pass after the minimum implementation,
+the exact artifact must pass the complete host/public suites and strict launch
+preflight, then an assisted monitor/both run must pass the former black frame
+without repeated per-CPU physical IPI growth.  Acceptance requires login,
+TCP/22, ten responsive idle minutes, and a bounded CPU/storage stress window.
+A static frame, IPI storm, bugcheck, or reset rejects acceptance and triggers a
+single synchronized snapshot before Stage 1 recovery.
+
+Implementation/build checkpoint before hardware launch:
+- RED was observed for both the pure interval state-machine and the production
+  post-exit integration contract; after the minimum implementation, focused
+  GREEN passed, the complete nested host suite passed, the complete public
+  suite passed 258/258, and all diff checks passed;
+- m1n1 commit is `f9b2a298ca45a836a8bc98c04ae52fe48b1de68d`;
+  the only production change is one cache-line-separated per-vCPU interval
+  latch/deferred bit, timer-only classification during VI recomputation, and a
+  flush after `hv_exc_exit`; Mu remains `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- the host lacked Cargo and the stopped Colima runtime initially rejected the
+  build; after starting the existing local container runtime, a clean build
+  completed with `aarch64-linux-gnu-gcc 13.3.0` / clang 18.1.3 and build tag
+  `f9b2a29`; `build_cfg.h` contains only `HV_DISABLE_APPLE_INPUT`;
+- `investigation/artifacts/EXP-20260814-048/m1n1.macho`, SHA-256
+  `70aa065007914cccd79e6c2cc3dd3bd8ed365d6769f9051fab5a7c0d187a5a21`;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict DEBUG/monitor/both `MANIFEST.json`, SHA-256
+  `4ca2bdfc6c48b714d89c605c315330a747b5b8d9afff6a8e3c11e200a14a821d`,
+  passed profile, display, debug and assisted-chainload role verification.  It
+  records the root ledger/test diff as dirty while m1n1 and Mu are clean.
+
+Hardware result (2026-08-23): rejected.  The artifact passed strict preflight,
+entered all eight vCPUs, initialized NVMe and xHCI, passed EXP-047's black-frame
+barrier, reached the Windows disk-check screen and then the lock screen.  It did
+not become usable: the framebuffer remained byte-identical between observer
+generations, TCP/22 did not appear, and an external diagnostic snapshot was the
+only event that advanced the guest from the disk-check stall.
+
+Two synchronized watchdog snapshots identify the rejected mechanism rather
+than Windows storage as the immediate problem.  Between them CPU1 physical IPI
+receives increased from 101152 to 311472 while its ordinary SGI queue increased
+from 19323 to 63388; CPU2 IPI increased from 21494 to 198260 while its queue
+increased from 16888 to 57456; CPU6 increased from 88808 to 150733 while its
+queue increased from 12498 to 35989.  The virtual timer IAR and EOI counters
+remained balanced, and all sampled idle CPUs converged in the same Windows idle
+region.  The deferred doorbell therefore wakes the guest but adds hundreds of
+physical exceptions per second on active timer CPUs, reproducing EXP-043's
+cumulative high-IRQL failure mechanism and the reported micro-freezes.
+
+Frozen evidence:
+- `evidence/live-rejection/hv.log`, SHA-256
+  `f908f4475441f0a66d5fe1a7f0f81be7c8680ae161bcb4496695c3014db48315`;
+- `evidence/live-rejection/fb-final.raw`, SHA-256
+  `f84df8e7f91fca492895c08e1c7963bc92c7d1dfe9055c6b28f4149ec779fabd`;
+- `evidence/live-rejection/fb-info.json`, SHA-256
+  `86ff31facd51c095bf6e7dbd6aee895e8e41d1d6654b3706756a83d5cee4e64c`;
+- `evidence/live-rejection/lock-screen.png`, SHA-256
+  `a05fb3afeaccd203ea96e9f8b11d0350173aaf1601b83b9afa435a2d4254305f`.
+
+The exact runner PID 30796 received SIGTERM only after evidence was frozen.
+Stage 1 then re-enumerated and answered a proxy NOP as m1n1 `b791225`, J313,
+eight GiB.  The next correction must remove the physical self-IPI entirely; it
+must not refine the rejected edge latch again.
+
+### EXP-20260814-049 — emulate guest idle with a real EL2 wait
+
+Status: rejected on hardware; Stage 1 recovered
+Created (UTC): 2026-08-23T13:40:00Z
+
+Hypothesis: Windows WFI/WFE must be virtualized as idle, not skipped and not
+allowed to put the Apple core to sleep below the virtual interrupt boundary.
+Unconditionally trapping guest WFI/WFE, executing the corresponding real wait
+instruction in the lock-free EL2 synchronous fast path while no virtual IRQ is
+deliverable, then returning after the physical wake will preserve idle semantics
+without a synthetic physical IPI.  A Pending VI skips the wait and resumes the
+guest immediately.
+
+Single changed variable relative to EXP-048: replace dynamic TWI/TWE plus the
+complete deferred timer self-IPI state machine with unconditional TWI/TWE and
+lock-free EL2 WFI/WFE emulation.  Live timer level synchronization, timer rates,
+LR/priority handling, FIQ fast path, Mu, Windows, NVMe, xHCI, display, CPU and
+memory layout remain unchanged.
+
+Architectural and ownership contract:
+- the WFI/WFE exception branch is before `hv_exc_entry()` and therefore never
+  holds the hypervisor-wide `bhl` while sleeping;
+- it synchronizes already-asserted timer state before deciding to wait, closes
+  the check-to-wait race with a real physical wait, and synchronizes again after
+  wake before guest return;
+- WFI waits for a physical interrupt and WFE waits for a physical event; a
+  currently deliverable HCR.VI performs neither wait;
+- no timer path calls `smp_send_ipi`, and no per-CPU timer wake latch or deferred
+  flush remains;
+- Windows continues to own timer programming, IAR/EOI and scheduling.  m1n1
+  owns the trap, physical wait and virtual interrupt publication.
+
+Smallest checkpoint: RED helper and source-contract tests must fail on EXP-048,
+then pass after the minimum implementation.  The complete nested/public suites,
+clean freestanding build and strict assisted monitor/both preflight must pass.
+On hardware, all eight CPUs, NVMe and xHCI must reach runtime; Windows must reach
+login without a host snapshot; physical IPI minus ordinary SGI queue growth must
+remain bounded rather than scaling with timer ticks.  Acceptance requires a
+changing framebuffer, responsive UI/SSH where available, ten idle minutes and a
+bounded CPU/storage stress window without freeze, reset or bugcheck.
+
+Implementation/build checkpoint before hardware launch:
+- focused RED failed on the absent static trap/action contract and the remaining
+  timer self-IPI source; after the minimum implementation, focused WFx, vGIC
+  and platform tests passed;
+- the complete nested host suite passed; the complete public suite passed
+  258/258 under `proxyenv` (the system Python attempt had only four missing-
+  `serial` import errors and did not execute product tests); diff checks passed;
+- m1n1 commit is `03b5fc92c70428e9111120fad063c197dafdddd3`;
+  Mu remains `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- a clean container build completed with `aarch64-linux-gnu-gcc 13.3.0` /
+  clang 18.1.3 and build tag `03b5fc9`; `build_cfg.h` contains only
+  `HV_DISABLE_APPLE_INPUT`;
+- `investigation/artifacts/EXP-20260814-049/m1n1.macho`, SHA-256
+  `4fc1e16670d2ddc572965e61bef77098ae9499b362be36be70af32f65079d6cb`;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict DEBUG/monitor/both manifest passed profile, display, debug,
+  assisted-chainload and guest-firmware role verification.  m1n1 and Mu are
+  clean; the root is intentionally dirty only for the ledger and RED/GREEN
+  public contract tests.
+
+Hardware result (2026-08-23): rejected.  The exact frozen artifact passed strict
+preflight, entered all eight vCPUs, initialized NVMe and xHCI, and reached the
+`guest runtime ready` checkpoint without an external diagnostic wake.  The web
+observer continued publishing generations, but every framebuffer sample stayed
+byte-identical and completely black for more than 90 seconds; TCP/22 never
+appeared.
+
+One synchronized snapshot proves the intended correction and the remaining
+failure separately.  Physical IPI receive counts exactly matched ordinary
+virtual-SGI queue counts on every CPU (for example CPU1 17460/17460, CPU2
+14368/14368 and CPU6 14084/14084), so EXP-048's timer self-IPI excess was fully
+removed.  Host timer counters continued advancing and timer IAR/EOI counts were
+balanced.  Nevertheless idle CPUs retained Pending-only or Active+Pending
+INTID 18 LRs, CPU0 retained an Active INTID 64 NVMe LR, and the guest made no
+visible or network progress.  The remaining problem is therefore not a dead
+host timer and not the removed timer doorbell storm; virtual SGI wake coalescing
+and IRQ Active/deactivation ownership must be classified next.
+
+Frozen rejection evidence:
+- `evidence/black-frame-rejection/hv.log`, SHA-256
+  `5ce2b23b3e3c36280670de9cc864bc23c2237f1c29168d64dc5861988d176844`;
+- `evidence/black-frame-rejection/fb-final.raw`, SHA-256
+  `6992296c77327bc9aaab7ca4758501ce5d2bd2e3c1ec7050f400881ed9ffbdcb`;
+- `evidence/black-frame-rejection/fb-info.json`, SHA-256
+  `fc8db4ef1c2bf32cd435ca50e52caced3e95d770db4457a37b75ebb51dc8378f`;
+- `evidence/black-frame-rejection/frame-black.png`, SHA-256
+  `16d4591d9bba12f935e2fa088b788c4b7937c78fb17fc99742d29004fe0eef55`.
+
+The exact runner PID 48046 received SIGTERM only after the evidence was frozen.
+The Air was then explicitly rebooted through the sole proxy owner; both USB
+ports re-enumerated and the role probe confirmed the clean Stage 1 proxy on
+`/dev/cu.usbmodemC02HDNCCQ6L41` with vUART on the `...43` port.
+
+### EXP-20260814-050 — preserve guest WFE as a native synchronization primitive
+
+Status: rejected after hardware test; Stage 1 recovery pending
+Created (UTC): 2026-08-23T11:48:50Z
+
+Hypothesis: EXP-049 incorrectly treats guest WFE as a vCPU halt and executes a
+real WFE inside the EL2 trap handler.  WFE is also the architectural event-based
+spin/wait primitive; sleeping the trapped CPU in EL2 can strand a Windows lock
+owner until an unrelated physical event and produce the observed multi-second
+or minute-wide freezes.  Preserving native guest WFE while continuing to trap
+only WFI should retain Windows synchronization semantics and keep the tested
+lock-free WFI halt path.
+
+Single changed variable relative to EXP-049: HCR traps WFI but no longer traps
+WFE; the defensive WFE trap action resumes immediately rather than entering a
+physical EL2 WFE.  Timer cadence, LR state, VI publication, SGI routing, NVMe,
+xHCI, Mu, display, CPU topology, memory map and launch profile remain unchanged.
+
+Primary implementations and specifications inspected before design:
+- current m1n1 `src/hv_exc.c`, `src/hv_wfx_policy.h`, `src/hv_vgic.c`,
+  `src/hv_sgi_pending.c` and their host tests;
+- upstream Linux arm64 KVM `arch/arm64/kvm/handle_exit.c`, where WFI halts the
+  vCPU until an IRQ/FIQ but WFE uses the scheduler spin/yield path rather than a
+  physical halt;
+- upstream Linux KVM WFI/WFE trap-policy implementation and documentation;
+- Arm RVIC signaling contract, which publishes VI while an enabled unmasked
+  interrupt is Pending and clears it when no such interrupt remains.
+
+Observed ownership contract: Windows owns WFE/SEV synchronization and WFI idle,
+m1n1 owns trapping and the physical WFI wait, and the vGIC owns VI plus LR
+publication.  Mu and ACPI do not participate in the WFx runtime decision.  The
+recovery path is the sole USB proxy reboot back to Stage 1; no ESP image will be
+installed.
+
+Starting checkpoint:
+- root `f9f372521a74999197d5531b7ed6b3d7e17fbd7a`; m1n1
+  `03b5fc92c70428e9111120fad063c197dafdddd3`; Mu
+  `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- root ledger/test diff SHA-256
+  `94497de9f79e7bd60bfe1a23daf76449ca729bdbf34e0507fe1d11c3d3b30776`;
+- m1n1 and Mu tracked diff SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+Smallest falsifiable checkpoint: the host policy and public source contracts
+must first fail against EXP-049, then pass when TWE and physical EL2 WFE are
+absent while TWI, lock-free WFI and VI skip remain.  After complete suites and a
+clean strict monitor/both artifact, hardware must autonomously pass EXP-049's
+black frame, reach the lock screen and TCP/22, then remain responsive for ten
+idle minutes and a bounded CPU/storage stress interval.  A static frame,
+unbounded SGI/IPI growth, reset or bugcheck rejects the hypothesis and requires
+one synchronized snapshot before Stage 1 recovery.
+
+Implementation/build checkpoint before hardware launch:
+- RED was observed independently: the host helper aborted because the trap mask
+  still contained TWE, and the public source contract failed on both HCR_TWE and
+  physical `sysop("wfe")` in the synchronous handler;
+- after the minimum policy change, both focused GREEN tests passed, the complete
+  nested host suite passed, and the complete public suite passed 258/258;
+- m1n1 commit is `8229266f668734338d0c86be077bb7e58db10b24`;
+  Mu remains `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- a clean container build completed with `aarch64-linux-gnu-gcc 13.3.0` /
+  clang 18.1.3 and `build_cfg.h` contains only `HV_DISABLE_APPLE_INPUT`;
+- `investigation/artifacts/EXP-20260814-050/m1n1.macho`, SHA-256
+  `3955949c94f079e7c2ec7c4a8a97dd4880853c226444728a09b33cd740a0bdf1`;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict DEBUG/monitor/both `MANIFEST.json`, SHA-256
+  `2070bee1384dc9f01d0a176197918351b4b327c88768ba5c428e76f604af1e95`,
+  passed profile, display, debug and both artifact-role checks.  It records
+  m1n1 and Mu as clean and the root ledger/source-contract diff explicitly as
+  dirty with SHA-256
+  `64815d71d4a05265f281ecaf3b1879b930b3f36c54b5e11f70c3a9caf2bd3f56`.
+
+Hardware result (2026-08-23): rejected.  The exact artifact reached all eight
+Windows CPUs, initialized NVMe and xHCI, reached the desktop and rendered Steam,
+but then reproduced two independent global pauses with byte-identical physical
+and USB framebuffer contents for more than 100 seconds.  TCP/22 was unavailable
+during the pauses.  A host SIGINT requested the established pre-rendezvous
+lockless snapshot; the physical rendezvous IPI briefly restored Windows
+progress each time, after which the same pause returned.
+
+The two snapshots rule out an ordinary SGI backlog: on every CPU SGI queue,
+physical IPI receive, drain, guest IAR and guest EOI counts were exactly
+balanced, queue depths were zero, no pending SGI mask remained and no LR
+allocation failed.  Host timer fire counters continued advancing.  CPUs 0, 1,
+2, 3, 6 and 7 retained Active+Pending INTID 18 timer LRs, while CPUs 4 and 5
+retained deliverable Pending-only timer LRs with `HCR.VI` asserted.  CPU0 also
+retained Active NVMe INTID 64 and CPU1 retained Active xHCI INTID 857.  The
+rendezvous therefore changes a slow-path boundary while the ordinary local IRQ
+queues themselves remain balanced.
+
+The repeating sampled PC `0xfffff800a9b0e320` was symbolized locally against
+the matching Windows kernel as `nt+0x30e320`,
+`RtlpImageDirectoryEntryToDataEx+0x28`, an ordinary conditional branch.  The
+records are independently published last samples rather than simultaneous
+stacks, so that hot PC is not itself evidence of an eight-core lock spin.
+
+Frozen evidence:
+- `evidence/desktop-freeze-1/fb-meta.json`, SHA-256
+  `86018f7cda431b184f624b49808f59bb7fc1a3d97af293b380b3193a211df923`;
+- `evidence/desktop-freeze-1/frame.bin`, SHA-256
+  `13f3a5f2f52ce9ee769b1a22177f75b5c43f0d5b07f296b17e0cd2c7c0775782`;
+- `evidence/desktop-freeze-1/hv-before-snapshot.log`, SHA-256
+  `92e73e67b8c1913e10845b19e0b4355db88149f46f3af1041d2ef38726361391`;
+- `evidence/desktop-freeze-1/watchdog-snapshot.txt`, SHA-256
+  `38f6be6099771f36243c538735a1890f57503650b56cd7240e737a632730e466`;
+- `evidence/desktop-freeze-2/fb-meta.json`, SHA-256
+  `dccfb8a10554ef259ec90dcfece18e07cb02b39660952518aaf7d7fd99d29ad4`;
+- `evidence/desktop-freeze-2/frame.bin`, SHA-256
+  `691de5ef48cc537e767b3680db38d49e19bc3a2c32d6f786cc9ca872cf4608df`;
+- `evidence/desktop-freeze-2/hv-before-snapshot.log`, SHA-256
+  `cbd625208685574646e424b5d0d1c9a937813499ec317795f980577541701a09`.
+
+The provisional `evidence/black-frame-rejection/` directory was captured while
+the initial raw framebuffer was still black and is superseded; it must not be
+used as the EXP-050 verdict.  Preserve native WFE as an architectural
+correctness change, but do not promote EXP-050 as a stability fix.
+
+### EXP-20260814-051 — push lock-free telemetry through the sole proxy owner
+
+Status: software and artifact verified; hardware validation pending
+Created (UTC): 2026-08-23T12:17:35Z
+
+Hypothesis: EXP-050 cannot distinguish an NVMe completion/INTx stall from an
+idle-wake stall without requesting a diagnostic rendezvous, and that request
+temporarily changes the failure.  Pushing the already existing 176-byte EL2
+ring sample as one nonblocking asynchronous proxy event every five seconds will
+preserve the failure while exposing guest PC, host timers, NVMe queue heads and
+tails, NVMe command/completion/INTx lifecycle, xHCI IRQ lifecycle, LR counts and
+framebuffer backpressure in the web observer.
+
+Single changed variable relative to EXP-050: diagnostic samples are sent as
+`EVT_TELEMETRY=4` to the existing assisted launcher and atomically recorded by
+that same process.  The host callback issues no proxy command.  WFI/WFE policy,
+timer cadence, vGIC/LR/VI behavior, SGI routing, NVMe, xHCI, Mu, Windows,
+display geometry, CPU topology and memory layout are unchanged.
+
+Starting checkpoint:
+- root `f9f372521a74999197d5531b7ed6b3d7e17fbd7a`;
+- m1n1 `8229266f668734338d0c86be077bb7e58db10b24`;
+- Mu `63942398cccbd98127cfecbd7f936af99c837d6f`;
+- root tracked diff SHA-256
+  `23a888cc4a0f1655e751ea3823a2cc88b44add4a17ae3d1c5cbcd8391d291312`;
+- m1n1 tracked diff SHA-256
+  `59dd5ea67628ff42ca08341067987f8ade8e86a6634cf018670e3f21279dd8f0`.
+
+RED/GREEN evidence:
+- the C test first failed because `hv_diag_tick()` could not return the newly
+  published sample;
+- host tests first failed because `TelemetryRecorder.accept_event`, event type
+  4 and the web `streaming` state did not exist;
+- after the minimum implementation, focused C and Python/web suites passed;
+- the complete nested C host suite passed and the complete public Python suite
+  passed 261/261; nested pytest-only files remain unavailable in the local
+  environment because pytest is not installed, while the unittest-compatible
+  nested proxy tests executed before that dependency boundary passed.
+
+Smallest hardware checkpoint: telemetry sequence and host tick counters advance
+without a host SIGINT, the web `guest diagnostic` field becomes live, and the
+first spontaneous pause retains at least four consecutive samples.  A proxy
+checksum failure, guest reset, changed framebuffer behavior or missing sample
+stream rejects the transport before any functional fix is attempted.
+
+Implementation/build checkpoint (2026-08-23):
+- m1n1 commit `2bd02fb2b01201c276a79b8fe7d3feb460be3a37`;
+- the callback decodes and records the asynchronous event but sends no proxy
+  command, so it cannot recursively enter the USB request/reply transport;
+- the complete public Python suite passed 261/261, the complete nested C host
+  suite passed, focused telemetry/display suites passed, and `git diff --check`
+  passed;
+- a clean Docker build with `APPLE_INPUT=0` succeeded;
+- frozen m1n1 artifact `investigation/artifacts/EXP-20260814-051/m1n1.macho`,
+  SHA-256 `9014731ac09511ec1a2e2ac7b9d61092387ad38cdda0f4de4c610c5283d02472`;
+- unchanged Mu artifact `investigation/artifacts/EXP-20260814-051/J313_EFI.fd`,
+  SHA-256 `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- manifest SHA-256
+  `89cd76cd04ba2a88bd2a4965a5ca7916178b43e02365e2f72208f79f9ca392de`;
+- strict manifest verification passed for assisted chainload, eight cores,
+  `display=both`, `debug=monitor` and the exact artifact roles above.

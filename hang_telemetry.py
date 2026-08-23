@@ -212,6 +212,31 @@ class TelemetryRecorder:
             },
         })
 
+    def accept_event(self, payload):
+        """Record one target-pushed sample without issuing a proxy request."""
+        try:
+            value = parse_sample(payload)
+        except Exception:
+            return False
+        if self._next_sequence is not None and value.sequence < self._next_sequence:
+            return False
+
+        self._append_sample(value)
+        self._recent.append(value)
+        self._recent = self._recent[-4:]
+        self._last_poll_samples = [value]
+        self._next_sequence = value.sequence + 1
+        try:
+            self._atomic_json({
+                "state": "streaming",
+                "updated_at": self.wall_clock(),
+                "last_sequence": value.sequence,
+                "findings": list(classify_window(self._recent)),
+            })
+        except Exception:
+            return False
+        return True
+
     def _poll_once(self):
         self._last_poll_samples = []
         payload = self.proxy.hv_diag_status()

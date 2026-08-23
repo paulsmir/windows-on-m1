@@ -18,9 +18,10 @@ class TestTelemetryStatusReader(unittest.TestCase):
         self.handler = DisplayRequestHandler.__new__(DisplayRequestHandler)
         self.handler.root = self.root
 
-    def test_reads_available_or_unavailable_object(self):
+    def test_reads_available_streaming_or_unavailable_object(self):
         for telemetry in (
             {"state": "available", "last_sequence": 9, "findings": ["running"]},
+            {"state": "streaming", "last_sequence": 10, "findings": ["running"]},
             {"state": "unavailable", "error": "usb link lost"},
         ):
             with self.subTest(state=telemetry["state"]):
