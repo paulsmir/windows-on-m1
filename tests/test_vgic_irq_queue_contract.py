@@ -121,7 +121,7 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("timer_sync_live_irq(17", update)
         self.assertNotIn("hv_sync_timer_level", update)
 
-    def test_idle_timer_progress_uses_wfx_trap_and_lr_level_not_physical_ipi(self):
+    def test_idle_timer_progress_uses_lock_free_el2_wait_without_physical_doorbell(self):
         exc = HV_EXC.read_text()
         hv = HV.read_text()
         vgic = HV_VGIC.read_text()
@@ -137,14 +137,20 @@ class VgicIrqQueueContractTest(unittest.TestCase):
         self.assertNotIn("HV_DIAG_TRAP_WFX", M1N1_MAKEFILE.read_text())
         initial_hcr = hv.split("hv_write_hcr(HCR_API", 1)[1].split("HCR_VM);", 1)[0]
         write_hcr = function_body(hv, "void hv_write_hcr(u64 val)")
-        self.assertNotIn("HCR_TWI | HCR_TWE", initial_hcr)
-        self.assertIn(
-            "hv_wfx_apply_pending_hcr(val, !!(val & HCR_VI))", write_hcr
-        )
-        self.assertIn("hv_update_fiq();", wfi)
+        self.assertIn("HCR_TWI", initial_hcr)
+        self.assertNotIn("HCR_TWE", initial_hcr)
+        self.assertIn("hv_wfx_apply_hcr(val)", write_hcr)
+        self.assertGreaterEqual(wfi.count("hv_update_fiq();"), 2)
         self.assertIn("hv_wfx_resume_pc", wfi)
+        self.assertIn("hv_wfx_trap_action", wfi)
+        self.assertIn('sysop("wfi")', wfi)
+        self.assertNotIn('sysop("wfe")', wfi)
+        self.assertNotIn("HV_WFX_WAIT_WFE", wfi)
+        self.assertNotIn("hv_exc_entry", wfi)
+        self.assertNotIn("spin_lock", wfi)
 
         self.assertNotIn("timer_wake_state", vgic)
+        self.assertNotIn("timer_wake_deferred", vgic)
         self.assertNotIn("hv_vgic3_flush_timer_wake", vgic)
         self.assertNotIn("hv_vgic3_flush_timer_wake", vgic_header)
         self.assertNotIn("hv_vgic_diag_timer_wake_transition", vgic_diag)

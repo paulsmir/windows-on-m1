@@ -60,7 +60,10 @@ class LaunchProfile:
 
     @property
     def telemetry(self) -> bool:
-        return self.debug is Debug.FULL
+        # FULL additionally enables verbose synchronous tracing.  MONITOR uses
+        # only the bounded lock-free sample stream, but the sole host proxy
+        # owner must still register its asynchronous event handler.
+        return self.debug in (Debug.FULL, Debug.MONITOR)
 
     @property
     def proxy_takeover(self) -> bool:

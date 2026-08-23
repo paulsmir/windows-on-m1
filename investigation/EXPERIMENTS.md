@@ -4203,3 +4203,271 @@ Implementation/build checkpoint (2026-08-23):
   `89cd76cd04ba2a88bd2a4965a5ca7916178b43e02365e2f72208f79f9ca392de`;
 - strict manifest verification passed for assisted chainload, eight cores,
   `display=both`, `debug=monitor` and the exact artifact roles above.
+
+Hardware result (2026-08-23): rejected as an observation transport.  The first
+hardware attempt enabled the host handler but received no sample while a 4 KiB
+framebuffer response occupied USB IN.  The target sent each sample only once and
+discarded a failed nonblocking send, so the transport could silently lose the
+only evidence of a freeze.  Guest behavior is not a verdict for this experiment.
+
+Frozen rejection evidence:
+- `evidence/EXP-20260814-051-transport-drop/hv.log`, SHA-256
+  `7067ea18053fed9f4de2148d7257eac939a07a4e05a26a3db5cf82d0df908e04`;
+- `evidence/EXP-20260814-051-transport-drop/fb-info.json`, SHA-256
+  `e22794613d76245d72b18ef7eef8b7a46fbb6083640ef175cc302bc072756ce1`.
+
+### EXP-20260814-052 — retry one pending telemetry sample under USB backpressure
+
+Status: rejected after hardware test; observability correction retained
+Created (UTC): 2026-08-23T13:20:00Z
+
+Hypothesis: retaining exactly one pending 176-byte sample and retrying its
+nonblocking asynchronous send until the sole proxy owner accepts it will make a
+spontaneous freeze observable without polling, queue growth or guest delay.
+
+Single changed variable relative to EXP-051: asynchronous telemetry delivery
+keeps one pending sample until `usb_iodev_send_event()` succeeds.  NVMe, xHCI,
+vGIC, timer and WFx policy, Mu, Windows, topology, memory and display are
+unchanged.
+
+Software/build checkpoint:
+- m1n1 commit `86433fd0dc69ec52d3507e4d05f68d62bf0c0293`;
+- TDD first failed because the pending-delivery state and retry operations did
+  not exist, then the focused test and complete nested C host suite passed;
+- clean `APPLE_INPUT=0` Docker build succeeded;
+- `artifacts/EXP-20260814-052/m1n1.macho`, SHA-256
+  `3fec8e20e42b00e6a4d1c40b85cca2deed920c877fce09ca579700ecbed801da`;
+- unchanged `J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict `debug=monitor`, `display=both`, assisted manifest, SHA-256
+  `54552029199b02891835bd4fdb5af000adbbccea12677343e052ef12255c18a9`,
+  passed profile and artifact-role verification.
+
+Hardware result (2026-08-23): telemetry transport validated; guest stability
+rejected.  Samples continued every five seconds through an unperturbed global
+pause while physical and USB framebuffers remained at the Windows sign-in
+screen and TCP/22 was unavailable.  Host FIQ and tick counters advanced.  NVMe
+stopped with one unacknowledged CQ entry, Active INTID 64, and xHCI stopped with
+Active INTID 857.
+
+The decisive pre-freeze measurement is an NVMe interrupt storm: 10,416,958
+inject/IAR cycles for 37,718 completions (about 276 notifications per
+completion), while CQ doorbells and completions differed by only one.  xHCI
+remained proportional at 3,071 hardware IRQs/injects.  The emulated PCI header
+advertises no MSI/MSI-X capability and `hv_nvme_irq_eoi()` immediately injects
+the same continuously asserted pin interrupt again before the Windows DPC can
+acknowledge CQHDBL.  This matches the NVMe over PCIe transport definition:
+wire mode remains asserted until all related CQ entries are acknowledged, and
+host software normally masks it in the ISR before deferred processing.
+
+Frozen evidence:
+- `evidence/EXP-20260814-052-nvme-intx-storm/hang-telemetry.jsonl`, SHA-256
+  `ee46a7c580afb636ce769503cd924ccaed6817c7de7e8d5ad4893fdfb16614f0`;
+- `evidence/EXP-20260814-052-nvme-intx-storm/hv.log`, SHA-256
+  `0a887fd7643b0e7651784682e20a7f53467b79dac676a89742ba768f53672107`;
+- `evidence/EXP-20260814-052-nvme-intx-storm/fb.raw`, SHA-256
+  `71d25bf2ab379a459c7439b7987dc527c14e20b8ace54dcd70ea2587e4d9875f`;
+- `evidence/EXP-20260814-052-nvme-intx-storm/fb-info.json`, SHA-256
+  `76a9bb67bb579e58ea129eca8864b9efc7c579168628fe42d2738fd07040939e`.
+
+### EXP-20260814-053 — latch one notification per NVMe assertion generation
+
+Status: software validation passed; hardware validation pending
+Created (UTC): 2026-08-23T14:50:00Z
+
+Hypothesis: the global pauses and low throughput are caused by immediate
+re-injection of the same continuously asserted NVMe INTx after every guest EOI.
+Remembering that the current assertion generation was already notified, and
+allowing another injection only after a real line deassert/reassert transition,
+will give the Windows DPC time to process the CQE and ring CQHDBL.  With the
+existing one-CQE controller backpressure this preserves every completion while
+preventing millions of duplicate notifications.
+
+Single changed variable relative to EXP-052: NVMe INTx delivery generation
+ownership.  EOI releases the Active LR but does not make the same logical
+assertion injectable again; a true line deassertion rearms delivery.  If a
+deassert/reassert transition occurs while the previous LR remains Active, the
+new generation waits for EOI and is then injected.  No timer, WFx, SGI, vGIC
+priority, xHCI, Mu, Windows, display, topology or memory change is permitted.
+
+Primary references inspected before the hypothesis:
+- current `hv_pci.c`, `hv_nvme.c`, `hv_nvme_queue.c`, `hv_vgic.c` and their host
+  tests end to end;
+- NVMe over PCIe Transport Specification 1.0a sections 3.5 and A.3: pin mode is
+  level-sensitive, CQHDBL acknowledges completion state, and ISR masking before
+  DPC processing is the recommended software flow;
+- QEMU NVMe documentation: its ordinary controller exposes MSI-X vectors and
+  uses MSI-X for the normal admin/I/O queue path.
+
+Smallest falsifiable checkpoint: the host test must first fail because EOI
+still makes an unchanged assertion injectable.  After the minimum state-machine
+change, all suites and a clean strict artifact must pass.  Hardware accepts the
+hypothesis only if interrupt injects remain proportional to completions, the
+sign-in/desktop stays responsive, TCP/22 becomes available, and repeated idle
+plus bounded storage/CPU stress produces no static-frame interval or bugcheck.
+
+Software checkpoint (2026-08-23): the RED test failed because no assertion
+generation state existed.  The minimum implementation added one notified latch,
+clears it only when the effective line is low (including INTMS masking), and
+keeps LR ownership separate until EOI.  The focused NVMe test, complete nested
+C host suite (46 programs), and complete public Python suite (261 tests) pass.
+No hardware verdict is claimed yet.
+
+Frozen pre-run checkpoint:
+- m1n1 commit `9bc8b33f1e25225cb3281d88784d8db9ddc0c5c4`;
+- clean Docker `APPLE_INPUT=0` build completed with only the pre-existing
+  compiler warnings recorded by earlier experiments;
+- `artifacts/EXP-20260814-053/m1n1.macho`, SHA-256
+  `cac737ca8d3271fc64dd13eaedfa086fdccc08f59b4c430e571ed4cdd4419d92`;
+- unchanged `artifacts/EXP-20260814-053/J313_EFI.fd`, SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- strict assisted `debug=monitor`, `display=both` manifest, SHA-256
+  `7550975241673394ddfbf207f906365efe4bd83c3cb66a3ef6128dcf449b7ac5`,
+  passed profile, guest-contract and artifact-role verification.
+
+Hardware result (2026-08-23): rejected as the complete correction.  The
+one-notification latch reduced the measured NVMe injection/IAR rate from about
+276 notifications per completion in EXP-052 to about 1.14 notifications per
+completion, so the duplicate INTx storm is fixed.  Windows nevertheless froze
+at the sign-in screen.  Asynchronous telemetry stopped advancing guest NVMe,
+xHCI and virtual-IAR/EOI counters while host ticks and framebuffer transport
+continued.  A lockless snapshot found balanced SGI queues, Active INTID 64 on
+CPU0, and Pending or Active+Pending overdue INTID 18 timer LRs on several
+vCPUs.  KD break-in produced no state-change packet and its cleanup sent
+Continue.  The freeze is therefore a second defect after the NVMe storm, not a
+reason to revert the proportional INTx correction.
+
+Frozen evidence is under
+`investigation/evidence/EXP-20260814-053-active-timer-stall/`.  The exact runner
+was terminated through its managed SIGTERM path only after the evidence was
+copied; Stage 1 then returned on the same proxy/vUART pair.
+
+### EXP-20260823-054 — binary A/B against the last private assisted control
+
+Status: rejected; selected legacy binary was not the accepted fast control
+Created (UTC): 2026-08-23
+
+Purpose: separate a public m1n1 runtime regression from Mu, launcher and the
+current Windows installation.  The user reports that the pre-public assisted
+eight-core build reached the desktop in roughly ten seconds and was markedly
+smoother.  This control keeps the current public launcher, current Mu firmware,
+eight-core guest contract, `display=both`, monitor observation, NVMe, xHCI and
+Windows installation byte-identical, and changes only the assisted m1n1 Mach-O
+to the last binary from `/Users/pavel/windows/m1n1_windows/build/m1n1.macho`.
+The old repository is read-only; its binary is copied and hashed into this
+experiment before use.
+
+Hard timing gate: Windows must reach the sign-in screen in no more than 30
+seconds after the Mu-to-Windows handoff; the normal target is about ten seconds.
+A static frame, spinner or sign-in pause longer than 30 seconds, missing CPU,
+bugcheck, spontaneous reset, or unusable desktop rejects the control.  Passing
+this control does not promote the historical binary; it identifies m1n1 as the
+regression range and triggers a source-level bisect.  Failure with the same
+current Mu/Windows layers shifts the next A/B to the historical Mu firmware.
+
+Hardware result (2026-08-23): rejected by the 30-second gate.  The selected
+legacy file identified itself as m1n1 `0060186` and required an explicit host
+compatibility flag because its successful `hv_init()` and `hv_pci_init()` calls
+return zero.  With that compatibility isolated to this experiment, all eight
+vCPUs entered Windows and user-mode PCs appeared, but the USB framebuffer stayed
+black and TCP/22 never became reachable.  The binary emitted the later
+`HV DIAG X18`, `HV LOWER BRK`, timer and xHCI hot-path diagnostics at high volume;
+it is therefore a late diagnostic build, not the pre-public fast binary the
+experiment intended to select.  Reusing the last file in a mutable legacy build
+directory is not valid provenance.
+
+Evidence:
+- `evidence/EXP-20260823-054-private-binary-control/hv.log`, SHA-256
+  `e19ad4e9a2c2a7cb48cf6e638e7e38ed467134e830e42481ae865fec9eff6ef6`;
+- `evidence/EXP-20260823-054-private-binary-control/fb-info.json`, SHA-256
+  `436b753d854b8548281b605100ae36f4a9b6f1e10ce416ab8efbc000ea2452da`;
+- rendered black frame
+  `evidence/EXP-20260823-054-private-binary-control/frame.png`, SHA-256
+  `880a9a589539b7d9aaeeca93fe1eb9662b5e17e95f2c753d688e72975162af2e`.
+
+The managed reboot signal could not be decoded by the old target's incompatible
+event framing, so the host process was terminated only after evidence capture.
+The target then no longer answered proxy NOP; one physical reset is required.
+
+### EXP-20260823-055 — current runtime with release-cost diagnostics
+
+Status: software preparation in progress
+Created (UTC): 2026-08-23
+
+Hypothesis: the very slow boot and pervasive micro-stutter are amplified by the
+non-release monitor binary rather than by framebuffer consumption itself.  The
+current m1n1 runtime, including the validated proportional NVMe INTx correction,
+will reach sign-in within 30 seconds when rebuilt with `RELEASE=1`, while the host
+still publishes the asynchronous framebuffer for visual timing.
+
+Single changed variable relative to EXP-053: m1n1 build-time diagnostic cost.
+Source, Mu, Windows, eight-core topology, NVMe, xHCI, timer/vGIC behavior and
+display geometry remain unchanged.  `APPLE_INPUT=0` remains fixed.  The first
+hardware gate is only boot latency and basic responsiveness; a later freeze or
+bugcheck still rejects this as a complete stability fix.
+
+Software checkpoint:
+- current m1n1 source commit `9bc8b33f1e25225cb3281d88784d8db9ddc0c5c4`;
+- build configuration contains exactly `RELEASE` and `HV_DISABLE_APPLE_INPUT`;
+- complete nested host suite passed (46 programs);
+- `artifacts/EXP-20260823-055/m1n1.macho`, SHA-256
+  `f574fa8f35776cf09fd575a835c4b00e9b9b722ebaf22ce313e807c45ffe7d23`;
+- unchanged Mu SHA-256
+  `0dba13c6fa652ec86900c8879babf6b48ac6a723f37f187ab99ee5f676e00ba5`;
+- assisted `display=both`, `debug=monitor` manifest SHA-256
+  `cd2ac78aec8a5fb8c5a308d9084f57f3b6135c798627f26167a996b291d9ae56`;
+  strict artifact-role verification passed.  The monitor host contract remains
+  enabled only to publish the framebuffer; the target's release build removes
+  synchronous diagnostic work.
+
+### EXP-20260823-056 — validated minimal four-E-core control
+
+Status: validated as the next hardware control
+Created (UTC): 2026-08-23
+
+Purpose: freeze the exact configuration that completed a clean Windows 11 ARM64
+first boot and reached a responsive desktop after the earlier eight-core and
+full-observation runs produced watchdogs, global pauses, slow boot, or a black
+screen.
+
+The successful run changed two variables relative to the rejected observed
+experiments: Mu exposed only GICC UIDs 0 through 3, and the launcher selected
+`display=physical`, `debug=off`, and no USB framebuffer or host telemetry. The
+low-memory alias, physical DCP surface, proportional NVMe INTx correction,
+current timer/vGIC implementation, xHCI pass-through, and Windows installation
+remained enabled.
+
+Exact artifacts:
+
+- `dist/j313/debug-forensic/m1n1.macho`, SHA-256
+  `0389bc92d88f1a19049cecc564b929502f7dbce2ab05942a7e6421bef24632c9`;
+- `dist/j313/debug-forensic/J313_EFI.fd`, SHA-256
+  `8d95d77664346ceb95bbe7a1fca493cc1b1e876fc1acf627c385191fe4df268a`;
+- m1n1 source checkpoint `2fe790beebed32658eae753dee3e6d581df97197`;
+- Mu source checkpoint `af4c9705cfd42e976bc9602c35830cc2e9072f36`.
+
+Software verification:
+
+- complete public Python suite passed 265/265 using `proxyenv`;
+- the focused m1n1 contract suite passed;
+- full upstream m1n1 pytest remains environment-limited by the installed LLD
+  default image base and a pre-existing Darwin `uname_result` fixture; these
+  failures are outside the changed runtime path and are not reported as green;
+- all four launch-contract checkpoints completed on hardware.
+
+Hardware result: Windows entered kernel and user mode on all four enabled
+vCPUs, completed OOBE, and reached the desktop. The operator reported normal
+interactive speed, stable operation, and no observed micro-freezes in the
+initial session. No reset or bugcheck was recorded during that session.
+
+This validates the configuration as the control, not as final platform
+qualification. Long-duration storage/CPU stress, suspend/resume, and any
+Firestorm guest core remain untested. The target m1n1 was compiled from a
+diagnostic tree and still emits build-time UART messages even when runtime
+debug is off; a quiet rebuilt binary must reproduce this result before it can
+replace these artifact hashes.
+
+Regression rule: subsequent work changes one variable at a time. First prove a
+quiet rebuild of this exact four-E-core source. Then test one Firestorm core in
+isolation. Any boot over 30 seconds, global pause, watchdog, or loss of the
+interactive desktop rejects the experiment and returns to this baseline.

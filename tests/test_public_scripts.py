@@ -340,7 +340,7 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("telemetry: disabled", result.stdout)
         self.assertNotIn("reader-before-guest", result.stdout)
 
-    def test_monitor_assisted_uses_debug_artifacts_without_full_telemetry(self):
+    def test_monitor_assisted_enables_lock_free_telemetry(self):
         result = subprocess.run(
             [
                 "sh", str(ROOT / "scripts/run-assisted.sh"),
@@ -352,7 +352,7 @@ class PublicScriptTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("debug: monitor", result.stdout)
-        self.assertIn("telemetry: disabled", result.stdout)
+        self.assertIn("telemetry: enabled", result.stdout)
         self.assertIn("dist/j313/debug-monitor/J313_EFI.fd", result.stdout)
 
     def test_public_entrypoint_accepts_assisted_monitor_profile(self):
@@ -369,7 +369,7 @@ class PublicScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("debug: monitor", result.stdout)
         self.assertIn("virtual UART: /dev/cu.test-vuart", result.stdout)
-        self.assertIn("telemetry: disabled", result.stdout)
+        self.assertIn("telemetry: enabled", result.stdout)
         self.assertIn("chainload: dist/j313/debug-monitor/m1n1.macho", result.stdout)
 
     def test_public_entrypoint_exposes_foreground_runner_lifecycle(self):

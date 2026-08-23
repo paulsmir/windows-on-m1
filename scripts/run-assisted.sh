@@ -101,7 +101,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
         echo "virtual UART: $VUART"
     fi
     case "$DISPLAY" in virtual|both) echo "USB framebuffer: enabled" ;; *) echo "USB framebuffer: disabled" ;; esac
-    [ "$DEBUG" = full ] && echo "telemetry: enabled" || echo "telemetry: disabled"
+    case "$DEBUG" in
+        full|monitor) echo "telemetry: enabled" ;;
+        *) echo "telemetry: disabled" ;;
+    esac
     [ "$CHAINLOAD" -eq 0 ] && echo "chainload: disabled" || echo "chainload: $M1N1"
     echo "firmware: $FIRMWARE"
     [ -z "$RAMDISK" ] || echo "RAM disk: $RAMDISK"

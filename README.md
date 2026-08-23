@@ -14,19 +14,18 @@ Windows 11 ARM64 has booted from the internal Apple SSD, completed OOBE with a l
 account, reached the desktop, accepted USB keyboard and mouse input, and sustained an RDP
 session long enough to install software. The working development configuration exposes:
 
-- eight virtual CPUs backed by all four efficiency and four performance cores;
+- four virtual CPUs backed by the four Icestorm efficiency cores;
 - a synthetic PCIe NVMe controller backed by the physical Apple ANS storage device;
 - physical USB xHCI with keyboard, mouse, hubs, and installation media;
 - a Project Mu GOP framebuffer and a remotely observable virtual framebuffer;
 - virtual UART and Windows kernel-debug transport for assisted development.
 
-The current eight-core development baseline boots the installed Windows system, reaches the
-desktop, survives bounded CPU and NVMe stress, and keeps SSH responsive. The earlier recurrent
-watchdog failures and long global pauses were traced to EL2 timer/IPI and vGIC fast-path defects;
-the current candidate corrected those defects and was accepted on the development J313 as the
-baseline for built-in input work. This is still an experimental checkpoint, not a production
-release: repeated cold-boot and long-duration acceptance gates remain intentionally stricter than
-one successful development session.
+The validated four-efficiency-core baseline completed a fresh Windows installation, OOBE,
+and reached a responsive desktop without the earlier micro-freezes in its initial hardware
+session. Firestorm performance cores are deliberately disabled in the guest MADT: previous
+mixed E/P configurations produced watchdog bugchecks, global pauses, and inconsistent
+secondary-core startup. This is still an experimental checkpoint, not a production release;
+long-duration stress and repeated cold-boot qualification remain pending.
 
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
 
@@ -48,6 +47,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Architecture](documentation/ARCHITECTURE.md)
 - [Platform roadmap and milestone gates](documentation/ROADMAP.md)
 - [Current stability checkpoint and iteration workflow](documentation/PLATFORM_STABILITY.md)
+- [Validated J313 four-efficiency-core baseline](documentation/STABLE_4E_BASELINE.md)
 - [Debugging and KD tools](documentation/DEBUGGING.md)
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
 - [Historical artifact provenance](documentation/history/ARTIFACT_PROVENANCE.md)
@@ -83,10 +83,10 @@ Documentation distinguishes three states:
 - **implemented:** present in source and host-tested but awaiting the relevant hardware run;
 - **planned:** not yet implemented.
 
-The physical internal-panel handoff and full-panel 2560x1600 Windows framebuffer have been
-validated on J313. The accepted assisted checkpoint ran all eight CPUs, the synthetic NVMe bridge,
-physical USB, networking, and the internal panel. Built-in Apple keyboard/trackpad and GPU
-acceleration remain implementation milestones; they are not claimed as working here.
+The physical internal-panel handoff, full-panel 2560x1600 Windows framebuffer, four Icestorm
+guest CPUs, synthetic NVMe bridge, and physical USB have been validated together on J313.
+Firestorm guest CPUs, built-in Apple keyboard/trackpad, and GPU acceleration remain
+implementation milestones; they are not claimed as working here.
 
 Native built-in input bring-up is tracked in
 [`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md). The platform,

@@ -45,7 +45,7 @@ class LaunchProfileTests(unittest.TestCase):
             "off": (False, False, False, 0x1),
             "uart": (True, False, True, 0x5),
             "full": (True, True, True, 0x9),
-            "monitor": (True, False, False, 0x11),
+            "monitor": (True, True, False, 0x11),
         }
 
         for name, want in expected.items():

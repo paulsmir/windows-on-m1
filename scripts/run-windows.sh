@@ -75,7 +75,7 @@ fi
 virtual=disabled
 case "$DISPLAY" in virtual|both) virtual=enabled ;; esac
 telemetry=disabled
-[ "$DEBUG" = full ] && telemetry=enabled
+case "$DEBUG" in full|monitor) telemetry=enabled ;; esac
 vuart_summary=disabled
 [ "$DEBUG" = off ] || vuart_summary=${VUART:-'<auto>'}
 

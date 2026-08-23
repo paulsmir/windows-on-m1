@@ -29,6 +29,10 @@ screenshots/
 investigation/**/*.dmp
 investigation/artifacts/
 investigation/*.contract
+# Hardware captures stay local; the public ledger records their hashes and conclusions.
+investigation/evidence/
+hang-telemetry.jsonl
+hang-telemetry-status.json
 
 __pycache__/
 *.py[cod]

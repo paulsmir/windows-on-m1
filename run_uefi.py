@@ -185,14 +185,30 @@ descriptor = pack_descriptor(
     adt_size=len(adt_blob),
     adt_digest=hashlib.sha256(adt_blob).digest(),
 )
-if not p.hv_launch_publish(descriptor):
-    raise RuntimeError("m1n1 rejected the J313 launch descriptor")
+launch_contract_available = True
+try:
+    launch_descriptor_accepted = p.hv_launch_publish(descriptor)
+except ProxyCommandError:
+    if os.environ.get("WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT") != "1":
+        raise
+    # Frozen pre-public m1n1 images predate the launch-contract opcodes. This
+    # escape hatch exists only for controlled binary A/B runs: normal public
+    # launches stay fail-closed so a mismatched Stage 1 can never pass silently.
+    launch_contract_available = False
+    print("Compatibility: legacy launch-contract opcodes unavailable; "
+          "checkpoint publication disabled for this A/B")
+else:
+    if not launch_descriptor_accepted:
+        raise RuntimeError("m1n1 rejected the J313 launch descriptor")
 
 if args.contract_output:
     args.contract_output.parent.mkdir(parents=True, exist_ok=True)
     args.contract_output.write_bytes(b"")
 
 def capture_contract(checkpoint, sequence):
+    if not launch_contract_available:
+        print(f"LAUNCH_CONTRACT checkpoint={checkpoint} skipped for legacy A/B")
+        return
     payload = p.hv_launch_capture(checkpoint, sequence)
     if payload is None:
         raise RuntimeError(f"launch contract checkpoint {checkpoint} failed")

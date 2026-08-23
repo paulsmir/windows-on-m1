@@ -23,7 +23,17 @@ EFI_ACPI_6_3_GICC_STRUCTURE_INIT( // Icestorm-2
 """
 
 
+ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_MADT = (
+    ROOT / "mu" / "Silicon" / "Apple" / "T810XFamilyPkg" /
+    "AcpiTables" / "MADT_Static.aslc"
+)
+
+
 class TestJ313MadtTopology(unittest.TestCase):
+    def test_public_release_exposes_only_the_validated_efficiency_cluster(self):
+        self.assertEqual(enabled_gicc_uids(PUBLIC_MADT.read_text()), [0, 1, 2, 3])
+
     def test_returns_only_enabled_gicc_uids_in_source_order(self):
         self.assertEqual(enabled_gicc_uids(MADT_FRAGMENT), [0, 2])
 

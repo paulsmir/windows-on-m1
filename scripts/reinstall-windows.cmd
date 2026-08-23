@@ -8,6 +8,10 @@ rem and exact labels because WinPE drive letters can change between boots.
 set "SOURCE_DRIVE="
 set "WINDOWS_DRIVE="
 set "WINESP_DRIVE="
+set "WINESP_VOLUME="
+set "WINESP_MOUNT_LETTER="
+set "LIST_VOLUMES_DISKPART=%TEMP%\reinstall-windows-list-volumes.txt"
+set "MOUNT_WINESP_DISKPART=%TEMP%\reinstall-windows-mount-winesp.txt"
 set /a SOURCE_COUNT=0
 set /a WINDOWS_COUNT=0
 set /a WINESP_COUNT=0
@@ -31,8 +35,69 @@ for %%L in (C D E F G H I J K L M N O P Q R S T U V W Y Z) do (
         set "WINDOWS_DRIVE=%%L:"
     )
     if /i "!VOLUME_LABEL!"=="WINESP" (
-        set /a WINESP_COUNT+=1
         set "WINESP_DRIVE=%%L:"
+    )
+)
+
+rem DiskPart sees hidden volumes that have no drive letter. Count the exact
+rem WINESP label across all volumes so a stale or duplicate ESP cannot be used.
+>"!LIST_VOLUMES_DISKPART!" echo list volume
+for /f "tokens=1-5" %%A in ('diskpart /s "!LIST_VOLUMES_DISKPART!" 2^>nul') do (
+    if /i "%%A"=="Volume" (
+        if /i "%%C"=="WINESP" (
+            set /a WINESP_COUNT+=1
+            set "WINESP_VOLUME=%%B"
+        )
+        if /i "%%D"=="WINESP" (
+            set /a WINESP_COUNT+=1
+            set "WINESP_VOLUME=%%B"
+        )
+    )
+)
+del /q "!LIST_VOLUMES_DISKPART!" >nul 2>&1
+
+if not "!WINESP_COUNT!"=="1" (
+    echo ERROR: expected exactly one volume with the exact label WINESP.
+    echo Found: !WINESP_COUNT!
+    exit /b 12
+)
+
+rem A hidden EFI system partition normally has no letter in WinPE. Assign a
+rem free temporary letter; this mounts the existing volume but does not alter
+rem the partition table or format anything.
+if not defined WINESP_DRIVE (
+    for %%L in (S R Q P O N M L K J I H G F E D C) do (
+        if not defined WINESP_MOUNT_LETTER (
+            if exist "%%L:\NUL" (
+                rem Letter is already in use.
+            ) else (
+                set "WINESP_MOUNT_LETTER=%%L"
+            )
+        )
+    )
+    if not defined WINESP_MOUNT_LETTER (
+        echo ERROR: no free drive letter is available to mount WINESP.
+        exit /b 16
+    )
+    >"!MOUNT_WINESP_DISKPART!" echo select volume !WINESP_VOLUME!
+    >>"!MOUNT_WINESP_DISKPART!" echo assign letter=!WINESP_MOUNT_LETTER!
+    diskpart /s "!MOUNT_WINESP_DISKPART!"
+    if errorlevel 1 (
+        set "MOUNT_ERROR=!ERRORLEVEL!"
+        del /q "!MOUNT_WINESP_DISKPART!" >nul 2>&1
+        echo ERROR: could not mount WINESP. DiskPart exit code: !MOUNT_ERROR!
+        exit /b 17
+    )
+    del /q "!MOUNT_WINESP_DISKPART!" >nul 2>&1
+    set "WINESP_DRIVE=!WINESP_MOUNT_LETTER!:"
+
+    set "VOLUME_LABEL="
+    for /f "tokens=1-5,*" %%A in ('vol !WINESP_DRIVE! 2^>nul') do (
+        if /i "%%A %%B %%C %%D %%E"=="Volume in drive !WINESP_MOUNT_LETTER! is" set "VOLUME_LABEL=%%F"
+    )
+    if /i not "!VOLUME_LABEL!"=="WINESP" (
+        echo ERROR: mounted volume did not verify as exact label WINESP.
+        exit /b 18
     )
 )
 
@@ -45,11 +110,6 @@ if not "!WINDOWS_COUNT!"=="1" (
     echo ERROR: expected exactly one volume with the exact label Windows.
     echo Found: !WINDOWS_COUNT!
     exit /b 11
-)
-if not "!WINESP_COUNT!"=="1" (
-    echo ERROR: expected exactly one volume with the exact label WINESP.
-    echo Found: !WINESP_COUNT!
-    exit /b 12
 )
 if /I "!SOURCE_DRIVE!"=="!WINDOWS_DRIVE!" (
     echo ERROR: installer source and Windows target resolve to the same volume.
@@ -95,8 +155,11 @@ if not defined IMAGE_INDEX (
     echo ERROR: no image index was entered.
     exit /b 21
 )
-set "INDEX_REMAINDER=!IMAGE_INDEX!"
-for %%D in (0 1 2 3 4 5 6 7 8 9) do set "INDEX_REMAINDER=!INDEX_REMAINDER:%%D=!"
+set "INDEX_REMAINDER="
+rem With digits as delimiters, FOR emits a token only when a non-digit is
+rem present. Unlike repeated delayed substitutions, this works in minimal
+rem WinPE cmd.exe and leaves a valid index such as 3 unchanged.
+for /f "delims=0123456789" %%D in ("!IMAGE_INDEX!") do set "INDEX_REMAINDER=%%D"
 if defined INDEX_REMAINDER (
     echo ERROR: the image index must be a positive integer.
     exit /b 22

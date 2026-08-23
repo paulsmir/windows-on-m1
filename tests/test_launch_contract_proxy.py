@@ -29,6 +29,15 @@ class LaunchContractProxyTests(unittest.TestCase):
         self.assertNotIn("p.hv_watchdog_dump()", runner)
         self.assertIn("return EXC_RET.UNHANDLED", runner)
 
+    def test_legacy_launch_contract_fallback_is_explicit_and_fail_closed(self):
+        runner = (ROOT / "run_uefi.py").read_text()
+
+        self.assertIn("WOM1_ALLOW_LEGACY_LAUNCH_CONTRACT", runner)
+        self.assertIn("except ProxyCommandError", runner)
+        self.assertIn("legacy launch-contract opcodes unavailable", runner)
+        self.assertIn("launch_contract_available = False", runner)
+        self.assertIn("if not launch_contract_available:", runner)
+
 
 if __name__ == "__main__":
     unittest.main()

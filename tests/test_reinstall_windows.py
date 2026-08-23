@@ -30,6 +30,25 @@ class ReinstallWindowsContractTests(unittest.TestCase):
         self.assertFalse(windows.search("Volume in drive E is WindowsARM"))
         self.assertFalse(winesp.search("Volume in drive F is WINESP-backup"))
 
+    def test_mounts_an_unlettered_winesp_by_exact_diskpart_label(self):
+        self.assertIn("list volume", self.lower)
+        self.assertIn('"%%a"=="volume"', self.lower)
+        self.assertIn('"%%c"=="winesp"', self.lower)
+        self.assertIn('"%%d"=="winesp"', self.lower)
+        self.assertIn("winesp_volume", self.lower)
+        self.assertIn("select volume !winesp_volume!", self.lower)
+        self.assertIn("assign letter=!winesp_mount_letter!", self.lower)
+        self.assertIn('if exist "%%l:\\nul"', self.lower)
+        self.assertLess(
+            self.lower.index("assign letter=!winesp_mount_letter!"),
+            self.lower.index('set /p "confirm='),
+        )
+
+    def test_accepts_plain_numeric_image_index_without_mutating_it(self):
+        self.assertIn('for /f "delims=0123456789"', self.lower)
+        self.assertNotIn('!index_remainder:%%d=!', self.lower)
+        self.assertIn('/index:!image_index!', self.lower)
+
     def test_requires_literal_confirmation_before_format(self):
         confirmation = self.lower.index("erase windows")
         first_format = self.lower.index("format fs=")
