@@ -247,6 +247,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         )
         self.assertIn("ARM64", cli_project)
         self.assertNotIn("<PlatformToolset>v143</PlatformToolset>", cli_project)
+        self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", cli_project)
         self.assertIn("IOCTL_AI_GET_SNAPSHOT", cli)
         self.assertIn("--json", cli)
         self.assertIn("try:", kd)
