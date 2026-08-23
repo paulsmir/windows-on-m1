@@ -17,8 +17,11 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 {
     UNREFERENCED_PARAMETER(Driver);
     WDF_PNPPOWER_EVENT_CALLBACKS callbacks;
+    WDF_INTERRUPT_CONFIG interrupt_config;
     WDF_OBJECT_ATTRIBUTES attributes;
     WDFDEVICE device;
+    PAI_DEVICE_CONTEXT context;
+    NTSTATUS status;
 
     WDF_PNPPOWER_EVENT_CALLBACKS_INIT(&callbacks);
     callbacks.EvtDevicePrepareHardware = AppleInputEvtDevicePrepareHardware;
@@ -28,7 +31,25 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
     WdfDeviceInitSetPnpPowerEventCallbacks(DeviceInit, &callbacks);
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attributes, AI_DEVICE_CONTEXT);
-    return WdfDeviceCreate(&DeviceInit, &attributes, &device);
+    status = WdfDeviceCreate(&DeviceInit, &attributes, &device);
+    if (!NT_SUCCESS(status))
+        return status;
+
+    context = AiGetDeviceContext(device);
+    context->TransportOnly = TRUE;
+    context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_1;
+    context->Diagnostics.Size = sizeof(context->Diagnostics);
+
+    WDF_INTERRUPT_CONFIG_INIT(&interrupt_config, AiInputInterruptIsr, NULL);
+    interrupt_config.EvtInterruptWorkItem = AiTransportWorker;
+    interrupt_config.PassiveHandling = TRUE;
+    interrupt_config.AutomaticSerialization = FALSE;
+    status = WdfInterruptCreate(device, &interrupt_config,
+                                WDF_NO_OBJECT_ATTRIBUTES,
+                                &context->Interrupt);
+    if (!NT_SUCCESS(status))
+        return status;
+    return AiDiagnosticsInitialize(device, context);
 }
 
 NTSTATUS AiDeviceParseResources(WDFCMRESLIST Raw, WDFCMRESLIST Translated,
@@ -39,7 +60,10 @@ NTSTATUS AiDeviceParseResources(WDFCMRESLIST Raw, WDFCMRESLIST Translated,
     ULONG raw_count = WdfCmResourceListGetCount(Raw);
     ULONG translated_count = WdfCmResourceListGetCount(Translated);
 
-    RtlZeroMemory(Context, sizeof(*Context));
+    RtlZeroMemory(Context->MemoryBase, sizeof(Context->MemoryBase));
+    RtlZeroMemory(Context->MemoryLength, sizeof(Context->MemoryLength));
+    Context->InterruptVector = 0;
+    Context->ResourcesValidated = FALSE;
     if (raw_count != translated_count)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
@@ -105,6 +129,7 @@ NTSTATUS AppleInputEvtDeviceReleaseHardware(WDFDEVICE Device,
 {
     UNREFERENCED_PARAMETER(Translated);
     PAI_DEVICE_CONTEXT context = AiGetDeviceContext(Device);
+    AiTransportStop(context);
     if (context->NubGpioRegisters)
         MmUnmapIoSpace(context->NubGpioRegisters, context->MemoryLength[2]);
     if (context->ApGpioRegisters)
@@ -122,14 +147,16 @@ NTSTATUS AppleInputEvtDeviceD0Entry(WDFDEVICE Device,
                                     WDF_POWER_DEVICE_STATE PreviousState)
 {
     UNREFERENCED_PARAMETER(PreviousState);
-    return AiGetDeviceContext(Device)->ResourcesValidated
-               ? STATUS_SUCCESS : STATUS_DEVICE_NOT_READY;
+    PAI_DEVICE_CONTEXT context = AiGetDeviceContext(Device);
+    if (!context->ResourcesValidated)
+        return STATUS_DEVICE_NOT_READY;
+    return AiTransportStart(context);
 }
 
 NTSTATUS AppleInputEvtDeviceD0Exit(WDFDEVICE Device,
                                    WDF_POWER_DEVICE_STATE TargetState)
 {
-    UNREFERENCED_PARAMETER(Device);
     UNREFERENCED_PARAMETER(TargetState);
+    AiTransportStop(AiGetDeviceContext(Device));
     return STATUS_SUCCESS;
 }

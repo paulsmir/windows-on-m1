@@ -11,3 +11,5 @@ $properties = "/p:Configuration=$Configuration", "/p:Platform=$Platform"
 if ($CodeAnalysis) { $properties += "/p:RunCodeAnalysis=true" }
 & $msbuild (Join-Path $root "AppleInput.vcxproj") /m @properties
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& $msbuild (Join-Path $root "tools/AppleInputDiag/AppleInputDiag.vcxproj") /m @properties
+if ($LASTEXITCODE) { exit $LASTEXITCODE }

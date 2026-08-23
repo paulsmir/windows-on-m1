@@ -165,6 +165,8 @@ All host-side KD tools live in `tools/kd/`. They are intentionally small and bui
 - `tools/kd/kd_devnodes.py` — walk PnP devnodes and show state, problem code, and service;
 - `tools/kd/kd_modules.py` — list loaded modules such as `pci.sys`, `stornvme.sys`, and USB drivers;
 - `tools/kd/kd_acpi.py` — read the live RSDP/XSDT/table chain and validate MCFG/ECAM exposure;
+- `tools/kd/kd_apple_input.py` — report the `APPL0001` devnode and, when given the
+  PDB-resolved snapshot address, bounded Apple SPI-HID transport counters;
 - `tools/kd/kd_proclist.py` — enumerate processes from `PsActiveProcessHead`;
 - `tools/kd/kd_threads.py` and `tools/kd/kd_stack.py` — inspect wait state and kernel stacks;
 - `tools/kd/kd_peek.py` — read a selected physical address;

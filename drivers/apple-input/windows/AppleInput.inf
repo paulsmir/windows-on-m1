@@ -37,6 +37,10 @@ ServiceType=1
 StartType=3
 ErrorControl=1
 ServiceBinary=%13%\AppleInput.sys
+AddReg=AppleInput_ServiceParameters
+
+[AppleInput_ServiceParameters]
+HKR,Parameters,TransportOnly,0x00010001,1
 
 [AppleInput_Install.NT.Wdf]
 KmdfService=AppleInput,AppleInput_Wdf

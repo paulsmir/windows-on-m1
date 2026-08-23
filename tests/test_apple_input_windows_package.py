@@ -13,6 +13,20 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertTrue(path.is_file(), f"missing {path}")
         return path.read_text()
 
+    def c_function_body(self, source, name):
+        match = re.search(rf"\b{name}\s*\([^;]*?\)\s*\{{", source, re.S)
+        self.assertIsNotNone(match, f"missing C function {name}")
+        depth = 1
+        cursor = match.end()
+        while cursor < len(source) and depth:
+            if source[cursor] == "{":
+                depth += 1
+            elif source[cursor] == "}":
+                depth -= 1
+            cursor += 1
+        self.assertEqual(depth, 0, f"unterminated C function {name}")
+        return source[match.end():cursor - 1]
+
     def test_inf_is_arm64_kmdf_vhf_package(self):
         inf = self.read("AppleInput.inf")
         for required in ("ACPI\\APPL0001", "AppleInput", "NTarm64", "KmdfLibraryVersion",
@@ -54,7 +68,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("READ_REGISTER", spi)
         self.assertIn("READ_REGISTER", gpio)
         self.assertNotIn("WRITE_REGISTER", device)
-        self.assertNotIn("WdfInterruptCreate", device + spi + gpio)
+        self.assertNotIn("WdfInterruptCreate", spi + gpio)
 
     def test_bounded_spi_and_gpio_primitive_contract(self):
         header = self.read("include/apple_input_device.h")
@@ -64,6 +78,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         for symbol in (
             "AiSpiInitialize",
             "AiSpiTransfer",
+            "AiSpiWritePacketReadStatus",
             "AiGpioResetInputController",
             "AiGpioInputAsserted",
             "AiGpioAcknowledge",
@@ -75,6 +90,15 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("WRITE_REGISTER_NOFENCE_ULONG", gpio)
         self.assertIn("J313_APPLE_INPUT_AP_GPIO_PIN", gpio)
         self.assertIn("J313_APPLE_INPUT_NUB_GPIO_PIN", gpio)
+        self.assertIn("AI_SPI_WRITE_STATUS_DELAY_US", hw_header)
+        self.assertIn("AI_SPI_WRITE_STATUS_SIZE", hw_header)
+        self.assertIn("AiSpiWritePacketReadStatus", spi)
+        self.assertRegex(spi, r"if\s*\(\s*\(!Tx\s*&&\s*!Rx\)")
+        self.assertIn("Tx ? (ULONG)Length : 0", spi)
+        self.assertRegex(
+            self.read("src/transport.c"),
+            r"AiSpiTransfer\(context,\s*NULL,\s*context->ReceivePacket",
+        )
 
     def test_irq_contract_uses_raw_gsi_and_keeps_translated_vector(self):
         device = self.read("src/device.c")
@@ -119,6 +143,10 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             build,
         )
         self.assertIn('(Join-Path $root "AppleInput.vcxproj")', build)
+        self.assertIn(
+            '(Join-Path $root "tools/AppleInputDiag/AppleInputDiag.vcxproj")',
+            build,
+        )
 
     def test_official_wdk_arm64_ci_is_pinned_and_publishes_package(self):
         packages = (ROOT / "packages.config").read_text(encoding="utf-8")
@@ -135,8 +163,95 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("stampinf.exe", workflow.lower())
         self.assertIn("GITHUB_PATH", workflow)
         self.assertIn("AppleInput.vcxproj", workflow)
+        self.assertIn("AppleInputDiag.vcxproj", workflow)
         self.assertIn("Platform=ARM64", workflow)
         self.assertIn("actions/upload-artifact", workflow)
+
+    def test_transport_isr_only_acknowledges_and_queues_passive_work(self):
+        project = self.read("AppleInput.vcxproj")
+        device = self.read("src/device.c")
+        transport = self.read("src/transport.c")
+        for source in ("transport.c", "diagnostics.c"):
+            self.assertIn(source, project)
+
+        self.assertIn("WDF_INTERRUPT_CONFIG_INIT", device)
+        self.assertIn("PassiveHandling = TRUE", device)
+        self.assertIn("AutomaticSerialization = FALSE", device)
+        self.assertIn("WdfInterruptCreate", device)
+
+        isr = self.c_function_body(transport, "AiInputInterruptIsr")
+        for required in (
+            "AiGpioInputAsserted",
+            "AiGpioAcknowledge",
+            "ai_transport_irq",
+            "WdfInterruptQueueWorkItemForIsr",
+        ):
+            self.assertIn(required, isr)
+        for forbidden in (
+            "AiSpiTransfer",
+            "ExAllocatePool",
+            "WdfMemoryCreate",
+            "KeDelayExecutionThread",
+            "KeStallExecutionProcessor",
+            "Vhf",
+        ):
+            self.assertNotIn(forbidden, isr)
+
+    def test_transport_worker_has_a_hard_packet_budget_and_protocol_validation(self):
+        transport = self.read("src/transport.c")
+        self.assertIn("AI_TRANSPORT_MAX_PACKETS_PER_WORKER 32u", transport)
+        worker = self.c_function_body(transport, "AiTransportWorker")
+        for required in ("AiSpiTransfer", "AiTransportProcessPacket",
+                         "ai_transport_worker_complete"):
+            self.assertIn(required, worker)
+        for required in (
+            "ai_packet_decode",
+            "ai_reassembler_push",
+            "ai_message_decode",
+            "ai_discovery_accept_boot",
+            "ai_discovery_response_matches",
+        ):
+            self.assertIn(required, transport)
+
+    def test_diagnostic_snapshot_is_versioned_bounded_and_contains_no_payload(self):
+        ioctl = self.read("include/apple_input_ioctl.h")
+        diagnostics = self.read("src/diagnostics.c")
+        for field in (
+            "InterruptCount",
+            "WorkerQueuedCount",
+            "WorkerCompletedCount",
+            "SpiTransferCount",
+            "SpiTimeoutCount",
+            "PacketCrcFailureCount",
+            "MessageCrcFailureCount",
+            "FragmentFailureCount",
+            "KeyboardReportCount",
+            "TrackpadReportCount",
+            "ResetCount",
+            "OfflineCount",
+        ):
+            self.assertIn(field, ioctl)
+        self.assertIn("AI_DIAGNOSTIC_SNAPSHOT_VERSION_1", ioctl)
+        self.assertIn("AI_PACKET_HEADER_RING_CAPACITY", ioctl)
+        self.assertNotRegex(ioctl, r"(?i)(payload|packetdata|rawpacket)\s*\[")
+        self.assertIn("WdfRequestRetrieveOutputBuffer", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1)", diagnostics)
+        self.assertIn("STATUS_BUFFER_TOO_SMALL", diagnostics)
+        self.assertIn("WdfRequestCompleteWithInformation", diagnostics)
+
+    def test_diagnostic_clients_are_packaged_without_machine_specific_paths(self):
+        cli_project = self.read("tools/AppleInputDiag/AppleInputDiag.vcxproj")
+        cli = self.read("tools/AppleInputDiag/main.c")
+        kd = (ROOT / "tools" / "kd" / "kd_apple_input.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("ARM64", cli_project)
+        self.assertIn("IOCTL_AI_GET_SNAPSHOT", cli)
+        self.assertIn("--json", cli)
+        self.assertIn("try:", kd)
+        self.assertIn("finally:", kd)
+        self.assertIn("continue", kd.lower())
+        self.assertNotRegex(cli + kd, re.compile(r"/Users/|C:\\Users\\pavel", re.I))
 
 
 if __name__ == "__main__":

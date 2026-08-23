@@ -176,6 +176,7 @@ class PublicDocumentationTests(unittest.TestCase):
     def test_kd_tools_have_one_canonical_directory(self):
         names = {
             "kd_acpi.py",
+            "kd_apple_input.py",
             "kd_continue.py",
             "kd_devnodes.py",
             "kd_diag.py",

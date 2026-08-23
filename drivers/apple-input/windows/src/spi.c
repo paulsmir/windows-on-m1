@@ -35,6 +35,14 @@ static VOID AiSpiStall(ULONG Microseconds)
     }
 }
 
+static VOID AiSpiFinishChipSelect(PAI_DEVICE_CONTEXT Context)
+{
+    AiSpiWrite(Context, AI_SPI_REG_CONTROL, 0);
+    AiSpiStall((ULONG)J313_APPLE_INPUT_CS_HOLD_US);
+    AiSpiWrite(Context, AI_SPI_REG_PIN, AI_SPI_PIN_CS);
+    AiSpiStall((ULONG)J313_APPLE_INPUT_CS_INACTIVE_US);
+}
+
 NTSTATUS AiSpiValidateReadOnly(PAI_DEVICE_CONTEXT Context)
 {
     ULONG divider;
@@ -78,19 +86,21 @@ NTSTATUS AiSpiInitialize(PAI_DEVICE_CONTEXT Context)
     return STATUS_SUCCESS;
 }
 
-NTSTATUS AiSpiTransfer(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx, UCHAR *Rx,
-                       SIZE_T Length, ULONGLONG DeadlineQpc)
+static NTSTATUS AiSpiTransferPhase(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx,
+                                  UCHAR *Rx, SIZE_T Length,
+                                  ULONGLONG DeadlineQpc, BOOLEAN BeginChipSelect,
+                                  BOOLEAN EndChipSelect)
 {
     LARGE_INTEGER frequency;
     SIZE_T tx_done = 0;
     SIZE_T rx_done = 0;
-    ULONG required = AI_SPI_XFER_TX_COMPLETE;
+    ULONG required = Tx ? AI_SPI_XFER_TX_COMPLETE : 0;
     ULONGLONG now;
     NTSTATUS status = STATUS_SUCCESS;
 
     if (!Context || !Context->ResourcesValidated || !Context->SpiRegisters)
         return STATUS_DEVICE_NOT_READY;
-    if (!Tx || !AiSpiTransferLengthValid(Length) || !DeadlineQpc)
+    if ((!Tx && !Rx) || !AiSpiTransferLengthValid(Length) || !DeadlineQpc)
         return STATUS_INVALID_PARAMETER;
     now = (ULONGLONG)KeQueryPerformanceCounter(&frequency).QuadPart;
     DeadlineQpc = AiSpiBoundDeadline(now, (ULONGLONG)frequency.QuadPart,
@@ -113,13 +123,15 @@ NTSTATUS AiSpiTransfer(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx, UCHAR *Rx,
         AiSpiWrite(Context, AI_SPI_REG_SHIFT_CONFIG, shift);
     }
     AiSpiWrite(Context, AI_SPI_REG_RX_COUNT, Rx ? (ULONG)Length : 0);
-    AiSpiWrite(Context, AI_SPI_REG_TX_COUNT, (ULONG)Length);
+    AiSpiWrite(Context, AI_SPI_REG_TX_COUNT, Tx ? (ULONG)Length : 0);
 
-    while (tx_done < Length && tx_done < AI_SPI_FIFO_DEPTH)
+    while (Tx && tx_done < Length && tx_done < AI_SPI_FIFO_DEPTH)
         AiSpiWrite(Context, AI_SPI_REG_TX_DATA, Tx[tx_done++]);
 
-    AiSpiWrite(Context, AI_SPI_REG_PIN, 0);
-    AiSpiStall((ULONG)J313_APPLE_INPUT_CS_SETUP_US);
+    if (BeginChipSelect) {
+        AiSpiWrite(Context, AI_SPI_REG_PIN, 0);
+        AiSpiStall((ULONG)J313_APPLE_INPUT_CS_SETUP_US);
+    }
     AiSpiWrite(Context, AI_SPI_REG_CONTROL, AI_SPI_CONTROL_RUN);
 
     for (;;) {
@@ -130,7 +142,7 @@ NTSTATUS AiSpiTransfer(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx, UCHAR *Rx,
 
         while (Rx && rx_done < Length && rx_level--)
             Rx[rx_done++] = (UCHAR)AiSpiRead(Context, AI_SPI_REG_RX_DATA);
-        while (tx_done < Length && tx_level < AI_SPI_FIFO_DEPTH) {
+        while (Tx && tx_done < Length && tx_level < AI_SPI_FIFO_DEPTH) {
             AiSpiWrite(Context, AI_SPI_REG_TX_DATA, Tx[tx_done++]);
             tx_level++;
         }
@@ -160,10 +172,39 @@ NTSTATUS AiSpiTransfer(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx, UCHAR *Rx,
     }
 
     AiSpiWrite(Context, AI_SPI_REG_CONTROL, 0);
-    AiSpiStall((ULONG)J313_APPLE_INPUT_CS_HOLD_US);
-    AiSpiWrite(Context, AI_SPI_REG_PIN, AI_SPI_PIN_CS);
-    AiSpiStall((ULONG)J313_APPLE_INPUT_CS_INACTIVE_US);
+    if (EndChipSelect || !NT_SUCCESS(status))
+        AiSpiFinishChipSelect(Context);
     if (!NT_SUCCESS(status))
         AiSpiWrite(Context, AI_SPI_REG_CONTROL, AI_SPI_CONTROL_FIFO_RESET);
+    return status;
+}
+
+NTSTATUS AiSpiTransfer(PAI_DEVICE_CONTEXT Context, const UCHAR *Tx, UCHAR *Rx,
+                       SIZE_T Length, ULONGLONG DeadlineQpc)
+{
+    return AiSpiTransferPhase(Context, Tx, Rx, Length, DeadlineQpc, TRUE, TRUE);
+}
+
+NTSTATUS AiSpiWritePacketReadStatus(PAI_DEVICE_CONTEXT Context,
+                                    const UCHAR Packet[AI_PACKET_SIZE],
+                                    UCHAR Status[AI_SPI_WRITE_STATUS_SIZE],
+                                    ULONGLONG DeadlineQpc)
+{
+    NTSTATUS status;
+
+    if (!Packet || !Status)
+        return STATUS_INVALID_PARAMETER;
+    status = AiSpiTransferPhase(Context, Packet, NULL, AI_PACKET_SIZE,
+                                DeadlineQpc, TRUE, FALSE);
+    if (!NT_SUCCESS(status))
+        return status;
+    AiSpiStall(AI_SPI_WRITE_STATUS_DELAY_US);
+    status = AiSpiTransferPhase(Context, NULL, Status,
+                                AI_SPI_WRITE_STATUS_SIZE, DeadlineQpc,
+                                FALSE, TRUE);
+    if (!NT_SUCCESS(status)) {
+        AiSpiFinishChipSelect(Context);
+        AiSpiWrite(Context, AI_SPI_REG_CONTROL, AI_SPI_CONTROL_FIFO_RESET);
+    }
     return status;
 }

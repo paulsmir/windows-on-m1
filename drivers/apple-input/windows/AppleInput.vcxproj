@@ -23,6 +23,8 @@
     <ClCompile Include="src\apple_input_hw.c" />
     <ClCompile Include="src\spi.c" />
     <ClCompile Include="src\gpio.c" />
+    <ClCompile Include="src\transport.c" />
+    <ClCompile Include="src\diagnostics.c" />
     <ClCompile Include="..\protocol\src\apple_spi_plan.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_crc.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_discovery.c" />
@@ -33,6 +35,7 @@
   <ItemGroup>
     <ClInclude Include="include\apple_input_device.h" />
     <ClInclude Include="include\apple_input_hw.h" />
+    <ClInclude Include="include\apple_input_ioctl.h" />
     <ClInclude Include="include\j313_apple_input.generated.h" />
   </ItemGroup>
   <ItemGroup>

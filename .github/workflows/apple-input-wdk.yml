@@ -53,6 +53,14 @@ jobs:
           /p:Platform=ARM64
           /p:RunCodeAnalysis=true
 
+      - name: Build AppleInputDiag for ARM64
+        run: >-
+          msbuild drivers\apple-input\windows\tools\AppleInputDiag\AppleInputDiag.vcxproj
+          /m
+          /t:Clean,Build
+          /p:Configuration=Debug
+          /p:Platform=ARM64
+
       - name: Upload unsigned test package
         uses: actions/upload-artifact@v4
         with:
@@ -63,3 +71,5 @@ jobs:
             drivers/apple-input/windows/ARM64/Debug/**/*.inf
             drivers/apple-input/windows/ARM64/Debug/**/*.cat
             drivers/apple-input/windows/ARM64/Debug/**/*.pdb
+            drivers/apple-input/windows/tools/AppleInputDiag/ARM64/Debug/**/*.exe
+            drivers/apple-input/windows/tools/AppleInputDiag/ARM64/Debug/**/*.pdb
