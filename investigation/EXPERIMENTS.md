@@ -4858,3 +4858,21 @@ Rollback: identify the newly published OEM INF, remove it with `pnputil
 installed confirmed `oem4.inf` package becomes best-ranked again.  Remove only
 the new public certificate thumbprint if necessary.  The stable ESP and the
 verified full rollback bundle remain unchanged.
+
+Initial hardware result (2026-08-24T00:28Z): the exact package installed as
+`oem6.inf`; APPL0001 and AppleInput both report Started/RUNNING, IRQ 865 and all
+three MMIO ranges are unchanged, and SSH remained responsive.  The first CLI
+binary exposed an independent packaging defect by exiting with `0xC0000135` on
+the clean Windows image.  A static-CRT rebuild from run `32674551330` then ran
+successfully and returned a version-1 snapshot: phase `WAIT_BOOT`, reset count
+1, with interrupt, worker, and SPI counters all zero.
+
+This safely rejects the original runtime candidate before devnode restart or
+input publication.  Microsoft documents that `EvtDeviceD0Entry` executes before
+the framework enables interrupts and that
+`EvtDeviceD0EntryPostInterruptsEnabled` executes afterward.  The installed
+candidate reset the input controller in the earlier callback and set
+`HardwareStarted` only after the 50-ms boot wait, so its ISR could reject or
+miss the short startup event.  Asahi enables the HID interrupt before waiting
+for the boot marker.  The next candidate changes only that lifecycle ordering;
+`oem6.inf` remains live and responsive until the replacement compiles.
