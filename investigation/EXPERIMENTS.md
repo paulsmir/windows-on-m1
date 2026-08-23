@@ -4792,3 +4792,69 @@ Verdict: confirmed.  The raw/translated WDF resource-pairing defect was the
 complete cause of EXP-059 Code 10.  The next experiment may add exactly one
 runtime capability to the now-starting scaffold; built-in keyboard and
 trackpad input are still intentionally absent at this checkpoint.
+
+### EXP-20260824-061 — bounded Apple SPI HID transport-only Gate A
+
+Status: hardware run prepared
+Created (UTC): 2026-08-24T00:19:00Z
+
+Hypothesis: replacing only the previously validated inert AppleInput package
+with the bounded transport-only package will start the passive IRQ worker,
+perform Apple SPI HID boot and discovery traffic, and expose header-only
+diagnostics without publishing keyboard or trackpad HID children or disturbing
+the validated four-E-core Windows baseline.
+
+Single changed variable relative to EXP-060: AppleInput gains the reviewed
+SPI3/GPIO transport, constant-work ISR, passive worker with a 32-packet drain
+limit, portable protocol discovery, and read-only diagnostic IOCTL.  The stable
+ESP, m1n1, Mu, guest firmware, CPU topology, NVMe, xHCI, display, Windows image,
+and test-signing policy remain unchanged.  `TransportOnly=1` is present in the
+INF and in the device context; no VHF child is created by this candidate.
+
+Pre-state observed over SSH:
+
+- Windows 11 Pro is reachable at `192.168.1.37` with four logical processors;
+- BCD reports `testsigning Yes`;
+- `ACPI\\APPL0001\\0` is Started on `oem4.inf`, service `AppleInput` is
+  RUNNING, and the exact resources remain IRQ 865 plus the three reviewed MMIO
+  ranges;
+- the current package is the confirmed inert EXP-060 rollback driver;
+- the stable ESP is not modified by this experiment.
+
+Source and build checkpoint:
+
+- root branch `feature/j313-native-input`, root commit
+  `8177d7972961f7b954e53e7ad2bd6f34cbc6157a`;
+- GitHub Actions ARM64 WDK run `32673938270` completed successfully, including
+  code-analysis driver build, ARM64 diagnostic-client build, and package
+  upload;
+- `AppleInput.sys` SHA-256
+  `daf714d6311191dae63c354f61f9f1b9a31b6c0b04637704cbdb4d261ce98196`;
+- `appleinput.cat` SHA-256
+  `3ef247d57b2d22be00abc01e2a558be21e9440dd870ee960851e0f0c569e9e71`;
+- `AppleInput.inf` SHA-256
+  `1bca70bf9ec35a94f2f564915e2d5490b39b029a09ef88f04ef24fbfee2cd357`;
+- `AppleInputDiag.exe` SHA-256
+  `9f2895433f8d8c3d3ea5b34f21e0966ff777d498196792ceabbd5ac9deaf8d55`;
+- catalog public-certificate SHA-256
+  `7e257aa237af27a185be04385a32415c4d680877d55d4cfee82df380dccadc94`,
+  SHA-1 thumbprint `44797A7C75ED8D09E7BE3135E700D591F0E3C168`.
+
+Procedure: copy the exact package, CLI, and public certificate to Windows;
+verify all hashes on the Air; trust only that public certificate in
+LocalMachine Root and TrustedPublisher; install the INF; require the devnode
+and service to start; then capture versioned diagnostic snapshots before and
+after key/touch activity.  Restart the devnode once only after the initial
+checkpoint remains responsive.
+
+Immediate pass gates: Windows remains reachable over SSH, external USB input,
+NVMe, physical display, and four CPUs stay alive; no new HID child is present;
+interrupt/worker/SPI counters are bounded and coherent; discovery advances or
+fails with an explicit bounded counter rather than a hang; no bugcheck, global
+pause, storage loss, or repeated interrupt storm occurs.
+
+Rollback: identify the newly published OEM INF, remove it with `pnputil
+/delete-driver oemNN.inf /uninstall /force`, and rescan devices so the already
+installed confirmed `oem4.inf` package becomes best-ranked again.  Remove only
+the new public certificate thumbprint if necessary.  The stable ESP and the
+verified full rollback bundle remain unchanged.
