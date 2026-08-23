@@ -2,8 +2,13 @@
 
 #ifdef AI_KERNEL_MODE
 #include <ntddk.h>
-typedef UINT32 uint32_t;
-typedef UINT64 uint64_t;
+#ifndef AI_KERNEL_FIXED_WIDTH_TYPES
+#define AI_KERNEL_FIXED_WIDTH_TYPES
+typedef UCHAR uint8_t;
+typedef USHORT uint16_t;
+typedef ULONG uint32_t;
+typedef ULONGLONG uint64_t;
+#endif
 #else
 #include <stddef.h>
 #include <stdint.h>

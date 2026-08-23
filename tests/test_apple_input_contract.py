@@ -165,6 +165,8 @@ class AppleInputContractTests(unittest.TestCase):
         self.assertIn("#ifdef AI_KERNEL_MODE", protocol)
         self.assertIn("#ifdef AI_KERNEL_MODE", hardware)
         self.assertIn("RtlCopyMemory", protocol)
+        self.assertIn("AI_KERNEL_FIXED_WIDTH_TYPES", protocol)
+        self.assertIn("AI_KERNEL_FIXED_WIDTH_TYPES", hardware)
         self.assertNotIn("#include <string.h>",
                          "\n".join(path.read_text() for path in
                                    (ROOT / "drivers" / "apple-input" /

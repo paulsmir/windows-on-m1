@@ -3,10 +3,13 @@
 
 #ifdef AI_KERNEL_MODE
 #include <ntddk.h>
+#ifndef AI_KERNEL_FIXED_WIDTH_TYPES
+#define AI_KERNEL_FIXED_WIDTH_TYPES
 typedef UCHAR uint8_t;
 typedef USHORT uint16_t;
 typedef ULONG uint32_t;
 typedef ULONGLONG uint64_t;
+#endif
 typedef unsigned char bool;
 #define true 1
 #define false 0
