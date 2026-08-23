@@ -4750,3 +4750,45 @@ Build and artifact hashes will be appended after the full suite and CI signing
 complete.  Hardware gate and rollback are identical to EXP-059; any Code 10,
 unexpected child, global pause, storage/input/display loss, or bugcheck rejects
 the candidate.
+
+Hardware result (2026-08-23T22:31:41Z): confirmed.  GitHub Actions run
+`32670342876` completed successfully at root commit
+`401d783a69c33e4f6612fb3e8d352a59f49e57fd`.  Artifact
+`AppleInput-ARM64-Debug` has GitHub digest
+`sha256:ff512e2d1d7c470149cd4d954df0b38987722f5f443ce00ecd7a6a7a5869e46f`.
+The installed package hashes were verified both on the host and on Windows:
+
+- `AppleInput.sys` SHA-256
+  `f87dc8a8ab5cbf3e329e434ac10353be8cc621139653a525a56eebf81ddff198`;
+- `appleinput.cat` SHA-256
+  `57cad98005bd465e2870976a96084bae0459bae00177dfff238d8b749855a61b`;
+- `AppleInput.inf` SHA-256
+  `2584b7171f255c4a77df7810fb07bd6db443bbc5ef57965421d029255ad7c240`.
+
+The package is signed by WDK test certificate thumbprint
+`66BD427FE4704AE3C0FF3F51A1DE26AE0BE8338C`; its exported public certificate
+has SHA-256
+`095e2bb5d614ea0c098273eac912699f1125b3b63bfb02cd9c53945e3259b3cf`.
+After explicitly adding that public certificate to LocalMachine Root and
+TrustedPublisher, both CAT and SYS reported `Signature verified`, and
+`{current}` still reported `testsigning Yes`.
+
+`pnputil /add-driver AppleInput.inf /install` published `oem4.inf`, selected it
+as best ranked over rejected `oem2.inf`, and started `ACPI\\APPL0001\\0`.
+The devnode reports `Started`, `CM_PROB_NONE`, and driver version
+`22.23.36.653`; `sc query AppleInput` reports the kernel driver `RUNNING` with
+zero exit codes.  The exact resources remain IRQ 865 and memory ranges
+`0x23510c000..0x23510ffff`, `0x23c100000..0x23c1fffff`, and
+`0x23d1f0000..0x23d1f3fff`.  No Apple keyboard, mouse, precision-touchpad, or
+other HID child was published, as expected for this read-only checkpoint.
+
+Windows remained reachable over SSH with four logical CPUs; NVMe, xHCI,
+external USB input, physical display, and virtual framebuffer remained alive.
+The assisted log contains `guest runtime ready` and no bugcheck, reset,
+unhandled-exception, panic, or fatal marker.  The unchanged stable ESP and its
+verified rollback bundle were not modified.
+
+Verdict: confirmed.  The raw/translated WDF resource-pairing defect was the
+complete cause of EXP-059 Code 10.  The next experiment may add exactly one
+runtime capability to the now-starting scaffold; built-in keyboard and
+trackpad input are still intentionally absent at this checkpoint.
