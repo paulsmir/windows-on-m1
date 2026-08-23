@@ -4471,3 +4471,282 @@ Regression rule: subsequent work changes one variable at a time. First prove a
 quiet rebuild of this exact four-E-core source. Then test one Firestorm core in
 isolation. Any boot over 30 seconds, global pause, watchdog, or loss of the
 interactive desktop rejects the experiment and returns to this baseline.
+
+### EXP-20260823-057 — read-only Apple input resource scaffold
+
+Status: software preparation in progress
+Created (UTC): 2026-08-23T21:36:53Z
+
+Hypothesis: an assisted build from the exact validated four-E-core source
+checkpoints can expose the reviewed J313 Apple SPI-HID resources as
+`ACPI\\APPL0001\\0`, route physical IRQ 330 to guest INTID 865, and start the
+read-only KMDF scaffold without changing the stable ESP or affecting Windows,
+NVMe, external USB input, display, or the four enabled guest CPUs.
+
+Single experimental variable: Apple input resource publication and the
+read-only Windows scaffold.  The stable standalone image remains installed and
+is the recovery path.  The assisted run uses physical plus virtual display and
+monitor diagnostics so ACPI enumeration, driver start, and any guest failure
+remain independently observable.
+
+Source and package checkpoint:
+
+- root `14207a24a62fadad2ca8173f3d07486892ffa746`;
+- m1n1 `2fe790beebed32658eae753dee3e6d581df97197`;
+- Mu `af4c9705cfd42e976bc9602c35830cc2e9072f36`;
+- all three tracked-tree diff SHA-256 values are the empty-diff hash
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- GitHub Actions run `32667648804` AppleInput SYS SHA-256
+  `bbb6d9b81b20331a46d005709983116cee17eeef28f9aac54b1ae7908342e8f0`;
+- CAT SHA-256
+  `66f9113788d2370cf4449136ed7aeb9abd6376c10e0a5764c9a3eeaed6c6613f`;
+- INF SHA-256
+  `be862209af2f68811c68c3fd8dd1f6ab9e0f445944f6ddb0884c5ce666861edc`;
+- signer thumbprint `F95C4158B0E63BD26131FD615482898C5592D201`.
+
+Build command: `scripts/build-development.sh --display both --debug monitor`.
+Expected artifact directory: `dist/j313/debug-monitor/`.  The artifact manifest
+and SHA-256 values must be recorded after the build and verified before launch.
+
+Launch command: `scripts/run-windows.sh --execution assisted --observed
+--debug monitor --foreground` with the detected proxy and vUART endpoints.  The
+first run does not install the driver.  It passes only if Windows reaches the
+desktop within 30 seconds, `APPL0001` exposes exactly three reviewed MMIO ranges
+and one INTID 865 interrupt, all four guest CPUs remain available, and external
+USB input, display, NVMe, and SSH stay alive.
+
+Only after that gate passes may the CI certificate be imported and the read-only
+driver staged.  The scaffold performs no MMIO write, creates no interrupt
+object, and publishes no VHF device; therefore built-in keyboard and trackpad
+operation is explicitly not an expected result of this experiment.
+
+Recovery: boot the unchanged stable standalone image.  The verified Windows,
+BCD, driver-store, and both-ESP snapshot is
+`investigation/evidence/rollback/20260823-232304-stable-4e-baseline-verified`.
+Current stable Windows has no `ACPI\\APPL0001\\0` devnode and test signing is
+off, so the experimental package cannot bind after a normal stable boot.
+
+Failure criterion: any contract mismatch, stage-2/IRQ preflight failure, boot
+over 30 seconds, global pause, bugcheck, storage/input/display loss, unexpected
+MMIO write, or devnode resource difference rejects the candidate immediately.
+
+Pre-launch software result (2026-08-23T21:52:12Z): the first clean Mu build
+reproduced a packaging defect before any hardware was changed.  EDK2 expanded
+the generated node in `DSDT.iii`, then `Trim --source-code -l` discarded it
+from `DSDT.iiii` because the C-preprocessor attributed the quoted `#include`
+body to a different source file.  Consequently the original candidate FD was
+byte-identical to the stable FD and did not contain `APPL0001`; it was rejected
+without launch.
+
+The single source correction changes that generated inclusion to the native
+ASL `Include (...)` form.  EDK2 now flattens the generated body before the C
+preprocessor, so `APPL0001` is present once in `DSDT.i`, `DSDT.iii`,
+`DSDT.iiii`, and the compiled `DSDT.aml`.  A new binary-AML build gate checks
+the unique `AINP`/`APPL0001` identifiers, all three 64-bit MMIO bases, and guest
+INTID 865 before any firmware can be packaged.  Its test was observed failing
+before the correction and passing afterward.  The focused Apple input suite
+passes 32/32.  Decompiled final MADT still enables UIDs 0-3 and disables UIDs
+4-7.
+
+Corrected assisted candidate:
+
+- root diff SHA-256
+  `d6997ad66d9e7ee37fd832e2442ad03df6842cb9243edad36b1dc997e14982c7`;
+- m1n1 diff SHA-256 remains the empty-diff hash;
+- Mu diff SHA-256
+  `e535e345a5202a944f5b1edc397e656f65f40679ca959914752b288d6fde272b`;
+- `m1n1.macho` SHA-256
+  `3d41abb1b5b16c09a96c9bebe4244b2e5d88fe084cd786f8289e928920b49a35`;
+- `J313_EFI.fd` SHA-256
+  `cd591aab2ef0641902f03e1a38aac697e45fc12e466a3cb72f32cd3d68060710`;
+- `boot.bin` SHA-256
+  `61fef2d71f9f4b46dc787d1db56a2749d22d055bc5e15e0d5c1f6767aa60c58a`.
+
+Artifact-role verification passed for `display=both`, `debug=monitor`.  The Air
+was confirmed in m1n1 proxy mode by a read-only identity probe.  The stable ESP
+and the Windows driver store remain unchanged at this point.
+
+First assisted hardware gate (2026-08-24): confirmed.  Two launch attempts were
+discarded before evaluation: the first mixed a stale guest session with the new
+chainload and failed the launch-publish RPC; the second detached the host owner
+of `run_uefi.py`, so the process lifetime was not a valid assisted contract.
+Neither attempt installed a driver or changed the stable ESP.  After a physical
+return to proxy mode, m1n1 `2fe790b` was chainloaded and the corrected firmware
+was kept under a foreground host owner for the entire run.
+
+The valid run reached the Windows desktop with all four intended E cores online,
+NVMe, xHCI, physical display, asynchronous virtual display, SSH, and monitor
+telemetry alive.  The virtual framebuffer published 2560x1600 B8G8R8X8 frames;
+generation 93 showed the live desktop and Task Manager with four logical
+processors.  No bugcheck, system reset, unhandled exception, or fatal marker was
+present in `hv.log` at the checkpoint.  Exact live Windows enumeration:
+
+- instance `ACPI\\APPL0001\\0`, BIOS path `\\_SB.AINP`;
+- status Code 28 solely because no compatible driver is installed;
+- interrupt resource `0x361` (guest INTID 865);
+- memory `0x23510c000..0x23510ffff`;
+- memory `0x23c100000..0x23c1fffff`;
+- memory `0x23d1f0000..0x23d1f3fff`;
+- AppleInput service absent and test signing still disabled.
+
+Verdict: the ACPI packaging correction and no-driver resource publication are
+confirmed on hardware.  Boot-to-desktop latency was not independently timestamped
+in this manually resumed run, so this result validates the resource gate rather
+than replacing the EXP-056 performance baseline.  The next experiment changes
+only Windows test-signing state and installation of the already-hashed read-only
+AppleInput scaffold.  It must bind and start without MMIO writes, interrupt
+creation, child HID publication, storage loss, USB loss, global pause, or
+bugcheck.  Recovery remains the unchanged stable ESP plus the verified rollback
+bundle above.
+
+### EXP-20260823-058 — enable AppleInput test-signing trust only
+
+Status: hardware run prepared
+Created (UTC): 2026-08-23T22:03:58Z
+
+Hypothesis: importing only the public CI signing certificate and enabling Windows
+test-signing will preserve the confirmed EXP-057 four-E-core desktop, storage,
+xHCI, displays, SSH, and ACPI resources.  No driver is staged or installed in
+this experiment, so `ACPI\\APPL0001\\0` must remain Code 28 and the AppleInput
+service must remain absent.
+
+Single changed variable: Windows code-signing policy and trust stores.  Firmware,
+ACPI, m1n1, Mu, CPU topology, ESP contents, and driver store remain unchanged.
+
+Source state:
+
+- branch `stable/j313-4e-baseline`, root commit
+  `14207a24a62fadad2ca8173f3d07486892ffa746`;
+- m1n1 `2fe790beebed32658eae753dee3e6d581df97197`;
+- Mu `af4c9705cfd42e976bc9602c35830cc2e9072f36`;
+- root diff SHA-256
+  `ddec3b930f829825b14e374fee5db4687e029517d700a0703f51fa179eb59d1f`;
+- m1n1 diff SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- Mu diff SHA-256
+  `e535e345a5202a944f5b1edc397e656f65f40679ca959914752b288d6fde272b`.
+
+The package is the unexpired GitHub Actions artifact
+`AppleInput-ARM64-Debug` from run `32667648804`, archive digest
+`f9ac49e5a66283a5d47ad7f81078f0b4a9b62815f2f8053fd2b9fd0454c00a80`.
+The catalog signer certificate is exported locally by Windows from the already
+verified catalog; no private key is copied or created.  Its expected thumbprint
+is `F95C4158B0E63BD26131FD615482898C5592D201`.
+
+Preparation commands copy the package into the operator profile, export the
+catalog signer, verify its thumbprint, add the public certificate to LocalMachine
+Root and TrustedPublisher, and run `bcdedit /set testsigning on`.  The package is
+not passed to `pnputil` in this experiment.
+
+Launch after reboot: the same foreground assisted EXP-057 artifacts with
+`display=both`, `debug=monitor`.  Expected checkpoint: desktop within 30 seconds,
+four logical CPUs, test-signing enabled, APPL0001 exact resources unchanged,
+Code 28, service absent, and no bugcheck/reset/global pause.
+
+Rollback: boot the unchanged stable standalone ESP; then remove the two public
+certificate-store entries and run `bcdedit /deletevalue testsigning`.  The
+verified full rollback bundle remains
+`investigation/evidence/rollback/20260823-232304-stable-4e-baseline-verified`.
+
+Hardware result (2026-08-23T22:11Z): confirmed.  The signer certificate with
+thumbprint `F95C4158B0E63BD26131FD615482898C5592D201` is present in both
+LocalMachine Root and TrustedPublisher, and `{current}` reports
+`testsigning Yes`.  The package was copied and hash-verified but was not passed
+to `pnputil`; `sc query AppleInput` remained 1060 and APPL0001 remained Code 28.
+
+The same corrected assisted firmware reached SSH on polling attempt 11 at a
+two-second interval, approximately 22 seconds after launch.  The 2560x1600
+virtual frame showed the live Windows lock screen, all four CPU entry markers
+and `guest runtime ready` were present, and no bugcheck, system reset, unhandled
+exception, or fatal marker appeared.  APPL0001 still exposed INTID 865 and the
+same exact three memory ranges.  Verdict: test-signing/trust is not the source
+of a boot, resource, display, USB, storage, or CPU regression.  Proceed with one
+live installation of the read-only scaffold; no reboot is required because
+test-signing is already active.
+
+### EXP-20260823-059 — bind read-only AppleInput scaffold
+
+Status: hardware run prepared
+Created (UTC): 2026-08-23T22:12:00Z
+
+Hypothesis: the signed read-only AppleInput KMDF scaffold will bind to the exact
+EXP-057 ACPI resources and enter D0 without changing any hardware register,
+creating an interrupt object, or publishing a HID child.  Windows, NVMe, xHCI,
+SSH, both displays, and four E cores must remain responsive.
+
+Single changed variable relative to confirmed EXP-058: add and install the
+already verified AppleInput INF package.  Firmware, ACPI, test-signing, CPU
+topology, ESP, and all other drivers remain fixed.
+
+Package in `C:\\Users\\pavel\\AppleInput-32667648804`:
+
+- `AppleInput.sys` SHA-256
+  `bbb6d9b81b20331a46d005709983116cee17eeef28f9aac54b1ae7908342e8f0`;
+- `appleinput.cat` SHA-256
+  `66f9113788d2370cf4449136ed7aeb9abd6376c10e0a5764c9a3eeaed6c6613f`;
+- `AppleInput.inf` SHA-256
+  `be862209af2f68811c68c3fd8dd1f6ab9e0f445944f6ddb0884c5ce666861edc`.
+
+Install command: `pnputil /add-driver AppleInput.inf /install`.  Immediate gates:
+the devnode is Started with service AppleInput, exactly the reviewed resources
+remain assigned, no keyboard/mouse child appears, external USB input remains
+alive, SSH remains reachable, the framebuffer advances, and `hv.log` contains no
+fatal/reset/bugcheck marker.  Failure includes any Code 10/31/39/52, resource
+mismatch, global pause, storage/display/input loss, or bugcheck.
+
+Rollback: boot the unchanged stable standalone firmware, identify the published
+OEM INF with `pnputil /enum-drivers`, remove it with `pnputil /delete-driver
+oemNN.inf /uninstall /force`, remove the public certificates, and delete the
+testsigning BCD value.  The verified full rollback bundle remains unchanged.
+
+Hardware result (2026-08-23T22:13:33Z): rejected safely.  `pnputil` accepted the
+catalog, published `oem2.inf`, selected it for `ACPI\\APPL0001\\0`, and attempted
+to start the device.  Windows remained responsive with SSH, framebuffer,
+telemetry, NVMe, xHCI, and four logical CPUs alive; no reset or bugcheck marker
+appeared.  The devnode failed closed with Code 10 and problem status
+`0xC0000182` (`STATUS_DEVICE_CONFIGURATION_ERROR`).  AppleInput was registered
+but stopped, no HID child was published, and the exact IRQ/MMIO assignments were
+unchanged.
+
+Kernel-PnP event 411 and SetupAPI confirmed that package staging, catalog
+selection, service creation, and the PnP start request all completed before the
+driver returned the configuration error.  Microsoft WDF documentation states
+that raw and translated resources are paired in the same order: the raw
+interrupt descriptor contains the bus/firmware interrupt, while the translated
+descriptor contains the system vector a driver uses at runtime.  The scaffold
+incorrectly ignored `ResourcesRaw` and compared translated `u.Interrupt.Vector`
+to ACPI GSI 865.  That comparison is invalid even when `pnputil /resources`
+correctly reports the firmware GSI.
+
+Verdict: the ACPI and signing contracts remain confirmed; the driver resource
+parser is rejected.  The next candidate changes only that parser: validate GSI
+865 from the paired raw descriptor, retain the translated vector for future
+`WdfInterruptCreate`, validate raw memory identities, and map translated memory
+addresses.  The old package remains fail-closed and can be replaced in place.
+
+### EXP-20260823-060 — correct raw/translated KMDF resource pairing
+
+Status: software implementation in progress
+Created (UTC): 2026-08-23T22:17:00Z
+
+Hypothesis: with the one confirmed parser defect corrected, the otherwise
+byte-equivalent read-only scaffold will start on the exact EXP-057 resources and
+remain inert: no MMIO write, interrupt object, VHF child, keyboard, or trackpad
+activity is expected yet.
+
+Single changed variable relative to rejected EXP-059: `AiDeviceParseResources`
+uses paired raw and translated descriptors according to the WDF contract.  INF,
+VHF lower filter, ACPI, firmware, m1n1, Mu, signing mode, topology, and all
+read-only validation calls remain unchanged.
+
+Regression test: `test_irq_contract_uses_raw_gsi_and_keeps_translated_vector`
+was observed failing because the source ignored `Raw`; after the correction the
+focused Windows-package plus ACPI suite passes 15/15.  The test requires the
+raw descriptor to validate `J313_APPLE_INPUT_GUEST_VINTID`, the translated
+descriptor to supply `Context->InterruptVector`, equal paired list counts/types,
+and no comparison of the translated vector to the firmware GSI.
+
+Build and artifact hashes will be appended after the full suite and CI signing
+complete.  Hardware gate and rollback are identical to EXP-059; any Code 10,
+unexpected child, global pause, storage/input/display loss, or bugcheck rejects
+the candidate.

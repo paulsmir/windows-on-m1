@@ -1,19 +1,68 @@
 import pathlib
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
+
+from tools.verify_apple_input_acpi_aml import AmlContractError, verify_aml
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DSDT = ROOT / "mu/Platform/MacBookAirMid2020Pkg/AcpiTables/DSDT.asl"
 GENERATED = ROOT / "mu/Platform/MacBookAirMid2020Pkg/AcpiTables/J313AppleInput.asl.inc"
+TRIM = ROOT / "mu/MU_BASECORE/BaseTools/Source/Python/Trim/Trim.py"
+BASETOOLS_PYTHON = ROOT / "mu/MU_BASECORE/BaseTools/Source/Python"
+BUILD_STANDALONE = ROOT / "scripts/build-standalone.sh"
 
 
 class AppleInputAcpiTests(unittest.TestCase):
+    def test_binary_aml_gate_accepts_one_exact_generated_contract(self):
+        aml = b"prefix" + b"AINP" + b"APPL0001"
+        for value in (0x23510C000, 0x23C100000, 0x23D1F0000):
+            aml += value.to_bytes(8, "little")
+        aml += (0x361).to_bytes(4, "little") + b"suffix"
+        verify_aml(aml)
+
+    def test_binary_aml_gate_rejects_missing_or_duplicated_contract(self):
+        with self.assertRaises(AmlContractError):
+            verify_aml(b"no generated device")
+
+        aml = b"AINPAPPL0001" * 2
+        for value in (0x23510C000, 0x23C100000, 0x23D1F0000):
+            aml += value.to_bytes(8, "little")
+        aml += (0x361).to_bytes(4, "little")
+        with self.assertRaises(AmlContractError):
+            verify_aml(aml)
+
+    def test_standalone_build_gates_the_compiled_dsdt_before_packaging(self):
+        source = BUILD_STANDALONE.read_text(encoding="utf-8")
+        gate = 'tools/verify_apple_input_acpi_aml.py" "$DSDT_AML"'
+        self.assertEqual(source.count(gate), 1)
+        self.assertLess(source.index(gate), source.rindex('pack_boot.py'))
+
     def test_dsdt_includes_the_generated_device_exactly_once(self):
         source = DSDT.read_text(encoding="utf-8")
-        include = '#include "J313AppleInput.asl.inc"'
+        include = 'Include ("J313AppleInput.asl.inc")'
         self.assertEqual(source.count(include), 1)
         self.assertEqual(source.count("Device (AINP)"), 0)
+
+    def test_edk2_asl_trim_inlines_the_generated_device_before_cpp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            flattened = pathlib.Path(tmp) / "DSDT.i"
+            result = subprocess.run(
+                [sys.executable, str(TRIM), "--asl-file", "-o",
+                 str(flattened), str(DSDT)],
+                cwd=ROOT,
+                env={"PYTHONPATH": str(BASETOOLS_PYTHON)},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            source = flattened.read_text(encoding="utf-8")
+            self.assertEqual(source.count('Name (_HID, "APPL0001")'), 1)
+            self.assertNotIn('Include ("J313AppleInput.asl.inc")', source)
+            self.assertNotIn('#include "J313AppleInput.asl.inc"', source)
 
     def test_generated_node_exposes_the_exact_read_write_contract(self):
         source = GENERATED.read_text(encoding="utf-8")

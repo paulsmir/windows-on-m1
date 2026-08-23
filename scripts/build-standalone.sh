@@ -237,6 +237,12 @@ if [ "$SKIP_MU" != 1 ]; then
     )
 fi
 
+# EDK2's second Trim pass silently discards C-preprocessor include bodies from
+# ASL.  Gate the compiled table itself so a firmware image can never be
+# published after losing the generated APPL0001 resource contract.
+DSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables/OUTPUT/DSDT.aml"
+python3 "$ROOT/tools/verify_apple_input_acpi_aml.py" "$DSDT_AML"
+
 [ "$MU_ONLY" != 1 ] || exit 0
 
 PROFILE_PARENT="$ROOT/dist/j313"
