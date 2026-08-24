@@ -5590,3 +5590,96 @@ bytes and a two-contact payload is 48 + 30 + 28 = 106 bytes.  Controlled X/Y,
 click and contact-count deltas independently validate the fields required for
 the next parser; no confidence, palm or Windows gesture semantics are inferred
 from these captures.
+
+### EXP-20260824-051 — capture the J313 contact-release wire shape
+
+Pre-run record (2026-08-24T12:56:29Z). Hypothesis: the already validated
+`0.1.2.0` capture package will record at least one 76-byte one-contact frame
+followed by the exact device-2 contact-release representation when a held
+single finger is lifted inside one bounded capture. The only changed variable
+is the physical transition from one contact to no contact; firmware, ESP,
+Windows image, driver, descriptor, capture ABI and publication gates remain
+unchanged.
+
+- repository: `paulsmir/windows-on-m1`, branch
+  `feature/j313-native-input`, root
+  `a50eec9b40c1a673e31eb171e630433833309368`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`; all three tracked diff
+  SHA-256 values are
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- source contracts: EXP-20260824-050 and the current bounded capture source;
+  upstream Linux `drivers/input/keyboard/applespi.c` for the 48-byte header and
+  30-byte finger layout; the accepted Precision Touchpad design and
+  implementation plan for the requirement to emit an explicit Windows
+  tip-clear release.
+- active hardware state: `ACPI\APPL0001\0` Started with best-ranked
+  `oem15.inf`; service `AppleInput` RUNNING; DriverStore SYS SHA-256
+  `65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`;
+  capture CLI SHA-256
+  `68a4db63c816c6c6a5fece3f7aefc256af46fd3ddbeaea769f96255ac8ae51ee`.
+  The artifact is workflow run `32724933170`, capture job `97423982301`,
+  artifact ID `9519185291`; INF/catalog hashes remain
+  `9ef28a7a70d86d6cc5c5fa5584fbdb51e1afe432319d3bf177bd611bd897663c`
+  and
+  `46e60354ddd6f78ff985e4ee16e3d6b257c502792df1a333b177e68553507e37`.
+- exact run: from the existing SSH administrator session run
+  `AppleInputCapture.exe capture --count 16 --output C:\Users\pavel\j313-release-transition.bin --timeout 60`
+  while one finger is already held, then lift immediately after arming. Copy
+  the result to ignored
+  `.local/apple-input/trackpad-captures/EXP-20260824-051/09-release-transition.bin`.
+- pass: zero drops; descriptor digest
+  `9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`;
+  at least one proven one-contact frame followed by an exact zero-contact or
+  tip-clear release shape. Fail: timeout, partial file, digest mismatch,
+  transport error, reboot, bugcheck or no release transition.
+- recovery: no install occurs. On capture failure cancel the IOCTL and delete
+  only the new incomplete output. `oem14.inf` and production `oem13.inf` remain
+  the recorded driver rollback paths; external USB and SSH remain available.
+
+Post-run attempt 1 (2026-08-24T13:00:00Z): inconclusive and rejected before
+fixture creation. The bounded tool saved 16 reports with zero drops, the
+expected descriptor digest and local SHA-256
+`5e5c576e298c679095523d8f43457301b8ca48a9f1e3ffb8be36124d743db93d`,
+but the user reported that the requested initial held contact/release action
+was not performed in time. All 16 records were 76-byte `count=1` frames, so
+the file cannot establish release behavior. It remains ignored as
+`09-rejected-uncontrolled-transition.bin`; no code, driver or hardware state
+changed. Repeat only after an explicit `держу` confirmation, using a new
+CREATE_NEW output path.
+
+Repeat pre-run (2026-08-24T13:02:00Z): the user explicitly confirmed that one
+finger is already held. Artifact, hashes, driver, limits, pass/fail criteria
+and recovery are unchanged. The only corrected procedural variable is timing;
+the new non-overwriting output is
+`C:\Users\pavel\j313-release-transition-2.bin`, copied locally as
+`10-release-transition.bin` only if the capture completes.
+
+Post-run attempt 2 (2026-08-24T13:04:00Z): rejected as release evidence but
+diagnostic root cause confirmed. With the finger already held, all 16 slots
+filled in less than the 250 ms SSH observation interval, before the user could
+receive an `отпускайте` instruction. The ignored file is
+`10-rejected-window-filled-before-release.bin`, SHA-256
+`46561b3f2daa8dd7afcc9cada4b48c2bc5742b98c5e725618e25a4feec8be875`;
+it has the expected descriptor digest, zero drops and only active 76-byte
+one-contact frames. This behavior is reproducible and proves that a fixed
+16-report window cannot capture a human-triggered release at the live report
+rate.
+
+Two metadata-only v3 snapshots taken after the user lifted were identical:
+`trackpad_reports=27509`, `interrupts=872179`, `workers=26166/26166`, last
+message device 2 with payload length 76, and zero SPI timeout, packet CRC,
+message CRC, fragment or offline errors. The stopped counters prove quiescence,
+but the privacy-safe header cannot expose whether the retained one-contact
+payload has zero `touch_major`. Upstream Linux explicitly skips contacts whose
+`touch_major` is zero before `input_mt_sync_frame`, so both a 46-byte
+zero-contact payload and a 76-byte one-contact/zero-`touch_major` payload are
+valid release candidates.
+
+Verdict: the physical hypothesis remains unresolved, while the workflow
+hypothesis is confirmed: count-complete capture is the wrong trigger. The next
+single change is a diagnostic-only ABI v2 predicate that ignores active frames
+and captures the first structurally valid zero-contact or zero-`touch_major`
+release candidate. Production AppleInput, firmware, ESP and the live Air remain
+unchanged; `oem15.inf` is the rollback before installing any rebuilt capture
+package.
