@@ -113,6 +113,8 @@ VOID AiDiagnosticsPublish(PAI_DEVICE_CONTEXT Context)
     if (!Context)
         return;
     Context->Diagnostics.TransportPhase = (ULONG)Context->Discovery.phase;
+    Context->Diagnostics.KeyboardVhfState =
+        (ULONG)Context->KeyboardVhfState;
     RtlCopyMemory(&g_AiDiagnosticSnapshot, &Context->Diagnostics,
                   sizeof(g_AiDiagnosticSnapshot));
 }

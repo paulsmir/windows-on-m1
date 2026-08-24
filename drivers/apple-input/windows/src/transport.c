@@ -154,10 +154,33 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
     AiDiagnosticsRecordMessage(Context, &message);
 
     if (phase == AI_DISCOVERY_READY) {
-        if (wire.flags == AI_PACKET_READ && wire.device == 1u)
+        if (wire.flags == AI_PACKET_READ && wire.device == 1u) {
             AiCounterIncrement(&Context->Diagnostics.KeyboardReportCount);
-        else if (wire.flags == AI_PACKET_READ && wire.device == 2u)
+            if (!ai_hid_input_report_valid(
+                    &Context->KeyboardInputContract, message.payload,
+                    message.payload_length, NULL)) {
+                AiCounterIncrement(
+                    &Context->Diagnostics.KeyboardReportRejectedCount);
+                Context->Diagnostics.KeyboardVhfLastStatus =
+                    STATUS_INVALID_BUFFER_SIZE;
+                return STATUS_SUCCESS;
+            }
+            AiCounterIncrement(
+                &Context->Diagnostics.KeyboardReportAcceptedCount);
+            if (!Context->TransportOnly) {
+                status = AiVhfFrontendSubmitKeyboard(
+                    Context, message.payload, message.payload_length);
+                Context->Diagnostics.KeyboardVhfLastStatus = status;
+                if (NT_SUCCESS(status))
+                    AiCounterIncrement(
+                        &Context->Diagnostics.KeyboardReportSubmittedCount);
+                else
+                    AiCounterIncrement(
+                        &Context->Diagnostics.KeyboardVhfSubmissionFailureCount);
+            }
+        } else if (wire.flags == AI_PACKET_READ && wire.device == 2u) {
             AiCounterIncrement(&Context->Diagnostics.TrackpadReportCount);
+        }
         return STATUS_SUCCESS;
     }
 
@@ -171,8 +194,16 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
     protocol_status = ai_discovery_accept(
         &Context->Discovery, Context->Discovery.request_id, true, now_us,
         AI_TRANSPORT_DISCOVERY_TIMEOUT_US);
-    if (protocol_status == AI_COMPLETE)
+    if (protocol_status == AI_COMPLETE) {
+        status = AiVhfFrontendStart(Context);
+        Context->Diagnostics.KeyboardVhfLastStatus = status;
+        Context->Diagnostics.KeyboardVhfState =
+            (ULONG)Context->KeyboardVhfState;
+        if (!NT_SUCCESS(status))
+            AiCounterIncrement(
+                &Context->Diagnostics.KeyboardVhfStartFailureCount);
         return STATUS_SUCCESS;
+    }
     if (protocol_status != AI_OK)
         return STATUS_DEVICE_PROTOCOL_ERROR;
     return AiTransportSendCurrentRequest(Context);
@@ -300,5 +331,8 @@ VOID AiTransportStop(PAI_DEVICE_CONTEXT Context)
     Context->HardwareStarted = FALSE;
     ai_transport_queue_reset(&Context->TransportQueue);
     ai_reassembler_reset(&Context->Reassembler);
+    AiVhfFrontendStop(Context);
+    Context->Diagnostics.KeyboardVhfState =
+        (ULONG)Context->KeyboardVhfState;
     AiDiagnosticsPublish(Context);
 }

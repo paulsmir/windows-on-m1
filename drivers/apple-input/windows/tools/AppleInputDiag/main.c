@@ -100,12 +100,25 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
                "\"trackpad_descriptor_length\":%u,"
                "\"keyboard_contract_valid\":%u,"
                "\"descriptor_digest_status\":%lu,"
+               "\"keyboard_vhf_state\":%lu,"
+               "\"keyboard_reports_accepted\":%llu,"
+               "\"keyboard_reports_rejected\":%llu,"
+               "\"keyboard_reports_submitted\":%llu,"
+               "\"keyboard_vhf_submission_failures\":%llu,"
+               "\"keyboard_vhf_start_failures\":%llu,"
+               "\"keyboard_vhf_last_status\":%ld,"
                "\"keyboard_descriptor_sha256\":\"",
                s->MessagePhase, s->MessageType, s->MessageReport,
                s->MessageDevice, s->MessageId, s->MessageResponseLength,
                s->MessagePayloadLength, s->KeyboardDescriptorLength,
                s->TrackpadDescriptorLength, s->KeyboardContractValid,
-               s->DescriptorDigestStatus);
+               s->DescriptorDigestStatus, s->KeyboardVhfState,
+               (unsigned long long)s->KeyboardReportAcceptedCount,
+               (unsigned long long)s->KeyboardReportRejectedCount,
+               (unsigned long long)s->KeyboardReportSubmittedCount,
+               (unsigned long long)s->KeyboardVhfSubmissionFailureCount,
+               (unsigned long long)s->KeyboardVhfStartFailureCount,
+               s->KeyboardVhfLastStatus);
         print_digest(s->KeyboardDescriptorSha256);
         printf("\",\"trackpad_descriptor_sha256\":\"");
         print_digest(s->TrackpadDescriptorSha256);
@@ -135,6 +148,14 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
     printf("descriptors keyboard=%u trackpad=%u keyboard_contract=%u digest_status=%08lx\n",
            s->KeyboardDescriptorLength, s->TrackpadDescriptorLength,
            s->KeyboardContractValid, s->DescriptorDigestStatus);
+    printf("vhf state=%lu accepted=%llu rejected=%llu submitted=%llu submit_failures=%llu start_failures=%llu last_status=%08lx\n",
+           s->KeyboardVhfState,
+           (unsigned long long)s->KeyboardReportAcceptedCount,
+           (unsigned long long)s->KeyboardReportRejectedCount,
+           (unsigned long long)s->KeyboardReportSubmittedCount,
+           (unsigned long long)s->KeyboardVhfSubmissionFailureCount,
+           (unsigned long long)s->KeyboardVhfStartFailureCount,
+           (ULONG)s->KeyboardVhfLastStatus);
     printf("keyboard_descriptor_sha256=");
     print_digest(s->KeyboardDescriptorSha256);
     printf("\ntrackpad_descriptor_sha256=");

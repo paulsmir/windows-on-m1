@@ -111,4 +111,11 @@ typedef struct _AI_DIAGNOSTIC_SNAPSHOT_V3 {
     ULONG DescriptorDigestStatus;
     UCHAR KeyboardContractValid;
     UCHAR Reserved[3];
+    ULONG KeyboardVhfState;
+    ULONGLONG KeyboardReportAcceptedCount;
+    ULONGLONG KeyboardReportRejectedCount;
+    ULONGLONG KeyboardReportSubmittedCount;
+    ULONGLONG KeyboardVhfSubmissionFailureCount;
+    ULONGLONG KeyboardVhfStartFailureCount;
+    LONG KeyboardVhfLastStatus;
 } AI_DIAGNOSTIC_SNAPSHOT_V3, *PAI_DIAGNOSTIC_SNAPSHOT_V3;

@@ -178,6 +178,47 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("TransportOnly", uninstall)
         self.assertIn("pnputil /restart-device", install)
 
+    def test_keyboard_vhf_dispatch_and_teardown_are_ordered_and_private(self):
+        ioctl = self.read("include/apple_input_ioctl.h")
+        transport = self.read("src/transport.c")
+        device = self.read("src/device.c")
+        cli = self.read("tools/AppleInputDiag/main.c")
+
+        process = self.c_function_body(transport, "AiTransportProcessPacket")
+        self.assertLess(process.index("AiCaptureDiscoveryDescriptor"),
+                        process.index("ai_discovery_accept("))
+        self.assertLess(process.index("protocol_status == AI_COMPLETE"),
+                        process.index("AiVhfFrontendStart"))
+        self.assertLess(process.index("wire.flags == AI_PACKET_READ"),
+                        process.index("AiVhfFrontendSubmitKeyboard"))
+        self.assertLess(process.index("wire.device == 1u"),
+                        process.index("AiVhfFrontendSubmitKeyboard"))
+        stop = self.c_function_body(transport, "AiTransportStop")
+        self.assertLess(stop.index("Stopping = TRUE"),
+                        stop.index("AiVhfFrontendStop"))
+        release = self.c_function_body(device,
+                                       "AppleInputEvtDeviceReleaseHardware")
+        self.assertLess(release.index("AiTransportStop"),
+                        release.index("MmUnmapIoSpace"))
+        isr = self.c_function_body(transport, "AiInputInterruptIsr")
+        self.assertNotIn("Vhf", isr)
+
+        for field in (
+            "KeyboardVhfState",
+            "KeyboardReportAcceptedCount",
+            "KeyboardReportRejectedCount",
+            "KeyboardReportSubmittedCount",
+            "KeyboardVhfSubmissionFailureCount",
+            "KeyboardVhfStartFailureCount",
+            "KeyboardVhfLastStatus",
+        ):
+            self.assertIn(field, ioctl)
+            self.assertIn(field, cli)
+        self.assertNotRegex(
+            ioctl + cli,
+            r"(?i)(KeyCode|PressedKeys|RawReport|payloadbytes)\s*\[",
+        )
+
     def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")
         device = self.read("src/device.c")
