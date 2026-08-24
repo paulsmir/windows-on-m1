@@ -312,6 +312,38 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
                 &Context->TrackpadInit, &wire, &message, now_us,
                 AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_US);
             if (protocol_status == AI_OK) {
+                protocol_status = ai_trackpad_axis_contract_from_dimensions(
+                    &Context->TrackpadInit.dimensions,
+                    &Context->TrackpadAxisContract);
+                if (protocol_status != AI_OK) {
+                    Context->TrackpadInit.phase = AI_TRACKPAD_INIT_OFFLINE;
+                    AiCounterIncrement(&Context->Diagnostics.OfflineCount);
+                    return STATUS_DEVICE_PROTOCOL_ERROR;
+                }
+                Context->Diagnostics.TrackpadAxisXValid =
+                    Context->TrackpadAxisContract.x.valid ? TRUE : FALSE;
+                Context->Diagnostics.TrackpadAxisYValid =
+                    Context->TrackpadAxisContract.y.valid ? TRUE : FALSE;
+                Context->Diagnostics.TrackpadLogicalXMinimum =
+                    Context->TrackpadAxisContract.x.logical_min;
+                Context->Diagnostics.TrackpadLogicalXMaximum =
+                    Context->TrackpadAxisContract.x.logical_max;
+                Context->Diagnostics.TrackpadLogicalYMinimum =
+                    Context->TrackpadAxisContract.y.logical_min;
+                Context->Diagnostics.TrackpadLogicalYMaximum =
+                    Context->TrackpadAxisContract.y.logical_max;
+                Context->Diagnostics.TrackpadPhysicalXMinimum =
+                    Context->TrackpadAxisContract.x.physical_min;
+                Context->Diagnostics.TrackpadPhysicalXMaximum =
+                    Context->TrackpadAxisContract.x.physical_max;
+                Context->Diagnostics.TrackpadPhysicalYMinimum =
+                    Context->TrackpadAxisContract.y.physical_min;
+                Context->Diagnostics.TrackpadPhysicalYMaximum =
+                    Context->TrackpadAxisContract.y.physical_max;
+                Context->Diagnostics.TrackpadUnit =
+                    Context->TrackpadAxisContract.x.unit;
+                Context->Diagnostics.TrackpadUnitExponent =
+                    Context->TrackpadAxisContract.x.unit_exponent;
                 (VOID)AiTransportSendTrackpadInitRequest(Context);
                 AiTrackpadInitArmTimer(Context);
             } else if (protocol_status == AI_COMPLETE) {

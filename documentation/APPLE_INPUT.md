@@ -7,7 +7,7 @@ stable platform baseline. External USB input remains mandatory for every
 hardware test and recovery operation.
 
 The current feature branch implements the complete software path for the
-built-in keyboard:
+built-in keyboard and a hardware-gated Precision Touchpad candidate:
 
 - one versioned J313 resource contract generates matching m1n1, Mu ACPI and
   Windows-driver constants;
@@ -33,13 +33,19 @@ its default mode must not create a VHF keyboard child. Keyboard publication is
 enabled only by the explicit `-PublishKeyboard` installer switch after the
 transport-only hardware gate succeeds.
 
-The VHF keyboard path has passed software and official ARM64 WDK build gates,
-but it has **not** passed either live transport-only Gate C1 or keyboard Gate
-C2. It must not yet be described as working built-in input.
+The VHF keyboard path has passed its live J313 gate and has been used at Windows
+sign-in. The trackpad software path now implements the full Windows Precision
+Touchpad collection; there is no temporary basic-mouse frontend. Trackpad
+publication remains disabled by default until its independent live gate passes.
 
-The trackpad frontend has not been implemented. The next trackpad milestone is
-the full Windows Precision Touchpad protocol; there is no temporary basic-mouse
-frontend in this branch.
+The live 110-byte Apple trackpad descriptor contains only a relative mouse
+collection and vendor reports, so it cannot supply the absolute geometry that
+Windows Precision Touchpad requires. The driver instead follows the native
+Apple contract used by Asahi: it requests sensor dimensions through feature
+report `0xd9`, validates width, height and signed X/Y bounds, converts the
+physical dimensions from hundredths of a millimetre to hundredths of an inch,
+and only then permits the VHF touchpad to start. A missing or malformed response
+fails closed while leaving the already validated keyboard path independent.
 
 ## Architecture
 
@@ -49,7 +55,8 @@ The implementation is native rather than a USB-emulation bridge:
    and translates physical IRQ 330 to guest INTID 865.
 2. Mu describes those resources as the `APPL0001` ACPI device.
 3. The KMDF function driver owns SPI3 and the two GPIO controllers, performs
-   bounded discovery and validates descriptor-derived report contracts.
+   bounded discovery, validates descriptor-derived keyboard reports and obtains
+   trackpad geometry through Apple's bounded `0xd9` feature exchange.
 4. VHF publishes Windows-facing HID collections without changing the hardware
    transport or exposing input payloads to diagnostics.
 
@@ -110,9 +117,11 @@ gates are deliberately separate:
    explicit `-PublishKeyboard` switch; require a VHF keyboard child, correct key
    make/break behavior, zero rejected/submission-failure counters and clean
    disable/enable plus reboot teardown.
-3. **Precision Touchpad evidence:** capture only bounded descriptor metadata and
-   one controlled gesture at a time, then implement and validate the full
-   Windows Precision Touchpad collection in a separate plan.
+3. **Precision Touchpad publication:** first install the exact candidate with
+   `PublishTrackpad=0` and require valid `0xd9` axis diagnostics. Only then set
+   `PublishTrackpad=1`; require the Precision Touchpad child, Windows feature
+   negotiation, controlled one- and two-finger input, clean disable/enable and
+   cold boot without a transport, VHF or bugcheck failure.
 
 Any boot regression, descriptor mismatch, changing digest, parser rejection,
 transport timeout, CRC/fragment/offline counter, bugcheck or loss of external

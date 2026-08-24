@@ -65,10 +65,20 @@ enum ai_discovery_phase {
 
 enum ai_trackpad_init_phase {
     AI_TRACKPAD_INIT_IDLE,
-    AI_TRACKPAD_INIT_INFO,
+    AI_TRACKPAD_INIT_DIMENSIONS,
     AI_TRACKPAD_INIT_MULTITOUCH,
     AI_TRACKPAD_INIT_READY,
     AI_TRACKPAD_INIT_OFFLINE,
+};
+
+struct ai_trackpad_dimensions {
+    uint32_t width_hundredths_mm;
+    uint32_t height_hundredths_mm;
+    int32_t min_x;
+    int32_t min_y;
+    int32_t max_x;
+    int32_t max_y;
+    bool valid;
 };
 
 struct ai_trackpad_init {
@@ -77,6 +87,7 @@ struct ai_trackpad_init {
     uint8_t retry_limit;
     uint8_t message_id;
     uint64_t deadline_us;
+    struct ai_trackpad_dimensions dimensions;
 };
 
 struct ai_discovery {
@@ -208,6 +219,9 @@ enum ai_status ai_discovery_request_encode(const struct ai_discovery_request *re
 enum ai_status ai_trackpad_init_request_encode(
     enum ai_trackpad_init_phase phase, uint8_t message_id,
     uint8_t raw[AI_PACKET_SIZE]);
+enum ai_status ai_trackpad_dimensions_parse(
+    const uint8_t *report, size_t length,
+    struct ai_trackpad_dimensions *out);
 void ai_trackpad_init_start(struct ai_trackpad_init *state,
                             uint8_t message_id, uint64_t now_us,
                             uint64_t timeout_us, uint8_t retry_limit);

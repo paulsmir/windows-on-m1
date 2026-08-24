@@ -5889,3 +5889,36 @@ descriptor to ignored `.local` evidence. On any hash, PnP, service, keyboard,
 transport or capture mismatch, publication remains off and recovery restores
 `oem15.inf`, restarts only APPL0001 and removes only signer
 `355AC2033CC1130087F1E8B9E28171B71841AAF0` from Root and TrustedPublisher.
+
+Descriptor-capture post-run (2026-08-24T18:24:00Z). The exact capture package
+installed temporarily as `oem16.inf` with `PublishTrackpad=0`. It returned the
+already owned 110-byte J313 trackpad descriptor at
+`.local/apple-input/trackpad-captures/EXP-20260824-052/j313-trackpad-descriptor.bin`.
+The captured length is 110 and SHA-256 is
+`9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`,
+exactly matching the discovery-time digest. The descriptor contains a standard
+relative Mouse application with X/Y, a Touch Pad application containing only
+vendor report `0x3f`, and a second vendor application containing report `0x44`.
+It contains no absolute multitouch logical range, physical range, unit or unit
+exponent, so `trackpad_axis_x_valid=0` and `trackpad_axis_y_valid=0` were the
+correct fail-closed result rather than a parser defect.
+
+Source comparison identifies the violated contract. Current Asahi SPI-HID sends
+device 2, request type `0x32`, report `0xd9`, device byte 0 and response length
+32 for `HID_REQ_GET_REPORT`; `hid-magicmouse` parses the returned width and
+height in hundredths of a millimetre plus signed little-endian minimum and
+maximum X/Y values. The current AppleInput INFO phase instead repeats the
+descriptor-discovery request (`d0/20/10/02`) and discards its payload. Microsoft
+requires logical and physical ranges plus unit and exponent for Precision
+Touchpad X/Y; its mandatory sample represents the physical extents as
+hundredths of an inch. The next single-variable correction is therefore to
+replace INFO with the native `0xd9` dimensions exchange and derive the Windows
+axis contract from that validated response. No hard-coded J313 geometry is
+permitted.
+
+Cleanup passed. `oem16.inf` and only its signer were removed; preserved
+`oem15.inf` is again selected, APPL0001 is `OK`, AppleInput is Running and the
+active SYS SHA-256 is
+`65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
+Verdict: descriptor-axis hypothesis rejected; dimensions-feature-report
+hypothesis confirmed by exact hardware evidence and primary source comparison.

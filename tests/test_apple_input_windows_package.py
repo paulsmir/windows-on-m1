@@ -280,7 +280,7 @@ int main(void)
 
         start = self.c_function_body(source, "AiTrackpadVhfStart")
         for required in (
-            "ai_trackpad_axis_contract_parse",
+            "TrackpadAxisContract.valid",
             "AiPrecisionTouchpadDescriptorPatch",
             "VhfClientContext = Context",
             "EvtVhfAsyncOperationGetFeature = AiTrackpadVhfGetFeature",
@@ -288,7 +288,15 @@ int main(void)
             "VendorID", "ProductID", "VersionNumber", "VhfCreate", "VhfStart",
         ):
             self.assertIn(required, start)
+        self.assertNotIn("ai_trackpad_axis_contract_parse", start)
         self.assertIn("AI_TRACKPAD_INIT_READY", start)
+
+        transport = self.read("src/transport.c")
+        process = self.c_function_body(transport, "AiTransportProcessPacket")
+        self.assertIn("ai_trackpad_axis_contract_from_dimensions", process)
+        self.assertIn("TrackpadInit.dimensions", process)
+        self.assertIn("TrackpadAxisXValid", process)
+        self.assertIn("TrackpadAxisYValid", process)
 
     def test_trackpad_vhf_lifecycle_is_independent_and_passive(self):
         header = self.read("include/apple_input_device.h")

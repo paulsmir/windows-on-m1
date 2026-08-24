@@ -94,8 +94,8 @@ struct ai_ptp_feature_state {
 };
 
 bool ai_apple_trackpad_release_candidate(const uint8_t *report, size_t length);
-enum ai_status ai_trackpad_axis_contract_parse(
-    const uint8_t *descriptor, size_t length,
+enum ai_status ai_trackpad_axis_contract_from_dimensions(
+    const struct ai_trackpad_dimensions *dimensions,
     struct ai_trackpad_axis_contract *out);
 enum ai_status ai_apple_trackpad_decode(
     const uint8_t *report, size_t length,

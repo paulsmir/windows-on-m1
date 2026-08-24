@@ -101,20 +101,20 @@ enum ai_status ai_trackpad_init_request_encode(
 
     if (!raw)
         return AI_ERR_ARGUMENT;
-    if (phase != AI_TRACKPAD_INIT_INFO &&
+    if (phase != AI_TRACKPAD_INIT_DIMENSIONS &&
         phase != AI_TRACKPAD_INIT_MULTITOUCH)
         return AI_ERR_SEQUENCE;
 
     AI_MEMSET(raw, AI_PACKET_SIZE);
     raw[0] = AI_PACKET_WRITE;
-    raw[1] = phase == AI_TRACKPAD_INIT_INFO ? 0xd0 : 0x02;
+    raw[1] = 0x02;
 
-    if (phase == AI_TRACKPAD_INIT_INFO) {
-        raw[8] = 0x20;
-        raw[9] = 0x10;
-        raw[10] = 0x02;
+    if (phase == AI_TRACKPAD_INIT_DIMENSIONS) {
+        raw[8] = 0x32;
+        raw[9] = 0xd9;
+        raw[10] = 0x00;
         raw[11] = message_id;
-        put_le16(raw + 12, 0x0200);
+        put_le16(raw + 12, 0x0020);
         message_size = 10;
     } else {
         raw[8] = 0x52;

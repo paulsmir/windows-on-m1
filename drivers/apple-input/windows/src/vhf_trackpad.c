@@ -141,8 +141,6 @@ Complete:
 
 NTSTATUS AiTrackpadVhfStart(PAI_DEVICE_CONTEXT Context)
 {
-    const struct ai_descriptor_slot *descriptor;
-    enum ai_status protocol_status;
     VHF_CONFIG config;
     VHFHANDLE handle = NULL;
     NTSTATUS status;
@@ -152,16 +150,10 @@ NTSTATUS AiTrackpadVhfStart(PAI_DEVICE_CONTEXT Context)
         return STATUS_INVALID_PARAMETER;
     if (Context->TrackpadInit.phase != AI_TRACKPAD_INIT_READY)
         return STATUS_DEVICE_NOT_READY;
-    descriptor = ai_descriptor_store_get(&Context->Descriptors, 2u);
-    if (!descriptor)
-        return STATUS_DEVICE_NOT_READY;
     if (Context->TrackpadVhf.Handle)
         return STATUS_SUCCESS;
 
-    protocol_status = ai_trackpad_axis_contract_parse(
-        descriptor->bytes, descriptor->length,
-        &Context->TrackpadAxisContract);
-    if (protocol_status != AI_OK)
+    if (!Context->TrackpadAxisContract.valid)
         return STATUS_DEVICE_PROTOCOL_ERROR;
     if (!AiPrecisionTouchpadDescriptorPatch(
             Context->TrackpadVhf.ReportDescriptor,

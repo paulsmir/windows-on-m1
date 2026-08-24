@@ -4,7 +4,7 @@
 
 **Goal:** Publish the J313 built-in Apple trackpad as a native Windows Precision Touchpad through an independent VHF child, with correct multi-contact identity, click, feature reports, recovery and hardware evidence.
 
-**Architecture:** Keep Apple SPI HID transport, validation and post-discovery multitouch initialization in the existing owner layer. Add a portable Apple contact decoder and persistent slot tracker, then encode only proven fields into a project-owned Precision Touchpad descriptor schema whose axis metadata is derived from the validated native descriptor. A second VHF object owns the touchpad feature state and remains independently gated from the already working keyboard.
+**Architecture:** Keep Apple SPI HID transport, validation and post-discovery multitouch initialization in the existing owner layer. Add a portable Apple contact decoder and persistent slot tracker, then encode only proven fields into a project-owned Precision Touchpad descriptor schema. Derive the logical ranges and physical size from Apple's validated sensor-dimensions feature report `0xd9`; the native J313 descriptor itself has no absolute multitouch axes. A second VHF object owns the touchpad feature state and remains independently gated from the already working keyboard.
 
 **Tech Stack:** C11 portable protocol tests, KMDF ARM64, Windows Virtual HID Framework, HID 1.11 usages, Microsoft Windows Precision Touchpad protocol, GitHub Actions WDK build, PowerShell hardware validation.
 
@@ -18,7 +18,9 @@
 - Do not add a relative-mouse fallback. Completion is a Windows Precision Touchpad.
 - Normal Debug and Release packages must never compile raw trackpad capture support.
 - Do not publish raw reports, coordinates, keys or arbitrary descriptor bytes in normal diagnostics or the repository.
-- Derive axis logical/physical metadata from the owned, structurally valid J313 trackpad descriptor; do not hard-code guessed dimensions.
+- Derive axis logical ranges and physical size from the validated J313 report
+  `0xd9` dimensions response; do not hard-code guessed dimensions or infer them
+  from the vendor-only native descriptor.
 - Publish no more than five Windows contacts. Track up to eleven Apple contacts so contacts suppressed at the Windows limit remain suppressed for their complete physical lifetime.
 - Do not publish pressure, width, height, palm, force or haptics until a separate controlled-delta gate proves those semantics.
 - Every defect or feature starts with a failing test, every hardware run has pre/post `investigation/EXPERIMENTS.md` entries, and every implementation commit is followed by a separate `investigation/CHANGES.csv` ledger commit.
@@ -36,7 +38,11 @@
 ## File Map
 
 - Create `drivers/apple-input/protocol/include/apple_trackpad.h`: portable Apple frame, axis contract, physical tracker and Precision Touchpad report interfaces.
-- Create `drivers/apple-input/protocol/src/apple_trackpad_axis.c`: bounded HID short-item parser for X/Y logical, physical, unit and exponent metadata.
+- Modify `drivers/apple-input/protocol/src/apple_trackpad_axis.c`: construct the
+  Windows axis contract from Apple's report `0xd9` sensor-dimensions response.
+  The live J313 descriptor contains no absolute multitouch X/Y metadata, so the
+  earlier descriptor-parser result is retained only as rejected evidence and
+  must not gate VHF publication.
 - Create `drivers/apple-input/protocol/src/apple_trackpad_frame.c`: Apple 48-byte header/30-byte contact decoder and physical contact tracker.
 - Create `drivers/apple-input/protocol/src/apple_precision_touchpad.c`: fixed five-contact Windows report encoder and feature-state helpers.
 - Create `drivers/apple-input/windows/include/apple_precision_touchpad_descriptor.h`: project-owned descriptor template, report IDs, feature sizes and patch offsets.
@@ -102,7 +108,7 @@ Before creating the fixture, add a portable test include/reference that fails be
 
 Commit the sanitized fixture and EXP result. Append one CHANGES process row with that commit hash, then commit only the ledger row.
 
-### Task 2: Parse native descriptor axis metadata
+### Task 2: Parse native descriptor axis metadata (superseded by Task 8 evidence)
 
 **Files:**
 - Create: `drivers/apple-input/protocol/include/apple_trackpad.h`
@@ -127,6 +133,13 @@ Run: `./proxyenv/bin/python -m unittest tests.test_apple_spihid_protocol -v`
 Expected: compile failure for the missing header/function.
 
 - [x] **Step 3: Implement the minimal bounded HID short-item parser**
+
+Hardware Gate D2 rejected this design: the exact 110-byte J313 descriptor has
+only a relative mouse X/Y collection plus vendor-defined trackpad reports. It
+does not contain the absolute axis metadata required by Windows Precision
+Touchpad. Task 8 therefore replaces the duplicated descriptor request with
+Apple's feature-report `0xd9` dimensions request, following the current Asahi
+SPI-HID and `hid-magicmouse` contract.
 
 Track Usage Page, Logical/Physical Min/Max, Unit, Unit Exponent and a four-entry Push/Pop stack. Record X (Generic Desktop 0x30) and Y (0x31) only inside a Finger logical collection beneath Touch Pad. Return `AI_ERR_PROTOCOL` on ambiguity and zero `out` on every failure.
 

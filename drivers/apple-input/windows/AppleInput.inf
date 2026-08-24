@@ -3,7 +3,7 @@ Signature="$WINDOWS NT$"
 Class=HIDClass
 ClassGuid={745A17A0-74D3-11D0-B6FE-00A0C90F57DA}
 Provider=%ProviderName%
-DriverVer=08/13/2026,0.1.0.0
+DriverVer=08/24/2026,0.1.5.0
 CatalogFile=AppleInput.cat
 PnpLockdown=1
 
