@@ -138,6 +138,115 @@ static void test_trackpad_release_candidate(void)
     assert(!ai_apple_trackpad_release_candidate(NULL, sizeof(active)));
 }
 
+static void test_trackpad_axis_contract(void)
+{
+    static const uint8_t descriptor[] = {
+        0x05, 0x0d,       /* Usage Page (Digitizers) */
+        0x09, 0x05,       /* Usage (Touch Pad) */
+        0xa1, 0x01,       /* Collection (Application) */
+        0x09, 0x22,       /* Usage (Finger) */
+        0xa1, 0x02,       /* Collection (Logical) */
+        0x05, 0x01,       /* Usage Page (Generic Desktop) */
+        0x09, 0x30,       /* Usage (X) */
+        0x16, 0x18, 0xfc, /* Logical Minimum (-1000) */
+        0x26, 0xe8, 0x03, /* Logical Maximum (1000) */
+        0x36, 0x00, 0x00, /* Physical Minimum (0) */
+        0x46, 0x64, 0x00, /* Physical Maximum (100) */
+        0x55, 0x0e,       /* Unit Exponent (-2) */
+        0x65, 0x11,       /* Unit (SI Linear, centimetres) */
+        0x81, 0x02,       /* Input */
+        0x09, 0x31,       /* Usage (Y) */
+        0x16, 0x30, 0xf8, /* Logical Minimum (-2000) */
+        0x26, 0xd0, 0x07, /* Logical Maximum (2000) */
+        0x36, 0x00, 0x00, /* Physical Minimum (0) */
+        0x46, 0xc8, 0x00, /* Physical Maximum (200) */
+        0x55, 0x0e,       /* Unit Exponent (-2) */
+        0x65, 0x11,       /* Unit (SI Linear, centimetres) */
+        0x81, 0x02,       /* Input */
+        0xc0,             /* End Collection (Finger) */
+        0xc0,             /* End Collection (Touch Pad) */
+    };
+    static const uint8_t truncated[] = {0x16, 0x00};
+    static const uint8_t long_item[] = {0xfe, 0x00, 0x00};
+    static const uint8_t stack_overflow[] = {
+        0xa4, 0xa4, 0xa4, 0xa4, 0xa4,
+    };
+    static const uint8_t stack_underflow[] = {0xb4};
+    static const uint8_t overflow_maximum[] = {
+        0x05, 0x0d, 0x09, 0x05, 0xa1, 0x01,
+        0x09, 0x22, 0xa1, 0x02, 0x05, 0x01,
+        0x09, 0x30, 0x15, 0x00,
+        0x27, 0xff, 0xff, 0xff, 0xff,
+    };
+    struct ai_trackpad_axis_contract contract;
+    uint8_t changed[sizeof(descriptor)];
+
+    assert(ai_trackpad_axis_contract_parse(descriptor, sizeof(descriptor),
+                                           &contract) == AI_OK);
+    assert(contract.valid && contract.x.valid && contract.y.valid);
+    assert(contract.x.logical_min == -1000);
+    assert(contract.x.logical_max == 1000);
+    assert(contract.x.physical_min == 0);
+    assert(contract.x.physical_max == 100);
+    assert(contract.x.unit == 0x11);
+    assert(contract.x.unit_exponent == -2);
+    assert(contract.y.logical_min == -2000);
+    assert(contract.y.logical_max == 2000);
+    assert(contract.y.physical_min == 0);
+    assert(contract.y.physical_max == 200);
+    assert(contract.y.unit == 0x11);
+    assert(contract.y.unit_exponent == -2);
+
+    assert(ai_trackpad_axis_contract_parse(truncated, sizeof(truncated),
+                                           &contract) == AI_ERR_LENGTH);
+    assert(!contract.valid);
+    assert(ai_trackpad_axis_contract_parse(long_item, sizeof(long_item),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+    assert(ai_trackpad_axis_contract_parse(stack_overflow,
+                                           sizeof(stack_overflow),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+    assert(ai_trackpad_axis_contract_parse(stack_underflow,
+                                           sizeof(stack_underflow),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+    assert(ai_trackpad_axis_contract_parse(overflow_maximum,
+                                           sizeof(overflow_maximum),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+
+    AI_MEMCPY(changed, descriptor, sizeof(changed));
+    changed[33] = 0x32; /* Missing Y. */
+    assert(ai_trackpad_axis_contract_parse(changed, sizeof(changed),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+
+    AI_MEMCPY(changed, descriptor, sizeof(changed));
+    changed[33] = 0x30; /* Conflicting second X definition. */
+    assert(ai_trackpad_axis_contract_parse(changed, sizeof(changed),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+
+    AI_MEMCPY(changed, descriptor, sizeof(changed));
+    changed[15] = 0xe8;
+    changed[16] = 0x03; /* X logical min equals logical max. */
+    assert(ai_trackpad_axis_contract_parse(changed, sizeof(changed),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+
+    AI_MEMCPY(changed, descriptor, sizeof(changed));
+    changed[49] = 0x12; /* X/Y unit mismatch. */
+    assert(ai_trackpad_axis_contract_parse(changed, sizeof(changed),
+                                           &contract) == AI_ERR_PROTOCOL);
+    assert(!contract.valid);
+
+    assert(ai_trackpad_axis_contract_parse(NULL, sizeof(descriptor),
+                                           &contract) == AI_ERR_ARGUMENT);
+    assert(ai_trackpad_axis_contract_parse(descriptor, sizeof(descriptor),
+                                           NULL) == AI_ERR_ARGUMENT);
+}
+
 static void test_discovery(void)
 {
     struct ai_discovery state;
@@ -720,6 +829,7 @@ int main(void)
     test_reassembly();
     test_message_decode();
     test_trackpad_release_candidate();
+    test_trackpad_axis_contract();
     test_discovery();
     test_boot_and_write_status_contract();
     test_discovery_request_contract();

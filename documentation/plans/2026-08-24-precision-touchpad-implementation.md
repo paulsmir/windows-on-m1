@@ -116,29 +116,29 @@ Commit the sanitized fixture and EXP result. Append one CHANGES process row with
   - `struct ai_trackpad_axis { int32_t logical_min, logical_max, physical_min, physical_max; uint32_t unit; int8_t unit_exponent; bool valid; };`
   - `struct ai_trackpad_axis_contract { struct ai_trackpad_axis x, y; bool valid; };`
 
-- [ ] **Step 1: Write failing synthetic descriptor tests**
+- [x] **Step 1: Write failing synthetic descriptor tests**
 
 Add a compact HID descriptor with a Touch Pad/Finger collection, signed X/Y logical ranges, physical ranges, unit and exponent. Assert exact scalar extraction. Add rejection cases for truncated items, long items, missing X/Y, duplicate conflicting axes, `min >= max`, unit mismatch, global-stack overflow and arithmetic overflow.
 
-- [ ] **Step 2: Run the portable test and verify RED**
+- [x] **Step 2: Run the portable test and verify RED**
 
 Run: `./proxyenv/bin/python -m unittest tests.test_apple_spihid_protocol -v`
 
 Expected: compile failure for the missing header/function.
 
-- [ ] **Step 3: Implement the minimal bounded HID short-item parser**
+- [x] **Step 3: Implement the minimal bounded HID short-item parser**
 
 Track Usage Page, Logical/Physical Min/Max, Unit, Unit Exponent and a four-entry Push/Pop stack. Record X (Generic Desktop 0x30) and Y (0x31) only inside a Finger logical collection beneath Touch Pad. Return `AI_ERR_PROTOCOL` on ambiguity and zero `out` on every failure.
 
-- [ ] **Step 4: Run portable sanitizers and package tests**
+- [x] **Step 4: Run portable sanitizers and package tests**
 
 Run the focused unittest, then compile the native test once with `-fsanitize=address,undefined` and run it. Expected: all cases pass and no sanitizer report.
 
-- [ ] **Step 5: Fix the parser ownership boundary**
+- [x] **Step 5: Fix the parser ownership boundary**
 
 Keep this task portable: the parser accepts a caller-owned descriptor and returns only scalar metadata. Task 6 calls it on the context-owned native descriptor before creating VHF, and Task 7 exposes the returned scalars plus the existing descriptor digest through normal diagnostics. No raw descriptor is added to an IOCTL or log.
 
-- [ ] **Step 6: Commit implementation and ledger separately**
+- [x] **Step 6: Commit implementation and ledger separately**
 
 Commit parser/tests first. Append an implemented CHANGES row with no hardware validation claim, then commit the ledger.
 
