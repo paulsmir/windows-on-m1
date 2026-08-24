@@ -246,6 +246,31 @@ evidence, sanitized before any fixture is committed and disabled in production.
 - Keep raw captures ignored and local; commit only reviewed sanitized fixtures.
 - Demonstrate every parsed field by controlled deltas before implementing it.
 
+Gate D1 uses a separate `AppleInputCapture` driver, INF, administrator-only
+device ACL, CLI and manually dispatched CI workflow. The normal Debug and
+Release `AppleInput` projects do not define `AI_ENABLE_TRACKPAD_CAPTURE`, do not
+compile `trackpad_capture.c` and do not recognize the capture IOCTLs. The test
+driver accepts only reassembled device-2 reports after protocol CRC validation,
+stores at most 16 reports of at most 512 bytes in fixed kernel memory, and
+clears the capture on transport start, stop or explicit cancellation. The CLI
+requires an explicit new output path and refuses overwrites; raw output belongs
+under ignored `.local/apple-input/trackpad-captures/` only.
+
+This boundary follows Microsoft's requirement that a VHF source driver submit
+validated input reports from kernel mode and its documented rule that an SDDL
+assigned with `WdfDeviceInitAssignSDDLString` requires a named device object.
+The Apple packet filter follows the upstream Linux `applespi` transport split:
+read packet device 1 is the keyboard and device 2 is the touchpad. These
+references justify the boundary but do not substitute for J313 controlled-
+delta evidence; no Linux touch field is assumed to match this machine until
+Gate D1 proves it.
+
+Primary references:
+
+- <https://learn.microsoft.com/windows-hardware/drivers/hid/virtual-hid-framework--vhf->
+- <https://learn.microsoft.com/windows-hardware/drivers/ddi/wdfdevice/nf-wdfdevice-wdfdeviceinitassignsddlstring>
+- <https://github.com/torvalds/linux/blob/master/drivers/input/keyboard/applespi.c>
+
 ### Gate D2: Precision Touchpad VHF
 
 - Add parser golden tests, malformed-report tests and report-encoding tests.

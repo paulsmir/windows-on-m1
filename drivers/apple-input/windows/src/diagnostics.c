@@ -129,6 +129,11 @@ VOID AiDiagnosticsEvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request,
 
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(InputBufferLength);
+#if AI_ENABLE_TRACKPAD_CAPTURE
+    context = AiGetDeviceContext(WdfIoQueueGetDevice(Queue));
+    if (AiTrackpadCaptureIoctl(context, Request, IoControlCode))
+        return;
+#endif
     if (IoControlCode != IOCTL_AI_GET_SNAPSHOT) {
         WdfRequestComplete(Request, STATUS_INVALID_DEVICE_REQUEST);
         return;

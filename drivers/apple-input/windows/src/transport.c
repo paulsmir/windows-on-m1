@@ -180,6 +180,10 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
             }
         } else if (wire.flags == AI_PACKET_READ && wire.device == 2u) {
             AiCounterIncrement(&Context->Diagnostics.TrackpadReportCount);
+#if AI_ENABLE_TRACKPAD_CAPTURE
+            AiTrackpadCaptureRecord(Context, 2u, message.payload,
+                                    message.payload_length);
+#endif
         }
         return STATUS_SUCCESS;
     }
@@ -301,6 +305,9 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
     RtlZeroMemory(&Context->Diagnostics, sizeof(Context->Diagnostics));
     Context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
     Context->Diagnostics.Size = sizeof(Context->Diagnostics);
+#if AI_ENABLE_TRACKPAD_CAPTURE
+    AiTrackpadCaptureCancel(Context);
+#endif
 
     status = AiSpiInitialize(Context);
     if (!NT_SUCCESS(status))
@@ -331,6 +338,9 @@ VOID AiTransportStop(PAI_DEVICE_CONTEXT Context)
     Context->HardwareStarted = FALSE;
     ai_transport_queue_reset(&Context->TransportQueue);
     ai_reassembler_reset(&Context->Reassembler);
+#if AI_ENABLE_TRACKPAD_CAPTURE
+    AiTrackpadCaptureCancel(Context);
+#endif
     AiVhfFrontendStop(Context);
     Context->Diagnostics.KeyboardVhfState =
         (ULONG)Context->KeyboardVhfState;

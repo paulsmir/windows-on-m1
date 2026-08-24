@@ -7,6 +7,12 @@
 #include "apple_input_hw.h"
 #include "apple_input_ioctl.h"
 #include "apple_spihid.h"
+#ifndef AI_ENABLE_TRACKPAD_CAPTURE
+#define AI_ENABLE_TRACKPAD_CAPTURE 0
+#endif
+#if AI_ENABLE_TRACKPAD_CAPTURE
+#include "apple_input_capture.h"
+#endif
 
 enum AI_VHF_STATE {
     AiVhfAbsent,
@@ -19,6 +25,9 @@ enum AI_VHF_STATE {
 typedef struct _AI_DEVICE_CONTEXT {
     WDFDEVICE Device;
     WDFWAITLOCK FrontendLock;
+#if AI_ENABLE_TRACKPAD_CAPTURE
+    WDFWAITLOCK CaptureLock;
+#endif
     VHFHANDLE KeyboardVhf;
     enum AI_VHF_STATE KeyboardVhfState;
     PHYSICAL_ADDRESS MemoryBase[3];
@@ -35,6 +44,9 @@ typedef struct _AI_DEVICE_CONTEXT {
     struct ai_descriptor_store Descriptors;
     struct ai_hid_input_contract KeyboardInputContract;
     AI_DIAGNOSTIC_SNAPSHOT_V3 Diagnostics;
+#if AI_ENABLE_TRACKPAD_CAPTURE
+    AI_TRACKPAD_CAPTURE_BLOB TrackpadCapture;
+#endif
     UCHAR ReceivePacket[AI_PACKET_SIZE];
     UCHAR TransmitPacket[AI_PACKET_SIZE];
     UCHAR ZeroTransmit[AI_PACKET_SIZE];
@@ -99,3 +111,12 @@ NTSTATUS AiVhfFrontendStart(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiVhfFrontendSubmitKeyboard(PAI_DEVICE_CONTEXT Context,
                                      const UCHAR *Report, SIZE_T Length);
 VOID AiVhfFrontendStop(PAI_DEVICE_CONTEXT Context);
+#if AI_ENABLE_TRACKPAD_CAPTURE
+NTSTATUS AiTrackpadCaptureInitialize(WDFDEVICE Device,
+                                     PAI_DEVICE_CONTEXT Context);
+VOID AiTrackpadCaptureCancel(PAI_DEVICE_CONTEXT Context);
+VOID AiTrackpadCaptureRecord(PAI_DEVICE_CONTEXT Context, UCHAR Device,
+                             const UCHAR *Report, SIZE_T Length);
+BOOLEAN AiTrackpadCaptureIoctl(PAI_DEVICE_CONTEXT Context,
+                               WDFREQUEST Request, ULONG IoControlCode);
+#endif

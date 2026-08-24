@@ -720,12 +720,16 @@ validated CHANGES process row and commit/push all evidence.
 - Consumes the hardware-validated transport and keyboard frontend.
 - Produces sanitized, controlled-delta Apple trackpad fixtures and the separate Precision Touchpad implementation plan.
 
-- [ ] **Step 1: Design an explicit test-only capture build**
+- [x] **Step 1: Design an explicit test-only capture build**
 
 After keyboard validation, return to brainstorming/TDD for a bounded raw-capture
 mechanism that is impossible to enable in production. It must cap report count
 and size, require administrator access, exclude keyboard device 1 entirely, and
 store raw device-2 reports only under ignored `.local/` evidence.
+
+Implemented as a separate manually built project and workflow with a fixed
+16-by-512-byte buffer. ARM64 WDK compilation and hardware installation remain
+required before Step 2.
 
 - [ ] **Step 2: Capture controlled trackpad deltas**
 
