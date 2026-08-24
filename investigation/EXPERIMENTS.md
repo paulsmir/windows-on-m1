@@ -4876,3 +4876,29 @@ candidate reset the input controller in the earlier callback and set
 miss the short startup event.  Asahi enables the HID interrupt before waiting
 for the boot marker.  The next candidate changes only that lifecycle ordering;
 `oem6.inf` remains live and responsive until the replacement compiles.
+
+Lifecycle-corrected result: CI run `32674919980` installed as `oem7.inf` and
+remained Started/RUNNING with Windows reachable over SSH, but its version-1
+snapshot was unchanged: phase `WAIT_BOOT`, reset count 1, and interrupt,
+worker, and SPI counters all zero.  This rejects lifecycle ordering as the
+remaining cause.
+
+Root-cause checkpoint (2026-08-24T00:04:57Z): the Linux Apple GPIO driver
+performs three hardware operations in `apple_gpio_irq_startup`: it selects IRQ
+group 0, configures the pin as an input, and unmasks the selected trigger mode.
+For `IRQ_TYPE_LEVEL_LOW`, that mode is register value 3.  Our Windows driver
+only read pin 13 and acknowledged its group register; it never configured the
+pin's group or interrupt mode.  Therefore the controller reset completed but
+the nub GPIO controller could not raise the parent IRQ that m1n1 routes to GSI
+865.  Reference:
+`https://github.com/torvalds/linux/blob/master/drivers/pinctrl/pinctrl-apple-gpio.c`.
+
+Next single-variable candidate: root commit
+`d78081e4d3e310375242ce791ede996717cd9a2e` clears pin 13's peripheral/data
+configuration, selects group 0, enables input, sets level-low IRQ mode, and
+acknowledges stale pending state before the existing controller reset.  It does
+not add VHF children, modify the ESP, firmware, CPU topology, display, NVMe,
+xHCI, or Windows configuration.  The new regression test failed before the
+implementation; the focused package suite passed 14/14 and the complete public
+suite passed 277/277 after the change.  Hardware result remains pending the
+ARM64 WDK artifact and one-package replacement.
