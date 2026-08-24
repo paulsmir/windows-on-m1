@@ -5932,3 +5932,31 @@ because standard `<stdint.h>` supplied the type. No package was produced and no
 hardware was changed. The correction moves the guarded signed fixed-width
 typedefs into the base protocol header before the dimensions structure and adds
 a source-contract regression assertion for that ordering.
+
+EXP-20260824-053 pre-run (2026-08-24T16:20:00Z). Gate D2 geometry
+preflight will use public root `b4db773b8e339d2a45428be881078e2cd701f651`
+and successful official WDK run `32749949709` (job `97504287093`). The
+downloaded unsigned-development artifact is kept under ignored
+`.local/apple-input/wdk/32749949709/`. Exact production files are:
+
+- `AppleInput.sys` SHA-256
+  `13000bf512feb8a45f7ba21b72af1afa4e1d1562ce101298180d1220cf2597b4`;
+- `AppleInput.inf` SHA-256
+  `dc53ea5e89307052c218d4916b7a26fe1cdc1449210a16b994360143df857bb6`;
+- `appleinput.cat` SHA-256
+  `a5ad5c5c7f54a97b8fc803516c99f71c9f3540c469d8fa8d2b56ffa03efe6c15`;
+- `AppleInputDiag.exe` SHA-256
+  `d887630645ae99248af0dee63290665c7a466c353748eac634ba02b942726703`.
+
+The live Air preflight is APPL0001 `OK` / `CM_PROB_NONE`, service AppleInput
+Running, and service path under
+`appleinputcapture.inf_arm64_ab17b994ad2f5f75`. The preserved rollback is
+`oem15.inf`; its active SYS SHA-256 remains
+`65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
+Current service gates are `TransportOnly=1`, `PublishKeyboard=0` and
+`PublishTrackpad=0`. The candidate will first be installed with only keyboard
+publication enabled and trackpad publication still zero. Acceptance requires
+the exact candidate SYS, APPL0001 and service healthy, phase 8, trackpad init
+READY, both axis-valid flags true, nondegenerate scalar ranges and zero
+transport errors. Any mismatch immediately restores all gates off and
+reinstalls preserved `oem15.inf`; no ESP or firmware component is changed.
