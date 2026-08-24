@@ -6078,3 +6078,53 @@ USB, display or ESP behavior changes.
   problem code; zero timeout, CRC, fragment, offline, VHF start or decode
   errors. A bounded physical touch test follows only after these automatic
   gates pass.
+
+Automatic Gate D2 result (2026-08-24T17:18:00Z): passed after correcting one
+harness-only PnP assumption; the physical touch checkpoint remains pending.
+The initial combined assisted invocation began while an earlier guest context
+still owned the hypervisor and its chainload caused an EL1 guest exception.
+After the target returned to the immutable stage-1 proxy, separating the
+operations reproduced the proven manual contract: exact m1n1 `2fe790b` was
+chainloaded once, followed by Mu/Windows with explicit `--reuse-proxy`.  Windows
+reached SSH.  The host runner later lost the `hv_start` reply to interleaved
+full-telemetry events (`UartChecksumError`), but the command had executed and
+the live guest remained healthy; this host-observation failure did not alter
+the firmware or driver gate.
+
+The candidate installed as `oem16.inf` with exact active SYS SHA-256
+`7b75873de00a392b6e906edf5776f69c274e86814fb02389414ef557d2b7bdb5`.
+With `PublishTrackpad=0`, APPL0001 and AppleInput were healthy, keyboard VHF was
+running, trackpad VHF was absent, native geometry exactly matched Gate D2a and
+all transport errors were zero. Enabling only `PublishTrackpad` produced:
+
+- keyboard VHF state 3 and trackpad VHF state 3;
+- two new healthy `HID\\HID_DEVICE_SYSTEM_VHF*` PnP children;
+- two successful GET_FEATURE and four successful SET_FEATURE operations with
+  `trackpad_feature_last_status=0` and `trackpad_vhf_last_status=0`;
+- zero VHF start/submission failures, SPI timeouts, packet/message CRC errors,
+  fragment failures and offline transitions.
+
+The first observation harness incorrectly searched for
+`HID\\VID_05AC&PID_0000*`. VHF uses system-generated
+`HID_DEVICE_SYSTEM_VHF` instance IDs, so that check rejected an otherwise
+successful publication and automatically restored exact `oem15.inf`. The
+corrected ignored harness snapshots the keyboard-only VHF topology and requires
+new healthy system-VHF children; repeating from the verified rollback passed.
+This changed no driver or guest behavior.
+
+Ignored evidence SHA-256 values:
+
+- `axis-gate-pass.remote.json`:
+  `7f97bec2f92dc9d99749d703f8139025e30f66ec2c6c3713dae727cc60bea4cf`;
+- `trackpad-publish-status.remote.json`:
+  `ad982681049f4b76a1c64d23856012751acb9ea4a0ce63d9d48227b2bcb60bcd`;
+- `trackpad-publish-pass.remote.json`:
+  `9fbd1a8cb8bf2d16db6482f092c7efcac788519c1df3af137bc2102e1c6bc8d1`;
+- `trackpad-pnp.remote.json`:
+  `11157f878c8162e76702d10a99282368df2bacd3b78ff4be623fd3a8b9c8726a`.
+
+Verdict: the feature-buffer correction and automatic Windows Precision
+Touchpad publication contract are confirmed on J313. `oem16.inf` remains
+active with both keyboard and trackpad publication enabled. Do not call motion,
+click or gesture behavior validated until a bounded physical-input run advances
+decoded/submitted reports and the user confirms cursor/click behavior.
