@@ -5186,3 +5186,50 @@ commit `6fe3ee32c7238655b2f0860be4e398ce1a0d0d69` fixes it on J313.  Native
 GPIO/IRQ/SPI/discovery Gate B is now closed.  `TransportOnly=1` remains
 intentional, so this result does not claim a Windows keyboard or Precision
 Touchpad child; VHF publication is the next separately testable gate.
+
+### EXP-20260824-047 — descriptor ownership Gate C1 with VHF disabled
+
+Pre-run record (2026-08-24T08:27:44Z).  Hypothesis: on the unchanged EXP-057
+four-E-core firmware pair, replacing only confirmed rollback `oem12.inf` with
+the software-verified package from root commit
+`bb426e00ee683be17fd8872cbce050e8db56a58b` will retain both hardware HID
+descriptors in driver-owned storage, produce stable metadata-only version-3
+snapshots and keep VHF absent because the package default is
+`TransportOnly=1`.
+
+- repository state: root branch `feature/j313-native-input`, documentation head
+  `27b4d6ebea3f8e857ed926f945d56c9fda4a9e7e`; implementation head represented
+  by the package is `bb426e00ee683be17fd8872cbce050e8db56a58b`; m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`; Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`.  All three tracked diff SHA-256
+  values are `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- firmware remains the validated EXP-057 `debug-monitor` pair:
+  `dist/j313/debug-monitor/m1n1.macho` SHA-256
+  `3d41abb1b5b16c09a96c9bebe4244b2e5d88fe084cd786f8289e928920b49a35`
+  and `dist/j313/debug-monitor/J313_EFI.fd` SHA-256
+  `cd591aab2ef0641902f03e1a38aac697e45fc12e466a3cb72f32cd3d68060710`.
+- driver package: GitHub Actions run `32705632141`, job `97366009946`, artifact
+  `AppleInput-ARM64-Debug`; SYS SHA-256
+  `bc457c288cef25eeb1445305629ffb9f8147b7beaf1d7d258c5cc81a2de6104e`,
+  INF `0f74306484403b97b81ad1350488cbed7a1af000b8c7d7e4f793cfe1101fe67d`,
+  CAT `2adf691aab8f2252601bb6f55dff4bf15c29f52eefc76de058d49e604f95251c`
+  and CLI `2e060e2bb050baf6b2a1ccd889f9245d0a4754417e530de162a83fbe434490b8`.
+  Both binaries are PE32+ AArch64.  The catalog signer is
+  `2172CED45D605B33C0572C30FF69F74C440734A3`; importing it requires explicit
+  approval before installation.
+- launch command: `scripts/run-windows.sh --execution assisted --display both
+  --debug monitor --observed --foreground --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43`.
+- install contract: use the package installer without `-PublishKeyboard`, then
+  confirm `TransportOnly=1`; `oem12.inf`, external USB input and the unchanged
+  stable ESP remain the recovery paths.
+- pass gates: phase 8; keyboard descriptor payload length 182 and trackpad
+  descriptor payload length 110; stable nonzero SHA-256 values across repeated
+  snapshots; valid keyboard contract; VHF state absent; zero VHF submissions
+  and failures; no new HID child; zero transport-error counters; responsive
+  SSH, physical display, USB viewer and external USB input.
+- failure gates: boot regression, phase below 8, changing descriptor digest,
+  parser rejection, timeout/CRC/fragment/offline count, any VHF child or
+  submission, bugcheck, reboot or loss of SSH/display/external USB recovery.
+  Evidence paths are `hv.log`, ports 8765/8766, PnP/service state and repeated
+  version-3 `AppleInputDiag.exe` snapshots.
