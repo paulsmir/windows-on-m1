@@ -85,6 +85,34 @@ class ProxyEventChecksumTest(unittest.TestCase):
         self.assertEqual(received, [b"frame"])
         self.assertEqual(result[:2], b"OK")
 
+    def test_ignores_false_reply_marker_while_resynchronizing_after_corrupt_event(self):
+        corrupt = bytes.fromhex("ff55aa050600030062726f6b656e")
+        corrupt += struct.pack("<I", 0)
+        # A dropped USB word can leave framebuffer pixels in the scan window.
+        # Pixel data may contain the three-byte framing prefix but cannot be a
+        # reply unless its complete command word is one we are waiting for.
+        false_reply = bytes.fromhex("ff55aa99") + bytes(32)
+        valid = bytes.fromhex("ff55aa05050003006672616d65")
+        valid += struct.pack("<I", UartInterface.CHECKSUM_SENTINEL)
+        reply = bytes.fromhex(
+            "ff55aa01000000004f4b00000000000000000000000000000000000000000000"
+        )
+        reply += struct.pack("<I", 0xF39F09B5)
+
+        iface = UartInterface.__new__(UartInterface)
+        iface.dev = FakeSerial(corrupt + false_reply + valid + reply)
+        iface.debug = False
+        iface.enabled_features = Feature.DISABLE_DATA_CSUMS
+        iface.tty_enable = False
+        iface.evt_handlers = {}
+        received = []
+        iface.set_event_handler(EVENT.FRAMEBUFFER, received.append)
+
+        result = iface.reply(iface.REQ_PROXY)
+
+        self.assertEqual(received, [b"frame"])
+        self.assertEqual(result[:2], b"OK")
+
 
 if __name__ == "__main__":
     unittest.main()
