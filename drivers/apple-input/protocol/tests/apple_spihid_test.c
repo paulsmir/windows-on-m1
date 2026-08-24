@@ -1,5 +1,6 @@
 #include "apple_spihid.h"
 #include "apple_trackpad.h"
+#include "fixtures/j313_trackpad_release_sanitized.h"
 #include "fixtures/j313_trackpad_sanitized.h"
 
 #include <assert.h>
@@ -682,6 +683,13 @@ static void test_hid_input_contract(void)
 
 static void test_j313_trackpad_sanitized_fixture_contract(void)
 {
+    assert(sizeof(j313_trackpad_release) == 76);
+    assert(j313_trackpad_release[30] == 1);
+    assert(j313_trackpad_release[48 + 16] == 0);
+    assert(j313_trackpad_release[48 + 17] == 0);
+    assert(ai_apple_trackpad_release_candidate(j313_trackpad_release,
+                                               sizeof(j313_trackpad_release)));
+
     assert(sizeof(j313_trackpad_one_contact_x) == 76);
     assert(sizeof(j313_trackpad_one_contact_y) == 76);
     assert(sizeof(j313_trackpad_held_click) == 76);

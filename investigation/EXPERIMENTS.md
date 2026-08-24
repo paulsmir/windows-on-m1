@@ -5747,3 +5747,48 @@ discovery phase is 8, trackpad-init phase is 3 and init attempts are 2. The
 previous `oem15.inf` package was not deleted and remains the immediate
 rollback. No raw capture has been armed yet; the physical release gate remains
 open.
+
+Release-trigger post-run (2026-08-24T13:58:55Z): passed. With one stationary
+contact already held, the ABI-v2 CLI armed for one RELEASE record. The user
+lifted once after the armed instruction and the tool saved exactly one report
+with the expected descriptor digest. The ignored raw blob is
+`.local/apple-input/trackpad-captures/EXP-20260824-051/11-release-trigger.bin`,
+8324 bytes, SHA-256
+`19eb38118c455d55096fd448b426895037ccf621141c2ec62a32abc287492b80`.
+
+The capture header is version 2, size 8324, armed 0, complete 1, report limit
+1, report-size limit 512, report count 1, dropped count 0 and trigger 1. The
+single payload is 76 bytes with contact count one and little-endian
+`touch_major` zero at contact offset 16. This is the physical tip-clear release
+shape required by the primary upstream Linux `applespi` rule that skips a
+contact when `touch_major == 0` before synchronizing the multitouch frame.
+
+The metadata-only post-capture snapshot is ignored as
+`11-post-release-status.json`, SHA-256
+`eaa8b78f3f15b0501343d0a9f2a9916b41dbccbde9d447ef64b5f566cea70dce`.
+It records phase 8, trackpad-init phase 3, two init attempts, keyboard VHF
+state 3, 3357 trackpad reports, matched workers 3191/3191 and zero SPI timeout,
+packet CRC, message CRC, fragment, offline or VHF errors.
+
+Only the proven 76-byte shape, contact count and zero `touch_major` condition
+were retained in
+`drivers/apple-input/protocol/tests/fixtures/j313_trackpad_release_sanitized.h`;
+timestamp, coordinates, identity and all unrelated fields were zeroed. The
+fixture SHA-256 is
+`a0eb96c8b4b9961352287176a75e2ff284d1f0339e0e0e3645b0539a554f154d`.
+Its test first failed because the fixture was absent; after sanitization the
+focused protocol suite, complete 291-test suite, ASan/UBSan run and
+`git diff --check` all passed.
+
+Cleanup also passed. Temporary `oem16.inf` was uninstalled and deleted, only
+`APPL0001` was restarted, and the exact temporary signer was removed from Root
+and TrustedPublisher. The selected package returned to preserved `oem15.inf`;
+APPL0001 is `OK`, AppleInput is `Running`, active SYS SHA-256 is again
+`65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`,
+descriptor digest is unchanged, phase is 8, MT-init phase is 3, keyboard VHF
+state is 3 and transport error counters remain zero.
+
+Verdict: Gate D1 release evidence passes and Task 1 closes. A J313 release can
+arrive as a 76-byte one-contact payload whose `touch_major` is zero; the next
+bounded task is native descriptor axis metadata parsing. This result does not
+publish a Precision Touchpad or infer palm, pressure or gesture semantics.

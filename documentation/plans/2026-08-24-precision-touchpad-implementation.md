@@ -72,33 +72,33 @@
 - Consumes: the validated 0.1.2.0 capture package and descriptor digest from EXP-20260824-050.
 - Produces: one bounded finger-down/finger-up capture tied to the already validated descriptor digest, plus a sanitized zero-contact/release fixture.
 
-- [ ] **Step 1: Write failing release-candidate and CLI tests**
+- [x] **Step 1: Write failing release-candidate and CLI tests**
 
 Add portable synthetic frames proving that a 76-byte one-contact report with nonzero `touch_major` is not a release candidate, the same shape with zero `touch_major` is a candidate, and a structurally valid 46-byte zero-contact report is a candidate. Reject malformed lengths, count above 11 and truncated contact fields. Add package tests for capture ABI version 2, `AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE`, and CLI command `capture-release --output PATH --timeout SECONDS`.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 Run: `./proxyenv/bin/python -m unittest tests.test_apple_spihid_protocol tests.test_apple_input_windows_package -v`
 
 Expected: protocol compile failure for the missing release-candidate function and package failure for the missing trigger/command.
 
-- [ ] **Step 3: Implement the minimal release-triggered capture**
+- [x] **Step 3: Implement the minimal release-triggered capture**
 
 Implement `ai_apple_trackpad_release_candidate()` as a bounded portable predicate from the upstream Apple layout. Capture ABI v2 adds one trigger field; ANY preserves existing behavior, RELEASE ignores active frames and completes after the first valid zero-contact or zero-`touch_major` frame. The new CLI command arms exactly one release record. Preserve the 16-by-512-byte maximum, administrator-only device, CREATE_NEW output and exclusion from normal AppleInput projects.
 
-- [ ] **Step 4: Build and record the exact diagnostic package**
+- [x] **Step 4: Build and record the exact diagnostic package**
 
 Advance only `AppleInputCapture.inf` to `0.1.3.0`, run the existing manual WDK capture job, record SYS/CAT/INF/CLI SHA-256 values and preserve `oem15.inf` as rollback. Production AppleInput, firmware and ESP remain unchanged.
 
-- [ ] **Step 5: Capture a physical release transition**
+- [x] **Step 5: Capture a physical release transition**
 
 Arm `capture-release` while one finger is already down, then lift it. Accept only one structurally valid release candidate with the stable descriptor digest and zero drops. Store raw evidence only under `.local/apple-input/trackpad-captures/<EXP-ID>/` and commit only a sanitized terminal shape.
 
-- [ ] **Step 6: Add a failing parser-fixture assertion, then sanitize**
+- [x] **Step 6: Add a failing parser-fixture assertion, then sanitize**
 
 Before creating the fixture, add a portable test include/reference that fails because `j313_trackpad_release_sanitized.h` is absent. Then add only the proven release bytes and provenance needed by Task 3; run the focused and complete suites.
 
-- [ ] **Step 7: Commit evidence and ledger separately**
+- [x] **Step 7: Commit evidence and ledger separately**
 
 Commit the sanitized fixture and EXP result. Append one CHANGES process row with that commit hash, then commit only the ledger row.
 
