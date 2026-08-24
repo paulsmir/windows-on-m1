@@ -5474,3 +5474,29 @@ least one device-2 report longer than the repeated 8-byte click-only report.
   Any init phase 4, more than two attempts, transport error, missing keyboard,
   hang, bugcheck, reboot or hash mismatch triggers immediate rollback without
   collecting further gestures.
+
+Pre-run correction (2026-08-24T12:05:00Z).  The first recorded artifact from
+run `32724166740` was rejected before transfer or installation: its capture
+INF still advertised `0.1.1.0`, equal to live `oem14`, so Windows driver
+selection could retain the old SYS and invalidate the experiment.  Commit
+`c07743a16b2003a58389df53a339ab91c957bf2a` changes only capture `DriverVer`
+to `0.1.2.0`; commit
+`ff87b40e7aba654b78de12f55a5adff21b4e44f5` indexes that correction.  No
+runtime source changed after `ca105432`.
+
+The only installable artifact for EXP-050 is now workflow-dispatch run
+`32724933170`, production job `97423982004`, capture job `97423982301`,
+artifact `AppleInput-Trackpad-Capture-ARM64-Debug` ID `9519185291`.  Both jobs
+passed the official ARM64 WDK.  The ignored staging path is
+`.local/apple-input/mt-init-v012-run-32724933170`; INF SHA-256 is
+`9ef28a7a70d86d6cc5c5fa5584fbdb51e1afe432319d3bf177bd611bd897663c`,
+catalog `46e60354ddd6f78ff985e4ee16e3d6b257c502792df1a333b177e68553507e37`,
+AArch64 SYS
+`65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`
+and AArch64 capture CLI
+`68a4db63c816c6c6a5fece3f7aefc256af46fd3ddbeaea769f96255ac8ae51ee`.
+Its exact catalog signer SHA-1 is
+`09E7FBD3BF02971B4B21CF56A8C5A9CCB528B97F`; this supersedes the signer and
+all hashes in the original pre-run paragraph and still requires explicit user
+approval before import.  The higher version allows side-by-side staging and
+selection without deleting the `oem14` rollback first.
