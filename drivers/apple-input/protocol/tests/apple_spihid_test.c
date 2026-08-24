@@ -111,19 +111,19 @@ static void test_discovery(void)
                                     (const uint8_t[]){0xa0, 0x80, 0x00, 0x00},
                                     4, 105, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_IDENTITY);
-    assert(state.request_id == 1 && state.deadline_us == 155);
+    assert(state.request_id == 0 && state.deadline_us == 155);
     assert(ai_discovery_accept(&state, 99, true, 110, 50) == AI_ERR_SEQUENCE);
-    assert(ai_discovery_accept(&state, 1, true, 110, 50) == AI_OK);
-    assert(state.phase == AI_DISCOVERY_INTERFACE_MANAGEMENT && state.request_id == 2);
-    assert(ai_discovery_accept(&state, 2, true, 120, 50) == AI_OK);
+    assert(ai_discovery_accept(&state, 0, true, 110, 50) == AI_OK);
+    assert(state.phase == AI_DISCOVERY_INTERFACE_MANAGEMENT && state.request_id == 1);
+    assert(ai_discovery_accept(&state, 1, true, 120, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_INTERFACE_KEYBOARD);
-    assert(ai_discovery_accept(&state, 3, true, 130, 50) == AI_OK);
+    assert(ai_discovery_accept(&state, 2, true, 130, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_INTERFACE_TRACKPAD);
-    assert(ai_discovery_accept(&state, 4, true, 140, 50) == AI_OK);
+    assert(ai_discovery_accept(&state, 3, true, 140, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_KEYBOARD_DESCRIPTOR);
-    assert(ai_discovery_accept(&state, 5, true, 150, 50) == AI_OK);
+    assert(ai_discovery_accept(&state, 4, true, 150, 50) == AI_OK);
     assert(state.phase == AI_DISCOVERY_TRACKPAD_DESCRIPTOR);
-    assert(ai_discovery_accept(&state, 6, true, 160, 50) == AI_COMPLETE);
+    assert(ai_discovery_accept(&state, 5, true, 160, 50) == AI_COMPLETE);
     assert(state.phase == AI_DISCOVERY_READY);
 
     ai_discovery_start(&state, 0, 10, 1);
@@ -137,7 +137,7 @@ static void test_discovery(void)
     assert(ai_discovery_accept_boot(&state,
                                     (const uint8_t[]){0xa0, 0x80, 0x00, 0x00},
                                     4, 1, 10) == AI_OK);
-    assert(ai_discovery_accept(&state, 1, false, 2, 10) == AI_ERR_PROTOCOL);
+    assert(ai_discovery_accept(&state, 0, false, 2, 10) == AI_ERR_PROTOCOL);
     assert(state.phase == AI_DISCOVERY_OFFLINE);
 }
 

@@ -47,7 +47,8 @@ enum ai_status ai_discovery_accept_boot(struct ai_discovery *state,
 
     state->retry_count = 0;
     state->phase = AI_DISCOVERY_IDENTITY;
-    arm_request(state, now_us, timeout_us);
+    /* Linux sends the first request with message ID zero. */
+    arm_deadline(state, now_us, timeout_us);
     return AI_OK;
 }
 
