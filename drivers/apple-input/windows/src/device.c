@@ -13,11 +13,30 @@ static const ULONG AiExpectedSizes[3] = {
     (ULONG)J313_APPLE_INPUT_NUB_GPIO_SIZE,
 };
 
+static BOOLEAN AiReadTransportOnlyParameter(WDFDRIVER Driver)
+{
+    UNICODE_STRING value_name;
+    WDFKEY parameters_key;
+    ULONG value = 1;
+    NTSTATUS status;
+
+    status = WdfDriverOpenParametersRegistryKey(
+        Driver, KEY_READ, WDF_NO_OBJECT_ATTRIBUTES, &parameters_key);
+    if (!NT_SUCCESS(status))
+        return TRUE;
+    RtlInitUnicodeString(&value_name, L"TransportOnly");
+    status = WdfRegistryQueryULong(parameters_key, &value_name, &value);
+    WdfRegistryClose(parameters_key);
+    if (!NT_SUCCESS(status))
+        return TRUE;
+    return value == 0 ? FALSE : TRUE;
+}
+
 NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 {
-    UNREFERENCED_PARAMETER(Driver);
     WDF_PNPPOWER_EVENT_CALLBACKS callbacks;
     WDF_INTERRUPT_CONFIG interrupt_config;
+    WDF_OBJECT_ATTRIBUTES lock_attributes;
     WDF_OBJECT_ATTRIBUTES attributes;
     WDFDEVICE device;
     PAI_DEVICE_CONTEXT context;
@@ -40,8 +59,17 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 
     context = AiGetDeviceContext(device);
     context->TransportOnly = TRUE;
+    context->Device = device;
+    context->KeyboardVhfState = AiVhfAbsent;
     context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
     context->Diagnostics.Size = sizeof(context->Diagnostics);
+
+    WDF_OBJECT_ATTRIBUTES_INIT(&lock_attributes);
+    lock_attributes.ParentObject = device;
+    status = WdfWaitLockCreate(&lock_attributes, &context->FrontendLock);
+    if (!NT_SUCCESS(status))
+        return status;
+    context->TransportOnly = AiReadTransportOnlyParameter(Driver);
 
     WDF_INTERRUPT_CONFIG_INIT(&interrupt_config, AiInputInterruptIsr, NULL);
     interrupt_config.EvtInterruptWorkItem = AiTransportWorker;

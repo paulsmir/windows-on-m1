@@ -133,6 +133,51 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("trackpad_descriptor_sha256", cli)
         self.assertNotRegex(cli, r"(?i)(raw_descriptor|raw_report|payload_bytes)")
 
+    def test_keyboard_vhf_frontend_is_explicitly_gated_and_synchronous(self):
+        header = self.read("include/apple_input_device.h")
+        device = self.read("src/device.c")
+        vhf = self.read("src/vhf_keyboard.c")
+        frontend = self.read("src/vhf_frontend.c")
+        project = self.read("AppleInput.vcxproj")
+        inf = self.read("AppleInput.inf")
+        install = self.read("scripts/install-driver.ps1")
+        uninstall = self.read("scripts/uninstall-driver.ps1")
+
+        for source in ("vhf_keyboard.c", "vhf_frontend.c"):
+            self.assertIn(source, project)
+        for symbol in (
+            "VHF_CONFIG_INIT",
+            "VhfCreate",
+            "VhfStart",
+            "VhfReadReportSubmit",
+            "VhfDelete",
+        ):
+            self.assertIn(symbol, vhf)
+        self.assertIn("WdfDeviceWdmGetDeviceObject", vhf)
+        self.assertIn("VhfDelete(handle, TRUE)", vhf)
+        self.assertNotIn("EvtVhfReadyForNextReadReport", vhf)
+        for symbol in (
+            "AiVhfFrontendStart",
+            "AiVhfFrontendSubmitKeyboard",
+            "AiVhfFrontendStop",
+            "AiVhfDescriptorsReady",
+            "AiVhfStarting",
+            "AiVhfRunning",
+            "AiVhfStopping",
+            "FrontendLock",
+        ):
+            self.assertIn(symbol, header + frontend)
+        self.assertIn("ai_hid_input_report_valid", vhf)
+        self.assertIn("HID_XFER_PACKET", vhf)
+        self.assertIn("WdfDriverOpenParametersRegistryKey", device)
+        self.assertIn("WdfRegistryQueryULong", device)
+        self.assertIn("context->TransportOnly = TRUE", device)
+        self.assertIn("TransportOnly,0x00010001,1", inf)
+        self.assertIn("[switch]$PublishKeyboard", install)
+        self.assertIn("TransportOnly", install)
+        self.assertIn("TransportOnly", uninstall)
+        self.assertIn("pnputil /restart-device", install)
+
     def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")
         device = self.read("src/device.c")

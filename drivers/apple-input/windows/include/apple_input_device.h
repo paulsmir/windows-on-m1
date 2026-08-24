@@ -2,12 +2,25 @@
 
 #include <ntddk.h>
 #include <wdf.h>
+#include <vhf.h>
 
 #include "apple_input_hw.h"
 #include "apple_input_ioctl.h"
 #include "apple_spihid.h"
 
+enum AI_VHF_STATE {
+    AiVhfAbsent,
+    AiVhfDescriptorsReady,
+    AiVhfStarting,
+    AiVhfRunning,
+    AiVhfStopping,
+};
+
 typedef struct _AI_DEVICE_CONTEXT {
+    WDFDEVICE Device;
+    WDFWAITLOCK FrontendLock;
+    VHFHANDLE KeyboardVhf;
+    enum AI_VHF_STATE KeyboardVhfState;
     PHYSICAL_ADDRESS MemoryBase[3];
     ULONG MemoryLength[3];
     ULONG InterruptVector;
@@ -78,3 +91,11 @@ VOID AiDiagnosticsRecordMessage(PAI_DEVICE_CONTEXT Context,
 VOID AiDiagnosticsRecordDescriptor(
     PAI_DEVICE_CONTEXT Context, const struct ai_descriptor_slot *Descriptor);
 VOID AiDiagnosticsPublish(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiKeyboardVhfStart(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiKeyboardVhfSubmit(PAI_DEVICE_CONTEXT Context,
+                             const UCHAR *Report, SIZE_T Length);
+VOID AiKeyboardVhfStop(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiVhfFrontendStart(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiVhfFrontendSubmitKeyboard(PAI_DEVICE_CONTEXT Context,
+                                     const UCHAR *Report, SIZE_T Length);
+VOID AiVhfFrontendStop(PAI_DEVICE_CONTEXT Context);
