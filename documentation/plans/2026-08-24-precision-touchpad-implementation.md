@@ -55,27 +55,28 @@
 ### Task 1: Close the release-frame evidence boundary
 
 **Files:**
-- Modify: `drivers/apple-input/windows/tools/AppleInputCapture/main.c`
-- Modify: `tests/test_apple_input_package.py`
+- Verify: `drivers/apple-input/windows/tools/AppleInputCapture/main.c`
+- Verify: `tests/test_apple_input_windows_package.py`
+- Create: `drivers/apple-input/protocol/tests/fixtures/j313_trackpad_release_sanitized.h`
 - Modify: `investigation/EXPERIMENTS.md`
 
 **Interfaces:**
 - Consumes: the validated 0.1.2.0 capture package and descriptor digest from EXP-20260824-050.
 - Produces: one bounded finger-down/finger-up capture tied to the already validated descriptor digest, plus a sanitized zero-contact/release fixture.
 
-- [ ] **Step 1: Write failing CLI contract tests**
+- [ ] **Step 1: Verify the existing capture safety contract**
 
-Assert that the existing capture CLI accepts `--reports 8`, rejects zero or more than 16 reports, requires a new output directory and never overwrites an existing capture. No kernel ABI change is part of this task.
+Inspect and run the existing package tests proving that the capture CLI accepts `--count 8`, rejects counts outside 1..16, requires an explicit new output path and opens it with `CREATE_NEW` so evidence is never overwritten. No kernel ABI or production-code change is part of this task.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [ ] **Step 2: Run the focused safety tests**
 
 Run: `./proxyenv/bin/python -m unittest tests.test_apple_input_package -v`
 
-Expected: FAIL because capture ABI v2 and axis-only output do not exist.
+Use the actual module `tests.test_apple_input_windows_package`; expected result is PASS because this is characterization of the already hardware-validated 0.1.2.0 evidence tool, not a new production behavior.
 
-- [ ] **Step 3: Confirm the existing bounded capture path**
+- [ ] **Step 3: Record the hardware pre-run**
 
-Keep the existing kernel limits of 16 reports by 512 bytes, administrator-only capture and exclusion from standard AppleInput projects. Change only CLI validation if the RED test proves a gap; do not change the capture ABI or descriptor handling.
+Record the existing kernel limits of 16 reports by 512 bytes, administrator-only capture, exact 0.1.2.0 hashes, active `oem15.inf`, stable descriptor digest, recovery and the single changed physical variable. Do not change the capture ABI, driver, firmware, ESP or descriptor handling.
 
 - [ ] **Step 4: Record the exact already-installed capture package**
 
@@ -85,7 +86,11 @@ Reuse the hardware-accepted `0.1.2.0` capture package from EXP-20260824-050. Rec
 
 Arm eight reports while one finger is already down, then lift it. Accept the run only if at least one earlier report contains one contact and the terminal report proves the exact zero-contact or tip-clear wire shape. Store raw evidence only under `.local/apple-input/trackpad-captures/<EXP-ID>/` and commit only a sanitized terminal shape.
 
-- [ ] **Step 6: Commit evidence and ledger separately**
+- [ ] **Step 6: Add a failing parser-fixture assertion, then sanitize**
+
+Before creating the fixture, add a portable test include/reference that fails because `j313_trackpad_release_sanitized.h` is absent. Then add only the proven terminal release bytes and provenance needed by Task 3; run the focused and complete suites.
+
+- [ ] **Step 7: Commit evidence and ledger separately**
 
 Commit the sanitized fixture and EXP result. Append one CHANGES process row with that commit hash, then commit only the ledger row.
 
