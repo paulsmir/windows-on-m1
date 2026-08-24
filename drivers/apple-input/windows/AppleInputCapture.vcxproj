@@ -34,6 +34,7 @@
     <ClCompile Include="src\transport.c" />
     <ClCompile Include="src\diagnostics.c" />
     <ClCompile Include="src\vhf_keyboard.c" />
+    <ClCompile Include="src\vhf_trackpad.c" />
     <ClCompile Include="src\vhf_frontend.c" />
     <ClCompile Include="src\trackpad_capture.c" />
     <ClCompile Include="..\protocol\src\apple_hid_contract.c" />
@@ -46,6 +47,8 @@
     <ClCompile Include="..\protocol\src\apple_spihid_reassembly.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_trackpad.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_transport.c" />
+    <ClCompile Include="..\protocol\src\apple_trackpad_axis.c" />
+    <ClCompile Include="..\protocol\src\apple_precision_touchpad.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_input_capture.h" />
@@ -53,6 +56,7 @@
     <ClInclude Include="include\apple_input_hw.h" />
     <ClInclude Include="include\apple_input_ioctl.h" />
     <ClInclude Include="include\j313_apple_input.generated.h" />
+    <ClInclude Include="include\apple_precision_touchpad_descriptor.h" />
     <ClInclude Include="..\protocol\include\apple_trackpad.h" />
   </ItemGroup>
   <ItemGroup>

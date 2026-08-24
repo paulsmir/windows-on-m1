@@ -985,6 +985,12 @@ int main(void)
         self.assertIn("trackpad_capture.c", capture)
         self.assertIn("AppleInputCapture", capture)
         self.assertIn("Wdmsec.lib", capture)
+        for shared_source in (
+            "vhf_trackpad.c",
+            "apple_trackpad_axis.c",
+            "apple_precision_touchpad.c",
+        ):
+            self.assertIn(shared_source, capture)
         self.assertIn("AppleInputCapture.sys", capture_inf)
         self.assertIn("DriverVer=08/24/2026,0.1.3.0", capture_inf)
         self.assertIn("TransportOnly,0x00010001,0", capture_inf)
