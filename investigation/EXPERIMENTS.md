@@ -5507,3 +5507,36 @@ The matching metadata-only `AppleInputDiag.exe` from production artifact ID
 it is staged under ignored
 `.local/apple-input/mt-init-v012-production-run-32724933170` and is the only
 diagnostic CLI permitted for the new version-3 init fields in this experiment.
+
+Post-run checkpoint (2026-08-24T14:19:00Z).  The exact versioned capture
+package was installed as `oem15.inf` after the user explicitly approved its
+catalog signer.  The installer reported a false negative only because Windows
+rendered `DriverVer=0.1.2.0` as `12.3.59.626`; read-only verification proved
+that the selected service binary is the new DriverStore copy with SHA-256
+`65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
+`ACPI\\APPL0001\\0` remained `OK`, AppleInput remained `RUNNING`, and the
+previous `oem14` binary remained present as the rollback package.
+
+The immediate gate passed exactly: discovery phase 8, trackpad-init phase 3,
+zero retries, two attempts, keyboard VHF state 3, unchanged descriptor lengths
+and digests, and zero SPI timeout, packet CRC, message CRC, fragment, offline,
+VHF start or VHF submission failures.  The INFO completion was observed before
+the MT-init completion; the latter returned message type `0x0052`, report ID 2,
+command ID 1, response length 2 and payload 0.
+
+The first controlled one-finger motion capture is preserved only under ignored
+evidence at
+`.local/apple-input/trackpad-captures/EXP-20260824-050/03-one-finger-motion.bin`.
+It is 8320 bytes with SHA-256
+`31b3ab8c14182813a86d81ee2fabd1fc9347edbcfdaa51ba1e9f141d9cc35a9a`,
+descriptor digest
+`9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`,
+eight requested reports, zero drops and eight 76-byte device-2 multitouch
+frames.  This is a strict behavioral change from EXP-049's repeated 8-byte
+service report and proves that the upstream INFO then MT-init contract enables
+the coordinate stream.
+
+Verdict: Gate D1 passes.  The transport initialization defect is closed; the
+next bounded work is controlled field mapping for X, Y, contact count and
+physical click, followed by a separately tested Windows Precision Touchpad
+frontend.  This result does not yet claim Precision Touchpad publication.
