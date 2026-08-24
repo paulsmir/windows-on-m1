@@ -4950,3 +4950,43 @@ attempting an unsupported self-requeue.  The new regression test failed against
 the old adapter, then the focused transport suites passed 16/16 and the complete
 public suite passed 278/278.  ARM64 WDK and one-package hardware validation are
 pending; `oem8.inf` stays installed until the replacement is verified.
+
+Coalesced-IRQ hardware result (2026-08-24): CI run `32676346545` was rebuilt
+after one transient runner restore stall and produced artifact
+`AppleInput-ARM64-Debug`, digest
+`sha256:e85ffbc10d8815ffb3c59b133d9d5deba8f2db1b484b3ef989c8144f3163f90c`.
+The package hashes matched on the host and Air: SYS
+`4680a3ac1f66cd290df9f4619349c2ebbe63d224abf94a54359e3359031f7259`,
+CAT `3ad1666f7fd27032acd02486bbed70f435505baab0c5984db77d025af88b7819`,
+INF `33c45f5b3a8ca266fa17680058a7c67c7ab076b7947b7ef0b645b1e60d6a071b`,
+and CLI `c3d41c45ed11e8e18431b43a8a65006e0c8d9325e2d66c801aac45594970f2fd`.
+Only the exported public certificate, SHA-256
+`173eaeb98a3e0bae1ab5579baf58214d107acc1a1daff17126456871dcf7bcc3`,
+thumbprint `F866FBE77A5F882A1AA270DBDA8B7B8DE5E558AE`, was trusted.  CAT and SYS
+then verified as `Valid`, and the package installed as `oem9.inf`.
+
+The Air remained reachable and APPL0001 plus AppleInput remained
+Started/RUNNING.  Four stable snapshots reported phase 2, IRQ 4, workers 2/2,
+SPI 6, reset 1, and zero timeout, CRC, fragment, or offline failures.  Thus the
+previous 36-to-4 IRQ/worker loss is gone, but identity still does not advance.
+No HID child was published and the stable ESP was not modified.
+
+Diagnostic boundary result: CLI commit `3f50c3f` exposed the already bounded
+header ring without changing the driver.  CI run `32677347015` produced CLI
+SHA-256 `7038ecf20eb36ea0b2310c62408f5e2fa82d4c0cdb81070c0d1b89194f955d09`.
+The live `oem9` snapshot contained exactly two successfully decoded headers:
+the boot packet (`flags=0x20`, device `0xd0`, length 4) and a complete identity
+response (`flags=0x40`, device `0xd0`, length 99).  Therefore GPIO, interrupt,
+SPI read/write, packet CRC, fragmentation, and response delivery all succeed;
+the rejection occurs after message decode.
+
+The official Asahi SPI HID implementation initializes `msg_id` to zero and
+post-increments it when encoding the first identity request.  Our discovery
+state incremented zero to one while accepting the boot marker, then required
+the response ID to equal one.  Commit `517aac4` changes only that initial
+sequence boundary: accepting boot arms the identity deadline while preserving
+request ID zero; subsequent accepted phases continue incrementing normally.
+The portable protocol test failed against the old behavior, then focused tests
+passed 17/17 and the complete public suite passed 279/279.  Hardware validation
+of this one-variable candidate is pending; `oem9.inf` remains the responsive
+rollback package.
