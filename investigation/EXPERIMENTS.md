@@ -4902,3 +4902,51 @@ xHCI, or Windows configuration.  The new regression test failed before the
 implementation; the focused package suite passed 14/14 and the complete public
 suite passed 277/277 after the change.  Hardware result remains pending the
 ARM64 WDK artifact and one-package replacement.
+
+GPIO hardware result (2026-08-24): confirmed.  GitHub Actions run
+`32675571980` completed successfully and produced artifact
+`AppleInput-ARM64-Debug`, digest
+`sha256:e5a836fe213b8908e5661a43ac3edb30c64e3b47e4276232dc2d7f5de8bd9838`.
+The host and Air agreed on the package hashes:
+
+- `AppleInput.sys` SHA-256
+  `462a398cc490e3e8d981583646841d117bf54a405cc16c9a4eea3b862ec9b976`;
+- `appleinput.cat` SHA-256
+  `571f16771d99b544412d4f892bd9df193b4f500a2ea4cc23e317c48e33deb6e5`;
+- `AppleInput.inf` SHA-256
+  `8c439728c8020b190278163af0ec949a4f2a106802d14f1d665d397cfc90b5c2`;
+- `AppleInputDiag.exe` SHA-256
+  `d8e7343b513aea3a5ce4a4e29a0f58736b61842aed312732f26aca92d12532b9`;
+- exported public certificate SHA-256
+  `d5f21c3a09201d337835068095ade76c3649b693d1c62e10a91cd2dbf3032d8e`,
+  SHA-1 thumbprint `9996D1A92A0F2EC86E7A60227EAC02E82F1CA951`.
+
+After trusting only that public test certificate, the catalog signature was
+`Valid`; `pnputil` installed the package as `oem8.inf`.  APPL0001 and the
+AppleInput service remained Started/RUNNING and SSH stayed responsive.  The
+snapshot changed from phase 1, IRQ 0, worker 0, SPI 0 to phase 2, IRQ 36,
+workers queued/completed 4/4, SPI transfers 7, reset 1, and zero timeout, CRC,
+fragment, or offline failures.  No built-in HID child was published, as required
+by transport-only mode.  This proves the missing pin-13 group-0 level-low GPIO
+configuration was the complete cause of the zero-interrupt Gate A failure.
+
+The stable counters after five seconds also expose the next independent defect:
+32 interrupts arrived while only four workers were queued, and the transport
+remained at identity phase 2.  `AiTransportWorker` calls
+`ai_transport_worker_complete`, receives a true result when a coalesced IRQ is
+pending, then clears `pending` instead of draining it.  The next candidate will
+change only this bounded worker handoff.  `oem8.inf` remains responsive and is
+the rollback point for that test; the ESP remains untouched.
+
+Coalesced-IRQ candidate checkpoint: root commit
+`af79ed5fa1c90d19509193081e5dd25e55151782` keeps the same 32-packet callback
+budget but, when `ai_transport_worker_complete` reports pending work, consumes
+that work in the current passive callback instead of clearing it.  The portable
+queue contract already required `worker_complete(true)` to be followed by
+another `worker_begin`; the Windows adapter was the sole violating consumer.
+Microsoft documents that `WdfInterruptQueueWorkItemForIsr` must be queued from
+the ISR, so the callback drains already-coalesced work itself rather than
+attempting an unsupported self-requeue.  The new regression test failed against
+the old adapter, then the focused transport suites passed 16/16 and the complete
+public suite passed 278/278.  ARM64 WDK and one-package hardware validation are
+pending; `oem8.inf` stays installed until the replacement is verified.
