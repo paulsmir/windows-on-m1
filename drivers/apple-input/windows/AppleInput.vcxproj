@@ -15,7 +15,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup>
     <ClCompile><AdditionalIncludeDirectories>include;..\protocol\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><PreprocessorDefinitions>AI_KERNEL_MODE;%(PreprocessorDefinitions)</PreprocessorDefinitions><TreatWarningAsError>true</TreatWarningAsError></ClCompile>
-    <Link><AdditionalDependencies>vhfkm.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><AdditionalDependencies>vhfkm.lib;Cng.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\driver.c" />

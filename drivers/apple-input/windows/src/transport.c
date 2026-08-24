@@ -69,12 +69,54 @@ static NTSTATUS AiTransportSendCurrentRequest(PAI_DEVICE_CONTEXT Context)
     return STATUS_SUCCESS;
 }
 
+NTSTATUS AiCaptureDiscoveryDescriptor(
+    PAI_DEVICE_CONTEXT Context, enum ai_discovery_phase Phase,
+    const struct ai_protocol_message *Message)
+{
+    const struct ai_descriptor_slot *descriptor;
+    enum ai_status protocol_status;
+    UCHAR device;
+
+    if (!Context || !Message)
+        return STATUS_INVALID_PARAMETER;
+    if (Phase == AI_DISCOVERY_KEYBOARD_DESCRIPTOR)
+        device = 1;
+    else if (Phase == AI_DISCOVERY_TRACKPAD_DESCRIPTOR)
+        device = 2;
+    else
+        return STATUS_SUCCESS;
+    if (Message->device != device)
+        return STATUS_DEVICE_PROTOCOL_ERROR;
+
+    protocol_status = ai_descriptor_store_put(
+        &Context->Descriptors, device, Message->payload,
+        Message->payload_length);
+    if (protocol_status != AI_OK)
+        return STATUS_DEVICE_PROTOCOL_ERROR;
+    descriptor = ai_descriptor_store_get(&Context->Descriptors, device);
+    if (!descriptor)
+        return STATUS_INTERNAL_ERROR;
+
+    if (device == 1) {
+        protocol_status = ai_hid_input_contract_parse(
+            descriptor->bytes, descriptor->length,
+            &Context->KeyboardInputContract);
+        if (protocol_status != AI_OK)
+            return STATUS_DEVICE_PROTOCOL_ERROR;
+        Context->Diagnostics.KeyboardContractValid = TRUE;
+    }
+    AiDiagnosticsRecordDescriptor(Context, descriptor);
+    return STATUS_SUCCESS;
+}
+
 static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
 {
     struct ai_packet_view packet;
     struct ai_message_view wire;
     struct ai_protocol_message message;
+    enum ai_discovery_phase phase = Context->Discovery.phase;
     enum ai_status protocol_status;
+    NTSTATUS status;
     ULONGLONG now_us = AiNowMicroseconds();
 
     protocol_status = ai_packet_decode(Context->ReceivePacket, &packet);
@@ -85,7 +127,7 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
     }
     AiDiagnosticsRecordHeader(Context, &packet, protocol_status);
 
-    if (Context->Discovery.phase == AI_DISCOVERY_WAIT_BOOT) {
+    if (phase == AI_DISCOVERY_WAIT_BOOT) {
         protocol_status = ai_discovery_accept_boot(
             &Context->Discovery, packet.data, packet.length, now_us,
             AI_TRANSPORT_DISCOVERY_TIMEOUT_US);
@@ -111,7 +153,7 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
     }
     AiDiagnosticsRecordMessage(Context, &message);
 
-    if (Context->Discovery.phase == AI_DISCOVERY_READY) {
+    if (phase == AI_DISCOVERY_READY) {
         if (wire.flags == AI_PACKET_READ && wire.device == 1u)
             AiCounterIncrement(&Context->Diagnostics.KeyboardReportCount);
         else if (wire.flags == AI_PACKET_READ && wire.device == 2u)
@@ -119,9 +161,12 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
         return STATUS_SUCCESS;
     }
 
-    if (!ai_discovery_response_matches(Context->Discovery.phase, &wire,
-                                       &message))
+    if (!ai_discovery_response_matches(phase, &wire, &message))
         return STATUS_DEVICE_PROTOCOL_ERROR;
+
+    status = AiCaptureDiscoveryDescriptor(Context, phase, &message);
+    if (!NT_SUCCESS(status))
+        return status;
 
     protocol_status = ai_discovery_accept(
         &Context->Discovery, Context->Discovery.request_id, true, now_us,
@@ -219,8 +264,11 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
     Context->HardwareStarted = FALSE;
     ai_transport_queue_reset(&Context->TransportQueue);
     ai_reassembler_reset(&Context->Reassembler);
+    ai_descriptor_store_reset(&Context->Descriptors);
+    AI_MEMSET(&Context->KeyboardInputContract,
+              sizeof(Context->KeyboardInputContract));
     RtlZeroMemory(&Context->Diagnostics, sizeof(Context->Diagnostics));
-    Context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_2;
+    Context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
     Context->Diagnostics.Size = sizeof(Context->Diagnostics);
 
     status = AiSpiInitialize(Context);

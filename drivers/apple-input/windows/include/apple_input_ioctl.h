@@ -4,7 +4,9 @@
 
 #define AI_DIAGNOSTIC_SNAPSHOT_VERSION_1 1u
 #define AI_DIAGNOSTIC_SNAPSHOT_VERSION_2 2u
+#define AI_DIAGNOSTIC_SNAPSHOT_VERSION_3 3u
 #define AI_PACKET_HEADER_RING_CAPACITY 16u
+#define AI_SHA256_DIGEST_SIZE 32u
 
 DEFINE_GUID(GUID_DEVINTERFACE_APPLE_INPUT_DIAGNOSTIC,
             0x8db27de1, 0xb531, 0x41fb, 0x99, 0x48, 0x45, 0xc7, 0x44, 0x89, 0xd0, 0x32);
@@ -72,3 +74,41 @@ typedef struct _AI_DIAGNOSTIC_SNAPSHOT_V2 {
     USHORT MessageResponseLength;
     USHORT MessagePayloadLength;
 } AI_DIAGNOSTIC_SNAPSHOT_V2, *PAI_DIAGNOSTIC_SNAPSHOT_V2;
+
+/*
+ * Version 3 appends only descriptor metadata.  The digest permits exact
+ * comparison across boots without publishing descriptor or report payloads.
+ */
+typedef struct _AI_DIAGNOSTIC_SNAPSHOT_V3 {
+    ULONG Version;
+    ULONG Size;
+    ULONG TransportPhase;
+    ULONG HeaderWriteIndex;
+    ULONGLONG InterruptCount;
+    ULONGLONG WorkerQueuedCount;
+    ULONGLONG WorkerCompletedCount;
+    ULONGLONG SpiTransferCount;
+    ULONGLONG SpiTimeoutCount;
+    ULONGLONG PacketCrcFailureCount;
+    ULONGLONG MessageCrcFailureCount;
+    ULONGLONG FragmentFailureCount;
+    ULONGLONG KeyboardReportCount;
+    ULONGLONG TrackpadReportCount;
+    ULONGLONG ResetCount;
+    ULONGLONG OfflineCount;
+    AI_PACKET_HEADER_V1 Headers[AI_PACKET_HEADER_RING_CAPACITY];
+    ULONG MessagePhase;
+    UCHAR MessageType;
+    UCHAR MessageReport;
+    UCHAR MessageDevice;
+    UCHAR MessageId;
+    USHORT MessageResponseLength;
+    USHORT MessagePayloadLength;
+    USHORT KeyboardDescriptorLength;
+    USHORT TrackpadDescriptorLength;
+    UCHAR KeyboardDescriptorSha256[AI_SHA256_DIGEST_SIZE];
+    UCHAR TrackpadDescriptorSha256[AI_SHA256_DIGEST_SIZE];
+    ULONG DescriptorDigestStatus;
+    UCHAR KeyboardContractValid;
+    UCHAR Reserved[3];
+} AI_DIAGNOSTIC_SNAPSHOT_V3, *PAI_DIAGNOSTIC_SNAPSHOT_V3;

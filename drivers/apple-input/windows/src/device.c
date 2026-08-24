@@ -40,7 +40,7 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 
     context = AiGetDeviceContext(device);
     context->TransportOnly = TRUE;
-    context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_1;
+    context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
     context->Diagnostics.Size = sizeof(context->Diagnostics);
 
     WDF_INTERRUPT_CONFIG_INIT(&interrupt_config, AiInputInterruptIsr, NULL);

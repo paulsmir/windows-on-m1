@@ -84,6 +84,55 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("bytes_by_id[AI_HID_REPORT_ID_CAPACITY]", header)
         self.assertNotRegex(source, r"\b(ExAllocatePool|malloc|calloc|realloc)\b")
 
+    def test_discovery_captures_only_bounded_descriptor_metadata(self):
+        header = self.read("include/apple_input_device.h")
+        ioctl = self.read("include/apple_input_ioctl.h")
+        transport = self.read("src/transport.c")
+        diagnostics = self.read("src/diagnostics.c")
+        cli = self.read("tools/AppleInputDiag/main.c")
+        project = self.read("AppleInput.vcxproj")
+
+        for field in (
+            "struct ai_descriptor_store Descriptors",
+            "struct ai_hid_input_contract KeyboardInputContract",
+            "AiCaptureDiscoveryDescriptor",
+        ):
+            self.assertIn(field, header + transport)
+        capture = self.c_function_body(transport, "AiCaptureDiscoveryDescriptor")
+        self.assertIn("AI_DISCOVERY_KEYBOARD_DESCRIPTOR", capture)
+        self.assertIn("AI_DISCOVERY_TRACKPAD_DESCRIPTOR", capture)
+        self.assertIn("ai_descriptor_store_put", capture)
+        self.assertIn("ai_hid_input_contract_parse", capture)
+        self.assertNotIn("AI_DISCOVERY_READY", capture)
+        process = self.c_function_body(transport, "AiTransportProcessPacket")
+        self.assertLess(process.index("AiCaptureDiscoveryDescriptor"),
+                        process.index("ai_discovery_accept("))
+        start = self.c_function_body(transport, "AiTransportStart")
+        self.assertLess(start.index("ai_descriptor_store_reset"),
+                        start.index("AiGpioResetInputController"))
+
+        for field in (
+            "AI_DIAGNOSTIC_SNAPSHOT_VERSION_3",
+            "KeyboardDescriptorLength",
+            "TrackpadDescriptorLength",
+            "KeyboardDescriptorSha256",
+            "TrackpadDescriptorSha256",
+            "KeyboardContractValid",
+            "DescriptorDigestStatus",
+        ):
+            self.assertIn(field, ioctl + diagnostics + cli)
+        self.assertNotRegex(
+            ioctl,
+            r"(?i)(payload|rawreport|descriptorbytes)\s*\[",
+        )
+        self.assertIn("BCryptHashData", diagnostics)
+        self.assertIn("BCryptFinishHash", diagnostics)
+        self.assertIn("Cng.lib", project)
+        self.assertIn('printf("%02x"', cli)
+        self.assertIn("keyboard_descriptor_sha256", cli)
+        self.assertIn("trackpad_descriptor_sha256", cli)
+        self.assertNotRegex(cli, r"(?i)(raw_descriptor|raw_report|payload_bytes)")
+
     def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")
         device = self.read("src/device.c")
@@ -336,7 +385,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("AI_PACKET_HEADER_RING_CAPACITY", ioctl)
         self.assertNotRegex(ioctl, r"(?i)(payload|packetdata|rawpacket)\s*\[")
         self.assertIn("WdfRequestRetrieveOutputBuffer", diagnostics)
-        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3)", diagnostics)
         self.assertIn("STATUS_BUFFER_TOO_SMALL", diagnostics)
         self.assertIn("WdfRequestCompleteWithInformation", diagnostics)
 
@@ -382,7 +431,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertNotRegex(ioctl, r"(?i)(payload|packetdata|rawpacket)\s*\[")
         self.assertIn("AiDiagnosticsRecordMessage", diagnostics)
         self.assertIn("AiDiagnosticsRecordMessage(Context, &message)", transport)
-        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3)", diagnostics)
 
 
 if __name__ == "__main__":

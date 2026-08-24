@@ -45,7 +45,13 @@ out:
     return handle;
 }
 
-static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V2 *s, int json)
+static void print_digest(const UCHAR digest[AI_SHA256_DIGEST_SIZE])
+{
+    for (ULONG index = 0; index < AI_SHA256_DIGEST_SIZE; ++index)
+        printf("%02x", digest[index]);
+}
+
+static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
 {
     ULONG header_count = s->HeaderWriteIndex;
     ULONG first_sequence;
@@ -89,10 +95,21 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V2 *s, int json)
         }
         printf("],\"message\":{\"phase\":%lu,\"type\":%u,"
                "\"report\":%u,\"device\":%u,\"id\":%u,"
-               "\"response_length\":%u,\"payload_length\":%u}}\n",
+               "\"response_length\":%u,\"payload_length\":%u},"
+               "\"keyboard_descriptor_length\":%u,"
+               "\"trackpad_descriptor_length\":%u,"
+               "\"keyboard_contract_valid\":%u,"
+               "\"descriptor_digest_status\":%lu,"
+               "\"keyboard_descriptor_sha256\":\"",
                s->MessagePhase, s->MessageType, s->MessageReport,
                s->MessageDevice, s->MessageId, s->MessageResponseLength,
-               s->MessagePayloadLength);
+               s->MessagePayloadLength, s->KeyboardDescriptorLength,
+               s->TrackpadDescriptorLength, s->KeyboardContractValid,
+               s->DescriptorDigestStatus);
+        print_digest(s->KeyboardDescriptorSha256);
+        printf("\",\"trackpad_descriptor_sha256\":\"");
+        print_digest(s->TrackpadDescriptorSha256);
+        printf("\"}\n");
         return;
     }
     printf("AppleInput snapshot v%lu phase=%lu\n", s->Version,
@@ -115,6 +132,14 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V2 *s, int json)
            s->MessagePhase, s->MessageType, s->MessageReport,
            s->MessageDevice, s->MessageId, s->MessageResponseLength,
            s->MessagePayloadLength);
+    printf("descriptors keyboard=%u trackpad=%u keyboard_contract=%u digest_status=%08lx\n",
+           s->KeyboardDescriptorLength, s->TrackpadDescriptorLength,
+           s->KeyboardContractValid, s->DescriptorDigestStatus);
+    printf("keyboard_descriptor_sha256=");
+    print_digest(s->KeyboardDescriptorSha256);
+    printf("\ntrackpad_descriptor_sha256=");
+    print_digest(s->TrackpadDescriptorSha256);
+    printf("\n");
     for (ULONG index = 0; index < header_count; ++index) {
         ULONG sequence = first_sequence + index;
         const AI_PACKET_HEADER_V1 *header =
@@ -129,7 +154,7 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V2 *s, int json)
 
 int wmain(int argc, wchar_t **argv)
 {
-    AI_DIAGNOSTIC_SNAPSHOT_V2 snapshot = {0};
+    AI_DIAGNOSTIC_SNAPSHOT_V3 snapshot = {0};
     DWORD returned = 0;
     int json = argc == 3 && wcscmp(argv[2], L"--json") == 0;
     HANDLE handle;
@@ -153,7 +178,7 @@ int wmain(int argc, wchar_t **argv)
     }
     CloseHandle(handle);
     if (returned != sizeof(snapshot) ||
-        snapshot.Version != AI_DIAGNOSTIC_SNAPSHOT_VERSION_2 ||
+        snapshot.Version != AI_DIAGNOSTIC_SNAPSHOT_VERSION_3 ||
         snapshot.Size != sizeof(snapshot)) {
         fwprintf(stderr, L"unsupported snapshot response\n");
         return 1;

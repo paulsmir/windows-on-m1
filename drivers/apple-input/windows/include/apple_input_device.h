@@ -19,7 +19,9 @@ typedef struct _AI_DEVICE_CONTEXT {
     struct ai_transport_queue TransportQueue;
     struct ai_discovery Discovery;
     struct ai_reassembler Reassembler;
-    AI_DIAGNOSTIC_SNAPSHOT_V2 Diagnostics;
+    struct ai_descriptor_store Descriptors;
+    struct ai_hid_input_contract KeyboardInputContract;
+    AI_DIAGNOSTIC_SNAPSHOT_V3 Diagnostics;
     UCHAR ReceivePacket[AI_PACKET_SIZE];
     UCHAR TransmitPacket[AI_PACKET_SIZE];
     UCHAR ZeroTransmit[AI_PACKET_SIZE];
@@ -64,10 +66,15 @@ BOOLEAN AiGpioInputAsserted(PAI_DEVICE_CONTEXT Context);
 VOID AiGpioAcknowledge(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context);
 VOID AiTransportStop(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiCaptureDiscoveryDescriptor(
+    PAI_DEVICE_CONTEXT Context, enum ai_discovery_phase Phase,
+    const struct ai_protocol_message *Message);
 NTSTATUS AiDiagnosticsInitialize(WDFDEVICE Device, PAI_DEVICE_CONTEXT Context);
 VOID AiDiagnosticsRecordHeader(PAI_DEVICE_CONTEXT Context,
                                const struct ai_packet_view *Packet,
                                enum ai_status Result);
 VOID AiDiagnosticsRecordMessage(PAI_DEVICE_CONTEXT Context,
                                 const struct ai_protocol_message *Message);
+VOID AiDiagnosticsRecordDescriptor(
+    PAI_DEVICE_CONTEXT Context, const struct ai_descriptor_slot *Descriptor);
 VOID AiDiagnosticsPublish(PAI_DEVICE_CONTEXT Context);
