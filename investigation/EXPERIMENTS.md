@@ -6158,3 +6158,46 @@ long-duration stress, power-transition, or complete Windows gesture-suite
 gates. The permanent source and recovery checkpoint is recorded as
 `j313-native-input-v1` in
 `documentation/verification/J313_NATIVE_INPUT_V1.md`.
+
+### EXP-20260824-062 — isolated J313 4E+1P assisted boot
+
+Status: pre-run; no Air or ESP mutation has occurred.
+
+Hypothesis: the validated four-Icestorm baseline can admit exactly one
+Firestorm processor without changing the proven timer, FIQ, vGIC, SGI, NVMe,
+USB, display, or native-input paths.  This isolates heterogeneous secondary
+startup from both additional Firestorm concurrency and later scheduler/power
+work.
+
+- source: root `e076d03d7d53f9c8dc741b3ddef26cc8cf53e183`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, and Mu
+  `2bd610c9f6184c78abfe0fa5c8cdda1a9fd8f057`;
+- exact assisted artifacts: `dist/j313/debug-forensic/m1n1.macho` SHA-256
+  `e4c073c28d2d008aa0159cf3e64f5daa2afabe0bb712b68198ea8d917381a3a6`
+  and `dist/j313/debug-forensic/J313_EFI.fd` SHA-256
+  `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`;
+  packed `boot.bin` SHA-256 is
+  `032f1ef08895b8759372e7be250ad88ab0dc595b6d4ca8320bca977623408267`;
+- build profile: J313 debug, display `both`, diagnostics `full`; the manifest
+  verifier passed and records the exact three source revisions above;
+- topology gate: both the static source checker and the compiled
+  `MADT_Static.acpi` report enabled UIDs `[0, 1, 2, 3, 4]`, efficiency classes
+  `{0:0, 1:0, 2:0, 3:0, 4:1, 5:1, 6:1, 7:1}`, and disabled UIDs 5 through 7;
+- execution: assisted launch only.  Do not install `boot.bin` on the ESP and do
+  not advance a standalone image during this experiment;
+- acceptance: guest-entry evidence for CPUs 0 through 4 and none for 5 through
+  7; Windows reaches the login screen and desktop; Windows reports five
+  processors with CPU4 in the higher performance class; no bugcheck, watchdog,
+  reset, EL2 exception, or prolonged boot stall; built-in keyboard and Precision
+  Touchpad remain usable; and a short bounded CPU load returns cleanly;
+- stop/rollback: stop or reboot the assisted guest at the first watchdog,
+  exception, unexpected CPU, input regression, or boot stall.  Return to tag
+  `j313-native-input-v1`; its complete restoration contract is
+  `documentation/verification/J313_NATIVE_INPUT_V1.md`.
+
+The first build produced the same firmware hash as the final build even though
+the source checkout had briefly been reset by the old root submodule update.
+Inspection of the compiled MADT resolved the ambiguity: that cached output had
+already been compiled from the 4E+1P source.  The build contract was still
+corrected so future development builds preserve explicitly selected nested
+revisions, while release builds continue to require root-pinned gitlinks.
