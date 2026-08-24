@@ -5866,3 +5866,26 @@ Touchpad child existed at any point. The next investigation must inspect the
 already owned 110-byte native descriptor in the explicit capture package and
 compare its collection/axis shape with the parser; changing or hard-coding an
 axis transform before that evidence is forbidden.
+
+Descriptor-capture pre-run continuation (2026-08-24T18:02:00Z). Root commit
+`1df021587ae453618ab18e89d54dbcbad6ddc6e3` adds only a bounded test-package
+IOCTL for the already owned native descriptor; production remains capture-free.
+Workflow-dispatch run `32745878677` passed both ARM64 WDK jobs. The exact
+capture INF SHA-256 is
+`d2c1dcd68f2c4eb1a58bafe59d8242e66f4cfce51309d5e9b1596ded8ab327e1`,
+SYS `0ca5ab2543e9ecc611ffea3b5e23e8e108dfaa208f800d9d92996a6e3b72be06`,
+catalog `8565c7b1641e4277a8dc5c2bbdaafe1b8749892d278d97491757f04acd702eb1`
+and descriptor CLI
+`44170927babd305b9b591256203f75f172ebaca291d30912dcd2ae30ebfee4c4`.
+The extracted public test certificate SHA-256 is
+`1eecf966bf311f50eb8868a2648c850f79e870a89e0ec3078664503a6cde114a`
+and signer SHA-1 is `355AC2033CC1130087F1E8B9E28171B71841AAF0`.
+
+The Air reports APPL0001 `OK` on preserved `oem15.inf`; no ESP, firmware,
+display, CPU, storage or USB artifact is changed. The single changed variable
+is the higher-version explicit capture package with `TransportOnly=0`,
+`PublishKeyboard=1` and `PublishTrackpad=0`. It may write only the native HID
+descriptor to ignored `.local` evidence. On any hash, PnP, service, keyboard,
+transport or capture mismatch, publication remains off and recovery restores
+`oem15.inf`, restarts only APPL0001 and removes only signer
+`355AC2033CC1130087F1E8B9E28171B71841AAF0` from Root and TrustedPublisher.
