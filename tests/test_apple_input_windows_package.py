@@ -46,12 +46,28 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             "apple_spihid_discovery.c",
             "apple_spihid_packet.c",
             "apple_spihid_reassembly.c",
+            "apple_spihid_descriptors.c",
             "apple_spihid_transport.c",
         ):
             self.assertIn(source, project)
         self.assertIn("j313_apple_input.generated.h", project)
         self.assertIn("vhfkm.lib", project.lower())
         self.assertIn('<FilesToPackage Include="$(TargetPath)"', project)
+
+    def test_descriptor_store_is_fixed_size_and_has_no_dynamic_allocation(self):
+        source = self.read("../protocol/src/apple_spihid_descriptors.c")
+        header = self.read("../protocol/include/apple_spihid.h")
+
+        for symbol in (
+            "struct ai_descriptor_slot",
+            "struct ai_descriptor_store",
+            "ai_descriptor_store_reset",
+            "ai_descriptor_store_put",
+            "ai_descriptor_store_get",
+        ):
+            self.assertIn(symbol, source + header)
+        self.assertIn("bytes[AI_DESCRIPTOR_MAX]", header)
+        self.assertNotRegex(source, r"\\b(ExAllocatePool|malloc|calloc|realloc)\\b")
 
     def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")

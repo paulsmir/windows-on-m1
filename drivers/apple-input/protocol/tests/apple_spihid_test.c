@@ -358,6 +358,54 @@ static void test_interrupt_worker_queue(void)
     assert(!ai_transport_worker_complete(&queue, false));
 }
 
+static void test_descriptor_store_owns_bytes(void)
+{
+    struct ai_descriptor_store store;
+    uint8_t keyboard[] = {0x05, 0x01, 0x09, 0x06};
+    uint8_t trackpad[] = {0x05, 0x0d, 0x09, 0x05};
+    uint8_t oversized[AI_DESCRIPTOR_MAX + 1] = {0};
+    const struct ai_descriptor_slot *slot;
+
+    ai_descriptor_store_reset(&store);
+    assert(ai_descriptor_store_get(&store, 1) == NULL);
+    assert(ai_descriptor_store_get(&store, 2) == NULL);
+
+    assert(ai_descriptor_store_put(&store, 1, keyboard,
+                                   sizeof(keyboard)) == AI_OK);
+    keyboard[0] = 0xff;
+    slot = ai_descriptor_store_get(&store, 1);
+    assert(slot && slot->valid && slot->device == 1);
+    assert(slot->length == sizeof(keyboard));
+    assert(slot->bytes[0] == 0x05);
+
+    assert(ai_descriptor_store_put(&store, 2, trackpad,
+                                   sizeof(trackpad)) == AI_OK);
+    trackpad[0] = 0xff;
+    slot = ai_descriptor_store_get(&store, 2);
+    assert(slot && slot->valid && slot->device == 2);
+    assert(slot->length == sizeof(trackpad));
+    assert(slot->bytes[0] == 0x05);
+
+    assert(ai_descriptor_store_put(NULL, 1, keyboard,
+                                   sizeof(keyboard)) == AI_ERR_ARGUMENT);
+    assert(ai_descriptor_store_put(&store, 1, NULL,
+                                   sizeof(keyboard)) == AI_ERR_ARGUMENT);
+    assert(ai_descriptor_store_put(&store, 1, keyboard, 0) == AI_ERR_ARGUMENT);
+    assert(ai_descriptor_store_put(&store, 1, oversized,
+                                   sizeof(oversized)) == AI_ERR_LENGTH);
+    assert(ai_descriptor_store_put(&store, 0, keyboard,
+                                   sizeof(keyboard)) == AI_ERR_PROTOCOL);
+    assert(ai_descriptor_store_put(&store, 3, keyboard,
+                                   sizeof(keyboard)) == AI_ERR_PROTOCOL);
+    assert(ai_descriptor_store_get(NULL, 1) == NULL);
+    assert(ai_descriptor_store_get(&store, 0) == NULL);
+    assert(ai_descriptor_store_get(&store, 3) == NULL);
+
+    ai_descriptor_store_reset(&store);
+    assert(ai_descriptor_store_get(&store, 1) == NULL);
+    assert(ai_descriptor_store_get(&store, 2) == NULL);
+}
+
 int main(void)
 {
     test_crc();
@@ -372,5 +420,6 @@ int main(void)
     test_spi_transfer_plan();
     test_spi_init_plan();
     test_interrupt_worker_queue();
+    test_descriptor_store_owns_bytes();
     return 0;
 }

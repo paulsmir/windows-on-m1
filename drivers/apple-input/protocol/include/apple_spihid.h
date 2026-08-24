@@ -110,6 +110,18 @@ struct ai_reassembler {
     uint8_t data[AI_MAX_MESSAGE_SIZE];
 };
 
+struct ai_descriptor_slot {
+    bool valid;
+    uint8_t device;
+    uint16_t length;
+    uint8_t bytes[AI_DESCRIPTOR_MAX];
+};
+
+struct ai_descriptor_store {
+    struct ai_descriptor_slot keyboard;
+    struct ai_descriptor_slot trackpad;
+};
+
 struct ai_spi_transfer_plan {
     uint16_t clock_divider;
     uint16_t words;
@@ -177,5 +189,12 @@ bool ai_transport_irq(struct ai_transport_queue *queue);
 bool ai_transport_worker_begin(struct ai_transport_queue *queue);
 bool ai_transport_worker_complete(struct ai_transport_queue *queue,
                                   bool interrupt_asserted);
+void ai_descriptor_store_reset(struct ai_descriptor_store *store);
+enum ai_status ai_descriptor_store_put(struct ai_descriptor_store *store,
+                                       uint8_t device,
+                                       const uint8_t *bytes,
+                                       size_t length);
+const struct ai_descriptor_slot *ai_descriptor_store_get(
+    const struct ai_descriptor_store *store, uint8_t device);
 
 #endif
