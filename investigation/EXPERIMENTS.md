@@ -5408,3 +5408,69 @@ The next experiment must change only that sequence, retain the capture-only
 frontend and exact rollback package, and require INFO then MULTITOUCH response
 completion before asking the user for another gesture.  No Precision Touchpad
 translation or mouse emulation is justified by this result.
+
+### EXP-20260824-050 — initialize J313 multitouch before coordinate capture
+
+Pre-run record (2026-08-24T11:57:49Z).  Hypothesis: replacing only the live
+EXP-049 capture driver with the `ca105432` capture build will send the missing
+Trackpad Info and multitouch-init commands after the already validated
+descriptor discovery, reach trackpad-init READY in exactly two successful
+attempts, preserve keyboard VHF, and cause a stationary contact to generate at
+least one device-2 report longer than the repeated 8-byte click-only report.
+
+- repository state: root branch `feature/j313-native-input` at
+  `84a98bc1f749e620de31a1d53c4641e1929d89f4`; implementation commit
+  `ca105432a811e5eaee08a90b8b24a16f900fed28`; m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`; Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`.  All three tracked diff
+  SHA-256 values are
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- inspected owner contracts: upstream Linux
+  `drivers/input/keyboard/applespi.c` for the observable INFO then MT-init
+  sequence; current m1n1 and Mu input ownership; current Windows transport and
+  discovery; official Microsoft `WdfTimerCreate`, `WDF_TIMER_CONFIG`,
+  `WdfTimerStop` and `WdfWaitLockAcquire` documentation.  Initialization and
+  retry belong to the Windows function driver; m1n1 owns guest hardware access,
+  Mu exposes ACPI resources, and VHF owns only the Windows HID frontend.
+- software verification: exact request bytes and both CRCs plus the portable
+  INFO-to-MULTITOUCH state/retry sequence are regression tested.  Protocol and
+  package suites pass 28/28; the complete public `proxyenv` suite passes
+  290/290; `git diff --check` passes.  GitHub Actions production run
+  `32724127630` job `97421554913` and workflow-dispatch run `32724166740`
+  jobs `97421675750` and `97421676068` all completed successfully with the
+  official ARM64 WDK.
+- capture artifact: `AppleInput-Trackpad-Capture-ARM64-Debug`, artifact ID
+  `9518923751`, staged only under ignored
+  `.local/apple-input/mt-init-run-32724166740`.  INF SHA-256
+  `82a2659d4431c7c8320b0decd4a4318b0b9dc3da91425ee2944e82c547f1238c`,
+  catalog `e5ccb5795ab3fd73cc699f739cbd266d21323700f97dd0774feb63e1e209b068`,
+  AArch64 SYS
+  `15c96c26aa929aebda16996dec3e72f79bc911ce8e224da3de88fdac903dd0f6`
+  and AArch64 capture CLI
+  `ff997f42c029c88af88d5ed4345e44765ff70ca62e7c92a57b4938908442d495`.
+  Catalog signer SHA-1 is
+  `8BFD8A2FB301F1909BF21446F2E9FB7E71C1E2CD`; it differs from the currently
+  trusted signer and must not be imported without explicit approval.
+- single changed variable: replace the current capture SYS with the exact new
+  package.  Firmware, ESP, Windows image, CPU topology, display, NVMe, USB,
+  descriptor discovery, keyboard VHF, capture format and physical gesture are
+  unchanged.  The install removes only the current capture OEM INF if Windows
+  refuses an equal-version replacement, imports only the explicitly approved
+  exact catalog signer, adds the recorded INF with `pnputil /install`, and
+  verifies the active DriverStore SYS hash before any contact.
+- recovery: the previous EXP-049 package remains preserved at
+  `C:\Users\pavel\AppleInputTrackpadCapture` with SYS SHA-256
+  `58b24722b68fdb9e5a875c04602c8322efde3cc015a6ad108144cc2a2d1aa780`;
+  validated production `oem13.inf`, external USB input and the stable ESP are
+  secondary rollback paths.  Remove the new signer after restoring the old
+  package.
+- immediate pass gate: APPL0001 PnP OK; AppleInput RUNNING; discovery phase 8;
+  `trackpad_init_phase=3`, retries 0 and attempts 2; keyboard VHF Running;
+  unchanged descriptor lengths/digests; zero timeout, CRC, fragment, offline
+  or VHF errors; SSH or external USB and physical display remain alive.
+- physical pass gate: one stationary contact produces at least one report
+  longer than 8 bytes while the descriptor digest remains
+  `9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`.
+  Any init phase 4, more than two attempts, transport error, missing keyboard,
+  hang, bugcheck, reboot or hash mismatch triggers immediate rollback without
+  collecting further gestures.
