@@ -585,6 +585,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleInputCapture", capture)
         self.assertIn("Wdmsec.lib", capture)
         self.assertIn("AppleInputCapture.sys", capture_inf)
+        self.assertIn("DriverVer=08/24/2026,0.1.2.0", capture_inf)
         self.assertIn("TransportOnly,0x00010001,0", capture_inf)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("build-trackpad-capture-arm64:", workflow)
