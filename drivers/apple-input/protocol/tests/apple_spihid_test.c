@@ -1,4 +1,5 @@
 #include "apple_spihid.h"
+#include "fixtures/j313_trackpad_sanitized.h"
 
 #include <assert.h>
 #include <string.h>
@@ -7,6 +8,11 @@ static void put_le16(uint8_t *bytes, uint16_t value)
 {
     bytes[0] = (uint8_t)value;
     bytes[1] = (uint8_t)(value >> 8);
+}
+
+static int16_t get_i16(const uint8_t *bytes)
+{
+    return (int16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
 }
 
 static void seal_packet(uint8_t raw[AI_PACKET_SIZE])
@@ -644,6 +650,31 @@ static void test_hid_input_contract(void)
                                       &report_id));
 }
 
+static void test_j313_trackpad_sanitized_fixture_contract(void)
+{
+    assert(sizeof(j313_trackpad_one_contact_x) == 76);
+    assert(sizeof(j313_trackpad_one_contact_y) == 76);
+    assert(sizeof(j313_trackpad_held_click) == 76);
+    assert(sizeof(j313_trackpad_two_contacts) == 106);
+
+    assert(j313_trackpad_one_contact_x[1] == 0);
+    assert(j313_trackpad_one_contact_x[30] == 1);
+    assert(j313_trackpad_one_contact_x[31] == 0);
+    assert(j313_trackpad_held_click[1] == 1);
+    assert(j313_trackpad_held_click[30] == 1);
+    assert(j313_trackpad_held_click[31] == 1);
+    assert(j313_trackpad_two_contacts[30] == 2);
+
+    assert(get_i16(j313_trackpad_one_contact_x + 50) == -624);
+    assert(get_i16(j313_trackpad_one_contact_x + 52) == 4901);
+    assert(get_i16(j313_trackpad_one_contact_y + 50) == -798);
+    assert(get_i16(j313_trackpad_one_contact_y + 52) == 7097);
+    assert(get_i16(j313_trackpad_two_contacts + 50) == 2562);
+    assert(get_i16(j313_trackpad_two_contacts + 52) == 3735);
+    assert(get_i16(j313_trackpad_two_contacts + 80) == 275);
+    assert(get_i16(j313_trackpad_two_contacts + 82) == 3142);
+}
+
 int main(void)
 {
     test_crc();
@@ -662,5 +693,6 @@ int main(void)
     test_interrupt_worker_queue();
     test_descriptor_store_owns_bytes();
     test_hid_input_contract();
+    test_j313_trackpad_sanitized_fixture_contract();
     return 0;
 }
