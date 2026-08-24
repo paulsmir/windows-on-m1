@@ -166,6 +166,9 @@ class AppleInputContractTests(unittest.TestCase):
         self.assertIn("#ifdef AI_KERNEL_MODE", hardware)
         self.assertIn("RtlCopyMemory", protocol)
         self.assertIn("AI_KERNEL_FIXED_WIDTH_TYPES", protocol)
+        self.assertIn("typedef LONG int32_t;", protocol)
+        self.assertLess(protocol.index("typedef LONG int32_t;"),
+                        protocol.index("struct ai_trackpad_dimensions"))
         self.assertIn("AI_KERNEL_FIXED_WIDTH_TYPES", hardware)
         self.assertNotIn("#include <string.h>",
                          "\n".join(path.read_text() for path in

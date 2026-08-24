@@ -5922,3 +5922,13 @@ active SYS SHA-256 is
 `65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
 Verdict: descriptor-axis hypothesis rejected; dimensions-feature-report
 hypothesis confirmed by exact hardware evidence and primary source comparison.
+
+WDK build correction (2026-08-24T16:14:26Z). Push run
+`32749485673`, source `8721d1fb5a9910459c8142d28f863a133560297a`,
+failed before linking because `struct ai_trackpad_dimensions` was introduced in
+`apple_spihid.h` before the kernel-only `int32_t` compatibility typedef in
+`apple_trackpad.h`. The portable clang build did not expose this ordering error
+because standard `<stdint.h>` supplied the type. No package was produced and no
+hardware was changed. The correction moves the guarded signed fixed-width
+typedefs into the base protocol header before the dimensions structure and adds
+a source-contract regression assertion for that ordering.

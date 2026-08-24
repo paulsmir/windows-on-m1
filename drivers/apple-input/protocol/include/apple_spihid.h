@@ -10,6 +10,11 @@ typedef USHORT uint16_t;
 typedef ULONG uint32_t;
 typedef ULONGLONG uint64_t;
 #endif
+#ifndef AI_KERNEL_SIGNED_FIXED_WIDTH_TYPES
+#define AI_KERNEL_SIGNED_FIXED_WIDTH_TYPES
+typedef signed char int8_t;
+typedef LONG int32_t;
+#endif
 #ifndef AI_KERNEL_BOOL_TYPE
 #define AI_KERNEL_BOOL_TYPE
 typedef unsigned char bool;
