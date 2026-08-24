@@ -275,7 +275,7 @@ Base the schema on Microsoft's parallel/hybrid sample report descriptor. Keep th
 
 Add assertions that every portable encoder report size and feature size equals the size calculated from the descriptor parser. Run package and protocol tests.
 
-- [ ] **Step 5: Commit implementation and ledger separately**
+- [x] **Step 5: Commit implementation and ledger separately**
 
 Commit descriptor/tests/project changes; append and separately commit the CHANGES row.
 
