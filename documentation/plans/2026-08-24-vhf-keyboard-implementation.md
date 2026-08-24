@@ -562,11 +562,11 @@ its full hash to CHANGES with `status=implemented` and commit the ledger.
 - Modify: `investigation/CHANGES.csv`
 
 **Interfaces:**
-- Produces a test-signed ARM64 package containing `AppleInput.sys`,
-  `AppleInput.inf`, `AppleInput.cat`, certificate, PDB and `AppleInputDiag.exe`.
+- Produces an unsigned ARM64 development package containing `AppleInput.sys`,
+  `AppleInput.inf`, generated `AppleInput.cat`, PDB and `AppleInputDiag.exe`.
 - Does not install or launch anything on the Air.
 
-- [ ] **Step 1: Run all local verification from a clean tracked root**
+- [x] **Step 1: Run all local verification from a clean tracked root**
 
 ```bash
 git diff --check
@@ -577,7 +577,7 @@ cd m1n1_windows && ./tests/run_host_tests.sh
 Expected: all pass. The nested repositories may remain intentional untracked
 gitlinks; tracked root files must be clean after commits.
 
-- [ ] **Step 2: Push the feature branch and wait for Apple input WDK CI**
+- [x] **Step 2: Push the feature branch and wait for Apple input WDK CI**
 
 ```bash
 git push origin feature/j313-native-input
@@ -587,13 +587,13 @@ gh run watch <run-id> --exit-status
 
 Expected: successful ARM64 build and artifact publication.
 
-- [ ] **Step 3: Download and verify the artifact**
+- [x] **Step 3: Download and verify the artifact**
 
-Download into an ignored local directory, verify PE machine type ARM64, INF
-strict validation, catalog signature and SHA-256 for every packaged file.
+Download into an ignored local directory, verify PE machine type ARM64, the
+generated INF/catalog outputs and SHA-256 for every packaged file.
 Confirm the package default remains `TransportOnly=1`.
 
-- [ ] **Step 4: Record software-only result**
+- [x] **Step 4: Record software-only result**
 
 Update `documentation/APPLE_INPUT.md` with CI run, artifact name and hashes but
 state explicitly that keyboard VHF is not hardware validated. Append/update the

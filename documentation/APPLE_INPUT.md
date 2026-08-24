@@ -2,98 +2,125 @@
 
 ## Current status
 
-The built-in J313 keyboard and trackpad are under active development and are
-not part of the accepted stable platform baseline yet.
+Native J313 input is under active development and is not part of the accepted
+stable platform baseline. External USB input remains mandatory for every
+hardware test and recovery operation.
 
-The following foundation is implemented:
+The current feature branch implements the complete software path for the
+built-in keyboard:
 
-- one versioned J313 resource contract generates matching m1n1, Mu ACPI, and
+- one versioned J313 resource contract generates matching m1n1, Mu ACPI and
   Windows-driver constants;
-- Mu publishes `ACPI\APPL0001\0` with the reviewed SPI3, AP-GPIO, nub-GPIO,
-  and guest interrupt resources;
-- m1n1 resolves the live ADT nodes and validates their compatible strings,
-  translated register ranges, GPIO bindings, interrupt parent, and complete
-  parent IRQ list;
-- assisted and standalone launches use the same `hv_init` passthrough gate;
-- after validation, m1n1 maps only the three reviewed MMIO regions and installs
-  the level route `physical IRQ 330 -> guest INTID 865`;
-- no m1n1 input emulation and no m1n1 SPI/GPIO data-path writes are used;
-- the portable Apple SPI HID packet, CRC, reassembly, discovery, and bounded
-  recovery core has host tests;
-- an ARM64 KMDF resource-validation scaffold maps the three translated MMIO
-  resources, performs bounded read-only SPI/GPIO register sanity checks, and
-  unmaps every partial allocation on failure or release;
-- the official pinned WDK NuGet toolchain builds the scaffold as a test-signed
-  ARM64 PE, passes strict INF/catalog verification, and publishes the complete
-  `.sys`/`.inf`/`.cat`/`.cer`/PDB package in GitHub Actions run `31697195976`;
-- portable tests lock the Apple SPI register layout, FIFO depth, 200 ms maximum
-  transfer deadline, clock-divider calculation, and GPIO pin/group offsets.
+- Mu publishes `ACPI\APPL0001\0` with the reviewed SPI3, AP-GPIO, nub-GPIO and
+  guest interrupt resources;
+- m1n1 validates the live ADT identities, register ranges, GPIO bindings and
+  interrupt route before mapping only those reviewed resources;
+- the ARM64 KMDF driver owns the bounded Apple SPI HID transport and its
+  level-triggered interrupt path;
+- keyboard and trackpad HID descriptors are copied into fixed driver-owned
+  storage before the discovery reassembly buffer can be reused;
+- a bounded HID parser derives exact input-report sizes from the hardware
+  keyboard descriptor;
+- descriptor diagnostics expose only length, SHA-256 and parser status, never
+  descriptor bytes, key values or report payloads;
+- a VHF keyboard frontend publishes the exact hardware descriptor and accepts
+  only reports matching the parsed contract;
+- VHF start, submission and synchronous teardown are behind a fail-closed
+  `TransportOnly` service parameter.
 
-The driver still performs no register write, creates no interrupt object, and
-publishes no VHF input device.
+The package default is `TransportOnly=1`. Therefore installing the package in
+its default mode must not create a VHF keyboard child. Keyboard publication is
+enabled only by the explicit `-PublishKeyboard` installer switch after the
+transport-only hardware gate succeeds.
 
-Consequently, external USB keyboard and mouse remain mandatory for recovery
-and for all current Windows operation.
+The VHF keyboard path has passed software and official ARM64 WDK build gates,
+but it has **not** passed either live transport-only Gate C1 or keyboard Gate
+C2. It must not yet be described as working built-in input.
+
+The trackpad frontend has not been implemented. The next trackpad milestone is
+the full Windows Precision Touchpad protocol; there is no temporary basic-mouse
+frontend in this branch.
 
 ## Architecture
 
-The final driver is native rather than a USB-emulation bridge:
+The implementation is native rather than a USB-emulation bridge:
 
-1. m1n1 preserves platform state, maps the reviewed resources through stage 2,
-   and translates the physical level interrupt into the guest GIC namespace.
+1. m1n1 preserves platform state, maps the reviewed resources through stage 2
+   and translates physical IRQ 330 to guest INTID 865.
 2. Mu describes those resources as the `APPL0001` ACPI device.
-3. The test-signed ARM64 KMDF function driver owns SPI3 and the two GPIO
-   controllers, validates every translated resource before its first write,
-   and performs bounded Apple SPI HID discovery.
-4. VHF publishes the Windows keyboard and trackpad-facing HID collections.
+3. The KMDF function driver owns SPI3 and the two GPIO controllers, performs
+   bounded discovery and validates descriptor-derived report contracts.
+4. VHF publishes Windows-facing HID collections without changing the hardware
+   transport or exposing input payloads to diagnostics.
 
-Milestone 1 will provide the built-in keyboard plus basic pointer movement and
-primary click. Milestone 2 is explicitly required and replaces the temporary
-mouse frontend with a full Windows Precision Touchpad collection while keeping
-the same hardware transport.
+No VHF function is called from the ISR. Report publication runs from the
+passive transport worker. PnP teardown stops new submissions, synchronously
+deletes the VHF object and only then releases MMIO mappings.
 
-## Safety gates
+## Software verification checkpoint
 
-Hardware testing must retain an external USB keyboard and mouse. Development
-advances in this order:
+The accepted software-only checkpoint is commit
+`bb426e00ee683be17fd8872cbce050e8db56a58b` on
+`feature/j313-native-input`.
 
-1. read-only live ADT inventory;
-2. ACPI enumeration and resource validation;
-3. stage-2 mappings and level IRQ route;
-4. read-only SPI/GPIO register sanity checks and ARM64 WDK package build
-   (implemented; live devnode validation pending);
-5. bounded GPIO reset and one SPI boot transaction;
-6. descriptor discovery and transport-only packet capture;
-7. VHF keyboard;
-8. basic trackpad;
-9. Windows Precision Touchpad.
-
-Any mismatch in path identity, compatibility, MMIO range, GPIO binding, parent
-interrupt list, or guest route disables input passthrough before the driver can
-touch hardware. The guest platform remains bootable so external USB input can
-be used to recover.
-
-## Verification
-
-Run the portable and platform tests from the repository root:
+Local verification:
 
 ```sh
 proxyenv/bin/python -m unittest discover -s tests -v
 m1n1_windows/tests/run_host_tests.sh
 ```
 
-Build the matching assisted diagnostic artifacts without installing them:
+The public suite passed 286/286. The nested m1n1 host suite also passed before
+the CI submission.
 
-```sh
-scripts/build-development.sh --display physical --debug monitor
-```
+Official WDK verification:
 
-The first hardware driver package is now reproducibly built and test-signed as
-ARM64. Do not install it merely to obtain input: this checkpoint deliberately
-performs only resource validation and read-only register sanity checks. Live
-devnode validation remains the next reversible hardware checkpoint and must be
-performed with external USB input attached.
+- workflow: `Apple input ARM64 WDK`;
+- run: [32705632141](https://github.com/paulsmir/windows-on-m1/actions/runs/32705632141);
+- job: `97366009946`;
+- artifact: `AppleInput-ARM64-Debug`;
+- artifact type: unsigned development package;
+- package default: `TransportOnly=1`;
+- hardware status: not installed and not hardware validated at this checkpoint.
 
-The detailed design and implementation sequence are in
-`documentation/design/2026-08-09-native-apple-input.md` and
-`documentation/plans/2026-08-09-native-apple-input-implementation.md`.
+Verified ARM64 files and SHA-256:
+
+| File | SHA-256 |
+| --- | --- |
+| `AppleInput.sys` | `bc457c288cef25eeb1445305629ffb9f8147b7beaf1d7d258c5cc81a2de6104e` |
+| `AppleInput.inf` | `0f74306484403b97b81ad1350488cbed7a1af000b8c7d7e4f793cfe1101fe67d` |
+| `appleinput.cat` | `2adf691aab8f2252601bb6f55dff4bf15c29f52eefc76de058d49e604f95251c` |
+| `AppleInputDiag.exe` | `2e060e2bb050baf6b2a1ccd889f9245d0a4754417e530de162a83fbe434490b8` |
+
+Both `AppleInput.sys` and `AppleInputDiag.exe` were independently identified as
+PE32+ AArch64 binaries after artifact download. The package needs the documented
+Windows test-signing workflow before installation; the CI artifact is not a
+production-signed driver.
+
+## Hardware gates
+
+Hardware testing must retain an external USB keyboard and mouse. The remaining
+gates are deliberately separate:
+
+1. **Gate C1, transport only:** install with `TransportOnly=1`; require repeated
+   phase-8 snapshots, keyboard descriptor length 182, trackpad descriptor
+   length 110, stable nonzero descriptor digests, a valid keyboard report
+   contract, VHF state absent and no new HID child.
+2. **Gate C2, keyboard publication:** install the exact same package with the
+   explicit `-PublishKeyboard` switch; require a VHF keyboard child, correct key
+   make/break behavior, zero rejected/submission-failure counters and clean
+   disable/enable plus reboot teardown.
+3. **Precision Touchpad evidence:** capture only bounded descriptor metadata and
+   one controlled gesture at a time, then implement and validate the full
+   Windows Precision Touchpad collection in a separate plan.
+
+Any boot regression, descriptor mismatch, changing digest, parser rejection,
+transport timeout, CRC/fragment/offline counter, bugcheck or loss of external
+recovery input fails the active gate and requires rollback.
+
+## Design and implementation records
+
+- `documentation/design/2026-08-24-vhf-keyboard-precision-touchpad.md`
+- `documentation/plans/2026-08-24-vhf-keyboard-implementation.md`
+- `documentation/design/2026-08-09-native-apple-input.md`
+- `documentation/plans/2026-08-09-native-apple-input-implementation.md`
