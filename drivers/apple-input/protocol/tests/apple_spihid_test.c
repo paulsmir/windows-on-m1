@@ -822,6 +822,229 @@ static void test_j313_trackpad_sanitized_fixture_contract(void)
     assert(get_i16(j313_trackpad_two_contacts + 82) == 3142);
 }
 
+static void assert_decoded_contact(const struct ai_apple_trackpad_frame *frame,
+                                   uint8_t index, int32_t x, int32_t y)
+{
+    assert(index < frame->count);
+    assert(frame->contacts[index].x == x);
+    assert(frame->contacts[index].y == y);
+}
+
+static void test_trackpad_frame_decode(void)
+{
+    struct ai_apple_trackpad_frame frame;
+    uint8_t changed[106];
+
+    assert(ai_apple_trackpad_decode(j313_trackpad_one_contact_x,
+                                    sizeof(j313_trackpad_one_contact_x),
+                                    &frame) == AI_OK);
+    assert(!frame.button && frame.count == 1);
+    assert_decoded_contact(&frame, 0, -624, 4901);
+
+    assert(ai_apple_trackpad_decode(j313_trackpad_one_contact_y,
+                                    sizeof(j313_trackpad_one_contact_y),
+                                    &frame) == AI_OK);
+    assert_decoded_contact(&frame, 0, -798, 7097);
+
+    assert(ai_apple_trackpad_decode(j313_trackpad_held_click,
+                                    sizeof(j313_trackpad_held_click),
+                                    &frame) == AI_OK);
+    assert(frame.button && frame.count == 1);
+
+    assert(ai_apple_trackpad_decode(j313_trackpad_two_contacts,
+                                    sizeof(j313_trackpad_two_contacts),
+                                    &frame) == AI_OK);
+    assert(!frame.button && frame.count == 2);
+    assert_decoded_contact(&frame, 0, 2562, 3735);
+    assert_decoded_contact(&frame, 1, 275, 3142);
+
+    assert(ai_apple_trackpad_decode(j313_trackpad_release,
+                                    sizeof(j313_trackpad_release),
+                                    &frame) == AI_OK);
+    assert(!frame.button && frame.count == 0);
+
+    memcpy(changed, j313_trackpad_two_contacts, sizeof(changed));
+    changed[31] = 1;
+    assert(ai_apple_trackpad_decode(changed, sizeof(changed), &frame) ==
+           AI_ERR_PROTOCOL);
+    changed[31] = changed[1];
+    changed[30] = 12;
+    assert(ai_apple_trackpad_decode(changed, sizeof(changed), &frame) ==
+           AI_ERR_LENGTH);
+    changed[30] = 2;
+    assert(ai_apple_trackpad_decode(changed, sizeof(changed) - 1, &frame) ==
+           AI_ERR_LENGTH);
+    assert(ai_apple_trackpad_decode(changed, (size_t)-1, &frame) ==
+           AI_ERR_LENGTH);
+    assert(ai_apple_trackpad_decode(NULL, sizeof(changed), &frame) ==
+           AI_ERR_ARGUMENT);
+    assert(ai_apple_trackpad_decode(changed, sizeof(changed), NULL) ==
+           AI_ERR_ARGUMENT);
+}
+
+static struct ai_apple_trackpad_frame synthetic_frame(
+    const int32_t (*points)[2], uint8_t count)
+{
+    struct ai_apple_trackpad_frame frame;
+    uint8_t index;
+
+    AI_MEMSET(&frame, sizeof(frame));
+    frame.count = count;
+    for (index = 0; index < count; ++index) {
+        frame.contacts[index].x = points[index][0];
+        frame.contacts[index].y = points[index][1];
+    }
+    return frame;
+}
+
+static const struct ai_trackpad_output_contact *output_by_id(
+    const struct ai_trackpad_output_frame *out, uint8_t id)
+{
+    uint8_t index;
+
+    for (index = 0; index < out->count; ++index) {
+        if (out->contacts[index].id == id)
+            return &out->contacts[index];
+    }
+    return NULL;
+}
+
+static void test_trackpad_physical_lifetimes(void)
+{
+    struct ai_trackpad_tracker tracker = {0};
+    struct ai_trackpad_output_frame out;
+    struct ai_apple_trackpad_frame frame;
+    const struct ai_trackpad_output_contact *contact;
+    static const int32_t initial[][2] = {{-100, 0}, {100, 0}};
+    static const int32_t reordered[][2] = {{60, 0}, {-60, 0}};
+    static const int32_t one_left[][2] = {{70, 0}};
+    static const int32_t six[][2] = {
+        {0, 0}, {100, 0}, {200, 0}, {300, 0}, {400, 0}, {500, 0},
+    };
+    static const int32_t five_after_lift[][2] = {
+        {101, 0}, {201, 0}, {301, 0}, {401, 0}, {501, 0},
+    };
+    static const int32_t five_with_new[][2] = {
+        {102, 0}, {202, 0}, {302, 0}, {402, 0}, {502, 0}, {900, 0},
+    };
+
+    frame = synthetic_frame(initial, 2);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(out.count == 2 && out.active_count == 2 && out.suppressed_count == 0);
+    assert(output_by_id(&out, 0)->x == -100);
+    assert(output_by_id(&out, 1)->x == 100);
+
+    frame = synthetic_frame(reordered, 2);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(output_by_id(&out, 0)->x == -60);
+    assert(output_by_id(&out, 1)->x == 60);
+
+    frame = synthetic_frame(one_left, 1);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    contact = output_by_id(&out, 0);
+    assert(contact && !contact->tip && contact->x == -60);
+    contact = output_by_id(&out, 1);
+    assert(contact && contact->tip && contact->x == 70);
+
+    frame = synthetic_frame(NULL, 0);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(out.count == 1 && !out.contacts[0].tip && out.contacts[0].id == 1);
+
+    AI_MEMSET(&tracker, sizeof(tracker));
+    frame = synthetic_frame(six, 6);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(out.count == 5 && out.active_count == 5 && out.suppressed_count == 1);
+
+    frame = synthetic_frame(five_after_lift, 5);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(out.count == 5 && out.active_count == 4 && out.suppressed_count == 1);
+    assert(output_by_id(&out, 0) && !output_by_id(&out, 0)->tip);
+
+    frame = synthetic_frame(five_after_lift, 5);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(out.count == 4 && out.active_count == 4 && out.suppressed_count == 1);
+    assert(output_by_id(&out, 0) == NULL);
+
+    frame = synthetic_frame(five_with_new, 6);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+    assert(out.count == 5 && out.active_count == 5 && out.suppressed_count == 1);
+    contact = output_by_id(&out, 0);
+    assert(contact && contact->tip && contact->x == 900);
+
+    frame.count = 12;
+    assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_ERR_LENGTH);
+    assert(ai_trackpad_tracker_update(NULL, &frame, &out) == AI_ERR_ARGUMENT);
+    assert(ai_trackpad_tracker_update(&tracker, NULL, &out) == AI_ERR_ARGUMENT);
+    assert(ai_trackpad_tracker_update(&tracker, &frame, NULL) == AI_ERR_ARGUMENT);
+}
+
+static void test_trackpad_bounded_fuzz(void)
+{
+    struct ai_trackpad_tracker tracker = {0};
+    struct ai_trackpad_output_frame out;
+    struct ai_apple_trackpad_frame frame;
+    struct ai_apple_trackpad_frame decoded;
+    uint8_t report[AI_APPLE_TRACKPAD_HEADER_SIZE - 2u +
+                   AI_APPLE_TRACKPAD_MAX_CONTACTS *
+                   AI_APPLE_TRACKPAD_CONTACT_STRIDE];
+    uint32_t state = 0x4a313350u;
+    uint32_t iteration;
+
+    for (iteration = 0; iteration < 4096u; ++iteration) {
+        uint8_t index;
+        uint8_t wire_count;
+        size_t exact_length;
+        size_t supplied_length;
+        enum ai_status status;
+
+        state = state * 1664525u + 1013904223u;
+        wire_count = (uint8_t)(state % 13u);
+        AI_MEMSET(report, sizeof(report));
+        report[1] = (uint8_t)((state >> 8) & 1u);
+        report[31] = report[1];
+        report[30] = wire_count;
+        for (index = 0;
+             index < wire_count && index < AI_APPLE_TRACKPAD_MAX_CONTACTS;
+             ++index) {
+            uint8_t *contact = report + AI_APPLE_TRACKPAD_HEADER_SIZE +
+                (size_t)index * AI_APPLE_TRACKPAD_CONTACT_STRIDE;
+
+            state = state * 1664525u + 1013904223u;
+            put_le16(contact + 2u, (uint16_t)state);
+            put_le16(contact + 4u, (uint16_t)(state >> 16));
+            put_le16(contact + AI_APPLE_TRACKPAD_TOUCH_MAJOR_OFFSET,
+                     (uint16_t)((state & 7u) == 0u ? 0u : 1u));
+        }
+        exact_length = AI_APPLE_TRACKPAD_HEADER_SIZE - 2u +
+            (size_t)(wire_count <= AI_APPLE_TRACKPAD_MAX_CONTACTS ?
+                     wire_count : AI_APPLE_TRACKPAD_MAX_CONTACTS) *
+            AI_APPLE_TRACKPAD_CONTACT_STRIDE;
+        supplied_length = (state & 1u) != 0u && exact_length > 0u ?
+            exact_length - 1u : exact_length;
+        status = ai_apple_trackpad_decode(report, supplied_length, &decoded);
+        if (wire_count > AI_APPLE_TRACKPAD_MAX_CONTACTS ||
+            supplied_length != exact_length) {
+            assert(status == AI_ERR_LENGTH);
+        } else {
+            assert(status == AI_OK);
+            assert(decoded.count <= wire_count);
+        }
+
+        AI_MEMSET(&frame, sizeof(frame));
+        frame.count = (uint8_t)(state % 12u);
+        for (index = 0; index < frame.count; ++index) {
+            state = state * 1664525u + 1013904223u;
+            frame.contacts[index].x = (int32_t)state;
+            state = state * 1664525u + 1013904223u;
+            frame.contacts[index].y = (int32_t)state;
+        }
+        assert(ai_trackpad_tracker_update(&tracker, &frame, &out) == AI_OK);
+        assert(out.count <= AI_PTP_MAX_CONTACTS);
+        assert(out.active_count <= out.count);
+        assert(out.suppressed_count <= AI_APPLE_TRACKPAD_MAX_CONTACTS);
+    }
+}
+
 int main(void)
 {
     test_crc();
@@ -843,5 +1066,8 @@ int main(void)
     test_descriptor_store_owns_bytes();
     test_hid_input_contract();
     test_j313_trackpad_sanitized_fixture_contract();
+    test_trackpad_frame_decode();
+    test_trackpad_physical_lifetimes();
+    test_trackpad_bounded_fuzz();
     return 0;
 }

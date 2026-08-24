@@ -156,27 +156,27 @@ Commit parser/tests first. Append an implemented CHANGES row with no hardware va
   - Constants `AI_APPLE_TRACKPAD_MAX_CONTACTS=11`, `AI_PTP_MAX_CONTACTS=5`, header `48`, contact stride `30`.
   - Each decoded contact contains signed `x`, signed `y`; unknown fields remain opaque and unpublished.
 
-- [ ] **Step 1: Write failing fixture tests**
+- [x] **Step 1: Write failing fixture tests**
 
 Decode all four sanitized fixtures. Assert click byte equality, contact count, exact 76/106 lengths, selected signed X/Y values and two distinct contacts. Add malformed tests for unequal click bytes, count > 11, formula mismatch, integer overflow and null arguments.
 
-- [ ] **Step 2: Write failing lifetime tests**
+- [x] **Step 2: Write failing lifetime tests**
 
 Feed synthetic trajectories for crossing contacts, reorderings, one lift, all lift, five admitted plus one suppressed, an admitted lift while the suppressed contact remains down, and a new contact after a slot is free. Assert IDs remain stable, one tip-clear release is emitted at the last position, and the pre-existing suppressed contact is never promoted mid-lifetime.
 
-- [ ] **Step 3: Run and verify RED**
+- [x] **Step 3: Run and verify RED**
 
 Run the focused protocol unittest. Expected: missing decoder/tracker symbols.
 
-- [ ] **Step 4: Implement bounded decoding**
+- [x] **Step 4: Implement bounded decoding**
 
 Validate `length == 48 + 30 * count - 2` for nonzero frames and the exact release shape proven by Task 1 for zero contacts. Decode only click, count and signed little-endian X/Y. Do not interpret `origin`, pressure, major/minor, orientation, multi or unknown header bytes.
 
-- [ ] **Step 5: Implement deterministic trajectory assignment**
+- [x] **Step 5: Implement deterministic trajectory assignment**
 
 Maintain eleven physical slots. For each frame, choose the minimum total squared-distance assignment with deterministic slot-index tie-breaking; max 11 permits a bounded exhaustive/DP solution with no allocation. Mark at most five newly arriving physical lifetimes admitted. Preserve the admitted flag until physical lift and emit one release record before reusing a Windows ID.
 
-- [ ] **Step 6: Run sanitizers and commit**
+- [x] **Step 6: Run sanitizers and commit**
 
 Run focused tests, ASan/UBSan, then the complete suite. Commit implementation/tests; append and separately commit the CHANGES row.
 
