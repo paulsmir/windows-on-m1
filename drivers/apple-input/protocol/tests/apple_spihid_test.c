@@ -1045,6 +1045,295 @@ static void test_trackpad_bounded_fuzz(void)
     }
 }
 
+static struct ai_trackpad_axis_contract ptp_test_axes(void)
+{
+    struct ai_trackpad_axis_contract axes = {0};
+
+    axes.valid = true;
+    axes.x.valid = true;
+    axes.x.logical_min = -1000;
+    axes.x.logical_max = 1000;
+    axes.x.physical_min = 0;
+    axes.x.physical_max = 100;
+    axes.x.unit = 0x11;
+    axes.x.unit_exponent = -2;
+    axes.y.valid = true;
+    axes.y.logical_min = -2000;
+    axes.y.logical_max = 2000;
+    axes.y.physical_min = 0;
+    axes.y.physical_max = 200;
+    axes.y.unit = 0x11;
+    axes.y.unit_exponent = -2;
+    return axes;
+}
+
+static void enable_ptp_mode(struct ai_ptp_feature_state *features)
+{
+    static const uint8_t mode[] = {AI_PTP_REPORT_INPUT_MODE, 3};
+    bool neutral = true;
+
+    ai_ptp_feature_init(features);
+    assert(ai_ptp_set_feature(features, AI_PTP_REPORT_INPUT_MODE,
+                              mode, sizeof(mode), false, &neutral) == AI_OK);
+    assert(!neutral && features->input_mode == 3);
+}
+
+static void assert_ptp_report(
+    const struct ai_trackpad_axis_contract *axes,
+    const struct ai_trackpad_output_frame *frame,
+    const struct ai_ptp_feature_state *features,
+    const uint8_t expected[AI_PTP_INPUT_REPORT_SIZE])
+{
+    uint8_t report[AI_PTP_INPUT_REPORT_SIZE];
+    size_t length = 0;
+
+    assert(ai_ptp_encode_input(axes, frame, 0x1234, features,
+                               report, sizeof(report), &length) == AI_OK);
+    assert(length == sizeof(report));
+    assert(memcmp(report, expected, sizeof(report)) == 0);
+}
+
+static void test_ptp_input_reports(void)
+{
+    struct ai_trackpad_axis_contract axes = ptp_test_axes();
+    struct ai_trackpad_output_frame frame = {0};
+    struct ai_ptp_feature_state features;
+    uint8_t expected[AI_PTP_INPUT_REPORT_SIZE] = {0};
+    uint8_t report[AI_PTP_INPUT_REPORT_SIZE];
+    size_t length = 99;
+    uint8_t index;
+
+    enable_ptp_mode(&features);
+    expected[0] = AI_PTP_REPORT_INPUT;
+    expected[31] = 0x34;
+    expected[32] = 0x12;
+    assert_ptp_report(&axes, &frame, &features, expected);
+
+    frame.count = 1;
+    frame.active_count = 1;
+    frame.contacts[0].tip = true;
+    frame.contacts[0].id = 2;
+    frame.contacts[0].x = -1000;
+    frame.contacts[0].y = -2000;
+    expected[1] = 0x03;
+    expected[2] = 2;
+    expected[5] = 0xff;
+    expected[6] = 0x0f;
+    expected[33] = 1;
+    assert_ptp_report(&axes, &frame, &features, expected);
+
+    frame.contacts[0].x = 0;
+    frame.contacts[0].y = 0;
+    expected[3] = 0x00;
+    expected[4] = 0x08;
+    expected[5] = 0xff;
+    expected[6] = 0x07;
+    assert_ptp_report(&axes, &frame, &features, expected);
+
+    frame.contacts[0].tip = false;
+    frame.active_count = 0;
+    expected[1] = 0x01;
+    assert_ptp_report(&axes, &frame, &features, expected);
+
+    AI_MEMSET(&frame, sizeof(frame));
+    AI_MEMSET(expected + 1, AI_PTP_INPUT_REPORT_SIZE - 1u);
+    expected[31] = 0x34;
+    expected[32] = 0x12;
+    frame.count = 2;
+    frame.active_count = 2;
+    frame.button = true;
+    for (index = 0; index < frame.count; ++index) {
+        frame.contacts[index].tip = true;
+        frame.contacts[index].id = index;
+    }
+    frame.contacts[0].x = -1000;
+    frame.contacts[0].y = 2000;
+    frame.contacts[1].x = 1000;
+    frame.contacts[1].y = -2000;
+    expected[1] = 3;
+    expected[7] = 3;
+    expected[8] = 1;
+    expected[9] = 0xff;
+    expected[10] = 0x0f;
+    expected[11] = 0xff;
+    expected[12] = 0x0f;
+    expected[33] = 2;
+    expected[34] = 1;
+    assert_ptp_report(&axes, &frame, &features, expected);
+
+    AI_MEMSET(&frame, sizeof(frame));
+    AI_MEMSET(expected + 1, AI_PTP_INPUT_REPORT_SIZE - 1u);
+    expected[31] = 0x34;
+    expected[32] = 0x12;
+    frame.count = AI_PTP_MAX_CONTACTS;
+    frame.active_count = AI_PTP_MAX_CONTACTS;
+    for (index = 0; index < AI_PTP_MAX_CONTACTS; ++index) {
+        frame.contacts[index].tip = true;
+        frame.contacts[index].id = index;
+        frame.contacts[index].x = -1000 + (int32_t)index * 500;
+        frame.contacts[index].y = -2000 + (int32_t)index * 1000;
+        expected[1u + (size_t)index * 6u] = 3;
+        expected[2u + (size_t)index * 6u] = index;
+    }
+    expected[3] = 0x00; expected[4] = 0x00;
+    expected[5] = 0xff; expected[6] = 0x0f;
+    expected[9] = 0x00; expected[10] = 0x04;
+    expected[11] = 0xff; expected[12] = 0x0b;
+    expected[15] = 0x00; expected[16] = 0x08;
+    expected[17] = 0xff; expected[18] = 0x07;
+    expected[21] = 0xff; expected[22] = 0x0b;
+    expected[23] = 0x00; expected[24] = 0x04;
+    expected[27] = 0xff; expected[28] = 0x0f;
+    expected[29] = 0x00; expected[30] = 0x00;
+    expected[33] = AI_PTP_MAX_CONTACTS;
+    assert_ptp_report(&axes, &frame, &features, expected);
+
+    frame.count = 6;
+    assert(ai_ptp_encode_input(&axes, &frame, 0, &features,
+                               report, sizeof(report), &length) == AI_ERR_LENGTH);
+    frame.count = 0;
+    axes.valid = false;
+    assert(ai_ptp_encode_input(&axes, &frame, 0, &features,
+                               report, sizeof(report), &length) == AI_ERR_PROTOCOL);
+    axes = ptp_test_axes();
+    assert(ai_ptp_encode_input(&axes, &frame, 0, &features,
+                               report, sizeof(report) - 1u, &length) == AI_ERR_LENGTH);
+    assert(ai_ptp_encode_input(NULL, &frame, 0, &features,
+                               report, sizeof(report), &length) == AI_ERR_ARGUMENT);
+
+    features.input_mode = 0;
+    length = 99;
+    assert(ai_ptp_encode_input(&axes, &frame, 0, &features,
+                               report, sizeof(report), &length) == AI_OK);
+    assert(length == 0);
+
+    assert(ai_ptp_encode_neutral(0xffff, report, sizeof(report), &length) == AI_OK);
+    assert(length == sizeof(report) && report[0] == AI_PTP_REPORT_INPUT);
+    assert(report[31] == 0xff && report[32] == 0xff);
+    for (index = 1; index < 31; ++index)
+        assert(report[index] == 0);
+    assert(report[33] == 0 && report[34] == 0);
+
+    enable_ptp_mode(&features);
+    features.surface_enabled = false;
+    features.button_enabled = true;
+    AI_MEMSET(&frame, sizeof(frame));
+    frame.count = 1;
+    frame.active_count = 1;
+    frame.button = true;
+    frame.contacts[0].tip = true;
+    assert(ai_ptp_encode_input(&axes, &frame, 7, &features,
+                               report, sizeof(report), &length) == AI_OK);
+    assert(report[33] == 0 && report[34] == 1);
+    features.surface_enabled = true;
+    features.button_enabled = false;
+    assert(ai_ptp_encode_input(&axes, &frame, 7, &features,
+                               report, sizeof(report), &length) == AI_OK);
+    assert(report[33] == 1 && report[34] == 0);
+}
+
+static uint32_t fnv1a32(const uint8_t *bytes, size_t length)
+{
+    uint32_t hash = 2166136261u;
+    size_t index;
+
+    for (index = 0; index < length; ++index) {
+        hash ^= bytes[index];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static void test_ptp_feature_reports(void)
+{
+    struct ai_ptp_feature_state features;
+    uint8_t buffer[AI_PTP_CERTIFICATION_REPORT_SIZE];
+    static const uint8_t mode3[] = {AI_PTP_REPORT_INPUT_MODE, 3};
+    static const uint8_t mode0[] = {AI_PTP_REPORT_INPUT_MODE, 0};
+    static const uint8_t invalid_mode[] = {AI_PTP_REPORT_INPUT_MODE, 9};
+    static const uint8_t selective_surface[] = {AI_PTP_REPORT_SELECTIVE, 1};
+    static const uint8_t selective_button[] = {AI_PTP_REPORT_SELECTIVE, 2};
+    bool neutral;
+    size_t length;
+
+    ai_ptp_feature_init(&features);
+    assert(features.input_mode == 0 && features.surface_enabled &&
+           features.button_enabled);
+
+    assert(ai_ptp_get_feature(&features, AI_PTP_REPORT_CAPABILITIES,
+                              buffer, sizeof(buffer), &length) == AI_OK);
+    assert(length == AI_PTP_CAPABILITIES_REPORT_SIZE);
+    assert(buffer[0] == AI_PTP_REPORT_CAPABILITIES && buffer[1] == 0x05);
+
+    assert(ai_ptp_get_feature(&features, AI_PTP_REPORT_CERTIFICATION,
+                              buffer, sizeof(buffer), &length) == AI_OK);
+    assert(length == AI_PTP_CERTIFICATION_REPORT_SIZE);
+    assert(buffer[0] == AI_PTP_REPORT_CERTIFICATION);
+    assert(buffer[1] == 0xfc && buffer[2] == 0x28 && buffer[256] == 0xc2);
+    assert(fnv1a32(buffer + 1, 256) == 0xd8f9ed49u);
+
+    assert(ai_ptp_get_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              buffer, sizeof(buffer), &length) == AI_OK);
+    assert(length == 2 && buffer[0] == AI_PTP_REPORT_INPUT_MODE && buffer[1] == 0);
+    assert(ai_ptp_get_feature(&features, AI_PTP_REPORT_SELECTIVE,
+                              buffer, sizeof(buffer), &length) == AI_OK);
+    assert(length == 2 && buffer[1] == 3);
+
+    neutral = true;
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              mode3, sizeof(mode3), false, &neutral) == AI_OK);
+    assert(!neutral && features.input_mode == 3);
+
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              mode0, sizeof(mode0), true, &neutral) == AI_OK);
+    assert(neutral && features.input_mode == 3 && features.mode_change_pending);
+    neutral = true;
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              mode0, sizeof(mode0), true, &neutral) == AI_OK);
+    assert(!neutral);
+    assert(ai_ptp_get_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              buffer, sizeof(buffer), &length) == AI_OK);
+    assert(buffer[1] == 0);
+    assert(ai_ptp_feature_take_neutral(&features));
+    assert(!ai_ptp_feature_take_neutral(&features));
+    assert(!ai_ptp_feature_contacts_update(&features, true));
+    assert(!ai_ptp_feature_contacts_update(&features, false));
+    assert(features.input_mode == 0 && !features.mode_change_pending);
+
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              invalid_mode, sizeof(invalid_mode), false,
+                              &neutral) == AI_OK);
+    assert(features.input_mode == 0 && !neutral);
+
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_SELECTIVE,
+                              selective_surface, sizeof(selective_surface),
+                              false, &neutral) == AI_OK);
+    assert(features.surface_enabled && !features.button_enabled);
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_SELECTIVE,
+                              selective_button, sizeof(selective_button),
+                              false, &neutral) == AI_OK);
+    assert(!features.surface_enabled && features.button_enabled);
+
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_CAPABILITIES,
+                              buffer, 2, false, &neutral) == AI_ERR_PROTOCOL);
+    buffer[0] = AI_PTP_REPORT_INPUT_MODE;
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_SELECTIVE,
+                              buffer, 2, false, &neutral) == AI_ERR_PROTOCOL);
+    assert(ai_ptp_set_feature(&features, AI_PTP_REPORT_INPUT_MODE,
+                              mode3, 1, false, &neutral) == AI_ERR_LENGTH);
+    assert(ai_ptp_get_feature(&features, 99, buffer, sizeof(buffer),
+                              &length) == AI_ERR_PROTOCOL);
+    assert(ai_ptp_get_feature(&features, AI_PTP_REPORT_CERTIFICATION,
+                              buffer, 2, &length) == AI_ERR_LENGTH);
+    assert(ai_ptp_get_feature(NULL, AI_PTP_REPORT_INPUT_MODE,
+                              buffer, sizeof(buffer), &length) == AI_ERR_ARGUMENT);
+    assert(ai_ptp_set_feature(NULL, AI_PTP_REPORT_INPUT_MODE,
+                              mode3, sizeof(mode3), false, &neutral) ==
+           AI_ERR_ARGUMENT);
+    assert(!ai_ptp_feature_contacts_update(NULL, false));
+    assert(!ai_ptp_feature_take_neutral(NULL));
+}
+
 int main(void)
 {
     test_crc();
@@ -1069,5 +1358,7 @@ int main(void)
     test_trackpad_frame_decode();
     test_trackpad_physical_lifetimes();
     test_trackpad_bounded_fuzz();
+    test_ptp_input_reports();
+    test_ptp_feature_reports();
     return 0;
 }

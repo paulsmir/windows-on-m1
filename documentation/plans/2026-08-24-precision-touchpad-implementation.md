@@ -222,27 +222,27 @@ struct ai_ptp_wire_contact {       /* exactly 6 bytes */
 
 Mode 0 emits no pointer input because this design intentionally has no Mouse collection. Windows must select mode 3 before touchpad reports are submitted.
 
-- [ ] **Step 1: Write failing golden report tests**
+- [x] **Step 1: Write failing golden report tests**
 
 Assert exact byte layouts for neutral, one contact, two contacts, click, release and five contacts. Assert X maps linearly from native logical min/max to 0..4095, Y maps inversely to 0..4095, scan time wraps at 16 bits, contact count never exceeds five and confidence is 1 for every currently admitted contact because no palm evidence exists.
 
-- [ ] **Step 2: Write failing feature-state tests**
+- [x] **Step 2: Write failing feature-state tests**
 
 Assert Device Capabilities returns max 5 and type 0; Certification returns the Microsoft-documented 256-byte default blob; Input Mode accepts 0/3 and maps all other values to 0; Selective Reporting independently gates surface/button; mode changes while contacts are down request exactly one neutral report and defer new-mode reports until all contacts are physically up.
 
-- [ ] **Step 3: Run and verify RED**
+- [x] **Step 3: Run and verify RED**
 
 Run the focused protocol unittest. Expected: missing encoder/feature functions.
 
-- [ ] **Step 4: Implement exact fixed-size encoding**
+- [x] **Step 4: Implement exact fixed-size encoding**
 
 Use five parallel six-byte finger blocks with one flags byte, one 8-bit Contact ID, 16-bit X and 16-bit Y, followed by Scan Time, Contact Count and Button 1 plus seven padding bits. Zero all unused finger blocks. Use checked 64-bit arithmetic for coordinate normalization and reject invalid axis contracts.
 
-- [ ] **Step 5: Implement bounded feature handlers**
+- [x] **Step 5: Implement bounded feature handlers**
 
 Feature functions perform no I/O and no allocation. Reject unknown report IDs and wrong lengths. Store only input mode, selective reporting and latency state. Certification blob is immutable.
 
-- [ ] **Step 6: Run full software verification and commit**
+- [x] **Step 6: Run full software verification and commit**
 
 Run focused tests, sanitizers and complete suite. Commit implementation/tests; append and separately commit the CHANGES row.
 
