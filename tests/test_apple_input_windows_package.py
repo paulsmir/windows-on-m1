@@ -628,6 +628,14 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
 
     def test_trackpad_capture_has_a_release_trigger_without_production_capture(self):
         header = self.read("include/apple_input_capture.h")
+        portable_header = (
+            ROOT
+            / "drivers"
+            / "apple-input"
+            / "protocol"
+            / "include"
+            / "apple_trackpad.h"
+        ).read_text()
         source = self.read("src/trackpad_capture.c")
         cli = self.read("tools/AppleInputCapture/main.c")
         capture_project = self.read("AppleInputCapture.vcxproj")
@@ -636,6 +644,8 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
 
         self.assertIn("AI_TRACKPAD_CAPTURE_VERSION 2u", header)
         self.assertIn("AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE", header)
+        self.assertIn("#ifdef AI_KERNEL_MODE", portable_header)
+        self.assertIn("#include <ntddk.h>", portable_header)
         self.assertIn("ai_apple_trackpad_release_candidate", source)
         self.assertIn("capture-release --output", cli)
         self.assertIn("apple_trackpad_frame.c", capture_project)

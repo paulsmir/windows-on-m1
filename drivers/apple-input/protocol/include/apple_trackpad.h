@@ -1,8 +1,23 @@
 #pragma once
 
+#ifdef AI_KERNEL_MODE
+#include <ntddk.h>
+#ifndef AI_KERNEL_FIXED_WIDTH_TYPES
+#define AI_KERNEL_FIXED_WIDTH_TYPES
+typedef UCHAR uint8_t;
+typedef USHORT uint16_t;
+#endif
+#ifndef AI_KERNEL_BOOL_TYPE
+#define AI_KERNEL_BOOL_TYPE
+typedef unsigned char bool;
+#define true 1
+#define false 0
+#endif
+#else
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#endif
 
 #define AI_APPLE_TRACKPAD_HEADER_SIZE 48u
 #define AI_APPLE_TRACKPAD_CONTACT_STRIDE 30u

@@ -10,9 +10,12 @@ typedef USHORT uint16_t;
 typedef ULONG uint32_t;
 typedef ULONGLONG uint64_t;
 #endif
+#ifndef AI_KERNEL_BOOL_TYPE
+#define AI_KERNEL_BOOL_TYPE
 typedef unsigned char bool;
 #define true 1
 #define false 0
+#endif
 #define AI_MEMCPY RtlCopyMemory
 #define AI_MEMSET RtlZeroMemory
 #define AI_UINT16_MAX MAXUSHORT
