@@ -88,11 +88,14 @@ int wmain(int argc, wchar_t **argv)
     DWORD elapsed = 0;
     HANDLE handle;
     int count = 0;
+    int release_only;
     int index;
     int result = 1;
 
-    if (argc < 6 || wcscmp(argv[1], L"capture") != 0) {
-        fwprintf(stderr, L"usage: AppleInputCapture.exe capture --count N --output PATH [--timeout SECONDS]\n");
+    release_only = argc >= 2 && wcscmp(argv[1], L"capture-release") == 0;
+    if (argc < 4 || (!release_only && wcscmp(argv[1], L"capture") != 0)) {
+        fwprintf(stderr, L"usage: AppleInputCapture.exe capture --count N --output PATH [--timeout SECONDS]\n"
+                         L"       AppleInputCapture.exe capture-release --output PATH [--timeout SECONDS]\n");
         return 2;
     }
     for (index = 2; index + 1 < argc; index += 2) {
@@ -106,6 +109,14 @@ int wmain(int argc, wchar_t **argv)
             fwprintf(stderr, L"unknown argument: %ls\n", argv[index]);
             return 2;
         }
+    }
+    if (release_only) {
+        if (count != 0) {
+            fwprintf(stderr, L"capture-release does not accept --count\n");
+            return 2;
+        }
+        count = 1;
+        request.Trigger = AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE;
     }
     if (!output || count < 1 || count > AI_TRACKPAD_CAPTURE_MAX_REPORTS ||
         timeout_seconds < 1 || timeout_seconds > 300) {
@@ -128,8 +139,11 @@ int wmain(int argc, wchar_t **argv)
         fwprintf(stderr, L"capture arm failed (%lu)\n", GetLastError());
         goto out;
     }
-    printf("armed for %d device-2 reports; perform exactly one controlled gesture\n",
-           count);
+    if (release_only)
+        printf("armed for one device-2 release candidate; lift the held contact\n");
+    else
+        printf("armed for %d device-2 reports; perform exactly one controlled gesture\n",
+               count);
     while (elapsed < timeout_seconds * 1000u) {
         ZeroMemory(&capture, sizeof(capture));
         if (!DeviceIoControl(handle, IOCTL_AI_TRACKPAD_CAPTURE_READ,

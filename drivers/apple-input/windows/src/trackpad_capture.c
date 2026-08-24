@@ -1,5 +1,6 @@
 #include <initguid.h>
 #include "apple_input_device.h"
+#include "apple_trackpad.h"
 
 static VOID AiTrackpadCaptureClearLocked(PAI_DEVICE_CONTEXT Context)
 {
@@ -41,6 +42,12 @@ VOID AiTrackpadCaptureRecord(PAI_DEVICE_CONTEXT Context, UCHAR Device,
         WdfWaitLockRelease(Context->CaptureLock);
         return;
     }
+    if (Context->TrackpadCapture.Trigger ==
+            AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE &&
+        !ai_apple_trackpad_release_candidate(Report, Length)) {
+        WdfWaitLockRelease(Context->CaptureLock);
+        return;
+    }
     if (Length > Context->TrackpadCapture.ReportSizeLimit ||
         Context->TrackpadCapture.ReportCount >= AI_TRACKPAD_CAPTURE_MAX_REPORTS ||
         Context->TrackpadCapture.ReportCount >=
@@ -78,7 +85,8 @@ static NTSTATUS AiTrackpadCaptureArm(PAI_DEVICE_CONTEXT Context,
         input->ReportLimit == 0 ||
         input->ReportLimit > AI_TRACKPAD_CAPTURE_MAX_REPORTS ||
         input->ReportSizeLimit == 0 ||
-        input->ReportSizeLimit > AI_TRACKPAD_CAPTURE_MAX_REPORT_SIZE)
+        input->ReportSizeLimit > AI_TRACKPAD_CAPTURE_MAX_REPORT_SIZE ||
+        input->Trigger > AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE)
         return STATUS_INVALID_PARAMETER;
     if (Context->Discovery.phase != AI_DISCOVERY_READY ||
         !Context->Descriptors.trackpad.valid)
@@ -89,6 +97,7 @@ static NTSTATUS AiTrackpadCaptureArm(PAI_DEVICE_CONTEXT Context,
     AiTrackpadCaptureClearLocked(Context);
     Context->TrackpadCapture.ReportLimit = input->ReportLimit;
     Context->TrackpadCapture.ReportSizeLimit = input->ReportSizeLimit;
+    Context->TrackpadCapture.Trigger = input->Trigger;
     RtlCopyMemory(Context->TrackpadCapture.TrackpadDescriptorSha256,
                   Context->Diagnostics.TrackpadDescriptorSha256,
                   AI_SHA256_DIGEST_SIZE);

@@ -585,7 +585,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleInputCapture", capture)
         self.assertIn("Wdmsec.lib", capture)
         self.assertIn("AppleInputCapture.sys", capture_inf)
-        self.assertIn("DriverVer=08/24/2026,0.1.2.0", capture_inf)
+        self.assertIn("DriverVer=08/24/2026,0.1.3.0", capture_inf)
         self.assertIn("TransportOnly,0x00010001,0", capture_inf)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("build-trackpad-capture-arm64:", workflow)
@@ -625,6 +625,22 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("GENERIC_READ | GENERIC_WRITE", cli)
         self.assertIn("capture --count", cli)
         self.assertNotRegex(cli, re.compile(r"/Users/|C:\\\\Users\\\\pavel", re.I))
+
+    def test_trackpad_capture_has_a_release_trigger_without_production_capture(self):
+        header = self.read("include/apple_input_capture.h")
+        source = self.read("src/trackpad_capture.c")
+        cli = self.read("tools/AppleInputCapture/main.c")
+        capture_project = self.read("AppleInputCapture.vcxproj")
+        production_project = self.read("AppleInput.vcxproj")
+        capture_inf = self.read("AppleInputCapture.inf")
+
+        self.assertIn("AI_TRACKPAD_CAPTURE_VERSION 2u", header)
+        self.assertIn("AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE", header)
+        self.assertIn("ai_apple_trackpad_release_candidate", source)
+        self.assertIn("capture-release --output", cli)
+        self.assertIn("apple_trackpad_frame.c", capture_project)
+        self.assertNotIn("AI_ENABLE_TRACKPAD_CAPTURE", production_project)
+        self.assertIn("DriverVer=08/24/2026,0.1.3.0", capture_inf)
 
 
 if __name__ == "__main__":

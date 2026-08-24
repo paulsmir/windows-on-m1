@@ -1,4 +1,5 @@
 #include "apple_spihid.h"
+#include "apple_trackpad.h"
 #include "fixtures/j313_trackpad_sanitized.h"
 
 #include <assert.h>
@@ -105,6 +106,35 @@ static void test_message_decode(void)
     raw[8] ^= 1;
     assert(ai_message_decode(raw, size, &message) == AI_ERR_CRC);
     assert(ai_message_decode(NULL, size, &message) == AI_ERR_ARGUMENT);
+}
+
+static void test_trackpad_release_candidate(void)
+{
+    uint8_t active[76] = {0};
+    uint8_t zero_contacts[46] = {0};
+    uint8_t mixed[106] = {0};
+    uint8_t too_many[406] = {0};
+
+    active[30] = 1;
+    put_le16(active + 48 + 16, 7);
+    assert(!ai_apple_trackpad_release_candidate(active, sizeof(active)));
+
+    put_le16(active + 48 + 16, 0);
+    assert(ai_apple_trackpad_release_candidate(active, sizeof(active)));
+    assert(ai_apple_trackpad_release_candidate(zero_contacts,
+                                               sizeof(zero_contacts)));
+
+    mixed[30] = 2;
+    put_le16(mixed + 48 + 16, 9);
+    put_le16(mixed + 48 + 30 + 16, 0);
+    assert(ai_apple_trackpad_release_candidate(mixed, sizeof(mixed)));
+
+    too_many[30] = 12;
+    assert(!ai_apple_trackpad_release_candidate(too_many, sizeof(too_many)));
+    assert(!ai_apple_trackpad_release_candidate(active, sizeof(active) - 1));
+    assert(!ai_apple_trackpad_release_candidate(zero_contacts,
+                                                sizeof(zero_contacts) - 1));
+    assert(!ai_apple_trackpad_release_candidate(NULL, sizeof(active)));
 }
 
 static void test_discovery(void)
@@ -681,6 +711,7 @@ int main(void)
     test_decode();
     test_reassembly();
     test_message_decode();
+    test_trackpad_release_candidate();
     test_discovery();
     test_boot_and_write_status_contract();
     test_discovery_request_contract();
