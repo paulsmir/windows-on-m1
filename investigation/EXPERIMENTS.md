@@ -5233,3 +5233,33 @@ snapshots and keep VHF absent because the package default is
   submission, bugcheck, reboot or loss of SSH/display/external USB recovery.
   Evidence paths are `hv.log`, ports 8765/8766, PnP/service state and repeated
   version-3 `AppleInputDiag.exe` snapshots.
+
+Post-run result (2026-08-24T09:07:53Z): confirmed.  The user explicitly
+approved catalog signer `2172CED45D605B33C0572C30FF69F74C440734A3`; all four
+files transferred to the Air matched the recorded host hashes.  The package
+installed as `oem13.inf` without `-PublishKeyboard`; the live registry value
+remained `TransportOnly=1`, `ACPI\APPL0001\0` reported `CM_PROB_NONE`, and the
+AppleInput service remained RUNNING.  The active DriverStore SYS path was
+`appleinput.inf_arm64_0d1ab3b27eec0e54\AppleInput.sys`, with the expected
+SHA-256 `bc457c288cef25eeb1445305629ffb9f8147b7beaf1d7d258c5cc81a2de6104e`.
+
+Four version-3 snapshots over the same live device restart were byte-stable at
+phase 8.  They reported keyboard descriptor payload length 182, trackpad length
+110, `keyboard_contract_valid=1`, digest status zero, keyboard digest
+`5ad48fbaddbae4d5806c4dbc27c842e535e2954cd140e208494cf4f17fbc47c7`
+and trackpad digest
+`9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`.
+The bounded discovery header lengths remained 4, 99, 43, 41, 41, 192 and 120.
+All snapshots reported interrupts 92, workers 2/2, SPI transfers 21, reset 1,
+and zero SPI timeout, packet CRC, message CRC, fragment and offline failures.
+
+The fail-closed publication boundary also passed: VHF state was absent; accepted,
+rejected, submitted, start-failure and submission-failure counts were all zero;
+and a present-device query found no VHF or Virtual HID child.  SSH remained
+responsive, the internal lock screen remained visible, the USB viewer stayed
+streaming at the 2560x1600 B8G8R8X8 contract, the recent System event query
+contained no critical/error event, and `hv.log` contained no reset, exception,
+bugcheck or watchdog marker.  Verdict: fixed descriptor ownership, bounded
+keyboard contract parsing, version-3 metadata and the `TransportOnly=1`
+fail-closed boundary are hardware validated on J313.  This result does not
+validate VHF keyboard creation or report publication; Gate C2 remains separate.
