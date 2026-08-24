@@ -58,6 +58,7 @@ NTSTATUS AiSpiWritePacketReadStatus(PAI_DEVICE_CONTEXT Context,
                                     const UCHAR Packet[AI_PACKET_SIZE],
                                     UCHAR Status[AI_SPI_WRITE_STATUS_SIZE],
                                     ULONGLONG DeadlineQpc);
+NTSTATUS AiGpioEnableInputInterrupt(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiGpioResetInputController(PAI_DEVICE_CONTEXT Context);
 BOOLEAN AiGpioInputAsserted(PAI_DEVICE_CONTEXT Context);
 VOID AiGpioAcknowledge(PAI_DEVICE_CONTEXT Context);

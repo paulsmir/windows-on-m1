@@ -218,6 +218,9 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
     status = AiSpiInitialize(Context);
     if (!NT_SUCCESS(status))
         return status;
+    status = AiGpioEnableInputInterrupt(Context);
+    if (!NT_SUCCESS(status))
+        return status;
     ai_discovery_start(&Context->Discovery, AiNowMicroseconds(),
                        AI_TRANSPORT_DISCOVERY_TIMEOUT_US,
                        AI_TRANSPORT_DISCOVERY_RETRY_LIMIT);

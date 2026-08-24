@@ -65,6 +65,9 @@ typedef ULONGLONG uint64_t;
 #define AI_GPIO_MODE_MASK  (7u << AI_GPIO_MODE_SHIFT)
 #define AI_GPIO_MODE_OUTPUT 1u
 #define AI_GPIO_MODE_IRQ_LOW 3u
+#define AI_GPIO_DATA (1u << 0)
+#define AI_GPIO_PERIPH_MASK (3u << 5)
+#define AI_GPIO_INPUT_ENABLE (1u << 9)
 #define AI_GPIO_GROUP_SHIFT 16u
 #define AI_GPIO_GROUP_MASK  (7u << AI_GPIO_GROUP_SHIFT)
 #define AI_GPIO_IRQ_GROUP_STARTUP 0u

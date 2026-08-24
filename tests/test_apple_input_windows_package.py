@@ -223,6 +223,33 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertLess(start.index("HardwareStarted = TRUE"),
                         start.index("AiGpioResetInputController"))
 
+    def test_transport_arms_nub_gpio_as_group_zero_level_low_before_reset(self):
+        header = self.read("include/apple_input_device.h")
+        gpio = self.read("src/gpio.c")
+        transport = self.read("src/transport.c")
+
+        self.assertIn("NTSTATUS AiGpioEnableInputInterrupt", header)
+        enable = self.c_function_body(gpio, "AiGpioEnableInputInterrupt")
+        for required in (
+            "J313_APPLE_INPUT_NUB_GPIO_PIN",
+            "J313_APPLE_INPUT_IRQ_STARTUP_GROUP",
+            "AI_GPIO_MODE_IRQ_LOW",
+            "AiGpioIrqMode",
+            "READ_REGISTER_NOFENCE_ULONG",
+            "WRITE_REGISTER_NOFENCE_ULONG",
+            "AI_GPIO_MODE_MASK",
+            "AI_GPIO_GROUP_MASK",
+            "AI_GPIO_PERIPH_MASK",
+            "AI_GPIO_INPUT_ENABLE",
+            "AiGpioAcknowledge",
+        ):
+            self.assertIn(required, enable)
+
+        start = self.c_function_body(transport, "AiTransportStart")
+        self.assertIn("AiGpioEnableInputInterrupt", start)
+        self.assertLess(start.index("AiGpioEnableInputInterrupt"),
+                        start.index("AiGpioResetInputController"))
+
     def test_transport_worker_has_a_hard_packet_budget_and_protocol_validation(self):
         transport = self.read("src/transport.c")
         self.assertIn("AI_TRANSPORT_MAX_PACKETS_PER_WORKER 32u", transport)
