@@ -5981,3 +5981,33 @@ This replacement changes only diagnostic observability relative to the prior
 package: it adds bounded geometry scalars to JSON and does not enable trackpad
 publication. The same rollback, live baseline and two-stage gate remain in
 force.
+
+EXP-20260824-053 Gate D2a result (2026-08-24T16:43:00Z): passed after one
+fail-closed harness correction. The first attempt loaded the exact candidate
+SYS but rejected because `Win32_PnPSignedDriver` transiently reported
+`oem15.inf` while authoritative PnP state already selected `oem16.inf`; the
+harness restored the publication gates and the preserved package. PnP then
+proved `oem16.inf` was installed and best-ranked. The harness was changed to
+read `DEVPKEY_Device_DriverInfPath`, explicitly deleted only `oem16.inf`, and
+verified the exact `oem15.inf` rollback SYS before retrying.
+
+The second attempt also failed closed and restored `oem15.inf`: geometry was
+already valid, but keyboard VHF remained absent because production INF defaults
+were written after the gates. Moving the gate write after `pnputil /install`
+fixed the proven order dependency. The third attempt passed on `oem16.inf` with
+exact active SYS SHA-256
+`01d49454875fea68d352746dc51d4afcac07613c2b8a212d50cfd1a358397a7f`,
+transport phase 8, trackpad init READY, zero retries, zero timeout/CRC/fragment
+and offline counters, keyboard VHF running, and trackpad VHF absent. Hardware
+dimensions are logical X `[-5318,5787]`, logical Y `[-157,7102]`, physical X
+`[0,468]`, physical Y `[0,317]`, HID unit `0x13` and exponent `-2`.
+
+Ignored evidence hashes:
+- `axis-gate-pass.remote.json` SHA-256
+  `b0eb6ad9f61d770cad3873f3f8535673ce2b9c2367c6da6c726eac9e227131f0`;
+- `axis-gate-status.pass.remote.json` SHA-256
+  `f6fa002e526398732e8483b1f574b7de28138169b4025d191a365b8170cc739d`.
+
+Verdict: Apple dimensions report `0xd9` produces a valid Windows axis contract
+on live J313. Gate D2b may now publish the Precision Touchpad child without
+changing firmware, NVMe, USB or the preserved rollback package.
