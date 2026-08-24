@@ -5500,3 +5500,10 @@ Its exact catalog signer SHA-1 is
 all hashes in the original pre-run paragraph and still requires explicit user
 approval before import.  The higher version allows side-by-side staging and
 selection without deleting the `oem14` rollback first.
+
+The matching metadata-only `AppleInputDiag.exe` from production artifact ID
+`9519183501` is AArch64 with SHA-256
+`72438a90074f033d37045e9d4d8c3096aad35ac5ef661f5f078430ba33a4be50`;
+it is staged under ignored
+`.local/apple-input/mt-init-v012-production-run-32724933170` and is the only
+diagnostic CLI permitted for the new version-3 init fields in this experiment.
