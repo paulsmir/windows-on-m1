@@ -47,6 +47,12 @@ out:
 
 static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
 {
+    ULONG header_count = s->HeaderWriteIndex;
+    ULONG first_sequence;
+
+    if (header_count > AI_PACKET_HEADER_RING_CAPACITY)
+        header_count = AI_PACKET_HEADER_RING_CAPACITY;
+    first_sequence = s->HeaderWriteIndex - header_count;
     if (json) {
         printf("{\"version\":%lu,\"phase\":%lu,\"interrupts\":%llu,"
                "\"workers_queued\":%llu,\"workers_completed\":%llu,"
@@ -54,7 +60,7 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
                "\"packet_crc_failures\":%llu,\"message_crc_failures\":%llu,"
                "\"fragment_failures\":%llu,\"keyboard_reports\":%llu,"
                "\"trackpad_reports\":%llu,\"resets\":%llu,"
-               "\"offline\":%llu}\n",
+               "\"offline\":%llu,\"headers\":[",
                s->Version, s->TransportPhase,
                (unsigned long long)s->InterruptCount,
                (unsigned long long)s->WorkerQueuedCount,
@@ -68,6 +74,20 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
                (unsigned long long)s->TrackpadReportCount,
                (unsigned long long)s->ResetCount,
                (unsigned long long)s->OfflineCount);
+        for (ULONG index = 0; index < header_count; ++index) {
+            ULONG sequence = first_sequence + index;
+            const AI_PACKET_HEADER_V1 *header =
+                &s->Headers[sequence % AI_PACKET_HEADER_RING_CAPACITY];
+
+            printf("%s{\"sequence\":%llu,\"result\":%lu,"
+                   "\"flags\":%u,\"device\":%u,\"offset\":%u,"
+                   "\"remaining\":%u,\"length\":%u}",
+                   index ? "," : "",
+                   (unsigned long long)header->Sequence, header->Result,
+                   header->Flags, header->Device, header->Offset,
+                   header->Remaining, header->Length);
+        }
+        printf("]}\n");
         return;
     }
     printf("AppleInput snapshot v%lu phase=%lu\n", s->Version,
@@ -86,6 +106,16 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
            (unsigned long long)s->FragmentFailureCount,
            (unsigned long long)s->KeyboardReportCount,
            (unsigned long long)s->TrackpadReportCount);
+    for (ULONG index = 0; index < header_count; ++index) {
+        ULONG sequence = first_sequence + index;
+        const AI_PACKET_HEADER_V1 *header =
+            &s->Headers[sequence % AI_PACKET_HEADER_RING_CAPACITY];
+
+        printf("header[%llu] result=%lu flags=%02x device=%02x off=%u remain=%u len=%u\n",
+               (unsigned long long)header->Sequence, header->Result,
+               header->Flags, header->Device, header->Offset,
+               header->Remaining, header->Length);
+    }
 }
 
 int wmain(int argc, wchar_t **argv)

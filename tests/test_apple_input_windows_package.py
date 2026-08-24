@@ -318,6 +318,16 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("continue", kd.lower())
         self.assertNotRegex(cli + kd, re.compile(r"/Users/|C:\\Users\\pavel", re.I))
 
+    def test_diagnostic_cli_exposes_the_bounded_packet_header_ring(self):
+        cli = self.read("tools/AppleInputDiag/main.c")
+
+        self.assertIn("HeaderWriteIndex", cli)
+        self.assertIn("AI_PACKET_HEADER_RING_CAPACITY", cli)
+        self.assertIn('\\"headers\\"', cli)
+        for field in ("Sequence", "Result", "Flags", "Device", "Offset",
+                      "Remaining", "Length"):
+            self.assertIn(field, cli)
+
 
 if __name__ == "__main__":
     unittest.main()
