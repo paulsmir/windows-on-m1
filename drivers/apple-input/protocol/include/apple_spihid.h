@@ -60,6 +60,22 @@ enum ai_discovery_phase {
     AI_DISCOVERY_OFFLINE,
 };
 
+enum ai_trackpad_init_phase {
+    AI_TRACKPAD_INIT_IDLE,
+    AI_TRACKPAD_INIT_INFO,
+    AI_TRACKPAD_INIT_MULTITOUCH,
+    AI_TRACKPAD_INIT_READY,
+    AI_TRACKPAD_INIT_OFFLINE,
+};
+
+struct ai_trackpad_init {
+    enum ai_trackpad_init_phase phase;
+    uint8_t retry_count;
+    uint8_t retry_limit;
+    uint8_t message_id;
+    uint64_t deadline_us;
+};
+
 struct ai_discovery {
     enum ai_discovery_phase phase;
     uint8_t retry_count;
@@ -186,6 +202,23 @@ bool ai_discovery_response_matches(enum ai_discovery_phase phase,
 enum ai_status ai_discovery_request_encode(const struct ai_discovery_request *request,
                                            uint8_t message_id,
                                            uint8_t raw[AI_PACKET_SIZE]);
+enum ai_status ai_trackpad_init_request_encode(
+    enum ai_trackpad_init_phase phase, uint8_t message_id,
+    uint8_t raw[AI_PACKET_SIZE]);
+void ai_trackpad_init_start(struct ai_trackpad_init *state,
+                            uint8_t message_id, uint64_t now_us,
+                            uint64_t timeout_us, uint8_t retry_limit);
+bool ai_trackpad_init_response_matches(
+    const struct ai_trackpad_init *state,
+    const struct ai_message_view *wire,
+    const struct ai_protocol_message *message);
+enum ai_status ai_trackpad_init_accept(
+    struct ai_trackpad_init *state, const struct ai_message_view *wire,
+    const struct ai_protocol_message *message, uint64_t now_us,
+    uint64_t timeout_us);
+enum ai_status ai_trackpad_init_poll(struct ai_trackpad_init *state,
+                                     uint64_t now_us,
+                                     uint64_t timeout_us);
 bool ai_write_status_valid(const uint8_t *status, size_t size);
 enum ai_status ai_spi_plan_transfer(uint32_t reference_hz, uint32_t target_hz,
                                     uint8_t bits_per_word, size_t byte_length,

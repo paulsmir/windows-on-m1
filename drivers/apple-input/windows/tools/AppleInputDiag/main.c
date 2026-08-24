@@ -99,6 +99,9 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
                "\"keyboard_descriptor_length\":%u,"
                "\"trackpad_descriptor_length\":%u,"
                "\"keyboard_contract_valid\":%u,"
+               "\"trackpad_init_phase\":%u,"
+               "\"trackpad_init_retries\":%u,"
+               "\"trackpad_init_attempts\":%u,"
                "\"descriptor_digest_status\":%lu,"
                "\"keyboard_vhf_state\":%lu,"
                "\"keyboard_reports_accepted\":%llu,"
@@ -112,6 +115,8 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
                s->MessageDevice, s->MessageId, s->MessageResponseLength,
                s->MessagePayloadLength, s->KeyboardDescriptorLength,
                s->TrackpadDescriptorLength, s->KeyboardContractValid,
+               s->TrackpadInitPhase, s->TrackpadInitRetryCount,
+               s->TrackpadInitAttemptCount,
                s->DescriptorDigestStatus, s->KeyboardVhfState,
                (unsigned long long)s->KeyboardReportAcceptedCount,
                (unsigned long long)s->KeyboardReportRejectedCount,
@@ -148,6 +153,9 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
     printf("descriptors keyboard=%u trackpad=%u keyboard_contract=%u digest_status=%08lx\n",
            s->KeyboardDescriptorLength, s->TrackpadDescriptorLength,
            s->KeyboardContractValid, s->DescriptorDigestStatus);
+    printf("trackpad_init phase=%u retries=%u attempts=%u\n",
+           s->TrackpadInitPhase, s->TrackpadInitRetryCount,
+           s->TrackpadInitAttemptCount);
     printf("vhf state=%lu accepted=%llu rejected=%llu submitted=%llu submit_failures=%llu start_failures=%llu last_status=%08lx\n",
            s->KeyboardVhfState,
            (unsigned long long)s->KeyboardReportAcceptedCount,

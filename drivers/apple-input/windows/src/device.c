@@ -40,6 +40,8 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
     WDF_PNPPOWER_EVENT_CALLBACKS callbacks;
     WDF_INTERRUPT_CONFIG interrupt_config;
     WDF_OBJECT_ATTRIBUTES lock_attributes;
+    WDF_OBJECT_ATTRIBUTES timer_attributes;
+    WDF_TIMER_CONFIG timer_config;
     WDF_OBJECT_ATTRIBUTES attributes;
     WDFDEVICE device;
     PAI_DEVICE_CONTEXT context;
@@ -78,6 +80,9 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 
     WDF_OBJECT_ATTRIBUTES_INIT(&lock_attributes);
     lock_attributes.ParentObject = device;
+    status = WdfWaitLockCreate(&lock_attributes, &context->TransportLock);
+    if (!NT_SUCCESS(status))
+        return status;
     status = WdfWaitLockCreate(&lock_attributes, &context->FrontendLock);
     if (!NT_SUCCESS(status))
         return status;
@@ -87,6 +92,16 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
         return status;
 #endif
     context->TransportOnly = AiReadTransportOnlyParameter(Driver);
+
+    WDF_TIMER_CONFIG_INIT(&timer_config, AiTrackpadInitTimer);
+    timer_config.AutomaticSerialization = FALSE;
+    WDF_OBJECT_ATTRIBUTES_INIT(&timer_attributes);
+    timer_attributes.ParentObject = device;
+    timer_attributes.ExecutionLevel = WdfExecutionLevelPassive;
+    status = WdfTimerCreate(&timer_config, &timer_attributes,
+                            &context->TrackpadInitTimer);
+    if (!NT_SUCCESS(status))
+        return status;
 
     WDF_INTERRUPT_CONFIG_INIT(&interrupt_config, AiInputInterruptIsr, NULL);
     interrupt_config.EvtInterruptWorkItem = AiTransportWorker;

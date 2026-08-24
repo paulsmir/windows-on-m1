@@ -92,3 +92,44 @@ enum ai_status ai_discovery_request_encode(const struct ai_discovery_request *re
              ai_crc16_usb(0, raw, AI_PACKET_SIZE - 2));
     return AI_OK;
 }
+
+enum ai_status ai_trackpad_init_request_encode(
+    enum ai_trackpad_init_phase phase, uint8_t message_id,
+    uint8_t raw[AI_PACKET_SIZE])
+{
+    size_t message_size;
+
+    if (!raw)
+        return AI_ERR_ARGUMENT;
+    if (phase != AI_TRACKPAD_INIT_INFO &&
+        phase != AI_TRACKPAD_INIT_MULTITOUCH)
+        return AI_ERR_SEQUENCE;
+
+    AI_MEMSET(raw, AI_PACKET_SIZE);
+    raw[0] = AI_PACKET_WRITE;
+    raw[1] = phase == AI_TRACKPAD_INIT_INFO ? 0xd0 : 0x02;
+
+    if (phase == AI_TRACKPAD_INIT_INFO) {
+        raw[8] = 0x20;
+        raw[9] = 0x10;
+        raw[10] = 0x02;
+        raw[11] = message_id;
+        put_le16(raw + 12, 0x0200);
+        message_size = 10;
+    } else {
+        raw[8] = 0x52;
+        raw[9] = 0x02;
+        raw[11] = message_id;
+        put_le16(raw + 12, 2);
+        put_le16(raw + 14, 2);
+        put_le16(raw + 16, 0x0102);
+        message_size = 12;
+    }
+
+    put_le16(raw + 6, (uint16_t)message_size);
+    put_le16(raw + 8 + message_size - 2,
+             ai_crc16_usb(0, raw + 8, message_size - 2));
+    put_le16(raw + AI_PACKET_SIZE - 2,
+             ai_crc16_usb(0, raw, AI_PACKET_SIZE - 2));
+    return AI_OK;
+}

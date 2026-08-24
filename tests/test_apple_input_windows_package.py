@@ -46,6 +46,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             "apple_spihid_discovery.c",
             "apple_spihid_packet.c",
             "apple_spihid_reassembly.c",
+            "apple_spihid_trackpad.c",
             "apple_spihid_descriptors.c",
             "apple_hid_contract.c",
             "apple_spihid_transport.c",
@@ -224,6 +225,51 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             ioctl + cli,
             r"(?i)(KeyCode|PressedKeys|RawReport|payloadbytes)\s*\[",
         )
+
+    def test_trackpad_multitouch_init_is_serialized_retriable_and_nonfatal(self):
+        header = self.read("include/apple_input_device.h")
+        device = self.read("src/device.c")
+        transport = self.read("src/transport.c")
+        ioctl = self.read("include/apple_input_ioctl.h")
+        diagnostics = self.read("src/diagnostics.c")
+        cli = self.read("tools/AppleInputDiag/main.c")
+
+        for symbol in (
+            "TransportLock",
+            "TrackpadInitTimer",
+            "struct ai_trackpad_init TrackpadInit",
+            "EVT_WDF_TIMER AiTrackpadInitTimer",
+        ):
+            self.assertIn(symbol, header)
+        self.assertIn("WdfWaitLockCreate", device)
+        self.assertIn("WdfTimerCreate", device)
+        self.assertIn("WdfExecutionLevelPassive", device)
+
+        process = self.c_function_body(transport, "AiTransportProcessPacket")
+        worker = self.c_function_body(transport, "AiTransportWorker")
+        timer = self.c_function_body(transport, "AiTrackpadInitTimer")
+        stop = self.c_function_body(transport, "AiTransportStop")
+        self.assertIn("ai_trackpad_init_start", process)
+        self.assertIn("ai_trackpad_init_response_matches", process)
+        self.assertIn("ai_trackpad_init_accept", process)
+        self.assertIn("AiTransportSendTrackpadInitRequest", process)
+        self.assertIn("WdfWaitLockAcquire(context->TransportLock", worker)
+        self.assertIn("ai_trackpad_init_poll", timer)
+        self.assertIn("AiTransportSendTrackpadInitRequest", timer)
+        self.assertIn("WdfWaitLockAcquire(context->TransportLock", timer)
+        self.assertLess(stop.index("WdfTimerStop"),
+                        stop.index("WdfWaitLockAcquire"))
+        self.assertIn("AiVhfFrontendStart", process)
+        self.assertNotIn("return status;", process[process.index("AiVhfFrontendStart"):])
+
+        for field in (
+            "TrackpadInitPhase",
+            "TrackpadInitRetryCount",
+            "TrackpadInitAttemptCount",
+        ):
+            self.assertIn(field, ioctl)
+            self.assertIn(field, diagnostics + transport)
+            self.assertIn(field, cli)
 
     def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")

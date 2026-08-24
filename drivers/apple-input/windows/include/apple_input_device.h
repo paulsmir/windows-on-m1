@@ -24,6 +24,7 @@ enum AI_VHF_STATE {
 
 typedef struct _AI_DEVICE_CONTEXT {
     WDFDEVICE Device;
+    WDFWAITLOCK TransportLock;
     WDFWAITLOCK FrontendLock;
 #if AI_ENABLE_TRACKPAD_CAPTURE
     WDFWAITLOCK CaptureLock;
@@ -37,9 +38,11 @@ typedef struct _AI_DEVICE_CONTEXT {
     PUCHAR ApGpioRegisters;
     PUCHAR NubGpioRegisters;
     WDFINTERRUPT Interrupt;
+    WDFTIMER TrackpadInitTimer;
     WDFQUEUE DiagnosticQueue;
     struct ai_transport_queue TransportQueue;
     struct ai_discovery Discovery;
+    struct ai_trackpad_init TrackpadInit;
     struct ai_reassembler Reassembler;
     struct ai_descriptor_store Descriptors;
     struct ai_hid_input_contract KeyboardInputContract;
@@ -71,6 +74,7 @@ EVT_WDF_DEVICE_D0_EXIT_PRE_INTERRUPTS_DISABLED
     AppleInputEvtDeviceD0ExitPreInterruptsDisabled;
 EVT_WDF_INTERRUPT_ISR AiInputInterruptIsr;
 EVT_WDF_INTERRUPT_WORKITEM AiTransportWorker;
+EVT_WDF_TIMER AiTrackpadInitTimer;
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL AiDiagnosticsEvtIoDeviceControl;
 
 NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit);

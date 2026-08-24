@@ -5373,3 +5373,38 @@ for one explicitly controlled physical gesture at a time.
   and zero timeout/CRC/fragment/offline/VHF failures. Any mismatch, hang,
   bugcheck, reboot, lost keyboard, lost SSH or dropped report triggers rollback
   before gesture collection.
+
+Post-run result (2026-08-24T14:02:00Z): superseded.  The capture package was
+installed as `oem14.inf` with the exact recorded SYS hash and the explicitly
+approved catalog signer
+`1DF96731DC3D8DECD712F828B11616C384CBD83A`.  The built-in keyboard remained
+functional.  Two separate stationary-one-finger attempts both included an
+accidental physical click, but that physical difference did not alter the
+captured data: each 8320-byte blob contained eight identical 8-byte device-2
+reports, `02 00 00 00 00 00 00 01`, and both files had SHA-256
+`2997b4b31206f4c008764fa0b0ec43cebbdc7cbc9d61d429e903c37dbd195c7f`.
+The ignored evidence paths are
+`.local/apple-input/trackpad-captures/EXP-20260824-049/00-rejected-stationary-plus-strong-click.bin`
+and
+`.local/apple-input/trackpad-captures/EXP-20260824-049/02-stationary-one-finger.bin`.
+
+The exact repetition proves that another gesture retry cannot produce the
+missing coordinate frames under this transport state.  Source review found the
+violated initialization contract in upstream Linux
+`drivers/input/keyboard/applespi.c`: after descriptor discovery the host sends
+the Trackpad Info request (`0x1020`) followed by the multitouch-init request
+(`0x0252`, command `0x0102`), and the source explicitly records that the latter
+is required for pointer movement.  The current Windows transport transitioned
+directly from descriptor discovery to READY and sent neither command.  Current
+m1n1 and Mu do not own this post-discovery Apple SPI HID command sequence; the
+Windows function driver does.  Official KMDF timer and wait-lock documentation
+was also checked before designing the Windows retry path: both the passive
+interrupt worker and a passive one-shot timer can share one wait lock, while a
+waited timer stop must occur before acquiring that lock during teardown.
+
+Verdict: the bounded capture mechanism works, but Gate D1 cannot collect
+coordinate evidence until the owner-layer initialization sequence is present.
+The next experiment must change only that sequence, retain the capture-only
+frontend and exact rollback package, and require INFO then MULTITOUCH response
+completion before asking the user for another gesture.  No Precision Touchpad
+translation or mouse emulation is justified by this result.

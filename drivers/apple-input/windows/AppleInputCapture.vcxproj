@@ -43,6 +43,7 @@
     <ClCompile Include="..\protocol\src\apple_spihid_descriptors.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_packet.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_reassembly.c" />
+    <ClCompile Include="..\protocol\src\apple_spihid_trackpad.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_transport.c" />
   </ItemGroup>
   <ItemGroup>

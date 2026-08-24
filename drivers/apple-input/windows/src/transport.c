@@ -4,6 +4,9 @@
 #define AI_TRANSPORT_MAX_PACKETS_PER_WORKER 32u
 #define AI_TRANSPORT_DISCOVERY_TIMEOUT_US 1000000ull
 #define AI_TRANSPORT_DISCOVERY_RETRY_LIMIT 2u
+#define AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_MS 1000u
+#define AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_US 1000000ull
+#define AI_TRANSPORT_TRACKPAD_INIT_RETRY_LIMIT 2u
 
 static VOID AiCounterIncrement(ULONGLONG *Counter)
 {
@@ -58,6 +61,41 @@ static NTSTATUS AiTransportSendCurrentRequest(PAI_DEVICE_CONTEXT Context)
                                         Context->StatusBytes,
                                         AiTransferDeadlineQpc());
     AiCounterIncrement(&Context->Diagnostics.SpiTransferCount);
+    if (status == STATUS_IO_TIMEOUT)
+        AiCounterIncrement(&Context->Diagnostics.SpiTimeoutCount);
+    if (!NT_SUCCESS(status))
+        return status;
+    if (!ai_write_status_valid(Context->StatusBytes,
+                               sizeof(Context->StatusBytes)))
+        return STATUS_DEVICE_PROTOCOL_ERROR;
+    return STATUS_SUCCESS;
+}
+
+static VOID AiTrackpadInitArmTimer(PAI_DEVICE_CONTEXT Context)
+{
+    WdfTimerStart(Context->TrackpadInitTimer,
+                  WDF_REL_TIMEOUT_IN_MS(
+                      AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_MS));
+}
+
+static NTSTATUS AiTransportSendTrackpadInitRequest(
+    PAI_DEVICE_CONTEXT Context)
+{
+    enum ai_status protocol_status;
+    NTSTATUS status;
+
+    protocol_status = ai_trackpad_init_request_encode(
+        Context->TrackpadInit.phase, Context->TrackpadInit.message_id,
+        Context->TransmitPacket);
+    if (protocol_status != AI_OK)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (Context->Diagnostics.TrackpadInitAttemptCount != MAXUCHAR)
+        Context->Diagnostics.TrackpadInitAttemptCount++;
+
+    RtlZeroMemory(Context->StatusBytes, sizeof(Context->StatusBytes));
+    status = AiSpiWritePacketReadStatus(Context, Context->TransmitPacket,
+                                        Context->StatusBytes,
+                                        AiTransferDeadlineQpc());
     AiCounterIncrement(&Context->Diagnostics.SpiTransferCount);
     if (status == STATUS_IO_TIMEOUT)
         AiCounterIncrement(&Context->Diagnostics.SpiTimeoutCount);
@@ -154,7 +192,20 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
     AiDiagnosticsRecordMessage(Context, &message);
 
     if (phase == AI_DISCOVERY_READY) {
-        if (wire.flags == AI_PACKET_READ && wire.device == 1u) {
+        if (ai_trackpad_init_response_matches(
+                &Context->TrackpadInit, &wire, &message)) {
+            WdfTimerStop(Context->TrackpadInitTimer, FALSE);
+            protocol_status = ai_trackpad_init_accept(
+                &Context->TrackpadInit, &wire, &message, now_us,
+                AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_US);
+            if (protocol_status == AI_OK) {
+                (VOID)AiTransportSendTrackpadInitRequest(Context);
+                AiTrackpadInitArmTimer(Context);
+            } else if (protocol_status != AI_COMPLETE) {
+                Context->TrackpadInit.phase = AI_TRACKPAD_INIT_OFFLINE;
+                AiCounterIncrement(&Context->Diagnostics.OfflineCount);
+            }
+        } else if (wire.flags == AI_PACKET_READ && wire.device == 1u) {
             AiCounterIncrement(&Context->Diagnostics.KeyboardReportCount);
             if (!ai_hid_input_report_valid(
                     &Context->KeyboardInputContract, message.payload,
@@ -206,6 +257,12 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
         if (!NT_SUCCESS(status))
             AiCounterIncrement(
                 &Context->Diagnostics.KeyboardVhfStartFailureCount);
+        ai_trackpad_init_start(
+            &Context->TrackpadInit, Context->MessageId++, now_us,
+            AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_US,
+            AI_TRANSPORT_TRACKPAD_INIT_RETRY_LIMIT);
+        (VOID)AiTransportSendTrackpadInitRequest(Context);
+        AiTrackpadInitArmTimer(Context);
         return STATUS_SUCCESS;
     }
     if (protocol_status != AI_OK)
@@ -248,6 +305,8 @@ VOID AiTransportWorker(WDFINTERRUPT Interrupt, WDFOBJECT AssociatedObject)
     }
     WdfInterruptReleaseLock(Interrupt);
 
+    WdfWaitLockAcquire(context->TransportLock, NULL);
+
     do {
         while (packet_count < AI_TRANSPORT_MAX_PACKETS_PER_WORKER) {
             NTSTATUS status;
@@ -285,8 +344,36 @@ VOID AiTransportWorker(WDFINTERRUPT Interrupt, WDFOBJECT AssociatedObject)
         WdfInterruptReleaseLock(Interrupt);
     } while (drain_again && !context->Stopping && context->HardwareStarted);
 
+    WdfWaitLockRelease(context->TransportLock);
+
     AiCounterIncrement(&context->Diagnostics.WorkerCompletedCount);
     AiDiagnosticsPublish(context);
+}
+
+VOID AiTrackpadInitTimer(WDFTIMER Timer)
+{
+    PAI_DEVICE_CONTEXT context = AiGetDeviceContext(
+        (WDFDEVICE)WdfTimerGetParentObject(Timer));
+    enum ai_status protocol_status;
+
+    WdfWaitLockAcquire(context->TransportLock, NULL);
+    if (context->Stopping || !context->HardwareStarted)
+        goto Exit;
+
+    protocol_status = ai_trackpad_init_poll(
+        &context->TrackpadInit, AiNowMicroseconds(),
+        AI_TRANSPORT_TRACKPAD_INIT_TIMEOUT_US);
+    if (protocol_status == AI_ERR_TIMEOUT &&
+        context->TrackpadInit.phase != AI_TRACKPAD_INIT_OFFLINE) {
+        (VOID)AiTransportSendTrackpadInitRequest(context);
+        AiTrackpadInitArmTimer(context);
+    } else if (context->TrackpadInit.phase == AI_TRACKPAD_INIT_OFFLINE) {
+        AiCounterIncrement(&context->Diagnostics.OfflineCount);
+    }
+    AiDiagnosticsPublish(context);
+
+Exit:
+    WdfWaitLockRelease(context->TransportLock);
 }
 
 NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
@@ -295,26 +382,30 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
 
     if (!Context || !Context->ResourcesValidated)
         return STATUS_DEVICE_NOT_READY;
+    WdfTimerStop(Context->TrackpadInitTimer, TRUE);
+    WdfWaitLockAcquire(Context->TransportLock, NULL);
     Context->Stopping = FALSE;
     Context->HardwareStarted = FALSE;
     ai_transport_queue_reset(&Context->TransportQueue);
     ai_reassembler_reset(&Context->Reassembler);
+    AI_MEMSET(&Context->TrackpadInit, sizeof(Context->TrackpadInit));
     ai_descriptor_store_reset(&Context->Descriptors);
     AI_MEMSET(&Context->KeyboardInputContract,
               sizeof(Context->KeyboardInputContract));
     RtlZeroMemory(&Context->Diagnostics, sizeof(Context->Diagnostics));
     Context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
     Context->Diagnostics.Size = sizeof(Context->Diagnostics);
+    Context->MessageId = 0;
 #if AI_ENABLE_TRACKPAD_CAPTURE
     AiTrackpadCaptureCancel(Context);
 #endif
 
     status = AiSpiInitialize(Context);
     if (!NT_SUCCESS(status))
-        return status;
+        goto Exit;
     status = AiGpioEnableInputInterrupt(Context);
     if (!NT_SUCCESS(status))
-        return status;
+        goto Exit;
     ai_discovery_start(&Context->Discovery, AiNowMicroseconds(),
                        AI_TRANSPORT_DISCOVERY_TIMEOUT_US,
                        AI_TRANSPORT_DISCOVERY_RETRY_LIMIT);
@@ -324,10 +415,12 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
     if (!NT_SUCCESS(status)) {
         Context->HardwareStarted = FALSE;
         Context->Stopping = TRUE;
-        return status;
+        goto Exit;
     }
     AiDiagnosticsPublish(Context);
-    return STATUS_SUCCESS;
+Exit:
+    WdfWaitLockRelease(Context->TransportLock);
+    return status;
 }
 
 VOID AiTransportStop(PAI_DEVICE_CONTEXT Context)
@@ -336,8 +429,11 @@ VOID AiTransportStop(PAI_DEVICE_CONTEXT Context)
         return;
     Context->Stopping = TRUE;
     Context->HardwareStarted = FALSE;
+    WdfTimerStop(Context->TrackpadInitTimer, TRUE);
+    WdfWaitLockAcquire(Context->TransportLock, NULL);
     ai_transport_queue_reset(&Context->TransportQueue);
     ai_reassembler_reset(&Context->Reassembler);
+    Context->TrackpadInit.phase = AI_TRACKPAD_INIT_IDLE;
 #if AI_ENABLE_TRACKPAD_CAPTURE
     AiTrackpadCaptureCancel(Context);
 #endif
@@ -345,4 +441,5 @@ VOID AiTransportStop(PAI_DEVICE_CONTEXT Context)
     Context->Diagnostics.KeyboardVhfState =
         (ULONG)Context->KeyboardVhfState;
     AiDiagnosticsPublish(Context);
+    WdfWaitLockRelease(Context->TransportLock);
 }

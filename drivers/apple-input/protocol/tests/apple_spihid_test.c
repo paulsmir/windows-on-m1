@@ -283,6 +283,116 @@ static void test_discovery_response_matching(void)
     assert(!ai_discovery_response_matches(AI_DISCOVERY_IDENTITY, &wire, NULL));
 }
 
+static void test_trackpad_init_request_encoding(void)
+{
+    static const uint8_t info_prefix[] = {
+        0x40, 0xd0, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x00,
+        0x20, 0x10, 0x02, 0x34, 0x00, 0x02, 0x00, 0x00,
+        0x02, 0x3f,
+    };
+    static const uint8_t mt_prefix[] = {
+        0x40, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0c, 0x00,
+        0x52, 0x02, 0x00, 0x35, 0x02, 0x00, 0x02, 0x00,
+        0x02, 0x01, 0x1e, 0x12,
+    };
+    uint8_t raw[AI_PACKET_SIZE];
+
+    assert(ai_trackpad_init_request_encode(AI_TRACKPAD_INIT_INFO, 0x34,
+                                           raw) == AI_OK);
+    assert(memcmp(raw, info_prefix, sizeof(info_prefix)) == 0);
+    for (size_t index = sizeof(info_prefix); index < AI_PACKET_SIZE - 2;
+         index++)
+        assert(raw[index] == 0);
+    assert(raw[AI_PACKET_SIZE - 2] == 0xd0);
+    assert(raw[AI_PACKET_SIZE - 1] == 0x62);
+
+    assert(ai_trackpad_init_request_encode(AI_TRACKPAD_INIT_MULTITOUCH,
+                                           0x35, raw) == AI_OK);
+    assert(memcmp(raw, mt_prefix, sizeof(mt_prefix)) == 0);
+    for (size_t index = sizeof(mt_prefix); index < AI_PACKET_SIZE - 2;
+         index++)
+        assert(raw[index] == 0);
+    assert(raw[AI_PACKET_SIZE - 2] == 0x23);
+    assert(raw[AI_PACKET_SIZE - 1] == 0xab);
+    assert(ai_trackpad_init_request_encode(AI_TRACKPAD_INIT_IDLE, 0,
+                                           raw) == AI_ERR_SEQUENCE);
+    assert(ai_trackpad_init_request_encode(AI_TRACKPAD_INIT_INFO, 0,
+                                           NULL) == AI_ERR_ARGUMENT);
+}
+
+static void test_trackpad_init_sequence_and_retry_limit(void)
+{
+    static const uint8_t info_payload[] = {0x11};
+    static const uint8_t mt_payload[] = {0x02, 0x01};
+    struct ai_trackpad_init state;
+    struct ai_message_view wire = {
+        AI_PACKET_WRITE, 0xd0, info_payload, sizeof(info_payload),
+    };
+    struct ai_protocol_message message = {
+        .type = 0x20,
+        .report = 0x10,
+        .device = 0x02,
+        .id = 0x34,
+        .response_length = 0x0200,
+        .payload = info_payload,
+        .payload_length = sizeof(info_payload),
+    };
+
+    ai_trackpad_init_start(&state, 0x34, 100, 50, 2);
+    assert(state.phase == AI_TRACKPAD_INIT_INFO);
+    assert(state.message_id == 0x34 && state.deadline_us == 150);
+
+    {
+        struct ai_message_view keyboard_wire = {
+            AI_PACKET_READ, 0x01, info_payload, sizeof(info_payload),
+        };
+        struct ai_protocol_message keyboard_message = {
+            .type = 0x10,
+            .report = 0x01,
+            .device = 0,
+            .id = 0,
+            .payload = info_payload,
+            .payload_length = sizeof(info_payload),
+        };
+        assert(!ai_trackpad_init_response_matches(
+            &state, &keyboard_wire, &keyboard_message));
+    }
+    assert(ai_trackpad_init_response_matches(&state, &wire, &message));
+
+    message.id = 0x35;
+    assert(ai_trackpad_init_accept(&state, &wire, &message, 110, 50) ==
+           AI_ERR_SEQUENCE);
+    assert(state.phase == AI_TRACKPAD_INIT_INFO && state.message_id == 0x34);
+    message.id = 0x34;
+    assert(ai_trackpad_init_accept(&state, &wire, &message, 110, 50) == AI_OK);
+    assert(state.phase == AI_TRACKPAD_INIT_MULTITOUCH);
+    assert(state.message_id == 0x35 && state.deadline_us == 160);
+
+    wire.device = 0x02;
+    wire.data = mt_payload;
+    wire.length = sizeof(mt_payload);
+    message.type = 0x52;
+    message.report = 0x02;
+    message.device = 0;
+    message.id = 0x35;
+    message.response_length = 2;
+    message.payload = mt_payload;
+    message.payload_length = sizeof(mt_payload);
+    assert(ai_trackpad_init_accept(&state, &wire, &message, 120, 50) ==
+           AI_COMPLETE);
+    assert(state.phase == AI_TRACKPAD_INIT_READY);
+
+    ai_trackpad_init_start(&state, 0xfe, 0, 10, 2);
+    assert(ai_trackpad_init_poll(&state, 9, 10) == AI_OK);
+    assert(ai_trackpad_init_poll(&state, 10, 10) == AI_ERR_TIMEOUT);
+    assert(state.phase == AI_TRACKPAD_INIT_INFO && state.retry_count == 1);
+    assert(state.message_id == 0xff && state.deadline_us == 20);
+    assert(ai_trackpad_init_poll(&state, 20, 10) == AI_ERR_TIMEOUT);
+    assert(state.retry_count == 2 && state.message_id == 0x00);
+    assert(ai_trackpad_init_poll(&state, 30, 10) == AI_ERR_TIMEOUT);
+    assert(state.phase == AI_TRACKPAD_INIT_OFFLINE);
+}
+
 static void test_spi_transfer_plan(void)
 {
     struct ai_spi_transfer_plan plan;
@@ -545,6 +655,8 @@ int main(void)
     test_discovery_request_contract();
     test_discovery_request_encoding();
     test_discovery_response_matching();
+    test_trackpad_init_request_encoding();
+    test_trackpad_init_sequence_and_retry_limit();
     test_spi_transfer_plan();
     test_spi_init_plan();
     test_interrupt_worker_queue();

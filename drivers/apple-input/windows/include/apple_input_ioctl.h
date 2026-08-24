@@ -110,7 +110,9 @@ typedef struct _AI_DIAGNOSTIC_SNAPSHOT_V3 {
     UCHAR TrackpadDescriptorSha256[AI_SHA256_DIGEST_SIZE];
     ULONG DescriptorDigestStatus;
     UCHAR KeyboardContractValid;
-    UCHAR Reserved[3];
+    UCHAR TrackpadInitPhase;
+    UCHAR TrackpadInitRetryCount;
+    UCHAR TrackpadInitAttemptCount;
     ULONG KeyboardVhfState;
     ULONGLONG KeyboardReportAcceptedCount;
     ULONGLONG KeyboardReportRejectedCount;
