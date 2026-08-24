@@ -424,6 +424,19 @@ int main(void)
             "TrackpadFeatureLastStatus",
         ):
             self.assertIn(field, combined)
+        for json_key in (
+            "trackpad_logical_x_minimum",
+            "trackpad_logical_x_maximum",
+            "trackpad_logical_y_minimum",
+            "trackpad_logical_y_maximum",
+            "trackpad_physical_x_minimum",
+            "trackpad_physical_x_maximum",
+            "trackpad_physical_y_minimum",
+            "trackpad_physical_y_maximum",
+            "trackpad_unit",
+            "trackpad_unit_exponent",
+        ):
+            self.assertIn(f'\\"{json_key}\\"', cli)
         self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1)", diagnostics)
         self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)", diagnostics)
         self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3)", diagnostics)

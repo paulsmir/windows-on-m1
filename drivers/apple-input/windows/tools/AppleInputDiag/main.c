@@ -112,6 +112,16 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V4 *s, int json)
                "\"keyboard_vhf_last_status\":%ld,"
                "\"trackpad_axis_x_valid\":%u,"
                "\"trackpad_axis_y_valid\":%u,"
+               "\"trackpad_logical_x_minimum\":%ld,"
+               "\"trackpad_logical_x_maximum\":%ld,"
+               "\"trackpad_logical_y_minimum\":%ld,"
+               "\"trackpad_logical_y_maximum\":%ld,"
+               "\"trackpad_physical_x_minimum\":%ld,"
+               "\"trackpad_physical_x_maximum\":%ld,"
+               "\"trackpad_physical_y_minimum\":%ld,"
+               "\"trackpad_physical_y_maximum\":%ld,"
+               "\"trackpad_unit\":%lu,"
+               "\"trackpad_unit_exponent\":%d,"
                "\"trackpad_vhf_state\":%lu,"
                "\"trackpad_reports_decoded\":%llu,"
                "\"trackpad_reports_rejected\":%llu,"
@@ -141,6 +151,11 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V4 *s, int json)
                (unsigned long long)s->KeyboardVhfStartFailureCount,
                s->KeyboardVhfLastStatus,
                s->TrackpadAxisXValid, s->TrackpadAxisYValid,
+               s->TrackpadLogicalXMinimum, s->TrackpadLogicalXMaximum,
+               s->TrackpadLogicalYMinimum, s->TrackpadLogicalYMaximum,
+               s->TrackpadPhysicalXMinimum, s->TrackpadPhysicalXMaximum,
+               s->TrackpadPhysicalYMinimum, s->TrackpadPhysicalYMaximum,
+               s->TrackpadUnit, s->TrackpadUnitExponent,
                s->TrackpadVhfState,
                (unsigned long long)s->TrackpadReportDecodedCount,
                (unsigned long long)s->TrackpadReportRejectedCount,
