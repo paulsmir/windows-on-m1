@@ -5960,3 +5960,24 @@ the exact candidate SYS, APPL0001 and service healthy, phase 8, trackpad init
 READY, both axis-valid flags true, nondegenerate scalar ranges and zero
 transport errors. Any mismatch immediately restores all gates off and
 reinstalls preserved `oem15.inf`; no ESP or firmware component is changed.
+
+EXP-20260824-053 artifact replacement (2026-08-24T16:29:30Z). The pre-run
+package above is superseded before any hardware mutation because its diagnostic
+CLI cannot expose the scalar geometry needed by the fail-closed gate. Official
+WDK run `32750888801` (job `97507322188`) succeeded from source
+`34d7440460e2c8bca3cc7bc19b37dd63bcbfb670`; its ignored local artifact is
+`.local/apple-input/wdk/32750888801/`. Exact files selected for Gate D2 are:
+
+- `AppleInput.sys` SHA-256
+  `01d49454875fea68d352746dc51d4afcac07613c2b8a212d50cfd1a358397a7f`;
+- `AppleInput.inf` SHA-256
+  `16dc50813350d9c76ad6b69e12aa04c034266b732fad3f01f6163c28d1e00e39`;
+- `appleinput.cat` SHA-256
+  `c9a6e28c9ddd613eda00bbae64b7b8eb51ab1ef1548b7f3f8c1c539f92fb6dc4`;
+- `AppleInputDiag.exe` SHA-256
+  `7e6787ea999b888d0bc70d380596029413d67ed4e95d5fb3c87c1b92e3a1a136`.
+
+This replacement changes only diagnostic observability relative to the prior
+package: it adds bounded geometry scalars to JSON and does not enable trackpad
+publication. The same rollback, live baseline and two-stage gate remain in
+force.
