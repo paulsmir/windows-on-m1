@@ -119,8 +119,7 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
         return STATUS_SUCCESS;
     }
 
-    if (message.id != (UCHAR)Context->Discovery.request_id ||
-        !ai_discovery_response_matches(Context->Discovery.phase, &wire,
+    if (!ai_discovery_response_matches(Context->Discovery.phase, &wire,
                                        &message))
         return STATUS_DEVICE_PROTOCOL_ERROR;
 

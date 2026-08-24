@@ -266,6 +266,13 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         ):
             self.assertIn(required, transport)
 
+    def test_transport_does_not_require_responses_to_echo_message_ids(self):
+        transport = self.read("src/transport.c")
+        process_packet = self.c_function_body(transport, "AiTransportProcessPacket")
+
+        self.assertIn("ai_discovery_response_matches", process_packet)
+        self.assertNotIn("message.id", process_packet)
+
     def test_transport_worker_consumes_coalesced_irq_before_returning(self):
         transport = self.read("src/transport.c")
         worker = self.c_function_body(transport, "AiTransportWorker")
