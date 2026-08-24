@@ -344,27 +344,27 @@ Run tests and `git diff --check`. Commit implementation; append and separately c
 - Consumes Apple device-2 reports only after `AI_TRACKPAD_INIT_READY`.
 - Produces diagnostic ABI v4 counters/state and independent `PublishTrackpad` service gate.
 
-- [ ] **Step 1: Write failing ordering/privacy tests**
+- [x] **Step 1: Write failing ordering/privacy tests**
 
 Assert parse/submit occurs after CRC/reassembly and MT READY, never in the ISR, and never while TransportOnly or PublishTrackpad is false. Assert diagnostics contain counts/status/rejection reasons/active count only and no report payload, coordinates or keys.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run package tests. Expected: missing submit path, gate and v4 fields.
 
-- [ ] **Step 3: Connect the data path**
+- [x] **Step 3: Connect the data path**
 
 Under the existing passive worker, decode, update physical slots, encode and submit. Use one monotonically wrapping 100µs scan-time counter. A malformed frame is dropped and counted without resetting transport; repeated VHF failures stop only the trackpad frontend.
 
-- [ ] **Step 4: Add fail-closed publication controls**
+- [x] **Step 4: Add fail-closed publication controls**
 
 Default INF values remain `TransportOnly=1`, `PublishKeyboard=0`, `PublishTrackpad=0`. The installer requires explicit `-PublishKeyboard` and `-PublishTrackpad`; uninstall restores all gates off before package removal.
 
-- [ ] **Step 5: Add diagnostic ABI v4**
+- [x] **Step 5: Add diagnostic ABI v4**
 
 Expose axis-valid flags and scalar ranges, trackpad VHF lifecycle, decoded/rejected/submitted counts, last rejection enum, active/admitted/suppressed counts, feature callback counts and last NTSTATUS. Preserve v1–v3 query compatibility.
 
-- [ ] **Step 6: Run complete software verification and commit**
+- [x] **Step 6: Run complete software verification and commit**
 
 Run the complete suite, descriptor parser tests, ASan/UBSan, XML parse, INF checks and `git diff --check`. Commit implementation; append and separately commit the CHANGES row.
 
