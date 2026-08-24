@@ -992,7 +992,7 @@ int main(void)
         ):
             self.assertIn(shared_source, capture)
         self.assertIn("AppleInputCapture.sys", capture_inf)
-        self.assertIn("DriverVer=08/24/2026,0.1.3.0", capture_inf)
+        self.assertIn("DriverVer=08/24/2026,0.1.4.0", capture_inf)
         self.assertIn("TransportOnly,0x00010001,0", capture_inf)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("build-trackpad-capture-arm64:", workflow)
@@ -1058,7 +1058,23 @@ int main(void)
         self.assertIn("capture-release --output", cli)
         self.assertIn("apple_trackpad_frame.c", capture_project)
         self.assertNotIn("AI_ENABLE_TRACKPAD_CAPTURE", production_project)
-        self.assertIn("DriverVer=08/24/2026,0.1.3.0", capture_inf)
+        self.assertIn("DriverVer=08/24/2026,0.1.4.0", capture_inf)
+
+    def test_trackpad_capture_can_dump_only_the_owned_native_descriptor(self):
+        header = self.read("include/apple_input_capture.h")
+        source = self.read("src/trackpad_capture.c")
+        cli = self.read("tools/AppleInputCapture/main.c")
+        production = self.read("AppleInput.vcxproj")
+
+        self.assertIn("AI_TRACKPAD_DESCRIPTOR_CAPTURE_VERSION", header)
+        self.assertIn("AI_TRACKPAD_DESCRIPTOR_CAPTURE_MAX_SIZE 512u", header)
+        self.assertIn("IOCTL_AI_TRACKPAD_CAPTURE_READ_DESCRIPTOR", header)
+        self.assertIn("TrackpadDescriptorSha256", header)
+        self.assertIn("Context->Descriptors.trackpad", source)
+        self.assertIn("IOCTL_AI_TRACKPAD_CAPTURE_READ_DESCRIPTOR", source)
+        self.assertIn("descriptor --output", cli)
+        self.assertIn("CREATE_NEW", cli)
+        self.assertNotIn("AI_ENABLE_TRACKPAD_CAPTURE", production)
 
 
 if __name__ == "__main__":

@@ -54,8 +54,7 @@ static void print_digest(const UCHAR digest[AI_SHA256_DIGEST_SIZE])
         printf("%02x", digest[index]);
 }
 
-static int write_capture(const wchar_t *path,
-                         const AI_TRACKPAD_CAPTURE_BLOB *capture)
+static int write_bytes(const wchar_t *path, const void *bytes, DWORD size)
 {
     HANDLE file;
     DWORD written = 0;
@@ -67,8 +66,7 @@ static int write_capture(const wchar_t *path,
                  GetLastError(), path);
         return 1;
     }
-    if (!WriteFile(file, capture, sizeof(*capture), &written, NULL) ||
-        written != sizeof(*capture)) {
+    if (!WriteFile(file, bytes, size, &written, NULL) || written != size) {
         fwprintf(stderr, L"capture write failed (%lu)\n", GetLastError());
         CloseHandle(file);
         return 1;
@@ -78,10 +76,17 @@ static int write_capture(const wchar_t *path,
     return 0;
 }
 
+static int write_capture(const wchar_t *path,
+                         const AI_TRACKPAD_CAPTURE_BLOB *capture)
+{
+    return write_bytes(path, capture, sizeof(*capture));
+}
+
 int wmain(int argc, wchar_t **argv)
 {
     AI_TRACKPAD_CAPTURE_ARM_REQUEST request = {0};
     AI_TRACKPAD_CAPTURE_BLOB capture = {0};
+    AI_TRACKPAD_DESCRIPTOR_CAPTURE descriptor = {0};
     const wchar_t *output = NULL;
     DWORD returned = 0;
     DWORD timeout_seconds = 30;
@@ -89,13 +94,17 @@ int wmain(int argc, wchar_t **argv)
     HANDLE handle;
     int count = 0;
     int release_only;
+    int descriptor_only;
     int index;
     int result = 1;
 
     release_only = argc >= 2 && wcscmp(argv[1], L"capture-release") == 0;
-    if (argc < 4 || (!release_only && wcscmp(argv[1], L"capture") != 0)) {
+    descriptor_only = argc >= 2 && wcscmp(argv[1], L"descriptor") == 0;
+    if (argc < 4 || (!release_only && !descriptor_only &&
+                     wcscmp(argv[1], L"capture") != 0)) {
         fwprintf(stderr, L"usage: AppleInputCapture.exe capture --count N --output PATH [--timeout SECONDS]\n"
-                         L"       AppleInputCapture.exe capture-release --output PATH [--timeout SECONDS]\n");
+                         L"       AppleInputCapture.exe capture-release --output PATH [--timeout SECONDS]\n"
+                         L"       AppleInputCapture.exe descriptor --output PATH\n");
         return 2;
     }
     for (index = 2; index + 1 < argc; index += 2) {
@@ -110,7 +119,12 @@ int wmain(int argc, wchar_t **argv)
             return 2;
         }
     }
-    if (release_only) {
+    if (descriptor_only) {
+        if (count != 0 || timeout_seconds != 30) {
+            fwprintf(stderr, L"descriptor accepts only --output\n");
+            return 2;
+        }
+    } else if (release_only) {
         if (count != 0) {
             fwprintf(stderr, L"capture-release does not accept --count\n");
             return 2;
@@ -118,8 +132,9 @@ int wmain(int argc, wchar_t **argv)
         count = 1;
         request.Trigger = AI_TRACKPAD_CAPTURE_TRIGGER_RELEASE;
     }
-    if (!output || count < 1 || count > AI_TRACKPAD_CAPTURE_MAX_REPORTS ||
-        timeout_seconds < 1 || timeout_seconds > 300) {
+    if (!output || (!descriptor_only &&
+        (count < 1 || count > AI_TRACKPAD_CAPTURE_MAX_REPORTS ||
+         timeout_seconds < 1 || timeout_seconds > 300))) {
         fwprintf(stderr, L"count must be 1..16 and timeout 1..300 seconds\n");
         return 2;
     }
@@ -129,6 +144,32 @@ int wmain(int argc, wchar_t **argv)
         fwprintf(stderr, L"capture interface unavailable (%lu); run elevated and use the explicit capture build\n",
                  GetLastError());
         return 1;
+    }
+    if (descriptor_only) {
+        if (!DeviceIoControl(handle,
+                             IOCTL_AI_TRACKPAD_CAPTURE_READ_DESCRIPTOR,
+                             NULL, 0, &descriptor, sizeof(descriptor),
+                             &returned, NULL)) {
+            fwprintf(stderr, L"descriptor read failed (%lu)\n",
+                     GetLastError());
+            goto out;
+        }
+        if (returned != sizeof(descriptor) ||
+            descriptor.Version != AI_TRACKPAD_DESCRIPTOR_CAPTURE_VERSION ||
+            descriptor.Size != sizeof(descriptor) ||
+            descriptor.Length == 0 ||
+            descriptor.Length > AI_TRACKPAD_DESCRIPTOR_CAPTURE_MAX_SIZE) {
+            fwprintf(stderr, L"unsupported descriptor response\n");
+            goto out;
+        }
+        if (write_bytes(output, descriptor.Bytes, descriptor.Length) != 0)
+            goto out;
+        printf("saved %lu descriptor bytes; descriptor_sha256=",
+               descriptor.Length);
+        print_digest(descriptor.TrackpadDescriptorSha256);
+        printf("\n");
+        result = 0;
+        goto out;
     }
     request.Version = AI_TRACKPAD_CAPTURE_VERSION;
     request.ReportLimit = (ULONG)count;

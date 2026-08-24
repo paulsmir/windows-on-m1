@@ -126,6 +126,41 @@ static NTSTATUS AiTrackpadCaptureRead(PAI_DEVICE_CONTEXT Context,
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS AiTrackpadCaptureReadDescriptor(PAI_DEVICE_CONTEXT Context,
+                                                WDFREQUEST Request,
+                                                SIZE_T *Information)
+{
+    PAI_TRACKPAD_DESCRIPTOR_CAPTURE output = NULL;
+    const struct ai_descriptor_slot *descriptor;
+    NTSTATUS status;
+
+    status = WdfRequestRetrieveOutputBuffer(
+        Request, sizeof(*output), (PVOID *)&output, NULL);
+    if (!NT_SUCCESS(status))
+        return status;
+    status = WdfWaitLockAcquire(Context->TransportLock, NULL);
+    if (!NT_SUCCESS(status))
+        return status;
+    descriptor = &Context->Descriptors.trackpad;
+    if (Context->Discovery.phase != AI_DISCOVERY_READY ||
+        !descriptor->valid || descriptor->length == 0u ||
+        descriptor->length > AI_TRACKPAD_DESCRIPTOR_CAPTURE_MAX_SIZE) {
+        WdfWaitLockRelease(Context->TransportLock);
+        return STATUS_DEVICE_NOT_READY;
+    }
+    RtlZeroMemory(output, sizeof(*output));
+    output->Version = AI_TRACKPAD_DESCRIPTOR_CAPTURE_VERSION;
+    output->Size = sizeof(*output);
+    output->Length = descriptor->length;
+    RtlCopyMemory(output->TrackpadDescriptorSha256,
+                  Context->Diagnostics.TrackpadDescriptorSha256,
+                  AI_SHA256_DIGEST_SIZE);
+    RtlCopyMemory(output->Bytes, descriptor->bytes, descriptor->length);
+    WdfWaitLockRelease(Context->TransportLock);
+    *Information = sizeof(*output);
+    return STATUS_SUCCESS;
+}
+
 BOOLEAN AiTrackpadCaptureIoctl(PAI_DEVICE_CONTEXT Context,
                                WDFREQUEST Request, ULONG IoControlCode)
 {
@@ -139,6 +174,10 @@ BOOLEAN AiTrackpadCaptureIoctl(PAI_DEVICE_CONTEXT Context,
     } else if (IoControlCode == IOCTL_AI_TRACKPAD_CAPTURE_CANCEL) {
         AiTrackpadCaptureCancel(Context);
         status = STATUS_SUCCESS;
+    } else if (IoControlCode ==
+               IOCTL_AI_TRACKPAD_CAPTURE_READ_DESCRIPTOR) {
+        status = AiTrackpadCaptureReadDescriptor(Context, Request,
+                                                 &information);
     } else {
         return FALSE;
     }
