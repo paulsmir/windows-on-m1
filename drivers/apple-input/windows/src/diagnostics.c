@@ -1,7 +1,6 @@
 #include <initguid.h>
-#include <bcrypt.h>
-
 #include "apple_input_device.h"
+#include <bcrypt.h>
 
 AI_DIAGNOSTIC_SNAPSHOT_V3 g_AiDiagnosticSnapshot;
 

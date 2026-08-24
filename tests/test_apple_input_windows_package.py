@@ -128,6 +128,12 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("BCryptHashData", diagnostics)
         self.assertIn("BCryptFinishHash", diagnostics)
         self.assertIn("Cng.lib", project)
+        self.assertLess(
+            diagnostics.index('#include "apple_input_device.h"'),
+            diagnostics.index("#include <bcrypt.h>"),
+            "bcrypt.h requires the kernel/WDK base types included by "
+            "apple_input_device.h",
+        )
         self.assertIn('printf("%02x"', cli)
         self.assertIn("keyboard_descriptor_sha256", cli)
         self.assertIn("trackpad_descriptor_sha256", cli)
