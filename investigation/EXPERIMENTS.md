@@ -4990,3 +4990,199 @@ The portable protocol test failed against the old behavior, then focused tests
 passed 17/17 and the complete public suite passed 279/279.  Hardware validation
 of this one-variable candidate is pending; `oem9.inf` remains the responsive
 rollback package.
+
+### EXP-20260824-043 — assisted relaunch before identity-ID validation
+
+Pre-run record (2026-08-24T06:15:41Z).  Hypothesis: the previously validated
+four-E-core public launch contract still reaches an interactive Windows desktop
+after the user reboot, allowing the message-ID-zero AppleInput package to be
+validated without changing firmware, topology, or the stable ESP.  The single
+run variable is execution mode: the installed ESP is left untouched and the
+paired `debug-forensic` artifacts are chainloaded from the host with both the
+physical and USB framebuffer consumers enabled.
+
+- repositories: root `0525c0297a5db15644923dd87a769969266d6b3a`,
+  m1n1 `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`, branch
+  `feature/j313-native-input`; all three tracked diffs are empty (SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`).
+- artifacts: `dist/j313/debug-forensic/m1n1.macho`, SHA-256
+  `0389bc92d88f1a19049cecc564b929502f7dbce2ab05942a7e6421bef24632c9`,
+  and `dist/j313/debug-forensic/J313_EFI.fd`, SHA-256
+  `8d95d77664346ceb95bbe7a1fca493cc1b1e876fc1acf627c385191fe4df268a`.
+- launch command: `scripts/run-windows.sh --execution assisted --display both
+  --debug full --observed --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart
+  /dev/cu.usbmodemC02HDNCCQ6L43`.
+- recovery: no ESP write; reboot returns to the installed stable image.
+  `oem9.inf` remains the confirmed AppleInput rollback package.
+- expected checkpoint: explicit `Starting guest...`, live internal and web
+  display, interactive Windows desktop and SSH at `192.168.1.37`.  Failure is
+  no guest handoff within the launcher's deadline, bugcheck/reboot, or no
+  interactive desktop.  Evidence paths are `assisted-runner.log`, `hv.log`,
+  the viewers on ports 8765/8766, and the post-boot Windows/AppleInput snapshot.
+
+Post-run result (2026-08-24T06:20Z): inconclusive; no guest defect was
+observed.  The wrapper validated and chainloaded the paired artifacts, reached
+`Starting guest...`, initialized the NVMe backend, and entered Mu DXE.  The
+host execution environment then reaped detached PIDs 1466/1570 after the
+launcher command returned.  `hv.log` ended mid-line at 65,008 bytes while Mu
+was loading DXE drivers, with no traceback, exception, reset, or bugcheck; both
+the runner and vUART reader were dead while both USB ACM nodes remained.  This
+left the target inside a host-driven hypervisor with no process servicing the
+proxy.  A UEFI-console `reset` write and a 90-second proxy probe could not
+recover it, so one physical reboot is required.  Repeat this exact artifact and
+contract with `--foreground` in a persistent host session; do not interpret
+this run as firmware, Windows, or AppleInput evidence.
+
+### EXP-20260824-044 — persistent foreground repeat of EXP-20260824-043
+
+Pre-run record (2026-08-24T06:25:46Z).  Hypothesis: keeping `run_uefi.py` as a
+persistent foreground process eliminates the host-lifecycle truncation seen in
+EXP-20260824-043 and permits the unchanged four-E-core guest to reach the
+interactive desktop.  The sole changed variable is detached versus foreground
+host process ownership.  Root commit is
+`0525c0297a5db15644923dd87a769969266d6b3a`; the artifacts and hashes are
+unchanged from EXP-20260824-043: m1n1
+`0389bc92d88f1a19049cecc564b929502f7dbce2ab05942a7e6421bef24632c9`
+and Mu `8d95d77664346ceb95bbe7a1fca493cc1b1e876fc1acf627c385191fe4df268a`.
+The fresh proxy passed `probe.py` before launch.
+
+Launch command: `scripts/run-windows.sh --execution assisted --display both
+--debug full --observed --foreground --proxy
+/dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43`.
+The stable ESP remains untouched and `oem9.inf` remains the input-driver
+rollback.  Expected checkpoint and evidence paths are identical to
+EXP-20260824-043; failure additionally includes loss of the persistent runner
+without a target exception or reset.
+
+Post-run result (2026-08-24T06:29Z): confirmed for the host-lifecycle
+hypothesis.  The persistent runner reached Windows, SSH became available at
+08:27:10 local time, and a normal Windows restart returned the Air to a
+responsive proxy.  No host truncation or guest fatal marker occurred.  This
+pre-input `debug-forensic` Mu intentionally has no `ACPI\\APPL0001\\0`, so
+AppleInput remained stopped and the run provides no input-protocol evidence.
+The next run uses the separately hardware-validated EXP-057 `debug-monitor`
+pair that publishes the reviewed input ACPI node.
+
+### EXP-20260824-045 — validate identity-ID zero on the EXP-057 firmware pair
+
+Pre-run record (2026-08-24T06:29:59Z).  Hypothesis: under the exact EXP-057
+AppleInput-capable firmware pair, replacing only confirmed rollback `oem9.inf`
+with CI run 32677640457 will accept the already observed identity response ID
+zero and advance discovery beyond phase 2 without affecting Windows, storage,
+USB, display, SSH, or the four enabled E cores.
+
+The launch artifacts are `dist/j313/debug-monitor/m1n1.macho`, SHA-256
+`3d41abb1b5b16c09a96c9bebe4244b2e5d88fe084cd786f8289e928920b49a35`,
+and `dist/j313/debug-monitor/J313_EFI.fd`, SHA-256
+`cd591aab2ef0641902f03e1a38aac697e45fc12e466a3cb72f32cd3d68060710`.
+Their manifest records m1n1 commit `2fe790be`, Mu commit `af4c9705` plus diff
+SHA-256 `e535e345a5202a944f5b1edc397e656f65f40679ca959914752b288d6fde272b`,
+and the previously validated root build state from EXP-057.
+
+Launch command: `scripts/run-windows.sh --execution assisted --display both
+--debug monitor --observed --foreground --proxy
+/dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43`.
+Driver candidate hashes are those recorded for CI run 32677640457 immediately
+above; installation is forbidden until the live APPL0001 node and `oem9.inf`
+rollback state are re-confirmed.  The stable ESP remains untouched.  Pass:
+interactive desktop and SSH, APPL0001 Started, candidate service RUNNING,
+discovery phase greater than 2 with bounded coherent counters and no transport
+errors.  Failure: missing resource, driver start failure, phase not advancing,
+hang, reboot, bugcheck, or loss of any baseline subsystem.  Evidence: `hv.log`,
+ports 8765/8766, Windows PnP/service state, and versioned CLI snapshots.
+
+Post-run result (2026-08-24T06:56:39Z): confirmed.  The unchanged EXP-057
+firmware pair reached an interactive Windows desktop with SSH and the 2560x1600
+physical/USB framebuffer contract alive.  Installing CI run 32677640457 as
+`oem10.inf` changed only AppleInput and advanced discovery from phase 2 to phase
+3 with zero SPI timeout, packet CRC, message CRC, fragment, or offline failures.
+This validates the message-ID-zero correction from commit `517aac4`.
+
+CI run 32698571320 then supplied read-only snapshot v2 diagnostics from commit
+`33ca3d1`.  Host and Air hashes matched: SYS
+`4750e732b126649d3c9aedc95557731eb7cf24414353b9071e033d00e74ec317`,
+CAT `7e848559fcd2708981a5f29f136162bf0a20372147ced197e87f4b7fb397a8f7`,
+INF `17570431916fd3348fa9233c659656ca1f786ca1f5043cd8d7c23d2b18a2e884`,
+and CLI `aa81b080bdd24fdc24c8ed43fa4ed085557c6eaedc333c46ceb7c2390d65c43a`.
+The user explicitly approved WDK test certificate
+`93BE8353D349CD9845916DD72AD23A31524AD941`; the diagnostic package installed
+as `oem11.inf`, remained PnP `OK` and service `RUNNING`, and retained
+`oem10.inf` as rollback.
+
+The phase-3 snapshot contained a CRC-valid management response
+`type=0x10 report=0x02 device=0 id=56 payload_length=8` while the state machine
+was waiting for its interface-management response with request ID 1.  Counters
+were coherent (`interrupts=5481`, `workers=55/55`, `spi_transfers=122`) and all
+transport error counters remained zero.  The bounded packet ring also showed
+continuing valid device-2 input packets.  The web viewer remained streaming at
+2560x1600 generation 221 and `hv.log` contained no reset, exception, or
+bugcheck marker.  This confirms that the strict incoming response-ID equality
+test is the next rejection boundary.  The official Asahi implementation uses
+IDs only when encoding outbound messages and dispatches inbound responses by
+packet direction plus message type/report/device; the next one-variable change
+must remove only the Windows-side incoming ID gate while retaining those
+structural predicates and outbound ID sequencing.
+
+### EXP-20260824-046 — accept structurally matched responses without echoed IDs
+
+Pre-run record (2026-08-24T07:05:10Z).  Hypothesis: removing only the
+Windows-side equality test between the inbound message ID and the current
+outbound request ID will allow the already CRC-valid management response to
+advance discovery beyond phase 3 while preserving all packet direction,
+target, type, report, device, payload, CRC, phase, and outbound-ID checks.  The
+single changed variable is the AppleInput SYS built from root commit
+`6fe3ee32c7238655b2f0860be4e398ce1a0d0d69`; firmware, topology, display,
+Windows, and the installed ESP are unchanged from EXP-20260824-045.
+
+- repository state: root branch `feature/j313-native-input`, root diff SHA-256
+  `e4908a5fddbb8b1f012018f40eb398bc5c66c955ebe512f14534465699f42e14`
+  contains only the required experiment/change ledgers; nested source commits
+  are m1n1 `2fe790beebed32658eae753dee3e6d581df97197` and Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`.
+- live launch artifacts remain the EXP-057 pair:
+  `dist/j313/debug-monitor/m1n1.macho` SHA-256
+  `3d41abb1b5b16c09a96c9bebe4244b2e5d88fe084cd786f8289e928920b49a35`
+  and `dist/j313/debug-monitor/J313_EFI.fd` SHA-256
+  `cd591aab2ef0641902f03e1a38aac697e45fc12e466a3cb72f32cd3d68060710`.
+- driver artifact: GitHub Actions run 32699722561,
+  `.local/apple-input/no-id-gate-32699722561`; SYS SHA-256
+  `580428d9e6623de672d7d1a0da89610aa740f811985ca5447db88a57f4d1fe13`,
+  CAT `56866318c65338f939f3d69319154a68861bda538c72bf68fbd412d5bb062d77`,
+  INF `712eaf895ecd6c7653149e05c542b34f5ee415cfde9af0b62adf8fa1e87d7a1a`,
+  CLI `954d6c768e1afd4f82c9ced3be609ffa180a9045fd61720ed179e7bb6b294cad`.
+- install command: import only the package catalog signer approved for this run,
+  then `pnputil /add-driver AppleInput.inf /install`; confirmed diagnostic
+  `oem11.inf` and the stable ESP remain the recovery paths.
+- expected checkpoint: PnP `OK`, service `RUNNING`, discovery phase greater
+  than 3 (ideally READY=8), bounded coherent counters, zero transport errors,
+  live SSH and both displays, and no fatal `hv.log` marker.  Failure is phase 3
+  unchanged, a later structural rejection, service/devnode failure, hang,
+  reboot, or bugcheck.  Evidence paths are the version-2 CLI snapshot,
+  `hv.log`, ports 8765/8766, and Windows PnP/service state.
+
+Post-run result (2026-08-24T07:08Z): confirmed.  The user explicitly approved
+catalog signer `88DBD41B452CC62D2CAFFB4C64B0094F9000E2DF`; host and Air artifact
+hashes matched, and the package installed as `oem12.inf` while `oem11.inf` and
+the stable ESP remained available for recovery.  PnP reported `CM_PROB_NONE`,
+the AppleInput service remained `RUNNING`, and the actual DriverStore SYS hash
+was `580428d9e6623de672d7d1a0da89610aa740f811985ca5447db88a57f4d1fe13`.
+
+Discovery immediately completed through phase 8 (READY).  The bounded header
+ring contained the boot marker, 99-byte identity response, three interface-info
+responses of 43/41/41 bytes, and keyboard/trackpad HID descriptors of 192/120
+bytes.  Four snapshots over eight seconds were identical and coherent:
+`interrupts=84`, `workers=2/2`, `spi_transfers=21`, `resets=1`, with every SPI
+timeout, packet CRC, message CRC, fragment, offline, keyboard-report, and
+trackpad-report error/count still zero.  The final accepted descriptor header
+was `type=0x20 report=0x10 device=2 id=0 response_length=512
+payload_length=110`, independently confirming that responses do not echo the
+outbound request IDs.
+
+SSH remained responsive; physical display and the USB viewer remained alive at
+the 2560x1600 B8G8R8X8 contract, and `hv.log` had no reset, exception, watchdog,
+or bugcheck marker.  Verdict: the strict incoming-ID gate was the root cause and
+commit `6fe3ee32c7238655b2f0860be4e398ce1a0d0d69` fixes it on J313.  Native
+GPIO/IRQ/SPI/discovery Gate B is now closed.  `TransportOnly=1` remains
+intentional, so this result does not claim a Windows keyboard or Precision
+Touchpad child; VHF publication is the next separately testable gate.
