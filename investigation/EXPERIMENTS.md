@@ -6599,3 +6599,64 @@ operator confirmed that Windows was "super responsive" during the same live
 session.  This validates the restored 512-byte hardware submission boundary as
 the transport root fix and accepts the exact 4E+1P assisted state as the
 checkpoint to publish before exposing another core.
+
+### EXP-20260825-070 — expose the second J313 performance core
+
+Status: validated on J313 and accepted as the 4E+2P assisted checkpoint.
+
+Hypothesis: after the validated 4E+1P interrupt, storage and USB transport
+checkpoint, Firestorm UID5 can be exposed without changing any other platform
+contract.  Windows should classify it with the same higher efficiency and
+scheduling class as UID4 and remain as responsive as EXP069.
+
+- recovery point: root `4d0aa9cea18cb12532db41c94c29be2a294cad38`,
+  m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `2bd610c9f6184c78abfe0fa5c8cdda1a9fd8f057`, all verified on their
+  published remote branches;
+- branches: root and Mu `feature/j313-4e2p-cpu-stability`; m1n1 remains the
+  unchanged published `stable/j313-4e-baseline`;
+- single variable: enable only GICC UID5 in J313 MADT.  UIDs 6 and 7 remain
+  disabled; CPU timers, vGIC, NVMe, USB, input, framebuffer and diagnostics
+  remain unchanged;
+- RED/GREEN contract: change the topology test first to require enabled UIDs
+  `[0, 1, 2, 3, 4, 5]` with efficiency class 1 on UIDs 4 and 5, observe the
+  expected failure, then change only UID5's GICC flag;
+- RED/GREEN result: the focused test failed with observed UIDs `[0, 1, 2, 3,
+  4]`, then passed after only UID5's flag changed; all 305 public Python tests
+  and the complete m1n1 host suite pass;
+- frozen assisted artifacts: m1n1 SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  Mu SHA-256
+  `4faa23597735b5a5aae2bb7f574ad13108bb05820d85ec292f964925ae87f50c`,
+  and packed `boot.bin` SHA-256
+  `1fa0e798093a8d3d6545c00ec7f462b2e299e2af3e5aaa48afec9f83e2c48c5e`;
+  the manifest reports display `both`, debug `monitor`, m1n1 clean at
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and only the recorded Mu/root
+  experiment diffs dirty;
+- hardware profile: assisted `both/monitor`, exact m1n1 from EXP069, freshly
+  built Mu, no ESP installation;
+- acceptance: Mu and Windows reach the login/desktop within 30 seconds of the
+  corresponding boot phase; Windows reports six unparked logical processors
+  and classifies UIDs 4 and 5 as higher-performance; built-in keyboard and
+  Precision Touchpad remain usable; web frames advance with zero proxy errors;
+  no bugcheck, watchdog, NVMe reset, long UI pause or SSH loss during a bounded
+  idle and CPU-load observation;
+- stop/rollback: any boot slowdown, spinner freeze, bugcheck, watchdog, input
+  regression, Event 129/reset or proxy corruption rejects UID5.  Stop the
+  assisted guest and relaunch the exact published EXP069 4E+1P artifacts.
+
+Interim hardware result (2026-08-25): the exact candidate reached the Windows
+lock screen and desktop without a delayed boot or recovery path.  Windows
+reported one package, six cores and six logical processors.  The documented
+`GetSystemCpuSetInformation` probe returned logical CPUs 0 through 3 with
+`EfficiencyClass=0` and `SchedulingClass=0`, and CPUs 4 and 5 with both values
+equal to 1; this directly confirms that Windows recognizes both exposed
+Firestorm cores as the higher-performance class.  A six-worker eight-second
+CPU load completed, and the guest remained responsive over SSH afterward.
+At 386 seconds uptime, Windows had zero new BugCheck, WHEA, stornvme or storage
+reset events.  The exact framebuffer advanced through generation 51.  Counts
+remained zero for event checksum errors, reply/parser failures,
+bugcheck/system-reset/watchdog capture and NVMe errors.  The operator then
+exercised the built-in keyboard, Precision Touchpad and desktop UI and reported
+the session stable.  The candidate is accepted for commit and publication as
+an assisted checkpoint; it has not touched the ESP.
