@@ -1,5 +1,8 @@
 from pathlib import Path
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 
 
@@ -26,6 +29,228 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             cursor += 1
         self.assertEqual(depth, 0, f"unterminated C function {name}")
         return source[match.end():cursor - 1]
+
+    def c_byte_array(self, source, name):
+        match = re.search(
+            rf"\b{name}\s*\[[^\]]*\]\s*=\s*\{{(.*?)\}};",
+            source,
+            re.S,
+        )
+        self.assertIsNotNone(match, f"missing C byte array {name}")
+        return bytes(int(value, 16) for value in
+                     re.findall(r"0x([0-9a-fA-F]{2})", match.group(1)))
+
+    def c_define_uint(self, source, name):
+        match = re.search(rf"^#define\s+{name}\s+(\d+)u$", source, re.M)
+        self.assertIsNotNone(match, f"missing unsigned C define {name}")
+        return int(match.group(1))
+
+    def parse_hid_descriptor(self, descriptor):
+        state = {
+            "usage_page": 0,
+            "report_size": 0,
+            "report_count": 0,
+            "report_id": 0,
+        }
+        local_usages = []
+        collections = []
+        top_level = []
+        finger_collections = 0
+        usages = []
+        report_bits = {}
+        cursor = 0
+
+        while cursor < len(descriptor):
+            prefix = descriptor[cursor]
+            cursor += 1
+            self.assertNotEqual(prefix, 0xfe, "long HID items are forbidden")
+            size_code = prefix & 3
+            size = 4 if size_code == 3 else size_code
+            self.assertLessEqual(cursor + size, len(descriptor))
+            payload = descriptor[cursor:cursor + size]
+            cursor += size
+            value = int.from_bytes(payload, "little") if payload else 0
+            item_type = (prefix >> 2) & 3
+            tag = prefix >> 4
+
+            if item_type == 1:
+                if tag == 0:
+                    state["usage_page"] = value
+                elif tag == 7:
+                    state["report_size"] = value
+                elif tag == 8:
+                    state["report_id"] = value
+                elif tag == 9:
+                    state["report_count"] = value
+            elif item_type == 2 and tag == 0:
+                usage = (state["usage_page"], value)
+                local_usages.append(usage)
+                usages.append(usage)
+            elif item_type == 0:
+                if tag == 10:
+                    usage = local_usages[-1] if local_usages else (0, 0)
+                    if not collections:
+                        top_level.append(usage)
+                    elif (usage == (0x0d, 0x22) and
+                          collections[0] == (0x0d, 0x05)):
+                        finger_collections += 1
+                    collections.append(usage)
+                elif tag == 12:
+                    self.assertTrue(collections, "collection stack underflow")
+                    collections.pop()
+                elif tag in (8, 11):
+                    kind = "input" if tag == 8 else "feature"
+                    key = (kind, state["report_id"])
+                    report_bits[key] = report_bits.get(key, 0) + (
+                        state["report_size"] * state["report_count"]
+                    )
+                local_usages = []
+
+        self.assertFalse(collections, "unclosed HID collection")
+        return top_level, finger_collections, set(usages), report_bits
+
+    def test_precision_touchpad_descriptor_contract(self):
+        header = self.read("include/apple_precision_touchpad_descriptor.h")
+        project = self.read("AppleInput.vcxproj")
+        portable = (ROOT / "drivers" / "apple-input" / "protocol" /
+                    "include" / "apple_trackpad.h").read_text()
+        descriptor = self.c_byte_array(
+            header, "AiPrecisionTouchpadReportDescriptorTemplate"
+        )
+        top_level, fingers, usages, report_bits = self.parse_hid_descriptor(
+            descriptor
+        )
+
+        self.assertEqual(top_level, [(0x0d, 0x05), (0x0d, 0x0e)])
+        self.assertEqual(fingers, 5)
+        for usage in (
+            (0x0d, 0x47), (0x0d, 0x42), (0x0d, 0x51),
+            (0x01, 0x30), (0x01, 0x31), (0x0d, 0x56),
+            (0x0d, 0x54), (0x09, 0x01), (0x0d, 0x55),
+            (0x0d, 0x59), (0xff00, 0xc5), (0x0d, 0x52),
+            (0x0d, 0x57), (0x0d, 0x58),
+        ):
+            self.assertIn(usage, usages)
+        self.assertNotIn((0x01, 0x02), top_level)
+        self.assertNotIn((0x0d, 0x30), usages)
+        self.assertNotIn((0x0d, 0x48), usages)
+        self.assertNotIn((0x0d, 0x49), usages)
+        self.assertFalse(any(page in (0x0e, 0x20) for page, _ in usages))
+        self.assertNotRegex(header.lower(), r"\b(palm|pressure|width|height|haptic)\b")
+
+        report_contracts = {
+            ("input", 1): "AI_PTP_INPUT_REPORT_SIZE",
+            ("feature", 2): "AI_PTP_CAPABILITIES_REPORT_SIZE",
+            ("feature", 3): "AI_PTP_CERTIFICATION_REPORT_SIZE",
+            ("feature", 4): "AI_PTP_INPUT_MODE_REPORT_SIZE",
+            ("feature", 5): "AI_PTP_SELECTIVE_REPORT_SIZE",
+        }
+        for report, size_name in report_contracts.items():
+            self.assertEqual(
+                report_bits[report],
+                (self.c_define_uint(portable, size_name) - 1) * 8,
+            )
+        self.assertEqual(
+            set(report_bits),
+            set(report_contracts),
+        )
+
+        for symbol in (
+            "AI_PTP_DESCRIPTOR_SIZE",
+            "AiPrecisionTouchpadReportDescriptorTemplate",
+            "AiPrecisionTouchpadDescriptorPatch",
+            "AI_PTP_X_PHYSICAL_MIN_OFFSETS",
+            "AI_PTP_Y_PHYSICAL_MAX_OFFSETS",
+        ):
+            self.assertIn(symbol, header)
+        for source in (
+            "apple_precision_touchpad_descriptor.h",
+            "apple_trackpad_axis.c",
+            "apple_trackpad_frame.c",
+            "apple_precision_touchpad.c",
+        ):
+            self.assertIn(source, project)
+
+    def test_precision_touchpad_descriptor_patch_is_bounded(self):
+        source = r'''
+#include <assert.h>
+#include <stdint.h>
+#include <string.h>
+#include "apple_precision_touchpad_descriptor.h"
+
+static uint32_t get_le32(const uint8_t *bytes)
+{
+    return (uint32_t)bytes[0] |
+           ((uint32_t)bytes[1] << 8) |
+           ((uint32_t)bytes[2] << 16) |
+           ((uint32_t)bytes[3] << 24);
+}
+
+int main(void)
+{
+    uint8_t descriptor[AI_PTP_DESCRIPTOR_SIZE];
+    uint8_t untouched[AI_PTP_DESCRIPTOR_SIZE];
+    struct ai_trackpad_axis_contract axes = {
+        .x = {-1000, 1000, -123456, 654321, 0x00110001u, -2, true},
+        .y = {-2000, 2000, -222222, 777777, 0x00110001u, -2, true},
+        .valid = true,
+    };
+    unsigned int index;
+
+    _Static_assert(sizeof(AiPrecisionTouchpadReportDescriptorTemplate) ==
+                   AI_PTP_DESCRIPTOR_SIZE, "descriptor size contract");
+    memset(descriptor, 0xa5, sizeof(descriptor));
+    assert(AiPrecisionTouchpadDescriptorPatch(
+        descriptor, sizeof(descriptor), &axes));
+    for (index = 0; index < AI_PTP_DESCRIPTOR_PATCH_COUNT; ++index) {
+        assert(descriptor[AI_PTP_X_EXPONENT_OFFSETS[index]] == 0x0e);
+        assert(descriptor[AI_PTP_Y_EXPONENT_OFFSETS[index]] == 0x0e);
+        assert(get_le32(descriptor + AI_PTP_X_UNIT_OFFSETS[index]) ==
+               0x00110001u);
+        assert(get_le32(descriptor + AI_PTP_Y_UNIT_OFFSETS[index]) ==
+               0x00110001u);
+        assert(get_le32(descriptor + AI_PTP_X_PHYSICAL_MIN_OFFSETS[index]) ==
+               (uint32_t)-123456);
+        assert(get_le32(descriptor + AI_PTP_X_PHYSICAL_MAX_OFFSETS[index]) ==
+               654321u);
+        assert(get_le32(descriptor + AI_PTP_Y_PHYSICAL_MIN_OFFSETS[index]) ==
+               (uint32_t)-222222);
+        assert(get_le32(descriptor + AI_PTP_Y_PHYSICAL_MAX_OFFSETS[index]) ==
+               777777u);
+    }
+
+    memset(untouched, 0x3c, sizeof(untouched));
+    assert(!AiPrecisionTouchpadDescriptorPatch(
+        untouched, sizeof(untouched) - 1, &axes));
+    for (index = 0; index < sizeof(untouched); ++index)
+        assert(untouched[index] == 0x3c);
+    axes.x.unit_exponent = 8;
+    assert(!AiPrecisionTouchpadDescriptorPatch(
+        untouched, sizeof(untouched), &axes));
+    axes.x.unit_exponent = -2;
+    axes.y.unit = 0x11u;
+    assert(!AiPrecisionTouchpadDescriptorPatch(
+        untouched, sizeof(untouched), &axes));
+    assert(!AiPrecisionTouchpadDescriptorPatch(NULL, 0, &axes));
+    assert(!AiPrecisionTouchpadDescriptorPatch(
+        untouched, sizeof(untouched), NULL));
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "descriptor_patch_test.c"
+            binary_path = Path(tmp) / "descriptor_patch_test"
+            source_path.write_text(source)
+            command = [
+                os.environ.get("CC", "clang"),
+                "-std=c11", "-Wall", "-Wextra", "-Werror",
+                "-I", str(DRIVER / "include"),
+                "-I", str(ROOT / "drivers" / "apple-input" /
+                           "protocol" / "include"),
+                str(source_path), "-o", str(binary_path),
+            ]
+            subprocess.run(command, check=True, cwd=ROOT)
+            subprocess.run([str(binary_path)], check=True, cwd=ROOT)
 
     def test_inf_is_arm64_kmdf_vhf_package(self):
         inf = self.read("AppleInput.inf")

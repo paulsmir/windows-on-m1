@@ -36,12 +36,16 @@
     <ClCompile Include="..\protocol\src\apple_spihid_reassembly.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_trackpad.c" />
     <ClCompile Include="..\protocol\src\apple_spihid_transport.c" />
+    <ClCompile Include="..\protocol\src\apple_trackpad_axis.c" />
+    <ClCompile Include="..\protocol\src\apple_trackpad_frame.c" />
+    <ClCompile Include="..\protocol\src\apple_precision_touchpad.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_input_device.h" />
     <ClInclude Include="include\apple_input_hw.h" />
     <ClInclude Include="include\apple_input_ioctl.h" />
     <ClInclude Include="include\j313_apple_input.generated.h" />
+    <ClInclude Include="include\apple_precision_touchpad_descriptor.h" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="AppleInput.inf" />

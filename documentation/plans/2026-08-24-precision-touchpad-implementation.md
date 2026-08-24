@@ -257,21 +257,21 @@ Run focused tests, sanitizers and complete suite. Commit implementation/tests; a
 - Produces `AiPrecisionTouchpadReportDescriptorTemplate`, report IDs and patch offsets for X/Y physical ranges, units and exponents. Logical X/Y ranges are fixed at 0..4095 to match the portable encoder.
 - Consumes the native axis contract and portable feature/input report layouts from Tasks 2–4.
 
-- [ ] **Step 1: Write failing source-contract tests**
+- [x] **Step 1: Write failing source-contract tests**
 
 Parse the descriptor bytes in Python and assert exactly two mandatory top-level collections: Digitizer/Touch Pad and Digitizer/Configuration. Assert five Finger collections, mandatory usages, exact report sizes/IDs, Device Capabilities, Certification, Input Mode and Selective Reporting. Assert there is no Mouse collection, pressure, width, height, force, palm or haptics usage.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run: `./proxyenv/bin/python -m unittest tests.test_apple_input_package -v`
 
 Expected: missing descriptor header and project source entries.
 
-- [ ] **Step 3: Add the project-owned descriptor template**
+- [x] **Step 3: Add the project-owned descriptor template**
 
 Base the schema on Microsoft's parallel/hybrid sample report descriptor. Keep the schema, report IDs and logical ranges immutable; patch only checked physical range, unit and exponent items into a context-owned copy before `VhfCreate`. The patch routine must fail closed if the native metadata cannot be represented in HID short items.
 
-- [ ] **Step 4: Verify report/descriptor agreement**
+- [x] **Step 4: Verify report/descriptor agreement**
 
 Add assertions that every portable encoder report size and feature size equals the size calculated from the descriptor parser. Run package and protocol tests.
 
