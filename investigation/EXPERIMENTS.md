@@ -5733,3 +5733,17 @@ unchanged.
   and either a 46-byte count-zero payload or a valid payload containing a
   zero-`touch_major` contact. The raw blob stays ignored; only a reviewed
   minimal sanitized fixture may enter the repository.
+
+Release-trigger installation checkpoint (2026-08-24T13:51:44Z). After the
+user explicitly approved installation of the exact test kernel driver and its
+catalog signer, the hash-gated installer published the package as `oem16.inf`
+and restarted only `ACPI\\APPL0001\\0`. The device returned `OK`, service
+`AppleInput` returned `Running`, and the selected DriverStore SYS SHA-256 is
+exactly
+`4ba2468ecf3194130c135ef1ddc2376ababe2cae438e5f6128bd6d9f03f6c873`.
+The active descriptor digest remains
+`9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`,
+discovery phase is 8, trackpad-init phase is 3 and init attempts are 2. The
+previous `oem15.inf` package was not deleted and remains the immediate
+rollback. No raw capture has been armed yet; the physical release gate remains
+open.
