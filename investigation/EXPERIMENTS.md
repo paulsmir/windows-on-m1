@@ -5326,3 +5326,50 @@ reboot input plus the bounded 30-minute mixed-input run remain open.  Gate C2
 therefore remains a successful partial checkpoint rather than a completed
 stability gate.  `TransportOnly=0` remains active; the documented
 `TransportOnly=1` rollback and external USB input remain available.
+
+### EXP-20260824-049 — bounded J313 trackpad report capture Gate D1
+
+Pre-run record (2026-08-24T11:11:38Z). Hypothesis: replacing only the live
+Gate-C2 `oem13.inf` driver with the isolated capture build from GitHub Actions
+run `32714036047` will preserve the validated Apple SPI transport and keyboard
+VHF path while allowing at most 16 CRC-validated device-2 reports to be saved
+for one explicitly controlled physical gesture at a time.
+
+- repository state: root branch `feature/j313-native-input` at
+  `86a3f4390bca95bb0a33d528f98fee3bf5c551f8`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`; all three tracked diff
+  SHA-256 values are
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- firmware and launch contract remain the accepted EXP-057/EXP-047 pair; no
+  ESP, m1n1, Mu, CPU, display, storage or USB change is permitted.
+- capture artifact: workflow run `32714036047`, job `97391400734`, artifact
+  `AppleInput-Trackpad-Capture-ARM64-Debug`; INF SHA-256
+  `208925e026f0f4359f4d53daa2b8f98b87837f7046944356632975c12acaee43`,
+  unsigned catalog SHA-256
+  `15c6907228db00fa213db4c09b4e3d45cb6041a5a4cf65228409a68bd2265aa6`,
+  ARM64 SYS
+  `58b24722b68fdb9e5a875c04602c8322efde3cc015a6ad108144cc2a2d1aa780`
+  and ARM64 CLI
+  `54de5d2959c000eb62c29858029e0822909841981c41d6db055211a20b9317ac`.
+  The package is staged, not installed, at
+  `C:\Users\pavel\AppleInputTrackpadCapture`; host and Air binary hashes match.
+- signing contract: extract and import only catalog signer
+  `1DF96731DC3D8DECD712F828B11616C384CBD83A` from the exact recorded catalog;
+  Windows test-signing is already enabled. Installation is
+  `pnputil /add-driver AppleInputCapture.inf /install`, followed by a query of
+  the active published INF, service, PnP tree and capture interface.
+- recovery: active `oem13.inf` remains in DriverStore with validated SYS hash
+  `bc457c288cef25eeb1445305629ffb9f8147b7beaf1d7d258c5cc81a2de6104e`;
+  setting `TransportOnly=1` and restarting `ACPI\APPL0001\0` disables VHF, and
+  `pnputil /add-driver` against the preserved oem13 package restores the
+  validated driver. External USB input and SSH remain mandatory recovery paths.
+- single physical variable per capture: no contact, stationary one finger,
+  X-only motion, Y-only motion, physical click, then two contacts. Each raw blob
+  is stored only under ignored local evidence and must have the exact trackpad
+  descriptor digest from EXP-047, the requested report count, and zero drops.
+- immediate pass gates: APPL0001 PnP OK, AppleInput service RUNNING, phase 8,
+  keyboard VHF Running, SSH and external USB alive, capture interface present,
+  and zero timeout/CRC/fragment/offline/VHF failures. Any mismatch, hang,
+  bugcheck, reboot, lost keyboard, lost SSH or dropped report triggers rollback
+  before gesture collection.
