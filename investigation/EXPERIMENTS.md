@@ -5792,3 +5792,58 @@ Verdict: Gate D1 release evidence passes and Task 1 closes. A J313 release can
 arrive as a 76-byte one-contact payload whose `touch_major` is zero; the next
 bounded task is native descriptor axis metadata parsing. This result does not
 publish a Precision Touchpad or infer palm, pressure or gesture semantics.
+
+### EXP-20260824-052 — publish the J313 Precision Touchpad Gate D2
+
+Pre-run record (2026-08-24T17:25:00Z). Hypothesis: the Task 7 production
+package can first replace only the driver while preserving the working
+keyboard and native axis metadata with `PublishTrackpad=0`; enabling only the
+independent trackpad gate afterward will publish a Windows Precision Touchpad
+without transport errors or loss of the keyboard. No ESP, firmware, CPU,
+storage, USB or display artifact is changed.
+
+- source: root `8afbcf4e6c227dc169b3b95b6702176e3bf5c07e`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`; all three tracked diff
+  SHA-256 values are the empty-diff hash
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- exact build: workflow-dispatch run `32743605323`; both production and
+  explicit capture ARM64 WDK jobs passed. The production INF SHA-256 is
+  `caf8a0190369ab158bbe8465ef6596dd630c0c84ad3fec3d13b977bb91734313`,
+  catalog `e6de47275954d6b813032626f6ec9fcdffecc687d9fcae0fa6436ac08ecf66ec`,
+  SYS `d5db2fceb32bcb189228cf44d935352dcfad9b14396eb59a43c8b561d205c8d0`
+  and diagnostic CLI
+  `020318609882e4caf7d12bf3cf15aae83c081166bd4a3014c09d34b691a0d24f`.
+  Catalog signer SHA-1 is
+  `F17DB51F17AB079C7E20618F8C0CE4A24E795FD9`; exported public certificate
+  SHA-256 is
+  `111324c2234fcbdca10b73c119330904ce827b530add8b2ddfcd682af8ab683c`.
+- accepted platform baseline remains the EXP-057/060 four-E-core firmware
+  pair: `J313_EFI.fd` SHA-256
+  `cd591aab2ef0641902f03e1a38aac697e45fc12e466a3cb72f32cd3d68060710`
+  and packaged `boot.bin` SHA-256
+  `61fef2d71f9f4b46dc787d1db56a2749d22d055bc5e15e0d5c1f6767aa60c58a`.
+  This experiment does not write or remount the ESP.
+- live rollback baseline: `ACPI\\APPL0001\\0` is Started on preserved
+  `oem15.inf`; service `AppleInput` is RUNNING; active capture SYS SHA-256 is
+  `65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
+  Diagnostic ABI v3 reports discovery phase 8, MT-init phase 3, two attempts,
+  keyboard VHF state 3, descriptor digests
+  `5ad48fbaddbae4d5806c4dbc27c842e535e2954cd140e208494cf4f17fbc47c7`
+  and
+  `9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`,
+  matched 138/138 workers and zero SPI timeout, CRC, fragment, offline or VHF
+  errors.
+- first changed variable: trust only the exact new public certificate, stage
+  and select the higher-version production INF, then set
+  `TransportOnly=0`, `PublishKeyboard=1`, `PublishTrackpad=0` before restarting
+  only `ACPI\\APPL0001\\0`. Precision Touchpad publication is forbidden until
+  APPL0001, service, ABI-v4 axis metadata, descriptor digest, keyboard and all
+  transport error gates pass.
+- immediate recovery: set `PublishTrackpad=0`; if the new package or keyboard
+  gate fails, uninstall only its newly reported `oemNN.inf`, force-select the
+  preserved rollback with `pnputil /add-driver
+  C:\\Windows\\INF\\oem15.inf /install`, restart only APPL0001 and remove only
+  certificate thumbprint `F17DB51F17AB079C7E20618F8C0CE4A24E795FD9` from
+  LocalMachine Root and TrustedPublisher. External USB and SSH remain the
+  control paths.
