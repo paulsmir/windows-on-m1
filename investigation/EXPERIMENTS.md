@@ -5847,3 +5847,22 @@ storage, USB or display artifact is changed.
   certificate thumbprint `F17DB51F17AB079C7E20618F8C0CE4A24E795FD9` from
   LocalMachine Root and TrustedPublisher. External USB and SSH remain the
   control paths.
+
+Transport-only/keyboard checkpoint (2026-08-24T17:31:00Z): rejected before
+trackpad publication, with rollback complete. The exact candidate installed as
+`oem16.inf`; APPL0001 was Started, AppleInput was RUNNING, discovery reached
+phase 8, MT init reached phase 3 in two attempts, both descriptor digests were
+unchanged, keyboard VHF state was 3 and every transport/VHF error counter was
+zero. However ABI v4 reported both `trackpad_axis_x_valid=0` and
+`trackpad_axis_y_valid=0`, so the mandatory native-axis contract failed. The
+trackpad VHF remained Absent, no trackpad report was submitted and
+`PublishTrackpad` was never enabled.
+
+The rejected `oem16.inf` was uninstalled and deleted, only APPL0001 was
+rescanned, and the exact new signer was removed from Root and
+TrustedPublisher. Windows selected preserved `oem15.inf`; APPL0001 is Started
+and AppleInput is RUNNING. This is a clean fail-closed result: no Precision
+Touchpad child existed at any point. The next investigation must inspect the
+already owned 110-byte native descriptor in the explicit capture package and
+compare its collection/axis shape with the parser; changing or hard-coding an
+axis transform before that evidence is forbidden.
