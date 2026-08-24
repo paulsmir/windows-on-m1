@@ -266,6 +266,16 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         ):
             self.assertIn(required, transport)
 
+    def test_transport_worker_consumes_coalesced_irq_before_returning(self):
+        transport = self.read("src/transport.c")
+        worker = self.c_function_body(transport, "AiTransportWorker")
+
+        self.assertIn("drain_again", worker)
+        self.assertGreaterEqual(worker.count("ai_transport_worker_begin"), 2)
+        self.assertLess(worker.index("ai_transport_worker_complete"),
+                        worker.rindex("ai_transport_worker_begin"))
+        self.assertNotIn("A still-active level will retrigger", worker)
+
     def test_diagnostic_snapshot_is_versioned_bounded_and_contains_no_payload(self):
         ioctl = self.read("include/apple_input_ioctl.h")
         diagnostics = self.read("src/diagnostics.c")

@@ -156,8 +156,9 @@ VOID AiTransportWorker(WDFINTERRUPT Interrupt, WDFOBJECT AssociatedObject)
 {
     PAI_DEVICE_CONTEXT context = AiGetDeviceContext(
         WdfInterruptGetDevice(Interrupt));
-    ULONG packet_count;
+    ULONG packet_count = 0;
     BOOLEAN asserted;
+    BOOLEAN drain_again;
 
     UNREFERENCED_PARAMETER(AssociatedObject);
     WdfInterruptAcquireLock(Interrupt);
@@ -167,36 +168,43 @@ VOID AiTransportWorker(WDFINTERRUPT Interrupt, WDFOBJECT AssociatedObject)
     }
     WdfInterruptReleaseLock(Interrupt);
 
-    for (packet_count = 0;
-         packet_count < AI_TRANSPORT_MAX_PACKETS_PER_WORKER;
-         packet_count++) {
-        NTSTATUS status;
+    do {
+        while (packet_count < AI_TRANSPORT_MAX_PACKETS_PER_WORKER) {
+            NTSTATUS status;
 
-        if (context->Stopping || !context->HardwareStarted)
-            break;
-        RtlZeroMemory(context->ReceivePacket, sizeof(context->ReceivePacket));
-        status = AiSpiTransfer(context, NULL, context->ReceivePacket,
-                               AI_PACKET_SIZE,
-                               AiTransferDeadlineQpc());
-        AiCounterIncrement(&context->Diagnostics.SpiTransferCount);
-        if (status == STATUS_IO_TIMEOUT)
-            AiCounterIncrement(&context->Diagnostics.SpiTimeoutCount);
-        if (!NT_SUCCESS(status))
-            break;
-        status = AiTransportProcessPacket(context);
-        AiGpioAcknowledge(context);
-        if (!NT_SUCCESS(status) || !AiGpioInputAsserted(context))
-            break;
-    }
+            if (context->Stopping || !context->HardwareStarted)
+                break;
+            RtlZeroMemory(context->ReceivePacket, sizeof(context->ReceivePacket));
+            status = AiSpiTransfer(context, NULL, context->ReceivePacket,
+                                   AI_PACKET_SIZE,
+                                   AiTransferDeadlineQpc());
+            packet_count++;
+            AiCounterIncrement(&context->Diagnostics.SpiTransferCount);
+            if (status == STATUS_IO_TIMEOUT)
+                AiCounterIncrement(&context->Diagnostics.SpiTimeoutCount);
+            if (!NT_SUCCESS(status))
+                break;
+            status = AiTransportProcessPacket(context);
+            AiGpioAcknowledge(context);
+            if (!NT_SUCCESS(status) || !AiGpioInputAsserted(context))
+                break;
+        }
 
-    asserted = AiGpioInputAsserted(context);
-    WdfInterruptAcquireLock(Interrupt);
-    if (ai_transport_worker_complete(&context->TransportQueue,
-                                     asserted ? true : false)) {
-        /* A still-active level will retrigger the ISR after lock release. */
-        context->TransportQueue.pending = false;
-    }
-    WdfInterruptReleaseLock(Interrupt);
+        asserted = AiGpioInputAsserted(context);
+        WdfInterruptAcquireLock(Interrupt);
+        drain_again = ai_transport_worker_complete(
+            &context->TransportQueue, asserted ? true : false) ? TRUE : FALSE;
+        if (drain_again &&
+            packet_count < AI_TRANSPORT_MAX_PACKETS_PER_WORKER) {
+            drain_again = ai_transport_worker_begin(
+                &context->TransportQueue) ? TRUE : FALSE;
+        } else if (drain_again) {
+            /* Bound this callback; an asserted level can schedule the next one. */
+            context->TransportQueue.pending = false;
+        }
+        WdfInterruptReleaseLock(Interrupt);
+    } while (drain_again && !context->Stopping && context->HardwareStarted);
+
     AiCounterIncrement(&context->Diagnostics.WorkerCompletedCount);
     AiDiagnosticsPublish(context);
 }
