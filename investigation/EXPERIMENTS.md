@@ -6226,3 +6226,376 @@ the experiment is not yet a final validated CPU checkpoint.  Preserve the
 working guest for operator input/responsiveness confirmation, then repeat the
 same topology with the bounded `monitor` profile so CPU4 entry and the live
 display remain observable without full-log USB backpressure.
+
+Windows topology follow-up (2026-08-24T20:43:00Z): the documented
+`GetSystemCpuSetInformation` API returned five CPU sets.  Logical processors 0
+through 3 reported `EfficiencyClass=0` and `SchedulingClass=0`; logical
+processor 4 reported `EfficiencyClass=1` and `SchedulingClass=1`.  None was
+parked.  This is direct guest evidence that Windows recognizes UID 4 as the
+higher-performance, lower-efficiency core rather than merely counting a fifth
+homogeneous processor.
+
+The same read-only snapshot also explained two misleading observations.  Raw
+SMBIOS Type 4 correctly contains `MaxSpeed=3228 MHz` and
+`CurrentSpeed=0` (unknown), but Windows synthesizes only `~MHz=44` for CPU0 and
+no frequency for CPUs 1 through 4.  The platform exposes neither ACPI `_CPC`
+nor another Windows-visible Apple DVFS interface, so Task Manager's displayed
+44 MHz is metadata/counter fallback, not a measurement of the physical core
+clock.  Separately, the brief UI pause reported while opening Task Manager
+coincided with eleven `stornvme` Event 129 resets at ten-second intervals from
+22:37:06 through 22:38:46 local time.  Treat that pause as an NVMe completion
+timeout/reset symptom, not as evidence of a heterogeneous-scheduler stall.
+
+### EXP-20260824-063 — capture the Windows request behind NVMe Event 129
+
+Status: completed; request class identified, queue failure boundary still open.
+
+Hypothesis: the 22:37–22:38 UI pause is caused by one unsupported or lost
+virtual-NVMe request, after which `stornvme` performs ten-second hierarchical
+reset attempts.  Capturing StorPort's request trace around a bounded read-only
+storage query will identify the opcode/SRB boundary without changing firmware,
+topology, the ESP, or disk contents.
+
+- source: root `0fed0e3bae72c327e71eace649a32d738617d238`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, and Mu
+  `2bd610c9f6184c78abfe0fa5c8cdda1a9fd8f057`; root documentation-only dirty
+  diff SHA-256 is
+  `76be82494c66a5a1709fea807acd97ad22ef239c8711b0dbd72feda15162e09e`,
+  while both nested source diffs are empty;
+- running artifact: the unchanged assisted 4E+1P debug-forensic candidate from
+  EXP-20260824-062, m1n1 SHA-256
+  `e4c073c28d2d008aa0159cf3e64f5daa2afabe0bb712b68198ea8d917381a3a6`
+  and J313 EFI SHA-256
+  `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`;
+- single variable: briefly enable `Microsoft-Windows-StorPort/Operational`,
+  issue a bounded read-only Windows storage query/read, collect the trace, then
+  disable the analytic channel again;
+- evidence: copied EVTX/XML records under ignored `.local/nvme/`, Windows
+  System Event 129 and Storage-Storport 500/550 timestamps, SSH continuity,
+  and the current guest uptime;
+- acceptance: identify the exact request/opcode or queue transition preceding
+  the timeout with no guest reboot and no writes to the Windows namespace;
+- failure/rollback: stop immediately on a new reset storm, UI freeze, SSH loss,
+  or bugcheck.  Disabling the analytic channel restores its original state;
+  the firmware/ESP recovery point remains tag `j313-native-input-v1`.
+
+Result (2026-08-24T20:51:00Z): the bounded query completed without a new
+System Event 129, reboot, SSH loss, or UI freeze.  The StorPort analytic
+channel was returned to its original disabled state.  Its trace contained 36
+Event 24 translation records and one provider decoding error, so it did not
+expose the NVMe command payload.  The copied ignored evidence is:
+
+- `.local/nvme/storport-exp063.evtx`, SHA-256
+  `286847b6b67e91ecef24b76ac43fb4a5e7b8b107b4676abb082ff23a094b71ee`;
+- `.local/nvme/storport-exp063.xml`, SHA-256
+  `cae00ac2ae5d5e4c9007e636fbf0b156f21890203eea580e02f38a93b832890a`.
+
+The same-time Storage-Storport Event 524 supplied the missing admin-command
+boundary: `stornvme` issued opcode `0x02` (Get Log Page), and the virtual
+controller returned generic status `SCT=0, SC=2` (Invalid Field).  This event
+is not itself a timeout; the bounded query generated no Event 500/550 pair.
+
+Historical Event 500 payloads resolve the actual reset storm.  The timed-out
+commands were ordinary SCSI READ(10) and WRITE(10) requests (`0x28` and
+`0x2a`) at unrelated LBAs and sizes from 4 KiB through the advertised 128 KiB
+MDTS.  Once the first request stopped progressing, one additional outstanding
+request timed out every ten seconds.  Each hierarchical reset then generated
+an admin opcode `0x0a` (Get Features) Event 524 with Invalid Field.  Therefore
+the Get Features error is reset fallout, and neither a particular LBA nor an
+oversized transfer explains the incident.  The unresolved first-failure
+boundary is now specifically between submission of a valid ordinary I/O and
+guest observation of its CQE/INTx; the next diagnostic must capture SQE,
+backend return, CQE publication, CQ-head acknowledgement, INTx generation,
+injection and EOI in one bounded ring.
+
+### EXP-20260824-064 — wake the synthetic NVMe INTx owner
+
+Status: first hardware run invalidated by host-runner loss; candidate result
+still unknown and no hardware mutation was made.
+
+Hypothesis: the first ordinary I/O timeout occurs when a non-boot guest CPU
+publishes the next CQE.  The current virtual controller pins the synthetic INTx
+LR to CPU0, but `try_raise_intx()` simply returns on every other CPU without
+waking CPU0.  A directed host IPI to the owner should make CPU0 leave the guest
+and inject the already-pending completion instead of waiting for an unrelated
+exit until `stornvme`'s ten-second timeout.
+
+- source bases: root `0fed0e3bae72c327e71eace649a32d738617d238`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, and Mu
+  `2bd610c9f6184c78abfe0fa5c8cdda1a9fd8f057`;
+- m1n1 candidate diff SHA-256:
+  `5b11da8fcb21bee0addac0bd2af3ea09f176fd729358db76975885d52204922d`;
+- single variable: when an unmasked, uninjected NVMe INTx generation is ready
+  on a non-owner CPU, send exactly one host IPI to `boot_cpu_idx`; owner polling,
+  successful injection, or line deassertion clears the kick latch;
+- tests: the new generation/latch unit test passed, followed by the complete
+  `tests/run_host_tests.sh` suite;
+- exact assisted monitor artifacts: `dist/j313/debug-monitor/m1n1.macho`
+  SHA-256
+  `d13e30b27852caf3e7854a1835143d88fe0e9e27c26ac8cdd89bc2daa8bd9e35`
+  and unchanged `dist/j313/debug-monitor/J313_EFI.fd` SHA-256
+  `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`;
+  packed `boot.bin` SHA-256 is
+  `5326895b614ee5ee4d5e28683f340e02785ef259b58c3a4380bd1e480ebee249`;
+- profile: assisted only, display `both`, diagnostics `monitor`; the artifact
+  manifest verifier passed;
+- acceptance: Windows reaches the desktop with five processors; built-in input
+  remains usable; a bounded mixed read/write workload and opening Task Manager
+  produce no Event 129/500/550, ten-second UI pause, bugcheck, or SSH loss;
+- stop/rollback: do not install the candidate on the ESP.  At the first boot
+  regression, watchdog, or reset storm, stop the assisted guest and return to
+  the unchanged `j313-native-input-v1` standalone recovery point.
+
+First-run result (2026-08-24T23:10:00Z): do not classify this as a candidate
+failure.  Chainload, CPU/NVMe initialization and Mu entry succeeded, and the
+internal panel reached the Windows logo.  Before Windows displayed its spinner,
+both detached host processes (`run_uefi.py` and `uart-reader.py`) disappeared;
+`hv.log` ended abruptly during DXE without a Python traceback or orderly-exit
+record, while the Air remained at the logo.  Neither USB interface then
+answered the proxy NOP probe.  Because the Python hypervisor runner services
+guest exits, a guest left behind after that process is killed cannot make
+forward progress.  The observation therefore measures detached-process
+lifetime in the host execution environment, not NVMe INTx behavior.  Repeat
+the identical artifacts with `run-assisted.sh --foreground` held in a
+persistent PTY; do not alter or rebuild the candidate between runs.
+
+Foreground-repeat result (2026-08-24T23:35:00Z): also invalid for classifying
+the NVMe candidate, but it isolates a host-observer failure.  Windows reached
+five online processors and answered SSH at 38 seconds uptime.  The asynchronous
+framebuffer published 36 complete 2560x1600 frames, then the shared proxy stream
+reported 481 framebuffer checksum failures and finally terminated
+`run_uefi.py` with `m1n1.proxy.UartChecksumError` while `hv_start()` awaited its
+reply.  The 2.7 MiB host log contains 31,565 IRQ-route console messages and
+948,013 NUL bytes from the desynchronised pixel stream.  Once the only proxy
+reader died, the guest could no longer service VM exits.  Therefore neither
+the later screen freeze nor SSH loss measures the NVMe owner-kick candidate.
+
+### EXP-20260824-065 — keep framebuffer publication off the proxy reader
+
+Status: rejected after extended hardware observation; retained as a useful
+host-side mitigation, not a complete transport fix.
+
+Hypothesis: `FrameReceiver.accept()` publishes each complete 16 MiB frame by
+writing, flushing and `fsync()`ing `fb.raw` synchronously inside the sole USB
+proxy reader.  During that disk wait the host does not drain CDC; combined with
+the monitor build's high console volume, a dropped byte permanently shifts the
+reply/event framing.  Moving only complete-frame disk publication to a bounded
+background worker should preserve ordered chunk assembly while ensuring the
+proxy reader never waits for host storage.
+
+- source bases and firmware candidate are identical to EXP-20260824-064;
+- host-only candidate diff SHA-256 (exact diff of `run_uefi.py`,
+  `virtual_display.py` and `tests/test_virtual_display.py`):
+  `bd99d034ace496d3eddf83f2a21f0f3e03c8705f8a37df150f765843b80904a3`;
+- single variable: `run_uefi.py` uses asynchronous, single-slot latest-frame
+  publication; framebuffer parsing and all m1n1/Mu/NVMe code remain unchanged;
+- test: hold the publisher's `fsync()` path blocked and prove the final chunk
+  returns immediately, then release it and verify the exact raw frame and
+  metadata are atomically published;
+- verification: the focused test failed first because the async API did not
+  exist, then passed after implementation.  All 304 root Python tests and the
+  complete m1n1 host suite pass.  The m1n1 and Mu artifact hashes remain
+  `d13e30b27852caf3e7854a1835143d88fe0e9e27c26ac8cdd89bc2daa8bd9e35`
+  and `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`;
+- acceptance: foreground assisted boot reaches Windows/SSH and exceeds 75
+  complete framebuffer generations with zero event/reply checksum failures and
+  a live runner;
+- stop/rollback: no ESP write.  On any framing error or runner exit, retain the
+  evidence, stop the assisted run and revert only the asynchronous host
+  publisher before considering any NVMe change.
+
+Result (2026-08-24T23:30:00Z): passed.  A clean chainload of m1n1
+`2fe790b-dirty` booted Windows with five logical processors; SSH first answered
+at 52 seconds uptime.  The framebuffer advanced through generation 89 (well
+past the former failure at generation 36) with zero event checksum failures,
+zero reply checksum failures and no traceback.  Both `run_uefi.py` and the
+vUART reader remained alive.  The initial attempt before this run was excluded:
+it connected to the frozen prior guest's pixel stream and reset into stock
+m1n1 `b791225`, which correctly failed the public launch-contract preflight.
+The valid run began only after a second clean chainload from stock `Running
+proxy`.  EXP-20260824-064 may now continue without conflating observer loss
+with guest/NVMe behavior.
+
+Extended result (2026-08-24T23:32:00Z): the original acceptance window was too
+short.  The async publisher advanced to generation 144, but then 538 event
+checksum failures, one reply checksum failure and a Python traceback killed
+`run_uefi.py`; only the independent vUART reader survived.  The first corrupt
+event still had a valid type and length, but its four-byte wire checksum was a
+framebuffer pixel (`0x8bff1830`) instead of the sentinel.  Thus `fsync()`
+blocking amplified the failure but was not its root cause.  During the same
+boot Windows logged Event 129 at 23:27:44 and another at 23:31:56.  The bounded
+temporary-file workload itself completed in 1.92 seconds, but its result cannot
+validate EXP-20260824-064 after observer death.
+
+### EXP-20260824-066 — serialize DWC3 event consumption with CDC writers
+
+Status: rejected after extended hardware observation; the iodev locking remains
+a valid local invariant, but it is not the transport root cause.
+
+Hypothesis: `iodev_handle_events()` is the only CDC ring access that does not
+hold the per-device lock.  A USB transfer completion may therefore update the
+ring's read indices on one CPU while an event writer updates its write indices
+on another, dropping a machine word from an otherwise valid framed event.  The
+observed first failure—correct 4060-byte event header followed by a missing
+four-byte sentinel—is the expected wire signature.  Holding the same recursive
+device lock around `handle_events` should make ring consumption and production
+mutually exclusive without changing event contents or cadence.
+
+- source bases are unchanged from EXP-20260824-064;
+- m1n1 CDC-lock diff SHA-256:
+  `86e97694dda2a8080d94c436a7240088b498bb47e312a1b21c0bf4554cb80906`;
+- single variable beyond retained EXP065 host mitigation: acquire the target
+  iodev lock across its hardware event callback;
+- TDD: the existing iodev host harness was extended to assert that the callback
+  observes the lock held.  It failed before implementation, passed after it,
+  and the complete m1n1 host suite passed;
+- exact artifacts: m1n1 SHA-256
+  `3e6ac9e19046e03c82e8f3f4ec4ecdd8a5316fc2cb8be3be6fb910a8c602c397`,
+  unchanged Mu SHA-256
+  `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`,
+  packed debug-monitor `boot.bin` SHA-256
+  `eba4739d641c9f17009548786f6dae5891e33170dbe877f8cf9468591188db19`;
+- acceptance: clean assisted five-CPU Windows boot, live SSH and runner, more
+  than 160 framebuffer generations, zero event/reply checksum failures, then a
+  bounded temporary-file storage workload with no new Event 129/500/550;
+- stop/rollback: no ESP write.  A deadlock, framing error, runner exit, bugcheck
+  or new storage reset rejects the candidate and returns to the unchanged
+  standalone recovery tag.
+
+Result (2026-08-24T23:55:00Z): rejected.  A clean assisted run booted Windows
+with five logical processors and reached framebuffer generation 144 with zero
+framing errors.  At generation 149 the stream produced 98 event checksum
+errors, one reply checksum error and the same fatal Python traceback as EXP065.
+The Windows lock screen then stopped responding because the only host
+hypervisor runner had exited.  Serializing the DWC3 callback therefore delayed
+neither the byte-loss threshold nor its fatal consequence.
+
+### EXP-20260824-067 — resynchronize past false reply markers after event loss
+
+Status: rejected as a complete transport fix; retained as required parser
+hardening.
+
+Hypothesis: the event parser already drops a framebuffer event whose checksum
+is invalid, but a missing USB word shifts the stream.  While scanning for the
+next frame, arbitrary BGRA pixels can contain the three-byte `ff 55 aa` prefix.
+The old parser accepted any fourth byte as a reply command, consumed 32 more
+pixel bytes, raised `UartChecksumError`, and killed the sole hypervisor runner.
+Only the command currently awaited, the boot notification, and the event
+command are valid complete command words at that boundary.  Rejecting every
+other candidate before consuming a reply preserves strict control-reply
+checking while making optional display-frame loss recoverable.
+
+- source and firmware artifacts are unchanged from EXP066; this is a host-only
+  parser change, so rebuilding or changing target firmware would invalidate the
+  single-variable comparison;
+- TDD: a corrupt framebuffer event followed by a pixel-aligned false marker,
+  then a valid event and reply, raised `UartChecksumError` before the change;
+  after filtering complete command words it delivers the valid event and exact
+  reply;
+- verification: all four proxy event checksum tests and all 305 root Python
+  tests pass;
+- acceptance: the identical EXP066 target artifacts boot five-CPU Windows,
+  the runner and SSH remain live beyond framebuffer generation 180, corrupt
+  optional events (if any) do not produce a reply checksum traceback, and the
+  lock screen remains interactive;
+- stop/rollback: no ESP write.  A real expected-command reply checksum failure
+  remains fatal and rejects the candidate; do not weaken control-plane checks.
+
+Result (2026-08-25T00:05:00Z): the host parser no longer died.  The identical
+target booted all five processors and reached Windows; after 544 corrupt
+framebuffer events there was still no reply checksum error, traceback or runner
+exit, and complete frames continued to publish intermittently (frame 62,
+generation 58).  This proves false-marker recovery, but the raw stream itself
+remained badly corrupted and the guest UI stopped responding.  Parser recovery
+is therefore necessary containment, not the target-side root fix.
+
+### EXP-20260825-068 — retry the unsent tail of short DWC3 BULK-IN transfers
+
+Status: implemented and host-verified; hardware result pending.
+
+Hypothesis: the CDC producer removes bytes from `device2host` before submitting
+the BULK-IN TRB.  DWC3 reports physically unsent bytes in the completed TRB's
+remaining-length field.  The BULK-OUT completion path consumes that field, but
+the BULK-IN path discarded it and immediately allowed newer ring data.  A
+four-byte short host read therefore permanently removes the framebuffer
+checksum/sentinel from the wire, exactly matching the captured failures.
+Resubmit the unsent portion of the endpoint transfer buffer before dequeuing
+new ring data.
+
+- retained host changes: asynchronous publication and EXP067 parser recovery;
+- single target variable beyond those retained changes: record each BULK-IN
+  buffer offset/submitted length and retry a valid nonzero residual tail at the
+  original IOVA before accepting newer bytes;
+- TDD: the USB state test now requires a 16 KiB submission with four bytes
+  remaining to produce retry offset `16380`, while zero residual and impossible
+  residuals produce no retry.  The new assertion failed to compile before the
+  helper existed and passed after implementation;
+- verification: the focused USB test and complete m1n1 host suite pass;
+- frozen assisted artifacts built from the public tree:
+  `dist/j313/debug-monitor/m1n1.macho`, SHA-256
+  `a55050a4c94ec2e6d33cf749c4dea85833c32f1c24e2d19f983faf1bddeff743`;
+  `dist/j313/debug-monitor/J313_EFI.fd`, SHA-256
+  `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`;
+  `dist/j313/debug-monitor/boot.bin`, SHA-256
+  `be42e8569fa047f7aa5fd7b85a8afb848293876291b5cd7ec8a9fb9e1b9bdd8c`;
+- acceptance: clean assisted five-CPU Windows boot, runner and UI live beyond
+  framebuffer generation 180, zero event/reply checksum errors, and exact
+  continuously advancing web frames;
+- stop/rollback: no ESP write.  Any framing error rejects the candidate; retain
+  EXP067 so an optional-frame error cannot kill the control plane while evidence
+  is collected.
+
+Hardware result (2026-08-25): rejected as the root fix.  The exact frozen
+artifact booted Mu, all five configured CPUs and NVMe, but its first
+framebuffer checksum failure appeared at `hv.log` line 4154.  Corrupt events
+then continued into raw pixel bytes despite the BULK-IN residual-tail retry.
+Therefore the observed loss is not explained by an ignored nonzero TRB
+residual on `XferComplete`; retain the validation/helper, but do not claim a
+transport fix.
+
+### EXP-20260825-069 — restore the proven 512-byte DWC3 BULK transfer boundary
+
+Status: validated on J313 and accepted as the new assisted stability baseline.
+
+Hypothesis: commit `e1b12a6` increased each CDC DWC3 transfer from the original
+512-byte max-packet boundary to 16 KiB.  The current framebuffer streamer was
+already reduced below 4 KiB because hardware observation found framing loss
+near that 16 KiB path, yet multiple events are still aggregated into one 16 KiB
+TRB.  Restore the original one-max-packet transfer size so every hardware
+submission has the historical, proven boundary; leave the 1 MiB software ring,
+event format, frame cadence, Windows, CPU, NVMe, Mu and host parser unchanged.
+
+- RED: a focused USB policy assertion must require the DWC3 bulk transfer size
+  to equal the USB 2.0 high-speed max packet (512 bytes) and fail before the
+  policy constant exists;
+- RED/GREEN result: the focused test first failed to compile because
+  `USB_DWC3_BULK_TRANSFER_SIZE` did not exist, then passed after defining the
+  512-byte policy and wiring `XFER_SIZE` to it; the complete m1n1 host suite and
+  development build pass;
+- frozen public-tree artifacts: m1n1 SHA-256
+  `785b1b0b2d7f8936f81033dd42cf4be67c512772c28095555e424222230d223f`,
+  unchanged Mu SHA-256
+  `ec7a596b2eb28905fc2ae44d99fb7721b8aaf6947bd98398d0350b5eb9df4f00`,
+  boot image SHA-256
+  `8d51d2310f9054e7e15e991fcd1e88327926791ddce80f29fa6f962ba2681c23`;
+  focused USB diff SHA-256
+  `8deccca91bf3281392aa084a1f48de95bca693d6e4b8b0f91c5373a2deb516d7`;
+- acceptance: assisted five-CPU Windows boot, runner/UI and exact web frames
+  remain live beyond generation 180 with zero new event/reply checksum errors;
+- stop/rollback: no ESP write.  Any framing error rejects the candidate.
+
+Hardware result (2026-08-25): the frozen EXP069 artifact booted Mu,
+four secondary CPUs (five logical processors total), NVMe and Windows to the
+live desktop.  The async viewer published generation 63, representing more
+than 1 GiB of exact 2560x1600 framebuffer payload, over an 8-minute soak.  The
+frame CRC and Windows Task Manager contents/time continued to change.  Counts
+remained zero for event checksum failures, reply/parser failures,
+bugcheck/reset, watchdog/stuck capture, NVMe errors, unhandled endpoint events
+and invalid residual retries.  Observation then continued through generation
+134 (more than 2 GiB of exact framebuffer payload) with the runner still alive
+and every listed error counter still zero.  The prior 16 KiB candidate
+corrupted its first framebuffer event near the beginning of the run.  The
+operator confirmed that Windows was "super responsive" during the same live
+session.  This validates the restored 512-byte hardware submission boundary as
+the transport root fix and accepts the exact 4E+1P assisted state as the
+checkpoint to publish before exposing another core.
