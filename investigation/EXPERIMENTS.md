@@ -5683,3 +5683,53 @@ and captures the first structurally valid zero-contact or zero-`touch_major`
 release candidate. Production AppleInput, firmware, ESP and the live Air remain
 unchanged; `oem15.inf` is the rollback before installing any rebuilt capture
 package.
+
+Release-trigger continuation pre-run (2026-08-24T13:28:00Z). Hypothesis: an
+isolated ABI-v2 capture package that ignores active coordinate frames and arms
+for exactly one structurally valid release candidate will record the physical
+J313 contact-release representation without a human-timing race. The only
+runtime change is the diagnostic capture package; production AppleInput, m1n1,
+Mu, ESP, CPU topology, display, NVMe, USB and the physical gesture remain
+unchanged.
+
+- repository: root `8d46ac420550dba7b143f0c8737bdb57b63268f3`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`; all three tracked diff
+  SHA-256 values are
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- software verification: release-classifier tests cover active, count-zero,
+  zero-`touch_major`, mixed, malformed-length, excessive-count and null input;
+  the complete public suite passes 291/291, ASan/UBSan passes and
+  `git diff --check` passes. The first WDK run `32731783429`, capture job
+  `97445397225`, correctly rejected a user-mode CRT include in the kernel
+  header; no artifact was installed. Kernel-safe correction
+  `033fb431c430aadc7f3bad2d5514db795076b009` then passed workflow-dispatch run
+  `32732378158`, production job `97447288708` and capture job `97447289066`.
+- exact artifact: `AppleInput-Trackpad-Capture-ARM64-Debug`, artifact ID
+  `9521969603`, ignored staging path
+  `.local/apple-input/wdk-32732378158`. INF SHA-256
+  `c50718b453c2c5dd3512e43be770c8660c5ef12a6344c6d7b109ecbb1c722eec`,
+  catalog `1108938598dd17333df31c15c0f54aaa36b3641902fd2d4d0df88edac02d60ea`,
+  AArch64 SYS
+  `4ba2468ecf3194130c135ef1ddc2376ababe2cae438e5f6128bd6d9f03f6c873`
+  and AArch64 CLI
+  `c6666e2403c199814658cc991318ca8a9772c5a7b53a71b659fe708f5087fc85`.
+  The exact catalog signer SHA-1 is
+  `550C27C7CEB41FDCA2AE3F94E14132691AD820FE`; extracted public certificate
+  SHA-256 is
+  `7fbc47adeb20fd89c9183c2c0276f717fa6111051029dc8ac9f4acb9bd162de1`.
+- live baseline and rollback: `oem15.inf`, service `AppleInput` RUNNING,
+  DriverStore SYS SHA-256
+  `65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`;
+  the complete EXP-050 package remains preserved. Install may add the exact
+  signer and higher-version package but must not delete `oem15`; any hash,
+  PnP, discovery, keyboard, transport, reboot or bugcheck failure restores
+  `oem15` before further capture.
+- exact physical run: hold one finger stationary, invoke
+  `AppleInputCapture.exe capture-release --output C:\\Users\\pavel\\j313-release-trigger.bin --timeout 60`,
+  then lift once the tool reports it is armed. Pass requires one report, zero
+  drops, descriptor digest
+  `9da960157f983b6494a19ce6fde471191c183bbdf54486d9217be4e800abcfef`
+  and either a 46-byte count-zero payload or a valid payload containing a
+  zero-`touch_major` contact. The raw blob stays ignored; only a reviewed
+  minimal sanitized fixture may enter the repository.
