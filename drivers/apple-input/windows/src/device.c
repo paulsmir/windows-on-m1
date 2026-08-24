@@ -35,6 +35,25 @@ static BOOLEAN AiReadTransportOnlyParameter(WDFDRIVER Driver)
     return value == 0 ? FALSE : TRUE;
 }
 
+static BOOLEAN AiReadPublishParameter(WDFDRIVER Driver, PCWSTR Name)
+{
+    UNICODE_STRING value_name;
+    WDFKEY parameters_key;
+    ULONG value = 0;
+    NTSTATUS status;
+
+    status = WdfDriverOpenParametersRegistryKey(
+        Driver, KEY_READ, WDF_NO_OBJECT_ATTRIBUTES, &parameters_key);
+    if (!NT_SUCCESS(status))
+        return FALSE;
+    RtlInitUnicodeString(&value_name, Name);
+    status = WdfRegistryQueryULong(parameters_key, &value_name, &value);
+    WdfRegistryClose(parameters_key);
+    if (!NT_SUCCESS(status))
+        return FALSE;
+    return value == 0 ? FALSE : TRUE;
+}
+
 NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 {
     WDF_PNPPOWER_EVENT_CALLBACKS callbacks;
@@ -73,10 +92,12 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
 
     context = AiGetDeviceContext(device);
     context->TransportOnly = TRUE;
+    context->PublishKeyboard = FALSE;
+    context->PublishTrackpad = FALSE;
     context->Device = device;
     context->KeyboardVhfState = AiVhfAbsent;
     context->TrackpadVhfState = AiVhfAbsent;
-    context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
+    context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_4;
     context->Diagnostics.Size = sizeof(context->Diagnostics);
 
     WDF_OBJECT_ATTRIBUTES_INIT(&lock_attributes);
@@ -93,6 +114,10 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
         return status;
 #endif
     context->TransportOnly = AiReadTransportOnlyParameter(Driver);
+    context->PublishKeyboard = AiReadPublishParameter(
+        Driver, L"PublishKeyboard");
+    context->PublishTrackpad = AiReadPublishParameter(
+        Driver, L"PublishTrackpad");
 
     WDF_TIMER_CONFIG_INIT(&timer_config, AiTrackpadInitTimer);
     timer_config.AutomaticSerialization = FALSE;

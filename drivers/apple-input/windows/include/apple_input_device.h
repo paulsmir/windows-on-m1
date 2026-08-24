@@ -57,10 +57,11 @@ typedef struct _AI_DEVICE_CONTEXT {
     struct ai_transport_queue TransportQueue;
     struct ai_discovery Discovery;
     struct ai_trackpad_init TrackpadInit;
+    struct ai_trackpad_tracker TrackpadTracker;
     struct ai_reassembler Reassembler;
     struct ai_descriptor_store Descriptors;
     struct ai_hid_input_contract KeyboardInputContract;
-    AI_DIAGNOSTIC_SNAPSHOT_V3 Diagnostics;
+    AI_DIAGNOSTIC_SNAPSHOT_V4 Diagnostics;
 #if AI_ENABLE_TRACKPAD_CAPTURE
     AI_TRACKPAD_CAPTURE_BLOB TrackpadCapture;
 #endif
@@ -69,10 +70,15 @@ typedef struct _AI_DEVICE_CONTEXT {
     UCHAR ZeroTransmit[AI_PACKET_SIZE];
     UCHAR StatusBytes[AI_SPI_WRITE_STATUS_SIZE];
     UCHAR MessageId;
+    USHORT TrackpadScanTime100us;
+    ULONG TrackpadConsecutiveSubmissionFailures;
     BOOLEAN ResourcesValidated;
     BOOLEAN HardwareStarted;
     BOOLEAN Stopping;
     BOOLEAN TransportOnly;
+    BOOLEAN PublishKeyboard;
+    BOOLEAN PublishTrackpad;
+    BOOLEAN TrackpadPublicationFailed;
 } AI_DEVICE_CONTEXT, *PAI_DEVICE_CONTEXT;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(AI_DEVICE_CONTEXT, AiGetDeviceContext)
@@ -137,6 +143,7 @@ NTSTATUS AiVhfFrontendSubmitKeyboard(PAI_DEVICE_CONTEXT Context,
 NTSTATUS AiVhfFrontendSubmitTrackpad(PAI_DEVICE_CONTEXT Context,
                                      const UCHAR *Report, SIZE_T Length);
 VOID AiVhfFrontendStop(PAI_DEVICE_CONTEXT Context);
+VOID AiVhfFrontendStopTrackpad(PAI_DEVICE_CONTEXT Context);
 #if AI_ENABLE_TRACKPAD_CAPTURE
 NTSTATUS AiTrackpadCaptureInitialize(WDFDEVICE Device,
                                      PAI_DEVICE_CONTEXT Context);

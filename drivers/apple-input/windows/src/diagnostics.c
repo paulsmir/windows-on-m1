@@ -2,7 +2,10 @@
 #include "apple_input_device.h"
 #include <bcrypt.h>
 
-AI_DIAGNOSTIC_SNAPSHOT_V3 g_AiDiagnosticSnapshot;
+AI_DIAGNOSTIC_SNAPSHOT_V4 g_AiDiagnosticSnapshot;
+
+C_ASSERT(FIELD_OFFSET(AI_DIAGNOSTIC_SNAPSHOT_V4, TrackpadAxisXValid) ==
+         sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3));
 
 static NTSTATUS AiSha256(const UCHAR *Bytes, ULONG Length,
                          UCHAR Digest[AI_SHA256_DIGEST_SIZE])
@@ -118,6 +121,8 @@ VOID AiDiagnosticsPublish(PAI_DEVICE_CONTEXT Context)
         Context->TrackpadInit.retry_count;
     Context->Diagnostics.KeyboardVhfState =
         (ULONG)Context->KeyboardVhfState;
+    Context->Diagnostics.TrackpadVhfState =
+        (ULONG)Context->TrackpadVhfState;
     RtlCopyMemory(&g_AiDiagnosticSnapshot, &Context->Diagnostics,
                   sizeof(g_AiDiagnosticSnapshot));
 }
@@ -127,8 +132,11 @@ VOID AiDiagnosticsEvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request,
                                      SIZE_T InputBufferLength,
                                      ULONG IoControlCode)
 {
-    PAI_DIAGNOSTIC_SNAPSHOT_V3 output = NULL;
+    PVOID output = NULL;
     PAI_DEVICE_CONTEXT context;
+    SIZE_T output_length = 0;
+    SIZE_T snapshot_size;
+    ULONG snapshot_version;
     NTSTATUS status;
 
     UNREFERENCED_PARAMETER(OutputBufferLength);
@@ -145,8 +153,8 @@ VOID AiDiagnosticsEvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request,
 
     context = AiGetDeviceContext(WdfIoQueueGetDevice(Queue));
     status = WdfRequestRetrieveOutputBuffer(
-        Request, sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3),
-        (PVOID *)&output, NULL);
+        Request, sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1),
+        &output, &output_length);
     if (!NT_SUCCESS(status)) {
         if (status == STATUS_BUFFER_TOO_SMALL)
             WdfRequestComplete(Request, STATUS_BUFFER_TOO_SMALL);
@@ -155,8 +163,23 @@ VOID AiDiagnosticsEvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request,
         return;
     }
 
+    if (output_length >= sizeof(AI_DIAGNOSTIC_SNAPSHOT_V4)) {
+        snapshot_size = sizeof(AI_DIAGNOSTIC_SNAPSHOT_V4);
+        snapshot_version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_4;
+    } else if (output_length >= sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3)) {
+        snapshot_size = sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3);
+        snapshot_version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
+    } else if (output_length >= sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)) {
+        snapshot_size = sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2);
+        snapshot_version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_2;
+    } else {
+        snapshot_size = sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1);
+        snapshot_version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_1;
+    }
     AiDiagnosticsPublish(context);
-    RtlCopyMemory(output, &context->Diagnostics, sizeof(*output));
+    RtlCopyMemory(output, &context->Diagnostics, snapshot_size);
+    ((PAI_DIAGNOSTIC_SNAPSHOT_V1)output)->Version = snapshot_version;
+    ((PAI_DIAGNOSTIC_SNAPSHOT_V1)output)->Size = (ULONG)snapshot_size;
     WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS,
-                                      sizeof(*output));
+                                      snapshot_size);
 }

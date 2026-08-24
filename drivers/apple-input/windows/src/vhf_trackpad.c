@@ -4,6 +4,11 @@
 #define AI_PTP_VHF_PRODUCT_ID 0x0000u
 #define AI_PTP_VHF_VERSION 0x0001u
 
+static VOID AiTrackpadCounterIncrement(ULONGLONG *Counter)
+{
+    InterlockedIncrement64((volatile LONG64 *)Counter);
+}
+
 static SIZE_T AiTrackpadFeatureReportSize(UCHAR ReportId)
 {
     switch (ReportId) {
@@ -76,6 +81,11 @@ VOID AiTrackpadVhfGetFeature(
         HidTransferPacket->reportBufferLen = (ULONG)length;
 
 Complete:
+    if (Context) {
+        AiTrackpadCounterIncrement(
+            &Context->Diagnostics.TrackpadGetFeatureCount);
+        Context->Diagnostics.TrackpadFeatureLastStatus = status;
+    }
     (VOID)VhfAsyncOperationComplete(VhfOperationHandle, status);
 }
 
@@ -121,6 +131,11 @@ VOID AiTrackpadVhfSetFeature(
     status = AiTrackpadProtocolStatus(protocol_status);
 
 Complete:
+    if (Context) {
+        AiTrackpadCounterIncrement(
+            &Context->Diagnostics.TrackpadSetFeatureCount);
+        Context->Diagnostics.TrackpadFeatureLastStatus = status;
+    }
     (VOID)VhfAsyncOperationComplete(VhfOperationHandle, status);
 }
 
@@ -153,6 +168,31 @@ NTSTATUS AiTrackpadVhfStart(PAI_DEVICE_CONTEXT Context)
             sizeof(Context->TrackpadVhf.ReportDescriptor),
             &Context->TrackpadAxisContract))
         return STATUS_DEVICE_PROTOCOL_ERROR;
+
+    Context->Diagnostics.TrackpadAxisXValid =
+        Context->TrackpadAxisContract.x.valid ? TRUE : FALSE;
+    Context->Diagnostics.TrackpadAxisYValid =
+        Context->TrackpadAxisContract.y.valid ? TRUE : FALSE;
+    Context->Diagnostics.TrackpadLogicalXMinimum =
+        Context->TrackpadAxisContract.x.logical_min;
+    Context->Diagnostics.TrackpadLogicalXMaximum =
+        Context->TrackpadAxisContract.x.logical_max;
+    Context->Diagnostics.TrackpadLogicalYMinimum =
+        Context->TrackpadAxisContract.y.logical_min;
+    Context->Diagnostics.TrackpadLogicalYMaximum =
+        Context->TrackpadAxisContract.y.logical_max;
+    Context->Diagnostics.TrackpadPhysicalXMinimum =
+        Context->TrackpadAxisContract.x.physical_min;
+    Context->Diagnostics.TrackpadPhysicalXMaximum =
+        Context->TrackpadAxisContract.x.physical_max;
+    Context->Diagnostics.TrackpadPhysicalYMinimum =
+        Context->TrackpadAxisContract.y.physical_min;
+    Context->Diagnostics.TrackpadPhysicalYMaximum =
+        Context->TrackpadAxisContract.y.physical_max;
+    Context->Diagnostics.TrackpadUnit =
+        Context->TrackpadAxisContract.x.unit;
+    Context->Diagnostics.TrackpadUnitExponent =
+        Context->TrackpadAxisContract.x.unit_exponent;
 
     KeInitializeSpinLock(&Context->TrackpadVhf.FeatureLock);
     ai_ptp_feature_init(&Context->TrackpadVhf.Features);

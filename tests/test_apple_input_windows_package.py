@@ -333,6 +333,98 @@ int main(void)
         )
         self.assertIn("ai_ptp_encode_neutral", stop_manager)
 
+    def test_trackpad_delivery_is_passive_ordered_and_fail_closed(self):
+        header = self.read("include/apple_input_device.h")
+        transport = self.read("src/transport.c")
+        isr = self.c_function_body(transport, "AiInputInterruptIsr")
+        process = self.c_function_body(
+            transport, "AiTransportProcessTrackpadReport"
+        )
+        packet = self.c_function_body(transport, "AiTransportProcessPacket")
+
+        for field in (
+            "struct ai_trackpad_tracker TrackpadTracker",
+            "TrackpadScanTime100us",
+            "PublishTrackpad",
+            "TrackpadPublicationFailed",
+        ):
+            self.assertIn(field, header)
+        for call in (
+            "ai_apple_trackpad_decode",
+            "ai_trackpad_tracker_update",
+            "ai_ptp_encode_input",
+            "AiVhfFrontendSubmitTrackpad",
+        ):
+            self.assertIn(call, process)
+        self.assertLess(process.index("ai_apple_trackpad_decode"),
+                        process.index("ai_trackpad_tracker_update"))
+        self.assertLess(process.index("ai_trackpad_tracker_update"),
+                        process.index("ai_ptp_encode_input"))
+        self.assertLess(process.index("ai_ptp_encode_input"),
+                        process.index("AiVhfFrontendSubmitTrackpad"))
+        self.assertIn("AI_TRACKPAD_INIT_READY", process)
+        self.assertIn("PublishTrackpad", process)
+        self.assertLess(packet.index("ai_message_decode"),
+                        packet.index("AiTransportProcessTrackpadReport"))
+        self.assertIn("AI_TRACKPAD_VHF_FAILURE_LIMIT", process)
+        self.assertIn("AiVhfFrontendStopTrackpad", process)
+        self.assertNotIn("Trackpad", isr)
+        stop_trackpad = self.c_function_body(
+            self.read("src/vhf_frontend.c"),
+            "AiVhfFrontendStopTrackpad",
+        )
+        self.assertIn("AiTrackpadVhfStop", stop_trackpad)
+        self.assertNotIn("AiKeyboardVhfStop", stop_trackpad)
+
+    def test_trackpad_publication_gates_default_off_and_uninstall_off(self):
+        device = self.read("src/device.c")
+        inf = self.read("AppleInput.inf")
+        install = self.read("scripts/install-driver.ps1")
+        uninstall = self.read("scripts/uninstall-driver.ps1")
+
+        for gate in ("PublishKeyboard", "PublishTrackpad"):
+            self.assertIn(gate, device)
+            self.assertIn(f"{gate},0x00010001,0", inf)
+            self.assertIn(f"[switch]${gate}", install)
+            self.assertIn(gate, uninstall)
+        self.assertIn("TransportOnly,0x00010001,1", inf)
+        capture_inf = self.read("AppleInputCapture.inf")
+        self.assertIn("PublishKeyboard,0x00010001,1", capture_inf)
+        self.assertIn("PublishTrackpad,0x00010001,0", capture_inf)
+        self.assertIn("pnputil /restart-device", install)
+
+    def test_diagnostic_v4_is_scalar_private_and_backwards_compatible(self):
+        ioctl = self.read("include/apple_input_ioctl.h")
+        diagnostics = self.read("src/diagnostics.c")
+        cli = self.read("tools/AppleInputDiag/main.c")
+        combined = ioctl + diagnostics + cli
+
+        for field in (
+            "AI_DIAGNOSTIC_SNAPSHOT_VERSION_4",
+            "TrackpadAxisXValid",
+            "TrackpadAxisYValid",
+            "TrackpadVhfState",
+            "TrackpadReportDecodedCount",
+            "TrackpadReportRejectedCount",
+            "TrackpadReportSubmittedCount",
+            "TrackpadLastRejection",
+            "TrackpadActiveCount",
+            "TrackpadAdmittedCount",
+            "TrackpadSuppressedCount",
+            "TrackpadGetFeatureCount",
+            "TrackpadSetFeatureCount",
+            "TrackpadFeatureLastStatus",
+        ):
+            self.assertIn(field, combined)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1)", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V3)", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V4)", diagnostics)
+        self.assertNotRegex(
+            ioctl + cli,
+            r"(?i)(trackpadraw|trackpadpayload|trackpadcoordinates|contactx|contacty)\s*\[",
+        )
+
     def test_inf_is_arm64_kmdf_vhf_package(self):
         inf = self.read("AppleInput.inf")
         for required in ("ACPI\\APPL0001", "AppleInput", "NTarm64", "KmdfLibraryVersion",
@@ -566,7 +658,10 @@ int main(void)
         self.assertLess(stop.index("WdfTimerStop"),
                         stop.index("WdfWaitLockAcquire"))
         self.assertIn("AiVhfFrontendStart", process)
-        self.assertNotIn("return status;", process[process.index("AiVhfFrontendStart"):])
+        self.assertNotRegex(
+            process,
+            r"AiVhfFrontendStart\(Context\);\s*if\s*\(!NT_SUCCESS\(status\)\)\s*return status;",
+        )
 
         for field in (
             "TrackpadInitPhase",

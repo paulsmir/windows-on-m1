@@ -51,7 +51,7 @@ static void print_digest(const UCHAR digest[AI_SHA256_DIGEST_SIZE])
         printf("%02x", digest[index]);
 }
 
-static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
+static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V4 *s, int json)
 {
     ULONG header_count = s->HeaderWriteIndex;
     ULONG first_sequence;
@@ -110,6 +110,22 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
                "\"keyboard_vhf_submission_failures\":%llu,"
                "\"keyboard_vhf_start_failures\":%llu,"
                "\"keyboard_vhf_last_status\":%ld,"
+               "\"trackpad_axis_x_valid\":%u,"
+               "\"trackpad_axis_y_valid\":%u,"
+               "\"trackpad_vhf_state\":%lu,"
+               "\"trackpad_reports_decoded\":%llu,"
+               "\"trackpad_reports_rejected\":%llu,"
+               "\"trackpad_reports_submitted\":%llu,"
+               "\"trackpad_vhf_submission_failures\":%llu,"
+               "\"trackpad_vhf_start_failures\":%llu,"
+               "\"trackpad_last_rejection\":%lu,"
+               "\"trackpad_active\":%u,"
+               "\"trackpad_admitted\":%u,"
+               "\"trackpad_suppressed\":%u,"
+               "\"trackpad_get_feature\":%llu,"
+               "\"trackpad_set_feature\":%llu,"
+               "\"trackpad_feature_last_status\":%ld,"
+               "\"trackpad_vhf_last_status\":%ld,"
                "\"keyboard_descriptor_sha256\":\"",
                s->MessagePhase, s->MessageType, s->MessageReport,
                s->MessageDevice, s->MessageId, s->MessageResponseLength,
@@ -123,7 +139,20 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
                (unsigned long long)s->KeyboardReportSubmittedCount,
                (unsigned long long)s->KeyboardVhfSubmissionFailureCount,
                (unsigned long long)s->KeyboardVhfStartFailureCount,
-               s->KeyboardVhfLastStatus);
+               s->KeyboardVhfLastStatus,
+               s->TrackpadAxisXValid, s->TrackpadAxisYValid,
+               s->TrackpadVhfState,
+               (unsigned long long)s->TrackpadReportDecodedCount,
+               (unsigned long long)s->TrackpadReportRejectedCount,
+               (unsigned long long)s->TrackpadReportSubmittedCount,
+               (unsigned long long)s->TrackpadVhfSubmissionFailureCount,
+               (unsigned long long)s->TrackpadVhfStartFailureCount,
+               s->TrackpadLastRejection,
+               s->TrackpadActiveCount, s->TrackpadAdmittedCount,
+               s->TrackpadSuppressedCount,
+               (unsigned long long)s->TrackpadGetFeatureCount,
+               (unsigned long long)s->TrackpadSetFeatureCount,
+               s->TrackpadFeatureLastStatus, s->TrackpadVhfLastStatus);
         print_digest(s->KeyboardDescriptorSha256);
         printf("\",\"trackpad_descriptor_sha256\":\"");
         print_digest(s->TrackpadDescriptorSha256);
@@ -156,6 +185,27 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
     printf("trackpad_init phase=%u retries=%u attempts=%u\n",
            s->TrackpadInitPhase, s->TrackpadInitRetryCount,
            s->TrackpadInitAttemptCount);
+    printf("trackpad axes=%u/%u logical=[%ld,%ld]x[%ld,%ld] physical=[%ld,%ld]x[%ld,%ld] unit=%08lx exponent=%d\n",
+           s->TrackpadAxisXValid, s->TrackpadAxisYValid,
+           s->TrackpadLogicalXMinimum, s->TrackpadLogicalXMaximum,
+           s->TrackpadLogicalYMinimum, s->TrackpadLogicalYMaximum,
+           s->TrackpadPhysicalXMinimum, s->TrackpadPhysicalXMaximum,
+           s->TrackpadPhysicalYMinimum, s->TrackpadPhysicalYMaximum,
+           s->TrackpadUnit, s->TrackpadUnitExponent);
+    printf("trackpad vhf=%lu decoded=%llu rejected=%llu submitted=%llu submit_failures=%llu start_failures=%llu rejection=%lu active/admitted/suppressed=%u/%u/%u feature(get/set)=%llu/%llu feature_status=%08lx vhf_status=%08lx\n",
+           s->TrackpadVhfState,
+           (unsigned long long)s->TrackpadReportDecodedCount,
+           (unsigned long long)s->TrackpadReportRejectedCount,
+           (unsigned long long)s->TrackpadReportSubmittedCount,
+           (unsigned long long)s->TrackpadVhfSubmissionFailureCount,
+           (unsigned long long)s->TrackpadVhfStartFailureCount,
+           s->TrackpadLastRejection,
+           s->TrackpadActiveCount, s->TrackpadAdmittedCount,
+           s->TrackpadSuppressedCount,
+           (unsigned long long)s->TrackpadGetFeatureCount,
+           (unsigned long long)s->TrackpadSetFeatureCount,
+           (ULONG)s->TrackpadFeatureLastStatus,
+           (ULONG)s->TrackpadVhfLastStatus);
     printf("vhf state=%lu accepted=%llu rejected=%llu submitted=%llu submit_failures=%llu start_failures=%llu last_status=%08lx\n",
            s->KeyboardVhfState,
            (unsigned long long)s->KeyboardReportAcceptedCount,
@@ -183,7 +233,7 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V3 *s, int json)
 
 int wmain(int argc, wchar_t **argv)
 {
-    AI_DIAGNOSTIC_SNAPSHOT_V3 snapshot = {0};
+    AI_DIAGNOSTIC_SNAPSHOT_V4 snapshot = {0};
     DWORD returned = 0;
     int json = argc == 3 && wcscmp(argv[2], L"--json") == 0;
     HANDLE handle;
@@ -207,7 +257,7 @@ int wmain(int argc, wchar_t **argv)
     }
     CloseHandle(handle);
     if (returned != sizeof(snapshot) ||
-        snapshot.Version != AI_DIAGNOSTIC_SNAPSHOT_VERSION_3 ||
+        snapshot.Version != AI_DIAGNOSTIC_SNAPSHOT_VERSION_4 ||
         snapshot.Size != sizeof(snapshot)) {
         fwprintf(stderr, L"unsupported snapshot response\n");
         return 1;

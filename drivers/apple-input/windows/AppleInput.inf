@@ -41,6 +41,8 @@ AddReg=AppleInput_ServiceParameters
 
 [AppleInput_ServiceParameters]
 HKR,Parameters,TransportOnly,0x00010001,1
+HKR,Parameters,PublishKeyboard,0x00010001,0
+HKR,Parameters,PublishTrackpad,0x00010001,0
 
 [AppleInput_Install.NT.Wdf]
 KmdfService=AppleInput,AppleInput_Wdf

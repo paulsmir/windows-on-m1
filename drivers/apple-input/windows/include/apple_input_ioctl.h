@@ -5,6 +5,7 @@
 #define AI_DIAGNOSTIC_SNAPSHOT_VERSION_1 1u
 #define AI_DIAGNOSTIC_SNAPSHOT_VERSION_2 2u
 #define AI_DIAGNOSTIC_SNAPSHOT_VERSION_3 3u
+#define AI_DIAGNOSTIC_SNAPSHOT_VERSION_4 4u
 #define AI_PACKET_HEADER_RING_CAPACITY 16u
 #define AI_SHA256_DIGEST_SIZE 32u
 
@@ -121,3 +122,89 @@ typedef struct _AI_DIAGNOSTIC_SNAPSHOT_V3 {
     ULONGLONG KeyboardVhfStartFailureCount;
     LONG KeyboardVhfLastStatus;
 } AI_DIAGNOSTIC_SNAPSHOT_V3, *PAI_DIAGNOSTIC_SNAPSHOT_V3;
+
+enum AI_TRACKPAD_REJECTION {
+    AiTrackpadRejectNone,
+    AiTrackpadRejectNotReady,
+    AiTrackpadRejectDecode,
+    AiTrackpadRejectTrack,
+    AiTrackpadRejectEncode,
+    AiTrackpadRejectSubmit,
+};
+
+/*
+ * Version 4 appends scalar Precision Touchpad state and counters.  It never
+ * stores report payloads, contact coordinates, contact identities or keys.
+ * Versions 1 through 3 remain exact prefixes of this structure.
+ */
+typedef struct _AI_DIAGNOSTIC_SNAPSHOT_V4 {
+    ULONG Version;
+    ULONG Size;
+    ULONG TransportPhase;
+    ULONG HeaderWriteIndex;
+    ULONGLONG InterruptCount;
+    ULONGLONG WorkerQueuedCount;
+    ULONGLONG WorkerCompletedCount;
+    ULONGLONG SpiTransferCount;
+    ULONGLONG SpiTimeoutCount;
+    ULONGLONG PacketCrcFailureCount;
+    ULONGLONG MessageCrcFailureCount;
+    ULONGLONG FragmentFailureCount;
+    ULONGLONG KeyboardReportCount;
+    ULONGLONG TrackpadReportCount;
+    ULONGLONG ResetCount;
+    ULONGLONG OfflineCount;
+    AI_PACKET_HEADER_V1 Headers[AI_PACKET_HEADER_RING_CAPACITY];
+    ULONG MessagePhase;
+    UCHAR MessageType;
+    UCHAR MessageReport;
+    UCHAR MessageDevice;
+    UCHAR MessageId;
+    USHORT MessageResponseLength;
+    USHORT MessagePayloadLength;
+    USHORT KeyboardDescriptorLength;
+    USHORT TrackpadDescriptorLength;
+    UCHAR KeyboardDescriptorSha256[AI_SHA256_DIGEST_SIZE];
+    UCHAR TrackpadDescriptorSha256[AI_SHA256_DIGEST_SIZE];
+    ULONG DescriptorDigestStatus;
+    UCHAR KeyboardContractValid;
+    UCHAR TrackpadInitPhase;
+    UCHAR TrackpadInitRetryCount;
+    UCHAR TrackpadInitAttemptCount;
+    ULONG KeyboardVhfState;
+    ULONGLONG KeyboardReportAcceptedCount;
+    ULONGLONG KeyboardReportRejectedCount;
+    ULONGLONG KeyboardReportSubmittedCount;
+    ULONGLONG KeyboardVhfSubmissionFailureCount;
+    ULONGLONG KeyboardVhfStartFailureCount;
+    LONG KeyboardVhfLastStatus;
+    ULONG Version3Reserved;
+    UCHAR TrackpadAxisXValid;
+    UCHAR TrackpadAxisYValid;
+    UCHAR TrackpadActiveCount;
+    UCHAR TrackpadAdmittedCount;
+    UCHAR TrackpadSuppressedCount;
+    UCHAR TrackpadReserved[3];
+    LONG TrackpadLogicalXMinimum;
+    LONG TrackpadLogicalXMaximum;
+    LONG TrackpadLogicalYMinimum;
+    LONG TrackpadLogicalYMaximum;
+    LONG TrackpadPhysicalXMinimum;
+    LONG TrackpadPhysicalXMaximum;
+    LONG TrackpadPhysicalYMinimum;
+    LONG TrackpadPhysicalYMaximum;
+    ULONG TrackpadUnit;
+    CHAR TrackpadUnitExponent;
+    UCHAR TrackpadAxisReserved[3];
+    ULONG TrackpadVhfState;
+    ULONG TrackpadLastRejection;
+    ULONGLONG TrackpadReportDecodedCount;
+    ULONGLONG TrackpadReportRejectedCount;
+    ULONGLONG TrackpadReportSubmittedCount;
+    ULONGLONG TrackpadVhfSubmissionFailureCount;
+    ULONGLONG TrackpadVhfStartFailureCount;
+    ULONGLONG TrackpadGetFeatureCount;
+    ULONGLONG TrackpadSetFeatureCount;
+    LONG TrackpadFeatureLastStatus;
+    LONG TrackpadVhfLastStatus;
+} AI_DIAGNOSTIC_SNAPSHOT_V4, *PAI_DIAGNOSTIC_SNAPSHOT_V4;
