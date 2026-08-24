@@ -325,7 +325,7 @@ Create the trackpad object only when multitouch init is READY and the native axi
 
 `AiVhfFrontendStart` may leave keyboard Running while trackpad stays DescriptorsReady. Trackpad start/submit failure increments only trackpad counters. Stop first blocks new submissions, emits a neutral report when possible, deletes trackpad, then keyboard, before MMIO unmap.
 
-- [ ] **Step 5: Run package/full suite and commit**
+- [x] **Step 5: Run package/full suite and commit**
 
 Run tests and `git diff --check`. Commit implementation; append and separately commit the CHANGES row.
 
