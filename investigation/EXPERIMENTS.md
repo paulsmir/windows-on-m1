@@ -5540,3 +5540,53 @@ Verdict: Gate D1 passes.  The transport initialization defect is closed; the
 next bounded work is controlled field mapping for X, Y, contact count and
 physical click, followed by a separately tested Windows Precision Touchpad
 frontend.  This result does not yet claim Precision Touchpad publication.
+
+Controlled-delta completion (2026-08-24T14:31:00Z).  Four additional bounded
+captures completed with the same descriptor digest, eight requested reports,
+zero drops and no transport error:
+
+- X-only motion:
+  `.local/apple-input/trackpad-captures/EXP-20260824-050/04-x-only.bin`,
+  SHA-256
+  `13f8a744f35f8261f15c0c0bd74772cb26f222a3e6fd5d9ea14022a5029d29cf`,
+  eight 76-byte one-contact frames.  Across the recorded sequence absolute X
+  changed from -624 to 830 while absolute Y remained within 4901..4950.
+- Y-only motion:
+  `.local/apple-input/trackpad-captures/EXP-20260824-050/05-y-only.bin`,
+  SHA-256
+  `a1de99cefc19c825eff5c3a25895742966105521ae3edef9f0710258d302a257`,
+  eight 76-byte one-contact frames.  This physically independent capture
+  preserves the separately decoded X and Y field positions.
+- two contacts:
+  `.local/apple-input/trackpad-captures/EXP-20260824-050/07-two-finger.bin`,
+  SHA-256
+  `aac25aec4094ef3037691bb876210d625888b5000d19546b9ddcc746d39d25f3`.
+  Contact count changed from one to two and frame length increased from 76 to
+  106 bytes, exactly one additional 30-byte Apple finger record.
+- held physical click:
+  `.local/apple-input/trackpad-captures/EXP-20260824-050/08-held-physical-click.bin`,
+  SHA-256
+  `ebeecc64a0305555dab17c3a0ff98250b358f0d3a170ac1faef14800d59485fb`,
+  eight 76-byte one-contact frames.  Both independently reported click bytes
+  were one in all eight frames; both were zero in every X-only and Y-only
+  frame.
+
+The earlier file
+`.local/apple-input/trackpad-captures/EXP-20260824-050/06-physical-click.bin`
+with SHA-256
+`14a455ad0d28cc7f3aa1a18fbebe0d188f8b3982d6e2ba78cc52be3a6495744d`
+is explicitly rejected as click evidence: the fixed eight-report window filled
+after initial contact but before the user completed the physical press, so both
+click bytes remained zero.  Repeating while the click was already held removed
+that timing ambiguity.  A no-contact attempt correctly timed out without
+creating a partial file.
+
+The observed layout matches the primary upstream Linux `applespi` contract:
+the payload begins with the 48-byte touchpad header; byte 1 is `clicked`, byte
+30 is contact count and byte 31 is the duplicate click state; each contact is a
+30-byte little-endian `tp_finger`.  The validated message decoder removes the
+final two-byte message CRC, so a one-contact captured payload is 48 + 28 = 76
+bytes and a two-contact payload is 48 + 30 + 28 = 106 bytes.  Controlled X/Y,
+click and contact-count deltas independently validate the fields required for
+the next parser; no confidence, palm or Windows gesture semantics are inferred
+from these captures.
