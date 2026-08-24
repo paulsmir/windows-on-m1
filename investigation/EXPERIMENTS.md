@@ -5263,3 +5263,38 @@ bugcheck or watchdog marker.  Verdict: fixed descriptor ownership, bounded
 keyboard contract parsing, version-3 metadata and the `TransportOnly=1`
 fail-closed boundary are hardware validated on J313.  This result does not
 validate VHF keyboard creation or report publication; Gate C2 remains separate.
+
+### EXP-20260824-048 — publish the native keyboard through VHF Gate C2
+
+Pre-run record (2026-08-24T09:10:12Z).  Hypothesis: on the live Gate
+C1-validated `oem13.inf` package, changing only the AppleInput service parameter
+from `TransportOnly=1` to `TransportOnly=0` and restarting only
+`ACPI\APPL0001\0` will create one VHF keyboard child and publish descriptor-
+validated built-in keyboard reports without disturbing the native transport or
+the accepted Windows platform baseline.
+
+- repository state: root `b1ae81a0dc5ea7e4d3775e943b40c20b9b742c2f`,
+  m1n1 `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`; all tracked diff SHA-256 values
+  remain `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- firmware, package, signer and hashes are exactly those recorded and validated
+  in EXP-20260824-047.  Active SYS SHA-256 is
+  `bc457c288cef25eeb1445305629ffb9f8147b7beaf1d7d258c5cc81a2de6104e`;
+  no binary, INF, catalog, ESP, firmware, topology or CPU change is permitted.
+- single changed variable: run the same installer with `-PublishKeyboard`,
+  which writes `TransportOnly=0`, then restart only `ACPI\APPL0001\0`.
+  Rollback writes `TransportOnly=1` and restarts that same devnode; `oem12.inf`,
+  external USB input and the stable ESP remain available.
+- immediate pass gates: AppleInput PnP OK and service RUNNING; phase 8;
+  keyboard VHF state running; exactly one new VHF/HID keyboard child; unchanged
+  descriptor lengths/digests and keyboard contract; zero report rejection,
+  start failure, submission failure and transport errors.
+- behavioral pass gates: built-in letters, numbers, punctuation, both modifier
+  sides, repeat, simultaneous chords, Caps Lock, recognized function-row input
+  and complete key release; counters accepted/submitted increase together
+  without recording input payloads; input resumes after one devnode restart and
+  works at Windows sign-in after one controlled reboot.
+- failure gates: any stuck key, rejected report, VHF failure, devnode problem,
+  unexpected IRQ/worker/SPI rate, hang, bugcheck, reboot or loss of external
+  USB, SSH, display, storage or accepted CPUs.  On any failure immediately set
+  `TransportOnly=1`, restart APPL0001 and stop the experiment.
