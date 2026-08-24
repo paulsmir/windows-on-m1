@@ -109,6 +109,7 @@ static NTSTATUS AiTransportProcessPacket(PAI_DEVICE_CONTEXT Context)
             AiCounterIncrement(&Context->Diagnostics.MessageCrcFailureCount);
         return STATUS_DATA_ERROR;
     }
+    AiDiagnosticsRecordMessage(Context, &message);
 
     if (Context->Discovery.phase == AI_DISCOVERY_READY) {
         if (wire.flags == AI_PACKET_READ && wire.device == 1u)
@@ -220,7 +221,7 @@ NTSTATUS AiTransportStart(PAI_DEVICE_CONTEXT Context)
     ai_transport_queue_reset(&Context->TransportQueue);
     ai_reassembler_reset(&Context->Reassembler);
     RtlZeroMemory(&Context->Diagnostics, sizeof(Context->Diagnostics));
-    Context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_1;
+    Context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_2;
     Context->Diagnostics.Size = sizeof(Context->Diagnostics);
 
     status = AiSpiInitialize(Context);

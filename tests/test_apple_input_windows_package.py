@@ -298,7 +298,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("AI_PACKET_HEADER_RING_CAPACITY", ioctl)
         self.assertNotRegex(ioctl, r"(?i)(payload|packetdata|rawpacket)\s*\[")
         self.assertIn("WdfRequestRetrieveOutputBuffer", diagnostics)
-        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1)", diagnostics)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)", diagnostics)
         self.assertIn("STATUS_BUFFER_TOO_SMALL", diagnostics)
         self.assertIn("WdfRequestCompleteWithInformation", diagnostics)
 
@@ -327,6 +327,24 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         for field in ("Sequence", "Result", "Flags", "Device", "Offset",
                       "Remaining", "Length"):
             self.assertIn(field, cli)
+
+    def test_diagnostics_expose_only_last_decoded_message_header(self):
+        ioctl = self.read("include/apple_input_ioctl.h")
+        diagnostics = self.read("src/diagnostics.c")
+        transport = self.read("src/transport.c")
+        cli = self.read("tools/AppleInputDiag/main.c")
+
+        self.assertIn("AI_DIAGNOSTIC_SNAPSHOT_VERSION_2", ioctl)
+        self.assertIn("AI_DIAGNOSTIC_SNAPSHOT_V2", ioctl)
+        for field in ("MessageType", "MessageReport", "MessageDevice",
+                      "MessageId", "MessageResponseLength",
+                      "MessagePayloadLength"):
+            self.assertIn(field, ioctl)
+            self.assertIn(field, cli)
+        self.assertNotRegex(ioctl, r"(?i)(payload|packetdata|rawpacket)\s*\[")
+        self.assertIn("AiDiagnosticsRecordMessage", diagnostics)
+        self.assertIn("AiDiagnosticsRecordMessage(Context, &message)", transport)
+        self.assertIn("sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2)", diagnostics)
 
 
 if __name__ == "__main__":

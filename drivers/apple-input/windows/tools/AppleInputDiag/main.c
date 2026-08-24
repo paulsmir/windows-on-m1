@@ -45,7 +45,7 @@ out:
     return handle;
 }
 
-static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
+static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V2 *s, int json)
 {
     ULONG header_count = s->HeaderWriteIndex;
     ULONG first_sequence;
@@ -87,7 +87,12 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
                    header->Flags, header->Device, header->Offset,
                    header->Remaining, header->Length);
         }
-        printf("]}\n");
+        printf("],\"message\":{\"phase\":%lu,\"type\":%u,"
+               "\"report\":%u,\"device\":%u,\"id\":%u,"
+               "\"response_length\":%u,\"payload_length\":%u}}\n",
+               s->MessagePhase, s->MessageType, s->MessageReport,
+               s->MessageDevice, s->MessageId, s->MessageResponseLength,
+               s->MessagePayloadLength);
         return;
     }
     printf("AppleInput snapshot v%lu phase=%lu\n", s->Version,
@@ -106,6 +111,10 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
            (unsigned long long)s->FragmentFailureCount,
            (unsigned long long)s->KeyboardReportCount,
            (unsigned long long)s->TrackpadReportCount);
+    printf("message phase=%lu type=%02x report=%02x device=%02x id=%u response=%u payload=%u\n",
+           s->MessagePhase, s->MessageType, s->MessageReport,
+           s->MessageDevice, s->MessageId, s->MessageResponseLength,
+           s->MessagePayloadLength);
     for (ULONG index = 0; index < header_count; ++index) {
         ULONG sequence = first_sequence + index;
         const AI_PACKET_HEADER_V1 *header =
@@ -120,7 +129,7 @@ static void print_snapshot(const AI_DIAGNOSTIC_SNAPSHOT_V1 *s, int json)
 
 int wmain(int argc, wchar_t **argv)
 {
-    AI_DIAGNOSTIC_SNAPSHOT_V1 snapshot = {0};
+    AI_DIAGNOSTIC_SNAPSHOT_V2 snapshot = {0};
     DWORD returned = 0;
     int json = argc == 3 && wcscmp(argv[2], L"--json") == 0;
     HANDLE handle;
@@ -144,7 +153,7 @@ int wmain(int argc, wchar_t **argv)
     }
     CloseHandle(handle);
     if (returned != sizeof(snapshot) ||
-        snapshot.Version != AI_DIAGNOSTIC_SNAPSHOT_VERSION_1 ||
+        snapshot.Version != AI_DIAGNOSTIC_SNAPSHOT_VERSION_2 ||
         snapshot.Size != sizeof(snapshot)) {
         fwprintf(stderr, L"unsupported snapshot response\n");
         return 1;

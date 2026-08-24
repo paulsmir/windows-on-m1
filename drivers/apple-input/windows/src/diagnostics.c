@@ -2,7 +2,7 @@
 
 #include "apple_input_device.h"
 
-AI_DIAGNOSTIC_SNAPSHOT_V1 g_AiDiagnosticSnapshot;
+AI_DIAGNOSTIC_SNAPSHOT_V2 g_AiDiagnosticSnapshot;
 
 NTSTATUS AiDiagnosticsInitialize(WDFDEVICE Device, PAI_DEVICE_CONTEXT Context)
 {
@@ -42,6 +42,20 @@ VOID AiDiagnosticsRecordHeader(PAI_DEVICE_CONTEXT Context,
     header->Device = Packet->device;
 }
 
+VOID AiDiagnosticsRecordMessage(PAI_DEVICE_CONTEXT Context,
+                                const struct ai_protocol_message *Message)
+{
+    if (!Context || !Message)
+        return;
+    Context->Diagnostics.MessagePhase = (ULONG)Context->Discovery.phase;
+    Context->Diagnostics.MessageType = Message->type;
+    Context->Diagnostics.MessageReport = Message->report;
+    Context->Diagnostics.MessageDevice = Message->device;
+    Context->Diagnostics.MessageId = Message->id;
+    Context->Diagnostics.MessageResponseLength = Message->response_length;
+    Context->Diagnostics.MessagePayloadLength = Message->payload_length;
+}
+
 VOID AiDiagnosticsPublish(PAI_DEVICE_CONTEXT Context)
 {
     if (!Context)
@@ -56,7 +70,7 @@ VOID AiDiagnosticsEvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request,
                                      SIZE_T InputBufferLength,
                                      ULONG IoControlCode)
 {
-    PAI_DIAGNOSTIC_SNAPSHOT_V1 output = NULL;
+    PAI_DIAGNOSTIC_SNAPSHOT_V2 output = NULL;
     PAI_DEVICE_CONTEXT context;
     NTSTATUS status;
 
@@ -69,7 +83,7 @@ VOID AiDiagnosticsEvtIoDeviceControl(WDFQUEUE Queue, WDFREQUEST Request,
 
     context = AiGetDeviceContext(WdfIoQueueGetDevice(Queue));
     status = WdfRequestRetrieveOutputBuffer(
-        Request, sizeof(AI_DIAGNOSTIC_SNAPSHOT_V1),
+        Request, sizeof(AI_DIAGNOSTIC_SNAPSHOT_V2),
         (PVOID *)&output, NULL);
     if (!NT_SUCCESS(status)) {
         if (status == STATUS_BUFFER_TOO_SMALL)

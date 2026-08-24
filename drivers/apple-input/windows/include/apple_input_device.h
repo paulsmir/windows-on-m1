@@ -19,7 +19,7 @@ typedef struct _AI_DEVICE_CONTEXT {
     struct ai_transport_queue TransportQueue;
     struct ai_discovery Discovery;
     struct ai_reassembler Reassembler;
-    AI_DIAGNOSTIC_SNAPSHOT_V1 Diagnostics;
+    AI_DIAGNOSTIC_SNAPSHOT_V2 Diagnostics;
     UCHAR ReceivePacket[AI_PACKET_SIZE];
     UCHAR TransmitPacket[AI_PACKET_SIZE];
     UCHAR ZeroTransmit[AI_PACKET_SIZE];
@@ -68,4 +68,6 @@ NTSTATUS AiDiagnosticsInitialize(WDFDEVICE Device, PAI_DEVICE_CONTEXT Context);
 VOID AiDiagnosticsRecordHeader(PAI_DEVICE_CONTEXT Context,
                                const struct ai_packet_view *Packet,
                                enum ai_status Result);
+VOID AiDiagnosticsRecordMessage(PAI_DEVICE_CONTEXT Context,
+                                const struct ai_protocol_message *Message);
 VOID AiDiagnosticsPublish(PAI_DEVICE_CONTEXT Context);
