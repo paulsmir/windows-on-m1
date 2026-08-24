@@ -247,7 +247,7 @@ evidence, sanitized before any fixture is committed and disabled in production.
 - Demonstrate every parsed field by controlled deltas before implementing it.
 
 Gate D1 uses a separate `AppleInputCapture` driver, INF, administrator-only
-device ACL, CLI and manually dispatched CI workflow. The normal Debug and
+device ACL and CLI plus a manual-only job in the established WDK workflow. The normal Debug and
 Release `AppleInput` projects do not define `AI_ENABLE_TRACKPAD_CAPTURE`, do not
 compile `trackpad_capture.c` and do not recognize the capture IOCTLs. The test
 driver accepts only reassembled device-2 reports after protocol CRC validation,

@@ -727,7 +727,7 @@ mechanism that is impossible to enable in production. It must cap report count
 and size, require administrator access, exclude keyboard device 1 entirely, and
 store raw device-2 reports only under ignored `.local/` evidence.
 
-Implemented as a separate manually built project and workflow with a fixed
+Implemented as a separate manually built project and manual-only CI job with a fixed
 16-by-512-byte buffer. ARM64 WDK compilation and hardware installation remain
 required before Step 2.
 

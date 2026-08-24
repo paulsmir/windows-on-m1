@@ -530,7 +530,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         capture = self.read("AppleInputCapture.vcxproj")
         capture_inf = self.read("AppleInputCapture.inf")
         workflow = (ROOT / ".github" / "workflows" /
-                    "apple-input-trackpad-capture-wdk.yml").read_text()
+                    "apple-input-wdk.yml").read_text()
 
         self.assertNotIn("AI_ENABLE_TRACKPAD_CAPTURE", production)
         self.assertNotIn("trackpad_capture.c", production)
@@ -540,7 +540,11 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleInputCapture.sys", capture_inf)
         self.assertIn("TransportOnly,0x00010001,0", capture_inf)
         self.assertIn("workflow_dispatch:", workflow)
-        self.assertNotRegex(workflow, r"(?m)^\s{2}(push|pull_request):")
+        self.assertIn("build-trackpad-capture-arm64:", workflow)
+        self.assertIn("if: github.event_name == 'workflow_dispatch'", workflow)
+        capture_job = workflow[workflow.index("build-trackpad-capture-arm64:"):]
+        self.assertIn("AppleInputCapture.vcxproj", capture_job)
+        self.assertNotIn("github.event_name == 'push'", capture_job)
 
     def test_trackpad_capture_is_admin_only_bounded_and_device_two_only(self):
         header = self.read("include/apple_input_capture.h")
