@@ -31,8 +31,14 @@ PUBLIC_MADT = (
 
 
 class TestJ313MadtTopology(unittest.TestCase):
-    def test_public_release_exposes_only_the_validated_efficiency_cluster(self):
-        self.assertEqual(enabled_gicc_uids(PUBLIC_MADT.read_text()), [0, 1, 2, 3])
+    def test_cpu_stability_experiment_exposes_four_efficiency_and_one_performance_core(self):
+        source = PUBLIC_MADT.read_text()
+
+        self.assertEqual(enabled_gicc_uids(source), [0, 1, 2, 3, 4])
+
+        classes = gicc_efficiency_classes(source)
+        self.assertEqual([classes[uid] for uid in range(4)], [0, 0, 0, 0])
+        self.assertEqual(classes[4], 1)
 
     def test_returns_only_enabled_gicc_uids_in_source_order(self):
         self.assertEqual(enabled_gicc_uids(MADT_FRAGMENT), [0, 2])
