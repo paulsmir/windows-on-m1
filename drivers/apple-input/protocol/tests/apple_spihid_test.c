@@ -406,6 +406,134 @@ static void test_descriptor_store_owns_bytes(void)
     assert(ai_descriptor_store_get(&store, 2) == NULL);
 }
 
+static void test_hid_input_contract(void)
+{
+    static const uint8_t keyboard_descriptor[] = {
+        0x05, 0x01, 0x09, 0x06, 0xa1, 0x01,
+        0x85, 0x01, 0x75, 0x08, 0x95, 0x08, 0x81, 0x02,
+        0xc0,
+    };
+    static const uint8_t no_report_id[] = {
+        0x75, 0x08, 0x95, 0x08, 0x81, 0x02,
+    };
+    static const uint8_t multiple_inputs[] = {
+        0x85, 0x02, 0x75, 0x01, 0x95, 0x03, 0x81, 0x02,
+        0x95, 0x05, 0x81, 0x02,
+    };
+    static const uint8_t rounded_bits[] = {
+        0x75, 0x01, 0x95, 0x09, 0x81, 0x02,
+    };
+    static const uint8_t push_pop[] = {
+        0x75, 0x08, 0x95, 0x02, 0xa4,
+        0x75, 0x01, 0x95, 0x03, 0x81, 0x02,
+        0xb4, 0x81, 0x02,
+    };
+    static const uint8_t truncated[] = {0x75};
+    static const uint8_t long_item[] = {0xfe, 0x00, 0x00};
+    static const uint8_t report_id_zero[] = {
+        0x85, 0x00, 0x75, 0x08, 0x95, 0x01, 0x81, 0x02,
+    };
+    static const uint8_t zero_report_size[] = {
+        0x75, 0x00, 0x95, 0x01, 0x81, 0x02,
+    };
+    static const uint8_t zero_report_count[] = {
+        0x75, 0x08, 0x95, 0x00, 0x81, 0x02,
+    };
+    static const uint8_t stack_underflow[] = {0xb4};
+    static const uint8_t stack_overflow[] = {0xa4, 0xa4, 0xa4, 0xa4, 0xa4};
+    static const uint8_t unbalanced_stack[] = {
+        0x75, 0x08, 0x95, 0x01, 0xa4, 0x81, 0x02,
+    };
+    static const uint8_t bit_count_overflow[] = {
+        0x77, 0xff, 0xff, 0xff, 0xff,
+        0x97, 0xff, 0xff, 0xff, 0xff,
+        0x81, 0x02,
+    };
+    static const uint8_t no_input[] = {0x05, 0x01, 0x09, 0x06};
+    struct ai_hid_input_contract contract;
+    uint8_t keyboard_report[9] = {1};
+    uint8_t no_id_report[8] = {0};
+    uint8_t report_id = 0xff;
+
+    assert(ai_hid_input_contract_parse(keyboard_descriptor,
+                                       sizeof(keyboard_descriptor),
+                                       &contract) == AI_OK);
+    assert(contract.valid && contract.uses_report_ids);
+    assert(contract.bytes_by_id[1] == 9);
+    assert(ai_hid_input_report_valid(&contract, keyboard_report,
+                                     sizeof(keyboard_report), &report_id));
+    assert(report_id == 1);
+    assert(!ai_hid_input_report_valid(&contract, keyboard_report, 8,
+                                      &report_id));
+    keyboard_report[0] = 2;
+    assert(!ai_hid_input_report_valid(&contract, keyboard_report,
+                                      sizeof(keyboard_report), &report_id));
+
+    assert(ai_hid_input_contract_parse(no_report_id, sizeof(no_report_id),
+                                       &contract) == AI_OK);
+    assert(contract.valid && !contract.uses_report_ids);
+    assert(contract.bytes_by_id[0] == sizeof(no_id_report));
+    assert(ai_hid_input_report_valid(&contract, no_id_report,
+                                     sizeof(no_id_report), &report_id));
+    assert(report_id == 0);
+
+    assert(ai_hid_input_contract_parse(multiple_inputs,
+                                       sizeof(multiple_inputs),
+                                       &contract) == AI_OK);
+    assert(contract.uses_report_ids && contract.bytes_by_id[2] == 2);
+    assert(ai_hid_input_contract_parse(rounded_bits, sizeof(rounded_bits),
+                                       &contract) == AI_OK);
+    assert(!contract.uses_report_ids && contract.bytes_by_id[0] == 2);
+    assert(ai_hid_input_contract_parse(push_pop, sizeof(push_pop),
+                                       &contract) == AI_OK);
+    assert(contract.bytes_by_id[0] == 3);
+
+    assert(ai_hid_input_contract_parse(NULL, sizeof(no_input), &contract) ==
+           AI_ERR_ARGUMENT);
+    assert(ai_hid_input_contract_parse(no_input, sizeof(no_input), NULL) ==
+           AI_ERR_ARGUMENT);
+    assert(ai_hid_input_contract_parse(no_input, 0, &contract) ==
+           AI_ERR_ARGUMENT);
+    assert(ai_hid_input_contract_parse(truncated, sizeof(truncated),
+                                       &contract) == AI_ERR_LENGTH);
+    assert(ai_hid_input_contract_parse(long_item, sizeof(long_item),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(report_id_zero,
+                                       sizeof(report_id_zero),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(zero_report_size,
+                                       sizeof(zero_report_size),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(zero_report_count,
+                                       sizeof(zero_report_count),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(stack_underflow,
+                                       sizeof(stack_underflow),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(stack_overflow,
+                                       sizeof(stack_overflow),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(unbalanced_stack,
+                                       sizeof(unbalanced_stack),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(ai_hid_input_contract_parse(bit_count_overflow,
+                                       sizeof(bit_count_overflow),
+                                       &contract) == AI_ERR_LENGTH);
+    assert(ai_hid_input_contract_parse(no_input, sizeof(no_input),
+                                       &contract) == AI_ERR_PROTOCOL);
+    assert(!ai_hid_input_report_valid(NULL, no_id_report,
+                                      sizeof(no_id_report), &report_id));
+    AI_MEMSET(&contract, sizeof(contract));
+    assert(!ai_hid_input_report_valid(&contract, no_id_report,
+                                      sizeof(no_id_report), &report_id));
+    contract.valid = true;
+    contract.bytes_by_id[0] = sizeof(no_id_report);
+    assert(!ai_hid_input_report_valid(&contract, NULL,
+                                      sizeof(no_id_report), &report_id));
+    assert(!ai_hid_input_report_valid(&contract, no_id_report, 0,
+                                      &report_id));
+}
+
 int main(void)
 {
     test_crc();
@@ -421,5 +549,6 @@ int main(void)
     test_spi_init_plan();
     test_interrupt_worker_queue();
     test_descriptor_store_owns_bytes();
+    test_hid_input_contract();
     return 0;
 }

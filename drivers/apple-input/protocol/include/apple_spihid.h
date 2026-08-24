@@ -32,6 +32,7 @@ typedef unsigned char bool;
 #define AI_PACKET_DATA_SIZE 246u
 #define AI_MAX_MESSAGE_SIZE 2048u
 #define AI_DESCRIPTOR_MAX 512u
+#define AI_HID_REPORT_ID_CAPACITY 256u
 #define AI_PACKET_READ 0x20u
 #define AI_PACKET_WRITE 0x40u
 
@@ -122,6 +123,12 @@ struct ai_descriptor_store {
     struct ai_descriptor_slot trackpad;
 };
 
+struct ai_hid_input_contract {
+    bool valid;
+    bool uses_report_ids;
+    uint16_t bytes_by_id[AI_HID_REPORT_ID_CAPACITY];
+};
+
 struct ai_spi_transfer_plan {
     uint16_t clock_divider;
     uint16_t words;
@@ -196,5 +203,11 @@ enum ai_status ai_descriptor_store_put(struct ai_descriptor_store *store,
                                        size_t length);
 const struct ai_descriptor_slot *ai_descriptor_store_get(
     const struct ai_descriptor_store *store, uint8_t device);
+enum ai_status ai_hid_input_contract_parse(
+    const uint8_t *descriptor, size_t length,
+    struct ai_hid_input_contract *out);
+bool ai_hid_input_report_valid(const struct ai_hid_input_contract *contract,
+                               const uint8_t *report, size_t length,
+                               uint8_t *report_id);
 
 #endif

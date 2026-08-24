@@ -47,6 +47,7 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
             "apple_spihid_packet.c",
             "apple_spihid_reassembly.c",
             "apple_spihid_descriptors.c",
+            "apple_hid_contract.c",
             "apple_spihid_transport.c",
         ):
             self.assertIn(source, project)
@@ -67,7 +68,21 @@ class AppleInputWindowsPackageTests(unittest.TestCase):
         ):
             self.assertIn(symbol, source + header)
         self.assertIn("bytes[AI_DESCRIPTOR_MAX]", header)
-        self.assertNotRegex(source, r"\\b(ExAllocatePool|malloc|calloc|realloc)\\b")
+        self.assertNotRegex(source, r"\b(ExAllocatePool|malloc|calloc|realloc)\b")
+
+    def test_hid_contract_parser_is_bounded_and_has_no_dynamic_allocation(self):
+        source = self.read("../protocol/src/apple_hid_contract.c")
+        header = self.read("../protocol/include/apple_spihid.h")
+
+        for symbol in (
+            "AI_HID_REPORT_ID_CAPACITY",
+            "struct ai_hid_input_contract",
+            "ai_hid_input_contract_parse",
+            "ai_hid_input_report_valid",
+        ):
+            self.assertIn(symbol, source + header)
+        self.assertIn("bytes_by_id[AI_HID_REPORT_ID_CAPACITY]", header)
+        self.assertNotRegex(source, r"\b(ExAllocatePool|malloc|calloc|realloc)\b")
 
     def test_driver_maps_validated_resources_before_hardware_primitives(self):
         driver = self.read("src/driver.c")
