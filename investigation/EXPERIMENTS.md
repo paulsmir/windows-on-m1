@@ -6201,3 +6201,28 @@ Inspection of the compiled MADT resolved the ambiguity: that cached output had
 already been compiled from the 4E+1P source.  The build contract was still
 corrected so future development builds preserve explicitly selected nested
 revisions, while release builds continue to require root-pinned gitlinks.
+
+First hardware result (2026-08-24T20:31:00Z): partially passed.  The initial
+attempt was invalid before Mu because chainload entered an interrupted old
+hypervisor context; its EL0 guest exception rebooted the machine to the clean
+stage-1 proxy.  The next generation entered Mu, then Windows ran a pending C:
+filesystem check caused by the prior interrupted guest and requested one
+reboot.  Neither generation reached secondary-processor startup and neither is
+evidence against the 4E+1P topology.
+
+The unchanged candidate then booted Windows normally.  Windows reported one
+processor package, five cores, and five logical processors.  Boot time was
+2026-08-24T22:26:01+02:00.  Five bounded PowerShell workers completed an
+eight-second arithmetic load; a fresh SSH session succeeded immediately
+afterward at 22:30:33+02:00 with unchanged uptime.  The AppleInput kernel
+service remained RUNNING with `PublishKeyboard=1`, `PublishTrackpad=1`, and
+`TransportOnly=0`.  No bugcheck or reboot occurred during this bounded run.
+
+The `full` telemetry host runner exited during verbose Mu DXE logging at line
+987, before Windows requested secondary processors.  The independently running
+guest continued and reached Windows, but this observation failure prevented
+direct `CPU_ENTRY cpu=4` evidence and left the web framebuffer stale.  Therefore
+the experiment is not yet a final validated CPU checkpoint.  Preserve the
+working guest for operator input/responsiveness confirmation, then repeat the
+same topology with the bounded `monitor` profile so CPU4 entry and the live
+display remain observable without full-log USB backpressure.
