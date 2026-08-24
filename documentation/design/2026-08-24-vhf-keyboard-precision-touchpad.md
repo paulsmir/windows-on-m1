@@ -2,8 +2,7 @@
 
 ## Status
 
-The architecture in this document was approved in chat on 2026-08-24. This
-written specification is pending final review before implementation planning.
+The architecture and written specification were approved on 2026-08-24.
 
 This document supersedes only the temporary relative-mouse frontend described
 in `2026-08-09-native-apple-input.md`. The validated J313 hardware transport,
