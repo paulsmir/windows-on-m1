@@ -75,6 +75,7 @@ NTSTATUS AppleInputCreateDevice(WDFDRIVER Driver, PWDFDEVICE_INIT DeviceInit)
     context->TransportOnly = TRUE;
     context->Device = device;
     context->KeyboardVhfState = AiVhfAbsent;
+    context->TrackpadVhfState = AiVhfAbsent;
     context->Diagnostics.Version = AI_DIAGNOSTIC_SNAPSHOT_VERSION_3;
     context->Diagnostics.Size = sizeof(context->Diagnostics);
 

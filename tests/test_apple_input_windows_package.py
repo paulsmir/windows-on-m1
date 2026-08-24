@@ -252,6 +252,87 @@ int main(void)
             subprocess.run(command, check=True, cwd=ROOT)
             subprocess.run([str(binary_path)], check=True, cwd=ROOT)
 
+    def test_trackpad_vhf_feature_callbacks_are_bounded_and_transport_free(self):
+        source = self.read("src/vhf_trackpad.c")
+        get_feature = self.c_function_body(
+            source, "AiTrackpadVhfGetFeature"
+        )
+        set_feature = self.c_function_body(
+            source, "AiTrackpadVhfSetFeature"
+        )
+
+        for body, portable_handler in (
+            (get_feature, "ai_ptp_get_feature"),
+            (set_feature, "ai_ptp_set_feature"),
+        ):
+            self.assertIn(portable_handler, body)
+            self.assertEqual(body.count("VhfAsyncOperationComplete"), 1)
+            for required in (
+                "reportBuffer", "reportBufferLen", "reportId",
+                "TrackpadVhf.FeatureLock",
+            ):
+                self.assertIn(required, body)
+            for forbidden in (
+                "AiSpi", "AiTransport", "AiGpio", "WdfWaitLock",
+                "ExAllocate", "malloc",
+            ):
+                self.assertNotIn(forbidden, body)
+
+        start = self.c_function_body(source, "AiTrackpadVhfStart")
+        for required in (
+            "ai_trackpad_axis_contract_parse",
+            "AiPrecisionTouchpadDescriptorPatch",
+            "VhfClientContext = Context",
+            "EvtVhfAsyncOperationGetFeature = AiTrackpadVhfGetFeature",
+            "EvtVhfAsyncOperationSetFeature = AiTrackpadVhfSetFeature",
+            "VendorID", "ProductID", "VersionNumber", "VhfCreate", "VhfStart",
+        ):
+            self.assertIn(required, start)
+        self.assertIn("AI_TRACKPAD_INIT_READY", start)
+
+    def test_trackpad_vhf_lifecycle_is_independent_and_passive(self):
+        header = self.read("include/apple_input_device.h")
+        source = self.read("src/vhf_trackpad.c")
+        frontend = self.read("src/vhf_frontend.c")
+        device = self.read("src/device.c")
+        project = self.read("AppleInput.vcxproj")
+
+        for required in (
+            "typedef struct _AI_TRACKPAD_VHF_STATE",
+            "VHFHANDLE Handle",
+            "BOOLEAN Running",
+            "KSPIN_LOCK FeatureLock",
+            "struct ai_ptp_feature_state Features",
+            "UCHAR ReportDescriptor[AI_PTP_DESCRIPTOR_SIZE]",
+            "AI_TRACKPAD_VHF_STATE TrackpadVhf",
+            "enum AI_VHF_STATE TrackpadVhfState",
+            "struct ai_trackpad_axis_contract TrackpadAxisContract",
+        ):
+            self.assertIn(required, header)
+        self.assertIn("src\\vhf_trackpad.c", project)
+        self.assertIn("context->TrackpadVhfState = AiVhfAbsent", device)
+
+        submit = self.c_function_body(source, "AiTrackpadVhfSubmit")
+        self.assertIn("AI_PTP_INPUT_REPORT_SIZE", submit)
+        self.assertIn("AI_PTP_REPORT_INPUT", submit)
+        self.assertIn("VhfReadReportSubmit", submit)
+        stop = self.c_function_body(source, "AiTrackpadVhfStop")
+        self.assertIn("PAGED_CODE", stop)
+        self.assertIn("VhfDelete(handle, TRUE)", stop)
+
+        start_manager = self.c_function_body(frontend, "AiVhfFrontendStart")
+        self.assertIn("KeyboardVhfState", start_manager)
+        self.assertIn("TrackpadVhfState", start_manager)
+        self.assertIn("AiKeyboardVhfStart", start_manager)
+        self.assertIn("AiTrackpadVhfStart", start_manager)
+        self.assertNotIn("return STATUS_DEVICE_NOT_READY", start_manager)
+        stop_manager = self.c_function_body(frontend, "AiVhfFrontendStop")
+        self.assertLess(
+            stop_manager.index("AiTrackpadVhfStop"),
+            stop_manager.index("AiKeyboardVhfStop"),
+        )
+        self.assertIn("ai_ptp_encode_neutral", stop_manager)
+
     def test_inf_is_arm64_kmdf_vhf_package(self):
         inf = self.read("AppleInput.inf")
         for required in ("ACPI\\APPL0001", "AppleInput", "NTarm64", "KmdfLibraryVersion",

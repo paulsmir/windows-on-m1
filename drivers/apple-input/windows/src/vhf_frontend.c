@@ -2,35 +2,45 @@
 
 NTSTATUS AiVhfFrontendStart(PAI_DEVICE_CONTEXT Context)
 {
-    NTSTATUS status;
+    NTSTATUS keyboard_status = STATUS_SUCCESS;
+    NTSTATUS trackpad_status;
 
+    PAGED_CODE();
     if (!Context || !Context->FrontendLock)
         return STATUS_INVALID_PARAMETER;
     if (Context->TransportOnly)
         return STATUS_SUCCESS;
 
     WdfWaitLockAcquire(Context->FrontendLock, NULL);
-    if (Context->KeyboardVhfState == AiVhfRunning) {
-        WdfWaitLockRelease(Context->FrontendLock);
-        return STATUS_SUCCESS;
-    }
     if (Context->KeyboardVhfState == AiVhfStopping) {
         WdfWaitLockRelease(Context->FrontendLock);
         return STATUS_DEVICE_BUSY;
     }
-    if (!Context->Descriptors.keyboard.valid ||
-        !Context->KeyboardInputContract.valid) {
-        WdfWaitLockRelease(Context->FrontendLock);
-        return STATUS_DEVICE_NOT_READY;
+    if (Context->KeyboardVhfState != AiVhfRunning) {
+        Context->KeyboardVhfState = AiVhfDescriptorsReady;
+        if (!Context->Descriptors.keyboard.valid ||
+            !Context->KeyboardInputContract.valid) {
+            keyboard_status = STATUS_DEVICE_NOT_READY;
+        } else {
+            Context->KeyboardVhfState = AiVhfStarting;
+            keyboard_status = AiKeyboardVhfStart(Context);
+            Context->KeyboardVhfState = NT_SUCCESS(keyboard_status) ?
+                AiVhfRunning : AiVhfDescriptorsReady;
+        }
     }
 
-    Context->KeyboardVhfState = AiVhfDescriptorsReady;
-    Context->KeyboardVhfState = AiVhfStarting;
-    status = AiKeyboardVhfStart(Context);
-    Context->KeyboardVhfState = NT_SUCCESS(status) ?
-        AiVhfRunning : AiVhfDescriptorsReady;
+    if (Context->TrackpadVhfState != AiVhfRunning &&
+        Context->TrackpadVhfState != AiVhfStopping) {
+        Context->TrackpadVhfState = AiVhfDescriptorsReady;
+        if (Context->TrackpadInit.phase == AI_TRACKPAD_INIT_READY) {
+            Context->TrackpadVhfState = AiVhfStarting;
+            trackpad_status = AiTrackpadVhfStart(Context);
+            Context->TrackpadVhfState = NT_SUCCESS(trackpad_status) ?
+                AiVhfRunning : AiVhfDescriptorsReady;
+        }
+    }
     WdfWaitLockRelease(Context->FrontendLock);
-    return status;
+    return keyboard_status;
 }
 
 NTSTATUS AiVhfFrontendSubmitKeyboard(PAI_DEVICE_CONTEXT Context,
@@ -49,17 +59,44 @@ NTSTATUS AiVhfFrontendSubmitKeyboard(PAI_DEVICE_CONTEXT Context,
     return status;
 }
 
+NTSTATUS AiVhfFrontendSubmitTrackpad(PAI_DEVICE_CONTEXT Context,
+                                     const UCHAR *Report, SIZE_T Length)
+{
+    NTSTATUS status;
+
+    if (!Context || !Context->FrontendLock)
+        return STATUS_INVALID_PARAMETER;
+    WdfWaitLockAcquire(Context->FrontendLock, NULL);
+    if (Context->TrackpadVhfState != AiVhfRunning)
+        status = STATUS_DEVICE_NOT_READY;
+    else
+        status = AiTrackpadVhfSubmit(Context, Report, Length);
+    WdfWaitLockRelease(Context->FrontendLock);
+    return status;
+}
+
 VOID AiVhfFrontendStop(PAI_DEVICE_CONTEXT Context)
 {
+    UCHAR neutral[AI_PTP_INPUT_REPORT_SIZE];
+    size_t neutral_length = 0;
+
+    PAGED_CODE();
     if (!Context || !Context->FrontendLock)
         return;
     WdfWaitLockAcquire(Context->FrontendLock, NULL);
-    if (Context->KeyboardVhfState == AiVhfAbsent) {
-        WdfWaitLockRelease(Context->FrontendLock);
-        return;
+    if (Context->TrackpadVhfState != AiVhfAbsent) {
+        Context->TrackpadVhfState = AiVhfStopping;
+        if (Context->TrackpadVhf.Running &&
+            ai_ptp_encode_neutral(0u, neutral, sizeof(neutral),
+                                  &neutral_length) == AI_OK)
+            (VOID)AiTrackpadVhfSubmit(Context, neutral, neutral_length);
+        AiTrackpadVhfStop(Context);
+        Context->TrackpadVhfState = AiVhfAbsent;
     }
-    Context->KeyboardVhfState = AiVhfStopping;
-    AiKeyboardVhfStop(Context);
-    Context->KeyboardVhfState = AiVhfAbsent;
+    if (Context->KeyboardVhfState != AiVhfAbsent) {
+        Context->KeyboardVhfState = AiVhfStopping;
+        AiKeyboardVhfStop(Context);
+        Context->KeyboardVhfState = AiVhfAbsent;
+    }
     WdfWaitLockRelease(Context->FrontendLock);
 }

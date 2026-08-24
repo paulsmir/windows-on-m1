@@ -309,19 +309,19 @@ typedef struct _AI_TRACKPAD_VHF_STATE {
 } AI_TRACKPAD_VHF_STATE;
 ```
 
-- [ ] **Step 1: Write failing lifecycle/callback tests**
+- [x] **Step 1: Write failing lifecycle/callback tests**
 
 Assert the source has a second `VHFHANDLE`, independent lifecycle state, GetFeature and SetFeature callbacks, `VhfAsyncOperationComplete` on every callback path, exact buffer bounds, no SPI call in callbacks and synchronous delete only under the passive frontend lock.
 
-- [ ] **Step 2: Run and verify RED**
+- [x] **Step 2: Run and verify RED**
 
 Run package tests. Expected: missing trackpad VHF source and callbacks.
 
-- [ ] **Step 3: Implement VHF creation and feature callbacks**
+- [x] **Step 3: Implement VHF creation and feature callbacks**
 
 Create the trackpad object only when multitouch init is READY and the native axis contract is valid. Set `VHF_CONFIG.VhfClientContext = Context`, register both asynchronous feature callbacks and set vendor/product/version fields explicitly. Feature callbacks recover the device context from VHF, translate portable status to NTSTATUS and call `VhfAsyncOperationComplete` exactly once on every path.
 
-- [ ] **Step 4: Make lifecycle independent**
+- [x] **Step 4: Make lifecycle independent**
 
 `AiVhfFrontendStart` may leave keyboard Running while trackpad stays DescriptorsReady. Trackpad start/submit failure increments only trackpad counters. Stop first blocks new submissions, emits a neutral report when possible, deletes trackpad, then keyboard, before MMIO unmap.
 

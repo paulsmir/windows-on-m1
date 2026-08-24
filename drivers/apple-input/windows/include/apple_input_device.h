@@ -6,6 +6,7 @@
 
 #include "apple_input_hw.h"
 #include "apple_input_ioctl.h"
+#include "apple_precision_touchpad_descriptor.h"
 #include "apple_spihid.h"
 #ifndef AI_ENABLE_TRACKPAD_CAPTURE
 #define AI_ENABLE_TRACKPAD_CAPTURE 0
@@ -22,6 +23,16 @@ enum AI_VHF_STATE {
     AiVhfStopping,
 };
 
+typedef struct _AI_TRACKPAD_VHF_STATE {
+    VHFHANDLE Handle;
+    BOOLEAN Running;
+    KSPIN_LOCK FeatureLock;
+    struct ai_ptp_feature_state Features;
+    BOOLEAN ContactsActive;
+    BOOLEAN NeutralRequired;
+    UCHAR ReportDescriptor[AI_PTP_DESCRIPTOR_SIZE];
+} AI_TRACKPAD_VHF_STATE, *PAI_TRACKPAD_VHF_STATE;
+
 typedef struct _AI_DEVICE_CONTEXT {
     WDFDEVICE Device;
     WDFWAITLOCK TransportLock;
@@ -31,6 +42,9 @@ typedef struct _AI_DEVICE_CONTEXT {
 #endif
     VHFHANDLE KeyboardVhf;
     enum AI_VHF_STATE KeyboardVhfState;
+    AI_TRACKPAD_VHF_STATE TrackpadVhf;
+    enum AI_VHF_STATE TrackpadVhfState;
+    struct ai_trackpad_axis_contract TrackpadAxisContract;
     PHYSICAL_ADDRESS MemoryBase[3];
     ULONG MemoryLength[3];
     ULONG InterruptVector;
@@ -111,8 +125,16 @@ NTSTATUS AiKeyboardVhfStart(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiKeyboardVhfSubmit(PAI_DEVICE_CONTEXT Context,
                              const UCHAR *Report, SIZE_T Length);
 VOID AiKeyboardVhfStop(PAI_DEVICE_CONTEXT Context);
+EVT_VHF_ASYNC_OPERATION AiTrackpadVhfGetFeature;
+EVT_VHF_ASYNC_OPERATION AiTrackpadVhfSetFeature;
+NTSTATUS AiTrackpadVhfStart(PAI_DEVICE_CONTEXT Context);
+NTSTATUS AiTrackpadVhfSubmit(PAI_DEVICE_CONTEXT Context,
+                             const UCHAR *Report, SIZE_T Length);
+VOID AiTrackpadVhfStop(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiVhfFrontendStart(PAI_DEVICE_CONTEXT Context);
 NTSTATUS AiVhfFrontendSubmitKeyboard(PAI_DEVICE_CONTEXT Context,
+                                     const UCHAR *Report, SIZE_T Length);
+NTSTATUS AiVhfFrontendSubmitTrackpad(PAI_DEVICE_CONTEXT Context,
                                      const UCHAR *Report, SIZE_T Length);
 VOID AiVhfFrontendStop(PAI_DEVICE_CONTEXT Context);
 #if AI_ENABLE_TRACKPAD_CAPTURE
