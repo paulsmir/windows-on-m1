@@ -118,6 +118,14 @@ Any boot regression, descriptor mismatch, changing digest, parser rejection,
 transport timeout, CRC/fragment/offline counter, bugcheck or loss of external
 recovery input fails the active gate and requires rollback.
 
+Gate C2 has reached a successful partial hardware checkpoint on J313. The
+built-in keyboard was used at Windows sign-in; six observed reports were all
+accepted and submitted through a running VHF frontend; and the parent, VHF and
+keyboard children returned `OK` after a devnode restart. No transport or VHF
+failure counter increased. Physical typing after that restart, a controlled
+reboot and the 30-minute mixed-input stability run are still required before
+the gate is called complete.
+
 ## Design and implementation records
 
 - `documentation/design/2026-08-24-vhf-keyboard-precision-touchpad.md`

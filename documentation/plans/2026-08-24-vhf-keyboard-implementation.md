@@ -611,7 +611,7 @@ push documentation.
 - Uses the new package with `TransportOnly=1`.
 - Produces repeated version-3 descriptor length/digest snapshots without a VHF keyboard child.
 
-- [ ] **Step 1: Create the pre-run experiment entry**
+- [x] **Step 1: Create the pre-run experiment entry**
 
 Record a new experiment ID, UTC time, branch/root commit, nested m1n1/Mu commits,
 all diff hashes, exact CI package and SHA-256, unchanged EXP-057 assisted
@@ -665,7 +665,7 @@ submission failure, devnode problem, hang, bugcheck or loss of external USB.
 
 Commit the pre-run entry before changing the parameter.
 
-- [ ] **Step 2: Enable keyboard publication and restart only APPL0001**
+- [x] **Step 2: Enable keyboard publication and restart only APPL0001**
 
 Run the package installer with `-PublishKeyboard`, confirm the service parameter
 is exactly zero, and restart `ACPI\\APPL0001`. Do not reboot or change firmware
@@ -673,6 +673,11 @@ unless PnP explicitly requires it; if a reboot is required, record that fact
 before performing it.
 
 - [ ] **Step 3: Validate keyboard behavior**
+
+Checkpoint: built-in keyboard input at Windows sign-in, matching
+accepted/submitted counters, and successful VHF/HID recreation after one
+devnode restart are validated. Physical input after that restart, the
+controlled reboot and the full behavior matrix remain open.
 
 With external USB recovery still attached, validate:
 

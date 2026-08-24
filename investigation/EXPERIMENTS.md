@@ -5298,3 +5298,31 @@ the accepted Windows platform baseline.
   unexpected IRQ/worker/SPI rate, hang, bugcheck, reboot or loss of external
   USB, SSH, display, storage or accepted CPUs.  On any failure immediately set
   `TransportOnly=1`, restart APPL0001 and stop the experiment.
+
+Post-run checkpoint (2026-08-24T09:24:36Z).  The single-variable activation
+completed without rollback.  The installer retained `oem13.inf`, wrote
+`TransportOnly=0` and restarted only `ACPI\APPL0001\0`.  Windows reported the
+parent as `OK / CM_PROB_NONE` and created one VHF device with keyboard,
+consumer-control and vendor-defined HID collections, all `OK`.
+
+The user then used the built-in keyboard to enter the live Windows session.
+The version-3 snapshot after that activity recorded phase 8, VHF state 3
+(`Running`), six native keyboard reports, six accepted reports and six
+submitted reports.  Rejected reports, VHF start failures, VHF submission
+failures, SPI timeouts, packet/message CRC failures, fragment failures and the
+offline flag all remained zero.  Descriptor lengths, descriptor digests and
+the validated keyboard report contract remained identical to Gate C1.
+
+One subsequent `pnputil /restart-device ACPI\APPL0001\0` completed
+successfully.  The parent returned `OK / CM_PROB_NONE`; the same VHF and HID
+children reappeared `OK`; and a fresh diagnostic instance again reached phase
+8 with VHF state 3 and zero failure counters.  There were no recent critical
+or error System events and no fatal marker in the tail of `hv.log`.
+
+Verdict: keyboard publication, sign-in input, report delivery and VHF/PnP
+recreation are validated.  Physical typing after the devnode restart was not
+performed because the user was no longer beside the machine, and controlled
+reboot input plus the bounded 30-minute mixed-input run remain open.  Gate C2
+therefore remains a successful partial checkpoint rather than a completed
+stability gate.  `TransportOnly=0` remains active; the documented
+`TransportOnly=1` rollback and external USB input remain available.
