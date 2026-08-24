@@ -278,6 +278,20 @@ int main(void)
             ):
                 self.assertNotIn(forbidden, body)
 
+        # GET_FEATURE receives an output buffer owned by the HID requester.
+        # Windows may provide more capacity than the selected report needs;
+        # only a buffer smaller than the report is invalid. SET_FEATURE is an
+        # input report and therefore retains its exact-length validation.
+        self.assertIn(
+            "HidTransferPacket->reportBufferLen < expected", get_feature
+        )
+        self.assertNotIn(
+            "HidTransferPacket->reportBufferLen != expected", get_feature
+        )
+        self.assertIn(
+            "HidTransferPacket->reportBufferLen != expected", set_feature
+        )
+
         start = self.c_function_body(source, "AiTrackpadVhfStart")
         for required in (
             "TrackpadAxisContract.valid",

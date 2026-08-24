@@ -64,7 +64,13 @@ VOID AiTrackpadVhfGetFeature(
         status = STATUS_NOT_SUPPORTED;
         goto Complete;
     }
-    if (HidTransferPacket->reportBufferLen != expected) {
+    /*
+     * GET_FEATURE writes into requester-owned output storage.  HID callers
+     * may supply more capacity than this report requires, so reject only a
+     * buffer that cannot hold the complete selected report.  On success the
+     * callback replaces reportBufferLen with the number of bytes produced.
+     */
+    if (HidTransferPacket->reportBufferLen < expected) {
         status = STATUS_INVALID_BUFFER_SIZE;
         goto Complete;
     }
