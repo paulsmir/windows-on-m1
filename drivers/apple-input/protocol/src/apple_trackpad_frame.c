@@ -85,7 +85,7 @@ enum ai_status ai_apple_trackpad_decode(
 
 typedef signed long long ai_trackpad_cost_t;
 
-#define AI_TRACKPAD_COST_MAX ((ai_trackpad_cost_t)0x3fffffffffffffffLL)
+#define AI_TRACKPAD_COST_MAX ((ai_trackpad_cost_t)0x00ffffffffffffffLL)
 
 static ai_trackpad_cost_t coordinate_cost(
     const struct ai_trackpad_physical_slot *slot,
@@ -100,11 +100,10 @@ static ai_trackpad_cost_t coordinate_cost(
     unsigned long long x2;
     unsigned long long y2;
 
-    if (ax > 1518500249ULL || ay > 1518500249ULL)
-        return AI_TRACKPAD_COST_MAX;
     x2 = ax * ax;
     y2 = ay * ay;
-    if (x2 > (unsigned long long)AI_TRACKPAD_COST_MAX - y2)
+    if (x2 > (unsigned long long)AI_TRACKPAD_COST_MAX ||
+        y2 > (unsigned long long)AI_TRACKPAD_COST_MAX - x2)
         return AI_TRACKPAD_COST_MAX;
     return (ai_trackpad_cost_t)(x2 + y2);
 }
