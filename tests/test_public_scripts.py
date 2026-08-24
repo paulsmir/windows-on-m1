@@ -141,6 +141,8 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("m1n1.macho", result.stdout)
         self.assertIn("J313_EFI.fd", result.stdout)
         self.assertIn("chainload.py", result.stdout)
+        self.assertIn("git -C mu submodule update --init --recursive", result.stdout)
+        self.assertIn("git -C m1n1_windows submodule update --init --recursive", result.stdout)
 
     def test_development_build_forwards_standalone_profile(self):
         result = subprocess.run(

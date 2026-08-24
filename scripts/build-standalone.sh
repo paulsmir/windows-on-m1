@@ -67,6 +67,18 @@ fi
 CONTAINER_MODE=${STANDALONE_BUILD_CONTAINER:-auto}
 SKIP_MU=${STANDALONE_SKIP_MU:-0}
 MU_ONLY=${STANDALONE_BUILD_MU_ONLY:-0}
+PRESERVE_COMPONENTS=${STANDALONE_PRESERVE_COMPONENTS:-0}
+case "$PRESERVE_COMPONENTS" in
+    0|1) ;;
+    *)
+        echo "STANDALONE_PRESERVE_COMPONENTS must be 0 or 1" >&2
+        exit 2
+        ;;
+esac
+if [ "$PRESERVE_COMPONENTS" = 1 ] && [ "$PROFILE" != debug ]; then
+    echo "STANDALONE_PRESERVE_COMPONENTS=1 requires --debug-build" >&2
+    exit 2
+fi
 USE_CONTAINER=0
 case "$CONTAINER_MODE" in
     auto)
@@ -88,7 +100,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
     IMAGE=windows-on-m1-build:local
     if [ "$DRY_RUN" = 1 ]; then
         echo "docker build -t $IMAGE -f <repository-root>/Dockerfile.build <repository-root>"
-        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -e STANDALONE_BUILD_MU_ONLY=1 -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG"
+        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -e STANDALONE_BUILD_MU_ONLY=1 -e STANDALONE_PRESERVE_COMPONENTS=$PRESERVE_COMPONENTS -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG"
     else
         COMMON_DIR=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
         MOUNT_ROOT=$(dirname "$COMMON_DIR")
@@ -111,6 +123,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
         docker run --rm \
             -e STANDALONE_IN_CONTAINER=1 \
             -e STANDALONE_BUILD_MU_ONLY=1 \
+            -e STANDALONE_PRESERVE_COMPONENTS="$PRESERVE_COMPONENTS" \
             -v "$MOUNT_ROOT:/work" \
             -v "$MOUNT_ROOT:$MOUNT_ROOT" \
             -w "$CONTAINER_ROOT" \
@@ -166,10 +179,17 @@ else
     JOBS=$(sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 fi
 
+if [ "$PRESERVE_COMPONENTS" = 1 ]; then
+    COMPONENT_SETUP='git -C mu submodule update --init --recursive
+git -C m1n1_windows submodule update --init --recursive'
+else
+    COMPONENT_SETUP='git submodule update --init --recursive'
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
     cat <<EOF
 cd <repository-root>
-git submodule update --init --recursive
+$COMPONENT_SETUP
 $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
@@ -198,7 +218,12 @@ EOF
 fi
 
 cd "$ROOT"
-git submodule update --init --recursive
+if [ "$PRESERVE_COMPONENTS" = 1 ]; then
+    git -C mu submodule update --init --recursive
+    git -C m1n1_windows submodule update --init --recursive
+else
+    git submodule update --init --recursive
+fi
 
 M1N1_SOURCE_COMMIT=$(git -C "$ROOT/m1n1_windows" rev-parse HEAD)
 if [ "$(uname -s)" = Darwin ]; then

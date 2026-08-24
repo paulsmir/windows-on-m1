@@ -180,6 +180,46 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--display both --debug full", result.stdout)
 
+    def test_debug_build_can_preserve_explicit_top_level_component_revisions(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+            STANDALONE_PRESERVE_COMPONENTS="1",
+        )
+        result = subprocess.run(
+            [str(SCRIPT), "--debug-build", "--display", "both", "--debug", "full"],
+            cwd="/tmp",
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("git -C mu submodule update --init --recursive", result.stdout)
+        self.assertIn("git -C m1n1_windows submodule update --init --recursive", result.stdout)
+        self.assertNotIn("\ngit submodule update --init --recursive\n", result.stdout)
+
+    def test_release_rejects_preserving_unpinned_component_revisions(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+            STANDALONE_PRESERVE_COMPONENTS="1",
+        )
+        result = subprocess.run(
+            [str(SCRIPT), "--release"],
+            cwd="/tmp",
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("requires --debug-build", result.stderr)
+
     def test_dry_run_accepts_and_forwards_monitor_profile(self):
         environment = dict(
             os.environ,

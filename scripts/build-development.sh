@@ -29,11 +29,15 @@ case "$DISPLAY" in none|physical|virtual|both) ;; *) usage ;; esac
 case "$DEBUG" in off|uart|full|monitor) ;; *) usage ;; esac
 
 set -- "$BUILD_MODE" --display "$DISPLAY" --debug "$DEBUG"
+PRESERVE_COMPONENTS=1
+[ "$BUILD_MODE" != --release ] || PRESERVE_COMPONENTS=0
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    BUILD_STANDALONE_DRY_RUN=1 "$ROOT/scripts/build-standalone.sh" "$@"
+    BUILD_STANDALONE_DRY_RUN=1 STANDALONE_PRESERVE_COMPONENTS="$PRESERVE_COMPONENTS" \
+        "$ROOT/scripts/build-standalone.sh" "$@"
 else
-    "$ROOT/scripts/build-standalone.sh" "$@"
+    STANDALONE_PRESERVE_COMPONENTS="$PRESERVE_COMPONENTS" \
+        "$ROOT/scripts/build-standalone.sh" "$@"
 fi
 
 PROFILE=debug
