@@ -23,7 +23,7 @@
       <PreprocessorDefinitions>AI_KERNEL_MODE;AI_ENABLE_TRACKPAD_CAPTURE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
-    <Link><AdditionalDependencies>vhfkm.lib;Cng.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><AdditionalDependencies>vhfkm.lib;Cng.lib;Wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\driver.c" />
