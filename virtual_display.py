@@ -4,7 +4,9 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import queue
 import struct
+import threading
 from typing import Mapping
 import zlib
 
@@ -81,6 +83,8 @@ class FrameReceiver:
         config: VirtualDisplayConfig,
         raw_path: str | os.PathLike[str] = "fb.raw",
         info_path: str | os.PathLike[str] = "fb-info.json",
+        *,
+        asynchronous_publish: bool = False,
     ) -> None:
         self.config = config
         self.raw_path = Path(raw_path)
@@ -90,6 +94,19 @@ class FrameReceiver:
         self._offset = 0
         self.generation = 0
         self.discarded_chunks = 0
+        self.discarded_publications = 0
+        self.publish_error: BaseException | None = None
+        self._publish_queue: queue.Queue[tuple[int, bytes] | None] | None = None
+        self._publish_condition = threading.Condition()
+        self._publish_thread: threading.Thread | None = None
+        if asynchronous_publish:
+            self._publish_queue = queue.Queue(maxsize=1)
+            self._publish_thread = threading.Thread(
+                target=self._publish_worker,
+                name="framebuffer-publisher",
+                daemon=True,
+            )
+            self._publish_thread.start()
 
     def _discard(self) -> None:
         self._frame_id = None
@@ -144,10 +161,59 @@ class FrameReceiver:
         if self._offset != self.config.size:
             return False
 
-        self._publish(frame_id)
+        self._submit_publish(frame_id)
         self._frame_id = None
         self._offset = 0
         return True
+
+    def _submit_publish(self, frame_id: int) -> None:
+        if self._publish_queue is None:
+            self._publish(frame_id, bytes(self._buffer))
+            return
+
+        item = (frame_id, bytes(self._buffer))
+        try:
+            self._publish_queue.put_nowait(item)
+        except queue.Full:
+            # The observer must never back-pressure the only proxy reader. Keep
+            # the newest complete frame and discard an unpublished stale one.
+            try:
+                self._publish_queue.get_nowait()
+                self._publish_queue.task_done()
+            except queue.Empty:
+                pass
+            self.discarded_publications += 1
+            self._publish_queue.put_nowait(item)
+
+    def _publish_worker(self) -> None:
+        assert self._publish_queue is not None
+        while True:
+            item = self._publish_queue.get()
+            try:
+                if item is None:
+                    return
+                frame_id, frame = item
+                self._publish(frame_id, frame)
+            except BaseException as exc:
+                # Display publication is diagnostic only. Preserve the guest
+                # and proxy reader even if host storage becomes unavailable.
+                self.publish_error = exc
+            finally:
+                self._publish_queue.task_done()
+
+    def wait_for_generation(self, generation: int, timeout: float | None = None) -> bool:
+        with self._publish_condition:
+            return self._publish_condition.wait_for(
+                lambda: self.generation >= generation or self.publish_error is not None,
+                timeout=timeout,
+            ) and self.generation >= generation
+
+    def close(self) -> None:
+        if self._publish_queue is None or self._publish_thread is None:
+            return
+        if self._publish_thread.is_alive():
+            self._publish_queue.put(None)
+            self._publish_thread.join(timeout=2)
 
     def _atomic_write(self, path: Path, data: bytes) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,8 +224,9 @@ class FrameReceiver:
             os.fsync(stream.fileno())
         os.replace(temporary, path)
 
-    def _publish(self, frame_id: int) -> None:
-        next_generation = self.generation + 1
+    def _publish(self, frame_id: int, frame: bytes) -> None:
+        with self._publish_condition:
+            next_generation = self.generation + 1
         metadata = {
             "generation": next_generation,
             "frame_id": frame_id,
@@ -169,11 +236,13 @@ class FrameReceiver:
             "stride": self.config.stride,
             "size": self.config.size,
             "format": "B8G8R8X8",
-            "crc32": zlib.crc32(self._buffer) & 0xFFFFFFFF,
+            "crc32": zlib.crc32(frame) & 0xFFFFFFFF,
         }
-        self._atomic_write(self.raw_path, self._buffer)
+        self._atomic_write(self.raw_path, frame)
         self._atomic_write(
             self.info_path,
             (json.dumps(metadata, sort_keys=True) + "\n").encode("utf-8"),
         )
-        self.generation = next_generation
+        with self._publish_condition:
+            self.generation = next_generation
+            self._publish_condition.notify_all()

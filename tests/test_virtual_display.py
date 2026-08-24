@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 import struct
 import tempfile
+import threading
+import time
 import unittest
 
 from virtual_display import (
@@ -114,6 +116,35 @@ class TestFrameReceiver(unittest.TestCase):
         self.assertEqual(json.loads(self.info.read_text())["generation"], 1)
         self.receiver.accept(chunk(self.config, 8, 32, self.frame[32:]))
         self.assertEqual(json.loads(self.info.read_text())["generation"], 2)
+
+    def test_async_publication_never_blocks_proxy_reader_on_fsync(self):
+        receiver = FrameReceiver(
+            self.config, self.raw, self.info, asynchronous_publish=True
+        )
+        self.addCleanup(receiver.close)
+        entered = threading.Event()
+        release = threading.Event()
+        original_atomic_write = receiver._atomic_write
+
+        def blocked_atomic_write(path, data):
+            if path == self.raw:
+                entered.set()
+                self.assertTrue(release.wait(2), "test did not release frame publisher")
+            original_atomic_write(path, data)
+
+        receiver._atomic_write = blocked_atomic_write
+        receiver.accept(chunk(self.config, 9, 0, self.frame[:32]))
+
+        started = time.monotonic()
+        self.assertTrue(receiver.accept(chunk(self.config, 9, 32, self.frame[32:])))
+        self.assertLess(time.monotonic() - started, 0.1)
+        self.assertTrue(entered.wait(1), "background publisher never started")
+        self.assertFalse(self.raw.exists())
+
+        release.set()
+        self.assertTrue(receiver.wait_for_generation(1, timeout=2))
+        self.assertEqual(self.raw.read_bytes(), self.frame)
+        self.assertEqual(json.loads(self.info.read_text())["frame_id"], 9)
 
 
 if __name__ == "__main__":

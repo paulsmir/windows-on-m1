@@ -324,7 +324,11 @@ if args.low_mem:
 
 # The ordinary proxy event loop is the only USB reader. EL2 opportunistically appends chunks
 # to the USB IN ring and skips a tick under backpressure; it never interrupts or pauses Windows.
-receiver = FrameReceiver(fb) if profile.virtual_display else None
+# This callback runs inside the only proxy/CDC reader. Publishing a complete
+# 16 MiB frame includes fsync(), so doing it inline can stop serial draining
+# long enough to lose framing under monitor-mode console load. Assembly stays
+# ordered here; only complete-frame disk publication uses a bounded worker.
+receiver = FrameReceiver(fb, asynchronous_publish=True) if profile.virtual_display else None
 telemetry = TelemetryRecorder(p) if profile.telemetry else None
 telemetry_inline = profile.telemetry and os.environ.get("HANG_TELEMETRY_INLINE") == "1"
 
