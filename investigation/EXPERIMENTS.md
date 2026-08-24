@@ -6011,3 +6011,70 @@ Ignored evidence hashes:
 Verdict: Apple dimensions report `0xd9` produces a valid Windows axis contract
 on live J313. Gate D2b may now publish the Precision Touchpad child without
 changing firmware, NVMe, USB or the preserved rollback package.
+
+EXP-20260824-053 Gate D2b result (2026-08-24T16:52:00Z): rejected with exact
+rollback complete.  Enabling only `PublishTrackpad` started the trackpad VHF
+frontend (`trackpad_vhf_state=3`) with valid axes, 148 decoded reports, zero
+rejections, zero start failures and zero transport errors.  Windows issued ten
+feature requests, but every request completed with NTSTATUS `0xC0000206`
+(`STATUS_INVALID_BUFFER_SIZE`); no input report was submitted during the
+bounded observation interval.  The publication harness immediately disabled
+the gates, deleted only the candidate `oem16.inf`, restored preserved
+`oem15.inf`, and verified active SYS SHA-256
+`65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
+
+Source inspection localized the rejection to `AiTrackpadVhfGetFeature`, which
+required requester-owned output capacity to equal the selected feature-report
+length.  Microsoft HID/VHF contracts permit an output buffer larger than the
+report and require only sufficient capacity.  The next candidate changes that
+single comparison from exact equality to a minimum-capacity check; SET_FEATURE
+retains exact input length.  Verdict: transport, geometry and VHF startup
+confirmed; GET_FEATURE output-capacity contract rejected.
+
+### EXP-20260824-054 — retry Precision Touchpad publication with the corrected feature-buffer contract
+
+Pre-run record (2026-08-24T17:07:53Z). Hypothesis: accepting a requester-owned
+GET_FEATURE buffer whose capacity is at least the selected report size will
+remove the only observed `0xC0000206` failure and allow Windows to enumerate the
+Precision Touchpad child while preserving the proven keyboard, transport and
+rollback contracts. The single driver change is implementation commit
+`97cc8f6fea2355b52de66e67eb387f567d89ea54`; no m1n1, Mu, ACPI, CPU, NVMe,
+USB, display or ESP behavior changes.
+
+- source: root `7c260ae8f84f7f898d3f9209c15e39b37565e217`, m1n1
+  `2fe790beebed32658eae753dee3e6d581df97197`, Mu
+  `9501de460353b902dbbd3b7de42c703af811f037`; all tracked diff SHA-256
+  values are the empty-diff hash
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- exact build: push-triggered official WDK run `32754271477`, job
+  `97518075905`, completed successfully from head
+  `7c260ae8f84f7f898d3f9209c15e39b37565e217`. The ignored artifact is
+  `.local/apple-input/wdk/32754271477/`; production SYS SHA-256 is
+  `7b75873de00a392b6e906edf5776f69c274e86814fb02389414ef557d2b7bdb5`,
+  INF `ca844ebf9a0fab6ae4a6aa434033eb487ca246b9248bc4fde968539ca26565cd`,
+  catalog `e11befe19ef7b0dac31360b348394a65259dcb12ea7e7b6bd8ca66097dc0187f`
+  and diagnostic CLI
+  `d842e47ee5b8c9299b3f3ceb8027855c016f28494fb4e0f4be7dc0d801f5c3f7`.
+- assisted platform artifact remains the verified `debug-forensic` both/full
+  pair: J313 EFI SHA-256
+  `cd591aab2ef0641902f03e1a38aac697e45fc12e466a3cb72f32cd3d68060710`
+  and m1n1 Mach-O SHA-256
+  `e4c073c28d2d008aa0159cf3e64f5daa2afabe0bb712b68198ea8d917381a3a6`.
+  Exact launch command is `scripts/run-windows.sh --execution assisted
+  --display both --debug full --observed --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --vuart
+  /dev/cu.usbmodemC02HDNCCQ6L43` from the current proxy-ready state.
+- recovery artifact remains installed Windows package `oem15.inf` with active
+  SYS SHA-256
+  `65a3d0c4e169abb411712e18658405322a96b2b5dcba85966a53ffa5d16f1ef1`.
+  External USB and SSH remain the control paths. Any package, PnP, service,
+  feature-status, keyboard or transport mismatch must disable both publication
+  gates, delete only the new `oemNN.inf`, force-select preserved `oem15.inf`,
+  restart only `ACPI\\APPL0001\\0`, and verify the exact rollback hash.
+- acceptance checkpoint: exact candidate SYS active; APPL0001 and AppleInput
+  running; transport phase 8; trackpad init READY; keyboard and trackpad VHF
+  states 3; valid nondegenerate geometry; GET_FEATURE count greater than zero
+  with `trackpad_feature_last_status=0`; a Windows HID child bound without a
+  problem code; zero timeout, CRC, fragment, offline, VHF start or decode
+  errors. A bounded physical touch test follows only after these automatic
+  gates pass.
