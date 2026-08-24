@@ -144,6 +144,29 @@ class PublicDocumentationTests(unittest.TestCase):
         ):
             self.assertIn(token, text)
 
+    def test_native_apple_input_guide_is_installable_and_hardware_validated(self):
+        guide = (ROOT / "documentation/APPLE_INPUT.md").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        limitations = (ROOT / "documentation/LIMITATIONS.md").read_text(encoding="utf-8")
+
+        for token in (
+            "EXP-20260824-054",
+            "32754271477",
+            "7b75873de00a392b6e906edf5776f69c274e86814fb02389414ef557d2b7bdb5",
+            "LocalMachine\\TrustedPublisher",
+            "bcdedit /set testsigning on",
+            "PublishTrackpad",
+            "HID_DEVICE_SYSTEM_VHF",
+            "AppleInputDiag.exe status --json",
+            "pnputil /delete-driver",
+            "7185",
+        ):
+            self.assertIn(token, guide)
+
+        self.assertIn("built-in Apple keyboard and Precision Touchpad", readme)
+        self.assertNotIn("built-in Apple keyboard/trackpad, and GPU acceleration remain", readme)
+        self.assertNotIn("internal keyboard/trackpad driver", limitations)
+
     def test_standalone_monitor_workflow_is_explicit_and_abi_safe(self):
         paths = (
             ROOT / "documentation/CONFIGURATION.md",

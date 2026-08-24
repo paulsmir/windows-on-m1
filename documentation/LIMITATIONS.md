@@ -15,9 +15,11 @@ Only J313/T8103 is supported. Device addresses, interrupt routes, ACPI, firmware
 and memory layout are machine-specific. Other M1 models are not expected to work by merely
 changing a board name.
 
-There is no accelerated GPU driver, internal keyboard/trackpad driver, audio driver, Wi-Fi,
-Bluetooth, camera, sleep, battery-management integration, or production power management.
-USB keyboard/mouse and RDP are the practical input/display paths today.
+There is no accelerated GPU driver, audio driver, Wi-Fi, Bluetooth, camera, sleep,
+battery-management integration, or production power management. A test-signed native
+driver for the built-in Apple keyboard and Windows Precision Touchpad is validated on the
+development J313, but external USB input remains the required installation and recovery
+path. See `APPLE_INPUT.md` for its exact bounded checkpoint and limitations.
 
 ## Storage
 

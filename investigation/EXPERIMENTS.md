@@ -6128,3 +6128,22 @@ Touchpad publication contract are confirmed on J313. `oem16.inf` remains
 active with both keyboard and trackpad publication enabled. Do not call motion,
 click or gesture behavior validated until a bounded physical-input run advances
 decoded/submitted reports and the user confirms cursor/click behavior.
+
+Bounded physical-input result (2026-08-24T20:48:00Z): passed for built-in
+typing, pointer motion, and an ordinary click. The user exercised the internal
+keyboard and trackpad and reported that they worked correctly. The final
+metadata-only `AppleInputDiag.exe status --json` snapshot recorded phase 8,
+28/28 accepted and submitted keyboard reports, and 7185/7185 decoded and
+submitted trackpad reports. Keyboard and trackpad VHF states remained 3;
+GET_FEATURE/SET_FEATURE counts remained 2/4 with both final statuses zero; and
+all timeout, CRC, fragment, offline, rejected-report, VHF-start, and submission
+failure counters remained zero. The ignored evidence file
+`.local/apple-input/gate-d2-32754271477/physical-input-status.remote.json` has
+SHA-256
+`1b87c25e4294b2ccc7083c80648e914bfd3c7c90d6ed2fd81078dce7c7ba0c71`.
+
+Final verdict: the exact WDK-run-32754271477 package is the validated native
+J313 input starting point for built-in typing, pointer motion, and ordinary
+click. Multi-finger gesture qualification, controlled reboot/disable-enable,
+and long-duration mixed-input stress remain later gates and are not claimed by
+this result.

@@ -17,6 +17,7 @@ session long enough to install software. The working development configuration e
 - four virtual CPUs backed by the four Icestorm efficiency cores;
 - a synthetic PCIe NVMe controller backed by the physical Apple ANS storage device;
 - physical USB xHCI with keyboard, mouse, hubs, and installation media;
+- native built-in Apple keyboard and Precision Touchpad through the J313 SPI-HID driver;
 - a Project Mu GOP framebuffer and a remotely observable virtual framebuffer;
 - virtual UART and Windows kernel-debug transport for assisted development.
 
@@ -52,6 +53,7 @@ Only `j313` is currently supported. This is not a general Apple Silicon Windows 
 - [Engineering history](documentation/DEVELOPMENT_HISTORY.md)
 - [Historical artifact provenance](documentation/history/ARTIFACT_PROVENANCE.md)
 - [Known limitations](documentation/LIMITATIONS.md)
+- [Built-in Apple keyboard and Precision Touchpad](documentation/APPLE_INPUT.md)
 - [Changelog](CHANGELOG.md)
 
 ## Repository layout
@@ -85,10 +87,9 @@ Documentation distinguishes three states:
 
 The physical internal-panel handoff, full-panel 2560x1600 Windows framebuffer, four Icestorm
 guest CPUs, synthetic NVMe bridge, and physical USB have been validated together on J313.
-Firestorm guest CPUs, built-in Apple keyboard/trackpad, and GPU acceleration remain
-implementation milestones; they are not claimed as working here.
+Firestorm guest CPUs and GPU acceleration remain implementation milestones; they are not
+claimed as working here. The test-signed built-in Apple keyboard and Precision Touchpad
+driver is hardware validated on J313 at the bounded checkpoint documented below.
 
-Native built-in input bring-up is tracked in
-[`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md). The platform,
-ACPI, and protocol foundations exist, but the current Windows driver does not
-yet perform hardware transactions or publish working input devices.
+Native built-in input build, installation, diagnostics, and rollback are documented in
+[`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md).
