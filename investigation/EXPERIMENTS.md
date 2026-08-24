@@ -6147,3 +6147,14 @@ J313 input starting point for built-in typing, pointer motion, and ordinary
 click. Multi-finger gesture qualification, controlled reboot/disable-enable,
 and long-duration mixed-input stress remain later gates and are not claimed by
 this result.
+
+Physical qualification extension (2026-08-24): the operator subsequently
+confirmed multitouch, left click, right click, and simultaneous built-in
+keyboard and trackpad use in the same Windows session. Windows remained stable
+and responsive throughout that bounded operator test. This advances the
+physical behavior verdict from basic motion/click to usable built-in keyboard
+and Precision Touchpad input. It does not replace the still-separate
+long-duration stress, power-transition, or complete Windows gesture-suite
+gates. The permanent source and recovery checkpoint is recorded as
+`j313-native-input-v1` in
+`documentation/verification/J313_NATIVE_INPUT_V1.md`.

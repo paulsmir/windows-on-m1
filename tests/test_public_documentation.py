@@ -167,6 +167,29 @@ class PublicDocumentationTests(unittest.TestCase):
         self.assertNotIn("built-in Apple keyboard/trackpad, and GPU acceleration remain", readme)
         self.assertNotIn("internal keyboard/trackpad driver", limitations)
 
+    def test_native_input_checkpoint_is_permanently_reproducible(self):
+        guide = (ROOT / "documentation/APPLE_INPUT.md").read_text(encoding="utf-8")
+        checkpoint_path = ROOT / "documentation/verification/J313_NATIVE_INPUT_V1.md"
+        self.assertTrue(checkpoint_path.is_file())
+        checkpoint = checkpoint_path.read_text(encoding="utf-8")
+
+        for token in (
+            "j313-native-input-v1",
+            "f6a90f6acabb8e057f93d44cb07cfb2113fc007c",
+            "2fe790beebed32658eae753dee3e6d581df97197",
+            "9501de460353b902dbbd3b7de42c703af811f037",
+            "32754271477",
+            "multitouch",
+            "left click",
+            "right click",
+            "git switch --detach j313-native-input-v1",
+        ):
+            self.assertIn(token, checkpoint)
+
+        self.assertIn("multitouch", guide)
+        self.assertIn("left and right click", guide)
+        self.assertNotIn("Multi-finger gesture qualification", guide)
+
     def test_standalone_monitor_workflow_is_explicit_and_abi_safe(self):
         paths = (
             ROOT / "documentation/CONFIGURATION.md",

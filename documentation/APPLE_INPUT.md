@@ -30,9 +30,10 @@ geometry, successful Windows feature negotiation, two healthy
 `HID_DEVICE_SYSTEM_VHF` children, and zero transport or VHF errors. The bounded
 physical test then advanced 28/28 accepted keyboard reports and 7185/7185
 decoded and submitted trackpad reports with no rejection or submission
-failure. Built-in typing, pointer motion, and an ordinary click were confirmed
-by the user. Multi-finger gesture qualification and long-duration stress remain
-separate future gates; they are not implied by this checkpoint.
+failure. Built-in typing, pointer motion, left and right click, multitouch, and
+simultaneous keyboard and trackpad use were confirmed by the user. Long-duration
+stress and complete gesture certification remain separate future gates; they
+are not implied by this bounded checkpoint.
 
 Keep an external USB keyboard and mouse connected while installing or replacing
 the driver. They are the recovery path if the test package cannot start.
@@ -262,4 +263,5 @@ are intentionally absent from diagnostics.
 - `documentation/plans/2026-08-24-vhf-keyboard-implementation.md`
 - `documentation/design/2026-08-09-native-apple-input.md`
 - `documentation/plans/2026-08-09-native-apple-input-implementation.md`
+- `documentation/verification/J313_NATIVE_INPUT_V1.md`
 - `investigation/EXPERIMENTS.md`, `EXP-20260824-054`
