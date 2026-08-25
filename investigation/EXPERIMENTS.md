@@ -6944,8 +6944,8 @@ launched.  This experiment will not be retried or have its timing changed.
 
 ### EXP-20260825-075 — corrected bounded J313 AGX G1 firmware lifecycle
 
-Status: planned; no AGX clock, power, MMIO, UAT, or firmware start operation
-has been attempted for this experiment.
+Status: rejected during partial firmware start; Windows was not launched and a
+hardware reboot restored a fresh proxy state.
 
 Run timestamp (UTC): `2026-08-25T14:59:49Z`.
 
@@ -6996,3 +6996,55 @@ chainload the unchanged stable eight-core/native-input Windows artifact.
   Windows.  Preserve all evidence without changing timing.  If ownership is
   unknown, use the registered proxy reboot path and return to a fresh
   `Running proxy...`; never write the ESP.
+
+Observed result: the corrected live comparison passed, both AGX clock requests
+completed, ASC management started, UAT context zero was initialized and AGX
+reached initdata construction.  Construction then failed at
+`AGXHWDataB.io_mappings` with `expected 20 elements, found 25`.  The exact
+cause is that the gate omitted the upstream-required `Ver.set_version(u)`, so
+the live V13_5 firmware produced 25 mappings while Construct retained its
+default V12_3 20-element schema.  The atomic result has SHA-256
+`f91573d2d44e7d8a171541c550960a24504d47e5063ec4b0106bca53d03882f2`,
+`verdict=failed`, `completed_cycles=0`, and
+`windows_launch_permitted=false`.  Its `released=true` field is invalid: the
+exception occurred after ASC and endpoints were started but before the backend
+set its old started flag.  Windows was not launched.  The registered physical
+reboot path was executed immediately; a subsequent read-only handshake
+confirmed a fresh `Running proxy...`, J313 and V13_5.  EXP-075 will not be
+retried.
+
+### EXP-20260825-076 — versioned J313 AGX G1 firmware lifecycle
+
+Status: planned; no AGX operation has been attempted for this experiment.
+
+Run timestamp (UTC): `2026-08-25T15:06:29Z`.
+
+Hypothesis: selecting the live `V13_5` and `G13` Construct schema before clock
+ownership will make the 25-entry initdata layout valid, and marking ownership
+before non-transactional start will keep every later failure fail-closed.  The
+same reviewed resources can then complete ten start, Pong, snapshot, stop,
+reset and release cycles before the unchanged stable Windows launch.
+
+- source: root `13d20cc553c9e8317575668a560a73d3f729fd2f`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- corrections: implementation
+  `f6a16ed9f3bd8fffd8e9665d55e2c86b87b75c9e` calls the same
+  `Ver.set_version(u)` boundary used by upstream m1n1 AGX experiments before
+  clocks and construction, and records start ownership before `AGX.start()`;
+- contract and immutable recovery hashes, exact ten-cycle lifecycle, one-second
+  heartbeat deadline, post-gate Windows checks, stop rules and physical reboot
+  rollback are unchanged from EXP-075;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory
+  `investigation/artifacts/EXP-20260825-076-agx-g1/` was proven absent before
+  this run;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-076-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- firmware success gate: all ten cycles must pass and the atomic result must
+  contain `verdict=passed`, `completed_cycles=10`, and
+  `windows_launch_permitted=true`; otherwise Windows remains blocked and no
+  timing or retry changes are allowed inside EXP-076.
