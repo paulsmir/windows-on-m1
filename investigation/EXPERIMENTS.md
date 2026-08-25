@@ -7499,3 +7499,37 @@ this directory, do not launch Windows, and do not claim replay, WDDM, display,
 performance, power, thermal, or production GPU qualification. A passed capture
 still requires manual manifest review and a separately preregistered one-shot
 private replay before EXP-080 can be bound.
+
+Observed result: rejected during the only permitted first capture, before any
+accepted GPU submission or frame dump. All source, stable recovery, Mesa,
+container-export, shim, producer, identity and contract preflights passed. The
+historical shim then opened `/tmp/m1n1-proxy`, but m1n1 bootstrap received no
+byte within its fixed 150 ms initial NOP window and raised `UartTimeout`. BO
+creation failed and the clear process terminated with a core dump before
+`shim_frame000.agx` or `final.rgba` existed. The sole preserved file is
+`work/capture-01/core`, SHA-256
+`cae6721c647af067e0ca4481803cea51ac4387e390630cd3db9ec3666f8b64df`.
+
+The failed path also exposed an independent runner defect after the capture
+process: because `PYTHONPATH` was scoped only to that process after changing
+into the capture directory, the receipt command could not import the root
+`tools` package. The first scripted reboot saw the already desynchronized
+stream (`expected opcode 0x04, got 0x905`) and failed. No fixture, receipt, or
+accepted output was produced and capture two did not start.
+
+Read-only process and device inspection found no surviving owner of either USB
+endpoint. The required cleanup reboot was then issued without retrying GPU
+work. It succeeded after resynchronization and reported the pre-reboot m1n1
+base `0x804698000`. A fresh read-only handshake after the reboot reported
+J313/V13_5 and changed base `0x805b58000`, proving the cold boundary. EXP-082
+is closed and must not be retried.
+
+The first-failure diagnosis is a host bridge readiness race: container `socat`
+published its PTY path with `wait-slave` but deferred completing the TCP/USB
+side until the client opened that PTY; the client immediately began a bootstrap
+whose first-stage timeout is 150 ms. This race is absent on direct USB and was
+not exercised by the earlier delayed byte-loopback test. The next change must
+remove this deferred-open contract, establish bounded bridge readiness before
+proxy bootstrap, export both repository and m1n1 Python roots for every capture
+subcommand, and prove two proxy handshakes separated by a mandatory reboot in a
+new preregistered transport-only experiment before any new GPU capture.
