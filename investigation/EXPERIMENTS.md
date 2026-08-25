@@ -9302,7 +9302,7 @@ until the full suite passes and a new one-shot is separately preregistered.
 
 ### EXP-20260826-104 — one-shot replay with shared renderer schema
 
-Status: preregistered; hardware replay not run.
+Status: rejected after successful render; reset proof incomplete.
 
 Hypothesis: installing the exact fail-closed historical-renderer compatibility
 already proven by native capture before replay resolves its renderer types will
@@ -9376,3 +9376,42 @@ bound to a distinct fresh J313/V13_5 proxy base.  Any exception, timeout,
 partial progress, output or immutable mismatch, unexpected mapping, fault,
 cleanup or reboot failure rejects EXP-104.  Never retry it in place and do not
 begin the reserved ten-cycle EXP-080 unless independent inspection accepts it.
+
+Observed result (completed UTC 2026-08-26):
+- the one permitted replay crossed every schema boundary, submitted exactly two
+  TA and two 3D commands, and completed both queues.  Producer/read/done were
+  `0 -> 2` for each queue; TA event 0 and 3D event 1 each matched once; TA and
+  3D stamps each advanced by `0x100`;
+- workload elapsed was `0.013015832984820008` seconds and the bounded host call
+  was `0.2965979580185376` seconds.  The poisoned output changed from SHA-256
+  `4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe`
+  to the exact raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- immutable objects remained exactly
+  `a2fe0f0e6034d680ee89ffeed520efed55119055a36a533fc98d9221b5bd3652`,
+  all guards were unmapped, unexpected mappings and readable firmware faults
+  were empty, cleanup completed, reset completed and backend ownership release
+  was checked before the result was written;
+- the mandatory single physical reboot ran.  The render used proxy base
+  `0x804bf4000`; the post-reboot J313/V13_5 proxy answered at distinct base
+  `0x8040b4000`;
+- formal receipt creation failed closed with `cycle 1 has no proxy boot
+  identity`.  The real lifecycle snapshot stored `m1n1_base` but omitted the
+  deterministic `proxy_identity` string required by `_validate_one_shot` and
+  already supplied by its fake test backend.  No reset receipt was written and
+  no replay retry was attempted.
+
+Evidence:
+- atomic one-shot result SHA-256
+  `687666db6ae9ec048a8b07d4fed9673e4cc96c6d4f98b678676aa93a070325d5`
+  at `investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/cycle-01/render-gate-result.json`;
+- `completed_cycles=1`, cycle status `passed`, aggregate verdict `incomplete`
+  and `windows_launch_permitted=false`; reset receipt intentionally absent.
+
+Verdict: rejected only as an incomplete cold-reset proof.  The hardware render
+itself satisfies every G1R work, output, isolation, fault and deadline condition,
+and proves the shared schema correction.  The next change must add the same
+deterministic identity used by the receipt CLI to the real lifecycle firmware
+snapshot, with a failing unit test first.  Fixture, GPU submission, firmware and
+reset rules must not change; EXP-080 and Windows remain blocked until a separately
+preregistered one-shot produces a valid receipt.
