@@ -8765,7 +8765,8 @@ re-enumerated at 23:28, and the new proxy reported J313/V13_5 at base
 
 ### EXP-20260825-098 — initialize capture tiling helper state
 
-Status: preregistered; hardware command not yet run.
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
 
 Hypothesis: creating capture-only `TilingParameters` instances with
 `helper_cfg = 0` lets the TA portion of sequence 9 serialize after the already
@@ -8808,3 +8809,25 @@ cold receipts/archives, a valid final attachment, no exception, assertion,
 timeout, contention, recursion or fallback, and mandatory physical reboot.
 Anything else rejects EXP-098. Preserve evidence, never reuse the destination,
 keep Windows blocked and return to fresh J313/V13_5 proxy.
+
+Observed result: rejected after the two previously identified Construct
+compatibility boundaries. The capture produced a complete `cmdbuf.json` and
+object archive, then the Python implementation of `DRM_IOCTL_ASAHI_SUBMIT`
+raised an exception. The historical C shim printed that exception only to the
+runner terminal, cleared the Python error and returned `-EIO` directly without
+setting `errno`; Mesa consequently reported the misleading terminal error
+`DRM_IOCTL_ASAHI_SUBMIT failed: Success` and aborted in
+`agx_submit_cmdbuf`. The terminal stream exceeded the retained tool output, so
+the exact Python traceback is not recoverable from the core after
+`PyErr_Print()` cleared it. This is an evidence-retention failure, not evidence
+for another renderer compatibility change.
+
+The preserved frame SHA-256 is
+`b31361a50a348c4c4db6d481d1f3e91d2dd575b29132e886477ac92eb9a8b163`;
+the core SHA-256 is
+`947e708dde9823a2c6cc4010d35dcdbef2b6609bd2e0d2bc6b5dba2203dba526`;
+no final attachment or receipt exists. The mandatory reboot completed and both
+USB endpoints re-enumerated at 23:33. EXP-098 is closed and its destination
+will not be reused. Before any further hardware command, producer stdout and
+stderr must be persisted inside the unique experiment destination while still
+preserving the producer exit status and emergency-reboot contract.
