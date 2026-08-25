@@ -8296,3 +8296,50 @@ returned at base `0x805eec000`. Because EXP-090 first timed out AGX firmware and
 an ordinary reboot may not prove a cold GPU state, another render attempt is
 blocked until the stable m1n1 payload is freshly chainloaded and its identity
 is recorded. EXP-091 is closed and its evidence directory will not be reused.
+
+### EXP-20260825-092 — control AGX boot after a fresh stable chainload
+
+Status: preregistered; one two-capture run permitted.
+
+Hypothesis: the EXP-091 ASC timeout was residual GPU firmware state from the
+failed full-eager EXP-090 attempt. Re-chainloading the exact immutable stable
+m1n1 payload before taking USB ownership will restore the formerly working AGX
+boot boundary, while the unchanged setup-only wrapper retains the corrected
+fake-fd lifetime.
+
+- root source `84d6274` with unchanged implementation
+  `fe195983674b94c069c9243764d49739b0f55616` and ledger
+  `69b981f6d6ab507ca8ab725dc40d886c674b3bed`;
+- exact chainloaded stable m1n1 SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  commit `9cd80ac652ac404e92ae279deeaec8c629d7d184`;
+- capture wrapper SHA-256
+  `e3806c9af5cd374149ad450cf2a3c2a6012d45e8d32cce3852cd131bf94b9ecc`;
+- identity `.local/agx-capture/identity-exp092.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- freshly chainloaded J313/V13_5 proxy base `0x805eec000`, present without an
+  open owner; destination
+  `investigation/artifacts/EXP-20260825-092-agx-post-chainload/` confirmed
+  absent; fixed bridge port `43147`.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp092.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-092-agx-post-chainload \
+  --bridge-port 43147
+```
+
+Pass and rejection rules are identical to EXP-091. In particular, any ASC
+timeout rejects the stale-state hypothesis; no retry is allowed without a new
+diagnostic correction and preregistration. Preserve all evidence, require the
+operator reboot, never reuse this directory, keep Windows blocked, and return
+the Air to a fresh J313/V13_5 proxy regardless of result.
