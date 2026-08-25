@@ -7066,7 +7066,8 @@ EXP-076 will not be retried.
 
 ### EXP-20260825-077 — safe-snapshot J313 AGX G1 firmware lifecycle
 
-Status: planned; no AGX operation has been attempted for this experiment.
+Status: rejected after proving one lifecycle; the second in-process boot timed
+out and correctly required hardware reboot.
 
 Run timestamp (UTC): `2026-08-25T15:13:54Z`.
 
@@ -7097,3 +7098,54 @@ before launching the unchanged stable Windows artifact.
   fault snapshot in each, proven stop/reset/release, `verdict=passed`, and
   `windows_launch_permitted=true`.  The first failure blocks Windows and ends
   EXP-077 without timing changes or retry.
+
+Observed result: cycle 1 completed in the same proxy boot with a management
+Pong in `0.002387250` seconds, zero firmware fault fields, zero SGX IRQs,
+management stop, both context-zero UAT roots cleared, and released software
+ownership.  Cycle 2 then timed out during firmware boot after UAT
+initialization.  The atomic result has SHA-256
+`c24ac75401186055f963ec20d3e9bfc1eab0276862db249cd763d429d9e88a1e`,
+`completed_cycles=1`, `verdict=failed`, `released=false` for cycle 2, and
+`windows_launch_permitted=false`.  This proves management stop and UAT clear
+do not restore the cold pmgr clock and power state needed for another firmware
+boot.  Windows was not launched.  The registered hardware reboot was executed
+and a later read-only handshake confirmed fresh J313 V13_5 proxy state.
+EXP-077 will not be retried.
+
+### EXP-20260825-078 — ten cold-reset J313 AGX G1 lifecycles
+
+Status: planned; no AGX operation has been attempted for this experiment.
+
+Run timestamp (UTC): `2026-08-25T15:25:06Z`.
+
+Hypothesis: one V13_5 firmware lifecycle is repeatable when every software
+stop and UAT clear is followed by a physical hardware reboot, a fresh J313
+V13_5 proxy handshake, and a changed randomized m1n1 base.  Ten independently
+proven pairs may then aggregate into a version-2 gate and launch the unchanged
+stable Windows artifact without residual AGX clock or power state.
+
+- source: root `94cdc9a767d631e11cc5f6db8a407f28d67aff01`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- orchestration: implementation
+  `0f894cb5fdffb11f59f9ce19e1242338919a7c84` runs one lifecycle per
+  process, requests hardware reboot after every pass or failure, waits at most
+  30 one-second attempts for proxy, records exact platform firmware and changed
+  m1n1 base, then aggregates only ten valid pairs;
+- contract, immutable recovery artifacts, one-second heartbeat, one snapshot
+  per lifecycle, stable Windows post-gate checks and ESP prohibition are
+  unchanged.  No render context, command queue or work submission is present;
+- initial proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`, J313 V13_5, m1n1 base
+  `0x805c74000`; evidence directory
+  `investigation/artifacts/EXP-20260825-078-agx-g1/` was proven absent;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-078-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- success requires ten `cycle-NN/gate-result.json` one-shot passes, ten matching
+  `reset-NN.json` fresh-proxy receipts, aggregate `gate_version=2`,
+  `cold_reset_between_cycles=true`, `completed_cycles=10`, `verdict=passed`,
+  and `windows_launch_permitted=true`.  The first failed lifecycle, reboot,
+  receipt, identity or aggregation ends EXP-078 and blocks Windows.
