@@ -66,6 +66,7 @@ class M1n1AgxQueueBackend:
         self._event = None
         self._barrier = None
         self._last_queue_evidence = None
+        self._last_transport_evidence = None
 
     def prepare(self, contract) -> None:
         self.lifecycle.prepare(contract)
@@ -200,6 +201,34 @@ class M1n1AgxQueueBackend:
             raise QueueBackendError("canary read returned the wrong size")
         return hashlib.sha256(data).hexdigest()
 
+    @staticmethod
+    def _channel_pointers(channel) -> dict:
+        return {
+            "read_ptr": int(channel.state.READ_PTR.val),
+            "write_ptr": int(channel.state.WRITE_PTR.val),
+        }
+
+    @staticmethod
+    def _ring_pointers(queue) -> dict:
+        return {
+            "cpu_wptr": int(queue.pmap.CPU_WPTR.val),
+            "gpu_rptr": int(queue.pmap.GPU_RPTR.val),
+            "gpu_doneptr": int(queue.pmap.GPU_DONEPTR.val),
+        }
+
+    @staticmethod
+    def _queue_info(queue) -> dict:
+        info = queue.info.pull()
+        return {
+            "gpu_rptr1": int(info.gpu_rptr1),
+            "gpu_rptr2": int(info.gpu_rptr2),
+            "gpu_rptr3": int(info.gpu_rptr3),
+            "event_id": int(info.event_id),
+            "busy": int(info.busy),
+            "has_commands": int(info.has_commands),
+            "inflight_commands": int(info.inflight_commands),
+        }
+
     def submit_barrier(self, queue_index: int, timeout_s: float) -> dict:
         if queue_index != QUEUE_INDEX:
             raise QueueBackendError("G1Q requires queue index 1")
@@ -215,6 +244,10 @@ class M1n1AgxQueueBackend:
         self._create_queue()
         queue = self._queue
         event = self._event
+        channel = self.agx.ch.queue[QUEUE_INDEX].q_3D
+        channel_before = self._channel_pointers(channel)
+        ring_before = self._ring_pointers(queue)
+        info_before = self._queue_info(queue)
         producer_before = int(queue.wptr)
         consumer_before = int(queue.pmap.GPU_DONEPTR.val)
         event_before = int(self.agx.event_mgr.event_count)
@@ -227,8 +260,10 @@ class M1n1AgxQueueBackend:
             raise QueueBackendError("queue producer ring wrap is forbidden")
         if producer_after - producer_before != 1:
             raise QueueBackendError("queue producer must advance exactly once")
+        ring_after_submit = self._ring_pointers(queue)
 
         self.agx.ch.queue[QUEUE_INDEX].q_3D.run(queue, event.id)
+        channel_after_send = self._channel_pointers(channel)
         started = self.clock()
         while self.clock() - started < float(timeout_s):
             self.agx.asc.work()
@@ -237,6 +272,35 @@ class M1n1AgxQueueBackend:
                 break
 
         elapsed = self.clock() - started
+        channel_final = self._channel_pointers(channel)
+        ring_final = self._ring_pointers(queue)
+        info_final = self._queue_info(queue)
+        transport = {
+            "channel": {
+                "before": channel_before,
+                "after_send": channel_after_send,
+                "final": channel_final,
+                "message_consumed": (
+                    channel_after_send["write_ptr"] == channel_final["read_ptr"]
+                ),
+            },
+            "ring": {
+                "before": ring_before,
+                "after_submit": ring_after_submit,
+                "final": ring_final,
+                "entry_consumed": (
+                    ring_final["gpu_rptr"] > ring_before["gpu_rptr"]
+                ),
+                "entry_completed": (
+                    ring_final["gpu_doneptr"] > ring_before["gpu_doneptr"]
+                ),
+            },
+            "queue_info": {
+                "before": info_before,
+                "final": info_final,
+            },
+        }
+        self._last_transport_evidence = transport
         consumer_after = int(queue.pmap.GPU_DONEPTR.val)
         event_after = int(self.agx.event_mgr.event_count)
         matching_events = event_after - event_before if event.fired else 0
@@ -318,6 +382,11 @@ class M1n1AgxQueueBackend:
                     if self._last_queue_evidence is not None
                     else None
                 ),
+                "transport": (
+                    dict(self._last_transport_evidence)
+                    if self._last_transport_evidence is not None
+                    else None
+                ),
             }
         return snapshot
 
@@ -345,6 +414,7 @@ class M1n1AgxQueueBackend:
         self._event = None
         self._barrier = None
         self._last_queue_evidence = None
+        self._last_transport_evidence = None
         self.lifecycle.reset()
         self.agx = None
 

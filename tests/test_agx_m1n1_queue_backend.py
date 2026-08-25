@@ -105,9 +105,20 @@ class FakeObject:
         self.push_count = 0
         if kind == "stamp":
             self.value = 0
+        if kind == "queue-info":
+            self.gpu_rptr1 = 0
+            self.gpu_rptr2 = 0
+            self.gpu_rptr3 = 0
+            self.event_id = -1
+            self.busy = 0
+            self.has_commands = 0
+            self.inflight_commands = 0
 
     def push(self):
         self.push_count += 1
+        return self
+
+    def pull(self):
         return self
 
 
@@ -151,6 +162,8 @@ class FakeRegister:
 class FakePointerMap:
     def __init__(self):
         self.GPU_DONEPTR = FakeRegister(0)
+        self.GPU_RPTR = FakeRegister(0)
+        self.CPU_WPTR = FakeRegister(0)
 
 
 class FakeGPU3DWorkQueue:
@@ -170,6 +183,7 @@ class FakeGPU3DWorkQueue:
         work.push()
         self.submitted.append(work)
         self.wptr = (self.wptr + 1) % self.rb_size
+        self.pmap.CPU_WPTR.val = self.wptr
 
 
 class FakeEvent:
@@ -195,9 +209,14 @@ class FakeEventManager:
 class FakeQueueChannel:
     def __init__(self):
         self.runs = []
+        self.state = SimpleNamespace(
+            READ_PTR=FakeRegister(0),
+            WRITE_PTR=FakeRegister(0),
+        )
 
     def run(self, queue, event_id):
         self.runs.append((queue, event_id))
+        self.state.WRITE_PTR.val += 1
 
 
 class FakeClock:
@@ -532,6 +551,65 @@ class EvidenceAndTeardownTests(QueueSubmissionTests):
             snapshot["physical_fault"],
             {"readable": False, "reason": "power-domain-not-qualified"},
         )
+
+    def test_timeout_distinguishes_unconsumed_run_message_from_ring_entry(self):
+        from tools.agx_m1n1_queue_backend import QueueBackendError
+
+        backend, _, _ = self._configured_backend()
+        with self.assertRaisesRegex(QueueBackendError, "timeout"):
+            backend.submit_barrier(1, 0.5)
+
+        transport = backend.snapshot("timeout")["queue"]["transport"]
+        self.assertEqual(
+            transport["channel"],
+            {
+                "before": {"read_ptr": 0, "write_ptr": 0},
+                "after_send": {"read_ptr": 0, "write_ptr": 1},
+                "final": {"read_ptr": 0, "write_ptr": 1},
+                "message_consumed": False,
+            },
+        )
+        self.assertEqual(
+            transport["ring"],
+            {
+                "before": {"cpu_wptr": 0, "gpu_rptr": 0, "gpu_doneptr": 0},
+                "after_submit": {"cpu_wptr": 1, "gpu_rptr": 0, "gpu_doneptr": 0},
+                "final": {"cpu_wptr": 1, "gpu_rptr": 0, "gpu_doneptr": 0},
+                "entry_consumed": False,
+                "entry_completed": False,
+            },
+        )
+        self.assertEqual(
+            transport["queue_info"]["final"],
+            {
+                "gpu_rptr1": 0,
+                "gpu_rptr2": 0,
+                "gpu_rptr3": 0,
+                "event_id": -1,
+                "busy": 0,
+                "has_commands": 0,
+                "inflight_commands": 0,
+            },
+        )
+
+    def test_timeout_records_channel_consumption_before_ring_stall(self):
+        from tools.agx_m1n1_queue_backend import QueueBackendError
+
+        backend, agx, _ = self._configured_backend()
+
+        def consume_run_message(target):
+            channel = target.ch.queue[1].q_3D
+            channel.state.READ_PTR.val = channel.state.WRITE_PTR.val
+            target.poll_behavior = None
+
+        agx.poll_behavior = consume_run_message
+        with self.assertRaisesRegex(QueueBackendError, "timeout"):
+            backend.submit_barrier(1, 0.5)
+
+        transport = backend.snapshot("timeout")["queue"]["transport"]
+        self.assertTrue(transport["channel"]["message_consumed"])
+        self.assertFalse(transport["ring"]["entry_consumed"])
+        self.assertFalse(transport["ring"]["entry_completed"])
 
     def test_snapshot_exposes_live_canary_mutation(self):
         backend, agx, _ = self._completed_backend()
