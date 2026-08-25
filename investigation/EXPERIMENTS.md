@@ -8152,3 +8152,59 @@ mandatory reboot without manual cleanup. The pre-run base was `0x805398000`; a
 fresh J313/V13_5 proxy returned at `0x8047a0000`, with cleanup identity SHA-256
 `64617a712040dd3fec785c51cfb1307eb595377d2eeb5376c2f97c5f481d09b6`.
 EXP-089 is closed and its evidence directory will not be reused.
+
+### EXP-20260825-090 — bootstrap AGX before exposing the fake render fd
+
+Status: preregistered; one two-capture run permitted.
+
+Hypothesis: moving the unchanged historical AGX/proxy initialization into Shim
+construction, before drm-shim exposes a fake render fd to EGL, removes the
+reentrant fd-lifetime violation proven by the EXP-089 core. The fixed clear
+producer will then pass the first create-BO C handler, issue subsequent ioctls,
+submit one deterministic clear, and produce two cold byte-identical capture
+packages without a mutex abort, timeout or manual intervention.
+
+- implementation and ledger: `97ab533ae13d120f36397abf79a84d784c0aba20`
+  and `1c4e391e8f3887286af9631b43cfc3ac1d0c36ed`;
+- capture wrapper SHA-256:
+  `aa650612a9f298b00aacd7bd101ebf52a4777088b2d1d355ee019e833f43e5c0`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp090.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- no-cache rebuilt and verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x8047a0000`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-090-agx-eager-bootstrap/`,
+  confirmed absent; fixed bridge port `43145`;
+- the mandatory regression test failed before implementation, ten focused
+  tests passed, the complete repository suite passed 582/582, shell syntax,
+  Python compilation and diff checks passed, and a no-cache ARM64 image build
+  plus export verification passed.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp090.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-090-agx-eager-bootstrap \
+  --bridge-port 43145
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, at least one ioctl after
+create BO, no mutex assertion, timeout, exception or software fallback, and a
+successful mandatory physical reboot after each capture. Any missing file,
+unexpected ioctl boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-090. Preserve all obtainable evidence, never reuse this directory,
+keep Windows blocked, and return the Air to a fresh J313/V13_5 proxy regardless
+of result.
