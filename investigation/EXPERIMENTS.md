@@ -6875,8 +6875,8 @@ the stable boot artifacts.
 
 ### EXP-20260825-074 — bounded J313 AGX G1 firmware lifecycle
 
-Status: planned; no AGX clock, power, MMIO, UAT, or firmware start operation
-has been attempted for this experiment.
+Status: rejected before AGX ownership; no AGX clock, power, MMIO, UAT, or
+firmware start operation was attempted for this experiment.
 
 Run timestamp (UTC): `2026-08-25T14:51:44Z`.
 
@@ -6931,3 +6931,68 @@ stable eight-core/native-input Windows artifact.
   proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py`, wait for a fresh
   `Running proxy...`, and use only the recovery hashes above.  Never write the
   ESP during this experiment.
+
+Observed result: cycle 1 stopped inside the pre-clock live-contract comparison.
+Every reviewed value matched except the enumeration order of `nodes`: the
+immutable contract contained `[/arm-io/gfx-asc, /arm-io/sgx]`, while the live
+ADT reader returned `[/arm-io/sgx, /arm-io/gfx-asc]`.  The atomic result has
+SHA-256 `7def0b333f0ad9fb2415af93772fc37b8d17d2c26bfacfd595e324f08bf9f56a`,
+`verdict=failed`, `completed_cycles=0`, `released=true`, and
+`windows_launch_permitted=false`.  No cycle snapshot exists because the
+backend had not enabled either clock or constructed AGX.  Windows was not
+launched.  This experiment will not be retried or have its timing changed.
+
+### EXP-20260825-075 — corrected bounded J313 AGX G1 firmware lifecycle
+
+Status: planned; no AGX clock, power, MMIO, UAT, or firmware start operation
+has been attempted for this experiment.
+
+Run timestamp (UTC): `2026-08-25T14:59:49Z`.
+
+Hypothesis: after normalizing only the semantically irrelevant ordering of the
+unique ADT node paths, the exact reviewed G0 resources are sufficient for
+m1n1 to start the AGX firmware, observe a management Pong, capture bounded
+diagnostics, stop the firmware, invalidate both context-zero UAT roots, and
+prove released ownership ten consecutive times.  Only that exact result may
+chainload the unchanged stable eight-core/native-input Windows artifact.
+
+- source: root `012be5b560e6bd1d3f7db0fabbb43be7c39210e4`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- correction: implementation
+  `e68680f754ec5ae9669a2cc1691157a5e620a568` sorts only `nodes` in the
+  private live-comparison identity.  Reviewed contract bytes, IRQ order,
+  firmware, regions, dependencies, UAT geometry, timing, lifecycle and stable
+  artifacts are unchanged;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- immutable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; m1n1.macho SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  J313_EFI.fd SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  and boot.bin SHA-256
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory
+  `investigation/artifacts/EXP-20260825-075-agx-g1/` was proven absent before
+  this run;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-075-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- fixed deadline: one second for each management heartbeat, exactly ten cycles,
+  one snapshot per cycle, and no timing adjustment or retry inside EXP-075;
+- firmware success gate: every cycle must complete
+  `prepare -> start -> Pong -> snapshot -> stop -> reset -> released`; the
+  atomic result must contain `verdict=passed`, `completed_cycles=10`, and
+  `windows_launch_permitted=true`;
+- post-gate Windows gate: unchanged stable artifacts only; lock screen within
+  30 seconds; eight CPUs; advancing physical and virtual frames; responsive
+  external USB and native keyboard/trackpad; healthy NVMe; SSH response; and no
+  new BugCheck, WHEA, stornvme, storage-reset, watchdog, or AGX-ownership error;
+- stop rule: the first failed or timed-out cycle ends EXP-075 and forbids
+  Windows.  Preserve all evidence without changing timing.  If ownership is
+  unknown, use the registered proxy reboot path and return to a fresh
+  `Running proxy...`; never write the ESP.
