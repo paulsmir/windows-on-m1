@@ -54,6 +54,7 @@ fi
 
 PYTHON=${AGX_CAPTURE_PYTHON:-"$ROOT/proxyenv/bin/python"}
 [ -x "$PYTHON" ] || PYTHON=python3
+export PYTHONPATH="$ROOT:$ROOT/m1n1_windows/proxyclient${PYTHONPATH:+:$PYTHONPATH}"
 cd "$ROOT"
 "$PYTHON" -m tools.agx_gate preflight \
     --root "$ROOT" --contract "$CONTRACT" --artifact-dir "$ARTIFACT_DIR"
@@ -101,7 +102,6 @@ while [ "$CYCLE" -le 2 ]; do
         cd "$CYCLE_DIR"
         ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
             M1N1DEVICE="$PROXY" LD_PRELOAD="$SHIM_LIBRARY" \
-            PYTHONPATH="$ROOT/m1n1_windows/proxyclient${PYTHONPATH:+:$PYTHONPATH}" \
             "$CAPTURE_PROGRAM" "$FINAL"
         [ -f "$FRAME" ]
         M1N1DEVICE="$PROXY" "$PYTHON" -m tools.agx_capture_clear live-receipt \

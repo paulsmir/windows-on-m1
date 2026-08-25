@@ -19,7 +19,7 @@ bridge_loop()
 {
     while :; do
         rm -f "$PROXY"
-        socat PTY,link=/tmp/m1n1-proxy,raw,echo=0,wait-slave \
+        socat PTY,link=/tmp/m1n1-proxy,raw,echo=0,ignoreeof \
             TCP:host.docker.internal:${AGX_BRIDGE_PORT} || true
         sleep 1
     done
@@ -42,6 +42,7 @@ while [ ! -e "$PROXY" ]; do
     }
     sleep 0.1
 done
+sleep 1
 
 AGX_CAPTURE_PYTHON=python3 /work/scripts/capture-agx-clear-frame.sh \
     --proxy "$PROXY" \

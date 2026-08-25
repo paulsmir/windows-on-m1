@@ -6,6 +6,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/run-agx-capture-container.sh"
 HELPER = ROOT / "tools/agx-capture-container/run-capture.sh"
+PROBE_SCRIPT = ROOT / "scripts/probe-agx-capture-transport.sh"
+PROBE_HELPER = ROOT / "tools/agx-capture-container/probe-transport.sh"
 
 
 class RunAgxCaptureContainerTests(unittest.TestCase):
@@ -51,10 +53,57 @@ class RunAgxCaptureContainerTests(unittest.TestCase):
 
     def test_container_helper_reconnects_pty_and_uses_pinned_linux_python(self):
         source = HELPER.read_text(encoding="utf-8")
-        self.assertIn("PTY,link=/tmp/m1n1-proxy,raw,echo=0,wait-slave", source)
+        self.assertIn("PTY,link=/tmp/m1n1-proxy,raw,echo=0,ignoreeof", source)
+        self.assertNotIn("wait-slave", source)
         self.assertIn("TCP:host.docker.internal:${AGX_BRIDGE_PORT}", source)
+        self.assertIn("sleep 1", source)
         self.assertIn("AGX_CAPTURE_PYTHON=python3", source)
         self.assertIn("verify-agx-capture-env.py", source)
+
+    def test_capture_exports_both_python_roots_for_every_subcommand(self):
+        source = (ROOT / "scripts/capture-agx-clear-frame.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'export PYTHONPATH="$ROOT:$ROOT/m1n1_windows/proxyclient', source
+        )
+
+    def test_transport_probe_is_bounded_read_only_and_reboot_separated(self):
+        helper = PROBE_HELPER.read_text(encoding="utf-8")
+        required = (
+            "probe-proxy-identity.py",
+            "before.json",
+            "reboot.py",
+            "after.json",
+            "20",
+            "transport-receipt.json",
+            "PTY,link=/tmp/m1n1-proxy,raw,echo=0,ignoreeof",
+        )
+        for item in required:
+            self.assertIn(item, helper)
+        self.assertNotIn("capture-agx-clear-frame", helper)
+        self.assertNotIn("LD_PRELOAD", helper)
+        self.assertNotIn("pmgr_adt_clocks_enable", helper)
+
+    def test_transport_probe_dry_run_has_no_hardware_side_effect(self):
+        result = subprocess.run(
+            [
+                str(PROBE_SCRIPT),
+                "--proxy", "/dev/cu.test-m1n1",
+                "--destination", "/tmp/agx-transport-probe",
+                "--bridge-port", "43138",
+                "--dry-run",
+            ],
+            cwd="/tmp",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("TCP-LISTEN:43138", result.stdout)
+        self.assertIn("repository-root>:/work:ro", result.stdout)
+        self.assertIn("probe-transport.sh", result.stdout)
+        self.assertIn("/tmp:/capture-host:rw", result.stdout)
 
     def test_unknown_option_is_rejected(self):
         result = subprocess.run(

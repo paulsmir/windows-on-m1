@@ -128,6 +128,12 @@ The container receives the repository read-only and a separate evidence
 directory read-write. A reconnecting host `socat` bridge exposes the physical
 USB proxy as a container PTY without granting the container direct host-device
 ownership. The bridge was independently loopback-tested in both directions.
+A PTY path is never treated as sufficient readiness: the bridge opens its
+TCP/USB side without `wait-slave`, preserves the PTY across individual client
+processes, and observes a fixed settle boundary before m1n1's 150 ms bootstrap
+NOP. A transport-only gate must prove J313/V13_5 identities and a changed m1n1
+base across one mandatory reboot before a failed bridge may be used for another
+GPU acquisition experiment.
 A negative control using the exact EGL/GLES and Asahi override without the shim
 must fail with `EGL_NOT_INITIALIZED`; it must never fall back to software
 rendering or create an output artifact.
@@ -232,6 +238,8 @@ The stable recovery directory remains byte-identical and is the rollback point.
   environment builder and atomic exporter.
 - `scripts/run-agx-capture-container.sh`: read-only container runner and
   reconnecting host USB-proxy bridge.
+- `scripts/probe-agx-capture-transport.sh`: transport-only cold-reboot gate;
+  never imports or starts AGX.
 - `tools/verify-agx-capture-env.py`: exact exported-artifact and manifest
   verifier.
 - `tools/agx-capture-container/`: pinned build and runtime definitions.

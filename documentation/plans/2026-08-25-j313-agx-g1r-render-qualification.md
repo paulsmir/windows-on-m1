@@ -555,6 +555,17 @@ negative control without the shim and require `EGL_NOT_INITIALIZED` with no
 output. Loopback-test host serial to TCP to container PTY in both directions.
 Do not touch the Air during these host checks.
 
+- [x] **Step 8: Fail closed on deferred bridge readiness**
+
+After EXP-082 proved that `wait-slave` races m1n1's fixed 150 ms bootstrap NOP,
+remove the deferred-open contract, keep the PTY alive across capture and receipt
+processes, export both repository Python roots globally, and wait at a bounded
+post-connect readiness boundary. Add a transport-only operator that records
+J313/V13_5 before and after exactly one reboot, requires a changed randomized
+m1n1 base, retries only the post-reboot read-only handshake within a fixed
+twenty-attempt bound, and never imports or starts AGX. A new capture experiment
+is forbidden until that transport-only gate passes under its own preregistration.
+
 ---
 
 ### Task 6: Host gate, hardware acquisition, one-shot replay, and final qualification
