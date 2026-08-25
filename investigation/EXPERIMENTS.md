@@ -9299,3 +9299,80 @@ EXP-102 already applies a capture-process-only schema compatibility rename, but
 the replay process did not apply it.  The next work is a local test-first fix
 which shares that schema compatibility with replay; hardware must remain idle
 until the full suite passes and a new one-shot is separately preregistered.
+
+### EXP-20260826-104 — one-shot replay with shared renderer schema
+
+Status: preregistered; hardware replay not run.
+
+Hypothesis: installing the exact fail-closed historical-renderer compatibility
+already proven by native capture before replay resolves its renderer types will
+let the immutable EXP-102 fixture cross the pre-submit serialization boundary,
+complete one two-entry TA plus two-entry 3D submission within 0.5 seconds, and
+change only the poisoned output page to the bound raw BGRA oracle.
+
+Single changed variable relative to rejected EXP-103: replay now installs the
+same `Start3DStruct1` mapping-key bridge, zero tiling helper default and exact TA
+padding bridge as capture.  Fixture bytes, command buffer, stable m1n1, Mu,
+firmware identity, context 63, queue 1, mappings, timeout, lifecycle, reboot and
+acceptance rules are unchanged.
+
+Source and artifact contract:
+- root commit `0050c3f601503614ed978e6297ac9face471b5c8`; implementation
+  commit `ba4115e01618f2c5660d5cbc7109cf4b584f24a7` and separate ledger
+  commit `0050c3f601503614ed978e6297ac9face471b5c8`;
+- stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- replay gate, live backend and shared compatibility SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `eeed4b2e86fa8b10a203e39fe89ec88887fafb50d8f19ba21cbfd4e26cbe4164`
+  and `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`;
+- immutable frame, manifest and provenance SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`,
+  `938cb9427dfdef646ec6938c4fc92f2404e41a70c1d0662f01dfe93f01702fe7`
+  and `edb5fc2caeea2bdda8e07f6d90a92c5f8ef097345d97b5f579729161bdf970a9`;
+- stable recovery `SHA256SUMS` SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`
+  passed all five artifact checks; canonical fixture verification passed;
+- the new regression reproduced RED before implementation, then 26 focused
+  tests and the complete public suite passed 597/597; tracked root diff is
+  clean and only the expected nested worktree status markers remain;
+- fresh J313/V13_5 proxy base `0x804bf4000`; evidence destination
+  `investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/` confirmed
+  absent.  Windows remains blocked.
+
+The permitted sequence is exactly one `run-one`, exactly one physical reboot
+regardless of its exit status, then one receipt against that unedited result:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate run-one \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/cycle-01
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate proxy-receipt \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --cycle-result investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/cycle-01/render-gate-result.json \
+  --cycle 1 \
+  --output investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/reset-01.json
+```
+
+Pass requires exact queue producer/read/done progress `0 -> 2` for TA and 3D,
+one matching completion event per queue and no spurious event, exact stamps,
+poison-to-oracle output, unchanged immutable-object hash, only classified
+private mappings with unmapped guards, zero readable firmware faults, complete
+cleanup and release, workload elapsed no greater than 0.5 seconds, plus a receipt
+bound to a distinct fresh J313/V13_5 proxy base.  Any exception, timeout,
+partial progress, output or immutable mismatch, unexpected mapping, fault,
+cleanup or reboot failure rejects EXP-104.  Never retry it in place and do not
+begin the reserved ten-cycle EXP-080 unless independent inspection accepts it.
