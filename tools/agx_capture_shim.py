@@ -1,10 +1,59 @@
 """Historical Asahi shim with the capture-only bridged bootstrap policy."""
 
 import os
+from pathlib import Path
 import subprocess
 import sys
 
 from tools.agx_capture_bootstrap import install_bootstrap_override
+
+
+def write_complete_attachment_page(cmdbuf, bos, output):
+    """Atomically persist the sole fully pulled color attachment BO."""
+
+    count = getattr(cmdbuf, "attachment_count", None)
+    attachments = getattr(cmdbuf, "attachments", None)
+    if count != 1 or not isinstance(attachments, (list, tuple)) or len(attachments) < 1:
+        raise RuntimeError("capture requires exactly one attachment")
+    attachment = attachments[0]
+    pointer = getattr(attachment, "pointer", None)
+    size = getattr(attachment, "size", None)
+    kind = getattr(attachment, "type", None)
+    if (
+        kind != 0
+        or isinstance(pointer, bool)
+        or not isinstance(pointer, int)
+        or pointer <= 0
+        or isinstance(size, bool)
+        or not isinstance(size, int)
+        or size <= 0
+        or size > 16 * 1024 * 1024
+    ):
+        raise RuntimeError("capture attachment metadata is invalid")
+    matches = [
+        obj for obj in bos.values()
+        if getattr(obj, "_addr", None) == pointer
+        and getattr(obj, "_size", None) == size
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("capture attachment BO is missing or ambiguous")
+    data = bytes(getattr(matches[0], "val", b""))
+    if len(data) != size:
+        raise RuntimeError("capture attachment bytes are incomplete")
+
+    output = Path(output)
+    temporary = output.with_name(output.name + ".tmp")
+    if output.exists() or temporary.exists():
+        raise RuntimeError("capture attachment destination already exists")
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(output)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def install_start3d_helper_cfg_compatibility(start3d_struct_cls):
@@ -149,6 +198,20 @@ class Shim(HistoricalShim):
             file=sys.stderr,
             flush=True,
         )
+        submit_request = getattr(self.submit, "_ioctl").value
+        if self._capture_is_producer and request == submit_request and result == 0:
+            target = os.environ.get("AGX_CAPTURE_FULL_ATTACHMENT")
+            if not target or not self.pull_buffers:
+                raise RuntimeError("complete attachment capture is not configured")
+            from m1n1.agx.uapi import drm_asahi_cmdbuf_t, drm_asahi_submit_t
+
+            args = drm_asahi_submit_t.parse(
+                self.read_buf(p_arg, drm_asahi_submit_t.sizeof())
+            )
+            cmdbuf = drm_asahi_cmdbuf_t.parse(
+                self.read_buf(args.cmdbuf, drm_asahi_cmdbuf_t.sizeof())
+            )
+            write_complete_attachment_page(cmdbuf, self.bos, target)
         return result
 
     def init_agx(self):

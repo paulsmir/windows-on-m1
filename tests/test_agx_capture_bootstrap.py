@@ -2,6 +2,8 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -183,6 +185,38 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertIs(installed, repeated)
         self.assertEqual(command["unk_3e8"], bytes(0x60))
 
+    def test_capture_persists_the_complete_pulled_attachment_page(self):
+        from tools.agx_capture_shim import write_complete_attachment_page
+
+        payload = bytes(range(256)) * 64
+        attachment = SimpleNamespace(pointer=0x1500000000, size=len(payload), type=0)
+        command = SimpleNamespace(attachment_count=1, attachments=[attachment])
+        obj = SimpleNamespace(
+            _addr=attachment.pointer,
+            _size=attachment.size,
+            val=payload,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "final-attachment.bin"
+            write_complete_attachment_page(command, {1: obj}, output)
+            self.assertEqual(output.read_bytes(), payload)
+
+    def test_capture_rejects_an_incomplete_pulled_attachment_page(self):
+        from tools.agx_capture_shim import write_complete_attachment_page
+
+        attachment = SimpleNamespace(pointer=0x1500000000, size=0x4000, type=0)
+        command = SimpleNamespace(attachment_count=1, attachments=[attachment])
+        obj = SimpleNamespace(
+            _addr=attachment.pointer,
+            _size=attachment.size,
+            val=bytes(0x400),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "attachment bytes"):
+                write_complete_attachment_page(
+                    command, {1: obj}, Path(directory) / "short.bin"
+                )
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"
@@ -198,6 +232,16 @@ class CaptureBootstrapTests(unittest.TestCase):
             "timeout --foreground --signal=TERM --kill-after=5s 30s", source
         )
         self.assertNotIn("CAPTURE_TIMEOUT_SECONDS", source)
+
+    def test_capture_receipt_uses_full_attachment_not_visible_pixels(self):
+        source = (ROOT / "scripts/capture-agx-clear-frame.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('VISIBLE="$CYCLE_DIR/visible.rgba"', source)
+        self.assertIn('FINAL="$CYCLE_DIR/final-attachment.bin"', source)
+        self.assertIn('AGX_CAPTURE_FULL_ATTACHMENT="$FINAL"', source)
+        self.assertIn('"$CAPTURE_PROGRAM" "$VISIBLE"', source)
+        self.assertIn('--final-attachment "$FINAL"', source)
 
     def test_full_client_probe_reproduces_loader_path_without_agx(self):
         helper = (ROOT / "tools/agx-capture-container/probe-full-client-bootstrap.sh").read_text(

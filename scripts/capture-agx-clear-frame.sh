@@ -93,7 +93,8 @@ while [ "$CYCLE" -le 2 ]; do
     LABEL=$(printf "%02d" "$CYCLE")
     CYCLE_DIR="$DESTINATION/work/capture-$LABEL"
     mkdir "$CYCLE_DIR"
-    FINAL="$CYCLE_DIR/final.rgba"
+    VISIBLE="$CYCLE_DIR/visible.rgba"
+    FINAL="$CYCLE_DIR/final-attachment.bin"
     FRAME="$CYCLE_DIR/shim_frame000.agx"
     PRODUCER_LOG="$CYCLE_DIR/producer.log"
     RECEIPT="$DESTINATION/work/receipt-$LABEL.json"
@@ -104,8 +105,9 @@ while [ "$CYCLE" -le 2 ]; do
         if timeout --foreground --signal=TERM --kill-after=5s 30s env \
                 ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 \
                 AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
+                AGX_CAPTURE_FULL_ATTACHMENT="$FINAL" \
                 M1N1DEVICE="$PROXY" LD_PRELOAD="$SHIM_LIBRARY" \
-                "$CAPTURE_PROGRAM" "$FINAL" \
+                "$CAPTURE_PROGRAM" "$VISIBLE" \
                 >"$PRODUCER_LOG" 2>&1; then
             PRODUCER_STATUS=0
         else

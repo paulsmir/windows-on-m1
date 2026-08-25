@@ -13,6 +13,8 @@ import sys
 
 from tools.agx_frame_fixture import (
     FixtureError,
+    MAX_MEMBER_SIZE,
+    MAX_TOTAL_SIZE,
     _canonical_zip_bytes,
     _load_json,
     _read_members,
@@ -69,6 +71,44 @@ def _object_metadata(members: dict[str, bytes]):
     return objects
 
 
+def _materialize_omitted_zero_objects(members: dict[str, bytes]) -> dict[str, bytes]:
+    """Expand GPUFrame's ``file: null`` shorthand into canonical zero members."""
+
+    normalized = dict(members)
+    objects = _object_metadata(normalized)
+    rewritten = []
+    total = sum(len(data) for data in normalized.values())
+    for index, source in enumerate(objects):
+        if not isinstance(source, dict):
+            raise CaptureError(f"object metadata entry {index} is malformed")
+        item = dict(source)
+        if item.get("file") is None:
+            size = item.get("size")
+            if (
+                isinstance(size, bool)
+                or not isinstance(size, int)
+                or size <= 0
+                or size > MAX_MEMBER_SIZE
+            ):
+                raise CaptureError(f"zero object size is invalid at index {index}")
+            address = item.get("addr")
+            if isinstance(address, bool) or not isinstance(address, int) or address <= 0:
+                raise CaptureError(f"zero object address is invalid at index {index}")
+            member = f"obj_{address:x}.bin"
+            if member in normalized:
+                raise CaptureError(f"zero object member collides at index {index}")
+            total += size
+            if total > MAX_TOTAL_SIZE:
+                raise CaptureError("materialized zero objects exceed fixture limits")
+            normalized[member] = bytes(size)
+            item["file"] = member
+        rewritten.append(item)
+    normalized["objects.json"] = (
+        json.dumps(rewritten, indent=2, sort_keys=True) + "\n"
+    ).encode()
+    return normalized
+
+
 def _compare_object_metadata(first, second) -> None:
     if not isinstance(first, list) or not isinstance(second, list):
         raise CaptureError("object metadata must be arrays")
@@ -112,8 +152,8 @@ def compare_captures(first: CaptureInput, second: CaptureInput) -> dict:
     if first.capture_program_sha256 != second.capture_program_sha256:
         raise CaptureError("capture program differs between cold captures")
 
-    left = _capture_members(first)
-    right = _capture_members(second)
+    left = _materialize_omitted_zero_objects(_capture_members(first))
+    right = _materialize_omitted_zero_objects(_capture_members(second))
     if set(left) != set(right):
         raise CaptureError("capture member inventory differs")
     if left.get("cmdbuf.json") != right.get("cmdbuf.json"):
@@ -184,15 +224,6 @@ def package_capture(
         raise CaptureError("capture program bytes do not match both receipts")
 
     compared = compare_captures(first, second)
-    try:
-        manifest = build_manifest(
-            Path(first.frame_path),
-            identity=compared["identity"],
-            capture_program_sha256=program_hash,
-            expected_output=compared["expected_output"],
-        )
-    except FixtureError as exc:
-        raise CaptureError(f"fixture manifest rejected: {exc}") from exc
     provenance = {
         "capture_program_sha256": program_hash,
         "fixture_sha256": compared["fixture_sha256"],
@@ -213,6 +244,15 @@ def package_capture(
     staging.mkdir(parents=True)
     try:
         _write_temporary(staging / "frame.agx", compared["canonical_frame"])
+        try:
+            manifest = build_manifest(
+                staging / "frame.agx",
+                identity=compared["identity"],
+                capture_program_sha256=program_hash,
+                expected_output=compared["expected_output"],
+            )
+        except FixtureError as exc:
+            raise CaptureError(f"fixture manifest rejected: {exc}") from exc
         _write_temporary(staging / "manifest.json", _json_bytes(manifest))
         _write_temporary(staging / "provenance.json", _json_bytes(provenance))
         if destination.exists():

@@ -83,6 +83,55 @@ class CaptureCase(unittest.TestCase):
 
 
 class ReproducibilityTests(CaptureCase):
+    def test_omitted_zero_objects_are_materialized_canonically(self):
+        from tools.agx_capture_clear import package_capture
+        from tools.agx_frame_fixture import validate_fixture
+
+        members = dict(self.members)
+        objects = json.loads(members["objects.json"])
+        omitted = objects[0]
+        del members[omitted["file"]]
+        omitted["file"] = None
+        members["objects.json"] = _json_bytes(objects)
+        _write_capture(self.first_frame, members, minute=0)
+        _write_capture(self.second_frame, members, reverse=True, minute=2)
+
+        frame, manifest = package_capture(
+            self.first,
+            self.second,
+            capture_program=self.program,
+            destination=self.destination,
+        )
+        validated = validate_fixture(frame, manifest, IDENTITY)
+        materialized = next(
+            item for item in validated.objects if item.gpu_va == omitted["addr"]
+        )
+        self.assertEqual(materialized.data, bytes(omitted["size"]))
+
+    def test_non_null_missing_object_member_remains_rejected(self):
+        members = dict(self.members)
+        objects = json.loads(members["objects.json"])
+        del members[objects[0]["file"]]
+        members["objects.json"] = _json_bytes(objects)
+        _write_capture(self.first_frame, members, minute=0)
+        _write_capture(self.second_frame, members, reverse=True, minute=2)
+
+        with self.assertRaisesRegex(Exception, "object member is missing"):
+            self._compare()
+
+    def test_omitted_zero_object_requires_valid_size(self):
+        members = dict(self.members)
+        objects = json.loads(members["objects.json"])
+        del members[objects[0]["file"]]
+        objects[0]["file"] = None
+        objects[0]["size"] = 0
+        members["objects.json"] = _json_bytes(objects)
+        _write_capture(self.first_frame, members, minute=0)
+        _write_capture(self.second_frame, members, reverse=True, minute=2)
+
+        with self.assertRaisesRegex(Exception, "zero object size"):
+            self._compare()
+
     def test_independent_zip_metadata_produces_one_identical_fixture(self):
         from tools.agx_capture_clear import package_capture
         from tools.agx_frame_fixture import validate_fixture
