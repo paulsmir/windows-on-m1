@@ -7,10 +7,29 @@ import sys
 from tools.agx_capture_bootstrap import install_bootstrap_override
 
 
+def install_start3d_helper_cfg_compatibility(start3d_struct_cls):
+    """Map the historical renderer name onto the documented command field."""
+
+    def get_helper_cfg(command):
+        return command.helper_cfg
+
+    def set_helper_cfg(command, value):
+        command.helper_cfg = value
+
+    start3d_struct_cls.unk_40 = property(get_helper_cfg, set_helper_cfg)
+
+
 install_bootstrap_override()
 
 from m1n1.agx.shim import Shim as HistoricalShim  # noqa: E402
 from m1n1.constructutils import Ver  # noqa: E402
+from m1n1.fw.agx.microsequence import Start3DStruct1  # noqa: E402
+
+
+# The pinned renderer predates the schema rename in b50e29b and still assigns
+# ``unk_40 = 0``.  Keep the immutable m1n1 source/artifact pin intact and map
+# that capture-only assignment to the serialized ``helper_cfg`` field.
+install_start3d_helper_cfg_compatibility(Start3DStruct1)
 
 
 def isolate_capture_subprocess_memory():

@@ -136,6 +136,19 @@ class CaptureBootstrapTests(unittest.TestCase):
             self.assertFalse(subprocess._USE_VFORK)
             self.assertFalse(subprocess._USE_POSIX_SPAWN)
 
+    def test_capture_maps_historical_helper_field_without_changing_m1n1(self):
+        from tools.agx_capture_shim import install_start3d_helper_cfg_compatibility
+
+        class HistoricalStart3DStruct1:
+            pass
+
+        install_start3d_helper_cfg_compatibility(HistoricalStart3DStruct1)
+        command = HistoricalStart3DStruct1()
+        command.unk_40 = 0
+
+        self.assertEqual(command.helper_cfg, 0)
+        self.assertEqual(command.unk_40, 0)
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"
