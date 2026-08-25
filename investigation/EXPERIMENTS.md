@@ -7182,3 +7182,95 @@ override was removed, `recoveryenabled` was set to `No`, and
 for manual recovery.  No render context, command queue, work submission, WDDM
 device, or acceleration was created, and the stable boot artifacts remained
 byte-identical.
+
+### EXP-20260825-079 — one-shot J313 AGX G1Q queue probe
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the pinned V13_5/G13 firmware can consume exactly one
+already-satisfied barrier on context 63, queue index 1's 3D channel and emit
+exactly one matching completion event within 500 ms, while one 16 KiB canary
+mapping remains unchanged, both adjacent guards remain unmapped, firmware fault
+state remains clear, and teardown clears both context-63 roots before the
+mandatory physical reboot.
+
+- implementation source before this preregistration: root
+  `802b9200efa79fd2ff3c4fe2b3139930e163fa98`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- reviewed design and plan commits:
+  `099ab3a7e5388f8d2ce961a7e0f124a5a77752a5`,
+  `84e9961205e688a999741de791577218007183c0`, and
+  `66ec558d3e4ac62ba15ec86b625a520477f8d7cf`;
+- state-machine implementation and ledger:
+  `592e53d105e13a3aeabb9b4163fc76223d00eedf` and
+  `0270e5740d6f31761fb5fe2ff00883d1e3ecefb6`;
+- m1n1 queue backend implementation and ledger:
+  `3d2eb22408cbc49ce45c0d4796868e3b03c67535` and
+  `63e499eee0db394464fd990a2305929de6cc7228`;
+- cold runner implementation and ledger:
+  `8f442bf30d82233a5e44ba993bbda738e331b2b1` and
+  `4f58eaa273a4daf4ccf9b5ae9c7352bbc604c531`;
+- host-test isolation correction and ledger:
+  `4339f11c72d6c00a381f6c6da01d92457bf4bf3b` and
+  `802b9200efa79fd2ff3c4fe2b3139930e163fa98`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- immutable recovery artifact SHA-256 values: `J313_EFI.fd`
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  `boot.bin` `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`,
+  `m1n1-stage0.bin`
+  `dd3056a9add42ec8dc6071d6b9a04938328375dbe00e005483414910f3e26101`,
+  `m1n1-stage1.bin`
+  `69680f9d24e5e0648463fc3703cef1ca046f029aac1e9f2a1ec61f28457f60e3`,
+  and `m1n1.macho`
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`; it must be re-confirmed as
+  sole J313/V13_5 `Running proxy...` ownership immediately before execution;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-079-agx-g1q-probe/`, confirmed absent
+  at preregistration time;
+- host preflight: 446/446 root tests passed through `proxyenv`, all 47 nested
+  m1n1 C host tests passed, shell syntax and `git diff --check` passed, and the
+  complete immutable recovery manifest verified. A system-Python-only run was
+  rejected before hardware because that interpreter lacks `pyserial`;
+- exact one-shot command, executed once only from the public repository:
+
+```sh
+set +e
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_queue_gate run-one \
+  --contract config/j313-agx.json \
+  --evidence-dir investigation/artifacts/EXP-20260825-079-agx-g1q-probe/cycle-01
+G1Q_STATUS=$?
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+test "$G1Q_STATUS" -eq 0
+```
+
+After the fresh proxy returns, and only if the one-shot command succeeded, the
+exact receipt command is:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_queue_gate proxy-receipt \
+  --contract config/j313-agx.json --cycle 1 \
+  --cycle-result investigation/artifacts/EXP-20260825-079-agx-g1q-probe/cycle-01/queue-gate-result.json \
+  --output investigation/artifacts/EXP-20260825-079-agx-g1q-probe/reset-01.json
+```
+
+The fixed completion deadline is 0.5 seconds. Pass requires context 63, 16 KiB
+pages, one declared mapping, both guards unmapped, queue index 1/type 3D,
+exactly one command, producer and consumer progress by one without wrap,
+exactly one matching event, unchanged stamp and canary SHA-256, zero firmware
+fault fields, an explicitly unreadable physical fault register with reason
+`power-domain-not-qualified`, complete stop/reset/release, a successful physical
+reboot, and a fresh changed proxy identity bound to the cycle result.
+
+Any mismatch, timeout, exception, canary or mapping change, fault, cleanup
+error, reboot failure, or stale proxy identity rejects EXP-079. Preserve every
+obtainable snapshot and receipt, block Windows, do not retry this evidence
+directory, and physically reboot before further diagnosis. This probe is one
+cycle only: it cannot be aggregated, cannot permit Windows, and makes no render,
+display, performance, WDDM, power, or thermal claim.

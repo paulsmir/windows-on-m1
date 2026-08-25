@@ -174,3 +174,51 @@ After G1Q passes ten cold-reset-separated cycles, G2 begins as a render-only
 Windows KMD that directly owns firmware, UAT, queues, interrupts, fences,
 timeout detection, and reset.  The diagnostic proxy path is not reused by the
 Windows driver.
+
+## Reproduce the G1Q queue gate
+
+G1Q is assisted-only and must start with the Air stopped at m1n1
+`Running proxy...`. The command below submits one already-satisfied barrier
+through context 63 and queue index 1's 3D channel in each boot. It does not
+render pixels, run a shader, map guest memory, or expose a graphics adapter to
+Windows.
+
+Use a new evidence directory. Existing evidence is rejected and must never be
+deleted merely to retry a failed experiment:
+
+```sh
+cd /path/to/windows-on-m1
+
+./scripts/run-agx-queue-gate.sh \
+  --proxy /dev/cu.usbmodem.PROXY \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --evidence-dir investigation/artifacts/EXP-20260825-080-agx-g1q \
+  --cycles 10
+```
+
+The completion deadline is fixed at 500 ms and is intentionally not an
+operator option. The runner physically reboots after every cycle, including a
+failed cycle, then records a fresh proxy receipt. It stops at the first queue,
+event, canary, mapping, fault, cleanup, reboot, identity, or aggregation error.
+Windows remains blocked on every failure.
+
+After ten cycles, verify the aggregate independently:
+
+```sh
+./proxyenv/bin/python -m tools.agx_queue_gate verify-result \
+  investigation/artifacts/EXP-20260825-080-agx-g1q/queue-gate-result.json
+```
+
+A valid result has queue gate version 2, exactly ten completed cycles, ten
+distinct cold-reset proxy identities, `verdict: passed`, and
+`windows_launch_permitted: true`. To recover from a rejected cycle, preserve
+the complete evidence directory, allow the mandatory physical reboot to return
+to `Running proxy...`, record the failure in the experiment ledger, and diagnose
+from a new implementation and a newly preregistered evidence directory. Never
+change the deadline, edit a receipt, reuse a directory, or launch Windows from
+partial evidence.
+
+Passing G1Q proves only bounded firmware queue consumption and one matching
+completion event. It is not a render, display, performance, WDDM, power, or
+thermal qualification.
