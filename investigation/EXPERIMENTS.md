@@ -8359,3 +8359,58 @@ No frame, final attachment or receipt exists. The preserved core SHA-256 is
 The operator performed the mandatory reboot; a fresh unowned J313/V13_5 proxy
 returned at base `0x8057f8000`. EXP-092 is closed and its evidence directory
 will not be reused.
+
+### EXP-20260825-093 — isolate AGX bootstrap to the native producer
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: comparing `/proc/self/exe` with the explicitly exported native
+capture program before importing `m1n1.setup` prevents inherited `gcc` and `as`
+processes from opening the USB proxy, while the real producer retains the
+validated setup-only pre-render-fd bootstrap. The runtime assembler will then
+complete without the EXP-092 proxy contention and the first create-BO ioctl can
+return to EGL.
+
+- root source `34c71e6fe48f57f6e323144e2aa6bd0d0c80bc18` with implementation
+  `ae1944238602d5baa50a274ea2216ee7227552bf` and ledger
+  `34c71e6fe48f57f6e323144e2aa6bd0d0c80bc18`;
+- capture wrapper SHA-256
+  `02af1a9575063aa44c1436124c4a33ce77a84222f58262ede76df0b172358b3f`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp093.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x8057f8000`; destination
+  `investigation/artifacts/EXP-20260825-093-agx-producer-isolation/` confirmed
+  absent; fixed bridge port `43148`;
+- the producer-order regression contract and complete public suite passed
+  582/582, with shell syntax, Python compilation and diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp093.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-093-agx-producer-isolation \
+  --bridge-port 43148
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, at least one completed
+ioctl after create BO, no mutex assertion, ASC timeout, proxy contention,
+recursive child initialization, exception or software fallback, and a
+successful mandatory physical reboot after every capture. Any missing file,
+unexpected boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-093. Preserve all evidence, never reuse its directory, keep Windows
+blocked, and return the Air to a fresh J313/V13_5 proxy regardless of result.
