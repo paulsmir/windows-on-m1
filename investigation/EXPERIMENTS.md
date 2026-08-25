@@ -9004,7 +9004,8 @@ does not claim Windows GPU acceleration.
 
 ### EXP-20260826-101 — capture the complete AGX attachment page
 
-Status: preregistered; hardware command not yet run.
+Status: rejected by the live receipt after one successful hardware clear; the
+mandatory reboot completed and the Air is at a fresh proxy.
 
 Hypothesis: retaining the sole color BO after the historical shim has pulled
 its complete declared 0x4000 bytes, while canonically materializing only
@@ -9058,3 +9059,32 @@ Any missing or inferred byte, malformed or ambiguous BO, differing output,
 exception, timeout, software fallback, packaging failure, cleanup failure or
 manual intervention rejects EXP-101.  Preserve all evidence, never reuse the
 destination, keep Windows blocked and return to a fresh proxy.
+
+Observed result: the first cold capture at base `0x80441c000` completed every
+native ioctl, TA/3D submit, completion event and full BO pull.  It atomically
+saved a real 0x4000-byte attachment with SHA-256
+`b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`,
+the expected 1024-byte GL-visible image with SHA-256
+`614fd59f81a4457909acaa056573427fd8dc8a4095f60a70a72a8b170b321c8a`,
+the complete frame with SHA-256
+`5b5a9cf64266f96f2d7b5683386ce2550ee03599f209667c68a97fe1eb81d387`
+and producer log with SHA-256
+`28a88b188d75df9391f769ce627da30177d41358a308d15a1f8f871d9e96fdf0`.
+
+The actual attachment contains 256 raw BGRA pixels `33 22 11 ff` followed by
+an all-zero 0x3c00-byte page tail.  `glReadPixels` correctly converts those
+pixels to RGBA `11 22 33 ff`; therefore the preregistered statement that the
+two byte streams must share the same first 1024 bytes was wrong.  The live
+receipt then rejected the valid full page because its stale boundary still
+required the entire final file to equal the 1024-byte RGBA image.  Capture two
+and packaging did not run.  This is a receipt and raw-format contract defect,
+not a GPU execution failure.  No bytes may be reordered or padded during
+packaging: the receipt must validate the exact full raw BGRA page, while the
+separate visible file continues to prove the requested GL RGBA clear.
+
+The mandatory failure reboot completed without manual intervention.  The
+post-experiment proxy is fresh J313/V13_5 at base `0x804260000`; both USB
+endpoints are present.  EXP-101 is closed, its evidence is preserved and its
+destination will not be reused.  Before another hardware command, a RED test
+must require a full 0x4000-byte raw BGRA attachment and reject the old
+1024-byte receipt; fixture metadata must identify the real raw format.
