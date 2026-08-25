@@ -646,9 +646,28 @@ def verify_render_gate_result(path: Path) -> dict:
     return copy.deepcopy(data)
 
 
+def _validate_fixture_identity(contract, identity: dict) -> None:
+    expected = {
+        "board": contract.platform,
+        "chip_generation": contract.firmware.generation,
+        "firmware_version": contract.firmware.version,
+        "m1n1_commit": contract.source.m1n1_commit,
+        "adt_sha256": contract.source.adt_identity,
+    }
+    if not isinstance(identity, dict) or any(
+        identity.get(field) != value for field, value in expected.items()
+    ):
+        raise RenderGateError("fixture identity does not match AGX contract")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    preflight = commands.add_parser("preflight-fixture")
+    preflight.add_argument("--contract", type=Path, required=True)
+    preflight.add_argument("--frame", type=Path, required=True)
+    preflight.add_argument("--manifest", type=Path, required=True)
+    preflight.add_argument("--identity", type=Path, required=True)
     run_one = commands.add_parser("run-one")
     run_one.add_argument("--contract", type=Path, required=True)
     run_one.add_argument("--frame", type=Path, required=True)
@@ -686,14 +705,31 @@ def main(argv=None) -> int:
             )
             return 0
         from tools.agx_contract import load_contract
-        from tools.agx_frame_fixture import FixtureError, validate_fixture
+        from tools.agx_frame_fixture import (
+            FixtureError,
+            require_canonical_fixture,
+            validate_fixture,
+        )
 
         contract = load_contract(args.contract)
         try:
             identity = _read_json(args.identity, "fixture identity")
+            _validate_fixture_identity(contract, identity)
             fixture = validate_fixture(args.frame, args.manifest, identity)
+            if args.command == "preflight-fixture":
+                require_canonical_fixture(args.frame)
         except FixtureError as exc:
             raise RenderGateError(f"fixture validation failed: {exc}") from exc
+        if args.command == "preflight-fixture":
+            print(json.dumps({
+                "contract": str(args.contract),
+                "fixture_sha256": fixture.fixture_sha256,
+                "expected_output_sha256": fixture.expected_output_sha256,
+                "context": 63,
+                "queue": 1,
+                "deadline_s": COMPLETION_DEADLINE_S,
+            }, indent=2, sort_keys=True))
+            return 0
         if args.command == "aggregate-cold":
             result = aggregate_cold_render_results(
                 args.evidence_dir, contract, fixture, cycles=args.cycles

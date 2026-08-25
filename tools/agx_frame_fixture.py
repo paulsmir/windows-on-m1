@@ -496,6 +496,20 @@ def validate_fixture(
     )
 
 
+def require_canonical_fixture(frame_path: Path) -> str:
+    """Reject a fixture whose complete file bytes are not canonical ZIP bytes."""
+
+    frame_path = Path(frame_path)
+    try:
+        encoded = frame_path.read_bytes()
+    except OSError as exc:
+        raise FixtureError(f"cannot read fixture: {frame_path}") from exc
+    canonical = _canonical_zip_bytes(_read_members(frame_path))
+    if encoded != canonical:
+        raise FixtureError("fixture bytes are not the canonical ZIP encoding")
+    return _sha256(encoded)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -515,6 +529,7 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--frame", type=Path, required=True)
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--identity", type=Path, required=True)
+    verify.add_argument("--require-canonical", action="store_true")
     return parser
 
 
@@ -540,6 +555,8 @@ def main(argv=None) -> int:
             print(_sha256(args.output.read_bytes()))
             return 0
         validated = validate_fixture(args.frame, args.manifest, identity)
+        if args.require_canonical:
+            require_canonical_fixture(args.frame)
         print(json.dumps({
             "expected_output_sha256": validated.expected_output_sha256,
             "fixture_sha256": validated.fixture_sha256,

@@ -21,6 +21,7 @@ from tools.agx_frame_fixture import (
 
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+_COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 READBACK = bytes([0x11, 0x22, 0x33, 0xFF]) * 256
 
 
@@ -263,6 +264,142 @@ def run_capture_program(executable: Path, output: Path) -> Path:
     return output
 
 
+def _git(root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        raise CaptureError(result.stderr.strip() or f"git failed in {root}")
+    return result.stdout.strip()
+
+
+def _read_identity(path: Path) -> dict:
+    try:
+        identity = json.loads(Path(path).read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise CaptureError(f"invalid capture identity {path}: {exc}") from exc
+    required = {
+        "board", "chip_generation", "firmware_version", "m1n1_commit",
+        "mesa_commit", "adt_sha256",
+    }
+    if not isinstance(identity, dict) or set(identity) != required:
+        raise CaptureError("capture identity fields do not match the fixed contract")
+    for field in ("m1n1_commit", "mesa_commit"):
+        if not isinstance(identity[field], str) or not _COMMIT_RE.fullmatch(identity[field]):
+            raise CaptureError(f"capture identity {field} is not a 40-character commit")
+    if not isinstance(identity["adt_sha256"], str) or not _SHA256_RE.fullmatch(
+        identity["adt_sha256"]
+    ):
+        raise CaptureError("capture identity adt_sha256 is malformed")
+    return identity
+
+
+def preflight_capture_source(
+    mesa_source: Path,
+    shim_launcher: Path,
+    capture_program: Path,
+    identity_path: Path,
+    contract_path: Path,
+    expected_program_sha256: str,
+) -> dict:
+    """Verify the pinned, clean capture producer without touching hardware."""
+
+    mesa_source = Path(mesa_source).resolve()
+    shim_launcher = Path(shim_launcher).resolve()
+    capture_program = Path(capture_program).resolve()
+    identity = _read_identity(identity_path)
+    try:
+        from tools.agx_contract import load_contract
+        contract = load_contract(contract_path)
+    except Exception as exc:
+        raise CaptureError(f"cannot load AGX contract: {exc}") from exc
+    expected_identity = {
+        "board": contract.platform,
+        "chip_generation": contract.firmware.generation,
+        "firmware_version": contract.firmware.version,
+        "m1n1_commit": contract.source.m1n1_commit,
+        "adt_sha256": contract.source.adt_identity,
+    }
+    if any(identity[field] != value for field, value in expected_identity.items()):
+        raise CaptureError("capture identity does not match AGX contract")
+    if not (mesa_source / ".git").exists():
+        raise CaptureError(f"Mesa source is not a Git checkout: {mesa_source}")
+    if _git(mesa_source, "status", "--porcelain"):
+        raise CaptureError("Mesa source is dirty")
+    mesa_commit = _git(mesa_source, "rev-parse", "HEAD")
+    if mesa_commit != identity["mesa_commit"]:
+        raise CaptureError("Mesa source commit does not match capture identity")
+    try:
+        shim_launcher.relative_to(mesa_source)
+    except ValueError as exc:
+        raise CaptureError("shim launcher must belong to the pinned Mesa source") from exc
+    if not shim_launcher.is_file() or not os.access(shim_launcher, os.X_OK):
+        raise CaptureError("shim launcher must be an executable file")
+    relative_launcher = shim_launcher.relative_to(mesa_source)
+    try:
+        _git(mesa_source, "ls-files", "--error-unmatch", str(relative_launcher))
+    except CaptureError as exc:
+        raise CaptureError("shim launcher is not tracked by pinned Mesa") from exc
+    if not capture_program.is_file() or not os.access(capture_program, os.X_OK):
+        raise CaptureError("capture program must be an executable file")
+    program_sha256 = _sha256(_read_bytes(capture_program, "capture program"))
+    if (
+        not isinstance(expected_program_sha256, str)
+        or not _SHA256_RE.fullmatch(expected_program_sha256)
+        or program_sha256 != expected_program_sha256
+    ):
+        raise CaptureError("capture program SHA-256 does not match preregistration")
+    return {
+        "mesa_source": str(mesa_source),
+        "mesa_commit": mesa_commit,
+        "shim_launcher": str(shim_launcher),
+        "capture_program": str(capture_program),
+        "capture_program_sha256": program_sha256,
+        "identity": identity,
+    }
+
+
+def write_capture_receipt(
+    output: Path,
+    *,
+    frame_path: Path,
+    final_attachment_path: Path,
+    identity: dict,
+    capture_program: Path,
+    proxy_identity: str,
+    m1n1_base: int,
+) -> dict:
+    """Atomically bind one raw capture to its live cold-boot identity."""
+
+    if not proxy_identity:
+        raise CaptureError("proxy identity must be nonempty")
+    if isinstance(m1n1_base, bool) or not isinstance(m1n1_base, int) or m1n1_base <= 0:
+        raise CaptureError("m1n1 base must be a positive integer")
+    _capture_members(CaptureInput(
+        Path(frame_path), Path(final_attachment_path), identity, "0" * 64,
+        proxy_identity, m1n1_base,
+    ))
+    final = _read_bytes(final_attachment_path, "final attachment")
+    if len(final) != 1024 or final != READBACK:
+        raise CaptureError("final attachment is not the fixed 16x16 RGBA8 clear")
+    program_sha256 = _sha256(_read_bytes(capture_program, "capture program"))
+    receipt = {
+        "frame_path": str(Path(frame_path).resolve()),
+        "final_attachment_path": str(Path(final_attachment_path).resolve()),
+        "identity": dict(identity),
+        "capture_program_sha256": program_sha256,
+        "proxy_identity": proxy_identity,
+        "m1n1_base": m1n1_base,
+    }
+    temporary = Path(output).with_name(Path(output).name + ".tmp")
+    temporary.write_bytes(_json_bytes(receipt))
+    temporary.replace(output)
+    return receipt
+
+
 def _receipt(path: Path) -> CaptureInput:
     try:
         value = json.loads(Path(path).read_text())
@@ -286,13 +423,55 @@ def main(argv=None) -> int:
     package.add_argument("--second-receipt", type=Path, required=True)
     package.add_argument("--capture-program", type=Path, required=True)
     package.add_argument("--destination", type=Path, required=True)
+    preflight = commands.add_parser("preflight")
+    preflight.add_argument("--mesa-source", type=Path, required=True)
+    preflight.add_argument("--shim-launcher", type=Path, required=True)
+    preflight.add_argument("--capture-program", type=Path, required=True)
+    preflight.add_argument("--identity", type=Path, required=True)
+    preflight.add_argument("--contract", type=Path, required=True)
+    preflight.add_argument("--capture-program-sha256", required=True)
+    receipt = commands.add_parser("live-receipt")
+    receipt.add_argument("--frame", type=Path, required=True)
+    receipt.add_argument("--final-attachment", type=Path, required=True)
+    receipt.add_argument("--capture-program", type=Path, required=True)
+    receipt.add_argument("--identity", type=Path, required=True)
+    receipt.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "preflight":
+            print(json.dumps(preflight_capture_source(
+                args.mesa_source, args.shim_launcher, args.capture_program, args.identity,
+                args.contract, args.capture_program_sha256,
+            ), indent=2, sort_keys=True))
+            return 0
+        if args.command == "live-receipt":
+            if not os.environ.get("M1N1DEVICE"):
+                raise CaptureError("M1N1DEVICE is required")
+            root = Path(__file__).resolve().parents[1]
+            proxyclient = root / "m1n1_windows" / "proxyclient"
+            if str(proxyclient) not in sys.path:
+                sys.path.insert(0, str(proxyclient))
+            from m1n1.setup import u
+
+            identity = _read_identity(args.identity)
+            if u.adt.target_type.upper() != identity["board"]:
+                raise CaptureError("live platform does not match capture identity")
+            if u.version != identity["firmware_version"]:
+                raise CaptureError("live firmware does not match capture identity")
+            data = write_capture_receipt(
+                args.output,
+                frame_path=args.frame,
+                final_attachment_path=args.final_attachment,
+                identity=identity,
+                capture_program=args.capture_program,
+                proxy_identity=f"{u.adt.target_type}:{u.version}:{int(u.base):x}",
+                m1n1_base=int(u.base),
+            )
+            print(json.dumps(data, indent=2, sort_keys=True))
+            return 0
         frame, manifest = package_capture(
-            _receipt(args.first_receipt),
-            _receipt(args.second_receipt),
-            capture_program=args.capture_program,
-            destination=args.destination,
+            _receipt(args.first_receipt), _receipt(args.second_receipt),
+            capture_program=args.capture_program, destination=args.destination,
         )
         print(json.dumps({"fixture": str(frame), "manifest": str(manifest)}, sort_keys=True))
         return 0
