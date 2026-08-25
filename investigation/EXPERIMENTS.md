@@ -6805,3 +6805,70 @@ reported the desktop stable and smooth and authorized publication.  This exact
 both/monitor assisted candidate is therefore the new eight-core recovery
 checkpoint; the ESP was not modified and standalone cold-boot qualification
 remains a separate gate.
+
+### EXP-20260825-073 — read-only J313 AGX G0 inventory
+
+Status: validated and accepted as the reviewed G0 resource contract.
+
+Run timestamp (UTC): `2026-08-25T13:46:49Z`.
+
+Hypothesis: the live J313 ADT already contains an unambiguous SGX and gfx-asc
+resource contract that can be captured and validated without enabling clocks,
+writing MMIO, constructing an AGX device, changing guest state, or modifying
+the stable boot artifacts.
+
+- initial source: root `69f2bf5aedfc3745c4e9fbf526ec15220e4d62b1`; final
+  extraction source: root `7501dc57f485416737924f9c86b4ded12230c26a`; m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- recovery point: `.local/recovery/STABLE-j313-8core-native-input-v1/` with
+  m1n1.macho SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  Mu SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  and packed boot.bin SHA-256
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; output directory:
+  `investigation/artifacts/EXP-20260825-073-agx-g0/`;
+- exact command: `M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41
+  proxyenv/bin/python tools/agx_live_inventory.py --output
+  investigation/artifacts/EXP-20260825-073-agx-g0/raw-adt.json`;
+- preflight result: the source audit and unit tests reject write-capable APIs.
+  The real guard refused active public guest PID 19672 before importing
+  `m1n1.setup`.  The documented host-control `SIGTERM` path then produced a
+  diagnostic snapshot, performed a controlled Air reboot, and returned the
+  machine to `Running proxy...` without this tool touching guest state;
+- rejected passes: the first raw capture selected the wrong target-property
+  accessor and was rejected before contract acceptance (preserved SHA-256
+  `13045d3947a65e5057a30e00e2239c5678186fb84dd2ecb72fd23881c47a3785`).
+  Two subsequent attempts stopped before writing output while the root ADT
+  identity API was corrected.  A read-only property audit proved that
+  `/device-tree` exposes `target-type = J313` through `u.adt.target_type`;
+- deterministic checkpoint: `raw-adt-a.json` and `raw-adt-b.json` are byte
+  identical with SHA-256
+  `9a44e3373e93d35bb996381ec8e70a529de897100ad8e2496600120dfc5edc49`.
+  Their independently generated `contract-a.json` and `contract-b.json` are
+  byte identical with SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- accepted physical resources: SGX MMIO `0x204000000..0x208000000`, gfx-asc
+  MMIO `0x206400000..0x20646c000`, and interrupts
+  `[563, 564, 565, 566, 579, 576, 575, 578, 577]`;
+- accepted virtual/private resources: RTKit private
+  `0xffffff8000000000..0xffffffa000000000`, GPU
+  `0x9fffb8000..0x9fffbc000`, shared
+  `0x9fff78000..0x9fffb8000`, and handoff
+  `0x9fff70000..0x9fff74000`;
+- accepted identity and translation geometry: platform `J313`, firmware
+  generation `G13`, firmware version `V13_5`, UAT page size `0x4000`, 64
+  contexts, and 40 address bits;
+- verification: the reviewed fixture reproduces the reviewed canonical
+  contract exactly; the full repository suite passed 332 tests under
+  `proxyenv/bin/python`.  The two checksum-error lines printed by the suite are
+  expected negative-test diagnostics, not failures;
+- stop/rollback: any active owner, proxy bootstrap error, missing or ambiguous
+  node/property/register/interrupt, unsupported decoded value, non-deterministic
+  digest, or reachable write-capable API rejects the capture.  No Windows boot,
+  AGX clock enable, MMIO access, ESP write, or standalone change is permitted.
+  The accepted run enabled no AGX clocks, wrote no MMIO or DART state, started
+  no guest, and changed neither ESP nor standalone artifacts.

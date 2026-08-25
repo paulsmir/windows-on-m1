@@ -5,8 +5,13 @@ import sys
 import tempfile
 import unittest
 
-from tools.agx_contract import ContractError
+from tools.agx_contract import ContractError, canonical_bytes, load_contract
 from tools.agx_inventory import extract_contract, required_paths
+
+
+ROOT = Path(__file__).resolve().parents[1]
+REVIEWED_RAW = ROOT / "tests" / "fixtures" / "j313-agx-adt.json"
+REVIEWED_CONTRACT = ROOT / "config" / "j313-agx.json"
 
 
 def source_commits():
@@ -64,6 +69,19 @@ def raw_inventory():
 
 
 class AgxInventoryTests(unittest.TestCase):
+    def test_reviewed_raw_fixture_reproduces_reviewed_contract(self):
+        reviewed = load_contract(REVIEWED_CONTRACT)
+        raw = json.loads(REVIEWED_RAW.read_text())
+        extracted = extract_contract(
+            raw,
+            {
+                "root_commit": reviewed.source.root_commit,
+                "m1n1_commit": reviewed.source.m1n1_commit,
+                "mu_commit": reviewed.source.mu_commit,
+            },
+        )
+        self.assertEqual(canonical_bytes(extracted), REVIEWED_CONTRACT.read_bytes())
+
     def test_required_paths_are_explicit_and_stable(self):
         self.assertEqual(required_paths(), ("/arm-io/sgx", "/arm-io/gfx-asc"))
 

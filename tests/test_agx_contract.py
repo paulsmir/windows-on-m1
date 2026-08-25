@@ -9,6 +9,10 @@ from tools.agx_contract import (ContractError, canonical_bytes,
                                 validate_contract)
 
 
+ROOT = Path(__file__).resolve().parents[1]
+REVIEWED_CONTRACT = ROOT / "config" / "j313-agx.json"
+
+
 def valid_contract_dict():
     return {
         "contract_version": 1,
@@ -48,6 +52,32 @@ def valid_contract_dict():
 
 
 class AgxContractTests(unittest.TestCase):
+    def test_reviewed_j313_contract_has_exact_live_resources(self):
+        contract = load_contract(REVIEWED_CONTRACT)
+        self.assertEqual(contract.firmware.generation, "G13")
+        self.assertEqual(contract.firmware.version, "V13_5")
+        self.assertEqual(
+            {
+                name: (region.base, region.size)
+                for name, region in contract.regions.items()
+            },
+            {
+                "sgx_mmio": (0x204000000, 0x4000000),
+                "asc_mmio": (0x206400000, 0x6C000),
+                "rtkit_private": (0xFFFFFF8000000000, 0x2000000000),
+                "gpu": (0x9FFFB8000, 0x4000),
+                "shared": (0x9FFF78000, 0x40000),
+                "handoff": (0x9FFF70000, 0x4000),
+            },
+        )
+        self.assertEqual(
+            contract.interrupts,
+            (563, 564, 565, 566, 579, 576, 575, 578, 577),
+        )
+        self.assertEqual(contract.uat.page_size, 0x4000)
+        self.assertEqual(contract.uat.num_contexts, 64)
+        self.assertEqual(contract.uat.address_bits, 40)
+
     def test_valid_contract_round_trips_canonically(self):
         contract = validate_contract(valid_contract_dict())
         encoded = canonical_bytes(contract)
