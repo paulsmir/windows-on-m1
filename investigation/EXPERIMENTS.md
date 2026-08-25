@@ -8073,7 +8073,7 @@ The pre-run proxy base was `0x8044a0000`; a fresh J313/V13_5 proxy returned at
 
 ### EXP-20260825-089 — bound the first post-BO AGX client transition
 
-Status: preregistered; hardware not yet touched.
+Status: rejected after the first completed create-BO ioctl.
 
 Hypothesis: on the exact EXP-088 capture path, the fixed producer deadline and
 per-ioctl return markers will either complete the two cold deterministic clear
@@ -8125,3 +8125,24 @@ review and a separately preregistered replay. Any timeout, missing matching
 or manual intervention rejects EXP-089. Preserve the last begin/end markers and
 all obtainable files, do not retry this evidence directory, keep Windows
 blocked and establish a fresh J313/V13_5 proxy before further diagnosis.
+
+Observed result: rejected without a timeout or manual intervention. The first
+ioctl was request `0xc0186442`, the Asahi create-BO request. Both
+`capture-ioctl-begin sequence=1` and `capture-ioctl-end sequence=1 result=0`
+were emitted, proving that Python AGX startup, V13_5 initdata, context-23 setup,
+the historical create-BO handler, ioctl copyout and return to native Mesa all
+completed. Immediately afterward glibc aborted the producer in
+`pthread_mutex_lock.c:438` with assertion `e != ESRCH || !robust`. The pinned
+Mesa caller's next statement after the successful create-BO ioctl is
+`pthread_mutex_lock(&dev->bo_map_lock)` in `src/asahi/lib/agx_device.c`, while
+the same pinned source initializes `bo_cache.lock` but contains no initializer
+for `bo_map_lock`. This is a userspace synchronization failure before mmap,
+command construction or GPU submission, not an AGX firmware hang.
+
+The rejected core SHA-256 is
+`8b3eb8ef8a426e6875bfd8edf2999e7361cdd637131480cacd39824fa19ad3d5`.
+No frame, final attachment or receipt exists. The operator performed its
+mandatory reboot without manual cleanup. The pre-run base was `0x805398000`; a
+fresh J313/V13_5 proxy returned at `0x8047a0000`, with cleanup identity SHA-256
+`64617a712040dd3fec785c51cfb1307eb595377d2eeb5376c2f97c5f481d09b6`.
+EXP-089 is closed and its evidence directory will not be reused.
