@@ -9515,3 +9515,65 @@ Verdict: accepted.  G1R now has one complete cold render plus independently
 bound reset proof on J313/V13_5.  This permits only the already-reserved final
 ten-cold-cycle EXP-080 with the exact same fixture and source.  It does not yet
 permit Windows launch or claim a Windows graphics driver.
+
+### EXP-20260826-080 — final ten-cold-cycle AGX G1R qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: the exact immutable render accepted once by EXP-105 will reproduce
+across ten consecutive physical cold-reset boundaries with identical queue,
+event, stamp, output, isolation, fault, cleanup and deadline results and ten
+independently bound fresh proxy receipts.
+
+No implementation variable changes relative to accepted EXP-105.  This is the
+reserved repetition/reliability gate only.  Stable Windows launch is explicitly
+disabled and the operator must remain at proxy after aggregation.
+
+Contract:
+- root `70a0fe2` on `feature/j313-gpu-acceleration`; replay implementation
+  `ba4115e01618f2c5660d5cbc7109cf4b584f24a7`; identity implementation
+  `81fccaa7ffd1661a5cc96e175d9419448103f9a2`;
+- stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, render backend, schema bridge and cold operator SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `0464c1d5a2b4eae943bb01fe5f29217a6eaa76568eac004eb649e6df22093532`,
+  `eeed4b2e86fa8b10a203e39fe89ec88887fafb50d8f19ba21cbfd4e26cbe4164`,
+  `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`
+  and `c41872cb548b5e186f7c386cc1d494579de1b796c3219484d6cf7acacac9e924`;
+- immutable fixture SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- stable recovery preflight passed all five hashes, fixture preflight passed,
+  complete public suite passed 597/597, and the exact operator dry-run passed
+  context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, cold reset after
+  every cycle and no Windows launch;
+- EXP-105 independently accepted one complete render and receipt.  Starting
+  proxy is fresh J313/V13_5 base `0x804430000`; evidence destination
+  `investigation/artifacts/EXP-20260826-080-agx-g1r-final/` was fresh and empty
+  at dry-run.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-080-agx-g1r-final \
+  --cycles 10
+```
+
+Pass requires ten complete one-shot results, each meeting every EXP-105 render
+invariant, ten successful physical reboots, ten receipts whose prior identity
+matches that cycle and whose live identity/base differ, no repeated adjacent
+boot identity or base, exact canonical result hashes, an accepted aggregate
+with `completed_cycles=10`, `cold_reset_between_cycles=true`,
+`windows_launch_permitted=true`, and successful independent `verify-result`.
+Any single failure rejects EXP-080 and stops the operator; preserve all evidence,
+do not retry in place and keep Windows blocked.
