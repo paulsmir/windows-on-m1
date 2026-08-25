@@ -8227,7 +8227,7 @@ evidence directory will not be reused.
 
 ### EXP-20260825-091 — isolate setup before the fake render fd
 
-Status: preregistered; one two-capture run permitted.
+Status: rejected at AGX ASC boot in the first create-BO callback.
 
 Hypothesis: importing and pinning `m1n1.setup` during Shim construction will
 finish the only fd-affecting USB bootstrap before drm-shim exposes its fake
@@ -8279,3 +8279,20 @@ capture. Any missing file, unexpected boundary, cleanup failure, stale proxy
 or manual intervention rejects EXP-091. Preserve all evidence, never reuse its
 directory, keep Windows blocked, and return the Air to a fresh J313/V13_5 proxy
 regardless of result.
+
+Observed result: rejected without timeout or manual intervention. Setup-only
+bootstrap completed before the fake render fd, and the first create-BO callback
+began without the EXP-089 dangling-shim_fd mutex abort or EXP-090 recursive
+child initialization. Historical `AGX.start()` then raised `ASCTimeout: Boot
+timed out` before create BO completed. The error path attempted to free a BO
+that Python had never registered, then the producer terminated; no later ioctl
+or GPU submission occurred. This result validates the corrected fd-lifetime
+boundary but does not validate an AGX render.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`e0d7ec51ad8e155f00b03f251e2026556a34fbc08daab7383cf6d32fe1ca8c3a`.
+The operator performed the mandatory reboot; a fresh unowned J313/V13_5 proxy
+returned at base `0x805eec000`. Because EXP-090 first timed out AGX firmware and
+an ordinary reboot may not prove a cold GPU state, another render attempt is
+blocked until the stable m1n1 payload is freshly chainloaded and its identity
+is recorded. EXP-091 is closed and its evidence directory will not be reused.
