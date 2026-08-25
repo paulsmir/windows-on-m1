@@ -136,6 +136,17 @@ class CaptureBootstrapTests(unittest.TestCase):
             self.assertFalse(subprocess._USE_VFORK)
             self.assertFalse(subprocess._USE_POSIX_SPAWN)
 
+    def test_historical_renderer_populates_renamed_helper_configuration(self):
+        source = (
+            ROOT / "m1n1_windows/proxyclient/m1n1/agx/render.py"
+        ).read_text(encoding="utf-8")
+        struct_start = source.index("wc_3d.struct_1 = Start3DStruct1()")
+        struct_end = source.index("wc_3d.struct_2 = Start3DStruct2()", struct_start)
+        assignments = source[struct_start:struct_end]
+
+        self.assertIn("wc_3d.struct_1.helper_cfg = 0", assignments)
+        self.assertNotIn("wc_3d.struct_1.unk_40 =", assignments)
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"

@@ -13,7 +13,7 @@ IDENTITY = {
     "board": "J313",
     "chip_generation": "G13",
     "firmware_version": "V13_5",
-    "m1n1_commit": "9cd80ac652ac404e92ae279deeaec8c629d7d184",
+    "m1n1_commit": "195f70ddfc0fdfa382d1643dbe9466431850e56c",
     "mesa_commit": "a" * 40,
     "adt_sha256": "c57d4c0db26125394409c3b5b518fdef553d8f4dfe2263ae9303e2276b0796a3",
 }
