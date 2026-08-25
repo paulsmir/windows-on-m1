@@ -6728,3 +6728,80 @@ live lock screen.  The operator then verified the built-in keyboard, Precision
 Touchpad and desktop behavior and reported the session stable and smooth.  The
 4E+3P candidate is accepted as the next assisted recovery checkpoint; the ESP
 was not modified.
+
+### EXP-20260825-072 — expose the fourth J313 performance core
+
+Status: validated and accepted for publication as the 4E+4P assisted checkpoint.
+
+Run timestamp (UTC): `2026-08-25T07:08:17Z`.
+
+Hypothesis: the published and operator-validated 4E+3P checkpoint demonstrates
+correct heterogeneous startup, scheduling and bounded load for the first three
+Firestorm siblings.  Enabling only Firestorm UID7 should expose all eight M1
+cores without changing any other platform contract.
+
+- recovery point: root `2e7686532c74049d89b8bd7c2ae1a2fd0b755d4d`, Mu
+  `b6213a54695ebfabfef38b66bd1b9e1713342a5f`, and unchanged m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, each verified against its
+  published remote branch;
+- binary recovery point: `.local/recovery/EXP-20260825-071-4e3p/`, containing
+  m1n1 SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  Mu SHA-256
+  `62926b4ecf8450e9bdde6c7db64dd20d5622d0a3fa43a6d7b874b5597564b1c8`,
+  and packed `boot.bin` SHA-256
+  `eea72444e05fec89fa86d65f8fda3db29e4eb5e1e48923d97bb7f62e157e8610`;
+- branches: root and Mu `feature/j313-4e4p-cpu-stability`; m1n1 remains the
+  unchanged published `stable/j313-4e-baseline`;
+- single variable: enable only GICC UID7.  Timer, vGIC, NVMe, USB, input,
+  display and diagnostic code remain unchanged;
+- RED/GREEN contract: first require enabled UIDs `[0, 1, 2, 3, 4, 5, 6, 7]`,
+  class 0 for UIDs 0 through 3 and class 1 for UIDs 4 through 7; observe the
+  expected failure, then change only UID7's GICC flag;
+- RED/GREEN result: the focused test failed with enabled UIDs `[0, 1, 2, 3,
+  4, 5, 6]`, then passed after only UID7's GICC flag changed; all 305 public
+  Python tests plus the complete m1n1 host suite pass;
+- frozen candidate artifacts: m1n1 SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  Mu SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  and packed `boot.bin` SHA-256
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`;
+  the manifest reports display `both`, debug `monitor`, clean m1n1 at the
+  published checkpoint and only the recorded root/Mu experiment diffs dirty;
+- planned build: `scripts/build-standalone.sh --debug-build --display both
+  --debug monitor`;
+- planned launch: `M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41
+  M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 scripts/run-assisted.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43
+  --display both --debug monitor --chainload --foreground`;
+- expected checkpoint: Windows reaches the lock screen within 30 seconds,
+  reports eight logical CPUs, and classifies UIDs 4 through 7 as P-class;
+  an eight-worker bounded load completes while input, SSH and frames remain
+  responsive with no relevant Windows or hypervisor error;
+- stop/rollback: any boot delay, freeze, bugcheck, watchdog, storage reset,
+  input failure or proxy corruption rejects UID7.  Relaunch the preserved
+  EXP071 4E+3P binary recovery point without writing the ESP.
+
+Hardware result (2026-08-25): all secondaries CPU1 through CPU7 entered
+the guest and Windows reached the lock screen inside the 30-second gate.  It
+reported one package and eight logical processors.  The official
+`GetSystemCpuSetInformation` probe returned logical CPUs 0 through 3 with
+efficiency/scheduling class 0 and CPUs 4 through 7 with both classes equal to
+1.  An eight-worker eight-second CPU load completed in 21624 ms including
+PowerShell job startup and cleanup.  At 314 seconds uptime, Windows reported
+zero new BugCheck, WHEA, stornvme or storage-reset events and remained available
+over SSH.  Hypervisor counts were zero for checksum, proxy/parser,
+bugcheck/reset/watchdog and NVMe failures.  The exact framebuffer advanced to
+generation 42 and displayed a clean live lock screen after the load.  A second,
+longer eight-worker test kept every worker busy for 20 seconds and completed in
+39535 ms including PowerShell job startup and cleanup.  Six independent SSH
+round trips made during that load completed in 0.72 to 1.26 seconds, with no
+pause or lost response.  At 6418 seconds uptime, Windows still reported eight
+logical processors and zero relevant System events.  `AppleInput` remained
+RUNNING, `ACPI\\APPL0001\\0` and both VHF children remained healthy, and the
+keyboard and Precision Touchpad publication gates remained enabled.  The user
+reported the desktop stable and smooth and authorized publication.  This exact
+both/monitor assisted candidate is therefore the new eight-core recovery
+checkpoint; the ESP was not modified and standalone cold-boot qualification
+remains a separate gate.
