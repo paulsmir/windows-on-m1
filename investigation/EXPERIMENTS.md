@@ -7185,7 +7185,7 @@ byte-identical.
 
 ### EXP-20260825-079 — one-shot J313 AGX G1Q queue probe
 
-Status: rejected after AGX startup and before the first captured submission.
+Status: rejected in the only permitted cycle.
 
 Hypothesis: the pinned V13_5/G13 firmware can consume exactly one
 already-satisfied barrier on context 63, queue index 1's 3D channel and emit
@@ -8000,7 +8000,7 @@ m1n1 source or truncate the builder's mapping list.
 
 ### EXP-20260825-088 — acquire version-bound cold AGX clear captures
 
-Status: preregistered; hardware not yet touched.
+Status: rejected after AGX startup and before the first captured submission.
 
 Hypothesis: the tracked helper and capture wrapper, now binding the live
 J313/V13_5/G13 construct layout before historical AGX startup, can complete two
