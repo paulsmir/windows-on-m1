@@ -26,7 +26,6 @@ PAGE_SIZE = 0x4000
 QUEUE_INDEX = 1
 COMPLETION_DEADLINE_S = 0.5
 QUALIFICATION_CYCLES = 10
-DECLARED_MAPPING_COUNT = 9
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _COMPLETION_FIELDS = frozenset({
@@ -41,7 +40,8 @@ _COMPLETION_FIELDS = frozenset({
     "ta_stamp_before", "ta_stamp_after", "d3_stamp_before", "d3_stamp_after",
     "output_sha256_before", "output_sha256_after",
     "immutable_sha256_before", "immutable_sha256_after",
-    "guards_unmapped", "declared_mapping_count", "unexpected_mappings",
+    "guards_unmapped", "declared_mapping_count", "mapping_classification",
+    "unexpected_mappings",
     "firmware_faults", "physical_fault_readable", "physical_fault_value",
     "cleanup_complete", "elapsed_s", "deadline_s",
 })
@@ -177,10 +177,48 @@ def validate_render_completion(
 
     if receipt["guards_unmapped"] is not True:
         raise RenderGateError("guard mappings must remain unmapped")
-    _literal(
-        receipt, "declared_mapping_count", DECLARED_MAPPING_COUNT,
-        "declared mapping count",
-    )
+    mappings = receipt["mapping_classification"]
+    if not isinstance(mappings, list) or not mappings:
+        raise RenderGateError("mapping classification must be a nonempty list")
+    if _integer(receipt, "declared_mapping_count") != len(mappings):
+        raise RenderGateError("declared mapping count must match classification")
+    allowed_classes = {"bootstrap", "frame", "renderer", "firmware-shared"}
+    required_classes = {"bootstrap", "frame", "renderer"}
+    seen_classes = set()
+    intervals = []
+    for index, mapping in enumerate(mappings):
+        if not isinstance(mapping, dict) or set(mapping) != {
+            "class", "context_id", "gpu_va", "size"
+        }:
+            raise RenderGateError(f"mapping classification {index} fields mismatch")
+        kind = mapping["class"]
+        if kind not in allowed_classes:
+            raise RenderGateError(f"mapping class is not allowed: {kind!r}")
+        context = mapping["context_id"]
+        address = mapping["gpu_va"]
+        size = mapping["size"]
+        for field, value in (("context_id", context), ("gpu_va", address), ("size", size)):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise RenderGateError(f"mapping {field} must be a non-negative integer")
+        if context not in (0, CONTEXT_ID):
+            raise RenderGateError("mapping context must be 0 or 63")
+        if kind == "firmware-shared" and context != 0:
+            raise RenderGateError("firmware-shared mapping must use context 0")
+        if kind != "firmware-shared" and context != CONTEXT_ID:
+            raise RenderGateError(f"{kind} mapping must use context 63")
+        if size <= 0 or address % PAGE_SIZE or size % PAGE_SIZE:
+            raise RenderGateError("mapping address and size must be 0x4000 aligned")
+        end = address + size
+        if end <= address or end > 1 << 64:
+            raise RenderGateError("mapping range overflows")
+        intervals.append((context, address, end))
+        seen_classes.add(kind)
+    if not required_classes.issubset(seen_classes):
+        raise RenderGateError("mapping classification lacks a required class")
+    intervals.sort()
+    for previous, current in zip(intervals, intervals[1:]):
+        if current[0] == previous[0] and current[1] < previous[2]:
+            raise RenderGateError("mapping classification contains an overlap")
     if not isinstance(receipt["unexpected_mappings"], list) or receipt["unexpected_mappings"]:
         raise RenderGateError("unexpected mappings must be an empty list")
     if not isinstance(receipt["firmware_faults"], dict) or receipt["firmware_faults"]:

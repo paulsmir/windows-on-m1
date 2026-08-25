@@ -63,7 +63,13 @@ VALID_RENDER = {
     "immutable_sha256_before": "d" * 64,
     "immutable_sha256_after": "d" * 64,
     "guards_unmapped": True,
-    "declared_mapping_count": 9,
+    "declared_mapping_count": 4,
+    "mapping_classification": [
+        {"class": "firmware-shared", "context_id": 0, "gpu_va": 0x100000000, "size": 0x4000},
+        {"class": "frame", "context_id": 63, "gpu_va": 0x1500000000, "size": 0x4000},
+        {"class": "renderer", "context_id": 63, "gpu_va": 0x1600010000, "size": 0x4000},
+        {"class": "bootstrap", "context_id": 63, "gpu_va": 0x6FFFFF8000, "size": 0x4000},
+    ],
     "unexpected_mappings": [],
     "firmware_faults": {},
     "physical_fault_readable": True,
@@ -116,7 +122,7 @@ class RenderCompletionTests(unittest.TestCase):
             ("output_sha256_after", "2" * 64, "output"),
             ("immutable_sha256_after", "e" * 64, "immutable"),
             ("guards_unmapped", False, "guard"),
-            ("declared_mapping_count", 8, "mapping count"),
+            ("declared_mapping_count", 3, "mapping count"),
             ("unexpected_mappings", [0x1500008000], "unexpected mapping"),
             ("firmware_faults", {"fault": 1}, "firmware fault"),
             ("physical_fault_value", 1, "physical fault"),
@@ -148,6 +154,17 @@ class RenderCompletionTests(unittest.TestCase):
         receipt["extra"] = 1
         from tools.agx_render_gate import RenderGateError, validate_render_completion
         with self.assertRaisesRegex(RenderGateError, "fields"):
+            validate_render_completion(receipt, fixture())
+
+    def test_unknown_or_overlapping_mapping_classification_is_rejected(self):
+        from tools.agx_render_gate import RenderGateError, validate_render_completion
+        receipt = copy.deepcopy(VALID_RENDER)
+        receipt["mapping_classification"][0]["class"] = "guest"
+        with self.assertRaisesRegex(RenderGateError, "mapping class"):
+            validate_render_completion(receipt, fixture())
+        receipt = copy.deepcopy(VALID_RENDER)
+        receipt["mapping_classification"][2]["gpu_va"] = 0x1500000000
+        with self.assertRaisesRegex(RenderGateError, "overlap"):
             validate_render_completion(receipt, fixture())
 
     def test_booleans_are_not_integers(self):
