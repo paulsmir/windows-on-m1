@@ -167,6 +167,22 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertIs(installed, repeated)
         self.assertEqual(tiling["helper_cfg"], 0)
 
+    def test_capture_aligns_ta_padding_after_appended_helper_configuration(self):
+        from m1n1.agx import render
+        from tools import agx_capture_shim
+
+        self.assertTrue(
+            hasattr(agx_capture_shim, "install_work_command_ta_padding_compatibility")
+        )
+        install = agx_capture_shim.install_work_command_ta_padding_compatibility
+        installed = install(render)
+        repeated = install(render)
+        command = render.WorkCommandTA()
+        command.unk_3e8 = bytes(0x64)
+
+        self.assertIs(installed, repeated)
+        self.assertEqual(command["unk_3e8"], bytes(0x60))
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"

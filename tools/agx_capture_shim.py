@@ -43,6 +43,33 @@ def install_tiling_helper_cfg_default(render_module):
     return CaptureTilingParameters
 
 
+def install_work_command_ta_padding_compatibility(render_module):
+    """Keep the historical TA writer aligned with the appended helper field."""
+
+    current = render_module.WorkCommandTA
+    if getattr(current, "_capture_ta_padding_compatibility", False):
+        return current
+    fields = [field for field in current.subcon.subcons if field.name == "unk_3e8"]
+    if len(fields) != 1 or fields[0].sizeof() != 0x60:
+        raise RuntimeError("unexpected WorkCommandTA padding layout")
+
+    class CaptureWorkCommandTA(current):
+        _capture_ta_padding_compatibility = True
+
+        def __setattr__(self, name, value):
+            if name == "unk_3e8":
+                if value == bytes(0x64):
+                    value = bytes(0x60)
+                elif value != bytes(0x60):
+                    raise RuntimeError("unexpected historical WorkCommandTA padding")
+            super().__setattr__(name, value)
+
+    CaptureWorkCommandTA.__name__ = current.__name__
+    CaptureWorkCommandTA.__qualname__ = current.__qualname__
+    render_module.WorkCommandTA = CaptureWorkCommandTA
+    return CaptureWorkCommandTA
+
+
 install_bootstrap_override()
 
 from m1n1.agx import render as capture_render  # noqa: E402
@@ -57,6 +84,7 @@ from m1n1.fw.agx.microsequence import Start3DStruct1  # noqa: E402
 # only the capture schema key while preserving its codec, offset and value.
 install_start3d_helper_cfg_compatibility(Start3DStruct1)
 install_tiling_helper_cfg_default(capture_render)
+install_work_command_ta_padding_compatibility(capture_render)
 
 
 def isolate_capture_subprocess_memory():
