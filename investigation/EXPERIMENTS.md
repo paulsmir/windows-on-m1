@@ -8224,3 +8224,58 @@ No frame, final attachment or receipt exists. The preserved core SHA-256 is
 The operator performed the mandatory physical reboot; a fresh unowned
 J313/V13_5 proxy returned at base `0x805a40000`. EXP-090 is closed and its
 evidence directory will not be reused.
+
+### EXP-20260825-091 — isolate setup before the fake render fd
+
+Status: preregistered; one two-capture run permitted.
+
+Hypothesis: importing and pinning `m1n1.setup` during Shim construction will
+finish the only fd-affecting USB bootstrap before drm-shim exposes its fake
+render fd, while leaving AGX firmware start at the historical first-ioctl
+boundary. The first create-BO C handler will therefore retain a live shim_fd,
+subsequent ioctls will execute, and two cold deterministic clears will package
+without the EXP-089 mutex abort or EXP-090 recursive child initialization.
+
+- implementation and ledger: `fe195983674b94c069c9243764d49739b0f55616`
+  and `69b981f6d6ab507ca8ab725dc40d886c674b3bed`;
+- capture wrapper SHA-256:
+  `e3806c9af5cd374149ad450cf2a3c2a6012d45e8d32cce3852cd131bf94b9ecc`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp091.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x805a40000`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-091-agx-setup-only-bootstrap/`,
+  confirmed absent; fixed bridge port `43146`;
+- the mandatory regression test failed before implementation, ten focused
+  tests and the complete repository suite passed 582/582, with shell syntax,
+  Python compilation and diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp091.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-091-agx-setup-only-bootstrap \
+  --bridge-port 43146
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, at least one ioctl after
+create BO, no mutex assertion, recursive shim construction, timeout, exception
+or software fallback, and a successful mandatory physical reboot after every
+capture. Any missing file, unexpected boundary, cleanup failure, stale proxy
+or manual intervention rejects EXP-091. Preserve all evidence, never reuse its
+directory, keep Windows blocked, and return the Air to a fresh J313/V13_5 proxy
+regardless of result.
