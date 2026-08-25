@@ -7536,7 +7536,8 @@ new preregistered transport-only experiment before any new GPU capture.
 
 ### EXP-20260825-083 — qualify the container proxy transport across one reboot
 
-Status: preregistered; hardware not yet touched.
+Status: passed on hardware; the capture transport is qualified across one
+physical reboot. No AGX module was imported and no GPU work was submitted.
 
 Hypothesis: after removing deferred PTY opening and preserving the PTY across
 individual clients, the exact container bridge can complete an initial m1n1
@@ -7590,3 +7591,23 @@ identity mismatch, unchanged base, malformed or partial receipt, unexpected
 USB owner, or extra side effect rejects EXP-083. Preserve all evidence, do not
 retry this directory, and do not start a new GPU capture. Only a passed receipt
 permits a newly preregistered replacement for the closed EXP-082.
+
+Observed result (single permitted execution): PASS.
+
+- `before.json` recorded J313, V13_5, and m1n1 base `0x805b58000`;
+- exactly one reboot request was issued;
+- transient post-reboot connection failures occurred only while the USB proxy
+  was absent and remained within the preregistered bounded reconnect loop;
+- `after.json` recorded J313, V13_5, and the fresh randomized m1n1 base
+  `0x8040c2000`;
+- the atomic receipt reports `fresh_proxy=true`;
+- SHA-256: `before.json`
+  `63129515d7cd7883f7065f2babafd939b274889d164f2a14c4f7904b561303d2`,
+  `after.json`
+  `b1068959a068816b53e55ee72e641443240bf4ee9c5277a0af15cac618c65ee5`,
+  and `transport-receipt.json`
+  `2e1e9c141fea8ccec633194d5c24beedc1adbcd1e7843468ef8ecf29945544c3`.
+
+This proves the corrected PTY/TCP/USB transport survives the capture tool's
+mandatory reboot boundary. It does not prove AGX initialization, submission,
+frame dumping, or replay; those remain separate gates.
