@@ -9577,3 +9577,35 @@ with `completed_cycles=10`, `cold_reset_between_cycles=true`,
 `windows_launch_permitted=true`, and successful independent `verify-result`.
 Any single failure rejects EXP-080 and stops the operator; preserve all evidence,
 do not retry in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- all ten one-shot renders completed and all ten physical reboot receipts were
+  written before aggregation.  Independent validation accepted every one-shot
+  result, its canonical SHA-256 binding and every reset receipt;
+- every cycle completed exact TA and 3D producer/read/done `0 -> 2`, exact
+  `0x100` stamp increments, one event per queue, the raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`,
+  immutable objects, unmapped guards, complete cleanup and no firmware fault;
+- GPU workload elapsed ranged from `0.006956166995223612` to
+  `0.01272262500494259` seconds and host submit elapsed ranged from
+  `0.28869487502332777` to `0.31270304101053625` seconds, inside both fixed
+  0.5-second deadlines;
+- every adjacent reset identity and base differed and each receipt reported
+  `fresh_proxy=true`.  However pre-render base `0x805604000` occurred in both
+  cycle 3 and cycle 5, so the ten valid cold boots provided only nine globally
+  distinct base-derived identities;
+- the fail-closed aggregator therefore returned
+  `error: ten distinct proxy identities are required` and did not create an
+  aggregate or permit Windows launch.  The SHA-256 of the sorted twenty-file
+  evidence checksum list is
+  `a66d33cbfd8a18cdbfe484a6ac5534f60e1bcef36229005b101b6f6e3171a26a`.
+
+Verdict: rejected by the preregistered operator without retry.  The GPU render
+path itself passed ten times; the failed boundary is boot-identity proof.  The
+current identity is `platform:firmware:m1n1_base`, but an allocation base is not
+a boot nonce and can legitimately recur after a later reboot.  EXP-080 remains
+immutable, Windows remains blocked and its evidence remains under
+`investigation/artifacts/EXP-20260826-080-agx-g1r-final/`.  The next experiment
+must first replace the probabilistic base-derived identity with a real per-boot
+identity under a failing unit test; it must not reinterpret or reaggregate this
+run.
