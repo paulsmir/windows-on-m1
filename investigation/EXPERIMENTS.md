@@ -8444,7 +8444,8 @@ closure into a private forked address space.
 
 ### EXP-20260825-094 — fork-isolate AGX runtime assembler children
 
-Status: preregistered; hardware command not yet run.
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
 
 Hypothesis: disabling Python `vfork` and `posix_spawn` in the exact native
 capture producer before AGX runtime assembly forces helper fd closure into a
