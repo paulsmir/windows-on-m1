@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 
@@ -16,18 +17,45 @@ sys.path.insert(0, str(ROOT / "m1n1_windows" / "proxyclient"))
 from tools.agx_inventory import required_paths  # noqa: E402
 
 
-def ensure_guest_inactive(root):
+def _process_lines():
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,command="],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.splitlines()
+
+
+def ensure_guest_inactive(root, process_lines=None):
     """Refuse to open m1n1.setup while a guest runner owns the proxy."""
 
-    pid_path = Path(root) / "guest.pid"
+    root = Path(root).resolve()
+    pid_path = root / "guest.pid"
     try:
         pid = int(pid_path.read_text().strip())
         os.kill(pid, 0)
     except (FileNotFoundError, ProcessLookupError, ValueError):
-        return
+        pass
     except PermissionError as exc:
         raise RuntimeError(f"cannot verify guest runner {pid}") from exc
-    raise RuntimeError(f"guest runner {pid} is active; live inventory is unsafe")
+    else:
+        raise RuntimeError(f"guest runner {pid} is active; live inventory is unsafe")
+
+    if process_lines is None:
+        process_lines = _process_lines()
+    markers = ("run_uefi.py", "scripts/run-assisted.sh", "scripts/supervise-assisted.sh")
+    root_text = str(root)
+    for line in process_lines:
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) != 2 or not fields[0].isdigit():
+            continue
+        process_id, command = fields
+        if root_text in command and any(marker in command for marker in markers):
+            raise RuntimeError(
+                f"active guest process {process_id} owns the proxy; "
+                "live inventory is unsafe"
+            )
 
 
 def json_value(value):

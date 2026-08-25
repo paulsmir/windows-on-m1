@@ -31,12 +31,18 @@ class AgxLiveInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "guest.pid").write_text(str(os.getpid()))
             with self.assertRaisesRegex(RuntimeError, "guest runner"):
-                ensure_guest_inactive(Path(tmp))
+                ensure_guest_inactive(Path(tmp), process_lines=())
 
     def test_stale_guest_pid_is_safe(self):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "guest.pid").write_text("99999999")
-            ensure_guest_inactive(Path(tmp))
+            ensure_guest_inactive(Path(tmp), process_lines=())
+
+    def test_live_inventory_refuses_runner_without_pid_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            command = f"19672 python -u {Path(tmp).resolve()}/run_uefi.py firmware.fd"
+            with self.assertRaisesRegex(RuntimeError, "active guest process 19672"):
+                ensure_guest_inactive(Path(tmp), process_lines=(command,))
 
     def test_node_record_preserves_exact_read_only_values(self):
         self.assertEqual(
@@ -53,7 +59,7 @@ class AgxLiveInventoryTests(unittest.TestCase):
 
     def test_live_inventory_source_has_no_write_capable_api(self):
         source = LIVE_INVENTORY.read_text()
-        self.assertIn("def ensure_guest_inactive(root):", source)
+        self.assertIn("def ensure_guest_inactive(root, process_lines=None):", source)
         self.assertIn("ensure_guest_inactive(ROOT)\n    data = capture_raw()", source)
         self.assertNotIn("\nfrom m1n1.setup import u", source)
         self.assertIn("    from m1n1.setup import u", source)
