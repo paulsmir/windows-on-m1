@@ -7737,7 +7737,8 @@ process's startup path.
 
 ### EXP-20260825-085 — qualify historical full-client bootstrap without AGX
 
-Status: preregistered; hardware not yet touched.
+Status: passed on hardware; the exact heavy client startup path and fresh-proxy
+reconnect are qualified without importing or starting AGX.
 
 Hypothesis: the exact pinned Mesa clear producer can traverse `LD_PRELOAD`, EGL,
 the embedded Python interpreter and its first DRM ioctl through the corrected
@@ -7804,3 +7805,30 @@ budget, malformed or partial evidence, reboot failure, reconnect exhaustion,
 identity drift, unchanged base, unexpected USB owner or AGX side effect rejects
 EXP-085. Preserve its evidence and do not retry its directory. Only a pass may
 permit a newly preregistered replacement capture after manual review.
+
+Observed result (single permitted execution): PASS.
+
+- the verified historical producer reached its first real DRM ioctl through
+  `LD_PRELOAD`, EGL and embedded Python;
+- capture-only m1n1 setup completed in 216.63 ms against the explicit finite
+  3.0-second budget, explaining why the inherited 150 ms contract in EXP-084
+  was deterministically too short;
+- `before.json` recorded J313/V13_5 at base `0x804e64000`;
+- the probe terminated immediately after setup, before historical AGX import,
+  clock enable, object allocation or GPU submission;
+- exactly one reboot completed and the bounded reconnect recorded J313/V13_5
+  at fresh base `0x804804000`;
+- the atomic receipt reports `fresh_proxy=true`;
+- SHA-256: `before.json`
+  `6edd89c0453e0c16cc86cbc3b3ab8072e475bf692074bcb8376a9c9de2ac0fbe`,
+  `bootstrap-metrics.json`
+  `f1cbcf988aaed8cd5e36f2f306cb70ed69c988afbd8a26ecd4f4d1042979e613`,
+  `after.json`
+  `690d9461f1ba8393694f2db261f722f87eaf7ee10ba3729655401c3427e12dfa`,
+  and `transport-receipt.json`
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`.
+
+This closes the capture-startup regression without changing the stable m1n1
+tree or production Windows path. A new capture may use the same wrapper and
+three-second budget, but still requires its own fresh preregistration and cannot
+inherit any GPU-success claim from this transport-only result.
