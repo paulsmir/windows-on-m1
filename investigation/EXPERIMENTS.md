@@ -7611,3 +7611,99 @@ Observed result (single permitted execution): PASS.
 This proves the corrected PTY/TCP/USB transport survives the capture tool's
 mandatory reboot boundary. It does not prove AGX initialization, submission,
 frame dumping, or replay; those remain separate gates.
+
+### EXP-20260825-084 — acquire two cold historical Mesa AGX clear captures
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: with the proxy transport now qualified by EXP-083, the exact
+historical Asahi Mesa m1n1 bridge can execute the fixed 16 by 16 RGBA8
+`11 22 33 ff` clear twice on J313/G13/V13_5 across two distinct cold proxy
+identities and produce byte-identical complete `GPUFrame` archives and final
+1024-byte attachments. The bounded operator must release ownership and
+physically reboot after every capture.
+
+- root source before registration:
+  `b5c66e1f6b6d3702c837558b25afd2970f7b515e` on
+  `feature/j313-gpu-acceleration`;
+- capture-environment implementation and ledger:
+  `296f7a4b99664a478b8d0c65e6a881f5f4f0cebf` and
+  `7fb4ee3d8b6b5b4f85f580909ef87b7bc933db0f`;
+- corrected transport implementation and ledger:
+  `184b2a2497b93699e0a3b55ab80fc57c29ee7ebb` and
+  `59de6e8b5b6c37a590a21e331fbc019e8fe0ba97`;
+- prerequisite transport receipt: EXP-083 passed with `fresh_proxy=true`;
+  `transport-receipt.json` SHA-256
+  `2e1e9c141fea8ccec633194d5c24beedc1adbcd1e7843468ef8ecf29945544c3`;
+- m1n1 source: `9cd80ac652ac404e92ae279deeaec8c629d7d184`;
+- Mu source: `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- historical Mesa source:
+  `https://gitlab.freedesktop.org/asahilina/mesa.git` at
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- capture bundle hashes: `libasahi_m1n1_drm_shim.so`
+  `0fc9e2ef6e677d4552192eb86fc1ac3fc3c1197ce53452703aaae538d58a0a62`,
+  `agx-clear-capture`
+  `a71737ec35abeb7efb422a54dcb0b146463f840c6da7169e99946c2a3771b87a`,
+  `asahi_dri.so`
+  `ab9e135b06d8cda0f1e19cc98dbe0304638917139675a536ca92223479db7b33`,
+  `libEGL.so.1.0.0`
+  `715d8ce4fc930a48b3208e9f5403eb458631764ac4914590a7ae7c36a13d07be`,
+  and `libGLESv2.so.2.0.0`
+  `57aecc4b5a2cddec0e0fac9ea73a37d1d173a21d2b8f760e292ed4d5325211b4`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- capture identity: `.local/agx-capture/identity-exp084.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- fixed producer source: `tools/agx_clear_capture.c`, SHA-256
+  `741da86a93f40472f1211ed247368c5ca9030f08d3fcee29cdd9f3cf82ca20e9`;
+- immutable stable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; its checksum-list
+  SHA-256 is
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`
+  and every listed artifact passed immediately before registration;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`, present without a surviving
+  open owner immediately before registration;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-084-agx-g1r-capture/`, confirmed absent
+  before registration;
+- fixed bridge port: `43139`;
+- host qualification inherited unchanged from the capture implementation:
+  three manifest-identical recipe exports, the no-shim negative control,
+  bidirectional loopback, 572 complete tests, diff checks and stable hashes;
+  the exact corrected transport then passed EXP-083 across one reboot.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp084.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-084-agx-g1r-capture \
+  --bridge-port 43139
+```
+
+The container must verify its export before proxy access, mount the repository
+read-only, mount only the evidence parent read-write, and use the historical
+shim solely through `LD_PRELOAD`. Each capture must dump exactly
+`shim_frame000.agx`, pull the sole attachment, validate the final bytes, write
+an atomic receipt, and request a physical reboot. Capture two may begin only
+after the corrected bridge observes a fresh proxy. Packaging must require
+distinct proxy identities and randomized m1n1 bases and must compare all
+normalized archive members, object bytes, command bytes, map flags, source
+identity, producer hash and final attachment bytes.
+
+Pass requires two fault-free captures, both mandatory reboots, distinct cold
+identities, byte-identical normalized captures and final attachments, and one
+atomically published canonical fixture candidate. Any command failure, absent
+or extra frame, wrong attachment, source or hash mismatch, warm identity,
+non-deterministic byte, proxy loss that does not reconnect, cleanup failure, or
+reboot failure rejects EXP-084. Preserve all obtainable evidence, do not retry
+this directory, do not launch Windows, and do not claim replay, WDDM, display,
+performance, power, thermal, or production GPU qualification. A passed capture
+still requires manual manifest review and a separately preregistered one-shot
+private replay.
