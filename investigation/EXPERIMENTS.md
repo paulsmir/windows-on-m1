@@ -8526,3 +8526,60 @@ The mandatory reboot returned an unowned J313/V13_5 proxy at base
 `0x804c44000`. EXP-094 is closed; its destination must never be reused. The
 next correction must restore the renamed zero-valued field at the capture
 boundary without changing the stable Windows recovery artifacts.
+
+### EXP-20260825-095 — serialize disabled helper state and submit 3D work
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: advancing only the reviewed GPU m1n1 pin to
+`195f70ddfc0fdfa382d1643dbe9466431850e56c`, where the historical renderer
+assigns zero to the renamed `Start3DStruct1.helper_cfg`, allows ioctl sequence
+9 to serialize and submit the first 3D work command. The already-proven
+transport, producer isolation, AGX firmware initialization, runtime assembler
+and BO paths remain byte-identical.
+
+- root source `b91898010fdddebe77a0c68a260c278fd050436b`, with implementation
+  `7bf79d0e39d72fbd75d2a221bbb05e872a0236d5` and ledger
+  `b91898010fdddebe77a0c68a260c278fd050436b`;
+- m1n1 `195f70ddfc0fdfa382d1643dbe9466431850e56c`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp095.json`, SHA-256
+  `de4bb4ba0fea78cc15b528feece0c09e0be2be5b0c352216c23253e2e3eac3a6`;
+- capture wrapper SHA-256
+  `705366a81006d6808f1ce608700794653a3355ad7073114839c542a3a75436d7`;
+- unchanged host and container helpers SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x804c44000`; destination
+  `investigation/artifacts/EXP-20260825-095-agx-helper-cfg/` confirmed absent;
+  fixed bridge port `43150`;
+- the mandatory regression test failed before implementation, twelve focused
+  bootstrap tests, 68 AGX contract tests and the complete public suite passed
+  584/584, with Python compilation and both root and nested diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp095.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-095-agx-helper-cfg \
+  --bridge-port 43150
+```
+
+Pass requires sequence 9 and every later render ioctl to return, two complete
+byte-identical cold receipts and archives, a final attachment matching the
+identity and artifact hashes, no Construct exception, mutex assertion, ASC
+timeout, proxy contention, recursive child initialization or software
+fallback, and a successful mandatory physical reboot. Any missing evidence,
+unexpected boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-095. Preserve all evidence, never reuse its destination, keep
+Windows blocked, and return the Air to a fresh J313/V13_5 proxy regardless of
+result.
