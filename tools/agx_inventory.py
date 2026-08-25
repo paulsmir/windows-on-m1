@@ -1,6 +1,10 @@
 """Pure conversion of a captured ADT inventory into an AGX contract."""
 
-from tools.agx_contract import ContractError, validate_contract
+import argparse
+import json
+from pathlib import Path
+
+from tools.agx_contract import ContractError, canonical_bytes, validate_contract
 
 
 RAW_KEYS = {
@@ -102,3 +106,29 @@ def extract_contract(raw: dict, source: dict):
         "uat": raw["uat"],
     }
     return validate_contract(contract)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--root-commit", required=True)
+    parser.add_argument("--m1n1-commit", required=True)
+    parser.add_argument("--mu-commit", required=True)
+    args = parser.parse_args()
+    raw = json.loads(args.input.read_text())
+    contract = extract_contract(
+        raw,
+        {
+            "root_commit": args.root_commit,
+            "m1n1_commit": args.m1n1_commit,
+            "mu_commit": args.mu_commit,
+        },
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_bytes(canonical_bytes(contract))
+    print(args.output)
+
+
+if __name__ == "__main__":
+    main()

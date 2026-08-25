@@ -1,3 +1,8 @@
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from tools.agx_contract import ContractError
@@ -101,6 +106,36 @@ class AgxInventoryTests(unittest.TestCase):
         raw["guess"] = 1
         with self.assertRaisesRegex(ContractError, "raw inventory keys"):
             extract_contract(raw, source_commits())
+
+    def test_cli_writes_the_canonical_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = Path(tmp) / "raw.json"
+            output_path = Path(tmp) / "contract.json"
+            input_path.write_text(json.dumps(raw_inventory()))
+            source = source_commits()
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "tools.agx_inventory",
+                    "--input",
+                    str(input_path),
+                    "--output",
+                    str(output_path),
+                    "--root-commit",
+                    source["root_commit"],
+                    "--m1n1-commit",
+                    source["m1n1_commit"],
+                    "--mu-commit",
+                    source["mu_commit"],
+                ],
+                check=True,
+                cwd=Path(__file__).resolve().parents[1],
+            )
+            written = output_path.read_text()
+        self.assertTrue(written.endswith("\n"))
+        self.assertEqual(json.loads(written)["platform"], "J313")
+        self.assertEqual(json.loads(written)["source"]["root_commit"], "1" * 40)
 
 
 if __name__ == "__main__":
