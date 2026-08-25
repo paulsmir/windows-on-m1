@@ -32,7 +32,7 @@
 ## File map
 
 - `tools/agx_queue_gate.py`: pure G1Q receipt validation, lifecycle, atomic evidence, cold-cycle aggregation, proxy-receipt binding, and verification CLI.
-- `tools/agx_m1n1_queue_backend.py`: sole hardware adapter; composes `M1n1AgxBackend` and wraps pinned context, UAT, queue, barrier, event, and snapshot primitives.
+- `tools/agx_m1n1_queue_backend.py`: sole hardware adapter; composes `M1n1AgxBackend` and wraps pinned UAT, queue, barrier, event, and snapshot primitives.
 - `scripts/run-agx-queue-gate.sh`: assisted-only provenance guard and cold-reset orchestration.
 - `tests/test_agx_queue_gate.py`: pure lifecycle, receipt mutation, deadline, cleanup, aggregation, and CLI tests.
 - `tests/test_agx_m1n1_queue_backend.py`: real adapter behavior against complete deterministic fakes.
@@ -200,8 +200,9 @@ Commit only the ledger with `docs: record AGX queue gate state machine`.
 - Create: `tests/test_agx_m1n1_queue_backend.py`
 
 **Interfaces:**
-- Consumes: a live m1n1 `u`, the proven `M1n1AgxBackend`, `GPUContext`,
-  `GPUContextData`, `JobList`, `GPU3DWorkQueue`, `StampCounter`,
+- Consumes: a live m1n1 `u`, the proven `M1n1AgxBackend`, UAT
+  `bind_context`/`iomap_at`/`iotranslate`, `GPUContextData`, `JobList`,
+  `GPU3DWorkQueue`, `StampCounter`,
   `WorkCommandBarrier`, and `GPUEventManager` from the pinned m1n1 commit.
 - Produces: `M1n1AgxQueueBackend` implementing `QueueGateBackend` and returning
   the exact completion receipt defined in Task 1.
@@ -224,8 +225,12 @@ Use complete fakes for the actual m1n1 object shape.  Assert `configure_context(
 Run RED: `python3 -m unittest tests.test_agx_m1n1_queue_backend.ContextIsolationTests -v`
 
 Implement composition over `M1n1AgxBackend`; do not subclass or duplicate G1
-prepare/start/heartbeat/fault logic.  Delay all m1n1 AGX context imports until
-hardware construction.
+prepare/start/heartbeat/fault logic.  Allocate and zero one TTBR page, bind it
+directly as context 63, allocate one physical canary page, and map only that
+page at the fixed gate VA `0x1600000000`.  Verify `0x15ffffc000` and
+`0x1600004000` remain untranslated.  Do not instantiate upstream `GPUContext`:
+its `bind()` method adds the unrelated `thing` mapping and would violate the
+one-mapping contract.  Delay all m1n1 AGX imports until hardware construction.
 
 Run GREEN: same command; all tests pass.
 
