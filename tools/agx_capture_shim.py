@@ -1,5 +1,6 @@
 """Historical Asahi shim with the capture-only bridged bootstrap policy."""
 
+import os
 import sys
 
 from tools.agx_capture_bootstrap import install_bootstrap_override
@@ -16,6 +17,16 @@ class Shim(HistoricalShim):
 
     def __init__(self, memfd):
         super().__init__(memfd)
+        expected_program = os.environ.get("AGX_CAPTURE_PROGRAM")
+        current_program = os.path.realpath("/proc/self/exe")
+        self._capture_is_producer = bool(
+            expected_program
+            and current_program == os.path.realpath(expected_program)
+        )
+        if not expected_program or current_program != os.path.realpath(expected_program):
+            self._capture_setup = None
+            return
+
         # Importing setup opens and bootstraps the m1n1 transport.  Do that
         # while drm-shim is still creating the device and before it exposes a
         # fake render fd to EGL; otherwise the first ioctl can resume with a

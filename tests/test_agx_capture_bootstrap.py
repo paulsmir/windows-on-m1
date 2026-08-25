@@ -103,12 +103,21 @@ class CaptureBootstrapTests(unittest.TestCase):
         source = (ROOT / "tools/agx_capture_shim.py").read_text(encoding="utf-8")
         constructor = source.index("def __init__(self, memfd):")
         historical = source.index("super().__init__(memfd)", constructor)
+        expected = source.index(
+            'os.environ.get("AGX_CAPTURE_PROGRAM")', historical
+        )
+        current = source.index('os.path.realpath("/proc/self/exe")', expected)
+        guard = source.index("current_program !=", current)
         setup_import = source.index(
-            "from m1n1 import setup as capture_setup", historical
+            "from m1n1 import setup as capture_setup", guard
         )
         setup_pin = source.index("self._capture_setup = capture_setup", setup_import)
         ioctl = source.index("def ioctl(self, fd, request, p_arg):", setup_pin)
         self.assertLess(constructor, historical)
+        self.assertLess(historical, expected)
+        self.assertLess(expected, current)
+        self.assertLess(current, guard)
+        self.assertLess(guard, setup_import)
         self.assertLess(historical, setup_import)
         self.assertLess(setup_import, setup_pin)
         self.assertLess(setup_pin, ioctl)
