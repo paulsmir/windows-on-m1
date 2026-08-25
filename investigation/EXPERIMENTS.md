@@ -8129,15 +8129,21 @@ blocked and establish a fresh J313/V13_5 proxy before further diagnosis.
 Observed result: rejected without a timeout or manual intervention. The first
 ioctl was request `0xc0186442`, the Asahi create-BO request. Both
 `capture-ioctl-begin sequence=1` and `capture-ioctl-end sequence=1 result=0`
-were emitted, proving that Python AGX startup, V13_5 initdata, context-23 setup,
-the historical create-BO handler, ioctl copyout and return to native Mesa all
-completed. Immediately afterward glibc aborted the producer in
-`pthread_mutex_lock.c:438` with assertion `e != ESRCH || !robust`. The pinned
-Mesa caller's next statement after the successful create-BO ioctl is
-`pthread_mutex_lock(&dev->bo_map_lock)` in `src/asahi/lib/agx_device.c`, while
-the same pinned source initializes `bo_cache.lock` but contains no initializer
-for `bo_map_lock`. This is a userspace synchronization failure before mmap,
-command construction or GPU submission, not an AGX firmware hang.
+were emitted. Those markers bracket only the reentrant Python callback inside
+the historical C create-BO handler; they do not prove that the enclosing C
+ioctl returned to native Mesa.
+
+Offline GDB analysis of the preserved core placed the abort in
+`drm_shim_bo_get_handle()` at `src/drm-shim/device.c:423`, called directly by
+`asahi_ioctl_create_bo()` at `src/asahi/drm-shim/asahi_m1n1.c:130`. The cached
+`shim_fd` was already dangling when the handler tried to lock
+`shim_fd->handle_lock`: its allocation contained unrelated UTF-32-like text,
+and the live `shim_device.fd_map` had size 7 but zero entries. The BO and
+create-BO argument remained valid. Therefore the first proven failure is a
+fake-DRM fd lifetime violation across the reentrant Python callback, before
+handle allocation, return to Mesa, mmap, command construction or GPU
+submission. The earlier `dev->bo_map_lock` inference was incorrect and is
+superseded by this core-backed boundary.
 
 The rejected core SHA-256 is
 `8b3eb8ef8a426e6875bfd8edf2999e7361cdd637131480cacd39824fa19ad3d5`.
