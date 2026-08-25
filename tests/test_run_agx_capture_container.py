@@ -41,7 +41,8 @@ class RunAgxCaptureContainerTests(unittest.TestCase):
             "host.docker.internal",
             "<repository-root>:/work:ro",
             "/tmp:/capture-host:rw",
-            "/opt/agx-capture/run-capture.sh",
+            "tools/agx-capture-container/run-capture.sh:/opt/agx-capture/run-capture-public.sh:ro",
+            "/opt/agx-capture/run-capture-public.sh",
             "--destination /capture-host/agx-capture-exp",
         )
         cursor = 0
@@ -50,6 +51,7 @@ class RunAgxCaptureContainerTests(unittest.TestCase):
             self.assertGreaterEqual(found, 0, f"missing or out-of-order step: {item}")
             cursor = found + len(item)
         self.assertNotIn("/Users/pavel", output)
+        self.assertNotIn(" /opt/agx-capture/run-capture.sh ", output)
 
     def test_container_helper_reconnects_pty_and_uses_pinned_linux_python(self):
         source = HELPER.read_text(encoding="utf-8")

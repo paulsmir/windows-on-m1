@@ -56,8 +56,9 @@ socat TCP-LISTEN:$BRIDGE_PORT,bind=127.0.0.1,reuseaddr,fork FILE:$PROXY,raw,echo
 docker run --rm --add-host host.docker.internal:host-gateway \\
   -v <repository-root>:/work:ro \\
   -v $DEST_PARENT:/capture-host:rw \\
+  -v <repository-root>/tools/agx-capture-container/run-capture.sh:/opt/agx-capture/run-capture-public.sh:ro \\
   -e AGX_BRIDGE_PORT=$BRIDGE_PORT $IMAGE \\
-  /opt/agx-capture/run-capture.sh \\
+  /opt/agx-capture/run-capture-public.sh \\
   --contract /work/$CONTRACT --artifact-dir /work/$ARTIFACT_DIR \\
   --identity /work/$IDENTITY --destination /capture-host/$DEST_NAME
 EOF
@@ -95,8 +96,9 @@ kill -0 "$SOCAT_PID" 2>/dev/null || {
 docker run --rm --add-host host.docker.internal:host-gateway \
     -v "$ROOT:/work:ro" \
     -v "$DEST_PARENT:/capture-host:rw" \
+    -v "$ROOT/tools/agx-capture-container/run-capture.sh:/opt/agx-capture/run-capture-public.sh:ro" \
     -e AGX_BRIDGE_PORT="$BRIDGE_PORT" \
-    "$IMAGE" /opt/agx-capture/run-capture.sh \
+    "$IMAGE" /opt/agx-capture/run-capture-public.sh \
     --contract "/work/$CONTRACT" \
     --artifact-dir "/work/$ARTIFACT_DIR" \
     --identity "/work/$IDENTITY" \
