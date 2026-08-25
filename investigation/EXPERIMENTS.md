@@ -8831,3 +8831,57 @@ USB endpoints re-enumerated at 23:33. EXP-098 is closed and its destination
 will not be reused. Before any further hardware command, producer stdout and
 stderr must be persisted inside the unique experiment destination while still
 preserving the producer exit status and emergency-reboot contract.
+
+### EXP-20260825-099 — retain the native submit traceback
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: rerunning the otherwise unchanged fixed-clear capture with the
+producer's combined output persisted will reproduce EXP-098 and retain the
+exact Python exception that the historical C shim clears before returning
+`-EIO`. This is an evidence-only experiment: it does not claim that logging
+will fix submission, and no new renderer compatibility change is included.
+
+- root source `bf9d62f`, implementation
+  `158ef23f04ee1000400deecd839892ebc6714616`, ledger `bf9d62f`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp099.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `39c27e6307e253bd15c47fef53b4800eeb9fd3c884f3b76d601966908c4bad52`;
+- host/container/cycle helper SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `0ff3f987c4d5b27343b4b8c35e05d0b5553e37855df7a4de9748bc0a0b559e64`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x805adc000`, both USB endpoints present;
+  destination `investigation/artifacts/EXP-20260825-099-agx-submit-trace/`
+  confirmed absent; fixed bridge port `43154`;
+- the producer-log contract failed before implementation, 19 focused tests and
+  the complete public suite passed 586/586; shell syntax, Python compilation,
+  root and nested diff checks and CSV validation passed.
+
+One command is permitted:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp099.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-099-agx-submit-trace \
+  --bridge-port 43154
+```
+
+Pass requires `producer.log` to retain the complete Python traceback and exact
+ioctl sequence for the EXP-098 failure, followed by the mandatory physical
+reboot and a fresh J313/V13_5 proxy. If the render unexpectedly completes, the
+stronger two-cold-capture fixture contract still applies. Any missing log,
+masked producer status, stale proxy, cleanup failure or manual intervention
+rejects EXP-099. Preserve all evidence, never reuse the destination, keep
+Windows blocked and return the Air to fresh proxy regardless of result.
