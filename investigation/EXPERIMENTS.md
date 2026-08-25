@@ -8918,7 +8918,8 @@ at 23:44. EXP-099 is closed and its destination will not be reused.
 
 ### EXP-20260825-100 — align the capture TA padding
 
-Status: preregistered; hardware command not yet run.
+Status: rejected by fixture packaging after two successful cold hardware clears;
+the mandatory reboots completed and the Air is at a fresh proxy.
 
 Hypothesis: converting only the pinned renderer's exact all-zero `0x64`-byte
 `WorkCommandTA.unk_3e8` assignment to the active schema's `0x60` bytes allows
@@ -8967,3 +8968,36 @@ exception, assertion, timeout, contention, recursion or fallback, and a
 mandatory physical reboot after each capture. Anything else rejects EXP-100.
 Preserve all evidence, never reuse the destination, keep Windows blocked and
 return the Air to fresh proxy regardless of result.
+
+Observed result: both cold hardware captures completed every native ioctl,
+submitted TA and 3D work, received completion event 1, pulled the attachment
+and returned producer status zero.  Capture one used proxy base `0x804458000`;
+capture two used distinct base `0x8049d4000`.  Their 1024-byte visible RGBA
+attachments are byte-identical with SHA-256
+`614fd59f81a4457909acaa056573427fd8dc8a4095f60a70a72a8b170b321c8a`.
+The capture archives are complete historical `GPUFrame` files with SHA-256
+`705b2acc3d620da466e28ffff24188ef75bfe44b88613766f9243023cec243b6`
+and `dcb006e2426382542fe6edf20598d9147424ea9106e61ceb23d1aeba168e07cb`;
+their producer logs have SHA-256
+`b8206cb5b8b8f29d6cb5adf23260282265e9f465d5e9242cb3c98c34b20bd862`
+and `c6e2ebfb50eed1756ad4003ca2c4bb88b486461c31f0d34d6039a4477ddaf32e`.
+
+Packaging then rejected the pair with `object member is missing at index 5`.
+Inspection proved that m1n1 `GPUFrame.save()` deliberately records completely
+zero objects as `"file": null`; the fixture packager incorrectly treated that
+documented shorthand as corruption.  A test-first offline correction now
+materializes only those exact null entries as bounded canonical zero members.
+Applying it to the preserved evidence reaches the next fail-closed boundary:
+`expected output size must equal 16384, got 1024`.  The producer's
+`glReadPixels` proves the 16 by 16 visible pixels, while the fixture contract
+correctly requires the complete 0x4000-byte attachment object.  Inferring the
+unread 0x3c00-byte tail would weaken the gate, so EXP-100 remains rejected and
+no fixture is published.  The next capture must persist the actual complete
+post-render attachment page from the shim before packaging.
+
+Both mandatory reboots ran.  The post-experiment identity is fresh
+J313/V13_5 at base `0x80441c000`; both USB endpoints are present.  The
+preserved destination is immutable and will not be reused.  This experiment
+is the first two-cold-boot proof that the pinned native AGX path executes the
+fixed clear successfully, but it is not yet an accepted replay fixture and
+does not claim Windows GPU acceleration.
