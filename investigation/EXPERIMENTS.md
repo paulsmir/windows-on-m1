@@ -7015,7 +7015,8 @@ retried.
 
 ### EXP-20260825-076 — versioned J313 AGX G1 firmware lifecycle
 
-Status: planned; no AGX operation has been attempted for this experiment.
+Status: rejected by an unsafe diagnostic MMIO read after a successful firmware
+heartbeat; Windows was not launched and hardware reboot restored clean proxy.
 
 Run timestamp (UTC): `2026-08-25T15:06:29Z`.
 
@@ -7048,3 +7049,51 @@ reset and release cycles before the unchanged stable Windows launch.
   contain `verdict=passed`, `completed_cycles=10`, and
   `windows_launch_permitted=true`; otherwise Windows remains blocked and no
   timing or retry changes are allowed inside EXP-076.
+
+Observed result: the V13_5/G13 schema selected correctly; initdata construction,
+firmware send, `DC_Init`, and `DC_UpdateIdleTS` completed.  Management Pong
+arrived in `0.002328875` seconds with no firmware event.  The subsequent
+diagnostic snapshot read physical `SGX.FAULT_INFO` at `0x204017030` and caused
+two recoverable EL2 data aborts because G1 had intentionally not enabled the
+separate render power-control path.  The backend then sent management stop,
+cleared both context-zero UAT roots and reported release.  The atomic result
+has SHA-256
+`d02f684e9a29e340e8fd30117a54f00f91b7845f69c4cbdbb040a13275c4d0b5`,
+`verdict=failed`, `completed_cycles=0`, `released=true`, and
+`windows_launch_permitted=false`.  Windows was not launched.  A physical reboot
+and read-only handshake subsequently confirmed fresh J313 V13_5 proxy state.
+EXP-076 will not be retried.
+
+### EXP-20260825-077 — safe-snapshot J313 AGX G1 firmware lifecycle
+
+Status: planned; no AGX operation has been attempted for this experiment.
+
+Run timestamp (UTC): `2026-08-25T15:13:54Z`.
+
+Hypothesis: retaining the proven V13_5 lifecycle while replacing the unpowered
+physical SGX fault-register read with the firmware-owned versioned RegionC
+fault record will allow ten bounded firmware cycles to complete and release
+before launching the unchanged stable Windows artifact.
+
+- source: root `6ffd492a50bff30f18f27126afe94ea2cc7096a5`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- correction: implementation
+  `3e947270a369e5216d5f3a99a741f6295a108b95` pulls the versioned firmware
+  shared-memory fault record and contains no physical SGX fault-register read;
+- contract, immutable recovery artifacts, exact ten-cycle lifecycle,
+  one-second heartbeat deadline, post-gate Windows checks, stop rules and
+  physical reboot rollback are unchanged from EXP-076;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory
+  `investigation/artifacts/EXP-20260825-077-agx-g1/` was proven absent after a
+  fresh read-only J313 V13_5 handshake;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-077-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- success requires ten passed records, a management Pong and shared-memory
+  fault snapshot in each, proven stop/reset/release, `verdict=passed`, and
+  `windows_launch_permitted=true`.  The first failure blocks Windows and ends
+  EXP-077 without timing changes or retry.
