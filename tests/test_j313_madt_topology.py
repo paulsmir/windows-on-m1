@@ -31,14 +31,14 @@ PUBLIC_MADT = (
 
 
 class TestJ313MadtTopology(unittest.TestCase):
-    def test_cpu_stability_experiment_exposes_four_efficiency_and_three_performance_cores(self):
+    def test_cpu_stability_experiment_exposes_four_efficiency_and_four_performance_cores(self):
         source = PUBLIC_MADT.read_text()
 
-        self.assertEqual(enabled_gicc_uids(source), [0, 1, 2, 3, 4, 5, 6])
+        self.assertEqual(enabled_gicc_uids(source), [0, 1, 2, 3, 4, 5, 6, 7])
 
         classes = gicc_efficiency_classes(source)
         self.assertEqual([classes[uid] for uid in range(4)], [0, 0, 0, 0])
-        self.assertEqual([classes[uid] for uid in (4, 5, 6)], [1, 1, 1])
+        self.assertEqual([classes[uid] for uid in (4, 5, 6, 7)], [1, 1, 1, 1])
 
     def test_returns_only_enabled_gicc_uids_in_source_order(self):
         self.assertEqual(enabled_gicc_uids(MADT_FRAGMENT), [0, 2])
