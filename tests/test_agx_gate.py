@@ -172,6 +172,106 @@ class AgxGateTests(unittest.TestCase):
             )
         self.assertEqual(backend.calls, [])
 
+    def _write_cold_cycle(self, index, *, same_boot=False):
+        from tools.agx_contract import contract_sha256
+
+        cycle_dir = self.path / f"cycle-{index:02d}"
+        cycle_dir.mkdir()
+        before = 0x100000 + index * 0x10000
+        result = {
+            "gate_version": 1,
+            "contract_sha256": contract_sha256(self.contract),
+            "requested_cycles": 1,
+            "completed_cycles": 1,
+            "timeout_s": 1.0,
+            "cycles": [
+                {
+                    "cycle": 1,
+                    "status": "passed",
+                    "heartbeat": {"progress": True},
+                    "snapshot": {
+                        "firmware": {"m1n1_base": before},
+                        "fault": {"source": "firmware-shared-memory"},
+                    },
+                }
+            ],
+            "verdict": "incomplete",
+            "windows_launch_permitted": False,
+        }
+        (cycle_dir / "gate-result.json").write_text(json.dumps(result))
+        receipt = {
+            "reset_receipt_version": 1,
+            "cycle": index,
+            "platform": "J313",
+            "firmware": "V13_5",
+            "previous_m1n1_base": before,
+            "m1n1_base": before if same_boot else before + 0x4000,
+        }
+        (self.path / f"reset-{index:02d}.json").write_text(json.dumps(receipt))
+
+    def test_ten_cold_cycles_and_distinct_reset_receipts_permit_windows(self):
+        from tools.agx_gate import aggregate_cold_results
+
+        for index in range(1, 11):
+            self._write_cold_cycle(index)
+
+        result = aggregate_cold_results(self.path, self.contract, cycles=10)
+
+        self.assertTrue(result["windows_launch_permitted"])
+        self.assertEqual(result["completed_cycles"], 10)
+        self.assertTrue(result["cold_reset_between_cycles"])
+        self.assertEqual(len(result["cycles"]), 10)
+
+    def test_same_proxy_boot_cannot_satisfy_cold_reset_receipt(self):
+        from tools.agx_gate import GateError, aggregate_cold_results
+
+        for index in range(1, 11):
+            self._write_cold_cycle(index, same_boot=index == 4)
+
+        with self.assertRaisesRegex(GateError, "fresh proxy boot"):
+            aggregate_cold_results(self.path, self.contract, cycles=10)
+
+    def test_missing_cold_reset_receipt_blocks_windows(self):
+        from tools.agx_gate import GateError, aggregate_cold_results
+
+        for index in range(1, 11):
+            self._write_cold_cycle(index)
+        (self.path / "reset-07.json").unlink()
+
+        with self.assertRaisesRegex(GateError, "reset receipt"):
+            aggregate_cold_results(self.path, self.contract, cycles=10)
+
+    def test_proxy_receipt_requires_a_changed_boot_identity(self):
+        from tools.agx_gate import GateError, record_proxy_receipt
+
+        with self.assertRaisesRegex(GateError, "fresh proxy boot"):
+            record_proxy_receipt(
+                self.path / "reset-01.json",
+                self.contract,
+                cycle=1,
+                previous_m1n1_base=0x804000000,
+                live_platform="J313",
+                live_firmware="V13_5",
+                live_m1n1_base=0x804000000,
+            )
+
+    def test_proxy_receipt_records_exact_live_identity(self):
+        from tools.agx_gate import record_proxy_receipt
+
+        path = self.path / "reset-01.json"
+        receipt = record_proxy_receipt(
+            path,
+            self.contract,
+            cycle=1,
+            previous_m1n1_base=0x804000000,
+            live_platform="J313",
+            live_firmware="V13_5",
+            live_m1n1_base=0x804100000,
+        )
+
+        self.assertEqual(receipt, json.loads(path.read_text()))
+        self.assertEqual(receipt["m1n1_base"], 0x804100000)
+
 
 if __name__ == "__main__":
     unittest.main()

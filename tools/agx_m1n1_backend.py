@@ -168,6 +168,7 @@ class M1n1AgxBackend:
             if status is not None and hasattr(status, name):
                 firmware_status[name] = _register_value(getattr(status, name))
         return {
+            "m1n1_base": int(self.u.base),
             "asc_running": bool(self.agx.asc.is_running()),
             "iop_power_state": int(mgmt.iop_power_state),
             "ap_power_state": int(mgmt.ap_power_state),

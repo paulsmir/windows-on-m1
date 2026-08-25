@@ -21,6 +21,7 @@ class FakeProxy:
 class FakeU:
     def __init__(self, calls):
         self.proxy = FakeProxy(calls)
+        self.base = 0x804000000
 
 
 class FakeMgmt:
@@ -275,6 +276,7 @@ class M1n1AgxBackendTests(unittest.TestCase):
         self.assertIn("sgx_irqs", snapshot)
         self.assertIn("fault", snapshot)
         self.assertIn("uat_mappings", snapshot)
+        self.assertEqual(snapshot["firmware"]["m1n1_base"], 0x804000000)
         self.assertEqual(
             snapshot["fault"],
             {

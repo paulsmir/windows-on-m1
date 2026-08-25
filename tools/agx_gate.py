@@ -191,7 +191,7 @@ def run_gate(
 
 
 def verify_gate_result(path: Path) -> dict:
-    """Return a complete ten-cycle result or fail before Windows launch."""
+    """Return a complete cold-reset ten-cycle result or block Windows."""
 
     try:
         data = json.loads(Path(path).read_text())
@@ -199,7 +199,7 @@ def verify_gate_result(path: Path) -> dict:
         raise GateError(f"cannot read gate result: {path}") from exc
     cycles = data.get("cycles")
     complete = (
-        data.get("gate_version") == 1
+        data.get("gate_version") == 2
         and data.get("requested_cycles") == 10
         and data.get("completed_cycles") == 10
         and isinstance(cycles, list)
@@ -210,10 +210,134 @@ def verify_gate_result(path: Path) -> dict:
         )
         and data.get("verdict") == "passed"
         and data.get("windows_launch_permitted") is True
+        and data.get("cold_reset_between_cycles") is True
+        and all(item.get("reset_receipt", {}).get("fresh_proxy") is True
+                for item in cycles)
     )
     if not complete:
         raise GateError("G1 result does not permit Windows launch")
     return data
+
+
+def _read_json(path: Path, description: str) -> dict:
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise GateError(f"cannot read {description}: {path}") from exc
+    if not isinstance(data, dict):
+        raise GateError(f"invalid {description}: {path}")
+    return data
+
+
+def record_proxy_receipt(
+    path: Path,
+    contract: AgxContract,
+    *,
+    cycle: int,
+    previous_m1n1_base: int,
+    live_platform: str,
+    live_firmware: str,
+    live_m1n1_base: int,
+) -> dict:
+    """Record a fresh post-cycle proxy identity or reject the reset boundary."""
+
+    cycle = _valid_positive_integer(cycle, "cycle")
+    for value, name in (
+        (previous_m1n1_base, "previous_m1n1_base"),
+        (live_m1n1_base, "live_m1n1_base"),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise GateError(f"{name} must be a positive integer")
+    if live_platform != contract.platform:
+        raise GateError("reset receipt platform does not match contract")
+    if live_firmware != contract.firmware.version:
+        raise GateError("reset receipt firmware does not match contract")
+    if live_m1n1_base == previous_m1n1_base:
+        raise GateError("reset receipt does not prove a fresh proxy boot")
+
+    receipt = {
+        "reset_receipt_version": 1,
+        "cycle": cycle,
+        "platform": live_platform,
+        "firmware": live_firmware,
+        "previous_m1n1_base": previous_m1n1_base,
+        "m1n1_base": live_m1n1_base,
+        "fresh_proxy": True,
+    }
+    _atomic_json(Path(path), receipt)
+    return receipt
+
+
+def aggregate_cold_results(
+    evidence_dir: Path,
+    contract: AgxContract,
+    *,
+    cycles: int,
+) -> dict:
+    """Permit Windows only after ten one-shot cycles and ten fresh proxies."""
+
+    if cycles != 10:
+        raise GateError("cold qualification requires exactly 10 cycles")
+    evidence_dir = Path(evidence_dir)
+    contract_digest = contract_sha256(contract)
+    aggregate_cycles = []
+
+    for index in range(1, cycles + 1):
+        cycle_path = evidence_dir / f"cycle-{index:02d}" / "gate-result.json"
+        data = _read_json(cycle_path, "single-cycle result")
+        records = data.get("cycles")
+        valid_cycle = (
+            data.get("gate_version") == 1
+            and data.get("contract_sha256") == contract_digest
+            and data.get("requested_cycles") == 1
+            and data.get("completed_cycles") == 1
+            and isinstance(records, list)
+            and len(records) == 1
+            and records[0].get("cycle") == 1
+            and records[0].get("status") == "passed"
+            and data.get("verdict") == "incomplete"
+            and data.get("windows_launch_permitted") is False
+        )
+        if not valid_cycle:
+            raise GateError(f"cycle {index} is not a complete one-shot result")
+        try:
+            previous_base = int(
+                records[0]["snapshot"]["firmware"]["m1n1_base"]
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise GateError(f"cycle {index} has no proxy boot identity") from exc
+
+        receipt_path = evidence_dir / f"reset-{index:02d}.json"
+        receipt = _read_json(receipt_path, "reset receipt")
+        valid_receipt = (
+            receipt.get("reset_receipt_version") == 1
+            and receipt.get("cycle") == index
+            and receipt.get("platform") == contract.platform
+            and receipt.get("firmware") == contract.firmware.version
+            and receipt.get("previous_m1n1_base") == previous_base
+            and isinstance(receipt.get("m1n1_base"), int)
+            and receipt.get("m1n1_base") != previous_base
+        )
+        if not valid_receipt:
+            raise GateError(f"reset receipt {index} does not prove a fresh proxy boot")
+
+        record = dict(records[0])
+        record["cycle"] = index
+        record["reset_receipt"] = dict(receipt, fresh_proxy=True)
+        aggregate_cycles.append(record)
+
+    result = {
+        "gate_version": 2,
+        "contract_sha256": contract_digest,
+        "requested_cycles": cycles,
+        "completed_cycles": cycles,
+        "cycles": aggregate_cycles,
+        "cold_reset_between_cycles": True,
+        "verdict": "passed",
+        "windows_launch_permitted": True,
+    }
+    _atomic_json(evidence_dir / "gate-result.json", result)
+    return result
 
 
 def _git(root: Path, *args: str) -> str:
@@ -332,6 +456,19 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--evidence-dir", type=Path, required=True)
     run.add_argument("--cycles", type=int, required=True)
     run.add_argument("--timeout", type=float, default=1.0)
+    run_one = subparsers.add_parser("run-one")
+    run_one.add_argument("--contract", type=Path, required=True)
+    run_one.add_argument("--evidence-dir", type=Path, required=True)
+    run_one.add_argument("--timeout", type=float, default=1.0)
+    receipt = subparsers.add_parser("proxy-receipt")
+    receipt.add_argument("--contract", type=Path, required=True)
+    receipt.add_argument("--cycle", type=int, required=True)
+    receipt.add_argument("--cycle-result", type=Path, required=True)
+    receipt.add_argument("--output", type=Path, required=True)
+    aggregate = subparsers.add_parser("aggregate-cold")
+    aggregate.add_argument("--contract", type=Path, required=True)
+    aggregate.add_argument("--evidence-dir", type=Path, required=True)
+    aggregate.add_argument("--cycles", type=int, required=True)
     verify = subparsers.add_parser("verify-result")
     verify.add_argument("path", type=Path)
     return parser
@@ -350,8 +487,9 @@ def main() -> int:
                 f"validated {data['completed_cycles']} AGX cycles; "
                 "Windows launch is permitted"
             )
-        else:
-            if args.cycles != 10:
+        elif args.command in ("run", "run-one"):
+            cycles = args.cycles if args.command == "run" else 1
+            if args.command == "run" and args.cycles != 10:
                 raise GateError("cycles must be exactly 10")
             os.environ.setdefault("M1N1DEVICE", "")
             if not os.environ["M1N1DEVICE"]:
@@ -363,11 +501,47 @@ def main() -> int:
             result = run_gate(
                 M1n1AgxBackend(u),
                 load_contract(args.contract),
-                cycles=args.cycles,
+                cycles=cycles,
                 timeout_s=args.timeout,
                 evidence_dir=args.evidence_dir,
             )
             print(result.evidence_path)
+        elif args.command == "proxy-receipt":
+            os.environ.setdefault("M1N1DEVICE", "")
+            if not os.environ["M1N1DEVICE"]:
+                raise GateError("M1N1DEVICE is required")
+            cycle_data = _read_json(args.cycle_result, "single-cycle result")
+            try:
+                previous_base = int(
+                    cycle_data["cycles"][0]["snapshot"]["firmware"]["m1n1_base"]
+                )
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                raise GateError("single-cycle result has no proxy boot identity") from exc
+            from m1n1.setup import u
+            from tools.agx_contract import load_contract
+
+            receipt = record_proxy_receipt(
+                args.output,
+                load_contract(args.contract),
+                cycle=args.cycle,
+                previous_m1n1_base=previous_base,
+                live_platform=u.adt.target_type,
+                live_firmware=u.version,
+                live_m1n1_base=int(u.base),
+            )
+            print(json.dumps(receipt, indent=2, sort_keys=True))
+        else:
+            from tools.agx_contract import load_contract
+
+            data = aggregate_cold_results(
+                args.evidence_dir,
+                load_contract(args.contract),
+                cycles=args.cycles,
+            )
+            print(
+                f"aggregated {data['completed_cycles']} cold AGX cycles; "
+                "Windows launch is permitted"
+            )
     except GateError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

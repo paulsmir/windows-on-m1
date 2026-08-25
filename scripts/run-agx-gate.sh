@@ -59,6 +59,7 @@ echo "contract: $CONTRACT"
 echo "artifact directory: $ARTIFACT_DIR"
 echo "evidence directory: $EVIDENCE_DIR"
 echo "cycles: $CYCLES"
+echo "reset policy: cold reset boundary after every cycle"
 if [ "$LAUNCH_WINDOWS" -eq 1 ]; then
     echo "post-gate action: launch the same stable Windows artifacts"
 else
@@ -74,7 +75,58 @@ if [ -d "$EVIDENCE_DIR" ] && [ -n "$(find "$EVIDENCE_DIR" -mindepth 1 -maxdepth 
     exit 1
 fi
 
-M1N1DEVICE="$PROXY" "$PYTHON" -m tools.agx_gate run \
+mkdir -p "$EVIDENCE_DIR"
+
+CYCLE=1
+while [ "$CYCLE" -le "$CYCLES" ]; do
+    LABEL=$(printf "%02d" "$CYCLE")
+    CYCLE_DIR="$EVIDENCE_DIR/cycle-$LABEL"
+    RESULT="$CYCLE_DIR/gate-result.json"
+    RECEIPT="$EVIDENCE_DIR/reset-$LABEL.json"
+
+    echo "AGX cold cycle $CYCLE/$CYCLES"
+    CYCLE_OK=0
+    if M1N1DEVICE="$PROXY" "$PYTHON" -m tools.agx_gate run-one \
+        --contract "$CONTRACT" \
+        --evidence-dir "$CYCLE_DIR"; then
+        CYCLE_OK=1
+    fi
+
+    # Management stop and UAT invalidation quiesce software ownership, but
+    # pmgr clocks have no symmetric disable contract here.  A real reboot is
+    # therefore mandatory even after a passed one-shot cycle.
+    if ! M1N1DEVICE="$PROXY" "$PYTHON" \
+        "$ROOT/m1n1_windows/proxyclient/tools/reboot.py"; then
+        echo "hardware reboot failed after AGX cycle $CYCLE" >&2
+        exit 1
+    fi
+    if [ "$CYCLE_OK" -ne 1 ]; then
+        echo "AGX cycle $CYCLE failed; hardware reboot requested" >&2
+        exit 1
+    fi
+
+    ATTEMPT=1
+    RECEIPT_OK=0
+    while [ "$ATTEMPT" -le 30 ]; do
+        sleep 1
+        if M1N1DEVICE="$PROXY" "$PYTHON" -m tools.agx_gate proxy-receipt \
+            --contract "$CONTRACT" \
+            --cycle "$CYCLE" \
+            --cycle-result "$RESULT" \
+            --output "$RECEIPT"; then
+            RECEIPT_OK=1
+            break
+        fi
+        ATTEMPT=$((ATTEMPT + 1))
+    done
+    if [ "$RECEIPT_OK" -ne 1 ]; then
+        echo "fresh proxy receipt timed out after AGX cycle $CYCLE" >&2
+        exit 1
+    fi
+    CYCLE=$((CYCLE + 1))
+done
+
+"$PYTHON" -m tools.agx_gate aggregate-cold \
     --contract "$CONTRACT" \
     --evidence-dir "$EVIDENCE_DIR" \
     --cycles "$CYCLES"

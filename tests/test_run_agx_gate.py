@@ -97,6 +97,7 @@ class RunAgxGateTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("mode: assisted AGX firmware gate", result.stdout)
         self.assertIn("cycles: 10", result.stdout)
+        self.assertIn("cold reset boundary after every cycle", result.stdout)
         self.assertIn(str(CONTRACT_PATH), result.stdout)
         self.assertIn(str(self.artifacts), result.stdout)
         self.assertIn(str(self.evidence), result.stdout)
