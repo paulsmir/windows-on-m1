@@ -99,6 +99,7 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertIn("LD_PRELOAD=\"$SHIM\"", helper)
         self.assertIn("AGX_SHIM_MODULE=tools.agx_capture_bootstrap_probe", helper)
         self.assertIn("M1N1_BOOTSTRAP_TIMEOUT=3.0", helper)
+        self.assertIn("verify-agx-capture-env.py", helper)
         self.assertIn("reboot.py", helper)
         self.assertIn("transport-receipt.json", helper)
         self.assertNotIn("m1n1.agx", helper)

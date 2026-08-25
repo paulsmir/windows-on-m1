@@ -9,6 +9,9 @@ MESA=/opt/asahi-mesa
 SHIM="$MESA/build/src/asahi/drm-shim/libasahi_m1n1_drm_shim.so"
 PROGRAM=/opt/agx-capture/bin/agx-clear-capture
 
+python3 /opt/agx-capture/export/verify-agx-capture-env.py \
+    /opt/agx-capture/export
+
 usage()
 {
     echo "usage: $0 --destination DIRECTORY" >&2
