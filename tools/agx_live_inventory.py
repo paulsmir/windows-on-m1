@@ -108,10 +108,10 @@ def _text(value):
     return str(value)
 
 
-def platform_name(chosen):
+def platform_name(adt):
     """Return m1n1's decoded target identifier, for example J313."""
 
-    return _text(chosen.target_type)
+    return _text(adt["/"].target_type)
 
 
 def capture_raw():
@@ -122,7 +122,7 @@ def capture_raw():
 
     chosen = u.adt["/chosen"]
     arm_io = u.adt["/arm-io"]
-    platform = platform_name(chosen)
+    platform = platform_name(u.adt)
     firmware_version = _text(chosen.firmware_version)
     identity_fields = {
         "target_type": platform,

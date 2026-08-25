@@ -27,8 +27,15 @@ class FakeNode:
         return 0x204000000, 0x1000000
 
 
-class FakeChosen:
+class FakeRoot:
     target_type = "J313"
+
+
+class FakeAdt:
+    def __getitem__(self, path):
+        if path != "/":
+            raise KeyError(path)
+        return FakeRoot()
 
 
 class AgxLiveInventoryTests(unittest.TestCase):
@@ -62,8 +69,8 @@ class AgxLiveInventoryTests(unittest.TestCase):
             },
         )
 
-    def test_platform_uses_decoded_target_type_attribute(self):
-        self.assertEqual(platform_name(FakeChosen()), "J313")
+    def test_platform_uses_device_tree_root_target_type(self):
+        self.assertEqual(platform_name(FakeAdt()), "J313")
 
     def test_live_inventory_source_has_no_write_capable_api(self):
         source = LIVE_INVENTORY.read_text()
