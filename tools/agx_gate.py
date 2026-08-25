@@ -16,6 +16,9 @@ from typing import Protocol
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+PROXYCLIENT = ROOT / "m1n1_windows" / "proxyclient"
+if str(PROXYCLIENT) not in sys.path:
+    sys.path.insert(0, str(PROXYCLIENT))
 
 from tools.agx_contract import AgxContract, contract_sha256
 

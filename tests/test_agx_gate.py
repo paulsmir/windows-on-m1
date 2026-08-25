@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
@@ -51,6 +52,12 @@ class FakeBackend:
 
 
 class AgxGateTests(unittest.TestCase):
+    def test_cli_exposes_the_bundled_m1n1_proxyclient(self):
+        import tools.agx_gate  # noqa: F401
+
+        proxyclient = str(ROOT / "m1n1_windows" / "proxyclient")
+        self.assertIn(proxyclient, sys.path)
+
     def setUp(self):
         self.contract = load_contract(CONTRACT)
         self.tmp = tempfile.TemporaryDirectory()
