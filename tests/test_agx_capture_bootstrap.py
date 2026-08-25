@@ -103,11 +103,16 @@ class CaptureBootstrapTests(unittest.TestCase):
         source = (ROOT / "tools/agx_capture_shim.py").read_text(encoding="utf-8")
         constructor = source.index("def __init__(self, memfd):")
         historical = source.index("super().__init__(memfd)", constructor)
-        eager_init = source.index("self.init()", historical)
-        ioctl = source.index("def ioctl(self, fd, request, p_arg):", eager_init)
+        setup_import = source.index(
+            "from m1n1 import setup as capture_setup", historical
+        )
+        setup_pin = source.index("self._capture_setup = capture_setup", setup_import)
+        ioctl = source.index("def ioctl(self, fd, request, p_arg):", setup_pin)
         self.assertLess(constructor, historical)
-        self.assertLess(historical, eager_init)
-        self.assertLess(eager_init, ioctl)
+        self.assertLess(historical, setup_import)
+        self.assertLess(setup_import, setup_pin)
+        self.assertLess(setup_pin, ioctl)
+        self.assertNotIn("self.init()", source[constructor:ioctl])
 
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(

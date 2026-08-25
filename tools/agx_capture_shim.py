@@ -16,12 +16,14 @@ class Shim(HistoricalShim):
 
     def __init__(self, memfd):
         super().__init__(memfd)
-        # Historical Mesa lazily initializes from its first DRM ioctl.  That
-        # reenters Python while the fake render fd is live, and the bootstrap
-        # can unregister the fd before the enclosing C handler resumes.
-        # Complete bootstrap while drm-shim is still creating the device and
-        # before it exposes a fake render fd to EGL.
-        self.init()
+        # Importing setup opens and bootstraps the m1n1 transport.  Do that
+        # while drm-shim is still creating the device and before it exposes a
+        # fake render fd to EGL; otherwise the first ioctl can resume with a
+        # bootstrap-invalidated shim_fd.  Keep AGX.start() lazy in init(), as
+        # the historical path expects, and pin the module for this Shim.
+        from m1n1 import setup as capture_setup
+
+        self._capture_setup = capture_setup
 
     def ioctl(self, fd, request, p_arg):
         sequence = getattr(self, "_capture_ioctl_sequence", 0) + 1
