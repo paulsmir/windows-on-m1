@@ -8070,3 +8070,58 @@ The mandatory cleanup reboot completed after stopping the orphaned container.
 The pre-run proxy base was `0x8044a0000`; a fresh J313/V13_5 proxy returned at
 `0x805398000`. The cleanup identity SHA-256 is
 `8fe50d22b8d641525e37729240ccb0dd2c2bea8e858cf6bbe999e798bf01431f`.
+
+### EXP-20260825-089 — bound the first post-BO AGX client transition
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: on the exact EXP-088 capture path, the fixed producer deadline and
+per-ioctl return markers will either complete the two cold deterministic clear
+captures or identify the last ioctl that returned before the native EGL client
+stopped. In either case the producer will terminate without manual intervention
+within 35 seconds of a stall and the existing operator will request the
+mandatory physical reboot.
+
+- root source and ledger: `136f2ab589cc4f7f9b8597956c98096ce30ab1dc`
+  and `aed3990c104ce4a66b85a849fabbd18d100ce0e8`;
+- fixed capture operator SHA-256:
+  `803d591843ebbff7f6e556fb990961783fa307240a96a2218a047214cd5f7149`;
+- capture wrapper SHA-256:
+  `a4163f39e9687aa2be094e9a07f1af5c95afba6757a3a24d91d02d6b7ef4fdcb`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp089.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- pinned image ID
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x805398000`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-089-agx-g1r-capture/`,
+  confirmed absent; fixed bridge port `43144`;
+- two mandatory tests failed before the correction, focused tests passed, and
+  the complete repository suite passed 581/581.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp089.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-089-agx-g1r-capture \
+  --bridge-port 43144
+```
+
+A capture pass retains the EXP-088 requirements: two cold receipts, complete
+byte-identical archives and attachments, mandatory reboots, manual fixture
+review and a separately preregistered replay. Any timeout, missing matching
+`capture-ioctl-end`, exception, incomplete output, cleanup failure, stale proxy
+or manual intervention rejects EXP-089. Preserve the last begin/end markers and
+all obtainable files, do not retry this evidence directory, keep Windows
+blocked and establish a fresh J313/V13_5 proxy before further diagnosis.
