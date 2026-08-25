@@ -7734,3 +7734,73 @@ non-consuming handshake on the same persistent connection or provide an
 explicit bounded initial-bootstrap budget. It must not retry EXP-084 or submit
 GPU work until a new transport qualification reproduces the historical
 process's startup path.
+
+### EXP-20260825-085 — qualify historical full-client bootstrap without AGX
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the exact pinned Mesa clear producer can traverse `LD_PRELOAD`, EGL,
+the embedded Python interpreter and its first DRM ioctl through the corrected
+PTY/TCP/USB bridge when the capture-only adapter replaces the direct-UART
+150 ms first-reply assumption with an explicit finite three-second budget. It
+must record J313/V13_5, complete one physical reboot, reconnect to a changed
+m1n1 base and publish an atomic fresh-proxy receipt without importing
+`m1n1.agx`, enabling GPU clocks, or submitting GPU work.
+
+- root source and ledger: `838cf5c54c0a22a4760877b9c08b9896c3d467c1`;
+- bootstrap implementation and ledger:
+  `bbdc09bad562dd2f29a834a24db43b2a64330ce3` and
+  `2b89fa0e7476ed9a0f923ab5038ba7112bd21d25`;
+- export-verification correction and ledger:
+  `a477bf518ad9374bea392daa333078981fae4158` and
+  `838cf5c54c0a22a4760877b9c08b9896c3d467c1`;
+- host operator SHA-256:
+  `e80963d730bbf64764433e47925b3da4fa4e5561781cce8448e5dbf74401fdb2`;
+- container helper SHA-256:
+  `18b36991e533fe1a9dea550226ef34cebe0efbbaee3f9a063dce76a1744e9812`;
+- bounded bootstrap module SHA-256:
+  `704533a1a76f5e7f57af63b7b15a92ca744cef9110b62dc1262b677787990c73`;
+- no-AGX embedded shim probe SHA-256:
+  `1dc8bc86c36202e610fd9af86a905ddc94f0a9ffb4469d150e535b456287ce35`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- exact initial bootstrap budget: 3.0 seconds, bounded by code to the finite
+  range 0.15 through 10.0 seconds and restored after setup;
+- immutable stable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; checksum-list SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`,
+  with every listed artifact passing immediately before registration;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`, present without a surviving
+  open owner immediately before registration;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-085-agx-full-client-bootstrap/`,
+  confirmed absent before registration;
+- fixed bridge port: `43140`;
+- host verification: six focused bootstrap tests, fifteen combined bootstrap
+  and transport tests and the complete repository suite passed 578/578; shell
+  syntax, Python compilation and diff checks passed.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/probe-agx-full-client-bootstrap.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-085-agx-full-client-bootstrap \
+  --bridge-port 43140
+```
+
+Pass requires verified immutable container exports, a successful embedded
+Python setup reached through the producer's first real DRM ioctl, exact-field
+`before.json` and `bootstrap-metrics.json`, one successful physical reboot, a
+bounded reconnect to J313/V13_5 at a positive changed m1n1 base, and an atomic
+`transport-receipt.json` with `fresh_proxy=true`. The probe module must terminate
+the producer immediately after setup and before importing the historical AGX
+shim. The helper must not enable GPU clocks, start AGX, allocate GPU objects,
+submit work, launch Windows, or write outside its evidence directory.
+
+Any export mismatch, initial bootstrap failure, elapsed time beyond the explicit
+budget, malformed or partial evidence, reboot failure, reconnect exhaustion,
+identity drift, unchanged base, unexpected USB owner or AGX side effect rejects
+EXP-085. Preserve its evidence and do not retry its directory. Only a pass may
+permit a newly preregistered replacement capture after manual review.
