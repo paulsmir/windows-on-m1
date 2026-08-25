@@ -1,0 +1,76 @@
+import os
+from pathlib import Path
+import tempfile
+import unittest
+
+from tools.agx_live_inventory import ensure_guest_inactive, node_record
+
+
+ROOT = Path(__file__).resolve().parents[1]
+LIVE_INVENTORY = ROOT / "tools" / "agx_live_inventory.py"
+
+
+class FakeNode:
+    _path = "/device-tree/arm-io/sgx"
+    _properties = {
+        "name": "sgx",
+        "gpu-region-base": 0x500040000,
+        "gpu-region-size": 0x40000,
+    }
+    interrupts = [180, 181, 182]
+    reg = [object()]
+
+    def get_reg(self, index):
+        if index != 0:
+            raise IndexError(index)
+        return 0x204000000, 0x1000000
+
+
+class AgxLiveInventoryTests(unittest.TestCase):
+    def test_live_inventory_refuses_active_guest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "guest.pid").write_text(str(os.getpid()))
+            with self.assertRaisesRegex(RuntimeError, "guest runner"):
+                ensure_guest_inactive(Path(tmp))
+
+    def test_stale_guest_pid_is_safe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "guest.pid").write_text("99999999")
+            ensure_guest_inactive(Path(tmp))
+
+    def test_node_record_preserves_exact_read_only_values(self):
+        self.assertEqual(
+            node_record(FakeNode()),
+            {
+                "reg": [[0x204000000, 0x1000000]],
+                "interrupts": [180, 181, 182],
+                "properties": {
+                    "gpu-region-base": 0x500040000,
+                    "gpu-region-size": 0x40000,
+                },
+            },
+        )
+
+    def test_live_inventory_source_has_no_write_capable_api(self):
+        source = LIVE_INVENTORY.read_text()
+        self.assertIn("def ensure_guest_inactive(root):", source)
+        self.assertIn("ensure_guest_inactive(ROOT)\n    data = capture_raw()", source)
+        self.assertNotIn("\nfrom m1n1.setup import u", source)
+        self.assertIn("    from m1n1.setup import u", source)
+        for forbidden in (
+            "u.proxy",
+            "import p",
+            "p.",
+            "write32",
+            "write64",
+            "writemem",
+            "pmgr_adt_clocks_enable",
+            "iomap",
+            "DART",
+            "AGX(",
+        ):
+            self.assertNotIn(forbidden, source)
+
+
+if __name__ == "__main__":
+    unittest.main()
