@@ -164,6 +164,19 @@ class M1n1AgxBackendTests(unittest.TestCase):
         )
         self.assertFalse(backend.released())
 
+    def test_prepare_accepts_live_node_enumeration_order(self):
+        live_contract = replace(
+            self.contract,
+            nodes=tuple(reversed(self.contract.nodes)),
+        )
+        backend = self.backend(live_contract=live_contract)
+
+        backend.prepare(self.contract)
+
+        self.assertEqual(self.calls[0], "inventory")
+        self.assertIn(("clock", "/arm-io/gfx-asc"), self.calls)
+        self.assertFalse(backend.released())
+
     def test_mismatch_refuses_before_clocks_or_constructor(self):
         from tools.agx_m1n1_backend import BackendError
 

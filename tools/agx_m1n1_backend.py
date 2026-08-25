@@ -1,6 +1,7 @@
 """Thin m1n1 backend for the bounded J313 AGX firmware-only gate."""
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from tools.agx_contract import AgxContract, canonical_bytes
 
@@ -40,6 +41,14 @@ def _register_value(value):
         return int(value)
     except (TypeError, ValueError):
         return str(value)
+
+
+def _live_identity_bytes(contract: AgxContract) -> bytes:
+    """Canonicalize ADT enumeration order without weakening resource checks."""
+
+    return canonical_bytes(
+        replace(contract, nodes=tuple(sorted(contract.nodes)))
+    )
 
 
 class M1n1AgxBackend:
@@ -92,7 +101,7 @@ class M1n1AgxBackend:
             raise BackendError("AGX backend already owns resources")
 
         live_contract = self.live_contract_reader(contract)
-        if canonical_bytes(live_contract) != canonical_bytes(contract):
+        if _live_identity_bytes(live_contract) != _live_identity_bytes(contract):
             raise BackendError("live AGX resources do not match reviewed contract")
 
         self._released = False
