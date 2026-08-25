@@ -8762,3 +8762,49 @@ the preserved core SHA-256 is
 no final attachment exists. The mandatory reboot completed, both USB endpoints
 re-enumerated at 23:28, and the new proxy reported J313/V13_5 at base
 `0x80458c000`. EXP-097 is closed and its destination will not be reused.
+
+### EXP-20260825-098 — initialize capture tiling helper state
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: creating capture-only `TilingParameters` instances with
+`helper_cfg = 0` lets the TA portion of sequence 9 serialize after the already
+proven 3D command, without changing stable m1n1, Mu, Windows or recovery data.
+
+- root `40529a7`, implementation `4d1066ba344c91cf80b4835228ad6c1de5d994fe`;
+- stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+  wrapper SHA-256
+  `39c27e6307e253bd15c47fef53b4800eeb9fd3c884f3b76d601966908c4bad52`;
+- host/container helper SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  / `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+  pinned image ID `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x80458c000`, endpoints re-enumerated at 23:28;
+  destination `investigation/artifacts/EXP-20260825-098-agx-tiling-helper/`
+  absent; bridge port `43153`;
+- RED test observed; 13 focused and 585/585 full tests passed with pinned-class,
+  compilation, diff, pin and CSV checks.
+
+One command is permitted:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp098.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-098-agx-tiling-helper \
+  --bridge-port 43153
+```
+
+Pass requires sequence 9 and later ioctls to return, two complete identical
+cold receipts/archives, a valid final attachment, no exception, assertion,
+timeout, contention, recursion or fallback, and mandatory physical reboot.
+Anything else rejects EXP-098. Preserve evidence, never reuse the destination,
+keep Windows blocked and return to fresh J313/V13_5 proxy.
