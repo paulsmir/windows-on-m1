@@ -1,6 +1,7 @@
 import math
 import os
 from pathlib import Path
+import subprocess
 import unittest
 from unittest import mock
 
@@ -108,8 +109,9 @@ class CaptureBootstrapTests(unittest.TestCase):
         )
         current = source.index('os.path.realpath("/proc/self/exe")', expected)
         guard = source.index("current_program !=", current)
+        isolate = source.index("isolate_capture_subprocess_memory()", guard)
         setup_import = source.index(
-            "from m1n1 import setup as capture_setup", guard
+            "from m1n1 import setup as capture_setup", isolate
         )
         setup_pin = source.index("self._capture_setup = capture_setup", setup_import)
         ioctl = source.index("def ioctl(self, fd, request, p_arg):", setup_pin)
@@ -117,11 +119,22 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertLess(historical, expected)
         self.assertLess(expected, current)
         self.assertLess(current, guard)
-        self.assertLess(guard, setup_import)
+        self.assertLess(guard, isolate)
+        self.assertLess(isolate, setup_import)
         self.assertLess(historical, setup_import)
         self.assertLess(setup_import, setup_pin)
         self.assertLess(setup_pin, ioctl)
         self.assertNotIn("self.init()", source[constructor:ioctl])
+
+    def test_capture_subprocesses_cannot_mutate_parent_shim_fd_map(self):
+        from tools.agx_capture_shim import isolate_capture_subprocess_memory
+
+        with mock.patch.object(subprocess, "_USE_VFORK", True), mock.patch.object(
+            subprocess, "_USE_POSIX_SPAWN", True
+        ):
+            isolate_capture_subprocess_memory()
+            self.assertFalse(subprocess._USE_VFORK)
+            self.assertFalse(subprocess._USE_POSIX_SPAWN)
 
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(

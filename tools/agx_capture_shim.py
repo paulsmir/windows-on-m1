@@ -1,6 +1,7 @@
 """Historical Asahi shim with the capture-only bridged bootstrap policy."""
 
 import os
+import subprocess
 import sys
 
 from tools.agx_capture_bootstrap import install_bootstrap_override
@@ -10,6 +11,13 @@ install_bootstrap_override()
 
 from m1n1.agx.shim import Shim as HistoricalShim  # noqa: E402
 from m1n1.constructutils import Ver  # noqa: E402
+
+
+def isolate_capture_subprocess_memory():
+    """Keep pre-exec fd closure out of the producer's drm-shim address space."""
+
+    subprocess._USE_VFORK = False
+    subprocess._USE_POSIX_SPAWN = False
 
 
 class Shim(HistoricalShim):
@@ -26,6 +34,12 @@ class Shim(HistoricalShim):
         if not expected_program or current_program != os.path.realpath(expected_program):
             self._capture_setup = None
             return
+
+        # AGX assembles firmware helpers at runtime.  With vfork/posix_spawn,
+        # their pre-exec close sweep runs inside this process's address space;
+        # drm-shim's interposed close() then removes the producer's fd_map
+        # entries.  A normal fork gives those children a private map copy.
+        isolate_capture_subprocess_memory()
 
         # Importing setup opens and bootstraps the m1n1 transport.  Do that
         # while drm-shim is still creating the device and before it exposes a
