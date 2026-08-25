@@ -6660,3 +6660,71 @@ bugcheck/system-reset/watchdog capture and NVMe errors.  The operator then
 exercised the built-in keyboard, Precision Touchpad and desktop UI and reported
 the session stable.  The candidate is accepted for commit and publication as
 an assisted checkpoint; it has not touched the ESP.
+
+### EXP-20260825-071 — expose the third J313 performance core
+
+Status: validated and accepted for publication.
+
+Run timestamp (UTC): `2026-08-25T07:00:56Z`.
+
+Hypothesis: the validated 4E+2P checkpoint demonstrates correct heterogeneous
+startup and scheduling for two Firestorm siblings.  Enabling only Firestorm
+UID6 should extend the same proven path to seven Windows CPUs without changing
+any other platform behavior.
+
+- recovery point: root `3ba28a21caf21ff396abd854eea6aa8b4a9cfd08`, Mu
+  `926f45204e0faffc040f85966b62ef3ec217e61f`, and unchanged m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, each verified against its
+  published remote branch;
+- branches: root and Mu `feature/j313-4e3p-cpu-stability`;
+- single variable: enable only GICC UID6.  UID7 remains disabled and all
+  timer, vGIC, NVMe, USB, input, display and diagnostic code is unchanged;
+- RED/GREEN contract: require enabled UIDs `[0, 1, 2, 3, 4, 5, 6]`, class 0
+  for UIDs 0 through 3 and class 1 for UIDs 4 through 6; observe failure before
+  changing UID6, then change only its GICC flag;
+- RED/GREEN result: the focused test failed with observed enabled UIDs `[0, 1,
+  2, 3, 4, 5]`, then passed after only UID6's GICC flag changed; all 306 public
+  Python tests and 96 subtests plus the complete m1n1 host suite pass;
+- frozen assisted artifacts: m1n1 SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  Mu SHA-256
+  `62926b4ecf8450e9bdde6c7db64dd20d5622d0a3fa43a6d7b874b5597564b1c8`,
+  and packed `boot.bin` SHA-256
+  `eea72444e05fec89fa86d65f8fda3db29e4eb5e1e48923d97bb7f62e157e8610`;
+  the manifest reports display `both`, debug `monitor`, clean m1n1 at the
+  published checkpoint and only the recorded root/Mu experiment diffs dirty;
+- hardware profile: assisted `both/monitor`, fresh Mu and exact m1n1 from the
+  published checkpoint, with no ESP write;
+- build command: `scripts/build-standalone.sh --debug-build --display both
+  --debug monitor`;
+- launch command: `M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41
+  M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 scripts/run-assisted.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43
+  --display both --debug monitor --chainload --foreground`;
+- evidence paths: `hv.log`, `fb.raw`, `fb-info.json`, Windows System event log,
+  `/tmp/cpuset-exp070.ps1`, `/tmp/cpu-stress-exp071.ps1`, and
+  `/tmp/health-exp071.ps1`;
+- acceptance: Windows reaches the desktop without a delayed spinner, reports
+  seven logical processors and P-class on UIDs 4 through 6; internal input and
+  SSH remain responsive; a seven-worker bounded CPU test completes; exact web
+  frames advance and Windows/hypervisor logs contain no relevant error;
+- stop/rollback: any boot delay, freeze, bugcheck, watchdog, storage reset,
+  input failure or proxy corruption rejects UID6 and returns to the published
+  4E+2P checkpoint.
+
+Interim hardware result (2026-08-25): the exact candidate reached the Windows
+lock screen within the 30-second gate and remained available over SSH.  All
+secondaries CPU1 through CPU6 entered the guest.  Windows reported one package
+and seven logical processors.  `GetSystemCpuSetInformation` returned logical
+CPUs 0 through 3 with efficiency/scheduling class 0 and CPUs 4 through 6 with
+both classes equal to 1, confirming the third exposed Firestorm core is in the
+higher-performance class.  A seven-worker eight-second CPU load completed in
+19081 ms including PowerShell job startup/cleanup.  At 222 seconds uptime,
+Windows reported zero new BugCheck, WHEA, stornvme or storage-reset events and
+remained responsive afterward.  Hypervisor counts were zero for checksum,
+proxy/parser, bugcheck/reset and NVMe failures; the only `watchdog` text was the
+normal Mu `WatchdogTimer.efi` load line.  The exact framebuffer showed the
+live lock screen.  The operator then verified the built-in keyboard, Precision
+Touchpad and desktop behavior and reported the session stable and smooth.  The
+4E+3P candidate is accepted as the next assisted recovery checkpoint; the ESP
+was not modified.
