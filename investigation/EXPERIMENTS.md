@@ -7832,3 +7832,71 @@ This closes the capture-startup regression without changing the stable m1n1
 tree or production Windows path. A new capture may use the same wrapper and
 three-second budget, but still requires its own fresh preregistration and cannot
 inherit any GPU-success claim from this transport-only result.
+
+### EXP-20260825-086 — acquire corrected cold historical Mesa clear captures
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: after EXP-085 measured the exact full-client setup at 216.63 ms and
+qualified the capture-only three-second bootstrap adapter, the pinned historical
+Mesa bridge can execute the fixed 16 by 16 RGBA8 `11 22 33 ff` clear twice on
+J313/G13/V13_5 across distinct cold proxy identities and produce byte-identical
+complete `GPUFrame` archives and final 1024-byte attachments.
+
+- root source before registration:
+  `3b0d46197259da64e81c913ef1fadcfd5d57bc14`;
+- capture environment: `296f7a4b99664a478b8d0c65e6a881f5f4f0cebf`;
+- transport correction: `184b2a2497b93699e0a3b55ab80fc57c29ee7ebb`;
+- full-client bootstrap adapter: `bbdc09bad562dd2f29a834a24db43b2a64330ce3`;
+- prerequisite EXP-085 receipt SHA-256:
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`;
+- capture wrapper SHA-256:
+  `36bd1b2d1ea886397ec02f7788a6509cacb07474ddea8892a5be5ce13f50e198`;
+- bounded bootstrap module SHA-256:
+  `704533a1a76f5e7f57af63b7b15a92ca744cef9110b62dc1262b677787990c73`;
+- container helper SHA-256:
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp086.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- contract `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- fixed producer SHA-256
+  `741da86a93f40472f1211ed247368c5ca9030f08d3fcee29cdd9f3cf82ca20e9`;
+- immutable stable recovery manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`,
+  with every artifact passing immediately before registration;
+- proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, present without an open owner;
+- evidence directory
+  `investigation/artifacts/EXP-20260825-086-agx-g1r-capture/`, confirmed absent;
+- fixed bridge port `43141`;
+- 578/578 repository tests passed before the prerequisite hardware gate, and
+  EXP-085 then passed the exact full-client path and mandatory reboot.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp086.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-086-agx-g1r-capture \
+  --bridge-port 43141
+```
+
+Each capture must use `AGX_SHIM_MODULE=tools.agx_capture_shim`, the finite
+three-second bootstrap budget, exactly one frame and attachment, an atomic live
+receipt and a mandatory physical reboot. Capture two requires a fresh proxy.
+Packaging must prove distinct identities and bases plus byte-identical complete
+archives, commands, objects, flags and final attachments.
+
+Any startup, AGX, dump, attachment, validation, cleanup, reboot, reconnect or
+determinism failure rejects EXP-086. Preserve evidence and do not retry this
+directory. A pass still proves capture reproducibility only; it cannot claim
+replay, WDDM, display, performance, power, thermal or production GPU support.
