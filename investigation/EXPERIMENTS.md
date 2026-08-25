@@ -7997,3 +7997,53 @@ does not. The capture wrapper must therefore establish version `V13_5` and GPU
 generation `G13` from the live, already-validated `ProxyUtils` object before
 delegating to the historical `init_agx`. It must not alter the pinned nested
 m1n1 source or truncate the builder's mapping list.
+
+### EXP-20260825-088 — acquire version-bound cold AGX clear captures
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the tracked helper and capture wrapper, now binding the live
+J313/V13_5/G13 construct layout before historical AGX startup, can complete two
+cold fixed-clear captures and produce byte-identical complete frames and final
+attachments.
+
+- root source and ledger: `05a99900e726604ab87515e6dcc90a4c043018a2`;
+- version-layout correction and ledger:
+  `e5066ea7a3cf77da5c0fd6f98dd73c884414d703` and
+  `05a99900e726604ab87515e6dcc90a4c043018a2`;
+- capture wrapper SHA-256:
+  `cf383a4cc9d6b094a9e45454e163eebcf7e4b6c11aa2090a5ee8d10c0da7c870`;
+- host operator SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`;
+- prerequisite EXP-085 receipt SHA-256:
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`;
+- identity `.local/agx-capture/identity-exp088.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- pinned image ID
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-088-agx-g1r-capture/`,
+  confirmed absent; fixed bridge port `43143`;
+- full repository suite passed 579/579.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp088.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-088-agx-g1r-capture \
+  --bridge-port 43143
+```
+
+Pass and rejection rules remain identical to EXP-087 and require the exact
+tracked helper, V13_5/G13 assertion, two cold receipts, complete deterministic
+archives, attachments and mandatory reboots. A pass is capture-only and still
+requires manual fixture review and separately preregistered replay.
