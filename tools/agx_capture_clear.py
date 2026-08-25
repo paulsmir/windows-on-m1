@@ -299,16 +299,17 @@ def _read_identity(path: Path) -> dict:
 
 def preflight_capture_source(
     mesa_source: Path,
-    shim_launcher: Path,
+    shim_library: Path,
     capture_program: Path,
     identity_path: Path,
     contract_path: Path,
     expected_program_sha256: str,
+    expected_shim_sha256: str,
 ) -> dict:
     """Verify the pinned, clean capture producer without touching hardware."""
 
     mesa_source = Path(mesa_source).resolve()
-    shim_launcher = Path(shim_launcher).resolve()
+    shim_library = Path(shim_library).resolve()
     capture_program = Path(capture_program).resolve()
     identity = _read_identity(identity_path)
     try:
@@ -333,16 +334,21 @@ def preflight_capture_source(
     if mesa_commit != identity["mesa_commit"]:
         raise CaptureError("Mesa source commit does not match capture identity")
     try:
-        shim_launcher.relative_to(mesa_source)
+        shim_library.relative_to(mesa_source)
     except ValueError as exc:
-        raise CaptureError("shim launcher must belong to the pinned Mesa source") from exc
-    if not shim_launcher.is_file() or not os.access(shim_launcher, os.X_OK):
-        raise CaptureError("shim launcher must be an executable file")
-    relative_launcher = shim_launcher.relative_to(mesa_source)
-    try:
-        _git(mesa_source, "ls-files", "--error-unmatch", str(relative_launcher))
-    except CaptureError as exc:
-        raise CaptureError("shim launcher is not tracked by pinned Mesa") from exc
+        raise CaptureError("shim library must belong to the pinned Mesa source") from exc
+    if not shim_library.is_file():
+        raise CaptureError("shim library must be a regular file")
+    shim_bytes = _read_bytes(shim_library, "shim library")
+    if not shim_bytes.startswith(b"\x7fELF"):
+        raise CaptureError("shim library is not ELF")
+    shim_sha256 = _sha256(shim_bytes)
+    if (
+        not isinstance(expected_shim_sha256, str)
+        or not _SHA256_RE.fullmatch(expected_shim_sha256)
+        or shim_sha256 != expected_shim_sha256
+    ):
+        raise CaptureError("shim library SHA-256 does not match preregistration")
     if not capture_program.is_file() or not os.access(capture_program, os.X_OK):
         raise CaptureError("capture program must be an executable file")
     program_sha256 = _sha256(_read_bytes(capture_program, "capture program"))
@@ -355,7 +361,8 @@ def preflight_capture_source(
     return {
         "mesa_source": str(mesa_source),
         "mesa_commit": mesa_commit,
-        "shim_launcher": str(shim_launcher),
+        "shim_library": str(shim_library),
+        "shim_library_sha256": shim_sha256,
         "capture_program": str(capture_program),
         "capture_program_sha256": program_sha256,
         "identity": identity,
@@ -425,7 +432,8 @@ def main(argv=None) -> int:
     package.add_argument("--destination", type=Path, required=True)
     preflight = commands.add_parser("preflight")
     preflight.add_argument("--mesa-source", type=Path, required=True)
-    preflight.add_argument("--shim-launcher", type=Path, required=True)
+    preflight.add_argument("--shim-library", type=Path, required=True)
+    preflight.add_argument("--shim-library-sha256", required=True)
     preflight.add_argument("--capture-program", type=Path, required=True)
     preflight.add_argument("--identity", type=Path, required=True)
     preflight.add_argument("--contract", type=Path, required=True)
@@ -440,8 +448,8 @@ def main(argv=None) -> int:
     try:
         if args.command == "preflight":
             print(json.dumps(preflight_capture_source(
-                args.mesa_source, args.shim_launcher, args.capture_program, args.identity,
-                args.contract, args.capture_program_sha256,
+                args.mesa_source, args.shim_library, args.capture_program, args.identity,
+                args.contract, args.capture_program_sha256, args.shim_library_sha256,
             ), indent=2, sort_keys=True))
             return 0
         if args.command == "live-receipt":

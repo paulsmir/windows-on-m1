@@ -73,11 +73,12 @@ class OperatorFixture(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.mesa), "config", "user.name", "test"], check=True)
         subprocess.run(["git", "-C", str(self.mesa), "config", "user.email", "test@example.invalid"], check=True)
         (self.mesa / "PINNED").write_text("pinned Mesa source\n")
-        self.shim_launcher = self.mesa / "run-fixed-clear"
-        self.shim_launcher.write_text("#!/bin/sh\nexec \"$@\"\n")
-        self.shim_launcher.chmod(0o755)
+        (self.mesa / ".gitignore").write_text("/build/\n")
+        self.shim_library = self.mesa / "build" / "src" / "asahi" / "drm-shim" / "libasahi_m1n1_drm_shim.so"
+        self.shim_library.parent.mkdir(parents=True)
+        self.shim_library.write_bytes(b"\x7fELF" + b"test shim library\n")
         subprocess.run(
-            ["git", "-C", str(self.mesa), "add", "PINNED", "run-fixed-clear"],
+            ["git", "-C", str(self.mesa), "add", "PINNED", ".gitignore"],
             check=True,
         )
         subprocess.run(["git", "-C", str(self.mesa), "commit", "-q", "-m", "fixture"], check=True)
@@ -143,7 +144,8 @@ class OperatorFixture(unittest.TestCase):
             "--contract", str(CONTRACT_PATH),
             "--artifact-dir", str(self.artifacts),
             "--mesa-source", str(self.mesa),
-            "--shim-launcher", str(self.shim_launcher),
+            "--shim-library", str(self.shim_library),
+            "--shim-library-sha256", sha256(self.shim_library),
             "--capture-program", str(self.capture_program),
             "--capture-program-sha256", sha256(self.capture_program),
             "--identity", str(self.identity),
@@ -218,15 +220,20 @@ class CaptureOperatorTests(OperatorFixture):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("capture program SHA-256", result.stderr)
 
-    def test_shim_launcher_must_be_tracked_by_pinned_mesa(self):
-        launcher = self.base / "untracked-launcher"
-        launcher.write_text("#!/bin/sh\nexec \"$@\"\n")
-        launcher.chmod(0o755)
+    def test_built_shim_library_must_match_preregistered_hash(self):
         command = self.capture_command("--dry-run")
-        command[command.index("--shim-launcher") + 1] = str(launcher)
+        command[command.index("--shim-library-sha256") + 1] = "0" * 64
         result = self.run_script(command)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("shim launcher", result.stderr)
+        self.assertIn("shim library SHA-256", result.stderr)
+
+    def test_shim_library_must_be_an_elf_shared_object(self):
+        self.shim_library.write_bytes(b"not an ELF shared object\n")
+        command = self.capture_command("--dry-run")
+        command[command.index("--shim-library-sha256") + 1] = sha256(self.shim_library)
+        result = self.run_script(command)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("shim library is not ELF", result.stderr)
 
     def test_nonempty_destination_is_rejected(self):
         self.destination.mkdir()
@@ -247,6 +254,15 @@ class CaptureOperatorTests(OperatorFixture):
         capture = source.index("ASAHI_SHIM_DUMP=1", armed)
         self.assertLess(guard, armed)
         self.assertLess(armed, capture)
+
+    def test_capture_uses_historical_mesa_ld_preload_contract(self):
+        source = CAPTURE_SCRIPT.read_text()
+        self.assertIn('LD_PRELOAD="$SHIM_LIBRARY"', source)
+        self.assertNotIn('"$SHIM_LAUNCHER" "$CAPTURE_PROGRAM"', source)
+
+    def test_capture_allows_a_pinned_linux_python_runtime(self):
+        source = CAPTURE_SCRIPT.read_text()
+        self.assertIn('PYTHON=${AGX_CAPTURE_PYTHON:-"$ROOT/proxyenv/bin/python"}', source)
 
 
 class ReplayOperatorTests(OperatorFixture):

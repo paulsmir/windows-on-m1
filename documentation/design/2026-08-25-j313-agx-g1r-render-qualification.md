@@ -95,6 +95,43 @@ The canonical fixture and manifest are versioned together. The manifest binds:
 
 Any fixture or manifest change creates a new gate version and experiment.
 
+### Historical capture bridge and reproducible host
+
+The capture path is pinned to the historical Asahi Mesa bridge that actually
+implemented m1n1 forwarding, not to the later no-op demonstration shim:
+
+- repository: `https://gitlab.freedesktop.org/asahilina/mesa.git`;
+- commit: `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- bridge source: `src/asahi/drm-shim/asahi_m1n1.c`;
+- runtime artifact: `libasahi_m1n1_drm_shim.so`.
+
+The bridge is a Linux-only `LD_PRELOAD` library. It embeds CPython, imports
+`m1n1.agx.shim`, constructs `Shim(shim_device.mem_fd)`, and forwards the Asahi
+DRM ioctls into the pinned m1n1 proxy API. It is not an executable launcher and
+does not need to be tracked in the Mesa source tree. The acquisition operator
+therefore requires all of the following independently:
+
+- the exact clean Mesa source commit above;
+- an ELF shim library located under that checkout;
+- the exact SHA-256 of that built library supplied at preflight; and
+- the exact pinned m1n1 ioctl ABI and capture-program SHA-256.
+
+The host build is reproducible in an ARM64 Linux container based on
+`ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc`.
+It builds the exact Mesa commit with only the Asahi Gallium driver, DRM shim,
+EGL, GBM, GLES, and shared glapi required for the fixed clear. The exported
+bundle contains the shim, `asahi_dri.so`, EGL/GLES libraries, fixed-clear
+producer, verifier, and a hash manifest. Two independent no-cache builds must
+produce byte-identical manifests before hardware is eligible.
+
+The container receives the repository read-only and a separate evidence
+directory read-write. A reconnecting host `socat` bridge exposes the physical
+USB proxy as a container PTY without granting the container direct host-device
+ownership. The bridge was independently loopback-tested in both directions.
+A negative control using the exact EGL/GLES and Asahi override without the shim
+must fail with `EGL_NOT_INITIALIZED`; it must never fall back to software
+rendering or create an output artifact.
+
 ## Fixture validation
 
 Fixture validation is pure and runs before hardware access. It fails closed on
@@ -191,6 +228,13 @@ The stable recovery directory remains byte-identical and is the rollback point.
   proven G1 backend and pinned `GPUFrame`/`GPURenderer` implementation.
 - `scripts/capture-agx-clear-frame.sh`: provenance-checked, assisted-only
   two-cold-boot fixture acquisition operator.
+- `scripts/build-agx-capture-env.sh`: reproducible ARM64 Linux capture
+  environment builder and atomic exporter.
+- `scripts/run-agx-capture-container.sh`: read-only container runner and
+  reconnecting host USB-proxy bridge.
+- `tools/verify-agx-capture-env.py`: exact exported-artifact and manifest
+  verifier.
+- `tools/agx-capture-container/`: pinned build and runtime definitions.
 - `scripts/run-agx-render-gate.sh`: provenance-checked one-shot replay and
   eventual ten-cycle cold qualification operator.
 - `fixtures/agx/j313-g13-v13_5-clear-16x16/`: canonical capture, manifest, and

@@ -7,7 +7,8 @@ PROXY=
 CONTRACT=
 ARTIFACT_DIR=
 MESA_SOURCE=
-SHIM_LAUNCHER=
+SHIM_LIBRARY=
+SHIM_LIBRARY_SHA256=
 CAPTURE_PROGRAM=
 CAPTURE_PROGRAM_SHA256=
 IDENTITY=
@@ -16,7 +17,8 @@ DRY_RUN=0
 
 usage() {
     echo "usage: $0 --proxy DEVICE --contract FILE --artifact-dir DIR" >&2
-    echo "          --mesa-source DIR --shim-launcher FILE --capture-program FILE" >&2
+    echo "          --mesa-source DIR --shim-library FILE --shim-library-sha256 SHA256" >&2
+    echo "          --capture-program FILE" >&2
     echo "          --capture-program-sha256 SHA256 --identity FILE" >&2
     echo "          --destination DIR [--dry-run]" >&2
     exit 2
@@ -28,7 +30,8 @@ while [ "$#" -gt 0 ]; do
         --contract) [ "$#" -ge 2 ] || usage; CONTRACT=$2; shift 2 ;;
         --artifact-dir) [ "$#" -ge 2 ] || usage; ARTIFACT_DIR=$2; shift 2 ;;
         --mesa-source) [ "$#" -ge 2 ] || usage; MESA_SOURCE=$2; shift 2 ;;
-        --shim-launcher) [ "$#" -ge 2 ] || usage; SHIM_LAUNCHER=$2; shift 2 ;;
+        --shim-library) [ "$#" -ge 2 ] || usage; SHIM_LIBRARY=$2; shift 2 ;;
+        --shim-library-sha256) [ "$#" -ge 2 ] || usage; SHIM_LIBRARY_SHA256=$2; shift 2 ;;
         --capture-program) [ "$#" -ge 2 ] || usage; CAPTURE_PROGRAM=$2; shift 2 ;;
         --capture-program-sha256) [ "$#" -ge 2 ] || usage; CAPTURE_PROGRAM_SHA256=$2; shift 2 ;;
         --identity) [ "$#" -ge 2 ] || usage; IDENTITY=$2; shift 2 ;;
@@ -39,8 +42,9 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-for value in "$PROXY" "$CONTRACT" "$ARTIFACT_DIR" "$MESA_SOURCE" "$SHIM_LAUNCHER" \
-    "$CAPTURE_PROGRAM" "$CAPTURE_PROGRAM_SHA256" "$IDENTITY" "$DESTINATION"; do
+for value in "$PROXY" "$CONTRACT" "$ARTIFACT_DIR" "$MESA_SOURCE" "$SHIM_LIBRARY" \
+    "$SHIM_LIBRARY_SHA256" "$CAPTURE_PROGRAM" "$CAPTURE_PROGRAM_SHA256" "$IDENTITY" \
+    "$DESTINATION"; do
     [ -n "$value" ] || usage
 done
 if [ -d "$DESTINATION" ] && [ -n "$(find "$DESTINATION" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
@@ -48,13 +52,14 @@ if [ -d "$DESTINATION" ] && [ -n "$(find "$DESTINATION" -mindepth 1 -maxdepth 1 
     exit 1
 fi
 
-PYTHON="$ROOT/proxyenv/bin/python"
+PYTHON=${AGX_CAPTURE_PYTHON:-"$ROOT/proxyenv/bin/python"}
 [ -x "$PYTHON" ] || PYTHON=python3
 cd "$ROOT"
 "$PYTHON" -m tools.agx_gate preflight \
     --root "$ROOT" --contract "$CONTRACT" --artifact-dir "$ARTIFACT_DIR"
 "$PYTHON" -m tools.agx_capture_clear preflight \
-    --mesa-source "$MESA_SOURCE" --shim-launcher "$SHIM_LAUNCHER" \
+    --mesa-source "$MESA_SOURCE" --shim-library "$SHIM_LIBRARY" \
+    --shim-library-sha256 "$SHIM_LIBRARY_SHA256" \
     --capture-program "$CAPTURE_PROGRAM" \
     --capture-program-sha256 "$CAPTURE_PROGRAM_SHA256" \
     --identity "$IDENTITY" --contract "$CONTRACT"
@@ -95,7 +100,9 @@ while [ "$CYCLE" -le 2 ]; do
     if (
         cd "$CYCLE_DIR"
         ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
-            M1N1DEVICE="$PROXY" "$SHIM_LAUNCHER" "$CAPTURE_PROGRAM" "$FINAL"
+            M1N1DEVICE="$PROXY" LD_PRELOAD="$SHIM_LIBRARY" \
+            PYTHONPATH="$ROOT/m1n1_windows/proxyclient${PYTHONPATH:+:$PYTHONPATH}" \
+            "$CAPTURE_PROGRAM" "$FINAL"
         [ -f "$FRAME" ]
         M1N1DEVICE="$PROXY" "$PYTHON" -m tools.agx_capture_clear live-receipt \
             --frame "$FRAME" --final-attachment "$FINAL" \

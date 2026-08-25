@@ -462,7 +462,14 @@ Record the exact commit, then commit only the ledger with
 **Files:**
 - Create: `scripts/capture-agx-clear-frame.sh`
 - Create: `scripts/run-agx-render-gate.sh`
+- Create: `scripts/build-agx-capture-env.sh`
+- Create: `scripts/run-agx-capture-container.sh`
+- Create: `tools/agx-capture-container/Dockerfile`
+- Create: `tools/agx-capture-container/run-capture.sh`
+- Create: `tools/verify-agx-capture-env.py`
 - Create: `tests/test_run_agx_render_gate.py`
+- Create: `tests/test_build_agx_capture_env.py`
+- Create: `tests/test_run_agx_capture_container.py`
 - Modify: `tools/agx_capture_clear.py`
 - Modify: `tools/agx_render_gate.py`
 
@@ -494,8 +501,10 @@ Expected: script-not-found failures.
 
 - [ ] **Step 3: Implement capture preflight and fixed-clear invocation**
 
-The capture script must refuse hardware unless the pinned Mesa shim environment
-and capture program are present and hash-matched. It sets frame dump and
+The capture script must refuse hardware unless the pinned historical Mesa
+`LD_PRELOAD` shim library and capture program are present and hash-matched. The
+shim is an untracked ELF build artifact under the exact clean Mesa checkout,
+not a tracked executable launcher. It sets frame dump and
 attachment pull, executes one fixed clear, saves one raw frame and final output,
 records identity, and reboots on every exit path. It never installs packages,
 downloads a capture, launches Windows, or mutates pinned m1n1.
@@ -529,6 +538,22 @@ git commit -m "gpu: add bounded AGX capture and replay operators"
 
 Record the exact commit, then commit only the ledger with
 `docs: record AGX capture and replay operators`.
+
+- [x] **Step 7: Correct and reproduce the historical capture environment**
+
+Pin `asahilina/mesa` commit
+`7a4f24061fa56ef7eff12132dd7b1461d5a890d8`, its actual
+`libasahi_m1n1_drm_shim.so` `LD_PRELOAD` contract, and an ARM64 Ubuntu image by
+digest. Build the shim, Asahi DRI driver, EGL/GLES libraries, and fixed-clear
+producer inside that image. Export them atomically with an exact hash manifest.
+Require an ELF shim under the pinned checkout and its literal SHA-256 at capture
+preflight. Mount the repository read-only, evidence separately read-write, and
+bridge the host USB serial proxy through a reconnecting PTY.
+
+Verify two independent no-cache builds have byte-identical manifests. Run a
+negative control without the shim and require `EGL_NOT_INITIALIZED` with no
+output. Loopback-test host serial to TCP to container PTY in both directions.
+Do not touch the Air during these host checks.
 
 ---
 
