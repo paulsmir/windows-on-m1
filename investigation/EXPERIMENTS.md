@@ -8299,7 +8299,7 @@ is recorded. EXP-091 is closed and its evidence directory will not be reused.
 
 ### EXP-20260825-092 — control AGX boot after a fresh stable chainload
 
-Status: preregistered; one two-capture run permitted.
+Status: rejected by inherited-shim proxy contention in assembler children.
 
 Hypothesis: the EXP-091 ASC timeout was residual GPU firmware state from the
 failed full-eager EXP-090 attempt. Re-chainloading the exact immutable stable
@@ -8343,3 +8343,19 @@ timeout rejects the stale-state hypothesis; no retry is allowed without a new
 diagnostic correction and preregistration. Preserve all evidence, require the
 operator reboot, never reuse this directory, keep Windows blocked, and return
 the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected without timeout or manual intervention, disproving
+the stale-GPU-state hypothesis. The first create-BO callback entered AGX start,
+whose crash-buffer/UAT path invoked runtime `gcc` and `as`. Both children
+inherited `LD_PRELOAD`, constructed the capture Shim, imported `m1n1.setup` and
+opened the same proxy concurrently. Their bootstrap readers consumed each
+other's binary replies, raising `UnicodeEncodeError`; gcc and as then aborted,
+and the parent surfaced `CalledProcessError`. The setup-only boundary is valid
+only in the exact capture producer. Inherited helper executables must construct
+an inert Shim without USB or AGX initialization.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`08eb42cff54f5f608930c55a9e6d82e5b53d95b5b6bda747cf4f3be9aad7d474`.
+The operator performed the mandatory reboot; a fresh unowned J313/V13_5 proxy
+returned at base `0x8057f8000`. EXP-092 is closed and its evidence directory
+will not be reused.
