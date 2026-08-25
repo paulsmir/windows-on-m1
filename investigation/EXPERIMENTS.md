@@ -8414,3 +8414,29 @@ successful mandatory physical reboot after every capture. Any missing file,
 unexpected boundary, cleanup failure, stale proxy or manual intervention
 rejects EXP-093. Preserve all evidence, never reuse its directory, keep Windows
 blocked, and return the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected without timeout or manual intervention. The exact
+producer guard eliminated EXP-092 proxy contention: runtime `gcc` and `as`
+completed, AGX ASC booted, all endpoints and channels initialized, V13_5
+initdata was sent, and context 23 was bound. The first create-BO Python handler
+completed, then the enclosing C `drm_shim_bo_get_handle()` aborted while
+locking its cached `shim_fd`.
+
+Core analysis proves the cached object at `0x0000b244e627d4f0` was freed and
+overwritten: its original `fd=11` and lock fields were no longer valid. The
+global `shim_device.fd_map` remained allocated but contained `entries=0` and
+`deleted_entries=3`. The exact stack is `mtx_lock` ->
+`drm_shim_bo_get_handle` -> `asahi_ioctl_create_bo` -> interposed `ioctl`.
+This is the pre-`exec` half of the subprocess problem: Python's runtime
+assembler uses `vfork`/`posix_spawn`; while sharing the producer address space,
+the child closes inherited descriptors and drm-shim's interposed `close()`
+unregisters the producer mappings before `exec`. The post-`exec` producer guard
+cannot repair that parent-memory mutation.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`bedcbeba0b30c60ba9e0ff0a6eab10d24199831ffa52b7cd1dd5a7e1539ec69d`.
+The mandatory reboot succeeded and a fresh unowned J313/V13_5 proxy returned at
+base `0x805218000`. EXP-093 is closed and its evidence directory will not be
+reused. The next correction must disable `vfork` and `posix_spawn` only in the
+exact native producer before AGX can invoke its assembler, forcing child fd
+closure into a private forked address space.
