@@ -8915,3 +8915,55 @@ the core SHA-256 is
 no final attachment or receipt exists. The saved producer status remained
 nonzero, the mandatory reboot completed and both USB endpoints re-enumerated
 at 23:44. EXP-099 is closed and its destination will not be reused.
+
+### EXP-20260825-100 — align the capture TA padding
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: converting only the pinned renderer's exact all-zero `0x64`-byte
+`WorkCommandTA.unk_3e8` assignment to the active schema's `0x60` bytes allows
+sequence 9 to cross TA queue serialization while preserving all subsequent
+field offsets established by the paired helper-layout transition.
+
+- root source `ff96785`, implementation
+  `96452ee606f2df1828a2c4f60fd49ad5eba00464`, ledger `ff96785`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp100.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `e1dc37507e7f55041a9e3286c00ea99a4b6bef3cfa710b3aeb7d5cd349b5fbc4`;
+- host/container/cycle helper SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `0ff3f987c4d5b27343b4b8c35e05d0b5553e37855df7a4de9748bc0a0b559e64`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x804458000`, both USB endpoints present;
+  destination `investigation/artifacts/EXP-20260825-100-agx-ta-padding/`
+  confirmed absent; fixed bridge port `43155`;
+- the TA-padding behavioral test failed before implementation, 14 focused
+  tests and the complete public suite passed 587/587; Python compilation, root
+  and nested diff checks and CSV validation passed.
+
+One command is permitted:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp100.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-100-agx-ta-padding \
+  --bridge-port 43155
+```
+
+Pass requires sequence 9 and every later ioctl to return, two complete
+byte-identical cold receipts and archives, a valid final attachment, no
+exception, assertion, timeout, contention, recursion or fallback, and a
+mandatory physical reboot after each capture. Anything else rejects EXP-100.
+Preserve all evidence, never reuse the destination, keep Windows blocked and
+return the Air to fresh proxy regardless of result.
