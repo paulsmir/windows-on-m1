@@ -9001,3 +9001,60 @@ preserved destination is immutable and will not be reused.  This experiment
 is the first two-cold-boot proof that the pinned native AGX path executes the
 fixed clear successfully, but it is not yet an accepted replay fixture and
 does not claim Windows GPU acceleration.
+
+### EXP-20260826-101 — capture the complete AGX attachment page
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: retaining the sole color BO after the historical shim has pulled
+its complete declared 0x4000 bytes, while canonically materializing only
+`GPUFrame.save()` entries explicitly marked `"file": null`, will preserve all
+actual initial and final GPU bytes and allow the two successful cold fixed
+clears to pass fixture packaging without weakening any G1R boundary.
+
+- root source and ledger `5f6fd58eb40113d5267e5af8aa7ffbdddbfcb490`;
+  implementation `58504103f61332f9aea200c5bd3311ed45fb99ce`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp101.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture shim, host/container/cycle helpers SHA-256
+  `7ceb64e17a4f5ccc52ef9bb0939c8ea3aa47a3d9a2c460ac16ba8011bf9d4071`,
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `1e498032d263018981691110371baaf801ec7080012a23a29fb1e32f6311cae9`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x80441c000`, both USB endpoints
+  present; destination
+  `investigation/artifacts/EXP-20260826-101-agx-full-attachment/` confirmed
+  absent; fixed bridge port `43156`;
+- three mandatory tests failed before implementation; 45 focused tests and
+  the complete public suite passed 593/593; compileall, shell syntax, diff,
+  CSV and immutable recovery checks passed.
+
+One command is permitted exactly once:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp101.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260826-101-agx-full-attachment \
+  --bridge-port 43156
+```
+
+Pass requires two distinct cold J313/V13_5 identities and bases; every native
+ioctl, TA/3D queue and completion event to succeed; each visible file to be
+exactly 1024 bytes; each final attachment to be exactly 0x4000 actual pulled
+bytes whose first 1024 bytes equal the visible file; byte-identical normalized
+frames and complete attachments; a valid atomically published fixture,
+manifest and provenance; and the mandatory physical reboot after each cycle.
+Any missing or inferred byte, malformed or ambiguous BO, differing output,
+exception, timeout, software fallback, packaging failure, cleanup failure or
+manual intervention rejects EXP-101.  Preserve all evidence, never reuse the
+destination, keep Windows blocked and return to a fresh proxy.
