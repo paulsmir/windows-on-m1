@@ -9183,3 +9183,84 @@ reproducible native AGX clear and supplies the first accepted replay fixture;
 it does not yet prove replay reliability or Windows GPU acceleration.  The
 next hardware gate is repeated cold replay of this exact fixture without any
 capture-path mutation.
+
+### EXP-20260826-103 — one-shot replay of the accepted AGX fixture
+
+Status: preregistered; hardware replay not run.
+
+Hypothesis: the committed fixture accepted by EXP-102 can be loaded into an
+isolated context 63, replayed once through renderer queue 1, and complete its
+exact two-entry TA and two-entry 3D sequences within 0.5 seconds while changing
+only the poisoned output page to its bound raw BGRA oracle, after which all
+private ownership is released and a physical reboot returns a fresh proxy.
+
+- root source `f7f00c4622393d1df4fbfae8d2cc19d6f328a62e`;
+  replay implementation remains bound to ledgered source preceding EXP-102;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- committed frame, manifest and provenance SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`,
+  `938cb9427dfdef646ec6938c4fc92f2404e41a70c1d0662f01dfe93f01702fe7`
+  and `edb5fc2caeea2bdda8e07f6d90a92c5f8ef097345d97b5f579729161bdf970a9`;
+- render gate, live backend and cold operator SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `a6ec0f48ee6d312e54cb80e1adc06b5670c84e0524fa48691ed1e9510d79a8ee`
+  and `c41872cb548b5e186f7c386cc1d494579de1b796c3219484d6cf7acacac9e924`;
+- immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+  contract SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- fresh unowned J313/V13_5 proxy base `0x80427c000`, both USB endpoints
+  present; evidence destination
+  `investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/` confirmed
+  absent;
+- the complete public suite passed 596/596, canonical fixture verification and
+  the exact ten-cycle operator dry-run passed, stable recovery hashes matched,
+  root diff checks passed and Windows remained blocked.
+
+The hardware sequence is permitted exactly once and in this order:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate run-one \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/cycle-01
+```
+
+Regardless of the one-shot exit status, run exactly one physical reboot:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+```
+
+Only after a fresh changed identity is observed, bind it to the immutable
+one-shot result:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate proxy-receipt \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --cycle-result investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/cycle-01/render-gate-result.json \
+  --cycle 1 \
+  --output investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/reset-01.json
+```
+
+Pass requires exact queue producer/read/done progress `0 -> 2` for both TA and
+3D, one matching event for each queue and no spurious event, exact TA and 3D
+stamp progress, poison-to-oracle output transition, unchanged immutable-object
+hash, only classified private mappings with unmapped guards, no firmware fault,
+complete cleanup and ownership release within the fixed 0.5-second workload
+deadline.  The reboot receipt must bind the unedited result to a distinct fresh
+J313/V13_5 proxy identity and randomized m1n1 base.  Any exception, timeout,
+missing event, partial pointer or stamp progress, changed immutable byte,
+unexpected mapping, fault, cleanup or reboot failure rejects EXP-103.  Do not
+retry in place, preserve all evidence, keep Windows blocked and do not begin
+EXP-080 unless this one-shot passes independent inspection.
