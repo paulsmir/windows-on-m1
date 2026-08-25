@@ -7,10 +7,11 @@ implemented or claimed by this document. The validated J313 eight-core and
 native-input checkpoint is the immutable recovery baseline for every GPU
 experiment.
 
-The first implementation scope is deliberately limited to G0 and G1: capture a
-read-only, versioned J313 AGX resource contract, then prove bounded firmware
-start, heartbeat, stop, and reset outside the Windows graphics stack. No AGX
-device is published to Windows during these gates.
+The initial implementation scope is deliberately staged: G0 captures a
+read-only, versioned J313 AGX resource contract; G1 proves bounded firmware
+start, heartbeat, stop, and cold-reset recovery; G1Q qualifies one assisted
+barrier/no-op queue completion.  No AGX device is published to Windows during
+these gates.  G2 remains the first Windows-owned driver milestone.
 
 ## Why this is not a Mesa DLL port
 
@@ -47,7 +48,7 @@ m1n1 performs the minimum platform work Windows cannot infer:
 
 m1n1 must not become a synchronous command proxy for every draw call.
 
-The diagnostic ownership used by G0 and G1 is temporary. Beginning with G2,
+The diagnostic ownership used by G0, G1, and G1Q is temporary. Beginning with G2,
 the Windows KMD owns runtime queues, address spaces, interrupts, fences, fault
 handling, and reset. m1n1 remains outside the submission and presentation hot
 paths. This is a hard architectural requirement: the final implementation must
@@ -117,6 +118,22 @@ Every wait has an explicit deadline. A timeout fails closed: save evidence,
 attempt one bounded reset, and otherwise reboot into the preserved recovery
 artifact. The harness never continues into Windows with AGX ownership or an
 unknown reset state.
+
+### G1Q: Assisted queue qualification
+
+- Run only before guest entry with sole proxy ownership.
+- Create one dedicated non-zero UAT context with guarded gate-owned mappings.
+- Submit one already-satisfied barrier/no-op command on one reviewed queue.
+- Require exact queue progress and one interrupt-backed completion event before
+  a fixed deadline.
+- Capture queue, UAT, event, interrupt, firmware-fault, physical-fault, canary,
+  and deadline evidence.
+- Physically reboot between all ten qualification lifecycles.
+- Keep stable Windows, standalone artifacts, Mu, and ACPI unchanged.
+
+G1Q is diagnostic plumbing qualification, not rendering or acceleration.  Its
+full contract is
+[`2026-08-25-j313-agx-g1q-queue-qualification.md`](2026-08-25-j313-agx-g1q-queue-qualification.md).
 
 ### G2: Render-only KMD prototype
 
@@ -198,6 +215,7 @@ single-queue design.
 | --- | --- | --- | --- | --- |
 | G0 | none; read-only inventory | none | none | existing DCP/GOP |
 | G1 | assisted m1n1 harness | private diagnostic UAT; no render context | assisted m1n1 harness | existing DCP/GOP |
+| G1Q | assisted m1n1 harness | one private diagnostic context and queue | assisted event/fault capture; cold reboot | existing DCP/GOP |
 | G2-G4 | Windows KMD | Windows KMD | Windows KMD through reviewed stage-2/vGIC routes | existing DCP/GOP |
 | G5 | Windows KMD | Windows KMD | Windows KMD/TDR | WDDM presentation to DCP, GOP fallback retained |
 

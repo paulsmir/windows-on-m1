@@ -159,18 +159,18 @@ power/thermal policy, and firmware ABI coverage still determine real results.
 
 ## Next hardware gate
 
-G2 must define render-domain power ownership and reset before it submits any
-work.  The first accepted submission should be a bounded, non-display buffer
-operation with:
+G1Q is the assisted queue-qualification gate between G1 and the Windows-owned
+G2 driver.  It creates one dedicated non-zero UAT context and submits one
+already-satisfied barrier/no-op command through one reviewed firmware queue.
+Success requires exact consumer progress, one matching completion event before
+a fixed deadline, unchanged guards and canaries, complete fault evidence, and
+a physical cold reboot between every lifecycle.  It makes no render-domain,
+shader, pixel, performance, or acceleration claim and changes no stable Windows
+or standalone artifact.
 
-- a dedicated non-zero UAT context;
-- mapped guard pages and explicit read/write permissions;
-- one reviewed queue and one fence;
-- interrupt-backed completion with a fixed deadline;
-- before/after buffer hashes and untouched canaries;
-- firmware and physical fault capture while the render domain is powered;
-- mandatory reset and cold-reboot recovery on every failure;
-- no change to the stable Windows or standalone launch artifacts.
-
-Only after bounded buffer submission and reset recovery are repeatable should
-the project expose a Windows WDDM adapter.
+The complete contract is
+[`documentation/design/2026-08-25-j313-agx-g1q-queue-qualification.md`](design/2026-08-25-j313-agx-g1q-queue-qualification.md).
+After G1Q passes ten cold-reset-separated cycles, G2 begins as a render-only
+Windows KMD that directly owns firmware, UAT, queues, interrupts, fences,
+timeout detection, and reset.  The diagnostic proxy path is not reused by the
+Windows driver.
