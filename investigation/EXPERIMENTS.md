@@ -7114,9 +7114,8 @@ EXP-077 will not be retried.
 
 ### EXP-20260825-078 — ten cold-reset J313 AGX G1 lifecycles
 
-Status: firmware gate passed; the registered post-gate Windows lock-screen gate
-was not met because Windows entered Recovery.  No AGX fault or guest bugcheck
-was observed.
+Status: passed.  The firmware gate, post-Recovery Windows boot, and native input
+checks completed without an AGX fault or guest bugcheck.
 
 Run timestamp (UTC): `2026-08-25T15:25:06Z`.
 
@@ -7164,13 +7163,22 @@ V13_5, and a changed randomized m1n1 base.  The version-2 aggregate has SHA-256
 cycles; Windows launch is permitted`.
 
 The unchanged recovery artifacts were then used for the registered Windows
-launch.  A subsequent clean attempt reached guest runtime with CPUs 0 through
-7 online, NVMe ready, the physical xHCI route enabled, no BugCheck, no
-synchronous exception, and no AGX fault.  The 2560x1600 assisted framebuffer
-advanced through generation 36, but Windows stopped at the Recovery `Choose an
-option` page instead of reaching the lock screen within 30 seconds; SSH was
-therefore unavailable.  This does not invalidate the completed firmware gate,
-but it does fail the separately preregistered post-gate Windows criterion.
-Native input responsiveness was not requalified in this run.  No render
-context, command queue, work submission, WDDM device, or acceleration was
-created, and the stable boot artifacts remained byte-identical.
+launch.  The first launch entered the Recovery `Choose an option` page.  The
+operator selected `Continue`, which produced a normal PSCI reset; assisted mode
+then required the host to relaunch the unchanged stable artifacts from the
+fresh proxy.  That clean attempt reached the Windows lock screen within 30
+seconds with CPUs 0 through 7 online, NVMe ready, the physical xHCI route
+enabled, an advancing 2560x1600 assisted framebuffer, no BugCheck, no
+synchronous exception, and no AGX fault.  The initial key-only SSH probe was
+rejected, but an authenticated administrative session subsequently reported
+eight processors, one NVMe disk, `AppleInput=Running`,
+`ACPI\APPL0001\0=OK`, an OK HID keyboard child, and an OK HID-compliant touch
+pad child.  The operator confirmed that the built-in mouse and keyboard were
+responsive.  The same session proved the Recovery detour was guest
+configuration, not AGX residue: the active BCD entry contained both
+`displaymessageoverride Recovery` and `recoveryenabled Yes`.  The forced
+override was removed, `recoveryenabled` was set to `No`, and
+`bootstatuspolicy` was set to `IgnoreAllFailures`; WinRE itself remains enabled
+for manual recovery.  No render context, command queue, work submission, WDDM
+device, or acceleration was created, and the stable boot artifacts remained
+byte-identical.

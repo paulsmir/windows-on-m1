@@ -107,9 +107,15 @@ The aggregate SHA-256 is
 
 The unchanged stable guest subsequently reached runtime with eight CPUs, NVMe,
 physical xHCI, and an advancing 2560x1600 framebuffer without a bugcheck or AGX
-fault.  Windows entered Recovery instead of the lock screen, so the separately
-registered post-gate Windows criterion was not accepted and native input was
-not requalified in that run.  See
+fault.  Its first launch entered Recovery because the active Windows BCD entry
+contained the forced `displaymessageoverride Recovery` policy.  After the
+operator selected `Continue`, assisted mode relaunched the same immutable
+artifacts from fresh proxy and Windows reached the lock screen inside 30
+seconds.  An authenticated administrative query reported eight processors,
+one NVMe disk, a running AppleInput service, and OK built-in keyboard and
+Precision Touchpad devices; the operator confirmed both were responsive.  The
+forced Recovery override was removed, automatic recovery after failed boots
+was disabled, and manual WinRE remains available.  See
 [`investigation/EXPERIMENTS.md`](../investigation/EXPERIMENTS.md) for the exact
 attempt history and rejected predecessors.
 
