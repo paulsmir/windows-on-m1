@@ -20,8 +20,32 @@ def install_start3d_helper_cfg_compatibility(start3d_struct_cls):
     documented[0].name = "unk_40"
 
 
+def install_tiling_helper_cfg_default(render_module):
+    """Initialize the helper field appended after the pinned renderer."""
+
+    current = render_module.TilingParameters
+    if getattr(current, "_capture_helper_cfg_default", False):
+        return current
+    fields = [field for field in current.subcon.subcons if field.name == "helper_cfg"]
+    if len(fields) != 1:
+        raise RuntimeError("unexpected TilingParameters helper field layout")
+
+    class CaptureTilingParameters(current):
+        _capture_helper_cfg_default = True
+
+        def __init__(self):
+            super().__init__()
+            self.helper_cfg = 0
+
+    CaptureTilingParameters.__name__ = current.__name__
+    CaptureTilingParameters.__qualname__ = current.__qualname__
+    render_module.TilingParameters = CaptureTilingParameters
+    return CaptureTilingParameters
+
+
 install_bootstrap_override()
 
+from m1n1.agx import render as capture_render  # noqa: E402
 from m1n1.agx.shim import Shim as HistoricalShim  # noqa: E402
 from m1n1.constructutils import Ver  # noqa: E402
 from m1n1.fw.agx.microsequence import Start3DStruct1  # noqa: E402
@@ -32,6 +56,7 @@ from m1n1.fw.agx.microsequence import Start3DStruct1  # noqa: E402
 # properties, so keep the immutable m1n1 source/artifact pin intact and rename
 # only the capture schema key while preserving its codec, offset and value.
 install_start3d_helper_cfg_compatibility(Start3DStruct1)
+install_tiling_helper_cfg_default(capture_render)
 
 
 def isolate_capture_subprocess_memory():

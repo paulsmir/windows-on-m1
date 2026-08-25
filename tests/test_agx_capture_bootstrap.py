@@ -156,6 +156,17 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertEqual(names, ["before", "unk_40", "after"])
         self.assertNotIn("helper_cfg", names)
 
+    def test_capture_initializes_appended_tiling_helper_configuration(self):
+        from m1n1.agx import render
+        from tools.agx_capture_shim import install_tiling_helper_cfg_default
+
+        installed = install_tiling_helper_cfg_default(render)
+        repeated = install_tiling_helper_cfg_default(render)
+        tiling = render.TilingParameters()
+
+        self.assertIs(installed, repeated)
+        self.assertEqual(tiling["helper_cfg"], 0)
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"
