@@ -7533,3 +7533,60 @@ remove this deferred-open contract, establish bounded bridge readiness before
 proxy bootstrap, export both repository and m1n1 Python roots for every capture
 subcommand, and prove two proxy handshakes separated by a mandatory reboot in a
 new preregistered transport-only experiment before any new GPU capture.
+
+### EXP-20260825-083 — qualify the container proxy transport across one reboot
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: after removing deferred PTY opening and preserving the PTY across
+individual clients, the exact container bridge can complete an initial m1n1
+bootstrap, record J313/V13_5, request one physical reboot, reconnect, record the
+same platform and firmware with a changed randomized m1n1 base, and publish one
+atomic transport receipt without importing or enabling AGX.
+
+- root source and ledger: `59de6e8b5b6c37a590a21e331fbc019e8fe0ba97`
+  on `feature/j313-gpu-acceleration`;
+- transport implementation and ledger:
+  `184b2a2497b93699e0a3b55ab80fc57c29ee7ebb` and
+  `59de6e8b5b6c37a590a21e331fbc019e8fe0ba97`;
+- host operator SHA-256:
+  `3666a6b028f801c8eda850341e79a93615601a605db911047c99a8532b604ccf`;
+- container helper SHA-256:
+  `d9d6173dd9bdcb62ff43927871ef461c6dcd9681c3208b350d85ea157fde7cf3`;
+- identity utility SHA-256:
+  `33d091b24487df24d58584ee521afa6be5c183c8555491a2a971585d11df408b`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`, confirmed present and without
+  a surviving open owner immediately before registration;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-083-agx-capture-transport/`, confirmed
+  absent before registration;
+- fixed bridge port: `43138`;
+- host verification: nine focused transport tests, 89 adjacent AGX tests, and
+  572 complete repository tests passed; shell and Python syntax, diff checks,
+  and all stable recovery hashes passed.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/probe-agx-capture-transport.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-083-agx-capture-transport \
+  --bridge-port 43138
+```
+
+Pass requires an exact-field `before.json`, one successful reboot request, an
+exact-field `after.json`, J313 and V13_5 unchanged, positive and different
+m1n1 bases, and an atomic `transport-receipt.json` with `fresh_proxy=true`.
+Only the post-reboot identity read may retry, at most twenty times separated by
+two seconds, because USB disappearance and return are asynchronous. The tool
+must not import `m1n1.agx`, enable GPU clocks, use `LD_PRELOAD`, submit GPU work,
+launch Windows, or write outside its evidence directory.
+
+Any initial bootstrap failure, reboot failure, bounded reconnect exhaustion,
+identity mismatch, unchanged base, malformed or partial receipt, unexpected
+USB owner, or extra side effect rejects EXP-083. Preserve all evidence, do not
+retry this directory, and do not start a new GPU capture. Only a passed receipt
+permits a newly preregistered replacement for the closed EXP-082.
