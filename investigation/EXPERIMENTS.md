@@ -8682,3 +8682,60 @@ no final attachment exists. The mandatory hardware reboot completed, both USB
 endpoints re-enumerated at 23:23, and the post-reboot probe reported
 J313/V13_5 at base `0x804c44000`. EXP-096 is closed and its destination will
 not be reused.
+
+### EXP-20260825-097 — align the capture schema mapping key
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: renaming exactly the capture copy of the `Start3DStruct1` schema
+field from `helper_cfg` to the pinned renderer's internal mapping key `unk_40`
+allows sequence 9 to build and submit while preserving the same `Int32ul`
+codec, byte offset and zero value. Stable m1n1, Mu, Windows and recovery inputs
+remain unchanged.
+
+- root source `11fff133d6cc926f3018d25d3c17ee44c3e9aa45`, implementation
+  `2ff4de47c5676ed01e78482199d69c503ae7603b`, ledger
+  `11fff133d6cc926f3018d25d3c17ee44c3e9aa45`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp097.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `ca65445bc9ae6af7fa753d1577b07d0df74ffcfede1d858dad517620978f3130`;
+- unchanged host and container helpers SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- post-EXP-096 J313/V13_5 proxy base `0x804c44000`, both endpoints
+  re-enumerated at 23:23; destination
+  `investigation/artifacts/EXP-20260825-097-agx-schema-key/` confirmed absent;
+  fixed bridge port `43152`;
+- the schema-key test failed before implementation, twelve focused tests and
+  the complete public suite passed 584/584; the live pinned schema reports one
+  `unk_40` and no `helper_cfg`; Python compilation, diff checks, stable pin and
+  CSV validation passed.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp097.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-097-agx-schema-key \
+  --bridge-port 43152
+```
+
+Pass requires sequence 9 and every later ioctl to return, two complete
+byte-identical cold receipts and archives, a final attachment matching all
+identity and artifact hashes, no preflight rejection, exception, assertion,
+ASC timeout, proxy contention, recursive initialization or software fallback,
+and a successful mandatory physical reboot. Any missing evidence, unexpected
+boundary, cleanup failure, stale proxy or manual intervention rejects EXP-097.
+Preserve all evidence, never reuse its destination, keep Windows blocked, and
+return the Air to a fresh J313/V13_5 proxy regardless of result.
