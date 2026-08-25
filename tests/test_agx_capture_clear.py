@@ -83,6 +83,36 @@ class CaptureCase(unittest.TestCase):
 
 
 class ReproducibilityTests(CaptureCase):
+    def test_live_receipt_accepts_the_exact_complete_raw_bgra_page(self):
+        from tools.agx_capture_clear import write_capture_receipt
+
+        output = self.root / "receipt.json"
+        receipt = write_capture_receipt(
+            output,
+            frame_path=self.first_frame,
+            final_attachment_path=self.first_output,
+            identity=self.first.identity,
+            capture_program=self.program,
+            proxy_identity=self.first.proxy_identity,
+            m1n1_base=self.first.m1n1_base,
+        )
+        self.assertEqual(receipt, json.loads(output.read_text()))
+
+    def test_live_receipt_rejects_only_the_visible_rgba_pixels(self):
+        from tools.agx_capture_clear import write_capture_receipt
+
+        self.first_output.write_bytes(bytes([0x11, 0x22, 0x33, 0xFF]) * 256)
+        with self.assertRaisesRegex(Exception, "complete raw BGRA"):
+            write_capture_receipt(
+                self.root / "receipt.json",
+                frame_path=self.first_frame,
+                final_attachment_path=self.first_output,
+                identity=self.first.identity,
+                capture_program=self.program,
+                proxy_identity=self.first.proxy_identity,
+                m1n1_base=self.first.m1n1_base,
+            )
+
     def test_omitted_zero_objects_are_materialized_canonically(self):
         from tools.agx_capture_clear import package_capture
         from tools.agx_frame_fixture import validate_fixture

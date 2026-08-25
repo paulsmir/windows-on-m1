@@ -411,7 +411,7 @@ def build_manifest(
             "size": output_size,
             "width": _integer(command_buffer.get("fb_width"), "fb_width"),
             "height": _integer(command_buffer.get("fb_height"), "fb_height"),
-            "format": "RGBA8",
+            "format": "BGRA8",
             "poison_sha256": _sha256(members[output_member]),
             "expected_output_sha256": _sha256(expected_output),
         },
@@ -463,8 +463,8 @@ def validate_fixture(
     if (_integer(output.get("width"), "output width"),
             _integer(output.get("height"), "output height")) != (16, 16):
         raise FixtureError("output dimensions must equal 16 by 16")
-    if output.get("format") != "RGBA8":
-        raise FixtureError("output format must equal RGBA8")
+    if output.get("format") != "BGRA8":
+        raise FixtureError("output format must equal BGRA8")
     poison_hash = _hash(output.get("poison_sha256"), "poison hash")
     expected_output_hash = _hash(
         output.get("expected_output_sha256"), "expected output hash"

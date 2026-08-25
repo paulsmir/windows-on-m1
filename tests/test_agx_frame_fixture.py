@@ -23,7 +23,9 @@ PIPELINE_ADDR = 0x1100010000
 OUTPUT_ADDR = 0x1500000000
 OBJECT_SIZE = 0x4000
 POISON = bytes([0xA5]) * OBJECT_SIZE
-EXPECTED_OUTPUT = bytes([0x11, 0x22, 0x33, 0xFF]) * (OBJECT_SIZE // 4)
+EXPECTED_OUTPUT = bytes([0x33, 0x22, 0x11, 0xFF]) * 256 + bytes(
+    OBJECT_SIZE - 1024
+)
 
 
 def _json_bytes(value):
@@ -127,7 +129,7 @@ def _manifest_for(members):
             "size": OBJECT_SIZE,
             "width": 16,
             "height": 16,
-            "format": "RGBA8",
+            "format": "BGRA8",
             "poison_sha256": hashlib.sha256(POISON).hexdigest(),
             "expected_output_sha256": hashlib.sha256(EXPECTED_OUTPUT).hexdigest(),
         },
@@ -294,6 +296,12 @@ class SafeZipTests(FixtureCase):
 
 
 class ManifestIsolationTests(FixtureCase):
+    def test_raw_output_format_must_be_bgra8(self):
+        self._assert_manifest_rejected(
+            lambda manifest: manifest["output"].__setitem__("format", "RGBA8"),
+            "format.*BGRA8",
+        )
+
     def _validate(self):
         from tools.agx_frame_fixture import validate_fixture
 

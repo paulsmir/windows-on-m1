@@ -25,6 +25,7 @@ from tools.agx_frame_fixture import (
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
 READBACK = bytes([0x11, 0x22, 0x33, 0xFF]) * 256
+RAW_ATTACHMENT = bytes([0x33, 0x22, 0x11, 0xFF]) * 256 + bytes(0x3C00)
 
 
 class CaptureError(RuntimeError):
@@ -430,8 +431,10 @@ def write_capture_receipt(
         proxy_identity, m1n1_base,
     ))
     final = _read_bytes(final_attachment_path, "final attachment")
-    if len(final) != 1024 or final != READBACK:
-        raise CaptureError("final attachment is not the fixed 16x16 RGBA8 clear")
+    if len(final) != 0x4000 or final != RAW_ATTACHMENT:
+        raise CaptureError(
+            "final attachment is not the complete raw BGRA clear page"
+        )
     program_sha256 = _sha256(_read_bytes(capture_program, "capture program"))
     receipt = {
         "frame_path": str(Path(frame_path).resolve()),
