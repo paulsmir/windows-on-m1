@@ -264,6 +264,22 @@ class CaptureOperatorTests(OperatorFixture):
         source = CAPTURE_SCRIPT.read_text()
         self.assertIn('PYTHON=${AGX_CAPTURE_PYTHON:-"$ROOT/proxyenv/bin/python"}', source)
 
+    def test_capture_persists_producer_output_without_masking_failure(self):
+        source = CAPTURE_SCRIPT.read_text()
+        self.assertIn('PRODUCER_LOG="$CYCLE_DIR/producer.log"', source)
+        log = source.index('PRODUCER_LOG="$CYCLE_DIR/producer.log"')
+        producer = source.index('timeout --foreground', log)
+        redirect = source.index('>"$PRODUCER_LOG" 2>&1', producer)
+        replay = source.index('cat "$PRODUCER_LOG"', redirect)
+        failed = source.index('exit "$PRODUCER_STATUS"', replay)
+        frame_check = source.index('[ -f "$FRAME" ]', failed)
+
+        self.assertLess(log, producer)
+        self.assertLess(producer, redirect)
+        self.assertLess(redirect, replay)
+        self.assertLess(replay, failed)
+        self.assertLess(failed, frame_check)
+
 
 class ReplayOperatorTests(OperatorFixture):
     def test_replay_dry_run_prints_literal_render_contract(self):

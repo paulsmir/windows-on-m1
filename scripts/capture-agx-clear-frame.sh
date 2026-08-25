@@ -95,16 +95,26 @@ while [ "$CYCLE" -le 2 ]; do
     mkdir "$CYCLE_DIR"
     FINAL="$CYCLE_DIR/final.rgba"
     FRAME="$CYCLE_DIR/shim_frame000.agx"
+    PRODUCER_LOG="$CYCLE_DIR/producer.log"
     RECEIPT="$DESTINATION/work/receipt-$LABEL.json"
     CAPTURE_OK=0
     NEEDS_REBOOT=1
     if (
         cd "$CYCLE_DIR"
-        timeout --foreground --signal=TERM --kill-after=5s 30s env \
-            ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 \
-            AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
-            M1N1DEVICE="$PROXY" LD_PRELOAD="$SHIM_LIBRARY" \
-            "$CAPTURE_PROGRAM" "$FINAL"
+        if timeout --foreground --signal=TERM --kill-after=5s 30s env \
+                ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 \
+                AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
+                M1N1DEVICE="$PROXY" LD_PRELOAD="$SHIM_LIBRARY" \
+                "$CAPTURE_PROGRAM" "$FINAL" \
+                >"$PRODUCER_LOG" 2>&1; then
+            PRODUCER_STATUS=0
+        else
+            PRODUCER_STATUS=$?
+        fi
+        cat "$PRODUCER_LOG"
+        if [ "$PRODUCER_STATUS" -ne 0 ]; then
+            exit "$PRODUCER_STATUS"
+        fi
         [ -f "$FRAME" ]
         M1N1DEVICE="$PROXY" "$PYTHON" -m tools.agx_capture_clear live-receipt \
             --frame "$FRAME" --final-attachment "$FINAL" \
