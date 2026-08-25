@@ -7835,7 +7835,8 @@ inherit any GPU-success claim from this transport-only result.
 
 ### EXP-20260825-086 — acquire corrected cold historical Mesa clear captures
 
-Status: preregistered; hardware not yet touched.
+Status: rejected during the only permitted first capture, before any accepted
+GPU submission or frame dump.
 
 Hypothesis: after EXP-085 measured the exact full-client setup at 216.63 ms and
 qualified the capture-only three-second bootstrap adapter, the pinned historical
@@ -7900,3 +7901,23 @@ Any startup, AGX, dump, attachment, validation, cleanup, reboot, reconnect or
 determinism failure rejects EXP-086. Preserve evidence and do not retry this
 directory. A pass still proves capture reproducibility only; it cannot claim
 replay, WDDM, display, performance, power, thermal or production GPU support.
+
+Observed result: immutable preflights passed, but the historical process again
+used the original 150 ms bootstrap and timed out before AGX initialization. No
+frame, attachment, receipt, second capture or fixture was produced. The sole
+preserved file is `work/capture-01/core`, SHA-256
+`24ced6384f11cfadff5a22f0eed571ad28531417fb79ec0cadaecc0fa549ff44`.
+
+The failed scripted reboot was followed by a separate cleanup reboot without
+retrying GPU work. It reported pre-reboot base `0x804804000`; the fresh proxy
+returned as J313/V13_5 at `0x80529c000`.
+
+Source inspection after the failure found that the host capture operator still
+invoked `/opt/agx-capture/run-capture.sh` baked into the immutable container
+image. Unlike the passed EXP-085 operator, it did not bind-mount the newly
+tracked public helper, so neither `AGX_SHIM_MODULE=tools.agx_capture_shim` nor
+the three-second adapter reached the producer. Environment propagation itself
+was verified separately and is not the fault. The next correction must mount
+the exact tracked helper read-only and invoke that path explicitly; no new
+capture is allowed until tests prove the host command cannot select the stale
+image-internal helper.
