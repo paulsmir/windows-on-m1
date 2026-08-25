@@ -7185,7 +7185,7 @@ byte-identical.
 
 ### EXP-20260825-079 — one-shot J313 AGX G1Q queue probe
 
-Status: preregistered; hardware not yet touched.
+Status: rejected after AGX startup and before the first captured submission.
 
 Hypothesis: the pinned V13_5/G13 firmware can consume exactly one
 already-satisfied barrier on context 63, queue index 1's 3D channel and emit
@@ -8047,3 +8047,26 @@ Pass and rejection rules remain identical to EXP-087 and require the exact
 tracked helper, V13_5/G13 assertion, two cold receipts, complete deterministic
 archives, attachments and mandatory reboots. A pass is capture-only and still
 requires manual fixture review and separately preregistered replay.
+
+Observed result: transport, the full-client bootstrap, live V13_5/G13 binding,
+AGX firmware startup, UAT initialization, initdata construction and initdata
+submission all completed. The historical shim created context 23 and reached
+its first BO allocation, logging `Create BO @ 0xffffc000`. No subsequent ioctl,
+frame archive, final attachment or receipt appeared during the following 60
+seconds. Because the operator placed no wall-clock deadline around the native
+capture producer, the process had to be interrupted and the remaining
+container stopped explicitly. The empty rejected destination contains only
+`work/capture-01/`; it contains no files and is not a fixture.
+
+The `Create BO` message is emitted after the shim has allocated the GPU object,
+mapped the memfd range, stored the BO and returned its GPU address in the ioctl
+argument. The next investigation boundary is therefore the transition from the
+first completed create-BO ioctl back into the native EGL client, not AGX
+firmware startup or V13_5 initdata. Before another hardware attempt, the
+operator must gain a fixed producer deadline and the capture wrapper must
+record the next ioctl boundary without modifying the pinned nested m1n1 tree.
+
+The mandatory cleanup reboot completed after stopping the orphaned container.
+The pre-run proxy base was `0x8044a0000`; a fresh J313/V13_5 proxy returned at
+`0x805398000`. The cleanup identity SHA-256 is
+`8fe50d22b8d641525e37729240ccb0dd2c2bea8e858cf6bbe999e798bf01431f`.
