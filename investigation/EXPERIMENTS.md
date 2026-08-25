@@ -7297,3 +7297,72 @@ the queue cycle itself failed. EXP-079 is closed and will not be retried. The
 next experiment must use a new implementation commit and a newly preregistered
 evidence directory after determining why firmware did not consume the published
 3D queue entry.
+
+### EXP-20260825-081 — locate the first stalled AGX queue transport boundary
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the rejected EXP-079 producer-only result can be localized without
+changing its workload by recording the Submit3D TX channel pointers, queue ring
+pointers, and firmware-owned `CommandQueueInfo` fields.  If the channel read
+pointer reaches the published write pointer but `GPU_RPTR` remains unchanged,
+V13_5 accepted `RunCmdQueue` and rejected or deferred the lone barrier ring
+entry; if the channel read pointer itself remains unchanged, the failure is
+earlier in queue-channel activation or doorbell delivery.
+
+- source: root `41b0db82b75523c87c9483338902dc34a4dac2b8`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- diagnostic implementation and ledger:
+  `5d49308ba29e8cfe6679f73c2f58efd9f537b45d` and
+  `41b0db82b75523c87c9483338902dc34a4dac2b8`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- queue backend SHA-256:
+  `53b157098894b014bdf33777dc4d82d621cecabfd575b3368e166ff8558aed49`;
+- immutable recovery hashes: `J313_EFI.fd`
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  `boot.bin` `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`,
+  and `m1n1.macho`
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`; immediately before execution
+  it must be the sole J313/V13_5 `Running proxy...` endpoint with the same ADT
+  identity and a recorded randomized m1n1 base;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-081-agx-g1q-transport/`, confirmed absent
+  before this registration;
+- the workload is byte-for-byte behaviorally unchanged from EXP-079: context
+  63, one 16 KiB canary mapping, unmapped guards, queue index 1 Submit3D, one
+  already-satisfied `WorkCommandBarrier`, event 0, and a fixed 0.5-second
+  deadline. No render command, shader, framebuffer, guest mapping, physical
+  fault read, power-control write, Mu, ACPI, stable boot, or Windows change is
+  permitted;
+- exact one-shot command, permitted once only from the public repository:
+
+```sh
+set +e
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_queue_gate run-one \
+  --contract config/j313-agx.json \
+  --evidence-dir investigation/artifacts/EXP-20260825-081-agx-g1q-transport/cycle-01
+EXP081_STATUS=$?
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+test "$EXP081_STATUS" -eq 0
+```
+
+Regardless of pass, timeout, exception, or incomplete evidence, the management
+channel must stop, both context-63 and context-zero roots must clear, and the
+hardware must reboot. After the fresh proxy returns, record a read-only J313,
+V13_5, ADT and changed-base inventory. Do not create a reset receipt, aggregate
+the result, launch Windows, or retry this directory.
+
+Interpretation is preregistered as follows: unchanged channel read pointer means
+the first failure boundary is command-channel activation/doorbell delivery;
+consumed channel message with unchanged `GPU_RPTR` means the first failure is
+between accepted `RunCmdQueue` and ring-entry recognition; advancing
+`GPU_RPTR` with unchanged `GPU_DONEPTR` means the barrier was fetched but did
+not complete; advancing done pointer without the exact event remains a rejected
+completion-path result. Any canary, guard, fault, cleanup, or release mismatch
+overrides transport classification and rejects the experiment as unsafe.
