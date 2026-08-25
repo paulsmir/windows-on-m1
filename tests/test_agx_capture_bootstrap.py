@@ -82,8 +82,15 @@ class CaptureBootstrapTests(unittest.TestCase):
     def test_capture_wrapper_patches_before_importing_historical_shim(self):
         source = (ROOT / "tools/agx_capture_shim.py").read_text(encoding="utf-8")
         install = source.index("install_bootstrap_override()")
-        historical = source.index("from m1n1.agx.shim import Shim")
+        historical = source.index("from m1n1.agx.shim import Shim as HistoricalShim")
         self.assertLess(install, historical)
+
+    def test_capture_wrapper_sets_live_firmware_layout_before_agx_start(self):
+        source = (ROOT / "tools/agx_capture_shim.py").read_text(encoding="utf-8")
+        set_version = source.index("Ver.set_version(u)")
+        historical_start = source.index("super().init_agx()")
+        self.assertLess(set_version, historical_start)
+        self.assertIn('Ver.check("V == V13_5 && G == G13")', source)
 
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(

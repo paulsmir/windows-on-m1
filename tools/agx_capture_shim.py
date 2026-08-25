@@ -5,4 +5,17 @@ from tools.agx_capture_bootstrap import install_bootstrap_override
 
 install_bootstrap_override()
 
-from m1n1.agx.shim import Shim  # noqa: E402,F401
+from m1n1.agx.shim import Shim as HistoricalShim  # noqa: E402
+from m1n1.constructutils import Ver  # noqa: E402
+
+
+class Shim(HistoricalShim):
+    """Bind live firmware and GPU generation before historical AGX startup."""
+
+    def init_agx(self):
+        from m1n1.setup import u
+
+        Ver.set_version(u)
+        if not Ver.check("V == V13_5 && G == G13"):
+            raise RuntimeError("capture requires the pinned J313 V13_5/G13 layout")
+        return super().init_agx()
