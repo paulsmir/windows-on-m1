@@ -9415,3 +9415,69 @@ deterministic identity used by the receipt CLI to the real lifecycle firmware
 snapshot, with a failing unit test first.  Fixture, GPU submission, firmware and
 reset rules must not change; EXP-080 and Windows remain blocked until a separately
 preregistered one-shot produces a valid receipt.
+
+### EXP-20260826-105 — one-shot replay with bound proxy identity
+
+Status: preregistered; hardware replay not run.
+
+Hypothesis: recording the real pre-render proxy identity in the lifecycle
+snapshot will preserve EXP-104's already-proven render behavior and allow the
+mandatory post-reboot receipt to prove a distinct physical boot.
+
+Single changed variable relative to EXP-104: the lifecycle firmware snapshot
+now includes `proxy_identity = target:firmware:m1n1_base_hex`, derived from the
+same live proxy object and exact format as the receipt CLI.  GPU fixture,
+commands, schema bridge, m1n1, Mu, mappings, context, queue, deadlines, reset and
+all acceptance rules are unchanged.
+
+Contract:
+- root `fc0fe30070ea8a21027e338c236f7f48978234b4`; implementation
+  `81fccaa7ffd1661a5cc96e175d9419448103f9a2`; stable m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, render backend and schema bridge SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `0464c1d5a2b4eae943bb01fe5f29217a6eaa76568eac004eb649e6df22093532`,
+  `eeed4b2e86fa8b10a203e39fe89ec88887fafb50d8f19ba21cbfd4e26cbe4164`
+  and `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`;
+- immutable fixture SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  verified canonical with eight objects and the exact raw output oracle;
+- stable recovery passed all five `SHA256SUMS` entries; the identity regression
+  reproduced RED and then 43 focused tests plus the full suite passed 597/597;
+- fresh J313/V13_5 proxy base `0x8040b4000`; evidence destination
+  `investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/` is absent;
+  Windows remains blocked.
+
+Run exactly once, reboot exactly once regardless of exit, then create exactly
+one receipt:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate run-one \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/cycle-01
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate proxy-receipt \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --cycle-result investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/cycle-01/render-gate-result.json \
+  --cycle 1 \
+  --output investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/reset-01.json
+```
+
+Pass requires every EXP-104 render invariant plus a result snapshot containing
+the exact pre-reboot identity and a valid receipt binding its canonical hash to
+a different J313/V13_5 identity and m1n1 base.  Any failure rejects EXP-105;
+never retry it in place.  EXP-080 and Windows remain blocked until independent
+inspection accepts both files.
