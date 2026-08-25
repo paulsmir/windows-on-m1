@@ -8,15 +8,16 @@ from tools.agx_capture_bootstrap import install_bootstrap_override
 
 
 def install_start3d_helper_cfg_compatibility(start3d_struct_cls):
-    """Map the historical renderer name onto the documented command field."""
+    """Make Construct read the key emitted by the pinned historical renderer."""
 
-    def get_helper_cfg(command):
-        return command.helper_cfg
-
-    def set_helper_cfg(command, value):
-        command.helper_cfg = value
-
-    start3d_struct_cls.unk_40 = property(get_helper_cfg, set_helper_cfg)
+    fields = start3d_struct_cls.subcon.subcons
+    documented = [field for field in fields if field.name == "helper_cfg"]
+    historical = [field for field in fields if field.name == "unk_40"]
+    if len(historical) == 1 and not documented:
+        return
+    if len(documented) != 1 or historical:
+        raise RuntimeError("unexpected Start3DStruct1 helper field layout")
+    documented[0].name = "unk_40"
 
 
 install_bootstrap_override()
@@ -27,8 +28,9 @@ from m1n1.fw.agx.microsequence import Start3DStruct1  # noqa: E402
 
 
 # The pinned renderer predates the schema rename in b50e29b and still assigns
-# ``unk_40 = 0``.  Keep the immutable m1n1 source/artifact pin intact and map
-# that capture-only assignment to the serialized ``helper_cfg`` field.
+# ``unk_40 = 0``.  Construct builds from mapping keys rather than Python
+# properties, so keep the immutable m1n1 source/artifact pin intact and rename
+# only the capture schema key while preserving its codec, offset and value.
 install_start3d_helper_cfg_compatibility(Start3DStruct1)
 
 

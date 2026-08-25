@@ -139,15 +139,22 @@ class CaptureBootstrapTests(unittest.TestCase):
     def test_capture_maps_historical_helper_field_without_changing_m1n1(self):
         from tools.agx_capture_shim import install_start3d_helper_cfg_compatibility
 
+        class Field:
+            def __init__(self, name):
+                self.name = name
+
+        class Schema:
+            subcons = [Field("before"), Field("helper_cfg"), Field("after")]
+
         class HistoricalStart3DStruct1:
-            pass
+            subcon = Schema()
 
         install_start3d_helper_cfg_compatibility(HistoricalStart3DStruct1)
-        command = HistoricalStart3DStruct1()
-        command.unk_40 = 0
+        install_start3d_helper_cfg_compatibility(HistoricalStart3DStruct1)
+        names = [field.name for field in HistoricalStart3DStruct1.subcon.subcons]
 
-        self.assertEqual(command.helper_cfg, 0)
-        self.assertEqual(command.unk_40, 0)
+        self.assertEqual(names, ["before", "unk_40", "after"])
+        self.assertNotIn("helper_cfg", names)
 
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
