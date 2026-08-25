@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -370,6 +371,33 @@ class RenderBackendTests(unittest.TestCase):
             (GPURenderer, ("submit", "run")),
         ):
             for name in names: self.assertTrue(hasattr(cls, name))
+
+    def test_default_type_loader_installs_historical_renderer_schema_compatibility(self):
+        result = subprocess.run(
+            [
+                str(ROOT / "proxyenv" / "bin" / "python"),
+                "-c",
+                (
+                    "from tools.agx_m1n1_render_backend import "
+                    "_default_render_types; "
+                    "_default_render_types(); "
+                    "from m1n1.fw.agx.microsequence import Start3DStruct1; "
+                    "from m1n1.agx import render; "
+                    "names=[field.name for field in "
+                    "Start3DStruct1.subcon.subcons]; "
+                    "assert 'unk_40' in names and 'helper_cfg' not in names; "
+                    "assert render.TilingParameters()['helper_cfg'] == 0; "
+                    "command=render.WorkCommandTA(); "
+                    "command.unk_3e8=bytes(0x64); "
+                    "assert command['unk_3e8'] == bytes(0x60)"
+                ),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__": unittest.main()

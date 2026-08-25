@@ -11,6 +11,7 @@ import time
 
 from tools.agx_frame_fixture import _canonical_zip_bytes
 from tools.agx_m1n1_backend import M1n1AgxBackend
+from tools.agx_schema_compat import install_historical_renderer_schema_compatibility
 from tools.agx_render_gate import (
     COMPLETION_DEADLINE_S,
     CONTEXT_ID,
@@ -34,12 +35,15 @@ def _default_render_types():
     if str(PROXYCLIENT) not in sys.path:
         sys.path.insert(0, str(PROXYCLIENT))
     from m1n1.agx.context import GPUContext
-    from m1n1.agx.render import GPUFrame, GPURenderer
+    from m1n1.agx import render
+    from m1n1.fw.agx.microsequence import Start3DStruct1
+
+    install_historical_renderer_schema_compatibility(render, Start3DStruct1)
 
     return SimpleNamespace(
         GPUContext=GPUContext,
-        GPUFrame=GPUFrame,
-        GPURenderer=GPURenderer,
+        GPUFrame=render.GPUFrame,
+        GPURenderer=render.GPURenderer,
     )
 
 

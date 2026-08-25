@@ -6,6 +6,12 @@ import subprocess
 import sys
 
 from tools.agx_capture_bootstrap import install_bootstrap_override
+from tools.agx_schema_compat import (
+    install_historical_renderer_schema_compatibility,
+    install_start3d_helper_cfg_compatibility,
+    install_tiling_helper_cfg_default,
+    install_work_command_ta_padding_compatibility,
+)
 
 
 def write_complete_attachment_page(cmdbuf, bos, output):
@@ -56,69 +62,6 @@ def write_complete_attachment_page(cmdbuf, bos, output):
         raise
 
 
-def install_start3d_helper_cfg_compatibility(start3d_struct_cls):
-    """Make Construct read the key emitted by the pinned historical renderer."""
-
-    fields = start3d_struct_cls.subcon.subcons
-    documented = [field for field in fields if field.name == "helper_cfg"]
-    historical = [field for field in fields if field.name == "unk_40"]
-    if len(historical) == 1 and not documented:
-        return
-    if len(documented) != 1 or historical:
-        raise RuntimeError("unexpected Start3DStruct1 helper field layout")
-    documented[0].name = "unk_40"
-
-
-def install_tiling_helper_cfg_default(render_module):
-    """Initialize the helper field appended after the pinned renderer."""
-
-    current = render_module.TilingParameters
-    if getattr(current, "_capture_helper_cfg_default", False):
-        return current
-    fields = [field for field in current.subcon.subcons if field.name == "helper_cfg"]
-    if len(fields) != 1:
-        raise RuntimeError("unexpected TilingParameters helper field layout")
-
-    class CaptureTilingParameters(current):
-        _capture_helper_cfg_default = True
-
-        def __init__(self):
-            super().__init__()
-            self.helper_cfg = 0
-
-    CaptureTilingParameters.__name__ = current.__name__
-    CaptureTilingParameters.__qualname__ = current.__qualname__
-    render_module.TilingParameters = CaptureTilingParameters
-    return CaptureTilingParameters
-
-
-def install_work_command_ta_padding_compatibility(render_module):
-    """Keep the historical TA writer aligned with the appended helper field."""
-
-    current = render_module.WorkCommandTA
-    if getattr(current, "_capture_ta_padding_compatibility", False):
-        return current
-    fields = [field for field in current.subcon.subcons if field.name == "unk_3e8"]
-    if len(fields) != 1 or fields[0].sizeof() != 0x60:
-        raise RuntimeError("unexpected WorkCommandTA padding layout")
-
-    class CaptureWorkCommandTA(current):
-        _capture_ta_padding_compatibility = True
-
-        def __setattr__(self, name, value):
-            if name == "unk_3e8":
-                if value == bytes(0x64):
-                    value = bytes(0x60)
-                elif value != bytes(0x60):
-                    raise RuntimeError("unexpected historical WorkCommandTA padding")
-            super().__setattr__(name, value)
-
-    CaptureWorkCommandTA.__name__ = current.__name__
-    CaptureWorkCommandTA.__qualname__ = current.__qualname__
-    render_module.WorkCommandTA = CaptureWorkCommandTA
-    return CaptureWorkCommandTA
-
-
 install_bootstrap_override()
 
 from m1n1.agx import render as capture_render  # noqa: E402
@@ -131,9 +74,7 @@ from m1n1.fw.agx.microsequence import Start3DStruct1  # noqa: E402
 # ``unk_40 = 0``.  Construct builds from mapping keys rather than Python
 # properties, so keep the immutable m1n1 source/artifact pin intact and rename
 # only the capture schema key while preserving its codec, offset and value.
-install_start3d_helper_cfg_compatibility(Start3DStruct1)
-install_tiling_helper_cfg_default(capture_render)
-install_work_command_ta_padding_compatibility(capture_render)
+install_historical_renderer_schema_compatibility(capture_render, Start3DStruct1)
 
 
 def isolate_capture_subprocess_memory():
