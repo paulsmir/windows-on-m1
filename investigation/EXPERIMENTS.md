@@ -8440,3 +8440,58 @@ base `0x805218000`. EXP-093 is closed and its evidence directory will not be
 reused. The next correction must disable `vfork` and `posix_spawn` only in the
 exact native producer before AGX can invoke its assembler, forcing child fd
 closure into a private forked address space.
+
+### EXP-20260825-094 — fork-isolate AGX runtime assembler children
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: disabling Python `vfork` and `posix_spawn` in the exact native
+capture producer before AGX runtime assembly forces helper fd closure into a
+private forked address space. The producer's three drm-shim fd-map entries and
+cached `shim_fd` will survive the first create-BO callback, allowing the ioctl
+to return and rendering to proceed.
+
+- root source `f301b64a0128ea520531987517766cd0c9257cac` with implementation
+  `b6219c42af3cbbef6f9993a35ec9f59b2475e44d` and ledger
+  `f301b64a0128ea520531987517766cd0c9257cac`;
+- capture wrapper SHA-256
+  `705366a81006d6808f1ce608700794653a3355ad7073114839c542a3a75436d7`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp094.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x805218000`; destination
+  `investigation/artifacts/EXP-20260825-094-agx-fork-isolation/` confirmed
+  absent; fixed bridge port `43149`;
+- the behavioral isolation test failed before implementation, eleven focused
+  tests and the complete public suite passed 583/583, with shell syntax,
+  Python compilation and diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp094.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-094-agx-fork-isolation \
+  --bridge-port 43149
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, completed create-BO and
+later submit ioctls, no mutex assertion, ASC timeout, proxy contention,
+recursive child initialization, exception or software fallback, and a
+successful mandatory physical reboot after every capture. Any missing file,
+unexpected boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-094. Preserve all evidence, never reuse its directory, keep Windows
+blocked, and return the Air to a fresh J313/V13_5 proxy regardless of result.
