@@ -99,6 +99,16 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertIn("capture-ioctl-error", source)
         self.assertIn("super().ioctl(fd, request, p_arg)", source)
 
+    def test_capture_wrapper_bootstraps_before_the_fake_render_fd_is_opened(self):
+        source = (ROOT / "tools/agx_capture_shim.py").read_text(encoding="utf-8")
+        constructor = source.index("def __init__(self, memfd):")
+        historical = source.index("super().__init__(memfd)", constructor)
+        eager_init = source.index("self.init()", historical)
+        ioctl = source.index("def ioctl(self, fd, request, p_arg):", eager_init)
+        self.assertLess(constructor, historical)
+        self.assertLess(historical, eager_init)
+        self.assertLess(eager_init, ioctl)
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"

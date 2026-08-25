@@ -14,6 +14,15 @@ from m1n1.constructutils import Ver  # noqa: E402
 class Shim(HistoricalShim):
     """Bind live firmware and GPU generation before historical AGX startup."""
 
+    def __init__(self, memfd):
+        super().__init__(memfd)
+        # Historical Mesa lazily initializes from its first DRM ioctl.  That
+        # reenters Python while the fake render fd is live, and the bootstrap
+        # can unregister the fd before the enclosing C handler resumes.
+        # Complete bootstrap while drm-shim is still creating the device and
+        # before it exposes a fake render fd to EGL.
+        self.init()
+
     def ioctl(self, fd, request, p_arg):
         sequence = getattr(self, "_capture_ioctl_sequence", 0) + 1
         self._capture_ioctl_sequence = sequence
