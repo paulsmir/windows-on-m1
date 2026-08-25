@@ -7924,7 +7924,8 @@ image-internal helper.
 
 ### EXP-20260825-087 — acquire tracked-helper cold AGX clear captures
 
-Status: preregistered; hardware not yet touched.
+Status: rejected during the only permitted first capture, after successful
+transport and bootstrap but before AGX start completed or GPU work was submitted.
 
 Hypothesis: the exact tracked capture helper selected by commit
 `6053d6fc8dc877b9a967cd8d61eb96856e97ca3e` will deliver the EXP-085-qualified
@@ -7976,3 +7977,23 @@ requirement that the host command mount the helper read-only and execute
 `/opt/agx-capture/run-capture-public.sh`; selecting the image-internal helper is
 an immediate rejection. A pass remains capture-only and requires manual fixture
 review plus separately preregistered replay.
+
+Observed result: the tracked helper, capture shim and three-second bootstrap
+adapter all reached the producer correctly. m1n1 setup completed, GPU clocks
+were enabled and `agx.start()` began building firmware initdata. Serialization
+then failed closed at `AGXHWDataB.io_mappings`: the J313/V13_5 builder produced
+25 entries while the still-uninitialized version selector chose the legacy
+20-entry layout. No AGX start completion, frame, attachment, receipt or GPU
+submission occurred. The sole preserved file is `work/capture-01/core`,
+SHA-256 `9bb541d23dd6a3b383fe588b9a5da0c7cd87e3fa97f2aa991b063db528446345`.
+
+The mandatory reboot completed; the fresh J313/V13_5 proxy returned at
+`0x8044a0000` after the pre-reboot base `0x80529c000`.
+
+The firmware structures already define 25 mappings for `V >= V13_5B4`, and the
+J313 builder intentionally emits 25. Historical m1n1 experiment entry points
+call `Ver.set_version(u)` before constructing AGX state, but the historical shim
+does not. The capture wrapper must therefore establish version `V13_5` and GPU
+generation `G13` from the live, already-validated `ProxyUtils` object before
+delegating to the historical `init_agx`. It must not alter the pinned nested
+m1n1 source or truncate the builder's mapping list.
