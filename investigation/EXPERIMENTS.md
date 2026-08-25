@@ -8685,7 +8685,8 @@ not be reused.
 
 ### EXP-20260825-097 — align the capture schema mapping key
 
-Status: preregistered; hardware command not yet run.
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
 
 Hypothesis: renaming exactly the capture copy of the `Start3DStruct1` schema
 field from `helper_cfg` to the pinned renderer's internal mapping key `unk_40`
@@ -8739,3 +8740,25 @@ and a successful mandatory physical reboot. Any missing evidence, unexpected
 boundary, cleanup failure, stale proxy or manual intervention rejects EXP-097.
 Preserve all evidence, never reuse its destination, keep Windows blocked, and
 return the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected at the next independent command structure. The
+capture schema-key correction worked: `WorkCommand3D` serialized completely,
+was pushed, and queue construction advanced into `WorkCommandTA`. Sequence 9
+then failed at `WorkCommandTA -> tiling_params -> TilingParameters` with
+`KeyError: 'helper_cfg'`.
+
+Upstream commit `b50e29bcf6a8ecafff50a4555385be39e44b8616` appended the
+`Int32ul helper_cfg` field to `TilingParameters`, but the pinned renderer still
+initializes only through `unk_28`; there is no historical key to alias. With
+helpers disabled throughout this fixed-clear workload, the missing appended
+configuration is zero. The next capture-only correction must install zero in
+every `TilingParameters` instance created by the renderer, without changing
+the class schema, production source pin or firmware bytes.
+
+The partial frame SHA-256 is
+`4946e3dabf2167e837c1c88775562ce3f40651fb08a901af5fe68cea352cdece`;
+the preserved core SHA-256 is
+`2396fb629c028b1b625d222092026f3130b474c405874190ab7f2e86a8fe02ff`;
+no final attachment exists. The mandatory reboot completed, both USB endpoints
+re-enumerated at 23:28, and the new proxy reported J313/V13_5 at base
+`0x80458c000`. EXP-097 is closed and its destination will not be reused.
