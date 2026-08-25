@@ -9091,7 +9091,8 @@ must require a full 0x4000-byte raw BGRA attachment and reject the old
 
 ### EXP-20260826-102 — publish a raw BGRA AGX clear fixture
 
-Status: preregistered; hardware command not run.
+Status: accepted; both cold hardware captures, fixture packaging and the
+mandatory reboots completed, and the Air is at a fresh proxy.
 
 Hypothesis: validating the complete pulled attachment as a 0x4000-byte raw
 BGRA8 page, while retaining the separate 1024-byte GL-visible RGBA result and
@@ -9150,3 +9151,35 @@ malformed or ambiguous BO, exception, timeout, software fallback, packaging
 failure, cleanup failure or manual intervention rejects EXP-102.  Preserve all
 evidence, never reuse the destination, keep Windows blocked and return the Air
 to a fresh proxy regardless of result.
+
+Observed result: accepted.  Both cold native clears completed every ioctl,
+TA/3D submit and completion event, and pulled the entire output BO.  Capture
+one used proxy identity `J313:V13_5:804260000`; capture two used the distinct
+identity `J313:V13_5:80584c000`.  Their 1024-byte visible RGBA files are
+byte-identical with SHA-256
+`614fd59f81a4457909acaa056573427fd8dc8a4095f60a70a72a8b170b321c8a`.
+Their actual 0x4000-byte raw BGRA pages are byte-identical with SHA-256
+`b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`.
+Independent byte checks proved exactly 256 RGBA pixels `11 22 33 ff` in each
+visible file and exactly 256 raw BGRA pixels `33 22 11 ff` followed by a zero
+0x3c00-byte tail in each complete attachment.
+
+Canonical packaging published an eight-object fixture with SHA-256
+`34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`,
+manifest SHA-256
+`938cb9427dfdef646ec6938c4fc92f2404e41a70c1d0662f01dfe93f01702fe7`
+and provenance SHA-256
+`edb5fc2caeea2bdda8e07f6d90a92c5f8ef097345d97b5f579729161bdf970a9`.
+An independent `agx_frame_fixture verify --require-canonical` invocation
+accepted the fixture, identity, output GPU VA `0x15001d0000`, raw output size
+0x4000 and expected-output hash.  The normalized command-buffer SHA-256 is
+`f699bbc79e095613a33e12b7748f3539c6faec40683f5f45983943ba22d5eb34`.
+
+Both mandatory physical reboots completed without intervention.  The final
+post-experiment identity is a third fresh J313/V13_5 proxy at base
+`0x80427c000`; both USB endpoints are present.  The destination and accepted
+fixture are preserved and must not be regenerated in place.  EXP-102 proves a
+reproducible native AGX clear and supplies the first accepted replay fixture;
+it does not yet prove replay reliability or Windows GPU acceleration.  The
+next hardware gate is repeated cold replay of this exact fixture without any
+capture-path mutation.
