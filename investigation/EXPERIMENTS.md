@@ -7274,3 +7274,26 @@ obtainable snapshot and receipt, block Windows, do not retry this evidence
 directory, and physically reboot before further diagnosis. This probe is one
 cycle only: it cannot be aggregated, cannot permit Windows, and makes no render,
 display, performance, WDDM, power, or thermal claim.
+
+Observed result: rejected in the only permitted cycle. Firmware startup and the
+management heartbeat completed, context 63 was bound with the exact 16 KiB
+canary mapping, the queue producer advanced `0 -> 1`, but the consumer remained
+at `0` and the allocated event remained `0 -> 0`. The fixed deadline expired at
+`0.503993916` seconds with `matching_event_count=0`; no polling-only completion
+was accepted. The canary SHA-256 stayed
+`090381a44ecc54fa7e2cf20a8454e42ce10dd22520258eaf3849ef709a724812`,
+both guards remained unmapped, every firmware fault field and all five sampled
+SGX IRQ counts were zero, and the physical fault register remained explicitly
+unreadable because the render power domain is not qualified. Cleanup stopped
+management, cleared both context-63 roots and both context-zero roots, and
+reported released software ownership. Windows stayed blocked.
+
+The atomic rejected result SHA-256 is
+`c00fbc31707febe82a0ce6885ad616610b52c43e3c430949500cdb485d488f02`.
+The mandatory physical reboot completed. A read-only post-reboot handshake
+confirmed J313/V13_5, the unchanged ADT identity, and a changed randomized m1n1
+base from `0x804f24000` to `0x804718000`. No reset receipt was created because
+the queue cycle itself failed. EXP-079 is closed and will not be retried. The
+next experiment must use a new implementation commit and a newly preregistered
+evidence directory after determining why firmware did not consume the published
+3D queue entry.
