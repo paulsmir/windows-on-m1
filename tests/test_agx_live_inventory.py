@@ -32,10 +32,7 @@ class FakeRoot:
 
 
 class FakeAdt:
-    def __getitem__(self, path):
-        if path != "/":
-            raise KeyError(path)
-        return FakeRoot()
+    target_type = FakeRoot.target_type
 
 
 class AgxLiveInventoryTests(unittest.TestCase):

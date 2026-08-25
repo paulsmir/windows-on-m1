@@ -111,7 +111,7 @@ def _text(value):
 def platform_name(adt):
     """Return m1n1's decoded target identifier, for example J313."""
 
-    return _text(adt["/"].target_type)
+    return _text(adt.target_type)
 
 
 def capture_raw():
