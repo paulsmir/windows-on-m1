@@ -167,8 +167,16 @@ class M1n1AgxBackend:
         for name in ("halted", "halt_count", "resume"):
             if status is not None and hasattr(status, name):
                 firmware_status[name] = _register_value(getattr(status, name))
+        base = int(self.u.base)
+        target = self.u.adt.target_type
+        version = self.u.version
+        if not isinstance(target, str) or not target:
+            raise BackendError("proxy target identity is unavailable")
+        if not isinstance(version, str) or not version:
+            raise BackendError("proxy firmware identity is unavailable")
         return {
-            "m1n1_base": int(self.u.base),
+            "m1n1_base": base,
+            "proxy_identity": f"{target}:{version}:{base:x}",
             "asc_running": bool(self.agx.asc.is_running()),
             "iop_power_state": int(mgmt.iop_power_state),
             "ap_power_state": int(mgmt.ap_power_state),

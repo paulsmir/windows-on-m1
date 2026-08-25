@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 from tools.agx_contract import load_contract
@@ -22,6 +23,8 @@ class FakeU:
     def __init__(self, calls):
         self.proxy = FakeProxy(calls)
         self.base = 0x804000000
+        self.adt = SimpleNamespace(target_type="J313")
+        self.version = "V13_5"
 
 
 class FakeMgmt:
@@ -277,6 +280,10 @@ class M1n1AgxBackendTests(unittest.TestCase):
         self.assertIn("fault", snapshot)
         self.assertIn("uat_mappings", snapshot)
         self.assertEqual(snapshot["firmware"]["m1n1_base"], 0x804000000)
+        self.assertEqual(
+            snapshot["firmware"]["proxy_identity"],
+            "J313:V13_5:804000000",
+        )
         self.assertEqual(
             snapshot["fault"],
             {
