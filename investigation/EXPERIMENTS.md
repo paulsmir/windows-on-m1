@@ -7114,7 +7114,9 @@ EXP-077 will not be retried.
 
 ### EXP-20260825-078 — ten cold-reset J313 AGX G1 lifecycles
 
-Status: planned; no AGX operation has been attempted for this experiment.
+Status: firmware gate passed; the registered post-gate Windows lock-screen gate
+was not met because Windows entered Recovery.  No AGX fault or guest bugcheck
+was observed.
 
 Run timestamp (UTC): `2026-08-25T15:25:06Z`.
 
@@ -7149,3 +7151,26 @@ stable Windows artifact without residual AGX clock or power state.
   `cold_reset_between_cycles=true`, `completed_cycles=10`, `verdict=passed`,
   and `windows_launch_permitted=true`.  The first failed lifecycle, reboot,
   receipt, identity or aggregation ends EXP-078 and blocks Windows.
+
+Observed result: all ten independent V13_5/G13 firmware lifecycles passed.  A
+management Pong arrived between `0.002170459` and `0.002371625` seconds in every
+cycle.  Every firmware-shared fault field and every sampled SGX IRQ count was
+zero.  Each cycle stopped management, cleared both context-zero UAT roots, and
+was followed by a hardware reboot.  All ten fresh-proxy receipts reported J313,
+V13_5, and a changed randomized m1n1 base.  The version-2 aggregate has SHA-256
+`d5683820a5efc4d065e98f395f377bc7496f4ffbf91144090fc64373281183e2`,
+`cold_reset_between_cycles=true`, `completed_cycles=10`, `verdict=passed`, and
+`windows_launch_permitted=true`.  The verifier printed `validated 10 AGX
+cycles; Windows launch is permitted`.
+
+The unchanged recovery artifacts were then used for the registered Windows
+launch.  A subsequent clean attempt reached guest runtime with CPUs 0 through
+7 online, NVMe ready, the physical xHCI route enabled, no BugCheck, no
+synchronous exception, and no AGX fault.  The 2560x1600 assisted framebuffer
+advanced through generation 36, but Windows stopped at the Recovery `Choose an
+option` page instead of reaching the lock screen within 30 seconds; SSH was
+therefore unavailable.  This does not invalidate the completed firmware gate,
+but it does fail the separately preregistered post-gate Windows criterion.
+Native input responsiveness was not requalified in this run.  No render
+context, command queue, work submission, WDDM device, or acceleration was
+created, and the stable boot artifacts remained byte-identical.
