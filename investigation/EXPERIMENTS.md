@@ -8362,7 +8362,8 @@ will not be reused.
 
 ### EXP-20260825-093 — isolate AGX bootstrap to the native producer
 
-Status: preregistered; hardware command not yet run.
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
 
 Hypothesis: comparing `/proc/self/exe` with the explicitly exported native
 capture program before importing `m1n1.setup` prevents inherited `gcc` and `as`
@@ -8495,3 +8496,32 @@ successful mandatory physical reboot after every capture. Any missing file,
 unexpected boundary, cleanup failure, stale proxy or manual intervention
 rejects EXP-094. Preserve all evidence, never reuse its directory, keep Windows
 blocked, and return the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected after a new, deterministic serialization boundary.
+The subprocess-memory isolation worked: AGX firmware booted, channels and
+initdata initialized, the runtime compiler completed, and create-BO ioctl
+sequences 1 through 8 all returned successfully without corrupting drm-shim's
+cached file descriptor or fd map. Submission then entered ioctl sequence 9
+(`0x40186440`) and failed in `GPURenderer.submit()` while pushing
+`WorkCommand3D.struct_1`:
+
+```text
+KeyError: 'helper_cfg'
+m1n1.constructutils.ConstructClassException:
+at (pushing) -> WorkCommand3D -> struct_1 -> Start3DStruct1
+```
+
+The failure is a pinned historical m1n1 schema drift, not a transport, ASC,
+allocator or native-client failure. Commit `b50e29bcf6a8ecafff50a4555385be39e44b8616`
+renamed `Start3DStruct1.unk_40` to `helper_cfg`, while this renderer still writes
+`unk_40 = 0`; Construct therefore cannot find the renamed field. Historical
+source proves the intended disabled-helper value is zero.
+
+The partial `shim_frame000.agx` SHA-256 is
+`205086af23e668e775312d4cb6b4633a0c76d96ab3a3b47ecfe02fd4aa128a6e`; no
+`final.rgba` exists. The preserved core SHA-256 is
+`d318364691c714fb559c798caf8417845dac7afe5042c04d1366f632cd72a4b7`.
+The mandatory reboot returned an unowned J313/V13_5 proxy at base
+`0x804c44000`. EXP-094 is closed; its destination must never be reused. The
+next correction must restore the renamed zero-valued field at the capture
+boundary without changing the stable Windows recovery artifacts.
