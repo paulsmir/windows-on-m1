@@ -28,6 +28,11 @@ class RunAgxGateTests(unittest.TestCase):
         self.artifacts = self.base / "stable"
         self.artifacts.mkdir()
         self.evidence = self.base / "evidence"
+        self.test_bin = self.base / "bin"
+        self.test_bin.mkdir()
+        fake_ps = self.test_bin / "ps"
+        fake_ps.write_text("#!/bin/sh\nexit 0\n")
+        fake_ps.chmod(0o755)
         contract = load_contract(CONTRACT_PATH)
         records = {}
         checksum_lines = []
@@ -84,9 +89,12 @@ class RunAgxGateTests(unittest.TestCase):
         ]
 
     def run_script(self, *extra):
+        env = os.environ.copy()
+        env["PATH"] = f"{self.test_bin}{os.pathsep}{env['PATH']}"
         return subprocess.run(
             self.command(*extra),
             cwd=self.base,
+            env=env,
             capture_output=True,
             text=True,
             check=False,
