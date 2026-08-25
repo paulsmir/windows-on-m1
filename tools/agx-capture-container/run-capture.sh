@@ -44,6 +44,8 @@ while [ ! -e "$PROXY" ]; do
 done
 sleep 1
 
+AGX_SHIM_MODULE=tools.agx_capture_shim \
+M1N1_BOOTSTRAP_TIMEOUT=3.0 \
 AGX_CAPTURE_PYTHON=python3 /work/scripts/capture-agx-clear-frame.sh \
     --proxy "$PROXY" \
     --mesa-source "$MESA" \
