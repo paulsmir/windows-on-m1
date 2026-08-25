@@ -56,19 +56,33 @@ class FakeAsc:
         return self.running
 
 
-class FakeFaultRegister:
-    value = 0x1234
-    FAULTED = 0
-
-
-class FakeFaultInfo:
-    @property
-    def reg(self):
-        return FakeFaultRegister()
-
-
 class FakeSgx:
-    FAULT_INFO = FakeFaultInfo()
+    @property
+    def FAULT_INFO(self):
+        raise AssertionError("firmware-only snapshot must not read SGX MMIO")
+
+
+class FakeFirmwareFaultInfo:
+    unk_0 = 1
+    unk_4 = 2
+    queue_uuid = 3
+    unk_c = 4
+    unk_10 = 5
+    unk_14 = 6
+
+
+class FakeRegionC:
+    def __init__(self, calls):
+        self.calls = calls
+        self.fault_info = FakeFirmwareFaultInfo()
+
+    def pull(self):
+        self.calls.append("region-c-pull")
+
+
+class FakeInitData:
+    def __init__(self, calls):
+        self.regionC = FakeRegionC(calls)
 
 
 class FakeUat:
@@ -107,6 +121,7 @@ class FakeAgx:
         self.uat = FakeUat(calls)
         self.event_mgr = FakeEventManager()
         self.sgx = FakeSgx()
+        self.initdata = FakeInitData(calls)
         self.fail_start = fail_start
 
     def start(self):
@@ -260,7 +275,19 @@ class M1n1AgxBackendTests(unittest.TestCase):
         self.assertIn("sgx_irqs", snapshot)
         self.assertIn("fault", snapshot)
         self.assertIn("uat_mappings", snapshot)
-        self.assertEqual(snapshot["fault"]["raw"], 0x1234)
+        self.assertEqual(
+            snapshot["fault"],
+            {
+                "source": "firmware-shared-memory",
+                "unk_0": 1,
+                "unk_4": 2,
+                "queue_uuid": 3,
+                "unk_c": 4,
+                "unk_10": 5,
+                "unk_14": 6,
+            },
+        )
+        self.assertIn("region-c-pull", self.calls)
 
     def test_reset_invalidates_private_roots_before_release(self):
         backend = self.backend()

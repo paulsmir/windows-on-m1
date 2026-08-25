@@ -175,10 +175,16 @@ class M1n1AgxBackend:
         }
 
     def _fault_snapshot(self) -> dict:
-        fault = self.agx.sgx.FAULT_INFO.reg
+        # The physical SGX fault register is not readable until the render
+        # power-control path is enabled.  G1 deliberately owns firmware only,
+        # so read the versioned firmware fault record from shared memory.
+        region = self.agx.initdata.regionC
+        region.pull()
+        fault = region.fault_info
+        fields = ("unk_0", "unk_4", "queue_uuid", "unk_c", "unk_10", "unk_14")
         return {
-            "raw": int(fault.value),
-            "faulted": bool(fault.FAULTED),
+            "source": "firmware-shared-memory",
+            **{name: int(getattr(fault, name)) for name in fields},
         }
 
     def _uat_snapshot(self) -> dict:
