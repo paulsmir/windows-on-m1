@@ -27,6 +27,7 @@ class PublicScriptTests(unittest.TestCase):
             "display-assisted.sh",
             "log-assisted.sh",
             "supervise-assisted.sh",
+            "run-agx-gate.sh",
         )
         for name in names:
             path = ROOT / "scripts" / name

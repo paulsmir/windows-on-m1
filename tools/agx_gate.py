@@ -1,10 +1,21 @@
 """Fail-closed lifecycle gate for bounded J313 AGX firmware experiments."""
 
+import argparse
 from dataclasses import dataclass
+import hashlib
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
+import sys
 import time
 from typing import Protocol
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from tools.agx_contract import AgxContract, contract_sha256
 
@@ -35,6 +46,9 @@ class GateResult:
     windows_launch_permitted: bool
     verdict: str
     evidence_path: Path
+
+
+SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _atomic_json(path: Path, data: dict) -> None:
@@ -171,3 +185,191 @@ def run_gate(
     manifest["windows_launch_permitted"] = permitted
     _atomic_json(evidence_path, manifest)
     return GateResult(completed, permitted, verdict, evidence_path)
+
+
+def verify_gate_result(path: Path) -> dict:
+    """Return a complete ten-cycle result or fail before Windows launch."""
+
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise GateError(f"cannot read gate result: {path}") from exc
+    cycles = data.get("cycles")
+    complete = (
+        data.get("gate_version") == 1
+        and data.get("requested_cycles") == 10
+        and data.get("completed_cycles") == 10
+        and isinstance(cycles, list)
+        and len(cycles) == 10
+        and all(
+            item.get("cycle") == index and item.get("status") == "passed"
+            for index, item in enumerate(cycles, 1)
+        )
+        and data.get("verdict") == "passed"
+        and data.get("windows_launch_permitted") is True
+    )
+    if not complete:
+        raise GateError("G1 result does not permit Windows launch")
+    return data
+
+
+def _git(root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise GateError(result.stderr.strip() or f"git failed in {root}")
+    return result.stdout.strip()
+
+
+def _parse_checksums(path: Path) -> dict[str, str]:
+    try:
+        lines = path.read_text().splitlines()
+    except OSError as exc:
+        raise GateError(f"Stable checksum list not found: {path}") from exc
+    result = {}
+    for line in lines:
+        fields = line.split("  ", 1)
+        if len(fields) != 2 or not SHA256_RE.fullmatch(fields[0]):
+            raise GateError(f"invalid stable checksum line: {line}")
+        name = fields[1]
+        if not name or Path(name).name != name or name in result:
+            raise GateError(f"invalid stable checksum artifact: {name}")
+        result[name] = fields[0]
+    if not result:
+        raise GateError("stable checksum list is empty")
+    return result
+
+
+def preflight_operator(root: Path, contract_path: Path, artifact_dir: Path) -> dict:
+    """Validate immutable G0, source, and recovery identities before proxy use."""
+
+    from tools.agx_contract import canonical_bytes, load_contract
+    from tools.agx_live_inventory import ensure_guest_inactive
+    from tools.artifact_manifest import ARTIFACT_ROLES, verify_manifest
+
+    root = Path(root).resolve()
+    contract_path = Path(contract_path).resolve()
+    artifact_dir = Path(artifact_dir).resolve()
+    ensure_guest_inactive(root)
+
+    if not contract_path.is_file():
+        raise GateError(f"AGX contract not found: {contract_path}")
+    contract = load_contract(contract_path)
+    if contract_path.read_bytes() != canonical_bytes(contract):
+        raise GateError("AGX contract is not canonical")
+
+    manifest_path = artifact_dir / "MANIFEST.json"
+    if not manifest_path.is_file():
+        raise GateError(f"Artifact manifest not found: {manifest_path}")
+    try:
+        manifest = verify_manifest(
+            manifest_path,
+            expected_profile="debug",
+            expected_roles=ARTIFACT_ROLES,
+            expected_display="both",
+            expected_debug="monitor",
+        )
+    except Exception as exc:
+        raise GateError(str(exc)) from exc
+
+    artifacts = manifest.get("artifacts", {})
+    if set(artifacts) != set(ARTIFACT_ROLES):
+        raise GateError("stable recovery manifest has an unexpected artifact set")
+    allowed_entries = set(artifacts) | {"MANIFEST.json", "SHA256SUMS"}
+    actual_entries = {path.name for path in artifact_dir.iterdir()}
+    unexpected = sorted(actual_entries - allowed_entries)
+    missing = sorted(allowed_entries - actual_entries)
+    if unexpected:
+        raise GateError(f"unexpected recovery entry: {unexpected[0]}")
+    if missing:
+        raise GateError(f"missing recovery entry: {missing[0]}")
+
+    checksums = _parse_checksums(artifact_dir / "SHA256SUMS")
+    if set(checksums) != set(artifacts):
+        raise GateError("stable checksum artifact set does not match manifest")
+    for name, digest in checksums.items():
+        if artifacts[name].get("sha256") != digest:
+            raise GateError(f"stable checksum mismatch: {name}")
+
+    m1n1_commit = _git(root / "m1n1_windows", "rev-parse", "HEAD")
+    mu_commit = _git(root / "mu", "rev-parse", "HEAD")
+    if m1n1_commit != contract.source.m1n1_commit:
+        raise GateError("m1n1 source commit does not match AGX contract")
+    if mu_commit != contract.source.mu_commit:
+        raise GateError("Mu source commit does not match AGX contract")
+    _git(root, "cat-file", "-e", f"{contract.source.root_commit}^{{commit}}")
+    if manifest.get("m1n1_windows_commit") != contract.source.m1n1_commit:
+        raise GateError("stable m1n1 artifact source does not match AGX contract")
+
+    return {
+        "contract": str(contract_path),
+        "contract_sha256": contract_sha256(contract),
+        "artifact_dir": str(artifact_dir),
+        "m1n1_sha256": artifacts["m1n1.macho"]["sha256"],
+        "firmware_sha256": artifacts["J313_EFI.fd"]["sha256"],
+        "m1n1_commit": m1n1_commit,
+        "mu_commit": mu_commit,
+        "recovery_checksums": checksums,
+    }
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    preflight = subparsers.add_parser("preflight")
+    preflight.add_argument("--root", type=Path, required=True)
+    preflight.add_argument("--contract", type=Path, required=True)
+    preflight.add_argument("--artifact-dir", type=Path, required=True)
+    run = subparsers.add_parser("run")
+    run.add_argument("--contract", type=Path, required=True)
+    run.add_argument("--evidence-dir", type=Path, required=True)
+    run.add_argument("--cycles", type=int, required=True)
+    run.add_argument("--timeout", type=float, default=1.0)
+    verify = subparsers.add_parser("verify-result")
+    verify.add_argument("path", type=Path)
+    return parser
+
+
+def main() -> int:
+    parser = _parser()
+    args = parser.parse_args()
+    try:
+        if args.command == "preflight":
+            data = preflight_operator(args.root, args.contract, args.artifact_dir)
+            print(json.dumps(data, indent=2, sort_keys=True))
+        elif args.command == "verify-result":
+            data = verify_gate_result(args.path)
+            print(
+                f"validated {data['completed_cycles']} AGX cycles; "
+                "Windows launch is permitted"
+            )
+        else:
+            if args.cycles != 10:
+                raise GateError("cycles must be exactly 10")
+            os.environ.setdefault("M1N1DEVICE", "")
+            if not os.environ["M1N1DEVICE"]:
+                raise GateError("M1N1DEVICE is required")
+            from m1n1.setup import u
+            from tools.agx_contract import load_contract
+            from tools.agx_m1n1_backend import M1n1AgxBackend
+
+            result = run_gate(
+                M1n1AgxBackend(u),
+                load_contract(args.contract),
+                cycles=args.cycles,
+                timeout_s=args.timeout,
+                evidence_dir=args.evidence_dir,
+            )
+            print(result.evidence_path)
+    except GateError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
