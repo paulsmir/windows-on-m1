@@ -8155,7 +8155,7 @@ EXP-089 is closed and its evidence directory will not be reused.
 
 ### EXP-20260825-090 — bootstrap AGX before exposing the fake render fd
 
-Status: preregistered; one two-capture run permitted.
+Status: rejected during eager Shim construction before the first DRM ioctl.
 
 Hypothesis: moving the unchanged historical AGX/proxy initialization into Shim
 construction, before drm-shim exposes a fake render fd to EGL, removes the
@@ -8208,3 +8208,19 @@ unexpected ioctl boundary, cleanup failure, stale proxy or manual intervention
 rejects EXP-090. Preserve all obtainable evidence, never reuse this directory,
 keep Windows blocked, and return the Air to a fresh J313/V13_5 proxy regardless
 of result.
+
+Observed result: rejected without timeout or manual intervention. Eager
+`self.init()` ran before the fake render fd as intended, but it also started
+AGX from every process that inherited `LD_PRELOAD`. The primary AGX ASC boot
+timed out before any `capture-ioctl-begin` marker. Its crash-buffer path invoked
+the historical runtime assembler; the child `gcc` inherited the capture shim,
+constructed another eager Shim and aborted recursively. This proves that the
+safe pre-fd boundary is the `m1n1.setup` import and USB bootstrap only, not the
+entire AGX start. AGX start must remain lazy at the original first-ioctl point
+after setup has already completed.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`9723e012c65d5ccaefe6eadf86a952fee988addd46264ed0b595c64850b843ad`.
+The operator performed the mandatory physical reboot; a fresh unowned
+J313/V13_5 proxy returned at base `0x805a40000`. EXP-090 is closed and its
+evidence directory will not be reused.
