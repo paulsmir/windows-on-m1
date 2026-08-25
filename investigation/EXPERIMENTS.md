@@ -8529,7 +8529,7 @@ boundary without changing the stable Windows recovery artifacts.
 
 ### EXP-20260825-095 — serialize disabled helper state and submit 3D work
 
-Status: preregistered; hardware command not yet run.
+Status: rejected by protected source-coherence preflight; no GPU command ran.
 
 Hypothesis: advancing only the reviewed GPU m1n1 pin to
 `195f70ddfc0fdfa382d1643dbe9466431850e56c`, where the historical renderer
@@ -8583,3 +8583,20 @@ unexpected boundary, cleanup failure, stale proxy or manual intervention
 rejects EXP-095. Preserve all evidence, never reuse its destination, keep
 Windows blocked, and return the Air to a fresh J313/V13_5 proxy regardless of
 result.
+
+Observed result: rejected before transport or GPU ownership. Environment
+verification passed, then the operator refused the immutable stable artifact:
+
+```text
+error: stable m1n1 artifact source does not match AGX contract
+```
+
+The stable recovery artifact correctly identifies source
+`9cd80ac652ac404e92ae279deeaec8c629d7d184`, while this experiment advanced the
+whole AGX contract to `195f70ddfc0fdfa382d1643dbe9466431850e56c` for a
+Python-only renderer correction. No destination was created, no capture or GPU
+command ran, and both USB proxy endpoints remained present. This is a design
+error in the experiment, not a hardware result: a capture-only compatibility
+shim must preserve the immutable stable m1n1 contract rather than changing the
+production source pin. EXP-095 is closed and its destination will not be
+reused.
