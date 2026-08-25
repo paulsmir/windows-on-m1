@@ -30,7 +30,7 @@ def raw_inventory():
         },
         "nodes": {
             "/arm-io/sgx": {
-                "reg": [[0x204000000, 0x1000000]],
+                "reg": [[0x204000000, 0x2000000]],
                 "interrupts": [180, 181, 182],
                 "properties": {
                     "rtkit-private-vm-region-base": 0x500000000,

@@ -136,6 +136,19 @@ def _check_region_overlap(regions):
             )
 
 
+def _check_region_classes(regions):
+    sgx = regions["sgx_mmio"]
+    asc = regions["asc_mmio"]
+    if asc.base < sgx.base or asc.base + asc.size > sgx.base + sgx.size:
+        raise ContractError("regions.asc_mmio must be inside sgx_mmio")
+    _check_region_overlap(
+        {
+            name: regions[name]
+            for name in ("rtkit_private", "gpu", "shared", "handoff")
+        }
+    )
+
+
 def validate_contract(data: dict) -> AgxContract:
     """Validate an untrusted dictionary and return its immutable form."""
 
@@ -167,7 +180,7 @@ def validate_contract(data: dict) -> AgxContract:
     region_data = data["regions"]
     _exact(region_data, REGION_NAMES, "regions")
     regions = {name: _region(region_data[name], name) for name in REGION_NAMES}
-    _check_region_overlap(regions)
+    _check_region_classes(regions)
 
     irq_data = data["interrupts"]
     if not isinstance(irq_data, list) or not irq_data:

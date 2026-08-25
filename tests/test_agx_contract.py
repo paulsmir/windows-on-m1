@@ -30,7 +30,7 @@ def valid_contract_dict():
             "/arm-io/dcp",
         ],
         "regions": {
-            "sgx_mmio": {"base": 0x204000000, "size": 0x1000000},
+            "sgx_mmio": {"base": 0x204000000, "size": 0x2000000},
             "asc_mmio": {"base": 0x205000000, "size": 0x4000},
             "rtkit_private": {"base": 0x500000000, "size": 0x40000},
             "gpu": {"base": 0x500040000, "size": 0x40000},
@@ -79,6 +79,21 @@ class AgxContractTests(unittest.TestCase):
         data = valid_contract_dict()
         data["regions"]["shared"] = data["regions"]["gpu"].copy()
         with self.assertRaisesRegex(ContractError, "overlap"):
+            validate_contract(data)
+
+    def test_asc_mmio_is_an_explicit_subrange_of_sgx_aperture(self):
+        contract = validate_contract(valid_contract_dict())
+        self.assertLessEqual(
+            contract.regions["asc_mmio"].base
+            + contract.regions["asc_mmio"].size,
+            contract.regions["sgx_mmio"].base
+            + contract.regions["sgx_mmio"].size,
+        )
+
+    def test_asc_mmio_outside_sgx_aperture_is_rejected(self):
+        data = valid_contract_dict()
+        data["regions"]["asc_mmio"]["base"] = 0x203000000
+        with self.assertRaisesRegex(ContractError, "inside sgx_mmio"):
             validate_contract(data)
 
     def test_misaligned_region_is_rejected(self):
