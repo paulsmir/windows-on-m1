@@ -100,7 +100,9 @@ while [ "$CYCLE" -le 2 ]; do
     NEEDS_REBOOT=1
     if (
         cd "$CYCLE_DIR"
-        ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
+        timeout --foreground --signal=TERM --kill-after=5s 30s env \
+            ASAHI_SHIM_DUMP=1 ASAHI_SHIM_PULL=1 \
+            AGX_CAPTURE_PROGRAM="$CAPTURE_PROGRAM" \
             M1N1DEVICE="$PROXY" LD_PRELOAD="$SHIM_LIBRARY" \
             "$CAPTURE_PROGRAM" "$FINAL"
         [ -f "$FRAME" ]

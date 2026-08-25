@@ -92,12 +92,28 @@ class CaptureBootstrapTests(unittest.TestCase):
         self.assertLess(set_version, historical_start)
         self.assertIn('Ver.check("V == V13_5 && G == G13")', source)
 
+    def test_capture_wrapper_records_each_ioctl_return_boundary(self):
+        source = (ROOT / "tools/agx_capture_shim.py").read_text(encoding="utf-8")
+        self.assertIn("capture-ioctl-begin", source)
+        self.assertIn("capture-ioctl-end", source)
+        self.assertIn("capture-ioctl-error", source)
+        self.assertIn("super().ioctl(fd, request, p_arg)", source)
+
     def test_capture_operator_selects_wrapper_and_explicit_budget(self):
         source = (ROOT / "tools/agx-capture-container/run-capture.sh").read_text(
             encoding="utf-8"
         )
         self.assertIn("AGX_SHIM_MODULE=tools.agx_capture_shim", source)
         self.assertIn("M1N1_BOOTSTRAP_TIMEOUT=3.0", source)
+
+    def test_capture_producer_has_fixed_wall_clock_deadline(self):
+        source = (ROOT / "scripts/capture-agx-clear-frame.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "timeout --foreground --signal=TERM --kill-after=5s 30s", source
+        )
+        self.assertNotIn("CAPTURE_TIMEOUT_SECONDS", source)
 
     def test_full_client_probe_reproduces_loader_path_without_agx(self):
         helper = (ROOT / "tools/agx-capture-container/probe-full-client-bootstrap.sh").read_text(
