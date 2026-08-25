@@ -30,6 +30,12 @@ def _default_agx_factory(u):
     return AGX(u)
 
 
+def _default_version_setter(u) -> None:
+    from m1n1.constructutils import Ver
+
+    Ver.set_version(u)
+
+
 def _register_value(value):
     if value is None:
         return None
@@ -62,6 +68,7 @@ class M1n1AgxBackend:
         *,
         live_contract_reader: Callable[[AgxContract], AgxContract] | None = None,
         agx_factory: Callable | None = None,
+        version_setter: Callable | None = None,
         heartbeat_attempts: int = 256,
     ):
         if (
@@ -75,6 +82,7 @@ class M1n1AgxBackend:
             live_contract_reader or _default_live_contract_reader
         )
         self.agx_factory = agx_factory or _default_agx_factory
+        self.version_setter = version_setter or _default_version_setter
         self.heartbeat_attempts = heartbeat_attempts
         self.agx = None
         self._prepared = False
@@ -104,6 +112,11 @@ class M1n1AgxBackend:
         if _live_identity_bytes(live_contract) != _live_identity_bytes(contract):
             raise BackendError("live AGX resources do not match reviewed contract")
 
+        # m1n1's AGX Construct layouts are selected from the live firmware and
+        # SoC generation.  The upstream AGX experiments establish this global
+        # schema before constructing AGX; leaving the default at V12_3 corrupts
+        # every versioned initdata layout on J313 V13_5.
+        self.version_setter(self.u)
         self._released = False
         # Once a clock-enable request is attempted, only a proven hardware
         # reset may claim release.  A transport error can occur after the
@@ -119,8 +132,11 @@ class M1n1AgxBackend:
     def start(self) -> None:
         if not self._prepared or self.agx is None or self._started:
             raise BackendError("AGX backend is not prepared for start")
-        self.agx.start()
+        # start() is not transactional: ASC and endpoints are live before
+        # initdata construction completes.  Mark ownership first so an
+        # exception can never be mistaken for a released device.
         self._started = True
+        self.agx.start()
 
     def heartbeat(self) -> dict:
         if not self._started or self.agx is None:

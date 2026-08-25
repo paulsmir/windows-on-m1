@@ -101,16 +101,19 @@ class FakeEventManager:
 
 
 class FakeAgx:
-    def __init__(self, calls, *, respond=True):
+    def __init__(self, calls, *, respond=True, fail_start=False):
         self.calls = calls
         self.asc = FakeAsc(calls, respond=respond)
         self.uat = FakeUat(calls)
         self.event_mgr = FakeEventManager()
         self.sgx = FakeSgx()
+        self.fail_start = fail_start
 
     def start(self):
         self.calls.append("agx-start")
         self.asc.running = True
+        if self.fail_start:
+            raise RuntimeError("partial start failure")
 
     def stop(self):
         self.calls.append("agx-stop")
@@ -129,7 +132,7 @@ class M1n1AgxBackendTests(unittest.TestCase):
         self.calls = []
         self.u = FakeU(self.calls)
 
-    def backend(self, *, live_contract=None, respond=True):
+    def backend(self, *, live_contract=None, respond=True, fail_start=False):
         from tools.agx_m1n1_backend import M1n1AgxBackend
 
         live_contract = live_contract or self.contract
@@ -140,12 +143,20 @@ class M1n1AgxBackendTests(unittest.TestCase):
 
         def create_agx(_u):
             self.calls.append("agx-constructor")
-            return FakeAgx(self.calls, respond=respond)
+            return FakeAgx(
+                self.calls,
+                respond=respond,
+                fail_start=fail_start,
+            )
+
+        def set_version(_u):
+            self.calls.append("set-version")
 
         return M1n1AgxBackend(
             self.u,
             live_contract_reader=read_live,
             agx_factory=create_agx,
+            version_setter=set_version,
             heartbeat_attempts=3,
         )
 
@@ -154,9 +165,10 @@ class M1n1AgxBackendTests(unittest.TestCase):
         backend.prepare(self.contract)
 
         self.assertEqual(
-            self.calls[:4],
+            self.calls[:5],
             [
                 "inventory",
+                "set-version",
                 ("clock", "/arm-io/gfx-asc"),
                 ("clock", "/arm-io/sgx"),
                 "agx-constructor",
@@ -212,6 +224,20 @@ class M1n1AgxBackendTests(unittest.TestCase):
         backend.start()
         with self.assertRaisesRegex(BackendError, "management progress"):
             backend.heartbeat()
+
+    def test_partial_start_failure_is_not_released_without_reboot(self):
+        from tools.agx_m1n1_backend import BackendError
+
+        backend = self.backend(fail_start=True)
+        backend.prepare(self.contract)
+
+        with self.assertRaisesRegex(RuntimeError, "partial start failure"):
+            backend.start()
+
+        self.assertFalse(backend.released())
+        with self.assertRaisesRegex(BackendError, "must be stopped"):
+            backend.reset()
+        self.assertFalse(backend.released())
 
     def test_heartbeat_reports_management_and_event_progress(self):
         backend = self.backend()
