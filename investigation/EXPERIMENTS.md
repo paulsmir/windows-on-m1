@@ -8164,8 +8164,8 @@ producer will then pass the first create-BO C handler, issue subsequent ioctls,
 submit one deterministic clear, and produce two cold byte-identical capture
 packages without a mutex abort, timeout or manual intervention.
 
-- implementation and ledger: `97ab533ae13d120f36397abf79a84d784c0aba20`
-  and `1c4e391e8f3887286af9631b43cfc3ac1d0c36ed`;
+- implementation and ledger: `97ab533107b0e9a35281d5c6580a6bd6c00e0c63`
+  and `1c4e3910799b34e95a6e3cd1322b07085fae1685`;
 - capture wrapper SHA-256:
   `aa650612a9f298b00aacd7bd101ebf52a4777088b2d1d355ee019e833f43e5c0`;
 - unchanged host and container helpers SHA-256:
