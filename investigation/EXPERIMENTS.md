@@ -9186,7 +9186,7 @@ capture-path mutation.
 
 ### EXP-20260826-103 — one-shot replay of the accepted AGX fixture
 
-Status: preregistered; hardware replay not run.
+Status: rejected before GPU queue submission; cold reboot confirmed.
 
 Hypothesis: the committed fixture accepted by EXP-102 can be loaded into an
 isolated context 63, replayed once through renderer queue 1, and complete its
@@ -9264,3 +9264,38 @@ missing event, partial pointer or stamp progress, changed immutable byte,
 unexpected mapping, fault, cleanup or reboot failure rejects EXP-103.  Do not
 retry in place, preserve all evidence, keep Windows blocked and do not begin
 EXP-080 unless this one-shot passes independent inspection.
+
+Observed result (completed UTC 2026-08-26):
+- the one permitted `run-one` invocation loaded the accepted fixture, created
+  isolated context 63, classified 102 mappings, confirmed all guards unmapped,
+  read the poisoned output and immutable baseline, and then failed while
+  serializing `WorkCommand3D.struct_1` at `Start3DStruct1`;
+- the exact failure was `render backend failure: at (pushing) ->
+  WorkCommand3D -> struct_1 -> Start3DStruct1`.  It happened inside
+  `renderer.submit()` before either queue producer moved, so no TA or 3D work
+  reached firmware, no completion event fired and no output byte changed;
+- the bounded heartbeat still completed one management pong, firmware remained
+  running at AP/IOP power state 32, every readable firmware fault word was zero,
+  and cleanup reported `released=true`;
+- as preregistered, one physical reboot was performed regardless of failure.
+  The pre-run proxy base was `0x80427c000`; the post-reboot proxy answered as
+  J313/V13_5 at distinct base `0x804bf4000`, proving a fresh Stage 1 instance;
+- `proxy-receipt` correctly refused to issue an acceptance receipt because the
+  one-shot result was incomplete.  No retry was attempted and EXP-080 remains
+  blocked.
+
+Evidence:
+- atomic result
+  `investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/cycle-01/render-gate-result.json`;
+- completed cycles `0`, event count/delta `0`, `completion=null`, firmware fault
+  words all zero, immutable-before SHA-256
+  `a2fe0f0e6034d680ee89ffeed520efed55119055a36a533fc98d9221b5bd3652`,
+  and `released=true`.
+
+Verdict: rejected safely before hardware submission.  Source inspection found
+that the pinned renderer assigns the historical `Start3DStruct1.unk_40` key,
+while the current schema builds the same 32-bit field under `helper_cfg`.
+EXP-102 already applies a capture-process-only schema compatibility rename, but
+the replay process did not apply it.  The next work is a local test-first fix
+which shares that schema compatibility with replay; hardware must remain idle
+until the full suite passes and a new one-shot is separately preregistered.
