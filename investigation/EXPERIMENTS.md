@@ -9418,7 +9418,7 @@ preregistered one-shot produces a valid receipt.
 
 ### EXP-20260826-105 — one-shot replay with bound proxy identity
 
-Status: preregistered; hardware replay not run.
+Status: accepted; one cold replay and bound reset receipt passed.
 
 Hypothesis: recording the real pre-render proxy identity in the lifecycle
 snapshot will preserve EXP-104's already-proven render behavior and allow the
@@ -9481,3 +9481,37 @@ the exact pre-reboot identity and a valid receipt binding its canonical hash to
 a different J313/V13_5 identity and m1n1 base.  Any failure rejects EXP-105;
 never retry it in place.  EXP-080 and Windows remain blocked until independent
 inspection accepts both files.
+
+Observed result (completed UTC 2026-08-26):
+- the sole replay again completed exact TA and 3D producer/read/done `0 -> 2`,
+  one event per queue, exact `0x100` stamp increments, no spurious event,
+  no firmware fault, no unexpected mapping, unmapped guards and complete
+  cleanup/release;
+- GPU workload elapsed `0.007328165986109525` seconds and bounded host submit
+  elapsed `0.29336354101542383` seconds, both within their fixed 0.5-second
+  limits;
+- output changed from poison SHA-256
+  `4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe`
+  to raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`,
+  while immutable objects remained
+  `a2fe0f0e6034d680ee89ffeed520efed55119055a36a533fc98d9221b5bd3652`;
+- the result captured pre-reboot identity `J313:V13_5:8040b4000` and the one
+  mandatory physical reboot produced `J313:V13_5:804430000`.  Independent
+  receipt validation passed with `fresh_proxy=true` and bound canonical result
+  SHA-256 `3a8080b698a538ebcb8a1c9637bb35b76ab3259500796145c1e94cd255764fa4`;
+- independent fixture, one-shot and reset validators all passed without editing
+  either evidence file.
+
+Evidence:
+- result file SHA-256
+  `3134bc472b715f91606b696e9b87bf0d6acd46022ba1cbf924337c8dd28656e5`;
+- reset receipt SHA-256
+  `2cc1aff108f887a1cf79c58fbd4113b5459c387a681954165df7bd597a508b5e`;
+- paths under
+  `investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/`.
+
+Verdict: accepted.  G1R now has one complete cold render plus independently
+bound reset proof on J313/V13_5.  This permits only the already-reserved final
+ten-cold-cycle EXP-080 with the exact same fixture and source.  It does not yet
+permit Windows launch or claim a Windows graphics driver.
