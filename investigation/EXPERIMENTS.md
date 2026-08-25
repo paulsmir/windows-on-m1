@@ -7921,3 +7921,58 @@ was verified separately and is not the fault. The next correction must mount
 the exact tracked helper read-only and invoke that path explicitly; no new
 capture is allowed until tests prove the host command cannot select the stale
 image-internal helper.
+
+### EXP-20260825-087 — acquire tracked-helper cold AGX clear captures
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the exact tracked capture helper selected by commit
+`6053d6fc8dc877b9a967cd8d61eb96856e97ca3e` will deliver the EXP-085-qualified
+capture shim and three-second bootstrap budget to the pinned historical Mesa
+producer, allowing two cold J313/G13/V13_5 fixed-clear captures to produce
+byte-identical complete frames and 1024-byte final attachments.
+
+- root source and ledger: `11768b0a60d15a96f2480875af44cbff6ed6d4dc`;
+- tracked-helper correction and ledger:
+  `6053d6fc8dc877b9a967cd8d61eb96856e97ca3e` and
+  `11768b0a60d15a96f2480875af44cbff6ed6d4dc`;
+- prerequisite EXP-085 receipt SHA-256:
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`;
+- host operator SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`;
+- tracked helper SHA-256:
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- capture shim SHA-256:
+  `36bd1b2d1ea886397ec02f7788a6509cacb07474ddea8892a5be5ce13f50e198`;
+- identity `.local/agx-capture/identity-exp087.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- pinned image ID
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`;
+- m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable recovery checksum-list SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-087-agx-g1r-capture/`,
+  confirmed absent;
+- fixed bridge port `43142`;
+- full repository suite passed 578/578 after the helper correction.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp087.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-087-agx-g1r-capture \
+  --bridge-port 43142
+```
+
+Pass and rejection rules are identical to EXP-086, with the additional hard
+requirement that the host command mount the helper read-only and execute
+`/opt/agx-capture/run-capture-public.sh`; selecting the image-internal helper is
+an immediate rejection. A pass remains capture-only and requires manual fixture
+review plus separately preregistered replay.
