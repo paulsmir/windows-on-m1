@@ -8834,7 +8834,8 @@ preserving the producer exit status and emergency-reboot contract.
 
 ### EXP-20260825-099 — retain the native submit traceback
 
-Status: preregistered; hardware command not yet run.
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
 
 Hypothesis: rerunning the otherwise unchanged fixed-clear capture with the
 producer's combined output persisted will reproduce EXP-098 and retain the
@@ -8885,3 +8886,32 @@ stronger two-cold-capture fixture contract still applies. Any missing log,
 masked producer status, stale proxy, cleanup failure or manual intervention
 rejects EXP-099. Preserve all evidence, never reuse the destination, keep
 Windows blocked and return the Air to fresh proxy regardless of result.
+
+Observed result: rejected with the intended complete traceback retained.
+Sequence 9 passed both earlier helper-field compatibility boundaries, built the
+3D command and entered TA queue submission. `WorkCommandTA` then failed while
+building `unk_3e8`:
+
+```text
+construct.core.StreamError: Error in path (pushing) -> WorkCommandTA -> unk_3e8
+bytes object of wrong length, expected 96, found 100
+```
+
+The root cause is a paired upstream schema transition in commit
+`b50e29bcf6a8ecafff50a4555385be39e44b8616`: it appended the four-byte
+`TilingParameters.helper_cfg` field and simultaneously reduced
+`WorkCommandTA.unk_3e8` from `0x64` to `0x60`, retaining the subsequent field
+offsets. The pinned renderer still assigns `bytes(0x64)`. The already-proven
+capture tiling correction supplies the added four bytes, so the renderer's TA
+padding must now be `0x60`; changing the schema back would incorrectly shift
+all later fields.
+
+The producer log SHA-256 is
+`94279d3664a609d7ef07cb467115ccc804e511050085e8c69e09f5a104b19ad8`;
+the partial frame SHA-256 is
+`a584533f728cea8febb09ceacd6b1cb0a4dc836e1bdd85696ed4fb7745bd35a4`;
+the core SHA-256 is
+`75f79e2648b8b49a9c3e4761eb99929b02b4f4745c311bd53a946f95ab10c20e`;
+no final attachment or receipt exists. The saved producer status remained
+nonzero, the mandatory reboot completed and both USB endpoints re-enumerated
+at 23:44. EXP-099 is closed and its destination will not be reused.
