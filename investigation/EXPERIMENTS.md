@@ -8600,3 +8600,61 @@ error in the experiment, not a hardware result: a capture-only compatibility
 shim must preserve the immutable stable m1n1 contract rather than changing the
 production source pin. EXP-095 is closed and its destination will not be
 reused.
+
+### EXP-20260825-096 — capture-only helper-field compatibility
+
+Status: preregistered; hardware command not yet run.
+
+Hypothesis: installing a data-descriptor alias from the pinned renderer's
+historical `unk_40` assignment to the documented `helper_cfg` field only in the
+native capture wrapper allows the first 3D submission to serialize without
+changing the immutable stable m1n1 source or artifact contract. All transport,
+AGX initialization, runtime compiler, BO and producer-isolation paths remain
+those already proven through EXP-094.
+
+- root source `a6583cb27537c446baf35f2fc31a3c8965a7a21f`, implementation
+  `f33fc882738aad3c80b170b10c43042563386ca1`, ledger
+  `a6583cb27537c446baf35f2fc31a3c8965a7a21f`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`,
+  Mu `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp096.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `caa1640c5fc4d99a853e379110b0927624ac77989443c3b1e4cca38c204cba73`;
+- unchanged host and container helpers SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x804c44000`; both USB endpoints
+  present; destination
+  `investigation/artifacts/EXP-20260825-096-agx-capture-helper-alias/`
+  confirmed absent; fixed bridge port `43151`;
+- the behavioral alias test failed before implementation, twelve focused tests
+  and the complete public suite passed 584/584, with Python compilation, root
+  and nested diff checks, stable m1n1 pin equality and CSV validation passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp096.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-096-agx-capture-helper-alias \
+  --bridge-port 43151
+```
+
+Pass requires ioctl sequence 9 and all later render ioctls to return, two
+complete byte-identical cold receipts and archives, a final attachment matching
+the pinned identity and hashes, no preflight rejection, Construct exception,
+mutex assertion, ASC timeout, proxy contention, recursive child initialization
+or software fallback, and a successful mandatory physical reboot. Any missing
+evidence, unexpected boundary, cleanup failure, stale proxy or manual
+intervention rejects EXP-096. Preserve all evidence, never reuse its
+destination, keep Windows blocked, and return the Air to a fresh J313/V13_5
+proxy regardless of result.
