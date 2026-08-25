@@ -8603,7 +8603,8 @@ reused.
 
 ### EXP-20260825-096 — capture-only helper-field compatibility
 
-Status: preregistered; hardware command not yet run.
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
 
 Hypothesis: installing a data-descriptor alias from the pinned renderer's
 historical `unk_40` assignment to the documented `helper_cfg` field only in the
@@ -8658,3 +8659,26 @@ evidence, unexpected boundary, cleanup failure, stale proxy or manual
 intervention rejects EXP-096. Preserve all evidence, never reuse its
 destination, keep Windows blocked, and return the Air to a fresh J313/V13_5
 proxy regardless of result.
+
+Observed result: rejected at the same serialization boundary, but with a more
+precise object-model result. The protected source-coherence gate passed; AGX
+booted, V13_5 initdata and channels initialized, runtime assembly completed,
+all eight BO ioctls returned, and sequence 9 reached `Push done`. The command
+dump showed `Start3DStruct1.unk_40 = 0`, yet Construct still raised
+`KeyError: 'helper_cfg'` while building that structure.
+
+`ConstructClass` assignments populate its internal mapping under the assigned
+name, and `Struct._build()` reads `obj[sc.name]`; a Python property therefore
+cannot alias the mapping key. The correct capture-only boundary is the inverse:
+rename the single schema field from `helper_cfg` back to the pinned renderer's
+`unk_40` key while retaining its same `Int32ul` codec, byte offset and zero
+value. This does not alter firmware bytes or the immutable stable source pin.
+
+The partial frame SHA-256 is
+`c0e4f010e9ea896403377b3dabf337cbaced0175b7e725b6a181d76d004e7f98`;
+the preserved core SHA-256 is
+`4c114139700a2cb30418986a401a1043d4e0c6842e82c8e185cf2715d3959ea7`;
+no final attachment exists. The mandatory hardware reboot completed, both USB
+endpoints re-enumerated at 23:23, and the post-reboot probe reported
+J313/V13_5 at base `0x804c44000`. EXP-096 is closed and its destination will
+not be reused.
