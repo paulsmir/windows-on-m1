@@ -3,7 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.agx_live_inventory import ensure_guest_inactive, node_record
+from tools.agx_live_inventory import (ensure_guest_inactive, node_record,
+                                      platform_name)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,10 @@ class FakeNode:
         if index != 0:
             raise IndexError(index)
         return 0x204000000, 0x1000000
+
+
+class FakeChosen:
+    target_type = "J313"
 
 
 class AgxLiveInventoryTests(unittest.TestCase):
@@ -56,6 +61,9 @@ class AgxLiveInventoryTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_platform_uses_decoded_target_type_attribute(self):
+        self.assertEqual(platform_name(FakeChosen()), "J313")
 
     def test_live_inventory_source_has_no_write_capable_api(self):
         source = LIVE_INVENTORY.read_text()

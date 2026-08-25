@@ -40,7 +40,7 @@ def raw_inventory():
             },
             "/arm-io/gfx-asc": {
                 "reg": [[0x205000000, 0x4000]],
-                "interrupts": [],
+                "interrupts": [183, 184],
                 "properties": {},
             },
             "/arm-io/dart-sgx": {
@@ -68,7 +68,7 @@ class AgxInventoryTests(unittest.TestCase):
         self.assertEqual(contract.regions["sgx_mmio"].base, 0x204000000)
         self.assertEqual(contract.regions["asc_mmio"].size, 0x4000)
         self.assertEqual(contract.regions["gpu"].size, 0x40000)
-        self.assertEqual(contract.interrupts, (180, 181, 182))
+        self.assertEqual(contract.interrupts, (180, 181, 182, 183, 184))
         self.assertEqual(contract.dependencies, tuple(raw_inventory()["dependencies"]))
         self.assertEqual(contract.nodes, tuple(raw_inventory()["nodes"]))
 
@@ -84,10 +84,16 @@ class AgxInventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "/arm-io/gfx-asc"):
             extract_contract(raw, source_commits())
 
-    def test_multiple_register_tuples_are_rejected(self):
+    def test_first_register_tuple_is_the_primary_mmio_range(self):
         raw = raw_inventory()
         raw["nodes"]["/arm-io/sgx"]["reg"].append([0x208000000, 0x4000])
-        with self.assertRaisesRegex(ContractError, "exactly one reg"):
+        contract = extract_contract(raw, source_commits())
+        self.assertEqual(contract.regions["sgx_mmio"].base, 0x204000000)
+
+    def test_missing_primary_register_tuple_is_rejected(self):
+        raw = raw_inventory()
+        raw["nodes"]["/arm-io/sgx"]["reg"] = []
+        with self.assertRaisesRegex(ContractError, "at least one reg"):
             extract_contract(raw, source_commits())
 
     def test_unknown_raw_top_level_key_is_rejected(self):

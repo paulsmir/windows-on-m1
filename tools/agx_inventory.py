@@ -44,15 +44,15 @@ def _node(nodes, path):
     return node
 
 
-def _single_reg(node, path):
+def _primary_reg(node, path):
     registers = node["reg"]
     if (
         not isinstance(registers, list)
-        or len(registers) != 1
+        or not registers
         or not isinstance(registers[0], list)
         or len(registers[0]) != 2
     ):
-        raise ContractError(f"node {path} must contain exactly one reg tuple")
+        raise ContractError(f"node {path} must contain at least one reg tuple")
     return {"base": registers[0][0], "size": registers[0][1]}
 
 
@@ -78,8 +78,8 @@ def extract_contract(raw: dict, source: dict):
         raise ContractError("node /arm-io/sgx properties must be a mapping")
 
     regions = {
-        "sgx_mmio": _single_reg(sgx, "/arm-io/sgx"),
-        "asc_mmio": _single_reg(asc, "/arm-io/gfx-asc"),
+        "sgx_mmio": _primary_reg(sgx, "/arm-io/sgx"),
+        "asc_mmio": _primary_reg(asc, "/arm-io/gfx-asc"),
     }
     for region_name, (base_name, size_name) in SGX_PROPERTIES.items():
         regions[region_name] = {
@@ -97,7 +97,7 @@ def extract_contract(raw: dict, source: dict):
         "firmware": raw["firmware"],
         "nodes": list(nodes),
         "regions": regions,
-        "interrupts": sgx["interrupts"],
+        "interrupts": list(sgx["interrupts"]) + list(asc["interrupts"]),
         "dependencies": raw["dependencies"],
         "uat": raw["uat"],
     }

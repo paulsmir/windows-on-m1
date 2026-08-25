@@ -108,6 +108,12 @@ def _text(value):
     return str(value)
 
 
+def platform_name(chosen):
+    """Return m1n1's decoded target identifier, for example J313."""
+
+    return _text(chosen.target_type)
+
+
 def capture_raw():
     """Read the live ADT after the caller has passed the ownership guard."""
 
@@ -116,7 +122,7 @@ def capture_raw():
 
     chosen = u.adt["/chosen"]
     arm_io = u.adt["/arm-io"]
-    platform = _text(chosen.getprop("target-type"))
+    platform = platform_name(chosen)
     firmware_version = _text(chosen.firmware_version)
     identity_fields = {
         "target_type": platform,
