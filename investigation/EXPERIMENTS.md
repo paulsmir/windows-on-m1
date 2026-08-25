@@ -7404,3 +7404,98 @@ gate design must use a complete, known-valid schedulable workload in private
 GPU memory while retaining the same isolation, timeout, teardown and cold
 reset boundaries; EXP-080 remains reserved for the eventual ten-cycle final
 qualification.
+
+### EXP-20260825-082 — acquire two cold historical Mesa AGX clear captures
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the exact historical Asahi Mesa m1n1 bridge can execute the fixed
+16 by 16 RGBA8 `11 22 33 ff` clear twice on J313/G13/V13_5 across two distinct
+cold proxy identities and produce byte-identical complete `GPUFrame` archives
+and final 1024-byte attachments, while the bounded operator releases ownership
+and physically reboots after every capture.
+
+- root source and ledger at registration:
+  `7fb4ee3d8b6b5b4f85f580909ef87b7bc933db0f` on
+  `feature/j313-gpu-acceleration`;
+- capture-environment implementation and ledger:
+  `296f7a4b99664a478b8d0c65e6a881f5f4f0cebf` and
+  `7fb4ee3d8b6b5b4f85f580909ef87b7bc933db0f`;
+- m1n1 source: `9cd80ac652ac404e92ae279deeaec8c629d7d184`;
+- Mu source: `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- historical Mesa source:
+  `https://gitlab.freedesktop.org/asahilina/mesa.git` at
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`, built from
+  `ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc`;
+- capture bundle hashes: `libasahi_m1n1_drm_shim.so`
+  `0fc9e2ef6e677d4552192eb86fc1ac3fc3c1197ce53452703aaae538d58a0a62`,
+  `agx-clear-capture`
+  `a71737ec35abeb7efb422a54dcb0b146463f840c6da7169e99946c2a3771b87a`,
+  `asahi_dri.so`
+  `ab9e135b06d8cda0f1e19cc98dbe0304638917139675a536ca92223479db7b33`,
+  `libEGL.so.1.0.0`
+  `715d8ce4fc930a48b3208e9f5403eb458631764ac4914590a7ae7c36a13d07be`,
+  and `libGLESv2.so.2.0.0`
+  `57aecc4b5a2cddec0e0fac9ea73a37d1d173a21d2b8f760e292ed4d5325211b4`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- capture identity: `.local/agx-capture/identity-exp082.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`,
+  binding J313, G13, V13_5, the ADT SHA-256
+  `c57d4c0db26125394409c3b5b518fdef553d8f4dfe2263ae9303e2276b0796a3`,
+  and the exact m1n1 and Mesa commits above;
+- fixed producer source: `tools/agx_clear_capture.c`, SHA-256
+  `741da86a93f40472f1211ed247368c5ca9030f08d3fcee29cdd9f3cf82ca20e9`;
+- immutable stable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; its checksum-list
+  SHA-256 is
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`
+  and every listed artifact passed `shasum -a 256 -c` immediately before
+  registration;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`; immediately before execution
+  it must be the sole J313/V13_5 `Running proxy...` endpoint;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-082-agx-g1r-capture/`, confirmed absent
+  before registration;
+- host qualification: three independent recipe exports had byte-identical
+  manifests, including two no-cache builds; the exact no-shim negative control
+  failed with `EGL_NOT_INITIALIZED` and produced no output; bidirectional host
+  PTY/TCP/container-PTY loopback passed; 21 focused, 187 adjacent, and 566 full
+  repository tests passed; shell syntax, Python compilation, capture-bundle
+  verification, diff validation, and stable recovery hashes passed.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp082.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-082-agx-g1r-capture \
+  --bridge-port 43137
+```
+
+The container must verify its export before proxy access, mount the repository
+read-only, mount only the evidence parent read-write, and use
+`libasahi_m1n1_drm_shim.so` solely through `LD_PRELOAD`. Each capture must dump
+exactly `shim_frame000.agx`, pull the sole attachment, validate the final bytes,
+write an atomic receipt, and request a physical reboot. The second capture may
+start only after the reconnecting bridge observes the fresh proxy. Packaging
+must require distinct proxy identities and distinct randomized m1n1 bases and
+must compare every normalized archive member, object byte, command byte, map
+flag, source identity, producer hash, and final attachment byte.
+
+Pass requires two fault-free captures, both mandatory reboots, distinct cold
+identities, byte-identical normalized captures and final attachments, and one
+atomically published canonical fixture candidate. Any command failure, absent
+or extra frame, wrong attachment, source or hash mismatch, warm identity,
+non-deterministic byte, proxy loss that does not reconnect, cleanup failure, or
+reboot failure rejects EXP-082. Preserve all obtainable evidence, do not retry
+this directory, do not launch Windows, and do not claim replay, WDDM, display,
+performance, power, thermal, or production GPU qualification. A passed capture
+still requires manual manifest review and a separately preregistered one-shot
+private replay before EXP-080 can be bound.
