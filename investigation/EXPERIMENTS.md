@@ -7614,7 +7614,8 @@ frame dumping, or replay; those remain separate gates.
 
 ### EXP-20260825-084 — acquire two cold historical Mesa AGX clear captures
 
-Status: preregistered; hardware not yet touched.
+Status: rejected during the only permitted first capture, before any accepted
+GPU submission or frame dump.
 
 Hypothesis: with the proxy transport now qualified by EXP-083, the exact
 historical Asahi Mesa m1n1 bridge can execute the fixed 16 by 16 RGBA8
@@ -7707,3 +7708,29 @@ this directory, do not launch Windows, and do not claim replay, WDDM, display,
 performance, power, thermal, or production GPU qualification. A passed capture
 still requires manual manifest review and a separately preregistered one-shot
 private replay.
+
+Observed result: all immutable source, recovery, container, identity, contract,
+shim and producer checks passed. The historical Mesa process then opened the
+corrected persistent PTY, but its first m1n1 bootstrap NOP still received no
+byte within the fixed 150 ms window and raised `UartTimeout`. BO creation failed
+and the producer terminated before `shim_frame000.agx`, `final.rgba`, a receipt,
+capture two, or fixture packaging. The sole preserved capture file is
+`work/capture-01/core`, SHA-256
+`1a8ba07f6e0eada536b9202500683507275b41bdba669742fcc57c04041feddb`.
+
+The scripted reboot again encountered the desynchronized late reply and failed.
+A separate cleanup reboot, without retrying GPU work, then succeeded and
+reported the pre-reboot m1n1 base `0x8040c4000`. The fresh proxy returned as
+J313/V13_5 with base `0x804e64000`. The Air is therefore back at a clean
+`Running proxy...` boundary and EXP-084 is closed.
+
+EXP-083 already proved that the corrected PTY/TCP/USB bridge can bootstrap a
+small client before and after reboot. EXP-084 proves that bridge readiness alone
+is insufficient for the historical Mesa process: its first setup import still
+uses the fixed 150 ms direct-UART bootstrap contract after dynamic loader,
+`LD_PRELOAD`, EGL and shim initialization. The next correction must isolate and
+test that full-client bootstrap path and either establish readiness by a
+non-consuming handshake on the same persistent connection or provide an
+explicit bounded initial-bootstrap budget. It must not retry EXP-084 or submit
+GPU work until a new transport qualification reproduces the historical
+process's startup path.
