@@ -7366,3 +7366,41 @@ between accepted `RunCmdQueue` and ring-entry recognition; advancing
 not complete; advancing done pointer without the exact event remains a rejected
 completion-path result. Any canary, guard, fault, cleanup, or release mismatch
 overrides transport classification and rejects the experiment as unsafe.
+
+Observed result: the experiment safely rejected the lone barrier, while
+locating the first stalled boundary after ring-entry fetch. Firmware consumed
+the Submit3D channel message (`READ_PTR 0 -> 1`, `WRITE_PTR 0 -> 1`) and then
+advanced `GPU_RPTR 0 -> 1`; all three firmware-owned queue read pointers also
+advanced to 1. `CommandQueueInfo` changed from idle to `busy=1`, recorded
+`event_id=0`, and left `has_commands=0` and `inflight_commands=0`. The command
+did not retire: `GPU_DONEPTR` stayed 0, the event count stayed 0, and the fixed
+deadline expired at `0.503278042` seconds.
+
+This rules out the UAT publication, Submit3D TX channel, doorbell delivery, and
+ring-pointer visibility as the first failure. It also disproves the original
+G1Q assumption that an already-equal stamp makes a barrier an independently
+retiring work item. The pinned m1n1 ABI describes the barrier event as the
+event that triggers a stamp check and every working upstream path places the
+barrier before a real `WorkCommand3D`; the TA completion producer signals that
+event. No upstream barrier-only submission exists. Therefore EXP-081 does not
+justify increasing the timeout or changing queue indices: the workload itself
+lacks the producer event and following schedulable command required by the
+observed barrier protocol.
+
+The canary remained byte-identical with SHA-256
+`090381a44ecc54fa7e2cf20a8454e42ce10dd22520258eaf3849ef709a724812`,
+both guards remained unmapped, all firmware fault fields and five SGX IRQ
+samples were zero, and the physical fault register remained unread. Teardown
+stopped management, cleared both context-63 and context-zero roots, and
+reported `released=true`. The atomic failed result SHA-256 is
+`024c86122ce473266d4875a27827c8b45bb9c165a1f6c57d9ab53d096062a77e`.
+
+The mandatory reboot succeeded. The post-reboot read-only capture again
+reported J313, G13/V13_5, the same ADT identity and byte-identical inventory
+SHA-256 `9a44e3373e93d35bb996381ec8e70a529de897100ad8e2496600120dfc5edc49`,
+with a changed randomized m1n1 base from `0x804718000` to `0x804698000`.
+Windows remains blocked. EXP-081 is closed and must not be retried. The next
+gate design must use a complete, known-valid schedulable workload in private
+GPU memory while retaining the same isolation, timeout, teardown and cold
+reset boundaries; EXP-080 remains reserved for the eventual ten-cycle final
+qualification.
