@@ -10,6 +10,11 @@ SHARED = ROOT / "drivers" / "apple-agx" / "shared"
 
 
 class AppleAgxStateTests(unittest.TestCase):
+    def test_public_state_header_is_freestanding(self):
+        header = (SHARED / "include" / "apple_agx_state.h").read_text()
+        for hosted_header in ("stdbool.h", "stddef.h", "stdint.h"):
+            self.assertNotIn(hosted_header, header)
+
     def test_portable_state_suite(self):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "apple_agx_state_test"

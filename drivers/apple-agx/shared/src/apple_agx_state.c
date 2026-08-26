@@ -1,89 +1,96 @@
 #include "apple_agx_state.h"
 
-static bool AppleAgxPhaseMayMap(APPLE_AGX_PHASE Phase) {
+#define APPLE_AGX_NULL ((void *)0)
+
+static APPLE_AGX_BOOL AppleAgxPhaseMayMap(APPLE_AGX_PHASE Phase) {
   return Phase == AppleAgxPhaseFirmwareOwned ||
          Phase == AppleAgxPhaseQueueReady || Phase == AppleAgxPhaseRunning;
 }
 
-static bool AppleAgxRangeValid(uint64_t Base, uint64_t Size) {
-  const uint64_t page = J313_AGX_G2_PAGE_SIZE;
-  const uint64_t limit = 1ULL << J313_AGX_G2_ADDRESS_BITS;
+static APPLE_AGX_BOOL AppleAgxRangeValid(APPLE_AGX_U64 Base,
+                                         APPLE_AGX_U64 Size) {
+  const APPLE_AGX_U64 page = J313_AGX_G2_PAGE_SIZE;
+  const APPLE_AGX_U64 limit = 1ULL << J313_AGX_G2_ADDRESS_BITS;
 
   if (Size == 0 || (Base % page) != 0 || (Size % page) != 0)
-    return false;
+    return APPLE_AGX_FALSE;
   if (Base >= limit || Size > limit - Base)
-    return false;
-  return true;
+    return APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
 }
 
-static bool AppleAgxRangesOverlap(uint64_t LeftBase, uint64_t LeftSize,
-                                  uint64_t RightBase, uint64_t RightSize) {
+static APPLE_AGX_BOOL AppleAgxRangesOverlap(APPLE_AGX_U64 LeftBase,
+                                            APPLE_AGX_U64 LeftSize,
+                                            APPLE_AGX_U64 RightBase,
+                                            APPLE_AGX_U64 RightSize) {
   return LeftBase < RightBase + RightSize && RightBase < LeftBase + LeftSize;
 }
 
 void AppleAgxStateInitialize(APPLE_AGX_STATE *State) {
-  size_t index;
+  APPLE_AGX_COUNT index;
 
-  if (State == NULL)
+  if (State == APPLE_AGX_NULL)
     return;
   State->Phase = AppleAgxPhaseOff;
   State->MappingCount = 0;
   State->CompletedFence = 0;
   State->SubmittedFence = 0;
   State->SubmitTimeMs = 0;
-  State->FenceOutstanding = false;
+  State->FenceOutstanding = APPLE_AGX_FALSE;
   for (index = 0; index < APPLE_AGX_MAX_MAPPINGS; ++index) {
     State->Mappings[index].Base = 0;
     State->Mappings[index].Size = 0;
     State->Mappings[index].Permissions = 0;
-    State->Mappings[index].InUse = false;
+    State->Mappings[index].InUse = APPLE_AGX_FALSE;
   }
 }
 
-bool AppleAgxStateValidateResources(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->MappingCount != 0 || State->FenceOutstanding)
-    return false;
+APPLE_AGX_BOOL AppleAgxStateValidateResources(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL || State->MappingCount != 0 ||
+      State->FenceOutstanding)
+    return APPLE_AGX_FALSE;
   if (State->Phase != AppleAgxPhaseOff && State->Phase != AppleAgxPhaseStopped)
-    return false;
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseResourcesValidated;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateTakeFirmwareOwnership(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->Phase != AppleAgxPhaseResourcesValidated)
-    return false;
+APPLE_AGX_BOOL AppleAgxStateTakeFirmwareOwnership(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL ||
+      State->Phase != AppleAgxPhaseResourcesValidated)
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseFirmwareOwned;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateMarkQueueReady(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->Phase != AppleAgxPhaseFirmwareOwned)
-    return false;
+APPLE_AGX_BOOL AppleAgxStateMarkQueueReady(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseFirmwareOwned)
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseQueueReady;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateStart(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->Phase != AppleAgxPhaseQueueReady)
-    return false;
+APPLE_AGX_BOOL AppleAgxStateStart(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseQueueReady)
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseRunning;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateMap(APPLE_AGX_STATE *State, uint64_t Base, uint64_t Size,
-                      uint32_t Permissions) {
-  const uint32_t allowed =
+APPLE_AGX_BOOL AppleAgxStateMap(APPLE_AGX_STATE *State, APPLE_AGX_U64 Base,
+                                APPLE_AGX_U64 Size, APPLE_AGX_U32 Permissions) {
+  const APPLE_AGX_U32 allowed =
       AppleAgxMapRead | AppleAgxMapWrite | AppleAgxMapExecute;
-  size_t index;
-  size_t free_index = APPLE_AGX_MAX_MAPPINGS;
+  APPLE_AGX_COUNT index;
+  APPLE_AGX_COUNT free_index = APPLE_AGX_MAX_MAPPINGS;
 
-  if (State == NULL || !AppleAgxPhaseMayMap(State->Phase) ||
+  if (State == APPLE_AGX_NULL || !AppleAgxPhaseMayMap(State->Phase) ||
       !AppleAgxRangeValid(Base, Size) || Permissions == 0 ||
       (Permissions & ~allowed) != 0 ||
       (Permissions & (AppleAgxMapWrite | AppleAgxMapExecute)) ==
           (AppleAgxMapWrite | AppleAgxMapExecute) ||
       State->MappingCount >= APPLE_AGX_MAX_MAPPINGS)
-    return false;
+    return APPLE_AGX_FALSE;
 
   for (index = 0; index < APPLE_AGX_MAX_MAPPINGS; ++index) {
     APPLE_AGX_MAPPING *mapping = &State->Mappings[index];
@@ -93,23 +100,24 @@ bool AppleAgxStateMap(APPLE_AGX_STATE *State, uint64_t Base, uint64_t Size,
       continue;
     }
     if (AppleAgxRangesOverlap(Base, Size, mapping->Base, mapping->Size))
-      return false;
+      return APPLE_AGX_FALSE;
   }
   if (free_index == APPLE_AGX_MAX_MAPPINGS)
-    return false;
+    return APPLE_AGX_FALSE;
   State->Mappings[free_index].Base = Base;
   State->Mappings[free_index].Size = Size;
   State->Mappings[free_index].Permissions = Permissions;
-  State->Mappings[free_index].InUse = true;
+  State->Mappings[free_index].InUse = APPLE_AGX_TRUE;
   ++State->MappingCount;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateUnmap(APPLE_AGX_STATE *State, uint64_t Base, uint64_t Size) {
-  size_t index;
+APPLE_AGX_BOOL AppleAgxStateUnmap(APPLE_AGX_STATE *State, APPLE_AGX_U64 Base,
+                                  APPLE_AGX_U64 Size) {
+  APPLE_AGX_COUNT index;
 
-  if (State == NULL)
-    return false;
+  if (State == APPLE_AGX_NULL)
+    return APPLE_AGX_FALSE;
   for (index = 0; index < APPLE_AGX_MAX_MAPPINGS; ++index) {
     APPLE_AGX_MAPPING *mapping = &State->Mappings[index];
     if (!mapping->InUse || mapping->Base != Base || mapping->Size != Size)
@@ -117,77 +125,80 @@ bool AppleAgxStateUnmap(APPLE_AGX_STATE *State, uint64_t Base, uint64_t Size) {
     mapping->Base = 0;
     mapping->Size = 0;
     mapping->Permissions = 0;
-    mapping->InUse = false;
+    mapping->InUse = APPLE_AGX_FALSE;
     --State->MappingCount;
-    return true;
+    return APPLE_AGX_TRUE;
   }
-  return false;
+  return APPLE_AGX_FALSE;
 }
 
-bool AppleAgxStateSubmitFence(APPLE_AGX_STATE *State, uint64_t Fence,
-                              uint64_t NowMs) {
-  if (State == NULL || State->Phase != AppleAgxPhaseRunning ||
+APPLE_AGX_BOOL AppleAgxStateSubmitFence(APPLE_AGX_STATE *State,
+                                        APPLE_AGX_U64 Fence,
+                                        APPLE_AGX_U64 NowMs) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseRunning ||
       State->FenceOutstanding || Fence == 0 ||
       Fence != State->CompletedFence + 1)
-    return false;
+    return APPLE_AGX_FALSE;
   State->SubmittedFence = Fence;
   State->SubmitTimeMs = NowMs;
-  State->FenceOutstanding = true;
-  return true;
+  State->FenceOutstanding = APPLE_AGX_TRUE;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateCompleteFence(APPLE_AGX_STATE *State, uint64_t Fence) {
-  if (State == NULL || State->Phase != AppleAgxPhaseRunning ||
+APPLE_AGX_BOOL AppleAgxStateCompleteFence(APPLE_AGX_STATE *State,
+                                          APPLE_AGX_U64 Fence) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseRunning ||
       !State->FenceOutstanding || Fence != State->SubmittedFence)
-    return false;
+    return APPLE_AGX_FALSE;
   State->CompletedFence = Fence;
   State->SubmitTimeMs = 0;
-  State->FenceOutstanding = false;
-  return true;
+  State->FenceOutstanding = APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateCheckTimeout(APPLE_AGX_STATE *State, uint64_t NowMs) {
-  if (State == NULL || State->Phase != AppleAgxPhaseRunning ||
+APPLE_AGX_BOOL AppleAgxStateCheckTimeout(APPLE_AGX_STATE *State,
+                                         APPLE_AGX_U64 NowMs) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseRunning ||
       !State->FenceOutstanding)
-    return false;
+    return APPLE_AGX_FALSE;
   if (NowMs < State->SubmitTimeMs) {
     State->Phase = AppleAgxPhaseResetting;
-    return true;
+    return APPLE_AGX_TRUE;
   }
   if (NowMs - State->SubmitTimeMs <= J313_AGX_G2_WORK_TIMEOUT_MS)
-    return false;
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseResetting;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateDiscardOutstandingFence(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->Phase != AppleAgxPhaseResetting ||
+APPLE_AGX_BOOL AppleAgxStateDiscardOutstandingFence(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseResetting ||
       !State->FenceOutstanding)
-    return false;
+    return APPLE_AGX_FALSE;
   State->SubmittedFence = State->CompletedFence;
   State->SubmitTimeMs = 0;
-  State->FenceOutstanding = false;
-  return true;
+  State->FenceOutstanding = APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateBeginReset(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->Phase == AppleAgxPhaseOff ||
+APPLE_AGX_BOOL AppleAgxStateBeginReset(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL || State->Phase == AppleAgxPhaseOff ||
       State->Phase == AppleAgxPhaseStopped ||
       State->Phase == AppleAgxPhaseResetting)
-    return false;
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseResetting;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
-bool AppleAgxStateCompleteReset(APPLE_AGX_STATE *State) {
-  if (State == NULL || State->Phase != AppleAgxPhaseResetting ||
+APPLE_AGX_BOOL AppleAgxStateCompleteReset(APPLE_AGX_STATE *State) {
+  if (State == APPLE_AGX_NULL || State->Phase != AppleAgxPhaseResetting ||
       State->MappingCount != 0 || State->FenceOutstanding)
-    return false;
+    return APPLE_AGX_FALSE;
   State->Phase = AppleAgxPhaseStopped;
-  return true;
+  return APPLE_AGX_TRUE;
 }
 
 void AppleAgxStateFail(APPLE_AGX_STATE *State) {
-  if (State != NULL)
+  if (State != APPLE_AGX_NULL)
     State->Phase = AppleAgxPhaseFailed;
 }
