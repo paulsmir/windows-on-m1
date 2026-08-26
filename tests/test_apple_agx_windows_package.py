@@ -279,6 +279,27 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("apple_agx_state.c", project)
         self.assertIn("j313_agx_g2.generated.h", project)
 
+    def test_project_compiles_firmware_core_without_reaching_it_from_ddi(self):
+        project = self.read("AppleAgx.vcxproj")
+        adapter = self.read("src/adapter.c")
+        driver = self.read("src/driver.c")
+
+        for source in (
+            r"..\shared\src\apple_agx_rtkit.c",
+            r"..\shared\src\apple_agx_firmware.c",
+        ):
+            self.assertIn(source, project)
+        for header in (
+            r"..\shared\include\apple_agx_rtkit.h",
+            r"..\shared\include\apple_agx_firmware.h",
+        ):
+            self.assertIn(header, project)
+
+        for ddi_source in (adapter, driver):
+            self.assertNotIn("AppleAgxFirmwareStart", ddi_source)
+            self.assertNotIn("AppleAgxFirmwareRollback", ddi_source)
+        self.assertIn("return STATUS_NOT_SUPPORTED", adapter)
+
     def test_build_script_and_ci_run_code_analysis(self):
         build = self.read("scripts/build-driver.ps1")
         workflow = WORKFLOW.read_text()

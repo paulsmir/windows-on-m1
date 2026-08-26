@@ -43,11 +43,15 @@
     <ClCompile Include="src\driver_diagnostics.c" />
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_agx_driver.h" />
     <ClInclude Include="..\shared\include\apple_agx_state.h" />
     <ClInclude Include="..\shared\include\apple_agx_power.h" />
+    <ClInclude Include="..\shared\include\apple_agx_rtkit.h" />
+    <ClInclude Include="..\shared\include\apple_agx_firmware.h" />
     <ClInclude Include="..\shared\include\j313_agx_g2.generated.h" />
   </ItemGroup>
   <ItemGroup>
