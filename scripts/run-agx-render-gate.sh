@@ -106,7 +106,7 @@ activate_candidate() {
     echo "Activating validated candidate m1n1: $ARTIFACT_DIR/m1n1.macho"
     M1N1DEVICE="$PROXY" "$PYTHON" \
         "$ROOT/m1n1_windows/proxyclient/tools/chainload.py" -- \
-        "$ARTIFACT_DIR/m1n1.macho" "-v"
+        "$ARTIFACT_DIR/m1n1.macho" "-v" "m1n1.nodisplay"
 }
 
 normalize_initial_state() {

@@ -394,11 +394,13 @@ class ReplayOperatorTests(OperatorFixture):
         chainload = source.index("proxyclient/tools/chainload.py", helper)
         candidate = source.index('"$ARTIFACT_DIR/m1n1.macho"', chainload)
         headless = source.index('"-v"', candidate)
+        no_device_display = source.index('"m1n1.nodisplay"', headless)
         helper_end = source.index("\n}", candidate)
 
         self.assertLess(chainload, candidate)
         self.assertLess(candidate, headless)
-        self.assertLess(headless, helper_end)
+        self.assertLess(headless, no_device_display)
+        self.assertLess(no_device_display, helper_end)
 
     def test_operator_normalizes_hardware_before_first_candidate_activation(self):
         source = REPLAY_SCRIPT.read_text()
