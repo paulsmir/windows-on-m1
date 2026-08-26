@@ -9705,3 +9705,64 @@ The next implementation must make the cold operator chainload the validated
 candidate before cycle one and again after every physical reboot before reading
 the receipt, with a failing operator-order test first.  It must not retry or
 reuse the EXP-106 evidence directory.
+
+### EXP-20260826-107 — activated-candidate ten-cold-cookie qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: explicitly chainloading the exact validated candidate before the
+first render and after every physical reboot will expose the immutable boot
+cookie for every result and receipt, while preserving the ten-times-proven G1R
+render behavior and producing ten globally distinct concrete boot identities.
+
+Single changed variable relative to rejected EXP-106: the cold operator now
+activates `.local/agx-cookie-candidate/m1n1.macho` before cycle one and after
+every reset before the receipt.  Boot-cookie implementation, fixture, renderer
+schema, AGX commands, mappings, queue, deadlines, reset count and all acceptance
+rules are unchanged.  EXP-106 evidence is immutable and is not reused.
+
+Contract:
+- root `fcedc985e8d332b3b2efc5c4a8797068af01e402`; operator implementation
+  `2871bfb8771816949d61c924de6945fbf8fa3243`; boot identity implementation
+  `f9f9cdaf25d95911b079209185433df98672219f`; runtime m1n1
+  `e1a9a06fc170a04d055b5299ad98a9c478b1c06b`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, schema bridge, boot-identity helper and corrected cold
+  operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`
+  and `d49d461653e5735e3ede0b2d13f441751d9f9cf9204360b2387e56dc78cf7b24`;
+- contract, fixture, raw BGRA oracle, candidate boot, assisted m1n1 and Mu
+  firmware hashes are identical to preregistered EXP-106;
+- both mandatory operator-order tests failed before implementation; after the
+  fix all 26 operator tests and the complete proxyenv suite passed 603/603,
+  shell syntax and diff checks passed, stable recovery passed all five of its
+  checksums and the exact operator dry-run passed without launching Windows;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-107-agx-g1r-cookie-final/` was absent at
+  preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-cookie-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-107-agx-g1r-cookie-final \
+  --cycles 10
+```
+
+Pass requires the exact EXP-106 pass contract: ten complete G1R results, ten
+physical resets, ten cookie-bound receipts, ten globally distinct pre-render
+cookies and proxy identities, canonical result bindings, an accepted aggregate
+and successful independent `verify-result`.  m1n1 bases may recur.  Any failure
+rejects EXP-107; preserve evidence, never retry it in place and keep Windows
+blocked.
