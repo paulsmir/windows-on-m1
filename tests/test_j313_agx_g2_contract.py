@@ -1,0 +1,115 @@
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+from tools.generate_j313_agx_g2_contract import (
+    G2ContractError,
+    load_g2_contract,
+    render_windows_header,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+G1 = ROOT / "config" / "j313-agx.json"
+G2 = ROOT / "config" / "j313-agx-g2.json"
+HEADER = (ROOT / "drivers" / "apple-agx" / "shared" / "include" /
+          "j313_agx_g2.generated.h")
+
+
+class J313AgxG2ContractTests(unittest.TestCase):
+    def test_reviewed_contract_is_bound_to_accepted_g1r_resources(self):
+        contract = load_g2_contract(G2, G1)
+        self.assertEqual(contract.acpi_hid, "APPL0002")
+        self.assertEqual(contract.context_id, 63)
+        self.assertEqual(contract.queue_index, 1)
+        self.assertEqual(contract.page_size, 0x4000)
+        self.assertEqual(contract.work_timeout_ms, 500)
+        self.assertEqual(contract.acpi_mmio, (
+            ("sgx_mmio", 0x204000000, 0x4000000),
+        ))
+        self.assertEqual(contract.mmio_subregions, (
+            ("asc_mmio", 0x206400000, 0x6C000),
+        ))
+        self.assertEqual(
+            tuple(route.physical for route in contract.interrupt_routes),
+            (563, 564, 565, 566, 579, 576, 575, 578, 577),
+        )
+        self.assertEqual(
+            tuple(route.guest for route in contract.interrupt_routes),
+            tuple(range(880, 889)),
+        )
+
+    def test_generated_header_is_checked_in_and_deterministic(self):
+        rendered = render_windows_header(load_g2_contract(G2, G1))
+        self.assertEqual(rendered, HEADER.read_text())
+        self.assertIn("J313_AGX_G2_SOURCE_CONTRACT_SHA256", rendered)
+        self.assertIn("J313_AGX_G2_INTERRUPT_ROUTE_VALUES", rendered)
+        self.assertNotIn("UINT64_C", rendered)
+
+    def test_source_hash_mismatch_is_rejected(self):
+        data = json.loads(G2.read_text())
+        data["source_contract_sha256"] = "0" * 64
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g2.json"
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(G2ContractError, "source contract"):
+                load_g2_contract(path, G1)
+
+    def test_unreviewed_physical_interrupt_is_rejected(self):
+        data = json.loads(G2.read_text())
+        data["interrupt_routes"][0]["physical"] = 999
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g2.json"
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(G2ContractError, "physical interrupt"):
+                load_g2_contract(path, G1)
+
+    def test_duplicate_or_reserved_guest_interrupt_is_rejected(self):
+        data = json.loads(G2.read_text())
+        data["interrupt_routes"][1]["guest"] = data["interrupt_routes"][0]["guest"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g2.json"
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(G2ContractError, "guest interrupts"):
+                load_g2_contract(path, G1)
+
+        data = json.loads(G2.read_text())
+        data["interrupt_routes"][0]["guest"] = 865
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g2.json"
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(G2ContractError, "reserved guest"):
+                load_g2_contract(path, G1)
+
+    def test_gpu_virtual_regions_cannot_be_exposed_as_acpi_mmio(self):
+        data = json.loads(G2.read_text())
+        data["acpi_mmio_regions"].append("shared")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g2.json"
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(G2ContractError, "ACPI MMIO regions"):
+                load_g2_contract(path, G1)
+
+    def test_asc_is_an_alias_not_a_second_overlapping_acpi_resource(self):
+        contract = load_g2_contract(G2, G1)
+        self.assertEqual(len(contract.acpi_mmio), 1)
+        _, aperture_base, aperture_size = contract.acpi_mmio[0]
+        _, asc_base, asc_size = contract.mmio_subregions[0]
+        self.assertGreaterEqual(asc_base, aperture_base)
+        self.assertLessEqual(asc_base + asc_size, aperture_base + aperture_size)
+
+    def test_runtime_context_and_queue_are_fixed(self):
+        for key, bad in (("context_id", 0), ("queue_index", 2),
+                         ("work_timeout_ms", 501)):
+            data = json.loads(G2.read_text())
+            data["runtime"][key] = bad
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "g2.json"
+                path.write_text(json.dumps(data))
+                with self.assertRaisesRegex(G2ContractError, key):
+                    load_g2_contract(path, G1)
+
+
+if __name__ == "__main__":
+    unittest.main()

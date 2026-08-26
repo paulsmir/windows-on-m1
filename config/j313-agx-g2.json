@@ -1,0 +1,28 @@
+{
+  "acpi_hid": "APPL0002",
+  "contract_version": 1,
+  "interrupt_routes": [
+    { "guest": 880, "physical": 563 },
+    { "guest": 881, "physical": 564 },
+    { "guest": 882, "physical": 565 },
+    { "guest": 883, "physical": 566 },
+    { "guest": 884, "physical": 579 },
+    { "guest": 885, "physical": 576 },
+    { "guest": 886, "physical": 575 },
+    { "guest": 887, "physical": 578 },
+    { "guest": 888, "physical": 577 }
+  ],
+  "acpi_mmio_regions": [
+    "sgx_mmio"
+  ],
+  "mmio_subregions": [
+    "asc_mmio"
+  ],
+  "platform": "J313",
+  "runtime": {
+    "context_id": 63,
+    "queue_index": 1,
+    "work_timeout_ms": 500
+  },
+  "source_contract_sha256": "b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7"
+}
