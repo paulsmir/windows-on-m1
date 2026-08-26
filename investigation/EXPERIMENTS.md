@@ -10866,3 +10866,47 @@ interrupt, UAT, queue, command, render and display paths remain forbidden. The
 guest must return to exact stable firmware and remove the exact staged package
 and signer after evidence capture. No mutation has occurred at preregistration
 time.
+
+Observed result (2026-08-26 UTC):
+
+- the stable preflight passed before mutation: eight logical processors,
+  AppleInput `Running`, no critical System event, no present `APPL0002`, and
+  no AppleAgx package, service, loaded module or signer entry;
+- the exact signed package was staged as `oem17.inf`. One and only one G2 boot
+  used the clean embedded m1n1 identity and the preregistered Mu image. EL2
+  mapped only the synthetic broker page `0x300000000..0x300001000` and reached
+  `Starting guest...`;
+- Windows remained responsive with eight processors and healthy AppleInput.
+  It enumerated one present `ACPI\APPL0002\0`, bound `oem17.inf`, exposed the
+  exact SGX memory resource `0x204000000..0x207fffffff`, the exact broker
+  resource `0x300000000..0x300000fff`, and interrupts 880 through 888;
+- the device stopped with Problem 43 (`CM_PROB_FAILED_POST_START`).
+  `AppleAgx` remained stopped with Win32 exit 1077, the loaded-module count was
+  zero, and no critical event occurred;
+- no custom StartDevice stage event was recorded and EL2 observed no broker
+  `ON`, `QUERY` or `OFF` command. No GPU firmware, RTKit, SGX MMIO, interrupt,
+  UAT, queue, command, rendering or display-ownership operation occurred. The
+  G2 guest shut down normally;
+- SetupAPI confirms that the exact package installed and the device was
+  restarted before Windows assigned the post-start Problem 43 boundary. The
+  combined evidence narrows the failure to driver load/initialization before
+  the first observable StartDevice breadcrumb; it does not qualify a broker
+  power transition;
+- immutable stable recovery subsequently reached the Windows lock screen
+  twice with a live framebuffer, but USB Ethernet did not enumerate and SSH
+  remained unavailable. The active G2 guest is gone and exact stable firmware
+  is running, but removal of only `oem17.inf` and the two exact signer entries
+  has not yet been re-verified. No force removal and no third reset were
+  attempted.
+
+Verdict: rejected safely at the functional checkpoint, with active G2 state
+removed but guest-store cleanup still pending. EXP-119 is single-use and may
+not be retried. Its evidence justifies EXP-120: qualification-only persistent
+registry breadcrumbs around `DxgkInitialize`, followed by a separately
+preregistered one-shot boot only after exact cleanup and stable preflight are
+proven.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-119-agx-startdevice-boundary/`.
+The checksum-index SHA-256 is
+`f28ef93b9445d5001590d629f1d458ec3e4e75a3feee686ccc4a209e1de453d9`.
