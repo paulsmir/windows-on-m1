@@ -50,7 +50,7 @@ collection, Mu ACPI, m1n1 broker and hypervisor, Windows 11 ARM64.
 - [x] Require zero GPU firmware, RTKit, SGX MMIO, interrupt connection, UAT,
       queue, render, present or display-ownership action.
 - [x] Require eight CPUs, responsive input/storage/xHCI and zero critical
-      events. The one candidate Event 129 rejected the storage gate.
+      events. Two candidate Event 129 resets rejected the storage gate.
 - [x] Shut down normally, boot exact recovery, remove only the recorded package
       and exact signer without `/force`, then complete a cleanup reboot.
 - [x] Require final clean recovery, hash evidence, record verdict and push.
@@ -61,8 +61,8 @@ The sole candidate boot advanced through translated-resource and state
 validation to stage 7, returned `STATUS_NOT_SUPPORTED` (`0xC00000BB`) and
 produced the exact successful broker sequence ON, QUERY, OFF. The forbidden
 action audit was empty. Eight CPUs and the input, storage and xHCI services
-remained available with zero critical events. One `stornvme` Event 129 rejects
-the candidate storage gate, so the run does not authorize GPU firmware, RTKit,
+remained available with zero critical events. Two `stornvme` Event 129 resets
+reject the candidate storage gate, so the run does not authorize GPU firmware, RTKit,
 SGX MMIO, interrupt connection, UAT, queues or rendering.
 
 Recovery removed only `oem17.inf` and signer

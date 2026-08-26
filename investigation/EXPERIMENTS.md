@@ -11474,8 +11474,10 @@ The bounded broker produced the exact successful sequence:
 The forbidden-action audit was empty: no GPU firmware, RTKit, SGX MMIO,
 interrupt connection, UAT, queue, command, render, present or display
 ownership occurred. AppleInput, `stornvme` and `USBXHCI` remained Running and
-the candidate recorded zero critical events. It recorded one `stornvme` Event
-129, so the separate candidate storage gate is rejected even though the
+the candidate recorded zero critical events. The initial collector observed
+one `stornvme` Event 129 before a second reset occurred; the complete System
+log window contains resets at `20:59:35.739Z` and `21:00:45.379Z`. The final
+count is therefore two, so the separate candidate storage gate is rejected even though the
 parser, state-validation and broker-lifecycle hypothesis is confirmed.
 
 The candidate shut down normally. Recovery used the exact EXP-123 pair,
@@ -11489,5 +11491,5 @@ EXP-127 is closed and must not be retried.
 
 This result proves the next technical boundary but does not authorize it:
 before GPU firmware or interrupt work, a separate experiment must explain or
-eliminate the candidate Event 129 while preserving the exact successful
+eliminate the candidate Event 129 pair while preserving the exact successful
 stage-7 and ON/QUERY/OFF evidence.
