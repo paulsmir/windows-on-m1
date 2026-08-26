@@ -9609,3 +9609,78 @@ immutable, Windows remains blocked and its evidence remains under
 must first replace the probabilistic base-derived identity with a real per-boot
 identity under a failing unit test; it must not reinterpret or reaggregate this
 run.
+
+### EXP-20260826-106 — final ten-cold-cycle qualification with device boot cookies
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: the exact G1R render that passed all ten EXP-080 hardware cycles
+will again satisfy every queue, event, stamp, output, isolation, fault, cleanup
+and deadline invariant, while an immutable hardware-counter cookie sampled once
+at m1n1 entry will distinguish all ten concrete boots even when a randomized
+m1n1 allocation base legitimately recurs.
+
+Single changed variable relative to EXP-080: cold-boot identity is now
+`platform:firmware:boot_cookie` from read-only proxy opcode `0x014`.  The m1n1
+base remains recorded only as diagnostics.  Fixture bytes, renderer schema,
+AGX commands, mappings, queue, deadlines, physical-reset policy and all render
+acceptance rules are unchanged.  The already-written EXP-080 evidence is
+immutable and will not be reinterpreted or reaggregated.
+
+Contract:
+- root `62e1986c495b58391f3c6226da849142b50725e8`; identity implementation
+  `f9f9cdaf25d95911b079209185433df98672219f`; runtime m1n1
+  `e1a9a06fc170a04d055b5299ad98a9c478b1c06b`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, schema bridge, boot-identity helper and cold operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`
+  and `c41872cb548b5e186f7c386cc1d494579de1b796c3219484d6cf7acacac9e924`;
+- canonical contract SHA-256
+  `9fea37b9ffc6cdf44ba290181bbe5248b1de343fb91f7165f75458f7c799acd7`;
+  immutable fixture SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-cookie-candidate/` has boot SHA-256
+  `621342d1b5c135dc992535349db1c653876a33272043d48ff79b99a8a965f4a5`,
+  assisted m1n1 SHA-256
+  `a7badd88ee8d1da51a280e77d6389a6d55b40da052b194ca269ff0a88169d7b2`
+  and Mu firmware SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- stable recovery passed all five of its own checksums and was not modified;
+  the new m1n1 full host suite and complete public Python suite passed, the
+  canonical contract and diff checks passed, and the exact operator dry-run
+  accepted context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, cold
+  reset after every cycle and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-106-agx-g1r-cookie-final/` was absent at
+  preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-cookie-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-106-agx-g1r-cookie-final \
+  --cycles 10
+```
+
+Pass requires ten complete one-shot results meeting every EXP-080 render
+invariant, ten successful physical reboots and ten cookie-bound reset receipts.
+All ten pre-render boot cookies and derived proxy identities must be globally
+distinct; m1n1 bases may repeat.  Every receipt must bind the canonical result
+hash, the prior cookie and the different live cookie.  The accepted aggregate
+must report `completed_cycles=10`, `cold_reset_between_cycles=true` and
+`windows_launch_permitted=true`, and independent `verify-result` must pass.
+Any single failure rejects EXP-106 and stops the operator; preserve all evidence,
+never retry it in place and keep Windows blocked.
