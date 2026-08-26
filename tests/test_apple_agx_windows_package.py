@@ -28,6 +28,12 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
         self.assertRegex(driver, r"return\s+DxgkInitialize\(")
 
+    def test_driver_entry_is_declared_before_init_section_pragma(self):
+        driver = self.read("src/driver.c")
+        declaration = driver.index("DRIVER_INITIALIZE DriverEntry;")
+        pragma = driver.index("#pragma alloc_text(INIT, DriverEntry)")
+        self.assertLess(declaration, pragma)
+
     def test_wdk_display_headers_follow_required_base_type_order(self):
         header = self.read("include/apple_agx_driver.h")
         ordered = (

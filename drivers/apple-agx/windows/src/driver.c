@@ -1,8 +1,8 @@
 #include "apple_agx_driver.h"
 
-#pragma alloc_text(INIT, DriverEntry)
-
 DRIVER_INITIALIZE DriverEntry;
+
+#pragma alloc_text(INIT, DriverEntry)
 
 _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
                                             PUNICODE_STRING RegistryPath) {
