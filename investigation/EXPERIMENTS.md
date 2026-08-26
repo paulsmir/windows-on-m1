@@ -10562,3 +10562,97 @@ index SHA-256 is
 published identity.  Verdict: passed with complete rollback.  This proves
 only Windows catalog trust and Driver Store acceptance; it authorizes
 preregistration, but not execution, of a separately bounded G2 bind test.
+
+### EXP-20260826-116 — AppleAgx G2 fail-closed bind gate
+
+Status: preregistered; execution not approved.  This experiment combines only
+the two independently accepted boundaries: EXP-113's exact G2 enumeration
+firmware and EXP-115's exact signed Driver Store package.  It permits one
+Windows PnP bind attempt whose designed result is Problem 10 after exact
+resource validation and before any AGX hardware access.
+
+Hypothesis: when the exact package is staged while stable firmware omits
+APPL0002 and the accepted G2 candidate is then booted once, Windows matches
+`ACPI\APPL0002\0` to `AppleAgx`.  `DriverEntry`, AddDevice and StartDevice may
+run, the exact translated MMIO and nine interrupt resources validate, and
+StartDevice returns the source-pinned `STATUS_NOT_SUPPORTED`.  Windows remains
+responsive and the complete package, certificate and firmware rollback
+reproduces the stable state.
+
+Candidate and provenance contract:
+- root preparation source is
+  `a49ef73a19dbffe7ac5638d4982dc517372d09c0`; m1n1 gitlink and candidate
+  source are `4107043a96dedaec6dbe98bb8ee7b78f13c8080f`; Mu gitlink and candidate
+  source are `7a5071a5750bb23ed9ae7912a51cee84d4e31574`;
+- G2 directory `.local/agx-g2-enumeration-candidate-v2/` is unchanged from
+  accepted EXP-113.  Manifest SHA-256 is
+  `596ed2f2ad1465fd75e1dd560adc3d5da94ea62d41a68e98e2a955bf0804f2ea`,
+  `m1n1.macho` SHA-256 is
+  `0055ef339c5ae9099014e3d8e5158a0533c2df2adb235ad3646abf7fa31ca3d5`
+  and `J313_EFI.fd` SHA-256 is
+  `3d2a2dd1360c073e8413c1fcebb3d3c072c33c3acfc7f1be27873a75e87b3070`;
+- driver directory `.local/agx-driver-stage-exp114/` is unchanged from passed
+  EXP-115.  Manifest SHA-256 is
+  `ee9ac4532e4432e2b4e7faedc70ef1f101efd454f1db8f236fbb2710b26e217d`
+  and checksum-index SHA-256 is
+  `4e4ff25513bb56b8567996d30b264c6686119d3423386345aa9522caf2a6737e`;
+- exact package SHA-256 values are
+  `6ed690a40f17fec26aa351d91bfc2b8ad8672ae9e2e11e6cc4ebd64e80ca2847`
+  (`AppleAgx.inf`),
+  `34ba821fc3a06c2f1689697733b1ee6c1739b96cf591e8a75802d30f97503e11`
+  (`AppleAgx.sys`),
+  `0f42639d356e92334de771e8b1c280518b7d6d3b3517d0d75149a91019f421dd`
+  (`appleagx.cat`),
+  `f8fc916e55e7380fa797deebbef3fcdc2e79bfd54f10472a09c566394a69cd4f`
+  (`AppleAgxTest.cer`),
+  `9717f6019ca541ffc0f629df4033746428a265fa5b48699d6750247099c3cb90`
+  (`stage-driver.ps1`) and
+  `c19bb9a86d1c8beaf0fde43243da616ad5ac9aec4a15b7cfeb714f5d1ba919ec`
+  (`remove-staged-driver.ps1`);
+- exact signer thumbprint is
+  `7772864CB7326B7BFDA2C81C12D07CEF64135A57`.  Official ARM64 WDK run
+  `32963862166` passed build and code analysis;
+- source and tests prove that StartDevice validates exclusive MMIO
+  `0x204000000..0x207FFFFFF` plus level-sensitive exclusive vectors 880..888,
+  then reinitializes its private state and returns `STATUS_NOT_SUPPORTED`.
+  The package contains no MMIO mapping or register-write primitive and exposes
+  no allocation, context, submit, present or command callback;
+- execution follows
+  `documentation/plans/2026-08-26-j313-agx-g2-bind-gate.md`.  Fresh evidence
+  path `investigation/artifacts/EXP-20260826-116-agx-g2-bind-failclosed/` is
+  absent and may be created exactly once.
+
+Execution and pass contract:
+- on stable Windows first reproduce EXP-115's corrected baseline and all exact
+  hashes, then import only the exact signer and stage only the exact package.
+  Record its single `oemNN.inf`, prove no active device/service/module and shut
+  Windows down normally;
+- launch the G2 candidate exactly once through the public assisted path with
+  chainload, proxy L41, vUART L43, display `both` and debug `monitor`.  Do not
+  rebuild, substitute, retry, reboot or rescan inside G2;
+- within 180 seconds require responsive SSH, eight CPUs, healthy AppleInput
+  and NVMe, exactly one present `ACPI\APPL0002\0`, service `AppleAgx`, Problem
+  10 and the exact EXP-113 resources.  A Started adapter, child/display target,
+  different Problem code or nonresponsive guest rejects the run;
+- require no loaded AppleAgx module after failed start and no AGX MMIO, clock,
+  firmware, UAT, queue, command, interrupt-injection, power, display-ownership,
+  exception, reset, BugCheck, storage-reset or input-loss evidence.  Shut down
+  normally and restore only immutable stable recovery;
+- after APPL0002 is proven non-present, delete only the recorded package with
+  the hashed non-force rollback script.  If and only if Windows reports that
+  exact package still in use, permit `pnputil /delete-driver oemNN.inf
+  /uninstall`; `/force` is forbidden.  Remove only the exact certificate from
+  LocalMachine Root and TrustedPublisher;
+- final stable Windows must have zero AppleAgx package, service, loaded module
+  and signer entries, zero present APPL0002, eight CPUs, healthy native input,
+  unchanged display state, responsive SSH and no new critical event.  All five
+  immutable recovery hashes must pass again.
+
+Any mismatch triggers evidence preservation and stable rollback, never a
+second G2 boot or broader action.  Firmware start, AGX MMIO read or write,
+clock/power change, interrupt enable, UAT mapping, queue creation, command,
+fence, shader, render and display ownership are explicitly forbidden.  Pass
+would authorize only planning the later firmware/power ownership task.
+
+A new explicit user approval is required after this preregistration is
+committed and pushed.  No EXP-116 Windows or hardware mutation has occurred.
