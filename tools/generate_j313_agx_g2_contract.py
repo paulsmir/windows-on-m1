@@ -32,9 +32,18 @@ OUTPUTS = {
 TOP_KEYS = {
     "contract_version", "platform", "acpi_hid", "source_contract_sha256",
     "acpi_mmio_regions", "mmio_subregions", "synthetic_mmio_regions",
-    "interrupt_routes", "runtime",
+    "interrupt_routes", "runtime", "firmware_lifecycle",
 }
 RUNTIME_KEYS = {"context_id", "queue_index", "work_timeout_ms"}
+FIRMWARE_LIFECYCLE_KEYS = {
+    "management_endpoint", "firmware_endpoint", "doorbell_endpoint",
+    "iop_boot_request_state", "running_state", "stopped_state",
+    "asc_cpu_control_offset", "asc_cpu_status_offset",
+    "asc_inbox_control_offset", "asc_outbox_control_offset",
+    "asc_inbox0_offset", "asc_inbox1_offset", "asc_outbox0_offset",
+    "asc_outbox1_offset", "asc_boot_timeout_ms", "endpoint_timeout_ms",
+    "initdata_timeout_ms", "heartbeat_timeout_ms", "stop_timeout_ms",
+}
 ROUTE_KEYS = {"physical", "guest"}
 EXACT_ACPI_MMIO = ("sgx_mmio",)
 EXACT_MMIO_SUBREGIONS = ("asc_mmio",)
@@ -65,6 +74,48 @@ POWER_BROKER_ABI = (
     ("POWER_RESULT_OK", 0),
     ("POWER_RESULT_TRANSITION_FAILED", 4),
 )
+FIRMWARE_LIFECYCLE_EXACT = {
+    "management_endpoint": 0x00,
+    "firmware_endpoint": 0x20,
+    "doorbell_endpoint": 0x21,
+    "iop_boot_request_state": 0x220,
+    "running_state": 0x20,
+    "stopped_state": 0x10,
+    "asc_cpu_control_offset": 0x0044,
+    "asc_cpu_status_offset": 0x0048,
+    "asc_inbox_control_offset": 0x8110,
+    "asc_outbox_control_offset": 0x8114,
+    "asc_inbox0_offset": 0x8800,
+    "asc_inbox1_offset": 0x8808,
+    "asc_outbox0_offset": 0x8830,
+    "asc_outbox1_offset": 0x8838,
+    "asc_boot_timeout_ms": 3000,
+    "endpoint_timeout_ms": 500,
+    "initdata_timeout_ms": 500,
+    "heartbeat_timeout_ms": 500,
+    "stop_timeout_ms": 1000,
+}
+FIRMWARE_LIFECYCLE_HEADER_NAMES = {
+    "management_endpoint": "MANAGEMENT_ENDPOINT",
+    "firmware_endpoint": "FIRMWARE_ENDPOINT",
+    "doorbell_endpoint": "DOORBELL_ENDPOINT",
+    "iop_boot_request_state": "IOP_BOOT_REQUEST_STATE",
+    "running_state": "RUNNING_STATE",
+    "stopped_state": "STOPPED_STATE",
+    "asc_cpu_control_offset": "ASC_CPU_CONTROL_OFFSET",
+    "asc_cpu_status_offset": "ASC_CPU_STATUS_OFFSET",
+    "asc_inbox_control_offset": "ASC_INBOX_CTRL_OFFSET",
+    "asc_outbox_control_offset": "ASC_OUTBOX_CTRL_OFFSET",
+    "asc_inbox0_offset": "ASC_INBOX0_OFFSET",
+    "asc_inbox1_offset": "ASC_INBOX1_OFFSET",
+    "asc_outbox0_offset": "ASC_OUTBOX0_OFFSET",
+    "asc_outbox1_offset": "ASC_OUTBOX1_OFFSET",
+    "asc_boot_timeout_ms": "ASC_BOOT_TIMEOUT_MS",
+    "endpoint_timeout_ms": "ENDPOINT_TIMEOUT_MS",
+    "initdata_timeout_ms": "INITDATA_TIMEOUT_MS",
+    "heartbeat_timeout_ms": "HEARTBEAT_TIMEOUT_MS",
+    "stop_timeout_ms": "STOP_TIMEOUT_MS",
+}
 
 
 class G2ContractError(ValueError):
@@ -75,6 +126,29 @@ class G2ContractError(ValueError):
 class InterruptRoute:
     physical: int
     guest: int
+
+
+@dataclass(frozen=True)
+class FirmwareLifecycle:
+    management_endpoint: int
+    firmware_endpoint: int
+    doorbell_endpoint: int
+    iop_boot_request_state: int
+    running_state: int
+    stopped_state: int
+    asc_cpu_control_offset: int
+    asc_cpu_status_offset: int
+    asc_inbox_control_offset: int
+    asc_outbox_control_offset: int
+    asc_inbox0_offset: int
+    asc_inbox1_offset: int
+    asc_outbox0_offset: int
+    asc_outbox1_offset: int
+    asc_boot_timeout_ms: int
+    endpoint_timeout_ms: int
+    initdata_timeout_ms: int
+    heartbeat_timeout_ms: int
+    stop_timeout_ms: int
 
 
 @dataclass(frozen=True)
@@ -94,6 +168,7 @@ class G2Contract:
     address_bits: int
     firmware_generation: str
     firmware_version: str
+    firmware_lifecycle: FirmwareLifecycle
 
 
 def _exact(value, keys, where):
@@ -193,6 +268,45 @@ def load_g2_contract(g2_path=G2_CONTRACT, g1_path=G1_CONTRACT):
     if timeout != 500:
         raise G2ContractError("work_timeout_ms must be 500")
 
+    lifecycle_data = data["firmware_lifecycle"]
+    _exact(lifecycle_data, FIRMWARE_LIFECYCLE_KEYS, "firmware_lifecycle")
+    lifecycle_values = {}
+    for key, exact in FIRMWARE_LIFECYCLE_EXACT.items():
+        value = _integer(lifecycle_data[key], key, 0, 0xFFFFFFFF)
+        if value != exact:
+            raise G2ContractError(f"{key} must be {exact}")
+        lifecycle_values[key] = value
+
+    endpoint_values = (
+        lifecycle_values["management_endpoint"],
+        lifecycle_values["firmware_endpoint"],
+        lifecycle_values["doorbell_endpoint"],
+    )
+    if len(set(endpoint_values)) != len(endpoint_values):
+        raise G2ContractError("firmware lifecycle endpoints must be unique")
+
+    register_widths = {
+        "asc_cpu_control_offset": 4,
+        "asc_cpu_status_offset": 4,
+        "asc_inbox_control_offset": 4,
+        "asc_outbox_control_offset": 4,
+        "asc_inbox0_offset": 8,
+        "asc_inbox1_offset": 8,
+        "asc_outbox0_offset": 8,
+        "asc_outbox1_offset": 8,
+    }
+    asc_size = dict(
+        (name, size) for name, _, size in mmio_subregions
+    )["asc_mmio"]
+    offsets = []
+    for key, width in register_widths.items():
+        offset = lifecycle_values[key]
+        if offset + width > asc_size:
+            raise G2ContractError(f"{key} is outside asc_mmio")
+        offsets.append(offset)
+    if len(set(offsets)) != len(offsets):
+        raise G2ContractError("ASC lifecycle register offsets must be unique")
+
     return G2Contract(
         contract_version=2,
         platform="J313",
@@ -209,6 +323,7 @@ def load_g2_contract(g2_path=G2_CONTRACT, g1_path=G1_CONTRACT):
         address_bits=g1.uat.address_bits,
         firmware_generation=g1.firmware.generation,
         firmware_version=g1.firmware.version,
+        firmware_lifecycle=FirmwareLifecycle(**lifecycle_values),
     )
 
 
@@ -238,6 +353,16 @@ def render_windows_header(contract):
             f"#define J313_AGX_G2_{macro}_BASE 0x{base:x}ULL",
             f"#define J313_AGX_G2_{macro}_SIZE 0x{size:x}ULL",
         ])
+    lines.append("")
+    lifecycle = contract.firmware_lifecycle
+    lines.extend(
+        f"#define J313_AGX_G2_{FIRMWARE_LIFECYCLE_HEADER_NAMES[key]} "
+        f"0x{getattr(lifecycle, key):x}u"
+        if not key.endswith("_timeout_ms") else
+        f"#define J313_AGX_G2_{FIRMWARE_LIFECYCLE_HEADER_NAMES[key]} "
+        f"{getattr(lifecycle, key)}u"
+        for key in FIRMWARE_LIFECYCLE_EXACT
+    )
     lines.append("")
     lines.extend(
         f"#define J313_AGX_G2_{name} 0x{value:x}u"

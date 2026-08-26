@@ -30,6 +30,26 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertEqual(contract.queue_index, 1)
         self.assertEqual(contract.page_size, 0x4000)
         self.assertEqual(contract.work_timeout_ms, 500)
+        lifecycle = contract.firmware_lifecycle
+        self.assertEqual(lifecycle.management_endpoint, 0)
+        self.assertEqual(lifecycle.firmware_endpoint, 0x20)
+        self.assertEqual(lifecycle.doorbell_endpoint, 0x21)
+        self.assertEqual(lifecycle.iop_boot_request_state, 0x220)
+        self.assertEqual(lifecycle.running_state, 0x20)
+        self.assertEqual(lifecycle.stopped_state, 0x10)
+        self.assertEqual(lifecycle.asc_cpu_control_offset, 0x44)
+        self.assertEqual(lifecycle.asc_cpu_status_offset, 0x48)
+        self.assertEqual(lifecycle.asc_inbox_control_offset, 0x8110)
+        self.assertEqual(lifecycle.asc_outbox_control_offset, 0x8114)
+        self.assertEqual(lifecycle.asc_inbox0_offset, 0x8800)
+        self.assertEqual(lifecycle.asc_inbox1_offset, 0x8808)
+        self.assertEqual(lifecycle.asc_outbox0_offset, 0x8830)
+        self.assertEqual(lifecycle.asc_outbox1_offset, 0x8838)
+        self.assertEqual(lifecycle.asc_boot_timeout_ms, 3000)
+        self.assertEqual(lifecycle.endpoint_timeout_ms, 500)
+        self.assertEqual(lifecycle.initdata_timeout_ms, 500)
+        self.assertEqual(lifecycle.heartbeat_timeout_ms, 500)
+        self.assertEqual(lifecycle.stop_timeout_ms, 1000)
         self.assertEqual(contract.acpi_mmio, (
             ("sgx_mmio", 0x204000000, 0x4000000),
         ))
@@ -54,6 +74,28 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertIn("J313_AGX_G2_SOURCE_CONTRACT_SHA256", rendered)
         self.assertIn("J313_AGX_G2_INTERRUPT_ROUTE_VALUES", rendered)
         self.assertNotIn("UINT64_C", rendered)
+        for line in (
+            "#define J313_AGX_G2_ASC_CPU_CONTROL_OFFSET 0x44u",
+            "#define J313_AGX_G2_ASC_CPU_STATUS_OFFSET 0x48u",
+            "#define J313_AGX_G2_ASC_INBOX_CTRL_OFFSET 0x8110u",
+            "#define J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET 0x8114u",
+            "#define J313_AGX_G2_ASC_INBOX0_OFFSET 0x8800u",
+            "#define J313_AGX_G2_ASC_INBOX1_OFFSET 0x8808u",
+            "#define J313_AGX_G2_ASC_OUTBOX0_OFFSET 0x8830u",
+            "#define J313_AGX_G2_ASC_OUTBOX1_OFFSET 0x8838u",
+            "#define J313_AGX_G2_MANAGEMENT_ENDPOINT 0x0u",
+            "#define J313_AGX_G2_FIRMWARE_ENDPOINT 0x20u",
+            "#define J313_AGX_G2_DOORBELL_ENDPOINT 0x21u",
+            "#define J313_AGX_G2_IOP_BOOT_REQUEST_STATE 0x220u",
+            "#define J313_AGX_G2_RUNNING_STATE 0x20u",
+            "#define J313_AGX_G2_STOPPED_STATE 0x10u",
+            "#define J313_AGX_G2_ASC_BOOT_TIMEOUT_MS 3000u",
+            "#define J313_AGX_G2_ENDPOINT_TIMEOUT_MS 500u",
+            "#define J313_AGX_G2_INITDATA_TIMEOUT_MS 500u",
+            "#define J313_AGX_G2_HEARTBEAT_TIMEOUT_MS 500u",
+            "#define J313_AGX_G2_STOP_TIMEOUT_MS 1000u",
+        ):
+            self.assertIn(line, rendered)
 
     def test_generated_asl_is_exact_and_deterministic(self):
         contract = load_g2_contract(G2, G1)
@@ -175,6 +217,47 @@ class J313AgxG2ContractTests(unittest.TestCase):
                 path.write_text(json.dumps(data))
                 with self.assertRaisesRegex(G2ContractError, key):
                     load_g2_contract(path, G1)
+
+    def test_firmware_lifecycle_values_are_exact(self):
+        exact = {
+            "management_endpoint": 0,
+            "firmware_endpoint": 0x20,
+            "doorbell_endpoint": 0x21,
+            "iop_boot_request_state": 0x220,
+            "running_state": 0x20,
+            "stopped_state": 0x10,
+            "asc_cpu_control_offset": 0x44,
+            "asc_cpu_status_offset": 0x48,
+            "asc_inbox_control_offset": 0x8110,
+            "asc_outbox_control_offset": 0x8114,
+            "asc_inbox0_offset": 0x8800,
+            "asc_inbox1_offset": 0x8808,
+            "asc_outbox0_offset": 0x8830,
+            "asc_outbox1_offset": 0x8838,
+            "asc_boot_timeout_ms": 3000,
+            "endpoint_timeout_ms": 500,
+            "initdata_timeout_ms": 500,
+            "heartbeat_timeout_ms": 500,
+            "stop_timeout_ms": 1000,
+        }
+        for key, value in exact.items():
+            data = json.loads(G2.read_text())
+            data["firmware_lifecycle"][key] = value + 1
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "g2.json"
+                path.write_text(json.dumps(data))
+                with self.assertRaisesRegex(G2ContractError, key):
+                    load_g2_contract(path, G1)
+
+    def test_firmware_lifecycle_rejects_unknown_key(self):
+        data = json.loads(G2.read_text())
+        data["firmware_lifecycle"]["unknown"] = 1
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g2.json"
+            path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(G2ContractError,
+                                        "firmware_lifecycle keys"):
+                load_g2_contract(path, G1)
 
 
 if __name__ == "__main__":
