@@ -10285,3 +10285,77 @@ Windows driver and not AGX hardware ownership.  Do not retry this candidate or
 reuse its evidence directory.  A successor experiment requires a test-first
 fix proving the opt-in SSDT appears exactly once in the live XSDT while stable
 firmware still omits it.
+
+### EXP-20260826-113 — J313 AGX G2 live enumeration retry
+
+Status: preregistered; hardware execution requires a new explicit user
+approval.  This is a single enumeration-only retry after correcting the Mu
+firmware-volume publication boundary found by EXP-112.  It does not authorize
+building, staging, installing or loading `AppleAgx.sys` and does not authorize
+any AGX hardware access.
+
+Hypothesis: packaging the opt-in AGX SSDT inside the normal
+`DeviceAcpiTables` storage file, with the same live firmware GUID used by the
+stable profile, will install exactly one SSDT into the live XSDT and enumerate
+one driverless `ACPI\APPL0002` devnode in Windows.  Stable firmware remains
+byte-identical and free of AGX.
+
+Candidate and host-gate contract:
+- root source `f2bd0f5116b8845c984232eea49c4cc26e7eb9e3`, m1n1 source
+  `4107043a96dedaec6dbe98bb8ee7b78f13c8080f` and Mu source
+  `7a5071a5750bb23ed9ae7912a51cee84d4e31574`;
+- GitHub Actions run
+  `https://github.com/paulsmir/windows-on-m1/actions/runs/32959091018`
+  passed both jobs.  Stable firmware built without AGX AML; the explicit G2
+  profile built one semantically valid AGX SSDT inside the live device-table
+  storage module;
+- the read-only candidate directory is
+  `.local/agx-g2-enumeration-candidate-v2/`.  SHA-256 values are
+  `3d2a2dd1360c073e8413c1fcebb3d3c072c33c3acfc7f1be27873a75e87b3070`
+  (`J313_EFI.fd`),
+  `52ac6b56ccd41a5dcc08a54aa35c778e646aa7fb68726e9fcecef22bc1ff669e`
+  (`J313AppleAgxSsdt.aml`),
+  `0055ef339c5ae9099014e3d8e5158a0533c2df2adb235ad3646abf7fa31ca3d5`
+  (`m1n1.macho`) and
+  `596ed2f2ad1465fd75e1dd560adc3d5da94ea62d41a68e98e2a955bf0804f2ea`
+  (`MANIFEST.json`);
+- fresh local builds proved that the stable FD SHA-256 remains exactly
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+  The complete public suite passed 646/646 and all five stable recovery hashes
+  passed before preregistration;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-113-agx-g2-live-enumeration/` is absent
+  at preregistration and may be created exactly once.  EXP-112 evidence is
+  immutable and must not be reused.
+
+Execution contract:
+- use only the public `scripts/run-assisted.sh` launcher with `--chainload`,
+  the candidate m1n1 and Mu from the same manifest directory,
+  `--display both`, `--debug monitor`, proxy L41 and vUART L43;
+- capture the launch contract, `hv.log`, guest UART, exact candidate files and
+  their hashes.  Host-runner serial disconnect after guest handoff is not by
+  itself a guest failure; Windows SSH and both observer endpoints determine
+  guest liveness;
+- firmware must log exactly one SSDT installation and one live XSDT SSDT
+  entry.  Windows must expose exactly one `ACPI\APPL0002` instance with no
+  bound function driver, MMIO `0x204000000..0x207ffffff` and guest GSIVs
+  `880..888` in order with Level, ActiveHigh and Exclusive semantics;
+- `AppleAgx.sys` must be absent from the Driver Store before and after the
+  observation.  No AGX MMIO write, clock, firmware start, UAT mapping, queue,
+  command, interrupt injection, power transition or display ownership change
+  is allowed.  Any such event immediately rejects the experiment;
+- do not reboot or retry the G2 candidate in place.  After exporting the
+  read-only observations, restore only the immutable stable recovery pair.
+
+Recovery contract:
+- recovery directory is
+  `.local/recovery/STABLE-j313-8core-native-input-v1/` and its five SHA-256
+  values remain those recorded in EXP-112;
+- any provenance, manifest, build, live-XSDT, PnP, resource, liveness or safety
+  mismatch rejects EXP-113.  Preserve all evidence and return to stable
+  Windows; no failure permits widening the experiment.
+
+Pass requires all host and recovery checks, exactly one live SSDT, exactly one
+driverless `ACPI\APPL0002` with the reviewed resources, responsive Windows and
+no forbidden activity.  Passing this gate authorizes only planning the next
+driver-install experiment; it does not authorize that experiment.
