@@ -1,5 +1,9 @@
 #include "apple_agx_driver.h"
 
+#include <ntstrsafe.h>
+
+#define APPLE_AGX_DIAGNOSTIC_RESOURCE_LIMIT 16
+
 static void AppleAgxWriteDiagnosticDword(PUNICODE_STRING RegistryPath,
                                          PCWSTR ValueName, ULONG Value) {
 #ifdef APPLE_AGX_G2_POWER_QUALIFICATION
@@ -43,6 +47,113 @@ static void AppleAgxWriteDeviceDiagnosticDword(PDEVICE_OBJECT DeviceObject,
   UNREFERENCED_PARAMETER(DeviceObject);
   UNREFERENCED_PARAMETER(ValueName);
   UNREFERENCED_PARAMETER(Value);
+#endif
+}
+
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+static void AppleAgxWriteDiagnosticDwordToKey(HANDLE Key, PCWSTR ValueName,
+                                               ULONG Value) {
+  UNICODE_STRING valueName;
+
+  RtlInitUnicodeString(&valueName, ValueName);
+  (void)ZwSetValueKey(Key, &valueName, 0, REG_DWORD, &Value, sizeof(Value));
+}
+
+static void AppleAgxWriteIndexedDiagnosticDword(HANDLE Key, PCWSTR Format,
+                                                 ULONG Index, ULONG Value) {
+  WCHAR valueName[64];
+
+  if (!NT_SUCCESS(RtlStringCchPrintfW(valueName, RTL_NUMBER_OF(valueName),
+                                      Format, Index)))
+    return;
+  AppleAgxWriteDiagnosticDwordToKey(Key, valueName, Value);
+}
+#endif
+
+void AppleAgxRecordTranslatedResources(
+    PDEVICE_OBJECT DeviceObject, PCM_RESOURCE_LIST TranslatedResources) {
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  HANDLE key = NULL;
+  ULONG descriptorCount = 0;
+  ULONG fullIndex;
+  ULONG resourceIndex = 0;
+
+  if (DeviceObject == NULL)
+    return;
+  if (!NT_SUCCESS(IoOpenDeviceRegistryKey(
+          DeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+
+  AppleAgxWriteDiagnosticDwordToKey(
+      key, L"Wom1ResourceFullCount",
+      TranslatedResources == NULL ? 0 : TranslatedResources->Count);
+  if (TranslatedResources != NULL) {
+    for (fullIndex = 0; fullIndex < TranslatedResources->Count; ++fullIndex)
+      descriptorCount += TranslatedResources->List[fullIndex]
+                             .PartialResourceList.Count;
+  }
+  AppleAgxWriteDiagnosticDwordToKey(key, L"Wom1ResourceDescriptorCount",
+                                    descriptorCount);
+  AppleAgxWriteDiagnosticDwordToKey(
+      key, L"Wom1ResourceOverflow",
+      descriptorCount > APPLE_AGX_DIAGNOSTIC_RESOURCE_LIMIT ? 1 : 0);
+
+  if (TranslatedResources == NULL) {
+    ZwClose(key);
+    return;
+  }
+
+  for (fullIndex = 0; fullIndex < TranslatedResources->Count; ++fullIndex) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &TranslatedResources->List[fullIndex];
+    ULONG partialIndex;
+
+    for (partialIndex = 0; partialIndex < full->PartialResourceList.Count;
+         ++partialIndex, ++resourceIndex) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor;
+
+      if (resourceIndex >= APPLE_AGX_DIAGNOSTIC_RESOURCE_LIMIT)
+        continue;
+      descriptor =
+          &full->PartialResourceList.PartialDescriptors[partialIndex];
+      AppleAgxWriteIndexedDiagnosticDword(
+          key, L"Wom1Resource%02luType", resourceIndex, descriptor->Type);
+      AppleAgxWriteIndexedDiagnosticDword(
+          key, L"Wom1Resource%02luShare", resourceIndex,
+          descriptor->ShareDisposition);
+      AppleAgxWriteIndexedDiagnosticDword(
+          key, L"Wom1Resource%02luFlags", resourceIndex, descriptor->Flags);
+
+      if (descriptor->Type == CmResourceTypeMemory) {
+        ULONGLONG start = (ULONGLONG)descriptor->u.Memory.Start.QuadPart;
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luStartLow", resourceIndex, (ULONG)start);
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luStartHigh", resourceIndex,
+            (ULONG)(start >> 32));
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luLength", resourceIndex,
+            descriptor->u.Memory.Length);
+      } else if (descriptor->Type == CmResourceTypeInterrupt) {
+        ULONGLONG affinity = (ULONGLONG)descriptor->u.Interrupt.Affinity;
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luLevel", resourceIndex,
+            descriptor->u.Interrupt.Level);
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luVector", resourceIndex,
+            descriptor->u.Interrupt.Vector);
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luAffinityLow", resourceIndex,
+            (ULONG)affinity);
+        AppleAgxWriteIndexedDiagnosticDword(
+            key, L"Wom1Resource%02luAffinityHigh", resourceIndex,
+            (ULONG)(affinity >> 32));
+      }
+    }
+  }
+  ZwClose(key);
+#else
+  UNREFERENCED_PARAMETER(DeviceObject);
+  UNREFERENCED_PARAMETER(TranslatedResources);
 #endif
 }
 

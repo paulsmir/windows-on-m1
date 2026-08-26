@@ -93,6 +93,35 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         ):
             self.assertIn(stage, adapter)
 
+    def test_power_qualification_persists_bounded_translated_descriptors(self):
+        adapter = self.read("src/adapter.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
+        header = self.read("include/apple_agx_driver.h")
+
+        self.assertIn("AppleAgxRecordTranslatedResources", header)
+        self.assertIn("AppleAgxRecordTranslatedResources", diagnostics)
+        self.assertIn("APPLE_AGX_DIAGNOSTIC_RESOURCE_LIMIT 16", diagnostics)
+        self.assertIn("Wom1ResourceFullCount", diagnostics)
+        self.assertIn("Wom1ResourceDescriptorCount", diagnostics)
+        self.assertIn("Wom1ResourceOverflow", diagnostics)
+        for suffix in (
+            "Type", "Share", "Flags", "StartLow", "StartHigh", "Length",
+            "Level", "Vector", "AffinityLow", "AffinityHigh",
+        ):
+            self.assertIn(f'L"Wom1Resource%02lu{suffix}"', diagnostics)
+        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", diagnostics)
+        self.assertNotIn("MmMapIoSpace", diagnostics)
+        self.assertNotIn("WRITE_REGISTER", diagnostics)
+
+        record = adapter.index("AppleAgxRecordTranslatedResources")
+        validate = adapter.index("AppleAgxValidateTranslatedResources")
+        self.assertLess(record, validate)
+        qualification_guard = adapter.rfind(
+            "#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", 0, record
+        )
+        self.assertGreaterEqual(qualification_guard, 0)
+        self.assertLess(record, adapter.index("#endif", qualification_guard))
+
     def test_wdk_display_headers_follow_required_base_type_order(self):
         header = self.read("include/apple_agx_driver.h")
         ordered = (

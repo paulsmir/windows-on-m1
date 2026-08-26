@@ -73,5 +73,8 @@ void AppleAgxRecordAddDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
 void AppleAgxRecordStartDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
                                        _In_ APPLE_AGX_START_STAGE Stage,
                                        _In_ NTSTATUS Status);
+void AppleAgxRecordTranslatedResources(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PCM_RESOURCE_LIST TranslatedResources);
 
 #endif /* APPLE_AGX_DRIVER_H */

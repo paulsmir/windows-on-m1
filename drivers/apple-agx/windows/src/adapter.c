@@ -66,6 +66,8 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                     AppleAgxStartDeviceInformation,
                                     STATUS_SUCCESS);
+  AppleAgxRecordTranslatedResources(adapter->PhysicalDeviceObject,
+                                    deviceInfo.TranslatedResourceList);
 #endif
 
   status =
