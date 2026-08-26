@@ -10288,11 +10288,10 @@ firmware still omits it.
 
 ### EXP-20260826-113 — J313 AGX G2 live enumeration retry
 
-Status: preregistered; hardware execution requires a new explicit user
-approval.  This is a single enumeration-only retry after correcting the Mu
-firmware-volume publication boundary found by EXP-112.  It does not authorize
-building, staging, installing or loading `AppleAgx.sys` and does not authorize
-any AGX hardware access.
+Status: accepted after the single explicitly approved hardware execution.
+This was an enumeration-only retry after correcting the Mu firmware-volume
+publication boundary found by EXP-112.  `AppleAgx.sys` was not built, staged,
+installed or loaded and no AGX hardware access was authorized or observed.
 
 Hypothesis: packaging the opt-in AGX SSDT inside the normal
 `DeviceAcpiTables` storage file, with the same live firmware GUID used by the
@@ -10359,3 +10358,40 @@ Pass requires all host and recovery checks, exactly one live SSDT, exactly one
 driverless `ACPI\APPL0002` with the reviewed resources, responsive Windows and
 no forbidden activity.  Passing this gate authorizes only planning the next
 driver-install experiment; it does not authorize that experiment.
+
+Observed result:
+- the exact manifest-verified candidate was chainloaded once with the public
+  assisted launcher.  All eight CPUs, the NVMe backend and guest handoff were
+  observed.  Mu logged `ACPI INSTALL instance=3 sig=SSDT len=0x1BF` and
+  `ACPI LIVE: XSDT[4] SSDT`, proving that the corrected firmware-volume file
+  crossed into the live XSDT;
+- Windows reached SSH in 125 seconds of guest uptime and exposed exactly one
+  `ACPI\APPL0002\0`.  It had no service or function driver and reported the
+  expected Code 28 because no compatible driver was present;
+- the live Windows resources were IRQs 880 through 888 in exact order and
+  memory `0x0000000204000000..0x0000000207FFFFFF`.  The compiled AML retained
+  the CI-verified Level, ActiveHigh and Exclusive interrupt semantics;
+- `AppleAgx.sys` and an AppleAgx driver package were absent both before and
+  after the boot.  The hypervisor log contained no AGX clock, firmware, MMIO
+  write, UAT, queue, command, interrupt-injection, power-transition, display
+  ownership, exception, reset or bugcheck marker;
+- Windows remained responsive with eight logical processors.  AppleInput and
+  sshd were running, `ACPI\APPL0001\0` was healthy and no recent level-one
+  System event was present;
+- after exporting the observation, Windows was shut down normally and only
+  the immutable stable recovery pair was launched.  Stable firmware installed
+  no SSDT, Windows returned with zero `APPL0002` devices, AppleInput remained
+  healthy and all five recovery SHA-256 checks passed again;
+- immutable evidence is preserved at
+  `investigation/artifacts/EXP-20260826-113-agx-g2-live-enumeration/`.
+  Candidate `hv.log` SHA-256 is
+  `35f3938c8ecab90f0917c9824bfcab0e5afac4d25ea768e9e6b255a1300d465b`,
+  Windows PnP resource evidence SHA-256 is
+  `f604e0c2e3942e6743eee0ff97bd71b1e94c185f190b6a8b05da30c9d14ff174`
+  and the complete `SHA256SUMS` index SHA-256 is
+  `427786ac0e817ca313c1b2e78ded80d67357da270b45c4ea59b8e9181a40cf0d`.
+
+Verdict: accepted.  G2 firmware now proves isolated Windows enumeration of the
+reviewed J313 AGX resources without a driver or any GPU hardware activity.  A
+separate preregistration and explicit approval remain mandatory before any
+`AppleAgx.sys` installation or StartDevice attempt.
