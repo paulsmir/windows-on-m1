@@ -9,7 +9,7 @@ import unittest
 
 from tools.agx_contract import load_contract
 from tools.artifact_manifest import ARTIFACT_ROLES, J313_GUEST_CONTRACT
-from tests.agx_gate_test_support import install_contract_git
+from tests.agx_gate_test_support import install_contract_git, write_artifact_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +40,7 @@ class RunAgxQueueGateTests(unittest.TestCase):
         checksum_lines = []
         for index, name in enumerate(ARTIFACT_NAMES, 1):
             path = self.artifacts / name
-            path.write_bytes((f"fixture-{index}-{name}\n").encode())
+            write_artifact_fixture(path, name, index, contract)
             digest = sha256(path)
             records[name] = {
                 "size": path.stat().st_size,

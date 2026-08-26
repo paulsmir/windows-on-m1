@@ -3,6 +3,16 @@ import shlex
 import shutil
 
 
+def write_artifact_fixture(path: Path, name: str, index: int, contract) -> None:
+    """Write a minimal artifact that still satisfies production identity gates."""
+    payload = f"fixture-{index}-{name}\n".encode()
+    if name == "m1n1.macho":
+        payload += (
+            b"##m1n1_ver##" + contract.source.m1n1_commit[:7].encode() + b"\0"
+        )
+    path.write_bytes(payload)
+
+
 def install_contract_git(test_bin: Path, contract) -> None:
     """Make operator fixtures independent of the development checkout pins."""
     real_git = shutil.which("git")

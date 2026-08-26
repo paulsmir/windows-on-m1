@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -33,6 +34,10 @@ class ManifestError(RuntimeError):
     pass
 
 
+M1N1_BUILD_TAG_MARKER = b"##m1n1_ver##"
+M1N1_BUILD_TAG_PATTERN = re.compile(rb"[ -~]+")
+
+
 def _git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", "-C", str(root), *args], check=False, capture_output=True, text=True
@@ -48,6 +53,47 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _m1n1_build_tag(path: Path) -> str:
+    """Read the identity compiled into m1n1 by version.sh.
+
+    Hashing proves that a binary did not change after packaging; this marker
+    proves that the binary was actually built from the source revision claimed
+    by the manifest.  The two checks deliberately cover different failures.
+    """
+    data = path.read_bytes()
+    offsets = []
+    start = 0
+    while True:
+        offset = data.find(M1N1_BUILD_TAG_MARKER, start)
+        if offset < 0:
+            break
+        offsets.append(offset)
+        start = offset + len(M1N1_BUILD_TAG_MARKER)
+    if len(offsets) != 1:
+        raise ManifestError(
+            f"m1n1 build identity marker count is {len(offsets)}, expected 1: {path}"
+        )
+    value = data[offsets[0] + len(M1N1_BUILD_TAG_MARKER):]
+    match = M1N1_BUILD_TAG_PATTERN.match(value)
+    if match is None:
+        raise ManifestError(f"m1n1 build identity is empty: {path}")
+    return match.group().decode("ascii")
+
+
+def _validate_m1n1_build_identity(
+    path: Path, source_commit: str, *, expected_tag: str | None = None
+) -> str:
+    tag = _m1n1_build_tag(path)
+    if tag.endswith("-dirty"):
+        raise ManifestError(f"m1n1 build identity is dirty: {tag}")
+    required = expected_tag if expected_tag is not None else source_commit[:7]
+    if tag != required:
+        raise ManifestError(
+            f"m1n1 build identity mismatch: expected {required}, got {tag}"
+        )
+    return tag
 
 
 def _clean_revision(root: Path) -> str:
@@ -114,6 +160,14 @@ def create_manifest(
             revisions[f"{name}_dirty"] = revision["dirty"]
             if revision["dirty"]:
                 revisions[f"{name}_diff_sha256"] = revision["diff_sha256"]
+    m1n1_build_tag = None
+    if "m1n1.macho" in artifact_names and "m1n1_windows_commit" in revisions:
+        expected_tag = _git(root / "m1n1_windows", "describe", "--tags", "--always")
+        m1n1_build_tag = _validate_m1n1_build_identity(
+            artifact_dir / "m1n1.macho",
+            revisions["m1n1_windows_commit"],
+            expected_tag=expected_tag,
+        )
     roles = ARTIFACT_ROLES if artifact_roles is None else artifact_roles
     artifacts = {}
     for name in artifact_names:
@@ -121,6 +175,8 @@ def create_manifest(
         if not path.is_file():
             raise ManifestError(f"artifact is missing: {path}")
         record = {"size": path.stat().st_size, "sha256": _sha256(path)}
+        if name == "m1n1.macho" and m1n1_build_tag is not None:
+            record["build_tag"] = m1n1_build_tag
         if name in roles:
             record["role"] = roles[name]
         artifacts[name] = record
@@ -179,6 +235,12 @@ def verify_manifest(
             raise ManifestError(f"artifact is missing: {artifact}")
         if artifact.stat().st_size != record.get("size") or _sha256(artifact) != record.get("sha256"):
             raise ManifestError(f"artifact hash mismatch: {artifact}")
+        if name == "m1n1.macho" and data.get("m1n1_windows_commit"):
+            _validate_m1n1_build_identity(
+                artifact,
+                data["m1n1_windows_commit"],
+                expected_tag=record.get("build_tag"),
+            )
     for name, role in (expected_roles or {}).items():
         if data.get("artifacts", {}).get(name, {}).get("role") != role:
             raise ManifestError(f"artifact role mismatch: {name} is not {role}")

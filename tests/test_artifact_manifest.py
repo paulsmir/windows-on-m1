@@ -76,9 +76,15 @@ class ArtifactManifestTests(unittest.TestCase):
             self.write_layout(root)
             subprocess.run(["git", "-C", root, "add", "config"], check=True)
             subprocess.run(["git", "-C", root, "commit", "-qm", "source"], check=True)
+            commit = subprocess.run(
+                ["git", "-C", root, "rev-parse", "HEAD"], check=True,
+                capture_output=True, text=True,
+            ).stdout.strip()
             artifacts = root / "dist"
             artifacts.mkdir()
-            (artifacts / "m1n1.macho").write_bytes(b"plain")
+            (artifacts / "m1n1.macho").write_bytes(
+                b"plain##m1n1_ver##" + commit[:7].encode() + b"\0"
+            )
             path = create_manifest(
                 root, artifacts, "debug", "physical", "full", ["m1n1.macho"],
                 compiler="clang", artifact_roles={"m1n1.macho": "assisted-chainload"},
@@ -92,6 +98,82 @@ class ArtifactManifestTests(unittest.TestCase):
                     path, expected_profile="debug",
                     expected_roles={"m1n1.macho": "assisted-chainload"},
                 )
+
+    def test_create_rejects_stale_or_dirty_embedded_m1n1_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", root], check=True)
+            subprocess.run(["git", "-C", root, "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", root, "config", "user.name", "Test"], check=True)
+            self.write_layout(root)
+            (root / "m1n1_windows").mkdir()
+            subprocess.run(["git", "init", "-q", root / "m1n1_windows"], check=True)
+            subprocess.run(["git", "-C", root / "m1n1_windows", "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", root / "m1n1_windows", "config", "user.name", "Test"], check=True)
+            (root / "m1n1_windows" / "source").write_text("source", encoding="utf-8")
+            subprocess.run(["git", "-C", root / "m1n1_windows", "add", "source"], check=True)
+            subprocess.run(["git", "-C", root / "m1n1_windows", "commit", "-qm", "source"], check=True)
+            subprocess.run(["git", "-C", root, "add", "config"], check=True)
+            subprocess.run(["git", "-C", root, "commit", "-qm", "source"], check=True)
+            m1n1_commit = subprocess.run(
+                ["git", "-C", root / "m1n1_windows", "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            artifacts = root / "dist"
+            artifacts.mkdir()
+
+            (artifacts / "m1n1.macho").write_bytes(
+                b"##m1n1_ver##" + m1n1_commit[:7].encode() + b"\0"
+            )
+            manifest = create_manifest(
+                root, artifacts, "debug", "both", "monitor",
+                ["m1n1.macho"], compiler="clang",
+            )
+            data = verify_manifest(manifest)
+            self.assertEqual(
+                data["artifacts"]["m1n1.macho"]["build_tag"],
+                m1n1_commit[:7],
+            )
+
+            for tag in ("deadbee", "deadbee-dirty"):
+                with self.subTest(tag=tag):
+                    (artifacts / "m1n1.macho").write_bytes(
+                        b"##m1n1_ver##" + tag.encode() + b"\0"
+                    )
+                    with self.assertRaisesRegex(ManifestError, "m1n1 build identity"):
+                        create_manifest(
+                            root, artifacts, "debug", "both", "monitor",
+                            ["m1n1.macho"], compiler="clang",
+                        )
+
+    def test_verify_rejects_tampered_m1n1_build_tag_even_with_matching_hash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact_dir = Path(directory)
+            binary = artifact_dir / "m1n1.macho"
+            binary.write_bytes(b"##m1n1_ver##deadbee-dirty\0")
+            import hashlib
+            data = {
+                "format_version": 2,
+                "platform": "j313",
+                "profile": "debug",
+                "display": "both",
+                "debug": "monitor",
+                "compiler": "clang",
+                "guest_layout_sha256": "0" * 64,
+                "guest_contract": dict(__import__("tools.artifact_manifest", fromlist=["J313_GUEST_CONTRACT"]).J313_GUEST_CONTRACT),
+                "m1n1_windows_commit": "deadbee" + "0" * 33,
+                "artifacts": {
+                    "m1n1.macho": {
+                        "size": binary.stat().st_size,
+                        "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
+                        "role": "assisted-chainload",
+                    }
+                },
+            }
+            manifest = artifact_dir / "MANIFEST.json"
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(ManifestError, "m1n1 build identity"):
+                verify_manifest(manifest)
 
     def test_verify_rejects_corruption_and_wrong_profile(self):
         with tempfile.TemporaryDirectory() as directory:
