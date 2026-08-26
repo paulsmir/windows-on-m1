@@ -28,6 +28,21 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
         self.assertRegex(driver, r"return\s+DxgkInitialize\(")
 
+    def test_wdk_display_headers_follow_required_base_type_order(self):
+        header = self.read("include/apple_agx_driver.h")
+        ordered = (
+            "#include <ntddk.h>",
+            "#include <windef.h>",
+            "#include <winerror.h>",
+            "#include <wingdi.h>",
+            "#include <ntddvdeo.h>",
+            "#include <d3dkmddi.h>",
+            "#include <d3dkmthk.h>",
+            "#include <dispmprt.h>",
+        )
+        positions = [header.index(include) for include in ordered]
+        self.assertEqual(positions, sorted(positions))
+
     def test_skeleton_registers_only_fail_closed_lifecycle_callbacks(self):
         driver = self.read("src/driver.c")
         required = (

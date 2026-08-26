@@ -1,9 +1,17 @@
 #ifndef APPLE_AGX_DRIVER_H
 #define APPLE_AGX_DRIVER_H
 
-#include <d3dkmddi.h>
-#include <dispmprt.h>
+/* The WDK display headers require the base NT, Win32 and GDI types first. */
+// clang-format off
 #include <ntddk.h>
+#include <windef.h>
+#include <winerror.h>
+#include <wingdi.h>
+#include <ntddvdeo.h>
+#include <d3dkmddi.h>
+#include <d3dkmthk.h>
+#include <dispmprt.h>
+// clang-format on
 
 #include "apple_agx_state.h"
 
