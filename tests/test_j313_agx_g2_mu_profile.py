@@ -9,8 +9,10 @@ DSC = PKG / "MacBookAirMid2020.dsc"
 FDF = PKG / "MacBookAirMid2020.fdf"
 DSDT = PKG / "AcpiTables" / "DSDT.asl"
 SSDT = PKG / "AcpiTables" / "J313AppleAgxSsdt.asl"
-INF = PKG / "AcpiTables" / "J313AppleAgxAcpiTables.inf"
-MODULE = "MacBookAirMid2020Pkg/AcpiTables/J313AppleAgxAcpiTables.inf"
+DEVICE_INF = PKG / "AcpiTables" / "DeviceAcpiTables.inf"
+G2_DEVICE_INF = PKG / "AcpiTables" / "DeviceAcpiTablesG2.inf"
+DEVICE_MODULE = "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf"
+G2_DEVICE_MODULE = "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf"
 WORKFLOW = ROOT / ".github" / "workflows" / "j313-agx-g2-acpi.yml"
 
 
@@ -26,20 +28,49 @@ def _conditional_body(text, module):
 
 
 class J313AgxG2MuProfileTests(unittest.TestCase):
+    def test_g2_replaces_device_storage_file_with_same_live_guid(self):
+        stable_inf = DEVICE_INF.read_text()
+        g2_inf = G2_DEVICE_INF.read_text()
+        storage_guid = re.search(
+            r"(?m)^\s*FILE_GUID\s*=\s*([^\s]+)\s*$", stable_inf
+        ).group(1)
+
+        self.assertIn(f"FILE_GUID                      = {storage_guid}", g2_inf)
+        for source in ("DBG2.aslc", "MCFG.aslc", "DSDT.asl"):
+            self.assertIn(source, g2_inf)
+        self.assertEqual(g2_inf.count("J313AppleAgxSsdt.asl"), 1)
+
+        for platform_file in (DSC, FDF):
+            text = platform_file.read_text()
+            profile = re.search(
+                r"!if\s+\$\(J313_AGX_G2_PROFILE\)\s*==\s*TRUE\s*\n"
+                r"(?P<true>.*?)"
+                r"!else\s*\n"
+                r"(?P<false>.*?)"
+                r"!endif(?:\s*#.*)?",
+                text,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(profile)
+            self.assertIn(G2_DEVICE_MODULE, profile.group("true"))
+            self.assertNotIn(DEVICE_MODULE, profile.group("true"))
+            self.assertIn(DEVICE_MODULE, profile.group("false"))
+            self.assertNotIn(G2_DEVICE_MODULE, profile.group("false"))
+
     def test_profile_defaults_false_and_component_is_opt_in(self):
         dsc = DSC.read_text()
         self.assertRegex(
             dsc,
             r"(?m)^\s*J313_AGX_G2_PROFILE\s*=\s*FALSE\s*$",
         )
-        self.assertEqual(len(_conditional_body(dsc, MODULE)), 1)
-        self.assertEqual(dsc.count(MODULE), 1)
+        self.assertEqual(len(_conditional_body(dsc, G2_DEVICE_MODULE)), 1)
+        self.assertEqual(dsc.count(G2_DEVICE_MODULE), 1)
 
     def test_fdf_packages_exactly_one_opt_in_acpi_module(self):
         fdf = FDF.read_text()
-        packaged = "INF RuleOverride=ACPITABLE " + MODULE
+        packaged = "INF RuleOverride=ACPITABLE " + G2_DEVICE_MODULE
         self.assertEqual(len(_conditional_body(fdf, packaged)), 1)
-        self.assertEqual(fdf.count(MODULE), 1)
+        self.assertEqual(fdf.count(G2_DEVICE_MODULE), 1)
 
     def test_stable_dsdt_remains_free_of_agx(self):
         dsdt = DSDT.read_text()
@@ -55,12 +86,10 @@ class J313AgxG2MuProfileTests(unittest.TestCase):
         self.assertNotIn("0x204000000", ssdt)
         self.assertNotIn("APPL0002", ssdt)
 
-    def test_acpi_module_builds_only_the_standalone_ssdt(self):
-        inf = INF.read_text()
-        self.assertIn("MODULE_TYPE                    = USER_DEFINED", inf)
-        self.assertIn("J313AppleAgxSsdt.asl", inf)
-        self.assertNotIn("DSDT.asl", inf)
-        self.assertEqual(inf.count("J313AppleAgxSsdt.asl"), 1)
+    def test_obsolete_standalone_storage_module_is_not_referenced(self):
+        obsolete = "MacBookAirMid2020Pkg/AcpiTables/J313AppleAgxAcpiTables.inf"
+        self.assertNotIn(obsolete, DSC.read_text())
+        self.assertNotIn(obsolete, FDF.read_text())
 
     def test_ci_builds_and_checks_stable_and_g2_profiles(self):
         workflow = WORKFLOW.read_text()
