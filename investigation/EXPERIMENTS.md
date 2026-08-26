@@ -10491,7 +10491,7 @@ historical Problem-45 devnode instead of silently weakening this contract.
 
 ### EXP-20260826-115 — corrected AppleAgx stage-only qualification
 
-Status: preregistered; hardware execution not approved.  This successor keeps
+Status: passed and rolled back.  This successor kept
 the exact EXP-114 candidate and every mutation/rollback limit, but corrects
 only the stable PnP baseline using the evidence obtained before mutation.
 
@@ -10529,4 +10529,36 @@ Corrected baseline and execution contract:
 Every EXP-114 stop rule and forbidden AGX hardware action remains in force.
 Pass authorizes only a new preregistration for G2 binding; it does not authorize
 G2, StartDevice, MMIO, firmware, interrupts, queues, power or display control.
-A new explicit user approval is required before executing EXP-115.
+The required explicit approval for this one execution was received before any
+Windows mutation.
+
+Observed result:
+- the user explicitly approved the one-shot execution.  Stable Windows first
+  reproduced the corrected baseline exactly: eight logical processors,
+  AppleInput `Running`, healthy `ACPI\APPL0001\0`, no critical System event,
+  no AppleAgx package, service, module or test certificate, zero present
+  APPL0002 devices and one historical `ACPI\APPL0002\0` record with
+  `Present=false`, `DEVPKEY_Device_IsPresent=false`, Status `Unknown`, no
+  class or friendly name and Problem 45;
+- Windows recomputed all six candidate SHA-256 values and matched the
+  preregistered identities.  After importing only the exact certificate,
+  `Get-AuthenticodeSignature` reported `Valid`, `Signature verified` and
+  thumbprint `7772864CB7326B7BFDA2C81C12D07CEF64135A57`;
+- the hashed stage-only script added exactly one Driver Store package,
+  `oem17.inf`.  The historical APPL0002 record remained unchanged and absent;
+  no AppleAgx service or module appeared, display inventory stayed unchanged,
+  all eight CPUs and native input remained healthy and no critical event was
+  recorded.  No G2 firmware or GPU hardware action occurred;
+- the hashed rollback script deleted only `oem17.inf` without uninstall or
+  force.  Both exact certificate-store entries were removed.  Final and
+  independent live checks showed zero AppleAgx packages, services, modules and
+  certificates while reproducing the full corrected baseline without reboot.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-115-agx-driver-store-stage/`; its checksum
+index SHA-256 is
+`0636c62e55216d8aca3f70395f041f72f879dde0e1ee0d9a64c7c7a3ab2d2a3e`.
+`result.json` records `StagePassed=true`, no failure and the exact temporary
+published identity.  Verdict: passed with complete rollback.  This proves
+only Windows catalog trust and Driver Store acceptance; it authorizes
+preregistration, but not execution, of a separately bounded G2 bind test.
