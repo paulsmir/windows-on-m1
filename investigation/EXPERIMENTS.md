@@ -10793,3 +10793,55 @@ rollback is mandatory; no retry and no force deletion are permitted.
 
 No EXP-118 Windows package, certificate, firmware or hardware mutation has
 occurred at preregistration time.  The fresh evidence path is absent.
+
+Observed result:
+- stable Windows reproduced the corrected baseline with eight logical
+  processors, healthy AppleInput, no critical event, no present APPL0002 and
+  no AppleAgx package, service, module or signer.  All exact candidate hashes
+  matched, the exact signer was imported and only the qualification package
+  was staged as `oem17.inf`; no live GPU device or module appeared under
+  stable firmware;
+- stable Windows shut down normally and the G2 v2 candidate was launched once
+  through the public assisted path with the power-broker gate enabled.  The
+  hypervisor mapped only the synthetic page
+  `0x300000000..0x300001000`, reached `Starting guest...`, and Windows became
+  responsive with eight CPUs, healthy native input and no critical event;
+- Windows matched the exact present `ACPI\APPL0002\0` to `oem17.inf`, exposed
+  the exact SGX and broker memory resources, stopped `AppleAgx` with the
+  designed Problem 43 boundary and loaded no AppleAgx module.  The broker log
+  contained no `ON`, `QUERY` or `OFF` command because StartDevice did not reach
+  the client transition;
+- the launch was nevertheless rejected before interpreting that functional
+  result.  The executed `m1n1.macho` had SHA-256
+  `0135f6d3a7d5de5b582073f77ff5f5121c35e591608063ad367f7aac6f65cf33`
+  and embedded tag `4107043-dirty`, while its manifest claimed clean source
+  `035b8ab38b504fa30f15e4db75649b1c5e1e73ae`.  Equivalent source content is
+  not equivalent provenance, so the one-shot identity contract failed;
+- no AGX firmware, RTKit, SGX MMIO, interrupt, UAT, queue, command, render or
+  display-ownership action and no BugCheck, reset, storage reset or input loss
+  was observed.  The guest shut down normally without retry;
+- immutable stable recovery returned through its exact assisted pair.  The
+  package's historical association required the preregistered non-force
+  `/uninstall` fallback for only `oem17.inf`; `/force` was not used.  The two
+  exact signer entries were removed.  Final state has eight CPUs, AppleInput
+  `Running/OK`, zero present APPL0002, package, service, module and signer
+  entries, and no critical event.  All five recovery hashes passed;
+- postmortem tooling now validates the `##m1n1_ver##` identity compiled into
+  every manifest-backed m1n1 artifact.  It accepts the historical stable
+  identity, rejects the executed EXP-118 manifest before launch, and records
+  the embedded build tag in new manifests.  A clean local rebuild from the
+  pinned source produced tag `035b8ab` and SHA-256
+  `380920f80e460544b74c6ff9439bdb8af6fe02ec44492149cb32ccdebcf6315d`;
+  that rebuilt binary was not executed as part of EXP-118.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-118-agx-power-broker-qualification/`.
+Its checksum-index SHA-256 is
+`a284502e1916fed82a6e08df9cc4d6df3721a38275b1bd91515229f03784fc4a`.
+
+Verdict: rejected safely with complete active-state rollback.  EXP-118 is
+single-use and may not be retried.  The result proves that the synthetic
+broker can be published and that the qualification driver binds to the exact
+two-resource contract, but it does not qualify a power transition.  A
+successor must use a newly manifested clean m1n1 binary and a separately
+preregistered one-shot contract.
