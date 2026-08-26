@@ -11232,7 +11232,9 @@ initialization. Evidence checksum-index SHA-256 is
 
 ### EXP-20260826-125 — J313 AGX AddDevice/StartDevice boundary qualification
 
-Status: preregistered at `2026-08-26T19:57:34Z` for one G2 execution. The full
+Status: completed once and rolled back; lifecycle hypothesis confirmed, final
+storage-health gate rejected.  Preregistered at `2026-08-26T19:57:34Z` for one
+G2 execution. The full
 literal contract is
 `documentation/plans/2026-08-26-j313-agx-lifecycle-boundary-qualification.md`.
 The falsifiable hypothesis is that the exact Problem-43 package reaches
@@ -11285,3 +11287,41 @@ input loss, failed rollback or second G2 boot rejects the run. Evidence path
 `investigation/artifacts/EXP-20260826-125-agx-lifecycle-boundary/` must be absent
 before execution. Recovery removes only the recorded `oemNN.inf` and exact
 signer without `/force`.
+
+Observed result (`2026-08-26T20:06:09Z` candidate boot): the one permitted G2
+execution reached responsive eight-core Windows with AppleInput, `stornvme`
+and `USBXHCI` running.  `ACPI\\APPL0002\\0` bound the exact `oem17.inf`
+package, remained Problem 43, and exposed the expected persistent boundaries
+under its `Device Parameters` key:
+
+- `Wom1AddDeviceStage=2`, `Wom1AddDeviceStatus=0x00000000`;
+- `Wom1StartDeviceStage=3`, `Wom1StartDeviceStatus=0xC0000182`.
+
+Stage 3 is `AppleAgxStartResourcesValidated`; therefore AddDevice allocation
+and `DxgkCbGetDeviceInformation` completed, but
+`AppleAgxValidateTranslatedResources` returned
+`STATUS_DEVICE_CONFIGURATION_ERROR`.  PnP reported both expected translated
+memory ranges and all nine firmware IRQ assignments 880 through 888.  The
+validator nevertheless compared each translated `u.Interrupt.Vector` with the
+firmware GSI.  Microsoft documents that a translated interrupt descriptor
+contains the global system interrupt vector used to connect the interrupt,
+whereas a raw descriptor contains the bus-specific vector.  `DXGK_DEVICE_INFO`
+provides only `TranslatedResourceList`.  This is the same invalid raw-versus-
+translated identity assumption previously corrected in AppleInput, now
+localized before state validation, broker mapping or any GPU action.
+
+The candidate had zero critical events and zero `stornvme` Event 129 records.
+The forbidden-action audit was empty: no AGX broker command, firmware, RTKit,
+SGX MMIO access, interrupt, UAT, queue, render or present action occurred.  The
+guest shut down normally.  Recovery used the exact EXP-123 pair, removed only
+`oem17.inf` and signer `F247053BE6C49EFEB4C8D8AEBF6F47399787B1C2` without
+`/force`, and a cleanup reboot left eight CPUs, no APPL0002, package, service or
+signer, with AppleInput, NVMe and xHCI running and zero critical events.
+
+The separate final storage gate did not pass: each of the two recovery boots
+recorded two `stornvme` Event 129 resets ten seconds apart despite using
+`bee53dc`.  These resets did not occur in the G2 candidate and do not alter the
+lifecycle boundary, but they prevent calling the overall recovery healthy.
+EXP-125 is closed and must not be retried.  The next experiment may add only
+per-descriptor translated-resource breadcrumbs; it must not weaken validation
+or access GPU hardware until the actual descriptor representation is measured.
