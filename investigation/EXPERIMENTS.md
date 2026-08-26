@@ -10395,3 +10395,75 @@ Verdict: accepted.  G2 firmware now proves isolated Windows enumeration of the
 reviewed J313 AGX resources without a driver or any GPU hardware activity.  A
 separate preregistration and explicit approval remain mandatory before any
 `AppleAgx.sys` installation or StartDevice attempt.
+
+### EXP-20260826-114 — AppleAgx stage-only Driver Store qualification
+
+Status: preregistered; Windows has not been modified.  This experiment uses
+only the immutable stable firmware profile.  It imports the exact ephemeral
+WDK test certificate, stages the exact AppleAgx package without `/install`,
+proves that no device or service was activated, and then removes only the new
+OEM INF and certificate.  It does not boot G2 and cannot call StartDevice.
+
+Hypothesis: the current ARM64 WDK package is internally signed, trusted and
+accepted by the Windows Driver Store without binding any device, changing the
+stable display path or loading `AppleAgx.sys`.
+
+Candidate and host-gate contract:
+- root source `5102957b644be72700e493a5af7fc2af0821cdab`, implementation
+  source `37e801cb087e2b9c4ec1a805b84f444e3e55fe16`, m1n1 source
+  `4107043a96dedaec6dbe98bb8ee7b78f13c8080f` and Mu source
+  `7a5071a5750bb23ed9ae7912a51cee84d4e31574`;
+- GitHub Actions run
+  `https://github.com/paulsmir/windows-on-m1/actions/runs/32963862166`
+  passed the official ARM64 WDK build and code analysis at root commit
+  `5102957b644be72700e493a5af7fc2af0821cdab`;
+- read-only candidate `.local/agx-driver-stage-exp114/` has manifest SHA-256
+  `ee9ac4532e4432e2b4e7faedc70ef1f101efd454f1db8f236fbb2710b26e217d`
+  and checksum-index SHA-256
+  `4e4ff25513bb56b8567996d30b264c6686119d3423386345aa9522caf2a6737e`;
+- exact package SHA-256 values are
+  `6ed690a40f17fec26aa351d91bfc2b8ad8672ae9e2e11e6cc4ebd64e80ca2847`
+  (`AppleAgx.inf`),
+  `34ba821fc3a06c2f1689697733b1ee6c1739b96cf591e8a75802d30f97503e11`
+  (`AppleAgx.sys`) and
+  `0f42639d356e92334de771e8b1c280518b7d6d3b3517d0d75149a91019f421dd`
+  (`appleagx.cat`).  The SYS is PE32+ AArch64;
+- the catalog embeds only the self-signed certificate subject
+  `CN=WDKTestCert runneradmin,134322176743924837`, SHA-1 thumbprint
+  `7772864CB7326B7BFDA2C81C12D07CEF64135A57`; exported CER SHA-256 is
+  `f8fc916e55e7380fa797deebbef3fcdc2e79bfd54f10472a09c566394a69cd4f`;
+- 13 AppleAgx package tests, 26 related G2 tests and the complete project
+  environment suite passed 649/649.  All five immutable stable recovery hashes
+  passed immediately before preregistration;
+- fresh evidence destination
+  `investigation/artifacts/EXP-20260826-114-agx-driver-store-stage/` is absent
+  and may be created exactly once.
+
+Execution contract:
+- remain on the stable firmware profile.  Before mutation prove zero
+  `ACPI\APPL0002` devices, no `AppleAgx` system service, no AppleAgx OEM INF,
+  eight logical CPUs, healthy AppleInput and no new critical System event;
+- transfer only the read-only candidate.  Recompute all six SHA-256 values on
+  Windows before use.  Import `AppleAgxTest.cer` only into LocalMachine Root
+  and TrustedPublisher and require the exact thumbprint above;
+- require `Get-AuthenticodeSignature appleagx.cat` to return `Valid` with that
+  exact thumbprint, then invoke only `stage-driver.ps1 -InfPath AppleAgx.inf`.
+  The script contains `pnputil /add-driver` but no `/install`, device ID or
+  restart operation.  Record the one newly published `oemNN.inf` identity;
+- after staging, require exactly one matching Driver Store package but still
+  zero `ACPI\APPL0002` devices, no `AppleAgx` service, no loaded module, no
+  display-adapter change, eight CPUs, healthy AppleInput and responsive SSH;
+- invoke `remove-staged-driver.ps1` with only the recorded new OEM INF.  It may
+  not use `/uninstall` or `/force`.  Remove only certificate thumbprint
+  `7772864CB7326B7BFDA2C81C12D07CEF64135A57` from the two imported stores;
+- final state must match baseline: no AppleAgx package, service, module,
+  APPL0002 devnode or test certificate.  No reboot is permitted or required.
+
+Stop and rollback immediately on a hash, signer, package-count, OEM identity,
+device, service, module, display, CPU, input, liveness or event mismatch.  A
+failure does not authorize `/install`, G2 firmware, StartDevice, MMIO, firmware,
+interrupt, UAT, queue, command, power or display-ownership activity.
+
+Pass authorizes only preregistration of a separate one-shot G2 bind experiment.
+It does not authorize that bind, StartDevice or any GPU hardware access.  One
+new explicit user approval is required before executing EXP-114.
