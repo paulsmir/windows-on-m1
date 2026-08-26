@@ -105,6 +105,9 @@ class J313AgxG2MuProfileTests(unittest.TestCase):
         self.assertIn("BLD_*_J313_AGX_G2_PROFILE=${G2_PROFILE}", workflow)
         self.assertIn("tools/verify_j313_agx_g2_aml.py", workflow)
         self.assertIn("J313AppleAgxSsdt.aml", workflow)
+        self.assertIn("J313-EFI-AGX-G2", workflow)
+        self.assertIn("actions/upload-artifact@v4", workflow)
+        self.assertIn("J313MACBOOKAIRMID2020_EFI.fd", workflow)
         self.assertNotIn("AppleAgx.sys", workflow)
 
 

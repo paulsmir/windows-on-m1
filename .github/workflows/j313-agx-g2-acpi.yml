@@ -101,3 +101,13 @@ jobs:
           cp "${tables[0]}" /tmp/J313AppleAgxSsdt.aml
           (cd /tmp && iasl -d J313AppleAgxSsdt.aml)
           python3 tools/verify_j313_agx_g2_aml.py /tmp/J313AppleAgxSsdt.dsl
+
+      - name: Upload exact G2 firmware
+        if: matrix.g2 == 'TRUE'
+        uses: actions/upload-artifact@v4
+        with:
+          name: J313-EFI-AGX-G2
+          if-no-files-found: error
+          path: |
+            mu/Build/MacBookAirMid2020-AARCH64/DEBUG_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd
+            /tmp/J313AppleAgxSsdt.aml
