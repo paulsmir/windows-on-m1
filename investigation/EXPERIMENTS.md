@@ -11328,7 +11328,9 @@ or access GPU hardware until the actual descriptor representation is measured.
 
 ### EXP-20260826-126 — J313 AGX translated-resource descriptor qualification
 
-Status: preregistered at `2026-08-26T20:31:00Z` for one G2 execution.  The
+Status: completed once and rolled back; measurement accepted, candidate
+storage gate rejected. Preregistered at `2026-08-26T20:31:00Z` for one G2
+execution. The
 complete task-by-task contract is
 `documentation/plans/2026-08-26-j313-agx-translated-resource-descriptor-qualification.md`.
 The falsifiable hypothesis is that EXP-125 failed because the display miniport
@@ -11373,3 +11375,48 @@ Rollback removes only the recorded package and exact signer without `/force`.
 Any identity mismatch, missing or overflowing descriptors, candidate Event
 129, critical event, input/storage loss, failed rollback or second G2 boot
 rejects the experiment.
+
+Observed result (`2026-08-26T20:35:04Z` candidate boot): the sole permitted G2
+execution reached responsive eight-core Windows and persisted one full
+translated resource list containing 13 descriptors with no overflow. The
+exact package bound as `oem17.inf`; APPL0002 remained Problem 43; DriverEntry
+and AddDevice returned success; and StartDevice again stopped at stage 3 with
+`STATUS_DEVICE_CONFIGURATION_ERROR` (`0xC0000182`).
+
+The descriptor representation was:
+
+- memory `0x204000000..0x207ffffff` (64 MiB), followed by type 129;
+- memory `0x300000000..0x300000fff` (4 KiB), followed by type 129;
+- nine exclusive level-sensitive interrupt descriptors with affinity `0xff`;
+  translated level/vector pairs were `9/2304`, `8/2048`, `11/2817`,
+  `10/2561`, `9/2305`, `8/2049`, `11/2818`, `10/2562`, and `9/2306`.
+
+Microsoft's `wdm.h` contract identifies numeric type 129 as
+`CmResourceTypeDevicePrivate`; its payload is reserved for system use. It is
+not an MMIO range and must not be interpreted or mapped by AppleAgx. The same
+contract and translated-resource documentation confirm that the observed
+interrupt vectors are system vectors rather than ACPI firmware GSIs. The old
+validator therefore had two independent representation errors: it rejected
+system-private descriptors outright and required translated vectors to equal
+generated guest INTIDs 880 through 888.
+
+No broker command, GPU firmware, RTKit, SGX MMIO, interrupt object, UAT,
+queue, command, render, present or display-ownership action occurred; the
+forbidden-action audit is empty. AppleInput, `stornvme` and `USBXHCI` remained
+Running and the candidate had zero critical events. The candidate nevertheless
+recorded two `stornvme` Event 129 resets, so its separate storage gate is
+rejected even though the descriptor measurement is complete.
+
+The guest shut down normally. Recovery used the exact EXP-123 pair, removed
+only `oem17.inf` and signer `419A261FEC73D775202BAC41300EF47F37531580`
+without `/force`, and completed one cleanup reboot. Final recovery proved eight
+CPUs; no APPL0002, AppleAgx package, service or signer; Running AppleInput,
+NVMe and xHCI; and zero critical events and zero Event 129. EXP-126 is closed
+and must not be retried. Evidence checksum-index SHA-256 is
+`64890ca9fa0079e89a325f6cea1e54bc6e01d16b5eb620cf64e40416ba9950e3`.
+
+This result authorizes only a separately tested parser correction that ignores
+`CmResourceTypeDevicePrivate` without inspecting it and validates translated
+interrupt properties/count/uniqueness instead of raw GSI identity. It does not
+authorize mapping SGX, connecting interrupts, loading firmware or starting a
+render adapter.
