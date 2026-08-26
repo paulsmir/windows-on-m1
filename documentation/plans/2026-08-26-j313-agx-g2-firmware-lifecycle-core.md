@@ -53,7 +53,7 @@
 - Consumes: accepted G1R firmware identity and `asc_mmio` range from `config/j313-agx.json`.
 - Produces: `G2Contract.firmware_lifecycle` and `J313_AGX_G2_ASC_*`, endpoint, state and deadline macros.
 
-- [ ] **Step 1: Write failing schema and generation tests**
+- [x] **Step 1: Write failing schema and generation tests**
 
 Add assertions to `test_reviewed_contract_is_bound_to_accepted_g1r_resources`:
 
@@ -92,7 +92,7 @@ for line in (
 
 Add mutation cases that change each endpoint, state, offset or deadline and require `G2ContractError` containing the exact field name. Also require an unknown `firmware_lifecycle` key to fail the existing exact-key check.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -102,7 +102,7 @@ Run:
 
 Expected: FAIL because `G2Contract` has no `firmware_lifecycle` field and the generated macros do not exist.
 
-- [ ] **Step 3: Add the reviewed JSON object**
+- [x] **Step 3: Add the reviewed JSON object**
 
 Add this exact top-level object to `config/j313-agx-g2.json`:
 
@@ -132,7 +132,7 @@ Add this exact top-level object to `config/j313-agx-g2.json`:
 
 The register and message values mirror the pinned `m1n1/hw/asc.py`, `fw/asc/mgmt.py` and `fw/agx/__init__.py`. The 3000 ms boot deadline matches `StandardASC.start`; all new deadlines are finite and independently validated.
 
-- [ ] **Step 4: Implement exact parsing and rendering**
+- [x] **Step 4: Implement exact parsing and rendering**
 
 Add immutable `FirmwareLifecycle` and a field on `G2Contract`:
 
@@ -162,7 +162,7 @@ class FirmwareLifecycle:
 
 Extend `TOP_KEYS`, define one exact-key set, validate every literal against the JSON above, and render unsigned C macros. Reject offsets outside `asc_mmio`, duplicate mailbox offsets, endpoint values outside `0..255`, equal firmware/doorbell endpoints and deadlines outside `1..5000`.
 
-- [ ] **Step 5: Regenerate and verify GREEN**
+- [x] **Step 5: Regenerate and verify GREEN**
 
 Run:
 
@@ -175,7 +175,7 @@ git diff --check
 
 Expected: deterministic check succeeds, all contract tests pass and only JSON, generator, test and generated header differ.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add config/j313-agx-g2.json tools/generate_j313_agx_g2_contract.py tests/test_j313_agx_g2_contract.py drivers/apple-agx/shared/include/j313_agx_g2.generated.h
@@ -198,7 +198,7 @@ Record the resulting full hash as the commit field of the matching `investigatio
 - Consumes: generated endpoint/state macros from Task 1.
 - Produces: `AppleAgxRtkitSetIopPower`, `AppleAgxRtkitSetApPower`, `AppleAgxRtkitStartEndpoint`, `AppleAgxRtkitInitdata`, `AppleAgxRtkitDecodeManagement` and `AppleAgxRtkitDecodeEndpoint`.
 
-- [ ] **Step 1: Write literal codec tests**
+- [x] **Step 1: Write literal codec tests**
 
 Create a C test with these exact vectors:
 
@@ -215,7 +215,7 @@ assert(!AppleAgxRtkitDecodeEndpoint(0x100ULL, &endpoint));
 
 Also assert that a 44-bit overflow initdata address and endpoint/flag values above their bit widths return `APPLE_AGX_RTKIT_INVALID_MESSAGE` rather than truncating.
 
-- [ ] **Step 2: Add the sanitizer runner and verify RED**
+- [x] **Step 2: Add the sanitizer runner and verify RED**
 
 In `tests/test_apple_agx_firmware.py`, compile with:
 
@@ -238,7 +238,7 @@ Run:
 
 Expected: FAIL because the header and codec do not exist.
 
-- [ ] **Step 3: Implement the freestanding codec**
+- [x] **Step 3: Implement the freestanding codec**
 
 Use only project-defined unsigned types; do not include hosted C headers. Encode management type in bits `59:52`, endpoint in `39:32`, start flag in `1:0`, firmware message type in `63:48`, initdata address in `43:0`, and endpoint selector in `7:0`.
 
@@ -258,7 +258,7 @@ APPLE_AGX_RTKIT_BOOL AppleAgxRtkitDecodeEndpoint(
 
 The invalid-message sentinel is `~0ULL`; every encoder checks its input before shifting.
 
-- [ ] **Step 4: Run focused tests and verify GREEN**
+- [x] **Step 4: Run focused tests and verify GREEN**
 
 Run:
 
@@ -269,7 +269,7 @@ git diff --check
 
 Expected: literal vectors and every rejection case pass under ASan/UBSan.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add drivers/apple-agx/shared/include/apple_agx_rtkit.h drivers/apple-agx/shared/src/apple_agx_rtkit.c drivers/apple-agx/shared/tests/apple_agx_rtkit_test.c tests/test_apple_agx_firmware.py
@@ -292,7 +292,7 @@ Record the full hash in `investigation/CHANGES.csv`.
 - Consumes: endpoint and deadline macros from Task 1; RTKit codec from Task 2 through transport callbacks.
 - Produces: `APPLE_AGX_FIRMWARE`, `APPLE_AGX_FIRMWARE_IO`, `AppleAgxFirmwareInitialize`, `AppleAgxFirmwareStart`, `AppleAgxFirmwareRollback` and `AppleAgxFirmwareFail`.
 
-- [ ] **Step 1: Define the failing fake-transport suite**
+- [x] **Step 1: Define the failing fake-transport suite**
 
 The fake transport appends one byte per callback to `Trace[64]`:
 
@@ -322,7 +322,7 @@ fake.Times[3] = 2000 + J313_AGX_G2_ENDPOINT_TIMEOUT_MS + 1; /* rejected */
 
 Also test addition overflow from `~0ULL - 2`, post-callback clock regression, unknown completion bits, null callbacks and cleanup failure. Cleanup failure must end in `AppleAgxFirmwareFailed` and preserve the bit for the resource that was not released.
 
-- [ ] **Step 2: Compile the new suite and verify RED**
+- [x] **Step 2: Compile the new suite and verify RED**
 
 Extend `tests/test_apple_agx_firmware.py` with a second sanitizer compilation containing `apple_agx_firmware_test.c`, `apple_agx_firmware.c` and `apple_agx_rtkit.c`.
 
@@ -334,7 +334,7 @@ Run:
 
 Expected: FAIL because the firmware coordinator files and symbols do not exist.
 
-- [ ] **Step 3: Add the exact callback contract**
+- [x] **Step 3: Add the exact callback contract**
 
 Define ten startup operations through nine callback members and six cleanup operations through five callback members. Every operation receives an absolute deadline; endpoint callbacks also receive the generated endpoint value. The clock is called before and after every startup and cleanup operation.
 
@@ -431,7 +431,7 @@ void AppleAgxFirmwareFail(APPLE_AGX_FIRMWARE *Firmware,
                           APPLE_AGX_FIRMWARE_RESULT Result);
 ```
 
-- [ ] **Step 4: Implement ordered startup and rollback**
+- [x] **Step 4: Implement ordered startup and rollback**
 
 `AppleAgxFirmwareStart` must execute exactly:
 
@@ -469,7 +469,7 @@ touching the transport.
 
 For each cleanup operation, compute a fresh absolute deadline using `J313_AGX_G2_STOP_TIMEOUT_MS`, validate addition overflow, and reject a post-callback time beyond the deadline or below the pre-callback time. Invoke `RecordPhase` after every phase/result change; it is diagnostic-only and its return value cannot affect progress.
 
-- [ ] **Step 5: Run lifecycle and existing state tests**
+- [x] **Step 5: Run lifecycle and existing state tests**
 
 Run:
 
@@ -480,7 +480,7 @@ git diff --check
 
 Expected: all sanitizer-backed suites pass; existing queue/fence state and power broker behavior remain unchanged.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add drivers/apple-agx/shared/include/apple_agx_firmware.h drivers/apple-agx/shared/src/apple_agx_firmware.c drivers/apple-agx/shared/tests/apple_agx_firmware_test.c tests/test_apple_agx_firmware.py
@@ -501,7 +501,7 @@ Record the full hash in `investigation/CHANGES.csv`.
 - Consumes: Task 2 and Task 3 shared headers and sources.
 - Produces: an ARM64 driver package containing the offline-verified core but no call site from any DDI.
 
-- [ ] **Step 1: Write failing WDK reachability tests**
+- [x] **Step 1: Write failing WDK reachability tests**
 
 Add assertions:
 
@@ -527,7 +527,7 @@ self.assertIn("return STATUS_NOT_SUPPORTED", adapter)
 
 Retain the existing audit that forbids SGX mapping/writes outside the bounded power file.
 
-- [ ] **Step 2: Run the package test and verify RED**
+- [x] **Step 2: Run the package test and verify RED**
 
 Run:
 
@@ -537,11 +537,11 @@ Run:
 
 Expected: FAIL because the project does not list the new shared files.
 
-- [ ] **Step 3: Add only compile items**
+- [x] **Step 3: Add only compile items**
 
 Add the two sources to `<ClCompile>` and the two headers to `<ClInclude>`. Do not modify `adapter.c`, `driver.c`, the INF, feature flags, callbacks or package scripts.
 
-- [ ] **Step 4: Verify focused and canonical offline gates**
+- [x] **Step 4: Verify focused and canonical offline gates**
 
 Run:
 
@@ -557,7 +557,7 @@ git diff --check
 
 Expected: all focused tests and the full public suite pass; generator reports no stale output; `adapter.c` remains byte-identical.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add drivers/apple-agx/windows/AppleAgx.vcxproj tests/test_apple_agx_windows_package.py
@@ -578,7 +578,7 @@ Record the full hash in `investigation/CHANGES.csv`.
 - Consumes: Tasks 1 through 4 and their exact commit hashes.
 - Produces: a pushed, reproducible offline milestone and an explicit boundary for the next Windows transport/initdata plan.
 
-- [ ] **Step 1: Push the implementation commits and observe ARM64 WDK CI**
+- [x] **Step 1: Push the implementation commits and observe ARM64 WDK CI**
 
 Run:
 
@@ -591,7 +591,7 @@ gh run watch "$run_id" --exit-status
 
 Expected: both normal and qualification ARM64 build jobs pass code analysis, INF validation and signature packaging. Store the actual run ID in the plan result section when closing the task.
 
-- [ ] **Step 2: Add one CSV row per implementation commit**
+- [x] **Step 2: Add one CSV row per implementation commit**
 
 Each row must contain the full commit hash, exact changed interface, reason, pre-change reproduction, test commands, WDK run result, artifact path/hash and this hardware result:
 
@@ -599,7 +599,7 @@ Each row must contain the full commit hash, exact changed interface, reason, pre
 No Windows package was installed and no GPU hardware action occurred; EXP-123 recovery remained unchanged.
 ```
 
-- [ ] **Step 3: Run the final verification set**
+- [x] **Step 3: Run the final verification set**
 
 Run:
 
@@ -616,7 +616,7 @@ git status --short --branch
 
 Expected: all tests pass, only the known pre-existing `m1n1_windows` and `mu` submodule dirt is reported, and the branch has no unpushed root-repository change.
 
-- [ ] **Step 4: Commit and push the milestone record**
+- [x] **Step 4: Commit and push the milestone record**
 
 ```bash
 git add investigation/CHANGES.csv documentation/plans/2026-08-26-j313-agx-g2-firmware-lifecycle-core.md
@@ -624,6 +624,22 @@ git commit -m "docs: close AGX firmware lifecycle core milestone"
 git push origin feature/j313-gpu-acceleration
 ```
 
-- [ ] **Step 5: State the next explicit boundary**
+- [x] **Step 5: State the next explicit boundary**
 
 The next plan may add the Windows SGX/ASC mapping and versioned initdata builder behind a new opt-in compile flag. It must begin with source-first structure provenance, failing offline tests and a separate design review. It may not install a driver, boot firmware or connect an interrupt until a new experiment is preregistered against exact EXP-123 recovery and requires zero Event 129.
+
+## Result
+
+Completed on 2026-08-26 as an offline-only milestone.
+
+- Generated lifecycle contract: `7a0e8f29b0eb8388534a6492fb53e313995fa4c4`.
+- Bounded RTKit codec: `1c85c657e3d94b9ddab226da17aedb92a4b63c11`.
+- Fail-closed lifecycle coordinator: `5411e4b1f9d8c55053665fbd5a6c3041b5fe298a`.
+- Compile-only ARM64 WDK integration: `7e9ece504621ce5b707688ed35f023b7ebbc4eec`.
+- Focused final gate: 48/48 tests passed.
+- Complete public regression gate: 670/670 tests passed.
+- Deterministic generated-contract check and `git diff --check` passed.
+- GitHub Actions run `33017120072` passed both the default and power-qualification ARM64 WDK jobs, including code analysis, package signing checks and artifact upload.
+- No driver package was installed, no GPU firmware was started, no interrupt was connected and no guest or hardware state changed. The active recovery remains EXP-123.
+
+The next authorized design unit is the Windows SGX/ASC mapping plus a versioned initdata builder behind an opt-in compile flag. Hardware execution remains prohibited until that work receives its own design, preregistered experiment and zero-Event-129 storage gate.
