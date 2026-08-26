@@ -133,24 +133,28 @@ def verify_dsl(dsl, contract=None):
     crs = _balanced(device, crs_match)
 
     qwords = list(re.finditer(r"\bQWordMemory\s*\(", crs))
-    if len(qwords) != 1:
+    expected_resources = tuple(contract.acpi_mmio) + tuple(contract.synthetic_mmio)
+    if len(qwords) != len(expected_resources):
         raise AmlContractError(
-            f"_CRS must contain exactly one QWordMemory; found {len(qwords)}"
+            f"_CRS must contain exactly {len(expected_resources)} QWordMemory; "
+            f"found {len(qwords)}"
         )
-    qword = _balanced(crs, qwords[0], "(", ")")
-    qword_flags = [part.strip() for part in qword.split(",")[:6]]
-    if qword_flags != [
-        "ResourceConsumer", "PosDecode", "MinFixed", "MaxFixed",
-        "NonCacheable", "ReadWrite",
-    ]:
-        raise AmlContractError("QWordMemory flags do not match the G2 contract")
-    numbers = [_integer(value) for value in re.findall(r"0[xX][0-9A-Fa-f]+|\b[0-9]+\b", qword)]
-    _, base, size = contract.acpi_mmio[0]
-    expected_mmio = [0, base, base + size - 1, 0, size]
-    if numbers != expected_mmio:
-        raise AmlContractError(
-            f"MMIO descriptor {numbers!r} does not match {expected_mmio!r}"
-        )
+    for match, (_, base, size) in zip(qwords, expected_resources):
+        qword = _balanced(crs, match, "(", ")")
+        qword_flags = [part.strip() for part in qword.split(",")[:6]]
+        if qword_flags != [
+            "ResourceConsumer", "PosDecode", "MinFixed", "MaxFixed",
+            "NonCacheable", "ReadWrite",
+        ]:
+            raise AmlContractError("QWordMemory flags do not match the G2 contract")
+        numbers = [_integer(value) for value in re.findall(
+            r"0[xX][0-9A-Fa-f]+|\b[0-9]+\b", qword
+        )]
+        expected_mmio = [0, base, base + size - 1, 0, size]
+        if numbers != expected_mmio:
+            raise AmlContractError(
+                f"MMIO descriptor {numbers!r} does not match {expected_mmio!r}"
+            )
 
     interrupt_matches = list(re.finditer(r"\bInterrupt\s*\(", crs))
     if len(interrupt_matches) != len(contract.interrupt_routes):

@@ -36,6 +36,9 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertEqual(contract.mmio_subregions, (
             ("asc_mmio", 0x206400000, 0x6C000),
         ))
+        self.assertEqual(contract.synthetic_mmio, (
+            ("power_broker", 0x300000000, 0x1000),
+        ))
         self.assertEqual(
             tuple(route.physical for route in contract.interrupt_routes),
             (563, 564, 565, 566, 579, 576, 575, 578, 577),
@@ -63,10 +66,12 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertIn("0x0000000204000000", rendered)
         self.assertIn("0x0000000207FFFFFF", rendered)
         self.assertIn("0x0000000004000000", rendered)
+        self.assertIn("0x0000000300000000", rendered)
+        self.assertIn("0x0000000000001000", rendered)
         self.assertEqual(rendered.count("Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive)"), 9)
         for guest in range(880, 889):
             self.assertIn(f"{{ {guest} }}", rendered)
-        self.assertIn('"agx-contract-version", One', rendered)
+        self.assertIn('"agx-contract-version", 0x02', rendered)
         self.assertIn(
             f'"agx-source-contract-sha256", "{contract.source_contract_sha256}"',
             rendered,
@@ -88,6 +93,8 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertIn(contract.source_contract_sha256, rendered)
         self.assertIn("#define HV_AGX_G2_SGX_MMIO_BASE 0x204000000ULL", rendered)
         self.assertIn("#define HV_AGX_G2_SGX_MMIO_SIZE 0x4000000ULL", rendered)
+        self.assertIn("#define HV_AGX_G2_POWER_BROKER_BASE 0x300000000ULL", rendered)
+        self.assertIn("#define HV_AGX_G2_POWER_BROKER_SIZE 0x1000ULL", rendered)
         self.assertIn("#define HV_AGX_G2_INTERRUPT_ROUTE_COUNT 9u", rendered)
         for route in contract.interrupt_routes:
             self.assertIn(
@@ -145,6 +152,18 @@ class J313AgxG2ContractTests(unittest.TestCase):
         _, asc_base, asc_size = contract.mmio_subregions[0]
         self.assertGreaterEqual(asc_base, aperture_base)
         self.assertLessEqual(asc_base + asc_size, aperture_base + aperture_size)
+
+    def test_power_broker_is_fixed_page_in_the_reviewed_guest_hole(self):
+        data = json.loads(G2.read_text())
+        for key, bad in (("base", 0x204000000), ("base", 0x300001000),
+                         ("size", 0x2000)):
+            mutated = json.loads(json.dumps(data))
+            mutated["synthetic_mmio_regions"]["power_broker"][key] = bad
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "g2.json"
+                path.write_text(json.dumps(mutated))
+                with self.assertRaisesRegex(G2ContractError, "power broker"):
+                    load_g2_contract(path, G1)
 
     def test_runtime_context_and_queue_are_fixed(self):
         for key, bad in (("context_id", 0), ("queue_index", 2),

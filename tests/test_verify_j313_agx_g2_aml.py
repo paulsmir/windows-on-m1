@@ -46,13 +46,19 @@ class J313AgxG2AmlVerifierTests(unittest.TestCase):
         )
 
     def test_duplicate_or_changed_mmio_resource_is_rejected(self):
-        qword = self.valid[self.valid.index("        QWordMemory"):self.valid.index("        Interrupt")]
+        first = self.valid.index("        QWordMemory")
+        second = self.valid.index("        QWordMemory", first + 1)
+        qword = self.valid[first:second]
         self.assert_rejected(
             self.valid.replace(qword, qword + qword),
             "QWordMemory",
         )
         self.assert_rejected(
             self.valid.replace("0x0000000204000000", "0x0000000204004000"),
+            "MMIO",
+        )
+        self.assert_rejected(
+            self.valid.replace("0x0000000300000000", "0x0000000300001000"),
             "MMIO",
         )
 

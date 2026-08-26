@@ -90,6 +90,10 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn(generated, resources)
         self.assertIn("J313_AGX_G2_SGX_MMIO_BASE", resources)
         self.assertIn("J313_AGX_G2_SGX_MMIO_SIZE", resources)
+        self.assertIn("J313_AGX_G2_POWER_BROKER_BASE", resources)
+        self.assertIn("J313_AGX_G2_POWER_BROKER_SIZE", resources)
+        self.assertIn("seenSgxMemory", resources)
+        self.assertIn("seenPowerBrokerMemory", resources)
         self.assertIn("J313_AGX_G2_INTERRUPT_ROUTE_COUNT", resources)
         self.assertIn("CmResourceTypeMemory", resources)
         self.assertIn("CmResourceTypeInterrupt", resources)
@@ -105,13 +109,40 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         )
 
     def test_sources_contain_no_gpu_write_path(self):
-        sources = "\n".join(path.read_text() for path in
-                            sorted((WINDOWS / "src").glob("*.c")))
+        sources = "\n".join(
+            path.read_text()
+            for path in sorted((WINDOWS / "src").glob("*.c"))
+            if path.name != "power.c"
+        )
         for unsafe in (
             "WRITE_REGISTER", "MmMapIoSpace", "MmMapIoSpaceEx",
             "DxgkCbMapMemory", "DxgkCbSynchronizeExecution",
         ):
             self.assertNotIn(unsafe, sources)
+
+    def test_power_qualification_is_opt_in_bounded_and_always_unmapped(self):
+        adapter = self.read("src/adapter.c")
+        power = self.read("src/power.c")
+        project = self.read("AppleAgx.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+
+        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", adapter)
+        self.assertIn("AppleAgxQualifyPowerBroker", adapter)
+        self.assertIn("AppleAgxPowerQualification", project)
+        self.assertIn("APPLE_AGX_G2_POWER_QUALIFICATION=1", project)
+        self.assertIn("[switch]$PowerQualification", build)
+        self.assertIn("/p:AppleAgxPowerQualification=$qualification", build)
+
+        self.assertIn("DxgkCbMapMemory", power)
+        self.assertIn("DxgkCbUnmapMemory", power)
+        self.assertIn("AppleAgxPowerQualify", power)
+        self.assertIn("J313_AGX_G2_POWER_BROKER_SIZE", power)
+        self.assertNotIn("J313_AGX_G2_SGX_MMIO_BASE", power)
+        self.assertNotIn("MmMapIoSpace", power)
+        self.assertLess(power.index("DxgkCbMapMemory"),
+                        power.index("AppleAgxPowerQualify"))
+        self.assertLess(power.index("AppleAgxPowerQualify"),
+                        power.rindex("DxgkCbUnmapMemory"))
 
     def test_project_is_arm64_wdm_and_packages_inf(self):
         project = self.read("AppleAgx.vcxproj")

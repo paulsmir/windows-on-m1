@@ -14,6 +14,7 @@
 // clang-format on
 
 #include "apple_agx_state.h"
+#include "apple_agx_power.h"
 
 #define APPLE_AGX_POOL_TAG 'xgAA'
 
@@ -39,5 +40,11 @@ DXGKDDI_QUERYADAPTERINFO AppleAgxDdiQueryAdapterInfo;
 
 NTSTATUS
 AppleAgxValidateTranslatedResources(_In_ PCM_RESOURCE_LIST TranslatedResources);
+NTSTATUS AppleAgxGetPowerBrokerAddress(
+    _In_ PCM_RESOURCE_LIST TranslatedResources,
+    _Out_ PPHYSICAL_ADDRESS PowerBrokerAddress);
+NTSTATUS AppleAgxQualifyPowerBroker(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _In_ PHYSICAL_ADDRESS PowerBrokerAddress);
 
 #endif /* APPLE_AGX_DRIVER_H */

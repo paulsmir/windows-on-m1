@@ -1,6 +1,6 @@
 {
   "acpi_hid": "APPL0002",
-  "contract_version": 1,
+  "contract_version": 2,
   "interrupt_routes": [
     { "guest": 880, "physical": 563 },
     { "guest": 881, "physical": 564 },
@@ -18,6 +18,12 @@
   "mmio_subregions": [
     "asc_mmio"
   ],
+  "synthetic_mmio_regions": {
+    "power_broker": {
+      "base": 12884901888,
+      "size": 4096
+    }
+  },
   "platform": "J313",
   "runtime": {
     "context_id": 63,

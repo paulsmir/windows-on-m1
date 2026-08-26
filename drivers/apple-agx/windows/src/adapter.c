@@ -47,10 +47,26 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   if (!AppleAgxStateValidateResources(&adapter->State))
     return STATUS_INVALID_DEVICE_STATE;
 
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  {
+    PHYSICAL_ADDRESS powerBrokerAddress;
+
+    status = AppleAgxGetPowerBrokerAddress(deviceInfo.TranslatedResourceList,
+                                            &powerBrokerAddress);
+    if (NT_SUCCESS(status))
+      status = AppleAgxQualifyPowerBroker(DxgkInterface,
+                                          powerBrokerAddress);
+    if (!NT_SUCCESS(status)) {
+      AppleAgxStateInitialize(&adapter->State);
+      return status;
+    }
+  }
+#endif
+
   /*
-   * G2 Task 3 is intentionally enumeration-only.  It validates the immutable
-   * resource contract but refuses to start until firmware, UAT, queue and TDR
-   * ownership are implemented.  In particular, this path performs no MMIO.
+   * This remains enumeration-only.  A qualification build may execute the
+   * bounded ON/QUERY/OFF broker receipt above, but firmware, UAT, queues and
+   * render callbacks remain unavailable.
    */
   AppleAgxStateInitialize(&adapter->State);
   return STATUS_NOT_SUPPORTED;
