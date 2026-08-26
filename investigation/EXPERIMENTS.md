@@ -11536,3 +11536,27 @@ zero-status receipts, the generated SGX/ASC geometry, responsive eight-core
 Windows, working AppleInput/NVMe/xHCI, zero Event 129, zero critical events,
 normal shutdown and exact non-force rollback. Any mismatch rejects the run
 without retry.
+
+Observed result (`2026-08-26T23:23:30Z` candidate collection): the one
+permitted G2 boot reached responsive eight-core Windows and bound the exact
+package as `oem17.inf`. AppleInput, stornvme and USBXHCI were Running; critical
+events and Event 129 were both zero. PnP nevertheless stopped before the MMIO
+boundary with Problem 31 (`CM_PROB_FAILED_ADD`) and ProblemStatus
+`0xC0000182` (`STATUS_DEVICE_CONFIGURATION_ERROR`). Map, ASC subview and unmap
+receipts were absent. Persistent stage-7 values were identified as stale from
+an earlier power-qualification package and were excluded from this verdict.
+
+The forbidden-action audit remained empty: no pointer dereference, GPU
+register access, firmware, RTKit, interrupt connection, active UAT, queue,
+command, render, present or display ownership occurred. The candidate shut
+down normally without retry. Exact recovery removed only `oem17.inf` and
+signer `A40D8EC7010BB5D4E14792C360737F79F79D0151` without `/force`. Its first
+boot recorded six stornvme Event 129 resets and failed the recovery gate. The
+required cleanup boot then proved eight CPUs, no package, signer, service or
+present APPL0002, Running input/NVMe/xHCI, zero critical events and zero Event
+129 through the final quiet window.
+
+EXP-128 is rejected, closed and must not be retried. The next authorized work
+is offline diagnostic parity for MMIO qualification and localization of the
+pre-map `STATUS_DEVICE_CONFIGURATION_ERROR`; no further hardware action is
+authorized by this result.

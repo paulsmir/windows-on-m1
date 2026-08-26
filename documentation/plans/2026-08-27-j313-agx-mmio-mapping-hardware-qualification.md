@@ -53,23 +53,23 @@ display ownership remain forbidden.
 
 ## Procedure
 
-- [ ] Revalidate every package, firmware and recovery hash; require the
+- [x] Revalidate every package, firmware and recovery hash; require the
       evidence path absent.
-- [ ] Require a responsive recovery baseline with eight CPUs, no present
+- [x] Require a responsive recovery baseline with eight CPUs, no present
       APPL0002/AppleAgx package or signer, Running AppleInput, stornvme and
       USBXHCI, zero critical events and zero Event 129 in the quiet window.
-- [ ] Stage only the exact package and record its new `oemNN.inf` identity.
-- [ ] Shut down normally and launch one exact G2 candidate with display
+- [x] Stage only the exact package and record its new `oemNN.inf` identity.
+- [x] Shut down normally and launch one exact G2 candidate with display
       `both`, monitor logging and no power-broker qualification flag.
-- [ ] Collect the exact map, subview and unmap receipts and require the final
+- [x] Collect the exact map, subview and unmap receipts and require the final
       fail-closed state.
-- [ ] Require zero GPU register access, firmware, RTKit, interrupt connection,
+- [x] Require zero GPU register access, firmware, RTKit, interrupt connection,
       active UAT, queue, command, render, present or display ownership.
-- [ ] Require responsive Windows, eight CPUs, working NVMe/USB/internal input,
+- [x] Require responsive Windows, eight CPUs, working NVMe/USB/internal input,
       zero Event 129 and zero critical events.
-- [ ] Shut down normally, boot exact recovery, remove only the recorded
+- [x] Shut down normally, boot exact recovery, remove only the recorded
       package and exact signer without `/force`, and perform the cleanup boot.
-- [ ] Require clean recovery, hash the bounded evidence, record one verdict
+- [x] Require clean recovery, hash the bounded evidence, record one verdict
       and close the experiment without retry.
 
 ## Falsifiable result
@@ -81,3 +81,17 @@ rollback succeed. Any map/subview/unmap failure, missing or mismatched receipt,
 register read or write, firmware start, new PnP problem outside the expected
 fail-closed APPL0002 state, storage reset, forced recovery, identity mismatch
 or second G2 boot rejects the experiment and authorizes no retry.
+
+## Result
+
+Rejected without retry. The exact package bound as `oem17.inf`, but the sole
+G2 boot stopped with PnP Problem 31 and ProblemStatus `0xC0000182` before any
+fresh MMIO receipt was written. Windows otherwise remained responsive with
+eight CPUs, working input/NVMe/xHCI, zero critical events and zero Event 129.
+No forbidden GPU action occurred.
+
+Recovery removed only the recorded package and signer without `/force`. Its
+first boot recorded six Event 129 resets and failed the health gate; the
+required cleanup boot ended clean with zero Event 129. EXP-128 is closed and
+must not be retried. The next step is offline diagnostic parity between power
+and MMIO qualification profiles, not another hardware boot.
