@@ -10930,6 +10930,13 @@ binding, resource and liveness evidence. No broker command or GPU firmware,
 RTKit, SGX MMIO, interrupt, UAT, queue, command, render or display operation is
 authorized. No mutation has occurred for EXP-120 at preregistration time.
 
+Correction (`2026-08-26T19:24:43Z`): EXP-120 is superseded unexecuted and may
+not be launched. Its pinned m1n1 `035b8ab` contains the one-CQE virtual-NVMe
+policy that EXP-122 proved can produce a 100%-disk Storport timeout/reset storm.
+Substituting a new binary under the old manifest would violate its identity
+contract. EXP-124 retains the exact driver, Mu, ACPI and fail-closed boundary
+while pinning the hardware-validated `bee53dc` storage correction.
+
 ### EXP-20260826-121 — Stable USB runtime failure localization
 
 Status: preregistered at `2026-08-26T18:35:59Z`.  This experiment is separate
@@ -11140,3 +11147,50 @@ the 100%-disk Storport timeout/reset storm under boot and the controlled 512
 MiB queue workload without recreating timer starvation.  The immutable stable
 recovery pair remains unchanged.  Longer soak testing is still required before
 calling this a release or replacing the recovery artifact.
+
+### EXP-20260826-124 — J313 AGX DriverEntry NVMe-safe qualification
+
+Status: preregistered at `2026-08-26T19:24:43Z` for one execution. The full
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-driverentry-nvme-safe-qualification.md`.
+This is not a retry of EXP-119 or EXP-120. EXP-120 never mutated Windows or
+hardware and is superseded. Relative to its intended G2 run, the sole platform
+change is clean m1n1 `bee53dc60bd160c0a64de758974af767c2970baf`, whose bounded
+virtual-NVMe completion batching passed EXP-123. The qualification driver,
+G2 Mu firmware, AGX SSDT, ACPI resources, synthetic broker and every forbidden
+GPU boundary remain byte-for-byte unchanged.
+
+Mandatory cleanup completed before preregistration. Old EXP-119 `oem17.inf`
+required the already permitted non-force `/uninstall` fallback because the
+stopped device association remained; deletion then succeeded. Only signer
+`DC81FF63FD2FFE8CDE24F95052C45BB7C0006731` was removed from Root and
+TrustedPublisher. No `/force` option was used. Final read-only preflight proved
+8 processors; `AppleInput`, `stornvme` and `USBXHCI` Running; zero present
+APPL0002, AppleAgx package and pinned signer; zero critical event and zero
+`stornvme` Event 129. Cleanup evidence SHA-256 is
+`365430147d4d535eb83da316052e33a25f65996370eabcfcb3167deb96748593`.
+
+Pinned root state is branch `feature/j313-gpu-acceleration`, commit
+`1fed6774889888b75708595c0db416fbfa485c74`; m1n1 commit
+`bee53dc60bd160c0a64de758974af767c2970baf`; Mu commit
+`c6108366201f869b297912a0ef8323b343256ecc`. The exact candidate profile is
+`.local/agx-power-exp124-profile/`, manifest SHA-256
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`,
+with m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`,
+Mu SHA-256 `70b216c01f3d7acd77b2c24d0a3dc4fa0cccefec631031a413a301d271f6c064`
+and SSDT SHA-256
+`a6f8f4911030c23b61a2ed8c3a300d1ca438af74accc41e624918930ef55f65b`.
+The unchanged signed driver manifest SHA-256 is
+`6cf7321e32849418a4dbac70cc027db0fedb4b5ab3fbadf6c3b325357c8262ca`
+and signer is `442D150255F1F27A6D10CFD8E4BF5F35E8AD28BB`.
+
+The one allowed action stages only that exact package, performs one manifest-
+verified G2 boot with `WOM1_AGX_G2_POWER_BROKER=1`, reads persistent
+`Wom1DriverEntryStage` and `Wom1DxgkInitializeStatus`, captures binding and
+liveness evidence, then shuts down and restores immutable stable firmware.
+No GPU firmware, RTKit, SGX MMIO, interrupt, UAT, queue, command, render,
+present or display-ownership action is permitted. Evidence path
+`investigation/artifacts/EXP-20260826-124-agx-driverentry-nvme-safe/` was absent
+at preregistration. Any mismatch, forbidden action, BugCheck, reset, storage
+timeout, input loss or missing evidence rejects the run without retry.
