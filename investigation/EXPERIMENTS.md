@@ -10094,3 +10094,67 @@ teach the identity reader to support the real `ProxyUtils.proxy` topology while
 retaining direct-proxy compatibility, with a failing wrapper-shaped unit test
 before implementation.  EXP-110 remains immutable and its evidence directory
 must never be reused.
+
+### EXP-20260826-111 — real ProxyUtils identity ten-cold qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: reading the immutable boot cookie from the real
+`ProxyUtils.proxy.get_boot_cookie` transport will preserve the successful AGX
+behavior observed in EXP-110 and allow all ten renders and reset receipts to
+meet the cookie-bound evidence contract.
+
+Single changed variable relative to rejected EXP-110: the host identity adapter
+supports the real two-layer `ProxyUtils` object while retaining direct-proxy
+compatibility.  Candidate, recovery, Mu, m1n1, device-display ownership,
+fixture, renderer schema, AGX commands, mappings, queue, deadlines, resets and
+all acceptance rules are byte-for-byte unchanged.  EXP-110 evidence is
+immutable and is not reused.
+
+Contract:
+- root preregistration base `8e6ea816a568a6f0e4ab707567dbb58f3debae7b`,
+  identity implementation `2d5521bd2a1f66faf340ecdc6cf0cefc6e623662`,
+  m1n1 runtime `f76b63ade8756571acd91400283ee68b2f1d65ce` and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- identity adapter and wrapper-shaped regression test SHA-256 are
+  `0a34303a5a6f7e9a7d667c480a81ccbb307aa8d11368b850347f903daa861dec`
+  and `a42a769124c6abefe2ad89b34be1a51bb76c969b9229181ecfae38f70c5bae98`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- unchanged read-only `.local/agx-bootargs-candidate/` boot, stage-zero,
+  stage-one, assisted m1n1 and Mu SHA-256 are
+  `2ade878b9e973d4a489cb77f3449c62160a84385c02ed9c40da88432487b1206`,
+  `cf0bb1e370bf12cf814d41a7d08fbc6d4854bc38cda9da79c62d114841b82d8d`,
+  `c744f2dd78452221698079f11db501fedc97bf33624541f84659ae8b68aebbb6`,
+  `985b419ebe55f5977376008318553d8ac291ab892d773a8c278a542f4d8836d0`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- the wrapper-shaped regression test failed before implementation.  Afterward
+  39 focused tests and the fresh complete public suite passed 607/607;
+- stable recovery again passed all five checksums and was not modified.  The
+  exact dry-run accepted all ten cycles and no Windows launch.  Evidence
+  destination
+  `investigation/artifacts/EXP-20260826-111-agx-g1r-identity-final/` was absent
+  at preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-bootargs-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-111-agx-g1r-identity-final \
+  --cycles 10
+```
+
+Pass requires the unchanged EXP-110 contract: exact display bypass before each
+render, one initial normalization reset, ten complete G1R results, ten
+post-cycle physical resets, ten cookie-bound receipts, ten globally distinct
+pre-render cookies and proxy identities, canonical result bindings, accepted
+aggregate and independent verification.  Any failure rejects EXP-111; preserve
+all evidence, never retry it in place and keep Windows blocked.
