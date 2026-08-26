@@ -10467,3 +10467,66 @@ interrupt, UAT, queue, command, power or display-ownership activity.
 Pass authorizes only preregistration of a separate one-shot G2 bind experiment.
 It does not authorize that bind, StartDevice or any GPU hardware access.  One
 new explicit user approval is required before executing EXP-114.
+
+Observed result:
+- the approved execution stopped during the read-only baseline, before any
+  certificate import or Driver Store command;
+- stable Windows had eight logical processors, AppleInput `Running`, healthy
+  `ACPI\APPL0001\0`, no AppleAgx service or package, neither test-certificate
+  store entry and no critical System event since boot;
+- the unfiltered PnP inventory retained exactly one historical
+  `ACPI\APPL0002\0` record from EXP-113.  A dedicated query proved
+  `PresentOnlyCount=0`, `DEVPKEY_Device_IsPresent=false`, `Present=false` and
+  Problem 45.  Stable firmware therefore did not publish a live GPU device,
+  but the literal preregistered requirement of zero devnode records was false;
+- evidence is preserved at
+  `investigation/artifacts/EXP-20260826-114-agx-driver-store-stage/`; its
+  checksum index SHA-256 is
+  `9d1cc56ad302a00c888d889df08ef9ca7f734ba7e96d30aa01c65961f9f48d95`.
+
+Verdict: rejected safely before mutation.  No certificate, OEM INF, service,
+module, firmware, device, MMIO, interrupt or GPU state changed.  EXP-114 may
+not be retried.  A successor must distinguish present devices from the exact
+historical Problem-45 devnode instead of silently weakening this contract.
+
+### EXP-20260826-115 — corrected AppleAgx stage-only qualification
+
+Status: preregistered; hardware execution not approved.  This successor keeps
+the exact EXP-114 candidate and every mutation/rollback limit, but corrects
+only the stable PnP baseline using the evidence obtained before mutation.
+
+Candidate contract is unchanged from EXP-114: root source
+`5102957b644be72700e493a5af7fc2af0821cdab`, implementation source
+`37e801cb087e2b9c4ec1a805b84f444e3e55fe16`, WDK run `32963862166`, read-only
+candidate `.local/agx-driver-stage-exp114/`, manifest SHA-256
+`ee9ac4532e4432e2b4e7faedc70ef1f101efd454f1db8f236fbb2710b26e217d`
+and checksum-index SHA-256
+`4e4ff25513bb56b8567996d30b264c6686119d3423386345aa9522caf2a6737e`.
+All file and signer identities remain exactly those recorded in EXP-114.
+
+Corrected baseline and execution contract:
+- evidence destination
+  `investigation/artifacts/EXP-20260826-115-agx-driver-store-stage/` must be
+  absent and may be created exactly once;
+- stable Windows must have zero present APPL0002 devices and exactly one
+  historical `ACPI\APPL0002\0` record with `Present=false`,
+  `DEVPKEY_Device_IsPresent=false`, Status `Unknown`, no class or friendly
+  name and Problem 45.  Any different count or property rejects the run;
+- no AppleAgx service, package, module, Root certificate or TrustedPublisher
+  certificate may exist.  Eight logical processors, AppleInput `Running`,
+  healthy APPL0001, responsive SSH and no new critical event remain mandatory;
+- recompute the exact six candidate hashes on Windows, import only the exact
+  certificate into the two named stores, require catalog signature `Valid`
+  with thumbprint `7772864CB7326B7BFDA2C81C12D07CEF64135A57`, and invoke only
+  the hashed stage-only script without `/install` or device restart;
+- after staging, require one new AppleAgx OEM INF, no present APPL0002, the
+  same unchanged Problem-45 historical record, no AppleAgx service or loaded
+  module, unchanged display inventory, eight CPUs, healthy input and SSH;
+- remove only the recorded new OEM INF with the hashed non-force rollback
+  script, then remove only the exact certificate from the two stores.  Final
+  state must reproduce the corrected baseline exactly.  No reboot is allowed.
+
+Every EXP-114 stop rule and forbidden AGX hardware action remains in force.
+Pass authorizes only a new preregistration for G2 binding; it does not authorize
+G2, StartDevice, MMIO, firmware, interrupts, queues, power or display control.
+A new explicit user approval is required before executing EXP-115.
