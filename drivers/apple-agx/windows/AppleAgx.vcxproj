@@ -10,6 +10,7 @@
     <RootNamespace>AppleAgx</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <AppleAgxPowerQualification Condition="'$(AppleAgxPowerQualification)'==''">false</AppleAgxPowerQualification>
+    <AppleAgxMmioQualification Condition="'$(AppleAgxMmioQualification)'==''">false</AppleAgxMmioQualification>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
@@ -34,17 +35,24 @@
       <PreprocessorDefinitions>APPLE_AGX_G2_POWER_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxMmioQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_MMIO_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\driver.c" />
     <ClCompile Include="src\adapter.c" />
     <ClCompile Include="src\resources.c" />
     <ClCompile Include="src\power.c" />
+    <ClCompile Include="src\mmio.c" />
     <ClCompile Include="src\diagnostics.c" />
     <ClCompile Include="src\driver_diagnostics.c" />
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />
     <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
     <ClCompile Include="..\shared\src\apple_agx_firmware.c" />
+    <ClCompile Include="..\shared\src\apple_agx_mapping.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_agx_driver.h" />
@@ -52,6 +60,8 @@
     <ClInclude Include="..\shared\include\apple_agx_power.h" />
     <ClInclude Include="..\shared\include\apple_agx_rtkit.h" />
     <ClInclude Include="..\shared\include\apple_agx_firmware.h" />
+    <ClInclude Include="..\shared\include\apple_agx_mapping.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat.h" />
     <ClInclude Include="..\shared\include\j313_agx_g2.generated.h" />
   </ItemGroup>
   <ItemGroup>

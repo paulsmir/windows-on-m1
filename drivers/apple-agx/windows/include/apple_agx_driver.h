@@ -15,12 +15,20 @@
 
 #include "apple_agx_state.h"
 #include "apple_agx_power.h"
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#include "apple_agx_mapping.h"
+#endif
 
 #define APPLE_AGX_POOL_TAG 'xgAA'
 
 typedef struct _APPLE_AGX_ADAPTER {
   PDEVICE_OBJECT PhysicalDeviceObject;
   APPLE_AGX_STATE State;
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+  APPLE_AGX_MAPPING_STATE MappingState;
+  DXGKRNL_INTERFACE DxgkInterface;
+  BOOLEAN DxgkInterfaceValid;
+#endif
 } APPLE_AGX_ADAPTER;
 
 typedef enum _APPLE_AGX_ADD_STAGE {
@@ -61,6 +69,14 @@ NTSTATUS AppleAgxGetPowerBrokerAddress(
 NTSTATUS AppleAgxQualifyPowerBroker(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _In_ PHYSICAL_ADDRESS PowerBrokerAddress);
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+NTSTATUS AppleAgxQualifyMmioMapping(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _Out_ APPLE_AGX_MAPPING_STATE *MappingState);
+NTSTATUS AppleAgxReleaseMmioMapping(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _Inout_ APPLE_AGX_MAPPING_STATE *MappingState);
+#endif
 void AppleAgxLogStartStage(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ APPLE_AGX_START_STAGE Stage,
                            _In_ NTSTATUS Status);

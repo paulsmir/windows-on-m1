@@ -121,6 +121,23 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   }
 #endif
 
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+  adapter->DxgkInterface = *DxgkInterface;
+  adapter->DxgkInterfaceValid = TRUE;
+  status = AppleAgxQualifyMmioMapping(&adapter->DxgkInterface,
+                                      &adapter->MappingState);
+  if (NT_SUCCESS(status)) {
+    status = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
+                                        &adapter->MappingState);
+  }
+  if (!NT_SUCCESS(status)) {
+    AppleAgxStateInitialize(&adapter->State);
+    return status;
+  }
+  RtlZeroMemory(&adapter->DxgkInterface, sizeof(adapter->DxgkInterface));
+  adapter->DxgkInterfaceValid = FALSE;
+#endif
+
   /*
    * This remains enumeration-only.  A qualification build may execute the
    * bounded ON/QUERY/OFF broker receipt above, but firmware, UAT, queues and
@@ -138,20 +155,42 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
 _Use_decl_annotations_ NTSTATUS
 AppleAgxDdiStopDevice(PVOID MiniportDeviceContext) {
   APPLE_AGX_ADAPTER *adapter = (APPLE_AGX_ADAPTER *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_SUCCESS;
   if (adapter == NULL)
     return STATUS_INVALID_PARAMETER;
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+  if (adapter->DxgkInterfaceValid) {
+    status = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
+                                        &adapter->MappingState);
+    if (!NT_SUCCESS(status))
+      return status;
+    RtlZeroMemory(&adapter->DxgkInterface, sizeof(adapter->DxgkInterface));
+    adapter->DxgkInterfaceValid = FALSE;
+  }
+#endif
   AppleAgxStateInitialize(&adapter->State);
-  return STATUS_SUCCESS;
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS
 AppleAgxDdiRemoveDevice(PVOID MiniportDeviceContext) {
   APPLE_AGX_ADAPTER *adapter = (APPLE_AGX_ADAPTER *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_SUCCESS;
   if (adapter == NULL)
     return STATUS_INVALID_PARAMETER;
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+  if (adapter->DxgkInterfaceValid) {
+    status = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
+                                        &adapter->MappingState);
+    if (!NT_SUCCESS(status))
+      return status;
+    RtlZeroMemory(&adapter->DxgkInterface, sizeof(adapter->DxgkInterface));
+    adapter->DxgkInterfaceValid = FALSE;
+  }
+#endif
   AppleAgxStateInitialize(&adapter->State);
   ExFreePoolWithTag(adapter, APPLE_AGX_POOL_TAG);
-  return STATUS_SUCCESS;
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS
@@ -214,8 +253,17 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiSetPowerState(
 _Use_decl_annotations_ VOID
 AppleAgxDdiResetDevice(PVOID MiniportDeviceContext) {
   APPLE_AGX_ADAPTER *adapter = (APPLE_AGX_ADAPTER *)MiniportDeviceContext;
-  if (adapter != NULL)
+  if (adapter != NULL) {
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+    if (adapter->DxgkInterfaceValid &&
+        NT_SUCCESS(AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
+                                              &adapter->MappingState))) {
+      RtlZeroMemory(&adapter->DxgkInterface, sizeof(adapter->DxgkInterface));
+      adapter->DxgkInterfaceValid = FALSE;
+    }
+#endif
     AppleAgxStateInitialize(&adapter->State);
+  }
 }
 
 _Use_decl_annotations_ VOID AppleAgxDdiUnload(VOID) {}

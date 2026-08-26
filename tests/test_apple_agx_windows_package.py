@@ -212,13 +212,40 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         sources = "\n".join(
             path.read_text()
             for path in sorted((WINDOWS / "src").glob("*.c"))
-            if path.name != "power.c"
+            if path.name not in ("power.c", "mmio.c")
         )
         for unsafe in (
             "WRITE_REGISTER", "MmMapIoSpace", "MmMapIoSpaceEx",
             "DxgkCbMapMemory", "DxgkCbSynchronizeExecution",
         ):
             self.assertNotIn(unsafe, sources)
+
+    def test_mmio_qualification_is_opt_in_inert_and_fail_closed(self):
+        adapter = self.read("src/adapter.c")
+        mmio_path = WINDOWS / "src" / "mmio.c"
+        project = self.read("AppleAgx.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+
+        self.assertTrue(mmio_path.exists())
+        mmio = mmio_path.read_text()
+        self.assertIn("AppleAgxMmioQualification", project)
+        self.assertIn("APPLE_AGX_G2_MMIO_QUALIFICATION=1", project)
+        self.assertIn(r"src\mmio.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_mapping.c", project)
+        self.assertIn("#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION", adapter)
+        self.assertIn("AppleAgxQualifyMmioMapping", adapter)
+        self.assertIn("[switch]$MmioQualification", build)
+        self.assertIn(
+            "/p:AppleAgxMmioQualification=$mmioQualification", build
+        )
+        self.assertIn("DxgkCbMapMemory", mmio)
+        self.assertIn("DxgkCbUnmapMemory", mmio)
+        self.assertNotIn("READ_REGISTER", mmio)
+        self.assertNotIn("WRITE_REGISTER", mmio)
+        self.assertNotIn("MmMapIoSpace", mmio)
+        self.assertIn("*NumberOfVideoPresentSources = 0", adapter)
+        self.assertIn("*NumberOfChildren = 0", adapter)
+        self.assertIn("return STATUS_NOT_SUPPORTED", adapter)
 
     def test_power_qualification_is_opt_in_bounded_and_always_unmapped(self):
         adapter = self.read("src/adapter.c")
