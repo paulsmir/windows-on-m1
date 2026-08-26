@@ -1,0 +1,47 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=Display
+ClassGuid={4d36e968-e325-11ce-bfc1-08002be10318}
+Provider=%ProviderName%
+DriverVer=08/26/2026,0.1.0.0
+CatalogFile=AppleAgx.cat
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=AppleAgxModels,NTarm64
+
+[AppleAgxModels.NTarm64]
+%DeviceName%=AppleAgx_Install,ACPI\APPL0002
+
+[AppleAgx_Install]
+CopyFiles=AppleAgx.CopyFiles
+FeatureScore=F9
+
+[AppleAgx_Install.Services]
+AddService=AppleAgx,0x00000002,AppleAgx_Service
+
+[AppleAgx_Service]
+DisplayName=%ServiceName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\AppleAgx.sys
+
+[AppleAgx.CopyFiles]
+AppleAgx.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+AppleAgx.sys=1
+
+[Strings]
+ProviderName="Windows on Apple Silicon Project"
+ManufacturerName="Windows on Apple Silicon Project"
+DeviceName="Apple AGX G13 render adapter (G2 development)"
+ServiceName="Apple AGX G2 development KMD"
+DiskName="Apple AGX G2 driver package"
