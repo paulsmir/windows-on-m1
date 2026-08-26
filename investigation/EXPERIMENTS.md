@@ -10191,10 +10191,10 @@ management or production GPU support.
 
 ### EXP-20260826-112 — J313 AGX G2 enumeration-only qualification
 
-Status: preregistered; not run.  Hardware execution requires a separate user
-approval after the host gates recorded below.  This experiment permits one
-Windows boot for ACPI/PnP observation only.  It does not permit installing,
-loading, staging or building `AppleAgx.sys`.
+Status: rejected after the single approved hardware attempt.  The candidate
+reached the Mu DXE phase, but the live XSDT contained no SSDT and therefore no
+`APPL0002` device could be presented to Windows.  `AppleAgx.sys` was not built,
+staged, installed or loaded.
 
 Hypothesis: an explicitly selected `J313_AGX_G2_PROFILE=TRUE` Mu build will
 enumerate exactly one disabled, driverless `ACPI\\APPL0002` device with the
@@ -10248,5 +10248,40 @@ the exact MMIO and interrupt resources above, an otherwise responsive Windows
 desktop, no new device error outside the expected missing-driver state and no
 forbidden AGX activity.  The observation must be exported before shutdown.
 
-Verdict: pending.  Stop at the hardware approval checkpoint; no candidate has
-been built for installation, copied to the Air or booted by this entry.
+Observed result:
+- the opt-in G2 Mu firmware SHA-256 was
+  `6f6903d26196eb4699eef37d7949d90bf6849d39f1937aacca03329f4abf47ba`;
+  its compiled `J313AppleAgxSsdt.aml` SHA-256 was
+  `52ac6b56ccd41a5dcc08a54aa35c778e646aa7fb68726e9fcecef22bc1ff669e`
+  and the disassembled semantic verifier passed;
+- m1n1 SHA-256 was
+  `0055ef339c5ae9099014e3d8e5158a0533c2df2adb235ad3646abf7fa31ca3d5`.
+  All eight secondary CPU starts, the NVMe backend and guest handoff were
+  observed, with launch-contract checkpoints zero through three recorded;
+- Mu logged seven live ACPI tables: FACP, RGRT, DBG2, MCFG, APIC, PPTT and
+  GTDT.  It did not log an SSDT installation, and the live XSDT contained no
+  SSDT entry.  Thus the packaged AGX AML never crossed the firmware-volume to
+  live-ACPI boundary and the required `ACPI\\APPL0002` enumeration was
+  impossible;
+- the host runner later lost its serial connection during DXE and its log ended
+  mid-line.  A subsequent exact stable launch exhibited the same host-runner
+  disconnect while Windows still reached SSH, so that disconnect is not used
+  as evidence of a guest crash or of the G2 rejection;
+- no AGX clock, firmware start, MMIO write, UAT mapping, interrupt injection,
+  driver-store mutation or `AppleAgx.sys` activity occurred;
+- the failed-attempt evidence is preserved without reuse under
+  `investigation/artifacts/EXP-20260826-112-agx-g2-enumeration-only/`.  The
+  launch-contract SHA-256 is
+  `d0236cf263b55c95597f6d3aaff2ba7d44d8ecb30cc07cc6d4008db9c94a2f9f`
+  and the hypervisor-log SHA-256 is
+  `8f77ff4fca21da1ea6bae9f3a3e6a1e24f114f5818ea539a02ed03dd44c75c79`;
+- all five immutable recovery hashes passed again.  The exact stable
+  eight-core/native-input pair was relaunched from its pinned source and binary
+  revisions; Windows reached an open SSH service and both local observer pages
+  returned HTTP 200.
+
+Verdict: rejected.  The root cause boundary is Mu ACPI publication, not the
+Windows driver and not AGX hardware ownership.  Do not retry this candidate or
+reuse its evidence directory.  A successor experiment requires a test-first
+fix proving the opt-in SSDT appears exactly once in the live XSDT while stable
+firmware still omits it.
