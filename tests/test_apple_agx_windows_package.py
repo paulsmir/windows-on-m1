@@ -53,6 +53,46 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertRegex(driver, r"return\s+status\s*;")
         self.assertIn("src\\driver_diagnostics.c", project)
 
+    def test_power_qualification_persists_device_lifecycle_boundaries(self):
+        diagnostics = self.read("src/driver_diagnostics.c")
+
+        self.assertIn("IoOpenDeviceRegistryKey", diagnostics)
+        self.assertIn("PLUGPLAY_REGKEY_DEVICE", diagnostics)
+        self.assertIn("KEY_SET_VALUE", diagnostics)
+        self.assertIn("Wom1AddDeviceStage", diagnostics)
+        self.assertIn("Wom1AddDeviceStatus", diagnostics)
+        self.assertIn("Wom1StartDeviceStage", diagnostics)
+        self.assertIn("Wom1StartDeviceStatus", diagnostics)
+        self.assertIn("AppleAgxRecordAddDeviceBoundary", diagnostics)
+        self.assertIn("AppleAgxRecordStartDeviceBoundary", diagnostics)
+        self.assertIn("AppleAgxLogStartStage", diagnostics)
+        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", diagnostics)
+        self.assertNotIn("MmMapIoSpace", diagnostics)
+        self.assertNotIn("WRITE_REGISTER", diagnostics)
+
+    def test_add_and_start_callbacks_publish_the_persistent_boundary(self):
+        adapter = self.read("src/adapter.c")
+
+        self.assertGreaterEqual(
+            adapter.count("AppleAgxRecordAddDeviceBoundary"), 3
+        )
+        self.assertGreaterEqual(
+            adapter.count("AppleAgxRecordStartDeviceBoundary"), 7
+        )
+        self.assertNotIn("AppleAgxLogStartStage", adapter)
+        self.assertIn("AppleAgxAddEntered", adapter)
+        self.assertIn("AppleAgxAddReturned", adapter)
+        for stage in (
+            "AppleAgxStartEntered",
+            "AppleAgxStartDeviceInformation",
+            "AppleAgxStartResourcesValidated",
+            "AppleAgxStartStateValidated",
+            "AppleAgxStartBrokerAddress",
+            "AppleAgxStartBrokerTransaction",
+            "AppleAgxStartFailClosed",
+        ):
+            self.assertIn(stage, adapter)
+
     def test_wdk_display_headers_follow_required_base_type_order(self):
         header = self.read("include/apple_agx_driver.h")
         ordered = (

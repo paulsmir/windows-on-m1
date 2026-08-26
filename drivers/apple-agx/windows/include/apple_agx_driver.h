@@ -23,6 +23,11 @@ typedef struct _APPLE_AGX_ADAPTER {
   APPLE_AGX_STATE State;
 } APPLE_AGX_ADAPTER;
 
+typedef enum _APPLE_AGX_ADD_STAGE {
+  AppleAgxAddEntered = 1,
+  AppleAgxAddReturned,
+} APPLE_AGX_ADD_STAGE;
+
 typedef enum _APPLE_AGX_START_STAGE {
   AppleAgxStartEntered = 1,
   AppleAgxStartDeviceInformation,
@@ -61,6 +66,12 @@ void AppleAgxLogStartStage(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ NTSTATUS Status);
 void AppleAgxRecordDriverEntryBoundary(_In_ PUNICODE_STRING RegistryPath,
                                        _In_ ULONG Stage,
+                                       _In_ NTSTATUS Status);
+void AppleAgxRecordAddDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
+                                     _In_ APPLE_AGX_ADD_STAGE Stage,
+                                     _In_ NTSTATUS Status);
+void AppleAgxRecordStartDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
+                                       _In_ APPLE_AGX_START_STAGE Stage,
                                        _In_ NTSTATUS Status);
 
 #endif /* APPLE_AGX_DRIVER_H */
