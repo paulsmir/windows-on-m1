@@ -27,7 +27,9 @@ def read_proxy_boot_identity(u) -> ProxyBootIdentity:
     if isinstance(base, bool) or not isinstance(base, int) or base <= 0:
         raise ProxyIdentityError("m1n1 base must be a positive integer")
     getter = getattr(u, "get_boot_cookie", None)
-    if getter is None:
+    if not callable(getter):
+        getter = getattr(getattr(u, "proxy", None), "get_boot_cookie", None)
+    if not callable(getter):
         raise ProxyIdentityError("proxy firmware has no boot cookie API")
     cookie = getter()
     if isinstance(cookie, bool) or not isinstance(cookie, int) or cookie <= 0:

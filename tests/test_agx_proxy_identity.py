@@ -13,6 +13,14 @@ class FakeProxy:
         return self.cookie
 
 
+class FakeProxyUtils:
+    def __init__(self, cookie):
+        self.adt = SimpleNamespace(target_type="J313")
+        self.version = "V13_5"
+        self.base = 0x804000000
+        self.proxy = SimpleNamespace(get_boot_cookie=lambda: cookie)
+
+
 class ProxyBootIdentityTests(unittest.TestCase):
     def test_identity_is_derived_from_device_boot_cookie_not_load_base(self):
         from tools.agx_proxy_identity import read_proxy_boot_identity
@@ -31,6 +39,17 @@ class ProxyBootIdentityTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ProxyIdentityError, "boot cookie"):
             read_proxy_boot_identity(FakeProxy(0))
+
+    def test_identity_reads_cookie_from_real_proxyutils_shape(self):
+        from tools.agx_proxy_identity import read_proxy_boot_identity
+
+        identity = read_proxy_boot_identity(FakeProxyUtils(0x123456789abcdef0))
+
+        self.assertEqual(identity.boot_cookie, 0x123456789abcdef0)
+        self.assertEqual(
+            identity.proxy_identity,
+            "J313:V13_5:123456789abcdef0",
+        )
 
 
 if __name__ == "__main__":
