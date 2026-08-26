@@ -9684,3 +9684,24 @@ must report `completed_cycles=10`, `cold_reset_between_cycles=true` and
 `windows_launch_permitted=true`, and independent `verify-result` must pass.
 Any single failure rejects EXP-106 and stops the operator; preserve all evidence,
 never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- preflight accepted the exact candidate, contract and fixture, and cycle one
+  reached the GPU on the proxy that was already running before the operator;
+- TA and 3D both completed, events 0 and 1 fired, the AGX management endpoint
+  stopped and UAT contexts 63 and 0 were unmapped;
+- formal snapshot validation then failed closed with `proxy firmware has no
+  boot cookie API`.  The starting proxy was the older immutable recovery m1n1,
+  because `--artifact-dir` validates artifacts but the cold operator never
+  chainloads its `m1n1.macho` before the first render or after reset;
+- the mandatory physical reboot ran, no receipt or aggregate was created, and
+  the operator stopped without retry.  Failed result SHA-256 is
+  `a3f06ac5ad2fb8e8b55fc881cb5ed1a51dcf211ddf6ddee5d7e4dc0668910bd5`.
+
+Verdict: rejected at the launch-identity boundary, not at GPU execution.  The
+candidate artifact was proven build-valid but was not the firmware serving the
+first proxy session.  EXP-106 remains immutable and Windows remains blocked.
+The next implementation must make the cold operator chainload the validated
+candidate before cycle one and again after every physical reboot before reading
+the receipt, with a failing operator-order test first.  It must not retry or
+reuse the EXP-106 evidence directory.
