@@ -10069,3 +10069,28 @@ candidate output must contain the exact `cmdline: -v m1n1.nodisplay` and the
 explicit display-disabled message, with no candidate DCP modeset or quiesce.
 m1n1 bases may recur.  Any failure rejects EXP-110; preserve all evidence,
 never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- corrected chainload delivered the exact `cmdline: -v m1n1.nodisplay` and
+  candidate m1n1 printed `display: Device initialization explicitly disabled
+  by boot option`; it performed no candidate DCP modeset or quiesce;
+- AGX initialized, accepted `DC_Init`, submitted the fixture TA and 3D work,
+  fired both completion events and stopped cleanly.  The prior firmware abort
+  did not recur;
+- formal capture then failed while taking the mandatory firmware snapshot:
+  `read_proxy_boot_identity()` looked for `get_boot_cookie` directly on the
+  live `ProxyUtils` wrapper.  The device API is correctly exposed by its
+  underlying `M1N1Proxy` at `u.proxy.get_boot_cookie`, so the validator
+  incorrectly reported `proxy firmware has no boot cookie API`;
+- the fail-safe physical reset completed and returned to the corrected
+  candidate proxy.  No accepted cycle, receipt, aggregate or Windows launch
+  occurred.  Result SHA-256 is
+  `059e058e09766adf65bda54d7b94aeda5fa7781de2407fb34650df73a4b12738`.
+
+Verdict: rejected at the host identity-adapter boundary after successful GPU
+completion.  The GPU/DCP hypothesis passed its first hardware observation, but
+the preregistered ten-cycle evidence contract did not.  The next change must
+teach the identity reader to support the real `ProxyUtils.proxy` topology while
+retaining direct-proxy compatibility, with a failing wrapper-shaped unit test
+before implementation.  EXP-110 remains immutable and its evidence directory
+must never be reused.
