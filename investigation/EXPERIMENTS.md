@@ -11420,3 +11420,40 @@ This result authorizes only a separately tested parser correction that ignores
 interrupt properties/count/uniqueness instead of raw GSI identity. It does not
 authorize mapping SGX, connecting interrupts, loading firmware or starting a
 render adapter.
+
+### EXP-20260826-127 — J313 AGX translated-parser hardware qualification
+
+Status: preregistered at `2026-08-26T20:53:00Z` for one G2 execution. The
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-translated-parser-hardware-qualification.md`.
+The falsifiable hypothesis is that the exact EXP-126 representation passes
+the corrected parser, state validation and existing bounded broker receipt,
+then remains fail-closed at stage 7 with `STATUS_NOT_SUPPORTED`.
+
+The sole candidate change is driver parser commit
+`a680ef2c451140c17c831d0d06df9ae82f3fb712`, built by WDK run
+`33012247554` at source head
+`61bd7998cd0e715a41e961bdd897bdcc9408cb80`. Both ARM64 jobs passed. Exact
+driver manifest SHA-256 is
+`192a253084f56d557f28c650ee8bbe18b37ca885d12a3b5e7b299662377c0b9b`;
+SYS is `81b08b27f1cdd9362937cd254b357792d321978c93a6bcc33b76d9e12788e124`;
+catalog is
+`d43ac3685b9556ca81aa66acfa0cb2391b072b5b742361fac9af3a60f5b8de25`;
+signer is `2DAADA2A7B34687AE6D922D792F39C220EA4C7AA`.
+
+Candidate firmware remains manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+No Mu, ACPI, broker, CPU, input, display, USB or storage binary changed.
+
+Exactly one G2 boot is allowed and evidence path
+`investigation/artifacts/EXP-20260826-127-agx-translated-parser/` was absent at
+preregistration. The only permitted GPU-related operation is the already
+bounded synthetic broker ON/QUERY/OFF receipt. Firmware, RTKit, SGX MMIO,
+interrupt connection, UAT, queues, commands, rendering, presentation and
+display ownership remain forbidden. Any stage-3 failure, missing receipt,
+forbidden action, Event 129, critical event, reset, input/storage loss, identity
+mismatch or incomplete non-force rollback rejects the run without retry.
