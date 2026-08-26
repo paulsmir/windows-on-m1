@@ -92,7 +92,7 @@ def extract_contract(raw: dict, source: dict):
         }
 
     contract = {
-        "contract_version": 1,
+        "contract_version": 2,
         "platform": raw["platform"],
         "source": {
             **source,
@@ -114,6 +114,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--root-commit", required=True)
     parser.add_argument("--m1n1-commit", required=True)
+    parser.add_argument("--fixture-m1n1-commit", required=True)
     parser.add_argument("--mu-commit", required=True)
     args = parser.parse_args()
     raw = json.loads(args.input.read_text())
@@ -122,6 +123,7 @@ def main():
         {
             "root_commit": args.root_commit,
             "m1n1_commit": args.m1n1_commit,
+            "fixture_m1n1_commit": args.fixture_m1n1_commit,
             "mu_commit": args.mu_commit,
         },
     )

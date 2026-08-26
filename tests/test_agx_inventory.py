@@ -18,6 +18,7 @@ def source_commits():
     return {
         "root_commit": "1" * 40,
         "m1n1_commit": "2" * 40,
+        "fixture_m1n1_commit": "4" * 40,
         "mu_commit": "3" * 40,
     }
 
@@ -77,6 +78,7 @@ class AgxInventoryTests(unittest.TestCase):
             {
                 "root_commit": reviewed.source.root_commit,
                 "m1n1_commit": reviewed.source.m1n1_commit,
+                "fixture_m1n1_commit": reviewed.source.fixture_m1n1_commit,
                 "mu_commit": reviewed.source.mu_commit,
             },
         )
@@ -144,6 +146,8 @@ class AgxInventoryTests(unittest.TestCase):
                     source["root_commit"],
                     "--m1n1-commit",
                     source["m1n1_commit"],
+                    "--fixture-m1n1-commit",
+                    source["fixture_m1n1_commit"],
                     "--mu-commit",
                     source["mu_commit"],
                 ],

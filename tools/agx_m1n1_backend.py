@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from tools.agx_contract import AgxContract, canonical_bytes
+from tools.agx_proxy_identity import ProxyIdentityError, read_proxy_boot_identity
 
 
 class BackendError(RuntimeError):
@@ -19,6 +20,7 @@ def _default_live_contract_reader(contract: AgxContract) -> AgxContract:
         {
             "root_commit": contract.source.root_commit,
             "m1n1_commit": contract.source.m1n1_commit,
+            "fixture_m1n1_commit": contract.source.fixture_m1n1_commit,
             "mu_commit": contract.source.mu_commit,
         },
     )
@@ -167,16 +169,14 @@ class M1n1AgxBackend:
         for name in ("halted", "halt_count", "resume"):
             if status is not None and hasattr(status, name):
                 firmware_status[name] = _register_value(getattr(status, name))
-        base = int(self.u.base)
-        target = self.u.adt.target_type
-        version = self.u.version
-        if not isinstance(target, str) or not target:
-            raise BackendError("proxy target identity is unavailable")
-        if not isinstance(version, str) or not version:
-            raise BackendError("proxy firmware identity is unavailable")
+        try:
+            identity = read_proxy_boot_identity(self.u)
+        except ProxyIdentityError as exc:
+            raise BackendError(str(exc)) from exc
         return {
-            "m1n1_base": base,
-            "proxy_identity": f"{target}:{version}:{base:x}",
+            "m1n1_base": identity.m1n1_base,
+            "boot_cookie": identity.boot_cookie,
+            "proxy_identity": identity.proxy_identity,
             "asc_running": bool(self.agx.asc.is_running()),
             "iop_power_state": int(mgmt.iop_power_state),
             "ap_power_state": int(mgmt.ap_power_state),

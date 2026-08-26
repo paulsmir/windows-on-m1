@@ -1,5 +1,5 @@
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "dependencies": [
     "/arm-io/sgx",
     "/arm-io/gfx-asc"
@@ -52,7 +52,8 @@
   },
   "source": {
     "adt_identity": "c57d4c0db26125394409c3b5b518fdef553d8f4dfe2263ae9303e2276b0796a3",
-    "m1n1_commit": "9cd80ac652ac404e92ae279deeaec8c629d7d184",
+    "fixture_m1n1_commit": "9cd80ac652ac404e92ae279deeaec8c629d7d184",
+    "m1n1_commit": "e1a9a06fc170a04d055b5299ad98a9c478b1c06b",
     "mu_commit": "8b4dc4b4e3ff8606d0af36163acf9de79b7b4737",
     "root_commit": "7501dc57f485416737924f9c86b4ded12230c26a"
   },

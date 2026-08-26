@@ -23,6 +23,7 @@ class Region:
 class Source:
     root_commit: str
     m1n1_commit: str
+    fixture_m1n1_commit: str
     mu_commit: str
     adt_identity: str
 
@@ -73,7 +74,10 @@ REGION_NAMES = {
     "shared",
     "handoff",
 }
-SOURCE_KEYS = {"root_commit", "m1n1_commit", "mu_commit", "adt_identity"}
+SOURCE_KEYS = {
+    "root_commit", "m1n1_commit", "fixture_m1n1_commit", "mu_commit",
+    "adt_identity",
+}
 FIRMWARE_KEYS = {"generation", "version"}
 UAT_KEYS = {"page_size", "num_contexts", "address_bits"}
 COMMIT_RE = re.compile(r"[0-9a-f]{40}\Z")
@@ -153,15 +157,17 @@ def validate_contract(data: dict) -> AgxContract:
     """Validate an untrusted dictionary and return its immutable form."""
 
     _exact(data, TOP_LEVEL, "contract")
-    version = _integer(data["contract_version"], "contract_version", minimum=1,
-                       maximum=1)
+    version = _integer(data["contract_version"], "contract_version", minimum=2,
+                       maximum=2)
     if data["platform"] != "J313":
         raise ContractError("platform must be J313")
 
     source_data = data["source"]
     _exact(source_data, SOURCE_KEYS, "source")
     commits = {}
-    for key in ("root_commit", "m1n1_commit", "mu_commit"):
+    for key in (
+        "root_commit", "m1n1_commit", "fixture_m1n1_commit", "mu_commit",
+    ):
         value = _nonempty_string(source_data[key], f"source.{key}")
         if not COMMIT_RE.fullmatch(value):
             raise ContractError(f"source.{key} must be 40 lowercase hex digits")
@@ -226,6 +232,7 @@ def contract_dict(contract: AgxContract) -> dict:
         "source": {
             "root_commit": contract.source.root_commit,
             "m1n1_commit": contract.source.m1n1_commit,
+            "fixture_m1n1_commit": contract.source.fixture_m1n1_commit,
             "mu_commit": contract.source.mu_commit,
             "adt_identity": contract.source.adt_identity,
         },

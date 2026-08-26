@@ -15,12 +15,13 @@ from typing import Protocol
 
 from tools.agx_contract import AgxContract, contract_sha256
 from tools.agx_frame_fixture import ValidatedFrame
+from tools.agx_proxy_identity import ProxyIdentityError, read_proxy_boot_identity
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROXYCLIENT = ROOT / "m1n1_windows" / "proxyclient"
-RENDER_GATE_VERSION = 1
-RENDER_AGGREGATE_VERSION = 1
+RENDER_GATE_VERSION = 2
+RENDER_AGGREGATE_VERSION = 2
 CONTEXT_ID = 63
 PAGE_SIZE = 0x4000
 QUEUE_INDEX = 1
@@ -411,11 +412,14 @@ def _validate_one_shot(
     try:
         firmware = records[0]["snapshot"]["firmware"]
         base = firmware["m1n1_base"]
+        cookie = firmware["boot_cookie"]
         proxy = firmware["proxy_identity"]
     except (KeyError, TypeError) as exc:
         raise RenderGateError(f"cycle {index} has no proxy boot identity") from exc
     if isinstance(base, bool) or not isinstance(base, int) or base <= 0:
         raise RenderGateError(f"cycle {index} has invalid m1n1 base")
+    if isinstance(cookie, bool) or not isinstance(cookie, int) or cookie <= 0:
+        raise RenderGateError(f"cycle {index} has invalid boot cookie")
     if not isinstance(proxy, str) or not proxy:
         raise RenderGateError(f"cycle {index} has invalid proxy identity")
     return copy.deepcopy(records[0])
@@ -427,24 +431,30 @@ def _validate_reset(
     index: int,
     contract: AgxContract,
     previous_proxy: str,
+    previous_cookie: int,
     previous_base: int,
     result_sha256: str,
 ) -> dict:
     fields = {
         "render_reset_receipt_version", "cycle", "platform", "firmware",
         "previous_proxy_identity", "proxy_identity",
+        "previous_boot_cookie", "boot_cookie",
         "previous_m1n1_base", "m1n1_base", "cycle_result_sha256", "fresh_proxy",
     }
     proxy = receipt.get("proxy_identity")
+    cookie = receipt.get("boot_cookie")
     base = receipt.get("m1n1_base")
     valid = (
         set(receipt) == fields
-        and receipt.get("render_reset_receipt_version") == 1
+        and receipt.get("render_reset_receipt_version") == 2
         and receipt.get("cycle") == index
         and receipt.get("platform") == contract.platform
         and receipt.get("firmware") == contract.firmware.version
         and receipt.get("previous_proxy_identity") == previous_proxy
         and isinstance(proxy, str) and proxy and proxy != previous_proxy
+        and receipt.get("previous_boot_cookie") == previous_cookie
+        and isinstance(cookie, int) and not isinstance(cookie, bool)
+        and cookie > 0 and cookie != previous_cookie
         and receipt.get("previous_m1n1_base") == previous_base
         and isinstance(base, int) and not isinstance(base, bool)
         and base > 0 and base != previous_base
@@ -466,6 +476,7 @@ def record_render_proxy_receipt(
     live_platform: str,
     live_firmware: str,
     live_proxy_identity: str,
+    live_boot_cookie: int,
     live_m1n1_base: int,
 ) -> dict:
     """Bind one complete render result to a fresh post-reset proxy boot."""
@@ -482,6 +493,12 @@ def record_render_proxy_receipt(
     if not isinstance(live_proxy_identity, str) or not live_proxy_identity:
         raise RenderGateError("live proxy identity must be nonempty")
     if (
+        isinstance(live_boot_cookie, bool)
+        or not isinstance(live_boot_cookie, int)
+        or live_boot_cookie <= 0
+    ):
+        raise RenderGateError("live boot cookie must be a positive integer")
+    if (
         isinstance(live_m1n1_base, bool)
         or not isinstance(live_m1n1_base, int)
         or live_m1n1_base <= 0
@@ -489,16 +506,18 @@ def record_render_proxy_receipt(
         raise RenderGateError("live m1n1 base must be a positive integer")
     if (
         live_proxy_identity == previous["proxy_identity"]
-        or live_m1n1_base == previous["m1n1_base"]
+        or live_boot_cookie == previous["boot_cookie"]
     ):
         raise RenderGateError("reset receipt does not prove a fresh proxy boot")
     receipt = {
-        "render_reset_receipt_version": 1,
+        "render_reset_receipt_version": 2,
         "cycle": cycle,
         "platform": live_platform,
         "firmware": live_firmware,
         "previous_proxy_identity": previous["proxy_identity"],
         "proxy_identity": live_proxy_identity,
+        "previous_boot_cookie": previous["boot_cookie"],
+        "boot_cookie": live_boot_cookie,
         "previous_m1n1_base": previous["m1n1_base"],
         "m1n1_base": live_m1n1_base,
         "cycle_result_sha256": _canonical_sha256(data),
@@ -522,6 +541,7 @@ def aggregate_cold_render_results(
     evidence_dir = Path(evidence_dir)
     loaded = []
     proxies = []
+    cookies = []
     bases = []
     for index in range(1, QUALIFICATION_CYCLES + 1):
         path = evidence_dir / f"cycle-{index:02d}" / "render-gate-result.json"
@@ -529,12 +549,13 @@ def aggregate_cold_render_results(
         record = _validate_one_shot(data, contract, fixture, index)
         firmware = record["snapshot"]["firmware"]
         proxies.append(firmware["proxy_identity"])
+        cookies.append(firmware["boot_cookie"])
         bases.append(firmware["m1n1_base"])
         loaded.append((data, record, _canonical_sha256(data)))
+    if len(set(cookies)) != QUALIFICATION_CYCLES:
+        raise RenderGateError("ten distinct boot cookies are required")
     if len(set(proxies)) != QUALIFICATION_CYCLES:
         raise RenderGateError("ten distinct proxy identities are required")
-    if len(set(bases)) != QUALIFICATION_CYCLES:
-        raise RenderGateError("ten distinct m1n1 bases are required")
 
     aggregate_cycles = []
     previous_reset = None
@@ -543,7 +564,7 @@ def aggregate_cold_render_results(
             firmware = record["snapshot"]["firmware"]
             if (
                 firmware["proxy_identity"] != previous_reset["proxy_identity"]
-                or firmware["m1n1_base"] != previous_reset["m1n1_base"]
+                or firmware["boot_cookie"] != previous_reset["boot_cookie"]
             ):
                 raise RenderGateError(f"cycle {index} is not bound to reset {index - 1}")
         receipt = _read_json(
@@ -557,6 +578,7 @@ def aggregate_cold_render_results(
             index=index,
             contract=contract,
             previous_proxy=firmware["proxy_identity"],
+            previous_cookie=firmware["boot_cookie"],
             previous_base=firmware["m1n1_base"],
             result_sha256=digest,
         )
@@ -619,7 +641,7 @@ def verify_render_gate_result(path: Path) -> dict:
     if not isinstance(expected, str) or not _SHA256_RE.fullmatch(expected):
         raise RenderGateError("aggregate output hash is invalid")
     proxy_ids = []
-    bases = []
+    boot_cookies = []
     stub = ValidatedFrame(
         fixture_sha256=data.get("fixture_sha256"), command_buffer={}, objects=(),
         output_gpu_va=0, output_size=PAGE_SIZE,
@@ -636,13 +658,13 @@ def verify_render_gate_result(path: Path) -> dict:
         try:
             firmware = record["snapshot"]["firmware"]
             proxy_ids.append(firmware["proxy_identity"])
-            bases.append(firmware["m1n1_base"])
+            boot_cookies.append(firmware["boot_cookie"])
         except (KeyError, TypeError) as exc:
             raise RenderGateError(f"G1R cycle {index} has no boot identity") from exc
         if record.get("reset_receipt", {}).get("fresh_proxy") is not True:
             raise RenderGateError(f"G1R cycle {index} has no cold reset receipt")
-    if len(set(proxy_ids)) != 10 or len(set(bases)) != 10:
-        raise RenderGateError("G1R aggregate reuses a proxy identity or m1n1 base")
+    if len(set(boot_cookies)) != 10 or len(set(proxy_ids)) != 10:
+        raise RenderGateError("G1R aggregate reuses a boot cookie or proxy identity")
     return copy.deepcopy(data)
 
 
@@ -651,7 +673,7 @@ def _validate_fixture_identity(contract, identity: dict) -> None:
         "board": contract.platform,
         "chip_generation": contract.firmware.generation,
         "firmware_version": contract.firmware.version,
-        "m1n1_commit": contract.source.m1n1_commit,
+        "m1n1_commit": contract.source.fixture_m1n1_commit,
         "adt_sha256": contract.source.adt_identity,
     }
     if not isinstance(identity, dict) or any(
@@ -752,16 +774,21 @@ def main(argv=None) -> int:
             print(result.evidence_path)
             return 0
         u = _live_proxy()
+        try:
+            live_identity = read_proxy_boot_identity(u)
+        except ProxyIdentityError as exc:
+            raise RenderGateError(str(exc)) from exc
         receipt = record_render_proxy_receipt(
             args.output,
             contract,
             fixture,
             cycle=args.cycle,
             cycle_result=args.cycle_result,
-            live_platform=u.adt.target_type,
-            live_firmware=u.version,
-            live_proxy_identity=f"{u.adt.target_type}:{u.version}:{int(u.base):x}",
-            live_m1n1_base=int(u.base),
+            live_platform=live_identity.platform,
+            live_firmware=live_identity.firmware,
+            live_proxy_identity=live_identity.proxy_identity,
+            live_boot_cookie=live_identity.boot_cookie,
+            live_m1n1_base=live_identity.m1n1_base,
         )
         print(json.dumps(receipt, indent=2, sort_keys=True))
         return 0

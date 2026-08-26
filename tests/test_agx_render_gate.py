@@ -173,6 +173,21 @@ class RenderCompletionTests(unittest.TestCase):
                 self._assert_rejected(field, True, field.split("_")[0])
 
 
+class FixtureIdentityBindingTests(unittest.TestCase):
+    def test_fixture_uses_capture_pin_not_runtime_m1n1_pin(self):
+        from tools.agx_render_gate import _validate_fixture_identity
+
+        contract = load_contract(CONTRACT_PATH)
+        identity = {
+            "board": contract.platform,
+            "chip_generation": contract.firmware.generation,
+            "firmware_version": contract.firmware.version,
+            "m1n1_commit": contract.source.fixture_m1n1_commit,
+            "adt_sha256": contract.source.adt_identity,
+        }
+        _validate_fixture_identity(contract, identity)
+
+
 class FakeRenderBackend:
     def __init__(self, *, receipt=None, fail=None, released=True):
         self.receipt = copy.deepcopy(receipt or VALID_RENDER)
@@ -301,13 +316,14 @@ class RenderAggregateTests(unittest.TestCase):
 
     def tearDown(self): self.tmp.cleanup()
 
-    def _write_cycle(self, index, *, proxy=None, base=None):
-        proxy = proxy or f"proxy-{index:02d}"
+    def _write_cycle(self, index, *, proxy=None, base=None, cookie=None):
+        cookie = cookie or 0x1000000000000000 + index
+        proxy = proxy or f"J313:V13_5:{cookie:016x}"
         base = base or 0x804000000 + index * 0x200000
         directory = self.path / f"cycle-{index:02d}"
         directory.mkdir()
         result = {
-            "render_gate_version": 1,
+            "render_gate_version": 2,
             "contract_sha256": contract_sha256(self.contract),
             "fixture_sha256": FIXTURE_HASH,
             "requested_cycles": 1,
@@ -319,7 +335,9 @@ class RenderAggregateTests(unittest.TestCase):
                 "host_submit_elapsed_s": 0.01,
                 "completion": copy.deepcopy(VALID_RENDER),
                 "snapshot": {"firmware": {
-                    "m1n1_base": base, "proxy_identity": proxy,
+                    "m1n1_base": base,
+                    "boot_cookie": cookie,
+                    "proxy_identity": proxy,
                 }},
             }],
             "verdict": "incomplete",
@@ -327,15 +345,18 @@ class RenderAggregateTests(unittest.TestCase):
         }
         result_path = directory / "render-gate-result.json"
         result_path.write_text(json.dumps(result))
-        next_proxy = f"proxy-{index + 1:02d}"
+        next_cookie = 0x1000000000000000 + index + 1
+        next_proxy = f"J313:V13_5:{next_cookie:016x}"
         next_base = 0x804000000 + (index + 1) * 0x200000
         reset = {
-            "render_reset_receipt_version": 1,
+            "render_reset_receipt_version": 2,
             "cycle": index,
             "platform": "J313",
             "firmware": "V13_5",
             "previous_proxy_identity": proxy,
             "proxy_identity": next_proxy,
+            "previous_boot_cookie": cookie,
+            "boot_cookie": next_cookie,
             "previous_m1n1_base": base,
             "m1n1_base": next_base,
             "cycle_result_sha256": canonical_sha256(result),
@@ -352,7 +373,7 @@ class RenderAggregateTests(unittest.TestCase):
         result = aggregate_cold_render_results(
             self.path, self.contract, fixture(), cycles=10
         )
-        self.assertEqual(result["render_aggregate_version"], 1)
+        self.assertEqual(result["render_aggregate_version"], 2)
         self.assertEqual(result["completed_cycles"], 10)
         self.assertTrue(result["cold_reset_between_cycles"])
         self.assertTrue(result["windows_launch_permitted"])
@@ -371,8 +392,9 @@ class RenderAggregateTests(unittest.TestCase):
             cycle_result=result_path,
             live_platform="J313",
             live_firmware="V13_5",
-            live_proxy_identity="proxy-02",
-            live_m1n1_base=0x804400000,
+            live_proxy_identity="J313:V13_5:1000000000000002",
+            live_boot_cookie=0x1000000000000002,
+            live_m1n1_base=0x804200000,
         )
         self.assertEqual(receipt["cycle_result_sha256"], canonical_sha256(
             json.loads(result_path.read_text())
@@ -392,8 +414,9 @@ class RenderAggregateTests(unittest.TestCase):
                 cycle_result=result_path,
                 live_platform="J313",
                 live_firmware="V13_5",
-                live_proxy_identity="proxy-01",
-                live_m1n1_base=0x804200000,
+                live_proxy_identity="J313:V13_5:1000000000000001",
+                live_boot_cookie=0x1000000000000001,
+                live_m1n1_base=0x900000000,
             )
 
     def test_exactly_ten_cycles_are_required(self):
@@ -420,19 +443,29 @@ class RenderAggregateTests(unittest.TestCase):
         with self.assertRaisesRegex(RenderGateError, "reset receipt 3"):
             aggregate_cold_render_results(self.path, self.contract, fixture(), cycles=10)
 
-    def test_reused_proxy_or_base_is_rejected(self):
+    def test_reused_proxy_identity_is_rejected(self):
         from tools.agx_render_gate import RenderGateError, aggregate_cold_render_results
         for index in range(1, 11):
             self._write_cycle(index, proxy="reused" if index in (5, 6) else None)
         with self.assertRaisesRegex(RenderGateError, "distinct proxy"):
             aggregate_cold_render_results(self.path, self.contract, fixture(), cycles=10)
 
-    def test_reused_m1n1_base_is_rejected(self):
-        from tools.agx_render_gate import RenderGateError, aggregate_cold_render_results
+    def test_reused_m1n1_base_is_accepted_when_cookies_are_unique(self):
+        from tools.agx_render_gate import aggregate_cold_render_results
         reused = 0x900000000
         for index in range(1, 11):
             self._write_cycle(index, base=reused if index in (5, 6) else None)
-        with self.assertRaisesRegex(RenderGateError, "distinct m1n1"):
+        result = aggregate_cold_render_results(
+            self.path, self.contract, fixture(), cycles=10
+        )
+        self.assertTrue(result["windows_launch_permitted"])
+
+    def test_reused_boot_cookie_is_rejected_even_when_base_changes(self):
+        from tools.agx_render_gate import RenderGateError, aggregate_cold_render_results
+        reused = 0x123456789abcdef0
+        for index in range(1, 11):
+            self._write_cycle(index, cookie=reused if index in (5, 6) else None)
+        with self.assertRaisesRegex(RenderGateError, "distinct boot cookies"):
             aggregate_cold_render_results(self.path, self.contract, fixture(), cycles=10)
 
     def test_incomplete_render_is_rejected_even_when_rehashed(self):

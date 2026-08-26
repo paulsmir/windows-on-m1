@@ -26,6 +26,9 @@ class FakeU:
         self.adt = SimpleNamespace(target_type="J313")
         self.version = "V13_5"
 
+    def get_boot_cookie(self):
+        return 0x123456789abcdef0
+
 
 class FakeMgmt:
     def __init__(self, calls, *, respond=True):
@@ -281,8 +284,12 @@ class M1n1AgxBackendTests(unittest.TestCase):
         self.assertIn("uat_mappings", snapshot)
         self.assertEqual(snapshot["firmware"]["m1n1_base"], 0x804000000)
         self.assertEqual(
+            snapshot["firmware"]["boot_cookie"],
+            0x123456789abcdef0,
+        )
+        self.assertEqual(
             snapshot["firmware"]["proxy_identity"],
-            "J313:V13_5:804000000",
+            "J313:V13_5:123456789abcdef0",
         )
         self.assertEqual(
             snapshot["fault"],

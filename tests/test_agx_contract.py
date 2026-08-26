@@ -15,11 +15,12 @@ REVIEWED_CONTRACT = ROOT / "config" / "j313-agx.json"
 
 def valid_contract_dict():
     return {
-        "contract_version": 1,
+        "contract_version": 2,
         "platform": "J313",
         "source": {
             "root_commit": "1" * 40,
             "m1n1_commit": "2" * 40,
+            "fixture_m1n1_commit": "4" * 40,
             "mu_commit": "3" * 40,
             "adt_identity": "j313-test-adt",
         },
@@ -54,6 +55,10 @@ def valid_contract_dict():
 class AgxContractTests(unittest.TestCase):
     def test_reviewed_j313_contract_has_exact_live_resources(self):
         contract = load_contract(REVIEWED_CONTRACT)
+        self.assertNotEqual(
+            contract.source.m1n1_commit,
+            contract.source.fixture_m1n1_commit,
+        )
         self.assertEqual(contract.firmware.generation, "G13")
         self.assertEqual(contract.firmware.version, "V13_5")
         self.assertEqual(
@@ -134,7 +139,7 @@ class AgxContractTests(unittest.TestCase):
 
     def test_unsupported_version_is_rejected(self):
         data = valid_contract_dict()
-        data["contract_version"] = 2
+        data["contract_version"] = 3
         with self.assertRaisesRegex(ContractError, "contract_version"):
             validate_contract(data)
 

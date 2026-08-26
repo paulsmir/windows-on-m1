@@ -362,7 +362,7 @@ def preflight_capture_source(
         "board": contract.platform,
         "chip_generation": contract.firmware.generation,
         "firmware_version": contract.firmware.version,
-        "m1n1_commit": contract.source.m1n1_commit,
+        "m1n1_commit": contract.source.fixture_m1n1_commit,
         "adt_sha256": contract.source.adt_identity,
     }
     if any(identity[field] != value for field, value in expected_identity.items()):
