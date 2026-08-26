@@ -196,6 +196,18 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             2,
         )
 
+    def test_resource_parser_uses_translated_interrupt_semantics(self):
+        resources = self.read("src/resources.c")
+
+        self.assertIn("CmResourceTypeDevicePrivate", resources)
+        self.assertIn("devicePrivateCount", resources)
+        self.assertIn("J313_AGX_G2_MEMORY_RESOURCE_COUNT", resources)
+        self.assertIn("descriptor->u.Interrupt.Affinity == 0", resources)
+        self.assertIn("AppleAgxRecordTranslatedInterrupt", resources)
+        self.assertNotIn("AppleAgxInterruptRoutes", resources)
+        self.assertNotIn(".GuestIntId != Vector", resources)
+        self.assertNotIn("descriptor->u.DevicePrivate", resources)
+
     def test_sources_contain_no_gpu_write_path(self):
         sources = "\n".join(
             path.read_text()

@@ -2,32 +2,41 @@
 
 #include "j313_agx_g2.generated.h"
 
-static const J313_AGX_G2_INTERRUPT_ROUTE AppleAgxInterruptRoutes[] =
-    J313_AGX_G2_INTERRUPT_ROUTE_VALUES;
+#define J313_AGX_G2_MEMORY_RESOURCE_COUNT 2u
+#define J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT 2u
+#define J313_AGX_G2_TRANSLATED_RESOURCE_COUNT                              \
+  (J313_AGX_G2_MEMORY_RESOURCE_COUNT +                                     \
+   J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT +                             \
+   J313_AGX_G2_INTERRUPT_ROUTE_COUNT)
 
-static BOOLEAN AppleAgxRecordInterrupt(ULONG Vector, BOOLEAN *Seen) {
+static BOOLEAN AppleAgxRecordTranslatedInterrupt(ULONG Vector,
+                                                 ULONG *SeenVectors,
+                                                 ULONG SeenCount) {
   ULONG index;
 
-  for (index = 0; index < J313_AGX_G2_INTERRUPT_ROUTE_COUNT; ++index) {
-    if (AppleAgxInterruptRoutes[index].GuestIntId != Vector)
-      continue;
-    if (Seen[index])
+  if (Vector == 0 || SeenCount >= J313_AGX_G2_INTERRUPT_ROUTE_COUNT)
+    return FALSE;
+  for (index = 0; index < SeenCount; ++index) {
+    if (SeenVectors[index] == Vector)
       return FALSE;
-    Seen[index] = TRUE;
-    return TRUE;
   }
-  return FALSE;
+  SeenVectors[SeenCount] = Vector;
+  return TRUE;
 }
 
 _Use_decl_annotations_ NTSTATUS
 AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
-  BOOLEAN seenInterrupts[J313_AGX_G2_INTERRUPT_ROUTE_COUNT] = {FALSE};
+  ULONG seenInterruptVectors[J313_AGX_G2_INTERRUPT_ROUTE_COUNT] = {0};
   BOOLEAN seenSgxMemory = FALSE;
   BOOLEAN seenPowerBrokerMemory = FALSE;
+  ULONG devicePrivateCount = 0;
   ULONG interruptCount = 0;
   ULONG fullIndex;
 
   if (TranslatedResources == NULL || TranslatedResources->Count != 1)
+    return STATUS_DEVICE_CONFIGURATION_ERROR;
+  if (TranslatedResources->List[0].PartialResourceList.Count !=
+      J313_AGX_G2_TRANSLATED_RESOURCE_COUNT)
     return STATUS_DEVICE_CONFIGURATION_ERROR;
 
   for (fullIndex = 0; fullIndex < TranslatedResources->Count; ++fullIndex) {
@@ -59,12 +68,26 @@ AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
         return STATUS_DEVICE_CONFIGURATION_ERROR;
       }
 
+      if (descriptor->Type == CmResourceTypeDevicePrivate) {
+        /*
+         * The PnP manager owns this payload.  WDM documents it as reserved
+         * for system use, so only its bounded presence and ownership are part
+         * of our contract; AppleAgx must never interpret its union member.
+         */
+        if (descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
+            devicePrivateCount >= J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT)
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
+        ++devicePrivateCount;
+        continue;
+      }
+
       if (descriptor->Type == CmResourceTypeInterrupt) {
         if (descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
-            (descriptor->Flags & CM_RESOURCE_INTERRUPT_LATCHED) !=
-                CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE ||
-            !AppleAgxRecordInterrupt(descriptor->u.Interrupt.Vector,
-                                     seenInterrupts))
+            descriptor->Flags != CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE ||
+            descriptor->u.Interrupt.Affinity == 0 ||
+            !AppleAgxRecordTranslatedInterrupt(
+                descriptor->u.Interrupt.Vector, seenInterruptVectors,
+                interruptCount))
           return STATUS_DEVICE_CONFIGURATION_ERROR;
         ++interruptCount;
         continue;
@@ -75,6 +98,7 @@ AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
   }
 
   if (!seenSgxMemory || !seenPowerBrokerMemory ||
+      devicePrivateCount != J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT ||
       interruptCount != J313_AGX_G2_INTERRUPT_ROUTE_COUNT)
     return STATUS_DEVICE_CONFIGURATION_ERROR;
   return STATUS_SUCCESS;
