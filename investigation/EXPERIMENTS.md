@@ -9766,3 +9766,34 @@ cookies and proxy identities, canonical result bindings, an accepted aggregate
 and successful independent `verify-result`.  m1n1 bases may recur.  Any failure
 rejects EXP-107; preserve evidence, never retry it in place and keep Windows
 blocked.
+
+Observed result (completed UTC 2026-08-26):
+- the operator successfully waited for the recovery proxy and chainloaded the
+  exact candidate; the target reported m1n1 `e1a9a06` and `Proxy is alive
+  again`, proving the activation-order fix itself;
+- the candidate inherited `video.display=1`, initialized the internal display,
+  booted and quiesced DCP even though the recovery m1n1 had already initialized
+  that physical display pipeline earlier in the same boot;
+- AGX initialization then reached initdata, `DC_Init` and `DC_UpdateIdleTS`, but
+  firmware crashed before any fixture submission with EL1 data abort
+  `ESR=0x96000145`, `ELR=0xffffff800002be50` at `dc civac`, and FAR
+  `0xffffffcfe4df3780`.  This is a pre-render platform-state failure, not an
+  output, queue, cookie or receipt failure;
+- the hung cleanup was interrupted only after a stack sample proved it remained
+  in ASC crash handling.  The fail-safe physical reboot ran, the operator
+  reactivated the candidate, stopped without receipt or aggregate and did not
+  launch Windows;
+- the atomic result remained `status=running` because the interrupt occurred
+  while exception cleanup itself was blocked; SHA-256
+  `7738646526ade210ee063711dac3bf73779127e56ea58026f1918a2b9258b154`.
+  Preserved firmware dump SHA-256 is
+  `b9ccb211507d6b04f55c56b34e0ad2c7c3a6100b87a79cefdc76aac7790585f9`.
+
+Verdict: rejected before GPU submission.  Candidate activation is now proven,
+but a second internal-display/DCP bring-up in one physical boot contaminates
+the AGX start boundary.  EXP-107 remains immutable and Windows remains blocked.
+The next test must change only candidate chainload to headless `-v`, which sets
+the inherited boot video display flag to zero and avoids the second display
+pipeline initialization while leaving the candidate binary, GPU fixture and
+all qualification rules unchanged.  A failing operator test must require this
+argument before any new hardware run.
