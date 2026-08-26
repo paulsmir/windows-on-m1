@@ -11493,3 +11493,46 @@ This result proves the next technical boundary but does not authorize it:
 before GPU firmware or interrupt work, a separate experiment must explain or
 eliminate the candidate Event 129 pair while preserving the exact successful
 stage-7 and ON/QUERY/OFF evidence.
+
+### EXP-20260827-128 — J313 AGX inert MMIO mapping qualification
+
+Status: preregistered at `2026-08-27T01:15:00+02:00` for one G2 execution.
+The literal contract is
+`documentation/plans/2026-08-27-j313-agx-mmio-mapping-hardware-qualification.md`.
+The falsifiable hypothesis is that Windows can map the exact 64 MiB SGX
+aperture once, validate ASC as the contained `0x02400000..0x0246bfff`
+subview, unmap the sole owner, and remain stable while the driver still fails
+closed with `STATUS_NOT_SUPPORTED`.
+
+The only candidate package change is qualification-only receipt commit
+`c573a3b49e029f423630f72876b87029f117f729`, built by WDK run
+`33022226675` at source head
+`4d40aee5cdb9f2f5d813956665fba6ff22743087`. All three ARM64 jobs passed.
+Exact local package manifest SHA-256 is
+`cfabbee1d50d1c54765e43ffe533b9a9780f6afec0fda964b7aa10a4ec17b934`;
+SYS is `d1dd6783a0c30bdf639f6d01a5a6c800fe89699740ba245f634656a7734f732d`;
+INF is `db5e09d26ca52311156473db0e931203a9d77dfecf5af17ec9acc39dccaab157`;
+catalog is `4032e47cfacc72eaef31d98d67233cb093865998581bcd9cbb8fd482d4d71a1f`;
+certificate is
+`9f70513f96edccbfef8d833d17670fa01124e17239fe44592e9eab007e4002ae`;
+and signer is `A40D8EC7010BB5D4E14792C360737F79F79D0151`.
+
+Candidate firmware remains manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+The evidence path
+`investigation/artifacts/EXP-20260827-128-agx-mmio-mapping/` was absent at
+preregistration.
+
+Exactly one display-`both` G2 boot is allowed and power qualification remains
+off. The sole GPU operation is map, bounds-check an ASC subview, and immediate
+unmap; no pointer dereference is permitted. GPU register access, firmware,
+RTKit, interrupt connection, active UAT, queues, commands, rendering,
+presentation and display ownership remain forbidden. Passing requires exact
+zero-status receipts, the generated SGX/ASC geometry, responsive eight-core
+Windows, working AppleInput/NVMe/xHCI, zero Event 129, zero critical events,
+normal shutdown and exact non-force rollback. Any mismatch rejects the run
+without retry.
