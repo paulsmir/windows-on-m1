@@ -10188,3 +10188,65 @@ completion and teardown contract across ten cold-reset-separated lifecycles.
 This permits transition to G2 direct Windows ownership.  It does not by itself
 claim a Windows graphics adapter, WDDM acceleration, DWM presentation, power
 management or production GPU support.
+
+### EXP-20260826-112 — J313 AGX G2 enumeration-only qualification
+
+Status: preregistered; not run.  Hardware execution requires a separate user
+approval after the host gates recorded below.  This experiment permits one
+Windows boot for ACPI/PnP observation only.  It does not permit installing,
+loading, staging or building `AppleAgx.sys`.
+
+Hypothesis: an explicitly selected `J313_AGX_G2_PROFILE=TRUE` Mu build will
+enumerate exactly one disabled, driverless `ACPI\\APPL0002` device with the
+reviewed SGX aperture and nine guest interrupts, while the stable Mu profile
+continues to omit the AGX SSDT completely.
+
+Candidate and host-gate contract:
+- root source `4c52ac8493bc363aee86e1ede1216b0f560d7198`, m1n1 source
+  `4107043a96dedaec6dbe98bb8ee7b78f13c8080f` and Mu source
+  `7ea6c1cfe70956f0b1db583a3cc810453235462d`;
+- GitHub Actions run
+  `https://github.com/paulsmir/windows-on-m1/actions/runs/32954128584`
+  completed successfully for both profiles.  The stable build proved that no
+  AGX SSDT was packaged.  The opt-in G2 build proved that exactly one compiled
+  and disassembled AGX SSDT passed the fail-closed semantic verifier;
+- the selected profile is exactly `J313_AGX_G2_PROFILE=TRUE`.  No other Mu,
+  m1n1, launch, CPU, memory, NVMe, USB, input or display variable may change;
+- expected Windows PnP identity is one `ACPI\\APPL0002` devnode with no bound
+  function driver.  `AppleAgx.sys` must be absent from the Driver Store before
+  and after the boot;
+- expected resources are one MMIO aperture
+  `0x204000000..0x207ffffff` and guest GSIVs `880..888`, in order, each with
+  Level, ActiveHigh and Exclusive semantics;
+- no AGX clock, firmware, MMIO write, UAT mapping, command submission,
+  completion injection, power transition or display ownership change is
+  allowed.  Any observation of one rejects the experiment immediately;
+- fresh evidence destination
+  `investigation/artifacts/EXP-20260826-112-agx-g2-enumeration-only/` was absent
+  at preregistration and must never be reused after a failed attempt.
+
+Recovery contract:
+- immutable recovery directory is
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`;
+- its five verified SHA-256 values are
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`
+  (`boot.bin`),
+  `dd3056a9add42ec8dc6071d6b9a04938328375dbe00e005483414910f3e26101`
+  (`m1n1-stage0.bin`),
+  `69680f9d24e5e0648463fc3703cef1ca046f029aac1e9f2a1ec61f28457f60e3`
+  (`m1n1-stage1.bin`),
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`
+  (`m1n1.macho`) and
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`
+  (`J313_EFI.fd`);
+- any build, provenance, boot, PnP, resource or safety mismatch rejects the
+  experiment.  Preserve evidence, power-cycle to proxy and boot only the
+  immutable stable recovery image.  Do not retry in the same evidence path.
+
+Pass requires one and only one `ACPI\\APPL0002` devnode, no driver binding,
+the exact MMIO and interrupt resources above, an otherwise responsive Windows
+desktop, no new device error outside the expected missing-driver state and no
+forbidden AGX activity.  The observation must be exported before shutdown.
+
+Verdict: pending.  Stop at the hardware approval checkpoint; no candidate has
+been built for installation, copied to the Air or booted by this entry.
