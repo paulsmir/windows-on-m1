@@ -43,7 +43,7 @@ jobs:
       - name: Install firmware build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y acpica-tools clang lld nasm python3-venv
+          sudo apt-get install -y acpica-tools clang lld llvm nasm python3-venv
 
       - name: Verify generated contracts and host policy
         run: |

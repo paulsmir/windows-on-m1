@@ -65,6 +65,11 @@ class J313AgxG2MuProfileTests(unittest.TestCase):
     def test_ci_builds_and_checks_stable_and_g2_profiles(self):
         workflow = WORKFLOW.read_text()
         self.assertIn("acpica-tools", workflow)
+        self.assertRegex(
+            workflow,
+            r"apt-get install[^\n]*\bllvm\b",
+            "CLANGPDB requires the llvm package that provides llvm-lib",
+        )
         self.assertIn("tools/generate_j313_agx_g2_contract.py --check", workflow)
         self.assertIn('g2: "FALSE"', workflow)
         self.assertIn('g2: "TRUE"', workflow)
