@@ -22,6 +22,23 @@ class J313AgxG2AmlVerifierTests(unittest.TestCase):
     def test_exact_generated_device_is_accepted(self):
         verify_dsl(self.valid, self.contract)
 
+    def test_iasl_disassembled_package_arities_are_accepted(self):
+        disassembled = self.valid.replace(
+            "Name (_DSD, Package ()",
+            "Name (_DSD, Package (0x02)",
+            1,
+        ).replace(
+            "        Package ()\n        {",
+            "        Package (0x04)\n        {",
+            1,
+        ).replace("Package () {", "Package (0x02) {")
+        verify_dsl(disassembled, self.contract)
+        self.assert_rejected(
+            disassembled.replace("Name (_DSD, Package (0x02)",
+                                 "Name (_DSD, Package (0x03)", 1),
+            "_DSD package",
+        )
+
     def test_wrong_or_partial_hid_is_rejected(self):
         self.assert_rejected(
             self.valid.replace('"APPL0002"', '"APPL000"'),

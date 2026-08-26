@@ -68,6 +68,13 @@ def _integer(value):
         raise AmlContractError(f"invalid AML integer {value!r}") from exc
 
 
+def _package_arity(expected):
+    """Match source Package () or iasl's exact explicit package count."""
+    decimal = str(expected)
+    hexadecimal = f"{expected:X}"
+    return rf"(?:\s*|\s*(?:0[xX]0*{hexadecimal}|0*{decimal})\s*)"
+
+
 def _name_string(body, name, description):
     match = _one_match(
         rf"\bName\s*\(\s*{re.escape(name)}\s*,\s*\"([^\"]*)\"\s*\)",
@@ -88,7 +95,7 @@ def _name_integer(body, name, description):
 
 def _property(body, name, description):
     match = _one_match(
-        rf"\bPackage\s*\(\s*\)\s*\{{\s*\"{re.escape(name)}\"\s*,\s*"
+        rf"\bPackage\s*\({_package_arity(2)}\)\s*\{{\s*\"{re.escape(name)}\"\s*,\s*"
         r"(?P<value>\"[^\"]*\"|[A-Za-z]+|0[xX][0-9A-Fa-f]+|[0-9]+)\s*\}",
         body,
         description,
@@ -176,7 +183,7 @@ def verify_dsl(dsl, contract=None):
         )
 
     dsd_match = _one_match(
-        r"\bName\s*\(\s*_DSD\s*,\s*Package\s*\(\s*\)\s*\{",
+        rf"\bName\s*\(\s*_DSD\s*,\s*Package\s*\({_package_arity(2)}\)\s*\{{",
         device,
         "_DSD package",
     )
