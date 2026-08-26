@@ -10699,3 +10699,33 @@ be retried.  The evidence proves matching, exact translated-resource delivery
 and fail-closed StartDevice execution, but it does not authorize AGX hardware
 access.  A successor must preregister Problem 43 explicitly before reusing the
 unchanged candidates for a corrected qualification gate.
+
+### EXP-20260826-117 — corrected AppleAgx G2 Problem-43 qualification
+
+Status: preregistered; execution not approved.  This successor changes only
+the two facts learned by the safely rejected EXP-116: the designed
+`StartDevice -> STATUS_NOT_SUPPORTED` path is expected to produce Windows PnP
+Problem 43 (`CM_PROB_FAILED_POST_START`), and the stable non-present Problem-45
+history record now retains class `Display` plus friendly name
+`Apple AGX G13 render adapter (G2 development)`.  Neither candidate changes.
+
+The complete contract is
+`documentation/plans/2026-08-26-j313-agx-g2-problem43-qualification.md`.
+It pins the same accepted G2 manifest, m1n1, Mu FD, signed driver manifest,
+checksum index and signer recorded by EXP-116, requires a fresh absent evidence
+path `investigation/artifacts/EXP-20260826-117-agx-g2-problem43-qualification/`,
+and permits exactly one public-assisted G2 boot after exact stage-only package
+preparation.
+
+Pass requires one present APPL0002 device bound to `AppleAgx`, the exact MMIO
+range and nine vectors, stopped service, no loaded module and exactly Problem
+43 while the guest remains responsive with eight CPUs and healthy native
+input.  Every AGX hardware action remains forbidden: no MMIO access, firmware,
+clock, UAT, queue, command, interrupt injection, power or display ownership.
+The exact stable firmware, package and certificate rollback is mandatory and
+`/force` remains forbidden.
+
+A pass would authorize only preregistration of a later firmware/power ownership
+experiment.  It would not authorize that experiment.  A new explicit user
+approval is required after this preregistration is committed and pushed.  No
+EXP-117 Windows or hardware mutation has occurred.
