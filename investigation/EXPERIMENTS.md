@@ -9797,3 +9797,74 @@ the inherited boot video display flag to zero and avoids the second display
 pipeline initialization while leaving the candidate binary, GPU fixture and
 all qualification rules unchanged.  A failing operator test must require this
 argument before any new hardware run.
+
+### EXP-20260826-108 — normalized headless ten-cold-cookie qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: a physical normalization reset followed by headless activation of
+the exact validated candidate will preserve the recovery firmware's single DCP
+bring-up, avoid the EXP-107 `DC_Init` abort and complete ten cold G1R renders
+with ten globally distinct immutable m1n1 boot cookies.
+
+Single functional changed variable relative to rejected EXP-107: candidate
+chainload passes `-v` after the argument separator, setting inherited
+`video.display=0`.  The operator also performs one initial physical reset so
+cycle one cannot inherit the already-contaminated state left by a prior failed
+experiment.  Candidate bytes, recovery bytes, fixture, renderer schema, AGX
+commands, mappings, queue, deadlines, post-cycle resets and all render and
+cookie acceptance rules are unchanged.  EXP-107 evidence is immutable and is
+not reused.
+
+Contract:
+- root `284e35009b4e1e53969c799907758c6799431181`; operator implementation
+  `8b1150195bb0e7b1cf0c1b69f68c42708c64220f`; boot identity implementation
+  `f9f9cdaf25d95911b079209185433df98672219f`; runtime m1n1
+  `e1a9a06fc170a04d055b5299ad98a9c478b1c06b`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, boot-identity helper and normalized cold operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`
+  and `dbeb63f8bd32a5bc1a02bd24aa11eb2e0dd1b99a9d4a1acdadfcad57cbfe3bac`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `9fea37b9ffc6cdf44ba290181bbe5248b1de343fb91f7165f75458f7c799acd7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-cookie-candidate/` has boot, assisted m1n1
+  and Mu firmware SHA-256
+  `621342d1b5c135dc992535349db1c653876a33272043d48ff79b99a8a965f4a5`,
+  `a7badd88ee8d1da51a280e77d6389a6d55b40da052b194ca269ff0a88169d7b2`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- both new mandatory tests failed before implementation; after the fix all 28
+  operator tests and the fresh complete public suite passed 605/605, shell
+  syntax and diff checks passed, stable recovery passed all five of its own
+  checksums and the exact operator dry-run accepted the initial normalization
+  reset, context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, ten
+  post-cycle cold resets and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-108-agx-g1r-cookie-final/` was absent at
+  preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-cookie-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-108-agx-g1r-cookie-final \
+  --cycles 10
+```
+
+Pass requires one successful initial normalization reset followed by ten
+complete G1R results, ten post-cycle physical resets, ten cookie-bound receipts,
+ten globally distinct pre-render cookies and proxy identities, canonical result
+bindings, an accepted aggregate and successful independent `verify-result`.
+m1n1 bases may recur.  Any failure rejects EXP-108; preserve all evidence,
+never retry it in place and keep Windows blocked.
