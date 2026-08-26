@@ -10765,3 +10765,31 @@ G2 enumeration plus fail-closed Windows bind boundary.  It authorizes only
 preregistration of a separately bounded AGX firmware/power ownership
 experiment; it does not itself authorize firmware startup, MMIO, clocks,
 interrupts, UAT, queues, commands, rendering or display ownership.
+
+### EXP-20260826-118 — J313 AGX G2 power-broker qualification
+
+Status: preregistered and approved for one execution under the user's standing
+authorization for bounded, fail-closed, reversible experiments.  The complete
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-power-broker-qualification.md`.
+
+The experiment pins m1n1
+`035b8ab38b504fa30f15e4db75649b1c5e1e73ae`, Mu
+`c6108366201f869b297912a0ef8323b343256ecc`, WDK run `32979986789`, Mu run
+`32980992246`, assisted manifest
+`fd3058016fe866258eefefc79d5e72e6136479682b0390b1c2cb00f8293177c2`,
+driver manifest
+`9c5ab00a08c856e0dd2459cd1850acebe3a8a382812f61801d838989022a9f75`
+and signer `E85192E5FD6D15A43C05B2D9E652B9867EB22825`.
+
+The one permitted mutation stages only that signed qualification package under
+the live immutable stable baseline, performs one public-assisted G2 v2 boot
+with `WOM1_AGX_G2_POWER_BROKER=1`, and requires exactly `ON`, `QUERY`, `OFF`
+receipts ending in state OFF.  The expected Windows result is the same
+fail-closed Problem 43 boundary with the additional exact broker resource.
+Firmware, RTKit, SGX MMIO, interrupts, UAT, queues, commands, rendering and
+display ownership remain forbidden.  Stable firmware, package and certificate
+rollback is mandatory; no retry and no force deletion are permitted.
+
+No EXP-118 Windows package, certificate, firmware or hardware mutation has
+occurred at preregistration time.  The fresh evidence path is absent.
