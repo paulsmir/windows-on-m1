@@ -63,43 +63,43 @@ jobs:
           /p:RunCodeAnalysis=true
           /p:AppleAgxPowerQualification=${{ matrix.qualification }}
 
-      - name: Sign qualification catalog with ephemeral test certificate
+      - name: Verify WDK qualification signature provenance
         if: matrix.qualification == true
+        timeout-minutes: 2
         shell: pwsh
         run: |
+          Write-Host "Locating the WDK-signed qualification catalog"
           $catalog = Get-ChildItem drivers/apple-agx/windows/ARM64/Debug -Recurse -Filter appleagx.cat |
             Select-Object -First 1
-          $signTool = Get-ChildItem packages -Recurse -Filter signtool.exe |
-            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
-            Select-Object -First 1
           if (!$catalog) { throw "appleagx.cat was not found" }
-          if (!$signTool) { throw "signtool.exe was not found in the restored WDK" }
-          $certificatePath = Join-Path $catalog.Directory.FullName "AppleAgxTest.cer"
-          $certificate = $null
-          $trustedCertificate = $null
-          try {
-            $certificate = New-SelfSignedCertificate `
-              -Type CodeSigningCert `
-              -Subject "CN=AppleAgx G2 Qualification Run $env:GITHUB_RUN_ID" `
-              -CertStoreLocation Cert:\CurrentUser\My `
-              -KeyExportPolicy NonExportable `
-              -KeyUsage DigitalSignature `
-              -NotAfter (Get-Date).AddDays(7)
-            Export-Certificate -Cert $certificate -FilePath $certificatePath -Type CERT | Out-Null
-            $trustedCertificate = Import-Certificate -FilePath $certificatePath `
-              -CertStoreLocation Cert:\CurrentUser\Root
-            & $signTool.FullName sign /fd SHA256 /sha1 $certificate.Thumbprint /s My $catalog.FullName
-            if ($LASTEXITCODE -ne 0) { throw "signtool sign failed: $LASTEXITCODE" }
-            & $signTool.FullName verify /pa /v $catalog.FullName
-            if ($LASTEXITCODE -ne 0) { throw "signtool verify failed: $LASTEXITCODE" }
-          } finally {
-            if ($trustedCertificate) {
-              Remove-Item "Cert:\CurrentUser\Root\$($trustedCertificate.Thumbprint)" -Force
-            }
-            if ($certificate) {
-              Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force
-            }
+          $debugDirectory = Split-Path $catalog.Directory.FullName -Parent
+          $certificatePath = Join-Path $debugDirectory "AppleAgx.cer"
+          if (!(Test-Path $certificatePath)) {
+            throw "WDK test certificate AppleAgx.cer was not exported"
           }
+          Write-Host "Reading the catalog signature and exported certificate"
+          $signature = Get-AuthenticodeSignature -FilePath $catalog.FullName
+          $certificate = Get-PfxCertificate -FilePath $certificatePath
+          if (!$signature.SignerCertificate) {
+            throw "appleagx.cat has no Authenticode signer"
+          }
+          if ($signature.Status -in @('NotSigned', 'HashMismatch', 'NotSupported')) {
+            throw "appleagx.cat has an unusable signature: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+            throw "catalog signer does not match AppleAgx.cer"
+          }
+          $provenancePath = Join-Path $debugDirectory "AppleAgx-signature.json"
+          [ordered]@{
+            catalog_sha256 = (Get-FileHash $catalog.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            certificate_sha256 = (Get-FileHash $certificatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            signer_thumbprint = $signature.SignerCertificate.Thumbprint
+            signer_subject = $signature.SignerCertificate.Subject
+            signature_status = [string]$signature.Status
+            github_run_id = $env:GITHUB_RUN_ID
+            source_commit = $env:GITHUB_SHA
+          } | ConvertTo-Json | Set-Content -Path $provenancePath -Encoding utf8
+          Write-Host "Verified WDK signature thumbprint $($certificate.Thumbprint)"
 
       - name: Upload test package
         uses: actions/upload-artifact@v4
@@ -111,4 +111,5 @@ jobs:
             drivers/apple-agx/windows/ARM64/Debug/**/*.inf
             drivers/apple-agx/windows/ARM64/Debug/**/*.cat
             drivers/apple-agx/windows/ARM64/Debug/**/*.cer
+            drivers/apple-agx/windows/ARM64/Debug/**/*-signature.json
             drivers/apple-agx/windows/ARM64/Debug/**/*.pdb
