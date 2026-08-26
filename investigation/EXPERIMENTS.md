@@ -11229,3 +11229,59 @@ This result authorizes only a separately preregistered persistent
 AddDevice/StartDevice boundary probe; it does not authorize GPU hardware
 initialization. Evidence checksum-index SHA-256 is
 `5118b93c5fe8635e4d46015e040ac47be045054e72723cef27421d3f7d262fd6`.
+
+### EXP-20260826-125 — J313 AGX AddDevice/StartDevice boundary qualification
+
+Status: preregistered at `2026-08-26T19:57:34Z` for one G2 execution. The full
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-lifecycle-boundary-qualification.md`.
+The falsifiable hypothesis is that the exact Problem-43 package reaches
+`DxgkDdiAddDevice` and possibly `DxgkDdiStartDevice`, but EXP-124 lost the
+evidence when the miniport unloaded. The sole candidate variable is driver
+commit `6692ffbbe6738b3066854cf42dbe38b524715934`, which adds qualification-only
+device-instance stage/status DWORDs and routes the existing StartDevice event
+record through the same helper. No production path or GPU operation changed.
+
+Microsoft's documented callback contract supplies the PDO to AddDevice at
+PASSIVE_LEVEL and permits `IoOpenDeviceRegistryKey` plus `ZwSetValueKey` for
+the device key. Dxgkrnl owns callback invocation; AppleAgx owns only private
+context, translated-resource validation and breadcrumbs; Mu owns ACPI; m1n1
+owns the synthetic broker and NVMe. AGX firmware, RTKit, SGX MMIO, interrupts,
+UAT, queues, commands, render, present and display ownership remain forbidden.
+
+Pinned root branch is `feature/j313-gpu-acceleration`; preregistration follows
+root commit `b6b7f7d`. m1n1 is
+`bee53dc60bd160c0a64de758974af767c2970baf`; Mu is
+`c6108366201f869b297912a0ef8323b343256ecc`. WDK run `33007284611` passed both
+ARM64 jobs. Driver manifest SHA-256 is
+`21d8cd97630389d19c7185ee110c7eac81e78ecee835d8fe940b7344df3505d6`;
+SYS is `6a8bac7b40dd13e960b87f138b391e4eae2f79373c9623ca1803cd6b1c9a91e6`;
+catalog is `87c70750c56d18229a313178421a0dcf1c961f0523bf971defbd66ffba4ee020`;
+signer is `F247053BE6C49EFEB4C8D8AEBF6F47399787B1C2`.
+
+The unchanged G2 profile manifest is
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`.
+Preparation and rollback use the hardware-validated EXP-123 manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`,
+combining ordinary Mu
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`
+with NVMe-safe m1n1
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+This replaces the old recovery binary whose one-CQE policy produced Event 129.
+
+The current guest preflight is not admissible for staging: APPL0002 and the
+package are absent, but an orphan disabled AppleAgx service remains marked
+`DriverDelete=1` and `DeleteFlag=1`; the old recovery boot has 70 stornvme
+Event 129 records and one Kernel-Power event since boot. EXP-125 therefore
+begins with a normal shutdown and exact EXP-123 recovery boot. Staging stops
+unless that reboot clears the pending service and yields eight CPUs, healthy
+input/storage/xHCI and zero new critical or Event-129 records.
+
+The expected checkpoint is persistent AddDevice stage 2/status 0, followed by
+either no StartDevice values or one exact StartDevice stage/status pair. One
+present APPL0002, Problem 43 and an unloaded stopped driver remain expected.
+Any hash mismatch, forbidden GPU action, BugCheck, reset, storage timeout,
+input loss, failed rollback or second G2 boot rejects the run. Evidence path
+`investigation/artifacts/EXP-20260826-125-agx-lifecycle-boundary/` must be absent
+before execution. Recovery removes only the recorded `oemNN.inf` and exact
+signer without `/force`.
