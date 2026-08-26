@@ -247,6 +247,40 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("*NumberOfChildren = 0", adapter)
         self.assertIn("return STATUS_NOT_SUPPORTED", adapter)
 
+    def test_mmio_qualification_persists_map_subview_unmap_receipts(self):
+        adapter = self.read("src/adapter.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
+        header = self.read("include/apple_agx_driver.h")
+
+        self.assertIn("AppleAgxRecordMmioQualification", header)
+        self.assertIn("AppleAgxRecordMmioQualification", diagnostics)
+        for value_name in (
+            "Wom1MmioMapStatus",
+            "Wom1MmioSubviewStatus",
+            "Wom1MmioUnmapStatus",
+            "Wom1MmioSgxStartLow",
+            "Wom1MmioSgxStartHigh",
+            "Wom1MmioSgxLength",
+            "Wom1MmioAscOffset",
+            "Wom1MmioAscLength",
+        ):
+            self.assertIn(value_name, diagnostics)
+        self.assertIn("#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION", diagnostics)
+        self.assertNotIn("READ_REGISTER", diagnostics)
+        self.assertNotIn("WRITE_REGISTER", diagnostics)
+        self.assertNotIn("MmMapIoSpace", diagnostics)
+
+        map_call = adapter.index("AppleAgxQualifyMmioMapping")
+        mapped_receipt = adapter.index("AppleAgxMmioMapped", map_call)
+        subview_receipt = adapter.index("AppleAgxMmioSubviewValidated",
+                                        mapped_receipt)
+        unmap_call = adapter.index("AppleAgxReleaseMmioMapping", subview_receipt)
+        unmapped_receipt = adapter.index("AppleAgxMmioUnmapped", unmap_call)
+        self.assertLess(map_call, mapped_receipt)
+        self.assertLess(mapped_receipt, subview_receipt)
+        self.assertLess(subview_receipt, unmap_call)
+        self.assertLess(unmap_call, unmapped_receipt)
+
     def test_power_qualification_is_opt_in_bounded_and_always_unmapped(self):
         adapter = self.read("src/adapter.c")
         power = self.read("src/power.c")

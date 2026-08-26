@@ -126,9 +126,17 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   adapter->DxgkInterfaceValid = TRUE;
   status = AppleAgxQualifyMmioMapping(&adapter->DxgkInterface,
                                       &adapter->MappingState);
+  AppleAgxRecordMmioQualification(adapter->PhysicalDeviceObject,
+                                  AppleAgxMmioMapped, status,
+                                  &adapter->MappingState);
   if (NT_SUCCESS(status)) {
+    AppleAgxRecordMmioQualification(adapter->PhysicalDeviceObject,
+                                    AppleAgxMmioSubviewValidated,
+                                    STATUS_SUCCESS, &adapter->MappingState);
     status = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
                                         &adapter->MappingState);
+    AppleAgxRecordMmioQualification(adapter->PhysicalDeviceObject,
+                                    AppleAgxMmioUnmapped, status, NULL);
   }
   if (!NT_SUCCESS(status)) {
     AppleAgxStateInitialize(&adapter->State);

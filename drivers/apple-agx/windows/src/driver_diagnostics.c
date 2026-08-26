@@ -30,7 +30,8 @@ static void AppleAgxWriteDiagnosticDword(PUNICODE_STRING RegistryPath,
 static void AppleAgxWriteDeviceDiagnosticDword(PDEVICE_OBJECT DeviceObject,
                                                 PCWSTR ValueName,
                                                 ULONG Value) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                         \
+    defined(APPLE_AGX_G2_MMIO_QUALIFICATION)
   UNICODE_STRING valueName;
   HANDLE key = NULL;
 
@@ -49,6 +50,50 @@ static void AppleAgxWriteDeviceDiagnosticDword(PDEVICE_OBJECT DeviceObject,
   UNREFERENCED_PARAMETER(Value);
 #endif
 }
+
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+void AppleAgxRecordMmioQualification(
+    PDEVICE_OBJECT DeviceObject, APPLE_AGX_MMIO_STAGE Stage, NTSTATUS Status,
+    const APPLE_AGX_MAPPING_STATE *MappingState) {
+  ULONGLONG sgxStart;
+
+  switch (Stage) {
+  case AppleAgxMmioMapped:
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1MmioMapStatus",
+                                       (ULONG)Status);
+    if (!NT_SUCCESS(Status) || MappingState == NULL)
+      return;
+    sgxStart = MappingState->SgxPhysicalAddress;
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject,
+                                       L"Wom1MmioSgxStartLow",
+                                       (ULONG)sgxStart);
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject,
+                                       L"Wom1MmioSgxStartHigh",
+                                       (ULONG)(sgxStart >> 32));
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1MmioSgxLength",
+                                       MappingState->SgxLength);
+    break;
+  case AppleAgxMmioSubviewValidated:
+    AppleAgxWriteDeviceDiagnosticDword(
+        DeviceObject, L"Wom1MmioSubviewStatus", (ULONG)Status);
+    if (!NT_SUCCESS(Status) || MappingState == NULL ||
+        MappingState->SgxBase == NULL || MappingState->AscBase == NULL)
+      return;
+    AppleAgxWriteDeviceDiagnosticDword(
+        DeviceObject, L"Wom1MmioAscOffset",
+        (ULONG)(MappingState->AscBase - MappingState->SgxBase));
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1MmioAscLength",
+                                       J313_AGX_G2_ASC_MMIO_SIZE);
+    break;
+  case AppleAgxMmioUnmapped:
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1MmioUnmapStatus",
+                                       (ULONG)Status);
+    break;
+  default:
+    break;
+  }
+}
+#endif
 
 #ifdef APPLE_AGX_G2_POWER_QUALIFICATION
 static void AppleAgxWriteDiagnosticDwordToKey(HANDLE Key, PCWSTR ValueName,

@@ -46,6 +46,14 @@ typedef enum _APPLE_AGX_START_STAGE {
   AppleAgxStartFailClosed,
 } APPLE_AGX_START_STAGE;
 
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+typedef enum _APPLE_AGX_MMIO_STAGE {
+  AppleAgxMmioMapped = 1,
+  AppleAgxMmioSubviewValidated,
+  AppleAgxMmioUnmapped,
+} APPLE_AGX_MMIO_STAGE;
+#endif
+
 DXGKDDI_ADD_DEVICE AppleAgxDdiAddDevice;
 DXGKDDI_START_DEVICE AppleAgxDdiStartDevice;
 DXGKDDI_STOP_DEVICE AppleAgxDdiStopDevice;
@@ -76,6 +84,10 @@ NTSTATUS AppleAgxQualifyMmioMapping(
 NTSTATUS AppleAgxReleaseMmioMapping(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _Inout_ APPLE_AGX_MAPPING_STATE *MappingState);
+void AppleAgxRecordMmioQualification(
+    _In_ PDEVICE_OBJECT DeviceObject, _In_ APPLE_AGX_MMIO_STAGE Stage,
+    _In_ NTSTATUS Status,
+    _In_opt_ const APPLE_AGX_MAPPING_STATE *MappingState);
 #endif
 void AppleAgxLogStartStage(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ APPLE_AGX_START_STAGE Stage,
