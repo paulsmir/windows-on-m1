@@ -9992,3 +9992,80 @@ device-display implementation itself was present but never selected.  The next
 change must move the Python padding before `cmdline` in all three revisions and
 add a byte-offset/round-trip regression test before implementation.  EXP-109
 remains immutable and its evidence directory must never be reused.
+
+### EXP-20260826-110 — corrected boot-argument ABI ten-cold qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: serializing the Python boot-argument structure with the same
+four-byte pre-command-line alignment as the C ABI will deliver the exact
+`-v m1n1.nodisplay` command line.  Candidate m1n1 will consequently skip every
+DCP and framebuffer operation, retain recovery ownership of the display and
+complete ten cookie-bound G1R renders without a firmware abort.
+
+Single changed variable relative to rejected EXP-109: Python `BootArgs_r1`,
+`BootArgs_r2` and `BootArgs_r3` now place their four-byte alignment pad before
+`cmdline`, matching C offset 112.  The dedicated display bypass, operator,
+initial normalization reset, recovery and Mu bytes, fixture, renderer schema,
+AGX commands, mappings, queue, deadlines, post-cycle resets and every output
+and cookie acceptance rule are unchanged.  EXP-109 evidence is immutable and
+is not reused.
+
+Contract:
+- root preregistration base `07a35be57882667e59030a9e03fc7e9e7e2fef83`,
+  root ABI implementation `974542e44fca6ed2f427fec9cc41cf7a575ef38f`,
+  root operator implementation `a47cf1a94ab3952aa5674388121815307d1324a4`,
+  m1n1 ABI/runtime `f76b63ade8756571acd91400283ee68b2f1d65ce`,
+  m1n1 display implementation `f6079c7143b58b2ffc242d5daa9a3a5d063ed85a`
+  and Mu `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- corrected Python ABI, byte-offset regression test, exact display parser and
+  operator SHA-256 are
+  `4e6e4202237d39082c8a2ae53a2e01973cdbad11ec11cd7968e8e251112e0915`,
+  `82bc72dbb66b2499242c27013027a3f18bdb4c840e8686d4250fecd6d999c2d6`,
+  `ad3cf1a850ddaba24dc978875cabecf48054ef372705e05f0075abaa92698f9a`
+  and `254980cc1ba25b936f6dda697fd232936db2af45c6846841b783397a76064673`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-bootargs-candidate/` has boot, stage zero,
+  stage one, assisted m1n1 and Mu firmware SHA-256
+  `2ade878b9e973d4a489cb77f3449c62160a84385c02ed9c40da88432487b1206`,
+  `cf0bb1e370bf12cf814d41a7d08fbc6d4854bc38cda9da79c62d114841b82d8d`,
+  `c744f2dd78452221698079f11db501fedc97bf33624541f84659ae8b68aebbb6`,
+  `985b419ebe55f5977376008318553d8ac291ab892d773a8c278a542f4d8836d0`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- the ABI regression test failed for all three boot-argument revisions before
+  implementation.  Afterward the complete public suite passed 606/606, the
+  complete m1n1 host suite and production build passed, and the canonical
+  development builder completed successfully;
+- stable recovery separately passed all five checksums and was not modified.
+  Candidate files are read-only.  The exact dry-run accepted the initial reset,
+  context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, ten post-cycle
+  resets and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-110-agx-g1r-bootargs-final/` was absent
+  at preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-bootargs-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-110-agx-g1r-bootargs-final \
+  --cycles 10
+```
+
+Pass requires one initial normalization reset, ten complete G1R results, ten
+post-cycle physical resets, ten cookie-bound receipts, ten globally distinct
+pre-render cookies and proxy identities, canonical result bindings, accepted
+aggregate and successful independent verification.  Before the first render,
+candidate output must contain the exact `cmdline: -v m1n1.nodisplay` and the
+explicit display-disabled message, with no candidate DCP modeset or quiesce.
+m1n1 bases may recur.  Any failure rejects EXP-110; preserve all evidence,
+never retry it in place and keep Windows blocked.
