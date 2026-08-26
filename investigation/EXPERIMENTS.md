@@ -11560,3 +11560,29 @@ EXP-128 is rejected, closed and must not be retried. The next authorized work
 is offline diagnostic parity for MMIO qualification and localization of the
 pre-map `STATUS_DEVICE_CONFIGURATION_ERROR`; no further hardware action is
 authorized by this result.
+
+### EXP-20260827-129 — J313 AGX pre-map diagnostic qualification
+
+Status: preregistered at `2026-08-26T23:50:00Z` for one G2 execution. The
+literal contract is
+`documentation/plans/2026-08-27-j313-agx-pre-map-diagnostic-qualification.md`.
+The one-variable change from rejected EXP-128 is lifecycle and translated-
+resource diagnostic parity in commit
+`451b276ded24fd01239fdec853a2a23a14852e92`; GPU behavior is unchanged.
+
+The exact MMIO package comes from successful ARM64 WDK run `33024515164` at
+source `ed2a385b806b9859a7898c82ea5a307ed59c13fb`. Its SYS is
+`13b1ee676c45c9a5d8cc49a972d63439188c77d39f38f7eb06f98e4a18e7230b`,
+INF is `b7c0714443cf45bb3125468cda6d7bc5d70d31a3547cf688077dbebe1bf0d816`,
+catalog is `6e199757e3fb79ff06d077b4a9d71e470d24c9adc67c97dd0567d02f56eca823`,
+certificate is
+`29aebbe3dc260e143a616305cbd72c548a97a1e5c9c8a30117e497c8e0375685`
+and signer is `74CA42EA1DFE978EFFF4070049219DD5B0790867`.
+
+Candidate and recovery identities remain byte-for-byte identical to EXP-128.
+Exactly one display-`both` G2 boot is allowed. Passing requires fresh current-
+profile receipts that localize the pre-map failure, no forbidden GPU action,
+healthy input/NVMe/xHCI, zero Event 129, zero critical events, normal shutdown
+and exact non-force rollback. The evidence path
+`investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/` was absent
+at preregistration. Any mismatch closes the experiment without retry.
