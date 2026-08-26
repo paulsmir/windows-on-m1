@@ -28,11 +28,11 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiUnload = AppleAgxDdiUnload;
   initialization.DxgkDdiQueryAdapterInfo = AppleAgxDdiQueryAdapterInfo;
 
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordDriverEntryBoundary(RegistryPath, 1, STATUS_PENDING);
 #endif
   status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordDriverEntryBoundary(RegistryPath, 2, status);
 #endif
   return status;

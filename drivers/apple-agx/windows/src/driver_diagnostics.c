@@ -6,7 +6,7 @@
 
 static void AppleAgxWriteDiagnosticDword(PUNICODE_STRING RegistryPath,
                                          PCWSTR ValueName, ULONG Value) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   OBJECT_ATTRIBUTES attributes;
   UNICODE_STRING valueName;
   HANDLE key = NULL;
@@ -30,8 +30,7 @@ static void AppleAgxWriteDiagnosticDword(PUNICODE_STRING RegistryPath,
 static void AppleAgxWriteDeviceDiagnosticDword(PDEVICE_OBJECT DeviceObject,
                                                 PCWSTR ValueName,
                                                 ULONG Value) {
-#if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                         \
-    defined(APPLE_AGX_G2_MMIO_QUALIFICATION)
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   UNICODE_STRING valueName;
   HANDLE key = NULL;
 
@@ -95,7 +94,7 @@ void AppleAgxRecordMmioQualification(
 }
 #endif
 
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
 static void AppleAgxWriteDiagnosticDwordToKey(HANDLE Key, PCWSTR ValueName,
                                                ULONG Value) {
   UNICODE_STRING valueName;
@@ -117,7 +116,7 @@ static void AppleAgxWriteIndexedDiagnosticDword(HANDLE Key, PCWSTR Format,
 
 void AppleAgxRecordTranslatedResources(
     PDEVICE_OBJECT DeviceObject, PCM_RESOURCE_LIST TranslatedResources) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   HANDLE key = NULL;
   ULONG descriptorCount = 0;
   ULONG fullIndex;

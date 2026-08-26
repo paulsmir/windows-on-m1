@@ -47,7 +47,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("ZwSetValueKey", diagnostics)
         self.assertIn("Wom1DriverEntryStage", diagnostics)
         self.assertIn("Wom1DxgkInitializeStatus", diagnostics)
-        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", driver)
+        self.assertIn("#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", driver)
         self.assertIn("AppleAgxRecordDriverEntryBoundary", driver)
         self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
         self.assertRegex(driver, r"return\s+status\s*;")
@@ -66,7 +66,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgxRecordAddDeviceBoundary", diagnostics)
         self.assertIn("AppleAgxRecordStartDeviceBoundary", diagnostics)
         self.assertIn("AppleAgxLogStartStage", diagnostics)
-        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", diagnostics)
+        self.assertIn("#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", diagnostics)
         self.assertNotIn("MmMapIoSpace", diagnostics)
         self.assertNotIn("WRITE_REGISTER", diagnostics)
 
@@ -109,7 +109,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "Level", "Vector", "AffinityLow", "AffinityHigh",
         ):
             self.assertIn(f'L"Wom1Resource%02lu{suffix}"', diagnostics)
-        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", diagnostics)
+        self.assertIn("#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", diagnostics)
         self.assertNotIn("MmMapIoSpace", diagnostics)
         self.assertNotIn("WRITE_REGISTER", diagnostics)
 
@@ -117,7 +117,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         validate = adapter.index("AppleAgxValidateTranslatedResources")
         self.assertLess(record, validate)
         qualification_guard = adapter.rfind(
-            "#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", 0, record
+            "#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", 0, record
         )
         self.assertGreaterEqual(qualification_guard, 0)
         self.assertLess(record, adapter.index("#endif", qualification_guard))
@@ -280,6 +280,33 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertLess(mapped_receipt, subview_receipt)
         self.assertLess(subview_receipt, unmap_call)
         self.assertLess(unmap_call, unmapped_receipt)
+
+    def test_all_qualification_profiles_share_lifecycle_diagnostics(self):
+        header = self.read("include/apple_agx_driver.h")
+        driver = self.read("src/driver.c")
+        adapter = self.read("src/adapter.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
+
+        self.assertIn("APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", header)
+        self.assertIn("defined(APPLE_AGX_G2_POWER_QUALIFICATION)", header)
+        self.assertIn("defined(APPLE_AGX_G2_MMIO_QUALIFICATION)", header)
+        self.assertIn(
+            "#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", driver
+        )
+        self.assertGreaterEqual(
+            adapter.count(
+                "#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS"
+            ),
+            11,
+        )
+        self.assertIn(
+            "#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS",
+            diagnostics,
+        )
+        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", adapter)
+        self.assertIn("AppleAgxQualifyPowerBroker", adapter)
+        self.assertIn("#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION", adapter)
+        self.assertIn("AppleAgxQualifyMmioMapping", adapter)
 
     def test_power_qualification_is_opt_in_bounded_and_always_unmapped(self):
         adapter = self.read("src/adapter.c")

@@ -7,7 +7,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiAddDevice(
   if (PhysicalDeviceObject == NULL || MiniportDeviceContext == NULL)
     return STATUS_INVALID_PARAMETER;
 
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordAddDeviceBoundary(PhysicalDeviceObject, AppleAgxAddEntered,
                                   STATUS_PENDING);
 #endif
@@ -15,7 +15,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiAddDevice(
   adapter = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*adapter),
                             APPLE_AGX_POOL_TAG);
   if (adapter == NULL) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
     AppleAgxRecordAddDeviceBoundary(PhysicalDeviceObject, AppleAgxAddReturned,
                                     STATUS_INSUFFICIENT_RESOURCES);
 #endif
@@ -26,7 +26,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiAddDevice(
   adapter->PhysicalDeviceObject = PhysicalDeviceObject;
   AppleAgxStateInitialize(&adapter->State);
   *MiniportDeviceContext = adapter;
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordAddDeviceBoundary(PhysicalDeviceObject, AppleAgxAddReturned,
                                   STATUS_SUCCESS);
 #endif
@@ -45,7 +45,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
       NumberOfVideoPresentSources == NULL || NumberOfChildren == NULL)
     return STATUS_INVALID_PARAMETER;
 
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                     AppleAgxStartEntered, STATUS_SUCCESS);
 #endif
@@ -56,13 +56,13 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   status = DxgkInterface->DxgkCbGetDeviceInformation(
       DxgkInterface->DeviceHandle, &deviceInfo);
   if (!NT_SUCCESS(status)) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
     AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                       AppleAgxStartDeviceInformation, status);
 #endif
     return status;
   }
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                     AppleAgxStartDeviceInformation,
                                     STATUS_SUCCESS);
@@ -73,27 +73,27 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   status =
       AppleAgxValidateTranslatedResources(deviceInfo.TranslatedResourceList);
   if (!NT_SUCCESS(status)) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
     AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                       AppleAgxStartResourcesValidated, status);
 #endif
     return status;
   }
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                     AppleAgxStartResourcesValidated,
                                     STATUS_SUCCESS);
 #endif
 
   if (!AppleAgxStateValidateResources(&adapter->State)) {
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
     AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                       AppleAgxStartStateValidated,
                                       STATUS_INVALID_DEVICE_STATE);
 #endif
     return STATUS_INVALID_DEVICE_STATE;
   }
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                     AppleAgxStartStateValidated,
                                     STATUS_SUCCESS);
@@ -152,7 +152,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
    * render callbacks remain unavailable.
    */
   AppleAgxStateInitialize(&adapter->State);
-#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                     AppleAgxStartFailClosed,
                                     STATUS_NOT_SUPPORTED);

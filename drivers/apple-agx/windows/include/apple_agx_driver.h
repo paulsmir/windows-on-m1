@@ -19,6 +19,11 @@
 #include "apple_agx_mapping.h"
 #endif
 
+#if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                         \
+    defined(APPLE_AGX_G2_MMIO_QUALIFICATION)
+#define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
+#endif
+
 #define APPLE_AGX_POOL_TAG 'xgAA'
 
 typedef struct _APPLE_AGX_ADAPTER {
