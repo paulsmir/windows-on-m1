@@ -6,6 +6,8 @@ import unittest
 from tools.generate_j313_agx_g2_contract import (
     G2ContractError,
     load_g2_contract,
+    render_asl_include,
+    render_m1n1_header,
     render_windows_header,
 )
 
@@ -15,6 +17,9 @@ G1 = ROOT / "config" / "j313-agx.json"
 G2 = ROOT / "config" / "j313-agx-g2.json"
 HEADER = (ROOT / "drivers" / "apple-agx" / "shared" / "include" /
           "j313_agx_g2.generated.h")
+ASL_INCLUDE = (ROOT / "mu" / "Platform" / "MacBookAirMid2020Pkg" /
+               "AcpiTables" / "J313AppleAgx.asl.inc")
+M1N1_HEADER = ROOT / "m1n1_windows" / "src" / "hv_agx_g2.generated.h"
 
 
 class J313AgxG2ContractTests(unittest.TestCase):
@@ -46,6 +51,48 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertIn("J313_AGX_G2_SOURCE_CONTRACT_SHA256", rendered)
         self.assertIn("J313_AGX_G2_INTERRUPT_ROUTE_VALUES", rendered)
         self.assertNotIn("UINT64_C", rendered)
+
+    def test_generated_asl_is_exact_and_deterministic(self):
+        contract = load_g2_contract(G2, G1)
+        rendered = render_asl_include(contract)
+        self.assertEqual(rendered, ASL_INCLUDE.read_text())
+        self.assertIn('Name (_HID, "APPL0002")', rendered)
+        self.assertIn("Name (_UID, Zero)", rendered)
+        self.assertIn("Name (_CCA, One)", rendered)
+        self.assertIn("Name (_STA, 0x0F)", rendered)
+        self.assertIn("0x0000000204000000", rendered)
+        self.assertIn("0x0000000207FFFFFF", rendered)
+        self.assertIn("0x0000000004000000", rendered)
+        self.assertEqual(rendered.count("Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive)"), 9)
+        for guest in range(880, 889):
+            self.assertIn(f"{{ {guest} }}", rendered)
+        self.assertIn('"agx-contract-version", One', rendered)
+        self.assertIn(
+            f'"agx-source-contract-sha256", "{contract.source_contract_sha256}"',
+            rendered,
+        )
+        self.assertIn(
+            f'"agx-firmware-generation", "{contract.firmware_generation}"',
+            rendered,
+        )
+        self.assertIn(
+            f'"agx-firmware-version", "{contract.firmware_version}"',
+            rendered,
+        )
+
+    def test_generated_m1n1_policy_header_is_exact_and_deterministic(self):
+        contract = load_g2_contract(G2, G1)
+        rendered = render_m1n1_header(contract)
+        self.assertEqual(rendered, M1N1_HEADER.read_text())
+        self.assertIn('#define HV_AGX_G2_PROFILE_IDENTITY "agx-g2"', rendered)
+        self.assertIn(contract.source_contract_sha256, rendered)
+        self.assertIn("#define HV_AGX_G2_SGX_MMIO_BASE 0x204000000ULL", rendered)
+        self.assertIn("#define HV_AGX_G2_SGX_MMIO_SIZE 0x4000000ULL", rendered)
+        self.assertIn("#define HV_AGX_G2_INTERRUPT_ROUTE_COUNT 9u", rendered)
+        for route in contract.interrupt_routes:
+            self.assertIn(
+                f"{{{route.physical}u, {route.guest}u}}", rendered
+            )
 
     def test_source_hash_mismatch_is_rejected(self):
         data = json.loads(G2.read_text())
