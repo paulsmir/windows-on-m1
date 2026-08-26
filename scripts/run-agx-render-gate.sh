@@ -67,7 +67,7 @@ echo "queue: renderer index 1"
 echo "work: TA + 3D"
 echo "completion deadline: 0.5 seconds"
 echo "cycles: $CYCLES"
-echo "reset policy: physical cold reset after every cycle"
+echo "reset policy: initial normalization reset plus a physical cold reset after every cycle"
 if [ "$LAUNCH_WINDOWS" -eq 1 ]; then
     echo "post-gate action: launch the same stable Windows artifacts"
 else
@@ -105,11 +105,18 @@ activate_candidate() {
     wait_for_proxy
     echo "Activating validated candidate m1n1: $ARTIFACT_DIR/m1n1.macho"
     M1N1DEVICE="$PROXY" "$PYTHON" \
-        "$ROOT/m1n1_windows/proxyclient/tools/chainload.py" \
-        "$ARTIFACT_DIR/m1n1.macho"
+        "$ROOT/m1n1_windows/proxyclient/tools/chainload.py" -- \
+        "$ARTIFACT_DIR/m1n1.macho" "-v"
+}
+
+normalize_initial_state() {
+    echo "Normalizing initial hardware state with a physical reboot"
+    M1N1DEVICE="$PROXY" "$PYTHON" \
+        "$ROOT/m1n1_windows/proxyclient/tools/reboot.py"
 }
 
 NEEDS_REBOOT=1
+normalize_initial_state
 activate_candidate
 NEEDS_REBOOT=0
 

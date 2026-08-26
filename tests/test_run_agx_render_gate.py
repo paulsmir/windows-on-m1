@@ -294,7 +294,7 @@ class ReplayOperatorTests(OperatorFixture):
             "work: TA + 3D",
             "completion deadline: 0.5 seconds",
             "cycles: 10",
-            "reset policy: physical cold reset after every cycle",
+            "reset policy: initial normalization reset plus a physical cold reset after every cycle",
         ):
             self.assertIn(value, result.stdout)
 
@@ -387,6 +387,30 @@ class ReplayOperatorTests(OperatorFixture):
         self.assertLess(run_one, reboot)
         self.assertLess(reboot, activation)
         self.assertLess(activation, receipt)
+
+    def test_candidate_chainload_is_headless_to_avoid_second_dcp_init(self):
+        source = REPLAY_SCRIPT.read_text()
+        helper = source.index("activate_candidate()")
+        chainload = source.index("proxyclient/tools/chainload.py", helper)
+        candidate = source.index('"$ARTIFACT_DIR/m1n1.macho"', chainload)
+        headless = source.index('"-v"', candidate)
+        helper_end = source.index("\n}", candidate)
+
+        self.assertLess(chainload, candidate)
+        self.assertLess(candidate, headless)
+        self.assertLess(headless, helper_end)
+
+    def test_operator_normalizes_hardware_before_first_candidate_activation(self):
+        source = REPLAY_SCRIPT.read_text()
+        helper = source.index("normalize_initial_state()")
+        reboot = source.index("proxyclient/tools/reboot.py", helper)
+        helper_end = source.index("\n}", reboot)
+        normalize = source.index("\nnormalize_initial_state\n", helper_end)
+        activation = source.index("\nactivate_candidate\n", normalize)
+
+        self.assertLess(reboot, helper_end)
+        self.assertLess(helper_end, normalize)
+        self.assertLess(normalize, activation)
 
     def test_runner_never_substitutes_earlier_gates(self):
         source = REPLAY_SCRIPT.read_text()
