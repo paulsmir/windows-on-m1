@@ -10565,7 +10565,8 @@ preregistration, but not execution, of a separately bounded G2 bind test.
 
 ### EXP-20260826-116 — AppleAgx G2 fail-closed bind gate
 
-Status: preregistered; execution not approved.  This experiment combines only
+Status: rejected safely after its single approved execution; stable recovery
+is restored.  This experiment combined only
 the two independently accepted boundaries: EXP-113's exact G2 enumeration
 firmware and EXP-115's exact signed Driver Store package.  It permits one
 Windows PnP bind attempt whose designed result is Problem 10 after exact
@@ -10654,5 +10655,47 @@ clock/power change, interrupt enable, UAT mapping, queue creation, command,
 fence, shader, render and display ownership are explicitly forbidden.  Pass
 would authorize only planning the later firmware/power ownership task.
 
-A new explicit user approval is required after this preregistration is
-committed and pushed.  No EXP-116 Windows or hardware mutation has occurred.
+The required explicit user approval was received after preregistration was
+committed and pushed.
+
+Observed result:
+- stable Windows reproduced the full accepted baseline, matched every G2 and
+  driver-package hash, imported only the exact signer and staged exactly one
+  package as `oem17.inf`.  It then shut down normally;
+- the exact G2 candidate booted once through the public assisted path.  SSH
+  became responsive in 18 seconds with eight logical processors, healthy
+  AppleInput, no critical System event and exactly one present
+  `ACPI\APPL0002\0`;
+- Windows matched `oem17.inf` and service `AppleAgx`.  The devnode exposed the
+  exact preregistered MMIO range `0x204000000..0x207fffffff` and vectors
+  880..888.  The service was stopped after the intentional refusal and no
+  AppleAgx module remained loaded;
+- Windows reported Problem 43 (`CM_PROB_FAILED_POST_START`), not the literal
+  preregistered Problem 10.  This is consistent with Windows mapping the
+  source-pinned `StartDevice -> STATUS_NOT_SUPPORTED` refusal to a post-start
+  failure, but the mismatch rejects EXP-116 without reinterpretation or retry;
+- the captured hypervisor and guest logs contain no AGX MMIO access, firmware,
+  clock, UAT, queue, command, interrupt injection, power or display-ownership
+  action and no exception, reset, BugCheck, storage reset or input loss;
+- G2 shut down normally and immutable stable recovery returned through the
+  exact public assisted pair.  Ordinary non-force package deletion reported
+  the historical association, so the preregistered exact fallback
+  `pnputil /delete-driver oem17.inf /uninstall` was used without `/force`.
+  The exact Root and TrustedPublisher entries were then removed;
+- final live state has zero present APPL0002 devices, AppleAgx packages,
+  services, loaded modules and signer entries, eight CPUs, responsive SSH,
+  healthy native input, no present display adapter and no new critical event.
+  The non-present Problem-45 historical record now retains the driver's
+  Display class and friendly-name metadata; no active package or device backs
+  it, and no unapproved ghost-device mutation was attempted;
+- all five immutable stable-recovery hashes passed again.  Evidence is
+  preserved at
+  `investigation/artifacts/EXP-20260826-116-agx-g2-bind-failclosed/`; its
+  checksum-index SHA-256 is
+  `cf3eb5e4668fc028580b70e95d244332707f6c3c08d2b5c79b70cc41f1a2609e`.
+
+Verdict: rejected safely with complete active-state rollback.  EXP-116 may not
+be retried.  The evidence proves matching, exact translated-resource delivery
+and fail-closed StartDevice execution, but it does not authorize AGX hardware
+access.  A successor must preregister Problem 43 explicitly before reusing the
+unchanged candidates for a corrected qualification gate.
