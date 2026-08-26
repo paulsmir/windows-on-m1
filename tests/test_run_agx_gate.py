@@ -9,6 +9,7 @@ import unittest
 
 from tools.agx_contract import load_contract
 from tools.artifact_manifest import ARTIFACT_ROLES, J313_GUEST_CONTRACT
+from tests.agx_gate_test_support import install_contract_git
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,7 @@ class RunAgxGateTests(unittest.TestCase):
         fake_ps.write_text("#!/bin/sh\nexit 0\n")
         fake_ps.chmod(0o755)
         contract = load_contract(CONTRACT_PATH)
+        install_contract_git(self.test_bin, contract)
         records = {}
         checksum_lines = []
         for index, name in enumerate(ARTIFACT_NAMES, 1):

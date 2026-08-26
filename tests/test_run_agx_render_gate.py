@@ -10,6 +10,7 @@ from tests.test_agx_frame_fixture import IDENTITY, EXPECTED_OUTPUT, _base_member
 from tools.agx_capture_clear import CaptureInput, package_capture
 from tools.agx_contract import load_contract
 from tools.artifact_manifest import ARTIFACT_ROLES, J313_GUEST_CONTRACT
+from tests.agx_gate_test_support import install_contract_git
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,7 @@ class OperatorFixture(unittest.TestCase):
         fake_ps.chmod(0o755)
 
         contract = load_contract(CONTRACT_PATH)
+        install_contract_git(self.test_bin, contract)
         records = {}
         checksums = []
         for index, (name, role) in enumerate(ARTIFACT_ROLES.items(), 1):
