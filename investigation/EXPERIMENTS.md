@@ -10097,7 +10097,7 @@ must never be reused.
 
 ### EXP-20260826-111 — real ProxyUtils identity ten-cold qualification
 
-Status: preregistered; hardware qualification not run.
+Status: accepted; hardware qualification passed 10/10 cold cycles.
 
 Hypothesis: reading the immutable boot cookie from the real
 `ProxyUtils.proxy.get_boot_cookie` transport will preserve the successful AGX
@@ -10158,3 +10158,33 @@ post-cycle physical resets, ten cookie-bound receipts, ten globally distinct
 pre-render cookies and proxy identities, canonical result bindings, accepted
 aggregate and independent verification.  Any failure rejects EXP-111; preserve
 all evidence, never retry it in place and keep Windows blocked.
+
+Observed result:
+- the exact preregistered command exited successfully without launching
+  Windows.  Every candidate startup carried the exact `m1n1.nodisplay` token,
+  left the recovery-owned DCP pipeline untouched, completed both TA and 3D,
+  observed the required events and queue progress, and completed cleanup;
+- all ten cycles passed after their mandatory physical resets.  The boot
+  cookies were `000000000d0a8ab2`, `000000000ccf57d2`,
+  `000000000ccc4e83`, `000000000ccdfc2d`, `000000000d0743e4`,
+  `000000000d6853a3`, `000000000b821bde`, `000000000d4eb316`,
+  `000000000d1634c8` and `000000000d33861e`; all ten proxy identities were
+  also globally distinct;
+- every cycle produced the canonical BGRA SHA-256
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`.
+  Measured submission-to-completion time ranged from 0.006318 to 0.007001
+  seconds;
+- the accepted aggregate contains ten completed cycles, permits the next
+  Windows launch gate, passed an independent `verify-result` invocation, and
+  has SHA-256
+  `7c0553dca3ed9dcfa375494205c44c1775b342d50b8867b05ed84760002e7236`;
+- the immutable evidence is in
+  `investigation/artifacts/EXP-20260826-111-agx-g1r-identity-final/`.  Stable
+  recovery passed all five checksums after qualification and was not modified.
+  The Air remains at the candidate proxy and Windows was not launched.
+
+Verdict: accepted.  G1R now proves a complete private AGX render, output,
+completion and teardown contract across ten cold-reset-separated lifecycles.
+This permits transition to G2 direct Windows ownership.  It does not by itself
+claim a Windows graphics adapter, WDDM acceleration, DWM presentation, power
+management or production GPU support.
