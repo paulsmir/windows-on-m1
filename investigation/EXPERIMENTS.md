@@ -11457,3 +11457,37 @@ interrupt connection, UAT, queues, commands, rendering, presentation and
 display ownership remain forbidden. Any stage-3 failure, missing receipt,
 forbidden action, Event 129, critical event, reset, input/storage loss, identity
 mismatch or incomplete non-force rollback rejects the run without retry.
+
+Observed result (`2026-08-26T20:58:26Z` candidate boot): the one permitted G2
+execution reached responsive eight-core Windows. The exact `oem17.inf`
+package bound to `ACPI\\APPL0002\\0`; DriverEntry and AddDevice completed with
+status zero; the corrected parser accepted one 13-descriptor translated list;
+and StartDevice reached stage 7 before returning `STATUS_NOT_SUPPORTED`
+(`0xC00000BB`) as preregistered.
+
+The bounded broker produced the exact successful sequence:
+
+- `seq=1 cmd=1 state=3 result=0` (ON);
+- `seq=2 cmd=0 state=3 result=0` (QUERY);
+- `seq=3 cmd=2 state=0 result=0` (OFF).
+
+The forbidden-action audit was empty: no GPU firmware, RTKit, SGX MMIO,
+interrupt connection, UAT, queue, command, render, present or display
+ownership occurred. AppleInput, `stornvme` and `USBXHCI` remained Running and
+the candidate recorded zero critical events. It recorded one `stornvme` Event
+129, so the separate candidate storage gate is rejected even though the
+parser, state-validation and broker-lifecycle hypothesis is confirmed.
+
+The candidate shut down normally. Recovery used the exact EXP-123 pair,
+removed only `oem17.inf` and signer
+`2DAADA2A7B34687AE6D922D792F39C220EA4C7AA` without `/force`, and completed
+the required cleanup reboot. Final recovery proved eight CPUs; no present
+APPL0002, AppleAgx service, package or loaded module; Running AppleInput,
+NVMe and xHCI; zero critical events; and zero Event 129. The remaining
+non-present Problem-45 PnP history record contains stale diagnostics only.
+EXP-127 is closed and must not be retried.
+
+This result proves the next technical boundary but does not authorize it:
+before GPU firmware or interrupt work, a separate experiment must explain or
+eliminate the candidate Event 129 while preserving the exact successful
+stage-7 and ON/QUERY/OFF evidence.

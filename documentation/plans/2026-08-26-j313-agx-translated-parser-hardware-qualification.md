@@ -39,21 +39,38 @@ collection, Mu ACPI, m1n1 broker and hypervisor, Windows 11 ARM64.
 
 ## Procedure
 
-- [ ] Revalidate all package and firmware manifests; require evidence path absent.
-- [ ] Require recovery with eight CPUs, no AppleAgx/APPL0002/package/signer,
+- [x] Revalidate all package and firmware manifests; require evidence path absent.
+- [x] Require recovery with eight CPUs, no AppleAgx/APPL0002/package/signer,
       Running AppleInput/NVMe/xHCI, zero critical events and zero Event 129.
-- [ ] Stage only the exact package and record its new `oemNN.inf` identity.
-- [ ] Shut down normally and launch one exact G2 candidate with display both,
+- [x] Stage only the exact package and record its new `oemNN.inf` identity.
+- [x] Shut down normally and launch one exact G2 candidate with display both,
       monitor logging and `WOM1_AGX_G2_POWER_BROKER=1`.
-- [ ] Require APPL0002 Problem 43, final StartDevice stage 7 with
+- [x] Require APPL0002 Problem 43, final StartDevice stage 7 with
       `STATUS_NOT_SUPPORTED`, and exact ordered ON/QUERY/OFF broker receipts.
-- [ ] Require zero GPU firmware, RTKit, SGX MMIO, interrupt connection, UAT,
+- [x] Require zero GPU firmware, RTKit, SGX MMIO, interrupt connection, UAT,
       queue, render, present or display-ownership action.
-- [ ] Require eight CPUs, responsive input/storage/xHCI, zero critical events
-      and zero Event 129. Any violation rejects the run.
-- [ ] Shut down normally, boot exact recovery, remove only the recorded package
+- [x] Require eight CPUs, responsive input/storage/xHCI and zero critical
+      events. The one candidate Event 129 rejected the storage gate.
+- [x] Shut down normally, boot exact recovery, remove only the recorded package
       and exact signer without `/force`, then complete a cleanup reboot.
-- [ ] Require final clean recovery, hash evidence, record verdict and push.
+- [x] Require final clean recovery, hash evidence, record verdict and push.
+
+## Result
+
+The sole candidate boot advanced through translated-resource and state
+validation to stage 7, returned `STATUS_NOT_SUPPORTED` (`0xC00000BB`) and
+produced the exact successful broker sequence ON, QUERY, OFF. The forbidden
+action audit was empty. Eight CPUs and the input, storage and xHCI services
+remained available with zero critical events. One `stornvme` Event 129 rejects
+the candidate storage gate, so the run does not authorize GPU firmware, RTKit,
+SGX MMIO, interrupt connection, UAT, queues or rendering.
+
+Recovery removed only `oem17.inf` and signer
+`2DAADA2A7B34687AE6D922D792F39C220EA4C7AA` without `/force`. The required
+cleanup reboot used the exact EXP-123 pair and ended with eight CPUs, no
+present APPL0002, AppleAgx service, package or loaded module, Running
+AppleInput/NVMe/xHCI, zero critical events and zero Event 129. EXP-127 is
+closed and must not be retried.
 
 ## Falsifiable result
 
