@@ -26,13 +26,32 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("DRIVER_INITIALIZATION_DATA", driver)
         self.assertIn("DxgkInitialize(", driver)
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
-        self.assertRegex(driver, r"return\s+DxgkInitialize\(")
+        self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
+        self.assertRegex(driver, r"return\s+status\s*;")
 
     def test_driver_entry_is_declared_before_init_section_pragma(self):
         driver = self.read("src/driver.c")
         declaration = driver.index("DRIVER_INITIALIZE DriverEntry;")
         pragma = driver.index("#pragma alloc_text(INIT, DriverEntry)")
         self.assertLess(declaration, pragma)
+
+    def test_power_qualification_persists_driver_entry_boundary(self):
+        driver = self.read("src/driver.c")
+        diagnostics_path = WINDOWS / "src" / "driver_diagnostics.c"
+        project = self.read("AppleAgx.vcxproj")
+
+        self.assertTrue(diagnostics_path.exists())
+        diagnostics = diagnostics_path.read_text()
+        self.assertIn("AppleAgxRecordDriverEntryBoundary", diagnostics)
+        self.assertIn("ZwOpenKey", diagnostics)
+        self.assertIn("ZwSetValueKey", diagnostics)
+        self.assertIn("Wom1DriverEntryStage", diagnostics)
+        self.assertIn("Wom1DxgkInitializeStatus", diagnostics)
+        self.assertIn("#ifdef APPLE_AGX_G2_POWER_QUALIFICATION", driver)
+        self.assertIn("AppleAgxRecordDriverEntryBoundary", driver)
+        self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
+        self.assertRegex(driver, r"return\s+status\s*;")
+        self.assertIn("src\\driver_diagnostics.c", project)
 
     def test_wdk_display_headers_follow_required_base_type_order(self):
         header = self.read("include/apple_agx_driver.h")

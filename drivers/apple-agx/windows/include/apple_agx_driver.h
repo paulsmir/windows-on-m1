@@ -59,5 +59,8 @@ NTSTATUS AppleAgxQualifyPowerBroker(
 void AppleAgxLogStartStage(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ APPLE_AGX_START_STAGE Stage,
                            _In_ NTSTATUS Status);
+void AppleAgxRecordDriverEntryBoundary(_In_ PUNICODE_STRING RegistryPath,
+                                       _In_ ULONG Stage,
+                                       _In_ NTSTATUS Status);
 
 #endif /* APPLE_AGX_DRIVER_H */

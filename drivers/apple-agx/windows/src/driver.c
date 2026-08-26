@@ -7,6 +7,7 @@ DRIVER_INITIALIZE DriverEntry;
 _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
                                             PUNICODE_STRING RegistryPath) {
   DRIVER_INITIALIZATION_DATA initialization;
+  NTSTATUS status;
 
   PAGED_CODE();
   RtlZeroMemory(&initialization, sizeof(initialization));
@@ -27,5 +28,12 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiUnload = AppleAgxDdiUnload;
   initialization.DxgkDdiQueryAdapterInfo = AppleAgxDdiQueryAdapterInfo;
 
-  return DxgkInitialize(DriverObject, RegistryPath, &initialization);
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxRecordDriverEntryBoundary(RegistryPath, 1, STATUS_PENDING);
+#endif
+  status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxRecordDriverEntryBoundary(RegistryPath, 2, status);
+#endif
+  return status;
 }
