@@ -117,9 +117,9 @@ Files:
 - bounded m1n1 stage-2/vGIC resource policy files
 
 Expose vendor device `APPL0002` only in an explicit G2 firmware profile. `_CRS`
-contains only reviewed MMIO and one level-sensitive interrupt; `_DSD` carries
-the version and immutable contract hash. Normal stable firmware omits or
-disables the device.
+contains only the reviewed SGX MMIO aperture and all nine level-sensitive
+interrupts from the generated contract; `_DSD` carries the version and
+immutable contract hash. Normal stable firmware omits the AGX SSDT entirely.
 
 Gate: AML tests and a Windows enumeration-only boot show the exact devnode and
 resources with the KMD disabled. No AGX clock, firmware or MMIO write occurs.
@@ -205,4 +205,3 @@ Do not call the desktop accelerated and do not replace the stable recovery tag.
 The final hot path is Direct3D runtime -> UMD -> Dxgkrnl/KMD shared queues ->
 AGX firmware/hardware. USB, Python, framebuffer scraping and synchronous EL2
 requests remain diagnostics and contribute no steady-state performance cost.
-
