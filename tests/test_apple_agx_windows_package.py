@@ -144,6 +144,31 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertLess(power.index("AppleAgxPowerQualify"),
                         power.rindex("DxgkCbUnmapMemory"))
 
+    def test_power_qualification_records_fail_closed_start_boundaries(self):
+        adapter = self.read("src/adapter.c")
+        diagnostics_path = WINDOWS / "src" / "diagnostics.c"
+        self.assertTrue(diagnostics_path.exists())
+        diagnostics = diagnostics_path.read_text()
+        project = self.read("AppleAgx.vcxproj")
+
+        self.assertIn("AppleAgxLogStartStage", diagnostics)
+        self.assertIn("IoAllocateErrorLogEntry", diagnostics)
+        self.assertIn("IoWriteErrorLogEntry", diagnostics)
+        self.assertIn("APPLE_AGX_START_LOG_BASE", diagnostics)
+        self.assertNotIn("ZwSetValueKey", diagnostics)
+        self.assertNotIn("MmMapIoSpace", diagnostics)
+        for stage in (
+            "AppleAgxStartEntered",
+            "AppleAgxStartDeviceInformation",
+            "AppleAgxStartResourcesValidated",
+            "AppleAgxStartStateValidated",
+            "AppleAgxStartBrokerAddress",
+            "AppleAgxStartBrokerTransaction",
+            "AppleAgxStartFailClosed",
+        ):
+            self.assertIn(stage, adapter)
+        self.assertIn("src\\diagnostics.c", project)
+
     def test_project_is_arm64_wdm_and_packages_inf(self):
         project = self.read("AppleAgx.vcxproj")
         self.assertIn("Debug|ARM64", project)

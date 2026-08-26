@@ -31,21 +31,54 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
       NumberOfVideoPresentSources == NULL || NumberOfChildren == NULL)
     return STATUS_INVALID_PARAMETER;
 
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxLogStartStage(adapter->PhysicalDeviceObject, AppleAgxStartEntered,
+                        STATUS_SUCCESS);
+#endif
+
   *NumberOfVideoPresentSources = 0;
   *NumberOfChildren = 0;
   RtlZeroMemory(&deviceInfo, sizeof(deviceInfo));
   status = DxgkInterface->DxgkCbGetDeviceInformation(
       DxgkInterface->DeviceHandle, &deviceInfo);
-  if (!NT_SUCCESS(status))
+  if (!NT_SUCCESS(status)) {
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+    AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                          AppleAgxStartDeviceInformation, status);
+#endif
     return status;
+  }
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                        AppleAgxStartDeviceInformation, STATUS_SUCCESS);
+#endif
 
   status =
       AppleAgxValidateTranslatedResources(deviceInfo.TranslatedResourceList);
-  if (!NT_SUCCESS(status))
+  if (!NT_SUCCESS(status)) {
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+    AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                          AppleAgxStartResourcesValidated, status);
+#endif
     return status;
+  }
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                        AppleAgxStartResourcesValidated, STATUS_SUCCESS);
+#endif
 
-  if (!AppleAgxStateValidateResources(&adapter->State))
+  if (!AppleAgxStateValidateResources(&adapter->State)) {
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+    AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                          AppleAgxStartStateValidated,
+                          STATUS_INVALID_DEVICE_STATE);
+#endif
     return STATUS_INVALID_DEVICE_STATE;
+  }
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                        AppleAgxStartStateValidated, STATUS_SUCCESS);
+#endif
 
 #ifdef APPLE_AGX_G2_POWER_QUALIFICATION
   {
@@ -53,9 +86,14 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
 
     status = AppleAgxGetPowerBrokerAddress(deviceInfo.TranslatedResourceList,
                                             &powerBrokerAddress);
-    if (NT_SUCCESS(status))
+    AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                          AppleAgxStartBrokerAddress, status);
+    if (NT_SUCCESS(status)) {
       status = AppleAgxQualifyPowerBroker(DxgkInterface,
                                           powerBrokerAddress);
+      AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                            AppleAgxStartBrokerTransaction, status);
+    }
     if (!NT_SUCCESS(status)) {
       AppleAgxStateInitialize(&adapter->State);
       return status;
@@ -69,6 +107,10 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
    * render callbacks remain unavailable.
    */
   AppleAgxStateInitialize(&adapter->State);
+#ifdef APPLE_AGX_G2_POWER_QUALIFICATION
+  AppleAgxLogStartStage(adapter->PhysicalDeviceObject,
+                        AppleAgxStartFailClosed, STATUS_NOT_SUPPORTED);
+#endif
   return STATUS_NOT_SUPPORTED;
 }
 

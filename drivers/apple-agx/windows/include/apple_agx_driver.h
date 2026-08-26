@@ -23,6 +23,16 @@ typedef struct _APPLE_AGX_ADAPTER {
   APPLE_AGX_STATE State;
 } APPLE_AGX_ADAPTER;
 
+typedef enum _APPLE_AGX_START_STAGE {
+  AppleAgxStartEntered = 1,
+  AppleAgxStartDeviceInformation,
+  AppleAgxStartResourcesValidated,
+  AppleAgxStartStateValidated,
+  AppleAgxStartBrokerAddress,
+  AppleAgxStartBrokerTransaction,
+  AppleAgxStartFailClosed,
+} APPLE_AGX_START_STAGE;
+
 DXGKDDI_ADD_DEVICE AppleAgxDdiAddDevice;
 DXGKDDI_START_DEVICE AppleAgxDdiStartDevice;
 DXGKDDI_STOP_DEVICE AppleAgxDdiStopDevice;
@@ -46,5 +56,8 @@ NTSTATUS AppleAgxGetPowerBrokerAddress(
 NTSTATUS AppleAgxQualifyPowerBroker(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _In_ PHYSICAL_ADDRESS PowerBrokerAddress);
+void AppleAgxLogStartStage(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                           _In_ APPLE_AGX_START_STAGE Stage,
+                           _In_ NTSTATUS Status);
 
 #endif /* APPLE_AGX_DRIVER_H */

@@ -39,6 +39,7 @@
     <ClCompile Include="src\adapter.c" />
     <ClCompile Include="src\resources.c" />
     <ClCompile Include="src\power.c" />
+    <ClCompile Include="src\diagnostics.c" />
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />
   </ItemGroup>
