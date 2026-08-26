@@ -63,7 +63,45 @@ jobs:
           /p:RunCodeAnalysis=true
           /p:AppleAgxPowerQualification=${{ matrix.qualification }}
 
-      - name: Upload unsigned test package
+      - name: Sign qualification catalog with ephemeral test certificate
+        if: matrix.qualification == true
+        shell: pwsh
+        run: |
+          $catalog = Get-ChildItem drivers/apple-agx/windows/ARM64/Debug -Recurse -Filter appleagx.cat |
+            Select-Object -First 1
+          $signTool = Get-ChildItem packages -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (!$catalog) { throw "appleagx.cat was not found" }
+          if (!$signTool) { throw "signtool.exe was not found in the restored WDK" }
+          $certificatePath = Join-Path $catalog.Directory.FullName "AppleAgxTest.cer"
+          $certificate = $null
+          $trustedCertificate = $null
+          try {
+            $certificate = New-SelfSignedCertificate `
+              -Type CodeSigningCert `
+              -Subject "CN=AppleAgx G2 Qualification Run $env:GITHUB_RUN_ID" `
+              -CertStoreLocation Cert:\CurrentUser\My `
+              -KeyExportPolicy NonExportable `
+              -KeyUsage DigitalSignature `
+              -NotAfter (Get-Date).AddDays(7)
+            Export-Certificate -Cert $certificate -FilePath $certificatePath -Type CERT | Out-Null
+            $trustedCertificate = Import-Certificate -FilePath $certificatePath `
+              -CertStoreLocation Cert:\CurrentUser\Root
+            & $signTool.FullName sign /fd SHA256 /sha1 $certificate.Thumbprint /s My $catalog.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign failed: $LASTEXITCODE" }
+            & $signTool.FullName verify /pa /v $catalog.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool verify failed: $LASTEXITCODE" }
+          } finally {
+            if ($trustedCertificate) {
+              Remove-Item "Cert:\CurrentUser\Root\$($trustedCertificate.Thumbprint)" -Force
+            }
+            if ($certificate) {
+              Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -Force
+            }
+          }
+
+      - name: Upload test package
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -72,4 +110,5 @@ jobs:
             drivers/apple-agx/windows/ARM64/Debug/**/*.sys
             drivers/apple-agx/windows/ARM64/Debug/**/*.inf
             drivers/apple-agx/windows/ARM64/Debug/**/*.cat
+            drivers/apple-agx/windows/ARM64/Debug/**/*.cer
             drivers/apple-agx/windows/ARM64/Debug/**/*.pdb

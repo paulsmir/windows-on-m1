@@ -201,6 +201,19 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             workflow,
         )
 
+    def test_ci_signs_only_the_qualification_catalog_with_ephemeral_key(self):
+        workflow = WORKFLOW.read_text()
+        self.assertIn("if: matrix.qualification", workflow)
+        self.assertIn("New-SelfSignedCertificate", workflow)
+        self.assertIn("-Type CodeSigningCert", workflow)
+        self.assertIn("signtool.exe", workflow)
+        self.assertIn("sign /fd SHA256", workflow)
+        self.assertIn("verify /pa /v", workflow)
+        self.assertIn("Export-Certificate", workflow)
+        self.assertIn("AppleAgxTest.cer", workflow)
+        self.assertIn("Cert:\\CurrentUser\\My", workflow)
+        self.assertIn("Remove-Item", workflow)
+
     def test_stage_script_never_installs_or_restarts_the_device(self):
         stage = self.read("scripts/stage-driver.ps1")
         self.assertIn("pnputil /add-driver", stage)
