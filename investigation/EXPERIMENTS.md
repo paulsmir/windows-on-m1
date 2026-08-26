@@ -11194,3 +11194,38 @@ present or display-ownership action is permitted. Evidence path
 `investigation/artifacts/EXP-20260826-124-agx-driverentry-nvme-safe/` was absent
 at preregistration. Any mismatch, forbidden action, BugCheck, reset, storage
 timeout, input loss or missing evidence rejects the run without retry.
+
+Observed result (`2026-08-26T19:41:13Z`):
+
+- the exact package was staged as `oem17.inf`; its catalog, certificate, INF
+  and SYS hashes matched the preregistered manifest, and the one permitted G2
+  boot used the exact manifest-validated Mu and clean `bee53dc` m1n1 pair;
+- Windows exposed one present `ACPI\\APPL0002\\0` device with the exact
+  Display-class package and resources, then reported Problem 43
+  (`CM_PROB_FAILED_POST_START`). Persistent registry evidence proved
+  `Wom1DriverEntryStage=2` and `Wom1DxgkInitializeStatus=0`: `DriverEntry`
+  returned from `DxgkInitialize` with `STATUS_SUCCESS`;
+- no AGX broker command, firmware, RTKit, SGX MMIO, interrupt, UAT, queue,
+  command, render, present or display-ownership action occurred. The driver
+  remained stopped and unloaded. Eight CPUs, `AppleInput`, `stornvme` and
+  `USBXHCI` remained live, with zero critical event and zero `stornvme` Event
+  129 during the G2 boot;
+- the G2 guest shut down normally. Immutable recovery then proved APPL0002
+  non-present, after which the bounded non-force rollback removed only
+  `oem17.inf` and signer `442D150255F1F27A6D10CFD8E4BF5F35E8AD28BB`.
+  Final cleanup found zero AppleAgx package, service, loaded module and pinned
+  certificate, with eight CPUs and the input, NVMe and xHCI services running;
+- the final immutable-recovery health gate nevertheless recorded one
+  `stornvme` Event 129 (`Reset to device, \\Device\\RaidPort0, was issued`).
+  This recovery pair intentionally still contains pre-`bee53dc` m1n1 and its
+  known one-CQE storage policy. The event did not occur in the EXP-124 G2 boot,
+  but it means the literal post-rollback zero-Event-129 gate did not pass.
+
+Verdict: the DriverEntry boundary hypothesis passed and localizes the next
+unknown boundary after successful `DxgkInitialize`, within AddDevice or
+StartDevice. The overall experiment is recorded as partially accepted because
+the immutable recovery pair failed its separate final storage-health gate.
+This result authorizes only a separately preregistered persistent
+AddDevice/StartDevice boundary probe; it does not authorize GPU hardware
+initialization. Evidence checksum-index SHA-256 is
+`5118b93c5fe8635e4d46015e040ac47be045054e72723cef27421d3f7d262fd6`.
