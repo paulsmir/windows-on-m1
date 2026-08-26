@@ -10729,3 +10729,39 @@ A pass would authorize only preregistration of a later firmware/power ownership
 experiment.  It would not authorize that experiment.  A new explicit user
 approval is required after this preregistration is committed and pushed.  No
 EXP-117 Windows or hardware mutation has occurred.
+
+Observed result:
+- the user granted continuing authorization for bounded preregistered
+  fail-closed experiments.  Stable Windows reproduced the exact corrected
+  baseline, all six package hashes matched, the catalog signer was the pinned
+  thumbprint and exactly one package was staged as `oem17.inf` without a live
+  APPL0002 device, service or module;
+- stable Windows shut down normally and the immutable G2 candidate booted once
+  through the public assisted path with display `both` and debug `monitor`.
+  SSH became responsive in 30 seconds with eight logical processors, healthy
+  AppleInput and no critical event;
+- exactly one present `ACPI\APPL0002\0` matched `oem17.inf` and service
+  `AppleAgx`.  It reported exactly Problem 43, stopped service, no loaded
+  AppleAgx module, MMIO `0x204000000..0x207fffffff` and IRQs 880..888;
+- the captured host and UART evidence contains no AGX MMIO access, firmware,
+  clock, UAT, queue, command, interrupt injection, power or display ownership
+  marker and no BugCheck, reset, exception, storage reset or input loss;
+- G2 shut down normally without retry.  Immutable stable recovery became
+  responsive in 45 seconds.  The exact package still had the expected
+  historical association, so the preregistered `/uninstall` fallback removed
+  only `oem17.inf` without `/force`; the exact Root and TrustedPublisher signer
+  entries were removed;
+- final state has eight CPUs, healthy native input, responsive SSH, zero
+  present APPL0002, zero AppleAgx package/service/module/certificates, no
+  present display adapter and no new critical event.  The known non-present
+  Problem-45 history record retains only its class and friendly-name metadata;
+- all five immutable recovery hashes passed.  Evidence is preserved at
+  `investigation/artifacts/EXP-20260826-117-agx-g2-problem43-qualification/`;
+  its checksum-index SHA-256 is
+  `d1100ea8116586bc833ba5d7f23f6faf16d34806638e5c020dac231add81830c`.
+
+Verdict: passed with complete active-state rollback.  This qualifies the exact
+G2 enumeration plus fail-closed Windows bind boundary.  It authorizes only
+preregistration of a separately bounded AGX firmware/power ownership
+experiment; it does not itself authorize firmware startup, MMIO, clocks,
+interrupts, UAT, queues, commands, rendering or display ownership.
