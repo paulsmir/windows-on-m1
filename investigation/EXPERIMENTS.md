@@ -9868,3 +9868,29 @@ ten globally distinct pre-render cookies and proxy identities, canonical result
 bindings, an accepted aggregate and successful independent `verify-result`.
 m1n1 bases may recur.  Any failure rejects EXP-108; preserve all evidence,
 never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- the initial physical normalization reset completed and the operator
+  chainloaded the exact candidate with literal boot argument `-v`; the new
+  boot reported m1n1 `e1a9a06` and `video.display=0`;
+- despite that value, m1n1 unconditionally entered its compile-time `USE_FB`
+  block, initialized the internal display, modeset it and quiesced DCP.  The
+  log therefore disproves the assumption that `video.display=0` suppresses
+  device display initialization; it controls console state only;
+- AGX again reached initdata, `DC_Init` and `DC_UpdateIdleTS`, then crashed
+  before fixture submission at the same `dc civac` instruction with
+  `ESR=0x96000145`, `ELR=0xffffff800002be50` and FAR
+  `0xffffffcfe4df3780`;
+- the blocked crash cleanup was interrupted after preserving the evidence and
+  the fail-safe physical reboot ran.  No receipt, aggregate or Windows launch
+  occurred.  The immutable running result SHA-256 is
+  `7738646526ade210ee063711dac3bf73779127e56ea58026f1918a2b9258b154`;
+  preserved firmware dump SHA-256 is
+  `395d72b15eb84c83548b1d57ba6c7c00995bd6bf3935b5176b960beb7adef9de`.
+
+Verdict: rejected before GPU submission.  Headless boot metadata is not a DCP
+ownership control in current m1n1.  The next implementation must add a
+dedicated, exact boot argument that skips the complete `display_init`,
+`display_shutdown`, framebuffer and logo block while leaving normal recovery
+and Windows launches unchanged.  Its host test must fail before implementation,
+and no new hardware run may reuse the EXP-108 evidence directory.
