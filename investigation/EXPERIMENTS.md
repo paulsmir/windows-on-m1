@@ -9968,3 +9968,27 @@ receipts, ten globally distinct pre-render cookies and proxy identities,
 canonical result bindings, accepted aggregate and successful independent
 verification.  m1n1 bases may recur.  Any failure rejects EXP-109; preserve all
 evidence, never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- the initial reset completed and the operator loaded exact candidate m1n1
+  `f6079c7` while chainload reported the intended command line
+  `-v m1n1.nodisplay`;
+- m1n1 itself printed `cmdline: 1n1.nodisplay`: exactly the first four bytes
+  were lost.  It therefore correctly rejected the malformed token, initialized
+  the internal display, modeset it and quiesced DCP;
+- code inspection found the ABI defect: Python `BootArgs_r1`, `_r2` and `_r3`
+  place the four-byte alignment pad after `cmdline`, while C `struct boot_args`
+  aligns the union before `cmdline`.  Both layouts have the same total size but
+  disagree on the command-line offset by four bytes;
+- AGX consequently repeated the pre-submission `DC_Init` abort at
+  `ELR=0xffffff800002be50`, and the fail-safe reset ran after preserving the
+  dump.  No receipt, aggregate or Windows launch occurred.  Result SHA-256 is
+  `6055a7e4dcd122ff652c1473e4162265234c9a17ff893054ca08a5fc31d0ec44`;
+  firmware dump SHA-256 is
+  `a8b1c929c27ccaabacbfade4121e36964e51675f08c316ce348e59e82e0ee0fc`.
+
+Verdict: rejected at the boot-argument ABI boundary before GPU submission.  The
+device-display implementation itself was present but never selected.  The next
+change must move the Python padding before `cmdline` in all three revisions and
+add a byte-offset/round-trip regression test before implementation.  EXP-109
+remains immutable and its evidence directory must never be reused.
