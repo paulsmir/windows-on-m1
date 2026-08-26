@@ -213,7 +213,7 @@ assert(!AppleAgxRtkitDecodeManagement(0x00f0000000000000ULL, &decoded));
 assert(!AppleAgxRtkitDecodeEndpoint(0x100ULL, &endpoint));
 ```
 
-Also assert that a 44-bit overflow initdata address and endpoint/flag values above their bit widths return `APPLE_AGX_RTKit_INVALID_MESSAGE` rather than truncating.
+Also assert that a 44-bit overflow initdata address and endpoint/flag values above their bit widths return `APPLE_AGX_RTKIT_INVALID_MESSAGE` rather than truncating.
 
 - [ ] **Step 2: Add the sanitizer runner and verify RED**
 
@@ -245,15 +245,15 @@ Use only project-defined unsigned types; do not include hosted C headers. Encode
 Public signatures:
 
 ```c
-APPLE_AGX_RTKit_U64 AppleAgxRtkitSetIopPower(APPLE_AGX_RTKit_U32 State);
-APPLE_AGX_RTKit_U64 AppleAgxRtkitSetApPower(APPLE_AGX_RTKit_U32 State);
-APPLE_AGX_RTKit_U64 AppleAgxRtkitStartEndpoint(APPLE_AGX_RTKit_U32 Endpoint,
-                                               APPLE_AGX_RTKit_U32 Flag);
-APPLE_AGX_RTKit_U64 AppleAgxRtkitInitdata(APPLE_AGX_RTKit_U64 Address);
-APPLE_AGX_RTKit_BOOL AppleAgxRtkitDecodeManagement(
-    APPLE_AGX_RTKit_U64 Message, APPLE_AGX_RTKIT_MANAGEMENT *Decoded);
-APPLE_AGX_RTKit_BOOL AppleAgxRtkitDecodeEndpoint(
-    APPLE_AGX_RTKit_U64 Selector, APPLE_AGX_RTKit_U32 *Endpoint);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitSetIopPower(APPLE_AGX_RTKIT_U32 State);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitSetApPower(APPLE_AGX_RTKIT_U32 State);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitStartEndpoint(APPLE_AGX_RTKIT_U32 Endpoint,
+                                               APPLE_AGX_RTKIT_U32 Flag);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitInitdata(APPLE_AGX_RTKIT_U64 Address);
+APPLE_AGX_RTKIT_BOOL AppleAgxRtkitDecodeManagement(
+    APPLE_AGX_RTKIT_U64 Message, APPLE_AGX_RTKIT_MANAGEMENT *Decoded);
+APPLE_AGX_RTKIT_BOOL AppleAgxRtkitDecodeEndpoint(
+    APPLE_AGX_RTKIT_U64 Selector, APPLE_AGX_RTKIT_U32 *Endpoint);
 ```
 
 The invalid-message sentinel is `~0ULL`; every encoder checks its input before shifting.
