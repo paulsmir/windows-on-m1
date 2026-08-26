@@ -9894,3 +9894,77 @@ dedicated, exact boot argument that skips the complete `display_init`,
 `display_shutdown`, framebuffer and logo block while leaving normal recovery
 and Windows launches unchanged.  Its host test must fail before implementation,
 and no new hardware run may reuse the EXP-108 evidence directory.
+
+### EXP-20260826-109 — explicit no-device-display ten-cold qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: the exact `m1n1.nodisplay` boot option will prevent every candidate
+DCP and framebuffer operation while leaving the recovery-owned display state
+intact, allowing ten G1R renders and cookie-bound cold-reset receipts to pass.
+
+Single changed variable relative to rejected EXP-108: the candidate contains
+the exact device-display bypass implementation and the operator passes its
+dedicated token.  Initial normalization reset, recovery bytes, Mu bytes,
+fixture, renderer schema, AGX commands, mappings, queue, deadlines, post-cycle
+resets and every output and cookie acceptance rule are unchanged.  EXP-108
+evidence is immutable and is not reused.
+
+Contract:
+- root `a4cdec8dff47d7e4010056158e6f8a62ff26fcb6`; root operator implementation
+  `a47cf1a94ab3952aa5674388121815307d1324a4`; m1n1 display implementation and
+  runtime commit `f6079c7143b58b2ffc242d5daa9a3a5d063ed85a`; Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, boot-identity helper, explicit display parser and corrected
+  operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`,
+  `ad3cf1a850ddaba24dc978875cabecf48054ef372705e05f0075abaa92698f9a`
+  and `254980cc1ba25b936f6dda697fd232936db2af45c6846841b783397a76064673`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `6f05b99683b9995b14c73ed2d41626bf71515ee21ba6ca3046bb62b76ec694c7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-nodisplay-candidate/` has boot, stage zero,
+  stage one, assisted m1n1 and Mu firmware SHA-256
+  `c9e7afd3e87a3f0d33e344768fd0eedecfb9f7acf0f1a6f90d2d4adbf46707a8`,
+  `98e491aac16f5709ca4facb0f1a714dad840c8db70afa8ffc95d1e251e49d64f`,
+  `4a12e0cd67c2205c9069172e015612f52f2550099c244296861ec589eb6273c7`,
+  `497ad8484b9b35f19ce9daaaed1695585de5451e540a15ed5b7f5a4f1887a0b1`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- the mandatory m1n1 parser and root operator tests failed before their
+  implementations; afterward the complete m1n1 host suite, production m1n1
+  build, 65 focused public tests and fresh complete public suite 605/605 passed,
+  along with clang-format, shell syntax and diff checks;
+- the canonical builder completed and its manifest preflight accepted the exact
+  m1n1 and Mu commits and all five candidate hashes.  Stable recovery separately
+  passed all five of its own checksums and was not modified.  The exact dry-run
+  accepted the initial reset, context 63, queue 1, TA+3D, 0.5-second deadline,
+  ten cycles, ten post-cycle resets and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-109-agx-g1r-nodisplay-final/` was absent
+  at preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-nodisplay-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-109-agx-g1r-nodisplay-final \
+  --cycles 10
+```
+
+Pass requires the exact EXP-108 acceptance contract: one initial normalization
+reset, ten complete G1R results, ten post-cycle physical resets, ten cookie-bound
+receipts, ten globally distinct pre-render cookies and proxy identities,
+canonical result bindings, accepted aggregate and successful independent
+verification.  m1n1 bases may recur.  Any failure rejects EXP-109; preserve all
+evidence, never retry it in place and keep Windows blocked.
