@@ -87,6 +87,32 @@ emergency_reboot() {
 }
 trap emergency_reboot EXIT
 
+wait_for_proxy() {
+    attempt=1
+    while [ "$attempt" -le 30 ]; do
+        if M1N1DEVICE="$PROXY" "$PYTHON" "$ROOT/probe.py" "$PROXY" \
+            >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    echo "responsive proxy timed out before candidate activation" >&2
+    return 1
+}
+
+activate_candidate() {
+    wait_for_proxy
+    echo "Activating validated candidate m1n1: $ARTIFACT_DIR/m1n1.macho"
+    M1N1DEVICE="$PROXY" "$PYTHON" \
+        "$ROOT/m1n1_windows/proxyclient/tools/chainload.py" \
+        "$ARTIFACT_DIR/m1n1.macho"
+}
+
+NEEDS_REBOOT=1
+activate_candidate
+NEEDS_REBOOT=0
+
 mkdir -p "$EVIDENCE_DIR"
 CYCLE=1
 while [ "$CYCLE" -le "$CYCLES" ]; do
@@ -107,6 +133,8 @@ while [ "$CYCLE" -le "$CYCLES" ]; do
         echo "hardware reboot failed after AGX G1R cycle $CYCLE" >&2
         exit 1
     fi
+    NEEDS_REBOOT=1
+    activate_candidate
     NEEDS_REBOOT=0
     if [ "$CYCLE_OK" -ne 1 ]; then
         echo "AGX G1R cycle $CYCLE failed; hardware reboot requested" >&2

@@ -364,6 +364,30 @@ class ReplayOperatorTests(OperatorFixture):
         self.assertLess(run_one, reboot)
         self.assertLess(reboot, failed_exit)
 
+    def test_validated_candidate_is_activated_before_first_render(self):
+        source = REPLAY_SCRIPT.read_text()
+        helper = source.index("activate_candidate()")
+        chainload = source.index("proxyclient/tools/chainload.py", helper)
+        candidate = source.index('"$ARTIFACT_DIR/m1n1.macho"', chainload)
+        first_activation = source.index("activate_candidate", candidate)
+        run_one = source.index("tools.agx_render_gate run-one", first_activation)
+
+        self.assertLess(helper, chainload)
+        self.assertLess(chainload, candidate)
+        self.assertLess(candidate, first_activation)
+        self.assertLess(first_activation, run_one)
+
+    def test_candidate_is_reactivated_after_reset_before_receipt(self):
+        source = REPLAY_SCRIPT.read_text()
+        run_one = source.index("tools.agx_render_gate run-one")
+        reboot = source.index("proxyclient/tools/reboot.py", run_one)
+        activation = source.index("activate_candidate", reboot)
+        receipt = source.index("tools.agx_render_gate proxy-receipt", activation)
+
+        self.assertLess(run_one, reboot)
+        self.assertLess(reboot, activation)
+        self.assertLess(activation, receipt)
+
     def test_runner_never_substitutes_earlier_gates(self):
         source = REPLAY_SCRIPT.read_text()
         self.assertIn("tools.agx_render_gate run-one", source)
