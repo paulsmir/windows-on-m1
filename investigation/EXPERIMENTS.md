@@ -10910,3 +10910,22 @@ Evidence is preserved at
 `investigation/artifacts/EXP-20260826-119-agx-startdevice-boundary/`.
 The checksum-index SHA-256 is
 `f28ef93b9445d5001590d629f1d458ec3e4e75a3feee686ccc4a209e1de453d9`.
+
+### EXP-20260826-120 — J313 AGX DriverEntry boundary qualification
+
+Status: preregistered but blocked on exact EXP-119 guest-store cleanup and a
+clean stable preflight. The complete literal contract is
+`documentation/plans/2026-08-26-j313-agx-driverentry-boundary-qualification.md`.
+
+This is not a retry of EXP-119. The only changed runtime variable is a new
+CI-signed qualification driver that persists stage 1 before
+`DxgkInitialize` and stage 2 plus the returned NTSTATUS afterward. The exact
+firmware, ACPI, broker and recovery artifacts are unchanged. WDK run
+`32991981562` passed both default and power-qualification builds; the exact
+driver manifest SHA-256 is
+`6cf7321e32849418a4dbac70cc027db0fedb4b5ab3fbadf6c3b325357c8262ca`.
+
+One G2 boot may read only those registry breadcrumbs plus the existing
+binding, resource and liveness evidence. No broker command or GPU firmware,
+RTKit, SGX MMIO, interrupt, UAT, queue, command, render or display operation is
+authorized. No mutation has occurred for EXP-120 at preregistration time.
