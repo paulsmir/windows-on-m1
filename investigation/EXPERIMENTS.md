@@ -10845,3 +10845,24 @@ broker can be published and that the qualification driver binds to the exact
 two-resource contract, but it does not qualify a power transition.  A
 successor must use a newly manifested clean m1n1 binary and a separately
 preregistered one-shot contract.
+
+### EXP-20260826-119 — J313 AGX StartDevice boundary qualification
+
+Status: preregistered for one execution under the user's standing authorization
+for bounded, reversible, fail-closed GPU experiments. The complete literal
+contract is
+`documentation/plans/2026-08-26-j313-agx-startdevice-boundary-qualification.md`.
+
+This is not a retry of EXP-118. It pins the clean m1n1 embedded identity
+`035b8ab`, assisted manifest
+`32f71dbe29ce3299c46d46595479a2777993d6916eebf639ab03774aed622e63`,
+WDK run `32987511238`, driver manifest
+`b588bad78887da1993899cc7e0e38d3b06a87fe4598e9cd8facb5dae46418777`
+and catalog signer `DC81FF63FD2FFE8CDE24F95052C45BB7C0006731`.
+
+One G2 boot may record qualification-only System events for StartDevice stages
+1 through 7 and the synthetic EL2 broker receipts. All GPU firmware, SGX MMIO,
+interrupt, UAT, queue, command, render and display paths remain forbidden. The
+guest must return to exact stable firmware and remove the exact staged package
+and signer after evidence capture. No mutation has occurred at preregistration
+time.
