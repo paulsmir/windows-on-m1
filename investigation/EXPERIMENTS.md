@@ -10929,3 +10929,214 @@ One G2 boot may read only those registry breadcrumbs plus the existing
 binding, resource and liveness evidence. No broker command or GPU firmware,
 RTKit, SGX MMIO, interrupt, UAT, queue, command, render or display operation is
 authorized. No mutation has occurred for EXP-120 at preregistration time.
+
+### EXP-20260826-121 — Stable USB runtime failure localization
+
+Status: preregistered at `2026-08-26T18:35:59Z`.  This experiment is separate
+from and blocks EXP-120.  Its hypothesis is that the reported loss of all
+external USB occurs after the successful Mu xHCI start, at the firmware-to-
+Windows runtime handoff, rather than during physical Type-C or UEFI bring-up.
+
+The first failing run has already been preserved without reinterpretation at
+`investigation/artifacts/EXP-20260826-121-stable-usb-runtime-diagnosis/pre-run-failure/`.
+It used the immutable recovery pair: m1n1 SHA-256
+`3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`
+and Mu SHA-256
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+Mu reported `XHCI started`; EL2 masked AC64, installed the 32-bit DART view,
+and enabled the physical xHCI route `AIC 857 -> vINTID 857` once.  There was no
+EL2 exception, BugCheck or reset.  The 4,135 route transitions initially
+suspected to be xHCI were proven to belong to Apple Input guest INTIDs 865 and
+above, whose physical parent starts at AIC 330; they are not xHCI evidence.
+
+The single controlled action is one cold repeat of the exact immutable stable
+assisted profile with the already-connected hub and `display=both`; there is
+no source, firmware, ACPI, Windows package or device-state mutation.  The exact
+launch command is:
+
+`env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware .local/recovery/STABLE-j313-8core-native-input-v1/J313_EFI.fd --m1n1 .local/recovery/STABLE-j313-8core-native-input-v1/m1n1.macho --display both --debug monitor --chainload --foreground`
+
+Expected checkpoint: lock screen within 30 seconds after guest entry, a live
+framebuffer, xHCI route 857 enabled, external keyboard/mouse or USB Ethernet
+enumeration, and SSH if DHCP succeeds.  Failure criterion: Mu starts xHCI but
+Windows never programs/runs it, no external USB function enumerates, or the
+route/DART state faults.  Evidence paths are the experiment directory,
+`hv.log`, framebuffer state and the host network/ARP observation.  Recovery is
+the same immutable stable assisted pair after a physical reboot to `Running
+proxy...`.
+
+Observed result:
+
+- the exact immutable assisted pair reached guest entry, the lock screen and a
+  live framebuffer without EL2 exception, BugCheck or reset;
+- Mu started xHCI, EL2 installed the 32-bit DART view and enabled the exact
+  level route `AIC 857 -> vINTID 857` once;
+- Windows reported `USBXHCI` and `Ucx01000` running, a healthy USB 3 root hub,
+  two healthy external hubs, both Logitech receivers, USB mass storage and a
+  Realtek USB GbE adapter at 1 Gbit/s.  Every present USB devnode returned
+  `CM_PROB_NONE`, the adapter received `192.168.1.37`, and SSH was responsive;
+- the enabled USBXHCI operational log and the filtered System window contained
+  no USB, Kernel-PnP or WHEA error.  The earlier failed observation did not
+  contain an EL2/xHCI fault and the host had observed the Realtek MAC only with
+  a link-local address.  Therefore the claim that the controller itself had
+  permanently failed is rejected, while transient hub enumeration or DHCP
+  failure remains unlocalized.
+
+Verdict: passed as an unchanged recovery reproduction, but inconclusive for
+the intermittent root cause.  No firmware or Windows fix is justified yet.
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-121-stable-usb-runtime-diagnosis/`.
+
+### EXP-20260826-122 — USB persistence across a clean Windows restart
+
+Status: preregistered at `2026-08-26T18:42:28Z`.  The hypothesis is that the
+intermittent external-USB loss is caused by controller, Type-C or hub state
+surviving a guest restart, rather than by the immutable stable image itself.
+The only changed variable from the passing EXP-121 state is a Windows-requested
+clean restart; the exact recovery m1n1 and Mu hashes, connected hub, display,
+debug profile and launch command remain identical.  No source, package, ACPI,
+driver, registry or hardware topology mutation is permitted.
+
+After Windows requests restart, the host must return to `Running proxy...` and
+the exact EXP-121 launch command will be issued once.  Expected checkpoint is
+the same healthy USB tree and SSH address as EXP-121.  Failure is Mu/xHCI
+success followed by absence or Problem state of the root hub, external hubs or
+Realtek adapter.  Evidence will be preserved under
+`investigation/artifacts/EXP-20260826-122-usb-clean-restart-persistence/`.
+Recovery is a physical reboot to proxy followed by the immutable recovery pair.
+
+Observed result and correction (`2026-08-26T19:02:03Z`):
+
+- the USB-persistence hypothesis is rejected.  The exact immutable stable pair
+  reached Windows with all eight vCPUs alive and with the xHCI route, interrupt
+  delivery and external USB stack initially operational;
+- Windows then reported 100% disk activity while the UI, SSH/PnP queries and
+  external USB responsiveness stalled.  The System log recorded `stornvme`
+  Event 129 every ten seconds and the Storport Operational log recorded request
+  timeouts (Event 500), hierarchical resets (Event 550), 1,860 failed requests
+  and 28 timeouts.  The last failed command was SCSI READ(10), SRB status
+  `0xE`, at 9,666 ms;
+- `hv.log` recorded 30 matching NVMe disable/enable cycles.  Before each reset,
+  vNVMe telemetry showed a saturated 256-entry guest I/O queue while command,
+  completion and IRQ inject/IAR/EOI counters remained balanced apart from the
+  expected outstanding asynchronous event request.  No physical ANS backend
+  completion, tag or timeout error was recorded;
+- source inspection localized the violated contract to
+  `hv_nvme_queue.c::process_until_completion()`: the controller intentionally
+  publishes only one guest CQE per doorbell/interrupt round trip.  This avoids
+  the historical all-256 synchronous drain that starved guest timers, but under
+  sustained queue depth it ages requests beyond Storport's ten-second timeout.
+  USB loss is a downstream symptom of the storage reset storm, not its cause;
+- evidence is preserved under
+  `investigation/artifacts/EXP-20260826-122-usb-clean-restart-persistence/`.
+  Key SHA-256 values are `59f48ae9ee9ce2d0f8d8bbc95ac6c7e4587696eb2c042df18a1f3a706c101575`
+  (`hv-storage-stall.log`),
+  `cd020bb3a700c6e4363e6e014dc40969f075ed86467d768ebfc4bd320e395272`
+  (`hang-telemetry.jsonl`) and
+  `466f286dadd186fffe5f92c970ec8c4c60b249e1684b036fafed51d1ef7b6c86`
+  (`storage-events.txt`).
+
+Verdict: rejected and superseded by the storage diagnosis.  EXP-123 tests the
+smallest owner-layer correction: bounded CQE batching.
+
+### EXP-20260826-123 — Bounded vNVMe completion batching
+
+Status: preregistered at `2026-08-26T19:02:03Z`.  The falsifiable hypothesis is
+that publishing a bounded batch of eight guest CQEs per trapped queue action
+prevents Storport request aging and controller resets without recreating the
+historical guest-timer starvation caused by draining all 256 entries in one EL2
+trap.  The sole runtime variable relative to EXP-122 is the completion budget:
+one becomes eight.  Mu, ACPI, Windows, CPU topology, input, display and the
+physical storage backend remain unchanged.
+
+Primary sources inspected before the change were the live EXP-122 queue,
+interrupt and reset traces; current and stable `hv_nvme_queue.c` plus the ANS
+backend; Asahi Linux `drivers/nvme/host/apple.c`, which uses one admin and one
+I/O queue with bounded shared tags and drains pending physical CQEs per IRQ; and
+Microsoft Storport timeout/reset documentation.  Ownership is split as follows:
+ANS owns physical command execution and physical CQ draining, m1n1 owns guest
+queue progress and interrupt publication, Mu owns PCI/ACPI discovery, and
+Storport owns the ten-second request deadline and reset recovery.
+
+Pinned state before build: root branch `feature/j313-gpu-acceleration`, commit
+`3303e7f0b944e2d59590a676ab650efddea0a0dc`; m1n1 branch
+`feature/j313-gpu-boot-cookie`, commit
+`035b8ab38b504fa30f15e4db75649b1c5e1e73ae`, dirty diff SHA-256
+`e4fdf732cccb68d98f063debbf3190a6f8bad0cbf42597997c7af309bc3bd84a`;
+Mu commit `c6108366201f869b297912a0ef8323b343256ecc`, source diff SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The regression test first failed because the old implementation completed only
+one of sixteen queued commands.  With the bounded batch it passes, and the full
+m1n1 host suite passes.
+
+Planned build command is a clean diagnostic m1n1 build in the pinned local
+`windows-on-m1-build:local` container; the immutable Mu artifact remains
+`.local/recovery/STABLE-j313-8core-native-input-v1/J313_EFI.fd` with SHA-256
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+The built m1n1 path, embedded identity and SHA-256 will be appended before
+launch.  The exact launch profile is the EXP-121 public assisted command with
+`display=both`, `debug=monitor`, eight CPUs and native input, replacing only the
+`--m1n1` path.
+
+Expected checkpoint: lock screen within 30 seconds, responsive input/SSH, no
+BugCheck, zero new System Event 129 and Storport Event 500/550 during boot plus
+a bounded read workload, and queue progress without a ten-second-old request.
+Failure is any watchdog, lost vCPU/input, new storage timeout/reset, or a queue
+that remains saturated without progress.  Evidence will be preserved under
+`investigation/artifacts/EXP-20260826-123-vnvme-bounded-completion-batch/`.
+Recovery is the immutable stable pair with m1n1 SHA-256
+`3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+Pre-launch artifact record (superseding the unlaunched dirty artifact): the
+implementation was committed as m1n1
+`bee53dc60bd160c0a64de758974af767c2970baf`, then the clean container command was
+`docker run --rm -v /Users/pavel/public_windows:/work -w /work/m1n1_windows windows-on-m1-build:local sh -lc 'make clean && make -j8'`.
+It completed successfully.  The diagnostic binary is
+`.local/experiments/EXP-20260826-123-vnvme-bounded-completion-batch/m1n1.macho`,
+has embedded identity `bee53dc` and SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+The paired copied Mu SHA-256 is unchanged at
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+The verified manifest SHA-256 is
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+
+Observed result (`2026-08-26T19:13:53Z`):
+
+- manifest validation accepted the exact clean `bee53dc` binary and unchanged
+  stable Mu.  Guest entry reached the Windows boot path immediately; all seven
+  secondary mailboxes were consumed and Windows exposed eight logical
+  processors.  SSH became responsive within the 30-second checkpoint;
+- before workload, System contained zero new `stornvme` Event 129 and Storport
+  Operational contained zero Event 500/504/505/550 since boot.  `stornvme`,
+  `USBXHCI` and `AppleInput` were all Running;
+- a four-worker cached read check completed in 2,767 ms.  The bounded physical
+  storage workload then created four unique 128 MiB temporary files using
+  write-through streams, flushed each file, read each file back and removed
+  only those files.  All four jobs completed in 3,439 ms and cleanup succeeded;
+- after waiting beyond Storport's ten-second timeout window, both relevant
+  event counts remained zero.  All eight processors, NVMe, xHCI and AppleInput
+  remained live.  Monitor telemetry advanced from sequence 21 through 56,
+  guest timers progressed and the 2560x1600 framebuffer continued publishing;
+- no BugCheck, watchdog, synchronous EL2 exception, system reset or physical
+  ANS backend error was recorded.  The initial `WinSAT` attempt exited 24 and
+  is not counted as workload evidence; it made no state change.  The first
+  root-suite invocation used system Python and failed only on missing
+  `pyserial`/`construct`; the required `proxyenv` rerun passed all 659 tests;
+- fresh verification after hardware execution passed the complete m1n1 host
+  suite, all 659 root tests, artifact manifest validation and both diff checks.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-123-vnvme-bounded-completion-batch/`.
+SHA-256 values are `4c7a2d45d0674a2812d7969b3f183cc2177731234e3a878407da0db32403f13c`
+for `hv.log`, `7f433824b81327970932419e62a23a548da9845a4d2a38dd90f97009e9182ab9`
+for the final Windows storage report,
+`ff4c463cfd1029b3bdc3521e8b8557f9df34463363d0b2a76cd626757bf08a7a`
+for final monitor status and
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`
+for the executed manifest.
+
+Verdict: confirmed for the reproduced failure mode.  Bounded batches remove
+the 100%-disk Storport timeout/reset storm under boot and the controlled 512
+MiB queue workload without recreating timer starvation.  The immutable stable
+recovery pair remains unchanged.  Longer soak testing is still required before
+calling this a release or replacing the recovery artifact.
