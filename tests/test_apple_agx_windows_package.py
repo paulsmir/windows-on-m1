@@ -165,6 +165,17 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("/p:RunCodeAnalysis=true", workflow)
         self.assertIn("AppleAgx-ARM64-Debug", workflow)
 
+    def test_ci_publishes_separate_default_and_power_qualification_packages(self):
+        workflow = WORKFLOW.read_text()
+        self.assertIn("qualification: false", workflow)
+        self.assertIn("qualification: true", workflow)
+        self.assertIn("AppleAgx-ARM64-Debug", workflow)
+        self.assertIn("AppleAgx-ARM64-PowerQualification", workflow)
+        self.assertIn(
+            "/p:AppleAgxPowerQualification=${{ matrix.qualification }}",
+            workflow,
+        )
+
     def test_stage_script_never_installs_or_restarts_the_device(self):
         stage = self.read("scripts/stage-driver.ps1")
         self.assertIn("pnputil /add-driver", stage)

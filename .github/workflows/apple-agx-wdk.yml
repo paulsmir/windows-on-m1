@@ -17,7 +17,18 @@ on:
 
 jobs:
   build-arm64:
+    name: build-arm64 (${{ matrix.name }})
     runs-on: windows-2025-vs2026
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            qualification: false
+            artifact: AppleAgx-ARM64-Debug
+          - name: power-qualification
+            qualification: true
+            artifact: AppleAgx-ARM64-PowerQualification
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -50,11 +61,12 @@ jobs:
           /p:Configuration=Debug
           /p:Platform=ARM64
           /p:RunCodeAnalysis=true
+          /p:AppleAgxPowerQualification=${{ matrix.qualification }}
 
       - name: Upload unsigned test package
         uses: actions/upload-artifact@v4
         with:
-          name: AppleAgx-ARM64-Debug
+          name: ${{ matrix.artifact }}
           if-no-files-found: error
           path: |
             drivers/apple-agx/windows/ARM64/Debug/**/*.sys
