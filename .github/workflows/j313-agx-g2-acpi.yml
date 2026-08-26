@@ -1,0 +1,103 @@
+name: J313 AGX G2 ACPI isolation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/j313-agx-g2-acpi.yml"
+      - "config/j313-agx*.json"
+      - "mu"
+      - "tests/test_j313_agx_g2_*.py"
+      - "tests/test_verify_j313_agx_g2_aml.py"
+      - "tools/agx_contract.py"
+      - "tools/generate_j313_agx_g2_contract.py"
+      - "tools/verify_j313_agx_g2_aml.py"
+  pull_request:
+    paths:
+      - ".github/workflows/j313-agx-g2-acpi.yml"
+      - "config/j313-agx*.json"
+      - "mu"
+      - "tests/test_j313_agx_g2_*.py"
+      - "tests/test_verify_j313_agx_g2_aml.py"
+      - "tools/agx_contract.py"
+      - "tools/generate_j313_agx_g2_contract.py"
+      - "tools/verify_j313_agx_g2_aml.py"
+  workflow_dispatch:
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: stable
+            g2: "FALSE"
+          - profile: agx-g2
+            g2: "TRUE"
+    steps:
+      - name: Check out source and pinned components
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install firmware build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y acpica-tools clang lld nasm python3-venv
+
+      - name: Verify generated contracts and host policy
+        run: |
+          python3 tools/generate_j313_agx_g2_contract.py --check
+          python3 -m unittest \
+            tests.test_j313_agx_g2_contract \
+            tests.test_j313_agx_g2_mu_profile \
+            tests.test_j313_agx_g2_m1n1_policy \
+            tests.test_verify_j313_agx_g2_aml
+
+      - name: Prepare Mu build environment
+        run: |
+          python3 -m venv .build/mu-venv
+          .build/mu-venv/bin/pip install --upgrade pip
+          .build/mu-venv/bin/pip install -r mu/pip-requirements.txt
+          .build/mu-venv/bin/pip install 'setuptools<81' wheel
+          cd mu
+          ../.build/mu-venv/bin/stuart_setup \
+            -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py \
+            TOOL_CHAIN_TAG=CLANGPDB
+          rm -f MU_BASECORE/BaseTools/Bin/nasm_ext_dep.yaml \
+            MU_BASECORE/BaseTools/Bin/iasl_ext_dep.yaml \
+            MU_BASECORE/.pytool/Plugin/UncrustifyCheck/uncrustify_ext_dep.yaml
+          ../.build/mu-venv/bin/stuart_update \
+            -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py \
+            TOOL_CHAIN_TAG=CLANGPDB
+
+      - name: Build ${{ matrix.profile }} firmware profile
+        env:
+          G2_PROFILE: ${{ matrix.g2 }}
+        run: |
+          cd mu
+          ../.build/mu-venv/bin/stuart_build \
+            -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py \
+            TOOL_CHAIN_TAG=CLANGPDB TARGET=DEBUG \
+            'BLD_*_AIC_BUILD=FALSE' \
+            "BLD_*_J313_AGX_G2_PROFILE=${G2_PROFILE}"
+
+      - name: Prove stable profile omits AGX SSDT
+        if: matrix.g2 == 'FALSE'
+        run: |
+          if find mu/Build -name J313AppleAgxSsdt.aml -print -quit | grep -q .; then
+            echo "stable profile unexpectedly contains J313AppleAgxSsdt.aml" >&2
+            exit 1
+          fi
+
+      - name: Prove G2 profile has one exact AGX SSDT
+        if: matrix.g2 == 'TRUE'
+        run: |
+          mapfile -t tables < <(find mu/Build -name J313AppleAgxSsdt.aml -type f)
+          if [ "${#tables[@]}" -ne 1 ]; then
+            echo "G2 profile must contain exactly one AGX SSDT; found ${#tables[@]}" >&2
+            exit 1
+          fi
+          cp "${tables[0]}" /tmp/J313AppleAgxSsdt.aml
+          (cd /tmp && iasl -d J313AppleAgxSsdt.aml)
+          python3 tools/verify_j313_agx_g2_aml.py /tmp/J313AppleAgxSsdt.dsl

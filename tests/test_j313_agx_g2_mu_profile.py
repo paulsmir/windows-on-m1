@@ -11,6 +11,7 @@ DSDT = PKG / "AcpiTables" / "DSDT.asl"
 SSDT = PKG / "AcpiTables" / "J313AppleAgxSsdt.asl"
 INF = PKG / "AcpiTables" / "J313AppleAgxAcpiTables.inf"
 MODULE = "MacBookAirMid2020Pkg/AcpiTables/J313AppleAgxAcpiTables.inf"
+WORKFLOW = ROOT / ".github" / "workflows" / "j313-agx-g2-acpi.yml"
 
 
 def _conditional_body(text, module):
@@ -60,6 +61,17 @@ class J313AgxG2MuProfileTests(unittest.TestCase):
         self.assertIn("J313AppleAgxSsdt.asl", inf)
         self.assertNotIn("DSDT.asl", inf)
         self.assertEqual(inf.count("J313AppleAgxSsdt.asl"), 1)
+
+    def test_ci_builds_and_checks_stable_and_g2_profiles(self):
+        workflow = WORKFLOW.read_text()
+        self.assertIn("acpica-tools", workflow)
+        self.assertIn("tools/generate_j313_agx_g2_contract.py --check", workflow)
+        self.assertIn('g2: "FALSE"', workflow)
+        self.assertIn('g2: "TRUE"', workflow)
+        self.assertIn("BLD_*_J313_AGX_G2_PROFILE=${G2_PROFILE}", workflow)
+        self.assertIn("tools/verify_j313_agx_g2_aml.py", workflow)
+        self.assertIn("J313AppleAgxSsdt.aml", workflow)
+        self.assertNotIn("AppleAgx.sys", workflow)
 
 
 if __name__ == "__main__":
