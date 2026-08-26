@@ -35,7 +35,7 @@
 - Consumes: the existing validated G1 values `page_size=0x4000`, `address_bits=40`, `num_contexts=64`, `firmware_generation=G13`, `firmware_version=V13_5`.
 - Produces: generated macros `J313_AGX_G2_UAT_INPUT_ADDRESS_BITS`, `J313_AGX_G2_UAT_OUTPUT_ADDRESS_BITS`, `J313_AGX_G2_UAT_PAGE_BITS`, `J313_AGX_G2_UAT_LEVEL_COUNT`, per-level shifts/counts, context ownership limits, `J313_AGX_G2_INITDATA_SIZE` and four V13_5 version words.
 
-- [ ] **Step 1: Write the failing contract test**
+- [x] **Step 1: Write the failing contract test**
 
 Add assertions to `test_generated_header_is_checked_in_and_deterministic`:
 
@@ -65,7 +65,7 @@ for line in (
     self.assertIn(line, rendered)
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -75,7 +75,7 @@ python3 -m unittest tests.test_j313_agx_g2_contract.J313AgxG2ContractTests.test_
 
 Expected: FAIL because the first UAT macro is absent.
 
-- [ ] **Step 3: Add reviewed generator constants and render them only into the Windows header**
+- [x] **Step 3: Add reviewed generator constants and render them only into the Windows header**
 
 Define immutable generator tuples:
 
@@ -95,7 +95,7 @@ Validate that `1 << UAT_PAGE_BITS == contract.page_size`, output bits equal
 level count is a power of two. Render the macros after the existing page and
 address macros. Do not change ASL or the m1n1 policy header.
 
-- [ ] **Step 4: Regenerate and verify GREEN**
+- [x] **Step 4: Regenerate and verify GREEN**
 
 Run:
 
@@ -108,7 +108,7 @@ git diff --check
 
 Expected: generator check succeeds and the complete contract suite passes.
 
-- [ ] **Step 5: Commit the generated contract**
+- [x] **Step 5: Commit the generated contract**
 
 ```bash
 git add tools/generate_j313_agx_g2_contract.py tests/test_j313_agx_g2_contract.py drivers/apple-agx/shared/include/j313_agx_g2.generated.h
@@ -171,7 +171,7 @@ APPLE_AGX_UAT_RESULT AppleAgxUatEncodePageDescriptor(
     unsigned long long *Descriptor);
 ```
 
-- [ ] **Step 1: Write a host test that names the exact descriptor bits**
+- [x] **Step 1: Write a host test that names the exact descriptor bits**
 
 The first test must assert:
 
@@ -193,7 +193,7 @@ the non-global bit, the first/last pages of both canonical TTBR halves,
 rejection of the non-canonical middle and cross-half ranges, page/table
 misalignment, null outputs, 40-bit overflow and an invalid enum value.
 
-- [ ] **Step 2: Add the Python sanitizer harness and run RED**
+- [x] **Step 2: Add the Python sanitizer harness and run RED**
 
 `tests/test_apple_agx_uat.py` compiles the C test with:
 
@@ -215,7 +215,7 @@ python3 -m unittest tests.test_apple_agx_uat -v
 
 Expected: compiler failure because the new header/source are absent.
 
-- [ ] **Step 3: Implement the minimal freestanding codec**
+- [x] **Step 3: Implement the minimal freestanding codec**
 
 Use local unsigned integer typedefs, the generated header and named masks for
 PTE owner bit 55, UXN 54, PXN 53, non-global 11, access flag 10, AP bits 7:6,
@@ -229,7 +229,7 @@ returns which TTBR half owns the range. Context 0 accepts only
 firmware-capable protections; contexts 1-62 and 63 reject firmware-only
 protections. No public protection permits execution.
 
-- [ ] **Step 4: Run GREEN and mutation checks**
+- [x] **Step 4: Run GREEN and mutation checks**
 
 Run:
 
@@ -243,7 +243,7 @@ Then temporarily flip the access-flag bit in `apple_agx_uat.c`, verify the
 golden test fails, and restore the correct source. Expected final result: all
 focused tests pass under ASan/UBSan.
 
-- [ ] **Step 5: Commit the UAT codec**
+- [x] **Step 5: Commit the UAT codec**
 
 ```bash
 git add drivers/apple-agx/shared/include/apple_agx_uat.h drivers/apple-agx/shared/src/apple_agx_uat.c drivers/apple-agx/shared/tests/apple_agx_uat_test.c tests/test_apple_agx_uat.py
@@ -313,7 +313,7 @@ void AppleAgxUatDestroy(const APPLE_AGX_UAT_ALLOCATOR *Allocator,
                         APPLE_AGX_UAT_INVENTORY *Inventory);
 ```
 
-- [ ] **Step 1: Write table-walk and rollback tests**
+- [x] **Step 1: Write table-walk and rollback tests**
 
 Use a fake allocator that returns zeroed, 16-KiB-aligned arrays and monotonically
 increasing 40-bit physical addresses. Assert:
@@ -337,7 +337,7 @@ inventory capacity. Inject allocator failure on every allocation call. For
 each failure, assert that only completed pages are released in strict reverse
 order. Call destroy twice and assert no second release.
 
-- [ ] **Step 2: Add the sanitizer harness and run RED**
+- [x] **Step 2: Add the sanitizer harness and run RED**
 
 Compile `apple_agx_uat_table_test.c`, `apple_agx_uat_table.c` and
 `apple_agx_uat.c` with the same C11 ASan/UBSan flags as Task 2.
@@ -348,7 +348,7 @@ python3 -m unittest tests.test_apple_agx_uat_table -v
 
 Expected: compiler failure because `apple_agx_uat_table.h` is absent.
 
-- [ ] **Step 3: Implement allocation-free caller ownership**
+- [x] **Step 3: Implement allocation-free caller ownership**
 
 The module must never allocate its inventory arrays. It appends only after
 capacity checks, accepts only allocator pages whose CPU pointer and physical
@@ -357,7 +357,7 @@ publishes a parent descriptor only after the child page is valid and recorded.
 On any mapping failure, restore the page and mapping counts to their entry
 values and release pages added by that call in reverse order.
 
-- [ ] **Step 4: Run GREEN and the combined UAT suite**
+- [x] **Step 4: Run GREEN and the combined UAT suite**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_uat tests.test_apple_agx_uat_table -v
@@ -366,7 +366,7 @@ git diff --check
 
 Expected: both sanitizer binaries pass with no warning or sanitizer report.
 
-- [ ] **Step 5: Commit the table owner**
+- [x] **Step 5: Commit the table owner**
 
 ```bash
 git add drivers/apple-agx/shared/include/apple_agx_uat_table.h drivers/apple-agx/shared/src/apple_agx_uat_table.c drivers/apple-agx/shared/tests/apple_agx_uat_table_test.c tests/test_apple_agx_uat_table.py
@@ -416,7 +416,7 @@ APPLE_AGX_INITDATA_RESULT AppleAgxInitdataEncodeG13V13_5(
     unsigned int DestinationSize, APPLE_AGX_INITDATA_MANIFEST *Manifest);
 ```
 
-- [ ] **Step 1: Write the golden 0xBC-byte test**
+- [x] **Step 1: Write the golden 0xBC-byte test**
 
 Use four distinct aligned firmware-private addresses. Assert bytes and fields
 at exact offsets:
@@ -446,7 +446,7 @@ duplicate/overlapping referenced 16-KiB objects and output preservation after
 every failure. Valid objects may occupy any aligned address in the
 context-zero high canonical half; they are not limited to `rtkit_private`.
 
-- [ ] **Step 2: Add sanitizer harness and run RED**
+- [x] **Step 2: Add sanitizer harness and run RED**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_initdata -v
@@ -454,7 +454,7 @@ python3 -m unittest tests.test_apple_agx_initdata -v
 
 Expected: compiler failure because the initdata header/source are absent.
 
-- [ ] **Step 3: Implement explicit little-endian writers**
+- [x] **Step 3: Implement explicit little-endian writers**
 
 Use `write_u16`, `write_u32` and `write_u64` helpers; do not cast the output to
 a packed C structure. Validate every input and scan the full destination for
@@ -462,7 +462,7 @@ zero before writing the first byte. Build into a local `unsigned char
 encoded[J313_AGX_G2_INITDATA_SIZE]`, then copy it to the caller only after all
 validation succeeds. Populate the manifest from the validated input.
 
-- [ ] **Step 4: Run GREEN and mutation proof**
+- [x] **Step 4: Run GREEN and mutation proof**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_initdata tests.test_apple_agx_uat -v
@@ -472,7 +472,7 @@ git diff --check
 Temporarily change one level shift and verify the golden test fails, then
 restore it. Expected final result: all tests pass under ASan/UBSan.
 
-- [ ] **Step 5: Commit the initdata codec**
+- [x] **Step 5: Commit the initdata codec**
 
 ```bash
 git add drivers/apple-agx/shared/include/apple_agx_initdata.h drivers/apple-agx/shared/src/apple_agx_initdata.c drivers/apple-agx/shared/tests/apple_agx_initdata_test.c tests/test_apple_agx_initdata.py
@@ -515,7 +515,7 @@ APPLE_AGX_UAT_RESULT AppleAgxMappingStop(
     const APPLE_AGX_MAPPING_IO *Io, APPLE_AGX_MAPPING_STATE *State);
 ```
 
-- [ ] **Step 1: Write map-once/subview/rollback tests**
+- [x] **Step 1: Write map-once/subview/rollback tests**
 
 The fake mapper records every request. Assert one map at
 `0x204000000/0x04000000`, `AscBase == SgxBase + 0x02400000`, no second map,
@@ -524,7 +524,7 @@ returned null base, corrupted generated containment through a test-only helper,
 unmap failure preserving active ownership, successful retry and idempotent
 second stop.
 
-- [ ] **Step 2: Add sanitizer harness and run RED**
+- [x] **Step 2: Add sanitizer harness and run RED**
 
 Compile the mapping test with `apple_agx_mapping.c` and
 `apple_agx_uat.c`, then run:
@@ -535,7 +535,7 @@ python3 -m unittest tests.test_apple_agx_mapping -v
 
 Expected: compiler failure because the mapping module is absent.
 
-- [ ] **Step 3: Implement the pure coordinator**
+- [x] **Step 3: Implement the pure coordinator**
 
 Before mapping, prove with checked subtraction/addition that ASC begins at or
 after SGX and ends no later than SGX. Map SGX once, reject a null returned
@@ -543,7 +543,7 @@ pointer, derive ASC only from the validated offset, and set `Active` last. On
 successful unmap, zero the complete state. On unmap failure, retain state so a
 later teardown can retry without losing ownership.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_mapping tests.test_apple_agx_uat -v
@@ -552,7 +552,7 @@ git diff --check
 
 Expected: both sanitizer suites pass.
 
-- [ ] **Step 5: Commit the mapping coordinator**
+- [x] **Step 5: Commit the mapping coordinator**
 
 ```bash
 git add drivers/apple-agx/shared/include/apple_agx_mapping.h drivers/apple-agx/shared/src/apple_agx_mapping.c drivers/apple-agx/shared/tests/apple_agx_mapping_test.c tests/test_apple_agx_mapping.py
@@ -587,7 +587,7 @@ NTSTATUS AppleAgxReleaseMmioMapping(
 and MSBuild property `AppleAgxMmioQualification=false` defining
 `APPLE_AGX_G2_MMIO_QUALIFICATION=1` only when true.
 
-- [ ] **Step 1: Write package tests for the unreachable default path**
+- [x] **Step 1: Write package tests for the unreachable default path**
 
 Add assertions that:
 
@@ -606,7 +606,7 @@ Also require the default build script argument to render
 `AppleAgxMmioQualification=false`, and retain zero present sources, zero
 children and final `STATUS_NOT_SUPPORTED`.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_windows_package -v
@@ -614,7 +614,7 @@ python3 -m unittest tests.test_apple_agx_windows_package -v
 
 Expected: FAIL because `src/mmio.c` and the new property do not exist.
 
-- [ ] **Step 3: Implement the dxgkrnl adapter**
+- [x] **Step 3: Implement the dxgkrnl adapter**
 
 `mmio.c` adapts `DxgkCbMapMemory` with `InIoSpace=FALSE`,
 `MapToUserMode=FALSE`, `MmNonCached` and exact SGX length. It adapts
@@ -630,7 +630,7 @@ Add `APPLE_AGX_MAPPING_STATE MappingState` and a saved
 `PDXGKRNL_INTERFACE` only under the qualification guard. The default compiled
 DDI flow must contain no call to either mapping function.
 
-- [ ] **Step 4: Run GREEN and source audits**
+- [x] **Step 4: Run GREEN and source audits**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_windows_package tests.test_apple_agx_mapping -v
@@ -640,7 +640,7 @@ git diff --check
 
 Expected: tests pass; the register audit returns no matches.
 
-- [ ] **Step 5: Commit the WDDM wrapper**
+- [x] **Step 5: Commit the WDDM wrapper**
 
 ```bash
 git add drivers/apple-agx/windows/src/mmio.c drivers/apple-agx/windows/include/apple_agx_driver.h drivers/apple-agx/windows/src/adapter.c drivers/apple-agx/windows/AppleAgx.vcxproj drivers/apple-agx/windows/scripts/build-driver.ps1 tests/test_apple_agx_windows_package.py
@@ -662,7 +662,7 @@ git commit -m "gpu: compile opt-in inert SGX mapping transport"
 - Produces: three WDK jobs (`default`, `power-qualification`,
   `mmio-qualification`), complete ledger rows and a closed offline checklist.
 
-- [ ] **Step 1: Write the failing CI matrix test**
+- [x] **Step 1: Write the failing CI matrix test**
 
 Require these matrix values and MSBuild argument:
 
@@ -678,7 +678,7 @@ self.assertIn(
 
 Require default and power rows to set `mmio_qualification: false` explicitly.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 python3 -m unittest tests.test_apple_agx_windows_package.AppleAgxWindowsPackageTests.test_ci_publishes_separate_default_and_power_qualification_packages -v
@@ -686,7 +686,7 @@ python3 -m unittest tests.test_apple_agx_windows_package.AppleAgxWindowsPackageT
 
 Expected: FAIL because the mmio matrix row is absent.
 
-- [ ] **Step 3: Extend CI without changing signature provenance**
+- [x] **Step 3: Extend CI without changing signature provenance**
 
 Add matrix fields `qualification` and `mmio_qualification` to all three rows,
 pass both MSBuild properties and run the existing signature/provenance step for
@@ -698,7 +698,7 @@ if: matrix.qualification || matrix.mmio_qualification
 
 Retain code analysis and the same WDK packages.
 
-- [ ] **Step 4: Run the complete offline gate**
+- [x] **Step 4: Run the complete offline gate**
 
 ```bash
 python3 tools/generate_j313_agx_g2_contract.py --check
@@ -720,7 +720,7 @@ git status --short
 Expected: focused and complete suites pass; only the known untracked submodule
 worktree state may remain and no generated file is stale.
 
-- [ ] **Step 5: Commit CI, then obtain the WDK run result**
+- [x] **Step 5: Commit CI, then obtain the WDK run result**
 
 ```bash
 git add .github/workflows/apple-agx-wdk.yml tests/test_apple_agx_windows_package.py
@@ -731,7 +731,7 @@ git push origin feature/j313-gpu-acceleration
 Wait for all three ARM64 jobs. Record the workflow run ID and exact job result.
 Do not download, stage or install the package.
 
-- [ ] **Step 6: Index every implementation commit**
+- [x] **Step 6: Index every implementation commit**
 
 Append one RFC 4180 row for the design commit `d1166d6` and one row for each
 Task 1-7 implementation commit. Each row includes the exact commit, reason,
@@ -743,7 +743,7 @@ python3 -m unittest tests.test_change_ledger tests.test_repository_hygiene -v
 git diff --check
 ```
 
-- [ ] **Step 7: Close and commit the milestone**
+- [x] **Step 7: Close and commit the milestone**
 
 Mark every completed checkbox, add the final focused/full test totals and WDK
 run ID to this plan, then commit and push:
@@ -756,4 +756,43 @@ git push origin feature/j313-gpu-acceleration
 
 The closing note must state that no hardware experiment is authorized and the
 next action requires a new preregistered map/subview/unmap experiment with the
+existing zero-Event-129 storage gate.
+
+## Closure Receipt
+
+Completed implementation commits:
+
+- Task 1: `edf7f9a539b996c830fe75cd54450e990937c70f`
+- Task 2: `016c716d9111439485272ad844c4332a2cd2f750`
+- Task 3: `f35448af064cbc83b9002210b5d2decf28eebaab`
+- Task 4: `150f290396fe9ab92334f08690fc596c758f0399`
+- Task 5: `10a3c6fc871b8c5a76605811ecc62b106fa8735a`
+- Task 6: `0d3c87348fcb4ceaa133b3957cc814f15a8bd789`
+- Task 7: `32f881911b7c31695e1ce6aaf84cc249178f8f75`
+
+Final verification on 2026-08-27:
+
+- deterministic generated-contract check: passed;
+- focused UAT, table, initdata, mapping, firmware, state, power and WDDM
+  package gate: 50/50 passed;
+- canonical public `tests/` suite through the repository `proxyenv`: 677 tests
+  and 175 subtests passed;
+- GitHub Actions ARM64 WDK run `33021179478`: `default`,
+  `power-qualification` and `mmio-qualification` all succeeded, including code
+  analysis, WDK test-signature provenance and package publication;
+- no generated file was stale and the final diff check passed.
+
+The unrestricted repository-root pytest command is intentionally not the
+public gate because it recursively collects vendored Mu, m1n1 hardware and
+archived experiment tests. The reproducible full public command is:
+
+```bash
+PYTHONPATH=.:m1n1_windows/proxyclient \
+  ./proxyenv/bin/python -m pytest tests -q
+```
+
+No CI artifact was downloaded, staged or installed. No Windows, firmware,
+guest, MMIO register or hardware state changed during this milestone. This
+closure does **not** authorize a hardware experiment. The next action requires
+a new preregistered SGX map/subview/unmap experiment and must retain the
 existing zero-Event-129 storage gate.
