@@ -342,10 +342,18 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         workflow = WORKFLOW.read_text()
         self.assertIn("qualification: false", workflow)
         self.assertIn("qualification: true", workflow)
+        self.assertGreaterEqual(workflow.count("mmio_qualification: false"), 2)
+        self.assertIn("name: mmio-qualification", workflow)
+        self.assertIn("mmio_qualification: true", workflow)
         self.assertIn("AppleAgx-ARM64-Debug", workflow)
         self.assertIn("AppleAgx-ARM64-PowerQualification", workflow)
+        self.assertIn("AppleAgx-ARM64-MmioQualification", workflow)
         self.assertIn(
             "/p:AppleAgxPowerQualification=${{ matrix.qualification }}",
+            workflow,
+        )
+        self.assertIn(
+            "/p:AppleAgxMmioQualification=${{ matrix.mmio_qualification }}",
             workflow,
         )
 

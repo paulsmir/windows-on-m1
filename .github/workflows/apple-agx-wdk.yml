@@ -25,10 +25,16 @@ jobs:
         include:
           - name: default
             qualification: false
+            mmio_qualification: false
             artifact: AppleAgx-ARM64-Debug
           - name: power-qualification
             qualification: true
+            mmio_qualification: false
             artifact: AppleAgx-ARM64-PowerQualification
+          - name: mmio-qualification
+            qualification: false
+            mmio_qualification: true
+            artifact: AppleAgx-ARM64-MmioQualification
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -62,9 +68,10 @@ jobs:
           /p:Platform=ARM64
           /p:RunCodeAnalysis=true
           /p:AppleAgxPowerQualification=${{ matrix.qualification }}
+          /p:AppleAgxMmioQualification=${{ matrix.mmio_qualification }}
 
       - name: Verify WDK qualification signature provenance
-        if: matrix.qualification == true
+        if: matrix.qualification == true || matrix.mmio_qualification == true
         timeout-minutes: 2
         shell: pwsh
         run: |
