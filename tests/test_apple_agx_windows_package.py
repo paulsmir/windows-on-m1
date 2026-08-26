@@ -95,6 +95,15 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("CmResourceTypeInterrupt", resources)
         self.assertIn("CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE", resources)
 
+    def test_resource_parser_requires_exclusive_resource_ownership(self):
+        resources = self.read("src/resources.c")
+        self.assertGreaterEqual(
+            resources.count(
+                "descriptor->ShareDisposition != CmResourceShareDeviceExclusive"
+            ),
+            2,
+        )
+
     def test_sources_contain_no_gpu_write_path(self):
         sources = "\n".join(path.read_text() for path in
                             sorted((WINDOWS / "src").glob("*.c")))
@@ -124,6 +133,20 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("/p:Platform=ARM64", workflow)
         self.assertIn("/p:RunCodeAnalysis=true", workflow)
         self.assertIn("AppleAgx-ARM64-Debug", workflow)
+
+    def test_stage_script_never_installs_or_restarts_the_device(self):
+        stage = self.read("scripts/stage-driver.ps1")
+        self.assertIn("pnputil /add-driver", stage)
+        self.assertNotIn("/install", stage.lower())
+        self.assertNotIn("/restart-device", stage.lower())
+        self.assertNotIn("ACPI\\APPL0002", stage)
+
+    def test_stage_rollback_removes_only_the_recorded_oem_inf(self):
+        rollback = self.read("scripts/remove-staged-driver.ps1")
+        self.assertIn("[Parameter(Mandatory=$true)][string]$PublishedName", rollback)
+        self.assertIn("pnputil /delete-driver $PublishedName", rollback)
+        self.assertNotIn("/uninstall", rollback.lower())
+        self.assertNotIn("/force", rollback.lower())
 
 
 if __name__ == "__main__":

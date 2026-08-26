@@ -40,6 +40,7 @@ AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
 
       if (descriptor->Type == CmResourceTypeMemory) {
         if (seenMemory ||
+            descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
             (ULONGLONG)descriptor->u.Memory.Start.QuadPart !=
                 J313_AGX_G2_SGX_MMIO_BASE ||
             descriptor->u.Memory.Length != J313_AGX_G2_SGX_MMIO_SIZE)
@@ -49,7 +50,8 @@ AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
       }
 
       if (descriptor->Type == CmResourceTypeInterrupt) {
-        if ((descriptor->Flags & CM_RESOURCE_INTERRUPT_LATCHED) !=
+        if (descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
+            (descriptor->Flags & CM_RESOURCE_INTERRUPT_LATCHED) !=
                 CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE ||
             !AppleAgxRecordInterrupt(descriptor->u.Interrupt.Vector,
                                      seenInterrupts))
