@@ -11325,3 +11325,51 @@ lifecycle boundary, but they prevent calling the overall recovery healthy.
 EXP-125 is closed and must not be retried.  The next experiment may add only
 per-descriptor translated-resource breadcrumbs; it must not weaken validation
 or access GPU hardware until the actual descriptor representation is measured.
+
+### EXP-20260826-126 — J313 AGX translated-resource descriptor qualification
+
+Status: preregistered at `2026-08-26T20:31:00Z` for one G2 execution.  The
+complete task-by-task contract is
+`documentation/plans/2026-08-26-j313-agx-translated-resource-descriptor-qualification.md`.
+The falsifiable hypothesis is that EXP-125 failed because the display miniport
+compared dxgkrnl translated system interrupt vectors with ACPI firmware GSIs.
+One bounded, read-only descriptor snapshot will expose the actual translated
+type, share, flags, MMIO identity, IRQ level, vector and affinity before the
+unchanged validator returns `STATUS_DEVICE_CONFIGURATION_ERROR`.
+
+The only candidate change relative to EXP-125 is qualification diagnostics
+commit `5d58cfb95640bc725d6ec42f4980f4f6e8fa7e7a`.  WDK run
+`33010381345` passed default and power-qualification ARM64 jobs at source head
+`e4c0ffcd8b0424d91c1b4d2276cf65f12cc5da3c`.  Driver manifest SHA-256 is
+`122c0ee602e047cf23bcc81a389657c53d3a49bd24749354ed660beeb3fbca3b`;
+SYS is `2dc6317b80cef81822748aa7bb068415ec3de71a44fb2bbd963872a334230451`;
+catalog is `bfa914e439f54ddcc31115dc181b147234878988155382a4cdf2ba32abc9e0fd`;
+certificate is
+`ef08f7a3aa769a31d682ccb80156c0525f23b2352890a9b1a95e7d290cc7a00d`;
+signer is `419A261FEC73D775202BAC41300EF47F37531580`.
+
+Candidate firmware remains the EXP-124 G2 manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains EXP-123 manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+No firmware, ACPI, broker, CPU, display, input, USB or storage binary changes.
+
+The current recovery guest completed EXP-125 cleanup with eight CPUs, no
+APPL0002, AppleAgx package, service or signer, and Running AppleInput,
+`stornvme` and `USBXHCI`.  It recorded two Event 129 resets ten seconds apart
+on each recovery boot, but no further Event 129 occurred after
+`2026-08-26T22:14:12+02:00` through the `22:26:44` read-only check.  EXP-126
+therefore treats those boot-time pairs as an explicit pre-existing recovery
+baseline, requires a new quiet window before staging, and still rejects any
+Event 129 in the G2 candidate or after the recovery quiet-window marker.
+
+Exactly one G2 boot is allowed.  GPU firmware, RTKit, SGX MMIO, interrupt
+creation, UAT, queues, commands, rendering, presentation and display ownership
+remain forbidden.  Evidence is limited to sanitized descriptor JSON, PnP text
+and local HV/display data; full registry and event-log export is prohibited.
+Rollback removes only the recorded package and exact signer without `/force`.
+Any identity mismatch, missing or overflowing descriptors, candidate Event
+129, critical event, input/storage loss, failed rollback or second G2 boot
+rejects the experiment.
