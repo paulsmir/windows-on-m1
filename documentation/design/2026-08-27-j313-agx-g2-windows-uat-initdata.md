@@ -67,13 +67,20 @@ not be conflated:
 - entries per level: `8`, `2048`, `2048`;
 - contexts: 64.
 
+The 39-bit input size applies to two canonical halves.  TTBR0 covers the low
+half `[0, 0x0000008000000000)`.  TTBR1 covers the sign-extended high half
+`[0xffffff8000000000, 0x10000000000000000)`, including the reviewed
+`rtkit_private` region.  Context zero therefore owns a TTBR0/TTBR1 root pair.
+The encoder rejects the non-canonical middle, wraparound and any mapping that
+crosses from one half into the other.
+
 Context zero is firmware-private.  Context 63 remains reserved for bounded
 qualification work already described by the G2 contract.  Future process and
 render address spaces may use only contexts 1 through 62 and are outside this
 milestone.
 
 The encoder accepts only 16-KiB-aligned virtual addresses, physical addresses
-and lengths.  It rejects input addresses outside 39 bits, output addresses
+and lengths.  It rejects non-canonical input addresses, output addresses
 outside 40 bits, arithmetic overflow, duplicate or overlapping mappings,
 unknown memory attributes, invalid context ownership and write-plus-execute
 permissions.
@@ -119,10 +126,13 @@ levels, level shifts and counts from the address contract, and
 `host_mapped_fw_allocations=1`.  Each level's output mask derives from the
 40-bit physical width and 16-KiB page mask; it is not a handwritten literal.
 
-The builder requires a zeroed destination buffer of the exact generated size,
-checks every pointer against the firmware-private UAT policy and writes no
-output on validation failure.  A successful result returns both the encoded
-length and a hashable manifest of the version and referenced buffers.
+The builder requires a zeroed destination buffer of the exact generated size.
+Every referenced object must be aligned, non-overlapping and located in the
+context-zero high canonical half used for firmware and kernel objects; the
+builder does not restrict those objects to the narrower `rtkit_private`
+subregion.  It writes no output on validation failure.  A successful result
+returns both the encoded length and a hashable manifest of the version and
+referenced buffers.
 
 Nested runtime structures will be introduced as separate versioned codecs in
 later milestones.  The lifecycle core cannot publish this envelope until all
@@ -238,4 +248,3 @@ separately approved hardware qualification.
 It is not complete AGX firmware startup and it is not graphics acceleration.
 The next architectural increment adds the remaining versioned runtime
 structures and wires the complete graph to the lifecycle core.
-
