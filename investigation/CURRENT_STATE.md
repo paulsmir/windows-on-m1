@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-28T16:45:00Z
+Updated: 2026-08-27T23:23:06Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -16,8 +16,9 @@ This is the bounded session entry point. Detailed history is append-only in
 
 - Canonical checkout: `/Users/pavel/public_windows`.
 - Branch: `feature/j313-gpu-acceleration`.
-- Candidate root: EXP-156 matched-WDDM correction pending commit and official
-  ARM64 package.
+- Candidate root: `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`.
+- EXP-156 official ARM64 package is built, ABI-inspected, hash-pinned and
+  staged device-free; one cold G2 admission run remains.
 - Single-transaction runner correction:
   `b4906b9d7468b00d35dfc10411b91a4c9b70064d`.
 - Candidate m1n1 pin: `4108e79c69bac112ffbebf452fccf352c93c1dd2`.
@@ -40,7 +41,12 @@ This is the bounded session entry point. Detailed history is append-only in
   `53c52005854d03c449c534c805df7c180d90e30ab29effbdc9e7003b3bef5c8d`.
 - boot image SHA-256:
   `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
-- Air is currently at `Running proxy`; no guest is active.
+- Air is running immutable recovery with display `both` and monitor logging.
+- Exact EXP-156 is staged as `oem18.inf`; APPL0002 is absent before cold G2
+  enumeration.  The catalog signature is valid and package SYS SHA-256 is
+  `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f`.
+- Recovery has eight logical processors and Running AppleInput, stornvme,
+  USBXHCI and sshd, with zero boot-window Event 129 or critical event.
 - EXP-144 showed that IRQ gating removes the approximately nine-to-one ISR
   amplification but was invalidated by an unplanned VHF parameter reset.
 - EXP-145 preserved explicit VHF `0/1/1`, installed exact candidate
@@ -105,10 +111,9 @@ reconstructed mixed ABI.
 
 ## Single next action
 
-Build the EXP-156 lifecycle package with matched WDDM 3.0 compile/runtime ABI.
-Disassembly must prove zero size `0x510` and Version `0xF003`. Only then perform
-one device-free recovery staging and one G2 cold boot; require StartDevice stage
-7/status `0xC00000BB` with no hardware-owning receipt or platform-health loss.
+Shut down recovery normally and perform exactly one preregistered cold G2
+natural-enumeration run.  Require StartDevice stage 7/status `0xC00000BB`, no
+hardware-owning receipt and no platform-health loss.  Do not retry a failed run.
 
 ## Rollback
 

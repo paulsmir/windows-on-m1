@@ -12962,7 +12962,8 @@ for the EXP-154 package and authorizes no retry.
 
 ## EXP-20260828-156 — Restore the last hardware-admitted WDDM ABI contract
 
-Status: software correction implemented; official ARM64 build pending.
+Status: official ARM64 package and device-free recovery staging validated; one
+preregistered cold G2 admission run pending.
 
 ### Evidence and single hypothesis
 
@@ -13004,3 +13005,62 @@ Mu, m1n1, CPU, input, storage or display behavior changes.
 Any identity mismatch, missing StartDevice, hardware receipt or platform-health
 loss rejects the candidate without retry.  This experiment tests Dxgkrnl
 admission only and does not authorize GPU execution or display ownership.
+
+### 2026-08-27T23:23:06Z execution amendment and verifier correction
+
+This amendment supersedes only the stale "official ARM64 build pending" and
+device-free staging claims above.  It does not reinterpret any prior hardware
+result.
+
+- Exact source commit:
+  `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`.
+- Official CI run: `33124955239`; all eight ARM64 jobs completed successfully.
+- Package SYS / INF / CAT SHA-256:
+  `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f` /
+  `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc` /
+  `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
+- Certificate SHA-256 / signer thumbprint:
+  `30c4b23da2b8484d8d43bb1583368f5f9e3e3b12cfa58da13554fb772b5760ad` /
+  `778CD8E4AA4079949F199DAEC77D12A6C8A4F0B8`.
+- Independent ARM64 disassembly at `DriverEntry` proves zero size `0x510` and
+  runtime Version `0xF003`.  The focused package suite passes 39/39.
+- Exact G2 Mu / m1n1 SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9` /
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Immutable recovery Mu / m1n1 SHA-256:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b` /
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+The exact device-free staging command was:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\AppleAgxStaging\EXP156-6ac19e9\stage-exp156.ps1 -PackageRoot C:\Users\pavel\AppleAgxStaging\EXP156-6ac19e9\package -EvidencePath C:\Users\pavel\AppleAgxEvidence\EXP-20260828-156\stage-result.json
+```
+
+That transaction removed only the non-present `ACPI\APPL0002\0` phantom and
+its recorded predecessor `oem18.inf`, imported the exact test certificate, and
+staged the exact candidate without install, rescan, start, or hardware access.
+The script's final verifier incorrectly compared
+`Get-WindowsDriver.OriginalFileName` with the basename `AppleAgx.inf`; Windows
+returns the absolute Driver Store path.  A separate read-only collector proved
+the actual postcondition: zero APPL0002 devices, exact candidate `oem18.inf`,
+valid catalog signature, eight CPUs and Running AppleInput, stornvme and
+USBXHCI, with zero Event 129 and zero critical event.  The durable receipt is
+`.local/experiments/EXP-20260828-156-matched-wddm/stage-result.json`.
+
+The one authorized cold G2 launch command is:
+
+```sh
+env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware dist/j313/debug-monitor-agx-g2/J313_EFI.fd --m1n1 dist/j313/debug-monitor-agx-g2/m1n1.macho --display both --debug monitor --chainload --foreground
+```
+
+Allowed operations are DriverEntry, DxgkInitialize, AddDevice and StartDevice
+receipts plus read-only identity, assigned-resource and platform-health checks.
+Power, MMIO mapping or access, RTKit, UAT, interrupt enable, queue, command,
+fence, render, presentation and display ownership remain forbidden.  Success
+requires fresh AddDevice stage 2/status zero and StartDevice stage 7/status
+`0xC00000BB`, no forbidden receipt, eight CPUs and healthy input/storage/xHCI
+with no new Event 129, WHEA, BugCheck, critical or error System event.  Missing
+StartDevice, identity drift, any forbidden receipt or health loss rejects the
+experiment without retry.  Rollback is one normal shutdown followed by the
+immutable recovery Mu and m1n1 pair recorded above.
