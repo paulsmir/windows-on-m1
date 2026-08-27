@@ -12834,7 +12834,7 @@ toolchain identity.
 
 ## EXP-20260828-154 — Restore the full initialization callback ABI cold-first
 
-Status: offline gates passed; the single cold-first hardware sequence is pending.
+Status: rejected safely after its single cold-first hardware sequence.
 
 ### Evidence and single hypothesis
 
@@ -12900,3 +12900,50 @@ and zeroing `0x608` bytes immediately before populating and submitting
 contains the required 1544-byte table.  The package is preserved locally at
 `.local/experiments/EXP-20260828-154-full-abi/`; no Air state changed during
 these checks.
+
+### Cold-first result
+
+Recovery removed only the exact disconnected `ACPI\\APPL0002\\0` phantom,
+ordinarily deleted `oem18.inf`, verified all package hashes and signer, and
+staged the exact package again as `oem18.inf` while APPL0002 was absent.  The
+single unchanged G2 cold boot reached Windows with eight processors, Running
+AppleInput/stornvme/USBXHCI/sshd, zero Event 129 and zero critical or error
+System events.  Windows loaded the exact SYS hash above.
+
+The service receipts show DriverEntry stage 2 and a successful
+`DxgkInitialize`, but the natural cold enumeration produced no AddDevice or
+StartDevice receipt.  APPL0002 settled at Problem 31 and AppleAgx remained
+Stopped.  No hardware-owning receipt exists, so the candidate failed closed
+without GPU access.  Evidence is preserved at
+`.local/experiments/EXP-20260828-154-full-abi/stage-result.json` and
+`.local/experiments/EXP-20260828-154-full-abi/cold-first-result.json`.
+
+This rejects complete table geometry as sufficient for natural cold
+admission.  Disassembly additionally proves the EXP-130 and EXP-154 DriverEntry
+table construction is instruction-for-instruction equivalent apart from
+linked addresses.  The remaining procedural difference is that passed EXP-130
+received one device-scoped same-boot restart, whereas EXP-154 intentionally
+tested only natural cold enumeration.
+
+## EXP-20260828-155 — Isolate same-boot display-miniport admission
+
+Status: preregistered for one device-scoped restart in the existing healthy
+EXP-154 guest.
+
+The exact firmware, m1n1, package, signer, device and Windows boot remain
+unchanged from EXP-154.  The sole variable is one invocation of
+`pnputil /restart-device ACPI\\APPL0002\\0`, matching the admission sequence
+that passed EXP-130.  Do not replace a package, rescan, reboot, disable, remove,
+force, uninstall or retry.
+
+Before the transaction require eight CPUs, exact SYS SHA-256
+`372fe92fcb9f613ab9c1db0df4549878f0652537ae7f7fe01e3854c193cf5c49`,
+Problem 31, Running AppleInput/NVMe/xHCI/sshd, and no Event 129 or critical
+System event since boot.  Remove only prior `Wom1*` receipts from the AppleAgx
+service and exact APPL0002 device keys, perform one restart, wait at most 30
+seconds, and collect the same evidence.
+
+Pass requires fresh AddDevice stage 2/status zero and StartDevice stage
+7/status `0xC00000BB`, no MMIO/power/firmware/RTKit/UAT/queue/render receipt,
+eight healthy CPUs, responsive input/storage/USB/SSH and no Event 129, critical
+or error System event.  Any mismatch ends the experiment without retry.
