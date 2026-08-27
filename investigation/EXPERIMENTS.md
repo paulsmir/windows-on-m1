@@ -11599,3 +11599,39 @@ zero critical events and zero Event 129. The sanitized verdict is
 `investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/VERDICT.md`;
 raw evidence remains local and ignored. Next work is offline completion of the
 full render-only WDDM callback contract before any new hardware boundary.
+
+### EXP-20260827-130 — J313 AGX lifecycle contract qualification
+
+Status: preregistered at `2026-08-27T00:45:00Z`. The literal contract is
+`documentation/plans/2026-08-27-j313-agx-lifecycle-contract-qualification.md`.
+The one-variable correction from rejected EXP-129 is the full fail-closed
+render-only WDDM callback table. A new diagnostics-only build profile makes
+power and MMIO code unreachable at compile time.
+
+The exact package comes from successful four-profile ARM64 WDK run
+`33026918148` at source `6609ab08a046edbe54b4795fda87700ac04e7412`.
+SYS is `2cd6a077c09bbf2cbafbda6baad695aae9b4eb6ec0cc691b48694a904aee2e03`;
+INF is `408169ecdbadde5e35164a47ea7d7196cbc6b28b7600689299a414543fe6321d`;
+catalog is `c205d3ffaef417767f5380502c3773ec82ad9a25305b61a549af15dda2ca480e`;
+certificate is
+`e0104ef99471447bf9ce1231550876ca74f3aa749af0b15ceba391b8a4ac0781`;
+and signer is `A7847E0FB9AEAF201CD0CA24D9822CBF55632536`.
+
+Candidate firmware remains manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+The evidence path
+`investigation/artifacts/EXP-20260827-130-agx-lifecycle-contract/` was absent
+at preregistration.
+
+One display-`both` G2 cold boot is allowed. After it, only packages compiled
+with the diagnostics-only lifecycle profile may be replaced in the same guest
+session by the exact device-scoped runner. Power, MMIO, GPU register access,
+firmware, RTKit, interrupts, UAT, queues, commands, rendering, presentation and
+display ownership remain forbidden. Passing requires fresh StartDevice stage
+7 / `0xC00000BB`, no hardware receipt, responsive eight-core Windows, working
+AppleInput/NVMe/xHCI, zero Event 129, zero critical events and exact non-force
+recovery before any later hardware-owning experiment.
