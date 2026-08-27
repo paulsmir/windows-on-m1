@@ -201,6 +201,8 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
       status = AppleAgxPowerSessionBegin(&adapter->DxgkInterface,
                                          powerBrokerAddress, &powerSession);
       powerSessionStarted = NT_SUCCESS(status);
+      AppleAgxRecordPowerSession(adapter->PhysicalDeviceObject,
+                                 AppleAgxPowerReceiptAcquired, status);
       AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                         AppleAgxStartBrokerTransaction, status);
       AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
@@ -215,6 +217,8 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
     if (powerSessionStarted)
       powerEndStatus =
           AppleAgxPowerSessionEnd(&adapter->DxgkInterface, &powerSession);
+    AppleAgxRecordPowerSession(adapter->PhysicalDeviceObject,
+                               AppleAgxPowerReceiptReleased, powerEndStatus);
     AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                       AppleAgxStartPowerReleased,
                                       powerEndStatus);

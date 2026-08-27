@@ -558,6 +558,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         adapter = self.read("src/adapter.c")
         header = self.read("include/apple_agx_driver.h")
         power = self.read("src/power.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
         project = self.read("AppleAgx.vcxproj")
         build = self.read("scripts/build-driver.ps1")
         workflow = WORKFLOW.read_text()
@@ -571,6 +572,13 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgxPowerSessionEnd", power)
         self.assertIn("AppleAgxPowerAcquire", power)
         self.assertIn("AppleAgxPowerRelease", power)
+        self.assertIn("AppleAgxRecordPowerSession", header)
+        self.assertIn("AppleAgxRecordPowerSession", diagnostics)
+        for name in (
+            "Wom1PowerAcquireStatus",
+            "Wom1PowerReleaseStatus",
+        ):
+            self.assertIn(name, diagnostics)
         self.assertEqual(
             adapter.count("PHYSICAL_ADDRESS powerBrokerAddress = {0};"), 2
         )
@@ -581,6 +589,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         for required in (
             "AppleAgxQualifyMmioMapping",
             "AppleAgxPowerSessionBegin",
+            "AppleAgxRecordPowerSession",
             "AppleAgxQualifyAscCpuStatus",
             "AppleAgxPowerSessionEnd",
             "AppleAgxReleaseMmioMapping",
@@ -589,11 +598,14 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertLess(qualification.index("AppleAgxQualifyMmioMapping"),
                         qualification.index("AppleAgxPowerSessionBegin"))
         self.assertLess(qualification.index("AppleAgxPowerSessionBegin"),
+                        qualification.index("AppleAgxRecordPowerSession"))
+        self.assertLess(qualification.index("AppleAgxRecordPowerSession"),
                         qualification.index("AppleAgxQualifyAscCpuStatus"))
         self.assertLess(qualification.index("AppleAgxQualifyAscCpuStatus"),
                         qualification.index("AppleAgxPowerSessionEnd"))
         self.assertLess(qualification.index("AppleAgxPowerSessionEnd"),
                         qualification.index("AppleAgxReleaseMmioMapping"))
+        self.assertEqual(qualification.count("AppleAgxRecordPowerSession"), 2)
         self.assertEqual(qualification.count("AppleAgxQualifyAscCpuStatus"), 1)
         for forbidden in (
             "AppleAgxAscSetRun",

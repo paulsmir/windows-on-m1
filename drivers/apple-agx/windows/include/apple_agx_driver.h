@@ -53,6 +53,11 @@ typedef struct _APPLE_AGX_POWER_SESSION {
   volatile UCHAR *Base;
   BOOLEAN Powered;
 } APPLE_AGX_POWER_SESSION;
+
+typedef enum _APPLE_AGX_POWER_RECEIPT {
+  AppleAgxPowerReceiptAcquired = 1,
+  AppleAgxPowerReceiptReleased,
+} APPLE_AGX_POWER_RECEIPT;
 #endif
 
 typedef struct _APPLE_AGX_ADAPTER {
@@ -218,6 +223,9 @@ NTSTATUS AppleAgxPowerSessionBegin(
     _Out_ APPLE_AGX_POWER_SESSION *Session);
 NTSTATUS AppleAgxPowerSessionEnd(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                                  _Inout_ APPLE_AGX_POWER_SESSION *Session);
+void AppleAgxRecordPowerSession(_In_ PDEVICE_OBJECT DeviceObject,
+                                _In_ APPLE_AGX_POWER_RECEIPT Receipt,
+                                _In_ NTSTATUS Status);
 #endif
 
 #endif /* APPLE_AGX_DRIVER_H */

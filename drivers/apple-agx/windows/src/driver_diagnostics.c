@@ -92,6 +92,27 @@ void AppleAgxRecordMmioQualification(
 }
 #endif
 
+#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
+void AppleAgxRecordPowerSession(PDEVICE_OBJECT DeviceObject,
+                                APPLE_AGX_POWER_RECEIPT Receipt,
+                                NTSTATUS Status) {
+  switch (Receipt) {
+  case AppleAgxPowerReceiptAcquired:
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject,
+                                       L"Wom1PowerAcquireStatus",
+                                       (ULONG)Status);
+    break;
+  case AppleAgxPowerReceiptReleased:
+    AppleAgxWriteDeviceDiagnosticDword(DeviceObject,
+                                       L"Wom1PowerReleaseStatus",
+                                       (ULONG)Status);
+    break;
+  default:
+    break;
+  }
+}
+#endif
+
 #if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
     defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 void AppleAgxRecordAscCpuStatus(PDEVICE_OBJECT DeviceObject, NTSTATUS Status,
