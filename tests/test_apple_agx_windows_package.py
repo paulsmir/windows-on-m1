@@ -571,6 +571,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgxPowerSessionEnd", power)
         self.assertIn("AppleAgxPowerAcquire", power)
         self.assertIn("AppleAgxPowerRelease", power)
+        self.assertIn("PHYSICAL_ADDRESS powerBrokerAddress = {0};", adapter)
 
         start = adapter.index("#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION")
         end = adapter.index("#endif", start)

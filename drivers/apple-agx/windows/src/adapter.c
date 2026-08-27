@@ -101,7 +101,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
 
 #ifdef APPLE_AGX_G2_POWER_QUALIFICATION
   {
-    PHYSICAL_ADDRESS powerBrokerAddress;
+    PHYSICAL_ADDRESS powerBrokerAddress = {0};
 
     status = AppleAgxGetPowerBrokerAddress(deviceInfo.TranslatedResourceList,
                                            &powerBrokerAddress);
