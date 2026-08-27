@@ -503,6 +503,8 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("Get-AuthenticodeSignature", cycle)
         self.assertIn("& pnputil", cycle)
         self.assertIn('@("/add-driver", $inf, "/install")', cycle)
+        self.assertIn("259", cycle)
+        self.assertIn("already the exact installed package", cycle)
         self.assertIn("/install", cycle.lower())
         self.assertIn('@("/restart-device", $deviceId)', cycle)
         self.assertIn('@("/scan-devices")', cycle)

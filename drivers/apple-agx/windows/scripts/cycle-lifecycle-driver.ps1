@@ -171,7 +171,19 @@ if ($PreviousPublishedName) {
     $operations += Invoke-PnpUtil @("/scan-devices") $true
 }
 
-$operations += Invoke-PnpUtil @("/add-driver", $inf, "/install") $true
+$installOperation = Invoke-PnpUtil @("/add-driver", $inf, "/install") $false
+$operations += $installOperation
+if ($installOperation.ExitCode -ne 0) {
+    # pnputil returns ERROR_NO_MORE_ITEMS (259) when the exact staged package
+    # is already the best installed package.  Accept that idempotent state
+    # only when APPL0002 is currently bound to a recorded oemNN.inf.
+    $boundBeforeRestart = Get-DeviceSnapshot
+    $boundInf = $boundBeforeRestart.Properties["DEVPKEY_Device_DriverInfPath"]
+    if ($installOperation.ExitCode -ne 259 -or $boundInf -notmatch '^oem\d+\.inf$') {
+        throw "pnputil add/install failed with exit code $($installOperation.ExitCode): $($installOperation.Output -join '; ')"
+    }
+    Write-Host "pnputil 259: APPL0002 already the exact installed package $boundInf"
+}
 $operations += Invoke-PnpUtil @("/scan-devices") $true
 $operations += Invoke-PnpUtil @("/restart-device", $deviceId) $false
 Start-Sleep -Seconds 8
