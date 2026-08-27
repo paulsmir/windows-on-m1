@@ -11652,3 +11652,26 @@ is published at
 `investigation/artifacts/EXP-20260827-130-agx-lifecycle-contract/VERDICT.md`.
 The next separately gated boundary is inert SGX map/subview/unmap; register
 access and every later ownership layer remain unauthorized.
+
+### EXP-20260827-131 — J313 AGX inert MMIO contract qualification
+
+Status: preregistered at `2026-08-27T07:05:00Z` for exactly one G2 execution.
+The literal contract is
+`documentation/plans/2026-08-27-j313-agx-mmio-contract-qualification.md`.
+The only change from passed EXP-130 is the compile-time MMIO qualification
+profile from the same source and successful WDK run `33026918148`.
+
+The exact SYS is
+`5d3b2b8c9f20ac98d302259da593e41b41ecf01a9325f3c18052abb0c24581cb`;
+INF is `9073d731f645575f58f792712b37f33d08b7eb7e06bf597a14da2d77e1fb819a`;
+catalog is `5b38ee37b3e0059de78ee8b0868a1a4fa2eef6522140bb1f40eb235c5a3be89b`;
+certificate is
+`fd44a56f4f271a8e5b7bb7323e8f1b1325ecdbfcf0a5a3cb8d3c616f3e89136f`;
+and signer is `EE24256D1F278177D0DD882E557BC4FF9FE075C4`.
+Candidate, m1n1 and recovery identities remain byte-for-byte equal to EXP-130.
+
+The sole GPU operation is map the exact SGX range, validate ASC as a contained
+subview and immediately unmap without pointer access. Power, register access,
+firmware, RTKit, interrupts, UAT, queues, commands, rendering, presentation
+and display ownership remain forbidden. Any identity or health failure closes
+the experiment without retry.
