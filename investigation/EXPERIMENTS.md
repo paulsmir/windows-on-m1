@@ -11721,7 +11721,8 @@ authorized. See
 
 ### EXP-20260827-136 — J313 AGX RTKit phase diagnostics
 
-Status: preregistered at `2026-08-27T14:30:40Z`; hardware result pending. The
+Status: rejected and closed after one device-scoped start. Preregistered at
+`2026-08-27T14:30:40Z`; executed at `2026-08-27T14:34:49Z`. The
 falsifiable hypothesis is that the repeated `0xC00000B5` from the bounded
 READY-to-STOP qualification occurs during RTKit boot, and the exact saved phase
 will distinguish Hello, endpoint-map, power, or shutdown without changing the
@@ -11777,3 +11778,31 @@ or inability to remove only the recorded package closes the experiment. Evidence
 will be written under the immutable local experiment directory before and after
 the device action; no UAT publication, initdata, interrupt registration, queue,
 command, render, presentation, or display ownership is authorized.
+
+The package and signer hashes matched on Windows, the exact prior `oem17.inf`
+was removed without `/force`, and the diagnostic package installed as a new
+`oem17.inf`, version `14.25.24.601`. `pnputil` completed device configuration in
+about 80 milliseconds and an immediate query briefly reported `OK`, but this was
+not a completed StartDevice result. The PnP log proves configuration returned
+before the asynchronous driver transaction reached its terminal receipt.
+
+The final evidence was Problem 43, stopped AppleAgx, StartDevice stage 6 and
+`0xC00000B5` (`STATUS_IO_TIMEOUT`). The new RTKit receipts localized the failure
+to phase 1 with flags 1: boot began, but no management HELLO arrived and protocol
+version remained zero. The bounded cleanup recorded `0xC00000BB`; its final ASC
+CPU-status read succeeded with value `0x2d`. No endpoint map, power-ready state,
+UAT publication, initdata, queue, command, render or presentation occurred.
+
+Windows remained at the desktop and SSH-responsive with eight logical CPUs and
+Running AppleInput, stornvme and USBXHCI. No fresh stornvme Event 129 occurred
+after package installation. Five ACPI Error-level System records appeared at the
+device-start timestamp, so the preregistered health gate independently rejects
+the candidate. The device was left fail-closed and stopped; no retry, reboot or
+second hardware transaction was performed. Raw preflight, install, PnP and
+postflight evidence remains in
+`.local/experiments/EXP-20260827-136-agx-rtkit-phase-diagnostics/`.
+
+The hypothesis was confirmed only as a diagnostic localization: the timeout is
+before first HELLO. Its root cause remains unresolved. The next step is a
+source-first comparison of live ASC state, Asahi, m1n1, Mu/ACPI and the Windows
+transport before one new falsifiable hot-cycle experiment.
