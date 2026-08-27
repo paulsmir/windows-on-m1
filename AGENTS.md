@@ -52,6 +52,29 @@ compatibility review.
 - Do not add assistant attribution, session URLs, or `Co-Authored-By` trailers to
   commits.
 
+## Anti-loop discipline
+
+- Every next step must exclude a cause, confirm a cause, reduce the remaining
+  causes, or produce the smallest experiment that distinguishes them.
+- Stop a hypothesis after one complete offline pass if no new evidence changes
+  its probability. Do not repeat the same diff, search, or log analysis in a
+  different form.
+- Do not spend more than two consecutive steps on one hypothesis without new
+  evidence. Rank multiple differences by causal proximity to the current
+  lifecycle boundary and test only the strongest one.
+- Never run hardware without a new falsifiable reason. If offline analysis
+  cannot distinguish two causes, design one minimal experiment that does.
+- Restrict analysis to the current boundary. For `AddDevice` success followed
+  by missing `StartDevice`, ignore RTKit, MMIO, UAT, IRQ, queue, render, and
+  presentation behavior.
+- Do not reread the complete ledger, refactor, clean up, or document incidental
+  details unless that work changes the current causal decision.
+
+After context compaction or reset, read `investigation/GPU_CURRENT_STATE.md`
+first. Consult only the referenced experiment evidence in the full ledger.
+Update that compact file only when a proven boundary, accepted package, stable
+recovery, active hypothesis, verdict, or next causal target changes.
+
 ## Persistent experiment ledger
 
 Every hardware build, launch, diagnostic run, and recovery attempt must be recorded

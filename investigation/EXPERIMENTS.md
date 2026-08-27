@@ -13109,3 +13109,90 @@ Ignored raw evidence:
 The next action is offline-only: compare the exact EXP-138 package that reached
 StartDevice with EXP-156 beyond the already-matched WDDM table size and runtime
 Version.  No new hardware hypothesis is authorized yet.
+
+## EXP-20260828-157 — Isolate fresh live display-miniport admission
+
+Status: preregistered; no G2 launch or PnP transaction has occurred.
+
+### Hypothesis and single variable
+
+The current proven boundary is DriverEntry stage 2, successful DxgkInitialize,
+AddDevice stage 2/status zero, and no StartDevice receipt.  A bounded offline
+comparison of the exact EXP-138 StartDevice-admitted SYS and the exact rejected
+EXP-156 SYS found equal 180-instruction DriverEntry shapes, 32 declaration-table
+stores at identical offsets with identical store opcodes, the same `0x510`
+zeroing size, the same `0xF003` runtime Version, equal import sets, and equal INF
+contracts after excluding DriverVer.  Downstream RTKit/MMIO/UAT differences
+cannot execute before the missing StartDevice call and are excluded.
+
+The strongest remaining causal distinction is the admission sequence. EXP-138
+reached StartDevice during one fresh live remove/delete/scan/add-install
+transaction. EXP-156 used natural cold enumeration and stopped before
+StartDevice. EXP-157 changes only that sequence while retaining the exact
+EXP-156 package, signer, G2 Mu, m1n1, WDDM declaration, resources, and platform.
+
+### Exact identities
+
+- Root source commit:
+  `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`.
+- SYS / INF / CAT SHA-256:
+  `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f` /
+  `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc` /
+  `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
+- Certificate SHA-256 / signer thumbprint:
+  `30c4b23da2b8484d8d43bb1583368f5f9e3e3b12cfa58da13554fb772b5760ad` /
+  `778CD8E4AA4079949F199DAEC77D12A6C8A4F0B8`.
+- G2 Mu / m1n1 SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9` /
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Recovery Mu / m1n1 SHA-256:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b` /
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+### Exact procedure
+
+1. In recovery remove only the disconnected `ACPI\\APPL0002\\0` phantom with
+   `pnputil /remove-device ACPI\\APPL0002\\0`; require zero present and
+   non-present APPL0002 devices. Do not rescan. Keep exact staged `oem18.inf`.
+2. Shut recovery down normally and launch exactly once:
+
+```sh
+env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware dist/j313/debug-monitor-agx-g2/J313_EFI.fd --m1n1 dist/j313/debug-monitor-agx-g2/m1n1.macho --display both --debug monitor --chainload --foreground
+```
+
+3. Require the natural APPL0002 device to bind exact `oem18.inf`, reproduce
+   Problem 31 with AddDevice success and no StartDevice receipt, retain eight
+   CPUs and Running AppleInput/stornvme/USBXHCI/sshd, and observe no new Event
+   129, WHEA, BugCheck, critical, or error System event.
+4. Run the already validated single-transaction helper once with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\AppleAgxStaging\EXP157-sequence\cycle-lifecycle-driver.ps1 -PackageRoot C:\Users\pavel\AppleAgxStaging\EXP157-sequence\package -EvidenceRoot C:\Users\pavel\AppleAgxEvidence\EXP-20260828-157 -ExpectedSysSha256 423B39307B5A56AB4CDB77866CA733D4F9CFA629A3D3CCA63FAA94239F076B2F -ExpectedInfSha256 6D267F09F51E505AC869D9EE0A7E0D566DC4E20B9E4629B32085F8A18CC375CC -ExpectedCatSha256 36C525A10D4A323A6FC4F8088B22E5F23741EE68D45769B85FE8693D057B063B -ExpectedSignerThumbprint 778CD8E4AA4079949F199DAEC77D12A6C8A4F0B8 -PreviousPublishedName oem18.inf -CompletionTimeoutSeconds 30 -PollIntervalMilliseconds 250
+```
+
+The helper performs exactly one remove-device, ordinary delete of `oem18.inf`,
+scan, receipt clear, and add-driver/install transaction, then waits once for the
+terminal StartDevice receipt. It must not retry.
+
+### Allowed and forbidden operations
+
+Allowed: exact package/certificate verification, DriverEntry,
+DxgkInitialize, AddDevice, StartDevice receipts, the listed device-scoped PnP
+operations, SetupAPI and platform-health reads.  Forbidden: GPU power, MMIO map
+or access, ASC/RTKit, UAT, interrupt enable, queue, submit, fence, command,
+render, presentation, display ownership, unrelated driver/device mutation, or
+a second transaction.
+
+### Verdict gates and evidence
+
+Success requires fresh AddDevice stage 2/status zero and StartDevice stage
+9/status `0xC00000BB`, zero forbidden receipts, eight CPUs, Running platform
+services, responsive input/storage/USB/SSH, and zero new Event 129, WHEA,
+BugCheck, critical, or error System event. This confirms admission sequence as
+causal but does not qualify any GPU hardware stage.
+
+Missing StartDevice, identity drift, a forbidden receipt, health loss, timeout,
+or any unlisted PnP action rejects the hypothesis without retry. Evidence is
+written under `C:\Users\pavel\AppleAgxEvidence\EXP-20260828-157` and copied to
+ignored `.local/experiments/EXP-20260828-157-live-admission/`. Rollback is one
+normal shutdown followed by the immutable recovery pair above.
