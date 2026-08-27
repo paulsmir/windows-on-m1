@@ -16,18 +16,21 @@
 #include "apple_agx_memory.h"
 #include "apple_agx_power.h"
 #include "apple_agx_state.h"
-#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+#if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 #include "apple_agx_asc_transport.h"
 #endif
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
-    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 #include "apple_agx_mapping.h"
 #endif
 
 #if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                               \
     defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION) ||                           \
-    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 #define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
 #endif
 
@@ -37,18 +40,27 @@ typedef struct _APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR {
   PDXGKRNL_INTERFACE Interface;
 } APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR;
 
-#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+#if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 typedef struct _APPLE_AGX_WINDOWS_ASC_TRANSPORT {
   volatile UCHAR *Base;
   ULONG Length;
 } APPLE_AGX_WINDOWS_ASC_TRANSPORT;
 #endif
 
+#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
+typedef struct _APPLE_AGX_POWER_SESSION {
+  volatile UCHAR *Base;
+  BOOLEAN Powered;
+} APPLE_AGX_POWER_SESSION;
+#endif
+
 typedef struct _APPLE_AGX_ADAPTER {
   PDEVICE_OBJECT PhysicalDeviceObject;
   APPLE_AGX_STATE State;
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
-    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
   APPLE_AGX_MAPPING_STATE MappingState;
   DXGKRNL_INTERFACE DxgkInterface;
   BOOLEAN DxgkInterfaceValid;
@@ -67,10 +79,13 @@ typedef enum _APPLE_AGX_START_STAGE {
   AppleAgxStartStateValidated,
   AppleAgxStartBrokerAddress,
   AppleAgxStartBrokerTransaction,
+  AppleAgxStartPowerAcquired,
+  AppleAgxStartPowerReleased,
   AppleAgxStartFailClosed,
 } APPLE_AGX_START_STAGE;
 
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                               \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 typedef enum _APPLE_AGX_MMIO_STAGE {
   AppleAgxMmioMapped = 1,
   AppleAgxMmioSubviewValidated,
@@ -153,7 +168,8 @@ NTSTATUS AppleAgxWindowsMemoryInitialize(
     _Out_ APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR *Allocator,
     _Out_ APPLE_AGX_MEMORY_IO *Io);
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
-    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 NTSTATUS
 AppleAgxQualifyMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                            _Out_ APPLE_AGX_MAPPING_STATE *MappingState);
@@ -161,7 +177,8 @@ NTSTATUS
 AppleAgxReleaseMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                            _Inout_ APPLE_AGX_MAPPING_STATE *MappingState);
 #endif
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                               \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 void AppleAgxRecordMmioQualification(
     _In_ PDEVICE_OBJECT DeviceObject, _In_ APPLE_AGX_MMIO_STAGE Stage,
     _In_ NTSTATUS Status, _In_opt_ const APPLE_AGX_MAPPING_STATE *MappingState);
@@ -181,7 +198,8 @@ void AppleAgxRecordTranslatedResources(_In_ PDEVICE_OBJECT DeviceObject,
                                        _In_opt_ PCM_RESOURCE_LIST
                                            TranslatedResources);
 
-#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+#if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 NTSTATUS AppleAgxFirmwareTransportInitialize(
     _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength,
     _Out_ APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
@@ -191,6 +209,15 @@ AppleAgxQualifyAscCpuStatus(_In_reads_bytes_(AscLength) volatile UCHAR *AscBase,
                             _In_ ULONG AscLength, _Out_ PULONG CpuStatus);
 void AppleAgxRecordAscCpuStatus(_In_ PDEVICE_OBJECT DeviceObject,
                                 _In_ NTSTATUS Status, _In_ ULONG CpuStatus);
+#endif
+
+#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
+NTSTATUS AppleAgxPowerSessionBegin(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _In_ PHYSICAL_ADDRESS PowerBrokerAddress,
+    _Out_ APPLE_AGX_POWER_SESSION *Session);
+NTSTATUS AppleAgxPowerSessionEnd(_In_ PDXGKRNL_INTERFACE DxgkInterface,
+                                 _Inout_ APPLE_AGX_POWER_SESSION *Session);
 #endif
 
 #endif /* APPLE_AGX_DRIVER_H */

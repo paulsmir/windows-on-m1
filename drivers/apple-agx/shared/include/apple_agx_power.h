@@ -18,5 +18,7 @@ typedef struct _APPLE_AGX_POWER_IO {
 } APPLE_AGX_POWER_IO;
 
 APPLE_AGX_POWER_BOOL AppleAgxPowerQualify(const APPLE_AGX_POWER_IO *Io);
+APPLE_AGX_POWER_BOOL AppleAgxPowerAcquire(const APPLE_AGX_POWER_IO *Io);
+APPLE_AGX_POWER_BOOL AppleAgxPowerRelease(const APPLE_AGX_POWER_IO *Io);
 
 #endif /* APPLE_AGX_POWER_H */

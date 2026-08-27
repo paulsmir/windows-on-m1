@@ -28,31 +28,43 @@ jobs:
             mmio_qualification: false
             lifecycle_qualification: false
             firmware_qualification: false
+            powered_status_qualification: false
             artifact: AppleAgx-ARM64-Debug
           - name: power-qualification
             qualification: true
             mmio_qualification: false
             lifecycle_qualification: false
             firmware_qualification: false
+            powered_status_qualification: false
             artifact: AppleAgx-ARM64-PowerQualification
           - name: mmio-qualification
             qualification: false
             mmio_qualification: true
             lifecycle_qualification: false
             firmware_qualification: false
+            powered_status_qualification: false
             artifact: AppleAgx-ARM64-MmioQualification
           - name: lifecycle-qualification
             qualification: false
             mmio_qualification: false
             lifecycle_qualification: true
             firmware_qualification: false
+            powered_status_qualification: false
             artifact: AppleAgx-ARM64-LifecycleQualification
           - name: firmware-qualification
             qualification: false
             mmio_qualification: false
             lifecycle_qualification: false
             firmware_qualification: true
+            powered_status_qualification: false
             artifact: AppleAgx-ARM64-FirmwareQualification
+          - name: powered-status-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: true
+            artifact: AppleAgx-ARM64-PoweredStatusQualification
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -89,9 +101,10 @@ jobs:
           /p:AppleAgxMmioQualification=${{ matrix.mmio_qualification }}
           /p:AppleAgxLifecycleQualification=${{ matrix.lifecycle_qualification }}
           /p:AppleAgxFirmwareQualification=${{ matrix.firmware_qualification }}
+          /p:AppleAgxPoweredStatusQualification=${{ matrix.powered_status_qualification }}
 
       - name: Verify WDK qualification signature provenance
-        if: matrix.qualification == true || matrix.mmio_qualification == true || matrix.lifecycle_qualification == true || matrix.firmware_qualification == true
+        if: matrix.qualification == true || matrix.mmio_qualification == true || matrix.lifecycle_qualification == true || matrix.firmware_qualification == true || matrix.powered_status_qualification == true
         timeout-minutes: 2
         shell: pwsh
         run: |

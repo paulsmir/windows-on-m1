@@ -1,6 +1,7 @@
 #include "apple_agx_driver.h"
 
-#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+#if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 
 static BOOLEAN
 AppleAgxAscRangeValid(_In_ const APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
@@ -115,4 +116,4 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyAscCpuStatus(
   return STATUS_IO_DEVICE_ERROR;
 }
 
-#endif /* APPLE_AGX_G2_FIRMWARE_QUALIFICATION */
+#endif

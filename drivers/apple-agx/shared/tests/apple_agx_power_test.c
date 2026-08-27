@@ -97,6 +97,40 @@ static void test_query_failure_still_powers_off(void) {
   assert(broker.State == J313_AGX_G2_POWER_STATE_OFF);
 }
 
+static void test_acquire_leaves_power_on_until_release(void) {
+  FAKE_BROKER broker;
+  APPLE_AGX_POWER_IO io;
+  memset(&broker, 0, sizeof(broker));
+  broker.FailCommand = 0xFFFFFFFFu;
+  io = make_io(&broker);
+
+  assert(AppleAgxPowerAcquire(&io));
+  assert(broker.CommandCount == 2);
+  assert(broker.Commands[0] == J313_AGX_G2_POWER_CMD_ON);
+  assert(broker.Commands[1] == J313_AGX_G2_POWER_CMD_QUERY);
+  assert(broker.State == J313_AGX_G2_POWER_STATE_ON);
+
+  assert(AppleAgxPowerRelease(&io));
+  assert(broker.CommandCount == 3);
+  assert(broker.Commands[2] == J313_AGX_G2_POWER_CMD_OFF);
+  assert(broker.State == J313_AGX_G2_POWER_STATE_OFF);
+}
+
+static void test_acquire_query_failure_rolls_power_back_off(void) {
+  FAKE_BROKER broker;
+  APPLE_AGX_POWER_IO io;
+  memset(&broker, 0, sizeof(broker));
+  broker.FailCommand = J313_AGX_G2_POWER_CMD_QUERY;
+  io = make_io(&broker);
+
+  assert(!AppleAgxPowerAcquire(&io));
+  assert(broker.CommandCount == 3);
+  assert(broker.Commands[0] == J313_AGX_G2_POWER_CMD_ON);
+  assert(broker.Commands[1] == J313_AGX_G2_POWER_CMD_QUERY);
+  assert(broker.Commands[2] == J313_AGX_G2_POWER_CMD_OFF);
+  assert(broker.State == J313_AGX_G2_POWER_STATE_OFF);
+}
+
 static void test_invalid_identity_performs_no_write(void) {
   FAKE_BROKER broker;
   APPLE_AGX_POWER_IO io;
@@ -111,6 +145,8 @@ static void test_invalid_identity_performs_no_write(void) {
 int main(void) {
   test_exact_on_query_off_qualification();
   test_query_failure_still_powers_off();
+  test_acquire_leaves_power_on_until_release();
+  test_acquire_query_failure_rolls_power_back_off();
   test_invalid_identity_performs_no_write();
   return 0;
 }

@@ -11687,3 +11687,15 @@ and signer; the cleanup boot proved no APPL0002/package/service/module/signer,
 eight CPUs, healthy platform services and a quiet event window. The sanitized
 verdict is
 `investigation/artifacts/EXP-20260827-131-agx-mmio-contract/VERDICT.md`.
+
+### EXP-20260827-134 — J313 AGX read-only ASC status qualification
+
+Status: rejected and closed without retry. The exact one-shot candidate
+performed its sole 32-bit load from ASC CPU status at physical `0x206400048`
+and raised an external abort even though the guest VA and stage-2 SGX mapping
+were valid. The G2 broker was exposed but the profile never powered the GPU
+domain on. This proves that mapped power-gated MMIO is not readable while the
+domain is off. No later GPU action occurred. Exact recovery and non-force
+package/signer cleanup completed; a subsequent recovery boot showed Event 129,
+so another candidate remains gated on a fresh quiet recovery window. See
+`investigation/artifacts/EXP-20260827-134-agx-asc-status/VERDICT.md`.

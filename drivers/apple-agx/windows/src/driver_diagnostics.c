@@ -49,7 +49,8 @@ static void AppleAgxWriteDeviceDiagnosticDword(PDEVICE_OBJECT DeviceObject,
 #endif
 }
 
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                               \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 void AppleAgxRecordMmioQualification(
     PDEVICE_OBJECT DeviceObject, APPLE_AGX_MMIO_STAGE Stage, NTSTATUS Status,
     const APPLE_AGX_MAPPING_STATE *MappingState) {
@@ -91,7 +92,8 @@ void AppleAgxRecordMmioQualification(
 }
 #endif
 
-#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+#if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 void AppleAgxRecordAscCpuStatus(PDEVICE_OBJECT DeviceObject, NTSTATUS Status,
                                 ULONG CpuStatus) {
   AppleAgxWriteDeviceDiagnosticDword(

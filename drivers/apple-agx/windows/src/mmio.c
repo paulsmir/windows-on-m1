@@ -1,7 +1,8 @@
 #include "apple_agx_driver.h"
 
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
-    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 
 typedef struct _APPLE_AGX_DXGK_MAPPING_CONTEXT {
   PDXGKRNL_INTERFACE Interface;

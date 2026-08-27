@@ -22,10 +22,7 @@ static APPLE_AGX_POWER_BOOL AppleAgxPowerCommand(
          ExpectedState;
 }
 
-APPLE_AGX_POWER_BOOL AppleAgxPowerQualify(const APPLE_AGX_POWER_IO *Io) {
-  APPLE_AGX_POWER_BOOL queryOk;
-  APPLE_AGX_POWER_BOOL offOk;
-
+APPLE_AGX_POWER_BOOL AppleAgxPowerAcquire(const APPLE_AGX_POWER_IO *Io) {
   if (Io == 0 || Io->Read32 == 0 || Io->Read64 == 0 || Io->Write32 == 0 ||
       Io->Write64 == 0)
     return 0;
@@ -43,9 +40,25 @@ APPLE_AGX_POWER_BOOL AppleAgxPowerQualify(const APPLE_AGX_POWER_IO *Io) {
                             J313_AGX_G2_POWER_STATE_ON))
     return 0;
 
-  queryOk = AppleAgxPowerCommand(Io, J313_AGX_G2_POWER_CMD_QUERY,
-                                 J313_AGX_G2_POWER_STATE_ON);
-  offOk = AppleAgxPowerCommand(Io, J313_AGX_G2_POWER_CMD_OFF,
-                               J313_AGX_G2_POWER_STATE_OFF);
-  return queryOk && offOk;
+  if (AppleAgxPowerCommand(Io, J313_AGX_G2_POWER_CMD_QUERY,
+                           J313_AGX_G2_POWER_STATE_ON))
+    return 1;
+
+  (void)AppleAgxPowerCommand(Io, J313_AGX_G2_POWER_CMD_OFF,
+                             J313_AGX_G2_POWER_STATE_OFF);
+  return 0;
+}
+
+APPLE_AGX_POWER_BOOL AppleAgxPowerRelease(const APPLE_AGX_POWER_IO *Io) {
+  if (Io == 0 || Io->Read32 == 0 || Io->Read64 == 0 || Io->Write32 == 0 ||
+      Io->Write64 == 0)
+    return 0;
+  return AppleAgxPowerCommand(Io, J313_AGX_G2_POWER_CMD_OFF,
+                              J313_AGX_G2_POWER_STATE_OFF);
+}
+
+APPLE_AGX_POWER_BOOL AppleAgxPowerQualify(const APPLE_AGX_POWER_IO *Io) {
+  if (!AppleAgxPowerAcquire(Io))
+    return 0;
+  return AppleAgxPowerRelease(Io);
 }

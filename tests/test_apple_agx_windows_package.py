@@ -319,7 +319,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "Wom1MmioAscLength",
         ):
             self.assertIn(value_name, diagnostics)
-        self.assertIn("#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION", diagnostics)
+        self.assertIn("defined(APPLE_AGX_G2_MMIO_QUALIFICATION)", diagnostics)
         self.assertNotIn("READ_REGISTER", diagnostics)
         self.assertNotIn("WRITE_REGISTER", diagnostics)
         self.assertNotIn("MmMapIoSpace", diagnostics)
@@ -551,6 +551,57 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "AppleAgxFirmwareStart",
             "WRITE_REGISTER",
             "AppleAgxQualifyPowerBroker",
+        ):
+            self.assertNotIn(forbidden, qualification)
+
+    def test_powered_status_qualification_brackets_one_read_and_cleans_up(self):
+        adapter = self.read("src/adapter.c")
+        header = self.read("include/apple_agx_driver.h")
+        power = self.read("src/power.c")
+        project = self.read("AppleAgx.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+        workflow = WORKFLOW.read_text()
+
+        self.assertIn("APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION", header)
+        self.assertIn("AppleAgxPoweredStatusQualification", project)
+        self.assertIn("[switch]$PoweredStatusQualification", build)
+        self.assertIn("name: powered-status-qualification", workflow)
+        self.assertIn("AppleAgx-ARM64-PoweredStatusQualification", workflow)
+        self.assertIn("AppleAgxPowerSessionBegin", power)
+        self.assertIn("AppleAgxPowerSessionEnd", power)
+        self.assertIn("AppleAgxPowerAcquire", power)
+        self.assertIn("AppleAgxPowerRelease", power)
+
+        start = adapter.index("#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION")
+        end = adapter.index("#endif", start)
+        qualification = adapter[start:end]
+        for required in (
+            "AppleAgxQualifyMmioMapping",
+            "AppleAgxPowerSessionBegin",
+            "AppleAgxQualifyAscCpuStatus",
+            "AppleAgxPowerSessionEnd",
+            "AppleAgxReleaseMmioMapping",
+        ):
+            self.assertIn(required, qualification)
+        self.assertLess(qualification.index("AppleAgxQualifyMmioMapping"),
+                        qualification.index("AppleAgxPowerSessionBegin"))
+        self.assertLess(qualification.index("AppleAgxPowerSessionBegin"),
+                        qualification.index("AppleAgxQualifyAscCpuStatus"))
+        self.assertLess(qualification.index("AppleAgxQualifyAscCpuStatus"),
+                        qualification.index("AppleAgxPowerSessionEnd"))
+        self.assertLess(qualification.index("AppleAgxPowerSessionEnd"),
+                        qualification.index("AppleAgxReleaseMmioMapping"))
+        self.assertEqual(qualification.count("AppleAgxQualifyAscCpuStatus"), 1)
+        for forbidden in (
+            "AppleAgxAscSetRun",
+            "AppleAgxAscSend",
+            "AppleAgxAscReceive",
+            "AppleAgxFirmwareStart",
+            "AppleAgxDdiInterruptRoutine",
+            "AppleAgxDdiCreateAllocation",
+            "AppleAgxDdiSubmitCommand",
+            "AppleAgxDdiRender",
+            "AppleAgxDdiPresent",
         ):
             self.assertNotIn(forbidden, qualification)
 

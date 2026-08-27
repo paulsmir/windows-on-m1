@@ -94,3 +94,20 @@ and rollback gate. A missing or duplicate read, nonzero status, unexpected
 receipt, write, reset, Event 129, critical event, service regression, identity
 drift or incomplete rollback rejects the experiment and authorizes no retry.
 
+## Observed result
+
+Rejected and closed without retry. Preflight passed with eight CPUs, healthy
+AppleInput/NVMe/xHCI, no installed APPL0002 package or signer and zero Event
+129. The one authorized cold candidate reached the exact 32-bit load from ASC
+CPU status (`SGX + 0x2400000 + 0x48`, physical `0x206400048`) and immediately
+raised a physical external abort. The guest VA and stage-2 SGX mapping were
+valid; the abort therefore proves that mapping alone does not make the
+power-gated ASC register readable. The qualification profile performed no
+power transaction, so the GPU domain remained off.
+
+The guest was reset, the exact EXP-123 recovery pair booted, and only the
+recorded package and signer were removed without force. A later recovery boot
+showed Event 129 reset activity, so no subsequent GPU candidate is authorized
+until a fresh recovery preflight proves a zero-Event-129 window. The sanitized
+verdict is
+`investigation/artifacts/EXP-20260827-134-agx-asc-status/VERDICT.md`.
