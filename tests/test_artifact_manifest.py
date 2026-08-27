@@ -99,6 +99,30 @@ class ArtifactManifestTests(unittest.TestCase):
                     expected_roles={"m1n1.macho": "assisted-chainload"},
                 )
 
+    def test_manifest_capability_can_be_recorded_and_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(["git", "init", "-q", root], check=True)
+            subprocess.run(["git", "-C", root, "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", root, "config", "user.name", "Test"], check=True)
+            self.write_layout(root)
+            subprocess.run(["git", "-C", root, "add", "config"], check=True)
+            subprocess.run(["git", "-C", root, "commit", "-qm", "source"], check=True)
+            artifacts = root / "dist"
+            artifacts.mkdir()
+            (artifacts / "boot.bin").write_bytes(b"boot")
+            path = create_manifest(
+                root, artifacts, "debug", "both", "monitor", ["boot.bin"],
+                compiler="clang", capabilities=("agx-g2",),
+            )
+            data = verify_manifest(
+                path, expected_profile="debug",
+                required_capabilities=("agx-g2",),
+            )
+            self.assertEqual(data["capabilities"], ["agx-g2"])
+            with self.assertRaisesRegex(ManifestError, "missing capability"):
+                verify_manifest(path, required_capabilities=("future-gate",))
+
     def test_create_rejects_stale_or_dirty_embedded_m1n1_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

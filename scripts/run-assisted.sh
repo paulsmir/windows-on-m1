@@ -134,6 +134,9 @@ set -- "$PYTHON" "$ROOT/tools/artifact_manifest.py" verify "$MANIFEST" \
 if [ "$CHAINLOAD" -eq 1 ]; then
     set -- "$@" --require-role m1n1.macho=assisted-chainload
 fi
+if [ "$AGX_POWER_BROKER" -eq 1 ]; then
+    set -- "$@" --require-capability agx-g2
+fi
 "$@"
 if [ "$CHAINLOAD" -eq 1 ] && [ "$(dirname "$M1N1")" != "$(dirname "$FIRMWARE")" ]; then
     echo "m1n1 and Mu must come from the same artifact profile directory" >&2

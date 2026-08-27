@@ -128,6 +128,7 @@ def create_manifest(
     compiler: str,
     allow_dirty: bool = False,
     artifact_roles: dict[str, str] | None = None,
+    capabilities: tuple[str, ...] = (),
 ) -> Path:
     root = root.resolve()
     artifact_dir = artifact_dir.resolve()
@@ -137,6 +138,10 @@ def create_manifest(
         raise ManifestError("dirty source is allowed only for debug artifacts")
     if not compiler.strip():
         raise ManifestError("compiler identity is empty")
+    normalized_capabilities = sorted(set(capabilities))
+    for capability in normalized_capabilities:
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", capability):
+            raise ManifestError(f"invalid capability: {capability}")
     layout_path = root / "config" / "j313-guest-layout.json"
     try:
         layout = json.loads(layout_path.read_text(encoding="utf-8"))
@@ -187,6 +192,7 @@ def create_manifest(
         "display": display,
         "debug": debug,
         "compiler": compiler,
+        "capabilities": normalized_capabilities,
         "guest_layout_sha256": _sha256(layout_path),
         "guest_contract": guest_contract,
         **revisions,
@@ -205,6 +211,7 @@ def verify_manifest(
     expected_roles: dict[str, str] | None = None,
     expected_display: str | None = None,
     expected_debug: str | None = None,
+    required_capabilities: tuple[str, ...] = (),
 ) -> dict:
     path = path.resolve()
     try:
@@ -229,6 +236,16 @@ def verify_manifest(
         raise ManifestError("incomplete artifact provenance")
     if data.get("guest_contract") != J313_GUEST_CONTRACT:
         raise ManifestError("guest contract mismatch")
+    capabilities = data.get("capabilities", [])
+    if not isinstance(capabilities, list) or not all(
+        isinstance(value, str) for value in capabilities
+    ):
+        raise ManifestError("invalid manifest capabilities")
+    missing_capabilities = sorted(set(required_capabilities) - set(capabilities))
+    if missing_capabilities:
+        raise ManifestError(
+            "missing capability: " + ", ".join(missing_capabilities)
+        )
     for name, record in data.get("artifacts", {}).items():
         artifact = path.parent / name
         if not artifact.is_file():
@@ -260,6 +277,7 @@ def main() -> int:
     create.add_argument("--debug", required=True)
     create.add_argument("--compiler", required=True)
     create.add_argument("--allow-dirty", action="store_true")
+    create.add_argument("--capability", action="append", default=[])
     create.add_argument("artifacts", nargs="+")
     verify = subparsers.add_parser("verify")
     verify.add_argument("manifest", type=Path)
@@ -267,6 +285,7 @@ def main() -> int:
     verify.add_argument("--display")
     verify.add_argument("--debug")
     verify.add_argument("--require-role", action="append", default=[], metavar="NAME=ROLE")
+    verify.add_argument("--require-capability", action="append", default=[])
     args = parser.parse_args()
     try:
         if args.command == "create":
@@ -280,6 +299,7 @@ def main() -> int:
                     args.artifacts,
                     compiler=args.compiler,
                     allow_dirty=args.allow_dirty,
+                    capabilities=tuple(args.capability),
                 )
             )
         else:
@@ -294,6 +314,7 @@ def main() -> int:
             data = verify_manifest(
                 args.manifest, args.profile, roles,
                 expected_display=args.display, expected_debug=args.debug,
+                required_capabilities=tuple(args.require_capability),
             )
             print(f"validated {data['platform']} {data['profile']} artifacts")
     except ManifestError as error:

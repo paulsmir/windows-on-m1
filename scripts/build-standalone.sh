@@ -13,12 +13,15 @@ DISPLAY=physical
 DEBUG=off
 M1N1_DIAG=
 APPLE_INPUT=on
+AGX_G2_PROFILE=0
+AGX_AML_VERIFIED=0
 VALIDATED_DARWIN_CLANG='Homebrew clang version 22.1.8'
 
 usage() {
     echo "usage: $0 [--release|--debug-build] [--check-python]" >&2
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--apple-input on|off]" >&2
+    echo "          [--agx-g2-profile]" >&2
     exit 2
 }
 
@@ -30,6 +33,7 @@ while [ "$#" -gt 0 ]; do
         --display) [ "$#" -ge 2 ] || usage; DISPLAY=$2; shift 2 ;;
         --debug) [ "$#" -ge 2 ] || usage; DEBUG=$2; shift 2 ;;
         --apple-input) [ "$#" -ge 2 ] || usage; APPLE_INPUT=$2; shift 2 ;;
+        --agx-g2-profile) AGX_G2_PROFILE=1; shift ;;
         -h|--help) usage ;;
         *) usage ;;
     esac
@@ -58,6 +62,19 @@ if [ "$PROFILE" = debug ]; then
         full) ARTIFACT_PROFILE=debug-forensic ;;
         monitor) ARTIFACT_PROFILE=debug-monitor ;;
     esac
+fi
+AGX_BUILD_ARG='BLD_*_J313_AGX_G2_PROFILE=FALSE'
+AGX_FORWARD_ARG=
+AGX_CAPABILITY_ARG=
+if [ "$AGX_G2_PROFILE" = 1 ]; then
+    [ "$PROFILE" = debug ] || {
+        echo "--agx-g2-profile requires --debug-build" >&2
+        exit 2
+    }
+    ARTIFACT_PROFILE="${ARTIFACT_PROFILE}-agx-g2"
+    AGX_BUILD_ARG='BLD_*_J313_AGX_G2_PROFILE=TRUE'
+    AGX_FORWARD_ARG=--agx-g2-profile
+    AGX_CAPABILITY_ARG='--capability agx-g2'
 fi
 if [ "$PROFILE" = release ] && { [ "$DISPLAY" != physical ] || [ "$DEBUG" != off ]; }; then
     echo "release profile is fixed to --display physical --debug off; use --debug-build for diagnostics" >&2
@@ -100,7 +117,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
     IMAGE=windows-on-m1-build:local
     if [ "$DRY_RUN" = 1 ]; then
         echo "docker build -t $IMAGE -f <repository-root>/Dockerfile.build <repository-root>"
-        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -e STANDALONE_BUILD_MU_ONLY=1 -e STANDALONE_PRESERVE_COMPONENTS=$PRESERVE_COMPONENTS -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG"
+        echo "docker run --rm -e STANDALONE_IN_CONTAINER=1 -e STANDALONE_BUILD_MU_ONLY=1 -e STANDALONE_PRESERVE_COMPONENTS=$PRESERVE_COMPONENTS -v <git-worktree-root>:/work -v <git-worktree-root>:<git-worktree-root> -w <container-repository-root> $IMAGE scripts/build-standalone.sh ${M1N1_RELEASE:+--release }--display $DISPLAY --debug $DEBUG $AGX_FORWARD_ARG"
     else
         COMMON_DIR=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
         MOUNT_ROOT=$(dirname "$COMMON_DIR")
@@ -120,6 +137,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
             set -- "$@" --debug-build
         fi
         set -- "$@" --display "$DISPLAY" --debug "$DEBUG"
+        [ -z "$AGX_FORWARD_ARG" ] || set -- "$@" "$AGX_FORWARD_ARG"
         docker run --rm \
             -e STANDALONE_IN_CONTAINER=1 \
             -e STANDALONE_BUILD_MU_ONLY=1 \
@@ -128,6 +146,7 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
             -v "$MOUNT_ROOT:$MOUNT_ROOT" \
             -w "$CONTAINER_ROOT" \
             "$IMAGE" "$@"
+        [ "$AGX_G2_PROFILE" = 0 ] || AGX_AML_VERIFIED=1
         SKIP_MU=1
     fi
 fi
@@ -193,7 +212,8 @@ $COMPONENT_SETUP
 $MU_PYTHON_SELECTED -m venv .build/mu-venv
 .build/mu-venv/bin/stuart_setup -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
 .build/mu-venv/bin/stuart_update -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB
-.build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE
+.build/mu-venv/bin/stuart_build -c Platform/MacBookAirMid2020Pkg/PlatformBuild.py TOOL_CHAIN_TAG=CLANGPDB TARGET=$BUILD_TARGET BLD_*_AIC_BUILD=FALSE $AGX_BUILD_ARG
+[ "$AGX_G2_PROFILE" = 0 ] || copy J313AppleAgxSsdt.aml to a temporary directory, run iasl -d J313AppleAgxSsdt.aml, then verify J313AppleAgxSsdt.dsl with tools/verify_j313_agx_g2_aml.py
 mkdir -p dist/j313/$ARTIFACT_PROFILE
 create temporary sibling for dist/j313/$ARTIFACT_PROFILE
 make -C m1n1_windows clean
@@ -211,7 +231,7 @@ python3 tools/pack_boot.py --stage0-m1n1 dist/j313/$ARTIFACT_PROFILE/m1n1-stage0
 PYTHONPATH=. python3 -c 'from pathlib import Path; from bootstrap_image import parse_bootstrap; from standalone_image import parse_image; outer, inner = parse_bootstrap(Path("dist/j313/$ARTIFACT_PROFILE/boot.bin").read_bytes()); nested, firmware = parse_image(inner); assert outer.flags == nested.flags; print("validated outer parse_bootstrap and nested parse_image")'
 copy m1n1.macho and J313_EFI.fd to dist/j313/$ARTIFACT_PROFILE
 write dist/j313/$ARTIFACT_PROFILE/SHA256SUMS and dist/j313/$ARTIFACT_PROFILE/MANIFEST.json
-python3 tools/artifact_manifest.py create ${MANIFEST_DIRTY:+--allow-dirty }--root <repository-root> --directory dist/j313/$ARTIFACT_PROFILE --profile $PROFILE
+python3 tools/artifact_manifest.py create ${MANIFEST_DIRTY:+--allow-dirty }$AGX_CAPABILITY_ARG --root <repository-root> --directory dist/j313/$ARTIFACT_PROFILE --profile $PROFILE
 publish complete profile atomically to dist/j313/$ARTIFACT_PROFILE
 EOF
     exit 0
@@ -258,15 +278,31 @@ if [ "$SKIP_MU" != 1 ]; then
             MU_BASECORE/.pytool/Plugin/UncrustifyCheck/uncrustify_ext_dep.yaml
         "$VENV/bin/stuart_update" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB
         "$VENV/bin/stuart_build" -c "$PLATFORM" TOOL_CHAIN_TAG=CLANGPDB \
-            "TARGET=$BUILD_TARGET" 'BLD_*_AIC_BUILD=FALSE'
+            "TARGET=$BUILD_TARGET" 'BLD_*_AIC_BUILD=FALSE' "$AGX_BUILD_ARG"
     )
 fi
 
 # EDK2's second Trim pass silently discards C-preprocessor include bodies from
 # ASL.  Gate the compiled table itself so a firmware image can never be
 # published after losing the generated APPL0001 resource contract.
-DSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables/OUTPUT/DSDT.aml"
+if [ "$AGX_G2_PROFILE" = 1 ]; then
+    DSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2/OUTPUT/DSDT.aml"
+else
+    DSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables/OUTPUT/DSDT.aml"
+fi
 python3 "$ROOT/tools/verify_apple_input_acpi_aml.py" "$DSDT_AML"
+if [ "$AGX_G2_PROFILE" = 1 ] && [ "$AGX_AML_VERIFIED" != 1 ]; then
+    AGX_SSDT_AML="$ROOT/mu/Build/MacBookAirMid2020-AARCH64/${BUILD_TARGET}_CLANGPDB/AARCH64/MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2/OUTPUT/J313AppleAgxSsdt.aml"
+    (
+        AGX_VERIFY_DIR=$(mktemp -d)
+        trap 'rm -rf "$AGX_VERIFY_DIR"' EXIT HUP INT TERM
+        cp "$AGX_SSDT_AML" "$AGX_VERIFY_DIR/J313AppleAgxSsdt.aml"
+        cd "$AGX_VERIFY_DIR"
+        iasl -d J313AppleAgxSsdt.aml >/dev/null
+        python3 "$ROOT/tools/verify_j313_agx_g2_aml.py" \
+            "$AGX_VERIFY_DIR/J313AppleAgxSsdt.dsl"
+    )
+fi
 
 [ "$MU_ONLY" != 1 ] || exit 0
 
@@ -340,7 +376,7 @@ fi
         shasum -a 256 boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd >SHA256SUMS
     fi
 )
-python3 "$ROOT/tools/artifact_manifest.py" create $MANIFEST_DIRTY \
+python3 "$ROOT/tools/artifact_manifest.py" create $MANIFEST_DIRTY $AGX_CAPABILITY_ARG \
     --root "$ROOT" --directory "$DIST" --profile "$PROFILE" \
     --display "$DISPLAY" --debug "$DEBUG" --compiler "$M1N1_COMPILER" \
     boot.bin m1n1-stage0.bin m1n1-stage1.bin m1n1.macho J313_EFI.fd

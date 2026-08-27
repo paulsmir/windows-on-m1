@@ -394,6 +394,22 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("telemetry: enabled", result.stdout)
         self.assertIn("chainload: dist/j313/debug-monitor/m1n1.macho", result.stdout)
 
+    def test_agx_g2_build_is_isolated_verified_and_manifested(self):
+        build = (ROOT / "scripts" / "build-standalone.sh").read_text()
+        self.assertIn("--agx-g2-profile", build)
+        self.assertIn("BLD_*_J313_AGX_G2_PROFILE=TRUE", build)
+        self.assertIn("J313AppleAgxSsdt.aml", build)
+        self.assertIn("DeviceAcpiTablesG2/OUTPUT/DSDT.aml", build)
+        self.assertIn("iasl -d", build)
+        self.assertIn("AGX_AML_VERIFIED=1", build)
+        self.assertIn("verify_j313_agx_g2_aml.py", build)
+        self.assertIn("-agx-g2", build)
+        self.assertIn("--capability agx-g2", build)
+
+    def test_agx_broker_launch_requires_agx_g2_manifest_capability(self):
+        launcher = (ROOT / "scripts" / "run-assisted.sh").read_text()
+        self.assertIn("--require-capability agx-g2", launcher)
+
     def test_public_entrypoint_exposes_foreground_runner_lifecycle(self):
         result = subprocess.run(
             [
