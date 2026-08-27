@@ -660,6 +660,15 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("Result->NegotiatedVersion", transport)
         self.assertIn("Result->FinalCpuStatusReadStatus", transport)
         self.assertIn("Result->FinalCpuStatus", transport)
+        for field in (
+            "MailboxSnapshotFlags",
+            "InboxControlBeforeInit",
+            "InboxControlAfterInit",
+            "InboxControlAtFailure",
+            "OutboxControlAtFailure",
+        ):
+            self.assertIn(field, header)
+            self.assertIn(f"Result->{field}", transport)
         self.assertIn("AppleAgxRecordRtkitQualification", adapter)
         self.assertIn("rtkitAttempted = TRUE", adapter)
         self.assertIn("if (rtkitAttempted)", adapter)
@@ -671,6 +680,11 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "Wom1RtkitNegotiatedVersion",
             "Wom1RtkitFinalCpuStatusReadStatus",
             "Wom1RtkitFinalCpuStatus",
+            "Wom1RtkitMailboxSnapshotFlags",
+            "Wom1RtkitInboxControlBeforeInit",
+            "Wom1RtkitInboxControlAfterInit",
+            "Wom1RtkitInboxControlAtFailure",
+            "Wom1RtkitOutboxControlAtFailure",
         ):
             self.assertIn(name, diagnostics)
 

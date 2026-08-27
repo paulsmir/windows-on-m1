@@ -148,6 +148,21 @@ void AppleAgxRecordRtkitQualification(
   AppleAgxWriteDeviceDiagnosticDword(DeviceObject,
                                      L"Wom1RtkitFinalCpuStatus",
                                      Result->FinalCpuStatus);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitMailboxSnapshotFlags",
+      Result->MailboxSnapshotFlags);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitInboxControlBeforeInit",
+      Result->InboxControlBeforeInit);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitInboxControlAfterInit",
+      Result->InboxControlAfterInit);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitInboxControlAtFailure",
+      Result->InboxControlAtFailure);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitOutboxControlAtFailure",
+      Result->OutboxControlAtFailure);
 }
 #endif
 

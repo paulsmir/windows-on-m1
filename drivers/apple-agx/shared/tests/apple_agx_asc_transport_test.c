@@ -88,6 +88,26 @@ static void TestReadCpuStatusUsesTypedOffset(void) {
   assert(fake.Read64Count == 0u);
 }
 
+static void TestReadMailboxControlsUseTypedOffsets(void) {
+  FAKE_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  unsigned int control = 0;
+
+  memset(&fake, 0, sizeof(fake));
+  fake.Read32Values[0] = 0x00120101u;
+  fake.Read32Values[1] = 0x00230201u;
+  io = MakeIo(&fake);
+  assert(AppleAgxAscReadInboxControl(&io, &control) ==
+         AppleAgxAscResultOk);
+  assert(control == 0x00120101u);
+  assert(fake.LastOffset == J313_AGX_G2_ASC_INBOX_CTRL_OFFSET);
+  assert(AppleAgxAscReadOutboxControl(&io, &control) ==
+         AppleAgxAscResultOk);
+  assert(control == 0x00230201u);
+  assert(fake.LastOffset == J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET);
+  assert(fake.Read32Count == 2u);
+}
+
 static void TestSetRunPreservesOtherControlBits(void) {
   FAKE_ASC fake;
   APPLE_AGX_ASC_IO io;
@@ -229,6 +249,7 @@ static void TestSendAndReceiveRequireOnlyTheirOwnCallbacks(void) {
 
 int main(void) {
   TestReadCpuStatusUsesTypedOffset();
+  TestReadMailboxControlsUseTypedOffsets();
   TestSetRunPreservesOtherControlBits();
   TestWaitRunningObservesStoppedToRunningTransition();
   TestWaitRunningIsBounded();

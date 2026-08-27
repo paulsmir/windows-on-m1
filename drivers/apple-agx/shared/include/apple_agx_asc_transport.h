@@ -45,6 +45,10 @@ typedef struct _APPLE_AGX_ASC_IO {
 
 APPLE_AGX_ASC_RESULT AppleAgxAscReadCpuStatus(const APPLE_AGX_ASC_IO *Io,
                                                APPLE_AGX_ASC_U32 *Status);
+APPLE_AGX_ASC_RESULT AppleAgxAscReadInboxControl(
+    const APPLE_AGX_ASC_IO *Io, APPLE_AGX_ASC_U32 *Control);
+APPLE_AGX_ASC_RESULT AppleAgxAscReadOutboxControl(
+    const APPLE_AGX_ASC_IO *Io, APPLE_AGX_ASC_U32 *Control);
 APPLE_AGX_ASC_RESULT AppleAgxAscSetRun(const APPLE_AGX_ASC_IO *Io,
                                        APPLE_AGX_ASC_BOOL Run);
 APPLE_AGX_ASC_RESULT AppleAgxAscWaitRunning(const APPLE_AGX_ASC_IO *Io,

@@ -19,6 +19,14 @@ typedef struct _APPLE_AGX_RTKIT_SESSION {
   APPLE_AGX_RTKIT_BOOT Boot;
   APPLE_AGX_RTKIT_BOOL Running;
   APPLE_AGX_RTKIT_BOOL CpuReady;
+  APPLE_AGX_RTKIT_BOOL InboxBeforeInitValid;
+  APPLE_AGX_RTKIT_BOOL InboxAfterInitValid;
+  APPLE_AGX_RTKIT_BOOL InboxAtFailureValid;
+  APPLE_AGX_RTKIT_BOOL OutboxAtFailureValid;
+  APPLE_AGX_RTKIT_U32 InboxControlBeforeInit;
+  APPLE_AGX_RTKIT_U32 InboxControlAfterInit;
+  APPLE_AGX_RTKIT_U32 InboxControlAtFailure;
+  APPLE_AGX_RTKIT_U32 OutboxControlAtFailure;
 } APPLE_AGX_RTKIT_SESSION;
 
 void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session);

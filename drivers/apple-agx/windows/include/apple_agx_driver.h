@@ -81,6 +81,10 @@ typedef enum _APPLE_AGX_POWER_RECEIPT {
 #define APPLE_AGX_RTKIT_BOOT_FLAG_AP_POWER_READY (1u << 5)
 #define APPLE_AGX_RTKIT_BOOT_FLAG_RUNNING (1u << 6)
 #define APPLE_AGX_RTKIT_BOOT_FLAG_CPU_READY (1u << 7)
+#define APPLE_AGX_RTKIT_MAILBOX_BEFORE_INIT_VALID (1u << 0)
+#define APPLE_AGX_RTKIT_MAILBOX_AFTER_INIT_VALID (1u << 1)
+#define APPLE_AGX_RTKIT_MAILBOX_INBOX_FAILURE_VALID (1u << 2)
+#define APPLE_AGX_RTKIT_MAILBOX_OUTBOX_FAILURE_VALID (1u << 3)
 
 typedef struct _APPLE_AGX_RTKIT_QUALIFICATION_RESULT {
   NTSTATUS BootStatus;
@@ -90,6 +94,11 @@ typedef struct _APPLE_AGX_RTKIT_QUALIFICATION_RESULT {
   ULONG NegotiatedVersion;
   NTSTATUS FinalCpuStatusReadStatus;
   ULONG FinalCpuStatus;
+  ULONG MailboxSnapshotFlags;
+  ULONG InboxControlBeforeInit;
+  ULONG InboxControlAfterInit;
+  ULONG InboxControlAtFailure;
+  ULONG OutboxControlAtFailure;
 } APPLE_AGX_RTKIT_QUALIFICATION_RESULT;
 #endif
 

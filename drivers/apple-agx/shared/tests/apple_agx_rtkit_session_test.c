@@ -18,6 +18,9 @@ typedef struct _FAKE_SESSION_ASC {
   unsigned int CpuStatus[8];
   unsigned int CpuStatusCount;
   unsigned int CpuStatusIndex;
+  unsigned int InboxControl[8];
+  unsigned int InboxControlCount;
+  unsigned int InboxControlIndex;
 } FAKE_SESSION_ASC;
 
 static unsigned long long FakeNow(void *Context) {
@@ -35,8 +38,12 @@ static unsigned char FakeRead32(void *Context, unsigned int Offset,
     else
       *Value = APPLE_AGX_ASC_CPU_RUNNING;
   }
-  else if (Offset == J313_AGX_G2_ASC_INBOX_CTRL_OFFSET)
-    *Value = 0u;
+  else if (Offset == J313_AGX_G2_ASC_INBOX_CTRL_OFFSET) {
+    if (fake->InboxControlIndex < fake->InboxControlCount)
+      *Value = fake->InboxControl[fake->InboxControlIndex++];
+    else
+      *Value = 0u;
+  }
   else if (Offset == J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET)
     *Value = fake->ReceiveIndex < fake->ReceiveCount
                  ? 0u
@@ -186,9 +193,35 @@ static void TestBootWaitsForCpuReadyBeforeSendingWake(void) {
   assert(fake.SendCount == 4u);
 }
 
+static void TestHelloTimeoutPreservesMailboxSnapshots(void) {
+  FAKE_SESSION_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+
+  memset(&fake, 0, sizeof(fake));
+  fake.InboxControl[0] = 0x00000101u;
+  fake.InboxControl[1] = 0x00000101u;
+  fake.InboxControl[2] = 0x00100201u;
+  fake.InboxControl[3] = 0x00010201u;
+  fake.InboxControlCount = 4u;
+  io = MakeIo(&fake);
+  AppleAgxRtkitSessionInitialize(&session);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, 8u) ==
+         AppleAgxRtkitSessionResultTimeout);
+  assert(session.InboxBeforeInitValid);
+  assert(session.InboxAfterInitValid);
+  assert(session.InboxAtFailureValid);
+  assert(session.OutboxAtFailureValid);
+  assert(session.InboxControlBeforeInit == 0x00000101u);
+  assert(session.InboxControlAfterInit == 0x00100201u);
+  assert(session.InboxControlAtFailure == 0x00010201u);
+  assert(session.OutboxControlAtFailure == APPLE_AGX_ASC_MAILBOX_EMPTY);
+}
+
 int main(void) {
   TestBootAndStopAreExactAndBounded();
   TestProtocolFailureClearsRun();
   TestBootWaitsForCpuReadyBeforeSendingWake();
+  TestHelloTimeoutPreservesMailboxSnapshots();
   return 0;
 }

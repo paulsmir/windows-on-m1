@@ -43,6 +43,24 @@ APPLE_AGX_ASC_RESULT AppleAgxAscReadCpuStatus(const APPLE_AGX_ASC_IO *Io,
   return AppleAgxAscResultOk;
 }
 
+APPLE_AGX_ASC_RESULT AppleAgxAscReadInboxControl(
+    const APPLE_AGX_ASC_IO *Io, APPLE_AGX_ASC_U32 *Control) {
+  if (!AppleAgxAscReadIoValid(Io) || Control == APPLE_AGX_ASC_NULL)
+    return AppleAgxAscResultInvalidArgument;
+  if (!Io->Read32(Io->Context, J313_AGX_G2_ASC_INBOX_CTRL_OFFSET, Control))
+    return AppleAgxAscResultTransportFailed;
+  return AppleAgxAscResultOk;
+}
+
+APPLE_AGX_ASC_RESULT AppleAgxAscReadOutboxControl(
+    const APPLE_AGX_ASC_IO *Io, APPLE_AGX_ASC_U32 *Control) {
+  if (!AppleAgxAscReadIoValid(Io) || Control == APPLE_AGX_ASC_NULL)
+    return AppleAgxAscResultInvalidArgument;
+  if (!Io->Read32(Io->Context, J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET, Control))
+    return AppleAgxAscResultTransportFailed;
+  return AppleAgxAscResultOk;
+}
+
 APPLE_AGX_ASC_RESULT AppleAgxAscSetRun(const APPLE_AGX_ASC_IO *Io,
                                        APPLE_AGX_ASC_BOOL Run) {
   APPLE_AGX_ASC_U32 control;

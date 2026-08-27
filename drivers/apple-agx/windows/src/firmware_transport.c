@@ -156,6 +156,20 @@ static ULONG AppleAgxRtkitBootFlags(
   return flags;
 }
 
+static ULONG AppleAgxRtkitMailboxSnapshotFlags(
+    const APPLE_AGX_RTKIT_SESSION *Session) {
+  ULONG flags = 0;
+  if (Session->InboxBeforeInitValid != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_MAILBOX_BEFORE_INIT_VALID;
+  if (Session->InboxAfterInitValid != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_MAILBOX_AFTER_INIT_VALID;
+  if (Session->InboxAtFailureValid != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_MAILBOX_INBOX_FAILURE_VALID;
+  if (Session->OutboxAtFailureValid != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_MAILBOX_OUTBOX_FAILURE_VALID;
+  return flags;
+}
+
 _Use_decl_annotations_ NTSTATUS AppleAgxQualifyRtkitReadyStop(
     volatile UCHAR *AscBase, ULONG AscLength,
     APPLE_AGX_RTKIT_QUALIFICATION_RESULT *Result) {
@@ -185,6 +199,12 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyRtkitReadyStop(
   Result->BootPhase = (ULONG)session.Boot.Phase;
   Result->BootFlags = AppleAgxRtkitBootFlags(&session);
   Result->NegotiatedVersion = (ULONG)session.Boot.NegotiatedVersion;
+  Result->MailboxSnapshotFlags =
+      AppleAgxRtkitMailboxSnapshotFlags(&session);
+  Result->InboxControlBeforeInit = (ULONG)session.InboxControlBeforeInit;
+  Result->InboxControlAfterInit = (ULONG)session.InboxControlAfterInit;
+  Result->InboxControlAtFailure = (ULONG)session.InboxControlAtFailure;
+  Result->OutboxControlAtFailure = (ULONG)session.OutboxControlAtFailure;
   if (sessionResult == AppleAgxRtkitSessionResultOk) {
     deadline =
         (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
