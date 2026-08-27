@@ -23,11 +23,9 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
 
     def test_driver_separates_adl_headers_from_implemented_runtime_level(self):
         driver = self.read("src/driver.c")
-        project = self.read("AppleAgx.vcxproj")
         self.assertIn("DRIVER_INITIALIZATION_DATA", driver)
         self.assertIn("DxgkInitialize(", driver)
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
-        self.assertIn("DXGKDDI_INTERFACE_VERSION_WDDM3_0", project)
         self.assertIn(
             "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM2_6",
             driver,
@@ -44,10 +42,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         project = self.read("AppleAgx.vcxproj")
         build = self.read("scripts/build-driver.ps1")
 
-        self.assertIn(
-            "DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0",
-            project,
-        )
+        self.assertNotIn("DXGKDDI_INTERFACE_VERSION=", project)
         self.assertNotIn("AppleAgxWddm26AbiQualification", project)
         self.assertNotIn("AppleAgxDdiInterfaceVersion", project)
         self.assertNotIn("Wddm26AbiQualification", build)

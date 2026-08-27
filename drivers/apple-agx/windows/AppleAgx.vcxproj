@@ -29,7 +29,6 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
