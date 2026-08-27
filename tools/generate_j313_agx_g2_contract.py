@@ -125,6 +125,12 @@ UAT_RENDER_CONTEXTS = (1, 62)
 UAT_QUALIFICATION_CONTEXT = 63
 INITDATA_SIZE = 0xBC
 INITDATA_VERSION_WORDS = (0x6BA0, 0x1F28, 0x0601, 0x00B0)
+INITDATA_OBJECT_SIZES = (
+    ("REGION_A", 0x4000),
+    ("REGION_B", 0x6BC0),
+    ("REGION_C", 0x12394),
+    ("FW_STATUS", 0x80),
+)
 
 
 class G2ContractError(ValueError):
@@ -368,6 +374,13 @@ def _validate_windows_binary_contract(contract):
     for name, base, size in contract.firmware_regions:
         if size == 0 or (base | size) & (contract.page_size - 1):
             raise G2ContractError(f"firmware region {name} must be page aligned")
+    regions = {name: (base, size)
+               for name, base, size in contract.firmware_regions}
+    rtkit_base, rtkit_size = regions["rtkit_private"]
+    if rtkit_size > (1 << 64) - rtkit_base:
+        raise G2ContractError("rtkit_private end overflows the VA space")
+    if any(size <= 0 for _, size in INITDATA_OBJECT_SIZES):
+        raise G2ContractError("initdata object sizes must be positive")
 
 
 def render_windows_header(contract):
@@ -405,6 +418,8 @@ def render_windows_header(contract):
         f"#define J313_AGX_G2_INITDATA_SIZE 0x{INITDATA_SIZE:x}u",
         *(f"#define J313_AGX_G2_INITDATA_VERSION_WORD{index} 0x{word:x}u"
           for index, word in enumerate(INITDATA_VERSION_WORDS)),
+        *(f"#define J313_AGX_G2_INITDATA_{name}_SIZE 0x{size:x}u"
+          for name, size in INITDATA_OBJECT_SIZES),
         "",
     ]
     for name, base, size in (contract.acpi_mmio + contract.mmio_subregions +
@@ -415,6 +430,13 @@ def render_windows_header(contract):
             f"#define J313_AGX_G2_{macro}_BASE 0x{base:x}ULL",
             f"#define J313_AGX_G2_{macro}_SIZE 0x{size:x}ULL",
         ])
+    firmware_regions = {
+        name: (base, size) for name, base, size in contract.firmware_regions
+    }
+    rtkit_base, rtkit_size = firmware_regions["rtkit_private"]
+    lines.append(
+        f"#define J313_AGX_G2_KERNEL_VA_BASE 0x{rtkit_base + rtkit_size:x}ULL"
+    )
     lines.append("")
     lifecycle = contract.firmware_lifecycle
     lines.extend(

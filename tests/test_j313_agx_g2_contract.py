@@ -128,6 +128,11 @@ class J313AgxG2ContractTests(unittest.TestCase):
             "#define J313_AGX_G2_HANDOFF_SIZE 0x4000ULL",
             "#define J313_AGX_G2_RTKIT_PRIVATE_BASE 0xffffff8000000000ULL",
             "#define J313_AGX_G2_RTKIT_PRIVATE_SIZE 0x2000000000ULL",
+            "#define J313_AGX_G2_KERNEL_VA_BASE 0xffffffa000000000ULL",
+            "#define J313_AGX_G2_INITDATA_REGION_A_SIZE 0x4000u",
+            "#define J313_AGX_G2_INITDATA_REGION_B_SIZE 0x6bc0u",
+            "#define J313_AGX_G2_INITDATA_REGION_C_SIZE 0x12394u",
+            "#define J313_AGX_G2_INITDATA_FW_STATUS_SIZE 0x80u",
         ):
             self.assertIn(line, rendered)
 

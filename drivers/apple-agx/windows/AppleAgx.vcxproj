@@ -80,6 +80,8 @@
     <ClCompile Include="..\shared\src\apple_agx_uat.c" />
     <ClCompile Include="..\shared\src\apple_agx_uat_table.c" />
     <ClCompile Include="..\shared\src\apple_agx_uat_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata_memory.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_agx_driver.h" />
@@ -93,6 +95,8 @@
     <ClInclude Include="..\shared\include\apple_agx_uat.h" />
     <ClInclude Include="..\shared\include\apple_agx_uat_table.h" />
     <ClInclude Include="..\shared\include\apple_agx_uat_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_initdata.h" />
+    <ClInclude Include="..\shared\include\apple_agx_initdata_memory.h" />
     <ClInclude Include="..\shared\include\j313_agx_g2.generated.h" />
   </ItemGroup>
   <ItemGroup>

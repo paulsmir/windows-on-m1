@@ -256,11 +256,16 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn(r"..\shared\src\apple_agx_uat.c", project)
         self.assertIn(r"..\shared\src\apple_agx_uat_table.c", project)
         self.assertIn(r"..\shared\src\apple_agx_uat_memory.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_initdata.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_initdata_memory.c", project)
         self.assertIn(r"..\shared\include\apple_agx_uat.h", project)
         self.assertIn(r"..\shared\include\apple_agx_uat_table.h", project)
         self.assertIn(r"..\shared\include\apple_agx_uat_memory.h", project)
+        self.assertIn(r"..\shared\include\apple_agx_initdata.h", project)
+        self.assertIn(r"..\shared\include\apple_agx_initdata_memory.h", project)
         self.assertNotIn("AppleAgxUatMemoryOwner", adapter)
         self.assertNotIn("AppleAgxUatCreateAddressSpace", adapter)
+        self.assertNotIn("AppleAgxInitdataMemoryBuild", adapter)
 
     def test_wddm3_memory_adapter_uses_adl_device_addresses(self):
         memory_path = WINDOWS / "src" / "memory_windows.c"
