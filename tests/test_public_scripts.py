@@ -234,6 +234,25 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("secondary CPU startup failed", text)
         self.assertIn("runner failed a hardware bootstrap gate", text)
 
+    def test_assisted_agx_power_broker_is_explicit_and_fail_closed(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-assisted.sh"),
+                "--dry-run", "--proxy", "/dev/cu.test-proxy",
+                "--vuart", "/dev/cu.test-vuart", "--display", "both",
+                "--debug", "monitor", "--agx-power-broker",
+            ],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("AGX G2 power broker: enabled", result.stdout)
+
+        source = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
+        self.assertIn('WOM1_AGX_G2_POWER_BROKER="$AGX_POWER_BROKER"', source)
+        self.assertIn("AGX boot config snapshot v2", source)
+        self.assertIn("AGX scalar snapshot missing", source)
+
     def test_assisted_foreground_keeps_runner_owned_and_observable(self):
         result = subprocess.run(
             [
