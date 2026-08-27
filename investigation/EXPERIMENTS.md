@@ -11809,7 +11809,8 @@ transport before one new falsifiable hot-cycle experiment.
 
 ### EXP-20260827-137 — J313 AGX ASC-ready RTKit qualification
 
-Status: preregistered at `2026-08-27T15:09:26Z`; hardware not yet run. The
+Status: rejected and closed after one device hot cycle. Preregistered at
+`2026-08-27T15:09:26Z`; executed at `2026-08-27T15:22:05Z`. The
 source-first comparison found that EXP-135 entered with powered ASC status
 `0x2a` (stopped), EXP-136 timed out before HELLO and ended at `0x2d` (running and
 idle), and current Asahi leaves a substantial initialization interval between
@@ -11831,3 +11832,33 @@ rendering, presentation and display ownership remain forbidden. Stop on any
 identity drift, lost SSH/input/NVMe/xHCI health, Event 129, critical event,
 bugcheck or reboot. The literal contract is
 `documentation/plans/2026-08-27-j313-agx-asc-ready-hardware-qualification.md`.
+
+The official WDK artifact was GitHub Actions run `33086632205`, source commit
+`8252b9c759f447241fb5b28bfed522c9486dc080`. Its SYS SHA-256 was
+`1ac19ede3267b2a836e177e96ad26f69c89298c3078a6412f1b9200882893beb`, INF
+SHA-256 was
+`8cc6f88cef5c664f92387fce6f0ad80ac006e35c525f30f0e1006c6c7966fceb`,
+catalog SHA-256 was
+`ea25133a3c3b76450d73b3e1d1259566c713650f1ca5105114f757e16ba7df42`,
+and signer thumbprint was `BCE4F22D33D675EABA3B8A88FDB102E536E69F5A`.
+
+The single final transaction proved the ASC-ready marker: boot flags were
+`0x81`, final CPU status was `0x2d`, and the bounded wait had observed RUNNING
+with STOPPED clear. RTKit still remained at phase 1, negotiated version zero,
+and timed out with `0xC00000B5` before HELLO. Final StartDevice stage was 6 and
+the device settled stopped with Problem 43. The timing hypothesis is therefore
+rejected; adding delay after RUN is not source-backed. The next boundary is
+visibility of the IOP-init mailbox write and doorbell to running firmware.
+
+Windows retained eight logical processors and Running AppleInput, stornvme and
+USBXHCI. No fresh stornvme Event 129, bugcheck or reboot occurred. ACPI errors
+accompanied the failed start. The package remains fail-closed and no retry was
+performed. Raw result and postflight hashes are recorded under ignored
+`.local/experiments/EXP-20260827-137-agx-asc-ready/`; the sanitized verdict is
+`investigation/artifacts/EXP-20260827-137-agx-asc-ready/VERDICT.md`.
+
+The run also proved that the former lifecycle helper could consume an
+intermediate receipt because it started the package, scanned again and then
+restarted the device. Commit `b4906b9d7468b00d35dfc10411b91a4c9b70064d`
+reduces future iterations to one add/install transaction and clears preparation
+receipts immediately before it.

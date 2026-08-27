@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T15:09:26Z
+Updated: 2026-08-27T15:27:27Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -16,8 +16,9 @@ This is the bounded session entry point. Detailed history is append-only in
 
 - Canonical checkout: `/Users/pavel/public_windows`.
 - Branch: `feature/j313-gpu-acceleration`.
-- Root at the EXP-136 hardware run: `704bf3e6a39414ead0025ba27ee70d9e53832a43`.
-- EXP-136 diagnostic implementation: `e0087563daf45426675c2754571199ce8af6f00c`.
+- EXP-137 package source: `8252b9c759f447241fb5b28bfed522c9486dc080`.
+- Single-transaction runner correction:
+  `b4906b9d7468b00d35dfc10411b91a4c9b70064d`.
 - m1n1 pin: `72dbbd2b0b279638ac53482a6d79d06adfa6aef7`.
 - Mu pin: `c6108366201f869b297912a0ef8323b343256ecc`.
 - Preserve existing untracked/dirty submodule metadata; never stage it.
@@ -34,27 +35,27 @@ This is the bounded session entry point. Detailed history is append-only in
   `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
 - Windows is at the desktop and SSH-responsive.
 - AppleInput, stornvme and USBXHCI are Running.
-- No fresh stornvme Event 129 occurred after the EXP-136 package installation.
+- No fresh stornvme Event 129 occurred after the EXP-137 package installation.
 - Never attach the m1n1 proxy client while this guest is running.
 
 ## Installed GPU package
 
 - Device: `ACPI\APPL0002\0`.
-- Package: `oem17.inf`, version `14.25.24.601`.
+- Package: `oem17.inf`, version `15.15.32.644`.
 - Driver: `AppleAgx.sys`, service Stopped/Manual.
 - Device state: Error, Problem 43.
 - SYS SHA-256:
-  `af3a029572f0b45945a53cb15ff79fbfcd1e3ff0d6a12d0a6398a1eac31a950b`.
-- Signer thumbprint: `92D87C083D104C19CF3E40E34139992A6D16D827`.
+  `1ac19ede3267b2a836e177e96ad26f69c89298c3078a6412f1b9200882893beb`.
+- Signer thumbprint: `BCE4F22D33D675EABA3B8A88FDB102E536E69F5A`.
 
 ## Last confirmed boundary
 
-- Experiment: EXP-20260827-136.
+- Experiment: EXP-20260827-137.
 - PnP invoked DriverEntry, AddDevice and StartDevice.
 - Final StartDevice stage: 6.
 - StartDevice/RTKit boot status: `0xC00000B5` (`STATUS_IO_TIMEOUT`).
 - RTKit phase: 1 (`boot begun`).
-- RTKit flags: 1 (only `begun`; no HELLO).
+- RTKit flags: `0x81` (`begun` and `CPU_READY`; no HELLO).
 - Negotiated protocol version: 0.
 - Final ASC CPU-status read succeeded; value `0x2d`.
 - Bounded stop returned `0xC00000BB` after the incomplete boot.
@@ -63,18 +64,16 @@ This is the bounded session entry point. Detailed history is append-only in
 
 ## Active hypothesis
 
-EXP-135 observed powered pre-start `CPU_STATUS=0x2a` (stopped), while EXP-136
-ended at `0x2d` (running and idle) after no HELLO. Current Asahi asserts ASC RUN
-well before its RTKit boot wait; the Windows path previously sent IOP INIT
-immediately after RUN. The falsifiable EXP-137 hypothesis is that the first
-mailbox message crossed the unobserved stopped-to-running transition.
+EXP-137 proved the ASC reached running and stopped cleared before IOP INIT, but
+HELLO still never arrived. The stopped-to-running timing hypothesis is rejected.
+The next source-first boundary is whether the IOP-init mailbox write and
+doorbell are visible to the running GPU firmware.
 
 ## Single next action
 
-Build and sign the EXP-137 package that waits for
-`CPU_STATUS.RUNNING=1 && STOPPED=0`, then perform one receipt-complete Windows
-device hot cycle without reboot. A new `CPU_READY` flag distinguishes a ready
-ASC with no HELLO from failure to leave STOPPED.
+Compare the exact Windows mailbox write and doorbell sequence with current
+Asahi and m1n1, then add one read-only durable receipt that distinguishes a
+published message from firmware consumption. Do not rerun EXP-137 or add delay.
 
 ## Rollback
 

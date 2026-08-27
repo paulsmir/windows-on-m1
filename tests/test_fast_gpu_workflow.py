@@ -27,7 +27,7 @@ class FastGpuWorkflowTests(unittest.TestCase):
         ):
             self.assertIn(heading, text)
         self.assertIn("EXP-123", text)
-        self.assertIn("EXP-20260827-136", text)
+        self.assertIn("EXP-20260827-137", text)
         self.assertLessEqual(len(text.splitlines()), 180)
 
     def test_hot_cycle_waits_for_final_startdevice_receipt(self):
