@@ -4,6 +4,15 @@ DRIVER_INITIALIZE DriverEntry;
 
 #pragma alloc_text(INIT, DriverEntry)
 
+/*
+ * The pinned 10.0.28000 WDK exposes the complete WDDM 3.x initialization
+ * table as 1544 bytes on ARM64.  Dxgkrnl accepts this full callback ABI while
+ * the Version field below deliberately advertises only the implemented WDDM
+ * 2.6 runtime surface.  Compiling the structure itself as WDDM 2.6 truncates
+ * it to 1224 bytes and prevents the PnP stack from reaching StartDevice.
+ */
+C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1544);
+
 _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
                                             PUNICODE_STRING RegistryPath) {
   DRIVER_INITIALIZATION_DATA initialization;

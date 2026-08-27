@@ -39,31 +39,23 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
         self.assertRegex(driver, r"return\s+status\s*;")
 
-    def test_lifecycle_profile_can_restore_the_proven_wddm26_compile_abi(self):
+    def test_driver_uses_the_full_pinned_wdk_initialization_abi(self):
+        driver = self.read("src/driver.c")
         project = self.read("AppleAgx.vcxproj")
         build = self.read("scripts/build-driver.ps1")
 
-        self.assertIn("AppleAgxWddm26AbiQualification", project)
-        self.assertIn("AppleAgxDdiInterfaceVersion", project)
         self.assertIn(
-            "DXGKDDI_INTERFACE_VERSION_WDDM2_6",
+            "DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0",
             project,
         )
+        self.assertNotIn("AppleAgxWddm26AbiQualification", project)
+        self.assertNotIn("AppleAgxDdiInterfaceVersion", project)
+        self.assertNotIn("Wddm26AbiQualification", build)
         self.assertIn(
-            "DXGKDDI_INTERFACE_VERSION=$(AppleAgxDdiInterfaceVersion)",
-            project,
+            "C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1544)",
+            driver,
         )
-        self.assertIn("[switch]$Wddm26AbiQualification", build)
-        self.assertIn(
-            "/p:AppleAgxWddm26AbiQualification=$wddm26AbiQualification",
-            build,
-        )
-        self.assertRegex(
-            project,
-            r'<ClCompile Include="src\\memory_windows\.c" '
-            r'Condition="\'\$\(AppleAgxWddm26AbiQualification\)\'!='
-            r"'true'" ,
-        )
+        self.assertIn('<ClCompile Include="src\\memory_windows.c" />', project)
 
     def test_driver_entry_is_declared_before_init_section_pragma(self):
         driver = self.read("src/driver.c")

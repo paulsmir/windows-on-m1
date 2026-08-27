@@ -16,9 +16,6 @@
     <AppleAgxPoweredStatusQualification Condition="'$(AppleAgxPoweredStatusQualification)'==''">false</AppleAgxPoweredStatusQualification>
     <AppleAgxRtkitQualification Condition="'$(AppleAgxRtkitQualification)'==''">false</AppleAgxRtkitQualification>
     <AppleAgxUatSnapshotQualification Condition="'$(AppleAgxUatSnapshotQualification)'==''">false</AppleAgxUatSnapshotQualification>
-    <AppleAgxWddm26AbiQualification Condition="'$(AppleAgxWddm26AbiQualification)'==''">false</AppleAgxWddm26AbiQualification>
-    <AppleAgxDdiInterfaceVersion Condition="'$(AppleAgxWddm26AbiQualification)'=='true'">DXGKDDI_INTERFACE_VERSION_WDDM2_6</AppleAgxDdiInterfaceVersion>
-    <AppleAgxDdiInterfaceVersion Condition="'$(AppleAgxDdiInterfaceVersion)'==''">DXGKDDI_INTERFACE_VERSION_WDDM3_0</AppleAgxDdiInterfaceVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
@@ -32,7 +29,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=$(AppleAgxDdiInterfaceVersion);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
@@ -84,7 +81,7 @@
     <ClCompile Include="src\diagnostics.c" />
     <ClCompile Include="src\driver_diagnostics.c" />
     <ClCompile Include="src\firmware_transport.c" />
-    <ClCompile Include="src\memory_windows.c" Condition="'$(AppleAgxWddm26AbiQualification)'!='true'" />
+    <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\uat_publication_windows.c" />
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />
