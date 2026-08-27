@@ -12588,7 +12588,37 @@ lifecycle profile, not another runtime-version retry.
 
 ## EXP-20260827-151 — A/B current lifecycle profile against UAT profile
 
-Status: preregistered; package identities pending before hardware run.
+Status: preregistered; exact package pinned; hardware run pending.
+
+Created (UTC): 2026-08-27T21:46:27Z.
+
+### Fixed identities
+
+- Root: `373e962d88cd1fe9aa99539d2d24d86c5a11a542` on
+  `feature/j313-gpu-acceleration`.
+- m1n1: `8371e3674ba0944c4a32068f0ba659cbb0e57e77`; root-visible
+  nested diff SHA-256
+  `41f1c3a931d95a6a3ee9cba1d97ba5e10251cbeb84cde67a588519c8057e3d6d`.
+- Mu: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; clean diff
+  SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Source archive SHA-256:
+  `2770f5ec30c44c751f6b7b73ba8845e74d5ec10332f90ef66ad3ac5c5897b7cc`.
+- Build configuration: Debug ARM64, WDK `10.0.26100.0`, lifecycle=true;
+  power/MMIO/firmware/powered-status/RTKit/UAT-snapshot=false.
+- Driver version: `08/27/2026,23.45.58.628`.
+- SYS SHA-256:
+  `d4863709d96ecdd5a5a7b02fc76a65149c44d409c2d0cc4b5e499f26c653115d`.
+- INF SHA-256:
+  `94e6aaddd499884a51fed2333b14e590f0bd429faf3c159d1380dbd4dc904a65`.
+- CAT SHA-256:
+  `54c8b114945e5c9a526b6955a11c71d57f7a69202362c9badf4a6b9d41c92b22`.
+- Signer: `E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+- Firmware SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`.
+- Launch m1n1 SHA-256:
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Recovery remains the immutable EXP-123 artifact.
 
 ### Hypothesis and single variable
 
