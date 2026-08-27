@@ -12673,7 +12673,7 @@ lifecycle binary before changing hardware, firmware, UAT or RTKit behavior.
 
 ## EXP-20260827-152 — Restore the proven compile-time WDDM 2.6 ABI
 
-Status: preregistered; package build pending.
+Status: preregistered; exact package pinned; hardware run pending.
 
 ### Fixed source and single variable
 
@@ -12691,6 +12691,20 @@ Status: preregistered; package build pending.
 - The sole variable is the compile-time `DXGKDDI_INTERFACE_VERSION`: WDDM 3.0
   in EXP-151 versus WDDM 2.6 in EXP-152.  Runtime Version remains WDDM 2.6.
 - Recovery remains the immutable EXP-123 artifact.
+- Corrected source archive SHA-256:
+  `12bd819b44fe8efffb44b5b1a5817eb179275b1d79a2f843e04ab67b6cc4781b`.
+- Build: Debug ARM64, WDK `10.0.26100.0`, lifecycle=true,
+  WDDM26-ABI=true; every hardware-owning profile=false.
+- Driver version: `08/27/2026,23.59.32.66`.
+- SYS SHA-256:
+  `09b17e317c79f2a3919f1efa1c0642f89d66a14193585362eb1590fbe36aeae0`.
+- INF SHA-256:
+  `ac6c54765d680066f19879659a408b506317fb7def73067b13403ade409ecc44`.
+- CAT SHA-256:
+  `8363762b5e9ef81af98f6e7681d65e72b92f943fa5cd0b2efb4fbc156e5e8ce8`.
+- PDB SHA-256:
+  `430c7733acaeb9043245f0e5fc34d93d8849d8354a591ad97c11f3f7b68abd95`.
+- Signer: `E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
 
 ### Hypothesis and gates
 
