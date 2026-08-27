@@ -25,7 +25,13 @@ advertises no render node or display source.
 - [x] Keep CPU RUN writes, mailbox traffic, power changes, firmware startup,
   interrupts, UAT, queues, render, present and display ownership unreachable.
 - [x] Pass the complete host test suite.
-- [ ] Pass all ARM64 WDK build and signing profiles for the exact source head.
+- [x] Pass all ARM64 WDK build and signing profiles for the exact source head.
+
+The exact implementation head `ac1eae5ffc703008560a8838222edeea17e09ec0`
+passed all five ARM64 WDK build and signing profiles in workflow
+`33056857717`. The firmware-qualification package is therefore eligible for a
+separately preregistered hardware experiment; this result alone does not
+authorize register access.
 
 ## Hardware gate
 
