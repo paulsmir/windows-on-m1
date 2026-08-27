@@ -12751,7 +12751,7 @@ lifecycle package; it must not change firmware, UAT or hardware behavior.
 
 ## EXP-20260828-153 — Cold-first enumerate the exact EXP-152 package
 
-Status: preregistered; hardware sequence pending.
+Status: completed; cold-first hypothesis rejected.
 
 ### Corrected premise
 
@@ -12799,3 +12799,35 @@ already pinned EXP-152 package; no driver byte changes.
 
 Any identity drift, recovery APPL0002, package failure, missing StartDevice,
 storage/input failure or reboot loop rejects the experiment without retry.
+
+### Result
+
+The corrected recovery sequence first exported and hash-verified the exact
+EXP-152 package, removed only the disconnected `ACPI\\APPL0002\\0` phantom,
+deleted only `oem18.inf` without force or uninstall, and staged the same package
+while no present or non-present APPL0002 devnode existed.  Recovery retained
+eight logical processors and Running AppleInput, stornvme and USBXHCI.  It then
+shut down normally; no rescan, device start or hot replacement occurred.
+
+The single exact G2 cold boot naturally created APPL0002 and reached the Windows
+lock screen.  The device bound to `oem18.inf` version `23.59.32.66`, DriverEntry
+reached stage 2, DxgkInitialize returned success and AddDevice reached stage 2
+with status zero.  Dxgkrnl did not invoke StartDevice.  APPL0002 therefore
+settled at `CM_PROB_FAILED_ADD` / Problem 31 and AppleAgx remained Stopped.
+
+All eight processors remained online; AppleInput, stornvme, USBXHCI and sshd
+remained Running.  The bounded window contained no stornvme Event 129, no
+critical System event and no error System event.  The exact SYS hash remained
+`09b17e317c79f2a3919f1efa1c0642f89d66a14193585362eb1590fbe36aeae0`.
+Evidence is stored in the guest at
+`C:\\Users\\pavel\\AppleAgxEvidence\\EXP-20260828-153\\cold-first-result.json`
+and on the host at
+`.local/experiments/EXP-20260828-153-cold-first/cold-first-result.json`.
+
+This rejects retained phantom state, hot replacement, Mu, m1n1, ACPI
+enumeration, CPU topology, storage and input as causes of the missing
+StartDevice transition.  No further device-cycle experiment is justified.  The
+next investigation is an offline binary and build-environment comparison of the
+exact EXP-130 package that reached StartDevice and this exact rejected package,
+with particular attention to the linked miniport initialization ABI and WDK/MSVC
+toolchain identity.
