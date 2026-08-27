@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory=$true)][string]$ExpectedInfSha256,
     [Parameter(Mandatory=$true)][string]$ExpectedCatSha256,
     [Parameter(Mandatory=$true)][string]$ExpectedSignerThumbprint,
-    [string]$PreviousPublishedName = ""
+    [string]$PreviousPublishedName = "",
+    [ValidateRange(5, 300)][int]$CompletionTimeoutSeconds = 30,
+    [ValidateRange(100, 5000)][int]$PollIntervalMilliseconds = 250
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,6 +128,30 @@ function Clear-LifecycleReceipts {
     }
 }
 
+function Wait-StartDeviceCompletion {
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    while ($watch.Elapsed.TotalSeconds -lt $CompletionTimeoutSeconds) {
+        $receipts = Get-LifecycleReceipts
+        if ($receipts.ContainsKey("Wom1StartDeviceStatus")) {
+            $watch.Stop()
+            return [ordered]@{
+                Outcome = "Completed"
+                ElapsedMilliseconds = [int64]$watch.ElapsedMilliseconds
+                StartDeviceStatus = $receipts["Wom1StartDeviceStatus"]
+                TimeoutSeconds = $CompletionTimeoutSeconds
+            }
+        }
+        Start-Sleep -Milliseconds $PollIntervalMilliseconds
+    }
+    $watch.Stop()
+    return [ordered]@{
+        Outcome = "Timeout"
+        ElapsedMilliseconds = [int64]$watch.ElapsedMilliseconds
+        StartDeviceStatus = $null
+        TimeoutSeconds = $CompletionTimeoutSeconds
+    }
+}
+
 Assert-Administrator
 $expectedSys = Normalize-Hex $ExpectedSysSha256 64 "ExpectedSysSha256"
 $expectedInf = Normalize-Hex $ExpectedInfSha256 64 "ExpectedInfSha256"
@@ -186,7 +212,7 @@ if ($installOperation.ExitCode -ne 0) {
 }
 $operations += Invoke-PnpUtil @("/scan-devices") $true
 $operations += Invoke-PnpUtil @("/restart-device", $deviceId) $false
-Start-Sleep -Seconds 8
+$completion = Wait-StartDeviceCompletion
 
 $afterDevice = Get-DeviceSnapshot
 $afterHealth = Get-HealthSnapshot
@@ -223,6 +249,7 @@ $result = [ordered]@{
         Receipts = $beforeReceipts
     }
     Operations = $operations
+    Completion = $completion
     After = [ordered]@{
         Device = $afterDevice
         Health = $afterHealth
@@ -234,6 +261,9 @@ $result = [ordered]@{
 $resultPath = Join-Path $runDirectory "result.json"
 $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resultPath -Encoding UTF8
 
+if ($completion.Outcome -ne "Completed") {
+    throw "Rejected: StartDevice final receipt timed out after $($completion.ElapsedMilliseconds) ms."
+}
 if ($event129.Count -ne 0) {
     throw "Rejected: observed $($event129.Count) fresh stornvme Event 129 record(s)."
 }
