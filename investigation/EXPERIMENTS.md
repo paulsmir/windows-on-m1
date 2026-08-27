@@ -12385,3 +12385,56 @@ host and `C:\\Users\\pavel\\AppleAgxEvidence` in the guest.  Recovery remains
 the hardware-qualified eight-core stable pair and exact exported AppleInput
 rollback package; no cold recovery is needed for a healthy fail-closed hot
 cycle.
+
+### Result
+
+The exact package from `45127a2a164e34119464f5e7ab22d4c3acb63852`
+was built with the official ARM64 WDK UAT-snapshot profile.  Artifact hashes
+were INF `3575098341156a711c5e98cc5d38a55cecf344fa37f4ec3cdac9faf79ea274d0`,
+SYS `546568655f72737052aee5abd32f2adb3f7f7a941973503159c2f604f9a6661c`
+and CAT `d26972673b85c6350df5b29169f8dbdfbf61208251d1a699d7f27c9df7feb029`;
+Windows validated signer thumbprint
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`.  Preflight proved exact current
+`oem18.inf`, eight CPUs, Running AppleInput/stornvme/USBXHCI and VHF `0/1/1`.
+
+The sole hot package replacement did not execute the new StartDevice and is
+therefore inconclusive for the parser hypothesis.  The runner timed out after
+30145 ms with only successful AddDevice receipts.  SetupAPI recorded
+`Configure Driver Package: exit(0x00000bc3)`, `Restart required for any devices
+using this driver`, and service `AppleAgx` pended for deletion.  PnP settled at
+Problem 31 / `CM_PROB_FAILED_ADD`, status `0xC0000182`, while DriverEntry,
+DxgkInitialize and the miniport AddDevice callback all recorded success.  This
+is a display-miniport reload constraint, not a UAT, MMIO or parser result.
+Eight CPUs and all three platform services remained alive, with zero Event 129
+and zero critical System events.  EXP-146 ends inconclusive and must not be
+retried hot.
+
+## EXP-20260827-147 — Cold-load the exact assigned-root snapshot package
+
+Status: preregistered at 2026-08-27T21:12:39Z; hardware run pending.
+
+### Hypothesis and single variable
+
+The exact EXP-146 package is already installed as `oem18.inf`, but Windows
+requires one reboot to replace the pended display-miniport service image.  The
+sole variable is a clean guest reboot and cold load of those already recorded
+bytes.  Firmware, m1n1, Mu, display mode, CPU count, AppleInput and every GPU
+driver byte remain unchanged.
+
+### Procedure and gates
+
+1. Preserve the EXP-146 JSON and SetupAPI excerpt, then request a normal Windows
+   restart.  Do not mutate or reinstall the package.
+2. Relaunch the same version-three G2 firmware/m1n1 pair with display `both`,
+   eight CPUs, monitor logging and AGX power broker enabled.
+3. Require the new SYS hash and signer, `AppleAgxDdiStartDevice` receipts,
+   resource stage success and final UAT config/snapshot/root-pair receipts.
+4. Require working internal input, SSH, NVMe and xHCI, eight CPUs, zero fresh
+   Event 129 and zero critical System events.  No retry is permitted.
+
+Pass requires a bounded fail-closed UAT result with no platform-health loss;
+failure is missing StartDevice, timeout, reset, black screen without SSH,
+input/storage loss, Event 129, critical event or identity drift.  Recovery is
+the exact EXP-123 pair.  Evidence is stored under
+`.local/experiments/EXP-20260827-147-cold-kmd-load/` and the existing guest
+`C:\\Users\\pavel\\AppleAgxEvidence` tree.
