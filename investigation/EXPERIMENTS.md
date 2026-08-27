@@ -12783,10 +12783,14 @@ already pinned EXP-152 package; no driver byte changes.
   eight CPUs and the canonical launch contract.
 
 1. Shut down the current G2 guest normally and boot exact recovery.  Require
-   APPL0002 absent, AppleAgx unloaded, eight CPUs and Running input, NVMe/xHCI.
-2. Delete only the recorded `oem18.inf` without force, stage the exact EXP-152
-   package while no device is present, verify hashes/signer and shut down
-   normally.  Do not start or restart a device in recovery.
+   no present APPL0002, AppleAgx unloaded, eight CPUs and Running input,
+   NVMe/xHCI.  If Windows retains only `ACPI\\APPL0002\\0` as
+   `CM_PROB_PHANTOM`, remove exactly that non-present devnode and require it to
+   disappear from both present and non-present PnP enumeration.  Do not rescan.
+2. Delete only the recorded `oem18.inf` without force or uninstall, stage the
+   exact EXP-152 package while no matching devnode exists, verify hashes/signer
+   and shut down normally.  Do not start, restart or rescan a device in
+   recovery.
 3. Boot the exact G2 candidate once.  Do not invoke a hot package cycle.  Read
    the naturally created APPL0002 state and fresh lifecycle receipts.
 4. Pass only if StartDevice reaches stage 7/status `0xC00000BB`, all
