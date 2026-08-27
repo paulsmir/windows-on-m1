@@ -80,3 +80,14 @@ health condition. Exact non-force rollback removed the package and signer. A
 fresh EXP-123 control boot then proved eight CPUs, healthy platform services,
 no AppleAgx/APPL0002 and zero Event 129 or critical events. The experiment is
 closed without retry and does not authorize the next GPU ownership boundary.
+
+## Process correction for later qualifications
+
+Do not pre-stage an active APPL0002 package in recovery. Windows can bind it
+automatically during the following G2 boot, before the candidate health gate
+and before stale receipts can be cleared. Future hardware qualifications must
+cold-boot an inert G2 candidate first, prove the full zero-reset health window,
+then import and install the exact signed package in that same boot immediately
+before the single device-scoped cycle. Power acquire and release must be stored
+in their dedicated `Wom1PowerAcquireStatus` and `Wom1PowerReleaseStatus`
+receipts rather than inferred from the overwritten final StartDevice stage.

@@ -43,3 +43,8 @@ because it recorded Event 129. One fresh control boot then proved APPL0002 and
 AppleAgx absent, eight logical processors, Running AppleInput/stornvme/USBXHCI,
 zero Event 129 and zero critical events. That clean recovery state is the final
 machine state.
+
+The follow-up correction stores acquire and release in separate durable
+registry receipts. It also changes future experiment ordering: boot inert G2,
+pass candidate health first, then stage and cycle the package in the same boot.
+This prevents automatic PnP binding from crossing the preflight boundary.
