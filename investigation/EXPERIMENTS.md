@@ -11718,3 +11718,62 @@ proved eight CPUs, healthy services, no AppleAgx/APPL0002 and zero Event 129 or
 critical events. No firmware, interrupt, UAT, queue, render or display action is
 authorized. See
 `investigation/artifacts/EXP-20260827-135-agx-powered-status/VERDICT.md`.
+
+### EXP-20260827-136 — J313 AGX RTKit phase diagnostics
+
+Status: preregistered at `2026-08-27T14:30:40Z`; hardware result pending. The
+falsifiable hypothesis is that the repeated `0xC00000B5` from the bounded
+READY-to-STOP qualification occurs during RTKit boot, and the exact saved phase
+will distinguish Hello, endpoint-map, power, or shutdown without changing the
+wire protocol. The single changed variable from the responsive retry of the G2
+guest is the RTKit qualification driver binary: it adds persistent registry
+receipts only and preserves the same MMIO map, power acquire, ASC RUN,
+management messages, STOP, unmap, and power release sequence.
+
+The public root is `704bf3e6a39414ead0025ba27ee70d9e53832a43`; the code
+commit is `e0087563daf45426675c2754571199ce8af6f00c`; m1n1 is
+`72dbbd2b0b279638ac53482a6d79d06adfa6aef7`; Mu is
+`c6108366201f869b297912a0ef8323b343256ecc`. Root and tracked submodule
+diff hashes are the empty SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Preserved unrelated dirt is m1n1 `.DS_Store` SHA-256
+`e5da54df51dda2d5f6e20d00f24d3c052dd8a24159a7758dd28246ac67f94883`;
+Mu nested commits match their tree pins and retain only the pre-existing
+libspdm dirty marker plus two IDE metadata files.
+
+The current display-both G2 guest uses m1n1 SHA-256
+`c7232200573956155c48ddf441723df21e5d8bfee069bf33b36b6b6065d36846`
+and Mu SHA-256
+`53c52005854d03c449c534c805df7c180d90e30ab29effbdc9e7003b3bef5c8d`;
+its boot image SHA-256 is
+`ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
+It reached the desktop, remained SSH-responsive for more than 19 minutes, and
+reported eight logical processors before this experiment. Exact EXP-123 remains
+the boot recovery artifact. The already installed prior RTKit package is retained
+locally as the device-level rollback.
+
+The replacement package comes from successful signed RTKit job `98551380670`
+in GitHub Actions run `33081986331`. Its ARM64 SYS SHA-256 is
+`af3a029572f0b45945a53cb15ff79fbfcd1e3ff0d6a12d0a6398a1eac31a950b`,
+INF SHA-256 is
+`40785dd625c3996a047c484756c1af9ae259343d5b83c9d100799789519c86f4`,
+catalog SHA-256 is
+`5b6c8048dc8a97c9c1009814143d4898a10c170954d90295b13a311441fa7a50`,
+certificate SHA-256 is
+`4e9b8d039bc84d21ab12cd9d624ae64c598deb0e92e34d9fc1021b28a56dfcae`,
+and signer thumbprint is `92D87C083D104C19CF3E40E34139992A6D16D827`.
+The immutable local evidence directory is
+`.local/experiments/EXP-20260827-136-agx-rtkit-phase-diagnostics/`.
+
+The exact hardware action is to copy that package to a new Windows directory,
+verify all four hashes and the signer, import only its exact certificate, replace
+only the recorded AppleAgx package without `/force`, and let PnP perform one
+device-scoped start. Passing diagnostics require fresh
+`Wom1RtkitBootStatus`, `Wom1RtkitStopStatus`, `Wom1RtkitBootPhase`,
+`Wom1RtkitBootFlags`, `Wom1RtkitNegotiatedVersion`, and final ASC CPU-status
+receipts while Windows, AppleInput, NVMe, xHCI, SSH, display, and all eight CPUs
+remain alive. Any unexpected reboot, inaccessible desktop, new critical event,
+or inability to remove only the recorded package closes the experiment. Evidence
+will be written under the immutable local experiment directory before and after
+the device action; no UAT publication, initdata, interrupt registration, queue,
+command, render, presentation, or display ownership is authorized.
