@@ -47,6 +47,7 @@ FIRMWARE_LIFECYCLE_KEYS = {
 ROUTE_KEYS = {"physical", "guest"}
 EXACT_ACPI_MMIO = ("sgx_mmio",)
 EXACT_MMIO_SUBREGIONS = ("asc_mmio",)
+EXACT_FIRMWARE_REGIONS = ("gpu", "shared", "handoff", "rtkit_private")
 EXACT_GUEST_INTERRUPTS = tuple(range(880, 889))
 RESERVED_GUEST_INTERRUPTS = {64, 865}
 HEX64_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -168,6 +169,7 @@ class G2Contract:
     acpi_mmio: tuple[tuple[str, int, int], ...]
     mmio_subregions: tuple[tuple[str, int, int], ...]
     synthetic_mmio: tuple[tuple[str, int, int], ...]
+    firmware_regions: tuple[tuple[str, int, int], ...]
     interrupt_routes: tuple[InterruptRoute, ...]
     context_id: int
     queue_index: int
@@ -242,6 +244,10 @@ def load_g2_contract(g2_path=G2_CONTRACT, g1_path=G1_CONTRACT):
     if broker_base != POWER_BROKER_BASE or broker_size != POWER_BROKER_SIZE:
         raise G2ContractError("power broker must be the reviewed 0x300000000/0x1000 page")
     synthetic_mmio = (("power_broker", broker_base, broker_size),)
+    firmware_regions = tuple(
+        (name, g1.regions[name].base, g1.regions[name].size)
+        for name in EXACT_FIRMWARE_REGIONS
+    )
 
     routes_data = data["interrupt_routes"]
     if not isinstance(routes_data, list):
@@ -324,6 +330,7 @@ def load_g2_contract(g2_path=G2_CONTRACT, g1_path=G1_CONTRACT):
         acpi_mmio=acpi_mmio,
         mmio_subregions=mmio_subregions,
         synthetic_mmio=synthetic_mmio,
+        firmware_regions=firmware_regions,
         interrupt_routes=routes,
         context_id=context_id,
         queue_index=queue_index,
@@ -355,6 +362,12 @@ def _validate_windows_binary_contract(contract):
         raise G2ContractError("UAT context classes must cover exactly 0..63")
     if any(count <= 0 or count & (count - 1) for _, count in UAT_LEVELS):
         raise G2ContractError("UAT level entry counts must be powers of two")
+    if (tuple(name for name, _, _ in contract.firmware_regions) !=
+            EXACT_FIRMWARE_REGIONS):
+        raise G2ContractError("firmware regions must preserve the accepted G1R order")
+    for name, base, size in contract.firmware_regions:
+        if size == 0 or (base | size) & (contract.page_size - 1):
+            raise G2ContractError(f"firmware region {name} must be page aligned")
 
 
 def render_windows_header(contract):
@@ -395,7 +408,8 @@ def render_windows_header(contract):
         "",
     ]
     for name, base, size in (contract.acpi_mmio + contract.mmio_subregions +
-                             contract.synthetic_mmio):
+                             contract.synthetic_mmio +
+                             contract.firmware_regions):
         macro = name.upper()
         lines.extend([
             f"#define J313_AGX_G2_{macro}_BASE 0x{base:x}ULL",

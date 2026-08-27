@@ -17,6 +17,9 @@
 #define APPLE_AGX_UAT_PTE_AP(_value) ((unsigned long long)(_value) << 6)
 #define APPLE_AGX_UAT_PTE_ATTR(_value) ((unsigned long long)(_value) << 2)
 #define APPLE_AGX_UAT_PTE_LEAF_TABLE 3ULL
+#define APPLE_AGX_UAT_TTBR_VALID 1ULL
+#define APPLE_AGX_UAT_TTBR_ASID(_context) \
+  ((unsigned long long)(_context) << 48)
 
 #define APPLE_AGX_UAT_ATTR_CACHED 0u
 #define APPLE_AGX_UAT_ATTR_DEVICE 1u
@@ -128,6 +131,43 @@ APPLE_AGX_UAT_RESULT AppleAgxUatEncodeTableDescriptor(
   }
   *Descriptor = PhysicalAddress | APPLE_AGX_UAT_PTE_LEAF_TABLE;
   return AppleAgxUatResultOk;
+}
+
+APPLE_AGX_UAT_RESULT AppleAgxUatEncodeTtbrPair(
+    unsigned int Context, const APPLE_AGX_UAT_ROOTS *Roots,
+    APPLE_AGX_UAT_TTBR_PAIR *Pair) {
+  APPLE_AGX_UAT_RESULT result;
+  unsigned long long ignored_descriptor;
+  unsigned long long asid;
+
+  if (Roots == 0 || Pair == 0) {
+    return AppleAgxUatResultInvalidArgument;
+  }
+  if (Context >= J313_AGX_G2_UAT_CONTEXT_COUNT) {
+    return AppleAgxUatResultUnsupportedContext;
+  }
+  result = AppleAgxUatEncodeTableDescriptor(
+      Roots->Ttbr0PhysicalAddress, &ignored_descriptor);
+  if (result != AppleAgxUatResultOk) {
+    return result;
+  }
+  result = AppleAgxUatEncodeTableDescriptor(
+      Roots->Ttbr1PhysicalAddress, &ignored_descriptor);
+  if (result != AppleAgxUatResultOk) {
+    return result;
+  }
+
+  asid = APPLE_AGX_UAT_TTBR_ASID(Context);
+  Pair->Ttbr0 = asid | Roots->Ttbr0PhysicalAddress | APPLE_AGX_UAT_TTBR_VALID;
+  Pair->Ttbr1 = asid | Roots->Ttbr1PhysicalAddress | APPLE_AGX_UAT_TTBR_VALID;
+  return AppleAgxUatResultOk;
+}
+
+void AppleAgxUatClearTtbrPair(APPLE_AGX_UAT_TTBR_PAIR *Pair) {
+  if (Pair != 0) {
+    Pair->Ttbr0 = 0ULL;
+    Pair->Ttbr1 = 0ULL;
+  }
 }
 
 APPLE_AGX_UAT_RESULT AppleAgxUatEncodePageDescriptor(

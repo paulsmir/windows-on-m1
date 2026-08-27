@@ -155,6 +155,36 @@ static void test_range_validation(void) {
 }
 
 int main(void) {
+  APPLE_AGX_UAT_TTBR_PAIR pair = {0xaaaaaaaaaaaaaaaaULL,
+                                  0xbbbbbbbbbbbbbbbbULL};
+  APPLE_AGX_UAT_ROOTS roots = {0x10004000ULL, 0x10008000ULL};
+
+  assert(sizeof(pair) == 16u);
+  assert(AppleAgxUatEncodeTtbrPair(64u, &roots, &pair) ==
+         AppleAgxUatResultUnsupportedContext);
+  assert(pair.Ttbr0 == 0xaaaaaaaaaaaaaaaaULL);
+  assert(pair.Ttbr1 == 0xbbbbbbbbbbbbbbbbULL);
+  assert(AppleAgxUatEncodeTtbrPair(0u, 0, &pair) ==
+         AppleAgxUatResultInvalidArgument);
+  assert(AppleAgxUatEncodeTtbrPair(0u, &roots, 0) ==
+         AppleAgxUatResultInvalidArgument);
+  assert(AppleAgxUatEncodeTtbrPair(0u, &roots, &pair) ==
+         AppleAgxUatResultOk);
+  assert(pair.Ttbr0 == 0x10004001ULL);
+  assert(pair.Ttbr1 == 0x10008001ULL);
+  assert(AppleAgxUatEncodeTtbrPair(63u, &roots, &pair) ==
+         AppleAgxUatResultOk);
+  assert(pair.Ttbr0 == 0x003f000010004001ULL);
+  assert(pair.Ttbr1 == 0x003f000010008001ULL);
+  roots.Ttbr1PhysicalAddress = 0x10008001ULL;
+  assert(AppleAgxUatEncodeTtbrPair(0u, &roots, &pair) ==
+         AppleAgxUatResultMisaligned);
+  assert(pair.Ttbr0 == 0x003f000010004001ULL);
+  assert(pair.Ttbr1 == 0x003f000010008001ULL);
+  AppleAgxUatClearTtbrPair(&pair);
+  assert(pair.Ttbr0 == 0ULL && pair.Ttbr1 == 0ULL);
+  AppleAgxUatClearTtbrPair(0);
+
   test_table_descriptor();
   test_page_descriptor_protections();
   test_range_validation();

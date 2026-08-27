@@ -32,6 +32,16 @@ typedef enum _APPLE_AGX_UAT_HALF {
   AppleAgxUatTtbr1 = 1,
 } APPLE_AGX_UAT_HALF;
 
+typedef struct _APPLE_AGX_UAT_ROOTS {
+  unsigned long long Ttbr0PhysicalAddress;
+  unsigned long long Ttbr1PhysicalAddress;
+} APPLE_AGX_UAT_ROOTS;
+
+typedef struct _APPLE_AGX_UAT_TTBR_PAIR {
+  unsigned long long Ttbr0;
+  unsigned long long Ttbr1;
+} APPLE_AGX_UAT_TTBR_PAIR;
+
 APPLE_AGX_UAT_RESULT AppleAgxUatValidateRange(
     unsigned int Context, unsigned long long VirtualAddress,
     unsigned long long PhysicalAddress, unsigned long long Length,
@@ -42,5 +52,9 @@ APPLE_AGX_UAT_RESULT AppleAgxUatEncodePageDescriptor(
     unsigned int Context, unsigned long long PhysicalAddress,
     APPLE_AGX_UAT_PROTECTION Protection,
     unsigned long long *Descriptor);
+APPLE_AGX_UAT_RESULT AppleAgxUatEncodeTtbrPair(
+    unsigned int Context, const APPLE_AGX_UAT_ROOTS *Roots,
+    APPLE_AGX_UAT_TTBR_PAIR *Pair);
+void AppleAgxUatClearTtbrPair(APPLE_AGX_UAT_TTBR_PAIR *Pair);
 
 #endif /* APPLE_AGX_UAT_H */

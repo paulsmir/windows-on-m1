@@ -32,11 +32,6 @@ typedef struct _APPLE_AGX_UAT_ALLOCATOR {
   void (*ReleasePage)(void *Context, const APPLE_AGX_UAT_PAGE *Page);
 } APPLE_AGX_UAT_ALLOCATOR;
 
-typedef struct _APPLE_AGX_UAT_ROOTS {
-  unsigned long long Ttbr0PhysicalAddress;
-  unsigned long long Ttbr1PhysicalAddress;
-} APPLE_AGX_UAT_ROOTS;
-
 APPLE_AGX_UAT_RESULT AppleAgxUatCreateAddressSpace(
     unsigned int Context, const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory, APPLE_AGX_UAT_ROOTS *Roots);

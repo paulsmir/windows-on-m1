@@ -59,6 +59,12 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertEqual(contract.synthetic_mmio, (
             ("power_broker", 0x300000000, 0x1000),
         ))
+        self.assertEqual(contract.firmware_regions, (
+            ("gpu", 0x9FFFB8000, 0x4000),
+            ("shared", 0x9FFF78000, 0x40000),
+            ("handoff", 0x9FFF70000, 0x4000),
+            ("rtkit_private", 0xFFFFFF8000000000, 0x2000000000),
+        ))
         self.assertEqual(
             tuple(route.physical for route in contract.interrupt_routes),
             (563, 564, 565, 566, 579, 576, 575, 578, 577),
@@ -114,6 +120,14 @@ class J313AgxG2ContractTests(unittest.TestCase):
             "#define J313_AGX_G2_INITDATA_VERSION_WORD1 0x1f28u",
             "#define J313_AGX_G2_INITDATA_VERSION_WORD2 0x601u",
             "#define J313_AGX_G2_INITDATA_VERSION_WORD3 0xb0u",
+            "#define J313_AGX_G2_GPU_BASE 0x9fffb8000ULL",
+            "#define J313_AGX_G2_GPU_SIZE 0x4000ULL",
+            "#define J313_AGX_G2_SHARED_BASE 0x9fff78000ULL",
+            "#define J313_AGX_G2_SHARED_SIZE 0x40000ULL",
+            "#define J313_AGX_G2_HANDOFF_BASE 0x9fff70000ULL",
+            "#define J313_AGX_G2_HANDOFF_SIZE 0x4000ULL",
+            "#define J313_AGX_G2_RTKIT_PRIVATE_BASE 0xffffff8000000000ULL",
+            "#define J313_AGX_G2_RTKIT_PRIVATE_SIZE 0x2000000000ULL",
         ):
             self.assertIn(line, rendered)
 
