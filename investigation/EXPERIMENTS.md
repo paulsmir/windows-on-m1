@@ -11865,7 +11865,7 @@ receipts immediately before it.
 
 ### EXP-20260827-138 — J313 AGX mailbox visibility qualification
 
-Status: preregistered at `2026-08-27T15:39:43Z`; hardware not yet run. EXP-137
+Status: completed at `2026-08-27T16:00:10Z`; hypothesis confirmed. EXP-137
 proved the ASC was running before IOP INIT but still received no HELLO. Exact
 comparison against Asahi commit
 `77cb8f24c2381a8abb7272d7bbdec548d6426a8a`, pinned m1n1 `src/asc.c`, and the
@@ -11887,3 +11887,34 @@ Running AppleInput/stornvme/USBXHCI, exact package and signer identity, no Event
 129, and a delayed final postflight. Do not retry or advance GPU ownership. The
 literal contract is
 `documentation/plans/2026-08-27-j313-agx-mailbox-visibility-qualification.md`.
+
+Exactly one corrected package transaction ran from
+`2026-08-27T15:58:50Z` through `2026-08-27T15:58:54Z`; the delayed postflight
+was collected at `2026-08-27T16:00:10Z`. The package was the official signed
+GitHub artifact from run `33089519306`: INF
+`bdda859faf193db12896ba309fa9f20bd247f8b0520c339d05f23c6d18bed160`, SYS
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`, CAT
+`644111b2583b636c5643e39a62c2595e262cfe642c7e6e7cb78dd66d51c7eeab`,
+signer `8E36CF1EC74F76AB5D6532706C59158914AD37A9`. The runner's immediate
+84-millisecond PnP success was only an intermediate receipt; delayed
+postflight correctly observed Problem 43 and `STATUS_IO_TIMEOUT`.
+
+All four mailbox snapshots were valid. A2I `INBOX_CTRL` changed from
+`0x00025501` before IOP INIT (empty, count 0, read/write pointer 5) to
+`0x00105601` immediately after publication (count 1, read pointer 5, write
+pointer 6), then to `0x00026601` at failure (empty, count 0, read/write pointer
+6). I2A `OUTBOX_CTRL` was `0x00023301` at failure (empty, count 0,
+read/write pointer 3). Therefore Windows published the IOP INIT message and
+the running firmware consumed it, but firmware produced no RTKit HELLO. The
+mailbox visibility, barrier, trigger-order and unconsumed-response hypotheses
+are rejected. The failure boundary is now a firmware prerequisite before
+HELLO, with context-zero UAT publication the first source-backed checkpoint.
+
+Eight logical processors and Running AppleInput, stornvme and USBXHCI were
+retained; no critical event or reboot occurred. The delayed query counted 20
+stornvme Event 129 records from the experiment start timestamp, so storage
+health for this transaction is not qualified as clean even though the
+immediate runner saw zero. No retry is permitted. Raw evidence remains under
+ignored `.local/experiments/EXP-20260827-138-agx-mailbox-visibility/`; the
+sanitized verdict is
+`investigation/artifacts/EXP-20260827-138-agx-mailbox-visibility/VERDICT.md`.

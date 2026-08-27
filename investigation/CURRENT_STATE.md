@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T15:39:43Z
+Updated: 2026-08-27T16:00:10Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -50,7 +50,7 @@ This is the bounded session entry point. Detailed history is append-only in
 
 ## Last confirmed boundary
 
-- Experiment: EXP-20260827-137.
+- Experiment: EXP-20260827-138.
 - PnP invoked DriverEntry, AddDevice and StartDevice.
 - Final StartDevice stage: 6.
 - StartDevice/RTKit boot status: `0xC00000B5` (`STATUS_IO_TIMEOUT`).
@@ -58,24 +58,27 @@ This is the bounded session entry point. Detailed history is append-only in
 - RTKit flags: `0x81` (`begun` and `CPU_READY`; no HELLO).
 - Negotiated protocol version: 0.
 - Final ASC CPU-status read succeeded; value `0x2d`.
+- A2I inbox moved from empty at pointer 5, to one queued message, to empty at
+  pointer 6. Firmware therefore consumed IOP INIT.
+- I2A outbox remained empty at pointer 3; firmware produced no HELLO.
 - Bounded stop returned `0xC00000BB` after the incomplete boot.
 - `pnputil` configuration success is not driver success: PnP returned before the
   asynchronous StartDevice timeout became visible.
 
 ## Active hypothesis
 
-EXP-137 proved the ASC reached running and stopped cleared before IOP INIT, but
-HELLO still never arrived. The stopped-to-running timing hypothesis is rejected.
-Exact Asahi, m1n1 and Windows comparison found matching mailbox offsets,
-payload-to-trigger ordering and barrier semantics. EXP-138 will distinguish
-whether IOP INIT is published, remains queued, is consumed without HELLO, or
-leaves an unread I2A response.
+EXP-138 proved mailbox publication and firmware consumption, rejecting timing,
+barrier, trigger-order and unread-response explanations. Asahi and m1n1 create
+and publish the context-zero UAT roots before RTKit boot; the active Windows
+StartDevice path enters RTKit without doing so. Missing or invalid roots in the
+fixed J313 GPU region are now the first falsifiable firmware prerequisite.
 
 ## Single next action
 
-Complete host and official WDK verification of the read-only EXP-138 mailbox
-control receipts, then use the corrected runner for one device hot cycle. Do
-not rerun EXP-137, add delay, or change the RTKit wire protocol.
+Add a read-only, fail-closed snapshot of the two context-zero UAT root words in
+the fixed J313 GPU region before ASC RUN. Do not publish roots, build initdata,
+rerun EXP-138, add delay, or change the RTKit wire protocol until the snapshot
+proves the inherited state.
 
 ## Rollback
 
