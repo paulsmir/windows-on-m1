@@ -8,6 +8,7 @@ CYCLE_RUNNER = (
     ROOT / "drivers" / "apple-agx" / "windows" / "scripts" /
     "cycle-lifecycle-driver.ps1"
 )
+CONTEXT_HELPER = ROOT / "scripts" / "gpu-dev-context.sh"
 
 
 class FastGpuWorkflowTests(unittest.TestCase):
@@ -40,6 +41,20 @@ class FastGpuWorkflowTests(unittest.TestCase):
         self.assertIn('Outcome = "Timeout"', text)
         self.assertNotIn("Start-Sleep -Seconds 8", text)
         self.assertNotIn("/force", text.lower())
+
+    def test_context_helper_is_bounded_and_read_only(self):
+        self.assertTrue(CONTEXT_HELPER.is_file(), "gpu-dev-context.sh is required")
+        text = CONTEXT_HELPER.read_text(encoding="utf-8")
+        self.assertIn("/Users/pavel/public_windows", text)
+        self.assertIn("investigation/CURRENT_STATE.md", text)
+        self.assertIn("git rev-parse", text)
+        self.assertIn("git status --short", text)
+        self.assertIn("git submodule status", text)
+        self.assertIn("investigation/CHANGES.csv", text)
+        self.assertIn("tail -n 6", text)
+        self.assertIn("sed -n '1,220p'", text)
+        for forbidden in ("git pull", "git fetch", "git reset", "git clean", "rm -"):
+            self.assertNotIn(forbidden, text)
 
 
 if __name__ == "__main__":
