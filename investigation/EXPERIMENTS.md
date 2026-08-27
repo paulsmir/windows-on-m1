@@ -12831,3 +12831,46 @@ next investigation is an offline binary and build-environment comparison of the
 exact EXP-130 package that reached StartDevice and this exact rejected package,
 with particular attention to the linked miniport initialization ABI and WDK/MSVC
 toolchain identity.
+
+## EXP-20260828-154 — Restore the full initialization callback ABI cold-first
+
+Status: preregistered; WDK build and hardware sequence pending.
+
+### Evidence and single hypothesis
+
+Offline disassembly of the exact EXP-130 SYS that reached StartDevice and the
+exact EXP-152 SYS rejected by EXP-153 found a decisive binary difference before
+`DxgkInitialize`: EXP-130 zeroes and submits a 1544-byte
+`DRIVER_INITIALIZATION_DATA`, while EXP-152 submits only 1224 bytes.  Both set
+the runtime Version field to WDDM 2.6 and use the same pinned 10.0.28000.2526
+WDK packages.  The size change came from the explicit compile-time WDDM 2.6 ABI
+qualification added after EXP-130, not from source callback assignments or the
+WDK package version.
+
+EXP-154 tests one hypothesis: dxgkrnl requires the complete pinned-WDK callback
+table even while the miniport truthfully advertises only its implemented WDDM
+2.6 runtime surface.  Commit `7b64bce` removes the truncated-layout build mode,
+compiles every profile with the full WDDM 3.0 declaration layout, keeps the
+runtime Version at WDDM 2.6 and fails compilation unless ARM64
+`sizeof(DRIVER_INITIALIZATION_DATA)` is exactly 1544.
+
+### Gates and procedure
+
+1. The exact source commit must pass all 66 Apple AGX host/package tests and an
+   official ARM64 WDK build.  Disassembly of its lifecycle SYS must show the
+   1544-byte zeroing size before `DxgkInitialize`; reject any other size.
+2. Pin SYS/INF/CAT hashes, version, signer and build provenance.  Do not mutate
+   the Air until those identities are recorded.
+3. Repeat the proven EXP-153 recovery staging sequence: remove only an exact
+   disconnected APPL0002 phantom if present, require no present or non-present
+   APPL0002, ordinarily delete only its current INF, and stage the exact EXP-154
+   package without force, uninstall, rescan or device start.  Shut down normally.
+4. Cold boot the unchanged exact G2 candidate once with display=both and
+   debug=monitor.  Do not perform a hot package cycle.
+5. Pass only if natural enumeration reaches StartDevice stage 7 with status
+   `0xC00000BB`, every hardware-owning receipt remains absent, all eight CPUs
+   and native input/NVMe/xHCI remain healthy, and no Event 129 or critical
+   System event occurs.
+
+This experiment authorizes no GPU power, MMIO, firmware, RTKit, UAT, interrupt,
+queue, render or presentation operation.  Failure is terminal without retry.
