@@ -93,8 +93,8 @@ static void test_builds_exact_graph_and_releases(void) {
   assert(graph.Built == 1u);
   assert(graph.DataObjectCount == APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT);
   assert(graph.Inventory.PageCount == 4u);
-  assert(graph.Inventory.MappingCount == 5u);
-  assert(fake.AllocateCount == 9u);
+  assert(graph.Inventory.MappingCount == 7u);
+  assert(fake.AllocateCount == 11u);
   assert(graph.VirtualAddresses[AppleAgxInitdataMemoryEnvelope] ==
          J313_AGX_G2_KERNEL_VA_BASE);
   assert(graph.VirtualAddresses[AppleAgxInitdataMemoryRegionA] ==
@@ -105,6 +105,10 @@ static void test_builds_exact_graph_and_releases(void) {
          J313_AGX_G2_KERNEL_VA_BASE + 0x1c000ULL);
   assert(graph.VirtualAddresses[AppleAgxInitdataMemoryFirmwareStatus] ==
          J313_AGX_G2_KERNEL_VA_BASE + 0x34000ULL);
+  assert(graph.VirtualAddresses[AppleAgxInitdataMemoryFwctlState] ==
+         J313_AGX_G2_KERNEL_VA_BASE + 0x3c000ULL);
+  assert(graph.VirtualAddresses[AppleAgxInitdataMemoryFwctlRing] ==
+         J313_AGX_G2_KERNEL_VA_BASE + 0x44000ULL);
   assert(graph.TtbrPair.Ttbr0 ==
          (graph.Roots.Ttbr0PhysicalAddress | 1ULL));
   assert(graph.TtbrPair.Ttbr1 ==
@@ -123,20 +127,26 @@ static void test_builds_exact_graph_and_releases(void) {
   assert(graph.InitdataVirtualAddress == J313_AGX_G2_KERNEL_VA_BASE);
   assert(graph.InitdataDeviceAddress ==
          graph.DataObjects[AppleAgxInitdataMemoryEnvelope].DeviceAddress);
+  encoded = (unsigned char *)
+      graph.DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress;
+  assert(read_u64(encoded + 0x00u) ==
+         graph.VirtualAddresses[AppleAgxInitdataMemoryFwctlState]);
+  assert(read_u64(encoded + 0x08u) ==
+         graph.VirtualAddresses[AppleAgxInitdataMemoryFwctlRing]);
 
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultOk);
   assert(graph.Built == 0u && graph.DataObjectCount == 0u);
-  assert(fake.FreeCount == 9u);
+  assert(fake.FreeCount == 11u);
   assert_no_active_allocations(&fake);
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultOk);
-  assert(fake.FreeCount == 9u);
+  assert(fake.FreeCount == 11u);
 }
 
 static void test_every_allocation_failure_rolls_back(void) {
   unsigned int fail_call;
-  for (fail_call = 1u; fail_call <= 9u; ++fail_call) {
+  for (fail_call = 1u; fail_call <= 11u; ++fail_call) {
     FAKE_MEMORY fake;
     APPLE_AGX_MEMORY_IO io;
     APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
@@ -184,8 +194,8 @@ static void test_double_build_fails_without_disturbing_owned_graph(void) {
          AppleAgxInitdataMemoryResultOk);
   assert(AppleAgxInitdataMemoryBuild(&graph, &io) ==
          AppleAgxInitdataMemoryResultInvalidArgument);
-  assert(fake.AllocateCount == 9u);
-  assert(graph.Built == 1u && graph.DataObjectCount == 5u);
+  assert(fake.AllocateCount == 11u);
+  assert(graph.Built == 1u && graph.DataObjectCount == 7u);
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultOk);
   assert_no_active_allocations(&fake);
@@ -199,27 +209,27 @@ static void test_failed_release_is_retryable(void) {
   init_fixture(&fake, &io, &graph);
   assert(AppleAgxInitdataMemoryBuild(&graph, &io) ==
          AppleAgxInitdataMemoryResultOk);
-  fake.FailFreeSlot = 9u;
+  fake.FailFreeSlot = 11u;
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultReleaseFailed);
-  assert(graph.Initialized == 1u && graph.DataObjectCount == 5u);
+  assert(graph.Initialized == 1u && graph.DataObjectCount == 7u);
   fake.FailFreeSlot = 0u;
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultOk);
-  assert(fake.FreeCount == 9u);
+  assert(fake.FreeCount == 11u);
   assert_no_active_allocations(&fake);
 
   init_fixture(&fake, &io, &graph);
   assert(AppleAgxInitdataMemoryBuild(&graph, &io) ==
          AppleAgxInitdataMemoryResultOk);
-  fake.FailFreeSlot = 5u;
+  fake.FailFreeSlot = 7u;
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultReleaseFailed);
-  assert(graph.Initialized == 1u && graph.DataObjectCount == 5u);
+  assert(graph.Initialized == 1u && graph.DataObjectCount == 7u);
   fake.FailFreeSlot = 0u;
   assert(AppleAgxInitdataMemoryDestroy(&graph) ==
          AppleAgxInitdataMemoryResultOk);
-  assert(fake.FreeCount == 9u);
+  assert(fake.FreeCount == 11u);
   assert_no_active_allocations(&fake);
 }
 

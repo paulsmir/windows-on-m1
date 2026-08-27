@@ -2,10 +2,11 @@
 #define APPLE_AGX_INITDATA_MEMORY_H
 
 #include "apple_agx_initdata.h"
+#include "apple_agx_firmware_status.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_uat_memory.h"
 
-#define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 5u
+#define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 7u
 #define APPLE_AGX_INITDATA_MEMORY_UAT_PAGE_CAPACITY 8u
 
 typedef enum _APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX {
@@ -14,6 +15,8 @@ typedef enum _APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX {
   AppleAgxInitdataMemoryRegionB,
   AppleAgxInitdataMemoryRegionC,
   AppleAgxInitdataMemoryFirmwareStatus,
+  AppleAgxInitdataMemoryFwctlState,
+  AppleAgxInitdataMemoryFwctlRing,
 } APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX;
 
 typedef enum _APPLE_AGX_INITDATA_MEMORY_RESULT {
@@ -42,6 +45,7 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   APPLE_AGX_UAT_ROOTS Roots;
   APPLE_AGX_UAT_TTBR_PAIR TtbrPair;
   APPLE_AGX_INITDATA_MANIFEST Manifest;
+  APPLE_AGX_FIRMWARE_STATUS_MANIFEST FirmwareStatusManifest;
   unsigned long long InitdataVirtualAddress;
   unsigned long long InitdataDeviceAddress;
   unsigned char Initialized;

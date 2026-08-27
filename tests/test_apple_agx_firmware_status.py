@@ -9,23 +9,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SHARED = ROOT / "drivers" / "apple-agx" / "shared"
 
 
-class AppleAgxInitdataMemoryTests(unittest.TestCase):
-    def test_owned_initdata_graph_suite(self):
+class AppleAgxFirmwareStatusTests(unittest.TestCase):
+    def test_firmware_status_codec_suite(self):
         with tempfile.TemporaryDirectory() as tmp:
-            binary = Path(tmp) / "apple_agx_initdata_memory_test"
+            binary = Path(tmp) / "apple_agx_firmware_status_test"
             command = [
                 os.environ.get("CC", "clang"),
                 "-std=c11", "-Wall", "-Wextra", "-Werror",
                 "-fsanitize=address,undefined",
                 "-I", str(SHARED / "include"),
-                str(SHARED / "tests" / "apple_agx_initdata_memory_test.c"),
-                str(SHARED / "src" / "apple_agx_initdata_memory.c"),
-                str(SHARED / "src" / "apple_agx_initdata.c"),
+                str(SHARED / "tests" / "apple_agx_firmware_status_test.c"),
                 str(SHARED / "src" / "apple_agx_firmware_status.c"),
-                str(SHARED / "src" / "apple_agx_uat_memory.c"),
-                str(SHARED / "src" / "apple_agx_uat_table.c"),
                 str(SHARED / "src" / "apple_agx_uat.c"),
-                str(SHARED / "src" / "apple_agx_memory.c"),
                 "-o", str(binary),
             ]
             subprocess.run(command, check=True, cwd=ROOT)

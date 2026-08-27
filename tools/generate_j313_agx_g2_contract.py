@@ -131,6 +131,9 @@ INITDATA_OBJECT_SIZES = (
     ("REGION_C", 0x12394),
     ("FW_STATUS", 0x80),
 )
+FWCTL_STATE_SIZE = 0x30
+FWCTL_MESSAGE_SIZE = 0x14
+FWCTL_RING_ENTRY_COUNT = 0x100
 
 
 class G2ContractError(ValueError):
@@ -381,6 +384,9 @@ def _validate_windows_binary_contract(contract):
         raise G2ContractError("rtkit_private end overflows the VA space")
     if any(size <= 0 for _, size in INITDATA_OBJECT_SIZES):
         raise G2ContractError("initdata object sizes must be positive")
+    if (FWCTL_STATE_SIZE <= 0 or FWCTL_MESSAGE_SIZE <= 0 or
+            FWCTL_RING_ENTRY_COUNT <= 0):
+        raise G2ContractError("firmware-control sizes must be positive")
 
 
 def render_windows_header(contract):
@@ -420,6 +426,12 @@ def render_windows_header(contract):
           for index, word in enumerate(INITDATA_VERSION_WORDS)),
         *(f"#define J313_AGX_G2_INITDATA_{name}_SIZE 0x{size:x}u"
           for name, size in INITDATA_OBJECT_SIZES),
+        f"#define J313_AGX_G2_FWCTL_STATE_SIZE 0x{FWCTL_STATE_SIZE:x}u",
+        f"#define J313_AGX_G2_FWCTL_MESSAGE_SIZE 0x{FWCTL_MESSAGE_SIZE:x}u",
+        ("#define J313_AGX_G2_FWCTL_RING_ENTRY_COUNT "
+         f"0x{FWCTL_RING_ENTRY_COUNT:x}u"),
+        ("#define J313_AGX_G2_FWCTL_RING_SIZE "
+         f"0x{FWCTL_MESSAGE_SIZE * FWCTL_RING_ENTRY_COUNT:x}u"),
         "",
     ]
     for name, base, size in (contract.acpi_mmio + contract.mmio_subregions +

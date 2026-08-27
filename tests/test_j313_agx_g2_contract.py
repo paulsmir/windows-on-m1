@@ -133,6 +133,10 @@ class J313AgxG2ContractTests(unittest.TestCase):
             "#define J313_AGX_G2_INITDATA_REGION_B_SIZE 0x6bc0u",
             "#define J313_AGX_G2_INITDATA_REGION_C_SIZE 0x12394u",
             "#define J313_AGX_G2_INITDATA_FW_STATUS_SIZE 0x80u",
+            "#define J313_AGX_G2_FWCTL_STATE_SIZE 0x30u",
+            "#define J313_AGX_G2_FWCTL_MESSAGE_SIZE 0x14u",
+            "#define J313_AGX_G2_FWCTL_RING_ENTRY_COUNT 0x100u",
+            "#define J313_AGX_G2_FWCTL_RING_SIZE 0x1400u",
         ):
             self.assertIn(line, rendered)
 

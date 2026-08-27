@@ -11,6 +11,8 @@ static const unsigned long long AppleAgxInitdataMemoryContentSizes[
     J313_AGX_G2_INITDATA_REGION_B_SIZE,
     J313_AGX_G2_INITDATA_REGION_C_SIZE,
     J313_AGX_G2_INITDATA_FW_STATUS_SIZE,
+    J313_AGX_G2_FWCTL_STATE_SIZE,
+    J313_AGX_G2_FWCTL_RING_SIZE,
 };
 
 static unsigned char AppleAgxInitdataMemoryStorageIsEmpty(
@@ -49,6 +51,9 @@ static void AppleAgxInitdataMemoryClearPublished(
   Graph->Roots.Ttbr1PhysicalAddress = 0ULL;
   AppleAgxUatClearTtbrPair(&Graph->TtbrPair);
   Graph->Manifest.EncodedSize = 0u;
+  Graph->FirmwareStatusManifest.EncodedSize = 0u;
+  Graph->FirmwareStatusManifest.StateAddress = 0ULL;
+  Graph->FirmwareStatusManifest.RingAddress = 0ULL;
   for (index = 0u; index < 4u; ++index) {
     Graph->Manifest.VersionWords[index] = 0u;
     Graph->Manifest.ReferencedAddresses[index] = 0ULL;
@@ -74,6 +79,8 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
   APPLE_AGX_INITDATA_INPUT input;
   APPLE_AGX_UAT_RESULT uat_result;
   APPLE_AGX_INITDATA_RESULT initdata_result;
+  APPLE_AGX_FIRMWARE_STATUS_INPUT firmware_status_input;
+  APPLE_AGX_FIRMWARE_STATUS_RESULT firmware_status_result;
   unsigned long long virtual_address;
   unsigned int index;
 
@@ -141,6 +148,20 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
                      ? AppleAgxInitdataMemoryResultAllocationFailed
                      : AppleAgxInitdataMemoryResultUatFailed);
   }
+
+  firmware_status_input.StateAddress =
+      Graph->VirtualAddresses[AppleAgxInitdataMemoryFwctlState];
+  firmware_status_input.RingAddress =
+      Graph->VirtualAddresses[AppleAgxInitdataMemoryFwctlRing];
+  firmware_status_result = AppleAgxFirmwareStatusEncodeG13V13_5(
+      &firmware_status_input,
+      (unsigned char *)
+          Graph->DataObjects[AppleAgxInitdataMemoryFirmwareStatus].CpuAddress,
+      J313_AGX_G2_INITDATA_FW_STATUS_SIZE,
+      &Graph->FirmwareStatusManifest);
+  if (firmware_status_result != AppleAgxFirmwareStatusResultOk)
+    return AppleAgxInitdataMemoryRollback(
+        Graph, AppleAgxInitdataMemoryResultEncodeFailed);
 
   input.TaggedBufferAddress =
       Graph->VirtualAddresses[AppleAgxInitdataMemoryRegionA];
