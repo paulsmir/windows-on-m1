@@ -11862,3 +11862,28 @@ intermediate receipt because it started the package, scanned again and then
 restarted the device. Commit `b4906b9d7468b00d35dfc10411b91a4c9b70064d`
 reduces future iterations to one add/install transaction and clears preparation
 receipts immediately before it.
+
+### EXP-20260827-138 — J313 AGX mailbox visibility qualification
+
+Status: preregistered at `2026-08-27T15:39:43Z`; hardware not yet run. EXP-137
+proved the ASC was running before IOP INIT but still received no HELLO. Exact
+comparison against Asahi commit
+`77cb8f24c2381a8abb7272d7bbdec548d6426a8a`, pinned m1n1 `src/asc.c`, and the
+official Windows `WRITE_REGISTER_ULONG64` barrier contract found matching A2I
+offsets, `payload -> endpoint/trigger` ordering, and barrier semantics.
+
+The only changed variable is read-only mailbox-control evidence: A2I
+`INBOX_CTRL` before IOP INIT, immediately after publication, and at failure,
+plus I2A `OUTBOX_CTRL` at failure. Passing diagnostics require all four valid
+bits. Pointer/count movement will distinguish an unpublished message, a queued
+but unconsumed message, a consumed message without HELLO, or an unprocessed I2A
+response. No message, timeout, power, RUN, cleanup, or fail-closed behavior may
+change.
+
+After host and official WDK verification, use commit
+`b4906b9d7468b00d35dfc10411b91a4c9b70064d` or later for exactly one
+single-transaction Windows package cycle without reboot. Require eight CPUs,
+Running AppleInput/stornvme/USBXHCI, exact package and signer identity, no Event
+129, and a delayed final postflight. Do not retry or advance GPU ownership. The
+literal contract is
+`documentation/plans/2026-08-27-j313-agx-mailbox-visibility-qualification.md`.

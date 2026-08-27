@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T15:27:27Z
+Updated: 2026-08-27T15:39:43Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -66,14 +66,16 @@ This is the bounded session entry point. Detailed history is append-only in
 
 EXP-137 proved the ASC reached running and stopped cleared before IOP INIT, but
 HELLO still never arrived. The stopped-to-running timing hypothesis is rejected.
-The next source-first boundary is whether the IOP-init mailbox write and
-doorbell are visible to the running GPU firmware.
+Exact Asahi, m1n1 and Windows comparison found matching mailbox offsets,
+payload-to-trigger ordering and barrier semantics. EXP-138 will distinguish
+whether IOP INIT is published, remains queued, is consumed without HELLO, or
+leaves an unread I2A response.
 
 ## Single next action
 
-Compare the exact Windows mailbox write and doorbell sequence with current
-Asahi and m1n1, then add one read-only durable receipt that distinguishes a
-published message from firmware consumption. Do not rerun EXP-137 or add delay.
+Complete host and official WDK verification of the read-only EXP-138 mailbox
+control receipts, then use the corrected runner for one device hot cycle. Do
+not rerun EXP-137, add delay, or change the RTKit wire protocol.
 
 ## Rollback
 
