@@ -7,7 +7,8 @@ param(
     [switch]$FirmwareQualification,
     [switch]$PoweredStatusQualification,
     [switch]$RtkitQualification,
-    [switch]$UatSnapshotQualification
+    [switch]$UatSnapshotQualification,
+    [switch]$Wddm26AbiQualification
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,7 @@ $firmwareQualification = if ($FirmwareQualification) { "true" } else { "false" }
 $poweredStatusQualification = if ($PoweredStatusQualification) { "true" } else { "false" }
 $rtkitQualification = if ($RtkitQualification) { "true" } else { "false" }
 $uatSnapshotQualification = if ($UatSnapshotQualification) { "true" } else { "false" }
+$wddm26AbiQualification = if ($Wddm26AbiQualification) { "true" } else { "false" }
 
 & msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true `
@@ -29,7 +31,8 @@ $uatSnapshotQualification = if ($UatSnapshotQualification) { "true" } else { "fa
     "/p:AppleAgxFirmwareQualification=$firmwareQualification" `
     "/p:AppleAgxPoweredStatusQualification=$poweredStatusQualification" `
     "/p:AppleAgxRtkitQualification=$rtkitQualification" `
-    "/p:AppleAgxUatSnapshotQualification=$uatSnapshotQualification"
+    "/p:AppleAgxUatSnapshotQualification=$uatSnapshotQualification" `
+    "/p:AppleAgxWddm26AbiQualification=$wddm26AbiQualification"
 if ($LASTEXITCODE -ne 0) {
     throw "AppleAgx ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

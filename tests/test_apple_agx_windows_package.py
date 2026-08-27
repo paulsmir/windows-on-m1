@@ -39,6 +39,26 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
         self.assertRegex(driver, r"return\s+status\s*;")
 
+    def test_lifecycle_profile_can_restore_the_proven_wddm26_compile_abi(self):
+        project = self.read("AppleAgx.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+
+        self.assertIn("AppleAgxWddm26AbiQualification", project)
+        self.assertIn("AppleAgxDdiInterfaceVersion", project)
+        self.assertIn(
+            "DXGKDDI_INTERFACE_VERSION_WDDM2_6",
+            project,
+        )
+        self.assertIn(
+            "DXGKDDI_INTERFACE_VERSION=$(AppleAgxDdiInterfaceVersion)",
+            project,
+        )
+        self.assertIn("[switch]$Wddm26AbiQualification", build)
+        self.assertIn(
+            "/p:AppleAgxWddm26AbiQualification=$wddm26AbiQualification",
+            build,
+        )
+
     def test_driver_entry_is_declared_before_init_section_pragma(self):
         driver = self.read("src/driver.c")
         declaration = driver.index("DRIVER_INITIALIZE DriverEntry;")
