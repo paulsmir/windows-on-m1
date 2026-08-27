@@ -35,7 +35,8 @@
     defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION) ||                           \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
     defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
-    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION) ||                              \
+    defined(APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION)
 #define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
 #endif
 
@@ -220,6 +221,19 @@ NTSTATUS AppleAgxWindowsUatPublicationInitialize(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _Out_ APPLE_AGX_WINDOWS_UAT_PUBLICATION *Publication,
     _Out_ APPLE_AGX_UAT_PUBLICATION_IO *Io);
+#ifdef APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION
+NTSTATUS AppleAgxReadConfigSnapshot(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _In_ PHYSICAL_ADDRESS PowerBrokerAddress,
+    _Out_ APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
+NTSTATUS AppleAgxWindowsInspectUatRoots(
+    _In_ const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
+    _Out_ APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots);
+void AppleAgxRecordUatRootSnapshot(
+    _In_ PDEVICE_OBJECT DeviceObject, _In_ NTSTATUS ConfigStatus,
+    _In_ NTSTATUS SnapshotStatus,
+    _In_opt_ const APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots);
+#endif
 #ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
 NTSTATUS AppleAgxQualifyRtkitReadyStop(
     _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength,

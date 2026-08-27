@@ -240,6 +240,36 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   }
 #endif
 
+#ifdef APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION
+  {
+    APPLE_AGX_CONFIG_SNAPSHOT configSnapshot = {0};
+    APPLE_AGX_UAT_ROOT_SNAPSHOT rootSnapshot = {0};
+    PHYSICAL_ADDRESS powerBrokerAddress = {0};
+    NTSTATUS configStatus;
+    NTSTATUS snapshotStatus = STATUS_UNSUCCESSFUL;
+
+    status = AppleAgxGetPowerBrokerAddress(deviceInfo.TranslatedResourceList,
+                                           &powerBrokerAddress);
+    configStatus = status;
+    if (NT_SUCCESS(configStatus))
+      configStatus = AppleAgxReadConfigSnapshot(
+          DxgkInterface, powerBrokerAddress, &configSnapshot);
+    if (NT_SUCCESS(configStatus))
+      snapshotStatus = AppleAgxWindowsInspectUatRoots(
+          &configSnapshot, &rootSnapshot);
+    AppleAgxRecordUatRootSnapshot(adapter->PhysicalDeviceObject, configStatus,
+                                  snapshotStatus, &rootSnapshot);
+    if (!NT_SUCCESS(configStatus)) {
+      AppleAgxStateInitialize(&adapter->State);
+      return configStatus;
+    }
+    if (!NT_SUCCESS(snapshotStatus)) {
+      AppleAgxStateInitialize(&adapter->State);
+      return snapshotStatus;
+    }
+  }
+#endif
+
 #ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
   {
     APPLE_AGX_RTKIT_QUALIFICATION_RESULT rtkitResult = {0};

@@ -124,8 +124,63 @@ static void test_fail_closed_and_retryable_unmap(void) {
   assert(state.Active == 0u);
 }
 
+static void test_snapshot_is_read_only_and_unmaps(void) {
+  FAKE_PUBLICATION fake;
+  APPLE_AGX_UAT_PUBLICATION_IO io;
+  APPLE_AGX_UAT_ROOT_SNAPSHOT roots;
+  APPLE_AGX_CONFIG_SNAPSHOT config = snapshot();
+  unsigned char before[J313_AGX_G2_GPU_SIZE];
+
+  memset(&fake, 0, sizeof(fake));
+  memset(&roots, 0, sizeof(roots));
+  write_u64(fake.Region, 0x10004001ULL);
+  write_u64(fake.Region + 8u, 0x10008001ULL);
+  memcpy(before, fake.Region, sizeof(before));
+  io = publication_io(&fake);
+
+  assert(AppleAgxUatInspectJ313(&config, &io, &roots) ==
+         AppleAgxUatPublicationResultOk);
+  assert(roots.Ttbr0 == 0x10004001ULL);
+  assert(roots.Ttbr1 == 0x10008001ULL);
+  assert(roots.PairValid == 1u);
+  assert(fake.MapCount == 1u && fake.BarrierCount == 2u &&
+         fake.UnmapCount == 1u);
+  assert(memcmp(before, fake.Region, sizeof(before)) == 0);
+}
+
+static void test_snapshot_fails_closed(void) {
+  FAKE_PUBLICATION fake;
+  APPLE_AGX_UAT_PUBLICATION_IO io;
+  APPLE_AGX_UAT_ROOT_SNAPSHOT roots;
+  APPLE_AGX_CONFIG_SNAPSHOT config = snapshot();
+
+  memset(&fake, 0, sizeof(fake));
+  memset(&roots, 0xa5, sizeof(roots));
+  io = publication_io(&fake);
+  assert(AppleAgxUatInspectJ313(0, &io, &roots) ==
+         AppleAgxUatPublicationResultInvalidArgument);
+  assert(fake.MapCount == 0u);
+
+  fake.FailMap = 1u;
+  memset(&roots, 0xa5, sizeof(roots));
+  assert(AppleAgxUatInspectJ313(&config, &io, &roots) ==
+         AppleAgxUatPublicationResultMapFailed);
+  assert(roots.Ttbr0 == 0ULL && roots.Ttbr1 == 0ULL &&
+         roots.PairValid == 0u);
+
+  fake.FailMap = 0u;
+  fake.FailUnmap = 1u;
+  memset(&roots, 0, sizeof(roots));
+  assert(AppleAgxUatInspectJ313(&config, &io, &roots) ==
+         AppleAgxUatPublicationResultUnmapFailed);
+  assert(roots.Ttbr0 == 0ULL && roots.Ttbr1 == 0ULL &&
+         roots.PairValid == 0u);
+}
+
 int main(void) {
   test_publish_and_restore_exact_context_zero_pair();
   test_fail_closed_and_retryable_unmap();
+  test_snapshot_is_read_only_and_unmaps();
+  test_snapshot_fails_closed();
   return 0;
 }

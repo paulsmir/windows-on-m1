@@ -30,6 +30,7 @@ jobs:
             firmware_qualification: false
             powered_status_qualification: false
             rtkit_qualification: false
+            uat_snapshot_qualification: false
             artifact: AppleAgx-ARM64-Debug
           - name: power-qualification
             qualification: true
@@ -37,6 +38,8 @@ jobs:
             lifecycle_qualification: false
             firmware_qualification: false
             powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
             artifact: AppleAgx-ARM64-PowerQualification
           - name: mmio-qualification
             qualification: false
@@ -44,6 +47,8 @@ jobs:
             lifecycle_qualification: false
             firmware_qualification: false
             powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
             artifact: AppleAgx-ARM64-MmioQualification
           - name: lifecycle-qualification
             qualification: false
@@ -51,6 +56,8 @@ jobs:
             lifecycle_qualification: true
             firmware_qualification: false
             powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
             artifact: AppleAgx-ARM64-LifecycleQualification
           - name: firmware-qualification
             qualification: false
@@ -58,6 +65,8 @@ jobs:
             lifecycle_qualification: false
             firmware_qualification: true
             powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
             artifact: AppleAgx-ARM64-FirmwareQualification
           - name: powered-status-qualification
             qualification: false
@@ -65,8 +74,9 @@ jobs:
             lifecycle_qualification: false
             firmware_qualification: false
             powered_status_qualification: true
-            artifact: AppleAgx-ARM64-PoweredStatusQualification
             rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-PoweredStatusQualification
           - name: rtkit-qualification
             qualification: false
             mmio_qualification: false
@@ -74,7 +84,17 @@ jobs:
             firmware_qualification: false
             powered_status_qualification: false
             rtkit_qualification: true
+            uat_snapshot_qualification: false
             artifact: AppleAgx-ARM64-RtkitQualification
+          - name: uat-snapshot-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: true
+            artifact: AppleAgx-ARM64-UatSnapshotQualification
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -113,9 +133,10 @@ jobs:
           /p:AppleAgxFirmwareQualification=${{ matrix.firmware_qualification }}
           /p:AppleAgxPoweredStatusQualification=${{ matrix.powered_status_qualification }}
           /p:AppleAgxRtkitQualification=${{ matrix.rtkit_qualification }}
+          /p:AppleAgxUatSnapshotQualification=${{ matrix.uat_snapshot_qualification }}
 
       - name: Verify WDK qualification signature provenance
-        if: matrix.qualification == true || matrix.mmio_qualification == true || matrix.lifecycle_qualification == true || matrix.firmware_qualification == true || matrix.powered_status_qualification == true || matrix.rtkit_qualification == true
+        if: matrix.qualification == true || matrix.mmio_qualification == true || matrix.lifecycle_qualification == true || matrix.firmware_qualification == true || matrix.powered_status_qualification == true || matrix.rtkit_qualification == true || matrix.uat_snapshot_qualification == true
         timeout-minutes: 2
         shell: pwsh
         run: |

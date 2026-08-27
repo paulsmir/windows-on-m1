@@ -35,6 +35,39 @@ static unsigned char AppleAgxUatPublicationIoValid(
                          io->Unmap != 0);
 }
 
+APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatInspectJ313(
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
+    const APPLE_AGX_UAT_PUBLICATION_IO *Io,
+    APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots) {
+  APPLE_AGX_UAT_TTBR_PAIR pair;
+  volatile unsigned char *mapped = 0;
+
+  if (Roots == 0)
+    return AppleAgxUatPublicationResultInvalidArgument;
+  Roots->Ttbr0 = 0ULL;
+  Roots->Ttbr1 = 0ULL;
+  Roots->PairValid = 0u;
+  if (Snapshot == 0 || AppleAgxUatPublicationIoValid(Io) == 0u ||
+      Snapshot->GpuRegionBase != J313_AGX_G2_GPU_BASE)
+    return AppleAgxUatPublicationResultInvalidArgument;
+  if (Io->Map(Io->Context, Snapshot->GpuRegionBase,
+              (unsigned int)J313_AGX_G2_GPU_SIZE, &mapped) == 0u ||
+      mapped == 0)
+    return AppleAgxUatPublicationResultMapFailed;
+
+  Io->Barrier(Io->Context);
+  pair.Ttbr0 = AppleAgxUatPublicationReadU64(mapped);
+  pair.Ttbr1 = AppleAgxUatPublicationReadU64(mapped + 8u);
+  Io->Barrier(Io->Context);
+  if (Io->Unmap(Io->Context, mapped) == 0u)
+    return AppleAgxUatPublicationResultUnmapFailed;
+
+  Roots->Ttbr0 = pair.Ttbr0;
+  Roots->Ttbr1 = pair.Ttbr1;
+  Roots->PairValid = AppleAgxUatPublicationPairValid(&pair);
+  return AppleAgxUatPublicationResultOk;
+}
+
 APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313(
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
     const APPLE_AGX_UAT_TTBR_PAIR *Pair,

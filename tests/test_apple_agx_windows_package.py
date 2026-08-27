@@ -321,6 +321,69 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("DxgkCbUnmapMemory", source)
         self.assertNotIn("AppleAgxWindowsUatPublicationInitialize", adapter)
 
+    def test_uat_root_snapshot_profile_is_read_only_and_isolated(self):
+        project = self.read("AppleAgx.vcxproj")
+        header = self.read("include/apple_agx_driver.h")
+        adapter = self.read("src/adapter.c")
+        transport = self.read("src/uat_publication_windows.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
+        build = self.read("scripts/build-driver.ps1")
+        workflow = WORKFLOW.read_text()
+
+        self.assertIn("AppleAgxUatSnapshotQualification", project)
+        self.assertIn("APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION=1", project)
+        self.assertIn("[switch]$UatSnapshotQualification", build)
+        self.assertIn("AppleAgx-ARM64-UatSnapshotQualification", workflow)
+        self.assertIn(
+            "/p:AppleAgxUatSnapshotQualification=${{ matrix.uat_snapshot_qualification }}",
+            workflow,
+        )
+
+        self.assertIn("AppleAgxReadConfigSnapshot", header)
+        self.assertIn("AppleAgxWindowsInspectUatRoots", header)
+        self.assertIn("AppleAgxRecordUatRootSnapshot", header)
+        self.assertIn("MmMapIoSpaceEx", transport)
+        self.assertIn("PAGE_READONLY", transport)
+        self.assertIn("PAGE_NOCACHE", transport)
+        self.assertIn("MmUnmapIoSpace", transport)
+        self.assertIn("AppleAgxUatInspectJ313", transport)
+
+        start = adapter.index(
+            "#ifdef APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION"
+        )
+        end = adapter.index("#endif", start)
+        qualification = adapter[start:end]
+        for required in (
+            "AppleAgxGetPowerBrokerAddress",
+            "AppleAgxReadConfigSnapshot",
+            "AppleAgxWindowsInspectUatRoots",
+            "AppleAgxRecordUatRootSnapshot",
+        ):
+            self.assertIn(required, qualification)
+        self.assertLess(
+            qualification.index("AppleAgxReadConfigSnapshot"),
+            qualification.index("AppleAgxWindowsInspectUatRoots"),
+        )
+        for forbidden in (
+            "AppleAgxPowerSessionBegin",
+            "AppleAgxQualifyRtkitReadyStop",
+            "AppleAgxUatPublishJ313",
+            "AppleAgxInitdataMemoryBuild",
+            "AppleAgxAscSetRun",
+            "AppleAgxAscSend",
+        ):
+            self.assertNotIn(forbidden, qualification)
+        for receipt in (
+            "Wom1UatConfigStatus",
+            "Wom1UatSnapshotStatus",
+            "Wom1UatTtbr0Low",
+            "Wom1UatTtbr0High",
+            "Wom1UatTtbr1Low",
+            "Wom1UatTtbr1High",
+            "Wom1UatPairValid",
+        ):
+            self.assertIn(receipt, diagnostics)
+
     def test_mmio_qualification_is_opt_in_inert_and_fail_closed(self):
         adapter = self.read("src/adapter.c")
         mmio_path = WINDOWS / "src" / "mmio.c"
@@ -726,13 +789,13 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "Wom1PowerReleaseStatus",
         ):
             self.assertIn(name, diagnostics)
-        self.assertEqual(
-            adapter.count("PHYSICAL_ADDRESS powerBrokerAddress = {0};"), 3
-        )
-
         start = adapter.index("#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION")
         end = adapter.index("#endif", start)
         qualification = adapter[start:end]
+        self.assertEqual(
+            qualification.count("PHYSICAL_ADDRESS powerBrokerAddress = {0};"),
+            1,
+        )
         for required in (
             "AppleAgxQualifyMmioMapping",
             "AppleAgxPowerSessionBegin",

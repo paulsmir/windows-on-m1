@@ -166,6 +166,29 @@ void AppleAgxRecordRtkitQualification(
 }
 #endif
 
+#ifdef APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION
+void AppleAgxRecordUatRootSnapshot(
+    PDEVICE_OBJECT DeviceObject, NTSTATUS ConfigStatus,
+    NTSTATUS SnapshotStatus, const APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots) {
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatConfigStatus",
+                                     (ULONG)ConfigStatus);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatSnapshotStatus",
+                                     (ULONG)SnapshotStatus);
+  if (!NT_SUCCESS(SnapshotStatus) || Roots == NULL)
+    return;
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatTtbr0Low",
+                                     (ULONG)Roots->Ttbr0);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatTtbr0High",
+                                     (ULONG)(Roots->Ttbr0 >> 32));
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatTtbr1Low",
+                                     (ULONG)Roots->Ttbr1);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatTtbr1High",
+                                     (ULONG)(Roots->Ttbr1 >> 32));
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1UatPairValid",
+                                     Roots->PairValid);
+}
+#endif
+
 #ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
 static void AppleAgxWriteDiagnosticDwordToKey(HANDLE Key, PCWSTR ValueName,
                                               ULONG Value) {

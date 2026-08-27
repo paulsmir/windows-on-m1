@@ -31,6 +31,17 @@ typedef struct _APPLE_AGX_UAT_PUBLICATION_STATE {
   unsigned char Active;
 } APPLE_AGX_UAT_PUBLICATION_STATE;
 
+typedef struct _APPLE_AGX_UAT_ROOT_SNAPSHOT {
+  unsigned long long Ttbr0;
+  unsigned long long Ttbr1;
+  unsigned char PairValid;
+} APPLE_AGX_UAT_ROOT_SNAPSHOT;
+
+APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatInspectJ313(
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
+    const APPLE_AGX_UAT_PUBLICATION_IO *Io,
+    APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots);
+
 APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313(
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
     const APPLE_AGX_UAT_TTBR_PAIR *Pair,
