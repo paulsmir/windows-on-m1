@@ -137,7 +137,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         positions = [header.index(include) for include in ordered]
         self.assertEqual(positions, sorted(positions))
 
-    def test_skeleton_registers_only_fail_closed_lifecycle_callbacks(self):
+    def test_full_kmd_registers_fail_closed_render_only_contract(self):
         driver = self.read("src/driver.c")
         required = (
             "DxgkDdiAddDevice", "DxgkDdiStartDevice", "DxgkDdiStopDevice",
@@ -146,17 +146,32 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "DxgkDdiQueryChildRelations", "DxgkDdiQueryChildStatus",
             "DxgkDdiQueryDeviceDescriptor", "DxgkDdiSetPowerState",
             "DxgkDdiResetDevice", "DxgkDdiUnload",
-            "DxgkDdiQueryAdapterInfo",
+            "DxgkDdiQueryAdapterInfo", "DxgkDdiNotifyAcpiEvent",
+            "DxgkDdiQueryInterface", "DxgkDdiControlEtwLogging",
+            "DxgkDdiCreateDevice", "DxgkDdiDestroyDevice",
+            "DxgkDdiCreateAllocation", "DxgkDdiDestroyAllocation",
+            "DxgkDdiDescribeAllocation",
+            "DxgkDdiGetStandardAllocationDriverData",
+            "DxgkDdiOpenAllocation", "DxgkDdiCloseAllocation",
+            "DxgkDdiPatch", "DxgkDdiSubmitCommand",
+            "DxgkDdiBuildPagingBuffer", "DxgkDdiPreemptCommand",
+            "DxgkDdiRender", "DxgkDdiPresent",
+            "DxgkDdiResetFromTimeout", "DxgkDdiRestartFromTimeout",
+            "DxgkDdiEscape", "DxgkDdiCollectDbgInfo",
+            "DxgkDdiQueryCurrentFence", "DxgkDdiControlInterrupt",
+            "DxgkDdiCreateContext", "DxgkDdiDestroyContext",
+            "DxgkDdiRenderKm", "DxgkDdiQueryDependentEngineGroup",
+            "DxgkDdiQueryEngineStatus", "DxgkDdiResetEngine",
+            "DxgkDdiCancelCommand", "DxgkDdiSetPowerComponentFState",
+            "DxgkDdiPowerRuntimeControlRequest", "DxgkDdiGetNodeMetadata",
+            "DxgkDdiSubmitCommandVirtual", "DxgkDdiCreateProcess",
+            "DxgkDdiDestroyProcess", "DxgkDdiCalibrateGpuClock",
+            "DxgkDdiSetStablePowerState",
         )
         for callback in required:
             self.assertRegex(driver, rf"initialization\.{callback}\s*=")
 
-        forbidden = (
-            "DxgkDdiCreateDevice", "DxgkDdiCreateAllocation",
-            "DxgkDdiCreateContext", "DxgkDdiRender",
-            "DxgkDdiSubmitCommand", "DxgkDdiSubmitCommandVirtual",
-            "DxgkDdiPresent",
-        )
+        forbidden = ("DxgkDdiPresentDisplayOnly",)
         for callback in forbidden:
             self.assertNotRegex(driver, rf"initialization\.{callback}\s*=")
 

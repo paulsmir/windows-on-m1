@@ -27,6 +27,50 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiResetDevice = AppleAgxDdiResetDevice;
   initialization.DxgkDdiUnload = AppleAgxDdiUnload;
   initialization.DxgkDdiQueryAdapterInfo = AppleAgxDdiQueryAdapterInfo;
+  initialization.DxgkDdiNotifyAcpiEvent = AppleAgxDdiNotifyAcpiEvent;
+  initialization.DxgkDdiQueryInterface = AppleAgxDdiQueryInterface;
+  initialization.DxgkDdiControlEtwLogging = AppleAgxDdiControlEtwLogging;
+  initialization.DxgkDdiCreateDevice = AppleAgxDdiCreateDevice;
+  initialization.DxgkDdiDestroyDevice = AppleAgxDdiDestroyDevice;
+  initialization.DxgkDdiCreateAllocation = AppleAgxDdiCreateAllocation;
+  initialization.DxgkDdiDestroyAllocation = AppleAgxDdiDestroyAllocation;
+  initialization.DxgkDdiDescribeAllocation = AppleAgxDdiDescribeAllocation;
+  initialization.DxgkDdiGetStandardAllocationDriverData =
+      AppleAgxDdiGetStandardAllocationDriverData;
+  initialization.DxgkDdiOpenAllocation = AppleAgxDdiOpenAllocation;
+  initialization.DxgkDdiCloseAllocation = AppleAgxDdiCloseAllocation;
+  initialization.DxgkDdiPatch = AppleAgxDdiPatch;
+  initialization.DxgkDdiSubmitCommand = AppleAgxDdiSubmitCommand;
+  initialization.DxgkDdiBuildPagingBuffer = AppleAgxDdiBuildPagingBuffer;
+  initialization.DxgkDdiPreemptCommand = AppleAgxDdiPreemptCommand;
+  initialization.DxgkDdiRender = AppleAgxDdiRender;
+  initialization.DxgkDdiPresent = AppleAgxDdiPresent;
+  initialization.DxgkDdiResetFromTimeout = AppleAgxDdiResetFromTimeout;
+  initialization.DxgkDdiRestartFromTimeout = AppleAgxDdiRestartFromTimeout;
+  initialization.DxgkDdiEscape = AppleAgxDdiEscape;
+  initialization.DxgkDdiCollectDbgInfo = AppleAgxDdiCollectDbgInfo;
+  initialization.DxgkDdiQueryCurrentFence = AppleAgxDdiQueryCurrentFence;
+  initialization.DxgkDdiControlInterrupt = AppleAgxDdiControlInterrupt;
+  initialization.DxgkDdiCreateContext = AppleAgxDdiCreateContext;
+  initialization.DxgkDdiDestroyContext = AppleAgxDdiDestroyContext;
+  initialization.DxgkDdiRenderKm = AppleAgxDdiRenderKm;
+  initialization.DxgkDdiQueryDependentEngineGroup =
+      AppleAgxDdiQueryDependentEngineGroup;
+  initialization.DxgkDdiQueryEngineStatus = AppleAgxDdiQueryEngineStatus;
+  initialization.DxgkDdiResetEngine = AppleAgxDdiResetEngine;
+  initialization.DxgkDdiCancelCommand = AppleAgxDdiCancelCommand;
+  initialization.DxgkDdiSetPowerComponentFState =
+      AppleAgxDdiSetPowerComponentFState;
+  initialization.DxgkDdiPowerRuntimeControlRequest =
+      AppleAgxDdiPowerRuntimeControlRequest;
+  initialization.DxgkDdiGetNodeMetadata = AppleAgxDdiGetNodeMetadata;
+  initialization.DxgkDdiSubmitCommandVirtual =
+      AppleAgxDdiSubmitCommandVirtual;
+  initialization.DxgkDdiCreateProcess = AppleAgxDdiCreateProcess;
+  initialization.DxgkDdiDestroyProcess = AppleAgxDdiDestroyProcess;
+  initialization.DxgkDdiCalibrateGpuClock = AppleAgxDdiCalibrateGpuClock;
+  initialization.DxgkDdiSetStablePowerState =
+      AppleAgxDdiSetStablePowerState;
 
 #ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
   AppleAgxRecordDriverEntryBoundary(RegistryPath, 1, STATUS_PENDING);

@@ -74,6 +74,54 @@ DXGKDDI_RESET_DEVICE AppleAgxDdiResetDevice;
 DXGKDDI_UNLOAD AppleAgxDdiUnload;
 DXGKDDI_QUERYADAPTERINFO AppleAgxDdiQueryAdapterInfo;
 
+/*
+ * A full WDDM miniport must publish the render-only callback contract before
+ * dxgkrnl will start the adapter.  These entry points intentionally remain
+ * fail-closed: they validate no hardware, create no GPU objects, touch no
+ * registers, and return STATUS_NOT_SUPPORTED until their individual contracts
+ * are implemented and qualified.
+ */
+DXGKDDI_NOTIFY_ACPI_EVENT AppleAgxDdiNotifyAcpiEvent;
+DXGKDDI_QUERY_INTERFACE AppleAgxDdiQueryInterface;
+VOID AppleAgxDdiControlEtwLogging(_In_ BOOLEAN Enable, _In_ ULONG Flags,
+                                  _In_ UCHAR Level);
+DXGKDDI_CREATEDEVICE AppleAgxDdiCreateDevice;
+DXGKDDI_DESTROYDEVICE AppleAgxDdiDestroyDevice;
+DXGKDDI_CREATEALLOCATION AppleAgxDdiCreateAllocation;
+DXGKDDI_DESTROYALLOCATION AppleAgxDdiDestroyAllocation;
+DXGKDDI_DESCRIBEALLOCATION AppleAgxDdiDescribeAllocation;
+DXGKDDI_GETSTANDARDALLOCATIONDRIVERDATA
+AppleAgxDdiGetStandardAllocationDriverData;
+DXGKDDI_OPENALLOCATIONINFO AppleAgxDdiOpenAllocation;
+DXGKDDI_CLOSEALLOCATION AppleAgxDdiCloseAllocation;
+DXGKDDI_PATCH AppleAgxDdiPatch;
+DXGKDDI_SUBMITCOMMAND AppleAgxDdiSubmitCommand;
+DXGKDDI_BUILDPAGINGBUFFER AppleAgxDdiBuildPagingBuffer;
+DXGKDDI_PREEMPTCOMMAND AppleAgxDdiPreemptCommand;
+DXGKDDI_RENDER AppleAgxDdiRender;
+DXGKDDI_PRESENT AppleAgxDdiPresent;
+DXGKDDI_RESETFROMTIMEOUT AppleAgxDdiResetFromTimeout;
+DXGKDDI_RESTARTFROMTIMEOUT AppleAgxDdiRestartFromTimeout;
+DXGKDDI_ESCAPE AppleAgxDdiEscape;
+DXGKDDI_COLLECTDBGINFO AppleAgxDdiCollectDbgInfo;
+DXGKDDI_QUERYCURRENTFENCE AppleAgxDdiQueryCurrentFence;
+DXGKDDI_CONTROLINTERRUPT AppleAgxDdiControlInterrupt;
+DXGKDDI_CREATECONTEXT AppleAgxDdiCreateContext;
+DXGKDDI_DESTROYCONTEXT AppleAgxDdiDestroyContext;
+DXGKDDI_RENDERKM AppleAgxDdiRenderKm;
+DXGKDDI_QUERYDEPENDENTENGINEGROUP AppleAgxDdiQueryDependentEngineGroup;
+DXGKDDI_QUERYENGINESTATUS AppleAgxDdiQueryEngineStatus;
+DXGKDDI_RESETENGINE AppleAgxDdiResetEngine;
+DXGKDDI_CANCELCOMMAND AppleAgxDdiCancelCommand;
+DXGKDDI_SETPOWERCOMPONENTFSTATE AppleAgxDdiSetPowerComponentFState;
+DXGKDDI_POWERRUNTIMECONTROLREQUEST AppleAgxDdiPowerRuntimeControlRequest;
+DXGKDDI_GETNODEMETADATA AppleAgxDdiGetNodeMetadata;
+DXGKDDI_SUBMITCOMMANDVIRTUAL AppleAgxDdiSubmitCommandVirtual;
+DXGKDDI_CREATEPROCESS AppleAgxDdiCreateProcess;
+DXGKDDI_DESTROYPROCESS AppleAgxDdiDestroyProcess;
+DXGKDDI_CALIBRATEGPUCLOCK AppleAgxDdiCalibrateGpuClock;
+DXGKDDI_SETSTABLEPOWERSTATE AppleAgxDdiSetStablePowerState;
+
 NTSTATUS
 AppleAgxValidateTranslatedResources(_In_ PCM_RESOURCE_LIST TranslatedResources);
 NTSTATUS AppleAgxGetPowerBrokerAddress(

@@ -42,6 +42,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\driver.c" />
+    <ClCompile Include="src\fail_closed.c" />
     <ClCompile Include="src\adapter.c" />
     <ClCompile Include="src\resources.c" />
     <ClCompile Include="src\power.c" />
