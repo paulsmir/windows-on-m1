@@ -12054,3 +12054,197 @@ resource identity without installing the driver. Only after that boot gate may
 the signed package run through the corrected single-transaction lifecycle
 runner exactly once. Do not attach the m1n1 proxy client while Windows is
 running and do not rerun EXP-139.
+
+Observed result (`2026-08-27T19:43:00Z`): the resource boundary passed and the
+package boundary was rejected without a transaction. Exact EXP-123 first
+reached responsive Windows with eight logical processors, Running AppleInput,
+`stornvme`, `USBXHCI` and SSH, and no recent critical or Event-129 record. The
+sole version-three boot then reached the lock screen and SSH with all eight
+processors and the same platform services alive. Windows assigned AGX0 exactly
+three memory resources: SGX `0x204000000..0x207ffffff`, context-zero
+`gpu-region` `0x9fffb8000..0x9fffbbfff`, and broker
+`0x300000000..0x300000fff`, plus IRQs 880 through 888. This proves the Mu,
+m1n1 stage-2 and translated WDDM ownership chain added by the candidate.
+
+The pre-existing `oem17.inf` automatically bound when AGX0 became present. It
+was version `15.47.29.978`; active SYS SHA-256 was
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+which does not match the new candidate. It stopped with Problem 43 while two
+new `stornvme` Event 129 resets were recorded ten seconds apart. The new signed
+package was therefore not transferred, installed or started. Windows shut down
+normally and exact EXP-123 recovery again reached SSH with eight processors,
+the three platform services Running, AGX0 phantom, and zero Event 129 or
+critical events after its new boot.
+
+The exact old package was exported before any removal to ignored
+`.local/rollback/EXP140-oem17/`: INF SHA-256
+`bdda859faf193db12896ba309fa9f20bd247f8b0520c339d05f23c6d18bed160`,
+SYS `841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+and CAT `644111b2583b636c5643e39a62c2595e262cfe642c7e6e7cb78dd66d51c7eeab`.
+EXP-140 is closed and must not be retried. Its accepted result is the assigned
+resource identity only; the UAT snapshot remains unexecuted.
+
+### EXP-20260827-141 — isolate stale AppleAgx startup from G2 storage resets
+
+Status: preregistered at `2026-08-27T19:51:24Z`; hardware mutation not yet
+started. EXP-140 proved that version-three resource assignment is correct but
+also showed that the stale installed AppleAgx package starts automatically only
+when G2 makes AGX0 present. The falsifiable hypothesis is that this old
+StartDevice path, rather than the new 16-KiB identity mapping, causes the pair
+of boot-time `stornvme` resets.
+
+While exact EXP-123 is responsive, export and hash the exact old package, then
+remove only recorded `oem17.inf` without `/force`. Do not change firmware,
+NVMe, CPU, USB, input, display, recovery policy or the ESP. After a quiet
+recovery window, perform one cold version-three boot using the same EXP-140
+m1n1 and Mu artifacts. Before any package transaction require eight processors,
+Running AppleInput, `stornvme`, `USBXHCI` and SSH, the exact three AGX memory
+resources, APPL0002 unbound/Code 28, no AppleAgx service execution, and zero
+Event 129 or critical records since boot.
+
+Only if that pre-install gate passes may the exact retained qualification
+package from implementation commit
+`a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b` run once through the corrected
+single-transaction lifecycle helper. Expected hashes remain INF
+`0185337e08de483ffb0fb85632179f096d912ae9746c673e4213e01a2e0e9caa`, SYS
+`09e74647911439b720cc32013114c95ad69e7697fe8ea3873b14f4fcc3828ee0`, and CAT
+`01ff42516dd8cfe791f2c8f6531914aaef5d90bb0b21b36079aad3c33c4498a9`.
+The qualification may read and persist only the configuration snapshot,
+TTBR0/TTBR1 and pair-valid result, then must return fail-closed without power,
+ASC RUN, mailbox, UAT write, initdata, interrupt, queue, render, present or
+display ownership.
+
+Any pre-install Event 129 rejects the stale-driver hypothesis without a driver
+transaction. Any package hash or signer mismatch, missing resource, failed
+health gate, timeout, forbidden action, input/storage/USB/SSH loss, bugcheck or
+reboot stops the experiment with no retry. Rollback uses only the recorded
+exported package and exact signer, never `/force`; exact EXP-123 remains the
+full platform recovery.
+
+Setup clarification recorded before mutation at `2026-08-27T19:58:00Z`:
+ordinary `pnputil /delete-driver oem17.inf` correctly refused because the
+package is still attached to disconnected phantom devnode
+`ACPI\\APPL0002\\0`. Read-only enumeration confirmed `Present=False`,
+`CM_PROB_PHANTOM`, `Status=Disconnected`, and no other matching AGX devnode.
+The bounded setup operation is therefore to remove exactly that disconnected
+devnode through the normal PnP remove-device path, then delete exactly
+`oem17.inf` without `/force`. This does not broaden the experiment variable:
+the old AGX binding and its Driver Store package are one stale startup state.
+Any identity drift or refusal stops the experiment without retry.
+
+Observed result (`2026-08-27T20:02:00Z`): the stale-driver hypothesis was
+rejected before any new package transaction. Exact EXP-123 was healthy with
+eight processors, Running AppleInput/stornvme/USBXHCI/sshd, and zero Event 129
+or critical events. The disconnected `ACPI\\APPL0002\\0` devnode was removed
+through the normal PnP path, then exact `oem17.inf` was deleted without
+`/force`. Driver Store enumeration was empty and platform health remained
+unchanged.
+
+The unchanged version-three candidate then reached responsive Windows. AGX0
+was cleanly unbound with Problem 28 and had the exact expected resources: SGX
+`0x204000000..0x207fffffff`, context-zero
+`0x9fffb8000..0x9fffbbfff`, broker `0x300000000..0x300000fff`, and IRQs 880
+through 888. Nevertheless `stornvme` Event 129 occurred at 22:00:59 and
+22:01:09, exactly ten and twenty seconds after the 22:00:49 boot time. The new
+package was not transferred, installed or started. Thus old AppleAgx startup
+is not required for the reset pair. Raw hypervisor evidence is retained under
+ignored `.local/experiments/EXP-20260827-141-stale-agx-isolation/`.
+
+### EXP-20260827-142 — isolate G2 power-broker activation from NVMe resets
+
+Status: preregistered at `2026-08-27T20:03:00Z`; hardware run not started.
+EXP-141 proves the reset pair occurs with no display driver in Driver Store and
+AGX0 unbound. The next smallest runtime difference from immutable EXP-123 is
+the assisted launch option that activates the G2 power broker. The falsifiable
+hypothesis is that broker activation, not the assigned 16-KiB resource or
+Windows driver execution, is required for the two boot-time NVMe resets.
+
+After clean EXP-141 shutdown and exact EXP-123 recovery, cold-launch the exact
+same version-three m1n1 and Mu artifacts once with display `both`, debug
+`monitor`, but without `--agx-power-broker`. Do not rebuild either artifact,
+change ACPI, install a driver, alter CPU/NVMe/USB/input/display state, or attach
+the proxy client while the guest runs. Require eight processors, Running
+AppleInput/stornvme/USBXHCI/sshd, AGX0 unbound with Problem 28, and zero critical
+events. Zero Event 129 through a 25-second post-boot window supports the broker
+hypothesis; any Event 129 rejects it. In either case stop without a package
+transaction, retain `hv.log`, shut down cleanly, and recover EXP-123. No retry.
+
+Precondition result (`2026-08-27T20:06:31Z`): EXP-142 was not started. Exact
+EXP-123 itself recorded one `stornvme` Event 129 at 22:06:31, 68 seconds after
+its 22:05:23 boot time, so the required zero-reset recovery gate failed. The
+guest remained responsive with eight processors and zero critical events. No
+GPU candidate or driver transaction followed.
+
+The recovery `hv.log` contains 1,937 routed-IRQ transition messages, 1,927 of
+them for USB vINTID 865/AIC 330. These synchronous UART prints execute in the
+GIC distributor hot path immediately before the later NVMe re-enable. This
+diagnostic load is therefore the next falsifiable test-harness variable; the
+power-broker hypothesis remains untested.
+
+### EXP-20260827-143 — bound hot-path IRQ diagnostics on exact recovery
+
+Status: preregistered at `2026-08-27T20:12:00Z`; hardware run not started. The
+sole changed behavior from immutable EXP-123 is diagnostic output frequency.
+IRQ mask/unmask, AIC state, vGIC state, EOI, routing and delivery are unchanged.
+Every transition remains counted atomically; the UART prints only transitions
+1 through 8 and later powers of two. The policy was developed test-first, the
+new test failed on the absent API, then passed after the implementation; the
+complete m1n1 host-test suite passed.
+
+Exact m1n1 source is
+`261c6e5f15a7cfe710a25aec24901ac9ff6bbf86`, based on EXP-123 `bee53dc` plus
+only bounded logging. Exact Mu is unchanged EXP-123. Retained artifacts are
+under ignored
+`.local/experiments/EXP-20260827-143-recovery-bounded-irq-logging/`: m1n1
+SHA-256 `1aeb4c398b1f6941eb204af0ed7b3ab7d37a849bb68ea4a454d708f6599bf87d`,
+Mu SHA-256 `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+
+After clean shutdown of the current exact-recovery guest, cold-launch EXP-143
+once with display `both`, debug `monitor`, and no G2 power broker. Require eight
+processors and Running AppleInput/stornvme/USBXHCI/sshd. Observe at least 90
+seconds after boot. Passing requires no critical event, no Event 129, responsive
+SSH/input, and no more than 20 routed-IRQ transition log lines while the final
+counter proves later transitions occurred. Any reset, service loss, hang or
+reboot rejects the diagnostic-overhead hypothesis. Do not install a display
+driver or run a GPU candidate. Cleanly recover exact EXP-123 after the single
+run; no retry.
+## EXP-20260827-144 — Gate Apple SPI-HID level IRQ across passive drain
+
+Status: preregistered; no candidate package has been installed.
+
+### Evidence and single variable
+
+- Live EXP-143 Windows reports `13,729` AppleInput ISR entries, `1,575`
+  queued/completed workers, `2,992` SPI transfers, `1,585` trackpad reports,
+  and zero SPI timeout, packet CRC, message CRC, fragment, or offline errors.
+- The physical active-low GPIO therefore remains asserted while the passive
+  worker is queued.  KMDF unmasks GSI 865 after the ISR returns, producing
+  repeated `AIC 330 -> vINTID 865` delivery before SPI drain completes.
+- The same window contains four stornvme Event 129 resets at ten-second
+  intervals.  No GPU package is present and no GPU mutation is allowed.
+- Exact rollback is `oem16.inf`, version `17.6.9.292`, active SYS SHA-256
+  `7b75873de00a392b6e906edf5776f69c274e86814fb02389414ef557d2b7bdb5`,
+  exported to `C:\AppleInputRollback\EXP144`.
+- The only candidate variable is root commit
+  `857dde5340e0447d68c7df308d3ab6c9db149ae0`: the ISR gates only nub-gpio pin
+  13 before queueing its existing bounded worker; the worker re-arms IRQ_LOW
+  only after draining.  Firmware, m1n1, Mu, CPU topology, NVMe, USB, display,
+  VHF descriptors and packet parsing remain unchanged.
+
+### Procedure and gates
+
+1. Build and sign the exact ARM64 AppleInput package from the candidate commit.
+2. Verify package hashes and signer, publish it once, and restart only
+   `ACPI\APPL0001\0`; do not reboot Windows or change firmware.
+3. Require APPL0001 Started, AppleInput Running, keyboard and Precision
+   Touchpad children healthy, phase 8, zero transport errors and responsive
+   SSH.
+4. Record AppleInput counters, wait 90 seconds at idle, exercise keyboard plus
+   single- and two-finger trackpad input, then record counters again.
+5. Pass only if worker and report progress continues while ISR growth is near
+   worker growth rather than the pre-change ~9:1 amplification, and there is no
+   new stornvme Event 129 or critical System event.
+
+Any package mismatch, Code 10/43, lost input, lost SSH, transport error, Event
+129 or critical event immediately ends the experiment and restores the exact
+exported `oem16.inf`.  No retry and no GPU transaction are permitted.
