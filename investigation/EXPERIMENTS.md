@@ -12000,3 +12000,57 @@ next experiment must first expose exactly this 16-KiB region through the
 generated Mu ACPI contract and explicit m1n1 stage-2 identity mapping, then map
 only its translated resource through `DxgkCbMapMemory`. Recovery remains
 immutable EXP-123. EXP-139 must not be rerun.
+
+### EXP-20260827-140 — assigned J313 context-zero UAT root snapshot
+
+Status: preregistered at `2026-08-27T19:32:00Z`; hardware transaction not
+started because the Air remains unreachable after EXP-139. EXP-139 could not
+recover root values and rejected private physical mapping. The source-backed
+correction is one atomic ownership contract: Mu assigns the exact 16-KiB
+`gpu-region` to AGX0, m1n1 identity-maps that same region in both assisted and
+standalone stage-2 paths, and the Windows qualification maps only the assigned
+translated resource through `DxgkCbMapMemory`.
+
+The changed variable relative to EXP-139 is the resource ownership contract;
+the read-only snapshot semantics remain unchanged. No UAT root may be written,
+no initdata may be built, no ASC RUN bit may be asserted, no mailbox message may
+be sent, and no power, interrupt, queue, command, render, presentation, or
+display-ownership stage may run. A successful map plus durable TTBR0/TTBR1 and
+pair-valid receipts passes the observation gate. A clean configuration failure
+rejects the contract without touching firmware. Lost input, storage, USB, SSH,
+Event 129, bugcheck, reboot, or missing receipt stops the experiment with no
+retry.
+
+Exact source identity is root implementation commit
+`a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b`, ledger HEAD
+`fcfd7d71d87b0d6aca0d20cde89433125f8c0fbc`, m1n1
+`4108e79c69bac112ffbebf452fccf352c93c1dd2`, and Mu
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`. Tracked-diff SHA-256 for root,
+m1n1 and Mu is the empty hash
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Porcelain hashes are root
+`2477882f411e88db4fb05126b3e82477ff2ea180faf20439a4b33648e08bbee2`,
+m1n1 `6481a9771aff8aed35cbcebcba7137f562e443494d729c89db15e05b28c49971`,
+and Mu `305c4c53bf5736d01bf1f198d76bf3e3c440e18f8a0973bdeabffe00bf29f5de`;
+only the pre-existing m1n1 `.DS_Store` and nested Mu metadata account for that
+porcelain state and they must not be staged.
+
+The complete `display=both`, `debug=monitor` candidate built successfully in
+the project container. Its boot-image SHA-256 is
+`67713a743f5b6e16e7f3d69cf016ad74b3cb57a0ef901b239b741cdc06651b7e`;
+compiled AML verification passed. The exact ARM64 WDK qualification build
+completed with code analysis and signability success. Package hashes are INF
+`0185337e08de483ffb0fb85632179f096d912ae9746c673e4213e01a2e0e9caa`,
+SYS `09e74647911439b720cc32013114c95ad69e7697fe8ea3873b14f4fcc3828ee0`,
+and CAT `01ff42516dd8cfe791f2c8f6531914aaef5d90bb0b21b36079aad3c33c4498a9`.
+The retained package is under ignored
+`.local/builds/a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b/AppleAgx/`.
+
+Before candidate use, physically recover immutable EXP-123 and prove eight
+logical processors, stable internal input, stornvme, USBXHCI and SSH, no fresh
+Event 129 or critical System event, and the exact prior AppleAgx package state.
+Then cold-launch the candidate once and first verify the version-three ACPI
+resource identity without installing the driver. Only after that boot gate may
+the signed package run through the corrected single-transaction lifecycle
+runner exactly once. Do not attach the m1n1 proxy client while Windows is
+running and do not rerun EXP-139.
