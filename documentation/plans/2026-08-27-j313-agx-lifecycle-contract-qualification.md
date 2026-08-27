@@ -49,33 +49,33 @@ or display-ownership change still requires exact cold recovery.
 
 ## Procedure
 
-- [ ] Revalidate every fixed identity and require exact responsive EXP-123
+- [x] Revalidate every fixed identity and require exact responsive EXP-123
   recovery with eight CPUs; Running AppleInput, NVMe and xHCI; no present
   APPL0002; zero active AppleAgx package/service/module/signer; zero critical
   events and zero Event 129 through the quiet window.
-- [ ] Import only the pinned certificate, stage only the exact package, record
+- [x] Import only the pinned certificate, stage only the exact package, record
   the generated `oemNN.inf`, prove APPL0002 remains absent, and shut down
   normally.
-- [ ] Launch one exact EXP-124 G2 candidate through the public assisted launcher
+- [x] Launch one exact EXP-124 G2 candidate through the public assisted launcher
   with `display=both`, `debug=monitor`, the pinned Mu/m1n1 pair and no power or
   MMIO qualification environment flag.
-- [ ] Run `cycle-lifecycle-driver.ps1` against the exact package and signer.
+- [x] Run `cycle-lifecycle-driver.ps1` against the exact package and signer.
   Preserve its unique JSON result together with the launch contract, monitor
   log and framebuffer metadata.
-- [ ] Require fresh DriverEntry stage 2 and successful DxgkInitialize,
+- [x] Require fresh DriverEntry stage 2 and successful DxgkInitialize,
   AddDevice stage 2/status zero, and a fresh StartDevice receipt. The expected
   designed endpoint is stage 7 with `STATUS_NOT_SUPPORTED` (`0xC00000BB`).
-- [ ] Require every power and MMIO receipt absent; no GPU pointer dereference,
+- [x] Require every power and MMIO receipt absent; no GPU pointer dereference,
   register access, firmware, RTKit, interrupt connection, UAT, queue, command,
   render, present or display ownership; eight CPUs; Running input/NVMe/xHCI;
   zero critical events and zero Event 129.
-- [ ] If this inert iteration passes, additional lifecycle-only source revisions
+- [x] If this inert iteration passes, additional lifecycle-only source revisions
   may use the same G2 session by supplying the exact prior `oemNN.inf` to the
   runner. Any health failure ends same-boot iteration immediately.
-- [ ] Before any hardware-owning profile, shut down normally, boot exact
+- [x] Before any hardware-owning profile, shut down normally, boot exact
   EXP-123 recovery, remove only the recorded package and signer without
   `/force`, and prove the final recovery quiet window clean.
-- [ ] Publish only a sanitized verdict; raw host and guest evidence remains
+- [x] Publish only a sanitized verdict; raw host and guest evidence remains
   ignored locally.
 
 ## Falsifiable result
@@ -87,3 +87,14 @@ stale receipts, Problem 31 before StartDevice, identity drift, Event 129,
 critical event, input/storage/xHCI loss, forbidden GPU action, forced package
 deletion or incomplete recovery rejects the experiment. Same-boot iteration is
 never evidence for safe power, MMIO or firmware ownership.
+
+## Result
+
+Passed and closed. The exact package produced fresh DriverEntry and AddDevice
+success receipts and reached StartDevice stage 7 with the designed
+`STATUS_NOT_SUPPORTED` (`0xC00000BB`). Every power and MMIO receipt remained
+absent. The same-boot cycle completed in approximately 11 seconds with eight
+CPUs, Running AppleInput/NVMe/xHCI, zero critical events and zero Event 129.
+Exact non-force rollback and the required cleanup recovery boot passed every
+final gate. The sanitized result is published in
+`investigation/artifacts/EXP-20260827-130-agx-lifecycle-contract/VERDICT.md`.

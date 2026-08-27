@@ -11635,3 +11635,20 @@ display ownership remain forbidden. Passing requires fresh StartDevice stage
 7 / `0xC00000BB`, no hardware receipt, responsive eight-core Windows, working
 AppleInput/NVMe/xHCI, zero Event 129, zero critical events and exact non-force
 recovery before any later hardware-owning experiment.
+
+Observed result: passed and closed. The exact package bound as `oem17.inf` and
+a device-scoped same-boot restart produced fresh DriverEntry stage 2,
+successful AddDevice stage 2 and StartDevice stage 7 with `0xC00000BB`. The
+translated list contained 13 descriptors. Every power and MMIO receipt was
+absent; no forbidden GPU operation occurred. The measured cycle took roughly
+11 seconds and retained eight CPUs, Running AppleInput/NVMe/xHCI, zero
+critical events and zero Event 129.
+
+The candidate shut down normally. Exact EXP-123 recovery removed only
+`oem17.inf` and the exact signer without `/force`; the cleanup boot proved no
+present APPL0002, package, service, module or signer, eight CPUs, Running
+input/NVMe/xHCI, zero critical events and zero Event 129. The sanitized verdict
+is published at
+`investigation/artifacts/EXP-20260827-130-agx-lifecycle-contract/VERDICT.md`.
+The next separately gated boundary is inert SGX map/subview/unmap; register
+access and every later ownership layer remain unauthorized.
