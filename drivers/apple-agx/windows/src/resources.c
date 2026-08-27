@@ -2,7 +2,7 @@
 
 #include "j313_agx_g2.generated.h"
 
-#define J313_AGX_G2_MEMORY_RESOURCE_COUNT 2u
+#define J313_AGX_G2_MEMORY_RESOURCE_COUNT 3u
 #define J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT 2u
 #define J313_AGX_G2_TRANSLATED_RESOURCE_COUNT                              \
   (J313_AGX_G2_MEMORY_RESOURCE_COUNT +                                     \
@@ -28,6 +28,7 @@ _Use_decl_annotations_ NTSTATUS
 AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
   ULONG seenInterruptVectors[J313_AGX_G2_INTERRUPT_ROUTE_COUNT] = {0};
   BOOLEAN seenSgxMemory = FALSE;
+  BOOLEAN seenGpuMemory = FALSE;
   BOOLEAN seenPowerBrokerMemory = FALSE;
   ULONG devicePrivateCount = 0;
   ULONG interruptCount = 0;
@@ -65,6 +66,12 @@ AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
           seenPowerBrokerMemory = TRUE;
           continue;
         }
+        if (start == J313_AGX_G2_GPU_BASE &&
+            descriptor->u.Memory.Length == J313_AGX_G2_GPU_SIZE &&
+            !seenGpuMemory) {
+          seenGpuMemory = TRUE;
+          continue;
+        }
         return STATUS_DEVICE_CONFIGURATION_ERROR;
       }
 
@@ -97,11 +104,41 @@ AppleAgxValidateTranslatedResources(PCM_RESOURCE_LIST TranslatedResources) {
     }
   }
 
-  if (!seenSgxMemory || !seenPowerBrokerMemory ||
+  if (!seenSgxMemory || !seenGpuMemory || !seenPowerBrokerMemory ||
       devicePrivateCount != J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT ||
       interruptCount != J313_AGX_G2_INTERRUPT_ROUTE_COUNT)
     return STATUS_DEVICE_CONFIGURATION_ERROR;
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AppleAgxGetGpuRegionAddress(
+    PCM_RESOURCE_LIST TranslatedResources,
+    PPHYSICAL_ADDRESS GpuRegionAddress) {
+  ULONG fullIndex;
+
+  if (GpuRegionAddress == NULL)
+    return STATUS_INVALID_PARAMETER;
+  if (!NT_SUCCESS(AppleAgxValidateTranslatedResources(TranslatedResources)))
+    return STATUS_DEVICE_CONFIGURATION_ERROR;
+
+  for (fullIndex = 0; fullIndex < TranslatedResources->Count; ++fullIndex) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &TranslatedResources->List[fullIndex];
+    ULONG partialIndex;
+
+    for (partialIndex = 0; partialIndex < full->PartialResourceList.Count;
+         ++partialIndex) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+          &full->PartialResourceList.PartialDescriptors[partialIndex];
+      if (descriptor->Type == CmResourceTypeMemory &&
+          (ULONGLONG)descriptor->u.Memory.Start.QuadPart ==
+              J313_AGX_G2_GPU_BASE &&
+          descriptor->u.Memory.Length == J313_AGX_G2_GPU_SIZE) {
+        *GpuRegionAddress = descriptor->u.Memory.Start;
+        return STATUS_SUCCESS;
+      }
+    }
+  }
+  return STATUS_DEVICE_CONFIGURATION_ERROR;
 }
 
 _Use_decl_annotations_ NTSTATUS AppleAgxGetPowerBrokerAddress(

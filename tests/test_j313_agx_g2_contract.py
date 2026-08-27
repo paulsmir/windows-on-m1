@@ -26,6 +26,7 @@ class J313AgxG2ContractTests(unittest.TestCase):
     def test_reviewed_contract_is_bound_to_accepted_g1r_resources(self):
         contract = load_g2_contract(G2, G1)
         self.assertEqual(contract.acpi_hid, "APPL0002")
+        self.assertEqual(contract.contract_version, 3)
         self.assertEqual(contract.context_id, 63)
         self.assertEqual(contract.queue_index, 1)
         self.assertEqual(contract.page_size, 0x4000)
@@ -52,6 +53,7 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertEqual(lifecycle.stop_timeout_ms, 1000)
         self.assertEqual(contract.acpi_mmio, (
             ("sgx_mmio", 0x204000000, 0x4000000),
+            ("gpu", 0x9FFFB8000, 0x4000),
         ))
         self.assertEqual(contract.mmio_subregions, (
             ("asc_mmio", 0x206400000, 0x6C000),
@@ -196,7 +198,7 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertEqual(rendered.count("Interrupt (ResourceConsumer, Level, ActiveHigh, Exclusive)"), 9)
         for guest in range(880, 889):
             self.assertIn(f"{{ {guest} }}", rendered)
-        self.assertIn('"agx-contract-version", 0x02', rendered)
+        self.assertIn('"agx-contract-version", 0x03', rendered)
         self.assertIn(
             f'"agx-source-contract-sha256", "{contract.source_contract_sha256}"',
             rendered,
@@ -218,6 +220,8 @@ class J313AgxG2ContractTests(unittest.TestCase):
         self.assertIn(contract.source_contract_sha256, rendered)
         self.assertIn("#define HV_AGX_G2_SGX_MMIO_BASE 0x204000000ULL", rendered)
         self.assertIn("#define HV_AGX_G2_SGX_MMIO_SIZE 0x4000000ULL", rendered)
+        self.assertIn("#define HV_AGX_G2_GPU_BASE 0x9fffb8000ULL", rendered)
+        self.assertIn("#define HV_AGX_G2_GPU_SIZE 0x4000ULL", rendered)
         self.assertIn("#define HV_AGX_G2_POWER_BROKER_BASE 0x300000000ULL", rendered)
         self.assertIn("#define HV_AGX_G2_POWER_BROKER_SIZE 0x1000ULL", rendered)
         self.assertIn("#define HV_AGX_G2_INTERRUPT_ROUTE_COUNT 9u", rendered)
@@ -272,8 +276,9 @@ class J313AgxG2ContractTests(unittest.TestCase):
 
     def test_asc_is_an_alias_not_a_second_overlapping_acpi_resource(self):
         contract = load_g2_contract(G2, G1)
-        self.assertEqual(len(contract.acpi_mmio), 1)
-        _, aperture_base, aperture_size = contract.acpi_mmio[0]
+        self.assertEqual(len(contract.acpi_mmio), 2)
+        aperture_name, aperture_base, aperture_size = contract.acpi_mmio[0]
+        self.assertEqual(aperture_name, "sgx_mmio")
         _, asc_base, asc_size = contract.mmio_subregions[0]
         self.assertGreaterEqual(asc_base, aperture_base)
         self.assertLessEqual(asc_base + asc_size, aperture_base + aperture_size)

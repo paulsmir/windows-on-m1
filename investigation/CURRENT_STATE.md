@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T16:00:10Z
+Updated: 2026-08-27T19:27:00Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -16,11 +16,13 @@ This is the bounded session entry point. Detailed history is append-only in
 
 - Canonical checkout: `/Users/pavel/public_windows`.
 - Branch: `feature/j313-gpu-acceleration`.
-- EXP-137 package source: `8252b9c759f447241fb5b28bfed522c9486dc080`.
+- EXP-139 package source: `8b5ab22ba9d7b7446d9919b62b9554589a51f14f`.
 - Single-transaction runner correction:
   `b4906b9d7468b00d35dfc10411b91a4c9b70064d`.
-- m1n1 pin: `72dbbd2b0b279638ac53482a6d79d06adfa6aef7`.
-- Mu pin: `c6108366201f869b297912a0ef8323b343256ecc`.
+- Candidate m1n1 pin: `4108e79c69bac112ffbebf452fccf352c93c1dd2`.
+- Candidate Mu pin: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
+- Candidate monitor image SHA-256:
+  `67713a743f5b6e16e7f3d69cf016ad74b3cb57a0ef901b239b741cdc06651b7e`.
 - Preserve existing untracked/dirty submodule metadata; never stage it.
 
 ## Live machine
@@ -33,12 +35,13 @@ This is the bounded session entry point. Detailed history is append-only in
   `53c52005854d03c449c534c805df7c180d90e30ab29effbdc9e7003b3bef5c8d`.
 - boot image SHA-256:
   `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
-- Windows is at the desktop and SSH-responsive.
-- AppleInput, stornvme and USBXHCI are Running.
-- No fresh stornvme Event 129 occurred after the EXP-137 package installation.
+- EXP-139 lost SSH and ICMP during its only transaction. The Air remains
+  unreachable; physical-screen state and installed-package state are unknown.
+- Do not run another package transaction until exact EXP-123 recovery and the
+  stable Windows device/service baseline are re-established.
 - Never attach the m1n1 proxy client while this guest is running.
 
-## Installed GPU package
+## Last known stable GPU package
 
 - Device: `ACPI\APPL0002\0`.
 - Package: `oem17.inf`, version `15.15.32.644`.
@@ -48,7 +51,7 @@ This is the bounded session entry point. Detailed history is append-only in
   `1ac19ede3267b2a836e177e96ad26f69c89298c3078a6412f1b9200882893beb`.
 - Signer thumbprint: `BCE4F22D33D675EABA3B8A88FDB102E536E69F5A`.
 
-## Last confirmed boundary
+## Last confirmed successful boundary
 
 - Experiment: EXP-20260827-138.
 - PnP invoked DriverEntry, AddDevice and StartDevice.
@@ -72,13 +75,16 @@ barrier, trigger-order and unread-response explanations. Asahi and m1n1 create
 and publish the context-zero UAT roots before RTKit boot; the active Windows
 StartDevice path enters RTKit without doing so. Missing or invalid roots in the
 fixed J313 GPU region are now the first falsifiable firmware prerequisite.
+EXP-139 did not recover a root receipt and rejected private physical mapping as
+an unsafe access method. The version-3 candidate now assigns the region through
+Mu, m1n1 stage-2 and Windows translated resources.
 
 ## Single next action
 
-Add a read-only, fail-closed snapshot of the two context-zero UAT root words in
-the fixed J313 GPU region before ASC RUN. Do not publish roots, build initdata,
-rerun EXP-138, add delay, or change the RTKit wire protocol until the snapshot
-proves the inherited state.
+Recover exact EXP-123, verify eight CPUs and stable input/storage/USB/SSH, then
+qualify the version-3 resource contract and read-only root snapshot exactly
+once. Do not publish roots, build initdata, rerun EXP-138/139, add delay, or
+change the RTKit wire protocol until the assigned-resource snapshot succeeds.
 
 ## Rollback
 

@@ -13,6 +13,8 @@ static struct hv_agx_g2_policy accepted_policy(void)
         .source_contract_sha256 = HV_AGX_G2_SOURCE_CONTRACT_SHA256,
         .aperture_base = HV_AGX_G2_SGX_MMIO_BASE,
         .aperture_size = HV_AGX_G2_SGX_MMIO_SIZE,
+        .gpu_region_base = HV_AGX_G2_GPU_BASE,
+        .gpu_region_size = HV_AGX_G2_GPU_SIZE,
         .routes = accepted_routes,
         .route_count = HV_AGX_G2_INTERRUPT_ROUTE_COUNT,
         .level = true,
@@ -58,6 +60,14 @@ int main(void)
     policy = accepted_policy();
     policy.aperture_size--;
     if (require_rejected(&policy, "aperture size"))
+        return 1;
+    policy = accepted_policy();
+    policy.gpu_region_base += 0x4000;
+    if (require_rejected(&policy, "gpu region base"))
+        return 1;
+    policy = accepted_policy();
+    policy.gpu_region_size -= 0x4000;
+    if (require_rejected(&policy, "gpu region size"))
         return 1;
     policy = accepted_policy();
     policy.route_count--;

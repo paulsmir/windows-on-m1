@@ -58,6 +58,10 @@ class J313AgxG2AmlVerifierTests(unittest.TestCase):
             "MMIO",
         )
         self.assert_rejected(
+            self.valid.replace("0x00000009FFFB8000", "0x00000009FFFB4000"),
+            "MMIO",
+        )
+        self.assert_rejected(
             self.valid.replace("0x0000000300000000", "0x0000000300001000"),
             "MMIO",
         )

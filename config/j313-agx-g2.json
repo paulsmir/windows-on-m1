@@ -1,6 +1,6 @@
 {
   "acpi_hid": "APPL0002",
-  "contract_version": 2,
+  "contract_version": 3,
   "firmware_lifecycle": {
     "management_endpoint": 0,
     "firmware_endpoint": 32,
@@ -34,7 +34,8 @@
     { "guest": 888, "physical": 577 }
   ],
   "acpi_mmio_regions": [
-    "sgx_mmio"
+    "sgx_mmio",
+    "gpu"
   ],
   "mmio_subregions": [
     "asc_mmio"

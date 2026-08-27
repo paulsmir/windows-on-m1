@@ -211,6 +211,9 @@ AppleAgxValidateTranslatedResources(_In_ PCM_RESOURCE_LIST TranslatedResources);
 NTSTATUS
 AppleAgxGetPowerBrokerAddress(_In_ PCM_RESOURCE_LIST TranslatedResources,
                               _Out_ PPHYSICAL_ADDRESS PowerBrokerAddress);
+NTSTATUS
+AppleAgxGetGpuRegionAddress(_In_ PCM_RESOURCE_LIST TranslatedResources,
+                            _Out_ PPHYSICAL_ADDRESS GpuRegionAddress);
 NTSTATUS AppleAgxQualifyPowerBroker(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                                     _In_ PHYSICAL_ADDRESS PowerBrokerAddress);
 NTSTATUS AppleAgxWindowsMemoryInitialize(
@@ -227,6 +230,8 @@ NTSTATUS AppleAgxReadConfigSnapshot(
     _In_ PHYSICAL_ADDRESS PowerBrokerAddress,
     _Out_ APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
 NTSTATUS AppleAgxWindowsInspectUatRoots(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _In_ PHYSICAL_ADDRESS GpuRegionAddress,
     _In_ const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
     _Out_ APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots);
 void AppleAgxRecordUatRootSnapshot(

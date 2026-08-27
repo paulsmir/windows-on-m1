@@ -202,6 +202,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("J313_AGX_G2_POWER_BROKER_BASE", resources)
         self.assertIn("J313_AGX_G2_POWER_BROKER_SIZE", resources)
         self.assertIn("seenSgxMemory", resources)
+        self.assertIn("seenGpuMemory", resources)
         self.assertIn("seenPowerBrokerMemory", resources)
         self.assertIn("J313_AGX_G2_INTERRUPT_ROUTE_COUNT", resources)
         self.assertIn("CmResourceTypeMemory", resources)
@@ -340,12 +341,14 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         )
 
         self.assertIn("AppleAgxReadConfigSnapshot", header)
+        self.assertIn("AppleAgxGetGpuRegionAddress", header)
         self.assertIn("AppleAgxWindowsInspectUatRoots", header)
         self.assertIn("AppleAgxRecordUatRootSnapshot", header)
-        self.assertIn("MmMapIoSpaceEx", transport)
-        self.assertIn("PAGE_READONLY", transport)
-        self.assertIn("PAGE_NOCACHE", transport)
-        self.assertIn("MmUnmapIoSpace", transport)
+        self.assertNotIn("MmMapIoSpace", transport)
+        self.assertNotIn("MmMapIoSpaceEx", transport)
+        self.assertIn("DxgkCbMapMemory", transport)
+        self.assertIn("DxgkCbUnmapMemory", transport)
+        self.assertIn("GpuRegionAddress", transport)
         self.assertIn("AppleAgxUatInspectJ313", transport)
 
         start = adapter.index(
@@ -355,6 +358,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         qualification = adapter[start:end]
         for required in (
             "AppleAgxGetPowerBrokerAddress",
+            "AppleAgxGetGpuRegionAddress",
             "AppleAgxReadConfigSnapshot",
             "AppleAgxWindowsInspectUatRoots",
             "AppleAgxRecordUatRootSnapshot",

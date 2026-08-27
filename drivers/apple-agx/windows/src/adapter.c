@@ -245,6 +245,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
     APPLE_AGX_CONFIG_SNAPSHOT configSnapshot = {0};
     APPLE_AGX_UAT_ROOT_SNAPSHOT rootSnapshot = {0};
     PHYSICAL_ADDRESS powerBrokerAddress = {0};
+    PHYSICAL_ADDRESS gpuRegionAddress = {0};
     NTSTATUS configStatus;
     NTSTATUS snapshotStatus = STATUS_UNSUCCESSFUL;
 
@@ -252,11 +253,14 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
                                            &powerBrokerAddress);
     configStatus = status;
     if (NT_SUCCESS(configStatus))
+      configStatus = AppleAgxGetGpuRegionAddress(
+          deviceInfo.TranslatedResourceList, &gpuRegionAddress);
+    if (NT_SUCCESS(configStatus))
       configStatus = AppleAgxReadConfigSnapshot(
           DxgkInterface, powerBrokerAddress, &configSnapshot);
     if (NT_SUCCESS(configStatus))
       snapshotStatus = AppleAgxWindowsInspectUatRoots(
-          &configSnapshot, &rootSnapshot);
+          DxgkInterface, gpuRegionAddress, &configSnapshot, &rootSnapshot);
     AppleAgxRecordUatRootSnapshot(adapter->PhysicalDeviceObject, configStatus,
                                   snapshotStatus, &rootSnapshot);
     if (!NT_SUCCESS(configStatus)) {

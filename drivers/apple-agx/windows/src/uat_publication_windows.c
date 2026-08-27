@@ -2,6 +2,8 @@
 
 #ifdef APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION
 typedef struct _APPLE_AGX_WINDOWS_UAT_INSPECTION {
+  PDXGKRNL_INTERFACE Interface;
+  PHYSICAL_ADDRESS GpuRegionAddress;
   volatile unsigned char *MappedBase;
 } APPLE_AGX_WINDOWS_UAT_INSPECTION;
 
@@ -10,17 +12,22 @@ static unsigned char AppleAgxWindowsUatInspectMap(
     volatile unsigned char **VirtualAddress) {
   APPLE_AGX_WINDOWS_UAT_INSPECTION *inspection = Context;
   PHYSICAL_ADDRESS address;
+  PVOID mapped = NULL;
 
   if (inspection == NULL || VirtualAddress == NULL ||
+      inspection->Interface == NULL ||
+      inspection->Interface->DeviceHandle == NULL ||
+      inspection->Interface->DxgkCbMapMemory == NULL ||
       inspection->MappedBase != NULL ||
-      PhysicalAddress != J313_AGX_G2_GPU_BASE ||
+      PhysicalAddress != (unsigned long long)inspection->GpuRegionAddress.QuadPart ||
       Length != (unsigned int)J313_AGX_G2_GPU_SIZE)
     return 0u;
   address.QuadPart = (LONGLONG)PhysicalAddress;
-  inspection->MappedBase = MmMapIoSpaceEx(
-      address, Length, PAGE_READONLY | PAGE_NOCACHE);
-  if (inspection->MappedBase == NULL)
+  if (!NT_SUCCESS(inspection->Interface->DxgkCbMapMemory(
+          inspection->Interface->DeviceHandle, address, Length, FALSE, FALSE,
+          MmNonCached, &mapped)) || mapped == NULL)
     return 0u;
+  inspection->MappedBase = mapped;
   *VirtualAddress = inspection->MappedBase;
   return 1u;
 }
@@ -35,22 +42,33 @@ static unsigned char AppleAgxWindowsUatInspectUnmap(
   APPLE_AGX_WINDOWS_UAT_INSPECTION *inspection = Context;
 
   if (inspection == NULL || inspection->MappedBase == NULL ||
+      inspection->Interface == NULL ||
+      inspection->Interface->DeviceHandle == NULL ||
+      inspection->Interface->DxgkCbUnmapMemory == NULL ||
       VirtualAddress != inspection->MappedBase)
     return 0u;
-  MmUnmapIoSpace((PVOID)inspection->MappedBase,
-                 (SIZE_T)J313_AGX_G2_GPU_SIZE);
+  if (!NT_SUCCESS(inspection->Interface->DxgkCbUnmapMemory(
+          inspection->Interface->DeviceHandle,
+          (PVOID)inspection->MappedBase)))
+    return 0u;
   inspection->MappedBase = NULL;
   return 1u;
 }
 
 _Use_decl_annotations_ NTSTATUS AppleAgxWindowsInspectUatRoots(
+    PDXGKRNL_INTERFACE DxgkInterface,
+    PHYSICAL_ADDRESS GpuRegionAddress,
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
     APPLE_AGX_UAT_ROOT_SNAPSHOT *Roots) {
-  APPLE_AGX_WINDOWS_UAT_INSPECTION inspection = {0};
+  APPLE_AGX_WINDOWS_UAT_INSPECTION inspection = {
+      .Interface = DxgkInterface,
+      .GpuRegionAddress = GpuRegionAddress,
+  };
   APPLE_AGX_UAT_PUBLICATION_IO io;
   APPLE_AGX_UAT_PUBLICATION_RESULT result;
 
-  if (Snapshot == NULL || Roots == NULL)
+  if (DxgkInterface == NULL || Snapshot == NULL || Roots == NULL ||
+      (unsigned long long)GpuRegionAddress.QuadPart != J313_AGX_G2_GPU_BASE)
     return STATUS_INVALID_PARAMETER;
   RtlZeroMemory(&io, sizeof(io));
   io.Context = &inspection;

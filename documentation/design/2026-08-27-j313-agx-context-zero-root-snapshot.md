@@ -22,9 +22,14 @@ publish roots or register render callbacks.
   `0x9fffb8000`.
 - Microsoft documents `DxgkCbMapMemory` for translated resources assigned to
   the display adapter. The fixed `uat-ttbs` RAM is not currently in AGX `_CRS`,
-  so the diagnostic uses a private read-only `MmMapIoSpaceEx` mapping. A
+  so the original diagnostic used a private read-only `MmMapIoSpaceEx` mapping. A
   production publisher must first receive an explicit resource contract; it
   must not reuse this diagnostic shortcut.
+
+EXP-139 rejected the shortcut after the Air lost contact during the single
+transaction. It is superseded by the version-3 explicit Mu, stage-2, and
+translated-resource contract in
+`2026-08-27-j313-agx-gpu-region-resource-contract.md`.
 
 Ownership remains unchanged: m1n1 reserves and passes the region, Mu describes
 the device, the Windows diagnostic only observes the inherited bytes, and GPU
