@@ -235,6 +235,14 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         ):
             self.assertNotIn(unsafe, sources)
 
+    def test_memory_lifecycle_core_is_always_wdk_compiled_but_not_started(self):
+        project = self.read("AppleAgx.vcxproj")
+        adapter = self.read("src/adapter.c")
+
+        self.assertIn(r"..\shared\src\apple_agx_memory.c", project)
+        self.assertIn(r"..\shared\include\apple_agx_memory.h", project)
+        self.assertNotIn("AppleAgxMemoryAllocate", adapter)
+
     def test_mmio_qualification_is_opt_in_inert_and_fail_closed(self):
         adapter = self.read("src/adapter.c")
         mmio_path = WINDOWS / "src" / "mmio.c"
