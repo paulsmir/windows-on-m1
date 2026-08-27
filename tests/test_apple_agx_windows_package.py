@@ -487,6 +487,30 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("/uninstall", rollback.lower())
         self.assertNotIn("/force", rollback.lower())
 
+    def test_lifecycle_cycle_is_hash_pinned_and_device_scoped(self):
+        cycle = self.read("scripts/cycle-lifecycle-driver.ps1")
+        for parameter in (
+            "PackageRoot",
+            "EvidenceRoot",
+            "ExpectedSysSha256",
+            "ExpectedInfSha256",
+            "ExpectedCatSha256",
+            "ExpectedSignerThumbprint",
+        ):
+            self.assertIn(parameter, cycle)
+        self.assertIn("ACPI\\APPL0002\\0", cycle)
+        self.assertIn("Get-FileHash", cycle)
+        self.assertIn("Get-AuthenticodeSignature", cycle)
+        self.assertIn("& pnputil", cycle)
+        self.assertIn('@("/add-driver", $inf, "/install")', cycle)
+        self.assertIn("/install", cycle.lower())
+        self.assertIn('@("/restart-device", $deviceId)', cycle)
+        self.assertIn('@("/scan-devices")', cycle)
+        self.assertIn("Wom1", cycle)
+        self.assertIn("Event 129", cycle)
+        self.assertIn("ConvertTo-Json", cycle)
+        self.assertNotIn("/force", cycle.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
