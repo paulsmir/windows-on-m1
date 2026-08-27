@@ -136,6 +136,7 @@ FWCTL_MESSAGE_SIZE = 0x14
 FWCTL_RING_ENTRY_COUNT = 0x100
 CHANNEL_INFO_SIZE = 0x10
 CHANNEL_INFO_COUNT = 0x11
+CHANNEL_STATE_STRIDE = 0x30
 CMD_QUEUE_CHANNEL_COUNT = 0x0C
 CHANNEL_RING_LAYOUT = (
     ("CMD_QUEUE", 0x30, 0x100),
@@ -146,6 +147,7 @@ CHANNEL_RING_LAYOUT = (
     ("STATS", 0x40, 0x100),
 )
 FWLOG_RING_COUNT = 6
+FWLOG_DUMMY_RING_SIZE = 0x150000
 REGIONB_OBJECT_SIZES = (
     ("STATS_TA", 0x690),
     ("STATS_3D", 0x748),
@@ -409,7 +411,8 @@ def _validate_windows_binary_contract(contract):
     if (FWCTL_STATE_SIZE <= 0 or FWCTL_MESSAGE_SIZE <= 0 or
             FWCTL_RING_ENTRY_COUNT <= 0):
         raise G2ContractError("firmware-control sizes must be positive")
-    if CHANNEL_INFO_SIZE <= 0 or CHANNEL_INFO_COUNT <= 0:
+    if (CHANNEL_INFO_SIZE <= 0 or CHANNEL_INFO_COUNT <= 0 or
+            CHANNEL_STATE_STRIDE <= 0):
         raise G2ContractError("channel-info geometry must be positive")
     if not 0 < CMD_QUEUE_CHANNEL_COUNT <= CHANNEL_INFO_COUNT:
         raise G2ContractError("command-channel count is invalid")
@@ -469,12 +472,18 @@ def render_windows_header(contract):
         f"#define J313_AGX_G2_CHANNEL_INFO_COUNT 0x{CHANNEL_INFO_COUNT:x}u",
         ("#define J313_AGX_G2_CHANNEL_INFO_SET_SIZE "
          f"0x{CHANNEL_INFO_SIZE * CHANNEL_INFO_COUNT:x}u"),
+        ("#define J313_AGX_G2_CHANNEL_STATE_STRIDE "
+         f"0x{CHANNEL_STATE_STRIDE:x}u"),
         ("#define J313_AGX_G2_CMD_QUEUE_CHANNEL_COUNT "
          f"0x{CMD_QUEUE_CHANNEL_COUNT:x}u"),
         *(f"#define J313_AGX_G2_{name}_RING_SIZE "
           f"0x{message_size * entry_count:x}u"
           for name, message_size, entry_count in CHANNEL_RING_LAYOUT),
         f"#define J313_AGX_G2_FWLOG_RING_COUNT 0x{FWLOG_RING_COUNT:x}u",
+        ("#define J313_AGX_G2_FWLOG_STATE_SIZE "
+         f"0x{CHANNEL_STATE_STRIDE * FWLOG_RING_COUNT:x}u"),
+        ("#define J313_AGX_G2_FWLOG_DUMMY_RING_SIZE "
+         f"0x{FWLOG_DUMMY_RING_SIZE:x}u"),
         *(f"#define J313_AGX_G2_REGIONB_{name}_SIZE 0x{size:x}u"
           for name, size in REGIONB_OBJECT_SIZES),
         "",

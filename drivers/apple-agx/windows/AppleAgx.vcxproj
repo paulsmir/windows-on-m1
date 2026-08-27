@@ -83,6 +83,7 @@
     <ClCompile Include="..\shared\src\apple_agx_initdata.c" />
     <ClCompile Include="..\shared\src\apple_agx_initdata_memory.c" />
     <ClCompile Include="..\shared\src\apple_agx_firmware_status.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_info.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_agx_driver.h" />
@@ -99,6 +100,7 @@
     <ClInclude Include="..\shared\include\apple_agx_initdata.h" />
     <ClInclude Include="..\shared\include\apple_agx_initdata_memory.h" />
     <ClInclude Include="..\shared\include\apple_agx_firmware_status.h" />
+    <ClInclude Include="..\shared\include\apple_agx_channel_info.h" />
     <ClInclude Include="..\shared\include\j313_agx_g2.generated.h" />
   </ItemGroup>
   <ItemGroup>
