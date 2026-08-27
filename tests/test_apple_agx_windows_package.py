@@ -520,6 +520,8 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgxQualifyAscCpuStatus", header)
         self.assertIn("AppleAgxQualifyAscCpuStatus", transport)
         self.assertIn("AppleAgxAscReadCpuStatus", transport)
+        self.assertIn("APPLE_AGX_ASC_U32 typedStatus", transport)
+        self.assertIn("*CpuStatus = (ULONG)typedStatus", transport)
         self.assertIn("AppleAgxRecordAscCpuStatus", diagnostics)
         for name in ("Wom1AscCpuStatusReadStatus", "Wom1AscCpuStatus"):
             self.assertIn(name, diagnostics)

@@ -95,6 +95,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyAscCpuStatus(
   APPLE_AGX_WINDOWS_ASC_TRANSPORT transport;
   APPLE_AGX_ASC_IO io;
   APPLE_AGX_ASC_RESULT result;
+  APPLE_AGX_ASC_U32 typedStatus = 0;
   NTSTATUS status;
 
   if (CpuStatus == NULL)
@@ -104,9 +105,11 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyAscCpuStatus(
       AppleAgxFirmwareTransportInitialize(AscBase, AscLength, &transport, &io);
   if (!NT_SUCCESS(status))
     return status;
-  result = AppleAgxAscReadCpuStatus(&io, CpuStatus);
-  if (result == AppleAgxAscResultOk)
+  result = AppleAgxAscReadCpuStatus(&io, &typedStatus);
+  if (result == AppleAgxAscResultOk) {
+    *CpuStatus = (ULONG)typedStatus;
     return STATUS_SUCCESS;
+  }
   if (result == AppleAgxAscResultInvalidArgument)
     return STATUS_INVALID_PARAMETER;
   return STATUS_IO_DEVICE_ERROR;
