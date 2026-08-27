@@ -12482,3 +12482,42 @@ CPU or boot variable changes.
 The exact EXP-123 assisted pair remains recovery.  Evidence is stored under
 `.local/experiments/EXP-20260827-148-explicit-start/` and the guest
 `C:\\Users\\pavel\\AppleAgxEvidence` tree.
+
+### Result
+
+The exact restart returned success but produced fresh DriverEntry,
+DxgkInitialize and AddDevice-success receipts only.  StartDevice was never
+called within 30 seconds; APPL0002 retained Problem 31 / `0xC0000182`.
+Eight CPUs and AppleInput/stornvme/USBXHCI remained healthy with VHF `0/1/1`,
+zero Event 129 and zero critical System events.  EXP-148 rejects the hypothesis
+that a restart of the preserved failed-add devnode is sufficient.
+
+Microsoft's KMDOD installation guidance identifies display-stack replacement
+as requiring a switch away from the active adapter or reboot.  Here reboot
+cleared the service-deletion requirement but retained the failed devnode, and
+restart reused that same stack.  The next bounded variable is clean devnode
+recreation while retaining the exact installed package.
+
+## EXP-20260827-149 — Recreate APPL0002 without replacing its package
+
+Status: preregistered; hardware run pending.
+
+### Hypothesis and procedure
+
+The current `oem18.inf` package and SYS are exact and trusted, but the existing
+APPL0002 devnode was created while the previous service was pending deletion.
+Removing only that devnode and issuing one PnP rescan will create a clean
+display stack and invoke StartDevice.  The package, firmware, driver bytes,
+power, UAT, display, input, CPU and boot state do not change.
+
+1. Verify exact package/SYS, eight CPUs, services and VHF `0/1/1`.
+2. Remove exactly `ACPI\\APPL0002\\0`; do not delete `oem18.inf` or any signer.
+3. Clear only service diagnostic `Wom1*` receipts and perform exactly one PnP
+   rescan.
+4. Wait at most 30 seconds for a present APPL0002 and fresh StartDevice status.
+5. Require resource-stage success, bounded UAT receipts, responsive input/SSH,
+   eight CPUs and zero Event 129/critical events.  Do not retry.
+
+Recovery remains EXP-123.  Evidence is stored under
+`.local/experiments/EXP-20260827-149-clean-devnode/` and the guest evidence
+tree.
