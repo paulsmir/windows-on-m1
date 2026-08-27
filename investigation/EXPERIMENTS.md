@@ -12670,3 +12670,43 @@ EXP-151 therefore rejects the lifecycle-versus-UAT build-profile switch as the
 cause of the post-AddDevice admission regression.  The next investigation must
 compare the exact EXP-130 binary/source/build contract with the current
 lifecycle binary before changing hardware, firmware, UAT or RTKit behavior.
+
+## EXP-20260827-152 — Restore the proven compile-time WDDM 2.6 ABI
+
+Status: preregistered; package build pending.
+
+### Fixed source and single variable
+
+- Root source: `c324297ac6d042f447a8308aeeba2884a680b388` on
+  `feature/j313-gpu-acceleration`; implementation
+  commit `b0c8a523507bbf85136eebece9048fab8e87c250`.
+- Firmware, m1n1, Mu, ACPI, eight-CPU topology, input, storage, xHCI, display,
+  callback assignments, runtime Version field and lifecycle-only behavior are
+  identical to EXP-151.
+- The sole variable is the compile-time `DXGKDDI_INTERFACE_VERSION`: WDDM 3.0
+  in EXP-151 versus WDDM 2.6 in EXP-152.  Runtime Version remains WDDM 2.6.
+- Recovery remains the immutable EXP-123 artifact.
+
+### Hypothesis and gates
+
+EXP-130 reached StartDevice before the project introduced its global WDDM 3.0
+compile definition.  EXP-150 changed only the runtime Version value, and
+EXP-151 changed only the qualification profile; neither restored the proven
+compile-time structure and callback ABI.  Compiling the current lifecycle
+package with the WDDM 2.6 interface layout will cross the post-AddDevice
+admission boundary and reach the deliberate stage-7
+`STATUS_NOT_SUPPORTED` endpoint.
+
+1. Build and sign exactly one Debug ARM64 package from the fixed root with
+   lifecycle=true and WDDM26-ABI=true; every hardware-owning profile remains
+   false.  Pin SYS/INF/CAT hashes, version and signer before guest mutation.
+2. Require exact EXP-151 precondition, eight CPUs and Running AppleInput,
+   stornvme and USBXHCI.  Cycle only APPL0002 once in the current G2 guest.
+3. Pass only on fresh AddDevice success and StartDevice stage 7/status
+   `0xC00000BB`, with every power/MMIO/firmware/UAT receipt absent.
+4. Require responsive native input, eight CPUs, zero Event 129 and zero
+   critical System events.  A package failure, timeout or different receipt is
+   terminal; do not retry.
+
+This experiment tests dxgkrnl admission only.  It does not authorize GPU power,
+MMIO, firmware, RTKit, UAT, interrupts, queues, rendering or presentation.
