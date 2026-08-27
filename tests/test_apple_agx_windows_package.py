@@ -21,7 +21,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("PCI\\CC_03", inf)
         self.assertIn("CatalogFile=AppleAgx.cat", inf)
 
-    def test_driver_uses_full_dxgkrnl_entry_not_display_only(self):
+    def test_driver_separates_adl_headers_from_implemented_runtime_level(self):
         driver = self.read("src/driver.c")
         project = self.read("AppleAgx.vcxproj")
         self.assertIn("DRIVER_INITIALIZATION_DATA", driver)
@@ -29,6 +29,10 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
         self.assertIn("DXGKDDI_INTERFACE_VERSION_WDDM3_0", project)
         self.assertIn(
+            "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM2_6",
+            driver,
+        )
+        self.assertNotIn(
             "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0",
             driver,
         )
