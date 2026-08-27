@@ -11918,3 +11918,65 @@ immediate runner saw zero. No retry is permitted. Raw evidence remains under
 ignored `.local/experiments/EXP-20260827-138-agx-mailbox-visibility/`; the
 sanitized verdict is
 `investigation/artifacts/EXP-20260827-138-agx-mailbox-visibility/VERDICT.md`.
+
+### EXP-20260827-139 — J313 context-zero UAT root snapshot
+
+Status: preregistered at `2026-08-27T18:58:32Z`; hardware transaction not yet
+started. EXP-138 proved that the running firmware consumed Windows IOP INIT but
+produced no HELLO. Current Asahi and pinned m1n1 establish context-zero UAT
+roots before entering RTKit, while the Windows qualification path does not.
+
+The single changed variable is one read-only snapshot before ASC RUN: decode
+the existing versioned AGX broker configuration, map the exact J313 gpu-region
+with `PAGE_READONLY | PAGE_NOCACHE`, read context-zero TTBR0 and TTBR1, unmap,
+and persist the values and pair-valid flag. The profile may not acquire GPU
+power, write MMIO, change ASC state, publish UAT roots, send mailbox messages,
+build initdata, register interrupts, submit commands, or expose a render node.
+Zero or invalid roots confirm the missing-prerequisite hypothesis. A valid
+nonzero pair rejects it. A mapping failure localizes the next correction to an
+explicit Mu/ACPI resource contract; the private diagnostic mapping must not be
+reused for production publication.
+
+Repository branch is `feature/j313-gpu-acceleration`. The ledger HEAD at
+preregistration is `fd847af8d1bba316b87f91e5ce5bbd7376b9dc54`; package source
+is `8b5ab22ba9d7b7446d9919b62b9554589a51f14f`; m1n1 is
+`72dbbd2b0b279638ac53482a6d79d06adfa6aef7`; Mu is
+`c6108366201f869b297912a0ef8323b343256ecc`. Tracked diff hashes for root,
+m1n1 and Mu are the empty SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Porcelain-state hashes are root
+`2477882f411e88db4fb05126b3e82477ff2ea180faf20439a4b33648e08bbee2`,
+m1n1 `6481a9771aff8aed35cbcebcba7137f562e443494d729c89db15e05b28c49971`,
+and Mu `305c4c53bf5736d01bf1f198d76bf3e3c440e18f8a0973bdeabffe00bf29f5de`;
+these represent only the pre-existing m1n1 `.DS_Store` and nested Mu metadata
+and must not be staged.
+
+The exact builder command is MSBuild `Clean,Build` for `Debug|ARM64`, WDK
+`10.0.26100.0`, `MatchingWdkPresent=true`, and
+`AppleAgxUatSnapshotQualification=true` against source commit `8b5ab22`.
+The build completed with zero errors and warnings. The retained local package is
+`.local/experiments/EXP-20260827-139-agx-uat-root-snapshot/package/`:
+INF `030a93073caa689dfd6e786548d3437dcd548aaa61a46f7761ef1f23dca41bf1`,
+SYS `7f94281877f99d9bfcdbe1e31c56dac324d6432e2907036f9537920b2bf308e5`,
+CAT `02b5c36952d7e3632aa00597835197984d80af065c440f363d3802b96325f8bb`,
+certificate `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda`,
+signer `E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+
+The live machine is `DESKTOP-LS9L95M` at `192.168.1.37`, assisted G2,
+display both, eight logical processors, with Running AppleInput, stornvme,
+USBXHCI and sshd. The current AppleAgx package is `oem17.inf`, version
+`15.47.29.978`, SYS
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+signer `8E36CF1EC74F76AB5D6532706C59158914AD37A9`, Problem 43. The boot image
+is `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
+Stable cold recovery is immutable EXP-123.
+
+Install exactly once with the hash-pinned single-transaction lifecycle runner,
+passing `PreviousPublishedName oem17.inf`, a 30-second completion timeout, and
+a 250-millisecond poll interval. Evidence is written under
+`C:\\Users\\pavel\\EXP139Evidence` and copied back to
+`.local/experiments/EXP-20260827-139-agx-uat-root-snapshot/`. Passing requires
+all six new receipts, eight CPUs, Running AppleInput/stornvme/USBXHCI, no fresh
+Event 129, no critical System event, no reboot, and responsive SSH/input. Stop
+after the single transaction on any hash, signer or device identity drift,
+receipt timeout, health loss, storage reset, bugcheck or reboot. Do not retry.
