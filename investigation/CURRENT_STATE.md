@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T14:38:04Z
+Updated: 2026-08-27T15:09:26Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -63,18 +63,18 @@ This is the bounded session entry point. Detailed history is append-only in
 
 ## Active hypothesis
 
-The first failing boundary is before receipt of the RTKit management HELLO. The
-current evidence does not yet distinguish absent firmware execution, missing ASC
-mailbox visibility, or missing interrupt/poll delivery. No protocol correction is
-authorized until the live state, Asahi, m1n1, Mu/ACPI and WDK contracts are
-compared at this exact boundary.
+EXP-135 observed powered pre-start `CPU_STATUS=0x2a` (stopped), while EXP-136
+ended at `0x2d` (running and idle) after no HELLO. Current Asahi asserts ASC RUN
+well before its RTKit boot wait; the Windows path previously sent IOP INIT
+immediately after RUN. The falsifiable EXP-137 hypothesis is that the first
+mailbox message crossed the unobserved stopped-to-running transition.
 
 ## Single next action
 
-Complete source-first comparison for the ASC RUN-to-first-HELLO sequence and
-form one falsifiable hypothesis. The next hardware action, if justified, is one
-Windows device hot cycle using a receipt-complete runner. Do not reboot merely
-for a Windows-only driver diagnostic change.
+Build and sign the EXP-137 package that waits for
+`CPU_STATUS.RUNNING=1 && STOPPED=0`, then perform one receipt-complete Windows
+device hot cycle without reboot. A new `CPU_READY` flag distinguishes a ready
+ASC with no HELLO from failure to leave STOPPED.
 
 ## Rollback
 

@@ -15,6 +15,9 @@ typedef struct _FAKE_SESSION_ASC {
   unsigned int SendCount;
   unsigned long long PendingPayload;
   unsigned char FailWrite;
+  unsigned int CpuStatus[8];
+  unsigned int CpuStatusCount;
+  unsigned int CpuStatusIndex;
 } FAKE_SESSION_ASC;
 
 static unsigned long long FakeNow(void *Context) {
@@ -26,6 +29,12 @@ static unsigned char FakeRead32(void *Context, unsigned int Offset,
   FAKE_SESSION_ASC *fake = Context;
   if (Offset == J313_AGX_G2_ASC_CPU_CONTROL_OFFSET)
     *Value = fake->Control;
+  else if (Offset == J313_AGX_G2_ASC_CPU_STATUS_OFFSET) {
+    if (fake->CpuStatusIndex < fake->CpuStatusCount)
+      *Value = fake->CpuStatus[fake->CpuStatusIndex++];
+    else
+      *Value = APPLE_AGX_ASC_CPU_RUNNING;
+  }
   else if (Offset == J313_AGX_G2_ASC_INBOX_CTRL_OFFSET)
     *Value = 0u;
   else if (Offset == J313_AGX_G2_ASC_OUTBOX_CTRL_OFFSET)
@@ -123,6 +132,7 @@ static void TestBootAndStopAreExactAndBounded(void) {
   assert(AppleAgxRtkitSessionBoot(&session, &io, 100u) ==
          AppleAgxRtkitSessionResultOk);
   assert(session.Running);
+  assert(session.CpuReady);
   assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) != 0u);
   assert(fake.SendCount == 4u);
   assert(fake.SendPayload[0] == 0x0060000000000220ULL);
@@ -153,11 +163,32 @@ static void TestProtocolFailureClearsRun(void) {
   assert(AppleAgxRtkitSessionBoot(&session, &io, 100u) ==
          AppleAgxRtkitSessionResultProtocolViolation);
   assert(!session.Running);
+  assert(session.CpuReady);
   assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) == 0u);
+}
+
+static void TestBootWaitsForCpuReadyBeforeSendingWake(void) {
+  FAKE_SESSION_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+
+  memset(&fake, 0, sizeof(fake));
+  fake.CpuStatus[0] = APPLE_AGX_ASC_CPU_STOPPED;
+  fake.CpuStatus[1] = APPLE_AGX_ASC_CPU_RUNNING;
+  fake.CpuStatusCount = 2u;
+  QueueBoot(&fake);
+  io = MakeIo(&fake);
+  AppleAgxRtkitSessionInitialize(&session);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, 100u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(fake.CpuStatusIndex == 2u);
+  assert(session.CpuReady);
+  assert(fake.SendCount == 4u);
 }
 
 int main(void) {
   TestBootAndStopAreExactAndBounded();
   TestProtocolFailureClearsRun();
+  TestBootWaitsForCpuReadyBeforeSendingWake();
   return 0;
 }

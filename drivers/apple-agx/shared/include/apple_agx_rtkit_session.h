@@ -18,6 +18,7 @@ typedef enum _APPLE_AGX_RTKIT_SESSION_RESULT {
 typedef struct _APPLE_AGX_RTKIT_SESSION {
   APPLE_AGX_RTKIT_BOOT Boot;
   APPLE_AGX_RTKIT_BOOL Running;
+  APPLE_AGX_RTKIT_BOOL CpuReady;
 } APPLE_AGX_RTKIT_SESSION;
 
 void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session);

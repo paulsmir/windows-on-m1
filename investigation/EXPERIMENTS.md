@@ -11806,3 +11806,28 @@ The hypothesis was confirmed only as a diagnostic localization: the timeout is
 before first HELLO. Its root cause remains unresolved. The next step is a
 source-first comparison of live ASC state, Asahi, m1n1, Mu/ACPI and the Windows
 transport before one new falsifiable hot-cycle experiment.
+
+### EXP-20260827-137 — J313 AGX ASC-ready RTKit qualification
+
+Status: preregistered at `2026-08-27T15:09:26Z`; hardware not yet run. The
+source-first comparison found that EXP-135 entered with powered ASC status
+`0x2a` (stopped), EXP-136 timed out before HELLO and ended at `0x2d` (running and
+idle), and current Asahi leaves a substantial initialization interval between
+asserting ASC RUN and waiting for RTKit boot. The Windows path instead wrote IOP
+INIT immediately after RUN without observing CPU readiness.
+
+The single falsifiable change is a bounded wait for
+`CPU_STATUS.RUNNING=1 && CPU_STATUS.STOPPED=0` before the first mailbox write.
+The driver adds a durable `CPU_READY` boot flag but preserves the exact EXP-136
+power, MMIO, RTKit messages, cleanup and fail-closed boundary. Passing requires
+the flag and progress beyond `AwaitingHello`; CPU ready with no HELLO rejects
+the timing hypothesis and localizes the next investigation to mailbox/firmware
+visibility. A ready-wait timeout separately proves failure to start ASC.
+
+Use the existing assisted G2 display-both eight-core guest and change only the
+officially signed Windows package. Run exactly one receipt-complete device hot
+cycle without reboot. UAT publication, initdata, interrupts, queues, commands,
+rendering, presentation and display ownership remain forbidden. Stop on any
+identity drift, lost SSH/input/NVMe/xHCI health, Event 129, critical event,
+bugcheck or reboot. The literal contract is
+`documentation/plans/2026-08-27-j313-agx-asc-ready-hardware-qualification.md`.

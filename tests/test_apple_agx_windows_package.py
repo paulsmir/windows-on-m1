@@ -656,6 +656,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("Result->StopStatus", transport)
         self.assertIn("Result->BootPhase", transport)
         self.assertIn("Result->BootFlags", transport)
+        self.assertIn("APPLE_AGX_RTKIT_BOOT_FLAG_CPU_READY", transport)
         self.assertIn("Result->NegotiatedVersion", transport)
         self.assertIn("Result->FinalCpuStatusReadStatus", transport)
         self.assertIn("Result->FinalCpuStatus", transport)

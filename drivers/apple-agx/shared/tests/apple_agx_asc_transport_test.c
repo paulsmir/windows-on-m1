@@ -107,6 +107,37 @@ static void TestSetRunPreservesOtherControlBits(void) {
   assert(fake.LastValue == 0x101u);
 }
 
+static void TestWaitRunningObservesStoppedToRunningTransition(void) {
+  FAKE_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  unsigned int status = 0;
+
+  memset(&fake, 0, sizeof(fake));
+  fake.Read32Values[0] = APPLE_AGX_ASC_CPU_STOPPED;
+  fake.Read32Values[1] = APPLE_AGX_ASC_CPU_RUNNING;
+  io = MakeIo(&fake);
+  assert(AppleAgxAscWaitRunning(&io, 10u, &status) ==
+         AppleAgxAscResultOk);
+  assert(status == APPLE_AGX_ASC_CPU_RUNNING);
+  assert(fake.Read32Count == 2u);
+  assert(fake.LastOffset == J313_AGX_G2_ASC_CPU_STATUS_OFFSET);
+}
+
+static void TestWaitRunningIsBounded(void) {
+  FAKE_ASC fake;
+  APPLE_AGX_ASC_IO io;
+  unsigned int status = 0;
+
+  memset(&fake, 0, sizeof(fake));
+  fake.Read32Values[0] = APPLE_AGX_ASC_CPU_STOPPED;
+  fake.Read32Values[1] = APPLE_AGX_ASC_CPU_STOPPED;
+  fake.Read32Values[2] = APPLE_AGX_ASC_CPU_STOPPED;
+  io = MakeIo(&fake);
+  assert(AppleAgxAscWaitRunning(&io, 1u, &status) ==
+         AppleAgxAscResultTimeout);
+  assert(status == APPLE_AGX_ASC_CPU_STOPPED);
+}
+
 static void TestSendWaitsForSpaceThenPublishesPayloadBeforeEndpoint(void) {
   FAKE_ASC fake;
   APPLE_AGX_ASC_IO io;
@@ -199,6 +230,8 @@ static void TestSendAndReceiveRequireOnlyTheirOwnCallbacks(void) {
 int main(void) {
   TestReadCpuStatusUsesTypedOffset();
   TestSetRunPreservesOtherControlBits();
+  TestWaitRunningObservesStoppedToRunningTransition();
+  TestWaitRunningIsBounded();
   TestSendWaitsForSpaceThenPublishesPayloadBeforeEndpoint();
   TestReceiveWaitsForMessageAndExtractsEndpoint();
   TestBoundedWaitAndTransportFailures();

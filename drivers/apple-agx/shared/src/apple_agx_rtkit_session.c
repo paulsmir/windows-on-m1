@@ -48,6 +48,7 @@ void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session) {
     return;
   AppleAgxRtkitBootInitialize(&Session->Boot);
   Session->Running = APPLE_AGX_RTKIT_FALSE;
+  Session->CpuReady = APPLE_AGX_RTKIT_FALSE;
 }
 
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
@@ -57,6 +58,7 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
   APPLE_AGX_RTKIT_BOOT_OUTPUT output;
   APPLE_AGX_RTKIT_BOOT_RESULT boot_result;
   APPLE_AGX_RTKIT_SESSION_RESULT result;
+  APPLE_AGX_ASC_U32 cpu_status = 0u;
 
   if (Session == APPLE_AGX_RTKIT_SESSION_NULL ||
       Io == APPLE_AGX_RTKIT_SESSION_NULL)
@@ -69,6 +71,11 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
   if (result != AppleAgxRtkitSessionResultOk)
     return result;
   Session->Running = APPLE_AGX_RTKIT_TRUE;
+  result = AppleAgxRtkitSessionAscResult(
+      AppleAgxAscWaitRunning(Io, DeadlineMs, &cpu_status));
+  if (result != AppleAgxRtkitSessionResultOk)
+    return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
+  Session->CpuReady = APPLE_AGX_RTKIT_TRUE;
   AppleAgxRtkitBootInitialize(&Session->Boot);
   boot_result = AppleAgxRtkitBootBegin(&Session->Boot, &output);
   if (boot_result != AppleAgxRtkitBootResultOk)

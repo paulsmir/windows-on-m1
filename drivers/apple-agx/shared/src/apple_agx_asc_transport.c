@@ -63,6 +63,33 @@ APPLE_AGX_ASC_RESULT AppleAgxAscSetRun(const APPLE_AGX_ASC_IO *Io,
   return AppleAgxAscResultOk;
 }
 
+APPLE_AGX_ASC_RESULT AppleAgxAscWaitRunning(const APPLE_AGX_ASC_IO *Io,
+                                            APPLE_AGX_ASC_U64 DeadlineMs,
+                                            APPLE_AGX_ASC_U32 *Status) {
+  APPLE_AGX_ASC_U64 start_ms;
+  APPLE_AGX_ASC_RESULT result;
+
+  if (Io == APPLE_AGX_ASC_NULL || Io->NowMs == APPLE_AGX_ASC_NULL ||
+      Io->Read32 == APPLE_AGX_ASC_NULL || Status == APPLE_AGX_ASC_NULL)
+    return AppleAgxAscResultInvalidArgument;
+  start_ms = Io->NowMs(Io->Context);
+  if (start_ms > DeadlineMs)
+    return AppleAgxAscResultTimeout;
+  for (;;) {
+    result = AppleAgxAscReadCpuStatus(Io, Status);
+    if (result != AppleAgxAscResultOk)
+      return result;
+    if ((*Status & APPLE_AGX_ASC_CPU_RUNNING) != 0u &&
+        (*Status & APPLE_AGX_ASC_CPU_STOPPED) == 0u)
+      return AppleAgxAscResultOk;
+    if (Io->Pause != APPLE_AGX_ASC_NULL && !Io->Pause(Io->Context))
+      return AppleAgxAscResultTransportFailed;
+    result = AppleAgxAscCheckDeadline(Io, start_ms, DeadlineMs);
+    if (result != AppleAgxAscResultOk)
+      return result;
+  }
+}
+
 APPLE_AGX_ASC_RESULT AppleAgxAscSend(const APPLE_AGX_ASC_IO *Io,
                                      APPLE_AGX_ASC_U64 Payload,
                                      APPLE_AGX_ASC_U32 Endpoint,

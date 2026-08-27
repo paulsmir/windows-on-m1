@@ -11,6 +11,8 @@ typedef unsigned long long APPLE_AGX_ASC_U64;
 #define APPLE_AGX_ASC_FALSE ((APPLE_AGX_ASC_BOOL)0u)
 #define APPLE_AGX_ASC_TRUE ((APPLE_AGX_ASC_BOOL)1u)
 #define APPLE_AGX_ASC_CPU_RUN (1u << 4u)
+#define APPLE_AGX_ASC_CPU_RUNNING (1u << 0u)
+#define APPLE_AGX_ASC_CPU_STOPPED (1u << 1u)
 #define APPLE_AGX_ASC_MAILBOX_FULL (1u << 16u)
 #define APPLE_AGX_ASC_MAILBOX_EMPTY (1u << 17u)
 
@@ -45,6 +47,9 @@ APPLE_AGX_ASC_RESULT AppleAgxAscReadCpuStatus(const APPLE_AGX_ASC_IO *Io,
                                                APPLE_AGX_ASC_U32 *Status);
 APPLE_AGX_ASC_RESULT AppleAgxAscSetRun(const APPLE_AGX_ASC_IO *Io,
                                        APPLE_AGX_ASC_BOOL Run);
+APPLE_AGX_ASC_RESULT AppleAgxAscWaitRunning(const APPLE_AGX_ASC_IO *Io,
+                                            APPLE_AGX_ASC_U64 DeadlineMs,
+                                            APPLE_AGX_ASC_U32 *Status);
 APPLE_AGX_ASC_RESULT AppleAgxAscSend(const APPLE_AGX_ASC_IO *Io,
                                      APPLE_AGX_ASC_U64 Payload,
                                      APPLE_AGX_ASC_U32 Endpoint,

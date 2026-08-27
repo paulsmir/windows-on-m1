@@ -151,6 +151,8 @@ static ULONG AppleAgxRtkitBootFlags(
     flags |= APPLE_AGX_RTKIT_BOOT_FLAG_AP_POWER_READY;
   if (Session->Running != APPLE_AGX_RTKIT_FALSE)
     flags |= APPLE_AGX_RTKIT_BOOT_FLAG_RUNNING;
+  if (Session->CpuReady != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_CPU_READY;
   return flags;
 }
 
