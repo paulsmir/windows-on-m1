@@ -180,7 +180,6 @@ $beforeHealth = Get-HealthSnapshot
 Assert-PlatformHealth $beforeHealth
 $beforeDevice = Get-DeviceSnapshot
 $beforeReceipts = Get-LifecycleReceipts
-Clear-LifecycleReceipts
 
 $runName = "{0:yyyyMMddTHHmmss.fffZ}-{1}" -f `
     $startedAt.ToUniversalTime(), ([Guid]::NewGuid().ToString("N").Substring(0, 8))
@@ -197,21 +196,23 @@ if ($PreviousPublishedName) {
     $operations += Invoke-PnpUtil @("/scan-devices") $true
 }
 
+# Removal and rediscovery may complete asynchronous PnP transactions of their
+# own.  Clear their receipts only after preparation, immediately before the
+# single candidate add/install transaction observed below.
+Clear-LifecycleReceipts
 $installOperation = Invoke-PnpUtil @("/add-driver", $inf, "/install") $false
 $operations += $installOperation
 if ($installOperation.ExitCode -ne 0) {
     # pnputil returns ERROR_NO_MORE_ITEMS (259) when the exact staged package
     # is already the best installed package.  Accept that idempotent state
     # only when APPL0002 is currently bound to a recorded oemNN.inf.
-    $boundBeforeRestart = Get-DeviceSnapshot
-    $boundInf = $boundBeforeRestart.Properties["DEVPKEY_Device_DriverInfPath"]
+    $boundAfterInstall = Get-DeviceSnapshot
+    $boundInf = $boundAfterInstall.Properties["DEVPKEY_Device_DriverInfPath"]
     if ($installOperation.ExitCode -ne 259 -or $boundInf -notmatch '^oem\d+\.inf$') {
         throw "pnputil add/install failed with exit code $($installOperation.ExitCode): $($installOperation.Output -join '; ')"
     }
     Write-Host "pnputil 259: APPL0002 already the exact installed package $boundInf"
 }
-$operations += Invoke-PnpUtil @("/scan-devices") $true
-$operations += Invoke-PnpUtil @("/restart-device", $deviceId) $false
 $completion = Wait-StartDeviceCompletion
 
 $afterDevice = Get-DeviceSnapshot
