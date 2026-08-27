@@ -16,6 +16,7 @@
 #include "apple_agx_memory.h"
 #include "apple_agx_power.h"
 #include "apple_agx_state.h"
+#include "apple_agx_uat_publication.h"
 #if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
     defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
 #include "apple_agx_asc_transport.h"
@@ -39,6 +40,11 @@
 typedef struct _APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR {
   PDXGKRNL_INTERFACE Interface;
 } APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR;
+
+typedef struct _APPLE_AGX_WINDOWS_UAT_PUBLICATION {
+  PDXGKRNL_INTERFACE Interface;
+  NTSTATUS LastStatus;
+} APPLE_AGX_WINDOWS_UAT_PUBLICATION;
 
 #if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
     defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
@@ -172,6 +178,10 @@ NTSTATUS AppleAgxWindowsMemoryInitialize(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _Out_ APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR *Allocator,
     _Out_ APPLE_AGX_MEMORY_IO *Io);
+NTSTATUS AppleAgxWindowsUatPublicationInitialize(
+    _In_ PDXGKRNL_INTERFACE DxgkInterface,
+    _Out_ APPLE_AGX_WINDOWS_UAT_PUBLICATION *Publication,
+    _Out_ APPLE_AGX_UAT_PUBLICATION_IO *Io);
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
     defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)

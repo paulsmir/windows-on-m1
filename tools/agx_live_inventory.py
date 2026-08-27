@@ -2,6 +2,7 @@
 """Capture J313 AGX ADT metadata without hardware writes."""
 
 import argparse
+from collections.abc import Mapping
 import hashlib
 import json
 import os
@@ -65,6 +66,16 @@ def json_value(value):
         return value
     if isinstance(value, bytes):
         return {"bytes_hex": value.hex()}
+    # construct.Container implements Mapping but iterates over field names.
+    # Preserve decoded values and omit construct's private bookkeeping keys;
+    # treating it as a generic iterable silently turns GPU perf-state records
+    # into ["_io", "freq", "volt"].
+    if isinstance(value, Mapping):
+        return {
+            str(key): json_value(item)
+            for key, item in value.items()
+            if not str(key).startswith("_")
+        }
     if all(hasattr(value, field) for field in ("phandle", "name", "args")):
         return {
             "phandle": int(value.phandle),

@@ -6,6 +6,7 @@
 #include "apple_agx_firmware_status.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_regionb_memory.h"
+#include "apple_agx_regionc.h"
 #include "apple_agx_uat_memory.h"
 
 #define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 7u
@@ -56,6 +57,7 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   APPLE_AGX_CHANNEL_INFO_MANIFEST ChannelInfoManifest;
   APPLE_AGX_REGIONB_MEMORY_OWNER RegionBMemory;
   APPLE_AGX_REGIONB_MANIFEST RegionBManifest;
+  APPLE_AGX_REGIONC_MANIFEST RegionCManifest;
   unsigned long long InitdataVirtualAddress;
   unsigned long long InitdataDeviceAddress;
   unsigned char Initialized;
@@ -65,7 +67,8 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
 
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
-    const APPLE_AGX_MEMORY_IO *MemoryIo);
+    const APPLE_AGX_MEMORY_IO *MemoryIo,
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryDestroy(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph);
 

@@ -75,6 +75,9 @@ static void AppleAgxInitdataMemoryClearPublished(
   Graph->RegionBManifest.PointerCount = 0u;
   Graph->RegionBManifest.FirstOffset = 0u;
   Graph->RegionBManifest.LastOffset = 0u;
+  Graph->RegionCManifest.EncodedSize = 0u;
+  Graph->RegionCManifest.NonzeroWordCount = 0u;
+  Graph->RegionCManifest.OracleFnv1a64 = 0ULL;
   for (index = 0u; index < 4u; ++index) {
     Graph->Manifest.VersionWords[index] = 0u;
     Graph->Manifest.ReferencedAddresses[index] = 0ULL;
@@ -96,7 +99,8 @@ static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryRollback(
 
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
-    const APPLE_AGX_MEMORY_IO *MemoryIo) {
+    const APPLE_AGX_MEMORY_IO *MemoryIo,
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot) {
   APPLE_AGX_INITDATA_INPUT input;
   APPLE_AGX_UAT_RESULT uat_result;
   APPLE_AGX_INITDATA_RESULT initdata_result;
@@ -104,10 +108,12 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
   APPLE_AGX_FIRMWARE_STATUS_RESULT firmware_status_result;
   APPLE_AGX_CHANNEL_INFO_RESULT channel_info_result;
   APPLE_AGX_REGIONB_RESULT regionb_result;
+  APPLE_AGX_REGIONC_RESULT regionc_result;
   unsigned long long virtual_address;
   unsigned int index;
 
-  if (Graph == 0 || MemoryIo == 0 || MemoryIo->AllocateContiguous == 0 ||
+  if (Graph == 0 || MemoryIo == 0 || Snapshot == 0 ||
+      MemoryIo->AllocateContiguous == 0 ||
       MemoryIo->FreeContiguous == 0 || Graph->Initialized != 0u ||
       Graph->Built != 0u || Graph->DataObjectCount != 0u ||
       AppleAgxInitdataMemoryStorageIsEmpty(Graph) == 0u)
@@ -244,6 +250,15 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
           Graph->DataObjects[AppleAgxInitdataMemoryRegionB].CpuAddress,
       J313_AGX_G2_INITDATA_REGION_B_SIZE, &Graph->RegionBManifest);
   if (regionb_result != AppleAgxRegionBResultOk)
+    return AppleAgxInitdataMemoryRollback(
+        Graph, AppleAgxInitdataMemoryResultEncodeFailed);
+
+  regionc_result = AppleAgxRegionCEncodeJ313G13V13_5(
+      Snapshot,
+      (unsigned char *)
+          Graph->DataObjects[AppleAgxInitdataMemoryRegionC].CpuAddress,
+      J313_AGX_G2_INITDATA_REGION_C_SIZE, &Graph->RegionCManifest);
+  if (regionc_result != AppleAgxRegionCResultOk)
     return AppleAgxInitdataMemoryRollback(
         Graph, AppleAgxInitdataMemoryResultEncodeFailed);
 

@@ -233,7 +233,10 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         sources = "\n".join(
             path.read_text()
             for path in sorted((WINDOWS / "src").glob("*.c"))
-            if path.name not in ("power.c", "mmio.c", "firmware_transport.c")
+            if path.name not in (
+                "power.c", "mmio.c", "firmware_transport.c",
+                "uat_publication_windows.c",
+            )
         )
         for unsafe in (
             "WRITE_REGISTER", "MmMapIoSpace", "MmMapIoSpaceEx",
@@ -261,6 +264,8 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn(r"..\shared\src\apple_agx_firmware_status.c", project)
         self.assertIn(r"..\shared\src\apple_agx_channel_info.c", project)
         self.assertIn(r"..\shared\src\apple_agx_channel_memory.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_regionc.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_uat_publication.c", project)
         self.assertIn(r"..\shared\include\apple_agx_uat.h", project)
         self.assertIn(r"..\shared\include\apple_agx_uat_table.h", project)
         self.assertIn(r"..\shared\include\apple_agx_uat_memory.h", project)
@@ -269,6 +274,8 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn(r"..\shared\include\apple_agx_firmware_status.h", project)
         self.assertIn(r"..\shared\include\apple_agx_channel_info.h", project)
         self.assertIn(r"..\shared\include\apple_agx_channel_memory.h", project)
+        self.assertIn(r"..\shared\include\apple_agx_regionc.h", project)
+        self.assertIn(r"..\shared\include\apple_agx_uat_publication.h", project)
         self.assertNotIn("AppleAgxUatMemoryOwner", adapter)
         self.assertNotIn("AppleAgxUatCreateAddressSpace", adapter)
         self.assertNotIn("AppleAgxInitdataMemoryBuild", adapter)
@@ -298,6 +305,21 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("MmGetPhysicalAddress", memory)
         self.assertNotIn("MmAllocateContiguousMemory", memory)
         self.assertNotIn("AppleAgxWindowsMemoryInitialize", self.read("src/adapter.c"))
+
+    def test_uat_publication_transport_is_noncached_and_disconnected(self):
+        source_path = WINDOWS / "src" / "uat_publication_windows.c"
+        self.assertTrue(source_path.exists())
+        source = source_path.read_text()
+        project = self.read("AppleAgx.vcxproj")
+        adapter = self.read("src/adapter.c")
+
+        self.assertIn(r"src\uat_publication_windows.c", project)
+        self.assertIn("AppleAgxWindowsUatPublicationInitialize", source)
+        self.assertIn("DxgkCbMapMemory", source)
+        self.assertIn("MmNonCached", source)
+        self.assertIn("KeMemoryBarrier", source)
+        self.assertIn("DxgkCbUnmapMemory", source)
+        self.assertNotIn("AppleAgxWindowsUatPublicationInitialize", adapter)
 
     def test_mmio_qualification_is_opt_in_inert_and_fail_closed(self):
         adapter = self.read("src/adapter.c")

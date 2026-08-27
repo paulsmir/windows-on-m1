@@ -3,8 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.agx_live_inventory import (ensure_guest_inactive, node_record,
-                                      platform_name)
+from tools.agx_live_inventory import (ensure_guest_inactive, json_value,
+                                      node_record, platform_name)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +36,17 @@ class FakeAdt:
 
 
 class AgxLiveInventoryTests(unittest.TestCase):
+    def test_live_perf_state_preserves_numeric_fields_not_field_names(self):
+        class PerfState(dict):
+            def __getattr__(self, name):
+                return self[name]
+
+        state = PerfState(_io="internal", freq=1_278_000_000, volt=850_000)
+        self.assertEqual(
+            json_value(state),
+            {"freq": 1_278_000_000, "volt": 850_000},
+        )
+
     def test_live_inventory_refuses_active_guest(self):
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "guest.pid").write_text(str(os.getpid()))

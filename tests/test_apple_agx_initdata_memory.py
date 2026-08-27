@@ -26,6 +26,7 @@ class AppleAgxInitdataMemoryTests(unittest.TestCase):
                 str(SHARED / "src" / "apple_agx_channel_memory.c"),
                 str(SHARED / "src" / "apple_agx_regionb.c"),
                 str(SHARED / "src" / "apple_agx_regionb_memory.c"),
+                str(SHARED / "src" / "apple_agx_regionc.c"),
                 str(SHARED / "src" / "apple_agx_uat_memory.c"),
                 str(SHARED / "src" / "apple_agx_uat_table.c"),
                 str(SHARED / "src" / "apple_agx_uat.c"),

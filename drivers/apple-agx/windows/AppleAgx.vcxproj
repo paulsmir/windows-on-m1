@@ -70,6 +70,7 @@
     <ClCompile Include="src\driver_diagnostics.c" />
     <ClCompile Include="src\firmware_transport.c" />
     <ClCompile Include="src\memory_windows.c" />
+    <ClCompile Include="src\uat_publication_windows.c" />
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />
     <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
@@ -87,6 +88,9 @@
     <ClCompile Include="..\shared\src\apple_agx_channel_memory.c" />
     <ClCompile Include="..\shared\src\apple_agx_regionb.c" />
     <ClCompile Include="..\shared\src\apple_agx_regionb_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_config_snapshot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionc.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_publication.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\apple_agx_driver.h" />
@@ -107,6 +111,9 @@
     <ClInclude Include="..\shared\include\apple_agx_channel_memory.h" />
     <ClInclude Include="..\shared\include\apple_agx_regionb.h" />
     <ClInclude Include="..\shared\include\apple_agx_regionb_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_config_snapshot.h" />
+    <ClInclude Include="..\shared\include\apple_agx_regionc.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_publication.h" />
     <ClInclude Include="..\shared\include\j313_agx_g2.generated.h" />
   </ItemGroup>
   <ItemGroup>
