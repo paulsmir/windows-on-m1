@@ -66,8 +66,10 @@ This is the bounded session entry point. Detailed history is append-only in
   `841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`.
 - Signer display name: `WDKTestCert runneradmin,134323192909486495`.
 
-## Last confirmed successful boundary
+## Last confirmed boundary
 
+- Predecessor: EXP-20260827-137 proved ASC CPU readiness before the same
+  first-message timeout.
 - Experiment: EXP-20260827-138.
 - PnP invoked DriverEntry, AddDevice and StartDevice.
 - Final StartDevice stage: 6.
@@ -90,13 +92,18 @@ IRQ-route logging and identified the sustained route as physical AIC 330 to
 guest INTID 865, the AppleInput GPIO parent rather than NVMe or xHCI. EXP-144
 confirmed the IRQ amplification mechanism.  EXP-145 removed the installer
 confound and qualified the complete input path plus clean storage window.
+The first version-three UAT package transaction then proved a separate parser
+regression: Windows translated each of the three QWordMemory ranges into a
+memory descriptor plus an opaque DevicePrivate companion, while the driver
+still admitted only the two companions from contract version two.
 
 ## Single next action
 
-Cleanly stop exact recovery, cold-launch the already-built version-three GPU
-resource candidate, and run only the read-only assigned UAT-root snapshot.
-Do not publish roots, build initdata, rerun EXP-138/139, add delay, or change
-the RTKit wire protocol until that assigned-resource snapshot succeeds.
+Build the exact `45127a2a164e34119464f5e7ab22d4c3acb63852` read-only
+UAT-snapshot package and perform one hot APPL0002 transaction.  Require resource
+stage success and durable UAT root receipts with healthy input, storage, xHCI,
+eight CPUs and no new Event 129 or critical System event.  Do not publish roots,
+build initdata, add delay, change the RTKit protocol or reboot the guest.
 
 ## Rollback
 

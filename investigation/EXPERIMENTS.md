@@ -12334,3 +12334,54 @@ at phase 8 with zero SPI timeout, packet CRC, message CRC, fragment and offline
 errors.  No stornvme Event 129 and no Critical or Error System event appeared
 in the observation window, and SSH remained responsive.  EXP-145 passes; this
 is the qualified AppleInput package for the next GPU cold boot.
+
+## EXP-20260827-146 — Accept one translated DevicePrivate descriptor per AGX MMIO range
+
+Status: preregistered; software correction pending, no second device transaction
+has run.
+
+### Evidence and hypothesis
+
+The first qualified version-three GPU transaction used root commit
+`9f4c79b566415ed90aeb6c9d14fd5ed43c004f28`, m1n1 artifact commit
+`4108e79c69bac112ffbebf452fccf352c93c1dd2`, Mu commit
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`, firmware SHA-256
+`34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`
+and m1n1 SHA-256
+`17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+The exact signed AppleAgx package was published as `oem18.inf`.  Its single
+StartDevice transaction completed in 326 ms with no Event 129 or critical
+System event, eight CPUs and AppleInput/stornvme/USBXHCI Running, but ended at
+`AppleAgxStartResourcesValidated` with `0xC0000182` and Problem 43.
+
+The durable translated-resource receipt contains exactly three memory
+descriptors, three immediately paired `CmResourceTypeDevicePrivate`
+descriptors and nine interrupt descriptors.  The generated version-three ACPI
+contract added a third QWordMemory (`gpu-region`), but `resources.c` retained
+the version-two expectation of only two DevicePrivate descriptors.  The
+falsifiable hypothesis is that Windows emits one opaque DevicePrivate companion
+for each translated QWordMemory and that accepting exactly three lets this same
+read-only package reach UAT snapshot diagnostics without changing power,
+mailbox, UAT contents, interrupts, queues or scanout.
+
+### Single variable and procedure
+
+1. Add a failing source regression that binds the opaque DevicePrivate count to
+   the generated three-memory contract.
+2. Change only the exact expected companion count from two to the memory count;
+   keep ownership, bounded-count, MMIO identity and nine-interrupt checks.
+3. Run the focused package tests and complete public test suite, then build and
+   sign one ARM64 `UatSnapshotQualification` package on the Windows builder.
+4. Record all artifact hashes and signer before mutation.  Replace only the
+   current `oem18.inf` package and perform exactly one hot APPL0002 transaction;
+   no reboot, firmware change, retry or proxy attachment.
+5. Pass requires resource stage success and durable UAT config/snapshot
+   receipts with continuously responsive SSH/input, eight CPUs, zero new Event
+   129 and zero critical System events.  Any mismatch, reset, lost input/SSH or
+   missing receipt ends the experiment and restores the recorded package.
+
+Evidence paths are `.local/experiments/EXP-20260827-146-device-private/` on the
+host and `C:\\Users\\pavel\\AppleAgxEvidence` in the guest.  Recovery remains
+the hardware-qualified eight-core stable pair and exact exported AppleInput
+rollback package; no cold recovery is needed for a healthy fail-closed hot
+cycle.
