@@ -125,6 +125,32 @@ void AppleAgxRecordAscCpuStatus(PDEVICE_OBJECT DeviceObject, NTSTATUS Status,
 }
 #endif
 
+#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
+void AppleAgxRecordRtkitQualification(
+    PDEVICE_OBJECT DeviceObject,
+    const APPLE_AGX_RTKIT_QUALIFICATION_RESULT *Result) {
+  if (Result == NULL)
+    return;
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1RtkitBootStatus",
+                                     (ULONG)Result->BootStatus);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1RtkitStopStatus",
+                                     (ULONG)Result->StopStatus);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1RtkitBootPhase",
+                                     Result->BootPhase);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject, L"Wom1RtkitBootFlags",
+                                     Result->BootFlags);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitNegotiatedVersion",
+      Result->NegotiatedVersion);
+  AppleAgxWriteDeviceDiagnosticDword(
+      DeviceObject, L"Wom1RtkitFinalCpuStatusReadStatus",
+      (ULONG)Result->FinalCpuStatusReadStatus);
+  AppleAgxWriteDeviceDiagnosticDword(DeviceObject,
+                                     L"Wom1RtkitFinalCpuStatus",
+                                     Result->FinalCpuStatus);
+}
+#endif
+
 #ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS
 static void AppleAgxWriteDiagnosticDwordToKey(HANDLE Key, PCWSTR ValueName,
                                               ULONG Value) {

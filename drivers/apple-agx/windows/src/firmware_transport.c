@@ -120,31 +120,82 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyAscCpuStatus(
 #endif
 
 #ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
+static NTSTATUS AppleAgxRtkitSessionStatus(
+    APPLE_AGX_RTKIT_SESSION_RESULT Result) {
+  if (Result == AppleAgxRtkitSessionResultOk)
+    return STATUS_SUCCESS;
+  if (Result == AppleAgxRtkitSessionResultTimeout)
+    return STATUS_IO_TIMEOUT;
+  if (Result == AppleAgxRtkitSessionResultInvalidArgument)
+    return STATUS_INVALID_PARAMETER;
+  if (Result == AppleAgxRtkitSessionResultInvalidState)
+    return STATUS_INVALID_DEVICE_STATE;
+  return STATUS_DEVICE_PROTOCOL_ERROR;
+}
+
+static ULONG AppleAgxRtkitBootFlags(
+    const APPLE_AGX_RTKIT_SESSION *Session) {
+  ULONG flags = 0;
+
+  if (Session->Boot.Begun != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_BEGUN;
+  if (Session->Boot.HelloSeen != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_HELLO_SEEN;
+  if (Session->Boot.EndpointMapComplete != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_ENDPOINT_MAP_COMPLETE;
+  if (Session->Boot.IopPowerReady != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_IOP_POWER_READY;
+  if (Session->Boot.ApPowerRequested != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_AP_POWER_REQUESTED;
+  if (Session->Boot.ApPowerReady != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_AP_POWER_READY;
+  if (Session->Running != APPLE_AGX_RTKIT_FALSE)
+    flags |= APPLE_AGX_RTKIT_BOOT_FLAG_RUNNING;
+  return flags;
+}
+
 _Use_decl_annotations_ NTSTATUS AppleAgxQualifyRtkitReadyStop(
-    volatile UCHAR *AscBase, ULONG AscLength) {
+    volatile UCHAR *AscBase, ULONG AscLength,
+    APPLE_AGX_RTKIT_QUALIFICATION_RESULT *Result) {
   APPLE_AGX_WINDOWS_ASC_TRANSPORT transport;
   APPLE_AGX_ASC_IO io;
   APPLE_AGX_RTKIT_SESSION session;
-  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  APPLE_AGX_RTKIT_SESSION_RESULT sessionResult;
+  APPLE_AGX_ASC_RESULT cpuStatusResult;
+  APPLE_AGX_ASC_U32 cpuStatus = 0;
   APPLE_AGX_ASC_U64 deadline;
-  NTSTATUS status = AppleAgxFirmwareTransportInitialize(
-      AscBase, AscLength, &transport, &io);
+  NTSTATUS status;
 
+  if (Result == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(Result, sizeof(*Result));
+  Result->BootStatus = STATUS_NOT_SUPPORTED;
+  Result->StopStatus = STATUS_NOT_SUPPORTED;
+  Result->FinalCpuStatusReadStatus = STATUS_NOT_SUPPORTED;
+  status = AppleAgxFirmwareTransportInitialize(AscBase, AscLength, &transport,
+                                               &io);
   if (!NT_SUCCESS(status))
     return status;
   AppleAgxRtkitSessionInitialize(&session);
   deadline = (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
-  result = AppleAgxRtkitSessionBoot(&session, &io, deadline);
-  if (result != AppleAgxRtkitSessionResultOk)
-    return result == AppleAgxRtkitSessionResultTimeout
-               ? STATUS_IO_TIMEOUT
-               : STATUS_DEVICE_PROTOCOL_ERROR;
-  deadline = (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
-  result = AppleAgxRtkitSessionStop(&session, &io, deadline);
-  if (result == AppleAgxRtkitSessionResultOk)
-    return STATUS_SUCCESS;
-  return result == AppleAgxRtkitSessionResultTimeout
-             ? STATUS_IO_TIMEOUT
-             : STATUS_DEVICE_PROTOCOL_ERROR;
+  sessionResult = AppleAgxRtkitSessionBoot(&session, &io, deadline);
+  Result->BootStatus = AppleAgxRtkitSessionStatus(sessionResult);
+  Result->BootPhase = (ULONG)session.Boot.Phase;
+  Result->BootFlags = AppleAgxRtkitBootFlags(&session);
+  Result->NegotiatedVersion = (ULONG)session.Boot.NegotiatedVersion;
+  if (sessionResult == AppleAgxRtkitSessionResultOk) {
+    deadline =
+        (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
+    sessionResult = AppleAgxRtkitSessionStop(&session, &io, deadline);
+    Result->StopStatus = AppleAgxRtkitSessionStatus(sessionResult);
+  }
+  cpuStatusResult = AppleAgxAscReadCpuStatus(&io, &cpuStatus);
+  Result->FinalCpuStatusReadStatus =
+      cpuStatusResult == AppleAgxAscResultOk ? STATUS_SUCCESS
+                                            : STATUS_IO_DEVICE_ERROR;
+  Result->FinalCpuStatus = (ULONG)cpuStatus;
+  if (!NT_SUCCESS(Result->BootStatus))
+    return Result->BootStatus;
+  return Result->StopStatus;
 }
 #endif

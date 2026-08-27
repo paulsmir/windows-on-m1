@@ -242,11 +242,13 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
 
 #ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
   {
+    APPLE_AGX_RTKIT_QUALIFICATION_RESULT rtkitResult = {0};
     APPLE_AGX_POWER_SESSION powerSession = {0};
     PHYSICAL_ADDRESS powerBrokerAddress = {0};
     NTSTATUS powerEndStatus = STATUS_SUCCESS;
     NTSTATUS unmapStatus = STATUS_SUCCESS;
     BOOLEAN powerSessionStarted = FALSE;
+    BOOLEAN rtkitAttempted = FALSE;
 
     adapter->DxgkInterface = *DxgkInterface;
     adapter->DxgkInterfaceValid = TRUE;
@@ -260,9 +262,15 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
                                          powerBrokerAddress, &powerSession);
       powerSessionStarted = NT_SUCCESS(status);
     }
-    if (NT_SUCCESS(status))
+    if (NT_SUCCESS(status)) {
+      rtkitAttempted = TRUE;
       status = AppleAgxQualifyRtkitReadyStop(
-          adapter->MappingState.AscBase, J313_AGX_G2_ASC_MMIO_SIZE);
+          adapter->MappingState.AscBase, J313_AGX_G2_ASC_MMIO_SIZE,
+          &rtkitResult);
+    }
+    if (rtkitAttempted)
+      AppleAgxRecordRtkitQualification(adapter->PhysicalDeviceObject,
+                                       &rtkitResult);
     if (powerSessionStarted)
       powerEndStatus =
           AppleAgxPowerSessionEnd(&adapter->DxgkInterface, &powerSession);

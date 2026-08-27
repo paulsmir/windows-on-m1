@@ -643,6 +643,49 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("name: rtkit-qualification", workflow)
         self.assertIn("AppleAgx-ARM64-RtkitQualification", workflow)
 
+    def test_rtkit_qualification_persists_exact_boot_and_stop_boundary(self):
+        header = self.read("include/apple_agx_driver.h")
+        transport = self.read("src/firmware_transport.c")
+        adapter = self.read("src/adapter.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
+
+        self.assertIn("APPLE_AGX_RTKIT_QUALIFICATION_RESULT", header)
+        self.assertIn("AppleAgxRecordRtkitQualification", header)
+        self.assertIn("APPLE_AGX_RTKIT_QUALIFICATION_RESULT *Result", header)
+        self.assertIn("Result->BootStatus", transport)
+        self.assertIn("Result->StopStatus", transport)
+        self.assertIn("Result->BootPhase", transport)
+        self.assertIn("Result->BootFlags", transport)
+        self.assertIn("Result->NegotiatedVersion", transport)
+        self.assertIn("Result->FinalCpuStatusReadStatus", transport)
+        self.assertIn("Result->FinalCpuStatus", transport)
+        self.assertIn("AppleAgxRecordRtkitQualification", adapter)
+        self.assertIn("rtkitAttempted = TRUE", adapter)
+        self.assertIn("if (rtkitAttempted)", adapter)
+        for name in (
+            "Wom1RtkitBootStatus",
+            "Wom1RtkitStopStatus",
+            "Wom1RtkitBootPhase",
+            "Wom1RtkitBootFlags",
+            "Wom1RtkitNegotiatedVersion",
+            "Wom1RtkitFinalCpuStatusReadStatus",
+            "Wom1RtkitFinalCpuStatus",
+        ):
+            self.assertIn(name, diagnostics)
+
+        start = adapter.index("#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION")
+        end = adapter.index("#endif", start)
+        qualification = adapter[start:end]
+        self.assertEqual(qualification.count("AppleAgxQualifyRtkitReadyStop"), 1)
+        self.assertNotIn("AppleAgxAscSetRun", qualification)
+        self.assertNotIn("WRITE_REGISTER", qualification)
+        powered_start = adapter.index(
+            "#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION"
+        )
+        powered_end = adapter.index("#endif", powered_start)
+        self.assertNotIn("rtkitResult", adapter[powered_start:powered_end])
+        self.assertNotIn("rtkitAttempted", adapter[powered_start:powered_end])
+
     def test_powered_status_qualification_brackets_one_read_and_cleans_up(self):
         adapter = self.read("src/adapter.c")
         header = self.read("include/apple_agx_driver.h")

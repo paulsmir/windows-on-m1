@@ -72,6 +72,26 @@ typedef enum _APPLE_AGX_POWER_RECEIPT {
 } APPLE_AGX_POWER_RECEIPT;
 #endif
 
+#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
+#define APPLE_AGX_RTKIT_BOOT_FLAG_BEGUN (1u << 0)
+#define APPLE_AGX_RTKIT_BOOT_FLAG_HELLO_SEEN (1u << 1)
+#define APPLE_AGX_RTKIT_BOOT_FLAG_ENDPOINT_MAP_COMPLETE (1u << 2)
+#define APPLE_AGX_RTKIT_BOOT_FLAG_IOP_POWER_READY (1u << 3)
+#define APPLE_AGX_RTKIT_BOOT_FLAG_AP_POWER_REQUESTED (1u << 4)
+#define APPLE_AGX_RTKIT_BOOT_FLAG_AP_POWER_READY (1u << 5)
+#define APPLE_AGX_RTKIT_BOOT_FLAG_RUNNING (1u << 6)
+
+typedef struct _APPLE_AGX_RTKIT_QUALIFICATION_RESULT {
+  NTSTATUS BootStatus;
+  NTSTATUS StopStatus;
+  ULONG BootPhase;
+  ULONG BootFlags;
+  ULONG NegotiatedVersion;
+  NTSTATUS FinalCpuStatusReadStatus;
+  ULONG FinalCpuStatus;
+} APPLE_AGX_RTKIT_QUALIFICATION_RESULT;
+#endif
+
 typedef struct _APPLE_AGX_ADAPTER {
   PDEVICE_OBJECT PhysicalDeviceObject;
   APPLE_AGX_STATE State;
@@ -192,7 +212,11 @@ NTSTATUS AppleAgxWindowsUatPublicationInitialize(
     _Out_ APPLE_AGX_UAT_PUBLICATION_IO *Io);
 #ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
 NTSTATUS AppleAgxQualifyRtkitReadyStop(
-    _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength);
+    _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength,
+    _Out_ APPLE_AGX_RTKIT_QUALIFICATION_RESULT *Result);
+void AppleAgxRecordRtkitQualification(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ const APPLE_AGX_RTKIT_QUALIFICATION_RESULT *Result);
 #endif
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
