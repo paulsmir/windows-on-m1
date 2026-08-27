@@ -3,10 +3,11 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-CANONICAL_ROOT=/Users/pavel/public_windows
-if [ "$ROOT" != "$CANONICAL_ROOT" ]; then
-    echo "Refusing non-canonical checkout: $ROOT" >&2
-    echo "Expected: $CANONICAL_ROOT" >&2
+GIT_ROOT=$(git -C "$ROOT" rev-parse --show-toplevel)
+EXPECTED_ROOT=${GPU_DEV_ROOT:-$ROOT}
+if [ "$GIT_ROOT" != "$ROOT" ] || [ "$ROOT" != "$EXPECTED_ROOT" ]; then
+    echo "Refusing unexpected checkout: $ROOT" >&2
+    echo "Expected repository root: $EXPECTED_ROOT" >&2
     exit 1
 fi
 

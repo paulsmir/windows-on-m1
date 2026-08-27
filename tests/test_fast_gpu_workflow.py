@@ -45,7 +45,8 @@ class FastGpuWorkflowTests(unittest.TestCase):
     def test_context_helper_is_bounded_and_read_only(self):
         self.assertTrue(CONTEXT_HELPER.is_file(), "gpu-dev-context.sh is required")
         text = CONTEXT_HELPER.read_text(encoding="utf-8")
-        self.assertIn("/Users/pavel/public_windows", text)
+        self.assertIn("git -C \"$ROOT\" rev-parse --show-toplevel", text)
+        self.assertIn("GPU_DEV_ROOT", text)
         self.assertIn("investigation/CURRENT_STATE.md", text)
         self.assertIn("git rev-parse", text)
         self.assertIn("git status --short", text)
