@@ -4,7 +4,7 @@ typedef struct _APPLE_AGX_WINDOWS_MEMORY_ALLOCATION {
   PDXGKRNL_INTERFACE Interface;
   HANDLE PhysicalMemoryObject;
   HANDLE AdapterMemoryObject;
-  PDXGK_ADL Adl;
+  DXGK_ADL *Adl;
   PVOID MappedBase;
   SIZE_T MappedSize;
 } APPLE_AGX_WINDOWS_MEMORY_ALLOCATION;

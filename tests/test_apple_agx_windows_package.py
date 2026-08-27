@@ -23,9 +23,15 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
 
     def test_driver_uses_full_dxgkrnl_entry_not_display_only(self):
         driver = self.read("src/driver.c")
+        project = self.read("AppleAgx.vcxproj")
         self.assertIn("DRIVER_INITIALIZATION_DATA", driver)
         self.assertIn("DxgkInitialize(", driver)
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
+        self.assertIn("DXGKDDI_INTERFACE_VERSION_WDDM3_0", project)
+        self.assertIn(
+            "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0",
+            driver,
+        )
         self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
         self.assertRegex(driver, r"return\s+status\s*;")
 
@@ -262,6 +268,8 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("RequireContiguous = 1", memory)
         self.assertIn("pAdl->Flags.Contiguous", memory)
         self.assertIn("BasePageNumber", memory)
+        self.assertIn("DXGK_ADL *Adl", memory)
+        self.assertNotIn("PDXGK_ADL", memory)
         self.assertNotIn("MmGetPhysicalAddress", memory)
         self.assertNotIn("MmAllocateContiguousMemory", memory)
         self.assertNotIn("AppleAgxWindowsMemoryInitialize", self.read("src/adapter.c"))

@@ -11,7 +11,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
 
   PAGED_CODE();
   RtlZeroMemory(&initialization, sizeof(initialization));
-  initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM2_6;
+  initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0;
   initialization.DxgkDdiAddDevice = AppleAgxDdiAddDevice;
   initialization.DxgkDdiStartDevice = AppleAgxDdiStartDevice;
   initialization.DxgkDdiStopDevice = AppleAgxDdiStopDevice;
