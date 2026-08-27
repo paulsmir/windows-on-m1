@@ -12849,10 +12849,13 @@ WDK package version.
 
 EXP-154 tests one hypothesis: dxgkrnl requires the complete pinned-WDK callback
 table even while the miniport truthfully advertises only its implemented WDDM
-2.6 runtime surface.  Commit `7b64bce` removes the truncated-layout build mode,
-compiles every profile with the full WDDM 3.0 declaration layout, keeps the
-runtime Version at WDDM 2.6 and fails compilation unless ARM64
-`sizeof(DRIVER_INITIALIZATION_DATA)` is exactly 1544.
+2.6 runtime surface.  Commits `7b64bce` and `f1f9fe6` remove the
+truncated-layout build mode and every explicit older interface-layout override,
+let the pinned WDK expose the same complete declaration layout used by EXP-130,
+keep the runtime Version at WDDM 2.6, and fail compilation unless ARM64
+`sizeof(DRIVER_INITIALIZATION_DATA)` is exactly 1544.  The intermediate explicit
+WDDM 3.0 layout was also shorter than EXP-130 and was rejected by the compile
+gate before any package existed.
 
 ### Gates and procedure
 
