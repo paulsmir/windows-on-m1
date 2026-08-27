@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T19:27:00Z
+Updated: 2026-08-27T20:40:00Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -40,21 +40,31 @@ This is the bounded session entry point. Detailed history is append-only in
   `53c52005854d03c449c534c805df7c180d90e30ab29effbdc9e7003b3bef5c8d`.
 - boot image SHA-256:
   `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
-- EXP-139 lost SSH and ICMP during its only transaction. The Air remains
-  unreachable; physical-screen state and installed-package state are unknown.
-- Do not run another package transaction until exact EXP-123 recovery and the
-  stable Windows device/service baseline are re-established.
+- Exact EXP-123 recovery is live and responsive with display `both`, eight
+  processors and Running platform services.
+- EXP-144 showed that IRQ gating removes the approximately nine-to-one ISR
+  amplification but was invalidated by an unplanned VHF parameter reset.
+- EXP-145 preserved explicit VHF `0/1/1`, installed exact candidate
+  `oem17.inf`, kept Keyboard and Touchpad children healthy, and produced no new
+  Event 129 or System errors.  The user confirmed built-in input works.
+- AGX0 is phantom under recovery. Driver Store contains no display package
+  after ordinary removal of the disconnected devnode and old `oem17.inf`
+  without `/force`.
+- A one-variable recovery candidate is built from EXP-123 plus bounded IRQ
+  transition logging; it has not yet been launched.
 - Never attach the m1n1 proxy client while this guest is running.
 
-## Last known stable GPU package
+## Stale GPU package isolated by EXP-140
 
 - Device: `ACPI\APPL0002\0`.
-- Package: `oem17.inf`, version `15.15.32.644`.
-- Driver: `AppleAgx.sys`, service Stopped/Manual.
-- Device state: Error, Problem 43.
+- Package: `oem17.inf`, version `15.47.29.978`.
+- Driver: `AppleAgx.sys`; it remains attached only to a disconnected phantom
+  devnode under EXP-123.
+- Candidate-G2 state: Problem 43 with two boot-time Event 129 records before
+  any new package transaction.
 - SYS SHA-256:
-  `1ac19ede3267b2a836e177e96ad26f69c89298c3078a6412f1b9200882893beb`.
-- Signer thumbprint: `BCE4F22D33D675EABA3B8A88FDB102E536E69F5A`.
+  `841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`.
+- Signer display name: `WDKTestCert runneradmin,134323192909486495`.
 
 ## Last confirmed successful boundary
 
@@ -75,21 +85,18 @@ This is the bounded session entry point. Detailed history is append-only in
 
 ## Active hypothesis
 
-EXP-138 proved mailbox publication and firmware consumption, rejecting timing,
-barrier, trigger-order and unread-response explanations. Asahi and m1n1 create
-and publish the context-zero UAT roots before RTKit boot; the active Windows
-StartDevice path enters RTKit without doing so. Missing or invalid roots in the
-fixed J313 GPU region are now the first falsifiable firmware prerequisite.
-EXP-139 did not recover a root receipt and rejected private physical mapping as
-an unsafe access method. The version-3 candidate now assigns the region through
-Mu, m1n1 stage-2 and Windows translated resources.
+EXP-141 rejected stale AppleAgx startup as the reset cause. EXP-143 bounded the
+IRQ-route logging and identified the sustained route as physical AIC 330 to
+guest INTID 865, the AppleInput GPIO parent rather than NVMe or xHCI. EXP-144
+confirmed the IRQ amplification mechanism.  EXP-145 removed the installer
+confound and qualified the complete input path plus clean storage window.
 
 ## Single next action
 
-Recover exact EXP-123, verify eight CPUs and stable input/storage/USB/SSH, then
-qualify the version-3 resource contract and read-only root snapshot exactly
-once. Do not publish roots, build initdata, rerun EXP-138/139, add delay, or
-change the RTKit wire protocol until the assigned-resource snapshot succeeds.
+Cleanly stop exact recovery, cold-launch the already-built version-three GPU
+resource candidate, and run only the read-only assigned UAT-root snapshot.
+Do not publish roots, build initdata, rerun EXP-138/139, add delay, or change
+the RTKit wire protocol until that assigned-resource snapshot succeeds.
 
 ## Rollback
 

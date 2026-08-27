@@ -12210,7 +12210,9 @@ driver or run a GPU candidate. Cleanly recover exact EXP-123 after the single
 run; no retry.
 ## EXP-20260827-144 — Gate Apple SPI-HID level IRQ across passive drain
 
-Status: preregistered; no candidate package has been installed.
+Status: invalidated by an unplanned VHF configuration change; exact
+`oem16.inf` rollback and stable `TransportOnly/PublishKeyboard/PublishTrackpad`
+values `0/1/1` are restored.
 
 ### Evidence and single variable
 
@@ -12248,3 +12250,87 @@ Status: preregistered; no candidate package has been installed.
 Any package mismatch, Code 10/43, lost input, lost SSH, transport error, Event
 129 or critical event immediately ends the experiment and restores the exact
 exported `oem16.inf`.  No retry and no GPU transaction are permitted.
+
+### Result
+
+GitHub Actions run `33113494073` built and signed the exact ARM64 package from
+root commit `857dde5340e0447d68c7df308d3ab6c9db149ae0`.  The installed
+`AppleInput.sys` SHA-256 is
+`15fbb42e0b7a686282c7874495fb1ac0214096a81a20e879b1a2690c9c19c1ef`;
+the catalog signer thumbprint is `71CD0A261CE0098675E1339C970E76726F0AC292`.
+Only the catalog certificate, package publication and restart of
+`ACPI\APPL0001\0` changed.  Windows and firmware were not rebooted.
+
+The device remained Started and the service remained Running at discovery
+phase 8.  After real keyboard and trackpad activity the diagnostic snapshot
+reported `594` interrupts, `594` queued workers, `594` completed workers,
+`609` SPI transfers, `8` keyboard reports and `584` trackpad reports.  All SPI
+timeout, packet CRC, message CRC, fragment, offline and transport-error
+counters remained zero.  This proves that gating removed the pre-change
+approximately nine-to-one ISR amplification.  There were also zero stornvme
+Event 129 records and zero Critical or Error System events after the switch.
+
+The user-visible keyboard and trackpad nevertheless stopped working.  PnP
+showed no Apple-backed Keyboard or Mouse child even though the parent remained
+Started and transport report counters progressed.  Inspection after rollback
+found that both candidate and rollback INF defaults had overwritten the stable
+service parameters with `TransportOnly=1`, `PublishKeyboard=0` and
+`PublishTrackpad=0`.  This was an unplanned second variable, not a VHF lifetime
+failure or evidence against the IRQ correction.
+
+Per the stop rule, `oem17.inf` was uninstalled without retry and exact exported
+`oem16.inf` restored.  Restoring the established explicit `0/1/1` publication
+parameters and restarting only APPL0001 immediately recreated both VHF
+devices: a HID Keyboard Device and HID-compliant touch pad.  EXP-144 is
+invalidated rather than passed or used to reject the code.  A new experiment
+must preserve `0/1/1` before evaluating the IRQ correction.
+
+## EXP-20260827-145 — Requalify Apple input IRQ gate with VHF preserved
+
+Status: passed on hardware; corrected `oem17.inf` is active with stable VHF
+publication parameters `0/1/1`.
+
+### Evidence and single variable
+
+- Exact rollback `oem16.inf` is active and APPL0001 is Started.
+- Stable VHF service parameters are explicitly `0/1/1`; both virtual HID
+  children are present after restart.
+- EXP-144's package publication silently reset those values to the INF-safe
+  defaults `1/0/0`, invalidating its user-input criterion while independently
+  showing one-to-one IRQ/worker transport behavior.
+- The sole candidate remains root commit
+  `857dde5340e0447d68c7df308d3ab6c9db149ae0`, Actions run `33113494073`, SYS
+  SHA-256
+  `15fbb42e0b7a686282c7874495fb1ac0214096a81a20e879b1a2690c9c19c1ef`.
+
+### Procedure and gates
+
+1. Verify rollback parent, VHF children, `0/1/1`, SSH and exact candidate
+   hashes before mutation.
+2. Publish the exact candidate once, immediately restore explicit `0/1/1`,
+   and restart only `ACPI\APPL0001\0`.  No reboot or firmware/GPU change.
+3. Require parent, service, keyboard and touchpad children all healthy before
+   collecting counters.
+4. Exercise real keyboard and trackpad input and require near one IRQ per
+   worker, report progress, phase 8 and zero transport errors.
+5. Observe 90 seconds and require zero new stornvme Event 129, Critical or
+   Error System events and continuously responsive SSH/input.
+
+Any hash/configuration mismatch, missing VHF child, Code 10/43, transport
+error, Event 129, lost SSH/input or reset ends the experiment.  Remove the
+candidate, restore exact `oem16.inf` plus explicit `0/1/1`, and do not retry.
+
+### Result
+
+Preflight confirmed exact rollback `oem16.inf`, explicit `0/1/1`, healthy VHF
+children and all three candidate hashes.  The exact Actions run `33113494073`
+package was then published once as `oem17.inf`; the same explicit `0/1/1`
+values were restored before the sole APPL0001 restart.
+
+Postflight found the parent Started, service Running, both VHF devices and the
+derived HID Keyboard Device plus HID-compliant touch pad healthy.  The user
+confirmed that the built-in keyboard and trackpad worked.  Discovery remained
+at phase 8 with zero SPI timeout, packet CRC, message CRC, fragment and offline
+errors.  No stornvme Event 129 and no Critical or Error System event appeared
+in the observation window, and SSH remained responsive.  EXP-145 passes; this
+is the qualified AppleInput package for the next GPU cold boot.
