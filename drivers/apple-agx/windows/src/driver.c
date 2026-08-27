@@ -5,14 +5,13 @@ DRIVER_INITIALIZE DriverEntry;
 #pragma alloc_text(INIT, DriverEntry)
 
 /*
- * The pinned 10.0.28000 WDK exposes its complete initialization table as 1544
- * bytes on ARM64 when no older interface layout is forced.  Dxgkrnl accepts
- * this full callback ABI while
- * the Version field below deliberately advertises only the implemented WDDM
- * 2.6 runtime surface.  Compiling the structure itself as WDDM 2.6 truncates
- * it to 1224 bytes and prevents the PnP stack from reaching StartDevice.
+ * Keep the declaration layout and the advertised runtime interface identical.
+ * The last package proven on J313 to cross Dxgkrnl admission used the pinned
+ * WDK's WDDM 3.0 layout: 1296 bytes on ARM64 and Version WDDM3_0.  Mixing the
+ * WDK-default 1544-byte layout with a WDDM 2.6 Version leaves the device at
+ * CM_PROB_FAILED_ADD before DxgkDdiStartDevice.
  */
-C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1544);
+C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1296);
 
 _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
                                             PUNICODE_STRING RegistryPath) {
@@ -21,7 +20,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
 
   PAGED_CODE();
   RtlZeroMemory(&initialization, sizeof(initialization));
-  initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM2_6;
+  initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0;
   initialization.DxgkDdiAddDevice = AppleAgxDdiAddDevice;
   initialization.DxgkDdiStartDevice = AppleAgxDdiStartDevice;
   initialization.DxgkDdiStopDevice = AppleAgxDdiStopDevice;

@@ -21,33 +21,36 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertNotIn("PCI\\CC_03", inf)
         self.assertIn("CatalogFile=AppleAgx.cat", inf)
 
-    def test_driver_separates_adl_headers_from_implemented_runtime_level(self):
+    def test_driver_uses_the_last_hardware_admitted_wddm_contract(self):
         driver = self.read("src/driver.c")
         self.assertIn("DRIVER_INITIALIZATION_DATA", driver)
         self.assertIn("DxgkInitialize(", driver)
         self.assertNotIn("DxgkInitializeDisplayOnlyDriver", driver)
         self.assertIn(
-            "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM2_6",
+            "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0",
             driver,
         )
         self.assertNotIn(
-            "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0",
+            "initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM2_6",
             driver,
         )
         self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
         self.assertRegex(driver, r"return\s+status\s*;")
 
-    def test_driver_uses_the_full_pinned_wdk_initialization_abi(self):
+    def test_driver_compile_and_runtime_wddm_abi_cannot_diverge(self):
         driver = self.read("src/driver.c")
         project = self.read("AppleAgx.vcxproj")
         build = self.read("scripts/build-driver.ps1")
 
-        self.assertNotIn("DXGKDDI_INTERFACE_VERSION=", project)
+        self.assertIn(
+            "DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0",
+            project,
+        )
         self.assertNotIn("AppleAgxWddm26AbiQualification", project)
         self.assertNotIn("AppleAgxDdiInterfaceVersion", project)
         self.assertNotIn("Wddm26AbiQualification", build)
         self.assertIn(
-            "C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1544)",
+            "C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1296)",
             driver,
         )
         self.assertIn('<ClCompile Include="src\\memory_windows.c" />', project)

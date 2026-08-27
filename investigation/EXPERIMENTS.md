@@ -12911,7 +12911,9 @@ AppleInput/stornvme/USBXHCI/sshd, zero Event 129 and zero critical or error
 System events.  Windows loaded the exact SYS hash above.
 
 The service receipts show DriverEntry stage 2 and a successful
-`DxgkInitialize`, but the natural cold enumeration produced no AddDevice or
+`DxgkInitialize`.  The first collector incorrectly queried lifecycle values
+from the device root key; the driver writes them under `Device Parameters`.
+The corrected read-only query found fresh AddDevice stage 2/status zero and no
 StartDevice receipt.  APPL0002 settled at Problem 31 and AppleAgx remained
 Stopped.  No hardware-owning receipt exists, so the candidate failed closed
 without GPU access.  Evidence is preserved at
@@ -12919,11 +12921,10 @@ without GPU access.  Evidence is preserved at
 `.local/experiments/EXP-20260828-154-full-abi/cold-first-result.json`.
 
 This rejects complete table geometry as sufficient for natural cold
-admission.  Disassembly additionally proves the EXP-130 and EXP-154 DriverEntry
-table construction is instruction-for-instruction equivalent apart from
-linked addresses.  The remaining procedural difference is that passed EXP-130
-received one device-scoped same-boot restart, whereas EXP-154 intentionally
-tested only natural cold enumeration.
+admission.  The initial comparison against EXP-130 was incomplete: EXP-130 was
+not the last package proven to reach StartDevice on the version-three G2
+contract.  The later exported EXP-138/140 package is the relevant working
+reference and is analyzed after EXP-155.
 
 ## EXP-20260828-155 — Isolate same-boot display-miniport admission
 
@@ -12947,3 +12948,59 @@ Pass requires fresh AddDevice stage 2/status zero and StartDevice stage
 7/status `0xC00000BB`, no MMIO/power/firmware/RTKit/UAT/queue/render receipt,
 eight healthy CPUs, responsive input/storage/USB/SSH and no Event 129, critical
 or error System event.  Any mismatch ends the experiment without retry.
+
+### Result
+
+The exact restart command returned success and no package, firmware, devnode,
+scan or boot variable changed.  The original collector again queried the
+device root key, so its empty device receipt object is not authoritative.  A
+corrected read-only query of `Device Parameters` found AddDevice stage 2/status
+zero and no StartDevice receipt.  APPL0002 remained Problem 31; AppleInput,
+stornvme, USBXHCI and sshd stayed Running on eight CPUs, with no Event 129,
+critical or error System event.  EXP-155 rejects same-boot restart as sufficient
+for the EXP-154 package and authorizes no retry.
+
+## EXP-20260828-156 — Restore the last hardware-admitted WDDM ABI contract
+
+Status: software correction implemented; official ARM64 build pending.
+
+### Evidence and single hypothesis
+
+The exact package that actually reached StartDevice on the version-three G2
+guest was preserved as EXP-138/EXP-140 `oem17.inf`: SYS SHA-256
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+source `14bfcfb044283a8541a78c354eb7de5e2f3f90e0`.  Disassembly proves that it
+submitted a 1296-byte (`0x510`) WDDM 3.0 declaration table and advertised
+WDDM 3.0 (`0xF003`).  It reached StartDevice and later failed only at the
+intentionally bounded RTKit phase.
+
+EXP-154 instead submitted the pinned-WDK default 1544-byte (`0x608`) table but
+advertised WDDM 2.6 (`0xB004`).  DriverEntry, DxgkInitialize and AddDevice
+succeeded, then Dxgkrnl rejected the mixed contract before StartDevice with
+Problem 31.  The hypothesis is that declaration layout and advertised runtime
+version must be the same proven WDDM 3.0 contract; the diagnostic downgrade to
+2.6 and later table-size reconstruction were a regression.
+
+The sole semantic variable is restoration of that matched WDDM contract:
+explicit WDDM 3.0 compile layout, WDDM 3.0 runtime Version and an ARM64 compile
+gate requiring 1296 bytes.  No callback assignment, GPU register access,
+resource parser, power, firmware, RTKit, UAT, interrupt, queue, render, present,
+Mu, m1n1, CPU, input, storage or display behavior changes.
+
+### Gates and procedure
+
+1. The focused tests must first reject the mixed EXP-154 contract and then pass
+   only for matched WDDM 3.0 compile/runtime values and the 1296-byte gate.
+2. The official ARM64 lifecycle package must build and its exact machine code
+   must contain zero size `0x510` and Version `0xF003`; pin package hashes and
+   signer before touching the Air.
+3. Use the established device-free recovery staging sequence once, then cold
+   boot the unchanged G2 candidate once with display `both` and monitor logging.
+4. Pass admission only on fresh AddDevice success and StartDevice stage
+   7/status `0xC00000BB`.  Every hardware-owning receipt must remain absent and
+   eight CPUs, native input, NVMe, xHCI and SSH must remain healthy with no
+   Event 129 or critical/error System event.
+
+Any identity mismatch, missing StartDevice, hardware receipt or platform-health
+loss rejects the candidate without retry.  This experiment tests Dxgkrnl
+admission only and does not authorize GPU execution or display ownership.

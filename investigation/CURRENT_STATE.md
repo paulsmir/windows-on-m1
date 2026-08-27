@@ -1,6 +1,6 @@
 # Current J313 development state
 
-Updated: 2026-08-27T20:40:00Z
+Updated: 2026-08-28T16:45:00Z
 
 This is the bounded session entry point. Detailed history is append-only in
 `investigation/EXPERIMENTS.md`; raw evidence remains under ignored `.local`.
@@ -16,8 +16,8 @@ This is the bounded session entry point. Detailed history is append-only in
 
 - Canonical checkout: `/Users/pavel/public_windows`.
 - Branch: `feature/j313-gpu-acceleration`.
-- Candidate root commit: `a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b`.
-- EXP-139 package source: `8b5ab22ba9d7b7446d9919b62b9554589a51f14f`.
+- Candidate root: EXP-156 matched-WDDM correction pending commit and official
+  ARM64 package.
 - Single-transaction runner correction:
   `b4906b9d7468b00d35dfc10411b91a4c9b70064d`.
 - Candidate m1n1 pin: `4108e79c69bac112ffbebf452fccf352c93c1dd2`.
@@ -40,8 +40,7 @@ This is the bounded session entry point. Detailed history is append-only in
   `53c52005854d03c449c534c805df7c180d90e30ab29effbdc9e7003b3bef5c8d`.
 - boot image SHA-256:
   `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
-- Exact EXP-123 recovery is live and responsive with display `both`, eight
-  processors and Running platform services.
+- Air is currently at `Running proxy`; no guest is active.
 - EXP-144 showed that IRQ gating removes the approximately nine-to-one ISR
   amplification but was invalidated by an unplanned VHF parameter reset.
 - EXP-145 preserved explicit VHF `0/1/1`, installed exact candidate
@@ -84,6 +83,11 @@ This is the bounded session entry point. Detailed history is append-only in
 - Bounded stop returned `0xC00000BB` after the incomplete boot.
 - `pnputil` configuration success is not driver success: PnP returned before the
   asynchronous StartDevice timeout became visible.
+- Exact working-reference SYS SHA-256:
+  `841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`.
+- Its machine contract is 1296-byte WDDM 3.0 compile layout plus runtime
+  WDDM 3.0.  This, not EXP-130, is the last version-three package proven to
+  cross Dxgkrnl admission.
 
 ## Active hypothesis
 
@@ -92,18 +96,19 @@ IRQ-route logging and identified the sustained route as physical AIC 330 to
 guest INTID 865, the AppleInput GPIO parent rather than NVMe or xHCI. EXP-144
 confirmed the IRQ amplification mechanism.  EXP-145 removed the installer
 confound and qualified the complete input path plus clean storage window.
-The first version-three UAT package transaction then proved a separate parser
-regression: Windows translated each of the three QWordMemory ranges into a
-memory descriptor plus an opaque DevicePrivate companion, while the driver
-still admitted only the two companions from contract version two.
+EXP-153 through EXP-155 proved that clean devnode state, cold-first staging,
+callback-table geometry and one same-boot restart do not make the mixed
+1544-byte/WDDM-2.6 package reach StartDevice. Corrected device-key queries show
+AddDevice stage 2/status zero and no StartDevice. Offline disassembly then
+identified the actual working reference as matched WDDM 3.0, not the
+reconstructed mixed ABI.
 
 ## Single next action
 
-Build the exact `45127a2a164e34119464f5e7ab22d4c3acb63852` read-only
-UAT-snapshot package and perform one hot APPL0002 transaction.  Require resource
-stage success and durable UAT root receipts with healthy input, storage, xHCI,
-eight CPUs and no new Event 129 or critical System event.  Do not publish roots,
-build initdata, add delay, change the RTKit protocol or reboot the guest.
+Build the EXP-156 lifecycle package with matched WDDM 3.0 compile/runtime ABI.
+Disassembly must prove zero size `0x510` and Version `0xF003`. Only then perform
+one device-free recovery staging and one G2 cold boot; require StartDevice stage
+7/status `0xC00000BB` with no hardware-owning receipt or platform-health loss.
 
 ## Rollback
 
