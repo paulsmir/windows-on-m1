@@ -12588,7 +12588,7 @@ lifecycle profile, not another runtime-version retry.
 
 ## EXP-20260827-151 — A/B current lifecycle profile against UAT profile
 
-Status: preregistered; exact package pinned; hardware run pending.
+Status: completed; hypothesis rejected.
 
 Created (UTC): 2026-08-27T21:46:27Z.
 
@@ -12645,3 +12645,28 @@ If the lifecycle profile reaches StartDevice, the hypothesis is confirmed and
 the next software investigation compares compile-time/profile differences
 before changing UAT code.  If it remains at AddDevice, the hypothesis is
 rejected and the regression must be outside the profile macro.
+
+### Result
+
+The single permitted device-scoped package cycle completed with the exact
+pinned package.  Windows verified and installed SYS SHA-256
+`d4863709d96ecdd5a5a7b02fc76a65149c44d409c2d0cc4b5e499f26c653115d`,
+INF SHA-256
+`94e6aaddd499884a51fed2333b14e590f0bd429faf3c159d1380dbd4dc904a65`
+and CAT SHA-256
+`54c8b114945e5c9a526b6955a11c71d57f7a69202362c9badf4a6b9d41c92b22`
+under `oem18.inf`.  AddDevice again reached stage 2/status zero, but no
+StartDevice receipt appeared during the bounded 30,201 ms observation.
+APPL0002 remained Problem 31 on driver version `23.45.58.628`.
+
+The guest retained eight logical processors and Running AppleInput, stornvme
+and USBXHCI services.  The user confirmed native keyboard and trackpad input
+before the run; the platform-health gate remained satisfied afterward.  No
+stornvme Event 129 and no critical System event occurred during the cycle.
+Evidence is stored in the guest at
+`C:\\Users\\pavel\\AppleAgxEvidence\\EXP-20260827-151\\20260827T214855.990Z-306778c4\\result.json`.
+
+EXP-151 therefore rejects the lifecycle-versus-UAT build-profile switch as the
+cause of the post-AddDevice admission regression.  The next investigation must
+compare the exact EXP-130 binary/source/build contract with the current
+lifecycle binary before changing hardware, firmware, UAT or RTKit behavior.
