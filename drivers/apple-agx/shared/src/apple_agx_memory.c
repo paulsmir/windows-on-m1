@@ -29,14 +29,15 @@ AppleAgxMemoryAllocate(const APPLE_AGX_MEMORY_IO *Io, unsigned long long Length,
 
   if (Object == 0 || AppleAgxMemoryIoValid(Io) == 0u || Length == 0ULL ||
       (Length & (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) != 0ULL ||
-      Length > ~0ULL - (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) {
+      Length > ~0ULL - APPLE_AGX_MEMORY_PAGE_SIZE) {
     return AppleAgxMemoryResultInvalidArgument;
   }
   if (Object->State != AppleAgxMemoryEmpty) {
     return AppleAgxMemoryResultBusy;
   }
 
-  allocation_length = Length + APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL;
+  /* A full extra device page guarantees an aligned contained view. */
+  allocation_length = Length + APPLE_AGX_MEMORY_PAGE_SIZE;
   if (Io->AllocateContiguous(Io->Context, allocation_length, &cpu_base,
                              &device_base, &handle) == 0u) {
     AppleAgxMemoryZero(Object);
@@ -45,7 +46,7 @@ AppleAgxMemoryAllocate(const APPLE_AGX_MEMORY_IO *Io, unsigned long long Length,
   if (cpu_base == 0 || handle == 0 || device_base == 0ULL ||
       device_base > ~0ULL - allocation_length) {
     if (handle != 0)
-      Io->FreeContiguous(Io->Context, handle);
+      (void)Io->FreeContiguous(Io->Context, handle);
     AppleAgxMemoryZero(Object);
     return AppleAgxMemoryResultAllocationFailed;
   }
@@ -56,7 +57,7 @@ AppleAgxMemoryAllocate(const APPLE_AGX_MEMORY_IO *Io, unsigned long long Length,
   if (device_base + alignment_offset >= APPLE_AGX_MEMORY_DEVICE_ADDRESS_LIMIT ||
       Length > APPLE_AGX_MEMORY_DEVICE_ADDRESS_LIMIT -
                    (device_base + alignment_offset)) {
-    Io->FreeContiguous(Io->Context, handle);
+    (void)Io->FreeContiguous(Io->Context, handle);
     AppleAgxMemoryZero(Object);
     return AppleAgxMemoryResultOutOfRange;
   }
@@ -183,7 +184,9 @@ APPLE_AGX_MEMORY_RESULT AppleAgxMemoryRelease(const APPLE_AGX_MEMORY_IO *Io,
       Object->State != AppleAgxMemoryPrepared) {
     return AppleAgxMemoryResultBusy;
   }
-  Io->FreeContiguous(Io->Context, Object->AllocationHandle);
+  if (Io->FreeContiguous(Io->Context, Object->AllocationHandle) == 0u) {
+    return AppleAgxMemoryResultAllocationFailed;
+  }
   AppleAgxMemoryZero(Object);
   return AppleAgxMemoryResultOk;
 }

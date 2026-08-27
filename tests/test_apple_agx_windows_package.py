@@ -243,6 +243,29 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn(r"..\shared\include\apple_agx_memory.h", project)
         self.assertNotIn("AppleAgxMemoryAllocate", adapter)
 
+    def test_wddm3_memory_adapter_uses_adl_device_addresses(self):
+        memory_path = WINDOWS / "src" / "memory_windows.c"
+        self.assertTrue(memory_path.exists())
+        memory = memory_path.read_text()
+        project = self.read("AppleAgx.vcxproj")
+
+        self.assertIn(r"src\memory_windows.c", project)
+        for callback in (
+            "DxgkCbCreatePhysicalMemoryObject",
+            "DxgkCbAllocateAdl",
+            "DxgkCbMapPhysicalMemory",
+            "DxgkCbUnmapPhysicalMemory",
+            "DxgkCbFreeAdl",
+            "DxgkCbDestroyPhysicalMemoryObject",
+        ):
+            self.assertIn(callback, memory)
+        self.assertIn("RequireContiguous = 1", memory)
+        self.assertIn("pAdl->Flags.Contiguous", memory)
+        self.assertIn("BasePageNumber", memory)
+        self.assertNotIn("MmGetPhysicalAddress", memory)
+        self.assertNotIn("MmAllocateContiguousMemory", memory)
+        self.assertNotIn("AppleAgxWindowsMemoryInitialize", self.read("src/adapter.c"))
+
     def test_mmio_qualification_is_opt_in_inert_and_fail_closed(self):
         adapter = self.read("src/adapter.c")
         mmio_path = WINDOWS / "src" / "mmio.c"

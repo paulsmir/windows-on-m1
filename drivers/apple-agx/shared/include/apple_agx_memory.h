@@ -45,7 +45,7 @@ typedef struct _APPLE_AGX_MEMORY_IO {
                                       void **CpuBase,
                                       unsigned long long *DeviceBase,
                                       void **AllocationHandle);
-  void (*FreeContiguous)(void *Context, void *AllocationHandle);
+  unsigned char (*FreeContiguous)(void *Context, void *AllocationHandle);
 } APPLE_AGX_MEMORY_IO;
 
 APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocate(const APPLE_AGX_MEMORY_IO *Io,

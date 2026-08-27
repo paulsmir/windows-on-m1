@@ -13,8 +13,9 @@
 #include <dispmprt.h>
 // clang-format on
 
-#include "apple_agx_state.h"
+#include "apple_agx_memory.h"
 #include "apple_agx_power.h"
+#include "apple_agx_state.h"
 #ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
 #include "apple_agx_asc_transport.h"
 #endif
@@ -22,14 +23,18 @@
 #include "apple_agx_mapping.h"
 #endif
 
-#if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                         \
-    defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                          \
-    defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION) ||                     \
+#if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                               \
+    defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION) ||                           \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
 #define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
 #endif
 
 #define APPLE_AGX_POOL_TAG 'xgAA'
+
+typedef struct _APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR {
+  PDXGKRNL_INTERFACE Interface;
+} APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR;
 
 #ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
 typedef struct _APPLE_AGX_WINDOWS_ASC_TRANSPORT {
@@ -136,44 +141,44 @@ DXGKDDI_SETSTABLEPOWERSTATE AppleAgxDdiSetStablePowerState;
 
 NTSTATUS
 AppleAgxValidateTranslatedResources(_In_ PCM_RESOURCE_LIST TranslatedResources);
-NTSTATUS AppleAgxGetPowerBrokerAddress(
-    _In_ PCM_RESOURCE_LIST TranslatedResources,
-    _Out_ PPHYSICAL_ADDRESS PowerBrokerAddress);
-NTSTATUS AppleAgxQualifyPowerBroker(
+NTSTATUS
+AppleAgxGetPowerBrokerAddress(_In_ PCM_RESOURCE_LIST TranslatedResources,
+                              _Out_ PPHYSICAL_ADDRESS PowerBrokerAddress);
+NTSTATUS AppleAgxQualifyPowerBroker(_In_ PDXGKRNL_INTERFACE DxgkInterface,
+                                    _In_ PHYSICAL_ADDRESS PowerBrokerAddress);
+NTSTATUS AppleAgxWindowsMemoryInitialize(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
-    _In_ PHYSICAL_ADDRESS PowerBrokerAddress);
+    _Out_ APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR *Allocator,
+    _Out_ APPLE_AGX_MEMORY_IO *Io);
 #ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
-NTSTATUS AppleAgxQualifyMmioMapping(
-    _In_ PDXGKRNL_INTERFACE DxgkInterface,
-    _Out_ APPLE_AGX_MAPPING_STATE *MappingState);
-NTSTATUS AppleAgxReleaseMmioMapping(
-    _In_ PDXGKRNL_INTERFACE DxgkInterface,
-    _Inout_ APPLE_AGX_MAPPING_STATE *MappingState);
+NTSTATUS
+AppleAgxQualifyMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
+                           _Out_ APPLE_AGX_MAPPING_STATE *MappingState);
+NTSTATUS
+AppleAgxReleaseMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
+                           _Inout_ APPLE_AGX_MAPPING_STATE *MappingState);
 void AppleAgxRecordMmioQualification(
     _In_ PDEVICE_OBJECT DeviceObject, _In_ APPLE_AGX_MMIO_STAGE Stage,
-    _In_ NTSTATUS Status,
-    _In_opt_ const APPLE_AGX_MAPPING_STATE *MappingState);
+    _In_ NTSTATUS Status, _In_opt_ const APPLE_AGX_MAPPING_STATE *MappingState);
 #endif
 void AppleAgxLogStartStage(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ APPLE_AGX_START_STAGE Stage,
                            _In_ NTSTATUS Status);
 void AppleAgxRecordDriverEntryBoundary(_In_ PUNICODE_STRING RegistryPath,
-                                       _In_ ULONG Stage,
-                                       _In_ NTSTATUS Status);
+                                       _In_ ULONG Stage, _In_ NTSTATUS Status);
 void AppleAgxRecordAddDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
                                      _In_ APPLE_AGX_ADD_STAGE Stage,
                                      _In_ NTSTATUS Status);
 void AppleAgxRecordStartDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
                                        _In_ APPLE_AGX_START_STAGE Stage,
                                        _In_ NTSTATUS Status);
-void AppleAgxRecordTranslatedResources(
-    _In_ PDEVICE_OBJECT DeviceObject,
-    _In_opt_ PCM_RESOURCE_LIST TranslatedResources);
+void AppleAgxRecordTranslatedResources(_In_ PDEVICE_OBJECT DeviceObject,
+                                       _In_opt_ PCM_RESOURCE_LIST
+                                           TranslatedResources);
 
 #ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
 NTSTATUS AppleAgxFirmwareTransportInitialize(
-    _In_reads_bytes_(AscLength) volatile UCHAR *AscBase,
-    _In_ ULONG AscLength,
+    _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength,
     _Out_ APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
     _Out_ APPLE_AGX_ASC_IO *Io);
 #endif

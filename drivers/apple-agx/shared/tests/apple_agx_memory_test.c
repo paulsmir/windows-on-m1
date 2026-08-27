@@ -12,6 +12,7 @@ typedef struct _FAKE_MEMORY {
   unsigned int AllocateCount;
   unsigned int FreeCount;
   unsigned char FailAllocation;
+  unsigned char FailFree;
 } FAKE_MEMORY;
 
 static unsigned char
@@ -28,10 +29,11 @@ allocate_contiguous(void *context, unsigned long long bytes, void **cpu_base,
   return 1u;
 }
 
-static void free_contiguous(void *context, void *allocation_handle) {
+static unsigned char free_contiguous(void *context, void *allocation_handle) {
   FAKE_MEMORY *fake = (FAKE_MEMORY *)context;
   assert(allocation_handle == fake);
   ++fake->FreeCount;
+  return fake->FailFree == 0u;
 }
 
 static void init_fixture(FAKE_MEMORY *fake, APPLE_AGX_MEMORY_IO *io,
@@ -52,13 +54,13 @@ static void test_aligned_view_and_release(void) {
 
   assert(AppleAgxMemoryAllocate(&io, PAGE_SIZE_16K, &object) ==
          AppleAgxMemoryResultOk);
-  assert(fake.LastBytes == 0x7fffULL);
+  assert(fake.LastBytes == 0x8000ULL);
   assert(object.AllocationCpuBase == &fake.Storage[0x1000]);
   assert(object.CpuAddress == &fake.Storage[0x4000]);
   assert(object.AllocationDeviceBase == 0x10001000ULL);
   assert(object.DeviceAddress == 0x10004000ULL);
   assert(object.Length == PAGE_SIZE_16K);
-  assert(object.AllocationLength == 0x7fffULL);
+  assert(object.AllocationLength == 0x8000ULL);
   assert(object.State == AppleAgxMemoryCpuOwned);
 
   assert(AppleAgxMemoryRelease(&io, &object) == AppleAgxMemoryResultOk);
@@ -117,9 +119,28 @@ static void test_validation_and_allocation_rollback(void) {
   assert(object.State == AppleAgxMemoryEmpty);
 }
 
+static void test_release_failure_preserves_ownership_for_retry(void) {
+  FAKE_MEMORY fake;
+  APPLE_AGX_MEMORY_IO io;
+  APPLE_AGX_MEMORY_OBJECT object;
+  init_fixture(&fake, &io, &object);
+
+  assert(AppleAgxMemoryAllocate(&io, PAGE_SIZE_16K, &object) ==
+         AppleAgxMemoryResultOk);
+  fake.FailFree = 1u;
+  assert(AppleAgxMemoryRelease(&io, &object) ==
+         AppleAgxMemoryResultAllocationFailed);
+  assert(object.State == AppleAgxMemoryCpuOwned);
+  assert(object.AllocationHandle == &fake);
+  fake.FailFree = 0u;
+  assert(AppleAgxMemoryRelease(&io, &object) == AppleAgxMemoryResultOk);
+  assert(object.State == AppleAgxMemoryEmpty);
+}
+
 int main(void) {
   test_aligned_view_and_release();
   test_lifecycle_is_fail_closed();
   test_validation_and_allocation_rollback();
+  test_release_failure_preserves_ownership_for_retry();
   return 0;
 }

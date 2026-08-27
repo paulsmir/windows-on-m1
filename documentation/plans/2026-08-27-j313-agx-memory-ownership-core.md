@@ -30,6 +30,14 @@ tracking handle must never be interpreted as an Apple UAT output address.
 solution.  The adapter must either prove the qualified J313 path is 1:1 or
 consume the logical pages provided by the WDDM 3.0 ADL contract.
 
+The compiled Windows adapter now uses the latter contract.  It creates a
+Dxgkrnl physical-memory object, requests a contiguous ADL, maps a separate
+kernel CPU view, and returns the ADL base page as the device address.  Cleanup
+always unmaps the CPU view, frees the ADL, destroys both memory-object handles,
+and only then releases driver bookkeeping.  Control allocations start
+non-cached; cached render resources and their explicit synchronization remain
+a later path.
+
 ## State model
 
 `empty -> CPU-owned -> prepared -> GPU-mapped -> in-flight -> completed`
