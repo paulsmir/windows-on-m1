@@ -12834,7 +12834,7 @@ toolchain identity.
 
 ## EXP-20260828-154 — Restore the full initialization callback ABI cold-first
 
-Status: preregistered; WDK build and hardware sequence pending.
+Status: offline gates passed; the single cold-first hardware sequence is pending.
 
 ### Evidence and single hypothesis
 
@@ -12877,3 +12877,26 @@ gate before any package existed.
 
 This experiment authorizes no GPU power, MMIO, firmware, RTKit, UAT, interrupt,
 queue, render or presentation operation.  Failure is terminal without retry.
+
+### Offline gate result
+
+GitHub Actions run `33123122412` built all eight ARM64 profiles successfully
+from source commit `a7951f8a0bbf0ac878656ad2af3aeae0ba5c9c07`.  The exact lifecycle
+package selected for the one hardware sequence has these immutable identities:
+
+- SYS SHA-256:
+  `372fe92fcb9f613ab9c1db0df4549878f0652537ae7f7fe01e3854c193cf5c49`;
+- INF SHA-256:
+  `6fbc519afa82485f98af3e362df727304116783a2739c524fd531029869a6efe`;
+- CAT SHA-256:
+  `9ffd3f990557d957a8e9edb93a43e396b2908d1719e100e4858415edf37e21b5`;
+- certificate SHA-256:
+  `50bda6797415d3aecd6c17a30513b9c307f3bba0244e0c0dbb105e13ea8b412b`;
+- signer thumbprint: `6E27D48C2B78D8CABB89AE9D689DEFFE308D1033`.
+
+Disassembly of that exact SYS shows DriverEntry reserving `0x620` stack bytes
+and zeroing `0x608` bytes immediately before populating and submitting
+`DRIVER_INITIALIZATION_DATA`.  Thus the produced binary, not merely its source,
+contains the required 1544-byte table.  The package is preserved locally at
+`.local/experiments/EXP-20260828-154-full-abi/`; no Air state changed during
+these checks.
