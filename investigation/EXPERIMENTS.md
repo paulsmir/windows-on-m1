@@ -12673,7 +12673,7 @@ lifecycle binary before changing hardware, firmware, UAT or RTKit behavior.
 
 ## EXP-20260827-152 — Restore the proven compile-time WDDM 2.6 ABI
 
-Status: preregistered; exact package pinned; hardware run pending.
+Status: completed; hypothesis rejected.
 
 ### Fixed source and single variable
 
@@ -12729,3 +12729,22 @@ admission boundary and reach the deliberate stage-7
 
 This experiment tests dxgkrnl admission only.  It does not authorize GPU power,
 MMIO, firmware, RTKit, UAT, interrupts, queues, rendering or presentation.
+
+### Result
+
+The single permitted device-scoped cycle installed the exact pinned package as
+`oem18.inf`.  AddDevice reached stage 2/status zero, but no StartDevice receipt
+appeared during the bounded 30,256 ms observation.  APPL0002 retained Problem
+31 on driver version `23.59.32.66`.
+
+Eight logical processors and Running AppleInput, stornvme and USBXHCI were
+preserved.  No stornvme Event 129 and no critical System event occurred during
+the transaction.  Evidence is stored in the guest at
+`C:\\Users\\pavel\\AppleAgxEvidence\\EXP-20260827-152\\20260827T220107.298Z-c13eb74a\\result.json`.
+
+EXP-152 rejects the compile-time WDDM 3.0 structure layout as the remaining
+post-AddDevice admission cause.  Runtime WDDM level, compile-time WDDM ABI,
+qualification-profile selection and devnode recreation have now all been
+excluded independently.  The next investigation must compare the exact
+callback values and linked miniport contract between EXP-130 and the current
+lifecycle package; it must not change firmware, UAT or hardware behavior.
