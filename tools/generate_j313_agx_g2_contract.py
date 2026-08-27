@@ -157,7 +157,27 @@ REGIONB_OBJECT_SIZES = (
     ("TIMESTAMP", 0xC0),
     ("HWDATA_B", 0x1884),
     ("BUFFER_MGR_CTL", 0x7F0),
+    ("UNKNOWN_1B8", 0x1000),
+    ("UNKNOWN_1C0", 0x300),
+    ("UNKNOWN_1C8", 0x1000),
 )
+REGIONB_POINTER_OFFSETS = (
+    ("STATS_TA", 0x170),
+    ("STATS_3D", 0x178),
+    ("STATS_CP", 0x180),
+    ("HWDATA_A", 0x188),
+    ("FAULT_INFO", 0x190),
+    ("TIMESTAMP", 0x198),
+    ("HWDATA_B", 0x1A0),
+    ("HWDATA_B_REPEAT", 0x1A8),
+    ("FWLOG_RING", 0x1B0),
+    ("UNKNOWN_1B8", 0x1B8),
+    ("UNKNOWN_1C0", 0x1C0),
+    ("UNKNOWN_1C8", 0x1C8),
+    ("BUFFER_MGR_GPU", 0x214),
+    ("BUFFER_MGR_CPU", 0x21C),
+)
+REGIONB_BUFFER_MGR_GPU_VA = 0x420000000
 
 
 class G2ContractError(ValueError):
@@ -486,6 +506,10 @@ def render_windows_header(contract):
          f"0x{FWLOG_DUMMY_RING_SIZE:x}u"),
         *(f"#define J313_AGX_G2_REGIONB_{name}_SIZE 0x{size:x}u"
           for name, size in REGIONB_OBJECT_SIZES),
+        *(f"#define J313_AGX_G2_REGIONB_{name}_OFFSET 0x{offset:x}u"
+          for name, offset in REGIONB_POINTER_OFFSETS),
+        ("#define J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA "
+         f"0x{REGIONB_BUFFER_MGR_GPU_VA:x}ULL"),
         "",
     ]
     for name, base, size in (contract.acpi_mmio + contract.mmio_subregions +
