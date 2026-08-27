@@ -84,7 +84,7 @@
     <ClCompile Include="src\diagnostics.c" />
     <ClCompile Include="src\driver_diagnostics.c" />
     <ClCompile Include="src\firmware_transport.c" />
-    <ClCompile Include="src\memory_windows.c" />
+    <ClCompile Include="src\memory_windows.c" Condition="'$(AppleAgxWddm26AbiQualification)'!='true'" />
     <ClCompile Include="src\uat_publication_windows.c" />
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />

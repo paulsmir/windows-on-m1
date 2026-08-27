@@ -58,6 +58,12 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "/p:AppleAgxWddm26AbiQualification=$wddm26AbiQualification",
             build,
         )
+        self.assertRegex(
+            project,
+            r'<ClCompile Include="src\\memory_windows\.c" '
+            r'Condition="\'\$\(AppleAgxWddm26AbiQualification\)\'!='
+            r"'true'" ,
+        )
 
     def test_driver_entry_is_declared_before_init_section_pragma(self):
         driver = self.read("src/driver.c")
