@@ -67,4 +67,4 @@
 - [x] Run `./proxyenv/bin/python -m unittest discover -s tests` and require a completely green suite.
 - [x] Commit the implementation without unrelated submodule changes.
 - [x] Add a `CHANGES.csv` row referencing the exact implementation commit and mark completed plan steps.
-- [ ] Commit and push the documentation record to `origin/feature/j313-gpu-acceleration`.
+- [x] Commit and push the documentation record to `origin/feature/j313-gpu-acceleration`.
