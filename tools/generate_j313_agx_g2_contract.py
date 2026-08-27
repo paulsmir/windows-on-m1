@@ -134,6 +134,28 @@ INITDATA_OBJECT_SIZES = (
 FWCTL_STATE_SIZE = 0x30
 FWCTL_MESSAGE_SIZE = 0x14
 FWCTL_RING_ENTRY_COUNT = 0x100
+CHANNEL_INFO_SIZE = 0x10
+CHANNEL_INFO_COUNT = 0x11
+CMD_QUEUE_CHANNEL_COUNT = 0x0C
+CHANNEL_RING_LAYOUT = (
+    ("CMD_QUEUE", 0x30, 0x100),
+    ("DEVCTRL", 0x30, 0x100),
+    ("EVENT", 0x38, 0x100),
+    ("FWLOG", 0xD8, 0x100 * 6),
+    ("KTRACE", 0x38, 0x200),
+    ("STATS", 0x40, 0x100),
+)
+FWLOG_RING_COUNT = 6
+REGIONB_OBJECT_SIZES = (
+    ("STATS_TA", 0x690),
+    ("STATS_3D", 0x748),
+    ("STATS_CP", 0x1180),
+    ("HWDATA_A", 0x421C),
+    ("FAULT_INFO", 0x80),
+    ("TIMESTAMP", 0xC0),
+    ("HWDATA_B", 0x1884),
+    ("BUFFER_MGR_CTL", 0x7F0),
+)
 
 
 class G2ContractError(ValueError):
@@ -387,6 +409,17 @@ def _validate_windows_binary_contract(contract):
     if (FWCTL_STATE_SIZE <= 0 or FWCTL_MESSAGE_SIZE <= 0 or
             FWCTL_RING_ENTRY_COUNT <= 0):
         raise G2ContractError("firmware-control sizes must be positive")
+    if CHANNEL_INFO_SIZE <= 0 or CHANNEL_INFO_COUNT <= 0:
+        raise G2ContractError("channel-info geometry must be positive")
+    if not 0 < CMD_QUEUE_CHANNEL_COUNT <= CHANNEL_INFO_COUNT:
+        raise G2ContractError("command-channel count is invalid")
+    if FWLOG_RING_COUNT <= 0:
+        raise G2ContractError("firmware-log ring count must be positive")
+    if any(message_size <= 0 or entry_count <= 0
+           for _, message_size, entry_count in CHANNEL_RING_LAYOUT):
+        raise G2ContractError("channel ring geometry must be positive")
+    if any(size <= 0 for _, size in REGIONB_OBJECT_SIZES):
+        raise G2ContractError("RegionB object sizes must be positive")
 
 
 def render_windows_header(contract):
@@ -432,6 +465,18 @@ def render_windows_header(contract):
          f"0x{FWCTL_RING_ENTRY_COUNT:x}u"),
         ("#define J313_AGX_G2_FWCTL_RING_SIZE "
          f"0x{FWCTL_MESSAGE_SIZE * FWCTL_RING_ENTRY_COUNT:x}u"),
+        f"#define J313_AGX_G2_CHANNEL_INFO_SIZE 0x{CHANNEL_INFO_SIZE:x}u",
+        f"#define J313_AGX_G2_CHANNEL_INFO_COUNT 0x{CHANNEL_INFO_COUNT:x}u",
+        ("#define J313_AGX_G2_CHANNEL_INFO_SET_SIZE "
+         f"0x{CHANNEL_INFO_SIZE * CHANNEL_INFO_COUNT:x}u"),
+        ("#define J313_AGX_G2_CMD_QUEUE_CHANNEL_COUNT "
+         f"0x{CMD_QUEUE_CHANNEL_COUNT:x}u"),
+        *(f"#define J313_AGX_G2_{name}_RING_SIZE "
+          f"0x{message_size * entry_count:x}u"
+          for name, message_size, entry_count in CHANNEL_RING_LAYOUT),
+        f"#define J313_AGX_G2_FWLOG_RING_COUNT 0x{FWLOG_RING_COUNT:x}u",
+        *(f"#define J313_AGX_G2_REGIONB_{name}_SIZE 0x{size:x}u"
+          for name, size in REGIONB_OBJECT_SIZES),
         "",
     ]
     for name, base, size in (contract.acpi_mmio + contract.mmio_subregions +
