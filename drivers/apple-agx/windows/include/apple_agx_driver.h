@@ -18,12 +18,15 @@
 #include "apple_agx_state.h"
 #include "apple_agx_uat_publication.h"
 #if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 #include "apple_agx_asc_transport.h"
+#include "apple_agx_rtkit_session.h"
 #endif
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 #include "apple_agx_mapping.h"
 #endif
 
@@ -31,7 +34,8 @@
     defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION) ||                           \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 #define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
 #endif
 
@@ -47,14 +51,16 @@ typedef struct _APPLE_AGX_WINDOWS_UAT_PUBLICATION {
 } APPLE_AGX_WINDOWS_UAT_PUBLICATION;
 
 #if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 typedef struct _APPLE_AGX_WINDOWS_ASC_TRANSPORT {
   volatile UCHAR *Base;
   ULONG Length;
 } APPLE_AGX_WINDOWS_ASC_TRANSPORT;
 #endif
 
-#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
+#if defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 typedef struct _APPLE_AGX_POWER_SESSION {
   volatile UCHAR *Base;
   BOOLEAN Powered;
@@ -71,11 +77,13 @@ typedef struct _APPLE_AGX_ADAPTER {
   APPLE_AGX_STATE State;
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
   APPLE_AGX_MAPPING_STATE MappingState;
   DXGKRNL_INTERFACE DxgkInterface;
   BOOLEAN DxgkInterfaceValid;
 #endif
+
 } APPLE_AGX_ADAPTER;
 
 typedef enum _APPLE_AGX_ADD_STAGE {
@@ -182,6 +190,10 @@ NTSTATUS AppleAgxWindowsUatPublicationInitialize(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _Out_ APPLE_AGX_WINDOWS_UAT_PUBLICATION *Publication,
     _Out_ APPLE_AGX_UAT_PUBLICATION_IO *Io);
+#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
+NTSTATUS AppleAgxQualifyRtkitReadyStop(
+    _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength);
+#endif
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
     defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
@@ -226,7 +238,8 @@ void AppleAgxRecordAscCpuStatus(_In_ PDEVICE_OBJECT DeviceObject,
                                 _In_ NTSTATUS Status, _In_ ULONG CpuStatus);
 #endif
 
-#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
+#if defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 NTSTATUS AppleAgxPowerSessionBegin(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _In_ PHYSICAL_ADDRESS PowerBrokerAddress,

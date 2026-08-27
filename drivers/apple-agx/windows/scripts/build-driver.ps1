@@ -5,7 +5,8 @@ param(
     [switch]$MmioQualification,
     [switch]$LifecycleQualification,
     [switch]$FirmwareQualification,
-    [switch]$PoweredStatusQualification
+    [switch]$PoweredStatusQualification,
+    [switch]$RtkitQualification
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +17,7 @@ $mmioQualification = if ($MmioQualification) { "true" } else { "false" }
 $lifecycleQualification = if ($LifecycleQualification) { "true" } else { "false" }
 $firmwareQualification = if ($FirmwareQualification) { "true" } else { "false" }
 $poweredStatusQualification = if ($PoweredStatusQualification) { "true" } else { "false" }
+$rtkitQualification = if ($RtkitQualification) { "true" } else { "false" }
 
 & msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true `
@@ -23,7 +25,8 @@ $poweredStatusQualification = if ($PoweredStatusQualification) { "true" } else {
     "/p:AppleAgxMmioQualification=$mmioQualification" `
     "/p:AppleAgxLifecycleQualification=$lifecycleQualification" `
     "/p:AppleAgxFirmwareQualification=$firmwareQualification" `
-    "/p:AppleAgxPoweredStatusQualification=$poweredStatusQualification"
+    "/p:AppleAgxPoweredStatusQualification=$poweredStatusQualification" `
+    "/p:AppleAgxRtkitQualification=$rtkitQualification"
 if ($LASTEXITCODE -ne 0) {
     throw "AppleAgx ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

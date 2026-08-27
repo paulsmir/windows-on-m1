@@ -1,7 +1,8 @@
 #include "apple_agx_driver.h"
 
 #if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 
 static BOOLEAN
 AppleAgxAscRangeValid(_In_ const APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
@@ -116,4 +117,34 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyAscCpuStatus(
   return STATUS_IO_DEVICE_ERROR;
 }
 
+#endif
+
+#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
+_Use_decl_annotations_ NTSTATUS AppleAgxQualifyRtkitReadyStop(
+    volatile UCHAR *AscBase, ULONG AscLength) {
+  APPLE_AGX_WINDOWS_ASC_TRANSPORT transport;
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  APPLE_AGX_ASC_U64 deadline;
+  NTSTATUS status = AppleAgxFirmwareTransportInitialize(
+      AscBase, AscLength, &transport, &io);
+
+  if (!NT_SUCCESS(status))
+    return status;
+  AppleAgxRtkitSessionInitialize(&session);
+  deadline = (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
+  result = AppleAgxRtkitSessionBoot(&session, &io, deadline);
+  if (result != AppleAgxRtkitSessionResultOk)
+    return result == AppleAgxRtkitSessionResultTimeout
+               ? STATUS_IO_TIMEOUT
+               : STATUS_DEVICE_PROTOCOL_ERROR;
+  deadline = (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
+  result = AppleAgxRtkitSessionStop(&session, &io, deadline);
+  if (result == AppleAgxRtkitSessionResultOk)
+    return STATUS_SUCCESS;
+  return result == AppleAgxRtkitSessionResultTimeout
+             ? STATUS_IO_TIMEOUT
+             : STATUS_DEVICE_PROTOCOL_ERROR;
+}
 #endif

@@ -67,7 +67,8 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyPowerBroker(
   return STATUS_SUCCESS;
 }
 
-#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
+#if defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 static void AppleAgxPowerSessionIo(APPLE_AGX_POWER_SESSION *Session,
                                    APPLE_AGX_POWER_IO *Io) {
   RtlZeroMemory(Io, sizeof(*Io));

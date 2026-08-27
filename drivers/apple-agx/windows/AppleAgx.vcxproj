@@ -14,6 +14,7 @@
     <AppleAgxLifecycleQualification Condition="'$(AppleAgxLifecycleQualification)'==''">false</AppleAgxLifecycleQualification>
     <AppleAgxFirmwareQualification Condition="'$(AppleAgxFirmwareQualification)'==''">false</AppleAgxFirmwareQualification>
     <AppleAgxPoweredStatusQualification Condition="'$(AppleAgxPoweredStatusQualification)'==''">false</AppleAgxPoweredStatusQualification>
+    <AppleAgxRtkitQualification Condition="'$(AppleAgxRtkitQualification)'==''">false</AppleAgxRtkitQualification>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
@@ -57,6 +58,11 @@
   <ItemDefinitionGroup Condition="'$(AppleAgxPoweredStatusQualification)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxRtkitQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_RTKIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

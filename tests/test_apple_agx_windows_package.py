@@ -601,6 +601,43 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, qualification)
 
+    def test_rtkit_ready_stop_is_a_separate_opt_in_profile(self):
+        project = self.read("AppleAgx.vcxproj")
+        header = self.read("include/apple_agx_driver.h")
+        transport = self.read("src/firmware_transport.c")
+        adapter = self.read("src/adapter.c")
+        build = self.read("scripts/build-driver.ps1")
+        workflow = WORKFLOW.read_text()
+
+        self.assertIn("AppleAgxRtkitQualification", project)
+        self.assertIn("APPLE_AGX_G2_RTKIT_QUALIFICATION=1", project)
+        self.assertIn("AppleAgxQualifyRtkitReadyStop", header)
+        self.assertIn("AppleAgxRtkitSessionBoot", transport)
+        self.assertIn("AppleAgxRtkitSessionStop", transport)
+        self.assertIn("#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION", adapter)
+        start = adapter.index("#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION")
+        end = adapter.index("#endif", start)
+        qualification = adapter[start:end]
+        for required in (
+            "AppleAgxQualifyMmioMapping",
+            "AppleAgxPowerSessionBegin",
+            "AppleAgxQualifyRtkitReadyStop",
+            "AppleAgxPowerSessionEnd",
+            "AppleAgxReleaseMmioMapping",
+        ):
+            self.assertIn(required, qualification)
+        for forbidden in (
+            "AppleAgxWindowsMemoryInitialize",
+            "AppleAgxWindowsUatPublicationInitialize",
+            "AppleAgxFirmwareStart",
+            "AppleAgxDdiSubmitCommand",
+            "AppleAgxDdiPresent",
+        ):
+            self.assertNotIn(forbidden, qualification)
+        self.assertIn("[switch]$RtkitQualification", build)
+        self.assertIn("name: rtkit-qualification", workflow)
+        self.assertIn("AppleAgx-ARM64-RtkitQualification", workflow)
+
     def test_powered_status_qualification_brackets_one_read_and_cleans_up(self):
         adapter = self.read("src/adapter.c")
         header = self.read("include/apple_agx_driver.h")
@@ -627,7 +664,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         ):
             self.assertIn(name, diagnostics)
         self.assertEqual(
-            adapter.count("PHYSICAL_ADDRESS powerBrokerAddress = {0};"), 2
+            adapter.count("PHYSICAL_ADDRESS powerBrokerAddress = {0};"), 3
         )
 
         start = adapter.index("#ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION")
