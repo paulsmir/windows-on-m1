@@ -12438,3 +12438,47 @@ input/storage loss, Event 129, critical event or identity drift.  Recovery is
 the exact EXP-123 pair.  Evidence is stored under
 `.local/experiments/EXP-20260827-147-cold-kmd-load/` and the existing guest
 `C:\\Users\\pavel\\AppleAgxEvidence` tree.
+
+### Result
+
+Windows cold-booted with exact SYS SHA-256
+`546568655f72737052aee5abd32f2adb3f7f7a941973503159c2f604f9a6661c`,
+eight processors, Running AppleInput/stornvme/USBXHCI, VHF `0/1/1`, zero Event
+129, zero critical or error System events and responsive SSH.  APPL0002 retained
+Problem 31 / status `0xC0000182` and only the pre-existing AddDevice receipts.
+The AppleAgx kernel service reported stopped with Win32 exit code 1077, proving
+the new image had never started.  No Code Integrity event existed; the exact
+three MMIO and nine IRQ resources remained assigned.
+
+Cold boot cleared the service deletion requirement but did not cause PnP to
+retry the already failed devnode.  EXP-147 is inconclusive for the parser and
+UAT hypothesis; it does prove that an explicit bounded device restart is
+required after this package replacement workflow.
+
+## EXP-20260827-148 — Start the installed GPU package once after cold reload
+
+Status: preregistered; hardware run pending.
+
+### Hypothesis and single variable
+
+The exact new package is installed and trusted, but APPL0002 preserves the
+failed-add state created while the old service was pending deletion.  Clearing
+only diagnostic `Wom1*` values and issuing one exact PnP restart will load the
+new SYS for the first time.  No package, firmware, power, UAT, input, display,
+CPU or boot variable changes.
+
+### Procedure and gates
+
+1. Verify exact `oem18.inf`, SYS/CAT/INF hashes, signer, eight CPUs, platform
+   services and VHF `0/1/1`.
+2. Remove only `Wom1*` values from the AppleAgx service and APPL0002 Device
+   Parameters diagnostic keys.
+3. Invoke `pnputil /restart-device ACPI\\APPL0002\\0` exactly once and wait at
+   most 30 seconds for fresh StartDevice receipts.
+4. Require resource stage success and bounded UAT config/snapshot/root receipts,
+   plus responsive input/SSH, eight CPUs, zero Event 129 and zero critical
+   System events.  Do not retry on any failure.
+
+The exact EXP-123 assisted pair remains recovery.  Evidence is stored under
+`.local/experiments/EXP-20260827-148-explicit-start/` and the guest
+`C:\\Users\\pavel\\AppleAgxEvidence` tree.
