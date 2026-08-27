@@ -614,6 +614,11 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgxQualifyRtkitReadyStop", header)
         self.assertIn("AppleAgxRtkitSessionBoot", transport)
         self.assertIn("AppleAgxRtkitSessionStop", transport)
+        mmio_declarations = header[
+            header.rfind("#if", 0, header.index("AppleAgxQualifyMmioMapping")):
+            header.index("AppleAgxReleaseMmioMapping")
+        ]
+        self.assertIn("APPLE_AGX_G2_RTKIT_QUALIFICATION", mmio_declarations)
         self.assertIn("#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION", adapter)
         start = adapter.index("#ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION")
         end = adapter.index("#endif", start)

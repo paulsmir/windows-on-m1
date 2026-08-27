@@ -196,7 +196,8 @@ NTSTATUS AppleAgxQualifyRtkitReadyStop(
 #endif
 #if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
     defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                            \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION)
+    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                     \
+    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
 NTSTATUS
 AppleAgxQualifyMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                            _Out_ APPLE_AGX_MAPPING_STATE *MappingState);
