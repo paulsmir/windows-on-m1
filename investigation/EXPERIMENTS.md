@@ -11586,3 +11586,16 @@ healthy input/NVMe/xHCI, zero Event 129, zero critical events, normal shutdown
 and exact non-force rollback. The evidence path
 `investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/` was absent
 at preregistration. Any mismatch closes the experiment without retry.
+
+Result: rejected and closed without retry. Fresh current-profile receipts
+prove `DriverEntry` stage 2, successful `DxgkInitialize`, and AddDevice stage 2
+with success. StartDevice and every MMIO receipt are absent. Kernel-PnP
+reported Problem 31 / `0xC0000182`, while SetupAPI placed the failure after
+AddDevice. The candidate retained eight CPUs and Running AppleInput/NVMe/xHCI
+but recorded two stornvme Event 129 resets, so it also failed the storage health
+gate. No forbidden GPU action occurred. Exact non-force rollback completed;
+the final recovery quiet window had eight CPUs, Running AppleInput/NVMe/xHCI,
+zero critical events and zero Event 129. The sanitized verdict is
+`investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/VERDICT.md`;
+raw evidence remains local and ignored. Next work is offline completion of the
+full render-only WDDM callback contract before any new hardware boundary.

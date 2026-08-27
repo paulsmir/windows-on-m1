@@ -47,22 +47,22 @@ ownership remain forbidden.
 
 ## Procedure
 
-- [ ] Revalidate every fixed identity and require a responsive exact recovery
+- [x] Revalidate every fixed identity and require a responsive exact recovery
       baseline with eight CPUs, Running AppleInput/NVMe/xHCI, no present
       APPL0002/package/service/module/signer, zero critical events and zero
       Event 129 through the quiet window.
-- [ ] Record then clear only the enumerated `Wom1*` qualification receipts so
+- [x] Record then clear only the enumerated `Wom1*` qualification receipts so
       absence after boot is current evidence rather than stale state.
-- [ ] Stage only the exact package and record its generated `oemNN.inf`.
-- [ ] Shut down normally and launch one exact G2 candidate with display
+- [x] Stage only the exact package and record its generated `oemNN.inf`.
+- [x] Shut down normally and launch one exact G2 candidate with display
       `both`, monitor logging and no power-qualification environment flag.
-- [ ] Collect DriverEntry, AddDevice, StartDevice, translated-resource and
+- [x] Collect DriverEntry, AddDevice, StartDevice, translated-resource and
       optional map/subview/unmap receipts with registry key timestamps.
-- [ ] Require no forbidden GPU action, responsive eight-core Windows, working
+- [x] Require no forbidden GPU action, responsive eight-core Windows, working
       input/NVMe/xHCI, zero critical events and zero Event 129.
-- [ ] Shut down normally, boot exact recovery, remove only the recorded
+- [x] Shut down normally, boot exact recovery, remove only the recorded
       package and signer without `/force`, then require a clean quiet window.
-- [ ] Publish only a sanitized verdict; retain raw device-state evidence
+- [x] Publish only a sanitized verdict; retain raw device-state evidence
       locally. Close without retry.
 
 ## Falsifiable result
@@ -74,3 +74,13 @@ for this diagnostic objective. Any identity mismatch, stale or ambiguous
 receipt, forbidden GPU operation, storage reset, critical event, forced
 recovery, unresponsive guest or second G2 boot rejects the experiment and
 authorizes no retry.
+
+## Result
+
+Rejected and closed without retry. Fresh receipts prove successful
+`DxgkInitialize` and AddDevice, with no StartDevice or MMIO receipt. Windows
+reported Problem 31 / `0xC0000182`; the candidate also recorded two stornvme
+Event 129 resets and failed the storage health gate. Exact non-force rollback
+completed and the final recovery quiet window was clean. The sanitized result
+is published in
+`investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/VERDICT.md`.
