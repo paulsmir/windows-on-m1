@@ -491,7 +491,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("WRITE_REGISTER_ULONG64", transport)
         self.assertIn("KeDelayExecutionThread", transport)
         self.assertIn("J313_AGX_G2_ASC_MMIO_SIZE", transport)
-        self.assertNotIn("AppleAgxFirmwareTransportInitialize", adapter)
+        self.assertNotIn("AppleAgxFirmwareStart", adapter)
         self.assertIn("[switch]$FirmwareQualification", build)
         self.assertIn(
             "/p:AppleAgxFirmwareQualification=$firmwareQualification", build
@@ -503,6 +503,54 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             "/p:AppleAgxFirmwareQualification=${{ matrix.firmware_qualification }}",
             workflow,
         )
+
+    def test_firmware_qualification_reads_only_asc_cpu_status_and_unmaps(self):
+        adapter = self.read("src/adapter.c")
+        header = self.read("include/apple_agx_driver.h")
+        mmio = self.read("src/mmio.c")
+        transport = self.read("src/firmware_transport.c")
+        diagnostics = self.read("src/driver_diagnostics.c")
+
+        shared_guard = (
+            r"defined\(APPLE_AGX_G2_MMIO_QUALIFICATION\)\s*\|\|\s*\\?\s*"
+            r"defined\(APPLE_AGX_G2_FIRMWARE_QUALIFICATION\)"
+        )
+        self.assertRegex(header, shared_guard)
+        self.assertRegex(mmio, shared_guard)
+        self.assertIn("AppleAgxQualifyAscCpuStatus", header)
+        self.assertIn("AppleAgxQualifyAscCpuStatus", transport)
+        self.assertIn("AppleAgxAscReadCpuStatus", transport)
+        self.assertIn("AppleAgxRecordAscCpuStatus", diagnostics)
+        for name in ("Wom1AscCpuStatusReadStatus", "Wom1AscCpuStatus"):
+            self.assertIn(name, diagnostics)
+
+        start = adapter.index("#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION")
+        end = adapter.index("#endif", start)
+        qualification = adapter[start:end]
+        for required in (
+            "AppleAgxQualifyMmioMapping",
+            "AppleAgxQualifyAscCpuStatus",
+            "AppleAgxRecordAscCpuStatus",
+            "AppleAgxReleaseMmioMapping",
+        ):
+            self.assertIn(required, qualification)
+        self.assertLess(
+            qualification.index("AppleAgxQualifyMmioMapping"),
+            qualification.index("AppleAgxQualifyAscCpuStatus"),
+        )
+        self.assertLess(
+            qualification.index("AppleAgxQualifyAscCpuStatus"),
+            qualification.index("AppleAgxReleaseMmioMapping"),
+        )
+        for forbidden in (
+            "AppleAgxAscSetRun",
+            "AppleAgxAscSend",
+            "AppleAgxAscReceive",
+            "AppleAgxFirmwareStart",
+            "WRITE_REGISTER",
+            "AppleAgxQualifyPowerBroker",
+        ):
+            self.assertNotIn(forbidden, qualification)
 
     def test_build_script_and_ci_run_code_analysis(self):
         build = self.read("scripts/build-driver.ps1")

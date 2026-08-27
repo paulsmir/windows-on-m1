@@ -19,7 +19,8 @@
 #ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
 #include "apple_agx_asc_transport.h"
 #endif
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
 #include "apple_agx_mapping.h"
 #endif
 
@@ -46,7 +47,8 @@ typedef struct _APPLE_AGX_WINDOWS_ASC_TRANSPORT {
 typedef struct _APPLE_AGX_ADAPTER {
   PDEVICE_OBJECT PhysicalDeviceObject;
   APPLE_AGX_STATE State;
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
   APPLE_AGX_MAPPING_STATE MappingState;
   DXGKRNL_INTERFACE DxgkInterface;
   BOOLEAN DxgkInterfaceValid;
@@ -150,13 +152,16 @@ NTSTATUS AppleAgxWindowsMemoryInitialize(
     _In_ PDXGKRNL_INTERFACE DxgkInterface,
     _Out_ APPLE_AGX_WINDOWS_MEMORY_ALLOCATOR *Allocator,
     _Out_ APPLE_AGX_MEMORY_IO *Io);
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
 NTSTATUS
 AppleAgxQualifyMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                            _Out_ APPLE_AGX_MAPPING_STATE *MappingState);
 NTSTATUS
 AppleAgxReleaseMmioMapping(_In_ PDXGKRNL_INTERFACE DxgkInterface,
                            _Inout_ APPLE_AGX_MAPPING_STATE *MappingState);
+#endif
+#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
 void AppleAgxRecordMmioQualification(
     _In_ PDEVICE_OBJECT DeviceObject, _In_ APPLE_AGX_MMIO_STAGE Stage,
     _In_ NTSTATUS Status, _In_opt_ const APPLE_AGX_MAPPING_STATE *MappingState);
@@ -181,6 +186,11 @@ NTSTATUS AppleAgxFirmwareTransportInitialize(
     _In_reads_bytes_(AscLength) volatile UCHAR *AscBase, _In_ ULONG AscLength,
     _Out_ APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
     _Out_ APPLE_AGX_ASC_IO *Io);
+NTSTATUS
+AppleAgxQualifyAscCpuStatus(_In_reads_bytes_(AscLength) volatile UCHAR *AscBase,
+                            _In_ ULONG AscLength, _Out_ PULONG CpuStatus);
+void AppleAgxRecordAscCpuStatus(_In_ PDEVICE_OBJECT DeviceObject,
+                                _In_ NTSTATUS Status, _In_ ULONG CpuStatus);
 #endif
 
 #endif /* APPLE_AGX_DRIVER_H */

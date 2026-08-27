@@ -1,6 +1,7 @@
 #include "apple_agx_driver.h"
 
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
 
 typedef struct _APPLE_AGX_DXGK_MAPPING_CONTEXT {
   PDXGKRNL_INTERFACE Interface;
@@ -15,8 +16,7 @@ static unsigned char AppleAgxDxgkMap(void *Context,
   PHYSICAL_ADDRESS address;
   PVOID base = NULL;
 
-  if (mapping == NULL || mapping->Interface == NULL ||
-      VirtualAddress == NULL) {
+  if (mapping == NULL || mapping->Interface == NULL || VirtualAddress == NULL) {
     return 0u;
   }
 
@@ -35,8 +35,7 @@ static unsigned char AppleAgxDxgkUnmap(void *Context,
                                        unsigned char *VirtualAddress) {
   APPLE_AGX_DXGK_MAPPING_CONTEXT *mapping = Context;
 
-  if (mapping == NULL || mapping->Interface == NULL ||
-      VirtualAddress == NULL) {
+  if (mapping == NULL || mapping->Interface == NULL || VirtualAddress == NULL) {
     return 0u;
   }
 
@@ -45,8 +44,8 @@ static unsigned char AppleAgxDxgkUnmap(void *Context,
   return NT_SUCCESS(mapping->LastStatus) ? 1u : 0u;
 }
 
-static NTSTATUS AppleAgxMappingResultToStatus(
-    APPLE_AGX_UAT_RESULT Result, NTSTATUS CallbackStatus) {
+static NTSTATUS AppleAgxMappingResultToStatus(APPLE_AGX_UAT_RESULT Result,
+                                              NTSTATUS CallbackStatus) {
   if (Result == AppleAgxUatResultOk)
     return STATUS_SUCCESS;
   if (Result == AppleAgxUatResultAllocationFailed &&
@@ -60,8 +59,7 @@ static NTSTATUS AppleAgxMappingResultToStatus(
 }
 
 _Use_decl_annotations_ NTSTATUS AppleAgxQualifyMmioMapping(
-    PDXGKRNL_INTERFACE DxgkInterface,
-    APPLE_AGX_MAPPING_STATE *MappingState) {
+    PDXGKRNL_INTERFACE DxgkInterface, APPLE_AGX_MAPPING_STATE *MappingState) {
   APPLE_AGX_DXGK_MAPPING_CONTEXT context;
   APPLE_AGX_MAPPING_IO io;
   APPLE_AGX_UAT_RESULT result;
@@ -81,8 +79,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyMmioMapping(
 }
 
 _Use_decl_annotations_ NTSTATUS AppleAgxReleaseMmioMapping(
-    PDXGKRNL_INTERFACE DxgkInterface,
-    APPLE_AGX_MAPPING_STATE *MappingState) {
+    PDXGKRNL_INTERFACE DxgkInterface, APPLE_AGX_MAPPING_STATE *MappingState) {
   APPLE_AGX_DXGK_MAPPING_CONTEXT context;
   APPLE_AGX_MAPPING_IO io;
   APPLE_AGX_UAT_RESULT result;
@@ -100,4 +97,4 @@ _Use_decl_annotations_ NTSTATUS AppleAgxReleaseMmioMapping(
   return AppleAgxMappingResultToStatus(result, context.LastStatus);
 }
 
-#endif /* APPLE_AGX_G2_MMIO_QUALIFICATION */
+#endif /* MMIO or firmware qualification */

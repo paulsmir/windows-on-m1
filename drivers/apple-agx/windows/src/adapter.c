@@ -104,15 +104,13 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
     PHYSICAL_ADDRESS powerBrokerAddress;
 
     status = AppleAgxGetPowerBrokerAddress(deviceInfo.TranslatedResourceList,
-                                            &powerBrokerAddress);
+                                           &powerBrokerAddress);
     AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
                                       AppleAgxStartBrokerAddress, status);
     if (NT_SUCCESS(status)) {
-      status = AppleAgxQualifyPowerBroker(DxgkInterface,
-                                          powerBrokerAddress);
+      status = AppleAgxQualifyPowerBroker(DxgkInterface, powerBrokerAddress);
       AppleAgxRecordStartDeviceBoundary(adapter->PhysicalDeviceObject,
-                                        AppleAgxStartBrokerTransaction,
-                                        status);
+                                        AppleAgxStartBrokerTransaction, status);
     }
     if (!NT_SUCCESS(status)) {
       AppleAgxStateInitialize(&adapter->State);
@@ -146,6 +144,33 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
   adapter->DxgkInterfaceValid = FALSE;
 #endif
 
+#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+  {
+    ULONG cpuStatus = 0;
+    NTSTATUS unmapStatus;
+
+    adapter->DxgkInterface = *DxgkInterface;
+    adapter->DxgkInterfaceValid = TRUE;
+    status = AppleAgxQualifyMmioMapping(&adapter->DxgkInterface,
+                                        &adapter->MappingState);
+    if (NT_SUCCESS(status))
+      status = AppleAgxQualifyAscCpuStatus(
+          adapter->MappingState.AscBase, J313_AGX_G2_ASC_MMIO_SIZE, &cpuStatus);
+    AppleAgxRecordAscCpuStatus(adapter->PhysicalDeviceObject, status,
+                               cpuStatus);
+    unmapStatus = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
+                                             &adapter->MappingState);
+    if (NT_SUCCESS(status))
+      status = unmapStatus;
+    RtlZeroMemory(&adapter->DxgkInterface, sizeof(adapter->DxgkInterface));
+    adapter->DxgkInterfaceValid = FALSE;
+    if (!NT_SUCCESS(status)) {
+      AppleAgxStateInitialize(&adapter->State);
+      return status;
+    }
+  }
+#endif
+
   /*
    * This remains enumeration-only.  A qualification build may execute the
    * bounded ON/QUERY/OFF broker receipt above, but firmware, UAT, queues and
@@ -166,7 +191,8 @@ AppleAgxDdiStopDevice(PVOID MiniportDeviceContext) {
   NTSTATUS status = STATUS_SUCCESS;
   if (adapter == NULL)
     return STATUS_INVALID_PARAMETER;
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
   if (adapter->DxgkInterfaceValid) {
     status = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
                                         &adapter->MappingState);
@@ -186,7 +212,8 @@ AppleAgxDdiRemoveDevice(PVOID MiniportDeviceContext) {
   NTSTATUS status = STATUS_SUCCESS;
   if (adapter == NULL)
     return STATUS_INVALID_PARAMETER;
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
   if (adapter->DxgkInterfaceValid) {
     status = AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
                                         &adapter->MappingState);
@@ -262,7 +289,8 @@ _Use_decl_annotations_ VOID
 AppleAgxDdiResetDevice(PVOID MiniportDeviceContext) {
   APPLE_AGX_ADAPTER *adapter = (APPLE_AGX_ADAPTER *)MiniportDeviceContext;
   if (adapter != NULL) {
-#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
+#if defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                                \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
     if (adapter->DxgkInterfaceValid &&
         NT_SUCCESS(AppleAgxReleaseMmioMapping(&adapter->DxgkInterface,
                                               &adapter->MappingState))) {
