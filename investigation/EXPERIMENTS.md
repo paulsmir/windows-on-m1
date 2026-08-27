@@ -12677,9 +12677,14 @@ Status: preregistered; package build pending.
 
 ### Fixed source and single variable
 
-- Root source: `c324297ac6d042f447a8308aeeba2884a680b388` on
-  `feature/j313-gpu-acceleration`; implementation
-  commit `b0c8a523507bbf85136eebece9048fab8e87c250`.
+- Initial source `c324297ac6d042f447a8308aeeba2884a680b388`
+  stopped at the compile gate: the unreachable `memory_windows.c` object
+  requires WDDM 3.0-only ADL types.  No package was produced and the guest was
+  not mutated.
+- Corrected root source: `864be372c1c6903e3014fce871609779cae59d83`
+  on `feature/j313-gpu-acceleration`; ABI-control implementation
+  `b0c8a523507bbf85136eebece9048fab8e87c250`; ADL build isolation
+  `7b8126cd5f9deb9bd5e551149381d1510be4223e`.
 - Firmware, m1n1, Mu, ACPI, eight-CPU topology, input, storage, xHCI, display,
   callback assignments, runtime Version field and lifecycle-only behavior are
   identical to EXP-151.
