@@ -36,6 +36,11 @@ typedef struct _APPLE_AGX_RTKIT_MANAGEMENT {
 
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitSetIopPower(APPLE_AGX_RTKIT_U32 State);
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitSetApPower(APPLE_AGX_RTKIT_U32 State);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitHelloAck(APPLE_AGX_RTKIT_U32 MinVersion,
+                                          APPLE_AGX_RTKIT_U32 MaxVersion);
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitEndpointMapAck(APPLE_AGX_RTKIT_U32 Base,
+                                                APPLE_AGX_RTKIT_U32 Last,
+                                                APPLE_AGX_RTKIT_U32 More);
 APPLE_AGX_RTKIT_U64
 AppleAgxRtkitStartEndpoint(APPLE_AGX_RTKIT_U32 Endpoint,
                            APPLE_AGX_RTKIT_U32 Flag);

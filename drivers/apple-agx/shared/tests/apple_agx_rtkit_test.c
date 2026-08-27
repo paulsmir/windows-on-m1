@@ -3,6 +3,11 @@
 #include <assert.h>
 
 static void test_literal_message_vectors(void) {
+  assert(AppleAgxRtkitHelloAck(1u, 4u) == 0x0020000000040001ULL);
+  assert(AppleAgxRtkitEndpointMapAck(3u, 1u, 0u) ==
+         0x0088000300000000ULL);
+  assert(AppleAgxRtkitEndpointMapAck(2u, 0u, 1u) ==
+         0x0080000200000001ULL);
   assert(AppleAgxRtkitSetIopPower(0x220u) == 0x0060000000000220ULL);
   assert(AppleAgxRtkitSetApPower(0x20u) == 0x00b0000000000020ULL);
   assert(AppleAgxRtkitStartEndpoint(0x20u, 2u) ==
@@ -57,6 +62,16 @@ static void test_management_decode_is_bounded(void) {
 }
 
 static void test_invalid_encode_inputs_are_not_truncated(void) {
+  assert(AppleAgxRtkitHelloAck(5u, 4u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
+  assert(AppleAgxRtkitHelloAck(0x10000u, 0x10000u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
+  assert(AppleAgxRtkitEndpointMapAck(8u, 0u, 0u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
+  assert(AppleAgxRtkitEndpointMapAck(0u, 2u, 0u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
+  assert(AppleAgxRtkitEndpointMapAck(0u, 0u, 2u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
   assert(AppleAgxRtkitSetIopPower(0x10000u) ==
          APPLE_AGX_RTKIT_INVALID_MESSAGE);
   assert(AppleAgxRtkitSetApPower(0x10000u) ==

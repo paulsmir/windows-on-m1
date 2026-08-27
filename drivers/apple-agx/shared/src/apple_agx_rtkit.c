@@ -20,6 +20,24 @@ AppleAgxRtkitManagementType(APPLE_AGX_RTKIT_U32 Type) {
          << APPLE_AGX_RTKIT_MANAGEMENT_TYPE_SHIFT;
 }
 
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitHelloAck(APPLE_AGX_RTKIT_U32 MinVersion,
+                                          APPLE_AGX_RTKIT_U32 MaxVersion) {
+  if (MinVersion > MaxVersion || MaxVersion > 0xffffu)
+    return APPLE_AGX_RTKIT_INVALID_MESSAGE;
+  return AppleAgxRtkitManagementType(AppleAgxRtkitManagementHelloAck) |
+         ((APPLE_AGX_RTKIT_U64)MaxVersion << 16u) | MinVersion;
+}
+
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitEndpointMapAck(APPLE_AGX_RTKIT_U32 Base,
+                                                APPLE_AGX_RTKIT_U32 Last,
+                                                APPLE_AGX_RTKIT_U32 More) {
+  if (Base > 7u || Last > 1u || More > 1u)
+    return APPLE_AGX_RTKIT_INVALID_MESSAGE;
+  return AppleAgxRtkitManagementType(AppleAgxRtkitManagementEndpointMap) |
+         ((APPLE_AGX_RTKIT_U64)Last << 51u) |
+         ((APPLE_AGX_RTKIT_U64)Base << 32u) | More;
+}
+
 static void AppleAgxRtkitClearManagement(
     APPLE_AGX_RTKIT_MANAGEMENT *Decoded) {
   Decoded->Type = (APPLE_AGX_RTKIT_MANAGEMENT_TYPE)0;

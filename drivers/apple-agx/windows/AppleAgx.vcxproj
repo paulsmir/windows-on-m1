@@ -74,6 +74,8 @@
     <ClCompile Include="..\shared\src\apple_agx_state.c" />
     <ClCompile Include="..\shared\src\apple_agx_power.c" />
     <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_boot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_session.c" />
     <ClCompile Include="..\shared\src\apple_agx_firmware.c" />
     <ClCompile Include="..\shared\src\apple_agx_mapping.c" />
     <ClCompile Include="..\shared\src\apple_agx_asc_transport.c" />
@@ -97,6 +99,8 @@
     <ClInclude Include="..\shared\include\apple_agx_state.h" />
     <ClInclude Include="..\shared\include\apple_agx_power.h" />
     <ClInclude Include="..\shared\include\apple_agx_rtkit.h" />
+    <ClInclude Include="..\shared\include\apple_agx_rtkit_boot.h" />
+    <ClInclude Include="..\shared\include\apple_agx_rtkit_session.h" />
     <ClInclude Include="..\shared\include\apple_agx_firmware.h" />
     <ClInclude Include="..\shared\include\apple_agx_mapping.h" />
     <ClInclude Include="..\shared\include\apple_agx_asc_transport.h" />
