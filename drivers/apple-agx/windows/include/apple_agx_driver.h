@@ -15,17 +15,28 @@
 
 #include "apple_agx_state.h"
 #include "apple_agx_power.h"
+#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+#include "apple_agx_asc_transport.h"
+#endif
 #ifdef APPLE_AGX_G2_MMIO_QUALIFICATION
 #include "apple_agx_mapping.h"
 #endif
 
 #if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                         \
     defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                          \
-    defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION)
+    defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION) ||                     \
+    defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)
 #define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
 #endif
 
 #define APPLE_AGX_POOL_TAG 'xgAA'
+
+#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+typedef struct _APPLE_AGX_WINDOWS_ASC_TRANSPORT {
+  volatile UCHAR *Base;
+  ULONG Length;
+} APPLE_AGX_WINDOWS_ASC_TRANSPORT;
+#endif
 
 typedef struct _APPLE_AGX_ADAPTER {
   PDEVICE_OBJECT PhysicalDeviceObject;
@@ -158,5 +169,13 @@ void AppleAgxRecordStartDeviceBoundary(_In_ PDEVICE_OBJECT DeviceObject,
 void AppleAgxRecordTranslatedResources(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_opt_ PCM_RESOURCE_LIST TranslatedResources);
+
+#ifdef APPLE_AGX_G2_FIRMWARE_QUALIFICATION
+NTSTATUS AppleAgxFirmwareTransportInitialize(
+    _In_reads_bytes_(AscLength) volatile UCHAR *AscBase,
+    _In_ ULONG AscLength,
+    _Out_ APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
+    _Out_ APPLE_AGX_ASC_IO *Io);
+#endif
 
 #endif /* APPLE_AGX_DRIVER_H */

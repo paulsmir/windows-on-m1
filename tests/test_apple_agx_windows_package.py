@@ -227,7 +227,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         sources = "\n".join(
             path.read_text()
             for path in sorted((WINDOWS / "src").glob("*.c"))
-            if path.name not in ("power.c", "mmio.c")
+            if path.name not in ("power.c", "mmio.c", "firmware_transport.c")
         )
         for unsafe in (
             "WRITE_REGISTER", "MmMapIoSpace", "MmMapIoSpaceEx",
@@ -306,6 +306,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("defined(APPLE_AGX_G2_POWER_QUALIFICATION)", header)
         self.assertIn("defined(APPLE_AGX_G2_MMIO_QUALIFICATION)", header)
         self.assertIn("defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION)", header)
+        self.assertIn("defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION)", header)
         self.assertIn(
             "#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", driver
         )
@@ -429,6 +430,40 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
             self.assertNotIn("AppleAgxFirmwareStart", ddi_source)
             self.assertNotIn("AppleAgxFirmwareRollback", ddi_source)
         self.assertIn("return STATUS_NOT_SUPPORTED", adapter)
+
+    def test_firmware_transport_is_separate_compile_only_profile(self):
+        project = self.read("AppleAgx.vcxproj")
+        header = self.read("include/apple_agx_driver.h")
+        transport = self.read("src/firmware_transport.c")
+        adapter = self.read("src/adapter.c")
+        build = self.read("scripts/build-driver.ps1")
+        workflow = WORKFLOW.read_text()
+
+        self.assertIn("AppleAgxFirmwareQualification", project)
+        self.assertIn("APPLE_AGX_G2_FIRMWARE_QUALIFICATION=1", project)
+        self.assertIn(r"src\firmware_transport.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_asc_transport.c", project)
+        self.assertIn(r"..\shared\include\apple_agx_asc_transport.h", project)
+        self.assertIn("APPLE_AGX_WINDOWS_ASC_TRANSPORT", header)
+        self.assertIn("AppleAgxFirmwareTransportInitialize", header)
+        self.assertIn("READ_REGISTER_ULONG", transport)
+        self.assertIn("READ_REGISTER_ULONG64", transport)
+        self.assertIn("WRITE_REGISTER_ULONG", transport)
+        self.assertIn("WRITE_REGISTER_ULONG64", transport)
+        self.assertIn("KeDelayExecutionThread", transport)
+        self.assertIn("J313_AGX_G2_ASC_MMIO_SIZE", transport)
+        self.assertNotIn("AppleAgxFirmwareTransportInitialize", adapter)
+        self.assertIn("[switch]$FirmwareQualification", build)
+        self.assertIn(
+            "/p:AppleAgxFirmwareQualification=$firmwareQualification", build
+        )
+        self.assertIn("name: firmware-qualification", workflow)
+        self.assertIn("firmware_qualification: true", workflow)
+        self.assertIn("AppleAgx-ARM64-FirmwareQualification", workflow)
+        self.assertIn(
+            "/p:AppleAgxFirmwareQualification=${{ matrix.firmware_qualification }}",
+            workflow,
+        )
 
     def test_build_script_and_ci_run_code_analysis(self):
         build = self.read("scripts/build-driver.ps1")

@@ -3,7 +3,8 @@ param(
     [string]$Configuration = "Debug",
     [switch]$PowerQualification,
     [switch]$MmioQualification,
-    [switch]$LifecycleQualification
+    [switch]$LifecycleQualification,
+    [switch]$FirmwareQualification
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,12 +13,14 @@ $project = Join-Path $root "AppleAgx.vcxproj"
 $qualification = if ($PowerQualification) { "true" } else { "false" }
 $mmioQualification = if ($MmioQualification) { "true" } else { "false" }
 $lifecycleQualification = if ($LifecycleQualification) { "true" } else { "false" }
+$firmwareQualification = if ($FirmwareQualification) { "true" } else { "false" }
 
 & msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true `
     "/p:AppleAgxPowerQualification=$qualification" `
     "/p:AppleAgxMmioQualification=$mmioQualification" `
-    "/p:AppleAgxLifecycleQualification=$lifecycleQualification"
+    "/p:AppleAgxLifecycleQualification=$lifecycleQualification" `
+    "/p:AppleAgxFirmwareQualification=$firmwareQualification"
 if ($LASTEXITCODE -ne 0) {
     throw "AppleAgx ARM64 WDK build failed with exit code $LASTEXITCODE"
 }
