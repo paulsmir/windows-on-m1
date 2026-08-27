@@ -13064,3 +13064,48 @@ with no new Event 129, WHEA, BugCheck, critical or error System event.  Missing
 StartDevice, identity drift, any forbidden receipt or health loss rejects the
 experiment without retry.  Rollback is one normal shutdown followed by the
 immutable recovery Mu and m1n1 pair recorded above.
+
+### 2026-08-27T23:30:53Z single cold G2 result — rejected
+
+Before interpreting the hardware receipt, source review found that the numeric
+success criterion above was stale: in exact source commit
+`6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`,
+`AppleAgxStartFailClosed` is stage 9, not stage 7.  Stages 7 and 8 are the
+bounded power-acquired and power-released receipts.  The correct admission-only
+success receipt would therefore be StartDevice stage 9 with
+`STATUS_NOT_SUPPORTED` (`0xC00000BB`).  This correction does not change the
+verdict because no StartDevice receipt was produced at all.
+
+Recovery shut down normally.  The exact preregistered G2 launch was executed
+once with the recorded Mu and m1n1 artifacts.  Windows booted and SSH returned.
+Read-only postflight proved:
+
+- exact `oem18.inf` version `23.6.21.184` bound to `ACPI\APPL0002\0`;
+- exact SYS / INF / CAT hashes and valid signer matched preregistration;
+- DriverEntry stage 2 and DxgkInitialize status zero;
+- AddDevice stage 2 and status zero;
+- no StartDevice receipt;
+- no forbidden MMIO, power, ASC, RTKit, UAT, IRQ, queue, submit, fence,
+  command, render or present receipt;
+- eight logical processors and Running AppleInput, stornvme, USBXHCI and sshd;
+- no WHEA, BugCheck, critical or error System event;
+- one boot-window stornvme Event 129 reset at 2026-08-27T23:29:40Z.
+
+SetupAPI independently records the natural device start at 01:28:19 and
+Problem 31 / `STATUS_DEVICE_CONFIGURATION_ERROR` (`0xC0000182`).  The exact
+matched WDDM3 ABI is therefore insufficient for Dxgkrnl to invoke StartDevice,
+and the separate platform-health gate also failed.  EXP-156 is rejected without
+retry.  No GPU hardware access occurred.
+
+Ignored raw evidence:
+
+- `.local/experiments/EXP-20260828-156-matched-wddm/cold-result.json`
+  SHA-256 `86533e666bff308416556699c3037c913e12ad240060a23fc12031ac20dd6986`;
+- `.local/experiments/EXP-20260828-156-matched-wddm/setupapi.dev.log`
+  SHA-256 `01d03d40cfafe6b149b792a7ac5a145bfac5f29b9fe64bbe14987c297e68d553b`;
+- `.local/experiments/EXP-20260828-156-matched-wddm/hv.log`
+  SHA-256 `2f357d9ddb84d59be3f97f697e16d20effde59f3d8f641ceaef884cd2742b5a9`.
+
+The next action is offline-only: compare the exact EXP-138 package that reached
+StartDevice with EXP-156 beyond the already-matched WDDM table size and runtime
+Version.  No new hardware hypothesis is authorized yet.
