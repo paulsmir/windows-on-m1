@@ -11980,3 +11980,23 @@ all six new receipts, eight CPUs, Running AppleInput/stornvme/USBXHCI, no fresh
 Event 129, no critical System event, no reboot, and responsive SSH/input. Stop
 after the single transaction on any hash, signer or device identity drift,
 receipt timeout, health loss, storage reset, bugcheck or reboot. Do not retry.
+
+Actual result at `2026-08-27T19:11:57Z`: inconclusive and rejected as a safe
+qualification method. Exactly one package transaction was started. The remote
+runner did not return a completion record; after approximately 31 seconds the
+Air stopped answering both SSH and ICMP and remained unreachable at the final
+read-only liveness check. No retry, guest reset, second package transaction, or
+new firmware launch was attempted. The local web framebuffer and telemetry
+servers contained only stale data from an earlier generation, so they cannot
+be used as evidence for the physical screen or guest state. No UAT snapshot
+receipt was recovered before loss of contact.
+
+The experiment therefore does not establish whether context-zero roots were
+zero or valid. It does establish that privately mapping `gpu-region` from its
+ADT physical address is not an acceptable Windows access contract: the region
+was absent from AGX0 `_CRS`, absent from the translated-resource validator, and
+not independently guaranteed by the assisted/standalone stage-2 contract. The
+next experiment must first expose exactly this 16-KiB region through the
+generated Mu ACPI contract and explicit m1n1 stage-2 identity mapping, then map
+only its translated resource through `DxgkCbMapMemory`. Recovery remains
+immutable EXP-123. EXP-139 must not be rerun.
