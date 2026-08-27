@@ -224,6 +224,11 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("CmResourceTypeDevicePrivate", resources)
         self.assertIn("devicePrivateCount", resources)
         self.assertIn("J313_AGX_G2_MEMORY_RESOURCE_COUNT", resources)
+        self.assertIn(
+            "#define J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT "
+            "J313_AGX_G2_MEMORY_RESOURCE_COUNT",
+            resources,
+        )
         self.assertIn("descriptor->u.Interrupt.Affinity == 0", resources)
         self.assertIn("AppleAgxRecordTranslatedInterrupt", resources)
         self.assertNotIn("AppleAgxInterruptRoutes", resources)

@@ -3,7 +3,7 @@
 #include "j313_agx_g2.generated.h"
 
 #define J313_AGX_G2_MEMORY_RESOURCE_COUNT 3u
-#define J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT 2u
+#define J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT J313_AGX_G2_MEMORY_RESOURCE_COUNT
 #define J313_AGX_G2_TRANSLATED_RESOURCE_COUNT                              \
   (J313_AGX_G2_MEMORY_RESOURCE_COUNT +                                     \
    J313_AGX_G2_DEVICE_PRIVATE_RESOURCE_COUNT +                             \
