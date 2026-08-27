@@ -1,5 +1,9 @@
 # J313 AGX Powered ASC Status Hardware Qualification
 
+**Status:** Closed after one execution. The bounded powered read succeeded, but
+the candidate was rejected by the preregistered NVMe health gate. See
+`investigation/artifacts/EXP-20260827-135-agx-powered-status/VERDICT.md`.
+
 **Goal:** Prove in one fail-closed G2 boot that ASC CPU status is readable only
 inside a bounded, confirmed GPU power session, followed by verified power-off
 and release of both mappings.
@@ -60,3 +64,19 @@ subview, power acquire, one read, power release and both unmaps, deliberate
 stage-7 failure, healthy eight-core Windows, zero Event 129 and critical events,
 and exact clean rollback. Any missing or duplicate read, abort, power-off
 failure, health regression or identity drift rejects and closes without retry.
+
+## Observed result
+
+The exact staged package bound automatically during the sole candidate cold
+boot, so the authorized transaction occurred before the planned manual device
+restart. No restart or retry followed. SGX map, ASC subview, one status read and
+unmap all returned zero; the read value was `0x2a`. Hypervisor receipts proved
+the exact ON, QUERY=ON, OFF sequence with result zero, and StartDevice ended at
+stage 9 with deliberate `0xc00000bb`.
+
+The narrow powered-read result passed, but the candidate recorded one fresh
+`stornvme` Event 129 before any manual cycle and therefore failed the system
+health condition. Exact non-force rollback removed the package and signer. A
+fresh EXP-123 control boot then proved eight CPUs, healthy platform services,
+no AppleAgx/APPL0002 and zero Event 129 or critical events. The experiment is
+closed without retry and does not authorize the next GPU ownership boundary.

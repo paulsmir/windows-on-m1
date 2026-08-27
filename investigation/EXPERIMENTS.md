@@ -11702,12 +11702,19 @@ so another candidate remains gated on a fresh quiet recovery window. See
 
 ### EXP-20260827-135 — J313 AGX powered ASC status qualification
 
-Status: preregistered. The literal contract is
+Status: powered read validated; candidate rejected and closed without retry.
+The literal contract is
 `documentation/plans/2026-08-27-j313-agx-powered-status-hardware-qualification.md`.
-The only hardware change from rejected EXP-134 is a bounded broker session:
-ON, confirmed ON, exactly one CPU-status read, OFF, then both unmaps. Exact
-source, six-profile WDK run, signed artifact, G2 and recovery identities are
-pinned in the contract. A fresh recovery boot at
-`2026-08-27T09:46:56.7203420Z` reported eight CPUs, healthy AppleInput/NVMe/
-xHCI, zero Event 129 and zero critical events. One display-both cold execution
-is authorized; every later GPU action remains forbidden.
+The exact package started automatically on the sole display-both G2 cold boot.
+Map, ASC subview, one CPU-status read and unmap returned zero; the value was
+`0x2a`. Hypervisor receipts independently proved ON, QUERY=ON and OFF with
+zero result, and StartDevice then failed closed at stage 9 / `0xc00000bb`.
+
+The narrow powered-read boundary passed, but the candidate recorded one fresh
+stornvme Event 129 before a manual device cycle. The strict health gate rejected
+the candidate and no restart or retry was performed. Exact non-force rollback
+removed only the package and signer. One subsequent clean EXP-123 control boot
+proved eight CPUs, healthy services, no AppleAgx/APPL0002 and zero Event 129 or
+critical events. No firmware, interrupt, UAT, queue, render or display action is
+authorized. See
+`investigation/artifacts/EXP-20260827-135-agx-powered-status/VERDICT.md`.
