@@ -12748,3 +12748,50 @@ qualification-profile selection and devnode recreation have now all been
 excluded independently.  The next investigation must compare the exact
 callback values and linked miniport contract between EXP-130 and the current
 lifecycle package; it must not change firmware, UAT or hardware behavior.
+
+## EXP-20260828-153 — Cold-first enumerate the exact EXP-152 package
+
+Status: preregistered; hardware sequence pending.
+
+### Corrected premise
+
+EXP-146 recorded that replacing a display miniport in the live G2 guest makes
+SetupAPI return `Restart required for any devices using this driver` and leaves
+the service pending deletion.  EXP-147 then proved a cold boot clears deletion
+but preserves the failed devnode, while EXP-148/149 proved restart or hot
+recreation does not rebuild a clean dxgkrnl display stack.  Therefore the
+EXP-151/152 hot cycles are valid records of platform health and failed hot
+replacement, but they are not a clean admission A/B for the new SYS bytes.
+
+EXP-130 used a different, valid sequence: stage the package while recovery
+firmware exposes no APPL0002, shut down normally, then let one G2 candidate boot
+create APPL0002 for the first time.  EXP-153 repeats that sequence with the
+already pinned EXP-152 package; no driver byte changes.
+
+### Fixed identities and procedure
+
+- Package, version, hashes and signer are exactly EXP-152.
+- Recovery firmware SHA-256:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+  recovery m1n1 SHA-256:
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+- Candidate firmware SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`;
+  candidate m1n1 SHA-256:
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Both launches use the public assisted launcher, display=both, debug=monitor,
+  eight CPUs and the canonical launch contract.
+
+1. Shut down the current G2 guest normally and boot exact recovery.  Require
+   APPL0002 absent, AppleAgx unloaded, eight CPUs and Running input, NVMe/xHCI.
+2. Delete only the recorded `oem18.inf` without force, stage the exact EXP-152
+   package while no device is present, verify hashes/signer and shut down
+   normally.  Do not start or restart a device in recovery.
+3. Boot the exact G2 candidate once.  Do not invoke a hot package cycle.  Read
+   the naturally created APPL0002 state and fresh lifecycle receipts.
+4. Pass only if StartDevice reaches stage 7/status `0xC00000BB`, all
+   power/MMIO/firmware/UAT receipts remain absent, native input works, eight
+   CPUs remain online and no Event 129 or critical System event occurs.
+
+Any identity drift, recovery APPL0002, package failure, missing StartDevice,
+storage/input failure or reboot loop rejects the experiment without retry.
