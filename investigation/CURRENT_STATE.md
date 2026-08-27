@@ -16,6 +16,7 @@ This is the bounded session entry point. Detailed history is append-only in
 
 - Canonical checkout: `/Users/pavel/public_windows`.
 - Branch: `feature/j313-gpu-acceleration`.
+- Candidate root commit: `a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b`.
 - EXP-139 package source: `8b5ab22ba9d7b7446d9919b62b9554589a51f14f`.
 - Single-transaction runner correction:
   `b4906b9d7468b00d35dfc10411b91a4c9b70064d`.
@@ -23,6 +24,10 @@ This is the bounded session entry point. Detailed history is append-only in
 - Candidate Mu pin: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
 - Candidate monitor image SHA-256:
   `67713a743f5b6e16e7f3d69cf016ad74b3cb57a0ef901b239b741cdc06651b7e`.
+- Candidate UAT snapshot driver SHA-256:
+  `09e74647911439b720cc32013114c95ad69e7697fe8ea3873b14f4fcc3828ee0`.
+- Candidate UAT snapshot catalog SHA-256:
+  `01ff42516dd8cfe791f2c8f6531914aaef5d90bb0b21b36079aad3c33c4498a9`.
 - Preserve existing untracked/dirty submodule metadata; never stage it.
 
 ## Live machine
