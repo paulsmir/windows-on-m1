@@ -11699,3 +11699,15 @@ domain is off. No later GPU action occurred. Exact recovery and non-force
 package/signer cleanup completed; a subsequent recovery boot showed Event 129,
 so another candidate remains gated on a fresh quiet recovery window. See
 `investigation/artifacts/EXP-20260827-134-agx-asc-status/VERDICT.md`.
+
+### EXP-20260827-135 — J313 AGX powered ASC status qualification
+
+Status: preregistered. The literal contract is
+`documentation/plans/2026-08-27-j313-agx-powered-status-hardware-qualification.md`.
+The only hardware change from rejected EXP-134 is a bounded broker session:
+ON, confirmed ON, exactly one CPU-status read, OFF, then both unmaps. Exact
+source, six-profile WDK run, signed artifact, G2 and recovery identities are
+pinned in the contract. A fresh recovery boot at
+`2026-08-27T09:46:56.7203420Z` reported eight CPUs, healthy AppleInput/NVMe/
+xHCI, zero Event 129 and zero critical events. One display-both cold execution
+is authorized; every later GPU action remains forbidden.
