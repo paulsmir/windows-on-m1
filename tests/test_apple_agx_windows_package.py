@@ -305,6 +305,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", header)
         self.assertIn("defined(APPLE_AGX_G2_POWER_QUALIFICATION)", header)
         self.assertIn("defined(APPLE_AGX_G2_MMIO_QUALIFICATION)", header)
+        self.assertIn("defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION)", header)
         self.assertIn(
             "#ifdef APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS", driver
         )
@@ -322,6 +323,32 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgxQualifyPowerBroker", adapter)
         self.assertIn("#ifdef APPLE_AGX_G2_MMIO_QUALIFICATION", adapter)
         self.assertIn("AppleAgxQualifyMmioMapping", adapter)
+
+    def test_lifecycle_qualification_is_diagnostics_only(self):
+        header = self.read("include/apple_agx_driver.h")
+        project = self.read("AppleAgx.vcxproj")
+        build = self.read("scripts/build-driver.ps1")
+        workflow = WORKFLOW.read_text()
+
+        self.assertIn("AppleAgxLifecycleQualification", project)
+        self.assertIn("APPLE_AGX_G2_LIFECYCLE_QUALIFICATION=1", project)
+        self.assertIn("[switch]$LifecycleQualification", build)
+        self.assertIn(
+            "/p:AppleAgxLifecycleQualification=$lifecycleQualification",
+            build,
+        )
+        self.assertIn("name: lifecycle-qualification", workflow)
+        self.assertIn("lifecycle_qualification: true", workflow)
+        self.assertIn("AppleAgx-ARM64-LifecycleQualification", workflow)
+        self.assertIn(
+            "/p:AppleAgxLifecycleQualification=${{ matrix.lifecycle_qualification }}",
+            workflow,
+        )
+        self.assertIn("defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION)", header)
+        self.assertNotIn(
+            "#if defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION)",
+            self.read("src/adapter.c"),
+        )
 
     def test_power_qualification_is_opt_in_bounded_and_always_unmapped(self):
         adapter = self.read("src/adapter.c")
@@ -414,7 +441,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("/p:RunCodeAnalysis=true", workflow)
         self.assertIn("AppleAgx-ARM64-Debug", workflow)
 
-    def test_ci_publishes_separate_default_and_power_qualification_packages(self):
+    def test_ci_publishes_separate_qualification_packages(self):
         workflow = WORKFLOW.read_text()
         self.assertIn("qualification: false", workflow)
         self.assertIn("qualification: true", workflow)
@@ -424,6 +451,7 @@ class AppleAgxWindowsPackageTests(unittest.TestCase):
         self.assertIn("AppleAgx-ARM64-Debug", workflow)
         self.assertIn("AppleAgx-ARM64-PowerQualification", workflow)
         self.assertIn("AppleAgx-ARM64-MmioQualification", workflow)
+        self.assertIn("AppleAgx-ARM64-LifecycleQualification", workflow)
         self.assertIn(
             "/p:AppleAgxPowerQualification=${{ matrix.qualification }}",
             workflow,

@@ -20,7 +20,8 @@
 #endif
 
 #if defined(APPLE_AGX_G2_POWER_QUALIFICATION) ||                         \
-    defined(APPLE_AGX_G2_MMIO_QUALIFICATION)
+    defined(APPLE_AGX_G2_MMIO_QUALIFICATION) ||                          \
+    defined(APPLE_AGX_G2_LIFECYCLE_QUALIFICATION)
 #define APPLE_AGX_G2_QUALIFICATION_DIAGNOSTICS 1
 #endif
 
