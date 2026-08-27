@@ -2,11 +2,15 @@
 #define APPLE_AGX_INITDATA_MEMORY_H
 
 #include "apple_agx_initdata.h"
+#include "apple_agx_channel_memory.h"
 #include "apple_agx_firmware_status.h"
 #include "apple_agx_memory.h"
 #include "apple_agx_uat_memory.h"
 
 #define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 7u
+#define APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY \
+  (APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT + \
+   APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT)
 #define APPLE_AGX_INITDATA_MEMORY_UAT_PAGE_CAPACITY 8u
 
 typedef enum _APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX {
@@ -40,12 +44,14 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   APPLE_AGX_UAT_ALLOCATOR UatAllocator;
   APPLE_AGX_UAT_PAGE UatPages[APPLE_AGX_INITDATA_MEMORY_UAT_PAGE_CAPACITY];
   APPLE_AGX_UAT_MAPPING
-      UatMappings[APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT];
+      UatMappings[APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY];
   APPLE_AGX_UAT_INVENTORY Inventory;
   APPLE_AGX_UAT_ROOTS Roots;
   APPLE_AGX_UAT_TTBR_PAIR TtbrPair;
   APPLE_AGX_INITDATA_MANIFEST Manifest;
   APPLE_AGX_FIRMWARE_STATUS_MANIFEST FirmwareStatusManifest;
+  APPLE_AGX_CHANNEL_MEMORY_OWNER ChannelMemory;
+  APPLE_AGX_CHANNEL_INFO_MANIFEST ChannelInfoManifest;
   unsigned long long InitdataVirtualAddress;
   unsigned long long InitdataDeviceAddress;
   unsigned char Initialized;

@@ -28,6 +28,14 @@ static unsigned char AppleAgxInitdataMemoryStorageIsEmpty(
     if (Graph->UatMemoryObjects[index].State != AppleAgxMemoryEmpty)
       return 0u;
   }
+  if (Graph->ChannelMemory.Initialized != 0u ||
+      Graph->ChannelMemory.Built != 0u ||
+      Graph->ChannelMemory.ObjectCount != 0u)
+    return 0u;
+  for (index = 0u; index < APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT; ++index) {
+    if (Graph->ChannelMemory.Objects[index].State != AppleAgxMemoryEmpty)
+      return 0u;
+  }
   return 1u;
 }
 
@@ -54,6 +62,8 @@ static void AppleAgxInitdataMemoryClearPublished(
   Graph->FirmwareStatusManifest.EncodedSize = 0u;
   Graph->FirmwareStatusManifest.StateAddress = 0ULL;
   Graph->FirmwareStatusManifest.RingAddress = 0ULL;
+  Graph->ChannelInfoManifest.EncodedSize = 0u;
+  Graph->ChannelInfoManifest.ChannelCount = 0u;
   for (index = 0u; index < 4u; ++index) {
     Graph->Manifest.VersionWords[index] = 0u;
     Graph->Manifest.ReferencedAddresses[index] = 0ULL;
@@ -81,6 +91,7 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
   APPLE_AGX_INITDATA_RESULT initdata_result;
   APPLE_AGX_FIRMWARE_STATUS_INPUT firmware_status_input;
   APPLE_AGX_FIRMWARE_STATUS_RESULT firmware_status_result;
+  APPLE_AGX_CHANNEL_INFO_RESULT channel_info_result;
   unsigned long long virtual_address;
   unsigned int index;
 
@@ -97,7 +108,7 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
   Graph->Inventory.PageCapacity = APPLE_AGX_INITDATA_MEMORY_UAT_PAGE_CAPACITY;
   Graph->Inventory.PageCount = 0u;
   Graph->Inventory.Mappings = Graph->UatMappings;
-  Graph->Inventory.MappingCapacity = APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT;
+  Graph->Inventory.MappingCapacity = APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY;
   Graph->Inventory.MappingCount = 0u;
 
   if (AppleAgxUatMemoryOwnerInitialize(
@@ -128,6 +139,12 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
     virtual_address += allocation_size + APPLE_AGX_MEMORY_PAGE_SIZE;
   }
 
+  if (AppleAgxChannelMemoryBuild(&Graph->ChannelMemory, MemoryIo,
+                                 virtual_address) !=
+      AppleAgxChannelMemoryResultOk)
+    return AppleAgxInitdataMemoryRollback(
+        Graph, AppleAgxInitdataMemoryResultAllocationFailed);
+
   uat_result = AppleAgxUatCreateAddressSpace(
       J313_AGX_G2_UAT_FIRMWARE_CONTEXT, &Graph->UatAllocator,
       &Graph->Inventory, &Graph->Roots);
@@ -148,6 +165,29 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
                      ? AppleAgxInitdataMemoryResultAllocationFailed
                      : AppleAgxInitdataMemoryResultUatFailed);
   }
+  for (index = 0u; index < APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT; ++index) {
+    uat_result = AppleAgxUatMap(
+        J313_AGX_G2_UAT_FIRMWARE_CONTEXT, &Graph->Roots,
+        Graph->ChannelMemory.VirtualAddresses[index],
+        Graph->ChannelMemory.Objects[index].DeviceAddress,
+        Graph->ChannelMemory.Objects[index].Length,
+        AppleAgxUatFirmwareSharedReadWrite, &Graph->UatAllocator,
+        &Graph->Inventory);
+    if (uat_result != AppleAgxUatResultOk)
+      return AppleAgxInitdataMemoryRollback(
+          Graph, uat_result == AppleAgxUatResultAllocationFailed
+                     ? AppleAgxInitdataMemoryResultAllocationFailed
+                     : AppleAgxInitdataMemoryResultUatFailed);
+  }
+
+  channel_info_result = AppleAgxChannelInfoEncodeG13V13_5(
+      &Graph->ChannelMemory.ChannelInfo,
+      (unsigned char *)
+          Graph->DataObjects[AppleAgxInitdataMemoryRegionB].CpuAddress,
+      J313_AGX_G2_CHANNEL_INFO_SET_SIZE, &Graph->ChannelInfoManifest);
+  if (channel_info_result != AppleAgxChannelInfoResultOk)
+    return AppleAgxInitdataMemoryRollback(
+        Graph, AppleAgxInitdataMemoryResultEncodeFailed);
 
   firmware_status_input.StateAddress =
       Graph->VirtualAddresses[AppleAgxInitdataMemoryFwctlState];
@@ -209,6 +249,11 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryDestroy(
   AppleAgxUatDestroy(&Graph->UatAllocator, &Graph->Inventory);
   if (AppleAgxUatMemoryOwnerDestroy(&Graph->UatMemoryOwner) !=
       AppleAgxUatMemoryResultOk) {
+    Graph->LastResult = AppleAgxInitdataMemoryResultReleaseFailed;
+    return Graph->LastResult;
+  }
+  if (AppleAgxChannelMemoryDestroy(&Graph->ChannelMemory) !=
+      AppleAgxChannelMemoryResultOk) {
     Graph->LastResult = AppleAgxInitdataMemoryResultReleaseFailed;
     return Graph->LastResult;
   }
