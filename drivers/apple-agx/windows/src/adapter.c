@@ -174,7 +174,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxDdiStartDevice(
 #ifdef APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION
   {
     APPLE_AGX_POWER_SESSION powerSession = {0};
-    PHYSICAL_ADDRESS powerBrokerAddress;
+    PHYSICAL_ADDRESS powerBrokerAddress = {0};
     ULONG cpuStatus = 0;
     NTSTATUS powerEndStatus = STATUS_SUCCESS;
     NTSTATUS unmapStatus = STATUS_SUCCESS;
