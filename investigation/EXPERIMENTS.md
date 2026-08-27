@@ -12521,3 +12521,47 @@ power, UAT, display, input, CPU and boot state do not change.
 Recovery remains EXP-123.  Evidence is stored under
 `.local/experiments/EXP-20260827-149-clean-devnode/` and the guest evidence
 tree.
+
+### Result
+
+The exact device removal and single rescan both succeeded.  The recreated
+APPL0002 remained present on exact `oem18.inf` with Problem 31 and status
+`0xC0000182`.  Fresh service receipts ended at successful DriverEntry and
+DxgkInitialize; neither AddDevice nor StartDevice was called.  SetupAPI contains
+no install or trust failure for the recreation.  Eight CPUs and
+AppleInput/stornvme/USBXHCI remained Running with VHF `0/1/1`.
+
+EXP-149 rejects stale devnode state as the root cause.  The failure boundary is
+Dxgkrnl admission after successful miniport registration and before the
+driver's AddDevice callback.  The registered runtime interface is WDDM 3.0,
+while the initialization table does not provide the WDDM 3.0 callback surface.
+That mismatch was introduced only to expose compile-time ADL definitions.
+
+## EXP-20260827-150 — Separate compile-time ADL headers from runtime DDI level
+
+Status: preregistered; hardware run pending.
+
+### Hypothesis and single variable
+
+Dxgkrnl rejects the adapter before AddDevice because the driver advertises a
+WDDM 3.0 runtime contract that it does not implement completely.  Keep the
+project compiled against WDDM 3.0 headers, but advertise the previously
+implemented WDDM 2.6 runtime interface for this diagnostic package.  No DDI,
+resource, firmware, power, UAT, input, CPU or display behavior changes.
+
+1. Add a regression assertion that compile-time headers remain WDDM 3.0 while
+   `DRIVER_INITIALIZATION_DATA.Version` is WDDM 2.6 for this experiment.
+2. Build and sign exactly one ARM64 UAT package with the one-line runtime
+   version change.
+3. Install that package once, reboot once if SetupAPI requires it, and perform
+   no hot retry.
+4. Require fresh AddDevice and StartDevice receipts.  A bounded later UAT
+   failure counts as admission success; missing AddDevice rejects the
+   hypothesis.
+5. Require eight CPUs, working input/SSH, Running AppleInput/stornvme/USBXHCI,
+   zero Event 129 and zero critical System events.
+
+This is a diagnostic compatibility test, not the final UAT design.  If it
+passes, the production correction is to restore WDDM 3.0 and implement its
+required callback contract before continuing ADL/UAT.  Recovery remains
+EXP-123.
