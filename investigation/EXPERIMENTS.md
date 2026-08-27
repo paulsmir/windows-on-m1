@@ -12527,15 +12527,16 @@ tree.
 The exact device removal and single rescan both succeeded.  The recreated
 APPL0002 remained present on exact `oem18.inf` with Problem 31 and status
 `0xC0000182`.  Fresh service receipts ended at successful DriverEntry and
-DxgkInitialize; neither AddDevice nor StartDevice was called.  SetupAPI contains
-no install or trust failure for the recreation.  Eight CPUs and
-AppleInput/stornvme/USBXHCI remained Running with VHF `0/1/1`.
+DxgkInitialize.  A later device-key audit found fresh AddDevice stage 2/status
+zero receipts that the original service-key-only query missed; StartDevice was
+not called.  SetupAPI contains no install or trust failure for the recreation.
+Eight CPUs and AppleInput/stornvme/USBXHCI remained Running with VHF `0/1/1`.
 
-EXP-149 rejects stale devnode state as the root cause.  The failure boundary is
-Dxgkrnl admission after successful miniport registration and before the
-driver's AddDevice callback.  The registered runtime interface is WDDM 3.0,
-while the initialization table does not provide the WDDM 3.0 callback surface.
-That mismatch was introduced only to expose compile-time ADL definitions.
+EXP-149 rejects stale devnode state as the root cause.  The corrected failure
+boundary is inside Dxgkrnl's function-driver AddDevice path after the miniport's
+AddDevice callback returned success and before StartDevice.  The registered
+runtime interface mismatch remained the next hypothesis, but the original
+statement that AddDevice was absent is superseded by this correction.
 
 ## EXP-20260827-150 — Separate compile-time ADL headers from runtime DDI level
 
@@ -12565,3 +12566,52 @@ This is a diagnostic compatibility test, not the final UAT design.  If it
 passes, the production correction is to restore WDDM 3.0 and implement its
 required callback contract before continuing ADL/UAT.  Recovery remains
 EXP-123.
+
+### Result
+
+Rejected after the single permitted hot package cycle and one required cold
+load.  Windows loaded exact `AppleAgx.sys` SHA-256
+`e6ffbc9ca18aa99cbc23d9d97c85842c1b2b24e8241adf28e97b63ce494d72d1`
+from `oem18.inf`, and both DriverEntry/DxgkInitialize and AddDevice reached
+stage 2/status zero.  StartDevice remained absent; APPL0002 retained Problem 31
+with ProblemStatus `0xC0000182`.  Kernel-PnP event 411 classified this as a
+failed add, not a StartDevice failure.  Eight CPUs and Running
+AppleInput/stornvme/USBXHCI remained healthy; the keyboard and trackpad VHF
+children were present with Problem 0; zero Event 129 and zero critical/error
+System events occurred after boot.
+
+Changing only the advertised runtime DDI from WDDM 3.0 to WDDM 2.6 therefore
+does not cross the post-AddDevice admission boundary.  The exact callback table
+and WDDM 2.6 runtime had previously reached StartDevice in EXP-130, so the next
+bounded comparison is the current UAT/ADL build profile against the current
+lifecycle profile, not another runtime-version retry.
+
+## EXP-20260827-151 — A/B current lifecycle profile against UAT profile
+
+Status: preregistered; package identities pending before hardware run.
+
+### Hypothesis and single variable
+
+The regression was introduced by the UAT/ADL build-profile expansion after the
+EXP-130 lifecycle package, rather than by firmware, ACPI resources, devnode
+state or the source-level callback initializer.  Build the current root once
+with `AppleAgxLifecycleQualification=true` and no UAT-snapshot definition, then
+replace only the exact GPU package in the already-running G2 guest.  Firmware,
+m1n1, Mu, ACPI, CPU, input, storage, display and source revision remain fixed.
+
+1. Pin the current root, nested commits, dirty-state hashes, signed package
+   hashes, signer and generated INF before touching the guest.
+2. Verify the precondition is exact EXP-150 with eight CPUs, responsive SSH and
+   Running AppleInput/stornvme/USBXHCI.
+3. Perform one device-scoped package cycle with the current lifecycle profile;
+   reboot once only if SetupAPI explicitly requires it.  Do not retry.
+4. Require fresh AddDevice and StartDevice receipts.  The designed lifecycle
+   endpoint is stage 7/`STATUS_NOT_SUPPORTED`; any earlier hardware receipt is
+   forbidden.
+5. Require eight CPUs, working native input, zero Event 129 and zero critical
+   System events.  Recovery remains EXP-123.
+
+If the lifecycle profile reaches StartDevice, the hypothesis is confirmed and
+the next software investigation compares compile-time/profile differences
+before changing UAT code.  If it remains at AddDevice, the hypothesis is
+rejected and the regression must be outside the profile macro.
