@@ -42,24 +42,24 @@ queues, commands, render, present and display ownership remain forbidden.
 
 ## Procedure
 
-- [ ] Require the clean final EXP-130 recovery state: eight CPUs, Running
+- [x] Require the clean final EXP-130 recovery state: eight CPUs, Running
   AppleInput/NVMe/xHCI, no APPL0002/package/service/module/signer, zero
   critical events and zero Event 129.
-- [ ] Revalidate package hashes and signer; import and stage only this package;
+- [x] Revalidate package hashes and signer; import and stage only this package;
   record its exact `oemNN.inf`; prove APPL0002 absent; shut down normally.
-- [ ] Launch exactly one EXP-124 G2 candidate with `display=both`,
+- [x] Launch exactly one EXP-124 G2 candidate with `display=both`,
   `debug=monitor`, no power-broker flag and the pinned Mu/m1n1 pair.
-- [ ] Collect fresh lifecycle, translated-resource, map, subview and unmap
+- [x] Collect fresh lifecycle, translated-resource, map, subview and unmap
   receipts. Require StartDevice stage 7 / `0xC00000BB` after successful zero-
   status map, subview and unmap receipts.
-- [ ] Audit logs and package sources for zero pointer dereference, register
+- [x] Audit logs and package sources for zero pointer dereference, register
   access, firmware, RTKit, interrupt, UAT, queue, command, render, present or
   display ownership. Require eight CPUs, healthy input/storage/xHCI, zero
   critical events and zero Event 129.
-- [ ] Shut down normally; boot exact EXP-123 recovery; remove only the recorded
+- [x] Shut down normally; boot exact EXP-123 recovery; remove only the recorded
   package and signer without `/force`; cleanup reboot and prove final zero
   state and quiet health window.
-- [ ] Publish only a sanitized verdict and close without retry.
+- [x] Publish only a sanitized verdict and close without retry.
 
 ## Falsifiable result
 
@@ -69,3 +69,19 @@ and every platform-health gate. Missing or stale receipts, Problem 31 before
 StartDevice, pointer access, any later GPU ownership action, identity drift,
 Event 129, critical event, reset, forced deletion or incomplete rollback
 rejects the experiment and authorizes no retry.
+
+## Observed result
+
+Passed and closed without retry. Fresh receipts reported the exact SGX aperture
+at `0x204000000` with length `0x4000000`, the ASC subview at offset
+`0x2400000` with length `0x6c000`, and zero status for map, subview validation
+and unmap. StartDevice then deliberately failed closed at stage 7 with
+`0xC00000BB`.
+
+The candidate retained eight logical processors and Running AppleInput,
+stornvme and USBXHCI with zero Event 129 and zero critical System events. The
+source and hypervisor audit found no pointer dereference, GPU-register access,
+power transaction, firmware, RTKit, interrupt, UAT, queue, command, render,
+present or display ownership. Normal shutdown and exact EXP-123 recovery
+removed only the recorded package and signer without `/force`; the cleanup
+boot proved the original zero state and quiet health window.

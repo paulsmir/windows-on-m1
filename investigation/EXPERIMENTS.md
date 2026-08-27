@@ -11655,7 +11655,7 @@ access and every later ownership layer remain unauthorized.
 
 ### EXP-20260827-131 — J313 AGX inert MMIO contract qualification
 
-Status: preregistered at `2026-08-27T07:05:00Z` for exactly one G2 execution.
+Status: passed and closed after exactly one G2 execution.
 The literal contract is
 `documentation/plans/2026-08-27-j313-agx-mmio-contract-qualification.md`.
 The only change from passed EXP-130 is the compile-time MMIO qualification
@@ -11675,3 +11675,15 @@ subview and immediately unmap without pointer access. Power, register access,
 firmware, RTKit, interrupts, UAT, queues, commands, rendering, presentation
 and display ownership remain forbidden. Any identity or health failure closes
 the experiment without retry.
+
+Observed result: passed. Fresh receipts reported map, subview and unmap status
+zero for SGX `0x204000000 + 0x4000000` and ASC offset
+`0x2400000 + 0x6c000`. StartDevice then deliberately returned
+`0xC00000BB` at stage 7. The candidate retained eight CPUs and Running
+AppleInput/NVMe/xHCI with zero Event 129 and zero critical events. Source and
+hypervisor audit found no pointer dereference or later GPU ownership action.
+Normal shutdown and exact non-force recovery removed only the recorded package
+and signer; the cleanup boot proved no APPL0002/package/service/module/signer,
+eight CPUs, healthy platform services and a quiet event window. The sanitized
+verdict is
+`investigation/artifacts/EXP-20260827-131-agx-mmio-contract/VERDICT.md`.
