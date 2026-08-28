@@ -110,6 +110,27 @@ class AppleAgxAdmissionPackageTests(unittest.TestCase):
         )
         self.assertIn("RunCodeAnalysis=true", workflow)
 
+    def test_admission_ci_verifies_and_publishes_signature_provenance(self):
+        workflow = WORKFLOW.read_text()
+        admission = workflow[workflow.index("  build-admission-arm64:") :]
+        self.assertIn(
+            "Verify WDK admission signature provenance",
+            admission,
+        )
+        self.assertIn("AppleAgxAdmission-signature.json", admission)
+        self.assertIn("Get-AuthenticodeSignature", admission)
+        self.assertIn("Get-PfxCertificate", admission)
+        self.assertIn("SignerCertificate.Thumbprint", admission)
+        self.assertIn("certificate.Thumbprint", admission)
+        self.assertIn("catalog_sha256", admission)
+        self.assertIn("certificate_sha256", admission)
+        self.assertIn("source_commit", admission)
+        self.assertIn("github_run_id", admission)
+        self.assertIn(
+            "drivers/apple-agx/admission/ARM64/Debug/**/*-signature.json",
+            admission,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -222,6 +222,41 @@ jobs:
           /p:Platform=ARM64
           /p:RunCodeAnalysis=true
 
+      - name: Verify WDK admission signature provenance
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $catalog = Get-ChildItem drivers/apple-agx/admission/ARM64/Debug -Recurse -Filter appleagxadmission.cat |
+            Select-Object -First 1
+          if (!$catalog) { throw "appleagxadmission.cat was not found" }
+          $debugDirectory = Split-Path $catalog.Directory.FullName -Parent
+          $certificatePath = Join-Path $debugDirectory "AppleAgxAdmission.cer"
+          if (!(Test-Path $certificatePath)) {
+            throw "WDK test certificate AppleAgxAdmission.cer was not exported"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $catalog.FullName
+          $certificate = Get-PfxCertificate -FilePath $certificatePath
+          if (!$signature.SignerCertificate) {
+            throw "appleagxadmission.cat has no Authenticode signer"
+          }
+          if ($signature.Status -in @('NotSigned', 'HashMismatch', 'NotSupported')) {
+            throw "appleagxadmission.cat has an unusable signature: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+            throw "catalog signer does not match AppleAgxAdmission.cer"
+          }
+          $provenancePath = Join-Path $debugDirectory "AppleAgxAdmission-signature.json"
+          [ordered]@{
+            catalog_sha256 = (Get-FileHash $catalog.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            certificate_sha256 = (Get-FileHash $certificatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            signer_thumbprint = $signature.SignerCertificate.Thumbprint
+            signer_subject = $signature.SignerCertificate.Subject
+            signature_status = [string]$signature.Status
+            github_run_id = $env:GITHUB_RUN_ID
+            source_commit = $env:GITHUB_SHA
+          } | ConvertTo-Json | Set-Content -Path $provenancePath -Encoding utf8
+          Write-Host "Verified admission signer $($certificate.Thumbprint)"
+
       - name: Upload admission test package
         uses: actions/upload-artifact@v4
         with:
@@ -232,4 +267,5 @@ jobs:
             drivers/apple-agx/admission/ARM64/Debug/**/*.inf
             drivers/apple-agx/admission/ARM64/Debug/**/*.cat
             drivers/apple-agx/admission/ARM64/Debug/**/*.cer
+            drivers/apple-agx/admission/ARM64/Debug/**/*-signature.json
             drivers/apple-agx/admission/ARM64/Debug/**/*.pdb
