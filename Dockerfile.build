@@ -30,10 +30,6 @@ ENV CLANGPDB_BIN=/usr/lib/llvm-18/bin/
 ENV CLANGPDB_AARCH64_PREFIX=aarch64-linux-gnu-
 
 WORKDIR /work
-# The bind-mounted checkout is owned by the host runner, not container root.
-# Trust only the fixed build mount so Git provenance queries remain usable.
-RUN git config --global --add safe.directory /work \
-    && git config --global --add safe.directory '/work/*'
 # Mount the repository at /work. The script builds Mu + m1n1, runs host tests,
 # validates the shared guest layout, and writes dist/j313 with checksums.
 CMD ["./scripts/build-standalone.sh"]

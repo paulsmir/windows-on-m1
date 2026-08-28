@@ -135,6 +135,9 @@ if [ "$USE_CONTAINER" = 1 ] && [ "$CHECK_PYTHON" = 0 ] && [ "${STANDALONE_IN_CON
         set -- "$@" --display "$DISPLAY" --debug "$DEBUG"
         [ -z "$AGX_FORWARD_ARG" ] || set -- "$@" "$AGX_FORWARD_ARG"
         docker run --rm \
+            -e GIT_CONFIG_COUNT=1 \
+            -e GIT_CONFIG_KEY_0=safe.directory \
+            -e GIT_CONFIG_VALUE_0=* \
             -e STANDALONE_IN_CONTAINER=1 \
             -e STANDALONE_BUILD_MU_ONLY=1 \
             -e STANDALONE_PRESERVE_COMPONENTS="$PRESERVE_COMPONENTS" \
