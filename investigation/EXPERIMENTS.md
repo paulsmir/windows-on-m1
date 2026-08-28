@@ -13222,3 +13222,10 @@ Ignored evidence:
 
 - `.local/experiments/EXP-20260828-157-live-admission/preflight-abort.json`
   SHA-256 `091bde5aa893ce5caae53d8026dd317304758899c9b81ae01023ab6aa8bd97a5`.
+
+Rollback then booted the immutable recovery pair. Exact phantom
+`ACPI\APPL0002\0`, exact `oem18.inf`, and the exact EXP-157 staging directory
+were removed. Read-only post-cleanup verification proved zero APPL0002 devices,
+zero AppleAgx Driver Store packages, eight CPUs, Running AppleInput, stornvme,
+USBXHCI, and sshd, zero Event 129, and zero critical event. Recovery remains
+running; EXP-157 left no installed or staged GPU driver state.

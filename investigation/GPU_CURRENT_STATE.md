@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-08-28T00:04:00Z
+Updated: 2026-08-28T00:12:00Z
 
 ## Stable recovery
 
@@ -9,8 +9,8 @@ Updated: 2026-08-28T00:04:00Z
 - Immutable EXP-123 m1n1:
   `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
 - Recovery preserves eight CPUs, native input, internal display, NVMe, xHCI,
-  and SSH. The current recovery boot had one boot-window Event 129, no WHEA,
-  and no critical event; do not call that window clean.
+  and SSH. The post-EXP-157 cleanup boot has zero APPL0002 devices, zero
+  AppleAgx Driver Store packages, zero Event 129, and zero critical event.
 
 ## Repository identity
 
@@ -20,17 +20,15 @@ Updated: 2026-08-28T00:04:00Z
 - Mu commit: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
 - Preserve the recorded nested metadata dirt; never stage it implicitly.
 
-## Current GPU package
+## Last tested GPU package
 
 - EXP-156 `oem18.inf`, version `23.6.21.184`, source `6ac19e9`.
 - SYS: `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f`.
 - INF: `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc`.
 - CAT: `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
 - Compile/runtime contract: WDDM 3.0, `0x510` bytes, Version `0xF003`.
-- This package is experiment-local and remains staged only because EXP-157
-  aborted before cleanup. Remove exact `oem18.inf` in recovery before declaring
-  rollback complete. The next experiment must install its own hash-verified
-  package fresh; do not reuse this staged package implicitly.
+- It is no longer installed or staged on the Air. The next experiment must
+  install its own hash-verified package fresh; do not reuse a prior package.
 
 ## Proven lifecycle boundary
 

@@ -75,6 +75,11 @@ compatibility review.
   only that experiment's exact preregistered package and verify its hashes.
   Never carry an installed or staged AppleAgx package across experiments unless
   package retention is itself the single preregistered variable.
+- Before asking the operator to boot, reboot, power on, or report `Running
+  proxy`, check both control planes yourself: attempt Windows SSH with a bounded
+  timeout and inspect the expected proxy/vUART USB endpoints and active
+  launcher. Ask for physical action only when Windows is unreachable and the
+  machine is not already at `Running proxy`; state the evidence for the request.
 
 After context compaction or reset, read `investigation/GPU_CURRENT_STATE.md`
 first. Consult only the referenced experiment evidence in the full ledger.
