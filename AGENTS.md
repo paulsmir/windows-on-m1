@@ -75,6 +75,13 @@ compatibility review.
   only that experiment's exact preregistered package and verify its hashes.
   Never carry an installed or staged AppleAgx package across experiments unless
   package retention is itself the single preregistered variable.
+- Keep the normal GPU-development recovery profile GPU-visible: it must expose
+  exactly one inert `ACPI\\APPL0002` devnode while leaving the AGX power broker
+  disabled and carrying no AppleAgx package, service, module, signer, or staged
+  driver.  Use that same stable guest to remove the previous experiment package
+  and install the next hash-verified package; do not interpose a GPU-hidden boot
+  between ordinary driver experiments.  Retain the immutable GPU-hidden image
+  only as an emergency rollback when the GPU-visible guest cannot be recovered.
 - Before asking the operator to boot, reboot, power on, or report `Running
   proxy`, check both control planes yourself: attempt Windows SSH with a bounded
   timeout and inspect the expected proxy/vUART USB endpoints and active
