@@ -13229,3 +13229,133 @@ were removed. Read-only post-cleanup verification proved zero APPL0002 devices,
 zero AppleAgx Driver Store packages, eight CPUs, Running AppleInput, stornvme,
 USBXHCI, and sshd, zero Event 129, and zero critical event. Recovery remains
 running; EXP-157 left no installed or staged GPU driver state.
+
+## EXP-20260828-158 — Clean WDDM 3.0 admission discriminator
+
+Status: preregistered at 2026-08-28T01:48:15Z; no guest launch or driver
+transaction has occurred.
+
+### WHY THIS HYPOTHESIS
+
+- EXP-156 proved `DriverEntry`, `DxgkInitialize`, and `AddDevice`, but dxgkrnl
+  never invoked `StartDevice`; downstream AGX hardware paths cannot explain a
+  call that never occurred.
+- One bounded EXP-138/EXP-156 comparison found the WDDM 3.0 declaration shape,
+  table size, runtime version, imports, callback slots, and normalized INF
+  contract equal, so further historical archaeology has no stronger target.
+- The separate admission driver contains only the minimum WDDM lifecycle
+  callbacks and a fail-closed `StartDevice`; it cannot touch power, MMIO,
+  RTKit, UAT, interrupts, queues, render, presentation, or display ownership.
+
+### Hypothesis and single variable
+
+If accumulated AppleAgx initialization or callback groups prevent natural
+admission, replacing only the GPU package with the minimal admission driver
+will cause dxgkrnl to invoke `AppleAgxAdmissionStartDevice`. If that callback is
+still absent, the remaining cause is in the WDDM/PnP/package/environment
+contract rather than AGX bring-up code.
+
+The single variable is the exact GPU package. The assisted G2 launch contract,
+one inert `ACPI\APPL0002` device, eight CPUs, firmware, m1n1, display mode, and
+platform services remain fixed.
+
+### Exact identities
+
+- Root commit: `7b01449d5bdd611b1adef927eb886c9caaf3abca`.
+- m1n1 commit: `4108e79c69bac112ffbebf452fccf352c93c1dd2`.
+- Mu commit: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
+- Assisted m1n1 / Mu SHA-256:
+  `23749d4c3b9a93c637d367613a99109aea9b6d90394559ae9a2e683d4fb8bf02` /
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`.
+- Assisted manifest: debug profile, display `both`, debug `full`, capability
+  `agx-g2`, role `m1n1.macho=assisted-chainload`; all five artifact hashes
+  verified locally.
+- Admission source commit: `b13e9c32c06c21fbd522d33717a2d0078e4a077c`;
+  official run `33130376006`.
+- Admission SYS / INF / CAT SHA-256:
+  `ebe690ac55f861c4b881ead21527348c0a27846970c23cade603004cedebe0a4` /
+  `3191a342e298a7587eae4eb68391c83b94fb24a14f565ae0c1ea8673186202d3` /
+  `761ff3c26297f9679a4426f23eda3eb3dc27031ff916b0b35b73d42630da502e`.
+- Certificate SHA-256 / signer thumbprint:
+  `09d220fef9268478e6512effc6649ce511a2fd88aef8f506789e31474004a48d` /
+  `D6EC654F91AA15EF78EA7026051C93BFDE460E0F`.
+- Recovery remains immutable EXP-123 Mu / m1n1:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b` /
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+### Exact procedure and gates
+
+1. Use USB-assisted chainload only; do not install or execute the generated
+   standalone `boot.bin`:
+
+```sh
+env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware .local/experiments/EXP-20260828-158-clean-admission/assisted-boot/wom1-exp158-debug-forensic-agx-g2/J313_EFI.fd --m1n1 .local/experiments/EXP-20260828-158-clean-admission/assisted-boot/wom1-exp158-debug-forensic-agx-g2/m1n1.macho --display both --debug full --chainload
+```
+
+2. Before installing a package, require exactly one inert present
+   `ACPI\APPL0002`, zero AppleAgx/AppleAgxAdmission packages, services, modules,
+   signers and staged drivers, eight CPUs, Running AppleInput/stornvme/USBXHCI/
+   sshd, and no fresh Event 129, WHEA, BugCheck, critical, or error event.
+3. Verify the exact package hashes and signer, import its certificate, and
+   execute one ordinary `pnputil /add-driver ... /install` transaction. Do not
+   retry or mutate unrelated devices.
+4. Success requires `Wom1AdmissionAddDeviceStage=2`, AddDevice status zero,
+   `Wom1AdmissionStartDeviceStage=1`, and StartDevice status
+   `STATUS_NOT_SUPPORTED` (`0xC00000BB`). Missing StartDevice, identity drift,
+   any forbidden receipt, or platform health loss rejects the hypothesis.
+5. Collect evidence first, then remove the exact APPL0002 devnode, published
+   package, service, staging directory, and certificate. Verify the guest is
+   driver-clean before authorizing another experiment.
+
+Allowed operations are package identity/signature verification, the minimal
+WDDM lifecycle callbacks, device-scoped PnP install/removal, lifecycle receipt
+reads, SetupAPI reads, and platform-health reads. GPU power, MMIO, ASC/RTKit,
+UAT, IRQ, queues, submission, fences, commands, render, presentation, and
+display ownership are forbidden.
+
+Evidence paths are
+`.local/experiments/EXP-20260828-158-clean-admission/live/`, `hv.log`,
+`guest-uart.log`, and the exact Windows-side evidence directory created for the
+transaction.
+
+### 2026-08-28T01:58:24Z assisted hardware result — rejected before AddDevice
+
+The exact preregistered pair was launched by USB-assisted chainload. No
+standalone image was installed or executed. Windows SSH returned after 25
+seconds. The preflight gate proved eight CPUs, exactly one inert present
+`ACPI\APPL0002\0` with Problem 28, zero AppleAgx packages/services/modules,
+Running AppleInput/stornvme/USBXHCI/sshd, and zero Event 129, WHEA, BugCheck or
+critical event.
+
+One exact package install published `oem18.inf` and bound it to APPL0002. The
+device settled at Problem 37, `CM_PROB_FAILED_DRIVER_ENTRY`, with problem status
+`0xC0000059` (`STATUS_REVISION_MISMATCH`). No admission lifecycle receipt was
+written: `DxgkInitialize` rejected the declaration before AddDevice. There was
+no forbidden receipt and no Event 129, WHEA, BugCheck, critical, or error System
+event; all eight CPUs remained present.
+
+This rejects the first clean package as an admission discriminator without
+testing its intended AddDevice-to-StartDevice hypothesis. Offline comparison
+found one causally adjacent difference: unlike the accepted full WDDM 3.0
+table, the clean table left the base interrupt/DPC/child/power/reset callbacks
+null. Microsoft's official `DxgkInitialize` DriverEntry example supplies that
+group. A focused regression test failed on the missing group, then passed after
+adding inert/fail-closed stubs. No render, allocation, context, MMIO, power
+broker, RTKit, UAT, IRQ enable, queue, command, fence, render, presentation, or
+display ownership path was added.
+
+Evidence SHA-256:
+
+- `result.json`:
+  `f912f78744e3d07c6d9305cc029adbb4242d7c4123f97ef8dca6008ae165cdc8`;
+- `setupapi.dev.log`:
+  `70285d963114744603262044b4b278ad3d7267991707ea5b75e4972c53c224ed`;
+- `hv.log`:
+  `e36d6aac9dc2a3047efbf26c3370e67d17e71b3c88b616dbdc64575e98a04afb`.
+
+After evidence collection, the exact devnode and `oem18.inf` package were
+removed, both signer certificates and the EXP-158 staging directory were
+deleted, and one device scan restored the inert APPL0002. The cleanup receipt
+proves one APPL0002 at Problem 28 with no INF, zero AppleAgx packages/services/
+certificates, and eight CPUs. The same GPU-visible assisted guest remains
+running and is the allowed baseline for the next package-only experiment.

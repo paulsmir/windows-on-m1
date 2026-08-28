@@ -101,4 +101,58 @@ _Use_decl_annotations_ NTSTATUS AppleAgxAdmissionDispatchIoRequest(
   return STATUS_NOT_SUPPORTED;
 }
 
+_Use_decl_annotations_ BOOLEAN AppleAgxAdmissionInterruptRoutine(
+    PVOID MiniportDeviceContext, ULONG MessageNumber) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(MessageNumber);
+  return FALSE;
+}
+
+_Use_decl_annotations_ VOID
+AppleAgxAdmissionDpcRoutine(PVOID MiniportDeviceContext) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+}
+
+_Use_decl_annotations_ NTSTATUS AppleAgxAdmissionQueryChildRelations(
+    PVOID MiniportDeviceContext, PDXGK_CHILD_DESCRIPTOR ChildRelations,
+    ULONG ChildRelationsSize) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(ChildRelations);
+  UNREFERENCED_PARAMETER(ChildRelationsSize);
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AppleAgxAdmissionQueryChildStatus(
+    PVOID MiniportDeviceContext, PDXGK_CHILD_STATUS ChildStatus,
+    BOOLEAN NonDestructiveOnly) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(ChildStatus);
+  UNREFERENCED_PARAMETER(NonDestructiveOnly);
+  return STATUS_NOT_SUPPORTED;
+}
+
+_Use_decl_annotations_ NTSTATUS AppleAgxAdmissionQueryDeviceDescriptor(
+    PVOID MiniportDeviceContext, ULONG ChildUid,
+    PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(ChildUid);
+  UNREFERENCED_PARAMETER(DeviceDescriptor);
+  return STATUS_NOT_SUPPORTED;
+}
+
+_Use_decl_annotations_ NTSTATUS AppleAgxAdmissionSetPowerState(
+    PVOID MiniportDeviceContext, ULONG DeviceUid,
+    DEVICE_POWER_STATE DevicePowerState, POWER_ACTION ActionType) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(DeviceUid);
+  UNREFERENCED_PARAMETER(DevicePowerState);
+  UNREFERENCED_PARAMETER(ActionType);
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ VOID
+AppleAgxAdmissionResetDevice(PVOID MiniportDeviceContext) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+}
+
 _Use_decl_annotations_ VOID AppleAgxAdmissionUnload(VOID) {}

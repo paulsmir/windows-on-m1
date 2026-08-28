@@ -44,7 +44,7 @@ class AppleAgxAdmissionPackageTests(unittest.TestCase):
         self.assertNotIn("AddService=AppleAgx,", inf)
         self.assertNotIn("PCI\\", inf)
 
-    def test_driver_entry_is_wddm3_and_registers_only_admission_callbacks(self):
+    def test_driver_entry_is_wddm3_and_registers_required_admission_callbacks(self):
         driver = self.read("src/driver.c")
         self.assertIn(
             "C_ASSERT(sizeof(DRIVER_INITIALIZATION_DATA) == 1296)", driver
@@ -59,12 +59,50 @@ class AppleAgxAdmissionPackageTests(unittest.TestCase):
             "DxgkDdiStopDevice",
             "DxgkDdiRemoveDevice",
             "DxgkDdiDispatchIoRequest",
+            "DxgkDdiInterruptRoutine",
+            "DxgkDdiDpcRoutine",
+            "DxgkDdiQueryChildRelations",
+            "DxgkDdiQueryChildStatus",
+            "DxgkDdiQueryDeviceDescriptor",
+            "DxgkDdiSetPowerState",
+            "DxgkDdiResetDevice",
             "DxgkDdiUnload",
         }
         assigned = set(re.findall(r"initialization\.(DxgkDdi\w+)\s*=", driver))
         self.assertEqual(assigned, expected)
         self.assertRegex(driver, r"status\s*=\s*DxgkInitialize\(")
         self.assertRegex(driver, r"return\s+status\s*;")
+
+    def test_required_admission_callbacks_are_inert_and_fail_closed(self):
+        lifecycle = self.read("src/lifecycle.c")
+        header = self.read("include/apple_agx_admission.h")
+        for callback in (
+            "AppleAgxAdmissionInterruptRoutine",
+            "AppleAgxAdmissionDpcRoutine",
+            "AppleAgxAdmissionQueryChildRelations",
+            "AppleAgxAdmissionQueryChildStatus",
+            "AppleAgxAdmissionQueryDeviceDescriptor",
+            "AppleAgxAdmissionSetPowerState",
+            "AppleAgxAdmissionResetDevice",
+        ):
+            self.assertIn(callback, header)
+            self.assertIn(callback, lifecycle)
+        self.assertRegex(
+            lifecycle,
+            r"AppleAgxAdmissionInterruptRoutine[\s\S]*?return FALSE;",
+        )
+        self.assertRegex(
+            lifecycle,
+            r"AppleAgxAdmissionQueryChildRelations[\s\S]*?return STATUS_SUCCESS;",
+        )
+        self.assertRegex(
+            lifecycle,
+            r"AppleAgxAdmissionQueryChildStatus[\s\S]*?return STATUS_NOT_SUPPORTED;",
+        )
+        self.assertRegex(
+            lifecycle,
+            r"AppleAgxAdmissionQueryDeviceDescriptor[\s\S]*?return STATUS_NOT_SUPPORTED;",
+        )
 
     def test_lifecycle_is_persistent_and_start_fails_closed(self):
         lifecycle = self.read("src/lifecycle.c")
@@ -89,7 +127,6 @@ class AppleAgxAdmissionPackageTests(unittest.TestCase):
             "UAT",
             "mailbox",
             "firmware",
-            "DxgkDdiInterruptRoutine",
             "DxgkDdiPresent",
             "DxgkDdiRender",
         )

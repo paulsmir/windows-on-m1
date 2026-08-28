@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-08-28T01:10:00Z
+Updated: 2026-08-28T02:01:11Z
 
 ## Stable recovery
 
@@ -15,8 +15,8 @@ Updated: 2026-08-28T01:10:00Z
 ## Repository identity
 
 - Root branch: `feature/j313-gpu-acceleration`.
-- Root state commit: `2d114a8b218c893e8afde927eb886c9caaf3abca`.
-- m1n1 commit: `8371e3674ba0944c4a32068f0ba659cbb0e57e77`.
+- Root state commit: `7b01449d5bdd611b1adef927eb886c9caaf3abca`.
+- m1n1 commit: `4108e79c69bac112ffbebf452fccf352c93c1dd2`.
 - Mu commit: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
 - Preserve the recorded nested metadata dirt; never stage it implicitly.
 
@@ -30,6 +30,11 @@ Updated: 2026-08-28T01:10:00Z
 - Signer: `D6EC654F91AA15EF78EA7026051C93BFDE460E0F`.
 - Official run: `33130376006`; ARM64 and WDDM 3.0 `0x510`/`0xF003`
   were verified from the fresh artifact. It is not installed or staged.
+- Accepted assisted G2 m1n1 / Mu SHA-256:
+  `23749d4c3b9a93c637d367613a99109aea9b6d90394559ae9a2e683d4fb8bf02` /
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`.
+  Its debug/full, display/both, `agx-g2` manifest and all artifact hashes pass.
+  Only `m1n1.macho` and `J313_EFI.fd` are authorized; `boot.bin` is not used.
 
 ## Proven lifecycle boundary
 
@@ -41,14 +46,14 @@ Updated: 2026-08-28T01:10:00Z
 
 ## Last experiment
 
-- EXP-157 verdict: aborted before its PnP transaction; the admission-sequence
-  hypothesis was not tested and must not be called rejected or confirmed.
-- Exact G2 natural enumeration reproduced DriverEntry, DxgkInitialize, and
-  AddDevice success with no StartDevice receipt, Problem 31, and exact
-  `oem18.inf`. Eight CPUs and all required services remained present.
-- The prerequisite health gate failed first: four fresh stornvme Event 129
-  resets occurred at ten-second intervals. No helper, PnP mutation, retry, or
-  GPU hardware-owning operation followed.
+- EXP-158 used the exact assisted G2 pair; no standalone image was used.
+- Driver-clean preflight passed with one inert APPL0002, eight CPUs, healthy
+  services, and zero Event 129/WHEA/BugCheck/critical event.
+- Exact admission `oem18.inf` installed, but APPL0002 stopped at Problem 37 and
+  `0xC0000059` (`STATUS_REVISION_MISMATCH`) with no lifecycle receipt. The clean
+  declaration was rejected in `DxgkInitialize`, before AddDevice.
+- Cleanup restored one inert APPL0002 Problem 28 with zero GPU package/service/
+  certificate. The same healthy GPU-visible assisted guest remains running.
 
 ## Rejected causes
 
@@ -69,15 +74,17 @@ admission sequence; EXP-157 could not test it because the health prerequisite
 failed, and an exact retry has no new falsifiable reason. More historical
 comparison would now increase ambiguity rather than reduce the causal set.
 
-Active hypothesis: a separate minimal, fail-closed WDDM 3.x admission driver
-will distinguish accumulated AppleAgx initialization/callback groups from the
-WDDM/PnP/package/environment contract. It must stop at StartDevice and contain
-no GPU hardware access.
+Active hypothesis: the first clean declaration omitted the base mandatory
+interrupt/DPC/child/power/reset callbacks. Exact `STATUS_REVISION_MISMATCH`, the
+accepted full table, and Microsoft's official DxgkInitialize example make this
+the strongest causal explanation. Inert/fail-closed stubs for only that group
+should permit DxgkInitialize while retaining zero GPU hardware access.
 
 ## Next actions
 
-- Offline: accept the complete `release-agx-g2` artifact from the runtime-config
-  container build, then verify its manifest and exact hashes.
-- Hardware: first qualify that recovery driver-clean with one inert APPL0002.
-  If healthy, install only the accepted admission package in that same guest
-  and test natural StartDevice admission. Do not retry EXP-157.
+- Build and independently accept the admission package containing only the
+  tested base callback group.
+- Preregister one package-only EXP-159. Reuse the currently running healthy
+  GPU-visible assisted guest; do not reboot and do not use standalone. Install
+  the exact new package once, collect admission receipts and health evidence,
+  then remove that exact package. Do not retry EXP-157 or EXP-158.

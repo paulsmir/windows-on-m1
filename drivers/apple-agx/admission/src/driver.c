@@ -20,6 +20,17 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiRemoveDevice = AppleAgxAdmissionRemoveDevice;
   initialization.DxgkDdiDispatchIoRequest =
       AppleAgxAdmissionDispatchIoRequest;
+  initialization.DxgkDdiInterruptRoutine =
+      AppleAgxAdmissionInterruptRoutine;
+  initialization.DxgkDdiDpcRoutine = AppleAgxAdmissionDpcRoutine;
+  initialization.DxgkDdiQueryChildRelations =
+      AppleAgxAdmissionQueryChildRelations;
+  initialization.DxgkDdiQueryChildStatus =
+      AppleAgxAdmissionQueryChildStatus;
+  initialization.DxgkDdiQueryDeviceDescriptor =
+      AppleAgxAdmissionQueryDeviceDescriptor;
+  initialization.DxgkDdiSetPowerState = AppleAgxAdmissionSetPowerState;
+  initialization.DxgkDdiResetDevice = AppleAgxAdmissionResetDevice;
   initialization.DxgkDdiUnload = AppleAgxAdmissionUnload;
 
   status = DxgkInitialize(DriverObject, RegistryPath, &initialization);
