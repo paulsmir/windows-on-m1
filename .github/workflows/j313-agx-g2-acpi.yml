@@ -5,6 +5,9 @@ on:
     paths:
       - ".github/workflows/j313-agx-g2-acpi.yml"
       - "config/j313-agx*.json"
+      - "Dockerfile.build"
+      - "scripts/build-standalone.sh"
+      - "m1n1_windows"
       - "mu"
       - "tests/test_j313_agx_g2_*.py"
       - "tests/test_verify_j313_agx_g2_aml.py"
@@ -15,6 +18,9 @@ on:
     paths:
       - ".github/workflows/j313-agx-g2-acpi.yml"
       - "config/j313-agx*.json"
+      - "Dockerfile.build"
+      - "scripts/build-standalone.sh"
+      - "m1n1_windows"
       - "mu"
       - "tests/test_j313_agx_g2_*.py"
       - "tests/test_verify_j313_agx_g2_aml.py"
@@ -111,3 +117,43 @@ jobs:
           path: |
             mu/Build/MacBookAirMid2020-AARCH64/DEBUG_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd
             /tmp/J313AppleAgxSsdt.aml
+
+  build-release-gpu-visible-recovery:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source and pinned components
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build clean release GPU-visible recovery
+        run: |
+          docker build -t windows-on-m1-build:ci -f Dockerfile.build .
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            windows-on-m1-build:ci \
+            scripts/build-standalone.sh --release --agx-g2-profile
+
+      - name: Verify release artifact manifest
+        run: |
+          python3 tools/artifact_manifest.py verify \
+            dist/j313/release-agx-g2/MANIFEST.json \
+            --profile release \
+            --display physical \
+            --debug off \
+            --require-capability agx-g2
+
+      - name: Upload complete release GPU-visible recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: J313-Release-AGX-G2-Recovery
+          if-no-files-found: error
+          path: |
+            dist/j313/release-agx-g2/boot.bin
+            dist/j313/release-agx-g2/J313_EFI.fd
+            dist/j313/release-agx-g2/m1n1-stage0.bin
+            dist/j313/release-agx-g2/m1n1-stage1.bin
+            dist/j313/release-agx-g2/m1n1.macho
+            dist/j313/release-agx-g2/MANIFEST.json
+            dist/j313/release-agx-g2/SHA256SUMS

@@ -7,6 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/build-standalone.sh"
+G2_WORKFLOW = ROOT / ".github" / "workflows" / "j313-agx-g2-acpi.yml"
 
 
 class BuildStandaloneTests(unittest.TestCase):
@@ -50,6 +51,27 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertIn("--display physical --debug off", result.stdout)
         self.assertIn("--capability agx-g2", result.stdout)
         self.assertNotIn("RUNTIME_DIAG_VERBOSE=1", result.stdout)
+
+    def test_official_ci_publishes_the_complete_release_gpu_visible_recovery(self):
+        workflow = G2_WORKFLOW.read_text()
+        self.assertIn("build-release-gpu-visible-recovery:", workflow)
+        self.assertIn("docker build -t windows-on-m1-build:ci", workflow)
+        self.assertIn(
+            "scripts/build-standalone.sh --release --agx-g2-profile",
+            workflow,
+        )
+        self.assertIn("tools/artifact_manifest.py verify " + "\\", workflow)
+        self.assertIn("dist/j313/release-agx-g2/MANIFEST.json", workflow)
+        self.assertNotIn("--manifest dist/j313/release-agx-g2", workflow)
+        self.assertIn("name: J313-Release-AGX-G2-Recovery", workflow)
+        for artifact in (
+            "boot.bin",
+            "J313_EFI.fd",
+            "m1n1.macho",
+            "MANIFEST.json",
+            "SHA256SUMS",
+        ):
+            self.assertIn(f"dist/j313/release-agx-g2/{artifact}", workflow)
 
     def test_dry_run_has_the_complete_location_independent_pipeline(self):
         environment = dict(os.environ, BUILD_STANDALONE_DRY_RUN="1")
