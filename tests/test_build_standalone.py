@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/build-standalone.sh"
 G2_WORKFLOW = ROOT / ".github" / "workflows" / "j313-agx-g2-acpi.yml"
+BUILD_DOCKERFILE = ROOT / "Dockerfile.build"
 
 
 class BuildStandaloneTests(unittest.TestCase):
@@ -56,6 +57,10 @@ class BuildStandaloneTests(unittest.TestCase):
         workflow = G2_WORKFLOW.read_text()
         self.assertIn("build-release-gpu-visible-recovery:", workflow)
         self.assertIn("docker build -t windows-on-m1-build:ci", workflow)
+        self.assertIn(
+            "git config --global --add safe.directory /work",
+            BUILD_DOCKERFILE.read_text(),
+        )
         self.assertIn(
             "scripts/build-standalone.sh --release --agx-g2-profile",
             workflow,
