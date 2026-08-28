@@ -13196,3 +13196,29 @@ or any unlisted PnP action rejects the hypothesis without retry. Evidence is
 written under `C:\Users\pavel\AppleAgxEvidence\EXP-20260828-157` and copied to
 ignored `.local/experiments/EXP-20260828-157-live-admission/`. Rollback is one
 normal shutdown followed by the immutable recovery pair above.
+
+### 2026-08-28T00:03:59Z preflight result — aborted before transaction
+
+The exact package and helper were copied to the preregistered staging path and
+verified byte-for-byte. Recovery contained zero present and zero disconnected
+APPL0002 devices, exact staged `oem18.inf`, eight CPUs, and Running AppleInput,
+stornvme, USBXHCI, and sshd. Recovery then shut down normally and the exact G2
+pair was launched once.
+
+Natural G2 enumeration reproduced the required lifecycle boundary on exact
+`oem18.inf`: DriverEntry and DxgkInitialize succeeded, AddDevice recorded stage
+2/status zero, StartDevice was absent, and APPL0002 reported Problem 31 with
+`0xC0000182`. Eight CPUs and all required services remained present. However,
+the independent prerequisite health gate had already failed: four fresh
+stornvme Event 129 resets occurred at ten-second intervals after boot.
+
+The live helper was therefore not executed. No remove, delete, scan,
+add/install, retry, or GPU hardware-owning operation occurred. The
+admission-sequence hypothesis is untested, not rejected. The guest shut down
+normally. EXP-157 must not be retried without a separately preregistered reason
+that removes or explicitly isolates this prerequisite failure.
+
+Ignored evidence:
+
+- `.local/experiments/EXP-20260828-157-live-admission/preflight-abort.json`
+  SHA-256 `091bde5aa893ce5caae53d8026dd317304758899c9b81ae01023ab6aa8bd97a5`.

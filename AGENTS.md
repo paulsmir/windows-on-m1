@@ -69,6 +69,12 @@ compatibility review.
   presentation behavior.
 - Do not reread the complete ledger, refactor, clean up, or document incidental
   details unless that work changes the current causal decision.
+- Treat the GPU driver package as experiment-local state. After every GPU
+  experiment, collect the evidence first and then remove the exact experiment
+  devnode/package during rollback. Before the next experiment, stage or install
+  only that experiment's exact preregistered package and verify its hashes.
+  Never carry an installed or staged AppleAgx package across experiments unless
+  package retention is itself the single preregistered variable.
 
 After context compaction or reset, read `investigation/GPU_CURRENT_STATE.md`
 first. Consult only the referenced experiment evidence in the full ledger.

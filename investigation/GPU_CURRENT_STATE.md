@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-08-27T23:43:22Z
+Updated: 2026-08-28T00:04:00Z
 
 ## Stable recovery
 
@@ -27,6 +27,10 @@ Updated: 2026-08-27T23:43:22Z
 - INF: `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc`.
 - CAT: `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
 - Compile/runtime contract: WDDM 3.0, `0x510` bytes, Version `0xF003`.
+- This package is experiment-local and remains staged only because EXP-157
+  aborted before cleanup. Remove exact `oem18.inf` in recovery before declaring
+  rollback complete. The next experiment must install its own hash-verified
+  package fresh; do not reuse this staged package implicitly.
 
 ## Proven lifecycle boundary
 
@@ -38,12 +42,14 @@ Updated: 2026-08-27T23:43:22Z
 
 ## Last experiment
 
-- EXP-156 verdict: rejected after one cold natural-enumeration run.
-- Exact package and signer matched. DriverEntry, DxgkInitialize, and AddDevice
-  succeeded; StartDevice was absent; SetupAPI recorded Problem 31 and
-  `STATUS_DEVICE_CONFIGURATION_ERROR` (`0xC0000182`).
-- No GPU hardware-owning receipt was produced. One Event 129 also failed the
-  independent platform-health gate.
+- EXP-157 verdict: aborted before its PnP transaction; the admission-sequence
+  hypothesis was not tested and must not be called rejected or confirmed.
+- Exact G2 natural enumeration reproduced DriverEntry, DxgkInitialize, and
+  AddDevice success with no StartDevice receipt, Problem 31, and exact
+  `oem18.inf`. Eight CPUs and all required services remained present.
+- The prerequisite health gate failed first: four fresh stornvme Event 129
+  resets occurred at ten-second intervals. No helper, PnP mutation, retry, or
+  GPU hardware-owning operation followed.
 
 ## Rejected causes
 
@@ -65,7 +71,9 @@ is real but weakly causal because Dxgkrnl does not inspect the miniport context.
 
 ## Next actions
 
-- Offline: complete; package declaration and INF admission contracts match.
-- Hardware: EXP-157 only. Boot the exact G2 pair once, then apply the exact
-  single fresh live add/install sequence to the unchanged EXP-156 package. No
-  retry and no GPU hardware operation are allowed.
+- Offline: do not repeat EXP-138/EXP-156 admission diffs. Use only existing
+  recovery/G2 evidence to determine whether a health-clean admission test can
+  be preregistered without changing the GPU package or admission variable.
+- Hardware: none currently allowed. Do not retry EXP-157. A future run requires
+  a new preregistration with a falsifiable reason that removes or explicitly
+  isolates the recurring Event 129 prerequisite failure.
