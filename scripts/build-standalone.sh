@@ -67,10 +67,6 @@ AGX_BUILD_ARG='BLD_*_J313_AGX_G2_PROFILE=FALSE'
 AGX_FORWARD_ARG=
 AGX_CAPABILITY_ARG=
 if [ "$AGX_G2_PROFILE" = 1 ]; then
-    [ "$PROFILE" = debug ] || {
-        echo "--agx-g2-profile requires --debug-build" >&2
-        exit 2
-    }
     ARTIFACT_PROFILE="${ARTIFACT_PROFILE}-agx-g2"
     AGX_BUILD_ARG='BLD_*_J313_AGX_G2_PROFILE=TRUE'
     AGX_FORWARD_ARG=--agx-g2-profile

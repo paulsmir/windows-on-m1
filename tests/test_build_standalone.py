@@ -29,6 +29,28 @@ class BuildStandaloneTests(unittest.TestCase):
         self.assertIn("dist/j313/release/boot.bin", result.stdout)
         self.assertIn("--display physical --debug off", result.stdout)
 
+    def test_release_gpu_visible_recovery_is_a_distinct_inert_profile(self):
+        environment = dict(
+            os.environ,
+            BUILD_STANDALONE_DRY_RUN="1",
+            STANDALONE_BUILD_CONTAINER="never",
+        )
+        result = subprocess.run(
+            [str(SCRIPT), "--release", "--agx-g2-profile"],
+            cwd="/tmp",
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("dist/j313/release-agx-g2/boot.bin", result.stdout)
+        self.assertIn("BLD_*_J313_AGX_G2_PROFILE=TRUE", result.stdout)
+        self.assertIn("--display physical --debug off", result.stdout)
+        self.assertIn("--capability agx-g2", result.stdout)
+        self.assertNotIn("RUNTIME_DIAG_VERBOSE=1", result.stdout)
+
     def test_dry_run_has_the_complete_location_independent_pipeline(self):
         environment = dict(os.environ, BUILD_STANDALONE_DRY_RUN="1")
         result = subprocess.run(
