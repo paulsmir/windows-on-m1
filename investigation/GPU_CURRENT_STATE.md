@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-08-28T01:01:00Z
+Updated: 2026-08-28T01:10:00Z
 
 ## Stable recovery
 
@@ -15,7 +15,7 @@ Updated: 2026-08-28T01:01:00Z
 ## Repository identity
 
 - Root branch: `feature/j313-gpu-acceleration`.
-- Root state commit: `aedf6322ccc36219ffcd300ddeefad64585bdbde`.
+- Root state commit: `2d114a8b218c893e8afde927eb886c9caaf3abca`.
 - m1n1 commit: `8371e3674ba0944c4a32068f0ba659cbb0e57e77`.
 - Mu commit: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
 - Preserve the recorded nested metadata dirt; never stage it implicitly.
@@ -76,8 +76,8 @@ no GPU hardware access.
 
 ## Next actions
 
-- Offline: accept the complete `release-agx-g2` artifact from corrected run
-  `33131387114`, then verify its manifest and exact hashes.
+- Offline: accept the complete `release-agx-g2` artifact from the runtime-config
+  container build, then verify its manifest and exact hashes.
 - Hardware: first qualify that recovery driver-clean with one inert APPL0002.
   If healthy, install only the accepted admission package in that same guest
   and test natural StartDevice admission. Do not retry EXP-157.
