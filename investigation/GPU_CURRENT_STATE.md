@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-08-28T00:12:00Z
+Updated: 2026-08-28T01:01:00Z
 
 ## Stable recovery
 
@@ -15,20 +15,21 @@ Updated: 2026-08-28T00:12:00Z
 ## Repository identity
 
 - Root branch: `feature/j313-gpu-acceleration`.
-- Root state commit: `d28bf2c` (source package commit `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`).
+- Root state commit: `aedf6322ccc36219ffcd300ddeefad64585bdbde`.
 - m1n1 commit: `8371e3674ba0944c4a32068f0ba659cbb0e57e77`.
 - Mu commit: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
 - Preserve the recorded nested metadata dirt; never stage it implicitly.
 
-## Last tested GPU package
+## Accepted next GPU package
 
-- EXP-156 `oem18.inf`, version `23.6.21.184`, source `6ac19e9`.
-- SYS: `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f`.
-- INF: `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc`.
-- CAT: `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
-- Compile/runtime contract: WDDM 3.0, `0x510` bytes, Version `0xF003`.
-- It is no longer installed or staged on the Air. The next experiment must
-  install its own hash-verified package fresh; do not reuse a prior package.
+- Clean admission source: `b13e9c32c06c21fbd522d33717a2d0078e4a077c`.
+- SYS: `ebe690ac55f861c4b881ead21527348c0a27846970c23cade603004cedebe0a4`.
+- INF: `3191a342e298a7587eae4eb68391c83b94fb24a14f565ae0c1ea8673186202d3`.
+- CAT: `761ff3c26297f9679a4426f23eda3eb3dc27031ff916b0b35b73d42630da502e`.
+- CER: `09d220fef9268478e6512effc6649ce511a2fd88aef8f506789e31474004a48d`.
+- Signer: `D6EC654F91AA15EF78EA7026051C93BFDE460E0F`.
+- Official run: `33130376006`; ARM64 and WDDM 3.0 `0x510`/`0xF003`
+  were verified from the fresh artifact. It is not installed or staged.
 
 ## Proven lifecycle boundary
 
@@ -75,10 +76,8 @@ no GPU hardware access.
 
 ## Next actions
 
-- Offline: define and test the smallest separate WDDM 3.x admission package
-  using only the proven invariants above. Add existing callback groups only
-  after the minimal path is admitted.
-- Hardware: none currently allowed. First require RED/GREEN source tests,
-  official ARM64 WDK build, machine-code/ABI inspection, exact hashes, and a
-  preregistration containing `WHY THIS HYPOTHESIS:` with one to three evidence
-  items. Do not retry EXP-157.
+- Offline: accept the complete `release-agx-g2` artifact from corrected run
+  `33131387114`, then verify its manifest and exact hashes.
+- Hardware: first qualify that recovery driver-clean with one inert APPL0002.
+  If healthy, install only the accepted admission package in that same guest
+  and test natural StartDevice admission. Do not retry EXP-157.
