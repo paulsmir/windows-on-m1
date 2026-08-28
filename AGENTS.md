@@ -86,6 +86,38 @@ first. Consult only the referenced experiment evidence in the full ledger.
 Update that compact file only when a proven boundary, accepted package, stable
 recovery, active hypothesis, verdict, or next causal target changes.
 
+## Hardware hypothesis gate
+
+Before every new hardware experiment, write `WHY THIS HYPOTHESIS:` followed by
+one to three concrete evidence items from the current or reference state. Each
+item must explain why this cause is now more likely than the alternatives. If
+the hypothesis cannot be tied to concrete evidence, do not run hardware.
+
+## Stop archaeology and reconstruct cleanly
+
+- Historical comparison is a tool, not the goal. Stop after at most two full
+  offline comparison passes against an old working reference when they do not
+  yield one strong causal difference, keep producing minor differences, require
+  progressively older experiments, make evidence more ambiguous, or still do
+  not support one precise hardware hypothesis. Never perform a third equivalent
+  archaeology pass.
+- At `DriverEntry -> DxgkInitialize -> AddDevice -> missing StartDevice`, clean
+  reconstruction means a separate minimal WDDM 3.x admission path, not a full
+  AGX rewrite. It must contain only DriverEntry, DxgkInitialize, AddDevice,
+  natural StartDevice admission, and fail-closed StartDevice with no GPU access.
+- Preserve only proven invariants: the WDDM 3.0 compile/runtime contract, pinned
+  WDK, validated package/signing path, exact APPL0002 binding, and the minimum
+  required DXGK callbacks. MMIO, power, RTKit, UAT, IRQ, queue, render, and
+  presentation remain absent until StartDevice is proven.
+- Use old experiments only to identify a specific mandatory contract. If the
+  minimal driver reaches StartDevice, add existing functionality back one group
+  at a time. If it does not, focus on WDDM/PnP/package/environment instead of
+  accumulated AGX code.
+- Before continuing, record exactly one decision in the compact GPU state:
+  `WHY CONTINUE COMPARISON:` with evidence, or `WHY CLEAN RECONSTRUCTION:` with
+  the reason. Prefer clean reconstruction when it can prove behavior faster
+  than explaining historical differences.
+
 ## Persistent experiment ledger
 
 Every hardware build, launch, diagnostic run, and recovery attempt must be recorded

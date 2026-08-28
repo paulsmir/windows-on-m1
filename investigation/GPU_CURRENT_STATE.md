@@ -59,19 +59,26 @@ Updated: 2026-08-28T00:12:00Z
   declaration stores with identical offsets/opcodes, `0x510`, `0xF003`, import
   sets, and normalized INF contracts in EXP-138 and EXP-156.
 
-## Active hypothesis
+## Active hypothesis and path decision
 
-The strongest remaining distinction at the current boundary is admission
-sequence, not downstream GPU code: EXP-138 reached StartDevice during a fresh
-live remove/delete/scan/add-install transaction, while EXP-156 failed during
-natural cold enumeration. The profile-dependent opaque adapter allocation size
-is real but weakly causal because Dxgkrnl does not inspect the miniport context.
+`WHY CLEAN RECONSTRUCTION:` One bounded EXP-138/EXP-156 pass found matching
+DriverEntry declaration shapes, WDDM 3.0 contract, imports, callback assignments,
+and normalized INF contracts. Its only strong procedural distinction was live
+admission sequence; EXP-157 could not test it because the health prerequisite
+failed, and an exact retry has no new falsifiable reason. More historical
+comparison would now increase ambiguity rather than reduce the causal set.
+
+Active hypothesis: a separate minimal, fail-closed WDDM 3.x admission driver
+will distinguish accumulated AppleAgx initialization/callback groups from the
+WDDM/PnP/package/environment contract. It must stop at StartDevice and contain
+no GPU hardware access.
 
 ## Next actions
 
-- Offline: do not repeat EXP-138/EXP-156 admission diffs. Use only existing
-  recovery/G2 evidence to determine whether a health-clean admission test can
-  be preregistered without changing the GPU package or admission variable.
-- Hardware: none currently allowed. Do not retry EXP-157. A future run requires
-  a new preregistration with a falsifiable reason that removes or explicitly
-  isolates the recurring Event 129 prerequisite failure.
+- Offline: define and test the smallest separate WDDM 3.x admission package
+  using only the proven invariants above. Add existing callback groups only
+  after the minimal path is admitted.
+- Hardware: none currently allowed. First require RED/GREEN source tests,
+  official ARM64 WDK build, machine-code/ABI inspection, exact hashes, and a
+  preregistration containing `WHY THIS HYPOTHESIS:` with one to three evidence
+  items. Do not retry EXP-157.
