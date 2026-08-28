@@ -62,6 +62,10 @@ class BuildStandaloneTests(unittest.TestCase):
             BUILD_DOCKERFILE.read_text(),
         )
         self.assertIn(
+            "git config --global --add safe.directory '/work/*'",
+            BUILD_DOCKERFILE.read_text(),
+        )
+        self.assertIn(
             "scripts/build-standalone.sh --release --agx-g2-profile",
             workflow,
         )
