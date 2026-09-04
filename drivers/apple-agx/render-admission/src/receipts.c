@@ -140,6 +140,24 @@ _Use_decl_annotations_ void AdmissionRecordRtkitBoot(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordPreManagementUat(
+    ADMISSION_CONTEXT *Context, BOOLEAN Published,
+    const APPLE_AGX_UAT_PUBLICATION_STATE *State) {
+  HANDLE key = NULL;
+  if (Context == NULL || State == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1PreManagementUatPublished", Published ? 1u : 0u);
+  WriteDword(key, L"Wom1PreManagementUatActive", State->Active);
+  WriteDword(key, L"Wom1PreManagementUatTtbr0Low", (ULONG)State->PublishedTtbr0);
+  WriteDword(key, L"Wom1PreManagementUatTtbr0High", (ULONG)(State->PublishedTtbr0 >> 32));
+  WriteDword(key, L"Wom1PreManagementUatTtbr1Low", (ULONG)State->PublishedTtbr1);
+  WriteDword(key, L"Wom1PreManagementUatTtbr1High", (ULONG)(State->PublishedTtbr1 >> 32));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordQuery(
     PDEVICE_OBJECT DeviceObject, DXGK_QUERYADAPTERINFOTYPE Type,
     ULONG OutputDataSize, NTSTATUS Status) {

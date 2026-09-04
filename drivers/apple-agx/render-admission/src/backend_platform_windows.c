@@ -528,9 +528,14 @@ static APPLE_AGX_RTKIT_BOOL AdmissionFirmwarePrepareManagement(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs)
     return APPLE_AGX_RTKIT_FALSE;
-  if (!AdmissionFirmwarePublishUat(runtime, &runtime->Initdata.TtbrPair))
+  if (!AdmissionFirmwarePublishUat(runtime, &runtime->Initdata.TtbrPair)) {
+    AdmissionRecordPreManagementUat(runtime->Adapter, FALSE,
+                                    &runtime->FirmwarePublication);
     return APPLE_AGX_RTKIT_FALSE;
+  }
   runtime->FirmwareProvider.State |= APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
+  AdmissionRecordPreManagementUat(runtime->Adapter, TRUE,
+                                  &runtime->FirmwarePublication);
   return APPLE_AGX_RTKIT_TRUE;
 }
 

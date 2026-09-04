@@ -279,6 +279,9 @@ void AdmissionRecordFirmwarePowerOn(_In_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordRtkitBoot(_In_ ADMISSION_CONTEXT *Context,
                               _In_ APPLE_AGX_RTKIT_SESSION_RESULT Result,
                               _In_ const APPLE_AGX_RTKIT_SESSION *Session);
+void AdmissionRecordPreManagementUat(_In_ ADMISSION_CONTEXT *Context,
+                                     _In_ BOOLEAN Published,
+                                     _In_ const APPLE_AGX_UAT_PUBLICATION_STATE *State);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);
