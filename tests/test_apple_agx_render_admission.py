@@ -71,7 +71,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("Interlocked", scanline)
         present = callbacks[
             callbacks.index("AdmissionDdiPresent("):
-            callbacks.index("AdmissionDdiResetFromTimeout(")
+            callbacks.index("FAIL2(AdmissionDdiEscape")
         ]
         self.assertIn("STATUS_NOT_SUPPORTED", present)
         self.assertNotIn("STATUS_SUCCESS", present)
@@ -317,7 +317,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("D3D10DDIARG_OPENADAPTER", source)
         self.assertIn("return E_NOTIMPL", source)
 
-    def test_project_links_only_admission_and_pure_feature_gate_sources(self):
+    def test_project_links_only_admission_and_pure_contract_sources(self):
         project = self.read("AppleAgxRenderAdmission.vcxproj")
 
         for source in (
@@ -330,7 +330,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         )
         for forbidden in (
             "m1n1", "mmio", "power", "rtkit",
-            "firmware", "render_job", "submission", "scheduler",
+            "firmware", "render_job", "submission",
         ):
             self.assertNotIn(forbidden.lower(), project.lower())
 

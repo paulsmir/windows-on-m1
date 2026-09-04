@@ -165,6 +165,7 @@ VOID AdmissionDdiDpcRoutine(
   if (context != NULL) {
     InterlockedIncrement(&context->DpcCount);
     AdmissionPagingDpc(context);
+    AdmissionSchedulerDpc(context);
   }
 }
 

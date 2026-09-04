@@ -170,6 +170,9 @@ static VOID AdmissionPagingWorker(_In_ PDEVICE_OBJECT DeviceObject,
     if (!NT_SUCCESS(status))
       break;
   }
+  if (NT_SUCCESS(status) &&
+      !AdmissionSchedulerRecordCompletion(context, context->PagingFence))
+    status = STATUS_INVALID_DEVICE_STATE;
   context->PagingCompletionStatus = status;
   notification.Context = context;
   notification.Fence = context->PagingFence;

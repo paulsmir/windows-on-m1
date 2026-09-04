@@ -65,8 +65,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
 }
 
 FAIL2(AdmissionDdiPatch, HANDLE, Adapter, const DXGKARG_PATCH *, Args)
-FAIL2(AdmissionDdiPreemptCommand, HANDLE, Adapter,
-      const DXGKARG_PREEMPTCOMMAND *, Args)
 FAIL2(AdmissionDdiRender, HANDLE, Context, DXGKARG_RENDER *, Args)
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
@@ -77,26 +75,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
   return STATUS_NOT_SUPPORTED;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
-  UNUSED(Adapter);
-  return STATUS_NOT_SUPPORTED;
-}
-
-_Use_decl_annotations_ NTSTATUS AdmissionDdiRestartFromTimeout(HANDLE Adapter) {
-  UNUSED(Adapter);
-  return STATUS_NOT_SUPPORTED;
-}
-
 FAIL2(AdmissionDdiEscape, HANDLE, Adapter, const DXGKARG_ESCAPE *, Args)
-FAIL2(AdmissionDdiCollectDbgInfo, HANDLE, Adapter,
-      const DXGKARG_COLLECTDBGINFO *, Args)
-FAIL2(AdmissionDdiQueryCurrentFence, HANDLE, Adapter,
-      DXGKARG_QUERYCURRENTFENCE *, Args)
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
     HANDLE Device, DXGKARG_CREATECONTEXT *Args) {
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
+  ADMISSION_CONTEXT *adapter;
   ADMISSION_RENDER_CONTEXT *context;
+  KIRQL oldIrql;
   ULONG flags;
 
   if (device == NULL ||
@@ -112,12 +98,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   if (context == NULL)
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(context, sizeof(*context));
+  AppleAgxSchedulerContextInitialize(&context->SchedulerContext);
   if (!AdmissionObjectsCreateContext(
           &device->Object, Args->hContext, Args->NodeOrdinal,
           Args->EngineAffinity, flags, &context->Object)) {
     ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
     return STATUS_INVALID_PARAMETER;
   }
+  adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
+                              ObjectAdapter);
+  KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+  if (!AppleAgxSchedulerCreateContext(
+          &adapter->Scheduler, &context->SchedulerContext,
+          Args->NodeOrdinal, Args->EngineAffinity)) {
+    KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+    (void)AdmissionObjectsDestroyContext(&context->Object);
+    ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
+    return STATUS_INVALID_DEVICE_STATE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
 
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
@@ -139,18 +138,29 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
-  if (context == NULL || !AdmissionObjectsDestroyContext(&context->Object))
+  ADMISSION_CONTEXT *adapter;
+  KIRQL oldIrql;
+  if (context == NULL ||
+      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+      context->Object.Device == NULL || context->Object.Device->Adapter == NULL ||
+      context->Object.FenceOutstanding != 0u)
+    return STATUS_DEVICE_BUSY;
+  adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
+                              ADMISSION_CONTEXT, ObjectAdapter);
+  KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+  if (!AppleAgxSchedulerDestroyContext(
+          &adapter->Scheduler, &context->SchedulerContext)) {
+    KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+    return STATUS_DEVICE_BUSY;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+  if (!AdmissionObjectsDestroyContext(&context->Object))
     return STATUS_DEVICE_BUSY;
   ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }
 
 FAIL2(AdmissionDdiRenderKm, HANDLE, Context, DXGKARG_RENDER *, Args)
-FAIL2(AdmissionDdiQueryDependentEngineGroup, HANDLE, Adapter,
-      DXGKARG_QUERYDEPENDENTENGINEGROUP *, Args)
-FAIL2(AdmissionDdiQueryEngineStatus, HANDLE, Adapter,
-      DXGKARG_QUERYENGINESTATUS *, Args)
-FAIL2(AdmissionDdiResetEngine, HANDLE, Adapter, DXGKARG_RESETENGINE *, Args)
 FAIL2(AdmissionDdiCancelCommand, HANDLE, Adapter,
       const DXGKARG_CANCELCOMMAND *, Args)
 

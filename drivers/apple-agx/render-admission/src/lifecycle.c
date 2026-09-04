@@ -60,8 +60,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
+  status = AdmissionSchedulerStart(context);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
   status = AdmissionPagingStart(context);
   if (!NT_SUCCESS(status)) {
+    (void)AdmissionSchedulerStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
@@ -69,6 +76,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
     (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_NOT_SUPPORTED;
@@ -81,6 +89,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
                         AdmissionReceiptStartPostDisplay, status);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
@@ -90,6 +99,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->PostDisplayInformation.Height != 1600 ||
       context->PostDisplayInformation.Pitch != 10240) {
     (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
@@ -99,6 +109,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (!AdmissionObjectsStartAdapter(&context->ObjectAdapter)) {
     context->Started = FALSE;
     (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_INVALID_DEVICE_STATE;
@@ -128,6 +139,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   status = AdmissionPagingStop(context);
   if (!NT_SUCCESS(status))
     return status;
+  status = AdmissionSchedulerStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
   status = AdmissionMemoryRuntimeStop(context);
   if (!NT_SUCCESS(status))
     return status;
@@ -155,6 +169,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
     return STATUS_INVALID_PARAMETER;
   if (context->PagingWorkItem != NULL &&
       !NT_SUCCESS(AdmissionPagingStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) != 0 &&
+      !NT_SUCCESS(AdmissionSchedulerStop(context)))
     return STATUS_DEVICE_BUSY;
   if (context->MemoryRuntime != NULL &&
       !NT_SUCCESS(AdmissionMemoryRuntimeStop(context)))

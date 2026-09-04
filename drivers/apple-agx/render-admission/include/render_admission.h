@@ -19,6 +19,7 @@
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
 #include "apple_agx_wddm_feature_contract.h"
+#include "apple_agx_scheduler.h"
 #include "j313_agx_abi_admission.generated.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
@@ -90,6 +91,11 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG PagingPending;
   volatile LONG PagingStopping;
   volatile LONG PagingDpcPending;
+  KSPIN_LOCK SchedulerLock;
+  APPLE_AGX_SCHEDULER Scheduler;
+  volatile LONG SchedulerInitialized;
+  volatile LONG SchedulerFaulted;
+  volatile LONG SchedulerDpcPending;
   volatile LONG FeatureReadyMask;
 } ADMISSION_CONTEXT;
 
@@ -99,6 +105,7 @@ typedef struct _ADMISSION_DEVICE {
 
 typedef struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_OBJECT_CONTEXT Object;
+  APPLE_AGX_SCHEDULER_CONTEXT SchedulerContext;
 } ADMISSION_RENDER_CONTEXT;
 
 typedef struct _ADMISSION_ALLOCATION_HANDLE {
@@ -176,6 +183,11 @@ NTSTATUS AdmissionMemoryRuntimeExecutePaging(
 NTSTATUS AdmissionPagingStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionPagingStop(_Inout_ ADMISSION_CONTEXT *Context);
 VOID AdmissionPagingDpc(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionSchedulerStart(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionSchedulerStop(_Inout_ ADMISSION_CONTEXT *Context);
+BOOLEAN AdmissionSchedulerRecordCompletion(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ UINT Fence);
+VOID AdmissionSchedulerDpc(_Inout_ ADMISSION_CONTEXT *Context);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
