@@ -533,20 +533,16 @@ static unsigned char AdmissionFirmwarePublishUat(
     void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair);
 static unsigned char AdmissionFirmwareUnpublishUat(void *Context);
 
-static APPLE_AGX_RTKIT_BOOL AdmissionFirmwarePrepareManagement(
-    void *Context, APPLE_AGX_ASC_U64 DeadlineMs) {
+static void AdmissionFirmwareRecordBootstrap(
+    void *Context, unsigned int Phase, unsigned char Success,
+    unsigned int State) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs)
-    return APPLE_AGX_RTKIT_FALSE;
-  if (!AdmissionFirmwarePublishUat(runtime, &runtime->Initdata.TtbrPair)) {
-    AdmissionRecordPreManagementUat(runtime->Adapter, FALSE,
-                                    &runtime->FirmwarePublication);
-    return APPLE_AGX_RTKIT_FALSE;
-  }
-  runtime->FirmwareProvider.State |= APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
-  AdmissionRecordPreManagementUat(runtime->Adapter, TRUE,
+  if (runtime == NULL)
+    return;
+  AdmissionRecordProviderBootstrap(runtime->Adapter, Phase, Success, State);
+  if (Phase == APPLE_AGX_PROVIDER_BOOT_ROOTS)
+    AdmissionRecordPreManagementUat(runtime->Adapter, Success != 0u,
                                   &runtime->FirmwarePublication);
-  return APPLE_AGX_RTKIT_TRUE;
 }
 
 static unsigned char AdmissionFirmwareBootAsc(
@@ -555,14 +551,20 @@ static unsigned char AdmissionFirmwareBootAsc(
   APPLE_AGX_RTKIT_SESSION_RESULT result;
   if (runtime == NULL)
     return 0u;
-  result = AppleAgxRtkitSessionBoot(
-      &runtime->Rtkit, &runtime->AscIo, &runtime->Handoff,
-      AdmissionFirmwarePrepareManagement, runtime, DeadlineMs);
-  if (result != AppleAgxRtkitSessionResultOk &&
-      runtime->FirmwarePublication.Active != 0u)
-    (void)AdmissionFirmwareUnpublishUat(runtime);
-  if (result != AppleAgxRtkitSessionResultOk)
-    runtime->FirmwareProvider.State &= ~APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
+  result = AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+      &runtime->Rtkit, &runtime->AscIo, &runtime->Handoff, DeadlineMs);
+  AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
+  return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
+}
+
+static unsigned char AdmissionFirmwareCompleteManagement(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  if (runtime == NULL)
+    return 0u;
+  result = AppleAgxRtkitSessionCompleteManagementBootstrap(
+      &runtime->Rtkit, &runtime->AscIo, DeadlineMs);
   AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
   return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
 }
@@ -1504,6 +1506,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->FirmwarePrimitives.DestroyFirmwareUat =
       AdmissionFirmwareDestroyUat;
   runtime->FirmwarePrimitives.BootAsc = AdmissionFirmwareBootAsc;
+  runtime->FirmwarePrimitives.CompleteManagementBootstrap =
+      AdmissionFirmwareCompleteManagement;
+  runtime->FirmwarePrimitives.RecordBootstrapPhase =
+      AdmissionFirmwareRecordBootstrap;
   runtime->FirmwarePrimitives.StopAsc = AdmissionFirmwareStopAsc;
   runtime->FirmwarePrimitives.StartEndpoint =
       AdmissionFirmwareStartEndpoint;

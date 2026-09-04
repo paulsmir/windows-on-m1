@@ -78,6 +78,24 @@ _Use_decl_annotations_ void AdmissionRecordBackendStartResult(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordProviderBootstrap(
+    ADMISSION_CONTEXT *Context, ULONG Phase, UCHAR Success, ULONG State) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1ProviderBootPhase", Phase);
+  WriteDword(key, L"Wom1ProviderBootSucceeded", Success);
+  WriteDword(key, L"Wom1ProviderBootOwnedState", State);
+  if (Phase == APPLE_AGX_PROVIDER_BOOT_CLEANUP)
+    WriteDword(key, L"Wom1ProviderBootCleanupSucceeded", Success);
+  else if (!Success)
+    WriteDword(key, L"Wom1ProviderBootFailurePhase", Phase);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordFirmwarePhase(
     ADMISSION_CONTEXT *Context, APPLE_AGX_FIRMWARE_PHASE Phase,
     APPLE_AGX_FIRMWARE_RESULT Result, ULONG CompletedMask) {

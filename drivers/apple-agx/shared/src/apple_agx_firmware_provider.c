@@ -77,6 +77,19 @@ static APPLE_AGX_FW_BOOL provider_create_uat(void *context,
   return APPLE_AGX_FW_TRUE;
 }
 
+static unsigned char acquire_handoff(APPLE_AGX_FIRMWARE_PROVIDER *provider,
+                                     unsigned long long deadline);
+static unsigned char release_handoff(APPLE_AGX_FIRMWARE_PROVIDER *provider);
+static APPLE_AGX_FW_BOOL provider_unpublish_initdata(
+    void *context, APPLE_AGX_FW_U64 deadline);
+
+static void record_boot(APPLE_AGX_FIRMWARE_PROVIDER *provider,
+                        unsigned int phase, unsigned char success) {
+  if (provider->Primitives.RecordBootstrapPhase != APPLE_AGX_PROVIDER_NULL)
+    provider->Primitives.RecordBootstrapPhase(provider->Primitives.Context,
+                                               phase, success, provider->State);
+}
+
 static APPLE_AGX_FW_BOOL provider_boot_asc(void *context,
                                            APPLE_AGX_FW_U64 deadline) {
   APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
@@ -84,14 +97,42 @@ static APPLE_AGX_FW_BOOL provider_boot_asc(void *context,
   unsigned int required = APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED |
                           APPLE_AGX_FIRMWARE_PROVIDER_POWERED |
                           APPLE_AGX_FIRMWARE_PROVIDER_UAT;
-  if (!at_passive(provider) || provider->State != required ||
-      !provider->Primitives.BootAsc(provider->Primitives.Context, deadline))
+  unsigned char success;
+  if (!at_passive(provider) || provider->State != required)
     return APPLE_AGX_FW_FALSE;
+  /* Retain a cleanup obligation even if CPU start only partially succeeds. */
+  provider->State |= APPLE_AGX_FIRMWARE_PROVIDER_ASC;
+  success = provider->Primitives.BootAsc(provider->Primitives.Context, deadline);
+  if (!success) {
+    record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CPU_HANDOFF, 0u);
+    return APPLE_AGX_FW_FALSE;
+  }
   /* Firmware publishes MAGIC_FW only after ASC is running. */
   handoff_result = AppleAgxGfxHandoffInitialize(provider->Handoff, deadline);
+  record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CPU_HANDOFF,
+                handoff_result == AppleAgxGfxHandoffResultOk);
   if (handoff_result != AppleAgxGfxHandoffResultOk)
     return APPLE_AGX_FW_FALSE;
-  provider->State |= APPLE_AGX_FIRMWARE_PROVIDER_ASC;
+  if (provider->Primitives.CompleteManagementBootstrap !=
+      APPLE_AGX_PROVIDER_NULL) {
+    success = acquire_handoff(provider, deadline);
+    if (success) {
+      success = provider->Primitives.PublishUatRoots(
+          provider->Primitives.Context, &provider->Pair);
+      if (success)
+        provider->State |= APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
+      if (!release_handoff(provider))
+        success = 0u;
+    }
+    record_boot(provider, APPLE_AGX_PROVIDER_BOOT_ROOTS, success);
+    if (!success)
+      return APPLE_AGX_FW_FALSE;
+    success = provider->Primitives.CompleteManagementBootstrap(
+        provider->Primitives.Context, deadline);
+    record_boot(provider, APPLE_AGX_PROVIDER_BOOT_MANAGEMENT, success);
+    if (!success)
+      return APPLE_AGX_FW_FALSE;
+  }
   return APPLE_AGX_FW_TRUE;
 }
 
@@ -266,14 +307,18 @@ static APPLE_AGX_FW_BOOL provider_stop_endpoint(
 static APPLE_AGX_FW_BOOL provider_stop_asc(void *context,
                                            APPLE_AGX_FW_U64 deadline) {
   APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
-  if (!at_passive(provider) ||
-      (provider->State & APPLE_AGX_FIRMWARE_PROVIDER_ASC) == 0u ||
-      (provider->State & APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED) != 0u ||
-      !provider->Primitives.StopAsc(provider->Primitives.Context, deadline))
+  if (!at_passive(provider))
     return APPLE_AGX_FW_FALSE;
+  if (!provider_unpublish_initdata(provider, deadline) ||
+      ((provider->State & APPLE_AGX_FIRMWARE_PROVIDER_ASC) != 0u &&
+       !provider->Primitives.StopAsc(provider->Primitives.Context, deadline))) {
+    record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CLEANUP, 0u);
+    return APPLE_AGX_FW_FALSE;
+  }
   provider->State &= ~(APPLE_AGX_FIRMWARE_PROVIDER_ASC |
                        APPLE_AGX_FIRMWARE_PROVIDER_FW_ENDPOINT |
                        APPLE_AGX_FIRMWARE_PROVIDER_DOORBELL_ENDPOINT);
+  record_boot(provider, APPLE_AGX_PROVIDER_BOOT_CLEANUP, 1u);
   return APPLE_AGX_FW_TRUE;
 }
 

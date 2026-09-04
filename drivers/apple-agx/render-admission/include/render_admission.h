@@ -282,6 +282,9 @@ void AdmissionRecordRtkitBoot(_In_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordPreManagementUat(_In_ ADMISSION_CONTEXT *Context,
                                      _In_ BOOLEAN Published,
                                      _In_ const APPLE_AGX_UAT_PUBLICATION_STATE *State);
+void AdmissionRecordProviderBootstrap(_In_ ADMISSION_CONTEXT *Context,
+                                      _In_ ULONG Phase, _In_ UCHAR Success,
+                                      _In_ ULONG State);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);

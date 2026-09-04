@@ -13,6 +13,10 @@ typedef struct _FAKE_PLATFORM {
   unsigned char RootsPublished;
   unsigned char FailNextReleaseWrite;
   unsigned char PublishHandoffMagicOnAscBoot;
+  unsigned char RequireManagement;
+  unsigned char FailManagement;
+  unsigned char FailUnpublish;
+  unsigned int ManagementCount;
   unsigned int PublishCount;
   unsigned int UnpublishCount;
   unsigned long long NowMs;
@@ -101,6 +105,8 @@ static unsigned char start_endpoint(void *context, unsigned int endpoint,
                                     unsigned long long deadline) {
   FAKE_PLATFORM *fake = context;
   assert(fake->NowMs <= deadline);
+  if (fake->RequireManagement)
+    assert(fake->ManagementCount == 1u);
   if (!fake->AscRunning)
     return 0u;
   if (endpoint == J313_AGX_G2_FIRMWARE_ENDPOINT) {
@@ -148,6 +154,8 @@ static unsigned char publish_roots(void *context,
 static unsigned char unpublish_roots(void *context) {
   FAKE_PLATFORM *fake = context;
   assert(fake->Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_AP_OFFSET] == 1u);
+  if (fake->FailUnpublish)
+    return 0u;
   if (!fake->RootsPublished)
     return 0u;
   fake->RootsPublished = 0u;
@@ -467,7 +475,11 @@ static void test_handoff_timeout_is_after_asc_boot(void) {
   assert(!io.BootAsc(io.Context, 3u));
   assert(fake.NowMs >= 3u);
   assert(fake.Powered);
-  assert(fake.AscRunning);
+  /* A failed bootstrap must not abandon a running ASC outside ownership. */
+  assert(!fake.AscRunning ||
+         (provider.State & APPLE_AGX_FIRMWARE_PROVIDER_ASC) != 0u);
+  assert(io.StopAsc(io.Context, fake.NowMs + 100u));
+  assert(!fake.AscRunning);
   assert(!handoff.Initialized);
   assert(!handoff.Locked);
   assert(provider.State == (APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED |
@@ -475,7 +487,58 @@ static void test_handoff_timeout_is_after_asc_boot(void) {
                             APPLE_AGX_FIRMWARE_PROVIDER_UAT));
 }
 
+static unsigned char complete_management(void *context,
+                                          unsigned long long deadline) {
+  FAKE_PLATFORM *fake = context;
+  assert(fake->NowMs <= deadline);
+  assert(fake->AscRunning && fake->RootsPublished);
+  assert(fake->PublishCount == 1u);
+  assert(fake->Handoff[APPLE_AGX_GFX_HANDOFF_LOCK_AP_OFFSET] == 0u);
+  ++fake->ManagementCount;
+  return !fake->FailManagement;
+}
+
+static void test_split_bootstrap_owns_early_roots_and_failed_cleanup(void) {
+  unsigned int failure;
+  for (failure = 0u; failure != 3u; ++failure) {
+    FAKE_PLATFORM fake = {.Passive = 1u, .PublishHandoffMagicOnAscBoot = 1u,
+                         .RequireManagement = 1u};
+    APPLE_AGX_GFX_HANDOFF_STATE handoff = bind_uninitialized_handoff(&fake);
+    APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES ops = primitives(&fake);
+    APPLE_AGX_FIRMWARE_PROVIDER provider = {0};
+    APPLE_AGX_FIRMWARE_IO io = {0};
+    APPLE_AGX_FIRMWARE firmware;
+    ops.CompleteManagementBootstrap = complete_management;
+    fake.FailManagement = failure != 0u;
+    fake.FailUnpublish = failure == 2u;
+    assert(AppleAgxFirmwareProviderInitialize(&provider, &ops, &handoff, &io) ==
+           AppleAgxFirmwareProviderResultOk);
+    AppleAgxFirmwareInitialize(&firmware);
+    assert(AppleAgxFirmwareStart(&firmware, &io) ==
+           (failure == 0u ? AppleAgxFirmwareResultOk :
+            failure == 1u ? AppleAgxFirmwareResultTransportFailed :
+                            AppleAgxFirmwareResultCleanupFailed));
+    assert(fake.ManagementCount == 1u);
+    assert(fake.PublishCount == 1u);
+    if (failure == 2u) {
+      assert(fake.Powered && fake.UatCreated && fake.RootsPublished);
+      assert(provider.State & APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED);
+      assert(firmware.CleanupMask & APPLE_AGX_FIRMWARE_ASC_RUNNING);
+      assert(AppleAgxFirmwareProviderDestroy(&provider) ==
+             AppleAgxFirmwareProviderResultInvalidState);
+      fake.FailUnpublish = 0u;
+    }
+    assert(AppleAgxFirmwareRollback(&firmware, &io) == AppleAgxFirmwareResultOk);
+    assert(!fake.Powered && !fake.AscRunning && !fake.RootsPublished);
+    assert(fake.UnpublishCount == 1u);
+    assert(firmware.CleanupMask == 0u);
+    assert(AppleAgxFirmwareProviderDestroy(&provider) ==
+           AppleAgxFirmwareProviderResultOk);
+  }
+}
+
 int main(void) {
+  test_split_bootstrap_owns_early_roots_and_failed_cleanup();
   test_exact_semantics_are_ready();
   test_publication_holds_exact_handoff_lock();
   test_release_failure_compensates_publication();

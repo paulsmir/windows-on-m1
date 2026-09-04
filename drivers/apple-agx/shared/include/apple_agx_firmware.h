@@ -53,6 +53,8 @@ typedef struct _APPLE_AGX_FIRMWARE {
   APPLE_AGX_FW_U32 CompletedMask;
   APPLE_AGX_FW_U64 InitdataAddress;
   APPLE_AGX_FIRMWARE_RESULT LastResult;
+  /* Cleanup obligations are not completed hardware phases. */
+  APPLE_AGX_FW_U32 CleanupMask;
 } APPLE_AGX_FIRMWARE;
 
 typedef struct _APPLE_AGX_FIRMWARE_IO {

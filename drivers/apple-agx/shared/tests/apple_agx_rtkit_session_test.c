@@ -304,7 +304,31 @@ static void TestStopResumesIopAckWithoutReplayingEitherRequest(void) {
   assert(!session.Running);
 }
 
+static void TestSplitBootDefersMailboxAndRetainsFailedRunOff(void) {
+  FAKE_SESSION_ASC fake = {0};
+  APPLE_AGX_ASC_IO io = MakeIo(&fake);
+  APPLE_AGX_RTKIT_SESSION session;
+  AppleAgxRtkitSessionInitialize(&session);
+  assert(AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+             &session, &io, NULL, 100u) == AppleAgxRtkitSessionResultOk);
+  assert(session.Running && session.CpuReady);
+  assert(fake.SendCount == 0u);
+  fake.FailControlWrite = 1u;
+  assert(AppleAgxRtkitSessionCompleteManagementBootstrap(&session, &io, 100u) ==
+         AppleAgxRtkitSessionResultCleanupFailed);
+  assert(session.Running);
+  assert(fake.Control & APPLE_AGX_ASC_CPU_RUN);
+  fake.FailControlWrite = 0u;
+  assert(AppleAgxRtkitSessionStop(&session, &io, 200u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(!session.Running);
+  assert(!(fake.Control & APPLE_AGX_ASC_CPU_RUN));
+  assert(AppleAgxRtkitSessionStop(&session, &io, 200u) ==
+         AppleAgxRtkitSessionResultOk);
+}
+
 int main(void) {
+  TestSplitBootDefersMailboxAndRetainsFailedRunOff();
   TestBootAndStopAreExactAndBounded();
   TestProtocolFailureClearsRun();
   TestBootWaitsForCpuReadyBeforeSendingWake();

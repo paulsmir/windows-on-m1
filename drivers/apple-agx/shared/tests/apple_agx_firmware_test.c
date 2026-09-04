@@ -268,7 +268,7 @@ static void test_failure_after_every_start_operation_rolls_back_exactly(void) {
       expected[count++] = TraceStopDoorbellEndpoint;
     if (failure > 4)
       expected[count++] = TraceStopFirmwareEndpoint;
-    if (failure > 3)
+    if (failure >= 3)
       expected[count++] = TraceStopAsc;
     if (failure > 2)
       expected[count++] = TraceDestroyUat;
@@ -307,12 +307,13 @@ static void test_deadline_equality_passes_and_one_tick_late_fails(void) {
   assert(AppleAgxFirmwareStart(&firmware, &late_io) ==
          AppleAgxFirmwareResultTimeout);
   assert(firmware.Phase == AppleAgxFirmwareStopped);
-  assert(late.TraceCount == 5u);
+  assert(late.TraceCount == 6u);
   assert(late.Trace[0] == TracePowerOn);
   assert(late.Trace[1] == TraceCreateUat);
   assert(late.Trace[2] == TraceBootAsc);
-  assert(late.Trace[3] == TraceDestroyUat);
-  assert(late.Trace[4] == TracePowerOff);
+  assert(late.Trace[3] == TraceStopAsc);
+  assert(late.Trace[4] == TraceDestroyUat);
+  assert(late.Trace[5] == TracePowerOff);
 }
 
 static void test_clock_regression_and_deadline_overflow_fail_closed(void) {

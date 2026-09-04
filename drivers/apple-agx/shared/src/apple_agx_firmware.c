@@ -94,7 +94,7 @@ static APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareValidateStart(
   }
   if ((Firmware->Phase != AppleAgxFirmwareOff &&
        Firmware->Phase != AppleAgxFirmwareStopped) ||
-      Firmware->CompletedMask != 0)
+      Firmware->CompletedMask != 0 || Firmware->CleanupMask != 0)
     return AppleAgxFirmwareResultInvalid;
   Firmware->Phase = AppleAgxFirmwareOff;
   Firmware->InitdataAddress = 0;
@@ -107,6 +107,7 @@ void AppleAgxFirmwareInitialize(APPLE_AGX_FIRMWARE *Firmware) {
     return;
   Firmware->Phase = AppleAgxFirmwareOff;
   Firmware->CompletedMask = 0;
+  Firmware->CleanupMask = 0;
   Firmware->InitdataAddress = 0;
   Firmware->LastResult = AppleAgxFirmwareResultOk;
 }
@@ -151,6 +152,8 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStart(
                          J313_AGX_G2_INITDATA_TIMEOUT_MS,
                          AppleAgxFirmwareUatReady,
                          APPLE_AGX_FIRMWARE_UAT_READY);
+  /* Boot may acquire CPU/root ownership before a later primitive fails. */
+  Firmware->CleanupMask |= APPLE_AGX_FIRMWARE_ASC_RUNNING;
   APPLE_AGX_START_SIMPLE(Io->BootAsc, J313_AGX_G2_ASC_BOOT_TIMEOUT_MS,
                          AppleAgxFirmwareAscRunning,
                          APPLE_AGX_FIRMWARE_ASC_RUNNING);
@@ -231,9 +234,10 @@ static APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareCleanupFinish(
     APPLE_AGX_FW_U64 DeadlineMs, APPLE_AGX_FW_BOOL TransportResult) {
   APPLE_AGX_FIRMWARE_RESULT result = AppleAgxFirmwareFinishOperation(
       Io, StartMs, DeadlineMs, TransportResult);
-  if (result == AppleAgxFirmwareResultOk)
+  if (result == AppleAgxFirmwareResultOk) {
     Firmware->CompletedMask &= ~Bit;
-  else
+    Firmware->CleanupMask &= ~Bit;
+  } else
     Firmware->LastResult = AppleAgxFirmwareResultCleanupFailed;
   AppleAgxFirmwareRecord(Firmware, Io);
   return result;
@@ -251,12 +255,13 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareRollback(
       AppleAgxFirmwareFail(Firmware, AppleAgxFirmwareResultInvalid);
     return AppleAgxFirmwareResultInvalid;
   }
-  if ((Firmware->CompletedMask & ~APPLE_AGX_FIRMWARE_ALL_COMPLETED) != 0) {
+  if ((Firmware->CompletedMask & ~APPLE_AGX_FIRMWARE_ALL_COMPLETED) != 0 ||
+      (Firmware->CleanupMask & ~APPLE_AGX_FIRMWARE_ASC_RUNNING) != 0) {
     AppleAgxFirmwareFail(Firmware, AppleAgxFirmwareResultInvalid);
     AppleAgxFirmwareRecord(Firmware, Io);
     return AppleAgxFirmwareResultInvalid;
   }
-  if (Firmware->CompletedMask == 0) {
+  if (Firmware->CompletedMask == 0 && Firmware->CleanupMask == 0) {
     Firmware->Phase = AppleAgxFirmwareStopped;
     Firmware->LastResult = AppleAgxFirmwareResultOk;
     AppleAgxFirmwareRecord(Firmware, Io);
@@ -270,7 +275,7 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareRollback(
 
 #define APPLE_AGX_CLEANUP_SIMPLE(Bit, CallbackExpression)                  \
   do {                                                                     \
-    if ((Firmware->CompletedMask & (Bit)) != 0) {                          \
+    if (((Firmware->CompletedMask | Firmware->CleanupMask) & (Bit)) != 0) { \
       result = AppleAgxFirmwareBeginDeadline(                              \
           Io, J313_AGX_G2_STOP_TIMEOUT_MS, &start_ms, &deadline_ms);       \
       if (result == AppleAgxFirmwareResultOk)                              \
@@ -306,7 +311,8 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareRollback(
 
 #undef APPLE_AGX_CLEANUP_SIMPLE
 
-  if (cleanup_failed || Firmware->CompletedMask != 0) {
+  if (cleanup_failed || Firmware->CompletedMask != 0 ||
+      Firmware->CleanupMask != 0) {
     Firmware->Phase = AppleAgxFirmwareFailed;
     Firmware->LastResult = AppleAgxFirmwareResultCleanupFailed;
     AppleAgxFirmwareRecord(Firmware, Io);
