@@ -31,6 +31,7 @@ typedef struct _ADMISSION_GDI_COLOR_FILL_INPUT {
   unsigned int AllocationCount;
   unsigned int DestinationWritable;
   unsigned int Color;
+  unsigned int DestinationPitch;
   unsigned int Rop;
   unsigned int Rop3;
   unsigned int SubRectCount;

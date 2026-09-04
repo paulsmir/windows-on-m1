@@ -32,6 +32,7 @@ int AdmissionGdiPrepareColorFill(
       Input->AllocationCount == 0u ||
       Input->DestinationAllocationIndex >= Input->AllocationCount ||
       Input->DestinationWritable != 1u ||
+      Input->DestinationPitch == 0u ||
       Input->Rop != (unsigned int)AppleAgxGdiColorFillPatCopy ||
       Input->Rop3 != 0u ||
       (Input->SubRectCount != 0u &&
@@ -54,6 +55,7 @@ int AdmissionGdiPrepareColorFill(
   description.Command.DestinationAllocationIndex =
       Input->DestinationAllocationIndex;
   description.Command.Color = Input->Color;
+  description.Command.DestinationPitch = Input->DestinationPitch;
   description.Command.Rop = Input->Rop;
   description.Command.Rop3 = Input->Rop3;
   description.SubRects = Input->SubRects;

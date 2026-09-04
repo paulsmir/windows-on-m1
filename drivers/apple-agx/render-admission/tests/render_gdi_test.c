@@ -15,6 +15,7 @@ static ADMISSION_GDI_COLOR_FILL_INPUT valid_input(
   input.AllocationCount = 4u;
   input.DestinationWritable = 1u;
   input.Color = 0xff336699u;
+  input.DestinationPitch = 1024u;
   input.Rop = (unsigned int)AppleAgxGdiColorFillPatCopy;
   input.SubRectCount = 2u;
   input.SubRects = sub_rects;
@@ -110,6 +111,7 @@ static void test_only_prerecorded_patch_can_seal_exact_fence(void) {
   input.AllocationCount = 1u;
   input.DestinationWritable = 1u;
   input.Color = 0xff102030u;
+  input.DestinationPitch = 256u;
   input.Rop = (unsigned int)AppleAgxGdiColorFillPatCopy;
   input.SubRectCount = 1u;
   input.SubRects = &sub_rect;
@@ -165,6 +167,7 @@ static void test_prepared_record_is_reconstructed_from_immutable_bytes(void) {
   input.AllocationCount = 2u;
   input.DestinationWritable = 1u;
   input.Color = 0xff010203u;
+  input.DestinationPitch = 128u;
   input.Rop = (unsigned int)AppleAgxGdiColorFillPatCopy;
   input.SubRectCount = 1u;
   input.SubRects = &sub_rect;

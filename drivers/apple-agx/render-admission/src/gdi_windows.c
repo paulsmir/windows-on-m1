@@ -116,6 +116,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
   ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
   const DXGK_RENDERKM_COMMAND *command;
   const RECT *expected_sub_rects;
+  const ADMISSION_OPEN_ALLOCATION *opened;
   APPLE_AGX_U32 command_count = 0u;
   APPLE_AGX_U32 required_bytes = 0u;
   ADMISSION_GDI_COLOR_FILL_INPUT input;
@@ -168,6 +169,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
           : (const RECT *)((const UCHAR *)command + 48u);
   if (command->Command.ColorFill.pSubRects != expected_sub_rects)
     return STATUS_INVALID_USER_BUFFER;
+  opened = (const ADMISSION_OPEN_ALLOCATION *)
+      Args->pAllocationList[
+          command->Command.ColorFill.DstAllocationIndex]
+          .hDeviceSpecificAllocation;
 
   if (!AppleAgxDmaShadowIsVirgin(
           Args->pDmaBufferPrivateData,
@@ -184,6 +189,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
   input.AllocationCount = Args->AllocationListSize;
   input.DestinationWritable = 1u;
   input.Color = command->Command.ColorFill.Color;
+  input.DestinationPitch =
+      opened->Allocation->Description.Pitch;
   input.Rop = (UINT)AppleAgxGdiColorFillPatCopy;
   input.Rop3 = 0u;
   input.SubRectCount = command->Command.ColorFill.NumSubRects;

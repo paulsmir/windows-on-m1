@@ -173,6 +173,29 @@ static void test_canonical_lowering_receipt_binds_complete_stream(void) {
   }
 }
 
+static void test_full_destination_colorfill_needs_no_subrect_pointer(void) {
+  APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
+  APPLE_AGX_GDI_LOWERING_RECEIPT receipt;
+  unsigned char dma[256];
+  APPLE_AGX_U32 written = 0u;
+
+  memset(&description, 0, sizeof(description));
+  description.Command.Opcode = AppleAgxGdiColorFill;
+  description.Command.Destination =
+      (APPLE_AGX_GDI_RECT){0u, 0u, 16u, 16u};
+  description.Command.DestinationGpuAddress = 0x1500010000ULL;
+  description.Command.DestinationPitch = 64u;
+  description.Command.Color = 0xff112233u;
+  description.Command.Rop = AppleAgxGdiColorFillPatCopy;
+  assert(AppleAgxGdiEncodeDmaCommand(
+      &description, dma, sizeof(dma), &written));
+  assert(written == sizeof(APPLE_AGX_GDI_DMA_COMMAND));
+  assert(AppleAgxGdiBuildLoweringReceipt(dma, written, &receipt));
+  assert(receipt.CommandCount == 1u);
+  assert(receipt.RequiredPrimitiveMask ==
+         APPLE_AGX_GDI_PRIMITIVE_DESTINATION_WRITE);
+}
+
 static void assert_lowering_rejected_without_receipt_mutation(
     const unsigned char *dma, APPLE_AGX_U32 bytes) {
   APPLE_AGX_GDI_LOWERING_RECEIPT receipt;
@@ -494,6 +517,7 @@ int main(void) {
   test_minimum_wddm_profile_is_exact_and_coherent();
   test_canonical_lowering_receipts_cover_exact_six_operations();
   test_canonical_lowering_receipt_binds_complete_stream();
+  test_full_destination_colorfill_needs_no_subrect_pointer();
   test_canonical_lowering_rejects_unsupported_or_malformed_atomically();
   return 0;
 }

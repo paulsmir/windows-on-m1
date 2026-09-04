@@ -427,7 +427,7 @@ APPLE_AGX_BOOL AppleAgxGdiBuildLoweringReceipt(
                          (APPLE_AGX_U32)sizeof(command));
     if (command.Magic != APPLE_AGX_GDI_DMA_MAGIC ||
         command.Version != APPLE_AGX_GDI_DMA_VERSION ||
-        command.Reserved != 0u || command.SubRectCount == 0u ||
+        command.Reserved != 0u ||
         command.Opcode >= 32u ||
         !AppleAgxGdiDmaRecordBytes(command.SubRectCount, &expected_bytes) ||
         command.RecordBytes != expected_bytes ||
