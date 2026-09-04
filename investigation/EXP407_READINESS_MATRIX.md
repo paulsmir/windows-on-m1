@@ -1,9 +1,10 @@
 # EXP407 live readiness matrix
 
-Updated: 2026-09-04T12:04:00+02:00
+Updated: 2026-09-04T12:53:00+02:00
 
-This matrix is evaluated against root HEAD
-`1d8e6d86339764b4f0f4dd97e5673656c7f5ada7`. `READY=yes` means an
+This matrix is evaluated after memory source commits
+`32cd23e5244427148adf69525d4d32381778ca77` and
+`1e76707aa9fe34d1e4e69de478b991574a06a386`. `READY=yes` means an
 operational contract exists; callback registration, a success return, a data
 structure, or a source-presence test alone is insufficient.
 
@@ -13,7 +14,7 @@ structure, or a source-presence test alone is insufficient.
 | --- | --- | --- | --- | --- |
 | `WDDM3_IDENTITY` | Exact 1296-byte WDDM 3.0 initialization vector and pre-Start WDDMDEVICECAPS 3.0 response | EXP406: `DxgkInitialize=SUCCESS`, Add/Start reached, Type1/592 called successfully | Pinned WDK 10.0.28000.2526 | yes |
 | `ONE_NODE_TOPOLOGY` | Type1 names one asymmetric node and GetNodeMetadata describes ordinal 0 as 3D | Source and offline tests only; no admitted scheduler-visible AGX engine exists | Scheduler, context, completion | no |
-| `MEMORY_PAGING` | Not linked into `render-admission`; CreateAllocation, QuerySegment4 and BuildPagingBuffer remain fail-closed | Portable accumulated memory tests pass, but EXP393/396 never reached StartDevice or any memory callback | Segment 1, Segment 2, physical/context paging, checked UAT translation | no |
+| `MEMORY_PAGING` | Segment1/Segment2, PFN aperture, local address translation, paging plans, gated QuerySegment4 and allocation callbacks are production-linked; BuildPagingBuffer and the physical-memory owner remain incomplete | Commits `32cd23e` and `1e76707`; 220-test gate and two pinned-WDK zero-warning builds pass; EXP393/396 never reached any memory callback | DXGK physical-memory object/ADL/map, HVC translation, context-63 UAT publication, paging execution | no |
 | `DEVICE_CONTEXT` | Typed nonpaged adapter/device/context ownership, bounded counts, node 0/affinity 1 and busy destruction | Commit `7b0c771`; RED/GREEN object tests; pinned-WDK KMD/UMD build with zero warnings/errors | Allocation references and scheduler attachment remain later layers | yes |
 | `SCHEDULER` | SubmitCommand and scheduler callbacks remain fail-closed | No `render-admission` scheduler implementation | Memory, context, backend queue | no |
 | `DMA_BOUNDARY_PREEMPTION` | PreemptCommand remains fail-closed; no progress/fence accounting | None in `render-admission` | Scheduler, monotonic completion, replay | no |
@@ -93,5 +94,8 @@ approved Segment1/Segment2 model.
 - No experiment has executed `render-admission` QuerySegment4,
   CreateAllocation, BuildPagingBuffer, UAT publication or context paging.
 
-FIRST UNKNOWN: deterministic `render-admission` two-segment allocation and
-physical/context paging contract, before any Windows-to-AGX hardware mapping.
+FIRST UNKNOWN: current DXGK physical-memory object/ADL/map to HVC `0x4d31`
+translation owner, followed by context-63 16-KiB UAT publication and
+BuildPagingBuffer execution. The m1n1 HVC handler is committed and its host
+test passes, but no safe standalone current hardware harness exists yet; do not
+install an incomplete Full Graphics driver merely to exercise it.
