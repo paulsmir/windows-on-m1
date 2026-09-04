@@ -76,6 +76,24 @@ typedef enum _ADMISSION_START_STAGE {
   AdmissionStartComplete = 12,
 } ADMISSION_START_STAGE;
 
+typedef enum _ADMISSION_PLATFORM_STAGE {
+  AdmissionPlatformNone = 0,
+  AdmissionPlatformEntered = 1,
+  AdmissionPlatformResources = 2,
+  AdmissionPlatformRuntimeAllocated = 3,
+  AdmissionPlatformMemoryIo = 4,
+  AdmissionPlatformSnapshot = 5,
+  AdmissionPlatformSgxMap = 6,
+  AdmissionPlatformHandoffMap = 7,
+  AdmissionPlatformHandoffBind = 8,
+  AdmissionPlatformInitdata = 9,
+  AdmissionPlatformFirmwareProvider = 10,
+  AdmissionPlatformQueueProvider = 11,
+  AdmissionPlatformBackendStart = 12,
+  AdmissionPlatformWorkItem = 13,
+  AdmissionPlatformComplete = 14,
+} ADMISSION_PLATFORM_STAGE;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -245,6 +263,9 @@ void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordStartStage(_In_ ADMISSION_CONTEXT *Context,
                                _In_ ADMISSION_START_STAGE Stage,
                                _In_ NTSTATUS Status);
+void AdmissionRecordPlatformStage(_In_ ADMISSION_CONTEXT *Context,
+                                  _In_ ADMISSION_PLATFORM_STAGE Stage,
+                                  _In_ NTSTATUS Status);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);

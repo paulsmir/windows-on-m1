@@ -1292,25 +1292,41 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   PHYSICAL_ADDRESS address;
   NTSTATUS status;
 
-  if (Context == NULL || Context->PlatformRuntime != NULL ||
-      !Context->InterfaceValid || KeGetCurrentIrql() != PASSIVE_LEVEL ||
-      Context->BackendImage.Ready != APPLE_AGX_TRUE ||
-      !AdmissionMemoryRuntimeContextPublished(Context))
+  if (Context == NULL)
     return STATUS_INVALID_DEVICE_STATE;
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformEntered,
+                               STATUS_PENDING);
+  if (Context->PlatformRuntime != NULL || !Context->InterfaceValid ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      Context->BackendImage.Ready != APPLE_AGX_TRUE ||
+      !AdmissionMemoryRuntimeContextPublished(Context)) {
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformEntered,
+                                 STATUS_INVALID_DEVICE_STATE);
+    return STATUS_INVALID_DEVICE_STATE;
+  }
   status = AdmissionPlatformValidateResources(Context);
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformResources, status);
   if (!NT_SUCCESS(status))
     return status;
   runtime = ExAllocatePool2(
       POOL_FLAG_NON_PAGED, sizeof(*runtime), ADMISSION_PLATFORM_TAG);
-  if (runtime == NULL)
+  if (runtime == NULL) {
+    AdmissionRecordPlatformStage(
+        Context, AdmissionPlatformRuntimeAllocated,
+        STATUS_INSUFFICIENT_RESOURCES);
     return STATUS_INSUFFICIENT_RESOURCES;
+  }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformRuntimeAllocated,
+                               STATUS_SUCCESS);
   RtlZeroMemory(runtime, sizeof(*runtime));
   runtime->Adapter = Context;
   Context->PlatformRuntime = runtime;
   status = AdmissionMemoryRuntimeBorrowIo(Context, &runtime->MemoryIo);
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformMemoryIo, status);
   if (!NT_SUCCESS(status))
     goto Fail;
   status = AdmissionPlatformReadSnapshot(Context, &runtime->Snapshot);
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformSnapshot, status);
   if (!NT_SUCCESS(status))
     goto Fail;
 
@@ -1320,8 +1336,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       FALSE, FALSE, MmNonCached, (PVOID *)&runtime->SgxBase);
   if (!NT_SUCCESS(status) || runtime->SgxBase == NULL) {
     status = NT_SUCCESS(status) ? STATUS_NONE_MAPPED : status;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformSgxMap, status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformSgxMap,
+                               STATUS_SUCCESS);
   runtime->AscTransport.Base =
       runtime->SgxBase +
       (J313_AGX_G2_ASC_MMIO_BASE - J313_AGX_G2_SGX_MMIO_BASE);
@@ -1341,8 +1360,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
       FALSE, FALSE, MmNonCached, (PVOID *)&runtime->HandoffBase);
   if (!NT_SUCCESS(status) || runtime->HandoffBase == NULL) {
     status = NT_SUCCESS(status) ? STATUS_NONE_MAPPED : status;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformHandoffMap, status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformHandoffMap,
+                               STATUS_SUCCESS);
   runtime->HandoffIo.Context = runtime;
   runtime->HandoffIo.Read8 = AdmissionHandoffRead8;
   runtime->HandoffIo.Read32 = AdmissionHandoffRead32;
@@ -1359,14 +1381,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
           &runtime->Handoff, &handoff_region,
           &runtime->HandoffIo) != AppleAgxGfxHandoffResultOk) {
     status = STATUS_DEVICE_PROTOCOL_ERROR;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformHandoffBind, status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformHandoffBind,
+                               STATUS_SUCCESS);
   if (AppleAgxInitdataMemoryBuild(
           &runtime->Initdata, &runtime->MemoryIo,
           &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
     status = STATUS_INSUFFICIENT_RESOURCES;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata, status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata,
+                               STATUS_SUCCESS);
 
   runtime->PublicationMapping.Interface = &Context->Interface;
   runtime->PublicationIo.Context = &runtime->PublicationMapping;
@@ -1418,8 +1446,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
           &runtime->Handoff, &runtime->FirmwareIo) !=
       AppleAgxFirmwareProviderResultOk) {
     status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    AdmissionRecordPlatformStage(
+        Context, AdmissionPlatformFirmwareProvider, status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformFirmwareProvider,
+                               STATUS_SUCCESS);
 
   AppleAgxBackendRuntimeInitialize(
       &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
@@ -1448,8 +1480,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
           &runtime->Provider, &runtime->ProviderConfig,
           &runtime->PlatformIo)) {
     status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformQueueProvider,
+                                 status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformQueueProvider,
+                               STATUS_SUCCESS);
   runtime->ProviderReady = TRUE;
 
   RtlZeroMemory(&runtime->RuntimeIo, sizeof(runtime->RuntimeIo));
@@ -1482,14 +1518,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
           &runtime->Backend, &runtime->RuntimeIo) !=
       AppleAgxBackendRuntimeResultOk) {
     status = STATUS_DEVICE_HARDWARE_ERROR;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformBackendStart,
+                                 status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformBackendStart,
+                               STATUS_SUCCESS);
   runtime->BackendStarted = TRUE;
   runtime->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   if (runtime->WorkItem == NULL) {
     status = STATUS_INSUFFICIENT_RESOURCES;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformWorkItem, status);
     goto Fail;
   }
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformWorkItem,
+                               STATUS_SUCCESS);
+  AdmissionRecordPlatformStage(Context, AdmissionPlatformComplete,
+                               STATUS_SUCCESS);
   return STATUS_SUCCESS;
 
 Fail:
