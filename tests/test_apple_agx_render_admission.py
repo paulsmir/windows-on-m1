@@ -264,6 +264,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("MessageNumber != 0", interrupt)
         self.assertIn("DXGK_INTERRUPT_CRTC_VSYNC", interrupt)
         self.assertIn("STATUS_NOT_SUPPORTED", interrupt)
+        self.assertIn(
+            "AdmissionDdiInterruptRoutine(\n    CONST_PVOID MiniportDeviceContext",
+            interrupt,
+        )
+        self.assertIn(
+            "AdmissionDdiDpcRoutine(\n    CONST_PVOID MiniportDeviceContext",
+            interrupt,
+        )
 
         isr_start = interrupt.index("AdmissionDdiInterruptRoutine(")
         dpc_start = interrupt.index("AdmissionDdiDpcRoutine(")
