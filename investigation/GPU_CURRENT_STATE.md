@@ -1,15 +1,15 @@
 # GPU current state
 
-Updated: 2026-09-04T17:05:00+02:00
+Updated: 2026-09-04T17:31:34+02:00
 
 ## CURRENT PLATFORM
 
 - Live J313 is back on the normal current G2 pair: accepted EXP377 m1n1
   `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
   plus Mu `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
-- EXP425 is currently between boots: exact qualification package is staged as
-  `oem5.inf` without bind, controlled shutdown completed, Windows/launcher/
-  uartproxy are absent, and physical power-on to Running proxy is required.
+- EXP425 is complete and the machine is currently physically off after exact
+  cleanup. Normal-G2 restoration requires the next power-on; no AppleAgx
+  package/service/module remained before shutdown.
 - Current-compatible emergency non-AGX Mu remains
   `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
 
@@ -51,10 +51,24 @@ INTERPRETATION:
   MEMORY_PAGING_HW_PROVEN=YES. BuildPagingBuffer encode/worker/DMA completion
   remain implementation-proven; they were not separately exercised by the
   qualification branch.
+- EXP425 extends that hardware proof to one exact 64-MiB object: 263 HVC
+  calls, 16448 translated pages, five UAT pages, one context-63 mapping at
+  0x1500000000, exact first/last leaf readback and clean teardown. The lower
+  56 MiB is now the proven Windows/scanout range and the upper 8 MiB remains
+  the EXP208 tail.
 
 ## FIRST UNKNOWN / FAILED BOUNDARY
 
-Memory hardware qualification is closed by EXP412. Commits `4d539ea`,
+Memory hardware qualification is closed by EXP412/EXP425. The current first
+unknown is the narrow real UMD adapter/device/resource compatibility path:
+`UMD_DIRECT_FLIP` and its dependent `INDEPENDENT_FLIP` are the last two
+functional readiness bits. Commit `230a99a` now links the EXP425-proven lower
+56 MiB to the existing ABI-v2 fixed-panel broker, exact primary validation,
+nonblocking SetVidPnSourceAddress, matching D589/CRTC_VSYNC/DPC and synchronous
+POST restore/release. This is implementation evidence only; the integrated KMD
+scanout path is not hardware-proven and Type1 remains completely zero.
+
+Commits `4d539ea`,
 `421a1ac` and `ec214ae` provide the offline-green one-node substrate:
 one monotonic queued/active/completed interval, exact active-fence completion,
 queued-work removal at DMA-buffer-boundary preemption, dispatch blocking until
@@ -174,8 +188,15 @@ observations. EXP423 WDK builds are green, but no hardware run has occurred.
 - `PER_ENGINE_TDR` is IMPLEMENTED/HW_PROVEN=NO in `660c187`; functional
   readiness is 9/14. EXP425 then expands the one local mapping to 64 MiB so
   Segment 2 can expose the exact 56-MiB scanout pool plus 8-MiB backend tail.
-  That new range is not hardware-proven yet; EXP425 is preregistered and
-  staged under the synthetic-889 MemoryQualification route.
+  EXP425 has now hardware-proven that exact range and cleanup. The next source
+  boundary is Windows ownership of the existing Scanout ABI v2 pool and
+  nonblocking SetVidPnSourceAddress-to-latched-VSync completion.
+- `D589_SCANOUT`, `KMD_DIRECT_FLIP`, and `NON_VGA_STOP` are
+  IMPLEMENTED/HW_PROVEN=NO in `230a99a`. EXP426 passed 71 relevant tests and
+  both pinned-WDK build/package profiles with no new analysis diagnostic; no
+  package was staged. Functional readiness is now 12/14. The first unknown is
+  the real render-admission UMD resource/DirectFlip callback contract; after it
+  exists, `INDEPENDENT_FLIP` can share the same exact KMD latch path.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.

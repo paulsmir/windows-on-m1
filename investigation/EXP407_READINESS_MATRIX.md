@@ -1,6 +1,6 @@
 # EXP407 live readiness matrix
 
-Updated: 2026-09-04T17:05:00+02:00
+Updated: 2026-09-04T17:31:34+02:00
 
 This matrix is evaluated after memory source commits
 `8cd1449550b253862a3b770b9782b7b7fb2f776e`,
@@ -28,20 +28,20 @@ Readiness has two independent axes:
 | --- | --- | --- | --- | --- |
 | `WDDM3_IDENTITY` | Exact 1296-byte WDDM 3.0 initialization vector and pre-Start WDDMDEVICECAPS 3.0 response | EXP406: `DxgkInitialize=SUCCESS`, Add/Start reached, Type1/592 called successfully | Pinned WDK 10.0.28000.2526 | yes |
 | `ONE_NODE_TOPOLOGY` | Type1 names one asymmetric node; GetNodeMetadata describes ordinal 0 as 3D; adapter/context scheduler lifetime owns exactly node 0 and engine 0 | Commit `3df8e82`; focused scheduler tests and pinned-WDK build | Render submission/progress remains the next SCHEDULER dependency | yes |
-| `MEMORY_PAGING` | Complete production chain: Segment1/2, allocation backing/lifetime, exact contiguous DXGK object/ADL/map, bounded HVC 0x4d31, 40-bit host pages, context-63 16-KiB UAT publication, BuildPagingBuffer encode/execute, bounded paging worker, synchronized DMA completion/fault and reverse cleanup | Commits `8cd1449`, `3380434`, `39f64c6`, `4779f02`; EXP412 stage-10 HVC/PA/UAT/TTBR/readback/cleanup PASS; pinned-WDK build zero warnings/errors | `IMPLEMENTED=yes`; `HW_PROVEN=yes`; BuildPagingBuffer/DMA completion still need Windows-driven exercise | yes |
+| `MEMORY_PAGING` | Complete production chain: Segment1/2, allocation backing/lifetime, exact contiguous DXGK object/ADL/map, bounded HVC 0x4d31, 40-bit host pages, context-63 16-KiB UAT publication, BuildPagingBuffer encode/execute, bounded paging worker, synchronized DMA completion/fault and reverse cleanup; local geometry is exact 56-MiB scanout plus 8-MiB backend | Commits `8cd1449`, `3380434`, `39f64c6`, `4779f02`, and `8974048`; EXP412 16-MiB PASS and EXP425 64-MiB stage-10 PASS; pinned-WDK builds zero warnings/errors | `IMPLEMENTED=yes`; `HW_PROVEN=yes` for exact 64-MiB object; BuildPagingBuffer/DMA completion still need Windows-driven exercise | yes |
 | `DEVICE_CONTEXT` | Typed nonpaged adapter/device/context ownership, bounded counts, node 0/affinity 1 and busy destruction | Commit `7b0c771`; RED/GREEN object tests; pinned-WDK KMD/UMD build with zero warnings/errors | Allocation references and scheduler attachment remain later layers | yes |
 | `SCHEDULER` | One-node lifetime and context attachment share one monotonic queued/active/completed fence interval; the production passive worker activates the exact packet and only the provider completion transaction advances it | Commits `3df8e82`, `4d539ea`, and `3a4b55e`; 39-test gate and EXP423 WDK build | `IMPLEMENTED=yes`; `HW_PROVEN=no` | yes |
 | `DMA_BOUNDARY_PREEMPTION` | Exact scheduler snapshot cancels queued unpublished work, blocks dispatch, waits for the active provider boundary and permits one DMA_PREEMPTED claim/commit after the same completion path | Commits `421a1ac` and `3a4b55e`; deterministic tests and EXP423 WDK build | `IMPLEMENTED=yes`; `HW_PROVEN=no`; hardware boundary evidence remains absent | yes |
 | `PER_ENGINE_TDR` | QueryEngineStatus uses provider progress age; PASSIVE ResetEngine drains the worker, quiesces and retires the exact active fence without DMA completion, reports LastAbortedFenceId and recreates provider/backend before success | Commits `3df8e82`, `ec214ae`, and `660c187`; focused tests and EXP424 WDK build | `IMPLEMENTED=yes`; `HW_PROVEN=no` | yes |
 | `GDI_COMMAND_BUFFER` | One exact ColorFill/PATCOPY is normalized into a pointer-free record; Patch resolves one Segment-2 CPU/host-PA/GPU-VA tuple and seals the exact fence; SubmitCommand binds object 40, queues and schedules the exact provider job | Commits `2ee3398`, `7912547`, `b6ee1a6`, `eead97f`, and `3a4b55e`; EXP415/416/419/421/423 WDK builds | `IMPLEMENTED=yes`; `HW_PROVEN=no` | yes |
-| `D589_SCANOUT` | m1n1 retained-owner A407/A408/D589 path exists; `render-admission` does not register a pool or submit a primary | EXP270 proves retained owner, Scanout ABI v2 and exact D589 through Windows login; EXP406 candidate ran ABI v1 and no Windows present | Current full-owner build, KMD primary mapping, synthetic 889 ISR/DPC | no |
-| `KMD_DIRECT_FLIP` | SetVidPnSourceAddress is DIRQL-safe but deliberately returns NOT_SUPPORTED | In-memory receipt path only | Admitted primary allocation, nonblocking broker enqueue, exact D589 | no |
+| `D589_SCANOUT` | `render-admission` registers only the EXP425-proven 56-MiB pool after POST ownership and requires current m1n1 ABI v2 plus repeated-present latched-receipt and latched-IRQ caps; exact primary offsets enter the existing A407/A408/D589 path | Commit `230a99a`; shared sanitizer suites; EXP426 pinned-WDK build; EXP270 separately proved the retained-owner D589 source | `IMPLEMENTED=yes`; integrated KMD hardware path `HW_PROVEN=no`; current-source full-owner artifact still required | yes |
+| `KMD_DIRECT_FLIP` | Present validates only one NULL-DMA full-screen A8R8G8B8 primary; SetVidPnSourceAddress validates the same allocation and Segment-2 range then performs bounded nonblocking MMIO enqueue; matching latch ISR reports exact CRTC_VSYNC and DPC | Commit `230a99a`; verified RED/GREEN wiring/IRQL tests and EXP426 pinned-WDK build | `IMPLEMENTED=yes`; `HW_PROVEN=no`; Type1 remains zero until UMD/independent flip complete | yes |
 | `UMD_DIRECT_FLIP` | UMD exports `OpenAdapter10_2` and returns `E_NOTIMPL` | Package/build evidence only | Real UMD adapter/device/resource compatibility path | no |
 | `INDEPENDENT_FLIP` | Not advertised or implemented | None | KMD and UMD DirectFlip plus real VSync completion | no |
-| `NON_VGA_STOP` | Stop/release returns saved POST info and stops the adapter, but does not establish black fallback or latched handoff | Source-only partial implementation | Registered scanout pool, bounded quiesce, black fallback, accurate final POST | no |
+| `NON_VGA_STOP` | Stop closes new presents and synchronously RELEASEs the broker; current m1n1 re-presents and latches the saved firmware POST surface before unmapping the Windows pool, after which KMD returns the exact saved POST information | Commit `230a99a`; current m1n1 `display_scanout_quiesce_*` plus broker release tests; EXP426 pinned-WDK build | `IMPLEMENTED=yes`; integrated stop `HW_PROVEN=no` | yes |
 | `AGX_COMPLETION` | Production borrows the upper tail and context 63, materializes/rebases/binds EXP208, uses the existing G13 provider for D3 then TA publication, polls the event ring and requires both matching event/stamp/done-pointer observations before exact DMA_COMPLETED and DPC | Commits `68172a3`, `45969de`, `abe363f`, `eead97f`, `4285cef`, `f9ad365`, `35f5a68`, `c932a36`, and `3a4b55e`; EXP423 39-test and WDK gates | `IMPLEMENTED=yes`; `HW_PROVEN=no`; no physical AGX IRQ is used | yes |
 
-Current functional implementation result: `9/14 READY`; this is not a count of
+Current functional implementation result: `12/14 READY`; this is not a count of
 hardware-proven layers. The atomic readiness evaluator therefore must
 publish zero mandatory Type1 caps. Commit `52d3bf6` now enforces that rule in
 the real QueryAdapterInfo path; the final capability writer remains absent and
@@ -114,8 +114,9 @@ approved Segment1/Segment2 model.
   QuerySegment4, CreateAllocation, BuildPagingBuffer/DMA completion or a
   non-paging render submission.
 
-FIRST UNKNOWN: EXP425 must prove or reject the expanded 64-MiB physical/HVC/UAT
-object required by the fixed 56-MiB scanout pool. Then implement the remaining
-scanout/DirectFlip/UMD/non-VGA group. Render/TDR bits remain hardware-unproven
-until actual queue publication plus dual TA/3D event/stamp retirement advances
-the exact active Windows fence.
+FIRST UNKNOWN: implement the narrow real UMD adapter/device/resource
+compatibility path so `CheckDirectFlipSupport` accepts only the exact KMD
+primary vector. `UMD_DIRECT_FLIP` and dependent `INDEPENDENT_FLIP` are the last
+two functional bits. KMD scanout/D589/VSync/POST release and render/TDR remain
+hardware-unproven until the integrated candidate runs; Type1 therefore still
+publishes zero mandatory capabilities.
