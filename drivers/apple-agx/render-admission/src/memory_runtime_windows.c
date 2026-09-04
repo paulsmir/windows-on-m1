@@ -475,6 +475,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeResolveLocal(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeBorrowIo(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_MEMORY_IO *Io) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  if (Io == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(Io, sizeof(*Io));
+  if (runtime == NULL || runtime->MemoryIo.Context != runtime ||
+      runtime->MemoryIo.AllocateContiguous == NULL ||
+      runtime->MemoryIo.FreeContiguous == NULL)
+    return STATUS_INVALID_DEVICE_STATE;
+  *Io = runtime->MemoryIo;
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionMemoryRuntimeContextPublished(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  return runtime != NULL && runtime->PublicationReady &&
+                 runtime->Published.Active != 0u &&
+                 runtime->Published.Context == ADMISSION_MEMORY_UAT_CONTEXT &&
+                 runtime->Published.PublishedTtbr0 != 0ULL &&
+                 runtime->Published.PublishedTtbr1 != 0ULL
+             ? TRUE
+             : FALSE;
+}
+
 static ULONGLONG AdmissionMemoryReadU64(
     _In_reads_(8) volatile const unsigned char *Address) {
   ULONGLONG value = 0ULL;

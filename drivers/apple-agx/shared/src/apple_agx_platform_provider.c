@@ -360,6 +360,9 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformRenderRelocate(
                ? APPLE_AGX_BACKEND_TRUE
                : APPLE_AGX_BACKEND_FALSE;
   }
+#if defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
+  return APPLE_AGX_BACKEND_FALSE;
+#else
   return AppleAgxSubmissionCoordinatorStage(
              &provider->SubmissionCoordinator, Submission,
              SubmissionBytes, SubmissionByteCount) &&
@@ -369,6 +372,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformRenderRelocate(
                      Job)
              ? APPLE_AGX_BACKEND_TRUE
              : APPLE_AGX_BACKEND_FALSE;
+#endif
 }
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformRenderPublish(void *Context) {
@@ -403,8 +407,12 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueuesDestroy(void *Context) {
     return APPLE_AGX_BACKEND_FALSE;
   if (provider->ExternalRenderReady)
     return APPLE_AGX_BACKEND_TRUE;
+#if defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
+  return APPLE_AGX_BACKEND_FALSE;
+#else
   return AppleAgxSubmissionCoordinatorReset(
       &provider->SubmissionCoordinator);
+#endif
 }
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueuesRun3d(
@@ -436,10 +444,15 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueueFence(
       !Operation(Provider->QueueBackendIo.Context, Fence))
     return APPLE_AGX_BACKEND_FALSE;
   if (!Provider->QueueProvider.Runtime.BufferManagerInitialized)
+#if defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
+    return Provider->ExternalRenderReady ? APPLE_AGX_BACKEND_TRUE
+                                         : APPLE_AGX_BACKEND_FALSE;
+#else
     return Provider->ExternalRenderReady
                ? APPLE_AGX_BACKEND_TRUE
                : AppleAgxSubmissionCoordinatorReset(
                      &Provider->SubmissionCoordinator);
+#endif
   return APPLE_AGX_BACKEND_TRUE;
 }
 
@@ -483,7 +496,9 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   APPLE_AGX_BACKEND_IO queue_backend_io;
   APPLE_AGX_BACKEND_IO render_backend_io;
   APPLE_AGX_PLATFORM_COMPOSER_CONFIG composer_config;
+#if !defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
   APPLE_AGX_SUBMISSION_COORDINATOR_CONFIG coordinator_config;
+#endif
   APPLE_AGX_G13_QUEUE_PROVIDER_IO provider_io;
   APPLE_AGX_BACKEND_BOOL external_render;
   APPLE_AGX_BACKEND_BOOL legacy_render;
@@ -492,6 +507,9 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
                         ? AppleAgxPlatformExternalRenderValid(
                               &Config->ExternalRender)
                         : APPLE_AGX_BACKEND_FALSE;
+#if defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
+  legacy_render = APPLE_AGX_BACKEND_FALSE;
+#else
   legacy_render = Config != PLATFORM_NULL &&
                           Config->RenderProvider != PLATFORM_NULL &&
                           Config->RenderProvider->Initdata != PLATFORM_NULL &&
@@ -503,6 +521,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
                                    ->RenderSharedMemory
                       ? APPLE_AGX_BACKEND_TRUE
                       : APPLE_AGX_BACKEND_FALSE;
+#endif
 
   if (Provider == PLATFORM_NULL || Config == PLATFORM_NULL ||
       Io == PLATFORM_NULL || Provider->Initialized ||
@@ -511,7 +530,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
       Config->ChannelMemory == PLATFORM_NULL ||
       Config->RenderSharedMemory == PLATFORM_NULL ||
       Config->Runtime == PLATFORM_NULL ||
-      Config->Render->Image.Relocate == PLATFORM_NULL ||
+      (!external_render &&
+       Config->Render->Image.Relocate == PLATFORM_NULL) ||
       Config->Render->RenderContext.Publish == PLATFORM_NULL ||
       Config->Render->RenderContext.Unpublish == PLATFORM_NULL ||
       !AppleAgxPlatformTransportValid(&Config->Transport) ||
@@ -568,6 +588,10 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   }
 
   if (!external_render) {
+#if defined(APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY)
+    AppleAgxPlatformProviderReset(Provider, APPLE_AGX_BACKEND_TRUE);
+    return APPLE_AGX_BACKEND_FALSE;
+#else
     AppleAgxPlatformZero(&coordinator_config,
                          (APPLE_AGX_BACKEND_U32)sizeof(coordinator_config));
     coordinator_config.RenderProvider = Config->RenderProvider;
@@ -578,6 +602,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
       AppleAgxPlatformProviderReset(Provider, APPLE_AGX_BACKEND_TRUE);
       return APPLE_AGX_BACKEND_FALSE;
     }
+#endif
   }
 
   AppleAgxPlatformZero(&queue_backend_io,

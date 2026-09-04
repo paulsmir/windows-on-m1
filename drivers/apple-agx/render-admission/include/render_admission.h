@@ -23,6 +23,12 @@
 #include "render_backend_image.h"
 #include "apple_agx_wddm_feature_contract.h"
 #include "apple_agx_scheduler.h"
+#include "apple_agx_platform_provider.h"
+#include "apple_agx_firmware_provider.h"
+#include "apple_agx_device_control.h"
+#include "apple_agx_initdata_memory.h"
+#include "apple_agx_power.h"
+#include "apple_agx_rtkit_session.h"
 #include "j313_agx_abi_admission.generated.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
@@ -57,6 +63,7 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
   PVOID MemoryRuntime;
+  PVOID PlatformRuntime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
   PDEVICE_OBJECT PhysicalDeviceObject;
   DXGK_START_INFO StartInfo;
@@ -251,6 +258,11 @@ NTSTATUS AdmissionMemoryRuntimeResolveLocal(
     _In_ ULONGLONG AllocationSize,
     _In_ ULONGLONG AllocationOffset,
     _Out_ ADMISSION_LOCAL_MEMORY_VIEW *View);
+NTSTATUS AdmissionMemoryRuntimeBorrowIo(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ APPLE_AGX_MEMORY_IO *Io);
+BOOLEAN AdmissionMemoryRuntimeContextPublished(
+    _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);
@@ -270,6 +282,14 @@ NTSTATUS AdmissionDdiSubmitRender(
 NTSTATUS AdmissionBackendImageStart(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionBackendImageStop(
+    _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionPlatformRuntimeStart(
+    _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionPlatformRuntimeStop(
+    _Inout_ ADMISSION_CONTEXT *Context);
+BOOLEAN AdmissionPlatformRuntimeReady(
+    _Inout_ ADMISSION_CONTEXT *Context);
+BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;

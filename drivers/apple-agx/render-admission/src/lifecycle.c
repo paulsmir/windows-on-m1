@@ -127,8 +127,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
+  status = AdmissionPlatformRuntimeStart(context);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
 
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
+    (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
     (void)AdmissionBackendImageStop(context);
@@ -143,6 +153,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartPostDisplay, status);
   if (!NT_SUCCESS(status)) {
+    (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
     (void)AdmissionBackendImageStop(context);
@@ -154,6 +165,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->PostDisplayInformation.Width != 2560 ||
       context->PostDisplayInformation.Height != 1600 ||
       context->PostDisplayInformation.Pitch != 10240) {
+    (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
     (void)AdmissionBackendImageStop(context);
@@ -165,6 +177,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   context->Started = TRUE;
   if (!AdmissionObjectsStartAdapter(&context->ObjectAdapter)) {
     context->Started = FALSE;
+    (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
     (void)AdmissionBackendImageStop(context);
@@ -195,6 +208,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   if (context->ObjectAdapter.DeviceCount != 0u)
     return STATUS_DEVICE_BUSY;
   status = AdmissionPagingStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionPlatformRuntimeStop(context);
   if (!NT_SUCCESS(status))
     return status;
   status = AdmissionSchedulerStop(context);
@@ -230,6 +246,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
     return STATUS_INVALID_PARAMETER;
   if (context->PagingWorkItem != NULL &&
       !NT_SUCCESS(AdmissionPagingStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (context->PlatformRuntime != NULL &&
+      !NT_SUCCESS(AdmissionPlatformRuntimeStop(context)))
     return STATUS_DEVICE_BUSY;
   if (InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) != 0 &&
       !NT_SUCCESS(AdmissionSchedulerStop(context)))

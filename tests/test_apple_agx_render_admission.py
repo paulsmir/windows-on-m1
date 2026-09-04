@@ -317,7 +317,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("D3D10DDIARG_OPENADAPTER", source)
         self.assertIn("return E_NOTIMPL", source)
 
-    def test_project_links_only_admission_and_pure_contract_sources(self):
+    def test_project_links_only_admission_and_selected_provider_sources(self):
         project = self.read("AppleAgxRenderAdmission.vcxproj")
 
         for source in (
@@ -328,10 +328,14 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn(
             r'..\shared\src\apple_agx_wddm_feature_contract.c', project
         )
+        for provider in (
+            "apple_agx_backend_runtime.c",
+            "apple_agx_g13_queue_provider.c",
+            "apple_agx_platform_provider.c",
+        ):
+            self.assertIn(provider, project)
         for forbidden in (
-            "m1n1", "mmio", "power", "rtkit",
-            "firmware", "render_job",
-            r"..\shared\src\apple_agx_submission.c",
+            "m1n1", "render_job", r"..\windows\src",
         ):
             self.assertNotIn(forbidden.lower(), project.lower())
 

@@ -22,7 +22,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
@@ -64,6 +64,7 @@
     <ClCompile Include="src\submission_windows.c" />
     <ClCompile Include="src\render_backend_image.c" />
     <ClCompile Include="src\backend_image_windows.c" />
+    <ClCompile Include="src\backend_platform_windows.c" />
     <ClCompile Include="src\scheduler_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
@@ -87,6 +88,33 @@
     <ClCompile Include="..\shared\src\apple_agx_render_template.generated.c" />
     <ClCompile Include="..\shared\src\apple_agx_render_template_rebase.c" />
     <ClCompile Include="..\shared\src\apple_agx_relocation.c" />
+    <ClCompile Include="..\shared\src\apple_agx_backend_runtime.c" />
+    <ClCompile Include="..\shared\src\apple_agx_submission.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware_provider.c" />
+    <ClCompile Include="..\shared\src\apple_agx_asc_transport.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_boot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_session.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gfx_handoff.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware_status.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_info.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionb.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionb_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_render_shared_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionc.c" />
+    <ClCompile Include="..\shared\src\apple_agx_device_control.c" />
+    <ClCompile Include="..\shared\src\apple_agx_event_allocator.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_codec.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_queue_runtime.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_queue_provider.c" />
+    <ClCompile Include="..\shared\src\apple_agx_platform_composer.c" />
+    <ClCompile Include="..\shared\src\apple_agx_platform_provider.c" />
+    <ClCompile Include="..\shared\src\apple_agx_power.c" />
+    <ClCompile Include="..\shared\src\apple_agx_config_snapshot.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />

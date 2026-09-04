@@ -1,0 +1,1503 @@
+#include "render_admission.h"
+
+#define ADMISSION_PLATFORM_TAG 'pRGA'
+#define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
+#define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
+#define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
+
+typedef struct _ADMISSION_ASC_TRANSPORT {
+  volatile UCHAR *Base;
+  ULONG Length;
+} ADMISSION_ASC_TRANSPORT;
+
+typedef struct _ADMISSION_PUBLICATION_MAPPING {
+  PDXGKRNL_INTERFACE Interface;
+  volatile UCHAR *MappedBase;
+} ADMISSION_PUBLICATION_MAPPING;
+
+typedef struct _ADMISSION_PLATFORM_RUNTIME {
+  ADMISSION_CONTEXT *Adapter;
+  APPLE_AGX_MEMORY_IO MemoryIo;
+  APPLE_AGX_CONFIG_SNAPSHOT Snapshot;
+  volatile UCHAR *SgxBase;
+  volatile UCHAR *HandoffBase;
+  ADMISSION_ASC_TRANSPORT AscTransport;
+  APPLE_AGX_ASC_IO AscIo;
+  APPLE_AGX_RTKIT_SESSION Rtkit;
+  APPLE_AGX_GFX_HANDOFF_STATE Handoff;
+  APPLE_AGX_GFX_HANDOFF_IO HandoffIo;
+  APPLE_AGX_INITDATA_MEMORY_GRAPH Initdata;
+  ADMISSION_PUBLICATION_MAPPING PublicationMapping;
+  APPLE_AGX_UAT_PUBLICATION_IO PublicationIo;
+  APPLE_AGX_UAT_PUBLICATION_STATE FirmwarePublication;
+  APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES FirmwarePrimitives;
+  APPLE_AGX_FIRMWARE_PROVIDER FirmwareProvider;
+  APPLE_AGX_FIRMWARE_IO FirmwareIo;
+  APPLE_AGX_PLATFORM_TRANSPORT_IO TransportIo;
+  APPLE_AGX_G13_QUEUE_RUNTIME_IO QueueIo;
+  APPLE_AGX_PLATFORM_PROVIDER Provider;
+  APPLE_AGX_PLATFORM_PROVIDER_CONFIG ProviderConfig;
+  APPLE_AGX_BACKEND_RUNTIME Backend;
+  APPLE_AGX_BACKEND_IO RenderIo;
+  APPLE_AGX_BACKEND_IO PlatformIo;
+  APPLE_AGX_BACKEND_IO RuntimeIo;
+  PIO_WORKITEM WorkItem;
+  KEVENT WorkIdle;
+  volatile LONG WorkScheduled;
+  volatile LONG Stopping;
+  APPLE_AGX_COMPLETION_TRANSACTION Completion;
+  ADMISSION_RENDER_CONTEXT *CompletionContext;
+  BOOLEAN Powered;
+  BOOLEAN RenderBorrowed;
+  BOOLEAN ProviderReady;
+  BOOLEAN BackendStarted;
+} ADMISSION_PLATFORM_RUNTIME;
+
+typedef struct _ADMISSION_COMPLETION_NOTIFICATION {
+  ADMISSION_PLATFORM_RUNTIME *Runtime;
+  APPLE_AGX_U32 Fence;
+  APPLE_AGX_U32 Node;
+  APPLE_AGX_U32 Engine;
+} ADMISSION_COMPLETION_NOTIFICATION;
+
+static VOID AdmissionPlatformWorker(
+    _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context);
+
+static ULONGLONG AdmissionPlatformNowMs(void) {
+  return (ULONGLONG)(KeQueryInterruptTime() / 10000ULL);
+}
+
+static BOOLEAN AdmissionPlatformRangeContains(
+    const APPLE_AGX_MEMORY_OBJECT *Object, const void *Address,
+    APPLE_AGX_U32 Bytes) {
+  ULONG_PTR base;
+  ULONG_PTR value;
+  ULONGLONG offset;
+  if (Object == NULL || Address == NULL || Bytes == 0u ||
+      Object->CpuAddress == NULL || Object->Length == 0ULL)
+    return FALSE;
+  base = (ULONG_PTR)Object->CpuAddress;
+  value = (ULONG_PTR)Address;
+  if (value < base)
+    return FALSE;
+  offset = (ULONGLONG)(value - base);
+  return offset <= Object->Length &&
+                 Bytes <= Object->Length - offset
+             ? TRUE
+             : FALSE;
+}
+
+static BOOLEAN AdmissionPlatformContains(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, const void *Address,
+    APPLE_AGX_U32 Bytes) {
+  APPLE_AGX_U32 index;
+  if (Runtime == NULL || Address == NULL || Bytes == 0u)
+    return FALSE;
+  for (index = 0u; index < Runtime->Initdata.ChannelMemory.ObjectCount;
+       ++index) {
+    if (AdmissionPlatformRangeContains(
+            &Runtime->Initdata.ChannelMemory.Objects[index], Address,
+            Bytes))
+      return TRUE;
+  }
+  for (index = 0u;
+       index < Runtime->Initdata.RenderSharedMemory.ObjectCount; ++index) {
+    if (AdmissionPlatformRangeContains(
+            &Runtime->Initdata.RenderSharedMemory.Objects[index], Address,
+            Bytes))
+      return TRUE;
+  }
+  for (index = 0u;
+       index < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT; ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &Runtime->Adapter->BackendImage.Objects[index];
+    ULONG_PTR base;
+    ULONG_PTR value;
+    ULONGLONG offset;
+    if (object->Data == NULL || object->Size == 0u)
+      continue;
+    base = (ULONG_PTR)object->Data;
+    value = (ULONG_PTR)Address;
+    if (value < base)
+      continue;
+    offset = (ULONGLONG)(value - base);
+    if (offset <= object->Size && Bytes <= object->Size - offset)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+static NTSTATUS AdmissionPlatformValidateResources(
+    ADMISSION_CONTEXT *Context) {
+  PCM_RESOURCE_LIST resources;
+  ULONG memory_count = 0u;
+  ULONG interrupt_count = 0u;
+  ULONG seen = 0u;
+  ULONG full_index;
+  if (Context == NULL)
+    return STATUS_INVALID_PARAMETER;
+  resources = Context->DeviceInformation.TranslatedResourceList;
+  if (resources == NULL || resources->Count != 1u)
+    return STATUS_DEVICE_CONFIGURATION_ERROR;
+  for (full_index = 0u; full_index < resources->Count; ++full_index) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &resources->List[full_index];
+    ULONG partial_index;
+    for (partial_index = 0u;
+         partial_index < full->PartialResourceList.Count; ++partial_index) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+          &full->PartialResourceList.PartialDescriptors[partial_index];
+      if (descriptor->Type == CmResourceTypeMemory) {
+        ULONGLONG start =
+            (ULONGLONG)descriptor->u.Memory.Start.QuadPart;
+        ULONG length = descriptor->u.Memory.Length;
+        ULONG bit = 0u;
+        if (start == J313_AGX_G2_SGX_MMIO_BASE &&
+            length == J313_AGX_G2_SGX_MMIO_SIZE)
+          bit = 1u << 0;
+        else if (start == J313_AGX_G2_GPU_BASE &&
+                 length == J313_AGX_G2_GPU_SIZE)
+          bit = 1u << 1;
+        else if (start == J313_AGX_G2_HANDOFF_BASE &&
+                 length == J313_AGX_G2_HANDOFF_SIZE)
+          bit = 1u << 2;
+        else if (start == J313_AGX_G2_POWER_BROKER_BASE &&
+                 length == J313_AGX_G2_POWER_BROKER_SIZE)
+          bit = 1u << 3;
+        else
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
+        if ((seen & bit) != 0u)
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
+        seen |= bit;
+        ++memory_count;
+      } else if (descriptor->Type == CmResourceTypeInterrupt) {
+        if (descriptor->u.Interrupt.Vector !=
+            J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID)
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
+        ++interrupt_count;
+      } else if (descriptor->Type != CmResourceTypeDevicePrivate) {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+      }
+    }
+  }
+  return memory_count == 4u && seen == 0x0fu && interrupt_count == 1u
+             ? STATUS_SUCCESS
+             : STATUS_DEVICE_CONFIGURATION_ERROR;
+}
+
+static NTSTATUS AdmissionPlatformReadSnapshot(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_CONFIG_SNAPSHOT *Snapshot) {
+  UCHAR wire[APPLE_AGX_CONFIG_MMIO_OFFSET + APPLE_AGX_CONFIG_WIRE_SIZE];
+  ULONG index;
+  if (Context == NULL || Snapshot == NULL || Context->BrokerBase == NULL ||
+      sizeof(wire) > J313_AGX_G2_POWER_BROKER_SIZE)
+    return STATUS_INVALID_PARAMETER;
+  for (index = 0u; index < RTL_NUMBER_OF(wire); ++index)
+    wire[index] = READ_REGISTER_UCHAR(Context->BrokerBase + index);
+  return AppleAgxConfigSnapshotDecodeJ313(
+             wire, (APPLE_AGX_U32)sizeof(wire), Snapshot) ==
+                 AppleAgxConfigResultOk
+             ? STATUS_SUCCESS
+             : STATUS_DEVICE_CONFIGURATION_ERROR;
+}
+
+static BOOLEAN AdmissionAscRange(
+    ADMISSION_ASC_TRANSPORT *Transport, APPLE_AGX_U32 Offset,
+    APPLE_AGX_U32 Width) {
+  return Transport != NULL && Transport->Base != NULL && Width != 0u &&
+                 Offset <= Transport->Length &&
+                 Width <= Transport->Length - Offset
+             ? TRUE
+             : FALSE;
+}
+
+static APPLE_AGX_ASC_U64 AdmissionAscNow(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  return AdmissionPlatformNowMs();
+}
+
+static APPLE_AGX_ASC_BOOL AdmissionAscRead32(
+    void *Context, APPLE_AGX_ASC_U32 Offset, APPLE_AGX_ASC_U32 *Value) {
+  ADMISSION_ASC_TRANSPORT *transport = Context;
+  if (Value == NULL || (Offset & 3u) != 0u ||
+      !AdmissionAscRange(transport, Offset, sizeof(ULONG)))
+    return APPLE_AGX_ASC_FALSE;
+  *Value = READ_REGISTER_ULONG(
+      (volatile ULONG *)(transport->Base + Offset));
+  return APPLE_AGX_ASC_TRUE;
+}
+
+static APPLE_AGX_ASC_BOOL AdmissionAscRead64(
+    void *Context, APPLE_AGX_ASC_U32 Offset, APPLE_AGX_ASC_U64 *Value) {
+  ADMISSION_ASC_TRANSPORT *transport = Context;
+  if (Value == NULL || (Offset & 7u) != 0u ||
+      !AdmissionAscRange(transport, Offset, sizeof(ULONG64)))
+    return APPLE_AGX_ASC_FALSE;
+  *Value = READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(transport->Base + Offset));
+  return APPLE_AGX_ASC_TRUE;
+}
+
+static APPLE_AGX_ASC_BOOL AdmissionAscWrite32(
+    void *Context, APPLE_AGX_ASC_U32 Offset, APPLE_AGX_ASC_U32 Value) {
+  ADMISSION_ASC_TRANSPORT *transport = Context;
+  if ((Offset & 3u) != 0u ||
+      !AdmissionAscRange(transport, Offset, sizeof(ULONG)))
+    return APPLE_AGX_ASC_FALSE;
+  WRITE_REGISTER_ULONG((volatile ULONG *)(transport->Base + Offset), Value);
+  return APPLE_AGX_ASC_TRUE;
+}
+
+static APPLE_AGX_ASC_BOOL AdmissionAscWrite64(
+    void *Context, APPLE_AGX_ASC_U32 Offset, APPLE_AGX_ASC_U64 Value) {
+  ADMISSION_ASC_TRANSPORT *transport = Context;
+  if ((Offset & 7u) != 0u ||
+      !AdmissionAscRange(transport, Offset, sizeof(ULONG64)))
+    return APPLE_AGX_ASC_FALSE;
+  WRITE_REGISTER_ULONG64((volatile ULONG64 *)(transport->Base + Offset),
+                         Value);
+  return APPLE_AGX_ASC_TRUE;
+}
+
+static APPLE_AGX_ASC_BOOL AdmissionAscPause(void *Context) {
+  LARGE_INTEGER interval;
+  UNREFERENCED_PARAMETER(Context);
+  interval.QuadPart = -10000LL;
+  return NT_SUCCESS(
+             KeDelayExecutionThread(KernelMode, FALSE, &interval))
+             ? APPLE_AGX_ASC_TRUE
+             : APPLE_AGX_ASC_FALSE;
+}
+
+static BOOLEAN AdmissionHandoffRange(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Offset, ULONG Width) {
+  return Runtime != NULL && Runtime->HandoffBase != NULL && Width != 0u &&
+                 Offset <= J313_AGX_G2_HANDOFF_SIZE &&
+                 Width <= J313_AGX_G2_HANDOFF_SIZE - Offset
+             ? TRUE
+             : FALSE;
+}
+
+static unsigned char AdmissionHandoffRead8(
+    void *Context, unsigned int Offset, unsigned char *Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (Value == NULL || !AdmissionHandoffRange(runtime, Offset, 1u))
+    return 0u;
+  *Value = READ_REGISTER_UCHAR(runtime->HandoffBase + Offset);
+  return 1u;
+}
+
+static unsigned char AdmissionHandoffRead32(
+    void *Context, unsigned int Offset, unsigned int *Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (Value == NULL || (Offset & 3u) != 0u ||
+      !AdmissionHandoffRange(runtime, Offset, sizeof(ULONG)))
+    return 0u;
+  *Value = READ_REGISTER_ULONG(
+      (volatile ULONG *)(runtime->HandoffBase + Offset));
+  return 1u;
+}
+
+static unsigned char AdmissionHandoffRead64(
+    void *Context, unsigned int Offset, unsigned long long *Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (Value == NULL || (Offset & 7u) != 0u ||
+      !AdmissionHandoffRange(runtime, Offset, sizeof(ULONG64)))
+    return 0u;
+  *Value = READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(runtime->HandoffBase + Offset));
+  return 1u;
+}
+
+static unsigned char AdmissionHandoffWrite8(
+    void *Context, unsigned int Offset, unsigned char Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (!AdmissionHandoffRange(runtime, Offset, 1u))
+    return 0u;
+  WRITE_REGISTER_UCHAR(runtime->HandoffBase + Offset, Value);
+  return 1u;
+}
+
+static unsigned char AdmissionHandoffWrite32(
+    void *Context, unsigned int Offset, unsigned int Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if ((Offset & 3u) != 0u ||
+      !AdmissionHandoffRange(runtime, Offset, sizeof(ULONG)))
+    return 0u;
+  WRITE_REGISTER_ULONG(
+      (volatile ULONG *)(runtime->HandoffBase + Offset), Value);
+  return 1u;
+}
+
+static unsigned char AdmissionHandoffWrite64(
+    void *Context, unsigned int Offset, unsigned long long Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if ((Offset & 7u) != 0u ||
+      !AdmissionHandoffRange(runtime, Offset, sizeof(ULONG64)))
+    return 0u;
+  WRITE_REGISTER_ULONG64(
+      (volatile ULONG64 *)(runtime->HandoffBase + Offset), Value);
+  return 1u;
+}
+
+static void AdmissionHandoffBarrier(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  KeMemoryBarrier();
+}
+
+static void AdmissionHandoffRelax(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  KeStallExecutionProcessor(10u);
+}
+
+static unsigned long long AdmissionHandoffNow(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  return AdmissionPlatformNowMs();
+}
+
+static unsigned char AdmissionPublicationMap(
+    void *Context, unsigned long long PhysicalAddress, unsigned int Length,
+    volatile unsigned char **VirtualAddress) {
+  ADMISSION_PUBLICATION_MAPPING *mapping = Context;
+  PHYSICAL_ADDRESS address;
+  PVOID base = NULL;
+  if (mapping == NULL || mapping->Interface == NULL ||
+      mapping->MappedBase != NULL || VirtualAddress == NULL ||
+      PhysicalAddress != J313_AGX_G2_GPU_BASE ||
+      Length != J313_AGX_G2_GPU_SIZE)
+    return 0u;
+  address.QuadPart = (LONGLONG)PhysicalAddress;
+  if (!NT_SUCCESS(mapping->Interface->DxgkCbMapMemory(
+          mapping->Interface->DeviceHandle, address, Length, FALSE, FALSE,
+          MmNonCached, &base)) ||
+      base == NULL)
+    return 0u;
+  mapping->MappedBase = base;
+  *VirtualAddress = base;
+  return 1u;
+}
+
+static void AdmissionPublicationBarrier(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  KeMemoryBarrier();
+}
+
+static unsigned char AdmissionPublicationUnmap(
+    void *Context, volatile unsigned char *VirtualAddress) {
+  ADMISSION_PUBLICATION_MAPPING *mapping = Context;
+  if (mapping == NULL || mapping->Interface == NULL ||
+      mapping->MappedBase == NULL ||
+      VirtualAddress != mapping->MappedBase)
+    return 0u;
+  if (!NT_SUCCESS(mapping->Interface->DxgkCbUnmapMemory(
+          mapping->Interface->DeviceHandle, (PVOID)VirtualAddress)))
+    return 0u;
+  mapping->MappedBase = NULL;
+  return 1u;
+}
+
+static APPLE_AGX_POWER_U32 AdmissionPowerRead32(
+    void *Context, APPLE_AGX_POWER_U32 Offset) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return READ_REGISTER_ULONG(
+      (volatile ULONG *)(runtime->Adapter->BrokerBase + Offset));
+}
+
+static APPLE_AGX_POWER_U64 AdmissionPowerRead64(
+    void *Context, APPLE_AGX_POWER_U32 Offset) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(runtime->Adapter->BrokerBase + Offset));
+}
+
+static void AdmissionPowerWrite32(
+    void *Context, APPLE_AGX_POWER_U32 Offset, APPLE_AGX_POWER_U32 Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  WRITE_REGISTER_ULONG(
+      (volatile ULONG *)(runtime->Adapter->BrokerBase + Offset), Value);
+}
+
+static void AdmissionPowerWrite64(
+    void *Context, APPLE_AGX_POWER_U32 Offset, APPLE_AGX_POWER_U64 Value) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  WRITE_REGISTER_ULONG64(
+      (volatile ULONG64 *)(runtime->Adapter->BrokerBase + Offset), Value);
+}
+
+static void AdmissionPowerIo(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, APPLE_AGX_POWER_IO *Io) {
+  RtlZeroMemory(Io, sizeof(*Io));
+  Io->Context = Runtime;
+  Io->Read32 = AdmissionPowerRead32;
+  Io->Read64 = AdmissionPowerRead64;
+  Io->Write32 = AdmissionPowerWrite32;
+  Io->Write64 = AdmissionPowerWrite64;
+}
+
+static unsigned char AdmissionFirmwareAtPassive(void *Context) {
+  return Context != NULL && KeGetCurrentIrql() == PASSIVE_LEVEL ? 1u : 0u;
+}
+
+static unsigned long long AdmissionFirmwareNow(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  return AdmissionPlatformNowMs();
+}
+
+static unsigned char AdmissionFirmwarePowerOn(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  APPLE_AGX_POWER_IO io;
+  if (runtime == NULL || runtime->Powered ||
+      AdmissionPlatformNowMs() >= DeadlineMs)
+    return 0u;
+  AdmissionPowerIo(runtime, &io);
+  if (!AppleAgxPowerAcquire(&io))
+    return 0u;
+  runtime->Powered = TRUE;
+  return 1u;
+}
+
+static unsigned char AdmissionFirmwarePowerOff(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  APPLE_AGX_POWER_IO io;
+  if (runtime == NULL || !runtime->Powered ||
+      AdmissionPlatformNowMs() >= DeadlineMs)
+    return 0u;
+  AdmissionPowerIo(runtime, &io);
+  if (!AppleAgxPowerRelease(&io))
+    return 0u;
+  runtime->Powered = FALSE;
+  return 1u;
+}
+
+static unsigned char AdmissionFirmwareCreateUat(
+    void *Context, unsigned long long DeadlineMs,
+    APPLE_AGX_UAT_TTBR_PAIR *Pair,
+    unsigned long long *InitdataAddress) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL || Pair == NULL || InitdataAddress == NULL ||
+      AdmissionPlatformNowMs() >= DeadlineMs || !runtime->Initdata.Built ||
+      runtime->Initdata.TtbrPair.Ttbr0 == 0ULL ||
+      runtime->Initdata.TtbrPair.Ttbr1 == 0ULL ||
+      runtime->Initdata.InitdataVirtualAddress == 0ULL)
+    return 0u;
+  *Pair = runtime->Initdata.TtbrPair;
+  *InitdataAddress = runtime->Initdata.InitdataVirtualAddress &
+                     ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
+  return *InitdataAddress != 0ULL ? 1u : 0u;
+}
+
+static unsigned char AdmissionFirmwareDestroyUat(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL && AdmissionPlatformNowMs() < DeadlineMs &&
+                 runtime->FirmwarePublication.Active == 0u
+             ? 1u
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareBootAsc(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL &&
+                 AppleAgxRtkitSessionBoot(
+                     &runtime->Rtkit, &runtime->AscIo, DeadlineMs) ==
+                     AppleAgxRtkitSessionResultOk
+             ? 1u
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareStopAsc(
+    void *Context, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL)
+    return 0u;
+  if (runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE)
+    return 1u;
+  return AppleAgxRtkitSessionStop(
+             &runtime->Rtkit, &runtime->AscIo, DeadlineMs) ==
+                 AppleAgxRtkitSessionResultOk
+             ? 1u
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareEndpoint(
+    void *Context, unsigned int Endpoint, unsigned long long DeadlineMs,
+    BOOLEAN Start) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ULONGLONG message;
+  if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs ||
+      (Endpoint != J313_AGX_G2_FIRMWARE_ENDPOINT &&
+       Endpoint != J313_AGX_G2_DOORBELL_ENDPOINT))
+    return 0u;
+  message = Start ? AppleAgxRtkitStartEndpoint(Endpoint, 2u)
+                  : AppleAgxRtkitStopEndpoint(Endpoint);
+  return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
+                 AppleAgxAscSend(
+                     &runtime->AscIo, message, 0u, DeadlineMs) ==
+                     AppleAgxAscResultOk
+             ? 1u
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareStartEndpoint(
+    void *Context, unsigned int Endpoint, unsigned long long DeadlineMs) {
+  return AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, TRUE);
+}
+
+static unsigned char AdmissionFirmwareStopEndpoint(
+    void *Context, unsigned int Endpoint, unsigned long long DeadlineMs) {
+  return AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, FALSE);
+}
+
+static unsigned char AdmissionFirmwarePublishUat(
+    void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL && Pair != NULL &&
+                 AppleAgxUatPublishJ313(
+                     &runtime->Snapshot, Pair, &runtime->PublicationIo,
+                     &runtime->FirmwarePublication) ==
+                     AppleAgxUatPublicationResultOk
+             ? 1u
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareUnpublishUat(void *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL)
+    return 0u;
+  if (runtime->FirmwarePublication.Active == 0u)
+    return 1u;
+  return AppleAgxUatUnpublishJ313(
+             &runtime->PublicationIo, &runtime->FirmwarePublication) ==
+                 AppleAgxUatPublicationResultOk
+             ? 1u
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareSendInitdata(
+    void *Context, unsigned long long Address,
+    unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ULONGLONG message;
+  if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs)
+    return 0u;
+  message = AppleAgxRtkitInitdata(Address);
+  return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
+                 AppleAgxAscSend(
+                     &runtime->AscIo, message,
+                     J313_AGX_G2_FIRMWARE_ENDPOINT, DeadlineMs) ==
+                     AppleAgxAscResultOk
+             ? 1u
+             : 0u;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportFlush(
+    void *Context, const void *Address, APPLE_AGX_BACKEND_U32 Bytes) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (!AdmissionPlatformContains(runtime, Address, Bytes))
+    return APPLE_AGX_BACKEND_FALSE;
+  KeMemoryBarrier();
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static void AdmissionTransportBarrier(void *Context) {
+  UNREFERENCED_PARAMETER(Context);
+  KeMemoryBarrier();
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportPublishU32(
+    void *Context, volatile APPLE_AGX_BACKEND_U32 *Address,
+    APPLE_AGX_BACKEND_U32 Value) {
+  if (!AdmissionPlatformContains(
+          Context, (const void *)Address, sizeof(*Address)))
+    return APPLE_AGX_BACKEND_FALSE;
+  *Address = Value;
+  KeMemoryBarrier();
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportReadU32(
+    void *Context, const volatile APPLE_AGX_BACKEND_U32 *Address,
+    APPLE_AGX_BACKEND_U32 *Value) {
+  if (Value == NULL || !AdmissionPlatformContains(
+          Context, (const void *)Address, sizeof(*Address)))
+    return APPLE_AGX_BACKEND_FALSE;
+  KeMemoryBarrier();
+  *Value = *Address;
+  KeMemoryBarrier();
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportDoorbell(
+    void *Context, APPLE_AGX_BACKEND_U32 Doorbell) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ULONGLONG message;
+  ULONGLONG deadline;
+  if (runtime == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE ||
+      (Doorbell != APPLE_AGX_PLATFORM_TA_DOORBELL &&
+       Doorbell != APPLE_AGX_PLATFORM_D3_DOORBELL &&
+       Doorbell != APPLE_AGX_DEVICE_CONTROL_DOORBELL_CHANNEL))
+    return APPLE_AGX_BACKEND_FALSE;
+  message = AppleAgxRtkitDoorbell(Doorbell);
+  deadline = AdmissionPlatformNowMs() + J313_AGX_G2_INITDATA_TIMEOUT_MS;
+  return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
+                 AppleAgxAscSend(
+                     &runtime->AscIo, message,
+                     J313_AGX_G2_DOORBELL_ENDPOINT, deadline) ==
+                     AppleAgxAscResultOk
+             ? APPLE_AGX_BACKEND_TRUE
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionTransportQuiesce(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ULONGLONG deadline;
+  if (runtime == NULL || Fence == 0u ||
+      runtime->Provider.QueueProvider.PendingFence != Fence ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return APPLE_AGX_BACKEND_FALSE;
+  deadline = AdmissionPlatformNowMs() + J313_AGX_G2_STOP_TIMEOUT_MS;
+  return AppleAgxRtkitSessionStop(
+             &runtime->Rtkit, &runtime->AscIo, deadline) ==
+                 AppleAgxRtkitSessionResultOk
+             ? APPLE_AGX_BACKEND_TRUE
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
+static APPLE_AGX_BACKEND_U64 AdmissionTransportNow(void *Context) {
+  return Context != NULL ? AdmissionPlatformNowMs() : 0ULL;
+}
+
+static unsigned char AdmissionFirmwareDeviceControl(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, BOOLEAN Idle,
+    unsigned long long DeadlineMs) {
+  APPLE_AGX_DEVICE_CONTROL_PUBLICATION publication;
+  for (;;) {
+    APPLE_AGX_DEVICE_CONTROL_RESULT result;
+    unsigned int polls = 0u;
+    result = Idle
+                 ? AppleAgxDeviceControlPublishUpdateIdleTimestampG13V13_5(
+                       &Runtime->Initdata.ChannelMemory,
+                       &Runtime->TransportIo, &publication)
+                 : AppleAgxDeviceControlPublishInitG13V13_5(
+                       &Runtime->Initdata.ChannelMemory,
+                       &Runtime->TransportIo, &publication);
+    if (result != AppleAgxDeviceControlResultOk)
+      return 0u;
+    for (;;) {
+      result = AppleAgxDeviceControlWaitForReceiptG13V13_5(
+          &publication, &Runtime->TransportIo, 1u, &polls);
+      if (result == AppleAgxDeviceControlResultOk)
+        return 1u;
+      if (result != AppleAgxDeviceControlResultReceiptTimedOut ||
+          AdmissionPlatformNowMs() >= DeadlineMs)
+        return 0u;
+      KeStallExecutionProcessor(
+          ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US);
+    }
+  }
+}
+
+static unsigned char AdmissionFirmwareDeviceControlInit(
+    void *Context, unsigned long long DeadlineMs) {
+  return Context != NULL
+             ? AdmissionFirmwareDeviceControl(Context, FALSE, DeadlineMs)
+             : 0u;
+}
+
+static unsigned char AdmissionFirmwareIdleTimestamp(
+    void *Context, unsigned long long DeadlineMs) {
+  return Context != NULL
+             ? AdmissionFirmwareDeviceControl(Context, TRUE, DeadlineMs)
+             : 0u;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionRenderPublish(void *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL || runtime->RenderBorrowed ||
+      !AdmissionMemoryRuntimeContextPublished(runtime->Adapter))
+    return APPLE_AGX_BACKEND_FALSE;
+  runtime->RenderBorrowed = TRUE;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionRenderUnpublish(void *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL || !runtime->RenderBorrowed)
+    return APPLE_AGX_BACKEND_FALSE;
+  runtime->RenderBorrowed = FALSE;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
+    void *Context, const unsigned char *SubmissionBytes,
+    APPLE_AGX_BACKEND_U32 SubmissionByteCount,
+    const APPLE_AGX_BACKEND_SUBMISSION *Submission,
+    APPLE_AGX_BACKEND_U32 TaEvent, APPLE_AGX_BACKEND_U32 D3Event,
+    const APPLE_AGX_G13_QUEUE_JOB_PLAN *Plan,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL || Submission == NULL || Plan == NULL ||
+      Submission->Submission.Fence == 0u)
+    return APPLE_AGX_BACKEND_FALSE;
+  UNREFERENCED_PARAMETER(SubmissionBytes);
+  UNREFERENCED_PARAMETER(SubmissionByteCount);
+  return AdmissionBackendImageStageJob(
+             &runtime->Adapter->BackendImage,
+             Submission->Submission.Fence, TaEvent, D3Event,
+             Plan->TaExpectedDonePointer, Plan->D3ExpectedDonePointer,
+             Plan->IncludeInitBm, Job)
+             ? APPLE_AGX_BACKEND_TRUE
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionExternalResolveRange(
+    void *Context, APPLE_AGX_BACKEND_U64 GpuAddress,
+    const void **CpuAddress, APPLE_AGX_BACKEND_U32 *Bytes) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  APPLE_AGX_U32 index;
+  if (runtime == NULL || CpuAddress == NULL || Bytes == NULL ||
+      !runtime->Adapter->BackendImage.JobReady)
+    return APPLE_AGX_BACKEND_FALSE;
+  for (index = 0u; index < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT;
+       ++index) {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &runtime->Adapter->BackendImage.Objects[index];
+    if (object->GpuVa == GpuAddress && object->Data != NULL &&
+        object->Size != 0u) {
+      *CpuAddress = object->Data;
+      *Bytes = object->Size;
+      return APPLE_AGX_BACKEND_TRUE;
+    }
+  }
+  return APPLE_AGX_BACKEND_FALSE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendMap(
+    void *Context, void **CpuAddress, APPLE_AGX_BACKEND_U64 *GpuAddress,
+    APPLE_AGX_BACKEND_U32 *Bytes) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ADMISSION_BACKEND_IMAGE *image;
+  if (runtime == NULL || CpuAddress == NULL || GpuAddress == NULL ||
+      Bytes == NULL)
+    return APPLE_AGX_BACKEND_FALSE;
+  image = &runtime->Adapter->BackendImage;
+  if (image->Ready != APPLE_AGX_TRUE || image->ArenaCpuAddress == NULL ||
+      image->ArenaGpuAddress == 0ULL || image->ArenaBytes == 0u)
+    return APPLE_AGX_BACKEND_FALSE;
+  *CpuAddress = image->ArenaCpuAddress;
+  *GpuAddress = image->ArenaGpuAddress;
+  *Bytes = image->ArenaBytes;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendUnmap(
+    void *Context, void *CpuAddress, APPLE_AGX_BACKEND_U32 Bytes) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL &&
+                 runtime->Adapter->BackendImage.ArenaCpuAddress == CpuAddress &&
+                 runtime->Adapter->BackendImage.ArenaBytes == Bytes
+             ? APPLE_AGX_BACKEND_TRUE
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendResolve(
+    void *Context, const APPLE_AGX_BACKEND_SUBMISSION *Submission,
+    const unsigned char **Bytes, APPLE_AGX_BACKEND_U32 *ByteCount) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  APPLE_AGX_DMA_SHADOW shadow;
+  APPLE_AGX_DMA_SHADOW_VIEW view;
+  if (runtime == NULL || Submission == NULL || Bytes == NULL ||
+      ByteCount == NULL || Submission->PrivateData == NULL ||
+      !AppleAgxDmaShadowOpen(
+          &shadow, (void *)Submission->PrivateData,
+          Submission->PrivateDataBytes) ||
+      !AppleAgxDmaShadowIsSealedForFence(
+          shadow.Storage, shadow.BytesUsed,
+          Submission->Submission.Fence) ||
+      Submission->PrivateDataEnd < shadow.BytesUsed ||
+      !AppleAgxDmaShadowFind(
+          shadow.Storage, shadow.BytesUsed,
+          Submission->DmaSubmissionStart,
+          Submission->DmaSubmissionEnd -
+              Submission->DmaSubmissionStart,
+          &view))
+    return APPLE_AGX_BACKEND_FALSE;
+  *Bytes = view.Bytes;
+  *ByteCount = view.DmaBytes;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendAcquire(
+    void *Context, void *Arena, APPLE_AGX_BACKEND_U32 ArenaBytes,
+    APPLE_AGX_RENDER_TEMPLATE_ROOTS *Roots) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ADMISSION_BACKEND_IMAGE *image;
+  if (runtime == NULL || Roots == NULL)
+    return APPLE_AGX_BACKEND_FALSE;
+  image = &runtime->Adapter->BackendImage;
+  if (image->Ready != APPLE_AGX_TRUE || image->ArenaCpuAddress != Arena ||
+      image->ArenaBytes != ArenaBytes)
+    return APPLE_AGX_BACKEND_FALSE;
+  *Roots = image->Roots;
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendRelocate(
+    void *Context, void *Arena, APPLE_AGX_BACKEND_U32 ArenaBytes,
+    const APPLE_AGX_RENDER_TEMPLATE_ROOTS *Roots,
+    const unsigned char *SubmissionBytes,
+    APPLE_AGX_BACKEND_U32 SubmissionByteCount,
+    const APPLE_AGX_BACKEND_SUBMISSION *Submission,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  return runtime != NULL && runtime->PlatformIo.Image.Relocate != NULL
+             ? runtime->PlatformIo.Image.Relocate(
+                   runtime->PlatformIo.Context, Arena, ArenaBytes, Roots,
+                   SubmissionBytes, SubmissionByteCount, Submission, Job)
+             : APPLE_AGX_BACKEND_FALSE;
+}
+
+#define ADMISSION_DELEGATE_ZERO(name, member)                              \
+  static APPLE_AGX_BACKEND_BOOL name(void *Context) {                      \
+    ADMISSION_PLATFORM_RUNTIME *runtime = Context;                         \
+    return runtime != NULL && runtime->PlatformIo.member != NULL           \
+               ? runtime->PlatformIo.member(runtime->PlatformIo.Context)   \
+               : APPLE_AGX_BACKEND_FALSE;                                 \
+  }
+
+#define ADMISSION_DELEGATE_JOB(name, member)                               \
+  static APPLE_AGX_BACKEND_BOOL name(                                      \
+      void *Context, const APPLE_AGX_BACKEND_JOB_IMAGE *Job,               \
+      APPLE_AGX_BACKEND_U32 Fence) {                                       \
+    ADMISSION_PLATFORM_RUNTIME *runtime = Context;                         \
+    return runtime != NULL && runtime->PlatformIo.member != NULL           \
+               ? runtime->PlatformIo.member(runtime->PlatformIo.Context,   \
+                                            Job, Fence)                    \
+               : APPLE_AGX_BACKEND_FALSE;                                 \
+  }
+
+#define ADMISSION_DELEGATE_FENCE(name, member)                             \
+  static APPLE_AGX_BACKEND_BOOL name(                                      \
+      void *Context, APPLE_AGX_BACKEND_U32 Fence) {                        \
+    ADMISSION_PLATFORM_RUNTIME *runtime = Context;                         \
+    return runtime != NULL && runtime->PlatformIo.member != NULL           \
+               ? runtime->PlatformIo.member(runtime->PlatformIo.Context,   \
+                                            Fence)                         \
+               : APPLE_AGX_BACKEND_FALSE;                                 \
+  }
+
+ADMISSION_DELEGATE_ZERO(AdmissionQueuesCreate, Queues.Create)
+ADMISSION_DELEGATE_ZERO(AdmissionQueuesDestroy, Queues.Destroy)
+ADMISSION_DELEGATE_JOB(AdmissionQueuesRun3d, Queues.Run3d)
+ADMISSION_DELEGATE_JOB(AdmissionQueuesRunTa, Queues.RunTa)
+ADMISSION_DELEGATE_FENCE(AdmissionQueuesStop, Queues.Stop)
+ADMISSION_DELEGATE_FENCE(AdmissionQueuesReset, Queues.Reset)
+
+static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
+  ADMISSION_COMPLETION_NOTIFICATION *notification = Context;
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  DXGKARGCB_NOTIFY_INTERRUPT_DATA data;
+  if (notification == NULL || notification->Runtime == NULL)
+    return FALSE;
+  runtime = notification->Runtime;
+  if (!runtime->Adapter->InterfaceValid ||
+      !AppleAgxCompletionTransactionCanReport(
+          &runtime->Completion, notification->Fence,
+          notification->Node, notification->Engine))
+    return FALSE;
+  RtlZeroMemory(&data, sizeof(data));
+  data.InterruptType = DXGK_INTERRUPT_DMA_COMPLETED;
+  data.DmaCompleted.SubmissionFenceId = notification->Fence;
+  data.DmaCompleted.NodeOrdinal = notification->Node;
+  data.DmaCompleted.EngineOrdinal = notification->Engine;
+  runtime->Adapter->Interface.DxgkCbNotifyInterrupt(
+      runtime->Adapter->Interface.DeviceHandle, &data);
+  AppleAgxCompletionTransactionMarkReported(&runtime->Completion);
+  InterlockedExchange(&runtime->Adapter->SchedulerDpcPending, 1);
+  (void)runtime->Adapter->Interface.DxgkCbQueueDpc(
+      runtime->Adapter->Interface.DeviceHandle);
+  return TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_U32 Node, APPLE_AGX_BACKEND_U32 Engine,
+    APPLE_AGX_BACKEND_COMPLETION_STATUS Status) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ADMISSION_CONTEXT *adapter;
+  ADMISSION_COMPLETION_NOTIFICATION notification;
+  BOOLEAN local = FALSE;
+  BOOLEAN reported = FALSE;
+  BOOLEAN preemption_waiting = FALSE;
+  NTSTATUS sync_status;
+  KIRQL old_irql;
+
+  if (runtime == NULL || Fence == 0u || Node != 0u || Engine != 0u ||
+      Status != AppleAgxBackendCompletionSuccess)
+    return APPLE_AGX_BACKEND_FALSE;
+  adapter = runtime->Adapter;
+  if (adapter == NULL || !adapter->InterfaceValid ||
+      adapter->Interface.DxgkCbSynchronizeExecution == NULL ||
+      adapter->Interface.DxgkCbNotifyInterrupt == NULL ||
+      adapter->Interface.DxgkCbQueueDpc == NULL)
+    return APPLE_AGX_BACKEND_FALSE;
+
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (runtime->Completion.Phase == AppleAgxCompletionIdle) {
+    if (AdmissionRenderPacketState(&adapter->RenderPacket) !=
+            AdmissionRenderPacketActive ||
+        adapter->RenderPacket.Description.Fence != Fence ||
+        AppleAgxSchedulerActiveFence(
+            &adapter->Scheduler, Node, Engine) != Fence) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    runtime->CompletionContext =
+        (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+            adapter->RenderPacket.Description.ContextToken;
+    if (runtime->CompletionContext == NULL ||
+        runtime->CompletionContext->Object.FenceOutstanding != Fence ||
+        !AppleAgxCompletionTransactionBegin(
+            &runtime->Completion, Fence, Node, Engine)) {
+      runtime->CompletionContext = NULL;
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+  }
+  if (runtime->Completion.Phase == AppleAgxCompletionClaimed) {
+    if (!AppleAgxSchedulerCompleteActiveFence(
+            &adapter->Scheduler, Node, Engine, Fence) ||
+        !AppleAgxCompletionTransactionAdvance(
+            &runtime->Completion, Fence, Node, Engine,
+            AppleAgxCompletionClaimed,
+            AppleAgxCompletionSchedulerCommitted)) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+  }
+  if (runtime->Completion.Phase == AppleAgxCompletionSchedulerCommitted) {
+    if (!AdmissionBackendImageReleaseSubmission(
+            &adapter->BackendImage, Fence) ||
+        !AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
+        runtime->CompletionContext == NULL ||
+        runtime->CompletionContext->Object.FenceOutstanding != Fence) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    runtime->CompletionContext->Object.FenceOutstanding = 0u;
+    if (!AppleAgxCompletionTransactionAdvance(
+            &runtime->Completion, Fence, Node, Engine,
+            AppleAgxCompletionSchedulerCommitted,
+            AppleAgxCompletionLocalCommitted)) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+  }
+  if (runtime->Completion.Phase == AppleAgxCompletionLocalCommitted)
+    local = AppleAgxCompletionTransactionAdvance(
+                &runtime->Completion, Fence, Node, Engine,
+                AppleAgxCompletionLocalCommitted,
+                AppleAgxCompletionBackendRetired)
+                ? TRUE
+                : FALSE;
+  else
+    local = runtime->Completion.Phase == AppleAgxCompletionBackendRetired ||
+                    runtime->Completion.Phase == AppleAgxCompletionReported
+                ? TRUE
+                : FALSE;
+  if (local && AppleAgxSchedulerPreemptionPhase(&adapter->Scheduler) ==
+                   AppleAgxPreemptionWaitCurrentBoundary) {
+    preemption_waiting = AppleAgxSchedulerObserveBoundaryCompletion(
+                             &adapter->Scheduler, Node, Engine, Fence)
+                             ? TRUE
+                             : FALSE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!local)
+    return APPLE_AGX_BACKEND_FALSE;
+
+  if (runtime->Completion.Phase == AppleAgxCompletionBackendRetired) {
+    notification.Runtime = runtime;
+    notification.Fence = Fence;
+    notification.Node = Node;
+    notification.Engine = Engine;
+    sync_status = adapter->Interface.DxgkCbSynchronizeExecution(
+        adapter->Interface.DeviceHandle,
+        AdmissionNotifyCompletionAtInterrupt, &notification, 0u,
+        &reported);
+    if (!NT_SUCCESS(sync_status) || !reported)
+      return APPLE_AGX_BACKEND_FALSE;
+  }
+  if (runtime->Completion.Phase != AppleAgxCompletionReported ||
+      !AppleAgxCompletionTransactionFinish(
+          &runtime->Completion, Fence, Node, Engine))
+    return APPLE_AGX_BACKEND_FALSE;
+  runtime->CompletionContext = NULL;
+  if (preemption_waiting)
+    InterlockedExchange(&adapter->SchedulerDpcPending, 1);
+  return APPLE_AGX_BACKEND_TRUE;
+}
+
+static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
+    void *Context, APPLE_AGX_BACKEND_U32 Fence,
+    APPLE_AGX_BACKEND_U32 Node, APPLE_AGX_BACKEND_U32 Engine) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  ADMISSION_CONTEXT *adapter;
+  ADMISSION_RENDER_CONTEXT *render_context;
+  APPLE_AGX_U32 ignored = 0u;
+  ADMISSION_RENDER_PACKET_STATE state;
+  BOOLEAN retired = FALSE;
+  KIRQL old_irql;
+  if (runtime == NULL || Fence == 0u || Node != 0u || Engine != 0u ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 ||
+      !runtime->Backend.QueuesQuiesced)
+    return APPLE_AGX_BACKEND_FALSE;
+  adapter = runtime->Adapter;
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  state = AdmissionRenderPacketState(&adapter->RenderPacket);
+  if ((state == AdmissionRenderPacketQueued ||
+       state == AdmissionRenderPacketActive) &&
+      adapter->RenderPacket.Description.Fence == Fence) {
+    render_context = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        adapter->RenderPacket.Description.ContextToken;
+    if (render_context != NULL &&
+        render_context->Object.FenceOutstanding == Fence &&
+        AdmissionBackendImageReleaseSubmission(
+            &adapter->BackendImage, Fence) &&
+        AdmissionRenderPacketReset(
+            &adapter->RenderPacket, Fence,
+            state == AdmissionRenderPacketActive ? 1u : 0u) &&
+        AppleAgxSchedulerResetEngine(
+            &adapter->Scheduler, Node, Engine, &ignored)) {
+      render_context->Object.FenceOutstanding = 0u;
+      retired = TRUE;
+    }
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  return retired ? APPLE_AGX_BACKEND_TRUE : APPLE_AGX_BACKEND_FALSE;
+}
+
+static VOID AdmissionPlatformWorkerFinished(
+    ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  InterlockedExchange(&Runtime->WorkScheduled, 0);
+  KeSetEvent(&Runtime->WorkIdle, IO_NO_INCREMENT, FALSE);
+}
+
+static VOID AdmissionPlatformWorker(
+    PDEVICE_OBJECT DeviceObject, PVOID Context) {
+  ADMISSION_CONTEXT *adapter = Context;
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description;
+  APPLE_AGX_BACKEND_SUBMISSION submission;
+  APPLE_AGX_BACKEND_RUNTIME_RESULT result;
+  BOOLEAN activated = FALSE;
+  KIRQL old_irql;
+
+  UNREFERENCED_PARAMETER(DeviceObject);
+  if (adapter == NULL || adapter->PlatformRuntime == NULL)
+    return;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)adapter->PlatformRuntime;
+  RtlZeroMemory(&description, sizeof(description));
+  RtlZeroMemory(&submission, sizeof(submission));
+
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+      runtime->BackendStarted &&
+      runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
+      AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketQueued) {
+    description = adapter->RenderPacket.Description;
+    if (AppleAgxSchedulerActivateFence(
+            &adapter->Scheduler, 0u, 0u, description.Fence) &&
+        AdmissionRenderPacketActivate(
+            &adapter->RenderPacket, description.Fence))
+      activated = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!activated) {
+    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    AdmissionPlatformWorkerFinished(runtime);
+    return;
+  }
+
+  submission.Submission.Kind = AppleAgxSubmissionGdi;
+  submission.Submission.Fence = description.Fence;
+  submission.Submission.NodeOrdinal = 0u;
+  submission.Submission.EngineOrdinal = 0u;
+  submission.Submission.DmaBytes =
+      description.DmaEnd - description.DmaStart;
+  submission.ContextIdentity = ADMISSION_MEMORY_UAT_CONTEXT;
+  submission.PrivateData =
+      (const void *)(ULONG_PTR)description.PrivateDataToken;
+  submission.PrivateDataBytes = description.PrivateDataBytes;
+  submission.PrivateDataStart = description.PrivateDataStart;
+  submission.PrivateDataEnd = description.PrivateDataEnd;
+  submission.DmaSubmissionStart = description.DmaStart;
+  submission.DmaSubmissionEnd = description.DmaEnd;
+  result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+  if (result != AppleAgxBackendRuntimeResultOk) {
+    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    AdmissionPlatformWorkerFinished(runtime);
+    return;
+  }
+
+  while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+         InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0) {
+    APPLE_AGX_BACKEND_U32 drained = 0u;
+    APPLE_AGX_BACKEND_U32 completed = 0u;
+    LARGE_INTEGER interval;
+    if (!AppleAgxPlatformProviderPoll(
+            &runtime->Provider, 64u, &drained, &completed)) {
+      InterlockedExchange(&adapter->SchedulerFaulted, 1);
+      break;
+    }
+    UNREFERENCED_PARAMETER(drained);
+    UNREFERENCED_PARAMETER(completed);
+    if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted)
+      break;
+    interval.QuadPart = -10000LL;
+    if (!NT_SUCCESS(KeDelayExecutionThread(
+            KernelMode, FALSE, &interval))) {
+      InterlockedExchange(&adapter->SchedulerFaulted, 1);
+      break;
+    }
+  }
+  if (runtime->Backend.Phase != AppleAgxBackendRuntimeReady &&
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0)
+    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+  AdmissionPlatformWorkerFinished(runtime);
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime =
+      Context != NULL
+          ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime
+          : NULL;
+  if (runtime == NULL || runtime->WorkItem == NULL ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      runtime->Backend.Phase != AppleAgxBackendRuntimeReady ||
+      InterlockedCompareExchange(&runtime->WorkScheduled, 1, 0) != 0)
+    return FALSE;
+  KeClearEvent(&runtime->WorkIdle);
+  IoQueueWorkItem(runtime->WorkItem, AdmissionPlatformWorker,
+                  DelayedWorkQueue, Context);
+  return TRUE;
+}
+
+static NTSTATUS AdmissionPlatformDestroy(
+    ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  NTSTATUS status = STATUS_SUCCESS;
+  if (Runtime == NULL)
+    return STATUS_SUCCESS;
+  InterlockedExchange(&Runtime->Stopping, 1);
+  if (Runtime->WorkItem != NULL) {
+    KeWaitForSingleObject(&Runtime->WorkIdle, Executive, KernelMode,
+                          FALSE, NULL);
+    IoFreeWorkItem(Runtime->WorkItem);
+    Runtime->WorkItem = NULL;
+  }
+  if (Runtime->BackendStarted ||
+      Runtime->Backend.Phase != AppleAgxBackendRuntimeStopped) {
+    if (AppleAgxBackendRuntimeStop(&Runtime->Backend) !=
+        AppleAgxBackendRuntimeResultOk)
+      return STATUS_DEVICE_BUSY;
+    Runtime->BackendStarted = FALSE;
+  }
+  if (Runtime->ProviderReady) {
+    if (!AppleAgxPlatformProviderDestroy(&Runtime->Provider))
+      return STATUS_DEVICE_BUSY;
+    Runtime->ProviderReady = FALSE;
+  }
+  if (Runtime->FirmwareProvider.State != 0u &&
+      AppleAgxFirmwareProviderDestroy(&Runtime->FirmwareProvider) !=
+          AppleAgxFirmwareProviderResultOk)
+    return STATUS_DEVICE_BUSY;
+  if (Runtime->FirmwarePublication.Active != 0u &&
+      !AdmissionFirmwareUnpublishUat(Runtime))
+    return STATUS_DEVICE_BUSY;
+  if (Runtime->Powered) {
+    APPLE_AGX_POWER_IO io;
+    AdmissionPowerIo(Runtime, &io);
+    if (!AppleAgxPowerRelease(&io))
+      return STATUS_DEVICE_BUSY;
+    Runtime->Powered = FALSE;
+  }
+  if (Runtime->Initdata.Initialized &&
+      AppleAgxInitdataMemoryDestroy(&Runtime->Initdata) !=
+          AppleAgxInitdataMemoryResultOk)
+    return STATUS_DEVICE_BUSY;
+  if (Runtime->HandoffBase != NULL) {
+    status = Runtime->Adapter->Interface.DxgkCbUnmapMemory(
+        Runtime->Adapter->Interface.DeviceHandle,
+        (PVOID)Runtime->HandoffBase);
+    if (!NT_SUCCESS(status))
+      return status;
+    Runtime->HandoffBase = NULL;
+  }
+  if (Runtime->SgxBase != NULL) {
+    status = Runtime->Adapter->Interface.DxgkCbUnmapMemory(
+        Runtime->Adapter->Interface.DeviceHandle,
+        (PVOID)Runtime->SgxBase);
+    if (!NT_SUCCESS(status))
+      return status;
+    Runtime->SgxBase = NULL;
+  }
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  APPLE_AGX_GFX_HANDOFF_REGION handoff_region;
+  PHYSICAL_ADDRESS address;
+  NTSTATUS status;
+
+  if (Context == NULL || Context->PlatformRuntime != NULL ||
+      !Context->InterfaceValid || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      Context->BackendImage.Ready != APPLE_AGX_TRUE ||
+      !AdmissionMemoryRuntimeContextPublished(Context))
+    return STATUS_INVALID_DEVICE_STATE;
+  status = AdmissionPlatformValidateResources(Context);
+  if (!NT_SUCCESS(status))
+    return status;
+  runtime = ExAllocatePool2(
+      POOL_FLAG_NON_PAGED, sizeof(*runtime), ADMISSION_PLATFORM_TAG);
+  if (runtime == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
+  RtlZeroMemory(runtime, sizeof(*runtime));
+  runtime->Adapter = Context;
+  Context->PlatformRuntime = runtime;
+  status = AdmissionMemoryRuntimeBorrowIo(Context, &runtime->MemoryIo);
+  if (!NT_SUCCESS(status))
+    goto Fail;
+  status = AdmissionPlatformReadSnapshot(Context, &runtime->Snapshot);
+  if (!NT_SUCCESS(status))
+    goto Fail;
+
+  address.QuadPart = J313_AGX_G2_SGX_MMIO_BASE;
+  status = Context->Interface.DxgkCbMapMemory(
+      Context->Interface.DeviceHandle, address, J313_AGX_G2_SGX_MMIO_SIZE,
+      FALSE, FALSE, MmNonCached, (PVOID *)&runtime->SgxBase);
+  if (!NT_SUCCESS(status) || runtime->SgxBase == NULL) {
+    status = NT_SUCCESS(status) ? STATUS_NONE_MAPPED : status;
+    goto Fail;
+  }
+  runtime->AscTransport.Base =
+      runtime->SgxBase +
+      (J313_AGX_G2_ASC_MMIO_BASE - J313_AGX_G2_SGX_MMIO_BASE);
+  runtime->AscTransport.Length = J313_AGX_G2_ASC_MMIO_SIZE;
+  runtime->AscIo.Context = &runtime->AscTransport;
+  runtime->AscIo.NowMs = AdmissionAscNow;
+  runtime->AscIo.Read32 = AdmissionAscRead32;
+  runtime->AscIo.Read64 = AdmissionAscRead64;
+  runtime->AscIo.Write32 = AdmissionAscWrite32;
+  runtime->AscIo.Write64 = AdmissionAscWrite64;
+  runtime->AscIo.Pause = AdmissionAscPause;
+  AppleAgxRtkitSessionInitialize(&runtime->Rtkit);
+
+  address.QuadPart = J313_AGX_G2_HANDOFF_BASE;
+  status = Context->Interface.DxgkCbMapMemory(
+      Context->Interface.DeviceHandle, address, J313_AGX_G2_HANDOFF_SIZE,
+      FALSE, FALSE, MmNonCached, (PVOID *)&runtime->HandoffBase);
+  if (!NT_SUCCESS(status) || runtime->HandoffBase == NULL) {
+    status = NT_SUCCESS(status) ? STATUS_NONE_MAPPED : status;
+    goto Fail;
+  }
+  runtime->HandoffIo.Context = runtime;
+  runtime->HandoffIo.Read8 = AdmissionHandoffRead8;
+  runtime->HandoffIo.Read32 = AdmissionHandoffRead32;
+  runtime->HandoffIo.Read64 = AdmissionHandoffRead64;
+  runtime->HandoffIo.Write8 = AdmissionHandoffWrite8;
+  runtime->HandoffIo.Write32 = AdmissionHandoffWrite32;
+  runtime->HandoffIo.Write64 = AdmissionHandoffWrite64;
+  runtime->HandoffIo.Barrier = AdmissionHandoffBarrier;
+  runtime->HandoffIo.Relax = AdmissionHandoffRelax;
+  runtime->HandoffIo.Now = AdmissionHandoffNow;
+  handoff_region.PhysicalBase = J313_AGX_G2_HANDOFF_BASE;
+  handoff_region.Length = J313_AGX_G2_HANDOFF_SIZE;
+  if (AppleAgxGfxHandoffBindJ313(
+          &runtime->Handoff, &handoff_region,
+          &runtime->HandoffIo) != AppleAgxGfxHandoffResultOk) {
+    status = STATUS_DEVICE_PROTOCOL_ERROR;
+    goto Fail;
+  }
+  if (AppleAgxInitdataMemoryBuild(
+          &runtime->Initdata, &runtime->MemoryIo,
+          &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Fail;
+  }
+
+  runtime->PublicationMapping.Interface = &Context->Interface;
+  runtime->PublicationIo.Context = &runtime->PublicationMapping;
+  runtime->PublicationIo.Map = AdmissionPublicationMap;
+  runtime->PublicationIo.Barrier = AdmissionPublicationBarrier;
+  runtime->PublicationIo.Unmap = AdmissionPublicationUnmap;
+
+  runtime->TransportIo.Context = runtime;
+  runtime->TransportIo.FlushForDevice = AdmissionTransportFlush;
+  runtime->TransportIo.FlushForCpu = AdmissionTransportFlush;
+  runtime->TransportIo.MemoryBarrier = AdmissionTransportBarrier;
+  runtime->TransportIo.PublishU32 = AdmissionTransportPublishU32;
+  runtime->TransportIo.ReadU32 = AdmissionTransportReadU32;
+  runtime->TransportIo.RingDoorbell = AdmissionTransportDoorbell;
+  runtime->TransportIo.Quiesce = AdmissionTransportQuiesce;
+  runtime->TransportIo.NowTicks = AdmissionTransportNow;
+  runtime->QueueIo.Context = runtime;
+  runtime->QueueIo.FlushForDevice = AdmissionTransportFlush;
+  runtime->QueueIo.MemoryBarrier = AdmissionTransportBarrier;
+  runtime->QueueIo.PublishU32 = AdmissionTransportPublishU32;
+  runtime->QueueIo.ReadU32 = AdmissionTransportReadU32;
+  runtime->QueueIo.Quiesce = AdmissionTransportQuiesce;
+
+  runtime->FirmwarePrimitives.Context = runtime;
+  runtime->FirmwarePrimitives.IsPassiveLevel = AdmissionFirmwareAtPassive;
+  runtime->FirmwarePrimitives.NowMs = AdmissionFirmwareNow;
+  runtime->FirmwarePrimitives.PowerOn = AdmissionFirmwarePowerOn;
+  runtime->FirmwarePrimitives.PowerOff = AdmissionFirmwarePowerOff;
+  runtime->FirmwarePrimitives.CreateFirmwareUat =
+      AdmissionFirmwareCreateUat;
+  runtime->FirmwarePrimitives.DestroyFirmwareUat =
+      AdmissionFirmwareDestroyUat;
+  runtime->FirmwarePrimitives.BootAsc = AdmissionFirmwareBootAsc;
+  runtime->FirmwarePrimitives.StopAsc = AdmissionFirmwareStopAsc;
+  runtime->FirmwarePrimitives.StartEndpoint =
+      AdmissionFirmwareStartEndpoint;
+  runtime->FirmwarePrimitives.StopEndpoint =
+      AdmissionFirmwareStopEndpoint;
+  runtime->FirmwarePrimitives.PublishUatRoots = AdmissionFirmwarePublishUat;
+  runtime->FirmwarePrimitives.UnpublishUatRoots =
+      AdmissionFirmwareUnpublishUat;
+  runtime->FirmwarePrimitives.SendInitdata = AdmissionFirmwareSendInitdata;
+  runtime->FirmwarePrimitives.SendDeviceControlInit =
+      AdmissionFirmwareDeviceControlInit;
+  runtime->FirmwarePrimitives.UpdateIdleTimestamp =
+      AdmissionFirmwareIdleTimestamp;
+  if (AppleAgxFirmwareProviderInitialize(
+          &runtime->FirmwareProvider, &runtime->FirmwarePrimitives,
+          &runtime->Handoff, &runtime->FirmwareIo) !=
+      AppleAgxFirmwareProviderResultOk) {
+    status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    goto Fail;
+  }
+
+  AppleAgxBackendRuntimeInitialize(
+      &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
+  RtlZeroMemory(&runtime->RenderIo, sizeof(runtime->RenderIo));
+  runtime->RenderIo.Context = runtime;
+  runtime->RenderIo.RenderContext.Publish = AdmissionRenderPublish;
+  runtime->RenderIo.RenderContext.Unpublish = AdmissionRenderUnpublish;
+  RtlZeroMemory(&runtime->ProviderConfig, sizeof(runtime->ProviderConfig));
+  runtime->ProviderConfig.ChannelMemory =
+      &runtime->Initdata.ChannelMemory;
+  runtime->ProviderConfig.Transport = runtime->TransportIo;
+  runtime->ProviderConfig.Firmware = &runtime->FirmwareIo;
+  runtime->ProviderConfig.Render = &runtime->RenderIo;
+  runtime->ProviderConfig.RenderSharedMemory =
+      &runtime->Initdata.RenderSharedMemory;
+  runtime->ProviderConfig.Runtime = &runtime->Backend;
+  runtime->ProviderConfig.QueueConfig.TimeoutTicks =
+      ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS;
+  runtime->ProviderConfig.QueueRuntimeIo = runtime->QueueIo;
+  runtime->ProviderConfig.ExternalRender.Context = runtime;
+  runtime->ProviderConfig.ExternalRender.BuildJob =
+      AdmissionExternalBuildJob;
+  runtime->ProviderConfig.ExternalRender.ResolvePreparedRange =
+      AdmissionExternalResolveRange;
+  if (!AppleAgxPlatformProviderInitialize(
+          &runtime->Provider, &runtime->ProviderConfig,
+          &runtime->PlatformIo)) {
+    status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    goto Fail;
+  }
+  runtime->ProviderReady = TRUE;
+
+  RtlZeroMemory(&runtime->RuntimeIo, sizeof(runtime->RuntimeIo));
+  runtime->RuntimeIo.Context = runtime;
+  runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
+  runtime->RuntimeIo.Memory.Map = AdmissionBackendMap;
+  runtime->RuntimeIo.Memory.Unmap = AdmissionBackendUnmap;
+  runtime->RuntimeIo.Memory.Resolve = AdmissionBackendResolve;
+  runtime->RuntimeIo.Memory.FlushForDevice = AdmissionTransportFlush;
+  runtime->RuntimeIo.Memory.FlushForCpu = AdmissionTransportFlush;
+  runtime->RuntimeIo.Image.AcquirePrepared = AdmissionBackendAcquire;
+  runtime->RuntimeIo.Image.Relocate = AdmissionBackendRelocate;
+  runtime->RuntimeIo.RenderContext.Publish = AdmissionRenderPublish;
+  runtime->RuntimeIo.RenderContext.Unpublish = AdmissionRenderUnpublish;
+  runtime->RuntimeIo.Queues.Create = AdmissionQueuesCreate;
+  runtime->RuntimeIo.Queues.Destroy = AdmissionQueuesDestroy;
+  runtime->RuntimeIo.Queues.Run3d = AdmissionQueuesRun3d;
+  runtime->RuntimeIo.Queues.RunTa = AdmissionQueuesRunTa;
+  runtime->RuntimeIo.Queues.Stop = AdmissionQueuesStop;
+  runtime->RuntimeIo.Queues.Reset = AdmissionQueuesReset;
+  runtime->RuntimeIo.Complete = AdmissionBackendComplete;
+  runtime->RuntimeIo.Retire = AdmissionBackendRetire;
+  AppleAgxCompletionTransactionInitialize(&runtime->Completion);
+  KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
+  InterlockedExchange(&runtime->WorkScheduled, 0);
+  InterlockedExchange(&runtime->Stopping, 0);
+  if (AppleAgxBackendRuntimeStart(
+          &runtime->Backend, &runtime->RuntimeIo) !=
+      AppleAgxBackendRuntimeResultOk) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Fail;
+  }
+  runtime->BackendStarted = TRUE;
+  runtime->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
+  if (runtime->WorkItem == NULL) {
+    status = STATUS_INSUFFICIENT_RESOURCES;
+    goto Fail;
+  }
+  return STATUS_SUCCESS;
+
+Fail:
+  if (!NT_SUCCESS(AdmissionPlatformDestroy(runtime)))
+    return STATUS_DEVICE_BUSY;
+  Context->PlatformRuntime = NULL;
+  ExFreePoolWithTag(runtime, ADMISSION_PLATFORM_TAG);
+  return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  NTSTATUS status;
+  if (Context == NULL)
+    return STATUS_INVALID_PARAMETER;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL)
+    return STATUS_SUCCESS;
+  status = AdmissionPlatformDestroy(runtime);
+  if (!NT_SUCCESS(status))
+    return status;
+  Context->PlatformRuntime = NULL;
+  ExFreePoolWithTag(runtime, ADMISSION_PLATFORM_TAG);
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime =
+      Context != NULL
+          ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime
+          : NULL;
+  return runtime != NULL && runtime->ProviderReady &&
+                 runtime->BackendStarted &&
+                 runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
+                 runtime->WorkItem != NULL &&
+                 InterlockedCompareExchange(
+                     &runtime->Stopping, 0, 0) == 0 &&
+                 InterlockedCompareExchange(
+                     &runtime->WorkScheduled, 0, 0) == 0
+             ? TRUE
+             : FALSE;
+}
+
+#undef ADMISSION_DELEGATE_FENCE
+#undef ADMISSION_DELEGATE_JOB
+#undef ADMISSION_DELEGATE_ZERO

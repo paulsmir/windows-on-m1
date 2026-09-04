@@ -12,6 +12,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   BOOLEAN bound = FALSE;
 
   if (Context == NULL || Args == NULL || !Context->Started ||
+      !AdmissionPlatformRuntimeReady(Context) ||
       Args->Flags.Value != 0u || Args->SubmissionFenceId == 0u ||
       Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
       Args->hContext == NULL || Args->pDmaBufferPrivateData == NULL ||
@@ -95,6 +96,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted)
     return STATUS_DEVICE_BUSY;
+  if (!AdmissionPlatformRuntimeSubmit(Context)) {
+    InterlockedExchange(&Context->SchedulerFaulted, 1);
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  }
   return STATUS_SUCCESS;
 }
 
