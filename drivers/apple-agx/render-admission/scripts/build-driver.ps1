@@ -1,6 +1,7 @@
 param(
     [ValidateSet("Debug", "Release")]
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [switch]$MemoryQualification
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,8 +35,10 @@ if (-not (Test-Path $umd)) {
 }
 Copy-Item -Force $umd (Join-Path $root "AppleAgxRenderAdmissionUmd.dll")
 
+$memoryQualificationValue = if ($MemoryQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
-    /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true
+    /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
+    "/p:AppleAgxMemoryQualification=$memoryQualificationValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

@@ -77,6 +77,8 @@ static void test_high_and_low_walks(void) {
   APPLE_AGX_UAT_PAGE *level1;
   APPLE_AGX_UAT_PAGE *level2;
   unsigned long long va = 0xffffff8000010000ULL;
+  unsigned long long resolved = 0ULL;
+  unsigned long long descriptor = 0ULL;
   unsigned int l0 = (unsigned int)((va >> 36) & 7ULL);
   unsigned int l1 = (unsigned int)((va >> 25) & 2047ULL);
   unsigned int l2 = (unsigned int)((va >> 14) & 2047ULL);
@@ -102,6 +104,14 @@ static void test_high_and_low_walks(void) {
   assert(level2 != 0 && level2->Level == 2u);
   assert((level2->Entries[l2] & TABLE_ADDRESS_MASK) == 0x20000000ULL);
   assert((level2->Entries[l2 + 1u] & TABLE_ADDRESS_MASK) == 0x20004000ULL);
+  assert(AppleAgxUatResolvePage(0u, &roots, va, &inventory, &resolved,
+                                &descriptor) == AppleAgxUatResultOk);
+  assert(resolved == 0x20000000ULL);
+  assert(descriptor == level2->Entries[l2]);
+  assert(AppleAgxUatResolvePage(0u, &roots, va + TEST_PAGE_SIZE,
+                                &inventory, &resolved,
+                                &descriptor) == AppleAgxUatResultOk);
+  assert(resolved == 0x20004000ULL);
 
   va = 0x0000000000010000ULL;
   l0 = (unsigned int)((va >> 36) & 7ULL);
@@ -114,6 +124,9 @@ static void test_high_and_low_walks(void) {
   level1 = find_page(&inventory, root->Entries[l0] & TABLE_ADDRESS_MASK);
   level2 = find_page(&inventory, level1->Entries[l1] & TABLE_ADDRESS_MASK);
   assert((level2->Entries[l2] & TABLE_ADDRESS_MASK) == 0x30000000ULL);
+  assert(AppleAgxUatResolvePage(0u, &roots, va, &inventory, &resolved,
+                                &descriptor) == AppleAgxUatResultOk);
+  assert(resolved == 0x30000000ULL);
   assert(inventory.MappingCount == 2u);
 
   assert(AppleAgxUatMap(0, &roots, va, 0x40000000ULL, TEST_PAGE_SIZE,
@@ -454,6 +467,8 @@ static void test_invalid_arguments(void) {
   APPLE_AGX_UAT_ROOTS roots = {0, 0};
   APPLE_AGX_UAT_INVENTORY inventory = {0};
   APPLE_AGX_UAT_ALLOCATOR allocator = {0};
+  unsigned long long resolved = 1ULL;
+  unsigned long long descriptor = 1ULL;
   assert(AppleAgxUatCreateAddressSpace(0, 0, &inventory, &roots) ==
          AppleAgxUatResultInvalidArgument);
   assert(AppleAgxUatCreateAddressSpace(64, &allocator, &inventory, &roots) ==
@@ -461,6 +476,10 @@ static void test_invalid_arguments(void) {
   assert(AppleAgxUatMap(0, &roots, 0, 0, TEST_PAGE_SIZE,
                        AppleAgxUatFirmwarePrivateReadWrite, &allocator,
                        &inventory) == AppleAgxUatResultInvalidArgument);
+  assert(AppleAgxUatResolvePage(0u, &roots, 1u, &inventory, &resolved,
+                                &descriptor) ==
+         AppleAgxUatResultMisaligned);
+  assert(resolved == 0ULL && descriptor == 0ULL);
 }
 
 int main(void) {

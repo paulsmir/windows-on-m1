@@ -30,6 +30,18 @@
       <AdditionalDependencies>displib.lib;ntoskrnl.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_RENDER_MEMORY_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Whole-program analysis correctly sees that this diagnostic profile
+           exits StartDevice before every downstream callback implementation. -->
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
+    <OutDir>$(MSBuildProjectDirectory)\build\memory-qualification\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\build\memory-qualification\obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
   <ItemGroup>
     <ClCompile Include="src\driver.c" />
     <ClCompile Include="src\lifecycle.c" />

@@ -139,15 +139,23 @@ Fail:
 
 static unsigned int AdmissionPhysicalInvokeHvc(
     void *Context, unsigned int Immediate, unsigned long long RequestIpa,
-    struct hv_guest_ipa_pa_request *Request) {
+  struct hv_guest_ipa_pa_request *Request) {
+  ADMISSION_PHYSICAL_OWNER *owner = (ADMISSION_PHYSICAL_OWNER *)Context;
   ULONG status;
-  UNREFERENCED_PARAMETER(Context);
-  UNREFERENCED_PARAMETER(Request);
   if (Immediate != HV_GUEST_IPA_PA_HVC_IMMEDIATE)
     return HV_GUEST_IPA_PA_STATUS_INVALID_REQUEST;
   KeMemoryBarrier();
   status = __hvc(HV_GUEST_IPA_PA_HVC_IMMEDIATE, RequestIpa);
   KeMemoryBarrier();
+  if (owner != NULL && Request != NULL) {
+    owner->LastHvcReturnStatus = status;
+    owner->LastHvcPayloadStatus = Request->status;
+    ++owner->HvcInvocationCount;
+    if (status == HV_GUEST_IPA_PA_STATUS_SUCCESS &&
+        Request->status == HV_GUEST_IPA_PA_STATUS_SUCCESS &&
+        Request->count <= MAXULONG - owner->TranslatedPageCount)
+      owner->TranslatedPageCount += Request->count;
+  }
   return status;
 }
 

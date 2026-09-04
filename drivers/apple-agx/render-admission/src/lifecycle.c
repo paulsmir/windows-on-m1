@@ -60,6 +60,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return status;
   }
+#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)
+  {
+    ADMISSION_MEMORY_QUALIFICATION qualification;
+    NTSTATUS cleanupStatus;
+    NTSTATUS interruptStatus;
+
+    status = AdmissionMemoryRuntimeQualify(context, &qualification);
+    cleanupStatus = AdmissionMemoryRuntimeStop(context);
+    qualification.CleanupStatus = cleanupStatus;
+    interruptStatus = AdmissionInterruptStop(context);
+    AdmissionRecordDevice(context->PhysicalDeviceObject,
+                          AdmissionReceiptMemoryQualified, status);
+    AdmissionRecordMemoryQualification(context->PhysicalDeviceObject,
+                                       &qualification);
+    RtlZeroMemory(&context->Interface, sizeof(context->Interface));
+    context->InterfaceValid = FALSE;
+    if (!NT_SUCCESS(status))
+      return status;
+    if (!NT_SUCCESS(cleanupStatus))
+      return cleanupStatus;
+    if (!NT_SUCCESS(interruptStatus))
+      return interruptStatus;
+    return STATUS_NOT_SUPPORTED;
+  }
+#endif
   status = AdmissionSchedulerStart(context);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionMemoryRuntimeStop(context);

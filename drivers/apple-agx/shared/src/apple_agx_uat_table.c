@@ -201,6 +201,49 @@ static APPLE_AGX_UAT_RESULT AppleAgxUatFindExistingLeaf(
   return AppleAgxUatResultOk;
 }
 
+APPLE_AGX_UAT_RESULT AppleAgxUatResolvePage(
+    unsigned int Context, const APPLE_AGX_UAT_ROOTS *Roots,
+    unsigned long long VirtualAddress, APPLE_AGX_UAT_INVENTORY *Inventory,
+    unsigned long long *PhysicalAddress,
+    unsigned long long *Descriptor) {
+  const unsigned long long inputLimit =
+      1ULL << J313_AGX_G2_UAT_INPUT_ADDRESS_BITS;
+  const unsigned long long highBase = ~(inputLimit - 1ULL);
+  APPLE_AGX_UAT_PAGE *root;
+  unsigned long long *leaf = 0;
+  unsigned long long value;
+
+  if (PhysicalAddress != 0)
+    *PhysicalAddress = 0ULL;
+  if (Descriptor != 0)
+    *Descriptor = 0ULL;
+  if (Roots == 0 || Inventory == 0 || PhysicalAddress == 0 ||
+      Descriptor == 0 || Context >= J313_AGX_G2_UAT_CONTEXT_COUNT)
+    return AppleAgxUatResultInvalidArgument;
+  if ((VirtualAddress & APPLE_AGX_UAT_TABLE_PAGE_MASK) != 0ULL)
+    return AppleAgxUatResultMisaligned;
+  if (VirtualAddress >= inputLimit && VirtualAddress < highBase)
+    return AppleAgxUatResultOutOfRange;
+  root = AppleAgxUatFindPage(
+      Inventory,
+      VirtualAddress < inputLimit ? Roots->Ttbr0PhysicalAddress
+                                  : Roots->Ttbr1PhysicalAddress,
+      0u);
+  if (root == 0 ||
+      AppleAgxUatFindExistingLeaf(root, VirtualAddress, Inventory, &leaf) !=
+          AppleAgxUatResultOk ||
+      leaf == 0)
+    return AppleAgxUatResultNotMapped;
+  value = *leaf;
+  if ((value & APPLE_AGX_UAT_TABLE_DESCRIPTOR_MASK) !=
+          APPLE_AGX_UAT_TABLE_DESCRIPTOR_MASK ||
+      (value & APPLE_AGX_UAT_TABLE_ADDRESS_MASK) == 0ULL)
+    return AppleAgxUatResultNotMapped;
+  *PhysicalAddress = value & APPLE_AGX_UAT_TABLE_ADDRESS_MASK;
+  *Descriptor = value;
+  return AppleAgxUatResultOk;
+}
+
 static void AppleAgxUatRollbackMap(
     APPLE_AGX_UAT_PAGE *Root, unsigned long long VirtualAddress,
     unsigned long long MappedLength, unsigned int FirstPage,

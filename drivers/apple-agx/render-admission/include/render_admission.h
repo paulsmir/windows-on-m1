@@ -47,6 +47,7 @@ typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptVidPn = 13,
   AdmissionReceiptSourceAddress = 14,
   AdmissionReceiptStartInterrupt = 15,
+  AdmissionReceiptMemoryQualified = 16,
 } ADMISSION_RECEIPT;
 
 typedef struct _ADMISSION_CONTEXT {
@@ -142,8 +143,38 @@ typedef struct _ADMISSION_PHYSICAL_OWNER {
   struct hv_guest_ipa_pa_request *Request;
   ULONGLONG RequestIpa;
   LONG AllocationCount;
+  ULONG LastHvcReturnStatus;
+  ULONG LastHvcPayloadStatus;
+  ULONG HvcInvocationCount;
+  ULONG TranslatedPageCount;
   BOOLEAN Initialized;
 } ADMISSION_PHYSICAL_OWNER;
+
+#define ADMISSION_MEMORY_QUALIFICATION_VERSION 1u
+typedef struct _ADMISSION_MEMORY_QUALIFICATION {
+  ULONG Version;
+  ULONG Size;
+  NTSTATUS QualificationStatus;
+  NTSTATUS CleanupStatus;
+  ULONG HvcReturnStatus;
+  ULONG HvcPayloadStatus;
+  ULONG HvcInvocationCount;
+  ULONG TranslatedPageCount;
+  ULONG Context;
+  ULONG UatPageCount;
+  ULONG UatMappingCount;
+  ULONG Reserved;
+  ULONGLONG GuestIpaBase;
+  ULONGLONG HostPhysicalBase;
+  ULONGLONG LocalGpuVa;
+  ULONGLONG LocalBytes;
+  ULONGLONG Ttbr0;
+  ULONGLONG Ttbr1;
+  ULONGLONG FirstResolvedPhysical;
+  ULONGLONG LastResolvedPhysical;
+  ULONGLONG FirstLeafDescriptor;
+  ULONGLONG LastLeafDescriptor;
+} ADMISSION_MEMORY_QUALIFICATION;
 
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
                             _In_ PCWSTR Name, _In_ ULONG Value);
@@ -153,6 +184,9 @@ void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);
+void AdmissionRecordMemoryQualification(
+    _In_opt_ PDEVICE_OBJECT DeviceObject,
+    _In_ const ADMISSION_MEMORY_QUALIFICATION *Qualification);
 NTSTATUS AdmissionInterruptStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionDdiQuerySegment4(
@@ -171,6 +205,9 @@ NTSTATUS AdmissionPhysicalFree(
     _Inout_ ADMISSION_PHYSICAL_ALLOCATION *Allocation);
 NTSTATUS AdmissionMemoryRuntimeStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionMemoryRuntimeStop(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionMemoryRuntimeQualify(
+    _In_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_MEMORY_QUALIFICATION *Qualification);
 NTSTATUS AdmissionMemoryRuntimeMapAperture(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ApertureByteOffset,
     _In_ PMDL Mdl, _In_ SIZE_T MdlPageOffset, _In_ UINT PageCount);

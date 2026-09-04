@@ -357,6 +357,114 @@ static ADMISSION_MEMORY_RUNTIME *AdmissionMemoryGetRuntime(
              : NULL;
 }
 
+static ULONGLONG AdmissionMemoryReadU64(
+    _In_reads_(8) volatile const unsigned char *Address) {
+  ULONGLONG value = 0ULL;
+  ULONG index;
+  for (index = 0u; index < 8u; ++index)
+    value |= (ULONGLONG)Address[index] << (index * 8u);
+  return value;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeQualify(
+    ADMISSION_CONTEXT *Context,
+    ADMISSION_MEMORY_QUALIFICATION *Qualification) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  ADMISSION_PHYSICAL_ALLOCATION *allocation;
+  APPLE_AGX_UAT_MAPPING *mapping;
+  volatile const unsigned char *pairBase;
+  ULONGLONG firstPhysical = 0ULL;
+  ULONGLONG lastPhysical = 0ULL;
+  ULONGLONG firstDescriptor = 0ULL;
+  ULONGLONG lastDescriptor = 0ULL;
+  ULONGLONG offset;
+
+  if (Qualification == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(Qualification, sizeof(*Qualification));
+  Qualification->Version = ADMISSION_MEMORY_QUALIFICATION_VERSION;
+  Qualification->Size = sizeof(*Qualification);
+  Qualification->QualificationStatus = STATUS_DEVICE_NOT_READY;
+  Qualification->CleanupStatus = STATUS_PENDING;
+  if (runtime == NULL || runtime->LocalObject.AllocationHandle == NULL ||
+      runtime->Residency.Inventory.MappingCount != 1u ||
+      runtime->Publication.MappedBase == NULL)
+    return STATUS_INVALID_DEVICE_STATE;
+  allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
+      runtime->LocalObject.AllocationHandle;
+  mapping = &runtime->Residency.Inventory.Mappings[0];
+  if ((PUCHAR)runtime->LocalObject.CpuAddress <
+      (PUCHAR)runtime->LocalObject.AllocationCpuBase)
+    return STATUS_INVALID_ADDRESS;
+  offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
+                       (PUCHAR)runtime->LocalObject.AllocationCpuBase);
+
+  Qualification->HvcReturnStatus =
+      runtime->PhysicalOwner.LastHvcReturnStatus;
+  Qualification->HvcPayloadStatus =
+      runtime->PhysicalOwner.LastHvcPayloadStatus;
+  Qualification->HvcInvocationCount =
+      runtime->PhysicalOwner.HvcInvocationCount;
+  Qualification->TranslatedPageCount =
+      runtime->PhysicalOwner.TranslatedPageCount;
+  Qualification->Context = runtime->Residency.Context;
+  Qualification->UatPageCount = runtime->Residency.Inventory.PageCount;
+  Qualification->UatMappingCount =
+      runtime->Residency.Inventory.MappingCount;
+  Qualification->GuestIpaBase = allocation->GuestIpaBase + offset;
+  Qualification->HostPhysicalBase = runtime->LocalObject.DeviceAddress;
+  Qualification->LocalGpuVa = runtime->LocalObject.GpuVirtualAddress;
+  Qualification->LocalBytes = runtime->LocalObject.Length;
+  Qualification->Ttbr0 = runtime->Published.PublishedTtbr0;
+  Qualification->Ttbr1 = runtime->Published.PublishedTtbr1;
+
+  if (Qualification->HvcReturnStatus != HV_GUEST_IPA_PA_STATUS_SUCCESS ||
+      Qualification->HvcPayloadStatus != HV_GUEST_IPA_PA_STATUS_SUCCESS ||
+      Qualification->HvcInvocationCount == 0u ||
+      Qualification->TranslatedPageCount == 0u ||
+      Qualification->Context != ADMISSION_MEMORY_UAT_CONTEXT ||
+      Qualification->GuestIpaBase == 0ULL ||
+      Qualification->HostPhysicalBase == 0ULL ||
+      Qualification->HostPhysicalBase >= ADMISSION_HVC_PHYSICAL_LIMIT ||
+      Qualification->LocalGpuVa != ADMISSION_LOCAL_GPU_VA ||
+      Qualification->LocalBytes != ADMISSION_LOCAL_BYTES ||
+      mapping->Context != ADMISSION_MEMORY_UAT_CONTEXT ||
+      mapping->VirtualAddress != ADMISSION_LOCAL_GPU_VA ||
+      mapping->PhysicalAddress != runtime->LocalObject.DeviceAddress ||
+      mapping->Length != ADMISSION_LOCAL_BYTES ||
+      mapping->PhysicalStride != APPLE_AGX_UAT_PAGE_SIZE_16K ||
+      runtime->Published.Context != ADMISSION_MEMORY_UAT_CONTEXT)
+    return STATUS_DEVICE_HARDWARE_ERROR;
+
+  pairBase = runtime->Publication.MappedBase +
+             (ULONGLONG)ADMISSION_MEMORY_UAT_CONTEXT * 16ULL;
+  KeMemoryBarrier();
+  if (AdmissionMemoryReadU64(pairBase) != Qualification->Ttbr0 ||
+      AdmissionMemoryReadU64(pairBase + 8u) != Qualification->Ttbr1)
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  if (AppleAgxUatResolvePage(
+          ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
+          ADMISSION_LOCAL_GPU_VA, &runtime->Residency.Inventory,
+          &firstPhysical, &firstDescriptor) != AppleAgxUatResultOk ||
+      AppleAgxUatResolvePage(
+          ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
+          ADMISSION_LOCAL_GPU_VA + ADMISSION_LOCAL_BYTES -
+              APPLE_AGX_UAT_PAGE_SIZE_16K,
+          &runtime->Residency.Inventory, &lastPhysical,
+          &lastDescriptor) != AppleAgxUatResultOk ||
+      firstPhysical != runtime->LocalObject.DeviceAddress ||
+      lastPhysical != runtime->LocalObject.DeviceAddress +
+                          ADMISSION_LOCAL_BYTES -
+                          APPLE_AGX_UAT_PAGE_SIZE_16K)
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  Qualification->FirstResolvedPhysical = firstPhysical;
+  Qualification->LastResolvedPhysical = lastPhysical;
+  Qualification->FirstLeafDescriptor = firstDescriptor;
+  Qualification->LastLeafDescriptor = lastDescriptor;
+  Qualification->QualificationStatus = STATUS_SUCCESS;
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeMapAperture(
     ADMISSION_CONTEXT *Context, ULONGLONG ApertureByteOffset, PMDL Mdl,
     SIZE_T MdlPageOffset, UINT PageCount) {

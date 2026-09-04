@@ -6,6 +6,13 @@ static void WriteDword(HANDLE Key, PCWSTR Name, ULONG Value) {
   (void)ZwSetValueKey(Key, &name, 0, REG_DWORD, &Value, sizeof(Value));
 }
 
+static void WriteBinary(HANDLE Key, PCWSTR Name, const VOID *Value,
+                        ULONG Bytes) {
+  UNICODE_STRING name;
+  RtlInitUnicodeString(&name, Name);
+  (void)ZwSetValueKey(Key, &name, 0, REG_BINARY, (PVOID)Value, Bytes);
+}
+
 _Use_decl_annotations_ void AdmissionRecordService(
     PUNICODE_STRING RegistryPath, PCWSTR Name, ULONG Value) {
   OBJECT_ATTRIBUTES attributes;
@@ -43,5 +50,18 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
   WriteDword(key, L"Wom1CleanQueryType", (ULONG)Type);
   WriteDword(key, L"Wom1CleanQuerySize", OutputDataSize);
   WriteDword(key, L"Wom1CleanStatus", (ULONG)Status);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordMemoryQualification(
+    PDEVICE_OBJECT DeviceObject,
+    const ADMISSION_MEMORY_QUALIFICATION *Qualification) {
+  HANDLE key = NULL;
+  if (DeviceObject == NULL || Qualification == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1MemoryQualification", Qualification,
+              sizeof(*Qualification));
   ZwClose(key);
 }

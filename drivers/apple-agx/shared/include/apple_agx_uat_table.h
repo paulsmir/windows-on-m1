@@ -64,6 +64,13 @@ APPLE_AGX_UAT_RESULT AppleAgxUatMapPageList(
     unsigned int PageCount, APPLE_AGX_UAT_PROTECTION Protection,
     const APPLE_AGX_UAT_ALLOCATOR *Allocator,
     APPLE_AGX_UAT_INVENTORY *Inventory);
+/* Read-only walk of the exact CPU-owned page-table image.  This is used by
+ * qualification and diagnostics; it never creates tables or mappings. */
+APPLE_AGX_UAT_RESULT AppleAgxUatResolvePage(
+    unsigned int Context, const APPLE_AGX_UAT_ROOTS *Roots,
+    unsigned long long VirtualAddress, APPLE_AGX_UAT_INVENTORY *Inventory,
+    unsigned long long *PhysicalAddress,
+    unsigned long long *Descriptor);
 APPLE_AGX_UAT_RESULT AppleAgxUatUnmap(
     unsigned int Context, const APPLE_AGX_UAT_ROOTS *Roots,
     unsigned long long VirtualAddress, unsigned long long Length,
