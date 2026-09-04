@@ -31,6 +31,12 @@ ASL_INCLUDE = (
     / "J313AppleAgxAbiAdmission.asl.inc"
 )
 MATRIX = ROOT / "investigation" / "EXP406_FULL_GRAPHICS_ABI_MATRIX.csv"
+MU_PACKAGE = ROOT / "mu" / "Platform" / "MacBookAirMid2020Pkg"
+MU_DSC = MU_PACKAGE / "MacBookAirMid2020.dsc"
+MU_FDF = MU_PACKAGE / "MacBookAirMid2020.fdf"
+MU_SSDT = MU_PACKAGE / "AcpiTables" / "J313AppleAgxAbiAdmissionSsdt.asl"
+MU_INF = MU_PACKAGE / "AcpiTables" / "DeviceAcpiTablesAgxAbiAdmission.inf"
+M1N1_POWER = ROOT / "m1n1_windows" / "src" / "hv_agx_power_mmio.c"
 
 
 class J313AgxAbiAdmissionContractTests(unittest.TestCase):
@@ -85,6 +91,57 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
             row = next(row for row in rows if row["ddi"] == reserved)
             self.assertEqual(row["current_implementation"], "zero")
             self.assertEqual(row["safe_to_register"], "required zero")
+
+    def test_candidate_mu_profile_is_opt_in_and_keeps_normal_g2_separate(self):
+        dsc = MU_DSC.read_text()
+        fdf = MU_FDF.read_text()
+        admission_module = (
+            "MacBookAirMid2020Pkg/AcpiTables/"
+            "DeviceAcpiTablesAgxAbiAdmission.inf"
+        )
+        g2_module = "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf"
+        stable_module = "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf"
+        self.assertIn("J313_AGX_ABI_ADMISSION_PROFILE            = FALSE", dsc)
+        self.assertEqual(dsc.count(admission_module), 1)
+        self.assertEqual(fdf.count(admission_module), 1)
+        for text in (dsc, fdf):
+            admission_index = text.index(admission_module)
+            g2_index = text.index(g2_module)
+            stable_index = text.index(stable_module)
+            self.assertLess(admission_index, g2_index)
+            self.assertLess(g2_index, stable_index)
+        inf = MU_INF.read_text()
+        self.assertIn("J313AppleAgxAbiAdmissionSsdt.asl", inf)
+        for baseline in ("DBG2.aslc", "MCFG.aslc", "DSDT.asl"):
+            self.assertIn(baseline, inf)
+        wrapper = MU_SSDT.read_text()
+        self.assertIn('Include ("J313AppleAgxAbiAdmission.asl.inc")', wrapper)
+        self.assertNotIn('Include ("J313AppleAgx.asl.inc")', wrapper)
+
+    def test_m1n1_scanout_interrupt_is_synthetic_only(self):
+        source = M1N1_POWER.read_text()
+        self.assertIn('#include "hv_agx_abi_admission.generated.h"', source)
+        self.assertIn(
+            "HV_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID",
+            source,
+        )
+        self.assertNotIn("HV_AGX_SCANOUT_PHYSICAL_INTID", source)
+        self.assertNotIn("completion_route", source)
+        self.assertIn("hv_agx_scanout_broker_take_irq_edge", source)
+        self.assertIn("hv_vgic3_inject_irq", source)
+
+    def test_candidate_ssdt_uses_synthetic_resource_contract(self):
+        wrapper = MU_SSDT.read_text()
+        generated = ASL_INCLUDE.read_text()
+        self.assertNotIn("APPL0002", wrapper)
+        self.assertIn("APPL0002", generated)
+        self.assertIn(
+            "Interrupt (ResourceConsumer, Edge, ActiveHigh, Exclusive)",
+            generated,
+        )
+        self.assertIn("{ 889 }", generated)
+        for guest in range(880, 889):
+            self.assertNotIn(f"{{ {guest} }}", generated)
 
 
 if __name__ == "__main__":

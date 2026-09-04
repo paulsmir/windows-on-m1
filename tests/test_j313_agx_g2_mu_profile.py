@@ -11,20 +11,27 @@ DSDT = PKG / "AcpiTables" / "DSDT.asl"
 SSDT = PKG / "AcpiTables" / "J313AppleAgxSsdt.asl"
 DEVICE_INF = PKG / "AcpiTables" / "DeviceAcpiTables.inf"
 G2_DEVICE_INF = PKG / "AcpiTables" / "DeviceAcpiTablesG2.inf"
+ABI_DEVICE_INF = PKG / "AcpiTables" / "DeviceAcpiTablesAgxAbiAdmission.inf"
 DEVICE_MODULE = "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTables.inf"
 G2_DEVICE_MODULE = "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesG2.inf"
+ABI_DEVICE_MODULE = (
+    "MacBookAirMid2020Pkg/AcpiTables/DeviceAcpiTablesAgxAbiAdmission.inf"
+)
 WORKFLOW = ROOT / ".github" / "workflows" / "j313-agx-g2-acpi.yml"
 
 
-def _conditional_body(text, module):
+def _profile_sections(text):
     pattern = re.compile(
-        r"!if\s+\$\(J313_AGX_G2_PROFILE\)\s*==\s*TRUE\s*\n"
-        r"(?P<body>.*?)"
+        r"!if\s+\$\(J313_AGX_ABI_ADMISSION_PROFILE\)\s*==\s*TRUE\s*\n"
+        r"(?P<abi>.*?)"
+        r"!elseif\s+\$\(J313_AGX_G2_PROFILE\)\s*==\s*TRUE\s*\n"
+        r"(?P<g2>.*?)"
+        r"!else\s*\n"
+        r"(?P<stable>.*?)"
         r"!endif(?:\s*#.*)?",
         re.DOTALL,
     )
-    bodies = [match.group("body") for match in pattern.finditer(text)]
-    return [body for body in bodies if module in body]
+    return list(pattern.finditer(text))
 
 
 class J313AgxG2MuProfileTests(unittest.TestCase):
@@ -42,20 +49,16 @@ class J313AgxG2MuProfileTests(unittest.TestCase):
 
         for platform_file in (DSC, FDF):
             text = platform_file.read_text()
-            profile = re.search(
-                r"!if\s+\$\(J313_AGX_G2_PROFILE\)\s*==\s*TRUE\s*\n"
-                r"(?P<true>.*?)"
-                r"!else\s*\n"
-                r"(?P<false>.*?)"
-                r"!endif(?:\s*#.*)?",
-                text,
-                re.DOTALL,
-            )
-            self.assertIsNotNone(profile)
-            self.assertIn(G2_DEVICE_MODULE, profile.group("true"))
-            self.assertNotIn(DEVICE_MODULE, profile.group("true"))
-            self.assertIn(DEVICE_MODULE, profile.group("false"))
-            self.assertNotIn(G2_DEVICE_MODULE, profile.group("false"))
+            profiles = _profile_sections(text)
+            self.assertEqual(len(profiles), 1)
+            profile = profiles[0]
+            self.assertIn(ABI_DEVICE_MODULE, profile.group("abi"))
+            self.assertNotIn(G2_DEVICE_MODULE, profile.group("abi"))
+            self.assertIn(G2_DEVICE_MODULE, profile.group("g2"))
+            self.assertNotIn(ABI_DEVICE_MODULE, profile.group("g2"))
+            self.assertIn(DEVICE_MODULE, profile.group("stable"))
+            self.assertNotIn(G2_DEVICE_MODULE, profile.group("stable"))
+            self.assertNotIn(ABI_DEVICE_MODULE, profile.group("stable"))
 
     def test_profile_defaults_false_and_component_is_opt_in(self):
         dsc = DSC.read_text()
@@ -63,14 +66,24 @@ class J313AgxG2MuProfileTests(unittest.TestCase):
             dsc,
             r"(?m)^\s*J313_AGX_G2_PROFILE\s*=\s*FALSE\s*$",
         )
-        self.assertEqual(len(_conditional_body(dsc, G2_DEVICE_MODULE)), 1)
+        self.assertRegex(
+            dsc,
+            r"(?m)^\s*J313_AGX_ABI_ADMISSION_PROFILE\s*=\s*FALSE\s*$",
+        )
+        self.assertEqual(len(_profile_sections(dsc)), 1)
         self.assertEqual(dsc.count(G2_DEVICE_MODULE), 1)
+        self.assertEqual(dsc.count(ABI_DEVICE_MODULE), 1)
 
     def test_fdf_packages_exactly_one_opt_in_acpi_module(self):
         fdf = FDF.read_text()
         packaged = "INF RuleOverride=ACPITABLE " + G2_DEVICE_MODULE
-        self.assertEqual(len(_conditional_body(fdf, packaged)), 1)
+        abi_packaged = "INF RuleOverride=ACPITABLE " + ABI_DEVICE_MODULE
+        profiles = _profile_sections(fdf)
+        self.assertEqual(len(profiles), 1)
+        self.assertIn(packaged, profiles[0].group("g2"))
+        self.assertIn(abi_packaged, profiles[0].group("abi"))
         self.assertEqual(fdf.count(G2_DEVICE_MODULE), 1)
+        self.assertEqual(fdf.count(ABI_DEVICE_MODULE), 1)
 
     def test_stable_dsdt_remains_free_of_agx(self):
         dsdt = DSDT.read_text()
