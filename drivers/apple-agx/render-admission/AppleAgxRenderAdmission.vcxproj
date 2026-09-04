@@ -21,7 +21,7 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -37,9 +37,11 @@
     <ClCompile Include="src\display.c" />
     <ClCompile Include="src\interrupt.c" />
     <ClCompile Include="src\receipts.c" />
+    <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />
+    <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="AppleAgxRenderAdmission.inf" />
