@@ -42,6 +42,29 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
                         platform.index("AdmissionPlatformRuntimeReset(")]
         self.assertNotIn("AdmissionRecordPlatformStage", stop)
 
+    def test_resource_gate_distinguishes_raw_gsi_from_translated_vector(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        validate = platform[
+            platform.index("AdmissionPlatformReadRawResources("):
+            platform.index("AdmissionPlatformReadSnapshot(")
+        ]
+
+        self.assertIn("DevicePropertyBootConfiguration", validate)
+        self.assertRegex(
+            validate,
+            r"raw_descriptor->u\.Interrupt\.Vector\s*!=\s*"
+            r"J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID",
+        )
+        self.assertRegex(
+            validate,
+            r"translated_descriptor->u\.Interrupt\.Vector\s*==\s*0u",
+        )
+        self.assertNotRegex(
+            validate,
+            r"(?<!raw_)descriptor->u\.Interrupt\.Vector\s*!=\s*"
+            r"J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
