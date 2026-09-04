@@ -22,7 +22,6 @@ typedef enum _APPLE_AGX_FIRMWARE_PHASE {
   AppleAgxFirmwareInitdataSent,
   AppleAgxFirmwareDeviceControlInitialized,
   AppleAgxFirmwareIdleTimestampUpdated,
-  AppleAgxFirmwareHeartbeatObserved,
   AppleAgxFirmwareRollingBack,
   AppleAgxFirmwareStopped,
   AppleAgxFirmwareFailed,
@@ -47,8 +46,7 @@ typedef enum _APPLE_AGX_FIRMWARE_RESULT {
 #define APPLE_AGX_FIRMWARE_INITDATA_SENT (1u << 6)
 #define APPLE_AGX_FIRMWARE_DEVICE_CONTROL (1u << 7)
 #define APPLE_AGX_FIRMWARE_IDLE_TIMESTAMP (1u << 8)
-#define APPLE_AGX_FIRMWARE_HEARTBEAT (1u << 9)
-#define APPLE_AGX_FIRMWARE_ALL_COMPLETED ((1u << 10) - 1u)
+#define APPLE_AGX_FIRMWARE_ALL_COMPLETED ((1u << 9) - 1u)
 
 typedef struct _APPLE_AGX_FIRMWARE {
   APPLE_AGX_FIRMWARE_PHASE Phase;
@@ -79,8 +77,6 @@ typedef struct _APPLE_AGX_FIRMWARE_IO {
                                              APPLE_AGX_FW_U64 DeadlineMs);
   APPLE_AGX_FW_BOOL (*UpdateIdleTimestamp)(void *Context,
                                            APPLE_AGX_FW_U64 DeadlineMs);
-  APPLE_AGX_FW_BOOL (*ObserveHeartbeat)(void *Context,
-                                        APPLE_AGX_FW_U64 DeadlineMs);
   APPLE_AGX_FW_BOOL (*UnpublishInitdata)(void *Context,
                                         APPLE_AGX_FW_U64 DeadlineMs);
   APPLE_AGX_FW_BOOL (*StopEndpoint)(void *Context,

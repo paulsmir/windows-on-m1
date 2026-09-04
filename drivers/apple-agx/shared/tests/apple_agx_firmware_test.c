@@ -13,7 +13,6 @@ enum {
   TraceSendInitdata,
   TraceDeviceControlInit,
   TraceUpdateIdleTimestamp,
-  TraceHeartbeat,
   TraceUnpublishInitdata,
   TraceStopDoorbellEndpoint,
   TraceStopFirmwareEndpoint,
@@ -135,12 +134,6 @@ static APPLE_AGX_FW_BOOL update_idle_timestamp(
                          TraceUpdateIdleTimestamp);
 }
 
-static APPLE_AGX_FW_BOOL observe_heartbeat(void *context,
-                                           APPLE_AGX_FW_U64 deadline) {
-  (void)deadline;
-  return start_operation((FAKE_TRANSPORT *)context, TraceHeartbeat);
-}
-
 static APPLE_AGX_FW_BOOL unpublish_initdata(void *context,
                                             APPLE_AGX_FW_U64 deadline) {
   (void)deadline;
@@ -200,7 +193,6 @@ static APPLE_AGX_FIRMWARE_IO make_io(FAKE_TRANSPORT *fake) {
       send_initdata,
       device_control_init,
       update_idle_timestamp,
-      observe_heartbeat,
       unpublish_initdata,
       stop_endpoint,
       stop_asc,
@@ -222,7 +214,7 @@ static void assert_trace(const FAKE_TRANSPORT *fake,
 
 static void test_ordered_start_and_idempotent_rollback(void) {
   static const unsigned char expected[] = {
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
   };
   APPLE_AGX_FIRMWARE firmware;
   FAKE_TRANSPORT fake = {0};
@@ -232,7 +224,7 @@ static void test_ordered_start_and_idempotent_rollback(void) {
   AppleAgxFirmwareInitialize(&firmware);
   assert(AppleAgxFirmwareStart(&firmware, &io) ==
          AppleAgxFirmwareResultOk);
-  assert(firmware.Phase == AppleAgxFirmwareHeartbeatObserved);
+  assert(firmware.Phase == AppleAgxFirmwareIdleTimestampUpdated);
   assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_ALL_COMPLETED);
   assert(AppleAgxFirmwareRollback(&firmware, &io) ==
          AppleAgxFirmwareResultOk);
@@ -259,11 +251,11 @@ static void test_ordered_start_and_idempotent_rollback(void) {
 static void test_failure_after_every_start_operation_rolls_back_exactly(void) {
   unsigned int failure;
 
-  for (failure = 1; failure <= 10; ++failure) {
+  for (failure = 1; failure <= 9; ++failure) {
     APPLE_AGX_FIRMWARE firmware;
     FAKE_TRANSPORT fake = {0};
     APPLE_AGX_FIRMWARE_IO io = make_io(&fake);
-    unsigned char expected[16];
+    unsigned char expected[15];
     unsigned int count = 0;
     unsigned int index;
 
@@ -357,7 +349,7 @@ static void test_invalid_contracts_and_unknown_bits_are_rejected(void) {
   assert(fake.TraceCount == 0u);
 
   io = make_io(&fake);
-  firmware.Phase = AppleAgxFirmwareHeartbeatObserved;
+  firmware.Phase = AppleAgxFirmwareIdleTimestampUpdated;
   firmware.CompletedMask = 1u << 31;
   assert(AppleAgxFirmwareRollback(&firmware, &io) ==
          AppleAgxFirmwareResultInvalid);
@@ -413,7 +405,7 @@ static void test_cleanup_failure_keeps_exact_resource_bit(void) {
          AppleAgxFirmwareResultCleanupFailed);
   assert(firmware.Phase == AppleAgxFirmwareFailed);
   assert(firmware.CompletedMask == APPLE_AGX_FIRMWARE_DOORBELL_ENDPOINT);
-  assert(fake.TraceCount == 16u);
+  assert(fake.TraceCount == 15u);
 }
 
 static void test_cleanup_timeout_is_failure(void) {

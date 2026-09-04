@@ -14,6 +14,12 @@ static void test_literal_message_vectors(void) {
          0x0050002000000002ULL);
   assert(AppleAgxRtkitStartEndpoint(0x21u, 2u) ==
          0x0050002100000002ULL);
+  assert(AppleAgxRtkitStopEndpoint(0x20u) ==
+         0x0050002000000001ULL);
+  assert(AppleAgxRtkitStopEndpoint(0x21u) ==
+         0x0050002100000001ULL);
+  assert(AppleAgxRtkitDoorbell(0x11u) ==
+         0x0083000000000011ULL);
   assert(AppleAgxRtkitInitdata(0x00000abcde000ULL) ==
          0x00810000abcde000ULL);
 }
@@ -32,6 +38,11 @@ static void test_management_decode_is_bounded(void) {
   assert(decoded.State == 0u);
   assert(decoded.Endpoint == 0x20u);
   assert(decoded.Flag == 2u);
+
+  assert(AppleAgxRtkitDecodeManagement(0x0050002100000001ULL, &decoded));
+  assert(decoded.Type == AppleAgxRtkitManagementStartEndpoint);
+  assert(decoded.Endpoint == 0x21u);
+  assert(decoded.Flag == 1u);
 
   assert(AppleAgxRtkitDecodeManagement(0x0010000000040001ULL, &decoded));
   assert(decoded.Type == AppleAgxRtkitManagementHello);
@@ -79,6 +90,10 @@ static void test_invalid_encode_inputs_are_not_truncated(void) {
   assert(AppleAgxRtkitStartEndpoint(0x100u, 2u) ==
          APPLE_AGX_RTKIT_INVALID_MESSAGE);
   assert(AppleAgxRtkitStartEndpoint(0x20u, 4u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
+  assert(AppleAgxRtkitStopEndpoint(0x100u) ==
+         APPLE_AGX_RTKIT_INVALID_MESSAGE);
+  assert(AppleAgxRtkitDoorbell(0x10000u) ==
          APPLE_AGX_RTKIT_INVALID_MESSAGE);
   assert(AppleAgxRtkitInitdata(1ULL << 44) ==
          APPLE_AGX_RTKIT_INVALID_MESSAGE);

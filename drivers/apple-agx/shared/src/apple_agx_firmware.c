@@ -6,7 +6,7 @@
 #define APPLE_AGX_FW_U64_MAX (~0ULL)
 #define APPLE_AGX_FIRMWARE_OBSERVATION_BITS                                \
   (APPLE_AGX_FIRMWARE_INITDATA_SENT | APPLE_AGX_FIRMWARE_DEVICE_CONTROL |  \
-   APPLE_AGX_FIRMWARE_IDLE_TIMESTAMP | APPLE_AGX_FIRMWARE_HEARTBEAT)
+   APPLE_AGX_FIRMWARE_IDLE_TIMESTAMP)
 
 static void AppleAgxFirmwareRecord(const APPLE_AGX_FIRMWARE *Firmware,
                                    const APPLE_AGX_FIRMWARE_IO *Io) {
@@ -27,7 +27,6 @@ AppleAgxFirmwareIoValid(const APPLE_AGX_FIRMWARE_IO *Io) {
          Io->SendInitdata != APPLE_AGX_FW_NULL &&
          Io->SendDeviceControlInit != APPLE_AGX_FW_NULL &&
          Io->UpdateIdleTimestamp != APPLE_AGX_FW_NULL &&
-         Io->ObserveHeartbeat != APPLE_AGX_FW_NULL &&
          Io->UnpublishInitdata != APPLE_AGX_FW_NULL &&
          Io->StopEndpoint != APPLE_AGX_FW_NULL &&
          Io->StopAsc != APPLE_AGX_FW_NULL &&
@@ -221,10 +220,6 @@ APPLE_AGX_FIRMWARE_RESULT AppleAgxFirmwareStart(
                          J313_AGX_G2_INITDATA_TIMEOUT_MS,
                          AppleAgxFirmwareIdleTimestampUpdated,
                          APPLE_AGX_FIRMWARE_IDLE_TIMESTAMP);
-  APPLE_AGX_START_SIMPLE(Io->ObserveHeartbeat,
-                         J313_AGX_G2_HEARTBEAT_TIMEOUT_MS,
-                         AppleAgxFirmwareHeartbeatObserved,
-                         APPLE_AGX_FIRMWARE_HEARTBEAT);
   return AppleAgxFirmwareResultOk;
 }
 

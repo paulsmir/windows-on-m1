@@ -13,6 +13,8 @@
 #define APPLE_AGX_RTKIT_EPMAP_BITMAP_MASK 0xffffffffULL
 #define APPLE_AGX_RTKIT_INITDATA_TYPE (0x81ULL << 48u)
 #define APPLE_AGX_RTKIT_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
+#define APPLE_AGX_RTKIT_DOORBELL_TYPE (0x83ULL << 48u)
+#define APPLE_AGX_RTKIT_DOORBELL_CHANNEL_MASK 0xffffULL
 
 static APPLE_AGX_RTKIT_U64
 AppleAgxRtkitManagementType(APPLE_AGX_RTKIT_U32 Type) {
@@ -74,6 +76,17 @@ AppleAgxRtkitStartEndpoint(APPLE_AGX_RTKIT_U32 Endpoint,
   return AppleAgxRtkitManagementType(AppleAgxRtkitManagementStartEndpoint) |
          ((APPLE_AGX_RTKIT_U64)Endpoint << APPLE_AGX_RTKIT_ENDPOINT_SHIFT) |
          Flag;
+}
+
+APPLE_AGX_RTKIT_U64
+AppleAgxRtkitStopEndpoint(APPLE_AGX_RTKIT_U32 Endpoint) {
+  return AppleAgxRtkitStartEndpoint(Endpoint, 1u);
+}
+
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitDoorbell(APPLE_AGX_RTKIT_U32 Channel) {
+  if (Channel > APPLE_AGX_RTKIT_DOORBELL_CHANNEL_MASK)
+    return APPLE_AGX_RTKIT_INVALID_MESSAGE;
+  return APPLE_AGX_RTKIT_DOORBELL_TYPE | Channel;
 }
 
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitInitdata(APPLE_AGX_RTKIT_U64 Address) {

@@ -44,6 +44,14 @@ APPLE_AGX_RTKIT_U64 AppleAgxRtkitEndpointMapAck(APPLE_AGX_RTKIT_U32 Base,
 APPLE_AGX_RTKIT_U64
 AppleAgxRtkitStartEndpoint(APPLE_AGX_RTKIT_U32 Endpoint,
                            APPLE_AGX_RTKIT_U32 Flag);
+/*
+ * m1n1 ASCManagementEndpoint.stop_ep() uses the same type-5 management
+ * message as start_ep(), with FLAG=1 instead of FLAG=2.
+ */
+APPLE_AGX_RTKIT_U64
+AppleAgxRtkitStopEndpoint(APPLE_AGX_RTKIT_U32 Endpoint);
+/* AGX DoorbellMsg: type 0x83 in bits 63:48, channel in bits 15:0. */
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitDoorbell(APPLE_AGX_RTKIT_U32 Channel);
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitInitdata(APPLE_AGX_RTKIT_U64 Address);
 APPLE_AGX_RTKIT_BOOL AppleAgxRtkitDecodeManagement(
     APPLE_AGX_RTKIT_U64 Message, APPLE_AGX_RTKIT_MANAGEMENT *Decoded);
