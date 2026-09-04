@@ -57,7 +57,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 
   status = AdmissionMemoryRuntimeStart(context);
   if (!NT_SUCCESS(status)) {
+#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)
+    ADMISSION_MEMORY_QUALIFICATION qualification;
+    NTSTATUS interruptStatus;
+    RtlZeroMemory(&qualification, sizeof(qualification));
+    qualification.Version = ADMISSION_MEMORY_QUALIFICATION_VERSION;
+    qualification.Size = sizeof(qualification);
+    qualification.QualificationStatus = status;
+    qualification.CleanupStatus = context->MemoryRuntime == NULL
+                                      ? STATUS_SUCCESS
+                                      : STATUS_DEVICE_BUSY;
+    qualification.StartStage = (ULONG)InterlockedCompareExchange(
+        &context->MemoryStartStage, 0, 0);
+    interruptStatus = AdmissionInterruptStop(context);
+    AdmissionRecordDevice(context->PhysicalDeviceObject,
+                          AdmissionReceiptMemoryQualified, status);
+    AdmissionRecordMemoryQualification(context->PhysicalDeviceObject,
+                                       &qualification);
+    if (!NT_SUCCESS(interruptStatus))
+      return interruptStatus;
+#else
     (void)AdmissionInterruptStop(context);
+#endif
     return status;
   }
 #if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)

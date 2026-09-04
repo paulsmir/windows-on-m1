@@ -36,6 +36,15 @@ typedef struct _ADMISSION_MEMORY_RUNTIME {
   BOOLEAN PublicationReady;
 } ADMISSION_MEMORY_RUNTIME;
 
+static VOID AdmissionMemoryRecordStart(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ ADMISSION_MEMORY_START_STAGE Stage, _In_ NTSTATUS Status) {
+  if (Context == NULL)
+    return;
+  InterlockedExchange(&Context->MemoryStartStage, (LONG)Stage);
+  InterlockedExchange(&Context->MemoryStartStatus, (LONG)Status);
+}
+
 static unsigned char AdmissionMemoryAllocateContiguous(
     void *Opaque, unsigned long long Bytes, void **CpuBase,
     unsigned long long *DeviceBase, void **AllocationHandle) {
@@ -210,16 +219,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   APPLE_AGX_UAT_TTBR_PAIR pair;
   NTSTATUS status;
 
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartEntered,
+                             STATUS_PENDING);
   if (Context == NULL || !Context->InterfaceValid ||
       Context->MemoryRuntime != NULL ||
       !AdmissionGpuRegionAssigned(&Context->DeviceInformation) ||
       Context->Interface.DxgkCbMapMemory == NULL ||
-      Context->Interface.DxgkCbUnmapMemory == NULL)
+      Context->Interface.DxgkCbUnmapMemory == NULL) {
+    AdmissionMemoryRecordStart(Context, AdmissionMemoryStartEntered,
+                               STATUS_INVALID_DEVICE_STATE);
     return STATUS_INVALID_DEVICE_STATE;
+  }
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartInventories,
+                             STATUS_PENDING);
   runtime = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*runtime),
                             ADMISSION_MEMORY_RUNTIME_TAG);
   if (runtime == NULL)
+  {
+    AdmissionMemoryRecordStart(Context, AdmissionMemoryStartInventories,
+                               STATUS_INSUFFICIENT_RESOURCES);
     return STATUS_INSUFFICIENT_RESOURCES;
+  }
   RtlZeroMemory(runtime, sizeof(*runtime));
   ExInitializeFastMutex(&runtime->PagingLock);
   Context->MemoryRuntime = runtime;
@@ -253,6 +273,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
                 sizeof(*runtime->UatMappings) *
                     ADMISSION_UAT_MAPPING_CAPACITY);
 
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartPhysicalOwner,
+                             STATUS_PENDING);
   status = AdmissionPhysicalOwnerInitialize(
       &Context->Interface, Context->PhysicalDeviceObject,
       &runtime->PhysicalOwner);
@@ -264,6 +286,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
       AdmissionMemoryAllocateContiguous;
   runtime->MemoryIo.FreeContiguous = AdmissionMemoryFreeContiguous;
 
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartLocalObject,
+                             STATUS_PENDING);
   if (AppleAgxMemoryAllocateAligned(
           &runtime->MemoryIo, ADMISSION_LOCAL_BYTES,
           ADMISSION_ALLOCATION_ALIGNMENT,
@@ -276,6 +300,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     goto Fail;
   }
   runtime->LocalReady = TRUE;
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartResidency,
+                             STATUS_PENDING);
   if (!AppleAgxResidencyContextCreate(
           &runtime->Residency, ADMISSION_MEMORY_UAT_CONTEXT,
           &runtime->MemoryIo, runtime->UatObjects,
@@ -286,6 +312,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     goto Fail;
   }
   runtime->ResidencyReady = TRUE;
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartMapping,
+                             STATUS_PENDING);
   if (!AppleAgxResidencyMap64K(
           &runtime->LocalObject, ADMISSION_MEMORY_UAT_CONTEXT,
           &runtime->Residency.Roots, ADMISSION_LOCAL_GPU_VA,
@@ -295,6 +323,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     goto Fail;
   }
   runtime->MappingReady = TRUE;
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartTtbr,
+                             STATUS_PENDING);
   if (AppleAgxUatEncodeTtbrPair(
           ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
           &pair) != AppleAgxUatResultOk) {
@@ -308,6 +338,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
   runtime->PublicationIo.Unmap = AdmissionUatUnmap;
   RtlZeroMemory(&snapshot, sizeof(snapshot));
   snapshot.GpuRegionBase = J313_AGX_ABI_ADMISSION_GPU_BASE;
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartPublication,
+                             STATUS_PENDING);
   if (AppleAgxUatPublishJ313Context(
           &snapshot, ADMISSION_MEMORY_UAT_CONTEXT, &pair,
           &runtime->PublicationIo, &runtime->Published) !=
@@ -319,6 +351,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     goto Fail;
   }
   runtime->PublicationReady = TRUE;
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartContract,
+                             STATUS_PENDING);
   if (!AdmissionMemoryInitialize(
           &Context->Memory, runtime->ApertureEntries,
           (APPLE_AGX_U32)ADMISSION_APERTURE_PAGE_COUNT,
@@ -331,14 +365,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     status = STATUS_INVALID_DEVICE_STATE;
     goto Fail;
   }
+  AdmissionMemoryRecordStart(Context, AdmissionMemoryStartComplete,
+                             STATUS_SUCCESS);
   return STATUS_SUCCESS;
 
 Fail:
-  if (!NT_SUCCESS(AdmissionMemoryRuntimeDestroy(runtime)))
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeDestroy(runtime))) {
+    AdmissionMemoryRecordStart(
+        Context, (ADMISSION_MEMORY_START_STAGE)Context->MemoryStartStage,
+        STATUS_DEVICE_BUSY);
     return STATUS_DEVICE_BUSY;
+  }
   ExFreePoolWithTag(runtime, ADMISSION_MEMORY_RUNTIME_TAG);
   Context->MemoryRuntime = NULL;
   RtlZeroMemory(&Context->Memory, sizeof(Context->Memory));
+  AdmissionMemoryRecordStart(
+      Context, (ADMISSION_MEMORY_START_STAGE)Context->MemoryStartStage,
+      status);
   return status;
 }
 
@@ -411,6 +454,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeQualify(
   Qualification->UatPageCount = runtime->Residency.Inventory.PageCount;
   Qualification->UatMappingCount =
       runtime->Residency.Inventory.MappingCount;
+  Qualification->StartStage = (ULONG)InterlockedCompareExchange(
+      &Context->MemoryStartStage, 0, 0);
   Qualification->GuestIpaBase = allocation->GuestIpaBase + offset;
   Qualification->HostPhysicalBase = runtime->LocalObject.DeviceAddress;
   Qualification->LocalGpuVa = runtime->LocalObject.GpuVirtualAddress;
@@ -422,6 +467,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeQualify(
       Qualification->HvcPayloadStatus != HV_GUEST_IPA_PA_STATUS_SUCCESS ||
       Qualification->HvcInvocationCount == 0u ||
       Qualification->TranslatedPageCount == 0u ||
+      Qualification->StartStage != AdmissionMemoryStartComplete ||
       Qualification->Context != ADMISSION_MEMORY_UAT_CONTEXT ||
       Qualification->GuestIpaBase == 0ULL ||
       Qualification->HostPhysicalBase == 0ULL ||

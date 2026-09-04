@@ -19,6 +19,8 @@ class AppleAgxRenderMemoryQualificationTests(unittest.TestCase):
         self.assertIn("AppleAgxMemoryQualification", project)
         self.assertIn("[switch]$MemoryQualification", script)
         self.assertIn("AdmissionMemoryRuntimeStart(context)", lifecycle)
+        self.assertIn("context->MemoryStartStage", lifecycle)
+        self.assertIn("qualification.StartStage", lifecycle)
         self.assertIn("AdmissionMemoryRuntimeQualify(context", lifecycle)
         self.assertIn("AdmissionMemoryRuntimeStop(context)", lifecycle)
         self.assertIn("#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)",
@@ -40,6 +42,12 @@ class AppleAgxRenderMemoryQualificationTests(unittest.TestCase):
             "LastHvcPayloadStatus",
             "HvcInvocationCount",
             "TranslatedPageCount",
+            "AdmissionMemoryStartPhysicalOwner",
+            "AdmissionMemoryStartLocalObject",
+            "AdmissionMemoryStartResidency",
+            "AdmissionMemoryStartMapping",
+            "AdmissionMemoryStartPublication",
+            "AdmissionMemoryStartComplete",
         ):
             self.assertIn(token, runtime + physical)
         self.assertIn("AdmissionRecordMemoryQualification", receipts)
@@ -47,8 +55,9 @@ class AppleAgxRenderMemoryQualificationTests(unittest.TestCase):
 
     def test_profile_exits_before_scheduler_display_and_agx_backend(self):
         lifecycle = self.read("src/lifecycle.c")
-        start = lifecycle.index(
-            "#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)"
+        qualify = lifecycle.index("status = AdmissionMemoryRuntimeQualify")
+        start = lifecycle.rfind(
+            "#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)", 0, qualify
         )
         end = lifecycle.index("#endif", start)
         branch = lifecycle[start:end]

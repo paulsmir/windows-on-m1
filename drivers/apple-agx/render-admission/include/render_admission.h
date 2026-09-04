@@ -92,6 +92,8 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG PagingPending;
   volatile LONG PagingStopping;
   volatile LONG PagingDpcPending;
+  volatile LONG MemoryStartStage;
+  volatile LONG MemoryStartStatus;
   KSPIN_LOCK SchedulerLock;
   APPLE_AGX_SCHEDULER Scheduler;
   volatile LONG SchedulerInitialized;
@@ -151,6 +153,20 @@ typedef struct _ADMISSION_PHYSICAL_OWNER {
 } ADMISSION_PHYSICAL_OWNER;
 
 #define ADMISSION_MEMORY_QUALIFICATION_VERSION 1u
+typedef enum _ADMISSION_MEMORY_START_STAGE {
+  AdmissionMemoryStartNone = 0,
+  AdmissionMemoryStartEntered = 1,
+  AdmissionMemoryStartInventories = 2,
+  AdmissionMemoryStartPhysicalOwner = 3,
+  AdmissionMemoryStartLocalObject = 4,
+  AdmissionMemoryStartResidency = 5,
+  AdmissionMemoryStartMapping = 6,
+  AdmissionMemoryStartTtbr = 7,
+  AdmissionMemoryStartPublication = 8,
+  AdmissionMemoryStartContract = 9,
+  AdmissionMemoryStartComplete = 10,
+} ADMISSION_MEMORY_START_STAGE;
+
 typedef struct _ADMISSION_MEMORY_QUALIFICATION {
   ULONG Version;
   ULONG Size;
@@ -163,7 +179,7 @@ typedef struct _ADMISSION_MEMORY_QUALIFICATION {
   ULONG Context;
   ULONG UatPageCount;
   ULONG UatMappingCount;
-  ULONG Reserved;
+  ULONG StartStage;
   ULONGLONG GuestIpaBase;
   ULONGLONG HostPhysicalBase;
   ULONGLONG LocalGpuVa;
