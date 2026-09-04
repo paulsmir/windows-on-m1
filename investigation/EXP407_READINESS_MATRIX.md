@@ -1,6 +1,6 @@
 # EXP407 live readiness matrix
 
-Updated: 2026-09-04T17:31:34+02:00
+Updated: 2026-09-04T17:51:22+02:00
 
 This matrix is evaluated after memory source commits
 `8cd1449550b253862a3b770b9782b7b7fb2f776e`,
@@ -36,16 +36,17 @@ Readiness has two independent axes:
 | `GDI_COMMAND_BUFFER` | One exact ColorFill/PATCOPY is normalized into a pointer-free record; Patch resolves one Segment-2 CPU/host-PA/GPU-VA tuple and seals the exact fence; SubmitCommand binds object 40, queues and schedules the exact provider job | Commits `2ee3398`, `7912547`, `b6ee1a6`, `eead97f`, and `3a4b55e`; EXP415/416/419/421/423 WDK builds | `IMPLEMENTED=yes`; `HW_PROVEN=no` | yes |
 | `D589_SCANOUT` | `render-admission` registers only the EXP425-proven 56-MiB pool after POST ownership and requires current m1n1 ABI v2 plus repeated-present latched-receipt and latched-IRQ caps; exact primary offsets enter the existing A407/A408/D589 path | Commit `230a99a`; shared sanitizer suites; EXP426 pinned-WDK build; EXP270 separately proved the retained-owner D589 source | `IMPLEMENTED=yes`; integrated KMD hardware path `HW_PROVEN=no`; current-source full-owner artifact still required | yes |
 | `KMD_DIRECT_FLIP` | Present validates only one NULL-DMA full-screen A8R8G8B8 primary; SetVidPnSourceAddress validates the same allocation and Segment-2 range then performs bounded nonblocking MMIO enqueue; matching latch ISR reports exact CRTC_VSYNC and DPC | Commit `230a99a`; verified RED/GREEN wiring/IRQL tests and EXP426 pinned-WDK build | `IMPLEMENTED=yes`; `HW_PROVEN=no`; Type1 remains zero until UMD/independent flip complete | yes |
-| `UMD_DIRECT_FLIP` | UMD exports `OpenAdapter10_2` and returns `E_NOTIMPL` | Package/build evidence only | Real UMD adapter/device/resource compatibility path | no |
-| `INDEPENDENT_FLIP` | Not advertised or implemented | None | KMD and UMD DirectFlip plus real VSync completion | no |
+| `UMD_DIRECT_FLIP` | ARM64 UMD supplies a real `OpenAdapter10_2` WDDM1.3 adapter/device, exact resource create/open identity, flags-zero `CheckDirectFlipSupport`, SetDisplayMode/rotation and interval-one Present/Present1 callback path; 3D caps remain zero | Commit `7cf5495`; sanitizer-backed exact-pair predicate; EXP428 WDK/PE/export gates | `IMPLEMENTED=yes`; Windows load/callback path `HW_PROVEN=no` | yes |
+| `INDEPENDENT_FLIP` | Atomic Type1 advertises `FlipIndependent` only with the same exact KMD+UMD primary compatibility, one-pending broker queue and D589-derived VSync completion; immediate flip remains unsupported | Commits `230a99a`, `7cf5495`, and `6c96d53`; exact writer tests and EXP429 build | `IMPLEMENTED=yes`; `HW_PROVEN=no` | yes |
 | `NON_VGA_STOP` | Stop closes new presents and synchronously RELEASEs the broker; current m1n1 re-presents and latches the saved firmware POST surface before unmapping the Windows pool, after which KMD returns the exact saved POST information | Commit `230a99a`; current m1n1 `display_scanout_quiesce_*` plus broker release tests; EXP426 pinned-WDK build | `IMPLEMENTED=yes`; integrated stop `HW_PROVEN=no` | yes |
 | `AGX_COMPLETION` | Production borrows the upper tail and context 63, materializes/rebases/binds EXP208, uses the existing G13 provider for D3 then TA publication, polls the event ring and requires both matching event/stamp/done-pointer observations before exact DMA_COMPLETED and DPC | Commits `68172a3`, `45969de`, `abe363f`, `eead97f`, `4285cef`, `f9ad365`, `35f5a68`, `c932a36`, and `3a4b55e`; EXP423 39-test and WDK gates | `IMPLEMENTED=yes`; `HW_PROVEN=no`; no physical AGX IRQ is used | yes |
 
-Current functional implementation result: `12/14 READY`; this is not a count of
-hardware-proven layers. The atomic readiness evaluator therefore must
-publish zero mandatory Type1 caps. Commit `52d3bf6` now enforces that rule in
-the real QueryAdapterInfo path; the final capability writer remains absent and
-fails closed even if an accidental all-ready state is presented early.
+Current functional implementation result: `14/14 READY`; this is not a count of
+hardware-proven layers. Commit `6c96d53` publishes the approved mandatory Type1
+group only when the portable evaluator sees exactly all fourteen bits after a
+complete StartDevice. Every incomplete mask still returns a successful but
+fully zero mandatory group. This is implementation readiness, not evidence that
+Windows admitted the vector or exercised UMD, scanout, render, preemption or TDR.
 
 ## Existing allocation and memory implementation inventory
 
@@ -114,9 +115,9 @@ approved Segment1/Segment2 model.
   QuerySegment4, CreateAllocation, BuildPagingBuffer/DMA completion or a
   non-paging render submission.
 
-FIRST UNKNOWN: implement the narrow real UMD adapter/device/resource
-compatibility path so `CheckDirectFlipSupport` accepts only the exact KMD
-primary vector. `UMD_DIRECT_FLIP` and dependent `INDEPENDENT_FLIP` are the last
-two functional bits. KMD scanout/D589/VSync/POST release and render/TDR remain
-hardware-unproven until the integrated candidate runs; Type1 therefore still
-publishes zero mandatory capabilities.
+FIRST UNKNOWN: one commit-pinned integrated hardware candidate must determine
+whether current Windows accepts the complete Type1 vector after StartDevice.
+If it advances, collect the first actual downstream callback/UMD/scanout/render
+boundary rather than assuming the entire stack ran. KMD scanout/D589/VSync/
+POST release, UMD, render, preemption and TDR all remain hardware-unproven until
+their exact receipts occur.

@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-09-04T17:31:34+02:00
+Updated: 2026-09-04T17:51:22+02:00
 
 ## CURRENT PLATFORM
 
@@ -59,14 +59,18 @@ INTERPRETATION:
 
 ## FIRST UNKNOWN / FAILED BOUNDARY
 
-Memory hardware qualification is closed by EXP412/EXP425. The current first
-unknown is the narrow real UMD adapter/device/resource compatibility path:
-`UMD_DIRECT_FLIP` and its dependent `INDEPENDENT_FLIP` are the last two
-functional readiness bits. Commit `230a99a` now links the EXP425-proven lower
+Memory hardware qualification is closed by EXP412/EXP425. Functional readiness
+is now 14/14: commit `7cf5495` provides the exact real UMD resource/DirectFlip/
+Present path and commit `6c96d53` atomically publishes the complete Type1 group
+only after a fully successful StartDevice. Commit `230a99a` links the
+EXP425-proven lower
 56 MiB to the existing ABI-v2 fixed-panel broker, exact primary validation,
 nonblocking SetVidPnSourceAddress, matching D589/CRTC_VSYNC/DPC and synchronous
 POST restore/release. This is implementation evidence only; the integrated KMD
-scanout path is not hardware-proven and Type1 remains completely zero.
+scanout path is not hardware-proven. The first unknown is whether current
+Windows admits the complete Type1 vector and which exact downstream callback
+or UMD/backend boundary is reached first; no runtime layer is called proven
+until its own receipts exist.
 
 Commits `4d539ea`,
 `421a1ac` and `ec214ae` provide the offline-green one-node substrate:
@@ -194,9 +198,12 @@ observations. EXP423 WDK builds are green, but no hardware run has occurred.
 - `D589_SCANOUT`, `KMD_DIRECT_FLIP`, and `NON_VGA_STOP` are
   IMPLEMENTED/HW_PROVEN=NO in `230a99a`. EXP426 passed 71 relevant tests and
   both pinned-WDK build/package profiles with no new analysis diagnostic; no
-  package was staged. Functional readiness is now 12/14. The first unknown is
-  the real render-admission UMD resource/DirectFlip callback contract; after it
-  exists, `INDEPENDENT_FLIP` can share the same exact KMD latch path.
+  package was staged.
+- `UMD_DIRECT_FLIP` and `INDEPENDENT_FLIP` are IMPLEMENTED/HW_PROVEN=NO in
+  `7cf5495`; EXP428 proves ARM64/export/build and portable exact compatibility,
+  not a Windows load/callback. Commit `6c96d53` completes atomic Type1 wiring;
+  functional readiness is 14/14. EXP429 is offline-only because its manifest
+  names the pre-commit source state; rebuild once at exact HEAD before staging.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
