@@ -1,6 +1,6 @@
 # EXP407 live readiness matrix
 
-Updated: 2026-09-04T16:18:00+02:00
+Updated: 2026-09-04T16:32:00+02:00
 
 This matrix is evaluated after memory source commits
 `8cd1449550b253862a3b770b9782b7b7fb2f776e`,
@@ -39,7 +39,7 @@ Readiness has two independent axes:
 | `UMD_DIRECT_FLIP` | UMD exports `OpenAdapter10_2` and returns `E_NOTIMPL` | Package/build evidence only | Real UMD adapter/device/resource compatibility path | no |
 | `INDEPENDENT_FLIP` | Not advertised or implemented | None | KMD and UMD DirectFlip plus real VSync completion | no |
 | `NON_VGA_STOP` | Stop/release returns saved POST info and stops the adapter, but does not establish black fallback or latched handoff | Source-only partial implementation | Registered scanout pool, bounded quiesce, black fallback, accurate final POST | no |
-| `AGX_COMPLETION` | Exact EXP208 clear/output binding and deterministic arena rebase are implemented; production borrows the upper 8-MiB tail, materializes the accepted graph, applies all 159 relocations and binds object 40 to the exact Windows destination tuple before common enqueue | Commits `68172a3`, `45969de`, `abe363f`, and `eead97f`; generated graph tests; EXP208 hardware evidence; EXP417/418/420/421 WDK builds | Rebase-aware job plan, provider/queue publication and dual event/stamp completion | no |
+| `AGX_COMPLETION` | Exact EXP208 clear/output binding and deterministic arena rebase are implemented; production borrows the upper 8-MiB tail, materializes the accepted graph, applies all 159 relocations and binds object 40 to the exact Windows destination tuple; the existing dual-queue/event/stamp provider is committed and supports external images | Commits `68172a3`, `45969de`, `abe363f`, `eead97f`, `4285cef`, `f9ad365`, `35f5a68`, and `c932a36`; generated graph and selected 24-test provider suites; EXP208 hardware evidence; EXP417-422 WDK builds where linked | Windows platform-owner linkage, queue publication, exact dual-event/stamp completion and DPC | no |
 
 Current functional implementation result: `4/14 READY`; this is not a count of
 hardware-proven layers. The atomic readiness evaluator therefore must
@@ -114,7 +114,7 @@ approved Segment1/Segment2 model.
   QuerySegment4, CreateAllocation, BuildPagingBuffer/DMA completion or a
   non-paging render submission.
 
-FIRST UNKNOWN: make the existing EXP208 job builder consume the now-materialized
-rebased and exact-output-bound image, then connect the existing render provider
-and G13 queue provider. Completion and every readiness bit remain false until
-dual TA/3D event/stamp retirement advances the exact active Windows fence.
+FIRST UNKNOWN: connect the existing external-image platform provider to the
+Windows Start/Submit/PASSIVE poll/DPC lifetime. Completion and every readiness
+bit remain false until actual queue publication plus dual TA/3D event/stamp
+retirement advances the exact active Windows fence.

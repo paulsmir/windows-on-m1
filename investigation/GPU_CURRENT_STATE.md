@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-09-04T16:18:00+02:00
+Updated: 2026-09-04T16:32:00+02:00
 
 ## CURRENT PLATFORM
 
@@ -69,6 +69,14 @@ then resolve one exact Windows destination tuple, materialize/rebase/apply all
 159 relocations in the borrowed tail, and bind object 40 to that tuple before
 common enqueue. No activation, enqueue-only completion, AGX queue, physical
 IRQ or capability was added.
+Commit `4285cef` makes the existing EXP208 builder consume that rebased bound
+image and produce exact TA/3D roots, events, stamps and done pointers. Commits
+`f9ad365`, `35f5a68` and `c932a36` make the accumulated queue/completion stack
+reproducible and add an external-image mode: it retains firmware/channel/queue/
+event ownership but delegates image and prepared-range resolution to the
+EXP412-backed owner instead of allocating a second 64-MiB pool or republishing
+context 63. These portable provider modules are not yet linked to the Windows
+Start/Submit/DPC lifetime.
 
 ## LAST KNOWN GOOD FOR THIS BOUNDARY
 
@@ -149,10 +157,10 @@ IRQ or capability was added.
   image, rebases roots/descriptors, applies all relocations, and Submit binds
   the sole object-40 edge to the packet's exact Windows CPU/host/GPU tuple.
   EXP419-421 WDK gates are green and no package was staged.
-- Next implementation boundary: make the existing EXP208 job builder consume
-  the rebased bound image, then connect the current render/queue providers and
-  exact dual-event/stamp completion. Continue to publish zero mandatory Type1
-  caps until the complete 14/14 group is real.
+- Next implementation boundary: connect the imported external-image platform
+  provider to the Windows Start/Submit/PASSIVE poll/DPC lifetime, with exact
+  scheduler activation and dual-event/stamp completion. Continue to publish
+  zero mandatory Type1 caps until the complete 14/14 group is real.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
