@@ -210,6 +210,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   context->CommittedHeight = 1600;
   context->CommittedStride = 10240;
   context->CommittedFormat = D3DDDIFMT_A8R8G8B8;
+  /* QueryAdapterInfo cannot run until StartDevice returns. Publish the complete
+   * immutable implementation vector only after every runtime owner above has
+   * started and the adapter object is live. */
+  InterlockedExchange(&context->FeatureReadyMask,
+                      APPLE_AGX_WDDM_REQUIRED_READY_MASK);
   *NumberOfVideoPresentSources = 1;
   *NumberOfChildren = 1;
   AdmissionRecordDevice(context->PhysicalDeviceObject,
@@ -252,6 +257,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   context->Started = FALSE;
   context->DisplayActive = FALSE;
   context->SourceVisible = FALSE;
+  InterlockedExchange(
+      &context->FeatureReadyMask,
+      APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
+          APPLE_AGX_WDDM_READY_DEVICE_CONTEXT);
   RtlZeroMemory(&context->StartInfo, sizeof(context->StartInfo));
   RtlZeroMemory(&context->DeviceInformation,
                 sizeof(context->DeviceInformation));
@@ -320,15 +329,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
           &context->FeatureReadyMask, 0, 0);
       featureResult = AppleAgxWddmFeatureContractEvaluate(
           &featureInput, &featureOutput);
-      /* The capability writer is intentionally absent until all 14 readiness
-       * bits are earned.  An incomplete contract returns a completely zeroed
-       * mandatory capability group; an unexpected ready state fails closed
-       * instead of leaking the old partial Type-1 vector. */
       if (featureResult == AppleAgxWddmFeatureContractIncomplete &&
-          featureOutput.PublishCapsMask == 0u)
+          featureOutput.PublishCapsMask == 0u) {
         status = STATUS_SUCCESS;
-      else
+      } else if (featureResult == AppleAgxWddmFeatureContractReady &&
+                 featureOutput.PublishCapsMask ==
+                     APPLE_AGX_WDDM_MANDATORY_CAPS_MASK) {
+        caps->MaxAllocationListSlotId =
+            ADMISSION_GDI_ALLOCATION_LIST_SIZE - 1u;
+        caps->MaxQueuedFlipOnVSync = 1u;
+        caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u;
+        caps->SchedulingCaps.MultiEngineAware = 1u;
+        caps->SchedulingCaps.PreemptionAware = 1u;
+        caps->PreemptionCaps.GraphicsPreemptionGranularity =
+            D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
+        caps->PreemptionCaps.ComputePreemptionGranularity =
+            D3DKMDT_COMPUTE_PREEMPTION_NONE;
+        caps->FlipCaps.FlipOnVSyncMmIo = 1u;
+        caps->FlipCaps.FlipIndependent = 1u;
+        caps->SupportNonVGA = TRUE;
+        caps->SupportPerEngineTDR = TRUE;
+        caps->SupportDirectFlip = TRUE;
+        caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
+        status = STATUS_SUCCESS;
+      } else {
         status = STATUS_INVALID_DEVICE_STATE;
+      }
     }
     break;
   }

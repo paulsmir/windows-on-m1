@@ -131,13 +131,13 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("SupportsOnly64Bit = 1", lifecycle)
         self.assertIn("AppleAgxWddmFeatureContractEvaluate", lifecycle)
         self.assertIn("featureOutput.PublishCapsMask == 0u", lifecycle)
-        self.assertNotIn("caps->SupportNonVGA = TRUE", lifecycle)
-        self.assertNotIn("caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1",
-                         lifecycle)
-        self.assertNotIn("FlipOnVSyncMmIo = TRUE", lifecycle)
+        self.assertIn("caps->SupportNonVGA = TRUE", lifecycle)
+        self.assertIn("caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u",
+                      lifecycle)
+        self.assertIn("caps->FlipCaps.FlipOnVSyncMmIo = 1u", lifecycle)
+        self.assertIn("caps->SchedulingCaps.PreemptionAware = 1u", lifecycle)
+        self.assertIn("caps->SchedulingCaps.MultiEngineAware = 1u", lifecycle)
         self.assertNotIn("SupportSoftwareDeviceBitmaps", lifecycle)
-        self.assertNotIn("PreemptionAware = 1", lifecycle)
-        self.assertNotIn("MultiEngineAware = 1", lifecycle)
         self.assertNotIn("MapAperture2Supported = 1", lifecycle)
 
     def test_fixed_panel_child_monitor_pointer_and_visibility_contract(self):
