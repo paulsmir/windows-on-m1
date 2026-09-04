@@ -25,6 +25,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
+      <AdditionalIncludeDirectories>include;..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <SDLCheck>true</SDLCheck>
@@ -36,6 +37,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\umd.c" />
+    <ClCompile Include="src\direct_flip_contract.c" />
+    <ClCompile Include="..\src\render_allocation.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\direct_flip_contract.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="AppleAgxRenderAdmissionUmd.def" />
