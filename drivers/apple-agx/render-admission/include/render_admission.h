@@ -13,6 +13,7 @@
 #include "render_objects.h"
 #include "render_memory.h"
 #include "render_allocation.h"
+#include "render_hvc.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 4096u
@@ -43,6 +44,7 @@ typedef enum _ADMISSION_RECEIPT {
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
+  struct _ADMISSION_PHYSICAL_OWNER *PhysicalOwnerPointer;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
   PDEVICE_OBJECT PhysicalDeviceObject;
   DXGK_START_INFO StartInfo;
@@ -92,6 +94,30 @@ typedef struct _ADMISSION_OPEN_ALLOCATION {
   BOOLEAN ReadOnly;
 } ADMISSION_OPEN_ALLOCATION;
 
+typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
+  PDXGKRNL_INTERFACE Interface;
+  HANDLE PhysicalMemoryObject;
+  HANDLE AdapterMemoryObject;
+  DXGK_ADL *Adl;
+  PVOID MappedBase;
+  SIZE_T MappedSize;
+  PUCHAR CpuBase;
+  SIZE_T Size;
+  ULONGLONG GuestIpaBase;
+  ULONGLONG HostPhysicalBase;
+} ADMISSION_PHYSICAL_ALLOCATION;
+
+typedef struct _ADMISSION_PHYSICAL_OWNER {
+  PDXGKRNL_INTERFACE Interface;
+  PDEVICE_OBJECT DeviceObject;
+  FAST_MUTEX Lock;
+  ADMISSION_PHYSICAL_ALLOCATION *Scratch;
+  struct hv_guest_ipa_pa_request *Request;
+  ULONGLONG RequestIpa;
+  LONG AllocationCount;
+  BOOLEAN Initialized;
+} ADMISSION_PHYSICAL_OWNER;
+
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
                             _In_ PCWSTR Name, _In_ ULONG Value);
 void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
@@ -105,6 +131,17 @@ NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionDdiQuerySegment4(
     _In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo);
+NTSTATUS AdmissionPhysicalOwnerInitialize(
+    _In_ PDXGKRNL_INTERFACE Interface, _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ ADMISSION_PHYSICAL_OWNER *Owner);
+NTSTATUS AdmissionPhysicalOwnerDestroy(
+    _Inout_ ADMISSION_PHYSICAL_OWNER *Owner);
+NTSTATUS AdmissionPhysicalAllocate(
+    _Inout_ ADMISSION_PHYSICAL_OWNER *Owner, _In_ SIZE_T Bytes,
+    _Outptr_ ADMISSION_PHYSICAL_ALLOCATION **Allocation);
+NTSTATUS AdmissionPhysicalFree(
+    _Inout_ ADMISSION_PHYSICAL_OWNER *Owner,
+    _Inout_ ADMISSION_PHYSICAL_ALLOCATION *Allocation);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;

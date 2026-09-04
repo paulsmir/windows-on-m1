@@ -41,6 +41,8 @@
     <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\render_allocation.c" />
     <ClCompile Include="src\allocation_windows.c" />
+    <ClCompile Include="src\render_hvc.c" />
+    <ClCompile Include="src\physical_memory_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
     <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />
@@ -54,6 +56,8 @@
     <ClInclude Include="include\render_objects.h" />
     <ClInclude Include="include\render_memory.h" />
     <ClInclude Include="include\render_allocation.h" />
+    <ClInclude Include="include\render_hvc.h" />
+    <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
     <ClInclude Include="..\shared\include\apple_agx_software_aperture.h" />
     <ClInclude Include="..\shared\include\apple_agx_local_segment.h" />
