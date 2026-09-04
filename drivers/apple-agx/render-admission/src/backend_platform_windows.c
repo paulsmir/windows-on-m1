@@ -555,14 +555,9 @@ static unsigned char AdmissionFirmwareBootAsc(
   APPLE_AGX_RTKIT_SESSION_RESULT result;
   if (runtime == NULL)
     return 0u;
-  result = AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
-      &runtime->Rtkit, &runtime->AscIo, &runtime->Handoff, DeadlineMs);
-  if (result == AppleAgxRtkitSessionResultOk &&
-      !AdmissionFirmwarePrepareManagement(runtime, DeadlineMs))
-    result = AppleAgxRtkitSessionResultTransportFailed;
-  if (result == AppleAgxRtkitSessionResultOk)
-    result = AppleAgxRtkitSessionCompleteManagementBootstrap(
-        &runtime->Rtkit, &runtime->AscIo, DeadlineMs);
+  result = AppleAgxRtkitSessionBoot(
+      &runtime->Rtkit, &runtime->AscIo, &runtime->Handoff,
+      AdmissionFirmwarePrepareManagement, runtime, DeadlineMs);
   if (result != AppleAgxRtkitSessionResultOk &&
       runtime->FirmwarePublication.Active != 0u)
     (void)AdmissionFirmwareUnpublishUat(runtime);
