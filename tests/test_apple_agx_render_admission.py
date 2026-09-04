@@ -105,7 +105,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertRegex(lifecycle, r"return\s+STATUS_SUCCESS\s*;")
         for forbidden in (
             "MmMapIoSpace", "WRITE_REGISTER", "READ_REGISTER",
-            "RTKit", "UAT", "AppleAgx", "DxgkCbMapMemory",
+            "RTKit", "UAT", "DxgkCbMapMemory",
             "DxgkCbNotifyInterrupt",
         ):
             self.assertNotIn(forbidden, lifecycle)
@@ -126,7 +126,11 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("HighestVisibleAddress.QuadPart = 0xFFFFFFFFFFLL", lifecycle)
         self.assertIn("iommuCaps->Value = 0", lifecycle)
         self.assertIn("SupportsOnly64Bit = 1", lifecycle)
-        self.assertIn("caps->SupportNonVGA = TRUE", lifecycle)
+        self.assertIn("AppleAgxWddmFeatureContractEvaluate", lifecycle)
+        self.assertIn("featureOutput.PublishCapsMask == 0u", lifecycle)
+        self.assertNotIn("caps->SupportNonVGA = TRUE", lifecycle)
+        self.assertNotIn("caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1",
+                         lifecycle)
         self.assertNotIn("FlipOnVSyncMmIo = TRUE", lifecycle)
         self.assertNotIn("SupportSoftwareDeviceBitmaps", lifecycle)
         self.assertNotIn("PreemptionAware = 1", lifecycle)
@@ -325,7 +329,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             r'..\shared\src\apple_agx_wddm_feature_contract.c', project
         )
         for forbidden in (
-            "m1n1", "mmio", "power", "rtkit", "uat",
+            "m1n1", "mmio", "power", "rtkit",
             "firmware", "render_job", "submission", "scheduler",
         ):
             self.assertNotIn(forbidden.lower(), project.lower())
@@ -335,7 +339,10 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         callbacks = self.read("src/callbacks.c")
         header = self.read("include/render_admission.h")
 
-        self.assertIn("NbAsymetricProcessingNodes = 1", lifecycle)
+        self.assertIn("APPLE_AGX_WDDM_READY_WDDM3_IDENTITY", lifecycle)
+        self.assertIn("APPLE_AGX_WDDM_READY_DEVICE_CONTEXT", lifecycle)
+        paging = self.read("src/paging_windows.c")
+        self.assertIn("APPLE_AGX_WDDM_READY_MEMORY_PAGING", paging)
         self.assertIn("NodeOrdinal != 0", callbacks)
         self.assertIn("DXGK_ENGINE_TYPE_3D", callbacks)
         self.assertIn("AdmissionReceiptNodeMetadata", callbacks)

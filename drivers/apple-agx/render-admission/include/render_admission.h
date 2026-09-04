@@ -18,6 +18,7 @@
 #include "apple_agx_residency.h"
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
+#include "apple_agx_wddm_feature_contract.h"
 #include "j313_agx_abi_admission.generated.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
@@ -89,6 +90,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG PagingPending;
   volatile LONG PagingStopping;
   volatile LONG PagingDpcPending;
+  volatile LONG FeatureReadyMask;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {

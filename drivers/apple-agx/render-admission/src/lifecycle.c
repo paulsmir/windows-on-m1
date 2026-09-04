@@ -13,6 +13,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(context, sizeof(*context));
   AdmissionObjectsInitializeAdapter(&context->ObjectAdapter);
+  context->FeatureReadyMask =
+      APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
+      APPLE_AGX_WDDM_READY_DEVICE_CONTEXT;
   context->PhysicalDeviceObject = PhysicalDeviceObject;
   *MiniportDeviceContext = context;
   AdmissionRecordDevice(PhysicalDeviceObject, AdmissionReceiptAddSucceeded,
@@ -172,6 +175,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
   switch (QueryAdapterInfo->Type) {
   case DXGKQAITYPE_DRIVERCAPS: {
     DXGK_DRIVERCAPS *caps;
+    APPLE_AGX_WDDM_FEATURE_INPUT featureInput;
+    APPLE_AGX_WDDM_FEATURE_OUTPUT featureOutput;
+    APPLE_AGX_WDDM_FEATURE_CONTRACT_RESULT featureResult;
     if (QueryAdapterInfo->pOutputData == NULL ||
         QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
       status = STATUS_BUFFER_TOO_SMALL;
@@ -179,9 +185,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(caps, sizeof(*caps));
       caps->HighestAcceptableAddress.QuadPart = -1;
-      caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1;
-      caps->SupportNonVGA = TRUE;
-      status = STATUS_SUCCESS;
+      RtlZeroMemory(&featureInput, sizeof(featureInput));
+      featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;
+      featureInput.Size = sizeof(featureInput);
+      featureInput.WddmMajor = 3u;
+      featureInput.WddmMinor = 0u;
+      featureInput.NodeCount = 1u;
+      featureInput.ReadyMask = (ULONG)InterlockedCompareExchange(
+          &context->FeatureReadyMask, 0, 0);
+      featureResult = AppleAgxWddmFeatureContractEvaluate(
+          &featureInput, &featureOutput);
+      /* The capability writer is intentionally absent until all 14 readiness
+       * bits are earned.  An incomplete contract returns a completely zeroed
+       * mandatory capability group; an unexpected ready state fails closed
+       * instead of leaking the old partial Type-1 vector. */
+      if (featureResult == AppleAgxWddmFeatureContractIncomplete &&
+          featureOutput.PublishCapsMask == 0u)
+        status = STATUS_SUCCESS;
+      else
+        status = STATUS_INVALID_DEVICE_STATE;
     }
     break;
   }

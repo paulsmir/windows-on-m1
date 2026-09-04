@@ -213,6 +213,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStart(
     Context->PagingWorkItem = NULL;
     return STATUS_INVALID_DEVICE_STATE;
   }
+  (void)InterlockedOr(&Context->FeatureReadyMask,
+                      APPLE_AGX_WDDM_READY_MEMORY_PAGING);
   return STATUS_SUCCESS;
 }
 
@@ -235,6 +237,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPagingStop(
   IoFreeWorkItem(Context->PagingWorkItem);
   Context->PagingWorkItem = NULL;
   Context->PagingRecordCount = 0u;
+  (void)InterlockedAnd(&Context->FeatureReadyMask,
+                       ~((LONG)APPLE_AGX_WDDM_READY_MEMORY_PAGING));
   return STATUS_SUCCESS;
 }
 
