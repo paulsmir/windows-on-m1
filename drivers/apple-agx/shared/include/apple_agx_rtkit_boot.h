@@ -21,7 +21,8 @@ typedef enum _APPLE_AGX_RTKIT_BOOT_RESULT {
 
 typedef struct _APPLE_AGX_RTKIT_BOOT_OUTPUT {
   APPLE_AGX_RTKIT_U32 Count;
-  APPLE_AGX_RTKIT_U64 Message[2];
+  /* EPMAP ACK + six known system endpoint starts + AP power request. */
+  APPLE_AGX_RTKIT_U64 Message[8];
 } APPLE_AGX_RTKIT_BOOT_OUTPUT;
 
 typedef struct _APPLE_AGX_RTKIT_BOOT {

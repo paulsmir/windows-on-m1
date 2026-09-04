@@ -30,9 +30,10 @@ static void test_exact_management_handshake(void) {
   assert(output.Message[0] == 0x0080000000000001ULL);
 
   output = step(&boot, 0x0088000100000001ULL);
-  assert(output.Count == 2u);
+  assert(output.Count == 3u);
   assert(output.Message[0] == 0x0088000100000000ULL);
-  assert(output.Message[1] == 0x00b0000000000020ULL);
+  assert(output.Message[1] == 0x0050000100000002ULL);
+  assert(output.Message[2] == 0x00b0000000000020ULL);
 
   output = step(&boot, 0x0070000000000020ULL);
   assert(output.Count == 0u);
@@ -93,7 +94,27 @@ static void test_rejects_bad_versions_and_power_states(void) {
          AppleAgxRtkitBootResultProtocolViolation);
 }
 
+static void test_system_endpoints_start_before_ap_power(void) {
+  APPLE_AGX_RTKIT_BOOT boot;
+  APPLE_AGX_RTKIT_BOOT_OUTPUT output;
+  AppleAgxRtkitBootInitialize(&boot);
+  assert(AppleAgxRtkitBootBegin(&boot, &output) == AppleAgxRtkitBootResultOk);
+  (void)step(&boot, 0x0010000000040001ULL);
+  output = step(&boot, 0x008800000000051eULL);
+  assert(output.Count == 8u);
+  assert(output.Message[0] == 0x0088000000000000ULL);
+  assert(output.Message[1] == 0x0050000100000002ULL);
+  assert(output.Message[2] == 0x0050000200000002ULL);
+  assert(output.Message[3] == 0x0050000300000002ULL);
+  assert(output.Message[4] == 0x0050000400000002ULL);
+  assert(output.Message[5] == 0x0050000800000002ULL);
+  assert(output.Message[6] == 0x0050000a00000002ULL);
+  assert(output.Message[7] == 0x00b0000000000020ULL);
+  assert(!AppleAgxRtkitBootIsReady(&boot));
+}
+
 int main(void) {
+  test_system_endpoints_start_before_ap_power();
   test_exact_management_handshake();
   test_power_ack_order_is_not_assumed();
   test_protocol_violation_fails_closed();

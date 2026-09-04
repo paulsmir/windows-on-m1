@@ -38,6 +38,9 @@ typedef struct _APPLE_AGX_RTKIT_SESSION {
   APPLE_AGX_RTKIT_U32 InboxControlAfterInit;
   APPLE_AGX_RTKIT_U32 InboxControlAtFailure;
   APPLE_AGX_RTKIT_U32 OutboxControlAtFailure;
+  APPLE_AGX_RTKIT_U32 ReceivedCount;
+  APPLE_AGX_RTKIT_U32 LastRxEndpoint;
+  APPLE_AGX_RTKIT_U64 LastRxPayload;
 } APPLE_AGX_RTKIT_SESSION;
 
 /* Called only after CPU_READY and handoff initialization, before HELLO. */

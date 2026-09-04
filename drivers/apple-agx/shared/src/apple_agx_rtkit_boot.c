@@ -5,8 +5,11 @@
 static void AppleAgxRtkitBootClearOutput(
     APPLE_AGX_RTKIT_BOOT_OUTPUT *Output) {
   Output->Count = 0u;
-  Output->Message[0] = 0u;
-  Output->Message[1] = 0u;
+  {
+    unsigned int index;
+    for (index = 0u; index != 8u; ++index)
+      Output->Message[index] = 0u;
+  }
 }
 
 static APPLE_AGX_RTKIT_BOOT_RESULT
@@ -101,10 +104,20 @@ APPLE_AGX_RTKIT_BOOT_RESULT AppleAgxRtkitBootHandle(
         message.Base, message.Last, message.Last != 0u ? 0u : 1u);
     Output->Count = 1u;
     if (message.Last != 0u) {
+      unsigned int endpoint;
+      /* StandardASC starts the advertised crashlog/syslog/kdebug/ioreport/
+       * oslog/tracekit endpoints before requesting AP power. These starts
+       * are required by RTKit; they do not imply buffer service is ready. */
+      const unsigned int supported_system_endpoints = 0x51eu;
       Boot->EndpointMapComplete = APPLE_AGX_RTKIT_TRUE;
+      for (endpoint = 1u; endpoint < 16u; ++endpoint) {
+        unsigned int bit = 1u << endpoint;
+        if ((Boot->EndpointMap[0] & supported_system_endpoints & bit) != 0u)
+          Output->Message[Output->Count++] =
+              AppleAgxRtkitStartEndpoint(endpoint, 2u);
+      }
       Boot->ApPowerRequested = APPLE_AGX_RTKIT_TRUE;
-      Output->Message[1] = AppleAgxRtkitSetApPower(0x20u);
-      Output->Count = 2u;
+      Output->Message[Output->Count++] = AppleAgxRtkitSetApPower(0x20u);
     }
     break;
   case AppleAgxRtkitManagementIopPowerAck:

@@ -171,6 +171,9 @@ static void TestProtocolFailureClearsRun(void) {
   AppleAgxRtkitSessionInitialize(&session);
   assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultProtocolViolation);
+  assert(session.ReceivedCount == 1u);
+  assert(session.LastRxEndpoint == 1u);
+  assert(session.LastRxPayload == 0x0010000000040001ULL);
   assert(!session.Running);
   assert(session.CpuReady);
   assert((fake.Control & APPLE_AGX_ASC_CPU_RUN) == 0u);

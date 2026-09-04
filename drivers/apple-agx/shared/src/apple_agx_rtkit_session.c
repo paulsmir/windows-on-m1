@@ -60,6 +60,9 @@ void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session) {
   Session->InboxControlAfterInit = 0u;
   Session->InboxControlAtFailure = 0u;
   Session->OutboxControlAtFailure = 0u;
+  Session->ReceivedCount = 0u;
+  Session->LastRxEndpoint = 0u;
+  Session->LastRxPayload = 0u;
   Session->StopPhase = AppleAgxRtkitStopIdle;
 }
 
@@ -90,6 +93,9 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
     return AppleAgxRtkitSessionResultInvalidState;
   Session->StopPhase = AppleAgxRtkitStopIdle;
   Session->CpuReady = APPLE_AGX_RTKIT_FALSE;
+  Session->ReceivedCount = 0u;
+  Session->LastRxEndpoint = 0u;
+  Session->LastRxPayload = 0u;
   AppleAgxRtkitBootInitialize(&Session->Boot);
 
   result = AppleAgxRtkitSessionAscResult(
@@ -149,6 +155,9 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionCompleteManagementBootstrap(
       AppleAgxRtkitSessionCaptureFailureMailbox(Session, Io);
       return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
     }
+    ++Session->ReceivedCount;
+    Session->LastRxEndpoint = message.Endpoint;
+    Session->LastRxPayload = message.Payload;
     boot_result = AppleAgxRtkitBootHandle(
         &Session->Boot, message.Payload, message.Endpoint, &output);
     if (boot_result != AppleAgxRtkitBootResultOk)

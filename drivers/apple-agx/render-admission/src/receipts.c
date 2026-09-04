@@ -155,6 +155,13 @@ _Use_decl_annotations_ void AdmissionRecordRtkitBoot(
   WriteDword(key, L"Wom1RtkitApPower", (ULONG)Session->Boot.ApPowerReady);
   WriteDword(key, L"Wom1RtkitInboxControl", Session->InboxControlAtFailure);
   WriteDword(key, L"Wom1RtkitOutboxControl", Session->OutboxControlAtFailure);
+  WriteDword(key, L"Wom1RtkitReceivedCount", Session->ReceivedCount);
+  WriteDword(key, L"Wom1RtkitLastRxEndpoint", Session->LastRxEndpoint);
+  WriteDword(key, L"Wom1RtkitLastRxPayloadLow", (ULONG)Session->LastRxPayload);
+  WriteDword(key, L"Wom1RtkitLastRxPayloadHigh",
+              (ULONG)(Session->LastRxPayload >> 32));
+  WriteDword(key, L"Wom1RtkitEndpointMap0", Session->Boot.EndpointMap[0]);
+  WriteDword(key, L"Wom1RtkitEndpointMap1", Session->Boot.EndpointMap[1]);
   ZwClose(key);
 }
 
