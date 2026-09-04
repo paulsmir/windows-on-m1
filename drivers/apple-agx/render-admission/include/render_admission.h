@@ -20,6 +20,7 @@
 #include "render_paging.h"
 #include "render_gdi.h"
 #include "render_submission.h"
+#include "render_backend_image.h"
 #include "apple_agx_wddm_feature_contract.h"
 #include "apple_agx_scheduler.h"
 #include "j313_agx_abi_admission.generated.h"
@@ -99,6 +100,7 @@ typedef struct _ADMISSION_CONTEXT {
   KSPIN_LOCK SchedulerLock;
   APPLE_AGX_SCHEDULER Scheduler;
   ADMISSION_RENDER_PACKET RenderPacket;
+  ADMISSION_BACKEND_IMAGE BackendImage;
   volatile LONG SchedulerInitialized;
   volatile LONG SchedulerFaulted;
   volatile LONG SchedulerDpcPending;
@@ -265,6 +267,10 @@ VOID AdmissionSchedulerDpc(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionDdiSubmitRender(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args);
+NTSTATUS AdmissionBackendImageStart(
+    _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionBackendImageStop(
+    _Inout_ ADMISSION_CONTEXT *Context);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;

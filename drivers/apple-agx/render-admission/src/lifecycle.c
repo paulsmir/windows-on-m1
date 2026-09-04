@@ -106,8 +106,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return STATUS_NOT_SUPPORTED;
   }
 #endif
+  status = AdmissionBackendImageStart(context);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
   status = AdmissionSchedulerStart(context);
   if (!NT_SUCCESS(status)) {
+    (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
@@ -115,6 +122,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   status = AdmissionPagingStart(context);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
@@ -123,6 +131,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_NOT_SUPPORTED;
@@ -136,6 +145,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (!NT_SUCCESS(status)) {
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
@@ -146,6 +156,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->PostDisplayInformation.Pitch != 10240) {
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
@@ -156,6 +167,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     context->Started = FALSE;
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_INVALID_DEVICE_STATE;
@@ -188,6 +200,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   status = AdmissionSchedulerStop(context);
   if (!NT_SUCCESS(status))
     return status;
+  status = AdmissionBackendImageStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
   status = AdmissionMemoryRuntimeStop(context);
   if (!NT_SUCCESS(status))
     return status;
@@ -218,6 +233,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
     return STATUS_DEVICE_BUSY;
   if (InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) != 0 &&
       !NT_SUCCESS(AdmissionSchedulerStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (context->BackendImage.Ready == APPLE_AGX_TRUE &&
+      !NT_SUCCESS(AdmissionBackendImageStop(context)))
     return STATUS_DEVICE_BUSY;
   if (context->MemoryRuntime != NULL &&
       !NT_SUCCESS(AdmissionMemoryRuntimeStop(context)))

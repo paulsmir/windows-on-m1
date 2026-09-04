@@ -1,0 +1,48 @@
+#ifndef APPLE_AGX_RENDER_TEMPLATE_H
+#define APPLE_AGX_RENDER_TEMPLATE_H
+
+#include "apple_agx_exp208_relocation.h"
+#include "apple_agx_state.h"
+
+#define APPLE_AGX_RENDER_TEMPLATE_GPU_BASE 0x1503800000ULL
+#define APPLE_AGX_RENDER_TEMPLATE_ALIGNMENT 0x8000u
+#define APPLE_AGX_RENDER_TEMPLATE_ROOT_COUNT 2u
+#define APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT 73u
+#define APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT 74u
+#define APPLE_AGX_RENDER_TEMPLATE_ARENA_OBJECT_INDEX 73u
+#define APPLE_AGX_RENDER_TEMPLATE_RELOCATION_COUNT 159u
+
+typedef struct _APPLE_AGX_RENDER_TEMPLATE_ROOTS {
+  APPLE_AGX_U64 Ta[APPLE_AGX_RENDER_TEMPLATE_ROOT_COUNT];
+  APPLE_AGX_U64 D3[APPLE_AGX_RENDER_TEMPLATE_ROOT_COUNT];
+} APPLE_AGX_RENDER_TEMPLATE_ROOTS;
+
+typedef struct _APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT {
+  APPLE_AGX_U32 OriginalIndex;
+  const char *Name;
+  APPLE_AGX_U32 ContextId;
+  APPLE_AGX_U64 OriginalGpuVa;
+  APPLE_AGX_U64 OriginalPhysicalAddress;
+  APPLE_AGX_U32 ArenaOffset;
+  APPLE_AGX_U64 PackedGpuVa;
+  APPLE_AGX_U32 Size;
+} APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT;
+
+APPLE_AGX_U32 AppleAgxRenderTemplateBytes(void);
+APPLE_AGX_U32 AppleAgxRenderTemplateObjectCount(void);
+APPLE_AGX_U32 AppleAgxRenderTemplateRuntimeObjectCount(void);
+APPLE_AGX_U32 AppleAgxRenderTemplateArenaObjectIndex(void);
+APPLE_AGX_U32 AppleAgxRenderTemplateRelocationCount(void);
+const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *
+AppleAgxRenderTemplateObjectLayouts(void);
+const APPLE_AGX_EXP208_RELOCATION *AppleAgxRenderTemplateRelocations(void);
+APPLE_AGX_BOOL AppleAgxRenderTemplateMaterialize(
+    void *Arena, APPLE_AGX_U32 ArenaCapacity,
+    APPLE_AGX_RENDER_TEMPLATE_ROOTS *Roots);
+APPLE_AGX_BOOL AppleAgxRenderTemplateBuildRelocationObjects(
+    void *Arena, APPLE_AGX_U32 ArenaCapacity,
+    APPLE_AGX_U64 ArenaPhysicalAddress,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCapacity);
+
+#endif /* APPLE_AGX_RENDER_TEMPLATE_H */
