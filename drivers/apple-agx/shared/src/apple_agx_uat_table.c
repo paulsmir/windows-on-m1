@@ -57,7 +57,7 @@ static APPLE_AGX_UAT_RESULT AppleAgxUatAllocateRecordedPage(
   if (candidate.PhysicalAddress == 0ULL || candidate.Entries == 0 ||
       (candidate.PhysicalAddress & APPLE_AGX_UAT_TABLE_PAGE_MASK) != 0ULL ||
       (((unsigned long long)(void *)candidate.Entries) &
-       APPLE_AGX_UAT_TABLE_PAGE_MASK) != 0ULL ||
+       (sizeof(*candidate.Entries) - 1ULL)) != 0ULL ||
       candidate.PhysicalAddress >=
           (1ULL << J313_AGX_G2_UAT_OUTPUT_ADDRESS_BITS) ||
       AppleAgxUatPageIsZero(&candidate) == 0u) {

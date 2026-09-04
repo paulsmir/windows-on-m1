@@ -58,7 +58,7 @@ static unsigned char AppleAgxUatMemoryAllocatePage(
   }
   if (object->CpuAddress == 0 || object->DeviceAddress == 0ULL ||
       (((unsigned long long)(void *)object->CpuAddress) &
-       (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) != 0ULL ||
+       (sizeof(unsigned long long) - 1ULL)) != 0ULL ||
       (object->DeviceAddress & (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) != 0ULL) {
     memory_result = AppleAgxMemoryRelease(owner->MemoryIo, object);
     if (memory_result != AppleAgxMemoryResultOk) {

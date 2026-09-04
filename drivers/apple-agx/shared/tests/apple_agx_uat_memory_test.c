@@ -20,6 +20,7 @@ typedef struct _FAKE_MEMORY {
   unsigned int FailFreeSlot;
   unsigned int FreeOrder[TEST_ALLOCATION_COUNT];
   unsigned int FreeCount;
+  unsigned char MismatchedCpuAlignment;
 } FAKE_MEMORY;
 
 static unsigned char allocate_contiguous(
@@ -39,10 +40,46 @@ static unsigned char allocate_contiguous(
   allocation->DeviceBase = 0x10001000ULL + slot * 0x10000ULL;
   allocation->Slot = slot;
   allocation->Active = 1u;
-  *cpu_base = &allocation->Storage[0x1000];
+  *cpu_base = &allocation->Storage[
+      fake->MismatchedCpuAlignment ? 0u : 0x1000u];
   *device_base = allocation->DeviceBase;
   *allocation_handle = allocation;
   return 1u;
+}
+
+static void init_fixture(FAKE_MEMORY *fake,
+                         APPLE_AGX_MEMORY_IO *memory_io,
+                         APPLE_AGX_MEMORY_OBJECT *objects,
+                         APPLE_AGX_UAT_MEMORY_OWNER *owner,
+                         APPLE_AGX_UAT_ALLOCATOR *allocator,
+                         unsigned int capacity);
+static void init_inventory(APPLE_AGX_UAT_INVENTORY *inventory,
+                           APPLE_AGX_UAT_PAGE *pages,
+                           APPLE_AGX_UAT_MAPPING *mappings);
+
+static void test_cpu_mapping_need_not_share_physical_16k_alignment(void) {
+  FAKE_MEMORY fake;
+  APPLE_AGX_MEMORY_IO memory_io;
+  APPLE_AGX_MEMORY_OBJECT objects[TEST_ALLOCATION_COUNT];
+  APPLE_AGX_UAT_MEMORY_OWNER owner;
+  APPLE_AGX_UAT_ALLOCATOR allocator;
+  APPLE_AGX_UAT_INVENTORY inventory;
+  APPLE_AGX_UAT_PAGE pages[TEST_PAGE_COUNT];
+  APPLE_AGX_UAT_MAPPING mappings[4];
+  APPLE_AGX_UAT_ROOTS roots;
+
+  init_fixture(&fake, &memory_io, objects, &owner, &allocator,
+               TEST_ALLOCATION_COUNT);
+  fake.MismatchedCpuAlignment = 1u;
+  init_inventory(&inventory, pages, mappings);
+  assert(AppleAgxUatCreateAddressSpace(63u, &allocator, &inventory, &roots) ==
+         AppleAgxUatResultOk);
+  assert((roots.Ttbr0PhysicalAddress & 0x3fffULL) == 0ULL);
+  assert((roots.Ttbr1PhysicalAddress & 0x3fffULL) == 0ULL);
+  assert(((unsigned long long)(void *)pages[0].Entries & 7ULL) == 0ULL);
+  assert(((unsigned long long)(void *)pages[0].Entries & 0x3fffULL) != 0ULL);
+  AppleAgxUatDestroy(&allocator, &inventory);
+  assert(AppleAgxUatMemoryOwnerDestroy(&owner) == AppleAgxUatMemoryResultOk);
 }
 
 static unsigned char free_contiguous(void *context, void *handle) {
@@ -234,6 +271,7 @@ static void test_invalid_owner_arguments_fail_closed(void) {
 }
 
 int main(void) {
+  test_cpu_mapping_need_not_share_physical_16k_alignment();
   test_builds_and_releases_context_zero_in_reverse_order();
   test_capacity_and_allocation_failure_roll_back();
   test_rejects_unowned_release_without_freeing();
