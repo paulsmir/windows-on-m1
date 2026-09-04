@@ -508,12 +508,26 @@ static unsigned char AdmissionFirmwareCreateUat(
     APPLE_AGX_UAT_TTBR_PAIR *Pair,
     unsigned long long *InitdataAddress) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  unsigned long long crashlog_pa = 0u, crashlog_descriptor = 0u;
   if (runtime == NULL || Pair == NULL || InitdataAddress == NULL ||
       AdmissionPlatformNowMs() >= DeadlineMs || !runtime->Initdata.Built ||
       runtime->Initdata.TtbrPair.Ttbr0 == 0ULL ||
       runtime->Initdata.TtbrPair.Ttbr1 == 0ULL ||
       runtime->Initdata.InitdataVirtualAddress == 0ULL)
     return 0u;
+  if (runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog].Length !=
+          APPLE_AGX_RTKIT_CRASHLOG_BYTES ||
+      AppleAgxUatResolvePage(
+          0u, &runtime->Initdata.Roots,
+          runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog],
+          &runtime->Initdata.Inventory, &crashlog_pa, &crashlog_descriptor) !=
+          AppleAgxUatResultOk ||
+      crashlog_pa != runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog]
+                         .DeviceAddress)
+    return 0u;
+  runtime->Rtkit.CrashlogGpuAddress =
+      runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog];
+  runtime->Rtkit.CrashlogCapacityBytes = APPLE_AGX_RTKIT_CRASHLOG_BYTES;
   *Pair = runtime->Initdata.TtbrPair;
   *InitdataAddress = runtime->Initdata.InitdataVirtualAddress &
                      ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
@@ -566,6 +580,11 @@ static unsigned char AdmissionFirmwareCompleteManagement(
   result = AppleAgxRtkitSessionCompleteManagementBootstrap(
       &runtime->Rtkit, &runtime->AscIo, DeadlineMs);
   AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
+  if (result != AppleAgxRtkitSessionResultOk && runtime->Rtkit.CrashlogReplySent)
+    AdmissionRecordRtkitCrashlog(
+        runtime->Adapter,
+        runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog].CpuAddress,
+        APPLE_AGX_RTKIT_CRASHLOG_BYTES);
   return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
 }
 

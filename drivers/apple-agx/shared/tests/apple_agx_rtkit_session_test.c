@@ -330,7 +330,71 @@ static void TestSplitBootDefersMailboxAndRetainsFailedRunOff(void) {
          AppleAgxRtkitSessionResultOk);
 }
 
+static void QueueCrashlogBoot(FAKE_SESSION_ASC *fake,
+                              unsigned long long request) {
+  Queue(fake, 0x0010000000040001ULL);
+  Queue(fake, 0x0088000000000003ULL);
+  Queue(fake, request);
+  fake->ReceiveEndpoint[2] = 1u;
+}
+
+static void TestCrashlogGrantUsesOnlyRegisteredUatBuffer(void) {
+  FAKE_SESSION_ASC fake = {0};
+  APPLE_AGX_ASC_IO io = MakeIo(&fake);
+  APPLE_AGX_RTKIT_SESSION session;
+  QueueCrashlogBoot(&fake, 0x0010200000000000ULL);
+  Queue(&fake, 0x0070000000000020ULL);
+  Queue(&fake, 0x00b0000000000020ULL);
+  AppleAgxRtkitSessionInitialize(&session);
+  session.CrashlogGpuAddress = 0x430000000ULL;
+  session.CrashlogCapacityBytes = 0x4000u;
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(session.CrashlogReplySent && session.CrashlogRequestedBytes == 0x2000u);
+  assert(fake.SendCount == 6u);
+  assert(fake.SendEndpoint[5] == 1u);
+  assert(fake.SendPayload[5] == 0x0010400430000000ULL);
+}
+
+static void TestCrashlogRefusesUnbackedRequestsAndDetectsCrash(void) {
+  unsigned int which;
+  for (which = 0u; which != 5u; ++which) {
+    FAKE_SESSION_ASC fake = {0};
+    APPLE_AGX_ASC_IO io = MakeIo(&fake);
+    APPLE_AGX_RTKIT_SESSION session;
+    unsigned long long request = 0x0010200000000000ULL;
+    if (which == 1u) request = 0x0010500000000000ULL;
+    if (which == 2u) request = 0x0010200430000000ULL;
+    if (which == 3u) request = 0x0010000000000000ULL;
+    QueueCrashlogBoot(&fake, request);
+    AppleAgxRtkitSessionInitialize(&session);
+    session.CrashlogGpuAddress = which == 4u ? 0x430000001ULL : 0x430000000ULL;
+    session.CrashlogCapacityBytes = which == 0u ? 0u : 0x4000u;
+    assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
+           AppleAgxRtkitSessionResultProtocolViolation);
+    assert(!session.CrashlogReplySent && !session.Running);
+    assert(fake.SendCount == 5u);
+  }
+  {
+    FAKE_SESSION_ASC fake = {0};
+    APPLE_AGX_ASC_IO io = MakeIo(&fake);
+    APPLE_AGX_RTKIT_SESSION session;
+    QueueCrashlogBoot(&fake, 0x0010200000000000ULL);
+    Queue(&fake, 0x0010200430000000ULL);
+    fake.ReceiveEndpoint[3] = 1u;
+    AppleAgxRtkitSessionInitialize(&session);
+    session.CrashlogGpuAddress = 0x430000000ULL;
+    session.CrashlogCapacityBytes = 0x4000u;
+    assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
+           AppleAgxRtkitSessionResultFirmwareCrashed);
+    assert(session.CrashlogCrashed && session.CrashlogReplySent);
+    assert(!session.Running && fake.SendCount == 6u);
+  }
+}
+
 int main(void) {
+  TestCrashlogRefusesUnbackedRequestsAndDetectsCrash();
+  TestCrashlogGrantUsesOnlyRegisteredUatBuffer();
   TestSplitBootDefersMailboxAndRetainsFailedRunOff();
   TestBootAndStopAreExactAndBounded();
   TestProtocolFailureClearsRun();

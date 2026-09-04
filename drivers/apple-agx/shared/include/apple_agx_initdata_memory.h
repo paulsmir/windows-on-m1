@@ -10,7 +10,10 @@
 #include "apple_agx_render_shared_memory.h"
 #include "apple_agx_uat_memory.h"
 
-#define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 7u
+#define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 8u
+/* Driver-owned context0 VA policy, not a physical/hardware register address. */
+#define APPLE_AGX_RTKIT_CRASHLOG_GPU_VA 0x430000000ULL
+#define APPLE_AGX_RTKIT_CRASHLOG_BYTES 0x4000u
 #define APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY \
   (APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT + \
    APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT + \
@@ -26,6 +29,7 @@ typedef enum _APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX {
   AppleAgxInitdataMemoryFirmwareStatus,
   AppleAgxInitdataMemoryFwctlState,
   AppleAgxInitdataMemoryFwctlRing,
+  AppleAgxInitdataMemoryCrashlog,
 } APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX;
 
 typedef enum _APPLE_AGX_INITDATA_MEMORY_RESULT {

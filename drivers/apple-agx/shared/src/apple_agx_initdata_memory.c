@@ -13,6 +13,7 @@ static const unsigned long long AppleAgxInitdataMemoryContentSizes[
     J313_AGX_G2_INITDATA_FW_STATUS_SIZE,
     J313_AGX_G2_FWCTL_STATE_SIZE,
     J313_AGX_G2_FWCTL_RING_SIZE,
+    APPLE_AGX_RTKIT_CRASHLOG_BYTES,
 };
 
 static unsigned char AppleAgxInitdataMemoryStorageIsEmpty(
@@ -162,8 +163,12 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
     ++Graph->DataObjectCount;
     AppleAgxInitdataMemoryZero(Graph->DataObjects[index].CpuAddress,
                                allocation_size);
-    Graph->VirtualAddresses[index] = virtual_address;
-    virtual_address += allocation_size + APPLE_AGX_MEMORY_PAGE_SIZE;
+    if (index == AppleAgxInitdataMemoryCrashlog) {
+      Graph->VirtualAddresses[index] = APPLE_AGX_RTKIT_CRASHLOG_GPU_VA;
+    } else {
+      Graph->VirtualAddresses[index] = virtual_address;
+      virtual_address += allocation_size + APPLE_AGX_MEMORY_PAGE_SIZE;
+    }
   }
 
   if (AppleAgxChannelMemoryBuild(&Graph->ChannelMemory, MemoryIo,

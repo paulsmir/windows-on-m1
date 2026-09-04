@@ -285,6 +285,9 @@ void AdmissionRecordPreManagementUat(_In_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordProviderBootstrap(_In_ ADMISSION_CONTEXT *Context,
                                       _In_ ULONG Phase, _In_ UCHAR Success,
                                       _In_ ULONG State);
+void AdmissionRecordRtkitCrashlog(_In_ ADMISSION_CONTEXT *Context,
+                                 _In_reads_bytes_(Bytes) const VOID *Data,
+                                 _In_ ULONG Bytes);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);

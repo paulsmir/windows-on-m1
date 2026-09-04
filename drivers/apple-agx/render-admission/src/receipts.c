@@ -162,6 +162,25 @@ _Use_decl_annotations_ void AdmissionRecordRtkitBoot(
               (ULONG)(Session->LastRxPayload >> 32));
   WriteDword(key, L"Wom1RtkitEndpointMap0", Session->Boot.EndpointMap[0]);
   WriteDword(key, L"Wom1RtkitEndpointMap1", Session->Boot.EndpointMap[1]);
+  WriteDword(key, L"Wom1RtkitCrashlogRequestedBytes", Session->CrashlogRequestedBytes);
+  WriteDword(key, L"Wom1RtkitCrashlogCapacityBytes", Session->CrashlogCapacityBytes);
+  WriteDword(key, L"Wom1RtkitCrashlogReplySent", Session->CrashlogReplySent);
+  WriteDword(key, L"Wom1RtkitCrashlogCrashed", Session->CrashlogCrashed);
+  WriteDword(key, L"Wom1RtkitCrashlogGpuVaLow", (ULONG)Session->CrashlogGpuAddress);
+  WriteDword(key, L"Wom1RtkitCrashlogGpuVaHigh", (ULONG)(Session->CrashlogGpuAddress >> 32));
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordRtkitCrashlog(
+    ADMISSION_CONTEXT *Context, const VOID *Data, ULONG Bytes) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL || Data == NULL ||
+      Bytes != APPLE_AGX_RTKIT_CRASHLOG_BYTES ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteBinary(key, L"Wom1RtkitCrashlogImage", Data, Bytes);
   ZwClose(key);
 }
 

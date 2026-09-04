@@ -63,6 +63,11 @@ void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session) {
   Session->ReceivedCount = 0u;
   Session->LastRxEndpoint = 0u;
   Session->LastRxPayload = 0u;
+  Session->CrashlogGpuAddress = 0u;
+  Session->CrashlogCapacityBytes = 0u;
+  Session->CrashlogRequestedBytes = 0u;
+  Session->CrashlogReplySent = APPLE_AGX_RTKIT_FALSE;
+  Session->CrashlogCrashed = APPLE_AGX_RTKIT_FALSE;
   Session->StopPhase = AppleAgxRtkitStopIdle;
 }
 
@@ -96,6 +101,9 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
   Session->ReceivedCount = 0u;
   Session->LastRxEndpoint = 0u;
   Session->LastRxPayload = 0u;
+  Session->CrashlogRequestedBytes = 0u;
+  Session->CrashlogReplySent = APPLE_AGX_RTKIT_FALSE;
+  Session->CrashlogCrashed = APPLE_AGX_RTKIT_FALSE;
   AppleAgxRtkitBootInitialize(&Session->Boot);
 
   result = AppleAgxRtkitSessionAscResult(
@@ -116,6 +124,41 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
     return AppleAgxRtkitSessionForceRunOff(
         Session, Io, AppleAgxRtkitSessionResultTimeout);
   return AppleAgxRtkitSessionResultOk;
+}
+
+static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionCrashlog(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_RTKIT_U64 Payload, APPLE_AGX_ASC_U64 DeadlineMs) {
+  APPLE_AGX_RTKIT_U64 reply;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  if ((Payload >> 52) != 1u)
+    return AppleAgxRtkitSessionResultProtocolViolation;
+  if (Session->CrashlogReplySent) {
+    Session->CrashlogCrashed = APPLE_AGX_RTKIT_TRUE;
+    return AppleAgxRtkitSessionResultFirmwareCrashed;
+  }
+  Session->CrashlogRequestedBytes =
+      (APPLE_AGX_RTKIT_U32)((Payload >> 44) & 0xffu) << 12;
+  /* Never adopt a firmware-supplied address or invent backing for a grant. */
+  if ((Payload & ((1ULL << 44) - 1u)) != 0u ||
+      Session->CrashlogRequestedBytes == 0u ||
+      Session->CrashlogRequestedBytes > Session->CrashlogCapacityBytes ||
+      Session->CrashlogGpuAddress == 0u ||
+      Session->CrashlogGpuAddress >= (1ULL << 40) ||
+      (Session->CrashlogGpuAddress & 0x3fffu) != 0u ||
+      Session->CrashlogCapacityBytes == 0u ||
+      Session->CrashlogCapacityBytes > 0xff000u ||
+      (Session->CrashlogCapacityBytes & 0x3fffu) != 0u ||
+      Session->CrashlogCapacityBytes >
+          (1ULL << 40) - Session->CrashlogGpuAddress)
+    return AppleAgxRtkitSessionResultProtocolViolation;
+  reply = (1ULL << 52) |
+          ((APPLE_AGX_RTKIT_U64)(Session->CrashlogCapacityBytes >> 12) << 44) |
+          Session->CrashlogGpuAddress;
+  result = AppleAgxRtkitSessionAscResult(AppleAgxAscSend(Io, reply, 1u, DeadlineMs));
+  if (result == AppleAgxRtkitSessionResultOk)
+    Session->CrashlogReplySent = APPLE_AGX_RTKIT_TRUE;
+  return result;
 }
 
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionCompleteManagementBootstrap(
@@ -158,6 +201,15 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionCompleteManagementBootstrap(
     ++Session->ReceivedCount;
     Session->LastRxEndpoint = message.Endpoint;
     Session->LastRxPayload = message.Payload;
+    if (message.Endpoint == 1u) {
+      result = AppleAgxRtkitSessionCrashlog(Session, Io, message.Payload,
+                                            DeadlineMs);
+      if (result != AppleAgxRtkitSessionResultOk) {
+        Session->Boot.Phase = AppleAgxRtkitBootFailed;
+        return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
+      }
+      continue;
+    }
     boot_result = AppleAgxRtkitBootHandle(
         &Session->Boot, message.Payload, message.Endpoint, &output);
     if (boot_result != AppleAgxRtkitBootResultOk)
