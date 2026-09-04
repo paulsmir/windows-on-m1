@@ -19,4 +19,12 @@ typedef struct _ADMISSION_PAGING_RECORD {
   void *SystemMdl;
 } ADMISSION_PAGING_RECORD;
 
+int AdmissionPagingFenceCanSubmit(unsigned int LastSubmitted,
+                                  unsigned int Candidate,
+                                  unsigned int Resubmission);
+int AdmissionPagingRecordsValid(const ADMISSION_PAGING_RECORD *Records,
+                                unsigned int RecordCount,
+                                unsigned int MaximumRecords,
+                                unsigned int DmaBytes);
+
 #endif /* APPLE_AGX_RENDER_PAGING_H */

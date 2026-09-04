@@ -45,6 +45,7 @@
     <ClCompile Include="src\physical_memory_windows.c" />
     <ClCompile Include="src\memory_runtime_windows.c" />
     <ClCompile Include="src\paging_windows.c" />
+    <ClCompile Include="src\render_paging.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
     <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />

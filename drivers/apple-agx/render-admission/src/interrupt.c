@@ -162,8 +162,10 @@ _Use_decl_annotations_ BOOLEAN AdmissionDdiInterruptRoutine(
 VOID AdmissionDdiDpcRoutine(
     PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
-  if (context != NULL)
+  if (context != NULL) {
     InterlockedIncrement(&context->DpcCount);
+    AdmissionPagingDpc(context);
+  }
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiControlInterrupt(

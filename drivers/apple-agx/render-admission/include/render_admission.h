@@ -27,6 +27,7 @@
 #define ADMISSION_GDI_DMA_PRIVATE_SIZE 8192u
 #define ADMISSION_GDI_ALLOCATION_LIST_SIZE 256u
 #define ADMISSION_GDI_PATCH_LIST_SIZE 256u
+#define ADMISSION_MAX_PAGING_RECORDS 64u
 
 typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptAddEntered = 1,
@@ -76,6 +77,18 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG InterruptAckCount;
   volatile LONG LastInterruptStatus;
   volatile LONG DpcCount;
+  KSPIN_LOCK PagingLock;
+  PIO_WORKITEM PagingWorkItem;
+  KEVENT PagingIdle;
+  ADMISSION_PAGING_RECORD PagingRecords[ADMISSION_MAX_PAGING_RECORDS];
+  ULONG PagingRecordCount;
+  UINT PagingFence;
+  UINT PagingLastSubmittedFence;
+  UINT PagingLastCompletedFence;
+  NTSTATUS PagingCompletionStatus;
+  volatile LONG PagingPending;
+  volatile LONG PagingStopping;
+  volatile LONG PagingDpcPending;
 } ADMISSION_CONTEXT;
 
 typedef struct _ADMISSION_DEVICE {
@@ -158,6 +171,9 @@ NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);
+NTSTATUS AdmissionPagingStart(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionPagingStop(_Inout_ ADMISSION_CONTEXT *Context);
+VOID AdmissionPagingDpc(_Inout_ ADMISSION_CONTEXT *Context);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
