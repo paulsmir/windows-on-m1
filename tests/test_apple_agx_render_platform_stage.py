@@ -62,6 +62,18 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
             "J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID", validate
         )
 
+    def test_config_snapshot_uses_supported_aligned_mmio_reads(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        snapshot = platform[
+            platform.index("AdmissionPlatformReadSnapshot("):
+            platform.index("AdmissionAscRange(")
+        ]
+
+        self.assertIn("ULONG wire[", snapshot)
+        self.assertIn("READ_REGISTER_ULONG", snapshot)
+        self.assertNotIn("READ_REGISTER_UCHAR", snapshot)
+        self.assertIn("(const unsigned char *)wire", snapshot)
+
 
 if __name__ == "__main__":
     unittest.main()

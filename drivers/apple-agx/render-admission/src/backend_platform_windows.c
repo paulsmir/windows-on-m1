@@ -4,8 +4,11 @@
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
+#define ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES                              \
+  (APPLE_AGX_CONFIG_MMIO_OFFSET + APPLE_AGX_CONFIG_WIRE_SIZE)
 
 C_ASSERT(J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID == 889u);
+C_ASSERT((ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES % sizeof(ULONG)) == 0u);
 
 typedef struct _ADMISSION_ASC_TRANSPORT {
   volatile UCHAR *Base;
@@ -193,15 +196,17 @@ static NTSTATUS AdmissionPlatformValidateResources(
 
 static NTSTATUS AdmissionPlatformReadSnapshot(
     ADMISSION_CONTEXT *Context, APPLE_AGX_CONFIG_SNAPSHOT *Snapshot) {
-  UCHAR wire[APPLE_AGX_CONFIG_MMIO_OFFSET + APPLE_AGX_CONFIG_WIRE_SIZE];
+  ULONG wire[ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES / sizeof(ULONG)];
   ULONG index;
   if (Context == NULL || Snapshot == NULL || Context->BrokerBase == NULL ||
       sizeof(wire) > J313_AGX_G2_POWER_BROKER_SIZE)
     return STATUS_INVALID_PARAMETER;
   for (index = 0u; index < RTL_NUMBER_OF(wire); ++index)
-    wire[index] = READ_REGISTER_UCHAR(Context->BrokerBase + index);
+    wire[index] = READ_REGISTER_ULONG(
+        (volatile ULONG *)(Context->BrokerBase + index * sizeof(ULONG)));
   return AppleAgxConfigSnapshotDecodeJ313(
-             wire, (APPLE_AGX_U32)sizeof(wire), Snapshot) ==
+             (const unsigned char *)wire,
+             (APPLE_AGX_U32)sizeof(wire), Snapshot) ==
                  AppleAgxConfigResultOk
              ? STATUS_SUCCESS
              : STATUS_DEVICE_CONFIGURATION_ERROR;
