@@ -145,6 +145,24 @@ static void test_exact_packet_binds_output_and_reapplies_relocations(void) {
              image.Objects[relocations[output_edge].SourceObject].Data +
              relocations[output_edge].SourceOffset) ==
          packet.DestinationGpuVa);
+  {
+    APPLE_AGX_BACKEND_JOB_IMAGE job;
+    assert(!AdmissionBackendImageStageJob(
+        &image, 18u, 1u, 2u, 2u, 2u, APPLE_AGX_TRUE, &job));
+    assert(AdmissionBackendImageStageJob(
+        &image, packet.Fence, 1u, 2u, 2u, 2u,
+        APPLE_AGX_TRUE, &job));
+    assert(image.JobReady == APPLE_AGX_TRUE);
+    assert(image.JobFence == packet.Fence);
+    assert(job.TaWorkAddresses[0] == image.Roots.Ta[0]);
+    assert(job.TaWorkAddresses[1] == image.Roots.Ta[1]);
+    assert(job.D3WorkAddresses[0] == image.Roots.D3[0]);
+    assert(job.D3WorkAddresses[1] == image.Roots.D3[1]);
+    assert(job.TaEvent == 1u);
+    assert(job.D3Event == 2u);
+    assert(job.TaExpectedStamp == 0x7a000100u);
+    assert(job.D3ExpectedStamp == 0x3d000100u);
+  }
   assert(!AdmissionBackendImageReleaseSubmission(&image, 18u));
   assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
   assert(image.BoundFence == 0u);

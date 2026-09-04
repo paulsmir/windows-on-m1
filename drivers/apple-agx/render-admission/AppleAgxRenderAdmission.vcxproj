@@ -70,6 +70,8 @@
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_gdi.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_adapter.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_dynamic.c" />
     <ClCompile Include="..\shared\src\apple_agx_dma_shadow.c" />
     <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />
     <ClCompile Include="..\shared\src\apple_agx_local_segment.c" />
@@ -101,6 +103,10 @@
     <ClInclude Include="..\shared\include\apple_agx_scheduler.h" />
     <ClInclude Include="..\shared\include\apple_agx_gdi.h" />
     <ClInclude Include="..\shared\include\apple_agx_exp208_gdi.h" />
+    <ClInclude Include="..\shared\include\apple_agx_exp208_adapter.h" />
+    <ClInclude Include="..\shared\include\apple_agx_exp208_dynamic.h" />
+    <ClInclude Include="..\shared\include\apple_agx_backend_runtime.h" />
+    <ClInclude Include="..\shared\include\apple_agx_submission.h" />
     <ClInclude Include="..\shared\include\apple_agx_dma_shadow.h" />
     <ClInclude Include="..\shared\include\apple_agx_software_aperture.h" />
     <ClInclude Include="..\shared\include\apple_agx_local_segment.h" />

@@ -4,6 +4,8 @@
 #include "render_memory.h"
 #include "render_submission.h"
 #include "apple_agx_exp208_gdi.h"
+#include "apple_agx_exp208_adapter.h"
+#include "apple_agx_exp208_dynamic.h"
 #include "apple_agx_relocation.h"
 #include "apple_agx_render_template_rebase.h"
 
@@ -16,7 +18,12 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_U64 ArenaGpuAddress;
   APPLE_AGX_U32 ArenaBytes;
   APPLE_AGX_EXP208_GDI_BINDING Binding;
+  APPLE_AGX_EXP208_DYNAMIC_RESULT Dynamic;
+  APPLE_AGX_BACKEND_JOB_IMAGE Job;
+  APPLE_AGX_U32 Sequence;
   APPLE_AGX_U32 BoundFence;
+  APPLE_AGX_U32 JobFence;
+  APPLE_AGX_BOOL JobReady;
   APPLE_AGX_BOOL Ready;
 } ADMISSION_BACKEND_IMAGE;
 
@@ -34,6 +41,14 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
 
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
+
+APPLE_AGX_BOOL AdmissionBackendImageStageJob(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 TaEvent, APPLE_AGX_U32 D3Event,
+    APPLE_AGX_U32 TaExpectedDonePointer,
+    APPLE_AGX_U32 D3ExpectedDonePointer,
+    APPLE_AGX_BOOL IncludeInitBm,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job);
 
 void AdmissionBackendImageReset(ADMISSION_BACKEND_IMAGE *Image);
 

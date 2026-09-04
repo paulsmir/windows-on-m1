@@ -127,12 +127,75 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
 
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence) {
+  unsigned char *job_bytes;
+  unsigned char *dynamic_bytes;
+  APPLE_AGX_U32 index;
+
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
       Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
       Image->BoundFence != Fence)
     return APPLE_AGX_FALSE;
   Image->BoundFence = 0u;
+  Image->JobFence = 0u;
+  Image->JobReady = APPLE_AGX_FALSE;
   AdmissionBackendBindingZero(&Image->Binding);
+  job_bytes = (unsigned char *)&Image->Job;
+  for (index = 0u; index < (APPLE_AGX_U32)sizeof(Image->Job); ++index)
+    job_bytes[index] = 0u;
+  dynamic_bytes = (unsigned char *)&Image->Dynamic;
+  for (index = 0u; index < (APPLE_AGX_U32)sizeof(Image->Dynamic); ++index)
+    dynamic_bytes[index] = 0u;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageStageJob(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 TaEvent, APPLE_AGX_U32 D3Event,
+    APPLE_AGX_U32 TaExpectedDonePointer,
+    APPLE_AGX_U32 D3ExpectedDonePointer,
+    APPLE_AGX_BOOL IncludeInitBm,
+    APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
+  APPLE_AGX_EXP208_DYNAMIC_INPUT dynamic_input;
+  APPLE_AGX_EXP208_DYNAMIC_RESULT dynamic;
+  APPLE_AGX_EXP208_JOB_PARAMETERS parameters;
+  APPLE_AGX_BACKEND_JOB_IMAGE candidate;
+
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Job == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Image->JobReady ||
+      Fence == 0u || Image->BoundFence != Fence ||
+      Image->Sequence == 0xffffffffu)
+    return APPLE_AGX_FALSE;
+  dynamic_input.Sequence = Image->Sequence + 1u;
+  dynamic_input.TaEventNumber = TaEvent;
+  dynamic_input.D3EventNumber = D3Event;
+  dynamic_input.IncludeInitBm = IncludeInitBm;
+  if (!AppleAgxExp208DeriveDynamic(&dynamic_input, &dynamic))
+    return APPLE_AGX_FALSE;
+
+  parameters.ArenaGpuAddress = Image->ArenaGpuAddress;
+  parameters.ArenaBytes = Image->ArenaBytes;
+  parameters.TaEvent = TaEvent;
+  parameters.D3Event = D3Event;
+  parameters.TaExpectedStamp = dynamic.TaCurrentStamp;
+  parameters.D3ExpectedStamp = dynamic.D3CurrentStamp;
+  parameters.TaExpectedDonePointer = TaExpectedDonePointer;
+  parameters.D3ExpectedDonePointer = D3ExpectedDonePointer;
+  if (!AppleAgxExp208BuildJob(
+          &parameters, Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount(), &candidate) ||
+      !AppleAgxExp208PatchDynamic(
+          Image->ArenaCpuAddress, Image->ArenaBytes, &dynamic_input))
+    return APPLE_AGX_FALSE;
+
+  Image->Dynamic = dynamic;
+  Image->Job = candidate;
+  Image->Sequence = dynamic_input.Sequence;
+  Image->JobFence = Fence;
+  Image->JobReady = APPLE_AGX_TRUE;
+  *Job = candidate;
   return APPLE_AGX_TRUE;
 }
 
