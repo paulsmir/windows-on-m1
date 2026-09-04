@@ -1,6 +1,6 @@
 # EXP407 live readiness matrix
 
-Updated: 2026-09-04T15:13:00+02:00
+Updated: 2026-09-04T16:18:00+02:00
 
 This matrix is evaluated after memory source commits
 `8cd1449550b253862a3b770b9782b7b7fb2f776e`,
@@ -33,13 +33,13 @@ Readiness has two independent axes:
 | `SCHEDULER` | One-node lifetime and context attachment now share one monotonic queued/active/completed fence interval with the production paging path; completion is accepted only for the exact active fence | Commits `3df8e82` and `4d539ea`; 35-test gate and pinned-WDK build | Real non-paging RenderKm packet and AGX event/stamp completion | no |
 | `DMA_BOUNDARY_PREEMPTION` | Exact scheduler last-submitted/active snapshot cancels queued unpublished work, blocks later dispatch, waits for the active boundary and permits one DMA_PREEMPTED claim/commit | Commit `421a1ac`; deterministic RED/GREEN and EXP414 WDK build | Real non-paging backend must use the interval before capability publication | no |
 | `PER_ENGINE_TDR` | Query/status/reset/debug callbacks consume scheduler progress; reset returns active fence or completed boundary and clears outstanding work while preserving monotonic history | Commits `3df8e82` and `ec214ae`; deterministic RED/GREEN and EXP414 WDK build | Backend responsiveness and proven quiesce/recovery remain absent | no |
-| `GDI_COMMAND_BUFFER` | CreateAllocation, standard allocation data and RenderKm remain fail-closed | Existing accumulated GDI translator is not linked or end-to-end complete here | Cache-coherent aperture, allocation, patch, submit, hardware completion | no |
+| `GDI_COMMAND_BUFFER` | One exact ColorFill/PATCOPY is normalized into a pointer-free record; Patch resolves one Segment-2 CPU/host-PA/GPU-VA tuple and seals the exact fence; SubmitCommand binds EXP208 object 40 to that tuple, reapplies all relocations and queues the same interval | Commits `2ee3398`, `7912547`, `b6ee1a6`, and `eead97f`; EXP415/416/419/421 pinned-WDK builds zero warnings/errors | Scheduler activation, EXP208 provider publication and hardware completion remain absent | no |
 | `D589_SCANOUT` | m1n1 retained-owner A407/A408/D589 path exists; `render-admission` does not register a pool or submit a primary | EXP270 proves retained owner, Scanout ABI v2 and exact D589 through Windows login; EXP406 candidate ran ABI v1 and no Windows present | Current full-owner build, KMD primary mapping, synthetic 889 ISR/DPC | no |
 | `KMD_DIRECT_FLIP` | SetVidPnSourceAddress is DIRQL-safe but deliberately returns NOT_SUPPORTED | In-memory receipt path only | Admitted primary allocation, nonblocking broker enqueue, exact D589 | no |
 | `UMD_DIRECT_FLIP` | UMD exports `OpenAdapter10_2` and returns `E_NOTIMPL` | Package/build evidence only | Real UMD adapter/device/resource compatibility path | no |
 | `INDEPENDENT_FLIP` | Not advertised or implemented | None | KMD and UMD DirectFlip plus real VSync completion | no |
 | `NON_VGA_STOP` | Stop/release returns saved POST info and stops the adapter, but does not establish black fallback or latched handoff | Source-only partial implementation | Registered scanout pool, bounded quiesce, black fallback, accurate final POST | no |
-| `AGX_COMPLETION` | Accumulated EXP208/UAT/G13 queue/completion components exist but are not linked to `render-admission` | EXP208 proves a standalone materialized TA+3D graph; no Windows fence mapping | Windows allocation/context, UAT, queue publication, event/stamp ingress | no |
+| `AGX_COMPLETION` | Exact EXP208 clear/output binding and deterministic arena rebase are implemented; production borrows the upper 8-MiB tail, materializes the accepted graph, applies all 159 relocations and binds object 40 to the exact Windows destination tuple before common enqueue | Commits `68172a3`, `45969de`, `abe363f`, and `eead97f`; generated graph tests; EXP208 hardware evidence; EXP417/418/420/421 WDK builds | Rebase-aware job plan, provider/queue publication and dual event/stamp completion | no |
 
 Current functional implementation result: `4/14 READY`; this is not a count of
 hardware-proven layers. The atomic readiness evaluator therefore must
@@ -114,9 +114,7 @@ approved Segment1/Segment2 model.
   QuerySegment4, CreateAllocation, BuildPagingBuffer/DMA completion or a
   non-paging render submission.
 
-FIRST UNKNOWN: make RenderKm emit the narrow immutable GDI command/private-data
-and patch records that a later backend can publish into the new common render
-interval. Then connect the existing AGX event/stamp completion and backend
-quiesce to the interval so SCHEDULER, DMA-boundary preemption and per-engine TDR
-can become operational rather than state-only. No physical IRQ or capability
-publication belongs before that connection.
+FIRST UNKNOWN: make the existing EXP208 job builder consume the now-materialized
+rebased and exact-output-bound image, then connect the existing render provider
+and G13 queue provider. Completion and every readiness bit remain false until
+dual TA/3D event/stamp retirement advances the exact active Windows fence.

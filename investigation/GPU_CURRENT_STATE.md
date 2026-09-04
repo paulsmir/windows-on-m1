@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-09-04T15:13:00+02:00
+Updated: 2026-09-04T16:18:00+02:00
 
 ## CURRENT PLATFORM
 
@@ -52,13 +52,23 @@ INTERPRETATION:
 ## FIRST UNKNOWN / FAILED BOUNDARY
 
 Memory hardware qualification is closed by EXP412. Commits `4d539ea`,
-`421a1ac` and `ec214ae` now provide the offline-green one-node substrate:
+`421a1ac` and `ec214ae` provide the offline-green one-node substrate:
 one monotonic queued/active/completed interval, exact active-fence completion,
 queued-work removal at DMA-buffer-boundary preemption, dispatch blocking until
 one preemption notification, and reset reporting the active fence or completed
 boundary while clearing outstanding work. The first unknown is now connection
-of a real non-paging render packet and backend completion to that interval.
-No enqueue-only completion, AGX queue, physical IRQ or capability was added.
+of the exact EXP208 arena/output binding to the production memory owner and
+then real AGX publication/completion. Commits `2ee3398` and `7912547`
+now prove RenderKm -> Patch -> exact sealed packet -> common queued fence
+offline. Commit `68172a3` proves the only truthful EXP208 workload is the
+exact 16x16 A8R8G8B8 ColorFill 0xff112233 and can rebase its arena inside the
+existing 16-MiB UAT mapping. Commit `45969de` reserves the upper 8 MiB for
+that arena and advertises only the lower 8 MiB to VidMm while leaving the
+EXP412-proven mapping unchanged. Commits `b6ee1a6`, `abe363f` and `eead97f`
+then resolve one exact Windows destination tuple, materialize/rebase/apply all
+159 relocations in the borrowed tail, and bind object 40 to that tuple before
+common enqueue. No activation, enqueue-only completion, AGX queue, physical
+IRQ or capability was added.
 
 ## LAST KNOWN GOOD FOR THIS BOUNDARY
 
@@ -119,10 +129,30 @@ No enqueue-only completion, AGX queue, physical IRQ or capability was added.
   real non-paging backend publishes/completes work and supplies quiesce and
   responsiveness evidence. Do not infer readiness merely from registered
   callbacks or pure state transitions.
-- Next implementation boundary: GDI/RenderKm immutable command admission and
-  patch records feeding the common render interval, followed by the retained
-  owner scanout and existing AGX backend vertical slice. Continue to publish
-  zero mandatory Type1 caps until the complete 14/14 group is real.
+- RenderKm/Patch is implemented in `2ee3398`: one pointer-free ColorFill
+  record, exact live allocation, one prerecorded destination relocation,
+  Segment-2-to-AGX-VA translation and irreversible exact-fence seal.
+- SubmitCommand/common ownership is implemented in `7912547`: the sealed
+  record is bound to its typed context/allocation lifetime and may enter only
+  the common scheduler Queued state. It is not activated or completed.
+- EXP208 compatibility is narrowed in `68172a3`: exact hardware capture
+  matches only a 16x16 A8R8G8B8 PATCOPY clear 0xff112233; output object 40 has
+  one GPU-VA edge and no physical edge. Its 5.8-MiB arena can be rebased to
+  0x1500800000 inside the EXP412-proven mapping. The supported primitive mask
+  intentionally remains zero until provider linkage is complete.
+- The non-overlapping memory partition is implemented in `45969de`: lower
+  8 MiB is the only advertised/translated allocation range; upper 8 MiB is a
+  checked borrowed backend view of the same CPU/host-PA/GPU-VA object. The
+  qualification build still proves the complete 16-MiB map.
+- Exact image and output binding are implemented in `b6ee1a6`, `abe363f` and
+  `eead97f`: production Start borrows the tail, materializes the accepted
+  image, rebases roots/descriptors, applies all relocations, and Submit binds
+  the sole object-40 edge to the packet's exact Windows CPU/host/GPU tuple.
+  EXP419-421 WDK gates are green and no package was staged.
+- Next implementation boundary: make the existing EXP208 job builder consume
+  the rebased bound image, then connect the current render/queue providers and
+  exact dual-event/stamp completion. Continue to publish zero mandatory Type1
+  caps until the complete 14/14 group is real.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
