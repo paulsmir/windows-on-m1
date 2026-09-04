@@ -103,6 +103,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(
     return STATUS_INVALID_DEVICE_STATE;
   KeInitializeSpinLock(&Context->SchedulerLock);
   AppleAgxSchedulerInitialize(&Context->Scheduler);
+  AdmissionRenderPacketInitialize(&Context->RenderPacket);
   InterlockedExchange(&Context->SchedulerFaulted, 0);
   InterlockedExchange(&Context->SchedulerDpcPending, 0);
   InterlockedExchange(&Context->SchedulerInitialized, 1);
@@ -118,6 +119,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
   if (InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_SUCCESS;
   if (Context->Scheduler.ContextCount != 0u ||
+      AdmissionRenderPacketState(&Context->RenderPacket) !=
+          AdmissionRenderPacketEmpty ||
       AppleAgxSchedulerHasOutstandingFence(
           &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
           ADMISSION_SCHEDULER_ENGINE) ||
@@ -222,6 +225,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
   BOOLEAN notifyNow;
   UINT cutoffFence;
   UINT activeFence;
+  UINT queuedFence;
+  ADMISSION_RENDER_CONTEXT *queuedContext = NULL;
 
   if (context == NULL || PreemptCommand == NULL ||
       PreemptCommand->Flags.Value != 0u ||
@@ -236,6 +241,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
   activeFence = AppleAgxSchedulerActiveFence(
       &context->Scheduler, PreemptCommand->NodeOrdinal,
       PreemptCommand->EngineOrdinal);
+  queuedFence = AppleAgxSchedulerQueuedFence(
+      &context->Scheduler, PreemptCommand->NodeOrdinal,
+      PreemptCommand->EngineOrdinal);
+  if (AdmissionRenderPacketState(&context->RenderPacket) ==
+          AdmissionRenderPacketQueued)
+    queuedContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        context->RenderPacket.Description.ContextToken;
   if (!AppleAgxSchedulerBeginBoundaryPreemption(
           &context->Scheduler, PreemptCommand->NodeOrdinal,
           PreemptCommand->EngineOrdinal, PreemptCommand->PreemptionFenceId,
@@ -243,6 +255,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     InterlockedExchange(&context->SchedulerFaulted, 1);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     return STATUS_SUCCESS;
+  }
+  if (queuedFence != 0u &&
+      (!AdmissionRenderPacketDiscardQueued(
+           &context->RenderPacket, cutoffFence) ||
+       queuedContext == NULL ||
+       queuedContext->Object.FenceOutstanding != queuedFence)) {
+    InterlockedExchange(&context->SchedulerFaulted, 1);
+  } else if (queuedContext != NULL) {
+    queuedContext->Object.FenceOutstanding = 0u;
   }
   notifyNow = AppleAgxSchedulerPreemptionPhase(&context->Scheduler) ==
               AppleAgxPreemptionReadyToNotify;
@@ -284,6 +305,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
     HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   APPLE_AGX_U32 lastAborted = 0u;
+  ADMISSION_RENDER_CONTEXT *packetContext = NULL;
+  ADMISSION_RENDER_PACKET_STATE packetState;
+  APPLE_AGX_U32 packetFence = 0u;
   BOOLEAN reset;
   KIRQL oldIrql;
 
@@ -295,6 +319,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
   if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
   KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+  packetState = AdmissionRenderPacketState(&context->RenderPacket);
+  if (packetState == AdmissionRenderPacketActive) {
+    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+    return STATUS_DEVICE_BUSY;
+  }
+  if (packetState == AdmissionRenderPacketQueued) {
+    packetFence = context->RenderPacket.Description.Fence;
+    packetContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
+        context->RenderPacket.Description.ContextToken;
+    if (!AdmissionRenderPacketReset(
+            &context->RenderPacket, packetFence, 0u)) {
+      KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+      return STATUS_INVALID_DEVICE_STATE;
+    }
+  }
   reset = AppleAgxSchedulerResetEngine(
               &context->Scheduler, ResetEngine->NodeOrdinal,
               ResetEngine->EngineOrdinal, &lastAborted)
@@ -304,6 +343,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
   if (!reset)
     return STATUS_INVALID_DEVICE_STATE;
   ResetEngine->LastAbortedFenceId = lastAborted;
+  if (packetContext != NULL &&
+      packetContext->Object.FenceOutstanding == packetFence)
+    packetContext->Object.FenceOutstanding = 0u;
   InterlockedExchange(&context->SchedulerFaulted, 0);
   return STATUS_SUCCESS;
 }

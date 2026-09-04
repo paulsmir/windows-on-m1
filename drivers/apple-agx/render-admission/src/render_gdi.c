@@ -125,7 +125,7 @@ int AdmissionGdiDescribePreparedRecord(
   command = *(const APPLE_AGX_GDI_DMA_COMMAND *)DmaBuffer;
   if (command.Opcode != (unsigned int)AppleAgxGdiColorFill ||
       command.Rop != (unsigned int)AppleAgxGdiColorFillPatCopy ||
-      command.Rop3 != 0u || command.DestinationGpuAddress != 0ULL ||
+      command.Rop3 != 0u ||
       !AdmissionGdiRectValid(&command.Destination) ||
       !AppleAgxGdiDmaRecordBytes(command.SubRectCount, &expected_bytes) ||
       expected_bytes != DmaBytes)

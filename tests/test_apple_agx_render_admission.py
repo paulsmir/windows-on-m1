@@ -330,7 +330,8 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         )
         for forbidden in (
             "m1n1", "mmio", "power", "rtkit",
-            "firmware", "render_job", "submission",
+            "firmware", "render_job",
+            r"..\shared\src\apple_agx_submission.c",
         ):
             self.assertNotIn(forbidden.lower(), project.lower())
 

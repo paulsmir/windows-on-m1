@@ -19,6 +19,7 @@
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
 #include "render_gdi.h"
+#include "render_submission.h"
 #include "apple_agx_wddm_feature_contract.h"
 #include "apple_agx_scheduler.h"
 #include "j313_agx_abi_admission.generated.h"
@@ -97,6 +98,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG MemoryStartStatus;
   KSPIN_LOCK SchedulerLock;
   APPLE_AGX_SCHEDULER Scheduler;
+  ADMISSION_RENDER_PACKET RenderPacket;
   volatile LONG SchedulerInitialized;
   volatile LONG SchedulerFaulted;
   volatile LONG SchedulerDpcPending;
@@ -244,6 +246,9 @@ BOOLEAN AdmissionSchedulerSubmitFence(
 BOOLEAN AdmissionSchedulerRecordCompletion(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ UINT Fence);
 VOID AdmissionSchedulerDpc(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionDdiSubmitRender(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMAND *Args);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;

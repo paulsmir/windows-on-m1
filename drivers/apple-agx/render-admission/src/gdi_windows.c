@@ -71,6 +71,46 @@ static NTSTATUS AdmissionGdiTranslatePatch(
   return STATUS_SUCCESS;
 }
 
+static NTSTATUS AdmissionGdiPreparePacket(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    ADMISSION_OPEN_ALLOCATION *Opened, const DXGKARG_PATCH *Args,
+    APPLE_AGX_U32 PrivateBytesUsed) {
+  ADMISSION_RENDER_PACKET_DESCRIPTION description;
+  KIRQL old_irql;
+  BOOLEAN accepted = FALSE;
+
+  RtlZeroMemory(&description, sizeof(description));
+  description.Fence = Args->SubmissionFenceId;
+  description.ContextToken = (ULONGLONG)(ULONG_PTR)Context;
+  description.AllocationToken = (ULONGLONG)(ULONG_PTR)Opened;
+  description.PrivateDataToken =
+      (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData;
+  description.PrivateDataBytes = Args->DmaBufferPrivateDataSize;
+  description.PrivateDataStart = 0u;
+  description.PrivateDataEnd = PrivateBytesUsed;
+  description.DmaStart = Args->DmaBufferSubmissionStartOffset;
+  description.DmaEnd = Args->DmaBufferSubmissionEndOffset;
+
+  KeAcquireSpinLock(&Adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&Adapter->RenderPacket) ==
+          AdmissionRenderPacketEmpty) {
+    if (Context->Object.FenceOutstanding == 0u &&
+        AdmissionRenderPacketPrepare(
+            &Adapter->RenderPacket, &description)) {
+      Context->Object.FenceOutstanding = Args->SubmissionFenceId;
+      accepted = TRUE;
+    }
+  } else if (Context->Object.FenceOutstanding ==
+                 Args->SubmissionFenceId &&
+             AdmissionRenderPacketMatches(
+                 &Adapter->RenderPacket, &description,
+                 AdmissionRenderPacketPrepared)) {
+    accepted = TRUE;
+  }
+  KeReleaseSpinLock(&Adapter->SchedulerLock, old_irql);
+  return accepted ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
     HANDLE Context, DXGKARG_RENDER *Args) {
   ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
@@ -189,6 +229,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   ADMISSION_GDI_PREPARED prepared;
   ADMISSION_GDI_PATCH patch;
   const D3DDDI_PATCHLOCATIONLIST *location;
+  ADMISSION_OPEN_ALLOCATION *opened;
   BOOLEAN sealed;
   ULONGLONG gpu_va;
 
@@ -253,6 +294,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           adapter, context, Args->pAllocationList,
           Args->AllocationListSize, &patch, &gpu_va)))
     return STATUS_INVALID_ADDRESS;
+  opened = (ADMISSION_OPEN_ALLOCATION *)
+      Args->pAllocationList[patch.AllocationIndex]
+          .hDeviceSpecificAllocation;
 
   sealed = AppleAgxDmaShadowIsSealed(
                shadow.Storage, shadow.BytesUsed)
@@ -273,6 +317,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
         !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
       return STATUS_INVALID_DEVICE_STATE;
   }
+  if (!NT_SUCCESS(AdmissionGdiPreparePacket(
+          adapter, context, opened, Args, shadow.BytesUsed)))
+    return STATUS_DEVICE_BUSY;
   RtlCopyMemory(
       (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,
       &gpu_va, sizeof(gpu_va));

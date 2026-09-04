@@ -174,6 +174,9 @@ static void test_prepared_record_is_reconstructed_from_immutable_bytes(void) {
       dma, prepared.DmaBytes, prepared.DmaOffset, &reconstructed));
   assert(memcmp(&prepared, &reconstructed, sizeof(prepared)) == 0);
   command = (APPLE_AGX_GDI_DMA_COMMAND *)dma;
+  command->DestinationGpuAddress = 0x1500010000ULL;
+  assert(AdmissionGdiDescribePreparedRecord(
+      dma, prepared.DmaBytes, prepared.DmaOffset, &reconstructed));
   command->Rop = (unsigned int)AppleAgxGdiColorFillPatInvert;
   assert(!AdmissionGdiDescribePreparedRecord(
       dma, prepared.DmaBytes, prepared.DmaOffset, &reconstructed));

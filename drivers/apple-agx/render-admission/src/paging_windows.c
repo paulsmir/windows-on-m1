@@ -270,8 +270,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
   UINT count;
   KIRQL oldIrql;
 
-  if (context == NULL || Args == NULL || !context->Started ||
-      !Args->Flags.Paging || Args->Flags.Reserved != 0u ||
+  if (context == NULL || Args == NULL)
+    return STATUS_INVALID_PARAMETER;
+  if (!Args->Flags.Paging)
+    return AdmissionDdiSubmitRender(context, Args);
+  if (!context->Started || Args->Flags.Reserved != 0u ||
       Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
       Args->SubmissionFenceId == 0u ||
       context->PagingWorkItem == NULL ||

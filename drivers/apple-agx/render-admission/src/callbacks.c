@@ -159,8 +159,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiCancelCommand, HANDLE, Adapter,
-      const DXGKARG_CANCELCOMMAND *, Args)
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPowerComponentFState(
     PVOID MiniportDeviceContext, UINT ComponentIndex, UINT FState) {

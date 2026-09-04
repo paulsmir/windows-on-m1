@@ -1,0 +1,117 @@
+#include "render_submission.h"
+
+#include <assert.h>
+
+static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
+    unsigned int fence) {
+  ADMISSION_RENDER_PACKET_DESCRIPTION description = {0};
+  description.Fence = fence;
+  description.ContextToken = 0x1000ULL;
+  description.AllocationToken = 0x2000ULL;
+  description.PrivateDataToken = 0x3000ULL;
+  description.PrivateDataBytes = 8192u;
+  description.PrivateDataStart = 0u;
+  description.PrivateDataEnd = 256u;
+  description.DmaStart = 0u;
+  description.DmaEnd = 160u;
+  return description;
+}
+
+static void test_exact_packet_moves_prepared_queued_active_completed(void) {
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description =
+      packet_description(11u);
+
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketEmpty);
+  assert(AdmissionRenderPacketPrepare(&packet, &description));
+  assert(AdmissionRenderPacketMatches(&packet, &description,
+                                      AdmissionRenderPacketPrepared));
+  description.DmaEnd++;
+  assert(!AdmissionRenderPacketMatches(&packet, &description,
+                                       AdmissionRenderPacketPrepared));
+  description.DmaEnd--;
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketPrepared);
+  assert(!AdmissionRenderPacketComplete(&packet, 11u));
+  assert(!AdmissionRenderPacketQueue(&packet, 12u, 0x1000ULL,
+                                     0x3000ULL, 0u, 160u));
+  assert(AdmissionRenderPacketQueue(&packet, 11u, 0x1000ULL,
+                                    0x3000ULL, 0u, 160u));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketQueued);
+  assert(!AdmissionRenderPacketActivate(&packet, 12u));
+  assert(AdmissionRenderPacketActivate(&packet, 11u));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketActive);
+  assert(!AdmissionRenderPacketComplete(&packet, 12u));
+  assert(AdmissionRenderPacketComplete(&packet, 11u));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketEmpty);
+}
+
+static void test_prepare_rejects_missing_identity_and_bad_intervals(void) {
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description =
+      packet_description(13u);
+
+  AdmissionRenderPacketInitialize(&packet);
+  description.ContextToken = 0ULL;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  description = packet_description(13u);
+  description.PrivateDataEnd = description.PrivateDataBytes + 1u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  description = packet_description(13u);
+  description.PrivateDataStart = description.PrivateDataEnd;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  description = packet_description(13u);
+  description.DmaStart = description.DmaEnd;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+}
+
+static void test_cancel_and_preemption_never_synthesize_completion(void) {
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description =
+      packet_description(21u);
+
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionRenderPacketPrepare(&packet, &description));
+  assert(AdmissionRenderPacketCancelPrepared(&packet, 0x1000ULL));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketEmpty);
+  assert(AdmissionRenderPacketPrepare(&packet, &description));
+  assert(AdmissionRenderPacketQueue(&packet, 21u, 0x1000ULL,
+                                    0x3000ULL, 0u, 160u));
+  assert(!AdmissionRenderPacketCancelPrepared(&packet, 0x1000ULL));
+  assert(!AdmissionRenderPacketDiscardQueued(&packet, 20u));
+  assert(AdmissionRenderPacketDiscardQueued(&packet, 21u));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketEmpty);
+}
+
+static void test_active_reset_requires_backend_quiesce(void) {
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description =
+      packet_description(31u);
+
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionRenderPacketPrepare(&packet, &description));
+  assert(AdmissionRenderPacketQueue(&packet, 31u, 0x1000ULL,
+                                    0x3000ULL, 0u, 160u));
+  assert(AdmissionRenderPacketActivate(&packet, 31u));
+  assert(!AdmissionRenderPacketReset(&packet, 31u, 0u));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketActive);
+  assert(AdmissionRenderPacketReset(&packet, 31u, 1u));
+  assert(AdmissionRenderPacketState(&packet) ==
+         AdmissionRenderPacketEmpty);
+}
+
+int main(void) {
+  test_exact_packet_moves_prepared_queued_active_completed();
+  test_prepare_rejects_missing_identity_and_bad_intervals();
+  test_cancel_and_preemption_never_synthesize_completion();
+  test_active_reset_requires_backend_quiesce();
+  return 0;
+}
