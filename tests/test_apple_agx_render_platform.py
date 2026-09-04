@@ -48,6 +48,23 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         for irq in range(880, 889):
             self.assertNotIn(str(irq), source)
 
+    def test_per_engine_tdr_quiesces_retires_and_restarts_same_backend(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        scheduler = (RENDER / "src" / "scheduler_windows.c").read_text()
+
+        self.assertIn("AdmissionPlatformRuntimeReset", scheduler)
+        self.assertIn("AdmissionPlatformRuntimeResponsive", scheduler)
+        self.assertIn("AppleAgxBackendRuntimeStop", platform)
+        self.assertIn("AppleAgxPlatformProviderDestroy", platform)
+        self.assertIn("AppleAgxPlatformProviderInitialize", platform)
+        self.assertIn("AppleAgxBackendRuntimeStart", platform)
+        self.assertIn("AdmissionBackendRetire", platform)
+        self.assertIn("runtime->Backend.QueuesQuiesced", platform)
+        active = scheduler[scheduler.index(
+            "if (packetState == AdmissionRenderPacketActive)"):]
+        self.assertNotIn("return STATUS_DEVICE_BUSY", active.split(
+            "if (packetState == AdmissionRenderPacketQueued)")[0])
+
 
 if __name__ == "__main__":
     unittest.main()

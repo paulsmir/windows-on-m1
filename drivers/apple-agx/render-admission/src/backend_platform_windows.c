@@ -45,6 +45,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   KEVENT WorkIdle;
   volatile LONG WorkScheduled;
   volatile LONG Stopping;
+  volatile LONG Resetting;
+  volatile LONG64 LastProgressMs;
+  APPLE_AGX_G13_QUEUE_PROGRESS Progress;
+  BOOLEAN ProgressValid;
   APPLE_AGX_COMPLETION_TRANSACTION Completion;
   ADMISSION_RENDER_CONTEXT *CompletionContext;
   BOOLEAN Powered;
@@ -547,6 +551,10 @@ static unsigned char AdmissionFirmwareStartEndpoint(
 
 static unsigned char AdmissionFirmwareStopEndpoint(
     void *Context, unsigned int Endpoint, unsigned long long DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime != NULL &&
+      runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE)
+    return 1u;
   return AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, FALSE);
 }
 
@@ -1053,7 +1061,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
   BOOLEAN retired = FALSE;
   KIRQL old_irql;
   if (runtime == NULL || Fence == 0u || Node != 0u || Engine != 0u ||
-      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 ||
+      (InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0) ||
       !runtime->Backend.QueuesQuiesced)
     return APPLE_AGX_BACKEND_FALSE;
   adapter = runtime->Adapter;
@@ -1106,6 +1115,7 @@ static VOID AdmissionPlatformWorker(
 
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0 &&
       runtime->BackendStarted &&
       runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
       AdmissionRenderPacketState(&adapter->RenderPacket) ==
@@ -1144,9 +1154,18 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+  RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
+  runtime->ProgressValid =
+      AppleAgxG13QueueProviderQueryProgress(
+          &runtime->Provider.QueueProvider, &runtime->Progress)
+          ? TRUE
+          : FALSE;
+  InterlockedExchange64(
+      &runtime->LastProgressMs, (LONG64)AdmissionPlatformNowMs());
 
   while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
-         InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0) {
+         InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+         InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0) {
     APPLE_AGX_BACKEND_U32 drained = 0u;
     APPLE_AGX_BACKEND_U32 completed = 0u;
     LARGE_INTEGER interval;
@@ -1157,6 +1176,20 @@ static VOID AdmissionPlatformWorker(
     }
     UNREFERENCED_PARAMETER(drained);
     UNREFERENCED_PARAMETER(completed);
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) {
+      APPLE_AGX_G13_QUEUE_PROGRESS current;
+      if (AppleAgxG13QueueProviderQueryProgress(
+              &runtime->Provider.QueueProvider, &current) &&
+          (!runtime->ProgressValid ||
+           AppleAgxG13QueueProgressHasAdvanced(
+               &runtime->Progress, &current))) {
+        runtime->Progress = current;
+        runtime->ProgressValid = TRUE;
+        InterlockedExchange64(
+            &runtime->LastProgressMs,
+            (LONG64)AdmissionPlatformNowMs());
+      }
+    }
     if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted)
       break;
     interval.QuadPart = -10000LL;
@@ -1167,7 +1200,8 @@ static VOID AdmissionPlatformWorker(
     }
   }
   if (runtime->Backend.Phase != AppleAgxBackendRuntimeReady &&
-      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0)
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
   AdmissionPlatformWorkerFinished(runtime);
 }
@@ -1180,6 +1214,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
           : NULL;
   if (runtime == NULL || runtime->WorkItem == NULL ||
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0 ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeReady ||
       InterlockedCompareExchange(&runtime->WorkScheduled, 1, 0) != 0)
     return FALSE;
@@ -1441,6 +1476,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   InterlockedExchange(&runtime->WorkScheduled, 0);
   InterlockedExchange(&runtime->Stopping, 0);
+  InterlockedExchange(&runtime->Resetting, 0);
+  InterlockedExchange64(&runtime->LastProgressMs, 0);
   if (AppleAgxBackendRuntimeStart(
           &runtime->Backend, &runtime->RuntimeIo) !=
       AppleAgxBackendRuntimeResultOk) {
@@ -1478,6 +1515,108 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStop(
   Context->PlatformRuntime = NULL;
   ExFreePoolWithTag(runtime, ADMISSION_PLATFORM_TAG);
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_U32 *LastAbortedFence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  APPLE_AGX_U32 active;
+  NTSTATUS status = STATUS_SUCCESS;
+  KIRQL old_irql;
+
+  if (Context == NULL || LastAbortedFence == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  *LastAbortedFence = 0u;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL || !runtime->BackendStarted ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->Resetting, 1, 0) != 0)
+    return STATUS_INVALID_DEVICE_STATE;
+  if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0)
+    KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
+                          FALSE, NULL);
+  KeAcquireSpinLock(&Context->SchedulerLock, &old_irql);
+  active = AppleAgxSchedulerActiveFence(&Context->Scheduler, 0u, 0u);
+  if (active == 0u ||
+      AdmissionRenderPacketState(&Context->RenderPacket) !=
+          AdmissionRenderPacketActive ||
+      Context->RenderPacket.Description.Fence != active) {
+    KeReleaseSpinLock(&Context->SchedulerLock, old_irql);
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Exit;
+  }
+  KeReleaseSpinLock(&Context->SchedulerLock, old_irql);
+  *LastAbortedFence = active;
+  if (AppleAgxBackendRuntimeStop(&runtime->Backend) !=
+      AppleAgxBackendRuntimeResultOk) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+  runtime->BackendStarted = FALSE;
+  if (!AppleAgxPlatformProviderDestroy(&runtime->Provider)) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+  runtime->ProviderReady = FALSE;
+
+  AppleAgxBackendRuntimeInitialize(
+      &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
+  runtime->ProviderConfig.Runtime = &runtime->Backend;
+  RtlZeroMemory(&runtime->PlatformIo, sizeof(runtime->PlatformIo));
+  if (!AppleAgxPlatformProviderInitialize(
+          &runtime->Provider, &runtime->ProviderConfig,
+          &runtime->PlatformIo)) {
+    status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    goto Exit;
+  }
+  runtime->ProviderReady = TRUE;
+  runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
+  AppleAgxCompletionTransactionInitialize(&runtime->Completion);
+  runtime->CompletionContext = NULL;
+  RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
+  runtime->ProgressValid = FALSE;
+  InterlockedExchange64(&runtime->LastProgressMs, 0);
+  if (AppleAgxBackendRuntimeStart(
+          &runtime->Backend, &runtime->RuntimeIo) !=
+      AppleAgxBackendRuntimeResultOk) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+  runtime->BackendStarted = TRUE;
+  InterlockedExchange(&Context->SchedulerFaulted, 0);
+
+Exit:
+  InterlockedExchange(&runtime->Resetting, 0);
+  if (!NT_SUCCESS(status))
+    InterlockedExchange(&Context->SchedulerFaulted, 1);
+  return status;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeResponsive(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  ULONGLONG now;
+  ULONGLONG last;
+  if (Context == NULL ||
+      InterlockedCompareExchange(&Context->SchedulerFaulted, 0, 0) != 0)
+    return FALSE;
+  runtime = (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime;
+  if (runtime == NULL || !runtime->BackendStarted ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0)
+    return FALSE;
+  if (runtime->Backend.Phase == AppleAgxBackendRuntimeReady)
+    return TRUE;
+  if (runtime->Backend.Phase != AppleAgxBackendRuntimeSubmitted)
+    return FALSE;
+  last = (ULONGLONG)InterlockedCompareExchange64(
+      &runtime->LastProgressMs, 0, 0);
+  now = AdmissionPlatformNowMs();
+  return last != 0ULL && now >= last &&
+                 now - last < ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS
+             ? TRUE
+             : FALSE;
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(

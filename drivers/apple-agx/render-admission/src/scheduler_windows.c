@@ -3,6 +3,12 @@
 #define ADMISSION_SCHEDULER_NODE 0u
 #define ADMISSION_SCHEDULER_ENGINE 0u
 
+#ifdef ALLOC_PRAGMA
+#pragma alloc_text(PAGE, AdmissionDdiQueryDependentEngineGroup)
+#pragma alloc_text(PAGE, AdmissionDdiQueryEngineStatus)
+#pragma alloc_text(PAGE, AdmissionDdiResetEngine)
+#endif
+
 typedef struct _ADMISSION_PREEMPTION_NOTIFICATION {
   ADMISSION_CONTEXT *Context;
   APPLE_AGX_PREEMPTION Preemption;
@@ -278,6 +284,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDependentEngineGroup(
     HANDLE Adapter, DXGKARG_QUERYDEPENDENTENGINEGROUP *DependentGroup) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  PAGED_CODE();
   if (context == NULL || DependentGroup == NULL ||
       DependentGroup->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
       DependentGroup->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
@@ -290,6 +297,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDependentEngineGroup(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
     HANDLE Adapter, DXGKARG_QUERYENGINESTATUS *EngineStatus) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  PAGED_CODE();
   if (context == NULL || EngineStatus == NULL ||
       EngineStatus->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
       EngineStatus->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
@@ -297,7 +305,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
     return STATUS_INVALID_PARAMETER;
   EngineStatus->EngineStatus.Value = 0u;
   EngineStatus->EngineStatus.Responsive =
-      InterlockedCompareExchange(&context->SchedulerFaulted, 0, 0) == 0
+      AdmissionPlatformRuntimeResponsive(context)
           ? 1u
           : 0u;
   return STATUS_SUCCESS;
@@ -313,6 +321,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
   BOOLEAN reset;
   KIRQL oldIrql;
 
+  PAGED_CODE();
   if (context == NULL || ResetEngine == NULL ||
       ResetEngine->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
@@ -324,7 +333,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
   if (packetState == AdmissionRenderPacketActive) {
     KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
-    return STATUS_DEVICE_BUSY;
+    if (!NT_SUCCESS(AdmissionPlatformRuntimeReset(
+            context, &lastAborted)))
+      return STATUS_DEVICE_HARDWARE_ERROR;
+    ResetEngine->LastAbortedFenceId = lastAborted;
+    return STATUS_SUCCESS;
   }
   if (packetState == AdmissionRenderPacketQueued) {
     packetFence = context->RenderPacket.Description.Fence;

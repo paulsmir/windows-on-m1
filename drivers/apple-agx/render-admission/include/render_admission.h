@@ -291,6 +291,11 @@ BOOLEAN AdmissionPlatformRuntimeReady(
     _Inout_ ADMISSION_CONTEXT *Context);
 BOOLEAN AdmissionPlatformRuntimeSubmit(
     _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionPlatformRuntimeReset(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ APPLE_AGX_U32 *LastAbortedFence);
+BOOLEAN AdmissionPlatformRuntimeResponsive(
+    _Inout_ ADMISSION_CONTEXT *Context);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
