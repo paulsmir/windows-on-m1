@@ -64,18 +64,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiCreateAllocation, HANDLE, Adapter,
-      DXGKARG_CREATEALLOCATION *, Args)
-FAIL2(AdmissionDdiDestroyAllocation, HANDLE, Adapter,
-      const DXGKARG_DESTROYALLOCATION *, Args)
-FAIL2(AdmissionDdiDescribeAllocation, HANDLE, Adapter,
-      DXGKARG_DESCRIBEALLOCATION *, Args)
-FAIL2(AdmissionDdiGetStandardAllocationDriverData, HANDLE, Adapter,
-      DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA *, Args)
-FAIL2(AdmissionDdiOpenAllocation, HANDLE, Device,
-      const DXGKARG_OPENALLOCATION *, Args)
-FAIL2(AdmissionDdiCloseAllocation, HANDLE, Device,
-      const DXGKARG_CLOSEALLOCATION *, Args)
 FAIL2(AdmissionDdiPatch, HANDLE, Adapter, const DXGKARG_PATCH *, Args)
 FAIL2(AdmissionDdiSubmitCommand, HANDLE, Adapter,
       const DXGKARG_SUBMITCOMMAND *, Args)

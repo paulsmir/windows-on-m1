@@ -12,6 +12,7 @@
 #include <ntstrsafe.h>
 #include "render_objects.h"
 #include "render_memory.h"
+#include "render_allocation.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 4096u
@@ -77,6 +78,19 @@ typedef struct _ADMISSION_DEVICE {
 typedef struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_OBJECT_CONTEXT Object;
 } ADMISSION_RENDER_CONTEXT;
+
+typedef struct _ADMISSION_ALLOCATION_HANDLE {
+  ADMISSION_ALLOCATION_OBJECT Object;
+} ADMISSION_ALLOCATION_HANDLE;
+
+#define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
+typedef struct _ADMISSION_OPEN_ALLOCATION {
+  ULONG Magic;
+  ADMISSION_DEVICE *Device;
+  D3DKMT_HANDLE RuntimeAllocation;
+  ADMISSION_ALLOCATION_OBJECT *Allocation;
+  BOOLEAN ReadOnly;
+} ADMISSION_OPEN_ALLOCATION;
 
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
                             _In_ PCWSTR Name, _In_ ULONG Value);
