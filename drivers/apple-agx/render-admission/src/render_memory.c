@@ -188,7 +188,7 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanTransfer(
   return AppleAgxPhysicalPagingPlanTransfer(
       SourceSegmentId, SourceAddress, DestinationSegmentId,
       DestinationAddress, Memory->Topology.Local.Base,
-      Memory->Topology.Local.Size, TransferOffset, SystemOffset, Bytes, Plan);
+      Memory->LocalAllocationBytes, TransferOffset, SystemOffset, Bytes, Plan);
 }
 
 APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanFill(
@@ -201,7 +201,7 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanFill(
     return AppleAgxPhysicalPagingInvalidArgument;
   return AppleAgxPhysicalPagingPlanFill(
       DestinationSegmentId, DestinationAddress,
-      Memory->Topology.Local.Base, Memory->Topology.Local.Size, Bytes,
+      Memory->Topology.Local.Base, Memory->LocalAllocationBytes, Bytes,
       Pattern, Plan);
 }
 
@@ -213,5 +213,5 @@ APPLE_AGX_PHYSICAL_PAGING_RESULT AdmissionMemoryPlanDiscard(
     return AppleAgxPhysicalPagingInvalidArgument;
   return AppleAgxPhysicalPagingPlanDiscard(
       SegmentId, SegmentAddress, Memory->Topology.Local.Base,
-      Memory->Topology.Local.Size, Plan);
+      Memory->LocalAllocationBytes, Plan);
 }

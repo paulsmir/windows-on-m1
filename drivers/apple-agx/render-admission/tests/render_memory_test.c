@@ -96,6 +96,14 @@ static void test_backend_tail_reservation_preserves_full_uat_mapping(void) {
   assert(AdmissionMemoryLocalAddressToGpuVa(
              &memory, 2u, TEST_LOCAL_BASE + 0x00800000ULL, 0x10000ULL,
              0u, &gpu) == AppleAgxLocalSegmentAddressOutsideSegment);
+  {
+    APPLE_AGX_PHYSICAL_PAGING_PLAN plan;
+    assert(AdmissionMemoryPlanFill(
+               &memory, ADMISSION_MEMORY_LOCAL_SEGMENT,
+               TEST_LOCAL_BASE + 0x00800000ULL, 0x10000ULL,
+               0x11223344u, &plan) ==
+           AppleAgxPhysicalPagingOutOfRange);
+  }
   assert(!AdmissionMemoryReserveBackendTail(
       &memory, 0x00800000ULL, 0x00800000ULL));
 }
