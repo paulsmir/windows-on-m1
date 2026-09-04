@@ -10,13 +10,26 @@ wiring `52d3bf6182e6ae60e4a3520b68d857bdc7eb5167`. `READY=yes` means an
 operational contract exists; callback registration, a success return, a data
 structure, or a source-presence test alone is insufficient.
 
+Readiness has two independent axes:
+
+- `MEMORY_PAGING_IMPLEMENTED = YES`: the complete production source contract
+  is linked and offline-green, so the functional 14-bit implementation gate
+  may count this bit.
+- `MEMORY_PAGING_HW_PROVEN = NO`: EXP408 selected the exact qualification
+  package and remained system-healthy but produced no memory proof; it does not
+  prove the live chain
+  Windows KMD -> HVC `0x4d31` -> current m1n1 EL2 -> host PA -> context-63 UAT
+  publication -> cleanup. A stage/status-only follow-up must locate the exact
+  pre-proof boundary. This document must not treat the implementation bit as
+  hardware evidence.
+
 ## Fourteen prerequisites
 
 | Feature | Implementation | Evidence | Dependencies | Ready |
 | --- | --- | --- | --- | --- |
 | `WDDM3_IDENTITY` | Exact 1296-byte WDDM 3.0 initialization vector and pre-Start WDDMDEVICECAPS 3.0 response | EXP406: `DxgkInitialize=SUCCESS`, Add/Start reached, Type1/592 called successfully | Pinned WDK 10.0.28000.2526 | yes |
 | `ONE_NODE_TOPOLOGY` | Type1 names one asymmetric node and GetNodeMetadata describes ordinal 0 as 3D | Source and offline tests only; no admitted scheduler-visible AGX engine exists | Scheduler, context, completion | no |
-| `MEMORY_PAGING` | Complete production chain: Segment1/2, allocation backing/lifetime, exact contiguous DXGK object/ADL/map, bounded HVC 0x4d31, 40-bit host pages, context-63 16-KiB UAT publication, BuildPagingBuffer encode/execute, bounded paging worker, synchronized DMA completion/fault and reverse cleanup | Commits `8cd1449`, `3380434`, `39f64c6`; 238-test gate; pinned-WDK KMD/UMD build, analysis, Universal, Inf2Cat and signing pass with zero warnings/errors | Hardware execution remains unqualified until the integrated candidate; no incomplete package was installed | yes |
+| `MEMORY_PAGING` | Complete production chain: Segment1/2, allocation backing/lifetime, exact contiguous DXGK object/ADL/map, bounded HVC 0x4d31, 40-bit host pages, context-63 16-KiB UAT publication, BuildPagingBuffer encode/execute, bounded paging worker, synchronized DMA completion/fault and reverse cleanup | Commits `8cd1449`, `3380434`, `39f64c6`; 238-test gate; pinned-WDK KMD/UMD build, analysis, Universal, Inf2Cat and signing pass with zero warnings/errors | `IMPLEMENTED=yes`; `HW_PROVEN=no`; EXP408 inconclusive before proof | yes |
 | `DEVICE_CONTEXT` | Typed nonpaged adapter/device/context ownership, bounded counts, node 0/affinity 1 and busy destruction | Commit `7b0c771`; RED/GREEN object tests; pinned-WDK KMD/UMD build with zero warnings/errors | Allocation references and scheduler attachment remain later layers | yes |
 | `SCHEDULER` | SubmitCommand and scheduler callbacks remain fail-closed | No `render-admission` scheduler implementation | Memory, context, backend queue | no |
 | `DMA_BOUNDARY_PREEMPTION` | PreemptCommand remains fail-closed; no progress/fence accounting | None in `render-admission` | Scheduler, monotonic completion, replay | no |
@@ -29,7 +42,8 @@ structure, or a source-presence test alone is insufficient.
 | `NON_VGA_STOP` | Stop/release returns saved POST info and stops the adapter, but does not establish black fallback or latched handoff | Source-only partial implementation | Registered scanout pool, bounded quiesce, black fallback, accurate final POST | no |
 | `AGX_COMPLETION` | Accumulated EXP208/UAT/G13 queue/completion components exist but are not linked to `render-admission` | EXP208 proves a standalone materialized TA+3D graph; no Windows fence mapping | Windows allocation/context, UAT, queue publication, event/stamp ingress | no |
 
-Current result: `3/14 READY`. The atomic readiness evaluator therefore must
+Current functional implementation result: `3/14 READY`; this is not a count of
+hardware-proven layers. The atomic readiness evaluator therefore must
 publish zero mandatory Type1 caps. Commit `52d3bf6` now enforces that rule in
 the real QueryAdapterInfo path; the final capability writer remains absent and
 fails closed even if an accidental all-ready state is presented early.

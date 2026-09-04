@@ -90,13 +90,17 @@ individual Type1 bit experiment is prohibited.
   and standard/create/destroy/describe/open/close allocation DDIs. The full
   memory readiness bit remains false until DXGK physical-memory/HVC ownership,
   context-63 UAT publication and BuildPagingBuffer execution are connected.
-- MEMORY_PAGING is now implementation-ready in commits `8cd1449`, `3380434`
+- `MEMORY_PAGING_IMPLEMENTED=YES` in commits `8cd1449`, `3380434`
   and `39f64c6`: DXGK physical owner/ADL/map, bounded HVC 0x4d31, 40-bit host
   pages, aligned local object, context-63 16-KiB UAT publication,
   BuildPagingBuffer execution and paging-only interrupt/DPC completion form one
-  reverse-cleaned lifetime. Hardware remains unqualified and no incomplete
-  package was installed. Readiness is 3/14; next is one real scheduler-visible
-  node with fence/progress, then preemption and per-engine TDR.
+  reverse-cleaned lifetime. `MEMORY_PAGING_HW_PROVEN=NO`: no live Windows-to-
+  m1n1 HVC/host-PA/context-63-UAT result exists yet. EXP408 selected exact
+  `oem5.inf` and stayed healthy but produced no binary memory proof before
+  Code43/Remove; it is inconclusive, not HVC evidence. Exact cleanup restored
+  a package/service/SYS-free unbound APPL0002. The next allowed run changes
+  only durable production memory-start stage/status capture. Functional
+  readiness is 3/14, not hardware readiness.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
