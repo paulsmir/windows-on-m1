@@ -1,7 +1,9 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [switch]$MemoryQualification
+    [switch]$MemoryQualification,
+    [ValidateRange(0,65535)]
+    [int]$PackageBuild = 461
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,7 +26,7 @@ if ($null -ne $msbuildCommand) {
 }
 
 & $msbuild $umdProject /m /t:Clean,Build "/p:Configuration=$Configuration" `
-    /p:Platform=ARM64 /p:RunCodeAnalysis=true
+    /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 UMD build failed with exit code $LASTEXITCODE"
 }
@@ -38,7 +40,14 @@ Copy-Item -Force $umd (Join-Path $root "AppleAgxRenderAdmissionUmd.dll")
 $memoryQualificationValue = if ($MemoryQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
-    "/p:AppleAgxMemoryQualification=$memoryQualificationValue"
+    "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }
+
+$package = if ($MemoryQualification) {
+    Join-Path $root "build\memory-qualification\$Configuration\AppleAgxRenderAdmission"
+} else {
+    Join-Path $root "ARM64\$Configuration\AppleAgxRenderAdmission"
+}
+& (Join-Path $PSScriptRoot 'verify-package-version.ps1') -PackageDirectory $package

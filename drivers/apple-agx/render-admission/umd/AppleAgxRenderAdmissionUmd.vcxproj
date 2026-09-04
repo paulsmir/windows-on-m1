@@ -19,11 +19,15 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\package-version.props" />
   <PropertyGroup>
     <EnableInf2cat>false</EnableInf2cat>
     <ApiValidator_Enable>false</ApiValidator_Enable>
   </PropertyGroup>
   <ItemDefinitionGroup>
+    <ResourceCompile>
+      <PreprocessorDefinitions>APPLE_AGX_PACKAGE_DLL=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <WarningLevel>Level4</WarningLevel>
@@ -44,6 +48,7 @@
     <ClInclude Include="include\direct_flip_contract.h" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="..\package-version.rc" />
     <None Include="AppleAgxRenderAdmissionUmd.def" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

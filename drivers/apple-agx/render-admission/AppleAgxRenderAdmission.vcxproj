@@ -19,6 +19,7 @@
     <TargetVersion>Windows10</TargetVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="package-version.props" />
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -158,6 +159,7 @@
     <ClInclude Include="..\shared\include\apple_agx_fixed_panel.h" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="package-version.rc" />
     <Inf Include="AppleAgxRenderAdmission.inf" />
     <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
     <FilesToPackage Include="AppleAgxRenderAdmissionUmd.dll" />

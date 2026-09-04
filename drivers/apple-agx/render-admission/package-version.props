@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <AppleAgxVersionBuild Condition="'$(AppleAgxVersionBuild)'==''">461</AppleAgxVersionBuild>
+    <AppleAgxPackageVersion>30.0.$(AppleAgxVersionBuild).0</AppleAgxPackageVersion>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ResourceCompile>
+      <PreprocessorDefinitions>APPLE_AGX_VERSION_BUILD=$(AppleAgxVersionBuild);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+    <Inf>
+      <SpecifyDriverVerDirectiveVersion>true</SpecifyDriverVerDirectiveVersion>
+      <TimeStamp>$(AppleAgxPackageVersion)</TimeStamp>
+    </Inf>
+  </ItemDefinitionGroup>
+</Project>
