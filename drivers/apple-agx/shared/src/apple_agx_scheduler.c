@@ -325,7 +325,11 @@ APPLE_AGX_BOOL AppleAgxSchedulerResetEngine(
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       LastAbortedFence == APPLE_AGX_NULL)
     return APPLE_AGX_FALSE;
-  *LastAbortedFence = Scheduler->CompletedFence;
+  *LastAbortedFence = Scheduler->ActiveFence != 0u
+                          ? Scheduler->ActiveFence
+                          : Scheduler->CompletedFence;
+  Scheduler->QueuedFence = 0u;
+  Scheduler->ActiveFence = 0u;
   Scheduler->PendingPreemptionFence = 0;
   Scheduler->PreemptionCutoffFence = 0;
   Scheduler->PreemptionActiveFence = 0;

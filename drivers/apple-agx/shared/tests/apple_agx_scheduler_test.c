@@ -262,12 +262,32 @@ static void test_reset_reports_last_aborted_fence_and_restores_progress(void) {
   APPLE_AGX_U32 last_aborted = 99;
 
   AppleAgxSchedulerInitialize(&scheduler);
-  assert(AppleAgxSchedulerCompleteFence(&scheduler, 0, 0, 1));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 6u));
   assert(!AppleAgxSchedulerResetEngine(&scheduler, 0, 1, &last_aborted));
   assert(AppleAgxSchedulerResetEngine(&scheduler, 0, 0, &last_aborted));
-  assert(last_aborted == 1);
+  assert(last_aborted == 5u);
   assert(AppleAgxSchedulerEngineResponsive(&scheduler, 0, 0));
-  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0, 0) == 1);
+  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0, 0) == 0u);
+  assert(AppleAgxSchedulerLastSubmittedFence(&scheduler, 0, 0) == 6u);
+  assert(!AppleAgxSchedulerHasOutstandingFence(&scheduler, 0, 0));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+}
+
+static void test_reset_without_active_packet_reports_completed_boundary(void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  APPLE_AGX_U32 last_aborted = 99u;
+
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 3u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 3u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 3u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 4u));
+  assert(AppleAgxSchedulerResetEngine(&scheduler, 0u, 0u, &last_aborted));
+  assert(last_aborted == 3u);
+  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 3u);
+  assert(!AppleAgxSchedulerHasOutstandingFence(&scheduler, 0u, 0u));
 }
 
 int main(void) {
@@ -285,5 +305,6 @@ int main(void) {
   test_preemption_snapshot_must_describe_a_reachable_boundary();
   test_idle_preemption_discards_queued_work_before_notification();
   test_reset_reports_last_aborted_fence_and_restores_progress();
+  test_reset_without_active_packet_reports_completed_boundary();
   return 0;
 }
