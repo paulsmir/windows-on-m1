@@ -52,6 +52,79 @@ compatibility review.
 - Do not add assistant attribution, session URLs, or `Co-Authored-By` trailers to
   commits.
 
+## Anti-loop discipline
+
+- Every next step must exclude a cause, confirm a cause, reduce the remaining
+  causes, or produce the smallest experiment that distinguishes them.
+- Stop a hypothesis after one complete offline pass if no new evidence changes
+  its probability. Do not repeat the same diff, search, or log analysis in a
+  different form.
+- Do not spend more than two consecutive steps on one hypothesis without new
+  evidence. Rank multiple differences by causal proximity to the current
+  lifecycle boundary and test only the strongest one.
+- Never run hardware without a new falsifiable reason. If offline analysis
+  cannot distinguish two causes, design one minimal experiment that does.
+- Restrict analysis to the current boundary. For `AddDevice` success followed
+  by missing `StartDevice`, ignore RTKit, MMIO, UAT, IRQ, queue, render, and
+  presentation behavior.
+- Do not reread the complete ledger, refactor, clean up, or document incidental
+  details unless that work changes the current causal decision.
+- Treat the GPU driver package as experiment-local state. After every GPU
+  experiment, collect the evidence first and then remove the exact experiment
+  devnode/package during rollback. Before the next experiment, stage or install
+  only that experiment's exact preregistered package and verify its hashes.
+  Never carry an installed or staged AppleAgx package across experiments unless
+  package retention is itself the single preregistered variable.
+- Keep the normal GPU-development recovery profile GPU-visible: it must expose
+  exactly one inert `ACPI\\APPL0002` devnode while leaving the AGX power broker
+  disabled and carrying no AppleAgx package, service, module, signer, or staged
+  driver.  Use that same stable guest to remove the previous experiment package
+  and install the next hash-verified package; do not interpose a GPU-hidden boot
+  between ordinary driver experiments.  Retain the immutable GPU-hidden image
+  only as an emergency rollback when the GPU-visible guest cannot be recovered.
+- Before asking the operator to boot, reboot, power on, or report `Running
+  proxy`, check both control planes yourself: attempt Windows SSH with a bounded
+  timeout and inspect the expected proxy/vUART USB endpoints and active
+  launcher. Ask for physical action only when Windows is unreachable and the
+  machine is not already at `Running proxy`; state the evidence for the request.
+
+After context compaction or reset, read `investigation/GPU_CURRENT_STATE.md`
+first. Consult only the referenced experiment evidence in the full ledger.
+Update that compact file only when a proven boundary, accepted package, stable
+recovery, active hypothesis, verdict, or next causal target changes.
+
+## Hardware hypothesis gate
+
+Before every new hardware experiment, write `WHY THIS HYPOTHESIS:` followed by
+one to three concrete evidence items from the current or reference state. Each
+item must explain why this cause is now more likely than the alternatives. If
+the hypothesis cannot be tied to concrete evidence, do not run hardware.
+
+## Stop archaeology and reconstruct cleanly
+
+- Historical comparison is a tool, not the goal. Stop after at most two full
+  offline comparison passes against an old working reference when they do not
+  yield one strong causal difference, keep producing minor differences, require
+  progressively older experiments, make evidence more ambiguous, or still do
+  not support one precise hardware hypothesis. Never perform a third equivalent
+  archaeology pass.
+- At `DriverEntry -> DxgkInitialize -> AddDevice -> missing StartDevice`, clean
+  reconstruction means a separate minimal WDDM 3.x admission path, not a full
+  AGX rewrite. It must contain only DriverEntry, DxgkInitialize, AddDevice,
+  natural StartDevice admission, and fail-closed StartDevice with no GPU access.
+- Preserve only proven invariants: the WDDM 3.0 compile/runtime contract, pinned
+  WDK, validated package/signing path, exact APPL0002 binding, and the minimum
+  required DXGK callbacks. MMIO, power, RTKit, UAT, IRQ, queue, render, and
+  presentation remain absent until StartDevice is proven.
+- Use old experiments only to identify a specific mandatory contract. If the
+  minimal driver reaches StartDevice, add existing functionality back one group
+  at a time. If it does not, focus on WDDM/PnP/package/environment instead of
+  accumulated AGX code.
+- Before continuing, record exactly one decision in the compact GPU state:
+  `WHY CONTINUE COMPARISON:` with evidence, or `WHY CLEAN RECONSTRUCTION:` with
+  the reason. Prefer clean reconstruction when it can prove behavior faster
+  than explaining historical differences.
+
 ## Persistent experiment ledger
 
 Every hardware build, launch, diagnostic run, and recovery attempt must be recorded

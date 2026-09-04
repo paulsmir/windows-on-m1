@@ -1,0 +1,230 @@
+{
+  "adt_identity": "c57d4c0db26125394409c3b5b518fdef553d8f4dfe2263ae9303e2276b0796a3",
+  "dependencies": [
+    "/arm-io/sgx",
+    "/arm-io/gfx-asc"
+  ],
+  "firmware": {
+    "generation": "G13",
+    "version": "V13_5"
+  },
+  "format_version": 1,
+  "nodes": {
+    "/arm-io/gfx-asc": {
+      "interrupts": [
+        576,
+        575,
+        578,
+        577
+      ],
+      "properties": {
+        "AAPL,phandle": 233,
+        "clock-gates": [
+          316
+        ],
+        "clock-ids": [
+          317
+        ],
+        "compatible": [
+          "iop,ascwrap-v4"
+        ],
+        "device_type": "gfx-asc",
+        "interrupt-parent": 99,
+        "interrupts": [
+          576,
+          575,
+          578,
+          577
+        ],
+        "iommu-parent": 235,
+        "iop-version": 1,
+        "power-gates": [
+          316
+        ],
+        "reg": [
+          [
+            "_io",
+            "addr",
+            "size"
+          ],
+          [
+            "_io",
+            "addr",
+            "size"
+          ]
+        ],
+        "role": "GFX",
+        "segment-names": "__TEXT;__DATA",
+        "segment-ranges": {
+          "bytes_hex": "0000ac00080000000000000080ffffff0000ac000800000000c00400010000000080ad010800000000c0040080ffffff0080ad01080000000080070000000000"
+        }
+      },
+      "reg": [
+        [
+          8694792192,
+          442368
+        ],
+        [
+          8690925568,
+          8
+        ]
+      ]
+    },
+    "/arm-io/sgx": {
+      "interrupts": [
+        563,
+        564,
+        565,
+        566,
+        579
+      ],
+      "properties": {
+        "AAPL,phandle": 232,
+        "clock-gates": [
+          314,
+          315
+        ],
+        "clock-ids": [
+          317
+        ],
+        "compatible": [
+          "gpu,t8103"
+        ],
+        "device_type": "sgx",
+        "function-mcc_dataset": {
+          "args": [],
+          "name": "M$DS",
+          "phandle": 98
+        },
+        "gfx-handoff-base": 42949083136,
+        "gfx-handoff-size": 16384,
+        "gfx-qos": 4294967297,
+        "gfx-shared-region-base": 42949115904,
+        "gfx-shared-region-size": 262144,
+        "gptbat-ready": 1,
+        "gpu-avg-power-filter-tc-ms": 1000,
+        "gpu-avg-power-ki-only": 7.5,
+        "gpu-avg-power-kp": 4.0,
+        "gpu-avg-power-min-duty-cycle": 40,
+        "gpu-avg-power-target-filter-tc": 125,
+        "gpu-fast-die0-alarm-threshold": 94,
+        "gpu-fast-die0-integral-gain": 200.0,
+        "gpu-fast-die0-proportional-gain": 5.0,
+        "gpu-fast-die0-sensor-mask": 18,
+        "gpu-fast-die0-target": 94,
+        "gpu-num-perf-states": 6,
+        "gpu-perf-base-pstate": 1,
+        "gpu-perf-filter-drop-threshold": 0,
+        "gpu-perf-filter-time-constant": 5,
+        "gpu-perf-filter-time-constant2": 50,
+        "gpu-perf-integral-gain2": 0.19739200174808502,
+        "gpu-perf-integral-min-clamp": 0,
+        "gpu-perf-proportional-gain2": 6.853981018066406,
+        "gpu-perf-tgt-utilization": 85,
+        "gpu-power-sample-period": 8,
+        "gpu-power-zone-filter-tc-0": 6875,
+        "gpu-power-zone-target-0": 30000,
+        "gpu-power-zone-target-offset-0": 100,
+        "gpu-ppm-filter-time-constant-ms": 100,
+        "gpu-ppm-ki": 91.5,
+        "gpu-ppm-kp": 6.900000095367432,
+        "gpu-pwr-filter-time-constant": 313,
+        "gpu-pwr-integral-gain": 0.020212899893522263,
+        "gpu-pwr-integral-min-clamp": 0,
+        "gpu-pwr-min-duty-cycle": 40,
+        "gpu-pwr-perf-scale0": 0.0,
+        "gpu-pwr-perf-scale1": 1.0,
+        "gpu-pwr-proportional-gain": 5.2831854820251465,
+        "gpu-region-base": 42949378048,
+        "gpu-region-size": 16384,
+        "gpu-sochot-temp": 111,
+        "has-kf": 1,
+        "interrupt-parent": 99,
+        "interrupts": [
+          563,
+          564,
+          565,
+          566,
+          579
+        ],
+        "meta-sw-interrupt": {
+          "bytes_hex": "4840103b02000000c840103b0200000008000000"
+        },
+        "metal-standard": 256,
+        "opengl-standard": 768,
+        "perf-state-count": 7,
+        "perf-state-table-count": 1,
+        "perf-states": [
+          [
+            "_io",
+            "freq",
+            "volt"
+          ],
+          [
+            "_io",
+            "freq",
+            "volt"
+          ],
+          [
+            "_io",
+            "freq",
+            "volt"
+          ],
+          [
+            "_io",
+            "freq",
+            "volt"
+          ],
+          [
+            "_io",
+            "freq",
+            "volt"
+          ],
+          [
+            "_io",
+            "freq",
+            "volt"
+          ],
+          [
+            "_io",
+            "freq",
+            "volt"
+          ]
+        ],
+        "procedural-antialiasing": null,
+        "product-dram": 50,
+        "reg": [
+          [
+            "_io",
+            "addr",
+            "size"
+          ],
+          [
+            "_io",
+            "addr",
+            "size"
+          ]
+        ],
+        "rtkit-private-vm-region-base": 18446743523953737728,
+        "rtkit-private-vm-region-size": 137438953472,
+        "ttbat-phys-addr-base": 2621422
+      },
+      "reg": [
+        [
+          8657043456,
+          67108864
+        ],
+        [
+          8670674944,
+          131072
+        ]
+      ]
+    }
+  },
+  "platform": "J313",
+  "uat": {
+    "address_bits": 40,
+    "num_contexts": 64,
+    "page_size": 16384
+  }
+}

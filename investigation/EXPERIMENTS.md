@@ -6805,3 +6805,6557 @@ reported the desktop stable and smooth and authorized publication.  This exact
 both/monitor assisted candidate is therefore the new eight-core recovery
 checkpoint; the ESP was not modified and standalone cold-boot qualification
 remains a separate gate.
+
+### EXP-20260825-073 — read-only J313 AGX G0 inventory
+
+Status: validated and accepted as the reviewed G0 resource contract.
+
+Run timestamp (UTC): `2026-08-25T13:46:49Z`.
+
+Hypothesis: the live J313 ADT already contains an unambiguous SGX and gfx-asc
+resource contract that can be captured and validated without enabling clocks,
+writing MMIO, constructing an AGX device, changing guest state, or modifying
+the stable boot artifacts.
+
+- initial source: root `69f2bf5aedfc3745c4e9fbf526ec15220e4d62b1`; final
+  extraction source: root `7501dc57f485416737924f9c86b4ded12230c26a`; m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- recovery point: `.local/recovery/STABLE-j313-8core-native-input-v1/` with
+  m1n1.macho SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  Mu SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  and packed boot.bin SHA-256
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; output directory:
+  `investigation/artifacts/EXP-20260825-073-agx-g0/`;
+- exact command: `M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41
+  proxyenv/bin/python tools/agx_live_inventory.py --output
+  investigation/artifacts/EXP-20260825-073-agx-g0/raw-adt.json`;
+- preflight result: the source audit and unit tests reject write-capable APIs.
+  The real guard refused active public guest PID 19672 before importing
+  `m1n1.setup`.  The documented host-control `SIGTERM` path then produced a
+  diagnostic snapshot, performed a controlled Air reboot, and returned the
+  machine to `Running proxy...` without this tool touching guest state;
+- rejected passes: the first raw capture selected the wrong target-property
+  accessor and was rejected before contract acceptance (preserved SHA-256
+  `13045d3947a65e5057a30e00e2239c5678186fb84dd2ecb72fd23881c47a3785`).
+  Two subsequent attempts stopped before writing output while the root ADT
+  identity API was corrected.  A read-only property audit proved that
+  `/device-tree` exposes `target-type = J313` through `u.adt.target_type`;
+- deterministic checkpoint: `raw-adt-a.json` and `raw-adt-b.json` are byte
+  identical with SHA-256
+  `9a44e3373e93d35bb996381ec8e70a529de897100ad8e2496600120dfc5edc49`.
+  Their independently generated `contract-a.json` and `contract-b.json` are
+  byte identical with SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- accepted physical resources: SGX MMIO `0x204000000..0x208000000`, gfx-asc
+  MMIO `0x206400000..0x20646c000`, and interrupts
+  `[563, 564, 565, 566, 579, 576, 575, 578, 577]`;
+- accepted virtual/private resources: RTKit private
+  `0xffffff8000000000..0xffffffa000000000`, GPU
+  `0x9fffb8000..0x9fffbc000`, shared
+  `0x9fff78000..0x9fffb8000`, and handoff
+  `0x9fff70000..0x9fff74000`;
+- accepted identity and translation geometry: platform `J313`, firmware
+  generation `G13`, firmware version `V13_5`, UAT page size `0x4000`, 64
+  contexts, and 40 address bits;
+- verification: the reviewed fixture reproduces the reviewed canonical
+  contract exactly; the full repository suite passed 332 tests under
+  `proxyenv/bin/python`.  The two checksum-error lines printed by the suite are
+  expected negative-test diagnostics, not failures;
+- stop/rollback: any active owner, proxy bootstrap error, missing or ambiguous
+  node/property/register/interrupt, unsupported decoded value, non-deterministic
+  digest, or reachable write-capable API rejects the capture.  No Windows boot,
+  AGX clock enable, MMIO access, ESP write, or standalone change is permitted.
+  The accepted run enabled no AGX clocks, wrote no MMIO or DART state, started
+  no guest, and changed neither ESP nor standalone artifacts.
+
+### EXP-20260825-074 — bounded J313 AGX G1 firmware lifecycle
+
+Status: rejected before AGX ownership; no AGX clock, power, MMIO, UAT, or
+firmware start operation was attempted for this experiment.
+
+Run timestamp (UTC): `2026-08-25T14:51:44Z`.
+
+Hypothesis: the reviewed G0 resources are sufficient for m1n1 to start the AGX
+firmware, observe a management Pong, capture bounded diagnostics, stop the
+firmware, invalidate both context-zero UAT roots, and prove released ownership
+ten consecutive times.  Only that exact result may chainload the unchanged
+stable eight-core/native-input Windows artifact.
+
+- source: root `6de01fc79bf4df52a3566d513ae7161118d6d6fa`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`; all three tracked trees are clean and their
+  diff SHA-256 is the empty digest
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- immutable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; m1n1.macho SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  J313_EFI.fd SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  and boot.bin SHA-256
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory:
+  `investigation/artifacts/EXP-20260825-074-agx-g1/`, proven absent before the
+  run;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-074-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- fixed deadline: one second for each management heartbeat, exactly ten cycles,
+  one snapshot per cycle, and no timing adjustment or retry inside EXP-074;
+- preflight result: two USB serial functions are present, no guest runner owns
+  the proxy, the live read-only handshake returned `J313 V13_5`, and the real
+  hardware-free runner preflight verified the canonical contract, both current
+  component commits, the stable manifest, and all five recovery hashes;
+- firmware success gate: every cycle must complete
+  `prepare -> start -> Pong -> snapshot -> stop -> reset -> released`, and the
+  atomic result must contain `verdict=passed`, `completed_cycles=10`, and
+  `windows_launch_permitted=true`;
+- post-gate Windows gate: unchanged stable artifacts only; lock screen within
+  30 seconds; eight CPUs; advancing physical and virtual frames; responsive
+  external USB and native keyboard/trackpad; healthy NVMe; SSH response; and no
+  new BugCheck, WHEA, stornvme, storage-reset, watchdog, or AGX-ownership error;
+- stop rule: the first failed or timed-out cycle ends EXP-074 and forbids
+  Windows.  Preserve `gate-result.json` and snapshots without changing timing;
+- rollback: if the gate proves released ownership, remain at `Running proxy...`
+  and relaunch the immutable stable artifacts normally.  If ownership is
+  unknown, run `M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41
+  proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py`, wait for a fresh
+  `Running proxy...`, and use only the recovery hashes above.  Never write the
+  ESP during this experiment.
+
+Observed result: cycle 1 stopped inside the pre-clock live-contract comparison.
+Every reviewed value matched except the enumeration order of `nodes`: the
+immutable contract contained `[/arm-io/gfx-asc, /arm-io/sgx]`, while the live
+ADT reader returned `[/arm-io/sgx, /arm-io/gfx-asc]`.  The atomic result has
+SHA-256 `7def0b333f0ad9fb2415af93772fc37b8d17d2c26bfacfd595e324f08bf9f56a`,
+`verdict=failed`, `completed_cycles=0`, `released=true`, and
+`windows_launch_permitted=false`.  No cycle snapshot exists because the
+backend had not enabled either clock or constructed AGX.  Windows was not
+launched.  This experiment will not be retried or have its timing changed.
+
+### EXP-20260825-075 — corrected bounded J313 AGX G1 firmware lifecycle
+
+Status: rejected during partial firmware start; Windows was not launched and a
+hardware reboot restored a fresh proxy state.
+
+Run timestamp (UTC): `2026-08-25T14:59:49Z`.
+
+Hypothesis: after normalizing only the semantically irrelevant ordering of the
+unique ADT node paths, the exact reviewed G0 resources are sufficient for
+m1n1 to start the AGX firmware, observe a management Pong, capture bounded
+diagnostics, stop the firmware, invalidate both context-zero UAT roots, and
+prove released ownership ten consecutive times.  Only that exact result may
+chainload the unchanged stable eight-core/native-input Windows artifact.
+
+- source: root `012be5b560e6bd1d3f7db0fabbb43be7c39210e4`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- correction: implementation
+  `e68680f754ec5ae9669a2cc1691157a5e620a568` sorts only `nodes` in the
+  private live-comparison identity.  Reviewed contract bytes, IRQ order,
+  firmware, regions, dependencies, UAT geometry, timing, lifecycle and stable
+  artifacts are unchanged;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- immutable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; m1n1.macho SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  J313_EFI.fd SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  and boot.bin SHA-256
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory
+  `investigation/artifacts/EXP-20260825-075-agx-g1/` was proven absent before
+  this run;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-075-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- fixed deadline: one second for each management heartbeat, exactly ten cycles,
+  one snapshot per cycle, and no timing adjustment or retry inside EXP-075;
+- firmware success gate: every cycle must complete
+  `prepare -> start -> Pong -> snapshot -> stop -> reset -> released`; the
+  atomic result must contain `verdict=passed`, `completed_cycles=10`, and
+  `windows_launch_permitted=true`;
+- post-gate Windows gate: unchanged stable artifacts only; lock screen within
+  30 seconds; eight CPUs; advancing physical and virtual frames; responsive
+  external USB and native keyboard/trackpad; healthy NVMe; SSH response; and no
+  new BugCheck, WHEA, stornvme, storage-reset, watchdog, or AGX-ownership error;
+- stop rule: the first failed or timed-out cycle ends EXP-075 and forbids
+  Windows.  Preserve all evidence without changing timing.  If ownership is
+  unknown, use the registered proxy reboot path and return to a fresh
+  `Running proxy...`; never write the ESP.
+
+Observed result: the corrected live comparison passed, both AGX clock requests
+completed, ASC management started, UAT context zero was initialized and AGX
+reached initdata construction.  Construction then failed at
+`AGXHWDataB.io_mappings` with `expected 20 elements, found 25`.  The exact
+cause is that the gate omitted the upstream-required `Ver.set_version(u)`, so
+the live V13_5 firmware produced 25 mappings while Construct retained its
+default V12_3 20-element schema.  The atomic result has SHA-256
+`f91573d2d44e7d8a171541c550960a24504d47e5063ec4b0106bca53d03882f2`,
+`verdict=failed`, `completed_cycles=0`, and
+`windows_launch_permitted=false`.  Its `released=true` field is invalid: the
+exception occurred after ASC and endpoints were started but before the backend
+set its old started flag.  Windows was not launched.  The registered physical
+reboot path was executed immediately; a subsequent read-only handshake
+confirmed a fresh `Running proxy...`, J313 and V13_5.  EXP-075 will not be
+retried.
+
+### EXP-20260825-076 — versioned J313 AGX G1 firmware lifecycle
+
+Status: rejected by an unsafe diagnostic MMIO read after a successful firmware
+heartbeat; Windows was not launched and hardware reboot restored clean proxy.
+
+Run timestamp (UTC): `2026-08-25T15:06:29Z`.
+
+Hypothesis: selecting the live `V13_5` and `G13` Construct schema before clock
+ownership will make the 25-entry initdata layout valid, and marking ownership
+before non-transactional start will keep every later failure fail-closed.  The
+same reviewed resources can then complete ten start, Pong, snapshot, stop,
+reset and release cycles before the unchanged stable Windows launch.
+
+- source: root `13d20cc553c9e8317575668a560a73d3f729fd2f`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- corrections: implementation
+  `f6a16ed9f3bd8fffd8e9665d55e2c86b87b75c9e` calls the same
+  `Ver.set_version(u)` boundary used by upstream m1n1 AGX experiments before
+  clocks and construction, and records start ownership before `AGX.start()`;
+- contract and immutable recovery hashes, exact ten-cycle lifecycle, one-second
+  heartbeat deadline, post-gate Windows checks, stop rules and physical reboot
+  rollback are unchanged from EXP-075;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory
+  `investigation/artifacts/EXP-20260825-076-agx-g1/` was proven absent before
+  this run;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-076-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- firmware success gate: all ten cycles must pass and the atomic result must
+  contain `verdict=passed`, `completed_cycles=10`, and
+  `windows_launch_permitted=true`; otherwise Windows remains blocked and no
+  timing or retry changes are allowed inside EXP-076.
+
+Observed result: the V13_5/G13 schema selected correctly; initdata construction,
+firmware send, `DC_Init`, and `DC_UpdateIdleTS` completed.  Management Pong
+arrived in `0.002328875` seconds with no firmware event.  The subsequent
+diagnostic snapshot read physical `SGX.FAULT_INFO` at `0x204017030` and caused
+two recoverable EL2 data aborts because G1 had intentionally not enabled the
+separate render power-control path.  The backend then sent management stop,
+cleared both context-zero UAT roots and reported release.  The atomic result
+has SHA-256
+`d02f684e9a29e340e8fd30117a54f00f91b7845f69c4cbdbb040a13275c4d0b5`,
+`verdict=failed`, `completed_cycles=0`, `released=true`, and
+`windows_launch_permitted=false`.  Windows was not launched.  A physical reboot
+and read-only handshake subsequently confirmed fresh J313 V13_5 proxy state.
+EXP-076 will not be retried.
+
+### EXP-20260825-077 — safe-snapshot J313 AGX G1 firmware lifecycle
+
+Status: rejected after proving one lifecycle; the second in-process boot timed
+out and correctly required hardware reboot.
+
+Run timestamp (UTC): `2026-08-25T15:13:54Z`.
+
+Hypothesis: retaining the proven V13_5 lifecycle while replacing the unpowered
+physical SGX fault-register read with the firmware-owned versioned RegionC
+fault record will allow ten bounded firmware cycles to complete and release
+before launching the unchanged stable Windows artifact.
+
+- source: root `6ffd492a50bff30f18f27126afe94ea2cc7096a5`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- correction: implementation
+  `3e947270a369e5216d5f3a99a741f6295a108b95` pulls the versioned firmware
+  shared-memory fault record and contains no physical SGX fault-register read;
+- contract, immutable recovery artifacts, exact ten-cycle lifecycle,
+  one-second heartbeat deadline, post-gate Windows checks, stop rules and
+  physical reboot rollback are unchanged from EXP-076;
+- proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`; evidence directory
+  `investigation/artifacts/EXP-20260825-077-agx-g1/` was proven absent after a
+  fresh read-only J313 V13_5 handshake;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-077-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- success requires ten passed records, a management Pong and shared-memory
+  fault snapshot in each, proven stop/reset/release, `verdict=passed`, and
+  `windows_launch_permitted=true`.  The first failure blocks Windows and ends
+  EXP-077 without timing changes or retry.
+
+Observed result: cycle 1 completed in the same proxy boot with a management
+Pong in `0.002387250` seconds, zero firmware fault fields, zero SGX IRQs,
+management stop, both context-zero UAT roots cleared, and released software
+ownership.  Cycle 2 then timed out during firmware boot after UAT
+initialization.  The atomic result has SHA-256
+`c24ac75401186055f963ec20d3e9bfc1eab0276862db249cd763d429d9e88a1e`,
+`completed_cycles=1`, `verdict=failed`, `released=false` for cycle 2, and
+`windows_launch_permitted=false`.  This proves management stop and UAT clear
+do not restore the cold pmgr clock and power state needed for another firmware
+boot.  Windows was not launched.  The registered hardware reboot was executed
+and a later read-only handshake confirmed fresh J313 V13_5 proxy state.
+EXP-077 will not be retried.
+
+### EXP-20260825-078 — ten cold-reset J313 AGX G1 lifecycles
+
+Status: passed.  The firmware gate, post-Recovery Windows boot, and native input
+checks completed without an AGX fault or guest bugcheck.
+
+Run timestamp (UTC): `2026-08-25T15:25:06Z`.
+
+Hypothesis: one V13_5 firmware lifecycle is repeatable when every software
+stop and UAT clear is followed by a physical hardware reboot, a fresh J313
+V13_5 proxy handshake, and a changed randomized m1n1 base.  Ten independently
+proven pairs may then aggregate into a version-2 gate and launch the unchanged
+stable Windows artifact without residual AGX clock or power state.
+
+- source: root `94cdc9a767d631e11cc5f6db8a407f28d67aff01`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- orchestration: implementation
+  `0f894cb5fdffb11f59f9ce19e1242338919a7c84` runs one lifecycle per
+  process, requests hardware reboot after every pass or failure, waits at most
+  30 one-second attempts for proxy, records exact platform firmware and changed
+  m1n1 base, then aggregates only ten valid pairs;
+- contract, immutable recovery artifacts, one-second heartbeat, one snapshot
+  per lifecycle, stable Windows post-gate checks and ESP prohibition are
+  unchanged.  No render context, command queue or work submission is present;
+- initial proxy: `/dev/cu.usbmodemC02HDNCCQ6L41`, J313 V13_5, m1n1 base
+  `0x805c74000`; evidence directory
+  `investigation/artifacts/EXP-20260825-078-agx-g1/` was proven absent;
+- exact command: `scripts/run-agx-gate.sh --proxy
+  /dev/cu.usbmodemC02HDNCCQ6L41 --contract config/j313-agx.json
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1
+  --evidence-dir investigation/artifacts/EXP-20260825-078-agx-g1 --cycles 10
+  --launch-stable-windows`;
+- success requires ten `cycle-NN/gate-result.json` one-shot passes, ten matching
+  `reset-NN.json` fresh-proxy receipts, aggregate `gate_version=2`,
+  `cold_reset_between_cycles=true`, `completed_cycles=10`, `verdict=passed`,
+  and `windows_launch_permitted=true`.  The first failed lifecycle, reboot,
+  receipt, identity or aggregation ends EXP-078 and blocks Windows.
+
+Observed result: all ten independent V13_5/G13 firmware lifecycles passed.  A
+management Pong arrived between `0.002170459` and `0.002371625` seconds in every
+cycle.  Every firmware-shared fault field and every sampled SGX IRQ count was
+zero.  Each cycle stopped management, cleared both context-zero UAT roots, and
+was followed by a hardware reboot.  All ten fresh-proxy receipts reported J313,
+V13_5, and a changed randomized m1n1 base.  The version-2 aggregate has SHA-256
+`d5683820a5efc4d065e98f395f377bc7496f4ffbf91144090fc64373281183e2`,
+`cold_reset_between_cycles=true`, `completed_cycles=10`, `verdict=passed`, and
+`windows_launch_permitted=true`.  The verifier printed `validated 10 AGX
+cycles; Windows launch is permitted`.
+
+The unchanged recovery artifacts were then used for the registered Windows
+launch.  The first launch entered the Recovery `Choose an option` page.  The
+operator selected `Continue`, which produced a normal PSCI reset; assisted mode
+then required the host to relaunch the unchanged stable artifacts from the
+fresh proxy.  That clean attempt reached the Windows lock screen within 30
+seconds with CPUs 0 through 7 online, NVMe ready, the physical xHCI route
+enabled, an advancing 2560x1600 assisted framebuffer, no BugCheck, no
+synchronous exception, and no AGX fault.  The initial key-only SSH probe was
+rejected, but an authenticated administrative session subsequently reported
+eight processors, one NVMe disk, `AppleInput=Running`,
+`ACPI\APPL0001\0=OK`, an OK HID keyboard child, and an OK HID-compliant touch
+pad child.  The operator confirmed that the built-in mouse and keyboard were
+responsive.  The same session proved the Recovery detour was guest
+configuration, not AGX residue: the active BCD entry contained both
+`displaymessageoverride Recovery` and `recoveryenabled Yes`.  The forced
+override was removed, `recoveryenabled` was set to `No`, and
+`bootstatuspolicy` was set to `IgnoreAllFailures`; WinRE itself remains enabled
+for manual recovery.  No render context, command queue, work submission, WDDM
+device, or acceleration was created, and the stable boot artifacts remained
+byte-identical.
+
+### EXP-20260825-079 — one-shot J313 AGX G1Q queue probe
+
+Status: rejected in the only permitted cycle.
+
+Hypothesis: the pinned V13_5/G13 firmware can consume exactly one
+already-satisfied barrier on context 63, queue index 1's 3D channel and emit
+exactly one matching completion event within 500 ms, while one 16 KiB canary
+mapping remains unchanged, both adjacent guards remain unmapped, firmware fault
+state remains clear, and teardown clears both context-63 roots before the
+mandatory physical reboot.
+
+- implementation source before this preregistration: root
+  `802b9200efa79fd2ff3c4fe2b3139930e163fa98`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- reviewed design and plan commits:
+  `099ab3a7e5388f8d2ce961a7e0f124a5a77752a5`,
+  `84e9961205e688a999741de791577218007183c0`, and
+  `66ec558d3e4ac62ba15ec86b625a520477f8d7cf`;
+- state-machine implementation and ledger:
+  `592e53d105e13a3aeabb9b4163fc76223d00eedf` and
+  `0270e5740d6f31761fb5fe2ff00883d1e3ecefb6`;
+- m1n1 queue backend implementation and ledger:
+  `3d2eb22408cbc49ce45c0d4796868e3b03c67535` and
+  `63e499eee0db394464fd990a2305929de6cc7228`;
+- cold runner implementation and ledger:
+  `8f442bf30d82233a5e44ba993bbda738e331b2b1` and
+  `4f58eaa273a4daf4ccf9b5ae9c7352bbc604c531`;
+- host-test isolation correction and ledger:
+  `4339f11c72d6c00a381f6c6da01d92457bf4bf3b` and
+  `802b9200efa79fd2ff3c4fe2b3139930e163fa98`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- immutable recovery artifact SHA-256 values: `J313_EFI.fd`
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  `boot.bin` `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`,
+  `m1n1-stage0.bin`
+  `dd3056a9add42ec8dc6071d6b9a04938328375dbe00e005483414910f3e26101`,
+  `m1n1-stage1.bin`
+  `69680f9d24e5e0648463fc3703cef1ca046f029aac1e9f2a1ec61f28457f60e3`,
+  and `m1n1.macho`
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`; it must be re-confirmed as
+  sole J313/V13_5 `Running proxy...` ownership immediately before execution;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-079-agx-g1q-probe/`, confirmed absent
+  at preregistration time;
+- host preflight: 446/446 root tests passed through `proxyenv`, all 47 nested
+  m1n1 C host tests passed, shell syntax and `git diff --check` passed, and the
+  complete immutable recovery manifest verified. A system-Python-only run was
+  rejected before hardware because that interpreter lacks `pyserial`;
+- exact one-shot command, executed once only from the public repository:
+
+```sh
+set +e
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_queue_gate run-one \
+  --contract config/j313-agx.json \
+  --evidence-dir investigation/artifacts/EXP-20260825-079-agx-g1q-probe/cycle-01
+G1Q_STATUS=$?
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+test "$G1Q_STATUS" -eq 0
+```
+
+After the fresh proxy returns, and only if the one-shot command succeeded, the
+exact receipt command is:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_queue_gate proxy-receipt \
+  --contract config/j313-agx.json --cycle 1 \
+  --cycle-result investigation/artifacts/EXP-20260825-079-agx-g1q-probe/cycle-01/queue-gate-result.json \
+  --output investigation/artifacts/EXP-20260825-079-agx-g1q-probe/reset-01.json
+```
+
+The fixed completion deadline is 0.5 seconds. Pass requires context 63, 16 KiB
+pages, one declared mapping, both guards unmapped, queue index 1/type 3D,
+exactly one command, producer and consumer progress by one without wrap,
+exactly one matching event, unchanged stamp and canary SHA-256, zero firmware
+fault fields, an explicitly unreadable physical fault register with reason
+`power-domain-not-qualified`, complete stop/reset/release, a successful physical
+reboot, and a fresh changed proxy identity bound to the cycle result.
+
+Any mismatch, timeout, exception, canary or mapping change, fault, cleanup
+error, reboot failure, or stale proxy identity rejects EXP-079. Preserve every
+obtainable snapshot and receipt, block Windows, do not retry this evidence
+directory, and physically reboot before further diagnosis. This probe is one
+cycle only: it cannot be aggregated, cannot permit Windows, and makes no render,
+display, performance, WDDM, power, or thermal claim.
+
+Observed result: rejected in the only permitted cycle. Firmware startup and the
+management heartbeat completed, context 63 was bound with the exact 16 KiB
+canary mapping, the queue producer advanced `0 -> 1`, but the consumer remained
+at `0` and the allocated event remained `0 -> 0`. The fixed deadline expired at
+`0.503993916` seconds with `matching_event_count=0`; no polling-only completion
+was accepted. The canary SHA-256 stayed
+`090381a44ecc54fa7e2cf20a8454e42ce10dd22520258eaf3849ef709a724812`,
+both guards remained unmapped, every firmware fault field and all five sampled
+SGX IRQ counts were zero, and the physical fault register remained explicitly
+unreadable because the render power domain is not qualified. Cleanup stopped
+management, cleared both context-63 roots and both context-zero roots, and
+reported released software ownership. Windows stayed blocked.
+
+The atomic rejected result SHA-256 is
+`c00fbc31707febe82a0ce6885ad616610b52c43e3c430949500cdb485d488f02`.
+The mandatory physical reboot completed. A read-only post-reboot handshake
+confirmed J313/V13_5, the unchanged ADT identity, and a changed randomized m1n1
+base from `0x804f24000` to `0x804718000`. No reset receipt was created because
+the queue cycle itself failed. EXP-079 is closed and will not be retried. The
+next experiment must use a new implementation commit and a newly preregistered
+evidence directory after determining why firmware did not consume the published
+3D queue entry.
+
+### EXP-20260825-081 — locate the first stalled AGX queue transport boundary
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the rejected EXP-079 producer-only result can be localized without
+changing its workload by recording the Submit3D TX channel pointers, queue ring
+pointers, and firmware-owned `CommandQueueInfo` fields.  If the channel read
+pointer reaches the published write pointer but `GPU_RPTR` remains unchanged,
+V13_5 accepted `RunCmdQueue` and rejected or deferred the lone barrier ring
+entry; if the channel read pointer itself remains unchanged, the failure is
+earlier in queue-channel activation or doorbell delivery.
+
+- source: root `41b0db82b75523c87c9483338902dc34a4dac2b8`, m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` on
+  `feature/j313-gpu-acceleration`;
+- diagnostic implementation and ledger:
+  `5d49308ba29e8cfe6679f73c2f58efd9f537b45d` and
+  `41b0db82b75523c87c9483338902dc34a4dac2b8`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- queue backend SHA-256:
+  `53b157098894b014bdf33777dc4d82d621cecabfd575b3368e166ff8558aed49`;
+- immutable recovery hashes: `J313_EFI.fd`
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`,
+  `boot.bin` `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`,
+  and `m1n1.macho`
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`; immediately before execution
+  it must be the sole J313/V13_5 `Running proxy...` endpoint with the same ADT
+  identity and a recorded randomized m1n1 base;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-081-agx-g1q-transport/`, confirmed absent
+  before this registration;
+- the workload is byte-for-byte behaviorally unchanged from EXP-079: context
+  63, one 16 KiB canary mapping, unmapped guards, queue index 1 Submit3D, one
+  already-satisfied `WorkCommandBarrier`, event 0, and a fixed 0.5-second
+  deadline. No render command, shader, framebuffer, guest mapping, physical
+  fault read, power-control write, Mu, ACPI, stable boot, or Windows change is
+  permitted;
+- exact one-shot command, permitted once only from the public repository:
+
+```sh
+set +e
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_queue_gate run-one \
+  --contract config/j313-agx.json \
+  --evidence-dir investigation/artifacts/EXP-20260825-081-agx-g1q-transport/cycle-01
+EXP081_STATUS=$?
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+test "$EXP081_STATUS" -eq 0
+```
+
+Regardless of pass, timeout, exception, or incomplete evidence, the management
+channel must stop, both context-63 and context-zero roots must clear, and the
+hardware must reboot. After the fresh proxy returns, record a read-only J313,
+V13_5, ADT and changed-base inventory. Do not create a reset receipt, aggregate
+the result, launch Windows, or retry this directory.
+
+Interpretation is preregistered as follows: unchanged channel read pointer means
+the first failure boundary is command-channel activation/doorbell delivery;
+consumed channel message with unchanged `GPU_RPTR` means the first failure is
+between accepted `RunCmdQueue` and ring-entry recognition; advancing
+`GPU_RPTR` with unchanged `GPU_DONEPTR` means the barrier was fetched but did
+not complete; advancing done pointer without the exact event remains a rejected
+completion-path result. Any canary, guard, fault, cleanup, or release mismatch
+overrides transport classification and rejects the experiment as unsafe.
+
+Observed result: the experiment safely rejected the lone barrier, while
+locating the first stalled boundary after ring-entry fetch. Firmware consumed
+the Submit3D channel message (`READ_PTR 0 -> 1`, `WRITE_PTR 0 -> 1`) and then
+advanced `GPU_RPTR 0 -> 1`; all three firmware-owned queue read pointers also
+advanced to 1. `CommandQueueInfo` changed from idle to `busy=1`, recorded
+`event_id=0`, and left `has_commands=0` and `inflight_commands=0`. The command
+did not retire: `GPU_DONEPTR` stayed 0, the event count stayed 0, and the fixed
+deadline expired at `0.503278042` seconds.
+
+This rules out the UAT publication, Submit3D TX channel, doorbell delivery, and
+ring-pointer visibility as the first failure. It also disproves the original
+G1Q assumption that an already-equal stamp makes a barrier an independently
+retiring work item. The pinned m1n1 ABI describes the barrier event as the
+event that triggers a stamp check and every working upstream path places the
+barrier before a real `WorkCommand3D`; the TA completion producer signals that
+event. No upstream barrier-only submission exists. Therefore EXP-081 does not
+justify increasing the timeout or changing queue indices: the workload itself
+lacks the producer event and following schedulable command required by the
+observed barrier protocol.
+
+The canary remained byte-identical with SHA-256
+`090381a44ecc54fa7e2cf20a8454e42ce10dd22520258eaf3849ef709a724812`,
+both guards remained unmapped, all firmware fault fields and five SGX IRQ
+samples were zero, and the physical fault register remained unread. Teardown
+stopped management, cleared both context-63 and context-zero roots, and
+reported `released=true`. The atomic failed result SHA-256 is
+`024c86122ce473266d4875a27827c8b45bb9c165a1f6c57d9ab53d096062a77e`.
+
+The mandatory reboot succeeded. The post-reboot read-only capture again
+reported J313, G13/V13_5, the same ADT identity and byte-identical inventory
+SHA-256 `9a44e3373e93d35bb996381ec8e70a529de897100ad8e2496600120dfc5edc49`,
+with a changed randomized m1n1 base from `0x804718000` to `0x804698000`.
+Windows remains blocked. EXP-081 is closed and must not be retried. The next
+gate design must use a complete, known-valid schedulable workload in private
+GPU memory while retaining the same isolation, timeout, teardown and cold
+reset boundaries; EXP-080 remains reserved for the eventual ten-cycle final
+qualification.
+
+### EXP-20260825-082 — acquire two cold historical Mesa AGX clear captures
+
+Status: preregistered; hardware not yet touched.
+
+Hypothesis: the exact historical Asahi Mesa m1n1 bridge can execute the fixed
+16 by 16 RGBA8 `11 22 33 ff` clear twice on J313/G13/V13_5 across two distinct
+cold proxy identities and produce byte-identical complete `GPUFrame` archives
+and final 1024-byte attachments, while the bounded operator releases ownership
+and physically reboots after every capture.
+
+- root source and ledger at registration:
+  `7fb4ee3d8b6b5b4f85f580909ef87b7bc933db0f` on
+  `feature/j313-gpu-acceleration`;
+- capture-environment implementation and ledger:
+  `296f7a4b99664a478b8d0c65e6a881f5f4f0cebf` and
+  `7fb4ee3d8b6b5b4f85f580909ef87b7bc933db0f`;
+- m1n1 source: `9cd80ac652ac404e92ae279deeaec8c629d7d184`;
+- Mu source: `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- historical Mesa source:
+  `https://gitlab.freedesktop.org/asahilina/mesa.git` at
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`, built from
+  `ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc`;
+- capture bundle hashes: `libasahi_m1n1_drm_shim.so`
+  `0fc9e2ef6e677d4552192eb86fc1ac3fc3c1197ce53452703aaae538d58a0a62`,
+  `agx-clear-capture`
+  `a71737ec35abeb7efb422a54dcb0b146463f840c6da7169e99946c2a3771b87a`,
+  `asahi_dri.so`
+  `ab9e135b06d8cda0f1e19cc98dbe0304638917139675a536ca92223479db7b33`,
+  `libEGL.so.1.0.0`
+  `715d8ce4fc930a48b3208e9f5403eb458631764ac4914590a7ae7c36a13d07be`,
+  and `libGLESv2.so.2.0.0`
+  `57aecc4b5a2cddec0e0fac9ea73a37d1d173a21d2b8f760e292ed4d5325211b4`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- capture identity: `.local/agx-capture/identity-exp082.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`,
+  binding J313, G13, V13_5, the ADT SHA-256
+  `c57d4c0db26125394409c3b5b518fdef553d8f4dfe2263ae9303e2276b0796a3`,
+  and the exact m1n1 and Mesa commits above;
+- fixed producer source: `tools/agx_clear_capture.c`, SHA-256
+  `741da86a93f40472f1211ed247368c5ca9030f08d3fcee29cdd9f3cf82ca20e9`;
+- immutable stable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; its checksum-list
+  SHA-256 is
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`
+  and every listed artifact passed `shasum -a 256 -c` immediately before
+  registration;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`; immediately before execution
+  it must be the sole J313/V13_5 `Running proxy...` endpoint;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-082-agx-g1r-capture/`, confirmed absent
+  before registration;
+- host qualification: three independent recipe exports had byte-identical
+  manifests, including two no-cache builds; the exact no-shim negative control
+  failed with `EGL_NOT_INITIALIZED` and produced no output; bidirectional host
+  PTY/TCP/container-PTY loopback passed; 21 focused, 187 adjacent, and 566 full
+  repository tests passed; shell syntax, Python compilation, capture-bundle
+  verification, diff validation, and stable recovery hashes passed.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp082.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-082-agx-g1r-capture \
+  --bridge-port 43137
+```
+
+The container must verify its export before proxy access, mount the repository
+read-only, mount only the evidence parent read-write, and use
+`libasahi_m1n1_drm_shim.so` solely through `LD_PRELOAD`. Each capture must dump
+exactly `shim_frame000.agx`, pull the sole attachment, validate the final bytes,
+write an atomic receipt, and request a physical reboot. The second capture may
+start only after the reconnecting bridge observes the fresh proxy. Packaging
+must require distinct proxy identities and distinct randomized m1n1 bases and
+must compare every normalized archive member, object byte, command byte, map
+flag, source identity, producer hash, and final attachment byte.
+
+Pass requires two fault-free captures, both mandatory reboots, distinct cold
+identities, byte-identical normalized captures and final attachments, and one
+atomically published canonical fixture candidate. Any command failure, absent
+or extra frame, wrong attachment, source or hash mismatch, warm identity,
+non-deterministic byte, proxy loss that does not reconnect, cleanup failure, or
+reboot failure rejects EXP-082. Preserve all obtainable evidence, do not retry
+this directory, do not launch Windows, and do not claim replay, WDDM, display,
+performance, power, thermal, or production GPU qualification. A passed capture
+still requires manual manifest review and a separately preregistered one-shot
+private replay before EXP-080 can be bound.
+
+Observed result: rejected during the only permitted first capture, before any
+accepted GPU submission or frame dump. All source, stable recovery, Mesa,
+container-export, shim, producer, identity and contract preflights passed. The
+historical shim then opened `/tmp/m1n1-proxy`, but m1n1 bootstrap received no
+byte within its fixed 150 ms initial NOP window and raised `UartTimeout`. BO
+creation failed and the clear process terminated with a core dump before
+`shim_frame000.agx` or `final.rgba` existed. The sole preserved file is
+`work/capture-01/core`, SHA-256
+`cae6721c647af067e0ca4481803cea51ac4387e390630cd3db9ec3666f8b64df`.
+
+The failed path also exposed an independent runner defect after the capture
+process: because `PYTHONPATH` was scoped only to that process after changing
+into the capture directory, the receipt command could not import the root
+`tools` package. The first scripted reboot saw the already desynchronized
+stream (`expected opcode 0x04, got 0x905`) and failed. No fixture, receipt, or
+accepted output was produced and capture two did not start.
+
+Read-only process and device inspection found no surviving owner of either USB
+endpoint. The required cleanup reboot was then issued without retrying GPU
+work. It succeeded after resynchronization and reported the pre-reboot m1n1
+base `0x804698000`. A fresh read-only handshake after the reboot reported
+J313/V13_5 and changed base `0x805b58000`, proving the cold boundary. EXP-082
+is closed and must not be retried.
+
+The first-failure diagnosis is a host bridge readiness race: container `socat`
+published its PTY path with `wait-slave` but deferred completing the TCP/USB
+side until the client opened that PTY; the client immediately began a bootstrap
+whose first-stage timeout is 150 ms. This race is absent on direct USB and was
+not exercised by the earlier delayed byte-loopback test. The next change must
+remove this deferred-open contract, establish bounded bridge readiness before
+proxy bootstrap, export both repository and m1n1 Python roots for every capture
+subcommand, and prove two proxy handshakes separated by a mandatory reboot in a
+new preregistered transport-only experiment before any new GPU capture.
+
+### EXP-20260825-083 — qualify the container proxy transport across one reboot
+
+Status: passed on hardware; the capture transport is qualified across one
+physical reboot. No AGX module was imported and no GPU work was submitted.
+
+Hypothesis: after removing deferred PTY opening and preserving the PTY across
+individual clients, the exact container bridge can complete an initial m1n1
+bootstrap, record J313/V13_5, request one physical reboot, reconnect, record the
+same platform and firmware with a changed randomized m1n1 base, and publish one
+atomic transport receipt without importing or enabling AGX.
+
+- root source and ledger: `59de6e8b5b6c37a590a21e331fbc019e8fe0ba97`
+  on `feature/j313-gpu-acceleration`;
+- transport implementation and ledger:
+  `184b2a2497b93699e0a3b55ab80fc57c29ee7ebb` and
+  `59de6e8b5b6c37a590a21e331fbc019e8fe0ba97`;
+- host operator SHA-256:
+  `3666a6b028f801c8eda850341e79a93615601a605db911047c99a8532b604ccf`;
+- container helper SHA-256:
+  `d9d6173dd9bdcb62ff43927871ef461c6dcd9681c3208b350d85ea157fde7cf3`;
+- identity utility SHA-256:
+  `33d091b24487df24d58584ee521afa6be5c183c8555491a2a971585d11df408b`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`, confirmed present and without
+  a surviving open owner immediately before registration;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-083-agx-capture-transport/`, confirmed
+  absent before registration;
+- fixed bridge port: `43138`;
+- host verification: nine focused transport tests, 89 adjacent AGX tests, and
+  572 complete repository tests passed; shell and Python syntax, diff checks,
+  and all stable recovery hashes passed.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/probe-agx-capture-transport.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-083-agx-capture-transport \
+  --bridge-port 43138
+```
+
+Pass requires an exact-field `before.json`, one successful reboot request, an
+exact-field `after.json`, J313 and V13_5 unchanged, positive and different
+m1n1 bases, and an atomic `transport-receipt.json` with `fresh_proxy=true`.
+Only the post-reboot identity read may retry, at most twenty times separated by
+two seconds, because USB disappearance and return are asynchronous. The tool
+must not import `m1n1.agx`, enable GPU clocks, use `LD_PRELOAD`, submit GPU work,
+launch Windows, or write outside its evidence directory.
+
+Any initial bootstrap failure, reboot failure, bounded reconnect exhaustion,
+identity mismatch, unchanged base, malformed or partial receipt, unexpected
+USB owner, or extra side effect rejects EXP-083. Preserve all evidence, do not
+retry this directory, and do not start a new GPU capture. Only a passed receipt
+permits a newly preregistered replacement for the closed EXP-082.
+
+Observed result (single permitted execution): PASS.
+
+- `before.json` recorded J313, V13_5, and m1n1 base `0x805b58000`;
+- exactly one reboot request was issued;
+- transient post-reboot connection failures occurred only while the USB proxy
+  was absent and remained within the preregistered bounded reconnect loop;
+- `after.json` recorded J313, V13_5, and the fresh randomized m1n1 base
+  `0x8040c2000`;
+- the atomic receipt reports `fresh_proxy=true`;
+- SHA-256: `before.json`
+  `63129515d7cd7883f7065f2babafd939b274889d164f2a14c4f7904b561303d2`,
+  `after.json`
+  `b1068959a068816b53e55ee72e641443240bf4ee9c5277a0af15cac618c65ee5`,
+  and `transport-receipt.json`
+  `2e1e9c141fea8ccec633194d5c24beedc1adbcd1e7843468ef8ecf29945544c3`.
+
+This proves the corrected PTY/TCP/USB transport survives the capture tool's
+mandatory reboot boundary. It does not prove AGX initialization, submission,
+frame dumping, or replay; those remain separate gates.
+
+### EXP-20260825-084 — acquire two cold historical Mesa AGX clear captures
+
+Status: rejected during the only permitted first capture, before any accepted
+GPU submission or frame dump.
+
+Hypothesis: with the proxy transport now qualified by EXP-083, the exact
+historical Asahi Mesa m1n1 bridge can execute the fixed 16 by 16 RGBA8
+`11 22 33 ff` clear twice on J313/G13/V13_5 across two distinct cold proxy
+identities and produce byte-identical complete `GPUFrame` archives and final
+1024-byte attachments. The bounded operator must release ownership and
+physically reboot after every capture.
+
+- root source before registration:
+  `b5c66e1f6b6d3702c837558b25afd2970f7b515e` on
+  `feature/j313-gpu-acceleration`;
+- capture-environment implementation and ledger:
+  `296f7a4b99664a478b8d0c65e6a881f5f4f0cebf` and
+  `7fb4ee3d8b6b5b4f85f580909ef87b7bc933db0f`;
+- corrected transport implementation and ledger:
+  `184b2a2497b93699e0a3b55ab80fc57c29ee7ebb` and
+  `59de6e8b5b6c37a590a21e331fbc019e8fe0ba97`;
+- prerequisite transport receipt: EXP-083 passed with `fresh_proxy=true`;
+  `transport-receipt.json` SHA-256
+  `2e1e9c141fea8ccec633194d5c24beedc1adbcd1e7843468ef8ecf29945544c3`;
+- m1n1 source: `9cd80ac652ac404e92ae279deeaec8c629d7d184`;
+- Mu source: `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- historical Mesa source:
+  `https://gitlab.freedesktop.org/asahilina/mesa.git` at
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- capture bundle hashes: `libasahi_m1n1_drm_shim.so`
+  `0fc9e2ef6e677d4552192eb86fc1ac3fc3c1197ce53452703aaae538d58a0a62`,
+  `agx-clear-capture`
+  `a71737ec35abeb7efb422a54dcb0b146463f840c6da7169e99946c2a3771b87a`,
+  `asahi_dri.so`
+  `ab9e135b06d8cda0f1e19cc98dbe0304638917139675a536ca92223479db7b33`,
+  `libEGL.so.1.0.0`
+  `715d8ce4fc930a48b3208e9f5403eb458631764ac4914590a7ae7c36a13d07be`,
+  and `libGLESv2.so.2.0.0`
+  `57aecc4b5a2cddec0e0fac9ea73a37d1d173a21d2b8f760e292ed4d5325211b4`;
+- contract: `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- capture identity: `.local/agx-capture/identity-exp084.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- fixed producer source: `tools/agx_clear_capture.c`, SHA-256
+  `741da86a93f40472f1211ed247368c5ca9030f08d3fcee29cdd9f3cf82ca20e9`;
+- immutable stable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; its checksum-list
+  SHA-256 is
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`
+  and every listed artifact passed immediately before registration;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`, present without a surviving
+  open owner immediately before registration;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-084-agx-g1r-capture/`, confirmed absent
+  before registration;
+- fixed bridge port: `43139`;
+- host qualification inherited unchanged from the capture implementation:
+  three manifest-identical recipe exports, the no-shim negative control,
+  bidirectional loopback, 572 complete tests, diff checks and stable hashes;
+  the exact corrected transport then passed EXP-083 across one reboot.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp084.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-084-agx-g1r-capture \
+  --bridge-port 43139
+```
+
+The container must verify its export before proxy access, mount the repository
+read-only, mount only the evidence parent read-write, and use the historical
+shim solely through `LD_PRELOAD`. Each capture must dump exactly
+`shim_frame000.agx`, pull the sole attachment, validate the final bytes, write
+an atomic receipt, and request a physical reboot. Capture two may begin only
+after the corrected bridge observes a fresh proxy. Packaging must require
+distinct proxy identities and randomized m1n1 bases and must compare all
+normalized archive members, object bytes, command bytes, map flags, source
+identity, producer hash and final attachment bytes.
+
+Pass requires two fault-free captures, both mandatory reboots, distinct cold
+identities, byte-identical normalized captures and final attachments, and one
+atomically published canonical fixture candidate. Any command failure, absent
+or extra frame, wrong attachment, source or hash mismatch, warm identity,
+non-deterministic byte, proxy loss that does not reconnect, cleanup failure, or
+reboot failure rejects EXP-084. Preserve all obtainable evidence, do not retry
+this directory, do not launch Windows, and do not claim replay, WDDM, display,
+performance, power, thermal, or production GPU qualification. A passed capture
+still requires manual manifest review and a separately preregistered one-shot
+private replay.
+
+Observed result: all immutable source, recovery, container, identity, contract,
+shim and producer checks passed. The historical Mesa process then opened the
+corrected persistent PTY, but its first m1n1 bootstrap NOP still received no
+byte within the fixed 150 ms window and raised `UartTimeout`. BO creation failed
+and the producer terminated before `shim_frame000.agx`, `final.rgba`, a receipt,
+capture two, or fixture packaging. The sole preserved capture file is
+`work/capture-01/core`, SHA-256
+`1a8ba07f6e0eada536b9202500683507275b41bdba669742fcc57c04041feddb`.
+
+The scripted reboot again encountered the desynchronized late reply and failed.
+A separate cleanup reboot, without retrying GPU work, then succeeded and
+reported the pre-reboot m1n1 base `0x8040c4000`. The fresh proxy returned as
+J313/V13_5 with base `0x804e64000`. The Air is therefore back at a clean
+`Running proxy...` boundary and EXP-084 is closed.
+
+EXP-083 already proved that the corrected PTY/TCP/USB bridge can bootstrap a
+small client before and after reboot. EXP-084 proves that bridge readiness alone
+is insufficient for the historical Mesa process: its first setup import still
+uses the fixed 150 ms direct-UART bootstrap contract after dynamic loader,
+`LD_PRELOAD`, EGL and shim initialization. The next correction must isolate and
+test that full-client bootstrap path and either establish readiness by a
+non-consuming handshake on the same persistent connection or provide an
+explicit bounded initial-bootstrap budget. It must not retry EXP-084 or submit
+GPU work until a new transport qualification reproduces the historical
+process's startup path.
+
+### EXP-20260825-085 — qualify historical full-client bootstrap without AGX
+
+Status: passed on hardware; the exact heavy client startup path and fresh-proxy
+reconnect are qualified without importing or starting AGX.
+
+Hypothesis: the exact pinned Mesa clear producer can traverse `LD_PRELOAD`, EGL,
+the embedded Python interpreter and its first DRM ioctl through the corrected
+PTY/TCP/USB bridge when the capture-only adapter replaces the direct-UART
+150 ms first-reply assumption with an explicit finite three-second budget. It
+must record J313/V13_5, complete one physical reboot, reconnect to a changed
+m1n1 base and publish an atomic fresh-proxy receipt without importing
+`m1n1.agx`, enabling GPU clocks, or submitting GPU work.
+
+- root source and ledger: `838cf5c54c0a22a4760877b9c08b9896c3d467c1`;
+- bootstrap implementation and ledger:
+  `bbdc09bad562dd2f29a834a24db43b2a64330ce3` and
+  `2b89fa0e7476ed9a0f923ab5038ba7112bd21d25`;
+- export-verification correction and ledger:
+  `a477bf518ad9374bea392daa333078981fae4158` and
+  `838cf5c54c0a22a4760877b9c08b9896c3d467c1`;
+- host operator SHA-256:
+  `e80963d730bbf64764433e47925b3da4fa4e5561781cce8448e5dbf74401fdb2`;
+- container helper SHA-256:
+  `18b36991e533fe1a9dea550226ef34cebe0efbbaee3f9a063dce76a1744e9812`;
+- bounded bootstrap module SHA-256:
+  `704533a1a76f5e7f57af63b7b15a92ca744cef9110b62dc1262b677787990c73`;
+- no-AGX embedded shim probe SHA-256:
+  `1dc8bc86c36202e610fd9af86a905ddc94f0a9ffb4469d150e535b456287ce35`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- exact initial bootstrap budget: 3.0 seconds, bounded by code to the finite
+  range 0.15 through 10.0 seconds and restored after setup;
+- immutable stable recovery directory:
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`; checksum-list SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`,
+  with every listed artifact passing immediately before registration;
+- proxy target: `/dev/cu.usbmodemC02HDNCCQ6L41`, present without a surviving
+  open owner immediately before registration;
+- evidence directory:
+  `investigation/artifacts/EXP-20260825-085-agx-full-client-bootstrap/`,
+  confirmed absent before registration;
+- fixed bridge port: `43140`;
+- host verification: six focused bootstrap tests, fifteen combined bootstrap
+  and transport tests and the complete repository suite passed 578/578; shell
+  syntax, Python compilation and diff checks passed.
+
+The exact command is permitted once only from the public repository:
+
+```sh
+./scripts/probe-agx-full-client-bootstrap.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-085-agx-full-client-bootstrap \
+  --bridge-port 43140
+```
+
+Pass requires verified immutable container exports, a successful embedded
+Python setup reached through the producer's first real DRM ioctl, exact-field
+`before.json` and `bootstrap-metrics.json`, one successful physical reboot, a
+bounded reconnect to J313/V13_5 at a positive changed m1n1 base, and an atomic
+`transport-receipt.json` with `fresh_proxy=true`. The probe module must terminate
+the producer immediately after setup and before importing the historical AGX
+shim. The helper must not enable GPU clocks, start AGX, allocate GPU objects,
+submit work, launch Windows, or write outside its evidence directory.
+
+Any export mismatch, initial bootstrap failure, elapsed time beyond the explicit
+budget, malformed or partial evidence, reboot failure, reconnect exhaustion,
+identity drift, unchanged base, unexpected USB owner or AGX side effect rejects
+EXP-085. Preserve its evidence and do not retry its directory. Only a pass may
+permit a newly preregistered replacement capture after manual review.
+
+Observed result (single permitted execution): PASS.
+
+- the verified historical producer reached its first real DRM ioctl through
+  `LD_PRELOAD`, EGL and embedded Python;
+- capture-only m1n1 setup completed in 216.63 ms against the explicit finite
+  3.0-second budget, explaining why the inherited 150 ms contract in EXP-084
+  was deterministically too short;
+- `before.json` recorded J313/V13_5 at base `0x804e64000`;
+- the probe terminated immediately after setup, before historical AGX import,
+  clock enable, object allocation or GPU submission;
+- exactly one reboot completed and the bounded reconnect recorded J313/V13_5
+  at fresh base `0x804804000`;
+- the atomic receipt reports `fresh_proxy=true`;
+- SHA-256: `before.json`
+  `6edd89c0453e0c16cc86cbc3b3ab8072e475bf692074bcb8376a9c9de2ac0fbe`,
+  `bootstrap-metrics.json`
+  `f1cbcf988aaed8cd5e36f2f306cb70ed69c988afbd8a26ecd4f4d1042979e613`,
+  `after.json`
+  `690d9461f1ba8393694f2db261f722f87eaf7ee10ba3729655401c3427e12dfa`,
+  and `transport-receipt.json`
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`.
+
+This closes the capture-startup regression without changing the stable m1n1
+tree or production Windows path. A new capture may use the same wrapper and
+three-second budget, but still requires its own fresh preregistration and cannot
+inherit any GPU-success claim from this transport-only result.
+
+### EXP-20260825-086 — acquire corrected cold historical Mesa clear captures
+
+Status: rejected during the only permitted first capture, before any accepted
+GPU submission or frame dump.
+
+Hypothesis: after EXP-085 measured the exact full-client setup at 216.63 ms and
+qualified the capture-only three-second bootstrap adapter, the pinned historical
+Mesa bridge can execute the fixed 16 by 16 RGBA8 `11 22 33 ff` clear twice on
+J313/G13/V13_5 across distinct cold proxy identities and produce byte-identical
+complete `GPUFrame` archives and final 1024-byte attachments.
+
+- root source before registration:
+  `3b0d46197259da64e81c913ef1fadcfd5d57bc14`;
+- capture environment: `296f7a4b99664a478b8d0c65e6a881f5f4f0cebf`;
+- transport correction: `184b2a2497b93699e0a3b55ab80fc57c29ee7ebb`;
+- full-client bootstrap adapter: `bbdc09bad562dd2f29a834a24db43b2a64330ce3`;
+- prerequisite EXP-085 receipt SHA-256:
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`;
+- capture wrapper SHA-256:
+  `36bd1b2d1ea886397ec02f7788a6509cacb07474ddea8892a5be5ce13f50e198`;
+- bounded bootstrap module SHA-256:
+  `704533a1a76f5e7f57af63b7b15a92ca744cef9110b62dc1262b677787990c73`;
+- container helper SHA-256:
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- Linux image ID:
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`,
+  architecture `arm64`;
+- m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp086.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- contract `config/j313-agx.json`, SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- fixed producer SHA-256
+  `741da86a93f40472f1211ed247368c5ca9030f08d3fcee29cdd9f3cf82ca20e9`;
+- immutable stable recovery manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`,
+  with every artifact passing immediately before registration;
+- proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, present without an open owner;
+- evidence directory
+  `investigation/artifacts/EXP-20260825-086-agx-g1r-capture/`, confirmed absent;
+- fixed bridge port `43141`;
+- 578/578 repository tests passed before the prerequisite hardware gate, and
+  EXP-085 then passed the exact full-client path and mandatory reboot.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp086.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-086-agx-g1r-capture \
+  --bridge-port 43141
+```
+
+Each capture must use `AGX_SHIM_MODULE=tools.agx_capture_shim`, the finite
+three-second bootstrap budget, exactly one frame and attachment, an atomic live
+receipt and a mandatory physical reboot. Capture two requires a fresh proxy.
+Packaging must prove distinct identities and bases plus byte-identical complete
+archives, commands, objects, flags and final attachments.
+
+Any startup, AGX, dump, attachment, validation, cleanup, reboot, reconnect or
+determinism failure rejects EXP-086. Preserve evidence and do not retry this
+directory. A pass still proves capture reproducibility only; it cannot claim
+replay, WDDM, display, performance, power, thermal or production GPU support.
+
+Observed result: immutable preflights passed, but the historical process again
+used the original 150 ms bootstrap and timed out before AGX initialization. No
+frame, attachment, receipt, second capture or fixture was produced. The sole
+preserved file is `work/capture-01/core`, SHA-256
+`24ced6384f11cfadff5a22f0eed571ad28531417fb79ec0cadaecc0fa549ff44`.
+
+The failed scripted reboot was followed by a separate cleanup reboot without
+retrying GPU work. It reported pre-reboot base `0x804804000`; the fresh proxy
+returned as J313/V13_5 at `0x80529c000`.
+
+Source inspection after the failure found that the host capture operator still
+invoked `/opt/agx-capture/run-capture.sh` baked into the immutable container
+image. Unlike the passed EXP-085 operator, it did not bind-mount the newly
+tracked public helper, so neither `AGX_SHIM_MODULE=tools.agx_capture_shim` nor
+the three-second adapter reached the producer. Environment propagation itself
+was verified separately and is not the fault. The next correction must mount
+the exact tracked helper read-only and invoke that path explicitly; no new
+capture is allowed until tests prove the host command cannot select the stale
+image-internal helper.
+
+### EXP-20260825-087 — acquire tracked-helper cold AGX clear captures
+
+Status: rejected during the only permitted first capture, after successful
+transport and bootstrap but before AGX start completed or GPU work was submitted.
+
+Hypothesis: the exact tracked capture helper selected by commit
+`6053d6fc8dc877b9a967cd8d61eb96856e97ca3e` will deliver the EXP-085-qualified
+capture shim and three-second bootstrap budget to the pinned historical Mesa
+producer, allowing two cold J313/G13/V13_5 fixed-clear captures to produce
+byte-identical complete frames and 1024-byte final attachments.
+
+- root source and ledger: `11768b0a60d15a96f2480875af44cbff6ed6d4dc`;
+- tracked-helper correction and ledger:
+  `6053d6fc8dc877b9a967cd8d61eb96856e97ca3e` and
+  `11768b0a60d15a96f2480875af44cbff6ed6d4dc`;
+- prerequisite EXP-085 receipt SHA-256:
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`;
+- host operator SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`;
+- tracked helper SHA-256:
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- capture shim SHA-256:
+  `36bd1b2d1ea886397ec02f7788a6509cacb07474ddea8892a5be5ce13f50e198`;
+- identity `.local/agx-capture/identity-exp087.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- pinned image ID
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`;
+- m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable recovery checksum-list SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-087-agx-g1r-capture/`,
+  confirmed absent;
+- fixed bridge port `43142`;
+- full repository suite passed 578/578 after the helper correction.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp087.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-087-agx-g1r-capture \
+  --bridge-port 43142
+```
+
+Pass and rejection rules are identical to EXP-086, with the additional hard
+requirement that the host command mount the helper read-only and execute
+`/opt/agx-capture/run-capture-public.sh`; selecting the image-internal helper is
+an immediate rejection. A pass remains capture-only and requires manual fixture
+review plus separately preregistered replay.
+
+Observed result: the tracked helper, capture shim and three-second bootstrap
+adapter all reached the producer correctly. m1n1 setup completed, GPU clocks
+were enabled and `agx.start()` began building firmware initdata. Serialization
+then failed closed at `AGXHWDataB.io_mappings`: the J313/V13_5 builder produced
+25 entries while the still-uninitialized version selector chose the legacy
+20-entry layout. No AGX start completion, frame, attachment, receipt or GPU
+submission occurred. The sole preserved file is `work/capture-01/core`,
+SHA-256 `9bb541d23dd6a3b383fe588b9a5da0c7cd87e3fa97f2aa991b063db528446345`.
+
+The mandatory reboot completed; the fresh J313/V13_5 proxy returned at
+`0x8044a0000` after the pre-reboot base `0x80529c000`.
+
+The firmware structures already define 25 mappings for `V >= V13_5B4`, and the
+J313 builder intentionally emits 25. Historical m1n1 experiment entry points
+call `Ver.set_version(u)` before constructing AGX state, but the historical shim
+does not. The capture wrapper must therefore establish version `V13_5` and GPU
+generation `G13` from the live, already-validated `ProxyUtils` object before
+delegating to the historical `init_agx`. It must not alter the pinned nested
+m1n1 source or truncate the builder's mapping list.
+
+### EXP-20260825-088 — acquire version-bound cold AGX clear captures
+
+Status: rejected after AGX startup and before the first captured submission.
+
+Hypothesis: the tracked helper and capture wrapper, now binding the live
+J313/V13_5/G13 construct layout before historical AGX startup, can complete two
+cold fixed-clear captures and produce byte-identical complete frames and final
+attachments.
+
+- root source and ledger: `05a99900e726604ab87515e6dcc90a4c043018a2`;
+- version-layout correction and ledger:
+  `e5066ea7a3cf77da5c0fd6f98dd73c884414d703` and
+  `05a99900e726604ab87515e6dcc90a4c043018a2`;
+- capture wrapper SHA-256:
+  `cf383a4cc9d6b094a9e45454e163eebcf7e4b6c11aa2090a5ee8d10c0da7c870`;
+- host operator SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`;
+- prerequisite EXP-085 receipt SHA-256:
+  `4e6b05895fb01ff1c0ccdf99bb3c5b40776da48c9cf0b52fd6a15df0aacac4fa`;
+- identity `.local/agx-capture/identity-exp088.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- pinned image ID
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- proxy `/dev/cu.usbmodemC02HDNCCQ6L41`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-088-agx-g1r-capture/`,
+  confirmed absent; fixed bridge port `43143`;
+- full repository suite passed 579/579.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp088.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-088-agx-g1r-capture \
+  --bridge-port 43143
+```
+
+Pass and rejection rules remain identical to EXP-087 and require the exact
+tracked helper, V13_5/G13 assertion, two cold receipts, complete deterministic
+archives, attachments and mandatory reboots. A pass is capture-only and still
+requires manual fixture review and separately preregistered replay.
+
+Observed result: transport, the full-client bootstrap, live V13_5/G13 binding,
+AGX firmware startup, UAT initialization, initdata construction and initdata
+submission all completed. The historical shim created context 23 and reached
+its first BO allocation, logging `Create BO @ 0xffffc000`. No subsequent ioctl,
+frame archive, final attachment or receipt appeared during the following 60
+seconds. Because the operator placed no wall-clock deadline around the native
+capture producer, the process had to be interrupted and the remaining
+container stopped explicitly. The empty rejected destination contains only
+`work/capture-01/`; it contains no files and is not a fixture.
+
+The `Create BO` message is emitted after the shim has allocated the GPU object,
+mapped the memfd range, stored the BO and returned its GPU address in the ioctl
+argument. The next investigation boundary is therefore the transition from the
+first completed create-BO ioctl back into the native EGL client, not AGX
+firmware startup or V13_5 initdata. Before another hardware attempt, the
+operator must gain a fixed producer deadline and the capture wrapper must
+record the next ioctl boundary without modifying the pinned nested m1n1 tree.
+
+The mandatory cleanup reboot completed after stopping the orphaned container.
+The pre-run proxy base was `0x8044a0000`; a fresh J313/V13_5 proxy returned at
+`0x805398000`. The cleanup identity SHA-256 is
+`8fe50d22b8d641525e37729240ccb0dd2c2bea8e858cf6bbe999e798bf01431f`.
+
+### EXP-20260825-089 — bound the first post-BO AGX client transition
+
+Status: rejected after the first completed create-BO ioctl.
+
+Hypothesis: on the exact EXP-088 capture path, the fixed producer deadline and
+per-ioctl return markers will either complete the two cold deterministic clear
+captures or identify the last ioctl that returned before the native EGL client
+stopped. In either case the producer will terminate without manual intervention
+within 35 seconds of a stall and the existing operator will request the
+mandatory physical reboot.
+
+- root source and ledger: `136f2ab589cc4f7f9b8597956c98096ce30ab1dc`
+  and `aed3990c104ce4a66b85a849fabbd18d100ce0e8`;
+- fixed capture operator SHA-256:
+  `803d591843ebbff7f6e556fb990961783fa307240a96a2218a047214cd5f7149`;
+- capture wrapper SHA-256:
+  `a4163f39e9687aa2be094e9a07f1af5c95afba6757a3a24d91d02d6b7ef4fdcb`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp089.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- pinned image ID
+  `sha256:22bae7a1a346eb7102fcc4b04a6c9d8bbc6632f0eda232e6f6f966c2577d2ad2`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x805398000`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-089-agx-g1r-capture/`,
+  confirmed absent; fixed bridge port `43144`;
+- two mandatory tests failed before the correction, focused tests passed, and
+  the complete repository suite passed 581/581.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp089.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-089-agx-g1r-capture \
+  --bridge-port 43144
+```
+
+A capture pass retains the EXP-088 requirements: two cold receipts, complete
+byte-identical archives and attachments, mandatory reboots, manual fixture
+review and a separately preregistered replay. Any timeout, missing matching
+`capture-ioctl-end`, exception, incomplete output, cleanup failure, stale proxy
+or manual intervention rejects EXP-089. Preserve the last begin/end markers and
+all obtainable files, do not retry this evidence directory, keep Windows
+blocked and establish a fresh J313/V13_5 proxy before further diagnosis.
+
+Observed result: rejected without a timeout or manual intervention. The first
+ioctl was request `0xc0186442`, the Asahi create-BO request. Both
+`capture-ioctl-begin sequence=1` and `capture-ioctl-end sequence=1 result=0`
+were emitted. Those markers bracket only the reentrant Python callback inside
+the historical C create-BO handler; they do not prove that the enclosing C
+ioctl returned to native Mesa.
+
+Offline GDB analysis of the preserved core placed the abort in
+`drm_shim_bo_get_handle()` at `src/drm-shim/device.c:423`, called directly by
+`asahi_ioctl_create_bo()` at `src/asahi/drm-shim/asahi_m1n1.c:130`. The cached
+`shim_fd` was already dangling when the handler tried to lock
+`shim_fd->handle_lock`: its allocation contained unrelated UTF-32-like text,
+and the live `shim_device.fd_map` had size 7 but zero entries. The BO and
+create-BO argument remained valid. Therefore the first proven failure is a
+fake-DRM fd lifetime violation across the reentrant Python callback, before
+handle allocation, return to Mesa, mmap, command construction or GPU
+submission. The earlier `dev->bo_map_lock` inference was incorrect and is
+superseded by this core-backed boundary.
+
+The rejected core SHA-256 is
+`8b3eb8ef8a426e6875bfd8edf2999e7361cdd637131480cacd39824fa19ad3d5`.
+No frame, final attachment or receipt exists. The operator performed its
+mandatory reboot without manual cleanup. The pre-run base was `0x805398000`; a
+fresh J313/V13_5 proxy returned at `0x8047a0000`, with cleanup identity SHA-256
+`64617a712040dd3fec785c51cfb1307eb595377d2eeb5376c2f97c5f481d09b6`.
+EXP-089 is closed and its evidence directory will not be reused.
+
+### EXP-20260825-090 — bootstrap AGX before exposing the fake render fd
+
+Status: rejected during eager Shim construction before the first DRM ioctl.
+
+Hypothesis: moving the unchanged historical AGX/proxy initialization into Shim
+construction, before drm-shim exposes a fake render fd to EGL, removes the
+reentrant fd-lifetime violation proven by the EXP-089 core. The fixed clear
+producer will then pass the first create-BO C handler, issue subsequent ioctls,
+submit one deterministic clear, and produce two cold byte-identical capture
+packages without a mutex abort, timeout or manual intervention.
+
+- implementation and ledger: `97ab533107b0e9a35281d5c6580a6bd6c00e0c63`
+  and `1c4e3910799b34e95a6e3cd1322b07085fae1685`;
+- capture wrapper SHA-256:
+  `aa650612a9f298b00aacd7bd101ebf52a4777088b2d1d355ee019e833f43e5c0`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp090.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- no-cache rebuilt and verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x8047a0000`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-090-agx-eager-bootstrap/`,
+  confirmed absent; fixed bridge port `43145`;
+- the mandatory regression test failed before implementation, ten focused
+  tests passed, the complete repository suite passed 582/582, shell syntax,
+  Python compilation and diff checks passed, and a no-cache ARM64 image build
+  plus export verification passed.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp090.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-090-agx-eager-bootstrap \
+  --bridge-port 43145
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, at least one ioctl after
+create BO, no mutex assertion, timeout, exception or software fallback, and a
+successful mandatory physical reboot after each capture. Any missing file,
+unexpected ioctl boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-090. Preserve all obtainable evidence, never reuse this directory,
+keep Windows blocked, and return the Air to a fresh J313/V13_5 proxy regardless
+of result.
+
+Observed result: rejected without timeout or manual intervention. Eager
+`self.init()` ran before the fake render fd as intended, but it also started
+AGX from every process that inherited `LD_PRELOAD`. The primary AGX ASC boot
+timed out before any `capture-ioctl-begin` marker. Its crash-buffer path invoked
+the historical runtime assembler; the child `gcc` inherited the capture shim,
+constructed another eager Shim and aborted recursively. This proves that the
+safe pre-fd boundary is the `m1n1.setup` import and USB bootstrap only, not the
+entire AGX start. AGX start must remain lazy at the original first-ioctl point
+after setup has already completed.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`9723e012c65d5ccaefe6eadf86a952fee988addd46264ed0b595c64850b843ad`.
+The operator performed the mandatory physical reboot; a fresh unowned
+J313/V13_5 proxy returned at base `0x805a40000`. EXP-090 is closed and its
+evidence directory will not be reused.
+
+### EXP-20260825-091 — isolate setup before the fake render fd
+
+Status: rejected at AGX ASC boot in the first create-BO callback.
+
+Hypothesis: importing and pinning `m1n1.setup` during Shim construction will
+finish the only fd-affecting USB bootstrap before drm-shim exposes its fake
+render fd, while leaving AGX firmware start at the historical first-ioctl
+boundary. The first create-BO C handler will therefore retain a live shim_fd,
+subsequent ioctls will execute, and two cold deterministic clears will package
+without the EXP-089 mutex abort or EXP-090 recursive child initialization.
+
+- implementation and ledger: `fe195983674b94c069c9243764d49739b0f55616`
+  and `69b981f6d6ab507ca8ab725dc40d886c674b3bed`;
+- capture wrapper SHA-256:
+  `e3806c9af5cd374149ad450cf2a3c2a6012d45e8d32cce3852cd131bf94b9ecc`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp091.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x805a40000`, present without an open owner;
+- destination `investigation/artifacts/EXP-20260825-091-agx-setup-only-bootstrap/`,
+  confirmed absent; fixed bridge port `43146`;
+- the mandatory regression test failed before implementation, ten focused
+  tests and the complete repository suite passed 582/582, with shell syntax,
+  Python compilation and diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp091.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-091-agx-setup-only-bootstrap \
+  --bridge-port 43146
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, at least one ioctl after
+create BO, no mutex assertion, recursive shim construction, timeout, exception
+or software fallback, and a successful mandatory physical reboot after every
+capture. Any missing file, unexpected boundary, cleanup failure, stale proxy
+or manual intervention rejects EXP-091. Preserve all evidence, never reuse its
+directory, keep Windows blocked, and return the Air to a fresh J313/V13_5 proxy
+regardless of result.
+
+Observed result: rejected without timeout or manual intervention. Setup-only
+bootstrap completed before the fake render fd, and the first create-BO callback
+began without the EXP-089 dangling-shim_fd mutex abort or EXP-090 recursive
+child initialization. Historical `AGX.start()` then raised `ASCTimeout: Boot
+timed out` before create BO completed. The error path attempted to free a BO
+that Python had never registered, then the producer terminated; no later ioctl
+or GPU submission occurred. This result validates the corrected fd-lifetime
+boundary but does not validate an AGX render.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`e0d7ec51ad8e155f00b03f251e2026556a34fbc08daab7383cf6d32fe1ca8c3a`.
+The operator performed the mandatory reboot; a fresh unowned J313/V13_5 proxy
+returned at base `0x805eec000`. Because EXP-090 first timed out AGX firmware and
+an ordinary reboot may not prove a cold GPU state, another render attempt is
+blocked until the stable m1n1 payload is freshly chainloaded and its identity
+is recorded. EXP-091 is closed and its evidence directory will not be reused.
+
+### EXP-20260825-092 — control AGX boot after a fresh stable chainload
+
+Status: rejected by inherited-shim proxy contention in assembler children.
+
+Hypothesis: the EXP-091 ASC timeout was residual GPU firmware state from the
+failed full-eager EXP-090 attempt. Re-chainloading the exact immutable stable
+m1n1 payload before taking USB ownership will restore the formerly working AGX
+boot boundary, while the unchanged setup-only wrapper retains the corrected
+fake-fd lifetime.
+
+- root source `84d6274` with unchanged implementation
+  `fe195983674b94c069c9243764d49739b0f55616` and ledger
+  `69b981f6d6ab507ca8ab725dc40d886c674b3bed`;
+- exact chainloaded stable m1n1 SHA-256
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`,
+  commit `9cd80ac652ac404e92ae279deeaec8c629d7d184`;
+- capture wrapper SHA-256
+  `e3806c9af5cd374149ad450cf2a3c2a6012d45e8d32cce3852cd131bf94b9ecc`;
+- identity `.local/agx-capture/identity-exp092.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- freshly chainloaded J313/V13_5 proxy base `0x805eec000`, present without an
+  open owner; destination
+  `investigation/artifacts/EXP-20260825-092-agx-post-chainload/` confirmed
+  absent; fixed bridge port `43147`.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp092.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-092-agx-post-chainload \
+  --bridge-port 43147
+```
+
+Pass and rejection rules are identical to EXP-091. In particular, any ASC
+timeout rejects the stale-state hypothesis; no retry is allowed without a new
+diagnostic correction and preregistration. Preserve all evidence, require the
+operator reboot, never reuse this directory, keep Windows blocked, and return
+the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected without timeout or manual intervention, disproving
+the stale-GPU-state hypothesis. The first create-BO callback entered AGX start,
+whose crash-buffer/UAT path invoked runtime `gcc` and `as`. Both children
+inherited `LD_PRELOAD`, constructed the capture Shim, imported `m1n1.setup` and
+opened the same proxy concurrently. Their bootstrap readers consumed each
+other's binary replies, raising `UnicodeEncodeError`; gcc and as then aborted,
+and the parent surfaced `CalledProcessError`. The setup-only boundary is valid
+only in the exact capture producer. Inherited helper executables must construct
+an inert Shim without USB or AGX initialization.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`08eb42cff54f5f608930c55a9e6d82e5b53d95b5b6bda747cf4f3be9aad7d474`.
+The operator performed the mandatory reboot; a fresh unowned J313/V13_5 proxy
+returned at base `0x8057f8000`. EXP-092 is closed and its evidence directory
+will not be reused.
+
+### EXP-20260825-093 — isolate AGX bootstrap to the native producer
+
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
+
+Hypothesis: comparing `/proc/self/exe` with the explicitly exported native
+capture program before importing `m1n1.setup` prevents inherited `gcc` and `as`
+processes from opening the USB proxy, while the real producer retains the
+validated setup-only pre-render-fd bootstrap. The runtime assembler will then
+complete without the EXP-092 proxy contention and the first create-BO ioctl can
+return to EGL.
+
+- root source `34c71e6fe48f57f6e323144e2aa6bd0d0c80bc18` with implementation
+  `ae1944238602d5baa50a274ea2216ee7227552bf` and ledger
+  `34c71e6fe48f57f6e323144e2aa6bd0d0c80bc18`;
+- capture wrapper SHA-256
+  `02af1a9575063aa44c1436124c4a33ce77a84222f58262ede76df0b172358b3f`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp093.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x8057f8000`; destination
+  `investigation/artifacts/EXP-20260825-093-agx-producer-isolation/` confirmed
+  absent; fixed bridge port `43148`;
+- the producer-order regression contract and complete public suite passed
+  582/582, with shell syntax, Python compilation and diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp093.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-093-agx-producer-isolation \
+  --bridge-port 43148
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, at least one completed
+ioctl after create BO, no mutex assertion, ASC timeout, proxy contention,
+recursive child initialization, exception or software fallback, and a
+successful mandatory physical reboot after every capture. Any missing file,
+unexpected boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-093. Preserve all evidence, never reuse its directory, keep Windows
+blocked, and return the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected without timeout or manual intervention. The exact
+producer guard eliminated EXP-092 proxy contention: runtime `gcc` and `as`
+completed, AGX ASC booted, all endpoints and channels initialized, V13_5
+initdata was sent, and context 23 was bound. The first create-BO Python handler
+completed, then the enclosing C `drm_shim_bo_get_handle()` aborted while
+locking its cached `shim_fd`.
+
+Core analysis proves the cached object at `0x0000b244e627d4f0` was freed and
+overwritten: its original `fd=11` and lock fields were no longer valid. The
+global `shim_device.fd_map` remained allocated but contained `entries=0` and
+`deleted_entries=3`. The exact stack is `mtx_lock` ->
+`drm_shim_bo_get_handle` -> `asahi_ioctl_create_bo` -> interposed `ioctl`.
+This is the pre-`exec` half of the subprocess problem: Python's runtime
+assembler uses `vfork`/`posix_spawn`; while sharing the producer address space,
+the child closes inherited descriptors and drm-shim's interposed `close()`
+unregisters the producer mappings before `exec`. The post-`exec` producer guard
+cannot repair that parent-memory mutation.
+
+No frame, final attachment or receipt exists. The preserved core SHA-256 is
+`bedcbeba0b30c60ba9e0ff0a6eab10d24199831ffa52b7cd1dd5a7e1539ec69d`.
+The mandatory reboot succeeded and a fresh unowned J313/V13_5 proxy returned at
+base `0x805218000`. EXP-093 is closed and its evidence directory will not be
+reused. The next correction must disable `vfork` and `posix_spawn` only in the
+exact native producer before AGX can invoke its assembler, forcing child fd
+closure into a private forked address space.
+
+### EXP-20260825-094 — fork-isolate AGX runtime assembler children
+
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
+
+Hypothesis: disabling Python `vfork` and `posix_spawn` in the exact native
+capture producer before AGX runtime assembly forces helper fd closure into a
+private forked address space. The producer's three drm-shim fd-map entries and
+cached `shim_fd` will survive the first create-BO callback, allowing the ioctl
+to return and rendering to proceed.
+
+- root source `f301b64a0128ea520531987517766cd0c9257cac` with implementation
+  `b6219c42af3cbbef6f9993a35ec9f59b2475e44d` and ledger
+  `f301b64a0128ea520531987517766cd0c9257cac`;
+- capture wrapper SHA-256
+  `705366a81006d6808f1ce608700794653a3355ad7073114839c542a3a75436d7`;
+- unchanged host and container helpers SHA-256:
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- identity `.local/agx-capture/identity-exp094.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- verified pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x805218000`; destination
+  `investigation/artifacts/EXP-20260825-094-agx-fork-isolation/` confirmed
+  absent; fixed bridge port `43149`;
+- the behavioral isolation test failed before implementation, eleven focused
+  tests and the complete public suite passed 583/583, with shell syntax,
+  Python compilation and diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp094.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-094-agx-fork-isolation \
+  --bridge-port 43149
+```
+
+Pass requires two cold receipts, complete byte-identical archives and final
+attachments, matching identity and artifact hashes, completed create-BO and
+later submit ioctls, no mutex assertion, ASC timeout, proxy contention,
+recursive child initialization, exception or software fallback, and a
+successful mandatory physical reboot after every capture. Any missing file,
+unexpected boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-094. Preserve all evidence, never reuse its directory, keep Windows
+blocked, and return the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected after a new, deterministic serialization boundary.
+The subprocess-memory isolation worked: AGX firmware booted, channels and
+initdata initialized, the runtime compiler completed, and create-BO ioctl
+sequences 1 through 8 all returned successfully without corrupting drm-shim's
+cached file descriptor or fd map. Submission then entered ioctl sequence 9
+(`0x40186440`) and failed in `GPURenderer.submit()` while pushing
+`WorkCommand3D.struct_1`:
+
+```text
+KeyError: 'helper_cfg'
+m1n1.constructutils.ConstructClassException:
+at (pushing) -> WorkCommand3D -> struct_1 -> Start3DStruct1
+```
+
+The failure is a pinned historical m1n1 schema drift, not a transport, ASC,
+allocator or native-client failure. Commit `b50e29bcf6a8ecafff50a4555385be39e44b8616`
+renamed `Start3DStruct1.unk_40` to `helper_cfg`, while this renderer still writes
+`unk_40 = 0`; Construct therefore cannot find the renamed field. Historical
+source proves the intended disabled-helper value is zero.
+
+The partial `shim_frame000.agx` SHA-256 is
+`205086af23e668e775312d4cb6b4633a0c76d96ab3a3b47ecfe02fd4aa128a6e`; no
+`final.rgba` exists. The preserved core SHA-256 is
+`d318364691c714fb559c798caf8417845dac7afe5042c04d1366f632cd72a4b7`.
+The mandatory reboot returned an unowned J313/V13_5 proxy at base
+`0x804c44000`. EXP-094 is closed; its destination must never be reused. The
+next correction must restore the renamed zero-valued field at the capture
+boundary without changing the stable Windows recovery artifacts.
+
+### EXP-20260825-095 — serialize disabled helper state and submit 3D work
+
+Status: rejected by protected source-coherence preflight; no GPU command ran.
+
+Hypothesis: advancing only the reviewed GPU m1n1 pin to
+`195f70ddfc0fdfa382d1643dbe9466431850e56c`, where the historical renderer
+assigns zero to the renamed `Start3DStruct1.helper_cfg`, allows ioctl sequence
+9 to serialize and submit the first 3D work command. The already-proven
+transport, producer isolation, AGX firmware initialization, runtime assembler
+and BO paths remain byte-identical.
+
+- root source `b91898010fdddebe77a0c68a260c278fd050436b`, with implementation
+  `7bf79d0e39d72fbd75d2a221bbb05e872a0236d5` and ledger
+  `b91898010fdddebe77a0c68a260c278fd050436b`;
+- m1n1 `195f70ddfc0fdfa382d1643dbe9466431850e56c`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp095.json`, SHA-256
+  `de4bb4ba0fea78cc15b528feece0c09e0be2be5b0c352216c23253e2e3eac3a6`;
+- capture wrapper SHA-256
+  `705366a81006d6808f1ce608700794653a3355ad7073114839c542a3a75436d7`;
+- unchanged host and container helpers SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x804c44000`; destination
+  `investigation/artifacts/EXP-20260825-095-agx-helper-cfg/` confirmed absent;
+  fixed bridge port `43150`;
+- the mandatory regression test failed before implementation, twelve focused
+  bootstrap tests, 68 AGX contract tests and the complete public suite passed
+  584/584, with Python compilation and both root and nested diff checks passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp095.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-095-agx-helper-cfg \
+  --bridge-port 43150
+```
+
+Pass requires sequence 9 and every later render ioctl to return, two complete
+byte-identical cold receipts and archives, a final attachment matching the
+identity and artifact hashes, no Construct exception, mutex assertion, ASC
+timeout, proxy contention, recursive child initialization or software
+fallback, and a successful mandatory physical reboot. Any missing evidence,
+unexpected boundary, cleanup failure, stale proxy or manual intervention
+rejects EXP-095. Preserve all evidence, never reuse its destination, keep
+Windows blocked, and return the Air to a fresh J313/V13_5 proxy regardless of
+result.
+
+Observed result: rejected before transport or GPU ownership. Environment
+verification passed, then the operator refused the immutable stable artifact:
+
+```text
+error: stable m1n1 artifact source does not match AGX contract
+```
+
+The stable recovery artifact correctly identifies source
+`9cd80ac652ac404e92ae279deeaec8c629d7d184`, while this experiment advanced the
+whole AGX contract to `195f70ddfc0fdfa382d1643dbe9466431850e56c` for a
+Python-only renderer correction. No destination was created, no capture or GPU
+command ran, and both USB proxy endpoints remained present. This is a design
+error in the experiment, not a hardware result: a capture-only compatibility
+shim must preserve the immutable stable m1n1 contract rather than changing the
+production source pin. EXP-095 is closed and its destination will not be
+reused.
+
+### EXP-20260825-096 — capture-only helper-field compatibility
+
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
+
+Hypothesis: installing a data-descriptor alias from the pinned renderer's
+historical `unk_40` assignment to the documented `helper_cfg` field only in the
+native capture wrapper allows the first 3D submission to serialize without
+changing the immutable stable m1n1 source or artifact contract. All transport,
+AGX initialization, runtime compiler, BO and producer-isolation paths remain
+those already proven through EXP-094.
+
+- root source `a6583cb27537c446baf35f2fc31a3c8965a7a21f`, implementation
+  `f33fc882738aad3c80b170b10c43042563386ca1`, ledger
+  `a6583cb27537c446baf35f2fc31a3c8965a7a21f`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`,
+  Mu `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp096.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `caa1640c5fc4d99a853e379110b0927624ac77989443c3b1e4cca38c204cba73`;
+- unchanged host and container helpers SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x804c44000`; both USB endpoints
+  present; destination
+  `investigation/artifacts/EXP-20260825-096-agx-capture-helper-alias/`
+  confirmed absent; fixed bridge port `43151`;
+- the behavioral alias test failed before implementation, twelve focused tests
+  and the complete public suite passed 584/584, with Python compilation, root
+  and nested diff checks, stable m1n1 pin equality and CSV validation passing.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp096.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-096-agx-capture-helper-alias \
+  --bridge-port 43151
+```
+
+Pass requires ioctl sequence 9 and all later render ioctls to return, two
+complete byte-identical cold receipts and archives, a final attachment matching
+the pinned identity and hashes, no preflight rejection, Construct exception,
+mutex assertion, ASC timeout, proxy contention, recursive child initialization
+or software fallback, and a successful mandatory physical reboot. Any missing
+evidence, unexpected boundary, cleanup failure, stale proxy or manual
+intervention rejects EXP-096. Preserve all evidence, never reuse its
+destination, keep Windows blocked, and return the Air to a fresh J313/V13_5
+proxy regardless of result.
+
+Observed result: rejected at the same serialization boundary, but with a more
+precise object-model result. The protected source-coherence gate passed; AGX
+booted, V13_5 initdata and channels initialized, runtime assembly completed,
+all eight BO ioctls returned, and sequence 9 reached `Push done`. The command
+dump showed `Start3DStruct1.unk_40 = 0`, yet Construct still raised
+`KeyError: 'helper_cfg'` while building that structure.
+
+`ConstructClass` assignments populate its internal mapping under the assigned
+name, and `Struct._build()` reads `obj[sc.name]`; a Python property therefore
+cannot alias the mapping key. The correct capture-only boundary is the inverse:
+rename the single schema field from `helper_cfg` back to the pinned renderer's
+`unk_40` key while retaining its same `Int32ul` codec, byte offset and zero
+value. This does not alter firmware bytes or the immutable stable source pin.
+
+The partial frame SHA-256 is
+`c0e4f010e9ea896403377b3dabf337cbaced0175b7e725b6a181d76d004e7f98`;
+the preserved core SHA-256 is
+`4c114139700a2cb30418986a401a1043d4e0c6842e82c8e185cf2715d3959ea7`;
+no final attachment exists. The mandatory hardware reboot completed, both USB
+endpoints re-enumerated at 23:23, and the post-reboot probe reported
+J313/V13_5 at base `0x804c44000`. EXP-096 is closed and its destination will
+not be reused.
+
+### EXP-20260825-097 — align the capture schema mapping key
+
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
+
+Hypothesis: renaming exactly the capture copy of the `Start3DStruct1` schema
+field from `helper_cfg` to the pinned renderer's internal mapping key `unk_40`
+allows sequence 9 to build and submit while preserving the same `Int32ul`
+codec, byte offset and zero value. Stable m1n1, Mu, Windows and recovery inputs
+remain unchanged.
+
+- root source `11fff133d6cc926f3018d25d3c17ee44c3e9aa45`, implementation
+  `2ff4de47c5676ed01e78482199d69c503ae7603b`, ledger
+  `11fff133d6cc926f3018d25d3c17ee44c3e9aa45`;
+- unchanged m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp097.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `ca65445bc9ae6af7fa753d1577b07d0df74ffcfede1d858dad517620978f3130`;
+- unchanged host and container helpers SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  and `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- immutable stable recovery checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- post-EXP-096 J313/V13_5 proxy base `0x804c44000`, both endpoints
+  re-enumerated at 23:23; destination
+  `investigation/artifacts/EXP-20260825-097-agx-schema-key/` confirmed absent;
+  fixed bridge port `43152`;
+- the schema-key test failed before implementation, twelve focused tests and
+  the complete public suite passed 584/584; the live pinned schema reports one
+  `unk_40` and no `helper_cfg`; Python compilation, diff checks, stable pin and
+  CSV validation passed.
+
+The exact command is permitted once only:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp097.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-097-agx-schema-key \
+  --bridge-port 43152
+```
+
+Pass requires sequence 9 and every later ioctl to return, two complete
+byte-identical cold receipts and archives, a final attachment matching all
+identity and artifact hashes, no preflight rejection, exception, assertion,
+ASC timeout, proxy contention, recursive initialization or software fallback,
+and a successful mandatory physical reboot. Any missing evidence, unexpected
+boundary, cleanup failure, stale proxy or manual intervention rejects EXP-097.
+Preserve all evidence, never reuse its destination, keep Windows blocked, and
+return the Air to a fresh J313/V13_5 proxy regardless of result.
+
+Observed result: rejected at the next independent command structure. The
+capture schema-key correction worked: `WorkCommand3D` serialized completely,
+was pushed, and queue construction advanced into `WorkCommandTA`. Sequence 9
+then failed at `WorkCommandTA -> tiling_params -> TilingParameters` with
+`KeyError: 'helper_cfg'`.
+
+Upstream commit `b50e29bcf6a8ecafff50a4555385be39e44b8616` appended the
+`Int32ul helper_cfg` field to `TilingParameters`, but the pinned renderer still
+initializes only through `unk_28`; there is no historical key to alias. With
+helpers disabled throughout this fixed-clear workload, the missing appended
+configuration is zero. The next capture-only correction must install zero in
+every `TilingParameters` instance created by the renderer, without changing
+the class schema, production source pin or firmware bytes.
+
+The partial frame SHA-256 is
+`4946e3dabf2167e837c1c88775562ce3f40651fb08a901af5fe68cea352cdece`;
+the preserved core SHA-256 is
+`2396fb629c028b1b625d222092026f3130b474c405874190ab7f2e86a8fe02ff`;
+no final attachment exists. The mandatory reboot completed, both USB endpoints
+re-enumerated at 23:28, and the new proxy reported J313/V13_5 at base
+`0x80458c000`. EXP-097 is closed and its destination will not be reused.
+
+### EXP-20260825-098 — initialize capture tiling helper state
+
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
+
+Hypothesis: creating capture-only `TilingParameters` instances with
+`helper_cfg = 0` lets the TA portion of sequence 9 serialize after the already
+proven 3D command, without changing stable m1n1, Mu, Windows or recovery data.
+
+- root `40529a7`, implementation `4d1066ba344c91cf80b4835228ad6c1de5d994fe`;
+- stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+  wrapper SHA-256
+  `39c27e6307e253bd15c47fef53b4800eeb9fd3c884f3b76d601966908c4bad52`;
+- host/container helper SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`
+  / `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`;
+  pinned image ID `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+- stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x80458c000`, endpoints re-enumerated at 23:28;
+  destination `investigation/artifacts/EXP-20260825-098-agx-tiling-helper/`
+  absent; bridge port `43153`;
+- RED test observed; 13 focused and 585/585 full tests passed with pinned-class,
+  compilation, diff, pin and CSV checks.
+
+One command is permitted:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp098.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-098-agx-tiling-helper \
+  --bridge-port 43153
+```
+
+Pass requires sequence 9 and later ioctls to return, two complete identical
+cold receipts/archives, a valid final attachment, no exception, assertion,
+timeout, contention, recursion or fallback, and mandatory physical reboot.
+Anything else rejects EXP-098. Preserve evidence, never reuse the destination,
+keep Windows blocked and return to fresh J313/V13_5 proxy.
+
+Observed result: rejected after the two previously identified Construct
+compatibility boundaries. The capture produced a complete `cmdbuf.json` and
+object archive, then the Python implementation of `DRM_IOCTL_ASAHI_SUBMIT`
+raised an exception. The historical C shim printed that exception only to the
+runner terminal, cleared the Python error and returned `-EIO` directly without
+setting `errno`; Mesa consequently reported the misleading terminal error
+`DRM_IOCTL_ASAHI_SUBMIT failed: Success` and aborted in
+`agx_submit_cmdbuf`. The terminal stream exceeded the retained tool output, so
+the exact Python traceback is not recoverable from the core after
+`PyErr_Print()` cleared it. This is an evidence-retention failure, not evidence
+for another renderer compatibility change.
+
+The preserved frame SHA-256 is
+`b31361a50a348c4c4db6d481d1f3e91d2dd575b29132e886477ac92eb9a8b163`;
+the core SHA-256 is
+`947e708dde9823a2c6cc4010d35dcdbef2b6609bd2e0d2bc6b5dba2203dba526`;
+no final attachment or receipt exists. The mandatory reboot completed and both
+USB endpoints re-enumerated at 23:33. EXP-098 is closed and its destination
+will not be reused. Before any further hardware command, producer stdout and
+stderr must be persisted inside the unique experiment destination while still
+preserving the producer exit status and emergency-reboot contract.
+
+### EXP-20260825-099 — retain the native submit traceback
+
+Status: rejected; hardware command ran exactly once and the mandatory reboot
+completed.
+
+Hypothesis: rerunning the otherwise unchanged fixed-clear capture with the
+producer's combined output persisted will reproduce EXP-098 and retain the
+exact Python exception that the historical C shim clears before returning
+`-EIO`. This is an evidence-only experiment: it does not claim that logging
+will fix submission, and no new renderer compatibility change is included.
+
+- root source `bf9d62f`, implementation
+  `158ef23f04ee1000400deecd839892ebc6714616`, ledger `bf9d62f`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp099.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `39c27e6307e253bd15c47fef53b4800eeb9fd3c884f3b76d601966908c4bad52`;
+- host/container/cycle helper SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `0ff3f987c4d5b27343b4b8c35e05d0b5553e37855df7a4de9748bc0a0b559e64`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x805adc000`, both USB endpoints present;
+  destination `investigation/artifacts/EXP-20260825-099-agx-submit-trace/`
+  confirmed absent; fixed bridge port `43154`;
+- the producer-log contract failed before implementation, 19 focused tests and
+  the complete public suite passed 586/586; shell syntax, Python compilation,
+  root and nested diff checks and CSV validation passed.
+
+One command is permitted:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp099.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-099-agx-submit-trace \
+  --bridge-port 43154
+```
+
+Pass requires `producer.log` to retain the complete Python traceback and exact
+ioctl sequence for the EXP-098 failure, followed by the mandatory physical
+reboot and a fresh J313/V13_5 proxy. If the render unexpectedly completes, the
+stronger two-cold-capture fixture contract still applies. Any missing log,
+masked producer status, stale proxy, cleanup failure or manual intervention
+rejects EXP-099. Preserve all evidence, never reuse the destination, keep
+Windows blocked and return the Air to fresh proxy regardless of result.
+
+Observed result: rejected with the intended complete traceback retained.
+Sequence 9 passed both earlier helper-field compatibility boundaries, built the
+3D command and entered TA queue submission. `WorkCommandTA` then failed while
+building `unk_3e8`:
+
+```text
+construct.core.StreamError: Error in path (pushing) -> WorkCommandTA -> unk_3e8
+bytes object of wrong length, expected 96, found 100
+```
+
+The root cause is a paired upstream schema transition in commit
+`b50e29bcf6a8ecafff50a4555385be39e44b8616`: it appended the four-byte
+`TilingParameters.helper_cfg` field and simultaneously reduced
+`WorkCommandTA.unk_3e8` from `0x64` to `0x60`, retaining the subsequent field
+offsets. The pinned renderer still assigns `bytes(0x64)`. The already-proven
+capture tiling correction supplies the added four bytes, so the renderer's TA
+padding must now be `0x60`; changing the schema back would incorrectly shift
+all later fields.
+
+The producer log SHA-256 is
+`94279d3664a609d7ef07cb467115ccc804e511050085e8c69e09f5a104b19ad8`;
+the partial frame SHA-256 is
+`a584533f728cea8febb09ceacd6b1cb0a4dc836e1bdd85696ed4fb7745bd35a4`;
+the core SHA-256 is
+`75f79e2648b8b49a9c3e4761eb99929b02b4f4745c311bd53a946f95ab10c20e`;
+no final attachment or receipt exists. The saved producer status remained
+nonzero, the mandatory reboot completed and both USB endpoints re-enumerated
+at 23:44. EXP-099 is closed and its destination will not be reused.
+
+### EXP-20260825-100 — align the capture TA padding
+
+Status: rejected by fixture packaging after two successful cold hardware clears;
+the mandatory reboots completed and the Air is at a fresh proxy.
+
+Hypothesis: converting only the pinned renderer's exact all-zero `0x64`-byte
+`WorkCommandTA.unk_3e8` assignment to the active schema's `0x60` bytes allows
+sequence 9 to cross TA queue serialization while preserving all subsequent
+field offsets established by the paired helper-layout transition.
+
+- root source `ff96785`, implementation
+  `96452ee606f2df1828a2c4f60fd49ad5eba00464`, ledger `ff96785`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp100.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture wrapper SHA-256
+  `e1dc37507e7f55041a9e3286c00ea99a4b6bef3cfa710b3aeb7d5cd349b5fbc4`;
+- host/container/cycle helper SHA-256
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `0ff3f987c4d5b27343b4b8c35e05d0b5553e37855df7a4de9748bc0a0b559e64`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh J313/V13_5 proxy base `0x804458000`, both USB endpoints present;
+  destination `investigation/artifacts/EXP-20260825-100-agx-ta-padding/`
+  confirmed absent; fixed bridge port `43155`;
+- the TA-padding behavioral test failed before implementation, 14 focused
+  tests and the complete public suite passed 587/587; Python compilation, root
+  and nested diff checks and CSV validation passed.
+
+One command is permitted:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp100.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260825-100-agx-ta-padding \
+  --bridge-port 43155
+```
+
+Pass requires sequence 9 and every later ioctl to return, two complete
+byte-identical cold receipts and archives, a valid final attachment, no
+exception, assertion, timeout, contention, recursion or fallback, and a
+mandatory physical reboot after each capture. Anything else rejects EXP-100.
+Preserve all evidence, never reuse the destination, keep Windows blocked and
+return the Air to fresh proxy regardless of result.
+
+Observed result: both cold hardware captures completed every native ioctl,
+submitted TA and 3D work, received completion event 1, pulled the attachment
+and returned producer status zero.  Capture one used proxy base `0x804458000`;
+capture two used distinct base `0x8049d4000`.  Their 1024-byte visible RGBA
+attachments are byte-identical with SHA-256
+`614fd59f81a4457909acaa056573427fd8dc8a4095f60a70a72a8b170b321c8a`.
+The capture archives are complete historical `GPUFrame` files with SHA-256
+`705b2acc3d620da466e28ffff24188ef75bfe44b88613766f9243023cec243b6`
+and `dcb006e2426382542fe6edf20598d9147424ea9106e61ceb23d1aeba168e07cb`;
+their producer logs have SHA-256
+`b8206cb5b8b8f29d6cb5adf23260282265e9f465d5e9242cb3c98c34b20bd862`
+and `c6e2ebfb50eed1756ad4003ca2c4bb88b486461c31f0d34d6039a4477ddaf32e`.
+
+Packaging then rejected the pair with `object member is missing at index 5`.
+Inspection proved that m1n1 `GPUFrame.save()` deliberately records completely
+zero objects as `"file": null`; the fixture packager incorrectly treated that
+documented shorthand as corruption.  A test-first offline correction now
+materializes only those exact null entries as bounded canonical zero members.
+Applying it to the preserved evidence reaches the next fail-closed boundary:
+`expected output size must equal 16384, got 1024`.  The producer's
+`glReadPixels` proves the 16 by 16 visible pixels, while the fixture contract
+correctly requires the complete 0x4000-byte attachment object.  Inferring the
+unread 0x3c00-byte tail would weaken the gate, so EXP-100 remains rejected and
+no fixture is published.  The next capture must persist the actual complete
+post-render attachment page from the shim before packaging.
+
+Both mandatory reboots ran.  The post-experiment identity is fresh
+J313/V13_5 at base `0x80441c000`; both USB endpoints are present.  The
+preserved destination is immutable and will not be reused.  This experiment
+is the first two-cold-boot proof that the pinned native AGX path executes the
+fixed clear successfully, but it is not yet an accepted replay fixture and
+does not claim Windows GPU acceleration.
+
+### EXP-20260826-101 — capture the complete AGX attachment page
+
+Status: rejected by the live receipt after one successful hardware clear; the
+mandatory reboot completed and the Air is at a fresh proxy.
+
+Hypothesis: retaining the sole color BO after the historical shim has pulled
+its complete declared 0x4000 bytes, while canonically materializing only
+`GPUFrame.save()` entries explicitly marked `"file": null`, will preserve all
+actual initial and final GPU bytes and allow the two successful cold fixed
+clears to pass fixture packaging without weakening any G1R boundary.
+
+- root source and ledger `5f6fd58eb40113d5267e5af8aa7ffbdddbfcb490`;
+  implementation `58504103f61332f9aea200c5bd3311ed45fb99ce`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp101.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture shim, host/container/cycle helpers SHA-256
+  `7ceb64e17a4f5ccc52ef9bb0939c8ea3aa47a3d9a2c460ac16ba8011bf9d4071`,
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `1e498032d263018981691110371baaf801ec7080012a23a29fb1e32f6311cae9`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x80441c000`, both USB endpoints
+  present; destination
+  `investigation/artifacts/EXP-20260826-101-agx-full-attachment/` confirmed
+  absent; fixed bridge port `43156`;
+- three mandatory tests failed before implementation; 45 focused tests and
+  the complete public suite passed 593/593; compileall, shell syntax, diff,
+  CSV and immutable recovery checks passed.
+
+One command is permitted exactly once:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp101.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260826-101-agx-full-attachment \
+  --bridge-port 43156
+```
+
+Pass requires two distinct cold J313/V13_5 identities and bases; every native
+ioctl, TA/3D queue and completion event to succeed; each visible file to be
+exactly 1024 bytes; each final attachment to be exactly 0x4000 actual pulled
+bytes whose first 1024 bytes equal the visible file; byte-identical normalized
+frames and complete attachments; a valid atomically published fixture,
+manifest and provenance; and the mandatory physical reboot after each cycle.
+Any missing or inferred byte, malformed or ambiguous BO, differing output,
+exception, timeout, software fallback, packaging failure, cleanup failure or
+manual intervention rejects EXP-101.  Preserve all evidence, never reuse the
+destination, keep Windows blocked and return to a fresh proxy.
+
+Observed result: the first cold capture at base `0x80441c000` completed every
+native ioctl, TA/3D submit, completion event and full BO pull.  It atomically
+saved a real 0x4000-byte attachment with SHA-256
+`b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`,
+the expected 1024-byte GL-visible image with SHA-256
+`614fd59f81a4457909acaa056573427fd8dc8a4095f60a70a72a8b170b321c8a`,
+the complete frame with SHA-256
+`5b5a9cf64266f96f2d7b5683386ce2550ee03599f209667c68a97fe1eb81d387`
+and producer log with SHA-256
+`28a88b188d75df9391f769ce627da30177d41358a308d15a1f8f871d9e96fdf0`.
+
+The actual attachment contains 256 raw BGRA pixels `33 22 11 ff` followed by
+an all-zero 0x3c00-byte page tail.  `glReadPixels` correctly converts those
+pixels to RGBA `11 22 33 ff`; therefore the preregistered statement that the
+two byte streams must share the same first 1024 bytes was wrong.  The live
+receipt then rejected the valid full page because its stale boundary still
+required the entire final file to equal the 1024-byte RGBA image.  Capture two
+and packaging did not run.  This is a receipt and raw-format contract defect,
+not a GPU execution failure.  No bytes may be reordered or padded during
+packaging: the receipt must validate the exact full raw BGRA page, while the
+separate visible file continues to prove the requested GL RGBA clear.
+
+The mandatory failure reboot completed without manual intervention.  The
+post-experiment proxy is fresh J313/V13_5 at base `0x804260000`; both USB
+endpoints are present.  EXP-101 is closed, its evidence is preserved and its
+destination will not be reused.  Before another hardware command, a RED test
+must require a full 0x4000-byte raw BGRA attachment and reject the old
+1024-byte receipt; fixture metadata must identify the real raw format.
+
+### EXP-20260826-102 — publish a raw BGRA AGX clear fixture
+
+Status: accepted; both cold hardware captures, fixture packaging and the
+mandatory reboots completed, and the Air is at a fresh proxy.
+
+Hypothesis: validating the complete pulled attachment as a 0x4000-byte raw
+BGRA8 page, while retaining the separate 1024-byte GL-visible RGBA result and
+canonically materializing only exact `GPUFrame.save()` `"file": null` zero
+objects, will allow two cold native AGX clears to produce one accepted,
+byte-reproducible replay fixture without inferred or reordered bytes.
+
+- root source and ledger `ddb4436a6b6b020ce777124e4d0e7a5e983a1eb4`;
+  implementation `6a6cbc69064135cd6f51182817018e0012313cfe`;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- identity `.local/agx-capture/identity-exp102.json`, SHA-256
+  `4ccfc3d6fc79397fd0391dc7cca19b729bebee6fced879c716e551f57a632892`;
+- capture shim, host/container/cycle helpers SHA-256
+  `7ceb64e17a4f5ccc52ef9bb0939c8ea3aa47a3d9a2c460ac16ba8011bf9d4071`,
+  `9aa06d1c925c8667bb5e217b41ff7a065ca1bcff9c0e8f1c093a4051f5706427`,
+  `845fefaa31a3a546705f8f85b213103d34dfb4442cb87c5a672fc3d4c3dc1a7b`
+  and `1e498032d263018981691110371baaf801ec7080012a23a29fb1e32f6311cae9`;
+- raw receipt and fixture helpers SHA-256
+  `65a3cd0b3388e77a6fc682c7c3276f6aeac4190f835a90f1cce127ce5b403650`
+  and `423d9b951b1e10c8e48ba7d10aeff371ce2c933a3fbcbd99102f7286e0e6de72`;
+- pinned image ID
+  `sha256:5029f7c971335e915fe32c1b689f79b3f2871e405d280b0c2c98fef5a019effa`;
+  immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+- fresh unowned J313/V13_5 proxy base `0x804260000`, both USB endpoints
+  present; destination
+  `investigation/artifacts/EXP-20260826-102-agx-bgra-fixture/` confirmed
+  absent; fixed bridge port `43157`;
+- three raw-format tests failed before implementation; 91 focused tests and
+  the complete public suite passed 596/596; compileall, shell syntax, root and
+  nested diff, CSV and immutable recovery checks passed.
+
+One command is permitted exactly once:
+
+```sh
+./scripts/run-agx-capture-container.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --identity .local/agx-capture/identity-exp102.json \
+  --destination /Users/pavel/public_windows/investigation/artifacts/EXP-20260826-102-agx-bgra-fixture \
+  --bridge-port 43157
+```
+
+Pass requires two distinct cold J313/V13_5 identities and bases; every native
+ioctl, TA/3D queue and completion event to succeed; each visible file to be
+exactly 1024 bytes of repeated RGBA `11 22 33 ff`; each final attachment to be
+exactly 0x4000 actual pulled BGRA bytes with 1024 bytes of repeated
+`33 22 11 ff` followed by a zero 0x3c00-byte tail; byte-identical normalized
+frames and complete attachments; an atomically published fixture, manifest
+and provenance that independently validate; and the mandatory physical reboot
+after each capture.  Any missing, inferred, reordered or differing byte,
+malformed or ambiguous BO, exception, timeout, software fallback, packaging
+failure, cleanup failure or manual intervention rejects EXP-102.  Preserve all
+evidence, never reuse the destination, keep Windows blocked and return the Air
+to a fresh proxy regardless of result.
+
+Observed result: accepted.  Both cold native clears completed every ioctl,
+TA/3D submit and completion event, and pulled the entire output BO.  Capture
+one used proxy identity `J313:V13_5:804260000`; capture two used the distinct
+identity `J313:V13_5:80584c000`.  Their 1024-byte visible RGBA files are
+byte-identical with SHA-256
+`614fd59f81a4457909acaa056573427fd8dc8a4095f60a70a72a8b170b321c8a`.
+Their actual 0x4000-byte raw BGRA pages are byte-identical with SHA-256
+`b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`.
+Independent byte checks proved exactly 256 RGBA pixels `11 22 33 ff` in each
+visible file and exactly 256 raw BGRA pixels `33 22 11 ff` followed by a zero
+0x3c00-byte tail in each complete attachment.
+
+Canonical packaging published an eight-object fixture with SHA-256
+`34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`,
+manifest SHA-256
+`938cb9427dfdef646ec6938c4fc92f2404e41a70c1d0662f01dfe93f01702fe7`
+and provenance SHA-256
+`edb5fc2caeea2bdda8e07f6d90a92c5f8ef097345d97b5f579729161bdf970a9`.
+An independent `agx_frame_fixture verify --require-canonical` invocation
+accepted the fixture, identity, output GPU VA `0x15001d0000`, raw output size
+0x4000 and expected-output hash.  The normalized command-buffer SHA-256 is
+`f699bbc79e095613a33e12b7748f3539c6faec40683f5f45983943ba22d5eb34`.
+
+Both mandatory physical reboots completed without intervention.  The final
+post-experiment identity is a third fresh J313/V13_5 proxy at base
+`0x80427c000`; both USB endpoints are present.  The destination and accepted
+fixture are preserved and must not be regenerated in place.  EXP-102 proves a
+reproducible native AGX clear and supplies the first accepted replay fixture;
+it does not yet prove replay reliability or Windows GPU acceleration.  The
+next hardware gate is repeated cold replay of this exact fixture without any
+capture-path mutation.
+
+### EXP-20260826-103 — one-shot replay of the accepted AGX fixture
+
+Status: rejected before GPU queue submission; cold reboot confirmed.
+
+Hypothesis: the committed fixture accepted by EXP-102 can be loaded into an
+isolated context 63, replayed once through renderer queue 1, and complete its
+exact two-entry TA and two-entry 3D sequences within 0.5 seconds while changing
+only the poisoned output page to its bound raw BGRA oracle, after which all
+private ownership is released and a physical reboot returns a fresh proxy.
+
+- root source `f7f00c4622393d1df4fbfae8d2cc19d6f328a62e`;
+  replay implementation remains bound to ledgered source preceding EXP-102;
+- unchanged stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- committed frame, manifest and provenance SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`,
+  `938cb9427dfdef646ec6938c4fc92f2404e41a70c1d0662f01dfe93f01702fe7`
+  and `edb5fc2caeea2bdda8e07f6d90a92c5f8ef097345d97b5f579729161bdf970a9`;
+- render gate, live backend and cold operator SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `a6ec0f48ee6d312e54cb80e1adc06b5670c84e0524fa48691ed1e9510d79a8ee`
+  and `c41872cb548b5e186f7c386cc1d494579de1b796c3219484d6cf7acacac9e924`;
+- immutable stable checksum-manifest SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`;
+  contract SHA-256
+  `c6c7539bec09203228f6bb4d0905f499e330c8c9a46a570b138a8f666423f69b`;
+- fresh unowned J313/V13_5 proxy base `0x80427c000`, both USB endpoints
+  present; evidence destination
+  `investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/` confirmed
+  absent;
+- the complete public suite passed 596/596, canonical fixture verification and
+  the exact ten-cycle operator dry-run passed, stable recovery hashes matched,
+  root diff checks passed and Windows remained blocked.
+
+The hardware sequence is permitted exactly once and in this order:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate run-one \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/cycle-01
+```
+
+Regardless of the one-shot exit status, run exactly one physical reboot:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+```
+
+Only after a fresh changed identity is observed, bind it to the immutable
+one-shot result:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate proxy-receipt \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --cycle-result investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/cycle-01/render-gate-result.json \
+  --cycle 1 \
+  --output investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/reset-01.json
+```
+
+Pass requires exact queue producer/read/done progress `0 -> 2` for both TA and
+3D, one matching event for each queue and no spurious event, exact TA and 3D
+stamp progress, poison-to-oracle output transition, unchanged immutable-object
+hash, only classified private mappings with unmapped guards, no firmware fault,
+complete cleanup and ownership release within the fixed 0.5-second workload
+deadline.  The reboot receipt must bind the unedited result to a distinct fresh
+J313/V13_5 proxy identity and randomized m1n1 base.  Any exception, timeout,
+missing event, partial pointer or stamp progress, changed immutable byte,
+unexpected mapping, fault, cleanup or reboot failure rejects EXP-103.  Do not
+retry in place, preserve all evidence, keep Windows blocked and do not begin
+EXP-080 unless this one-shot passes independent inspection.
+
+Observed result (completed UTC 2026-08-26):
+- the one permitted `run-one` invocation loaded the accepted fixture, created
+  isolated context 63, classified 102 mappings, confirmed all guards unmapped,
+  read the poisoned output and immutable baseline, and then failed while
+  serializing `WorkCommand3D.struct_1` at `Start3DStruct1`;
+- the exact failure was `render backend failure: at (pushing) ->
+  WorkCommand3D -> struct_1 -> Start3DStruct1`.  It happened inside
+  `renderer.submit()` before either queue producer moved, so no TA or 3D work
+  reached firmware, no completion event fired and no output byte changed;
+- the bounded heartbeat still completed one management pong, firmware remained
+  running at AP/IOP power state 32, every readable firmware fault word was zero,
+  and cleanup reported `released=true`;
+- as preregistered, one physical reboot was performed regardless of failure.
+  The pre-run proxy base was `0x80427c000`; the post-reboot proxy answered as
+  J313/V13_5 at distinct base `0x804bf4000`, proving a fresh Stage 1 instance;
+- `proxy-receipt` correctly refused to issue an acceptance receipt because the
+  one-shot result was incomplete.  No retry was attempted and EXP-080 remains
+  blocked.
+
+Evidence:
+- atomic result
+  `investigation/artifacts/EXP-20260826-103-agx-g1r-one-shot/cycle-01/render-gate-result.json`;
+- completed cycles `0`, event count/delta `0`, `completion=null`, firmware fault
+  words all zero, immutable-before SHA-256
+  `a2fe0f0e6034d680ee89ffeed520efed55119055a36a533fc98d9221b5bd3652`,
+  and `released=true`.
+
+Verdict: rejected safely before hardware submission.  Source inspection found
+that the pinned renderer assigns the historical `Start3DStruct1.unk_40` key,
+while the current schema builds the same 32-bit field under `helper_cfg`.
+EXP-102 already applies a capture-process-only schema compatibility rename, but
+the replay process did not apply it.  The next work is a local test-first fix
+which shares that schema compatibility with replay; hardware must remain idle
+until the full suite passes and a new one-shot is separately preregistered.
+
+### EXP-20260826-104 — one-shot replay with shared renderer schema
+
+Status: rejected after successful render; reset proof incomplete.
+
+Hypothesis: installing the exact fail-closed historical-renderer compatibility
+already proven by native capture before replay resolves its renderer types will
+let the immutable EXP-102 fixture cross the pre-submit serialization boundary,
+complete one two-entry TA plus two-entry 3D submission within 0.5 seconds, and
+change only the poisoned output page to the bound raw BGRA oracle.
+
+Single changed variable relative to rejected EXP-103: replay now installs the
+same `Start3DStruct1` mapping-key bridge, zero tiling helper default and exact TA
+padding bridge as capture.  Fixture bytes, command buffer, stable m1n1, Mu,
+firmware identity, context 63, queue 1, mappings, timeout, lifecycle, reboot and
+acceptance rules are unchanged.
+
+Source and artifact contract:
+- root commit `0050c3f601503614ed978e6297ac9face471b5c8`; implementation
+  commit `ba4115e01618f2c5660d5cbc7109cf4b584f24a7` and separate ledger
+  commit `0050c3f601503614ed978e6297ac9face471b5c8`;
+- stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- replay gate, live backend and shared compatibility SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `eeed4b2e86fa8b10a203e39fe89ec88887fafb50d8f19ba21cbfd4e26cbe4164`
+  and `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`;
+- immutable frame, manifest and provenance SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`,
+  `938cb9427dfdef646ec6938c4fc92f2404e41a70c1d0662f01dfe93f01702fe7`
+  and `edb5fc2caeea2bdda8e07f6d90a92c5f8ef097345d97b5f579729161bdf970a9`;
+- stable recovery `SHA256SUMS` SHA-256
+  `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`
+  passed all five artifact checks; canonical fixture verification passed;
+- the new regression reproduced RED before implementation, then 26 focused
+  tests and the complete public suite passed 597/597; tracked root diff is
+  clean and only the expected nested worktree status markers remain;
+- fresh J313/V13_5 proxy base `0x804bf4000`; evidence destination
+  `investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/` confirmed
+  absent.  Windows remains blocked.
+
+The permitted sequence is exactly one `run-one`, exactly one physical reboot
+regardless of its exit status, then one receipt against that unedited result:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate run-one \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/cycle-01
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate proxy-receipt \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --cycle-result investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/cycle-01/render-gate-result.json \
+  --cycle 1 \
+  --output investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/reset-01.json
+```
+
+Pass requires exact queue producer/read/done progress `0 -> 2` for TA and 3D,
+one matching completion event per queue and no spurious event, exact stamps,
+poison-to-oracle output, unchanged immutable-object hash, only classified
+private mappings with unmapped guards, zero readable firmware faults, complete
+cleanup and release, workload elapsed no greater than 0.5 seconds, plus a receipt
+bound to a distinct fresh J313/V13_5 proxy base.  Any exception, timeout,
+partial progress, output or immutable mismatch, unexpected mapping, fault,
+cleanup or reboot failure rejects EXP-104.  Never retry it in place and do not
+begin the reserved ten-cycle EXP-080 unless independent inspection accepts it.
+
+Observed result (completed UTC 2026-08-26):
+- the one permitted replay crossed every schema boundary, submitted exactly two
+  TA and two 3D commands, and completed both queues.  Producer/read/done were
+  `0 -> 2` for each queue; TA event 0 and 3D event 1 each matched once; TA and
+  3D stamps each advanced by `0x100`;
+- workload elapsed was `0.013015832984820008` seconds and the bounded host call
+  was `0.2965979580185376` seconds.  The poisoned output changed from SHA-256
+  `4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe`
+  to the exact raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- immutable objects remained exactly
+  `a2fe0f0e6034d680ee89ffeed520efed55119055a36a533fc98d9221b5bd3652`,
+  all guards were unmapped, unexpected mappings and readable firmware faults
+  were empty, cleanup completed, reset completed and backend ownership release
+  was checked before the result was written;
+- the mandatory single physical reboot ran.  The render used proxy base
+  `0x804bf4000`; the post-reboot J313/V13_5 proxy answered at distinct base
+  `0x8040b4000`;
+- formal receipt creation failed closed with `cycle 1 has no proxy boot
+  identity`.  The real lifecycle snapshot stored `m1n1_base` but omitted the
+  deterministic `proxy_identity` string required by `_validate_one_shot` and
+  already supplied by its fake test backend.  No reset receipt was written and
+  no replay retry was attempted.
+
+Evidence:
+- atomic one-shot result SHA-256
+  `687666db6ae9ec048a8b07d4fed9673e4cc96c6d4f98b678676aa93a070325d5`
+  at `investigation/artifacts/EXP-20260826-104-agx-g1r-schema-replay/cycle-01/render-gate-result.json`;
+- `completed_cycles=1`, cycle status `passed`, aggregate verdict `incomplete`
+  and `windows_launch_permitted=false`; reset receipt intentionally absent.
+
+Verdict: rejected only as an incomplete cold-reset proof.  The hardware render
+itself satisfies every G1R work, output, isolation, fault and deadline condition,
+and proves the shared schema correction.  The next change must add the same
+deterministic identity used by the receipt CLI to the real lifecycle firmware
+snapshot, with a failing unit test first.  Fixture, GPU submission, firmware and
+reset rules must not change; EXP-080 and Windows remain blocked until a separately
+preregistered one-shot produces a valid receipt.
+
+### EXP-20260826-105 — one-shot replay with bound proxy identity
+
+Status: accepted; one cold replay and bound reset receipt passed.
+
+Hypothesis: recording the real pre-render proxy identity in the lifecycle
+snapshot will preserve EXP-104's already-proven render behavior and allow the
+mandatory post-reboot receipt to prove a distinct physical boot.
+
+Single changed variable relative to EXP-104: the lifecycle firmware snapshot
+now includes `proxy_identity = target:firmware:m1n1_base_hex`, derived from the
+same live proxy object and exact format as the receipt CLI.  GPU fixture,
+commands, schema bridge, m1n1, Mu, mappings, context, queue, deadlines, reset and
+all acceptance rules are unchanged.
+
+Contract:
+- root `fc0fe30070ea8a21027e338c236f7f48978234b4`; implementation
+  `81fccaa7ffd1661a5cc96e175d9419448103f9a2`; stable m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, render backend and schema bridge SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `0464c1d5a2b4eae943bb01fe5f29217a6eaa76568eac004eb649e6df22093532`,
+  `eeed4b2e86fa8b10a203e39fe89ec88887fafb50d8f19ba21cbfd4e26cbe4164`
+  and `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`;
+- immutable fixture SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  verified canonical with eight objects and the exact raw output oracle;
+- stable recovery passed all five `SHA256SUMS` entries; the identity regression
+  reproduced RED and then 43 focused tests plus the full suite passed 597/597;
+- fresh J313/V13_5 proxy base `0x8040b4000`; evidence destination
+  `investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/` is absent;
+  Windows remains blocked.
+
+Run exactly once, reboot exactly once regardless of exit, then create exactly
+one receipt:
+
+```sh
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate run-one \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/cycle-01
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python m1n1_windows/proxyclient/tools/reboot.py
+
+M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41 \
+  ./proxyenv/bin/python -m tools.agx_render_gate proxy-receipt \
+  --contract config/j313-agx.json \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --cycle-result investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/cycle-01/render-gate-result.json \
+  --cycle 1 \
+  --output investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/reset-01.json
+```
+
+Pass requires every EXP-104 render invariant plus a result snapshot containing
+the exact pre-reboot identity and a valid receipt binding its canonical hash to
+a different J313/V13_5 identity and m1n1 base.  Any failure rejects EXP-105;
+never retry it in place.  EXP-080 and Windows remain blocked until independent
+inspection accepts both files.
+
+Observed result (completed UTC 2026-08-26):
+- the sole replay again completed exact TA and 3D producer/read/done `0 -> 2`,
+  one event per queue, exact `0x100` stamp increments, no spurious event,
+  no firmware fault, no unexpected mapping, unmapped guards and complete
+  cleanup/release;
+- GPU workload elapsed `0.007328165986109525` seconds and bounded host submit
+  elapsed `0.29336354101542383` seconds, both within their fixed 0.5-second
+  limits;
+- output changed from poison SHA-256
+  `4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe`
+  to raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`,
+  while immutable objects remained
+  `a2fe0f0e6034d680ee89ffeed520efed55119055a36a533fc98d9221b5bd3652`;
+- the result captured pre-reboot identity `J313:V13_5:8040b4000` and the one
+  mandatory physical reboot produced `J313:V13_5:804430000`.  Independent
+  receipt validation passed with `fresh_proxy=true` and bound canonical result
+  SHA-256 `3a8080b698a538ebcb8a1c9637bb35b76ab3259500796145c1e94cd255764fa4`;
+- independent fixture, one-shot and reset validators all passed without editing
+  either evidence file.
+
+Evidence:
+- result file SHA-256
+  `3134bc472b715f91606b696e9b87bf0d6acd46022ba1cbf924337c8dd28656e5`;
+- reset receipt SHA-256
+  `2cc1aff108f887a1cf79c58fbd4113b5459c387a681954165df7bd597a508b5e`;
+- paths under
+  `investigation/artifacts/EXP-20260826-105-agx-g1r-identity-replay/`.
+
+Verdict: accepted.  G1R now has one complete cold render plus independently
+bound reset proof on J313/V13_5.  This permits only the already-reserved final
+ten-cold-cycle EXP-080 with the exact same fixture and source.  It does not yet
+permit Windows launch or claim a Windows graphics driver.
+
+### EXP-20260826-080 — final ten-cold-cycle AGX G1R qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: the exact immutable render accepted once by EXP-105 will reproduce
+across ten consecutive physical cold-reset boundaries with identical queue,
+event, stamp, output, isolation, fault, cleanup and deadline results and ten
+independently bound fresh proxy receipts.
+
+No implementation variable changes relative to accepted EXP-105.  This is the
+reserved repetition/reliability gate only.  Stable Windows launch is explicitly
+disabled and the operator must remain at proxy after aggregation.
+
+Contract:
+- root `70a0fe2` on `feature/j313-gpu-acceleration`; replay implementation
+  `ba4115e01618f2c5660d5cbc7109cf4b584f24a7`; identity implementation
+  `81fccaa7ffd1661a5cc96e175d9419448103f9a2`;
+- stable m1n1 `9cd80ac652ac404e92ae279deeaec8c629d7d184`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, render backend, schema bridge and cold operator SHA-256
+  `43493f124c44b91111f2f299d3aad9f4c188ab28bbaf1ce3d43ad6eb39714fec`,
+  `0464c1d5a2b4eae943bb01fe5f29217a6eaa76568eac004eb649e6df22093532`,
+  `eeed4b2e86fa8b10a203e39fe89ec88887fafb50d8f19ba21cbfd4e26cbe4164`,
+  `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`
+  and `c41872cb548b5e186f7c386cc1d494579de1b796c3219484d6cf7acacac9e924`;
+- immutable fixture SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- stable recovery preflight passed all five hashes, fixture preflight passed,
+  complete public suite passed 597/597, and the exact operator dry-run passed
+  context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, cold reset after
+  every cycle and no Windows launch;
+- EXP-105 independently accepted one complete render and receipt.  Starting
+  proxy is fresh J313/V13_5 base `0x804430000`; evidence destination
+  `investigation/artifacts/EXP-20260826-080-agx-g1r-final/` was fresh and empty
+  at dry-run.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/recovery/STABLE-j313-8core-native-input-v1 \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-080-agx-g1r-final \
+  --cycles 10
+```
+
+Pass requires ten complete one-shot results, each meeting every EXP-105 render
+invariant, ten successful physical reboots, ten receipts whose prior identity
+matches that cycle and whose live identity/base differ, no repeated adjacent
+boot identity or base, exact canonical result hashes, an accepted aggregate
+with `completed_cycles=10`, `cold_reset_between_cycles=true`,
+`windows_launch_permitted=true`, and successful independent `verify-result`.
+Any single failure rejects EXP-080 and stops the operator; preserve all evidence,
+do not retry in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- all ten one-shot renders completed and all ten physical reboot receipts were
+  written before aggregation.  Independent validation accepted every one-shot
+  result, its canonical SHA-256 binding and every reset receipt;
+- every cycle completed exact TA and 3D producer/read/done `0 -> 2`, exact
+  `0x100` stamp increments, one event per queue, the raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`,
+  immutable objects, unmapped guards, complete cleanup and no firmware fault;
+- GPU workload elapsed ranged from `0.006956166995223612` to
+  `0.01272262500494259` seconds and host submit elapsed ranged from
+  `0.28869487502332777` to `0.31270304101053625` seconds, inside both fixed
+  0.5-second deadlines;
+- every adjacent reset identity and base differed and each receipt reported
+  `fresh_proxy=true`.  However pre-render base `0x805604000` occurred in both
+  cycle 3 and cycle 5, so the ten valid cold boots provided only nine globally
+  distinct base-derived identities;
+- the fail-closed aggregator therefore returned
+  `error: ten distinct proxy identities are required` and did not create an
+  aggregate or permit Windows launch.  The SHA-256 of the sorted twenty-file
+  evidence checksum list is
+  `a66d33cbfd8a18cdbfe484a6ac5534f60e1bcef36229005b101b6f6e3171a26a`.
+
+Verdict: rejected by the preregistered operator without retry.  The GPU render
+path itself passed ten times; the failed boundary is boot-identity proof.  The
+current identity is `platform:firmware:m1n1_base`, but an allocation base is not
+a boot nonce and can legitimately recur after a later reboot.  EXP-080 remains
+immutable, Windows remains blocked and its evidence remains under
+`investigation/artifacts/EXP-20260826-080-agx-g1r-final/`.  The next experiment
+must first replace the probabilistic base-derived identity with a real per-boot
+identity under a failing unit test; it must not reinterpret or reaggregate this
+run.
+
+### EXP-20260826-106 — final ten-cold-cycle qualification with device boot cookies
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: the exact G1R render that passed all ten EXP-080 hardware cycles
+will again satisfy every queue, event, stamp, output, isolation, fault, cleanup
+and deadline invariant, while an immutable hardware-counter cookie sampled once
+at m1n1 entry will distinguish all ten concrete boots even when a randomized
+m1n1 allocation base legitimately recurs.
+
+Single changed variable relative to EXP-080: cold-boot identity is now
+`platform:firmware:boot_cookie` from read-only proxy opcode `0x014`.  The m1n1
+base remains recorded only as diagnostics.  Fixture bytes, renderer schema,
+AGX commands, mappings, queue, deadlines, physical-reset policy and all render
+acceptance rules are unchanged.  The already-written EXP-080 evidence is
+immutable and will not be reinterpreted or reaggregated.
+
+Contract:
+- root `62e1986c495b58391f3c6226da849142b50725e8`; identity implementation
+  `f9f9cdaf25d95911b079209185433df98672219f`; runtime m1n1
+  `e1a9a06fc170a04d055b5299ad98a9c478b1c06b`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, schema bridge, boot-identity helper and cold operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`
+  and `c41872cb548b5e186f7c386cc1d494579de1b796c3219484d6cf7acacac9e924`;
+- canonical contract SHA-256
+  `9fea37b9ffc6cdf44ba290181bbe5248b1de343fb91f7165f75458f7c799acd7`;
+  immutable fixture SHA-256
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and raw BGRA oracle
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-cookie-candidate/` has boot SHA-256
+  `621342d1b5c135dc992535349db1c653876a33272043d48ff79b99a8a965f4a5`,
+  assisted m1n1 SHA-256
+  `a7badd88ee8d1da51a280e77d6389a6d55b40da052b194ca269ff0a88169d7b2`
+  and Mu firmware SHA-256
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- stable recovery passed all five of its own checksums and was not modified;
+  the new m1n1 full host suite and complete public Python suite passed, the
+  canonical contract and diff checks passed, and the exact operator dry-run
+  accepted context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, cold
+  reset after every cycle and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-106-agx-g1r-cookie-final/` was absent at
+  preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-cookie-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-106-agx-g1r-cookie-final \
+  --cycles 10
+```
+
+Pass requires ten complete one-shot results meeting every EXP-080 render
+invariant, ten successful physical reboots and ten cookie-bound reset receipts.
+All ten pre-render boot cookies and derived proxy identities must be globally
+distinct; m1n1 bases may repeat.  Every receipt must bind the canonical result
+hash, the prior cookie and the different live cookie.  The accepted aggregate
+must report `completed_cycles=10`, `cold_reset_between_cycles=true` and
+`windows_launch_permitted=true`, and independent `verify-result` must pass.
+Any single failure rejects EXP-106 and stops the operator; preserve all evidence,
+never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- preflight accepted the exact candidate, contract and fixture, and cycle one
+  reached the GPU on the proxy that was already running before the operator;
+- TA and 3D both completed, events 0 and 1 fired, the AGX management endpoint
+  stopped and UAT contexts 63 and 0 were unmapped;
+- formal snapshot validation then failed closed with `proxy firmware has no
+  boot cookie API`.  The starting proxy was the older immutable recovery m1n1,
+  because `--artifact-dir` validates artifacts but the cold operator never
+  chainloads its `m1n1.macho` before the first render or after reset;
+- the mandatory physical reboot ran, no receipt or aggregate was created, and
+  the operator stopped without retry.  Failed result SHA-256 is
+  `a3f06ac5ad2fb8e8b55fc881cb5ed1a51dcf211ddf6ddee5d7e4dc0668910bd5`.
+
+Verdict: rejected at the launch-identity boundary, not at GPU execution.  The
+candidate artifact was proven build-valid but was not the firmware serving the
+first proxy session.  EXP-106 remains immutable and Windows remains blocked.
+The next implementation must make the cold operator chainload the validated
+candidate before cycle one and again after every physical reboot before reading
+the receipt, with a failing operator-order test first.  It must not retry or
+reuse the EXP-106 evidence directory.
+
+### EXP-20260826-107 — activated-candidate ten-cold-cookie qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: explicitly chainloading the exact validated candidate before the
+first render and after every physical reboot will expose the immutable boot
+cookie for every result and receipt, while preserving the ten-times-proven G1R
+render behavior and producing ten globally distinct concrete boot identities.
+
+Single changed variable relative to rejected EXP-106: the cold operator now
+activates `.local/agx-cookie-candidate/m1n1.macho` before cycle one and after
+every reset before the receipt.  Boot-cookie implementation, fixture, renderer
+schema, AGX commands, mappings, queue, deadlines, reset count and all acceptance
+rules are unchanged.  EXP-106 evidence is immutable and is not reused.
+
+Contract:
+- root `fcedc985e8d332b3b2efc5c4a8797068af01e402`; operator implementation
+  `2871bfb8771816949d61c924de6945fbf8fa3243`; boot identity implementation
+  `f9f9cdaf25d95911b079209185433df98672219f`; runtime m1n1
+  `e1a9a06fc170a04d055b5299ad98a9c478b1c06b`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, schema bridge, boot-identity helper and corrected cold
+  operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `e95041385e762a7299f92ed8a0b9f8dd510d1efc16f81df86bdf836eb6ee0db7`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`
+  and `d49d461653e5735e3ede0b2d13f441751d9f9cf9204360b2387e56dc78cf7b24`;
+- contract, fixture, raw BGRA oracle, candidate boot, assisted m1n1 and Mu
+  firmware hashes are identical to preregistered EXP-106;
+- both mandatory operator-order tests failed before implementation; after the
+  fix all 26 operator tests and the complete proxyenv suite passed 603/603,
+  shell syntax and diff checks passed, stable recovery passed all five of its
+  checksums and the exact operator dry-run passed without launching Windows;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-107-agx-g1r-cookie-final/` was absent at
+  preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-cookie-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-107-agx-g1r-cookie-final \
+  --cycles 10
+```
+
+Pass requires the exact EXP-106 pass contract: ten complete G1R results, ten
+physical resets, ten cookie-bound receipts, ten globally distinct pre-render
+cookies and proxy identities, canonical result bindings, an accepted aggregate
+and successful independent `verify-result`.  m1n1 bases may recur.  Any failure
+rejects EXP-107; preserve evidence, never retry it in place and keep Windows
+blocked.
+
+Observed result (completed UTC 2026-08-26):
+- the operator successfully waited for the recovery proxy and chainloaded the
+  exact candidate; the target reported m1n1 `e1a9a06` and `Proxy is alive
+  again`, proving the activation-order fix itself;
+- the candidate inherited `video.display=1`, initialized the internal display,
+  booted and quiesced DCP even though the recovery m1n1 had already initialized
+  that physical display pipeline earlier in the same boot;
+- AGX initialization then reached initdata, `DC_Init` and `DC_UpdateIdleTS`, but
+  firmware crashed before any fixture submission with EL1 data abort
+  `ESR=0x96000145`, `ELR=0xffffff800002be50` at `dc civac`, and FAR
+  `0xffffffcfe4df3780`.  This is a pre-render platform-state failure, not an
+  output, queue, cookie or receipt failure;
+- the hung cleanup was interrupted only after a stack sample proved it remained
+  in ASC crash handling.  The fail-safe physical reboot ran, the operator
+  reactivated the candidate, stopped without receipt or aggregate and did not
+  launch Windows;
+- the atomic result remained `status=running` because the interrupt occurred
+  while exception cleanup itself was blocked; SHA-256
+  `7738646526ade210ee063711dac3bf73779127e56ea58026f1918a2b9258b154`.
+  Preserved firmware dump SHA-256 is
+  `b9ccb211507d6b04f55c56b34e0ad2c7c3a6100b87a79cefdc76aac7790585f9`.
+
+Verdict: rejected before GPU submission.  Candidate activation is now proven,
+but a second internal-display/DCP bring-up in one physical boot contaminates
+the AGX start boundary.  EXP-107 remains immutable and Windows remains blocked.
+The next test must change only candidate chainload to headless `-v`, which sets
+the inherited boot video display flag to zero and avoids the second display
+pipeline initialization while leaving the candidate binary, GPU fixture and
+all qualification rules unchanged.  A failing operator test must require this
+argument before any new hardware run.
+
+### EXP-20260826-108 — normalized headless ten-cold-cookie qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: a physical normalization reset followed by headless activation of
+the exact validated candidate will preserve the recovery firmware's single DCP
+bring-up, avoid the EXP-107 `DC_Init` abort and complete ten cold G1R renders
+with ten globally distinct immutable m1n1 boot cookies.
+
+Single functional changed variable relative to rejected EXP-107: candidate
+chainload passes `-v` after the argument separator, setting inherited
+`video.display=0`.  The operator also performs one initial physical reset so
+cycle one cannot inherit the already-contaminated state left by a prior failed
+experiment.  Candidate bytes, recovery bytes, fixture, renderer schema, AGX
+commands, mappings, queue, deadlines, post-cycle resets and all render and
+cookie acceptance rules are unchanged.  EXP-107 evidence is immutable and is
+not reused.
+
+Contract:
+- root `284e35009b4e1e53969c799907758c6799431181`; operator implementation
+  `8b1150195bb0e7b1cf0c1b69f68c42708c64220f`; boot identity implementation
+  `f9f9cdaf25d95911b079209185433df98672219f`; runtime m1n1
+  `e1a9a06fc170a04d055b5299ad98a9c478b1c06b`, Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, boot-identity helper and normalized cold operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`
+  and `dbeb63f8bd32a5bc1a02bd24aa11eb2e0dd1b99a9d4a1acdadfcad57cbfe3bac`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `9fea37b9ffc6cdf44ba290181bbe5248b1de343fb91f7165f75458f7c799acd7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-cookie-candidate/` has boot, assisted m1n1
+  and Mu firmware SHA-256
+  `621342d1b5c135dc992535349db1c653876a33272043d48ff79b99a8a965f4a5`,
+  `a7badd88ee8d1da51a280e77d6389a6d55b40da052b194ca269ff0a88169d7b2`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- both new mandatory tests failed before implementation; after the fix all 28
+  operator tests and the fresh complete public suite passed 605/605, shell
+  syntax and diff checks passed, stable recovery passed all five of its own
+  checksums and the exact operator dry-run accepted the initial normalization
+  reset, context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, ten
+  post-cycle cold resets and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-108-agx-g1r-cookie-final/` was absent at
+  preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-cookie-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-108-agx-g1r-cookie-final \
+  --cycles 10
+```
+
+Pass requires one successful initial normalization reset followed by ten
+complete G1R results, ten post-cycle physical resets, ten cookie-bound receipts,
+ten globally distinct pre-render cookies and proxy identities, canonical result
+bindings, an accepted aggregate and successful independent `verify-result`.
+m1n1 bases may recur.  Any failure rejects EXP-108; preserve all evidence,
+never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- the initial physical normalization reset completed and the operator
+  chainloaded the exact candidate with literal boot argument `-v`; the new
+  boot reported m1n1 `e1a9a06` and `video.display=0`;
+- despite that value, m1n1 unconditionally entered its compile-time `USE_FB`
+  block, initialized the internal display, modeset it and quiesced DCP.  The
+  log therefore disproves the assumption that `video.display=0` suppresses
+  device display initialization; it controls console state only;
+- AGX again reached initdata, `DC_Init` and `DC_UpdateIdleTS`, then crashed
+  before fixture submission at the same `dc civac` instruction with
+  `ESR=0x96000145`, `ELR=0xffffff800002be50` and FAR
+  `0xffffffcfe4df3780`;
+- the blocked crash cleanup was interrupted after preserving the evidence and
+  the fail-safe physical reboot ran.  No receipt, aggregate or Windows launch
+  occurred.  The immutable running result SHA-256 is
+  `7738646526ade210ee063711dac3bf73779127e56ea58026f1918a2b9258b154`;
+  preserved firmware dump SHA-256 is
+  `395d72b15eb84c83548b1d57ba6c7c00995bd6bf3935b5176b960beb7adef9de`.
+
+Verdict: rejected before GPU submission.  Headless boot metadata is not a DCP
+ownership control in current m1n1.  The next implementation must add a
+dedicated, exact boot argument that skips the complete `display_init`,
+`display_shutdown`, framebuffer and logo block while leaving normal recovery
+and Windows launches unchanged.  Its host test must fail before implementation,
+and no new hardware run may reuse the EXP-108 evidence directory.
+
+### EXP-20260826-109 — explicit no-device-display ten-cold qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: the exact `m1n1.nodisplay` boot option will prevent every candidate
+DCP and framebuffer operation while leaving the recovery-owned display state
+intact, allowing ten G1R renders and cookie-bound cold-reset receipts to pass.
+
+Single changed variable relative to rejected EXP-108: the candidate contains
+the exact device-display bypass implementation and the operator passes its
+dedicated token.  Initial normalization reset, recovery bytes, Mu bytes,
+fixture, renderer schema, AGX commands, mappings, queue, deadlines, post-cycle
+resets and every output and cookie acceptance rule are unchanged.  EXP-108
+evidence is immutable and is not reused.
+
+Contract:
+- root `a4cdec8dff47d7e4010056158e6f8a62ff26fcb6`; root operator implementation
+  `a47cf1a94ab3952aa5674388121815307d1324a4`; m1n1 display implementation and
+  runtime commit `f6079c7143b58b2ffc242d5daa9a3a5d063ed85a`; Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`, fixture m1n1
+  `9cd80ac652ac404e92ae279deeaec8c629d7d184` and Mesa
+  `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`;
+- gate, lifecycle, boot-identity helper, explicit display parser and corrected
+  operator SHA-256
+  `1c706e6eb88261d2e9c4856906ede9818d7af50b2e9c09fff21bd3afbe867e61`,
+  `f94756c5ada3d601de08d977c97a1fad9406ea97487530dba70e9acebe0ac77d`,
+  `fb0c18178413282ede4472e7e8b8ccf094c2a8cbd621d20715d3aea2c0544aa7`,
+  `ad3cf1a850ddaba24dc978875cabecf48054ef372705e05f0075abaa92698f9a`
+  and `254980cc1ba25b936f6dda697fd232936db2af45c6846841b783397a76064673`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `6f05b99683b9995b14c73ed2d41626bf71515ee21ba6ca3046bb62b76ec694c7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-nodisplay-candidate/` has boot, stage zero,
+  stage one, assisted m1n1 and Mu firmware SHA-256
+  `c9e7afd3e87a3f0d33e344768fd0eedecfb9f7acf0f1a6f90d2d4adbf46707a8`,
+  `98e491aac16f5709ca4facb0f1a714dad840c8db70afa8ffc95d1e251e49d64f`,
+  `4a12e0cd67c2205c9069172e015612f52f2550099c244296861ec589eb6273c7`,
+  `497ad8484b9b35f19ce9daaaed1695585de5451e540a15ed5b7f5a4f1887a0b1`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- the mandatory m1n1 parser and root operator tests failed before their
+  implementations; afterward the complete m1n1 host suite, production m1n1
+  build, 65 focused public tests and fresh complete public suite 605/605 passed,
+  along with clang-format, shell syntax and diff checks;
+- the canonical builder completed and its manifest preflight accepted the exact
+  m1n1 and Mu commits and all five candidate hashes.  Stable recovery separately
+  passed all five of its own checksums and was not modified.  The exact dry-run
+  accepted the initial reset, context 63, queue 1, TA+3D, 0.5-second deadline,
+  ten cycles, ten post-cycle resets and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-109-agx-g1r-nodisplay-final/` was absent
+  at preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-nodisplay-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-109-agx-g1r-nodisplay-final \
+  --cycles 10
+```
+
+Pass requires the exact EXP-108 acceptance contract: one initial normalization
+reset, ten complete G1R results, ten post-cycle physical resets, ten cookie-bound
+receipts, ten globally distinct pre-render cookies and proxy identities,
+canonical result bindings, accepted aggregate and successful independent
+verification.  m1n1 bases may recur.  Any failure rejects EXP-109; preserve all
+evidence, never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- the initial reset completed and the operator loaded exact candidate m1n1
+  `f6079c7` while chainload reported the intended command line
+  `-v m1n1.nodisplay`;
+- m1n1 itself printed `cmdline: 1n1.nodisplay`: exactly the first four bytes
+  were lost.  It therefore correctly rejected the malformed token, initialized
+  the internal display, modeset it and quiesced DCP;
+- code inspection found the ABI defect: Python `BootArgs_r1`, `_r2` and `_r3`
+  place the four-byte alignment pad after `cmdline`, while C `struct boot_args`
+  aligns the union before `cmdline`.  Both layouts have the same total size but
+  disagree on the command-line offset by four bytes;
+- AGX consequently repeated the pre-submission `DC_Init` abort at
+  `ELR=0xffffff800002be50`, and the fail-safe reset ran after preserving the
+  dump.  No receipt, aggregate or Windows launch occurred.  Result SHA-256 is
+  `6055a7e4dcd122ff652c1473e4162265234c9a17ff893054ca08a5fc31d0ec44`;
+  firmware dump SHA-256 is
+  `a8b1c929c27ccaabacbfade4121e36964e51675f08c316ce348e59e82e0ee0fc`.
+
+Verdict: rejected at the boot-argument ABI boundary before GPU submission.  The
+device-display implementation itself was present but never selected.  The next
+change must move the Python padding before `cmdline` in all three revisions and
+add a byte-offset/round-trip regression test before implementation.  EXP-109
+remains immutable and its evidence directory must never be reused.
+
+### EXP-20260826-110 — corrected boot-argument ABI ten-cold qualification
+
+Status: preregistered; hardware qualification not run.
+
+Hypothesis: serializing the Python boot-argument structure with the same
+four-byte pre-command-line alignment as the C ABI will deliver the exact
+`-v m1n1.nodisplay` command line.  Candidate m1n1 will consequently skip every
+DCP and framebuffer operation, retain recovery ownership of the display and
+complete ten cookie-bound G1R renders without a firmware abort.
+
+Single changed variable relative to rejected EXP-109: Python `BootArgs_r1`,
+`BootArgs_r2` and `BootArgs_r3` now place their four-byte alignment pad before
+`cmdline`, matching C offset 112.  The dedicated display bypass, operator,
+initial normalization reset, recovery and Mu bytes, fixture, renderer schema,
+AGX commands, mappings, queue, deadlines, post-cycle resets and every output
+and cookie acceptance rule are unchanged.  EXP-109 evidence is immutable and
+is not reused.
+
+Contract:
+- root preregistration base `07a35be57882667e59030a9e03fc7e9e7e2fef83`,
+  root ABI implementation `974542e44fca6ed2f427fec9cc41cf7a575ef38f`,
+  root operator implementation `a47cf1a94ab3952aa5674388121815307d1324a4`,
+  m1n1 ABI/runtime `f76b63ade8756571acd91400283ee68b2f1d65ce`,
+  m1n1 display implementation `f6079c7143b58b2ffc242d5daa9a3a5d063ed85a`
+  and Mu `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- corrected Python ABI, byte-offset regression test, exact display parser and
+  operator SHA-256 are
+  `4e6e4202237d39082c8a2ae53a2e01973cdbad11ec11cd7968e8e251112e0915`,
+  `82bc72dbb66b2499242c27013027a3f18bdb4c840e8686d4250fecd6d999c2d6`,
+  `ad3cf1a850ddaba24dc978875cabecf48054ef372705e05f0075abaa92698f9a`
+  and `254980cc1ba25b936f6dda697fd232936db2af45c6846841b783397a76064673`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- read-only candidate `.local/agx-bootargs-candidate/` has boot, stage zero,
+  stage one, assisted m1n1 and Mu firmware SHA-256
+  `2ade878b9e973d4a489cb77f3449c62160a84385c02ed9c40da88432487b1206`,
+  `cf0bb1e370bf12cf814d41a7d08fbc6d4854bc38cda9da79c62d114841b82d8d`,
+  `c744f2dd78452221698079f11db501fedc97bf33624541f84659ae8b68aebbb6`,
+  `985b419ebe55f5977376008318553d8ac291ab892d773a8c278a542f4d8836d0`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- the ABI regression test failed for all three boot-argument revisions before
+  implementation.  Afterward the complete public suite passed 606/606, the
+  complete m1n1 host suite and production build passed, and the canonical
+  development builder completed successfully;
+- stable recovery separately passed all five checksums and was not modified.
+  Candidate files are read-only.  The exact dry-run accepted the initial reset,
+  context 63, queue 1, TA+3D, 0.5-second deadline, ten cycles, ten post-cycle
+  resets and no Windows launch;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-110-agx-g1r-bootargs-final/` was absent
+  at preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-bootargs-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-110-agx-g1r-bootargs-final \
+  --cycles 10
+```
+
+Pass requires one initial normalization reset, ten complete G1R results, ten
+post-cycle physical resets, ten cookie-bound receipts, ten globally distinct
+pre-render cookies and proxy identities, canonical result bindings, accepted
+aggregate and successful independent verification.  Before the first render,
+candidate output must contain the exact `cmdline: -v m1n1.nodisplay` and the
+explicit display-disabled message, with no candidate DCP modeset or quiesce.
+m1n1 bases may recur.  Any failure rejects EXP-110; preserve all evidence,
+never retry it in place and keep Windows blocked.
+
+Observed result (completed UTC 2026-08-26):
+- corrected chainload delivered the exact `cmdline: -v m1n1.nodisplay` and
+  candidate m1n1 printed `display: Device initialization explicitly disabled
+  by boot option`; it performed no candidate DCP modeset or quiesce;
+- AGX initialized, accepted `DC_Init`, submitted the fixture TA and 3D work,
+  fired both completion events and stopped cleanly.  The prior firmware abort
+  did not recur;
+- formal capture then failed while taking the mandatory firmware snapshot:
+  `read_proxy_boot_identity()` looked for `get_boot_cookie` directly on the
+  live `ProxyUtils` wrapper.  The device API is correctly exposed by its
+  underlying `M1N1Proxy` at `u.proxy.get_boot_cookie`, so the validator
+  incorrectly reported `proxy firmware has no boot cookie API`;
+- the fail-safe physical reset completed and returned to the corrected
+  candidate proxy.  No accepted cycle, receipt, aggregate or Windows launch
+  occurred.  Result SHA-256 is
+  `059e058e09766adf65bda54d7b94aeda5fa7781de2407fb34650df73a4b12738`.
+
+Verdict: rejected at the host identity-adapter boundary after successful GPU
+completion.  The GPU/DCP hypothesis passed its first hardware observation, but
+the preregistered ten-cycle evidence contract did not.  The next change must
+teach the identity reader to support the real `ProxyUtils.proxy` topology while
+retaining direct-proxy compatibility, with a failing wrapper-shaped unit test
+before implementation.  EXP-110 remains immutable and its evidence directory
+must never be reused.
+
+### EXP-20260826-111 — real ProxyUtils identity ten-cold qualification
+
+Status: accepted; hardware qualification passed 10/10 cold cycles.
+
+Hypothesis: reading the immutable boot cookie from the real
+`ProxyUtils.proxy.get_boot_cookie` transport will preserve the successful AGX
+behavior observed in EXP-110 and allow all ten renders and reset receipts to
+meet the cookie-bound evidence contract.
+
+Single changed variable relative to rejected EXP-110: the host identity adapter
+supports the real two-layer `ProxyUtils` object while retaining direct-proxy
+compatibility.  Candidate, recovery, Mu, m1n1, device-display ownership,
+fixture, renderer schema, AGX commands, mappings, queue, deadlines, resets and
+all acceptance rules are byte-for-byte unchanged.  EXP-110 evidence is
+immutable and is not reused.
+
+Contract:
+- root preregistration base `8e6ea816a568a6f0e4ab707567dbb58f3debae7b`,
+  identity implementation `2d5521bd2a1f66faf340ecdc6cf0cefc6e623662`,
+  m1n1 runtime `f76b63ade8756571acd91400283ee68b2f1d65ce` and Mu
+  `8b4dc4b4e3ff8606d0af36163acf9de79b7b4737`;
+- identity adapter and wrapper-shaped regression test SHA-256 are
+  `0a34303a5a6f7e9a7d667c480a81ccbb307aa8d11368b850347f903daa861dec`
+  and `a42a769124c6abefe2ad89b34be1a51bb76c969b9229181ecfae38f70c5bae98`;
+- canonical contract, immutable fixture and raw BGRA oracle SHA-256 are
+  `b049a055eba8536caeda7d1a8bac90b81ab6357e64d3f9cb600fff4691d7e3a7`,
+  `34c6580ba6471b920856f1dd48b2b252ff1fb3e7834cd0bf8856e97109aa79c8`
+  and `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`;
+- unchanged read-only `.local/agx-bootargs-candidate/` boot, stage-zero,
+  stage-one, assisted m1n1 and Mu SHA-256 are
+  `2ade878b9e973d4a489cb77f3449c62160a84385c02ed9c40da88432487b1206`,
+  `cf0bb1e370bf12cf814d41a7d08fbc6d4854bc38cda9da79c62d114841b82d8d`,
+  `c744f2dd78452221698079f11db501fedc97bf33624541f84659ae8b68aebbb6`,
+  `985b419ebe55f5977376008318553d8ac291ab892d773a8c278a542f4d8836d0`
+  and `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+- the wrapper-shaped regression test failed before implementation.  Afterward
+  39 focused tests and the fresh complete public suite passed 607/607;
+- stable recovery again passed all five checksums and was not modified.  The
+  exact dry-run accepted all ten cycles and no Windows launch.  Evidence
+  destination
+  `investigation/artifacts/EXP-20260826-111-agx-g1r-identity-final/` was absent
+  at preregistration.  Windows remains blocked.
+
+Execute exactly once without `--launch-stable-windows`:
+
+```sh
+./scripts/run-agx-render-gate.sh \
+  --proxy /dev/cu.usbmodemC02HDNCCQ6L41 \
+  --contract config/j313-agx.json \
+  --artifact-dir .local/agx-bootargs-candidate \
+  --frame fixtures/agx/j313-g13-v13_5-clear-16x16/frame.agx \
+  --manifest fixtures/agx/j313-g13-v13_5-clear-16x16/manifest.json \
+  --identity .local/agx-capture/identity-exp102.json \
+  --evidence-dir investigation/artifacts/EXP-20260826-111-agx-g1r-identity-final \
+  --cycles 10
+```
+
+Pass requires the unchanged EXP-110 contract: exact display bypass before each
+render, one initial normalization reset, ten complete G1R results, ten
+post-cycle physical resets, ten cookie-bound receipts, ten globally distinct
+pre-render cookies and proxy identities, canonical result bindings, accepted
+aggregate and independent verification.  Any failure rejects EXP-111; preserve
+all evidence, never retry it in place and keep Windows blocked.
+
+Observed result:
+- the exact preregistered command exited successfully without launching
+  Windows.  Every candidate startup carried the exact `m1n1.nodisplay` token,
+  left the recovery-owned DCP pipeline untouched, completed both TA and 3D,
+  observed the required events and queue progress, and completed cleanup;
+- all ten cycles passed after their mandatory physical resets.  The boot
+  cookies were `000000000d0a8ab2`, `000000000ccf57d2`,
+  `000000000ccc4e83`, `000000000ccdfc2d`, `000000000d0743e4`,
+  `000000000d6853a3`, `000000000b821bde`, `000000000d4eb316`,
+  `000000000d1634c8` and `000000000d33861e`; all ten proxy identities were
+  also globally distinct;
+- every cycle produced the canonical BGRA SHA-256
+  `b88456a302464b8f4735e8b09c14e004a9ad8df40fd17562e3d28c48de0ea126`.
+  Measured submission-to-completion time ranged from 0.006318 to 0.007001
+  seconds;
+- the accepted aggregate contains ten completed cycles, permits the next
+  Windows launch gate, passed an independent `verify-result` invocation, and
+  has SHA-256
+  `7c0553dca3ed9dcfa375494205c44c1775b342d50b8867b05ed84760002e7236`;
+- the immutable evidence is in
+  `investigation/artifacts/EXP-20260826-111-agx-g1r-identity-final/`.  Stable
+  recovery passed all five checksums after qualification and was not modified.
+  The Air remains at the candidate proxy and Windows was not launched.
+
+Verdict: accepted.  G1R now proves a complete private AGX render, output,
+completion and teardown contract across ten cold-reset-separated lifecycles.
+This permits transition to G2 direct Windows ownership.  It does not by itself
+claim a Windows graphics adapter, WDDM acceleration, DWM presentation, power
+management or production GPU support.
+
+### EXP-20260826-112 — J313 AGX G2 enumeration-only qualification
+
+Status: rejected after the single approved hardware attempt.  The candidate
+reached the Mu DXE phase, but the live XSDT contained no SSDT and therefore no
+`APPL0002` device could be presented to Windows.  `AppleAgx.sys` was not built,
+staged, installed or loaded.
+
+Hypothesis: an explicitly selected `J313_AGX_G2_PROFILE=TRUE` Mu build will
+enumerate exactly one disabled, driverless `ACPI\\APPL0002` device with the
+reviewed SGX aperture and nine guest interrupts, while the stable Mu profile
+continues to omit the AGX SSDT completely.
+
+Candidate and host-gate contract:
+- root source `4c52ac8493bc363aee86e1ede1216b0f560d7198`, m1n1 source
+  `4107043a96dedaec6dbe98bb8ee7b78f13c8080f` and Mu source
+  `7ea6c1cfe70956f0b1db583a3cc810453235462d`;
+- GitHub Actions run
+  `https://github.com/paulsmir/windows-on-m1/actions/runs/32954128584`
+  completed successfully for both profiles.  The stable build proved that no
+  AGX SSDT was packaged.  The opt-in G2 build proved that exactly one compiled
+  and disassembled AGX SSDT passed the fail-closed semantic verifier;
+- the selected profile is exactly `J313_AGX_G2_PROFILE=TRUE`.  No other Mu,
+  m1n1, launch, CPU, memory, NVMe, USB, input or display variable may change;
+- expected Windows PnP identity is one `ACPI\\APPL0002` devnode with no bound
+  function driver.  `AppleAgx.sys` must be absent from the Driver Store before
+  and after the boot;
+- expected resources are one MMIO aperture
+  `0x204000000..0x207ffffff` and guest GSIVs `880..888`, in order, each with
+  Level, ActiveHigh and Exclusive semantics;
+- no AGX clock, firmware, MMIO write, UAT mapping, command submission,
+  completion injection, power transition or display ownership change is
+  allowed.  Any observation of one rejects the experiment immediately;
+- fresh evidence destination
+  `investigation/artifacts/EXP-20260826-112-agx-g2-enumeration-only/` was absent
+  at preregistration and must never be reused after a failed attempt.
+
+Recovery contract:
+- immutable recovery directory is
+  `.local/recovery/STABLE-j313-8core-native-input-v1/`;
+- its five verified SHA-256 values are
+  `6ab28c09ced56db4e03ad54d755d0f2caae76ca9ff97f2b9fe0d6e71fec5bc30`
+  (`boot.bin`),
+  `dd3056a9add42ec8dc6071d6b9a04938328375dbe00e005483414910f3e26101`
+  (`m1n1-stage0.bin`),
+  `69680f9d24e5e0648463fc3703cef1ca046f029aac1e9f2a1ec61f28457f60e3`
+  (`m1n1-stage1.bin`),
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`
+  (`m1n1.macho`) and
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`
+  (`J313_EFI.fd`);
+- any build, provenance, boot, PnP, resource or safety mismatch rejects the
+  experiment.  Preserve evidence, power-cycle to proxy and boot only the
+  immutable stable recovery image.  Do not retry in the same evidence path.
+
+Pass requires one and only one `ACPI\\APPL0002` devnode, no driver binding,
+the exact MMIO and interrupt resources above, an otherwise responsive Windows
+desktop, no new device error outside the expected missing-driver state and no
+forbidden AGX activity.  The observation must be exported before shutdown.
+
+Observed result:
+- the opt-in G2 Mu firmware SHA-256 was
+  `6f6903d26196eb4699eef37d7949d90bf6849d39f1937aacca03329f4abf47ba`;
+  its compiled `J313AppleAgxSsdt.aml` SHA-256 was
+  `52ac6b56ccd41a5dcc08a54aa35c778e646aa7fb68726e9fcecef22bc1ff669e`
+  and the disassembled semantic verifier passed;
+- m1n1 SHA-256 was
+  `0055ef339c5ae9099014e3d8e5158a0533c2df2adb235ad3646abf7fa31ca3d5`.
+  All eight secondary CPU starts, the NVMe backend and guest handoff were
+  observed, with launch-contract checkpoints zero through three recorded;
+- Mu logged seven live ACPI tables: FACP, RGRT, DBG2, MCFG, APIC, PPTT and
+  GTDT.  It did not log an SSDT installation, and the live XSDT contained no
+  SSDT entry.  Thus the packaged AGX AML never crossed the firmware-volume to
+  live-ACPI boundary and the required `ACPI\\APPL0002` enumeration was
+  impossible;
+- the host runner later lost its serial connection during DXE and its log ended
+  mid-line.  A subsequent exact stable launch exhibited the same host-runner
+  disconnect while Windows still reached SSH, so that disconnect is not used
+  as evidence of a guest crash or of the G2 rejection;
+- no AGX clock, firmware start, MMIO write, UAT mapping, interrupt injection,
+  driver-store mutation or `AppleAgx.sys` activity occurred;
+- the failed-attempt evidence is preserved without reuse under
+  `investigation/artifacts/EXP-20260826-112-agx-g2-enumeration-only/`.  The
+  launch-contract SHA-256 is
+  `d0236cf263b55c95597f6d3aaff2ba7d44d8ecb30cc07cc6d4008db9c94a2f9f`
+  and the hypervisor-log SHA-256 is
+  `8f77ff4fca21da1ea6bae9f3a3e6a1e24f114f5818ea539a02ed03dd44c75c79`;
+- all five immutable recovery hashes passed again.  The exact stable
+  eight-core/native-input pair was relaunched from its pinned source and binary
+  revisions; Windows reached an open SSH service and both local observer pages
+  returned HTTP 200.
+
+Verdict: rejected.  The root cause boundary is Mu ACPI publication, not the
+Windows driver and not AGX hardware ownership.  Do not retry this candidate or
+reuse its evidence directory.  A successor experiment requires a test-first
+fix proving the opt-in SSDT appears exactly once in the live XSDT while stable
+firmware still omits it.
+
+### EXP-20260826-113 — J313 AGX G2 live enumeration retry
+
+Status: accepted after the single explicitly approved hardware execution.
+This was an enumeration-only retry after correcting the Mu firmware-volume
+publication boundary found by EXP-112.  `AppleAgx.sys` was not built, staged,
+installed or loaded and no AGX hardware access was authorized or observed.
+
+Hypothesis: packaging the opt-in AGX SSDT inside the normal
+`DeviceAcpiTables` storage file, with the same live firmware GUID used by the
+stable profile, will install exactly one SSDT into the live XSDT and enumerate
+one driverless `ACPI\APPL0002` devnode in Windows.  Stable firmware remains
+byte-identical and free of AGX.
+
+Candidate and host-gate contract:
+- root source `f2bd0f5116b8845c984232eea49c4cc26e7eb9e3`, m1n1 source
+  `4107043a96dedaec6dbe98bb8ee7b78f13c8080f` and Mu source
+  `7a5071a5750bb23ed9ae7912a51cee84d4e31574`;
+- GitHub Actions run
+  `https://github.com/paulsmir/windows-on-m1/actions/runs/32959091018`
+  passed both jobs.  Stable firmware built without AGX AML; the explicit G2
+  profile built one semantically valid AGX SSDT inside the live device-table
+  storage module;
+- the read-only candidate directory is
+  `.local/agx-g2-enumeration-candidate-v2/`.  SHA-256 values are
+  `3d2a2dd1360c073e8413c1fcebb3d3c072c33c3acfc7f1be27873a75e87b3070`
+  (`J313_EFI.fd`),
+  `52ac6b56ccd41a5dcc08a54aa35c778e646aa7fb68726e9fcecef22bc1ff669e`
+  (`J313AppleAgxSsdt.aml`),
+  `0055ef339c5ae9099014e3d8e5158a0533c2df2adb235ad3646abf7fa31ca3d5`
+  (`m1n1.macho`) and
+  `596ed2f2ad1465fd75e1dd560adc3d5da94ea62d41a68e98e2a955bf0804f2ea`
+  (`MANIFEST.json`);
+- fresh local builds proved that the stable FD SHA-256 remains exactly
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+  The complete public suite passed 646/646 and all five stable recovery hashes
+  passed before preregistration;
+- evidence destination
+  `investigation/artifacts/EXP-20260826-113-agx-g2-live-enumeration/` is absent
+  at preregistration and may be created exactly once.  EXP-112 evidence is
+  immutable and must not be reused.
+
+Execution contract:
+- use only the public `scripts/run-assisted.sh` launcher with `--chainload`,
+  the candidate m1n1 and Mu from the same manifest directory,
+  `--display both`, `--debug monitor`, proxy L41 and vUART L43;
+- capture the launch contract, `hv.log`, guest UART, exact candidate files and
+  their hashes.  Host-runner serial disconnect after guest handoff is not by
+  itself a guest failure; Windows SSH and both observer endpoints determine
+  guest liveness;
+- firmware must log exactly one SSDT installation and one live XSDT SSDT
+  entry.  Windows must expose exactly one `ACPI\APPL0002` instance with no
+  bound function driver, MMIO `0x204000000..0x207ffffff` and guest GSIVs
+  `880..888` in order with Level, ActiveHigh and Exclusive semantics;
+- `AppleAgx.sys` must be absent from the Driver Store before and after the
+  observation.  No AGX MMIO write, clock, firmware start, UAT mapping, queue,
+  command, interrupt injection, power transition or display ownership change
+  is allowed.  Any such event immediately rejects the experiment;
+- do not reboot or retry the G2 candidate in place.  After exporting the
+  read-only observations, restore only the immutable stable recovery pair.
+
+Recovery contract:
+- recovery directory is
+  `.local/recovery/STABLE-j313-8core-native-input-v1/` and its five SHA-256
+  values remain those recorded in EXP-112;
+- any provenance, manifest, build, live-XSDT, PnP, resource, liveness or safety
+  mismatch rejects EXP-113.  Preserve all evidence and return to stable
+  Windows; no failure permits widening the experiment.
+
+Pass requires all host and recovery checks, exactly one live SSDT, exactly one
+driverless `ACPI\APPL0002` with the reviewed resources, responsive Windows and
+no forbidden activity.  Passing this gate authorizes only planning the next
+driver-install experiment; it does not authorize that experiment.
+
+Observed result:
+- the exact manifest-verified candidate was chainloaded once with the public
+  assisted launcher.  All eight CPUs, the NVMe backend and guest handoff were
+  observed.  Mu logged `ACPI INSTALL instance=3 sig=SSDT len=0x1BF` and
+  `ACPI LIVE: XSDT[4] SSDT`, proving that the corrected firmware-volume file
+  crossed into the live XSDT;
+- Windows reached SSH in 125 seconds of guest uptime and exposed exactly one
+  `ACPI\APPL0002\0`.  It had no service or function driver and reported the
+  expected Code 28 because no compatible driver was present;
+- the live Windows resources were IRQs 880 through 888 in exact order and
+  memory `0x0000000204000000..0x0000000207FFFFFF`.  The compiled AML retained
+  the CI-verified Level, ActiveHigh and Exclusive interrupt semantics;
+- `AppleAgx.sys` and an AppleAgx driver package were absent both before and
+  after the boot.  The hypervisor log contained no AGX clock, firmware, MMIO
+  write, UAT, queue, command, interrupt-injection, power-transition, display
+  ownership, exception, reset or bugcheck marker;
+- Windows remained responsive with eight logical processors.  AppleInput and
+  sshd were running, `ACPI\APPL0001\0` was healthy and no recent level-one
+  System event was present;
+- after exporting the observation, Windows was shut down normally and only
+  the immutable stable recovery pair was launched.  Stable firmware installed
+  no SSDT, Windows returned with zero `APPL0002` devices, AppleInput remained
+  healthy and all five recovery SHA-256 checks passed again;
+- immutable evidence is preserved at
+  `investigation/artifacts/EXP-20260826-113-agx-g2-live-enumeration/`.
+  Candidate `hv.log` SHA-256 is
+  `35f3938c8ecab90f0917c9824bfcab0e5afac4d25ea768e9e6b255a1300d465b`,
+  Windows PnP resource evidence SHA-256 is
+  `f604e0c2e3942e6743eee0ff97bd71b1e94c185f190b6a8b05da30c9d14ff174`
+  and the complete `SHA256SUMS` index SHA-256 is
+  `427786ac0e817ca313c1b2e78ded80d67357da270b45c4ea59b8e9181a40cf0d`.
+
+Verdict: accepted.  G2 firmware now proves isolated Windows enumeration of the
+reviewed J313 AGX resources without a driver or any GPU hardware activity.  A
+separate preregistration and explicit approval remain mandatory before any
+`AppleAgx.sys` installation or StartDevice attempt.
+
+### EXP-20260826-114 — AppleAgx stage-only Driver Store qualification
+
+Status: preregistered; Windows has not been modified.  This experiment uses
+only the immutable stable firmware profile.  It imports the exact ephemeral
+WDK test certificate, stages the exact AppleAgx package without `/install`,
+proves that no device or service was activated, and then removes only the new
+OEM INF and certificate.  It does not boot G2 and cannot call StartDevice.
+
+Hypothesis: the current ARM64 WDK package is internally signed, trusted and
+accepted by the Windows Driver Store without binding any device, changing the
+stable display path or loading `AppleAgx.sys`.
+
+Candidate and host-gate contract:
+- root source `5102957b644be72700e493a5af7fc2af0821cdab`, implementation
+  source `37e801cb087e2b9c4ec1a805b84f444e3e55fe16`, m1n1 source
+  `4107043a96dedaec6dbe98bb8ee7b78f13c8080f` and Mu source
+  `7a5071a5750bb23ed9ae7912a51cee84d4e31574`;
+- GitHub Actions run
+  `https://github.com/paulsmir/windows-on-m1/actions/runs/32963862166`
+  passed the official ARM64 WDK build and code analysis at root commit
+  `5102957b644be72700e493a5af7fc2af0821cdab`;
+- read-only candidate `.local/agx-driver-stage-exp114/` has manifest SHA-256
+  `ee9ac4532e4432e2b4e7faedc70ef1f101efd454f1db8f236fbb2710b26e217d`
+  and checksum-index SHA-256
+  `4e4ff25513bb56b8567996d30b264c6686119d3423386345aa9522caf2a6737e`;
+- exact package SHA-256 values are
+  `6ed690a40f17fec26aa351d91bfc2b8ad8672ae9e2e11e6cc4ebd64e80ca2847`
+  (`AppleAgx.inf`),
+  `34ba821fc3a06c2f1689697733b1ee6c1739b96cf591e8a75802d30f97503e11`
+  (`AppleAgx.sys`) and
+  `0f42639d356e92334de771e8b1c280518b7d6d3b3517d0d75149a91019f421dd`
+  (`appleagx.cat`).  The SYS is PE32+ AArch64;
+- the catalog embeds only the self-signed certificate subject
+  `CN=WDKTestCert runneradmin,134322176743924837`, SHA-1 thumbprint
+  `7772864CB7326B7BFDA2C81C12D07CEF64135A57`; exported CER SHA-256 is
+  `f8fc916e55e7380fa797deebbef3fcdc2e79bfd54f10472a09c566394a69cd4f`;
+- 13 AppleAgx package tests, 26 related G2 tests and the complete project
+  environment suite passed 649/649.  All five immutable stable recovery hashes
+  passed immediately before preregistration;
+- fresh evidence destination
+  `investigation/artifacts/EXP-20260826-114-agx-driver-store-stage/` is absent
+  and may be created exactly once.
+
+Execution contract:
+- remain on the stable firmware profile.  Before mutation prove zero
+  `ACPI\APPL0002` devices, no `AppleAgx` system service, no AppleAgx OEM INF,
+  eight logical CPUs, healthy AppleInput and no new critical System event;
+- transfer only the read-only candidate.  Recompute all six SHA-256 values on
+  Windows before use.  Import `AppleAgxTest.cer` only into LocalMachine Root
+  and TrustedPublisher and require the exact thumbprint above;
+- require `Get-AuthenticodeSignature appleagx.cat` to return `Valid` with that
+  exact thumbprint, then invoke only `stage-driver.ps1 -InfPath AppleAgx.inf`.
+  The script contains `pnputil /add-driver` but no `/install`, device ID or
+  restart operation.  Record the one newly published `oemNN.inf` identity;
+- after staging, require exactly one matching Driver Store package but still
+  zero `ACPI\APPL0002` devices, no `AppleAgx` service, no loaded module, no
+  display-adapter change, eight CPUs, healthy AppleInput and responsive SSH;
+- invoke `remove-staged-driver.ps1` with only the recorded new OEM INF.  It may
+  not use `/uninstall` or `/force`.  Remove only certificate thumbprint
+  `7772864CB7326B7BFDA2C81C12D07CEF64135A57` from the two imported stores;
+- final state must match baseline: no AppleAgx package, service, module,
+  APPL0002 devnode or test certificate.  No reboot is permitted or required.
+
+Stop and rollback immediately on a hash, signer, package-count, OEM identity,
+device, service, module, display, CPU, input, liveness or event mismatch.  A
+failure does not authorize `/install`, G2 firmware, StartDevice, MMIO, firmware,
+interrupt, UAT, queue, command, power or display-ownership activity.
+
+Pass authorizes only preregistration of a separate one-shot G2 bind experiment.
+It does not authorize that bind, StartDevice or any GPU hardware access.  One
+new explicit user approval is required before executing EXP-114.
+
+Observed result:
+- the approved execution stopped during the read-only baseline, before any
+  certificate import or Driver Store command;
+- stable Windows had eight logical processors, AppleInput `Running`, healthy
+  `ACPI\APPL0001\0`, no AppleAgx service or package, neither test-certificate
+  store entry and no critical System event since boot;
+- the unfiltered PnP inventory retained exactly one historical
+  `ACPI\APPL0002\0` record from EXP-113.  A dedicated query proved
+  `PresentOnlyCount=0`, `DEVPKEY_Device_IsPresent=false`, `Present=false` and
+  Problem 45.  Stable firmware therefore did not publish a live GPU device,
+  but the literal preregistered requirement of zero devnode records was false;
+- evidence is preserved at
+  `investigation/artifacts/EXP-20260826-114-agx-driver-store-stage/`; its
+  checksum index SHA-256 is
+  `9d1cc56ad302a00c888d889df08ef9ca7f734ba7e96d30aa01c65961f9f48d95`.
+
+Verdict: rejected safely before mutation.  No certificate, OEM INF, service,
+module, firmware, device, MMIO, interrupt or GPU state changed.  EXP-114 may
+not be retried.  A successor must distinguish present devices from the exact
+historical Problem-45 devnode instead of silently weakening this contract.
+
+### EXP-20260826-115 — corrected AppleAgx stage-only qualification
+
+Status: passed and rolled back.  This successor kept
+the exact EXP-114 candidate and every mutation/rollback limit, but corrects
+only the stable PnP baseline using the evidence obtained before mutation.
+
+Candidate contract is unchanged from EXP-114: root source
+`5102957b644be72700e493a5af7fc2af0821cdab`, implementation source
+`37e801cb087e2b9c4ec1a805b84f444e3e55fe16`, WDK run `32963862166`, read-only
+candidate `.local/agx-driver-stage-exp114/`, manifest SHA-256
+`ee9ac4532e4432e2b4e7faedc70ef1f101efd454f1db8f236fbb2710b26e217d`
+and checksum-index SHA-256
+`4e4ff25513bb56b8567996d30b264c6686119d3423386345aa9522caf2a6737e`.
+All file and signer identities remain exactly those recorded in EXP-114.
+
+Corrected baseline and execution contract:
+- evidence destination
+  `investigation/artifacts/EXP-20260826-115-agx-driver-store-stage/` must be
+  absent and may be created exactly once;
+- stable Windows must have zero present APPL0002 devices and exactly one
+  historical `ACPI\APPL0002\0` record with `Present=false`,
+  `DEVPKEY_Device_IsPresent=false`, Status `Unknown`, no class or friendly
+  name and Problem 45.  Any different count or property rejects the run;
+- no AppleAgx service, package, module, Root certificate or TrustedPublisher
+  certificate may exist.  Eight logical processors, AppleInput `Running`,
+  healthy APPL0001, responsive SSH and no new critical event remain mandatory;
+- recompute the exact six candidate hashes on Windows, import only the exact
+  certificate into the two named stores, require catalog signature `Valid`
+  with thumbprint `7772864CB7326B7BFDA2C81C12D07CEF64135A57`, and invoke only
+  the hashed stage-only script without `/install` or device restart;
+- after staging, require one new AppleAgx OEM INF, no present APPL0002, the
+  same unchanged Problem-45 historical record, no AppleAgx service or loaded
+  module, unchanged display inventory, eight CPUs, healthy input and SSH;
+- remove only the recorded new OEM INF with the hashed non-force rollback
+  script, then remove only the exact certificate from the two stores.  Final
+  state must reproduce the corrected baseline exactly.  No reboot is allowed.
+
+Every EXP-114 stop rule and forbidden AGX hardware action remains in force.
+Pass authorizes only a new preregistration for G2 binding; it does not authorize
+G2, StartDevice, MMIO, firmware, interrupts, queues, power or display control.
+The required explicit approval for this one execution was received before any
+Windows mutation.
+
+Observed result:
+- the user explicitly approved the one-shot execution.  Stable Windows first
+  reproduced the corrected baseline exactly: eight logical processors,
+  AppleInput `Running`, healthy `ACPI\APPL0001\0`, no critical System event,
+  no AppleAgx package, service, module or test certificate, zero present
+  APPL0002 devices and one historical `ACPI\APPL0002\0` record with
+  `Present=false`, `DEVPKEY_Device_IsPresent=false`, Status `Unknown`, no
+  class or friendly name and Problem 45;
+- Windows recomputed all six candidate SHA-256 values and matched the
+  preregistered identities.  After importing only the exact certificate,
+  `Get-AuthenticodeSignature` reported `Valid`, `Signature verified` and
+  thumbprint `7772864CB7326B7BFDA2C81C12D07CEF64135A57`;
+- the hashed stage-only script added exactly one Driver Store package,
+  `oem17.inf`.  The historical APPL0002 record remained unchanged and absent;
+  no AppleAgx service or module appeared, display inventory stayed unchanged,
+  all eight CPUs and native input remained healthy and no critical event was
+  recorded.  No G2 firmware or GPU hardware action occurred;
+- the hashed rollback script deleted only `oem17.inf` without uninstall or
+  force.  Both exact certificate-store entries were removed.  Final and
+  independent live checks showed zero AppleAgx packages, services, modules and
+  certificates while reproducing the full corrected baseline without reboot.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-115-agx-driver-store-stage/`; its checksum
+index SHA-256 is
+`0636c62e55216d8aca3f70395f041f72f879dde0e1ee0d9a64c7c7a3ab2d2a3e`.
+`result.json` records `StagePassed=true`, no failure and the exact temporary
+published identity.  Verdict: passed with complete rollback.  This proves
+only Windows catalog trust and Driver Store acceptance; it authorizes
+preregistration, but not execution, of a separately bounded G2 bind test.
+
+### EXP-20260826-116 — AppleAgx G2 fail-closed bind gate
+
+Status: rejected safely after its single approved execution; stable recovery
+is restored.  This experiment combined only
+the two independently accepted boundaries: EXP-113's exact G2 enumeration
+firmware and EXP-115's exact signed Driver Store package.  It permits one
+Windows PnP bind attempt whose designed result is Problem 10 after exact
+resource validation and before any AGX hardware access.
+
+Hypothesis: when the exact package is staged while stable firmware omits
+APPL0002 and the accepted G2 candidate is then booted once, Windows matches
+`ACPI\APPL0002\0` to `AppleAgx`.  `DriverEntry`, AddDevice and StartDevice may
+run, the exact translated MMIO and nine interrupt resources validate, and
+StartDevice returns the source-pinned `STATUS_NOT_SUPPORTED`.  Windows remains
+responsive and the complete package, certificate and firmware rollback
+reproduces the stable state.
+
+Candidate and provenance contract:
+- root preparation source is
+  `a49ef73a19dbffe7ac5638d4982dc517372d09c0`; m1n1 gitlink and candidate
+  source are `4107043a96dedaec6dbe98bb8ee7b78f13c8080f`; Mu gitlink and candidate
+  source are `7a5071a5750bb23ed9ae7912a51cee84d4e31574`;
+- G2 directory `.local/agx-g2-enumeration-candidate-v2/` is unchanged from
+  accepted EXP-113.  Manifest SHA-256 is
+  `596ed2f2ad1465fd75e1dd560adc3d5da94ea62d41a68e98e2a955bf0804f2ea`,
+  `m1n1.macho` SHA-256 is
+  `0055ef339c5ae9099014e3d8e5158a0533c2df2adb235ad3646abf7fa31ca3d5`
+  and `J313_EFI.fd` SHA-256 is
+  `3d2a2dd1360c073e8413c1fcebb3d3c072c33c3acfc7f1be27873a75e87b3070`;
+- driver directory `.local/agx-driver-stage-exp114/` is unchanged from passed
+  EXP-115.  Manifest SHA-256 is
+  `ee9ac4532e4432e2b4e7faedc70ef1f101efd454f1db8f236fbb2710b26e217d`
+  and checksum-index SHA-256 is
+  `4e4ff25513bb56b8567996d30b264c6686119d3423386345aa9522caf2a6737e`;
+- exact package SHA-256 values are
+  `6ed690a40f17fec26aa351d91bfc2b8ad8672ae9e2e11e6cc4ebd64e80ca2847`
+  (`AppleAgx.inf`),
+  `34ba821fc3a06c2f1689697733b1ee6c1739b96cf591e8a75802d30f97503e11`
+  (`AppleAgx.sys`),
+  `0f42639d356e92334de771e8b1c280518b7d6d3b3517d0d75149a91019f421dd`
+  (`appleagx.cat`),
+  `f8fc916e55e7380fa797deebbef3fcdc2e79bfd54f10472a09c566394a69cd4f`
+  (`AppleAgxTest.cer`),
+  `9717f6019ca541ffc0f629df4033746428a265fa5b48699d6750247099c3cb90`
+  (`stage-driver.ps1`) and
+  `c19bb9a86d1c8beaf0fde43243da616ad5ac9aec4a15b7cfeb714f5d1ba919ec`
+  (`remove-staged-driver.ps1`);
+- exact signer thumbprint is
+  `7772864CB7326B7BFDA2C81C12D07CEF64135A57`.  Official ARM64 WDK run
+  `32963862166` passed build and code analysis;
+- source and tests prove that StartDevice validates exclusive MMIO
+  `0x204000000..0x207FFFFFF` plus level-sensitive exclusive vectors 880..888,
+  then reinitializes its private state and returns `STATUS_NOT_SUPPORTED`.
+  The package contains no MMIO mapping or register-write primitive and exposes
+  no allocation, context, submit, present or command callback;
+- execution follows
+  `documentation/plans/2026-08-26-j313-agx-g2-bind-gate.md`.  Fresh evidence
+  path `investigation/artifacts/EXP-20260826-116-agx-g2-bind-failclosed/` is
+  absent and may be created exactly once.
+
+Execution and pass contract:
+- on stable Windows first reproduce EXP-115's corrected baseline and all exact
+  hashes, then import only the exact signer and stage only the exact package.
+  Record its single `oemNN.inf`, prove no active device/service/module and shut
+  Windows down normally;
+- launch the G2 candidate exactly once through the public assisted path with
+  chainload, proxy L41, vUART L43, display `both` and debug `monitor`.  Do not
+  rebuild, substitute, retry, reboot or rescan inside G2;
+- within 180 seconds require responsive SSH, eight CPUs, healthy AppleInput
+  and NVMe, exactly one present `ACPI\APPL0002\0`, service `AppleAgx`, Problem
+  10 and the exact EXP-113 resources.  A Started adapter, child/display target,
+  different Problem code or nonresponsive guest rejects the run;
+- require no loaded AppleAgx module after failed start and no AGX MMIO, clock,
+  firmware, UAT, queue, command, interrupt-injection, power, display-ownership,
+  exception, reset, BugCheck, storage-reset or input-loss evidence.  Shut down
+  normally and restore only immutable stable recovery;
+- after APPL0002 is proven non-present, delete only the recorded package with
+  the hashed non-force rollback script.  If and only if Windows reports that
+  exact package still in use, permit `pnputil /delete-driver oemNN.inf
+  /uninstall`; `/force` is forbidden.  Remove only the exact certificate from
+  LocalMachine Root and TrustedPublisher;
+- final stable Windows must have zero AppleAgx package, service, loaded module
+  and signer entries, zero present APPL0002, eight CPUs, healthy native input,
+  unchanged display state, responsive SSH and no new critical event.  All five
+  immutable recovery hashes must pass again.
+
+Any mismatch triggers evidence preservation and stable rollback, never a
+second G2 boot or broader action.  Firmware start, AGX MMIO read or write,
+clock/power change, interrupt enable, UAT mapping, queue creation, command,
+fence, shader, render and display ownership are explicitly forbidden.  Pass
+would authorize only planning the later firmware/power ownership task.
+
+The required explicit user approval was received after preregistration was
+committed and pushed.
+
+Observed result:
+- stable Windows reproduced the full accepted baseline, matched every G2 and
+  driver-package hash, imported only the exact signer and staged exactly one
+  package as `oem17.inf`.  It then shut down normally;
+- the exact G2 candidate booted once through the public assisted path.  SSH
+  became responsive in 18 seconds with eight logical processors, healthy
+  AppleInput, no critical System event and exactly one present
+  `ACPI\APPL0002\0`;
+- Windows matched `oem17.inf` and service `AppleAgx`.  The devnode exposed the
+  exact preregistered MMIO range `0x204000000..0x207fffffff` and vectors
+  880..888.  The service was stopped after the intentional refusal and no
+  AppleAgx module remained loaded;
+- Windows reported Problem 43 (`CM_PROB_FAILED_POST_START`), not the literal
+  preregistered Problem 10.  This is consistent with Windows mapping the
+  source-pinned `StartDevice -> STATUS_NOT_SUPPORTED` refusal to a post-start
+  failure, but the mismatch rejects EXP-116 without reinterpretation or retry;
+- the captured hypervisor and guest logs contain no AGX MMIO access, firmware,
+  clock, UAT, queue, command, interrupt injection, power or display-ownership
+  action and no exception, reset, BugCheck, storage reset or input loss;
+- G2 shut down normally and immutable stable recovery returned through the
+  exact public assisted pair.  Ordinary non-force package deletion reported
+  the historical association, so the preregistered exact fallback
+  `pnputil /delete-driver oem17.inf /uninstall` was used without `/force`.
+  The exact Root and TrustedPublisher entries were then removed;
+- final live state has zero present APPL0002 devices, AppleAgx packages,
+  services, loaded modules and signer entries, eight CPUs, responsive SSH,
+  healthy native input, no present display adapter and no new critical event.
+  The non-present Problem-45 historical record now retains the driver's
+  Display class and friendly-name metadata; no active package or device backs
+  it, and no unapproved ghost-device mutation was attempted;
+- all five immutable stable-recovery hashes passed again.  Evidence is
+  preserved at
+  `investigation/artifacts/EXP-20260826-116-agx-g2-bind-failclosed/`; its
+  checksum-index SHA-256 is
+  `cf3eb5e4668fc028580b70e95d244332707f6c3c08d2b5c79b70cc41f1a2609e`.
+
+Verdict: rejected safely with complete active-state rollback.  EXP-116 may not
+be retried.  The evidence proves matching, exact translated-resource delivery
+and fail-closed StartDevice execution, but it does not authorize AGX hardware
+access.  A successor must preregister Problem 43 explicitly before reusing the
+unchanged candidates for a corrected qualification gate.
+
+### EXP-20260826-117 — corrected AppleAgx G2 Problem-43 qualification
+
+Status: preregistered; execution not approved.  This successor changes only
+the two facts learned by the safely rejected EXP-116: the designed
+`StartDevice -> STATUS_NOT_SUPPORTED` path is expected to produce Windows PnP
+Problem 43 (`CM_PROB_FAILED_POST_START`), and the stable non-present Problem-45
+history record now retains class `Display` plus friendly name
+`Apple AGX G13 render adapter (G2 development)`.  Neither candidate changes.
+
+The complete contract is
+`documentation/plans/2026-08-26-j313-agx-g2-problem43-qualification.md`.
+It pins the same accepted G2 manifest, m1n1, Mu FD, signed driver manifest,
+checksum index and signer recorded by EXP-116, requires a fresh absent evidence
+path `investigation/artifacts/EXP-20260826-117-agx-g2-problem43-qualification/`,
+and permits exactly one public-assisted G2 boot after exact stage-only package
+preparation.
+
+Pass requires one present APPL0002 device bound to `AppleAgx`, the exact MMIO
+range and nine vectors, stopped service, no loaded module and exactly Problem
+43 while the guest remains responsive with eight CPUs and healthy native
+input.  Every AGX hardware action remains forbidden: no MMIO access, firmware,
+clock, UAT, queue, command, interrupt injection, power or display ownership.
+The exact stable firmware, package and certificate rollback is mandatory and
+`/force` remains forbidden.
+
+A pass would authorize only preregistration of a later firmware/power ownership
+experiment.  It would not authorize that experiment.  A new explicit user
+approval is required after this preregistration is committed and pushed.  No
+EXP-117 Windows or hardware mutation has occurred.
+
+Observed result:
+- the user granted continuing authorization for bounded preregistered
+  fail-closed experiments.  Stable Windows reproduced the exact corrected
+  baseline, all six package hashes matched, the catalog signer was the pinned
+  thumbprint and exactly one package was staged as `oem17.inf` without a live
+  APPL0002 device, service or module;
+- stable Windows shut down normally and the immutable G2 candidate booted once
+  through the public assisted path with display `both` and debug `monitor`.
+  SSH became responsive in 30 seconds with eight logical processors, healthy
+  AppleInput and no critical event;
+- exactly one present `ACPI\APPL0002\0` matched `oem17.inf` and service
+  `AppleAgx`.  It reported exactly Problem 43, stopped service, no loaded
+  AppleAgx module, MMIO `0x204000000..0x207fffffff` and IRQs 880..888;
+- the captured host and UART evidence contains no AGX MMIO access, firmware,
+  clock, UAT, queue, command, interrupt injection, power or display ownership
+  marker and no BugCheck, reset, exception, storage reset or input loss;
+- G2 shut down normally without retry.  Immutable stable recovery became
+  responsive in 45 seconds.  The exact package still had the expected
+  historical association, so the preregistered `/uninstall` fallback removed
+  only `oem17.inf` without `/force`; the exact Root and TrustedPublisher signer
+  entries were removed;
+- final state has eight CPUs, healthy native input, responsive SSH, zero
+  present APPL0002, zero AppleAgx package/service/module/certificates, no
+  present display adapter and no new critical event.  The known non-present
+  Problem-45 history record retains only its class and friendly-name metadata;
+- all five immutable recovery hashes passed.  Evidence is preserved at
+  `investigation/artifacts/EXP-20260826-117-agx-g2-problem43-qualification/`;
+  its checksum-index SHA-256 is
+  `d1100ea8116586bc833ba5d7f23f6faf16d34806638e5c020dac231add81830c`.
+
+Verdict: passed with complete active-state rollback.  This qualifies the exact
+G2 enumeration plus fail-closed Windows bind boundary.  It authorizes only
+preregistration of a separately bounded AGX firmware/power ownership
+experiment; it does not itself authorize firmware startup, MMIO, clocks,
+interrupts, UAT, queues, commands, rendering or display ownership.
+
+### EXP-20260826-118 — J313 AGX G2 power-broker qualification
+
+Status: preregistered and approved for one execution under the user's standing
+authorization for bounded, fail-closed, reversible experiments.  The complete
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-power-broker-qualification.md`.
+
+The experiment pins m1n1
+`035b8ab38b504fa30f15e4db75649b1c5e1e73ae`, Mu
+`c6108366201f869b297912a0ef8323b343256ecc`, WDK run `32979986789`, Mu run
+`32980992246`, assisted manifest
+`fd3058016fe866258eefefc79d5e72e6136479682b0390b1c2cb00f8293177c2`,
+driver manifest
+`9c5ab00a08c856e0dd2459cd1850acebe3a8a382812f61801d838989022a9f75`
+and signer `E85192E5FD6D15A43C05B2D9E652B9867EB22825`.
+
+The one permitted mutation stages only that signed qualification package under
+the live immutable stable baseline, performs one public-assisted G2 v2 boot
+with `WOM1_AGX_G2_POWER_BROKER=1`, and requires exactly `ON`, `QUERY`, `OFF`
+receipts ending in state OFF.  The expected Windows result is the same
+fail-closed Problem 43 boundary with the additional exact broker resource.
+Firmware, RTKit, SGX MMIO, interrupts, UAT, queues, commands, rendering and
+display ownership remain forbidden.  Stable firmware, package and certificate
+rollback is mandatory; no retry and no force deletion are permitted.
+
+No EXP-118 Windows package, certificate, firmware or hardware mutation has
+occurred at preregistration time.  The fresh evidence path is absent.
+
+Observed result:
+- stable Windows reproduced the corrected baseline with eight logical
+  processors, healthy AppleInput, no critical event, no present APPL0002 and
+  no AppleAgx package, service, module or signer.  All exact candidate hashes
+  matched, the exact signer was imported and only the qualification package
+  was staged as `oem17.inf`; no live GPU device or module appeared under
+  stable firmware;
+- stable Windows shut down normally and the G2 v2 candidate was launched once
+  through the public assisted path with the power-broker gate enabled.  The
+  hypervisor mapped only the synthetic page
+  `0x300000000..0x300001000`, reached `Starting guest...`, and Windows became
+  responsive with eight CPUs, healthy native input and no critical event;
+- Windows matched the exact present `ACPI\APPL0002\0` to `oem17.inf`, exposed
+  the exact SGX and broker memory resources, stopped `AppleAgx` with the
+  designed Problem 43 boundary and loaded no AppleAgx module.  The broker log
+  contained no `ON`, `QUERY` or `OFF` command because StartDevice did not reach
+  the client transition;
+- the launch was nevertheless rejected before interpreting that functional
+  result.  The executed `m1n1.macho` had SHA-256
+  `0135f6d3a7d5de5b582073f77ff5f5121c35e591608063ad367f7aac6f65cf33`
+  and embedded tag `4107043-dirty`, while its manifest claimed clean source
+  `035b8ab38b504fa30f15e4db75649b1c5e1e73ae`.  Equivalent source content is
+  not equivalent provenance, so the one-shot identity contract failed;
+- no AGX firmware, RTKit, SGX MMIO, interrupt, UAT, queue, command, render or
+  display-ownership action and no BugCheck, reset, storage reset or input loss
+  was observed.  The guest shut down normally without retry;
+- immutable stable recovery returned through its exact assisted pair.  The
+  package's historical association required the preregistered non-force
+  `/uninstall` fallback for only `oem17.inf`; `/force` was not used.  The two
+  exact signer entries were removed.  Final state has eight CPUs, AppleInput
+  `Running/OK`, zero present APPL0002, package, service, module and signer
+  entries, and no critical event.  All five recovery hashes passed;
+- postmortem tooling now validates the `##m1n1_ver##` identity compiled into
+  every manifest-backed m1n1 artifact.  It accepts the historical stable
+  identity, rejects the executed EXP-118 manifest before launch, and records
+  the embedded build tag in new manifests.  A clean local rebuild from the
+  pinned source produced tag `035b8ab` and SHA-256
+  `380920f80e460544b74c6ff9439bdb8af6fe02ec44492149cb32ccdebcf6315d`;
+  that rebuilt binary was not executed as part of EXP-118.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-118-agx-power-broker-qualification/`.
+Its checksum-index SHA-256 is
+`a284502e1916fed82a6e08df9cc4d6df3721a38275b1bd91515229f03784fc4a`.
+
+Verdict: rejected safely with complete active-state rollback.  EXP-118 is
+single-use and may not be retried.  The result proves that the synthetic
+broker can be published and that the qualification driver binds to the exact
+two-resource contract, but it does not qualify a power transition.  A
+successor must use a newly manifested clean m1n1 binary and a separately
+preregistered one-shot contract.
+
+### EXP-20260826-119 — J313 AGX StartDevice boundary qualification
+
+Status: preregistered for one execution under the user's standing authorization
+for bounded, reversible, fail-closed GPU experiments. The complete literal
+contract is
+`documentation/plans/2026-08-26-j313-agx-startdevice-boundary-qualification.md`.
+
+This is not a retry of EXP-118. It pins the clean m1n1 embedded identity
+`035b8ab`, assisted manifest
+`32f71dbe29ce3299c46d46595479a2777993d6916eebf639ab03774aed622e63`,
+WDK run `32987511238`, driver manifest
+`b588bad78887da1993899cc7e0e38d3b06a87fe4598e9cd8facb5dae46418777`
+and catalog signer `DC81FF63FD2FFE8CDE24F95052C45BB7C0006731`.
+
+One G2 boot may record qualification-only System events for StartDevice stages
+1 through 7 and the synthetic EL2 broker receipts. All GPU firmware, SGX MMIO,
+interrupt, UAT, queue, command, render and display paths remain forbidden. The
+guest must return to exact stable firmware and remove the exact staged package
+and signer after evidence capture. No mutation has occurred at preregistration
+time.
+
+Observed result (2026-08-26 UTC):
+
+- the stable preflight passed before mutation: eight logical processors,
+  AppleInput `Running`, no critical System event, no present `APPL0002`, and
+  no AppleAgx package, service, loaded module or signer entry;
+- the exact signed package was staged as `oem17.inf`. One and only one G2 boot
+  used the clean embedded m1n1 identity and the preregistered Mu image. EL2
+  mapped only the synthetic broker page `0x300000000..0x300001000` and reached
+  `Starting guest...`;
+- Windows remained responsive with eight processors and healthy AppleInput.
+  It enumerated one present `ACPI\APPL0002\0`, bound `oem17.inf`, exposed the
+  exact SGX memory resource `0x204000000..0x207fffffff`, the exact broker
+  resource `0x300000000..0x300000fff`, and interrupts 880 through 888;
+- the device stopped with Problem 43 (`CM_PROB_FAILED_POST_START`).
+  `AppleAgx` remained stopped with Win32 exit 1077, the loaded-module count was
+  zero, and no critical event occurred;
+- no custom StartDevice stage event was recorded and EL2 observed no broker
+  `ON`, `QUERY` or `OFF` command. No GPU firmware, RTKit, SGX MMIO, interrupt,
+  UAT, queue, command, rendering or display-ownership operation occurred. The
+  G2 guest shut down normally;
+- SetupAPI confirms that the exact package installed and the device was
+  restarted before Windows assigned the post-start Problem 43 boundary. The
+  combined evidence narrows the failure to driver load/initialization before
+  the first observable StartDevice breadcrumb; it does not qualify a broker
+  power transition;
+- immutable stable recovery subsequently reached the Windows lock screen
+  twice with a live framebuffer, but USB Ethernet did not enumerate and SSH
+  remained unavailable. The active G2 guest is gone and exact stable firmware
+  is running, but removal of only `oem17.inf` and the two exact signer entries
+  has not yet been re-verified. No force removal and no third reset were
+  attempted.
+
+Verdict: rejected safely at the functional checkpoint, with active G2 state
+removed but guest-store cleanup still pending. EXP-119 is single-use and may
+not be retried. Its evidence justifies EXP-120: qualification-only persistent
+registry breadcrumbs around `DxgkInitialize`, followed by a separately
+preregistered one-shot boot only after exact cleanup and stable preflight are
+proven.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-119-agx-startdevice-boundary/`.
+The checksum-index SHA-256 is
+`f28ef93b9445d5001590d629f1d458ec3e4e75a3feee686ccc4a209e1de453d9`.
+
+### EXP-20260826-120 — J313 AGX DriverEntry boundary qualification
+
+Status: preregistered but blocked on exact EXP-119 guest-store cleanup and a
+clean stable preflight. The complete literal contract is
+`documentation/plans/2026-08-26-j313-agx-driverentry-boundary-qualification.md`.
+
+This is not a retry of EXP-119. The only changed runtime variable is a new
+CI-signed qualification driver that persists stage 1 before
+`DxgkInitialize` and stage 2 plus the returned NTSTATUS afterward. The exact
+firmware, ACPI, broker and recovery artifacts are unchanged. WDK run
+`32991981562` passed both default and power-qualification builds; the exact
+driver manifest SHA-256 is
+`6cf7321e32849418a4dbac70cc027db0fedb4b5ab3fbadf6c3b325357c8262ca`.
+
+One G2 boot may read only those registry breadcrumbs plus the existing
+binding, resource and liveness evidence. No broker command or GPU firmware,
+RTKit, SGX MMIO, interrupt, UAT, queue, command, render or display operation is
+authorized. No mutation has occurred for EXP-120 at preregistration time.
+
+Correction (`2026-08-26T19:24:43Z`): EXP-120 is superseded unexecuted and may
+not be launched. Its pinned m1n1 `035b8ab` contains the one-CQE virtual-NVMe
+policy that EXP-122 proved can produce a 100%-disk Storport timeout/reset storm.
+Substituting a new binary under the old manifest would violate its identity
+contract. EXP-124 retains the exact driver, Mu, ACPI and fail-closed boundary
+while pinning the hardware-validated `bee53dc` storage correction.
+
+### EXP-20260826-121 — Stable USB runtime failure localization
+
+Status: preregistered at `2026-08-26T18:35:59Z`.  This experiment is separate
+from and blocks EXP-120.  Its hypothesis is that the reported loss of all
+external USB occurs after the successful Mu xHCI start, at the firmware-to-
+Windows runtime handoff, rather than during physical Type-C or UEFI bring-up.
+
+The first failing run has already been preserved without reinterpretation at
+`investigation/artifacts/EXP-20260826-121-stable-usb-runtime-diagnosis/pre-run-failure/`.
+It used the immutable recovery pair: m1n1 SHA-256
+`3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`
+and Mu SHA-256
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+Mu reported `XHCI started`; EL2 masked AC64, installed the 32-bit DART view,
+and enabled the physical xHCI route `AIC 857 -> vINTID 857` once.  There was no
+EL2 exception, BugCheck or reset.  The 4,135 route transitions initially
+suspected to be xHCI were proven to belong to Apple Input guest INTIDs 865 and
+above, whose physical parent starts at AIC 330; they are not xHCI evidence.
+
+The single controlled action is one cold repeat of the exact immutable stable
+assisted profile with the already-connected hub and `display=both`; there is
+no source, firmware, ACPI, Windows package or device-state mutation.  The exact
+launch command is:
+
+`env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware .local/recovery/STABLE-j313-8core-native-input-v1/J313_EFI.fd --m1n1 .local/recovery/STABLE-j313-8core-native-input-v1/m1n1.macho --display both --debug monitor --chainload --foreground`
+
+Expected checkpoint: lock screen within 30 seconds after guest entry, a live
+framebuffer, xHCI route 857 enabled, external keyboard/mouse or USB Ethernet
+enumeration, and SSH if DHCP succeeds.  Failure criterion: Mu starts xHCI but
+Windows never programs/runs it, no external USB function enumerates, or the
+route/DART state faults.  Evidence paths are the experiment directory,
+`hv.log`, framebuffer state and the host network/ARP observation.  Recovery is
+the same immutable stable assisted pair after a physical reboot to `Running
+proxy...`.
+
+Observed result:
+
+- the exact immutable assisted pair reached guest entry, the lock screen and a
+  live framebuffer without EL2 exception, BugCheck or reset;
+- Mu started xHCI, EL2 installed the 32-bit DART view and enabled the exact
+  level route `AIC 857 -> vINTID 857` once;
+- Windows reported `USBXHCI` and `Ucx01000` running, a healthy USB 3 root hub,
+  two healthy external hubs, both Logitech receivers, USB mass storage and a
+  Realtek USB GbE adapter at 1 Gbit/s.  Every present USB devnode returned
+  `CM_PROB_NONE`, the adapter received `192.168.1.37`, and SSH was responsive;
+- the enabled USBXHCI operational log and the filtered System window contained
+  no USB, Kernel-PnP or WHEA error.  The earlier failed observation did not
+  contain an EL2/xHCI fault and the host had observed the Realtek MAC only with
+  a link-local address.  Therefore the claim that the controller itself had
+  permanently failed is rejected, while transient hub enumeration or DHCP
+  failure remains unlocalized.
+
+Verdict: passed as an unchanged recovery reproduction, but inconclusive for
+the intermittent root cause.  No firmware or Windows fix is justified yet.
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-121-stable-usb-runtime-diagnosis/`.
+
+### EXP-20260826-122 — USB persistence across a clean Windows restart
+
+Status: preregistered at `2026-08-26T18:42:28Z`.  The hypothesis is that the
+intermittent external-USB loss is caused by controller, Type-C or hub state
+surviving a guest restart, rather than by the immutable stable image itself.
+The only changed variable from the passing EXP-121 state is a Windows-requested
+clean restart; the exact recovery m1n1 and Mu hashes, connected hub, display,
+debug profile and launch command remain identical.  No source, package, ACPI,
+driver, registry or hardware topology mutation is permitted.
+
+After Windows requests restart, the host must return to `Running proxy...` and
+the exact EXP-121 launch command will be issued once.  Expected checkpoint is
+the same healthy USB tree and SSH address as EXP-121.  Failure is Mu/xHCI
+success followed by absence or Problem state of the root hub, external hubs or
+Realtek adapter.  Evidence will be preserved under
+`investigation/artifacts/EXP-20260826-122-usb-clean-restart-persistence/`.
+Recovery is a physical reboot to proxy followed by the immutable recovery pair.
+
+Observed result and correction (`2026-08-26T19:02:03Z`):
+
+- the USB-persistence hypothesis is rejected.  The exact immutable stable pair
+  reached Windows with all eight vCPUs alive and with the xHCI route, interrupt
+  delivery and external USB stack initially operational;
+- Windows then reported 100% disk activity while the UI, SSH/PnP queries and
+  external USB responsiveness stalled.  The System log recorded `stornvme`
+  Event 129 every ten seconds and the Storport Operational log recorded request
+  timeouts (Event 500), hierarchical resets (Event 550), 1,860 failed requests
+  and 28 timeouts.  The last failed command was SCSI READ(10), SRB status
+  `0xE`, at 9,666 ms;
+- `hv.log` recorded 30 matching NVMe disable/enable cycles.  Before each reset,
+  vNVMe telemetry showed a saturated 256-entry guest I/O queue while command,
+  completion and IRQ inject/IAR/EOI counters remained balanced apart from the
+  expected outstanding asynchronous event request.  No physical ANS backend
+  completion, tag or timeout error was recorded;
+- source inspection localized the violated contract to
+  `hv_nvme_queue.c::process_until_completion()`: the controller intentionally
+  publishes only one guest CQE per doorbell/interrupt round trip.  This avoids
+  the historical all-256 synchronous drain that starved guest timers, but under
+  sustained queue depth it ages requests beyond Storport's ten-second timeout.
+  USB loss is a downstream symptom of the storage reset storm, not its cause;
+- evidence is preserved under
+  `investigation/artifacts/EXP-20260826-122-usb-clean-restart-persistence/`.
+  Key SHA-256 values are `59f48ae9ee9ce2d0f8d8bbc95ac6c7e4587696eb2c042df18a1f3a706c101575`
+  (`hv-storage-stall.log`),
+  `cd020bb3a700c6e4363e6e014dc40969f075ed86467d768ebfc4bd320e395272`
+  (`hang-telemetry.jsonl`) and
+  `466f286dadd186fffe5f92c970ec8c4c60b249e1684b036fafed51d1ef7b6c86`
+  (`storage-events.txt`).
+
+Verdict: rejected and superseded by the storage diagnosis.  EXP-123 tests the
+smallest owner-layer correction: bounded CQE batching.
+
+### EXP-20260826-123 — Bounded vNVMe completion batching
+
+Status: preregistered at `2026-08-26T19:02:03Z`.  The falsifiable hypothesis is
+that publishing a bounded batch of eight guest CQEs per trapped queue action
+prevents Storport request aging and controller resets without recreating the
+historical guest-timer starvation caused by draining all 256 entries in one EL2
+trap.  The sole runtime variable relative to EXP-122 is the completion budget:
+one becomes eight.  Mu, ACPI, Windows, CPU topology, input, display and the
+physical storage backend remain unchanged.
+
+Primary sources inspected before the change were the live EXP-122 queue,
+interrupt and reset traces; current and stable `hv_nvme_queue.c` plus the ANS
+backend; Asahi Linux `drivers/nvme/host/apple.c`, which uses one admin and one
+I/O queue with bounded shared tags and drains pending physical CQEs per IRQ; and
+Microsoft Storport timeout/reset documentation.  Ownership is split as follows:
+ANS owns physical command execution and physical CQ draining, m1n1 owns guest
+queue progress and interrupt publication, Mu owns PCI/ACPI discovery, and
+Storport owns the ten-second request deadline and reset recovery.
+
+Pinned state before build: root branch `feature/j313-gpu-acceleration`, commit
+`3303e7f0b944e2d59590a676ab650efddea0a0dc`; m1n1 branch
+`feature/j313-gpu-boot-cookie`, commit
+`035b8ab38b504fa30f15e4db75649b1c5e1e73ae`, dirty diff SHA-256
+`e4fdf732cccb68d98f063debbf3190a6f8bad0cbf42597997c7af309bc3bd84a`;
+Mu commit `c6108366201f869b297912a0ef8323b343256ecc`, source diff SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+The regression test first failed because the old implementation completed only
+one of sixteen queued commands.  With the bounded batch it passes, and the full
+m1n1 host suite passes.
+
+Planned build command is a clean diagnostic m1n1 build in the pinned local
+`windows-on-m1-build:local` container; the immutable Mu artifact remains
+`.local/recovery/STABLE-j313-8core-native-input-v1/J313_EFI.fd` with SHA-256
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+The built m1n1 path, embedded identity and SHA-256 will be appended before
+launch.  The exact launch profile is the EXP-121 public assisted command with
+`display=both`, `debug=monitor`, eight CPUs and native input, replacing only the
+`--m1n1` path.
+
+Expected checkpoint: lock screen within 30 seconds, responsive input/SSH, no
+BugCheck, zero new System Event 129 and Storport Event 500/550 during boot plus
+a bounded read workload, and queue progress without a ten-second-old request.
+Failure is any watchdog, lost vCPU/input, new storage timeout/reset, or a queue
+that remains saturated without progress.  Evidence will be preserved under
+`investigation/artifacts/EXP-20260826-123-vnvme-bounded-completion-batch/`.
+Recovery is the immutable stable pair with m1n1 SHA-256
+`3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+Pre-launch artifact record (superseding the unlaunched dirty artifact): the
+implementation was committed as m1n1
+`bee53dc60bd160c0a64de758974af767c2970baf`, then the clean container command was
+`docker run --rm -v /Users/pavel/public_windows:/work -w /work/m1n1_windows windows-on-m1-build:local sh -lc 'make clean && make -j8'`.
+It completed successfully.  The diagnostic binary is
+`.local/experiments/EXP-20260826-123-vnvme-bounded-completion-batch/m1n1.macho`,
+has embedded identity `bee53dc` and SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+The paired copied Mu SHA-256 is unchanged at
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+The verified manifest SHA-256 is
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+
+Observed result (`2026-08-26T19:13:53Z`):
+
+- manifest validation accepted the exact clean `bee53dc` binary and unchanged
+  stable Mu.  Guest entry reached the Windows boot path immediately; all seven
+  secondary mailboxes were consumed and Windows exposed eight logical
+  processors.  SSH became responsive within the 30-second checkpoint;
+- before workload, System contained zero new `stornvme` Event 129 and Storport
+  Operational contained zero Event 500/504/505/550 since boot.  `stornvme`,
+  `USBXHCI` and `AppleInput` were all Running;
+- a four-worker cached read check completed in 2,767 ms.  The bounded physical
+  storage workload then created four unique 128 MiB temporary files using
+  write-through streams, flushed each file, read each file back and removed
+  only those files.  All four jobs completed in 3,439 ms and cleanup succeeded;
+- after waiting beyond Storport's ten-second timeout window, both relevant
+  event counts remained zero.  All eight processors, NVMe, xHCI and AppleInput
+  remained live.  Monitor telemetry advanced from sequence 21 through 56,
+  guest timers progressed and the 2560x1600 framebuffer continued publishing;
+- no BugCheck, watchdog, synchronous EL2 exception, system reset or physical
+  ANS backend error was recorded.  The initial `WinSAT` attempt exited 24 and
+  is not counted as workload evidence; it made no state change.  The first
+  root-suite invocation used system Python and failed only on missing
+  `pyserial`/`construct`; the required `proxyenv` rerun passed all 659 tests;
+- fresh verification after hardware execution passed the complete m1n1 host
+  suite, all 659 root tests, artifact manifest validation and both diff checks.
+
+Evidence is preserved at
+`investigation/artifacts/EXP-20260826-123-vnvme-bounded-completion-batch/`.
+SHA-256 values are `4c7a2d45d0674a2812d7969b3f183cc2177731234e3a878407da0db32403f13c`
+for `hv.log`, `7f433824b81327970932419e62a23a548da9845a4d2a38dd90f97009e9182ab9`
+for the final Windows storage report,
+`ff4c463cfd1029b3bdc3521e8b8557f9df34463363d0b2a76cd626757bf08a7a`
+for final monitor status and
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`
+for the executed manifest.
+
+Verdict: confirmed for the reproduced failure mode.  Bounded batches remove
+the 100%-disk Storport timeout/reset storm under boot and the controlled 512
+MiB queue workload without recreating timer starvation.  The immutable stable
+recovery pair remains unchanged.  Longer soak testing is still required before
+calling this a release or replacing the recovery artifact.
+
+### EXP-20260826-124 — J313 AGX DriverEntry NVMe-safe qualification
+
+Status: preregistered at `2026-08-26T19:24:43Z` for one execution. The full
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-driverentry-nvme-safe-qualification.md`.
+This is not a retry of EXP-119 or EXP-120. EXP-120 never mutated Windows or
+hardware and is superseded. Relative to its intended G2 run, the sole platform
+change is clean m1n1 `bee53dc60bd160c0a64de758974af767c2970baf`, whose bounded
+virtual-NVMe completion batching passed EXP-123. The qualification driver,
+G2 Mu firmware, AGX SSDT, ACPI resources, synthetic broker and every forbidden
+GPU boundary remain byte-for-byte unchanged.
+
+Mandatory cleanup completed before preregistration. Old EXP-119 `oem17.inf`
+required the already permitted non-force `/uninstall` fallback because the
+stopped device association remained; deletion then succeeded. Only signer
+`DC81FF63FD2FFE8CDE24F95052C45BB7C0006731` was removed from Root and
+TrustedPublisher. No `/force` option was used. Final read-only preflight proved
+8 processors; `AppleInput`, `stornvme` and `USBXHCI` Running; zero present
+APPL0002, AppleAgx package and pinned signer; zero critical event and zero
+`stornvme` Event 129. Cleanup evidence SHA-256 is
+`365430147d4d535eb83da316052e33a25f65996370eabcfcb3167deb96748593`.
+
+Pinned root state is branch `feature/j313-gpu-acceleration`, commit
+`1fed6774889888b75708595c0db416fbfa485c74`; m1n1 commit
+`bee53dc60bd160c0a64de758974af767c2970baf`; Mu commit
+`c6108366201f869b297912a0ef8323b343256ecc`. The exact candidate profile is
+`.local/agx-power-exp124-profile/`, manifest SHA-256
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`,
+with m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`,
+Mu SHA-256 `70b216c01f3d7acd77b2c24d0a3dc4fa0cccefec631031a413a301d271f6c064`
+and SSDT SHA-256
+`a6f8f4911030c23b61a2ed8c3a300d1ca438af74accc41e624918930ef55f65b`.
+The unchanged signed driver manifest SHA-256 is
+`6cf7321e32849418a4dbac70cc027db0fedb4b5ab3fbadf6c3b325357c8262ca`
+and signer is `442D150255F1F27A6D10CFD8E4BF5F35E8AD28BB`.
+
+The one allowed action stages only that exact package, performs one manifest-
+verified G2 boot with `WOM1_AGX_G2_POWER_BROKER=1`, reads persistent
+`Wom1DriverEntryStage` and `Wom1DxgkInitializeStatus`, captures binding and
+liveness evidence, then shuts down and restores immutable stable firmware.
+No GPU firmware, RTKit, SGX MMIO, interrupt, UAT, queue, command, render,
+present or display-ownership action is permitted. Evidence path
+`investigation/artifacts/EXP-20260826-124-agx-driverentry-nvme-safe/` was absent
+at preregistration. Any mismatch, forbidden action, BugCheck, reset, storage
+timeout, input loss or missing evidence rejects the run without retry.
+
+Observed result (`2026-08-26T19:41:13Z`):
+
+- the exact package was staged as `oem17.inf`; its catalog, certificate, INF
+  and SYS hashes matched the preregistered manifest, and the one permitted G2
+  boot used the exact manifest-validated Mu and clean `bee53dc` m1n1 pair;
+- Windows exposed one present `ACPI\\APPL0002\\0` device with the exact
+  Display-class package and resources, then reported Problem 43
+  (`CM_PROB_FAILED_POST_START`). Persistent registry evidence proved
+  `Wom1DriverEntryStage=2` and `Wom1DxgkInitializeStatus=0`: `DriverEntry`
+  returned from `DxgkInitialize` with `STATUS_SUCCESS`;
+- no AGX broker command, firmware, RTKit, SGX MMIO, interrupt, UAT, queue,
+  command, render, present or display-ownership action occurred. The driver
+  remained stopped and unloaded. Eight CPUs, `AppleInput`, `stornvme` and
+  `USBXHCI` remained live, with zero critical event and zero `stornvme` Event
+  129 during the G2 boot;
+- the G2 guest shut down normally. Immutable recovery then proved APPL0002
+  non-present, after which the bounded non-force rollback removed only
+  `oem17.inf` and signer `442D150255F1F27A6D10CFD8E4BF5F35E8AD28BB`.
+  Final cleanup found zero AppleAgx package, service, loaded module and pinned
+  certificate, with eight CPUs and the input, NVMe and xHCI services running;
+- the final immutable-recovery health gate nevertheless recorded one
+  `stornvme` Event 129 (`Reset to device, \\Device\\RaidPort0, was issued`).
+  This recovery pair intentionally still contains pre-`bee53dc` m1n1 and its
+  known one-CQE storage policy. The event did not occur in the EXP-124 G2 boot,
+  but it means the literal post-rollback zero-Event-129 gate did not pass.
+
+Verdict: the DriverEntry boundary hypothesis passed and localizes the next
+unknown boundary after successful `DxgkInitialize`, within AddDevice or
+StartDevice. The overall experiment is recorded as partially accepted because
+the immutable recovery pair failed its separate final storage-health gate.
+This result authorizes only a separately preregistered persistent
+AddDevice/StartDevice boundary probe; it does not authorize GPU hardware
+initialization. Evidence checksum-index SHA-256 is
+`5118b93c5fe8635e4d46015e040ac47be045054e72723cef27421d3f7d262fd6`.
+
+### EXP-20260826-125 — J313 AGX AddDevice/StartDevice boundary qualification
+
+Status: completed once and rolled back; lifecycle hypothesis confirmed, final
+storage-health gate rejected.  Preregistered at `2026-08-26T19:57:34Z` for one
+G2 execution. The full
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-lifecycle-boundary-qualification.md`.
+The falsifiable hypothesis is that the exact Problem-43 package reaches
+`DxgkDdiAddDevice` and possibly `DxgkDdiStartDevice`, but EXP-124 lost the
+evidence when the miniport unloaded. The sole candidate variable is driver
+commit `6692ffbbe6738b3066854cf42dbe38b524715934`, which adds qualification-only
+device-instance stage/status DWORDs and routes the existing StartDevice event
+record through the same helper. No production path or GPU operation changed.
+
+Microsoft's documented callback contract supplies the PDO to AddDevice at
+PASSIVE_LEVEL and permits `IoOpenDeviceRegistryKey` plus `ZwSetValueKey` for
+the device key. Dxgkrnl owns callback invocation; AppleAgx owns only private
+context, translated-resource validation and breadcrumbs; Mu owns ACPI; m1n1
+owns the synthetic broker and NVMe. AGX firmware, RTKit, SGX MMIO, interrupts,
+UAT, queues, commands, render, present and display ownership remain forbidden.
+
+Pinned root branch is `feature/j313-gpu-acceleration`; preregistration follows
+root commit `b6b7f7d`. m1n1 is
+`bee53dc60bd160c0a64de758974af767c2970baf`; Mu is
+`c6108366201f869b297912a0ef8323b343256ecc`. WDK run `33007284611` passed both
+ARM64 jobs. Driver manifest SHA-256 is
+`21d8cd97630389d19c7185ee110c7eac81e78ecee835d8fe940b7344df3505d6`;
+SYS is `6a8bac7b40dd13e960b87f138b391e4eae2f79373c9623ca1803cd6b1c9a91e6`;
+catalog is `87c70750c56d18229a313178421a0dcf1c961f0523bf971defbd66ffba4ee020`;
+signer is `F247053BE6C49EFEB4C8D8AEBF6F47399787B1C2`.
+
+The unchanged G2 profile manifest is
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`.
+Preparation and rollback use the hardware-validated EXP-123 manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`,
+combining ordinary Mu
+`4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`
+with NVMe-safe m1n1
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+This replaces the old recovery binary whose one-CQE policy produced Event 129.
+
+The current guest preflight is not admissible for staging: APPL0002 and the
+package are absent, but an orphan disabled AppleAgx service remains marked
+`DriverDelete=1` and `DeleteFlag=1`; the old recovery boot has 70 stornvme
+Event 129 records and one Kernel-Power event since boot. EXP-125 therefore
+begins with a normal shutdown and exact EXP-123 recovery boot. Staging stops
+unless that reboot clears the pending service and yields eight CPUs, healthy
+input/storage/xHCI and zero new critical or Event-129 records.
+
+The expected checkpoint is persistent AddDevice stage 2/status 0, followed by
+either no StartDevice values or one exact StartDevice stage/status pair. One
+present APPL0002, Problem 43 and an unloaded stopped driver remain expected.
+Any hash mismatch, forbidden GPU action, BugCheck, reset, storage timeout,
+input loss, failed rollback or second G2 boot rejects the run. Evidence path
+`investigation/artifacts/EXP-20260826-125-agx-lifecycle-boundary/` must be absent
+before execution. Recovery removes only the recorded `oemNN.inf` and exact
+signer without `/force`.
+
+Observed result (`2026-08-26T20:06:09Z` candidate boot): the one permitted G2
+execution reached responsive eight-core Windows with AppleInput, `stornvme`
+and `USBXHCI` running.  `ACPI\\APPL0002\\0` bound the exact `oem17.inf`
+package, remained Problem 43, and exposed the expected persistent boundaries
+under its `Device Parameters` key:
+
+- `Wom1AddDeviceStage=2`, `Wom1AddDeviceStatus=0x00000000`;
+- `Wom1StartDeviceStage=3`, `Wom1StartDeviceStatus=0xC0000182`.
+
+Stage 3 is `AppleAgxStartResourcesValidated`; therefore AddDevice allocation
+and `DxgkCbGetDeviceInformation` completed, but
+`AppleAgxValidateTranslatedResources` returned
+`STATUS_DEVICE_CONFIGURATION_ERROR`.  PnP reported both expected translated
+memory ranges and all nine firmware IRQ assignments 880 through 888.  The
+validator nevertheless compared each translated `u.Interrupt.Vector` with the
+firmware GSI.  Microsoft documents that a translated interrupt descriptor
+contains the global system interrupt vector used to connect the interrupt,
+whereas a raw descriptor contains the bus-specific vector.  `DXGK_DEVICE_INFO`
+provides only `TranslatedResourceList`.  This is the same invalid raw-versus-
+translated identity assumption previously corrected in AppleInput, now
+localized before state validation, broker mapping or any GPU action.
+
+The candidate had zero critical events and zero `stornvme` Event 129 records.
+The forbidden-action audit was empty: no AGX broker command, firmware, RTKit,
+SGX MMIO access, interrupt, UAT, queue, render or present action occurred.  The
+guest shut down normally.  Recovery used the exact EXP-123 pair, removed only
+`oem17.inf` and signer `F247053BE6C49EFEB4C8D8AEBF6F47399787B1C2` without
+`/force`, and a cleanup reboot left eight CPUs, no APPL0002, package, service or
+signer, with AppleInput, NVMe and xHCI running and zero critical events.
+
+The separate final storage gate did not pass: each of the two recovery boots
+recorded two `stornvme` Event 129 resets ten seconds apart despite using
+`bee53dc`.  These resets did not occur in the G2 candidate and do not alter the
+lifecycle boundary, but they prevent calling the overall recovery healthy.
+EXP-125 is closed and must not be retried.  The next experiment may add only
+per-descriptor translated-resource breadcrumbs; it must not weaken validation
+or access GPU hardware until the actual descriptor representation is measured.
+
+### EXP-20260826-126 — J313 AGX translated-resource descriptor qualification
+
+Status: completed once and rolled back; measurement accepted, candidate
+storage gate rejected. Preregistered at `2026-08-26T20:31:00Z` for one G2
+execution. The
+complete task-by-task contract is
+`documentation/plans/2026-08-26-j313-agx-translated-resource-descriptor-qualification.md`.
+The falsifiable hypothesis is that EXP-125 failed because the display miniport
+compared dxgkrnl translated system interrupt vectors with ACPI firmware GSIs.
+One bounded, read-only descriptor snapshot will expose the actual translated
+type, share, flags, MMIO identity, IRQ level, vector and affinity before the
+unchanged validator returns `STATUS_DEVICE_CONFIGURATION_ERROR`.
+
+The only candidate change relative to EXP-125 is qualification diagnostics
+commit `5d58cfb95640bc725d6ec42f4980f4f6e8fa7e7a`.  WDK run
+`33010381345` passed default and power-qualification ARM64 jobs at source head
+`e4c0ffcd8b0424d91c1b4d2276cf65f12cc5da3c`.  Driver manifest SHA-256 is
+`122c0ee602e047cf23bcc81a389657c53d3a49bd24749354ed660beeb3fbca3b`;
+SYS is `2dc6317b80cef81822748aa7bb068415ec3de71a44fb2bbd963872a334230451`;
+catalog is `bfa914e439f54ddcc31115dc181b147234878988155382a4cdf2ba32abc9e0fd`;
+certificate is
+`ef08f7a3aa769a31d682ccb80156c0525f23b2352890a9b1a95e7d290cc7a00d`;
+signer is `419A261FEC73D775202BAC41300EF47F37531580`.
+
+Candidate firmware remains the EXP-124 G2 manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains EXP-123 manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+No firmware, ACPI, broker, CPU, display, input, USB or storage binary changes.
+
+The current recovery guest completed EXP-125 cleanup with eight CPUs, no
+APPL0002, AppleAgx package, service or signer, and Running AppleInput,
+`stornvme` and `USBXHCI`.  It recorded two Event 129 resets ten seconds apart
+on each recovery boot, but no further Event 129 occurred after
+`2026-08-26T22:14:12+02:00` through the `22:26:44` read-only check.  EXP-126
+therefore treats those boot-time pairs as an explicit pre-existing recovery
+baseline, requires a new quiet window before staging, and still rejects any
+Event 129 in the G2 candidate or after the recovery quiet-window marker.
+
+Exactly one G2 boot is allowed.  GPU firmware, RTKit, SGX MMIO, interrupt
+creation, UAT, queues, commands, rendering, presentation and display ownership
+remain forbidden.  Evidence is limited to sanitized descriptor JSON, PnP text
+and local HV/display data; full registry and event-log export is prohibited.
+Rollback removes only the recorded package and exact signer without `/force`.
+Any identity mismatch, missing or overflowing descriptors, candidate Event
+129, critical event, input/storage loss, failed rollback or second G2 boot
+rejects the experiment.
+
+Observed result (`2026-08-26T20:35:04Z` candidate boot): the sole permitted G2
+execution reached responsive eight-core Windows and persisted one full
+translated resource list containing 13 descriptors with no overflow. The
+exact package bound as `oem17.inf`; APPL0002 remained Problem 43; DriverEntry
+and AddDevice returned success; and StartDevice again stopped at stage 3 with
+`STATUS_DEVICE_CONFIGURATION_ERROR` (`0xC0000182`).
+
+The descriptor representation was:
+
+- memory `0x204000000..0x207ffffff` (64 MiB), followed by type 129;
+- memory `0x300000000..0x300000fff` (4 KiB), followed by type 129;
+- nine exclusive level-sensitive interrupt descriptors with affinity `0xff`;
+  translated level/vector pairs were `9/2304`, `8/2048`, `11/2817`,
+  `10/2561`, `9/2305`, `8/2049`, `11/2818`, `10/2562`, and `9/2306`.
+
+Microsoft's `wdm.h` contract identifies numeric type 129 as
+`CmResourceTypeDevicePrivate`; its payload is reserved for system use. It is
+not an MMIO range and must not be interpreted or mapped by AppleAgx. The same
+contract and translated-resource documentation confirm that the observed
+interrupt vectors are system vectors rather than ACPI firmware GSIs. The old
+validator therefore had two independent representation errors: it rejected
+system-private descriptors outright and required translated vectors to equal
+generated guest INTIDs 880 through 888.
+
+No broker command, GPU firmware, RTKit, SGX MMIO, interrupt object, UAT,
+queue, command, render, present or display-ownership action occurred; the
+forbidden-action audit is empty. AppleInput, `stornvme` and `USBXHCI` remained
+Running and the candidate had zero critical events. The candidate nevertheless
+recorded two `stornvme` Event 129 resets, so its separate storage gate is
+rejected even though the descriptor measurement is complete.
+
+The guest shut down normally. Recovery used the exact EXP-123 pair, removed
+only `oem17.inf` and signer `419A261FEC73D775202BAC41300EF47F37531580`
+without `/force`, and completed one cleanup reboot. Final recovery proved eight
+CPUs; no APPL0002, AppleAgx package, service or signer; Running AppleInput,
+NVMe and xHCI; and zero critical events and zero Event 129. EXP-126 is closed
+and must not be retried. Evidence checksum-index SHA-256 is
+`64890ca9fa0079e89a325f6cea1e54bc6e01d16b5eb620cf64e40416ba9950e3`.
+
+This result authorizes only a separately tested parser correction that ignores
+`CmResourceTypeDevicePrivate` without inspecting it and validates translated
+interrupt properties/count/uniqueness instead of raw GSI identity. It does not
+authorize mapping SGX, connecting interrupts, loading firmware or starting a
+render adapter.
+
+### EXP-20260826-127 — J313 AGX translated-parser hardware qualification
+
+Status: preregistered at `2026-08-26T20:53:00Z` for one G2 execution. The
+literal contract is
+`documentation/plans/2026-08-26-j313-agx-translated-parser-hardware-qualification.md`.
+The falsifiable hypothesis is that the exact EXP-126 representation passes
+the corrected parser, state validation and existing bounded broker receipt,
+then remains fail-closed at stage 7 with `STATUS_NOT_SUPPORTED`.
+
+The sole candidate change is driver parser commit
+`a680ef2c451140c17c831d0d06df9ae82f3fb712`, built by WDK run
+`33012247554` at source head
+`61bd7998cd0e715a41e961bdd897bdcc9408cb80`. Both ARM64 jobs passed. Exact
+driver manifest SHA-256 is
+`192a253084f56d557f28c650ee8bbe18b37ca885d12a3b5e7b299662377c0b9b`;
+SYS is `81b08b27f1cdd9362937cd254b357792d321978c93a6bcc33b76d9e12788e124`;
+catalog is
+`d43ac3685b9556ca81aa66acfa0cb2391b072b5b742361fac9af3a60f5b8de25`;
+signer is `2DAADA2A7B34687AE6D922D792F39C220EA4C7AA`.
+
+Candidate firmware remains manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+No Mu, ACPI, broker, CPU, input, display, USB or storage binary changed.
+
+Exactly one G2 boot is allowed and evidence path
+`investigation/artifacts/EXP-20260826-127-agx-translated-parser/` was absent at
+preregistration. The only permitted GPU-related operation is the already
+bounded synthetic broker ON/QUERY/OFF receipt. Firmware, RTKit, SGX MMIO,
+interrupt connection, UAT, queues, commands, rendering, presentation and
+display ownership remain forbidden. Any stage-3 failure, missing receipt,
+forbidden action, Event 129, critical event, reset, input/storage loss, identity
+mismatch or incomplete non-force rollback rejects the run without retry.
+
+Observed result (`2026-08-26T20:58:26Z` candidate boot): the one permitted G2
+execution reached responsive eight-core Windows. The exact `oem17.inf`
+package bound to `ACPI\\APPL0002\\0`; DriverEntry and AddDevice completed with
+status zero; the corrected parser accepted one 13-descriptor translated list;
+and StartDevice reached stage 7 before returning `STATUS_NOT_SUPPORTED`
+(`0xC00000BB`) as preregistered.
+
+The bounded broker produced the exact successful sequence:
+
+- `seq=1 cmd=1 state=3 result=0` (ON);
+- `seq=2 cmd=0 state=3 result=0` (QUERY);
+- `seq=3 cmd=2 state=0 result=0` (OFF).
+
+The forbidden-action audit was empty: no GPU firmware, RTKit, SGX MMIO,
+interrupt connection, UAT, queue, command, render, present or display
+ownership occurred. AppleInput, `stornvme` and `USBXHCI` remained Running and
+the candidate recorded zero critical events. The initial collector observed
+one `stornvme` Event 129 before a second reset occurred; the complete System
+log window contains resets at `20:59:35.739Z` and `21:00:45.379Z`. The final
+count is therefore two, so the separate candidate storage gate is rejected even though the
+parser, state-validation and broker-lifecycle hypothesis is confirmed.
+
+The candidate shut down normally. Recovery used the exact EXP-123 pair,
+removed only `oem17.inf` and signer
+`2DAADA2A7B34687AE6D922D792F39C220EA4C7AA` without `/force`, and completed
+the required cleanup reboot. Final recovery proved eight CPUs; no present
+APPL0002, AppleAgx service, package or loaded module; Running AppleInput,
+NVMe and xHCI; zero critical events; and zero Event 129. The remaining
+non-present Problem-45 PnP history record contains stale diagnostics only.
+EXP-127 is closed and must not be retried.
+
+This result proves the next technical boundary but does not authorize it:
+before GPU firmware or interrupt work, a separate experiment must explain or
+eliminate the candidate Event 129 pair while preserving the exact successful
+stage-7 and ON/QUERY/OFF evidence.
+
+### EXP-20260827-128 — J313 AGX inert MMIO mapping qualification
+
+Status: preregistered at `2026-08-27T01:15:00+02:00` for one G2 execution.
+The literal contract is
+`documentation/plans/2026-08-27-j313-agx-mmio-mapping-hardware-qualification.md`.
+The falsifiable hypothesis is that Windows can map the exact 64 MiB SGX
+aperture once, validate ASC as the contained `0x02400000..0x0246bfff`
+subview, unmap the sole owner, and remain stable while the driver still fails
+closed with `STATUS_NOT_SUPPORTED`.
+
+The only candidate package change is qualification-only receipt commit
+`c573a3b49e029f423630f72876b87029f117f729`, built by WDK run
+`33022226675` at source head
+`4d40aee5cdb9f2f5d813956665fba6ff22743087`. All three ARM64 jobs passed.
+Exact local package manifest SHA-256 is
+`cfabbee1d50d1c54765e43ffe533b9a9780f6afec0fda964b7aa10a4ec17b934`;
+SYS is `d1dd6783a0c30bdf639f6d01a5a6c800fe89699740ba245f634656a7734f732d`;
+INF is `db5e09d26ca52311156473db0e931203a9d77dfecf5af17ec9acc39dccaab157`;
+catalog is `4032e47cfacc72eaef31d98d67233cb093865998581bcd9cbb8fd482d4d71a1f`;
+certificate is
+`9f70513f96edccbfef8d833d17670fa01124e17239fe44592e9eab007e4002ae`;
+and signer is `A40D8EC7010BB5D4E14792C360737F79F79D0151`.
+
+Candidate firmware remains manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+The evidence path
+`investigation/artifacts/EXP-20260827-128-agx-mmio-mapping/` was absent at
+preregistration.
+
+Exactly one display-`both` G2 boot is allowed and power qualification remains
+off. The sole GPU operation is map, bounds-check an ASC subview, and immediate
+unmap; no pointer dereference is permitted. GPU register access, firmware,
+RTKit, interrupt connection, active UAT, queues, commands, rendering,
+presentation and display ownership remain forbidden. Passing requires exact
+zero-status receipts, the generated SGX/ASC geometry, responsive eight-core
+Windows, working AppleInput/NVMe/xHCI, zero Event 129, zero critical events,
+normal shutdown and exact non-force rollback. Any mismatch rejects the run
+without retry.
+
+Observed result (`2026-08-26T23:23:30Z` candidate collection): the one
+permitted G2 boot reached responsive eight-core Windows and bound the exact
+package as `oem17.inf`. AppleInput, stornvme and USBXHCI were Running; critical
+events and Event 129 were both zero. PnP nevertheless stopped before the MMIO
+boundary with Problem 31 (`CM_PROB_FAILED_ADD`) and ProblemStatus
+`0xC0000182` (`STATUS_DEVICE_CONFIGURATION_ERROR`). Map, ASC subview and unmap
+receipts were absent. Persistent stage-7 values were identified as stale from
+an earlier power-qualification package and were excluded from this verdict.
+
+The forbidden-action audit remained empty: no pointer dereference, GPU
+register access, firmware, RTKit, interrupt connection, active UAT, queue,
+command, render, present or display ownership occurred. The candidate shut
+down normally without retry. Exact recovery removed only `oem17.inf` and
+signer `A40D8EC7010BB5D4E14792C360737F79F79D0151` without `/force`. Its first
+boot recorded six stornvme Event 129 resets and failed the recovery gate. The
+required cleanup boot then proved eight CPUs, no package, signer, service or
+present APPL0002, Running input/NVMe/xHCI, zero critical events and zero Event
+129 through the final quiet window.
+
+EXP-128 is rejected, closed and must not be retried. The next authorized work
+is offline diagnostic parity for MMIO qualification and localization of the
+pre-map `STATUS_DEVICE_CONFIGURATION_ERROR`; no further hardware action is
+authorized by this result.
+
+### EXP-20260827-129 — J313 AGX pre-map diagnostic qualification
+
+Status: preregistered at `2026-08-26T23:50:00Z` for one G2 execution. The
+literal contract is
+`documentation/plans/2026-08-27-j313-agx-pre-map-diagnostic-qualification.md`.
+The one-variable change from rejected EXP-128 is lifecycle and translated-
+resource diagnostic parity in commit
+`451b276ded24fd01239fdec853a2a23a14852e92`; GPU behavior is unchanged.
+
+The exact MMIO package comes from successful ARM64 WDK run `33024515164` at
+source `ed2a385b806b9859a7898c82ea5a307ed59c13fb`. Its SYS is
+`13b1ee676c45c9a5d8cc49a972d63439188c77d39f38f7eb06f98e4a18e7230b`,
+INF is `b7c0714443cf45bb3125468cda6d7bc5d70d31a3547cf688077dbebe1bf0d816`,
+catalog is `6e199757e3fb79ff06d077b4a9d71e470d24c9adc67c97dd0567d02f56eca823`,
+certificate is
+`29aebbe3dc260e143a616305cbd72c548a97a1e5c9c8a30117e497c8e0375685`
+and signer is `74CA42EA1DFE978EFFF4070049219DD5B0790867`.
+
+Candidate and recovery identities remain byte-for-byte identical to EXP-128.
+Exactly one display-`both` G2 boot is allowed. Passing requires fresh current-
+profile receipts that localize the pre-map failure, no forbidden GPU action,
+healthy input/NVMe/xHCI, zero Event 129, zero critical events, normal shutdown
+and exact non-force rollback. The evidence path
+`investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/` was absent
+at preregistration. Any mismatch closes the experiment without retry.
+
+Result: rejected and closed without retry. Fresh current-profile receipts
+prove `DriverEntry` stage 2, successful `DxgkInitialize`, and AddDevice stage 2
+with success. StartDevice and every MMIO receipt are absent. Kernel-PnP
+reported Problem 31 / `0xC0000182`, while SetupAPI placed the failure after
+AddDevice. The candidate retained eight CPUs and Running AppleInput/NVMe/xHCI
+but recorded two stornvme Event 129 resets, so it also failed the storage health
+gate. No forbidden GPU action occurred. Exact non-force rollback completed;
+the final recovery quiet window had eight CPUs, Running AppleInput/NVMe/xHCI,
+zero critical events and zero Event 129. The sanitized verdict is
+`investigation/artifacts/EXP-20260827-129-agx-pre-map-diagnostics/VERDICT.md`;
+raw evidence remains local and ignored. Next work is offline completion of the
+full render-only WDDM callback contract before any new hardware boundary.
+
+### EXP-20260827-130 — J313 AGX lifecycle contract qualification
+
+Status: preregistered at `2026-08-27T00:45:00Z`. The literal contract is
+`documentation/plans/2026-08-27-j313-agx-lifecycle-contract-qualification.md`.
+The one-variable correction from rejected EXP-129 is the full fail-closed
+render-only WDDM callback table. A new diagnostics-only build profile makes
+power and MMIO code unreachable at compile time.
+
+The exact package comes from successful four-profile ARM64 WDK run
+`33026918148` at source `6609ab08a046edbe54b4795fda87700ac04e7412`.
+SYS is `2cd6a077c09bbf2cbafbda6baad695aae9b4eb6ec0cc691b48694a904aee2e03`;
+INF is `408169ecdbadde5e35164a47ea7d7196cbc6b28b7600689299a414543fe6321d`;
+catalog is `c205d3ffaef417767f5380502c3773ec82ad9a25305b61a549af15dda2ca480e`;
+certificate is
+`e0104ef99471447bf9ce1231550876ca74f3aa749af0b15ceba391b8a4ac0781`;
+and signer is `A7847E0FB9AEAF201CD0CA24D9822CBF55632536`.
+
+Candidate firmware remains manifest
+`02204a6e37a04a323eae05e24b6a35eb7a0c6327b9af98b39d714482d78a0c70`;
+recovery remains manifest
+`143fd9aa07f9b224c316c5e23e3993991d7308fa178164beadc785e8dade03f9`.
+Both use NVMe-safe m1n1 SHA-256
+`2c39f7723475e6e74fa00b1a88e413ed7e5159a0da1bac5286b6c0442b7d52a9`.
+The evidence path
+`investigation/artifacts/EXP-20260827-130-agx-lifecycle-contract/` was absent
+at preregistration.
+
+One display-`both` G2 cold boot is allowed. After it, only packages compiled
+with the diagnostics-only lifecycle profile may be replaced in the same guest
+session by the exact device-scoped runner. Power, MMIO, GPU register access,
+firmware, RTKit, interrupts, UAT, queues, commands, rendering, presentation and
+display ownership remain forbidden. Passing requires fresh StartDevice stage
+7 / `0xC00000BB`, no hardware receipt, responsive eight-core Windows, working
+AppleInput/NVMe/xHCI, zero Event 129, zero critical events and exact non-force
+recovery before any later hardware-owning experiment.
+
+Observed result: passed and closed. The exact package bound as `oem17.inf` and
+a device-scoped same-boot restart produced fresh DriverEntry stage 2,
+successful AddDevice stage 2 and StartDevice stage 7 with `0xC00000BB`. The
+translated list contained 13 descriptors. Every power and MMIO receipt was
+absent; no forbidden GPU operation occurred. The measured cycle took roughly
+11 seconds and retained eight CPUs, Running AppleInput/NVMe/xHCI, zero
+critical events and zero Event 129.
+
+The candidate shut down normally. Exact EXP-123 recovery removed only
+`oem17.inf` and the exact signer without `/force`; the cleanup boot proved no
+present APPL0002, package, service, module or signer, eight CPUs, Running
+input/NVMe/xHCI, zero critical events and zero Event 129. The sanitized verdict
+is published at
+`investigation/artifacts/EXP-20260827-130-agx-lifecycle-contract/VERDICT.md`.
+The next separately gated boundary is inert SGX map/subview/unmap; register
+access and every later ownership layer remain unauthorized.
+
+### EXP-20260827-131 — J313 AGX inert MMIO contract qualification
+
+Status: passed and closed after exactly one G2 execution.
+The literal contract is
+`documentation/plans/2026-08-27-j313-agx-mmio-contract-qualification.md`.
+The only change from passed EXP-130 is the compile-time MMIO qualification
+profile from the same source and successful WDK run `33026918148`.
+
+The exact SYS is
+`5d3b2b8c9f20ac98d302259da593e41b41ecf01a9325f3c18052abb0c24581cb`;
+INF is `9073d731f645575f58f792712b37f33d08b7eb7e06bf597a14da2d77e1fb819a`;
+catalog is `5b38ee37b3e0059de78ee8b0868a1a4fa2eef6522140bb1f40eb235c5a3be89b`;
+certificate is
+`fd44a56f4f271a8e5b7bb7323e8f1b1325ecdbfcf0a5a3cb8d3c616f3e89136f`;
+and signer is `EE24256D1F278177D0DD882E557BC4FF9FE075C4`.
+Candidate, m1n1 and recovery identities remain byte-for-byte equal to EXP-130.
+
+The sole GPU operation is map the exact SGX range, validate ASC as a contained
+subview and immediately unmap without pointer access. Power, register access,
+firmware, RTKit, interrupts, UAT, queues, commands, rendering, presentation
+and display ownership remain forbidden. Any identity or health failure closes
+the experiment without retry.
+
+Observed result: passed. Fresh receipts reported map, subview and unmap status
+zero for SGX `0x204000000 + 0x4000000` and ASC offset
+`0x2400000 + 0x6c000`. StartDevice then deliberately returned
+`0xC00000BB` at stage 7. The candidate retained eight CPUs and Running
+AppleInput/NVMe/xHCI with zero Event 129 and zero critical events. Source and
+hypervisor audit found no pointer dereference or later GPU ownership action.
+Normal shutdown and exact non-force recovery removed only the recorded package
+and signer; the cleanup boot proved no APPL0002/package/service/module/signer,
+eight CPUs, healthy platform services and a quiet event window. The sanitized
+verdict is
+`investigation/artifacts/EXP-20260827-131-agx-mmio-contract/VERDICT.md`.
+
+### EXP-20260827-134 — J313 AGX read-only ASC status qualification
+
+Status: rejected and closed without retry. The exact one-shot candidate
+performed its sole 32-bit load from ASC CPU status at physical `0x206400048`
+and raised an external abort even though the guest VA and stage-2 SGX mapping
+were valid. The G2 broker was exposed but the profile never powered the GPU
+domain on. This proves that mapped power-gated MMIO is not readable while the
+domain is off. No later GPU action occurred. Exact recovery and non-force
+package/signer cleanup completed; a subsequent recovery boot showed Event 129,
+so another candidate remains gated on a fresh quiet recovery window. See
+`investigation/artifacts/EXP-20260827-134-agx-asc-status/VERDICT.md`.
+
+### EXP-20260827-135 — J313 AGX powered ASC status qualification
+
+Status: powered read validated; candidate rejected and closed without retry.
+The literal contract is
+`documentation/plans/2026-08-27-j313-agx-powered-status-hardware-qualification.md`.
+The exact package started automatically on the sole display-both G2 cold boot.
+Map, ASC subview, one CPU-status read and unmap returned zero; the value was
+`0x2a`. Hypervisor receipts independently proved ON, QUERY=ON and OFF with
+zero result, and StartDevice then failed closed at stage 9 / `0xc00000bb`.
+
+The narrow powered-read boundary passed, but the candidate recorded one fresh
+stornvme Event 129 before a manual device cycle. The strict health gate rejected
+the candidate and no restart or retry was performed. Exact non-force rollback
+removed only the package and signer. One subsequent clean EXP-123 control boot
+proved eight CPUs, healthy services, no AppleAgx/APPL0002 and zero Event 129 or
+critical events. No firmware, interrupt, UAT, queue, render or display action is
+authorized. See
+`investigation/artifacts/EXP-20260827-135-agx-powered-status/VERDICT.md`.
+
+### EXP-20260827-136 — J313 AGX RTKit phase diagnostics
+
+Status: rejected and closed after one device-scoped start. Preregistered at
+`2026-08-27T14:30:40Z`; executed at `2026-08-27T14:34:49Z`. The
+falsifiable hypothesis is that the repeated `0xC00000B5` from the bounded
+READY-to-STOP qualification occurs during RTKit boot, and the exact saved phase
+will distinguish Hello, endpoint-map, power, or shutdown without changing the
+wire protocol. The single changed variable from the responsive retry of the G2
+guest is the RTKit qualification driver binary: it adds persistent registry
+receipts only and preserves the same MMIO map, power acquire, ASC RUN,
+management messages, STOP, unmap, and power release sequence.
+
+The public root is `704bf3e6a39414ead0025ba27ee70d9e53832a43`; the code
+commit is `e0087563daf45426675c2754571199ce8af6f00c`; m1n1 is
+`72dbbd2b0b279638ac53482a6d79d06adfa6aef7`; Mu is
+`c6108366201f869b297912a0ef8323b343256ecc`. Root and tracked submodule
+diff hashes are the empty SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Preserved unrelated dirt is m1n1 `.DS_Store` SHA-256
+`e5da54df51dda2d5f6e20d00f24d3c052dd8a24159a7758dd28246ac67f94883`;
+Mu nested commits match their tree pins and retain only the pre-existing
+libspdm dirty marker plus two IDE metadata files.
+
+The current display-both G2 guest uses m1n1 SHA-256
+`c7232200573956155c48ddf441723df21e5d8bfee069bf33b36b6b6065d36846`
+and Mu SHA-256
+`53c52005854d03c449c534c805df7c180d90e30ab29effbdc9e7003b3bef5c8d`;
+its boot image SHA-256 is
+`ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
+It reached the desktop, remained SSH-responsive for more than 19 minutes, and
+reported eight logical processors before this experiment. Exact EXP-123 remains
+the boot recovery artifact. The already installed prior RTKit package is retained
+locally as the device-level rollback.
+
+The replacement package comes from successful signed RTKit job `98551380670`
+in GitHub Actions run `33081986331`. Its ARM64 SYS SHA-256 is
+`af3a029572f0b45945a53cb15ff79fbfcd1e3ff0d6a12d0a6398a1eac31a950b`,
+INF SHA-256 is
+`40785dd625c3996a047c484756c1af9ae259343d5b83c9d100799789519c86f4`,
+catalog SHA-256 is
+`5b6c8048dc8a97c9c1009814143d4898a10c170954d90295b13a311441fa7a50`,
+certificate SHA-256 is
+`4e9b8d039bc84d21ab12cd9d624ae64c598deb0e92e34d9fc1021b28a56dfcae`,
+and signer thumbprint is `92D87C083D104C19CF3E40E34139992A6D16D827`.
+The immutable local evidence directory is
+`.local/experiments/EXP-20260827-136-agx-rtkit-phase-diagnostics/`.
+
+The exact hardware action is to copy that package to a new Windows directory,
+verify all four hashes and the signer, import only its exact certificate, replace
+only the recorded AppleAgx package without `/force`, and let PnP perform one
+device-scoped start. Passing diagnostics require fresh
+`Wom1RtkitBootStatus`, `Wom1RtkitStopStatus`, `Wom1RtkitBootPhase`,
+`Wom1RtkitBootFlags`, `Wom1RtkitNegotiatedVersion`, and final ASC CPU-status
+receipts while Windows, AppleInput, NVMe, xHCI, SSH, display, and all eight CPUs
+remain alive. Any unexpected reboot, inaccessible desktop, new critical event,
+or inability to remove only the recorded package closes the experiment. Evidence
+will be written under the immutable local experiment directory before and after
+the device action; no UAT publication, initdata, interrupt registration, queue,
+command, render, presentation, or display ownership is authorized.
+
+The package and signer hashes matched on Windows, the exact prior `oem17.inf`
+was removed without `/force`, and the diagnostic package installed as a new
+`oem17.inf`, version `14.25.24.601`. `pnputil` completed device configuration in
+about 80 milliseconds and an immediate query briefly reported `OK`, but this was
+not a completed StartDevice result. The PnP log proves configuration returned
+before the asynchronous driver transaction reached its terminal receipt.
+
+The final evidence was Problem 43, stopped AppleAgx, StartDevice stage 6 and
+`0xC00000B5` (`STATUS_IO_TIMEOUT`). The new RTKit receipts localized the failure
+to phase 1 with flags 1: boot began, but no management HELLO arrived and protocol
+version remained zero. The bounded cleanup recorded `0xC00000BB`; its final ASC
+CPU-status read succeeded with value `0x2d`. No endpoint map, power-ready state,
+UAT publication, initdata, queue, command, render or presentation occurred.
+
+Windows remained at the desktop and SSH-responsive with eight logical CPUs and
+Running AppleInput, stornvme and USBXHCI. No fresh stornvme Event 129 occurred
+after package installation. Five ACPI Error-level System records appeared at the
+device-start timestamp, so the preregistered health gate independently rejects
+the candidate. The device was left fail-closed and stopped; no retry, reboot or
+second hardware transaction was performed. Raw preflight, install, PnP and
+postflight evidence remains in
+`.local/experiments/EXP-20260827-136-agx-rtkit-phase-diagnostics/`.
+
+The hypothesis was confirmed only as a diagnostic localization: the timeout is
+before first HELLO. Its root cause remains unresolved. The next step is a
+source-first comparison of live ASC state, Asahi, m1n1, Mu/ACPI and the Windows
+transport before one new falsifiable hot-cycle experiment.
+
+### EXP-20260827-137 — J313 AGX ASC-ready RTKit qualification
+
+Status: rejected and closed after one device hot cycle. Preregistered at
+`2026-08-27T15:09:26Z`; executed at `2026-08-27T15:22:05Z`. The
+source-first comparison found that EXP-135 entered with powered ASC status
+`0x2a` (stopped), EXP-136 timed out before HELLO and ended at `0x2d` (running and
+idle), and current Asahi leaves a substantial initialization interval between
+asserting ASC RUN and waiting for RTKit boot. The Windows path instead wrote IOP
+INIT immediately after RUN without observing CPU readiness.
+
+The single falsifiable change is a bounded wait for
+`CPU_STATUS.RUNNING=1 && CPU_STATUS.STOPPED=0` before the first mailbox write.
+The driver adds a durable `CPU_READY` boot flag but preserves the exact EXP-136
+power, MMIO, RTKit messages, cleanup and fail-closed boundary. Passing requires
+the flag and progress beyond `AwaitingHello`; CPU ready with no HELLO rejects
+the timing hypothesis and localizes the next investigation to mailbox/firmware
+visibility. A ready-wait timeout separately proves failure to start ASC.
+
+Use the existing assisted G2 display-both eight-core guest and change only the
+officially signed Windows package. Run exactly one receipt-complete device hot
+cycle without reboot. UAT publication, initdata, interrupts, queues, commands,
+rendering, presentation and display ownership remain forbidden. Stop on any
+identity drift, lost SSH/input/NVMe/xHCI health, Event 129, critical event,
+bugcheck or reboot. The literal contract is
+`documentation/plans/2026-08-27-j313-agx-asc-ready-hardware-qualification.md`.
+
+The official WDK artifact was GitHub Actions run `33086632205`, source commit
+`8252b9c759f447241fb5b28bfed522c9486dc080`. Its SYS SHA-256 was
+`1ac19ede3267b2a836e177e96ad26f69c89298c3078a6412f1b9200882893beb`, INF
+SHA-256 was
+`8cc6f88cef5c664f92387fce6f0ad80ac006e35c525f30f0e1006c6c7966fceb`,
+catalog SHA-256 was
+`ea25133a3c3b76450d73b3e1d1259566c713650f1ca5105114f757e16ba7df42`,
+and signer thumbprint was `BCE4F22D33D675EABA3B8A88FDB102E536E69F5A`.
+
+The single final transaction proved the ASC-ready marker: boot flags were
+`0x81`, final CPU status was `0x2d`, and the bounded wait had observed RUNNING
+with STOPPED clear. RTKit still remained at phase 1, negotiated version zero,
+and timed out with `0xC00000B5` before HELLO. Final StartDevice stage was 6 and
+the device settled stopped with Problem 43. The timing hypothesis is therefore
+rejected; adding delay after RUN is not source-backed. The next boundary is
+visibility of the IOP-init mailbox write and doorbell to running firmware.
+
+Windows retained eight logical processors and Running AppleInput, stornvme and
+USBXHCI. No fresh stornvme Event 129, bugcheck or reboot occurred. ACPI errors
+accompanied the failed start. The package remains fail-closed and no retry was
+performed. Raw result and postflight hashes are recorded under ignored
+`.local/experiments/EXP-20260827-137-agx-asc-ready/`; the sanitized verdict is
+`investigation/artifacts/EXP-20260827-137-agx-asc-ready/VERDICT.md`.
+
+The run also proved that the former lifecycle helper could consume an
+intermediate receipt because it started the package, scanned again and then
+restarted the device. Commit `b4906b9d7468b00d35dfc10411b91a4c9b70064d`
+reduces future iterations to one add/install transaction and clears preparation
+receipts immediately before it.
+
+### EXP-20260827-138 — J313 AGX mailbox visibility qualification
+
+Status: completed at `2026-08-27T16:00:10Z`; hypothesis confirmed. EXP-137
+proved the ASC was running before IOP INIT but still received no HELLO. Exact
+comparison against Asahi commit
+`77cb8f24c2381a8abb7272d7bbdec548d6426a8a`, pinned m1n1 `src/asc.c`, and the
+official Windows `WRITE_REGISTER_ULONG64` barrier contract found matching A2I
+offsets, `payload -> endpoint/trigger` ordering, and barrier semantics.
+
+The only changed variable is read-only mailbox-control evidence: A2I
+`INBOX_CTRL` before IOP INIT, immediately after publication, and at failure,
+plus I2A `OUTBOX_CTRL` at failure. Passing diagnostics require all four valid
+bits. Pointer/count movement will distinguish an unpublished message, a queued
+but unconsumed message, a consumed message without HELLO, or an unprocessed I2A
+response. No message, timeout, power, RUN, cleanup, or fail-closed behavior may
+change.
+
+After host and official WDK verification, use commit
+`b4906b9d7468b00d35dfc10411b91a4c9b70064d` or later for exactly one
+single-transaction Windows package cycle without reboot. Require eight CPUs,
+Running AppleInput/stornvme/USBXHCI, exact package and signer identity, no Event
+129, and a delayed final postflight. Do not retry or advance GPU ownership. The
+literal contract is
+`documentation/plans/2026-08-27-j313-agx-mailbox-visibility-qualification.md`.
+
+Exactly one corrected package transaction ran from
+`2026-08-27T15:58:50Z` through `2026-08-27T15:58:54Z`; the delayed postflight
+was collected at `2026-08-27T16:00:10Z`. The package was the official signed
+GitHub artifact from run `33089519306`: INF
+`bdda859faf193db12896ba309fa9f20bd247f8b0520c339d05f23c6d18bed160`, SYS
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`, CAT
+`644111b2583b636c5643e39a62c2595e262cfe642c7e6e7cb78dd66d51c7eeab`,
+signer `8E36CF1EC74F76AB5D6532706C59158914AD37A9`. The runner's immediate
+84-millisecond PnP success was only an intermediate receipt; delayed
+postflight correctly observed Problem 43 and `STATUS_IO_TIMEOUT`.
+
+All four mailbox snapshots were valid. A2I `INBOX_CTRL` changed from
+`0x00025501` before IOP INIT (empty, count 0, read/write pointer 5) to
+`0x00105601` immediately after publication (count 1, read pointer 5, write
+pointer 6), then to `0x00026601` at failure (empty, count 0, read/write pointer
+6). I2A `OUTBOX_CTRL` was `0x00023301` at failure (empty, count 0,
+read/write pointer 3). Therefore Windows published the IOP INIT message and
+the running firmware consumed it, but firmware produced no RTKit HELLO. The
+mailbox visibility, barrier, trigger-order and unconsumed-response hypotheses
+are rejected. The failure boundary is now a firmware prerequisite before
+HELLO, with context-zero UAT publication the first source-backed checkpoint.
+
+Eight logical processors and Running AppleInput, stornvme and USBXHCI were
+retained; no critical event or reboot occurred. The delayed query counted 20
+stornvme Event 129 records from the experiment start timestamp, so storage
+health for this transaction is not qualified as clean even though the
+immediate runner saw zero. No retry is permitted. Raw evidence remains under
+ignored `.local/experiments/EXP-20260827-138-agx-mailbox-visibility/`; the
+sanitized verdict is
+`investigation/artifacts/EXP-20260827-138-agx-mailbox-visibility/VERDICT.md`.
+
+### EXP-20260827-139 — J313 context-zero UAT root snapshot
+
+Status: preregistered at `2026-08-27T18:58:32Z`; hardware transaction not yet
+started. EXP-138 proved that the running firmware consumed Windows IOP INIT but
+produced no HELLO. Current Asahi and pinned m1n1 establish context-zero UAT
+roots before entering RTKit, while the Windows qualification path does not.
+
+The single changed variable is one read-only snapshot before ASC RUN: decode
+the existing versioned AGX broker configuration, map the exact J313 gpu-region
+with `PAGE_READONLY | PAGE_NOCACHE`, read context-zero TTBR0 and TTBR1, unmap,
+and persist the values and pair-valid flag. The profile may not acquire GPU
+power, write MMIO, change ASC state, publish UAT roots, send mailbox messages,
+build initdata, register interrupts, submit commands, or expose a render node.
+Zero or invalid roots confirm the missing-prerequisite hypothesis. A valid
+nonzero pair rejects it. A mapping failure localizes the next correction to an
+explicit Mu/ACPI resource contract; the private diagnostic mapping must not be
+reused for production publication.
+
+Repository branch is `feature/j313-gpu-acceleration`. The ledger HEAD at
+preregistration is `fd847af8d1bba316b87f91e5ce5bbd7376b9dc54`; package source
+is `8b5ab22ba9d7b7446d9919b62b9554589a51f14f`; m1n1 is
+`72dbbd2b0b279638ac53482a6d79d06adfa6aef7`; Mu is
+`c6108366201f869b297912a0ef8323b343256ecc`. Tracked diff hashes for root,
+m1n1 and Mu are the empty SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Porcelain-state hashes are root
+`2477882f411e88db4fb05126b3e82477ff2ea180faf20439a4b33648e08bbee2`,
+m1n1 `6481a9771aff8aed35cbcebcba7137f562e443494d729c89db15e05b28c49971`,
+and Mu `305c4c53bf5736d01bf1f198d76bf3e3c440e18f8a0973bdeabffe00bf29f5de`;
+these represent only the pre-existing m1n1 `.DS_Store` and nested Mu metadata
+and must not be staged.
+
+The exact builder command is MSBuild `Clean,Build` for `Debug|ARM64`, WDK
+`10.0.26100.0`, `MatchingWdkPresent=true`, and
+`AppleAgxUatSnapshotQualification=true` against source commit `8b5ab22`.
+The build completed with zero errors and warnings. The retained local package is
+`.local/experiments/EXP-20260827-139-agx-uat-root-snapshot/package/`:
+INF `030a93073caa689dfd6e786548d3437dcd548aaa61a46f7761ef1f23dca41bf1`,
+SYS `7f94281877f99d9bfcdbe1e31c56dac324d6432e2907036f9537920b2bf308e5`,
+CAT `02b5c36952d7e3632aa00597835197984d80af065c440f363d3802b96325f8bb`,
+certificate `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda`,
+signer `E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+
+The live machine is `DESKTOP-LS9L95M` at `192.168.1.37`, assisted G2,
+display both, eight logical processors, with Running AppleInput, stornvme,
+USBXHCI and sshd. The current AppleAgx package is `oem17.inf`, version
+`15.47.29.978`, SYS
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+signer `8E36CF1EC74F76AB5D6532706C59158914AD37A9`, Problem 43. The boot image
+is `ff8695f0b5f43f853bfd1cbd604b71c621baf0251ec9e56398b6214eba8818e6`.
+Stable cold recovery is immutable EXP-123.
+
+Install exactly once with the hash-pinned single-transaction lifecycle runner,
+passing `PreviousPublishedName oem17.inf`, a 30-second completion timeout, and
+a 250-millisecond poll interval. Evidence is written under
+`C:\\Users\\pavel\\EXP139Evidence` and copied back to
+`.local/experiments/EXP-20260827-139-agx-uat-root-snapshot/`. Passing requires
+all six new receipts, eight CPUs, Running AppleInput/stornvme/USBXHCI, no fresh
+Event 129, no critical System event, no reboot, and responsive SSH/input. Stop
+after the single transaction on any hash, signer or device identity drift,
+receipt timeout, health loss, storage reset, bugcheck or reboot. Do not retry.
+
+Actual result at `2026-08-27T19:11:57Z`: inconclusive and rejected as a safe
+qualification method. Exactly one package transaction was started. The remote
+runner did not return a completion record; after approximately 31 seconds the
+Air stopped answering both SSH and ICMP and remained unreachable at the final
+read-only liveness check. No retry, guest reset, second package transaction, or
+new firmware launch was attempted. The local web framebuffer and telemetry
+servers contained only stale data from an earlier generation, so they cannot
+be used as evidence for the physical screen or guest state. No UAT snapshot
+receipt was recovered before loss of contact.
+
+The experiment therefore does not establish whether context-zero roots were
+zero or valid. It does establish that privately mapping `gpu-region` from its
+ADT physical address is not an acceptable Windows access contract: the region
+was absent from AGX0 `_CRS`, absent from the translated-resource validator, and
+not independently guaranteed by the assisted/standalone stage-2 contract. The
+next experiment must first expose exactly this 16-KiB region through the
+generated Mu ACPI contract and explicit m1n1 stage-2 identity mapping, then map
+only its translated resource through `DxgkCbMapMemory`. Recovery remains
+immutable EXP-123. EXP-139 must not be rerun.
+
+### EXP-20260827-140 — assigned J313 context-zero UAT root snapshot
+
+Status: preregistered at `2026-08-27T19:32:00Z`; hardware transaction not
+started because the Air remains unreachable after EXP-139. EXP-139 could not
+recover root values and rejected private physical mapping. The source-backed
+correction is one atomic ownership contract: Mu assigns the exact 16-KiB
+`gpu-region` to AGX0, m1n1 identity-maps that same region in both assisted and
+standalone stage-2 paths, and the Windows qualification maps only the assigned
+translated resource through `DxgkCbMapMemory`.
+
+The changed variable relative to EXP-139 is the resource ownership contract;
+the read-only snapshot semantics remain unchanged. No UAT root may be written,
+no initdata may be built, no ASC RUN bit may be asserted, no mailbox message may
+be sent, and no power, interrupt, queue, command, render, presentation, or
+display-ownership stage may run. A successful map plus durable TTBR0/TTBR1 and
+pair-valid receipts passes the observation gate. A clean configuration failure
+rejects the contract without touching firmware. Lost input, storage, USB, SSH,
+Event 129, bugcheck, reboot, or missing receipt stops the experiment with no
+retry.
+
+Exact source identity is root implementation commit
+`a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b`, ledger HEAD
+`fcfd7d71d87b0d6aca0d20cde89433125f8c0fbc`, m1n1
+`4108e79c69bac112ffbebf452fccf352c93c1dd2`, and Mu
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`. Tracked-diff SHA-256 for root,
+m1n1 and Mu is the empty hash
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Porcelain hashes are root
+`2477882f411e88db4fb05126b3e82477ff2ea180faf20439a4b33648e08bbee2`,
+m1n1 `6481a9771aff8aed35cbcebcba7137f562e443494d729c89db15e05b28c49971`,
+and Mu `305c4c53bf5736d01bf1f198d76bf3e3c440e18f8a0973bdeabffe00bf29f5de`;
+only the pre-existing m1n1 `.DS_Store` and nested Mu metadata account for that
+porcelain state and they must not be staged.
+
+The complete `display=both`, `debug=monitor` candidate built successfully in
+the project container. Its boot-image SHA-256 is
+`67713a743f5b6e16e7f3d69cf016ad74b3cb57a0ef901b239b741cdc06651b7e`;
+compiled AML verification passed. The exact ARM64 WDK qualification build
+completed with code analysis and signability success. Package hashes are INF
+`0185337e08de483ffb0fb85632179f096d912ae9746c673e4213e01a2e0e9caa`,
+SYS `09e74647911439b720cc32013114c95ad69e7697fe8ea3873b14f4fcc3828ee0`,
+and CAT `01ff42516dd8cfe791f2c8f6531914aaef5d90bb0b21b36079aad3c33c4498a9`.
+The retained package is under ignored
+`.local/builds/a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b/AppleAgx/`.
+
+Before candidate use, physically recover immutable EXP-123 and prove eight
+logical processors, stable internal input, stornvme, USBXHCI and SSH, no fresh
+Event 129 or critical System event, and the exact prior AppleAgx package state.
+Then cold-launch the candidate once and first verify the version-three ACPI
+resource identity without installing the driver. Only after that boot gate may
+the signed package run through the corrected single-transaction lifecycle
+runner exactly once. Do not attach the m1n1 proxy client while Windows is
+running and do not rerun EXP-139.
+
+Observed result (`2026-08-27T19:43:00Z`): the resource boundary passed and the
+package boundary was rejected without a transaction. Exact EXP-123 first
+reached responsive Windows with eight logical processors, Running AppleInput,
+`stornvme`, `USBXHCI` and SSH, and no recent critical or Event-129 record. The
+sole version-three boot then reached the lock screen and SSH with all eight
+processors and the same platform services alive. Windows assigned AGX0 exactly
+three memory resources: SGX `0x204000000..0x207ffffff`, context-zero
+`gpu-region` `0x9fffb8000..0x9fffbbfff`, and broker
+`0x300000000..0x300000fff`, plus IRQs 880 through 888. This proves the Mu,
+m1n1 stage-2 and translated WDDM ownership chain added by the candidate.
+
+The pre-existing `oem17.inf` automatically bound when AGX0 became present. It
+was version `15.47.29.978`; active SYS SHA-256 was
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+which does not match the new candidate. It stopped with Problem 43 while two
+new `stornvme` Event 129 resets were recorded ten seconds apart. The new signed
+package was therefore not transferred, installed or started. Windows shut down
+normally and exact EXP-123 recovery again reached SSH with eight processors,
+the three platform services Running, AGX0 phantom, and zero Event 129 or
+critical events after its new boot.
+
+The exact old package was exported before any removal to ignored
+`.local/rollback/EXP140-oem17/`: INF SHA-256
+`bdda859faf193db12896ba309fa9f20bd247f8b0520c339d05f23c6d18bed160`,
+SYS `841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+and CAT `644111b2583b636c5643e39a62c2595e262cfe642c7e6e7cb78dd66d51c7eeab`.
+EXP-140 is closed and must not be retried. Its accepted result is the assigned
+resource identity only; the UAT snapshot remains unexecuted.
+
+### EXP-20260827-141 — isolate stale AppleAgx startup from G2 storage resets
+
+Status: preregistered at `2026-08-27T19:51:24Z`; hardware mutation not yet
+started. EXP-140 proved that version-three resource assignment is correct but
+also showed that the stale installed AppleAgx package starts automatically only
+when G2 makes AGX0 present. The falsifiable hypothesis is that this old
+StartDevice path, rather than the new 16-KiB identity mapping, causes the pair
+of boot-time `stornvme` resets.
+
+While exact EXP-123 is responsive, export and hash the exact old package, then
+remove only recorded `oem17.inf` without `/force`. Do not change firmware,
+NVMe, CPU, USB, input, display, recovery policy or the ESP. After a quiet
+recovery window, perform one cold version-three boot using the same EXP-140
+m1n1 and Mu artifacts. Before any package transaction require eight processors,
+Running AppleInput, `stornvme`, `USBXHCI` and SSH, the exact three AGX memory
+resources, APPL0002 unbound/Code 28, no AppleAgx service execution, and zero
+Event 129 or critical records since boot.
+
+Only if that pre-install gate passes may the exact retained qualification
+package from implementation commit
+`a36a6fcd1a2e67334690ba6f8d2ab1efb8376e2b` run once through the corrected
+single-transaction lifecycle helper. Expected hashes remain INF
+`0185337e08de483ffb0fb85632179f096d912ae9746c673e4213e01a2e0e9caa`, SYS
+`09e74647911439b720cc32013114c95ad69e7697fe8ea3873b14f4fcc3828ee0`, and CAT
+`01ff42516dd8cfe791f2c8f6531914aaef5d90bb0b21b36079aad3c33c4498a9`.
+The qualification may read and persist only the configuration snapshot,
+TTBR0/TTBR1 and pair-valid result, then must return fail-closed without power,
+ASC RUN, mailbox, UAT write, initdata, interrupt, queue, render, present or
+display ownership.
+
+Any pre-install Event 129 rejects the stale-driver hypothesis without a driver
+transaction. Any package hash or signer mismatch, missing resource, failed
+health gate, timeout, forbidden action, input/storage/USB/SSH loss, bugcheck or
+reboot stops the experiment with no retry. Rollback uses only the recorded
+exported package and exact signer, never `/force`; exact EXP-123 remains the
+full platform recovery.
+
+Setup clarification recorded before mutation at `2026-08-27T19:58:00Z`:
+ordinary `pnputil /delete-driver oem17.inf` correctly refused because the
+package is still attached to disconnected phantom devnode
+`ACPI\\APPL0002\\0`. Read-only enumeration confirmed `Present=False`,
+`CM_PROB_PHANTOM`, `Status=Disconnected`, and no other matching AGX devnode.
+The bounded setup operation is therefore to remove exactly that disconnected
+devnode through the normal PnP remove-device path, then delete exactly
+`oem17.inf` without `/force`. This does not broaden the experiment variable:
+the old AGX binding and its Driver Store package are one stale startup state.
+Any identity drift or refusal stops the experiment without retry.
+
+Observed result (`2026-08-27T20:02:00Z`): the stale-driver hypothesis was
+rejected before any new package transaction. Exact EXP-123 was healthy with
+eight processors, Running AppleInput/stornvme/USBXHCI/sshd, and zero Event 129
+or critical events. The disconnected `ACPI\\APPL0002\\0` devnode was removed
+through the normal PnP path, then exact `oem17.inf` was deleted without
+`/force`. Driver Store enumeration was empty and platform health remained
+unchanged.
+
+The unchanged version-three candidate then reached responsive Windows. AGX0
+was cleanly unbound with Problem 28 and had the exact expected resources: SGX
+`0x204000000..0x207fffffff`, context-zero
+`0x9fffb8000..0x9fffbbfff`, broker `0x300000000..0x300000fff`, and IRQs 880
+through 888. Nevertheless `stornvme` Event 129 occurred at 22:00:59 and
+22:01:09, exactly ten and twenty seconds after the 22:00:49 boot time. The new
+package was not transferred, installed or started. Thus old AppleAgx startup
+is not required for the reset pair. Raw hypervisor evidence is retained under
+ignored `.local/experiments/EXP-20260827-141-stale-agx-isolation/`.
+
+### EXP-20260827-142 — isolate G2 power-broker activation from NVMe resets
+
+Status: preregistered at `2026-08-27T20:03:00Z`; hardware run not started.
+EXP-141 proves the reset pair occurs with no display driver in Driver Store and
+AGX0 unbound. The next smallest runtime difference from immutable EXP-123 is
+the assisted launch option that activates the G2 power broker. The falsifiable
+hypothesis is that broker activation, not the assigned 16-KiB resource or
+Windows driver execution, is required for the two boot-time NVMe resets.
+
+After clean EXP-141 shutdown and exact EXP-123 recovery, cold-launch the exact
+same version-three m1n1 and Mu artifacts once with display `both`, debug
+`monitor`, but without `--agx-power-broker`. Do not rebuild either artifact,
+change ACPI, install a driver, alter CPU/NVMe/USB/input/display state, or attach
+the proxy client while the guest runs. Require eight processors, Running
+AppleInput/stornvme/USBXHCI/sshd, AGX0 unbound with Problem 28, and zero critical
+events. Zero Event 129 through a 25-second post-boot window supports the broker
+hypothesis; any Event 129 rejects it. In either case stop without a package
+transaction, retain `hv.log`, shut down cleanly, and recover EXP-123. No retry.
+
+Precondition result (`2026-08-27T20:06:31Z`): EXP-142 was not started. Exact
+EXP-123 itself recorded one `stornvme` Event 129 at 22:06:31, 68 seconds after
+its 22:05:23 boot time, so the required zero-reset recovery gate failed. The
+guest remained responsive with eight processors and zero critical events. No
+GPU candidate or driver transaction followed.
+
+The recovery `hv.log` contains 1,937 routed-IRQ transition messages, 1,927 of
+them for USB vINTID 865/AIC 330. These synchronous UART prints execute in the
+GIC distributor hot path immediately before the later NVMe re-enable. This
+diagnostic load is therefore the next falsifiable test-harness variable; the
+power-broker hypothesis remains untested.
+
+### EXP-20260827-143 — bound hot-path IRQ diagnostics on exact recovery
+
+Status: preregistered at `2026-08-27T20:12:00Z`; hardware run not started. The
+sole changed behavior from immutable EXP-123 is diagnostic output frequency.
+IRQ mask/unmask, AIC state, vGIC state, EOI, routing and delivery are unchanged.
+Every transition remains counted atomically; the UART prints only transitions
+1 through 8 and later powers of two. The policy was developed test-first, the
+new test failed on the absent API, then passed after the implementation; the
+complete m1n1 host-test suite passed.
+
+Exact m1n1 source is
+`261c6e5f15a7cfe710a25aec24901ac9ff6bbf86`, based on EXP-123 `bee53dc` plus
+only bounded logging. Exact Mu is unchanged EXP-123. Retained artifacts are
+under ignored
+`.local/experiments/EXP-20260827-143-recovery-bounded-irq-logging/`: m1n1
+SHA-256 `1aeb4c398b1f6941eb204af0ed7b3ab7d37a849bb68ea4a454d708f6599bf87d`,
+Mu SHA-256 `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`.
+
+After clean shutdown of the current exact-recovery guest, cold-launch EXP-143
+once with display `both`, debug `monitor`, and no G2 power broker. Require eight
+processors and Running AppleInput/stornvme/USBXHCI/sshd. Observe at least 90
+seconds after boot. Passing requires no critical event, no Event 129, responsive
+SSH/input, and no more than 20 routed-IRQ transition log lines while the final
+counter proves later transitions occurred. Any reset, service loss, hang or
+reboot rejects the diagnostic-overhead hypothesis. Do not install a display
+driver or run a GPU candidate. Cleanly recover exact EXP-123 after the single
+run; no retry.
+## EXP-20260827-144 — Gate Apple SPI-HID level IRQ across passive drain
+
+Status: invalidated by an unplanned VHF configuration change; exact
+`oem16.inf` rollback and stable `TransportOnly/PublishKeyboard/PublishTrackpad`
+values `0/1/1` are restored.
+
+### Evidence and single variable
+
+- Live EXP-143 Windows reports `13,729` AppleInput ISR entries, `1,575`
+  queued/completed workers, `2,992` SPI transfers, `1,585` trackpad reports,
+  and zero SPI timeout, packet CRC, message CRC, fragment, or offline errors.
+- The physical active-low GPIO therefore remains asserted while the passive
+  worker is queued.  KMDF unmasks GSI 865 after the ISR returns, producing
+  repeated `AIC 330 -> vINTID 865` delivery before SPI drain completes.
+- The same window contains four stornvme Event 129 resets at ten-second
+  intervals.  No GPU package is present and no GPU mutation is allowed.
+- Exact rollback is `oem16.inf`, version `17.6.9.292`, active SYS SHA-256
+  `7b75873de00a392b6e906edf5776f69c274e86814fb02389414ef557d2b7bdb5`,
+  exported to `C:\AppleInputRollback\EXP144`.
+- The only candidate variable is root commit
+  `857dde5340e0447d68c7df308d3ab6c9db149ae0`: the ISR gates only nub-gpio pin
+  13 before queueing its existing bounded worker; the worker re-arms IRQ_LOW
+  only after draining.  Firmware, m1n1, Mu, CPU topology, NVMe, USB, display,
+  VHF descriptors and packet parsing remain unchanged.
+
+### Procedure and gates
+
+1. Build and sign the exact ARM64 AppleInput package from the candidate commit.
+2. Verify package hashes and signer, publish it once, and restart only
+   `ACPI\APPL0001\0`; do not reboot Windows or change firmware.
+3. Require APPL0001 Started, AppleInput Running, keyboard and Precision
+   Touchpad children healthy, phase 8, zero transport errors and responsive
+   SSH.
+4. Record AppleInput counters, wait 90 seconds at idle, exercise keyboard plus
+   single- and two-finger trackpad input, then record counters again.
+5. Pass only if worker and report progress continues while ISR growth is near
+   worker growth rather than the pre-change ~9:1 amplification, and there is no
+   new stornvme Event 129 or critical System event.
+
+Any package mismatch, Code 10/43, lost input, lost SSH, transport error, Event
+129 or critical event immediately ends the experiment and restores the exact
+exported `oem16.inf`.  No retry and no GPU transaction are permitted.
+
+### Result
+
+GitHub Actions run `33113494073` built and signed the exact ARM64 package from
+root commit `857dde5340e0447d68c7df308d3ab6c9db149ae0`.  The installed
+`AppleInput.sys` SHA-256 is
+`15fbb42e0b7a686282c7874495fb1ac0214096a81a20e879b1a2690c9c19c1ef`;
+the catalog signer thumbprint is `71CD0A261CE0098675E1339C970E76726F0AC292`.
+Only the catalog certificate, package publication and restart of
+`ACPI\APPL0001\0` changed.  Windows and firmware were not rebooted.
+
+The device remained Started and the service remained Running at discovery
+phase 8.  After real keyboard and trackpad activity the diagnostic snapshot
+reported `594` interrupts, `594` queued workers, `594` completed workers,
+`609` SPI transfers, `8` keyboard reports and `584` trackpad reports.  All SPI
+timeout, packet CRC, message CRC, fragment, offline and transport-error
+counters remained zero.  This proves that gating removed the pre-change
+approximately nine-to-one ISR amplification.  There were also zero stornvme
+Event 129 records and zero Critical or Error System events after the switch.
+
+The user-visible keyboard and trackpad nevertheless stopped working.  PnP
+showed no Apple-backed Keyboard or Mouse child even though the parent remained
+Started and transport report counters progressed.  Inspection after rollback
+found that both candidate and rollback INF defaults had overwritten the stable
+service parameters with `TransportOnly=1`, `PublishKeyboard=0` and
+`PublishTrackpad=0`.  This was an unplanned second variable, not a VHF lifetime
+failure or evidence against the IRQ correction.
+
+Per the stop rule, `oem17.inf` was uninstalled without retry and exact exported
+`oem16.inf` restored.  Restoring the established explicit `0/1/1` publication
+parameters and restarting only APPL0001 immediately recreated both VHF
+devices: a HID Keyboard Device and HID-compliant touch pad.  EXP-144 is
+invalidated rather than passed or used to reject the code.  A new experiment
+must preserve `0/1/1` before evaluating the IRQ correction.
+
+## EXP-20260827-145 — Requalify Apple input IRQ gate with VHF preserved
+
+Status: passed on hardware; corrected `oem17.inf` is active with stable VHF
+publication parameters `0/1/1`.
+
+### Evidence and single variable
+
+- Exact rollback `oem16.inf` is active and APPL0001 is Started.
+- Stable VHF service parameters are explicitly `0/1/1`; both virtual HID
+  children are present after restart.
+- EXP-144's package publication silently reset those values to the INF-safe
+  defaults `1/0/0`, invalidating its user-input criterion while independently
+  showing one-to-one IRQ/worker transport behavior.
+- The sole candidate remains root commit
+  `857dde5340e0447d68c7df308d3ab6c9db149ae0`, Actions run `33113494073`, SYS
+  SHA-256
+  `15fbb42e0b7a686282c7874495fb1ac0214096a81a20e879b1a2690c9c19c1ef`.
+
+### Procedure and gates
+
+1. Verify rollback parent, VHF children, `0/1/1`, SSH and exact candidate
+   hashes before mutation.
+2. Publish the exact candidate once, immediately restore explicit `0/1/1`,
+   and restart only `ACPI\APPL0001\0`.  No reboot or firmware/GPU change.
+3. Require parent, service, keyboard and touchpad children all healthy before
+   collecting counters.
+4. Exercise real keyboard and trackpad input and require near one IRQ per
+   worker, report progress, phase 8 and zero transport errors.
+5. Observe 90 seconds and require zero new stornvme Event 129, Critical or
+   Error System events and continuously responsive SSH/input.
+
+Any hash/configuration mismatch, missing VHF child, Code 10/43, transport
+error, Event 129, lost SSH/input or reset ends the experiment.  Remove the
+candidate, restore exact `oem16.inf` plus explicit `0/1/1`, and do not retry.
+
+### Result
+
+Preflight confirmed exact rollback `oem16.inf`, explicit `0/1/1`, healthy VHF
+children and all three candidate hashes.  The exact Actions run `33113494073`
+package was then published once as `oem17.inf`; the same explicit `0/1/1`
+values were restored before the sole APPL0001 restart.
+
+Postflight found the parent Started, service Running, both VHF devices and the
+derived HID Keyboard Device plus HID-compliant touch pad healthy.  The user
+confirmed that the built-in keyboard and trackpad worked.  Discovery remained
+at phase 8 with zero SPI timeout, packet CRC, message CRC, fragment and offline
+errors.  No stornvme Event 129 and no Critical or Error System event appeared
+in the observation window, and SSH remained responsive.  EXP-145 passes; this
+is the qualified AppleInput package for the next GPU cold boot.
+
+## EXP-20260827-146 — Accept one translated DevicePrivate descriptor per AGX MMIO range
+
+Status: preregistered; software correction pending, no second device transaction
+has run.
+
+### Evidence and hypothesis
+
+The first qualified version-three GPU transaction used root commit
+`9f4c79b566415ed90aeb6c9d14fd5ed43c004f28`, m1n1 artifact commit
+`4108e79c69bac112ffbebf452fccf352c93c1dd2`, Mu commit
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`, firmware SHA-256
+`34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`
+and m1n1 SHA-256
+`17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+The exact signed AppleAgx package was published as `oem18.inf`.  Its single
+StartDevice transaction completed in 326 ms with no Event 129 or critical
+System event, eight CPUs and AppleInput/stornvme/USBXHCI Running, but ended at
+`AppleAgxStartResourcesValidated` with `0xC0000182` and Problem 43.
+
+The durable translated-resource receipt contains exactly three memory
+descriptors, three immediately paired `CmResourceTypeDevicePrivate`
+descriptors and nine interrupt descriptors.  The generated version-three ACPI
+contract added a third QWordMemory (`gpu-region`), but `resources.c` retained
+the version-two expectation of only two DevicePrivate descriptors.  The
+falsifiable hypothesis is that Windows emits one opaque DevicePrivate companion
+for each translated QWordMemory and that accepting exactly three lets this same
+read-only package reach UAT snapshot diagnostics without changing power,
+mailbox, UAT contents, interrupts, queues or scanout.
+
+### Single variable and procedure
+
+1. Add a failing source regression that binds the opaque DevicePrivate count to
+   the generated three-memory contract.
+2. Change only the exact expected companion count from two to the memory count;
+   keep ownership, bounded-count, MMIO identity and nine-interrupt checks.
+3. Run the focused package tests and complete public test suite, then build and
+   sign one ARM64 `UatSnapshotQualification` package on the Windows builder.
+4. Record all artifact hashes and signer before mutation.  Replace only the
+   current `oem18.inf` package and perform exactly one hot APPL0002 transaction;
+   no reboot, firmware change, retry or proxy attachment.
+5. Pass requires resource stage success and durable UAT config/snapshot
+   receipts with continuously responsive SSH/input, eight CPUs, zero new Event
+   129 and zero critical System events.  Any mismatch, reset, lost input/SSH or
+   missing receipt ends the experiment and restores the recorded package.
+
+Evidence paths are `.local/experiments/EXP-20260827-146-device-private/` on the
+host and `C:\\Users\\pavel\\AppleAgxEvidence` in the guest.  Recovery remains
+the hardware-qualified eight-core stable pair and exact exported AppleInput
+rollback package; no cold recovery is needed for a healthy fail-closed hot
+cycle.
+
+### Result
+
+The exact package from `45127a2a164e34119464f5e7ab22d4c3acb63852`
+was built with the official ARM64 WDK UAT-snapshot profile.  Artifact hashes
+were INF `3575098341156a711c5e98cc5d38a55cecf344fa37f4ec3cdac9faf79ea274d0`,
+SYS `546568655f72737052aee5abd32f2adb3f7f7a941973503159c2f604f9a6661c`
+and CAT `d26972673b85c6350df5b29169f8dbdfbf61208251d1a699d7f27c9df7feb029`;
+Windows validated signer thumbprint
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`.  Preflight proved exact current
+`oem18.inf`, eight CPUs, Running AppleInput/stornvme/USBXHCI and VHF `0/1/1`.
+
+The sole hot package replacement did not execute the new StartDevice and is
+therefore inconclusive for the parser hypothesis.  The runner timed out after
+30145 ms with only successful AddDevice receipts.  SetupAPI recorded
+`Configure Driver Package: exit(0x00000bc3)`, `Restart required for any devices
+using this driver`, and service `AppleAgx` pended for deletion.  PnP settled at
+Problem 31 / `CM_PROB_FAILED_ADD`, status `0xC0000182`, while DriverEntry,
+DxgkInitialize and the miniport AddDevice callback all recorded success.  This
+is a display-miniport reload constraint, not a UAT, MMIO or parser result.
+Eight CPUs and all three platform services remained alive, with zero Event 129
+and zero critical System events.  EXP-146 ends inconclusive and must not be
+retried hot.
+
+## EXP-20260827-147 — Cold-load the exact assigned-root snapshot package
+
+Status: preregistered at 2026-08-27T21:12:39Z; hardware run pending.
+
+### Hypothesis and single variable
+
+The exact EXP-146 package is already installed as `oem18.inf`, but Windows
+requires one reboot to replace the pended display-miniport service image.  The
+sole variable is a clean guest reboot and cold load of those already recorded
+bytes.  Firmware, m1n1, Mu, display mode, CPU count, AppleInput and every GPU
+driver byte remain unchanged.
+
+### Procedure and gates
+
+1. Preserve the EXP-146 JSON and SetupAPI excerpt, then request a normal Windows
+   restart.  Do not mutate or reinstall the package.
+2. Relaunch the same version-three G2 firmware/m1n1 pair with display `both`,
+   eight CPUs, monitor logging and AGX power broker enabled.
+3. Require the new SYS hash and signer, `AppleAgxDdiStartDevice` receipts,
+   resource stage success and final UAT config/snapshot/root-pair receipts.
+4. Require working internal input, SSH, NVMe and xHCI, eight CPUs, zero fresh
+   Event 129 and zero critical System events.  No retry is permitted.
+
+Pass requires a bounded fail-closed UAT result with no platform-health loss;
+failure is missing StartDevice, timeout, reset, black screen without SSH,
+input/storage loss, Event 129, critical event or identity drift.  Recovery is
+the exact EXP-123 pair.  Evidence is stored under
+`.local/experiments/EXP-20260827-147-cold-kmd-load/` and the existing guest
+`C:\\Users\\pavel\\AppleAgxEvidence` tree.
+
+### Result
+
+Windows cold-booted with exact SYS SHA-256
+`546568655f72737052aee5abd32f2adb3f7f7a941973503159c2f604f9a6661c`,
+eight processors, Running AppleInput/stornvme/USBXHCI, VHF `0/1/1`, zero Event
+129, zero critical or error System events and responsive SSH.  APPL0002 retained
+Problem 31 / status `0xC0000182` and only the pre-existing AddDevice receipts.
+The AppleAgx kernel service reported stopped with Win32 exit code 1077, proving
+the new image had never started.  No Code Integrity event existed; the exact
+three MMIO and nine IRQ resources remained assigned.
+
+Cold boot cleared the service deletion requirement but did not cause PnP to
+retry the already failed devnode.  EXP-147 is inconclusive for the parser and
+UAT hypothesis; it does prove that an explicit bounded device restart is
+required after this package replacement workflow.
+
+## EXP-20260827-148 — Start the installed GPU package once after cold reload
+
+Status: preregistered; hardware run pending.
+
+### Hypothesis and single variable
+
+The exact new package is installed and trusted, but APPL0002 preserves the
+failed-add state created while the old service was pending deletion.  Clearing
+only diagnostic `Wom1*` values and issuing one exact PnP restart will load the
+new SYS for the first time.  No package, firmware, power, UAT, input, display,
+CPU or boot variable changes.
+
+### Procedure and gates
+
+1. Verify exact `oem18.inf`, SYS/CAT/INF hashes, signer, eight CPUs, platform
+   services and VHF `0/1/1`.
+2. Remove only `Wom1*` values from the AppleAgx service and APPL0002 Device
+   Parameters diagnostic keys.
+3. Invoke `pnputil /restart-device ACPI\\APPL0002\\0` exactly once and wait at
+   most 30 seconds for fresh StartDevice receipts.
+4. Require resource stage success and bounded UAT config/snapshot/root receipts,
+   plus responsive input/SSH, eight CPUs, zero Event 129 and zero critical
+   System events.  Do not retry on any failure.
+
+The exact EXP-123 assisted pair remains recovery.  Evidence is stored under
+`.local/experiments/EXP-20260827-148-explicit-start/` and the guest
+`C:\\Users\\pavel\\AppleAgxEvidence` tree.
+
+### Result
+
+The exact restart returned success but produced fresh DriverEntry,
+DxgkInitialize and AddDevice-success receipts only.  StartDevice was never
+called within 30 seconds; APPL0002 retained Problem 31 / `0xC0000182`.
+Eight CPUs and AppleInput/stornvme/USBXHCI remained healthy with VHF `0/1/1`,
+zero Event 129 and zero critical System events.  EXP-148 rejects the hypothesis
+that a restart of the preserved failed-add devnode is sufficient.
+
+Microsoft's KMDOD installation guidance identifies display-stack replacement
+as requiring a switch away from the active adapter or reboot.  Here reboot
+cleared the service-deletion requirement but retained the failed devnode, and
+restart reused that same stack.  The next bounded variable is clean devnode
+recreation while retaining the exact installed package.
+
+## EXP-20260827-149 — Recreate APPL0002 without replacing its package
+
+Status: preregistered; hardware run pending.
+
+### Hypothesis and procedure
+
+The current `oem18.inf` package and SYS are exact and trusted, but the existing
+APPL0002 devnode was created while the previous service was pending deletion.
+Removing only that devnode and issuing one PnP rescan will create a clean
+display stack and invoke StartDevice.  The package, firmware, driver bytes,
+power, UAT, display, input, CPU and boot state do not change.
+
+1. Verify exact package/SYS, eight CPUs, services and VHF `0/1/1`.
+2. Remove exactly `ACPI\\APPL0002\\0`; do not delete `oem18.inf` or any signer.
+3. Clear only service diagnostic `Wom1*` receipts and perform exactly one PnP
+   rescan.
+4. Wait at most 30 seconds for a present APPL0002 and fresh StartDevice status.
+5. Require resource-stage success, bounded UAT receipts, responsive input/SSH,
+   eight CPUs and zero Event 129/critical events.  Do not retry.
+
+Recovery remains EXP-123.  Evidence is stored under
+`.local/experiments/EXP-20260827-149-clean-devnode/` and the guest evidence
+tree.
+
+### Result
+
+The exact device removal and single rescan both succeeded.  The recreated
+APPL0002 remained present on exact `oem18.inf` with Problem 31 and status
+`0xC0000182`.  Fresh service receipts ended at successful DriverEntry and
+DxgkInitialize.  A later device-key audit found fresh AddDevice stage 2/status
+zero receipts that the original service-key-only query missed; StartDevice was
+not called.  SetupAPI contains no install or trust failure for the recreation.
+Eight CPUs and AppleInput/stornvme/USBXHCI remained Running with VHF `0/1/1`.
+
+EXP-149 rejects stale devnode state as the root cause.  The corrected failure
+boundary is inside Dxgkrnl's function-driver AddDevice path after the miniport's
+AddDevice callback returned success and before StartDevice.  The registered
+runtime interface mismatch remained the next hypothesis, but the original
+statement that AddDevice was absent is superseded by this correction.
+
+## EXP-20260827-150 — Separate compile-time ADL headers from runtime DDI level
+
+Status: preregistered; hardware run pending.
+
+### Hypothesis and single variable
+
+Dxgkrnl rejects the adapter before AddDevice because the driver advertises a
+WDDM 3.0 runtime contract that it does not implement completely.  Keep the
+project compiled against WDDM 3.0 headers, but advertise the previously
+implemented WDDM 2.6 runtime interface for this diagnostic package.  No DDI,
+resource, firmware, power, UAT, input, CPU or display behavior changes.
+
+1. Add a regression assertion that compile-time headers remain WDDM 3.0 while
+   `DRIVER_INITIALIZATION_DATA.Version` is WDDM 2.6 for this experiment.
+2. Build and sign exactly one ARM64 UAT package with the one-line runtime
+   version change.
+3. Install that package once, reboot once if SetupAPI requires it, and perform
+   no hot retry.
+4. Require fresh AddDevice and StartDevice receipts.  A bounded later UAT
+   failure counts as admission success; missing AddDevice rejects the
+   hypothesis.
+5. Require eight CPUs, working input/SSH, Running AppleInput/stornvme/USBXHCI,
+   zero Event 129 and zero critical System events.
+
+This is a diagnostic compatibility test, not the final UAT design.  If it
+passes, the production correction is to restore WDDM 3.0 and implement its
+required callback contract before continuing ADL/UAT.  Recovery remains
+EXP-123.
+
+### Result
+
+Rejected after the single permitted hot package cycle and one required cold
+load.  Windows loaded exact `AppleAgx.sys` SHA-256
+`e6ffbc9ca18aa99cbc23d9d97c85842c1b2b24e8241adf28e97b63ce494d72d1`
+from `oem18.inf`, and both DriverEntry/DxgkInitialize and AddDevice reached
+stage 2/status zero.  StartDevice remained absent; APPL0002 retained Problem 31
+with ProblemStatus `0xC0000182`.  Kernel-PnP event 411 classified this as a
+failed add, not a StartDevice failure.  Eight CPUs and Running
+AppleInput/stornvme/USBXHCI remained healthy; the keyboard and trackpad VHF
+children were present with Problem 0; zero Event 129 and zero critical/error
+System events occurred after boot.
+
+Changing only the advertised runtime DDI from WDDM 3.0 to WDDM 2.6 therefore
+does not cross the post-AddDevice admission boundary.  The exact callback table
+and WDDM 2.6 runtime had previously reached StartDevice in EXP-130, so the next
+bounded comparison is the current UAT/ADL build profile against the current
+lifecycle profile, not another runtime-version retry.
+
+## EXP-20260827-151 — A/B current lifecycle profile against UAT profile
+
+Status: completed; hypothesis rejected.
+
+Created (UTC): 2026-08-27T21:46:27Z.
+
+### Fixed identities
+
+- Root: `373e962d88cd1fe9aa99539d2d24d86c5a11a542` on
+  `feature/j313-gpu-acceleration`.
+- m1n1: `8371e3674ba0944c4a32068f0ba659cbb0e57e77`; root-visible
+  nested diff SHA-256
+  `41f1c3a931d95a6a3ee9cba1d97ba5e10251cbeb84cde67a588519c8057e3d6d`.
+- Mu: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; clean diff
+  SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Source archive SHA-256:
+  `2770f5ec30c44c751f6b7b73ba8845e74d5ec10332f90ef66ad3ac5c5897b7cc`.
+- Build configuration: Debug ARM64, WDK `10.0.26100.0`, lifecycle=true;
+  power/MMIO/firmware/powered-status/RTKit/UAT-snapshot=false.
+- Driver version: `08/27/2026,23.45.58.628`.
+- SYS SHA-256:
+  `d4863709d96ecdd5a5a7b02fc76a65149c44d409c2d0cc4b5e499f26c653115d`.
+- INF SHA-256:
+  `94e6aaddd499884a51fed2333b14e590f0bd429faf3c159d1380dbd4dc904a65`.
+- CAT SHA-256:
+  `54c8b114945e5c9a526b6955a11c71d57f7a69202362c9badf4a6b9d41c92b22`.
+- Signer: `E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+- Firmware SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`.
+- Launch m1n1 SHA-256:
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Recovery remains the immutable EXP-123 artifact.
+
+### Hypothesis and single variable
+
+The regression was introduced by the UAT/ADL build-profile expansion after the
+EXP-130 lifecycle package, rather than by firmware, ACPI resources, devnode
+state or the source-level callback initializer.  Build the current root once
+with `AppleAgxLifecycleQualification=true` and no UAT-snapshot definition, then
+replace only the exact GPU package in the already-running G2 guest.  Firmware,
+m1n1, Mu, ACPI, CPU, input, storage, display and source revision remain fixed.
+
+1. Pin the current root, nested commits, dirty-state hashes, signed package
+   hashes, signer and generated INF before touching the guest.
+2. Verify the precondition is exact EXP-150 with eight CPUs, responsive SSH and
+   Running AppleInput/stornvme/USBXHCI.
+3. Perform one device-scoped package cycle with the current lifecycle profile;
+   reboot once only if SetupAPI explicitly requires it.  Do not retry.
+4. Require fresh AddDevice and StartDevice receipts.  The designed lifecycle
+   endpoint is stage 7/`STATUS_NOT_SUPPORTED`; any earlier hardware receipt is
+   forbidden.
+5. Require eight CPUs, working native input, zero Event 129 and zero critical
+   System events.  Recovery remains EXP-123.
+
+If the lifecycle profile reaches StartDevice, the hypothesis is confirmed and
+the next software investigation compares compile-time/profile differences
+before changing UAT code.  If it remains at AddDevice, the hypothesis is
+rejected and the regression must be outside the profile macro.
+
+### Result
+
+The single permitted device-scoped package cycle completed with the exact
+pinned package.  Windows verified and installed SYS SHA-256
+`d4863709d96ecdd5a5a7b02fc76a65149c44d409c2d0cc4b5e499f26c653115d`,
+INF SHA-256
+`94e6aaddd499884a51fed2333b14e590f0bd429faf3c159d1380dbd4dc904a65`
+and CAT SHA-256
+`54c8b114945e5c9a526b6955a11c71d57f7a69202362c9badf4a6b9d41c92b22`
+under `oem18.inf`.  AddDevice again reached stage 2/status zero, but no
+StartDevice receipt appeared during the bounded 30,201 ms observation.
+APPL0002 remained Problem 31 on driver version `23.45.58.628`.
+
+The guest retained eight logical processors and Running AppleInput, stornvme
+and USBXHCI services.  The user confirmed native keyboard and trackpad input
+before the run; the platform-health gate remained satisfied afterward.  No
+stornvme Event 129 and no critical System event occurred during the cycle.
+Evidence is stored in the guest at
+`C:\\Users\\pavel\\AppleAgxEvidence\\EXP-20260827-151\\20260827T214855.990Z-306778c4\\result.json`.
+
+EXP-151 therefore rejects the lifecycle-versus-UAT build-profile switch as the
+cause of the post-AddDevice admission regression.  The next investigation must
+compare the exact EXP-130 binary/source/build contract with the current
+lifecycle binary before changing hardware, firmware, UAT or RTKit behavior.
+
+## EXP-20260827-152 — Restore the proven compile-time WDDM 2.6 ABI
+
+Status: completed; hypothesis rejected.
+
+### Fixed source and single variable
+
+- Initial source `c324297ac6d042f447a8308aeeba2884a680b388`
+  stopped at the compile gate: the unreachable `memory_windows.c` object
+  requires WDDM 3.0-only ADL types.  No package was produced and the guest was
+  not mutated.
+- Corrected root source: `864be372c1c6903e3014fce871609779cae59d83`
+  on `feature/j313-gpu-acceleration`; ABI-control implementation
+  `b0c8a523507bbf85136eebece9048fab8e87c250`; ADL build isolation
+  `7b8126cd5f9deb9bd5e551149381d1510be4223e`.
+- Firmware, m1n1, Mu, ACPI, eight-CPU topology, input, storage, xHCI, display,
+  callback assignments, runtime Version field and lifecycle-only behavior are
+  identical to EXP-151.
+- The sole variable is the compile-time `DXGKDDI_INTERFACE_VERSION`: WDDM 3.0
+  in EXP-151 versus WDDM 2.6 in EXP-152.  Runtime Version remains WDDM 2.6.
+- Recovery remains the immutable EXP-123 artifact.
+- Corrected source archive SHA-256:
+  `12bd819b44fe8efffb44b5b1a5817eb179275b1d79a2f843e04ab67b6cc4781b`.
+- Build: Debug ARM64, WDK `10.0.26100.0`, lifecycle=true,
+  WDDM26-ABI=true; every hardware-owning profile=false.
+- Driver version: `08/27/2026,23.59.32.66`.
+- SYS SHA-256:
+  `09b17e317c79f2a3919f1efa1c0642f89d66a14193585362eb1590fbe36aeae0`.
+- INF SHA-256:
+  `ac6c54765d680066f19879659a408b506317fb7def73067b13403ade409ecc44`.
+- CAT SHA-256:
+  `8363762b5e9ef81af98f6e7681d65e72b92f943fa5cd0b2efb4fbc156e5e8ce8`.
+- PDB SHA-256:
+  `430c7733acaeb9043245f0e5fc34d93d8849d8354a591ad97c11f3f7b68abd95`.
+- Signer: `E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+
+### Hypothesis and gates
+
+EXP-130 reached StartDevice before the project introduced its global WDDM 3.0
+compile definition.  EXP-150 changed only the runtime Version value, and
+EXP-151 changed only the qualification profile; neither restored the proven
+compile-time structure and callback ABI.  Compiling the current lifecycle
+package with the WDDM 2.6 interface layout will cross the post-AddDevice
+admission boundary and reach the deliberate stage-7
+`STATUS_NOT_SUPPORTED` endpoint.
+
+1. Build and sign exactly one Debug ARM64 package from the fixed root with
+   lifecycle=true and WDDM26-ABI=true; every hardware-owning profile remains
+   false.  Pin SYS/INF/CAT hashes, version and signer before guest mutation.
+2. Require exact EXP-151 precondition, eight CPUs and Running AppleInput,
+   stornvme and USBXHCI.  Cycle only APPL0002 once in the current G2 guest.
+3. Pass only on fresh AddDevice success and StartDevice stage 7/status
+   `0xC00000BB`, with every power/MMIO/firmware/UAT receipt absent.
+4. Require responsive native input, eight CPUs, zero Event 129 and zero
+   critical System events.  A package failure, timeout or different receipt is
+   terminal; do not retry.
+
+This experiment tests dxgkrnl admission only.  It does not authorize GPU power,
+MMIO, firmware, RTKit, UAT, interrupts, queues, rendering or presentation.
+
+### Result
+
+The single permitted device-scoped cycle installed the exact pinned package as
+`oem18.inf`.  AddDevice reached stage 2/status zero, but no StartDevice receipt
+appeared during the bounded 30,256 ms observation.  APPL0002 retained Problem
+31 on driver version `23.59.32.66`.
+
+Eight logical processors and Running AppleInput, stornvme and USBXHCI were
+preserved.  No stornvme Event 129 and no critical System event occurred during
+the transaction.  Evidence is stored in the guest at
+`C:\\Users\\pavel\\AppleAgxEvidence\\EXP-20260827-152\\20260827T220107.298Z-c13eb74a\\result.json`.
+
+EXP-152 rejects the compile-time WDDM 3.0 structure layout as the remaining
+post-AddDevice admission cause.  Runtime WDDM level, compile-time WDDM ABI,
+qualification-profile selection and devnode recreation have now all been
+excluded independently.  The next investigation must compare the exact
+callback values and linked miniport contract between EXP-130 and the current
+lifecycle package; it must not change firmware, UAT or hardware behavior.
+
+## EXP-20260828-153 — Cold-first enumerate the exact EXP-152 package
+
+Status: completed; cold-first hypothesis rejected.
+
+### Corrected premise
+
+EXP-146 recorded that replacing a display miniport in the live G2 guest makes
+SetupAPI return `Restart required for any devices using this driver` and leaves
+the service pending deletion.  EXP-147 then proved a cold boot clears deletion
+but preserves the failed devnode, while EXP-148/149 proved restart or hot
+recreation does not rebuild a clean dxgkrnl display stack.  Therefore the
+EXP-151/152 hot cycles are valid records of platform health and failed hot
+replacement, but they are not a clean admission A/B for the new SYS bytes.
+
+EXP-130 used a different, valid sequence: stage the package while recovery
+firmware exposes no APPL0002, shut down normally, then let one G2 candidate boot
+create APPL0002 for the first time.  EXP-153 repeats that sequence with the
+already pinned EXP-152 package; no driver byte changes.
+
+### Fixed identities and procedure
+
+- Package, version, hashes and signer are exactly EXP-152.
+- Recovery firmware SHA-256:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b`;
+  recovery m1n1 SHA-256:
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+- Candidate firmware SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`;
+  candidate m1n1 SHA-256:
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Both launches use the public assisted launcher, display=both, debug=monitor,
+  eight CPUs and the canonical launch contract.
+
+1. Shut down the current G2 guest normally and boot exact recovery.  Require
+   no present APPL0002, AppleAgx unloaded, eight CPUs and Running input,
+   NVMe/xHCI.  If Windows retains only `ACPI\\APPL0002\\0` as
+   `CM_PROB_PHANTOM`, remove exactly that non-present devnode and require it to
+   disappear from both present and non-present PnP enumeration.  Do not rescan.
+2. Delete only the recorded `oem18.inf` without force or uninstall, stage the
+   exact EXP-152 package while no matching devnode exists, verify hashes/signer
+   and shut down normally.  Do not start, restart or rescan a device in
+   recovery.
+3. Boot the exact G2 candidate once.  Do not invoke a hot package cycle.  Read
+   the naturally created APPL0002 state and fresh lifecycle receipts.
+4. Pass only if StartDevice reaches stage 7/status `0xC00000BB`, all
+   power/MMIO/firmware/UAT receipts remain absent, native input works, eight
+   CPUs remain online and no Event 129 or critical System event occurs.
+
+Any identity drift, recovery APPL0002, package failure, missing StartDevice,
+storage/input failure or reboot loop rejects the experiment without retry.
+
+### Result
+
+The corrected recovery sequence first exported and hash-verified the exact
+EXP-152 package, removed only the disconnected `ACPI\\APPL0002\\0` phantom,
+deleted only `oem18.inf` without force or uninstall, and staged the same package
+while no present or non-present APPL0002 devnode existed.  Recovery retained
+eight logical processors and Running AppleInput, stornvme and USBXHCI.  It then
+shut down normally; no rescan, device start or hot replacement occurred.
+
+The single exact G2 cold boot naturally created APPL0002 and reached the Windows
+lock screen.  The device bound to `oem18.inf` version `23.59.32.66`, DriverEntry
+reached stage 2, DxgkInitialize returned success and AddDevice reached stage 2
+with status zero.  Dxgkrnl did not invoke StartDevice.  APPL0002 therefore
+settled at `CM_PROB_FAILED_ADD` / Problem 31 and AppleAgx remained Stopped.
+
+All eight processors remained online; AppleInput, stornvme, USBXHCI and sshd
+remained Running.  The bounded window contained no stornvme Event 129, no
+critical System event and no error System event.  The exact SYS hash remained
+`09b17e317c79f2a3919f1efa1c0642f89d66a14193585362eb1590fbe36aeae0`.
+Evidence is stored in the guest at
+`C:\\Users\\pavel\\AppleAgxEvidence\\EXP-20260828-153\\cold-first-result.json`
+and on the host at
+`.local/experiments/EXP-20260828-153-cold-first/cold-first-result.json`.
+
+This rejects retained phantom state, hot replacement, Mu, m1n1, ACPI
+enumeration, CPU topology, storage and input as causes of the missing
+StartDevice transition.  No further device-cycle experiment is justified.  The
+next investigation is an offline binary and build-environment comparison of the
+exact EXP-130 package that reached StartDevice and this exact rejected package,
+with particular attention to the linked miniport initialization ABI and WDK/MSVC
+toolchain identity.
+
+## EXP-20260828-154 — Restore the full initialization callback ABI cold-first
+
+Status: rejected safely after its single cold-first hardware sequence.
+
+### Evidence and single hypothesis
+
+Offline disassembly of the exact EXP-130 SYS that reached StartDevice and the
+exact EXP-152 SYS rejected by EXP-153 found a decisive binary difference before
+`DxgkInitialize`: EXP-130 zeroes and submits a 1544-byte
+`DRIVER_INITIALIZATION_DATA`, while EXP-152 submits only 1224 bytes.  Both set
+the runtime Version field to WDDM 2.6 and use the same pinned 10.0.28000.2526
+WDK packages.  The size change came from the explicit compile-time WDDM 2.6 ABI
+qualification added after EXP-130, not from source callback assignments or the
+WDK package version.
+
+EXP-154 tests one hypothesis: dxgkrnl requires the complete pinned-WDK callback
+table even while the miniport truthfully advertises only its implemented WDDM
+2.6 runtime surface.  Commits `7b64bce` and `f1f9fe6` remove the
+truncated-layout build mode and every explicit older interface-layout override,
+let the pinned WDK expose the same complete declaration layout used by EXP-130,
+keep the runtime Version at WDDM 2.6, and fail compilation unless ARM64
+`sizeof(DRIVER_INITIALIZATION_DATA)` is exactly 1544.  The intermediate explicit
+WDDM 3.0 layout was also shorter than EXP-130 and was rejected by the compile
+gate before any package existed.
+
+### Gates and procedure
+
+1. The exact source commit must pass all 66 Apple AGX host/package tests and an
+   official ARM64 WDK build.  Disassembly of its lifecycle SYS must show the
+   1544-byte zeroing size before `DxgkInitialize`; reject any other size.
+2. Pin SYS/INF/CAT hashes, version, signer and build provenance.  Do not mutate
+   the Air until those identities are recorded.
+3. Repeat the proven EXP-153 recovery staging sequence: remove only an exact
+   disconnected APPL0002 phantom if present, require no present or non-present
+   APPL0002, ordinarily delete only its current INF, and stage the exact EXP-154
+   package without force, uninstall, rescan or device start.  Shut down normally.
+4. Cold boot the unchanged exact G2 candidate once with display=both and
+   debug=monitor.  Do not perform a hot package cycle.
+5. Pass only if natural enumeration reaches StartDevice stage 7 with status
+   `0xC00000BB`, every hardware-owning receipt remains absent, all eight CPUs
+   and native input/NVMe/xHCI remain healthy, and no Event 129 or critical
+   System event occurs.
+
+This experiment authorizes no GPU power, MMIO, firmware, RTKit, UAT, interrupt,
+queue, render or presentation operation.  Failure is terminal without retry.
+
+### Offline gate result
+
+GitHub Actions run `33123122412` built all eight ARM64 profiles successfully
+from source commit `a7951f8a0bbf0ac878656ad2af3aeae0ba5c9c07`.  The exact lifecycle
+package selected for the one hardware sequence has these immutable identities:
+
+- SYS SHA-256:
+  `372fe92fcb9f613ab9c1db0df4549878f0652537ae7f7fe01e3854c193cf5c49`;
+- INF SHA-256:
+  `6fbc519afa82485f98af3e362df727304116783a2739c524fd531029869a6efe`;
+- CAT SHA-256:
+  `9ffd3f990557d957a8e9edb93a43e396b2908d1719e100e4858415edf37e21b5`;
+- certificate SHA-256:
+  `50bda6797415d3aecd6c17a30513b9c307f3bba0244e0c0dbb105e13ea8b412b`;
+- signer thumbprint: `6E27D48C2B78D8CABB89AE9D689DEFFE308D1033`.
+
+Disassembly of that exact SYS shows DriverEntry reserving `0x620` stack bytes
+and zeroing `0x608` bytes immediately before populating and submitting
+`DRIVER_INITIALIZATION_DATA`.  Thus the produced binary, not merely its source,
+contains the required 1544-byte table.  The package is preserved locally at
+`.local/experiments/EXP-20260828-154-full-abi/`; no Air state changed during
+these checks.
+
+### Cold-first result
+
+Recovery removed only the exact disconnected `ACPI\\APPL0002\\0` phantom,
+ordinarily deleted `oem18.inf`, verified all package hashes and signer, and
+staged the exact package again as `oem18.inf` while APPL0002 was absent.  The
+single unchanged G2 cold boot reached Windows with eight processors, Running
+AppleInput/stornvme/USBXHCI/sshd, zero Event 129 and zero critical or error
+System events.  Windows loaded the exact SYS hash above.
+
+The service receipts show DriverEntry stage 2 and a successful
+`DxgkInitialize`.  The first collector incorrectly queried lifecycle values
+from the device root key; the driver writes them under `Device Parameters`.
+The corrected read-only query found fresh AddDevice stage 2/status zero and no
+StartDevice receipt.  APPL0002 settled at Problem 31 and AppleAgx remained
+Stopped.  No hardware-owning receipt exists, so the candidate failed closed
+without GPU access.  Evidence is preserved at
+`.local/experiments/EXP-20260828-154-full-abi/stage-result.json` and
+`.local/experiments/EXP-20260828-154-full-abi/cold-first-result.json`.
+
+This rejects complete table geometry as sufficient for natural cold
+admission.  The initial comparison against EXP-130 was incomplete: EXP-130 was
+not the last package proven to reach StartDevice on the version-three G2
+contract.  The later exported EXP-138/140 package is the relevant working
+reference and is analyzed after EXP-155.
+
+## EXP-20260828-155 — Isolate same-boot display-miniport admission
+
+Status: preregistered for one device-scoped restart in the existing healthy
+EXP-154 guest.
+
+The exact firmware, m1n1, package, signer, device and Windows boot remain
+unchanged from EXP-154.  The sole variable is one invocation of
+`pnputil /restart-device ACPI\\APPL0002\\0`, matching the admission sequence
+that passed EXP-130.  Do not replace a package, rescan, reboot, disable, remove,
+force, uninstall or retry.
+
+Before the transaction require eight CPUs, exact SYS SHA-256
+`372fe92fcb9f613ab9c1db0df4549878f0652537ae7f7fe01e3854c193cf5c49`,
+Problem 31, Running AppleInput/NVMe/xHCI/sshd, and no Event 129 or critical
+System event since boot.  Remove only prior `Wom1*` receipts from the AppleAgx
+service and exact APPL0002 device keys, perform one restart, wait at most 30
+seconds, and collect the same evidence.
+
+Pass requires fresh AddDevice stage 2/status zero and StartDevice stage
+7/status `0xC00000BB`, no MMIO/power/firmware/RTKit/UAT/queue/render receipt,
+eight healthy CPUs, responsive input/storage/USB/SSH and no Event 129, critical
+or error System event.  Any mismatch ends the experiment without retry.
+
+### Result
+
+The exact restart command returned success and no package, firmware, devnode,
+scan or boot variable changed.  The original collector again queried the
+device root key, so its empty device receipt object is not authoritative.  A
+corrected read-only query of `Device Parameters` found AddDevice stage 2/status
+zero and no StartDevice receipt.  APPL0002 remained Problem 31; AppleInput,
+stornvme, USBXHCI and sshd stayed Running on eight CPUs, with no Event 129,
+critical or error System event.  EXP-155 rejects same-boot restart as sufficient
+for the EXP-154 package and authorizes no retry.
+
+## EXP-20260828-156 — Restore the last hardware-admitted WDDM ABI contract
+
+Status: official ARM64 package and device-free recovery staging validated; one
+preregistered cold G2 admission run pending.
+
+### Evidence and single hypothesis
+
+The exact package that actually reached StartDevice on the version-three G2
+guest was preserved as EXP-138/EXP-140 `oem17.inf`: SYS SHA-256
+`841dc5cb713ea3a61731a8b915ec0827c18add102f3de31da515fd3f77d4300a`,
+source `14bfcfb044283a8541a78c354eb7de5e2f3f90e0`.  Disassembly proves that it
+submitted a 1296-byte (`0x510`) WDDM 3.0 declaration table and advertised
+WDDM 3.0 (`0xF003`).  It reached StartDevice and later failed only at the
+intentionally bounded RTKit phase.
+
+EXP-154 instead submitted the pinned-WDK default 1544-byte (`0x608`) table but
+advertised WDDM 2.6 (`0xB004`).  DriverEntry, DxgkInitialize and AddDevice
+succeeded, then Dxgkrnl rejected the mixed contract before StartDevice with
+Problem 31.  The hypothesis is that declaration layout and advertised runtime
+version must be the same proven WDDM 3.0 contract; the diagnostic downgrade to
+2.6 and later table-size reconstruction were a regression.
+
+The sole semantic variable is restoration of that matched WDDM contract:
+explicit WDDM 3.0 compile layout, WDDM 3.0 runtime Version and an ARM64 compile
+gate requiring 1296 bytes.  No callback assignment, GPU register access,
+resource parser, power, firmware, RTKit, UAT, interrupt, queue, render, present,
+Mu, m1n1, CPU, input, storage or display behavior changes.
+
+### Gates and procedure
+
+1. The focused tests must first reject the mixed EXP-154 contract and then pass
+   only for matched WDDM 3.0 compile/runtime values and the 1296-byte gate.
+2. The official ARM64 lifecycle package must build and its exact machine code
+   must contain zero size `0x510` and Version `0xF003`; pin package hashes and
+   signer before touching the Air.
+3. Use the established device-free recovery staging sequence once, then cold
+   boot the unchanged G2 candidate once with display `both` and monitor logging.
+4. Pass admission only on fresh AddDevice success and StartDevice stage
+   7/status `0xC00000BB`.  Every hardware-owning receipt must remain absent and
+   eight CPUs, native input, NVMe, xHCI and SSH must remain healthy with no
+   Event 129 or critical/error System event.
+
+Any identity mismatch, missing StartDevice, hardware receipt or platform-health
+loss rejects the candidate without retry.  This experiment tests Dxgkrnl
+admission only and does not authorize GPU execution or display ownership.
+
+### 2026-08-27T23:23:06Z execution amendment and verifier correction
+
+This amendment supersedes only the stale "official ARM64 build pending" and
+device-free staging claims above.  It does not reinterpret any prior hardware
+result.
+
+- Exact source commit:
+  `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`.
+- Official CI run: `33124955239`; all eight ARM64 jobs completed successfully.
+- Package SYS / INF / CAT SHA-256:
+  `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f` /
+  `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc` /
+  `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
+- Certificate SHA-256 / signer thumbprint:
+  `30c4b23da2b8484d8d43bb1583368f5f9e3e3b12cfa58da13554fb772b5760ad` /
+  `778CD8E4AA4079949F199DAEC77D12A6C8A4F0B8`.
+- Independent ARM64 disassembly at `DriverEntry` proves zero size `0x510` and
+  runtime Version `0xF003`.  The focused package suite passes 39/39.
+- Exact G2 Mu / m1n1 SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9` /
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Immutable recovery Mu / m1n1 SHA-256:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b` /
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+The exact device-free staging command was:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\AppleAgxStaging\EXP156-6ac19e9\stage-exp156.ps1 -PackageRoot C:\Users\pavel\AppleAgxStaging\EXP156-6ac19e9\package -EvidencePath C:\Users\pavel\AppleAgxEvidence\EXP-20260828-156\stage-result.json
+```
+
+That transaction removed only the non-present `ACPI\APPL0002\0` phantom and
+its recorded predecessor `oem18.inf`, imported the exact test certificate, and
+staged the exact candidate without install, rescan, start, or hardware access.
+The script's final verifier incorrectly compared
+`Get-WindowsDriver.OriginalFileName` with the basename `AppleAgx.inf`; Windows
+returns the absolute Driver Store path.  A separate read-only collector proved
+the actual postcondition: zero APPL0002 devices, exact candidate `oem18.inf`,
+valid catalog signature, eight CPUs and Running AppleInput, stornvme and
+USBXHCI, with zero Event 129 and zero critical event.  The durable receipt is
+`.local/experiments/EXP-20260828-156-matched-wddm/stage-result.json`.
+
+The one authorized cold G2 launch command is:
+
+```sh
+env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware dist/j313/debug-monitor-agx-g2/J313_EFI.fd --m1n1 dist/j313/debug-monitor-agx-g2/m1n1.macho --display both --debug monitor --chainload --foreground
+```
+
+Allowed operations are DriverEntry, DxgkInitialize, AddDevice and StartDevice
+receipts plus read-only identity, assigned-resource and platform-health checks.
+Power, MMIO mapping or access, RTKit, UAT, interrupt enable, queue, command,
+fence, render, presentation and display ownership remain forbidden.  Success
+requires fresh AddDevice stage 2/status zero and StartDevice stage 7/status
+`0xC00000BB`, no forbidden receipt, eight CPUs and healthy input/storage/xHCI
+with no new Event 129, WHEA, BugCheck, critical or error System event.  Missing
+StartDevice, identity drift, any forbidden receipt or health loss rejects the
+experiment without retry.  Rollback is one normal shutdown followed by the
+immutable recovery Mu and m1n1 pair recorded above.
+
+### 2026-08-27T23:30:53Z single cold G2 result — rejected
+
+Before interpreting the hardware receipt, source review found that the numeric
+success criterion above was stale: in exact source commit
+`6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`,
+`AppleAgxStartFailClosed` is stage 9, not stage 7.  Stages 7 and 8 are the
+bounded power-acquired and power-released receipts.  The correct admission-only
+success receipt would therefore be StartDevice stage 9 with
+`STATUS_NOT_SUPPORTED` (`0xC00000BB`).  This correction does not change the
+verdict because no StartDevice receipt was produced at all.
+
+Recovery shut down normally.  The exact preregistered G2 launch was executed
+once with the recorded Mu and m1n1 artifacts.  Windows booted and SSH returned.
+Read-only postflight proved:
+
+- exact `oem18.inf` version `23.6.21.184` bound to `ACPI\APPL0002\0`;
+- exact SYS / INF / CAT hashes and valid signer matched preregistration;
+- DriverEntry stage 2 and DxgkInitialize status zero;
+- AddDevice stage 2 and status zero;
+- no StartDevice receipt;
+- no forbidden MMIO, power, ASC, RTKit, UAT, IRQ, queue, submit, fence,
+  command, render or present receipt;
+- eight logical processors and Running AppleInput, stornvme, USBXHCI and sshd;
+- no WHEA, BugCheck, critical or error System event;
+- one boot-window stornvme Event 129 reset at 2026-08-27T23:29:40Z.
+
+SetupAPI independently records the natural device start at 01:28:19 and
+Problem 31 / `STATUS_DEVICE_CONFIGURATION_ERROR` (`0xC0000182`).  The exact
+matched WDDM3 ABI is therefore insufficient for Dxgkrnl to invoke StartDevice,
+and the separate platform-health gate also failed.  EXP-156 is rejected without
+retry.  No GPU hardware access occurred.
+
+Ignored raw evidence:
+
+- `.local/experiments/EXP-20260828-156-matched-wddm/cold-result.json`
+  SHA-256 `86533e666bff308416556699c3037c913e12ad240060a23fc12031ac20dd6986`;
+- `.local/experiments/EXP-20260828-156-matched-wddm/setupapi.dev.log`
+  SHA-256 `01d03d40cfafe6b149b792a7ac5a145bfac5f29b9fe64bbe14987c297e68d553b`;
+- `.local/experiments/EXP-20260828-156-matched-wddm/hv.log`
+  SHA-256 `2f357d9ddb84d59be3f97f697e16d20effde59f3d8f641ceaef884cd2742b5a9`.
+
+The next action is offline-only: compare the exact EXP-138 package that reached
+StartDevice with EXP-156 beyond the already-matched WDDM table size and runtime
+Version.  No new hardware hypothesis is authorized yet.
+
+## EXP-20260828-157 — Isolate fresh live display-miniport admission
+
+Status: preregistered; no G2 launch or PnP transaction has occurred.
+
+### Hypothesis and single variable
+
+The current proven boundary is DriverEntry stage 2, successful DxgkInitialize,
+AddDevice stage 2/status zero, and no StartDevice receipt.  A bounded offline
+comparison of the exact EXP-138 StartDevice-admitted SYS and the exact rejected
+EXP-156 SYS found equal 180-instruction DriverEntry shapes, 32 declaration-table
+stores at identical offsets with identical store opcodes, the same `0x510`
+zeroing size, the same `0xF003` runtime Version, equal import sets, and equal INF
+contracts after excluding DriverVer.  Downstream RTKit/MMIO/UAT differences
+cannot execute before the missing StartDevice call and are excluded.
+
+The strongest remaining causal distinction is the admission sequence. EXP-138
+reached StartDevice during one fresh live remove/delete/scan/add-install
+transaction. EXP-156 used natural cold enumeration and stopped before
+StartDevice. EXP-157 changes only that sequence while retaining the exact
+EXP-156 package, signer, G2 Mu, m1n1, WDDM declaration, resources, and platform.
+
+### Exact identities
+
+- Root source commit:
+  `6ac19e9458b5d7786e2685fe7202f9e48eb0cf24`.
+- SYS / INF / CAT SHA-256:
+  `423b39307b5a56ab4cdb77866ca733d4f9cfa629a3d3cca63faa94239f076b2f` /
+  `6d267f09f51e505ac869d9ee0a7e0d566dc4e20b9e4629b32085f8a18cc375cc` /
+  `36c525a10d4a323a6fc4f8088b22e5f23741ee68d45769b85fe8693d057b063b`.
+- Certificate SHA-256 / signer thumbprint:
+  `30c4b23da2b8484d8d43bb1583368f5f9e3e3b12cfa58da13554fb772b5760ad` /
+  `778CD8E4AA4079949F199DAEC77D12A6C8A4F0B8`.
+- G2 Mu / m1n1 SHA-256:
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9` /
+  `17011f6b78f88f1c0c32da5d80005665225636c368462ca61c979c96e18c2ab0`.
+- Recovery Mu / m1n1 SHA-256:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b` /
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+### Exact procedure
+
+1. In recovery remove only the disconnected `ACPI\\APPL0002\\0` phantom with
+   `pnputil /remove-device ACPI\\APPL0002\\0`; require zero present and
+   non-present APPL0002 devices. Do not rescan. Keep exact staged `oem18.inf`.
+2. Shut recovery down normally and launch exactly once:
+
+```sh
+env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware dist/j313/debug-monitor-agx-g2/J313_EFI.fd --m1n1 dist/j313/debug-monitor-agx-g2/m1n1.macho --display both --debug monitor --chainload --foreground
+```
+
+3. Require the natural APPL0002 device to bind exact `oem18.inf`, reproduce
+   Problem 31 with AddDevice success and no StartDevice receipt, retain eight
+   CPUs and Running AppleInput/stornvme/USBXHCI/sshd, and observe no new Event
+   129, WHEA, BugCheck, critical, or error System event.
+4. Run the already validated single-transaction helper once with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\AppleAgxStaging\EXP157-sequence\cycle-lifecycle-driver.ps1 -PackageRoot C:\Users\pavel\AppleAgxStaging\EXP157-sequence\package -EvidenceRoot C:\Users\pavel\AppleAgxEvidence\EXP-20260828-157 -ExpectedSysSha256 423B39307B5A56AB4CDB77866CA733D4F9CFA629A3D3CCA63FAA94239F076B2F -ExpectedInfSha256 6D267F09F51E505AC869D9EE0A7E0D566DC4E20B9E4629B32085F8A18CC375CC -ExpectedCatSha256 36C525A10D4A323A6FC4F8088B22E5F23741EE68D45769B85FE8693D057B063B -ExpectedSignerThumbprint 778CD8E4AA4079949F199DAEC77D12A6C8A4F0B8 -PreviousPublishedName oem18.inf -CompletionTimeoutSeconds 30 -PollIntervalMilliseconds 250
+```
+
+The helper performs exactly one remove-device, ordinary delete of `oem18.inf`,
+scan, receipt clear, and add-driver/install transaction, then waits once for the
+terminal StartDevice receipt. It must not retry.
+
+### Allowed and forbidden operations
+
+Allowed: exact package/certificate verification, DriverEntry,
+DxgkInitialize, AddDevice, StartDevice receipts, the listed device-scoped PnP
+operations, SetupAPI and platform-health reads.  Forbidden: GPU power, MMIO map
+or access, ASC/RTKit, UAT, interrupt enable, queue, submit, fence, command,
+render, presentation, display ownership, unrelated driver/device mutation, or
+a second transaction.
+
+### Verdict gates and evidence
+
+Success requires fresh AddDevice stage 2/status zero and StartDevice stage
+9/status `0xC00000BB`, zero forbidden receipts, eight CPUs, Running platform
+services, responsive input/storage/USB/SSH, and zero new Event 129, WHEA,
+BugCheck, critical, or error System event. This confirms admission sequence as
+causal but does not qualify any GPU hardware stage.
+
+Missing StartDevice, identity drift, a forbidden receipt, health loss, timeout,
+or any unlisted PnP action rejects the hypothesis without retry. Evidence is
+written under `C:\Users\pavel\AppleAgxEvidence\EXP-20260828-157` and copied to
+ignored `.local/experiments/EXP-20260828-157-live-admission/`. Rollback is one
+normal shutdown followed by the immutable recovery pair above.
+
+### 2026-08-28T00:03:59Z preflight result — aborted before transaction
+
+The exact package and helper were copied to the preregistered staging path and
+verified byte-for-byte. Recovery contained zero present and zero disconnected
+APPL0002 devices, exact staged `oem18.inf`, eight CPUs, and Running AppleInput,
+stornvme, USBXHCI, and sshd. Recovery then shut down normally and the exact G2
+pair was launched once.
+
+Natural G2 enumeration reproduced the required lifecycle boundary on exact
+`oem18.inf`: DriverEntry and DxgkInitialize succeeded, AddDevice recorded stage
+2/status zero, StartDevice was absent, and APPL0002 reported Problem 31 with
+`0xC0000182`. Eight CPUs and all required services remained present. However,
+the independent prerequisite health gate had already failed: four fresh
+stornvme Event 129 resets occurred at ten-second intervals after boot.
+
+The live helper was therefore not executed. No remove, delete, scan,
+add/install, retry, or GPU hardware-owning operation occurred. The
+admission-sequence hypothesis is untested, not rejected. The guest shut down
+normally. EXP-157 must not be retried without a separately preregistered reason
+that removes or explicitly isolates this prerequisite failure.
+
+Ignored evidence:
+
+- `.local/experiments/EXP-20260828-157-live-admission/preflight-abort.json`
+  SHA-256 `091bde5aa893ce5caae53d8026dd317304758899c9b81ae01023ab6aa8bd97a5`.
+
+Rollback then booted the immutable recovery pair. Exact phantom
+`ACPI\APPL0002\0`, exact `oem18.inf`, and the exact EXP-157 staging directory
+were removed. Read-only post-cleanup verification proved zero APPL0002 devices,
+zero AppleAgx Driver Store packages, eight CPUs, Running AppleInput, stornvme,
+USBXHCI, and sshd, zero Event 129, and zero critical event. Recovery remains
+running; EXP-157 left no installed or staged GPU driver state.
+
+## EXP-20260828-158 — Clean WDDM 3.0 admission discriminator
+
+Status: preregistered at 2026-08-28T01:48:15Z; no guest launch or driver
+transaction has occurred.
+
+### WHY THIS HYPOTHESIS
+
+- EXP-156 proved `DriverEntry`, `DxgkInitialize`, and `AddDevice`, but dxgkrnl
+  never invoked `StartDevice`; downstream AGX hardware paths cannot explain a
+  call that never occurred.
+- One bounded EXP-138/EXP-156 comparison found the WDDM 3.0 declaration shape,
+  table size, runtime version, imports, callback slots, and normalized INF
+  contract equal, so further historical archaeology has no stronger target.
+- The separate admission driver contains only the minimum WDDM lifecycle
+  callbacks and a fail-closed `StartDevice`; it cannot touch power, MMIO,
+  RTKit, UAT, interrupts, queues, render, presentation, or display ownership.
+
+### Hypothesis and single variable
+
+If accumulated AppleAgx initialization or callback groups prevent natural
+admission, replacing only the GPU package with the minimal admission driver
+will cause dxgkrnl to invoke `AppleAgxAdmissionStartDevice`. If that callback is
+still absent, the remaining cause is in the WDDM/PnP/package/environment
+contract rather than AGX bring-up code.
+
+The single variable is the exact GPU package. The assisted G2 launch contract,
+one inert `ACPI\APPL0002` device, eight CPUs, firmware, m1n1, display mode, and
+platform services remain fixed.
+
+### Exact identities
+
+- Root commit: `7b01449d5bdd611b1adef927eb886c9caaf3abca`.
+- m1n1 commit: `4108e79c69bac112ffbebf452fccf352c93c1dd2`.
+- Mu commit: `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
+- Assisted m1n1 / Mu SHA-256:
+  `23749d4c3b9a93c637d367613a99109aea9b6d90394559ae9a2e683d4fb8bf02` /
+  `34c0b278b688348b79991d30e2f8c3f0a1e8305179b7c4b6ea298473e422e7f9`.
+- Assisted manifest: debug profile, display `both`, debug `full`, capability
+  `agx-g2`, role `m1n1.macho=assisted-chainload`; all five artifact hashes
+  verified locally.
+- Admission source commit: `b13e9c32c06c21fbd522d33717a2d0078e4a077c`;
+  official run `33130376006`.
+- Admission SYS / INF / CAT SHA-256:
+  `ebe690ac55f861c4b881ead21527348c0a27846970c23cade603004cedebe0a4` /
+  `3191a342e298a7587eae4eb68391c83b94fb24a14f565ae0c1ea8673186202d3` /
+  `761ff3c26297f9679a4426f23eda3eb3dc27031ff916b0b35b73d42630da502e`.
+- Certificate SHA-256 / signer thumbprint:
+  `09d220fef9268478e6512effc6649ce511a2fd88aef8f506789e31474004a48d` /
+  `D6EC654F91AA15EF78EA7026051C93BFDE460E0F`.
+- Recovery remains immutable EXP-123 Mu / m1n1:
+  `4c5e068f664d8ccc94823880de4226e3f7842e08841bc10fea19cbe9e05a519b` /
+  `3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`.
+
+### Exact procedure and gates
+
+1. Use USB-assisted chainload only; do not install or execute the generated
+   standalone `boot.bin`:
+
+```sh
+env M1N1VUART=/dev/cu.usbmodemC02HDNCCQ6L43 ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --firmware .local/experiments/EXP-20260828-158-clean-admission/assisted-boot/wom1-exp158-debug-forensic-agx-g2/J313_EFI.fd --m1n1 .local/experiments/EXP-20260828-158-clean-admission/assisted-boot/wom1-exp158-debug-forensic-agx-g2/m1n1.macho --display both --debug full --chainload
+```
+
+2. Before installing a package, require exactly one inert present
+   `ACPI\APPL0002`, zero AppleAgx/AppleAgxAdmission packages, services, modules,
+   signers and staged drivers, eight CPUs, Running AppleInput/stornvme/USBXHCI/
+   sshd, and no fresh Event 129, WHEA, BugCheck, critical, or error event.
+3. Verify the exact package hashes and signer, import its certificate, and
+   execute one ordinary `pnputil /add-driver ... /install` transaction. Do not
+   retry or mutate unrelated devices.
+4. Success requires `Wom1AdmissionAddDeviceStage=2`, AddDevice status zero,
+   `Wom1AdmissionStartDeviceStage=1`, and StartDevice status
+   `STATUS_NOT_SUPPORTED` (`0xC00000BB`). Missing StartDevice, identity drift,
+   any forbidden receipt, or platform health loss rejects the hypothesis.
+5. Collect evidence first, then remove the exact APPL0002 devnode, published
+   package, service, staging directory, and certificate. Verify the guest is
+   driver-clean before authorizing another experiment.
+
+Allowed operations are package identity/signature verification, the minimal
+WDDM lifecycle callbacks, device-scoped PnP install/removal, lifecycle receipt
+reads, SetupAPI reads, and platform-health reads. GPU power, MMIO, ASC/RTKit,
+UAT, IRQ, queues, submission, fences, commands, render, presentation, and
+display ownership are forbidden.
+
+Evidence paths are
+`.local/experiments/EXP-20260828-158-clean-admission/live/`, `hv.log`,
+`guest-uart.log`, and the exact Windows-side evidence directory created for the
+transaction.
+
+### 2026-08-28T01:58:24Z assisted hardware result — rejected before AddDevice
+
+The exact preregistered pair was launched by USB-assisted chainload. No
+standalone image was installed or executed. Windows SSH returned after 25
+seconds. The preflight gate proved eight CPUs, exactly one inert present
+`ACPI\APPL0002\0` with Problem 28, zero AppleAgx packages/services/modules,
+Running AppleInput/stornvme/USBXHCI/sshd, and zero Event 129, WHEA, BugCheck or
+critical event.
+
+One exact package install published `oem18.inf` and bound it to APPL0002. The
+device settled at Problem 37, `CM_PROB_FAILED_DRIVER_ENTRY`, with problem status
+`0xC0000059` (`STATUS_REVISION_MISMATCH`). No admission lifecycle receipt was
+written: `DxgkInitialize` rejected the declaration before AddDevice. There was
+no forbidden receipt and no Event 129, WHEA, BugCheck, critical, or error System
+event; all eight CPUs remained present.
+
+This rejects the first clean package as an admission discriminator without
+testing its intended AddDevice-to-StartDevice hypothesis. Offline comparison
+found one causally adjacent difference: unlike the accepted full WDDM 3.0
+table, the clean table left the base interrupt/DPC/child/power/reset callbacks
+null. Microsoft's official `DxgkInitialize` DriverEntry example supplies that
+group. A focused regression test failed on the missing group, then passed after
+adding inert/fail-closed stubs. No render, allocation, context, MMIO, power
+broker, RTKit, UAT, IRQ enable, queue, command, fence, render, presentation, or
+display ownership path was added.
+
+Evidence SHA-256:
+
+- `result.json`:
+  `f912f78744e3d07c6d9305cc029adbb4242d7c4123f97ef8dca6008ae165cdc8`;
+- `setupapi.dev.log`:
+  `70285d963114744603262044b4b278ad3d7267991707ea5b75e4972c53c224ed`;
+- `hv.log`:
+  `e36d6aac9dc2a3047efbf26c3370e67d17e71b3c88b616dbdc64575e98a04afb`.
+
+After evidence collection, the exact devnode and `oem18.inf` package were
+removed, both signer certificates and the EXP-158 staging directory were
+deleted, and one device scan restored the inert APPL0002. The cleanup receipt
+proves one APPL0002 at Problem 28 with no INF, zero AppleAgx packages/services/
+certificates, and eight CPUs. The same GPU-visible assisted guest remains
+running and is the allowed baseline for the next package-only experiment.

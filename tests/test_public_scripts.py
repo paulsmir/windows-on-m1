@@ -27,6 +27,7 @@ class PublicScriptTests(unittest.TestCase):
             "display-assisted.sh",
             "log-assisted.sh",
             "supervise-assisted.sh",
+            "run-agx-gate.sh",
         )
         for name in names:
             path = ROOT / "scripts" / name
@@ -233,6 +234,25 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("secondary CPU startup failed", text)
         self.assertIn("runner failed a hardware bootstrap gate", text)
 
+    def test_assisted_agx_power_broker_is_explicit_and_fail_closed(self):
+        result = subprocess.run(
+            [
+                "sh", str(ROOT / "scripts/run-assisted.sh"),
+                "--dry-run", "--proxy", "/dev/cu.test-proxy",
+                "--vuart", "/dev/cu.test-vuart", "--display", "both",
+                "--debug", "monitor", "--agx-power-broker",
+            ],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("AGX G2 power broker: enabled", result.stdout)
+
+        source = (ROOT / "scripts/run-assisted.sh").read_text(encoding="utf-8")
+        self.assertIn('WOM1_AGX_G2_POWER_BROKER="$AGX_POWER_BROKER"', source)
+        self.assertIn("AGX boot config snapshot v2", source)
+        self.assertIn("AGX scalar snapshot missing", source)
+
     def test_assisted_foreground_keeps_runner_owned_and_observable(self):
         result = subprocess.run(
             [
@@ -373,6 +393,22 @@ class PublicScriptTests(unittest.TestCase):
         self.assertIn("virtual UART: /dev/cu.test-vuart", result.stdout)
         self.assertIn("telemetry: enabled", result.stdout)
         self.assertIn("chainload: dist/j313/debug-monitor/m1n1.macho", result.stdout)
+
+    def test_agx_g2_build_is_isolated_verified_and_manifested(self):
+        build = (ROOT / "scripts" / "build-standalone.sh").read_text()
+        self.assertIn("--agx-g2-profile", build)
+        self.assertIn("BLD_*_J313_AGX_G2_PROFILE=TRUE", build)
+        self.assertIn("J313AppleAgxSsdt.aml", build)
+        self.assertIn("DeviceAcpiTablesG2/OUTPUT/DSDT.aml", build)
+        self.assertIn("iasl -d", build)
+        self.assertIn("AGX_AML_VERIFIED=1", build)
+        self.assertIn("verify_j313_agx_g2_aml.py", build)
+        self.assertIn("-agx-g2", build)
+        self.assertIn("--capability agx-g2", build)
+
+    def test_agx_broker_launch_requires_agx_g2_manifest_capability(self):
+        launcher = (ROOT / "scripts" / "run-assisted.sh").read_text()
+        self.assertIn("--require-capability agx-g2", launcher)
 
     def test_public_entrypoint_exposes_foreground_runner_lifecycle(self):
         result = subprocess.run(
