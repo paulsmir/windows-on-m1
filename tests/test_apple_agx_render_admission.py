@@ -150,6 +150,49 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, display)
 
+    def test_one_path_vidpn_state_machine_is_complete_and_hardware_inert(self):
+        display = self.read("src/display.c")
+
+        for callback in (
+            "AdmissionDdiIsSupportedVidPn",
+            "AdmissionDdiRecommendFunctionalVidPn",
+            "AdmissionDdiEnumVidPnCofuncModality",
+            "AdmissionDdiCommitVidPn",
+            "AdmissionDdiUpdateActiveVidPnPresentPath",
+        ):
+            self.assertIn(callback, display)
+
+        for operation in (
+            "DxgkCbQueryVidPnInterface",
+            "pfnGetTopology",
+            "pfnAcquireFirstPathInfo",
+            "pfnAcquireNextPathInfo",
+            "pfnReleasePathInfo",
+            "pfnCreateNewSourceModeSet",
+            "pfnCreateNewTargetModeSet",
+            "pfnAssignSourceModeSet",
+            "pfnAssignTargetModeSet",
+            "pfnAcquirePinnedModeInfo",
+            "pfnUpdatePathSupportInfo",
+        ):
+            self.assertIn(operation, display)
+
+        self.assertIn("hDesiredVidPn == 0", display)
+        self.assertIn("VidPnSourceId != 0", display)
+        self.assertIn("VidPnTargetId != 0", display)
+        self.assertIn("D3DKMDT_RMT_GRAPHICS", display)
+        self.assertIn("D3DDDIFMT_A8R8G8B8", display)
+        self.assertIn("Format.Graphics.Stride = 10240", display)
+        self.assertIn("D3DKMDT_VPPS_IDENTITY", display)
+        self.assertIn("D3DKMDT_VPPR_IDENTITY", display)
+        self.assertIn("STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN", display)
+
+        for forbidden in (
+            "MmMapIoSpace", "READ_REGISTER", "WRITE_REGISTER", "RTKit",
+            "UAT", "AppleAgx", "DxgkCbNotifyInterrupt", "DxgkCbNotifyDpc",
+        ):
+            self.assertNotIn(forbidden, display)
+
     def test_package_binds_exactly_appl0002_and_is_removable(self):
         inf = self.read("AppleAgxRenderAdmission.inf")
 
