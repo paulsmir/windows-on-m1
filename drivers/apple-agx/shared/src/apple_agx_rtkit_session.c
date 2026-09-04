@@ -143,14 +143,15 @@ static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionCrashlog(
   if ((Payload & ((1ULL << 44) - 1u)) != 0u ||
       Session->CrashlogRequestedBytes == 0u ||
       Session->CrashlogRequestedBytes > Session->CrashlogCapacityBytes ||
-      Session->CrashlogGpuAddress == 0u ||
-      Session->CrashlogGpuAddress >= (1ULL << 40) ||
+      Session->CrashlogGpuAddress <
+          (1ULL << 44) - (1ULL << J313_AGX_G2_UAT_INPUT_ADDRESS_BITS) ||
+      Session->CrashlogGpuAddress >= (1ULL << 44) ||
       (Session->CrashlogGpuAddress & 0x3fffu) != 0u ||
       Session->CrashlogCapacityBytes == 0u ||
       Session->CrashlogCapacityBytes > 0xff000u ||
       (Session->CrashlogCapacityBytes & 0x3fffu) != 0u ||
       Session->CrashlogCapacityBytes >
-          (1ULL << 40) - Session->CrashlogGpuAddress)
+          (1ULL << 44) - Session->CrashlogGpuAddress)
     return AppleAgxRtkitSessionResultProtocolViolation;
   reply = (1ULL << 52) |
           ((APPLE_AGX_RTKIT_U64)(Session->CrashlogCapacityBytes >> 12) << 44) |

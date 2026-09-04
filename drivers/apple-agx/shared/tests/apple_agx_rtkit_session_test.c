@@ -346,19 +346,19 @@ static void TestCrashlogGrantUsesOnlyRegisteredUatBuffer(void) {
   Queue(&fake, 0x0070000000000020ULL);
   Queue(&fake, 0x00b0000000000020ULL);
   AppleAgxRtkitSessionInitialize(&session);
-  session.CrashlogGpuAddress = 0x430000000ULL;
+  session.CrashlogGpuAddress = 0xfa080000000ULL;
   session.CrashlogCapacityBytes = 0x4000u;
   assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultOk);
   assert(session.CrashlogReplySent && session.CrashlogRequestedBytes == 0x2000u);
   assert(fake.SendCount == 6u);
   assert(fake.SendEndpoint[5] == 1u);
-  assert(fake.SendPayload[5] == 0x0010400430000000ULL);
+  assert(fake.SendPayload[5] == 0x00104fa080000000ULL);
 }
 
 static void TestCrashlogRefusesUnbackedRequestsAndDetectsCrash(void) {
   unsigned int which;
-  for (which = 0u; which != 5u; ++which) {
+  for (which = 0u; which != 7u; ++which) {
     FAKE_SESSION_ASC fake = {0};
     APPLE_AGX_ASC_IO io = MakeIo(&fake);
     APPLE_AGX_RTKIT_SESSION session;
@@ -368,7 +368,9 @@ static void TestCrashlogRefusesUnbackedRequestsAndDetectsCrash(void) {
     if (which == 3u) request = 0x0010000000000000ULL;
     QueueCrashlogBoot(&fake, request);
     AppleAgxRtkitSessionInitialize(&session);
-    session.CrashlogGpuAddress = which == 4u ? 0x430000001ULL : 0x430000000ULL;
+    session.CrashlogGpuAddress = which == 4u ? 0xfa080000001ULL :
+        which == 5u ? 0x430000000ULL :
+        which == 6u ? 0xffffffa080000000ULL : 0xfa080000000ULL;
     session.CrashlogCapacityBytes = which == 0u ? 0u : 0x4000u;
     assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
            AppleAgxRtkitSessionResultProtocolViolation);
@@ -383,7 +385,7 @@ static void TestCrashlogRefusesUnbackedRequestsAndDetectsCrash(void) {
     Queue(&fake, 0x0010200430000000ULL);
     fake.ReceiveEndpoint[3] = 1u;
     AppleAgxRtkitSessionInitialize(&session);
-    session.CrashlogGpuAddress = 0x430000000ULL;
+    session.CrashlogGpuAddress = 0xfa080000000ULL;
     session.CrashlogCapacityBytes = 0x4000u;
     assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
            AppleAgxRtkitSessionResultFirmwareCrashed);

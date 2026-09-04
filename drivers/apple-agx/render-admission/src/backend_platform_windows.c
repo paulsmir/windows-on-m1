@@ -526,7 +526,8 @@ static unsigned char AdmissionFirmwareCreateUat(
                          .DeviceAddress)
     return 0u;
   runtime->Rtkit.CrashlogGpuAddress =
-      runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog];
+      runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog] &
+      ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
   runtime->Rtkit.CrashlogCapacityBytes = APPLE_AGX_RTKIT_CRASHLOG_BYTES;
   *Pair = runtime->Initdata.TtbrPair;
   *InitdataAddress = runtime->Initdata.InitdataVirtualAddress &

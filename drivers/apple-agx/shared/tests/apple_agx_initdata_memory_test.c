@@ -136,8 +136,8 @@ static void test_builds_exact_graph_and_releases(void) {
   assert(graph.Built == 1u);
   {
     unsigned long long physical = 0ULL, descriptor = 0ULL;
-    /* RTKit's crashlog grant must name a real low-context0 UAT leaf. */
-    assert(AppleAgxUatResolvePage(0u, &graph.Roots, 0x430000000ULL,
+    /* RTKit storage belongs to kernel VM / TTBR1, as in AGXASC.ioalloc. */
+    assert(AppleAgxUatResolvePage(0u, &graph.Roots, 0xffffffa080000000ULL,
                                  &graph.Inventory, &physical, &descriptor) ==
            AppleAgxUatResultOk);
     assert(physical == 0x10e00000ULL);

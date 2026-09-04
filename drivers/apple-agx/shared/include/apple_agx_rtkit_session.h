@@ -42,7 +42,7 @@ typedef struct _APPLE_AGX_RTKIT_SESSION {
   APPLE_AGX_RTKIT_U32 ReceivedCount;
   APPLE_AGX_RTKIT_U32 LastRxEndpoint;
   APPLE_AGX_RTKIT_U64 LastRxPayload;
-  /* Borrowed from an already context0-mapped owner; never a physical address. */
+  /* 44-bit wire encoding of a mapped kernel-VM owner; never a physical PA. */
   APPLE_AGX_RTKIT_U64 CrashlogGpuAddress;
   APPLE_AGX_RTKIT_U32 CrashlogCapacityBytes;
   APPLE_AGX_RTKIT_U32 CrashlogRequestedBytes;
