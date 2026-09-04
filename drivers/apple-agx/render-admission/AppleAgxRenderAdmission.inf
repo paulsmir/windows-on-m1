@@ -1,0 +1,57 @@
+[Version]
+Signature="$WINDOWS NT$"
+Class=Display
+ClassGuid={4d36e968-e325-11ce-bfc1-08002be10318}
+Provider=%ProviderName%
+DriverVer=08/29/2026,0.1.214.0
+CatalogFile=AppleAgxRenderAdmission.cat
+PnpLockdown=1
+
+[DestinationDirs]
+Admission.KmdCopyFiles=12
+Admission.UmdCopyFiles=11
+
+[Manufacturer]
+%ManufacturerName%=Models,NTarm64
+
+[Models.NTarm64]
+%DeviceName%=Admission_Install,ACPI\APPL0002
+
+[Admission_Install]
+CopyFiles=Admission.KmdCopyFiles,Admission.UmdCopyFiles
+AddReg=Admission.SoftwareSettings
+FeatureScore=F9
+
+[Admission_Install.Services]
+AddService=AppleAgxAdmission,0x00000002,Admission_Service
+
+[Admission_Service]
+DisplayName=%ServiceName%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\AppleAgxRenderAdmission.sys
+
+[Admission.KmdCopyFiles]
+AppleAgxRenderAdmission.sys
+
+[Admission.UmdCopyFiles]
+AppleAgxRenderAdmissionUmd.dll,,,0x4000
+
+[Admission.SoftwareSettings]
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll,AppleAgxRenderAdmissionUmd.dll
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+AppleAgxRenderAdmission.sys=1
+AppleAgxRenderAdmissionUmd.dll=1
+
+[Strings]
+ProviderName="Windows on Apple Silicon Project"
+ManufacturerName="Windows on Apple Silicon Project"
+DeviceName="Apple AGX clean WDDM render-admission experiment"
+ServiceName="Apple AGX clean render-admission KMD"
+DiskName="Apple AGX clean render-admission package"
+REG_MULTI_SZ=0x00010000
