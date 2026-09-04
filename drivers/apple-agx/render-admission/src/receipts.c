@@ -38,6 +38,20 @@ _Use_decl_annotations_ void AdmissionRecordDevice(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordStartStage(
+    ADMISSION_CONTEXT *Context, ADMISSION_START_STAGE Stage,
+    NTSTATUS Status) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1StartStage", (ULONG)Stage);
+  WriteDword(key, L"Wom1StartStatus", (ULONG)Status);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordQuery(
     PDEVICE_OBJECT DeviceObject, DXGK_QUERYADAPTERINFOTYPE Type,
     ULONG OutputDataSize, NTSTATUS Status) {

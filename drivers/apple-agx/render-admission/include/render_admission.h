@@ -60,6 +60,22 @@ typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptMemoryQualified = 16,
 } ADMISSION_RECEIPT;
 
+typedef enum _ADMISSION_START_STAGE {
+  AdmissionStartNone = 0,
+  AdmissionStartEntered = 1,
+  AdmissionStartDeviceInfo = 2,
+  AdmissionStartInterrupt = 3,
+  AdmissionStartMemory = 4,
+  AdmissionStartBackendImage = 5,
+  AdmissionStartScheduler = 6,
+  AdmissionStartPaging = 7,
+  AdmissionStartPlatform = 8,
+  AdmissionStartPostDisplay = 9,
+  AdmissionStartScanout = 10,
+  AdmissionStartObjects = 11,
+  AdmissionStartComplete = 12,
+} ADMISSION_START_STAGE;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -226,6 +242,9 @@ void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
 void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
                            _In_ ADMISSION_RECEIPT Receipt,
                            _In_ NTSTATUS Status);
+void AdmissionRecordStartStage(_In_ ADMISSION_CONTEXT *Context,
+                               _In_ ADMISSION_START_STAGE Stage,
+                               _In_ NTSTATUS Status);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);

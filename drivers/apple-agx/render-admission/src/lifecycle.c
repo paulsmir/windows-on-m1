@@ -37,6 +37,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   *NumberOfChildren = 0;
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartEntered, STATUS_PENDING);
+  AdmissionRecordStartStage(context, AdmissionStartEntered, STATUS_PENDING);
   context->StartInfo = *DxgkStartInfo;
   context->Interface = *DxgkInterface;
   context->InterfaceValid = TRUE;
@@ -46,16 +47,19 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->Interface.DeviceHandle, &context->DeviceInformation);
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartDeviceInfo, status);
+  AdmissionRecordStartStage(context, AdmissionStartDeviceInfo, status);
   if (!NT_SUCCESS(status))
     return status;
 
   status = AdmissionInterruptStart(context);
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartInterrupt, status);
+  AdmissionRecordStartStage(context, AdmissionStartInterrupt, status);
   if (!NT_SUCCESS(status))
     return status;
 
   status = AdmissionMemoryRuntimeStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartMemory, status);
   if (!NT_SUCCESS(status)) {
 #if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)
     ADMISSION_MEMORY_QUALIFICATION qualification;
@@ -107,12 +111,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 #endif
   status = AdmissionBackendImageStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartBackendImage, status);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
   }
   status = AdmissionSchedulerStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartScheduler, status);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionBackendImageStop(context);
     (void)AdmissionMemoryRuntimeStop(context);
@@ -120,6 +126,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return status;
   }
   status = AdmissionPagingStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartPaging, status);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionSchedulerStop(context);
     (void)AdmissionBackendImageStop(context);
@@ -128,6 +135,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return status;
   }
   status = AdmissionPlatformRuntimeStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartPlatform, status);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
@@ -138,6 +146,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
+    AdmissionRecordStartStage(
+        context, AdmissionStartPostDisplay, STATUS_NOT_SUPPORTED);
     (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
@@ -152,6 +162,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->Interface.DeviceHandle, &context->PostDisplayInformation);
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartPostDisplay, status);
+  AdmissionRecordStartStage(context, AdmissionStartPostDisplay, status);
   if (!NT_SUCCESS(status)) {
     (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
@@ -165,6 +176,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->PostDisplayInformation.Width != 2560 ||
       context->PostDisplayInformation.Height != 1600 ||
       context->PostDisplayInformation.Pitch != 10240) {
+    AdmissionRecordStartStage(
+        context, AdmissionStartPostDisplay,
+        STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER);
     (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
@@ -175,6 +189,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 
   status = AdmissionScanoutStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartScanout, status);
   if (!NT_SUCCESS(status)) {
     /* An uncertain REGISTER/RELEASE result retains every lower memory owner.
      * PnP teardown may retry AdmissionScanoutStop, but must not unmap a pool
@@ -192,6 +207,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 
   context->Started = TRUE;
   if (!AdmissionObjectsStartAdapter(&context->ObjectAdapter)) {
+    AdmissionRecordStartStage(
+        context, AdmissionStartObjects, STATUS_INVALID_DEVICE_STATE);
     context->Started = FALSE;
     status = AdmissionScanoutStop(context);
     if (!NT_SUCCESS(status))
@@ -204,6 +221,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     (void)AdmissionInterruptStop(context);
     return STATUS_INVALID_DEVICE_STATE;
   }
+  AdmissionRecordStartStage(context, AdmissionStartObjects, STATUS_SUCCESS);
   context->DisplayActive = TRUE;
   context->SourceVisible = TRUE;
   context->CommittedWidth = 2560;
@@ -215,6 +233,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
    * started and the adapter object is live. */
   InterlockedExchange(&context->FeatureReadyMask,
                       APPLE_AGX_WDDM_REQUIRED_READY_MASK);
+  AdmissionRecordStartStage(context, AdmissionStartComplete, STATUS_SUCCESS);
   *NumberOfVideoPresentSources = 1;
   *NumberOfChildren = 1;
   AdmissionRecordDevice(context->PhysicalDeviceObject,
