@@ -1,8 +1,6 @@
 #include "render_admission.h"
 
 #define ADMISSION_PLATFORM_TAG 'pRGA'
-#define ADMISSION_PLATFORM_RESOURCE_TAG 'rRGA'
-#define ADMISSION_PLATFORM_RESOURCE_LIMIT 0x10000u
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
@@ -133,91 +131,29 @@ static BOOLEAN AdmissionPlatformContains(
   return FALSE;
 }
 
-static NTSTATUS AdmissionPlatformReadRawResources(
-    ADMISSION_CONTEXT *Context, PCM_RESOURCE_LIST *RawResources) {
-  PCM_RESOURCE_LIST resources;
-  ULONG required = 0u;
-  ULONG attempt;
-  NTSTATUS status;
-
-  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      RawResources == NULL)
-    return STATUS_INVALID_PARAMETER;
-  *RawResources = NULL;
-  status = IoGetDeviceProperty(
-      Context->PhysicalDeviceObject, DevicePropertyBootConfiguration, 0u,
-      NULL, &required);
-  if (status != STATUS_BUFFER_TOO_SMALL ||
-      required < sizeof(CM_RESOURCE_LIST) ||
-      required > ADMISSION_PLATFORM_RESOURCE_LIMIT)
-    return NT_SUCCESS(status) ? STATUS_DEVICE_CONFIGURATION_ERROR : status;
-
-  for (attempt = 0u; attempt < 2u; ++attempt) {
-    ULONG returned = 0u;
-    resources = ExAllocatePool2(
-        POOL_FLAG_PAGED, required, ADMISSION_PLATFORM_RESOURCE_TAG);
-    if (resources == NULL)
-      return STATUS_INSUFFICIENT_RESOURCES;
-    status = IoGetDeviceProperty(
-        Context->PhysicalDeviceObject, DevicePropertyBootConfiguration,
-        required, resources, &returned);
-    if (NT_SUCCESS(status)) {
-      *RawResources = resources;
-      return STATUS_SUCCESS;
-    }
-    ExFreePoolWithTag(resources, ADMISSION_PLATFORM_RESOURCE_TAG);
-    if (status != STATUS_BUFFER_TOO_SMALL || returned <= required ||
-        returned > ADMISSION_PLATFORM_RESOURCE_LIMIT)
-      return status;
-    required = returned;
-  }
-  return STATUS_BUFFER_TOO_SMALL;
-}
-
 static NTSTATUS AdmissionPlatformValidateResources(
     ADMISSION_CONTEXT *Context) {
-  PCM_RESOURCE_LIST raw_resources = NULL;
-  PCM_RESOURCE_LIST translated_resources;
+  PCM_RESOURCE_LIST resources;
   ULONG memory_count = 0u;
   ULONG interrupt_count = 0u;
   ULONG seen = 0u;
   ULONG full_index;
-  NTSTATUS status;
   if (Context == NULL)
     return STATUS_INVALID_PARAMETER;
-  translated_resources = Context->DeviceInformation.TranslatedResourceList;
-  if (translated_resources == NULL || translated_resources->Count != 1u)
+  resources = Context->DeviceInformation.TranslatedResourceList;
+  if (resources == NULL || resources->Count != 1u)
     return STATUS_DEVICE_CONFIGURATION_ERROR;
-  status = AdmissionPlatformReadRawResources(Context, &raw_resources);
-  if (!NT_SUCCESS(status))
-    return status;
-  status = STATUS_DEVICE_CONFIGURATION_ERROR;
-  if (raw_resources->Count != translated_resources->Count)
-    goto Exit;
-  for (full_index = 0u; full_index < translated_resources->Count;
-       ++full_index) {
-    PCM_FULL_RESOURCE_DESCRIPTOR raw_full =
-        &raw_resources->List[full_index];
-    PCM_FULL_RESOURCE_DESCRIPTOR translated_full =
-        &translated_resources->List[full_index];
+  for (full_index = 0u; full_index < resources->Count; ++full_index) {
+    PCM_FULL_RESOURCE_DESCRIPTOR full = &resources->List[full_index];
     ULONG partial_index;
-    if (raw_full->PartialResourceList.Count !=
-        translated_full->PartialResourceList.Count)
-      goto Exit;
     for (partial_index = 0u;
-         partial_index < translated_full->PartialResourceList.Count;
-         ++partial_index) {
-      PCM_PARTIAL_RESOURCE_DESCRIPTOR raw_descriptor =
-          &raw_full->PartialResourceList.PartialDescriptors[partial_index];
-      PCM_PARTIAL_RESOURCE_DESCRIPTOR translated_descriptor =
-          &translated_full->PartialResourceList.PartialDescriptors[
-              partial_index];
-      if (raw_descriptor->Type != translated_descriptor->Type)
-        goto Exit;
-      if (translated_descriptor->Type == CmResourceTypeMemory) {
+         partial_index < full->PartialResourceList.Count; ++partial_index) {
+      PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor =
+          &full->PartialResourceList.PartialDescriptors[partial_index];
+      if (descriptor->Type == CmResourceTypeMemory) {
         ULONGLONG start =
-            (ULONGLONG)translated_descriptor->u.Memory.Start.QuadPart;
-        ULONG length = translated_descriptor->u.Memory.Length;
+            (ULONGLONG)descriptor->u.Memory.Start.QuadPart;
+        ULONG length = descriptor->u.Memory.Length;
         ULONG bit = 0u;
         if (start == J313_AGX_G2_SGX_MMIO_BASE &&
             length == J313_AGX_G2_SGX_MMIO_SIZE)
@@ -232,28 +168,24 @@ static NTSTATUS AdmissionPlatformValidateResources(
                  length == J313_AGX_G2_POWER_BROKER_SIZE)
           bit = 1u << 3;
         else
-          goto Exit;
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
         if ((seen & bit) != 0u)
-          goto Exit;
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
         seen |= bit;
         ++memory_count;
-      } else if (translated_descriptor->Type == CmResourceTypeInterrupt) {
-        if (raw_descriptor->u.Interrupt.Vector !=
-                J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID ||
-            translated_descriptor->u.Interrupt.Vector == 0u)
-          goto Exit;
+      } else if (descriptor->Type == CmResourceTypeInterrupt) {
+        if (descriptor->u.Interrupt.Vector !=
+            J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID)
+          return STATUS_DEVICE_CONFIGURATION_ERROR;
         ++interrupt_count;
-      } else if (translated_descriptor->Type !=
-                 CmResourceTypeDevicePrivate) {
-        goto Exit;
+      } else if (descriptor->Type != CmResourceTypeDevicePrivate) {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
       }
     }
   }
-  if (memory_count == 4u && seen == 0x0fu && interrupt_count == 1u)
-    status = STATUS_SUCCESS;
-Exit:
-  ExFreePoolWithTag(raw_resources, ADMISSION_PLATFORM_RESOURCE_TAG);
-  return status;
+  return memory_count == 4u && seen == 0x0fu && interrupt_count == 1u
+             ? STATUS_SUCCESS
+             : STATUS_DEVICE_CONFIGURATION_ERROR;
 }
 
 static NTSTATUS AdmissionPlatformReadSnapshot(
