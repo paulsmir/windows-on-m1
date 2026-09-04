@@ -118,6 +118,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
   if (InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_SUCCESS;
   if (Context->Scheduler.ContextCount != 0u ||
+      AppleAgxSchedulerHasOutstandingFence(
+          &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
+          ADMISSION_SCHEDULER_ENGINE) ||
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
@@ -137,7 +140,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionSchedulerRecordCompletion(
       InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
     return FALSE;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
-  completed = AppleAgxSchedulerCompleteFence(
+  completed = AppleAgxSchedulerCompleteActiveFence(
                   &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
                   ADMISSION_SCHEDULER_ENGINE, Fence)
                   ? TRUE
@@ -154,6 +157,27 @@ _Use_decl_annotations_ BOOLEAN AdmissionSchedulerRecordCompletion(
   if (!completed)
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   return completed;
+}
+
+_Use_decl_annotations_ BOOLEAN AdmissionSchedulerSubmitFence(
+    ADMISSION_CONTEXT *Context, UINT Fence) {
+  BOOLEAN submitted = FALSE;
+
+  if (Context == NULL || Fence == 0u ||
+      InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
+    return FALSE;
+  KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
+  if (AppleAgxSchedulerQueueFence(
+          &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
+          ADMISSION_SCHEDULER_ENGINE, Fence) &&
+      AppleAgxSchedulerActivateFence(
+          &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
+          ADMISSION_SCHEDULER_ENGINE, Fence))
+    submitted = TRUE;
+  KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
+  if (!submitted)
+    InterlockedExchange(&Context->SchedulerFaulted, 1);
+  return submitted;
 }
 
 _Use_decl_annotations_ VOID AdmissionSchedulerDpc(

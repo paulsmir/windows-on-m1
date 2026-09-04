@@ -22,12 +22,15 @@ class AppleAgxRenderSchedulerTests(unittest.TestCase):
         self.assertIn("AppleAgxSchedulerCreateContext", callbacks)
         self.assertIn("AppleAgxSchedulerDestroyContext", callbacks)
 
-    def test_paging_completion_advances_the_single_engine_fence(self):
+    def test_paging_submission_and_completion_share_single_engine_progress(self):
         paging = self.read("src/paging_windows.c")
         scheduler = self.read("src/scheduler_windows.c")
 
+        self.assertIn("AdmissionSchedulerSubmitFence", paging)
         self.assertIn("AdmissionSchedulerRecordCompletion", paging)
-        self.assertIn("AppleAgxSchedulerCompleteFence", scheduler)
+        self.assertIn("AppleAgxSchedulerQueueFence", scheduler)
+        self.assertIn("AppleAgxSchedulerActivateFence", scheduler)
+        self.assertIn("AppleAgxSchedulerCompleteActiveFence", scheduler)
         self.assertIn("AdmissionDdiQueryCurrentFence", scheduler)
         self.assertNotIn("FAIL2(AdmissionDdiQueryCurrentFence", self.read(
             "src/callbacks.c"))

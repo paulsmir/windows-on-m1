@@ -238,6 +238,8 @@ NTSTATUS AdmissionPagingStop(_Inout_ ADMISSION_CONTEXT *Context);
 VOID AdmissionPagingDpc(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionSchedulerStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionSchedulerStop(_Inout_ ADMISSION_CONTEXT *Context);
+BOOLEAN AdmissionSchedulerSubmitFence(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ UINT Fence);
 BOOLEAN AdmissionSchedulerRecordCompletion(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ UINT Fence);
 VOID AdmissionSchedulerDpc(_Inout_ ADMISSION_CONTEXT *Context);

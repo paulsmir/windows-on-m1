@@ -308,7 +308,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
       InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
       !AdmissionPagingFenceCanSubmit(
           context->PagingLastSubmittedFence, Args->SubmissionFenceId,
-          Args->Flags.Resubmission ? 1u : 0u)) {
+          Args->Flags.Resubmission ? 1u : 0u) ||
+      !AdmissionSchedulerSubmitFence(context, Args->SubmissionFenceId)) {
     KeReleaseSpinLock(&context->PagingLock, oldIrql);
     return STATUS_DEVICE_BUSY;
   }
