@@ -14,6 +14,7 @@ typedef enum _APPLE_AGX_UAT_RESULT {
   AppleAgxUatResultAlreadyMapped,
   AppleAgxUatResultCapacity,
   AppleAgxUatResultAllocationFailed,
+  AppleAgxUatResultNotMapped,
 } APPLE_AGX_UAT_RESULT;
 
 typedef enum _APPLE_AGX_UAT_PROTECTION {

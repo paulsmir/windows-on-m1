@@ -19,12 +19,19 @@ static void AppleAgxUatPublicationWriteU64(
 static unsigned char AppleAgxUatPublicationPairValid(
     const APPLE_AGX_UAT_TTBR_PAIR *pair) {
   const unsigned long long address_limit = 1ULL << 40u;
+  const unsigned long long address_mask = address_limit - 1ULL;
+  const unsigned long long asid_mask = 0xffff000000000000ULL;
+  unsigned long long asid;
   if (pair == 0)
     return 0u;
+  asid = pair->Ttbr0 & asid_mask;
   if ((pair->Ttbr0 & 0x3fffULL) != 1ULL ||
-      (pair->Ttbr1 & 0x3fffULL) != 1ULL)
-    return 0u;
-  if (pair->Ttbr0 >= address_limit || pair->Ttbr1 >= address_limit)
+      (pair->Ttbr1 & 0x3fffULL) != 1ULL ||
+      (pair->Ttbr1 & asid_mask) != asid ||
+      asid >
+          ((unsigned long long)(J313_AGX_G2_UAT_CONTEXT_COUNT - 1u) << 48) ||
+      (pair->Ttbr0 & ~(asid_mask | address_mask)) != 0ULL ||
+      (pair->Ttbr1 & ~(asid_mask | address_mask)) != 0ULL)
     return 0u;
   return 1u;
 }
@@ -73,13 +80,24 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313(
     const APPLE_AGX_UAT_TTBR_PAIR *Pair,
     const APPLE_AGX_UAT_PUBLICATION_IO *Io,
     APPLE_AGX_UAT_PUBLICATION_STATE *State) {
+  return AppleAgxUatPublishJ313Context(Snapshot, 0u, Pair, Io, State);
+}
+
+APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313Context(
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot, unsigned int Context,
+    const APPLE_AGX_UAT_TTBR_PAIR *Pair,
+    const APPLE_AGX_UAT_PUBLICATION_IO *Io,
+    APPLE_AGX_UAT_PUBLICATION_STATE *State) {
   volatile unsigned char *mapped = 0;
+  volatile unsigned char *pairBase;
 
   if (Snapshot == 0 || State == 0 ||
       AppleAgxUatPublicationIoValid(Io) == 0u || State->Active != 0u ||
       State->MappedBase != 0 ||
       Snapshot->GpuRegionBase != J313_AGX_G2_GPU_BASE ||
-      AppleAgxUatPublicationPairValid(Pair) == 0u)
+      Context >= J313_AGX_G2_UAT_CONTEXT_COUNT ||
+      AppleAgxUatPublicationPairValid(Pair) == 0u ||
+      (Pair->Ttbr0 >> 48) != Context || (Pair->Ttbr1 >> 48) != Context)
     return AppleAgxUatPublicationResultInvalidArgument;
   if (Io->Map(Io->Context, Snapshot->GpuRegionBase,
               (unsigned int)J313_AGX_G2_GPU_SIZE, &mapped) == 0u ||
@@ -87,13 +105,15 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313(
     return AppleAgxUatPublicationResultMapFailed;
 
   State->MappedBase = mapped;
-  State->OriginalTtbr0 = AppleAgxUatPublicationReadU64(mapped);
-  State->OriginalTtbr1 = AppleAgxUatPublicationReadU64(mapped + 8u);
+  State->Context = Context;
+  pairBase = mapped + (unsigned long long)Context * 16u;
+  State->OriginalTtbr0 = AppleAgxUatPublicationReadU64(pairBase);
+  State->OriginalTtbr1 = AppleAgxUatPublicationReadU64(pairBase + 8u);
   State->PublishedTtbr0 = Pair->Ttbr0;
   State->PublishedTtbr1 = Pair->Ttbr1;
-  AppleAgxUatPublicationWriteU64(mapped, Pair->Ttbr0);
+  AppleAgxUatPublicationWriteU64(pairBase, Pair->Ttbr0);
   Io->Barrier(Io->Context);
-  AppleAgxUatPublicationWriteU64(mapped + 8u, Pair->Ttbr1);
+  AppleAgxUatPublicationWriteU64(pairBase + 8u, Pair->Ttbr1);
   Io->Barrier(Io->Context);
   State->Active = 1u;
   return AppleAgxUatPublicationResultOk;
@@ -106,10 +126,16 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatUnpublishJ313(
       State->Active == 0u || State->MappedBase == 0)
     return AppleAgxUatPublicationResultInvalidArgument;
 
-  AppleAgxUatPublicationWriteU64(State->MappedBase,
+  volatile unsigned char *pairBase;
+
+  if (State != 0 && State->Context >= J313_AGX_G2_UAT_CONTEXT_COUNT)
+    return AppleAgxUatPublicationResultInvalidArgument;
+  pairBase = State == 0 ? 0 :
+      State->MappedBase + (unsigned long long)State->Context * 16u;
+  AppleAgxUatPublicationWriteU64(pairBase,
                                  State->OriginalTtbr0);
   Io->Barrier(Io->Context);
-  AppleAgxUatPublicationWriteU64(State->MappedBase + 8u,
+  AppleAgxUatPublicationWriteU64(pairBase + 8u,
                                  State->OriginalTtbr1);
   Io->Barrier(Io->Context);
   if (Io->Unmap(Io->Context, State->MappedBase) == 0u)
@@ -120,6 +146,7 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatUnpublishJ313(
   State->OriginalTtbr1 = 0ULL;
   State->PublishedTtbr0 = 0ULL;
   State->PublishedTtbr1 = 0ULL;
+  State->Context = 0u;
   State->Active = 0u;
   return AppleAgxUatPublicationResultOk;
 }

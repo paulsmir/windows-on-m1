@@ -43,6 +43,8 @@
     <ClCompile Include="src\allocation_windows.c" />
     <ClCompile Include="src\render_hvc.c" />
     <ClCompile Include="src\physical_memory_windows.c" />
+    <ClCompile Include="src\memory_runtime_windows.c" />
+    <ClCompile Include="src\paging_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
     <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />
@@ -50,6 +52,12 @@
     <ClCompile Include="..\shared\src\apple_agx_physical_topology.c" />
     <ClCompile Include="..\shared\src\apple_agx_physical_paging.c" />
     <ClCompile Include="..\shared\src\apple_agx_aperture.c" />
+    <ClCompile Include="..\shared\src\apple_agx_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_table.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_residency.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_publication.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />
@@ -57,6 +65,7 @@
     <ClInclude Include="include\render_memory.h" />
     <ClInclude Include="include\render_allocation.h" />
     <ClInclude Include="include\render_hvc.h" />
+    <ClInclude Include="include\render_paging.h" />
     <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
     <ClInclude Include="..\shared\include\apple_agx_software_aperture.h" />
@@ -64,6 +73,12 @@
     <ClInclude Include="..\shared\include\apple_agx_physical_topology.h" />
     <ClInclude Include="..\shared\include\apple_agx_physical_paging.h" />
     <ClInclude Include="..\shared\include\apple_agx_aperture.h" />
+    <ClInclude Include="..\shared\include\apple_agx_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_table.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_residency.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_publication.h" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="AppleAgxRenderAdmission.inf" />

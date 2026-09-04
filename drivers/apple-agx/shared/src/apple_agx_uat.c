@@ -23,7 +23,7 @@
 
 #define APPLE_AGX_UAT_ATTR_CACHED 0u
 #define APPLE_AGX_UAT_ATTR_DEVICE 1u
-#define APPLE_AGX_UAT_ATTR_UNCACHED 2u
+#define APPLE_AGX_UAT_ATTR_SHARED_INNER_NC 2u
 #define APPLE_AGX_UAT_AP_FIRMWARE_GPU 0u
 #define APPLE_AGX_UAT_AP_FIRMWARE 1u
 #define APPLE_AGX_UAT_AP_GPU 2u
@@ -51,7 +51,7 @@ static APPLE_AGX_UAT_RESULT AppleAgxUatProtectionBits(
       pxn = 0u;
       break;
     case AppleAgxUatFirmwareSharedReadWrite:
-      attribute = APPLE_AGX_UAT_ATTR_UNCACHED;
+      attribute = APPLE_AGX_UAT_ATTR_SHARED_INNER_NC;
       ap = APPLE_AGX_UAT_AP_FIRMWARE;
       uxn = 1u;
       pxn = 0u;
@@ -75,19 +75,19 @@ static APPLE_AGX_UAT_RESULT AppleAgxUatProtectionBits(
       pxn = 1u;
       break;
     case AppleAgxUatGpuSharedReadOnly:
-      attribute = APPLE_AGX_UAT_ATTR_UNCACHED;
+      attribute = APPLE_AGX_UAT_ATTR_SHARED_INNER_NC;
       ap = APPLE_AGX_UAT_AP_GPU;
       uxn = 0u;
       pxn = 0u;
       break;
     case AppleAgxUatGpuSharedWriteOnly:
-      attribute = APPLE_AGX_UAT_ATTR_UNCACHED;
+      attribute = APPLE_AGX_UAT_ATTR_SHARED_INNER_NC;
       ap = APPLE_AGX_UAT_AP_GPU;
       uxn = 0u;
       pxn = 1u;
       break;
     case AppleAgxUatGpuSharedReadWrite:
-      attribute = APPLE_AGX_UAT_ATTR_UNCACHED;
+      attribute = APPLE_AGX_UAT_ATTR_SHARED_INNER_NC;
       ap = APPLE_AGX_UAT_AP_GPU;
       uxn = 1u;
       pxn = 0u;

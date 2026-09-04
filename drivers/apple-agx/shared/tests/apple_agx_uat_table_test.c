@@ -209,6 +209,247 @@ static void test_mapping_rollback_and_capacity(void) {
   }
 }
 
+static void test_exact_unmap_is_atomic_reclaims_tables_and_can_remap(void) {
+  FAKE_ALLOCATOR fake;
+  APPLE_AGX_UAT_ALLOCATOR allocator;
+  APPLE_AGX_UAT_INVENTORY inventory;
+  APPLE_AGX_UAT_PAGE pages[TEST_PAGE_COUNT];
+  APPLE_AGX_UAT_MAPPING mappings[8];
+  APPLE_AGX_UAT_ROOTS roots;
+  unsigned long long va = 0xffffff8000010000ULL;
+
+  init_fixture(&fake, &allocator, &inventory, pages, mappings);
+  assert(AppleAgxUatCreateAddressSpace(3u, &allocator, &inventory, &roots) ==
+         AppleAgxUatResultOk);
+  assert(AppleAgxUatMap(3u, &roots, va, 0x20000000ULL, 0x10000ULL,
+                       AppleAgxUatGpuSharedReadWrite, &allocator,
+                       &inventory) == AppleAgxUatResultOk);
+  assert(inventory.PageCount == 4u);
+  assert(inventory.MappingCount == 1u);
+
+  assert(AppleAgxUatUnmap(3u, &roots, va, 0x8000ULL, &allocator,
+                         &inventory) == AppleAgxUatResultNotMapped);
+  assert(inventory.PageCount == 4u);
+  assert(inventory.MappingCount == 1u);
+  assert(fake.ReleaseCount == 0u);
+
+  assert(AppleAgxUatUnmap(3u, &roots, va, 0x10000ULL, &allocator,
+                         &inventory) == AppleAgxUatResultOk);
+  assert(inventory.PageCount == 2u);
+  assert(inventory.MappingCount == 0u);
+  assert(fake.ReleaseCount == 2u);
+
+  assert(AppleAgxUatMap(3u, &roots, va, 0x30000000ULL, 0x10000ULL,
+                       AppleAgxUatGpuSharedReadWrite, &allocator,
+                       &inventory) == AppleAgxUatResultOk);
+  assert(inventory.PageCount == 4u);
+  assert(inventory.MappingCount == 1u);
+}
+
+static void test_batch_map_rolls_back_when_later_run_cannot_allocate(void) {
+  FAKE_ALLOCATOR fake;
+  APPLE_AGX_UAT_ALLOCATOR allocator;
+  APPLE_AGX_UAT_INVENTORY inventory;
+  APPLE_AGX_UAT_PAGE pages[TEST_PAGE_COUNT];
+  APPLE_AGX_UAT_MAPPING mappings[8];
+  APPLE_AGX_UAT_ROOTS roots;
+  APPLE_AGX_UAT_RANGE ranges[2];
+
+  init_fixture(&fake, &allocator, &inventory, pages, mappings);
+  assert(AppleAgxUatCreateAddressSpace(3u, &allocator, &inventory, &roots) ==
+         AppleAgxUatResultOk);
+  ranges[0].VirtualAddress = 0x16ffffc000ULL;
+  ranges[0].PhysicalAddress = 0x40000000ULL;
+  ranges[0].Length = TEST_PAGE_SIZE;
+  ranges[0].Protection = AppleAgxUatGpuSharedReadWrite;
+  ranges[1].VirtualAddress = 0x1700000000ULL;
+  ranges[1].PhysicalAddress = 0x50000000ULL;
+  ranges[1].Length = TEST_PAGE_SIZE;
+  ranges[1].Protection = AppleAgxUatGpuSharedReadWrite;
+  fake.FailCall = 5u;
+
+  assert(AppleAgxUatMapBatch(3u, &roots, ranges, 2u, &allocator,
+                             &inventory) ==
+         AppleAgxUatResultAllocationFailed);
+  assert(inventory.MappingCount == 0u);
+  assert(inventory.PageCount == 2u);
+}
+
+static void test_batch_unmap_prevalidates_every_exact_run(void) {
+  FAKE_ALLOCATOR fake;
+  APPLE_AGX_UAT_ALLOCATOR allocator;
+  APPLE_AGX_UAT_INVENTORY inventory;
+  APPLE_AGX_UAT_PAGE pages[TEST_PAGE_COUNT];
+  APPLE_AGX_UAT_MAPPING mappings[8];
+  APPLE_AGX_UAT_ROOTS roots;
+  APPLE_AGX_UAT_RANGE mapped[2];
+  APPLE_AGX_UAT_RANGE invalid[2];
+
+  init_fixture(&fake, &allocator, &inventory, pages, mappings);
+  assert(AppleAgxUatCreateAddressSpace(3u, &allocator, &inventory, &roots) ==
+         AppleAgxUatResultOk);
+  mapped[0].VirtualAddress = 0x1600010000ULL;
+  mapped[0].PhysicalAddress = 0x60000000ULL;
+  mapped[0].Length = TEST_PAGE_SIZE;
+  mapped[0].Protection = AppleAgxUatGpuSharedReadWrite;
+  mapped[1].VirtualAddress = 0x1600014000ULL;
+  mapped[1].PhysicalAddress = 0x70000000ULL;
+  mapped[1].Length = TEST_PAGE_SIZE;
+  mapped[1].Protection = AppleAgxUatGpuSharedReadWrite;
+  assert(AppleAgxUatMapBatch(3u, &roots, mapped, 2u, &allocator,
+                             &inventory) == AppleAgxUatResultOk);
+  assert(inventory.MappingCount == 2u);
+
+  invalid[0] = mapped[0];
+  invalid[1] = mapped[1];
+  invalid[1].PhysicalAddress += TEST_PAGE_SIZE;
+  assert(AppleAgxUatUnmapBatch(3u, &roots, invalid, 2u, &allocator,
+                               &inventory) == AppleAgxUatResultNotMapped);
+  assert(inventory.MappingCount == 2u);
+
+  assert(AppleAgxUatUnmapBatch(3u, &roots, mapped, 2u, &allocator,
+                               &inventory) == AppleAgxUatResultOk);
+  assert(inventory.MappingCount == 0u);
+  assert(inventory.PageCount == 2u);
+}
+
+static void test_batch_replace_with_dummy_page_is_atomic(void) {
+  FAKE_ALLOCATOR fake;
+  APPLE_AGX_UAT_ALLOCATOR allocator;
+  APPLE_AGX_UAT_INVENTORY inventory;
+  APPLE_AGX_UAT_PAGE pages[TEST_PAGE_COUNT];
+  APPLE_AGX_UAT_MAPPING mappings[8];
+  APPLE_AGX_UAT_ROOTS roots;
+  APPLE_AGX_UAT_RANGE mapped[2];
+  APPLE_AGX_UAT_RANGE invalid[2];
+  APPLE_AGX_UAT_PAGE *root;
+  APPLE_AGX_UAT_PAGE *level1;
+  APPLE_AGX_UAT_PAGE *level2;
+  unsigned long long dummy = 0x72000000ULL;
+  unsigned int index;
+
+  init_fixture(&fake, &allocator, &inventory, pages, mappings);
+  assert(AppleAgxUatCreateAddressSpace(3u, &allocator, &inventory, &roots) ==
+         AppleAgxUatResultOk);
+  mapped[0].VirtualAddress = 0x1600020000ULL;
+  mapped[0].PhysicalAddress = 0x60000000ULL;
+  mapped[0].Length = 2u * TEST_PAGE_SIZE;
+  mapped[0].Protection = AppleAgxUatGpuSharedReadWrite;
+  mapped[1].VirtualAddress = 0x1600028000ULL;
+  mapped[1].PhysicalAddress = 0x70000000ULL;
+  mapped[1].Length = TEST_PAGE_SIZE;
+  mapped[1].Protection = AppleAgxUatGpuSharedReadWrite;
+  assert(AppleAgxUatMapBatch(3u, &roots, mapped, 2u, &allocator,
+                             &inventory) == AppleAgxUatResultOk);
+
+  invalid[0] = mapped[0];
+  invalid[1] = mapped[1];
+  invalid[1].PhysicalAddress += TEST_PAGE_SIZE;
+  assert(AppleAgxUatReplaceBatchWithPage(
+             3u, &roots, invalid, 2u, dummy,
+             AppleAgxUatGpuSharedReadWrite, &allocator, &inventory) ==
+         AppleAgxUatResultNotMapped);
+  assert(inventory.Mappings[0].PhysicalAddress == mapped[0].PhysicalAddress);
+  assert(inventory.Mappings[0].PhysicalStride == TEST_PAGE_SIZE);
+
+  assert(AppleAgxUatReplaceBatchWithPage(
+             3u, &roots, mapped, 2u, dummy,
+             AppleAgxUatGpuSharedReadWrite, &allocator, &inventory) ==
+         AppleAgxUatResultOk);
+  assert(inventory.MappingCount == 2u);
+  for (index = 0u; index < 2u; ++index) {
+    assert(inventory.Mappings[index].PhysicalAddress == dummy);
+    assert(inventory.Mappings[index].PhysicalStride == 0ULL);
+  }
+
+  root = find_page(&inventory, roots.Ttbr0PhysicalAddress);
+  assert(root != 0);
+  level1 = find_page(&inventory,
+                     root->Entries[(mapped[0].VirtualAddress >> 36) & 7ULL] &
+                         TABLE_ADDRESS_MASK);
+  assert(level1 != 0);
+  level2 = find_page(&inventory,
+                     level1->Entries[(mapped[0].VirtualAddress >> 25) & 2047ULL] &
+                         TABLE_ADDRESS_MASK);
+  assert(level2 != 0);
+  for (index = 0u; index < 3u; ++index) {
+    unsigned int leaf =
+        (unsigned int)((mapped[0].VirtualAddress >> 14) & 2047ULL) + index;
+    assert((level2->Entries[leaf] & TABLE_ADDRESS_MASK) == dummy);
+  }
+
+  {
+    APPLE_AGX_UAT_RANGE dummy_ranges[2];
+    APPLE_AGX_UAT_RANGE remapped[2];
+    for (index = 0u; index < 2u; ++index) {
+      dummy_ranges[index] = mapped[index];
+      dummy_ranges[index].PhysicalAddress = dummy;
+      remapped[index] = mapped[index];
+      remapped[index].PhysicalAddress += 0x20000000ULL;
+    }
+    assert(AppleAgxUatReplaceBatch(3u, &roots, dummy_ranges, remapped, 2u,
+                                   &allocator, &inventory) ==
+           AppleAgxUatResultOk);
+    assert(inventory.Mappings[0].PhysicalAddress ==
+           remapped[0].PhysicalAddress);
+    assert(inventory.Mappings[0].PhysicalStride == TEST_PAGE_SIZE);
+    for (index = 0u; index < 2u; ++index) {
+      unsigned int leaf =
+          (unsigned int)((mapped[0].VirtualAddress >> 14) & 2047ULL) + index;
+      assert((level2->Entries[leaf] & TABLE_ADDRESS_MASK) ==
+             remapped[0].PhysicalAddress + index * TEST_PAGE_SIZE);
+    }
+  }
+}
+
+static void test_page_list_maps_noncontiguous_pages_atomically(void) {
+  FAKE_ALLOCATOR fake;
+  APPLE_AGX_UAT_ALLOCATOR allocator;
+  APPLE_AGX_UAT_INVENTORY inventory;
+  APPLE_AGX_UAT_PAGE pages[TEST_PAGE_COUNT];
+  APPLE_AGX_UAT_MAPPING mappings[8];
+  APPLE_AGX_UAT_ROOTS roots;
+  APPLE_AGX_UAT_PAGE *root;
+  APPLE_AGX_UAT_PAGE *level1;
+  APPLE_AGX_UAT_PAGE *level2;
+  const unsigned long long physical_pages[3] = {
+      0x60000000ULL, 0x64004000ULL, 0x68008000ULL};
+  const unsigned long long va = 0x1600200000ULL;
+  unsigned int leaf;
+
+  init_fixture(&fake, &allocator, &inventory, pages, mappings);
+  assert(AppleAgxUatCreateAddressSpace(3u, &allocator, &inventory, &roots) ==
+         AppleAgxUatResultOk);
+  assert(AppleAgxUatMapPageList(
+             3u, &roots, va, physical_pages, 3u,
+             AppleAgxUatGpuSharedReadWrite, &allocator, &inventory) ==
+         AppleAgxUatResultOk);
+  assert(inventory.MappingCount == 1u);
+  assert(inventory.Mappings[0].PhysicalAddress == physical_pages[0]);
+  assert(inventory.Mappings[0].PhysicalStride ==
+         APPLE_AGX_UAT_PHYSICAL_STRIDE_SCATTER);
+
+  root = find_page(&inventory, roots.Ttbr0PhysicalAddress);
+  assert(root != 0);
+  level1 = find_page(&inventory,
+                     root->Entries[(va >> 36) & 7ULL] & TABLE_ADDRESS_MASK);
+  assert(level1 != 0);
+  level2 = find_page(&inventory,
+                     level1->Entries[(va >> 25) & 2047ULL] &
+                         TABLE_ADDRESS_MASK);
+  assert(level2 != 0);
+  leaf = (unsigned int)((va >> 14) & 2047ULL);
+  assert((level2->Entries[leaf] & TABLE_ADDRESS_MASK) == physical_pages[0]);
+  assert((level2->Entries[leaf + 1u] & TABLE_ADDRESS_MASK) ==
+         physical_pages[1]);
+  assert((level2->Entries[leaf + 2u] & TABLE_ADDRESS_MASK) ==
+         physical_pages[2]);
+  assert(AppleAgxUatUnmap(3u, &roots, va, 3u * TEST_PAGE_SIZE, &allocator,
+                           &inventory) == AppleAgxUatResultOk);
+  assert(inventory.MappingCount == 0u);
+}
+
+
 static void test_invalid_arguments(void) {
   APPLE_AGX_UAT_ROOTS roots = {0, 0};
   APPLE_AGX_UAT_INVENTORY inventory = {0};
@@ -226,6 +467,11 @@ int main(void) {
   test_high_and_low_walks();
   test_create_rollback();
   test_mapping_rollback_and_capacity();
+  test_exact_unmap_is_atomic_reclaims_tables_and_can_remap();
+  test_batch_map_rolls_back_when_later_run_cannot_allocate();
+  test_batch_unmap_prevalidates_every_exact_run();
+  test_batch_replace_with_dummy_page_is_atomic();
+  test_page_list_maps_noncontiguous_pages_atomically();
   test_invalid_arguments();
   return 0;
 }

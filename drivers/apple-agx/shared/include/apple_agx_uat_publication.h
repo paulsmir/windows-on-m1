@@ -28,6 +28,7 @@ typedef struct _APPLE_AGX_UAT_PUBLICATION_STATE {
   unsigned long long OriginalTtbr1;
   unsigned long long PublishedTtbr0;
   unsigned long long PublishedTtbr1;
+  unsigned int Context;
   unsigned char Active;
 } APPLE_AGX_UAT_PUBLICATION_STATE;
 
@@ -44,6 +45,11 @@ APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatInspectJ313(
 
 APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313(
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot,
+    const APPLE_AGX_UAT_TTBR_PAIR *Pair,
+    const APPLE_AGX_UAT_PUBLICATION_IO *Io,
+    APPLE_AGX_UAT_PUBLICATION_STATE *State);
+APPLE_AGX_UAT_PUBLICATION_RESULT AppleAgxUatPublishJ313Context(
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot, unsigned int Context,
     const APPLE_AGX_UAT_TTBR_PAIR *Pair,
     const APPLE_AGX_UAT_PUBLICATION_IO *Io,
     APPLE_AGX_UAT_PUBLICATION_STATE *State);

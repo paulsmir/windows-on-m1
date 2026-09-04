@@ -33,6 +33,9 @@ typedef struct _APPLE_AGX_MEMORY_OBJECT {
   unsigned long long DeviceAddress;
   unsigned long long AllocationLength;
   unsigned long long Length;
+  /* Optional 16-KiB physical leaf list for a non-contiguous backing. */
+  const unsigned long long *DevicePages;
+  unsigned int DevicePageCount;
   unsigned long long GpuVirtualAddress;
   unsigned long long SubmittedFence;
   unsigned int Context;
@@ -46,11 +49,21 @@ typedef struct _APPLE_AGX_MEMORY_IO {
                                       unsigned long long *DeviceBase,
                                       void **AllocationHandle);
   unsigned char (*FreeContiguous)(void *Context, void *AllocationHandle);
+  /* A CPU-contiguous view backed by individually validated 16-KiB leaves. */
+  unsigned char (*AllocatePageList)(void *Context, unsigned long long Bytes,
+                                    void **CpuBase,
+                                    const unsigned long long **DevicePages,
+                                    unsigned int *DevicePageCount,
+                                    void **AllocationHandle);
+  unsigned char (*FreePageList)(void *Context, void *AllocationHandle);
 } APPLE_AGX_MEMORY_IO;
 
 APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocate(const APPLE_AGX_MEMORY_IO *Io,
                                                unsigned long long Length,
                                                APPLE_AGX_MEMORY_OBJECT *Object);
+APPLE_AGX_MEMORY_RESULT AppleAgxMemoryAllocateAligned(
+    const APPLE_AGX_MEMORY_IO *Io, unsigned long long Length,
+    unsigned long long Alignment, APPLE_AGX_MEMORY_OBJECT *Object);
 APPLE_AGX_MEMORY_RESULT
 AppleAgxMemoryMarkCpuWritten(APPLE_AGX_MEMORY_OBJECT *Object);
 APPLE_AGX_MEMORY_RESULT
@@ -65,6 +78,14 @@ AppleAgxMemoryMarkSubmitted(APPLE_AGX_MEMORY_OBJECT *Object,
 APPLE_AGX_MEMORY_RESULT
 AppleAgxMemoryMarkCompleted(APPLE_AGX_MEMORY_OBJECT *Object,
                             unsigned long long Fence);
+/*
+ * Retire an exact failed/cancelled/reset submission without pretending that
+ * GPU work completed successfully.  The object becomes reusable/unmappable,
+ * while SubmittedFence still prevents stale-fence reuse.
+ */
+APPLE_AGX_MEMORY_RESULT
+AppleAgxMemoryMarkAborted(APPLE_AGX_MEMORY_OBJECT *Object,
+                          unsigned long long Fence);
 APPLE_AGX_MEMORY_RESULT
 AppleAgxMemoryMarkGpuUnmapped(APPLE_AGX_MEMORY_OBJECT *Object);
 APPLE_AGX_MEMORY_RESULT AppleAgxMemoryRelease(const APPLE_AGX_MEMORY_IO *Io,

@@ -67,8 +67,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
 FAIL2(AdmissionDdiPatch, HANDLE, Adapter, const DXGKARG_PATCH *, Args)
 FAIL2(AdmissionDdiSubmitCommand, HANDLE, Adapter,
       const DXGKARG_SUBMITCOMMAND *, Args)
-FAIL2(AdmissionDdiBuildPagingBuffer, HANDLE, Adapter,
-      DXGKARG_BUILDPAGINGBUFFER *, Args)
 FAIL2(AdmissionDdiPreemptCommand, HANDLE, Adapter,
       const DXGKARG_PREEMPTCOMMAND *, Args)
 FAIL2(AdmissionDdiRender, HANDLE, Context, DXGKARG_RENDER *, Args)

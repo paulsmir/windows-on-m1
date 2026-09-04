@@ -14,6 +14,11 @@
 #include "render_memory.h"
 #include "render_allocation.h"
 #include "render_hvc.h"
+#include "apple_agx_memory.h"
+#include "apple_agx_residency.h"
+#include "apple_agx_uat_publication.h"
+#include "render_paging.h"
+#include "j313_agx_abi_admission.generated.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 4096u
@@ -44,7 +49,7 @@ typedef enum _ADMISSION_RECEIPT {
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
-  struct _ADMISSION_PHYSICAL_OWNER *PhysicalOwnerPointer;
+  PVOID MemoryRuntime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
   PDEVICE_OBJECT PhysicalDeviceObject;
   DXGK_START_INFO StartInfo;
@@ -142,6 +147,17 @@ NTSTATUS AdmissionPhysicalAllocate(
 NTSTATUS AdmissionPhysicalFree(
     _Inout_ ADMISSION_PHYSICAL_OWNER *Owner,
     _Inout_ ADMISSION_PHYSICAL_ALLOCATION *Allocation);
+NTSTATUS AdmissionMemoryRuntimeStart(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionMemoryRuntimeStop(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionMemoryRuntimeMapAperture(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ApertureByteOffset,
+    _In_ PMDL Mdl, _In_ SIZE_T MdlPageOffset, _In_ UINT PageCount);
+NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ApertureByteOffset,
+    _In_ ULONGLONG DummyPage);
+NTSTATUS AdmissionMemoryRuntimeExecutePaging(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_PAGING_RECORD *Record);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;

@@ -52,7 +52,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (!NT_SUCCESS(status))
     return status;
 
+  status = AdmissionMemoryRuntimeStart(context);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+
   if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
+    (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_NOT_SUPPORTED;
   }
@@ -63,6 +70,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartPostDisplay, status);
   if (!NT_SUCCESS(status)) {
+    (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return status;
   }
@@ -70,6 +78,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
       context->PostDisplayInformation.Width != 2560 ||
       context->PostDisplayInformation.Height != 1600 ||
       context->PostDisplayInformation.Pitch != 10240) {
+    (void)AdmissionMemoryRuntimeStop(context);
     (void)AdmissionInterruptStop(context);
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
   }
@@ -102,6 +111,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
                         STATUS_SUCCESS);
   if (context->ObjectAdapter.DeviceCount != 0u)
     return STATUS_DEVICE_BUSY;
+  status = AdmissionMemoryRuntimeStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
   status = AdmissionInterruptStop(context);
   if (!NT_SUCCESS(status))
     return status;
@@ -124,6 +136,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+  if (context->MemoryRuntime != NULL &&
+      !NT_SUCCESS(AdmissionMemoryRuntimeStop(context)))
+    return STATUS_DEVICE_BUSY;
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptRemove,
                         STATUS_SUCCESS);
   ExFreePoolWithTag(context, ADMISSION_POOL_TAG);

@@ -66,30 +66,43 @@ static APPLE_AGX_CONFIG_SNAPSHOT snapshot(void) {
   return value;
 }
 
-static void test_publish_and_restore_exact_context_zero_pair(void) {
+static void test_publish_and_restore_exact_context_pair(void) {
   FAKE_PUBLICATION fake;
   APPLE_AGX_UAT_PUBLICATION_IO io;
   APPLE_AGX_UAT_PUBLICATION_STATE state;
   APPLE_AGX_CONFIG_SNAPSHOT config = snapshot();
-  APPLE_AGX_UAT_TTBR_PAIR pair = {0x10004001ULL, 0x10008001ULL};
+  APPLE_AGX_UAT_TTBR_PAIR pair = {
+      (3ULL << 48) | 0x10004001ULL,
+      (3ULL << 48) | 0x10008001ULL,
+  };
 
   memset(&fake, 0, sizeof(fake));
   memset(&state, 0, sizeof(state));
-  write_u64(fake.Region, 0xaaaaaaaaaaaaaaaaULL);
-  write_u64(fake.Region + 8u, 0xbbbbbbbbbbbbbbbbULL);
+  write_u64(fake.Region, 0x1111111111111111ULL);
+  write_u64(fake.Region + 8u, 0x2222222222222222ULL);
+  write_u64(fake.Region + 3u * 16u, 0xaaaaaaaaaaaaaaaaULL);
+  write_u64(fake.Region + 3u * 16u + 8u, 0xbbbbbbbbbbbbbbbbULL);
   io = publication_io(&fake);
-  assert(AppleAgxUatPublishJ313(&config, &pair, &io, &state) ==
+  assert(AppleAgxUatPublishJ313Context(&config, 3u, &pair, &io, &state) ==
          AppleAgxUatPublicationResultOk);
   assert(state.Active == 1u && fake.MapCount == 1u);
   assert(fake.BarrierCount == 2u && fake.UnmapCount == 0u);
-  assert(read_u64(fake.Region) == pair.Ttbr0);
-  assert(read_u64(fake.Region + 8u) == pair.Ttbr1);
+  assert(state.Context == 3u);
+  assert(read_u64(fake.Region) == 0x1111111111111111ULL);
+  assert(read_u64(fake.Region + 8u) == 0x2222222222222222ULL);
+  assert(read_u64(fake.Region + 3u * 16u) == pair.Ttbr0);
+  assert(read_u64(fake.Region + 3u * 16u + 8u) == pair.Ttbr1);
   assert(AppleAgxUatUnpublishJ313(&io, &state) ==
          AppleAgxUatPublicationResultOk);
-  assert(read_u64(fake.Region) == 0xaaaaaaaaaaaaaaaaULL);
-  assert(read_u64(fake.Region + 8u) == 0xbbbbbbbbbbbbbbbbULL);
+  assert(read_u64(fake.Region + 3u * 16u) == 0xaaaaaaaaaaaaaaaaULL);
+  assert(read_u64(fake.Region + 3u * 16u + 8u) == 0xbbbbbbbbbbbbbbbbULL);
   assert(fake.BarrierCount == 4u && fake.UnmapCount == 1u);
   assert(state.Active == 0u);
+
+  memset(&state, 0, sizeof(state));
+  pair.Ttbr0 = (2ULL << 48) | 0x10004001ULL;
+  assert(AppleAgxUatPublishJ313Context(&config, 3u, &pair, &io, &state) ==
+         AppleAgxUatPublicationResultInvalidArgument);
 }
 
 static void test_fail_closed_and_retryable_unmap(void) {
@@ -178,7 +191,7 @@ static void test_snapshot_fails_closed(void) {
 }
 
 int main(void) {
-  test_publish_and_restore_exact_context_zero_pair();
+  test_publish_and_restore_exact_context_pair();
   test_fail_closed_and_retryable_unmap();
   test_snapshot_is_read_only_and_unmaps();
   test_snapshot_fails_closed();
