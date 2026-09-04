@@ -220,6 +220,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     HANDLE Adapter, const DXGKARG_PREEMPTCOMMAND *PreemptCommand) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   BOOLEAN notifyNow;
+  UINT cutoffFence;
   UINT activeFence;
 
   if (context == NULL || PreemptCommand == NULL ||
@@ -228,15 +229,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
       PreemptCommand->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
-  activeFence = InterlockedCompareExchange(
-                    &context->PagingPending, 0, 0) != 0
-                    ? context->PagingFence
-                    : 0u;
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
+  cutoffFence = AppleAgxSchedulerLastSubmittedFence(
+      &context->Scheduler, PreemptCommand->NodeOrdinal,
+      PreemptCommand->EngineOrdinal);
+  activeFence = AppleAgxSchedulerActiveFence(
+      &context->Scheduler, PreemptCommand->NodeOrdinal,
+      PreemptCommand->EngineOrdinal);
   if (!AppleAgxSchedulerBeginBoundaryPreemption(
           &context->Scheduler, PreemptCommand->NodeOrdinal,
           PreemptCommand->EngineOrdinal, PreemptCommand->PreemptionFenceId,
-          context->PagingLastSubmittedFence, activeFence)) {
+          cutoffFence, activeFence)) {
     InterlockedExchange(&context->SchedulerFaulted, 1);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
     return STATUS_SUCCESS;
@@ -342,8 +345,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCollectDbgInfo(
   snapshot.Size = sizeof(snapshot);
   KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
   snapshot.CompletedFence = context->Scheduler.CompletedFence;
-  snapshot.LastSubmittedFence = context->PagingLastSubmittedFence;
-  snapshot.ActiveFence = context->PagingPending ? context->PagingFence : 0u;
+  snapshot.LastSubmittedFence = context->Scheduler.LastSubmittedFence;
+  snapshot.ActiveFence = context->Scheduler.ActiveFence;
   snapshot.PreemptionPhase = context->Scheduler.PreemptionPhase;
   snapshot.ContextCount = context->Scheduler.ContextCount;
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);

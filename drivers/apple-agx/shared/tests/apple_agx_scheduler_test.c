@@ -171,18 +171,23 @@ static void test_active_dma_must_reach_its_boundary_before_notification(void) {
   APPLE_AGX_PREEMPTION preemption;
 
   AppleAgxSchedulerInitialize(&scheduler);
-  assert(AppleAgxSchedulerCompleteFence(&scheduler, 0u, 0u, 3u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 9u));
   assert(AppleAgxSchedulerBeginBoundaryPreemption(
       &scheduler, 0u, 0u, 42u, 9u, 7u));
+  assert(AppleAgxSchedulerQueuedFence(&scheduler, 0u, 0u) == 0u);
+  assert(AppleAgxSchedulerLastSubmittedFence(&scheduler, 0u, 0u) == 9u);
   assert(AppleAgxSchedulerPreemptionPhase(&scheduler) ==
          AppleAgxPreemptionWaitCurrentBoundary);
+  assert(!AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 10u));
   assert(!AppleAgxSchedulerClaimBoundaryPreemption(&scheduler,
                                                    &preemption));
   assert(!AppleAgxSchedulerObserveBoundaryCompletion(&scheduler, 0u, 0u,
                                                      6u));
   assert(AppleAgxSchedulerPreemptionPhase(&scheduler) ==
          AppleAgxPreemptionWaitCurrentBoundary);
-  assert(AppleAgxSchedulerCompleteFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 7u));
   assert(AppleAgxSchedulerObserveBoundaryCompletion(&scheduler, 0u, 0u,
                                                     7u));
   assert(!AppleAgxSchedulerObserveBoundaryCompletion(&scheduler, 0u, 0u,
@@ -201,13 +206,15 @@ static void test_waiting_preemption_rejects_completion_past_active_boundary(
   APPLE_AGX_SCHEDULER scheduler;
 
   AppleAgxSchedulerInitialize(&scheduler);
-  assert(AppleAgxSchedulerCompleteFence(&scheduler, 0u, 0u, 3u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 9u));
   assert(AppleAgxSchedulerBeginBoundaryPreemption(
       &scheduler, 0u, 0u, 43u, 9u, 7u));
   assert(!AppleAgxSchedulerCanCompleteFence(&scheduler, 0u, 0u, 8u));
   assert(!AppleAgxSchedulerCompleteFence(&scheduler, 0u, 0u, 8u));
-  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 3u);
-  assert(AppleAgxSchedulerCompleteFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 0u);
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 7u));
   assert(AppleAgxSchedulerObserveBoundaryCompletion(&scheduler, 0u, 0u,
                                                     7u));
 }
@@ -216,15 +223,38 @@ static void test_preemption_snapshot_must_describe_a_reachable_boundary(void) {
   APPLE_AGX_SCHEDULER scheduler;
 
   AppleAgxSchedulerInitialize(&scheduler);
-  assert(AppleAgxSchedulerCompleteFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerCompleteActiveFence(&scheduler, 0u, 0u, 5u));
   assert(!AppleAgxSchedulerBeginBoundaryPreemption(
       &scheduler, 0u, 0u, 44u, 4u, 0u));
   assert(!AppleAgxSchedulerBeginBoundaryPreemption(
       &scheduler, 0u, 0u, 44u, 9u, 5u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerActivateFence(&scheduler, 0u, 0u, 7u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 9u));
   assert(!AppleAgxSchedulerBeginBoundaryPreemption(
       &scheduler, 0u, 0u, 44u, 9u, 10u));
   assert(AppleAgxSchedulerBeginBoundaryPreemption(
       &scheduler, 0u, 0u, 44u, 9u, 7u));
+}
+
+static void test_idle_preemption_discards_queued_work_before_notification(
+    void) {
+  APPLE_AGX_SCHEDULER scheduler;
+  APPLE_AGX_PREEMPTION preemption;
+
+  AppleAgxSchedulerInitialize(&scheduler);
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 5u));
+  assert(AppleAgxSchedulerBeginBoundaryPreemption(
+      &scheduler, 0u, 0u, 45u, 5u, 0u));
+  assert(AppleAgxSchedulerQueuedFence(&scheduler, 0u, 0u) == 0u);
+  assert(AppleAgxSchedulerCurrentFence(&scheduler, 0u, 0u) == 0u);
+  assert(AppleAgxSchedulerClaimBoundaryPreemption(&scheduler,
+                                                  &preemption));
+  assert(preemption.LastCompletedFence == 0u);
+  assert(AppleAgxSchedulerCommitBoundaryPreemption(&scheduler, 45u));
+  assert(AppleAgxSchedulerQueueFence(&scheduler, 0u, 0u, 6u));
 }
 
 static void test_reset_reports_last_aborted_fence_and_restores_progress(void) {
@@ -253,6 +283,7 @@ int main(void) {
   test_active_dma_must_reach_its_boundary_before_notification();
   test_waiting_preemption_rejects_completion_past_active_boundary();
   test_preemption_snapshot_must_describe_a_reachable_boundary();
+  test_idle_preemption_discards_queued_work_before_notification();
   test_reset_reports_last_aborted_fence_and_restores_progress();
   return 0;
 }

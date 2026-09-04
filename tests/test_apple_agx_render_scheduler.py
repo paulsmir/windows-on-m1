@@ -63,6 +63,8 @@ class AppleAgxRenderSchedulerTests(unittest.TestCase):
             "AdmissionDdiCollectDbgInfo",
         ):
             self.assertNotIn(f"FAIL2({name}", callbacks)
+        self.assertIn("AppleAgxSchedulerLastSubmittedFence", scheduler)
+        self.assertIn("AppleAgxSchedulerActiveFence", scheduler)
         self.assertIn("PagingPending", scheduler)
         self.assertIn("STATUS_DEVICE_BUSY", scheduler)
 

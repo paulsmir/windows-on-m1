@@ -201,6 +201,8 @@ APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
   if (!AppleAgxSchedulerValidateEngine(Scheduler, NodeOrdinal, EngineOrdinal) ||
       PreemptionFence == 0u ||
       Scheduler->PreemptionPhase != AppleAgxPreemptionIdle ||
+      CutoffFence != Scheduler->LastSubmittedFence ||
+      ActiveFence != Scheduler->ActiveFence ||
       !AppleAgxSchedulerFenceAtOrAfter(CutoffFence,
                                       Scheduler->CompletedFence) ||
       (ActiveFence != 0u &&
@@ -208,6 +210,7 @@ APPLE_AGX_BOOL AppleAgxSchedulerBeginBoundaryPreemption(
                                     Scheduler->CompletedFence) ||
         !AppleAgxSchedulerFenceAtOrAfter(CutoffFence, ActiveFence))))
     return APPLE_AGX_FALSE;
+  Scheduler->QueuedFence = 0u;
   Scheduler->PendingPreemptionFence = PreemptionFence;
   Scheduler->PreemptionCutoffFence = CutoffFence;
   Scheduler->PreemptionActiveFence = ActiveFence;
