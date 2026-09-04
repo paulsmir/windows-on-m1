@@ -48,6 +48,10 @@ class AppleAgxRenderMemoryQualificationTests(unittest.TestCase):
             "AdmissionMemoryStartMapping",
             "AdmissionMemoryStartPublication",
             "AdmissionMemoryStartComplete",
+            "J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE",
+            "J313_AGX_G2_POWER_REG_COMMAND",
+            "J313_AGX_G2_POWER_CMD_QUERY",
+            "WRITE_REGISTER_ULONG64",
         ):
             self.assertIn(token, runtime + physical)
         self.assertIn("AdmissionRecordMemoryQualification", receipts)

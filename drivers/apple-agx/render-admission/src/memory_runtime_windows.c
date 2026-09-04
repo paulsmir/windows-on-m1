@@ -43,6 +43,22 @@ static VOID AdmissionMemoryRecordStart(
     return;
   InterlockedExchange(&Context->MemoryStartStage, (LONG)Stage);
   InterlockedExchange(&Context->MemoryStartStatus, (LONG)Status);
+#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)
+  if (Context->BrokerBase != NULL && Stage != AdmissionMemoryStartNone) {
+    volatile ULONGLONG *requestSequence =
+        (volatile ULONGLONG *)(Context->BrokerBase +
+            J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+    volatile ULONG *command =
+        (volatile ULONG *)(Context->BrokerBase +
+            J313_AGX_G2_POWER_REG_COMMAND);
+    ULONGLONG sequence = 0x409000000ULL + (ULONGLONG)Stage * 2ULL +
+                         (Status == STATUS_PENDING ? 0ULL : 1ULL);
+    WRITE_REGISTER_ULONG64(requestSequence, sequence);
+    KeMemoryBarrier();
+    WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+    KeMemoryBarrier();
+  }
+#endif
 }
 
 static unsigned char AdmissionMemoryAllocateContiguous(
