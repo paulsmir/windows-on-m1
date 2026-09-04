@@ -70,6 +70,10 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         ]
 
         self.assertIn("ULONG wire[", snapshot)
+        self.assertIn("RtlZeroMemory(wire, sizeof(wire))", snapshot)
+        self.assertIn(
+            "index = APPLE_AGX_CONFIG_MMIO_OFFSET / sizeof(ULONG)", snapshot
+        )
         self.assertIn("READ_REGISTER_ULONG", snapshot)
         self.assertNotIn("READ_REGISTER_UCHAR", snapshot)
         self.assertIn("(const unsigned char *)wire", snapshot)

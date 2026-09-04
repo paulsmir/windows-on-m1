@@ -201,7 +201,9 @@ static NTSTATUS AdmissionPlatformReadSnapshot(
   if (Context == NULL || Snapshot == NULL || Context->BrokerBase == NULL ||
       sizeof(wire) > J313_AGX_G2_POWER_BROKER_SIZE)
     return STATUS_INVALID_PARAMETER;
-  for (index = 0u; index < RTL_NUMBER_OF(wire); ++index)
+  RtlZeroMemory(wire, sizeof(wire));
+  for (index = APPLE_AGX_CONFIG_MMIO_OFFSET / sizeof(ULONG);
+       index < RTL_NUMBER_OF(wire); ++index)
     wire[index] = READ_REGISTER_ULONG(
         (volatile ULONG *)(Context->BrokerBase + index * sizeof(ULONG)));
   return AppleAgxConfigSnapshotDecodeJ313(
