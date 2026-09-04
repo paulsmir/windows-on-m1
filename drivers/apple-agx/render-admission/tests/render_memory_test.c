@@ -6,7 +6,9 @@
 #define TEST_APERTURE_BASE 0x1600000000ULL
 #define TEST_APERTURE_SIZE 0x10000000ULL
 #define TEST_LOCAL_BASE 0x1500000000ULL
-#define TEST_LOCAL_SIZE 0x01000000ULL
+#define TEST_LOCAL_SIZE 0x04000000ULL
+#define TEST_ALLOCATION_SIZE 0x03800000ULL
+#define TEST_BACKEND_SIZE 0x00800000ULL
 #define TEST_APERTURE_PAGES (TEST_APERTURE_SIZE / 0x1000ULL)
 
 static APPLE_AGX_SOFTWARE_APERTURE_ENTRY entries[TEST_APERTURE_PAGES];
@@ -82,30 +84,30 @@ static void test_backend_tail_reservation_preserves_full_uat_mapping(void) {
                                    TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
   assert(memory.LocalAllocationBytes == TEST_LOCAL_SIZE);
   assert(AdmissionMemoryReserveBackendTail(
-      &memory, 0x00800000ULL, 0x00800000ULL));
+      &memory, TEST_ALLOCATION_SIZE, TEST_BACKEND_SIZE));
   assert(memory.Topology.Local.Size == TEST_LOCAL_SIZE);
   assert(memory.LocalBytes == TEST_LOCAL_SIZE);
-  assert(memory.LocalAllocationBytes == 0x00800000ULL);
+  assert(memory.LocalAllocationBytes == TEST_ALLOCATION_SIZE);
   assert(AdmissionMemoryBackendRange(
       &memory, &backend_gpu, &backend_bytes));
-  assert(backend_gpu == TEST_LOCAL_BASE + 0x00800000ULL);
-  assert(backend_bytes == 0x00800000ULL);
+  assert(backend_gpu == TEST_LOCAL_BASE + TEST_ALLOCATION_SIZE);
+  assert(backend_bytes == TEST_BACKEND_SIZE);
   assert(AdmissionMemoryLocalAddressToGpuVa(
-             &memory, 2u, TEST_LOCAL_BASE + 0x007e0000ULL, 0x10000ULL,
+             &memory, 2u, TEST_LOCAL_BASE + 0x037e0000ULL, 0x10000ULL,
              0u, &gpu) == AppleAgxLocalSegmentAddressOk);
   assert(AdmissionMemoryLocalAddressToGpuVa(
-             &memory, 2u, TEST_LOCAL_BASE + 0x00800000ULL, 0x10000ULL,
+             &memory, 2u, TEST_LOCAL_BASE + TEST_ALLOCATION_SIZE, 0x10000ULL,
              0u, &gpu) == AppleAgxLocalSegmentAddressOutsideSegment);
   {
     APPLE_AGX_PHYSICAL_PAGING_PLAN plan;
     assert(AdmissionMemoryPlanFill(
                &memory, ADMISSION_MEMORY_LOCAL_SEGMENT,
-               TEST_LOCAL_BASE + 0x00800000ULL, 0x10000ULL,
+               TEST_LOCAL_BASE + TEST_ALLOCATION_SIZE, 0x10000ULL,
                0x11223344u, &plan) ==
            AppleAgxPhysicalPagingOutOfRange);
   }
   assert(!AdmissionMemoryReserveBackendTail(
-      &memory, 0x00800000ULL, 0x00800000ULL));
+      &memory, TEST_ALLOCATION_SIZE, TEST_BACKEND_SIZE));
 }
 
 static void test_local_allocation_view_resolves_cpu_host_and_gpu_together(
@@ -119,7 +121,7 @@ static void test_local_allocation_view_resolves_cpu_host_and_gpu_together(
                                    TEST_APERTURE_BASE, TEST_APERTURE_SIZE,
                                    TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
   assert(AdmissionMemoryReserveBackendTail(
-      &memory, 0x00800000ULL, 0x00800000ULL));
+      &memory, TEST_ALLOCATION_SIZE, TEST_BACKEND_SIZE));
   assert(AdmissionMemoryResolveLocalView(
       &memory, TEST_LOCAL_BASE + 0x20000ULL, 0x10000ULL, 0u,
       cpu_base, 0x9d0000000ULL, &view));
@@ -128,7 +130,7 @@ static void test_local_allocation_view_resolves_cpu_host_and_gpu_together(
   assert(view.GpuVirtualAddress == TEST_LOCAL_BASE + 0x20000ULL);
   assert(view.Bytes == 0x10000ULL);
   assert(!AdmissionMemoryResolveLocalView(
-      &memory, TEST_LOCAL_BASE + 0x800000ULL, 0x10000ULL, 0u,
+      &memory, TEST_LOCAL_BASE + TEST_ALLOCATION_SIZE, 0x10000ULL, 0u,
       cpu_base, 0x9d0000000ULL, &view));
 }
 

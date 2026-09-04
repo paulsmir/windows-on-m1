@@ -66,6 +66,14 @@ class AppleAgxRenderMemoryTests(unittest.TestCase):
         self.assertIn("BackendOffset", runtime)
         self.assertIn("ADMISSION_BACKEND_MEMORY_VIEW", header)
 
+    def test_primary_pool_and_backend_tail_use_exact_scanout_geometry(self):
+        runtime = (RENDER / "src" / "memory_runtime_windows.c").read_text()
+        self.assertIn("#define ADMISSION_LOCAL_BYTES 0x04000000ULL", runtime)
+        self.assertIn(
+            "#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x03800000ULL", runtime
+        )
+        self.assertIn("#define ADMISSION_BACKEND_BYTES 0x00800000ULL", runtime)
+
 
 if __name__ == "__main__":
     unittest.main()
