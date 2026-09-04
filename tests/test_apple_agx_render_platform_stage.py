@@ -42,6 +42,26 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
                         platform.index("AdmissionPlatformRuntimeReset(")]
         self.assertNotIn("AdmissionRecordPlatformStage", stop)
 
+    def test_translated_interrupt_is_a_runtime_vector_not_firmware_gsi(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        validate = platform[
+            platform.index("AdmissionPlatformValidateResources("):
+            platform.index("AdmissionPlatformReadSnapshot(")
+        ]
+
+        self.assertIn("descriptor->u.Interrupt.Vector == 0u", validate)
+        self.assertIn(
+            "descriptor->ShareDisposition != CmResourceShareDeviceExclusive",
+            validate,
+        )
+        self.assertIn(
+            "descriptor->Flags != CM_RESOURCE_INTERRUPT_LATCHED",
+            validate,
+        )
+        self.assertNotIn(
+            "J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID", validate
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

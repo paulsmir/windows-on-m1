@@ -5,6 +5,8 @@
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
 
+C_ASSERT(J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID == 889u);
+
 typedef struct _ADMISSION_ASC_TRANSPORT {
   volatile UCHAR *Base;
   ULONG Length;
@@ -174,8 +176,9 @@ static NTSTATUS AdmissionPlatformValidateResources(
         seen |= bit;
         ++memory_count;
       } else if (descriptor->Type == CmResourceTypeInterrupt) {
-        if (descriptor->u.Interrupt.Vector !=
-            J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID)
+        if (descriptor->ShareDisposition != CmResourceShareDeviceExclusive ||
+            descriptor->Flags != CM_RESOURCE_INTERRUPT_LATCHED ||
+            descriptor->u.Interrupt.Vector == 0u)
           return STATUS_DEVICE_CONFIGURATION_ERROR;
         ++interrupt_count;
       } else if (descriptor->Type != CmResourceTypeDevicePrivate) {
