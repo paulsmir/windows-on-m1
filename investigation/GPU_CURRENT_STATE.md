@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-09-04T16:32:00+02:00
+Updated: 2026-09-04T16:56:00+02:00
 
 ## CURRENT PLATFORM
 
@@ -76,7 +76,12 @@ reproducible and add an external-image mode: it retains firmware/channel/queue/
 event ownership but delegates image and prepared-range resolution to the
 EXP412-backed owner instead of allocating a second 64-MiB pool or republishing
 context 63. These portable provider modules are not yet linked to the Windows
-Start/Submit/DPC lifetime.
+Start/Submit/DPC lifetime. Commit `3a4b55e` closes that implementation seam:
+the synthetic-889-only platform runtime reuses the production allocator for
+firmware context 0, borrows the already published context 63, runs the exact
+packet through the existing D3/TA provider, polls the event ring at PASSIVE,
+and advances the exact Windows fence only after both event/stamp/done-pointer
+observations. EXP423 WDK builds are green, but no hardware run has occurred.
 
 ## LAST KNOWN GOOD FOR THIS BOUNDARY
 
@@ -133,10 +138,9 @@ Start/Submit/DPC lifetime.
   `4d539ea`, `421a1ac` and `ec214ae`. The current functional readiness
   mask is 4/14
   (WDDM3 identity, one-node topology, memory/paging, device/context).
-  SCHEDULER, DMA_BOUNDARY_PREEMPTION and PER_ENGINE_TDR remain false until a
-  real non-paging backend publishes/completes work and supplies quiesce and
-  responsiveness evidence. Do not infer readiness merely from registered
-  callbacks or pure state transitions.
+  SCHEDULER and DMA_BOUNDARY_PREEMPTION are now implementation-ready through
+  the linked non-paging provider, but hardware-unproven. PER_ENGINE_TDR remains
+  false because active reset cannot yet quiesce and restart the backend.
 - RenderKm/Patch is implemented in `2ee3398`: one pointer-free ColorFill
   record, exact live allocation, one prerecorded destination relocation,
   Segment-2-to-AGX-VA translation and irreversible exact-fence seal.
@@ -157,10 +161,13 @@ Start/Submit/DPC lifetime.
   image, rebases roots/descriptors, applies all relocations, and Submit binds
   the sole object-40 edge to the packet's exact Windows CPU/host/GPU tuple.
   EXP419-421 WDK gates are green and no package was staged.
-- Next implementation boundary: connect the imported external-image platform
-  provider to the Windows Start/Submit/PASSIVE poll/DPC lifetime, with exact
-  scheduler activation and dual-event/stamp completion. Continue to publish
-  zero mandatory Type1 caps until the complete 14/14 group is real.
+- `SCHEDULER`, `DMA_BOUNDARY_PREEMPTION`, `GDI_COMMAND_BUFFER`, and
+  `AGX_COMPLETION` are now IMPLEMENTED but HW_PROVEN=NO in `3a4b55e`; current
+  functional readiness is 8/14 and atomic Type1 still publishes zero.
+- Next implementation boundary: restartable per-engine TDR over the same
+  provider, then the remaining scanout/DirectFlip/UMD/non-VGA group. No
+  hardware bind until the complete truthful group exists or a separately
+  preregistered production-code qualification seam is justified.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
