@@ -11,6 +11,7 @@
 #include <dispmprt.h>
 #include <ntstrsafe.h>
 #include "render_objects.h"
+#include "render_memory.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
 #define ADMISSION_DMA_BUFFER_SIZE 4096u
@@ -40,6 +41,8 @@ typedef enum _ADMISSION_RECEIPT {
 
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
+  ADMISSION_MEMORY_CONTRACT Memory;
+  APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
   PDEVICE_OBJECT PhysicalDeviceObject;
   DXGK_START_INFO StartInfo;
   DXGKRNL_INTERFACE Interface;
@@ -85,6 +88,9 @@ void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);
 NTSTATUS AdmissionInterruptStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionDdiQuerySegment4(
+    _In_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;

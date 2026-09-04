@@ -37,13 +37,26 @@
     <ClCompile Include="src\display.c" />
     <ClCompile Include="src\interrupt.c" />
     <ClCompile Include="src\objects.c" />
+    <ClCompile Include="src\render_memory.c" />
+    <ClCompile Include="src\memory_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
+    <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />
+    <ClCompile Include="..\shared\src\apple_agx_local_segment.c" />
+    <ClCompile Include="..\shared\src\apple_agx_physical_topology.c" />
+    <ClCompile Include="..\shared\src\apple_agx_physical_paging.c" />
+    <ClCompile Include="..\shared\src\apple_agx_aperture.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />
     <ClInclude Include="include\render_objects.h" />
+    <ClInclude Include="include\render_memory.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
+    <ClInclude Include="..\shared\include\apple_agx_software_aperture.h" />
+    <ClInclude Include="..\shared\include\apple_agx_local_segment.h" />
+    <ClInclude Include="..\shared\include\apple_agx_physical_topology.h" />
+    <ClInclude Include="..\shared\include\apple_agx_physical_paging.h" />
+    <ClInclude Include="..\shared\include\apple_agx_aperture.h" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="AppleAgxRenderAdmission.inf" />

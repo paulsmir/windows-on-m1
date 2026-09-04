@@ -168,6 +168,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     break;
   }
 
+  case DXGKQAITYPE_QUERYSEGMENT4:
+    status = AdmissionDdiQuerySegment4(context, QueryAdapterInfo);
+    break;
+
   case DXGKQAITYPE_PHYSICAL_MEMORY_CAPS: {
     DXGK_PHYSICAL_MEMORY_CAPS *physicalMemoryCaps;
     if (QueryAdapterInfo->pOutputData == NULL ||
