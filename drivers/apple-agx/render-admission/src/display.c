@@ -568,17 +568,33 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryVidPnHWCapability(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     CONST HANDLE MiniportDeviceContext,
     CONST DXGKARG_SETVIDPNSOURCEADDRESS *SetVidPnSourceAddress) {
-  UNREFERENCED_PARAMETER(MiniportDeviceContext);
-  return SetVidPnSourceAddress == NULL ? STATUS_INVALID_PARAMETER
-                                       : STATUS_NOT_SUPPORTED;
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_INVALID_PARAMETER;
+
+  if (context == NULL)
+    return status;
+  InterlockedExchange(&context->SourceAddressStage, 1);
+  InterlockedExchange(&context->SourceAddressStatus, (LONG)STATUS_PENDING);
+  if (SetVidPnSourceAddress != NULL && context->Started &&
+      SetVidPnSourceAddress->VidPnSourceId == 0 &&
+      context->CommittedWidth == 2560 && context->CommittedHeight == 1600 &&
+      context->CommittedStride == 10240 &&
+      context->CommittedFormat == D3DDDIFMT_A8R8G8B8) {
+    status = STATUS_NOT_SUPPORTED;
+  }
+  InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
+  InterlockedExchange(&context->SourceAddressStage, 2);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS
 AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
     PVOID MiniportDeviceContext, D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
     PDXGK_DISPLAY_INFORMATION DisplayInfo) {
-  UNREFERENCED_PARAMETER(MiniportDeviceContext);
-  UNREFERENCED_PARAMETER(TargetId);
-  return DisplayInfo == NULL ? STATUS_INVALID_PARAMETER
-                             : STATUS_NOT_SUPPORTED;
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+
+  if (context == NULL || DisplayInfo == NULL || TargetId != 0)
+    return STATUS_INVALID_PARAMETER;
+  *DisplayInfo = context->PostDisplayInformation;
+  return AdmissionDdiStopDevice(context);
 }

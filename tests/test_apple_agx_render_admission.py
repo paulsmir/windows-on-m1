@@ -193,6 +193,31 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, display)
 
+    def test_primary_address_boundary_is_nonpaged_nonblocking_and_fail_closed(self):
+        display = self.read("src/display.c")
+        header = self.read("include/render_admission.h")
+        start = display.index("AdmissionDdiSetVidPnSourceAddress(")
+        end = display.index(
+            "AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(", start
+        )
+        source_address = display[start:end]
+
+        self.assertIn("volatile LONG SourceAddressStage", header)
+        self.assertIn("volatile LONG SourceAddressStatus", header)
+        self.assertIn("InterlockedExchange", source_address)
+        self.assertIn("SetVidPnSourceAddress->VidPnSourceId == 0", source_address)
+        self.assertIn("STATUS_NOT_SUPPORTED", source_address)
+        for forbidden in (
+            "AdmissionRecord", "Zw", "IoOpenDeviceRegistryKey", "ExAllocate",
+            "KeWait", "KeDelay", "READ_REGISTER", "WRITE_REGISTER",
+            "DxgkCbNotifyInterrupt", "DxgkCbNotifyDpc",
+        ):
+            self.assertNotIn(forbidden, source_address)
+
+        release = display[end:]
+        self.assertIn("*DisplayInfo = context->PostDisplayInformation", release)
+        self.assertIn("AdmissionDdiStopDevice(context)", release)
+
     def test_package_binds_exactly_appl0002_and_is_removable(self):
         inf = self.read("AppleAgxRenderAdmission.inf")
 
