@@ -1299,6 +1299,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime;
   APPLE_AGX_GFX_HANDOFF_REGION handoff_region;
+  APPLE_AGX_BACKEND_RUNTIME_RESULT backend_result;
   PHYSICAL_ADDRESS address;
   NTSTATUS status;
 
@@ -1524,9 +1525,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   InterlockedExchange(&runtime->Stopping, 0);
   InterlockedExchange(&runtime->Resetting, 0);
   InterlockedExchange64(&runtime->LastProgressMs, 0);
-  if (AppleAgxBackendRuntimeStart(
-          &runtime->Backend, &runtime->RuntimeIo) !=
-      AppleAgxBackendRuntimeResultOk) {
+  backend_result = AppleAgxBackendRuntimeStart(
+      &runtime->Backend, &runtime->RuntimeIo);
+  AdmissionRecordBackendStartResult(Context, backend_result);
+  if (backend_result != AppleAgxBackendRuntimeResultOk) {
     status = STATUS_DEVICE_HARDWARE_ERROR;
     AdmissionRecordPlatformStage(Context, AdmissionPlatformBackendStart,
                                  status);

@@ -266,6 +266,9 @@ void AdmissionRecordStartStage(_In_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordPlatformStage(_In_ ADMISSION_CONTEXT *Context,
                                   _In_ ADMISSION_PLATFORM_STAGE Stage,
                                   _In_ NTSTATUS Status);
+void AdmissionRecordBackendStartResult(
+    _In_ ADMISSION_CONTEXT *Context,
+    _In_ APPLE_AGX_BACKEND_RUNTIME_RESULT Result);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);

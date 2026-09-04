@@ -78,6 +78,17 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         self.assertNotIn("READ_REGISTER_UCHAR", snapshot)
         self.assertIn("(const unsigned char *)wire", snapshot)
 
+    def test_backend_start_persists_exact_portable_result(self):
+        header = (RENDER / "include" / "render_admission.h").read_text()
+        receipts = (RENDER / "src" / "receipts.c").read_text()
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        self.assertIn("AdmissionRecordBackendStartResult", header)
+        self.assertIn('L"Wom1BackendStartResult"', receipts)
+        self.assertIn("APPLE_AGX_BACKEND_RUNTIME_RESULT backend_result", platform)
+        self.assertIn(
+            "AdmissionRecordBackendStartResult(Context, backend_result)", platform
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
