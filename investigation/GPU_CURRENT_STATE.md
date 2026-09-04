@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated: 2026-09-04T13:33:00+02:00
+Updated: 2026-09-04T15:13:00+02:00
 
 ## CURRENT PLATFORM
 
@@ -12,9 +12,12 @@ Updated: 2026-09-04T13:33:00+02:00
 
 ## CURRENT WINDOWS BASELINE / PACKAGE STATE
 
-- Fresh post-EXP406 current-G2 check: APPL0002 Code28/unbound; no project Display
-  package, AppleAgx service or SYS; SSH, 8 CPUs, AppleInput, stornvme, USBXHCI
-  and sshd healthy; no new 41/129/1001.
+- Fresh post-EXP412 current-G2 check: APPL0002 Code28/unbound with null
+  INF/service; no project Display package, AppleAgx service, SYS or loaded
+  module; SSH, 8 CPUs, AppleInput, stornvme, USBXHCI and sshd healthy.
+  Two stornvme Event129 records 6528/6529 occurred before the EXP412 bind
+  during synthetic-platform boot; no new 41/129/1001 occurred after bind,
+  through exact cleanup, or after ordinary-G2 restoration.
 
 ## HARDWARE PROVEN
 
@@ -35,19 +38,27 @@ INTERPRETATION:
   status/ack/completion handler exists.
 - EXP403 also proved SystemDisplay callbacks cannot perform registry I/O on the
   any-IRQL bugcheck path; EXP404 contains that correction.
+- EXP412 hardware-proved the complete production memory qualification seam:
+  Windows DXGK physical objects/ADLs/maps, 70 real HVC 0x4d31 batches through
+  current m1n1, 4152 translated sub-40-bit host pages, context-63 four-page
+  16-KiB UAT, one exact 16-MiB mapping at GPU VA 0x1500000000, gpu-region TTBR
+  publication/readback, deterministic first/last leaf translation and reverse
+  cleanup. Its 128-byte proof has StartStage 10 and both statuses zero.
+- Therefore MEMORY_PAGING_IMPLEMENTED=YES and
+  MEMORY_PAGING_HW_PROVEN=YES. BuildPagingBuffer encode/worker/DMA completion
+  remain implementation-proven; they were not separately exercised by the
+  qualification branch.
 
 ## FIRST UNKNOWN / FAILED BOUNDARY
 
-EXP406 fixed the EXP405 `DxgkInitialize` revision mismatch. Exact receipts prove
-DriverEntry and DxgkInitialize success followed by natural AddDevice/StartDevice
-and a successful Type 1 QueryAdapterInfo of 592 bytes. Dxgkrnl then removed the
-adapter: APPL0002 Code43, service stopped, no GPU LUID and no Type34/35/VidPn
-receipt. Official Microsoft Full Graphics requirements resolve the immediate
-cause: EXP406 intentionally leaves mandatory preemption, FlipOnVSyncMmIo,
-per-engine TDR, DirectFlip/independent-flip and GDI kernel-command-buffer
-contracts unimplemented and therefore unadvertised. The first unknown is now
-implementation of that atomic mandatory-feature vertical slice; another
-individual Type1 bit experiment is prohibited.
+Memory hardware qualification is closed by EXP412. Commits `4d539ea`,
+`421a1ac` and `ec214ae` now provide the offline-green one-node substrate:
+one monotonic queued/active/completed interval, exact active-fence completion,
+queued-work removal at DMA-buffer-boundary preemption, dispatch blocking until
+one preemption notification, and reset reporting the active fence or completed
+boundary while clearing outstanding work. The first unknown is now connection
+of a real non-paging render packet and backend completion to that interval.
+No enqueue-only completion, AGX queue, physical IRQ or capability was added.
 
 ## LAST KNOWN GOOD FOR THIS BOUNDARY
 
@@ -64,7 +75,7 @@ individual Type1 bit experiment is prohibited.
 
 ## REJECTED / DO NOT REUSE
 
-- EXP398–EXP406 package identities are terminal and clean.
+- EXP398–EXP412 package identities are terminal and clean.
 - Explicit receipt flush removal alone is rejected; inert IRQ registration is
   the confirmed watchdog cause. Do not register ISR/DPC/ControlInterrupt before
   implementing the real AGX interrupt contract.
@@ -73,10 +84,11 @@ individual Type1 bit experiment is prohibited.
 
 ## NEXT CANDIDATE
 
-- Execute the committed EXP407 mandatory-feature vertical-slice plan while
-  preserving the EXP406 coherent vector and synthetic-only IRQ platform.
+- Continue the committed EXP407 mandatory-feature vertical-slice plan at
+  render fence/progress while preserving the EXP406 coherent vector and
+  synthetic-only IRQ platform for any later admission hardware run.
 - The atomic readiness gate is implemented and wired into the real Type1 path
-  in commit `52d3bf6`: the current 3/14 state publishes zero mandatory caps and
+  in commit `52d3bf6`: the current 4/14 state publishes zero mandatory caps and
   an accidental premature all-ready state fails closed. All later layers must
   earn their readiness bit through deterministic tests; the complete
   capability writer is installed only at 14/14.
@@ -87,20 +99,30 @@ individual Type1 bit experiment is prohibited.
 - Segment1/Segment2 translation and allocation contracts are implemented in
   commits `32cd23e` and `1e76707`: 4-KiB software aperture, 64-KiB local
   GPU-VA segment, 16-KiB UAT prerequisite, paging plans, gated QuerySegment4,
-  and standard/create/destroy/describe/open/close allocation DDIs. The full
-  memory readiness bit remains false until DXGK physical-memory/HVC ownership,
-  context-63 UAT publication and BuildPagingBuffer execution are connected.
-- `MEMORY_PAGING_IMPLEMENTED=YES` in commits `8cd1449`, `3380434`
-  and `39f64c6`: DXGK physical owner/ADL/map, bounded HVC 0x4d31, 40-bit host
-  pages, aligned local object, context-63 16-KiB UAT publication,
-  BuildPagingBuffer execution and paging-only interrupt/DPC completion form one
-  reverse-cleaned lifetime. `MEMORY_PAGING_HW_PROVEN=NO`: no live Windows-to-
-  m1n1 HVC/host-PA/context-63-UAT result exists yet. EXP408 selected exact
-  `oem5.inf` and stayed healthy but produced no binary memory proof before
-  Code43/Remove; it is inconclusive, not HVC evidence. Exact cleanup restored
-  a package/service/SYS-free unbound APPL0002. The next allowed run changes
-  only durable production memory-start stage/status capture. Functional
-  readiness is 3/14, not hardware readiness.
+  and standard/create/destroy/describe/open/close allocation DDIs. The
+  functional memory readiness bit is now true; EXP412 supplies its required
+  physical-owner/HVC/UAT hardware proof while BuildPagingBuffer remains an
+  explicit later Windows-driven exercise.
+- `MEMORY_PAGING_IMPLEMENTED=YES` and
+  `MEMORY_PAGING_HW_PROVEN=YES`. EXP411 first proved physical-owner/HVC/local
+  allocation and isolated a false CPU-VA 16-KiB alignment guard at UAT stage 5.
+  Commit `4779f02` retained physical 16-KiB alignment while allowing a
+  naturally aligned kernel mapping; EXP412 then reached stage 10 with exact
+  PA/UAT/TTBR/readback/cleanup proof. Exact `oem5.inf` cleanup and stale
+  APPL0002 devnode removal restored the package-free ordinary-G2 baseline.
+- One-node lifecycle and paging-backed fence primitives exist in
+  `3df8e82` and the unified progress/preemption/reset substrate exists in
+  `4d539ea`, `421a1ac` and `ec214ae`. The current functional readiness
+  mask is 4/14
+  (WDDM3 identity, one-node topology, memory/paging, device/context).
+  SCHEDULER, DMA_BOUNDARY_PREEMPTION and PER_ENGINE_TDR remain false until a
+  real non-paging backend publishes/completes work and supplies quiesce and
+  responsiveness evidence. Do not infer readiness merely from registered
+  callbacks or pure state transitions.
+- Next implementation boundary: GDI/RenderKm immutable command admission and
+  patch records feeding the common render interval, followed by the retained
+  owner scanout and existing AGX backend vertical slice. Continue to publish
+  zero mandatory Type1 caps until the complete 14/14 group is real.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
