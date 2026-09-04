@@ -34,8 +34,49 @@ APPLE_AGX_BOOL AdmissionMemoryInitialize(
     return APPLE_AGX_FALSE;
   candidate.LocalGpuVaBase = LocalGpuVaBase;
   candidate.LocalBytes = LocalBytes;
+  candidate.LocalAllocationBytes = LocalBytes;
   candidate.Initialized = APPLE_AGX_TRUE;
   *Memory = candidate;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionMemoryReserveBackendTail(
+    ADMISSION_MEMORY_CONTRACT *Memory,
+    APPLE_AGX_U64 AllocationBytes, APPLE_AGX_U64 BackendBytes) {
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      Memory->Initialized != APPLE_AGX_TRUE ||
+      Memory->LocalAllocationBytes != Memory->LocalBytes ||
+      Memory->BackendBytes != 0ULL ||
+      AllocationBytes == 0ULL || BackendBytes == 0ULL ||
+      (AllocationBytes & (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
+      (BackendBytes & (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
+      AllocationBytes > Memory->LocalBytes ||
+      BackendBytes != Memory->LocalBytes - AllocationBytes)
+    return APPLE_AGX_FALSE;
+  Memory->LocalAllocationBytes = AllocationBytes;
+  Memory->BackendOffset = AllocationBytes;
+  Memory->BackendBytes = BackendBytes;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionMemoryBackendRange(
+    const ADMISSION_MEMORY_CONTRACT *Memory,
+    APPLE_AGX_U64 *GpuVa, APPLE_AGX_U64 *Bytes) {
+  if (GpuVa != ADMISSION_MEMORY_NULL)
+    *GpuVa = 0ULL;
+  if (Bytes != ADMISSION_MEMORY_NULL)
+    *Bytes = 0ULL;
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      GpuVa == ADMISSION_MEMORY_NULL || Bytes == ADMISSION_MEMORY_NULL ||
+      Memory->Initialized != APPLE_AGX_TRUE ||
+      Memory->BackendBytes == 0ULL ||
+      Memory->BackendOffset > Memory->LocalBytes ||
+      Memory->BackendBytes >
+          Memory->LocalBytes - Memory->BackendOffset ||
+      Memory->LocalGpuVaBase > ~0ULL - Memory->BackendOffset)
+    return APPLE_AGX_FALSE;
+  *GpuVa = Memory->LocalGpuVaBase + Memory->BackendOffset;
+  *Bytes = Memory->BackendBytes;
   return APPLE_AGX_TRUE;
 }
 
@@ -114,7 +155,7 @@ APPLE_AGX_LOCAL_SEGMENT_ADDRESS_RESULT AdmissionMemoryLocalAddressToGpuVa(
     return AppleAgxLocalSegmentAddressInvalidArgument;
   return AppleAgxLocalSegmentAddressToGpuVa(
       ADMISSION_MEMORY_LOCAL_SEGMENT, SegmentId,
-      Memory->Topology.Local.Base, Memory->Topology.Local.Size,
+      Memory->Topology.Local.Base, Memory->LocalAllocationBytes,
       Memory->LocalGpuVaBase, AllocationSegmentAddress, AllocationSize,
       AllocationOffset, GpuVa);
 }

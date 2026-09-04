@@ -21,6 +21,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   DXGK_QUERYSEGMENTOUT4 *output;
   DXGK_SEGMENTDESCRIPTOR4 *aperture;
   DXGK_SEGMENTDESCRIPTOR4 *local;
+  APPLE_AGX_PHYSICAL_SEGMENT local_segment;
 
   if (Context == NULL || QueryAdapterInfo == NULL ||
       QueryAdapterInfo->pInputData == NULL ||
@@ -48,7 +49,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQuerySegment4(
   local = (DXGK_SEGMENTDESCRIPTOR4 *)(
       (PUCHAR)output->pSegmentDescriptor + output->SegmentDescriptorStride);
   AdmissionDescribeSegment(&Context->Memory.Topology.Aperture, aperture);
-  AdmissionDescribeSegment(&Context->Memory.Topology.Local, local);
+  local_segment = Context->Memory.Topology.Local;
+  local_segment.Size = Context->Memory.LocalAllocationBytes;
+  local_segment.CommitLimit = Context->Memory.LocalAllocationBytes;
+  AdmissionDescribeSegment(&local_segment, local);
   output->NbSegment = Context->Memory.Topology.SegmentCount;
   output->PagingBufferSegmentId =
       Context->Memory.Topology.PagingBufferSegmentId;

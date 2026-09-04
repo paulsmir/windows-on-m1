@@ -53,7 +53,18 @@ class AppleAgxRenderMemoryTests(unittest.TestCase):
         self.assertIn("AdmissionMemoryReady(&Context->Memory)", windows)
         self.assertIn("output->SegmentDescriptorStride", windows)
         self.assertIn("Flags.PopulatedFromSystemMemory", windows)
+        self.assertIn("LocalAllocationBytes", windows)
         self.assertIn("ADMISSION_MEMORY_CONTRACT Memory", header)
+
+    def test_backend_view_is_a_tail_slice_of_proven_local_object(self):
+        runtime = (RENDER / "src" / "memory_runtime_windows.c").read_text()
+        header = (RENDER / "include" / "render_admission.h").read_text()
+        self.assertIn("AdmissionMemoryRuntimeBackendView", runtime)
+        self.assertIn("LocalObject.CpuAddress", runtime)
+        self.assertIn("LocalObject.DeviceAddress", runtime)
+        self.assertIn("LocalObject.GpuVirtualAddress", runtime)
+        self.assertIn("BackendOffset", runtime)
+        self.assertIn("ADMISSION_BACKEND_MEMORY_VIEW", header)
 
 
 if __name__ == "__main__":

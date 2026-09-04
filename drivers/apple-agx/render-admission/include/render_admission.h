@@ -155,6 +155,13 @@ typedef struct _ADMISSION_PHYSICAL_OWNER {
   BOOLEAN Initialized;
 } ADMISSION_PHYSICAL_OWNER;
 
+typedef struct _ADMISSION_BACKEND_MEMORY_VIEW {
+  PVOID CpuAddress;
+  ULONGLONG HostPhysicalAddress;
+  ULONGLONG GpuVirtualAddress;
+  ULONGLONG Bytes;
+} ADMISSION_BACKEND_MEMORY_VIEW;
+
 #define ADMISSION_MEMORY_QUALIFICATION_VERSION 1u
 typedef enum _ADMISSION_MEMORY_START_STAGE {
   AdmissionMemoryStartNone = 0,
@@ -233,6 +240,9 @@ NTSTATUS AdmissionMemoryRuntimeMapAperture(
 NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ApertureByteOffset,
     _In_ ULONGLONG DummyPage);
+NTSTATUS AdmissionMemoryRuntimeBackendView(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_BACKEND_MEMORY_VIEW *View);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);

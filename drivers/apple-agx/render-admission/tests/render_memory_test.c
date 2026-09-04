@@ -70,6 +70,36 @@ static void test_aperture_and_local_address_translation(void) {
   assert(gpu == TEST_LOCAL_BASE + 0x23000ULL);
 }
 
+static void test_backend_tail_reservation_preserves_full_uat_mapping(void) {
+  ADMISSION_MEMORY_CONTRACT memory;
+  APPLE_AGX_U64 backend_gpu = 0u;
+  APPLE_AGX_U64 backend_bytes = 0u;
+  APPLE_AGX_U64 gpu = 0u;
+
+  memset(&memory, 0, sizeof(memory));
+  assert(AdmissionMemoryInitialize(&memory, entries, TEST_APERTURE_PAGES,
+                                   TEST_APERTURE_BASE, TEST_APERTURE_SIZE,
+                                   TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+  assert(memory.LocalAllocationBytes == TEST_LOCAL_SIZE);
+  assert(AdmissionMemoryReserveBackendTail(
+      &memory, 0x00800000ULL, 0x00800000ULL));
+  assert(memory.Topology.Local.Size == TEST_LOCAL_SIZE);
+  assert(memory.LocalBytes == TEST_LOCAL_SIZE);
+  assert(memory.LocalAllocationBytes == 0x00800000ULL);
+  assert(AdmissionMemoryBackendRange(
+      &memory, &backend_gpu, &backend_bytes));
+  assert(backend_gpu == TEST_LOCAL_BASE + 0x00800000ULL);
+  assert(backend_bytes == 0x00800000ULL);
+  assert(AdmissionMemoryLocalAddressToGpuVa(
+             &memory, 2u, TEST_LOCAL_BASE + 0x007e0000ULL, 0x10000ULL,
+             0u, &gpu) == AppleAgxLocalSegmentAddressOk);
+  assert(AdmissionMemoryLocalAddressToGpuVa(
+             &memory, 2u, TEST_LOCAL_BASE + 0x00800000ULL, 0x10000ULL,
+             0u, &gpu) == AppleAgxLocalSegmentAddressOutsideSegment);
+  assert(!AdmissionMemoryReserveBackendTail(
+      &memory, 0x00800000ULL, 0x00800000ULL));
+}
+
 static void test_invalid_initialization_is_atomic(void) {
   ADMISSION_MEMORY_CONTRACT memory;
   ADMISSION_MEMORY_CONTRACT before;
@@ -133,6 +163,7 @@ static void test_paging_plans_preserve_segment_and_uat_units(void) {
 int main(void) {
   test_exact_two_segment_contract();
   test_aperture_and_local_address_translation();
+  test_backend_tail_reservation_preserves_full_uat_mapping();
   test_invalid_initialization_is_atomic();
   test_paging_plans_preserve_segment_and_uat_units();
   return 0;

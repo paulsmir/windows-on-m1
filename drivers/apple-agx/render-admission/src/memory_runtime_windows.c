@@ -3,6 +3,8 @@
 #define ADMISSION_MEMORY_RUNTIME_TAG 'uRGA'
 #define ADMISSION_LOCAL_GPU_VA 0x1500000000ULL
 #define ADMISSION_LOCAL_BYTES 0x01000000ULL
+#define ADMISSION_LOCAL_ALLOCATION_BYTES 0x00800000ULL
+#define ADMISSION_BACKEND_BYTES 0x00800000ULL
 #define ADMISSION_APERTURE_GPU_VA 0x1600000000ULL
 #define ADMISSION_APERTURE_BYTES 0x10000000ULL
 #define ADMISSION_UAT_PAGE_CAPACITY 64u
@@ -374,6 +376,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
           (APPLE_AGX_U32)ADMISSION_APERTURE_PAGE_COUNT,
           ADMISSION_APERTURE_GPU_VA, ADMISSION_APERTURE_BYTES,
           ADMISSION_LOCAL_GPU_VA, ADMISSION_LOCAL_BYTES) ||
+      !AdmissionMemoryReserveBackendTail(
+          &Context->Memory, ADMISSION_LOCAL_ALLOCATION_BYTES,
+          ADMISSION_BACKEND_BYTES) ||
       !AdmissionMemoryMarkUatReady(
           &Context->Memory, ADMISSION_MEMORY_UAT_CONTEXT,
           APPLE_AGX_UAT_PAGE_SIZE_16K, ADMISSION_LOCAL_GPU_VA,
@@ -414,6 +419,40 @@ static ADMISSION_MEMORY_RUNTIME *AdmissionMemoryGetRuntime(
                  runtime->PublicationReady
              ? runtime
              : NULL;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeBackendView(
+    ADMISSION_CONTEXT *Context,
+    ADMISSION_BACKEND_MEMORY_VIEW *View) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  ULONGLONG gpu_address = 0ULL;
+  ULONGLONG bytes = 0ULL;
+  ULONGLONG offset;
+
+  if (View == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(View, sizeof(*View));
+  if (runtime == NULL ||
+      !AdmissionMemoryBackendRange(
+          &Context->Memory, &gpu_address, &bytes))
+    return STATUS_INVALID_DEVICE_STATE;
+  offset = Context->Memory.BackendOffset;
+  if (runtime->LocalObject.CpuAddress == NULL ||
+      runtime->LocalObject.DeviceAddress == 0ULL ||
+      runtime->LocalObject.GpuVirtualAddress == 0ULL ||
+      offset > runtime->LocalObject.Length ||
+      bytes > runtime->LocalObject.Length - offset ||
+      runtime->LocalObject.DeviceAddress > MAXULONGLONG - offset ||
+      runtime->LocalObject.GpuVirtualAddress > MAXULONGLONG - offset ||
+      runtime->LocalObject.GpuVirtualAddress + offset != gpu_address)
+    return STATUS_INVALID_ADDRESS;
+  View->CpuAddress =
+      (PUCHAR)runtime->LocalObject.CpuAddress + offset;
+  View->HostPhysicalAddress =
+      runtime->LocalObject.DeviceAddress + offset;
+  View->GpuVirtualAddress = gpu_address;
+  View->Bytes = bytes;
+  return STATUS_SUCCESS;
 }
 
 static ULONGLONG AdmissionMemoryReadU64(
