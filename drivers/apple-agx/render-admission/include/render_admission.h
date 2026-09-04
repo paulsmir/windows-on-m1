@@ -243,6 +243,12 @@ NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
 NTSTATUS AdmissionMemoryRuntimeBackendView(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ ADMISSION_BACKEND_MEMORY_VIEW *View);
+NTSTATUS AdmissionMemoryRuntimeResolveLocal(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ ULONGLONG AllocationSegmentAddress,
+    _In_ ULONGLONG AllocationSize,
+    _In_ ULONGLONG AllocationOffset,
+    _Out_ ADMISSION_LOCAL_MEMORY_VIEW *View);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);

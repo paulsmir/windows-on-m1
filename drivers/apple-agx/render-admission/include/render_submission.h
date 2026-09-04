@@ -20,6 +20,10 @@ typedef struct _ADMISSION_RENDER_PACKET_DESCRIPTION {
   unsigned int PrivateDataEnd;
   unsigned int DmaStart;
   unsigned int DmaEnd;
+  unsigned long long DestinationCpuToken;
+  unsigned long long DestinationGpuVa;
+  unsigned long long DestinationPhysical;
+  unsigned int DestinationBytes;
 } ADMISSION_RENDER_PACKET_DESCRIPTION;
 
 typedef struct _ADMISSION_RENDER_PACKET {

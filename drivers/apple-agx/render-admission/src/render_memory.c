@@ -80,6 +80,49 @@ APPLE_AGX_BOOL AdmissionMemoryBackendRange(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionMemoryResolveLocalView(
+    const ADMISSION_MEMORY_CONTRACT *Memory,
+    APPLE_AGX_U64 AllocationSegmentAddress,
+    APPLE_AGX_U64 AllocationSize,
+    APPLE_AGX_U64 AllocationOffset,
+    void *LocalCpuBase,
+    APPLE_AGX_U64 LocalHostPhysicalBase,
+    ADMISSION_LOCAL_MEMORY_VIEW *View) {
+  APPLE_AGX_U64 gpu_va = 0ULL;
+  APPLE_AGX_U64 segment_offset;
+  APPLE_AGX_U64 total_offset;
+
+  if (View == ADMISSION_MEMORY_NULL)
+    return APPLE_AGX_FALSE;
+  View->CpuAddress = ADMISSION_MEMORY_NULL;
+  View->HostPhysicalAddress = 0ULL;
+  View->GpuVirtualAddress = 0ULL;
+  View->Bytes = 0ULL;
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      LocalCpuBase == ADMISSION_MEMORY_NULL ||
+      LocalHostPhysicalBase == 0ULL ||
+      AllocationSegmentAddress < Memory->Topology.Local.Base ||
+      AdmissionMemoryLocalAddressToGpuVa(
+          Memory, ADMISSION_MEMORY_LOCAL_SEGMENT,
+          AllocationSegmentAddress, AllocationSize, AllocationOffset,
+          &gpu_va) != AppleAgxLocalSegmentAddressOk)
+    return APPLE_AGX_FALSE;
+  segment_offset =
+      AllocationSegmentAddress - Memory->Topology.Local.Base;
+  if (segment_offset > ~0ULL - AllocationOffset)
+    return APPLE_AGX_FALSE;
+  total_offset = segment_offset + AllocationOffset;
+  if (LocalHostPhysicalBase > ~0ULL - total_offset ||
+      LocalHostPhysicalBase + total_offset >= (1ULL << 40u))
+    return APPLE_AGX_FALSE;
+  View->CpuAddress =
+      (void *)((unsigned char *)LocalCpuBase + total_offset);
+  View->HostPhysicalAddress = LocalHostPhysicalBase + total_offset;
+  View->GpuVirtualAddress = gpu_va;
+  View->Bytes = AllocationSize - AllocationOffset;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AdmissionMemoryMarkUatReady(
     ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U32 Context,
     APPLE_AGX_U64 LeafSize, APPLE_AGX_U64 MappedGpuVaBase,

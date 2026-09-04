@@ -45,12 +45,13 @@ static BOOLEAN AdmissionGdiOpenValid(
 static NTSTATUS AdmissionGdiTranslatePatch(
     ADMISSION_CONTEXT *Adapter, const ADMISSION_RENDER_CONTEXT *Context,
     const DXGK_ALLOCATIONLIST *Allocations, UINT AllocationCount,
-    const ADMISSION_GDI_PATCH *Patch, ULONGLONG *GpuVa) {
+    const ADMISSION_GDI_PATCH *Patch,
+    ADMISSION_LOCAL_MEMORY_VIEW *View) {
   const DXGK_ALLOCATIONLIST *allocation;
   const ADMISSION_OPEN_ALLOCATION *opened;
   ULONGLONG aligned_size;
 
-  if (Adapter == NULL || Patch == NULL || GpuVa == NULL ||
+  if (Adapter == NULL || Patch == NULL || View == NULL ||
       !AdmissionGdiOpenValid(Context, Allocations, AllocationCount,
                              Patch->AllocationIndex, TRUE))
     return STATUS_INVALID_PARAMETER;
@@ -62,22 +63,29 @@ static NTSTATUS AdmissionGdiTranslatePatch(
       allocation->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||
       allocation->PhysicalAddress.QuadPart <= 0 ||
       !AdmissionAllocationAlign64K(
-          opened->Allocation->Description.Size, &aligned_size) ||
-      AdmissionMemoryLocalAddressToGpuVa(
-          &Adapter->Memory, allocation->SegmentId,
-          (ULONGLONG)allocation->PhysicalAddress.QuadPart, aligned_size,
-          0u, GpuVa) != AppleAgxLocalSegmentAddressOk)
+          opened->Allocation->Description.Size, &aligned_size))
     return STATUS_INVALID_PARAMETER;
-  return STATUS_SUCCESS;
+  return AdmissionMemoryRuntimeResolveLocal(
+      Adapter, (ULONGLONG)allocation->PhysicalAddress.QuadPart,
+      aligned_size, 0u, View);
 }
 
 static NTSTATUS AdmissionGdiPreparePacket(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     ADMISSION_OPEN_ALLOCATION *Opened, const DXGKARG_PATCH *Args,
-    APPLE_AGX_U32 PrivateBytesUsed) {
+    APPLE_AGX_U32 PrivateBytesUsed,
+    const ADMISSION_LOCAL_MEMORY_VIEW *Destination) {
   ADMISSION_RENDER_PACKET_DESCRIPTION description;
   KIRQL old_irql;
   BOOLEAN accepted = FALSE;
+
+  if (Adapter == NULL || Context == NULL || Opened == NULL ||
+      Args == NULL || Destination == NULL ||
+      Destination->CpuAddress == NULL ||
+      Destination->GpuVirtualAddress == 0ULL ||
+      Destination->HostPhysicalAddress == 0ULL ||
+      Destination->Bytes == 0ULL || Destination->Bytes > MAXUINT32)
+    return STATUS_INVALID_PARAMETER;
 
   RtlZeroMemory(&description, sizeof(description));
   description.Fence = Args->SubmissionFenceId;
@@ -90,6 +98,12 @@ static NTSTATUS AdmissionGdiPreparePacket(
   description.PrivateDataEnd = PrivateBytesUsed;
   description.DmaStart = Args->DmaBufferSubmissionStartOffset;
   description.DmaEnd = Args->DmaBufferSubmissionEndOffset;
+  description.DestinationCpuToken =
+      (ULONGLONG)(ULONG_PTR)Destination->CpuAddress;
+  description.DestinationGpuVa = Destination->GpuVirtualAddress;
+  description.DestinationPhysical =
+      Destination->HostPhysicalAddress;
+  description.DestinationBytes = (UINT)Destination->Bytes;
 
   KeAcquireSpinLock(&Adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&Adapter->RenderPacket) ==
@@ -238,7 +252,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   const D3DDDI_PATCHLOCATIONLIST *location;
   ADMISSION_OPEN_ALLOCATION *opened;
   BOOLEAN sealed;
-  ULONGLONG gpu_va;
+  ADMISSION_LOCAL_MEMORY_VIEW destination;
 
   PAGED_CODE();
   if (adapter == NULL || Args == NULL || Args->hContext == NULL ||
@@ -294,12 +308,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           &prepared, &patch,
           Args->DmaBufferSubmissionStartOffset,
           Args->DmaBufferSubmissionEndOffset) ||
-      Args->DmaBufferSize < sizeof(gpu_va) ||
-      patch.PatchOffset > Args->DmaBufferSize - sizeof(gpu_va))
+      Args->DmaBufferSize < sizeof(destination.GpuVirtualAddress) ||
+      patch.PatchOffset >
+          Args->DmaBufferSize - sizeof(destination.GpuVirtualAddress))
     return STATUS_INVALID_PARAMETER;
   if (!NT_SUCCESS(AdmissionGdiTranslatePatch(
           adapter, context, Args->pAllocationList,
-          Args->AllocationListSize, &patch, &gpu_va)))
+          Args->AllocationListSize, &patch, &destination)))
     return STATUS_INVALID_ADDRESS;
   opened = (ADMISSION_OPEN_ALLOCATION *)
       Args->pAllocationList[patch.AllocationIndex]
@@ -315,20 +330,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
             Args->SubmissionFenceId) ||
         !AppleAgxDmaShadowMatchesU64(
             shadow.Storage, shadow.BytesUsed,
-            patch.PatchOffset, gpu_va))
+            patch.PatchOffset, destination.GpuVirtualAddress))
       return STATUS_INVALID_DEVICE_STATE;
   } else {
     if (!AppleAgxDmaShadowPatchU64(
             shadow.Storage, shadow.BytesUsed,
-            patch.PatchOffset, gpu_va) ||
+            patch.PatchOffset, destination.GpuVirtualAddress) ||
         !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
       return STATUS_INVALID_DEVICE_STATE;
   }
   if (!NT_SUCCESS(AdmissionGdiPreparePacket(
-          adapter, context, opened, Args, shadow.BytesUsed)))
+          adapter, context, opened, Args, shadow.BytesUsed,
+          &destination)))
     return STATUS_DEVICE_BUSY;
   RtlCopyMemory(
       (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,
-      &gpu_va, sizeof(gpu_va));
+      &destination.GpuVirtualAddress,
+      sizeof(destination.GpuVirtualAddress));
   return STATUS_SUCCESS;
 }

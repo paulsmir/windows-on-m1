@@ -38,7 +38,7 @@ class AppleAgxRenderGdiTests(unittest.TestCase):
         self.assertNotIn("FAIL2(AdmissionDdiPatch", callbacks)
         self.assertIn("DXGK_GDIOP_COLORFILL", wrapper)
         self.assertIn("DXGK_GDIROPCF_PATCOPY", wrapper)
-        self.assertIn("AdmissionMemoryLocalAddressToGpuVa", wrapper)
+        self.assertIn("AdmissionMemoryRuntimeResolveLocal", wrapper)
         self.assertIn("AdmissionGdiPatchAuthorized", wrapper)
         self.assertIn("AppleAgxDmaShadowSeal", wrapper)
         self.assertNotIn("AppleAgxBackendRuntimeSubmit", wrapper)

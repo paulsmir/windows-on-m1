@@ -24,6 +24,13 @@ typedef struct _ADMISSION_MEMORY_CONTRACT {
   APPLE_AGX_BOOL PagingReady;
 } ADMISSION_MEMORY_CONTRACT;
 
+typedef struct _ADMISSION_LOCAL_MEMORY_VIEW {
+  void *CpuAddress;
+  APPLE_AGX_U64 HostPhysicalAddress;
+  APPLE_AGX_U64 GpuVirtualAddress;
+  APPLE_AGX_U64 Bytes;
+} ADMISSION_LOCAL_MEMORY_VIEW;
+
 APPLE_AGX_BOOL AdmissionMemoryInitialize(
     ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries,
@@ -43,6 +50,14 @@ APPLE_AGX_BOOL AdmissionMemoryReserveBackendTail(
 APPLE_AGX_BOOL AdmissionMemoryBackendRange(
     const ADMISSION_MEMORY_CONTRACT *Memory,
     APPLE_AGX_U64 *GpuVa, APPLE_AGX_U64 *Bytes);
+APPLE_AGX_BOOL AdmissionMemoryResolveLocalView(
+    const ADMISSION_MEMORY_CONTRACT *Memory,
+    APPLE_AGX_U64 AllocationSegmentAddress,
+    APPLE_AGX_U64 AllocationSize,
+    APPLE_AGX_U64 AllocationOffset,
+    void *LocalCpuBase,
+    APPLE_AGX_U64 LocalHostPhysicalBase,
+    ADMISSION_LOCAL_MEMORY_VIEW *View);
 APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryMapAperture64K(
     ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
     const APPLE_AGX_U64 *PhysicalPages, APPLE_AGX_U32 PhysicalPageCount);

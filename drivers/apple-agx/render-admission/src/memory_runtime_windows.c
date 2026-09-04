@@ -455,6 +455,26 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeBackendView(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeResolveLocal(
+    ADMISSION_CONTEXT *Context,
+    ULONGLONG AllocationSegmentAddress,
+    ULONGLONG AllocationSize,
+    ULONGLONG AllocationOffset,
+    ADMISSION_LOCAL_MEMORY_VIEW *View) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+
+  if (View == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(View, sizeof(*View));
+  if (runtime == NULL ||
+      !AdmissionMemoryResolveLocalView(
+          &Context->Memory, AllocationSegmentAddress, AllocationSize,
+          AllocationOffset, runtime->LocalObject.CpuAddress,
+          runtime->LocalObject.DeviceAddress, View))
+    return STATUS_INVALID_ADDRESS;
+  return STATUS_SUCCESS;
+}
+
 static ULONGLONG AdmissionMemoryReadU64(
     _In_reads_(8) volatile const unsigned char *Address) {
   ULONGLONG value = 0ULL;

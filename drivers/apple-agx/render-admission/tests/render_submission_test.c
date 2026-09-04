@@ -14,6 +14,10 @@ static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
   description.PrivateDataEnd = 256u;
   description.DmaStart = 0u;
   description.DmaEnd = 160u;
+  description.DestinationCpuToken = 0x4000ULL;
+  description.DestinationGpuVa = 0x1500010000ULL;
+  description.DestinationPhysical = 0x9d0010000ULL;
+  description.DestinationBytes = 0x10000u;
   return description;
 }
 
@@ -58,6 +62,9 @@ static void test_prepare_rejects_missing_identity_and_bad_intervals(void) {
 
   AdmissionRenderPacketInitialize(&packet);
   description.ContextToken = 0ULL;
+  assert(!AdmissionRenderPacketPrepare(&packet, &description));
+  description = packet_description(13u);
+  description.DestinationPhysical = 0ULL;
   assert(!AdmissionRenderPacketPrepare(&packet, &description));
   description = packet_description(13u);
   description.PrivateDataEnd = description.PrivateDataBytes + 1u;

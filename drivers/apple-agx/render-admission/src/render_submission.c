@@ -45,7 +45,11 @@ int AdmissionRenderPacketPrepare(
       Description->PrivateDataBytes == 0u ||
       Description->PrivateDataStart >= Description->PrivateDataEnd ||
       Description->PrivateDataEnd > Description->PrivateDataBytes ||
-      Description->DmaStart >= Description->DmaEnd)
+      Description->DmaStart >= Description->DmaEnd ||
+      Description->DestinationCpuToken == 0ULL ||
+      Description->DestinationGpuVa == 0ULL ||
+      Description->DestinationPhysical == 0ULL ||
+      Description->DestinationBytes == 0u)
     return 0;
   Packet->Description = *Description;
   Packet->State = AdmissionRenderPacketPrepared;
@@ -73,7 +77,15 @@ int AdmissionRenderPacketMatches(
          current->PrivateDataStart == Description->PrivateDataStart &&
          current->PrivateDataEnd == Description->PrivateDataEnd &&
          current->DmaStart == Description->DmaStart &&
-         current->DmaEnd == Description->DmaEnd;
+         current->DmaEnd == Description->DmaEnd &&
+         current->DestinationCpuToken ==
+             Description->DestinationCpuToken &&
+         current->DestinationGpuVa ==
+             Description->DestinationGpuVa &&
+         current->DestinationPhysical ==
+             Description->DestinationPhysical &&
+         current->DestinationBytes ==
+             Description->DestinationBytes;
 }
 
 int AdmissionRenderPacketQueue(

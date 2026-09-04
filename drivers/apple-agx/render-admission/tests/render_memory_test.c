@@ -108,6 +108,30 @@ static void test_backend_tail_reservation_preserves_full_uat_mapping(void) {
       &memory, 0x00800000ULL, 0x00800000ULL));
 }
 
+static void test_local_allocation_view_resolves_cpu_host_and_gpu_together(
+    void) {
+  ADMISSION_MEMORY_CONTRACT memory;
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  void *cpu_base = (void *)0x10000000ULL;
+
+  memset(&memory, 0, sizeof(memory));
+  assert(AdmissionMemoryInitialize(&memory, entries, TEST_APERTURE_PAGES,
+                                   TEST_APERTURE_BASE, TEST_APERTURE_SIZE,
+                                   TEST_LOCAL_BASE, TEST_LOCAL_SIZE));
+  assert(AdmissionMemoryReserveBackendTail(
+      &memory, 0x00800000ULL, 0x00800000ULL));
+  assert(AdmissionMemoryResolveLocalView(
+      &memory, TEST_LOCAL_BASE + 0x20000ULL, 0x10000ULL, 0u,
+      cpu_base, 0x9d0000000ULL, &view));
+  assert(view.CpuAddress == (void *)0x10020000ULL);
+  assert(view.HostPhysicalAddress == 0x9d0020000ULL);
+  assert(view.GpuVirtualAddress == TEST_LOCAL_BASE + 0x20000ULL);
+  assert(view.Bytes == 0x10000ULL);
+  assert(!AdmissionMemoryResolveLocalView(
+      &memory, TEST_LOCAL_BASE + 0x800000ULL, 0x10000ULL, 0u,
+      cpu_base, 0x9d0000000ULL, &view));
+}
+
 static void test_invalid_initialization_is_atomic(void) {
   ADMISSION_MEMORY_CONTRACT memory;
   ADMISSION_MEMORY_CONTRACT before;
@@ -172,6 +196,7 @@ int main(void) {
   test_exact_two_segment_contract();
   test_aperture_and_local_address_translation();
   test_backend_tail_reservation_preserves_full_uat_mapping();
+  test_local_allocation_view_resolves_cpu_host_and_gpu_together();
   test_invalid_initialization_is_atomic();
   test_paging_plans_preserve_segment_and_uat_units();
   return 0;
