@@ -522,12 +522,13 @@ static unsigned char AdmissionFirmwareDestroyUat(
 static unsigned char AdmissionFirmwareBootAsc(
     void *Context, unsigned long long DeadlineMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  return runtime != NULL &&
-                 AppleAgxRtkitSessionBoot(
-                     &runtime->Rtkit, &runtime->AscIo, DeadlineMs) ==
-                     AppleAgxRtkitSessionResultOk
-             ? 1u
-             : 0u;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  if (runtime == NULL)
+    return 0u;
+  result = AppleAgxRtkitSessionBoot(&runtime->Rtkit, &runtime->AscIo,
+                                    DeadlineMs);
+  AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
+  return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
 }
 
 static unsigned char AdmissionFirmwareStopAsc(

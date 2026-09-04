@@ -118,6 +118,28 @@ _Use_decl_annotations_ void AdmissionRecordFirmwarePowerOn(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordRtkitBoot(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_RTKIT_SESSION_RESULT Result,
+    const APPLE_AGX_RTKIT_SESSION *Session) {
+  HANDLE key = NULL;
+  if (Context == NULL || Session == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+                                          PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1RtkitBootResult", (ULONG)Result);
+  WriteDword(key, L"Wom1RtkitBootPhase", (ULONG)Session->Boot.Phase);
+  WriteDword(key, L"Wom1RtkitCpuReady", (ULONG)Session->CpuReady);
+  WriteDword(key, L"Wom1RtkitBootBegun", (ULONG)Session->Boot.Begun);
+  WriteDword(key, L"Wom1RtkitHelloSeen", (ULONG)Session->Boot.HelloSeen);
+  WriteDword(key, L"Wom1RtkitEndpointMap", (ULONG)Session->Boot.EndpointMapComplete);
+  WriteDword(key, L"Wom1RtkitIopPower", (ULONG)Session->Boot.IopPowerReady);
+  WriteDword(key, L"Wom1RtkitApPower", (ULONG)Session->Boot.ApPowerReady);
+  WriteDword(key, L"Wom1RtkitInboxControl", Session->InboxControlAtFailure);
+  WriteDword(key, L"Wom1RtkitOutboxControl", Session->OutboxControlAtFailure);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordQuery(
     PDEVICE_OBJECT DeviceObject, DXGK_QUERYADAPTERINFOTYPE Type,
     ULONG OutputDataSize, NTSTATUS Status) {

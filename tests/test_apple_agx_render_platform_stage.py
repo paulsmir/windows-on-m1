@@ -114,6 +114,20 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         self.assertLess(power_on.index("AdmissionRecordFirmwarePowerOn"),
                         power_on.index("if (!acquired)"))
 
+    def test_rtkit_boot_failure_is_durable_before_firmware_boolean_folding(self):
+        header = (RENDER / "include" / "render_admission.h").read_text()
+        receipts = (RENDER / "src" / "receipts.c").read_text()
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        self.assertIn("AdmissionRecordRtkitBoot", header)
+        for value in ("Wom1RtkitBootResult", "Wom1RtkitBootPhase",
+                      "Wom1RtkitCpuReady", "Wom1RtkitHelloSeen",
+                      "Wom1RtkitInboxControl", "Wom1RtkitOutboxControl"):
+            self.assertIn(value, receipts)
+        boot = platform[platform.index("AdmissionFirmwareBootAsc("):
+                        platform.index("AdmissionFirmwareStopAsc(")]
+        self.assertLess(boot.index("AdmissionRecordRtkitBoot"),
+                        boot.index("return result =="))
+
 
 if __name__ == "__main__":
     unittest.main()
