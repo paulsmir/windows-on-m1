@@ -142,7 +142,7 @@ AdmissionInterruptStop(ADMISSION_CONTEXT *Context) {
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionDdiInterruptRoutine(
-    CONST PVOID MiniportDeviceContext, ULONG MessageNumber) {
+    PVOID MiniportDeviceContext, ULONG MessageNumber) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   ULONG status;
 
@@ -159,8 +159,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionDdiInterruptRoutine(
   return TRUE;
 }
 
-_Use_decl_annotations_ VOID AdmissionDdiDpcRoutine(
-    CONST PVOID MiniportDeviceContext) {
+VOID AdmissionDdiDpcRoutine(
+    PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context != NULL)
     InterlockedIncrement(&context->DpcCount);
