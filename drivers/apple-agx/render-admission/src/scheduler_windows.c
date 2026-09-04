@@ -260,7 +260,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
       (!AdmissionRenderPacketDiscardQueued(
            &context->RenderPacket, cutoffFence) ||
        queuedContext == NULL ||
-       queuedContext->Object.FenceOutstanding != queuedFence)) {
+       queuedContext->Object.FenceOutstanding != queuedFence ||
+       !AdmissionBackendImageReleaseSubmission(
+           &context->BackendImage, queuedFence))) {
     InterlockedExchange(&context->SchedulerFaulted, 1);
   } else if (queuedContext != NULL) {
     queuedContext->Object.FenceOutstanding = 0u;
@@ -330,6 +332,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
         context->RenderPacket.Description.ContextToken;
     if (!AdmissionRenderPacketReset(
             &context->RenderPacket, packetFence, 0u)) {
+      KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+      return STATUS_INVALID_DEVICE_STATE;
+    }
+    if (!AdmissionBackendImageReleaseSubmission(
+            &context->BackendImage, packetFence)) {
+      InterlockedExchange(&context->SchedulerFaulted, 1);
       KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
       return STATUS_INVALID_DEVICE_STATE;
     }

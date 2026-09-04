@@ -2,6 +2,8 @@
 #define APPLE_AGX_RENDER_BACKEND_IMAGE_H
 
 #include "render_memory.h"
+#include "render_submission.h"
+#include "apple_agx_exp208_gdi.h"
 #include "apple_agx_relocation.h"
 #include "apple_agx_render_template_rebase.h"
 
@@ -13,12 +15,25 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_U64 ArenaPhysicalAddress;
   APPLE_AGX_U64 ArenaGpuAddress;
   APPLE_AGX_U32 ArenaBytes;
+  APPLE_AGX_EXP208_GDI_BINDING Binding;
+  APPLE_AGX_U32 BoundFence;
   APPLE_AGX_BOOL Ready;
 } ADMISSION_BACKEND_IMAGE;
 
 APPLE_AGX_BOOL AdmissionBackendImagePrepare(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_LOCAL_MEMORY_VIEW *BackendView);
+
+APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    const unsigned char *SubmissionBytes,
+    APPLE_AGX_U32 SubmissionByteCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
 
 void AdmissionBackendImageReset(ADMISSION_BACKEND_IMAGE *Image);
 

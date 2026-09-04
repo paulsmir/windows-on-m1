@@ -25,6 +25,9 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
                 str(SHARED / "src" / "apple_agx_render_template.generated.c"),
                 str(SHARED / "src" / "apple_agx_render_template_rebase.c"),
                 str(SHARED / "src" / "apple_agx_relocation.c"),
+                str(SHARED / "src" / "apple_agx_exp208_gdi.c"),
+                str(SHARED / "src" / "apple_agx_gdi.c"),
+                str(SHARED / "src" / "apple_agx_memory.c"),
                 "-o", str(binary),
             ], check=True, cwd=ROOT)
             subprocess.run([str(binary)], check=True, cwd=ROOT)
@@ -48,6 +51,11 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
         self.assertIn(
             r"..\shared\src\apple_agx_render_template.generated.c", project)
         self.assertIn(r"..\shared\src\apple_agx_relocation.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_exp208_gdi.c", project)
+        submission = (RENDER / "src" / "submission_windows.c").read_text()
+        scheduler = (RENDER / "src" / "scheduler_windows.c").read_text()
+        self.assertIn("AdmissionBackendImageBindSubmission", submission)
+        self.assertIn("AdmissionBackendImageReleaseSubmission", scheduler)
 
 
 if __name__ == "__main__":

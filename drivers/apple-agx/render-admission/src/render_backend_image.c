@@ -12,6 +12,15 @@ static void AdmissionBackendImageZero(
     bytes[index] = 0u;
 }
 
+static void AdmissionBackendBindingZero(
+    APPLE_AGX_EXP208_GDI_BINDING *Binding) {
+  unsigned char *bytes = (unsigned char *)Binding;
+  APPLE_AGX_U32 index;
+  for (index = 0u;
+       index < (APPLE_AGX_U32)sizeof(*Binding); ++index)
+    bytes[index] = 0u;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImagePrepare(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_LOCAL_MEMORY_VIEW *BackendView) {
@@ -60,6 +69,70 @@ APPLE_AGX_BOOL AdmissionBackendImagePrepare(
   candidate.ArenaBytes = template_bytes;
   candidate.Ready = APPLE_AGX_TRUE;
   *Image = candidate;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    const unsigned char *SubmissionBytes,
+    APPLE_AGX_U32 SubmissionByteCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding) {
+  APPLE_AGX_EXP208_RELOCATION_OBJECT saved_output;
+  APPLE_AGX_EXP208_GDI_BINDING candidate;
+
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Packet == ADMISSION_BACKEND_IMAGE_NULL ||
+      DestinationCpuAddress == ADMISSION_BACKEND_IMAGE_NULL ||
+      SubmissionBytes == ADMISSION_BACKEND_IMAGE_NULL ||
+      Binding == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Image->BoundFence != 0u ||
+      Packet->Fence == 0u || Packet->DestinationCpuToken == 0ULL ||
+      Packet->DestinationGpuVa == 0ULL ||
+      Packet->DestinationPhysical == 0ULL ||
+      Packet->DestinationBytes == 0u)
+    return APPLE_AGX_FALSE;
+
+  saved_output =
+      Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+  if (!AppleAgxExp208BindGdiColorFill(
+          SubmissionBytes, SubmissionByteCount,
+          DestinationCpuAddress, Packet->DestinationGpuVa,
+          Packet->DestinationPhysical, Packet->DestinationBytes,
+          Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount(), &candidate) ||
+      !AppleAgxApplyRelocations(
+          Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount())) {
+    Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT] =
+        saved_output;
+    if (!AppleAgxApplyRelocations(
+            Image->Objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+            AppleAgxRenderTemplateRelocations(),
+            AppleAgxRenderTemplateRelocationCount()))
+      Image->Ready = APPLE_AGX_FALSE;
+    return APPLE_AGX_FALSE;
+  }
+  Image->Binding = candidate;
+  Image->BoundFence = Packet->Fence;
+  *Binding = candidate;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
+    ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence) {
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence)
+    return APPLE_AGX_FALSE;
+  Image->BoundFence = 0u;
+  AdmissionBackendBindingZero(&Image->Binding);
   return APPLE_AGX_TRUE;
 }
 

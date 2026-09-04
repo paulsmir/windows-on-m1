@@ -7,7 +7,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   APPLE_AGX_DMA_SHADOW shadow;
   APPLE_AGX_DMA_SHADOW_VIEW view;
   ADMISSION_GDI_PREPARED prepared;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
   BOOLEAN accepted = FALSE;
+  BOOLEAN bound = FALSE;
 
   if (Context == NULL || Args == NULL || !Context->Started ||
       Args->Flags.Value != 0u || Args->SubmissionFenceId == 0u ||
@@ -68,16 +70,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
           Args->DmaBufferSubmissionStartOffset &&
       Context->RenderPacket.Description.DmaEnd ==
           Args->DmaBufferSubmissionEndOffset &&
-      AppleAgxSchedulerQueueFence(
+      AdmissionBackendImageBindSubmission(
+          &Context->BackendImage,
+          &Context->RenderPacket.Description,
+          (PVOID)(ULONG_PTR)Context->RenderPacket.Description
+              .DestinationCpuToken,
+          view.Bytes, view.DmaBytes, &binding)) {
+    bound = TRUE;
+    if (AppleAgxSchedulerQueueFence(
           &Context->Scheduler, Args->NodeOrdinal,
           Args->EngineOrdinal, Args->SubmissionFenceId) &&
-      AdmissionRenderPacketQueue(
+        AdmissionRenderPacketQueue(
           &Context->RenderPacket, Args->SubmissionFenceId,
           (ULONGLONG)(ULONG_PTR)render_context,
           (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData,
           Args->DmaBufferSubmissionStartOffset,
           Args->DmaBufferSubmissionEndOffset))
-    accepted = TRUE;
+      accepted = TRUE;
+  }
+  if (bound && !accepted &&
+      !AdmissionBackendImageReleaseSubmission(
+          &Context->BackendImage, Args->SubmissionFenceId))
+    InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted)
     return STATUS_DEVICE_BUSY;
