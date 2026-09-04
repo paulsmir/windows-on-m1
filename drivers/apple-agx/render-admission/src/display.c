@@ -1,5 +1,20 @@
 #include "render_admission.h"
 
+_Use_decl_annotations_ NTSTATUS AdmissionDdiSetPalette(
+    HANDLE Adapter, const DXGKARG_SETPALETTE *SetPalette) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  NTSTATUS status = STATUS_NOT_SUPPORTED;
+
+  if (context == NULL || SetPalette == NULL ||
+      SetPalette->VidPnSourceId != 0 || SetPalette->NumEntries == 0 ||
+      SetPalette->FirstEntry >= 256 ||
+      SetPalette->NumEntries > 256 - SetPalette->FirstEntry ||
+      SetPalette->pLookupTable == NULL)
+    return STATUS_INVALID_PARAMETER;
+  InterlockedExchange(&context->PaletteStatus, (LONG)status);
+  return status;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
     PVOID MiniportDeviceContext, PDXGK_CHILD_DESCRIPTOR ChildRelations,
     ULONG ChildRelationsSize) {
@@ -563,6 +578,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryVidPnHWCapability(
   RtlZeroMemory(&VidPnHWCaps->VidPnHWCaps,
                 sizeof(VidPnHWCaps->VidPnHWCaps));
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiGetScanLine(
+    HANDLE Adapter, DXGKARG_GETSCANLINE *GetScanLine) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  NTSTATUS status = STATUS_NOT_SUPPORTED;
+
+  if (context == NULL || GetScanLine == NULL ||
+      GetScanLine->VidPnTargetId != 0)
+    return STATUS_INVALID_PARAMETER;
+  InterlockedExchange(&context->ScanLineStage, 1);
+  RtlZeroMemory(GetScanLine, sizeof(*GetScanLine));
+  InterlockedExchange(&context->ScanLineStatus, (LONG)status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(

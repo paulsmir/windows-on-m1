@@ -28,6 +28,7 @@ typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptChildStatus = 12,
   AdmissionReceiptVidPn = 13,
   AdmissionReceiptSourceAddress = 14,
+  AdmissionReceiptStartInterrupt = 15,
 } ADMISSION_RECEIPT;
 
 typedef struct _ADMISSION_CONTEXT {
@@ -46,6 +47,16 @@ typedef struct _ADMISSION_CONTEXT {
   D3DDDIFORMAT CommittedFormat;
   volatile LONG SourceAddressStage;
   volatile LONG SourceAddressStatus;
+  volatile LONG PaletteStatus;
+  volatile LONG ScanLineStage;
+  volatile LONG ScanLineStatus;
+  volatile UCHAR *BrokerBase;
+  volatile LONG InterruptReady;
+  volatile LONG InterruptIngressEnabled;
+  volatile LONG InterruptCount;
+  volatile LONG InterruptAckCount;
+  volatile LONG LastInterruptStatus;
+  volatile LONG DpcCount;
 } ADMISSION_CONTEXT;
 
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
@@ -56,12 +67,16 @@ void AdmissionRecordDevice(_In_opt_ PDEVICE_OBJECT DeviceObject,
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);
+NTSTATUS AdmissionInterruptStart(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionInterruptStop(_Inout_ ADMISSION_CONTEXT *Context);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
 DXGKDDI_STOP_DEVICE AdmissionDdiStopDevice;
 DXGKDDI_REMOVE_DEVICE AdmissionDdiRemoveDevice;
 DXGKDDI_DISPATCH_IO_REQUEST AdmissionDdiDispatchIoRequest;
+DXGKDDI_INTERRUPT_ROUTINE AdmissionDdiInterruptRoutine;
+DXGKDDI_DPC_ROUTINE AdmissionDdiDpcRoutine;
 DXGKDDI_QUERY_CHILD_RELATIONS AdmissionDdiQueryChildRelations;
 DXGKDDI_QUERY_CHILD_STATUS AdmissionDdiQueryChildStatus;
 DXGKDDI_QUERY_DEVICE_DESCRIPTOR AdmissionDdiQueryDeviceDescriptor;
@@ -69,6 +84,7 @@ DXGKDDI_SET_POWER_STATE AdmissionDdiSetPowerState;
 DXGKDDI_RESET_DEVICE AdmissionDdiResetDevice;
 DXGKDDI_UNLOAD AdmissionDdiUnload;
 DXGKDDI_QUERYADAPTERINFO AdmissionDdiQueryAdapterInfo;
+DXGKDDI_SETPALETTE AdmissionDdiSetPalette;
 DXGKDDI_SETPOINTERPOSITION AdmissionDdiSetPointerPosition;
 DXGKDDI_SETPOINTERSHAPE AdmissionDdiSetPointerShape;
 DXGKDDI_ISSUPPORTEDVIDPN AdmissionDdiIsSupportedVidPn;
@@ -78,6 +94,7 @@ DXGKDDI_SETVIDPNSOURCEVISIBILITY AdmissionDdiSetVidPnSourceVisibility;
 DXGKDDI_COMMITVIDPN AdmissionDdiCommitVidPn;
 DXGKDDI_UPDATEACTIVEVIDPNPRESENTPATH AdmissionDdiUpdateActiveVidPnPresentPath;
 DXGKDDI_RECOMMENDMONITORMODES AdmissionDdiRecommendMonitorModes;
+DXGKDDI_GETSCANLINE AdmissionDdiGetScanLine;
 DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionDdiQueryVidPnHWCapability;
 DXGKDDI_SETVIDPNSOURCEADDRESS AdmissionDdiSetVidPnSourceAddress;
 DXGKDDI_STOP_DEVICE_AND_RELEASE_POST_DISPLAY_OWNERSHIP
@@ -106,6 +123,7 @@ DXGKDDI_RESTARTFROMTIMEOUT AdmissionDdiRestartFromTimeout;
 DXGKDDI_ESCAPE AdmissionDdiEscape;
 DXGKDDI_COLLECTDBGINFO AdmissionDdiCollectDbgInfo;
 DXGKDDI_QUERYCURRENTFENCE AdmissionDdiQueryCurrentFence;
+DXGKDDI_CONTROLINTERRUPT AdmissionDdiControlInterrupt;
 DXGKDDI_CREATECONTEXT AdmissionDdiCreateContext;
 DXGKDDI_DESTROYCONTEXT AdmissionDdiDestroyContext;
 DXGKDDI_RENDERKM AdmissionDdiRenderKm;

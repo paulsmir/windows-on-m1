@@ -35,6 +35,7 @@
     <ClCompile Include="src\lifecycle.c" />
     <ClCompile Include="src\callbacks.c" />
     <ClCompile Include="src\display.c" />
+    <ClCompile Include="src\interrupt.c" />
     <ClCompile Include="src\receipts.c" />
   </ItemGroup>
   <ItemGroup>

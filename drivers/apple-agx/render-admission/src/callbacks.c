@@ -63,7 +63,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
   UNUSED(Context);
   if (Present == NULL || Present->pDmaBuffer != NULL)
     return STATUS_INVALID_PARAMETER;
-  return STATUS_SUCCESS;
+  return STATUS_NOT_SUPPORTED;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {

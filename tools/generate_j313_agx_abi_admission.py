@@ -143,6 +143,9 @@ def _render_header(contract, prefix, guard):
         f'#define {prefix}_SOURCE_G2_SHA256 "{contract.source_g2_sha256}"',
         f"#define {prefix}_CONTRACT_VERSION 1u",
         f"#define {prefix}_SYNTHETIC_SCANOUT_GUEST_INTID 889u",
+        f"#define {prefix}_SCANOUT_IRQ_STATUS_OFFSET 0x414u",
+        f"#define {prefix}_SCANOUT_IRQ_ENABLE_OFFSET 0x418u",
+        f"#define {prefix}_SCANOUT_IRQ_MASK 0x3u",
     ]
     for name, base, size in contract.memory_resources:
         macro = name.upper()

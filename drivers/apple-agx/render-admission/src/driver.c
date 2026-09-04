@@ -18,6 +18,8 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiStopDevice = AdmissionDdiStopDevice;
   initialization.DxgkDdiRemoveDevice = AdmissionDdiRemoveDevice;
   initialization.DxgkDdiDispatchIoRequest = AdmissionDdiDispatchIoRequest;
+  initialization.DxgkDdiInterruptRoutine = AdmissionDdiInterruptRoutine;
+  initialization.DxgkDdiDpcRoutine = AdmissionDdiDpcRoutine;
   initialization.DxgkDdiQueryChildRelations = AdmissionDdiQueryChildRelations;
   initialization.DxgkDdiQueryChildStatus = AdmissionDdiQueryChildStatus;
   initialization.DxgkDdiQueryDeviceDescriptor = AdmissionDdiQueryDeviceDescriptor;
@@ -25,6 +27,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiResetDevice = AdmissionDdiResetDevice;
   initialization.DxgkDdiUnload = AdmissionDdiUnload;
   initialization.DxgkDdiQueryAdapterInfo = AdmissionDdiQueryAdapterInfo;
+  initialization.DxgkDdiSetPalette = AdmissionDdiSetPalette;
   initialization.DxgkDdiSetPointerPosition = AdmissionDdiSetPointerPosition;
   initialization.DxgkDdiSetPointerShape = AdmissionDdiSetPointerShape;
   initialization.DxgkDdiIsSupportedVidPn = AdmissionDdiIsSupportedVidPn;
@@ -39,6 +42,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
       AdmissionDdiUpdateActiveVidPnPresentPath;
   initialization.DxgkDdiRecommendMonitorModes =
       AdmissionDdiRecommendMonitorModes;
+  initialization.DxgkDdiGetScanLine = AdmissionDdiGetScanLine;
   initialization.DxgkDdiQueryVidPnHWCapability =
       AdmissionDdiQueryVidPnHWCapability;
   initialization.DxgkDdiSetVidPnSourceAddress =
@@ -67,6 +71,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiEscape = AdmissionDdiEscape;
   initialization.DxgkDdiCollectDbgInfo = AdmissionDdiCollectDbgInfo;
   initialization.DxgkDdiQueryCurrentFence = AdmissionDdiQueryCurrentFence;
+  initialization.DxgkDdiControlInterrupt = AdmissionDdiControlInterrupt;
   initialization.DxgkDdiCreateContext = AdmissionDdiCreateContext;
   initialization.DxgkDdiDestroyContext = AdmissionDdiDestroyContext;
   initialization.DxgkDdiRenderKm = AdmissionDdiRenderKm;

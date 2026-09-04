@@ -26,7 +26,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             project,
         )
 
-    def test_registers_full_graphics_display_contract_without_irq_or_kmdod_callbacks(self):
+    def test_registers_exp214_plus_full_roskmd_display_contract(self):
         driver = self.read("src/driver.c")
         required = (
             "DxgkDdiAddDevice", "DxgkDdiStartDevice",
@@ -43,17 +43,38 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             "DxgkDdiRecommendMonitorModes", "DxgkDdiQueryVidPnHWCapability",
             "DxgkDdiSetVidPnSourceAddress",
             "DxgkDdiStopDeviceAndReleasePostDisplayOwnership",
+            "DxgkDdiInterruptRoutine", "DxgkDdiDpcRoutine",
+            "DxgkDdiControlInterrupt", "DxgkDdiSetPalette",
+            "DxgkDdiGetScanLine",
         )
         for callback in required:
             self.assertIn(f"initialization.{callback} =", driver)
 
         for callback in (
-            "DxgkDdiInterruptRoutine", "DxgkDdiDpcRoutine",
-            "DxgkDdiControlInterrupt", "DxgkDdiGetScanLine",
-            "DxgkDdiPresentDisplayOnly",
-            "DxgkDdiSystemDisplayEnable", "DxgkDdiSystemDisplayWrite",
+            "DxgkDdiPresentDisplayOnly", "DxgkDdiSystemDisplayEnable",
+            "DxgkDdiSystemDisplayWrite",
         ):
             self.assertNotIn(f"initialization.{callback} =", driver)
+
+    def test_palette_scanline_and_present_are_truthful_fail_closed_boundaries(self):
+        display = self.read("src/display.c")
+        callbacks = self.read("src/callbacks.c")
+        header = self.read("include/render_admission.h")
+
+        self.assertIn("DXGKDDI_SETPALETTE AdmissionDdiSetPalette", header)
+        self.assertIn("DXGKDDI_GETSCANLINE AdmissionDdiGetScanLine", header)
+        for name in ("AdmissionDdiSetPalette", "AdmissionDdiGetScanLine"):
+            self.assertIn(name, display)
+        scanline = display[display.index("AdmissionDdiGetScanLine("):]
+        self.assertIn("RtlZeroMemory", scanline)
+        self.assertIn("STATUS_NOT_SUPPORTED", scanline)
+        self.assertIn("Interlocked", scanline)
+        present = callbacks[
+            callbacks.index("AdmissionDdiPresent("):
+            callbacks.index("AdmissionDdiResetFromTimeout(")
+        ]
+        self.assertIn("STATUS_NOT_SUPPORTED", present)
+        self.assertNotIn("STATUS_SUCCESS", present)
 
     def test_start_is_natural_hardware_inert_render_admission(self):
         lifecycle = self.read("src/lifecycle.c")
@@ -217,6 +238,44 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         release = display[end:]
         self.assertIn("*DisplayInfo = context->PostDisplayInformation", release)
         self.assertIn("AdmissionDdiStopDevice(context)", release)
+
+    def test_interrupt_admission_owns_only_synthetic_broker_status_and_ack(self):
+        interrupt = self.read("src/interrupt.c")
+        lifecycle = self.read("src/lifecycle.c")
+        header = self.read("include/render_admission.h")
+        project = self.read("AppleAgxRenderAdmission.vcxproj")
+
+        self.assertIn('<ClCompile Include="src\\interrupt.c"', project)
+        for token in (
+            "BrokerBase", "InterruptReady", "InterruptIngressEnabled",
+            "InterruptCount", "InterruptAckCount", "DpcCount",
+        ):
+            self.assertIn(token, header)
+        self.assertIn("AdmissionInterruptStart", lifecycle)
+        self.assertIn("AdmissionInterruptStop", lifecycle)
+        self.assertIn("DxgkCbMapMemory", interrupt)
+        self.assertIn("DxgkCbUnmapMemory", interrupt)
+        self.assertIn("DxgkCbSynchronizeExecution", interrupt)
+        self.assertIn("READ_REGISTER_ULONG", interrupt)
+        self.assertIn("WRITE_REGISTER_ULONG", interrupt)
+        self.assertIn("SCANOUT_IRQ_STATUS_OFFSET", interrupt)
+        self.assertIn("SCANOUT_IRQ_ENABLE_OFFSET", interrupt)
+        self.assertIn("SCANOUT_IRQ_MASK", interrupt)
+        self.assertIn("MessageNumber != 0", interrupt)
+        self.assertIn("DXGK_INTERRUPT_CRTC_VSYNC", interrupt)
+        self.assertIn("STATUS_NOT_SUPPORTED", interrupt)
+
+        isr_start = interrupt.index("AdmissionDdiInterruptRoutine(")
+        dpc_start = interrupt.index("AdmissionDdiDpcRoutine(")
+        isr = interrupt[isr_start:dpc_start]
+        self.assertIn("return FALSE", isr)
+        self.assertIn("return TRUE", isr)
+        self.assertNotIn("DxgkCbQueueDpc", isr)
+        for forbidden in (
+            "AdmissionRecord", "Zw", "IoOpenDeviceRegistryKey", "ExAllocate",
+            "KeWait", "KeDelay", "DbgPrint", "RTKit", "UAT",
+        ):
+            self.assertNotIn(forbidden, isr)
 
     def test_package_binds_exactly_appl0002_and_is_removable(self):
         inf = self.read("AppleAgxRenderAdmission.inf")

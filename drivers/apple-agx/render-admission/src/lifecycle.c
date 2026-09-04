@@ -45,21 +45,33 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   if (!NT_SUCCESS(status))
     return status;
 
-  if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL)
+  status = AdmissionInterruptStart(context);
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartInterrupt, status);
+  if (!NT_SUCCESS(status))
+    return status;
+
+  if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
+    (void)AdmissionInterruptStop(context);
     return STATUS_NOT_SUPPORTED;
+  }
   RtlZeroMemory(&context->PostDisplayInformation,
                 sizeof(context->PostDisplayInformation));
   status = context->Interface.DxgkCbAcquirePostDisplayOwnership(
       context->Interface.DeviceHandle, &context->PostDisplayInformation);
   AdmissionRecordDevice(context->PhysicalDeviceObject,
                         AdmissionReceiptStartPostDisplay, status);
-  if (!NT_SUCCESS(status))
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionInterruptStop(context);
     return status;
+  }
   if (context->PostDisplayInformation.PhysicAddress.QuadPart == 0 ||
       context->PostDisplayInformation.Width != 2560 ||
       context->PostDisplayInformation.Height != 1600 ||
-      context->PostDisplayInformation.Pitch != 10240)
+      context->PostDisplayInformation.Pitch != 10240) {
+    (void)AdmissionInterruptStop(context);
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
+  }
 
   context->Started = TRUE;
   context->DisplayActive = TRUE;
@@ -77,10 +89,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceContext) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptStop,
                         STATUS_SUCCESS);
+  status = AdmissionInterruptStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
   context->Started = FALSE;
   context->DisplayActive = FALSE;
   context->SourceVisible = FALSE;

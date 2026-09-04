@@ -67,6 +67,9 @@ class J313AgxAbiAdmissionContractTests(unittest.TestCase):
             (M1N1_HEADER.read_text(), "HV_AGX_ABI_ADMISSION"),
         ):
             self.assertIn(f"{prefix}_SYNTHETIC_SCANOUT_GUEST_INTID 889u", rendered)
+            self.assertIn(f"{prefix}_SCANOUT_IRQ_STATUS_OFFSET 0x414u", rendered)
+            self.assertIn(f"{prefix}_SCANOUT_IRQ_ENABLE_OFFSET 0x418u", rendered)
+            self.assertIn(f"{prefix}_SCANOUT_IRQ_MASK 0x3u", rendered)
             self.assertNotIn("PHYSICAL_INTID", rendered)
 
     def test_admission_asl_has_one_edge_irq_and_no_physical_agx_irq(self):
