@@ -1,12 +1,15 @@
 # GPU current state
 
-Updated: 2026-09-04T16:56:00+02:00
+Updated: 2026-09-04T17:05:00+02:00
 
 ## CURRENT PLATFORM
 
 - Live J313 is back on the normal current G2 pair: accepted EXP377 m1n1
   `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
   plus Mu `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+- EXP425 is currently between boots: exact qualification package is staged as
+  `oem5.inf` without bind, controlled shutdown completed, Windows/launcher/
+  uartproxy are absent, and physical power-on to Running proxy is required.
 - Current-compatible emergency non-AGX Mu remains
   `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
 
@@ -168,6 +171,11 @@ observations. EXP423 WDK builds are green, but no hardware run has occurred.
   provider, then the remaining scanout/DirectFlip/UMD/non-VGA group. No
   hardware bind until the complete truthful group exists or a separately
   preregistered production-code qualification seam is justified.
+- `PER_ENGINE_TDR` is IMPLEMENTED/HW_PROVEN=NO in `660c187`; functional
+  readiness is 9/14. EXP425 then expands the one local mapping to 64 MiB so
+  Segment 2 can expose the exact 56-MiB scanout pool plus 8-MiB backend tail.
+  That new range is not hardware-proven yet; EXP425 is preregistered and
+  staged under the synthetic-889 MemoryQualification route.
 - Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
   current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
   bind hardware until the entire mandatory group is real and offline-green.
