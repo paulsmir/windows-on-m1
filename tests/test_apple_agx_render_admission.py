@@ -57,10 +57,29 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
 
     def test_start_is_natural_hardware_inert_render_admission(self):
         lifecycle = self.read("src/lifecycle.c")
+        header = self.read("include/render_admission.h")
 
-        self.assertIn("*NumberOfVideoPresentSources = 0", lifecycle)
-        self.assertIn("*NumberOfChildren = 0", lifecycle)
+        for token in (
+            "DXGK_START_INFO StartInfo",
+            "DXGKRNL_INTERFACE Interface",
+            "DXGK_DEVICE_INFO DeviceInformation",
+            "DXGK_DISPLAY_INFORMATION PostDisplayInformation",
+            "BOOLEAN Started",
+            "BOOLEAN DisplayActive",
+            "BOOLEAN SourceVisible",
+            "ULONG CommittedWidth",
+            "ULONG CommittedHeight",
+            "ULONG CommittedStride",
+        ):
+            self.assertIn(token, header)
+
+        self.assertIn("*NumberOfVideoPresentSources = 1", lifecycle)
+        self.assertIn("*NumberOfChildren = 1", lifecycle)
         self.assertIn("DxgkCbGetDeviceInformation", lifecycle)
+        self.assertIn("DxgkCbAcquirePostDisplayOwnership", lifecycle)
+        self.assertIn("PostDisplayInformation.Width != 2560", lifecycle)
+        self.assertIn("PostDisplayInformation.Height != 1600", lifecycle)
+        self.assertIn("PostDisplayInformation.Pitch != 10240", lifecycle)
         self.assertIn("AdmissionReceiptStartSucceeded", lifecycle)
         self.assertRegex(lifecycle, r"return\s+STATUS_SUCCESS\s*;")
         for forbidden in (
@@ -69,6 +88,29 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             "DxgkCbNotifyInterrupt",
         ):
             self.assertNotIn(forbidden, lifecycle)
+
+    def test_query_adapter_info_reports_truthful_wddm30_memory_caps(self):
+        lifecycle = self.read("src/lifecycle.c")
+
+        for query in (
+            "DXGKQAITYPE_DRIVERCAPS",
+            "DXGKQAITYPE_WDDMDEVICECAPS",
+            "DXGKQAITYPE_PHYSICAL_MEMORY_CAPS",
+            "DXGKQAITYPE_IOMMU_CAPS",
+            "DXGKQAITYPE_64BITONLYCAPS",
+            "DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION",
+        ):
+            self.assertIn(f"case {query}:", lifecycle)
+
+        self.assertIn("HighestVisibleAddress.QuadPart = 0xFFFFFFFFFFLL", lifecycle)
+        self.assertIn("iommuCaps->Value = 0", lifecycle)
+        self.assertIn("SupportsOnly64Bit = 1", lifecycle)
+        self.assertIn("caps->SupportNonVGA = TRUE", lifecycle)
+        self.assertNotIn("FlipOnVSyncMmIo = TRUE", lifecycle)
+        self.assertNotIn("SupportSoftwareDeviceBitmaps", lifecycle)
+        self.assertNotIn("PreemptionAware = 1", lifecycle)
+        self.assertNotIn("MultiEngineAware = 1", lifecycle)
+        self.assertNotIn("MapAperture2Supported = 1", lifecycle)
 
     def test_package_binds_exactly_appl0002_and_is_removable(self):
         inf = self.read("AppleAgxRenderAdmission.inf")

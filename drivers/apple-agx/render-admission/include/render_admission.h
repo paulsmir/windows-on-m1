@@ -23,12 +23,29 @@ typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptStop = 7,
   AdmissionReceiptRemove = 8,
   AdmissionReceiptNodeMetadata = 9,
+  AdmissionReceiptStartPostDisplay = 10,
+  AdmissionReceiptChildRelations = 11,
+  AdmissionReceiptChildStatus = 12,
+  AdmissionReceiptVidPn = 13,
+  AdmissionReceiptSourceAddress = 14,
 } ADMISSION_RECEIPT;
 
 typedef struct _ADMISSION_CONTEXT {
   PDEVICE_OBJECT PhysicalDeviceObject;
+  DXGK_START_INFO StartInfo;
   DXGKRNL_INTERFACE Interface;
+  DXGK_DEVICE_INFO DeviceInformation;
+  DXGK_DISPLAY_INFORMATION PostDisplayInformation;
   BOOLEAN InterfaceValid;
+  BOOLEAN Started;
+  BOOLEAN DisplayActive;
+  BOOLEAN SourceVisible;
+  ULONG CommittedWidth;
+  ULONG CommittedHeight;
+  ULONG CommittedStride;
+  D3DDDIFORMAT CommittedFormat;
+  volatile LONG SourceAddressStage;
+  volatile LONG SourceAddressStatus;
 } ADMISSION_CONTEXT;
 
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
