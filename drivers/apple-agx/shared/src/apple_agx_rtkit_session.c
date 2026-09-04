@@ -2,6 +2,9 @@
 
 #define APPLE_AGX_RTKIT_SESSION_NULL ((void *)0)
 
+static void AppleAgxRtkitSessionCaptureFailureMailbox(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io);
+
 static APPLE_AGX_RTKIT_SESSION_RESULT
 AppleAgxRtkitSessionAscResult(APPLE_AGX_ASC_RESULT Result) {
   switch (Result) {
@@ -59,6 +62,65 @@ void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session) {
   Session->InboxControlAtFailure = 0u;
   Session->OutboxControlAtFailure = 0u;
   Session->StopPhase = AppleAgxRtkitStopIdle;
+}
+
+APPLE_AGX_RTKIT_SESSION_RESULT
+AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_GFX_HANDOFF_STATE *Handoff, APPLE_AGX_ASC_U64 DeadlineMs) {
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  APPLE_AGX_ASC_U32 cpu_status = 0u;
+  if (Session == APPLE_AGX_RTKIT_SESSION_NULL || Io == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Session->Running != APPLE_AGX_RTKIT_FALSE)
+    return AppleAgxRtkitSessionResultInvalidState;
+  result = AppleAgxRtkitSessionAscResult(AppleAgxAscSetRun(Io, APPLE_AGX_ASC_TRUE));
+  if (result != AppleAgxRtkitSessionResultOk)
+    return result;
+  Session->Running = APPLE_AGX_RTKIT_TRUE;
+  result = AppleAgxRtkitSessionAscResult(AppleAgxAscWaitRunning(Io, DeadlineMs, &cpu_status));
+  if (result != AppleAgxRtkitSessionResultOk)
+    return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
+  Session->CpuReady = APPLE_AGX_RTKIT_TRUE;
+  if (Handoff != APPLE_AGX_RTKIT_SESSION_NULL &&
+      AppleAgxGfxHandoffInitialize(Handoff, DeadlineMs) != AppleAgxGfxHandoffResultOk)
+    return AppleAgxRtkitSessionForceRunOff(Session, Io, AppleAgxRtkitSessionResultTimeout);
+  return AppleAgxRtkitSessionResultOk;
+}
+
+APPLE_AGX_RTKIT_SESSION_RESULT
+AppleAgxRtkitSessionCompleteManagementBootstrap(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_U64 DeadlineMs) {
+  APPLE_AGX_ASC_MESSAGE message;
+  APPLE_AGX_RTKIT_BOOT_OUTPUT output;
+  APPLE_AGX_RTKIT_BOOT_RESULT boot_result;
+  APPLE_AGX_RTKIT_SESSION_RESULT result;
+  if (Session == APPLE_AGX_RTKIT_SESSION_NULL || Io == APPLE_AGX_RTKIT_SESSION_NULL ||
+      Session->Running == APPLE_AGX_RTKIT_FALSE ||
+      Session->CpuReady == APPLE_AGX_RTKIT_FALSE)
+    return AppleAgxRtkitSessionResultInvalidState;
+  AppleAgxRtkitBootInitialize(&Session->Boot);
+  boot_result = AppleAgxRtkitBootBegin(&Session->Boot, &output);
+  if (boot_result != AppleAgxRtkitBootResultOk)
+    return AppleAgxRtkitSessionForceRunOff(Session, Io, AppleAgxRtkitSessionResultInvalidState);
+  if (AppleAgxAscReadInboxControl(Io, &Session->InboxControlBeforeInit) == AppleAgxAscResultOk)
+    Session->InboxBeforeInitValid = APPLE_AGX_RTKIT_TRUE;
+  result = AppleAgxRtkitSessionSendOutput(Io, &output, DeadlineMs);
+  if (result != AppleAgxRtkitSessionResultOk)
+    return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
+  if (AppleAgxAscReadInboxControl(Io, &Session->InboxControlAfterInit) == AppleAgxAscResultOk)
+    Session->InboxAfterInitValid = APPLE_AGX_RTKIT_TRUE;
+  while (AppleAgxRtkitBootIsReady(&Session->Boot) == APPLE_AGX_RTKIT_FALSE) {
+    result = AppleAgxRtkitSessionAscResult(AppleAgxAscReceive(Io, &message, DeadlineMs));
+    if (result != AppleAgxRtkitSessionResultOk) { AppleAgxRtkitSessionCaptureFailureMailbox(Session, Io); return AppleAgxRtkitSessionForceRunOff(Session, Io, result); }
+    boot_result = AppleAgxRtkitBootHandle(&Session->Boot, message.Payload, message.Endpoint, &output);
+    if (boot_result != AppleAgxRtkitBootResultOk)
+      return AppleAgxRtkitSessionForceRunOff(Session, Io, AppleAgxRtkitSessionResultProtocolViolation);
+    result = AppleAgxRtkitSessionSendOutput(Io, &output, DeadlineMs);
+    if (result != AppleAgxRtkitSessionResultOk)
+      return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
+  }
+  return AppleAgxRtkitSessionResultOk;
 }
 
 static void AppleAgxRtkitSessionCaptureFailureMailbox(

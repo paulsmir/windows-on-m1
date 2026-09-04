@@ -45,6 +45,12 @@ typedef APPLE_AGX_RTKIT_BOOL (*APPLE_AGX_RTKIT_PRE_MANAGEMENT)(
     void *Context, APPLE_AGX_ASC_U64 DeadlineMs);
 
 void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session);
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStartCpuAndInitializeHandoff(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_GFX_HANDOFF_STATE *Handoff, APPLE_AGX_ASC_U64 DeadlineMs);
+APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionCompleteManagementBootstrap(
+    APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
+    APPLE_AGX_ASC_U64 DeadlineMs);
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
     APPLE_AGX_GFX_HANDOFF_STATE *Handoff,
