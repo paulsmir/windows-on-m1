@@ -733,6 +733,19 @@ static unsigned char AdmissionFirmwareIdleTimestamp(
              : 0u;
 }
 
+static void AdmissionFirmwareRecordPhase(
+    void *Context, APPLE_AGX_FIRMWARE_PHASE Phase,
+    APPLE_AGX_FIRMWARE_RESULT Result, APPLE_AGX_FW_U32 CompletedMask) {
+  APPLE_AGX_FIRMWARE_PROVIDER *provider = Context;
+  ADMISSION_PLATFORM_RUNTIME *runtime;
+  if (provider == NULL)
+    return;
+  runtime = provider->Primitives.Context;
+  if (runtime != NULL)
+    AdmissionRecordFirmwarePhase(runtime->Adapter, Phase, Result,
+                                 CompletedMask);
+}
+
 static APPLE_AGX_BACKEND_BOOL AdmissionRenderPublish(void *Context) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   if (runtime == NULL || runtime->RenderBorrowed ||
@@ -1461,6 +1474,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
         Context, AdmissionPlatformFirmwareProvider, status);
     goto Fail;
   }
+  runtime->FirmwareIo.RecordPhase = AdmissionFirmwareRecordPhase;
   AdmissionRecordPlatformStage(Context, AdmissionPlatformFirmwareProvider,
                                STATUS_SUCCESS);
 

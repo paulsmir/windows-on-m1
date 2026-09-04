@@ -89,6 +89,14 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
             "AdmissionRecordBackendStartResult(Context, backend_result)", platform
         )
 
+    def test_firmware_start_persists_provider_phase_result_and_mask(self):
+        receipts = (RENDER / "src" / "receipts.c").read_text()
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        self.assertIn('L"Wom1FirmwarePhase"', receipts)
+        self.assertIn('L"Wom1FirmwareResult"', receipts)
+        self.assertIn('L"Wom1FirmwareCompletedMask"', receipts)
+        self.assertIn("runtime->FirmwareIo.RecordPhase = AdmissionFirmwareRecordPhase", platform)
+
 
 if __name__ == "__main__":
     unittest.main()

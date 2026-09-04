@@ -78,6 +78,21 @@ _Use_decl_annotations_ void AdmissionRecordBackendStartResult(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordFirmwarePhase(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_FIRMWARE_PHASE Phase,
+    APPLE_AGX_FIRMWARE_RESULT Result, ULONG CompletedMask) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1FirmwarePhase", (ULONG)Phase);
+  WriteDword(key, L"Wom1FirmwareResult", (ULONG)Result);
+  WriteDword(key, L"Wom1FirmwareCompletedMask", CompletedMask);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordQuery(
     PDEVICE_OBJECT DeviceObject, DXGK_QUERYADAPTERINFOTYPE Type,
     ULONG OutputDataSize, NTSTATUS Status) {
