@@ -44,6 +44,15 @@ static unsigned char AppleAgxInitdataMemoryStorageIsEmpty(
     if (Graph->RegionBMemory.Objects[index].State != AppleAgxMemoryEmpty)
       return 0u;
   }
+  if (Graph->RenderSharedMemory.Initialized ||
+      Graph->RenderSharedMemory.Built ||
+      Graph->RenderSharedMemory.ObjectCount != 0u)
+    return 0u;
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index) {
+    if (Graph->RenderSharedMemory.Objects[index].State != AppleAgxMemoryEmpty)
+      return 0u;
+  }
   return 1u;
 }
 
@@ -172,6 +181,18 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
       AppleAgxRegionBMemoryResultOk)
     return AppleAgxInitdataMemoryRollback(
         Graph, AppleAgxInitdataMemoryResultAllocationFailed);
+  virtual_address = AppleAgxInitdataMemoryAlignUp(
+      Graph->RegionBMemory.VirtualAddresses[
+          APPLE_AGX_REGIONB_MEMORY_OBJECT_COUNT - 1u] +
+      Graph->RegionBMemory.Objects[
+          APPLE_AGX_REGIONB_MEMORY_OBJECT_COUNT - 1u].Length +
+      APPLE_AGX_MEMORY_PAGE_SIZE);
+  virtual_address = (virtual_address + 0x7fffULL) & ~0x7fffULL;
+  if (AppleAgxRenderSharedMemoryBuild(&Graph->RenderSharedMemory, MemoryIo,
+                                      virtual_address) !=
+      AppleAgxRenderSharedMemoryResultOk)
+    return AppleAgxInitdataMemoryRollback(
+        Graph, AppleAgxInitdataMemoryResultAllocationFailed);
 
   uat_result = AppleAgxUatCreateAddressSpace(
       J313_AGX_G2_UAT_FIRMWARE_CONTEXT, &Graph->UatAllocator,
@@ -206,6 +227,15 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
           Graph, uat_result == AppleAgxUatResultAllocationFailed
                      ? AppleAgxInitdataMemoryResultAllocationFailed
                      : AppleAgxInitdataMemoryResultUatFailed);
+    if (AppleAgxMemoryMarkPrepared(&Graph->ChannelMemory.Objects[index]) !=
+            AppleAgxMemoryResultOk ||
+        AppleAgxMemoryMarkGpuMapped(
+            &Graph->ChannelMemory.Objects[index],
+            J313_AGX_G2_UAT_FIRMWARE_CONTEXT,
+            Graph->ChannelMemory.VirtualAddresses[index]) !=
+            AppleAgxMemoryResultOk)
+      return AppleAgxInitdataMemoryRollback(
+          Graph, AppleAgxInitdataMemoryResultUatFailed);
   }
   for (index = 0u; index < APPLE_AGX_REGIONB_MEMORY_OBJECT_COUNT; ++index) {
     uat_result = AppleAgxUatMap(
@@ -216,6 +246,29 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
         AppleAgxUatFirmwareSharedReadWrite, &Graph->UatAllocator,
         &Graph->Inventory);
     if (uat_result != AppleAgxUatResultOk)
+      return AppleAgxInitdataMemoryRollback(
+          Graph, uat_result == AppleAgxUatResultAllocationFailed
+                     ? AppleAgxInitdataMemoryResultAllocationFailed
+                     : AppleAgxInitdataMemoryResultUatFailed);
+  }
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index) {
+    uat_result = AppleAgxUatMap(
+        J313_AGX_G2_UAT_FIRMWARE_CONTEXT, &Graph->Roots,
+        Graph->RenderSharedMemory.VirtualAddresses[index],
+        Graph->RenderSharedMemory.Objects[index].DeviceAddress,
+        Graph->RenderSharedMemory.Objects[index].Length,
+        AppleAgxUatFirmwareSharedReadWrite, &Graph->UatAllocator,
+        &Graph->Inventory);
+    if (uat_result != AppleAgxUatResultOk ||
+        AppleAgxMemoryMarkPrepared(
+            &Graph->RenderSharedMemory.Objects[index]) !=
+            AppleAgxMemoryResultOk ||
+        AppleAgxMemoryMarkGpuMapped(
+            &Graph->RenderSharedMemory.Objects[index],
+            J313_AGX_G2_UAT_FIRMWARE_CONTEXT,
+            Graph->RenderSharedMemory.VirtualAddresses[index]) !=
+            AppleAgxMemoryResultOk)
       return AppleAgxInitdataMemoryRollback(
           Graph, uat_result == AppleAgxUatResultAllocationFailed
                      ? AppleAgxInitdataMemoryResultAllocationFailed
@@ -322,6 +375,11 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryDestroy(
   AppleAgxUatDestroy(&Graph->UatAllocator, &Graph->Inventory);
   if (AppleAgxUatMemoryOwnerDestroy(&Graph->UatMemoryOwner) !=
       AppleAgxUatMemoryResultOk) {
+    Graph->LastResult = AppleAgxInitdataMemoryResultReleaseFailed;
+    return Graph->LastResult;
+  }
+  if (AppleAgxRenderSharedMemoryDestroy(&Graph->RenderSharedMemory) !=
+      AppleAgxRenderSharedMemoryResultOk) {
     Graph->LastResult = AppleAgxInitdataMemoryResultReleaseFailed;
     return Graph->LastResult;
   }

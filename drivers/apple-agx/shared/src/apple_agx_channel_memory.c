@@ -169,6 +169,13 @@ APPLE_AGX_CHANNEL_MEMORY_RESULT AppleAgxChannelMemoryDestroy(
   AppleAgxChannelMemoryClearPublished(Owner);
   while (Owner->ObjectCount > 0u) {
     index = Owner->ObjectCount - 1u;
+    if ((Owner->Objects[index].State == AppleAgxMemoryGpuMapped ||
+         Owner->Objects[index].State == AppleAgxMemoryCompleted) &&
+        AppleAgxMemoryMarkGpuUnmapped(&Owner->Objects[index]) !=
+            AppleAgxMemoryResultOk) {
+      Owner->LastResult = AppleAgxChannelMemoryResultReleaseFailed;
+      return Owner->LastResult;
+    }
     if (AppleAgxMemoryRelease(Owner->MemoryIo, &Owner->Objects[index]) !=
         AppleAgxMemoryResultOk) {
       Owner->LastResult = AppleAgxChannelMemoryResultReleaseFailed;

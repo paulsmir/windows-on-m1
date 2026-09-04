@@ -7,13 +7,15 @@
 #include "apple_agx_memory.h"
 #include "apple_agx_regionb_memory.h"
 #include "apple_agx_regionc.h"
+#include "apple_agx_render_shared_memory.h"
 #include "apple_agx_uat_memory.h"
 
 #define APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT 7u
 #define APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY \
   (APPLE_AGX_INITDATA_MEMORY_OBJECT_COUNT + \
    APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT + \
-   APPLE_AGX_REGIONB_MEMORY_OBJECT_COUNT + 1u)
+   APPLE_AGX_REGIONB_MEMORY_OBJECT_COUNT + \
+   APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT + 1u)
 #define APPLE_AGX_INITDATA_MEMORY_UAT_PAGE_CAPACITY 8u
 
 typedef enum _APPLE_AGX_INITDATA_MEMORY_OBJECT_INDEX {
@@ -57,6 +59,7 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   APPLE_AGX_CHANNEL_INFO_MANIFEST ChannelInfoManifest;
   APPLE_AGX_REGIONB_MEMORY_OWNER RegionBMemory;
   APPLE_AGX_REGIONB_MANIFEST RegionBManifest;
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER RenderSharedMemory;
   APPLE_AGX_REGIONC_MANIFEST RegionCManifest;
   unsigned long long InitdataVirtualAddress;
   unsigned long long InitdataDeviceAddress;

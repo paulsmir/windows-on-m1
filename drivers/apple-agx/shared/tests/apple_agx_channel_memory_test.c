@@ -65,6 +65,7 @@ static void init_fixture(FAKE_MEMORY *fake, APPLE_AGX_MEMORY_IO *io,
                          APPLE_AGX_CHANNEL_MEMORY_OWNER *owner) {
   memset(fake, 0, sizeof(*fake));
   memset(owner, 0, sizeof(*owner));
+  memset(io, 0, sizeof(*io));
   io->Context = fake;
   io->AllocateContiguous = allocate_contiguous;
   io->FreeContiguous = free_contiguous;
