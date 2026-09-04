@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - `DRIVER_INITIALIZATION_DATA` is exactly 1296 bytes and Version is exactly `DXGKDDI_INTERFACE_VERSION_WDDM3_0` (`0xF003`).
-- EXP406 restores the EXP214 vector plus the complete RosKmd Full Graphics display branch; all 162 compiled fields are governed by `investigation/EXP406_FULL_GRAPHICS_ABI_MATRIX.csv`.
+- EXP406 restores the EXP214 vector plus the complete RosKmd Full Graphics display branch; all 162 compiled fields are governed by `investigation/EXP406_FULL_GRAPHICS_ABI_MATRIX.csv`, including the allocation, context, and paging boundaries.
 - No physical AGX interrupt 880--888 is published to EXP406 Windows; exactly one synthetic edge INTID 889 is published.
 - ISR code is nonpaged and bounded and performs only broker status/read/ack plus interlocked receipts. No registry, file, allocation, wait, logging, power, RTKit, UAT, queue, DCP, or pageable operation is reachable from ISR.
 - No AGX power, RTKit, UAT, queue, submission, render success, preemption success, flip success, or fence completion capability is claimed.
@@ -216,7 +216,7 @@ git commit -m "Add safe EXP406 interrupt admission"
 
 - [ ] **Step 1: Preregister EXP406 before any candidate launch**
 
-Record WHY THIS HYPOTHESIS, ATOMIC CONTRACT, WINDOWS CONTRACT, AGX/ASAHI CONTRACT, TRANSLATION, WHAT IS STILL UNKNOWN, commits/diff hashes, exact build commands, recovery hashes, expected ladder and cleanup commands.
+Record WHY THIS HYPOTHESIS, ATOMIC CONTRACT, WINDOWS CONTRACT, AGX/ASAHI CONTRACT, TRANSLATION, WHAT IS STILL UNKNOWN, commits/diff hashes, exact build commands, recovery hashes, the Type 34 and Type 35 checkpoints, expected ladder and cleanup commands.
 
 - [ ] **Step 2: Build KMD/UMD on FRYZZING using the EXP214-controlled root**
 
