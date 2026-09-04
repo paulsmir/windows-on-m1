@@ -112,6 +112,44 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertNotIn("MultiEngineAware = 1", lifecycle)
         self.assertNotIn("MapAperture2Supported = 1", lifecycle)
 
+    def test_fixed_panel_child_monitor_pointer_and_visibility_contract(self):
+        display = self.read("src/display.c")
+        lifecycle = self.read("src/lifecycle.c")
+
+        for callback in (
+            "AdmissionDdiQueryChildRelations",
+            "AdmissionDdiQueryChildStatus",
+            "AdmissionDdiQueryDeviceDescriptor",
+            "AdmissionDdiRecommendMonitorModes",
+            "AdmissionDdiQueryVidPnHWCapability",
+            "AdmissionDdiSetPointerPosition",
+            "AdmissionDdiSetPointerShape",
+            "AdmissionDdiSetVidPnSourceVisibility",
+        ):
+            self.assertIn(callback, display)
+
+        self.assertNotIn("AdmissionDdiQueryChildRelations", lifecycle)
+        self.assertIn("ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR)", display)
+        self.assertIn("ChildDeviceType = TypeVideoOutput", display)
+        self.assertIn("D3DKMDT_VOT_INTERNAL", display)
+        self.assertIn("StatusConnection", display)
+        self.assertIn("HotPlug.Connected = TRUE", display)
+        self.assertIn("STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED", display)
+        self.assertIn("VideoSignalInfo.TotalSize.cx = 2560", display)
+        self.assertIn("VideoSignalInfo.TotalSize.cy = 1600", display)
+        self.assertIn("D3DKMDT_FREQUENCY_NOTSPECIFIED", display)
+        self.assertIn("D3DKMDT_MP_PREFERRED", display)
+        self.assertIn("RtlZeroMemory(&VidPnHWCaps->VidPnHWCaps", display)
+        self.assertIn("!SetPointerPosition->Flags.Visible", display)
+        self.assertIn("SetVidPnSourceVisibility->Visible", display)
+
+        for forbidden in (
+            "Zw", "IoOpenDeviceRegistryKey", "READ_REGISTER",
+            "WRITE_REGISTER", "RTKit", "UAT", "DxgkCbNotifyInterrupt",
+            "KeWait", "KeDelay", "ExAllocate",
+        ):
+            self.assertNotIn(forbidden, display)
+
     def test_package_binds_exactly_appl0002_and_is_removable(self):
         inf = self.read("AppleAgxRenderAdmission.inf")
 

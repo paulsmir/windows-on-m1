@@ -217,33 +217,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDispatchIoRequest(
   return STATUS_NOT_SUPPORTED;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
-    PVOID MiniportDeviceContext, PDXGK_CHILD_DESCRIPTOR ChildRelations,
-    ULONG ChildRelationsSize) {
-  UNREFERENCED_PARAMETER(MiniportDeviceContext);
-  UNREFERENCED_PARAMETER(ChildRelations);
-  UNREFERENCED_PARAMETER(ChildRelationsSize);
-  return STATUS_SUCCESS;
-}
-
-_Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildStatus(
-    PVOID MiniportDeviceContext, PDXGK_CHILD_STATUS ChildStatus,
-    BOOLEAN NonDestructiveOnly) {
-  UNREFERENCED_PARAMETER(MiniportDeviceContext);
-  UNREFERENCED_PARAMETER(ChildStatus);
-  UNREFERENCED_PARAMETER(NonDestructiveOnly);
-  return STATUS_NOT_SUPPORTED;
-}
-
-_Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDeviceDescriptor(
-    PVOID MiniportDeviceContext, ULONG ChildUid,
-    PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor) {
-  UNREFERENCED_PARAMETER(MiniportDeviceContext);
-  UNREFERENCED_PARAMETER(ChildUid);
-  UNREFERENCED_PARAMETER(DeviceDescriptor);
-  return STATUS_NOT_SUPPORTED;
-}
-
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPowerState(
     PVOID MiniportDeviceContext, ULONG DeviceUid,
     DEVICE_POWER_STATE DevicePowerState, POWER_ACTION ActionType) {
