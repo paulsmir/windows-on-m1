@@ -12,6 +12,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
   if (context == NULL)
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(context, sizeof(*context));
+  AdmissionObjectsInitializeAdapter(&context->ObjectAdapter);
   context->PhysicalDeviceObject = PhysicalDeviceObject;
   *MiniportDeviceContext = context;
   AdmissionRecordDevice(PhysicalDeviceObject, AdmissionReceiptAddSucceeded,
@@ -74,6 +75,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
   }
 
   context->Started = TRUE;
+  if (!AdmissionObjectsStartAdapter(&context->ObjectAdapter)) {
+    context->Started = FALSE;
+    (void)AdmissionInterruptStop(context);
+    return STATUS_INVALID_DEVICE_STATE;
+  }
   context->DisplayActive = TRUE;
   context->SourceVisible = TRUE;
   context->CommittedWidth = 2560;
@@ -94,9 +100,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
     return STATUS_INVALID_PARAMETER;
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptStop,
                         STATUS_SUCCESS);
+  if (context->ObjectAdapter.DeviceCount != 0u)
+    return STATUS_DEVICE_BUSY;
   status = AdmissionInterruptStop(context);
   if (!NT_SUCCESS(status))
     return status;
+  if (!AdmissionObjectsStopAdapter(&context->ObjectAdapter))
+    return STATUS_DEVICE_BUSY;
   context->Started = FALSE;
   context->DisplayActive = FALSE;
   context->SourceVisible = FALSE;

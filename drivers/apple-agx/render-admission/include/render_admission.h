@@ -10,8 +10,15 @@
 #include <d3dkmthk.h>
 #include <dispmprt.h>
 #include <ntstrsafe.h>
+#include "render_objects.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
+#define ADMISSION_DMA_BUFFER_SIZE 4096u
+#define ADMISSION_ALLOCATION_LIST_SIZE 64u
+#define ADMISSION_PATCH_LIST_SIZE 64u
+#define ADMISSION_GDI_DMA_PRIVATE_SIZE 8192u
+#define ADMISSION_GDI_ALLOCATION_LIST_SIZE 256u
+#define ADMISSION_GDI_PATCH_LIST_SIZE 256u
 
 typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptAddEntered = 1,
@@ -32,6 +39,7 @@ typedef enum _ADMISSION_RECEIPT {
 } ADMISSION_RECEIPT;
 
 typedef struct _ADMISSION_CONTEXT {
+  ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   PDEVICE_OBJECT PhysicalDeviceObject;
   DXGK_START_INFO StartInfo;
   DXGKRNL_INTERFACE Interface;
@@ -58,6 +66,14 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG LastInterruptStatus;
   volatile LONG DpcCount;
 } ADMISSION_CONTEXT;
+
+typedef struct _ADMISSION_DEVICE {
+  ADMISSION_OBJECT_DEVICE Object;
+} ADMISSION_DEVICE;
+
+typedef struct _ADMISSION_RENDER_CONTEXT {
+  ADMISSION_OBJECT_CONTEXT Object;
+} ADMISSION_RENDER_CONTEXT;
 
 void AdmissionRecordService(_In_ PUNICODE_STRING RegistryPath,
                             _In_ PCWSTR Name, _In_ ULONG Value);

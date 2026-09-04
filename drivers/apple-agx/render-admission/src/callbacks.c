@@ -30,10 +30,37 @@ _Use_decl_annotations_ VOID AdmissionDdiControlEtwLogging(
   UNUSED(Level);
 }
 
-FAIL2(AdmissionDdiCreateDevice, HANDLE, Adapter, DXGKARG_CREATEDEVICE *, Args)
+_Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
+    HANDLE Adapter, DXGKARG_CREATEDEVICE *Args) {
+  ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
+  ADMISSION_DEVICE *device;
+  ULONG flags;
+
+  if (adapter == NULL || !adapter->Started || Args == NULL ||
+      Args->hDevice == NULL || Args->Pasid != 0 || Args->hKmdProcess != NULL)
+    return STATUS_INVALID_PARAMETER;
+  flags = Args->Flags.Value;
+  if ((flags & ~ADMISSION_DEVICE_VALID_FLAGS) != 0u)
+    return STATUS_NOT_SUPPORTED;
+  device = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*device),
+                           ADMISSION_POOL_TAG);
+  if (device == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
+  RtlZeroMemory(device, sizeof(*device));
+  if (!AdmissionObjectsCreateDevice(&adapter->ObjectAdapter, Args->hDevice,
+                                    flags, &device->Object)) {
+    ExFreePoolWithTag(device, ADMISSION_POOL_TAG);
+    return STATUS_INVALID_PARAMETER;
+  }
+  Args->hDevice = device;
+  return STATUS_SUCCESS;
+}
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
-  UNUSED(Device);
+  ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
+  if (device == NULL || !AdmissionObjectsDestroyDevice(&device->Object))
+    return STATUS_DEVICE_BUSY;
+  ExFreePoolWithTag(device, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }
 
@@ -82,10 +109,55 @@ FAIL2(AdmissionDdiCollectDbgInfo, HANDLE, Adapter,
 FAIL2(AdmissionDdiQueryCurrentFence, HANDLE, Adapter,
       DXGKARG_QUERYCURRENTFENCE *, Args)
 
-FAIL2(AdmissionDdiCreateContext, HANDLE, Device, DXGKARG_CREATECONTEXT *, Args)
+_Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
+    HANDLE Device, DXGKARG_CREATECONTEXT *Args) {
+  ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
+  ADMISSION_RENDER_CONTEXT *context;
+  ULONG flags;
+
+  if (device == NULL ||
+      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL ||
+      Args->hContext == NULL || Args->pPrivateDriverData != NULL ||
+      Args->PrivateDriverDataSize != 0u)
+    return STATUS_INVALID_PARAMETER;
+  flags = Args->Flags.Value;
+  if ((flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u)
+    return STATUS_NOT_SUPPORTED;
+  context = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*context),
+                            ADMISSION_POOL_TAG);
+  if (context == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
+  RtlZeroMemory(context, sizeof(*context));
+  if (!AdmissionObjectsCreateContext(
+          &device->Object, Args->hContext, Args->NodeOrdinal,
+          Args->EngineAffinity, flags, &context->Object)) {
+    ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
+    return STATUS_INVALID_PARAMETER;
+  }
+
+  RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
+  Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
+  Args->ContextInfo.DmaBufferSegmentSet = 0u;
+  if (Args->Flags.GdiContext) {
+    Args->ContextInfo.DmaBufferPrivateDataSize =
+        ADMISSION_GDI_DMA_PRIVATE_SIZE;
+    Args->ContextInfo.AllocationListSize =
+        ADMISSION_GDI_ALLOCATION_LIST_SIZE;
+    Args->ContextInfo.PatchLocationListSize =
+        ADMISSION_GDI_PATCH_LIST_SIZE;
+  } else {
+    Args->ContextInfo.AllocationListSize = ADMISSION_ALLOCATION_LIST_SIZE;
+    Args->ContextInfo.PatchLocationListSize = ADMISSION_PATCH_LIST_SIZE;
+  }
+  Args->hContext = context;
+  return STATUS_SUCCESS;
+}
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
-  UNUSED(Context);
+  ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
+  if (context == NULL || !AdmissionObjectsDestroyContext(&context->Object))
+    return STATUS_DEVICE_BUSY;
+  ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
   return STATUS_SUCCESS;
 }
 

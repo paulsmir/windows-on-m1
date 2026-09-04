@@ -36,11 +36,13 @@
     <ClCompile Include="src\callbacks.c" />
     <ClCompile Include="src\display.c" />
     <ClCompile Include="src\interrupt.c" />
+    <ClCompile Include="src\objects.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />
+    <ClInclude Include="include\render_objects.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
   </ItemGroup>
   <ItemGroup>
