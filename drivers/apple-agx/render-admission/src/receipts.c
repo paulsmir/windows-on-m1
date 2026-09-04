@@ -90,6 +90,10 @@ _Use_decl_annotations_ void AdmissionRecordFirmwarePhase(
   WriteDword(key, L"Wom1FirmwarePhase", (ULONG)Phase);
   WriteDword(key, L"Wom1FirmwareResult", (ULONG)Result);
   WriteDword(key, L"Wom1FirmwareCompletedMask", CompletedMask);
+  if (Phase == AppleAgxFirmwareFailed) {
+    WriteDword(key, L"Wom1FirmwareFailureResult", (ULONG)Result);
+    WriteDword(key, L"Wom1FirmwareFailureMask", CompletedMask);
+  }
   ZwClose(key);
 }
 

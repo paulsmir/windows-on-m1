@@ -95,6 +95,8 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         self.assertIn('L"Wom1FirmwarePhase"', receipts)
         self.assertIn('L"Wom1FirmwareResult"', receipts)
         self.assertIn('L"Wom1FirmwareCompletedMask"', receipts)
+        self.assertIn('L"Wom1FirmwareFailureResult"', receipts)
+        self.assertIn('L"Wom1FirmwareFailureMask"', receipts)
         self.assertIn("runtime->FirmwareIo.RecordPhase = AdmissionFirmwareRecordPhase", platform)
 
 
