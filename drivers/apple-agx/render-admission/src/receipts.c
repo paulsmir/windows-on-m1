@@ -97,6 +97,27 @@ _Use_decl_annotations_ void AdmissionRecordFirmwarePhase(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordFirmwarePowerOn(
+    ADMISSION_CONTEXT *Context, BOOLEAN Acquired, ULONG State, ULONG Result,
+    ULONGLONG ReceiptSequence) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1FirmwarePowerAcquire", Acquired ? 1u : 0u);
+  WriteDword(key, L"Wom1FirmwarePowerState", State);
+  WriteDword(key, L"Wom1FirmwarePowerResult", Result);
+  {
+    UNICODE_STRING name;
+    RtlInitUnicodeString(&name, L"Wom1FirmwarePowerReceiptSequence");
+    (void)ZwSetValueKey(key, &name, 0, REG_QWORD, &ReceiptSequence,
+                        sizeof(ReceiptSequence));
+  }
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordQuery(
     PDEVICE_OBJECT DeviceObject, DXGK_QUERYADAPTERINFOTYPE Type,
     ULONG OutputDataSize, NTSTATUS Status) {

@@ -90,6 +90,7 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         )
 
     def test_firmware_start_persists_provider_phase_result_and_mask(self):
+        header = (RENDER / "include" / "render_admission.h").read_text()
         receipts = (RENDER / "src" / "receipts.c").read_text()
         platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
         self.assertIn('L"Wom1FirmwarePhase"', receipts)
@@ -98,6 +99,20 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         self.assertIn('L"Wom1FirmwareFailureResult"', receipts)
         self.assertIn('L"Wom1FirmwareFailureMask"', receipts)
         self.assertIn("runtime->FirmwareIo.RecordPhase = AdmissionFirmwareRecordPhase", platform)
+        self.assertIn("AdmissionRecordFirmwarePowerOn", header)
+        for receipt in (
+            'L"Wom1FirmwarePowerAcquire"',
+            'L"Wom1FirmwarePowerState"',
+            'L"Wom1FirmwarePowerResult"',
+            'L"Wom1FirmwarePowerReceiptSequence"',
+        ):
+            self.assertIn(receipt, receipts)
+        power_on = platform[
+            platform.index("AdmissionFirmwarePowerOn("):
+            platform.index("AdmissionFirmwarePowerOff(")
+        ]
+        self.assertLess(power_on.index("AdmissionRecordFirmwarePowerOn"),
+                        power_on.index("if (!acquired)"))
 
 
 if __name__ == "__main__":

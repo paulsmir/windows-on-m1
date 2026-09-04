@@ -272,6 +272,10 @@ void AdmissionRecordBackendStartResult(
 void AdmissionRecordFirmwarePhase(
     _In_ ADMISSION_CONTEXT *Context, _In_ APPLE_AGX_FIRMWARE_PHASE Phase,
     _In_ APPLE_AGX_FIRMWARE_RESULT Result, _In_ ULONG CompletedMask);
+void AdmissionRecordFirmwarePowerOn(_In_ ADMISSION_CONTEXT *Context,
+                                    _In_ BOOLEAN Acquired, _In_ ULONG State,
+                                    _In_ ULONG Result,
+                                    _In_ ULONGLONG ReceiptSequence);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);

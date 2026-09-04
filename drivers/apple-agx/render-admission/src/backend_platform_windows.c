@@ -460,11 +460,20 @@ static unsigned char AdmissionFirmwarePowerOn(
     void *Context, unsigned long long DeadlineMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   APPLE_AGX_POWER_IO io;
+  BOOLEAN acquired;
   if (runtime == NULL || runtime->Powered ||
       AdmissionPlatformNowMs() >= DeadlineMs)
     return 0u;
   AdmissionPowerIo(runtime, &io);
-  if (!AppleAgxPowerAcquire(&io))
+  acquired = AppleAgxPowerAcquire(&io) ? TRUE : FALSE;
+  /* Preserve the broker's exact terminal response before provider PowerOn
+   * reduces this hardware transaction to a boolean transport result. */
+  AdmissionRecordFirmwarePowerOn(
+      runtime->Adapter, acquired,
+      AdmissionPowerRead32(runtime, J313_AGX_G2_POWER_REG_STATE),
+      AdmissionPowerRead32(runtime, J313_AGX_G2_POWER_REG_RESULT),
+      AdmissionPowerRead64(runtime, J313_AGX_G2_POWER_REG_RECEIPT_SEQUENCE));
+  if (!acquired)
     return 0u;
   runtime->Powered = TRUE;
   return 1u;
