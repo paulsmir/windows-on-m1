@@ -18,6 +18,7 @@
 #include "apple_agx_residency.h"
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
+#include "render_gdi.h"
 #include "apple_agx_wddm_feature_contract.h"
 #include "apple_agx_scheduler.h"
 #include "j313_agx_abi_admission.generated.h"

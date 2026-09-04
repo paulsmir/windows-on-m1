@@ -64,7 +64,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiPatch, HANDLE, Adapter, const DXGKARG_PATCH *, Args)
 FAIL2(AdmissionDdiRender, HANDLE, Context, DXGKARG_RENDER *, Args)
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
@@ -160,7 +159,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiRenderKm, HANDLE, Context, DXGKARG_RENDER *, Args)
 FAIL2(AdmissionDdiCancelCommand, HANDLE, Adapter,
       const DXGKARG_CANCELCOMMAND *, Args)
 

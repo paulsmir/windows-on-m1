@@ -58,10 +58,14 @@
     <ClCompile Include="src\memory_runtime_windows.c" />
     <ClCompile Include="src\paging_windows.c" />
     <ClCompile Include="src\render_paging.c" />
+    <ClCompile Include="src\render_gdi.c" />
+    <ClCompile Include="src\gdi_windows.c" />
     <ClCompile Include="src\scheduler_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
+    <ClCompile Include="..\shared\src\apple_agx_dma_shadow.c" />
     <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />
     <ClCompile Include="..\shared\src\apple_agx_local_segment.c" />
     <ClCompile Include="..\shared\src\apple_agx_physical_topology.c" />
@@ -81,9 +85,12 @@
     <ClInclude Include="include\render_allocation.h" />
     <ClInclude Include="include\render_hvc.h" />
     <ClInclude Include="include\render_paging.h" />
+    <ClInclude Include="include\render_gdi.h" />
     <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
     <ClInclude Include="..\shared\include\apple_agx_scheduler.h" />
+    <ClInclude Include="..\shared\include\apple_agx_gdi.h" />
+    <ClInclude Include="..\shared\include\apple_agx_dma_shadow.h" />
     <ClInclude Include="..\shared\include\apple_agx_software_aperture.h" />
     <ClInclude Include="..\shared\include\apple_agx_local_segment.h" />
     <ClInclude Include="..\shared\include\apple_agx_physical_topology.h" />
