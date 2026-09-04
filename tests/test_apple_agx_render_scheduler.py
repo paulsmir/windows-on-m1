@@ -68,11 +68,11 @@ class AppleAgxRenderSchedulerTests(unittest.TestCase):
         self.assertIn("PagingPending", scheduler)
         self.assertIn("STATUS_DEVICE_BUSY", scheduler)
 
-    def test_project_links_only_the_pure_scheduler_primitive(self):
+    def test_project_links_integrated_scheduler_submission_without_recovery(self):
         project = self.read("AppleAgxRenderAdmission.vcxproj")
         self.assertIn(r"src\scheduler_windows.c", project)
         self.assertIn(r"..\shared\src\apple_agx_scheduler.c", project)
-        self.assertNotIn(r"..\shared\src\apple_agx_submission.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_submission.c", project)
         self.assertNotIn(r"..\shared\src\apple_agx_recovery.c", project)
 
 

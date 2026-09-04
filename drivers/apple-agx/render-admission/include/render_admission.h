@@ -29,6 +29,7 @@
 #include "apple_agx_initdata_memory.h"
 #include "apple_agx_power.h"
 #include "apple_agx_rtkit_session.h"
+#include "apple_agx_fixed_panel.h"
 #include "j313_agx_abi_admission.generated.h"
 
 #define ADMISSION_POOL_TAG 'mRGA'
@@ -64,6 +65,7 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_MEMORY_CONTRACT Memory;
   PVOID MemoryRuntime;
   PVOID PlatformRuntime;
+  PVOID ScanoutRuntime;
   APPLE_AGX_SOFTWARE_APERTURE_ENTRY *ApertureEntries;
   PDEVICE_OBJECT PhysicalDeviceObject;
   DXGK_START_INFO StartInfo;
@@ -171,6 +173,14 @@ typedef struct _ADMISSION_BACKEND_MEMORY_VIEW {
   ULONGLONG Bytes;
 } ADMISSION_BACKEND_MEMORY_VIEW;
 
+typedef struct _ADMISSION_SCANOUT_MEMORY_VIEW {
+  PVOID CpuAddress;
+  ULONGLONG GuestIpaAddress;
+  ULONGLONG HostPhysicalAddress;
+  ULONGLONG GpuVirtualAddress;
+  ULONGLONG Bytes;
+} ADMISSION_SCANOUT_MEMORY_VIEW;
+
 #define ADMISSION_MEMORY_QUALIFICATION_VERSION 1u
 typedef enum _ADMISSION_MEMORY_START_STAGE {
   AdmissionMemoryStartNone = 0,
@@ -263,6 +273,9 @@ NTSTATUS AdmissionMemoryRuntimeBorrowIo(
     _Out_ APPLE_AGX_MEMORY_IO *Io);
 BOOLEAN AdmissionMemoryRuntimeContextPublished(
     _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionMemoryRuntimeScanoutView(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Out_ ADMISSION_SCANOUT_MEMORY_VIEW *View);
 NTSTATUS AdmissionMemoryRuntimeExecutePaging(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_PAGING_RECORD *Record);
@@ -296,6 +309,20 @@ NTSTATUS AdmissionPlatformRuntimeReset(
     _Out_ APPLE_AGX_U32 *LastAbortedFence);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionScanoutStart(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionScanoutCommit(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Width, _In_ ULONG Height, _In_ ULONG Stride,
+    _In_ D3DDDIFORMAT Format);
+NTSTATUS AdmissionScanoutSetVisible(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Visible);
+NTSTATUS AdmissionScanoutQueuePresent(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SETVIDPNSOURCEADDRESS *Args);
+BOOLEAN AdmissionScanoutInterrupt(_Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionScanoutControlInterrupt(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Enable);
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;

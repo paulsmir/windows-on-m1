@@ -501,6 +501,38 @@ _Use_decl_annotations_ BOOLEAN AdmissionMemoryRuntimeContextPublished(
              : FALSE;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
+    ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_MEMORY_VIEW *View) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  ADMISSION_PHYSICAL_ALLOCATION *allocation;
+  ULONGLONG offset;
+  if (View == NULL)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(View, sizeof(*View));
+  if (runtime == NULL || runtime->LocalObject.AllocationHandle == NULL ||
+      runtime->LocalObject.CpuAddress == NULL ||
+      runtime->LocalObject.DeviceAddress == 0ULL ||
+      runtime->LocalObject.GpuVirtualAddress != ADMISSION_LOCAL_GPU_VA ||
+      Context->Memory.LocalAllocationBytes !=
+          ADMISSION_LOCAL_ALLOCATION_BYTES)
+    return STATUS_INVALID_DEVICE_STATE;
+  allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
+      runtime->LocalObject.AllocationHandle;
+  if ((PUCHAR)runtime->LocalObject.CpuAddress <
+      (PUCHAR)runtime->LocalObject.AllocationCpuBase)
+    return STATUS_INVALID_ADDRESS;
+  offset = (ULONGLONG)((PUCHAR)runtime->LocalObject.CpuAddress -
+                       (PUCHAR)runtime->LocalObject.AllocationCpuBase);
+  if (allocation->GuestIpaBase > MAXULONGLONG - offset)
+    return STATUS_INTEGER_OVERFLOW;
+  View->CpuAddress = runtime->LocalObject.CpuAddress;
+  View->GuestIpaAddress = allocation->GuestIpaBase + offset;
+  View->HostPhysicalAddress = runtime->LocalObject.DeviceAddress;
+  View->GpuVirtualAddress = runtime->LocalObject.GpuVirtualAddress;
+  View->Bytes = Context->Memory.LocalAllocationBytes;
+  return STATUS_SUCCESS;
+}
+
 static ULONGLONG AdmissionMemoryReadU64(
     _In_reads_(8) volatile const unsigned char *Address) {
   ULONGLONG value = 0ULL;

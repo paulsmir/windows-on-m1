@@ -372,15 +372,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceVisibility(
       (SetVidPnSourceVisibility->VidPnSourceId != 0 &&
        SetVidPnSourceVisibility->VidPnSourceId != D3DDDI_ID_ALL))
     return STATUS_INVALID_PARAMETER;
-  if (SetVidPnSourceVisibility->Visible) {
-    context->SourceVisible = TRUE;
-    return STATUS_SUCCESS;
-  }
-  if (!context->DisplayActive) {
-    context->SourceVisible = FALSE;
-    return STATUS_SUCCESS;
-  }
-  return STATUS_NOT_SUPPORTED;
+  if (!NT_SUCCESS(AdmissionScanoutSetVisible(
+          context, SetVidPnSourceVisibility->Visible ? TRUE : FALSE)))
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  context->SourceVisible = SetVidPnSourceVisibility->Visible ? TRUE : FALSE;
+  return STATUS_SUCCESS;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
@@ -401,6 +397,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
       CommitVidPn->AffectedVidPnSourceId != 0)
     goto Exit;
   if (CommitVidPn->Flags.PathPoweredOff || CommitVidPn->hFunctionalVidPn == 0) {
+    status = AdmissionScanoutSetVisible(context, FALSE);
+    if (!NT_SUCCESS(status))
+      goto Exit;
     context->DisplayActive = FALSE;
     status = STATUS_SUCCESS;
     goto Exit;
@@ -418,6 +417,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   status = topologyInterface->pfnGetNumPathsFromSource(
       topology, CommitVidPn->AffectedVidPnSourceId, &numberOfPaths);
   if (status == STATUS_GRAPHICS_SOURCE_NOT_IN_TOPOLOGY) {
+    status = AdmissionScanoutSetVisible(context, FALSE);
+    if (!NT_SUCCESS(status))
+      goto Exit;
     context->DisplayActive = FALSE;
     status = STATUS_SUCCESS;
     goto Exit;
@@ -425,6 +427,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
   if (!NT_SUCCESS(status))
     goto Exit;
   if (numberOfPaths == 0) {
+    status = AdmissionScanoutSetVisible(context, FALSE);
+    if (!NT_SUCCESS(status))
+      goto Exit;
     context->DisplayActive = FALSE;
     status = STATUS_SUCCESS;
     goto Exit;
@@ -461,6 +466,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCommitVidPn(
     status = STATUS_GRAPHICS_VIDPN_TOPOLOGY_NOT_SUPPORTED;
     goto Exit;
   }
+  status = AdmissionScanoutCommit(
+      context, pinnedSourceMode->Format.Graphics.PrimSurfSize.cx,
+      pinnedSourceMode->Format.Graphics.PrimSurfSize.cy,
+      pinnedSourceMode->Format.Graphics.Stride,
+      pinnedSourceMode->Format.Graphics.PixelFormat);
+  if (!NT_SUCCESS(status))
+    goto Exit;
   context->CommittedWidth = 2560;
   context->CommittedHeight = 1600;
   context->CommittedStride = 10240;
@@ -605,11 +617,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   InterlockedExchange(&context->SourceAddressStage, 1);
   InterlockedExchange(&context->SourceAddressStatus, (LONG)STATUS_PENDING);
   if (SetVidPnSourceAddress != NULL && context->Started &&
+      SetVidPnSourceAddress->hAllocation != NULL &&
       SetVidPnSourceAddress->VidPnSourceId == 0 &&
       context->CommittedWidth == 2560 && context->CommittedHeight == 1600 &&
       context->CommittedStride == 10240 &&
       context->CommittedFormat == D3DDDIFMT_A8R8G8B8) {
-    status = STATUS_NOT_SUPPORTED;
+    status = AdmissionScanoutQueuePresent(context, SetVidPnSourceAddress);
   }
   InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
   InterlockedExchange(&context->SourceAddressStage, 2);

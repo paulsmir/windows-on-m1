@@ -174,9 +174,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
     return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
   }
 
+  status = AdmissionScanoutStart(context);
+  if (!NT_SUCCESS(status)) {
+    /* An uncertain REGISTER/RELEASE result retains every lower memory owner.
+     * PnP teardown may retry AdmissionScanoutStop, but must not unmap a pool
+     * that m1n1/DCP could still own. */
+    if (context->ScanoutRuntime != NULL)
+      return status;
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+
   context->Started = TRUE;
   if (!AdmissionObjectsStartAdapter(&context->ObjectAdapter)) {
     context->Started = FALSE;
+    status = AdmissionScanoutStop(context);
+    if (!NT_SUCCESS(status))
+      return status;
     (void)AdmissionPlatformRuntimeStop(context);
     (void)AdmissionPagingStop(context);
     (void)AdmissionSchedulerStop(context);
@@ -207,6 +226,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
                         STATUS_SUCCESS);
   if (context->ObjectAdapter.DeviceCount != 0u)
     return STATUS_DEVICE_BUSY;
+  status = AdmissionScanoutStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
   status = AdmissionPagingStop(context);
   if (!NT_SUCCESS(status))
     return status;
@@ -244,6 +266,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
+  if (context->ScanoutRuntime != NULL &&
+      !NT_SUCCESS(AdmissionScanoutStop(context)))
+    return STATUS_DEVICE_BUSY;
   if (context->PagingWorkItem != NULL &&
       !NT_SUCCESS(AdmissionPagingStop(context)))
     return STATUS_DEVICE_BUSY;

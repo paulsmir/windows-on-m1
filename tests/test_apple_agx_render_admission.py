@@ -56,7 +56,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         ):
             self.assertNotIn(f"initialization.{callback} =", driver)
 
-    def test_palette_scanline_and_present_are_truthful_fail_closed_boundaries(self):
+    def test_palette_scanline_fail_closed_and_present_accepts_exact_mmio_flip(self):
         display = self.read("src/display.c")
         callbacks = self.read("src/callbacks.c")
         header = self.read("include/render_admission.h")
@@ -73,8 +73,11 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             callbacks.index("AdmissionDdiPresent("):
             callbacks.index("FAIL2(AdmissionDdiEscape")
         ]
-        self.assertIn("STATUS_NOT_SUPPORTED", present)
-        self.assertNotIn("STATUS_SUCCESS", present)
+        self.assertIn("Present->pDmaBuffer != NULL", present)
+        self.assertIn("Present->Flags.Value != 0x4u", present)
+        self.assertIn("ADMISSION_OPEN_ALLOCATION_MAGIC", present)
+        self.assertIn("D3DDDIFMT_A8R8G8B8", present)
+        self.assertIn("return STATUS_SUCCESS", present)
 
     def test_start_is_natural_hardware_inert_render_admission(self):
         lifecycle = self.read("src/lifecycle.c")
@@ -218,7 +221,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, display)
 
-    def test_primary_address_boundary_is_nonpaged_nonblocking_and_fail_closed(self):
+    def test_primary_address_boundary_is_nonpaged_and_nonblocking(self):
         display = self.read("src/display.c")
         header = self.read("include/render_admission.h")
         start = display.index("AdmissionDdiSetVidPnSourceAddress(")
@@ -231,7 +234,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("volatile LONG SourceAddressStatus", header)
         self.assertIn("InterlockedExchange", source_address)
         self.assertIn("SetVidPnSourceAddress->VidPnSourceId == 0", source_address)
-        self.assertIn("STATUS_NOT_SUPPORTED", source_address)
+        self.assertIn("AdmissionScanoutQueuePresent", source_address)
         for forbidden in (
             "AdmissionRecord", "Zw", "IoOpenDeviceRegistryKey", "ExAllocate",
             "KeWait", "KeDelay", "READ_REGISTER", "WRITE_REGISTER",

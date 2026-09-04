@@ -150,6 +150,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionDdiInterruptRoutine(
       InterlockedCompareExchange(&context->InterruptReady, 0, 0) == 0 ||
       InterlockedCompareExchange(&context->InterruptIngressEnabled, 0, 0) == 0)
     return FALSE;
+  if (context->ScanoutRuntime != NULL)
+    return AdmissionScanoutInterrupt(context);
   status = AdmissionAcknowledgeInterrupt(context);
   if (status == 0u)
     return FALSE;
@@ -178,6 +180,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiControlInterrupt(
     return STATUS_INVALID_PARAMETER;
   if (InterruptType != DXGK_INTERRUPT_CRTC_VSYNC)
     return STATUS_NOT_IMPLEMENTED;
+  if (context->ScanoutRuntime != NULL)
+    return AdmissionScanoutControlInterrupt(context, EnableInterrupt);
   if (EnableInterrupt)
     return STATUS_NOT_SUPPORTED;
   AdmissionMaskInterrupt(context);

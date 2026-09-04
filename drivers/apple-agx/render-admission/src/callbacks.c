@@ -68,10 +68,46 @@ FAIL2(AdmissionDdiRender, HANDLE, Context, DXGKARG_RENDER *, Args)
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     HANDLE Context, DXGKARG_PRESENT *Present) {
-  UNUSED(Context);
-  if (Present == NULL || Present->pDmaBuffer != NULL)
+  ADMISSION_DEVICE *device = NULL;
+  ADMISSION_RENDER_CONTEXT *renderContext =
+      (ADMISSION_RENDER_CONTEXT *)Context;
+  ADMISSION_OPEN_ALLOCATION *source;
+  const ADMISSION_ALLOCATION_DESCRIPTION *description;
+
+  if (renderContext != NULL &&
+      renderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
+      renderContext->Object.Device != NULL &&
+      renderContext->Object.Device->Magic == ADMISSION_OBJECT_DEVICE_MAGIC)
+    device = CONTAINING_RECORD(renderContext->Object.Device,
+                               ADMISSION_DEVICE, Object);
+  else if (Context != NULL &&
+           ((ADMISSION_DEVICE *)Context)->Object.Magic ==
+               ADMISSION_OBJECT_DEVICE_MAGIC)
+    device = (ADMISSION_DEVICE *)Context;
+
+  if (device == NULL || Present == NULL || Present->pDmaBuffer != NULL ||
+      Present->Flags.Value != 0x4u || Present->pAllocationInfo == NULL ||
+      Present->NumSrcAllocations != 1u || Present->NumDstAllocations != 0u ||
+      Present->pPrivateDriverData != NULL ||
+      Present->PrivateDriverDataSize != 0u ||
+      Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX]
+              .hDeviceSpecificAllocation != NULL)
     return STATUS_INVALID_PARAMETER;
-  return STATUS_NOT_SUPPORTED;
+  source = (ADMISSION_OPEN_ALLOCATION *)
+      Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX]
+          .hDeviceSpecificAllocation;
+  if (source == NULL || source->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
+      source->Device != device || source->Allocation == NULL ||
+      source->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
+    return STATUS_INVALID_HANDLE;
+  description = &source->Allocation->Description;
+  if (!AdmissionAllocationDescriptionValid(description) ||
+      description->Width != 2560u || description->Height != 1600u ||
+      description->Pitch != 10240u || description->BytesPerPixel != 4u ||
+      description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      description->Format != (UINT)D3DDDIFMT_A8R8G8B8)
+    return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  return STATUS_SUCCESS;
 }
 
 FAIL2(AdmissionDdiEscape, HANDLE, Adapter, const DXGKARG_ESCAPE *, Args)
