@@ -118,7 +118,8 @@ static APPLE_AGX_FW_BOOL provider_start_endpoint(
   } else {
     return APPLE_AGX_FW_FALSE;
   }
-  if (provider->State != required ||
+  if ((provider->State != required &&
+       provider->State != (required | APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED)) ||
       !provider->Primitives.StartEndpoint(provider->Primitives.Context,
                                            endpoint, deadline))
     return APPLE_AGX_FW_FALSE;
@@ -154,8 +155,13 @@ static APPLE_AGX_FW_BOOL provider_publish_initdata(
                           APPLE_AGX_FIRMWARE_PROVIDER_DOORBELL_ENDPOINT;
   if (address != APPLE_AGX_PROVIDER_NULL)
     *address = 0ULL;
-  if (!at_passive(provider) || address == APPLE_AGX_PROVIDER_NULL ||
-      provider->State != required || !acquire_handoff(provider, deadline))
+  if (!at_passive(provider) || address == APPLE_AGX_PROVIDER_NULL)
+    return APPLE_AGX_FW_FALSE;
+  if (provider->State == (required | APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED)) {
+    *address = provider->InitdataAddress;
+    return APPLE_AGX_FW_TRUE;
+  }
+  if (provider->State != required || !acquire_handoff(provider, deadline))
     return APPLE_AGX_FW_FALSE;
   if (!provider->Primitives.PublishUatRoots(provider->Primitives.Context,
                                             &provider->Pair)) {

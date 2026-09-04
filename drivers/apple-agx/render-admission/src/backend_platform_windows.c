@@ -519,14 +519,35 @@ static unsigned char AdmissionFirmwareDestroyUat(
              : 0u;
 }
 
+static unsigned char AdmissionFirmwarePublishUat(
+    void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair);
+static unsigned char AdmissionFirmwareUnpublishUat(void *Context);
+
+static APPLE_AGX_RTKIT_BOOL AdmissionFirmwarePrepareManagement(
+    void *Context, APPLE_AGX_ASC_U64 DeadlineMs) {
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs)
+    return APPLE_AGX_RTKIT_FALSE;
+  if (!AdmissionFirmwarePublishUat(runtime, &runtime->Initdata.TtbrPair))
+    return APPLE_AGX_RTKIT_FALSE;
+  runtime->FirmwareProvider.State |= APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
+  return APPLE_AGX_RTKIT_TRUE;
+}
+
 static unsigned char AdmissionFirmwareBootAsc(
     void *Context, unsigned long long DeadlineMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   APPLE_AGX_RTKIT_SESSION_RESULT result;
   if (runtime == NULL)
     return 0u;
-  result = AppleAgxRtkitSessionBoot(&runtime->Rtkit, &runtime->AscIo,
-                                    &runtime->Handoff, DeadlineMs);
+  result = AppleAgxRtkitSessionBoot(
+      &runtime->Rtkit, &runtime->AscIo, &runtime->Handoff,
+      AdmissionFirmwarePrepareManagement, runtime, DeadlineMs);
+  if (result != AppleAgxRtkitSessionResultOk &&
+      runtime->FirmwarePublication.Active != 0u)
+    (void)AdmissionFirmwareUnpublishUat(runtime);
+  if (result != AppleAgxRtkitSessionResultOk)
+    runtime->FirmwareProvider.State &= ~APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED;
   AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
   return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
 }
@@ -581,6 +602,12 @@ static unsigned char AdmissionFirmwareStopEndpoint(
 static unsigned char AdmissionFirmwarePublishUat(
     void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  if (runtime != NULL && Pair != NULL &&
+      runtime->FirmwarePublication.Active != 0u)
+    return runtime->FirmwarePublication.PublishedTtbr0 == Pair->Ttbr0 &&
+                   runtime->FirmwarePublication.PublishedTtbr1 == Pair->Ttbr1
+               ? 1u
+               : 0u;
   return runtime != NULL && Pair != NULL &&
                  AppleAgxUatPublishJ313(
                      &runtime->Snapshot, Pair, &runtime->PublicationIo,

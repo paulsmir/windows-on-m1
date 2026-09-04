@@ -73,7 +73,9 @@ static void AppleAgxRtkitSessionCaptureFailureMailbox(
 
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
-    APPLE_AGX_GFX_HANDOFF_STATE *Handoff, APPLE_AGX_ASC_U64 DeadlineMs) {
+    APPLE_AGX_GFX_HANDOFF_STATE *Handoff,
+    APPLE_AGX_RTKIT_PRE_MANAGEMENT Prepare, void *PrepareContext,
+    APPLE_AGX_ASC_U64 DeadlineMs) {
   APPLE_AGX_ASC_MESSAGE message;
   APPLE_AGX_RTKIT_BOOT_OUTPUT output;
   APPLE_AGX_RTKIT_BOOT_RESULT boot_result;
@@ -107,6 +109,10 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
           AppleAgxGfxHandoffResultOk)
     return AppleAgxRtkitSessionForceRunOff(
         Session, Io, AppleAgxRtkitSessionResultTimeout);
+  if (Prepare != APPLE_AGX_RTKIT_SESSION_NULL &&
+      !Prepare(PrepareContext, DeadlineMs))
+    return AppleAgxRtkitSessionForceRunOff(
+        Session, Io, AppleAgxRtkitSessionResultTransportFailed);
   AppleAgxRtkitBootInitialize(&Session->Boot);
   boot_result = AppleAgxRtkitBootBegin(&Session->Boot, &output);
   if (boot_result != AppleAgxRtkitBootResultOk)

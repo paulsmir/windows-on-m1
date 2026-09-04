@@ -138,7 +138,7 @@ static void TestBootAndStopAreExactAndBounded(void) {
   QueueBoot(&fake);
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 100u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultOk);
   assert(session.Running);
   assert(session.CpuReady);
@@ -169,7 +169,7 @@ static void TestProtocolFailureClearsRun(void) {
   fake.ReceiveEndpoint[0] = 1u;
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 100u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultProtocolViolation);
   assert(!session.Running);
   assert(session.CpuReady);
@@ -188,7 +188,7 @@ static void TestBootWaitsForCpuReadyBeforeSendingWake(void) {
   QueueBoot(&fake);
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 100u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultOk);
   assert(fake.CpuStatusIndex == 2u);
   assert(session.CpuReady);
@@ -208,7 +208,7 @@ static void TestHelloTimeoutPreservesMailboxSnapshots(void) {
   fake.InboxControlCount = 4u;
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 8u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 8u) ==
          AppleAgxRtkitSessionResultTimeout);
   assert(session.InboxBeforeInitValid);
   assert(session.InboxAfterInitValid);
@@ -229,7 +229,7 @@ static void TestStopCleanupFailurePreservesRetryState(void) {
   QueueBoot(&fake);
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 100u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultOk);
 
   Queue(&fake, 0x00b0000000000010ULL);
@@ -257,7 +257,7 @@ static void TestStopResumesApAckWithoutReplayingRequest(void) {
   QueueBoot(&fake);
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 100u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultOk);
 
   assert(AppleAgxRtkitSessionStop(&session, &io, 110u) ==
@@ -286,7 +286,7 @@ static void TestStopResumesIopAckWithoutReplayingEitherRequest(void) {
   QueueBoot(&fake);
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
-  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, 100u) ==
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
          AppleAgxRtkitSessionResultOk);
 
   Queue(&fake, 0x00b0000000000010ULL);

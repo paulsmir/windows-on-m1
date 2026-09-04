@@ -188,7 +188,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyRtkitReadyStop(
     return status;
   AppleAgxRtkitSessionInitialize(&session);
   deadline = (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
-  sessionResult = AppleAgxRtkitSessionBoot(&session, &io, NULL, deadline);
+  sessionResult = AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, deadline);
   Result->BootStatus = AppleAgxRtkitSessionStatus(sessionResult);
   Result->BootPhase = (ULONG)session.Boot.Phase;
   Result->BootFlags = AppleAgxRtkitBootFlags(&session);
