@@ -1,124 +1,102 @@
 # GPU current state
-Updated: 2026-09-01 (EXP270 confirmed Windows login with retained DCP owner)
 
-## Stable recovery
-- Emergency rollback: `EXP-20260828-164-clean-g2-baseline/assisted-boot/`.
-  Mu / AML / m1n1 SHA-256:
-  `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
-  `7067ad2fa77e6bb5a7d70586c9bd556344fdabe522200f0caee1a751631080fb` /
-  `0f662f15dd651cc169f7996c5eacaba01908087db63a0ddb76937e2f10e82518`.
-- Clean GPU-visible inert recovery EXP241, m1n1 / Mu / manifest:
-  `0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2` /
-  `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
-  `9c03e167028696757038d16f465d16c40652c76d0e8875f3cb05c6e41b0252ad`.
-- Assisted USB only; never install or run `boot.bin` during GPU development.
+Updated: 2026-09-04T13:33:00+02:00
 
-## Repository identity
-- Root `feature/j313-gpu-acceleration`, base `0b13bcc465bce12705c37b12580ce275f899c1ff`, plus working diff.
-- m1n1 `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`; Mu `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
+## CURRENT PLATFORM
 
-## Current GPU package
-- Offline accepted package: `EXP-20260831-231-monotonic-receipts`.
-- ZIP / SYS / INF / CAT / CER SHA-256:
-  `3e3d303254a58f72e1a391c002896ee95913a5c6e0ff1b5654050408b0a2c6e5` /
-  `9bfdf1084fb83936b958fc104cddf353184146d86000c31949090a3973031556` /
-  `bbd898cd90f426044227d9389cee36750893ac1915cd617639d736279c00678f` /
-  `cb9bfb8bc3f29a16bcac19ea315363337a7f2a4602fa034c7089955b75904b9a` /
-  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda`.
-- No GPU package is installed or carried into EXP245/EXP255.
+- Live J313 is back on the normal current G2 pair: accepted EXP377 m1n1
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
+  plus Mu `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+- Current-compatible emergency non-AGX Mu remains
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
 
-## Proven lifecycle boundary
-- Windows admission through `StartDevice` is proven by EXP231; StartDevice intentionally fails closed.
-- Integrated render chain is offline-only: Windows FIFO -> worker -> backend -> EXP208 -> TA+3D -> dual completion -> exact Windows fence.
-- DCP EPMAP advertises `0x37`; AP power is ON; START alone survives 500 ms. EXP246 proves SID4 before RTKit, EXP247 proves corrected SET_SHMEM / InitComplete, EXP252 admits A401 after D576 and properties, EXP253 admits A426, EXP255 admits A449, EXP256 admits A456, and EXP257 proves A411 returns main-display true on the canonical baseline.
-- EXP270 hardware-proves one retained full IOMFB owner through HV Scanout ABI
-  v2, A408 APPLIED, exact D589, Mu, all eight guest CPUs and the Windows lock
-  screen. No GPU package or Windows-driven present was used.
+## CURRENT WINDOWS BASELINE / PACKAGE STATE
 
-## Last experiment and verdict
-- EXP254 is **SUPERSEDED BEFORE RUN**: its frozen source omitted TraceKit and
-  canonical system-endpoint ordering and retained the obsolete traffic-drain
-  discriminator in source.
-- EXP258 confirms A472; EXP259 confirms A410; EXP260 rejects the old A412
-  zero-result assumption. None may be repeated; exact evidence is in ledger.
-- EXP261 proves A412 transport/result; EXP262 confirms strict A412 admission.
-  Both are final/no-retry; exact artifacts and receipts are in the ledger.
-- EXP263 **REJECTED; NO RETRY**. m1n1 / Mu / manifest / source:
-  `d35c9dfe15acc909a83c76ff7bc63fec226c280543145fe5650753351acfff36` /
-  `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
-  `1dee5466ea6b3cfb40075535e6d5a7a48f3a0e60aa5b5e91c435ef952665bf14` /
-  `a4cdf4eacb1ed232778082cf5e183df99d8f0d0d4fd7a99a4cfa9834121e772c`.
-- EXP263 stage-1 / chainload / live-proxy receipt SHA-256:
-  `410607c8656b44336d4912a4be7c50d7fb797db866a083134a293c9a16f2c108` /
-  `47786845b52b13e2249e2d54c1be205eb6a06fdb97c0d7b0a81d3888a71695a6` /
-  `888976aa5ef9b3239cb35fce44469819fb35f64a695109e928e1d66b9df57e80`.
-- EXP264 **REJECTED; NO RETRY**. m1n1 / Mu / manifest / source:
-  `0f09d17abafd6fccbc3f30f1f89bd78aafe69330f9cd45d46571201e524fe21d` /
-  `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
-  `49f185eaefae26e71374b50c6616c805b473d6995068b02ee377a274a5ac2abd` /
-  `fc7f5615f21a4b1d7b1caa684ca79f53ed19e0f31abdd6241c35c43cd1d2104c`.
-- EXP264 stage-1 / chainload / live-proxy receipt SHA-256:
-  `f6c8ffd14e52575dac6c88539e0343fdee098a07dba3f21c890bb92264f02b67` /
-  `90aa06489add7163550000d5e25e84c649ae7e51f5b7f29c0e894d701d5bfd7a` /
-  `380d130272604c39afd6ff7d1cb9ecb08908d5d6c03c22928af3ed11bebfbb19`.
-- Exact receipts: A441 `transport=1 result=0`, A412 `transport=1 result=2`,
-  then bounded `DPTimingModeId` timeout, controlled quiesce and live 8-CPU proxy.
-- EXP265 is **INVALID BEFORE RUN / SUPERSEDED**: stale parsed ADT type made
-  chainload fail before `push_adt`; its m1n1 never executed.
-- EXP266 **REJECTED; NO RETRY**. m1n1 / Mu / manifest / source:
-  `fc56c43ff233b01c748e2b3ddc1411a5837d38fc152fdfad9bacf899fd50bb22` /
-  `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
-  `ab66a1aa23f346bce53eb2fa806a436e04377b8276f2702e43bb72b6b9f3d899` /
-  `4df7c8c19bc5581f0d6edbf3cf925a0c37d986bf16e08bfd9d18e09f14669d76`.
-- Exact chainload / live-proxy receipt SHA-256:
-  `420294aec37b03d135aa7de5be6465cc2c456875e9c0f57c2fda8b7460dde526` /
-  `e049c800de64841fa8286d05442b44e49f04d37928944d92874328580dc906ff`.
-- Initial and one reissued A412 both returned transport `1`, result `2`; no
-  D563 timing publication followed. Controlled quiesce returned a live proxy.
-- EXP267 **CONFIRMED; NO RETRY**. Exact m1n1 / Mu / manifest / source:
-  `71e9a8189726f599c5f3c4b2890a26a78c282e59bac2e930ad4c5406def16461` /
-  `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
-  `8a6f57676e6958f41d392b46d7bb54527a76ab94b790c5753b1dc7f0669fdbc3` /
-  `61833d077cf7facf6cc699a498fa5c4a15be4be6acdbd55c4decf57836b7d3c8`.
-- Hardware receipts: A407/A408 accepted, `A408 APPLIED swap_id=8`, exact
-  `D589 latch swap_id=8`, then controlled quiesce and live 8-CPU proxy.
-  Chainload / post-run proxy SHA-256:
-  `0c6671590c0c4a3157ff62a1b1286f09f32d34ef75ffa42e72d5ba9fdbffcd53` /
-  `19896edbf849919a34d2f11886f064a3fe0e514c3cf99a1b7fe6e98af2f64e04`.
+- Fresh post-EXP406 current-G2 check: APPL0002 Code28/unbound; no project Display
+  package, AppleAgx service or SYS; SSH, 8 CPUs, AppleInput, stornvme, USBXHCI
+  and sshd healthy; no new 41/129/1001.
 
-## Key rejected hypotheses
-- START crash is not caused by iBoot/dual ownership, mandatory system EP, AP-power ACK, missing EPMAP, START alone, START/mapping order, or pending system traffic.
-- NVMe Event129 is not a GPU-package symptom; EXP241 fixed level-INTx re-delivery and qualified the inert baseline.
-- Scanout needs DISP + DCP DART mappings, not an extra PIODMA SID4 mapping. PIODMA is only for explicitly requested firmware buffers.
-- Mu does not modeset/release DCP; GOP republishes the inherited BootArgs FB. Hidden Mu framebuffer/mode conflict is rejected.
-- D411 map-reg ABI/bounds match pinned Asahi v13.5.
+## HARDWARE PROVEN
 
-## Offline-proven downstream blockers
-- `SupportNonVGA=1` is tied to exact POST restore, D589 latch and full stop; focused test GREEN.
-- Keep `PreemptionAware=0`: current physical-patching design has no documented alternative that truthfully supports preemption without a real context/cancel/retire lifecycle.
-- ARM64 UMD is admission-only (`OpenAdapter10_2` returns `E_NOTIMPL`); DirectFlip/useful D3D cannot yet be claimed.
-- Working m1n1 strictly selects canonical DCPAV color/timing modes and now
-  follows pinned A472 -> A410 -> A441 -> A412 panel sequencing. Parser/ABI/lifecycle
-  and full host suites plus the A472 observer build are GREEN.
-- Truthful remaining debt: `FlipIndependent`, DirectFlip/UMD, PerEngineTDR, GDI KCB and preemption/recovery; never enable isolated cap bits.
+OBSERVED:
+- EXP404 natural current-G2 bind produced APPL0002 Code0, exact running service
+  and 2560x1600x32 Windows video controller.
+- StartDevice stage 7, POST ownership, one source/target, child/topology,
+  VidPn enumeration/commit/visibility, pointer and PresentDisplayOnly all
+  recorded SUCCESS.
+- Code0, exact package and all system health remained stable through a separate
+  180-second post-bind window with no 41/129/1001.
+- EXP404 runner never enabled AGX routes 880/881 and had no watchdog/reset.
 
-## Active hypothesis
-- EXP254 is `SUPERSEDED BEFORE RUN` and forbidden. EXP267 proves the canonical
-  inherited-framebuffer A407/A408 transaction reaches exact D589 latch. EXP268
-  proves initial full-owner bootstrap/quiesce succeeds but immediate same-stage
-  DCP reopen times out. EXP269 proved retention through D589 but was
-  harness-inconclusive. EXP270 with the bit-identical candidate and persistent
-  foreground runner reaches the Windows lock screen. The retained-owner host
-  lifecycle is confirmed; the first unknown is Windows AppleAgx production
-  StartDevice consuming the already-live platform owner without a workload.
+INTERPRETATION:
+- Registering the inert ISR/DPC pair made Dxgkrnl connect/unmask current-G2
+  level AGX IRQs and caused the earlier cumulative-DPC watchdogs.
+- A synchronous no-VSync KMDOD must leave ISR/DPC unregistered until a real AGX
+  status/ack/completion handler exists.
+- EXP403 also proved SystemDisplay callbacks cannot perform registry I/O on the
+  any-IRQL bugcheck path; EXP404 contains that correction.
 
-## Next offline action
-- Freeze EXP270 as the new assisted DCP/Windows recovery point. Then verify the
-  current AppleAgx package's boot-start platform-owner/Scanout ABI handshake,
-  fail-closed no-workload behavior, WDK build/sign/hashes and clean install plan.
+## FIRST UNKNOWN / FAILED BOUNDARY
 
-## Next allowed hardware action
-- No repeat of EXP268/269/270. After the package gate, one boot-start admission
-  run may test `DriverEntry -> AddDevice -> StartDevice -> platform-owner
-  attach` only. No render submission or repeated flip. Host rollback is EXP270;
-  package cleanup must restore the exact driver-free baseline.
+EXP406 fixed the EXP405 `DxgkInitialize` revision mismatch. Exact receipts prove
+DriverEntry and DxgkInitialize success followed by natural AddDevice/StartDevice
+and a successful Type 1 QueryAdapterInfo of 592 bytes. Dxgkrnl then removed the
+adapter: APPL0002 Code43, service stopped, no GPU LUID and no Type34/35/VidPn
+receipt. Official Microsoft Full Graphics requirements resolve the immediate
+cause: EXP406 intentionally leaves mandatory preemption, FlipOnVSyncMmIo,
+per-engine TDR, DirectFlip/independent-flip and GDI kernel-command-buffer
+contracts unimplemented and therefore unadvertised. The first unknown is now
+implementation of that atomic mandatory-feature vertical slice; another
+individual Type1 bit experiment is prohibited.
+
+## LAST KNOWN GOOD FOR THIS BOUNDARY
+
+- EXP404 source/test composite / SYS:
+  `1fe3c34ec6da571b89fe7aaa8524f89dd57cdfa0de04d548ff83375616315468` /
+  `9a4b43a6de0c7422324daf2f8a193c24363209389b5c47417cbeba545cc9b139`.
+- Phase-B / health / display inventory evidence SHA-256:
+  `37a4fc5f4ad082153204ed96f24f3a870f0cb4205e64db1b4a10240324efecb7` /
+  `e2c9c0d359582b5b06fce9d6f7954f96455edd5ce7965595d7e8acdeb33a7096` /
+  `9e92b5f3ae3fe5c265e3182861286e68a5841a156b01e7e78eeba824ae776b2e`.
+- EXP214 remains the byte-exact Full Graphics build/admission control:
+  source/test composite
+  `25718ba071971c8cb94a6847908f0a722ffdb4f6767b9ca4d548514ea6713d63`.
+
+## REJECTED / DO NOT REUSE
+
+- EXP398–EXP406 package identities are terminal and clean.
+- Explicit receipt flush removal alone is rejected; inert IRQ registration is
+  the confirmed watchdog cause. Do not register ISR/DPC/ControlInterrupt before
+  implementing the real AGX interrupt contract.
+- Do not restore platform-version overrides, old recovery binaries, or disable
+  Defender/WdFilter.
+
+## NEXT CANDIDATE
+
+- Execute the committed EXP407 mandatory-feature vertical-slice plan while
+  preserving the EXP406 coherent vector and synthetic-only IRQ platform.
+- The atomic readiness gate is implemented and wired into the real Type1 path
+  in commit `52d3bf6`: the current 3/14 state publishes zero mandatory caps and
+  an accidental premature all-ready state fails closed. All later layers must
+  earn their readiness bit through deterministic tests; the complete
+  capability writer is installed only at 14/14.
+- Typed nonpaged device/context ownership is implemented and pinned-WDK ARM64
+  KMD+UMD build, analysis, Universal validation, Inf2Cat and signing pass with
+  zero warnings/errors. This offline package is not an EXP407 hardware
+  candidate and must not be staged.
+- Segment1/Segment2 translation and allocation contracts are implemented in
+  commits `32cd23e` and `1e76707`: 4-KiB software aperture, 64-KiB local
+  GPU-VA segment, 16-KiB UAT prerequisite, paging plans, gated QuerySegment4,
+  and standard/create/destroy/describe/open/close allocation DDIs. The full
+  memory readiness bit remains false until DXGK physical-memory/HVC ownership,
+  context-63 UAT publication and BuildPagingBuffer execution are connected.
+- MEMORY_PAGING is now implementation-ready in commits `8cd1449`, `3380434`
+  and `39f64c6`: DXGK physical owner/ADL/map, bounded HVC 0x4d31, 40-bit host
+  pages, aligned local object, context-63 16-KiB UAT publication,
+  BuildPagingBuffer execution and paging-only interrupt/DPC completion form one
+  reverse-cleaned lifetime. Hardware remains unqualified and no incomplete
+  package was installed. Readiness is 3/14; next is one real scheduler-visible
+  node with fence/progress, then preemption and per-engine TDR.
+- Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
+  current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
+  bind hardware until the entire mandatory group is real and offline-green.

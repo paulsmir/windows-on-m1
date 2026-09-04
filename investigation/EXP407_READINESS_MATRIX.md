@@ -1,10 +1,12 @@
 # EXP407 live readiness matrix
 
-Updated: 2026-09-04T12:53:00+02:00
+Updated: 2026-09-04T13:33:00+02:00
 
 This matrix is evaluated after memory source commits
-`32cd23e5244427148adf69525d4d32381778ca77` and
-`1e76707aa9fe34d1e4e69de478b991574a06a386`. `READY=yes` means an
+`8cd1449550b253862a3b770b9782b7b7fb2f776e`,
+`338043409a3306fb594a147dde0ddd309015c9ae`, and
+`39f64c6c1312adb554d6c86745cd387a6af2e491`, followed by atomic Type1
+wiring `52d3bf6182e6ae60e4a3520b68d857bdc7eb5167`. `READY=yes` means an
 operational contract exists; callback registration, a success return, a data
 structure, or a source-presence test alone is insufficient.
 
@@ -14,7 +16,7 @@ structure, or a source-presence test alone is insufficient.
 | --- | --- | --- | --- | --- |
 | `WDDM3_IDENTITY` | Exact 1296-byte WDDM 3.0 initialization vector and pre-Start WDDMDEVICECAPS 3.0 response | EXP406: `DxgkInitialize=SUCCESS`, Add/Start reached, Type1/592 called successfully | Pinned WDK 10.0.28000.2526 | yes |
 | `ONE_NODE_TOPOLOGY` | Type1 names one asymmetric node and GetNodeMetadata describes ordinal 0 as 3D | Source and offline tests only; no admitted scheduler-visible AGX engine exists | Scheduler, context, completion | no |
-| `MEMORY_PAGING` | Segment1/Segment2, PFN aperture, local address translation, paging plans, gated QuerySegment4 and allocation callbacks are production-linked; BuildPagingBuffer and the physical-memory owner remain incomplete | Commits `32cd23e` and `1e76707`; 220-test gate and two pinned-WDK zero-warning builds pass; EXP393/396 never reached any memory callback | DXGK physical-memory object/ADL/map, HVC translation, context-63 UAT publication, paging execution | no |
+| `MEMORY_PAGING` | Complete production chain: Segment1/2, allocation backing/lifetime, exact contiguous DXGK object/ADL/map, bounded HVC 0x4d31, 40-bit host pages, context-63 16-KiB UAT publication, BuildPagingBuffer encode/execute, bounded paging worker, synchronized DMA completion/fault and reverse cleanup | Commits `8cd1449`, `3380434`, `39f64c6`; 238-test gate; pinned-WDK KMD/UMD build, analysis, Universal, Inf2Cat and signing pass with zero warnings/errors | Hardware execution remains unqualified until the integrated candidate; no incomplete package was installed | yes |
 | `DEVICE_CONTEXT` | Typed nonpaged adapter/device/context ownership, bounded counts, node 0/affinity 1 and busy destruction | Commit `7b0c771`; RED/GREEN object tests; pinned-WDK KMD/UMD build with zero warnings/errors | Allocation references and scheduler attachment remain later layers | yes |
 | `SCHEDULER` | SubmitCommand and scheduler callbacks remain fail-closed | No `render-admission` scheduler implementation | Memory, context, backend queue | no |
 | `DMA_BOUNDARY_PREEMPTION` | PreemptCommand remains fail-closed; no progress/fence accounting | None in `render-admission` | Scheduler, monotonic completion, replay | no |
@@ -27,8 +29,10 @@ structure, or a source-presence test alone is insufficient.
 | `NON_VGA_STOP` | Stop/release returns saved POST info and stops the adapter, but does not establish black fallback or latched handoff | Source-only partial implementation | Registered scanout pool, bounded quiesce, black fallback, accurate final POST | no |
 | `AGX_COMPLETION` | Accumulated EXP208/UAT/G13 queue/completion components exist but are not linked to `render-admission` | EXP208 proves a standalone materialized TA+3D graph; no Windows fence mapping | Windows allocation/context, UAT, queue publication, event/stamp ingress | no |
 
-Current result: `2/14 READY`. The atomic readiness evaluator therefore must
-publish zero mandatory Type1 caps.
+Current result: `3/14 READY`. The atomic readiness evaluator therefore must
+publish zero mandatory Type1 caps. Commit `52d3bf6` now enforces that rule in
+the real QueryAdapterInfo path; the final capability writer remains absent and
+fails closed even if an accidental all-ready state is presented early.
 
 ## Existing allocation and memory implementation inventory
 
@@ -44,14 +48,14 @@ publish zero mandatory Type1 caps.
 Their portable sanitizer-backed suites pass and their contracts match the
 approved Segment1/Segment2 model.
 
-### ADAPT
+### ADAPTED INTO PRODUCTION
 
-- `apple_agx_memory`: reuse the ownership/state transitions, but instantiate it
-  under `render-admission` storage and allocation handles.
-- `apple_agx_residency`, `apple_agx_uat`, `apple_agx_uat_table`, and
-  `apple_agx_uat_publication`: reuse 16 KiB leaf encoding and rollback, but
-  defer actual context-root publication until the render backend owns power and
-  firmware state.
+- `apple_agx_memory`: aligned/page-list ownership and abort-safe reuse now back
+  render-admission physical objects.
+- `apple_agx_residency`, `apple_agx_uat`, `apple_agx_uat_table`,
+  `apple_agx_uat_memory`, and `apple_agx_uat_publication`: context-63 roots,
+  16-KiB leaves, mapping rollback and exact gpu-region TTBR publication are in
+  the Start/Stop lifetime.
 - `windows/src/segment_windows.c`: extract QuerySegment4 and two-segment
   description; do not carry its EXP208 materialization and backend startup into
   the allocation commit.
@@ -94,8 +98,9 @@ approved Segment1/Segment2 model.
 - No experiment has executed `render-admission` QuerySegment4,
   CreateAllocation, BuildPagingBuffer, UAT publication or context paging.
 
-FIRST UNKNOWN: current DXGK physical-memory object/ADL/map to HVC `0x4d31`
-translation owner, followed by context-63 16-KiB UAT publication and
-BuildPagingBuffer execution. The m1n1 HVC handler is committed and its host
-test passes, but no safe standalone current hardware harness exists yet; do not
-install an incomplete Full Graphics driver merely to exercise it.
+FIRST UNKNOWN: turn the metadata-only node into one real scheduler-visible
+engine with monotonic render/paging fence accounting. Then implement
+DMA-buffer-boundary preemption and per-engine TDR before GDI command-buffer
+readiness. The m1n1 HVC handler and the Windows owner remain hardware-unqualified
+until the integrated candidate; no separate safe production-code standalone
+harness was available and no incomplete Full Graphics package was installed.
