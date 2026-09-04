@@ -526,7 +526,7 @@ static unsigned char AdmissionFirmwareBootAsc(
   if (runtime == NULL)
     return 0u;
   result = AppleAgxRtkitSessionBoot(&runtime->Rtkit, &runtime->AscIo,
-                                    DeadlineMs);
+                                    &runtime->Handoff, DeadlineMs);
   AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
   return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
 }

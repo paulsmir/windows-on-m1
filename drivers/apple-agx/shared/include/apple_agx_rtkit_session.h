@@ -2,6 +2,7 @@
 #define APPLE_AGX_RTKIT_SESSION_H
 
 #include "apple_agx_asc_transport.h"
+#include "apple_agx_gfx_handoff.h"
 #include "apple_agx_rtkit_boot.h"
 
 typedef enum _APPLE_AGX_RTKIT_SESSION_RESULT {
@@ -15,6 +16,15 @@ typedef enum _APPLE_AGX_RTKIT_SESSION_RESULT {
   AppleAgxRtkitSessionResultCleanupFailed,
 } APPLE_AGX_RTKIT_SESSION_RESULT;
 
+typedef enum _APPLE_AGX_RTKIT_STOP_PHASE {
+  AppleAgxRtkitStopIdle = 0,
+  AppleAgxRtkitStopApRequested,
+  AppleAgxRtkitStopApAcknowledged,
+  AppleAgxRtkitStopIopRequested,
+  AppleAgxRtkitStopIopAcknowledged,
+  AppleAgxRtkitStopComplete,
+} APPLE_AGX_RTKIT_STOP_PHASE;
+
 typedef struct _APPLE_AGX_RTKIT_SESSION {
   APPLE_AGX_RTKIT_BOOT Boot;
   APPLE_AGX_RTKIT_BOOL Running;
@@ -23,6 +33,7 @@ typedef struct _APPLE_AGX_RTKIT_SESSION {
   APPLE_AGX_RTKIT_BOOL InboxAfterInitValid;
   APPLE_AGX_RTKIT_BOOL InboxAtFailureValid;
   APPLE_AGX_RTKIT_BOOL OutboxAtFailureValid;
+  APPLE_AGX_RTKIT_STOP_PHASE StopPhase;
   APPLE_AGX_RTKIT_U32 InboxControlBeforeInit;
   APPLE_AGX_RTKIT_U32 InboxControlAfterInit;
   APPLE_AGX_RTKIT_U32 InboxControlAtFailure;
@@ -32,7 +43,7 @@ typedef struct _APPLE_AGX_RTKIT_SESSION {
 void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session);
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
-    APPLE_AGX_ASC_U64 DeadlineMs);
+    APPLE_AGX_GFX_HANDOFF_STATE *Handoff, APPLE_AGX_ASC_U64 DeadlineMs);
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStop(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
     APPLE_AGX_ASC_U64 DeadlineMs);

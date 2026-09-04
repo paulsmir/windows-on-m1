@@ -23,6 +23,7 @@ class AppleAgxRtkitSessionTests(unittest.TestCase):
                 str(SHARED / "src" / "apple_agx_rtkit_boot.c"),
                 str(SHARED / "src" / "apple_agx_rtkit.c"),
                 str(SHARED / "src" / "apple_agx_asc_transport.c"),
+                str(SHARED / "src" / "apple_agx_gfx_handoff.c"),
                 "-o", str(binary),
             ]
             subprocess.run(command, cwd=ROOT, check=True)

@@ -38,6 +38,7 @@ static APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionForceRunOff(
   APPLE_AGX_ASC_RESULT stop_result =
       AppleAgxAscSetRun(Io, APPLE_AGX_ASC_FALSE);
   Session->Running = APPLE_AGX_RTKIT_FALSE;
+  Session->StopPhase = AppleAgxRtkitStopIdle;
   return stop_result == AppleAgxAscResultOk
              ? OriginalResult
              : AppleAgxRtkitSessionResultCleanupFailed;
@@ -57,6 +58,7 @@ void AppleAgxRtkitSessionInitialize(APPLE_AGX_RTKIT_SESSION *Session) {
   Session->InboxControlAfterInit = 0u;
   Session->InboxControlAtFailure = 0u;
   Session->OutboxControlAtFailure = 0u;
+  Session->StopPhase = AppleAgxRtkitStopIdle;
 }
 
 static void AppleAgxRtkitSessionCaptureFailureMailbox(
@@ -71,7 +73,7 @@ static void AppleAgxRtkitSessionCaptureFailureMailbox(
 
 APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
-    APPLE_AGX_ASC_U64 DeadlineMs) {
+    APPLE_AGX_GFX_HANDOFF_STATE *Handoff, APPLE_AGX_ASC_U64 DeadlineMs) {
   APPLE_AGX_ASC_MESSAGE message;
   APPLE_AGX_RTKIT_BOOT_OUTPUT output;
   APPLE_AGX_RTKIT_BOOT_RESULT boot_result;
@@ -83,6 +85,10 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
     return AppleAgxRtkitSessionResultInvalidArgument;
   if (Session->Running != APPLE_AGX_RTKIT_FALSE)
     return AppleAgxRtkitSessionResultInvalidState;
+  if (Session->StopPhase != AppleAgxRtkitStopIdle &&
+      Session->StopPhase != AppleAgxRtkitStopComplete)
+    return AppleAgxRtkitSessionResultInvalidState;
+  Session->StopPhase = AppleAgxRtkitStopIdle;
 
   result = AppleAgxRtkitSessionAscResult(
       AppleAgxAscSetRun(Io, APPLE_AGX_ASC_TRUE));
@@ -94,6 +100,13 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionBoot(
   if (result != AppleAgxRtkitSessionResultOk)
     return AppleAgxRtkitSessionForceRunOff(Session, Io, result);
   Session->CpuReady = APPLE_AGX_RTKIT_TRUE;
+  /* Asahi initializes the firmware handoff after CPU_READY and before the
+   * management HELLO exchange; firmware otherwise waits for this transition. */
+  if (Handoff != APPLE_AGX_RTKIT_SESSION_NULL &&
+      AppleAgxGfxHandoffInitialize(Handoff, DeadlineMs) !=
+          AppleAgxGfxHandoffResultOk)
+    return AppleAgxRtkitSessionForceRunOff(
+        Session, Io, AppleAgxRtkitSessionResultTimeout);
   AppleAgxRtkitBootInitialize(&Session->Boot);
   boot_result = AppleAgxRtkitBootBegin(&Session->Boot, &output);
   if (boot_result != AppleAgxRtkitBootResultOk)
@@ -154,32 +167,53 @@ APPLE_AGX_RTKIT_SESSION_RESULT AppleAgxRtkitSessionStop(
     APPLE_AGX_RTKIT_SESSION *Session, const APPLE_AGX_ASC_IO *Io,
     APPLE_AGX_ASC_U64 DeadlineMs) {
   APPLE_AGX_RTKIT_SESSION_RESULT result;
-  APPLE_AGX_RTKIT_SESSION_RESULT cleanup_result;
 
   if (Session == APPLE_AGX_RTKIT_SESSION_NULL ||
       Io == APPLE_AGX_RTKIT_SESSION_NULL)
     return AppleAgxRtkitSessionResultInvalidArgument;
-  if (Session->Running == APPLE_AGX_RTKIT_FALSE ||
-      !AppleAgxRtkitBootIsReady(&Session->Boot))
+  if (Session->Running == APPLE_AGX_RTKIT_FALSE)
+    return Session->StopPhase == AppleAgxRtkitStopComplete
+               ? AppleAgxRtkitSessionResultOk
+               : AppleAgxRtkitSessionResultInvalidState;
+  if (!AppleAgxRtkitBootIsReady(&Session->Boot) ||
+      Session->StopPhase > AppleAgxRtkitStopIopAcknowledged)
     return AppleAgxRtkitSessionResultInvalidState;
 
-  result = AppleAgxRtkitSessionAscResult(
-      AppleAgxAscSend(Io, AppleAgxRtkitSetApPower(0x10u), 0u, DeadlineMs));
-  if (result == AppleAgxRtkitSessionResultOk)
+  if (Session->StopPhase == AppleAgxRtkitStopIdle) {
+    result = AppleAgxRtkitSessionAscResult(
+        AppleAgxAscSend(Io, AppleAgxRtkitSetApPower(0x10u), 0u, DeadlineMs));
+    if (result != AppleAgxRtkitSessionResultOk)
+      return result;
+    Session->StopPhase = AppleAgxRtkitStopApRequested;
+  }
+  if (Session->StopPhase == AppleAgxRtkitStopApRequested) {
     result = AppleAgxRtkitSessionWaitPower(
         Io, AppleAgxRtkitManagementSetApPower, 0x10u, DeadlineMs);
-  if (result == AppleAgxRtkitSessionResultOk)
+    if (result != AppleAgxRtkitSessionResultOk)
+      return result;
+    Session->StopPhase = AppleAgxRtkitStopApAcknowledged;
+  }
+  if (Session->StopPhase == AppleAgxRtkitStopApAcknowledged) {
     result = AppleAgxRtkitSessionAscResult(
         AppleAgxAscSend(Io, AppleAgxRtkitSetIopPower(0x10u), 0u, DeadlineMs));
-  if (result == AppleAgxRtkitSessionResultOk)
+    if (result != AppleAgxRtkitSessionResultOk)
+      return result;
+    Session->StopPhase = AppleAgxRtkitStopIopRequested;
+  }
+  if (Session->StopPhase == AppleAgxRtkitStopIopRequested) {
     result = AppleAgxRtkitSessionWaitPower(
         Io, AppleAgxRtkitManagementIopPowerAck, 0x10u, DeadlineMs);
+    if (result != AppleAgxRtkitSessionResultOk)
+      return result;
+    Session->StopPhase = AppleAgxRtkitStopIopAcknowledged;
+  }
 
-  cleanup_result = AppleAgxRtkitSessionAscResult(
+  result = AppleAgxRtkitSessionAscResult(
       AppleAgxAscSetRun(Io, APPLE_AGX_ASC_FALSE));
+  if (result != AppleAgxRtkitSessionResultOk)
+    return AppleAgxRtkitSessionResultCleanupFailed;
   Session->Running = APPLE_AGX_RTKIT_FALSE;
   AppleAgxRtkitBootInitialize(&Session->Boot);
-  if (cleanup_result != AppleAgxRtkitSessionResultOk)
-    return AppleAgxRtkitSessionResultCleanupFailed;
-  return result;
+  Session->StopPhase = AppleAgxRtkitStopComplete;
+  return AppleAgxRtkitSessionResultOk;
 }

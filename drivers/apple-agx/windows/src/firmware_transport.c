@@ -1,9 +1,5 @@
 #include "apple_agx_driver.h"
 
-#if defined(APPLE_AGX_G2_FIRMWARE_QUALIFICATION) ||                           \
-    defined(APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION) ||                    \
-    defined(APPLE_AGX_G2_RTKIT_QUALIFICATION)
-
 static BOOLEAN
 AppleAgxAscRangeValid(_In_ const APPLE_AGX_WINDOWS_ASC_TRANSPORT *Transport,
                       _In_ ULONG Offset, _In_ ULONG Width) {
@@ -117,8 +113,6 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyAscCpuStatus(
   return STATUS_IO_DEVICE_ERROR;
 }
 
-#endif
-
 #ifdef APPLE_AGX_G2_RTKIT_QUALIFICATION
 static NTSTATUS AppleAgxRtkitSessionStatus(
     APPLE_AGX_RTKIT_SESSION_RESULT Result) {
@@ -194,7 +188,7 @@ _Use_decl_annotations_ NTSTATUS AppleAgxQualifyRtkitReadyStop(
     return status;
   AppleAgxRtkitSessionInitialize(&session);
   deadline = (APPLE_AGX_ASC_U64)(KeQueryInterruptTime() / 10000ULL) + 5000ULL;
-  sessionResult = AppleAgxRtkitSessionBoot(&session, &io, deadline);
+  sessionResult = AppleAgxRtkitSessionBoot(&session, &io, NULL, deadline);
   Result->BootStatus = AppleAgxRtkitSessionStatus(sessionResult);
   Result->BootPhase = (ULONG)session.Boot.Phase;
   Result->BootFlags = AppleAgxRtkitBootFlags(&session);
