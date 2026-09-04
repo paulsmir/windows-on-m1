@@ -128,6 +128,18 @@ class AppleAgxRenderPlatformStageTests(unittest.TestCase):
         self.assertLess(boot.index("AdmissionRecordRtkitBoot"),
                         boot.index("return result =="))
 
+    def test_pre_asc_sgx_preparation_matches_current_m1n1_poke(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        power = platform[platform.index("AdmissionFirmwarePowerOn("):
+                         platform.index("AdmissionFirmwarePowerOff(")]
+        self.assertIn("ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET", platform)
+        self.assertIn("0xd14000u", platform)
+        self.assertIn("0x00070001u", platform)
+        self.assertLess(power.index("READ_REGISTER_ULONG"),
+                        power.index("WRITE_REGISTER_ULONG"))
+        self.assertLess(power.index("WRITE_REGISTER_ULONG"),
+                        power.index("runtime->Powered = TRUE"))
+
 
 if __name__ == "__main__":
     unittest.main()

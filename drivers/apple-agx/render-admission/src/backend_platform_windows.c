@@ -4,6 +4,8 @@
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
+#define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
+#define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
 #define ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES                              \
   (APPLE_AGX_CONFIG_MMIO_OFFSET + APPLE_AGX_CONFIG_WIRE_SIZE)
 
@@ -475,6 +477,14 @@ static unsigned char AdmissionFirmwarePowerOn(
       AdmissionPowerRead64(runtime, J313_AGX_G2_POWER_REG_RECEIPT_SEQUENCE));
   if (!acquired)
     return 0u;
+  /* Current m1n1 AGX.poke_sgx(): read then write this preparation register
+   * before constructing/starting the ASC-backed AGX runtime. */
+  (void)READ_REGISTER_ULONG((volatile ULONG *)(runtime->SgxBase +
+                                               ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET));
+  WRITE_REGISTER_ULONG((volatile ULONG *)(runtime->SgxBase +
+                                           ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET),
+                       ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE);
+  KeMemoryBarrier();
   runtime->Powered = TRUE;
   return 1u;
 }
