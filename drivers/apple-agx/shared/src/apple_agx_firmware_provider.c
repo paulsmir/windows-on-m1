@@ -48,43 +48,14 @@ static APPLE_AGX_FW_U64 provider_now_ms(void *context) {
   return provider->Primitives.NowMs(provider->Primitives.Context);
 }
 
-static APPLE_AGX_FW_U64 provider_rollback_deadline(
-    APPLE_AGX_FIRMWARE_PROVIDER *provider) {
-  APPLE_AGX_FW_U64 now =
-      provider->Primitives.NowMs(provider->Primitives.Context);
-  if (now > (~0ULL - APPLE_AGX_PROVIDER_ROLLBACK_TIMEOUT_MS))
-    return ~0ULL;
-  return now + APPLE_AGX_PROVIDER_ROLLBACK_TIMEOUT_MS;
-}
-
 static APPLE_AGX_FW_BOOL provider_power_on(void *context,
                                            APPLE_AGX_FW_U64 deadline) {
   APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
-  APPLE_AGX_GFX_HANDOFF_RESULT handoff_result;
   if (!at_passive(provider) ||
       provider->State != APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED ||
       !provider->Primitives.PowerOn(provider->Primitives.Context, deadline))
     return APPLE_AGX_FW_FALSE;
   provider->State |= APPLE_AGX_FIRMWARE_PROVIDER_POWERED;
-  /*
-   * Asahi/m1n1 powers gfx-asc and sgx before UAT.init() performs the
-   * firmware-side handoff handshake.  MAGIC_FW is therefore not a truthful
-   * pre-power prerequisite.  Keep the same ordering here and compensate the
-   * power transition if the bounded handshake cannot complete.
-   */
-  handoff_result = AppleAgxGfxHandoffInitialize(provider->Handoff, deadline);
-  if (handoff_result != AppleAgxGfxHandoffResultOk) {
-    /*
-     * A handoff timeout consumes the forward-operation deadline.  Rollback is
-     * a distinct bounded operation: reusing the expired deadline would make
-     * the real Windows PowerOff primitive reject compensation and strand
-     * platform power ownership.
-     */
-    if (provider->Primitives.PowerOff(provider->Primitives.Context,
-                                      provider_rollback_deadline(provider)))
-      provider->State = APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED;
-    return APPLE_AGX_FW_FALSE;
-  }
   return APPLE_AGX_FW_TRUE;
 }
 
@@ -109,11 +80,16 @@ static APPLE_AGX_FW_BOOL provider_create_uat(void *context,
 static APPLE_AGX_FW_BOOL provider_boot_asc(void *context,
                                            APPLE_AGX_FW_U64 deadline) {
   APPLE_AGX_FIRMWARE_PROVIDER *provider = context;
+  APPLE_AGX_GFX_HANDOFF_RESULT handoff_result;
   unsigned int required = APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED |
                           APPLE_AGX_FIRMWARE_PROVIDER_POWERED |
                           APPLE_AGX_FIRMWARE_PROVIDER_UAT;
   if (!at_passive(provider) || provider->State != required ||
       !provider->Primitives.BootAsc(provider->Primitives.Context, deadline))
+    return APPLE_AGX_FW_FALSE;
+  /* Firmware publishes MAGIC_FW only after ASC is running. */
+  handoff_result = AppleAgxGfxHandoffInitialize(provider->Handoff, deadline);
+  if (handoff_result != AppleAgxGfxHandoffResultOk)
     return APPLE_AGX_FW_FALSE;
   provider->State |= APPLE_AGX_FIRMWARE_PROVIDER_ASC;
   return APPLE_AGX_FW_TRUE;

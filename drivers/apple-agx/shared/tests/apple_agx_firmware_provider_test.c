@@ -12,7 +12,7 @@ typedef struct _FAKE_PLATFORM {
   unsigned char DoorbellEndpoint;
   unsigned char RootsPublished;
   unsigned char FailNextReleaseWrite;
-  unsigned char PublishHandoffMagicOnPower;
+  unsigned char PublishHandoffMagicOnAscBoot;
   unsigned int PublishCount;
   unsigned int UnpublishCount;
   unsigned long long NowMs;
@@ -37,9 +37,6 @@ static unsigned char power_on(void *context, unsigned long long deadline) {
   if (fake->Powered)
     return 0u;
   fake->Powered = 1u;
-  if (fake->PublishHandoffMagicOnPower)
-    assert(write64(fake, APPLE_AGX_GFX_HANDOFF_MAGIC_FW_OFFSET,
-                   APPLE_AGX_GFX_HANDOFF_PPL_MAGIC));
   return 1u;
 }
 
@@ -83,6 +80,9 @@ static unsigned char boot_asc(void *context, unsigned long long deadline) {
   if (!fake->UatCreated || fake->AscRunning)
     return 0u;
   fake->AscRunning = 1u;
+  if (fake->PublishHandoffMagicOnAscBoot)
+    assert(write64(fake, APPLE_AGX_GFX_HANDOFF_MAGIC_FW_OFFSET,
+                   APPLE_AGX_GFX_HANDOFF_PPL_MAGIC));
   return 1u;
 }
 
@@ -417,10 +417,10 @@ static void test_passive_lifetime_is_enforced(void) {
          AppleAgxFirmwareProviderResultOk);
 }
 
-static void test_handoff_initializes_only_after_power(void) {
+static void test_handoff_initializes_only_after_asc_boot(void) {
   FAKE_PLATFORM fake = {
       .Passive = 1u,
-      .PublishHandoffMagicOnPower = 1u,
+      .PublishHandoffMagicOnAscBoot = 1u,
   };
   APPLE_AGX_GFX_HANDOFF_STATE handoff =
       bind_uninitialized_handoff(&fake);
@@ -435,13 +435,22 @@ static void test_handoff_initializes_only_after_power(void) {
   assert(!handoff.Initialized);
   assert(io.PowerOn(io.Context, 100u));
   assert(fake.Powered);
+  assert(!handoff.Initialized);
+  assert(io.CreateFirmwareUat(io.Context, 100u));
+  assert(io.BootAsc(io.Context, 100u));
   assert(handoff.Initialized);
+  assert(io.StartEndpoint(io.Context, J313_AGX_G2_FIRMWARE_ENDPOINT, 100u));
+  assert(io.StartEndpoint(io.Context, J313_AGX_G2_DOORBELL_ENDPOINT, 100u));
+  assert(io.StopEndpoint(io.Context, J313_AGX_G2_DOORBELL_ENDPOINT, 100u));
+  assert(io.StopEndpoint(io.Context, J313_AGX_G2_FIRMWARE_ENDPOINT, 100u));
+  assert(io.StopAsc(io.Context, 100u));
+  assert(io.DestroyFirmwareUat(io.Context, 100u));
   assert(io.PowerOff(io.Context, 100u));
   assert(AppleAgxFirmwareProviderDestroy(&provider) ==
          AppleAgxFirmwareProviderResultOk);
 }
 
-static void test_handoff_timeout_compensates_power(void) {
+static void test_handoff_timeout_is_after_asc_boot(void) {
   FAKE_PLATFORM fake = {.Passive = 1u};
   APPLE_AGX_GFX_HANDOFF_STATE handoff =
       bind_uninitialized_handoff(&fake);
@@ -453,16 +462,17 @@ static void test_handoff_timeout_compensates_power(void) {
   memset(&io, 0, sizeof(io));
   assert(AppleAgxFirmwareProviderInitialize(&provider, &ops, &handoff, &io) ==
          AppleAgxFirmwareProviderResultOk);
-  assert(!io.PowerOn(io.Context, 3u));
+  assert(io.PowerOn(io.Context, 3u));
+  assert(io.CreateFirmwareUat(io.Context, 3u));
+  assert(!io.BootAsc(io.Context, 3u));
   assert(fake.NowMs >= 3u);
-  assert(fake.LastPowerOffDeadline > fake.NowMs);
-  assert(fake.LastPowerOffDeadline - fake.NowMs == 500u);
-  assert(!fake.Powered);
+  assert(fake.Powered);
+  assert(fake.AscRunning);
   assert(!handoff.Initialized);
   assert(!handoff.Locked);
-  assert(provider.State == APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED);
-  assert(AppleAgxFirmwareProviderDestroy(&provider) ==
-         AppleAgxFirmwareProviderResultOk);
+  assert(provider.State == (APPLE_AGX_FIRMWARE_PROVIDER_INITIALIZED |
+                            APPLE_AGX_FIRMWARE_PROVIDER_POWERED |
+                            APPLE_AGX_FIRMWARE_PROVIDER_UAT));
 }
 
 int main(void) {
@@ -471,7 +481,7 @@ int main(void) {
   test_release_failure_compensates_publication();
   test_coordinator_rolls_back_every_available_primitive();
   test_passive_lifetime_is_enforced();
-  test_handoff_initializes_only_after_power();
-  test_handoff_timeout_compensates_power();
+  test_handoff_initializes_only_after_asc_boot();
+  test_handoff_timeout_is_after_asc_boot();
   return 0;
 }
