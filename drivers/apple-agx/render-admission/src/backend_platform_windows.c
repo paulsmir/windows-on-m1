@@ -33,6 +33,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_INITDATA_MEMORY_GRAPH Initdata;
   ULONGLONG RetainedEpoch, RetainedRoot, RetainedRoot0;
   APPLE_AGX_CONTEXT0_BROKER Context0Lease;
+  AGX_FW_IO_MANIFEST FirmwareIoManifest;
   BOOLEAN RetainedPrepared;
   APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES FirmwarePrimitives;
   APPLE_AGX_FIRMWARE_PROVIDER FirmwareProvider;
@@ -529,6 +530,17 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
       response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
   runtime->Rtkit.CrashlogGpuAddress=response.SystemVa&((1ULL<<44)-1);
   runtime->Rtkit.CrashlogCapacityBytes=(ULONG)response.SystemBytes;
+  {
+    APPLE_AGX_MEMORY_OBJECT *hwdata=
+        &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataB];
+    unsigned char valid=AgxFwIoReadManifest(AdmissionRetainedRead,runtime,
+        runtime->RetainedEpoch,runtime->RetainedRoot,&runtime->FirmwareIoManifest);
+    if(valid) valid=AgxFwIoEncodeHwdataB(&runtime->FirmwareIoManifest,
+        sizeof(runtime->FirmwareIoManifest),runtime->RetainedEpoch,runtime->RetainedRoot,
+        hwdata->CpuAddress,hwdata->Length);
+    AdmissionRecordFirmwareIo(runtime->Adapter,valid?0u:1u,&runtime->FirmwareIoManifest);
+    if(!valid) return 0;
+  }
   result=AppleAgxContext0BrokerMap(&runtime->Context0Lease,&runtime->Initdata,&io,
       runtime->RetainedEpoch,runtime->RetainedRoot,AdmissionContext0Ipa,runtime);
   AdmissionRecordContext0Inventory(runtime->Adapter,1,result,&runtime->Context0Lease);

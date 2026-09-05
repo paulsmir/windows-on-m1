@@ -58,6 +58,19 @@ _Use_decl_annotations_ void AdmissionRecordContext0Inventory(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordFirmwareIo(
+    ADMISSION_CONTEXT *Context,ULONG Result,const AGX_FW_IO_MANIFEST *Manifest) {
+  HANDLE key=NULL; LARGE_INTEGER time;
+  if(!Context || !Manifest || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  KeQuerySystemTimePrecise(&time);
+  WriteDword(key,L"Wom1FirmwareIoResult",Result);
+  WriteQword(key,L"Wom1FirmwareIoTime",time.QuadPart);
+  WriteBinary(key,L"Wom1FirmwareIoManifest",Manifest,sizeof(*Manifest));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordEndpoint(
     ADMISSION_CONTEXT *Context, ULONG Endpoint, ULONG Success) {
   HANDLE key=NULL; LARGE_INTEGER time;

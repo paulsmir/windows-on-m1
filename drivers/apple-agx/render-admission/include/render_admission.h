@@ -287,6 +287,9 @@ void AdmissionRecordRetainedTrace(_In_ ADMISSION_CONTEXT *Context,
     _In_reads_bytes_(Bytes) const VOID *Data, _In_ ULONG Bytes);
 void AdmissionRecordContext0Inventory(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Stage, _In_ ULONG Result, _In_ const APPLE_AGX_CONTEXT0_BROKER *Journal);
+#include "apple_agx_firmware_io.h"
+void AdmissionRecordFirmwareIo(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Result,_In_ const AGX_FW_IO_MANIFEST *Manifest);
 void AdmissionRecordEndpoint(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Endpoint, _In_ ULONG Success);
 void AdmissionRecordRtkitBoot(_In_ ADMISSION_CONTEXT *Context,
