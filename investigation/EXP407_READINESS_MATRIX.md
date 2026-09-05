@@ -1,5 +1,23 @@
 # EXP407 live readiness matrix
 
+## EXP474 retained-root management qualification — 2026-09-05
+
+`RETAINED_ROOT_IDENTITY_HW_PROVEN = YES`.
+`BROKER_OWNED_CONTEXT0_MAP_QUERY_UNMAP_HW_PROVEN = YES`.
+`WINDOWS_RTKIT_MANAGEMENT_HW_PROVEN = YES` for the explicit management qualifier.
+
+Original root0x9fff78000 stayed unchanged through PREPARE/ACTIVATE/MAP/QUERY/
+UNMAP/CLOSE; private-prefix unchanged flags persisted. Broker-owned system
+crashlog and Windows-owned probe mapping led to real endpoint0 IOP/AP0x20 ACKs.
+Raw trace and exact receipts: .local/experiments/EXP474-retained-root/result.json.
+This supersedes only the earlier management NO below, not its historical result.
+
+`FULL_FIRMWARE_START_HW_PROVEN = NO`: deliberate qualifier stop before endpoint20.
+No queue/backend readiness, RenderKm/Patch/SubmitCommand, UMD, scanout or TA/3D
+completion proof added. Do not simply disable the qualifier: the full profile's
+legacy copied-root path still needs proper production broker integration.
+Candidate later logged stornvme Event12911769; not an error-free-platform claim.
+
 ## EXP472/473 boundary qualification — 2026-09-05
 
 `FIRMWARE_PRIVATE_PREFIX_TRANSPORT_HW_PROVEN = YES` and
