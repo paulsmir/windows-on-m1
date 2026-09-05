@@ -40,7 +40,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
   RtlZeroMemory(ChildRelations, ChildRelationsSize);
   ChildRelations[0].ChildDeviceType = TypeVideoOutput;
   ChildRelations[0].ChildCapabilities.HpdAwareness =
-      HpdAwarenessAlwaysConnected;
+      /* J313 is a portable computer.  The integrated panel follows the
+       * documented portable-laptop contract: dxgkrnl may query connection
+       * status through DxgkDdiQueryChildStatus. */
+      HpdAwarenessInterruptible;
   ChildRelations[0].ChildCapabilities.Type.VideoOutput.InterfaceTechnology =
       D3DKMDT_VOT_INTERNAL;
   ChildRelations[0]

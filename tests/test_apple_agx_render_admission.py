@@ -260,6 +260,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertNotIn("AdmissionDdiQueryChildRelations", lifecycle)
         self.assertIn("ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR)", display)
         self.assertIn("ChildDeviceType = TypeVideoOutput", display)
+        self.assertIn("HpdAwarenessInterruptible", display)
         self.assertIn("D3DKMDT_VOT_INTERNAL", display)
         self.assertIn("StatusConnection", display)
         self.assertIn("HotPlug.Connected = TRUE", display)
