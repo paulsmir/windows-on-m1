@@ -338,6 +338,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
       caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;
       RtlZeroMemory(caps, sizeof(*caps));
       caps->HighestAcceptableAddress.QuadPart = -1;
+      /* WDK 26100: must match DXGK_WDDMDEVICECAPS.WDDMVersion. */
+      caps->WDDMVersion = DXGKDDI_WDDMv3_0;
       RtlZeroMemory(&featureInput, sizeof(featureInput));
       featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;
       featureInput.Size = sizeof(featureInput);

@@ -27,6 +27,13 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
 
         self.assertIn("AppleAgxWddmFeatureContractReady", caps)
         self.assertIn("APPLE_AGX_WDDM_MANDATORY_CAPS_MASK", caps)
+        # WDK 26100 requires this to equal DXGK_WDDMDEVICECAPS.WDDMVersion;
+        # leaving Type-1 at zero matches the observed AddAdapter C0000059.
+        self.assertIn("caps->WDDMVersion = DXGKDDI_WDDMv3_0", caps)
+        self.assertLess(
+            caps.index("caps->WDDMVersion = DXGKDDI_WDDMv3_0"),
+            caps.index("AppleAgxWddmFeatureContractEvaluate"),
+        )
         for assignment in (
             "caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u",
             "caps->SchedulingCaps.MultiEngineAware = 1u",
