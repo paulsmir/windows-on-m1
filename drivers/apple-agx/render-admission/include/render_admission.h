@@ -293,6 +293,9 @@ void AdmissionRecordHwdataProfile(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Result,_In_ const AGX_HWDATA_RECEIPT *Receipt);
 void AdmissionRecordFirmwareQualification(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG StartResult,_In_ ULONG StartReturn,_In_ ULONG CompletedMask,_In_ ULONG CleanupResult);
+void AdmissionRecordBackendQualification(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Stage,_In_ ULONG Result,_In_ ULONG Phase,_In_ ULONG Flags,
+    _In_ ULONGLONG ArenaGpu,_In_ ULONG ArenaBytes);
 void AdmissionRecordDeviceControl(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Idle,_In_ ULONG Result,_In_ ULONG ReadPointer,
     _In_ ULONG WritePointer,_In_ ULONG Expected);

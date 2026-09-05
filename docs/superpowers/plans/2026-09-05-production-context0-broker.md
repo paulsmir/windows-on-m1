@@ -28,6 +28,16 @@ Add `int hv_agx_retained_verify_absent(core,epoch,handle,va,ipa,length)`. Only e
 
 ### Task 3: Reviewed build and hardware ladder (parent)
 
+Progress:EXP475 all200Windows leaves+application endpoints PASS;EXP477 full
+native-profile initdata and real DC_Init/Idle receipts PASS. Both exact packages
+cleaned. Next bounded BackendQualification runs existing production
+BackendRuntimeStart including prepared-image/context/queue ownership, records
+its existing exact result and readiness flags, then uses common teardown before
+WorkItem/StartDevice completion. This avoids automatic OS graphics workloads
+before queue-owner setup is hardware-qualified. No backend algorithm change.
+After PASS proceed to normal Windows-driven submission boundary, not another
+firmware probe. Native/Mu/profile remain exact477 artifacts.
+
 - [ ] Review task1 plus full integration and resolve all load-bearing findings. Confirm WDK pin choice, build clean native and pinned KMD/UMD with Universal/sign/version/hash gates.
 - [ ] First new candidate all200 Windows leaves+EL2 system, management proven prerequisite, application20/21 admitted, no initdata/workload. Save before/after Event129 timestamps and exact cleanup.
 - [ ] After verdict continue first unknown only: offline native I/O/Hwdata/initdata gaps -> next exact candidate, then runtime/queues -> real completion. Do not stop merely for checkpoint report; no blind repeat.

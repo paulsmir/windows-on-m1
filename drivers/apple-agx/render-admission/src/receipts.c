@@ -97,6 +97,30 @@ _Use_decl_annotations_ void AdmissionRecordFirmwareQualification(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordBackendQualification(
+    ADMISSION_CONTEXT *Context,ULONG Stage,ULONG Result,ULONG Phase,ULONG Flags,
+    ULONGLONG ArenaGpu,ULONG ArenaBytes) {
+  HANDLE key=NULL;LARGE_INTEGER time;
+  if(!Context || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  KeQuerySystemTimePrecise(&time);
+  if(Stage==1) {
+    WriteDword(key,L"Wom1BackendQualificationResult",Result);
+    WriteDword(key,L"Wom1BackendQualificationPhase",Phase);
+    WriteDword(key,L"Wom1BackendQualificationFlags",Flags);
+    WriteQword(key,L"Wom1BackendQualificationArenaGpu",ArenaGpu);
+    WriteDword(key,L"Wom1BackendQualificationArenaBytes",ArenaBytes);
+    WriteQword(key,L"Wom1BackendQualificationTime",time.QuadPart);
+  } else if(Stage==2) {
+    WriteDword(key,L"Wom1BackendQualificationCleanupStatus",Result);
+    WriteDword(key,L"Wom1BackendQualificationFinalPhase",Phase);
+    WriteDword(key,L"Wom1BackendQualificationFinalFlags",Flags);
+    WriteQword(key,L"Wom1BackendQualificationCleanupTime",time.QuadPart);
+  }
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordDeviceControl(
     ADMISSION_CONTEXT *Context,ULONG Idle,ULONG Result,ULONG ReadPointer,
     ULONG WritePointer,ULONG Expected) {

@@ -6,11 +6,15 @@ param(
     [switch]$RetainedRootQualification,
     [switch]$StopAfterEndpoints,
     [switch]$FirmwareQualification,
+    [switch]$BackendQualification,
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
 
 $ErrorActionPreference = "Stop"
+if ($BackendQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification)) {
+    throw "BackendQualification must not be combined with an earlier terminal qualification profile"
+}
 if ($FirmwareQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints)) {
     throw "FirmwareQualification must not be combined with an earlier terminal qualification profile"
 }
@@ -49,13 +53,15 @@ $managementQualificationValue = if ($ManagementQualification) { "true" } else { 
 $retainedRootValue = if ($RetainedRootQualification) { "true" } else { "false" }
 $endpointStopValue = if ($StopAfterEndpoints) { "true" } else { "false" }
 $firmwareQualificationValue = if ($FirmwareQualification) { "true" } else { "false" }
+$backendQualificationValue = if ($BackendQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
     "/p:AppleAgxManagementQualification=$managementQualificationValue" `
     "/p:AppleAgxRetainedRootQualification=$retainedRootValue" `
     "/p:AppleAgxStopAfterEndpoints=$endpointStopValue" `
-    "/p:AppleAgxFirmwareQualification=$firmwareQualificationValue"
+    "/p:AppleAgxFirmwareQualification=$firmwareQualificationValue" `
+    "/p:AppleAgxBackendQualification=$backendQualificationValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

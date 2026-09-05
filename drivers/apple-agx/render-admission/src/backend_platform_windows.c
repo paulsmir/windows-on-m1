@@ -1729,6 +1729,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   backend_result = AppleAgxBackendRuntimeStart(
       &runtime->Backend, &runtime->RuntimeIo);
   AdmissionRecordBackendStartResult(Context, backend_result);
+#ifdef APPLE_AGX_BACKEND_QUALIFICATION
+  AdmissionRecordRetainedTrace(Context,runtime->AscTransport.Trace,
+      runtime->AscTransport.TraceCount*sizeof(runtime->AscTransport.Trace[0]));
+  AdmissionRecordBackendQualification(Context,1,backend_result,runtime->Backend.Phase,
+      (runtime->Backend.ArenaMapped?1u:0u)|(runtime->Backend.ContextPublished?2u:0u)|
+      (runtime->Backend.QueuesCreated?4u:0u),runtime->Backend.ArenaGpuAddress,
+      runtime->Backend.ArenaBytes);
+#endif
   if (backend_result != AppleAgxBackendRuntimeResultOk) {
     status = STATUS_DEVICE_HARDWARE_ERROR;
     AdmissionRecordPlatformStage(Context, AdmissionPlatformBackendStart,
@@ -1738,6 +1746,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   AdmissionRecordPlatformStage(Context, AdmissionPlatformBackendStart,
                                STATUS_SUCCESS);
   runtime->BackendStarted = TRUE;
+#ifdef APPLE_AGX_BACKEND_QUALIFICATION
+  status=STATUS_DEVICE_HARDWARE_ERROR; /* stop before automatic Windows workloads */
+  goto Fail;
+#endif
   runtime->WorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
   if (runtime->WorkItem == NULL) {
     status = STATUS_INSUFFICIENT_RESOURCES;
@@ -1751,8 +1763,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   return STATUS_SUCCESS;
 
 Fail:
-  if (!NT_SUCCESS(AdmissionPlatformDestroy(runtime)))
-    return STATUS_DEVICE_BUSY;
+  {
+    NTSTATUS cleanup=AdmissionPlatformDestroy(runtime);
+#ifdef APPLE_AGX_BACKEND_QUALIFICATION
+    AdmissionRecordBackendQualification(Context,2,(ULONG)cleanup,runtime->Backend.Phase,
+        (runtime->Backend.ArenaMapped?1u:0u)|(runtime->Backend.ContextPublished?2u:0u)|
+        (runtime->Backend.QueuesCreated?4u:0u),runtime->Backend.ArenaGpuAddress,
+        runtime->Backend.ArenaBytes);
+#endif
+    if(!NT_SUCCESS(cleanup)) return STATUS_DEVICE_BUSY;
+  }
   Context->PlatformRuntime = NULL;
   ExFreePoolWithTag(runtime, ADMISSION_PLATFORM_TAG);
   return status;
