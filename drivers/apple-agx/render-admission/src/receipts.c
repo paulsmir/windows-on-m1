@@ -13,6 +13,71 @@ static void WriteBinary(HANDLE Key, PCWSTR Name, const VOID *Value,
   (void)ZwSetValueKey(Key, &name, 0, REG_BINARY, (PVOID)Value, Bytes);
 }
 
+static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
+  UNICODE_STRING name;
+  RtlInitUnicodeString(&name,Name);
+  (void)ZwSetValueKey(Key,&name,0,REG_QWORD,&Value,sizeof(Value));
+}
+
+_Use_decl_annotations_ void AdmissionRecordContext0Inventory(
+    ADMISSION_CONTEXT *Context, ULONG Stage, ULONG Result,
+    const APPLE_AGX_CONTEXT0_BROKER *Journal) {
+  HANDLE key=NULL; LARGE_INTEGER time;
+  if(!Context || !Journal || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  KeQuerySystemTimePrecise(&time);
+  WriteDword(key,L"Wom1Context0Stage",Stage);
+  WriteDword(key,L"Wom1Context0Result",Result);
+  WriteDword(key,L"Wom1Context0Mapped",Journal->Mapped);
+  WriteDword(key,L"Wom1Context0Verified",Journal->Verified);
+  WriteDword(key,L"Wom1Context0Retired",Journal->Retired);
+  WriteDword(key,L"Wom1Context0Absent",Journal->Absent);
+  WriteDword(key,L"Wom1Context0LiveCount",Journal->Count);
+  WriteDword(key,L"Wom1Context0Uncertain",Journal->Uncertain);
+  WriteDword(key,L"Wom1Context0FailedRange",Journal->FailedRange);
+  WriteDword(key,L"Wom1Context0LastOperation",Journal->LastOperation);
+  WriteQword(key,L"Wom1Context0Root",Journal->Root);
+  WriteQword(key,L"Wom1Context0Epoch",Journal->Epoch);
+  if(Stage==1) {
+    WriteQword(key,L"Wom1Context0MapTime",time.QuadPart);
+    WriteDword(key,L"Wom1Context0MapResult",Result);
+    WriteDword(key,L"Wom1Context0LeafRecordBytes",sizeof(Journal->Leaves[0]));
+    if(Journal->Count<=APPLE_AGX_CONTEXT0_MAX_LEAVES)
+      WriteBinary(key,L"Wom1Context0MapInventory",Journal->Leaves,
+          Journal->Count*sizeof(Journal->Leaves[0]));
+    WriteBinary(key,L"Wom1Context0MapReply",&Journal->LastResponse,sizeof(Journal->LastResponse));
+  } else if(Stage==2) {
+    WriteQword(key,L"Wom1Context0ManagementTime",time.QuadPart);
+    WriteDword(key,L"Wom1Context0ManagementVerifyResult",Result);
+    WriteBinary(key,L"Wom1Context0ManagementReply",&Journal->LastResponse,sizeof(Journal->LastResponse));
+  } else if(Stage==3) {
+    WriteQword(key,L"Wom1Context0RetireTime",time.QuadPart);
+    WriteDword(key,L"Wom1Context0RetireResult",Result);
+  }
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordEndpoint(
+    ADMISSION_CONTEXT *Context, ULONG Endpoint, ULONG Success) {
+  HANDLE key=NULL; LARGE_INTEGER time;
+  if(!Context || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  KeQuerySystemTimePrecise(&time);
+  if(Endpoint==0x20) {
+    WriteDword(key,L"Wom1Endpoint20Started",Success);
+    WriteQword(key,L"Wom1Endpoint20Time",time.QuadPart);
+  } else if(Endpoint==0x21) {
+    WriteDword(key,L"Wom1Endpoint21Started",Success);
+    WriteQword(key,L"Wom1Endpoint21Time",time.QuadPart);
+  } else if(!Endpoint) {
+    WriteDword(key,L"Wom1EndpointQualificationStop",Success);
+    WriteQword(key,L"Wom1EndpointStopTime",time.QuadPart);
+  }
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordService(
     PUNICODE_STRING RegistryPath, PCWSTR Name, ULONG Value) {
   OBJECT_ATTRIBUTES attributes;

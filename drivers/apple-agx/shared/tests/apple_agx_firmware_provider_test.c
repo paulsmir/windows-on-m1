@@ -16,6 +16,7 @@ typedef struct _FAKE_PLATFORM {
   unsigned char RequireManagement;
   unsigned char FailManagement;
   unsigned char FailUnpublish;
+  unsigned char ExpectPublishedAtStop;
   unsigned int ManagementCount;
   unsigned int PublishCount;
   unsigned int UnpublishCount;
@@ -95,6 +96,7 @@ static unsigned char stop_asc(void *context, unsigned long long deadline) {
   assert(fake->NowMs <= deadline);
   if (!fake->AscRunning)
     return 0u;
+  if (fake->ExpectPublishedAtStop) assert(fake->RootsPublished);
   fake->AscRunning = 0u;
   fake->FirmwareEndpoint = 0u;
   fake->DoorbellEndpoint = 0u;
@@ -537,7 +539,28 @@ static void test_split_bootstrap_owns_early_roots_and_failed_cleanup(void) {
   }
 }
 
+static void test_broker_mappings_live_until_asc_stops(void) {
+  FAKE_PLATFORM fake={.Passive=1u,.ExpectPublishedAtStop=1u};
+  APPLE_AGX_GFX_HANDOFF_STATE handoff=bind_handoff(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES ops=primitives(&fake);
+  APPLE_AGX_FIRMWARE_PROVIDER provider={0}; APPLE_AGX_FIRMWARE_IO io;
+  unsigned long long address;
+  ops.RetireMappingsAfterAscStop=1;
+  assert(AppleAgxFirmwareProviderInitialize(&provider,&ops,&handoff,&io)==0);
+  start_through_endpoints(&io);
+  assert(io.PublishInitdata(io.Context,100,&address));
+  assert(io.UnpublishInitdata(io.Context,100));
+  assert(fake.RootsPublished && fake.UnpublishCount==0);
+  assert(provider.State & APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED);
+  assert(io.StopAsc(io.Context,100));
+  assert(!fake.AscRunning && !fake.RootsPublished && fake.UnpublishCount==1);
+  assert(!(provider.State & APPLE_AGX_FIRMWARE_PROVIDER_PUBLISHED));
+  assert(io.DestroyFirmwareUat(io.Context,100));
+  assert(io.PowerOff(io.Context,100));
+}
+
 int main(void) {
+  test_broker_mappings_live_until_asc_stops();
   test_split_bootstrap_owns_early_roots_and_failed_cleanup();
   test_exact_semantics_are_ready();
   test_publication_holds_exact_handoff_lock();

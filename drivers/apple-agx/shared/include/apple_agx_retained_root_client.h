@@ -12,7 +12,7 @@ static inline unsigned char AgxRrExchange(const AGX_RR_IO *io,
   unsigned int i,j;
   unsigned long long word;
   if (!io || !q || !r || !io->Read64 || !io->Write64 || !io->Write32) return 0;
-  q->Version=1; q->Bytes=sizeof(*q); q->Reserved=0;
+  q->Version=AGX_RR_ABI_VERSION; q->Bytes=sizeof(*q); q->Reserved=0;
   q->Sequence=io->Read64(io->Context,AGX_RR_OFFSET+AGX_RR_RESPONSE_OFFSET)+1;
   if (!q->Sequence) return 0;
   for(i=0;i<sizeof(*q);i+=8) {

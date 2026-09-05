@@ -56,6 +56,7 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   APPLE_AGX_UAT_PAGE UatPages[APPLE_AGX_INITDATA_MEMORY_UAT_PAGE_CAPACITY];
   APPLE_AGX_UAT_MAPPING
       UatMappings[APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY];
+  APPLE_AGX_MEMORY_OBJECT *MappingObjects[APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY];
   APPLE_AGX_UAT_INVENTORY Inventory;
   APPLE_AGX_UAT_ROOTS Roots;
   APPLE_AGX_UAT_TTBR_PAIR TtbrPair;
@@ -72,6 +73,8 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   unsigned char Initialized;
   unsigned char Built;
   unsigned char MappingsReady;
+  unsigned char BrokerOnly;
+  unsigned int BrokerOutstanding;
   APPLE_AGX_INITDATA_MEMORY_RESULT LastResult;
 } APPLE_AGX_INITDATA_MEMORY_GRAPH;
 
@@ -82,13 +85,18 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryDestroy(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph);
 
-/* Production context0: prepare owned storage before CPU start, then import
- * live private prefix after handoff and only then add kernel mappings. */
+/* Legacy/diagnostic owned-root helpers, not reachable from full production. */
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepare(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
     const APPLE_AGX_MEMORY_IO *MemoryIo,
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryImportAndMap(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph, const AGX_FW_PREFIX *Prefix);
+/* Production preparation: allocations and range metadata only; no roots,
+ * tables, private-prefix copy or Windows-owned system crashlog. */
+APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepareBroker(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    const APPLE_AGX_MEMORY_IO *MemoryIo,
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
 
 #endif /* APPLE_AGX_INITDATA_MEMORY_H */

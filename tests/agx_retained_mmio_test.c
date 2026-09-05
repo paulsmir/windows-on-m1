@@ -26,7 +26,7 @@ int main(void) {
   assert(AgxRrGpuRegionWritable(1016,8));
   assert(!AgxRrGpuRegionWritable(1024,8));
   struct hv_agx_retained_mmio state = {0};
-  AGX_RR_REQUEST q = {1,64,AGX_RR_MAP,0,1,17,0xffffffa010000000ULL,0x200000,0x4000,0};
+  AGX_RR_REQUEST q = {2,64,AGX_RR_MAP,0,1,17,0xffffffa010000000ULL,0x200000,0x4000,0};
   unsigned long long value;
   unsigned i;
   for(i=0;i<sizeof(q);i+=8) {
@@ -38,10 +38,10 @@ int main(void) {
   assert(calls==1 && state.Response.Status==0 && state.Response.Receipt==1);
   assert(hv_agx_retained_mmio(&state,64,&value,1,2,execute,0));
   assert(calls==1 && state.Response.Status!=0);
-  state.Request.Sequence=2; state.Request.Version=2;
+  state.Request.Sequence=2; state.Request.Version=1;
   assert(hv_agx_retained_mmio(&state,64,&value,1,2,execute,0));
   assert(calls==1 && state.Response.Status!=0);
-  state.Request.Version=1; state.Request.Bytes=63;
+  state.Request.Version=2; state.Request.Bytes=63;
   assert(hv_agx_retained_mmio(&state,64,&value,1,2,execute,0));
   assert(calls==1);
   assert(!hv_agx_retained_mmio(&state,128,&value,1,3,execute,0));

@@ -427,6 +427,30 @@ static void test_import_mapping_failures_free_only_owned_pages(void) {
 }
 
 int main(void) {
+  {
+    FAKE_MEMORY fake; APPLE_AGX_MEMORY_IO io;
+    APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
+    APPLE_AGX_CONFIG_SNAPSHOT snapshot=physical_snapshot();
+    unsigned i; unsigned long long leaves=0;
+    init_fixture(&fake,&io,&graph);
+    assert(AppleAgxInitdataMemoryPrepareBroker(&graph,&io,&snapshot)==0);
+    assert(fake.AllocateCount==89 && graph.DataObjectCount==7);
+    assert(graph.BrokerOnly && graph.Roots.Ttbr0PhysicalAddress==0 &&
+           graph.Roots.Ttbr1PhysicalAddress==0 && graph.Inventory.PageCount==0);
+    assert(graph.TtbrPair.Ttbr0==0 && graph.TtbrPair.Ttbr1==0);
+    assert(graph.Inventory.MappingCount==90 && !graph.MappingsReady);
+    for(i=0;i<graph.Inventory.MappingCount;++i) {
+      assert(graph.MappingObjects[i]);
+      assert(graph.UatMappings[i].VirtualAddress!=APPLE_AGX_RTKIT_CRASHLOG_GPU_VA);
+      leaves+=graph.UatMappings[i].Length/0x4000;
+    }
+    assert(leaves==200);
+    graph.BrokerOutstanding=1;
+    assert(AppleAgxInitdataMemoryDestroy(&graph)==AppleAgxInitdataMemoryResultReleaseFailed);
+    assert(fake.FreeCount==0);
+    graph.BrokerOutstanding=0;
+    assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && fake.FreeCount==89);
+  }
   test_import_mapping_failures_free_only_owned_pages();
   test_live_prefix_before_mappings_and_owned_cleanup();
   test_builds_exact_graph_and_releases();

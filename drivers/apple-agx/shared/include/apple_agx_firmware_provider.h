@@ -64,6 +64,9 @@ typedef struct _APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES {
   unsigned char (*PublishUatRoots)(
       void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair);
   unsigned char (*UnpublishUatRoots)(void *Context);
+  /* Broker mappings may be consumed by running firmware. Keep publication
+   * ownership through deferred unpublish until StopAsc has succeeded. */
+  unsigned char RetireMappingsAfterAscStop;
   unsigned char (*SendInitdata)(void *Context,
                                 unsigned long long InitdataAddress,
                                 unsigned long long DeadlineMs);

@@ -27,6 +27,7 @@
 #include "apple_agx_firmware_provider.h"
 #include "apple_agx_device_control.h"
 #include "apple_agx_initdata_memory.h"
+#include "apple_agx_context0_broker.h"
 #include "apple_agx_retained_root_abi.h"
 #include "apple_agx_power.h"
 #include "apple_agx_rtkit_session.h"
@@ -284,6 +285,10 @@ void AdmissionRecordRetainedRoot(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Operation, _In_ const AGX_RR_RESPONSE *Response);
 void AdmissionRecordRetainedTrace(_In_ ADMISSION_CONTEXT *Context,
     _In_reads_bytes_(Bytes) const VOID *Data, _In_ ULONG Bytes);
+void AdmissionRecordContext0Inventory(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Stage, _In_ ULONG Result, _In_ const APPLE_AGX_CONTEXT0_BROKER *Journal);
+void AdmissionRecordEndpoint(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Endpoint, _In_ ULONG Success);
 void AdmissionRecordRtkitBoot(_In_ ADMISSION_CONTEXT *Context,
                               _In_ APPLE_AGX_RTKIT_SESSION_RESULT Result,
                               _In_ const APPLE_AGX_RTKIT_SESSION *Session);

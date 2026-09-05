@@ -23,7 +23,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY=1;APPLE_AGX_FULL_CONTEXT0_BROKER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
@@ -34,6 +34,12 @@
   <ItemDefinitionGroup Condition="'$(AppleAgxManagementQualification)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxStopAfterEndpoints)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_STOP_AFTER_ENDPOINTS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxRetainedRootQualification)'=='true'">
@@ -113,6 +119,7 @@
     <ClCompile Include="..\shared\src\apple_agx_gfx_handoff.c" />
     <ClCompile Include="..\shared\src\apple_agx_initdata.c" />
     <ClCompile Include="..\shared\src\apple_agx_initdata_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_context0_broker.c" />
     <ClCompile Include="..\shared\src\apple_agx_firmware_status.c" />
     <ClCompile Include="..\shared\src\apple_agx_channel_info.c" />
     <ClCompile Include="..\shared\src\apple_agx_channel_memory.c" />

@@ -15,16 +15,9 @@ C_ASSERT((ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES % sizeof(ULONG)) == 0u);
 typedef struct _ADMISSION_ASC_TRANSPORT {
   volatile UCHAR *Base;
   ULONG Length;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   struct { ULONG Offset, Write; ULONGLONG Value; } Trace[64];
   ULONG TraceCount;
-#endif
 } ADMISSION_ASC_TRANSPORT;
-
-typedef struct _ADMISSION_PUBLICATION_MAPPING {
-  PDXGKRNL_INTERFACE Interface;
-  volatile UCHAR *MappedBase;
-} ADMISSION_PUBLICATION_MAPPING;
 
 typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_CONTEXT *Adapter;
@@ -38,14 +31,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_GFX_HANDOFF_STATE Handoff;
   APPLE_AGX_GFX_HANDOFF_IO HandoffIo;
   APPLE_AGX_INITDATA_MEMORY_GRAPH Initdata;
-  ADMISSION_PUBLICATION_MAPPING PublicationMapping;
-  APPLE_AGX_UAT_PUBLICATION_IO PublicationIo;
-  APPLE_AGX_UAT_PUBLICATION_STATE FirmwarePublication;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   ULONGLONG RetainedEpoch, RetainedRoot, RetainedRoot0;
-  ULONGLONG RetainedHandle, RetainedIpa;
+  APPLE_AGX_CONTEXT0_BROKER Context0Lease;
   BOOLEAN RetainedPrepared;
-#endif
   APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES FirmwarePrimitives;
   APPLE_AGX_FIRMWARE_PROVIDER FirmwareProvider;
   APPLE_AGX_FIRMWARE_IO FirmwareIo;
@@ -259,13 +247,11 @@ static APPLE_AGX_ASC_BOOL AdmissionAscRead64(
     return APPLE_AGX_ASC_FALSE;
   *Value = READ_REGISTER_ULONG64(
       (volatile ULONG64 *)(transport->Base + Offset));
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   if (transport->TraceCount < RTL_NUMBER_OF(transport->Trace)) {
     transport->Trace[transport->TraceCount].Offset = Offset;
     transport->Trace[transport->TraceCount].Write = 0;
     transport->Trace[transport->TraceCount++].Value = *Value;
   }
-#endif
   return APPLE_AGX_ASC_TRUE;
 }
 
@@ -287,13 +273,11 @@ static APPLE_AGX_ASC_BOOL AdmissionAscWrite64(
     return APPLE_AGX_ASC_FALSE;
   WRITE_REGISTER_ULONG64((volatile ULONG64 *)(transport->Base + Offset),
                          Value);
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   if (transport->TraceCount < RTL_NUMBER_OF(transport->Trace)) {
     transport->Trace[transport->TraceCount].Offset = Offset;
     transport->Trace[transport->TraceCount].Write = 1;
     transport->Trace[transport->TraceCount++].Value = Value;
   }
-#endif
   return APPLE_AGX_ASC_TRUE;
 }
 
@@ -393,47 +377,6 @@ static unsigned long long AdmissionHandoffNow(void *Context) {
   return AdmissionPlatformNowMs();
 }
 
-static unsigned char AdmissionPublicationMap(
-    void *Context, unsigned long long PhysicalAddress, unsigned int Length,
-    volatile unsigned char **VirtualAddress) {
-  ADMISSION_PUBLICATION_MAPPING *mapping = Context;
-  PHYSICAL_ADDRESS address;
-  PVOID base = NULL;
-  if (mapping == NULL || mapping->Interface == NULL ||
-      mapping->MappedBase != NULL || VirtualAddress == NULL ||
-      PhysicalAddress != J313_AGX_G2_GPU_BASE ||
-      Length != J313_AGX_G2_GPU_SIZE)
-    return 0u;
-  address.QuadPart = (LONGLONG)PhysicalAddress;
-  if (!NT_SUCCESS(mapping->Interface->DxgkCbMapMemory(
-          mapping->Interface->DeviceHandle, address, Length, FALSE, FALSE,
-          MmNonCached, &base)) ||
-      base == NULL)
-    return 0u;
-  mapping->MappedBase = base;
-  *VirtualAddress = base;
-  return 1u;
-}
-
-static void AdmissionPublicationBarrier(void *Context) {
-  UNREFERENCED_PARAMETER(Context);
-  KeMemoryBarrier();
-}
-
-static unsigned char AdmissionPublicationUnmap(
-    void *Context, volatile unsigned char *VirtualAddress) {
-  ADMISSION_PUBLICATION_MAPPING *mapping = Context;
-  if (mapping == NULL || mapping->Interface == NULL ||
-      mapping->MappedBase == NULL ||
-      VirtualAddress != mapping->MappedBase)
-    return 0u;
-  if (!NT_SUCCESS(mapping->Interface->DxgkCbUnmapMemory(
-          mapping->Interface->DeviceHandle, (PVOID)VirtualAddress)))
-    return 0u;
-  mapping->MappedBase = NULL;
-  return 1u;
-}
-
 static APPLE_AGX_POWER_U32 AdmissionPowerRead32(
     void *Context, APPLE_AGX_POWER_U32 Offset) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
@@ -527,9 +470,8 @@ static unsigned char AdmissionFirmwarePowerOff(
 }
 
 
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
 #include "apple_agx_retained_root_client.h"
-#define ADMISSION_RETAINED_PROBE_VA 0xffffffa010000000ULL
+
 static unsigned long long AdmissionRetainedRead(void *ctx,unsigned int offset) {
   ADMISSION_PLATFORM_RUNTIME *r=ctx;
   return READ_REGISTER_ULONG64((volatile ULONG64 *)(r->Adapter->BrokerBase+offset));
@@ -549,11 +491,6 @@ static BOOLEAN AdmissionRetainedCommand(ADMISSION_PLATFORM_RUNTIME *runtime,
   BOOLEAN exchanged;
   request.Command = operation;
   request.Epoch = operation == AGX_RR_PREPARE ? 0 : runtime->RetainedEpoch;
-  if (operation == AGX_RR_MAP || operation == AGX_RR_QUERY || operation == AGX_RR_UNMAP) {
-    request.Va = ADMISSION_RETAINED_PROBE_VA;
-    request.Ipa = runtime->RetainedIpa; request.Length = 0x4000;
-    request.Handle = operation == AGX_RR_MAP ? 0 : runtime->RetainedHandle;
-  }
   exchanged = AgxRrExchange(&io,&request,response) ? TRUE : FALSE;
   AdmissionRecordRetainedRoot(runtime->Adapter,operation,response);
   return exchanged &&
@@ -562,36 +499,41 @@ static BOOLEAN AdmissionRetainedCommand(ADMISSION_PLATFORM_RUNTIME *runtime,
        (response->Epoch == runtime->RetainedEpoch && response->Root == runtime->RetainedRoot));
 }
 
-static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
-  AGX_RR_RESPONSE response = {0};
-  APPLE_AGX_MEMORY_OBJECT *object = &runtime->Initdata.DataObjects[AppleAgxInitdataMemoryEnvelope];
-  ADMISSION_PHYSICAL_ALLOCATION *allocation = object->AllocationHandle;
-  SIZE_T offset;
-  if (!runtime->RetainedPrepared || !runtime->Handoff.Locked || !allocation ||
-      !allocation->PhysicalMemoryObject || !allocation->Adl ||
-      allocation->Interface != &runtime->Adapter->Interface ||
-      object->Length < 0x4000 || (PUCHAR)object->CpuAddress < allocation->CpuBase)
-    return 0;
-  offset = (SIZE_T)((PUCHAR)object->CpuAddress - allocation->CpuBase);
-  if (offset > allocation->Size || 0x4000 > allocation->Size-offset ||
-      allocation->GuestIpaBase > MAXULONGLONG-offset) return 0;
-  runtime->RetainedIpa = allocation->GuestIpaBase + offset;
-  if (runtime->RetainedIpa & 0x3fff) return 0;
-  if (!AdmissionRetainedCommand(runtime,AGX_RR_ACTIVATE,&response) ||
-      !(response.Flags & AGX_RR_FLAG_ACTIVE) ||
-      !(response.Flags & AGX_RR_FLAG_PREFIX_UNCHANGED) ||
-      response.SystemVa != 0xffffffa080000000ULL || response.SystemBytes != 0x4000)
-    return 0;
-  runtime->Rtkit.CrashlogGpuAddress = response.SystemVa & ((1ULL<<44)-1);
-  runtime->Rtkit.CrashlogCapacityBytes = (ULONG)response.SystemBytes;
-  if (!AdmissionRetainedCommand(runtime,AGX_RR_MAP,&response) || !response.Handle)
-    return 0;
-  runtime->RetainedHandle = response.Handle;
-  return AdmissionRetainedCommand(runtime,AGX_RR_QUERY,&response) &&
-         response.Pa == object->DeviceAddress && response.Count == 1 &&
-         (response.Flags & AGX_RR_FLAG_PREFIX_UNCHANGED);
+
+static unsigned char AdmissionContext0Ipa(void *ctx,const APPLE_AGX_MEMORY_OBJECT *object,
+    unsigned long long leaf_offset,unsigned long long *ipa) {
+  ADMISSION_PLATFORM_RUNTIME *runtime=ctx;
+  ADMISSION_PHYSICAL_ALLOCATION *allocation=object?object->AllocationHandle:NULL;
+  ULONGLONG offset;
+  if(!runtime || !object || !ipa || !allocation || !allocation->PhysicalMemoryObject ||
+      !allocation->Adl || allocation->Interface!=&runtime->Adapter->Interface ||
+      (PUCHAR)object->CpuAddress<allocation->CpuBase || leaf_offset>object->Length ||
+      0x4000>object->Length-leaf_offset) return 0;
+  offset=(SIZE_T)((PUCHAR)object->CpuAddress-allocation->CpuBase);
+  if(offset>allocation->Size || leaf_offset>allocation->Size-offset ||
+      0x4000>allocation->Size-offset-leaf_offset ||
+      allocation->GuestIpaBase>MAXULONGLONG-offset ||
+      allocation->GuestIpaBase+offset>MAXULONGLONG-leaf_offset) return 0;
+  *ipa=allocation->GuestIpaBase+offset+leaf_offset;
+  return (*ipa&0x3fff)==0;
 }
-#endif
+
+static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  AGX_RR_RESPONSE response={0};
+  AGX_RR_IO io={runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
+  int result;
+  if(!runtime->RetainedPrepared || !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
+    return 0;
+  if(!AdmissionRetainedCommand(runtime,AGX_RR_ACTIVATE,&response) ||
+      !(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
+      response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
+  runtime->Rtkit.CrashlogGpuAddress=response.SystemVa&((1ULL<<44)-1);
+  runtime->Rtkit.CrashlogCapacityBytes=(ULONG)response.SystemBytes;
+  result=AppleAgxContext0BrokerMap(&runtime->Context0Lease,&runtime->Initdata,&io,
+      runtime->RetainedEpoch,runtime->RetainedRoot,AdmissionContext0Ipa,runtime);
+  AdmissionRecordContext0Inventory(runtime->Adapter,1,result,&runtime->Context0Lease);
+  return result==AppleAgxContext0Ok;
+}
 
 static unsigned char AdmissionFirmwareCreateUat(
     void *Context, unsigned long long DeadlineMs,
@@ -600,11 +542,9 @@ static unsigned char AdmissionFirmwareCreateUat(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   if (runtime == NULL || Pair == NULL || InitdataAddress == NULL ||
       AdmissionPlatformNowMs() >= DeadlineMs || !runtime->Initdata.Built ||
-      runtime->Initdata.TtbrPair.Ttbr0 == 0ULL ||
-      runtime->Initdata.TtbrPair.Ttbr1 == 0ULL ||
+      !runtime->Initdata.BrokerOnly ||
       runtime->Initdata.InitdataVirtualAddress == 0ULL)
     return 0u;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   {
     AGX_RR_RESPONSE response = {0};
     if (!AdmissionRetainedCommand(runtime,AGX_RR_PREPARE,&response)) return 0;
@@ -618,35 +558,22 @@ static unsigned char AdmissionFirmwareCreateUat(
         ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
     return response.Ttbr0 != 0 && !(response.Ttbr0 & 0x3fff);
   }
-#else
-  runtime->Rtkit.CrashlogGpuAddress =
-      runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog] &
-      ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
-  runtime->Rtkit.CrashlogCapacityBytes = APPLE_AGX_RTKIT_CRASHLOG_BYTES;
-  *Pair = runtime->Initdata.TtbrPair;
-  *InitdataAddress = runtime->Initdata.InitdataVirtualAddress &
-                     ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK;
-  return *InitdataAddress != 0ULL ? 1u : 0u;
-#endif
 }
 
 static unsigned char AdmissionFirmwareDestroyUat(
     void *Context, unsigned long long DeadlineMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   AGX_RR_RESPONSE response = {0};
   if (!runtime || AdmissionPlatformNowMs() >= DeadlineMs) return 0;
   if (!runtime->RetainedPrepared) return 1;
+  {
+    int result=AppleAgxContext0BrokerRetire(&runtime->Context0Lease);
+    AdmissionRecordContext0Inventory(runtime->Adapter,3,result,&runtime->Context0Lease);
+    if(result!=AppleAgxContext0Ok) return 0;
+  }
   if (!AdmissionRetainedCommand(runtime,AGX_RR_CLOSE,&response)) return 0;
   runtime->RetainedPrepared = FALSE;
-  runtime->RetainedHandle = 0;
   return 1;
-#else
-  return runtime != NULL && AdmissionPlatformNowMs() < DeadlineMs &&
-                 runtime->FirmwarePublication.Active == 0u
-             ? 1u
-             : 0u;
-#endif
 }
 
 static unsigned char AdmissionFirmwarePublishUat(
@@ -660,11 +587,6 @@ static void AdmissionFirmwareRecordBootstrap(
   if (runtime == NULL)
     return;
   AdmissionRecordProviderBootstrap(runtime->Adapter, Phase, Success, State);
-#ifndef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
-  if (Phase == APPLE_AGX_PROVIDER_BOOT_ROOTS)
-    AdmissionRecordPreManagementUat(runtime->Adapter, Success != 0u,
-                                  &runtime->FirmwarePublication);
-#endif
 }
 
 static unsigned char AdmissionFirmwareBootAsc(
@@ -688,18 +610,14 @@ static unsigned char AdmissionFirmwareCompleteManagement(
   result = AppleAgxRtkitSessionCompleteManagementBootstrap(
       &runtime->Rtkit, &runtime->AscIo, DeadlineMs);
   AdmissionRecordRtkitBoot(runtime->Adapter, result, &runtime->Rtkit);
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   AdmissionRecordRetainedTrace(runtime->Adapter,runtime->AscTransport.Trace,
       runtime->AscTransport.TraceCount * sizeof(runtime->AscTransport.Trace[0]));
-#endif
-#ifndef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
-  if (result != AppleAgxRtkitSessionResultOk && runtime->Rtkit.CrashlogReplySent)
-    AdmissionRecordRtkitCrashlog(
-        runtime->Adapter,
-        runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog].CpuAddress,
-        APPLE_AGX_RTKIT_CRASHLOG_BYTES);
-#endif
-  return result == AppleAgxRtkitSessionResultOk ? 1u : 0u;
+  if(result==AppleAgxRtkitSessionResultOk) {
+    int checked=AppleAgxContext0BrokerVerify(&runtime->Context0Lease);
+    AdmissionRecordContext0Inventory(runtime->Adapter,2,checked,&runtime->Context0Lease);
+    return checked==AppleAgxContext0Ok;
+  }
+  return 0u;
 }
 
 static unsigned char AdmissionFirmwareStopAsc(
@@ -746,7 +664,16 @@ static unsigned char AdmissionFirmwareStartEndpoint(
   AdmissionRecordFirmwarePrefix(runtime->Adapter, 4, NULL, NULL);
   return 0u;
 #else
-  return AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, TRUE);
+  ADMISSION_PLATFORM_RUNTIME *runtime=Context;
+  unsigned char success;
+  if(!runtime || !runtime->Rtkit.Boot.EndpointMapComplete ||
+      (Endpoint!=0x20 && Endpoint!=0x21) ||
+      !(runtime->Rtkit.Boot.EndpointMap[Endpoint>>5] & (1u<<(Endpoint&31)))) return 0;
+  success=AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, TRUE);
+  AdmissionRecordEndpoint(runtime->Adapter,Endpoint,success);
+  AdmissionRecordRetainedTrace(runtime->Adapter,runtime->AscTransport.Trace,
+      runtime->AscTransport.TraceCount*sizeof(runtime->AscTransport.Trace[0]));
+  return success;
 #endif
 }
 
@@ -760,99 +687,22 @@ static unsigned char AdmissionFirmwareStopEndpoint(
 }
 
 
-#ifndef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
-static unsigned char AdmissionFirmwareImportPrefix(ADMISSION_PLATFORM_RUNTIME *runtime) {
-  AGX_FW_PREFIX live = {0}, verify = {0};
-  unsigned long long epoch, after_epoch, crashlog_pa = 0, crashlog_descriptor = 0;
-  unsigned long long *root = NULL;
-  ULONG i;
-  if (!runtime || !runtime->Powered || !runtime->Handoff.Locked ||
-      runtime->Initdata.MappingsReady)
-    return 0u;
-  AdmissionRecordFirmwarePrefix(runtime->Adapter, 1, NULL, NULL);
-  epoch = AdmissionPowerRead64(runtime, J313_AGX_G2_POWER_REG_RECEIPT_SEQUENCE);
-  for (i = 0; i < sizeof(live) / sizeof(ULONGLONG); ++i)
-    ((ULONGLONG *)&live)[i] = AdmissionPowerRead64(runtime,
-        AGX_FW_PREFIX_OFFSET + i * sizeof(ULONGLONG));
-  for (i = 0; i < sizeof(verify) / sizeof(ULONGLONG); ++i)
-    ((ULONGLONG *)&verify)[i] = AdmissionPowerRead64(runtime,
-        AGX_FW_PREFIX_OFFSET + i * sizeof(ULONGLONG));
-  after_epoch = AdmissionPowerRead64(runtime, J313_AGX_G2_POWER_REG_RECEIPT_SEQUENCE);
-  AdmissionRecordFirmwarePrefix(runtime->Adapter, 2, &live, NULL);
-  if (after_epoch != epoch || RtlCompareMemory(&live, &verify, sizeof(live)) != sizeof(live) ||
-      !AgxFwPrefixValid(&live, sizeof(live), epoch) ||
-      AppleAgxInitdataMemoryImportAndMap(&runtime->Initdata, &live) !=
-          AppleAgxInitdataMemoryResultOk)
-    return 0u;
-  for (i = 0; i < runtime->Initdata.Inventory.PageCount; ++i)
-    if (runtime->Initdata.UatPages[i].PhysicalAddress ==
-        runtime->Initdata.Roots.Ttbr1PhysicalAddress)
-      root = runtime->Initdata.UatPages[i].Entries;
-  if (!root || root[0] != live.Entries[0] || root[1] != live.Entries[1])
-    return 0u;
-  if (runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog].Length !=
-          APPLE_AGX_RTKIT_CRASHLOG_BYTES ||
-      AppleAgxUatResolvePage(
-          0u, &runtime->Initdata.Roots,
-          runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog],
-          &runtime->Initdata.Inventory, &crashlog_pa, &crashlog_descriptor) !=
-          AppleAgxUatResultOk ||
-      crashlog_pa != runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog]
-                         .DeviceAddress)
-    return 0u;
-
-  KeMemoryBarrier();
-  AdmissionRecordFirmwarePrefix(runtime->Adapter, 3, &live, root);
-  return 1u;
-}
-
-#endif
 static unsigned char AdmissionFirmwarePublishUat(
     void *Context, const APPLE_AGX_UAT_TTBR_PAIR *Pair) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
   return runtime && Pair && runtime->RetainedRoot0 &&
       Pair->Ttbr0 == (runtime->RetainedRoot0 | 1ULL) &&
       Pair->Ttbr1 == (runtime->RetainedRoot | 1ULL) &&
       AdmissionRetainedActivate(runtime);
-#else
-  if (runtime != NULL && Pair != NULL &&
-      runtime->FirmwarePublication.Active != 0u)
-    return runtime->FirmwarePublication.PublishedTtbr0 == Pair->Ttbr0 &&
-                   runtime->FirmwarePublication.PublishedTtbr1 == Pair->Ttbr1
-               ? 1u
-               : 0u;
-  return runtime != NULL && Pair != NULL &&
-                 AdmissionFirmwareImportPrefix(runtime) &&
-                 AppleAgxUatPublishJ313(
-                     &runtime->Snapshot, Pair, &runtime->PublicationIo,
-                     &runtime->FirmwarePublication) ==
-                     AppleAgxUatPublicationResultOk
-             ? 1u
-             : 0u;
-#endif
 }
 
 static unsigned char AdmissionFirmwareUnpublishUat(void *Context) {
-  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
-  AGX_RR_RESPONSE response = {0};
-  if (!runtime) return 0;
-  if (!runtime->RetainedHandle) return 1;
-  if (!AdmissionRetainedCommand(runtime,AGX_RR_UNMAP,&response)) return 0;
-  runtime->RetainedHandle = 0;
-  return 1;
-#else
-  if (runtime == NULL)
-    return 0u;
-  if (runtime->FirmwarePublication.Active == 0u)
-    return 1u;
-  return AppleAgxUatUnpublishJ313(
-             &runtime->PublicationIo, &runtime->FirmwarePublication) ==
-                 AppleAgxUatPublicationResultOk
-             ? 1u
-             : 0u;
-#endif
+  ADMISSION_PLATFORM_RUNTIME *runtime=Context;
+  int result;
+  if(!runtime || runtime->Rtkit.Running) return 0;
+  result=AppleAgxContext0BrokerRetire(&runtime->Context0Lease);
+  AdmissionRecordContext0Inventory(runtime->Adapter,3,result,&runtime->Context0Lease);
+  return result==AppleAgxContext0Ok;
 }
 
 static unsigned char AdmissionFirmwareSendInitdata(
@@ -862,6 +712,12 @@ static unsigned char AdmissionFirmwareSendInitdata(
   ULONGLONG message;
   if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs)
     return 0u;
+#ifdef APPLE_AGX_STOP_AFTER_ENDPOINTS
+  AdmissionRecordEndpoint(runtime->Adapter,0,1); /* explicit pre-initdata stop */
+  UNREFERENCED_PARAMETER(Address);
+  UNREFERENCED_PARAMETER(message);
+  return 0u;
+#else
   message = AppleAgxRtkitInitdata(Address);
   return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
                  AppleAgxAscSend(
@@ -870,6 +726,7 @@ static unsigned char AdmissionFirmwareSendInitdata(
                      AppleAgxAscResultOk
              ? 1u
              : 0u;
+#endif
 }
 
 static APPLE_AGX_BACKEND_BOOL AdmissionTransportFlush(
@@ -1514,10 +1371,6 @@ static NTSTATUS AdmissionPlatformDestroy(
   NTSTATUS status = STATUS_SUCCESS;
   if (Runtime == NULL)
     return STATUS_SUCCESS;
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
-  if (Runtime->RetainedPrepared)
-    return STATUS_DEVICE_BUSY;
-#endif
   InterlockedExchange(&Runtime->Stopping, 1);
   if (Runtime->WorkItem != NULL) {
     KeWaitForSingleObject(&Runtime->WorkIdle, Executive, KernelMode,
@@ -1541,8 +1394,7 @@ static NTSTATUS AdmissionPlatformDestroy(
       AppleAgxFirmwareProviderDestroy(&Runtime->FirmwareProvider) !=
           AppleAgxFirmwareProviderResultOk)
     return STATUS_DEVICE_BUSY;
-  if (Runtime->FirmwarePublication.Active != 0u &&
-      !AdmissionFirmwareUnpublishUat(Runtime))
+  if (Runtime->RetainedPrepared || Runtime->Context0Lease.Count || Runtime->Context0Lease.Uncertain)
     return STATUS_DEVICE_BUSY;
   if (Runtime->Powered) {
     APPLE_AGX_POWER_IO io;
@@ -1676,7 +1528,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   }
   AdmissionRecordPlatformStage(Context, AdmissionPlatformHandoffBind,
                                STATUS_SUCCESS);
-  if (AppleAgxInitdataMemoryPrepare(
+  if (AppleAgxInitdataMemoryPrepareBroker(
           &runtime->Initdata, &runtime->MemoryIo,
           &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
     status = STATUS_INSUFFICIENT_RESOURCES;
@@ -1686,11 +1538,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata,
                                STATUS_SUCCESS);
 
-  runtime->PublicationMapping.Interface = &Context->Interface;
-  runtime->PublicationIo.Context = &runtime->PublicationMapping;
-  runtime->PublicationIo.Map = AdmissionPublicationMap;
-  runtime->PublicationIo.Barrier = AdmissionPublicationBarrier;
-  runtime->PublicationIo.Unmap = AdmissionPublicationUnmap;
 
   runtime->TransportIo.Context = runtime;
   runtime->TransportIo.FlushForDevice = AdmissionTransportFlush;
@@ -1730,6 +1577,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->FirmwarePrimitives.PublishUatRoots = AdmissionFirmwarePublishUat;
   runtime->FirmwarePrimitives.UnpublishUatRoots =
       AdmissionFirmwareUnpublishUat;
+  runtime->FirmwarePrimitives.RetireMappingsAfterAscStop=1;
   runtime->FirmwarePrimitives.SendInitdata = AdmissionFirmwareSendInitdata;
   runtime->FirmwarePrimitives.SendDeviceControlInit =
       AdmissionFirmwareDeviceControlInit;
@@ -1747,7 +1595,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->FirmwareIo.RecordPhase = AdmissionFirmwareRecordPhase;
   AdmissionRecordPlatformStage(Context, AdmissionPlatformFirmwareProvider,
                                STATUS_SUCCESS);
-#ifdef APPLE_AGX_RETAINED_ROOT_QUALIFICATION
+#if defined(APPLE_AGX_MANAGEMENT_QUALIFICATION) || defined(APPLE_AGX_STOP_AFTER_ENDPOINTS)
   {
     APPLE_AGX_FIRMWARE qualification;
     APPLE_AGX_FIRMWARE_RESULT result;
@@ -1920,10 +1768,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
   /* The stopped firmware lifetime must not donate its copied private prefix
    * to the next boot. Rebuild only our owned graph before channel providers
    * borrow any addresses; context63 and its physical owner are unchanged. */
-  if (runtime->FirmwarePublication.Active || runtime->Rtkit.Running ||
+  if (runtime->RetainedPrepared || runtime->Context0Lease.Count || runtime->Rtkit.Running ||
       AppleAgxInitdataMemoryDestroy(&runtime->Initdata) !=
           AppleAgxInitdataMemoryResultOk ||
-      AppleAgxInitdataMemoryPrepare(&runtime->Initdata, &runtime->MemoryIo,
+      AppleAgxInitdataMemoryPrepareBroker(&runtime->Initdata, &runtime->MemoryIo,
           &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
     status = STATUS_DEVICE_HARDWARE_ERROR;
     goto Exit;
