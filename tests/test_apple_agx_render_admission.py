@@ -128,7 +128,8 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             "Wom1DisplayDdiReceipt",
         ):
             self.assertIn(name, receipts)
-            self.assertEqual(receipts.count(name), 1)
+            expected_count = 2 if name == "Wom1DisplayDdiReceipt" else 1
+            self.assertEqual(receipts.count(name), expected_count)
         for split_field in (
             "Wom1Type1Status", "Wom1Type1Size", "Wom1Type1Caps",
             "Wom1Type16Status", "Wom1Type16Size", "Wom1Type16Caps",

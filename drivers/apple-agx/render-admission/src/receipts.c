@@ -511,6 +511,26 @@ _Use_decl_annotations_ void AdmissionRecordDisplayDdi(
     receipt.Status = (ULONG)Status;
     receipt.Time = (ULONGLONG)time.QuadPart;
     WriteBinary(key, L"Wom1DisplayDdiReceipt", &receipt, sizeof(receipt));
+
+    /* PnP may delete the device-key values while unwinding a failed adapter
+     * start.  Keep the same last observation in the owning service key for
+     * post-failure diagnostics; this mirror never feeds a driver decision. */
+    {
+      OBJECT_ATTRIBUTES attributes;
+      UNICODE_STRING servicePath;
+      HANDLE serviceKey = NULL;
+      RtlInitUnicodeString(
+          &servicePath,
+          L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+      InitializeObjectAttributes(&attributes, &servicePath,
+                                 OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                                 NULL, NULL);
+      if (NT_SUCCESS(ZwOpenKey(&serviceKey, KEY_SET_VALUE, &attributes))) {
+        WriteBinary(serviceKey, L"Wom1DisplayDdiReceipt", &receipt,
+                    sizeof(receipt));
+        ZwClose(serviceKey);
+      }
+    }
   }
   ZwClose(key);
 }
