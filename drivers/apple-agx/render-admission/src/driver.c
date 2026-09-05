@@ -43,6 +43,7 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiRecommendMonitorModes =
       AdmissionDdiRecommendMonitorModes;
   initialization.DxgkDdiGetScanLine = AdmissionDdiGetScanLine;
+  initialization.DxgkDdiStopCapture = AdmissionDdiStopCapture;
   initialization.DxgkDdiQueryVidPnHWCapability =
       AdmissionDdiQueryVidPnHWCapability;
   initialization.DxgkDdiSetVidPnSourceAddress =
@@ -66,6 +67,10 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
   initialization.DxgkDdiPreemptCommand = AdmissionDdiPreemptCommand;
   initialization.DxgkDdiRender = AdmissionDdiRender;
   initialization.DxgkDdiPresent = AdmissionDdiPresent;
+  initialization.DxgkDdiCreateOverlay = AdmissionDdiCreateOverlay;
+  initialization.DxgkDdiUpdateOverlay = AdmissionDdiUpdateOverlay;
+  initialization.DxgkDdiFlipOverlay = AdmissionDdiFlipOverlay;
+  initialization.DxgkDdiDestroyOverlay = AdmissionDdiDestroyOverlay;
   initialization.DxgkDdiResetFromTimeout = AdmissionDdiResetFromTimeout;
   initialization.DxgkDdiRestartFromTimeout = AdmissionDdiRestartFromTimeout;
   initialization.DxgkDdiEscape = AdmissionDdiEscape;

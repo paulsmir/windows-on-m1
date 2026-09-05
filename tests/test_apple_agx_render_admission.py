@@ -79,6 +79,42 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("D3DDDIFMT_A8R8G8B8", present)
         self.assertIn("return STATUS_SUCCESS", present)
 
+    def test_render_core_legacy_callback_group_is_complete_but_inert(self):
+        driver = self.read("src/driver.c")
+        callbacks = self.read("src/callbacks.c")
+        header = self.read("include/render_admission.h")
+        lifecycle = self.read("src/lifecycle.c")
+
+        # Current dxgkrnl's ADAPTER_RENDER::CreateRenderCore rejects a mixed
+        # default/vendor legacy group before it creates the render adapter.
+        # Register the whole indivisible group without advertising overlays or
+        # capture support; unsupported entry points stay fail-closed.
+        names = (
+            "StopCapture",
+            "CreateOverlay",
+            "UpdateOverlay",
+            "FlipOverlay",
+            "DestroyOverlay",
+        )
+        for name in names:
+            self.assertIn(
+                f"initialization.DxgkDdi{name} = AdmissionDdi{name}", driver
+            )
+            self.assertIn(f"AdmissionDdi{name}", header)
+            self.assertIn(f"AdmissionDdi{name}", callbacks)
+
+        fail2 = callbacks[callbacks.index("#define FAIL2"):
+                          callbacks.index("AdmissionDdiNotifyAcpiEvent")]
+        self.assertIn("return STATUS_NOT_SUPPORTED", fail2)
+        for name in ("CreateOverlay", "UpdateOverlay", "FlipOverlay"):
+            self.assertIn(f"FAIL2(AdmissionDdi{name}", callbacks)
+        destroy = callbacks[callbacks.index("AdmissionDdiDestroyOverlay"):
+                            callbacks.index("FAIL2(AdmissionDdiEscape")]
+        self.assertIn("return STATUS_NOT_SUPPORTED", destroy)
+
+        self.assertNotIn("SupportMultiPlaneOverlay = TRUE", lifecycle)
+        self.assertNotIn("SupportOverlay", lifecycle)
+
     def test_start_is_natural_hardware_inert_render_admission(self):
         lifecycle = self.read("src/lifecycle.c")
         header = self.read("include/render_admission.h")

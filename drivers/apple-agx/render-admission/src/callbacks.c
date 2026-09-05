@@ -110,6 +110,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionDdiStopCapture(
+    HANDLE Adapter, const DXGKARG_STOPCAPTURE *StopCapture) {
+  UNUSED(Adapter);
+  UNUSED(StopCapture);
+  /* No capture engine or capture allocations exist, so nothing is active. */
+  return STATUS_SUCCESS;
+}
+
+FAIL2(AdmissionDdiCreateOverlay, HANDLE, Adapter, DXGKARG_CREATEOVERLAY *, Args)
+FAIL2(AdmissionDdiUpdateOverlay, HANDLE, Overlay, const DXGKARG_UPDATEOVERLAY *,
+      Args)
+FAIL2(AdmissionDdiFlipOverlay, HANDLE, Overlay, const DXGKARG_FLIPOVERLAY *,
+      Args)
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyOverlay(HANDLE Overlay) {
+  UNUSED(Overlay);
+  return STATUS_NOT_SUPPORTED;
+}
+
 FAIL2(AdmissionDdiEscape, HANDLE, Adapter, const DXGKARG_ESCAPE *, Args)
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
