@@ -393,6 +393,12 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformRenderUnpublish(void *Context) {
 
 static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformQueuesCreate(void *Context) {
   APPLE_AGX_PLATFORM_PROVIDER *provider = Context;
+  APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG mapped_config;
+  /* Preparation never grants residency: retain strict mapped validation at
+   * the actual queue-create boundary, after successful firmware startup. */
+  if (provider == PLATFORM_NULL || !AppleAgxRenderSharedMemoryBuildQueueConfig(
+          provider->RenderSharedMemory, 1u, &mapped_config))
+    return APPLE_AGX_BACKEND_FALSE;
   return provider != PLATFORM_NULL && provider->BindingReady
              ? provider->QueueBackendIo.Queues.Create(
                    provider->QueueBackendIo.Context)
@@ -560,9 +566,11 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
     return APPLE_AGX_BACKEND_FALSE;
   }
 
-  if (!AppleAgxRenderSharedMemoryBuildQueueConfig(
-          Config->RenderSharedMemory, Config->QueueConfig.TimeoutTicks,
-          &queue_config)) {
+  if (!(Config->DeferFirmwareMappings
+      ? AppleAgxRenderSharedMemoryPrepareQueueConfig(
+          Config->RenderSharedMemory, Config->QueueConfig.TimeoutTicks, &queue_config)
+      : AppleAgxRenderSharedMemoryBuildQueueConfig(
+          Config->RenderSharedMemory, Config->QueueConfig.TimeoutTicks, &queue_config))) {
     AppleAgxPlatformProviderReset(Provider, APPLE_AGX_BACKEND_TRUE);
     return APPLE_AGX_BACKEND_FALSE;
   }

@@ -150,22 +150,23 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
 
 static APPLE_AGX_BOOL queue_object_valid(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
-    APPLE_AGX_U32 Index, APPLE_AGX_U64 MinimumBytes) {
+    APPLE_AGX_U32 Index, APPLE_AGX_U64 MinimumBytes, APPLE_AGX_BOOL Prepared) {
   return Index < Owner->ObjectCount && Owner->VirtualAddresses[Index] != 0ULL &&
                  Owner->Objects[Index].CpuAddress != RENDER_SHARED_NULL &&
                  Owner->Objects[Index].Length >= MinimumBytes &&
-                 Owner->Objects[Index].State == AppleAgxMemoryGpuMapped &&
-                 Owner->Objects[Index].Context == 0u &&
-                 Owner->Objects[Index].GpuVirtualAddress ==
-                     Owner->VirtualAddresses[Index]
+                 ((Prepared && Owner->Objects[Index].State == AppleAgxMemoryPrepared &&
+                   Owner->Objects[Index].GpuVirtualAddress == 0ULL) ||
+                  (!Prepared && Owner->Objects[Index].State == AppleAgxMemoryGpuMapped &&
+                   Owner->Objects[Index].Context == 0u &&
+                   Owner->Objects[Index].GpuVirtualAddress == Owner->VirtualAddresses[Index]))
              ? APPLE_AGX_TRUE
              : APPLE_AGX_FALSE;
 }
 
-APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildQueueConfig(
+static APPLE_AGX_BOOL queue_config(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     APPLE_AGX_U64 TimeoutTicks,
-    APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config) {
+    APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config, APPLE_AGX_BOOL Prepared) {
   const APPLE_AGX_U32 d3_queue_info = 3u;
   const APPLE_AGX_U32 d3_ring = 4u;
   const APPLE_AGX_U32 ta_queue_info = 6u;
@@ -177,16 +178,16 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildQueueConfig(
   if (Owner == RENDER_SHARED_NULL || !Owner->Initialized || !Owner->Built ||
       Owner->ObjectCount != APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT ||
       Config == RENDER_SHARED_NULL || TimeoutTicks == 0ULL ||
-      !queue_object_valid(Owner, d3_queue_info, 184u) ||
+      !queue_object_valid(Owner, d3_queue_info, 184u, Prepared) ||
       !queue_object_valid(Owner, d3_ring,
-                          APPLE_AGX_G13_RING_CAPACITY * 8ULL) ||
-      !queue_object_valid(Owner, ta_queue_info, 184u) ||
+                          APPLE_AGX_G13_RING_CAPACITY * 8ULL, Prepared) ||
+      !queue_object_valid(Owner, ta_queue_info, 184u, Prepared) ||
       !queue_object_valid(Owner, ta_ring,
-                          APPLE_AGX_G13_RING_CAPACITY * 8ULL) ||
-      !queue_object_valid(Owner, d3_pointers, 0x44u) ||
-      !queue_object_valid(Owner, ta_pointers, 0x44u) ||
-      !queue_object_valid(Owner, ta_stamp, 4u) ||
-      !queue_object_valid(Owner, d3_stamp, 4u))
+                          APPLE_AGX_G13_RING_CAPACITY * 8ULL, Prepared) ||
+      !queue_object_valid(Owner, d3_pointers, 0x44u, Prepared) ||
+      !queue_object_valid(Owner, ta_pointers, 0x44u, Prepared) ||
+      !queue_object_valid(Owner, ta_stamp, 4u, Prepared) ||
+      !queue_object_valid(Owner, d3_stamp, 4u, Prepared))
     return APPLE_AGX_FALSE;
 
   zero_bytes(Config, (APPLE_AGX_U64)sizeof(*Config));
@@ -217,6 +218,18 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildQueueConfig(
   Config->D3.EventNumber = 1u;
   Config->TimeoutTicks = TimeoutTicks;
   return APPLE_AGX_TRUE;
+}
+
+
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildQueueConfig(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U64 TimeoutTicks,
+    APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config) {
+  return queue_config(Owner, TimeoutTicks, Config, APPLE_AGX_FALSE);
+}
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryPrepareQueueConfig(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner, APPLE_AGX_U64 TimeoutTicks,
+    APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config) {
+  return queue_config(Owner, TimeoutTicks, Config, APPLE_AGX_TRUE);
 }
 
 #undef RENDER_SHARED_PAGE_MASK

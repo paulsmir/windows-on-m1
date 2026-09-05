@@ -42,6 +42,13 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildQueueConfig(
     APPLE_AGX_U64 TimeoutTicks,
     APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config);
 
+/* CPU-only provider configuration before firmware-private prefix import.
+ * This does not assert GPU residency or authorize queue creation. */
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryPrepareQueueConfig(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U64 TimeoutTicks,
+    APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config);
+
 APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryDestroy(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner);
 

@@ -25,6 +25,7 @@ typedef struct _FAKE_COMPONENTS {
   unsigned int FailApplyAt;
   APPLE_AGX_G13_QUEUE_PROVIDER_IO CapturedProviderIo;
   APPLE_AGX_BACKEND_IO CapturedRenderIo;
+  APPLE_AGX_BACKEND_IO CapturedQueueIo;
   unsigned int ExternalBuildCalls;
   unsigned int ExternalResolveCalls;
 } FAKE_COMPONENTS;
@@ -143,6 +144,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformComposerInitialize(
   assert(Composer != NULL && Config != NULL && Io != NULL);
   assert(Config->QueueProvider != NULL && Config->Runtime != NULL);
   g_components->CapturedRenderIo = *Config->Render;
+  g_components->CapturedQueueIo = *Config->Queues;
   memset(Composer, 0, sizeof(*Composer));
   Composer->Initialized = APPLE_AGX_BACKEND_TRUE;
   memset(Io, 0, sizeof(*Io));
@@ -705,7 +707,44 @@ static void test_external_rebased_image_mode_uses_exact_job_and_ranges(void) {
   assert(AppleAgxPlatformProviderDestroy(&provider));
 }
 
+static void test_deferred_bind_does_not_authorize_queue_creation(void) {
+  APPLE_AGX_CHANNEL_MEMORY_OWNER owner;
+  APPLE_AGX_PLATFORM_PROVIDER provider = {0};
+  APPLE_AGX_PLATFORM_PROVIDER_CONFIG config;
+  APPLE_AGX_BACKEND_RUNTIME runtime = {0};
+  APPLE_AGX_BACKEND_IO io = {0};
+  FAKE_TRANSPORT transport = {0};
+  FAKE_COMPONENTS components = {0};
+  unsigned char storage[35][0x4000];
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
+  static unsigned char render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+  unsigned int i;
+  prepare_channel_memory(&owner, storage);
+  prepare_render_shared_memory(&render_shared, render_storage);
+  for (i = 0; i < owner.ObjectCount; ++i) {
+    owner.Objects[i].State = AppleAgxMemoryPrepared;
+    owner.Objects[i].GpuVirtualAddress = 0;
+  }
+  for (i = 0; i < render_shared.ObjectCount; ++i) {
+    render_shared.Objects[i].State = AppleAgxMemoryPrepared;
+    render_shared.Objects[i].GpuVirtualAddress = 0;
+  }
+  config = provider_config(&owner, &transport, &runtime, &render_shared);
+  config.DeferFirmwareMappings = APPLE_AGX_BACKEND_TRUE;
+  g_components = &components; g_transport = &transport;
+  assert(AppleAgxPlatformProviderInitialize(&provider, &config, &io));
+  assert(!components.CapturedQueueIo.Queues.Create(components.CapturedQueueIo.Context));
+  assert(transport.DoorbellCalls == 0 && transport.PublishCalls == 0);
+  for (i = 0; i < config.RenderSharedMemory->ObjectCount; ++i) {
+    config.RenderSharedMemory->Objects[i].State = AppleAgxMemoryGpuMapped;
+    config.RenderSharedMemory->Objects[i].GpuVirtualAddress = config.RenderSharedMemory->VirtualAddresses[i];
+  }
+  assert(components.CapturedQueueIo.Queues.Create(components.CapturedQueueIo.Context));
+  assert(AppleAgxPlatformProviderDestroy(&provider));
+}
+
 int main(void) {
+  test_deferred_bind_does_not_authorize_queue_creation();
   test_exact_group1_bindings();
   test_exact_run_channel_publication();
   test_persistent_owner_and_bounded_event_drain();

@@ -1611,6 +1611,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   RtlZeroMemory(&runtime->ProviderConfig, sizeof(runtime->ProviderConfig));
   runtime->ProviderConfig.ChannelMemory =
       &runtime->Initdata.ChannelMemory;
+  runtime->ProviderConfig.DeferFirmwareMappings = APPLE_AGX_BACKEND_TRUE;
   runtime->ProviderConfig.Transport = runtime->TransportIo;
   runtime->ProviderConfig.Firmware = &runtime->FirmwareIo;
   runtime->ProviderConfig.Render = &runtime->RenderIo;

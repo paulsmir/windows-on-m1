@@ -376,6 +376,14 @@ static void test_live_prefix_before_mappings_and_owned_cleanup(void) {
     memset(&fake, 0, sizeof(fake));
     assert(AppleAgxInitdataMemoryPrepare(&graph,&io,&snapshot) == 0);
     assert(graph.Inventory.MappingCount == 0 && graph.MappingsReady == 0);
+    assert(graph.ChannelMemory.Objects[0].State == AppleAgxMemoryPrepared);
+    {
+      APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG config;
+      assert(AppleAgxRenderSharedMemoryPrepareQueueConfig(
+          &graph.RenderSharedMemory,500,&config));
+      assert(!AppleAgxRenderSharedMemoryBuildQueueConfig(
+          &graph.RenderSharedMemory,500,&config));
+    }
     for (i = 0; i < graph.Inventory.PageCount; ++i)
       if (graph.UatPages[i].PhysicalAddress == graph.Roots.Ttbr1PhysicalAddress)
         root = graph.UatPages[i].Entries;

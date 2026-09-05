@@ -271,6 +271,16 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepare(
     return AppleAgxInitdataMemoryRollback(
         Graph, AppleAgxInitdataMemoryResultUatFailed);
 
+  /* CPU content is complete. Prepared is not GPU-mapped: provider may build
+   * address/configuration bindings, but no queue can run before live import. */
+  for (index = 0; index < APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT; ++index)
+    if (AppleAgxMemoryMarkPrepared(&Graph->ChannelMemory.Objects[index]) !=
+        AppleAgxMemoryResultOk)
+      return AppleAgxInitdataMemoryRollback(Graph, AppleAgxInitdataMemoryResultUatFailed);
+  for (index = 0; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT; ++index)
+    if (AppleAgxMemoryMarkPrepared(&Graph->RenderSharedMemory.Objects[index]) !=
+        AppleAgxMemoryResultOk)
+      return AppleAgxInitdataMemoryRollback(Graph, AppleAgxInitdataMemoryResultUatFailed);
   /* The caller owns publication into the fixed GPU region and ASC startup. */
   Graph->InitdataVirtualAddress =
       Graph->VirtualAddresses[AppleAgxInitdataMemoryEnvelope];
@@ -312,9 +322,7 @@ static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryMapPrepared(
           Graph, uat_result == AppleAgxUatResultAllocationFailed
                      ? AppleAgxInitdataMemoryResultAllocationFailed
                      : AppleAgxInitdataMemoryResultUatFailed);
-    if (AppleAgxMemoryMarkPrepared(&Graph->ChannelMemory.Objects[index]) !=
-            AppleAgxMemoryResultOk ||
-        AppleAgxMemoryMarkGpuMapped(
+    if (AppleAgxMemoryMarkGpuMapped(
             &Graph->ChannelMemory.Objects[index],
             J313_AGX_G2_UAT_FIRMWARE_CONTEXT,
             Graph->ChannelMemory.VirtualAddresses[index]) !=
@@ -346,9 +354,6 @@ static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryMapPrepared(
         AppleAgxUatFirmwareSharedReadWrite, &Graph->UatAllocator,
         &Graph->Inventory);
     if (uat_result != AppleAgxUatResultOk ||
-        AppleAgxMemoryMarkPrepared(
-            &Graph->RenderSharedMemory.Objects[index]) !=
-            AppleAgxMemoryResultOk ||
         AppleAgxMemoryMarkGpuMapped(
             &Graph->RenderSharedMemory.Objects[index],
             J313_AGX_G2_UAT_FIRMWARE_CONTEXT,
