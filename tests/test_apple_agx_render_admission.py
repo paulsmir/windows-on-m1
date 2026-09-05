@@ -40,7 +40,8 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             "DxgkDdiEnumVidPnCofuncModality",
             "DxgkDdiSetVidPnSourceVisibility", "DxgkDdiCommitVidPn",
             "DxgkDdiUpdateActiveVidPnPresentPath",
-            "DxgkDdiRecommendMonitorModes", "DxgkDdiQueryVidPnHWCapability",
+            "DxgkDdiRecommendMonitorModes", "DxgkDdiRecommendVidPnTopology",
+            "DxgkDdiQueryVidPnHWCapability",
             "DxgkDdiSetVidPnSourceAddress",
             "DxgkDdiStopDeviceAndReleasePostDisplayOwnership",
             "DxgkDdiInterruptRoutine", "DxgkDdiDpcRoutine",
@@ -55,6 +56,26 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
             "DxgkDdiSystemDisplayWrite",
         ):
             self.assertNotIn(f"initialization.{callback} =", driver)
+
+    def test_display_core_has_truthful_no_topology_recommendation_callback(self):
+        driver = self.read("src/driver.c")
+        display = self.read("src/display.c")
+        header = self.read("include/render_admission.h")
+
+        self.assertIn(
+            "initialization.DxgkDdiRecommendVidPnTopology =\n"
+            "      AdmissionDdiRecommendVidPnTopology",
+            driver,
+        )
+        self.assertIn(
+            "DXGKDDI_RECOMMENDVIDPNTOPOLOGY "
+            "AdmissionDdiRecommendVidPnTopology",
+            header,
+        )
+        start = display.index("AdmissionDdiRecommendVidPnTopology")
+        body = display[start:start + 600]
+        self.assertIn("STATUS_GRAPHICS_NO_RECOMMENDED_VIDPN_TOPOLOGY", body)
+        self.assertNotIn("pfnCreateNewPathInfo", body)
 
     def test_palette_scanline_fail_closed_and_present_accepts_exact_mmio_flip(self):
         display = self.read("src/display.c")

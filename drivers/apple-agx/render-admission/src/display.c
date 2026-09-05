@@ -156,6 +156,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRecommendFunctionalVidPn(
   return STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionDdiRecommendVidPnTopology(
+    CONST HANDLE MiniportDeviceContext,
+    CONST DXGKARG_RECOMMENDVIDPNTOPOLOGY *RecommendVidPnTopology) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(RecommendVidPnTopology);
+  return STATUS_GRAPHICS_NO_RECOMMENDED_VIDPN_TOPOLOGY;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
     CONST HANDLE MiniportDeviceContext,
     CONST DXGKARG_ENUMVIDPNCOFUNCMODALITY *EnumCofuncModality) {
