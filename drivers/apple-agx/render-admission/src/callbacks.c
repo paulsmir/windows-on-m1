@@ -145,12 +145,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
 
   if (device == NULL ||
       device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL ||
-      Args->hContext == NULL || Args->pPrivateDriverData != NULL ||
+      Args->pPrivateDriverData != NULL ||
       Args->PrivateDriverDataSize != 0u)
     return STATUS_INVALID_PARAMETER;
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
+  /* VidSch also supplies no runtime handle for its paging SystemContext. */
+  if (Args->hContext == NULL && (flags & ADMISSION_CONTEXT_SYSTEM) == 0u)
+    return STATUS_INVALID_PARAMETER;
   context = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*context),
                             ADMISSION_POOL_TAG);
   if (context == NULL)

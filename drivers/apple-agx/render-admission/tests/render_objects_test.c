@@ -109,7 +109,35 @@ static void test_adapter_stop_requires_no_live_devices(void) {
   assert(!AdmissionObjectsStopAdapter(&adapter));
 }
 
+static void test_paging_context_without_runtime_handle(void) {
+  ADMISSION_OBJECT_ADAPTER adapter;
+  ADMISSION_OBJECT_DEVICE device;
+  ADMISSION_OBJECT_CONTEXT context;
+
+  AdmissionObjectsInitializeAdapter(&adapter);
+  assert(AdmissionObjectsStartAdapter(&adapter));
+  assert(AdmissionObjectsCreateDevice(&adapter, NULL,
+                                      ADMISSION_DEVICE_SYSTEM, &device));
+  assert(AdmissionObjectsCreateContext(&device, NULL, 0u, 1u,
+                                       ADMISSION_CONTEXT_SYSTEM, &context));
+  assert(context.RuntimeHandle == NULL);
+  assert(context.Device == &device);
+  assert(device.ContextCount == 1u);
+  assert(!AdmissionObjectsDestroyDevice(&device));
+  assert(AdmissionObjectsDestroyContext(&context));
+  assert(device.ContextCount == 0u);
+  assert(!AdmissionObjectsCreateContext(&device, NULL, 0u, 1u, 0u, &context));
+  assert(!AdmissionObjectsCreateContext(&device, NULL, 0u, 1u,
+                                        ADMISSION_CONTEXT_GDI, &context));
+  assert(!AdmissionObjectsCreateContext(&device, NULL, 1u, 1u,
+                                        ADMISSION_CONTEXT_SYSTEM, &context));
+  assert(device.ContextCount == 0u);
+  assert(AdmissionObjectsDestroyDevice(&device));
+  assert(AdmissionObjectsStopAdapter(&adapter));
+}
+
 int main(void) {
+  test_paging_context_without_runtime_handle();
   test_system_device_without_runtime_handle();
   test_device_and_context_lifetime();
   test_invalid_inputs_do_not_mutate_storage();

@@ -83,7 +83,9 @@ int AdmissionObjectsCreateContext(ADMISSION_OBJECT_DEVICE *Device,
       Device->Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
       Device->Adapter == ADMISSION_OBJECT_NULL ||
       Device->Adapter->Magic != ADMISSION_OBJECT_ADAPTER_MAGIC ||
-      Device->Adapter->Started == 0u || RuntimeHandle == ADMISSION_OBJECT_NULL ||
+      Device->Adapter->Started == 0u ||
+      (RuntimeHandle == ADMISSION_OBJECT_NULL &&
+       (Flags & ADMISSION_CONTEXT_SYSTEM) == 0u) ||
       Context == ADMISSION_OBJECT_NULL || NodeOrdinal != 0u ||
       EngineAffinity != 1u ||
       (Flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u ||
