@@ -136,6 +136,32 @@ _Use_decl_annotations_ void AdmissionRecordFirmwarePowerOn(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordRetainedTrace(
+    ADMISSION_CONTEXT *Context, const VOID *Data, ULONG Bytes) {
+  HANDLE key = NULL;
+  if (!Context || !Data || Bytes > 1024 || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  WriteBinary(key,L"Wom1RetainedManagementTrace",Data,Bytes);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordRetainedRoot(
+    ADMISSION_CONTEXT *Context, ULONG Operation, const AGX_RR_RESPONSE *Response) {
+  static const PCWSTR names[] = {L"Wom1RetainedInvalid", L"Wom1RetainedPrepare",
+      L"Wom1RetainedActivate",L"Wom1RetainedMap",L"Wom1RetainedUnmap",
+      L"Wom1RetainedQuery",L"Wom1RetainedClose"};
+  HANDLE key = NULL;
+  if (!Context || !Response || Operation >= RTL_NUMBER_OF(names) ||
+      !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  WriteDword(key,L"Wom1RetainedLastOperation",Operation);
+  WriteDword(key,L"Wom1RetainedLastStatus",Response->Status);
+  WriteBinary(key,names[Operation],Response,sizeof(*Response));
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordFirmwarePrefix(
     ADMISSION_CONTEXT *Context, ULONG Stage, const AGX_FW_PREFIX *Prefix,
     const ULONGLONG *Imported) {

@@ -3,6 +3,7 @@ param(
     [string]$Configuration = "Release",
     [switch]$MemoryQualification,
     [switch]$ManagementQualification,
+    [switch]$RetainedRootQualification,
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
@@ -40,10 +41,12 @@ Copy-Item -Force $umd (Join-Path $root "AppleAgxRenderAdmissionUmd.dll")
 
 $memoryQualificationValue = if ($MemoryQualification) { "true" } else { "false" }
 $managementQualificationValue = if ($ManagementQualification) { "true" } else { "false" }
+$retainedRootValue = if ($RetainedRootQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
-    "/p:AppleAgxManagementQualification=$managementQualificationValue"
+    "/p:AppleAgxManagementQualification=$managementQualificationValue" `
+    "/p:AppleAgxRetainedRootQualification=$retainedRootValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

@@ -27,6 +27,7 @@
 #include "apple_agx_firmware_provider.h"
 #include "apple_agx_device_control.h"
 #include "apple_agx_initdata_memory.h"
+#include "apple_agx_retained_root_abi.h"
 #include "apple_agx_power.h"
 #include "apple_agx_rtkit_session.h"
 #include "apple_agx_fixed_panel.h"
@@ -279,6 +280,10 @@ void AdmissionRecordFirmwarePowerOn(_In_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordFirmwarePrefix(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Stage, _In_opt_ const AGX_FW_PREFIX *Prefix,
     _In_opt_ const ULONGLONG *Imported);
+void AdmissionRecordRetainedRoot(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Operation, _In_ const AGX_RR_RESPONSE *Response);
+void AdmissionRecordRetainedTrace(_In_ ADMISSION_CONTEXT *Context,
+    _In_reads_bytes_(Bytes) const VOID *Data, _In_ ULONG Bytes);
 void AdmissionRecordRtkitBoot(_In_ ADMISSION_CONTEXT *Context,
                               _In_ APPLE_AGX_RTKIT_SESSION_RESULT Result,
                               _In_ const APPLE_AGX_RTKIT_SESSION *Session);

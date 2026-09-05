@@ -36,6 +36,13 @@
       <PreprocessorDefinitions>APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxRetainedRootQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_RETAINED_ROOT_QUALIFICATION=1;APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Deliberate terminal qualification branch before queue/backend start. -->
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_RENDER_MEMORY_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
