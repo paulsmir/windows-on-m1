@@ -19,11 +19,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
     PVOID MiniportDeviceContext, PDXGK_CHILD_DESCRIPTOR ChildRelations,
     ULONG ChildRelationsSize) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_SUCCESS;
 
-  if (context == NULL || !context->Started || ChildRelations == NULL)
+  if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR))
-    return STATUS_BUFFER_TOO_SMALL;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 1u, 1u,
+                            STATUS_PENDING);
+  if (!context->Started || ChildRelations == NULL)
+    status = STATUS_INVALID_PARAMETER;
+  else if (ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR))
+    status = STATUS_BUFFER_TOO_SMALL;
+  if (!NT_SUCCESS(status)) {
+    AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 1u, 2u, status);
+    return status;
+  }
 
   RtlZeroMemory(ChildRelations, ChildRelationsSize);
   ChildRelations[0].ChildDeviceType = TypeVideoOutput;
@@ -38,33 +47,47 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
       FALSE;
   ChildRelations[0].AcpiUid = 0;
   ChildRelations[0].ChildUid = 0;
-  return STATUS_SUCCESS;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 1u, 2u, status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildStatus(
     PVOID MiniportDeviceContext, PDXGK_CHILD_STATUS ChildStatus,
     BOOLEAN NonDestructiveOnly) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status = STATUS_SUCCESS;
 
   UNREFERENCED_PARAMETER(NonDestructiveOnly);
-  if (context == NULL || !context->Started || ChildStatus == NULL ||
-      ChildStatus->ChildUid != 0)
+  if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  if (ChildStatus->Type != StatusConnection)
-    return STATUS_NOT_SUPPORTED;
-  ChildStatus->HotPlug.Connected = TRUE;
-  return STATUS_SUCCESS;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 2u, 1u,
+                            STATUS_PENDING);
+  if (!context->Started || ChildStatus == NULL || ChildStatus->ChildUid != 0)
+    status = STATUS_INVALID_PARAMETER;
+  else if (ChildStatus->Type != StatusConnection)
+    status = STATUS_NOT_SUPPORTED;
+  else
+    ChildStatus->HotPlug.Connected = TRUE;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 2u, 2u, status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDeviceDescriptor(
     PVOID MiniportDeviceContext, ULONG ChildUid,
     PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status;
 
-  if (context == NULL || !context->Started || DeviceDescriptor == NULL ||
-      ChildUid != 0)
+  if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  return STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 3u, 1u,
+                            STATUS_PENDING);
+  if (!context->Started || DeviceDescriptor == NULL || ChildUid != 0)
+    status = STATUS_INVALID_PARAMETER;
+  else
+    status = STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED;
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 3u, 2u, status);
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPointerPosition(

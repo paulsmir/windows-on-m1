@@ -1,5 +1,48 @@
 #include "render_admission.h"
 
+#define ADMISSION_QUERY_RECEIPT_VERSION 1u
+#define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
+
+typedef struct _ADMISSION_TYPE1_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Type;
+  ULONG Status;
+  ULONG OutputBytes;
+  ULONG CapturedBytes;
+  DXGK_DRIVERCAPS Caps;
+} ADMISSION_TYPE1_RECEIPT;
+
+typedef struct _ADMISSION_DISPLAY_CAPS_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Type;
+  ULONG Status;
+  ULONG OutputBytes;
+  ULONG CapturedBytes;
+  DXGK_DISPLAY_DRIVERCAPS_EXTENSION Caps;
+} ADMISSION_DISPLAY_CAPS_RECEIPT;
+
+typedef struct _ADMISSION_WDDM_DEVICE_CAPS_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Type;
+  ULONG Status;
+  ULONG OutputBytes;
+  ULONG CapturedBytes;
+  DXGK_WDDMDEVICECAPS Caps;
+} ADMISSION_WDDM_DEVICE_CAPS_RECEIPT;
+
+typedef struct _ADMISSION_DISPLAY_DDI_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG DdiId;
+  ULONG Phase;
+  ULONG Status;
+  ULONG Reserved;
+  ULONGLONG Time;
+} ADMISSION_DISPLAY_DDI_RECEIPT;
+
 static void WriteDword(HANDLE Key, PCWSTR Name, ULONG Value) {
   UNICODE_STRING name;
   RtlInitUnicodeString(&name, Name);
@@ -392,7 +435,7 @@ _Use_decl_annotations_ void AdmissionRecordPreManagementUat(
 
 _Use_decl_annotations_ void AdmissionRecordQuery(
     PDEVICE_OBJECT DeviceObject, DXGK_QUERYADAPTERINFOTYPE Type,
-    ULONG OutputDataSize, NTSTATUS Status) {
+    ULONG OutputDataSize, NTSTATUS Status, const VOID *OutputData) {
   HANDLE key = NULL;
   if (DeviceObject == NULL ||
       !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
@@ -402,6 +445,73 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
   WriteDword(key, L"Wom1CleanQueryType", (ULONG)Type);
   WriteDword(key, L"Wom1CleanQuerySize", OutputDataSize);
   WriteDword(key, L"Wom1CleanStatus", (ULONG)Status);
+  if (Type == DXGKQAITYPE_DRIVERCAPS) {
+    ADMISSION_TYPE1_RECEIPT receipt;
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.Version = ADMISSION_QUERY_RECEIPT_VERSION;
+    receipt.Bytes = sizeof(receipt);
+    receipt.Type = (ULONG)Type;
+    receipt.Status = (ULONG)Status;
+    receipt.OutputBytes = OutputDataSize;
+    if (NT_SUCCESS(Status) && OutputData != NULL &&
+        OutputDataSize >= sizeof(receipt.Caps)) {
+      RtlCopyMemory(&receipt.Caps, OutputData, sizeof(receipt.Caps));
+      receipt.CapturedBytes = sizeof(receipt.Caps);
+    }
+    WriteBinary(key, L"Wom1Type1Receipt", &receipt, sizeof(receipt));
+  } else if (Type == DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION) {
+    ADMISSION_DISPLAY_CAPS_RECEIPT receipt;
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.Version = ADMISSION_QUERY_RECEIPT_VERSION;
+    receipt.Bytes = sizeof(receipt);
+    receipt.Type = (ULONG)Type;
+    receipt.Status = (ULONG)Status;
+    receipt.OutputBytes = OutputDataSize;
+    if (NT_SUCCESS(Status) && OutputData != NULL &&
+        OutputDataSize >= sizeof(receipt.Caps)) {
+      RtlCopyMemory(&receipt.Caps, OutputData, sizeof(receipt.Caps));
+      receipt.CapturedBytes = sizeof(receipt.Caps);
+    }
+    WriteBinary(key, L"Wom1DisplayCapsReceipt", &receipt, sizeof(receipt));
+  } else if (Type == DXGKQAITYPE_WDDMDEVICECAPS) {
+    ADMISSION_WDDM_DEVICE_CAPS_RECEIPT receipt;
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.Version = ADMISSION_QUERY_RECEIPT_VERSION;
+    receipt.Bytes = sizeof(receipt);
+    receipt.Type = (ULONG)Type;
+    receipt.Status = (ULONG)Status;
+    receipt.OutputBytes = OutputDataSize;
+    if (NT_SUCCESS(Status) && OutputData != NULL &&
+        OutputDataSize >= sizeof(receipt.Caps)) {
+      RtlCopyMemory(&receipt.Caps, OutputData, sizeof(receipt.Caps));
+      receipt.CapturedBytes = sizeof(receipt.Caps);
+    }
+    WriteBinary(key, L"Wom1WddmDeviceCapsReceipt", &receipt,
+                sizeof(receipt));
+  }
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordDisplayDdi(
+    PDEVICE_OBJECT DeviceObject, ULONG DdiId, ULONG Phase, NTSTATUS Status) {
+  HANDLE key = NULL;
+  LARGE_INTEGER time;
+  if (DeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE,
+                                          KEY_SET_VALUE, &key)))
+    return;
+  KeQuerySystemTimePrecise(&time);
+  {
+    ADMISSION_DISPLAY_DDI_RECEIPT receipt;
+    RtlZeroMemory(&receipt, sizeof(receipt));
+    receipt.Version = ADMISSION_DISPLAY_DDI_RECEIPT_VERSION;
+    receipt.Bytes = sizeof(receipt);
+    receipt.DdiId = DdiId;
+    receipt.Phase = Phase;
+    receipt.Status = (ULONG)Status;
+    receipt.Time = (ULONGLONG)time.QuadPart;
+    WriteBinary(key, L"Wom1DisplayDdiReceipt", &receipt, sizeof(receipt));
+  }
   ZwClose(key);
 }
 

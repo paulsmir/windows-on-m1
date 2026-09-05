@@ -115,6 +115,48 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertNotIn("SupportMultiPlaneOverlay = TRUE", lifecycle)
         self.assertNotIn("SupportOverlay", lifecycle)
 
+    def test_post_start_admission_trace_is_receipt_only_and_bounded(self):
+        receipts = self.read("src/receipts.c")
+        lifecycle = self.read("src/lifecycle.c")
+        display = self.read("src/display.c")
+        header = self.read("include/render_admission.h")
+
+        for name in (
+            "Wom1Type1Receipt", "Wom1DisplayCapsReceipt",
+            "Wom1WddmDeviceCapsReceipt",
+            "Wom1DisplayDdiReceipt",
+        ):
+            self.assertIn(name, receipts)
+            self.assertEqual(receipts.count(name), 1)
+        for split_field in (
+            "Wom1Type1Status", "Wom1Type1Size", "Wom1Type1Caps",
+            "Wom1Type16Status", "Wom1Type16Size", "Wom1Type16Caps",
+            "Wom1DisplayDdiId", "Wom1DisplayDdiPhase",
+            "Wom1DisplayDdiStatus", "Wom1DisplayDdiTime",
+        ):
+            self.assertNotIn(split_field, receipts)
+        self.assertIn("DXGK_DRIVERCAPS Caps", receipts)
+        self.assertIn("DXGK_WDDMDEVICECAPS Caps", receipts)
+        self.assertIn("DXGK_DISPLAY_DRIVERCAPS_EXTENSION Caps", receipts)
+        self.assertIn("sizeof(receipt.Caps)", receipts)
+        display_caps = receipts[
+            receipts.index("DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION"):
+            receipts.index("DXGKQAITYPE_WDDMDEVICECAPS",
+                           receipts.index("DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION"))
+        ]
+        self.assertIn("ADMISSION_DISPLAY_CAPS_RECEIPT", display_caps)
+        self.assertIn("Wom1DisplayCapsReceipt", display_caps)
+        self.assertIn("CapturedBytes", receipts)
+        self.assertIn("QueryAdapterInfo->pOutputData", lifecycle)
+        self.assertIn("AdmissionRecordDisplayDdi", header)
+        for ddi_id in ("1u", "2u", "3u"):
+            self.assertIn(
+                f"AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, {ddi_id}",
+                display,
+            )
+        self.assertNotIn("MmMapIoSpace", receipts)
+        self.assertNotIn("WRITE_REGISTER", receipts)
+
     def test_start_is_natural_hardware_inert_render_admission(self):
         lifecycle = self.read("src/lifecycle.c")
         header = self.read("include/render_admission.h")

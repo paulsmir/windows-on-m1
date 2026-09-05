@@ -317,7 +317,12 @@ void AdmissionRecordRtkitCrashlog(_In_ ADMISSION_CONTEXT *Context,
                                  _In_ ULONG Bytes);
 void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ DXGK_QUERYADAPTERINFOTYPE Type,
-                          _In_ ULONG OutputDataSize, _In_ NTSTATUS Status);
+                          _In_ ULONG OutputDataSize, _In_ NTSTATUS Status,
+                          _In_reads_bytes_opt_(OutputDataSize)
+                              const VOID *OutputData);
+void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
+                               _In_ ULONG DdiId, _In_ ULONG Phase,
+                               _In_ NTSTATUS Status);
 void AdmissionRecordMemoryQualification(
     _In_opt_ PDEVICE_OBJECT DeviceObject,
     _In_ const ADMISSION_MEMORY_QUALIFICATION *Qualification);

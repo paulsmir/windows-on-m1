@@ -463,7 +463,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     break;
   }
   AdmissionRecordQuery(context->PhysicalDeviceObject, QueryAdapterInfo->Type,
-                       QueryAdapterInfo->OutputDataSize, status);
+                       QueryAdapterInfo->OutputDataSize, status,
+                       QueryAdapterInfo->pOutputData);
   return status;
 }
 
