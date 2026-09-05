@@ -365,7 +365,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->PreemptionCaps.GraphicsPreemptionGranularity =
             D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
         caps->PreemptionCaps.ComputePreemptionGranularity =
-            D3DKMDT_COMPUTE_PREEMPTION_NONE;
+            D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY;
         caps->FlipCaps.FlipOnVSyncMmIo = 1u;
         caps->FlipCaps.FlipIndependent = 1u;
         caps->SupportNonVGA = TRUE;

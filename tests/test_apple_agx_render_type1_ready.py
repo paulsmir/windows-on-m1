@@ -39,7 +39,7 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
             "caps->SchedulingCaps.MultiEngineAware = 1u",
             "caps->SchedulingCaps.PreemptionAware = 1u",
             "D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY",
-            "D3DKMDT_COMPUTE_PREEMPTION_NONE",
+            "D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY",
             "caps->FlipCaps.FlipOnVSyncMmIo = 1u",
             "caps->FlipCaps.FlipIndependent = 1u",
             "caps->SupportNonVGA = TRUE",
