@@ -43,6 +43,7 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
             "caps->FlipCaps.FlipOnVSyncMmIo = 1u",
             "caps->FlipCaps.FlipIndependent = 1u",
             "caps->SupportNonVGA = TRUE",
+            "caps->SupportSmoothRotation = TRUE",
             "caps->SupportPerEngineTDR = TRUE",
             "caps->SupportDirectFlip = TRUE",
             "caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u",
@@ -51,7 +52,6 @@ class AppleAgxRenderType1ReadyTests(unittest.TestCase):
         for unsupported in (
             "FlipImmediateMmIo = 1",
             "FlipInterval = 1",
-            "SupportSmoothRotation = TRUE",
             "SupportMultiPlaneOverlay = TRUE",
             "MapAperture2Supported = 1",
         ):

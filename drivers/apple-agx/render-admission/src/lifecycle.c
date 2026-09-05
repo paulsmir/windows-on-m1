@@ -369,6 +369,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
         caps->FlipCaps.FlipOnVSyncMmIo = 1u;
         caps->FlipCaps.FlipIndependent = 1u;
         caps->SupportNonVGA = TRUE;
+        /* WDDM 1.2+ full graphics requires this even when the only exposed
+         * path transform is the already-supported identity/Offset0 pair. */
+        caps->SupportSmoothRotation = TRUE;
         caps->SupportPerEngineTDR = TRUE;
         caps->SupportDirectFlip = TRUE;
         caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
