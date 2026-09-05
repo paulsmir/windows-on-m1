@@ -2,6 +2,7 @@
 #define APPLE_AGX_INITDATA_MEMORY_H
 
 #include "apple_agx_initdata.h"
+#include "apple_agx_firmware_prefix.h"
 #include "apple_agx_channel_memory.h"
 #include "apple_agx_firmware_status.h"
 #include "apple_agx_memory.h"
@@ -70,6 +71,7 @@ typedef struct _APPLE_AGX_INITDATA_MEMORY_GRAPH {
   unsigned long long InitdataDeviceAddress;
   unsigned char Initialized;
   unsigned char Built;
+  unsigned char MappingsReady;
   APPLE_AGX_INITDATA_MEMORY_RESULT LastResult;
 } APPLE_AGX_INITDATA_MEMORY_GRAPH;
 
@@ -79,5 +81,14 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryBuild(
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryDestroy(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph);
+
+/* Production context0: prepare owned storage before CPU start, then import
+ * live private prefix after handoff and only then add kernel mappings. */
+APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepare(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    const APPLE_AGX_MEMORY_IO *MemoryIo,
+    const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
+APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryImportAndMap(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph, const AGX_FW_PREFIX *Prefix);
 
 #endif /* APPLE_AGX_INITDATA_MEMORY_H */

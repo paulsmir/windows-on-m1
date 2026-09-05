@@ -323,7 +323,8 @@ static void test_regionc_mismatch_rolls_back_entire_graph(void) {
          AppleAgxInitdataMemoryResultEncodeFailed);
   assert(graph.Built == 0u && graph.DataObjectCount == 0u);
   assert(graph.RegionCManifest.EncodedSize == 0u);
-  assert(fake.FreeCount == TEST_GRAPH_ALLOCATION_COUNT);
+  /* Invalid encoding now fails before deferred mapping-page allocations. */
+  assert(fake.FreeCount == fake.AllocateCount);
   assert_no_active_allocations(&fake);
 }
 
@@ -360,7 +361,66 @@ static void test_failed_release_is_retryable(void) {
   assert_no_active_allocations(&fake);
 }
 
+static void test_live_prefix_before_mappings_and_owned_cleanup(void) {
+  FAKE_MEMORY fake;
+  APPLE_AGX_MEMORY_IO io;
+  APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
+  APPLE_AGX_CONFIG_SNAPSHOT snapshot = physical_snapshot();
+  AGX_FW_PREFIX prefix = {AGX_FW_PREFIX_MAGIC,1,64,16,
+      0x800000000ULL,0x40000,9,1,{0x800004403ULL,0x800008403ULL}};
+  unsigned int cycle, i;
+  init_fixture(&fake, &io, &graph);
+  for (cycle = 0; cycle < 2; ++cycle) {
+    unsigned long long *root = 0, pa = 0, descriptor = 0;
+    /* Preserve actual destroyed graph state across the second lifetime. */
+    memset(&fake, 0, sizeof(fake));
+    assert(AppleAgxInitdataMemoryPrepare(&graph,&io,&snapshot) == 0);
+    assert(graph.Inventory.MappingCount == 0 && graph.MappingsReady == 0);
+    for (i = 0; i < graph.Inventory.PageCount; ++i)
+      if (graph.UatPages[i].PhysicalAddress == graph.Roots.Ttbr1PhysicalAddress)
+        root = graph.UatPages[i].Entries;
+    assert(root && root[0] == 0 && root[1] == 0 && root[2] == 0);
+    prefix.Version = 2;
+    assert(AppleAgxInitdataMemoryImportAndMap(&graph,&prefix) != 0);
+    assert(graph.Inventory.MappingCount == 0 && root[0] == 0);
+    prefix.Version = 1;
+    assert(AppleAgxInitdataMemoryImportAndMap(&graph,&prefix) == 0);
+    assert(root[0] == prefix.Entries[0] && root[1] == prefix.Entries[1]);
+    assert(root[2] != 0 && graph.MappingsReady);
+    assert(AppleAgxUatResolvePage(0,&graph.Roots,0xffffffa080000000ULL,
+               &graph.Inventory,&pa,&descriptor) == 0 && pa == 0x10e00000);
+    assert(AppleAgxInitdataMemoryImportAndMap(&graph,&prefix) != 0);
+    assert(AppleAgxInitdataMemoryDestroy(&graph) == 0);
+    assert(fake.FreeCount == TEST_GRAPH_ALLOCATION_COUNT);
+    assert_no_active_allocations(&fake); /* external tables never freed */
+    assert(!graph.MappingsReady);
+    prefix.Epoch++;
+    prefix.Entries[0] = 0x80000c403ULL; /* next boot must not reuse old copy */
+  }
+}
+
+static void test_import_mapping_failures_free_only_owned_pages(void) {
+  unsigned int fail;
+  for (fail = 1; fail <= 5; ++fail) {
+    FAKE_MEMORY fake;
+    APPLE_AGX_MEMORY_IO io;
+    APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
+    APPLE_AGX_CONFIG_SNAPSHOT snapshot = physical_snapshot();
+    AGX_FW_PREFIX prefix = {AGX_FW_PREFIX_MAGIC,1,64,16,
+        0x800000000ULL,0x40000,9,1,{0x800004403ULL,0x800008403ULL}};
+    init_fixture(&fake, &io, &graph);
+    assert(AppleAgxInitdataMemoryPrepare(&graph,&io,&snapshot) == 0);
+    fake.FailAllocateCall = fake.AllocateCount + fail;
+    assert(AppleAgxInitdataMemoryImportAndMap(&graph,&prefix) != 0);
+    assert(!graph.Initialized && !graph.MappingsReady);
+    assert_no_active_allocations(&fake);
+    assert(AppleAgxInitdataMemoryDestroy(&graph) == 0);
+  }
+}
+
 int main(void) {
+  test_import_mapping_failures_free_only_owned_pages();
+  test_live_prefix_before_mappings_and_owned_cleanup();
   test_builds_exact_graph_and_releases();
   test_every_allocation_failure_rolls_back();
   test_invalid_arguments_fail_closed();

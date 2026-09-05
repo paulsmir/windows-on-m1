@@ -276,6 +276,9 @@ void AdmissionRecordFirmwarePowerOn(_In_ ADMISSION_CONTEXT *Context,
                                     _In_ BOOLEAN Acquired, _In_ ULONG State,
                                     _In_ ULONG Result,
                                     _In_ ULONGLONG ReceiptSequence);
+void AdmissionRecordFirmwarePrefix(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Stage, _In_opt_ const AGX_FW_PREFIX *Prefix,
+    _In_opt_ const ULONGLONG *Imported);
 void AdmissionRecordRtkitBoot(_In_ ADMISSION_CONTEXT *Context,
                               _In_ APPLE_AGX_RTKIT_SESSION_RESULT Result,
                               _In_ const APPLE_AGX_RTKIT_SESSION *Session);

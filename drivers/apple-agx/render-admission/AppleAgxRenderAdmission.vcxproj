@@ -31,6 +31,11 @@
       <AdditionalDependencies>displib.lib;ntoskrnl.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxManagementQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_RENDER_MEMORY_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>

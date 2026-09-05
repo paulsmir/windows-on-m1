@@ -136,6 +136,24 @@ _Use_decl_annotations_ void AdmissionRecordFirmwarePowerOn(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordFirmwarePrefix(
+    ADMISSION_CONTEXT *Context, ULONG Stage, const AGX_FW_PREFIX *Prefix,
+    const ULONGLONG *Imported) {
+  HANDLE key = NULL;
+  if (!Context || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1FirmwarePrefixStage", Stage);
+  if (Prefix)
+    WriteBinary(key, L"Wom1FirmwarePrefixLive", Prefix, sizeof(*Prefix));
+  if (Imported)
+    WriteBinary(key, L"Wom1FirmwarePrefixImported", Imported, 16);
+  if (Stage == 4)
+    WriteDword(key, L"Wom1ManagementQualificationStop", 1);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordRtkitBoot(
     ADMISSION_CONTEXT *Context, APPLE_AGX_RTKIT_SESSION_RESULT Result,
     const APPLE_AGX_RTKIT_SESSION *Session) {

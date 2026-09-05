@@ -57,6 +57,7 @@ static unsigned char free_contiguous(void *context, void *handle) {
 static void init_fixture(FAKE_MEMORY *fake, APPLE_AGX_MEMORY_IO *io,
                          APPLE_AGX_REGIONB_MEMORY_OWNER *owner) {
   memset(fake, 0, sizeof(*fake));
+  memset(io, 0, sizeof(*io));
   memset(owner, 0, sizeof(*owner));
   io->Context = fake;
   io->AllocateContiguous = allocate_contiguous;

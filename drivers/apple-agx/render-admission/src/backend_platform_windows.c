@@ -508,22 +508,11 @@ static unsigned char AdmissionFirmwareCreateUat(
     APPLE_AGX_UAT_TTBR_PAIR *Pair,
     unsigned long long *InitdataAddress) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
-  unsigned long long crashlog_pa = 0u, crashlog_descriptor = 0u;
   if (runtime == NULL || Pair == NULL || InitdataAddress == NULL ||
       AdmissionPlatformNowMs() >= DeadlineMs || !runtime->Initdata.Built ||
       runtime->Initdata.TtbrPair.Ttbr0 == 0ULL ||
       runtime->Initdata.TtbrPair.Ttbr1 == 0ULL ||
       runtime->Initdata.InitdataVirtualAddress == 0ULL)
-    return 0u;
-  if (runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog].Length !=
-          APPLE_AGX_RTKIT_CRASHLOG_BYTES ||
-      AppleAgxUatResolvePage(
-          0u, &runtime->Initdata.Roots,
-          runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog],
-          &runtime->Initdata.Inventory, &crashlog_pa, &crashlog_descriptor) !=
-          AppleAgxUatResultOk ||
-      crashlog_pa != runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog]
-                         .DeviceAddress)
     return 0u;
   runtime->Rtkit.CrashlogGpuAddress =
       runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog] &
@@ -624,7 +613,17 @@ static unsigned char AdmissionFirmwareEndpoint(
 
 static unsigned char AdmissionFirmwareStartEndpoint(
     void *Context, unsigned int Endpoint, unsigned long long DeadlineMs) {
+#ifdef APPLE_AGX_MANAGEMENT_QUALIFICATION
+  ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+  UNREFERENCED_PARAMETER(Endpoint);
+  UNREFERENCED_PARAMETER(DeadlineMs);
+  /* Deliberate stop after real management success; no application endpoint,
+   * initdata delivery, queue creation or submission in this profile. */
+  AdmissionRecordFirmwarePrefix(runtime->Adapter, 4, NULL, NULL);
+  return 0u;
+#else
   return AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, TRUE);
+#endif
 }
 
 static unsigned char AdmissionFirmwareStopEndpoint(
@@ -634,6 +633,52 @@ static unsigned char AdmissionFirmwareStopEndpoint(
       runtime->Rtkit.Running == APPLE_AGX_RTKIT_FALSE)
     return 1u;
   return AdmissionFirmwareEndpoint(Context, Endpoint, DeadlineMs, FALSE);
+}
+
+
+static unsigned char AdmissionFirmwareImportPrefix(ADMISSION_PLATFORM_RUNTIME *runtime) {
+  AGX_FW_PREFIX live = {0}, verify = {0};
+  unsigned long long epoch, after_epoch, crashlog_pa = 0, crashlog_descriptor = 0;
+  unsigned long long *root = NULL;
+  ULONG i;
+  if (!runtime || !runtime->Powered || !runtime->Handoff.Locked ||
+      runtime->Initdata.MappingsReady)
+    return 0u;
+  AdmissionRecordFirmwarePrefix(runtime->Adapter, 1, NULL, NULL);
+  epoch = AdmissionPowerRead64(runtime, J313_AGX_G2_POWER_REG_RECEIPT_SEQUENCE);
+  for (i = 0; i < sizeof(live) / sizeof(ULONGLONG); ++i)
+    ((ULONGLONG *)&live)[i] = AdmissionPowerRead64(runtime,
+        AGX_FW_PREFIX_OFFSET + i * sizeof(ULONGLONG));
+  for (i = 0; i < sizeof(verify) / sizeof(ULONGLONG); ++i)
+    ((ULONGLONG *)&verify)[i] = AdmissionPowerRead64(runtime,
+        AGX_FW_PREFIX_OFFSET + i * sizeof(ULONGLONG));
+  after_epoch = AdmissionPowerRead64(runtime, J313_AGX_G2_POWER_REG_RECEIPT_SEQUENCE);
+  AdmissionRecordFirmwarePrefix(runtime->Adapter, 2, &live, NULL);
+  if (after_epoch != epoch || RtlCompareMemory(&live, &verify, sizeof(live)) != sizeof(live) ||
+      !AgxFwPrefixValid(&live, sizeof(live), epoch) ||
+      AppleAgxInitdataMemoryImportAndMap(&runtime->Initdata, &live) !=
+          AppleAgxInitdataMemoryResultOk)
+    return 0u;
+  for (i = 0; i < runtime->Initdata.Inventory.PageCount; ++i)
+    if (runtime->Initdata.UatPages[i].PhysicalAddress ==
+        runtime->Initdata.Roots.Ttbr1PhysicalAddress)
+      root = runtime->Initdata.UatPages[i].Entries;
+  if (!root || root[0] != live.Entries[0] || root[1] != live.Entries[1])
+    return 0u;
+  if (runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog].Length !=
+          APPLE_AGX_RTKIT_CRASHLOG_BYTES ||
+      AppleAgxUatResolvePage(
+          0u, &runtime->Initdata.Roots,
+          runtime->Initdata.VirtualAddresses[AppleAgxInitdataMemoryCrashlog],
+          &runtime->Initdata.Inventory, &crashlog_pa, &crashlog_descriptor) !=
+          AppleAgxUatResultOk ||
+      crashlog_pa != runtime->Initdata.DataObjects[AppleAgxInitdataMemoryCrashlog]
+                         .DeviceAddress)
+    return 0u;
+
+  KeMemoryBarrier();
+  AdmissionRecordFirmwarePrefix(runtime->Adapter, 3, &live, root);
+  return 1u;
 }
 
 static unsigned char AdmissionFirmwarePublishUat(
@@ -646,6 +691,7 @@ static unsigned char AdmissionFirmwarePublishUat(
                ? 1u
                : 0u;
   return runtime != NULL && Pair != NULL &&
+                 AdmissionFirmwareImportPrefix(runtime) &&
                  AppleAgxUatPublishJ313(
                      &runtime->Snapshot, Pair, &runtime->PublicationIo,
                      &runtime->FirmwarePublication) ==
@@ -1484,7 +1530,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   }
   AdmissionRecordPlatformStage(Context, AdmissionPlatformHandoffBind,
                                STATUS_SUCCESS);
-  if (AppleAgxInitdataMemoryBuild(
+  if (AppleAgxInitdataMemoryPrepare(
           &runtime->Initdata, &runtime->MemoryIo,
           &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
     status = STATUS_INSUFFICIENT_RESOURCES;
@@ -1708,6 +1754,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
     goto Exit;
   }
   runtime->ProviderReady = FALSE;
+
+  /* The stopped firmware lifetime must not donate its copied private prefix
+   * to the next boot. Rebuild only our owned graph before channel providers
+   * borrow any addresses; context63 and its physical owner are unchanged. */
+  if (runtime->FirmwarePublication.Active || runtime->Rtkit.Running ||
+      AppleAgxInitdataMemoryDestroy(&runtime->Initdata) !=
+          AppleAgxInitdataMemoryResultOk ||
+      AppleAgxInitdataMemoryPrepare(&runtime->Initdata, &runtime->MemoryIo,
+          &runtime->Snapshot) != AppleAgxInitdataMemoryResultOk) {
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
 
   AppleAgxBackendRuntimeInitialize(
       &runtime->Backend, ADMISSION_MEMORY_UAT_CONTEXT);
