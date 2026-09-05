@@ -1,5 +1,20 @@
 #include "render_admission.h"
 
+C_ASSERT(sizeof(DXGKARG_UPDATEMONITORLINKINFO) == 16);
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiUpdateMonitorLinkInfo(
+    CONST HANDLE Adapter, DXGKARG_UPDATEMONITORLINKINFO *Args) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  if (context == NULL || !context->Started || Args == NULL ||
+      Args->VideoPresentTargetId != 0u)
+    return STATUS_INVALID_PARAMETER;
+  /* Answer the connection-lifetime query without advertising optional link
+   * features. UsageHints are OS input, not capability bits to echo back. */
+  Args->MonitorLinkInfo.Capabilities.Value = 0u;
+  Args->MonitorLinkInfo.DitheringSupport.Value = 0u;
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSetPalette(
     HANDLE Adapter, const DXGKARG_SETPALETTE *SetPalette) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -726,5 +741,9 @@ ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiQueryVidPnHWCapability,
                             AdmissionDdiQueryVidPnHWCapability,
                             AdmissionDisplayDdiQueryVidPnHWCapability,
                             DXGKARG_QUERYVIDPNHWCAPABILITY *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiUpdateMonitorLinkInfo,
+                            AdmissionDdiUpdateMonitorLinkInfo,
+                            AdmissionDisplayDdiUpdateMonitorLinkInfo,
+                            DXGKARG_UPDATEMONITORLINKINFO *)
 
 #undef ADMISSION_TRACE_DISPLAY_DDI

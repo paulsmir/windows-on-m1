@@ -43,6 +43,8 @@ _Use_decl_annotations_ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject,
       AdmissionTraceDdiUpdateActiveVidPnPresentPath;
   initialization.DxgkDdiRecommendMonitorModes =
       AdmissionTraceDdiRecommendMonitorModes;
+  initialization.DxgkDdiUpdateMonitorLinkInfo =
+      AdmissionTraceDdiUpdateMonitorLinkInfo;
   initialization.DxgkDdiGetScanLine = AdmissionDdiGetScanLine;
   initialization.DxgkDdiStopCapture = AdmissionDdiStopCapture;
   initialization.DxgkDdiQueryVidPnHWCapability =

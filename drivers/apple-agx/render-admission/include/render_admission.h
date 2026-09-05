@@ -73,7 +73,8 @@ typedef enum _ADMISSION_DISPLAY_DDI_TRACE_ID {
   AdmissionDisplayDdiCommitVidPn = 8,
   AdmissionDisplayDdiUpdateActiveVidPnPresentPath = 9,
   AdmissionDisplayDdiRecommendMonitorModes = 10,
-  AdmissionDisplayDdiQueryVidPnHWCapability = 11
+  AdmissionDisplayDdiQueryVidPnHWCapability = 11,
+  AdmissionDisplayDdiUpdateMonitorLinkInfo = 12
 } ADMISSION_DISPLAY_DDI_TRACE_ID;
 
 typedef enum _ADMISSION_START_STAGE {
@@ -464,6 +465,8 @@ DXGKDDI_UPDATEACTIVEVIDPNPRESENTPATH
 AdmissionTraceDdiUpdateActiveVidPnPresentPath;
 DXGKDDI_RECOMMENDMONITORMODES AdmissionDdiRecommendMonitorModes;
 DXGKDDI_RECOMMENDMONITORMODES AdmissionTraceDdiRecommendMonitorModes;
+DXGKDDI_UPDATEMONITORLINKINFO AdmissionDdiUpdateMonitorLinkInfo;
+DXGKDDI_UPDATEMONITORLINKINFO AdmissionTraceDdiUpdateMonitorLinkInfo;
 DXGKDDI_GETSCANLINE AdmissionDdiGetScanLine;
 DXGKDDI_STOPCAPTURE AdmissionDdiStopCapture;
 DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionDdiQueryVidPnHWCapability;
