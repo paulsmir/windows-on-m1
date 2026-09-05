@@ -36,6 +36,12 @@
       <PreprocessorDefinitions>APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxFirmwareQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_FIRMWARE_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxStopAfterEndpoints)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>APPLE_AGX_STOP_AFTER_ENDPOINTS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>

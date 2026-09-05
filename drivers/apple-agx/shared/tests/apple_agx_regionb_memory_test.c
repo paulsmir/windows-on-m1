@@ -101,7 +101,10 @@ static void test_builds_exact_owned_children(void) {
   for (index = 0u; index < owner.ObjectCount; ++index) {
     unsigned long long byte;
     for (byte = 0ULL; byte < owner.Objects[index].Length; ++byte)
-      assert(((unsigned char *)owner.Objects[index].CpuAddress)[byte] == 0u);
+      assert(((unsigned char *)owner.Objects[index].CpuAddress)[byte] ==
+          ((index == AppleAgxRegionBMemoryStats3d &&
+            ((byte >= 0x108u && byte < 0x10cu) || (byte >= 0x120u && byte < 0x124u)))
+              ? 0xffu : 0u));
   }
   assert(AppleAgxRegionBMemoryDestroy(&owner) ==
          AppleAgxRegionBMemoryResultOk);

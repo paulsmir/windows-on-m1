@@ -1,4 +1,6 @@
 #include "render_admission.h"
+#include "apple_agx_hwdata_profile.h"
+#include "apple_agx_firmware_start_receipt.h"
 
 #define ADMISSION_PLATFORM_TAG 'pRGA'
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
@@ -34,6 +36,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ULONGLONG RetainedEpoch, RetainedRoot, RetainedRoot0;
   APPLE_AGX_CONTEXT0_BROKER Context0Lease;
   AGX_FW_IO_MANIFEST FirmwareIoManifest;
+  AGX_HWDATA_RECEIPT HwdataProfileReceipt;
+  APPLE_AGX_FIRMWARE_START_RECEIPT FirmwareStartFailure;
+  BOOLEAN CaptureFirmwareStart;
   BOOLEAN RetainedPrepared;
   APPLE_AGX_FIRMWARE_PROVIDER_PRIMITIVES FirmwarePrimitives;
   APPLE_AGX_FIRMWARE_PROVIDER FirmwareProvider;
@@ -531,14 +536,24 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
   runtime->Rtkit.CrashlogGpuAddress=response.SystemVa&((1ULL<<44)-1);
   runtime->Rtkit.CrashlogCapacityBytes=(ULONG)response.SystemBytes;
   {
-    APPLE_AGX_MEMORY_OBJECT *hwdata=
+    APPLE_AGX_MEMORY_OBJECT *hwdata_a=
+        &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataA];
+    APPLE_AGX_MEMORY_OBJECT *hwdata_b=
         &runtime->Initdata.RegionBMemory.Objects[AppleAgxRegionBMemoryHwdataB];
     unsigned char valid=AgxFwIoReadManifest(AdmissionRetainedRead,runtime,
         runtime->RetainedEpoch,runtime->RetainedRoot,&runtime->FirmwareIoManifest);
-    if(valid) valid=AgxFwIoEncodeHwdataB(&runtime->FirmwareIoManifest,
-        sizeof(runtime->FirmwareIoManifest),runtime->RetainedEpoch,runtime->RetainedRoot,
-        hwdata->CpuAddress,hwdata->Length);
     AdmissionRecordFirmwareIo(runtime->Adapter,valid?0u:1u,&runtime->FirmwareIoManifest);
+    if(!valid) return 0;
+    valid=AgxHwdataReadReceipt(AdmissionRetainedRead,runtime,runtime->RetainedEpoch,
+        runtime->RetainedRoot,&runtime->HwdataProfileReceipt);
+    if(!valid) {
+      AdmissionRecordHwdataProfile(runtime->Adapter,1,&runtime->HwdataProfileReceipt);
+      return 0;
+    }
+    valid=AgxHwdataMaterialize(&runtime->HwdataProfileReceipt,&runtime->FirmwareIoManifest,
+        runtime->RetainedEpoch,runtime->RetainedRoot,hwdata_a->CpuAddress,hwdata_a->Length,
+        hwdata_b->CpuAddress,hwdata_b->Length);
+    AdmissionRecordHwdataProfile(runtime->Adapter,valid?0u:2u,&runtime->HwdataProfileReceipt);
     if(!valid) return 0;
   }
   result=AppleAgxContext0BrokerMap(&runtime->Context0Lease,&runtime->Initdata,&io,
@@ -824,7 +839,7 @@ static APPLE_AGX_BACKEND_U64 AdmissionTransportNow(void *Context) {
 static unsigned char AdmissionFirmwareDeviceControl(
     ADMISSION_PLATFORM_RUNTIME *Runtime, BOOLEAN Idle,
     unsigned long long DeadlineMs) {
-  APPLE_AGX_DEVICE_CONTROL_PUBLICATION publication;
+  APPLE_AGX_DEVICE_CONTROL_PUBLICATION publication={0};
   for (;;) {
     APPLE_AGX_DEVICE_CONTROL_RESULT result;
     unsigned int polls = 0u;
@@ -835,16 +850,26 @@ static unsigned char AdmissionFirmwareDeviceControl(
                  : AppleAgxDeviceControlPublishInitG13V13_5(
                        &Runtime->Initdata.ChannelMemory,
                        &Runtime->TransportIo, &publication);
-    if (result != AppleAgxDeviceControlResultOk)
+    if (result != AppleAgxDeviceControlResultOk) {
+      AdmissionRecordDeviceControl(Runtime->Adapter,Idle,result,0,0,0);
       return 0u;
+    }
     for (;;) {
       result = AppleAgxDeviceControlWaitForReceiptG13V13_5(
           &publication, &Runtime->TransportIo, 1u, &polls);
-      if (result == AppleAgxDeviceControlResultOk)
-        return 1u;
       if (result != AppleAgxDeviceControlResultReceiptTimedOut ||
-          AdmissionPlatformNowMs() >= DeadlineMs)
-        return 0u;
+          AdmissionPlatformNowMs() >= DeadlineMs) {
+        APPLE_AGX_BACKEND_U32 read=0,write=0;
+        (void)Runtime->TransportIo.ReadU32(Runtime,
+            (volatile APPLE_AGX_BACKEND_U32 *)(publication.StateCpuAddress+
+                publication.StateReadPointerOffset),&read);
+        (void)Runtime->TransportIo.ReadU32(Runtime,
+            (volatile APPLE_AGX_BACKEND_U32 *)(publication.StateCpuAddress+
+                publication.StateWritePointerOffset),&write);
+        AdmissionRecordDeviceControl(Runtime->Adapter,Idle,result,read,write,
+            publication.ReceiptCookie);
+        return result == AppleAgxDeviceControlResultOk;
+      }
       KeStallExecutionProcessor(
           ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US);
     }
@@ -873,9 +898,12 @@ static void AdmissionFirmwareRecordPhase(
   if (provider == NULL)
     return;
   runtime = provider->Primitives.Context;
-  if (runtime != NULL)
+  if (runtime != NULL) {
+    if(runtime->CaptureFirmwareStart)
+      AppleAgxFirmwareCaptureStartFailure(&runtime->FirmwareStartFailure,Phase,Result,CompletedMask);
     AdmissionRecordFirmwarePhase(runtime->Adapter, Phase, Result,
                                  CompletedMask);
+  }
 }
 
 static APPLE_AGX_BACKEND_BOOL AdmissionRenderPublish(void *Context) {
@@ -1608,17 +1636,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->FirmwareIo.RecordPhase = AdmissionFirmwareRecordPhase;
   AdmissionRecordPlatformStage(Context, AdmissionPlatformFirmwareProvider,
                                STATUS_SUCCESS);
-#if defined(APPLE_AGX_MANAGEMENT_QUALIFICATION) || defined(APPLE_AGX_STOP_AFTER_ENDPOINTS)
+#if defined(APPLE_AGX_MANAGEMENT_QUALIFICATION) || defined(APPLE_AGX_STOP_AFTER_ENDPOINTS) || defined(APPLE_AGX_FIRMWARE_QUALIFICATION)
   {
     APPLE_AGX_FIRMWARE qualification;
     APPLE_AGX_FIRMWARE_RESULT result;
+    APPLE_AGX_FIRMWARE_RESULT cleanup=AppleAgxFirmwareResultOk;
+    ULONG completed;
+    ULONG primary;
     AppleAgxFirmwareInitialize(&qualification);
+    runtime->CaptureFirmwareStart=TRUE;
+    RtlZeroMemory(&runtime->FirmwareStartFailure,sizeof(runtime->FirmwareStartFailure));
     result = AppleAgxFirmwareStart(&qualification,&runtime->FirmwareIo);
-    /* Existing qualifier refuses first application endpoint after real ACK.
-     * Preserve failure/cleanup receipts; do not enter backend/queue provider. */
+    runtime->CaptureFirmwareStart=FALSE;
+    completed=runtime->FirmwareStartFailure.Captured?
+        runtime->FirmwareStartFailure.CompletedMask:qualification.CompletedMask;
+    primary=runtime->FirmwareStartFailure.Captured?runtime->FirmwareStartFailure.Result:result;
+    /* Qualification uses the production firmware path, then stops before any
+     * backend/queue provider. Preserve primary result separately from cleanup. */
     if (qualification.CleanupMask)
-      (void)AppleAgxFirmwareRollback(&qualification,&runtime->FirmwareIo);
-    status = result == AppleAgxFirmwareResultCleanupFailed
+      cleanup=AppleAgxFirmwareRollback(&qualification,&runtime->FirmwareIo);
+    AdmissionRecordFirmwareQualification(Context,primary,result,completed,cleanup);
+    status = result == AppleAgxFirmwareResultCleanupFailed || cleanup != AppleAgxFirmwareResultOk
         ? STATUS_DEVICE_BUSY : STATUS_DEVICE_HARDWARE_ERROR;
     goto Fail;
   }

@@ -5,11 +5,15 @@ param(
     [switch]$ManagementQualification,
     [switch]$RetainedRootQualification,
     [switch]$StopAfterEndpoints,
+    [switch]$FirmwareQualification,
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
 
 $ErrorActionPreference = "Stop"
+if ($FirmwareQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints)) {
+    throw "FirmwareQualification must not be combined with an earlier terminal qualification profile"
+}
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "AppleAgxRenderAdmission.vcxproj"
 $umdProject = Join-Path $root "umd\AppleAgxRenderAdmissionUmd.vcxproj"
@@ -44,12 +48,14 @@ $memoryQualificationValue = if ($MemoryQualification) { "true" } else { "false" 
 $managementQualificationValue = if ($ManagementQualification) { "true" } else { "false" }
 $retainedRootValue = if ($RetainedRootQualification) { "true" } else { "false" }
 $endpointStopValue = if ($StopAfterEndpoints) { "true" } else { "false" }
+$firmwareQualificationValue = if ($FirmwareQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
     "/p:AppleAgxManagementQualification=$managementQualificationValue" `
     "/p:AppleAgxRetainedRootQualification=$retainedRootValue" `
-    "/p:AppleAgxStopAfterEndpoints=$endpointStopValue"
+    "/p:AppleAgxStopAfterEndpoints=$endpointStopValue" `
+    "/p:AppleAgxFirmwareQualification=$firmwareQualificationValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

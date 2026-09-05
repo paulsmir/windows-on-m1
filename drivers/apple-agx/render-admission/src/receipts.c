@@ -71,6 +71,48 @@ _Use_decl_annotations_ void AdmissionRecordFirmwareIo(
   ZwClose(key);
 }
 
+_Use_decl_annotations_ void AdmissionRecordHwdataProfile(
+    ADMISSION_CONTEXT *Context,ULONG Result,const AGX_HWDATA_RECEIPT *Receipt) {
+  HANDLE key=NULL; LARGE_INTEGER time;
+  if(!Context || !Receipt || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  KeQuerySystemTimePrecise(&time);
+  WriteDword(key,L"Wom1HwdataProfileResult",Result);
+  WriteQword(key,L"Wom1HwdataProfileTime",time.QuadPart);
+  WriteBinary(key,L"Wom1HwdataProfileReceipt",Receipt,sizeof(*Receipt));
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordFirmwareQualification(
+    ADMISSION_CONTEXT *Context,ULONG StartResult,ULONG StartReturn,ULONG CompletedMask,ULONG CleanupResult) {
+  HANDLE key=NULL;
+  if(!Context || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  WriteDword(key,L"Wom1FirmwareQualificationStartResult",StartResult);
+  WriteDword(key,L"Wom1FirmwareQualificationStartReturn",StartReturn);
+  WriteDword(key,L"Wom1FirmwareQualificationCompletedMask",CompletedMask);
+  WriteDword(key,L"Wom1FirmwareQualificationCleanupResult",CleanupResult);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordDeviceControl(
+    ADMISSION_CONTEXT *Context,ULONG Idle,ULONG Result,ULONG ReadPointer,
+    ULONG WritePointer,ULONG Expected) {
+  HANDLE key=NULL; LARGE_INTEGER time;
+  if(!Context || !Context->PhysicalDeviceObject ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE,KEY_SET_VALUE,&key))) return;
+  KeQuerySystemTimePrecise(&time);
+  WriteDword(key,Idle?L"Wom1DcIdleResult":L"Wom1DcInitResult",Result);
+  WriteDword(key,Idle?L"Wom1DcIdleRead":L"Wom1DcInitRead",ReadPointer);
+  WriteDword(key,Idle?L"Wom1DcIdleWrite":L"Wom1DcInitWrite",WritePointer);
+  WriteDword(key,Idle?L"Wom1DcIdleExpected":L"Wom1DcInitExpected",Expected);
+  WriteQword(key,Idle?L"Wom1DcIdleTime":L"Wom1DcInitTime",time.QuadPart);
+  ZwClose(key);
+}
+
 _Use_decl_annotations_ void AdmissionRecordEndpoint(
     ADMISSION_CONTEXT *Context, ULONG Endpoint, ULONG Success) {
   HANDLE key=NULL; LARGE_INTEGER time;

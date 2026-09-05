@@ -241,6 +241,9 @@ static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepareInternal(
     return AppleAgxInitdataMemoryRollback(
         Graph, AppleAgxInitdataMemoryResultEncodeFailed);
 
+  /* InitData_RegionB's sole nonzero non-pointer/channel default on G13/V13_5. */
+  ((unsigned char *)Graph->DataObjects[AppleAgxInitdataMemoryRegionB].CpuAddress)[0x6b38u]=0xffu;
+
   regionc_result = AppleAgxRegionCEncodeJ313G13V13_5(
       Snapshot,
       (unsigned char *)

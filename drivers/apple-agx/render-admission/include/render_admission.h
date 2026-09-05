@@ -288,6 +288,14 @@ void AdmissionRecordRetainedTrace(_In_ ADMISSION_CONTEXT *Context,
 void AdmissionRecordContext0Inventory(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Stage, _In_ ULONG Result, _In_ const APPLE_AGX_CONTEXT0_BROKER *Journal);
 #include "apple_agx_firmware_io.h"
+#include "apple_agx_hwdata_profile_abi.h"
+void AdmissionRecordHwdataProfile(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Result,_In_ const AGX_HWDATA_RECEIPT *Receipt);
+void AdmissionRecordFirmwareQualification(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG StartResult,_In_ ULONG StartReturn,_In_ ULONG CompletedMask,_In_ ULONG CleanupResult);
+void AdmissionRecordDeviceControl(_In_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG Idle,_In_ ULONG Result,_In_ ULONG ReadPointer,
+    _In_ ULONG WritePointer,_In_ ULONG Expected);
 void AdmissionRecordFirmwareIo(_In_ ADMISSION_CONTEXT *Context,
     _In_ ULONG Result,_In_ const AGX_FW_IO_MANIFEST *Manifest);
 void AdmissionRecordEndpoint(_In_ ADMISSION_CONTEXT *Context,
