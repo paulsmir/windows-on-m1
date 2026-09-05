@@ -88,7 +88,7 @@ and retain shadow backing until proven TCB invalidation. Limit payload to
 128 KiB, 4 KiB LBAs, at most one PRP list (up to 33 data pages for an offset
 PRP1). No chained PRP lists, payload copies, or SART grants for guest payload.
 
-Linux ANS2 defines 64 total shared tags, one reserved admin tag, one I/O queue,
+Linux ANS2 defines 64 total shared tags, two reserved admin tag slots, one I/O queue,
 one admin queue and one IRQ. TCB direction bits are FROM_DEVICE bit 0 and
 TO_DEVICE bit 1; recovery currently grants both. Native must choose exact
 command direction. Native TCB length is the protocol's NLB field, not a byte
@@ -165,3 +165,9 @@ apple_nvme_handle_cqe selects the tagset from its source queue and never reads
 SQID. Accordingly this ANS helper validates the trusted source CQ and CID and
 does not reject arbitrary reserved DWORD2 as a generic PCI NVMe SQID violation.
 Source-CQ identity is mandatory at the eventual hardware drain boundary.
+
+Source-audit correction: Linux uses AQ_DEPTH=2 and AQ_MQ_TAG_DEPTH=1; its I/O
+tagset reserves **two** slots despite only one blk-mq admin request. Canonical
+V1 reservation is corrected to two slots, rather than mistaking active admin
+request depth for reserved tag count. Initial foundation used one slot; this
+is an offline correction, with no hardware artifact launched under either.

@@ -27,6 +27,8 @@ def main():
     run([sys.executable,'-m','unittest','tests.test_j313_ans_contract','-q'])
     cc=shutil.which('cc')
     clang=shutil.which('clang',path='/opt/homebrew/opt/llvm/bin:'+os.environ.get('PATH',''))
+    run([sys.executable,'m1n1_windows/tests/nvme_prp_quarantine_test.py'])
+    run(['sh','drivers/storage/appleans/common/tests/run.sh'])
     records=[]
     for name in ('hv_ans_broker','hv_ans_prp'):
         exe=OUT/name

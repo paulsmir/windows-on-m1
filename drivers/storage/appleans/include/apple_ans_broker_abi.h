@@ -1,5 +1,5 @@
 /* Generated; edit config/j313-ans.json and apple-ans-broker-abi.json. */
-/* Source SHA-256: d2d3f1018aa37c5db03a5f860dd19f56a4adc860b153ad73cc86cee8cab2f651 */
+/* Source SHA-256: 898ba70bee6d1881a584626acf53727e64a6528b6784362435aa4bc071c101e0 */
 #ifndef APPLE_ANS_BROKER_ABI_H
 #define APPLE_ANS_BROKER_ABI_H
 #include <stdint.h>
@@ -10,7 +10,7 @@
 #define ANS_ABI_MAJOR 1
 #define ANS_ABI_MINOR 0
 #define ANS_QUEUE_DEPTH 64
-#define ANS_ADMIN_TAGS 1
+#define ANS_ADMIN_TAGS 2
 #define ANS_MAX_TRANSFER 131072
 #define ANS_PRP_PAGE_SIZE 4096
 #define ANS_MAX_DATA_PAGES 33

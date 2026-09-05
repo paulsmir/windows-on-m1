@@ -16,7 +16,7 @@ def validate(c, root, for_launch=False):
         raise ValueError('invalid storage ownership modes')
     if c['dma'] != dict(prp_page_size=4096, lba_size=4096, maximum_transfer_length=131072, max_data_pages=33, payload_bounce=False):
         raise ValueError('unsupported V1 DMA contract')
-    if c['queues'] != dict(admin_queues=1, io_queues=1, depth=64, reserved_admin_tags=1):
+    if c['queues'] != dict(admin_queues=1, io_queues=1, depth=64, reserved_admin_tags=2):
         raise ValueError('unsupported T8103 queue contract')
     if c['acpi_hid'] != 'APPLANS0' or c['acpi_uid'] != 0:
         raise ValueError('invalid ACPI identity')
@@ -61,7 +61,7 @@ def generate(root, check=False):
          '#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__',
          '#error ANS ABI requires little endian', '#endif']
     values = dict(MAGIC=c['broker']['magic'], ABI_MAJOR=c['broker']['abi_major'],
-                  ABI_MINOR=c['broker']['abi_minor'], QUEUE_DEPTH=64, ADMIN_TAGS=1,
+                  ABI_MINOR=c['broker']['abi_minor'], QUEUE_DEPTH=64, ADMIN_TAGS=2,
                   MAX_TRANSFER=131072, PRP_PAGE_SIZE=4096, MAX_DATA_PAGES=33,
                   BROKER_BASE=c['broker']['guest_base']+'ULL', BROKER_SIZE=c['broker']['size'],
                   GUEST_GSIV=c['interrupt']['guest_gsiv'], FEATURE_READ_ONLY=1,
