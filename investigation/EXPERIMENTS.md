@@ -19877,3 +19877,76 @@ manifest SHA-256:
 `0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2` /
 `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
 `9c03e167028696757038d16f465d16c40652c76d0e8875f3cb05c6e41b0252ad`.
+
+# ANSBUILD001 — offline StorPort qualification build
+
+Recorded UTC 2026-09-05T10:57:41.510453+00:00. No Air access, driver installation or hardware run.
+
+## Correction: attempts A/B were not preregistered
+
+Two earlier FRYZZING build-tool configuration attempts occurred before this
+entry was written. This entry is retrospective for A/B and must not be treated
+as advance registration. A failed because the shared builder default selected
+WDK28000; B failed in PowerShell argument quoting. Both stopped before C source
+compile/SYS production. Logs: .local/ans-native/build-host/appleans-build-01.log
+and appleans-build-02.log. Source archive01 SHA256
+b0ad52f9dc21d8c57342f14ac92e51778f3328e30973075d06656e5bd42afb34.
+Verdict: build-environment failures, no hardware verdict. No retry of hardware.
+
+## Attempt C — PREREGISTERED, not started
+
+HYPOTHESIS: installed C:\VS2022Community ARM64 compiler and WDK26100 can
+compile the physical StorPort lifecycle skeleton when exact kit properties
+override the builder's unrelated global default.
+ONE VARIABLE: explicit correct WDK property/path argument binding; header-only
+correction RtlZeroMemory is included before first source compilation.
+EXPECTED PASS: ARM64 SYS, actual MSVC analysis, InfVerif and later signature
+gates; HwInitialize deliberately returns FALSE at transport-unavailable stop.
+EXPECTED FAIL: compile/analysis/INF error; never classify as storage failure.
+Profile: offline physical StorPort lifecycle qualification; no namespace ready,
+no broker QUERY/CLAIM receipts, no disk operations, no native launch enabled.
+Source archive02: .local/ans-native/build-host/appleans-source-02.tar
+SHA256 d50ce17fadf104e4d4c363b318094b453162d20a5118841e4a50353128021046.
+
+Exact PowerShell build command:
+```powershell
+& 'C:\VS2022Community\MSBuild\Current\Bin\amd64\MSBuild.exe' 'C:\Users\pauls\ans-native-offline-20260905\windows\AppleAns.vcxproj' /m:1 /t:Rebuild /p:Configuration=Release /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:SignMode=Off '/p:WDKContentRoot=C:/Program Files (x86)/Windows Kits/10/' /p:WDKBuildFolder=10.0.26100.0 /v:minimal
+```
+Remote output exclusively C:\Users\pauls\ans-native-offline-20260905\windows\out\ARM64\Release.
+EVIDENCE PATH: .local/ans-native/build-host/.
+ARTIFACT HASH: pending compilation; no artifact authorized for install/launch.
+LAUNCH/INSTALL COMMAND: none, forbidden in this offline scope.
+ROLLBACK: no deployed state; preserve separate EXP377/392 G2 recovery manifest
+in investigation/ans/RECOVERY_BASELINE.json.
+COMMITS / tracked dirty diff hashes (archive above covers untracked inputs):
+```json
+{
+  ".": {
+    "commit": "5420dafb6296ece7293ddc795858386379b143e3",
+    "branch": "feature/j313-ans-native-offline",
+    "tracked_diff_sha256": "4ad639b36395eddd28706ac0f8b67ef6c12ab829eaf8d151b4ba04299d0c5fc9"
+  },
+  "m1n1_windows": {
+    "commit": "a562468e1041d9d3db78ab3c74596d4bea88e749",
+    "branch": "feature/j313-ans-native-offline",
+    "tracked_diff_sha256": "e33043ad153ae3e2ae43959fefe48dce29ce49f52fe292aae57057fc9246401e"
+  },
+  "mu": {
+    "commit": "92b94133446acac2129288a4308cd93607ffec35",
+    "branch": "feature/j313-ans-native-offline",
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
+```
+
+Hardware phases, CPU/IRQ, Windows stop code and machine health: not applicable;
+no guest run. GPU working copies and hardware session remain untouched.
+
+### ANSBUILD001 C source correction BEFORE build
+
+Archive02 was superseded without building. Final frozen archive03 is
+`.local/ans-native/build-host/appleans-source-03.tar`, SHA256
+`f6d46b83218a4e8733910639a8e5ddd65b8f3ef63484065a25e7ded5cc259564`.
+It removes an explicit DriverEntry override so normal WDK GsDriverEntry cookie
+initialization remains intact. Exact command/profile/output gates above remain.
+This is a pre-first-source-compilation correction, not a hardware variable.

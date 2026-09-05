@@ -1,0 +1,17 @@
+{
+  ".": {
+    "commit": "5420dafb6296ece7293ddc795858386379b143e3",
+    "branch": "feature/j313-ans-native-offline",
+    "tracked_diff_sha256": "4ad639b36395eddd28706ac0f8b67ef6c12ab829eaf8d151b4ba04299d0c5fc9"
+  },
+  "m1n1_windows": {
+    "commit": "a562468e1041d9d3db78ab3c74596d4bea88e749",
+    "branch": "feature/j313-ans-native-offline",
+    "tracked_diff_sha256": "e33043ad153ae3e2ae43959fefe48dce29ce49f52fe292aae57057fc9246401e"
+  },
+  "mu": {
+    "commit": "92b94133446acac2129288a4308cd93607ffec35",
+    "branch": "feature/j313-ans-native-offline",
+    "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
