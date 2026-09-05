@@ -304,6 +304,53 @@ static void preparation_guards(void)
     assert(!f.live);
 }
 
+/* A PA-only software walk must not accept a hardware-invalid intermediate
+ * descriptor or a descriptor targeting anything outside the owned L2 pages. */
+static void invalid_intermediate_descriptors(void)
+{
+    unsigned int operation, corruption;
+    for (operation = 0; operation < 4; ++operation) {
+        for (corruption = 0; corruption < 5; ++corruption) {
+            struct fixture f;
+            unsigned long long h, pa = 1, *entry = NULL, invalid;
+            unsigned int i, live, released;
+            start(&f);
+            assert(hv_agx_retained_map(&f.core, 1, VA, IPA, PAGE, &h) == 0);
+            for (i = 0; i < f.core.Inventory.PageCount; ++i)
+                if (f.core.Pages[i].Level == 1)
+                    entry = &f.core.Pages[i].Entries[operation == 3 ? 64 : 0];
+            assert(entry && *entry);
+            if (corruption == 0)
+                invalid = *entry & ~1ULL; /* VALID cleared, PA unchanged. */
+            else if (corruption == 1)
+                invalid = *entry & ~2ULL; /* TYPE cleared, PA unchanged. */
+            else if (corruption == 2)
+                invalid = *entry | (1ULL << 55); /* Not our table encoding. */
+            else if (corruption == 3)
+                invalid = (ROOT_PA + 0x4000) | 3; /* Firmware-owned table. */
+            else
+                invalid = f.core.Roots.Ttbr0PhysicalAddress | 3; /* Wrong owned level. */
+            *entry = invalid;
+            live = f.live;
+            released = f.released;
+            if (operation == 0) {
+                assert(hv_agx_retained_query(&f.core, 1, h, VA, IPA, PAGE, &pa) ==
+                    HV_AGX_RETAINED_TAINTED);
+                assert(pa == 0);
+            } else if (operation == 1) {
+                assert(hv_agx_retained_unmap(&f.core, 1, h, VA, IPA, PAGE) ==
+                    HV_AGX_RETAINED_TAINTED);
+            } else {
+                assert(hv_agx_retained_close(&f.core, 1, 1) == HV_AGX_RETAINED_TAINTED);
+            }
+            assert(f.core.Tainted && f.core.MappingCount == 1);
+            assert(f.live == live && f.released == released && *entry == invalid);
+            check_prefix(&f);
+            discard_tainted_fixture(&f);
+        }
+    }
+}
+
 int main(void)
 {
     lifetime();
@@ -311,5 +358,6 @@ int main(void)
     rollback();
     tainted_tables();
     preparation_guards();
+    invalid_intermediate_descriptors();
     return 0;
 }
