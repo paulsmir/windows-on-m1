@@ -709,13 +709,14 @@ static unsigned char AdmissionFirmwareSendInitdata(
     void *Context, unsigned long long Address,
     unsigned long long DeadlineMs) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
+#ifndef APPLE_AGX_STOP_AFTER_ENDPOINTS
   ULONGLONG message;
+#endif
   if (runtime == NULL || AdmissionPlatformNowMs() >= DeadlineMs)
     return 0u;
 #ifdef APPLE_AGX_STOP_AFTER_ENDPOINTS
   AdmissionRecordEndpoint(runtime->Adapter,0,1); /* explicit pre-initdata stop */
   UNREFERENCED_PARAMETER(Address);
-  UNREFERENCED_PARAMETER(message);
   return 0u;
 #else
   message = AppleAgxRtkitInitdata(Address);
