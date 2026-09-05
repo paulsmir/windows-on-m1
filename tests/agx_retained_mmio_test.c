@@ -19,6 +19,12 @@ static void wr32(void *ctx,unsigned offset,unsigned v) {
   assert(hv_agx_retained_mmio(ctx,offset-AGX_RR_OFFSET,&data,1,2,execute,0));
 }
 int main(void) {
+  assert(!AgxRrGpuRegionWritable(0,8));
+  assert(!AgxRrGpuRegionWritable(16,8));
+  assert(!AgxRrGpuRegionWritable(1000,8));
+  assert(AgxRrGpuRegionWritable(1008,1));
+  assert(AgxRrGpuRegionWritable(1016,8));
+  assert(!AgxRrGpuRegionWritable(1024,8));
   struct hv_agx_retained_mmio state = {0};
   AGX_RR_REQUEST q = {1,64,AGX_RR_MAP,0,1,17,0xffffffa010000000ULL,0x200000,0x4000,0};
   unsigned long long value;

@@ -14,6 +14,12 @@
 #define AGX_RR_FLAG_PREPARED 1u
 #define AGX_RR_FLAG_ACTIVE 2u
 #define AGX_RR_FLAG_PREFIX_UNCHANGED 4u
+/* Preserve the existing Windows context63 contract, not arbitrary contexts. */
+static inline unsigned char AgxRrGpuRegionWritable(unsigned long long offset,
+                                                  unsigned long long bytes) {
+  return bytes && bytes <= 16 && offset >= 63u * 16u &&
+         offset <= 64u * 16u - bytes;
+}
 typedef struct _AGX_RR_REQUEST {
   unsigned int Version, Bytes, Command, Reserved;
   unsigned long long Sequence, Epoch, Va, Ipa, Length, Handle;
