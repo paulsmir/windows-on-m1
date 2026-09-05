@@ -116,6 +116,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertNotIn("SupportOverlay", lifecycle)
 
     def test_post_start_admission_trace_is_receipt_only_and_bounded(self):
+        driver = self.read("src/driver.c")
         receipts = self.read("src/receipts.c")
         lifecycle = self.read("src/lifecycle.c")
         display = self.read("src/display.c")
@@ -149,11 +150,33 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("CapturedBytes", receipts)
         self.assertIn("QueryAdapterInfo->pOutputData", lifecycle)
         self.assertIn("AdmissionRecordDisplayDdi", header)
-        for ddi_id in ("1u", "2u", "3u"):
+        for ddi_id in (
+            "AdmissionDisplayDdiQueryChildRelations",
+            "AdmissionDisplayDdiQueryChildStatus",
+            "AdmissionDisplayDdiQueryDeviceDescriptor",
+        ):
             self.assertIn(
                 f"AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, {ddi_id}",
-                display,
+                " ".join(display.split()),
             )
+        for name in (
+            "IsSupportedVidPn", "RecommendFunctionalVidPn",
+            "EnumVidPnCofuncModality", "SetVidPnSourceVisibility",
+            "CommitVidPn", "UpdateActiveVidPnPresentPath",
+            "RecommendMonitorModes", "QueryVidPnHWCapability",
+        ):
+            self.assertIn(
+                f"initialization.DxgkDdi{name} = AdmissionTraceDdi{name}",
+                " ".join(driver.split()),
+            )
+            self.assertIn(f"AdmissionTraceDdi{name}", header)
+            self.assertIn(f"AdmissionTraceDdi{name}", display)
+        self.assertIn(
+            "initialization.DxgkDdiSetVidPnSourceAddress =\n"
+            "      AdmissionDdiSetVidPnSourceAddress",
+            driver,
+        )
+        self.assertNotIn("AdmissionTraceDdiSetVidPnSourceAddress", driver)
         self.assertNotIn("MmMapIoSpace", receipts)
         self.assertNotIn("WRITE_REGISTER", receipts)
 

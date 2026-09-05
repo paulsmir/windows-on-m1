@@ -62,6 +62,20 @@ typedef enum _ADMISSION_RECEIPT {
   AdmissionReceiptMemoryQualified = 16,
 } ADMISSION_RECEIPT;
 
+typedef enum _ADMISSION_DISPLAY_DDI_TRACE_ID {
+  AdmissionDisplayDdiQueryChildRelations = 1,
+  AdmissionDisplayDdiQueryChildStatus = 2,
+  AdmissionDisplayDdiQueryDeviceDescriptor = 3,
+  AdmissionDisplayDdiIsSupportedVidPn = 4,
+  AdmissionDisplayDdiRecommendFunctionalVidPn = 5,
+  AdmissionDisplayDdiEnumVidPnCofuncModality = 6,
+  AdmissionDisplayDdiSetVidPnSourceVisibility = 7,
+  AdmissionDisplayDdiCommitVidPn = 8,
+  AdmissionDisplayDdiUpdateActiveVidPnPresentPath = 9,
+  AdmissionDisplayDdiRecommendMonitorModes = 10,
+  AdmissionDisplayDdiQueryVidPnHWCapability = 11
+} ADMISSION_DISPLAY_DDI_TRACE_ID;
+
 typedef enum _ADMISSION_START_STAGE {
   AdmissionStartNone = 0,
   AdmissionStartEntered = 1,
@@ -436,15 +450,24 @@ DXGKDDI_SETPALETTE AdmissionDdiSetPalette;
 DXGKDDI_SETPOINTERPOSITION AdmissionDdiSetPointerPosition;
 DXGKDDI_SETPOINTERSHAPE AdmissionDdiSetPointerShape;
 DXGKDDI_ISSUPPORTEDVIDPN AdmissionDdiIsSupportedVidPn;
+DXGKDDI_ISSUPPORTEDVIDPN AdmissionTraceDdiIsSupportedVidPn;
 DXGKDDI_RECOMMENDFUNCTIONALVIDPN AdmissionDdiRecommendFunctionalVidPn;
+DXGKDDI_RECOMMENDFUNCTIONALVIDPN AdmissionTraceDdiRecommendFunctionalVidPn;
 DXGKDDI_ENUMVIDPNCOFUNCMODALITY AdmissionDdiEnumVidPnCofuncModality;
+DXGKDDI_ENUMVIDPNCOFUNCMODALITY AdmissionTraceDdiEnumVidPnCofuncModality;
 DXGKDDI_SETVIDPNSOURCEVISIBILITY AdmissionDdiSetVidPnSourceVisibility;
+DXGKDDI_SETVIDPNSOURCEVISIBILITY AdmissionTraceDdiSetVidPnSourceVisibility;
 DXGKDDI_COMMITVIDPN AdmissionDdiCommitVidPn;
+DXGKDDI_COMMITVIDPN AdmissionTraceDdiCommitVidPn;
 DXGKDDI_UPDATEACTIVEVIDPNPRESENTPATH AdmissionDdiUpdateActiveVidPnPresentPath;
+DXGKDDI_UPDATEACTIVEVIDPNPRESENTPATH
+AdmissionTraceDdiUpdateActiveVidPnPresentPath;
 DXGKDDI_RECOMMENDMONITORMODES AdmissionDdiRecommendMonitorModes;
+DXGKDDI_RECOMMENDMONITORMODES AdmissionTraceDdiRecommendMonitorModes;
 DXGKDDI_GETSCANLINE AdmissionDdiGetScanLine;
 DXGKDDI_STOPCAPTURE AdmissionDdiStopCapture;
 DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionDdiQueryVidPnHWCapability;
+DXGKDDI_QUERYVIDPNHWCAPABILITY AdmissionTraceDdiQueryVidPnHWCapability;
 DXGKDDI_SETVIDPNSOURCEADDRESS AdmissionDdiSetVidPnSourceAddress;
 DXGKDDI_STOP_DEVICE_AND_RELEASE_POST_DISPLAY_OWNERSHIP
 AdmissionDdiStopDeviceAndReleasePostDisplayOwnership;

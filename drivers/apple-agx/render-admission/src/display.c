@@ -23,14 +23,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
 
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 1u, 1u,
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildRelations, 1u,
                             STATUS_PENDING);
   if (!context->Started || ChildRelations == NULL)
     status = STATUS_INVALID_PARAMETER;
   else if (ChildRelationsSize < 2 * sizeof(DXGK_CHILD_DESCRIPTOR))
     status = STATUS_BUFFER_TOO_SMALL;
   if (!NT_SUCCESS(status)) {
-    AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 1u, 2u, status);
+    AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                              AdmissionDisplayDdiQueryChildRelations, 2u,
+                              status);
     return status;
   }
 
@@ -47,7 +50,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildRelations(
       FALSE;
   ChildRelations[0].AcpiUid = 0;
   ChildRelations[0].ChildUid = 0;
-  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 1u, 2u, status);
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildRelations, 2u,
+                            status);
   return status;
 }
 
@@ -60,7 +65,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildStatus(
   UNREFERENCED_PARAMETER(NonDestructiveOnly);
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 2u, 1u,
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildStatus, 1u,
                             STATUS_PENDING);
   if (!context->Started || ChildStatus == NULL || ChildStatus->ChildUid != 0)
     status = STATUS_INVALID_PARAMETER;
@@ -68,7 +74,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryChildStatus(
     status = STATUS_NOT_SUPPORTED;
   else
     ChildStatus->HotPlug.Connected = TRUE;
-  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 2u, 2u, status);
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryChildStatus, 2u, status);
   return status;
 }
 
@@ -80,13 +87,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryDeviceDescriptor(
 
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
-  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 3u, 1u,
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryDeviceDescriptor, 1u,
                             STATUS_PENDING);
   if (!context->Started || DeviceDescriptor == NULL || ChildUid != 0)
     status = STATUS_INVALID_PARAMETER;
   else
     status = STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED;
-  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, 3u, 2u, status);
+  AdmissionRecordDisplayDdi(context->PhysicalDeviceObject,
+                            AdmissionDisplayDdiQueryDeviceDescriptor, 2u,
+                            status);
   return status;
 }
 
@@ -663,3 +673,55 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
   *DisplayInfo = context->PostDisplayInformation;
   return AdmissionDdiStopDevice(context);
 }
+
+#define ADMISSION_TRACE_DISPLAY_DDI(Name, Implementation, DdiId, ArgType)     \
+  _Use_decl_annotations_ NTSTATUS Name(CONST HANDLE MiniportDeviceContext,   \
+                                        ArgType Args) {                       \
+    ADMISSION_CONTEXT *context =                                             \
+        (ADMISSION_CONTEXT *)MiniportDeviceContext;                           \
+    NTSTATUS status;                                                          \
+    if (context != NULL)                                                      \
+      AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 1u,    \
+                                STATUS_PENDING);                              \
+    status = Implementation(MiniportDeviceContext, Args);                     \
+    if (context != NULL)                                                      \
+      AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 2u,    \
+                                status);                                      \
+    return status;                                                            \
+  }
+
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiIsSupportedVidPn,
+                            AdmissionDdiIsSupportedVidPn,
+                            AdmissionDisplayDdiIsSupportedVidPn,
+                            DXGKARG_ISSUPPORTEDVIDPN *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiRecommendFunctionalVidPn,
+                            AdmissionDdiRecommendFunctionalVidPn,
+                            AdmissionDisplayDdiRecommendFunctionalVidPn,
+                            const DXGKARG_RECOMMENDFUNCTIONALVIDPN *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiEnumVidPnCofuncModality,
+                            AdmissionDdiEnumVidPnCofuncModality,
+                            AdmissionDisplayDdiEnumVidPnCofuncModality,
+                            const DXGKARG_ENUMVIDPNCOFUNCMODALITY *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiSetVidPnSourceVisibility,
+                            AdmissionDdiSetVidPnSourceVisibility,
+                            AdmissionDisplayDdiSetVidPnSourceVisibility,
+                            const DXGKARG_SETVIDPNSOURCEVISIBILITY *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiCommitVidPn,
+                            AdmissionDdiCommitVidPn,
+                            AdmissionDisplayDdiCommitVidPn,
+                            const DXGKARG_COMMITVIDPN *)
+ADMISSION_TRACE_DISPLAY_DDI(
+    AdmissionTraceDdiUpdateActiveVidPnPresentPath,
+    AdmissionDdiUpdateActiveVidPnPresentPath,
+    AdmissionDisplayDdiUpdateActiveVidPnPresentPath,
+    const DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiRecommendMonitorModes,
+                            AdmissionDdiRecommendMonitorModes,
+                            AdmissionDisplayDdiRecommendMonitorModes,
+                            const DXGKARG_RECOMMENDMONITORMODES *)
+ADMISSION_TRACE_DISPLAY_DDI(AdmissionTraceDdiQueryVidPnHWCapability,
+                            AdmissionDdiQueryVidPnHWCapability,
+                            AdmissionDisplayDdiQueryVidPnHWCapability,
+                            DXGKARG_QUERYVIDPNHWCAPABILITY *)
+
+#undef ADMISSION_TRACE_DISPLAY_DDI
