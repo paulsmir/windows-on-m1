@@ -58,7 +58,6 @@ static inline unsigned char AgxHwdataMaterialize(const AGX_HWDATA_RECEIPT *r,
     unsigned int i;
     unsigned char *a_data=a,*b_data=b;
     unsigned long long ap,bp;
-    if(a_data==0 || b_data==0) return 0;
     ap=(unsigned long long)a_data;bp=(unsigned long long)b_data;
     if(a_bytes<AGX_HWDATA_A_BYTES || b_bytes<AGX_HWDATA_B_BYTES ||
        ap>~0ULL-AGX_HWDATA_A_BYTES || bp>~0ULL-AGX_HWDATA_B_BYTES ||
@@ -66,6 +65,8 @@ static inline unsigned char AgxHwdataMaterialize(const AGX_HWDATA_RECEIPT *r,
        AGX_HWDATA_A_BYTES!=0x421c || AGX_HWDATA_B_BYTES!=0x1884 ||
        !AgxHwdataReceiptValid(r,epoch,root) ||
        !AgxFwIoManifestValid(io,AGX_FW_IO_BYTES,epoch,root)) return 0;
+    /* Keep the pointer guard adjacent to stores, after integer overlap analysis. */
+    if(a_data==0 || b_data==0) return 0;
     for(i=0;i<AGX_HWDATA_A_BYTES;i++)a_data[i]=AgxHwdataAProfile[i];
     for(i=0;i<AGX_HWDATA_B_BYTES;i++)b_data[i]=AgxHwdataBProfile[i];
     AgxFwIoPut(b_data+0x28,AGX_HWDATA_TIMESTAMP_BASE,8);
