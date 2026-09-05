@@ -159,6 +159,34 @@ APPLE_AGX_BOOL AdmissionMemoryReady(const ADMISSION_MEMORY_CONTRACT *Memory) {
              : APPLE_AGX_FALSE;
 }
 
+APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryMapAperturePages(
+    ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
+    const APPLE_AGX_U64 *PhysicalPages, APPLE_AGX_U32 PhysicalPageCount) {
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      Memory->Initialized != APPLE_AGX_TRUE ||
+      (ApertureByteOffset & (APPLE_AGX_SYSTEM_PAGE_SIZE - 1ULL)) != 0ULL ||
+      ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE > 0xffffffffULL)
+    return AppleAgxSoftwareApertureInvalidArgument;
+  return AppleAgxSoftwareApertureMap(
+      &Memory->Aperture,
+      (APPLE_AGX_U32)(ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE),
+      PhysicalPages, PhysicalPageCount);
+}
+
+APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryUnmapAperturePages(
+    ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
+    APPLE_AGX_U32 PageCount, APPLE_AGX_U64 DummyPage) {
+  if (Memory == ADMISSION_MEMORY_NULL ||
+      Memory->Initialized != APPLE_AGX_TRUE ||
+      (ApertureByteOffset & (APPLE_AGX_SYSTEM_PAGE_SIZE - 1ULL)) != 0ULL ||
+      ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE > 0xffffffffULL)
+    return AppleAgxSoftwareApertureInvalidArgument;
+  return AppleAgxSoftwareApertureUnmap(
+      &Memory->Aperture,
+      (APPLE_AGX_U32)(ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE),
+      PageCount, DummyPage);
+}
+
 APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryMapAperture64K(
     ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
     const APPLE_AGX_U64 *PhysicalPages, APPLE_AGX_U32 PhysicalPageCount) {
@@ -168,10 +196,8 @@ APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryMapAperture64K(
       ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE > 0xffffffffULL ||
       PhysicalPageCount != APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE)
     return AppleAgxSoftwareApertureInvalidArgument;
-  return AppleAgxSoftwareApertureMap(
-      &Memory->Aperture,
-      (APPLE_AGX_U32)(ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE),
-      PhysicalPages, PhysicalPageCount);
+  return AdmissionMemoryMapAperturePages(
+      Memory, ApertureByteOffset, PhysicalPages, PhysicalPageCount);
 }
 
 APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryUnmapAperture64K(
@@ -182,10 +208,9 @@ APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryUnmapAperture64K(
       (ApertureByteOffset & (APPLE_AGX_WDDM_PAGE_SIZE_64K - 1ULL)) != 0ULL ||
       ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE > 0xffffffffULL)
     return AppleAgxSoftwareApertureInvalidArgument;
-  return AppleAgxSoftwareApertureUnmap(
-      &Memory->Aperture,
-      (APPLE_AGX_U32)(ApertureByteOffset / APPLE_AGX_SYSTEM_PAGE_SIZE),
-      APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE, DummyPage);
+  return AdmissionMemoryUnmapAperturePages(
+      Memory, ApertureByteOffset, APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE,
+      DummyPage);
 }
 
 APPLE_AGX_LOCAL_SEGMENT_ADDRESS_RESULT AdmissionMemoryLocalAddressToGpuVa(

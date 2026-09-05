@@ -58,6 +58,12 @@ APPLE_AGX_BOOL AdmissionMemoryResolveLocalView(
     void *LocalCpuBase,
     APPLE_AGX_U64 LocalHostPhysicalBase,
     ADMISSION_LOCAL_MEMORY_VIEW *View);
+APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryMapAperturePages(
+    ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
+    const APPLE_AGX_U64 *PhysicalPages, APPLE_AGX_U32 PhysicalPageCount);
+APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryUnmapAperturePages(
+    ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
+    APPLE_AGX_U32 PageCount, APPLE_AGX_U64 DummyPage);
 APPLE_AGX_SOFTWARE_APERTURE_RESULT AdmissionMemoryMapAperture64K(
     ADMISSION_MEMORY_CONTRACT *Memory, APPLE_AGX_U64 ApertureByteOffset,
     const APPLE_AGX_U64 *PhysicalPages, APPLE_AGX_U32 PhysicalPageCount);

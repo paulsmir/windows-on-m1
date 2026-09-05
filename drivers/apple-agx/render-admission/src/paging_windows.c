@@ -57,12 +57,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
             ADMISSION_MEMORY_APERTURE_SEGMENT ||
         Args->UnmapApertureSegment.OffsetInPages >
             (MAXULONGLONG >> PAGE_SHIFT) ||
-        Args->UnmapApertureSegment.NumberOfPages !=
-            (SIZE_T)APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE)
+        Args->UnmapApertureSegment.NumberOfPages > MAXULONG)
       return STATUS_INVALID_PARAMETER;
     return AdmissionMemoryRuntimeUnmapAperture(
         context,
         (ULONGLONG)Args->UnmapApertureSegment.OffsetInPages << PAGE_SHIFT,
+        (UINT)Args->UnmapApertureSegment.NumberOfPages,
         (ULONGLONG)Args->UnmapApertureSegment.DummyPage.QuadPart);
   case DXGK_OPERATION_TRANSFER:
     if (Args->Transfer.Flags.Reserved != 0u ||

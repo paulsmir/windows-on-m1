@@ -657,7 +657,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeMapAperture(
   NTSTATUS status = STATUS_SUCCESS;
 
   if (runtime == NULL || Mdl == NULL || PageCount == 0u ||
-      PageCount != APPLE_AGX_SYSTEM_PAGES_PER_WDDM_PAGE ||
+      PageCount > Context->Memory.Aperture.PageCount ||
       (SIZE_T)PageCount > MAXSIZE_T / sizeof(*pages))
     return STATUS_INVALID_PARAMETER;
   mdlPages = ADDRESS_AND_SIZE_TO_SPAN_PAGES(
@@ -681,7 +681,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeMapAperture(
     pages[index] = (ULONGLONG)pfn << PAGE_SHIFT;
   }
   ExAcquireFastMutex(&runtime->PagingLock);
-  result = AdmissionMemoryMapAperture64K(
+  result = AdmissionMemoryMapAperturePages(
       &Context->Memory, ApertureByteOffset, pages, PageCount);
   ExReleaseFastMutex(&runtime->PagingLock);
   if (result != AppleAgxSoftwareApertureOk)
@@ -698,14 +698,14 @@ Done:
 
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeUnmapAperture(
     ADMISSION_CONTEXT *Context, ULONGLONG ApertureByteOffset,
-    ULONGLONG DummyPage) {
+    UINT PageCount, ULONGLONG DummyPage) {
   ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
   APPLE_AGX_SOFTWARE_APERTURE_RESULT result;
   if (runtime == NULL)
     return STATUS_INVALID_DEVICE_STATE;
   ExAcquireFastMutex(&runtime->PagingLock);
-  result = AdmissionMemoryUnmapAperture64K(
-      &Context->Memory, ApertureByteOffset, DummyPage);
+  result = AdmissionMemoryUnmapAperturePages(
+      &Context->Memory, ApertureByteOffset, PageCount, DummyPage);
   ExReleaseFastMutex(&runtime->PagingLock);
   if (result == AppleAgxSoftwareApertureOk ||
       result == AppleAgxSoftwareApertureDummy)
