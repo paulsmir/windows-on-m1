@@ -56,16 +56,19 @@ static inline unsigned char AgxHwdataMaterialize(const AGX_HWDATA_RECEIPT *r,
     const AGX_FW_IO_MANIFEST *io,unsigned long long epoch,unsigned long long root,
     void *a,unsigned long long a_bytes,void *b,unsigned long long b_bytes) {
     unsigned int i;
-    unsigned long long ap=(unsigned long long)a,bp=(unsigned long long)b;
-    if(!a || !b || a_bytes<AGX_HWDATA_A_BYTES || b_bytes<AGX_HWDATA_B_BYTES ||
+    unsigned char *a_data=a,*b_data=b;
+    unsigned long long ap,bp;
+    if(a_data==0 || b_data==0) return 0;
+    ap=(unsigned long long)a_data;bp=(unsigned long long)b_data;
+    if(a_bytes<AGX_HWDATA_A_BYTES || b_bytes<AGX_HWDATA_B_BYTES ||
        ap>~0ULL-AGX_HWDATA_A_BYTES || bp>~0ULL-AGX_HWDATA_B_BYTES ||
        (ap<bp+AGX_HWDATA_B_BYTES && bp<ap+AGX_HWDATA_A_BYTES) ||
        AGX_HWDATA_A_BYTES!=0x421c || AGX_HWDATA_B_BYTES!=0x1884 ||
        !AgxHwdataReceiptValid(r,epoch,root) ||
        !AgxFwIoManifestValid(io,AGX_FW_IO_BYTES,epoch,root)) return 0;
-    for(i=0;i<AGX_HWDATA_A_BYTES;i++)((unsigned char *)a)[i]=AgxHwdataAProfile[i];
-    for(i=0;i<AGX_HWDATA_B_BYTES;i++)((unsigned char *)b)[i]=AgxHwdataBProfile[i];
-    AgxFwIoPut((unsigned char *)b+0x28,AGX_HWDATA_TIMESTAMP_BASE,8);
-    return AgxFwIoEncodeHwdataB(io,AGX_FW_IO_BYTES,epoch,root,b,b_bytes);
+    for(i=0;i<AGX_HWDATA_A_BYTES;i++)a_data[i]=AgxHwdataAProfile[i];
+    for(i=0;i<AGX_HWDATA_B_BYTES;i++)b_data[i]=AgxHwdataBProfile[i];
+    AgxFwIoPut(b_data+0x28,AGX_HWDATA_TIMESTAMP_BASE,8);
+    return AgxFwIoEncodeHwdataB(io,AGX_FW_IO_BYTES,epoch,root,b_data,b_bytes);
 }
 #endif

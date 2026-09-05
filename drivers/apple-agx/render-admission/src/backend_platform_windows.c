@@ -1648,6 +1648,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     RtlZeroMemory(&runtime->FirmwareStartFailure,sizeof(runtime->FirmwareStartFailure));
     result = AppleAgxFirmwareStart(&qualification,&runtime->FirmwareIo);
     runtime->CaptureFirmwareStart=FALSE;
+    AdmissionRecordRetainedTrace(Context,runtime->AscTransport.Trace,
+        runtime->AscTransport.TraceCount*sizeof(runtime->AscTransport.Trace[0]));
     completed=runtime->FirmwareStartFailure.Captured?
         runtime->FirmwareStartFailure.CompletedMask:qualification.CompletedMask;
     primary=runtime->FirmwareStartFailure.Captured?runtime->FirmwareStartFailure.Result:result;

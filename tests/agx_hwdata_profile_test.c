@@ -73,6 +73,8 @@ int main(void) {
     assert(!AgxHwdataMaterialize(&bad,&io,3,receipt.Root,a,sizeof(a),b,sizeof(b)));
     assert(!AgxHwdataMaterialize(&receipt,&io,3,receipt.Root,a,AGX_HWDATA_A_BYTES-1,b,sizeof(b)));
     assert(!AgxHwdataMaterialize(&receipt,&io,3,receipt.Root,a,sizeof(a),a,sizeof(a)));
+    assert(!AgxHwdataMaterialize(&receipt,&io,3,receipt.Root,0,sizeof(a),b,sizeof(b)));
+    assert(!AgxHwdataMaterialize(&receipt,&io,3,receipt.Root,a,sizeof(a),0,sizeof(b)));
     io.Records[0].Phys++;
     assert(!AgxHwdataMaterialize(&receipt,&io,3,receipt.Root,a,sizeof(a),b,sizeof(b)));
     assert(!memcmp(a,saved_a,sizeof(a)) && !memcmp(b,saved_b,sizeof(b)));
