@@ -1,5 +1,19 @@
 # EXP407 live readiness matrix
 
+## EXP472/473 boundary qualification — 2026-09-05
+
+`FIRMWARE_PRIVATE_PREFIX_TRANSPORT_HW_PROVEN = YES` and
+`FIRMWARE_PRIVATE_PREFIX_COPY_HW_PROVEN = YES`: EXP472 records byte-exact live
+and imported entries before successful kernel mapping/publication.
+`WINDOWS_RTKIT_MANAGEMENT_HW_PROVEN = NO`: IOP/AP remain zero and timeout persists.
+EXP473 native copied-root control reproduces timeout despite the same private
+entries; EXP470 native retained-root management PASS does not transfer to the
+Windows owned-root design. Further retained-root publication needs an explicit
+architecture decision. No Type1/UMD/scanout/submission/completion proof is added.
+
+The implementation readiness matrix below is not a claim of complete hardware
+readiness. Final clean ordinary G2 evidence is in GPU_CURRENT_STATE.md.
+
 Updated: 2026-09-04T17:51:22+02:00
 
 This matrix is evaluated after memory source commits
