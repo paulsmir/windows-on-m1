@@ -37,11 +37,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateDevice(
   ULONG flags;
 
   if (adapter == NULL || !adapter->Started || Args == NULL ||
-      Args->hDevice == NULL || Args->Pasid != 0 || Args->hKmdProcess != NULL)
+      Args->Pasid != 0 || Args->hKmdProcess != NULL)
     return STATUS_INVALID_PARAMETER;
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_DEVICE_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
+  /* VidSch supplies no runtime device handle for its SystemDevice. The
+   * returned driver-owned object still has the normal lifetime/ownership. */
+  if (Args->hDevice == NULL && (flags & ADMISSION_DEVICE_SYSTEM) == 0u)
+    return STATUS_INVALID_PARAMETER;
   device = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*device),
                            ADMISSION_POOL_TAG);
   if (device == NULL)

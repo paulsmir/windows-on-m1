@@ -37,7 +37,9 @@ int AdmissionObjectsCreateDevice(ADMISSION_OBJECT_ADAPTER *Adapter,
       Adapter->Magic != ADMISSION_OBJECT_ADAPTER_MAGIC ||
       Adapter->Started == 0u ||
       Adapter->DeviceCount >= ADMISSION_OBJECT_MAX_DEVICES ||
-      RuntimeHandle == ADMISSION_OBJECT_NULL || Device == ADMISSION_OBJECT_NULL ||
+      (RuntimeHandle == ADMISSION_OBJECT_NULL &&
+       (Flags & ADMISSION_DEVICE_SYSTEM) == 0u) ||
+      Device == ADMISSION_OBJECT_NULL ||
       (Flags & ~ADMISSION_DEVICE_VALID_FLAGS) != 0u)
     return 0;
   candidate.Magic = ADMISSION_OBJECT_DEVICE_MAGIC;

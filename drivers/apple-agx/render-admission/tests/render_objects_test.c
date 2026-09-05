@@ -65,6 +65,37 @@ static void test_invalid_inputs_do_not_mutate_storage(void) {
   assert(AdmissionObjectsStopAdapter(&adapter));
 }
 
+/* The Windows scheduler creates its system device with no runtime handle.
+ * Rejecting that input prevents paging-process initialization. */
+static void test_system_device_without_runtime_handle(void) {
+  ADMISSION_OBJECT_ADAPTER adapter;
+  ADMISSION_OBJECT_DEVICE device;
+  ADMISSION_OBJECT_CONTEXT context;
+
+  AdmissionObjectsInitializeAdapter(&adapter);
+  assert(AdmissionObjectsStartAdapter(&adapter));
+  assert(AdmissionObjectsCreateDevice(&adapter, NULL,
+                                      ADMISSION_DEVICE_SYSTEM, &device));
+  assert(device.RuntimeHandle == NULL);
+  assert(device.Flags == ADMISSION_DEVICE_SYSTEM);
+  assert(device.Adapter == &adapter);
+  assert(adapter.DeviceCount == 1u);
+  assert(AdmissionObjectsCreateContext(&device, (void *)2, 0u, 1u,
+                                       ADMISSION_CONTEXT_SYSTEM, &context));
+  assert(!AdmissionObjectsDestroyDevice(&device));
+  assert(!AdmissionObjectsStopAdapter(&adapter));
+  assert(AdmissionObjectsDestroyContext(&context));
+  assert(AdmissionObjectsDestroyDevice(&device));
+  assert(adapter.DeviceCount == 0u);
+  assert(!AdmissionObjectsCreateDevice(&adapter, NULL,
+                                       ADMISSION_DEVICE_GDI, &device));
+  assert(!AdmissionObjectsCreateDevice(&adapter, NULL,
+                                       ADMISSION_DEVICE_SYSTEM | 0x80000000u,
+                                       &device));
+  assert(adapter.DeviceCount == 0u);
+  assert(AdmissionObjectsStopAdapter(&adapter));
+}
+
 static void test_adapter_stop_requires_no_live_devices(void) {
   ADMISSION_OBJECT_ADAPTER adapter;
   ADMISSION_OBJECT_DEVICE device;
@@ -79,6 +110,7 @@ static void test_adapter_stop_requires_no_live_devices(void) {
 }
 
 int main(void) {
+  test_system_device_without_runtime_handle();
   test_device_and_context_lifetime();
   test_invalid_inputs_do_not_mutate_storage();
   test_adapter_stop_requires_no_live_devices();
