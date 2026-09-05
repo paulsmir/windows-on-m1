@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0">
+  <Profiles>
+    <EventCollector Id="AgxAdmissionCollector" Name="AppleAgx admission diagnostics">
+      <BufferSize Value="128" />
+      <Buffers Value="128" />
+    </EventCollector>
+    <EventProvider Id="DxgAdmissionProvider" Name="802ec45a-1e99-4b83-9920-87c98277ba9d" Level="5" NonPagedMemory="true">
+      <Keywords>
+        <!-- Exact current dxgkrnl event 494 includes AzureTriageLogging. -->
+        <Keyword Value="0x40000000" />
+      </Keywords>
+    </EventProvider>
+    <Profile Id="AgxAdmission.Verbose.Memory" Name="AgxAdmission" Description="Bounded dxgkrnl admission error messages" LoggingMode="Memory" DetailLevel="Verbose">
+      <Collectors>
+        <EventCollectorId Value="AgxAdmissionCollector">
+          <EventProviders>
+            <EventProviderId Value="DxgAdmissionProvider" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>
