@@ -302,6 +302,13 @@ service/SYS/UMD removed, ordinary restore underway. Commit6ae8698 packs guard+
 status in one broker word only;108 tests and pinned30.0.530.0 gates PASS.
 ZIP/SYS/producer SHA485b27e5.../50dd625f.../b917fce4.... EXP530 preregistered;
 no downstream GPU readiness changed.
+EXP530 FINAL: successful run bound exact Code0 and reset; host log SHA40fe1dd9...
+contains only atomic prologue `(ffff,STATUS_PENDING)`, proving the active broker
+command prevents the immediate final write. First launch miss was pre-hardware
+USB endpoint timing, not a driver run. Commit4563e0a removes only the nonverdict
+prologue so the final guard is the sole command;108 tests and pinned30.0.531.0
+gates PASS. ZIP/SYS/producer SHA15bb5b93.../b19fb303.../cb093183.... EXP531
+preregistered; EXP530 emergency cleanup/ordinary restore must complete first.
 
 ## Final live ordinary clean baseline
 

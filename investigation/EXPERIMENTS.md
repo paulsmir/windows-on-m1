@@ -1,5 +1,41 @@
 # Hardware Experiment Ledger
 
+## EXP531 final-only SubmitRender guard — preregistration 2026-09-06T21:50:09Z
+
+WHY THIS HYPOTHESIS:
+- EXP530 host log received only the atomic prologue word
+  `(guard=0xffff,status=STATUS_PENDING)` before reset.
+- The final word is the second broker command in the same short callback; the
+  prior request remains active, so the broker correctly cannot accept it.
+- Every exit already passes its exact guard and status through one macro; removing
+  the nonverdict prologue makes the final word the first and only command.
+
+Single variable commit `4563e0a16a01c12949ee0cac9ccf7f86b2601966`
+removes only the pending prologue receipt. Qualification return receipts remain;
+production and all KMD results are unchanged. RED proved pending still existed;
+then2/2 and106 render regressions GREEN. Pinned WDK26100 build/analysis/Universal/
+Inf2Cat/TestSign/version30.0.531.0 PASS with inherited C28251 only.
+
+Overlay/build SHA `3ef19318...`/`dd7db68a...`. ZIP/SYS/INF/CAT/UMD/producer SHA
+`15bb5b93...`/`b19fb303...`/`9fc837fe...`/`678e0f85...`/`39b45791...`/
+`cb093183...`; manifest SHA `585ea859...`. Stage/run/cleanup/launch SHA
+`7f48482e...`/`6553e0e2...`/`b57009eb...`/`21a36018...`.
+Preflight requires exact EXP530 cleanup and ordinary377/392 Code28/no AGX state/
+8CPU/SSH. Run one natural bind and one producer with host tee. PASS is one final
+0x5280 word `(numbered guard,C0000008)`, followed by exact cleanup and a correction
+only to that named invariant.
+
+## EXP530 atomic SubmitRender guard — result 2026-09-06T21:50Z
+
+INCONCLUSIVE for the KMD guard; transport hypothesis CONFIRMED. Exact30.0.530.0
+bound Code0 with matching oem5/SYS and8CPU. The first launch attempt missed the
+temporarily absent USB endpoint and never reached hardware; the same preregistered
+candidate was then launched once successfully. Producer reset Windows. Host log
+SHA `40fe1dd9f73e84205e69262d0184e566d1013aaca22998bb8842c80b3b23e3fa`
+contains only repeated atomic `5280ffff00000103`: the prologue pending command
+was accepted and the final command was not. No guard or downstream GPU claim.
+Ordinary recovery again did not regain SSH; emergency cleanup is in progress.
+
 ## EXP530 atomic SubmitRender guard word — preregistration 2026-09-06T21:43:27Z
 
 WHY THIS HYPOTHESIS:
