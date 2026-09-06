@@ -210,14 +210,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDescribeAllocation(
 _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     HANDLE Device, const DXGKARG_OPENALLOCATION *Args) {
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
+  ADMISSION_CONTEXT *adapter;
+  NTSTATUS status = STATUS_INVALID_PARAMETER;
   UINT index;
   if (device == NULL || device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
+      device->Object.Adapter == NULL ||
       Args == NULL || Args->NumAllocations == 0u ||
       Args->pOpenAllocation == NULL || Args->pPrivateDriverData != NULL ||
       Args->PrivateDriverSize != 0u)
     return STATUS_INVALID_PARAMETER;
+  adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
+                              ObjectAdapter);
+  if (!adapter->InterfaceValid ||
+      adapter->Interface.DxgkCbGetHandleData == NULL)
+    return STATUS_INVALID_DEVICE_STATE;
   for (index = 0u; index < Args->NumAllocations; ++index) {
     DXGK_OPENALLOCATIONINFO *info = &Args->pOpenAllocation[index];
+    DXGKARGCB_GETHANDLEDATA query;
     const ADMISSION_ALLOCATION_DESCRIPTION *description;
     ADMISSION_ALLOCATION_HANDLE *allocation;
     ADMISSION_OPEN_ALLOCATION *opened;
@@ -227,9 +236,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
       goto Rollback;
     description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
         info->pPrivateDriverData;
-    allocation = (ADMISSION_ALLOCATION_HANDLE *)info->hAllocation;
+    /* hAllocation is a dxgkrnl token, not the KMD object returned at Create. */
+    RtlZeroMemory(&query, sizeof(query));
+    query.hObject = info->hAllocation;
+    query.Type = DXGK_HANDLE_ALLOCATION;
+    allocation = (ADMISSION_ALLOCATION_HANDLE *)
+        adapter->Interface.DxgkCbGetHandleData(&query);
     if (allocation == NULL ||
-        !AdmissionAllocationDescriptionValid(description) ||
+        allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+      status = STATUS_INVALID_HANDLE;
+      goto Rollback;
+    }
+    if (!AdmissionAllocationDescriptionValid(description) ||
         !AdmissionAllocationDescriptionValid(&allocation->Object.Description) ||
         RtlCompareMemory(description, &allocation->Object.Description,
                          sizeof(*description)) != sizeof(*description) ||
@@ -266,7 +284,7 @@ Rollback:
       --device->Object.AllocationCount;
     }
   }
-  return STATUS_INVALID_PARAMETER;
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCloseAllocation(
