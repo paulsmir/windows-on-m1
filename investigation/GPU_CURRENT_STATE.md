@@ -258,6 +258,10 @@ correlated BuildPagingBuffer op1/status0, fence7001 complete. Render moved to
 C000000D but KMD entry absent. Cleanup/ordinary health1d7fba3260c46944a68ad51b443450082c7027d81d9ff1a9445538b0bfcd8c17.
 EXP523 preregistered: unchanged522 producer/package with bounded DxgKrnl ETW to
 name post-residency C000000D owner; then exact cleanup and causal fix.
+EXP523 FINAL: ETW proves Event169+ReferenceAllocations(write=true)+DdiRender
+profiler5030, returning C000000D in43us. Dispatch exists; old5120 arm was false.
+EXP524 commit46b1901 arms trace on exact Open lifetime unconditionally;106 tests
+and pinned524 gates PASS. Next exact524 run names KMD guard, then causal fix.
 
 ## Final live ordinary clean baseline
 

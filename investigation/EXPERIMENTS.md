@@ -1,5 +1,17 @@
 # Hardware Experiment Ledger
 
+## EXP524 unconditional exact-open Render guard — preregistration 2026-09-06T20:47Z
+
+WHY THIS HYPOTHESIS: EXP523 ETW proves explicit residency reaches Event169,
+ReferenceAllocations(write=true), and ADAPTER_RENDER::DdiRender profiler5030,
+which returns C000000D in43us. Thus dispatch exists; prior missing5120 was a
+faulty cookie arm. Commit46b1901 arms the qualification adapter on the exact
+OpenAllocation lifetime without the cookie condition and leaves all results
+unchanged.106 tests GREEN; pinned524 build/sign/Universal/analysis PASS. ZIP/SYS/
+producer SHA `0b45458a...`/`80e50a32...`/`391d74be...`. One run then cleanup.
+EXP523 exact ETW/ordinary health SHA boundary preserved; ordinary health
+`23bcf1038f0480e7c6abdd54d67eb20e2d2cdddc589ddbf556ac64c70c66bc75`.
+
 ## EXP523 post-residency DxgKrnl owner — preregistration 2026-09-06T20:42Z
 
 WHY THIS HYPOTHESIS: EXP522 proved explicit MakeResident is causal: paging queue
