@@ -150,6 +150,24 @@ R7 analysis build PASS; remote SHA
 3c9e342ed916fecc166b3a960d0a9c14e6809fa1f9be3f8273010fa5ef78bc2f.
 Next is one exact R7 run against unchanged Code0 driver30.0.511.0.
 
+EXP511 FINAL: exact R7 selected Apple hardware adapter; device/context/allocation
+all status0; D3DKMTRender C0000001; every cleanup status0; Windows Code0/healthy.
+No0x5090 Submit trace or GDI receipt: Patch/Submit/backend/TA3D did not execute.
+Exact cleanup and ordinary recovery complete; health SHA
+ca832b49292bce7b4879a0560dff045cdbad28cd47a9a9bd03be139037f671d9.
+One Code28/null INF/service, no package/SYS/UMD,8CPU/SSH/input/xHCI/NVMe healthy,
+no fresh fault events. Do not repeat511.
+
+EXP512 current: commit c5b246fec3918ab72a96a4fcd0f010cef8abc196 adds
+qualification-only crash-durable0x5120 UMD Render args/copied-command/numbered-
+guard/status trace.101 render tests and pinned30.0.512.0 build/sign/Universal/
+analysis PASS. ZIP SHA
+b50191190f3fb6c03bea96ae75133ed3366b32e43c159e57cc6a12bcd02fa931,
+SYS SHAb4a8cf4c9a61ba849639855148715ecd90d9e5dc5bd0d5470cb2aac643cca6fd,
+producer SHAf4a26107a5a0544b23fc5df28ad5e49fd66ca711971af2190f2c81747edbb997.
+Preregistered next: one natural bind and one producer run; decode exact first
+Render guard, cleanup, then fix only that guard.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,

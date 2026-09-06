@@ -1,5 +1,60 @@
 # Hardware Experiment Ledger
 
+## EXP512 crash-durable UMD Render guard — preregistration 2026-09-06T18:54:00Z
+
+WHY THIS HYPOTHESIS:
+- EXP511 R7 proved kernel inventory, CreateDevice, normal CreateContext and
+  CreateAllocation all return STATUS_SUCCESS, while the first D3DKMTRender alone
+  returns C0000001.
+- No0x5090 Submit trace and no GDI hardware receipt exist, so Patch, Submit and
+  backend did not execute. The exact first unknown is callback entry or one
+  current AdmissionDdiRender guard.
+- The current successful Render path creates its first receipt only after every
+  guard; one crash-durable entry/guard/status discriminator is the smallest
+  experiment that distinguishes the remaining causes.
+
+Single variable: qualification-only tag0x5120. It claims only the first normal
+Render and writes version/IRQL/context flags, command/DMA/private/list sizes,
+multipass, copied pointer-free command fields, numbered guard and exact NTSTATUS
+through the existing read-only power-broker QUERY receipt path. Production build
+omits the trace. No KMD behavior, producer, UMD, capability, platform, firmware,
+UAT, queue, IRQ, scheduler, display or backend path changes.
+
+Numbered guards:0 accepted;1 context;2 device;3 system;4 inactive;5 args;
+6 command pointer;7 command length;8 DMA;9 private;10 allocations;11 input patch;
+12 output patch;13 multipass;14 guarded user copy;15 command validation;
+16 opened allocation;17 bounds;18 virgin private shadow;19 prepare;20 append.
+
+Commit c5b246fec3918ab72a96a4fcd0f010cef8abc196. RED then decoder/wiring GREEN;
+101 render tests PASS. Exact source is EXP509 R2 base SHA
+12768f312649e8e7c39dfaa9e4b4629310b550955231642a88e6acca044c74fc plus
+overlay SHA5d768fe49120c152bb523419883f89f177f2ffeba1c4048680c1c57b000ff5e7.
+Pinned WDK26100/MSVC14.44 normal+SubmitQualification KMD/UMD, analysis,
+Universal, Inf2Cat/signing, version and exact R7-derived producer PASS; only
+inherited C28251 remains.
+
+Exact30.0.512.0 hashes: ZIP
+b50191190f3fb6c03bea96ae75133ed3366b32e43c159e57cc6a12bcd02fa931;
+SYSb4a8cf4c9a61ba849639855148715ecd90d9e5dc5bd0d5470cb2aac643cca6fd;
+INF02dbaf93a3248c2186de7a39a7d9e9ff6c7bf233d755a5656bf2dac02ac2c0c6;
+CATa3074314acb5ccbfab0993b97f5c31e521bc01e99a87bd56929be4c2cb0a94f2;
+UMD0367d0633c27baae53ded517d26262de4c28fdef0cbba15a49ce2c226df42a28;
+PDB27478d1cf4cd00fbaf139b88afd9f6b9dfa961dd50678d017b2718086300e465;
+producer f4a26107a5a0544b23fc5df28ad5e49fd66ca711971af2190f2c81747edbb997.
+Stage/collect/cleanup/run/launch script SHA-256:
+a7a5798be2c10f6ae5869691ee795a3e8ddbf8c5f7214a83428b59d5ef22555b /
+41c50ca6c685aaf48cf8cabfdb55283f98fe869c1264ea2cdaa724171f17a53d /
+93ae349d7842c9291a0a64a7e705927f2176a1990631889006d45cbda1774f6a /
+2e3a080aeb5bb13282693d7a74836b723205cdc0ddb96d29ebce66a3eb49e5a9 /
+c4aac4db807868a4bc1b0c5a4b5b17e4335103d280536f2caa9ae0c0844a81d5.
+
+Hardware: from exact clean ordinary Code28, stage exact package, graceful reboot,
+one immutable full-owner477/406 launch, verify Code0/health/hashes, run the exact
+producer once over SSH, decode0x5120 before collect, then exact package cleanup
+and ordinary recovery. PASS is a complete trace naming one guard/status; this is
+a discriminator, not TA/3D completion. If guard0 appears, the next boundary is
+dxgkrnl between Render return and Patch; otherwise fix only the named guard.
+
 ## EXP511 normal D3DKMT render to physical AGX — preregistration 2026-09-06T18:31:00Z
 
 WHY THIS HYPOTHESIS:
@@ -134,6 +189,25 @@ success alone is not PASS. Failure is localized to the first receipt or returned
 status. No retry of the same candidate. Recovery is exact experiment package
 removal and current ordinary377/392; emergency377/385 only if ordinary SSH cannot
 be recovered. ANS untouched; Event129 remains timestamped telemetry only.
+
+HARDWARE RESULT 2026-09-06T18:45Z — REJECTED AS WORKING RENDER; FIRST RENDER
+BOUNDARY REACHED. Exact30.0.511.0 bound Code0 with exact hashes,8CPU,SSH and no
+fresh fault events. Exact R7 selected hardware LUID0:262440,type0x10b; CreateDevice,
+normal flags0 CreateContext and CreateAllocation returned0. D3DKMTRender alone
+returned C0000001; synchronous allocation/context/device/adapter cleanup all
+returned0 and Windows remained healthy. Producer output SHA
+268940280dc867b71343b81a40b13856f886726b2cde505c22563efaada50ca4.
+No0x5090 Submit trace and no Wom1GdiHardwareReceipt exist, so no successful
+DxgkDdiRender, Patch, Submit, AGX TA/3D or fence is claimed. Observation result /
+ETL / host log SHA-256:
+b8fcd61c88115f7e54b3187051852892bb4acad5edffabf75b1ce1cbfdaaad3f /
+427fcc596f2887c040a9526a909c3358912ba62b849765dd23d2ecb9f2840f24 /
+f81272437af912ddc61b00622a906faed0be36d15fc846ec8ab92c4516e75521.
+Exact oem5/package/devnode cleanup completed. Final ordinary health SHA
+ca832b49292bce7b4879a0560dff045cdbad28cd47a9a9bd03be139037f671d9
+proves one Code28/null INF/service, zero package/service/SYS/UMD,8CPU,SSH,
+AppleInput/xHCI/stornvme Running and no fresh41/46/129/161/1001. Next is EXP512;
+do not repeat EXP511.
 
 ## EXP510 explicit display-target GDI producer — preregistration 2026-09-06T18:10:18Z
 
