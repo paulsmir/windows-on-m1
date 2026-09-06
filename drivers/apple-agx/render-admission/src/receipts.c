@@ -3,6 +3,8 @@
 #define ADMISSION_QUERY_RECEIPT_VERSION 1u
 #define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
 
+C_ASSERT(sizeof(ADMISSION_SOURCE_ADDRESS_RECEIPT) == 88);
+
 typedef struct _ADMISSION_TYPE1_RECEIPT {
   ULONG Version;
   ULONG Bytes;
@@ -490,6 +492,32 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
                 sizeof(receipt));
   }
   ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionFlushSourceAddressReceipt(
+    ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->SourceAddressReceiptState, 3, 2) != 2)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1SourceAddressReceipt", &Context->SourceAddressReceipt,
+                sizeof(Context->SourceAddressReceipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1SourceAddressReceipt", &Context->SourceAddressReceipt,
+                sizeof(Context->SourceAddressReceipt));
+    ZwClose(key);
+  }
 }
 
 _Use_decl_annotations_ void AdmissionRecordDisplayDdi(

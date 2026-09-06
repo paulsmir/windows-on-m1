@@ -111,6 +111,31 @@ typedef enum _ADMISSION_PLATFORM_STAGE {
   AdmissionPlatformComplete = 14,
 } ADMISSION_PLATFORM_STAGE;
 
+/* Immutable first source-address call. Publication is 0 empty, 1 writer,
+ * 2 complete, 3 passive persistence claimed. No production decision reads it. */
+typedef struct _ADMISSION_SOURCE_ADDRESS_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Status;
+  ULONG QueueCalled;
+  ULONG Irql;
+  ULONG ArgsPresent;
+  ULONG SourceId;
+  ULONG PrimarySegment;
+  ULONGLONG PrimaryAddress;
+  ULONGLONG Allocation;
+  ULONG Flags;
+  ULONG ContextCount;
+  ULONG Width;
+  ULONG Height;
+  ULONG Stride;
+  ULONG Format;
+  ULONG Started;
+  ULONG DisplayActive;
+  ULONG SourceVisible;
+  ULONG ScanoutState; /* bit0 runtime exists; bit1 IRQ enabled */
+} ADMISSION_SOURCE_ADDRESS_RECEIPT;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -133,6 +158,8 @@ typedef struct _ADMISSION_CONTEXT {
   D3DDDIFORMAT CommittedFormat;
   volatile LONG SourceAddressStage;
   volatile LONG SourceAddressStatus;
+  volatile LONG SourceAddressReceiptState;
+  ADMISSION_SOURCE_ADDRESS_RECEIPT SourceAddressReceipt;
   volatile LONG PaletteStatus;
   volatile LONG ScanLineStage;
   volatile LONG ScanLineStatus;
@@ -335,6 +362,9 @@ void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                           _In_ ULONG OutputDataSize, _In_ NTSTATUS Status,
                           _In_reads_bytes_opt_(OutputDataSize)
                               const VOID *OutputData);
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionFlushSourceAddressReceipt(_In_ ADMISSION_CONTEXT *Context);
+ULONG AdmissionScanoutReceiptState(_In_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
                                _In_ NTSTATUS Status);

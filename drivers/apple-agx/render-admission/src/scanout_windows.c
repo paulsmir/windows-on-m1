@@ -16,6 +16,13 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG64 LastNotifiedSequence;
 } ADMISSION_SCANOUT_RUNTIME;
 
+_Use_decl_annotations_ ULONG AdmissionScanoutReceiptState(
+    ADMISSION_CONTEXT *Context) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = Context->ScanoutRuntime;
+  return runtime == NULL ? 0u :
+      1u | (InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) != 0 ? 2u : 0u);
+}
+
 static APPLE_AGX_SCANOUT_U64 AdmissionScanoutNow(void *Context) {
   UNREFERENCED_PARAMETER(Context);
   return (APPLE_AGX_SCANOUT_U64)(KeQueryInterruptTime() / 10000ULL);

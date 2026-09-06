@@ -651,10 +651,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     CONST HANDLE MiniportDeviceContext,
     CONST DXGKARG_SETVIDPNSOURCEADDRESS *SetVidPnSourceAddress) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  ADMISSION_SOURCE_ADDRESS_RECEIPT *receipt = NULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
 
   if (context == NULL)
     return status;
+  /* A single caller owns the immutable receipt; no wait, allocation, registry
+   * call or deferred work is introduced into this potentially DIRQL path. */
+  if (InterlockedCompareExchange(&context->SourceAddressReceiptState, 1, 0) == 0) {
+    receipt = &context->SourceAddressReceipt;
+    receipt->Version = 1u;
+    receipt->Bytes = sizeof(*receipt);
+    receipt->Irql = KeGetCurrentIrql();
+    receipt->ArgsPresent = SetVidPnSourceAddress != NULL;
+    if (SetVidPnSourceAddress != NULL) {
+      receipt->SourceId = SetVidPnSourceAddress->VidPnSourceId;
+      receipt->PrimarySegment = SetVidPnSourceAddress->PrimarySegment;
+      receipt->PrimaryAddress = SetVidPnSourceAddress->PrimaryAddress.QuadPart;
+      receipt->Allocation = (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation;
+      receipt->Flags = SetVidPnSourceAddress->Flags.Value;
+      receipt->ContextCount = SetVidPnSourceAddress->ContextCount;
+    }
+    receipt->Width = context->CommittedWidth;
+    receipt->Height = context->CommittedHeight;
+    receipt->Stride = context->CommittedStride;
+    receipt->Format = context->CommittedFormat;
+    receipt->Started = context->Started;
+    receipt->DisplayActive = context->DisplayActive;
+    receipt->SourceVisible = context->SourceVisible;
+    receipt->ScanoutState = AdmissionScanoutReceiptState(context);
+  }
   InterlockedExchange(&context->SourceAddressStage, 1);
   InterlockedExchange(&context->SourceAddressStatus, (LONG)STATUS_PENDING);
   if (SetVidPnSourceAddress != NULL && context->Started &&
@@ -663,10 +689,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
       context->CommittedWidth == 2560 && context->CommittedHeight == 1600 &&
       context->CommittedStride == 10240 &&
       context->CommittedFormat == D3DDDIFMT_A8R8G8B8) {
+    if (receipt != NULL)
+      receipt->QueueCalled = 1u;
     status = AdmissionScanoutQueuePresent(context, SetVidPnSourceAddress);
   }
   InterlockedExchange(&context->SourceAddressStatus, (LONG)status);
   InterlockedExchange(&context->SourceAddressStage, 2);
+  if (receipt != NULL) {
+    receipt->Status = (ULONG)status;
+    InterlockedExchange(&context->SourceAddressReceiptState, 2);
+  }
   return status;
 }
 
@@ -688,6 +720,8 @@ AdmissionDdiStopDeviceAndReleasePostDisplayOwnership(
     ADMISSION_CONTEXT *context =                                             \
         (ADMISSION_CONTEXT *)MiniportDeviceContext;                           \
     NTSTATUS status;                                                          \
+    if (context != NULL)                                                      \
+      AdmissionFlushSourceAddressReceipt(context);                           \
     if (context != NULL)                                                      \
       AdmissionRecordDisplayDdi(context->PhysicalDeviceObject, DdiId, 1u,    \
                                 STATUS_PENDING);                              \
