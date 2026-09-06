@@ -1,5 +1,17 @@
 # Hardware Experiment Ledger
 
+## EXP516 exact D3DKMT buffer ownership — preregistration 2026-09-06T19:40:30Z
+
+EXP515 proved producer OpenAllocation guard0/status0 and zero correlated paging
+calls before CloseAllocation; Render entry remains absent. Residency is closed.
+Next variable is observation only: commit
+6e762320b2d8d3f7e8887e2f7cb4a5fa1fd539a5 logs device-vs-context command,
+allocation and patch buffers/sizes plus D3DKMT_RENDER returned buffers. No call
+or field changes.106 tests PASS; producer-only pinned build/analysis PASS SHA
+e2ab5db6d0265fbf8b92da0dcaeef11c69aaca490f66b736f7a493718d394974.
+Reuse exact515 driver ZIP SHA9247498782b88cb66b4212f11b84847a3fd98172be8c9e268d151dc38731b1e9
+under new EXP516 identity. One clean bind/producer, evidence, cleanup only.
+
 ## EXP515 producer-correlated paging — preregistration 2026-09-06T19:33:00Z
 
 WHY THIS HYPOTHESIS: EXP514's first global BuildPagingBuffer was boot-time
@@ -26,6 +38,12 @@ f2c97fe6ac3c74ec9a07d0b0e44b1a341f0531edc6382444c80388f5f16b6a52 /
 29f0cc86c55d83a34aebbdb114c962d11f2e5485a4bea1be1491d0b3546a6964 /
 18ca894f2270e57843ea909dc25b8fce167cd30d0630e5354bbf03fd019200a6.
 One clean bind/producer only; decode correlated514 plus513/512, collect, cleanup.
+
+HARDWARE RESULT19:36Z: exact producer OpenAllocation guard0/status0; no correlated
+BuildPagingBuffer and no Render entry; D3DKMTRender C0000001. Thus producer
+residency/paging is not the missing owner. Exact cleanup and ordinary health SHA
+71da7aa3a310003ffa6634b9139bc2b8340cca2d899c526d1dc64bcb8e687244
+prove Code28/no package/service/files,8CPU/SSH/platform healthy. Do not repeat515.
 
 ## EXP514 first BuildPagingBuffer trace — preregistration 2026-09-06T19:14:30Z
 

@@ -200,6 +200,14 @@ only from matching OpenAllocation to CloseAllocation.106 tests and pinned515
 gates PASS; ZIP9247498782b88cb66b4212f11b84847a3fd98172be8c9e268d151dc38731b1e9.
 Next: one exact EXP515 bind/producer and correlated paging decode.
 
+EXP515 FINAL: correlated OpenAllocation success, zero correlated paging calls,
+zero Render entry; residency closed. Cleanup/ordinary health
+71da7aa3a310003ffa6634b9139bc2b8340cca2d899c526d1dc64bcb8e687244.
+EXP516 commit6e762320b2d8d3f7e8887e2f7cb4a5fa1fd539a5 adds producer-only
+device/context/render buffer scalar output; build SHA
+e2ab5db6d0265fbf8b92da0dcaeef11c69aaca490f66b736f7a493718d394974.
+Next one exact516 run using unchanged515 driver package.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,
