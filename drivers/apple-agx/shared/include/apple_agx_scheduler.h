@@ -25,10 +25,14 @@ typedef enum _APPLE_AGX_PREEMPTION_PHASE {
   AppleAgxPreemptionNotificationClaimed,
 } APPLE_AGX_PREEMPTION_PHASE;
 
+#define APPLE_AGX_SCHEDULER_QUEUE_CAPACITY 64u
+
 typedef struct _APPLE_AGX_SCHEDULER {
   APPLE_AGX_U32 CompletedFence;
   APPLE_AGX_U32 LastSubmittedFence;
   APPLE_AGX_U32 QueuedFence;
+  APPLE_AGX_U32 QueueHead, QueueCount;
+  APPLE_AGX_U32 FenceQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
   APPLE_AGX_U32 ActiveFence;
   APPLE_AGX_U32 PendingPreemptionFence;
   APPLE_AGX_U32 PreemptionCutoffFence;

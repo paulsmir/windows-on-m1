@@ -96,10 +96,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted)
     return STATUS_DEVICE_BUSY;
-  if (!AdmissionPlatformRuntimeSubmit(Context)) {
-    InterlockedExchange(&Context->SchedulerFaulted, 1);
-    return STATUS_DEVICE_HARDWARE_ERROR;
-  }
+  AdmissionDispatchQueuedWork(Context);
   return STATUS_SUCCESS;
 }
 
@@ -117,6 +114,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCancelCommand(
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter)
     return STATUS_INVALID_HANDLE;
+  /* CancelCommand concerns a packet not submitted to the hardware queue.
+   * BLT preparation holds only buffer-owned snapshots, no runtime resources. */
+  if (AdmissionPresentIsBltPrivate(Args->pDmaBufferPrivateData,
+                                  Args->DmaBufferPrivateDataSize))
+    return STATUS_SUCCESS;
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketCancelPrepared(
           &adapter->RenderPacket,

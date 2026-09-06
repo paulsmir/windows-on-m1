@@ -28,6 +28,7 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
     def test_completion_is_dual_event_driven_and_exact_fence_only(self):
         source = (RENDER / "src" / "backend_platform_windows.c").read_text()
         submit = (RENDER / "src" / "submission_windows.c").read_text()
+        dispatch = (RENDER / "src" / "work_queue_windows.c").read_text()
 
         self.assertIn("AppleAgxPlatformProviderPoll", source)
         self.assertIn("AppleAgxSchedulerActiveFence", source)
@@ -36,7 +37,8 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         self.assertIn("AdmissionBackendImageReleaseSubmission", source)
         self.assertIn("AppleAgxCompletionTransactionCanReport", source)
         self.assertIn("DXGK_INTERRUPT_DMA_COMPLETED", source)
-        self.assertIn("AdmissionPlatformRuntimeSubmit", submit)
+        self.assertIn("AdmissionDispatchQueuedWork", submit)
+        self.assertIn("AdmissionPlatformRuntimeSubmit", dispatch)
         self.assertNotIn("AdmissionSchedulerRecordCompletion(", source)
 
     def test_bootstrap_profile_excludes_physical_agx_irq_routes(self):

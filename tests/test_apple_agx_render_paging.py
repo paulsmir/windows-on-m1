@@ -62,7 +62,7 @@ class AppleAgxRenderPagingTests(unittest.TestCase):
         self.assertIn("if (context == NULL || Args == NULL", source)
         self.assertIn("!Args->Flags.Paging", source)
         self.assertIn("ADMISSION_MAX_PAGING_RECORDS", source)
-        self.assertIn("AdmissionPagingFenceCanSubmit", source)
+        self.assertIn("AdmissionCpuQueueSubmit", source)
         self.assertIn("AdmissionPagingRecordsValid", source)
         self.assertIn("IoQueueWorkItem", source)
         self.assertIn("AdmissionMemoryRuntimeExecutePaging", source)

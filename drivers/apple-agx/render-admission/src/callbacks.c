@@ -77,6 +77,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       (ADMISSION_RENDER_CONTEXT *)Context;
   ADMISSION_OPEN_ALLOCATION *source;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  NTSTATUS status;
 
   if (renderContext != NULL &&
       renderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
@@ -88,6 +89,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
            ((ADMISSION_DEVICE *)Context)->Object.Magic ==
                ADMISSION_OBJECT_DEVICE_MAGIC)
     device = (ADMISSION_DEVICE *)Context;
+
+  if (device != NULL && device->Object.Adapter != NULL)
+    AdmissionFlushPresentTransfer(CONTAINING_RECORD(device->Object.Adapter,
+        ADMISSION_CONTEXT, ObjectAdapter));
+  if (device != NULL && Present != NULL && Present->Flags.Value == 1u) {
+    status = AdmissionPresentBlt(device, Context, Present);
+    if (!NT_SUCCESS(status))
+      AdmissionRecordPresent(device, Present, 4u, status);
+    return status;
+  }
 
   if (device == NULL || Present == NULL || Present->pDmaBuffer != NULL ||
       Present->Flags.Value != 0x4u || Present->pAllocationInfo == NULL ||

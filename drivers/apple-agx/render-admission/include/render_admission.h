@@ -19,6 +19,7 @@
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
 #include "render_gdi.h"
+#include "render_present.h"
 #include "render_submission.h"
 #include "render_backend_image.h"
 #include "apple_agx_wddm_feature_contract.h"
@@ -136,6 +137,22 @@ typedef struct _ADMISSION_SOURCE_ADDRESS_RECEIPT {
   ULONG ScanoutState; /* bit0 runtime exists; bit1 IRQ enabled */
 } ADMISSION_SOURCE_ADDRESS_RECEIPT;
 
+typedef struct _ADMISSION_PRESENT_TRANSFER_RECEIPT {
+  ULONG Version, Bytes, Fence, Status;
+  ULONGLONG BytesCopied, SourceLocation, DestinationLocation, ContextToken;
+  ULONG Width, Height, NotifyInterrupt, NotifyDpc;
+} ADMISSION_PRESENT_TRANSFER_RECEIPT;
+
+#define ADMISSION_CPU_PACKET_PAGING 1u
+#define ADMISSION_CPU_PACKET_PRESENT 2u
+typedef struct _ADMISSION_CPU_PACKET {
+  ULONG Fence, Kind, Bytes;
+  union {
+    ADMISSION_PAGING_RECORD Paging[ADMISSION_MAX_PAGING_RECORDS];
+    UCHAR Present[ADMISSION_PRESENT_BLT_DMA_MAX];
+  } Data;
+} ADMISSION_CPU_PACKET;
+
 typedef struct _ADMISSION_CONTEXT {
   ADMISSION_OBJECT_ADAPTER ObjectAdapter;
   ADMISSION_MEMORY_CONTRACT Memory;
@@ -175,11 +192,18 @@ typedef struct _ADMISSION_CONTEXT {
   KEVENT PagingIdle;
   ADMISSION_PAGING_RECORD PagingRecords[ADMISSION_MAX_PAGING_RECORDS];
   ULONG PagingRecordCount;
+  ULONG PresentCopyBytes;
+  ULONG CpuQueueHead, CpuQueueCount, DispatchedFence;
+  ADMISSION_CPU_PACKET CpuQueue[APPLE_AGX_SCHEDULER_QUEUE_CAPACITY];
+  UCHAR PresentCopyCommand[ADMISSION_PRESENT_BLT_DMA_MAX];
+  volatile LONG PresentTransferState;
+  ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
   UINT PagingFence;
   UINT PagingLastSubmittedFence;
   UINT PagingLastCompletedFence;
   NTSTATUS PagingCompletionStatus;
   volatile LONG PagingPending;
+  volatile LONG PagingWorkersActive, PagingDpcsActive;
   volatile LONG PagingStopping;
   volatile LONG PagingDpcPending;
   volatile LONG MemoryStartStage;
@@ -191,6 +215,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG SchedulerInitialized;
   volatile LONG SchedulerFaulted;
   volatile LONG SchedulerDpcPending;
+  volatile LONG RenderDpcFence;
   volatile LONG FeatureReadyMask;
 } ADMISSION_CONTEXT;
 
@@ -368,7 +393,31 @@ _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionRecordPresent(_In_opt_ ADMISSION_DEVICE *Device,
                             _In_opt_ const DXGKARG_PRESENT *Present,
                             ULONG Branch, NTSTATUS Status);
+void AdmissionRecordPresentTransfer(_In_ ADMISSION_CONTEXT *Context,
+    UINT Fence, _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
+    ULONGLONG BytesCopied, NTSTATUS Status);
+void AdmissionFlushPresentTransfer(_In_ ADMISSION_CONTEXT *Context);
 ULONG AdmissionScanoutReceiptState(_In_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionPresentBlt(_In_ ADMISSION_DEVICE *Device, HANDLE Context,
+                             _Inout_ DXGKARG_PRESENT *Present);
+BOOLEAN AdmissionPresentIsBltPrivate(_In_opt_ PVOID Data, UINT Bytes);
+NTSTATUS AdmissionPresentPatch(_In_ ADMISSION_CONTEXT *Context,
+                               _In_ const DXGKARG_PATCH *Args);
+NTSTATUS AdmissionPresentSubmit(_In_ ADMISSION_CONTEXT *Context,
+                                _In_ const DXGKARG_SUBMITCOMMAND *Args);
+NTSTATUS AdmissionPagingSubmitPresent(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMAND *Args,
+    _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes);
+NTSTATUS AdmissionCpuQueueSubmit(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMAND *Args, ULONG Kind,
+    _In_reads_bytes_(Bytes) const VOID *Data, UINT Bytes);
+void AdmissionDispatchQueuedWork(_In_ ADMISSION_CONTEXT *Context);
+void AdmissionPagingQueueActive(_In_ ADMISSION_CONTEXT *Context);
+/* Caller holds PagingLock. */
+void AdmissionPagingUpdateIdleLocked(_In_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionMemoryRuntimeExecutePresent(_In_ ADMISSION_CONTEXT *Context,
+    _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes,
+    _Out_ ULONGLONG *BytesCopied);
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
                                _In_ NTSTATUS Status);

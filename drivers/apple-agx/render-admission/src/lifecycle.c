@@ -247,6 +247,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceConte
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
   AdmissionFlushSourceAddressReceipt(context);
+  AdmissionFlushPresentTransfer(context);
   AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptStop,
                         STATUS_SUCCESS);
   if (context->ObjectAdapter.DeviceCount != 0u)
@@ -296,6 +297,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceCon
   if (context == NULL)
     return STATUS_INVALID_PARAMETER;
   AdmissionFlushSourceAddressReceipt(context);
+  AdmissionFlushPresentTransfer(context);
   if (context->ScanoutRuntime != NULL &&
       !NT_SUCCESS(AdmissionScanoutStop(context)))
     return STATUS_DEVICE_BUSY;

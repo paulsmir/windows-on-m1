@@ -112,6 +112,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(
   AdmissionRenderPacketInitialize(&Context->RenderPacket);
   InterlockedExchange(&Context->SchedulerFaulted, 0);
   InterlockedExchange(&Context->SchedulerDpcPending, 0);
+  InterlockedExchange(&Context->RenderDpcFence, 0);
   InterlockedExchange(&Context->SchedulerInitialized, 1);
   (void)InterlockedOr(&Context->FeatureReadyMask,
                       APPLE_AGX_WDDM_READY_ONE_NODE_TOPOLOGY);
@@ -130,7 +131,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
       AppleAgxSchedulerHasOutstandingFence(
           &Context->Scheduler, ADMISSION_SCHEDULER_NODE,
           ADMISSION_SCHEDULER_ENGINE) ||
+      Context->CpuQueueCount != 0u ||
       InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 ||
+      InterlockedCompareExchange(&Context->PagingWorkersActive, 0, 0) != 0 ||
+      InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
   (void)InterlockedAnd(&Context->FeatureReadyMask,
@@ -154,6 +158,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionSchedulerRecordCompletion(
                   ADMISSION_SCHEDULER_ENGINE, Fence)
                   ? TRUE
                   : FALSE;
+  if (completed && Context->DispatchedFence == Fence)
+    Context->DispatchedFence = 0u;
   if (completed &&
       AppleAgxSchedulerPreemptionPhase(&Context->Scheduler) ==
           AppleAgxPreemptionWaitCurrentBoundary)
@@ -193,18 +199,34 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
     ADMISSION_CONTEXT *Context) {
   APPLE_AGX_PREEMPTION_PHASE phase;
   KIRQL oldIrql;
+  ULONG renderFence;
+  ULONG reservedFence;
+  BOOLEAN cpuUnreported;
 
   if (Context == NULL ||
       InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
     return;
   KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
   phase = AppleAgxSchedulerPreemptionPhase(&Context->Scheduler);
+  reservedFence = Context->DispatchedFence;
   KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
-  if (phase == AppleAgxPreemptionReadyToNotify)
+  renderFence = (ULONG)InterlockedExchange(&Context->RenderDpcFence, 0);
+  cpuUnreported = InterlockedCompareExchange(&Context->PagingPending, 0, 0) != 0 &&
+      InterlockedCompareExchange(&Context->PagingDpcPending, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) == 0;
+  if (phase == AppleAgxPreemptionReadyToNotify && !cpuUnreported &&
+      (reservedFence == 0u || renderFence == reservedFence))
     (void)AdmissionSchedulerTryNotifyPreemption(Context);
   if (InterlockedExchange(&Context->SchedulerDpcPending, 0) != 0 &&
       Context->InterfaceValid && Context->Interface.DxgkCbNotifyDpc != NULL)
     Context->Interface.DxgkCbNotifyDpc(Context->Interface.DeviceHandle);
+  if (renderFence != 0u) {
+    KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+    if (Context->DispatchedFence == renderFence)
+      Context->DispatchedFence = 0u;
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
+  }
+  AdmissionDispatchQueuedWork(Context);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryCurrentFence(
@@ -240,6 +262,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
       PreemptCommand->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
+  KeAcquireSpinLockAtDpcLevel(&context->PagingLock);
   KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   cutoffFence = AppleAgxSchedulerLastSubmittedFence(
       &context->Scheduler, PreemptCommand->NodeOrdinal,
@@ -247,21 +270,26 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
   activeFence = AppleAgxSchedulerActiveFence(
       &context->Scheduler, PreemptCommand->NodeOrdinal,
       PreemptCommand->EngineOrdinal);
-  queuedFence = AppleAgxSchedulerQueuedFence(
-      &context->Scheduler, PreemptCommand->NodeOrdinal,
-      PreemptCommand->EngineOrdinal);
+  queuedFence = 0u;
   if (AdmissionRenderPacketState(&context->RenderPacket) ==
-          AdmissionRenderPacketQueued)
+          AdmissionRenderPacketQueued) {
+    queuedFence = context->RenderPacket.Description.Fence;
     queuedContext = (ADMISSION_RENDER_CONTEXT *)(ULONG_PTR)
         context->RenderPacket.Description.ContextToken;
+  }
   if (!AppleAgxSchedulerBeginBoundaryPreemption(
           &context->Scheduler, PreemptCommand->NodeOrdinal,
           PreemptCommand->EngineOrdinal, PreemptCommand->PreemptionFenceId,
           cutoffFence, activeFence)) {
     InterlockedExchange(&context->SchedulerFaulted, 1);
     KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+    KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
     return STATUS_SUCCESS;
   }
+  context->CpuQueueHead = context->CpuQueueCount = 0u;
+  if (activeFence == 0u && queuedFence != 0u && context->DispatchedFence == queuedFence)
+    context->DispatchedFence = 0u;
+  AdmissionPagingUpdateIdleLocked(context);
   if (queuedFence != 0u &&
       (!AdmissionRenderPacketDiscardQueued(
            &context->RenderPacket, cutoffFence) ||
@@ -274,8 +302,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPreemptCommand(
     queuedContext->Object.FenceOutstanding = 0u;
   }
   notifyNow = AppleAgxSchedulerPreemptionPhase(&context->Scheduler) ==
-              AppleAgxPreemptionReadyToNotify;
+                  AppleAgxPreemptionReadyToNotify && context->DispatchedFence == 0u &&
+      (InterlockedCompareExchange(&context->PagingPending, 0, 0) == 0 ||
+       InterlockedCompareExchange(&context->PagingDpcPending, 0, 0) != 0 ||
+       InterlockedCompareExchange(&context->PagingDpcsActive, 0, 0) != 0);
   KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+  KeReleaseSpinLockFromDpcLevel(&context->PagingLock);
   if (notifyNow && !AdmissionSchedulerTryNotifyPreemption(context))
     InterlockedExchange(&context->SchedulerFaulted, 1);
   return STATUS_SUCCESS;
@@ -327,15 +359,30 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
       InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) == 0)
     return STATUS_INVALID_PARAMETER;
-  if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0)
+  KeAcquireSpinLock(&context->PagingLock, &oldIrql);
+  if (InterlockedCompareExchange(&context->PagingPending, 0, 0) != 0 ||
+      InterlockedCompareExchange(&context->PagingWorkersActive, 0, 0) != 0 ||
+      InterlockedCompareExchange(&context->PagingDpcsActive, 0, 0) != 0) {
+    KeReleaseSpinLock(&context->PagingLock, oldIrql);
     return STATUS_DEVICE_BUSY;
-  KeAcquireSpinLock(&context->SchedulerLock, &oldIrql);
+  }
+  KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
   packetState = AdmissionRenderPacketState(&context->RenderPacket);
   if (packetState == AdmissionRenderPacketActive) {
-    KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+    InterlockedExchange(&context->SchedulerFaulted, 1);
+    KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+    KeReleaseSpinLock(&context->PagingLock, oldIrql);
     if (!NT_SUCCESS(AdmissionPlatformRuntimeReset(
             context, &lastAborted)))
       return STATUS_DEVICE_HARDWARE_ERROR;
+    KeAcquireSpinLock(&context->PagingLock, &oldIrql);
+    KeAcquireSpinLockAtDpcLevel(&context->SchedulerLock);
+    context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
+    InterlockedExchange(&context->RenderDpcFence, 0);
+    InterlockedExchange(&context->SchedulerFaulted, 0);
+    AdmissionPagingUpdateIdleLocked(context);
+    KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+    KeReleaseSpinLock(&context->PagingLock, oldIrql);
     ResetEngine->LastAbortedFenceId = lastAborted;
     return STATUS_SUCCESS;
   }
@@ -345,13 +392,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
         context->RenderPacket.Description.ContextToken;
     if (!AdmissionRenderPacketReset(
             &context->RenderPacket, packetFence, 0u)) {
-      KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+      KeReleaseSpinLock(&context->PagingLock, oldIrql);
       return STATUS_INVALID_DEVICE_STATE;
     }
     if (!AdmissionBackendImageReleaseSubmission(
             &context->BackendImage, packetFence)) {
       InterlockedExchange(&context->SchedulerFaulted, 1);
-      KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+      KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+      KeReleaseSpinLock(&context->PagingLock, oldIrql);
       return STATUS_INVALID_DEVICE_STATE;
     }
   }
@@ -360,7 +409,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
               ResetEngine->EngineOrdinal, &lastAborted)
               ? TRUE
               : FALSE;
-  KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  if (reset) {
+    context->CpuQueueHead = context->CpuQueueCount = context->DispatchedFence = 0u;
+    InterlockedExchange(&context->RenderDpcFence, 0);
+    AdmissionPagingUpdateIdleLocked(context);
+  }
+  KeReleaseSpinLockFromDpcLevel(&context->SchedulerLock);
+  KeReleaseSpinLock(&context->PagingLock, oldIrql);
   if (!reset)
     return STATUS_INVALID_DEVICE_STATE;
   ResetEngine->LastAbortedFenceId = lastAborted;

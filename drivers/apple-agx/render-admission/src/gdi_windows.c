@@ -321,6 +321,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   PAGED_CODE();
   if (adapter != NULL && Args != NULL && Args->Flags.Paging)
     return AdmissionPatchPaging(adapter, Args);
+  if (adapter != NULL && Args != NULL &&
+      AdmissionPresentIsBltPrivate(Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize))
+    return AdmissionPresentPatch(adapter, Args);
   if (adapter == NULL || Args == NULL || Args->hContext == NULL ||
       Args->pDmaBuffer == NULL || Args->DmaBufferSize == 0u ||
       Args->pDmaBufferPrivateData == NULL ||

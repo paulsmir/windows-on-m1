@@ -54,6 +54,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   PIO_WORKITEM WorkItem;
   KEVENT WorkIdle;
   volatile LONG WorkScheduled;
+  volatile LONG WorkersActive;
   volatile LONG Stopping;
   volatile LONG Resetting;
   volatile LONG64 LastProgressMs;
@@ -1108,6 +1109,7 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
   runtime->Adapter->Interface.DxgkCbNotifyInterrupt(
       runtime->Adapter->Interface.DeviceHandle, &data);
   AppleAgxCompletionTransactionMarkReported(&runtime->Completion);
+  InterlockedExchange(&runtime->Adapter->RenderDpcFence, (LONG)notification->Fence);
   InterlockedExchange(&runtime->Adapter->SchedulerDpcPending, 1);
   (void)runtime->Adapter->Interface.DxgkCbQueueDpc(
       runtime->Adapter->Interface.DeviceHandle);
@@ -1275,8 +1277,18 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
 
 static VOID AdmissionPlatformWorkerFinished(
     ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  KIRQL oldIrql;
+  KeAcquireSpinLock(&Runtime->Adapter->SchedulerLock, &oldIrql);
   InterlockedExchange(&Runtime->WorkScheduled, 0);
-  KeSetEvent(&Runtime->WorkIdle, IO_NO_INCREMENT, FALSE);
+  KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
+  if (InterlockedCompareExchange(&Runtime->Stopping, 0, 0) == 0 &&
+      InterlockedCompareExchange(&Runtime->Resetting, 0, 0) == 0)
+    AdmissionDispatchQueuedWork(Runtime->Adapter);
+  KeAcquireSpinLock(&Runtime->Adapter->SchedulerLock, &oldIrql);
+  if (InterlockedDecrement(&Runtime->WorkersActive) == 0 &&
+      InterlockedCompareExchange(&Runtime->WorkScheduled, 0, 0) == 0)
+    KeSetEvent(&Runtime->WorkIdle, IO_NO_INCREMENT, FALSE);
+  KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
 }
 
 static VOID AdmissionPlatformWorker(
@@ -1287,17 +1299,27 @@ static VOID AdmissionPlatformWorker(
   APPLE_AGX_BACKEND_SUBMISSION submission;
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
   BOOLEAN activated = FALSE;
+  BOOLEAN cancelled = FALSE;
+  BOOLEAN deferred = FALSE;
   KIRQL old_irql;
 
   UNREFERENCED_PARAMETER(DeviceObject);
   if (adapter == NULL || adapter->PlatformRuntime == NULL)
     return;
   runtime = (ADMISSION_PLATFORM_RUNTIME *)adapter->PlatformRuntime;
+  InterlockedIncrement(&runtime->WorkersActive);
   RtlZeroMemory(&description, sizeof(description));
   RtlZeroMemory(&submission, sizeof(submission));
 
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
-  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
+  cancelled = AdmissionRenderPacketState(&adapter->RenderPacket) == AdmissionRenderPacketEmpty ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0;
+  deferred = AdmissionRenderPacketState(&adapter->RenderPacket) == AdmissionRenderPacketQueued &&
+      (AppleAgxSchedulerActiveFence(&adapter->Scheduler, 0u, 0u) != 0u ||
+       AppleAgxSchedulerQueuedFence(&adapter->Scheduler, 0u, 0u) != adapter->RenderPacket.Description.Fence ||
+       (adapter->DispatchedFence != 0u && adapter->DispatchedFence != adapter->RenderPacket.Description.Fence));
+  if (!cancelled && !deferred && InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0 &&
       runtime->BackendStarted &&
       runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
@@ -1307,12 +1329,15 @@ static VOID AdmissionPlatformWorker(
     if (AppleAgxSchedulerActivateFence(
             &adapter->Scheduler, 0u, 0u, description.Fence) &&
         AdmissionRenderPacketActivate(
-            &adapter->RenderPacket, description.Fence))
+            &adapter->RenderPacket, description.Fence)) {
+      adapter->DispatchedFence = description.Fence;
       activated = TRUE;
+    }
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   if (!activated) {
-    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    if (!cancelled && !deferred)
+      InterlockedExchange(&adapter->SchedulerFaulted, 1);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
@@ -1391,17 +1416,23 @@ static VOID AdmissionPlatformWorker(
 
 _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
     ADMISSION_CONTEXT *Context) {
+  KIRQL oldIrql;
   ADMISSION_PLATFORM_RUNTIME *runtime =
       Context != NULL
           ? (ADMISSION_PLATFORM_RUNTIME *)Context->PlatformRuntime
           : NULL;
-  if (runtime == NULL || runtime->WorkItem == NULL ||
-      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+  if (runtime == NULL || runtime->WorkItem == NULL)
+    return FALSE;
+  KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
+  if (InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0 ||
       runtime->Backend.Phase != AppleAgxBackendRuntimeReady ||
-      InterlockedCompareExchange(&runtime->WorkScheduled, 1, 0) != 0)
+      InterlockedCompareExchange(&runtime->WorkScheduled, 1, 0) != 0) {
+    KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
     return FALSE;
+  }
   KeClearEvent(&runtime->WorkIdle);
+  KeReleaseSpinLock(&Context->SchedulerLock, oldIrql);
   IoQueueWorkItem(runtime->WorkItem, AdmissionPlatformWorker,
                   DelayedWorkQueue, Context);
   return TRUE;
@@ -1410,14 +1441,24 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeSubmit(
 static NTSTATUS AdmissionPlatformDestroy(
     ADMISSION_PLATFORM_RUNTIME *Runtime) {
   NTSTATUS status = STATUS_SUCCESS;
+  KIRQL oldIrql;
+  PIO_WORKITEM workItem;
   if (Runtime == NULL)
     return STATUS_SUCCESS;
   InterlockedExchange(&Runtime->Stopping, 1);
   if (Runtime->WorkItem != NULL) {
     KeWaitForSingleObject(&Runtime->WorkIdle, Executive, KernelMode,
                           FALSE, NULL);
-    IoFreeWorkItem(Runtime->WorkItem);
+    KeAcquireSpinLock(&Runtime->Adapter->SchedulerLock, &oldIrql);
+    if (InterlockedCompareExchange(&Runtime->WorkScheduled, 0, 0) != 0 ||
+        InterlockedCompareExchange(&Runtime->WorkersActive, 0, 0) != 0) {
+      KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
+      return STATUS_DEVICE_BUSY;
+    }
+    workItem = Runtime->WorkItem;
     Runtime->WorkItem = NULL;
+    KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
+    IoFreeWorkItem(workItem);
   }
   if (Runtime->BackendStarted ||
       Runtime->Backend.Phase != AppleAgxBackendRuntimeStopped) {
@@ -1723,6 +1764,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
   KeInitializeEvent(&runtime->WorkIdle, NotificationEvent, TRUE);
   InterlockedExchange(&runtime->WorkScheduled, 0);
+  InterlockedExchange(&runtime->WorkersActive, 0);
   InterlockedExchange(&runtime->Stopping, 0);
   InterlockedExchange(&runtime->Resetting, 0);
   InterlockedExchange64(&runtime->LastProgressMs, 0);
@@ -1811,7 +1853,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
       InterlockedCompareExchange(&runtime->Resetting, 1, 0) != 0)
     return STATUS_INVALID_DEVICE_STATE;
-  if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0)
+  if (InterlockedCompareExchange(&runtime->WorkScheduled, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->WorkersActive, 0, 0) != 0)
     KeWaitForSingleObject(&runtime->WorkIdle, Executive, KernelMode,
                           FALSE, NULL);
   KeAcquireSpinLock(&Context->SchedulerLock, &old_irql);
@@ -1921,6 +1964,8 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
                  runtime->WorkItem != NULL &&
                  InterlockedCompareExchange(
                      &runtime->Stopping, 0, 0) == 0 &&
+                 InterlockedCompareExchange(
+                     &runtime->Resetting, 0, 0) == 0 &&
                  InterlockedCompareExchange(
                      &runtime->WorkScheduled, 0, 0) == 0
              ? TRUE

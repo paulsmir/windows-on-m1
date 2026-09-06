@@ -25,8 +25,11 @@ class AppleAgxRenderSchedulerTests(unittest.TestCase):
     def test_paging_submission_and_completion_share_single_engine_progress(self):
         paging = self.read("src/paging_windows.c")
         scheduler = self.read("src/scheduler_windows.c")
+        queue = self.read("src/work_queue_windows.c")
 
-        self.assertIn("AdmissionSchedulerSubmitFence", paging)
+        self.assertIn("AdmissionCpuQueueSubmit", paging)
+        self.assertIn("AppleAgxSchedulerQueueFence", queue)
+        self.assertIn("AppleAgxSchedulerActivateFence", queue)
         self.assertIn("AdmissionSchedulerRecordCompletion", paging)
         self.assertIn("AppleAgxSchedulerQueueFence", scheduler)
         self.assertIn("AppleAgxSchedulerActivateFence", scheduler)

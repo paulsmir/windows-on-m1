@@ -90,6 +90,9 @@
     <ClCompile Include="src\paging_windows.c" />
     <ClCompile Include="src\render_paging.c" />
     <ClCompile Include="src\render_gdi.c" />
+    <ClCompile Include="src\render_present.c" />
+    <ClCompile Include="src\present_windows.c" />
+    <ClCompile Include="src\work_queue_windows.c" />
     <ClCompile Include="src\gdi_windows.c" />
     <ClCompile Include="src\render_submission.c" />
     <ClCompile Include="src\submission_windows.c" />
@@ -159,6 +162,7 @@
     <ClInclude Include="include\render_hvc.h" />
     <ClInclude Include="include\render_paging.h" />
     <ClInclude Include="include\render_gdi.h" />
+    <ClInclude Include="include\render_present.h" />
     <ClInclude Include="include\render_submission.h" />
     <ClInclude Include="include\render_backend_image.h" />
     <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />

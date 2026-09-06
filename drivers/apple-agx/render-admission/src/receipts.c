@@ -4,6 +4,7 @@
 #define ADMISSION_DISPLAY_DDI_RECEIPT_VERSION 1u
 
 C_ASSERT(sizeof(ADMISSION_SOURCE_ADDRESS_RECEIPT) == 88);
+C_ASSERT(sizeof(ADMISSION_PRESENT_TRANSFER_RECEIPT) == 64);
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -504,6 +505,54 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
                 sizeof(receipt));
   }
   ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordPresentTransfer(
+    ADMISSION_CONTEXT *Context, UINT Fence, const VOID *Command, UINT Bytes,
+    ULONGLONG BytesCopied, NTSTATUS Status) {
+  ADMISSION_PRESENT_BLT_COMMAND command;
+  ADMISSION_PRESENT_TRANSFER_RECEIPT *receipt;
+  if (!AdmissionPresentBltValidate(Command, Bytes, 1, &command) ||
+      InterlockedCompareExchange(&Context->PresentTransferState, 1, 0) != 0)
+    return;
+  receipt = &Context->PresentTransferReceipt;
+  RtlZeroMemory(receipt, sizeof(*receipt));
+  receipt->Version = 1u;
+  receipt->Bytes = sizeof(*receipt);
+  receipt->Fence = Fence;
+  receipt->Status = (ULONG)Status;
+  receipt->BytesCopied = BytesCopied;
+  receipt->SourceLocation = command.SourceLocation;
+  receipt->DestinationLocation = command.DestinationLocation;
+  receipt->ContextToken = command.ContextToken;
+  receipt->Width = command.DestinationRect.Right - command.DestinationRect.Left;
+  receipt->Height = command.DestinationRect.Bottom - command.DestinationRect.Top;
+  InterlockedExchange(&Context->PresentTransferState, 2);
+}
+
+_Use_decl_annotations_ void AdmissionFlushPresentTransfer(ADMISSION_CONTEXT *Context) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&Context->PresentTransferState, 5, 4) != 4)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1PresentTransferReceipt", &Context->PresentTransferReceipt,
+                sizeof(Context->PresentTransferReceipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1PresentTransferReceipt", &Context->PresentTransferReceipt,
+                sizeof(Context->PresentTransferReceipt));
+    ZwClose(key);
+  }
 }
 
 _Use_decl_annotations_ void AdmissionRecordPresent(

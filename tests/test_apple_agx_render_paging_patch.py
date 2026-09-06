@@ -62,6 +62,14 @@ typedef struct {HANDLE hContext;UINT DmaBufferSegmentId;
  UINT PatchLocationListSize,PatchLocationListSubmissionStart,PatchLocationListSubmissionLength;
  UINT SubmissionFenceId;union {UINT Value;struct {UINT Paging:1;UINT Other:31;};} Flags;
  UINT EngineOrdinal;} DXGKARG_PATCH;
+/* This fixture contains paging records, never a Present private packet.
+ * The actual Present classifier/translator is exercised by its own suite. */
+static int AdmissionPresentIsBltPrivate(void *data,UINT bytes){
+ assert(data!=NULL && bytes>=sizeof(ADMISSION_PAGING_RECORD));return 0;
+}
+static NTSTATUS AdmissionPresentPatch(ADMISSION_CONTEXT *adapter,const DXGKARG_PATCH *args){
+ (void)adapter;(void)args;assert(0 && "paging record routed as Present");return STATUS_NOT_SUPPORTED;
+}
 '''
         wrapper = '\nstatic NTSTATUS dispatch(ADMISSION_CONTEXT *adapter,const DXGKARG_PATCH *Args) {\n' + route + '\nreturn STATUS_NOT_SUPPORTED; /* Unchanged GDI implementation beyond test boundary. */\n}\n'
         cases = r'''
