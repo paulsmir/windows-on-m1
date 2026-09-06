@@ -161,7 +161,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *location;
   DXGK_ALLOCATIONLIST *allocation;
-  ADMISSION_LOCAL_MEMORY_VIEW destination;
+  ADMISSION_LOCAL_MEMORY_VIEW destination = {0};
   ULONGLONG alignedSize;
   KIRQL oldIrql;
   BOOLEAN prepatched = FALSE;
