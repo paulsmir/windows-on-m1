@@ -344,6 +344,12 @@ complete; health SHA41400625..., Code28/no AGX package/service/files,8CPU/SSH.
 Commit2b4f4d5 adds only final0x5350 adoption guard/status. Pinned30.0.536.0 gates
 and108 tests PASS; ZIP/SYS/producer SHA19d930c5.../6ba0e2ff.../884295b5....
 EXP536 preregistered; first unknown is exact Adoption pending/shadow/prepare guard.
+EXP536 FINAL: exact guard3/statusC00000E8, host SHAdeee3fe3..., proves pending
+metadata passed and writable shadow validation failed. Source root cause: adoption
+combined unsealed requirement with sealed-only MatchesU64. Commit086a2db adds a
+separate read-only writable verifier before existing seal;108 regressions and
+pinned30.0.537.0 gates PASS. ZIP/SYS/producer SHA6c6f118e.../f875cbac.../
+07361327.... EXP537 preregistered after exact cleanup/ordinary restore.
 
 ## Final live ordinary clean baseline
 

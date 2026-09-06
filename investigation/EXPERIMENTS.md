@@ -1,5 +1,28 @@
 # Hardware Experiment Ledger
 
+## EXP537 writable prepatch verification — preregistration 2026-09-06T23:10Z
+
+WHY THIS HYPOTHESIS: EXP536 exact0x5350 guard3/statusC00000E8 localizes failure
+to shadow validation. Source proof shows adoption requires an unsealed writable
+shadow but called sealed-only `AppleAgxDmaShadowMatchesU64`, making the predicate
+logically impossible. Commit `086a2db78956342af8fbaa9c7603b80422fde9b2`
+adds a read-only writable-state verifier, retains the sealed-only verifier, then
+uses the existing seal. No mapping, scheduler, backend, firmware, queue, IRQ,
+display or producer change. RED compile then DMA-shadow/prepatch tests and108
+render regressions GREEN. Pinned WDK26100 version30.0.537.0 build/analysis/
+Universal/Inf2Cat/signing PASS. ZIP/SYS/INF/producer SHA `6c6f118e...`/
+`f875cbac...`/`f99c8d5f...`/`07361327...`. One natural bind/producer after exact
+EXP536 cleanup and clean ordinary preflight. PASS requires adoption beyond guard3
+and progress to accepted Submit/backend; then exact cleanup and next boundary.
+
+## EXP536 exact prepatch-adoption guard — result 2026-09-06T23:10Z
+
+CONFIRMED: exact host word `53500003c00000e8`, log SHA
+`deee3fe3ad263131d1e422a78d26ceef47a21fbbde485bad45e635cebadfad77`.
+Pending metadata passed; writable shadow verification/seal group failed. No AGX
+execution. Established emergency recovery removed exact oem5 and hash-matched
+service/SYS/UMD; ordinary377/392 restoration is active.
+
 ## EXP536 exact prepatch-adoption guard — preregistration 2026-09-06T23:03:20Z
 
 WHY THIS HYPOTHESIS: EXP535 crossed Render into `AdmissionGdiAdoptPrepatchedPacket`
