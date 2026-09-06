@@ -211,6 +211,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     HANDLE Device, const DXGKARG_OPENALLOCATION *Args) {
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
   ADMISSION_CONTEXT *adapter;
+  DXGKARGCB_RELEASEHANDLEDATA reference;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
   UINT index;
   if (device == NULL || device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
@@ -222,8 +223,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
   adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
                               ObjectAdapter);
   if (!adapter->InterfaceValid ||
-      adapter->Interface.DxgkCbGetHandleData == NULL)
+      adapter->Interface.DxgkCbAcquireHandleData == NULL ||
+      adapter->Interface.DxgkCbReleaseHandleData == NULL)
     return STATUS_INVALID_DEVICE_STATE;
+  RtlZeroMemory(&reference, sizeof(reference));
+  reference.Type = DXGK_HANDLE_ALLOCATION;
   for (index = 0u; index < Args->NumAllocations; ++index) {
     DXGK_OPENALLOCATIONINFO *info = &Args->pOpenAllocation[index];
     DXGKARGCB_GETHANDLEDATA query;
@@ -241,8 +245,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     query.hObject = info->hAllocation;
     query.Type = DXGK_HANDLE_ALLOCATION;
     allocation = (ADMISSION_ALLOCATION_HANDLE *)
-        adapter->Interface.DxgkCbGetHandleData(&query);
-    if (allocation == NULL ||
+        adapter->Interface.DxgkCbAcquireHandleData(
+            &query, &reference.ReleaseHandle);
+    if (allocation == NULL || reference.ReleaseHandle == NULL ||
         allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
       status = STATUS_INVALID_HANDLE;
       goto Rollback;
@@ -267,10 +272,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     opened->ReadOnly = Args->Flags.ReadOnly ? TRUE : FALSE;
     info->hDeviceSpecificAllocation = opened;
     ++device->Object.AllocationCount;
+    /* The returned binding follows Close-before-Destroy lifetime. Only this
+       lookup needs the transient dxgkrnl reference; do not retain a cycle. */
+    adapter->Interface.DxgkCbReleaseHandleData(reference);
+    reference.ReleaseHandle = NULL;
   }
   return STATUS_SUCCESS;
 
 Rollback:
+  if (reference.ReleaseHandle != NULL)
+    adapter->Interface.DxgkCbReleaseHandleData(reference);
   while (index != 0u) {
     ADMISSION_OPEN_ALLOCATION *opened;
     --index;
