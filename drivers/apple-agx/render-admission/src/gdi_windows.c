@@ -329,6 +329,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   BOOLEAN sealed;
   ADMISSION_LOCAL_MEMORY_VIEW destination;
 
+#define PATCH_RENDER_RETURN(guard, value)                                    \
+  do {                                                                       \
+    NTSTATUS patchStatus = (value);                                          \
+    AdmissionPatchRenderGuardWindows(adapter, (guard), patchStatus);         \
+    return patchStatus;                                                      \
+  } while (0)
+
   PAGED_CODE();
   if (adapter != NULL && Args != NULL && Args->Flags.Paging)
     return AdmissionPatchPaging(adapter, Args);
@@ -353,14 +360,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           Args->DmaBufferPrivateDataSize ||
       Args->Flags.Value != 0u || Args->EngineOrdinal != 0u ||
       Args->SubmissionFenceId == 0u)
-    return STATUS_INVALID_PARAMETER;
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardArguments,
+                        STATUS_INVALID_PARAMETER);
   context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter ||
       (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
       !context->SchedulerContext.Active)
-    return STATUS_INVALID_HANDLE;
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardContext,
+                        STATUS_INVALID_HANDLE);
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
@@ -377,7 +386,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           &view) ||
       !AdmissionGdiDescribePreparedRecord(
           view.Bytes, view.DmaBytes, view.DmaOffset, &prepared))
-    return STATUS_INVALID_USER_BUFFER;
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardShadow,
+                        STATUS_INVALID_USER_BUFFER);
 
   location =
       &Args->pPatchLocationList[
@@ -395,11 +405,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
       Args->DmaBufferSize < sizeof(destination.GpuVirtualAddress) ||
       patch.PatchOffset >
           Args->DmaBufferSize - sizeof(destination.GpuVirtualAddress))
-    return STATUS_INVALID_PARAMETER;
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardLocation,
+                        STATUS_INVALID_PARAMETER);
   if (!NT_SUCCESS(AdmissionGdiTranslatePatch(
           adapter, context, Args->pAllocationList,
           Args->AllocationListSize, &patch, &destination)))
-    return STATUS_INVALID_ADDRESS;
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,
+                        STATUS_INVALID_ADDRESS);
   opened = (ADMISSION_OPEN_ALLOCATION *)
       Args->pAllocationList[patch.AllocationIndex]
           .hDeviceSpecificAllocation;
@@ -415,18 +427,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
         !AppleAgxDmaShadowMatchesU64(
             shadow.Storage, shadow.BytesUsed,
             patch.PatchOffset, destination.GpuVirtualAddress))
-      return STATUS_INVALID_DEVICE_STATE;
+      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,
+                          STATUS_INVALID_DEVICE_STATE);
   } else {
     if (!AppleAgxDmaShadowPatchU64(
             shadow.Storage, shadow.BytesUsed,
             patch.PatchOffset, destination.GpuVirtualAddress) ||
         !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
-      return STATUS_INVALID_DEVICE_STATE;
+      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,
+                          STATUS_INVALID_DEVICE_STATE);
   }
   if (!NT_SUCCESS(AdmissionGdiPreparePacket(
           adapter, context, opened, Args, shadow.BytesUsed,
           &destination)))
-    return STATUS_DEVICE_BUSY;
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardPrepare,
+                        STATUS_DEVICE_BUSY);
   AdmissionGdiReceiptPatchWindows(adapter,
       (ULONGLONG)(ULONG_PTR)context, Args->SubmissionFenceId,
       destination.GpuVirtualAddress, destination.HostPhysicalAddress,
@@ -435,5 +450,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
       (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,
       &destination.GpuVirtualAddress,
       sizeof(destination.GpuVirtualAddress));
-  return STATUS_SUCCESS;
+  PATCH_RENDER_RETURN(AdmissionPatchRenderGuardAccepted, STATUS_SUCCESS);
+#undef PATCH_RENDER_RETURN
 }

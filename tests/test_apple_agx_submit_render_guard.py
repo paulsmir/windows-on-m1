@@ -30,7 +30,9 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertEqual(helper.count("WRITE_REGISTER_ULONG(command"), 1)
         fence_helper = trace.split(
             "_Use_decl_annotations_ VOID AdmissionSubmitFenceDetailWindows", 1
-        )[1].split("static VOID AdmissionSubmitTraceU64", 1)[0]
+        )[1].split(
+            "_Use_decl_annotations_ VOID AdmissionPatchRenderGuardWindows", 1
+        )[0]
         self.assertEqual(fence_helper.count("WRITE_REGISTER_ULONG64"), 1)
         self.assertEqual(fence_helper.count("WRITE_REGISTER_ULONG(command"), 1)
         self.assertIn("ADMISSION_SUBMIT_RENDER_GUARD", guards)

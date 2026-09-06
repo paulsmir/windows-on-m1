@@ -43,6 +43,8 @@ class PagingPatchTests(unittest.TestCase):
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCopyMemory memcpy
 #define RtlCompareMemory(a,b,n) (memcmp((a),(b),(n))==0?(n):0)
+#define AdmissionPatchRenderGuardArguments 1u
+#define PATCH_RENDER_RETURN(guard,value) do {(void)(guard);return (value);}while(0)
 typedef int32_t NTSTATUS;
 typedef void *HANDLE,*PMDL;
 typedef unsigned int UINT,ULONG;
