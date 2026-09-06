@@ -2,6 +2,24 @@
 
 C_ASSERT(sizeof(DXGKARG_UPDATEMONITORLINKINFO) == 16);
 
+/* Fixed J313 mode2 measured from the retained DCP owner in EXP495.
+ * Active2560x1600,total2642x1682; fixed16:16 refresh3932151 derives266630kHz
+ * at the reference clock precision. This describes the inherited mode only. */
+static VOID AdmissionFillPanelSignalInfo(D3DKMDT_VIDEO_SIGNAL_INFO *Signal) {
+  RtlZeroMemory(Signal, sizeof(*Signal));
+  Signal->VideoStandard = D3DKMDT_VSS_OTHER;
+  Signal->ActiveSize.cx = 2560u;
+  Signal->ActiveSize.cy = 1600u;
+  Signal->TotalSize.cx = 2642u;
+  Signal->TotalSize.cy = 1682u;
+  Signal->PixelRate = 266630000ULL;
+  Signal->HSyncFreq.Numerator = 266630000u;
+  Signal->HSyncFreq.Denominator = 2642u;
+  Signal->VSyncFreq.Numerator = 266630000u;
+  Signal->VSyncFreq.Denominator = 2642u * 1682u;
+  Signal->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiUpdateMonitorLinkInfo(
     CONST HANDLE Adapter, DXGKARG_UPDATEMONITORLINKINFO *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
@@ -328,23 +346,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
       if (!NT_SUCCESS(status))
         goto Exit;
       RtlZeroMemory(targetMode, sizeof(*targetMode));
-      targetMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-      targetMode->VideoSignalInfo.TotalSize.cx = 2560;
-      targetMode->VideoSignalInfo.TotalSize.cy = 1600;
-      targetMode->VideoSignalInfo.ActiveSize =
-          targetMode->VideoSignalInfo.TotalSize;
-      targetMode->VideoSignalInfo.VSyncFreq.Numerator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.VSyncFreq.Denominator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.HSyncFreq.Numerator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.HSyncFreq.Denominator =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.PixelRate =
-          D3DKMDT_FREQUENCY_NOTSPECIFIED;
-      targetMode->VideoSignalInfo.ScanLineOrdering =
-          D3DDDI_VSSLO_PROGRESSIVE;
+      AdmissionFillPanelSignalInfo(&targetMode->VideoSignalInfo);
       targetMode->Preference = D3DKMDT_MP_PREFERRED;
       status = targetSetInterface->pfnAddMode(targetSet, targetMode);
       if (!NT_SUCCESS(status))
@@ -596,21 +598,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRecommendMonitorModes(
     return status;
 
   RtlZeroMemory(monitorMode, sizeof(*monitorMode));
-  monitorMode->VideoSignalInfo.VideoStandard = D3DKMDT_VSS_OTHER;
-  monitorMode->VideoSignalInfo.TotalSize.cx = 2560;
-  monitorMode->VideoSignalInfo.TotalSize.cy = 1600;
-  monitorMode->VideoSignalInfo.ActiveSize =
-      monitorMode->VideoSignalInfo.TotalSize;
-  monitorMode->VideoSignalInfo.VSyncFreq.Numerator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.VSyncFreq.Denominator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.HSyncFreq.Numerator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.HSyncFreq.Denominator =
-      D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
-  monitorMode->VideoSignalInfo.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+  AdmissionFillPanelSignalInfo(&monitorMode->VideoSignalInfo);
   monitorMode->Origin = D3DKMDT_MCO_DRIVER;
   monitorMode->Preference = D3DKMDT_MP_PREFERRED;
   monitorMode->ColorBasis = D3DKMDT_CB_SRGB;

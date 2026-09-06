@@ -266,9 +266,8 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("StatusConnection", display)
         self.assertIn("HotPlug.Connected = TRUE", display)
         self.assertIn("STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED", display)
-        self.assertIn("VideoSignalInfo.TotalSize.cx = 2560", display)
-        self.assertIn("VideoSignalInfo.TotalSize.cy = 1600", display)
-        self.assertIn("D3DKMDT_FREQUENCY_NOTSPECIFIED", display)
+        # Native signal geometry/frequencies are exercised by the production
+        # helper test in test_apple_agx_render_timing.py.
         self.assertIn("D3DKMDT_MP_PREFERRED", display)
         self.assertIn("RtlZeroMemory(&VidPnHWCaps->VidPnHWCaps", display)
         self.assertIn("!SetPointerPosition->Flags.Visible", display)
