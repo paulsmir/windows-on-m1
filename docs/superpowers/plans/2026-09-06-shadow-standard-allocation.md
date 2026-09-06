@@ -19,9 +19,10 @@ authorization.
   with current public symbols: `CreateCddAllocations` starts at RVA `0x0f2968`.
   The EXP500 return address is RVA `0x0f31b8`, exactly `+0x850`. At
   `0x0f3154..0x0f31b4`, the caller stores value 2 in the standard-allocation
-  type field, stores 2 as the creation-data size, points at the two dimensions
-  plus format structure, and calls `CreateStandardAllocation`; the return at
-  `+0x850` is tested for failure. Type 2 is therefore current
+  type field, points at the creation-data structure, and calls
+  `CreateStandardAllocation`; the return at `+0x850` is tested for failure.
+  The separate store at `sp+0xa0` is not labelled without a proven private
+  structure layout. Type 2 is therefore current
   `D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE`, not the earlier type-1 primary.
 - Pinned WDK 10.0.26100.0 `shared/d3dkmdt.h` defines type 2 and the complete
   `D3DKMDT_SHADOWSURFACEDATA` contract: Width, Height, Format are input and
