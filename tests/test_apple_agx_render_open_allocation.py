@@ -32,6 +32,10 @@ class OpenAllocationTests(unittest.TestCase):
 #define ADMISSION_POOL_TAG 0
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
 #define DXGK_HANDLE_ALLOCATION 1
+#define AdmissionOpenAllocationTraceBegin(Context,Device,Args) \
+ ((void)(Context),(void)(Device),(void)(Args),FALSE)
+#define AdmissionOpenAllocationTraceResult(Context,Enabled,Guard,Status) \
+ ((void)(Context),(void)(Enabled),(void)(Guard),(void)(Status))
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define RtlCompareMemory(a,b,n) (memcmp((a),(b),(n))==0?(n):0)
 #define ExAllocatePool2(flags,n,tag) allocate(n)
@@ -58,7 +62,8 @@ typedef struct {ULONG Magic;ADMISSION_DEVICE *Device;D3DKMT_HANDLE RuntimeAlloca
 typedef struct {D3DKMT_HANDLE hAllocation;void *pPrivateDriverData;
  UINT PrivateDriverDataSize;HANDLE hDeviceSpecificAllocation;} DXGK_OPENALLOCATIONINFO;
 typedef struct {UINT NumAllocations;DXGK_OPENALLOCATIONINFO *pOpenAllocation;
- const void *pPrivateDriverData;UINT PrivateDriverSize;struct {UINT ReadOnly;} Flags;
+ const void *pPrivateDriverData;UINT PrivateDriverSize;union {UINT Value;struct {
+ UINT Create:1;UINT ReadOnly:1;UINT Reserved:30;};} Flags;UINT SubresourceIndex;
 } DXGKARG_OPENALLOCATION;
 typedef struct {UINT NumAllocations;HANDLE *pOpenHandleList;} DXGKARG_CLOSEALLOCATION;
 static ADMISSION_ALLOCATION_HANDLE backing;
@@ -66,6 +71,10 @@ static unsigned calls,releases,refs;
 static int failAllocation;
 static void *allocate(size_t n) {return failAllocation?NULL:malloc(n);}
 static int referenceToken;
+enum {AdmissionOpenAllocationGuardAccepted=0,
+ AdmissionOpenAllocationGuardArgs=2,AdmissionOpenAllocationGuardInterface=3,
+ AdmissionOpenAllocationGuardPrivate=4,AdmissionOpenAllocationGuardAcquire=5,
+ AdmissionOpenAllocationGuardDescription=6,AdmissionOpenAllocationGuardPool=7};
 static void *legacy(const DXGKARGCB_GETHANDLEDATA *q) {
  (void)q;return NULL; /* EXP498 current Windows rejects WDDM1-only resolver. */
 }
@@ -93,7 +102,7 @@ int main(void) {
  device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
  device.Object.Adapter=&adapter.ObjectAdapter;
  DXGK_OPENALLOCATIONINFO info[2]={{0x400001c0u,&d,48,NULL},{0x400001c4u,&d,48,NULL}};
- DXGKARG_OPENALLOCATION a={1,info,NULL,0,{1}};
+ DXGKARG_OPENALLOCATION a={1,info,NULL,0,{.ReadOnly=1},0};
  assert(AdmissionDdiOpenAllocation(&device,&a)==0);
  ADMISSION_OPEN_ALLOCATION *opened=info[0].hDeviceSpecificAllocation;
  assert(opened && opened->Allocation==&backing.Object && opened->Device==&device);

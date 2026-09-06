@@ -4,6 +4,7 @@
 #define ADMISSION_SUBMIT_TRACE_TAG 0x5070000000000000ULL
 #define ADMISSION_GDI_SUBMIT_TRACE_TAG 0x5090000000000000ULL
 #define ADMISSION_UMD_RENDER_TRACE_TAG 0x5120000000000000ULL
+#define ADMISSION_OPEN_ALLOCATION_TRACE_TAG 0x5130000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -92,6 +93,31 @@ typedef enum _ADMISSION_UMD_RENDER_GUARD {
   AdmissionUmdRenderGuardShadow = 20u,
 } ADMISSION_UMD_RENDER_GUARD;
 
+typedef enum _ADMISSION_OPEN_ALLOCATION_TRACE_FIELD {
+  AdmissionOpenAllocationTraceVersion = 1u,
+  AdmissionOpenAllocationTraceIrql = 2u,
+  AdmissionOpenAllocationTraceDeviceFlags = 3u,
+  AdmissionOpenAllocationTraceCount = 4u,
+  AdmissionOpenAllocationTraceFlags = 5u,
+  AdmissionOpenAllocationTraceSubresource = 6u,
+  AdmissionOpenAllocationTraceHandle = 7u,
+  AdmissionOpenAllocationTracePrivateSize = 8u,
+  AdmissionOpenAllocationTraceDeviceSpecificPresent = 9u,
+  AdmissionOpenAllocationTraceGuard = 10u,
+  AdmissionOpenAllocationTraceStatus = 11u,
+} ADMISSION_OPEN_ALLOCATION_TRACE_FIELD;
+
+typedef enum _ADMISSION_OPEN_ALLOCATION_GUARD {
+  AdmissionOpenAllocationGuardAccepted = 0u,
+  AdmissionOpenAllocationGuardDevice = 1u,
+  AdmissionOpenAllocationGuardArgs = 2u,
+  AdmissionOpenAllocationGuardInterface = 3u,
+  AdmissionOpenAllocationGuardPrivate = 4u,
+  AdmissionOpenAllocationGuardAcquire = 5u,
+  AdmissionOpenAllocationGuardDescription = 6u,
+  AdmissionOpenAllocationGuardPool = 7u,
+} ADMISSION_OPEN_ALLOCATION_GUARD;
+
 typedef enum _ADMISSION_SUBMIT_TRACE_ROUTE {
   AdmissionSubmitRoutePresent = 1u,
   AdmissionSubmitRouteRender = 2u,
@@ -150,6 +176,14 @@ static inline unsigned long long AdmissionGdiSubmitTraceWord(
 static inline unsigned long long AdmissionUmdRenderTraceWord(
     unsigned int Field, unsigned int Value) {
   return ADMISSION_UMD_RENDER_TRACE_TAG |
+      ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Value;
+}
+
+static inline unsigned long long AdmissionOpenAllocationTraceWord(
+    unsigned int Field, unsigned int Value) {
+  return ADMISSION_OPEN_ALLOCATION_TRACE_TAG |
       ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Value;

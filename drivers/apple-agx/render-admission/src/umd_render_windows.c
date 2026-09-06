@@ -111,9 +111,21 @@ static VOID AdmissionUmdRenderTraceResult(
       Context, AdmissionUmdRenderTraceStatus, (ULONG)Status);
 }
 #else
-#define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args) FALSE
-#define AdmissionUmdRenderTraceCommand(Context, Enabled, Command) ((void)0)
-#define AdmissionUmdRenderTraceResult(Context, Enabled, Guard, Status) ((void)0)
+#define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args)            \
+  ((void)(Context), (void)(RenderContext), (void)(Args), FALSE)
+#define AdmissionUmdRenderTraceCommand(Context, Enabled, Command)             \
+  do {                                                                        \
+    (void)(Context);                                                          \
+    (void)(Enabled);                                                          \
+    (void)(Command);                                                          \
+  } while (0)
+#define AdmissionUmdRenderTraceResult(Context, Enabled, Guard, Status)        \
+  do {                                                                        \
+    (void)(Context);                                                          \
+    (void)(Enabled);                                                          \
+    (void)(Guard);                                                            \
+    (void)(Status);                                                           \
+  } while (0)
 #endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(

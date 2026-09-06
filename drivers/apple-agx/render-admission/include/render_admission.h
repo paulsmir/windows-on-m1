@@ -204,6 +204,7 @@ typedef struct _ADMISSION_CONTEXT {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   volatile LONG SubmitTraceClaimed;
   volatile LONG UmdRenderTraceClaimed;
+  volatile LONG OpenAllocationTraceClaimed;
   volatile LONG GdiReceiptClaimed;
   volatile LONG GdiSubmitTraceClaimed;
   KSPIN_LOCK GdiReceiptLock;

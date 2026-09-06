@@ -7,6 +7,84 @@
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET \
   (ADMISSION_APERTURE_SEGMENT_SET | ADMISSION_LOCAL_SEGMENT_SET)
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static VOID AdmissionOpenAllocationTraceWrite(
+    ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(
+      request, AdmissionOpenAllocationTraceWord(Field, Value));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
+static BOOLEAN AdmissionOpenAllocationTraceBegin(
+    ADMISSION_CONTEXT *Context, const ADMISSION_DEVICE *Device,
+    const DXGKARG_OPENALLOCATION *Args) {
+  const DXGK_OPENALLOCATIONINFO *info = NULL;
+  if (Context == NULL || Device == NULL || Context->BrokerBase == NULL ||
+      InterlockedCompareExchange(
+          &Context->OpenAllocationTraceClaimed, 1, 0) != 0)
+    return FALSE;
+  if (Args != NULL && Args->NumAllocations != 0u &&
+      Args->pOpenAllocation != NULL)
+    info = &Args->pOpenAllocation[0];
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceVersion, 1u);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceIrql,
+      (ULONG)KeGetCurrentIrql());
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceDeviceFlags,
+      Device->Object.Flags);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceCount,
+      Args == NULL ? 0u : Args->NumAllocations);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceFlags,
+      Args == NULL ? 0u : Args->Flags.Value);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceSubresource,
+      Args == NULL ? 0u : Args->SubresourceIndex);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceHandle,
+      info == NULL ? 0u : info->hAllocation);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTracePrivateSize,
+      info == NULL ? 0u : info->PrivateDriverDataSize);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceDeviceSpecificPresent,
+      info != NULL && info->hDeviceSpecificAllocation != NULL ? 1u : 0u);
+  return TRUE;
+}
+
+static VOID AdmissionOpenAllocationTraceResult(
+    ADMISSION_CONTEXT *Context, BOOLEAN Enabled, ULONG Guard,
+    NTSTATUS Status) {
+  if (!Enabled || Context == NULL)
+    return;
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceGuard, Guard);
+  AdmissionOpenAllocationTraceWrite(
+      Context, AdmissionOpenAllocationTraceStatus, (ULONG)Status);
+}
+#else
+#define AdmissionOpenAllocationTraceBegin(Context, Device, Args)             \
+  ((void)(Context), (void)(Device), (void)(Args), FALSE)
+#define AdmissionOpenAllocationTraceResult(Context, Enabled, Guard, Status)  \
+  do {                                                                       \
+    (void)(Context);                                                         \
+    (void)(Enabled);                                                         \
+    (void)(Guard);                                                           \
+    (void)(Status);                                                          \
+  } while (0)
+#endif
+
 static BOOLEAN AdmissionFormatBytesPerPixel(D3DDDIFORMAT Format,
                                              PULONG BytesPerPixel) {
   if (BytesPerPixel == NULL)
@@ -234,19 +312,33 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
   ADMISSION_CONTEXT *adapter;
   DXGKARGCB_RELEASEHANDLEDATA reference;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
+  ULONG guard = AdmissionOpenAllocationGuardArgs;
   UINT index;
+  BOOLEAN trace;
+
+#define OPEN_ALLOCATION_RETURN(value, result)                                \
+  do {                                                                       \
+    NTSTATUS openStatus = (result);                                          \
+    AdmissionOpenAllocationTraceResult(adapter, trace, (value), openStatus); \
+    return openStatus;                                                       \
+  } while (0)
+
   if (device == NULL || device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
-      device->Object.Adapter == NULL ||
-      Args == NULL || Args->NumAllocations == 0u ||
-      Args->pOpenAllocation == NULL || Args->pPrivateDriverData != NULL ||
-      Args->PrivateDriverSize != 0u)
+      device->Object.Adapter == NULL)
     return STATUS_INVALID_PARAMETER;
   adapter = CONTAINING_RECORD(device->Object.Adapter, ADMISSION_CONTEXT,
                               ObjectAdapter);
+  trace = AdmissionOpenAllocationTraceBegin(adapter, device, Args);
+  if (Args == NULL || Args->NumAllocations == 0u ||
+      Args->pOpenAllocation == NULL || Args->pPrivateDriverData != NULL ||
+      Args->PrivateDriverSize != 0u)
+    OPEN_ALLOCATION_RETURN(AdmissionOpenAllocationGuardArgs,
+                           STATUS_INVALID_PARAMETER);
   if (!adapter->InterfaceValid ||
       adapter->Interface.DxgkCbAcquireHandleData == NULL ||
       adapter->Interface.DxgkCbReleaseHandleData == NULL)
-    return STATUS_INVALID_DEVICE_STATE;
+    OPEN_ALLOCATION_RETURN(AdmissionOpenAllocationGuardInterface,
+                           STATUS_INVALID_DEVICE_STATE);
   RtlZeroMemory(&reference, sizeof(reference));
   reference.Type = DXGK_HANDLE_ALLOCATION;
   for (index = 0u; index < Args->NumAllocations; ++index) {
@@ -257,8 +349,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     ADMISSION_OPEN_ALLOCATION *opened;
     if (info->hDeviceSpecificAllocation != NULL ||
         info->pPrivateDriverData == NULL ||
-        info->PrivateDriverDataSize != sizeof(*description))
+        info->PrivateDriverDataSize != sizeof(*description)) {
+      guard = AdmissionOpenAllocationGuardPrivate;
       goto Rollback;
+    }
     description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
         info->pPrivateDriverData;
     /* hAllocation is a dxgkrnl token, not the KMD object returned at Create. */
@@ -271,18 +365,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     if (allocation == NULL || reference.ReleaseHandle == NULL ||
         allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
       status = STATUS_INVALID_HANDLE;
+      guard = AdmissionOpenAllocationGuardAcquire;
       goto Rollback;
     }
     if (!AdmissionAllocationDescriptionValid(description) ||
         !AdmissionAllocationDescriptionValid(&allocation->Object.Description) ||
         RtlCompareMemory(description, &allocation->Object.Description,
                          sizeof(*description)) != sizeof(*description) ||
-        !AdmissionAllocationOpen(&allocation->Object))
+        !AdmissionAllocationOpen(&allocation->Object)) {
+      guard = AdmissionOpenAllocationGuardDescription;
       goto Rollback;
+    }
     opened = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*opened),
                              ADMISSION_POOL_TAG);
     if (opened == NULL) {
       (void)AdmissionAllocationClose(&allocation->Object);
+      guard = AdmissionOpenAllocationGuardPool;
       goto Rollback;
     }
     RtlZeroMemory(opened, sizeof(*opened));
@@ -298,7 +396,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     adapter->Interface.DxgkCbReleaseHandleData(reference);
     reference.ReleaseHandle = NULL;
   }
-  return STATUS_SUCCESS;
+  OPEN_ALLOCATION_RETURN(AdmissionOpenAllocationGuardAccepted,
+                         STATUS_SUCCESS);
 
 Rollback:
   if (reference.ReleaseHandle != NULL)
@@ -316,7 +415,9 @@ Rollback:
       --device->Object.AllocationCount;
     }
   }
+  AdmissionOpenAllocationTraceResult(adapter, trace, guard, status);
   return status;
+#undef OPEN_ALLOCATION_RETURN
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCloseAllocation(
