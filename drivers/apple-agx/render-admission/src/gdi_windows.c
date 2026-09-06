@@ -241,6 +241,70 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
   return STATUS_SUCCESS;
 }
 
+static NTSTATUS AdmissionPatchPaging(
+    ADMISSION_CONTEXT *Adapter, const DXGKARG_PATCH *Args) {
+  const ADMISSION_PAGING_RECORD *records;
+  const UCHAR *markers;
+  ADMISSION_RENDER_CONTEXT *context;
+  UINT privateBytes;
+  UINT dmaBytes;
+  UINT count;
+  UINT index;
+
+  if (!Adapter->Started || Args->Flags.Value != 1u ||
+      Args->EngineOrdinal != 0u || Args->SubmissionFenceId == 0u ||
+      Args->pDmaBuffer == NULL || Args->pDmaBufferPrivateData == NULL ||
+      Args->pAllocationList != NULL || Args->AllocationListSize != 0u ||
+      Args->pPatchLocationList != NULL || Args->PatchLocationListSize != 0u ||
+      Args->PatchLocationListSubmissionStart != 0u ||
+      Args->PatchLocationListSubmissionLength != 0u ||
+      Args->DmaBufferSubmissionStartOffset >=
+          Args->DmaBufferSubmissionEndOffset ||
+      Args->DmaBufferSubmissionEndOffset > Args->DmaBufferSize ||
+      Args->DmaBufferPrivateDataSubmissionStartOffset >=
+          Args->DmaBufferPrivateDataSubmissionEndOffset ||
+      Args->DmaBufferPrivateDataSubmissionEndOffset >
+          Args->DmaBufferPrivateDataSize ||
+      Args->DmaBufferSubmissionStartOffset % sizeof(ADMISSION_PAGING_MARKER) != 0u ||
+      Args->DmaBufferPrivateDataSubmissionStartOffset %
+          sizeof(ADMISSION_PAGING_RECORD) != 0u ||
+      ((ULONG_PTR)Args->pDmaBufferPrivateData & (sizeof(void *) - 1u)) != 0u)
+    return STATUS_INVALID_PARAMETER;
+  /* Paging during power transitions may have no context. A supplied context
+     must belong to this adapter, but is not required to be a GDI context. */
+  context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
+  if (context != NULL &&
+      (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
+       context->Object.Device == NULL ||
+       context->Object.Device->Adapter != &Adapter->ObjectAdapter))
+    return STATUS_INVALID_HANDLE;
+  privateBytes = Args->DmaBufferPrivateDataSubmissionEndOffset -
+                 Args->DmaBufferPrivateDataSubmissionStartOffset;
+  dmaBytes = Args->DmaBufferSubmissionEndOffset -
+             Args->DmaBufferSubmissionStartOffset;
+  if (privateBytes % sizeof(ADMISSION_PAGING_RECORD) != 0u)
+    return STATUS_INVALID_PARAMETER;
+  count = (UINT)(privateBytes / sizeof(ADMISSION_PAGING_RECORD));
+  records = (const ADMISSION_PAGING_RECORD *)(
+      (const UCHAR *)Args->pDmaBufferPrivateData +
+      Args->DmaBufferPrivateDataSubmissionStartOffset);
+  if (!AdmissionPagingRecordsValid(records, count,
+                                   ADMISSION_MAX_PAGING_RECORDS, dmaBytes))
+    return STATUS_INVALID_PARAMETER;
+  markers = (const UCHAR *)Args->pDmaBuffer +
+            Args->DmaBufferSubmissionStartOffset;
+  for (index = 0u; index < count; ++index) {
+    if (RtlCompareMemory(markers + index * sizeof(ADMISSION_PAGING_MARKER),
+                         &records[index].Header,
+                         sizeof(ADMISSION_PAGING_MARKER)) !=
+        sizeof(ADMISSION_PAGING_MARKER))
+      return STATUS_INVALID_PARAMETER;
+  }
+  /* BuildPagingBuffer already resolved the plan. These markers contain no
+     relocatable GPU addresses; the existing Submit/worker owns execution. */
+  return STATUS_SUCCESS;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
     HANDLE Adapter, const DXGKARG_PATCH *Args) {
   ADMISSION_CONTEXT *adapter = (ADMISSION_CONTEXT *)Adapter;
@@ -255,6 +319,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   ADMISSION_LOCAL_MEMORY_VIEW destination;
 
   PAGED_CODE();
+  if (adapter != NULL && Args != NULL && Args->Flags.Paging)
+    return AdmissionPatchPaging(adapter, Args);
   if (adapter == NULL || Args == NULL || Args->hContext == NULL ||
       Args->pDmaBuffer == NULL || Args->DmaBufferSize == 0u ||
       Args->pDmaBufferPrivateData == NULL ||
