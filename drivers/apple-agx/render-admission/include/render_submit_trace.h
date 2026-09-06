@@ -9,6 +9,7 @@
 #define ADMISSION_SUBMIT_RENDER_GUARD_TAG 0x5280000000000000ULL
 #define ADMISSION_SUBMIT_FENCE_DETAIL_TAG 0x5320000000000000ULL
 #define ADMISSION_PATCH_RENDER_GUARD_TAG 0x5330000000000000ULL
+#define ADMISSION_PREPATCH_ADOPT_GUARD_TAG 0x5350000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -134,6 +135,14 @@ typedef enum _ADMISSION_PATCH_RENDER_GUARD {
   AdmissionPatchRenderGuardPrepare = 7u,
 } ADMISSION_PATCH_RENDER_GUARD;
 
+typedef enum _ADMISSION_PREPATCH_ADOPT_GUARD {
+  AdmissionPrepatchAdoptGuardAccepted = 0u,
+  AdmissionPrepatchAdoptGuardArguments = 1u,
+  AdmissionPrepatchAdoptGuardPending = 2u,
+  AdmissionPrepatchAdoptGuardShadow = 3u,
+  AdmissionPrepatchAdoptGuardPrepare = 4u,
+} ADMISSION_PREPATCH_ADOPT_GUARD;
+
 typedef enum _ADMISSION_OPEN_ALLOCATION_TRACE_FIELD {
   AdmissionOpenAllocationTraceVersion = 1u,
   AdmissionOpenAllocationTraceIrql = 2u,
@@ -257,6 +266,14 @@ static inline unsigned long long AdmissionSubmitFenceDetailWord(
 static inline unsigned long long AdmissionPatchRenderGuardWord(
     unsigned int Guard, unsigned int Status) {
   return ADMISSION_PATCH_RENDER_GUARD_TAG |
+      ((unsigned long long)(Guard & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Status;
+}
+
+static inline unsigned long long AdmissionPrepatchAdoptGuardWord(
+    unsigned int Guard, unsigned int Status) {
+  return ADMISSION_PREPATCH_ADOPT_GUARD_TAG |
       ((unsigned long long)(Guard & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Status;

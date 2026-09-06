@@ -9,6 +9,7 @@ RENDER = ROOT / "drivers" / "apple-agx" / "render-admission"
 class AppleAgxRenderPrepatchTests(unittest.TestCase):
     def test_resident_render_is_prepatched_and_submit_adopts_fence(self):
         header = (RENDER / "include" / "render_admission.h").read_text()
+        guards = (RENDER / "include" / "render_submit_trace.h").read_text()
         render = (RENDER / "src" / "umd_render_windows.c").read_text()
         patch = (RENDER / "src" / "gdi_windows.c").read_text()
         submit = (RENDER / "src" / "submission_windows.c").read_text()
@@ -19,6 +20,11 @@ class AppleAgxRenderPrepatchTests(unittest.TestCase):
         self.assertIn("AdmissionMemoryRuntimeResolveLocal", render)
         self.assertIn("PrepatchedRender.Active", render)
         self.assertIn("AdmissionGdiAdoptPrepatchedPacket", patch)
+        self.assertIn("ADMISSION_PREPATCH_ADOPT_GUARD", guards)
+        self.assertIn("PREPATCH_ADOPT_RETURN", patch)
+        self.assertIn("AdmissionPrepatchAdoptGuardPending", patch)
+        self.assertIn("AdmissionPrepatchAdoptGuardShadow", patch)
+        self.assertIn("AdmissionPrepatchAdoptGuardAccepted", patch)
         self.assertIn("AppleAgxDmaShadowSeal", patch)
         self.assertIn("AdmissionGdiAdoptPrepatchedPacket", submit)
         self.assertIn("PrepatchedRender.Active", callbacks)

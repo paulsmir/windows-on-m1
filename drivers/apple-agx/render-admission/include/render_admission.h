@@ -457,6 +457,8 @@ VOID AdmissionSubmitFenceDetailWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Outstanding, ULONG Submitted);
 VOID AdmissionPatchRenderGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Guard, NTSTATUS Status);
+VOID AdmissionPrepatchAdoptGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
+    ULONG Guard, NTSTATUS Status);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -496,6 +498,12 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Submitted);                                                         \
   } while (0)
 #define AdmissionPatchRenderGuardWindows(Context, Guard, Status)               \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Guard);                                                             \
+    (void)(Status);                                                            \
+  } while (0)
+#define AdmissionPrepatchAdoptGuardWindows(Context, Guard, Status)             \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Guard);                                                             \

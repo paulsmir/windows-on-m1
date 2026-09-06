@@ -133,9 +133,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
   APPLE_AGX_DMA_SHADOW shadow;
   DXGKARG_PATCH patchArgs;
   KIRQL oldIrql;
+#define PREPATCH_ADOPT_RETURN(guard, value)                                  \
+  do {                                                                       \
+    NTSTATUS adoptStatus = (value);                                          \
+    AdmissionPrepatchAdoptGuardWindows(Adapter, (guard), adoptStatus);       \
+    return adoptStatus;                                                      \
+  } while (0)
 
   if (Adapter == NULL || Context == NULL || Args == NULL)
-    return STATUS_INVALID_PARAMETER;
+    PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardArguments,
+                          STATUS_INVALID_PARAMETER);
   KeAcquireSpinLock(&Adapter->SchedulerLock, &oldIrql);
   pending = Context->PrepatchedRender;
   KeReleaseSpinLock(&Adapter->SchedulerLock, oldIrql);
@@ -144,7 +151,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
       pending.DmaStart != Args->DmaBufferSubmissionStartOffset ||
       pending.DmaEnd != Args->DmaBufferSubmissionEndOffset ||
       pending.PrivateBytesUsed > Args->DmaBufferPrivateDataSize)
-    return STATUS_INVALID_HANDLE;
+    PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPending,
+                          STATUS_INVALID_HANDLE);
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
@@ -154,7 +162,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
           shadow.Storage, shadow.BytesUsed, pending.PatchOffset,
           pending.Destination.GpuVirtualAddress) ||
       !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
-    return STATUS_INVALID_USER_BUFFER;
+    PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardShadow,
+                          STATUS_INVALID_USER_BUFFER);
   RtlZeroMemory(&patchArgs, sizeof(patchArgs));
   patchArgs.SubmissionFenceId = Args->SubmissionFenceId;
   patchArgs.pDmaBufferPrivateData = Args->pDmaBufferPrivateData;
@@ -163,10 +172,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
       Args->DmaBufferSubmissionStartOffset;
   patchArgs.DmaBufferSubmissionEndOffset =
       Args->DmaBufferSubmissionEndOffset;
-  return AdmissionGdiPreparePacket(
-      Adapter, Context,
-      (ADMISSION_OPEN_ALLOCATION *)pending.OpenedAllocation,
-      &patchArgs, shadow.BytesUsed, &pending.Destination);
+  {
+    NTSTATUS status = AdmissionGdiPreparePacket(
+        Adapter, Context,
+        (ADMISSION_OPEN_ALLOCATION *)pending.OpenedAllocation,
+        &patchArgs, shadow.BytesUsed, &pending.Destination);
+    PREPATCH_ADOPT_RETURN(
+        NT_SUCCESS(status) ? AdmissionPrepatchAdoptGuardAccepted
+                           : AdmissionPrepatchAdoptGuardPrepare,
+        status);
+  }
+#undef PREPATCH_ADOPT_RETURN
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
