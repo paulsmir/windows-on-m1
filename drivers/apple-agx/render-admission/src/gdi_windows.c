@@ -358,7 +358,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   if (context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL ||
       context->Object.Device->Adapter != &adapter->ObjectAdapter ||
-      (context->Object.Flags & ADMISSION_CONTEXT_GDI) == 0u ||
+      (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
       !context->SchedulerContext.Active)
     return STATUS_INVALID_HANDLE;
   if (!AppleAgxDmaShadowOpen(

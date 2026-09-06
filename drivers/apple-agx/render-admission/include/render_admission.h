@@ -19,6 +19,7 @@
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
 #include "render_gdi.h"
+#include "render_umd_command.h"
 #include "render_gdi_receipt.h"
 #include "render_present.h"
 #include "render_submit_trace.h"

@@ -68,8 +68,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
   return STATUS_SUCCESS;
 }
 
-FAIL2(AdmissionDdiRender, HANDLE, Context, DXGKARG_RENDER *, Args)
-
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     HANDLE Context, DXGKARG_PRESENT *Present) {
   ADMISSION_DEVICE *device = NULL;
@@ -203,9 +201,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));
   Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;
   Args->ContextInfo.DmaBufferSegmentSet = 0u;
+  Args->ContextInfo.DmaBufferPrivateDataSize =
+      ADMISSION_GDI_DMA_PRIVATE_SIZE;
   if (Args->Flags.GdiContext) {
-    Args->ContextInfo.DmaBufferPrivateDataSize =
-        ADMISSION_GDI_DMA_PRIVATE_SIZE;
     Args->ContextInfo.AllocationListSize =
         ADMISSION_GDI_ALLOCATION_LIST_SIZE;
     Args->ContextInfo.PatchLocationListSize =

@@ -36,7 +36,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
       render_context->Object.Device == NULL ||
       render_context->Object.Device->Adapter !=
           &Context->ObjectAdapter ||
-      (render_context->Object.Flags & ADMISSION_CONTEXT_GDI) == 0u ||
+      (render_context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
       !render_context->SchedulerContext.Active ||
       render_context->SchedulerContext.NodeOrdinal != Args->NodeOrdinal ||
       (render_context->SchedulerContext.EngineAffinity &
