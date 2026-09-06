@@ -126,6 +126,16 @@ analysis PASS and remote SHA
 No workload has run. Next action is exactly one R3 invocation over SSH, then
 collect receipt/trace/health before exact cleanup.
 
+R3 returned C0000001 at GDI-name open in session0 before any KMD callback:
+INCONCLUSIVE BEFORE DRIVER. R4 kernel-inventory source compiled but the pinned
+ARM64 import library omitted modern EnumAdapters3, so no artifact. Commits
+fc897a8c6fddb41e118480358845af9765ac422b and
+a2a7562595de85b3f07422c73f445a79843c6dc0 select exactly one nonsoftware
+render+display adapter with one source and resolve the real gdi32 export
+fail-closed. R5 build/analysis PASS; remote SHA
+78c2b86d2303fcf3661ee8d5941fe0ce8e9a086e65cac0183f02450e94106382.
+Driver30.0.511.0 remains Code0/unchanged. Next is one no-argument R5 run.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,

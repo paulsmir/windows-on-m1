@@ -78,6 +78,24 @@ Remote hash matches. The installed driver remains exact30.0.511.0 and unchanged.
 The sole workload command is now exact R3 with argument \\.\DISPLAY2; no stale
 LUID, interactive task or display enumeration is used.
 
+R3 RESULT — INCONCLUSIVE BEFORE DRIVER. Exact R3 ran once and
+D3DKMTOpenAdapterFromGdiDisplayName returned C0000001 in SSH session0; all later
+statuses remained C0000001, no D3DKMTRender or receipt executed. Producer output
+is preserved. Commit fc897a8c6fddb41e118480358845af9765ac422b replaces only
+address acquisition with fail-closed D3DKMTEnumAdapters3 selection: exactly one
+adapter must report RenderSupported+DisplaySupported, not SoftwareDevice or
+ComputeOnly, and exactly one VidPn source. R4 compiled/analyzed but its direct
+EnumAdapters3 reference failed link because the pinned ARM64 gdi32 import library
+omits that newer symbol; no R4 artifact exists. Current gdi32.dll does export
+D3DKMTEnumAdapters3. Commit a2a7562595de85b3f07422c73f445a79843c6dc0
+resolves the exact export with checked GetModuleHandle/GetProcAddress and changes
+no selection or render behavior. R5 pinned build/analysis PASS, ARM64 static
+886784bytes, zero warnings/errors; overlay SHA
+6208b0aee45780d0d5ae97a9ba6e022649c2205a9c731fedd78d758e4b716cc1,
+producer SHA78c2b86d2303fcf3661ee8d5941fe0ce8e9a086e65cac0183f02450e94106382.
+Remote hash matches. Exact R5 with no arguments is the sole remaining workload;
+the installed driver remains the original exact30.0.511.0 package.
+
 Hardware workflow: collect and remove exact installed EXP509 first; restore the
 current ordinary377/392 Code28 baseline; transfer exact EXP511 ZIP/producer and
 scripts; stage only; graceful reboot; launch immutable full-owner477/406 once;
