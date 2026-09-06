@@ -4,27 +4,6 @@
 
 C_ASSERT(sizeof(ADMISSION_GDI_HW_RECEIPT) == 160u);
 
-static VOID AdmissionGdiLock(
-    _In_ ADMISSION_CONTEXT *Context, _Out_ KIRQL *OldIrql,
-    _Out_ BOOLEAN *Raised) {
-  if (KeGetCurrentIrql() >= DISPATCH_LEVEL) {
-    KeAcquireSpinLockAtDpcLevel(&Context->GdiReceiptLock);
-    *OldIrql = KeGetCurrentIrql();
-    *Raised = FALSE;
-  } else {
-    KeAcquireSpinLock(&Context->GdiReceiptLock, OldIrql);
-    *Raised = TRUE;
-  }
-}
-
-static VOID AdmissionGdiUnlock(
-    _In_ ADMISSION_CONTEXT *Context, KIRQL OldIrql, BOOLEAN Raised) {
-  if (Raised)
-    KeReleaseSpinLock(&Context->GdiReceiptLock, OldIrql);
-  else
-    KeReleaseSpinLockFromDpcLevel(&Context->GdiReceiptLock);
-}
-
 static VOID AdmissionGdiTraceWrite(
     _In_ ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
   volatile ULONG64 *request;
@@ -69,16 +48,15 @@ _Use_decl_annotations_ VOID AdmissionGdiReceiptBeginWindows(
     ADMISSION_CONTEXT *Context, ULONGLONG ContextToken, ULONG Opcode,
     ULONG Color, ULONG RectCount, ULONG DmaBytes) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   if (Context == NULL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 1, 0) != 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   AdmissionGdiReceiptInitialize(&Context->GdiReceipt);
   if (!AdmissionGdiReceiptBegin(&Context->GdiReceipt, ContextToken, Opcode,
                                 Color, RectCount, DmaBytes))
     InterlockedExchange(&Context->GdiReceiptClaimed, 0);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionGdiReceiptPatchWindows(
@@ -86,37 +64,34 @@ _Use_decl_annotations_ VOID AdmissionGdiReceiptPatchWindows(
     ULONGLONG DestinationGpuVa, ULONGLONG DestinationPhysical,
     ULONG DestinationBytes) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   if (Context == NULL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   (void)AdmissionGdiReceiptPatch(&Context->GdiReceipt, ContextToken, Fence,
       DestinationGpuVa, DestinationPhysical, DestinationBytes);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionGdiReceiptSubmitWindows(
     ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args,
     NTSTATUS Status) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   AdmissionGdiTraceSubmit(Context, Args, Status);
   if (Context == NULL || Args == NULL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   (void)AdmissionGdiReceiptSubmit(&Context->GdiReceipt,
       (ULONGLONG)(ULONG_PTR)Args->hContext, Args->SubmissionFenceId,
       (ULONG)Status);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionGdiReceiptBackendWindows(
     ADMISSION_CONTEXT *Context, ULONG Fence, ULONG Result,
     const APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   APPLE_AGX_BACKEND_JOB_IMAGE empty;
   if (Context == NULL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
@@ -124,71 +99,67 @@ _Use_decl_annotations_ VOID AdmissionGdiReceiptBackendWindows(
   RtlZeroMemory(&empty, sizeof(empty));
   if (Job == NULL)
     Job = &empty;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   (void)AdmissionGdiReceiptBackend(&Context->GdiReceipt, Fence, Result,
       Job->TaEvent, Job->D3Event, Job->TaExpectedStamp,
       Job->D3ExpectedStamp, Job->TaExpectedDonePointer,
       Job->D3ExpectedDonePointer);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionGdiReceiptCompleteWindows(
     ADMISSION_CONTEXT *Context, ULONG Fence, ULONG Status,
     BOOLEAN NotifyInterrupt) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   if (Context == NULL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   (void)AdmissionGdiReceiptComplete(&Context->GdiReceipt, Fence, Status,
                                     NotifyInterrupt ? 1u : 0u);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionGdiReceiptProgressWindows(
     ADMISSION_CONTEXT *Context, ULONG Fence,
     const APPLE_AGX_G13_QUEUE_PROGRESS *Progress, ULONG WorkerFinalPhase) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   if (Context == NULL || Progress == NULL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   (void)AdmissionGdiReceiptProgress(&Context->GdiReceipt, Fence,
       Progress->TaDonePointer, Progress->TaStamp,
       Progress->TaEventSeen, Progress->TaComplete,
       Progress->D3DonePointer, Progress->D3Stamp,
       Progress->D3EventSeen, Progress->D3Complete, WorkerFinalPhase);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionGdiReceiptDpcWindows(
     ADMISSION_CONTEXT *Context, ULONG Fence) {
   KIRQL oldIrql;
-  BOOLEAN raised;
   if (Context == NULL || Fence == 0u ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   (void)AdmissionGdiReceiptDpc(&Context->GdiReceipt, Fence);
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
 }
 
 _Use_decl_annotations_ VOID AdmissionFlushGdiReceipt(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_GDI_HW_RECEIPT snapshot;
   KIRQL oldIrql;
-  BOOLEAN raised;
   HANDLE key = NULL;
   OBJECT_ATTRIBUTES attributes;
   UNICODE_STRING servicePath;
   if (Context == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
       InterlockedCompareExchange(&Context->GdiReceiptClaimed, 0, 0) == 0)
     return;
-  AdmissionGdiLock(Context, &oldIrql, &raised);
+  KeAcquireSpinLock(&Context->GdiReceiptLock, &oldIrql);
   snapshot = Context->GdiReceipt;
-  AdmissionGdiUnlock(Context, oldIrql, raised);
+  KeReleaseSpinLock(&Context->GdiReceiptLock, oldIrql);
   if (Context->PhysicalDeviceObject != NULL &&
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
