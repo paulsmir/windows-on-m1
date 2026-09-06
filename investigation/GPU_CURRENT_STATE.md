@@ -294,6 +294,14 @@ service/SYS/UMD orphans removed; ordinary377/392 remains Code28/no AGX state,
 dispatch-safe broker tag0x5280;108 focused tests and pinned30.0.529.0 gates PASS.
 ZIP/SYS/producer SHA689b22ab.../2ec1192d.../ca60430e.... EXP529 preregistered;
 first unknown remains the exact SubmitRender invariant returning INVALID_HANDLE.
+EXP529 FINAL: host log SHA2da89ece... confirms dispatch-safe SubmitRender final
+status C0000008 immediately before reset, but the two-word receipt overwrote its
+guard before broker consume. Exact package cleanup required emergency377/385
+after ordinary recovery did not regain SSH; oem5 and hash-matched stopped
+service/SYS/UMD removed, ordinary restore underway. Commit6ae8698 packs guard+
+status in one broker word only;108 tests and pinned30.0.530.0 gates PASS.
+ZIP/SYS/producer SHA485b27e5.../50dd625f.../b917fce4.... EXP530 preregistered;
+no downstream GPU readiness changed.
 
 ## Final live ordinary clean baseline
 

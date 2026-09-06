@@ -1,5 +1,46 @@
 # Hardware Experiment Ledger
 
+## EXP530 atomic SubmitRender guard word — preregistration 2026-09-06T21:43:27Z
+
+WHY THIS HYPOTHESIS:
+- EXP529 host log proves the dedicated dispatch-safe path ran immediately before
+  the reset and carried final `STATUS_INVALID_HANDLE`.
+- The final two-word sequence contains repeated status field2 but no final guard
+  field1: the shared request register was overwritten before broker consume.
+- Guard enum values fit the existing16-bit field and status fits the32-bit value,
+  so one existing64-bit receipt can preserve both without a handshake or wait at
+  DISPATCH_LEVEL.
+
+Single variable: commit `6ae8698fb6bd6907cf0396698483e066a9060f5f`
+encodes `(field=guard,value=status)` in one broker word and performs one command
+write. Qualification-only; production behavior and every KMD return remain
+unchanged. No firmware/RTKit/UAT/memory/scheduler/AGX/completion/IRQ/display/
+producer change. Test was RED at two request writes, then2/2 and106 regression
+tests GREEN. Pinned WDK26100/MSVC14.44 build/analysis/Universal/Inf2Cat/TestSign/
+version30.0.530.0 PASS with inherited C28251 only.
+
+Commit/overlay/build SHA `6ae8698f...`/`feeaa8ea...`/`da32309c...`.
+ZIP/SYS/INF/CAT/UMD/producer SHA `485b27e5...`/`50dd625f...`/`c634e750...`/
+`4fa75331...`/`a1c045e5...`/`b917fce4...`; manifest SHA `51abd4c4...`.
+Stage/run/cleanup/launch SHA `60094270...`/`8a85d45b...`/`3510d2fe...`/
+`20f51f1a...`. Preflight requires restored ordinary377/392 Code28/no package/
+service/files/8CPU/SSH. One natural full-owner bind and one producer; host output
+must be tee'd. PASS is one final `0x5280` word whose field is exactly one numbered
+guard and whose value is C0000008. Exact cleanup/recovery follows immediately.
+
+## EXP529 dispatch-safe SubmitRender guard — result 2026-09-06T21:43Z
+
+INCONCLUSIVE for the exact guard, CONFIRMED for final SubmitRender status. Exact
+30.0.529.0 bound Code0 with matching oem5/SYS and8CPU. One producer reset Windows.
+Host log SHA `2da89ece0d180dd71beed7aac330ab3f8b3682b65a7bf10414f6f5ff379cc0a6`
+contains the dedicated0x5280 pending pair and final C0000008 status, followed by
+PSCI reset. The final guard word was overwritten by the status word before broker
+consume, so no KMD invariant is yet selected. Ordinary GPU-visible recovery did
+not regain SSH; emergency377/385 removed exact oem5 and then the hash-matched
+stopped service/SYS/UMD only. Cleanup/stale-cleanup SHA `bdbc6c4f...`/
+`7915b8f3...`; ordinary377/392 restoration is in progress. No physical AGX or
+fence claim.
+
 ## EXP529 dispatch-safe SubmitRender guard — preregistration 2026-09-06T21:34:14Z
 
 WHY THIS HYPOTHESIS:
