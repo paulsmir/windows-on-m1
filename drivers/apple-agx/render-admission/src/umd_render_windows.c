@@ -43,7 +43,7 @@ static BOOLEAN AdmissionUmdRenderTraceBegin(
   if (Context == NULL || RenderContext == NULL ||
       Context->BrokerBase == NULL ||
       InterlockedCompareExchange(
-          &Context->UmdRenderTraceClaimed, 1, 0) != 0)
+          &Context->PagingCorrelationArmed, 0, 0) == 0)
     return FALSE;
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceVersion, 1u);

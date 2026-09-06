@@ -61,7 +61,12 @@ class AppleAgxRenderUmdTraceTests(unittest.TestCase):
         self.assertIn("ADMISSION_UMD_RENDER_TRACE_TAG", header)
         self.assertIn("AdmissionUmdRenderTraceWord", header)
         self.assertIn("UmdRenderTraceClaimed", context)
+        self.assertIn("PagingCorrelationArmed", context)
         self.assertIn("#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)", source)
+        self.assertIn("&Context->PagingCorrelationArmed", source)
+        self.assertNotIn(
+            "&Context->UmdRenderTraceClaimed, 1, 0", source
+        )
         self.assertIn("UMD_RENDER_RETURN", source)
         self.assertIn("AdmissionUmdRenderGuardUserCopy", source)
         self.assertIn("AdmissionUmdRenderGuardAccepted", source)
