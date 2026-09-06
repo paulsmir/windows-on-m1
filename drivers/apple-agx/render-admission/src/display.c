@@ -345,7 +345,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEnumVidPnCofuncModality(
                                                         &targetMode);
       if (!NT_SUCCESS(status))
         goto Exit;
-      RtlZeroMemory(targetMode, sizeof(*targetMode));
+      /* The manager initializes Id and the V1 MinimumVSyncFreq sentinel.
+       * Clearing the whole WDDM2.9+ object turns that sentinel into an
+       * unsupported minimum-refresh request. Only fill our mode fields. */
       AdmissionFillPanelSignalInfo(&targetMode->VideoSignalInfo);
       targetMode->Preference = D3DKMDT_MP_PREFERRED;
       status = targetSetInterface->pfnAddMode(targetSet, targetMode);
