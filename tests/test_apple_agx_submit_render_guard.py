@@ -33,6 +33,10 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertIn("AdmissionSubmitRenderGuardEngine", submit)
         self.assertIn("AdmissionSubmitRenderGuardFence", submit)
         self.assertIn("AdmissionSubmitRenderGuardAccepted", submit)
+        self.assertNotIn(
+            "AdmissionSubmitRenderGuardWindows(Context, MAXULONG, STATUS_PENDING)",
+            submit,
+        )
 
     def test_production_build_has_no_registry_receipt_calls(self):
         header = (RENDER / "include" / "render_admission.h").read_text()

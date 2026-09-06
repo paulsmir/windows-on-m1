@@ -18,7 +18,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     return gdiStatus;                                                        \
   } while (0)
 
-  AdmissionSubmitRenderGuardWindows(Context, MAXULONG, STATUS_PENDING);
   if (Context == NULL || Args == NULL)
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardArgs,
                       STATUS_INVALID_PARAMETER);
