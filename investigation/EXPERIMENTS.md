@@ -1,5 +1,15 @@
 # Hardware Experiment Ledger
 
+## EXP527 accept empty nonnull patch-list buffer — preregistration 2026-09-06T21:06Z
+
+WHY THIS HYPOTHESIS: EXP526 registry receipt proved exact KMD Render guard11,
+status C000000D. Windows supplied a nonnull preallocated patch-list pointer with
+PatchLocationListInSize0. Microsoft permits an empty input list; pointer value is
+irrelevant at zero count. Commit c9caf00 removes only the pointer-null demand;
+nonzero count remains rejected.106 tests and pinned527 build/sign/Universal/
+analysis pass. ZIP/SYS/producer SHA d42997c4.../9fbc041d.../459b5484....
+One exact run then cleanup. EXP526 cleanup/ordinary health2bac4c5f....
+
 ## EXP526 device-registry Render guard — preregistration 2026-09-06T20:58Z
 
 WHY THIS HYPOTHESIS: EXP523 proves DdiRender wrapper5030 runs; EXP524 broker

@@ -269,6 +269,9 @@ SHA38f83ccf448ee85bf4e0b3e38585c72c05b437c785f453ecdd99f4cc626377e0.
 EXP525 FINAL unchanged C000000D; hint rejected. EXP526 e02bfaa persists exact
 KMD Render prologue/guard/status to device registry; pinned gates PASS. Next one
 exact526 run, then fix named guard or callback-vector owner.
+EXP526 FINAL: device receipt guard11/statusC000000D proves empty patch input
+pointer validation is owner. EXP527 c9caf00 ignores pointer when input count0;
+all other validation unchanged,106 tests+pinned gates PASS. Next exact527 run.
 
 ## Final live ordinary clean baseline
 
