@@ -95,22 +95,29 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       Present->pPrivateDriverData != NULL ||
       Present->PrivateDriverDataSize != 0u ||
       Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX]
-              .hDeviceSpecificAllocation != NULL)
+              .hDeviceSpecificAllocation != NULL) {
+    AdmissionRecordPresent(device, Present, 1u, STATUS_INVALID_PARAMETER);
     return STATUS_INVALID_PARAMETER;
+  }
   source = (ADMISSION_OPEN_ALLOCATION *)
       Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX]
           .hDeviceSpecificAllocation;
   if (source == NULL || source->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
       source->Device != device || source->Allocation == NULL ||
-      source->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
+      source->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
+    AdmissionRecordPresent(device, Present, 2u, STATUS_INVALID_HANDLE);
     return STATUS_INVALID_HANDLE;
+  }
   description = &source->Allocation->Description;
   if (!AdmissionAllocationDescriptionValid(description) ||
       description->Width != 2560u || description->Height != 1600u ||
       description->Pitch != 10240u || description->BytesPerPixel != 4u ||
       description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8)
+      description->Format != (UINT)D3DDDIFMT_A8R8G8B8) {
+    AdmissionRecordPresent(device, Present, 3u,
+                            STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+  }
   return STATUS_SUCCESS;
 }
 

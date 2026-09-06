@@ -5,6 +5,18 @@
 
 C_ASSERT(sizeof(ADMISSION_SOURCE_ADDRESS_RECEIPT) == 88);
 
+typedef struct _ADMISSION_PRESENT_RECEIPT {
+  ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
+  ULONG DmaSize, DmaPrivateSize, PatchListSize, Multipass, Color, SubrectCount;
+  ULONG FlipInterval, NumSrc, NumDst, DriverPrivateSize;
+  ULONG DmaBufferPresent, DmaPrivatePresent, AllocationInfoPresent;
+  ULONG DriverPrivatePresent, SubrectPresent, DmaSegment;
+  ULONGLONG DmaPhysical, DmaGpuVirtual;
+  RECT SrcRect, DstRect, FirstSubrect;
+} ADMISSION_PRESENT_RECEIPT;
+C_ASSERT(sizeof(ADMISSION_PRESENT_RECEIPT) == 160);
+static volatile LONG AdmissionPresentReceiptClaimed;
+
 typedef struct _ADMISSION_TYPE1_RECEIPT {
   ULONG Version;
   ULONG Bytes;
@@ -492,6 +504,72 @@ _Use_decl_annotations_ void AdmissionRecordQuery(
                 sizeof(receipt));
   }
   ZwClose(key);
+}
+
+_Use_decl_annotations_ void AdmissionRecordPresent(
+    ADMISSION_DEVICE *Device, const DXGKARG_PRESENT *Present,
+    ULONG Branch, NTSTATUS Status) {
+  ADMISSION_PRESENT_RECEIPT receipt;
+  ADMISSION_CONTEXT *context = NULL;
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL || NT_SUCCESS(Status) ||
+      InterlockedCompareExchange(&AdmissionPresentReceiptClaimed, 1, 0) != 0)
+    return;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = 1u;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Branch = Branch;
+  receipt.Status = (ULONG)Status;
+  receipt.Irql = KeGetCurrentIrql();
+  receipt.DevicePresent = Device != NULL;
+  receipt.ArgsPresent = Present != NULL;
+  if (Present != NULL) {
+    receipt.Flags = Present->Flags.Value;
+    receipt.DmaSize = Present->DmaSize;
+    receipt.DmaPrivateSize = Present->DmaBufferPrivateDataSize;
+    receipt.PatchListSize = Present->PatchLocationListOutSize;
+    receipt.Multipass = Present->MultipassOffset;
+    receipt.Color = Present->Color;
+    receipt.SubrectCount = Present->SubRectCnt;
+    receipt.FlipInterval = Present->FlipInterval;
+    receipt.NumSrc = Present->NumSrcAllocations;
+    receipt.NumDst = Present->NumDstAllocations;
+    receipt.DriverPrivateSize = Present->PrivateDriverDataSize;
+    receipt.DmaBufferPresent = Present->pDmaBuffer != NULL;
+    receipt.DmaPrivatePresent = Present->pDmaBufferPrivateData != NULL;
+    receipt.AllocationInfoPresent = Present->pAllocationInfo != NULL;
+    receipt.DriverPrivatePresent = Present->pPrivateDriverData != NULL;
+    receipt.SubrectPresent = Present->pDstSubRects != NULL;
+    receipt.DmaSegment = Present->DmaBufferSegmentId;
+    receipt.DmaPhysical = Present->DmaBufferPhysicalAddress.QuadPart;
+    receipt.DmaGpuVirtual = Present->DmaBufferGpuVirtualAddress;
+    receipt.SrcRect = Present->SrcRect;
+    receipt.DstRect = Present->DstRect;
+    if (Present->pDstSubRects != NULL && Present->SubRectCnt != 0u)
+      receipt.FirstSubrect = Present->pDstSubRects[0];
+  }
+  /* The receipt never follows the reserved allocation-info union or alters
+   * command/output buffers. Device has already been resolved by the DDI. */
+  if (Device != NULL && Device->Object.Adapter != NULL &&
+      Device->Object.Adapter->Magic == ADMISSION_OBJECT_ADAPTER_MAGIC)
+    context = CONTAINING_RECORD(Device->Object.Adapter,
+                                ADMISSION_CONTEXT, ObjectAdapter);
+  if (context != NULL && context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1PresentReceipt", &receipt, sizeof(receipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1PresentReceipt", &receipt, sizeof(receipt));
+    ZwClose(key);
+  }
 }
 
 _Use_decl_annotations_ void AdmissionFlushSourceAddressReceipt(

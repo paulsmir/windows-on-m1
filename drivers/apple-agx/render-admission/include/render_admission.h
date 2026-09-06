@@ -364,6 +364,10 @@ void AdmissionRecordQuery(_In_opt_ PDEVICE_OBJECT DeviceObject,
                               const VOID *OutputData);
 _IRQL_requires_(PASSIVE_LEVEL)
 void AdmissionFlushSourceAddressReceipt(_In_ ADMISSION_CONTEXT *Context);
+_IRQL_requires_(PASSIVE_LEVEL)
+void AdmissionRecordPresent(_In_opt_ ADMISSION_DEVICE *Device,
+                            _In_opt_ const DXGKARG_PRESENT *Present,
+                            ULONG Branch, NTSTATUS Status);
 ULONG AdmissionScanoutReceiptState(_In_ ADMISSION_CONTEXT *Context);
 void AdmissionRecordDisplayDdi(_In_opt_ PDEVICE_OBJECT DeviceObject,
                                _In_ ULONG DdiId, _In_ ULONG Phase,
