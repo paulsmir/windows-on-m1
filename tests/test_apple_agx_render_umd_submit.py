@@ -89,6 +89,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertNotIn("D3DKMTOpenAdapterFromLuid", source)
         self.assertNotIn("createDevice.Flags.LegacyMode = 1u", source)
         self.assertIn("createContext.Flags.Value = 0u", source)
+        self.assertIn("createContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN", source)
+        self.assertNotIn("createContext.ClientHint = D3DKMT_CLIENTHINT_OPENGL", source)
         self.assertIn("D3DKMTCreatePagingQueue", source)
         self.assertIn("D3DKMTMakeResident", source)
         self.assertIn("PagingFenceValue", source)

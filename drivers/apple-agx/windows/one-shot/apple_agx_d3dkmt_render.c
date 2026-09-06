@@ -116,7 +116,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   createContext.NodeOrdinal = 0u;
   createContext.EngineAffinity = 1u;
   createContext.Flags.Value = 0u;
-  createContext.ClientHint = D3DKMT_CLIENTHINT_OPENGL;
+  createContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
   contextStatus = D3DKMTCreateContext(&createContext);
   if (!NT_SUCCESS(contextStatus) || createContext.hContext == 0u ||
       createContext.pCommandBuffer == NULL ||
