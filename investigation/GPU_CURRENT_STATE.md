@@ -1,209 +1,185 @@
 # GPU current state
 
-Updated: 2026-09-04T17:51:22+02:00
+Updated2026-09-06T17:11Z. Authoritative live state; read first after context reset.
+Detailed handoff: .local/experiments/EXP506-cdd-blt/handoff.md.
+Historical snapshot: .local/experiments/EXP506-cdd-blt/state-before-final-compact.md.
 
-## CURRENT PLATFORM
+## Binding scope and current executor
 
-- Live J313 is back on the normal current G2 pair: accepted EXP377 m1n1
-  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
-  plus Mu `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
-- EXP425 is complete and the machine is currently physically off after exact
-  cleanup. Normal-G2 restoration requires the next power-on; no AppleAgx
-  package/service/module remained before shutdown.
-- Current-compatible emergency non-AGX Mu remains
-  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
+The post-EXP506 model handoff is complete. Latest user instruction explicitly
+authorizes continuation here by the current main process without agents. No
+parallel implementation or hardware executor exists. Continue autonomously from
+the exact Submit boundary through the original AGX/OpenGL/CS1.6 goal. No ANS
+changes; preserve unrelated dirty work/evidence. Final proven driver stays active.
 
-## CURRENT WINDOWS BASELINE / PACKAGE STATE
+## EXP506 result and next boundary
 
-- Fresh post-EXP412 current-G2 check: APPL0002 Code28/unbound with null
-  INF/service; no project Display package, AppleAgx service, SYS or loaded
-  module; SSH, 8 CPUs, AppleInput, stornvme, USBXHCI and sshd healthy.
-  Two stornvme Event129 records 6528/6529 occurred before the EXP412 bind
-  during synthetic-platform boot; no new 41/129/1001 occurred after bind,
-  through exact cleanup, or after ordinary-G2 restoration.
+Exact30.0.506.0 R2 ran ONCE after hash-verifiedoem5 staging. Host saw A408swap9 ->
+exactD589latch9 then WindowsPSCIreset before SSH. RecoveredEvent41Record18293:
+0x119(0x2,0xffffffffc000000d,0xffffe18baf662a00,0xffff980aa7910a60).
+Subtype2 is failed submission; arg3 is SUBMITCOMMAND, not PATCH. Address matches
+candidate reset stack region. Exact route/guard/arguments remain unknown.
+No fresh minidump/MEMORY.DMP; volmgr46 dump initialization failure. No Present or
+PresentTransfer receipt persisted. SourceAddressStatus0 remains proven.
+VERDICT REJECTED as successful submitted-BLT/completion; exact guard INCONCLUSIVE.
+No copy/fence/AGX TA3D/OpenGL/CS1.6 proof follows from the physical display latch.
 
-## HARDWARE PROVEN
+Evidence relative to .local/experiments/EXP506-cdd-blt/:
+hardware.log SHA92d6975bde894613b0346c922dfe768fadba82b9f2aae672384e7e6bf3919766;
+observation/system-events-full.json SHAf3d6a105f7c4fd579fbb987d21dabfe1a71cf062573689f28a2abff08814b09c;
+admission.etl SHA964c20e6cf2f4cea262ced5478a98f220120401769a52fb1e34b3f3f369f318e.
+Guest/host clocks differ. Ordinary recovery reset has no separate stop record.
 
-OBSERVED:
-- EXP404 natural current-G2 bind produced APPL0002 Code0, exact running service
-  and 2560x1600x32 Windows video controller.
-- StartDevice stage 7, POST ownership, one source/target, child/topology,
-  VidPn enumeration/commit/visibility, pointer and PresentDisplayOnly all
-  recorded SUCCESS.
-- Code0, exact package and all system health remained stable through a separate
-  180-second post-bind window with no 41/129/1001.
-- EXP404 runner never enabled AGX routes 880/881 and had no watchdog/reset.
+EXP507 commitf9ed33077e8ca377b3a5497ceef87eeb137bb531 ran ONCE and is
+CONFIRMED discriminator / rejected functional candidate. Crash-durable trace and
+fresh dump independently prove first Submit: IRQL2 Flags2 routePresent,
+privateStage0, exact context/resident locations, DMA4096 range0..184,
+privateSize8192 range0..0, fence253,node0,engine0, guard15
+PrivateEndLow -> C000000D ->119/2. Do not rerun507. Hardware log SHA
+d8bb2efd64c8b90197252f8ec0256db8fd684d1eaa764d3871f5bc04ea54a5b5;
+decoded SHAb990ca15ebbe395397de67c889501be0054a7be5a7f6ce4e8545acf1132f3849;
+dump SHA592eb813ac64adaeb9ea6c930913f463595eb958f17358bb236853873e33b3c2.
+No copy/fence/AGX render proof.
 
-INTERPRETATION:
-- Registering the inert ISR/DPC pair made Dxgkrnl connect/unmask current-G2
-  level AGX IRQs and caused the earlier cumulative-DPC watchdogs.
-- A synchronous no-VSync KMDOD must leave ISR/DPC unregistered until a real AGX
-  status/ack/completion handler exists.
-- EXP403 also proved SystemDisplay callbacks cannot perform registry I/O on the
-  any-IRQL bugcheck path; EXP404 contains that correction.
-- EXP412 hardware-proved the complete production memory qualification seam:
-  Windows DXGK physical objects/ADLs/maps, 70 real HVC 0x4d31 batches through
-  current m1n1, 4152 translated sub-40-bit host pages, context-63 four-page
-  16-KiB UAT, one exact 16-MiB mapping at GPU VA 0x1500000000, gpu-region TTBR
-  publication/readback, deterministic first/last leaf translation and reverse
-  cleanup. Its 128-byte proof has StartStage 10 and both statuses zero.
-- Therefore MEMORY_PAGING_IMPLEMENTED=YES and
-  MEMORY_PAGING_HW_PROVEN=YES. BuildPagingBuffer encode/worker/DMA completion
-  remain implementation-proven; they were not separately exercised by the
-  qualification branch.
-- EXP425 extends that hardware proof to one exact 64-MiB object: 263 HVC
-  calls, 16448 translated pages, five UAT pages, one context-63 mapping at
-  0x1500000000, exact first/last leaf readback and clean teardown. The lower
-  56 MiB is now the proven Windows/scanout range and the upper 8 MiB remains
-  the EXP208 tail.
+Causal fix commit413704ab53d9a062fc4f5e1b4c521cb856c5c811 accepts zero
+private submission end for nonpaging while still rejecting nonzero ends below
+validated shadow BytesUsed and all ends above DmaBufferPrivateDataSize. Microsoft
+documents start0 for nonpaging and the range as only the associated portion of
+the full private buffer. Actual RED then GREEN;92 render+12shared tests PASS.
+EXP508 HARDWARE PROVEN: first Submit guard0/status0; complete2560x1600x4
+CPU-assisted copy16384000bytes; exact fence253; DMA_COMPLETED NotifyInterrupt1
+and NotifyDpc1. Receipt SHA451e759d1f484ee94d94ca8434feaaceac0c554ba26c77ce82ea23f1a6401465.
+This closes CDD presentation copy/fence only, not AGX rendering. Next boundary is
+interactive Windows GDI producer -> RenderKm/Patch/SubmitRender -> physical AGX
+TA3D/completion. Prepare qualification receipts before requesting local sign-in.
 
-## FIRST UNKNOWN / FAILED BOUNDARY
+EXP509 current: generic nonpaging range commit
+c264acc724f24e73a2b47c2708971c46e37a3a5b and GDI hardware receipt commit
+a1a27c4c5459e9bf46f153fb7089ef5bbcab8975; R2 IRQL-analysis-only correction
+bb0c656d9d07fe863e2814d007833c1d46224993.94render+12shared PASS. Pinned
+R2 normal+SubmitQualification build/sign/Universal/analysis PASS with only
+inheritedC28251. Exact30.0.509.0 ZIP SHA
+2ba514c403240ef425dd08cdb7ceb0331f7d1c4afea365c25d0bd270162cf487;
+SYS SHAef51d5838ff6f443fda62fba44c6009b9635f2eea856d1dd42b06fc75b226f13.
+R1 prohibited from staging dueC28167; R2 is installed and active once.
 
-Memory hardware qualification is closed by EXP412/EXP425. Functional readiness
-is now 14/14: commit `7cf5495` provides the exact real UMD resource/DirectFlip/
-Present path and commit `6c96d53` atomically publishes the complete Type1 group
-only after a fully successful StartDevice. Commit `230a99a` links the
-EXP425-proven lower
-56 MiB to the existing ABI-v2 fixed-panel broker, exact primary validation,
-nonblocking SetVidPnSourceAddress, matching D589/CRTC_VSYNC/DPC and synchronous
-POST restore/release. This is implementation evidence only; the integrated KMD
-scanout path is not hardware-proven. The first unknown is whether current
-Windows admits the complete Type1 vector and which exact downstream callback
-or UMD/backend boundary is reached first; no runtime layer is called proven
-until its own receipts exist.
+At17:11:04Z R2 live: SSH8CPU/APPL0002 Code0/serviceRunning/input/xHCI/NVMe;
+InteractiveUsernull; no GDI receipt or0x5090 trace before workload. This proves
+clean no-workload control only. Fullowner launcher exec36440/Python75166 soleL41;
+L43present/unowned. KEEP RUNNING. Await local sign-in and one execution of
+C:\Users\pavel\EXP509-LIST-GDI.cmd; it only lists displays and writes a log.
+Then derive exact display/LUID and run one explicit draw. No cleanup/reboot yet.
 
-Commits `4d539ea`,
-`421a1ac` and `ec214ae` provide the offline-green one-node substrate:
-one monotonic queued/active/completed interval, exact active-fence completion,
-queued-work removal at DMA-buffer-boundary preemption, dispatch blocking until
-one preemption notification, and reset reporting the active fence or completed
-boundary while clearing outstanding work. The first unknown is now connection
-of the exact EXP208 arena/output binding to the production memory owner and
-then real AGX publication/completion. Commits `2ee3398` and `7912547`
-now prove RenderKm -> Patch -> exact sealed packet -> common queued fence
-offline. Commit `68172a3` proves the only truthful EXP208 workload is the
-exact 16x16 A8R8G8B8 ColorFill 0xff112233 and can rebase its arena inside the
-existing 16-MiB UAT mapping. Commit `45969de` reserves the upper 8 MiB for
-that arena and advertises only the lower 8 MiB to VidMm while leaving the
-EXP412-proven mapping unchanged. Commits `b6ee1a6`, `abe363f` and `eead97f`
-then resolve one exact Windows destination tuple, materialize/rebase/apply all
-159 relocations in the borrowed tail, and bind object 40 to that tuple before
-common enqueue. No activation, enqueue-only completion, AGX queue, physical
-IRQ or capability was added.
-Commit `4285cef` makes the existing EXP208 builder consume that rebased bound
-image and produce exact TA/3D roots, events, stamps and done pointers. Commits
-`f9ad365`, `35f5a68` and `c932a36` make the accumulated queue/completion stack
-reproducible and add an external-image mode: it retains firmware/channel/queue/
-event ownership but delegates image and prepared-range resolution to the
-EXP412-backed owner instead of allocating a second 64-MiB pool or republishing
-context 63. These portable provider modules are not yet linked to the Windows
-Start/Submit/DPC lifetime. Commit `3a4b55e` closes that implementation seam:
-the synthetic-889-only platform runtime reuses the production allocator for
-firmware context 0, borrows the already published context 63, runs the exact
-packet through the existing D3/TA provider, polls the event ring at PASSIVE,
-and advances the exact Windows fence only after both event/stamp/done-pointer
-observations. EXP423 WDK builds are green, but no hardware run has occurred.
+Operator reports black physical panel. Read-only17:13 reanchor: Windows healthy;
+session1 winlogon/LogonUI/dwm running, exact DCP swap9/latch9 occurred, but no
+later latch and no GDI receipt/0x5090 trace. Current primary contents are black;
+this is not a crash verdict. Before blind login, request one Space/touchpad input
+to trigger natural LogonUI damage; then inspect new DCP/Present/GDI receipts.
 
-## LAST KNOWN GOOD FOR THIS BOUNDARY
+Space input produced no new latch/Present/GDI receipt; Windows remained stable.
+Next minimal physical action is blind local sign-in only. Confirm InteractiveUser
+over SSH before asking to run the prepared read-only list helper. EXP509 remains
+installed/Code0 with PID75166 soleL41; no reboot/cleanup.
 
-- EXP404 source/test composite / SYS:
-  `1fe3c34ec6da571b89fe7aaa8524f89dd57cdfa0de04d548ff83375616315468` /
-  `9a4b43a6de0c7422324daf2f8a193c24363209389b5c47417cbeba545cc9b139`.
-- Phase-B / health / display inventory evidence SHA-256:
-  `37a4fc5f4ad082153204ed96f24f3a870f0cb4205e64db1b4a10240324efecb7` /
-  `e2c9c0d359582b5b06fce9d6f7954f96455edd5ce7965595d7e8acdeb33a7096` /
-  `9e92b5f3ae3fe5c265e3182861286e68a5841a156b01e7e78eeba824ae776b2e`.
-- EXP214 remains the byte-exact Full Graphics build/admission control:
-  source/test composite
-  `25718ba071971c8cb94a6847908f0a722ffdb4f6767b9ca4d548514ea6713d63`.
+Blind sign-in succeeded: InteractiveUser J313-WIN\pavel, Explorer+DWM session1,
+LogonUI gone. Physical swap10/latch10 occurred; no GDI receipt/0x5090 trace yet.
+Await one Win+R execution of C:\Users\pavel\EXP509-LIST-GDI.cmd, then read exact
+display/LUID over SSH. Candidate remains installed and stable; no cleanup/reboot.
 
-## REJECTED / DO NOT REUSE
+List helper completed: exact target \\.\DISPLAY2, attached/nonmirror state0x5,
+source0,LUID high0 low0x3eb39; draw_calls0 and clean result0. Prepared exact one-
+draw C:\Users\pavel\EXP509-DRAW-GDI.cmd SHA
+b92665bc679bf7d6758c72cda1fd6dc8aa8ca51af7e5f2091cdbc4e3fa11bcd8;
+remote hash verified and output absent. Await one Win+R execution only, then
+collect producer/0x5090/GDI receipt/host evidence. No reboot/cleanup yet.
 
-- EXP398–EXP412 package identities are terminal and clean.
-- Explicit receipt flush removal alone is rejected; inert IRQ registration is
-  the confirmed watchdog cause. Do not register ISR/DPC/ControlInterrupt before
-  implementing the real AGX interrupt contract.
-- Do not restore platform-version overrides, old recovery binaries, or disable
-  Defender/WdFilter.
+Offscreen draw actually ran once and log result0, but no KMD/GDI trace/receipt:
+REJECTED as hardware producer, Windows used software DDB path. Do not repeat.
+EXP510 commit6cb52954096b98b027e14c3d0ed496b06f558b39 then ran one exact
+direct display-DC PATCOPY for DISPLAY2/LUID0:3eb39. Producer returned result0,
+but no0x5090/KMD receipt or new DCP work appeared: REJECTED as KMD producer,
+driver not rejected. Output SHAab41a1bf80ee8b93b93359a37b5392c0f03d9b13615edc2747b114bedc0ba735;
+temporary task removed with cleanup SHAb8005df0704d7cf3bdbaf2d2358a98d62ea96692e79ae95aa53a570c0237924a.
+APPL0002 remains Code0, AppleAgxAdmission RUNNING,8CPU/SSH live and exact EXP509
+R2/PID75166 soleL41 retained while deriving the next supported D3D runtime/UMD
+producer. Do not repeat GDI producers or restore TestContext/private one-shot ABI.
 
-## NEXT CANDIDATE
+## Final live ordinary clean baseline
 
-- Continue the committed EXP407 mandatory-feature vertical-slice plan at
-  render fence/progress while preserving the EXP406 coherent vector and
-  synthetic-only IRQ platform for any later admission hardware run.
-- The atomic readiness gate is implemented and wired into the real Type1 path
-  in commit `52d3bf6`: the current 4/14 state publishes zero mandatory caps and
-  an accidental premature all-ready state fails closed. All later layers must
-  earn their readiness bit through deterministic tests; the complete
-  capability writer is installed only at 14/14.
-- Typed nonpaged device/context ownership is implemented and pinned-WDK ARM64
-  KMD+UMD build, analysis, Universal validation, Inf2Cat and signing pass with
-  zero warnings/errors. This offline package is not an EXP407 hardware
-  candidate and must not be staged.
-- Segment1/Segment2 translation and allocation contracts are implemented in
-  commits `32cd23e` and `1e76707`: 4-KiB software aperture, 64-KiB local
-  GPU-VA segment, 16-KiB UAT prerequisite, paging plans, gated QuerySegment4,
-  and standard/create/destroy/describe/open/close allocation DDIs. The
-  functional memory readiness bit is now true; EXP412 supplies its required
-  physical-owner/HVC/UAT hardware proof while BuildPagingBuffer remains an
-  explicit later Windows-driven exercise.
-- `MEMORY_PAGING_IMPLEMENTED=YES` and
-  `MEMORY_PAGING_HW_PROVEN=YES`. EXP411 first proved physical-owner/HVC/local
-  allocation and isolated a false CPU-VA 16-KiB alignment guard at UAT stage 5.
-  Commit `4779f02` retained physical 16-KiB alignment while allowing a
-  naturally aligned kernel mapping; EXP412 then reached stage 10 with exact
-  PA/UAT/TTBR/readback/cleanup proof. Exact `oem5.inf` cleanup and stale
-  APPL0002 devnode removal restored the package-free ordinary-G2 baseline.
-- One-node lifecycle and paging-backed fence primitives exist in
-  `3df8e82` and the unified progress/preemption/reset substrate exists in
-  `4d539ea`, `421a1ac` and `ec214ae`. The current functional readiness
-  mask is 4/14
-  (WDDM3 identity, one-node topology, memory/paging, device/context).
-  SCHEDULER and DMA_BOUNDARY_PREEMPTION are now implementation-ready through
-  the linked non-paging provider, but hardware-unproven. PER_ENGINE_TDR remains
-  false because active reset cannot yet quiesce and restart the backend.
-- RenderKm/Patch is implemented in `2ee3398`: one pointer-free ColorFill
-  record, exact live allocation, one prerecorded destination relocation,
-  Segment-2-to-AGX-VA translation and irreversible exact-fence seal.
-- SubmitCommand/common ownership is implemented in `7912547`: the sealed
-  record is bound to its typed context/allocation lifetime and may enter only
-  the common scheduler Queued state. It is not activated or completed.
-- EXP208 compatibility is narrowed in `68172a3`: exact hardware capture
-  matches only a 16x16 A8R8G8B8 PATCOPY clear 0xff112233; output object 40 has
-  one GPU-VA edge and no physical edge. Its 5.8-MiB arena can be rebased to
-  0x1500800000 inside the EXP412-proven mapping. The supported primitive mask
-  intentionally remains zero until provider linkage is complete.
-- The non-overlapping memory partition is implemented in `45969de`: lower
-  8 MiB is the only advertised/translated allocation range; upper 8 MiB is a
-  checked borrowed backend view of the same CPU/host-PA/GPU-VA object. The
-  qualification build still proves the complete 16-MiB map.
-- Exact image and output binding are implemented in `b6ee1a6`, `abe363f` and
-  `eead97f`: production Start borrows the tail, materializes the accepted
-  image, rebases roots/descriptors, applies all relocations, and Submit binds
-  the sole object-40 edge to the packet's exact Windows CPU/host/GPU tuple.
-  EXP419-421 WDK gates are green and no package was staged.
-- `SCHEDULER`, `DMA_BOUNDARY_PREEMPTION`, `GDI_COMMAND_BUFFER`, and
-  `AGX_COMPLETION` are now IMPLEMENTED but HW_PROVEN=NO in `3a4b55e`; current
-  functional readiness is 8/14 and atomic Type1 still publishes zero.
-- Next implementation boundary: restartable per-engine TDR over the same
-  provider, then the remaining scanout/DirectFlip/UMD/non-VGA group. No
-  hardware bind until the complete truthful group exists or a separately
-  preregistered production-code qualification seam is justified.
-- `PER_ENGINE_TDR` is IMPLEMENTED/HW_PROVEN=NO in `660c187`; functional
-  readiness is 9/14. EXP425 then expands the one local mapping to 64 MiB so
-  Segment 2 can expose the exact 56-MiB scanout pool plus 8-MiB backend tail.
-  EXP425 has now hardware-proven that exact range and cleanup. The next source
-  boundary is Windows ownership of the existing Scanout ABI v2 pool and
-  nonblocking SetVidPnSourceAddress-to-latched-VSync completion.
-- `D589_SCANOUT`, `KMD_DIRECT_FLIP`, and `NON_VGA_STOP` are
-  IMPLEMENTED/HW_PROVEN=NO in `230a99a`. EXP426 passed 71 relevant tests and
-  both pinned-WDK build/package profiles with no new analysis diagnostic; no
-  package was staged.
-- `UMD_DIRECT_FLIP` and `INDEPENDENT_FLIP` are IMPLEMENTED/HW_PROVEN=NO in
-  `7cf5495`; EXP428 proves ARM64/export/build and portable exact compatibility,
-  not a Windows load/callback. Commit `6c96d53` completes atomic Type1 wiring;
-  functional readiness is 14/14. EXP429 is offline-only because its manifest
-  names the pre-commit source state; rebuild once at exact HEAD before staging.
-- Reuse current shared allocation/context/paging/scheduler/GDI/backend pieces,
-  current m1n1's hardware-proven retained DCP owner and the EXP208 graph. Do not
-  bind hardware until the entire mandatory group is real and offline-green.
+At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,
+AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
+exactlyoneCode28APPL0002/INFnull; noAGXpackage,
+service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
+stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
+InteractiveUsernull/TermServiceStopped; RDP and interactive input/display not
+workload-tested. final-ordinary-health.log SHA
+1d262413da4fe1e7495be62e7f80e1982a4f9ce4dbd85c485d641f1780582594.
+Launcher exec97110/Python60927, soleL41owner; L43present/unowned. KEEP RUNNING.
+EXP508 ordinary-contract.bin SHAb1ab2b612813447ff812aae35544eb172266952ecc6b98e6ceafb4a279d6dcfd.
+Always freshly check SSH/process/endpoints before any replacement.
+
+Recovery: ordinary377/392 withR2 failed to reachSSH and reset. Emergency377/385
+restoredSSH for evidence. Exactoem5 and phantom removed. Stale stoppedservice
+Owners{oem5.inf} removed only after package/INF/devnode absence and exactidentity
+checks. SYS/UMD moved to C:\Users\pavel\EXP506-observation\removed-orphans
+and copied locally (recoverable, not installed). Final graceful restart restored
+ordinary377/392. No candidate retry/unrelated removal/ANS change.
+
+## Source, verification and artifacts
+
+Branchfeature/j313-gpu-acceleration HEAD3f75dfed139987cab1819bb09480fb928dd1b553.
+Featurec43a2352c91152b4baffed414e3008781b83955e implements deterministic buffered
+CDD BLT/prepatch/repatch/submittedsnapshots/shared64FIFO/CPUtransfercompletion/
+preemption/reset/worker-DPClifetime. R2 keeps reset locks in residenthelper.
+1:1BGRA8888 sourcelocal2/aperture1 -> local2,64KiBbacking/logicalbounds retained;
+general overlappingmultipass/arbitraryqueuepressure not established.
+CPU presentation data transfer is NOT AGX rendering.89render+12shared testsPASS.
+NativeR2 KMD/UMD/Universal/analysis/Inf2Cat/TestSign/versionPASS,0errors,
+C28150absent/onlyinheritedC28251. R1 held and neverstaged. No source editsafterR2.
+
+Finaldir .local/experiments/EXP506-cdd-blt/r2/:
+source.tar.gz d9d4daa5d81ee689c7e2272deb9c7707f0baeb2fe96ab1c47134f71338a0860a
+EXP506.zip89a3fa5a587e99627ea7daca35cf54ec404d9d499e1da0ac496171882856be1c
+manifest.json99b9f71d363739a408cda35afe45d8d60929518b561bf058f8d18898e09aa69a
+SYSfc5f0cf36e00a4a72ee77e4b5a148b4bdb0530e43dda983744d274f3cb7cf3b9.
+Fullhashes/buildpaths/source scope inhandoff. Oldsealedpreservation unchanged,
+not currentcandidate. No whole-repoGREEN claim: legacyCHANGESschema issues preexist.
+
+## Accepted boundaries — do not reopen without contradictory evidence
+
+475retained-root/broker/context0;477nativefirmware/initdata/DC_Init;
+478BackendRuntimeStart/Ready/arena/context/queues;490SystemDevicenullruntime;
+491SystemContextnullruntime;492onepageaperture;494StartDevice0/Code0/truthful
+UpdateMonitorLinkInfo;495native2560x1600 total2642x1682 pixel266630000Hz;
+496preservesOSMinimumVSyncFreqsentinel;497rawtoken/498legacyGetHandleDataREJECTED;
+499modernAcquire/Release;500pagingPatchroutefix(noexecutionproof);
+501CDDshadowmetadata;502CPUvisibleSupported3Preferred2/primarylocalonly2;
+503internalIRQ0;504internallatchIRQseparatedfromOSVSyncsubscription,
+SourceAddressStatus0+A408swap10/D589latch10;505actualFlags1bufferedCDDPresent.
+FUNCTIONAL_READY_MASK14/14 is implementation readiness, not hardware proof.
+No Windows-originAGXTA3D/repeatedcompletion/fence/OpenGL/CS1.6hardwarePASS.
+
+## Immutable runtime/recovery and trusted tools
+
+Fullowner broker1: .local/experiments/EXP477-initdata-firmware/m1n1-final.macho
+b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 plus
+.local/experiments/EXP-20260904-406-coherent-abi-admission/J313_EFI-exp406.fd
+c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+OrdinarybrokerUNSET:
+.local/experiments/EXP-20260903-377-secondary-cpu-receipt/assisted-boot/m1n1.macho
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a plus
+.local/experiments/EXP-20260903-392-current-gpu-mu-publication/assisted-boot/J313_EFI.fd
+16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+EmergencyONLY377plus
+.local/experiments/EXP-20260903-385-hvc-single-page/recovery/J313_EFI-no-agx-autoboot.fd
+279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
+Neverold164/241; noBCD/NTFSarchaeology. SIGINTsnapshots/resumes;
+SIGTERMsnapshots/resets; neverkill-9. Gracefulrestart/naturalexit/USBreset preferred.
+
+Airpavel@192.168.1.37 key/Users/pavel/.ssh/air; builderpauls@FRYZZING
+key/Users/pavel/.ssh/windows_builder. BatchModeyes/ConnectTimeout5/
+StrictHostKeyCheckingno/UserKnownHostsFile/dev/null. RemoteCMD: uploadps1 then
+powershell -NoProfile -ExecutionPolicy Bypass -File. SDK/WDK10.0.26100.0,
+MSVC14.44.35207, invocation-localWindowsKits10override only. TrustedR2root
+C:\Users\pauls\EXP506-cdd-blt-r2. Freeze exactpreviousarchive plus committedscoped
+changes, neverentiredirtytree. CollectorEXP488-collect-current.ps1 uses-EvidenceDir.

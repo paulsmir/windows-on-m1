@@ -1,5 +1,3600 @@
 # Hardware Experiment Ledger
 
+## EXP510 explicit display-target GDI producer — preregistration 2026-09-06T18:10:18Z
+
+EXP509 offscreen producer result: helper target/LUID/API/cleanup all succeeded,
+but no RenderKm,0x5090 trace,GDI receipt or new DCP latch. Producer log SHA
+9174c0b9c6a83c04354b685f39224d6112aea064a376442dfe15cf13f77fb0a3.
+VERDICT REJECTED as hardware producer: Windows implemented the private memory-DC
+DDB PATCOPY in software. Driver not rejected. Do not repeat offscreen draw.
+
+WHY THIS HYPOTHESIS: direct drawing to the exact display DC targets the attached
+primary display path instead of an offscreen DDB and is the smallest supported
+Windows GDI difference capable of reaching RenderKm. Exact current discovery is
+DISPLAY2,state0x5,source0,LUID high0 low0x3eb39. Single variable is producer target;
+retain the exact installed/running EXP509 R2 package and full-owner PID75166 as
+explicit package retention. No driver/source/platform/reboot change.
+
+Producer commit6cb52954096b98b027e14c3d0ed496b06f558b39 adds --draw-display:
+same exact display/LUID checks, one16x16 PATCOPY directly on display DC, GdiFlush,
+3s hold and cleanup. No memory bitmap/readback/implicit display/TestContext or
+D3DKMTRender. Static contract RED then GREEN. Source archive SHA
+78b7bf455bba39bf80704eff8de661b84a0e706075dcc93d14de874d20e4b825;
+build script SHAd7c1f6736354b52caf850b2d8099019b2ebc2474a14456e172a8fa9fcf94993a.
+Build on trusted FRYZZING fresh C:\Users\pauls\EXP510-display-gdi with pinned
+SDK/WDK26100/MSVC14.44, ARM64 static runtime, warnings-as-errors and analysis.
+
+BUILD PASS: ARM64 static producer908288bytes SHA
+6c5c3ef88acc3093b6d1585825d5459913c88764e9a15caab9b5ef6c0ed0da2c;
+manifest SHA3ad2f8185a160358023a4bab20df54fcbc6b89288b4296c4622ccbce2bfe4fa5;
+build log SHA6b80c100c21ecce782855ea43184714a541ca544013ae1a8733e4e3c1da4ab1f,
+0warnings/0errors. Exact wrapper SHA
+0d0500f4a18011db45e016c96ff4fc37e1166220a5b5ece577157cab0de78280.
+Remote hashes match; output absent; no existing EXP510 task; logged-in exact user,
+driver Code0/serviceRunning. Register one Task Scheduler action executing
+C:\Users\pavel\EXP510-RUN-DISPLAY-GDI.cmd under principal J313-WIN\pavel with
+LogonType Interactive and one-minute limit, start once, wait exact output and
+process exit, then unregister only EXP510-GDI-DRAW. No reboot/rebind/package change.
+
+After exact executable hash, transfer to Air and create one one-shot interactive
+Task Scheduler invocation for logged-in J313-WIN\pavel; task command explicitly
+uses \\.\DISPLAY2 0x0 0x3eb39 and redirects producer output. Verify output absent,
+run once, wait completion, delete only temporary task. PASS requires EXP509 KMD
+RenderKm/Patch/Submit/backend/TA3D/fence receipt, not producer API success. If no
+KMD trace, reject direct GDI as hardware producer and choose next supported
+Windows producer. No package cleanup until driver verdict/evidence collected.
+
+HARDWARE RESULT 2026-09-06T18:15:59Z — REJECTED AS KMD PRODUCER; DRIVER
+UNCHANGED. The exact hash-pinned ARM64 producer ran once under the logged-in
+interactive principal and returned result0. It verified exact DISPLAY2/source0/
+LUID0:3eb39, created the brush, completed one direct display-DC 16x16 PATCOPY,
+flushed GDI, held for3016ms and cleaned up every object. Despite API success,
+there was no new0x5090 broker trace, Wom1GdiHardwareReceipt remained absent and
+the host log had no DCP work after the pre-existing login swap10/latch10. Thus
+modern Windows did not route this operation through AppleAgx RenderKm; no KMD
+render, AGX TA/3D, completion or fence claim follows. The output SHA-256 is
+ab41a1bf80ee8b93b93359a37b5392c0f03d9b13615edc2747b114bedc0ba735.
+The one-shot scheduled task completed with LastTaskResult0 and was then removed;
+cleanup receipt SHA-256 is
+b8005df0704d7cf3bdbaf2d2358a98d62ea96692e79ae95aa53a570c0237924a.
+APPL0002 remains Code0, AppleAgxAdmission remains RUNNING,8CPU/SSH remain live,
+and the exact EXP509 package/full-owner session is retained only while deriving
+the next producer contract. Do not repeat either GDI producer. Next offline
+boundary: derive a supported D3D runtime/UMD producer path from pinned WDK and
+the current fail-closed UMD; do not revive the TestContext/private one-shot ABI.
+
+## EXP509 interactive GDI to physical AGX receipt — preregistration 2026-09-06T16:59:26Z
+
+CURRENT HARDWARE STATE17:11Z: R2 exact package staged as oem5 version30.0.509.0
+from fresh clean Code28, then one natural immutable477/406 bind. Windows is SSH
+reachable with APPL0002 Code0, serviceRunning,8CPU/input/xHCI/NVMe healthy.
+Interactive user is null and Wom1GdiHardwareReceipt absent; no0x5090 GDI Submit
+trace exists. This is the expected no-workload control, not a GDI verdict.
+Full-owner launcher Python75166/exec36440 soleL41; L43unowned. Candidate remains
+installed/running for the preregistered workload. Required physical action: local
+Windows sign-in, then Win+R run C:\Users\pavel\EXP509-LIST-GDI.cmd once. It only
+executes the hash-verified producer --list and writes EXP509-gdi-list.txt; no draw.
+Afterward collect list over SSH, derive exact explicit display/LUID command and
+request one draw action. Do not reboot, cleanup, rerun bind or start another
+launcher while awaiting operator.
+
+BLACK-SCREEN REANCHOR17:13Z: operator reports physical panel black. Read-only
+checks prove Windows is not hung: APPL0002 Code0/serviceRunning/SSH8CPU and
+input/xHCI/NVMe healthy; session1 has winlogonPID856,LogonUIPID1256,dwmPID5804.
+Host log has exact A408swap9/D589latch9 but no later DCP latch, no0x5090 GDI
+Submit trace and registry GDI receipt remains absent. Thus the panel is displaying
+the single latched primary whose current contents are black; no evidence of a
+crash, lost DCP owner or GDI failure. Next minimum physical discriminator is one
+Space key or touchpad movement only, without reboot/login credentials. Observe
+whether this generates another Present/DCP latch or first GDI receipt. Candidate
+PID75166/exec36440 remains soleL41 and must stay running.
+
+INPUT RESULT17:14Z: operator pressed Space once. No new A408/D589, no Present,
+no0x5090 GDI trace and no registry GDI receipt. Windows remains Code0/SSH8CPU;
+session1 DWM/LogonUI alive and launcher stable. This rejects a simple lock-screen
+damage wake as sufficient stimulus. Next physical action is local blind sign-in
+only; verify Win32_ComputerSystem.UserName becomes nonnull before asking for any
+command. Do not reboot or cleanup candidate.
+
+BLIND SIGN-IN RESULT17:16Z: confirmed InteractiveUser J313-WIN\pavel;
+ExplorerPID5316 and DWM PID8516 in session1, LogonUI absent. Sign-in caused exact
+A408swap10/D589latch10 while adapter remained Code0/serviceRunning/SSH8CPU.
+No GDI receipt or0x5090 trace yet, so login/display presentation is not the GDI
+PATCOPY workload. Next physical action: Win+R then execute exact read-only
+C:\Users\pavel\EXP509-LIST-GDI.cmd once; collect its file over SSH. No reboot.
+
+GDI LIST RESULT18:02Z: exact read-only helper hash verified and ran once. One
+eligible target: \\.\DISPLAY2, Apple AGX clean WDDM render-admission experiment,
+state0x5 attached/nonmirror, source0, adapter open status0, LUID high0 low0x3eb39;
+clean close/delete and result0/draw_calls0. List SHA
+4217289e875941f18a6e316dd7c19c14445f84f828982b6d964dab41d81de368.
+No GDI receipt/0x5090 trace or new DCP latch, as expected for list-only.
+Exact draw wrapper C:\Users\pavel\EXP509-DRAW-GDI.cmd SHA
+b92665bc679bf7d6758c72cda1fd6dc8aa8ca51af7e5f2091cdbc4e3fa11bcd8
+contains only one explicit --draw \\.\DISPLAY2 0x0 0x0003eb39 and redirects its
+log. Remote hash matches and draw output is absent before execution. Operator
+must run this wrapper once via Win+R; no implicit target or second draw.
+
+WHY THIS HYPOTHESIS: EXP508 proves natural CDD Present/copy/fence but the guest has
+no interactive user and issued no RenderKm. Existing supported Win32 producer
+creates one exact GDI PATCOPY without TestContext/private ABI fabrication. Current
+production path maps RenderKm -> Patch -> SubmitRender -> EXP208 TA/3D -> dual
+event/stamp/done completion, but has no hardware receipt. The generic nonpaging
+private-range invariant is now applied to every GDI consumer at commit
+c264acc724f24e73a2b47c2708971c46e37a3a5b.
+
+Single functional variable: an interactive Windows GDI PATCOPY workload. Source
+commit a1a27c4c5459e9bf46f153fb7089ef5bbcab8975 adds qualification-only observation
+without changing production commands: one160-byte scalar receipt spans RenderKm,
+Patch, SubmitRender, backend submit, expected TA/3D events/stamps/done pointers,
+physical completion progress, exact fence NotifyInterrupt and DPC. Existing
+PASSIVE worker persists; StopDevice persists final DPC. A separate monotonic
+0x5090 broker trace preserves first GDI Submit args/status before a possible119.
+No new worker, ISR action, m1n1 ABI, UAT, firmware, queue, display or caps change.
+
+WINDOWS CONTRACT: use only OS GdiContext RenderKm, physical Patch/Submit and exact
+DMA_COMPLETED fence. AGX/ASAHI CONTRACT: existing EXP208 materialization and dual
+TA/3D observation unchanged. TRANSLATION: receipt follows one context/fence and
+stores only scalars under a dedicated non-DIRQL lock; synchronized ISR does only
+Windows NotifyInterrupt and receipt updates after returning from DIRQL.
+WHAT IS STILL UNKNOWN: whether interactive PATCOPY reaches RenderKm and whether
+both physical queues complete the exact Windows fence.
+
+RED lacked the receipt state machine; GREEN proves one context/fence, ordered
+stages, failure rejection, DPC-before-progress safety and exact completion. Self-
+review moved receipt mutation outside DIRQL and records Submit ownership before
+worker dispatch. Final94 render+12selected WDDM/shared tests PASS; diff check PASS.
+
+Frozen source is exact EXP508 source SHA
+2daded98e154c7753ed1dfc396356d4cd1a2e0d856cc9aec83a6fdbc2f46567b plus
+committed delta througha1a27c4 overlay SHA
+66636bc2adb2862350101e141666458538344db4b560c6852987a70988fa243a;
+combined .local/experiments/EXP509-gdi-hardware/source.tar.gz SHA
+048fdedff0feaa435c4182d67b00b3146496827993153c20f9d2a245890d02cb.
+Build script SHA21780622841d2cc292d711b8397bf30db84b26f713e6faec231a397a9efba1b5.
+Build on trusted FRYZZING fresh C:\Users\pauls\EXP509-gdi-hardware using pinned
+WDK/SDK26100 and MSVC14.44.35207; require normal and SubmitQualification KMD/UMD,
+analysis, Universal, Inf2Cat/sign, coherent30.0.509.0 and exact manifest hashes.
+
+R1 BUILD RESULT: binaries/package/signing/Universal/version completed but analysis
+reported two new C28167 warnings because cross-function lock helpers obscured IRQL
+restore from the analyzer. R1 ZIPc6cd1baa4781457a1721bd3eb14cfa94c18bc0a398c70e5a79ca4788085b9daf
+is preserved and MUST NOT be staged. This is builder/annotation evidence, not a
+hardware result. Commitbb0c656d9d07fe863e2814d007833c1d46224993 inlines normal
+KeAcquireSpinLock/KeReleaseSpinLock pairs at each <=DISPATCH receipt call site;
+no receipt or driver behavior change.94+12 tests remain PASS.
+
+R2 frozen source is R1 source SHA048fdedff0feaa435c4182d67b00b3146496827993153c20f9d2a245890d02cb
+plus one-file overlay SHA53b3a1a3ff6db6a9cba25fdf45d38c33ebb2fa4a358b66b6f76cc17381525f5c;
+combined SHA12768f312649e8e7c39dfaa9e4b4629310b550955231642a88e6acca044c74fc.
+R2 script SHA804e0ba28b66e239ab8b052170a2b0a4e4d01e3fd50457dfe013cacb66163a03;
+fresh remote root C:\Users\pauls\EXP509-gdi-hardware-r2 and source
+C:\Users\pauls\EXP509-source-r2.tar.gz. Require C28167 absent and no new warning;
+R1 remains unstaged.
+
+R2 BUILD PASS: normal+SubmitQualification KMD/UMD, analysis, Universal,
+Inf2Cat/TestSign and coherent30.0.509.0 complete with0errors; both C28167 absent,
+only inheritedC28251. R2 ZIP SHA
+2ba514c403240ef425dd08cdb7ceb0331f7d1c4afea365c25d0bd270162cf487;
+manifest SHA2a50c16e16a2e0f359f1794ec2232fc730673fd64d6b9bdcf17a8e8b18dcbde1;
+PDB SHA1aafbd804f45ce1d0caa61a74abc8b94c025ec566a30054f3f77ab7bd905766f;
+SYS SHAef51d5838ff6f443fda62fba44c6009b9635f2eea856d1dd42b06fc75b226f13;
+INF SHA8769c46e80ca51f277c75857d0f71c7409e9cce1a81ef34a4899d38f139fdfeb;
+CAT SHA95215cc40b76cf9b15cee96c808bc2215474dcfb8af81273277d0ef47184c48f;
+UMD SHA2092354e888d84b7367d7e1d2991ce5797447c5921a05cd2b657d4824f29fd26.
+StageSHA74e1603179897b4353075394c601cb723d28e0676d72ec2f2a07d51d6d5f5a6a;
+collectSHA7b6599e982e27a643b81f6d6a0a04bdf3a714de94340a4078a8ef117d52420c1;
+cleanupSHA6f60858827aace3379a40a88c43381ef7bac5d4988a0c5fd77d6318db7e51f98;
+launchSHA5f1f8bd0b1175f5c28bfa4c03ce8a300b42354823ffb02c8292eadc0617a5e28;
+ordinarySHAb2b6cd2812ba3459a874a58c7ba8cc03b367a0a255d0ae265f3cd556957b9fdc;
+interactive list helper SHAb3b801faf820392d53b1e7f7502afa226e3ec7b5955bc8f611544d0833044283.
+Accepted producer C:\Users\pavel\EXP494-GdiColorFill-static.exe reverified SHA
+aec6b916a89d4d857719cb142b343c9aa5f92f0e8731adee5ebbecd456318b12.
+Fresh clean preflight, exact stage and natural bind remain before operator action.
+
+Hardware after build: clean ordinary Code28, exact stage, graceful reboot and one
+immutable477/406 full-owner launch with durable log. Confirm Code0/SSH before
+workload. Operator then signs into the existing local Windows console. Run
+C:\Users\pavel\EXP494-GdiColorFill-static.exe --list only; capture exact attached
+non-mirror display and LUID, then run one explicit --draw with those exact values.
+No implicit display, software fallback claim, old one-shot ABI or fabricated KMD
+packet. Preserve producer log, 0x5090 trace, GDI receipt, ETL/events and system
+health. PASS requires RenderKm/Patch/Submit status0, backend result0, TA and3D
+event/stamp/done complete, same fence interrupt+DPC. API success alone is not PASS.
+Collect before exact cleanup and ordinary restore. One run only per candidate.
+
+## EXP508 hardware PASS and ordinary recovery — 2026-09-06T16:36Z
+
+Exact signed FullProduction+SubmitQualification30.0.508.0 oem5 staged from clean
+Code28 and launched once on immutable477/406. Host trace: same valid first CDD
+packet as507 with routePresent/privateStage0/privateEnd0 but PresentGuard0 and
+status0. decoded-submit.json SHAb2bda076d1e796c666f69b8fd345d59da1c3376f2991874b20207f3a591bf478;
+hardware.log SHAc69b18942c9d4f4fb7e86a8f77648d4846888bdb8ab121494b78812dc13de16d;
+contract SHA523d4dc6e9e660ca7b095843ce01621e941bdc209ed32ebd41e7f95d7b584c7c.
+Windows reached SSH, APPL0002 Code0, serviceRunning,8CPU and healthy
+input/xHCI/NVMe; collector had no fresh fault events.
+
+No second natural Present occurred in the noninteractive guest, so transfer
+receipt was not yet PASSIVE-persisted. Exact package uninstall invoked normal
+StopDevice, which flushed the completed64-byte service receipt before stale
+service cleanup. Receipt SHA451e759d1f484ee94d94ca8434feaaceac0c554ba26c77ce82ea23f1a6401465
+decodes Version1/Bytes64/Fence253/Status0/BytesCopied16384000/source and
+destination exact/context exact/2560x1600/NotifyInterrupt1/NotifyDpc1.
+
+VERDICT CONFIRMED: real Windows-originated CDD Present -> successful physical
+Submit DDI -> full 2560*1600*4 CPU-assisted copy -> exact Windows fence253
+DMA_COMPLETED interrupt -> DPC. This is software presentation data movement,
+not AGX TA/3D execution, hardware acceleration or OpenGL proof.
+
+Cleanup: exact oem5 uninstalled/deleted, devnode removed/rescanned. SYS/UMD were
+already absent; stopped service had no owner and exact image path, so only that
+stale service was deleted. Graceful reboot restored ordinary377/392. At16:36:09Z
+SSH8CPU/oneCode28/INFnull/noAGX package service runningdriver files; input/xHCI/
+NVMeRunning; no current-boot41/46/129/161/1001. Python60927/session97110 soleL41;
+L43unowned. Keep running. No ANS change.
+
+NEXT boundary: supported Windows GDI producer -> RenderKm -> Patch -> SubmitRender
+-> EXP208 materialization -> TA/3D -> physical completion -> exact fence. Current
+guest has no interactive user, so CDD boot alone did not issue RenderKm. Prepare
+qualification-only stage receipts first; then the minimum operator action is a
+local Windows sign-in and invocation of the already built Win32 GDI color-fill
+producer. Do not restore old TestContext ABI or count software fallback.
+
+## EXP508 accept observed empty nonpaging private range — preregistration 2026-09-06T16:27:30Z
+
+WHY THIS HYPOTHESIS: EXP507 crash-durable trace and fresh dump independently prove
+the first packet has Flags2, routePresent, valid private shadow and resident exact
+endpoints but DmaBufferPrivateDataSubmissionStart/EndOffset0/0. Guard15 alone
+returnsC000000D. Microsoft documents start always0 for nonpaging, EndOffset as
+only the private portion associated with the submission, and
+DmaBufferPrivateDataSize as the whole driver-resident private buffer.
+
+Single causal variable: commit413704ab53d9a062fc4f5e1b4c521cb856c5c811
+accepts EndOffset==0 after the full private shadow has independently validated.
+Any nonzero end below shadow.BytesUsed and every end above full private size still
+fail-closed. No route, flags, command encoding, queue, worker, completion,
+scheduler, capability, display, AGX, firmware, m1n1 or Mu change. Retain the exact
+EXP507 SubmitQualification trace so passage or a new guard remains observable.
+
+WINDOWS CONTRACT: nonpaging private start is0; end delimits the associated
+portion and may be empty while the whole private buffer remains supplied by
+pDmaBufferPrivateData/DmaBufferPrivateDataSize. AGX/ASAHI CONTRACT: unchanged;
+this correction precedes copy dispatch. TRANSLATION: treat end0 as no narrower
+subrange and consume only the separately validated shadow record; treat a
+nonzero subrange as a lower bound that must cover the shadow. WHAT IS STILL
+UNKNOWN: whether queue admission, CPU copy and exact fence completion pass after
+guard15.
+
+RED reproduced the observed zero-end rejection before source change. GREEN accepts
+zero end and still rejects nonzero shadow.BytesUsed-1 at guard15. Final92 render
+tests and12 selected WDDM/shared tests PASS. Source is exact EXP507 archive SHA
+f225da3ff61f55fee67aa4582631d15f424836c8b79dfd551fad7c6a3a189941 plus
+two-file commit overlay SHAc5a795a3d10375d1386a571234ca0563c02816d90e50388216ae9f29be15e071;
+combined .local/experiments/EXP508-private-range/source.tar.gz SHA
+2daded98e154c7753ed1dfc396356d4cd1a2e0d856cc9aec83a6fdbc2f46567b.
+Build script SHAd8e6ebb40345f13c900b9e02a31eac40c14530257409cc69d518b8754c68dd76.
+
+Build plan executed: transfer source to C:\Users\pauls\EXP508-source.tar.gz and script
+to C:\Users\pauls\EXP508-build.ps1; run powershell -NoProfile
+-ExecutionPolicy Bypass -File C:\Users\pauls\EXP508-build.ps1. Fresh root
+C:\Users\pauls\EXP508-private-range, pinned WDK/SDK10.0.26100.0 and
+MSVC14.44.35207. Require normal and SubmitQualification KMD/UMD builds, analysis,
+Universal, Inf2Cat/TestSign, coherent30.0.508.0 and exact hashes. BUILD PASS:
+0errors, only inheritedC28251, C28150 absent. Candidate ZIP SHA
+2f6a99ce99a21ec2237f04db6ba3396cc479e08d8438eee5b6bf3333706a8222;
+manifest SHA0fabefc4ce632fec87565d113748162de959017e142414ec365da1abe4d4a6a3;
+PDB SHA04b57c7bc7dc293e6435ab24448c44d64e17c1e0fa1960359714d1ed8c8ed1ac;
+SYS SHA577fe8698f083e2383e4cc7e209eb5ad0b63b3f65f40a938a3e4248257541bda;
+INF SHA2d2fbb0ebb0b78166a28d1c9ff68080f726cf1bd407753a15d5f777c6b087f95;
+CAT SHA678f65bfa807cb9637eca59131e043c8b6637c2d46af200d72b6930bcbf597f4;
+UMD SHA3e933d74a65a6f3b01a55854aff6e75bd786e7b487bd7dbca83b4b00eeb9dc1e.
+
+HARDWARE SUPPLEMENT: stageSHA1928b6134b269add9c28bf0a8768655b29b1b5fd7e291fc4dac0b9105c2b75fe;
+collectSHA1fbe320752a2fcc111a48d1bfd8ded690c872d369f5f30abc668e8b98c765bc7;
+cleanupSHA0c1d47ab22f8ea505a2c0cf60b85b409efa6db62b2325273a66ee499641eff9a;
+launchSHA75d2a5c72721678a16b09a1a7ca157a1052af7615c674e6cff442d18a321fe5c;
+ordinarySHAfde419bcb056b4d5c7bb7b9bb5f16deac5e2fb27346f4c1ca4b8b894326111b8;
+emergencySHAf512b9b555080a020aa1c5b24619db36ddbdafebc7dfdb4c6960f9d0f2bcbc15.
+Fresh preflight must confirm launcher48781/84710, SSH8CPU, oneCode28/noAGX and
+healthy input/xHCI/NVMe. Transfer exact ZIP to C:\Users\pavel\EXP508.zip and
+stage script to C:\Users\pavel\EXP508-stage.ps1; stage only hash-verified package,
+require oem version30.0.508.0 with Code28. Graceful reboot, wait launcher natural
+exit and L41free, then one logged launch.sh to hardware.log. Decode same trace;
+collect Windows receipts/events/ETL before exact cleanup. No retry.
+
+Expected hardware: exact first trace retains routePresent/privateStage0 but guard0
+and status0, then PresentTransfer evidence identifies copy/interrupt/DPC or the
+first later failure. PASS for this boundary requires advancement beyond guard15;
+it is not AGX TA3D/OpenGL proof. Failure means guard15 remains or candidate never
+reaches it. One exact natural bind only; collect before exact cleanup and restore
+ordinary377/392. Recovery/emergency artifacts remain the immutable hashes already
+recorded for507. Do not rerun507 or change ANS.
+
+## EXP507 discriminator result and clean recovery — 2026-09-06T16:18Z
+
+Exact FullProduction+SubmitQualification30.0.507.0 oem5 was staged from clean
+Code28 and launched once on immutable477/406. Host reached physical A408swap9 ->
+exactD589latch9 then emitted35 accepted monotonic 0x5070 QUERY receipts before
+Windows reset. decoded-submit.json proves IRQL2 Flags2 routePresent privateStage0,
+context token exact, source/destination resident, DMA size4096 range0..184,
+private size8192 range0..0, fence253, node0 engine0, PresentGuard15
+AdmissionPresentSubmitPrivateEndLow and statusC000000D. Hardware log SHA
+d8bb2efd64c8b90197252f8ec0256db8fd684d1eaa764d3871f5bc04ea54a5b5;
+contract SHAabf12b3bcbbe2c30d441819d37a3b1dec5323e932357577935d88368b897b958;
+decoded trace SHAb990ca15ebbe395397de67c889501be0054a7be5a7f6ce4e8545acf1132f3849.
+
+Emergency recovery collected Event1001 current bugcheck119
+(2,C000000D,ffffe381fcaf2a00,ffff970faa92ca60) and fresh minidump
+090626-14937-01.dmp SHA592eb813ac64adaeb9ea6c930913f463595eb958f17358bb236853873e33b3c2.
+Exact PDB CDB analysis independently decodes the same DXGKARG_SUBMITCOMMAND:
+DmaPrivateSize0x2000 privateStart0 privateEnd0 DMA0..0xb8 Flags2 fence0xfd;
+bucket dxgmms2!VidSchiSendToExecutionQueue DRIVER_FAILED_SUBMIT_COMMAND.
+dump-analysis.txt SHA11b9894deb32db808009cc0198a188fdc82a0c8cbf6cf9c1c50390b8e8d0f656.
+Windows result.json SHA7e6b68469978ec0464407a66cdb376081096b24c5e0a4f75af7f8e64476fb254;
+fault-events SHA28aaf96d902bec83dd7a83331ae0d5bf121c300a4a968a86b1391a0a1446c07e;
+ETL SHA63d471d1a138e93434953b0e47f7e55cdf66c4bcd65f1efa7d709e8d8c9082a3.
+Two candidate-window Event129 records are retained as storage telemetry; no
+causal GPU attribution.
+
+VERDICT: CONFIRMED the exact first failing primitive as PresentSubmit guard15.
+Rejected hypotheses: missing Present flag, render/paging route, malformed private
+shadow, unresolved source/destination, context token, DMA range, node/engine and
+fence. EXP507 is not BLT/fence/AGX render proof and must not be rerun.
+
+Cleanup: ordinary377/392 with package did not reachSSH during bounded intervals;
+snapshot/reset by documented SIGTERM. Emergency377/385 restoredSSH. Collected
+all evidence before exact oem5 uninstall/delete and device removal. Read-only
+checks then proved package/INF/DriverStore/devnode absent, stopped service with
+sole Owners{oem5.inf}, exact candidate SYS/UMD hashes. Moved only those orphan
+files to C:\Users\pavel\EXP507-observation\removed-orphans and deleted only the
+stale service. Post-cleanup: no device/package/service/driver entries/files,
+8CPU/input/xHCI/NVMe healthy. Graceful reboot restored ordinary377/392.
+At16:18:43Z: SSH8CPU/exactlyone Code28 APPL0002/INFnull/noAGX package service
+runningdriver SYS UMD; input/xHCI/NVMeRunning; no fresh41/46/129/161/1001 after
+current boot. Launcher Python48781/session84710 soleL41 owner; L43unowned.
+Keep running and recheck before mutation.
+
+CAUSAL FIX: Microsoft DXGKARG_SUBMITCOMMAND documents private start always zero
+for nonpaging and the end as only the portion associated with the current
+submission while DmaBufferPrivateDataSize remains the whole buffer. RED reproduced
+zero-end rejection. Commit413704ab53d9a062fc4f5e1b4c521cb856c5c811 accepts
+only EndOffset==0 or EndOffset>=validated shadow BytesUsed; nonzero-short and
+above-buffer ends still fail-closed.92 render+12selected shared tests PASS.
+Next EXP508 must build/sign/hash afresh and test passage beyond guard15; no508
+artifact/stage/run yet.
+
+## EXP507 first failing SubmitCommand discriminator — preregistration 2026-09-06T15:59:31Z
+
+WHY THIS HYPOTHESIS: EXP506 Event41Record18293 proves bugcheck119 subtype2 with
+STATUS_INVALID_PARAMETER and parameter3 in the candidate SubmitCommand stack
+region. Current source has two causally distinct pre-copy owners for that status:
+dispatcher private-BLT recognition can select render, and PresentSubmit has exact
+argument/residency/context guards. No506 dump or Submit receipt selects one.
+
+Single variable: qualification-only crash-durable scalar observation of the first
+non-paging SubmitCommand. Encode exact arguments, private-shadow classification,
+dispatcher route, numbered PresentSubmit guard and return status as strictly
+increasing 0x5070-tagged power-broker QUERY receipt sequences. m1n1 already
+serializes and prints accepted QUERY receipts. No functional return, queue,
+completion, capability, firmware, UAT, IRQ, scanout, Mu or m1n1 change.
+
+WINDOWS CONTRACT: pinned WDK26100 defines DXGKARG_SUBMITCOMMAND and Present bit;
+DxgkDdiSubmitCommand runs at DISPATCH_LEVEL and any error causes119/2. Microsoft
+WRITE_REGISTER_ULONG/ULONG64 permit any IRQL for resident mapped MMIO.
+AGX/ASAHI CONTRACT: no AGX execution contract changes; observation precedes
+physical submission. TRANSLATION: field-id in bits47:32 plus exact32-bit value in
+bits31:0; split64-bit inputs low/high; monotonically increasing field IDs prevent
+broker stale-sequence rejection. WHAT IS STILL UNKNOWN: exact first route, flags,
+ranges, private command identity and first failing guard.
+
+Source repository /Users/pavel/public_windows branch
+feature/j313-gpu-acceleration commit
+f9ed33077e8ca377b3a5497ceef87eeb137bb531. m1n1 commit
+336d365ff8951e6ecd343d37f8c2fa4e15d94aa6 with clean tracked diff SHA
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+Mu commit f1ef718e08db0e4c30fdb5d8555973513ad9a004; inherited Mu dirty diff
+SHA7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+Root tracked dirty diff after ledger update was measured immediately before this
+entry as SHA f19e25915342c07131cc18056fea121b81b38937aeeec95bd46b2318633cf3c5;
+unrelated/untracked user state is excluded from the source archive and preserved.
+
+Frozen source is exact EXP506 R2 source archive SHA
+d9d4daa5d81ee689c7e2272deb9c7707f0baeb2fe96ab1c47134f71338a0860a plus
+the11-file commit overlay SHA
+dff16ab9f7b402f0c7abc4e69ce0c380b05a5cc1446096f7376857d0114bc819,
+combined at .local/experiments/EXP507-submit-discriminator/source.tar.gz SHA
+f225da3ff61f55fee67aa4582631d15f424836c8b79dfd551fad7c6a3a189941.
+Build script .local/experiments/EXP507-submit-discriminator/build.ps1 SHA
+77e7bf3abcc7feb810a54341a0ffc89d33e07e490137380bc0a05bfdd8969eba.
+
+Offline verification: codec/profile test RED for absent implementation then
+GREEN; final92 render tests and12 selected WDDM/shared tests PASS; scoped diff
+check and decoder parser compile PASS. Build plan: transfer source to
+C:\Users\pauls\EXP507-source.tar.gz and script to
+C:\Users\pauls\EXP507-build.ps1 on trusted pauls@FRYZZING, then run
+powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP507-build.ps1. Fresh root
+C:\Users\pauls\EXP507-submit-discriminator; pinned SDK/WDK10.0.26100.0 and
+MSVC14.44.35207. Require normal and SubmitQualification KMD/UMD builds, code
+analysis, Universal validation, Inf2Cat/TestSign, version30.0.507.0 and exact
+manifest/hash gates. No stage until all pass.
+
+BUILD RESULT 2026-09-06T16:04Z: trusted pinned build completed in fresh
+C:\Users\pauls\EXP507-submit-discriminator. Normal and SubmitQualification
+KMD/UMD builds, code analysis, Universal validation, Inf2Cat/TestSign and version
+30.0.507.0 PASS with0errors. Only inherited C28251 appears; C28150 absent.
+Candidate EXP507.zip SHA04a7e83127085bb211d21aa8fe8eccacf297bf19c13f04db5889628782b527b3;
+manifest SHAdbac3a9b015441790cf1338bdd04557dfb2208a421fe597ad42ce6ac92e55889;
+PDB SHA03222302246456e36847ff7dd04ca12a2587c34bcb18d870eec7d20022d9f19f.
+Candidate SYS SHAe1046d2c52e6bbfcb9901943248ac72d787ec1589d6514fd411edf15930bae5e;
+INF SHA96cbbff09b4c3941b7e32281647289e5da98d9c0834a94c3c2930fa8ffca6e4e;
+CAT SHA6bf3738b46612632d87f86988e69d9194812feba549c45d09c58c4e8e8283df1;
+UMD SHA879ce4af7eee6bac2b69bd2864be7452f5603f310b754de9b11011b93568e05c.
+build.log SHAa39692aa7166f237432068f6858292301733419ee7937ec223c3de2ae77203cd;
+normal-build.log SHA771b3f514d4a2e2b66ece903b5d5a41af448e0f5da8d8311fc24e125db340815.
+
+HARDWARE SUPPLEMENT: stage script SHA
+40aa4e246cd2cafd88d0030c12828fb2f2f53ff3cfd0f164f4ad59aaa0eb191a;
+launch SHAce1b1f5cd40942928486b3c7dc30b7b79114064672e087afe702878b91e6e3d7;
+collector SHAcc20e862229e1c6548ea4995928eba93e2246b63aa89c4f21864556b7cc70935;
+physical collector SHA8c6e76cd893c87f091a4a3dfd343f1ea83d15d02d08b4d2e67da9429a361b8c7;
+cleanup SHA2cabf611de18c9afed7f299f755da6e06e3c6549228059fd87ac9cf9997c79f8;
+ordinary restore SHAc251de5f2d9e19baa0698909739807f57018ca7195a42385a78bb04fa9df2517;
+emergency restore SHA0f8822ec83602391e140ad3df9ecc82b508aa716f6d4ae21f6716403495dbe65.
+After fresh clean baseline verification transfer only EXP507.zip to
+C:\Users\pavel\EXP507.zip and stage.ps1 to C:\Users\pavel\EXP507-stage.ps1;
+run powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP507-stage.ps1. Require staged package version30.0.507.0 and
+Code28 before boot. Then graceful shutdown.exe /r /t0, wait old launcher
+PID36574/session96120 exits naturally and L41 is free, and run exactly once:
+sh .local/experiments/EXP507-submit-discriminator/launch.sh with stdout/stderr
+persisted from start to hardware.log. Do not use SIGINT to stop; it snapshots and
+resumes. Collect host trace first, decode with committed decoder, then use ordinary
+recovery for Windows evidence and exact package cleanup. No blind retry.
+
+Intended platform is
+immutable full-owner477m1n1 SHA
+b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 plus406Mu
+SHA c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Recovery is ordinary377m1n1 SHA
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a plus392Mu
+SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06;
+emergency385Mu SHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c
+only if the installed package prevents ordinary SSH cleanup.
+
+Expected checkpoint: host log contains one complete accepted 0x5070 trace ending
+in route/guard/status and Windows reproduces or advances beyond506. PASS for this
+discriminator means the trace names one exact owner; it is not BLT/fence/AGX
+render proof. Failure: no accepted trace, stale/non-monotonic field, candidate
+does not reach Submit, or trace remains ambiguous. Evidence directory
+.local/experiments/EXP507-submit-discriminator/; planned hardware.log,
+contract.bin, decoded-submit.json, Windows event/receipt collection and exact
+cleanup/ordinary health. Never reinstall or rerun rejected EXP506.
+
+## EXP506 final ordinary baseline and handoff — 2026-09-06T15:32Z
+
+Final ordinary377/392 recovery completed in exec96120/Python36574, soleL41owner;
+L43present/unowned. Keep launcher running. At15:31:06Z uptime133s: exactlyone
+inertCode28APPL0002, INFnull, noAGXpackage/service/CIMdriverentry/runningdriver/
+signeddevicebinding/physicalSYSorUMD. SSH8CPU,AppleInput/USBXHCI/stornvmeRunning;
+no fresh41/129/1001/46/161. WPRnotrecording. InteractiveUsernull/TermServiceStopped;
+no RDP or interactive display/input workload success is claimed.
+final-ordinary-health.log SHA1d262413da4fe1e7495be62e7f80e1982a4f9ce4dbd85c485d641f1780582594;
+ordinary-contract.bin SHA5e227ae73900ba70ffa4942b6825ff2c5d292368d0dbd7eab137b07629f69c4c;
+ordinary-final-host-snapshot.log SHAf167a55a99024a0629ce54cb82a70a08e2cfb4c94de0dfe522bd779d1d8db1e1.
+Fullhandoff and proposedprompt in .local/experiments/EXP506-cdd-blt/handoff.md
+and next-model-prompt.md. Source stays3f75dfed139987cab1819bb09480fb928dd1b553;
+no507 code/build/stage/run. Exactsource scope is clean versusHEAD; inherited dirty
+work and historical evidence retained. Latest user stop is satisfied; this executor
+stops afterhandoff and does not retain parallel hardware ownership. FinalAGX/
+OpenGL/CS1.6 acceptance is NOT satisfied.
+
+Final ledger test2cases gives1pass/1failure at existing instrumentation change_type
+in CHG-20260905-485-VIDPN-TRACE. New506 rows separately pass19columns/40hexcommit/
+allowedtypes/status. No broad ledger repair or whole-repoGREEN claim.
+
+## EXP506 classification and exact cleanup — 2026-09-06T15:29Z
+
+Emergency377/385 restored SSH8CPU/input/xHCI/NVMe, hidden APPL0002 (phantom45),
+R2oem5 serviceStopped and matching SYS/UMD. Collected before cleanup to
+.local/experiments/EXP506-cdd-blt/observation. Event41Record18293 has
+BUGCHECK0x119(0x2,0xffffffffc000000d,0xffffe18baf662a00,0xffff980aa7910a60).
+Arg3 is SUBMITCOMMAND, not PATCH (subtype103 uses PATCH). Its stack address
+matches the candidate reset's ffffe18baf661f00 stack region. This identifies
+candidate submission rejectionC000000D. The record's guest UTC15:07:55 predates
+host launch time; clocks are not interchangeable. Ordinary-recovery reset has
+no separately recovered bugcheck record; do not assign the candidate stop to it.
+No new minidump or MEMORY.DMP exists. volmgr46 reports dump initialization failure;
+129 is telemetry, not a proven GPU/ANS cause. Existing latest dump9967060355... is
+historical, not506. No Wom1PresentReceipt or Wom1PresentTransferReceipt persisted.
+SourceAddress receiptStatus0 SHA31de59a0e63d5a7c0336948e79be35c4e087eb81ba56e5bacbeda57d8e9a7101.
+Host A408swap9/D589latch9 remains physical latch proof only.
+
+Evidence: observation/result.json SHAa4f6fbb84648af18865ca2f5f056239c0161b0afbe833319eb4c4a07e066c8a0;
+system-events-full.json SHAf3d6a105f7c4fd579fbb987d21dabfe1a71cf062573689f28a2abff08814b09c;
+recent-fault-events.json SHAb6f2be5204e9b6effed89647fa9961f0fbf34643049c16e73706115f34afc3c2;
+recovery-dumps.json SHA7da5bbe4216755b129801e1c4375177dca4e08c9cf68bab07079174963fb78a7.
+BootWPR stop succeeded: admission.etl SHA964c20e6cf2f4cea262ced5478a98f220120401769a52fb1e34b3f3f369f318e;
+event494.json SHA272c0df9b678779d999398dfb11139600bb220a9b913ea9cfa7ffb50f0c207de,
+13records. Trace preserved across recovery; do not claim exact failed-submit
+arguments from its generic StartDevice/mode records.
+
+VERDICT: REJECTED as a successful submitted-BLT/completion candidate. CONFIRMED
+progress to a submission rejection0x119/2/C000000D; the exact route/guard remains
+INCONCLUSIVE without submitted arguments or dump. No copied-byte/fence/AGX TA3D/
+OpenGL/CS1.6 proof. Do not relax flags speculatively. Next preparation-only target
+is first failing SubmitCommand route/guard plus actual flags/ranges/command and
+endpoint identity, ranked from current source; no507 implementation/run permitted.
+
+Exact cleanup: pnputil deleted/uninstalled only hash-verifiedoem5. Hidden phantom
+retained stale serviceOwners{oem5.inf}; guarded script stopped before mutation.
+Read-only check proved package/INF/DriverStore absent and stoppedservice. Removed
+exact phantomAPPL0002; staleOwners remained. Exact orphan cleanup then required
+no package/INF/devnode, stoppedservice and matching sole staleowner, deleted that
+service and MOVED matching SYS/UMD into C:\Users\pavel\EXP506-observation\removed-orphans
+(recoverable evidence, not installed). No other package/service/file removed.
+Logs cleanup-host.log, inspect-cleanup-host.log, cleanup-residue-host.log and
+cleanup-orphans-host.log preserve every result. No source changes afterR2.
+
+FINAL ORDINARY RESTORE PREREGISTRATION: after no package/service/module/files is
+verified in emergency guest, graceful shutdown.exe /r /t0, wait35359 naturalexit,
+then existing restore-ordinary.sh redirected to ordinary.log and fresh
+ordinary-contract.bin. Same hash-pinned377/392 brokerUNSET. Require oneinertCode28,
+noAGXpackage/service/module/files, SSH8CPU/input/xHCI/NVMe and fresh fault inventory.
+This is final506 cleanup recovery, not507. Return handoff after final baseline.
+
+## EXP506 initial hardware result and ordinary recovery — 2026-09-06T15:15Z
+
+RECOVERY UPDATE15:21Z: ordinary377/392 started15:17:37Z, exec62838/Python34258.
+CORRECTION15:22Z: by the attempted SIGTERM,34258 had already exited naturally;
+kill returned no such process, so no host-requested reset occurred. Recovery
+log shows Windows PSCI reset and serial loss; exec62838 exit1. Endpoints now
+unowned. Finalordinary-recovery.logSHA
+1732549e37c6e018588795be1cbf15e4c0de7df8886c89ca1c9a8d3f0b671d47;
+contractSHA5e6d7db973d17e37e540e7a2e315a36ea4fdd3b14bbb29af25fb290ff19cb483.
+Proceed once with preregistered emergency recovery; collect both boot results.
+After >3minutes SSH still times out; L41 remains solely owned/L43 unowned. One
+SIGINT snapshot completed and resumed, with all8 CPU records; no spontaneous
+reset. This does not prove the package caused the inaccessible guest. Ordinary
+recovery has not provided required collection/cleanup access. Preserve log and
+use existing SIGTERM snapshot/reset to return proxy, then emergency377/385 only
+for evidence and exact package cleanup. Command sh
+.local/experiments/EXP506-cdd-blt/restore-emergency.sh >
+.local/experiments/EXP506-cdd-blt/emergency-recovery.log 2>&1; fresh contract
+emergency-recovery-contract.bin. Same377m1n1 above and emergency385Mu SHA
+279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c; brokerunset.
+No candidate rerun or new experiment. Require SSH to collect current dump,
+durable receipts and trace before deleting exactR2/oem5. Afterwards restore
+ordinary377/392 clean profile; do not leave emergency as the normal baseline.
+
+Binding scope correction: finish ONLY EXP506, preserve evidence, exact cleanup
+and restore ordinary clean baseline, then hand off; no EXP507 implementation/run.
+R2 was staged once as oem5.inf and launched once at approximately15:08:24Z in
+exec50854. Host observed A408swap9 and exactD589latch9, then Windows PSCI RESET
+ELRfffff801662312b8/x30fffff8016609f964. No SSH reached before reset. Launcher
+exited1 naturally (serial device reset); no stop code or copy/fence success is
+inferred. hardware.log SHA92d6975bde894613b0346c922dfe768fadba82b9f2aae672384e7e6bf3919766;
+contract.bin SHAd09c4aa135d3f74d5e2dd50d601e2cc6595f36a40777d72aafcb3d7d407041a7.
+Both USB endpoints returned unowned, no launcher; bounded SSH timed out.
+
+RECOVERY PREREGISTRATION: use ordinary GPU-visible377/392 brokerUNSET, not a
+candidate retry. Installed R2/oem5 last known remains. Expected broker fail-closed
+path permits SSH and evidence collection before exact package removal. Root3f75dfed139987cab1819bb09480fb928dd1b553,
+m1n1336d365ff8951e6ecd343d37f8c2fa4e15d94aa6 and Muf1ef718e08db0e4c30fdb5d8555973513ad9a004;
+no source change since frozen R2. Immutable377m1n1 SHA
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a and392Mu SHA
+16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Run sh .local/experiments/EXP506-cdd-blt/restore-recovery.sh redirected to
+.local/experiments/EXP506-cdd-blt/ordinary-recovery.log; contract at
+ordinary-recovery-contract.bin in same directory. Collect receipts/dump/ETL
+before exact R2 cleanup. If this ordinary recovery cannot reach SSH because of
+the installed package, preregister emergency385 recovery separately. No ANS changes.
+
+## EXP506 submitted CDD BLT — preregistration 2026-09-06T14:33:50Z
+
+FINAL R2 BUILD/STAGE/LAUNCH SUPPLEMENT: source3f75dfed139987cab1819bb09480fb928dd1b553,
+sourceSHAd9d4daa5d81ee689c7e2272deb9c7707f0baeb2fe96ab1c47134f71338a0860a.
+R2 KMD/UMD, native analysis, Universal, Inf2Cat, TestSign and version gates PASS:
+0errors, C28150 absent, only inheritedC28251 remains. Fresh89render tests PASS
+after the residency correction; unchanged selected12WDDM/shared tests PASS.
+ManifestSHA99b9f71d363739a408cda35afe45d8d60929518b561bf058f8d18898e09aa69a;
+ZIP89a3fa5a587e99627ea7daca35cf54ec404d9d499e1da0ac496171882856be1c;
+SYSfc5f0cf36e00a4a72ee77e4b5a148b4bdb0530e43dda983744d274f3cb7cf3b9;
+INF1def530fc0620d51dd6103ed367350b20f890eec644e567e86c9a16316261c56;
+CATc1769c61ba5218437ab21bfdb65ca55eeacd0792b8b869b725ebe49b347eb679;
+UMDf2e221da5261815b6c18e3109701c42443f0fb727e8bdf68297c1a6299d7bedd;
+build.logd161d0ff260eb4fc237e31cb43b0cd698884b7894135826bbc7c148fad375a91;
+version-tests c705b8b4945474eb00da233a14c2ef984471f9dbde7c19eabce044cf0ec7be5d.
+All final package artifacts are in .local/experiments/EXP506-cdd-blt/r2/.
+R1 remains preserved and is NOT the staging artifact.
+
+Fresh preflight14:56:34Z SHA
+d0f769fea3541954c3006b5aff41d3caf1186a0414e97ce21826b6cab99ee148 confirms
+SSH/8CPU/oneinertCode28APPL0002/noAGXpackage/service/module/SYS/UMD and input/
+xHCI/NVMe running. Existing ordinaryPython7099 exclusively ownsL41; L43 unowned.
+The current collector also ran into fresh C:\Users\pavel\EXP506-preflight.
+
+Final stage scriptSHAeae68df54084ab4b6f3835d438b73bfe14c37e8c0d9e99455246182a750302c3
+checks exact R2 ZIP/files and clean baseline, stages only506 INF while retaining
+Code28 and configures bounded24MiB WPR. Transfer r2/EXP506.zip to
+C:\Users\pavel\EXP506.zip and stage.ps1 to C:\Users\pavel\EXP506-stage.ps1;
+run powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP506-stage.ps1. Then graceful shutdown.exe /r /t0, wait for
+ordinary7099 natural exit/USB reset and noL41owner. Launch once in persistent
+foreground execution with explicit durable redirection:
+sh .local/experiments/EXP506-cdd-blt/launch.sh >
+.local/experiments/EXP506-cdd-blt/hardware.log 2>&1.
+LaunchSHA578459606ad3a9f22398b0933c7a411bd87e29299d6ae9cd61a27616d743ae9c;
+immutable native477m1n1SHAb970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+andMu406SHAc7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0;
+broker enabled. These immutable runtime/recovery hashes were freshly verified.
+Confirm nonempty host log and collect fresh EXP506-observation via existing488
+collector, physical/candidate-final, PresentTransfer/Present/SourceAddress receipts,
+contract.bin, ETL/Event494 and any dump before package removal.
+
+Expected positive copy checkpoint is first PresentTransferStatus0, actual copied
+bytes for the recorded geometry and matching fence with interrupt/DPC flags1.
+This is CPU-transfer evidence, not AGX rendering. Any earlier failure, failed/
+incomplete receipt, mismatched identity, crash/reset/hang or next failing primitive
+is classified from evidence, never a blind same-candidate retry.
+
+After evidence exact cleanup.ps1SHA
+1191a4aa26f89ef7c7f2ca5ba9feb6e2b7e89c970ef8ab0dea49b800b14f9b26 resolves and
+hash-checks boundR2 INF/SYS before removing only that package/devnode/unowned
+service. Verify package/module/physical absence, then graceful restart and
+sh .local/experiments/EXP506-cdd-blt/restore-ordinary.sh >
+.local/experiments/EXP506-cdd-blt/ordinary.log 2>&1,
+scriptSHAf56e49464e7f1150bd5f9a7436b8e9d6639bb83867d9f5cadb25281f04c75fe4.
+Ordinary377m1n1SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+392MuSHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06; brokerunset.
+Emergency385MuSHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c
+only if installed package blocks GPU-visible recovery. No ANS changes, no final
+driver-retention exception until the complete AGX/OpenGL/CS1.6 acceptance passes.
+Same long-lived implementation agent continues after506 evidence/cleanup.
+
+R2 build preregistration14:50:01Z: correction commit
+3f75dfed139987cab1819bb09480fb928dd1b553 keeps reset lock sections in a noinline
+nonpageable helper; the PAGE callback copies arguments to its resident stack and
+copies the result after IRQL is restored. Existing9reset/platform/scheduler
+tests PASS. No driver semantics, caps or platform artifact changes; no artificial
+RED added for this native-analysis repair. ExactR1 archive plus3 committed
+correction/test/plan files is r2/source.tar.gz SHA
+d9d4daa5d81ee689c7e2272deb9c7707f0baeb2fe96ab1c47134f71338a0860a.
+Build script r2/build.ps1SHA
+b9ac1bd602a21f92b3ff4350b652f4e3e215e2fe3fc4ad213efb4803c9740074.
+Transfer source to C:\Users\pauls\EXP506-source-r2.tar.gz and script to
+C:\Users\pauls\EXP506-build-r2.ps1; run powershell -NoProfile -ExecutionPolicy
+Bypass -File C:\Users\pauls\EXP506-build-r2.ps1. Fresh root
+C:\Users\pauls\EXP506-cdd-blt-r2, same pinned SDK/WDK26100/MSVC14.44.35207 and
+FullProduction30.0.506.0. Require no C28150, no new warnings, and all standard
+KMD/UMD/Universal/analysis/Inf2Cat/TestSign/version/hash gates. R1 artifacts remain
+untouched and unstaged; no506hardware until R2 gates and final launch supplement.
+
+Native R1 build result: KMD/UMD/Universal/Inf2Cat/TestSign/version generation
+succeeded, but the staging gate is NOT PASSED. Analysis has3warnings: inherited
+C28251 and C28150 at ResetEngine's two pageable lock acquisitions (lines362/378),
+one more C28150 site than the previous baseline. No warning is suppressed.
+R1 manifestSHA0a8df73fbbffee757d8a7890d30f5a8ea2b375d02faf2d5011a4a8a2b14bbf1b;
+ZIPeb96f237f9a9d847891e9603081873218a0a5d1d2f3445b1ddbdc8ba4d7219de;
+SYSf6bec2063cf754b04bdea7d59a5402db3ad8267458a64f3c5c975e4069dc64f6;
+build.log55892c4759e34c08f7e9281b337cdafb3a199665ba006c65a7301dbf616b6858;
+version-tests c705b8b4945474eb00da233a14c2ef984471f9dbde7c19eabce044cf0ec7be5d.
+R1 is preserved and never staged/launched. Correct reset code residency before
+fresh R2 build; use a nonpageable noinline helper and passive PAGE wrapper with
+stack arguments. This is an offline build/IRQL-contract correction, not a new
+hardware experiment or reinterpretation of an old result.
+
+One documentation request to
+https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/28150-function-causes-irq-level-above-acceptable-value
+returned non-retryable 'not safe to open'. It is BLOCKED_BY_PLATFORM and not
+retried/equivalently fetched. The already available local WDK diagnostic/source
+and independently retrieved PAGED_CODE documentation support the correction;
+the refusal itself supplies no driver evidence.
+
+WHY THIS HYPOTHESIS: (1) EXP505 exact first Present is bufferedFlags1 BLT,
+DMA4096/private8192/Patch256, counts0 and one full native rectangle; the driver
+only admitted null-DMAFlags4 flips. (2) Microsoft physical Present defines fixed
+allocation slots1/2, real command output, prepatch/repatch and submitted copy,
+so no isolated bit/guard relaxation could implement the observed operation.
+(3) Existing memory owner already covers local primary and CPU-visible shadow
+placements; source-derived queue tests exposed and now cover the ordering and
+lifetime invariants needed to schedule this copy beside AGX work.
+
+WINDOWS CONTRACT: FULL GRAPHICS physical WDDM3.0 Present compiles a pointer-free
+one-to-one BGRA copy plus source/destination patch references. Fixed physical
+slots remain1/2 when NumSrc/NumDst0. Nonzero segment addresses are prepatched;
+optional Patch can rebind both endpoints; actual fence binding occurs at Submit.
+Execution occurs only after submission; synchronized DMA notification and DPC
+follow real copied bytes. Existing Cancel releases no new pre-submit resources.
+Source/queued snapshot, current/queued fence ordering, preemption/reset, callback
+lifetimes and notification ordering are part of the same reachable operation.
+
+AGX/ASAHI CONTRACT: existing DCP owner scans the resident primary. This CPU-assisted
+CDD shadow-to-primary transfer is presentation data movement, NOT AGX TA3D or
+hardware rendering proof. Existing actual AGX color-fill backend, retained-root,
+RTKit/firmware/UAT protocols, native477 m1n1 and Mu406 remain unchanged. Only KMD
+software dispatch/lifetime integrates queued copy and AGX jobs; no capability,
+node, firmware, MMIO protocol or platform artifact change. No external code copied.
+
+TRANSLATION: source local2 or live aperture1 -> local2 primary, logical bounds
+plus rounded64KiB backing. Aperture reads use guest Windows PFNs via MmCopyMemory
+under existing PagingLock; no retained borrowed MDL or host-PA conflation. Source
+snapshot precedes destination writes for within-packet overlap; shifted overlap
+requiring multiple packets is rejected before output. Shared64-entry fence FIFO
+and CPU payload FIFO dispatch head only. Completion slots retire before OS DPC
+notification; callback-active counts guard teardown. AGX reservations survive
+local-retirement/notification gaps and preemption; canceled/deferred render wakes
+do not fault CPU work. First64-byte Wom1PresentTransferReceipt records actual
+copy bytes/status/fence plus reached interrupt/DPC notifications, persisted from
+an existing passive callback. It remains explicitly software-copy evidence.
+
+ATOMIC CONTRACT: encoding, two references/prepatch, relocation, submitted copy,
+ordered exact completion and required queue/lifetime integration form one Present
+BLT operation. Returning success without copy, copying at preparation, requiring
+optional Patch, orphaning a queued fence or signaling before visibility breaks
+that operation. No unrelated preemption/capability/topology experiments are bundled.
+
+WHAT IS STILL UNKNOWN: actual current Windows residency/optional-Patch ordering,
+physical copy and completion receipt, and the next natural CDD/Windows boundary.
+No rendering/AGX/fence/present/OpenGL/CS1.6 acceptance is inferred from offline tests.
+Hardware verifies the complete designed copy path, not guessed capability flags.
+Capacity beyond64 pending slots and general overlapping multipass are not claimed.
+
+Sources and full implementation/review mapping:
+docs/superpowers/plans/2026-09-06-exp506-cdd-blt.md. Real REDs reproduced505,
+active-render/queued-copy failure, surviving preempted payload, stale canceled
+render wake and preemption releasing an unreported completion. Final89 render
+and12 selected WDDM/shared tests GREEN, including actual-source prepatch/no-Patch,
+relocation/snapshot/fence, reentrantDPC, preemption/reset, lifetime, retry and
+scattered-page/short-read tests. Scoped diff-check GREEN. Narrow read-only review
+confirmed the final two race corrections; no review was used as hardware proof.
+
+Candidate commitc43a2352c91152b4baffed414e3008781b83955e on
+feature/j313-gpu-acceleration. Exact505 archive plus28 committed changed/new
+source/test/plan files; unrelated dirty work excluded. Frozen source
+.local/experiments/EXP506-cdd-blt/source.tar.gz SHA256
+bbc566e61e6a1bed9adc9dcab95c3f267e2ac3c4feb00284ebdd525702c014f0.
+Root remaining dirty diffSHAe2f6cc583cd3f06ba3deb207ca140c3cf9860e5555a02c9daa2582f782466816;
+m1n1commit336d365ff8951e6ecd343d37f8c2fa4e15d94aa6 diffSHA
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855;
+Mucommitf1ef718e08db0e4c30fdb5d8555973513ad9a004 inherited diffSHA
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+No platform build/edit or ANS changes. Earlier sealed partial archive is retained
+as historical preservation and is not used as a candidate.
+
+Build: transfer frozen source and build.ps1SHA
+8f9daf32c3fd83d8c2070cb3f3a286e36d31653c7656dfb00f2edbe8041ba1ad to trusted
+FRYZZING; powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP506-build.ps1. Fresh EXP506-cdd-blt root, pinned SDK/WDK26100
+MSVC14.44.35207 Release FullProduction30.0.506.0. Require KMD/UMD native analysis,
+Universal, Inf2Cat, TestSign and version gates; inheritedC28251/C28150 only.
+Hardware remains blocked until successful exact artifact/hash/launch supplement.
+Expected checkpoint: natural initial scanout accepted, CDD BLT reaches actual
+copied-byte/exact-notification receipt, and current first error is identified.
+Failure: earlier boundary, copy/patch/submit rejection, absent/incomplete receipt,
+bugcheck/hang/reset or inconsistent byte/fence identity. Record exact evidence;
+never infer GPU rendering from a CPU-copy receipt.
+Evidence paths: hardware.log, contract.bin, fresh EXP506-observation/physical/
+candidate-final, source-address/Present/PresentTransfer receipts, ETL/Event494 and
+any new dump. Recovery ordinary377/392, emergency377/385 only if package blocks
+recovery; immutable hashes remain in compact state and will be repeated before
+launch. No staging or hardware launch yet. Same long-lived agent continues.
+
+## EXP505 recovery completion addendum — 2026-09-06T14:30Z
+
+This records already-completed505 recovery, not a new run. Exactoem5 package/
+devnode and stopped-unowned service were removed online after evidence. Physical
+post-cleanSHA1ffbbc3a1fc81db7363350e72de049a267740f7d77a7bf2deb456832c90b97bd.
+Graceful restart released505Python5717; final hardware.logSHA
+f291562bcbc71e7b7d123923044c1387363dd433b017c9db568f1ee6d748bd8c.
+Ordinary377/392 broker-unset restored in exec29801/Python7099. Final physicalSHA
+084a7ac09e6027bc396f31448422c8ea65f89432cbadd88ecdfb88a3a6b97a5a proves SSH,
+8CPU, oneCode28APPL0002, noAGXpackage/service/module/files and input/xHCI/NVMe.
+No emergency boot or ANS change. A fresh read-only13:48Z check found the same
+clean guest and soleL41owner after the user-reported access-state change.
+
+## EXP505 first failing Present receipt — preregistration 2026-09-06T12:09:04Z
+
+WHY THIS HYPOTHESIS: EXP504 source-address succeeds and physicalswap10 latches;
+the next Event494 is Driver failed PresentC000000D/PresentFromCdd. Actual flags,
+DMA buffer, counts and rectangles are absent while one compound production guard
+can reject several of them. Capture exact first failure instead of guessing.
+
+WINDOWS CONTRACT: FULL GRAPHICS WDDM3.0 Present is PASSIVE_LEVEL in pinned26100
+and official Microsoft docs; DMA copy and MMIO flip are distinct operations.
+Pinned pAllocationList/pAllocationInfo are the same union; no assertion of two
+separate pointers. The observation does not dereference this union/private data.
+
+AGX/ASAHI CONTRACT: accepted source-address/physical DCP latch and current
+native477/Mu406/AGX/interrupt ownership unchanged; no hardware protocol change.
+
+TRANSLATION: one160-byte zeroed snapshot, first failing Present only, exact
+status/branch plus scalar input presence/flags/counts/DMA location/rectangles.
+Existing passive recorder writes immutable device/service copies. No success
+path change, command/output mutation, handle-translation change, worker or wait.
+
+WHAT IS STILL UNKNOWN: actual first CDD Present operation and rejected input.
+Receipt absent/malformed is inconclusive. Natural CDD is actionable despite no
+interactive user; no credential workaround. No paging/TA3D/fence/render proof.
+Plan/sources/review: docs/superpowers/plans/2026-09-06-exp505-present-receipt.md;
+pinned WDK evidence in EXP505/wdk26100-present.txt.83 render+4 WDDM tests GREEN;
+no artificial RED for receipt-only observation. Original guard order/returns and
+allocation/output accesses unchanged; diagnostics read only valid scalar input.
+
+Candidate584994d7569fce692e1274d626ee55a0a97edf21, feature/j313-gpu-acceleration.
+Exact504 archive plus4 committed files. Source
+.local/experiments/EXP505-present-receipt/source.tar.gz SHA
+51c83c54aaeb1cba5f92a3a9cabc2681b1212eadc11da33623a3985ca44be49f.
+Root unrelated diffSHA2dc24de297da29ad70c3441aa6c8a4ba83250ac6f299252a869e81572b62d2c2;
+m1n1commit336d365ff8951e6ecd343d37f8c2fa4e15d94aa6 clean diffSHA
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855;
+Mucommitf1ef718e08db0e4c30fdb5d8555973513ad9a004 inherited diffSHA
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+Build: transfer exact archive/build.ps1SHA
+af665dc07977d729983d888f529ac7f700cd3ad8d4a83188c533030253cd18e5 to trusted
+FRYZZING; powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP505-build.ps1. Fresh EXP505-present-receipt root, pinned
+SDK/WDK26100 MSVC14.44.35207 Release FullProduction30.0.505.0. All native
+analysis/Universal/Inf2Cat/TestSign/version gates required; expected inherited
+C28251/C28150 only. Launch awaits successful artifact/hash supplement.
+Evidence: Wom1PresentReceipt160bytes, existing source-address88bytes, ETL/Event494,
+durablehostlog/contract/health/physical and any dump. Recovery ordinary377/392;
+emergency377/385 only if installed package blocks recovery. Same agent continues.
+
+EXP505 build/hash supplement12:12Z: pinned KMD/UMD/native analysis/Universal/
+Inf2Cat/TestSign/version gates PASS;0errors only inheritedC28251/C28150.
+ManifestSHAfdd1975ba887a883b0580bd51665626e0f9baf6f8ffebb5211e67ddff0642d89;
+ZIPfb60b11eeae270a19f13c0373b5dfd56176b17fec0c6d741b21f4637d4a4d0e4;
+SYSa4ccb59ebc106cc051e01eae088c76973e3c82a4bd457dea9687e560fb30f088;
+INFd3ad54b3a4052763fe82b54a518701f0298a9110f8b1061373e0ec778ce67f76;
+CAT47a203435a6585dc8a9cb5310af571aaed1c22153b42fb005650ef808b58a157;
+UMDba4a45f996fcac9c9a71d96836291a61b03cf8421a99d322c3a4c86b4fc2bb89;
+buildSHAdc8506bbf5b3590832bdaa126e9cfbbe82ab42c1aee761256aca85dd8f6f4be9;
+version-testsddab1d5eb2f702e4e4d6dbfeba9787f1743443294c6e06b03c7efa0eafce7d66.
+Current ordinary504-final evidence proves cleanCode28/noAGX and8CPU/input/storage,
+SHAc5eebba421145e17432754f29de416605bb260310312930ab7595e7f15b975a6; fresh stage
+script rechecks all absence/identity. OrdinaryPython3976/exec8556 solely ownsL41.
+
+TransferZIP/stage.ps1SHA0e719a732dc8e92519eeb9287f8f6695bc136564631b6510cab9d9e6cba04aa7;
+run powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP505-stage.ps1. Exact clean/hash-gated stage retainsCode28 and
+starts24MiB bootWPR. Graceful shutdown.exe /r /t0; wait old launcher exit/USB reset
+andL41/L43 unowned. Launch once:
+sh .local/experiments/EXP505-present-receipt/launch.sh >
+.local/experiments/EXP505-present-receipt/hardware.log 2>&1,
+scriptSHA5a9892271f01ed65d4bea3d19e95613a5e9af1fd463c970eadb87d26748861f6.
+Full-owner native477m1n1SHA
+b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 andMu406SHA
+c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0, broker1.
+Confirm nonemptydurablelog; collect488-current into freshEXP505-observation plus
+160-bytePresent/88-byteSourceAddress receipts, ETL/Event494/health/contract/dumps.
+Expected existing initial scanout success then exact first Present failure
+receipt. Missing receipt, earlier boundary, crash/hang/reset or changed outcome
+is failure/inconclusive; no same-candidate blind retry.
+
+After evidence cleanup.ps1SHA
+5dabfa5a471eb62e8b9e8b6dd0857351b4dff549a49be9a8a9adcadee951ccb5 resolves and
+hash-checks exact boundINF/SYS and removes only its package/devnode/unownedservice.
+Verify physical absence, graceful restart, then
+sh .local/experiments/EXP505-present-receipt/restore-ordinary.sh >
+.local/experiments/EXP505-present-receipt/ordinary.log 2>&1,
+scriptSHA77320e8f846fd1b25cd2ca3889a301edd7d329e74bc16f3d6d5b5549da632e20.
+Immutable377m1n1SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a,
+392MuSHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06, brokerunset.
+Emergency385MuSHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c
+only if package prevents recovery. Same owner continues through subsequent EXPs.
+
+EXP505 actual12:13–12:16Z: exact505 staged once asoem5.inf; graceful restart
+released ordinary3976; one logged full-owner launchexec54806/Python5717.
+Windows reachable with Code0/serviceRunning/exact valid signed SYS+UMD/8CPU,
+58.3083555s observed uptime, input/xHCI/NVMe alive, no fresh41/129/1001 or newdump.
+Host showed exact A408/D589 swaps9 and10; no AGX rendering proof. Source-address
+acceptance remains intact. RDP/interactive input not separately exercised.
+
+VERDICT CONFIRMED: identical160-byte device/service Present receiptSHA
+013d42aabe1e2d5d714afe7897b799928dcb64e0e87f015d8f1e5c011843bbad shows branch1,
+C000000D,IRQL0,valid device/args,Flags1(BLT),DMA present/4096,privateDMA present/
+8192,PatchList256,Multipass0,Color0,FlipInterval0,NumSrc0/NumDst0,no private driver
+data,allocation union present,one source/destination/subrectangle all
+(0,0,2560,1600),DMAsegment0/physical42401931264/GPUVA0. This is a buffered
+CDD bitblt reaching an MMIO-flip-only implementation; changing one flag or
+ignoring the DMA buffer cannot implement the documented copy. No further hardware
+guessing of flags/counts: derive coherent physical Present BLT encoding, memory
+translation, submission and exact completion offline from pinned WDK and sources.
+
+Evidence: ETL05ccf1d1860b813019e065f0d79278dfec4e7e246753fba68b9b4c97b5f9e31f;
+Event494a85ce83039548a6d7917fba4e3a15dfa1a5eaa19f6eec148a535974f05ad7efd;
+source-addressdbacf51faea98ecac9cf6aeee52abc0c2f3ce14a30f3351ca24e9e68a98f0f22;
+contract5e9588bd9e6b9b18c9cdfcce1060e55eda9eceabfa628c2b54d33bdafb0958a9;
+observation/result4f20285b043fdd0adf9fd8d91e276514999120e5a7e6b14158faee192b4e4991;
+candidate-final561f94776e5a1a72b2b34639c6d3e6fc59ae9aa104e882c91978049574c4ff1f;
+physical331e677a286701143bc62979006a218914a2007e0bb1a07bc230860cec9879c6;
+host at collection0533ccf4915e6a4e945d683fbb7c3e6b2407f7d49ec9bb7103e7568a1adf67d3.
+Final host hash follows cleanup restart. Evidence secured before exact cleanup.
+Narrow read-only Present-contract reviewer is advisory only; long-lived agent
+retains all source/build/hardware ownership and continues to506 offline mapping.
+
+## EXP504 internal latch IRQ ownership — preregistration 2026-09-06T11:54:49Z
+
+WHY THIS HYPOTHESIS: EXP503 first source-address receipt reached inner queue
+at IRQL0 with valid source/allocation/physical address/native mode/visibility,
+but IrqEnabled0. Start never enables internal latch ingress; the current
+ControlInterrupt conflates internal completion with Windows VSync subscription.
+Microsoft explicitly permits keeping an interrupt required internally enabled.
+
+WINDOWS CONTRACT: FULL GRAPHICS WDDM3.0 modeset ContextCount0 must work before
+OS VSync subscription. ControlInterrupt enables/disables requested reporting and
+may preserve hardware interrupt for internal purposes. Do not apply DISPLAY_ONLY
+optional/simulated-VSync rules. Exact WDK/primary-source mapping is in
+docs/superpowers/plans/2026-09-06-exp504-internal-latch-irq.md.
+
+AGX/ASAHI CONTRACT: Asahi IOMFB physical swap-complete identifies actual swap;
+m1n1 D589 parser matches exact swap-id, broker distinguishes APPLIED and LATCHED,
+and enabled pending latch injects existing vIRQ889. Mu publishes existing broker
+MMIO/interrupt. Neither platform nor AGX/render/paging behavior changes.
+
+TRANSLATION: enable internal latch IRQ when scanout runtime is registered;
+ControlInterrupt updates independent VsyncNotifyEnabled; ISR retires exact
+physical sequence whether subscribed or not, and NotifyInterrupt/QueueDpc only
+when subscribed. Existing queue's IrqEnabled prerequisite remains. No polling,
+fabricated completion or address/guard/capability workaround.
+
+ATOMIC CONTRACT: internal runtime enable, separate notification subscription,
+unconditional exact pending retirement, conditional NotifyInterrupt/DPC are one
+ownership invariant. Omitting any member strands initial work or reports
+unrequested VSync. Supported by official ControlInterrupt internal-purpose rule.
+
+WHAT IS STILL UNKNOWN: actual DCP latch behavior for the first real Windows
+scanout request after offline-correct mapping and the next natural Windows
+primitive. Hardware verifies designed mapping; no speculative capability probes.
+No paging/AGX TA3D/fence/rendered-content proof is assumed from an address success.
+
+Candidatebac07e89244d89f3b1bfd2464e5a16e1c27cbd1b, feature/j313-gpu-acceleration.
+Exact503 archive plus only committed scanout source/regression/plan. SourceSHA
+5f1a521c9d5c6357cff75f1be23224b5fde40aee7e1f347481a196ff6feba051 at
+.local/experiments/EXP504-internal-latch-irq/source.tar.gz. Regression executes
+actual production start publication/ControlInterrupt/ISR with real shared decoder;
+RED reproduced internal IRQ0, GREEN validates repeated retired latches with OS
+off/on/off plus no duplicate and stale rejection.83 render plus8 WDDM/shared
+scanout/fixed-panel tests GREEN; scoped diff and ownership review completed.
+Root unrelated diffSHAd4f6be78e48fca50fa745671e2e12d0103cd810ce016ee1dcae023e3ee60fa5d.
+m1n1commit336d365ff8951e6ecd343d37f8c2fa4e15d94aa6, clean diffSHA
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855;
+Mucommitf1ef718e08db0e4c30fdb5d8555973513ad9a004 inherited diffSHA
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+No platform build/edit; no ANS changes.
+
+Build command: transfer archive/build.ps1SHA
+002b74c4bed559f14766010e5c1b7c3be81d5048cb5b453af0b174895e1fe96a to trusted
+FRYZZING; powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP504-build.ps1. Fresh EXP504-internal-latch-irq build root;
+pinned SDK/WDK26100 MSVC14.44.35207 Release FullProduction30.0.504.0 and all
+analysis/Universal/Inf2Cat/TestSign/version gates. Hardware blocked until exact
+successful artifact manifest/hash/launch/cleanup supplement. Evidence planned:
+existing first88-byte source-address receipt, ETL/Event494, durablehardware.log,
+physical/candidate-final/current collector, contract.bin and any dump.
+Checkpoint: IRQ1 and advance past C000000D, then classify actual next boundary.
+Recovery unchanged ordinary377/392; emergency377/385 only if package blocks boot.
+Same long-lived implementation agent continues after evidence/cleanup.
+
+EXP504 build/hash supplement11:57Z: KMD/UMD/analysis/Universal/Inf2Cat/TestSign/
+version PASS,0errors only inheritedC28251/C28150. ManifestSHA
+99a16129b22f9def0ee568701a1785a8e0be06e58259d1fd0e3fe9a6f7bd4a08;
+ZIP87e84b4e92f6f9f5153f5983e371e84ecde3680c53fdb6e6e6c2ecdfdce5d76c;
+SYS00ce0efeba96b5a9bc74b4acce60a9b78aceff0b5c8f2dbb25978a7c0851ded9;
+INFda60843787149298f39d22bb50ebab68fe2ca7065f3303e79439b926ee3103e6;
+CAT7533ca10ebbc5d06a8fd6d793ee4d0e59d67493b6b58b343fe7a6d0dc4f53eb3;
+UMD9a78c5ea02a005efbbccc6781b9817d89fdfdd8abeed437eda3c905570067f65;
+buildSHA138827230cb7ed8f38ffab4661bbaa75e4879d2f3f5339578f308f699e70fce8;
+version-testsSHA79dda811a6428f65e1ec1ae32a11b7b77963bf48ebaa822f0d51ecbdeb94d0bb.
+Fresh preflightSHA0e09ac1f30e1bae0e379754b4cd21bac5d5cb955cd41f7890c230e281394ff0b:
+SSH8CPU/oneCode28/noAGXpackage/service/module/files/input/xHCI/NVMe alive.
+OrdinaryPython1411 solely ownsL41; L43 unowned.
+
+Transfer exactZIP and stage.ps1SHA
+6ecff0ed29999b34dfd963ee0bbf04f054ada8b379ce9a57eb524f25dbafd981; run
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\EXP504-stage.ps1.
+Stage retainsCode28 and enables24MiB bounded bootWPR. Graceful shutdown.exe /r /t0;
+wait for old launcher natural exit/USB reset and noL41owner. Run once:
+sh .local/experiments/EXP504-internal-latch-irq/launch.sh >
+.local/experiments/EXP504-internal-latch-irq/hardware.log 2>&1,
+scriptSHAb2262c3f99867a1355fe7f09fef6634fe64a2c320f8085d1cd538b8fac67fa0e.
+Full-owner immutable native477m1n1SHA
+b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 andMu406SHA
+c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0; broker1.
+Confirm log nonempty and collect exact EXP504-observation via existing488collector,
+source-address receipt/current state/physical/ETL/Event494/contract and any dump.
+Failure criterion: earlier rejection, sameC000000D, malformed/absent receipt,
+reset/hang/bugcheck or new first failing primitive; no blind504retry.
+
+After evidence exactcleanupSHA
+c5e16ef307b1398a9f973704036635e759e7795d613caa6b002de3c6a319507c resolves and
+checks boundINF/SYS then removes only this package/devnode/unowned service.
+Physical absence then graceful restart; one ordinary launch:
+sh .local/experiments/EXP504-internal-latch-irq/restore-ordinary.sh >
+.local/experiments/EXP504-internal-latch-irq/ordinary.log 2>&1,
+scriptSHA5de52d5860e7326bc9ec7dfac546b3b8ee344f4642f049e90ff3fea1dc6da634,
+immutable377m1n1SHAfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+and392MuSHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Emergency385MuSHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c
+only if installed package blocks recovery. No ANS or unrelated platform changes.
+
+EXP504 actual result11:59–12:02Z: exact504 staged once asoem5.inf, graceful
+restart released ordinary1411 naturally; one logged full-owner launch in
+exec89738/Python3457. Firmware/Windows/8CPU/retained-owner phases completed;
+durable log shows A408 APPLIED swap_id10 followed by exact D589 latch swap_id10.
+Code0/serviceRunning/exact valid signed SYS+UMD,88.9628606s observed uptime,
+input/xHCI/NVMe alive, no fresh41/129/1001 or new dump. RDP/interactive input
+were not exercised. Session check found InteractiveUsernull and SSHsession0.
+
+VERDICT CONFIRMED: first source-address modeset Status0, QueueCalled1, IRQL0,
+source0/segment2/address0x1500000000/nonnull allocation/Flags1/ContextCount0,
+native2560x1600/10240/format21/Started1/DisplayActive1/SourceVisible1 and
+ScanoutState3 (runtime and internalIRQ enabled). Previous C000000D source-address
+messages absent. Exact88-byte receiptSHA
+6d240dda09ccd8b039cde2bf3e10a245e49c54e3a7cbad6304938b729ad7ceb1.
+Physical initial scanout latch is demonstrated; this does not prove ISR pending
+retirement/OS notification, repeated present, AGX TA3D or rendered content.
+
+Next natural boundary is Event494 at11:59:21.935: Driver failed PresentC000000D,
+then PresentFromCdd failedC000000D. Source AdmissionDdiPresent has multiple input
+guards; actual DXGKARG_PRESENT fields are not captured yet. Do not guess its
+flags/address/handles or change producer/session/AGX based solely on this result.
+No interactive user exists; not a reason to invent credentials or infer a GPU
+failure. Natural CDD still gives an actionable Present boundary.
+
+Evidence exactEXP504dir: ETL85e5cd71d19702a48348b57f9d130fb83453acde0107c006bdc6dbedc0e58db4;
+Event494f00f02addf270741bb1ea623825759f36353f4a84d610beb3d9cbdc0f98edd9e;
+contract4e313294d09a883c078fae7c89d85f42cfdeee29512591fada151e11bc143f80;
+observation/resultc723cf3bd19c33ff57df8abe6bdb32c2c82ea2494944ef02dbc4d5fa3c288576;
+candidate-finalf5dbafa8b4823db771ed882611a621c3403349954b6f246faf2b73ab5a84379a;
+physicale65f0c01f748eb406dac834d556274b74bab3061adc589d1a15a714c842d1894;
+session-state d674bd0f2045967e0529ff2d224e322ff7b05a81a3dd18651f29d3cebac8facf.
+Host at collectionSHA6e239cda23bf02e5775ab97df680d6396f4e32a4bb629e061a5b704f052ca196;
+final hash follows cleanup restart. Evidence secured before exact cleanup.
+Same agent proceeds to primary-source Present classification/observation for505.
+
+EXP504 recovery completed12:08Z: exactoem5 cleanup succeeded with boundINF/SYS
+hashes; only package/devnode/stopped-unowned service removed. Post-clean physical
+SHA1d0b8300b0f01b4b1a3b63fbf49c7f32cbe03c6ea291ebad134a3f530ed8312f proves
+oneCode28/noAGXpackage/service/module/files. Graceful restart releasedPython3457;
+final hardware.logSHA31d6ba2d46183808f51c1d8f7d23df1c489efc8b7449e72790daf4313fb1daf6.
+Ordinary377/392 broker-unset restored in exec8556/Python3976 with durable log.
+Final physicalSHAc5eebba421145e17432754f29de416605bb260310312930ab7595e7f15b975a6,
+collector hostSHA3cd9bbfebef5bb246f803adb140cc0f5d302a401daddb5de4a1d79c0a1d8f7b7:
+SSH8CPU/input/xHCI/NVMe, oneCode28/noAGX state and no fresh41/129/1001.
+No emergency or physical operator action. Exact cleanup indicates no pending
+scanout blocked lifecycle, but is not substituted for an ISR/fence receipt.
+
+## EXP503 immutable source-address receipt — preregistration 2026-09-06T11:38:13Z
+
+WHY THIS HYPOTHESIS: (1) EXP502 reached three C000000D source-address returns
+after the CPU-visible descriptor gate passed. (2) Current outer display and inner
+scanout guards share this status, and actual input/state is absent. (3) Repeated
+topology calls provide an existing passive persistence path for a first-call
+immutable receipt. Capture the rejection owner before changing its behavior.
+
+WINDOWS CONTRACT: FULL GRAPHICS WDDM3.0, pinned WDK26100 source-address ABI;
+ContextCount0 denotes modeset. Code/data must remain nonpageable at possible
+DIRQL. Pinned header lines6363–6395 and official Microsoft callback/argument
+documentation inspected. Existing initial VidPn wrappers and Stop/Remove are
+passive paths. Prior blocked LogEtwEvent retrieval is not retried or evidence.
+
+AGX/ASAHI CONTRACT: accepted AGX, UAT, firmware, queue and DCP ownership and
+immutable native477/Mu406 runtime remain unchanged. No new hardware access.
+
+TRANSLATION: one 88-byte receipt in the existing nonpaged context; interlocked
+single-writer claim, scalar input/state capture, publication after unchanged
+production return, then one immutable device/service persistence from existing
+passive wrappers or Stop/Remove. No worker, wait, allocation, registry operation
+or pageable helper in the source-address DDI. No changed guard, address, state,
+capability, segment, scheduling or AGX behavior. The only variable is observation.
+
+WHAT IS STILL UNKNOWN: the actual first source-address input/state and outer vs
+inner guard responsible for C000000D in the current internal dxgkrnl ordering.
+Receipt absence is inconclusive. No allocation/paging/TA3D/fence/present proof.
+
+Detailed sources, ownership, review and recovery plan:
+docs/superpowers/plans/2026-09-06-exp503-source-address-receipt.md.
+Candidate16fe182a6af59225b94683b3fe78a78134acdbe8 on feature/j313-gpu-acceleration.
+Exact EXP502 archive plus six committed candidate files only. Frozen source
+.local/experiments/EXP503-source-address-receipt/source.tar.gz SHA256
+c346ca04bb26c347de26969bbc5228584d5411a6564977abbf89012dcff31dad.
+82 render tests and4 WDDM contract tests GREEN; no artificial RED for receipt-only
+observation. First-call immutability/publication/lifetime and unchanged production
+guards self-reviewed. Root unrelated diff SHA256
+f093aafeccf19bb5d6db2ee4e1e6afbd0730b75ed980f3fd379218bcd586eb5b;
+m1n1 commit336d365ff8951e6ecd343d37f8c2fa4e15d94aa6 diffSHA
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855;
+Mu commitf1ef718e08db0e4c30fdb5d8555973513ad9a004 diffSHA
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+No platform build or edit and no ANS changes.
+
+Build: transfer source and build.ps1 SHA256
+734352ec7c7aa4a94c79b5020e8ae9a9562a24d5e9ad35476ebef95ff68c7745 to trusted
+pauls@FRYZZING; powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP503-build.ps1. Fresh root EXP503-source-address-receipt,
+WDK/SDK26100 MSVC14.44.35207 Release FullProduction30.0.503.0 with KMD/UMD,
+native analysis, Universal, Inf2Cat, TestSign and version gates. Expected inherited
+C28251/C28150 only. Build-host.log/manifest/source/ZIP under exact EXP503 directory.
+Hardware staging/launch blocked until successful build and exact hash supplement.
+Current ordinary Windows SSH reachable; Python93013 exclusively ownsL41; L43
+present/unowned. Recovery ordinary377/392 broker-unset, emergency377/385 only if
+package prevents recovery; hashes unchanged from compact state. One natural bind
+will seek exact source-address receipt alongside ETL and durable hardware.log.
+Collect evidence before exact package cleanup; same long-lived agent continues.
+
+Build/hash supplement 2026-09-06T11:41Z: KMD/UMD and all pinned gates PASS;
+0 errors, only inherited C28251/C28150. ManifestSHA
+95fe20b71194c44c513e5e738d9550e1217d431b6fd7c1e5549db1e80cf9838a;
+ZIP27ec02397a9db49c71a530d99f8871abe007d64c2b47b37cff9f64f66121a448;
+SYS134aa3db6a3be47caf7a234ce89b57cc80b93cc0a35431630c61a87ab4bb18ef;
+INF4f78524be6ea24c3afed077975051e7beea46ab6987df95d1ceddc5a2ab191a8;
+CATb8bf0946c2275ff6a1c78479dc9b47c39aa5e7baeeb18eea07c04276468b416b;
+UMD9021aad0b8b997fc90d3cc7e0f8f0f519cf20aa3df034baa5130f4ea00b0a097;
+build.log a85b265511f9a471c9091720c71c52d1ed6404a6b1a3789635a2691e59761dad;
+version-tests d2d50b678a788ea6e0e77b3c77e4bd4f082d3b0b108052d46263a94b8970a8ea.
+Fresh physical preflightSHA
+98edfe570d7b36cca24ca5c0c7e25e27d80bd2691f85929972e0843db6e1f603 proves
+SSH/8CPU/input/xHCI/NVMe, one Code28APPL0002 and no package/service/module/files.
+
+Exact stage command after transfer: powershell -NoProfile -ExecutionPolicy
+Bypass -File C:\Users\pavel\EXP503-stage.ps1, scriptSHA
+61968f7bf893c4041201db93a313a7caaee0a402addb93cfd78787b55bfc26c7; hashes clean
+state and ZIP/files, stages only candidate INF and configures24MiB boot WPR.
+Then shutdown.exe /r /t 0; wait for ordinary PID93013 natural exit and USB reset.
+Launch only after L41/L43 are present/unowned:
+sh .local/experiments/EXP503-source-address-receipt/launch.sh >
+.local/experiments/EXP503-source-address-receipt/hardware.log 2>&1.
+LaunchSHA0c2fa893ecaa118a7072b74b14178a1ecd5f0d761958004b5c0d92a200bc958c;
+immutable native477m1n1SHA
+b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 and
+Mu406SHAc7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0,
+broker enabled. Persistent foreground execution; verify nonempty durable log.
+Collect EXP488-collect-current.ps1 -EvidenceDir C:\Users\pavel\EXP503-observation,
+physical/candidate-final, source-address88-byte receipt, boot ETL/Event494 and
+contract.bin. Keep exact first return and state; absent receipt is inconclusive.
+
+After evidence, exact cleanup.ps1 SHA
+8fde208bc4018194d93c446ddc05cd0127cfaad2e323ee4447dd64f96948cb13 verifies bound
+INF/SYS, deletes only that package and unowned service/devnode, then rescans.
+Check physical/package absence. Graceful restart and
+sh .local/experiments/EXP503-source-address-receipt/restore-ordinary.sh >
+.local/experiments/EXP503-source-address-receipt/ordinary.log 2>&1,
+scriptSHA40ac9563d7a5b6703e570784f73d2d88c04e60bc0c646efaa8888555a404cddc.
+Immutable ordinary377m1n1SHA
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a and
+Mu392SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06;
+broker unset. Emergency385MuSHA
+279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c only if
+installed package blocks recovery. No blind retry of503.
+
+Actual EXP503 result 2026-09-06T11:42–11:45Z: exact503 staged once asoem5.inf;
+graceful restart released ordinaryPID93013. L41/L43 reappeared unowned; one
+preregistered full-owner launch ran in persistentexec54158/Python726. Durable
+hardware.log was nonempty through Mu/Windows/8CPU/retained-owner startup.
+Code0/serviceRunning/Start complete and exact valid signed SYS/UMD; observed
+86.2678793s uptime with input/xHCI/NVMe alive and no fresh41/129/1001 or new dump.
+Display visibility is accepted but physical presentation remains unproven; RDP
+and interactive input were not independently exercised in this run.
+
+VERDICT CONFIRMED for the source-address discriminator. Both immutable88-byte
+device/service receipts are identicalSHA
+5d2c54012dde504b49849d17513f8c5a1f4da9e6c5ba1faba881eb45831317f7.
+First call: StatusC000000D, QueueCalled1, IRQL0, ArgsPresent1, source0, segment2,
+address0x1500000000, nonnull allocation, Flags1, ContextCount0, committed
+2560x1600/stride10240/format21, Started1/DisplayActive1/SourceVisible1,
+ScanoutState1 (runtime exists; IrqEnabled0). Outer guard accepted. The inner
+queue's IRQ-enabled prerequisite is the captured failing state; all remaining
+argument/state conjuncts are satisfied. No primary address, null handle, format,
+visibility or StartDevice change is justified. Six matching Event494 returns
+show the same C000000D; no synthetic success is reported.
+
+Evidence in exact EXP503 directory: ETLSHA
+74e2eef4edfe35e4cdf7f7b01ad1909827fb14dc810f868cc1e26dbbf1822542;
+Event494SHAcda1c52f0d31d88ea7562805784430235fcdd0689256e1552b5230e8695dfa49;
+contractSHA80e6532594f8277a1d5fd17e6d7f13f6524b4100ffaf16604740cc9156bfc62e;
+observation/resultSHA2a626cea978125050fc24f094f84047399080499ebfee21b2f8454561b8b755d;
+candidate-finalSHA2edc240a206eed109ddc561d0ae303d72c791143e1e2c1bd408e39bcafd6d7c8;
+physicalSHA25e7860727e1e63cae9538c555df7d6958eaa4c68779932db5a2075d6d94d2df.
+Host log at evidence collectionSHA
+8a9ddf7b41951e3d86171ae0b2cfa75b376033564ed2c7e5d39eb1c4c426cd29;
+final hash follows graceful cleanup restart. Evidence collected before cleanup.
+Next causal target: derive source-address modeset vs ControlInterrupt ownership
+from Microsoft/WDK and current broker implementation; implement one documented
+mapping and real offline regression before EXP504. Same agent continues.
+
+EXP503 recovery complete11:49Z: exactoem5 INF/SYS hashes checked; pnputil removed
+only package and devnode; stopped/unowned service removed; rescan restored one
+Code28. Physical post-cleanSHA
+4c255b07ab43008f643fbae8ff43971efb72956bc362537140f2841c622b7a9d proves no AGX
+package/service/module/files. Graceful restart released Python726 naturally.
+Final candidate hostSHA
+1f6805063f5f25d29966d05a5b00cc99cce56b97e84ff43032d6fc2a51180b53.
+Ordinary377/392 broker-unset launched once with durableordinary.log in exec15421,
+Python1411. Fresh ordinary physicalSHA
+7191ffa487598a511742f6030ade6f6087bba6cc84a39aff216d594b1a9bbca9 proves SSH,
+8CPU, input/xHCI/NVMe, oneinertCode28APPL0002, noAGXpackage/service/module/files.
+No emergency boot, orphan move, physical operator action or ANS work occurred.
+
+## EXP502 CPU-visible residency preregistration — 2026-09-06T10:56Z
+
+WHY THIS HYPOTHESIS: (1) EXP501 removed the type-2 size/data rejection and the
+new first failure is 12 identical current-dxgkrnl messages: `CPUVisible
+allocations must include an aperture segment in the supported segment set` from
+`VIDMM_GLOBAL::CreateOneAllocation`; the production callback returns only local
+set `0x2`. (2) Pinned WDK 26100 `DXGK_ALLOCATIONINFO` requires every preferred
+segment to belong to the supported set and Microsoft allocation-usage tracking
+requires a CPU-visible allocation in non-CPU-visible memory to include an
+aperture fallback so VidMm can place it in system memory for lock. (3) Current
+segment 1 is the enumerated aperture with existing MDL/PFN map/unmap handling;
+current segment 2 is the local physical segment with existing system/local
+transfer and local-view translation, so supported set `0x3` with preference 2
+names exactly the two implemented locations. This is stronger and nearer than
+any paging-worker, AGX, platform, scheduler, display, capability, or UMD cause.
+
+WINDOWS CONTRACT: FULL GRAPHICS lockable type-2 shadow allocations are drawn by
+the CPU and participate in shadow/primary bitblts. Under WDDM 2+ VidMm uses the
+write set as the unified supported placement set; read and write sets therefore
+match. A CPU-visible allocation may prefer non-CPU-visible local memory only if
+its supported set also contains an aperture segment for guaranteed system-memory
+placement when locked. Every preference must name a supported segment.
+
+AGX/ASAHI CONTRACT: this descriptor change performs no AGX operation. Existing
+Asahi-derived UAT/queue/firmware semantics, m1n1 retained-root ownership, Mu
+publication, context63, HVC translation, physical local pool, and recovery are
+unchanged. The local segment remains physically addressable by the existing KMD
+path; the aperture is the already implemented VidMm system-page mapping path.
+No external code was copied.
+
+TRANSLATION: valid `CpuVisible=1` private metadata returns preferred segment 2,
+`SupportedReadSegmentSet=SupportedWriteSegmentSet=0x3`, `CpuVisible=1`, and
+`AccessedPhysically=1`. Valid non-CPU-visible primary metadata remains preferred
+segment 2, read/write set `0x2`, `CpuVisible=0`, and `AccessedPhysically=1`.
+`MapApertureCpuVisible` stays 0 because the existing map callback consumes the
+MDL/PFNs and does not require a CPU VA. VidMm owns placement/system backing and
+paging requests; KMD retains allocation/open lifetimes, aperture validation,
+physical local transfers, and fail-closed AGX translation.
+
+WHAT IS STILL UNKNOWN: whether current dxgkrnl accepts this exact complete
+descriptor and which natural allocation/lock/paging/present primitive follows.
+No allocation creation, lock, aperture map, transfer, paging Patch/Submit/worker,
+AGX TA/3D, completion, fence, present, acceleration, or CS1.6 result is assumed.
+The hardware run distinguishes only the internal Windows ordering and the next
+actual consumer boundary; all deterministic fields were derived offline.
+
+ATOMIC CONTRACT: for CPU-visible descriptions the paired read/write set `0x3`,
+local preference 2, CpuVisible bit, and AccessedPhysically bit form one coherent
+descriptor. The fields are invalid separately: set `0x2` fails the observed
+lockability gate; preference outside the supported set is prohibited; dropping
+local would reject the implemented physical transfer/bitblt location; dropping
+CpuVisible would make the documented shadow lock fail. Primary remains set
+`0x2`. Invalid private metadata fails before an allocation handle is published.
+
+Sources inspected: current `allocation_windows.c`, `memory_windows.c`,
+`render_memory.c`, `memory_runtime_windows.c`, `paging_windows.c`,
+`callbacks.c`, `gdi_windows.c`, shared `apple_agx_physical_topology.c`, pinned
+WDK 26100 `d3dkmddi.h` and `d3dukmdt.h`, and official Microsoft documentation
+for `DXGK_ALLOCATIONINFO`, allocation flags, allocation usage tracking, GPU
+segments, linear aperture segments, lock flags, and shadow surface behavior.
+
+Candidate commit `94cff3cd9e811f7325935ad4c6f60a076e817233`, branch
+`feature/j313-gpu-acceleration`; source archive
+`.local/experiments/EXP502-cpu-visible-residency/source.tar.gz` SHA256
+`c2954e724653d6e5a4dc42e2588bb386741b8d32b211bfed057a1579d054f527`.
+It is exact EXP501 archive
+`ed0cf4d658689f06b538c9ae5de1cade25a47bdc52001ab4cf7bc1836e813715`
+plus only committed `allocation_windows.c`, its production-callback test, and
+the EXP502 plan. Exact RED observed set `0x2` instead of `0x3`; then 82 render
+tests and 4 WDDM feature tests GREEN and scoped diff-check GREEN.
+
+Unrelated root tracked diff SHA256
+`d09182d2a9a7e2bd8981e2fa18e5f91468512087cc3138fce3d50588a034fa72`,
+pre-entry ledger diff
+`e91e11297e8e34938de90bf022a9f8982e0d3403f1dd0caee804924b901e488a`,
+untracked inventory
+`55e6c920e2782e63066ee9460560369956ced96c622696e5a1e72daa1b258d30`;
+all excluded from freeze. m1n1 commit
+`336d365ff8951e6ecd343d37f8c2fa4e15d94aa6`, clean-diff
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Mu commit `f1ef718e08db0e4c30fdb5d8555973513ad9a004`, inherited dirty diff
+`7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+Neither platform tree is changed or built.
+
+Build command: transfer the frozen archive and `build.ps1` SHA256
+`928b229b78dd9fcfc703d1ab679337c9873683e76e69704c4167d1dac7a27198`
+to FRYZZING, then run `powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP502-build.ps1`, captured in `build-host.log`. Fresh root
+`C:\Users\pauls\EXP502-cpu-visible-residency`; pinned WDK/SDK 26100 and MSVC
+14.44.35207; Release FullProduction 30.0.502.0. Result: KMD/UMD, native analysis,
+Universal validation, Inf2Cat, WDK TestSign, and version gates passed with 0
+errors and only inherited C28251/C28150 warnings.
+
+Artifact hashes: manifest
+`65c4d41035b90a13bc035a80b945ed683a3c60b7d82eb17011b138ef7b2d4342`;
+ZIP `c76e043123188a7bfc3704c0aabee7531cc2b7192c49e5ad6a277c5a568099a3`;
+SYS `48cf75b130adae393b3f3db802ab609fe029c2ef34d9d5e6d92e309c07182e6b`;
+INF `4aa9c9e3c8c3d3c4c5f1d02d222c78491ff7fc18723330a6eb28e21eac7d0612`;
+CAT `65747bf4c0b4d8d033ef2c68ae24b21fe84378fa5c95547de4bd9534ac34b63f`;
+UMD `59f6f45dfd61afbc9790ea4df4ac20556c6445a474d9c3aaadf95dd843797e0a`;
+private PDB
+`220eba1fd104078852e316869645bf82e12d96aaf3b169aa5a1f7f30e6c2394d`;
+build log
+`6d10e2a60d0e83881fd272047309b7e1e4215e2a413f429d7413b3761ece0a19`;
+version log
+`b339475eafff07fdb0584b94253af12f2d59c595cbe8e3cad7686c383a1a99d2`.
+
+Clean ordinary preflight collector
+`5a9c1fb90b403b9c20f0827b3e7e8bfea9f481ef3f4a46e3fd95c07c4437fbce`
+and physical
+`eb78c20df086b2842edc03d92a3dfcb72c80978ea3100b9e2a0699212b537cf2`
+prove SSH, 8 CPUs, healthy AppleInput/USBXHCI/stornvme, exactly one inert
+`ACPI\APPL0002\0` Code28, null INF, and no AGX package/service/module/SYS/UMD
+or fresh 41/129/1001. Ordinary Python PID87897 under script PID87896 exclusively
+owns L41; L43 is present and unowned. Before replacement Windows receives a
+graceful restart; the old launcher then exits naturally on USB reset. SIGINT is
+not used because it snapshots and resumes the guest; no second launcher starts.
+
+Exact staging script SHA256
+`f409d3dad19a40705df1220251ae2e907fc8e28c760794cefaf52e574de86ef8`
+hash-checks the clean baseline and exact ZIP/files, stages only its INF while
+retaining Code28, and configures the bounded 24 MiB boot trace. Transfer
+`EXP502.zip` and `stage.ps1`; run `powershell -NoProfile -ExecutionPolicy Bypass
+-File C:\Users\pavel\EXP502-stage.ps1`; then `Restart-Computer -Force`. After
+SSH is down, wait for ordinary session96696/PID87897 to exit naturally and
+confirm no capital-P Python owner plus L41/L43 state, then run exactly once:
+`sh .local/experiments/EXP502-cpu-visible-residency/launch.sh >
+.local/experiments/EXP502-cpu-visible-residency/hardware.log 2>&1` using
+launch script SHA256
+`a9626c96a5acd2d3b9ae8d6da7e823a5255b2a3fd45d30d8baeb2a4a0883471b`,
+immutable native477 m1n1
+`b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0`
+and Mu406
+`c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`,
+broker enabled. This persistent foreground execution and exact redirection are
+mandatory; confirm nonempty log/progress before collecting guest evidence.
+
+Expected checkpoint: natural bind reaches Code0/service Running/Start12Status0
+without the exact CPU-visible aperture-set diagnostic, then exposes the next
+real primitive. Failure criterion: the same validator, any earlier rejection,
+reset/bugcheck/hang, or a new first failing primitive. Evidence paths are
+`contract.bin`, `hardware.log`, fresh `EXP502-observation`, `candidate-final.json`,
+`physical.json`, `admission.etl`, `event494.json`, `stacks.csv`, system events,
+and any new dump. Absence of reset alone proves no paging or AGX path.
+
+After evidence, cleanup script SHA256
+`6eafe48e4881e21f4428fe854c28d197555891e3c86672a7d76c4b3075ca6ba0`
+will resolve/hash-check the exact bound INF/SYS, remove only that package,
+stopped/unowned service and devnode, and rescan one inert APPL0002. Verify
+physical SYS/UMD/package/service/module absence, then gracefully restart and run
+`sh .local/experiments/EXP502-cpu-visible-residency/restore-ordinary.sh >
+.local/experiments/EXP502-cpu-visible-residency/ordinary.log 2>&1` with script
+SHA256 `32837d19c3320984b79a2026d8c52d9fb8110c1a6ac588c3110edc6a2f71a606`,
+immutable ordinary377 m1n1
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
+and Mu392
+`16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`,
+broker unset. Emergency377/385
+`279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`
+is allowed only if the installed package prevents recovery. One candidate; no
+retry and no EXP503.
+
+Actual result 2026-09-06T10:57Z–11:04Z: exact 30.0.502.0 was staged once as
+`oem5.inf`; Code28 was retained and the bounded WPR boot trace configured.
+Windows restarted gracefully. The inherited ordinary PID87897 exited naturally
+after USB reset with L41/L43 present and unowned. The candidate was then launched
+once by the exact preregistered command in persistent exec session78517; Python
+PID92493 exclusively owned L41. `hardware.log` was confirmed nonempty during
+chainload and grew to220464 bytes before the candidate's natural exit on the
+cleanup restart. It contains all four launch-contract checkpoints, Mu/Windows
+entry, and the final expected serial `Device not configured` exception; SHA256
+`eede66fa39800a0f35e857d3fb42a30041872a34f840052a577aafd7b8815398`.
+Contract SHA256
+`8ba0b5338053982bd2a1da80c5190b482d833ddfc67187053d7e3e8438c5d11e`.
+
+HARDWARE VERDICT: PASS for the scoped CPU-visible supported-placement invariant
+and FAIL/NEW BOUNDARY at `AdmissionDdiSetVidPnSourceAddress`. The exact EXP501
+`CPUVisible allocations must include an aperture segment in the supported
+segment set` diagnostic is absent, as is the older private-data-size diagnostic.
+The natural CDD path reached Code0, AppleAgxAdmission Running,
+StartStage12/Status0, PlatformStage14/Status0, 8 CPUs, exact signed SYS/UMD, and
+remained live204.2473401s. No fresh System41/129/1001 and no new dump occurred.
+This proves current Windows accepts the complete local-preferred/aperture-capable
+descriptor and advances beyond its VidMm allocation validator. It does not prove
+a successful lock, aperture map, paging transfer/Patch/Submit/worker, AGX TA/3D,
+completion, fence, present, acceleration, or CS1.6.
+
+The 59 Event494 records contain zero instances of the old aperture-set validator
+and three instances of `Failed to set VidPn source address on VidPn source
+0x%I64x on adapter 0x%I64x (Status = 0x%I64x).` EventData3 is
+`18446744072635809805`, low32 `0xC000000D` (`STATUS_INVALID_PARAMETER`). The
+symbolized event stack is `dxgkrnl!ADAPTER_DISPLAY::SetVidPnSourceActive ->
+VIDPN_MGR::SetTimingsFromVidPn -> DmmSetTimingsOnAdapter ->
+CCD_TOPOLOGY::ApplyTopologyOnAdapter -> ApplyTopologyWorker -> ApplyTopology ->
+DxgkApplyPathsModality`. Production `AdmissionDdiSetVidPnSourceAddress` and
+`AdmissionScanoutQueuePresent` can return C000000D from several argument/state
+guards. No current receipt captures the actual address arguments or individual
+guard, so the evidence does not assign a sub-cause. The last durable display
+receipt remains DDI7 SetVidPnSourceVisibility Phase2 Status0, not a source-
+address success receipt.
+
+Candidate evidence: observation/result
+`cf256dd46e75cee2eef4c2386d8c605f9f3528cc0ae95021e213ae1807c982a5`;
+candidate-final at204s
+`c8dcda87935bf6abce30c6a567e2727fe44f3565849a0fb2f1b19b153bb8d6e2`;
+physical
+`842ca705ba072acdd7e114fe81ba06a4b150a9980e5d1bffd91a3e2bdf3d4090`;
+ETL `9266aaf83ce06f1a2d6f380097bc764c0b6696c0bbe1c267a8da8d88df8e68b4`;
+Event494 JSON
+`023f72c9bb358add6386f97ca685406177e76ef22058a76d463eb38bb08998bc`;
+symbolized stacks
+`3ad6a1df7b32ad8a8140bd31bc79752a06f104c31b340a17db59130a366313fef`;
+display receipt
+`2d8f71c651a3746c4e9a8ee5538653abf56e929dd77aac2a9ba9f7b82f08d896`.
+
+Evidence first, then exact cleanup verified bound `oem5.inf` and the installed
+SYS hashes. Only that package was uninstalled/deleted; service deletion, APPL0002
+device removal and rescan succeeded. Post-clean result
+`b7ad88d31b5e464c8f3155199b2bcfdbeafb06b442901a838a59e93b8d77dd9b`
+and physical
+`53a6b2c619c2dab7883525d8794819f42c88ba3d218dfe4c079a05b335c82544`
+prove one inert Code28 APPL0002 and no AGX INF/package/service/module/SYS/UMD.
+Cleanup receipts are the same deterministic pnputil/sc outputs as501:
+cleanup `247ecb94759c23b5a587037ef0fb029fc6c5d526d2da14ea911b53931070b9c3`,
+service-delete
+`1877f952eef92e6ec5ca7230211fe124eec2af3a1da81f11d01d819855f65529`,
+device-remove
+`9297415b2fa7f04421ec62ec5b1082cbf2df1bb2d760abf39ffb221a53dd48b7`,
+and scan `98fb003225ec77e34f076ca2539b76b24c0c5d119d603ad4b4788ae2026bdd6e`.
+No hidden/emergency boot or orphan move was needed.
+
+After another graceful restart, immutable ordinary377/392 broker-unset was
+launched with its separately redirected durable `ordinary.log` in persistent
+exec session71458. Final ordinary result
+`d334455bb1eb213fad6f183f532ff9a087f13a9491b7aae2501af9d17dc3f8aa`
+and physical
+`c3f0fe7741f6327d827bb6c4b513bf4a921ee0ad1f5831552f7e39007ffb3eb5`
+prove SSH, 8 CPUs, healthy AppleInput/USBXHCI/stornvme, exactly one inert Code28
+APPL0002, null INF, and no AGX package/service/module/SYS/UMD or fresh
+41/129/1001. Ordinary contract SHA256
+`8c77d00bd34dbf3ee01a5dc26583eb9404bce6804e2976acbf7dffb120741f96`.
+Fresh final physical audit at11:08:40Z SHA256
+`6df54a74820dad720e7d4a2976e383a800de20c15f1aed497ceb26a610d171f0`
+confirms the same clean state. Python PID93013 in live exec session71458
+exclusively owns L41; L43 is present and unowned.
+
+Next causal target for a fresh executor only: capture the exact current
+`DXGKARG_SETVIDPNSOURCEADDRESS` values and the minimal relevant committed/
+visibility/scanout/IRQ state at entry and return, then identify which existing
+C000000D guard is violated. Do not change the address, scanout, paging, AGX,
+platform, capability, session, or architecture path without that discriminator.
+No EXP503 was created or run.
+
+## EXP501 build preregistration — 2026-09-06T10:25Z
+
+WHY THIS HYPOTHESIS: (1) EXP500 stack `CreateCddAllocations+0x850` is the
+return from current `CreateStandardAllocation`; current dxgkrnl RVA
+`0x0f3154..0x0f31b4` stores standard type 2 immediately before that call.
+(2) Pinned WDK 26100 defines type 2 as `SHADOWSURFACE`, but production
+`AdmissionDdiGetStandardAllocationDriverData` admitted only types 1/4 and thus
+returned the exact observed C000000D before reporting sizes. (3) Microsoft
+requires shadow Pitch and requires FlagsWddm2.CpuVisible for the lock callback;
+the pre-change driver supplied neither type-2 translation nor the allocation
+flag. Two production-callback REDs reproduce both violations.
+
+WINDOWS CONTRACT: FULL GRAPHICS CDD creates a lockable type-2 BGRA shadow matching
+the display mode. Sizing must return allocation/resource private sizes 48/0
+without modifying creation data. Materialization returns checked linear metadata
+and Pitch. CreateAllocation must preserve the shadow's CpuVisible classification;
+the type-1 shared primary remains non-CpuVisible.
+
+AGX/ASAHI CONTRACT: no AGX operation occurs in standard-allocation description.
+Existing Asahi-derived UAT/queue behavior, m1n1 retained-root broker ownership,
+Mu publication, memory topology, paging executor, IRQ, firmware, and recovery are
+unchanged. No external code was copied.
+
+TRANSLATION: admit type 2; use existing `AdmissionAllocationDescribe` with BGRA,
+four bytes per pixel, CPU-visible staging classification and CpuVisible1; return
+Pitch only after success. Propagate the existing private CpuVisible bit into
+FlagsWddm2 bit0 while retaining AccessedPhysically bit15. This is the atomic
+lockable-shadow invariant; no new flag, segment, resource owner, ABI, capability,
+paging, or platform change.
+
+WHAT IS STILL UNKNOWN: whether current dxgkrnl accepts size/materialization and
+the following CreateAllocation/lifecycle path; any later placement, paging,
+submit, worker, completion, fence, or present behavior. EXP501 may prove only the
+standard-allocation boundary and identify the next actual primitive.
+
+Source commit `74ae9c5d1ca61946cefa7f01214526d704dc217b`, branch
+`feature/j313-gpu-acceleration`; exact EXP500-plus-commit source archive
+`.local/experiments/EXP501-standard-allocation/source.tar.gz` SHA256
+`ed0cf4d658689f06b538c9ae5de1cade25a47bdc52001ab4cf7bc1836e813715`.
+Two real REDs then 86 relevant tests GREEN and diff-check GREEN. Root unrelated
+tracked diff SHA256 `0eec0248846f83609449c69ce2c7be3f057e3029283021d5dd9699660a0cc2ea`,
+pre-entry ledger diff `44daf99caa5f34d4f374e9a791cf8baa8c343a84d4dfb5039f08d262e122e683`,
+untracked inventory `9c4f3b7830945d93f0445a551f5031a095a4c06cbfb407d24c6c13271e7b02df`;
+all excluded from freeze. m1n1 commit `336d365ff8951e6ecd343d37f8c2fa4e15d94aa6`
+clean-diff SHA `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+Mu commit
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`, existing dirty diff
+`7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`; neither
+is changed or built.
+
+Exact build command: transfer the frozen archive and `build.ps1` SHA256
+`6cca379ff5977442fd0f4e142a35e3b63dc601d2f84a3990ef1061bf64de0b6c` to
+FRYZZING, then run `powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP501-build.ps1`. Fresh root
+`C:\Users\pauls\EXP501-standard-allocation`, pinned WDK/SDK 26100 and MSVC
+14.44.35207, Release FullProduction version 30.0.501.0. Require KMD/UMD,
+analysis, Universal, Inf2Cat, package version, signature, and file-hash gates;
+the same two known analysis warnings are allowed, no new warning.
+
+Build result 2026-09-06T10:28Z: PASS. Pinned KMD/UMD build, native analysis,
+Universal validation, Inf2Cat, WDK test-signing of SYS/UMD/CAT, and package
+version 30.0.501.0 all completed; 0 errors and exactly the same two known
+C28251/C28150 analysis warnings. A separate default-trust Signtool check found
+the embedded WDK test certificate but correctly could not chain it to a trusted
+production root on FRYZZING; this does not replace or contradict the successful
+WDK TestSign/package gates. Local manifest/file verification PASS.
+
+Manifest SHA256 `b815f07e7e94edffce76d079199ec0a392c9076b7b7e7a844d46b942efc5f233`;
+ZIP `d0a58495635c85df36d6590afdd2c6df322c76499fd0f25e3f8c1dab646ad19b`;
+SYS `c83a7936b527849f49bbf90f28e6be7ea4dfaca15080faef933174b8062b309b`;
+INF `5d5a03db20e52185804c069e24632cd53db8d503b5c64018a2124c154badf761`;
+CAT `fe292254ec9c7bf705b068016e18acedb15090d7cd4c78f1e2acda8682b39e55`;
+UMD `57b8e2d01b1740a498c2dffa1b3b69e11695385d34e4494ee9c2da6665a99922`;
+private PDB `5c0044652ba2906bb9017bf4cb9d16b8a104de4958d42700324b2f8ab835fd55`;
+build log `943c9545479fb82b2fb779e1b46cc7785aca319cbd09d3acb6e7b421b2e8bceb`;
+version log `b8a651dd3d4c860209bd63edcbe276cf17778b695acc4dd8710b3ec5dec03627`.
+
+## EXP501 hardware gate — 2026-09-06T10:29Z
+
+WHY THIS HYPOTHESIS / WINDOWS CONTRACT / AGX-ASAHI CONTRACT / TRANSLATION /
+WHAT IS STILL UNKNOWN remain exactly the preregistered sections above. This is
+one atomic documented shadow-allocation contract, not multiple capability probes.
+The single candidate variable versus EXP500 is commit
+`74ae9c5d1ca61946cefa7f01214526d704dc217b`: type-2 shadow sizing/materialization,
+Pitch, and its required CpuVisible flag. All platform and other driver source is
+frozen from EXP500.
+
+Clean ordinary baseline at 10:29Z: collector
+`4ea4ce8802aa444a81fe41b6010c48c6a8697e9fdb17f215d8017d86097739b2`
+and physical `8835c74a86c8a49f3b13611e53cdade53622d5ae3a686f4b08c77a3d6dae2807`
+prove SSH, 8 CPUs, healthy AppleInput/USBXHCI/stornvme, exactly one inert
+`ACPI\APPL0002\0` Code28, null INF, and no AGX package/service/module/SYS/UMD or
+fresh 41/129/1001. The prior ordinary launcher has exited; Windows remains live.
+Host process check found no capital-P Python/run_uefi/chainload owner; uartproxy
+L41 is present and unowned. Do not start a second launcher.
+
+Stage script SHA256 `e9d1ed16c3df60cb72a0e8a26ae24d9cfbf5709030adef51eb4c9bc50ab62dac`
+must recheck that baseline and all candidate hashes, stage only the exact INF,
+retain Code28, and configure the bounded 24MiB WPR boot trace. Exact install/
+launch commands: transfer `EXP501.zip` and `stage.ps1`; run
+`powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP501-stage.ps1`; then use `Restart-Computer -Force` for a
+graceful persisted shutdown. After SSH is down, the old launcher is absent and
+L41 is present/unowned, run local `launch.sh` SHA256
+`516e23d585051178a3ad6e62396e9916b5e223030dc6b33fb84d15e1d2706d07`
+once with immutable native477/Mu406 and broker enabled. Candidate hardware log,
+contract, collector directory, ETL/Event494, system events, and any new dump are
+the evidence paths.
+
+Expected checkpoint: natural bind reaches Code0/service Running/Start12Status0
+without the exact CDD `Failed to find size of PrivateDriverData buffers`
+C000000D, then exposes the next actual callback or stable lifecycle boundary.
+Failure criterion: the same type-2 size failure, any validation failure before
+it, reset/bugcheck/hang, or clean evidence of a new first failing primitive.
+Absence of reset alone does not prove paging coverage. No successful Patch,
+Submit, worker, physical AGX TA/3D, completion, fence, present, acceleration, or
+CS1.6 claim is permitted without its own positive evidence.
+
+After evidence, cleanup script
+`f3d96df8639d1bb3040d1d9b4425492acfab10a7bb1a9ccfd5070aa82e0f5cbc`
+must resolve and hash-check the exact bound OEM INF/SYS before deletion, remove
+only that package/service/devnode, rescan to one inert APPL0002, and verify
+physical file absence. Then gracefully restart and run broker-unset ordinary
+restore script `8da881ed5476f2c3667e9d1775473feefee3725ef9f1076cd41d146ac8dbdb8b`
+with immutable 377/392. Emergency 377/385 is allowed only if the exact candidate
+prevents recovery. One EXP501 candidate only; no EXP502.
+
+Actual launch/result 2026-09-06T10:31Z–10:34Z: staged exact 30.0.501.0 as
+`oem5.inf`; staging preserved Code28 and configured WPR. Graceful restart made
+SSH unavailable and left L41 unowned. The first background launcher invocation
+exited before opening L41 and produced a zero-byte host log, so it did not launch
+hardware. The same preregistered candidate was then started once in interactive
+exec session 37020; Python PID87563 exclusively owned L41. Contract SHA256
+`e02dfad3527732e4dbe86c289e9c532214296332fdd459cbfe03fc8dac84a733`
+records all launch checkpoints. Because the interactive runner was not tee'd,
+there is no durable full candidate host log; this is an evidence-quality concern,
+not a second candidate or missing Windows identity. ETL, exact package hashes,
+receipts, boot identity, and launch contract remain durable.
+
+HARDWARE VERDICT: PASS for the scoped type-2 sizing/materialization boundary and
+FAIL/NEW BOUNDARY at VidMm allocation validation. Exact old `Failed to find size
+of PrivateDriverData buffers` is absent. Windows reached Code0, service Running,
+StartStage12/Status0, PlatformStage14/Status0, 8 CPUs, and remained live
+146.257869s. Air Authenticode reports both exact SYS and UMD `Valid`. No fresh
+System 41/129/1001 and no new dump; newest dump remains EXP499
+`090626-14484-01.dmp` SHA256 `9967060355454697b134efba0d20603ab93e92c22b5aba7e31214d4f7ad09ca2`.
+
+The 64 Event494 records include 12 identical new messages: `CPUVisible
+allocations must include an aperture segment in the supported segment set`
+(EventData1 `67141641` / `0x04008009`, not interpreted as an NTSTATUS).
+Symbolized stack is `dxgmms2!VIDMM_GLOBAL::CreateOneAllocation ->
+VIDMM_GLOBAL::CreateAllocation -> VidMmCreateAllocation ->
+dxgkrnl!DXGDEVICE::CreateVidMmAllocations -> CreateAllocation ->
+CreateStandardAllocation -> ADAPTER_DISPLAY::CreateCddAllocations`.
+This positively proves type-2 size/data handling advanced to VidMm's consumer
+validation. It does not prove successful allocation creation, lock, residency,
+paging Patch/Submit/worker, AGX TA/3D, completion, fence, present, acceleration,
+or CS1.6.
+
+Evidence hashes: observation result
+`dfe013e67183f42ca60ddf9bff83a1b8caa13f77c851a0f774e0df8d5e8b7e26`,
+candidate final `22544773eaddc26ccc3ac7fc972d381841dfdf65046c27bc84616a8f34a0a466`,
+candidate physical `f4c85447df45fcd5a842981ef63f64963b2a33c8e708106a2e841e1b9f550110`,
+ETL `427a8e4d0c4996c832b563e2240174f80b757ef3233d0387e1ba3cdeb31a9a42`,
+Event494 JSON `38c70852ee899bd8d24ea5bb5b4398d1c0142f9edd4a7fbd607dc6db8e357598`,
+symbolized stacks `d0ecdcc237768da876614b9697cc2e4e21af3c14bed1b1c45983bc9ad9218db4`.
+Display receipt ends at DDI7 SetVidPnSourceVisibility Phase2 Status0; it is not
+an allocation-success receipt.
+
+Evidence first, then cleanup verified exact bound `oem5.inf` and SYS hashes;
+package uninstall/delete, service delete, device remove/rescan all succeeded.
+Post-clean result `93160a6608f058623f534ac61ce670c3d456b4a5e5d2b14dea4a7878da0096da`
+and physical `587823dc2266d5bfc062f6049035a7b91939cb0ccda8dd93d4f142e950df1f4d`
+prove one inert Code28 APPL0002 and no AGX INF/package/service/module/SYS/UMD.
+Graceful restart then immutable ordinary377/392 broker-unset restoration
+completed without emergency image. Final ordinary result
+`6dedaea1923d57b83319ce79885b06ab4028051fb6971605d11b0102bc98d522`
+and physical `d7ede7ec819315f59a9d8af32a8db3a78bf23364c67b03e65d10e94f5bb5a71a`
+prove SSH/8CPU/healthy input-xHCI-NVMe/one inertAPPL0002/no AGX/no fresh
+41/129/1001. Ordinary Python PID87897 under script PID87896 and exec session
+96696 exclusively owns L41; ordinary contract SHA256
+`2f22963b4bbe38d9e2049a6c7a44110676d42b58560829402c65e59a603be97f`.
+
+CORRECTION TO PREREGISTERED PLAN: only the first word at caller `sp+0x90` is
+proven to be standard allocation type 2. The separate `sp+0xa0` store is not
+labelled as a creation-data size without a proven private structure layout.
+Docs-only commit `f91f2769d7c73bdddbae2664d17ca867aa03d017` corrects that wording and
+was not rebuilt; candidate source remains exactly `74ae9c5d...`.
+
+Next causal boundary: derive the exact WDDM 3.0 segment-set and preference
+contract for CPU-visible shadow allocations against current aperture segment1,
+local segment2, pinned WDK/Microsoft rules, existing Map/UnmapAperture behavior,
+and the exact `CreateOneAllocation` check. Do not remove the required CpuVisible
+bit merely to evade validation and do not change paging/AGX/platform paths until
+that deterministic placement contract is designed offline. No EXP502 was run.
+
+## EXP500 hardware gate — 2026-09-06T09:42Z
+
+Actual launch start 2026-09-06T10:02Z: SSH timed out; both expected proxy/vUART
+USB endpoints were present and unowned; no capital-P Python/run_uefi/chainload
+process existed. Frozen candidate, launch, full-owner, and recovery hashes reverified.
+
+Actual result/cleanup 2026-09-06T10:08Z: EXP499's paging-Patch C000000D ->
+119/103 reset was not reproduced. Exact500 reached SSH/Code0/serviceRunning/
+Start12Status0/8CPU and remained live225.986s versus499 reset at26.746s; no new
+dump or fresh41/129/1001. Observation
+31aa3722675ec70313d073759199284bc4bf90fe6ad33bc3897c7ac23d469853,
+finale3320936472c27a1bc279863a85bde30271e4be3f14454ca858d27b437d58708,
+hardwarelog5bfff4f3bcc9973e89034df07f483b06a9ddbcbc80da044187ce3ac6252cf7f3,
+contractb91180b1c88b563a212c96c3dfd8a40a41f100c0046f840341be493a7e899642.
+This is consistent with the routing fix but does not prove equivalent paging
+path coverage because the earlier CDD sizing failure may block it. Successful
+Patch/Submit/worker/completion/fence remain unproven; no render/TA3D/present proof.
+
+ETL67b8913f32fc34e015b86bb3e6f628f787c2be06c33d152df367bf953f7a58e6
+and event4948b3f0d525250cc3090b09ed8f2bb9c0ff5c7a9d5e39457552a6a55b03b65f3ee
+contain repeated C000000D `Failed to find size of PrivateDriverData buffers`.
+Symbolized stacka446ce1ede31847593fd99b539c826e0bfa07ebb50e32d7780a55cb447aafb1e
+classifies exactcaller ADAPTER_RENDER::DdiGetStandardAllocationDriverData ->
+DXGDEVICE::CreateStandardAllocation -> ADAPTER_DISPLAY::CreateCddAllocations.
+Trace09:46 timestamps remain separate from10:02 observation; no RTC inference.
+ETL does not expose StandardAllocationType/input fields, so exact subtype/guard
+is unclassified. Next target is pinned-WDK/offline comparison of this CDD sizing
+call, then minimal argument receipt only if sources cannot decide; do not guess it
+is the old primary path or change paging worker before resolving this boundary.
+
+Evidence first, then cleanup verified/deleted exactoem5/INF/SYS, service/devnode;
+rescan produced one inertCode28APPL0002. Post-clean
+34ef9ec7aedbc0c52e3ce0db1c227ee1912a431484e7bb6fb16c74136008422c and
+physical5102cc05922e99f83f0119794c0a23d8c5386715fac529194372dc4b6c6f6b68
+prove no package/service/module and no physicalSYS/UMD/INF. Graceful restart,
+then immutable ordinary377/392 restored broker-unset. Final health
+f2338ce0a520da3f9d3faef67d66af3f692cf5d45230de2c4eba5bb84c493bf0 and
+physical415e3dad3e6ac44cdfe44ce33aa2afa35c3d95e8ec0f0e7965418bd44a2922c5:
+SSH/8CPU/input/xHCI/NVMe/one inertAPPL0002/noAGX/no fresh41/129/1001.
+Ordinary launcher PID82005/session60240 exclusively ownsL41. Full report
+.local/experiments/EXP500-paging-patch/agent-report.md. Executor
+/root/exp500_hardware finished; follow investigation/GPU_AGENT_PROTOCOL.md and
+do not repeat500; a fresh executor owns any next EXP.
+
+86 tests GREEN; pinned KMD/UMD/analysis/Universal/Inf2Cat/sign/version gates PASS,
+same two existing KMD warnings. Exact499->500 source comparison only gdi_windows.c
+and paging Patch regression. Root c2d1a63ef368e82302ad1c9fe672f314a3aef557,
+branch feature/j313-gpu-acceleration, dirtydiff7850e07fce035a3fa0b8ef7a6012c35262dfe9ce9553136f2b3dfbc702079809
+excluded. Native336d365ff8951e6ecd343d37f8c2fa4e15d94aa6, Mu f1ef718e08db0e4c30fdb5d8555973513ad9a004
+with same previously recorded dirty7febae89... not rebuilt or imported.
+ZIPc6a15eac61c78a74ff53c9b816538c301d61b84bfe8c9362a9c7ce8df847a1e2;
+manifest2303d2794d58659ba5c6ffafdf55984e3d1662c5960ec33791166f9882cdac70;
+SYSed0222447cdd30d6d73f26cbadb7063122b460cf65675bd9eca1bfb075429cd7;
+INF6a48f99e36882c9348e82867da81295864b4743ebb1dba8032b92300e2882dda;
+CAT47a8d581c389536e07888884c794ea91fe238d744c7f402e7bd91bb66b8a94a5;
+UMDc562dcb2e78b657646af583ea1c2ce586e2b5a722f99f9f70bc028f80087a5e1.
+Fresh09:41 ordinary healthd743547851ccdcf9f99c4bad021fb801f7f836ba48c46cf94e00fdf8cec188b7:
+SSH/8CPU/one inertAPPL0002/noAGX/healthyinput-xHCI-NVMe/no fresh41/129/1001.
+Same ordinary launcherPID72749 owns499 ordinary-contract. Stage500/stage.ps1
+SHA3078d31487796849c76ece01b6c0520460a9dfa81a8cddda376ad3e63591ab41 rechecks
+package/service/SYS/UMD absence and all candidate hashes, stages without install,
+sets same24MiB WPR. Graceful Windowsrestart then500/launch.sh
+SHA6396107227ec39316b27f039176b308b67c928331c5fcb445f1f30f33da1f327 uses
+unchanged full-owner native477b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+andMu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Expected paging Patch success and nextactualSubmit/worker/completion boundary;
+failure is exactsame119/103 or any new fault, not guessed from partialboot.
+Evidence500/hardware.log/contract.bin/receipts/ETL/event494 or exactdump before
+sourcechanges. Exact500/cleanup.ps1 afteractualINF validation, ordinary377/392
+restoration,385 emergency only when candidate preventsboot. No renderPASS claim.
+
+## EXP500 build preregistration — 2026-09-06T09:30Z
+
+WHY THIS HYPOTHESIS: EXP499 exact PATCH arguments contain Paging=1, DMA range
+0..16, private range 0..72 in 4096-byte buffers, and empty allocation/patch lists.
+Production EncodePaging emits this format. Current Patch incorrectly routes it
+through GDI-only guards requiring 8192 private bytes and nonempty lists.
+WINDOWS CONTRACT: FULL GRAPHICS paging Patch has NULL/zero lists, independent
+private-data slices and optionally NULL hContext. Patch failure bugchecks.
+AGX/ASAHI CONTRACT: existing physical paging plans already resolve local offsets;
+their DMA markers have no address relocations. Production worker owns execution.
+TRANSLATION: dispatch Paging before GDI guards; validate bounds, context owner,
+existing records and marker/header equality without modifying any bytes. No
+BuildPagingBuffer, Submit, worker, completion, memory/UAT or GDI behavior change.
+WHAT IS STILL UNKNOWN: paging Patch acceptance and actual Submit/worker outcome.
+Source c2d1a63ef368e82302ad1c9fe672f314a3aef557, 86 relevant tests GREEN; real
+production encoder/dispatch RED reproduced499 rejection, then idempotent/sliced
+and malformed-input tests GREEN. Source archive
+fe49ecb0ebdc2b00051ad748e6a010c9ef93f84bf49d52d95231569a1550d425 is exact499
+plus gdi_windows.c and new behavior test. PinnedFRYZZING500/build.ps1 Release
+PackageBuild500, all signing/Universal/Inf2Cat/analysis/hash gates before staging.
+09:29 ordinary clean health2e9e39229d7a69622411477e4eee2b1d4be56bdcbd89b489b6fae4a24d9e081c.
+Recovery remains377/392;385 emergency only if candidate actually blocks boot.
+
+## EXP499 exact verdict and cleanup — 2026-09-06T09:29Z
+
+Dump090626-14484-01.dmp SHA9967060355454697b134efba0d20603ab93e92c22b5aba7e31214d4f7ad09ca2:
+119/103, CPU1, IRQL0, System, uptime26.746s. Modern handle resolution advanced
+past OpenAllocation into paging preparation. The immediate failing DDI is PATCH,
+not SubmitCommand: current VidSchiSubmitPagingCommand+1d8 calls DdiPatch; on its
+C000000D return it emits119/103 at+20c. Arg3 ffffc901508bcbd8 is DXGKARG_PATCH.
+Correction: preliminary decode as SUBMITCOMMAND used the wrong structure; discard
+those fields. Correct private-PDB PATCH decode is saved in499/patch.txt, caller
+in499/paging-caller.txt. DMAsegment1/address160fffe000/size4096/start0/end16,
+private4096/start0/end72, listsNULL/alllengths0, fence1, Flags1, engine0.
+No real rendering/TA3D/fence/present proof. No Event129 near the07:38 crash;
+older02:11 Event129 retained as telemetry, not a GPU causal conclusion.
+
+Exact499/oem5/version/INF/SYS verified and deleted in current377/385 emergency.
+SYS/UMD leftovers hash-verified and moved to recoverable EXP499-orphan-files.
+Hidden health e9e5fc185d1903fe805b049ecc7602b9b8d1d72170963909c440905a71d9d659
+shows noAGX/8CPU/SSH/input/xHCI/NVMe/no fresh41/129/1001. Graceful restart then
+499/restore-ordinary.sh restored immutable377/392 (session83512, ordinary.log).
+Fresh09:29 ordinary health2e9e39229d7a69622411477e4eee2b1d4be56bdcbd89b489b6fae4a24d9e081c
+confirms one inertAPPL0002, no package/service/module,8CPU, healthy systemdrivers
+and no fresh41/129/1001. Continue only paging Patch routing, no repeat499.
+
+## EXP499 reset / EXP499-R1 emergency preregistration — 2026-09-06T07:39Z
+
+Natural499 reset beforeSSH afterretainedseq602. Exactstop/owner unknown until
+dump; no normal499repeat. Host2d605a9df93c8e9c8d86c71bf19968a65f3331c1608aba21c6e16e2dbb8fbcad.
+BoundedSSHtimeout; launcher70951 exited; noactive run_uefi andbothUSBendpoints
+present. Use499/emergency.sh with immutable377fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+and385279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c,
+manifest499/emergency-manifest.json records samehashes/profile, brokerdisabled.
+Collect499-crash-evidence newest3 dumps/events plus499-observation/receipts,
+thenhash-verified exactoem5/version499 deletion withcleanup-hidden.ps1. Preserve
+any exactSYS/UMD orphans recoverably beforeordinary restoration. No newGPU/
+platform change duringrecovery, no diagnosis inferred fromreset alone.
+
+## EXP499 hardware gate — 2026-09-06T07:36Z
+
+85 testsGREEN; pinnedKMD/UMD/analysis/Universal/Inf2Cat/sign/version gatesPASS,
+same2 existingwarnings, no newdiagnostics. Archivecompare exact498->499 only
+allocation_windows.c/opentest. Roota7bf1de85fbc6d41d57a7bd301c486246759219d,
+branchfeature/j313-gpu-acceleration; dirtydiff03137a15b31b17dbd13171cb439b00f98e903476c9676d041ac527ff4875d751
+excluded. Native336d365/Mu f1ef718 and dirty7febae89... unchanged from498 gate.
+ZIPc6a4ba1355dae7274795a6be708666909737a465d984669cc3c746db15b2d6d9;
+manifest39d7c77592ad803b5a29f03f50a81893a4c5ce156ec5dc63494f49307fec2352;
+SYS5f5de852d0e6a5f34c0b772edbb0ce5373fab1dcc08c32ba59b3413a02857ba9;
+INF552f2abeb41323334d4172c116ba4e15dc8e8222e15bf42bfe11d7d531b29b88;
+CAT8b330d4267318837736683c2b74fd22ea0350e9b343dcea81375e646ba3a3f73;
+UMD5b7a4385f5335534b2d97b88cd11cf39a3d42d258c8d1c038ec1adf32258d8c1.
+After elapsedpause fresh07:36preflight7742e7bfa6cfffbe0f4d713a78814e7ee411b4ead1df807f94d20533dbe792fa
+confirms sameordinary guest/SSH/8CPU/oneinertAPPL0002/noAGX/nofresh41/129/1001.
+ActivePythonPID52676 owns proxydevice and runs immutableordinaryMu392 with498
+ordinary-contract.bin; no secondlauncher. Stage499/stage.ps1 SHA43036e718bfe604132b3f5afeb31f8b1411b31dd079c2f55cbcd1192e3844935
+rechecks package/service/fileabsence plus everyhash before pnputil/add-driver
+without/install and same24MiBWPR. GracefulWindowsrestart then499/launch.sh
+SHA5482100e699c83304369faf520736b343f86989e9d8ab23d3e3fdfb78aaf7ad6,
+native477b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+andMu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0,
+broker enabled. Expected nolegacy88/invalidhandle and laterCDDallocationcallback.
+Collect499/hardware.log/contract.bin/receipts/admission.etl/event494.json or
+exactdump ifcrash. Cleanup499/cleanup.ps1 verifies actualoem/hash beforedelete;
+restoreordinary377/392. Emergency385 only ifboot-boundpackage preventsguest.
+No actualrender/AGXexecution/fence/presentPASS inferred fromOpen success.
+
+## EXP499 build preregistration — 2026-09-06T02:16Z
+
+WHY THIS HYPOTHESIS:498 ETW reports exact88 WDDM1-only callback gate followed
+byINVALID_HANDLE. Current DxgGetHandleDataCB RVA130a7c..130afc checksmodel,
+logs88 andreturnsNULL. CurrentAcquireCB and pinnedWDK define WDDM2+ referencepair.
+WINDOWS CONTRACT: FULL GRAPHICS WDDM3.0 uses DxgkCbAcquireHandleData(queryType1/
+Flags0;outReleaseHandle) and DxgkCbReleaseHandleData(by-valueType1/reference).
+ATOMIC CONTRACT: successfulacquire requires exactlyonerelease on success and
+failure; the API pair cannot be advertised/wired independently. Microsoft
+Acquire/Release docs WDDM2.0+,IRQL<=APC and pinned26100 sharedheader1392..1418.
+AGX/ASAHI CONTRACT: unchanged memory/UAT/broker/firmware/IRQ/scanout ownership.
+TRANSLATION: transientreference duringOpen validation/binding creation, then
+release beforeDDIreturn. ExistingWindows Close-before-Destroy protects completed
+binding; no extra cross-DDI reference cycle orsecondallocationowner.
+WHAT IS STILL UNKNOWN: hardware acceptance ofmodernresolver/nextactualcallback.
+Sourcea7bf1de85fbc6d41d57a7bd301c486246759219d;85 testsGREEN. RegressionRED legacy
+NULL, thenGREEN modernpair with exacttoken/releasecount, partialrollback,
+malformeddescription andlowmemory all releasewithoutleak. Archive
+0a610a1aafe6809f5870b23d5641e142f7b900e045d2a1622364879dff81dce0 isexact498
+plus allocation_windows.c and existingopentest. PinnedFRYZZING499/build.ps1,
+Release PackageBuild499, allpackage/hashgates beforestage. No model/capschanges.
+
+## EXP498 verdict / cleanup — 2026-09-06T02:14Z
+
+No3B crash: Code0/serviceRunning/Start12 Status0;8CPU/SSH/input/xHCI/NVMe;
+no fresh41/129/1001. LastdisplayId7 Phase2 Status0. Observation
+dd9bc7d28d33e8acfdbbf244b9b0c5685ff23f3521b276380ab2bbdb1ad33919;
+ETLfda115a86c0416f5d747c1b33eb04fd542789ae155c6c7ef90f42dcefd87c7ba;
+event4942a9571471496f97b9f4010d0de9f99f7ab013674fb66e1867541bc60654de6ff.
+REJECTED as completedOpenAllocation solution: WDDM2 driver calls WDDM1.x DDI88,
+thenC0000008. Current DxgGetHandleDataCB generatesexact88 andreturnsNULL under
+currentmodel. Supersedes498-plan assertion thatlegacyresolver is supported here;
+token/pointer distinction remains correct. Nextfixmodernacquire/releasepair only.
+No AGXexecution/completion/fence/present proof and no new capability changes.
+Stopboot savedETL/removedtrace. Exactoem5/version498/INF/SYSverified; package
+uninstalled/deleted, stopped unownedservice deleted, devnode removed/rescanned.
+Postcleanup3ce00f367a7bd145271234964fdb7595167e07af2232ba899673004f82d115c5:
+oneinertAPPL0002/noAGX/8CPU/SSH/nofreshevents. GracefulWindowsrestart then
+498/restore-ordinary.sh immutable377/392; ordinary.log/ordinary-contract.bin.
+
+## EXP498 hardware gate — 2026-09-06T02:09Z
+
+85 testsGREEN, pinnedKMD/UMD/analysis/Universal/Inf2Cat/sign/version gatesPASS,
+same2 existingKMD warnings. Exact497->498 archive diff contains only
+allocation_windows.c and new open/close behavioral regression. Rootf3551bd2818744063a372a7f30795ec5e10cdeb4
+branchfeature/j313-gpu-acceleration, dirtydiff e46ace8ecfcb881a78dc092c15b9dafd6ba6ae3c46c87c67677e057e6da68b58
+before this ledgerupdate, excluded. m1n1/Mu commits/diffs and frozenartifacts
+unchanged from497 gate; no sourcebuild/import of otherplatformwork.
+ZIP2a969279519bd39013d884e6930ce73894b6bcdbac76fd0b339b70a68763aeb2;
+manifest5897ed6ddbb4ea473a3a1714bee438c8cf83a4f7fad7eecd5171dc1cea8e618e;
+SYS205681b530e3853a331b6cf7cbbcdacc2e8a0a4dd17b02e31264fe8a0631a827;
+INF61018708bbb5bcb09f9a551c10f234ee23172bf7a467d6fe1ff6da262b6d1aec;
+CAT4b30ae4219b5083444ac2326cd26bfea6428b60877825e9c4a2228684373fd3b;
+UMD98ce44389836089530a72a489cbc473c9905efdc6ddc86fec9b164cd4d482f21.
+02:08 ordinary health436f0c7ff1f7569beb3a912300f6a304475d2ef73ae5d8eb9f0dd23d1d238077
+proves cleanunboundAPPL0002/8CPU/SSH/input/xHCI/NVMe/no package/service/module/
+fresh41/129/1001.497 orphanfiles movedrecoverably, systempaths absent.
+498/stage.ps1 hashfd83c48554d21f382be878de6953916498841b1626dd8b5dc35d86d513f7313d
+rechecks fileabsence/package/hash before stage-only and sameWPRboottrace.
+Graceful guestrestart then498/launch.sh SHA4d5168e571230e10bdd85d9687bbd8507f0a0cc029ba373f6ece0eb183ac5770
+uses immutable native477b970a7.../Mu406c7ddcf... brokerenabled.
+Expected no runtime-token dereference and progress beyondOpenAllocation; collect
+498/hardware.log/contract.bin/ETL/receipts ornewestdump before anysourcechange.
+Exact498/cleanup.ps1 verifies actualoem beforedelete; restoreordinary377/392.
+Emergency385 only if thepackage prevents boot, no full-owner498 retry.
+
+## EXP498 build preregistration — 2026-09-06T02:07Z
+
+WHY THIS HYPOTHESIS:497 dump recoveredcontext x12=400001c8, pcKMD
+AdmissionAllocationDescriptionValid+10, callerOpenAllocation+c0. Source casts
+runtime token400001c0 to pointer; real callback offline reproduces same address.
+WINDOWS CONTRACT: FULL GRAPHICS DXGK_OPENALLOCATIONINFO.hAllocation is a32-bit
+dxgkrnl token. DxgkCbGetHandleData(Type=ALLOCATION1;Flags0) returns the original
+non-device-specific KMD allocation; NULL must returnINVALID_HANDLE. Pinned26100
+requires PASSIVE_LEVEL, matchingOpenAllocation. No private handle table needed.
+AGX/ASAHI CONTRACT: unchanged production memory/UAT/broker/IRQ/scanout owners.
+TRANSLATION: recover adapter via existing device owner; call supported resolver,
+validate returned object and existingdescription, retain existing open-count and
+rollback. Runtime token remains token; no new lifetime owner or ABI/caps change.
+WHAT IS STILL UNKNOWN: actualWindows OpenAllocation acceptance/next producer step.
+f3551bd2818744063a372a7f30795ec5e10cdeb4,85 relevant testsGREEN; realRED matched497
+invalidread. Source211f89dbc9368a34f0a65b10d0d955b15b352ef484481d3cc37ddde1439a2403
+freezes exact497 plus committedallocation_windows.c/newregression. Build pinned
+FRYZZING498/build.ps1 Release PackageBuild498; fullpackage/hash gates beforestage.
+Recovery ordinary377/392 underway; no staging until freshclean evidence.
+
+## EXP497 exact verdict / recovery cleanup — 2026-09-06T02:04Z
+
+Dump090626-14296-01.dmp SHA7327f4cfecf74048fa223864f688254be164fb7d6afbdf5061ea5700ef7909f7
+is497 version30.0.497.0,8CPU,uptime25.226s, CPU0 IRQL0 in csrss-attached caller.
+Bugcheck3B(C0000005,ffff90806a2e76d8,ffff90806a2e7160,0).
+Correction to preliminary Arg2 interpretation: recoveredcontextPC is
+fffff800b4e25ec0, AdmissionAllocationDescriptionValid+10, a load fromx12=400001c8.
+This is NOT proof of execution from stack. Fault is OpenAllocation casting
+runtimehandle400001c0 to KMDpointer, then validating objectdescription at+8.
+Stack advances CreateStandardAllocation+714 ->CreateAllocation+10f8 ->
+OpenAllocations+214 ->KMDOpenAllocation+c0. Thus497 sizing/materialization/creation
+advanced; entire497 candidate is rejected due to next handle-owner bug.
+No render, physicalexecution, fence or presentproof. No fresh129 in497 reset
+event window; old129 count remains telemetry only. No interactive workload ran.
+
+Emergency377/385 recoveredSSH/8CPU/input/xHCI/NVMe. Collected newestdump/events
+and497-observation first. Exactoem5/version497/hash-verifiedstore package deleted,
+stale devnode removed, service absent, WPRcancelled. Hash-verifiedSYS/UMD leftovers
+moved to C:\Users\pavel\EXP497-orphan-files (recoverable); systempaths nowabsent.
+Hidden-clean collector02:03:37 confirms no package/service/module and nofresh
+41/129/1001. Graceful restart ->497/restore-ordinary.sh with immutable377/392,
+ordinary.log/ordinary-contract.bin. Continue498 focused handletranslation fix.
+
+## EXP497 reset / EXP497-R1 emergency gate — 2026-09-06T02:00Z
+
+Natural497 reset before SSH after retained-root verification throughseq602.
+Host5c526833360da461483870c04c818f42e8c6e301b402dbd8e90a8a2b65b20631.
+Stop code/owner unknown until Windows dump; no hypothesis inference from reset.
+BoundedSSH failed; launcher exited and bothUSB endpoints are back. No full-owner
+497 retry. Boot emergency497/emergency.sh with same immutable377fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+and385279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
+Manifest8acd8734ecce7c63c1207f2ccdb74ac1a0b029065219896da6f8cd6c580fbf69.
+Purpose exclusively retrieve newest dump/receipts and remove exact497 boot-bound
+package; no source/platform changes. Save497/emergency.log/emergency-contract.bin,
+EXP497-crash-evidence newest3 dumps/events plus497-observation receipts. Confirm
+exact oem5/version497/INF/SYS hashes before deletion. Collect first, cleanup
+second; hash-verified orphanfiles moved recoverably if necessary. Restore ordinary
+377/392 after cleanup; investigate only exact first Windows failure from dump.
+
+## EXP497 hardware gate — 2026-09-06T01:57Z
+
+Pinned KMD/UMD builds, analysis, Universal, Inf2Cat, signing and version gates PASS.
+84 relevant testsGREEN. Same2 existingKMD warnings; UMD0 warnings. Source freeze
+comparison proves only allocation_windows.c and new behavioral test differ496.
+ZIP32d380be48fcb5a77c2dbf4aee18fed0edf399237a9e0a8122fb5a7ec5f5f9cc;
+manifest5534e9573b9a902bfef5ce7cf32ea7463f8bbb66937dedd80244eb33268fff70;
+SYSa2c026eb9e4349f7e9d832336c0929645664f19c4e5c2cefd954b4840c74f7f8;
+INF31ffe37e258c55830c08cad0d611183b3d5f9be276146247e004b57cab1c81db;
+CATe43826bfdbd73df6ad3deb5dd4a4beb64edc78708f01978415b4ea4bec913eee;
+UMDb2483475c493a85b484490c379edc9a14aa4b9ac4c9abbda2617fa5cbedb6dbc.
+Root e02ee32479a270d3268d6b99ae42b4de1909d1b3 branchfeature/j313-gpu-acceleration,
+dirty diff37561e21009b95fc4ab6daed13c679a81ea813df0175efe880a1c60f0fd8c8da
+before ledger/state updates, excluded from build. Native336d365ff8951e6ecd343d37f8c2fa4e15d94aa6
+trackedclean. Mu f1ef718e08db0e4c30fdb5d8555973513ad9a004 dirty7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce
+not built/imported. Same native477b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+andMu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Existing clean ordinary healthbfb5c55b...; stage497/stage.ps1 additionally verifies
+physical SYS/UMD absence and everyhash before pnputil /add-driver without/install.
+Stage scriptSHA3ddd147573c40a601a92d6e0a23ce5aca6f73269c5a452a5e77977654318ab0b.
+Then gracefulWindows restart -> sh497/launch.sh with brokerenabled; launchSHA
+9ca2d824be3b82bc03f5ff8ea6e86740e2699124ec96c776157e4bf503170ee0.
+Expected: no type1 sizing/materialization failure, actualallocation/nextcallback
+observed; failure is unchanged status or any new crash/hang. Same24MiB boot WPR.
+Evidence497/hardware.log,contract.bin,admission.etl,event494.json,EXP497-observation.
+Collect before exact497/cleanup.ps1 (verify actualINF first), restore377/392 via
+497/restore-ordinary.sh; emergency385 only if needed. No implicit rendering PASS.
+
+## EXP497 build preregistration — 2026-09-06T01:55Z
+
+WHY THIS HYPOTHESIS: EXP496 exact ETW caller CreateCddAllocations+4b8 forwards
+type1 SHAREDPRIMARYSURFACE (current dxgkrnl RVAf2d94/f2d98), while production
+accepts only type4. Windows forwards valid primary creation data but NULL private
+buffers in its size phase at2af6c8..dc. First error is C000000D from that phase.
+WINDOWS CONTRACT: FULL GRAPHICS standard primary is created by kernel without
+UMD private-data generation. Query sizes48/0 without mutating creation data;
+materialize native BGRA primary through existing allocation description.
+AGX/ASAHI CONTRACT: accepted native477/Mu406 retained-root/runtime/local backing
+and fixed native scanout are unchanged. No new firmware/UAT/IRQ contract.
+TRANSLATION: type1 native2560x1600/source0/BGRA -> existing linear texture
+description; Windows tags primary, KMD uses existing one-object lifetime. No
+separate resource handle is needed with zero group-private bytes. No caps added.
+WHAT IS STILL UNKNOWN: actual Windows primary allocation/next producer callback.
+Source e02ee32479a270d3268d6b99ae42b4de1909d1b3; actual-callback regression
+RED then84 relevant testsGREEN. Source8a492ee73c34ad2e8e2dbed1c6fae7b415ef9bc16d6344ee313ce7e9d29f8df2
+is exact496 plus allocation_windows.c and new behavior test; no dirty platform
+changes imported. PinnedFRYZZING EXP497/build.ps1 -> Release PackageBuild497,
+KMD/UMD/analysis/Universal/Inf2Cat/sign/version gates. Artifact hashes required
+before staging; hardware gate follows. Recovery remains immutable377/392,
+385 emergency only. No acceleration readiness upgraded.
+
+## EXP496 verdict and ordinary restoration — 2026-09-06T01:50Z
+
+CONFIRMED: preserving Windows-allocated target-mode defaults removed113/7 and
+advanced through successful SetVidPnSourceVisibility (Id7 Phase2 Status0).
+Code0/serviceRunning,8CPU/SSH/input/xHCI/NVMe present. No41/1001; one129 record16234
+at01:34:42Z remains storage telemetry, not a causal GPU regression conclusion.
+Observation SHAa43a570294523cda1a0b314ff73c2a6c23d45ef77dae01d2544e92d6c0f72f4e;
+host2ccbf9bf4b40cf612797ab7e55aab4cd600b5c1f2517d5f06506de8818ec834c;
+stack raw534edd0ea9811bcdf0a6cdcb2a8d57b1121d3b4030ea088862f1b128d93470fb.
+Next first failure: CDD shared-primary size query C000000D, not GDI render yet.
+WPR stopboot saved ETL and removed boot trace. Exact oem5/version496 package
+uninstalled/deleted, stopped service removed, APPL0002 removed/rescanned.
+Graceful guest restart ->496/restore-ordinary.sh completed with immutable377/392.
+01:50 ordinary health bfb5c55b74a00bef5aa66626af9d4ada1d44e29460bed36eff28f0ec655811cf
+proves SSH/8CPU/healthy input/xHCI/NVMe, exactly one inertAPPL0002/Code28,
+no package/service/module, no fresh41/129/1001. No interactive user currently
+logged in; boot DWM request itself supplies this discriminator. No AGX execution,
+completion/fence/present proof. Continue standard-allocation translation only.
+
+## EXP496 hardware gate — 2026-09-06T01:30Z
+
+Build/sign/Universal/Inf2Cat/version gates PASS;82 testsGREEN, same2 existing
+analysis warnings,0 errors. ZIP82dde7361034aeaa864f37b2084667dad644b6411d83d0e1934f06e9f0047422;
+manifest1eae267f2efdfac91775a432339ccb40c4fa0541e9535654f9c22ce84b2daaec;
+SYSa90098019bd3a0ff2dbb9c2a879c99d49e2c2517278384583ac93d5471138d2b;
+INFeb0187b3dc2d832f4ce166c18cc08bd59d665f7c24b8ed71ff16b42deb6253d3;
+CAT72d2b2cd5c9e49407a399f06dbcbf800183e10c7aa68bf2d5c9f217b63acfbbf;
+UMD823fd9fea5b351ee3ccbbdfeff994d7f2219a7c5ba810d39d06b9189b6209483.
+Ordinary healthba3c0003881faa64712cf462a5792be0eb547c55acf828fe0fd7b9f674a95e56
+proves clean unbound APPL0002/8CPU/SSH/no package, no new41/129/1001. Stage script
+also checks physicalSYS/UMD absence and all hashes before stage-without-install.
+Same stack-enabledWPR; graceful restart ->496/launch.sh frozen native477b970a7...
+andMu406c7ddcf... with brokerenabled; complete hashes unchanged in495 gate.
+Only source change from495 is preserving manager target-mode defaults. Expected
+no113/7 AddMode guard and later cofunctional enumeration. Collect exact results
+before next sourcefix or workload; no acceleration claim from admission alone.
+Evidence496/hardware.log/contract.bin/ETL/receipts; exactcleanup496/cleanup.ps1,
+thenordinary377/392. Current-compatible385 emergency only if unbootable.
+
+## EXP496 build preregistration — 2026-09-06T01:17Z
+
+Additional source proof: AcquireRawDdiEnumeratorCachedModeInfo RVA368c88
+sets managerId at368d00 and stores64-bit all-ones at mode+44 at368d28.
+AddModeImplV1 compares both words at364670..684 before intentional113/7.
+The raw target object heap page is absent from the triage dump; do not claim
+its fields were directly dumped. Cause is supported by observed guard,
+exact current creator/consumer code and reproduced production-init sentinel loss.
+An earlier dt after a standalone r command used the bugcheck-context x19, not
+the selected frame; disregard that unrelated object rendering.
+
+WHY THIS HYPOTHESIS:495 dump reaches TargetModeSet AddModeImpl guard requiring
+MinimumVSyncFreq FFFFFFFF/FFFFFFFF for VidPnV1. Whole-object memset erases those
+2.9+ fields. Production-init regression reproduces the exact loss of sentinel.
+WINDOWS CONTRACT: FULL GRAPHICS keeps VidPnV1; allocator creates target-mode
+object including managerId/extended defaults. Driver fills its known signal
+and preference, not unsupported minimum-refresh/VRR values.
+AGX/ASAHI CONTRACT: same measured495 signal tuple and current DCP/AGX owners.
+TRANSLATION: remove target whole-object memset only. No v2 API/model/caps switch.
+WHAT IS STILL UNKNOWN: target AddMode and remaining VidPn/producer path on hardware.
+Source4e422e06ccd07349bc767fe3732d2168b412b2e8, display.c+behavioraltest. Real
+RED sentinel assertion then82 testsGREEN and diff-check. New source freeze
+3c6538433f390961e2f96da0254a7ee49d5135425e99a04bb5874b2458e30cf5 is exact495
+archive plus those2 files. PinnedFRYZZING build.ps1 -> Release PackageBuild496,
+KMD/UMD/analysis/Universal/Inf2Cat/sign/version gates. Platform artifacts unchanged.
+Readiness: no completed VidPn/present/AGX submission/fence claim until run.
+495 exact cleanup complete; ordinary recovery running before next stage.
+
+## EXP495 exact verdict / ordinary restoration — 2026-09-06T01:13Z
+
+Dump56c44e1d36534add9aa45a4076edc863d61420a178727cb552886275995cd6ad
+identifies113/7 DDI_NOT_SUPPORTED in target-mode AddModeImpl, called by
+EnumVidPnCofuncModality from dwm display functionalization. ParameterC0000005
+is hardcoded by this guard, not proof of random memory corruption. Source
+RVA364670/36467c requires target offsets44/48 bothFFFFFFFF for VidPnV1; WDK
+names this MinimumVSyncFreq, added2.9. Our whole-object memset cleared it.
+No reason to change VidPn version or advertise variable refresh. Focused fix
+preserves manager-created target object and fills only existing timing/preference.
+Real production-init regression RED on sentinel loss; no further timing change.
+
+Exact495/oem5 deleted in hidden recovery; stopped service absent; stale SYS/UMD
+hash-verified and moved to recoverable495-orphan-files, not broadly deleted.
+WPR cancelled; hidden clean health collected. GracefulWindows restart done;
+restore495/restore-ordinary.sh with saved377/392 hashes/manifest now, evidence
+ordinary.log/ordinary-contract.bin/fresh health. No normal495 rerun.
+
+## EXP495 reset / EXP495-R1 emergency preregistration — 2026-09-06T00:49:13Z
+
+Natural495 run reset before SSH: retained context0 verified throughseq602, then
+NVMe queue size32 and PSCI SYSTEM_RESET. Exact stop code unknown until dump.
+HostSHA8e4f99b681ad74320364fb7e40117cf7e4b7407e4d467668ce22f8090d238894.
+No normal495 retry. Active launcher exited; both expected USB endpoints back;
+bounded WindowsSSH failed. Use existing emergency377/385 immediately because
+495 package remains boot-bound. emergency.sh and emergency-manifest.json use
+immutable377fae3444c.../Mu385279bd36a... hashes already recorded; no platform
+build/change. Collect newest3 minidumps plus41/1001/129 to avoid reset-time
+timestamp ambiguity, match kernelbase/version to495. Then verify unique495
+package hashes, delete exact package/service/device state and restore ordinary.
+No Render/TA3D/completion proof and no inferred timing PASS from reset alone.
+
+## EXP495 hardware gate — 2026-09-06T00:40:49Z
+
+KMD/UMD/Universal/Inf2Cat/sign/version gates PASS;0 errors,same2 existing analysis
+warnings.81 relevant testsGREEN. ZIP412ff0a01c08b6f35002056786c48c67c1223651bb37e30939f81004e8ac2ddd;
+manifest7751af0781aecd26f861404efad58bfcab9af214ba78703949ee239c3941ca37;
+SYSf71f6c1765576afd4c6e377f0cce75293c4e218998eea83fae23791883a8c999;
+INFaa66ff6843f371cf8d0fdd20d158108fe1a5dae6ddb58a17b32cbebf11194128;
+CATed4fd747653020b772f8206d2671012f23dcb4bf1ff0a26cb322297e9e83c107;
+UMD03d6120e4eeb6fe3412a312f5f3e52feaa1494f9c4cf023a1b2a4e1c7856eddf.
+Ordinary health0a1ee4a1f710c5ff364d6476edff91ffe1b73d7a1b9645bc154969d8be9eba0f.
+Stage495/stage.ps1 checks clean package/service/SYS/UMD and all output hashes;
+stage without install; same stack-enabled WPR. Graceful reboot ->495/launch.sh
+with frozennative477b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+and Mu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Sourcec72ecdb; currentroot2359cdc includes independent helperCRT change excluded
+fromKMD freeze. Root dirtydiff1e0ad9be5d7ca8634bbb58d8e272190bde7e87338db674fe274e98e059d5f057,
+native336d365 cleantracked; MuHEADf1ef718 dirty7febae89...not imported.
+One atomic signal-tuple change. Expected EnumCofunc noINVALID_FREQUENCY and
+later mode/present path observed. Do not equate admission/mode success with AGX
+execution. Collect receipt/ETL/event/health before exactcleanup495/cleanup.ps1,
+then ordinary377/392. Emergency current385 only if guest is unrecoverable.
+
+## EXP495 fresh ordinary PASS / producer loader control
+
+Static producer starts successfully but EnumDisplayDevicesW returns zero
+devices in the SSH session (list result1,draw_calls0). This is a producer
+session-routing limitation, not AGX proof or a loader failure. Next enumeration
+must run in the existing interactive Windows user session via supported process
+launch; do not revive obsolete TestContext/private ABI.
+
+Fresh proxy reset plus saved377/392 restored Windows; health00:36:52Z proves
+Code28/nullINF/service,no package/module,8CPU/SSH,input/NVMe/xHCI,no41/129/1001.
+No DCP code fix needed for earlier pre-guest handoff failure. Next495 loader
+control: hash-verified static producer aec6b916a89d4d857719cb142b343c9aa5f92f0e8731adee5ebbecd456318b12
+--list on this clean ordinary guest, no --draw. Captures executable loading and
+current Windows API enumeration only; ordinary has no AppleAgx, so no GPU proof.
+Then stage495 only after exact package/physical-file preflight.
+
+## EXP495 native-timing build preregistration — 2026-09-06T00:32Z
+
+WHY THIS HYPOTHESIS:494 reaches Code0/fullStart0 but EnumCofunc returns
+C01E030A INVALID_FREQUENCY. Source publishes unspecified frequencies.495 live
+owner capture provides actual mode2 totals/rate and color1 depth8 without writes.
+WINDOWS CONTRACT: FULL GRAPHICS D3DKMDT_VIDEO_SIGNAL_INFO specifies H/V rates
+inHz and pixel clock, active/total geometry; non-Miracast divider must stay0.
+AGX/ASAHI CONTRACT: current retained DCP mode2 active2560x1600,total2642x1682,
+Vrate3932151 in16:16. Asahi parser.calculate_clock rounds to266630kHz, matching
+captured timing element. Current owner programs mode; Windows only describes it.
+TRANSLATION: one shared signal helper supplies target and monitor modes:
+PixelRate266630000,HSync266630000/2642,VSync266630000/(2642*1682),progressive.
+ATOMIC CONTRACT: total geometry,pixel rate and both sync rationals form one
+self-consistent measured signal tuple. They cannot be changed independently
+while describing the same fixed physical mode. No frequency/capability probing.
+WHAT IS STILL UNKNOWN: does actual mode enumeration pass and establish a
+Windows-attached display/producer route; no present/completion claimed yet.
+
+Sourcec72ecdb680930a261f320b3b1b2668dbed72310e, display.c and two tests. New
+behavior test initially lacked helper then GREEN;77 render+4 feature testsGREEN.
+Obsolete unspecified-frequency source assertions replaced with behavioral tuple
+checks. No external code copied, only independently derived measured parameters.
+Exact494 frozen source plus these3 files:
+8b6d9b26d954beb535304f26d4e9fe7c515a47f2ffc6c075562b6eef070ee2fc.
+PinnedFRYZZING build.ps1 -> build-driver.ps1 Release -PackageBuild495; KMD/UMD/
+analysis/Universal/Inf2Cat/sign/version gates before staging. Native477/Mu406
+artifacts unchanged; source/diff of unrelated platform/ANS not imported.
+Ordinary recovery is pending after pre-guest handoff failure following capture;
+do not stage until fresh ordinary clean health and file absence checks pass.
+
+## EXP495 ordinary launch failure / fresh reset control — 2026-09-06T00:31Z
+
+The ordinary launcher after direct477->377 proxy chainload did not enter
+Windows: pre_guest_start rejected physical guest display handoff at
+PA85f000000,sizefa0000,2560x1600,stride10240,depth32. Launcher exited; USB proxy
+endpoints present; boundedSSH timeout. This is pre-guest platform state, not a
+Windows/driver failure. No package installed. One fresh-state control: existing
+proxyclient/tools/reboot.py sends P_REBOOT through current proxy, then restore
+same ordinary377/392 saved hashes/manifest. Do not change DCP/Mu code or reopen
+BCD/NTFS recovery. Evidence reset.log and fresh-ordinary.log/contract.
+
+## EXP495-TIMING-READ PASS / ordinary restoration
+
+Read-only capture succeeded at2026-09-06T00:18:15Z after exact RELATIVE startup
+relocation normalization; entire loaded.text equals derived ELF.text and pointer
+records stable. No property/MMIO/AGX writes. properties.json SHA
+a9c0b8e947b5016ed16f079020fcee2c989cce439d0d8e63e8aab442b21e29f4;
+TimingElements25d5f13c7624e3436b7bec964725268d6b05134b80edcc1df1d8ecd17ae2dc81;
+ColorElementsbf7895999e2eb28c2ec0383d159fa5b5a594e6fce11f4e6ff8674b20eae23a96.
+Selected native timing2/color1: active2560x1600,total2642x1682,H porches8/32/42,
+V porches32/8/42,noninterlaced/nonvirtual,depth8/RGB; V precise3932151/65536Hz.
+AsahiLinux current asahi-wip drivers/gpu/drm/apple/parser.c calculate_clock and
+parse_mode confirm fixed16:16 units and rounding clock to kHz. Derived266630kHz
+matches timing ElementData offset68 value266630000. No source code copied.
+Use this measured fixed-profile tuple in Windows target and monitor modes;
+no fake60Hz or foreign-panel constants. Actual DCP owner and mode unchanged.
+Restore ordinary377/392 via495/restore-ordinary.sh now, same immutable hashes/
+manifest as prior runs; output ordinary.log/ordinary-contract.bin and freshhealth.
+
+## EXP495-TIMING-READ verifier correction
+
+First capture stopped at text comparison before reading any DCP pointer. ELF
+contains8 R_AARCH64_RELATIVE relocations inside.text; startup.c apply_rela writes
+base+addend at each. Capture now derives the exact relocated expected.text using
+those hash-pinned entries and still compares every byte. No bytes masked, no
+check disabled, no owner/platform mutation. Mach-O contains exact ELF.text at
+fileoffset0x8000. Next capture reuses the same live proxy with corrected local
+verification; no chainload or hardware-variable retry needed.
+
+## EXP495-TIMING-READ execution gate — 2026-09-06T00:13Z
+
+494 cleanup collected and graceful reboot completed; both proxy endpoints
+returned with no active launcher. Chainloaded exact native477b970a7...;
+chainload log ends Running proxy/Proxy alive. No Windows guest or AGX package
+started. Capture.py SHA381e68866dbc8af8247b297aa0f324ead2dec4f785422b64ae017a1aea68dab7,
+syntax check GREEN. Execute ./proxyenv/bin/python
+.local/experiments/EXP495-timing-read/capture.py, 30second deadline. Only reads
+base/BootArgs/text/checked DCP property memory and writes local evidence.
+On any loaded-image/layout/range mismatch stop capture without weakening checks.
+
+## EXP494 final observation and cleanup — 2026-09-06T00:08Z
+
+Normal admission hardware PASS: Code0/serviceRunning, event494 full-adapter
+StartDevice status0 at23:55:49.8097546Z. Link-info callback causal correction
+confirmed; later lastreceiptId6/Phase2/statusC01E030A INVALID_FREQUENCY. Target
+timing remains FREQUENCY_NOTSPECIFIED, not valid in current FULL GRAPHICS path.
+No Windows rendering/AGX completion/present proof. Exact494 package was removed
+with pnputil; stopped stale service removed; exactdevnode rescanned. Postcleanup
+collection saved under494-postcleanup before restoration.
+
+GDI --list failed at loaderC0000135, no producer APIs ran. PE imports include
+VCRUNTIME140.dll; project will use static CRT. This is helper packaging, not KMD
+ABI/architecture. SDK path repair remained invocation-local; driver unaffected.
+
+Next read-only source checkpoint495-TIMING-READ: current-native477 DCP property
+capture after package cleanup. build/m1n1.macho matches frozenb970a7...; paired
+ELF SHA22ea1292dab930b9985c48d5f2719f921c32eef1f840ad83595ad422ba2b04c0.
+Symbols _base0,dcp0xf8160; DWARF dcp_dev size0x3ba8, iomfb_properties0x1d0,
+records0x28,8 records each0x50, data pointer0x40,size0x48. Capture script must
+verify loaded.text against exact ELF, validate all reads against live BootArgs
+DRAM, bound property size<=1MiB and metadata stability. Read only TimingElements
+and ColorElements; no MMIO/table write, no AGX power/firmware/workload request.
+Use same frozen477 chainload; no Mu/Windows guest launched for property reading.
+Expected decoded selected mode2 timing with actual native geometry/frequency;
+if no exact timing exists, do not fabricate60Hz or borrow foreign monitor values.
+After capture restore ordinary377/392 before next exact Windows candidate.
+
+## EXP494 admission result / read-only producer listing — 2026-09-06T00:01Z
+
+CONFIRMED: exact494 now Code0 and service Running; backend0. Event494 reports
+adapter StartDevice status0. FormerCreateRelatedObjects failure removed.
+Later display receiptId6/Phase2/statusC01E030A=INVALID_FREQUENCY during cofunctional
+mode enumeration. Do not claim display active/present/rendering. One Event129
+telemetry; no bugcheck/reset reported by current collector.
+GDI producer source unchanged; initial build failed because MSBuild resolved
+WindowsSdkDir to stale NuGet28000 root while targeting26100. Installed26100
+Windows.h exists. Project-invocation-only root overrides fixed build; no global
+SDK/environment mutation. EXE94ce0f2302b77080741c838f2ab472c9e269f0faee26ef81875f2e3f49f09e44.
+Observation substep494-LUID: hash-check executable and run --list only, no --draw,
+to record Windows display/adapter routing; not a rendering discriminator.
+Then exact494 cleanup and normal377/392. Next source target is valid mode timing
+from current DCP owner; no guessed timing or copied foreign-monitor values.
+
+## EXP494-PRODUCER-BUILD preregistration — 2026-09-05T23:55Z
+
+Independent preparation only while494 boots: compile already committed Windows
+GDI producer2ba036cb0431cc15640e8d1dababa8ff76636ee4, no edits or old TestContext ABI.
+Exact two-file archive e0e258ee83a231e68a762d99a205ce1c790e321382514e630657aa7be2712c7d.
+FRYZZING build-gdi.ps1 invokes pinnedMSBuild/WDKSDK26100/MSVC14.44 ARM64 Release
+with analysis; output hash manifest required. Do not run workload before adapter
+admission/LUID is proven. This build does not change494 KMD package or platform,
+and is not a rendering or acceleration result.
+
+## EXP494 hardware gate — 2026-09-05T23:53:53Z
+
+Build PASS KMD/UMD/Universal/Inf2Cat/sign/version and actual16-byte WDK ABI
+assertion.80 relevant tests GREEN; same existing2 analysis warnings,0 errors.
+ZIP6926266fb9c07ff1eaca35758efd143974d2ae6e95961ba61e8fec60840b2920;
+manifest1c40aa8e23fd2d9f6e2078ef77b7c7cff02b806b884c0a54b75e940698928ac2;
+SYS159949b1f5d1980099aac1f8316c83eba3d81d8c5439ad3bc65b32f96523066d;
+INF845e0c26d25bd29f939b6ce5b8d63ac9113254569638d4ce07cc3861a42a28bc;
+CAT47fc30e6e0ece41a985033ed09cb95b05be61f37003ce925dc4d80b8d75ca014;
+UMDce15eb36082c567ebfa7b9a8de2cc71b5aed32dd96e920396151be6cae594c0c.
+Stage494/stage.ps1 verifies no package/service/SYS/UMD and exact hashes; stage
+without install, same493 stack-enabled WPR profile; graceful restart ->494/
+launch.sh. Runtime frozen native477b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
++ Mu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Single change mandatory link-info callback; same diagnostics/platform as493.
+Expected receiptId12 status0 and past formerCreateRelatedObjectsBB. If not,
+exact new error/dump owns next decision. Evidence494/hardware.log/contract.bin,
+stop-decode ETL/event494, current receipt/health collector. No submit/fence PASS
+from mere Start success. Exactcleanup494/cleanup.ps1 -> ordinary377/392; ifboot
+blocked emergency377/385 with known hashes before exactcleanup, never retry bad
+full-owner merely to diagnose. Source rootcd7766, native336d365/MuHEADf1ef718;
+dirty platform sources excluded from artifacts as in492/493.
+
+## EXP493 verdict / EXP494 build preregistration — 2026-09-05T23:50Z
+
+493 diagnostic capture CONFIRMED: full event494 stacks and ASLR image identities
+available in stacks.csv SHA7cdad483e5642b73d327612ab6190175b742177f499bc1757ca37c658e8716da.
+Admin event549 record80 names FailureReason11 DpiFdoCreateRelatedObjectsFailed,
+not old AddAdapterFailed. LAST error stack is QAI20 -> DpiQueryDisplayIDDescriptor
+-> MonitorDescriptorState::OnInitializePhysicalMonitor. CORRECTION: do not treat
+that last stack as fatal by itself. Current source preserves success in w19
+when no EDID/DisplayID; no QAI20 source change was made.
+Focused return-path inspection identifies later DXGMONITOR::_UpdateLinkInfo:
+it calls driver UpdateMonitorLinkInfo, tries integrated-info fallback, and only
+ignores failure for WDDM<2400 (RVA0x264df0..0x264e20). DefaultDdiUpdateMonitorLinkInfo
+RVA0xfca70 literally returnsC00000BB. Current driver has no callback registered
+and no integrated descriptor. This supplies a concrete missing mandatory owner.
+No GDI rendering or scanout workload was attempted.
+
+WHY THIS HYPOTHESIS:
+-493 proves monitor creation after RecommendMonitorModes success and reason11;
+ source shows mandatory link-info failure propagated at WDDM3.0.
+-Missing registered callback selects defaultBB; internal descriptor fallback
+ cannot supply capabilities because this profile provides no descriptor.
+-Microsoft DXGKDDI_UPDATEMONITORLINKINFO states call is after RecommendMonitorModes
+ and before mode enumeration, and success is expected except real parameter/
+ processing failure. Matches exact last positively recorded DDI.
+
+WINDOWS CONTRACT: FULL GRAPHICS WDDM3.0 common monitor-link metadata query,
+PASSIVE_LEVEL. Target0 only, input UsageHints preserved, output optional caps0
+and DitheringSupport0; no false HDR/VRR/stereo/colorspace/synclock capabilities.
+AGX/ASAHI CONTRACT: inherited display owner and accepted AGX firmware/queues
+unchanged; no physical link programming or claim beyond current implementation.
+TRANSLATION: register typed callback and reuse existing PASSIVE receipt wrapper,
+Id12; respond truthfully instead of default unsupported. No QAI/type1 changes.
+WHAT IS STILL UNKNOWN: does mandatory link-info success remove reason11 and
+permit mode enumeration/admission; next exact boundary if not.
+
+IMPLEMENTED cd7766aa2a8111285bb47a0261db5cbfee5bafee, four files including new
+host behavior test. Missing callback RED, then production callback executed
+under minimal host ABI shim with hint preservation, zero outputs, rejected
+target/state nonmutation;76 render +4 feature tests GREEN. WDK C_ASSERT requires
+16-byte actual structure; pinned26100 shared/d3dkmddi.h type located. Primary
+Microsoft callback,monitor-link,capabilities docs and current dxgkrnl inspected.
+Build494 source26391e167f1c218fbc826f75cafd35a912a1c364af77c7d1f8ddd03aac040a6e
+is exact492 freeze + three driver files and one test. PinnedFRYZZING build.ps1
+-> build-driver.ps1 -Configuration Release -PackageBuild494, KMD/UMD/analysis/
+Universal/Inf2Cat/sign/version gates. No new platform artifacts or dirty imports.
+Ordinary493 cleanup/restoration PASS, final health
+57dab439cc5713fefe4f768bafe960b60bb05217cac46b5c44fbb7ec65fdfaa7.
+Before next stage require physicalSYS/UMD absence as well; recovery377/392 and
+emergency385 hashes unchanged. One candidate494 after output hashes recorded.
+One documentation URL failed non-retryable access; marked only that read
+BLOCKED_BY_PLATFORM and not retried. Other documentation/local sources sufficient.
+
+## EXP493 observation / ordinary restore preregistration — 2026-09-05T23:27Z
+
+Same492 behavior: finalC00000BB/Code43/noLUID;26 event494 messages, last display
+RecommendMonitorModes success. SSH8CPU/input/NVMe/xHCI alive; no41/129/1001.
+Stack-enabled ETL saved48a615f80b0b62c394b597720c5b5388bdc5e6bff4239d9ab629b2bb127186d7;
+event JSON7b9555324467d0c846e8aaf608b761a8f6988439797af6ab5bd7b524697bc183.
+Xperf stacktime-shifted symbol decode running on existing FRYZZING toolkit;
+owner verdict pending, no new source fix. Exact492/oem5 removed after evidence;
+stopped stale service deleted and devnode rescanned. WPR stopboot removed trace.
+Graceful reboot ->493/restore-ordinary.sh uses same immutable377/392 recorded
+hashes/manifest; evidence ordinary.log/ordinary-contract.bin/fresh clean health.
+No new GPU hardware test until stack owner extracted and causal decision made.
+
+## EXP493 preregistration — 2026-09-05T23:23Z
+
+Final492 ordinary health SHAd2c3ba011597ece9833853e1ce99ef58d567afd017cc8cd6b841bcb8da179ed9;
+493 clean-file gate also passed before staging. Same492 version staged as oem5;
+graceful reboot completed and both endpoints returned without active launcher.
+Frozen492 host22c9891102514c9bf4505711da20bffed7eb171fd48eb9a397bf67765f29f9b2;
+ordinary2970bd787bf26e1f3208ace45ef8e4aebc240332541ac1fc70e2826f0be8cbbd.
+
+WHY THIS HYPOTHESIS:
+-492 now reaches RecommendMonitorModes success then finalC00000BB, whereas
+ older system-device/context and aperture failures were distinguishable by
+ exact error strings. Current error494 supplies only invalid-status formatter.
+-LastQAI20 is not enough to distinguish optional DisplayID fallback from another
+ unsupported DDI. Source contains several returnsBB; do not change based on last
+ value alone. One focused caller inspection did not identify final owner.
+-Microsoft WPR EventProvider Stack=true captures the exact error call chain;
+ Loader/ProcessThread metadata permits ASLR image attribution. Current Air WPR
+ validates24MiB total budget and Stack flag. Existing FRYZZING xperf supports
+ dumper -stacktimeshifting; no new harness/backend needed.
+
+WINDOWS CONTRACT: bounded boot-memory ETW, same keyword40000000, add callstacks
+and image identity metadata. No registration/capabilities/driver behavior change.
+AGX/ASAHI CONTRACT: same exact492 package and full-owner native477/Mu406.
+TRANSLATION: current error call stack names unsupported DDI/internal caller.
+WHAT IS STILL UNKNOWN: which late callback's BB is fatal to adapter admission.
+Single diagnostic variable: stack+required image identity capture. No rebuild.
+Root4664e0edcca2b009a9db43cd15e88b91b16bf665; WPR profile
+6979a5a8515afca157632b2ad3f9ee957a4018d99cc2663bb7d88e465bb9ca33.
+Exact492 version30.0.492.0 ZIPed3b1f8c72700a9572611a35b01115d576d33f27e3e86b0afa019236fbc82411
+and manifest13582a93938b4f6b1221238691ffb9bcdd7e2f868684507cd1960c1faf08d2f7;
+all INF/SYS/CAT/UMD hashes unchanged from492 gate. Reuse after492 cleanup, not
+carry installed package. Stage493/stage.ps1 repeats all clean-file/hash checks
+and enables AgxAdmissionStacks. Graceful reboot ->493/launch.sh immutable
+native477b970a7.../Mu406c7ddcf... with broker enabled, hashes as492 gate.
+Evidence493/hardware.log/contract.bin,stop-decode ETL/event494,current receipts,
+then xperf stacktime-shifted dump with matching symbols. PASS=exact failing owner
+identified; not graphics/acceleration PASS. Exact cleanup493/cleanup.ps1 then
+ordinary377/392; recovery manifest/artifacts unchanged from492.
+Ordinary clean23:22:25Z no package/service/module,Code28,8CPU/SSH,input/NVMe/xHCI,
+no41/129/1001. File absence must pass493 stage before any install.
+
+## EXP492 result / ordinary restoration — 2026-09-05T23:20Z
+
+CONFIRMED advancement: no former aperture10e/b; Windows reached
+RecommendMonitorModes receiptId10/Phase2/Status0 (SHA843903fca0e980301f5e5de2a8504c43af5a344f2ae4123e575cff35e90c729a).
+Latest QAI type20(size16) is DISPLAYID_DESCRIPTOR, but this alone does not prove
+it caused final failure. Event494 final Start statusC00000BB; Code43/noLUID.
+Event494SHAa8ba6d8caf36678936b7bf9a36808eb254dc0560c4d31e0675a3e1952023fdd1;
+result5bd5ab273e7c80b9720eb3197a8e218f1dc783d9528f5e21432b89ce61ee8a2d.
+Start12/Platform14/Backend0 and reversecleanup successful, SSH8CPU and normal
+input/NVMe/xHCI. Event129 record15360 recorded as telemetry, no41/1001.
+Exact492/oem5 removed; stopped stale service removed and exact devnode rescanned.
+Postcleanup23:19:13 proves package/service/module absence andCode28. Graceful
+restart requested for ordinary377/392 using492/restore-ordinary.sh, exact saved
+hashes/manifest unchanged; evidence ordinary.log/ordinary-contract.bin. Verify
+physicalSYS/UMD paths as well before next package (491 hidden cleanup left orphans).
+Next permitted discriminator if offline caller analysis cannot identify owner:
+same exact492 package once with event494 stack capture; no new speculativecaps.
+
+## EXP492 staging preflight correction — 2026-09-05T23:16Z
+
+First staging attempt failed closed before expansion/install because leftover
+SYS existed at System32/drivers after491 hidden cleanup. Prior ordinary health
+proved package/service/module absence, not physical-file absence. Do not extend
+that earlier claim. cleanup-orphans.ps1 verifies no package/service/driver
+registration, checks exact491 SYS/UMD hashes before any move, then preserves
+matching leftovers under C:\Users\pavel\EXP491-orphan-files with manifest.
+No unrelated files removed. Only after original paths are absent may492 stage
+proceed. This is exact package cleanup, no driver or platform behavior change.
+
+## EXP492 hardware gate — 2026-09-05T23:13:49Z
+
+Prelaunch tracked dirty-state hashes at23:17Z: root
+b24f2b983a3509e042a0e9832e42e80cd60c4189e6ac17fbe0b7adeb0ab25984,
+m1n1 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855,
+Mu7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+These dirty changes/untracked sources are not included in frozen source or
+runtime artifacts. Rootadc9cbd/native336d365/MuHEADf1ef718 as recorded above.
+Exact492 staged as oem5; graceful Windows reboot completed, no active launcher
+and both expected proxy endpoints returned before launching candidate.
+
+Pinned build PASS KMD/UMD/Universal/Inf2Cat/sign/version, zero errors and same
+two existing analysis warnings. Source comparison confirms exactly six source/
+test changes from491. ZIPed3b1f8c72700a9572611a35b01115d576d33f27e3e86b0afa019236fbc82411;
+manifest13582a93938b4f6b1221238691ffb9bcdd7e2f868684507cd1960c1faf08d2f7;
+SYSb168d29ca0ddab38c45aa0a536c6ab4d1828e24df9549aa0dbe8e64545132761;
+INFd96c0c0ad41e220b48601209ad677271b5802582f25758fbf2d7a3544114fae8;
+CATf5e1691c6e70cf29be0a273b8c483fcd53b47a5710e0dfb3739fb16f0c513305;
+UMDe53453c4862ed4e6b561ab2c1ce0bd2964a4fb93be96719c7c3d46ca0599ca21.
+Stage492/stage.ps1 verifies clean ordinary state and hashes; pnputil/add-driver
+without install; same WPR profile. Graceful restart then492/launch.sh with
+native477b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+and Mu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+One natural bind, one variable page-range contract. Expected former10e/b
+aperture request completes; collect exact next event/dump, not API success
+as acceleration. Evidence492/hardware.log/contract.bin/ETL/current receipts.
+Exact cleanup492/cleanup.ps1 after evidence; if not bootable, use saved current
+emergency377/385 immediately (ordinary with boot-bound491 caused separate133).
+Emergency manifest71dae7b56bec724d1df043f7582edd8b5d3037b4726683c7cc6d6c1e27b161d4
+records unchanged artifacts; cleanup-hidden.ps1 verifies exact492 identity.
+Then restore normal377/392 clean baseline before next candidate.
+
+## EXP492 build preregistration — 2026-09-05T23:12Z
+
+WHY THIS HYPOTHESIS: exact491 dump identifies MapApertureSegment operation5,
+SegmentId1,offset0xffff,count1,MDLffffd20fadaa51a0,flags0,MDLoffset0. Runtime
+rejects count !=16 and64KiB-only helper rejects offset0x0ffff000. Existing
+topology declares aperture system pages and4KiB paging buffer; only local segment
+uses64KiB. This concrete mismatch precedes any transfer encoding or AGX queue.
+WINDOWS CONTRACT: Microsoft DXGKARG_BUILDPAGINGBUFFER Map/Unmap use system-page
+offset/count and MDL offset; null DMA buffer is valid for synchronous aperture
+mutation. hAllocation may be null for runtime-created DMA buffer.
+AGX/ASAHI CONTRACT: existing software aperture inventory is separate from16KiB
+UAT/local allocation; Asahi MMU ownership and m1n1 UAT.PAGE_BITS14 unchanged.
+TRANSLATION: new generic page-range admission wrappers call the same production
+software map/unmap; runtime preserves MDL bounds and mutex; exact unmap receives
+page count. Existing64KiB helpers remain constrained wrappers to same inventory.
+WHAT IS STILL UNKNOWN: does actual491 one-page tail mapping complete and which
+subsequent Windows paging/admission step follows. No rendering proof claimed.
+
+One coherent correction commitadc9cbde5703220788b7888b1471c4ab30054456 on GPU branch;
+plan docs/superpowers/plans/2026-09-06-aperture-system-page-ranges.md self-reviewed.
+New range tests initially failed for absent API; after implementation map/resolve/
+exact unmap/neighbors/nonmutation and preserved64KiB constraints GREEN.79 relevant
+tests GREEN; final memory5 re-run GREEN; diff-check. No new flags/caps/IRQ/HVC/UAT.
+Exact frozen491 source + six committed compiler/test files; source
+9b21d044ab52185b28976e4061e647dc56e0cfb3d594703721f3301b1c0af09e.
+FRYZZING EXP492-build.ps1 -> build-driver.ps1 -Configuration Release -PackageBuild492;
+pinned WDK26100/MSVC14.44; KMD/UMD/analysis/Universal/Inf2Cat/sign/version gates.
+Platform uses unchanged frozen native477/Mu406 artifacts, not dirty sources.
+Before staging: verify output hashes/manifest and ordinary clean health.
+EXP491-R3 final ordinary PASS23:06:29Z; exact APPL0002Code28/nullINF/service,
+no package/module,8CPU/SSH,input/NVMe/xHCI,no41/129/1001. Health
+9bccb7a8f09e3df63b3df4c457c8b422aa8435428f271584f54abf962a06cc78.
+Current no-AGX recovery branch closed; no further recovery investigation.
+
+## EXP491 exact crash verdict / EXP491-R3 ordinary restore — 2026-09-05T23:03Z
+
+EmergencyR2 regained SSH8CPU. Captured two dumps before removing exact package.
+Full-owner491 dump090626-14828-01 SHA73a854a2d57cd9ed9709282052d4a33e5fdf3b45421dc2e3c3e71e2a6b8b0d00:
+VIDEO_MEMORY_MANAGEMENT_INTERNAL10e, parameters b/ffffa70849098580/
+ffffffffc000000d/ffffd20fade4c000. Stack CompleteBuildPagingBufferIteration ->
+MapVideoApertureSegmentInternal -> MapApertureRange -> CommitResource ->
+PageInAllocation -> VidMmSubmitPacket. Kernel base matches full-owner host log.
+Thus system context creation advanced to actual VidMm aperture mapping; no
+render submission/completion or full adapter admission PASS claimed.
+OrdinaryR1 dump090626-14953-01 SHA07872ac20d3831c057ca904c85c85cf87054502f4b7d9c0d1e98cac38496f717:
+133 cumulative ISR watchdog1/1e00/fffff801fba083c0/0. Kernel base matchesR1;
+separate recovery failure, not the primary full-owner bugcheck. Guest file/event
+timestamps differ from host launch ordering after reset; match by kernel bases.
+Analysis saved EXP491-analysis-* and crash evidence under491. Symbols identify
+exact KMD30.0.491.0. Next decode actual BuildPagingBuffer arguments from dump;
+do not alter IRQ model or storage based on recovery133.
+
+Initial ordinary cleanup script failed closed because hidden devnode has no
+bound INF. cleanup-hidden.ps1 instead verified unique DriverStore oem5/491 plus
+exact publishedINF/storeSYS hashes; pnputil deleted package; stale device removed;
+WPR cancelboot removed recording. Hidden-clean23:03:14 proves no package/service/
+module,8CPU,healthyinput/NVMe/xHCI,no current-boot41/129/1001.
+EXP491-R3 restores ordinary377/392 using existing491/restore-ordinary.sh after
+graceful guest restart. Same recorded immutable hashes/manifest, no changes.
+Evidence final-ordinary.log/ordinary-contract.bin and fresh health; expected
+one inert APPL0002Code28 and persistent clean state. Emergency branch then closed.
+
+## EXP491-R1 result / EXP491-R2 emergency preregistration — 2026-09-05T22:59:40Z
+
+Ordinary377/392 with491 still installed reset before SSH. One non-destructive
+snapshot observed CPU0 last interrupt886 and other CPUs at idle-looking PC;
+this is not a bugcheck or causal verdict. Final log
+fefbb3ebf96e5c817b29b31ffb599118d8f45b90d762e0ad5dc27f80c97891ea.
+No active launcher; both expected USB endpoints returned; bounded SSH failed.
+Use emergency GPU-hidden profile now because ordinary guest was not recovered.
+EXP491-R2: emergency.sh, immutable377 m1n1
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a and current-compatible
+Mu385 no-agx-autoboot279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
+Manifest emergency-manifest.json SHAace21245c304af84fce21036b51dda470d98bc2be096e16569a73b418fce46b7.
+Reference existing461/recovery.sh and compact current-compatible recovery entry;
+not old164/241 artifacts. No rebuild or source change. Single difference is
+GPU visibility removed to prevent491 binding. Evidence emergency.log/contract;
+expected SSH -> crash-event/dump capture -> exact491 cleanup. If no SSH within
+180sec runtime bound, stop recovery variants and request physical cold cycle.
+
+## EXP491 result / EXP491-R1 recovery preregistration — 2026-09-05T22:56:36Z
+
+Natural bind reached current retained context0 verification through seq602;
+Frozen host log SHAc8e719f6eaf8a4ee2d8b196a3e192e9998da2dcf1d1e9a4427b89dcd54299c9e.
+then NVMe queue reinitialized to32 entries and PSCI SYSTEM_RESET occurred before
+SSH. No reverse AGX cleanup observed. Exact bugcheck unknown; do not claim
+context/admission PASS or GPU causality from reset alone. Launcher exited on
+USB disconnect, both expected USB endpoints returned, no active run_uefi;
+bounded Windows SSH failed. Memory WPR may have been lost on reset.
+EXP491-R1 runs existing restore-ordinary.sh with immutable ordinary377/392 pair
+and recorded hashes/manifest, AGX power broker disabled (still GPU-visible).
+This prevents production backend start while allowing collection/removal of491;
+do not run full-owner491 again. Evidence ordinary.log/ordinary-contract.bin,
+current Windows receipts and fresh bugcheck1001/41/dumps before exact cleanup.
+Expected SSH on ordinary profile, exact staged package identity491/oem5 and
+cleanup; failure bound180 seconds from runtime-ready. No BCD/NTFS experiments.
+
+## EXP491 hardware launch gate — 2026-09-05T22:54Z
+
+KMD/UMD build and Universal/Inf2Cat/sign/version gates PASS; same two existing
+analysis warnings. ZIPe3acbde787e83a017dd04a6049e398dd3e29b6630828ea72ff7b4d43a3b4a960;
+manifest2e2b7e7baeb19c8aa3115ed802042eec626ebe24da3d8d66566e3e8e11a5bb08;
+SYSc470add1628f8d15ac81c48465d678f830fcf102a03c046295aa412032d0b355;
+INF2dde7eed7651d501abcaea3fa0d3b031f4d149d8b40d6526d402a4c2c72c90f3;
+CAT0bd74e91804d1dc5413026f7e70ae3d057fb7713892939c75dd0e1c8285e5cad;
+UMD8e08bdd2396962ce509312134369c390be98d1a7c77d8f2674f6921ea06c4c7d.
+Source comparison: only three compiler/test files changed; AppleDouble metadata
+removed by COPYFILE_DISABLE, not code. No platform-source imports.
+EXP490-R1 ordinary health PASS22:52:05Z, persisted clean/noAGX8CPU/input/NVMe/xHCI,
+no41/129/1001; SHA c285fc3c8674bcd38a8ce97ab98f4fc6c66bee8f3d31dcbb6a803c7e603d88f2.
+Stage491/stage.ps1 verifies hashes/clean state, stages without install, enables
+same WPR; graceful restart ->491/launch.sh exact native477 b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+and Mu406 c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+One natural bind; expected paging-context failure gone. If new failure, collect
+exact event494 before causal change. Evidence491/hardware.log/contract.bin and
+stop-decode ETL/JSON plus current Windows collector. Recovery exact package
+cleanup491/cleanup.ps1 then ordinary377/392 via restore-ordinary.sh; immutable
+hashes/manifest as prior runs. Never carry installed package to next experiment.
+
+## EXP491 build preregistration — 2026-09-05T22:51Z
+
+WHY THIS HYPOTHESIS: EXP490 hardware moved to Paging context0 failure;
+actual dxgmms2 caller passes SystemContext with null input hContext; wrapper
+and portable owner reject that exact pair and real offline test reproduces it.
+WINDOWS CONTRACT: FULL GRAPHICS SystemContext is paging-engine context; driver
+returns its own handle. Current header and Microsoft CREATECONTEXT/FLAGS docs
+and RosKmdContext.cpp common object lifetime inspected; no code copied.
+AGX/ASAHI CONTRACT: unchanged accepted backend and current retained-root platform.
+TRANSLATION: conditional null-runtime-handle acceptance, normal driver-owned
+context and reverse lifetime unchanged; ordinary/GDI invalid handles still fail.
+WHAT IS STILL UNKNOWN: paging context initialization/admission next hardware step.
+One behavioral variable relative490; no capabilities or engine affinity change.
+Root0423146dbc3a7535c7d508d09b82a48046333fe7 on feature/j313-gpu-acceleration;
+source frozen from exact490 plus only three committed files,
+SHAc82919553972f5ae8aa3c48950e416f28c2439487e51d026279447d1b166bbdd.
+Unchanged native336d365/MuHEADf1ef718, dirty sources excluded; frozen native477/
+Mu406 runtime artifacts only. Pinned FRYZZING build via EXP491-build.ps1 invokes
+build-driver.ps1 -Configuration Release -PackageBuild491, WDK26100/MSVC14.44.
+79 relevant tests GREEN after expected RED. KMD/UMD/Universal/analysis/sign
+and exact output hashes required before stage. Ordinary377/392 restoration
+already preregistered as490-R1; collect clean health before next exact package.
+
+## EXP490 verdict and EXP490-R1 restoration — 2026-09-05T22:49Z
+
+Frozen final ETL977134758a59918efbbfc77a921ae0ee90f35eeb91c1f1b04c2d3fa8f78a4ab2;
+host42ab45f92f5210a0d16ba581efa9e748c5cbef4deee7b279b66c9646a19051b0;
+ordinary logf4bfe5ce50501a30db2538eaeab7029df7af03f0fbf3be0e0c33767fbb147280.
+
+CONFIRMED: former Creating system device failed error is gone. New event494
+at22:46:52.4322076Z says Paging context0 creation failed, after KMD C000000D;
+overall status now C0000001. Thus SystemDevice creation advanced, not full
+adapter admission. Code43/noLUID; Start12/Platform14/Backend0 and reverse
+cleanup remain successful. Event494SHAab17b631cd743f1e274d36597809d6f1a47ce211ab4ef0ad9879915ce5fdd8bf;
+resultSHAa764832ebd76341476957a0db1d58afaa8db932226a273db21bf42067c4b5379.
+No41/129/1001; SSH8CPU,input/NVMe/xHCI remained healthy. Exact490/oem5 package
+and stale stopped service/devnode removed;22:48:58Z postcleanup verified clean.
+WPR stopboot saved ETL and removed autologger. Graceful guest restart requested.
+EXP490-R1 restoration uses restore-ordinary.sh with the same recorded immutable
+ordinary377/392 hashes and manifest; evidence ordinary.log/ordinary-contract.bin,
+expected persisted clean state and SSH. No platform source changes.
+
+Next cause: current dxgmms2 RVA0x2d998 zeros CREATECONTEXT including hContext;
+system branch fills node/engine/flags then calls interface slot0xa8 at0x2da2c
+without setting runtime hContext. Wrapper and portable owner again reject NULL.
+Official CREATECONTEXT page labels handle output; WDK header describes in/out,
+so fix is narrowly SystemContext-only based on actual caller, not a claim that
+all runtime contexts lack handles. Commit0423146dbc3a7535c7d508d09b82a48046333fe7
+conditions handle validity on SystemContext; normal/GDI null rejects preserved.
+RED observed on real portable owner;79 relevant tests then GREEN. Next EXP491
+uses exact490 source plus these three files; no engine/flags/caps changes.
+
+## EXP490 hardware launch gate — 2026-09-05T22:44Z
+
+Build completed KMD/UMD with zero errors, existing C28251/C28150 only;
+Universal validation, Inf2Cat and SYS/UMD/CAT signing succeeded. Version tests
+PASS30.0.490.0. Expanded relevant render suite75 tests GREEN (plus4 feature).
+ZIP82f49b7f86778da1f1c873be93ee5c49a7ff1187c32fc077df727fea16cb6821;
+manifest86432642510fd1f89704160d71a72b7d4abe1acc9038dc534097a8962fae54da;
+SYSdf77fe96cd08ce3a7f967436435d5b72fd5b23c3c29c093a5bd7eaadd11715e5;
+INFa9b0633d2e342cb596d259369ae05707fd8c9c26ae439c219e7439007daedd93;
+CATaa60fafdd279ddded3068f002cce9e3b3abdaeffcb842e51d94339b04324abd9;
+UMDb09d0bc1222d6584f83732820f47bcaaaa7d8cf4c3f95e6033f741ee64a6f8c9.
+Archive comparison confirms only three source files changed; extra AppleDouble
+directory metadata entries are not compiler inputs. Source freeze otherwise exact488.
+Stage command EXP490-system-device/stage.ps1 verifies clean state and all hashes,
+pnputil /add-driver without /install, then same bounded WPR boot profile.
+Graceful shutdown /r /t0 -> launch.sh native477
+b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0
+and Mu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Single natural bind; expected prior scheduler-system-device rejection absent.
+Failure criterion same error or new exact next error, not a speculative caps
+change. Evidence hardware.log/contract.bin; stop-decode.ps1 saves ETL/event494;
+current collector captures receipt keys/PnP/LUID/CPU/health. Exact cleanup and
+ordinary377/392 follow evidence, then next causal graphics boundary.
+
+## EXP490 build preregistration — 2026-09-05T22:41Z
+
+WHY THIS HYPOTHESIS:
+- EXP489 event494 explicitly locates scheduler-system-device creation failure,
+  followed by paging-process initialization failure; previous display hypothesis
+  was too broad and is superseded by this stronger evidence.
+- Actual current-Air dxgmms2 SHA8350b53632fcbc724549c0cb7cceca9edcfa041c1d35d5f034d4e21b35082392
+  at RVA0x96bfc calls system device creation0xeac10. Its system branch initializes
+  hDevice=NULL at0xeae44 and Flags=SystemDevice at0xeae50, then invokes0x2fee0
+  via dxgkrnl interface slot0x98. Failure propagates to the exact observed string.
+- KMD wrapper and portable object owner both incorrectly reject NULL regardless
+  of SystemDevice. Real regression reproduces this reject before the fix.
+
+WINDOWS CONTRACT: FULL GRAPHICS device DDI creates a distinct driver-owned
+output handle; scheduler system devices have no incoming runtime device handle.
+Sources: current dxgmms2/dxgkrnl; Microsoft DXGKARG_CREATEDEVICE,
+DXGK_CREATEDEVICEFLAGS and DXGKDDI_CREATEDEVICE docs; Microsoft render-only
+RosKmdDevice.cpp used only for common device-object lifetime comparison.
+AGX/ASAHI CONTRACT: accepted EXP475/477/478 owners unchanged; no hardware protocol
+or platform exposure change and no external source code copied.
+TRANSLATION: preserve NULL as runtime handle for SystemDevice; create normal
+driver-owned object with existing context/stop/destroy lifetime enforcement.
+WHAT IS STILL UNKNOWN: does removal of this exact reject advance scheduler
+system-device initialization and adapter admission; next failure if any.
+
+Single behavioral variable: conditional runtime-handle validity in wrapper+owner.
+Commit53c0330b394ee0ef2883768b1baded2a7ee49e92; branch feature/j313-gpu-acceleration.
+Real test catches unconditional NULL rejection; system context lifetime and
+ordinary/GDI-null and reserved-bit rejection verified. RED assertion observed;
+4 feature-contract plus16 render-admission tests GREEN; diff-check GREEN.
+Freeze exact EXP488 source6fa347e7f58e93926952d7d1f7616ce0b367c494dcdcf90951c96df7151fe179
+plus only three committed files. New source425e68b5e23e89a0d53b8428755c831b023884fab5f2154c5a68cda8083614ae.
+Root dirty diff at freeze f1e06bbfed1fc180c3bb9cb380519f9bf8073033de69956e9d0b0d2a029d48d2
+is not imported. Native336d365ff8951e6ecd343d37f8c2fa4e15d94aa6,
+MuHEADf1ef718e08db0e4c30fdb5d8555973513ad9a004; use unchanged frozen artifacts,
+not dirty platform sources. Builder: pauls@FRYZZING, EXP490-system-device/build.ps1
+-> build-driver.ps1 -Configuration Release -PackageBuild490, pinnedWDK26100
+and MSVC14.44.35207, KMD/UMD/analysis/Universal/Inf2Cat/sign/version tests.
+Do not stage until output hashes and manifest recorded. Recovery ordinary377/392
+is live and clean after graceful reboot, healthSHAee8881c52f294690a1fc7c9640e80f965517074b9ba452672181ec1d75aef556.
+
+## EXP489 result and ordinary restoration — 2026-09-05T22:38Z
+
+Final evidence hashes: ETL1e0312011a7b486afe58fd01fdd50dc20707f338172a14c51bb1adb5c821c5b5;
+event49401d017b29a6280967907b34082ffa0cf3ac33353c0121053efcf653623efc12e;
+host59b462047b2a7a9b1afb11207515ff2cb73ce0bc9b576926d2e992473958c82f.
+EXP489-R1 ordinary restoration PASS at22:38:51Z (healthSHA above); graceful
+restart after staging490 persisted cleanup; final ordinary log
+5f58d5c6e6aa68169497353b8fa3c5df35616e491991b76df9993b145226a785.
+
+Event494 captured the actual rejection chain at22:29:14.3053564Z:
+invalid returned status C000000D -> Creating system device failed ->
+Failed to create scheduler system devices -> Failed to initialize paging process.
+This supersedes the earlier display-core localization; it does not yet distinguish
+CreateDevice input validation from a nested system-context creation failure.
+Evidence: EXP489-admission-event494/admission.etl and event494.json; same exact
+EXP488 package, no KMD behavior change. No acceleration or admission PASS.
+Exact hash-checked oem5/488 removal, stale stopped service removal and devnode
+rescan completed. Postcleanup at22:37:49Z proves no package/service/module,
+Code28/nullINF,8CPU/SSH,input/NVMe/xHCI running,no41/129/1001.
+Graceful Windows restart requested; launcher exited on USB reset, both expected
+USB endpoints returned and no active run_uefi remains.
+Restoration preregistration: EXP489-R1 runs restore-ordinary.sh using immutable
+ordinary377 m1n1 fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+and Mu392 16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06
+with its existing manifest. No new platform build/source change. Expected SSH
+and persisted clean package state; log ordinary.log, ordinary-contract.bin.
+
+## EXP488 result — mirrored receipt confirmed; admission still rejected
+
+At 2026-09-05T22:17:26.3304196Z DxgKrnl record76/event549 reports C000000D
+StartAdapter_AddAdapterFailed. Start12/status0, Platform14/status0, BackendStart0.
+Device Parameters and service Wom1DisplayDdiReceipt are byte-identical:
+Id1 QueryChildRelations, Phase2, Status0; SHA256
+a57c8af04b7f673bb13e4ad8c48e06f290c4101b893fff542fa8f92d015d4cc5.
+No later callback positively recorded; Code43/noLUID. Result SHA256
+7db744cea490969055d476dec23c75205d698fdee46541e54894e940a6b5168d.
+Two Event129 at 22:18:46.549Z and 22:18:56.557Z are telemetry only.
+Exact oem5/version488 removed; graceful Windows restart and ordinary377/392
+confirmed persistence of cleanup. Final ordinary health at22:23:18Z:
+Code28/nullINF/service, no AGX package/module, 8CPU/SSH/healthy input/NVMe/xHCI,
+default BootExecute and no41/129/1001. SHA256
+bcdd923c7911b70b7775a332bc8a2b735598cd552ce0d61198a03af7651bf931.
+Host log SHA256960c4f2c35eb2817ec16a2e6e702142de7402531da724053dbee3c408a68204e.
+
+## EXP489 preregistration — exact event494 admission error capture
+
+WHY THIS HYPOTHESIS:
+- EXP488 confirms returned caps and last callback success but not internal
+  dxgkrnl rejection. Current-image ADAPTER_DISPLAY::Initialize invokes Type16
+  at RVA0xf7e24, placing that query within display-core initialization.
+- Rejection branches call RVA0xb930, which emits through RVA0x3fbc0 with
+  EVENT_DESCRIPTOR at RVA0xab850: Id494, channel17, opcode3, task494,
+  keyword0x4000000040000000. The event carries the diagnostic format string and
+  arguments. Live logman provider metadata names bit0x40000000 AzureTriageLogging.
+- EXP459/460 mask0x410401 did not enable bit0x40000000; EXP486 used Diagnostic
+  channel0x8000000000000000, whose existing EVTX is only4096 bytes. This is a new
+  exact event selection, not another speculative driver or capability change.
+
+WINDOWS CONTRACT: native WPR boot memory recording, one DxgKrnl provider,
+keyword0x40000000, 128 buffers of128KiB. Natural PnP boot admission unchanged.
+AGX/ASAHI CONTRACT: same EXP488 production binary and accepted full-owner pair.
+TRANSLATION: event494 format/arguments locate internal validation after last DDI.
+WHAT IS STILL UNKNOWN: exact rejecting function/condition in this build.
+Single variable from EXP488 is the bounded WPR event selection, not KMD source.
+Reuse exact488 ZIP4e463edbbc6baa4b6f239dfd524977d0c4f7d4b169b02f3105fecf5fd7286ce4
+after proven cleanup. Driver version stays30.0.488.0 and all package/platform
+hashes are the EXP488 preregistered values. WPR profile
+scripts/trace-appleagx-admission.wprp SHA256
+a367aee0623705a8e515a75d6c5a975344395677712026cd2d83f6d961921025.
+Live WPR26100 profiledetails validated schema/keyword and16MiB buffer budget.
+Configure wpr -boottrace -addboot profile!AgxAdmission, stage exact488 as489
+control, graceful reboot, launch frozen native336d365/Mu406, then wpr
+-boottrace -stopboot C:\Users\pavel\EXP489-control\admission.etl.
+Collect event494 before exact package cleanup; stopboot removes autologger.
+PASS is an exact internal error message owner; no acceleration claim. No same
+trace rerun without new evidence. Evidence under EXP489-admission-event494.
+
+## EXP488-R6 — ordinary G2 after operator return, 2026-09-05T22:11:55Z
+
+RESULT 2026-09-05T22:15:26Z: SSH returned within the boot bound, eight CPUs and
+AppleInput/stornvme/USBXHCI healthy, no new System 41/129/1001. Current inventory
+found EXP487 oem5.inf version30.0.487.0 still installed, service stopped. Thus
+the previous cleanup had not persisted to this boot; its earlier success must
+not be interpreted as current package absence. Collected correct Device Parameters
+receipts first (display Id1/Phase2/Status0; historical timestamp), then removed
+hash-verified EXP487 via pnputil and stopped stale service, removed/rescanned the
+exact devnode. Restored R4 BootExecute to `autocheck autochk *`; C: NOT Dirty.
+Fresh clean result SHA256 5f3b71e3154d85c9ec3562c60ea266f4c3aa50e68d43df85cfd0734817b786d3
+proves Code28/nullINF/service, no packages or module, eight CPUs and healthy
+drivers. Cleanup SHA256 247ecb94759c23b5a587037ef0fb029fc6c5d526d2da14ea911b53931070b9c3.
+
+## EXP488 — service-mirrored display receipt, preregistered 2026-09-05T22:15:26Z
+
+WHY THIS HYPOTHESIS: EXP485 and EXP487 leave adapter admission at C000000D,
+last recovered display callback QueryChildRelations success. EXP488 is the
+already-built receipt-only candidate specified by the user; the same callback
+observation is mirrored to service state. Correct collector now reads both
+Device Parameters and service, so missing data will not be treated as deletion.
+WINDOWS CONTRACT: WDDM3 Full Graphics behavior unchanged from EXP487; natural
+boot PnP bind, then read atomic Id/Phase/Status/Time receipt and DxgKrnl event549.
+AGX/ASAHI CONTRACT: accepted EXP475/477/478 production owners unchanged.
+TRANSLATION: one existing display receipt mirrored; no capability-bit experiment.
+WHAT IS STILL UNKNOWN: exact last observed child/display callback on this run,
+first expected callback not reached, and whether adapter LUID is published.
+Frozen source commit 6cc431690df98cacbb5da442fa60984e046b32e2; archive
+6fa347e7f58e93926952d7d1f7616ce0b367c494dcdcf90951c96df7151fe179.
+Build command/build log/manifest: EXP488-display-receipt/build.ps1/build.log/manifest.json;
+WDK26100/MSVC14.44.35207 KMD/UMD, Universal, Inf2Cat and signing passed; two old
+analysis warnings remain. Manifest SHA256 7f477e6c32c026d3998c2e6ac808051e0f977f9ac06b307656d445de1140554e;
+ZIP 4e463edbbc6baa4b6f239dfd524977d0c4f7d4b169b02f3105fecf5fd7286ce4.
+SYS ca5c05ef416d44c61d643f4386ea5f9848c563a9c71e4606fad23887fc2c8c53;
+INF 5cec9fbbc6c0e2cdaa9664d4a5da577f36b33d9a6d9f08021aeb6f18ee91f0f8;
+CAT a818ffb831085bfd9413c2f0eb8d28b509a700efdb9e87da24b2d30fe12ab63c;
+UMD1198b21c87548f5496aadb38c67a860e45c9a8c50760387b4b480561588dbdfa.
+Platform native336d365 SHA256 b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0;
+Mu406 SHA256 c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Stage exact script stage-exact.ps1, use graceful Windows shutdown /r /t 0,
+then launch488.sh. Evidence directory C:\Users\pavel\EXP488-observation.
+Collect before exact package cleanup and graceful ordinary377/392 restoration.
+No GDI/TA3D submission until LUID/admission is proven. Event129 is telemetry.
+
+WHY THIS HYPOTHESIS: R5 failed under repeated warm resets; operator was asked
+for a cold cycle and now says continue. USB endpoints have re-enumerated at
+00:11 local; no launcher owns them and Windows SSH times out. A physical cold
+cycle is inferred from this context, not independently proven. One saved
+ordinary377/392 boot tests whether the prior warm hardware state owned the stall.
+No BCD/resume/Autochk changes; no GPU candidate installation.
+Root HEAD 01ad940810acbcd7a399bf3a60930a0dc43dbab7; working tree remains dirty.
+Frozen m1n1 SHA256 fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+Mu SHA256 16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Command: sh .local/experiments/EXP488-display-receipt/r6-launch.sh.
+Evidence: r6-launch.log, r6-contract.bin and r6-screen.png in that directory.
+Bound: 180 seconds after guest runtime ready; PASS requires usable SSH plus
+fresh driver/package/CPU health. EXP488 remains unstaged until verified.
+
+## EXP488-R5 — bounded saved ordinary G2 control, 2026-09-05T21:12:25Z
+
+RESULT 2026-09-05T21:17:40Z: saved d703f87/392 pair reached guest runtime but
+did not reach SSH within 180 seconds thereafter. Frame stream remained live
+with the normal spinner; CPU snapshot contained all eight CPUs, CPU0 last IRQ
+886 and other cores predominantly at the existing idle PC. No Windows stack
+or disk result was collected, so neither storage ownership of the stall nor
+GPU causality is proven. SIGTERM requested the launcher's documented
+snapshot-and-reset path; launcher exited. No new driver/package or boot-state
+mutation was made. Next action is a user physical cold power cycle, followed
+by the saved ordinary pair and Windows health/receipt readout. No more recovery
+variants are authorized by this decision.
+Final log SHA256 b55b6be2a1958e0335cb37ec6cf532b58916603d62a9fce8ec01d475c73ff007;
+screen 51ccc96711f28cbf8cffb77e011af8264ea1cfd5b5de3226e5bc2a789105a30c;
+contract f5c5f08e53245653c4bc801028dd880bbf373d8ebb8843b2ff838613d3363617.
+
+Evidence correction for EXP487: its collector queried the instance root, not
+the Device Parameters key used by the established EXP479 collector; its reg
+query used /d (search data). Missing receipts did not prove PnP deleted them.
+Commit 01ad940810acbcd7a399bf3a60930a0dc43dbab7 supplies the corrected collector,
+validated by the builder's PowerShell parser without executing it on the
+builder. EXP488 binary remains unchanged and unstaged.
+
+WHY THIS HYPOTHESIS: post-R4 guest has remained on the normal boot spinner for
+over nine minutes with a live framebuffer stream and no SSH. The active pair
+uses full-owner m1n1 336d365 with ordinary Mu392. Saved ordinary m1n1 d703f87
+plus Mu392 previously reached clean SSH on this same installation. One control
+now changes only m1n1 to that saved ordinary artifact after the R4 state change.
+No resume/hiberfile/bootstat/Autochk experiment is repeated.
+
+Root HEAD 6cc4316 (dirty working tree retained); frozen artifact manifest:
+`.local/experiments/EXP-20260903-392-current-gpu-mu-publication/assisted-boot/MANIFEST.json`.
+m1n1 SHA256 fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+Mu SHA256 16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Launch: chainload saved m1n1, then run_uefi.py saved Mu with --display-mode both
+--debug-mode off --low-mem, WOM1_AGX_G2_POWER_BROKER absent. Exact script and
+logs are under `.local/experiments/EXP488-display-receipt/r5-*`.
+PASS: Windows SSH and exact package/device/CPU health evidence. Bound: 180 seconds
+after guest runtime ready. If no SSH, preserve snapshot and stop expanding
+recovery. EXP488 ZIP 4e463edbbc6baa4b6f239dfd524977d0c4f7d4b169b02f3105fecf5fd7286ce4
+has not been staged by this task. Current package absence is not independently
+reverified while SSH is unavailable; previous cleanup reports are historical.
+
+## EXP486 — current-Air DxgKrnl Diagnostic channel; preregistered2026-09-05T16:50:47Z
+
+WHY THIS HYPOTHESIS:
+- EXP485 proves no initial VidPn DDI runs after successful QueryChildRelations;
+  failure is now inside Windows child/display-core processing.
+- The built-in Microsoft-Windows-DxgKrnl/Diagnostic analytic channel is disabled
+  by default and cannot provide retroactive events; enabling it for one boot can
+  expose the internal owner/event without changing driver behavior.
+- Reusing exact EXP485 bytes with only the cleared/enabled diagnostic channel
+  separates observation from another driver hypothesis.
+
+WINDOWS CONTRACT: clear and enable only DxgKrnl/Diagnostic before natural bind;
+export EVTX/JSON then disable it before package cleanup. No verifier or driver
+registry behavior setting changes.
+AGX/ASAHI CONTRACT: exact EXP485 package/native/Mu and all behavior unchanged.
+TRANSLATION: diagnostic events correlate the internal Windows failure with the
+same atomic driver receipts and event549 timestamp.
+WHAT IS STILL UNKNOWN: whether this channel emits an exact child/display-core
+validation reason on this Windows build.
+
+No source/build change. Exact EXP485 ZIP`24a376c3...`,SYS`dfd5bac0...`,
+INF`de7a2fa1...`,manifest`1b5b7812...`,commit`86242c9...` reused after prior
+exact cleanup. Stage/enable/collect-disable/cleanup/launch/restore hashes
+`43c59818...`/`408d45c3...`/`a5cea601...`/`5c06e5c8...`/`1eb50d98...`/
+`710b7400...`. Preflight ordinary16:50:07Z clean Code28/SSH8CPU/noAGX/
+no41/129/1001. PASS is an internal diagnostic owner/event; channel must be
+disabled and exact package cleaned every outcome. No workload. ANS untouched.
+Build-only control correction16:51:37Z: first enable invocation stopped at the
+documented analytic-log clear confirmation and left `enabled:false`; no reboot or
+bind occurred. Added only `wevtutil /q:true`, new enable script full SHA
+`408d45c3b7eebd7e04150e8e4c7b7a3d54e8b22a3e38338ad5f21ce4423a1621`.
+
+## EXP485 — passive initial-VidPn last-observation trace; preregistered2026-09-05T16:45:56Z
+
+HARDWARE RESULT — no initial VidPn wrapper entered; exact cleanup complete.
+Event549 record72 remains AddAdapter C000000D/Code43/noLUID with lower receipts
+green. Atomic last display observation is unchanged Id1/Phase2/Status0 at
+16:47:01.430Z: successful QueryChildRelations. None of the eight wrapped
+PASSIVE callbacks (IsSupported,RecommendFunctional,Enum,Visibility,Commit,
+UpdateActive,RecommendMonitor,QueryVidPnHW) entered. Thus failure is inside
+Windows child/display-core processing after the successful child relation and
+before initial VidPn DDI dispatch. This excludes those production callbacks and
+their return values from the current failure.
+
+Evidence result`f0aed1e658b933cd53e30f8cee93a066db4999a44389829fc05be32d20d4072b`,
+display receipt`48f8ebb2f7ce55fec9a2bd2cd6cb6cbe385e4359ed60eda66eeac60129746231`,
+Dxg Admin`a476dbe65d5fada323a40d303d3e89d4b364ba9b52912de44981e2a7d379ddcc`,
+host`b0ba5b54cbcde70180c03158d8567bab95d0875090b391782870780dfdc8fc9a`.
+No41/129/1001. Exact package/service removed; Code28/nullINF/service/module,
+zero package,8CPU/SSH; cleanup health`6b8e8e7c...`.
+Ordinary377/392 restored; fresh16:50:07Z health proves Code28/nullINF/service,
+no package/module/SYS/UMD,SSH8CPU,input/NVMe/xHCI,no41/129/1001. Evidence
+`f9a8b1a2dca084987457e07b3cabc6236d20e296de1d09039df61072c4d9790e`.
+NEXT: ordinary restore then one diagnostic-only rerun of this exact package with
+Microsoft-Windows-DxgKrnl/Diagnostic enabled and cleared before boot; export the
+channel, disable it, cleanup. No source/behavior change.
+
+WHY THIS HYPOTHESIS:
+- EXP484 positively proves caps exact and QueryChildRelations phase2/status0,
+  after which Default_Monitor UID0 is created and AddAdapter returns C000000D.
+- The next documented initialization sequence is RecommendFunctionalVidPn,
+  IsSupportedVidPn, EnumVidPnCofuncModality, Commit and related path callbacks;
+  none had a durable exact result.
+- One behavior-preserving last-observation wrapper set can name the first real
+  failing callback or prove the error remains internal before those callbacks.
+
+WINDOWS CONTRACT: eight wrapped callbacks are PASSIVE_LEVEL. The DIRQL-capable
+SetVidPnSourceAddress remains registered directly after review caught and removed
+an unsafe synchronous registry wrapper.
+AGX/ASAHI CONTRACT: all caps, callback implementations/results, native/Mu,
+retained root, firmware, queues and scanout are unchanged.
+TRANSLATION: wrapper publishes one atomic entry/exit record and invokes the exact
+production callback once with original arguments, then returns exact status.
+WHAT IS STILL UNKNOWN: the last VidPn callback reached and its returned status.
+
+Commit`86242c9fa71f615014a0637f4b5e45889d4c8040`;75 render tests GREEN;
+independent signatures/behavior/IRQL review approved after the DIRQL correction.
+WDK26100/MSVC14.44 KMD/UMD,analysis,Universal,Inf2Cat,signing,version30.0.485.0
+PASS with two old warnings. Source`cb66c4ade7742e531fba7fb44f57fb0fe703c19f3c27eba991cacee60fa113dd`,
+manifest`1b5b7812cd9ab647420f4828d0caa18ec6cfaca1267413700e8ac041a057367c`,
+ZIP`24a376c3767682be45b12c88d47fa73c5e60d2bae32504e4d6d25c0489c14487`,
+SYS`dfd5bac0345f6fa9018934de4019af8560d8a5a8788767a43d9f8eb5097d2ea2`,
+INF`de7a2fa1fa315a8ba7a7692b92487596b336da2451c611ee44d971560b317bc2`,
+CAT`81a2bf35772ada96196afec1c7ee653166face5ac61a8158a9465b3329933667`,
+UMD`887477106337cd71b4d0d4110d96de5e194ebc87fd73c94ac60780c1d21c9628`.
+Stage/diagnose/cleanup/launch/restore hashes
+`6cb93254...`/`53f0784d...`/`80359a9e...`/`765fa8e0...`/`6b8bd60d...`.
+Preflight ordinary16:44:17Z clean Code28/SSH8CPU/noAGX/no41/129/1001. Same
+hash-verified stage-only/natural bind/collect/exact cleanup/ordinary restore.
+No workload; PASS is a positive narrowing receipt or Code0/LUID. ANS untouched.
+
+## EXP484 — atomic post-Start admission receipts; preregistered2026-09-05T16:36:30Z
+
+HARDWARE RESULT — RECEIPT SEAM CONFIRMED; AddAdapter still C000000D; exact
+cleanup complete. Atomic receipts prove Type1 status0/592bytes/WDDM0x3000,
+PresentationCaps0x4,FlipCaps0x12,SchedulingCaps0x5,graphics+compute preemption100,
+Support bytes `01 01 01 01 00 00 00 00`; actual Type16 display extension is
+status0/4bytes/payload0; WDDM-device Type29 is status0/4bytes/0x3000. Therefore
+all three returned structures match source and are no longer unknown.
+
+Positive display receipt is Id1/Phase2/Status0: QueryChildRelations was invoked
+and returned success. No later QueryChildStatus or QueryDeviceDescriptor receipt
+exists. Kernel-PnP created `DISPLAY\\Default_Monitor\\...UID0`, then surprise-
+removed it about250ms later with APPL0002 when DxgKrnl event549 record71 again
+reported StartAdapter_AddAdapterFailed C000000D. The descriptor callback dispatch
+itself is not the failure; first unknown is after successful child enumeration,
+at initial VidPn/display initialization. Absence of later receipts is supporting,
+not standalone proof, because registry writes are nonfatal.
+
+Evidence result SHA`24e874b7d6bd34b1bc55e13245d748b3a45aca9bd3405176087e293947c89525`,
+Type1`55d9948a7ea6361f7cd48cd7d307ce80a9e0fa13c4a252ce392fef948d9cd1fc`,
+DisplayCaps`e6c5b67c437d7b9a061a897b010ae8ec22c184915fca1ae31f2c92a4dfb0fb8e`,
+WddmCaps`c027ce35eb41e65f8ae30c07231c82c2d1124ad22ed5bdb7612981170edce599`,
+DisplayDdi`bddc0219cfcd750f6424a9d088bbdaca09823e0debb55afe11a26b70e3180018`,
+Dxg Admin`11505fcccef7126f7ed0992ff512ef03f8d98d99384cd66d68a038515ca6c5dc`,
+host`299960570c045ba0aad61f40303549a24c5d86f3125697cadd50b260a8241800`.
+No41/129/1001 this candidate. Exact package/service removed; Code28/null
+INF/service/module,zero package,8CPU/SSH; post-cleanup
+`6b8e8e7c6f887a990f4308783d76de51f43a3d817d882c17c8bb9a3d40685535`.
+Ordinary377/392 restored; fresh16:44:17Z health proves Code28/nullINF/service,
+no package/module/SYS/UMD,SSH8CPU,input/NVMe/xHCI,no41/129/1001. Evidence
+`1d6b32120f072438fafb20d468166de1f489d9715a7fdf6bd204c1ca79f5353a`.
+NEXT: ordinary restore then extend only the same atomic last-observation seam to
+RecommendFunctionalVidPn/IsSupportedVidPn/EnumVidPnCofuncModality/Commit and
+UpdateActive/RecommendMonitorModes. No contract or GPU behavior change.
+
+WHY THIS HYPOTHESIS:
+- EXP481/482/483 retained the same AddAdapter C000000D despite three corrected
+  model prerequisites; another behavior/capability candidate is prohibited
+  without an owner-level discriminator.
+- Existing receipt exposes only last QueryType16/Size4/Status0, which pinned WDK
+  identifies as DISPLAY_DRIVERCAPS_EXTENSION, not WDDMDEVICECAPS. Returned bytes
+  and earlier Type1/WDDM-device bytes were not durable.
+- If invalid parameter occurs inside query-output validation, exact atomic caps
+  records will expose it. If dxgkrnl passes into child display DDIs, the atomic
+  entry/exit receipt identifies the last callback and exact returned status.
+
+WINDOWS CONTRACT: QueryAdapterInfo and the three early child callbacks run at
+PASSIVE_LEVEL. Receipt failures are nonfatal; positive records are exact, but an
+absent record alone is not proof of non-entry.
+AGX/ASAHI CONTRACT: native/Mu/retained-root/firmware/UAT/backend/queue/scanout
+and all callback results/capabilities remain identical to EXP483.
+TRANSLATION: each Type1, actual Type16 display extension, WDDM-device caps and
+last child-DDI observation is one versioned bounded REG_BINARY publication;
+no split tuple or hardware action.
+WHAT IS STILL UNKNOWN: whether caps validation or QueryChildRelations,
+QueryChildStatus or QueryDeviceDescriptor owns the current failure. No workload.
+
+Commit`d28fefe443563fc9b8812d2a7528f4885273628d`; 75 render tests GREEN;
+independent review approved selector/payload, atomicity, SAL/IRQL and behavior
+equivalence after two corrected review findings. WDK26100/MSVC14.44 KMD/UMD,
+analysis, Universal, Inf2Cat, signing and version30.0.484.0 PASS with two old
+warnings only. Source SHA`32ad3e60be2193bd1feee2834f3d8b2d450a9f2efdbce85c57278b574305d090`,
+dirty diff`29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75`,
+manifest`5fc24087a00bcc914a257017fc4d9b87e361505d92f19a488bb8d67035bd6635`,
+ZIP`5afd06a91747fa993f0bcbdeb3a9ae782ecf7223fda1845a8c23f497dfa56e69`,
+SYS`e88de78c46c90020a46d0d53a9c9a58b9ba9d9319f003c4b9b498c9bf46e8928`,
+INF`3b5a06ebe308b2a0512cd93227cc7b2f0739f304973ebee40070b576e49ac1de`,
+CAT`77887eb4f6b958b6736b5f7dd3169cc8812646597f4772975ac4f71f628f885a`,
+UMD`de35c2a2fccb4469babcc0c8735ca4ce0b63be31f563995205eac7989a86dcce`.
+
+Stage/diagnose/cleanup/launch/restore SHA respectively
+`00c2d7a1ed606629e2ddd2039979d5f37cd797d3e9f1954b7b041d591d598c47`,
+`2d37467bbcb42761ec46fe5cdb617e607f187d973a1c3b367bea2659956ad782`,
+`86bb128bb11c7ef1a651353531503a8c5e6edcba06d6b4fb1cc581dbab8590aa`,
+`c4b4a7338fbfccf80cbc26ebc14923cefa347cffe4e5b69bb1a8a74e0d8e680a`,
+`408137c7925a2342c5eec027d83a882d86309402a3c1f44982d1647ebfd69f4e`.
+Preflight ordinary377/392 at16:32:42Z: Code28/nullINF/service,no package/SYS/UMD,
+SSH8CPU,input/NVMe/xHCI,no41/129/1001. Same exact stage-only/graceful reboot/
+launcher-USB wait/full-owner launch/collect/cleanup/ordinary restore sequence.
+PASS is an owner receipt that narrows the failure or Code0/LUID; this is
+diagnostic-only and makes no acceleration claim. ANS untouched.
+
+## EXP483 — mandatory full-graphics smooth-rotation cap; preregistered2026-09-05T16:25:17Z
+
+HARDWARE RESULT — MANDATORY CAP CORRECTED BUT CURRENT STATUS UNCHANGED; exact
+cleanup complete. Exact30.0.483.0 again reached Start12/Platform14/Backend0,
+then DxgKrnl event549 record70 returned `StartAdapter_AddAdapterFailed`
+STATUS_INVALID_PARAMETER, Code43/noLUID. The cap remains required and truthful
+for the restricted Identity/Offset0 implementation, but hardware does not prove
+that CreateDisplayCore reached that specific status-matched check. No producer,
+render packet, TA/3D execution or fence ran. Two stornvme Event129 occurred at
+16:26:13Z and16:26:23Z; recorded as platform telemetry with no claimed GPU cause.
+
+Evidence result SHA`23fab650340afceb1499fb0f937849c8eca1be8898366971548bd963716e82f7`,
+Dxg Admin`d510e51cfae8f6790049491d75f81d41d2ca30fe89b2dcfc3f3554527383fb49`,
+host`30c5d5503065b24bb509d3f5be985e307460701ba47d90bc0e61c4ba0e05b1ee`.
+Exact oem5 hash matched and package/service/devnode was removed; Code28/null
+INF/service/module,zero package,8CPU/SSH. Post-cleanup
+`6b8e8e7c6f887a990f4308783d76de51f43a3d817d882c17c8bb9a3d40685535`.
+Ordinary377/392 restored; fresh16:32:42Z health proves Code28/nullINF/service,
+no package/module/SYS/UMD,SSH8CPU,input/NVMe/xHCI and no41/129/1001 since the
+ordinary boot. Evidence
+`8206817dcc736408173afd08e89e4f9912c81200ce832fad2450b7e873a77482`.
+NEXT: ordinary restore, then receipt-only instrumentation of the early display
+DDIs invoked by ADAPTER_DISPLAY::Initialize. One trace candidate must name the
+first called callback and exact returned status; no additional cap/behavior edit.
+
+WHY THIS HYPOTHESIS:
+- EXP482 again reached complete Start/Platform/Backend and then AddAdapter
+  STATUS_INVALID_PARAMETER; two prior focused corrections did not change that
+  external status, so the exact display-core validation was re-anchored.
+- Current-Air `ADAPTER_DISPLAY::CreateDisplayCore` reads caps at internal base
+  x19+0x9d8. `SupportNonVGA`/`SupportSmoothRotation` are offsets0x218/0x219.
+  At0x1400f3d80..0x1400f3d90 current NonVGA1 + SmoothRotation0 enters the path
+  returning exactly C000000D at0x1400f3f64, matching the hardware event.
+- Microsoft marks SupportSmoothRotation mandatory for full WDDM1.2+ drivers.
+  Current VidPn code already exposes only Identity+Offset0 and implements both
+  CommitVidPn and UpdateActiveVidPnPresentPath for that restricted transform.
+
+ATOMIC CONTRACT: set only `DXGK_DRIVERCAPS.SupportSmoothRotation=TRUE` inside
+the existing14-bit Ready publication. This states support for the mandatory
+smooth update mechanism over the currently exposed Identity/Offset0 set; it does
+not advertise 90/180/270 modes or add pixel rotation. The previously considered
+RecommendVidPnTopology callback was reverted before this archive because its
+direct failure code is C0000059, not the observed C000000D. Net source difference
+from EXP482 is exactly the one cap assignment/test expectation.
+
+WINDOWS CONTRACT: full WDDM3 satisfies the inherited mandatory WDDM1.2 optimized
+rotation cap; EnumCofuncModality advertises Identity+Offset0, Commit and
+UpdateActive accept that same set.
+AGX/ASAHI CONTRACT: candidate native336d365/machob970a7..., Mu406, retained-root,
+firmware/UAT/queue/backend/submission and DCP state are unchanged from EXP482.
+TRANSLATION: one truthful dxgkrnl model-cap bit describes already implemented
+identity-path behavior; no AGX command or scanout behavior changes.
+WHAT IS STILL UNKNOWN: whether this exact C000000D branch was the final AddAdapter
+rejection and Code0/non-null GPU LUID results. No producer or workload in EXP483.
+
+Implementation commit`d5684542f9f1c4f268e6e059c10f4d7f55bae079`; the separately
+valid topology callback commit`ae17df6b...` was reverted by`bf595240...` to retain
+one variable. RED then74 render tests GREEN; independent binary/WDK/companion
+review approved. FRYZZING WDK26100/MSVC14.44 KMD/UMD, code analysis, Universal,
+Inf2Cat, signing and version30.0.483.0 PASS with two old warnings only.
+Source SHA`f50dc7fb6f05ef0e49a87d5d9724ed1d6a7d7d86c68520d06050bfab713d85ed`,
+dirty diff`29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75`,
+manifest`3cf565a2cbb5a1e59a05387655e280da2668319018abb80101174145dc61358f`,
+ZIP`448f8105d79f2a7ca9a25ac1e55c98ab0f09c087e1c8d9ebd94da8a46f887ea6`,
+SYS`2fd4d0eb8460185b8a6d75eb03b852a52d8839c9b7b8eda2b7d20a84f034f381`,
+INF`89c514da9e6926e864936f82e462adf7160d415cde331dcb5c329eda66df9c58`,
+CAT`fa4068da5d95f72e6e180a527bb5bc8ce9adde5b6463fe020f8b357a0936ad1d`,
+UMD`f67fcd85b50a65e5ba7ca8a6a2fc221aff4cada3e37c8d53908d0cbb10b0c529`.
+
+Stage/diagnose/cleanup/launch/restore SHA respectively
+`5492f0fb44e0c3fc82f1e1c75d4761d25db5bf7160d334348ae633174daadc57`,
+`af4778145a7413ff7906360643f9ba1d3abb6dd6e8a8334bad352376ed839a5b`,
+`cde53e3a69beb2e9f94d9df39e336d580d96e4991fde3e9b617f875054200c14`,
+`b97b5653ef5326b90b3463f9c5dc20bcc4cd643317e336107e8334baf414301d`,
+`7be4ef70ff723b06414b2b67bf37631a03705ea24f1672b88d0980dc27ffd13c`.
+Preflight16:22:21Z ordinary377/392 is Code28/nullINF/service, no package/SYS/UMD,
+SSH8CPU,input/NVMe/xHCI,no41/129/1001. Commands and recovery sequence are the
+same hash-verified stage-only, graceful reboot, launcher/USB wait, exact launch,
+collect/diagnose, cleanup, ordinary restore used by482. PASS Code0+GPU LUID;
+otherwise collect exact new event. No workload. ANS untouched.
+
+## EXP482 — complete legacy render callback admission group; preregistered2026-09-05T16:13:33Z
+
+HARDWARE RESULT — HYPOTHESIS REJECTED AS SOLE CAUSE; exact cleanup complete.
+The complete callback group compiled and executed with unchanged successful
+StartStage12/PlatformStage14/BackendStart0 receipts, but DxgKrnl/Admin event549
+record69 again reported `StartAdapter_AddAdapterFailed` STATUS_INVALID_PARAMETER.
+Final state Code43/stopped service/noLUID. Thus the source correction is still a
+valid pinned-WDK callback-table invariant, but it was not the last invalid
+AddAdapter condition. No producer, render packet, TA/3D execution or fence ran.
+The enabled Operational channel contained no additional event; diagnostic/debug
+channels were disabled before this boot, so they are not retroactive evidence.
+
+Result SHA`763cc8ee4e0c659bcc5782cbca00b33de5a6bd975dd567fcf7f65f47b0725885`,
+DxgKrnl Admin`be258cd102087dea2d9f9c48ecbb461aa91d45417104ffbc8a4aeb27073f3738`,
+host log`4df2ac328e0e2173e892cdbdc848a66ddcf3879fc983601745d35ea14f37d01f`.
+The exact hash-matched oem5 package was uninstalled/deleted, stopped ownerless
+service/devnode removed and rescanned; Code28/nullINF/service/module,zero package,
+8CPU/SSH. Post-cleanup SHA
+`6b8e8e7c6f887a990f4308783d76de51f43a3d817d882c17c8bb9a3d40685535`.
+
+Ordinary377/392 restore completed. Fresh2026-09-05T16:22:21Z health proves
+Code28/nullINF/service, no AppleAgx package/service/module/SYS/UMD, SSH/8CPU,
+AppleInput/stornvme/USBXHCI running and no41/129/1001 since boot. Evidence SHA
+`e44a7edb7a603a139e156bc96dbb22c6e88be3f6635b744e0a60d183df1ca778`.
+
+ANTI-LOOP: EXP481 and EXP482 are two focused changes without boundary movement.
+Do not issue EXP483 from another capability or callback guess. Restore ordinary
+377/392 and re-anchor the exact AddAdapter path using current-Air dxgkrnl/PDB,
+pinned WDK and the last accepted full-graphics reference; the next hardware run
+must have a newly distinguishing owner-level receipt or one exact causal contract.
+
+WHY THIS HYPOTHESIS:
+- EXP481 reproduces the post-Start `StartAdapter_AddAdapterFailed`
+  STATUS_INVALID_PARAMETER after every platform/backend receipt succeeds; the
+  failing owner is dxgkrnl render-adapter creation, not GPU startup.
+- Exact current-Air dxgkrnl SHA`fd417add...` plus matching Microsoft PDB
+  SHA`158847cf...` locates `ADAPTER_RENDER::CreateRenderCore` at RVA0xfd480.
+  It requires non-null StopCapture/CreateOverlay and rejects the current mixed
+  vendor/default ControlInterrupt/Present/UpdateOverlay/FlipOverlay table.
+- Pinned WDK26100 `DRIVER_INITIALIZATION_DATA` contains this complete legacy
+  callback group. Current source had vendor Present/ControlInterrupt but null
+  StopCapture/CreateOverlay/UpdateOverlay/FlipOverlay/DestroyOverlay.
+
+ATOMIC CONTRACT: register StopCapture and Create/Update/Flip/DestroyOverlay as
+one legacy render callback-table invariant. StopCapture is truthful no-op success
+because no capture ownership exists. Every overlay operation returns
+STATUS_NOT_SUPPORTED and creates no handle/state. No overlay/capture cap is set.
+The exact dxgkrnl checks distinguish mandatory entries from the all-default or
+all-vendor four-entry relationship; these fields are invalid separately in the
+current vector.
+
+WINDOWS CONTRACT: WDDM3 full-graphics `DxgkInitialize` supplies a coherent
+DRIVER_INITIALIZATION_DATA vector. Registered unsupported overlay callbacks are
+entry points, not capability advertisements, and remain fail-closed.
+AGX/ASAHI CONTRACT: frozen native336d365/machob970a7..., Mu406, retained root,
+firmware/UAT/queues/backend and submission behavior are byte-identical to EXP481.
+TRANSLATION: only dxgkrnl callback-table admission changes; no callback performs
+AGX work and Type1/Type34/35 are unchanged.
+WHAT IS STILL UNKNOWN: whether this is the last invalid render-core condition and
+the adapter reaches Code0 with a non-null GPU LUID. No Windows producer runs in
+this candidate.
+
+IMPLEMENTED commit`e772d2ea15f42dbf89b43fbd42b0bc6dbf6556da`; changed only
+render-admission driver/header/callbacks and one regression test. RED captured;
+74 render tests GREEN; independent review approved exact signatures and scope.
+Pinned FRYZZING WDK26100/MSVC14.44 build, KMD/UMD, code analysis, Universal,
+Inf2Cat, signing and version30.0.482.0 PASS with only the same two old warnings.
+Source archive SHA`3e4a57316d8d55181af5ef35eea13f33848a04f62f786b65dc70c91a2530d826`;
+dirty-source diff SHA`29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75`.
+Manifest SHA`194c30a728d57d6f52030d549a488f0bc2735a75cb90f98e0a9c7369b49ece92`,
+ZIP`0407df6cc0412f4f3f0923b360c86324bc69b4ba30e5dcd3823122109a6a88ff`,
+SYS`7523e428fa09fbe5d6575da8e50db9dcbb6ba31e476e42e051761a1f67af0369`,
+INF`0b73ea8c5e389b60bcfe801c42d9bd7c78876eb7d82a183298b9a16fe25d5cbd`,
+CAT`821a114489b38cd1c0662213dfff96324ee46c11a597ab9a65677c85804d97ed`,
+UMD`cb6657966566b379fd19331dd85bd4640f4eacb5998518d02792bc7e1d2750d6`.
+
+Stage/diagnose/cleanup/launch/restore SHA respectively
+`e4ac8ff1da015946bdf27b4b8b228d89a4d85a63ee0f1eec9ddea16525c5744f`,
+`f44a7e98dd6c85d1454ff2eb219332ac12bec014ee9a295bfc9fc955ad6a2d5e`,
+`011edf901dcc9dccf2ee028bc5979728f73adf6c8883774d3cdee18d1c6f4ef5`,
+`76f771a32aaf0f7b963f37e738cde52a4de9e1283dbde5bb512cb5879965e26e`,
+`5912670d6d10f545b1f6fe3eaf26022757bc1694bb615253c30de183c4bde129`;
+collector is unchanged EXP479 SHA`8e1536da...`. Current preflight is ordinary
+377/392 at2026-09-05T16:05:17Z: Code28/nullINF/service,SSH8CPU,input/NVMe/xHCI,
+no package/module/SYS/UMD and no41/129/1001. Recovery m1n1/Mu hashes
+`fae3444c...`/`16c17718...`; candidate native/Mu hashes
+`b970a7fe...`/`c7ddcfb2...`.
+
+Exact commands: SCP ZIP/stage/collector/diagnose/cleanup to the current ordinary
+guest; execute `EXP482-stage.ps1` (stage only); issue one graceful Windows reboot;
+wait ordinary launcher exit and both USB endpoints; run recorded `launch.sh`;
+collect receipts/result and exact new DxgKrnl/PnP events. PASS requires
+Start/Platform/Backend0 plus APPL0002 Code0, running exact service and non-null
+GPU LUID. Any result is followed by hash-guarded exact package cleanup and
+ordinary377/392 restore. No producer/workload. ANS worktree remains untouched.
+
+## EXP481 — truthful compute DMA-boundary preemption; build preregistered2026-09-05T15:50:20Z
+
+HARDWARE RESULT — HYPOTHESIS REJECTED; exact package cleanup complete.
+The one-field compute-preemption correction did not move AddAdapter. Exact
+30.0.481.0 reached StartStage12/Complete0, PlatformStage14/Complete0 and
+BackendStartResult0 with all retained-root/platform receipts intact, then
+DxgKrnl/Admin event549 record68 again reported `StartAdapter_AddAdapterFailed`
+with `STATUS_INVALID_PARAMETER`. Final state was Code43, stopped service and no
+GPU LUID; no producer, render packet, TA/3D execution or fence ran. SSH and all
+8 CPUs remained live. This result does not invalidate DMA-boundary as the
+truthful common implementation contract, but proves it was not the rejected
+AddAdapter parameter. Do not continue micro-probing Type1 capability fields.
+
+The exact oem INF hash matched the preregistration and was uninstalled/deleted;
+the stopped ownerless service/device state was removed and rescanned. Fresh
+post-cleanup state is Code28 with null INF/service/module and zero Pavel Build
+Lab packages. Result SHA
+`f9da376200e4a15b762016f5fe9f9f9de3e0a7e925da00d9c20c7e06bc9d97c0`,
+DxgKrnl log `1efbd5fa62ecfb40ea51bf9f5ebee07e40a51049c0c28895e8894f5616fb320f`,
+host log `de600b3e629d4df570a04d77b6338a9cd178b9477da598ae2dd344271ab510d7`,
+post-cleanup health
+`6b8e8e7c6f887a990f4308783d76de51f43a3d817d882c17c8bb9a3d40685535`.
+
+Ordinary377/392 restore completed. Fresh2026-09-05T16:05:17Z health proves
+SSH,8 CPUs,AppleInput/stornvme/USBXHCI running, APPL0002 Code28 with null
+INF/service, no AppleAgx service/module/SYS/UMD or package, and no41/129/1001
+since this boot. Evidence SHA
+`d81ad6012a7819df9f2fcb236d1d750537fdb7b14d9ac43020b05792fd9f51bd`.
+
+NEXT: restore ordinary377/392, then use the exact current-Air dxgkrnl/PDB and
+pinned WDK26100 initialization structure to identify the first missing mandatory
+render DDI in `ADAPTER_RENDER::CreateRenderCore`. One exact DDI-owner fix before
+the next hardware candidate; no additional capability-bit candidate.
+
+FINAL HARDWARE PREREG2026-09-05T15:51:43Z: WDK26100 KMD/UMD analysis,
+Universal, Inf2Cat, signing and version30.0.481.0 pass; only2old warnings.
+Manifest SHA`31f96aaeeb43f42b319bfe1b4c2756322399fe086792e25994827b7cd71bc037`,
+ZIP`5415b7b5e292866a844f788fccbafcf60f27b15e923d9c553c0b1048bb0c03c5`,
+SYS`956714d56900f0625c3e0fef33692ad94216ab5d0e68759b584c316e891a7858`,
+INF`fd968460b95f83592f0cc540bd5d8feeb9ba5b512417791b83847bbd0f7c9cce`,
+CAT`419d6d9672dcd1649cac3c9aa771018b7d045c5e8ea4521a5c5f49e027654883`,
+UMD`ba6e1c52678f3c99484d8f0b7db08242322f1f1ec28e7d8184f9b3a2dfc74ac3`.
+Stage/launch/cleanup/restore SHA respectively4a268e2a30de4c3010b90223f413e0340defabee7b727feb60d8346518f3b263,
+45a15259fd5ab38fa9c5e828c947f1b984023edde1b3ccad055ea43f5d0ca3e7,
+fcc0a40b5f5bafe8f08a89eee5554c49f857d44b5edfc32b61809351b3b1c508,
+c1690330237949e26983799e3d28f7540faddcc7a2b9db8bd41d9f86d1466072.
+Generic normal collector/diagnoser from479/480 reused exactly. Preflight15:51:19Z
+ordinary377/392:SSH8CPU/input/NVMe/xHCI,Code28,nullINF/service,noAGX/no41/129/1001.
+Sole ordinary launcher61887 and bothUSBendpoints. Commands stage-only, graceful
+Windows reboot,wait launcherexit/USB,then recorded launch. PASS Code0+LUID;
+otherwise exact new DxgKrnl event. No producer/workload. Cleanup every outcome.
+
+WHY THIS HYPOTHESIS:
+- EXP480 removed C0000059 but DxgKrnl AddAdapter now returns
+  STATUS_INVALID_PARAMETER, narrowing failure to the accepted Type1 contents.
+- The readiness contract and actual scheduler implement DMA-buffer-boundary
+  blocking/removal for the one node/engine, but Type1 advertised compute NONE.
+- Microsoft defines NONE as unable to prevent pending DMA buffers, while the
+  implemented path does prevent them. The one-field change makes the cap truthful.
+
+WINDOWS CONTRACT: full WDDM reports the common coarsest preemption granularity
+for both graphics and compute DMA streams on node0/engine0. No compute shader
+feature or finer interruption is advertised.
+AGX/ASAHI CONTRACT: frozen native/Mu and queue/runtime identical to EXP480; no
+firmware/UAT/AGX register or submission behavior change.
+TRANSLATION: existing DxgkDdiPreemptCommand discards queued work, blocks further
+dispatch and waits active work to complete at DMA-buffer boundary; Type1 now says so.
+WHAT IS STILL UNKNOWN: whether compute NONE was the sole invalid Type1 field and
+normal AddAdapter reaches Code0/LUID.
+
+Source485eed141ca439d19253fcfc62ae2ed61203e9d7; archive SHA
+89c65c0f6ee0e640f7700f2496349d4d71cf0197949c5b73d0f021ba7f4d4ede;
+dirty-source diff unchanged29087e05.... Test observed RED then22 GREEN; focused
+review approved and explicitly treats this as a hypothesis, not a confirmed
+universal cause of invalid parameter. Build isolated WDK26100/MSVC14.44 normal
+FullProduction PackageBuild481. Require all gates and final prereg before stage.
+EXP480 exact package removed and ordinary377/392 restore running. No GDI producer
+or GPU workload in this candidate; next result must come from Code/LUID/events.
+
+## EXP480 — coherent WDDM query identity; build preregistered2026-09-05T15:43:17Z
+
+HARDWARE RESULT — identity fix CONFIRMED, next Type1 inconsistency exposed;
+exact cleanup complete. StartStage12/Platform14/Backend0 remain successful.
+The previous DxgKrnl C0000059/revision error is absent. New DxgKrnl/Admin event549
+record67 at2026-09-05T15:45:45.593Z reports `StartAdapter_AddAdapterFailed` with
+`STATUS_INVALID_PARAMETER`; Kernel-PnP reports Start at15:45:45.292Z then
+surprise removal at15:45:45.593Z. Final Code43/no LUID. This confirms coherent
+WDDM identity moved the boundary but did not finish AddAdapter. No producer or
+GPU job ran. Eight CPUs/SSH/input/NVMe/xHCI live, no41/129/1001.
+
+NEXT CAUSAL TYPE1 DIFFERENCE: the implementation/readiness model promises one
+DMA-buffer-boundary preemption path for node0/engine0 and registers a common
+DxgkDdiPreemptCommand, yet advertises graphics DMA_BUFFER_BOUNDARY and compute
+NONE. Microsoft defines NONE as unable to stop current or prevent pending DMA
+buffers, inconsistent with that shared scheduler behavior; full WDDM requires a
+declared preemption level. Single-variable EXP481 changes only compute granularity
+to DMA_BUFFER_BOUNDARY. RED test observed before source edit;22 related tests
+GREEN; focused review pending. No other Type1 bit changes.
+
+Evidence `result.json` SHA
+`d2b304386f3066c672de097d3080d9b3d9a306fec619c4ba21b7ba258eb6cfdf`,
+DxgKrnl log SHA
+`4ed2c54096d07728418912ad8cb13377ea95bf0f68a3aeefe7e427a90c605513`,
+host log SHA
+`314c1c61f85d50ef9ab4bdbffebe2c95dc1d1344d374012bb9fcfa1479baa12f`.
+Exact installed package hashes matched; oem INF uninstalled/deleted, service and
+devnode normalized to Code28/null service. Restore ordinary377/392 before EXP481.
+
+FINAL HARDWARE PREREGISTRATION2026-09-05T15:44:41Z: build passes KMD/UMD,
+analysis, Universal, Inf2Cat, signing and version30.0.480.0 with only the same two
+pre-existing warnings. Manifest SHA
+`051308e2b7d4f55c4349bd7cdaa3ecb4f305ba060895e2db54dd34cbd51a44f8`,
+ZIP `7135ce83c616353d51f673335899301b345cf74d5d9e68aaf328ca05d41f58b8`,
+SYS `ac5312514025b363d5a6364a7972bfbe816153b1ef64e9fe17be1c655e2d93b0`,
+INF `086852efc753ff73d3a78b82969eabb165abb781bba72951fdabab0aab50aa8c`,
+CAT `9ac5b356d5d6358a1ca871e703118467bace02875481c65542496c2a196f5eb2`,
+UMD `2617b75c1379bb1b092cec598316d7e964cb1226c9aa677acb53625302acfab4`.
+Stage/launch/cleanup/restore SHA respectively
+`b30b684fd6ceb145188ae9a4c059b8e57ecd30a5ddd22cb2b446c2a521937a9d`,
+`14b7ac81c0687be129e56dccdf59b3dbfb4d45296a0508d474d5e04eb32e0ba1`,
+`45907fd78d8dc4465763f74ec95945e9a6ffc0c8ad77af903e5c4544a9764bf7`,
+`27881bf74ef880f8d391b312b24e559c25ef8c6191cf44b69eb036972b3ff37b`.
+Generic normal collector is exact EXP479 collector SHA8e1536da... and exports
+all receipts/LUID/video/events. Commands: transfer ZIP/stage/collector; run
+`EXP480-stage.ps1` stage-only; Windows graceful reboot; wait sole ordinary
+launcher59762 exit and both USB endpoints; recorded launch.sh. PASS requires
+the EXP479 C0000059 event to be absent, APPL0002 Code0, exact running service,
+non-null LUID and retained Start/Platform/Backend success. No explicit producer,
+workload or acceptance claim in this run. Exact package cleanup after evidence.
+Preflight15:44:04Z ordinary377/392 is clean8CPU/SSH/input/NVMe/xHCI, Code28,
+no package/SYS/UMD or41/129/1001. ANS work remains untouched.
+
+WHY THIS HYPOTHESIS:
+- EXP479 proves every driver StartDevice/platform/backend group returns success;
+  the first failure is DxgKrnl `StartAdapter_AddAdapterFailed` C0000059.
+- Pinned WDK26100 says pre-Start WDDMDEVICECAPS.WDDMVersion must equal post-Start
+  DXGK_DRIVERCAPS.WDDMVersion; observed values were3.0 and0.
+- The new single assignment makes these identities equal without changing any
+  feature cap, callback, GPU state or runtime behavior.
+
+WINDOWS CONTRACT: WDDM model identity3.0 in both required query structures;
+all feature bits remain gated by the already approved14-bit readiness vector.
+AGX/ASAHI CONTRACT: identical EXP479 native336d365/machob970a7... plus Mu406;
+no m1n1/firmware/UAT/queue/scanout change.
+TRANSLATION: Type1 writer reports the same3.0 revision as Type WDDMDEVICECAPS;
+normal dxgkrnl AddAdapter may proceed to LUID publication.
+WHAT IS STILL UNKNOWN: whether this was the only AddAdapter rejection and the
+normal adapter reaches Code0/LUID without a later post-query failure.
+
+Source119be7cb8e9c204f57d22ef20bf0c2b348e6f142; archive SHA
+7cb92a780405d505773c40537a2d636bc7a1fc3e7eabc71d607a3a5bd7891364;
+selected unrelated dirty diff29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75.
+RED test failed on missing Type1 identity; after fix22 tests GREEN; focused review
+approved. Build uses isolated FRYZZING WDK26100/MSVC14.44, normal FullProduction,
+PackageBuild480. Require KMD/UMD analysis/Universal/Inf2Cat/sign/version/hash;
+candidate not stageable until final hashes/preflight/commands are appended.
+EXP479 exact package is already removed; ordinary377/392 restoration running.
+No GDI producer in EXP480 and no repeat of proven lower boundaries as a hypothesis.
+
+## EXP479 — normal production admission after backend-ready; build preregistered2026-09-05T15:18:40Z
+
+HARDWARE RESULT — REJECTED POST-START at dxgkrnl AddAdapter; exact cleanup
+complete. Natural candidate boot used m1n1 `336d365`, broker v3/profile match,
+and exact30.0.479.0 package. Driver receipts prove StartStage12/Complete status0,
+PlatformStage14/Complete status0, BackendStartResult0, native firmware/DC and all
+200 context0 mappings. Kernel-PnP event410 at2026-09-05T15:38:36.414Z says the
+device started. DxgKrnl/Admin event549 at15:38:36.692Z then reports
+`StartAdapter_AddAdapterFailed` with `STATUS_REVISION_MISMATCH`; Kernel-PnP1011
+at15:38:36.693Z surprise-removes the failing adapter. Final state Code43,
+stopped exact service, no `DEVPKEY_Gpu_Luid`, no usable display mode. Eight CPUs,
+SSH/input/NVMe/xHCI remained available and no41/129/1001 occurred in this boot.
+No GDI producer, render packet, TA/3D submission or fence was executed.
+
+ROOT CAUSE: pinned WDK10.0.26100.0 `d3dkmddi.h` states
+`DXGK_WDDMDEVICECAPS.WDDMVersion` is the same value as
+`DXGK_DRIVERCAPS::WDDMVersion`. Current pre-Start Type WDDMDEVICECAPS returned
+`DXGKDDI_WDDMv3_0`, while post-Start Type1 zeroed DXGK_DRIVERCAPS and never set
+its WDDMVersion. This exact cross-query mismatch explains the observed revision
+error and is closer than downstream render/IRQ hypotheses. Exact EXP214 was only
+a QueryAdapterInfo control and also omitted Type1 identity, so it does not refute
+this post-Start AddAdapter result. One-variable correction: set Type1 identity to
+WDDM3.0 outside the capability-ready branch; no capability bit or DDI changes.
+Test was observed RED before source edit and22 relevant tests are GREEN; focused
+review pending before freeze/build EXP480.
+
+Evidence `result.json` SHA
+`1dc4fe0f1d081e89932a3671a57d5fb6ed9767038d4451990a2e993e73e5f022`,
+`hardware-window.log` SHA
+`f55401338d162cc7b9778f7229149f1ebf3892ab28bd76be4d799e4ce8a65876`,
+`graphics-channels.json` SHA
+`0180e99e0a612a1bd4266b4eeffaba12c11de4b4648c2b032efc6df724d16d58`.
+Exact installed SYS/UMD/INF hashes matched manifest. Exact dynamic oem INF was
+hash-guarded, uninstalled/deleted; ownerless stopped service/devnode removed and
+rescanned to Code28/null service. Ordinary377/392 recovery follows before EXP480.
+
+FINAL HARDWARE PREREGISTRATION 2026-09-05T15:37:31Z: normal FullProduction
+package remains byte-identical to the interrupted checkpoint and was not
+previously staged. Root `ee706f09c44d15e27eef8441bc91a01fde0c7ce8`, native
+`336d365ff8951e6ecd343d37f8c2fa4e15d94aa6`, Mu406 unchanged. Manifest SHA
+`126469bd2369b36f4c5e1275d3e569e82681b75262231320ffb97a090dcbe1f3`;
+ZIP `2d874cc4265873fe37bc37fd258d041428d0319c30871dbd9e8beeb4082beeb0`;
+SYS `9c64297bf4739c3674bb7adf52c294509a2d916c38e3d6d4c370987cffa72a2e`;
+INF `44cf56f239ead406d629e77df24ce409775b23b93ad6e4f084c6f6c8062d6126`;
+CAT `299c941e43b097fa2b1cda11dbfb0890ee8af7c7e0996517b3760c1e8ad40091`;
+UMD `38be5580fc89eef2a0349bff97e905a4b28848543d1fb959a60e6b6de5ef23fc`.
+Stage/launch/collect/cleanup/restore script SHA256 respectively
+`db4e134483fb06bb328b9a68018d62d45dfc2d04496f2b030367b09f75007352`,
+`431f6fc1276ce96462292124873f2a0e06cf2dec13d3d294a76bafe098588029`,
+`8e1536da5efb74e7afbf6cb80a7e677ad959755022698ed5a43fb2d12da033e3`,
+`367df7b508669d9d1f2773b7d457d173fa289188c45e9f6e56f150fae47af184`,
+`07f77f10eddc556382cb8dbaae3a4d050d7480ca33bae48af793ccbc98492b36`.
+Stage-only command is `powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP479-stage.ps1`; it verifies clean Code28 and all four exact
+package hashes. Then Windows `shutdown /r /t 0`; wait for ordinary launcher PID
+54313 to exit and both USB endpoints to return; invoke recorded `launch.sh` with
+broker enabled. Collect only normal StartDevice/package/LUID/video/receipts and
+Event129 telemetry. No GDI producer in this experiment. PASS requires Code0,
+running exact service, StartStage complete, PlatformStage complete and a valid
+adapter LUID; failure uses the first durable stage. Exact package cleanup and
+ordinary377/392 restore follow evidence collection.
+
+Fresh preflight2026-09-05T15:36:56Z: ordinary377/392, SSH/8CPU, input/NVMe/xHCI
+running, APPL0002 Code28/null INF/service, no AppleAgx package/SYS/UMD, and no
+41/129/1001 since boot. Ordinary launcher54313 is sole proxy owner; both USB
+endpoints present. ANS worktree/branch remains untouched.
+
+BUILD RESULT PASS:KMD/UMD/analysis/Universal/Inf2Cat/sign/version30.0.479.0,
+only2preexistingwarnings. ZIP2d874cc4265873fe37bc37fd258d041428d0319c30871dbd9e8beeb4082beeb0;
+manifest126469bd2369b36f4c5e1275d3e569e82681b75262231320ffb97a090dcbe1f3.
+INTERRUPTION CHECKPOINT15:26:58Z:package NOT staged, no479hardwareattempt.
+Freshordinary377/392health has8CPU/SSH/input/NVMe/xHCI,Code28nullINF/service,
+noAGXpackage/service/SYS/UMD/module,no41/129/1001 over18minutes sinceboot.
+Evidence479/interruption-health.json; previousstable585secondwindow478/ordinary-health-first.json
+SHAa48df92917643e05295208d0021247a5bc810cd9d57b60b15633edf699c0482b.
+No safetyblockedaction; work interrupted rather than GPUgoalcompleted. Next
+finalartifact/stage/launch preregistration and one normalproductionbind.
+
+WHY THIS HYPOTHESIS:EXP477 proves firmware/initdata/DC;EXP478 proves existingBackendRuntimeStart reachesReady/ownershipflags7 andcleanstop. No backend owner fix is needed. Remaining original StartDevice groups and Windows admission have not executed with this current retained/fullbackend. Removing only terminal BackendQualification lets the approved production path reach those groups.
+
+WINDOWS CONTRACT:existing coherent WDDM3.0 Type1 implementation-ready group, no newcaps or testcontext. All earlier qualifiers false; normal StartDevice may createWorkItem/POST/scanout andWindows contexts.14/14 is implementation readiness, not hardware proof.
+AGX/ASAHI CONTRACT:frozen477native336d365/machob970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 +Mu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0, unchangedretainedroot/profile/IO/backend.
+TRANSLATION:sameee706f09c44d15e27eef8441bc91a01fde0c7ce8 source, normalprofile (no terminalflag) -> naturalStartDevice/OS admission. No explicit producer invocation unlessadapterCode0/exactLUID andstablehealth are verified and separately preregistered.
+WHAT IS STILL UNKNOWN:normal post-backend StartDevice/scanout/Type1 and OS-ownedcontext admission, before an exactWindows-originated packet.
+
+Source archivec6547e342033d7573855cd7aeb4932bdf0ce324c6852d6d7538b817151abb162; selecteddirtydiff29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75. No driver sourcechange since478. FRYZZING build.ps1 pins26100/MSVC14.44.35207, build-driver.ps1 -ConfigurationRelease -PackageBuild479, allqualification switchesfalse. Require KMD/UMD/analysis/Universal/sign/version/hash gates. Stage gated on recoveredordinary stablewindow withno129 after478burst; artifact/install/launch hashes append beforehardware. Evidence .local/experiments/EXP479-normal-production. Onfailure readfirstStartStage/BackendResult/Type1 owner, notwiderhypotheses. Exactpackagecleanup andordinaryrecoveryafterrun. SeparateWin32GDIproducer beingpreparedoffline; API successalone cannotprove GPUwork.
+
+## EXP478 — bounded production backend ownership; build preregistered2026-09-05T14:20:08Z
+
+HARDWARE RESULT:backend startup/ownership CONFIRMED with storage-health caveat.14:37:38.013701Z BackendStartResult0,PhaseReady2,flags7 (arena/context/queues); borrowed arenaGPU0x1503800000 bytes5799936. Commoncleanup14:37:38.050811Z status0,PhaseStopped0,flags0; realDC_Init1/Idle2,all200UNMAP/ABSENT,CLOSE0,powerOFF0. NoWorkItem/StartDevice success, noRenderKm/Patch/Submit/TA3D/fence. These are setup/ownership receipts, not executedqueuework proof.
+
+Storage caveat:first Event12912589 at14:38:57.335Z,79.284s AFTER backendcleanup;12590..12596 repeat10s intervals through14:40:07.332Z. SSH initially timed out then recovered;8CPU/input/NVMe/xHCI services running, no41/1001 in collectedwindow. Do notcallNVMehealthy orassertGPUcausality. Preservefullhostlog and exacttimeline; cleanup/recovery before anynextworkload.
+
+Evidence478/result.json SHAc3d6b3e7ae1288b1b4de4e30279abc68cb34f99c934b43a3a2899900579cb8d2; hardware-window.log SHA1108150f30b06489bfbb966f2ad0dc14b5e9d047bd80527aea6b821facff81cc; decoded-verdict.json SHA fed2fb37428d2ceccee87e2d08a32d9297062a9ca259e9b477fc68365af6559c. Allbinaryhashes verified. Exactoem5INFguard uninstall/delete,stoppedownerlessservice removal andCode28/nullservice succeeded. Postcleanup14:51:48Z SSH8CPU/noAGXpackage. Ordinary377/392 recovery preregistered via478/restore.sh aftergracefulreboot/oldlauncherexit; require fresh stablehealthwindow before nextcandidate. Independentnextofflinework:reuseexistingone-shot/D3DKMT source as reference, derive supported OS-GDI producer for exactpacket withoutTestContext/modelchange.
+
+FINAL HARDWARE PREREG2026-09-05T14:28:42Z:build1 KMD/UMD/analysis/Universal/Inf2Cat/sign/version30.0.478.0 PASS,only two oldwarnings. Manifesteec44c41e7976ed55cf56ec233909c1007d7d0e94d952766ff4b9d0cb8e205b0; ZIPbbe7c0652addc10a80035fe9cb76519d2c1bc07152e15305167040b1b10c9ba9; SYS8260832db574d8b08f2f8c309e325aef9a40dd1c983f97077ee65185f8d0b5c5; INF2c8e03f2ad46a440fa7bae2a91357cc2a5468a7261b81de7ca819c51feaa57ad; CATcab737c828c52358d4f6506cfcb46447a7d44a75ae82b3f8e2caff1fc43fb887; UMD684c59d0eb725eb3199bb771766ec2179c4b4853ed6aa24a8834d3b76d576474. Frozen native/Mu hashes above verified477hardware; no platformchange.
+
+Stage command powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\EXP478-stage.ps1 SHAfa7d4123f3ba9a5ffbf4260c36e35263a83c4cc83ec7221c09795495f4456d2d,allfourhasheschecked,stageonly. Then shutdown /r /t0;WAIT ordinarylauncher47877 exit and USBreconnect; sh478/launch.sh SHA36b5f3743f1e02745c8e1ed9a5ca095580dc9b358bcc2a0adea5ab0088c303e2,brokerenv1. Collector same475generic f9333f22... with478EvidenceDir,exportallbinaryreceipts. Cleanup478/cleanup.ps1 SHA7d87fa241aca5f732ba11d36632b1801ab582fc2efb5c2f4be792f3490ebee7c matchesexactINF beforedelete. Last ordinaryhealth14:20:09Z SHAd2f059e941e0514f4a69751c9b04cd6883c02b1783d5b130504ad7996bbf7bcc:SSH8CPU/input/NVMe/xHCI,noAGXpackage/service/SYS/UMD/module,Code28nullINF,no41/129/1001. BothUSBendpoints andordinarylauncherobserved14:28:42. Do notcallstage1flags pre-rollback evidence; existingBackendStartResultnamesowner.
+
+WHY THIS HYPOTHESIS:EXP477 proves native-compatible initdata plus realDC_Init/Idle consumption. Existing BackendRuntimeStart previously stopped inside firmware; its next existing operations are prepared-image borrow, context63 borrow and queue-provider Create. A bounded qualifier can test this continuation without automatic Windows workloads before queue ownership is known.
+
+WINDOWS CONTRACT:unchanged production allocation/image/provider path; qualifier fails deliberately before WorkItem/StartDevice success and caps. Existing exactBackendStartResult is discriminator.
+AGX/ASAHI CONTRACT:same retained owner/profile/IO firmware path as477; prepared EXP208 arena and queue objects use existing shared implementation. No TA/3D publication or completion claim.
+TRANSLATION:existing BackendRuntimeStart -> returnedresult/phase/ownershipflags -> common stopped-first teardown. Flags describe post-return state and may include internal failure rollback; never call them pre-failure progress.
+WHAT IS STILL UNKNOWN:real production runtime completes arena/image/firmware/context/queue owner setup together and reverses cleanup on current hardware.
+
+Single variable is continuation past firmware-only stop into existing backend startup, with terminal stop before OS workloads. Sourceee706f09c44d15e27eef8441bc91a01fde0c7ce8; archivee21de4d05e267168ab8738229ff6eb936fd9dac5127c3f1c01fcf1e5044ef246; selectedexistingdirtydiff29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75. Native336d365/477machob970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 and Mu406c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0 FROZEN, not rebuilt/changed. Ordinary377/392 recovery retained.
+
+14 focused hosttests GREEN and bounded qualifier review approved. FRYZZING build.ps1 pins26100/MSVC14.44.35207 -> build-driver.ps1 -ConfigurationRelease -PackageBuild478 -BackendQualification. Earlier qualifiers false. Require full WDK/UMD/analysis/Universal/Inf2Cat/sign/version/hash gates. Finalartifact/stage/launch prereg append BEFORE hardware. Evidence .local/experiments/EXP478-backend-qualification; expectedStartResult0/PhaseReady2/flags7,thencleanup0/flags0/PhaseStopped0; failedexactowner -> causalinspectiononly. No render/TA3D packet in this candidate. Recordevents before/after; exactINF/service/devicecleanupmandatory.
+
+## EXP477 — native-compatible initdata / firmware bootstrap; build preregistered2026-09-05T13:33:35Z
+
+HARDWARE RESULT CONFIRMED:first natural bind at recorded package/native/Mu reaches full FirmwareStart. Owner profile matched1; firmwareIO prepare0; RO manifest valid25slots10ranges77Device leaves; owner profileID8a69... exact. Windows200leaves +400queries still root0x9fff78000/epoch1/private flags unchanged. Raw trace contains realIOP/AP ACK, initdata TX0x81 and two device-control doorbells0x83/channel0x11. DC_Init result0 rptr/wptr/expected1/1/1; Idle result0 with2/2/2. Qualification primaryStart0,StartReturn0,precleanupMask0x1ff,cleanup0. Provider cleanup1,200exactUNMAP/ABSENT,CLOSE0,powerOFF0. Code43 is deliberate stop BEFORE backend/queue provider, no TA/3D/graphics proof.
+
+Evidence477/result.json SHAbb8b4db29b7b70c886399a051cd7a6e2d0781215c25c2d837626d295557a7004; hardware-window.log SHA22b8072d383f6f87b96237068c5f8dcbb8b57afdcede35562ce0d0b645fc91ee; decoded-verdict.json SHA3ad352c8645433a7bb9364ee1f38179e5d6042ad7f8a149bbfcbfb98988bd6eb. Binaryhashes and rawmessages verified. Initial health8CPU/SSH/input/NVMe/xHCI,no41/129/1001; exactoem5INF guard uninstall/delete/service cleanup succeeded,Code28/nullservice. Ordinary377/392 restore preregistered via477/restore.sh after graceful reboot/oldlauncherexit. NEXT production BackendRuntimeStart -> context/queue owner setup; bounded qualifier must stop before automatic Windows workloads until that boundary is proven. No repeat firmware qualifier.
+
+FINAL HARDWARE PREREGISTRATION2026-09-05T13:52:17Z:rootd74a40338113c1d09c8e28716a65cf0ca5d0b85c/native336d365ff8951e6ecd343d37f8c2fa4e15d94aa6. Build3 KMD/UMD/analysis/Universal/Inf2Cat/sign/version PASS, C28182 gone without suppression; only two old C28251/C28150. Native final clean build byte-identicalb970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0. Source/profile/core/defaults/qualifier reviews approved;22focused+7generator tests and final6 receipt/pointer tests GREEN. Root prelaunch dirtydiff8b40499d28f1848323f8cf75513f39aeaa1202e0c3f0efe8ef4240d5b0bc3ca9; selected source diff unchanged above, native clean.
+
+Manifest3d63ecbb62a8a5ecbd0dab190c600a7b57c81a8cb349cedac57cd9a8b41641e9; ZIPf6d369c290fb006fcdf7c55b5287e7727ca9baa8fc79a25e13a22768aeca5d1d; SYS8789a3925c49488ac93e5159c4fcbbf486828f5798d6b3054f27fcadda53e273; INFd5a4c4667d0724c8602a4d73702a119d25eb39c8f8556544494afbdb366507d8; CATd800cf82e447170a0f66860cb16e915f19a3c55ac6888eb1e03f25268c6263c2; UMD42b06a466f5df0aaf5e857bb233df44f5ce03418066a8136616035532e1e169e. All files under477evidence, priorv1/v2 neverstaged. Mu406 unchangedc7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0; ordinary377/392 recovery hashes frozen in475.
+
+Install:Windows powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\EXP477-stage.ps1 stages-only exactZIP, verifiesallfour hashes and unboundCode28. ScriptSHAeee3f070859cd81265046e5cc0f0f8807a8749904a34e6f010646af1a1498bc7. Then shutdown /r /t0, WAIT existinglauncher35824 exit and USBreconnect, only then sh .local/experiments/EXP477-initdata-firmware/launch.sh (SHA17a7e71e308ca39d2d0e6474012104fa6d0fa3594f588b6efaa1112428917de5), brokerenv1. Generic475 collector f9333f22d4329ad4f06b72c84b147e879cfcf1f87edfd2172bcdb7b06b6a46ae with -EvidenceDir C:\Users\pavel\EXP477-control exportsallWom1binaryreceipts. Exactcleanup4302907940cc7d80f927dcd561cbb42ce95973f4d9a4355fda62c75bf92b6639 onlyINFhashmatched oem5 and stoppedownerless service/devnode. Preflight13:43:26Z cleanordinarySSH8CPU/input/NVMe/xHCI,no package/service/SYS/UMD/module,no41/129/1001; currentlauncherordinaryverified13:52. Onecandidateonly,noqueue/workload.
+
+Build2 completed but same C28182 remains despite explicit NULL guard; runtime NULL regression passes. Commitd74a40338113c1d09c8e28716a65cf0ca5d0b85c moves the identical guard after numeric address validation immediately before stores, preserving all rejection semantics. Final build3 preregistered source8ca5e36e43e09d414847ffa2313acad713958422d067d007dbde195c22c0d701 /build-v3.ps1; no warning suppression. No package staged or GPU run. Native shared-header rebuild will verify final binary; earlier two native builds byte-identicalb970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0.
+
+Build1 completed KMD/UMD/Universal/sign/version, but analysis reports two new C28182 around pointer-to-integer overlap checks. No hardware. Commit5a31880d14ef8dbe6249ecaf18b9b8e6272086f4 separates explicit typed NULL guards before range arithmetic; adds NULL regression and saves complete ASC trace at qualifier return (including initdata/doorbells).6 focused tests GREEN. Build2 preregistered identical26100 script with source63a79d5b3e8635a56899e0aa1fc713e02dd33effb8734a21360171ef7a2140ae and build-v2.ps1. Native rebuild same336d365 with final shared header; initial nativeb970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0 retained but not launched.
+
+WHY THIS HYPOTHESIS:
+- EXP475 proves full current Windows200leaf inventory plus retained management/endpoints; next unknown is first actual initdata consumption, not root identity.
+- Native source and full-byte tests prove old HwdataA/B were zero instead of required profile, firmware IO10ranges/77Device leaves absent, Stats3D two -1 and RegionB0xff missing. These are deterministic initialization contract gaps, now corrected offline.
+- EXP476 fresh ADT supplies exact66-property input key; native constructors/helper produce complete A/B bytes, existing RegionC fullbytes match. No hardware guessing of values/defaults or Windows floating point.
+
+WINDOWS CONTRACT:existing DXGK physical allocations and200 RAM broker leases unchanged; checked RO owner profile+IO manifests populate existing Hwdata objects. No new caps/DDIs, queues, render, scanout or UMD execution.
+AGX/ASAHI CONTRACT:EL2 retains original root/private/system and additionally owns exactnativeT8103 firmware Device IO mappings; sends native initdata, DC_Init and UpdateIdleTimestamp, waits actual queue read-pointer receipts.
+TRANSLATION:owner verifies chip8103/board26/V13_5 +66raw input presence/length/bytes; RO epoch/root/profileID -> complete native bytes +IO/timestamp; existing firmware provider; rollback after qualified firmware start BEFORE backend/queue initialization.
+ATOMIC CONTRACT:one coherent native initialization image requires all pointed child bytes AND their IO translations. Do not hardware-probe missing defaults or fields individually. Qualification is a terminal observation branch of the production firmware path, not a new backend.
+WHAT IS STILL UNKNOWN:firmware accepts this current Windows-originated initdata image and consumes exact DC_Init/Idle packets; real hardware firmware DMA/read-pointer progress remains unproven.
+
+Source root94afde5728e39996c094e8dc3315288fc08d52d9 (implementation302e9a7), native336d365ff8951e6ecd343d37f8c2fa4e15d94aa6; branchfeature/j313-gpu-acceleration/native detached. Source archive8fa5aa0c01c15fadc1fa6c9f873f439c8655d0a619258254e2c177048794e563; selected existing dirty diff29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75; native diffempty. Generated profileID8a69a96ca4adfa30116dc54d53da25268e92ff85bfe7dc09a9b52c6fc2becaf8.22 focused top-level tests plus7 nativegenerator tests GREEN; core/profile/defaults/qualifier reviews approved, first-failure receipt correction tested through actual firmware cleanup failure.
+
+Build:FRYZZING build.ps1 isolated installed26100/MSVC14.44.35207 -> build-driver.ps1 -ConfigurationRelease -PackageBuild477 -FirmwareQualification; no earlier qualifier flags. Native docker full-owner clean command unchanged. Evidence .local/experiments/EXP477-initdata-firmware. Require fresh KMD/UMD analysis/Universal/Inf2Cat/sign/version/hash and native build gates before stage. No artifact is hardware-ready yet; final hashes/install/launch append before hardware.
+
+Target one natural bind on current full-owner+Mu406, exactpackage30.0.477.0. PASS:IO/profile receipts valid, initdata sent, DC_Init/Idle real rptr==expected, FirmwareStart primary0/completed0x1ff, clean stopped-first teardown. Failure:preserve primaryStartResult/precleanupMask separate StartReturn/cleanup, exactDC pointers and hostlog. No TA/3D workload. Recovery immutableordinary377/392, exactINF-hash removal first; no package retained between experiments. Last cleanordinary healthEXP47613:02:36Z, recheck beforestage. Event129 before/after recorded independently.
+
+## EXP476 — read-only current initdata input capture; preregistered2026-09-05T12:49Z
+
+RESULT2026-09-05T12:57:03Z:read-only capture PASS,376832-byte ADT SHA7e2a944d7b2d0900209cfe11be94e2b8012ef497c8c2951111216018a734dbfe,chip8103/layoutV13_5. GPU power was not touched. Actual zone0 target30000/offset100/filter6875; nine SE overrides absent; CS/AFR absent. These values/presence will be checked by EL2 before a generated Hwdata profile is admitted, never silently assumed. Restore uses476/restore.sh (only evidence contract path differs from475) and recorded immutable377/392 pair. Final13:02:36Z ordinary health SSH8CPU/input/NVMe/xHCI,Code28/nullINF/service,no package/SYS/UMD/module,no41/129/1001; SHA f1d9d81ad589b805b6d7de18c348a1a6e4c04e458a240a05c3579b0029aaef75.
+
+Offline IO-only native build PASS, copied m1n1-io-only.macho SHAef7aa84457e5da8c2a52d6ec0dad53efed76a8d67341ecb3bf932c60c0e8a518 (native core3b036bab plus platformde668e9 and shared wire3). Never launched. Five focused IO/guard/realgraph tests pass, core review approved. Root927cefa connects live IO serializer; full Hwdata profile generation/owner-validation is next uncommitted work. No initdata hardware proof yet.
+
+Timestamp correction:heading minute was approximate; actual pre-execution clock2026-09-05T12:56:44Z. Ordinary launcher30159 exited after graceful Windows reboot; both proxy/vUART endpoints present, no competing owner. Capture invoked only after that verification.
+
+WHY THIS HYPOTHESIS:source audit proves HwdataA130Extra uses nine SE properties and power-zone triplets absent from current v2 snapshot; HwdataB also consumes optional CS/AFR tables. Current snapshot alone cannot key byte-exact native initdata. Need current live ADT evidence, not assumed absence/defaults. This is source-input capture, NOT a GPU candidate or repeated management test.
+
+WINDOWS CONTRACT:already-clean ordinary377/392 guest, no package/service/driver. Graceful reboot and old launcher exit before proxy read; no Windows mutations other than requested restart.
+AGX/ASAHI CONTRACT:read current ADT via existing base proxy; no AGX power/RTKit/UAT mutation, endpoint/workload absent.
+TRANSLATION:raw ADT saved with SHA and chip/layout checks -> deterministic native constructors/complete profile-input validation offline.
+WHAT IS STILL UNKNOWN:actual current presence/content of SE/power-zone/CS/AFR inputs for this J313.
+
+Root6146e9140f673bf14750c273326686baddaa7b72/native3b036bab5b27c2263bb2267c718becb2424e8315 plus uncommitted IO platform/Windows wiring (NOT booted). Capture uses only Python proxy/ADT code, no new native image. Script .local/experiments/EXP476-initdata-inputs/capture-adt.py SHAdb1b43262430901fa7765e57746cfdacd5d618d14a7bbe7ad0a6cb4240de8ea7. Exact command ./proxyenv/bin/python .local/experiments/EXP476-initdata-inputs/capture-adt.py;20second bound; output j313-live.adt and capture.log. Expected chip8103/layoutV13_5 and complete raw ADT; failure rejects profile generation, not hardware hypothesis. Recovery same immutable377/392 pair and hashes as475, use475/restore.sh only after read owner closes, append separate476 restore log. No package to uninstall.
+
+Offline native build gate for IO work also preregistered: same current Docker full-owner command as475, output476/native-build.log; no hardware launch of this new image until complete initdata/offline/build/review gates.
+
+## EXP475 — production retained context0 inventory; build preregistered 2026-09-05T12:16:35Z
+
+Ordinary recovery COMPLETE12:39:45Z:recorded377/392 pair with broker disabled,8CPU/SSH/input/NVMe/xHCI, APPL0002 Code28/nullINF/service; no package/service/SYS/UMD/module and no41/129/1001 since restored boot. final-ordinary-health.json SHA9fd225a6cb55c61eb91e591a9439575b7d4976ccb9929e6398d748310655a947. Recovery used graceful Windows reboot, waited prior launcher exit, then restore.sh; no GPU-hidden recovery needed. Continue independent offline initdata gate, no repeat475.
+
+HARDWARE RESULT CONFIRMED2026-09-05T12:32:27Z:existing Windows inventory90ranges200leaves mapped/readback in retained root0x9fff78000 epoch1. Host1003 operations:PREPARE1 ACTIVATE1 MAP200 QUERY400 UNMAP200 VERIFY_ABSENT200 CLOSE1 allstatus0. Exact8000-byte Windows journal matches all200 aligned sub40-bit PA leaves and90ranges including low alias. Root address equal PREPARE/ACTIVATE/map/post-management/CLOSE; unchanged-prefix flags throughout active/close. Real raw IOP0070000000000020 and AP00b0000000000020, crashlog grant1/crashed0. Endpoint20Started1 and21Started1; advertised bits present; deliberate pre-initdata stop1. No initdata/workload/queues. Retired200/Absent200/Live0/Uncertain0; provider cleanup1 powerOFF0 CLOSE0. Code43 is deliberate qualifier failure atSendInitdata, not management failure.
+
+At first collection8CPU/SSH/input/NVMe/xHCI running and no41/129/1001 since candidate boot. Pre-driver prior-boot Event12911970 remains separate. Evidence result.json SHAc8b908293f4c0c87390012e9245465512518696d2eeec7262ccf665130424d99; hardware-window.log SHAa840634bf66d62e8f123b61c921f1712765d40aa7293f65a34b18870ed6255b4; decoded-verdict.json SHAc78bbf980970e3981a819aaf4afdf4b972865b54a864f17c22cb200ac6681a2c. All binary receipt hashes verified by verify-evidence.py. Exact oem5 INF hash-guarded uninstall/delete succeeded; stopped ownerless service removed; fresh Code28/nullservice. Restore ordinary377/392 preregistered through restore.sh after graceful reboot and prior launcher exit; artifact hashes unchanged above. Next offline boundary native10IO descriptors/HwdataB before initdata; this PASS covers existing Windows inventory, not missing native firmware MMIO.
+
+Stage2 exact package oem5 success/unbound; graceful Windows shutdown /r /t0 completed USB disconnect and launcher29018 exit before next owner. Both USB endpoints reappeared, no active launcher. Candidate launch4 uses unchanged recorded launch.sh; evidence launch-v4.log. This is first prospective natural GPU bind after durable staging; no forced interrupt during shutdown.
+
+Attempt3 boots correct native/Mu to Windows8CPU/SSH but NO GPU CANDIDATE:12:29:25Z APPL0002 Code28/nullINF/service, Driver Store empty, no SYS/UMD. Earlier stage and files did not persist across interrupted reboot. Current pre-driver Event12911970 at12:29:15Z is preserved independently; not attributed to GPU (driver absent). Restage exact same475 package from this confirmed unbound guest, then allow graceful Windows reboot and wait for old launcher exit before chainloading. This remains first intended GPU bind; no management result exists yet.
+
+Launch attempt2 also BEFORE CANDIDATE:proxy NOP had responded while the old guest exception handler was still unwinding. Chainload triggered that pending reset; log explicitly boots installed base m1n1 b791225, not candidatef777c75. run_uefi correctly fails closed at unsupported P_HV_LAUNCH_PUBLISH before Mu/Windows entry. Now real reboot/base Running proxy is observed. Next attempt3 from this base uses unchanged475 artifacts and sole owner; previous errors are not firmware management evidence.
+
+Launcher correction:old owner did not complete SIGTERM after serial stream collision; terminated only that host process, then one bounded existing proxy NOP/reboot succeeded (reset-proxy.log PROXY_Nop_PASS). No Windows candidate had run. Launch attempt2 uses exact same source/package/native/Mu, only waits for sole proxy ownership; preserve launch-v2.log separately. No physical action requested.
+
+Launch attempt1 INCONCLUSIVE BEFORE CANDIDATE:stage-only oem5 succeeded. New chainloader was started before ordinary launcher98091 released proxy during requested Windows reboot; concurrent readers garbled watchdog output and chainload NOP timed out. Candidate native/Windows bind NOT reached; this is launcher sequencing error, not GPU evidence. Preserve launch.log; request existing owner SIGTERM snapshot/reset and wait for its exit before any new connection. No candidate source change justified. Exact475 package remains staged; package retention only across this pre-candidate launcher correction, not a second GPU experiment.
+
+FINAL HARDWARE PREREGISTRATION2026-09-05T12:25Z:root702b6e8 pins nativef777c75e5f087ba95a8baaf3fd18f0c01857b101; driver source53ea9b2. Native tracked diff empty SHAe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855; root prelaunch diff21cca579058fd305a3976e6d95123e43a77e0f0be856dac24c0181711dab2c06. Build3 KMD/UMD analysis/Universal/Inf2Cat/sign/version PASS; only two pre-existing C28251/C28150 retained. Final9 relevant tests including ledger pass; prior14-method integration pass and reviews approved.
+
+Manifest.local/experiments/EXP475-production-inventory/manifest.json SHA778aea8b798070504bae9ba0f372f4c51bc4c7bf647202746973e5d8abd4013f, profileFullContext0Broker+StopAfterEndpoints; ZIP6ae92d452464e6f63f4f98266b80f97d4237f2cbad555a6385ed3d968e0828fd; SYS80363df83f4a17d74091a20cf6f737698f4291213479edc36ce2f9944c269c0c; INF9c481af5f32ce7ac08de5c909beb15828b700dc3bbd9202869c03ece640c7785; CATdc8341b05d7f1d879a9580f662c724584d1cdb89b27ee79507c525c78eeedbc7; UMD63da19d95de52178e91ba7287f6cb017c729b0034413db3b8a014cd08403b397.
+
+Candidate native4b051eccb0185c7bc3208ed8589c17fc9d534dfcb48092b8e5936c3591fcc2d2 + unchanged Mu406 c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0. Recovery ordinary377 m1n1fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a +392 Mu16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+
+Commands: transfer exact ZIP and stage.ps1; Windows powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\pavel\EXP475-stage.ps1 does pnputil /add-driver WITHOUT /install, verifies hashes and no bind. Then shutdown /r /t0 and sh .local/experiments/EXP475-production-inventory/launch.sh (broker env1, full-owner native and Mu406). Script hashes stage72a2ce634c83162804420221a709f6a21324aca594fa82664ffbc912b69eb4e6; launch5d766985874760113ce497d27d5c4f3f65ba6d06177b145e1c656b709daec003; collector f9333f22d4329ad4f06b72c84b147e879cfcf1f87edfd2172bcdb7b06b6a46ae; current run_uefi910064b62858f569d231f0fcb9258717fca8ff977b829577fa1a281b3d78c83a.
+
+Preflight12:20:49Z ordinary Windows SSH8CPU; APPL0002 Problem28 nullINF/service; no AppleAgx package/service/SYS/UMD/module; input/NVMe/xHCI running; no41/129/1001 since boot. Both USB endpoints and ordinary launcher98091 observed. Save host log and all binary receipts before exact INF-hash-guarded removal. Never launch copied-root qualification or workload.
+
+Build2 PASS KMD/UMD/Universal/Inf2Cat/sign/version; one new C6001 from unused uninitialized initdata-message reference in endpoint-stop branch. Commit53ea9b2b51801bb1d12bec037e03aec071ea1317 removes that local entirely from qualifier compilation, no runtime change.3 focused tests GREEN. Build3 preregistered same isolated26100 invocation, source5e59c99137f1bcd37d415442a147d6f386fb25fe4c25113c526351bae6625dd4, build-v3.ps1. EXP214 exact control PASS. No hardware yet.
+
+Build1 outcome:UMD pass; KMD C1083 ntddk.h. MSBuild evaluated WDKContentRoot incorrectly to Program Files instead of installed Program Files(x86); explicit correct root restores km include/lib imports. No GPU source change or hardware evidence. Exact EXP214 archive DB0EC20503021C6DC6E8EF766A697DA4E945C3CE0323390BE41F6AB6B0272E6A control independently rebuilding with its original parent NuGet invocation. Build2 preregistered: same475 source, build-v2.ps1 adds only correct isolated WDKContentRoot. Native clean build PASS SHA4b051eccb0185c7bc3208ed8589c17fc9d534dfcb48092b8e5936c3591fcc2d2.
+
+WHY THIS HYPOTHESIS:
+- EXP474 proves native retained identity plus broker-owned system crashlog reaches real IOP/AP ACK; copied-root candidates are frozen/rejected.
+- Current graph audit identifies90 Windows ranges/200 leaves including exact low buffer-manager alias. Real graph/core tests pass every Nth MAP rollback and verified absence, so full inventory can now replace the single qualification probe without changing root ownership.
+- Full callbacks no longer contain copied-prefix/direct context0 publication. Endpoint-only stop prevents the separately identified HwdataB/native IO gap from confounding this checkpoint.
+
+WINDOWS CONTRACT: existing production DXGK allocations and exact ADL/guest IPA backing; no Windows context0 table ownership. All leases must retire after ASC stop before backing release.
+AGX/ASAHI CONTRACT: retained firmware root/private/system mappings survive; broker alone mutates owned low alias/high range with existing barriers/TLB handling.
+TRANSLATION:89 allocations ->90 ranges ->200 MAP/QUERY leases; management verify then endpoint20/21 starts; deliberate stop BEFORE initdata; reverse UNMAP/VERIFY_ABSENT/CLOSE.
+WHAT IS STILL UNKNOWN: real firmware management and endpoint admission with the complete existing Windows inventory inserted into the same retained root.
+
+Build source root58c66027ae779fb0080370762f8348975920539e on feature/j313-gpu-acceleration; native f777c75e5f087ba95a8baaf3fd18f0c01857b101. Existing dirty work preserved; source archive SHA78d457f498fd9cc2290dda7cd5db5a001aa0093c2d516edcde85d9e0501ef9bf and selected tracked diff SHA29087e0573f66b2696479a5f544be9b36d7d12da072b66c075f9fc32faaf7a75 in .local/experiments/EXP475-production-inventory. Archive includes current shared sources used by prior builds.
+
+Build attempt1: FRYZZING C:\Users\pauls\EXP475-production-inventory-v1, isolated Directory.Build.props pins explicitly requested installed WDK10.0.26100.0 and MSVC14.44.35207; build-v1.ps1 invokes build-driver.ps1 -Configuration Release -PackageBuild475 -StopAfterEndpoints. KMD/UMD analysis/Universal/Inf2Cat/sign/version/hash gates required. No builder-global props changes. Native command: docker run --rm -v /Users/pavel/public_windows:/work -w /work/m1n1_windows windows-on-m1-build:local sh -lc 'make clean && make -j8 IOMFB_FULL_OWNER=1'.
+
+Hardware NOT YET AUTHORIZED BY ARTIFACT GATES: final manifests/hashes/install/launch commands and clean baseline must be appended before any stage/launch. Candidate Mu406 unchanged; current-compatible ordinary recovery377/392 hashes remain those in EXP474. One natural bind, full-owner broker-enabled platform. Evidence destination .local/experiments/EXP475-production-inventory; collect complete leaf journal/raw RX/TX and Event129 before/after with lifecycle timestamps. PASS requires200 exact maps and post-management queries, real IOP/AP ACK, both advertised endpoint starts, no initdata send, stopped-first exact retirement and healthy restoration. On failure collect first failing primitive, never replay474.
+
+Offline:14 focused methods GREEN; independent core and integration reviews approved; hardware unproven.
+
 This append-only ledger is the source of truth for J313 hardware experiments.
 Chat transcripts are not a substitute. Every run is entered before launch and
 completed after observation.
@@ -46,6 +3641,5247 @@ Next experiment:
 ```
 
 ## Experiments
+
+### EXP474 — final ordinary G2 recovery and handoff
+
+Launch log birth epoch1788602627 =2026-09-05T10:03:47Z; management PASS receipts
+captured10:04:58Z, within72seconds of launch (exact ACK instant not timestamped).
+Later candidate Event12911769 at10:05:22.871Z is preserved in post-cleanup-health.
+The native power/close sequence had already completed; no unsupported storage
+causal claim is made. Candidate otherwise retained SSH/8CPU and drivers running.
+Package cleanup verified before software restart. Old launcher97516 exited,
+proxy endpoints returned, then immutable ordinary EXP377/392 restored with
+broker disabled using preregistered restore.sh. Final health10:15:27.761Z,
+167seconds uptime, SHA7e2d82ea1d7cc71580073e48a46db64a8eb1822dd5aa728a167d40956b0c0cdd:
+APPL0002 Problem28/null INF/service; no AppleAgx store package/service/module/
+SYS/UMD; SSH/sshd and8CPU/input/NVMe/xHCI running; zero41/129/1001 since restored
+boot. RDP untested. No physical operator action required at any phase.
+Session ends at MANAGEMENT PASS, no next GPU workload/application endpoint.
+Source/readiness/handoff saved; branch kept locally, no merge or push requested.
+
+### EXP474 — hardware MANAGEMENT PASS and exact cleanup
+
+Collected2026-09-05T10:04:58Z. Raw result SHA
+75874c7ee666f71abd2c2d0030b487b973faa70b2deed0b17178d7225f71dce8.
+Immutable hardware-window.log SHA
+ccd3c3be157c5bb1c179bc650dce9eba621cae473fa81fde5bf1ccbdbc7987fb.
+Broker PREPARE/ACTIVATE/MAP/QUERY/UNMAP/CLOSE all status0, seq1..6/epoch1;
+root remains0x9fff78000 throughout. Host private prefix9fff7c403/9fff84403;
+unchanged-prefix flags survive CLOSE (flags4, no active/prepared ownership).
+Windows owned probeVA0xffffffa010000000 mapped/queried handle1, PA0x9df368000
+matches existing DXGK/HVC-owned object. Map count1 -> exact unmap count0.
+Broker-owned system/crashlog mapping0xffffffa080000000 length0x4000; Windows
+does not own its backing or raw retained tables. Context0 root0 broker-owned
+PA0x805984000; it is unpublished before release, retained root1 never replaced.
+RTKit result0, CPU/HELLO/EPMAP ready,8192 request/16384 grant, RX count6.
+Raw RX endpoint0 IOP=0x0070000000000020 and AP=0x00b0000000000020.
+Both power flags1. ManagementQualificationStop1 proves deliberate stop before
+first application endpoint. FirmwareResult5 is that deliberate refusal, not
+the old timeout3 and not full FirmwareStart/backend/graphics success.
+Provider cleanup success1, completed mask0, host powerON/QUERY/OFF result0.
+Verdict CONFIRMED for retained-root management architecture. No application
+endpoint20/21 start, queue/backend init or Windows GPU workload performed.
+Installed SYS/INF hashes match manifest. Exact oem5 INF528d2ad7... uninstalled/
+deleted; ownerless stopped service removed and devnode recreated Problem28.
+Cleanup output SHA3f6f86ba07d0196acb4ee5ccebad9ce52b2ad0a6d430b34d7374d12fd2ab6277.
+Health correction: initial collection had no events; later10:07:42Z health
+contains stornvme Event129 record11769. Preserve both observations. Candidate
+boot is NOT error-free; no bugcheck/reset/41 recorded, SSH/8CPU/input/NVMe/xHCI
+remained available. No unsupported causal attribution for Event129.
+Normal recovery: verified package-free state then software restart requested;
+run preregistered restore.sh014cb0cd... after launcher97516 exits and proxy
+returns, using immutable EXP377/392 and broker disabled. Final health follows.
+
+### EXP474 — exact retained-root natural management discriminator
+
+Preregistered2026-09-05T09:59:12Z. Single architectural variable: original root
+identity with EL2-owned table mutation/system mapping, replacing rejected copied
+root. Prior spec WINDOWS/AGX/TRANSLATION/UNKNOWN sections govern; no workloads.
+Rootf1b2dc0265572ff65fc56dcc63d564f20ca72c7c branchfeature/j313-gpu-acceleration;
+dirty tracked diff876cc66532c19e670b9127311a2e5fe9a6638c680a95cc7d526db43636c21bf8.
+m1n1 pinned9cf6c9d9fffdf191108d222411df025e5148fef5 tracked clean; archive
+fdec0128ace33c9daa099cd28629019f353d993edd31f831386f6a519579f7c3.
+Source input also includes shared UAT headers/sources from driver archive
+bb677489839babf25954b5116aa25a589d9fce8257ff0ed694775e9aeb482dd9.
+WDK archive based onfba9ce9; subsequent root commits change only tests/gitlink,
+git diff of drivers fba9ce9..current is empty. No environment repair on FRYZZING.
+Mu sourcef1ef718e08db0e4c30fdb5d8555973513ad9a004 dirty
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce remains
+unmodified; actual binary frozen EXP406 SHA
+c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Native artifact .local/experiments/EXP474-retained-root/m1n1.macho SHA
+858c8d9f449cd762d8e027d2fe3acbbfbae0a34a58d565dc09d136ce25ea35c7.
+Build: same Docker windows-on-m1-build:local image67ba6e1fea2d, make clean then
+make -j8 IOMFB_FULL_OWNER=1, shared source include archived explicitly.
+17 focused tests (core corruption/rollback/epoch; MMIO/client; backing exclusions;
+existing firmware/UAT) GREEN. Full native host suite GREEN. Review core and
+integration approved after local invalid-L1 descriptor fix and owner-reservation
+backing check. Outer-shareable TLBI encoded as SYS per Arm DDI0601 because pinned
+march8.2 assembler does not name v8.4 ASIDE1OS; native EXP470 uses that operation.
+WDK474: current MSVC14.44.35207/WDK10.0.28000.2526, KMD/UMD code analysis,
+Universal validation, Inf2Cat/signing, coherent version30.0.474.0 GREEN;
+2 pre-existing C28251/C28150 warnings retained. New qualifier stops before queue
+provider/backend/application endpoints, scoped unreachable-code warning applies.
+ZIP3c59dcb4aedeeedf63b608802d0f20026517cdad15c891feb64cf2976c40d702;
+SYS10954b3a378007b62ebcc04a1532323f52f939f35631ecfbb85d9528f697c4db;
+INF528d2ad71d3b7e9e5d1eaa9526d5a7371bff13751611713d33c2992334d82577;
+CAT3ff79441ccba128ba72ff3b56cd297c911e802b6fb106f36bcb0aaea6083fc8e;
+UMDc1d3272cef9c9bd29a410adbf034382863612019a3e5344fc4252ef2562f476b.
+Stage exact scriptfc400f1ce2f94da7c4c839ccdec8aae9e679cdefa8090ec8e7cbaea92f96c742
+via Windows powershell -File EXP474-stage.ps1; pnputil /add-driver WITHOUT install,
+verify Problem28 then shutdown /r /t0. Launcher69694 must exit before proxy.
+Launch sh .local/experiments/EXP474-retained-root/launch.sh >launch.log;
+scriptbbee0a1db1fefabad6efcffb17681a9494705c8de4664f4a6443509fa0f8547b,
+WOM1_AGX_G2_POWER_BROKER=1, full-owner/synthetic889. Current run_uefi publishes
+launch descriptor before hv.init/maps; no legacy override. Missing descriptor
+fails closed, never relax backing policy for a failed run.
+Expected: retained PREPARE/ACTIVATE/own MAP/QUERY status0 and same root address,
+query PA matches DXGK/HVC-owned object, prefix-unchanged flag, system grant,
+real IOP/AP0x20 (flags1), management qualifier stop before endpoint20, unmap/close0.
+Failure: missing ACK or identity/ownership mismatch; save exact host prefix/root,
+mapping receipts and bounded raw management RX/TX before deciding next cause.
+Do not repeat identical candidate. No render/scanout/acceleration run.
+Final exact cleanup by INF hash then ordinary377/392 restore script
+014cb0cd927a53b0b5b3c9c66aa790f958b0fe7f31e58d1951375f864cf9d2c1;
+immutable recovery hashesfae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+and16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Baseline09:29Z SSH/sshd/8CPU/input/NVMe/xHCI healthy; Code28 nullINF/service,
+no package/module/SYS/UMD and no41/129/1001. Both USB endpoints present; no
+physical operator action requested. All evidence in EXP474-retained-root.
+
+### EXP474 — retained-root broker management build preparation
+
+Planned2026-09-05, user explicitly approved retained-root identity/publication
+architecture. No hardware launch until final tests/review/source/hash gates.
+WHY THIS HYPOTHESIS: EXP472 byte-exact copy did not obtain ACK; EXP473 native
+copied root likewise timed out while EXP470 native retained-root passed.
+WINDOWS CONTRACT: production DXGK allocation/ADL GuestIpaBase; only owned16KiB
+probe map/query/unmap via versioned broker; no host-PA/raw-table input.
+AGX/ASAHI CONTRACT: immutable adopted native root and private prefix; broker
+owns system/crashlog backing and native-Normal system leaf. Existing shared
+UAT implementation handles broker-owned kernel mutations and rollback.
+TRANSLATION: powerON -> PREPARE(root0/adopt identity) -> existing CPU/handoff ->
+ACTIVATE(system mapping/same root publication) -> Windows probe map/query ->
+existing RTKit management -> real ACK -> qualification stop before endpoint20.
+Windows probe unmap -> existing ASC stop -> broker CLOSE -> powerOFF.
+WHAT IS STILL UNKNOWN: whether same retained root with broker-owned system
+mapping gives Windows IOP/AP0x20. No render/scanout/application work.
+Old prefix-copy window now returns no private contents. Context0 GPU-region
+writes denied to Windows; context63 byte/read/write semantics retained.
+Spec/plan docs/superpowers/{specs,plans}/2026-09-05-retained-root-broker*.
+Host core root0ab43fe and root tests78fe636; review found invalid intermediate
+descriptor accepted by shared resolver, fixed only in broker validation with
+targeted RED/GREEN. Exact final commits to follow.
+Build m1n1 same Docker toolchain and IOMFB_FULL_OWNER=1; WDK same FRYZZING
+PackageBuild474 RetainedRootQualification, which implies management-only stop.
+Artifacts/logs .local/experiments/EXP474-retained-root. Recovery frozen377/392.
+
+### EXP473 — final recovery complete / session stopped BLOCKED
+
+Ordinary GPU-visible EXP377/392 restored with broker disabled. Final health
+2026-09-05T00:42:01Z SHA1c3a332a2c6894bc0b536f44b455a7682d396e934963cc041d90b4a2466330c9
+at .local/experiments/EXP472-prepared-prefix/final-ordinary-health.json:
+8CPU, SSH/sshd live, AppleInput/stornvme/USBXHCI running, APPL0002 Problem28,
+null INF/service, no Display-store package/AppleAgx service/SYS/UMD/module;
+zero41/129/1001 since current boot. RDP not tested. EXP471 prior Event12911447
+is retained as historical evidence, not reinterpreted as a clean candidate boot.
+Session stops BLOCKED at retained-root identity/publication design, no further
+GPU phase. Exact prefix hardware proof remains valid, management PASS absent.
+Current frozen normal recovery artifacts unchanged; no test package retained.
+
+### EXP473 — copied-root native control rejects prefix-copy sufficiency
+
+Executed2026-09-05T00:40:23Z. Original retained root0x9fff78000 obtains private
+entries0x9fff7c403/0x9fff84403. Copied byte-exact to owned root0x80fecc000.
+Original native ioalloc adds slot2=0x80fed4003 to copied root, maps crashlog
+PA0x80fed0000 at0xffffffa080000000, publishes context0 TTBR1=0x80fecc001.
+Private original root remains with its original prefix and no kernel slot2.
+Native management times out3s with IOP/AP0. Stop hit5s cleanup deadline;
+software reset requested and USB returned. No successful native stop claimed.
+Result SHA b9256d96f9090e04320478f6c5224101c3bbaf3bdf2adedfea2de69b941ea0b2;
+console SHAd8fc542d0fc533a320b4a9948603ed0f2549d318b036fce93c500729108c812e.
+Verdict: copied-private-prefix sufficiency REJECTED independently of Windows,
+with native known-good grant/attributes. EXP470 retained-root PASS versus
+EXP473 copied-root timeout establishes root-identity/publication as next owner
+contract, not an unproven Windows cache-attribute fix. Precise firmware internal
+TTBR caching mechanism is not claimed measured.
+Current session BLOCKED at approved read-only/copy architecture: full requested
+management PASS not achieved. Stop adding equivalent copied-root candidates.
+Further work requires an explicit retained-root identity/owned-kernel-publication
+decision, preserving firmware private trees; no such writes introduced now.
+Ordinary EXP377/392 restore launched with prehashed EXP472 restore.sh after
+verified old launcher exit/proxy return. Final health follows before handoff.
+
+### EXP472 — exact live prefix preserved, management still times out
+
+Result2026-09-05T00:36:16Z SHA4336f414d0901142d6916dea93da93e71c18c7820b7e0425eee6329f199bfa19.
+Platform11 now passes. PrefixStage3, RO wirev1/base0x9fff78000/size0x40000/
+epoch2/ready1; live entries0x9fff7c403 and0x9fff84403 equal imported bytes.
+Existing crashlog leaf resolves exact backing before UAT publication; context0
+roots published. HELLO/EPMAP complete,8192 request/16384 grant sent, but RX4
+and IOP/AP0 persist; management timeout3, BackendResult6. No crash notice and
+zero crashlog image. Prefix-preservation HARDWARE PROVEN; full requested chain
+NOT PASS. Cleanup success, powerON/QUERY/OFF0;8CPU/SSH/input/NVMe/xHCI live,
+no41/129/1001 in this boot at collection. Exact oem5 INF7dee3de4... uninstalled/
+deleted, ownerless stopped service removed, device recreated28.
+Focused source comparison: grant size/DVA wire matches native. Native crashlog
+uses Normal attr whereas Asahi uses Shared, so Shared alone is not sufficient
+evidence for another Windows attribute change. Both native and Asahi keep
+retained root identity; Windows copied prefix changes root address.
+Next minimal distinguishing control tests only copied-root identity on native
+management, with its existing known-good attributes/transport. No production
+firmware-owned memory writes or broader GPU work introduced.
+
+### EXP473 — native copied-root discriminator preregistration
+
+Planned2026-09-05 after EXP472 cleanup. WHY THIS HYPOTHESIS:
+1. EXP472 proves exact live/imported private bytes but does not move management.
+2. EXP470 native ACK passes with retained root; native/Asahi preserve root
+   identity in addition to contents, unlike Windows fresh root.
+3. Keep native attributes/grant/transport fixed and change only root identity
+   to distinguish this from Windows-specific mapping or message semantics.
+WINDOWS CONTRACT: no package or Windows driver in this native control.
+AGX/ASAHI CONTRACT: same native management/ioalloc/handoff as EXP470; read
+first16 live root bytes before first ioalloc, copy byte-exact into one native
+owned16KiB root, point UAT.ttbr1_base at that copy, then original ioalloc.
+TRANSLATION: native reproduction of approved Windows owned-root preservation;
+no firmware-private subtree traversal/freeing, no retained-root table writes.
+WHAT IS STILL UNKNOWN: can management succeed with a copied root even though
+private entries match? Timeout here supports root-identity dependency, not a
+Windows transport failure. Success leaves Windows mapping semantics unresolved.
+Root9f65ea178f56930ddc9f534e8d5798c8c65d411f/m1n1d80a72d unchanged.
+Exact current EXP471 macho36d8901cf6deceb69ef3381f3c766887777bfb9258d6621b1f1dcdc040246263;
+no Mu during native control. control.py SHA
+da6981d3771da01b7024ee36d60db9832f4395538a59e9636e3c00e000fae1ac
+in .local/experiments/EXP473-native-copied-root; syntax GREEN. No build/new
+Windows package. Software reboot clean Windows, ensure launcher released,
+chainload current macho then PYTHONUNBUFFERED=1 proxyenv/bin/python control.py
+>console.log. Existing20s startup/5s stop/5s reset deadlines. Result.jsonl
+exclusive create and phase-flushed. No application endpoints/TA/3D.
+Always reset after power and restore ordinary EXP377/392 using already prepared
+EXP472 restore.sh SHA978fbed5ffa87f535606a4cfabaed6f87a7c8cc53130053bfd2277b96f8f4e2b;
+recovery hashes as EXP472 prereg. Record actual reset/restore and full health.
+
+### EXP472 — exact candidate natural bind preregistered
+
+2026-09-05T00:33:35Z. Same WINDOWS/AGX/TRANSLATION contracts and management-only
+terminal criteria as EXP471; sole causal fix is truthful CPUPrepared provider
+configuration before deferred map. Root9f65ea178f56930ddc9f534e8d5798c8c65d411f;
+source/archive and dirty diff recorded in build entry. m1n1d80a72d unchanged,
+exact EXP471 macho36d8901cf6deceb69ef3381f3c766887777bfb9258d6621b1f1dcdc040246263;
+EXP406 Mu c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0,
+Mu source/dirty state unchanged. Full-owner/synthetic889 + broker env enabled.
+27 selected tests GREEN; pinned KMD/UMD code analysis/build and Universal,
+Inf2Cat/signing/version gates GREEN (2 pre-existing warnings,0errors).
+Package30.0.472.0 ZIP2954fd2236c523927d2f5f2e95b971d271549dc92eb3897621cc1c6579935ea9;
+SYS68f4465c24eb39e5ef975fb88a09ddedc81cb1af6a2f162bd2cb4007e3880636;
+INF7dee3de400d642f1303843a2df2f8c3699a78ed5e4dd27a967eaa5d4caf737c6;
+CAT276ae3f88dc03bee2e463e899be2bb119a6e2bdefaa426ec187fd39a15dd7718;
+UMD01f3caaf9f4894456845718c234c4234da047afe1c2f50ae4b66bb4513bac31d.
+Evidence/artifact directory .local/experiments/EXP472-prepared-prefix.
+Stage scriptff595ecfc7270cad22e96125c010e0c012447fdf03b68ed28f31404f01c80a07
+via SSH powershell -File C:\Users\pavel\EXP472-stage.ps1; exact add without install,
+then Windows shutdown /r /t0. Launcher66947 must exit before proxy ownership.
+Launch sh launch.sh >launch.log, scriptcebd58daaecb29d41cb0a6b7c2c34e109f7d1e809215f56de79e43262e500ae2.
+Preflight00:32:40Z package/service/SYS/UMD absent and Problem28/8CPU/SSH healthy;
+prior Event12911447 retained, not called error-free boot. No new event since cleanup.
+Collect full prefix/RTKit receipts before exact cleanup. PASS ONLY same imported
+live entries + mappings + grant + IOP/AP ACK0x20 (flags1) + deliberate qualifier4.
+Recovery same immutable EXP377/392 hashes as EXP471; after PASS restore and STOP.
+
+### EXP472 — preparation-state causal fix build
+
+Planned2026-09-05. Root9f65ea178f56930ddc9f534e8d5798c8c65d411f,
+dirty diffab187086cae5e582423daa868eb6dea90922605635a55556ed4fc7c8ecc92b63;
+source d857237c76a7ceafae05813ce0d70d0e0a56a44f9763c2d7f11e0473bf00af85.
+WHY THIS HYPOTHESIS: EXP471 failed platform11 before power, BindChannels demands
+Prepared and queue config builder demands mapped objects. Deferred graph moved
+both state marks too late. Correct CPUPrepared at encoding completion, separate
+configuration-only builder, preserve strict actual mapped queue-create guard.
+11 focused tests GREEN and independent read-only review; no scheduler or queue
+execution changes. Exact same prefix transport/m1n1/Mu and management qualifier.
+Build same pinned FRYZZING command, PackageBuild472 ManagementQualification.
+No launch until package manifest/hash gates appended. Current Windows clean on
+EXP471 platform; prior package/service removed and device28. Recheck before stage.
+
+### EXP471 — result: pre-power provider initialization rejects deferred graph
+
+Collected2026-09-05T00:25:55Z, result SHA
+b06731fc3c4df922fd241176cc2b4e9941ea9f559bf1db27c6ed6c9afd85af42.
+StartStage8/PlatformStage11 STATUS_DEVICE_CONFIGURATION_ERROR; no power or
+firmware receipts. Device43;8CPU/SSH/input/NVMe/xHCI live. Event12911447 during
+boot recorded; no management or prefix hardware proof from this run.
+Verdict INCONCLUSIVE BEFORE PREFIX: provider BindChannels requires Prepared,
+and BuildQueueConfig requires GpuMapped; new Prepare left CpuOwned until map.
+Exact oem5.inf1a8a2348... uninstalled/deleted, stale stopped ownerless service
+removed, APPL0002 recreated Problem28. Cleanup output saved locally.
+Focused causal fix1: mark completed CPU content Prepared in Prepare; separate
+CPU-only provider configuration from strict mapped queue-create validation.
+Existing mapping algorithms and firmware prefix code unchanged. Do not mark
+objects GpuMapped before map. No queue execution or next backend work allowed.
+Next EXP472 same m1n1/Mu and qualification profile, only preparation-state fix.
+
+### EXP471 — launch started / actual platform receipts
+
+Exact hash-checked package staged as oem5.inf without install; Problem28
+post-stage gate passed. Software reset released launcher60734 and USB returned.
+launch.sh running, evidence launch.log and contract.bin. Actual host receipts:
+live firmware prefix RO v1 root0x9fff78000 size0x40000 broker+0x280;
+config snapshotv2, scanout ABI v2, gpu-region mapped, broker mapped.
+Collector SHAa7310ce21ed1652a1dac4fb9b9d8777b12b64f3393f8b2026503a6884aac9186;
+cleanup script SHA5f5204098262598a45e4b27ed69a66b25edaeff37bcb4c5393ff1ad299b52092,
+both in EXP471 directory. Cleanup refuses any INF except exact EXP471 hash.
+Build bookkeeping: first local m1n1 compile found wrong C spelling for bootargs
+actual-memory field; corrected to existing mem_size_actual global before commit.
+Subsequent full clean build succeeds. No hardware ran the failed build.
+Docker image-inspect initially returned not-found, image inventory then resolved
+the already-existing pinned image ID; no new image/toolchain installed.
+
+### EXP471 — exact build gates and natural bind preregistration
+
+Preregistered2026-09-05T00:22:43Z. Single atomic variable is live private-prefix
+transport/import-before-mappings; all prior platform/WDK/caps unchanged.
+Root926dd6b575b20515bb65dddbec7bf846e2e28441 branchfeature/j313-gpu-acceleration;
+tracked dirty diffc4339f681f053ffe79f5f1de7748f4c4d6751266d0305bb8527b500024ff14ae.
+m1n1d80a72d721f7f1a2291eba7e05670eab45776370 tracked clean, source archive
+56946b1db115e4f604ee7d286b027391d8f72d8c8ef00188890f8e7b26c8e4cb;
+shared external header7e2cfcd061163077e9444a20b3f6ae630761b602a5ade2508fb79e5b6a3f9292
+archived beside it and must be restored at root drivers/apple-agx/shared/include.
+Mu sourcef1ef718e08db0e4c30fdb5d8555973513ad9a004 dirty
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce;
+live binary unchanged EXP406 c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+26 selected tests GREEN; additional malformed-wire/mapping-failure/second-lifetime
+tests GREEN. m1n1 host-tests GREEN; full clean IOMFB_FULL_OWNER=1 build GREEN.
+FRYZZING MSVC14.44.35207 / WDK10.0.28000.2526 KMD/UMD analysis/build GREEN,
+Universal validated, Inf2Cat/signing and coherent30.0.471.0 gate GREEN.
+Two prior analysis warnings remain (worker SAL C28251, scheduler C28150), no
+new warning suppressed. No scheduler implementation changed.
+KMD source0d616e67918498ad1933b56204e0fcbf3cfa46a9d582f2d19358f35935baf00b
+excludes root Directory.Build.props to inherit the proven FRYZZING parent imports.
+Earlier local source.tar.gz containing misplaced props was never built/staged.
+Build script165fe032956f55fcf1d75cabca45d75e876d77657704e01dc27c075622bf6550.
+Artifact .local/experiments/EXP471-live-prefix/EXP471.zip
+e0f2481bb8b810a5645d1570c7abc2a80a8dfcee2edbcb4cb63a49b41526ce62;
+SYS70b274e562ec87f804df2bcb6a76ffbc3fb6db071389d6364f3575ab0c18af59;
+INF1a8a234854a4d9bf2f6fb3e960a008ed94f66e3717bc253e3113a1603efec316;
+CATd70059c4a298ec77573d4c78830733ff75522aa8a3d6711aa53911178f4c059e;
+UMD62fdbb28a2140e13b04e4399056d402ef50e61e32d887b215fceb690ca36818a.
+m1n1.macho36d8901cf6deceb69ef3381f3c766887777bfb9258d6621b1f1dcdc040246263.
+stage.ps1 SHA0a839e6d750b99f6cf42030e0907443444fc9c7a54c066b128ae618a29be4857:
+copy to Windows EXP471-stage.ps1 and exact ZIP; run powershell -File, pnputil
+add-driver WITHOUT install; confirm unchanged Problem28, then shutdown /r /t0.
+launch.sh SHA3b1c4965d39659fed855ea575c39e9d374c1720682553c7a23a78785bb608c1f:
+exact chainload + EXP406 Mu with WOM1_AGX_G2_POWER_BROKER=1; sh launch.sh >launch.log.
+Read receipts after natural boot. PASS requires PrefixLive/Imported equal,
+PrefixStage4 (qualification stop) and actual RTKit IOP/AP ready1 each, crashlog
+grant sent and continued RX, successful reverse cleanup. Endpoint-failure from
+deliberate qualifier is not FirmwareStart full-success; only management closed.
+Save result/health/host receipts before exact uninstall of hash-matched OEM INF;
+then stopped ownerless service removal if needed, ordinary EXP377/392 restore.
+Recovery hashes fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a
+and16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Preflight00:21:27Z confirms clean SSH/8CPU/Problem28/no package/service/SYS/UMD,
+input/NVMe/xHCI running, no129/1001. Current launcher60734; verify released before
+proxy ownership. No physical action requested. Evidence directory EXP471-live-prefix.
+
+### EXP471 — live prefix preservation / management-only qualification (build preparation)
+
+Created2026-09-05. Status planned; no candidate launch authorized by this entry
+until exact source/artifact hashes are appended. User authorizes only this
+boundary and requires stop after PASS + exact cleanup + ordinary G2 restore.
+WHY THIS HYPOTHESIS: EXP470 live native first-two root entries appear after CPU
+and survive native handoff/ioalloc; management ACK succeeds. EXP467 Windows
+fresh-root grant timed out. Minimal difference now addressed is borrowed live
+firmware-private prefix in context0; no neighboring GPU fixes.
+WINDOWS CONTRACT: existing assigned broker mapped register reads; no new
+private physical mapping. Versioned bounded RO64-byte window+0x280.
+AGX/ASAHI CONTRACT: firmware owns retained private trees; native preserves
+first16 root bytes, Asahi borrows reserved root with restricted kernel ranges.
+TRANSLATION: owned graph preparation -> CPU/handoff -> fresh double-read
+prefix/epoch -> exact import -> existing mappings -> existing publication ->
+management. Candidate qualification deliberately stops before first application
+endpoint after successful management; no further backend/GPU work.
+WHAT IS STILL UNKNOWN: whether preserving live private entries removes the
+Windows management timeout and gets IOP/AP0x20.
+Build commands: pinned FRYZZING render-admission build-driver.ps1 Release
+PackageBuild471 ManagementQualification; normal ARM64 UMD and version gates.
+m1n1 existing Docker image sha256:67ba6e1fea2d7272519d1c6117228f5d21d5bf667fb887a5abc5f88fd1f73749,
+make -j8 IOMFB_FULL_OWNER=1 after clean. Same EXP406 Mu unchanged.
+Recovery immutable EXP377/392 as EXP470; verify actual clean SSH/8CPU before
+staging. Exact manifest/commands/source commits and hash pins follow build.
+Focused tests initially found unrelated existing RegionB test fixture left
+optional allocator callbacks uninitialized (ASan indirect stack call). Only
+test fixture zero-initialization corrected; production RegionB unchanged.
+
+### EXP470 — recovery verification and next contract boundary
+
+Recovery SSH confirmed; health23:57:07Z at EXP470/health.json:8CPU,
+APPL0002 Problem28/null service, no AppleAgx service/SYS/UMD or Display-store
+package; AppleInput/stornvme/USBXHCI running; zero129/1001 since boot.
+Collector does not query41; no claim of41 absence or RDP validation.
+Initial collector invocation referenced a nonexistent remote script and failed;
+preserved in post-restore-health.json. Actual script transferred and executed
+normally, verified evidence is health.json. No platform safety block occurred.
+Focused source inspection: config snapshot exposes GpuRegionBase only;
+AdmissionPublicationMap permits only0x9fffb8000/0x4000. Native firmware root
+0x9fff78000 is distinct. No private-PA mapping or hardcoded prefix introduced.
+Next proposal: narrow read-only platform publication of live firmware prefix,
+then checked borrowed-prefix preservation in context0 only. Firmware retains
+private subtree lifetime, Windows owns its existing allocations/kernel entries;
+cleanup must not free or traverse borrowed private tables. Needs scope approval
+for frozen platform publication change, not another firmware-ordering gate.
+
+### EXP470 — native management PASS; restoration
+
+Timestamp correction: EXP470 prereg entry clock text23:56Z was a manual
+transcription error; actual execution23:54:59Z follows tool-recorded prereg.
+Result23:55:00Z SHA d39e6922d311de2a16071190680b9df87bc299a3d66668d2dacf1c4c1d33c7c7.
+Before power/root prefix zero; before first ioalloc firmware has populated
+entry0=0x9fff7c403 and entry1=0x9fff84403. Native handoff preserves them.
+ioalloc16KiB PA0x80fa14000 DVA0xffffffa080000000 adds root slot2; native
+management reaches actual IOP/AP0x20, stop returns. No app endpoint start or
+initdata/TA/3D. Advertised endpoints0,1,32,33. Duration about0.27seconds.
+Native PASS confirms runtime prefix is real, disproves pre-power-zero being
+sufficient runtime evidence. Windows timeout causality/fix still NOT proved.
+Reset requested; USB reappeared. Restore script SHA
+a915be33e7972528004dad73f75af65c6d4644131c7547b3bdbb6fb0f7329764 at
+.local/experiments/EXP470-native-management/restore.sh, same preregistered
+EXP377/392 hashes/profile; run sh restore.sh > restore.log 2>&1, unique contract.
+Next: verify restored Windows, derive minimal borrowed firmware-prefix contract
+at existing provider publication boundary without changing unrelated layers.
+
+### EXP469 result; EXP470 transport-initialized native control
+
+EXP4692026-09-04T23:54:11Z INCONCLUSIVE BEFORE POWER: first bulk read fails
+UartChecksumError expected0xd0decade/got0xbc638d70. No AGX power attempted,
+no firmware result and no platform safety rejection. Exact441 chainload
+completed and reported Running proxy. Transport source explains deterministic
+cause: chainload negotiates features with iface.nop(); a new UartInterface
+starts flags0 but peer retains negotiated sentinel mode. Inspector omitted
+normal bootstrap negotiation. Do not weaken validation or ignore exceptions.
+EXP470 prereg2026-09-04T23:56Z: same EXP469 contracts/hypothesis/platform,
+sole inspector change is existing iface.nop() handshake before bulk read,
+as existing bootstrap_port requires. No production source change.
+Inspector .local/experiments/EXP470-native-management/control.py SHA
+8aef1fe6338ab53c8d79e6c7c001e86c0ef27fa5a02741d6cee44d24ebd3ca8a,
+syntax GREEN. No new chainload or Windows package; exact441 remains at proxy
+with no launcher. Run proxyenv/bin/python control.py, output console.log and
+result.jsonl in EXP470 directory. Native control/20+5+5s deadlines, expected
+checkpoint, stop/reset and EXP377/392 recovery identical to EXP469 prereg.
+This fixes a host protocol initialization defect, not a blocked-action retry.
+
+### EXP469 — bounded current native management reference
+
+Preregistered2026-09-04T23:52:53Z. WHY THIS HYPOTHESIS:
+1. EXP467 gets crashlog request/reply but no IOP/AP ack; changing buffer VA
+   did not move the boundary, so another Windows buffer variant is unjustified.
+2. Current and EXP208 UAT.init preserve retained root prefix whereas Windows
+   owns fresh roots; EXP468 measured only pre-power zeroes, not runtime state.
+3. Native first crashlog ioalloc lazily initializes handoff/UAT; observing this
+   exact transition distinguishes runtime root population from a false premise.
+WINDOWS CONTRACT: no Windows driver in this control; baseline package-free.
+AGX/ASAHI CONTRACT: current StandardASC management start/stop and existing
+AGXASC.ioalloc/UAT.init/handoff.initialize unchanged. Asahi uses borrowed
+reserved pagetables and restricted kernel VA. Reference sources inspected:
+fw/asc/{__init__,mgmt}.py, agx/__init__.py, hw/uat.py, fw/agx/handoff.py,
+proxyutils.py, tools/agx_m1n1_backend.py, Asahi mmu.rs/pgtable.rs.
+TRANSLATION: none modified; compare native retained-root first8 entries and
+management power ACK with EXP467 receipts. Observers only read shared RAM.
+WHAT IS STILL UNKNOWN: whether retained private prefix becomes populated
+during native handoff/ioalloc and native management reaches IOP/AP0x20.
+Single variable: native reference management lifecycle instead of Windows
+production lifecycle; no claim this alone isolates every differing primitive.
+Ownership: existing native AGX owns power/UAT/system endpoints; script owns
+deadline, stop and reset. No app endpoints, initdata, render/TA/3D or IRQ setup.
+Native AGX constructor's existing SGX poke and console disable are INCLUDED;
+this is not a read-only experiment. No setup.py PMU counter resets.
+Rootf4bdbcc9259ec7da98d0c3549214c902135590da, branchfeature/j313-gpu-acceleration;
+dirty diff899b1e79fed10a707c122013c912ca2361483b4a2e21bba56d21c9e15936e972.
+m1n1 source930d7cf4a54eab89dfe9e7166492edfd3e2f22bc tracked clean; Mu unchanged
+from EXP468 and not launched during control. No firmware rebuild.
+Artifact EXP441 m1n1.macho SHA
+c7c068ad334ea11d0accf8f928c27e5c048cdb0ba2c56eb1576809925654a805.
+Inspector .local/experiments/EXP469-native-management/control.py SHA
+9f28e9aa32a01e39139a3fa47adf073ad8da14a9cb88bb464523fa209f862808,
+syntax GREEN and diff-check GREEN. Run software Windows shutdown /r /t 0;
+wait for existing launcher exit, chainload exact EXP441, run control.py via
+proxyenv/bin/python. Deadlines20s startup/5s stop/5s reset. Result.jsonl is
+exclusive-create/flushed per phase; console.log captures native messages.
+Preflight SSH23:52:53Z live, both USB endpoints present; launcher58933 owns
+current recovered Windows. Health23:48Z clean8CPU as EXP468 result.
+Expected: snapshots around handoff/ioalloc + actual management ACK states.
+Failure: bounded timeout/exception; save result without speculative root fix.
+Always reset after power attempt; then restore exact EXP377/392 using same
+commands as EXP468 but unique EXP469 restore log/contract. Recovery hashes
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a and
+16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+No AppleAgx package staged or retained. No safeguard bypass permitted.
+
+### EXP468 — outcome and normal recovery
+
+Native read2026-09-04T23:31:58Z succeeded without target writes from inspector.
+gfx_shared_region_base0x9fff78000 size0x40000; first16KiB and first8 entries
+zero, SHA4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe.
+Native DRAM0x800000000..0xa00000000. Evidence native-root.json includes leading
+stage1 TTY output before JSON; these boot actions are not inspector writes.
+Verdict: measurement CONFIRMED, runtime-prefix hypothesis INCONCLUSIVE BEFORE
+POWER. Current native UAT.init occurs lazily in first crashlog ioalloc.
+Normal EXP377/392 GPU-visible restore completed with broker disabled. Health
+2026-09-04T23:48:01Z in post-restore-health.json: SSH/8CPU, input/NVMe/xHCI
+running, APPL0002 Problem28/null service, no AppleAgx service/SYS/UMD/store;
+no events in collector window. No Windows bugcheck observed; RDP untested.
+Next: bounded current native management start/stop, read-only observers around
+existing handoff and ioalloc, then reset and identical normal recovery.
+
+### EXP468 — read-only retained TTBR1 contract measurement
+
+Preregistered2026-09-04T23:29:36Z. WHY THIS HYPOTHESIS:
+1. EXP467 still waits for management power after real crashlog grant; no crash
+   notice and no further packet. More equivalent buffer candidates are unjustified.
+2. Exact EXP208 m1n1 commit8371e367 and current UAT.init preserve the first16
+   bytes of the bootloader gfx_shared_region TTBR1; Asahi uses new_with_ttb
+   with ttb_owned=false and a restricted kernel VA range.
+3. Windows creates zeroed owned root pages. Live retained values/address are
+   needed before selecting a compatible import/ownership strategy.
+Single diagnostic: at native stage1 proxy read ADT and one16KiB gfx_shared
+root RAM page; record first8 entries/hash. No AGX power, ASC run, IRQ, page-table
+write, PMU reset or driver bind. Values are BEFORE AGX startup and cannot by
+themselves prove the later runtime state or timeout causality.
+Rootf4bdbcc9259ec7da98d0c3549214c902135590da branchfeature/j313-gpu-acceleration;
+root tracked diff before prereg8d2baf433088fcfb2ab49330ebc76ff4faa0c25064ef9508c8cf6176c6ff1ef1;
+m1n1 source930d7cf4a54eab89dfe9e7166492edfd3e2f22bc tracked diffempty;
+Mu sourcef1ef718e08db0e4c30fdb5d8555973513ad9a004 diff7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+Inspector .local/experiments/EXP468-retained-ttbr1-read/read_root.py
+SHAe8a8840e858e0390ff71cfe05b3e1a2c1f9d159e2f48fd62dd7dbf5493a227a4;
+syntax checked. Uses direct read-only proxy APIs, not setup.py/ProxyUtils.
+Run: bounded SSH package-free health, software restart, ensure launcher/USB
+ownership released, proxyenv/bin/python read_root.py. If platform blocks that
+exact action, record BLOCKED_BY_PLATFORM and do not use equivalent retries.
+Restore package-free GPU-visible Windows using restore.sh SHA
+576d4c1961717ae97862f7505f38f11f59612cdd1aa1ec2a95a8972600864496:
+EXP377 macho fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a,
+EXP392 Mu16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Preflight23:26:33Z confirms SSH/8CPU/Problem28/no service/SYS/UMD/store;
+old Event12911137 retained. Evidence same local directory, native-root.json
+and restore.log/contract plus post-restore health. No new GPU package.
+
+### EXP467 — final result and exact cleanup
+
+Result captured2026-09-04T23:20:16.4355740Z: kernel wire DVA0xfa080000000,
+8192-byte request /16384-byte capacity /reply-sent1; management timeout3,
+IOP/AP flags0, RxCount4 unchanged, no crash notice. Zero crashlog snapshot
+hash4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe.
+BackendResult6; provider cleanup success1 and completed mask0. Eight CPUs,
+SSH/input/NVMe/xHCI running; Event129 record11137 in this boot is retained.
+Exact hash-verified oem5 package deleted, stopped ownerless service deleted,
+APPL0002 recreated Problem28. Post-cleanup health saved locally.
+No further candidate run. Following the anti-loop rule, exact EXP208 source
+comparison identifies retained TTBR1 first-two-entry handling as the next
+unverified contract, not a proven cause. Current UAT.init and EXP208 m1n1
+commit8371e367 both preserve gfx_shared_region root bytes0..15; Windows creates
+a fresh root. Resolve live/source ownership before modifying this layer.
+During continuation the user reported a recurring service Trusted Access notice
+despite completing identity verification. No safeguard bypass attempted.
+
+### EXP467 — final artifact gates; natural kernel-VM grant test
+
+Commitf4bdbcc9259ec7da98d0c3549214c902135590da.28 selected tests and pinned WDK
+build/version verification pass; same2 existing analysis warnings.
+ZIP7a083346c653b1ca13e899ef98dade6a576e302a63fc4226379b9216913a3b8b;
+SYS095ef173dff26fac929740c5f06d8047e7cf327546113cc7f2e4ef6e6c89d266;
+INFe54cf4b451f901e079c218233ce1b5e595e7181e767990e36a826802586c739e;
+CAT5f44c373f0ac9a74bf25a5167d77d4aabf02a8a6eb6047208b016a1dc8bd0810;
+UMD397adea6ee6de3d0f5a64560fc044a03d3cdd1e1cf697ef8f249a227af988e0e.
+Stage only on clean APPL0002/no service/SYS then one natural boot, unchanged
+EXP441/406 with mandatory broker flag. Exact stage/launch scripts under local
+experiment. Expected discriminator: real IOP/AP power ACK after kernel-VM
+grant, versus the same timeout. Same16KiB object, no cache/IRQ/ABI changes.
+Collect scalar receipts and crashlog snapshot if present; exact cleanup after
+verdict. Recovery remains EXP377/EXP385. If power still stalls, compare the
+remaining firmware kernel address-space contract before any further candidate.
+
+### EXP467 — crashlog kernel-VM / 44-bit DVA contract; build preregistration
+
+Sourcebdd1e2bf2a938d11bc384fefc6276e95a2096ba53f1457d9956a81f8f6b2c6de;
+base7e0b988629ae1898b59610c4991ede73fc951163 diff
+b47fd7e652a11dfbaa13479734844d5e0d369bfde42245c1e55b40ac53f6bafc.
+WHY THIS HYPOTHESIS: EXP466 sends its real grant but receives nothing further;
+focused source comparison shows RTKit buffers belong to kernel VM, not low VM.
+m1n1 AGX constructor allocates from kern_va_base+0x80000000; Asahi
+GpuManager::shmem_alloc uses kernel_vm. This is stronger than guessing cache
+attributes or changing HVC/m1n1. Keep those untouched.
+ATOMIC CONTRACT: canonical VA0xffffffa080000000 maps in context0 TTBR1; packet
+carries 44-bit DVA0xfa080000000; session rejects low-half and unmasked64-bit
+addresses. These fields are invalid if changed separately. Physical object,
+16KiB size, attributes and existing UAT algorithms unchanged.
+RED: canonical mapping and domain-validation tests failed against EXP466.
+GREEN:28 selected suites; same97 graph allocations and all failure cleanup.
+Build script in EXP467 directory; PackageBuild467; hardware waits for final
+signed hashes/manifest and clean natural-bind staging. EXP466 exact cleanup done.
+
+### EXP466 — grant sent but not accepted; kernel-VM contract correction
+
+Result22:56:00Z: request8192/capacity16384, reply-sent1, no crash notice,
+RxCount4 remains endpoint1 request; no IOP/AP power ACK, timeout3.
+Owned crashlog snapshot16384 bytes is entirely zero, SHA
+4fe7b59af6de3b665b67788cc2f99892ab827efae3a467342b3bb4e3bc8e5bfe.
+Cleanup callbacks/power OFF succeeded; SSH/8 CPUs/input/NVMe/xHCI healthy,
+no fresh41/129/1001. Result/snapshot copied locally before exact package cleanup.
+Do not call this firmware acceptance or memory-DMA proof.
+Focused primary comparison found a contract defect in EXP466: AGXASC.ioalloc
+uses kernel VM (m1n1 AGX allocator = kern_va_base+0x80000000); Asahi
+GpuManager::shmem_alloc maps into kernel_vm/IOVA_KERN_RTKIT_RANGE. EXP466's low
+VM placement did not match that contract. Correct only this coupled tuple:
+canonical kernel VA0xffffffa080000000 / context0 TTBR1 mapping, 44-bit wire
+DVA0xfa080000000 and matching protocol range validation. Same physical owner,
+object size and UAT algorithms; no new mapping mechanism or cache-attribute
+guess. Earlier low-VA plan is superseded, not reinterpreted as success.
+
+### EXP466 — final gates and natural-run preregistration
+
+Commit7e0b988629ae1898b59610c4991ede73fc951163; source archive and diff as above.
+28 selected tests GREEN; WDK0 errors/2 existing analysis warnings; actual
+INF/SYS/UMD versions30.0.466.0 and mutation tests PASS.
+ZIPaa0dde511df0cdf8a6624b84606772fa7f45b478af356d8138ce0df82dc58c26;
+SYS0bbfdbdf21e9ebe96324bc0739d9a1eb061d38fb74915d8639b2655e587b58eb;
+INF587c1860480a89f97c4c08a36aa1515961db30f4e5d124f0c5e5402008880096;
+CAT94ff9b38031478ee7e17e7ea2f62544d4200fb615c6e7f8d0a6a0a5fdca2c7e9;
+UMD9efcbb9942aafe403da3401f0b7bb599c357152d410e9fa3afe9a177a51fcb90.
+Prestage health22:50:49Z:8 CPUs, unbound Problem28, no package/service/SYS/UMD,
+AppleInput/stornvme/USBXHCI Running, no129/1001 since boot. Stage-only then one
+natural bind with unchanged frozen EXP441/406 and mandatory broker flag.
+Scripts stage.ps1/launch.sh in EXP466 local directory. Evidence Windows
+EXP466-control and local result/contract/launch logs; binary crashlog snapshot
+extracted separately if present. Expected real buffer reply followed by power
+acknowledgements; continue existing firmware/backend calls if successful.
+No enqueue/ready result is acceleration proof. Collect exact first failure
+then cleanup exact package. Recovery EXP377/EXP385 retained unchanged.
+
+### EXP466 — real crashlog buffer grant; build preregistration
+
+Exact source archive28d1bc1b0f4b7686ab52e2da20708b3934c52daa4e9062ebdab75c9ebaffc157;
+base1735fe11bb995ba79df66dcfcb392def4b99871e diff
+c8b65d33f21d7d27d5ba034c600a36f2bb8ba7fef0b3ff67fe42e8be94ae5f6f.
+WHY THIS HYPOTHESIS: EXP465 receives endpoint1 type1 request8192 bytes/DVA0
+and intentionally rejects it. m1n1 crashlog service answers with a16-KiB-aligned
+allocation and actual context0 GPU address. EPMAP exposes only this system EP.
+ATOMIC CONTRACT: one prebuilt16-KiB owned object + pre-publication context0
+mapping + validated packet grant. No unbacked address or active UAT edits.
+Driver VA policy0x430000000; old kernel/initdata/channel VAs unchanged.
+Existing MemoryIo/UAT algorithms reused; graph grows one object/one leaf table,
+and existing allocation-failure/retry cleanup tests cover all97 allocations.
+Runtime resolves the exact UAT leaf against the object's actual physical page
+before registering the grant. Protocol rejects missing backing, oversized,
+zero-size and preallocated-DVA requests; second crash notice is distinguished.
+Fixed16-KiB owned-buffer snapshot on bootstrap failure only, no extra MMIO.
+RED tests reproduced absent mapping and rejected real request;28 selected
+tests GREEN, including exact reply0x0010400430000000 and negative cases.
+Build C:\Users\pauls\EXP466-build.ps1 with PackageBuild466; artifacts/evidence
+.local/experiments/EXP466-crashlog-buffer-grant. Wait for signed hash gates
+before one natural hardware test. EXP465 package/service cleanup completed.
+
+### EXP465 — next real request is crashlog buffer allocation
+
+Observed exact packet: RxCount4, endpoint1, payload0x0010200000000000.
+EPMAP0=3 (management/crashlog only), EPMAP1=3 (FW/doorbell). HELLO/EPMAP pass;
+power flags still0 because current session fails closed on non-management RX.
+Result6=ProtocolViolation; provider management failure phase3; cleanup success1,
+broker ON/QUERY/OFF result0. This is the documented first crashlog buffer
+request: type1, size2*4096=8192 bytes, DVA0. No guessed preallocated physical
+address is permitted. Save full result/receipts, exact cleanup follows.
+Next: one prebuilt16-KiB crashlog object through existing physical-owner and
+initdata UAT graph, low context0 virtual-address policy with nonoverlap check,
+then bounded validated endpoint1 buffer reply. Preserve all existing initdata
+virtual addresses and reuse existing graph cleanup. Unknown/oversized requests
+and subsequent crash notifications remain fail-closed; no memory rewrite.
+
+### EXP465 — final artifact gates; natural bind preregistered
+
+Commit1735fe11bb995ba79df66dcfcb392def4b99871e; final source archive and diff
+as build preregistration.27 selected tests pass; WDK build/version tests pass.
+ZIP88c1750fb65b5de5ebe6670355777271d1c8ae6e047cdb51dcdb9aee75cd725b;
+SYS71a23a40f0a0058745024e16b137e5d8cb586621aea07231d97edc08b0fc22c0;
+INF80b2f09779b81299db98252339d34359a3e57a9d8439021b83b35a70aa126429;
+CATa39c77ea86240a660c40cac3876d83852f9ff51a0f2bac377984149a39c1e4aa;
+UMD33609c2d08a0c5caeba1ff1e2f6e82d0f3bbee3a55c485d6809eee200bb1ae9d.
+Stage-only on fresh Problem28/no service/SYS, one natural boot on unchanged
+EXP441/406 WITH broker flag. Exact commands stage.ps1/launch.sh in local
+experiment directory. Evidence Windows EXP465-control and local experiment.
+PASS boundary: power acknowledgements genuinely observed; if an incoming
+system endpoint message stops boot, preserve exact endpoint/payload and stop
+at that new primitive. Never fabricate a buffer grant to claim ready.
+Collect then exact OEM-INF cleanup. Recovery remains EXP377/EXP385 current
+compatible, no old EXP164/241 images. No physical AGX IRQ enable change.
+
+### EXP465 — required RTKit system endpoint starts; build preregistration
+
+Source-final archivea3d34eee2fd0619974d0f651d98d7439164a188e5b157fcd7931362927bd4a44;
+base14f2088f4ff491df1c1015d710bf7c665b01d39f relevant diff
+b803588fc0ac6f9d689ffedf8b2dc9c4bae408dbde06116f757f2520a4d44fd3.
+WHY THIS HYPOTHESIS: EXP464 hardware completes HELLO/EPMAP but times out before
+IOP/AP power acknowledgement. Current state machine omits system endpoint
+starts. Upstream Linux explicitly identifies these as mandatory for boot, and
+current m1n1 StandardASC starts known low endpoints before AP power request.
+Single causal change: emit starts for advertised known endpoints1/2/3/4/8/10
+after final EPMAP ACK, before AP-power request, using existing packet codec.
+Output capacity8 covers ACK+six starts+AP request. No invented buffer addresses
+or fake acknowledgements; unsupported incoming non-management messages remain
+fail-closed and exact last RX/bitmap receipts identify their contract.
+Primary sources: m1n1 fw/asc/mgmt.py and fw/asc/__init__.py; Linux rtkit.c
+EPMAP handling. Protocol facts reused, no external implementation copied.
+RED: literal expected wire sequence failed on omitted starts. GREEN:27 selected
+suites before final diagnostic reset; rerun after reset before source commit.
+Build C:\Users\pauls\EXP465-build.ps1 with PackageBuild465; pinned WDK.
+Hardware not yet staged; requires final signed manifest and natural-bind gates.
+EXP464 exact package/service cleaned and APPL0002 Problem28 restored.
+
+### EXP464 — hardware result: HELLO/endpoint map proven; awaiting power
+
+Exact v2 package natural bind reaches CPU_READY=1, context0 publication=1,
+HELLO=1 and EndpointMapComplete=1. TTBR0=0x9d71a8001 and TTBR1=0x9d71a0001
+recorded by production publication. Provider failure phase3=management;
+RtkitBootPhase3=AwaitingPower, Result3=Timeout, IopPowerReady=0/ApPowerReady=0.
+Inbox0x25501/outbox0x23301. Provider cleanup success1, core completed mask0,
+broker ON/QUERY/OFF result0. Backend outer result6 remains FirmwareFailed.
+SSH remains available. Result JSON saved in local experiment; exact cleanup
+now follows evidence capture. No full FirmwareStart/BackendReady/acceleration
+claim. This hardware run validates the ordering/ownership advance only.
+Next causal source finding: current rtkit_boot.c never starts advertised
+system endpoints after EPMAP. Both current m1n1 fw/asc/mgmt.py and upstream
+Linux drivers/soc/apple/rtkit.c require those starts before boot completes.
+Primary source explicitly notes RTKit refuses to boot without system endpoints:
+https://raw.githubusercontent.com/torvalds/linux/master/drivers/soc/apple/rtkit.c
+Implement advertised known-system endpoint start messages only, preserve
+fail-closed handling of as-yet unsupported incoming endpoint messages and
+capture the exact last RX/bitmap. No guessed shared-memory buffer address.
+
+### EXP464 — final candidate gates and natural-run preregistration
+
+Implementation commit14f2088f4ff491df1c1015d710bf7c665b01d39f; exact source-v2
+archive414bd99c82ee8c1d8e18661ad973ca4be3347e5dd09d0f4082fb1342bdeb47d1.
+WDK v2 build0 errors/2 pre-existing analysis warnings;27 selected tests pass;
+artifact version checks30.0.464.0 pass. Final ZIP
+348f7ca434f0b9bf6881b2b03b5655406ed74a6bd38a6570430ca7faf682c74a;
+SYS2a6c8de17c32a9bd654de00d2ddc6e388da8e6a915d133ac1e35e81163390ab2;
+INF54984f0b73624754899dc6f35ca7bfc82269b2fb223ac1118c207de575cd8853;
+CATa5054b827aef125b7125e919fa14751f1e53d6e271cd4c77162353a9cda502ba;
+UMD0d0653c588730239a974f3712b53ce75dd0bea1be99feb663ba7f02da278e580.
+Prestage health22:21:44Z: fresh unbound Problem28, no service/SYS/UMD/store,
+8 CPUs, AppleInput/stornvme/USBXHCI Running, no129/1001 since this boot.
+Stage-only via stage.ps1; software restart, launch.sh with required broker
+flag and frozen EXP441 m1n1 c7c068ad334ea11d0accf8f928c27e5c048cdb0ba2c56eb1576809925654a805
+plus EXP406 Mu c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+One natural bind. Expected receipts: provider phases1/2/3, exact RTKit result
+and separate primary-failure/cleanup result; continue if firmware succeeds.
+Evidence .local/experiments/EXP464-provider-owned-bootstrap and Windows
+C:\Users\pavel\EXP464-control. Recovery exact OEM-INF hash deletion/service
+cleanup; immutable current-compatible EXP377/EXP385 if SSH unavailable.
+
+### EXP464 — build-v1 passed; source-comment clarification frozen as v2
+
+V1 pinned WDK passed with the same two existing analysis warnings and zero
+errors; artifact version tests passed. Self-review clarified the primitive
+contract comment: partial CPU bootstrap is explicitly retired by StopAsc,
+not falsely guaranteed already rolled back on every failed callback. No
+behavior change after v1. Rebuild exact final source-v2 archive
+414bd99c82ee8c1d8e18661ad973ca4be3347e5dd09d0f4082fb1342bdeb47d1,
+tracked diff4cb8ad336787d40592e3fbf6e673f42cefc162cc8e115f2317a0c5482843dec7.
+Build-v2.ps1 under same experiment; v1 artifacts are superseded before any
+hardware use. Hardware staging must use v2 manifest only.
+
+### EXP464 — provider-owned atomic bootstrap; build preregistration
+
+Source archive060238de2a7e4d42b6b067b43f1e300ac927943a981b8da01860ead6ca69b865;
+base68f479573fb1739c49508be95c0c80c63ef111f1, relevant tracked diff
+c64618ac73eb33c3cdb3ac3e02562136f4e30a7e06d3f1bafb18456c2da1ad8d.
+Current source includes prior accepted firmware receipts/preparation; no memory,
+scheduler, capabilities, UMD behavior, Mu or m1n1 changes in this batch.
+WHY THIS HYPOTHESIS: EXP463 restores exact FirmwareFailed6; Asahi context0
+TTBs are published under handoff lock before RTKit bootstrap. Prior platform
+callback mutated provider PUBLISHED and cleared it even if cleanup failed.
+ATOMIC CONTRACT: CPU/handoff split + provider locked root publication +
+management bootstrap + partial-ASC cleanup obligation. Splitting ordering
+without ownership/rollback would abandon early roots on a later failure.
+WINDOWS CONTRACT: PASSIVE_LEVEL startup and cleanup; receipts use existing
+registry writes without flushes. Package INF/SYS/UMD versions match30.0.464.0.
+AGX/ASAHI CONTRACT: CPU_READY/handoff then locked context0 roots then RTKit.
+TRANSLATION: existing shared RTKit session functions split without a second
+implementation; existing provider owns publication and the generic coordinator
+tracks cleanup separately from completed phases.
+WHAT IS STILL UNKNOWN: whether current firmware accepts this precise ordering
+and reaches management/endpoints/initdata. Wom1ProviderBootFailurePhase (1 CPU,
+2 roots, 3 management) and separate cleanup-success receipt distinguish owners.
+Offline: provider/firmware/RTKit/backend/composer suites13 tests pass, admission
+suite14 pass; failure cases exercise retained roots, retry cleanup, failed
+run-off ownership and no mailbox traffic before CPU-only phase returns.
+Build: C:\Users\pauls\EXP464-build.ps1; exact script/evidence at
+.local/experiments/EXP464-provider-owned-bootstrap. Hardware waits for build,
+version/sign/hash gates and natural-stage preregistration.
+
+### EXP463 — original firmware boundary restored
+
+Confirmed hardware: correct broker-enabled natural bind of EXP46130.0.461.0
+passes memory and platform stages1--11; final StartStage8/PlatformStage12
+C0000483 and BackendStartResult6=FirmwareFailed. Host power receipts show
+ON/QUERY/OFF result0. SSH alive. Final receipts saved locally under
+EXP463-natural-versioned-control/final-receipts.txt. No acceleration claim.
+Memory source unchanged; earlier live C000009A does not invalidate prior
+memory proof, and specific allocation fragmentation is still only a hypothesis.
+Packaging/admission detour closed. Exact cleanup script now runs; next work
+is the approved provider-owned early context0 publication/RTKit sequencing.
+
+### EXP463 — natural bind of version-coherent control on correct platform
+
+Preregistered2026-09-04T22:07:33Z. WHY THIS HYPOTHESIS: EXP462 restores
+DriverEntry/AddDevice/StartDevice and interrupt admission, then reports
+StartStage4/C000009A. The exact EXP444 C source needs a 64-MiB physically
+contiguous object; original EXP444 passed during natural boot, not this late
+live bind. Test that remaining environment difference before touching the
+hardware-proven memory implementation. This does NOT yet prove allocation
+fragmentation or identify the exact memory sub-operation.
+Single variable: natural boot instead of live install. Same signed EXP461
+package30.0.461.0 and all recorded hashes, no source change; intentional
+identity reuse. Exact EXP462 cleanup precedes fresh Problem28 then stage-only.
+Source5effaf8 + packaging68f479573fb1739c49508be95c0c80c63ef111f1;
+launch frozen EXP441/EXP406 with WOM1_AGX_G2_POWER_BROKER=1, verify broker-map
+receipt. Commands/evidence .local/experiments/EXP463-natural-versioned-control.
+Expected memory stage passes then original FirmwareFailed6; failure is same
+memory status, requiring exact memory substage rather than another boot guess.
+Recovery immutable EXP377/EXP385; collect and exact cleanup after one bind.
+
+### EXP462 — packaging hardware confirmation; memory-stage failure
+
+Corrected broker-enabled launcher explicitly reports ABI2 and broker map.
+Two pre-install health gates rejected recent events; no package install occurred
+in those attempts. Later gate passed; one actual live install reached
+StartStage3 SUCCESS, then StartStage4/C000009A and RemoveDevice. Immediate
+PnP0 observation was transient, NOT a successful adapter startup.
+Final receipts copied to EXP462-correct-launch-contract/final-receipts.txt.
+Packaging fix is HW-proven to restore StartDevice, not firmware readiness.
+Next natural control is justified by exact contiguous-memory contract and
+original boot-time EXP444 evidence. No memory/firmware source modification.
+
+### EXP462 — restore exact broker-enabled launch contract for EXP461 package
+
+Preregistered UTC2026-09-04T22:04Z. WHY THIS HYPOTHESIS: EXP461 advanced to
+broker IRQ_ENABLE write and aborted because EXP458 launcher omitted the
+required WOM1_AGX_G2_POWER_BROKER=1; actual map receipt absent. Current Python
+hv.map_agx_power_broker explicitly returns early without this flag. Restore
+that documented existing launch input only; no Mu/m1n1 or driver C changes.
+Identical signed EXP46130.0.461.0 package/manifest hashes; identity reuse is
+deliberate launcher-only control. Frozen EXP441 m1n1/EXP406 Mu hashes unchanged.
+Launcher .local/experiments/EXP462-correct-launch-contract/launch.sh; MUST verify
+actual broker-map and ABI-v2 receipts before package install on clean Problem28.
+Current recovery EXP377/EXP385 reached SSH. Fresh recovery read unexpectedly
+shows no Display package, no AppleAgxAdmission service (1060), no APPL0002 key,
+and no C:\Users\pavel\EXP461-control. Do not claim a successful uninstall that
+did not run; pre-reset evidence may not have persisted. Original host abort log
+and copied build artifacts remain durable on the control Mac.
+Expected checkpoint: original EXP444 FirmwareFailed6, not acceleration. Capture
+then exact cleanup. Emergency recovery as already hardware-exercised EXP377/385.
+
+### EXP461 — admission advanced; launcher-contract error and recovery
+
+Observed after live install: DriverEntry/DxgkInitialize success and KMD executes
+write to broker IRQ_ENABLE at IPA0x300000418, then repeated EL2 unmapped-IPA
+abort (cpu7 ELRfffff802e4d61944 ESR939f0046). Source interrupt.c maps this to
+AdmissionMaskInterrupt in admission startup. No firmware result collected yet.
+CRITICAL CORRECTION: EXP457/458 launch scripts omitted
+WOM1_AGX_G2_POWER_BROKER=1. Frozen image hashes alone did NOT establish the
+full-owner launch contract. hv/__init__.py map_agx_power_broker returns early
+without this variable; logs lack broker-map receipt. This was an execution
+error, not evidence of a new m1n1/Mu defect. Earlier descriptions calling those
+boots full-owner are superseded by this correction.
+Packaging fix advanced execution past prior failed Add; full original
+FirmwareFailed checkpoint remains unverified until correct launch.
+Source and hardware are not changed to accommodate the omitted launcher flag.
+Existing host SIGTERM recovery requested; exact EXP461 package must be removed
+under current-compatible EXP377/EXP385 before next run. Do not boot it again
+with the missing broker. Trace/evidence in EXP458 launch.log and EXP461 directory.
+
+### EXP461 — build passed; live bind preregistered
+
+UTC 2026-09-04T22:00:16Z. Packaging source commit68f479573fb1739c49508be95c0c80c63ef111f1;
+control source remains exact5effaf8 archive + recorded packaging-only overlay.
+WDK build zero errors/two existing scheduler warnings; real artifact version
+tests pass. KMD .text/PAGE/INIT byte-identical to EXP444; linker thunk/unwind
+metadata differs and is not claimed byte-identical. No C source change.
+ZIP9fae646e11591162fe3b1973a5baf5900799454aaa7f304e8df55598642768bd;
+SYS09ad25887de382b38992294e3025519f2600c00e805c41b08180124bb70647bc;
+INFfdd4706973b6e430e5929e9b60cc912b0deeae1c3e91742317f93f7d8ec0caa1;
+CATd3a533facfaf130f7b7c96f736288d1698172659fe2fd42ec20a21fabcccf244;
+UMD9635755f11035cd05a0a8eea35853b85fbc50014ac1d854276d861bf2aad3038.
+Manifest .local/experiments/EXP461-package-version/manifest.json.
+One live install using run.ps1 in same directory. Platform remains current
+EXP458 package-free full-owner EXP441/EXP406 frozen hashes. Gate fresh Problem28,
+no service or SYS, 8 CPUs and no fresh129/1001 in last120s. Old Event12910404
+at21:52:44 is preserved, not reinterpreted as clean lifetime history.
+Expected discriminator: StartStage8/PlatformStage12/BackendResult6 restored;
+Code31 still means packaging fix insufficient. Collect exact receipts and
+health, delete exact package/service afterward. Recovery EXP377/EXP385
+retained and hardware exercised in EXP457. This run is not acceleration.
+
+### EXP461 — coherent numeric package version; build preregistration
+
+2026-09-04: exact EXP444 source archive SHA0748eb9c89ceb4e36bd7f90c44e616dca5078b8434a735f2fd0c04d6ecb485ac
+plus packaging-only overlay SHA596e0f019104892e359c272cdfaaceec9fced6e0513a96e57c5fb24fa4553309.
+WHY THIS HYPOTHESIS: EXP460 same-thread trace reaches DriverVersion/Date/Rank
+then live-report/RemoveDevice. Focused interoperability inspection of current
+dxgkrnl at RVA1fd6f0 and1fdc60 identifies C0000182 on INF/file version mismatch,
+with compatibility exemption only when both majors<21 (apart from unrelated
+vendor exceptions). Original EXP44419.xx vs current23.xx crosses this threshold;
+KMD lacks VERSIONINFO. Pinned stampinf command uses -v "*" (time of day).
+No registry bypass is permitted or used. Fix: shared30.0.461.0 INF/SYS/UMD
+version metadata and post-build artifact equality gate. No executable source
+or firmware protocol changes. Plan docs/superpowers/plans/2026-09-04-admission-package-version.md.
+RED: verifier executed on exact EXP455 package on FRYZZING and failed
+"Missing VERSIONINFO: AppleAgxRenderAdmission.sys" as expected.
+Build command: powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP461-build.ps1; script .local/experiments/EXP461-package-version/build.ps1.
+Pinned WDK10.0.28000.2526. Hardware not yet authorized by artifact gates;
+hashes/manifest and exact recovery will be registered after successful build.
+
+### EXP460 — result and cleanup
+
+Dxg/registry correlation captured to local windows-evidence; same PID4/thread6908
+has successful miniport Add, version property queries, then live-report and
+RemoveDevice. No query of UMD registry names in this interval; do not fix UMD
+registry spec as a guess. Exact oem5/package/service removed, APPL0002 rebuilt
+to Problem28. Registry missing optional values alone were not treated as cause.
+
+### EXP460 — correlate Windows configuration reads with failed DpiAddDevice
+
+Preregistered after EXP459 trace/cleanup at 2026-09-04T21:54Z.
+WHY THIS HYPOTHESIS: EXP459 proves DdiAddDevice SUCCESS followed by
+DdiRemoveDevice SUCCESS and DpiAddDevice C0000182; StartDevice absent. The
+remaining owner is Windows display-port configuration, not the miniport Add
+callback. Add Kernel-Registry query/open/create/close ETW to correlate failed
+configuration lookups in the same PID4/thread/time interval, without changing
+source/capabilities. Optional lookup failures are not automatically causal.
+Single variable: additional registry trace. Same EXP455 source, signed
+package hashes/manifest, EXP441/EXP406 live platform as EXP459. EXP459 exact
+oem5 deleted, stopped ownerless service deleted, APPL0002 recreated Problem28.
+Command: .local/experiments/EXP460-dxg-registry-trace/run.ps1; two short
+ETW sessions, registry0xb401 level4 max32MiB, stop immediately after one
+pnputil install. Evidence C:\Users\pavel\EXP460-control and same local path.
+Expected evidence: identify relevant failed configuration lookup or reject
+registry explanation; no firmware verdict. Recovery/cleanup exact same INF
+hash gate as EXP459, current-compatible EXP377/EXP385 if needed.
+
+### EXP459 — result
+
+Trace captured and decoded: DdiAddDevice returns0; DpiAddDevice returns
+0xC0000182 after RemoveDevice. No StartDevice call in interval. This is a
+Windows display-port post-miniport-add failure. Two DpiDispatchIoctl calls
+returned0xC0000034; their causality is NOT established. ETW file/XML retained
+in .local/experiments/EXP459-dxg-add-trace/windows-evidence. Exact cleanup
+completed; fresh unbound APPL0002 Problem28 verified. No source edit.
+
+### EXP459 — bounded DxgKrnl AddDevice trace
+
+Preregistered after EXP458 health sample 2026-09-04T21:52:08.5476057Z.
+WHY THIS HYPOTHESIS: exact rebuilt EXP444 executable reproduces Code31 after
+successful DriverEntry/DxgkInitialize, before StartDevice; neither new devnode
+nor natural boot explains it. Error is Windows configuration error, not a
+firmware receipt. Instrument Windows' own DxgKrnl provider to identify its
+failing admission operation before another source change.
+Single variable relative to EXP455: bounded ETW diagnostics around same live
+install. Platform EXP441/EXP406; exact source archive, signed package hashes
+unchanged from EXP455, intentional identity reuse for environment diagnosis.
+EXP458 clean gate: 8 CPUs, no service/SYS/UMD/store package, APPL0002 Problem28,
+AppleInput/stornvme/USBXHCI Running, no Event129/1001 since this boot.
+Command/script: .local/experiments/EXP459-dxg-add-trace/run.ps1, logman
+Microsoft-Windows-DxgKrnl keywords0x410401 level5 circular32MiB, one install,
+stop trace in finally, tracerpt XML. No synthetic completion/AGX probing.
+Evidence C:\Users\pavel\EXP459-control and local experiment same name.
+Discriminator: Windows trace names failing AddDevice internal boundary or is
+inconclusive; do not infer firmware behavior. Exact cleanup afterward using
+oem INF hash F384038260848C78AC429389B03C350735C39D3EA103C4DDBC0F16F473C90164.
+Recovery EXP377/EXP385 retained as in EXP457.
+
+### EXP458 — health sample
+
+At 2026-09-04T21:52:08.5476057Z package-free full-owner guest is SSH-live,
+eight CPUs and no new129/1001, unbound APPL0002 Problem28; no package, service,
+SYS or UMD. File .local/experiments/EXP458-packagefree-baseline/health.json.
+This is a bounded clean sample, not proof of long-term platform stability.
+
+### EXP458 — package-free full-owner baseline before DxgKrnl trace
+
+Preregistered 2026-09-04T21:52Z. WHY THIS HYPOTHESIS: EXP457 full-owner boot
+later exhibited repeated NVMe re-enables and delayed SSH, while recovery
+EXP377/EXP385 is responsive. Remove the experiment package as the single
+variable and qualify full-owner health before any next driver bind. No GPU
+candidate permitted if fresh storage resets occur package-free.
+Exact EXP455 leftovers moved after hash verification to
+C:\Users\pavel\EXP457-control\stale-*; not deleted irrecoverably. Driver Store
+empty, service absent, exact nonpresent APPL0002 removed; AppleInput/stornvme/
+USBXHCI Running, 8 CPUs. Recovery is complete before this launch.
+Root 0d63af5bdd47a12a8ffd02d6ed0a794f9986b74e on feature/j313-gpu-acceleration;
+tracked diff SHA256 before entry 727ae4d9a8d92c7262644d465a819c43974348e9a93463cde76c4bf63e9bfaf6;
+m1n1 source930d7cf4a54eab89dfe9e7166492edfd3e2f22bc tracked diff empty;
+Mu source f1ef718e08db0e4c30fdb5d8555973513ad9a004 diff7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+Launch frozen EXP441/EXP406 hashes as EXP457, current run_uefi.py hash
+910064b62858f569d231f0fcb9258717fca8ff977b829577fa1a281b3d78c83a.
+Command: .local/experiments/EXP458-packagefree-baseline/launch.sh, software
+Windows restart first. Evidence same directory. Recovery EXP377/EXP385 as
+recorded/rehashed in EXP457. Expected SSH/8 CPUs/unbound APPL0002/no fresh129.
+
+### EXP457 — recovery cleanup completed
+
+2026-09-04T21:50Z: existing host SIGTERM recovery returned to proxy; EXP377
+m1n1 + EXP385 current-compatible no-AGX boot reached prompt SSH. Exact oem5
+INF hash confirmed, pnputil uninstall/delete successful. Hidden stale APPL0002
+removed, verified stopped AppleAgxAdmission with sole stale owner oem5 removed
+after Display store confirmed empty; sc query returns1060. No other driver
+deleted. Evidence: EXP457-natural-control/recovery-evidence and recovery.log.
+Collector metadata lookup of DxgKrnl-SysMm was invalid; replaced wildcard
+provider enumeration with exact logman provider query. This is collection-only.
+LiveKernelReports/WATCHDOG contains no dump. Exact error decoded by Windows:
+0xC0000182 STATUS_DEVICE_CONFIGURATION_ERROR. Driver software key captured;
+current next discriminator is bounded DxgKrnl ETW around failed AddDevice,
+not another source/firmware/layout guess.
+
+### EXP457 — result / recovery in progress
+
+Observed by 2026-09-04T21:47Z: Windows reached SSH, exact installed SYS/UMD
+hashes match EXP455, but fresh natural bind again only receipt8; no StartStage.
+Natural-versus-live admission explanation rejected. Later SSH response becomes
+intermittently slow and host log repeatedly records NVMe CC enable/ready cycles.
+No storage causal attribution yet; no backend/firmware proof from this run.
+Evidence collection/cleanup script is still running; do NOT claim cleanup done.
+Bounded diagnostic snapshot via current launcher SIGINT is preregistered to
+capture guest CPU state before recovery; no extra proxy owner. If software
+cleanup does not finish, use existing snapshot/reboot SIGTERM path, then
+current-compatible emergency EXP385 non-AGX Mu with EXP377 m1n1 to remove exact
+package. This is recovery only, not another GPU experiment.
+Timestamp correction: earlier prereg headings EXP456 21:43 / EXP457 21:46 / compact
+21:47 were approximate wall-clock labels written before reading the UTC clock;
+they are not authoritative run times. SSH logs and file/evidence times govern.
+
+### EXP457 — natural boot bind of rebuilt EXP444 control
+
+Preregistered UTC 2026-09-04T21:46:00Z. WHY THIS HYPOTHESIS:
+EXP456 fresh Problem28/new VideoID still gives failed-add; devnode-only stale
+state is rejected. Original EXP444 passed natural boot bind, unlike EXP455/456
+live installs. Preserve exact EXP455 package identity deliberately to isolate
+boot-time admission versus live-add session state; no source/build change.
+Cleanup EXP456 exact package/service, recreate unbound devnode, stage-only
+same manifest/SYS/INF/ZIP hashes recorded under EXP455, restart via Windows
+SSH, chainload frozen EXP441 m1n1 c7c068ad334ea11d0accf8f928c27e5c048cdb0ba2c56eb1576809925654a805,
+launch EXP406 Mu c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Source archive remains 0748eb9c89ceb4e36bd7f90c44e616dca5078b8434a735f2fd0c04d6ecb485ac.
+Commands: .local/experiments/EXP457-natural-control/stage.ps1 and launch.sh.
+Evidence directory: same local experiment; Windows C:\Users\pavel\EXP457-control.
+Expected: StartStage8/BackendResult6. Failure: Code31 without StartStage.
+Recovery: SSH exact cleanup; immutable EXP385 non-AGX Mu if SSH unavailable.
+No new backend, firmware, interrupt, memory or WDDM capability changes.
+
+### EXP456 — result
+
+Fresh APPL0002 Problem28 verified after successful remove/scan; same exact
+EXP455 package installed once, creates new VideoID but still receipt8,
+DriverEntry1, DxgkInitialize0, Code31 with absent StartStage.
+Verdict: devnode-only stale state rejected. Windows SSH stays alive.
+Evidence: .local/experiments/EXP456-devnode-control, Windows EXP456-control.
+Exact cleanup is first guarded step of EXP457 stage script before new staging.
+
+### EXP456 — EXP455 package after exact APPL0002 devnode recreation
+
+Preregistered UTC 2026-09-04T21:43:00Z. Single variable: remove the unbound
+APPL0002 devnode with PnPUtil and rediscover before re-staging the SAME EXP455
+package. Package reuse is intentional for this environment-only control;
+EXP455 package/service have already been removed. No source/platform change.
+WHY THIS HYPOTHESIS:
+1. EXP455 fresh EXP444 source reproduces Code31/0xC0000182 with successful
+   DriverEntry/DxgkInitialize; hence failure is not specific to firmware split.
+2. All executable sections, data, unwind and relocation sections of original
+   EXP444 and EXP455 are byte-identical. Rdata differs only in debug timestamps,
+   RSDS GUID and build path; INF differs only in DriverVer.
+3. Prior uninstall installed NULL on the existing devnode, not a new devnode;
+   retained Device Parameters/VideoID and graphics instance state remain a
+   concrete environment confound. This test can reject devnode-only state.
+Artifact: EXP455 ZIP/SYS/INF and manifest as recorded below. Root source
+5effaf8d6043f71bcc53bcd3bfeb462b996ba242 archived exactly; running Mu EXP406
+and m1n1 EXP441 unchanged. Recovery: exact oem INF hash gate, uninstall and
+stopped orphan service removal. Current SSH/8 CPUs are alive.
+Commands/evidence: .local/experiments/EXP456-devnode-control/run.ps1;
+Windows C:\Users\pavel\EXP456-control. PnPUtil /remove-device exact instance,
+/scan-devices, verify Problem28 and no service/INF, one /add-driver /install.
+Expected: StartStage/BackendResult restored; rejection: same failed-add status.
+Official supported device removal/scan interface:
+https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/pnputil-command-syntax
+
+### EXP455 — observed result and cleanup
+
+UTC bind 2026-09-04T21:39:43.7897350Z. Fresh exact EXP444 source rebuilt by
+current WDK pipeline failed Code31 / CM_PROB_FAILED_ADD / 0xC0000182.
+DriverEntryStage=1, DxgkInitializeStatus=0, device receipt=8 (RemoveDevice),
+no StartStage/BackendStartResult. SSH and eight CPUs alive; no bugcheck
+observed. This rejects attribution to the EXP454 source split alone.
+Evidence: .local/experiments/EXP455-exp444-control/windows-evidence and
+setupapi.dev.log. Kernel-PnP event411 corroborates the exact problem status.
+Exact oem5.inf hash matched EXP455; pnputil uninstall/delete succeeded, then
+stopped ownerless AppleAgxAdmission removed. Display store empty; AppleInput,
+stornvme and USBXHCI Running. No claim of fresh Problem28 until rediscovery.
+
+### EXP455 — fresh EXP444 source control; build preregistration
+
+Status: build passed; one live install preregistered after exact cleanup.
+Artifacts: .local/experiments/EXP455-exp444-control/manifest.json and build.log.
+ZIP SHA256 1fc378c8baec57ca11ac242c3a57a79a8d29b38374bbd79cc63ea436cfb01fec;
+SYS 7cc7e53a460998f09991894705ee388c16d9db37197e64d43e3dcfd1eedce01b;
+INF f384038260848c78ac429389b03c350735c39d3ea103c4ddbc0f16f473c90164.
+Platform: existing live EXP441 m1n1 SHA256
+c7c068ad334ea11d0accf8f928c27e5c048cdb0ba2c56eb1576809925654a805,
+EXP406 Mu c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Recovery: exact pnputil deletion on reachable Windows; emergency EXP385
+GPU-hidden Mu if unreachable. EXP454 exact package deleted; Display store
+empty; stopped disabled orphan AppleAgxAdmission verified then deleted.
+Install: powershell -NoProfile -File C:\Users\pavel\EXP455-run.ps1.
+Evidence destination: C:\Users\pavel\EXP455-control, copied to local experiment.
+Discriminator: rebuilt EXP444 reaches StartStage8/BackendResult6 versus Code31.
+This control cannot prove any firmware ordering fix.
+WHY THIS HYPOTHESIS: EXP454 has Code31 while the old EXP443 binary reached
+StartStage8. This does not establish a linked-code/CFG defect. Rebuilding the
+exact EXP444 archive through the current pipeline separates source effects
+from builder/package/environment effects, as requested in the current task.
+Source: 5effaf8d6043f71bcc53bcd3bfeb462b996ba242; authoritative archive
+SHA256 0748eb9c89ceb4e36bd7f90c44e616dca5078b8434a735f2fd0c04d6ecb485ac.
+Build command: powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP455-build.ps1 on FRYZZING. Script retained at
+.local/experiments/EXP455-exp444-control/build.ps1. No hardware bind yet.
+
+Correction to prior chat interpretations of EXP454: a fresh read before
+cleanup finds service AppleAgxAdmission with DriverEntryStage=1 and
+DxgkInitializeStatus=0; the device key contains Wom1CleanReceipt=8 (Remove),
+status=0. Thus absence of StartStage is NOT proof of absent DriverEntry or
+absent AddDevice. The generic receipt is overwritten by later callbacks.
+The package was still installed as oem5.inf, SHA256
+83add6fb9318dbb09b188626f6ab274d6e19739451c9e4c134accf015f062e34.
+Prior claims of clean baseline and proven CFG causality are withdrawn.
+
+### EXP-20260904-444 — BackendRuntimeStart exact-result discriminator
+
+Status: confirmed — backend result is FirmwareFailed; exact cleanup complete
+Created (UTC): 2026-09-04T17:40:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP443 hardware-proved every PlatformRuntimeStart owner through queue-provider
+   initialization and isolated BackendRuntimeStart at 0xC0000483.
+2. Commit 5effaf8 records the exact portable backend result at the only failing
+   call without changing backend behavior.
+
+Single changed variable:
+- `Wom1BackendStartResult` receipt only. Exact source commit
+  `5effaf8d6043f71bcc53bcd3bfeb462b996ba242`.
+
+Artifact:
+- FRYZZING exact build passed. Source archive / manifest / ZIP / SYS SHA-256:
+  `0748eb9c89ceb4e36bd7f90c44e616dca5078b8434a735f2fd0c04d6ecb485ac` /
+  `8f585a222d7a8dad9b09c7985b0ccfb69a128fa263a33c8211c881791f426166` /
+  `309367950d63aa88fc47cc2f3aa551dcb012c473eb9bbb2f4d28b23279bb3de9` /
+  `ff1e7c12f17cb533d32443a0b57e1a1e55600e3072af866c106e934485fff6ce`.
+
+Run contract:
+- Verify ordinary G2 fresh Problem28, stage exact package without install,
+  boot EXP441 full-owner + EXP406, allow exactly one natural bind and collect
+  `Wom1BackendStartResult` before exact cleanup.
+
+Observed result:
+- Stage-only gate passed from fresh Problem28 as exact `oem5.inf`; stage
+  evidence SHA-256 `6a5db1e72125e09d34c874f279855013a2093051b71eb23967e40f4c4fca5d7b`.
+- Full-owner natural bind remained SSH-live with eight CPUs. Durable receipt
+  `Wom1BackendStartResult=6` equals
+  `AppleAgxBackendRuntimeResultFirmwareFailed`; StartStage 8 and PlatformStage
+  12 remain `0xC0000483` by intentional outer mapping.
+- Result / candidate log / contract SHA-256:
+  `9f6b0b14304e0592c052e02a357f368fa91592d0688aab0e9766df544f8a6135` /
+  `1f45dc61294ecd9c8f212534be59cbcb9a16605aef69b11401c91a5ed89beb64` /
+  `0b59379a70d02c12c91f2acd14ad2e3598bb0d6f7fd3445dda928f2e5e065b3c`.
+- Exact package deletion succeeded; the verified stopped stale service key was
+  separately deleted. Normal-G2 restoration is underway.
+
+Verdict:
+- CONFIRMED: only firmware/channel startup remains under investigation. Arena,
+  prepared image, render-context publication and queue create are not changed.
+
+Next experiment:
+- Persist the exact firmware phase/result at `AppleAgxFirmwareStart` failure,
+  then inspect/fix only the named primitive.
+
+### EXP-20260904-443 — exact config-range snapshot read
+
+Status: confirmed — config range and providers pass; BackendRuntimeStart is next boundary; cleanup complete
+Created (UTC): 2026-09-04T17:35:00Z
+Completed (UTC): 2026-09-04T17:35:51Z
+
+WHY THIS HYPOTHESIS:
+1. EXP440 proved broker FIPA; EXP441 proved byte decode never dispatches; EXP442
+   proved aligned 32-bit loads dispatch until sparse power offset `0x14`.
+2. `AppleAgxConfigSnapshotDecodeJ313` ignores the prefix and consumes only the
+   exact payload at offset `0x100`; reading sparse power registers is unnecessary.
+3. Commit `fba189eee40473ad86b763140bc86702fe6c1731` zeroes the local prefix and
+   reads only the exact config range, changing no published ABI or later owner.
+
+Single changed variable:
+- Start offset of the already aligned KMD snapshot MMIO copy. Platform remains
+  EXP441 m1n1 plus unchanged EXP406 Mu.
+
+Run contract:
+- Fresh exact WDK package; clean ordinary baseline; package-free full-owner
+  boot; one live install. PASS requires no broker abort and PlatformStage > 5;
+  capture exact next boundary, cleanup exact package and restore ordinary G2.
+
+Observed result:
+- Exact source archive / build manifest / ZIP / SYS SHA-256:
+  `509fc843877184809f48ce90589c6ac8e33e60192116c8f5a142a716f238138e` /
+  `d0789116a37cc7ac35e53fe10dde09ce5303ea700d16906bde7c4e19689cd0e0` /
+  `4e4b5a84230d66894b1c415a15f2a3d93480ce9f06bb8c3db6161904f903f8f8` /
+  `9b75b263ddb669952f73077b5d7621c90723b1bb182fc69a474d915712fff0a5`.
+- Live install completed normally and Windows SSH remained available with
+  eight CPUs. No broker data abort occurred.
+- Durable receipts: `Wom1StartStage=8`,
+  `Wom1StartStatus=0xC0000483`, `Wom1PlatformStage=12`,
+  `Wom1PlatformStatus=0xC0000483`. Stages 1--11 are hardware-proven:
+  resources, runtime allocation, production memory IO, exact config snapshot,
+  SGX/handoff maps, handoff bind, initdata, firmware provider and queue provider.
+- m1n1 recorded exact successful power lifecycle:
+  sequence 1 ON state 3 result 0; sequence 2 QUERY state 3 result 0; sequence 3
+  OFF state 0 result 0. The first failing operation is
+  `AppleAgxBackendRuntimeStart`, mapped by the KMD to
+  `STATUS_DEVICE_HARDWARE_ERROR (0xC0000483)`.
+- Result / SetupAPI / candidate log / contract SHA-256:
+  `9fca8e0e531cc9fa675ec6340dad7eb5586508270bd884c4d444a6f0bb227b73` /
+  `4c0e690408d66f155aec2c84283e7883e73d56ae75e7d9eb5695833cdb579f98` /
+  `93df68cfa6a1381acff2b7a9fc7ac00d17ad2d115b6ef06cf2bda0f80313ebb8` /
+  `fbb86b921509f15c0f722451cfc8e3eaf73db629e72139287cce1f909b8b881f`.
+- Exact `oem5.inf` cleanup removed package, stopped service, module, SYS, UMD
+  and experiment files; eight CPUs stayed live. Cleanup SHA-256
+  `45b01d8c2e382e5142e7cf292897c7aa9914fcf46c0c856beef86a7eed957069`.
+
+Verdict:
+- CONFIRMED. The broker/config snapshot boundary and complete pre-backend
+  platform-provider construction are hardware-proven. Type1, UMD, scanout and
+  render remain unproven because StartDevice still returns before completion.
+
+Next experiment:
+- Inspect `AppleAgxBackendRuntimeStart` deterministic prerequisites and add the
+  smallest internal result/stage receipt needed to distinguish firmware start,
+  channel/queue create and backend state transition. Do not change scheduler,
+  caps or AGX workload until that exact boundary is identified.
+
+### EXP-20260904-442 — aligned config-snapshot KMD read
+
+Status: rejected as sufficient — fault moved to sparse broker offset 0x14; no package remained
+Created (UTC): 2026-09-04T17:29:00Z
+Completed (UTC): 2026-09-04T17:34:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP440 proved FIPA `0x300000000`; EXP441 proved accepting width 0 in the
+   leaf handler is insufficient because the generic decoder rejects the
+   compiler-generated `ldrsb` before hook dispatch.
+2. The same broker path is already offline/hardware configured for aligned
+   32-bit reads, and every snapshot field/total window is 32-bit aligned.
+3. Commit `88927b6` changes only the Windows snapshot copy to aligned
+   `READ_REGISTER_ULONG` operations; shared decoding and all later owners are
+   unchanged.
+
+Single changed variable:
+- KMD config-snapshot MMIO access width only, exact commit
+  `88927b662294c78c8a7286bf3450c6fb2bddedaf`. Platform uses EXP441 m1n1
+  `c7c068ad334ea11d0accf8f928c27e5c048cdb0ba2c56eb1576809925654a805`
+  and unchanged EXP406 Mu.
+
+Run contract:
+- Build a fresh signed exact package; 69 render plus 27 integrated tests are
+  GREEN after a real RED. From clean ordinary G2, boot package-free EXP441 Mu
+  pair, verify SSH/eight CPUs/Problem28, then one live install.
+- PASS first requires no broker abort and `PlatformStage > 5`; capture exact
+  next stage/status, power receipt, health and events. Then exact cleanup and
+  ordinary-G2 restoration. No retry.
+
+Observed result:
+- Exact build manifest / ZIP / SYS SHA-256:
+  `736d74fce19d4593a762e58e051a4e0601d99b092d62ef1d401d0ccee6bd435f` /
+  `0a92bde3037d9b809755a87dcb79083591ba9e5789b313f50929efe28426a85a` /
+  `77af7d581a80b4cb34aa9c59cc77ce30df534a14225e41ec4a55fdbfa3f318f6`.
+- The instruction became supported `ldr w12,[x12]` with `SAS=2`, proving the
+  width correction. The handler processed the initial broker words, then the
+  same copy loop faulted at FAR low offset `0x14`, a sparse/reserved power ABI
+  word before config snapshot offset `0x100`. No power receipt occurred.
+- Install was interrupted before package publication; GPU-hidden recovery found
+  no package/service/module. Experiment-local staging was removed.
+
+Verdict:
+- REJECTED as sufficient, but it proves the 32-bit access reaches farther into
+  the broker. The remaining defect is KMD over-reading sparse broker prefix;
+  decoder input may zero that prefix and read only exact config range.
+
+Next experiment:
+- Commit `fba189e` zeroes the local prefix and issues MMIO reads only from
+  `APPLE_AGX_CONFIG_MMIO_OFFSET` through the exact wire end. Build/test this
+  single-variable correction with unchanged EXP441 m1n1 and EXP406 Mu.
+
+### EXP-20260904-441 — byte-readable AGX config snapshot
+
+Status: rejected as sufficient — byte handler implemented but generic decoder blocks ldrsb; clean recovery underway
+Created (UTC): 2026-09-04T17:20:00Z
+Completed (UTC): 2026-09-04T17:25:49Z
+
+WHY THIS HYPOTHESIS:
+1. EXP440 hardware-proved the first abort FIPA is exact broker base
+   `0x300000000`, rejecting the RAM-gap hypothesis.
+2. Both existing Windows production consumers read the broker snapshot through
+   `READ_REGISTER_UCHAR`, while m1n1's validated snapshot handler accepts only
+   widths 2 and 3 and returns false for the observed width 0.
+3. The broker hook's false return is exactly what converts a valid published
+   page access into the repeated unhandled stage-2 abort; no power command was
+   reached.
+
+ATOMIC CONTRACT:
+- The read-only byte-addressable config snapshot supports access widths
+  8/16/32/64 with natural alignment and exact bounds. Writes remain rejected.
+  These widths are one indivisible MMIO publication contract, not new GPU
+  capabilities.
+
+Single changed variable:
+- m1n1 `hv_agx_config_snapshot_mmio` read widths only, commit
+  `930d7cf4a54eab89dfe9e7166492edfd3e2f22bc`. KMD source remains exact
+  `e2413b246ac8c26ca530c0a982e63780c28bb4f7`; Mu remains EXP406.
+
+Offline verification:
+- Focused snapshot/power/scanout tests passed after a real width-0 RED failure;
+  the complete m1n1 host suite passed. Writes, unaligned reads and out-of-range
+  accesses remain fail-closed.
+
+Run contract:
+- Build current full-owner m1n1 with only `DCP_IOMFB_FULL_OWNER`, preserve exact
+  artifact/hash/manifest. Build a fresh KMD package identity from unchanged
+  source only after ordinary-G2 clean baseline is reconfirmed.
+- Boot package-free new m1n1 + unchanged EXP406 Mu, require SSH/eight CPUs and
+  fresh Problem28, then one live exact install. PASS first requires no broker
+  data abort and `PlatformStage > 5`; later stage/status is the next boundary.
+  Save evidence, exact cleanup and restore ordinary G2; no same-artifact retry.
+
+Build result:
+- Full-owner m1n1 artifact / manifest SHA-256:
+  `c7c068ad334ea11d0accf8f928c27e5c048cdb0ba2c56eb1576809925654a805` /
+  `8292cb6b8a77750da49104da80d797b5f935a68d760739d4b7d2066e1f9b9473`.
+  Build config contains only `DCP_IOMFB_FULL_OWNER`; build tag is `930d7cf`.
+- Fresh unchanged-source KMD manifest / ZIP / SYS SHA-256:
+  `6f5c6c2a8c6edb0e4c5c20c20c298e65e5f8d0072222be465b5c2076448f4ca9` /
+  `4574c8edad47ff87a0478b4b4183115f3225375bb89fe0627cfa4b77f3e2515c` /
+  `29da397113259f9fb99fa4e2b0025da0019f49b8dc89c729683a686050a0de0a`.
+  Pinned WDK build/package gates passed with the unchanged two analysis warnings.
+
+Observed result:
+- Package-free new-m1n1 boot reached SSH/eight CPUs and exact fresh Problem28;
+  resource baseline SHA-256
+  `63e0f01fe772fa626a2257c5d1bb261c679b52740f7fe79aa40b590bdf511fd3`.
+- Live install again trapped at the same `ldrsb` copy instruction before SSH
+  could return. No AGX power receipt occurred. Candidate log / contract SHA-256:
+  `c7265612bb1c4d483f7fbaa5f2f7e653b0ffde893eede2ff130bdd676dd6a16c` /
+  `1a8f906396dc5acb334b2b8104877b4bc2eee3fd322130e2035835ea9a81515a`.
+- The config-snapshot leaf now accepts width 0, but the generic EL2 data-abort
+  instruction decoder never recognizes the compiler-generated sign-extending
+  byte load and therefore never dispatches the MMIO hook. Extending the generic
+  decoder would be broader than the current config ABI needs.
+- GPU-hidden recovery proved no published package, service, module or durable
+  driver receipt; only experiment-local staging required removal. Eight CPUs,
+  NVMe and USB remained healthy. Evidence SHA-256
+  `b8d37fa961886f22bc58f38492ca10579cbdd6e938f60fcb22fd29cc3baeb9a2`.
+
+Verdict:
+- REJECTED as a sufficient hardware fix. Commit `930d7cf` correctly implements
+  narrow snapshot reads offline but that path remains hardware-unreached. Do
+  not broaden the global instruction decoder at this boundary.
+
+Next experiment:
+- Make the existing Windows snapshot reader issue naturally aligned 32-bit
+  `READ_REGISTER_ULONG` operations into an aligned local word buffer; this is
+  already supported end-to-end by the broker handler and decoder. Keep the
+  byte-oriented shared decoder and all other KMD/m1n1/Mu behavior unchanged.
+
+### EXP-20260904-440 — first stage-2 fault FIPA discriminator
+
+Status: confirmed discriminator — FIPA is AGX broker base; no package remained
+Created (UTC): 2026-09-04T17:13:00Z
+Completed (UTC): 2026-09-04T17:17:10Z
+
+WHY THIS HYPOTHESIS:
+1. EXP437--EXP439 reproduce the same lower-EL translation abort before any
+   DriverEntry receipt across boot-time and live PnP paths, while package-free
+   full-owner Windows remains healthy.
+2. The abort reaches EL2 with `DFSC=XLAT_L3`, so a guest stage-1 mapping refers
+   to an IPA without a valid stage-2 leaf; FAR alone is only a Windows VA and
+   cannot identify the owner hole.
+3. Current source contains deliberate stage-2 holes for m1n1/firmware and TZ
+   carveouts, while Mu owns the guest-visible memory map. One HPFAR-derived FIPA
+   value distinguishes them without changing guest behavior.
+
+Single changed variable:
+- Host-only one-shot exception receipt, m1n1 proxyclient commit
+  `2ea708f5cf95169cbcdf81a68f2e6bfc22e19ddd`; the m1n1 macho remains exact
+  EXP427, Mu remains exact EXP406 and KMD source remains exact commit
+  `e2413b246ac8c26ca530c0a982e63780c28bb4f7`.
+
+Run contract:
+- Build a fresh signed identity from the same source. Boot package-free
+  full-owner Windows with `WOM1_DABORT_FIPA_RECEIPT=1`, verify fresh Problem28,
+  then perform one live exact install to reproduce the established fault.
+- PASS is exactly one `DABORT_FIPA_RECEIPT` with FAR, HPFAR, computed FIPA and
+  translated PA, followed by immediate stop. No driver-stage inference and no
+  retry. GPU-hidden recovery removes the exact package; ordinary G2 is restored.
+
+Build/run result:
+- Fresh package manifest / ZIP / SYS SHA-256:
+  `51a9eab5ad936640f815220d82f21793cfe1b9f55b5d9d881c2fbe250179b55f` /
+  `82af57a1d7f3ec12badd947b8b2e6286d2d3908782c24e6ceeff23c296621545` /
+  `a8412ba8f9b4d3488fc63e6cd41ed5e7dbcdd9f2deeff3a3e74834574698dbd9`.
+- Package-free full-owner guest reached SSH and fresh Problem28. One live
+  install reproduced the established abort; the one-shot receipt was:
+  `far=0xffff998679d08000 hpfar=0x3000000 fipa=0x300000000
+  translated_pa=0x300000000`.
+- `0x300000000` is the exact synthetic AGX power-broker base, rejecting the
+  advertised-RAM-gap hypothesis. Candidate log / contract SHA-256:
+  `c2e342a06d0fd65ca3cb8df96130e0463d2509c6c5bc0b1084218c0797cf3c05` /
+  `dfbdb54fe8e269ce1067d4361920231c476d8c57c8fbb8011b4f02cfc529b6dd`.
+- Source comparison then identified the exact width mismatch:
+  `AdmissionPlatformReadSnapshot` uses byte `READ_REGISTER_UCHAR` accesses,
+  while `hv_agx_config_snapshot_mmio` accepts only 32-bit and 64-bit reads and
+  returns unhandled for width 0. The stage-2 hook therefore exists but rejects
+  the Windows access before any power command.
+- GPU-hidden recovery reached SSH/eight CPUs. No Display package, service,
+  module or receipt remained because this install was interrupted before
+  publication; no `pnputil` delete target existed. One Event41 records the
+  forced recovery reset. Emergency state SHA-256
+  `3912ce134b2944445003997364b6ebc1e020b47457089c7d3cf3dc630747b2b5`.
+
+Verdict:
+- CONFIRMED. The first hardware boundary is config-snapshot MMIO access width,
+  not RAM, NVMe, PnP timing or KMD DriverEntry. The m1n1 broker owns the
+  published byte-addressable snapshot and must emulate bounded read widths used
+  by both existing Windows consumers. No KMD capability or hardware path changes.
+
+Next experiment:
+- Add deterministic host tests for 8/16-bit read-only aligned/bounded snapshot
+  access, implement them in the existing m1n1 snapshot handler, build a new
+  full-owner m1n1 artifact and rerun one fresh candidate package with unchanged
+  Mu and KMD source.
+
+### EXP-20260904-439 — live-bind translated-vector discriminator
+
+Status: confirmed pre-DriverEntry platform-memory fault — exact cleanup complete
+Created (UTC): 2026-09-04T17:00:00Z
+Completed (UTC): 2026-09-04T17:06:43Z
+
+WHY THIS HYPOTHESIS:
+1. EXP437 and EXP438 both staged a package at fresh Problem28 and faulted during
+   boot-time PnP selection with no Start receipt, service or loaded module;
+   different KMD resource implementations produced the same pre-entry result.
+2. EXP436 previously reached StartDevice from a live, recoverable Windows
+   environment, proving the package can be selected when boot-time setup is not
+   the confounder.
+3. A package-free full-owner boot followed by one live exact install changes
+   only PnP installation timing and exposes monotonic receipts immediately.
+
+Single changed variable:
+- Install timing: live `/add-driver ... /install` on an already healthy
+  package-free EXP427/EXP406 guest instead of carrying a staged package across
+  boot. Source remains exact commit
+  `e2413b246ac8c26ca530c0a982e63780c28bb4f7`; no source or platform change.
+
+Run contract:
+- Produce a fresh signed package identity from the same exact source archive
+  with the EXP438 build invocation. Restore/verify package-free ordinary G2,
+  then reboot package-free into unchanged full-owner EXP427/EXP406.
+- Require SSH, eight CPUs, healthy NVMe/USB, zero AppleAgx package/service and
+  normalize only APPL0002 to fresh Problem28 if needed. Transfer and hash-check
+  the candidate, invoke one live install, then capture receipts and health.
+- PASS discriminator is a non-null Start/Platform stage; no retry. Save evidence
+  before exact cleanup. If live install kills SSH, use the retained launcher
+  log and current-compatible GPU-hidden recovery to collect the registry key.
+
+Build/platform preflight:
+- Fresh package was built from source archive SHA-256
+  `e30c327e1a1613df3dffe6eba5e899332fe204dbf7dfea36e7cc8e14cbb73446`.
+  Manifest / ZIP / SYS SHA-256:
+  `425be56f6eb48c45c82cf4dbf7242143c6edb31cc387d0e10ad0633077274d16` /
+  `5ed7625bf1eef3ce8ea1d8a5d68a0c6c5cf7e7ef526b43e0926fdb3d4ae98234` /
+  `3630eb1de3c60d6c0a4bee1407274229da02960d910f316202cc8bf863ca41f7`.
+- Package-free EXP427/EXP406 boot reached SSH with eight CPUs. APPL0002 was
+  fresh Problem28 and exposed exact four memory ranges plus IRQ 889; no Display
+  package or service existed. State / launcher / contract SHA-256:
+  `63e0f01fe772fa626a2257c5d1bb261c679b52740f7fe79aa40b590bdf511fd3` /
+  `19be918a33f82072dd6069f732b7213a5524df21a8b9d46745d21ac6f9119313` /
+  `1a16ae56e1d723fb28909615a84d9edc687efa016b97697f4b8792a04a6d8c30`.
+
+Observed result:
+- The live install preregistration file was durably written, then
+  `/add-driver ... /install` did not return. SSH disappeared and the host
+  recorded the same lower-EL stage-2 translation-abort pattern as EXP437/438,
+  now on CPU7 at `ELR=fffff8039449d5cc`, `ESR=932c0007`,
+  `FAR=ffff96871eb08000`, `DFSC=XLAT_L3`.
+- GPU-hidden recovery proved no Start/Platform receipt, no service and no
+  loaded module. Thus failure remained before DriverEntry even with live bind;
+  install timing is excluded. Emergency state SHA-256
+  `f5949b2ac523855e210ad261adcbb180d6f558baeb65cc2b8cd1513450ec374a`.
+- SetupAPI had completed the package-copy/validation/import sequence for prior
+  attempts and explicitly reported flushing all package files. After the
+  interrupted EXP439 transaction, the sole DriverStore directory and published
+  INF existed with the exact EXP439 DriverVer metadata, but INF, SYS, CAT and
+  UMD contained only zero bytes at their expected lengths. The exact staging
+  INF remained intact. DriverStore / SetupAPI evidence SHA-256:
+  `8351c9785b44c7b68c50ae5acc6dae887c310e99d1f9b34b5643edca28dd958f` /
+  `37be73450c987300aad565ce566f53fb9612c95a8d6d180ac47194f9a6f986ef`.
+- The zeroed files are evidence of the interrupted copy transaction, not proof
+  that NVMe commands wrote zeros: the EL2 abort is a stage-2 translation fault
+  while Windows copies memory. Current source inspection shows m1n1 identity
+  maps only `0x850000000..0xa00000000` plus a tiny pre-heap low region, while
+  Mu declares all `0x800000000..0xa00000000` as system memory and never reserves
+  the unmapped pre-guest gap. This is the owner-level contract violation.
+
+Cleanup:
+- Initial hash-only cleanup correctly refused the all-zero published INF.
+  Cleanup then required the exact intact staging hash, unique oem5 metadata and
+  DriverVer, one DriverStore directory, expected file lengths and all-zero
+  contents before deleting only `oem5.inf`. Final state has no package,
+  service, module, SYS or UMD with eight CPUs. Cleanup SHA-256
+  `4ea2772991ac2f6f34458515e2fe516de1c220b68ad2ce0f6df184d19b93cf3c`.
+- Ordinary-G2 EXP377/EXP392 restoration then reached SSH and fresh Problem28
+  with no Display package or AppleAgx service. Evidence SHA-256
+  `148dea3f476779a12cb9ff5757a6d1aae1f614b7f5bd68d425a2f7739a07a085`.
+
+Verdict:
+- CONFIRMED BEFORE DRIVERENTRY. PnP timing is not the cause and KMD commit
+  `e2413b2` remains untested. The hardware-proven boundary is a lower-EL
+  stage-2 translation fault during package copying. Source comparison makes
+  Mu's advertised 8-GiB system-memory HOB versus m1n1's intentionally unmapped
+  pre-`phys_base` gap the leading hypothesis; exact fault IPA is not yet proven.
+
+Next experiment:
+- Restore ordinary G2. Add a receipt-only HPFAR/FIPA value to the sole assisted
+  launcher exception path and reproduce with a fresh package once to identify
+  the exact fault IPA. If it lies below pinned guest base `0x850000000`, reserve
+  precisely the inaccessible identity gap in current Mu without changing m1n1
+  ownership, then rerun the package transaction.
+
+### EXP-20260904-438 — translated runtime-vector admission
+
+Status: inconclusive before DriverEntry — boot-time package selection fault; exact cleanup complete
+Created (UTC): 2026-09-04T16:52:00Z
+Completed (UTC): 2026-09-04T16:57:19Z
+
+WHY THIS HYPOTHESIS:
+1. EXP436 proved the old stage-2 rejection while all four memory ranges and raw
+   IRQ 889 were correctly published; the only invalid check was equality
+   between firmware GSI and a translated runtime vector.
+2. EXP437 rejected the generic PDO raw-property workaround with a repeatable
+   pre-SSH EL1 translation abort, and that entire source change is reverted by
+   commit `03a3d6e`.
+3. Microsoft defines translated `u.Interrupt.Vector` as the assigned system
+   vector. Commit `e2413b2` changes only the gate to require one nonzero,
+   exclusive, edge translated interrupt, while generated Mu/m1n1 validation
+   continues to enforce raw synthetic GSI 889.
+
+Single changed variable:
+- Resource validation semantics only: do not compare translated vector value
+  with raw GSI. No PDO property read, capability, resource publication, MMIO,
+  power, provider, queue, scanout or scheduler change.
+
+Source contract:
+- Repository `paulsmir/windows-on-m1`, branch
+  `feature/j313-gpu-acceleration`, exact commit
+  `e2413b246ac8c26ca530c0a982e63780c28bb4f7`; 68 render plus 27 integrated
+  contract tests passed. EXP214 control already proved current FRYZZING and
+  builder-root WDK context green in EXP437.
+- Unchanged hardware platform: EXP427 full-owner m1n1 plus EXP406 Mu.
+  Recovery: EXP377/EXP392 ordinary G2, with immutable GPU-hidden Mu available
+  only if the guest again becomes boot-unreachable.
+
+Run contract:
+- Build exact commit using the EXP436/EXP437-v3 source scope and pinned WDK.
+  Stage from current fresh package-free Problem28 without `/install`, restart,
+  natural bind once on unchanged full-owner platform.
+- PASS discriminator is `PlatformStage > 2`; capture the exact next stage and
+  status even if StartDevice later fails. Any pre-SSH fault is rejection. Save
+  evidence before exact package cleanup and ordinary-G2 restoration.
+
+Build result:
+- Exact source archive SHA-256
+  `e30c327e1a1613df3dffe6eba5e899332fe204dbf7dfea36e7cc8e14cbb73446`.
+  Pinned WDK ARM64 Release, analysis, Universal validation, Inf2Cat and signing
+  passed with the unchanged two analysis warnings.
+- Manifest / log SHA-256:
+  `71e8167cc50aa272e9bb2bc9064361d672470001e1364328a6216cf5c6cc88a8` /
+  `40bfcb1202a21c7e858b06658e72b1c0304e614c280c2b25a4a731e180f42143`.
+- ZIP / SYS / INF / CAT / UMD SHA-256:
+  `ac34d36fef5cce41483ea837a7b1077ecdf9951ca2df4fd8b70e5a8ee3d4fe8e` /
+  `25d41de7c4d8763c5f058d604ca8edbd258d3a11308bf7d9310e9d60a0326594` /
+  `d5406e5bd14fa9972d2d576a7456876e7b28a2c31a07c0b740d4964612eefb67` /
+  `b2f21d94474a523ef27b122fe68fe625158b171f2d591d1a05c833cff6526989` /
+  `26a7f5e574def2f47fd21039133eb4754da13442871c42ba80137a5abebba07b`.
+
+Observed result:
+- Staged exact `oem5.inf` from fresh Problem28 without install; no service/bind
+  existed before restart. Baseline System RecordId 8017; stage evidence SHA-256
+  `5bbfd7ebc16c1e983ed6c2b724da0f7429a0d87ac5d0b0d826a220fe5f076dfa`.
+- Full-owner boot reached all eight CPU-entry receipts, then repeated one lower
+  EL data abort before SSH at `ELR=fffff80106b4d5cc`,
+  `ESR=932c0007`, `FAR=ffffc787f7508000`, `DFSC=XLAT_L3`. No
+  Windows-time AGX power/backend receipt was logged.
+- After current-compatible GPU-hidden recovery, the retained APPL0002 registry
+  key contained no Start or Platform receipt at all. `AppleAgxAdmission`
+  service and loaded module were absent; only staged `oem5.inf` existed.
+  Therefore the driver did not reach its first durable entry boundary and the
+  resource correction was not exercised.
+- Emergency state SHA-256
+  `5343c335db9435a930899a072f193653af50089d23d4315bff9be5a3b82c6968`;
+  candidate log / contract SHA-256:
+  `6a9a20f25628305afdac51f40b65ceb0f0bc5404d013275c49211a26f51aa6eb` /
+  `1ac51e44cb359804b847816af280362af433e36b2e7e6f2aaee7f830b02b712d`.
+- Exact `oem5.inf` uninstall/delete succeeded. No Display package, service,
+  module, SYS or UMD remains; eight CPUs were live. Cleanup SHA-256
+  `f3c17a6d2849a7bc5dde5bdc2b2e12e5d6484c2711794463149fc8a7e24d8154`.
+- Ordinary-G2 EXP377/EXP392 restoration reached SSH and fresh APPL0002
+  Problem28 with no Display package or AppleAgx service. Evidence SHA-256
+  `148dea3f476779a12cb9ff5757a6d1aae1f614b7f5bd68d425a2f7739a07a085`.
+
+Verdict:
+- INCONCLUSIVE BEFORE DRIVERENTRY. Do not accept or reject commit `e2413b2`
+  from this run. EXP437 and EXP438 used different KMD resource code but shared
+  the same boot-time stage-only package selection and produced the same class
+  of pre-entry fault with no installed service.
+
+Next experiment:
+- Build a fresh signed identity from the same source. Boot full-owner
+  EXP427/EXP406 package-free first, prove SSH/eight CPUs and normalize APPL0002
+  to fresh Problem28, then perform one live exact `/add-driver ... /install`.
+  This changes only PnP installation timing and makes receipts collectable
+  without carrying a boot-bound package across startup.
+
+### EXP-20260904-437 — raw-GSI / translated-vector platform admission
+
+Status: rejected — PDO raw-property read caused repeatable pre-SSH EL1 data abort; exact cleanup complete
+Created (UTC): 2026-09-04T16:36:00Z
+Completed (UTC): 2026-09-04T16:48:10Z
+
+WHY THIS HYPOTHESIS:
+1. EXP436 hardware-proved `PlatformStage=2`, status `0xC0000182`, while
+   `pnputil /resources` showed all four expected memory ranges and raw IRQ 889.
+2. The failing validator compares `TranslatedResourceList` interrupt `Vector`
+   against firmware GSI 889, but Microsoft defines that field as the assigned
+   global system vector; the raw descriptor carries the bus/firmware identity.
+3. The hardware-proven AppleInput path already pairs raw and translated lists,
+   validates the raw firmware vector and retains the translated runtime value.
+
+Single changed variable:
+- Commit `f612baf` retrieves the raw PDO boot configuration with the documented
+  bounded `IoGetDeviceProperty` path, pairs descriptor types/counts, validates
+  raw GSI 889 and accepts a nonzero translated runtime vector. No resource,
+  capability, MMIO, power, provider, queue, scanout or scheduler behavior
+  changes.
+
+Source contract:
+- Repository `paulsmir/windows-on-m1`, branch
+  `feature/j313-gpu-acceleration`, exact commit
+  `f612baf`; local RED reproduced the translated-vector bug, then 68 render and
+  27 integrated contract tests passed.
+- Microsoft sources inspected: `DXGK_DEVICE_INFO`,
+  `DxgkCbGetDeviceInformation`, `IoGetDeviceProperty`,
+  `CM_PARTIAL_RESOURCE_DESCRIPTOR`, and raw/translated resource semantics.
+- Mu remains exact EXP406; m1n1 remains exact EXP427. Recovery remains the
+  ordinary-G2 EXP377/EXP392 pair.
+- Builder attempt v1 stopped before compiler invocation because the archive
+  omitted the proven build script's required `src/` prefix. No source verdict
+  or artifact resulted. Attempt v2 then reproduced `ntddk.h` missing because
+  it packaged the repository-local `Directory.Build.props`, which shadowed the
+  EXP214-proven builder-root props while its relative package paths did not
+  exist in the isolated source root. Build log SHA-256
+  `0a5dc19b47d92769bed570b41896f3ecf56487943dc8255374a988eee4c34210`.
+- As required, byte-exact EXP214 archive SHA-256
+  `db0ec20503021c6dc6e8ef766a697da4e945c3ce0323390be41f6ab6b0272e6a`
+  built successfully on current FRYZZING while inheriting builder-root
+  `Directory.Build.props` SHA-256
+  `f2471b7bf38e7c13d64ea6e3f9678397e4240ec89843f5e17486cef16d6ea6c4`.
+  This proves builder packages remain intact and the failure is archive scope.
+- Retry v3 uses the exact EXP436 source scope (only render-admission plus shared
+  modules), retains the required `src/` prefix and intentionally omits the
+  shadowing root props. Source archive SHA-256
+  `cfd783467ae4cccadbdf8337b06e08f210cb35554ed157a424f1801763ac1021`.
+
+Run contract:
+- Build/sign/package exact commit on FRYZZING with pinned WDK 10.0.28000.2526.
+  From the current fresh package-free Problem28 baseline, stage without
+  install, restart, boot unchanged EXP427/EXP406 and allow one natural bind.
+- PASS for this discriminator is `PlatformStage > 2`. A later stage failure is
+  a valid boundary result, not a reason to retry. Capture all receipts, power
+  transport, PnP/package identity, SetupAPI, health and fresh System events;
+  then remove the exact package and restore ordinary G2.
+
+Build result:
+- V3 exact commit build passed ARM64 Release compilation, code analysis,
+  Universal validation, Inf2Cat and test signing with only the unchanged
+  worker-annotation and scheduler-IRQL analysis warnings from EXP435/EXP436.
+- Build manifest / build log SHA-256:
+  `8e15d06307d1bc7c20c832fb8192a52860b729faeda8f885b24f45c0254f36f9` /
+  `0e2cece80121b33e793f73e3079927ebb42f621af40c3613b7ebed0811118b97`.
+- ZIP / SYS / INF / CAT / UMD SHA-256:
+  `96ffcf314e53ddd125b20b6e76332033f39cf6cf89d8474424d759317abf3302` /
+  `c36cd5a86cf030b78c4c55da6600e8bcb11d89e1c0eedb85d864e8faf3a4d476` /
+  `6a68b1af0fb257aa5ddc98d7d3f0770f87e75e4ff2b6b1ce918e73df4fe05909` /
+  `4428a428c403a1e168b991645a0681d6e9981d7ae7ab27e9502cc9aaa41cc618` /
+  `6794683eaa3fc106ec517afb79e4dabae3bfcea64cc323f69d4387850f781f52`.
+
+Observed result:
+- Stage-only gate passed from fresh Problem28 as exact `oem5.inf`, with no
+  service/bind before restart and System baseline RecordId 7818. Stage evidence
+  SHA-256
+  `3cf9efeb5d6248085395db6aaca61e642114a8bd07aa61589a3bbd7bbd1f4b30`.
+- Unchanged EXP427/EXP406 reached guest entry, all eight CPU entry receipts and
+  the normal full-owner preflight, but Windows SSH never appeared.
+- CPU0 repeatedly took the same lower-EL data abort at
+  `ELR=fffff803c689d7dc`, `ESR=932c0007`,
+  `FAR=fffff482d0708000`, `DFSC=XLAT_L3`. The instruction was an `ldrsb` from
+  the unmapped FAR. No Windows-time AGX power/backend receipt occurred.
+- The only KMD change from EXP436 before that established platform failure was
+  the new PDO `IoGetDeviceProperty(DevicePropertyBootConfiguration)` path.
+  Because no durable Windows receipt could be read, do not infer a later
+  platform stage or claim that raw resources were returned.
+- Candidate log SHA-256
+  `88df4452bc6267472cfd9ad0fd159a4dd8276a1fd3e49e78af94a46763fdbf2e`;
+  launch-contract binary SHA-256
+  `e95229c52439f8c9c9a12f41f13347d23113cc71f9e1b6a1079c245a5a51df94`.
+
+Recovery/cleanup:
+- After stopping the sole launcher, the built-in m1n1 reboot path returned a
+  free proxy without physical intervention. Current-compatible immutable
+  GPU-hidden Mu SHA-256
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`
+  plus EXP377 m1n1 booted Windows without APPL0002.
+- Emergency state proved exact `oem5.inf` staged but no AppleAgx service,
+  loaded module or bind; SSH, eight CPUs, NVMe and USB were healthy and no new
+  41/129/1001 event appeared after RecordId 7818. Evidence SHA-256
+  `6c575f54274a7ffcb39d8effd3423888ae7d177182258d4e7382f8868a5bed2f`.
+- `pnputil /delete-driver oem5.inf /uninstall` removed the hash-verified exact
+  package. Final emergency cleanup proves no Display package, service, module,
+  SYS or UMD; SHA-256
+  `a49c9f7d7973c568d33472f6fbeebc23299ae9c3d30c9fe2e95caf4bd29fcee1`.
+
+Verdict:
+- REJECTED. Calling the generic PDO boot-configuration property path inside
+  this dxgkrnl StartDevice context is not a safe way to recover raw `_CRS` on
+  the current Windows/m1n1 contract. Revert commit `f612baf`; do not retry.
+
+Next experiment:
+- Restore ordinary G2 first. Keep the established translated resource list and
+  correct only its semantic gate: memory ranges must remain exact, while the
+  translated IRQ is validated as the single nonzero exclusive edge runtime
+  vector. Raw GSI 889 remains enforced by the generated Mu/m1n1 contract and
+  pre-run AML validation, not by a second PDO property query in the KMD.
+
+### EXP-20260904-436 — PlatformRuntimeStart substage hardware discriminator
+
+Status: confirmed discriminator — translated IRQ identity rejected at resource gate; exact cleanup complete
+Created (UTC): 2026-09-04T16:27:00Z
+Completed (UTC): 2026-09-04T16:30:12Z
+
+WHY THIS HYPOTHESIS:
+1. EXP434 hardware-proved StartDevice stages 1--7 and stage-8
+   `STATUS_DEVICE_CONFIGURATION_ERROR` before power.
+2. Only resource validation, firmware-provider init and queue-provider init in
+   the pre-power platform path return that exact status; current evidence cannot
+   distinguish them.
+3. Commit `46ed83e` adds only durable substage/status receipts around unchanged
+   operations, so one run will identify the first failing owner boundary.
+
+Single changed variable:
+- Platform receipt instrumentation only. Source commit
+  `46ed83ecad39fc81621fb0183cd89aff8b187d8d`; archive SHA-256
+  `5b68739e0e9c203fb0408fe677a13febfa622650e4c7e90d0fa6c78c40ee3a13`.
+
+Run contract:
+- Normalize package-free ordinary-G2 APPL0002 to fresh Problem28 once, stage a
+  new exact signed package without install, restart and use unchanged
+  EXP427/EXP406 platform. Natural bind once.
+- PASS discriminator is non-null `Wom1PlatformStage/Status`; capture StartStage
+  too, then exact cleanup and ordinary-G2 restore. No runtime fix or retry.
+
+Source/artifact contract:
+- Repository `paulsmir/windows-on-m1`, branch
+  `feature/j313-gpu-acceleration`, exact commit
+  `46ed83ecad39fc81621fb0183cd89aff8b187d8d`; clean source archive SHA-256
+  `5b68739e0e9c203fb0408fe677a13febfa622650e4c7e90d0fa6c78c40ee3a13`.
+- FRYZZING build manifest SHA-256
+  `7b2ca9341bc96d0c2c4267f5b1cd0d42af68bbf5ef62b9f21ae6176ec5fd1ade`;
+  package ZIP SHA-256
+  `e692c454ec3824a083d4e1843ae81da8f6a81e14f486a7cbfa1d98dbb60e8a9b`;
+  production SYS SHA-256
+  `03ba690117df0fcc42a814055f457e220a11f1796988083ee03eaf944d6fb7db`.
+- Staged exact package as `oem5.inf` from a fresh package-free Problem28
+  devnode. Launch used EXP427 full-owner m1n1 SHA-256
+  `ce34d1b901fbbe21e39266593f8b499548160003525b5696b596501245071423`
+  and EXP406 Mu SHA-256
+  `c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+- Recovery is the ordinary-G2 EXP377 m1n1 / EXP392 Mu pair; exact
+  `oem5.inf` removal precedes recovery launch.
+
+Observed result:
+- Full-owner boot reached Windows SSH with eight logical processors. m1n1
+  logged ABI v2, initial A408 plus exact D589 and only synthetic scanout
+  interrupt publication. No Windows-time AGX power/backend receipt occurred.
+- Natural bind selected `oem5.inf`; APPL0002 ended Code43 and the exact
+  service/module was stopped. Durable receipts were
+  `Wom1StartStage=8`, `Wom1StartStatus=0xC0000182`,
+  `Wom1PlatformStage=2`, `Wom1PlatformStatus=0xC0000182`.
+- Therefore StartDevice groups 1--7 passed and
+  `AdmissionPlatformValidateResources` was the first failing operation,
+  before runtime allocation, MMIO mapping, provider initialization or power.
+- `pnputil /resources` independently reported the four exact published memory
+  ranges and raw IRQ 889. This makes the remaining mismatch the code's use of
+  the translated interrupt `Vector` as if it were the raw ACPI GSI; the same
+  driver already uses the translated vector only for runtime delivery.
+- Standard NVMe, USB and all eight CPUs remained present. One new synthetic
+  NVMe Event129 occurred at RecordId 7644; no bugcheck was observed.
+
+Evidence:
+- Result JSON SHA-256
+  `4dff83133d300a5f25a82469e96984165a45ebbff1670b0abd70b85bf9b5e883`.
+- SetupAPI log SHA-256
+  `709ba265997f085d3e2db7a92b2d5fc903a5489617a5ba7580c89fb9d3eb1d5e`.
+- Candidate launch log SHA-256
+  `57154dacc2664261128323271c8b9408912842ca73a51caeb3797223ccfccaec`;
+  launch-contract binary SHA-256
+  `19298e0ec8b800fd79e9c8fcc66a0ab539e6eb4a3aaa15062bcedae7b3564873`.
+- Resource inventory:
+  `.local/experiments/EXP-20260904-436-platform-substage-hardware/pnputil-resources.txt`.
+- Exact `oem5.inf` uninstall/delete succeeded. The package, binding, SYS and UMD
+  were absent; the verified disabled service path was deleted separately.
+  Cleanup JSON SHA-256
+  `9df542dbdf487e2634ab407f079c31a9809f691023434518379a74e7e3167d5c`;
+  service deletion evidence SHA-256
+  `074957c64c87f90109149cb88cc8eef6b3a9ae8bf9336eec596536889c741260`.
+- Ordinary-G2 EXP377/EXP392 restoration reached SSH with eight CPUs, healthy
+  standard NVMe/USB and no Display package, AppleAgx service, loaded module,
+  SYS or UMD. Post-clean JSON SHA-256
+  `2656988f835a126fbca704dfbbb6b535296f1f9ce882d1f4424a0aeae340399a`.
+  Removing and rescanning only the package-free devnode normalized it from the
+  stale unbound Problem0 cache state to fresh Problem28; evidence SHA-256
+  `1eb3a441a1c5d7a9a90629110e0a45098d200854325190ef7ad9ce580a08aebf`.
+
+Verdict:
+- CONFIRMED. The first unknown platform boundary is no longer resource
+  publication: it is an incorrect translated-vs-raw interrupt identity check
+  inside the KMD validator. Type1, UMD, scanout and render remain unexercised.
+
+Next experiment:
+- After exact cleanup and ordinary-G2 restoration, correct only this owner
+  contract by pairing raw and translated resource lists: validate raw GSI 889,
+  validate matching descriptor types/counts, and retain the translated vector
+  for runtime. Rebuild and run one natural-bind discriminator.
+
+### EXP-20260904-435 — durable PlatformRuntimeStart substage receipt
+
+Status: planned — offline instrumentation build only
+Created (UTC): 2026-09-04T16:24:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP434 proves Start stages 1--7 and isolates stage 8 failure with
+   `STATUS_DEVICE_CONFIGURATION_ERROR` before any AGX power receipt.
+2. That status can originate from resource validation, firmware-provider init
+   or queue-provider init; offline source alone cannot distinguish them.
+3. Two dedicated DWORDs after each existing platform-start operation are the
+   smallest experiment and do not change any owner or hardware action.
+
+Single changed variable:
+- Add `Wom1PlatformStage/Status` receipts for resources, allocation, borrowed
+  memory IO, config snapshot, SGX/handoff maps, handoff bind, initdata,
+  firmware provider, queue provider, backend start and work item. Stop/reset do
+  not overwrite them.
+
+Source/build:
+- HEAD `e445c833c96c9436b74ed18c9a6a0333d576b924`; source archive SHA-256
+  `8e73a29cc984dd428df96586630d88974bd50e964d2a755799fe4eee536b4fb1`.
+- New RED/GREEN platform-stage test plus 116 relevant tests. Exact
+  `build-exp435.ps1` on FRYZZING, production ARM64 only. No hardware staging
+  until instrumentation is committed and rebuilt.
+
+### EXP-20260904-434 — StartDevice receipt from fresh Problem28
+
+Status: confirmed discriminator — PlatformRuntimeStart failed 0xC0000182; exact cleanup complete
+Created (UTC): 2026-09-04T16:19:00Z
+Completed (UTC): 2026-09-04T16:22:26Z
+
+WHY THIS HYPOTHESIS:
+1. EXP432 did not execute DriverEntry because APPL0002 entered the run as stale
+   unbound Problem0; the instrumentation itself was never tested on hardware.
+2. EXP433 changed only PnP environment and now proves a fresh package-free
+   Problem28 APPL0002, the same baseline from which prior packages naturally
+   bound.
+3. Source commit/archive, m1n1, Mu and all runtime behavior remain unchanged;
+   a newly signed package identity avoids reusing terminal EXP432 state.
+
+Single changed variable:
+- Initial APPL0002 state is fresh Problem28 instead of Problem0. Source remains
+  exact commit `e445c833c96c9436b74ed18c9a6a0333d576b924` and archive SHA-256
+  `63ab21da6e77ce92de18df26bdbaadf658bc0193b3b078442343cf99db8a5530`.
+
+Run contract:
+- Build a new timestamped/signed production package on FRYZZING, stage without
+  `/install`, controlled restart, boot exact EXP427/EXP406 and permit natural
+  bind once. No explicit PnP trigger.
+- Capture `Wom1StartStage/Status`, package identity, PnP, SetupAPI, health and
+  events. A non-null stage is the discriminator; no broader success inference.
+- Delete exact package/service/files after evidence and restore ordinary G2.
+  No same-package retry.
+
+Observed result:
+- New package manifest / ZIP / SYS SHA-256:
+  `981c020d8dfa249e720985373715abaa71bc002c9073395660149f7207da8283` /
+  `3daa9fcc851614fbbd0ebec264cad822d437414e0b549846ab7ddf9640ff5048` /
+  `5435069146248c130bdc5335ee5eb4214c3c3084d448bec9d66ae9b7edd7c4d1`.
+- Fresh Problem28 allowed one natural bind. Durable result is StartStage 8,
+  StartStatus `0xC0000182` (`STATUS_DEVICE_CONFIGURATION_ERROR`). Stages 1--7
+  prove device info, interrupt mapping, 64-MiB production memory, backend image,
+  scheduler and paging completed. Stage 8 identifies
+  `AdmissionPlatformRuntimeStart` as the first failing group.
+- Host log has no Windows-time AGX power receipt, consistent with failure before
+  the backend's power command. Type1, UMD, POST and scanout are outside verdict.
+- One stornvme Event129 RecordId 7443 occurred during the synthetic boot.
+- Result / SetupAPI SHA-256:
+  `8df7be5eeedf649ee67025165250e1a5185d8abafb907827b67b590a0cbce834` /
+  `0e9a7f6f168b1e18390b69dd9a2484863c8118cd8bc18638286a24cb0404b14c`.
+- `pnputil` removed exact `oem5.inf`, SYS and UMD. It left only the exact
+  disabled/stopped AppleAgxAdmission service; after verifying its path/state,
+  `sc delete AppleAgxAdmission` removed it. Final cleanup proves zero package,
+  service, bind, SYS and UMD with SSH/eight CPUs/health live. Final cleanup
+  SHA-256:
+  `81421edf9313007d00b885354223ff874587f0dceecb06373002c8e89b4a799e`.
+
+Verdict:
+- CONFIRMED discriminator, candidate rejected. The first unknown is now the
+  exact substage inside `AdmissionPlatformRuntimeStart`; no runtime fix is
+  justified until receipt-only substage evidence identifies it.
+
+### EXP-20260904-433 — package-free APPL0002 Problem28 normalization
+
+Status: confirmed — fresh Problem28 baseline restored; no GPU package
+Created (UTC): 2026-09-04T16:16:30Z
+Completed (UTC): 2026-09-04T16:18:30Z
+
+WHY THIS HYPOTHESIS:
+1. EXP432 proved the exact package was merely Best Ranked and no DriverEntry or
+   receipt ran because the unbound devnode entered the boot as Problem0 rather
+   than a device requesting installation.
+2. Exact package cleanup is complete, so removing only `ACPI\APPL0002\0` cannot
+   unbind or unload a driver and will force ACPI to create a fresh device on
+   the next ordinary-G2 boot.
+3. Previous clean recovery controls showed fresh enumeration as Problem28,
+   which is the required natural-bind staging baseline.
+
+Single changed variable:
+- Remove only the exact unbound APPL0002 devnode with no package/service/files,
+  restart to Running proxy and boot the frozen ordinary EXP377/EXP392 pair.
+
+PASS:
+- One present `ACPI\APPL0002\0`, Problem28, null INF/service; zero project
+  package/service/SYS/UMD; SSH, eight CPUs and health services live. No package
+  install, AGX power or full-owner m1n1.
+
+Recovery:
+- The same ordinary G2 pair; emergency non-AGX Mu remains available. If fresh
+  enumeration is not Problem28, stop PnP work rather than repeat removal.
+
+Observed result:
+- Exact unbound APPL0002 removal succeeded. Controlled restart returned to
+  Running proxy automatically; the frozen EXP377/EXP392 ordinary G2 pair then
+  reached Windows with SSH and eight CPUs.
+- Fresh `ACPI\APPL0002\0` is present as Unknown/unbound Problem28
+  (`CM_PROB_FAILED_INSTALL`, status `0xC0000490`), with no matching package,
+  service, SYS or UMD. AppleInput/stornvme/USBXHCI/sshd are running.
+
+Verdict:
+- CONFIRMED. The required natural-bind baseline is restored. A new signed
+  package from unchanged commit `e445c83` may now run the previously unexecuted
+  receipt discriminator once; EXP432 package identity remains terminal.
+
+### EXP-20260904-432 — StartDevice group hardware discriminator
+
+Status: inconclusive before DriverEntry — natural bind did not occur; exact cleanup complete
+Created (UTC): 2026-09-04T16:11:43Z
+Completed (UTC): 2026-09-04T16:16:21Z
+
+WHY THIS HYPOTHESIS:
+1. EXP430 retained pre-Start QueryType35 but no post-Start Type1, while
+   Stop/Remove erased the generic Start receipt. The failure is inside
+   StartDevice, not a Type35 capability decision.
+2. EXP430's host log contains no Windows-time AGX power receipt, so the failing
+   group is no later than platform start. Current evidence cannot distinguish
+   interrupt, memory, image, scheduler, paging or early platform validation.
+3. Commit `e445c83` adds only monotonic durable group receipts and changes no
+   hardware or Windows behavior, making one rerun the smallest falsifiable
+   discriminator rather than a repeated hypothesis.
+
+Single changed variable:
+- Receipt-only instrumentation. All production code, 14/14 caps, package INF,
+  m1n1, Mu, memory geometry and recovery procedure are EXP430-equivalent.
+
+Source/artifact:
+- Root commit `e445c833c96c9436b74ed18c9a6a0333d576b924`; exact source archive
+  `.local/experiments/EXP-20260904-432-start-stage-hardware/source.tar.gz`,
+  SHA-256 `63ab21da6e77ce92de18df26bdbaadf658bc0193b3b078442343cf99db8a5530`.
+- Build: exact `build-exp432.ps1` on FRYZZING, pinned-WDK production ARM64,
+  Universal/Inf2Cat/signing and package ZIP.
+- Platform remains EXP427 full-owner m1n1
+  `ce34d1b901fbbe21e39266593f8b499548160003525b5696b596501245071423`
+  plus EXP406 Mu
+  `c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+- Recovery remains exact ordinary G2 EXP377/EXP392 and emergency non-AGX Mu.
+
+Run contract:
+- Current ordinary-G2 baseline is clean, SSH/eight CPUs/health live, package
+  absent and APPL0002 unbound. Stage exact package without `/install`, controlled
+  restart to proxy, boot frozen candidate platform and allow one natural bind.
+- PASS discriminator: durable `Wom1StartStage` and `Wom1StartStatus` identify
+  the last attempted group after Stop/Remove. Stage 12/0 plus Type1 advances;
+  any earlier stage/status narrows the next source boundary. Full graphics
+  success is not required and no subsystem is changed to obtain it.
+- Failure: missing receipt, crash/reset/SSH loss or package/hash drift. Capture
+  evidence first, then delete exact OEM package/service/files and restore
+  ordinary G2. No same-artifact retry.
+
+Build result before staging:
+- Exact commit-pinned package passed compile/link, Universal validation,
+  Inf2Cat and signing with no new diagnostics. Manifest / package ZIP / SYS /
+  INF / CAT / UMD SHA-256:
+  `b215c33587138b830c0cecf77a42171ad8ec8298e5bafbcd5e1ff540e6bc971b` /
+  `f38d75c3ce676fc825825282efcc5757cd745017a4c309ca6aa2b3a7de2971c7` /
+  `bef555be0e442ca0e7508ebd8d764b789b72effa2e4b6932c340a6ac4bac8f2d` /
+  `bb1dde438db8da50cc159888f11a84f5df6c0309e6152616338f6f791d074889` /
+  `3fe7d1842c0a205e1f63e13a6c3f4df490a7ca8a5777332d2bca60d7d8c1122c` /
+  `e2f6e442f2fa8dd45b0c243c863f405860fc13d0a28e155a3351ebca5d5c839b`.
+
+Observed result:
+- Stage-only published exact `oem5.inf` on the ordinary-G2 package-free guest
+  while APPL0002 was unbound Problem0. After restart and exact EXP427/EXP406
+  launch, full-owner ABI-v2/D589 platform and eight CPUs were healthy.
+- Natural selection did not run: APPL0002 remained unbound Problem0 with no
+  class/friendly name, `oem5.inf` was only Best Ranked, and service/SYS/UMD plus
+  `Wom1StartStage`/`Wom1StartStatus` were all absent. No driver code executed.
+- A fresh stornvme Event129 RecordId 7244 occurred during the synthetic
+  platform boot, independently failing the health gate.
+- Result / SetupAPI / cleanup SHA-256:
+  `9d30c2f443715e571f165a4c6b2ef92147150f06e41d5f2f732e86089ddaf282` /
+  `b74becea99bd10bdfefbfa6434e4d8845f4f09f8429be8579fc7b8e4a68b80c7` /
+  `b0151decb6180c63826c77eb49c4cfabf0511abcd7583cf64c81e4faba6611d3`.
+- Exact `oem5.inf` was deleted; no package, service, SYS or UMD remains; SSH,
+  eight CPUs and AppleInput/stornvme/USBXHCI/sshd remain live.
+
+Verdict:
+- INCONCLUSIVE BEFORE DRIVERENTRY. Do not alter the instrumentation or invoke
+  explicit `/install`. Normalize only the stale unbound Problem0 devnode to a
+  freshly enumerated Problem28 state on ordinary G2 before a new natural-bind
+  experiment with the same commit and a newly signed exact package.
+
+### EXP-20260904-431 — durable StartDevice group receipt
+
+Status: planned — offline instrumentation build pending; never stage v1
+Created (UTC): 2026-09-04T16:10:29Z
+
+WHY THIS HYPOTHESIS:
+1. EXP430 ended Code43 with generic Stop/Remove receipt and retained pre-Start
+   QueryType35. Official Microsoft documentation proves Type35 occurs before
+   StartDevice; absence of a later Type1 receipt means Start did not return
+   successfully.
+2. The candidate host log contains no Windows-time AGX power-broker receipt,
+   placing failure no later than production platform startup, but current
+   receipts cannot distinguish interrupt, memory, image, scheduler, paging or
+   early platform failure.
+3. EXP425 separately proves the complete 64-MiB memory Start path, so changing
+   any runtime behavior before identifying the exact group would violate the
+   anti-loop rule.
+
+Single changed variable:
+- Add two crash-durable device DWORDs, `Wom1StartStage` and
+  `Wom1StartStatus`, updated after each existing StartDevice group and never
+  overwritten by Stop/Remove. No branch, owner, timeout, capability, MMIO or
+  cleanup behavior changes.
+
+Stage map:
+- 1 entered; 2 device info; 3 synthetic interrupt mapping; 4 production
+  memory; 5 backend image; 6 scheduler; 7 paging; 8 platform provider; 9 POST;
+  10 scanout; 11 object adapter; 12 complete.
+
+Source/artifact:
+- Root branch / HEAD: feature/j313-gpu-acceleration /
+  `22c7e6382c0f4130a3f25c974037fc8d777e49cb`; dirty source is only the two
+  receipt fields/calls/tests plus preserved unrelated state.
+- Source archive / SHA-256:
+  `.local/experiments/EXP-20260904-431-start-stage-receipt/source.tar.gz` /
+  `0891f39376ce7d8b9ee64f1dd46d2aad82320991158fdfdc301753f5ef5c8595`.
+- Offline gates: the exact source test was RED before instrumentation and GREEN
+  after; 115 relevant tests pass. Build uses exact `build-exp431.ps1` on
+  FRYZZING with pinned WDK ARM64 Release.
+- No hardware action is allowed from this pre-commit package. After WDK GREEN,
+  commit the instrumentation and rebuild once with exact commit identity.
+
+Observed result:
+- Commit `e445c833c96c9436b74ed18c9a6a0333d576b924` contains only the
+  durable group receipt. The new source test had a verified RED; 115 relevant
+  tests passed after implementation.
+- Pinned-WDK production build, Universal validation, Inf2Cat and signing passed
+  with zero new diagnostics and the two unchanged EXP425 KMD analysis warnings.
+  Manifest / SYS SHA-256:
+  `feb35cb51a1c5d625c06d67edadb0d8d34bf52297be78e71cf0089f5ae957d10` /
+  `cb6eb87a4fedd9524a6bd3b0d7bb86d6324009efcc41d25ab6844dec17350e75`.
+
+Verdict:
+- IMPLEMENTED instrumentation; no hardware run and v1 never staged. EXP432 is
+  the exact commit-pinned hardware package.
+
+### EXP-20260904-430 — integrated Full Graphics 14/14 candidate
+
+Status: rejected during StartDevice — first durable stage still unresolved; exact cleanup and ordinary-G2 restore complete
+Created (UTC): 2026-09-04T15:52:41Z
+Completed (UTC): 2026-09-04T16:07:53Z
+
+WHY THIS HYPOTHESIS:
+1. EXP406 proved the exact WDDM3 Full Graphics initialization vector reaches
+   StartDevice and successful Type1/592, then Windows rejects the all-zero
+   functional content with Code43 before Type34/35/VidPn.
+2. Commits through `6c96d53` now implement all fourteen preregistered
+   requirements and atomically publish only their complete capability group;
+   every incomplete mask is still fully zero.
+3. EXP425 hardware-proved the exact 64-MiB physical/HVC/UAT object beneath the
+   56-MiB scanout pool, EXP270 proved retained-owner D589, and EXP427 provides
+   a current commit full-owner build with synthetic 889. The first remaining
+   fact can only be learned from the integrated current Windows bind.
+
+WINDOWS CONTRACT:
+- WDDM 3.0 via the unchanged 1296-byte EXP406 initialization vector; one node,
+  one internal source/target, Type34 40-bit physical visibility and Type35 zero.
+- One immutable 14/14 Type1 vector: MultiEngineAware/PreemptionAware,
+  DMA-buffer-boundary graphics preemption, compute NONE, per-engine TDR, KMCB,
+  VSync-MMIO, DirectFlip, IndependentFlip and NonVGA. No immediate flip,
+  interval>1, smooth rotation, MPO, MapAperture2, runtime power or other bit.
+- One exact 2560x1600x10240 A8R8G8B8 local primary. ARM64 UMD accepts only the
+  same linear displayable resource pair and interval-one flip; KMD queues one
+  nonblocking source-address request and reports only matching D589 VSync/DPC.
+- One exact EXP208 16x16 PATCOPY clear can enter the production provider and
+  advances its Windows fence only after matching TA+3D event/stamp/done proof.
+
+AGX/ASAHI CONTRACT:
+- m1n1 owns DCP IOMFB, DART scanout maps, A407/A408, exact D589 and synthetic
+  edge 889. Mu publishes only four MMIO regions plus 889; physical 880--888 are
+  absent.
+- KMD owns Windows allocations, HVC-derived host pages, context-63 UAT, AGX
+  firmware/context0/provider queues and exact completion. It polls the AGX
+  event ring at PASSIVE and never treats enqueue as completion.
+
+TRANSLATION:
+- Type1 enables only callbacks whose complete implementation is present.
+  Segment-2 address -> exact pool offset -> m1n1 DCP swap -> D589 sequence ->
+  CRTC_VSYNC/DPC. RenderKm/Patch -> bound EXP208 graph -> D3/TA queue -> dual
+  completion -> exact DMA fence/DPC.
+
+WHAT IS STILL UNKNOWN:
+- First discriminator: whether current Windows accepts the complete Type1
+  vector and advances beyond EXP406. If it does, the first missing downstream
+  receipt among Type34/35, device/context/allocation/paging, UMD open/device/
+  resource/present, scanout latch or AGX completion becomes the next boundary.
+- No layer is called hardware-proven merely because the adapter reaches Code0.
+
+ATOMIC CONTRACT:
+- The 14 fields/DDI groups cannot be probed independently: Microsoft requires
+  them as the truthful Full Graphics contract and the portable gate proves any
+  missing bit suppresses all. This is the already approved EXP407 architecture.
+
+Source contract:
+- Root repository / branch / HEAD: public_windows /
+  feature/j313-gpu-acceleration /
+  `22c7e6382c0f4130a3f25c974037fc8d777e49cb`; source archive below is
+  authoritative and excludes preserved unrelated worktree state.
+- m1n1 commit / tracked diff: `1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58` /
+  empty. Exact EXP427 build config is only `DCP_IOMFB_FULL_OWNER`.
+- Mu commit / diff SHA-256: `f1ef718e08db0e4c30fdb5d8555973513ad9a004` /
+  `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+
+Artifact/build contract:
+- Root source archive / SHA-256:
+  `.local/experiments/EXP-20260904-430-integrated-full-graphics/source.tar.gz` /
+  `ed29206dbf9515c05d767ca6b6cb9d271cdb7ea008f688e0173ac36bbfe8d745`.
+- Build command: exact `build-exp430.ps1` on trusted FRYZZING; production and
+  MemoryQualification ARM64 Release, WDK 10.0.28000.2526, Universal validation,
+  Inf2Cat, signing and package ZIP.
+- Candidate m1n1: `.local/experiments/EXP-20260904-427-current-full-owner-m1n1/m1n1.macho`,
+  SHA-256 `ce34d1b901fbbe21e39266593f8b499548160003525b5696b596501245071423`.
+- Candidate Mu: `.local/experiments/EXP-20260904-406-coherent-abi-admission/J313_EFI-exp406.fd`,
+  SHA-256 `c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+- Recovery: ordinary current G2 m1n1/Mu
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`;
+  emergency non-AGX Mu
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
+
+Run contract:
+- Before physical action inspect Windows SSH, `/dev/cu.usbmodem*` and active
+  launcher. If the machine is at Running proxy, first boot the ordinary current
+  G2 pair to establish the package-free GPU-visible baseline.
+- Require APPL0002 unbound, no Display package/service/module/SYS/UMD, eight
+  CPUs, healthy AppleInput/stornvme/USBXHCI/sshd and fresh 41/129/1001 counts.
+- Stage the exact hash-verified EXP430 package without `/install`, confirm no
+  bind, then controlled shutdown. At the next Running proxy launch only the
+  EXP427 m1n1 and EXP406 Mu; let natural G2 bind occur once.
+- First PASS checkpoint: a receipt after Type1/592 or Code0/GPU LUID. Continue
+  collecting later callbacks only if the system remains healthy. Full PASS
+  additionally requires exact UMD resource/check/present, at least two ordered
+  D589/VSync flips, one then ten ordered AGX completions, stop/POST restoration,
+  SSH/eight CPUs/health and no 41/129/1001/TDR/reset.
+- FAIL: first honest callback/status, Code31/37/43, timeout, package/hash drift,
+  physical 880--888, Event129, bugcheck, reset or health loss. No same-artifact
+  retry. Evidence is captured before exact `pnputil /delete-driver <oem>.inf
+  /uninstall` cleanup on a current-compatible guest.
+- Evidence directory:
+  `.local/experiments/EXP-20260904-430-integrated-full-graphics/evidence/`.
+
+Preflight progress before ordinary-G2 baseline launch:
+- Exact commit-pinned EXP430 build passed: 114 integrated source tests, both
+  WDK profiles, UMD 0 warnings/errors, Universal validation, Inf2Cat and
+  signing. Manifest verified every embedded hash. Manifest / package ZIP /
+  production SYS / INF / CAT / UMD SHA-256:
+  `25e127d23050357262819370a548fce6388b6e5ce91bb7c524ef2bfc37c3a898` /
+  `daaa55d50223d71aed26f2b7f954d28cad747507fdc5570df5eae3e7d938d10d` /
+  `5308ef366082c66a08429c254714f6b2dc78646272bbcc98ab3d91ddd857110e` /
+  `2b64320e0dc21cf09bdca18c410aecafb3bcf9880fbb8109bfa11c8d9834f402` /
+  `fb4892ae031fe44fcbd646158b3251c291ea43d297fdaa4d6df81c5905b1556b` /
+  `bb7582ec12ad598badcd5e77dba743fc839d9e0827d1679fef47228f64c866e3`.
+- Windows SSH timed out after eight seconds. Both expected proxy/vUART USB
+  endpoints are present and no process owns them, so J313 is at Running proxy.
+- Ordinary baseline launch command is exact EXP377 chainload followed by
+  `PYTHONUNBUFFERED=1 M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41
+  ./proxyenv/bin/python run_uefi.py <EXP392-J313_EFI.fd> --display-mode
+  physical --debug-mode off --low-mem --contract-output
+  <normal-g2-contract.bin>`, with the foreground output tee'd to
+  `<normal-g2-runner.log>`. No AGX power-broker override and no package install.
+
+Ordinary-G2 baseline and stage result:
+- Exact ordinary pair reached SSH with eight CPUs. APPL0002 was clean/unbound;
+  no render-admission package/service/module/SYS/UMD existed; AppleInput,
+  stornvme, USBXHCI and sshd were running and the preceding 30-minute
+  41/129/1001 query was empty.
+- Hash-verified stage-only added exact `oem5.inf` without `/install`. After
+  three seconds APPL0002 remained Problem28 with null INF/service, no module
+  existed, eight CPUs and all four services remained healthy. Stage evidence
+  SHA-256 is
+  `f85d26a281f37c970463bcd6e702ecec45d3029285ae377bd122aad093361867`.
+- Next authorized action: controlled Windows shutdown, verify SSH/launcher/USB
+  state, then launch the frozen EXP427/EXP406 candidate only when Running proxy
+  is present. Natural bind only; no explicit install trigger before evidence.
+
+Controlled-shutdown state:
+- Windows accepted `shutdown /s /t 0`; the ordinary launcher observed PSCI
+  SYSTEM_OFF/reset and then exited on the expected USB disconnect.
+- Bounded post-shutdown checks find Windows SSH unreachable, no active launcher
+  and no `/dev/cu.usbmodem*` endpoints. J313 is physically off, not at Running
+  proxy. Exact `oem5.inf` remains staged but was never bound or loaded.
+- Operator action required: power on only until stage-1 reports Running proxy.
+  Then launch the already frozen EXP427 m1n1 / EXP406 Mu pair without changing
+  artifacts, package state or install trigger.
+
+Candidate launch preflight:
+- Operator reported Running proxy. Independent bounded check confirms Windows
+  SSH unreachable, both expected proxy/vUART USB endpoints present, and no
+  process owns either endpoint.
+- Recomputed m1n1 / Mu / package ZIP SHA-256 exactly match the preregistered
+  values. The launch is therefore authorized with no artifact or state change.
+
+Observed hardware result before cleanup:
+- Exact full-owner m1n1 booted and reported `AGX scanout ABI v2 enabled with
+  proven IOMFB latch source`; the initial guest surface produced A408 APPLIED
+  and exact D589. The broker/gpu-region mapped, all eight CPUs entered Windows,
+  and SSH plus AppleInput/stornvme/USBXHCI/sshd remained live.
+- Natural PnP selection bound exact `oem5.inf` once. DriverEntry and
+  DxgkInitialize statuses are success. APPL0002 ended at Problem43
+  (`CM_PROB_FAILED_POST_START`), service stopped, with exact SYS/UMD hashes.
+- The last durable device values are receipt 8 (Remove), status 0, query type
+  35, size 4. Therefore the complete Type1 vector advanced past EXP406 and
+  Windows also called Type34 then Type35 successfully before Stop/Remove. This
+  is not evidence that UMD, Windows primary, scanout ISR or AGX submission ran.
+- One fresh stornvme Event129 occurred at 17:57:59, RecordId 7035: reset issued
+  to `\Device\RaidPort0`. This violates the run health gate and makes the
+  integrated candidate rejected even though it advanced the graphics boundary.
+- Result / SetupAPI / Event7035 SHA-256:
+  `1f7b0e56a94b6b1726ab83af6c2c7807dc9fdf7c86ce3d1baeab53bcc9eaf810` /
+  `b39168945b3a3ba492b448020b5c42d559488c96b25955777151cbac31fd7044` /
+  `7ce05caae41fdbaf954c9f0b77c307ba064b8435559a4297da3bc3cec301d413`.
+- Evidence is complete for this run. Next action is guarded deletion of only
+  exact `oem5.inf`, AppleAgxAdmission, matching SYS/UMD and experiment staging
+  on the still-responsive synthetic guest; no retry or additional GPU action.
+
+Interpretation correction after primary-source review:
+- The preceding statement that query type 35 proved advancement past Type1 is
+  superseded. Microsoft and the pinned WDK specify that
+  `DXGKQAITYPE_IOMMU_CAPS` (35) is queried after AddDevice and before
+  StartDevice. `AdmissionRecordDevice` overwrites only receipt/status and does
+  not clear the old query fields; Stop/Remove therefore left the pre-Start
+  type-35 value behind.
+- If post-Start Type1 had run, it would have overwritten `Wom1CleanQueryType`
+  with 1. Its absence, together with no Windows-time AGX power-broker receipt,
+  proves EXP430 failed somewhere inside StartDevice before successful return
+  and before Type1. Type34/35 zero/40-bit responses remain coherent pre-Start
+  evidence, not the rejection boundary.
+- The current receipt design loses the failing Start substage when Stop/Remove
+  overwrites the generic slot. The next experiment must change only durable
+  per-stage receipt instrumentation around the existing production Start
+  sequence. It must not change IOMMU caps, memory, AGX, scanout, Type1 or the
+  package retention behavior.
+
+Cleanup and restoration result:
+- Guarded `pnputil /delete-driver oem5.inf /uninstall` removed the exact
+  package. No matching INF, service, SYS or UMD remained; APPL0002 was unbound
+  Problem0; SSH, eight CPUs and all four health services remained live.
+  Cleanup SHA-256:
+  `24b56ffccc0781d80fa31dcb22493102bf3dca40ad60ab5c69e01b721a3c2be4`.
+- Controlled restart returned automatically to Running proxy, then exact
+  EXP377/EXP392 ordinary G2 reached Windows. Final baseline has no package,
+  service, SYS, UMD or bind, APPL0002 Problem0, eight CPUs and healthy
+  AppleInput/stornvme/USBXHCI/sshd. No additional 41/129/1001 occurred after
+  Event7035. Baseline SHA-256:
+  `7dbc7665388883104b8356fadccfd95b23e53cc9bbb37d27405e59db4753e83d`.
+
+Verdict:
+- REJECTED DURING STARTDEVICE. Full-owner m1n1/ABI-v2/D589 platform startup is
+  confirmed, but Windows KMD memory/platform/scanout and Type1 remain unproven
+  in this run. The fresh Event129 independently rejects system health. No
+  same-artifact retry is permitted.
+
+### EXP-20260904-429 — atomic 14/14 Type1 publication
+
+Status: implemented — offline build complete; package never staged
+Created (UTC): 2026-09-04T15:49:38Z
+Completed (UTC): 2026-09-04T15:51:22Z
+
+WHY THIS HYPOTHESIS:
+1. Commits through `7cf5495` now provide a production implementation for all
+   fourteen preregistered Full Graphics prerequisites; the last runtime query
+   still deliberately rejects an all-ready evaluator result.
+2. The portable evaluator already proves every single missing prerequisite
+   suppresses the entire caps mask; therefore the smallest safe publication is
+   one all-or-nothing writer, not per-bit probes.
+3. The approved EXP407 design specifies the exact cap group and explicitly
+   excludes immediate flip, smooth rotation, MPO, MapAperture2 and every other
+   optional capability.
+
+WINDOWS CONTRACT:
+- StartDevice writes `APPLE_AGX_WDDM_REQUIRED_READY_MASK` only after memory,
+  backend image, scheduler, paging, platform provider, POST, ABI-v2 scanout and
+  adapter-object initialization have all succeeded.
+- Type1 remains a zeroed successful response for every incomplete mask. For
+  exactly 14/14 it publishes one node, MultiEngineAware, PreemptionAware,
+  graphics DMA-buffer-boundary preemption, compute NONE, one queued VSync flip,
+  VSync-MMIO, DirectFlip, IndependentFlip, per-engine TDR, KMCB and NonVGA.
+- WDDMVersion remains reserved/zero; Type34 stays 40-bit; Type35/IOMMU and all
+  unrelated/unsupported capability fields stay zero.
+
+AGX/ASAHI CONTRACT:
+- No behavior change. This writer describes already implemented paths and does
+  not touch MMIO, firmware, queues, DCP, UAT or interrupts.
+
+TRANSLATION:
+- The portable 14-bit readiness result is the sole gate to exact pinned-WDK
+  `DXGK_DRIVERCAPS` fields. Stop restores the initial identity/device mask.
+
+WHAT IS STILL UNKNOWN:
+- Whether the complete Type1 vector advances current Windows beyond EXP406's
+  post-query Code43 boundary. That is hardware-only and is not tested by this
+  offline build.
+
+ATOMIC CONTRACT:
+- All listed fields move together only for exactly 14/14, because Microsoft
+  requires their operational companion DDIs and the approved design forbids a
+  partially advertised mandatory group.
+
+Source/artifact:
+- Root branch / HEAD: feature/j313-gpu-acceleration /
+  `7cf54953ff67d086a7e6d0f43fe111bc6b8762cd`; exact dirty source is only the
+  Type1 lifecycle/test batch plus preserved unrelated worktree state.
+- Source archive / SHA-256:
+  `.local/experiments/EXP-20260904-429-atomic-type1-ready/source.tar.gz` /
+  `b688fb2fe97bce4499e4a629bf826593dc5c0460f1c18216683f8f8b145f712f`.
+- Build: exact `build-exp429.ps1` on FRYZZING, production and
+  MemoryQualification pinned-WDK ARM64 Release.
+- PASS: 76 relevant tests, both build/package profiles and UMD remain green;
+  no new analysis diagnostic; exact manifest/hashes returned.
+- FAIL: any compile/package error, UMD drift, partial-cap test or new warning.
+- No install/launch command. Hardware candidate preparation starts only after
+  this batch is committed and exact platform/package manifests are frozen.
+
+Observed result:
+- Commit `6c96d5343ff65b5faa56e9fb762b99992f48f40d` publishes the immutable
+  14/14 mask at the end of StartDevice and the exact all-or-nothing Type1
+  writer. The three new writer tests had a verified RED before implementation.
+- Sixty-five render tests plus eleven additional scanout/memory/scheduler tests
+  passed. Both pinned-WDK ARM64 profiles compiled, linked, passed Universal
+  validation and Inf2Cat and were signed. UMD stayed warning-free; KMD analysis
+  reproduced only the two EXP425 baseline warnings.
+- Manifest / production SYS / qualification SYS / UMD SHA-256:
+  `6b606da54bc650271acbb46050dee34e8b010de480592ac71339b947170160bc` /
+  `c154cda2e9c00c796cd9c2707f64badc84272eda868a0cbbab8fec1c7366ac39` /
+  `bb3223998bf45a364dd45fbc34098ab1ba90d52b61e9c8e5387900b397b6005e` /
+  `27cdeaeab3834957a3a00020c504e9f06f5d2e2fd136f440fbec8864379238ba`.
+- INF / CAT SHA-256:
+  `601ede76c07763aeb65c99623673899316f2209067b78067896ec516bb8e2ac4` /
+  `104de439e2804962946334d3aa6950d7c7b324e2b3e01a5e2c75553b970947ed`.
+
+Verdict:
+- IMPLEMENTED, HW_PROVEN=NO. Functional readiness is 14/14 and the production
+  Type1 writer is no longer fail-closed for a completed StartDevice. This
+  package was never staged because its manifest names the pre-commit HEAD; one
+  final commit-pinned rebuild is required for the integrated hardware candidate.
+
+### EXP-20260904-428 — narrow UMD DirectFlip runtime path
+
+Status: implemented — offline build complete; package never staged
+Created (UTC): 2026-09-04T15:43:41Z
+Completed (UTC): 2026-09-04T15:47:08Z
+
+WHY THIS HYPOTHESIS:
+1. Commit `230a99a` implements the exact KMD primary/present/source-address/
+   D589/VSync side, leaving UMD resource compatibility as the first unknown.
+2. Microsoft defines DirectFlip as a Full Graphics mandatory KMD+UMD contract;
+   DWM calls the D3D11.1 UMD `CheckDirectFlipSupport` for the current and
+   candidate managed primaries before attempting the flip.
+3. The existing UMD exports `OpenAdapter10_2` but returns `E_NOTIMPL`, so no
+   resource identity or present can reach the exact KMD path.
+
+WINDOWS CONTRACT:
+- `OpenAdapter10_2` supplies a WDDM 1.3 D3D11 adapter/device surface with zero
+  threading and zero 3D-pipeline caps. No shader, draw or feature-level support
+  is advertised.
+- The only admitted resource is one linear displayable 2560x1600
+  `DXGI_FORMAT_B8G8R8A8_UNORM` texture. It reuses the exact KMD
+  `ADMISSION_ALLOCATION_DESCRIPTION`, allocates one local primary and preserves
+  its allocation handle across open/identity rotation.
+- DirectFlip support is true only for two exact matching resources and flags
+  zero. `D3D11_1DDI_CHECK_DIRECT_FLIP_IMMEDIATE` is rejected because the KMD
+  implements only next-VSync latch.
+- DXGI Present/Present1 accept only a full flip at interval one with no
+  destination and call the runtime `pfnPresentCb` on the one KMD context.
+
+AGX/ASAHI CONTRACT:
+- None. UMD never accesses AGX/DCP/MMIO and adds no hardware capability.
+
+TRANSLATION:
+- D3D11 resource identity -> existing allocation description -> one KMD local
+  allocation; DXGI present -> runtime Present callback -> exact KMD Present and
+  SetVidPnSourceAddress path. Compatibility uses one portable predicate shared
+  by create/open/check/present validation.
+
+WHAT IS STILL UNKNOWN:
+- Whether these exact named WDDM1.3 UMD table members and callback structures
+  compile in pinned WDK, and whether zero 3D-pipeline caps still permit Windows
+  to instantiate the narrow present device. Only the first is tested by v1;
+  no readiness/hardware claim follows this build alone.
+
+Single changed variable:
+- Replace the load-only E_NOTIMPL UMD with the narrow adapter/device/resource/
+  DirectFlip/DXGI-present lifetime. KMD, Type1 and all hardware paths unchanged.
+
+Source/artifact:
+- Root branch / HEAD: feature/j313-gpu-acceleration /
+  `d40db123feb84e23676ae05cf75ec97b3b5c0c70`; dirty only for this UMD batch
+  plus preserved unrelated state.
+- Exact source archive / SHA-256:
+  `.local/experiments/EXP-20260904-428-umd-direct-flip/source.tar.gz` /
+  `edff2a78bcdbe0df022a96105801b4143516f40cdaec5c02f87cbe7b061a27af`.
+- Build: exact `build-exp428.ps1` on FRYZZING, production and
+  MemoryQualification ARM64 Release through pinned WDK 10.0.28000.2526.
+- PASS: actual UMD types compile/link with warnings-as-errors; KMD/package/
+  Universal/Inf2Cat/signing remain green; exact manifest and binaries returned.
+- FAIL: any UMD type/signature/link error or package regression. Correct only
+  the pinned-header mismatch and rebuild under a new non-overwriting version.
+- No install or launch command; no package may leave FRYZZING/local artifacts.
+
+Observed build v1 and v2 correction:
+- V1 compiled, linked, packaged and signed, proving the pinned D3D11.1/WDDM1.3
+  signatures. It added one UMD analysis warning `C28213` because
+  `_Use_decl_annotations_` was attached to the exported entry point without a
+  separate declaration. No runtime logic or ABI field was implicated; v1 is
+  superseded before staging.
+- V2 removes only that unsupported annotation. Exact v2 source archive /
+  SHA-256:
+  `.local/experiments/EXP-20260904-428-umd-direct-flip/source-v2.tar.gz` /
+  `da8eb38dba42e4bfc0cfb7a24d6f365d973d3558682dfca226b25164d58bed2f`.
+
+Observed result:
+- Commit `7cf54953ff67d086a7e6d0f43fe111bc6b8762cd` contains the exact UMD
+  adapter/device/resource/DirectFlip/present path.
+- Sixty-two render tests plus eleven additional scanout/memory/scheduler tests
+  passed; the portable predicate ran under ASan/UBSan and verified exact-pair,
+  mismatch, segment, layout, displayability, format and immediate-flag cases.
+- UMD compile/link passed with zero warnings/errors. `llvm-readobj` reports
+  COFF-ARM64 / IMAGE_FILE_MACHINE_ARM64 and exactly one exported function,
+  `OpenAdapter10_2`. Both KMD profiles, Universal validation, Inf2Cat and
+  signing passed with only the two unchanged EXP425 KMD analysis warnings.
+- V2 manifest / production SYS / qualification SYS / UMD SHA-256:
+  `88de77cfa8e5bf9d78d0f16dfb2262543d2364e543d50ae813aa879d6ee8bd53` /
+  `c3be79ad3a589bd54213bbb067c8248b8b03f73a0ffc01f69aac50564ed5b703` /
+  `799d973d6184b0f370c8a5545bf9db057b915659a55104534264715eb23f7780` /
+  `c417bd322c3bfca94e4c0422e3e8ce2197cc062a1d0ec916aa263a5e4c0c6a28`.
+- Production INF / CAT SHA-256:
+  `25a85cbb6003865fd28efa19a1b51a5efb7edb0a1d5bd10169c1e846903140b3` /
+  `278e0aafc358b9c4e37dd8111471aa063b43bf0e1bf39cf99f959127bf463d75`.
+
+Verdict:
+- IMPLEMENTED, HW_PROVEN=NO. `UMD_DIRECT_FLIP` now has a real source contract,
+  but Windows has not loaded the DLL or called its adapter/device/resource/
+  check/present path. No package was staged. Atomic Type1 publication is still
+  absent and must be wired/tested/built before any integrated candidate.
+
+### EXP-20260904-427 — current full-owner synthetic-889 m1n1 build
+
+Status: implemented — exact offline artifact built; no hardware launch
+Created (UTC): 2026-09-04T15:35:02Z
+Completed (UTC): 2026-09-04T15:36:14Z
+
+WHY THIS HYPOTHESIS:
+1. EXP270 hardware-proved retained IOMFB ownership and exact D589, while the
+   current source has since integrated that owner with the ABI-v2 broker and
+   coherent synthetic admission route 889.
+2. EXP406 used the same current commit but its default build stayed ABI v1 on
+   hardware; `IOMFB_FULL_OWNER=1` is the exact documented build selector that
+   activates the retained owner/latch source without an observer.
+3. The complete current host suite, including IOMFB bootstrap/present/latch and
+   scanout broker/service tests, is green before this build.
+
+WINDOWS CONTRACT:
+- None in this offline build. No driver package or Type1 capability changes.
+
+AGX/ASAHI CONTRACT:
+- Preserve one m1n1-owned internal-panel IOMFB endpoint and its exact A407/A408
+  present plus D589 matching. No new DCP command, timer, delay or observer.
+- Scanout broker advertises ABI v2 only when `display_scanout_latch_source_proven`
+  sees that owner; injection remains synthetic GSIV 889 and no physical AGX
+  IRQ 880--888 is introduced.
+
+TRANSLATION:
+- `make IOMFB_FULL_OWNER=1` defines only `DCP_IOMFB_FULL_OWNER`; current
+  generated admission header supplies INTID 889. The output is the later KMD
+  scanout platform dependency, not proof that Windows used it.
+
+WHAT IS STILL UNKNOWN:
+- Whether the clean J313 cross-build succeeds and its build_cfg contains only
+  `DCP_IOMFB_FULL_OWNER`; hardware ABI-v2 activation remains unproven for this
+  exact artifact until the integrated 14/14 candidate.
+
+Source/artifact contract:
+- m1n1 commit `1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58`; tracked
+  diff SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Build: `make clean && make -j8 IOMFB_FULL_OWNER=1` in the pinned local
+  aarch64 build container; no RELEASE or observer flag.
+- PASS: complete host suite green; cross-build exit 0; `build_cfg.h` contains
+  exactly one define; Mach-O and source/config manifest hashes recorded.
+- FAIL: any test/build failure, extra config define or dirty tracked source.
+- Output: `.local/experiments/EXP-20260904-427-current-full-owner-m1n1/`.
+- No launch/install command. Recovery artifacts remain the ordinary current G2
+  and emergency non-AGX hashes recorded in EXP426.
+
+Observed result:
+- The first local-host invocation failed before C/Rust integration because
+  `cargo` is absent from the macOS host; it produced no Mach-O and is not a
+  source verdict. The exact pre-existing Docker builder then completed the
+  clean J313 build. Its warnings are the established m1n1 baseline outside the
+  full-owner selector; no build error occurred.
+- `build_cfg.h` contains exactly `#define DCP_IOMFB_FULL_OWNER`; `build_tag.h`
+  is exactly `1791ea5`; tracked source remains clean apart from untracked
+  `.DS_Store`.
+- Mach-O is 966656 bytes. Mach-O / build config / build tag / manifest SHA-256:
+  `ce34d1b901fbbe21e39266593f8b499548160003525b5696b596501245071423` /
+  `41868df6f71a1c524585e4e3ca1482b23c221e9154841115c86a08ecf569f9bc` /
+  `e0091fb80eb5cab95dc275e6c3d9720353bfead1fe9d19cc1fb240258798de0c` /
+  `e32bf42001201ff62569e3a9fe23a9da4d09e6ca903d1e5d97f1b03af4bc39d0`.
+
+Verdict:
+- IMPLEMENTED artifact prerequisite. This exact m1n1 is the only current
+  full-owner candidate for the later integrated slice; it has not been
+  chainloaded and does not constitute ABI-v2, D589 or Windows evidence.
+
+### EXP-20260904-426 — production scanout/VSYNC integration
+
+Status: implemented — offline build complete; package never staged
+Created (UTC): 2026-09-04T15:24:03Z
+Completed (UTC): 2026-09-04T15:31:34Z
+
+WHY THIS HYPOTHESIS:
+1. EXP425 hardware-proved the exact 64-MiB physical object, context-63 UAT
+   mapping and lower 56-MiB scanout range required by the existing broker.
+2. Current m1n1 already separates APPLIED from exact D589 LATCHED and injects
+   the coherent admission profile's synthetic GSIV 889 only for the latched
+   edge; the remaining first boundary is Windows ownership of that contract.
+3. The shared fixed-panel/scanout client already has sanitizer-tested ABI-v2
+   queue, busy, exact-sequence, acknowledge and RELEASE semantics, so a new
+   scanout implementation or physical IRQ route is neither needed nor allowed.
+
+WINDOWS CONTRACT:
+- StartDevice registers the EXP425-proven 56-MiB Segment-2 pool only after
+  acquiring exact POST ownership and only against full Scanout ABI v2.
+- Present validates one exact 2560x1600x10240 A8R8G8B8 flip with NULL DMA.
+  SetVidPnSourceAddress performs only bounded validation/MMIO enqueue at DIRQL.
+- ISR first consumes/acknowledges one exact broker latch and reports one
+  DXGK_INTERRUPT_CRTC_VSYNC for the saved physical address, then queues DPC.
+- Stop synchronously RELEASEs/restores POST before UAT/memory teardown; an
+  uncertain ownership result retains all lower owners and fails closed.
+
+AGX/ASAHI CONTRACT:
+- No physical AGX IRQ 880--888 is published or consumed. Firmware/queue/render
+  behavior is unchanged. DCP ownership remains entirely in current m1n1.
+
+TRANSLATION:
+- The production memory owner exposes the lower 0x3800000 bytes as an exact
+  CPU/guest-IPA/host-PA/GPU-VA tuple. Windows Segment-2 addresses become broker
+  pool offsets; matching D589 sequence/address becomes one Windows VSync.
+
+WHAT IS STILL UNKNOWN:
+- Offline: whether the new wrapper compiles cleanly against pinned WDK ARM64
+  with actual DXGK types and analysis annotations.
+- Hardware remains unproven until the later complete 14/14 candidate uses a
+  current-source full-owner m1n1 that actually advertises ABI v2. EXP406's
+  observed ABI-v1 boot is not a scanout test artifact.
+
+Single changed variable:
+- Link and wire the existing scanout/fixed-panel owner into render-admission
+  lifecycle, Present, VidPn, ISR/DPC and synthetic-889 ControlInterrupt paths.
+
+Source contract:
+- Repository / branch / HEAD: public_windows /
+  feature/j313-gpu-acceleration /
+  10e5c4f05e3694b86f9ca35ff984e617d4607c45.
+- Tracked relevant diff SHA-256 / dirty:
+  8a9769bea7e812ff9c17694e0d4a2702327296d2f8c5a8b9e8da28fc460cc864 /
+  yes; exact source archive is authoritative for untracked shared modules.
+- m1n1 commit / tracked diff SHA-256:
+  1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58 /
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+- Mu commit / diff SHA-256: f1ef718e08db0e4c30fdb5d8555973513ad9a004 /
+  7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+
+Artifact:
+- Build command: exact `build-exp426.ps1` on trusted FRYZZING; production and
+  MemoryQualification Release builds through the pinned driver build script.
+- Source archive:
+  `.local/experiments/EXP-20260904-426-render-scanout-integration/source.tar.gz`.
+- Source archive SHA-256:
+  2c37c7d02233d9e79e9aeb06aa6b56534bbdbe0ec45794598208539c6d6d24f4.
+- Profile: WDDM 3.0 render-admission; synthetic GSIV 889 only.
+- Recovery: current normal G2 m1n1/Mu hashes
+  fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a /
+  16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06;
+  emergency non-AGX Mu
+  279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
+
+Build gate:
+- PASS: production and qualification compile/link/analyze/Universal/Inf2Cat/
+  signing all complete with zero warnings/errors and exact manifest hashes.
+- FAIL: any WDK error/warning or profile/package drift. Build-only corrections
+  must remain inside this same implementation; no hardware action follows.
+- No install/launch command exists for EXP426. The package is offline-only.
+
+Preregistration correction before build v2:
+- Build v1 source archive
+  `2c37c7d02233d9e79e9aeb06aa6b56534bbdbe0ec45794598208539c6d6d24f4`
+  compiled, linked, validated, catalogued and signed in both profiles with zero
+  compile/link errors. Static analysis repeated exactly the two warnings already
+  present in the archived EXP425 log (`C28251` provider-worker declaration and
+  `C28150` existing ResetEngine spinlock/PAGED_CODE); no scanout source warning
+  appeared. The absolute zero-warning sentence above was inconsistent with the
+  actual accepted EXP425 baseline. Per the instruction not to redo already-green
+  provider/TDR batches, the corrected gate is zero *new* warnings and an exact
+  match to those two recorded baseline diagnostics, not unrelated source edits.
+- Self-review then found one missing deterministic binding: source-address
+  validation checked the Segment-2 address but not `hAllocation`'s exact primary
+  description. V1 is superseded before staging. V2 adds only that validation;
+  new RED failed on its absence and the six scanout wiring tests pass afterward.
+- Exact v2 source archive / SHA-256:
+  `.local/experiments/EXP-20260904-426-render-scanout-integration/source-v2.tar.gz` /
+  `b8b2cfea21dd38cc862ca1ad0d6b17566a5eefad477848ee6054b39778354958`.
+
+Observed result:
+- Commit `230a99aba07f055d0f6abe607b6415dfb99b2c4a` contains the exact
+  production scanout owner and shared client used by build v2.
+- Sixty render-admission tests and eleven additional scanout/memory/scheduler
+  tests passed. The shared client suites execute under AddressSanitizer and
+  UndefinedBehaviorSanitizer; the six new wiring tests had a verified RED
+  against absent lifecycle/DDI/ISR/project integration.
+- Both pinned-WDK ARM64 profiles compiled and linked with zero compile/link
+  warnings and errors, passed Universal validation and Inf2Cat, and were test
+  signed. Static analysis emitted no new diagnostic and exactly reproduced the
+  two EXP425 baseline warnings described above.
+- V2 manifest / production SYS / qualification SYS SHA-256:
+  `8068aa4cdb4b25791333e826dfffb8a3e608f6fe2307ea29a620129002beb79f` /
+  `636cbcde6bb0dd9361d4398ea1e7d390936c765f50f903d8ea5718536f648e2b` /
+  `9acb287cfdde3d9b28fce46eab7ae06c825a23f098a3f181d4907c459f671f93`.
+- Production INF / CAT / UMD SHA-256:
+  `989e8db4dfaf8764a3aab131369d0f8b9b7843ed714f0392e2baabe70ea5c738` /
+  `64b6fb270bde09e1c6365719dff916143add8c82985a957ebaf8a4d77b224e44` /
+  `cb3cee89667c7a4eaee2112706cbc2f753e5e0fb0237685ac6e78718f0e2ce25`.
+
+Verdict:
+- IMPLEMENTED, HW_PROVEN=NO. `D589_SCANOUT`, `KMD_DIRECT_FLIP` and
+  `NON_VGA_STOP` have production source contracts; the atomic Type-1 writer
+  remains zero because `UMD_DIRECT_FLIP` and therefore `INDEPENDENT_FLIP` are
+  still absent. No Windows package was copied, staged, bound or loaded.
+
+### EXP-20260904-425 — 64-MiB scanout memory qualification
+
+Status: confirmed — 64-MiB production memory qualification PASS; exact cleanup complete
+Created (UTC): 2026-09-04T15:03:03Z
+
+WHY THIS HYPOTHESIS:
+1. J313 primary size is 0xfa0000 and Scanout ABI v2 requires one registered
+   0x3800000 pool; the former 8-MiB advertised range cannot represent either.
+2. EXP412 proved the exact allocator/HVC/context-63 UAT path for 16 MiB, while
+   the same code is bounded for larger page counts; the only new hardware
+   variable is the contiguous object and mapping length.
+3. The accumulated 24-MiB pool was internally inconsistent with the unchanged
+   56-MiB broker contract and is not a usable control.
+
+WINDOWS CONTRACT:
+- Segment 2 advertises 0x3800000 bytes, enough for the exact registered
+  scanout pool; the 0x800000 backend tail remains hidden from VidMm.
+
+AGX/ASAHI CONTRACT:
+- Context 63 maps one 0x4000000 range at 0x1500000000 with 16-KiB leaves;
+  EXP208 returns to its original tail address 0x1503800000. No AGX power,
+  firmware, queue or physical interrupt executes in MemoryQualification.
+
+TRANSLATION:
+- Reuse the exact EXP412 DXGK contiguous physical object, ADL, kernel mapping,
+  HVC 0x4d31 batching, host-PA validation, UAT publication/readback and cleanup
+  with only LocalBytes changed from 0x1000000 to 0x4000000.
+
+WHAT IS STILL UNKNOWN:
+- Whether Windows can allocate one contiguous 64-MiB object on the live clean
+  baseline and whether the resulting host range/UAT mapping succeeds through
+  the last leaf. Stage-4 allocation failure rejects the geometry without a
+  retry; stage 10 plus exact 64-MiB proof confirms it.
+
+Single changed variable:
+- Local object/mapping 16 -> 64 MiB and partition 8+8 -> 56+8 MiB.
+
+Source contract:
+- Root branch/commit: feature/j313-gpu-acceleration /
+  897404848205754e967f2f7f7c81fd18cad62c02; tracked dirty diff SHA-256
+  6d6652e58073f0fda0881b0f1ffa477493cc35e29486e72c499fea532c351db5.
+- m1n1 checkout 1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58, clean tracked diff; exact
+  synthetic candidate m1n1 SHA-256
+  f62c9074d8ffc92f9d8b5e887b35abb195c622b3edc4c52dde6408e03dd09c73.
+- Mu checkout f1ef718e08db0e4c30fdb5d8555973513ad9a004, dirty diff SHA-256
+  7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce;
+  exact synthetic Mu SHA-256
+  c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+
+Artifact:
+- Build command: render-admission/scripts/build-driver.ps1 -Configuration
+  Release and -MemoryQualification on FRYZZING, pinned WDK 10.0.28000.2526.
+- Source archive / package ZIP SHA-256:
+  f4372f83b8df68bcfdc7e405be7172ed7bd8449ea2bb4bb07a0615ebd959e394 /
+  9623d7eca73a1eeb0fccc6bccc821a8daaa348039eeff645ca4b7fac25fd39b9.
+- Qualification SYS / INF / CAT / UMD SHA-256:
+  4740ff9bed3e3f62b902367c308a9a15fc96fb568addf10b14dd5d8ca56a89f2 /
+  f8a9b0b01bb586f2d1b1fb46259e268d90f65a1953073472cf456e07a0e71072 /
+  b1a3a9a2addf68d8d9765b599fb222cfe5efc6ce16e5a76675767af98957f5ee /
+  d3dc40e2df7ae0b836fc5ec06855fd13dad5e429a8f21928ac92a96db50f60e9.
+- Build manifest SHA-256
+  148fa2ff04c90450b5742572bb13405388b7d115c9acd50be8423cccc13488e7.
+- Recovery: current-compatible emergency non-AGX Mu
+  279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c,
+  accepted m1n1
+  fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a,
+  and ordinary G2 Mu
+  16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+
+Run contract:
+- Current control planes: Windows SSH is live with eight CPUs, exact package
+  absent, APPL0002 Code28/null driver; current normal-G2 launcher PID 84890 is
+  live and m1n1 uartproxy USB is present.
+- Stage exact package without /install on the visible clean guest. Controlled
+  shutdown, then boot the frozen synthetic-889-only EXP406 pair. Natural bind
+  may run once; use one exact /install trigger only if no proof exists.
+- PASS: 128-byte stage-10 proof, statuses 0/0, HVC statuses 1/1, more than 70
+  HVC calls, more than 16000 translated pages, context 63, more than four UAT
+  pages, one 64-MiB mapping, exact first/last PA and TTBR readback, clean
+  reverse cleanup, SSH/eight CPUs/health and no post-trigger 41/129/1001.
+- FAIL: first exact non-success stage/status, allocation rejection, invalid
+  proof, reset/bugcheck/SSH loss or physical 880-888. No same-artifact retry.
+- After evidence, delete only the exact oem INF/service/files on the same
+  synthetic guest, then controlled shutdown and restore ordinary G2.
+
+Observed progress before hardware launch:
+- 2026-09-04T15:03:47Z: exact ZIP/artifact hashes passed and `pnputil
+  /add-driver` published only `oem5.inf`. APPL0002 remained Code28 with null
+  INF/service, no module loaded, eight CPUs and AppleInput/stornvme/USBXHCI/
+  sshd healthy. Stage evidence SHA-256:
+  93d62fe460a558b18ab7c85cd5c31f26df278a2140735c8fdda7166a3271b47c.
+- Controlled shutdown completed. Windows SSH is now unreachable, PID 84890
+  exited, and no `/dev/cu.usbmodem*` endpoint is present. The machine is
+  physically off, not at Running proxy; operator power-on is required before
+  the frozen synthetic pair can be launched.
+
+Observed hardware result:
+- Operator supplied Running proxy and the frozen synthetic pair booted with
+  power broker/gpu-region present and no physical 880--888. All eight CPUs
+  entered Windows and SSH returned.
+- Natural PnP bind executed once; no explicit install trigger was needed.
+  The exact 128-byte proof reports version/size 1/128, qualification/cleanup
+  status 0/0, HVC return/payload 1/1, 263 HVC invocations, 16448 translated
+  pages, context 63, five UAT pages, one mapping and StartStage 10.
+- Mapping is exactly GPU VA 0x1500000000, length 0x4000000. First resolved PA
+  equals host base and last resolved PA equals base + 0x3ffc000; TTBR0/TTBR1
+  and both leaf descriptors are nonzero.
+- APPL0002 ended in intentional Code43 after qualification cleanup. SSH,
+  eight CPUs and AppleInput/stornvme/USBXHCI/sshd remained healthy with no
+  post-trigger Event 41/129/1001.
+- Result / proof / SetupAPI SHA-256:
+  c9dd7382f0556d9565a7d5d111fd743c17a225f59f34031ac1db01737c3d222b /
+  e41a79f8ca32011eb53781c2bc3cfca7f4684f93f509177040b8d32a3698cd85 /
+  04a51e12015d3e4748c408d53a48fea087d2f8700b2b9d094482891cd0e6e42b.
+- Exact `oem5.inf` was then uninstalled/deleted on the same synthetic guest.
+  Package/service/module/SYS/UMD and device bind were absent; health remained
+  green. Cleanup evidence SHA-256:
+  e3b5df974122b105358b5d442120aea964cab5e0cfc4e3bd88dc5b054a1b25ee.
+- Controlled shutdown completed. The machine is currently physically off;
+  normal-G2 restoration is pending the next operator power-on.
+
+Verdict:
+- CONFIRMED. The exact 64-MiB physical object, HVC translation, context-63
+  16-KiB UAT mapping, first/last readback and reverse cleanup are hardware
+  proven. The 56-MiB scanout allocation range plus 8-MiB backend tail may now
+  be used by the presentation implementation. No render or DCP operation was
+  executed by this experiment.
+
+### EXP-20260904-424 — restartable per-engine TDR
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T14:57:00Z
+Completed (UTC): 2026-09-04T15:00:00Z
+
+Hypothesis:
+- At documented PASSIVE_LEVEL, the one active engine can synchronously stop
+  the exact provider, retire rather than complete its fence, and recreate the
+  same firmware/queue owner before returning success.
+
+Single changed variable:
+- Replace active ResetEngine fail-closed behavior with exact quiesce/retire/
+  destroy/reinitialize/start; QueryEngineStatus uses provider progress age.
+
+Source/artifact:
+- Commit 660c187242b745ed5f624fe0cc1db03bee59e29c.
+- Source archive / build-manifest SHA-256:
+  e08c2cfb0b2b4e254156687c10a482a0bcd8cac125062faa9ca084e57c5d082d /
+  cff1252bdba67f483cd5fd557e4d7fdd25a7d4c6859662cb202109a1f76961c9.
+- Pinned-WDK production and qualification builds passed zero warnings/errors;
+  production / qualification SYS SHA-256:
+  005f9cc0e0b34a9d0ec2b31ed70292afd0221b4860425f269b78797331d2b717 /
+  21bbdb3802bfbc5434a90c8b69eaa717f7d14ffd070c957bbd22ee1e6c0385e5.
+
+Observed result:
+- Offline reset waits for the passive worker, requires queue quiesce, retires
+  the exact fence without DMA_COMPLETED, reports LastAbortedFenceId and
+  rebuilds provider/backend before accepting work. Focused tests are green.
+
+Verdict:
+- IMPLEMENTED, HW_PROVEN=NO. PER_ENGINE_TDR functional readiness is yes;
+  package was not staged.
+
+### EXP-20260904-423 — integrated external-image platform runtime
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T14:32:00Z
+Completed (UTC): 2026-09-04T14:55:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP422 produces an exact rebased and destination-bound TA/3D job, but no
+   production owner connected it to firmware channels or completion.
+2. The existing G13 provider already enforces D3-before-TA publication and
+   dual event/stamp/done-pointer completion.
+3. Legacy 64-MiB render ownership conflicts with EXP412; external-image mode
+   permits reuse without a second context-63 UAT publication.
+
+Single changed variable:
+- Link the existing platform provider to render-admission using the EXP412
+  allocator/publication and EXP420 image, plus one exact passive submit/poll/
+  DMA-completion transaction. Physical AGX IRQs remain excluded.
+
+Source/artifact:
+- Commit 3a4b55e6b6a015daeb3c19921c6f8cd4078c15b1.
+- Source archive / build-manifest SHA-256:
+  efe08f6db14452c014e5464f4ae6001e7ca448f6aaf2b7a8e91d40501d402d3c /
+  4d3cd9c23fd7a99f8eb7c50121c494b08bc98e6e92aa7fe2816512a750752b00.
+- Pinned-WDK production and MemoryQualification ARM64 builds, analysis,
+  Universal validation, Inf2Cat and signing passed zero warnings/errors.
+- Production / qualification SYS SHA-256:
+  8a053bb12a3ba368050ca473630e241e19daf84c2d776e8a2ed965857a881c55 /
+  3f20b1b1843662e38d68aae9599bb617ae8233eca336b4833570ca1ff6d5cfc6.
+
+Observed result:
+- Offline chain is complete: synthetic-889 resource admission, same physical
+  allocator for firmware context 0, borrowed context 63, exact queue worker,
+  provider poll, dual TA/3D observation, exact active-fence transaction,
+  DMA_COMPLETED and DPC. Focused gate passed 39 tests.
+
+Verdict:
+- IMPLEMENTED, HARDWARE_PROVEN=NO. Package was not staged. Physical 880-888
+  remain excluded; active backend TDR/restart is the next scheduler boundary.
+
+### EXP-20260904-422 — rebased exact EXP208 job image
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T14:18:00Z
+Completed (UTC): 2026-09-04T14:23:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP421 binds the exact Windows output but the existing job builder still
+   accepted only the obsolete arena at 0x1503800000.
+2. TA/3D roots, event numbers, stamps and done pointers are the final exact
+   image contract required before the existing queue provider can publish.
+
+Single changed variable:
+- Make the existing EXP208 builder validate and consume the rebased arena and
+  stage one exact dynamic job for the bound fence. No queue write or hardware
+  access was added.
+
+Source/artifact:
+- Commit 4285cef756184ecc963a3eb34c7de7d6baa97c15.
+- Source archive / build-manifest SHA-256:
+  e83ae8a1c0111f394fb31cefa8fc01d984f8e4ff1c200a2c9e81f4ad214d361c /
+  dcb5a5b80c2403bc8d560b00499e223164bd9031cb9c159b77ead0c03c539bf6.
+- Pinned-WDK production and qualification builds passed zero warnings/errors.
+- Production / qualification SYS SHA-256:
+  334a6798e571ce7b5b15fc2d0c89c7e5766223cbca5aca9db4178fa79c5e19f0 /
+  25d1b52f9552da4b31da834bdf5822c2b9e54e878956c364b9c7b6a0c4b9acdd.
+
+Observed result:
+- Rebased job roots exactly match the EXP420 image; mismatched arena identity
+  and bound fence fail before staging. Focused tests are green.
+
+Verdict:
+- OFFLINE IMPLEMENTED. The package was not staged; provider/queue publication
+  and completion are still the first unknown.
+
+### EXP-20260904-421 — bind exact Windows output to EXP208 object 40
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T14:13:00Z
+Completed (UTC): 2026-09-04T14:17:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP208 has exactly one GPU-VA relocation to output object 40 and no
+   physical output relocation.
+2. EXP419 retains an exact Windows allocation CPU/host-PA/GPU-VA tuple in the
+   queued packet.
+3. EXP420 supplies a fully rebased internal image; replacing object 40 and
+   reapplying the checked relocation batch is the smallest exact binding.
+
+Single changed variable:
+- Bind object 40 to the packet's exact Windows destination before scheduler
+  enqueue and release that binding only with the matching discarded/reset
+  fence. No activation or hardware publication was added.
+
+Source/artifact:
+- Commit eead97f8a719cc5a62084e965ea9002bc8d7eafe.
+- Source archive SHA-256
+  02737fc0b8d85c1fc0fc84f2a34f1bfb2746b61a6706c148a850b0bf7da91d3b.
+- Pinned WDK 10.0.28000.2526 production and MemoryQualification ARM64
+  builds, analysis, Universal validation, Inf2Cat and signing passed with
+  zero warnings/errors.
+- Production / qualification SYS SHA-256:
+  729b7045ef27b2846e432d8eb3d8241a487ba7a37be7ce893c72e72f9569f0d1 /
+  cf5152c981a62c5b19a69947d96a2475db92e24528854a1e6ed76217c2432cd3.
+- Build manifest SHA-256
+  139710f469ff233d6cf886caf2683f24d8bd72068b30e88462000c058e3441e6.
+
+Observed result:
+- 31 focused tests prove exact command/tuple validation, object-40 replacement,
+  relocation rewrite to the Windows GPU VA and exact-fence release.
+
+Verdict:
+- OFFLINE IMPLEMENTED. Readiness remains 4/14 because activation, AGX queue
+  publication and dual TA/3D completion are absent.
+
+### EXP-20260904-420 — materialize exact rebased backend image
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T14:08:00Z
+Completed (UTC): 2026-09-04T14:13:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP418 provides an 8-MiB backend tail inside the hardware-proven mapping.
+2. The EXP208 arena is 5,799,936 bytes and fits at the tail base.
+3. Descriptor/root rebasing alone leaves stale captured addresses in command
+   bytes; all 159 relocations must be applied for a coherent image.
+
+Single changed variable:
+- Borrow the production tail after memory start, materialize the accepted
+  sparse image, rebase descriptors/roots and apply every relocation. No GPU
+  access, power, queue or physical interrupt was added.
+
+Source/artifact:
+- Commit abe363f6658afed0e7757047e67cbb7999698b5d.
+- Source archive / manifest SHA-256:
+  48766ee0261bf06549bcc74bf59bff304e5f0ff89d367bce4a480e0b859ade09 /
+  91bee4bdf76813f378ae9cdef7efaaf2a21c6a4a7d82b28592fe6b5f3eae69fe.
+- Pinned-WDK production and qualification builds passed zero warnings/errors.
+- Production / qualification SYS SHA-256:
+  6e99b7f87a8bbc804e7541ce21f48afdf028af0457944c1f4742a182479662bb /
+  0c61ec484731ef52e9dd4db3eef0e36e115e20d283da04e3cf5503f219f394bc.
+
+Observed result:
+- 30 focused tests prove exact tail placement, rebased roots/object addresses,
+  rewritten embedded target addresses, invalid-range atomic rejection and
+  reverse borrowed-state cleanup.
+
+Verdict:
+- OFFLINE IMPLEMENTED. No hardware claim and no readiness change.
+
+### EXP-20260904-419 — exact local destination view and paging isolation
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T14:04:00Z
+Completed (UTC): 2026-09-04T14:08:00Z
+
+WHY THIS HYPOTHESIS:
+1. Patch previously retained only the AGX VA, while object-40 binding requires
+   CPU, host physical and GPU addresses for the same allocation.
+2. EXP418's first revision still let paging plans address the backend half.
+
+Single changed variable:
+- Resolve one lower-half allocation through the production owner into a
+  single exact tuple and prevent paging plans from entering the backend tail.
+
+Source/artifact:
+- Commits fb886b4d264a458770260e49855681085005bd6b and
+  b6ee1a6e970638a8c941d366b7cb4871147ea96b.
+- Source archive / build-manifest SHA-256:
+  25faa75f35bab659eaa8d05bd85400180fa73ac06fe096ae62f6995fa876aa89 /
+  e860a3cf578a3e0a126dba43b80e81f6149dc48e5da5d3faccf9700eb3fabc29.
+- Pinned-WDK production and qualification builds passed zero warnings/errors.
+- Production / qualification SYS SHA-256:
+  1e39643d32dd41c0e9d023ae2f3121e4e5d728eb9844f8e5e1fe0b3d7a6065c5 /
+  7d556a890714ad011f5bf1367e541de186b592debbb156ab2dd0da8ce454fe3b.
+
+Observed result:
+- 26 focused tests prove tuple coherence, backend exclusion, mandatory packet
+  identity and paging rejection at the first backend byte.
+
+Verdict:
+- OFFLINE IMPLEMENTED. No package was staged and no hardware run occurred.
+
+### EXP-20260904-418 — reserve proven UAT tail for backend
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T13:58:00Z
+Completed (UTC): 2026-09-04T14:03:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP412 proves one 16-MiB context-63 mapping at 0x1500000000.
+2. EXP417 proves the complete 5.8-MiB EXP208 arena can be rebased to the upper
+   half of that mapping.
+3. Advertising the full mapped object to VidMm would allow allocations to
+   overlap the backend arena; separating allocatable and reserved ranges fixes
+   ownership without changing HVC, host pages, UAT leaves or TTBRs.
+
+Single changed variable:
+- Keep the exact 16-MiB physical/UAT object but advertise and translate only
+  the lower 8 MiB for Windows allocations; reserve the upper 8 MiB as a
+  read-only CPU/host-PA/GPU-VA backend view.
+
+Source/artifact:
+- Commit 45969dee8f22ef95dac1381a3ef6fcbf3b5d5726.
+- Final v2 source archive SHA-256
+  147eeae230f7f6f1324e1a314b2c000e84a3f65a4011d396fad9d51a389c99ef.
+  v1 predates the backend-view accessor and is superseded.
+- Pinned WDK 10.0.28000.2526 production and MemoryQualification ARM64 Release
+  builds, analysis, Universal ApiValidator, Inf2Cat and signing all passed with
+  zero warnings/errors.
+- Production / qualification SYS SHA-256:
+  2006cd14804aa93c933d257954ca5f0e5b0004ba55c38611151c13de04e898a0 /
+  46d92841774d010f6657e2af410778e21c54553d93d59d0649c9519efc6a7b50.
+- Build manifest SHA-256
+  58d6b6e477310d6830c050337df56a10bdc3a3d989140a97c8049bf999e3a22e.
+
+Observed result:
+- Reservation is one-shot and aligned; allocation translation rejects the
+  backend half; QuerySegment4 uses only LocalAllocationBytes; the qualification
+  path still checks the complete 16-MiB first/last UAT leaves. Focused gate
+  passed 31 tests.
+
+Verdict:
+- OFFLINE IMPLEMENTED. No new memory hardware claim is made. The next boundary
+  is materializing the rebased EXP208 arena into this view and binding the
+  exact Windows destination slice.
+
+### EXP-20260904-417 — exact EXP208 ColorFill binding and 16-MiB rebase
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T13:52:00Z
+Completed (UTC): 2026-09-04T13:58:00Z
+
+WHY THIS HYPOTHESIS:
+1. The accepted EXP208 artifact is the exact J313 G13/V13_5 16x16 RGBA clear
+   capture. Its full output SHA-256 is reproduced by 256 BGRA pixels
+   33:22:11:ff plus a zero tail, which maps exactly to Windows A8R8G8B8
+   ColorFill 0xff112233.
+2. Relocation evidence contains exactly one GPU-VA edge and no physical edge
+   to output object 40. Replacing that object's addresses is therefore the
+   smallest deterministic Windows destination binding.
+3. Accumulated code assumes a 64-MiB pool and arena at 0x1503800000, but
+   EXP412 proves a 16-MiB mapping at 0x1500000000. Relocation objects can be
+   rebased inside that existing mapping without changing the captured graph
+   or extending UAT.
+
+Single changed variable:
+- Add exact workload/output validation and deterministic arena rebasing only.
+  The supported primitive mask remains zero and no provider is linked.
+
+Source/artifact:
+- Commit 68172a304d9454023694adfce4f68a8018cef1ba.
+- Source archive SHA-256
+  d32e6653a1e6bca1049f8115e45b368886d0b3c95fdc775ad3dd5a044a999e9a.
+- EXP208 materialized job / relocation evidence SHA-256:
+  082b987c05c2ebdd44aa9b09df05a609b7d9772c5a15f25cf707c1e6732b4c7f /
+  9ea9efe1059dadb16818edeb7ed949785048b6b4d1a89f47b40e195dd39218fc.
+- EXP417 pinned WDK 10.0.28000.2526 ARM64 Release KMD/UMD analysis,
+  Universal ApiValidator, Inf2Cat and signing: zero warnings/errors.
+  SYS SHA-256
+  1bdcec02e240eb9f396f7a6b0b6cb4a2a5ab25b832cadf49138f3c930e51fc21.
+- Build manifest SHA-256
+  4c66fcb7ccd3b590e08bcbb7bc7b2defbbe5b92cd1df2b838b321d6d6204ab0f.
+
+Observed result:
+- Exact generated 73-object graph has one bindable output edge; wrong color,
+  geometry, pitch, ROP, physical output edge and out-of-map arena fail before
+  mutation. Rebased arena 0x1500800000 and roots remain inside the proven
+  16-MiB range. Relevant gate passed 41 tests.
+
+Verdict:
+- OFFLINE IMPLEMENTED. AGX publication and completion remain absent; no
+  readiness bit changes and no hardware run is allowed from this package.
+
+### EXP-20260904-416 — exact SubmitCommand to common scheduler
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T13:43:00Z
+Completed (UTC): 2026-09-04T13:50:00Z
+
+WHY THIS HYPOTHESIS:
+- EXP415 prepared and sealed an exact fence-bound record, while EXP413/414
+  already owned the only scheduler queue. A bounded packet owner can connect
+  them without publishing hardware or synthesizing completion.
+
+Single changed variable:
+- Non-paging SubmitCommand accepts only the exact sealed Patch transaction and
+  moves it to the common queued state. It does not activate or complete it.
+
+Source/artifact:
+- Commit 7912547763c0c0ed313c4fc7e0ed9c112c512a08.
+- Source archive SHA-256
+  5c0c03f23f0e1f40ec8182c39fc9f1338148e77c7786fb3dd1b706bb68ebf4a7.
+- EXP416 WDK build passed zero warnings/errors. SYS SHA-256
+  7acb5204c19ba5036b564d90b976a535ee699f9501031d236e81d59b523206a3;
+  build manifest SHA-256
+  9346287584c4007424b86878cf63909520884ace0b35368a41efff0d3127ceee.
+
+Observed result:
+- Exact context, allocation, private-data, DMA interval and fence are retained;
+  stale tokens and skipped states fail. Cancel releases only Prepared;
+  preemption discards only Queued; active reset requires backend quiesce.
+  Focused gate passed 35 tests.
+
+Verdict:
+- OFFLINE IMPLEMENTED. SCHEDULER/PREEMPTION/TDR remain not ready until backend
+  activation and real completion.
+
+### EXP-20260904-415 — immutable RenderKm and Patch contract
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T13:30:00Z
+Completed (UTC): 2026-09-04T13:45:00Z
+
+WHY THIS HYPOTHESIS:
+- Current render-admission had typed allocation/context and memory translation
+  but fail-closed RenderKm/Patch. Existing apple_agx_gdi and dma_shadow already
+  supply the pointer-free checked representation and exact relocation seal.
+
+Single changed variable:
+- Prepare one ColorFill/PATCOPY record with one destination patch and no
+  hardware publication.
+
+Source/artifact:
+- Commit 2ee33989312abdcd3f6681660a1ba174f23e2422.
+- Provenance audit: investigation/EXP415_RENDER_PROVENANCE.md.
+- Source archive SHA-256
+  7c7f61688a3df39856790756506067c5d54475c7ba950fb626ea2e7ef0e8dcc1.
+- EXP415 WDK build passed zero warnings/errors. SYS SHA-256
+  fd18bc3579b8f75bf4ab2b48cf12bee94b39f82e1690e86c31d785daeacfa40c;
+  build manifest SHA-256
+  a9648caa4f2b383254e1fe68bf4142a4f864573d3ab669a9869e79a302d0b21e.
+
+Observed result:
+- Raw WDK pointer is copied into an inline pointer-free record; malformed
+  command and patch intervals, foreign/read-only allocations, wrong segment
+  and post-seal mutation fail closed. Focused gate passed 28 tests.
+
+Verdict:
+- OFFLINE IMPLEMENTED. GDI_COMMAND_BUFFER remains not ready because backend
+  publication and completion are absent.
+
+### EXP-20260904-414 — scheduler preemption and reset offline build
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T13:20:00Z
+Completed (UTC): 2026-09-04T13:23:00Z
+
+Hypothesis:
+- Once queued/active/completed progress has one owner, DMA-buffer-boundary
+  preemption can derive cutoff and active fences from that owner, cancel
+  queued-but-unpublished work and wait for the exact active boundary. Engine
+  reset can then return the active fence or completed boundary and clear
+  outstanding work without inventing backend completion.
+
+Single changed variables:
+- Commit 421a1ac: preemption snapshot/cancellation only.
+- Commit ec214ae: coherent reset last-aborted interval only.
+
+Source/artifact:
+- Root commits
+  421a1acfb745451a91d83b256955b20c4078c2eb and
+  ec214ae7de90f9d88057c34e4aa3580d5b3cccc9.
+- Frozen source archive SHA-256
+  8020927622254dcce28c0399fdf53255e54914e853680649f65ab227ec237612.
+- Isolated FRYZZING build command:
+  render-admission/scripts/build-driver.ps1 -Configuration Release; ARM64,
+  pinned WDK/SDK 10.0.28000.2526, analysis, Universal ApiValidator, Inf2Cat
+  and test signing. Both KMD and UMD completed with zero warnings/errors.
+- SYS / INF / CAT / UMD SHA-256:
+  34fd3590ebcf101b4479dc51a8bd54026d1e63ce750cb3e9ba772ad55f8eed99 /
+  ce558866b4eca8b4e1c88b62c3990d2fa23112832d46a57dd7b0ecc589ced0d7 /
+  c43f9d74084d40d8760ab88147085976e48246a0e9bbefd42cf75d397c3199d3 /
+  dddd32a38a85db04b1d0e0aff8fa103d2a8cee223cb9e94cbcfa0bd975663bd7.
+- Build manifest:
+  .local/experiments/EXP-20260904-414-scheduler-preempt-tdr/build-result.json,
+  SHA-256
+  58465645352f9f21df0b36aa1b34476ffc25254e64b0ca71a9ccd905098cb0e2.
+
+Observed result:
+- RED proved queued work survived the old preemption boundary and reset
+  returned completed rather than active progress. GREEN covered queued
+  cancellation, dispatch blocking, exact active-boundary retirement, single
+  notification, wrap-safe submission history, active/idle reset intervals and
+  teardown. The focused scheduler/admission gate passed 23 tests and the
+  full relevant gate passed 35 tests.
+
+Verdict:
+- OFFLINE IMPLEMENTED. No hardware run and no package staging. Readiness bits
+  for scheduler, preemption and TDR stay false until a real non-paging backend
+  supplies completion, responsiveness and quiesce.
+
+### EXP-20260904-413 — unified one-node fence progress offline build
+
+Status: implemented — offline-only package; never staged
+Created (UTC): 2026-09-04T13:15:00Z
+Completed (UTC): 2026-09-04T13:19:00Z
+
+Hypothesis:
+- A single monotonic queued -> active -> completed interval shared by paging
+  and future render work is the smallest truthful scheduler foundation.
+  Completion must never advance at enqueue and teardown must reject outstanding
+  work.
+
+Single changed variable:
+- Add the bounded one-node progress state and route the existing paging worker
+  through it; no AGX queue, physical IRQ, capability or non-paging completion.
+
+Source/artifact:
+- Root commit 4d539eae319ddd73253be252f69976c0b0e0eb89.
+- Frozen source archive SHA-256
+  694619fd3b24d7e8d98b237fbe92aa080cb1534ff4f91682e94a427182ae8ed6.
+- Same isolated FRYZZING Release build contract as EXP414; zero warnings and
+  errors. SYS SHA-256
+  f5963135bb25ed5a8204b2003d66a06514b9a4bda219446ae39857787e3697f4.
+- Build manifest:
+  .local/experiments/EXP-20260904-413-render-progress/build-result.json,
+  SHA-256
+  52d7a49498bd61056622ec8b63879833ff32c47b7e15a42817de9debdd047308.
+
+Observed result:
+- The new regression was RED before implementation. After the minimal shared
+  state and paging wiring, exact queued/active/completed, duplicate/stale/wrap
+  rejection and outstanding-work teardown tests passed. Full relevant gate:
+  35 tests GREEN.
+
+Verdict:
+- OFFLINE IMPLEMENTED. Package was not staged. The next boundary was
+  DMA-buffer-boundary preemption and per-engine reset, completed in EXP414.
+
+### EXP-20260904-412 — independently aligned UAT CPU mapping
+
+Status: confirmed — full production memory qualification PASS and clean rollback
+Created (UTC): 2026-09-04T12:55:39Z
+Completed (UTC): 2026-09-04T13:12:57Z
+
+WHY THIS HYPOTHESIS:
+1. EXP411 on the synthetic-only platform produced host receipts through stage
+   4 complete and stage 5 failure plus exact NTSTATUS 0xc000009a; this proves
+   inventory, the real HVC-backed physical owner and the aligned 16-MiB local
+   object succeeded before AppleAgxResidencyContextCreate.
+2. Both UAT allocation layers then rejected a CPU mapping unless its virtual
+   address was 16-KiB aligned, even though Windows only promises a usable
+   kernel mapping and the hardware consumes the separately validated 16-KiB
+   physical address. A deterministic fake with different CPU and device low
+   bits reproduced the exact address-space creation failure before the fix.
+3. Relaxing only the CPU-pointer guards to natural 64-bit alignment made that
+   regression and the focused 34-test production memory/HVC/UAT/paging gate
+   GREEN while retaining every physical alignment and 40-bit range check.
+
+ATOMIC CONTRACT:
+- The only functional source change from the exact EXP410/411 package is the
+  two equivalent CPU-pointer guards in apple_agx_uat_memory.c and
+  apple_agx_uat_table.c; the third archive difference is its portable
+  regression test. A recursive comparison of the frozen EXP410 and EXP412
+  archives reports exactly those three paths.
+- Platform is byte-exact EXP406 synthetic-only m1n1/Mu with required
+  WOM1_AGX_G2_POWER_BROKER=1: synthetic edge 889 and no physical 880--888.
+  Normal G2 bind is prohibited.
+
+WINDOWS CONTRACT:
+- The kernel virtual mapping must remain non-null and naturally aligned for
+  64-bit page-table loads/stores. DXGK ownership, ADL contiguity, map lifetime,
+  reverse cleanup, zero mandatory Type1 caps and qualification-only fail-closed
+  exit are otherwise unchanged.
+
+AGX/ASAHI CONTRACT:
+- Every UAT table physical address remains 16-KiB aligned, below the T8103
+  40-bit output limit and zero-filled before publication. Context 63, exact
+  16-MiB mapping, gpu-region TTBR publication/readback and cleanup remain the
+  next hardware checkpoint. AGX power, ASC/RTKit, queues, TA/3D and physical
+  IRQs remain untouched.
+
+TRANSLATION:
+- Windows may map a valid aligned physical object at an unrelated kernel VA.
+  The CPU dereferences the naturally aligned VA; UAT descriptors and TTBRs
+  encode only the separately validated physical PA. No CPU VA bits are
+  translated into hardware-visible addresses.
+
+WHAT IS STILL UNKNOWN:
+- Whether the corrected live Windows mapping reaches stages 6--10 and produces
+  the complete HVC/host-PA/context-63-UAT/readback/cleanup proof. A later stage
+  failure is the next exact boundary; only stage 10 with valid 128-byte proof
+  can set MEMORY_PAGING_HW_PROVEN=YES.
+
+Source contract:
+- Root repository / branch / commit:
+  paulsmir/windows-on-m1 / feature/j313-gpu-acceleration /
+  4779f0204d76054776a3455d706e61945dc5444e; tracked dirty diff SHA-256 at
+  preregistration 02300e4aca8a12db49ef325d389e7046c5dbcee0006aeb620a4ba76f29a5a64b.
+- Current m1n1 checkout 1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58
+  has only an untracked .DS_Store; executed candidate is the frozen EXP406
+  m1n1 SHA-256
+  f62c9074d8ffc92f9d8b5e887b35abb195c622b3edc4c52dde6408e03dd09c73.
+- Mu checkout f1ef718e08db0e4c30fdb5d8555973513ad9a004 remains dirty as previously
+  recorded; executed candidate is the frozen EXP406 Mu SHA-256
+  c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+
+Artifact:
+- Build: isolated FRYZZING,
+  render-admission/scripts/build-driver.ps1 -Configuration Release
+  -MemoryQualification, ARM64, pinned WDK/SDK 10.0.28000.2526, code
+  analysis, Universal ApiValidator, Inf2Cat and existing test signing.
+  UMD and KMD both completed with zero warnings and zero errors.
+- Frozen source archive / package ZIP SHA-256:
+  44d21b3ab240b46970d37d0a239e4ed5c36cd07f8af435e58a876521c2d7c00f /
+  93a42805d6e27ce1039d95ebb99ef728baab705f779935675355b4f274b733ee.
+- SYS / INF / CAT / UMD SHA-256:
+  a44bfa5638083bc5a73923dd01a53745911f03115f7bbed2d2dc831b990557f9 /
+  0c431a7f21dcf655b7e7b3079c16dde944c5bff8fa75e706d84747ddfd267f7a /
+  d5d12ad908cff4c10b1cf0efd6b3a0373ef7d15f59ed7aa1c5e7a527ed5277eb /
+  b803b1fb189234ce41e931f65f9b37285fbed60dff2e0ee83d0d2ecf3a1bd13b.
+- Package/evidence directory:
+  .local/experiments/EXP-20260904-412-uat-cpu-alignment/.
+- Recovery artifacts: accepted EXP377 m1n1 SHA-256
+  fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+  emergency non-AGX Mu
+  279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c;
+  final normal G2 Mu
+  16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+
+Run contract:
+- First verify both control planes. On the live package-free normal-G2 guest
+  require SSH, eight CPUs, healthy AppleInput/stornvme/USBXHCI/sshd, null
+  APPL0002 INF/service, no AppleAgx package/module and no fresh 41/129/1001.
+- Controlled shutdown; boot current-compatible non-AGX, copy and stage exact
+  EXP412 without /install, and verify the package identity while APPL0002 is
+  absent and the SYS cannot load. Controlled shutdown again.
+- Boot the exact EXP406 synthetic pair with
+  WOM1_AGX_G2_POWER_BROKER=1; abort unless the host prints the G2 broker
+  mapping and no physical 880--888. If natural PnP retains the known Problem0
+  null-driver state, use the standard exact-INF /add-driver ... /install
+  trigger once, without explicit enable or reboot.
+- PASS requires stage 10 and a 128-byte proof with both statuses zero, executed
+  HVC calls, valid nonzero sub-40-bit host PAs, context 63, one exact 16-MiB
+  mapping at 0x1500000000, matching first/last translations and TTBR
+  publication/readback, successful reverse cleanup, live SSH/eight CPUs and no
+  fresh 41/129/1001.
+- Failure is the first exact non-success stage/status, invalid proof field,
+  physical 880--888, host loss, reset/bugcheck or fresh platform event. Capture
+  binary receipt, JSON, SetupAPI, System events and host log before recovery.
+  Then boot non-AGX, delete only the exact oemN.inf /uninstall, verify no
+  package/service/SYS/UMD/receipt remains, and restore clean ordinary G2.
+
+Observed result:
+- The clean ordinary-G2 preflight had APPL0002 Problem0 with null INF/service,
+  no AppleAgx package/service/SYS/module, eight CPUs and healthy input, NVMe,
+  xHCI and sshd, with no recent 41/129/1001. The current-compatible non-AGX
+  stage published exact `oem5.inf` without `/install`; APPL0002 was
+  non-present (only stale Problem45), no service or module loaded and health
+  remained GREEN.
+- The exact synthetic-only candidate printed the required G2 broker mapping
+  and no physical 880--888. Natural PnP retained Problem0/null INF, so one
+  standard exact-INF `/add-driver ... /install` trigger selected
+  `ACPI\APPL0002\0`.
+- The 128-byte production proof is complete: version 1, size 128,
+  qualification/cleanup status 0, HVC return/payload status 1, 70 HVC
+  invocations, 4152 translated pages, context 63, four UAT pages, one mapping,
+  and StartStage 10.
+- Exact mapping values are guest IPA and host PA `0x9d5f70000`, GPU VA
+  `0x1500000000`, length `0x1000000`; TTBR0/TTBR1, first/last translated
+  PA and first/last leaf descriptors are nonzero and the independently decoded
+  binary matches the JSON receipt exactly.
+- Host broker receipts advanced through stages 1--9 and stage-10 completion:
+  decimal sequences 17330864130 through 17330864149. No physical AGX IRQ,
+  reset or bugcheck occurred during the bind. APPL0002 intentionally ended
+  Code43 because the qualification profile returns fail-closed after cleanup;
+  service was stopped and SYS hash matched the preregistered package.
+- Two stornvme Event129 records 6528/6529 occurred during synthetic platform
+  boot before the bind and form the explicit watermark. No new 41/129/1001
+  occurred after the bind, during cleanup or after normal-G2 restoration.
+- Non-AGX cleanup successfully uninstalled and deleted exact `oem5.inf`.
+  Package/service/SYS/UMD/module were absent; the only remaining exact stale
+  Enum references were removed by `pnputil /remove-device
+  ACPI\APPL0002\0`. Final ordinary current G2 re-enumerated APPL0002 as
+  Problem28 with null INF/service, no package/service/SYS/module, eight CPUs
+  and healthy input/NVMe/xHCI/sshd.
+- Result / binary proof / final pre-cleanup / cleanup / final baseline /
+  candidate host log SHA-256:
+  `07aef0fe81b8b465d43e4cc16977f41b7550f220a847b7f9572ccc8cd25095e8` /
+  `2b0edd2ee796e913fb6ede78825c90781612daccba276856c3ea8fdcf202b3ae` /
+  `55b782ceca248b6c02e3abb36aec918726527cc68e526e2c8b0163e991c01bb6` /
+  `2e4f5f07d6783c0cb3ef2f45c4ce4b8cc473cf535f46ae7f3d961b9e41f642b5` /
+  `9ed8660e1085621ccea7a8a14399485a02293c94de0975c5946a20f8c8e64a9d` /
+  `4816d2b67544ded388fe004076b94e120a910efa7625ac51432cc89ecf9581ab`.
+
+Verdict:
+- CONFIRMED. `MEMORY_PAGING_IMPLEMENTED=YES` and
+  `MEMORY_PAGING_HW_PROVEN=YES`.
+- The production Windows DXGK physical-object/ADL/map path, real HVC
+  `0x4d31` caller/current m1n1 handler, valid host PAs, context-63 16-KiB
+  UAT creation, exact mapping, gpu-region publication/readback and reverse
+  cleanup are hardware-proven.
+- BuildPagingBuffer encoding, worker and DMA completion remain
+  implementation-proven rather than independently exercised by this
+  qualification branch. Per the approved sequence, the next boundary is the
+  minimal one-node render fence/progress layer, followed by DMA-boundary
+  preemption and per-engine TDR; no Full Graphics capability is published
+  until its complete atomic contract is real.
+
+### EXP-20260904-411 — synthetic-only production memory qualification
+
+Status: rejected — exact stage-5 UAT context creation boundary
+Created (UTC): 2026-09-04T12:30:00Z
+Completed (UTC): 2026-09-04T12:54:57Z
+
+WHY THIS HYPOTHESIS:
+1. EXP410 proves ordinary G2 enables physical routes 880/881 and reaches the
+   known `0x133 (1, 0x1e00, ...)` inert-ISR watchdog before the first production
+   memory stage receipt. Therefore ordinary G2 is an invalid memory harness.
+2. EXP406's current-compatible Mu+m1n1 pair publishes only synthetic edge 889,
+   no physical 880--888, and hardware-proved DriverEntry, DxgkInitialize,
+   AddDevice, StartDevice and Type1. It removes the exact confirmed confound
+   without changing memory code.
+3. EXP410's package already emits host-durable stage receipts and is reused
+   byte-exact. On the EXP406 platform, the first receipt must finally
+   distinguish pre-memory admission from physical owner/HVC/UAT execution.
+
+ATOMIC CONTRACT:
+- Mu `c7ddcfb...` and m1n1 `f62c907...` are one indivisible synthetic-IRQ
+  platform contract: exactly edge 889 and no 880--888. Neither artifact may be
+  mixed with ordinary G2 components.
+- KMD package is byte-identical to EXP410. No WDDM, memory, HVC, UAT,
+  scheduler, capability or diagnostic source changes.
+
+WINDOWS CONTRACT:
+- Same fail-closed WDDM 3.0 qualification vector, zero mandatory Type1 caps,
+  and production memory path. The profile exits before scheduler/display/AGX
+  backend and uses broker QUERY receipts only.
+
+AGX/ASAHI CONTRACT:
+- AGX power remains OFF; no ASC/RTKit, hardware UAT consumer, queue, TA/3D or
+  physical AGX IRQ. Synthetic 889 has explicit broker status/ack but no event
+  is expected because no scanout request is issued.
+
+TRANSLATION:
+- Exact Windows DXGK object/ADL/map -> HVC 0x4d31 -> m1n1 host PA -> context-63
+  16-KiB UAT publication/readback -> reverse cleanup, with host receipts before
+  each step. No alternate memory implementation.
+
+WHAT IS STILL UNKNOWN:
+- Whether the physical owner reaches HVC and whether the full PA/UAT proof
+  succeeds once physical IRQ 880/881 cannot preempt admission.
+
+Source/artifacts:
+- Root source commit `a6b311f8002aaa2bd198ff1159b8f522150b68ce`;
+  EXP410 ZIP/SYS/INF/CAT/UMD hashes remain
+  `de877cc20f3893b48fd5eeB393b79dbfd6e8fa62ca9286e84a009b40bb08df3f` /
+  `54aa036e4cd7a606c0ab9e9b6372e5678afb45312991d184c0584e363915850f` /
+  `d89b93585306f0dde58ca494225f5c7e6a85c194b2c0a797452c2e20d0f49450` /
+  `b67ad976208e277c334b1bf16c98935df24a63b05c5849711d45b23bf7836930` /
+  `52e13e5fd828fe50b03c42de7a4773d8d78aa4ff7bcf7be133313ef49022570c`.
+- Candidate m1n1 / Mu SHA-256:
+  `f62c9074d8ffc92f9d8b5e887b35abb195c622b3edc4c52dde6408e03dd09c73` /
+  `c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+- Emergency non-AGX Mu:
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`;
+  final normal G2 Mu:
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+
+Run/recovery contract:
+- Controlled shutdown of the clean normal-G2 guest; boot accepted EXP377 m1n1
+  plus non-AGX Mu. Stage exact package without `/install`, verify APPL0002
+  absent, no service/module activation, eight CPUs and healthy services.
+- Controlled shutdown; boot exact EXP406 synthetic pair. Natural PnP selection
+  only. Host runner must show no 880--888. PASS is stage 10, HVC success,
+  complete 128-byte PA/UAT proof, cleanup status zero and live SSH/8 CPUs.
+- Any last broker stage/HVC status is the conclusive next boundary. Any
+  physical 880--888, watchdog or missing host receipt invalidates the run.
+- Capture evidence first, then non-AGX exact `oemN.inf /uninstall` cleanup and
+  restore clean ordinary current G2. Evidence directory:
+  `.local/experiments/EXP-20260904-411-synthetic-memory-qualification/`.
+
+Attempt 1 invalid before memory; attempt 2 preregistered:
+- Attempt 1 used the correct m1n1/Mu/package hashes and no physical 880--888,
+  but the host invocation omitted `WOM1_AGX_G2_POWER_BROKER=1`. Consequently
+  the runner never installed the required stage-2 broker hook. Windows faulted
+  repeatedly on exact unmapped IPA `0x300000418` in
+  `AdmissionInterruptStart` before the first memory receipt or HVC. Host
+  recovery captured the exact translation fault and rendezvous panic; the
+  result is INVALID BEFORE MEMORY, not a driver-memory verdict.
+- Current-compatible non-AGX recovery removed exact `oem5.inf`; the identical
+  package has been staged again as `oem5.inf`. Attempt 2 changes only the
+  launcher environment to `WOM1_AGX_G2_POWER_BROKER=1`, the same required
+  invocation used by EXP406. Before guest entry the runner must print
+  `AGX G2 power broker: 0x300000000..0x300001000`; absence is immediate abort.
+  All other pass/failure/recovery gates remain unchanged. No third attempt is
+  permitted for this package/platform pair.
+
+Observed result:
+- Attempt 2 booted the exact candidate with the required G2 broker mapping and
+  no physical 880--888. The known APPL0002 Problem0/null-INF state did not
+  naturally select the staged package; one standard exact-INF
+  `/add-driver ... /install` trigger selected `oem5.inf` without an explicit
+  device enable.
+- Host-durable QUERY receipts reached stages 1, 2, 3 and 4 complete, entered
+  stage 5 and then emitted the failure receipt:
+  `0x409000002`, `0x409000004`, `0x409000006`, `0x409000008`,
+  `0x40900000a`, `0x40900000b`.
+- The exact 128-byte proof reports version 1, size 128,
+  `QualificationStatus=0xc000009a`, `CleanupStatus=0`, `StartStage=5`;
+  later HVC/PA/UAT proof fields are zero because the failure proof is built
+  after successful reverse cleanup.
+- Stage 3 and stage 4 completion require `AdmissionPhysicalTranslate` success.
+  Therefore the production DXGK physical owner, real HVC `0x4d31` caller,
+  current m1n1 handler, returned host pages and aligned 16-MiB local object are
+  hardware-proven. Context-63 UAT creation/publication is not proven.
+- Windows remained reachable with eight CPUs and healthy input, storage, xHCI
+  and sshd. One fresh stornvme Event129 occurred; no Event41 or Event1001.
+  Exact `oem5.inf /uninstall` cleanup removed the package/service/module and
+  receipts, then the normal current G2 platform was restored.
+- Result / cleanup / SetupAPI / final host log SHA-256:
+  `287ef8b3cf99244bcc0dfc2b3984ffcb636f7e2a531a1047df32b61a3847f45f` /
+  `67e3aef2dca9f38ada195d52d6dda643e270a29232e52f2bb05a6b5a7c12b315` /
+  `dec79ccd46220060478a0735b047b3aa9fc03273ae740cfd8996642aa7244ec5` /
+  `2f06c3396bdcc535761c4f2625f0f655870b02ac64c8ab2318779aa0fecb15fe`.
+
+Verdict:
+- REJECTED at production stage 5: `AppleAgxResidencyContextCreate` returns
+  `STATUS_INSUFFICIENT_RESOURCES` before context-63 UAT publication.
+- `MEMORY_PAGING_IMPLEMENTED=YES`; `MEMORY_PAGING_HW_PROVEN=NO`.
+- The next single-variable candidate is EXP412, which removes only the false
+  16-KiB CPU virtual-address alignment requirement while preserving all
+  physical UAT invariants and the byte-exact synthetic-only platform.
+
+### EXP-20260904-410 — host-visible production memory stage receipts
+
+Status: preregistered — one final pre-HVC boundary bind pending
+Created (UTC): 2026-09-04T12:21:34Z
+
+WHY THIS HYPOTHESIS:
+1. EXP409 reset Windows during `pnputil /install`; accepted m1n1 recorded the
+   guest PSCI reset, but the complete host log contains no
+   `guest IPA/PA HVC imm=0x4d31` line. Therefore the immediate boundary is
+   before the m1n1 HVC handler, not a returned HVC status or UAT result.
+2. Abrupt reset left the preflight file as allocated zero bytes and no registry
+   receipt, dump, Event41/129/1001, or install result. Windows-side persistence
+   cannot discriminate the synchronous callback that resets the guest.
+3. The already mapped current power broker accepts a no-power `QUERY` and
+   synchronously prints its receipt in the host-owned runner log. Commit
+   `a6b311f` emits a monotonically encoded query immediately before and after
+   each existing production memory stage only in the qualification build. No
+   m1n1 or functional memory implementation changes.
+
+WINDOWS CONTRACT:
+- Identical EXP409 WDDM vector, zero Type1 mandatory caps, and production
+  memory path. The new operation is diagnostic-only MMIO to an already owned
+  broker page; it does not publish sources, scheduler, preemption, TDR, GDI,
+  scanout, or AGX execution.
+
+AGX/ASAHI CONTRACT:
+- Broker command is `QUERY`, never ON/OFF. AGX domains, ASC/RTKit, UAT hardware
+  consumers, queues and physical IRQs 880--888 remain untouched. Existing
+  m1n1 prints `AGX power receipt seq=... cmd=0 state=0 result=0` synchronously.
+
+TRANSLATION:
+- Sequence is `0x409000000 + stage*2 + phase`, with phase 0 before and phase 1
+  after an operation. Stages retain EXP409 numbering 1 through 10. The last
+  host receipt before reset is therefore durable evidence for the exact
+  Windows production boundary. A subsequent HVC log is independently required
+  before any HVC success/failure inference.
+
+WHAT IS STILL UNKNOWN:
+- The last entered/completed stage and whether execution reaches HVC dispatch.
+  This run is diagnostic; `MEMORY_PAGING_HW_PROVEN` remains NO unless the full
+  128-byte success proof and cleanup complete.
+
+Single changed variable: host-visible QUERY receipts around existing stages.
+EXP408/409 are terminal and may not be repeated.
+
+Source/artifact contract:
+- Root / branch / commit: `paulsmir/windows-on-m1` /
+  `feature/j313-gpu-acceleration` /
+  `a6b311f8002aaa2bd198ff1159b8f522150b68ce`; tracked diff SHA-256
+  before this entry:
+  `296fabbead3fc758588146ecd153463cdb8bb226130daceaff9fbfde31972799`.
+- Platform remains accepted EXP377 m1n1
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
+  and current G2 Mu
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+- Frozen source archive SHA-256:
+  `f586f517898fea5be3bace6299c8c93e307f484f1f6c985c002669b593c76f82`.
+  Isolated pinned-WDK `10.0.28000.2526` ARM64 build, analysis, Universal,
+  Inf2Cat and signing passed with zero warnings/errors.
+- ZIP / SYS / INF / CAT / UMD SHA-256:
+  `de877cc20f3893b48fd5eeb393b79dbfd6e8fa62ca9286e84a009b40bb08df3f` /
+  `54aa036e4cd7a606c0ab9e9b6372e5678afb45312991d184c0584e363915850f` /
+  `d89b93585306f0dde58ca494225f5c7e6a85c194b2c0a797452c2e20d0f49450` /
+  `b67ad976208e277c334b1bf16c98935df24a63b05c5849711d45b23bf7836930` /
+  `52e13e5fd828fe50b03c42de7a4773d8d78aa4ff7bcf7be133313ef49022570c`.
+- Package: `.local/experiments/EXP-20260904-410-host-memory-stage/package/`.
+
+Run/recovery contract:
+- Current normal G2 is clean: APPL0002 null INF/service, no package/service/SYS/
+  UMD, SSH and eight CPUs healthy, no fresh 41/129/1001. Active foreground
+  runner writes
+  `.local/experiments/EXP-20260904-409-memory-start-stage/final-g2.log`; its
+  pre-run byte offset is `103986`.
+- Hash-check and install only EXP410 once. PASS for the discriminator is at
+  least one host receipt. On reset, preserve the log tail from byte 103986,
+  wait for launcher exit, confirm `Running proxy`, boot current-compatible
+  non-AGX Mu, collect Windows evidence, delete exact package, and restore the
+  same normal G2 pair. Do not run normal G2 while the package remains.
+- Full memory PASS still requires stage 10, HVC success log, valid 128-byte PA/
+  UAT proof, cleanup success and healthy Windows. Any earlier last sequence is
+  a conclusive rejected boundary; missing host receipt is pre-memory and ends
+  this qualification branch without another equivalent run.
+
+Observed result:
+- Exact package was selected as `oem5.inf`. Before any host-visible memory
+  stage or HVC receipt, the ordinary current G2 platform enabled physical AGX
+  routes vINTID 880/AIC563 and 881/AIC564. No
+  `AGX power receipt seq=0x409...` and no `guest IPA/PA HVC imm=0x4d31` exists
+  after the preregistered host-log offset.
+- Windows then reset with bugcheck `0x133 (1, 0x1e00,
+  0xfffff803ca6083c0, 0)`. Event1001 record 5888 and Event41 record 5837 are
+  preserved; minidump `090426-13812-02.dmp` SHA-256 is
+  `078d8a70ab210126ee8049b6e8558e816bf2552a8ce8493fa5ee424d30faa182`.
+- This exactly reproduces the already-proven inert-ISR/physical-level-IRQ
+  cumulative DPC watchdog and occurs before the production memory function's
+  first host receipt. It is not evidence against physical objects, HVC, host
+  PA, UAT, or paging.
+- Current-compatible non-AGX recovery restored SSH and eight CPUs. Exact
+  `oem5.inf` cleanup removed the package/service/SYS/UMD/staging; input,
+  stornvme, USBXHCI and sshd remained running. Ordinary current G2 was restored
+  with APPL0002 null INF/service and no project package.
+- Result / cleanup / bugcheck-event / setup evidence SHA-256:
+  `7b314d0827cd031b73e8b00b3405d42571cf1aa0c9ae524e4263205ab521fed0` /
+  `d2360da01afa559eec7e18ab38b84d1c6d2736306733d6c99ec0d4ddec10e4c9` /
+  `ddbed19b4a15cbac634d5f5071561d80cdc279c461d5420139d4ce30501de12a` /
+  `7283c2ab6144640f34072289f30be980724674df55a54197f5f5e11a3d2936c4`.
+
+Verdict: INVALID FOR MEMORY / CONFIRMED PLATFORM CONFOUND. Ordinary current G2
+must not be used with the structurally registered Full Graphics ISR before
+real physical IRQ ownership. `MEMORY_PAGING_IMPLEMENTED=YES` and
+`MEMORY_PAGING_HW_PROVEN=NO` remain unchanged.
+
+Next experiment: reuse the exact EXP410 package unchanged on the already-built
+current-compatible EXP406 synthetic-889-only Mu+m1n1 pair, which publishes no
+physical IRQ 880--888 and previously reached StartDevice/Type1. This changes
+only the indivisible IRQ publication/routing platform contract. Stage under
+current non-AGX first so ordinary G2 cannot bind the package.
+
+### EXP-20260904-409 — production memory start-stage discriminator
+
+Status: preregistered — one new hash-pinned current-G2 bind pending
+Created (UTC): 2026-09-04T12:06:55Z
+
+WHY THIS HYPOTHESIS:
+1. EXP408 selected its exact package and proved DriverEntry/DxgkInitialize,
+   Type35 and healthy rollback, but wrote no 128-byte qualification proof.
+   Therefore `MEMORY_PAGING_HW_PROVEN` remains false and the unknown is before
+   proof construction, not in scheduler, GDI, scanout, or AGX execution.
+2. EXP408's rolling device receipt was overwritten by Remove, so it cannot
+   distinguish an unentered StartDevice from validation, inventory, physical
+   owner/HVC, local allocation, residency, mapping, TTBR, publication, or
+   contract failure.
+3. Commit `be036e4` changes only durable stage/status telemetry around the
+   existing production `AdmissionMemoryRuntimeStart`. Its failure branch now
+   records the same 128-byte receipt after production cleanup; no functional
+   memory, HVC, UAT, WDDM capability, or platform behavior changes.
+
+WINDOWS CONTRACT:
+- Identical Full Graphics WDDM 3.0 vector and fail-closed qualification profile
+  as EXP408. Type1 caps remain zero. The profile returns unsupported after a
+  success proof or returns the exact production failure after recording stage,
+  status, and cleanup.
+
+AGX/ASAHI CONTRACT:
+- Identical to EXP408: no AGX power, firmware, queue, submission, DCP, or
+  physical IRQ 880--888. Context 63 and 16-KiB page-table publication are
+  reached only if all earlier production memory stages succeed.
+
+TRANSLATION:
+- The only new data is `StartStage`: 1 entered, 2 inventories, 3 physical
+  owner/HVC, 4 local object, 5 residency roots, 6 local mapping, 7 TTBR encode,
+  8 gpu-region publication, 9 memory contract, 10 complete. The accompanying
+  `QualificationStatus` is the exact NTSTATUS returned by production code.
+
+WHAT IS STILL UNKNOWN:
+- The first non-success stage on the live current-G2 guest. A stage-10 full
+  receipt would instead qualify HVC, host PA, context-63 UAT readback and
+  cleanup and set `MEMORY_PAGING_HW_PROVEN=YES`.
+
+Single changed variable: stage/status telemetry only. EXP408 must not be
+repeated and no other source or platform variable may change.
+
+Source contract:
+- Root / branch / commit:
+  `paulsmir/windows-on-m1` / `feature/j313-gpu-acceleration` /
+  `be036e469c531c146edf76ab8bf00d9fabb3e45d`; preserved tracked diff
+  SHA-256 before this ledger entry:
+  `5b984ce5cb2b645a83b3348d0d4fa675b3acf69477ec8ec102717e4146fa4587`.
+- Executed platform remains accepted EXP377 m1n1 commit
+  `d703f87e7031717a3dc56d0cd6b8c3827eff8c54`, artifact SHA-256
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`,
+  and current G2 Mu SHA-256
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+
+Artifact:
+- Frozen source archive SHA-256:
+  `f92c766792c9e66f62809cb33e59379c57452aa10968be90363c8e4a1e30923a`.
+- Build: isolated FRYZZING, `build-driver.ps1 -Configuration Release
+  -MemoryQualification`, ARM64, pinned WDK/SDK `10.0.28000.2526`, analysis,
+  Universal, Inf2Cat, signing; zero warnings and zero errors.
+- ZIP / SYS / INF / CAT / UMD SHA-256:
+  `c09da4a245c95f55add77379585a08d07974dedcca321a2ef4d9b5f1b9d6e566` /
+  `c611a53fba5837dc3de75124f1b198f8d4c896839dd932b5f42bc4484498b829` /
+  `dd0bd55c5bf81eac0ba694e09337921c5515aa9ab63c052c1d16e4699cdccc81` /
+  `fc283bdca09c324c815af382855aebb4db1ebecc03cedaaa9f16a0953a51b807` /
+  `fca5d99e5e86780520d358a97f276892f71025b7f72741dca506dfb58085b27c`.
+- Package:
+  `.local/experiments/EXP-20260904-409-memory-start-stage/package/`.
+- Recovery: current package-free GPU-visible G2 guest; immutable emergency
+  non-AGX Mu `279bd36a...0e3f32c` only if SSH is lost.
+
+Run contract:
+- Recheck live SSH, APPL0002 unbound with null INF/service, no project package,
+  eight CPUs and healthy input/NVMe/xHCI/sshd. Copy and hash-check only EXP409,
+  parse the runner/cleanup scripts, then run `pnputil /add-driver ... /install`
+  once. No reboot or explicit device-enable command.
+- PASS: stage 10 plus the complete EXP408 HVC/PA/UAT/cleanup proof and healthy
+  system. A non-10 stage is a conclusive rejected boundary only when its exact
+  status and cleanup success are present. Missing proof again is inconclusive.
+- Capture JSON, raw receipt, SetupAPI and System EVTX before deleting the exact
+  published INF with `/uninstall`; require no matching package/service/SYS/UMD,
+  null device INF/service, eight CPUs, healthy services and no new
+  41/129/1001.
+- Evidence: Windows `C:\Users\pavel\AppleAgxEvidence\EXP409`; host
+  `.local/experiments/EXP-20260904-409-memory-start-stage/evidence/`.
+
+Interim observation and preregistered recovery:
+- The bind-side SSH session stopped responding before JSON output. A second
+  bounded SSH connection timed out. The previously active foreground
+  `run_uefi.py` then disappeared and both USB endpoints re-enumerated at
+  approximately 14:12 local time. A read-only control probe, performed only
+  after launcher exit, proves J313/T8103, eight CPUs and fresh `Running proxy`.
+  No host-driven reset was issued. This is a spontaneous guest/platform reset
+  during the production memory-start interval.
+- Do not launch normal G2 while EXP409 remains staged. Recovery uses the
+  current-compatible non-AGX Mu SHA-256
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`
+  with accepted EXP377 m1n1 SHA-256
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`.
+  This profile cannot enumerate APPL0002 and therefore cannot reload EXP409.
+- PASS for recovery is Windows SSH with eight CPUs and healthy storage/xHCI/
+  input, followed by read-only collection of persisted proof, service/package,
+  dump and 41/129/1001 state. Only then delete exact `oemN.inf /uninstall`,
+  exact matching service/files/staging/receipts, verify clean non-AGX health,
+  and restore ordinary current G2. Failure is another reset, no SSH, ambiguous
+  package identity, or any attempt to load the package under normal G2 again.
+- Recovery launch evidence paths:
+  `.local/experiments/EXP-20260904-409-memory-start-stage/recovery-nonagx.log`
+  and `recovery-nonagx-contract.bin`.
+
+### EXP-20260904-408 — production memory path qualification
+
+Status: preregistered — one current-G2 natural bind pending
+Created (UTC): 2026-09-04T11:53:34Z
+
+WHY THIS HYPOTHESIS:
+1. EXP406 proves this separate WDDM 3.0 vector reaches natural AddDevice and
+   StartDevice on the current platform; EXP393/396 never reached StartDevice
+   and therefore could not execute their older memory discriminator.
+2. Commits `8cd1449`, `3380434`, and `39f64c6` form one production-linked
+   physical-object/ADL/map/HVC/context-63-UAT/paging lifetime, but every result
+   is offline. The first hardware-dependent operation is the real HVC
+   `0x4d31` call into current m1n1.
+3. A compile-time branch after the unchanged production
+   `AdmissionMemoryRuntimeStart` can inspect its live UAT tables and published
+   context-63 TTBR pair, call the unchanged reverse cleanup, persist one binary
+   proof, and exit before scheduler, display ownership, AGX power, RTKit,
+   queues, TA/3D, or physical IRQ 880--888.
+
+WINDOWS CONTRACT:
+- FULL GRAPHICS WDDM 3.0 initialization vector is retained only to reach the
+  already-proven StartDevice entry. The qualification branch publishes no
+  Type1 capability, source, target, scheduler, preemption, TDR, GDI, flip, or
+  presentation contract and returns `STATUS_NOT_SUPPORTED` after evidence and
+  reverse cleanup.
+- Production DXGK callbacks create one scratch object, one aligned 16-MiB
+  local object, and the bounded UAT table objects using exact contiguous
+  physical objects, contiguous ADLs, noncached kernel maps, and normal destroy
+  callbacks.
+
+AGX/ASAHI CONTRACT:
+- Context 63 uses 16-KiB UAT leaf mappings and its exact TTBR pair is published
+  only into the assigned gpu-region. No AGX power, ASC/RTKit firmware, queue,
+  submission, DCP transaction, or physical interrupt is needed or allowed.
+- Physical outputs must be nonzero, 4-KiB aligned, contiguous for each DXGK
+  object, and below the T8103 40-bit output-address limit.
+
+TRANSLATION:
+- Windows ADL guest IPA pages are passed by the production HVC caller to the
+  current m1n1 EL2 `hv_guest_ipa_pa_handle`; successful x0 and payload status
+  yield validated host PAs.
+- The aligned local host PA is mapped by the production residency/UAT modules
+  at GPU VA `0x1500000000` in context 63. A read-only walk of the actual
+  CPU-owned first and last leaf plus a readback of live gpu-region TTBR slots
+  must match the production object's exact physical range.
+
+WHAT IS STILL UNKNOWN:
+- Whether current Windows executes the production HVC instruction against the
+  running accepted m1n1 handler and returns valid host PAs.
+- Whether real context-63 root/table allocation, 16-KiB leaf encoding,
+  gpu-region TTBR publication/readback, and full reverse cleanup all succeed on
+  J313. BuildPagingBuffer/DMA completion remains outside this smallest run
+  because the branch deliberately cleans up before exposing any dxgkrnl
+  scheduler or capability.
+
+Single changed variable: enable only
+`APPLE_AGX_RENDER_MEMORY_QUALIFICATION=1` in the otherwise current source. The
+branch reuses the exact production physical owner, HVC caller, residency, UAT,
+publication, and cleanup functions; it contains no second memory
+implementation.
+
+Source contract:
+- Root repository / branch / commit:
+  `paulsmir/windows-on-m1` / `feature/j313-gpu-acceleration` /
+  `ec4981052afcf28eb822a3e3f483ae9eeab64293`; preserved unrelated tracked
+  diff SHA-256 before ledger edits:
+  `fd939c4e50c39c4701e3b4bd394ebd2d70bf624beb8446e05c9370cbe034d43c`.
+- Executed accepted m1n1 artifact is EXP377 commit
+  `d703f87e7031717a3dc56d0cd6b8c3827eff8c54`, SHA-256
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`.
+  Current m1n1 checkout `1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58`
+  is clean and contains the same HVC handler contract.
+- Mu checkout `f1ef718e08db0e4c30fdb5d8555973513ad9a004`, preserved tracked
+  diff SHA-256
+  `7febae89f21b2caf1dac3429544009858628e794cb00d5dd7e4ed278f9ce`;
+  currently running normal G2 FD SHA-256
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+
+Artifact:
+- Frozen source archive v2 SHA-256:
+  `e2ae360cf9a5bea831c02b2fc792f017e4652436ce24f55a0a4026df754b1e08`.
+  v1 is a rejected builder-only whole-program-warning intermediate and must
+  never be staged.
+- Build command: `render-admission/scripts/build-driver.ps1 -Configuration
+  Release -MemoryQualification` in an isolated FRYZZING tree with inherited
+  WDK/SDK `10.0.28000.2526`, ARM64 Release, code analysis, Universal
+  validation, Inf2Cat, and the existing test signer. Build passed with zero
+  warnings and zero errors.
+- ZIP / SYS / INF / CAT / UMD SHA-256:
+  `afdfb0fd939ebfefaebbfe95cdfa5ede5a6067f4dc037c7445f34588bf9e2b52` /
+  `110a46c30e42b42daff1e5dabfa958e6b08656f84dae578df5b7742bc8b24739` /
+  `2fad49f2deb6017b0e8fc42418dd8b6a8f07ce6881c519b6364bc88e8ec56f42` /
+  `5820bf17f0a454c3ecfc7d6c481f962d27f7f4edfde47a5633b361d0aa226b0b` /
+  `4171d47b197c7860db6023479190a2915cd736928ba52c011d2c76398ff935ed`.
+- Package path:
+  `.local/experiments/EXP-20260904-408-production-memory-qualification/package/`.
+- Recovery: the current package-free GPU-visible G2 guest; immutable emergency
+  non-AGX Mu SHA-256
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
+
+Run contract:
+- Preflight already proves live SSH on `J313-WIN`, natural APPL0002 Code 28,
+  eight CPUs, and running AppleInput/stornvme/USBXHCI/sshd. Both expected proxy
+  and vUART USB endpoints are present; no physical operator action is needed.
+- Copy only the hash-verified package to
+  `C:\Users\pavel\AppleAgxStaging\EXP408`, then run
+  `pnputil /add-driver AppleAgxRenderAdmission.inf /install` once in the live
+  current-G2 guest. Do not reboot, enable a device explicitly, publish a Type1
+  cap, or enable physical IRQ 880--888.
+- PASS requires a 128-byte `Wom1MemoryQualification` receipt with version 1,
+  both statuses zero, nonzero HVC invocation/page counts, context 63, exactly
+  one 16-MiB mapping, nonzero sub-40-bit host PA, exact GPU VA/length, matching
+  first/last resolved PAs and valid context-63 TTBR values, followed by cleanup
+  status zero. SSH, eight CPUs, input/storage/xHCI must remain healthy with no
+  fresh 41/129/1001.
+- Failure is missing StartDevice/receipt, any nonzero qualification or cleanup
+  status, invalid PA/UAT values, host loss, reset/bugcheck, or fresh critical
+  platform event. Evidence must be copied before exact package removal.
+- Evidence paths: Windows
+  `C:\Users\pavel\AppleAgxEvidence\EXP408`; host
+  `.local/experiments/EXP-20260904-408-production-memory-qualification/evidence/`.
+- After capture, delete only the exact published `oemN.inf` with
+  `/delete-driver /uninstall`, remove only matching stopped service/files and
+  `Wom1*` receipts if left, then require the original Code28/package-free
+  healthy G2 baseline.
+
+Observed result:
+- The one authorized live current-G2 install selected exact `oem5.inf`; the
+  installed INF/SYS/UMD hashes matched the preregistration. Service-side
+  receipts prove `DriverEntry` and `DxgkInitialize` status zero. Device state
+  ended at Type35 query followed by Remove and Code43.
+- `Wom1MemoryQualification` was absent (`ProofBytes=0`). Therefore this run
+  proves neither HVC execution nor a failure at HVC/UAT: the single rolling
+  device receipt was overwritten by Remove and cannot distinguish an earlier
+  StartDevice/memory-start failure. The post-install JSON serializer also
+  rejected one nested Hashtable, but a separate read-only collector preserved
+  all available raw state without rebinding.
+- Windows remained live with SSH, eight CPUs, AppleInput, stornvme, USBXHCI,
+  and sshd running. No System 41/129/1001 occurred in the experiment window.
+- Exact cleanup deleted only `oem5.inf` with `/uninstall`; no matching package,
+  service, SYS, UMD, staging, or Wom1 receipt remains. APPL0002 has null
+  INF/service and the guest remains healthy. PnP currently reports Problem 0
+  for that unbound instance rather than the pre-run Problem 28; no driver is
+  selected or loaded.
+- Result / cleanup / SetupAPI / System EVTX SHA-256:
+  `2f68a8345b26f52b9521eb190bf0ceb76907eb96021f1c16dfd2a94fb3e97b5f` /
+  `16cdb0fd17773b94d5cfce461f0826d75c4b72915ce230c6d297486e08f1747d` /
+  `e1139d5b656ce69f07c24d85c3d8e79704d27a13e96014ea877071ff9c6fae66` /
+  `f29536bf2ced9aad9a56345e184e4b6ee3f51ea9857ef8206e5d00288c7f8c01`.
+
+Verdict: INCONCLUSIVE BEFORE MEMORY PROOF. `MEMORY_PAGING_IMPLEMENTED=YES`;
+`MEMORY_PAGING_HW_PROVEN=NO`.
+
+Next experiment: add only durable stage/status capture around the existing
+production `AdmissionMemoryRuntimeStart` sequence, including its failure path,
+then perform one new hash-pinned bind. Do not change physical allocation, HVC,
+UAT, paging, scheduler, capabilities, Mu, m1n1, or interrupt ownership. This
+new evidence must identify the exact pre-proof boundary; repeating EXP408 is
+forbidden.
+
+### EXP-20260904-406 — coherent Full Graphics ABI admission
+
+Status: rejected — coherent vector passed DxgkInitialize and reached successful
+Type 1 QueryAdapterInfo, then dxgkrnl removed the adapter with Code 43 before
+GPU LUID / Type34 / Type35 / VidPn admission
+Created (UTC): 2026-09-04T08:52:56Z
+Completed (UTC): 2026-09-04T09:43:45Z
+
+WHY THIS HYPOTHESIS:
+1. EXP405 selected its exact package but `DxgkInitialize` returned
+   `STATUS_REVISION_MISMATCH` before AddDevice. Its 1296-byte WDDM 3.0 version
+   and builder matched accepted EXP214; the atomic structural difference was
+   removal of ISR/DPC/ControlInterrupt plus an incomplete Full Graphics display
+   branch without SetPalette/GetScanLine.
+2. Exact pinned-WDK enumeration proves the WDDM 3.0 structure contains 162
+   fields. The checked matrix covers every field once, and Microsoft RosKmd
+   registers the five missing entries in its corresponding base/full-display
+   vector.
+3. EXP404 proved inert raw level AGX interrupt registration is unsafe. Current
+   m1n1 already provides a scanout broker with explicit IRQ status, enable and
+   write-one-to-clear acknowledgement, so a distinct synthetic edge source can
+   satisfy the structural interrupt boundary while leaving all physical AGX
+   sources masked and AGX firmware inactive.
+
+ATOMIC CONTRACT:
+- Restore ISR, DPC, ControlInterrupt, SetPalette and GetScanLine together with
+  the existing EXP405 vector; none is probed independently on Air.
+- Candidate Mu publishes the four existing APPL0002 memory resources and only
+  synthetic edge INTID 889. It does not publish raw physical routes 880--888.
+- Candidate m1n1 injects 889 only for an enabled nonzero scanout-broker IRQ
+  status. INTID 889 has no physical AIC route.
+- The nonpaged driver ISR reads only broker IRQ status, acknowledges observed
+  owned bits, records interlocked in-memory counters and returns. The source is
+  initially masked; no DPC is queued without real deferred work.
+- These pieces are invalid separately: restoring the pointers with current Mu
+  repeats the EXP404 storm, while changing interrupt publication without the
+  coherent vector does not test the EXP405 boundary.
+
+WINDOWS CONTRACT:
+- FULL GRAPHICS WDDM 3.0 through `DxgkInitialize`, 1296-byte
+  `DRIVER_INITIALIZATION_DATA`, exact EXP214 render group plus the RosKmd common
+  display group.
+- AddDevice/StartDevice, POST ownership, one internal source/target, Type 34
+  40-bit visibility, Type 35 zero IOMMU, fixed VidPn and GPU LUID are the PASS
+  ladder.
+- SetPalette/GetScanLine and all not-yet-implemented render/allocation/context/
+  paging/submission calls fail honestly. Present no longer returns false
+  success. No flip, VSync, preemption, scheduler or queue capability is added.
+
+AGX/ASAHI CONTRACT:
+- Asahi T8103 uses the ASC mailbox and event stamps for firmware completion; it
+  does not treat all five raw SGX lines as interchangeable completion sources.
+- EXP406 powers no AGX domain, boots no ASC/RTKit firmware, creates no UAT or
+  queue, and submits no work. Physical 563/564/565/566/579 and mailbox
+  575/576/577/578 remain masked from the Windows candidate.
+- m1n1 retains DCP/scanout broker ownership inherited by the current platform;
+  only its already-implemented synthetic broker edge is exposed as 889.
+
+TRANSLATION:
+- Dxgkrnl's required ISR pointer maps to one synthetic broker edge, not to an
+  unacknowledged raw AGX level line. Broker status is peripheral status;
+  write-one-to-clear is source dismissal; broker IRQ_ENABLE is the mask.
+- Windows display/VidPn objects remain mapped only to fixed POST state.
+  Windows allocations, contexts, paging and commands have no AGX translation
+  until a later callback becomes the next observed boundary.
+
+WHAT IS STILL UNKNOWN:
+- Whether this coherent 162-field WDDM 3.0 vector passes DxgkInitialize and
+  reaches AddDevice/StartDevice/Type34/35/VidPn on the current Windows build.
+- Which honest render-side callback, if any, Windows invokes during initial
+  Full Graphics admission. Actual AGX execution behavior is not under test.
+
+Source contract:
+- Root repository / branch: `paulsmir/windows-on-m1` /
+  `feature/j313-gpu-acceleration`, commit
+  `3347a7c9ef355aac871458456863c158b450ccf8`; preserved unrelated dirty
+  diff SHA-256
+  `d017e0049ef3e7bd0ae251d37fec2183b7baa513acc893bb3889442ac5454193`.
+- m1n1 commit `1791ea5a7d6a44e7610cccf81f2f32a19f5d5e58`, tracked
+  diff SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Mu commit `f1ef718e08db0e4c30fdb5d8555973513ad9a004`, preserved unrelated
+  tracked diff SHA-256
+  `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+- Design / matrix / plan commits: `509dd11` / `509dd11` / `931be6d`.
+- Driver/platform implementation commits: root `6d698ca`, `de452ee`,
+  `8336ef2`, `912cfc5`, `5776857`, `3347a7c`; m1n1 `2520297`,
+  `1791ea5`; Mu `f1ef718e08`.
+- Relevant source/test composite SHA-256:
+  `aa139360bb8b1aa616c3c68815ab075bcf14656142bbc58b23ab88307058746e`.
+
+Artifact build contract:
+- KMD/UMD: frozen source archive copied to FRYZZING, inherited
+  `C:\Users\pauls\Directory.Build.props`, WDK/SDK `10.0.28000.2526`,
+  MSBuild `18.1.0-preview-25527-05`, ARM64 Release, code analysis, Universal
+  validation, Inf2Cat, existing signer. No target-platform override.
+- m1n1: clean build from nested commit `1791ea5`; candidate Mach-O must retain
+  the accepted launch/platform behavior and synthetic-only scanout injection.
+- Mu: build from nested commit `f1ef718e08` plus recorded unrelated diff, with
+  `BLD_*_AIC_BUILD=FALSE`, `BLD_*_J313_AGX_G2_PROFILE=FALSE`, and
+  `BLD_*_J313_AGX_ABI_ADMISSION_PROFILE=TRUE`. Decompile AML and require four
+  memory descriptors, edge 889 and no 880--888.
+- Final frozen KMD source archive v4 SHA-256:
+  `7153d2ef0c93bc754329ffb0202c15b54148daf7f4bf796c1072337603dcf6ea`.
+  Earlier v1--v3 archives are builder-only rejected intermediates and must
+  never be staged.
+- KMD build v4 passed compile, link, code analysis, Universal validation,
+  Inf2Cat and signing with zero warnings/errors. ZIP / SYS / INF / CAT / CER /
+  KMD PDB / UMD DLL / UMD PDB SHA-256:
+  `7847a28df4e4510ddfad52d13142aed36f47835a07d4dc33da458bfd1beb4446` /
+  `37aabfc498615690b7a19f381bc494385d706c91f2411d69fcca28e6973b8778` /
+  `90205645a8afad83f26a5818b0b12a219b1b8f53b1d07440d19ee3e56a58750c` /
+  `34926621a04daccebf1fd277b5e1a73520069fddea09bd4feec2fd59b3c255ec` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `5f7724524780a3e112662e1ae8dd926558bc9e627ef91185868a5104e705562a` /
+  `acfe9be727895599cb30b4653bec5a0146098be990b5036b57c1a6109b14704c` /
+  `ed0d2c70636dfc32cf1826e0f50de02063d0e1d5cb4feff6389b0d1cce75c99b`.
+- Candidate m1n1 Mach-O SHA-256:
+  `f62c9074d8ffc92f9d8b5e887b35abb195c622b3edc4c52dde6408e03dd09c73`.
+  Its clean build completed; emitted warnings are unchanged baseline warnings
+  outside the synthetic-interrupt change.
+- Candidate Mu FD / AML / decompiled DSL SHA-256:
+  `c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0` /
+  `ba604721bbdc7b9a2630681d6d3e80ed074db4d50650527cfaf5b8207f0f110f` /
+  `b9485dd1d84d415346c6ec4518d19cd2e2e9c9d10e09b8f71feb482614e99533`.
+  Mu build and 97-image post-build validation passed. Decompiled AML contains
+  exactly four QWordMemory descriptors, one edge INTID `0x379` (889), and no
+  880--888 resource. Remote build scratch selectors were restored byte-exact.
+- Integrated offline suite passed 206/206; generated-output and decompiled-AML
+  semantic gates passed.
+
+Run contract:
+- Verify ordinary current-G2 clean Code28 baseline, then stage only under
+  current-compatible non-AGX for 180 seconds with no `/install`.
+- Arm and boot exact EXP406 m1n1 plus candidate Mu. Natural APPL0002 selection
+  only; one foreground runner owns the control serial.
+- PASS: DxgkInitialize, AddDevice, StartDevice, Type34, Type35, fixed child/
+  topology/VidPn and GPU LUID, followed by a separate 180-second healthy window
+  with SSH, eight CPUs, storage, xHCI, input and no 41/129/1001.
+- Immediate failure: any physical route 880--888 enabled, watchdog/reset, lost
+  SSH, Code31/37/43, or first honest callback failure. Synthetic 889 is allowed
+  only with matching broker source status/ack evidence.
+- Recovery: accepted EXP377 m1n1
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`,
+  non-AGX Mu
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`,
+  and ordinary current-G2 Mu
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+- Evidence: `.local/experiments/EXP-20260904-406-coherent-abi-admission/` and
+  `C:\Users\pavel\AppleAgxEvidence\EXP406`.
+
+Observed result:
+- Phase A booted the exact current-compatible non-AGX Mu at
+  `2026-09-04T09:34:57Z`. Stage-only published exact `oem5.inf`; all seven
+  checkpoints from 0 through 180 seconds kept APPL0002 absent, eight CPUs and
+  AppleInput/stornvme/USBXHCI/sshd running, Defender active, no project
+  service/SYS/UMD, no admission receipts, and no 41/129/1001 events.
+- Phase B booted m1n1 `1791ea5` and the candidate Mu at
+  `2026-09-04T09:39:41Z`. The runner proved the broker page was mapped at
+  `0x300000000..0x300001000`; it recorded no enable/unmask of physical AGX
+  vINTID/AIC routes 880--888, no watchdog and no unexpected reset.
+- Natural selection bound exact `oem5.inf` and exact SYS/UMD hashes.
+  `Wom1CleanDriverEntryStage=1` and `Wom1CleanDxgkInitializeStatus=0` prove
+  DriverEntry/DxgkInitialize success. The device receipts ended at Remove (8)
+  while preserving a successful Type 1 query, size 592 and status 0. Thus the
+  coherent vector crossed AddDevice/StartDevice and entered QueryAdapterInfo,
+  then dxgkrnl removed the adapter. Final state was APPL0002 Code 43, stopped
+  `AppleAgxAdmission`, no GPU LUID and no Type34/35/VidPn receipt.
+- Windows remained reachable with eight CPUs and AppleInput, stornvme, USBXHCI
+  and sshd running. Two fresh stornvme Event 129 records occurred during the
+  candidate boot before the recorded OS boot time; no 41/1001 was recorded.
+- Phase-B result / runner / SetupAPI evidence SHA-256:
+  `95caba4c2f010a79bc1a40422b9347fd64d53340384882ab7afc077712ce9a48` /
+  `80b894f5907054aae305e5753ea5d8d6c8b7ef0cbea0ef447f308b0e7c96104a` /
+  `22d6111c6fe60397627cd6dbd7e9477b81c24c1cfb979533842142648f081350`.
+- Exact cleanup under current-compatible non-AGX Mu removed `oem5.inf` with
+  `pnputil /delete-driver oem5.inf /uninstall`, removed only EXP406 receipts,
+  service/SYS/UMD/staging and left no matching package. Cleanup receipt SHA-256
+  `f14f5a55de169ee861b269efed2b9d86af9b1f623df2119f3f4874339f76a0de`.
+- Ordinary current G2 was restored. At `2026-09-04T09:43:45Z`, APPL0002 was
+  Code 28/unbound with no project package/service/SYS, SSH and all eight CPUs
+  healthy, AppleInput/stornvme/USBXHCI running and no fresh 41/129/1001.
+
+Verdict: REJECTED. The five-field coherent vector fixed the EXP405
+`DxgkInitialize` revision mismatch and proved the synthetic-IRQ publication is
+not the immediate failure. The first unknown moved to dxgkrnl validation after
+successful Type 1 caps and before Type34/35/GPU LUID; this is an offline
+Windows-contract boundary, not an AGX hardware boundary.
+
+Next experiment: compare the exact Type 1 `DXGK_DRIVERCAPS` and immediate
+post-Type1 admission contract against byte-exact EXP214 and pinned RosKmd, then
+change only the strongest indivisible caps/DDI invariant. Do not touch AGX
+power, RTKit, UAT, physical IRQ routes, queues or submission and do not probe
+individual callback pointers on hardware.
+
+### EXP-20260904-405 — EXP214-derived Full Graphics admission
+
+Status: rejected — DxgkInitialize rejected the incomplete Full Graphics DDI
+contract with STATUS_REVISION_MISMATCH before AddDevice
+Created (UTC): 2026-09-04T07:58:57Z
+Completed (UTC): 2026-09-04T08:14:56Z
+
+WHY THIS HYPOTHESIS:
+1. EXP397 proved that the isolated Full Graphics render-only callback vector
+   returned success from AddDevice but was rejected before StartDevice with
+   Code 31; the strongest structural difference was its missing display/VidPn
+   group.
+2. EXP404 proved the current platform admits one internal panel through
+   StartDevice, Type34/35, child/VidPn and display presentation with Code0 when
+   no inert ISR/DPC pair causes current-G2 level IRQ routes to be connected.
+3. EXP214 is the byte-exact hardware/build control for the 1296-byte WDDM 3.0
+   `DRIVER_INITIALIZATION_DATA` and `DxgkInitialize` path. Adding the complete
+   common one-panel display group while removing unsupported interrupt and flip
+   claims is the smallest coherent Full Graphics discriminator.
+
+ATOMIC CONTRACT:
+- Keep `DRIVER_INITIALIZATION_DATA`, WDDM 3.0, `DxgkInitialize`, the Full
+  Graphics lifecycle/render entry table, one 3D node, the fail-closed UMD, and
+  add the complete one-source/one-target display/VidPn callback group.
+- Omit ISR, DPC, ControlInterrupt and GetScanLine together; all require a real
+  interrupt/VSync status, acknowledgement and completion contract.
+- Keep FlipOnVSyncMmIo, DirectFlip, scheduler, preemption, kernel-command,
+  per-engine-TDR and MapAperture2 capabilities zero as one truthful capability
+  invariant. These fields are invalid separately from the missing DDIs.
+
+WINDOWS CONTRACT:
+- FULL GRAPHICS WDDM 3.0 through `DxgkInitialize`, not KMDOD.
+- StartDevice copies start/interface state, gets `DXGK_DEVICE_INFO`, acquires
+  and validates the 2560x1600x10240 POST geometry, and returns one source and
+  one internal child.
+- QueryAdapterInfo supports DRIVERCAPS, WDDMDEVICECAPS, display extension,
+  64-bit-only, Type34 physical-memory visibility and Type35 zero IOMMU caps.
+- Child, monitor and VidPn callbacks accept only the empty topology or one
+  source-0/target-0 fixed path. SetVidPnSourceAddress is nonblocking,
+  nonpageable and fail-closed until a real Windows primary/scanout exists.
+
+AGX/ASAHI CONTRACT:
+- No AGX MMIO, power, firmware, RTKit, UAT, IRQ status, queue, submission,
+  render, scanout or DCP operation. A real AGX owner later initializes and
+  acknowledges interrupts as one lifecycle; no Asahi code is copied.
+
+TRANSLATION:
+- Windows lifecycle and VidPn objects map only to nonpaged admission context
+  and fixed POST geometry. Type34 describes the existing 40-bit J313 physical
+  visibility limit; Type35 explicitly claims no Windows IOMMU mapping.
+- No Windows allocation, context, DMA, fence or primary address maps to AGX yet.
+
+WHAT IS STILL UNKNOWN:
+- Whether dxgkrnl accepts the complete WDDM 3.0 Full Graphics vector with no
+  interrupt callbacks through StartDevice, Type34/35 and one-panel VidPn
+  without Code31/43; and whether SetVidPnSourceAddress or an earlier callback
+  becomes the first fail-closed boundary.
+
+Source contract:
+- Repository / branch: root commit
+  `3f0cd12f9d57c5afe676efb213c4c6c4a0794f68`,
+  `feature/j313-gpu-acceleration`; unrelated dirty diff SHA-256
+  `e2680ef3f023a5c431d71a4a758cfa131bc5771c2499f039a28b35ba2deda183`.
+- m1n1 `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`, clean diff
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Mu `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`, dirty diff
+  `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+- Approved spec / execution plan commits: `2dc18d29e3b5592bad38bfa908139845b44b4666` /
+  `9988185c704a76e968147f630a69c5b5de152356`.
+- Implementation commits: `289cb04`, `2d34b0a`, `2193a9b`, `a800ec1`,
+  `3f0cd12`.
+- Source/test composite / frozen archive SHA-256:
+  `dfb797a8dc6300c616aafe05f22946dd3fae8c9ceed13c8e8c4edb6479cdb676` /
+  `12a5316ff3597e033d80a262a87de9b87cec9b72b3be4d7f5391736962ada51c`.
+- TDD RED/GREEN complete; focused/integrated suite 197/197.
+
+Artifact:
+- Build command: guarded direct-root FRYZZING build of the UMD then KMD using
+  inherited `C:\Users\pauls\Directory.Build.props`/targets, MSBuild
+  `18.1.0-preview-25527-05`, NuGet WDK/SDK `10.0.28000.2526`, ARM64 Release,
+  code analysis, Universal validation, Inf2Cat and test signing.
+- EXP214-controlled FRYZZING build used MSBuild
+  `18.1.0-preview-25527-05`, inherited NuGet WDK/SDK `10.0.28000.2526`,
+  ARM64 Release, code analysis, Universal validation, Inf2Cat and test signing.
+  UMD and KMD builds both passed with zero warnings/errors.
+- ZIP / SYS / INF / CAT / CER / KMD PDB / UMD DLL / UMD PDB SHA-256:
+  `8af2506e50c3aa1dbb3d0f261afaf1371bee3e683672d21a049ea02ca7f62133` /
+  `5af15270c58a036da97b6f02fb161696a081ece760ed30b0007b18a110a41cff` /
+  `18ebfe92739dbb1797ccdeaf6756466122f60b98cf3382ce15c423ba894edf56` /
+  `ad3d2cbe16459e00790a04a54d13f357ee6488149d0247d52771576a3e15af5b` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `d264d846eb5c4800368ce4a8f1e5c1cd30763918e44adb4d03ac309f0398c9df` /
+  `c93a85f3b0e823772f399b94c2542c145d00ba6eaf66294bedb85ef5f0a896fe` /
+  `f2052f6c2e9042bc799180dfb831bcd9ccbf8866e54b834a9812f64064efc056`.
+- Recovery: accepted EXP377 m1n1
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
+  plus current-compatible non-AGX Mu
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
+
+Run contract:
+- Verify clean current-G2 Code28 baseline, then stage only under non-AGX for
+  180 seconds with no `/install`. Record exact `oemN.inf` and all health gates.
+- Arm and boot accepted m1n1 plus current G2 Mu
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+  Natural PnP selection only; foreground runner owns the control serial.
+- PASS requires DriverEntry/DxgkInitialize/Add/Start SUCCESS, Type34/35
+  SUCCESS, one-panel callbacks, GPU LUID, neither Code31 nor Code43, no AGX
+  route enable, and SSH/8 CPU/storage/USB/input with no 41/129/1001 for a
+  separate 180-second post-bind window.
+- Failure is the first callback status/PnP problem, unexpected 880–888 route
+  enable, watchdog/reset or missing SSH. Evidence precedes exact cleanup.
+- Evidence: `.local/experiments/EXP-20260904-405-full-graphics-admission/evidence`.
+
+Observed result:
+- Fresh current-G2 preflight at `2026-09-04T08:03:46Z` was Code28/unbound
+  with no project package/service/SYS, eight CPUs, all health services and no
+  boot 41/129/1001.
+- Phase A published exact `oem5.inf` under current-compatible non-AGX and
+  passed every 0..180-second checkpoint: APPL0002 absent, no service/SYS/UMD
+  activation, no receipts or bad events, eight CPUs and healthy input,
+  storage, xHCI and SSH. Result SHA-256:
+  `daebe6f498d824257ba44a1608430cc69e7ccf576f4c3a0d61d4d86d4396b4e2`.
+- Phase B was armed at `2026-09-04T08:09:47.7430527Z`; arm SHA-256:
+  `4f255cd527bd96c2f6583598fdb7166845c93eb55958e840583222514201c0e3`.
+- Natural current-G2 enumeration selected exact `oem5.inf`. DriverEntry stage 1
+  was durable, then `DxgkInitialize` returned decimal `3221225561` =
+  `0xC0000059` = `STATUS_REVISION_MISMATCH`. AddDevice, StartDevice and
+  QueryAdapterInfo were therefore never called. APPL0002 was Code37, the
+  service was stopped, no GPU LUID was assigned, and the exact SYS/UMD hashes
+  remained correct. Phase-B JSON SHA-256:
+  `68f6600c58df7eaa354a5809a00eb0051b4f3036f2ee3eaa2729cdaf326400b7`.
+- SSH, eight CPUs, input, storage and xHCI remained healthy with no System
+  41/129/1001. The foreground runner showed no enable of AGX vINTID 880--888
+  or AIC 563--569; its SHA-256 is
+  `9bc3b8881d72151ba12e11a5bafe7f51a72120ae988e05fe196b7f445cd9108c`.
+  The PSCI reset at the end of that log is the deliberate post-evidence Windows
+  shutdown used to enter cleanup, not a watchdog or spontaneous reset.
+- Current-compatible non-AGX cleanup deleted only exact `oem5.inf`, its stopped
+  service, exact SYS/UMD, staging and experiment receipts. Cleanup JSON SHA-256:
+  `261fff20b40df567d97649d0e05618fc6a9f07f208ed5d9054f97e93902c3ad1`.
+- Ordinary current G2 was restored. Fresh baseline is Code28/unbound with no
+  project package/service/SYS, eight CPUs, healthy services and no boot
+  41/129/1001. JSON SHA-256:
+  `0835657203e1605fa0aa5d6efed7326e6be3333074885445e34498e1258c08a1`.
+
+Verdict: REJECTED at `DxgkInitialize`, before all PnP, display and hardware
+work. Exact EXP214 comparison leaves two atomic differences: EXP405 removed
+the EXP214 ISR/DPC/ControlInterrupt entries and added a display group which
+omits the Full Graphics reference's SetPalette/GetScanLine entries. Microsoft
+defines Full Graphics as all required render and display DDIs, while the
+official RosKmd Full Graphics vector includes ISR/DPC/ControlInterrupt,
+SetPalette and GetScanLine. The approved no-interrupt/no-GetScanLine/no-false-
+capability contract is therefore not a complete supported Full Graphics DDI
+model; this is no longer an implementation-detail ambiguity.
+
+Next experiment: none until the architecture gate selects either (a) a
+temporary EXP214-controlled WDDM 3.0 render-only path with zero sources and
+targets, which still needs a truthful render scheduler/interrupt contract, or
+(b) the recommended re-sequenced real Full Graphics contract including its
+required interrupt, scanline, scheduler, preemption and presentation
+invariants. Do not probe individual callbacks.
+
+### EXP-20260904-404 — synchronous KMDOD without IRQ registration
+
+Status: confirmed — stable Code0 display-only driver; unused IRQ connection was
+the cumulative-watchdog cause
+Created (UTC): 2026-09-04T00:09:15Z
+Completed (UTC): 2026-09-04T00:25:16Z
+
+WHY THIS HYPOTHESIS:
+1. Clean current-G2 is stable while APPL0002 is unbound. In both valid natural
+   admission runs Windows enabled G2 level routes 880/881 only after binding
+   the driver, then hit cumulative-DPC `0x133` at approximately 2:15 uptime.
+2. Current Mu exposes nine AGX interrupts as level/high/exclusive and current
+   m1n1 unmasks each physical AIC line when Windows enables its guest route.
+   The admission driver neither initializes nor acknowledges AGX hardware; its
+   registered ISR always returns FALSE and its DPC does nothing.
+3. The driver completes PresentDisplayOnly synchronously and advertises neither
+   ControlInterrupt nor GetScanLine. Microsoft requires ISR+DPC for async
+   present completion or the four-part VSync contract; neither exists here.
+
+ATOMIC CONTRACT: omit `DxgkDdiInterruptRoutine` and `DxgkDdiDpcRoutine`
+registration together. They are the ISR/DPC companion pair, and retaining
+either alone cannot implement interrupt completion. No other WDDM callback or
+capability changes.
+
+WINDOWS CONTRACT: DISPLAY_ONLY KMDOD. PresentDisplayOnly stays synchronous and
+returns SUCCESS, so no interrupt/DPC progress notification is required. The
+no-VSync contract keeps ControlInterrupt/GetScanLine null and lets Dxgkrnl
+simulate VSync. Separately, Microsoft specifies SystemDisplayEnable and
+SystemDisplayWrite as bugcheck callbacks callable at any IRQL; both must be
+nonpaged and must not call unavailable/pageable kernel services.
+
+AGX/ASAHI CONTRACT: a real AGX owner must initialize firmware/channels and
+service/acknowledge its interrupts. This admission layer deliberately owns none
+of MMIO, power, RTKit, UAT, queues or interrupt status, so connecting physical
+level lines violates ownership. No Asahi code is copied.
+
+TRANSLATION: none. Until the full Windows AGX interrupt handler exists, the
+synchronous POST-framebuffer KMDOD has no Windows-to-AGX interrupt mapping.
+
+WHAT IS STILL UNKNOWN: whether null ISR/DPC pointers prevent Dxgkrnl from
+unmasking G2 routes 880/881 and eliminate the pre-SSH cumulative-DPC watchdog.
+
+Deterministic correction outside the causal variable: remove registry receipts
+from SystemDisplayEnable/SystemDisplayWrite. EXP403 private symbols prove the
+OS invoked SystemDisplayEnable from `KiDisplayBlueScreen` after the original
+watchdog and the callback entered `ZwOpenKey`. This correction cannot alter the
+pre-bugcheck execution that triggers the experiment; it only makes the mandated
+any-IRQL crash-display path valid and preserves the original dump owner.
+
+Source contract:
+- Root `5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`, branch
+  `feature/j313-gpu-acceleration`, dirty diff SHA-256
+  `ee05f9a7d370d9c6f60c3811a96d8ca9de8742d8480a456e1e36bce6e8d9398e`.
+- m1n1 `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`; Mu
+  `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
+- Inspected live platform/package state; current admission driver/lifecycle;
+  `mu/.../J313AppleAgx.asl.inc`; m1n1 `hv_irq_routes.c`, `hv_vgic.c`,
+  `hv_exc.c`; EXP168/401/403 primary evidence; Microsoft
+  KMDDOD_INITIALIZATION_DATA, PresentDisplayOnly, SystemDisplayEnable,
+  SystemDisplayWrite and VSync-control documentation; Microsoft KMDOD sample.
+- Source/test composite / frozen archive SHA-256:
+  `1fe3c34ec6da571b89fe7aaa8524f89dd57cdfa0de04d548ff83375616315468` /
+  `511a95f749b6d0cb4d6f8d05e6050bb929d5bdfe6fc5e127436e7c067f1942bd`.
+- TDD RED reproduced three obsolete-contract failures; GREEN is 41/41 package
+  tests and 194/194 focused admission/platform tests.
+
+Layer ownership:
+- Mu publishes APPL0002 resources; m1n1 maps/unmasks/routes level interrupts;
+  a future full Windows AGX driver will own device interrupt status/ack/recovery.
+  EXP404 KMDOD owns only synchronous POST-framebuffer display and therefore
+  requests no interrupt connection.
+
+Artifact:
+- EXP214-controlled FRYZZING build command/environment unchanged: direct
+  `C:\Users\pauls` root, inherited Directory.Build props/targets, ARM64 Release,
+  WDK/SDK `10.0.28000.2526`, code analysis, Universal, Inf2Cat, test signing.
+- Build passed with zero warnings/errors; Universal, Inf2Cat and signing gates
+  succeeded. ZIP / SYS / INF / CAT / CER / PDB SHA-256:
+  `e783974f96aceda41f0504cf17f74e7d819818d071d113cdf3964cff963dbab8` /
+  `9a4b43a6de0c7422324daf2f8a193c24363209389b5c47417cbeba545cc9b139` /
+  `75f862ecff8547debedcd9b0823ffd0917219616f6b8fa5cb89a6155d5534a95` /
+  `135895ca5bf814245f915b5fd706e9d7293a6a00f0c5ea7af4fdc63b9d4807a1` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `58f93199ca09e620c84cdfab1860b0fb2669c4c66cc016fcc8b5665b91eb2cf3`.
+- Recovery: accepted EXP377 m1n1 `fae3444c...a525a` plus current-compatible
+  non-AGX Mu `279bd36a...0e3f32c`.
+
+Run contract:
+- Restore/verify clean current-G2 Code28 baseline, then stage only under
+  current-compatible non-AGX for 180 seconds. Natural current-G2 bind only; no
+  `/install`.
+- Earliest checkpoint: runner must show whether 880/881 are enabled. PASS is
+  StartDevice/display path plus SSH/8 CPU/storage/USB/input and no 41/129/1001
+  through 180 seconds. Failure is rejection before StartDevice, route enable,
+  callback failure, watchdog or reset.
+- Foreground runner owns control serial exclusively and tees its output to the
+  experiment log. Evidence collection precedes exact package cleanup.
+
+Observed result:
+- Preflight current-G2 baseline was Code28 with no package/service/SYS, all
+  eight CPUs and health services running, no boot events, and runner log showed
+  only input/xHCI route activity (no 880/881). JSON SHA-256:
+  `fdc6420946a0e7de7cb73aee56cdfe01e397e8f7b91eb1358edfb2b36325e24a`.
+- Phase A published exact `oem5.inf` and passed all 0..180-second non-AGX
+  health checkpoints with Defender/WdFilter enabled and no new events.
+  Result SHA-256:
+  `37bd2cffba3f6093f9e2fb8bc83a2afc52c2d06084f622f83cdb9a468d900933`.
+- Phase B armed at `2026-09-04T00:18:00.0055483Z`; arm SHA-256:
+  `9118d497909da939b8875a8346de40f86613c22c613c75a7d3220e7cea871281`.
+- Natural current-G2 bind reached live SSH at boot UTC
+  `2026-09-04T00:18:43.7676890Z`. APPL0002 was present/OK/Code0, bound to the
+  exact `oem5.inf`; AppleAgxAdmission was Running and the exact SYS hash matched.
+  DriverEntry, AddDevice, StartDevice stage 7, POST ownership, topology,
+  QueryAdapterInfo, child callbacks, VidPn enumeration/commit/visibility,
+  pointer and PresentDisplayOnly all recorded SUCCESS. Initial Phase-B JSON
+  SHA-256:
+  `37a4fc5f4ad082153204ed96f24f3a870f0cb4205e64db1b4a10240324efecb7`.
+- A separate 0/30/60/90/120/150/180-second live window kept Code0, exact bind,
+  running service/SYS, eight CPUs and all health services at every checkpoint;
+  no 41/129/1001 appeared. Health-result SHA-256:
+  `e2c9c0d359582b5b06fce9d6f7954f96455edd5ce7965595d7e8acdeb33a7096`.
+- Windows inventory reported one OK video controller at 2560x1600x32,
+  `Apple AGX G13 admission discriminator`, driver version 2.10.15.357.
+  Inventory SHA-256:
+  `9e92b5f3ae3fe5c265e3182861286e68a5841a156b01e7e78eeba824ae776b2e`.
+- The complete foreground runner log contains no 880/881 or AIC 563/564 route
+  enable, no watchdog and no reset. SHA-256:
+  `cac53dcea456cf44a11586eebfe669eab877987a08edb20dbb41d36eff18f88e`.
+- After evidence, current-compatible non-AGX unloaded the driver. Guarded
+  cleanup removed exact `oem5.inf`, service/SYS/staging/receipts only; eight
+  CPUs and health services remained running. Cleanup SHA-256:
+  `72c35ed82b5f2f57c431ba51155da1b1e0433d334382cee795b994644586e4a3`.
+- Ordinary current G2 was restored after cleanup. Fresh baseline is Code28,
+  unbound, package/service/SYS-free with 8 CPUs, all health services and zero
+  new 41/129/1001. Baseline / runner-log SHA-256:
+  `3bc89bbf9c99c84457b11f1e7093de57486ed91cc104041273af6d0f219044e4` /
+  `27119cb5dbfe466d812a6580807f9676f0a061d6d7aa358b170cc00803e43ebb`.
+
+Verdict: confirmed. Registering an ISR/DPC pair for a synchronous KMDOD with no
+AGX interrupt ownership caused Windows to connect/unmask current-G2 level AGX
+routes and led to the cumulative-DPC watchdog. Omitting the pair kept the lines
+masked and made StartDevice/display-only admission continuously stable. The
+any-IRQL SystemDisplay correction also removes the proven secondary bugcheck
+registry fault.
+
+Next experiment: finish the required admission architecture review, restore
+clean current-G2 baseline, then use EXP404 as the validated display-only
+foundation for the first coherent Full Graphics boundary. Do not add ISR/DPC
+back until the real AGX interrupt status/ack/completion contract is implemented.
+
+### EXP-20260904-403 — exclusive-observer EXP402 rerun
+
+Status: rejected — explicit flush removal does not prevent the watchdog
+Created (UTC): 2026-09-03T23:50:00Z
+
+WHY THIS HYPOTHESIS:
+1. EXP401 proves the first unflushed receipt restored StartDevice SUCCESS and
+   the measured display-only ladder, while its remaining flushed receipts were
+   still followed by the cumulative-watchdog reset.
+2. EXP402 is the direct discriminator for all remaining explicit receipt
+   flushes, but its Phase B never reached DriverEntry and was invalidated when
+   a second process consumed the control serial owned by `run_uefi.py`.
+3. Repeating the exact source with exclusive runner ownership is required to
+   obtain the missing causal observation; changing code would discard the
+   intended discriminator.
+
+WINDOWS CONTRACT: identical to EXP402 DISPLAY_ONLY WDDM 3.0 package behavior;
+every diagnostic DWORD write/close remains and no explicit `ZwFlushKey` exists.
+
+AGX/ASAHI CONTRACT: none. No GPU hardware path is entered.
+
+TRANSLATION: none. This is an operational correction to observation only.
+
+WHAT IS STILL UNKNOWN: whether the EXP402 nonblocking receipt transport permits
+natural G2 bind and a healthy live Windows session beyond 180 seconds.
+
+Single changed variable: exclusive ownership of the control serial by the
+foreground `run_uefi.py`. Do not run probe or any other consumer on that
+endpoint while the guest is active; observe only via bounded SSH or the
+separate vUART endpoint.
+
+Source contract:
+- Root `5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`, branch
+  `feature/j313-gpu-acceleration`, dirty diff SHA-256
+  `2317b5391b060349910d6bb534c833a671db99ea1e94fe2c32db00ca51a8e060`.
+- m1n1 `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`; Mu
+  `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.
+- Source/test composite / frozen archive SHA-256 are unchanged from EXP402:
+  `a903c9d73541a828cc30339d27d1d463e9236bb3df4593a65c9181eff365a29a` /
+  `67859508254910d0351dc14b1bdfc80447f99c68972ac6a0ffe1fa0ba595abf0`.
+- No new deterministic code contract; existing admission tests remain 161/161.
+
+Artifact:
+- Build command/environment: exact EXP214-controlled direct FRYZZING builder,
+  MSBuild preview 18.1, inherited Directory.Build props/targets, ARM64 Release,
+  WDK/SDK `10.0.28000.2526`, analysis, Universal, Inf2Cat and signing.
+- Build passed with zero warnings/errors; Universal validation, Inf2Cat and
+  signing all succeeded.
+- ZIP / SYS / INF / CAT / CER / PDB SHA-256:
+  `33abe88cd63627ec15f44c08efef24ae0c8e47161209aafff56dd7fe77f82f13` /
+  `1d0db2010c8ada5ad04ad69ca3a3d7b8364cb418ff825cb44e7926209754823f` /
+  `f80279313190bbce19321d4fc62d887b960f2d64c41ee496208877ec6e787820` /
+  `835306b9aba064804f748c8b349cddcbcd3067e25e1bd70858a80b768626b8dc` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `e8d68efcb567bb930cf2bf63e7b17f40cb1da01569434960e3df51310753470c`.
+- Recovery: accepted EXP377 m1n1 `fae3444c...a525a` plus current-compatible
+  non-AGX Mu `279bd36a...0e3f32c`.
+
+Run contract:
+- Use the same no-`/install` two-phase contract: 180-second non-AGX stage-only
+  gate, then current-G2 natural enumeration. Verify hashes and capture all
+  evidence before exact cleanup.
+- Expected: natural bind, StartDevice/display-only success and healthy SSH for
+  at least 180 seconds. Failure: a hardware receipt boundary, loss of SSH or
+  reset with clean exclusive observer ownership.
+- Evidence: `.local/experiments/EXP-20260904-403-exclusive-observer-rerun/evidence`.
+
+Observed result:
+- Phase A stage-only published exact `oem5.inf` and passed every
+  0/30/60/90/120/150/180-second health checkpoint with Defender/WdFilter,
+  8 CPUs, SSH, AppleInput, stornvme and USBXHCI healthy; APPL0002, service,
+  SYS, receipts and new 41/129/1001 remained absent. Result SHA-256:
+  `a5dad65ab5fe12f1994dfab8c6378fbcbca4c1058ead03298802a2c681bac452`.
+- Phase B armed at `2026-09-03T23:55:02.1705763Z`; arm SHA-256:
+  `0396c00c12f6c11118b108e9fea3fccac6c2656cd30e2a6e9b66a849b56e5b36`.
+- With exclusive control-serial ownership, natural current-G2 boot enabled the
+  APPL0002 IRQ routes but never exposed SSH. At 2:15.329 uptime Windows reset
+  with `0x133 (1, 0x1e00, 0xfffff802910083c0, 0)`; PSCI reset function was
+  `0x84000009`. Recovery health was 8 CPUs with SSH/input/NVMe/xHCI running.
+- SetupAPI proves exact `oem5.inf` was selected at 01:55:32, created
+  AppleAgxAdmission, hardlinked the exact SYS, configured APPL0002 and reached
+  `Restarting Devices`. Cached registry receipts and the service rollback did
+  not survive the abrupt reset; the exact SYS did. Phase-B JSON / dump SHA-256:
+  `c36231d96da9cfd1a3ebfcae476fac51c6b9d3450d6081befc0e27c36b3bc639` /
+  `9374fc9ac9a4e5177509df12240def9a979d32b8da2d4b386344995704a96330`.
+- Private-symbol dump analysis resolves the captured driver stack to
+  `AppleAgxAdmissionSystemDisplayEnable -> AppleAgxAdmissionRecordService ->
+  NtOpenKeyEx`, lifecycle.c line 123. This is the bugcheck display-ownership
+  callback entered by `KiDisplayBlueScreen` after the cumulative watchdog had
+  already fired; it proves registry diagnostics are invalid in that callback,
+  but does not prove they caused the original cumulative DPC starvation.
+  Analysis SHA-256:
+  `611bb206e713950eacc0a5821fe4f8b575e4e2396b71d696b16a11274eafea80`.
+- Exact cleanup removed `oem5.inf`, the exact SYS and staging; no matching
+  package/service/receipt remains, and all health services are running.
+  Cleanup SHA-256:
+  `d74e750dbc6719485cc6f80297998ce869cbfe11df2cf6f009c30ecf0d09f08e`.
+
+Verdict: rejected. Removing every explicit `ZwFlushKey` does not stabilize the
+guest. It also makes cached receipts non-durable across the crash. The dump
+newly proves a separate deterministic defect: SystemDisplayEnable performs
+registry I/O while servicing the bugcheck display path.
+
+Next experiment: after the mandated focused admission architecture review,
+remove all pageable/blocking registry diagnostics from SystemDisplayEnable and
+SystemDisplayWrite as one indivisible bugcheck-display callback invariant. Keep
+the functional callbacks intact and use the resulting unobscured dump/live
+state to locate the original pre-bugcheck boundary.
+
+### EXP-20260904-402 — nonblocking admission receipt transport
+
+Status: inconclusive before DriverEntry — observer-control serial confound
+Created (UTC): 2026-09-03T23:34:15Z
+
+WHY THIS HYPOTHESIS:
+1. EXP401 changed only the first StartDevice receipt from flushed to unflushed
+   and advanced from StartDevice stage 1 to stage 7 / SUCCESS plus the complete
+   measured display-only DDI ladder.
+2. EXP401 still executed many later service/device receipt calls with explicit
+   synchronous `ZwFlushKey`, then reset near the same cumulative-watchdog
+   interval with `0x133`.
+3. Removing the explicit flush from the shared admission receipt transport is
+   the smallest discriminator: it preserves every receipt value and registry
+   close while removing only synchronous hive durability waits.
+
+WINDOWS CONTRACT: unchanged DISPLAY_ONLY WDDM 3.0 callbacks, capabilities,
+return values and package. Receipt DWORD writes remain best-effort diagnostics;
+Windows does not consume them as a driver contract.
+
+AGX/ASAHI CONTRACT: none. No AGX MMIO, power, RTKit, UAT, IRQ, queue, render or
+presentation-hardware operation is introduced.
+
+TRANSLATION: diagnostic transport only. Every `ZwSetValueKey` and `ZwClose`
+remains; all explicit `ZwFlushKey` calls in admission lifecycle diagnostics are
+removed as one transport policy change.
+
+WHAT IS STILL UNKNOWN: whether eliminating all explicit receipt flushes permits
+the live guest to remain stable beyond 180 seconds after natural G2 bind. If it
+does not, explicit flush is excluded and the concurrent storage/platform cause
+requires the mandated focused deep pass.
+
+Source contract:
+- Repository / branch: root `5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`,
+  `feature/j313-gpu-acceleration`, dirty diff SHA-256
+  `b49102199cec782a94637d6e374610a82ad27255b5683c6e408243a4ec251eac`.
+- m1n1 `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`, clean diff SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Mu `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`, dirty diff SHA-256
+  `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+- Inspected current callback transport in
+  `drivers/apple-agx/admission/src/lifecycle.c`, its package contract tests and
+  EXP401 phase-B/cleanup primary receipts.
+
+Artifact:
+- Source/test composite / frozen archive SHA-256:
+  `a903c9d73541a828cc30339d27d1d463e9236bb3df4593a65c9181eff365a29a` /
+  `67859508254910d0351dc14b1bdfc80447f99c68972ac6a0ffe1fa0ba595abf0`.
+- Build command: direct `C:\Users\pauls` extraction and inherited
+  Directory.Build props/targets, then `MSBuild.exe AppleAgxAdmission.vcxproj
+  /m /t:Clean,Build /p:Configuration=Release /p:Platform=ARM64
+  /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true` using WDK
+  `10.0.28000.2526` and the EXP214-controlled builder.
+- EXP214-controlled FRYZZING build used MSBuild
+  `18.1.0-preview-25527-05`, WDK/SDK `10.0.28000.2526`, inherited
+  `C:\Users\pauls\Directory.Build.props`, ARM64 Release, code analysis,
+  Universal validation, Inf2Cat and test signing. It completed with zero
+  warnings/errors.
+- ZIP / SYS / INF / CAT / CER / PDB SHA-256:
+  `1d85130d2256af302d6f24451f538aff587bb4cb3b97fded7a126cfd1e9faeeb` /
+  `b61e228886688a5f1993b1a76b9819f8c7549a2eb238e39cdceae019742af174` /
+  `44b715457db67e4256a5c62e227faebd185fdface406f7aed58d5ac3ccc07127` /
+  `0e208ea60c4778d86eeda0d01b4807919807c5dfd9e6a6d4bc46ae8f19b9bdfc` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `d502d51562dd6bae9e12459060560a35bf55b511f275df87cb2aba57961deb67`.
+- Recovery artifact: accepted EXP377 m1n1 SHA-256 `fae3444c...a525a` plus
+  current-compatible non-AGX Mu SHA-256 `279bd36a...0e3f32c`.
+
+Run contract:
+- Stage only under non-AGX with no `/install`; require 180 seconds of healthy
+  SSH, 8 CPUs, storage/USB/input and no new 41/129/1001.
+- Shut down, boot the same staged package under current G2 Mu SHA-256
+  `16c17718...c5e06`, and allow only natural APPL0002 selection.
+- Success: SSH and platform health remain stable for at least 180 seconds after
+  natural bind with the exact package loaded. Failure: proxy/reset, loss of SSH,
+  new 41/129/1001 or a first failing callback receipt.
+- Evidence: `.local/experiments/EXP-20260904-402-nonblocking-receipts/evidence`.
+- Exact experiment-local cleanup and restoration of current-G2 Code28 baseline
+  are mandatory. Never carry EXP402 into a later candidate.
+
+Observed result:
+- Phase A stage-only published exact `oem5.inf` and remained healthy at every
+  0/30/60/90/120/150/180-second checkpoint: 8 CPUs, SSH, AppleInput, stornvme
+  and USBXHCI running; APPL0002 absent; no service/SYS/receipt; Defender and
+  WdFilter enabled; no new 41/129/1001. Phase-A result SHA-256:
+  `18fc957dbb8e9cf184311fe85104eb544c5bd22d375af737540a374c3228708b`.
+- Phase B armed at `2026-09-03T23:42:26.3351293Z`; arm receipt SHA-256:
+  `c2fa22ed36ee6d937886bbcb3589015e7de9afca0fbdc87194c90111b5451b4e`.
+- During current-G2 boot, the expected runner remained active but SSH did not
+  become reachable. A concurrent `probe.py` was mistakenly opened against the
+  same control serial already owned by `run_uefi.py`; it consumed/garbled proxy
+  traffic before the runner eventually exited. This can disturb host-side
+  virtual-device servicing and invalidates a platform-stability verdict.
+- Recovery evidence contains no AppleAgxAdmission service, SYS, device/service
+  receipt, bound INF, 41, 129 or 1001. Normalized SetupAPI ends with the Phase-A
+  stage operation and has no hardware-initiated EXP402 APPL0002 install. Thus
+  the package did not reach DriverEntry. Phase-B result SHA-256:
+  `fc71ee80552a3dbb669819b4ddc66749d3e0e1633a6ef56b7c6d8e5607e3cd17`.
+- Exact stage-only cleanup deleted `oem5.inf`; no matching package, service,
+  SYS, staging directory or receipt remains, and all 8 CPUs plus AppleInput,
+  sshd, stornvme and USBXHCI are healthy. Cleanup receipt SHA-256:
+  `702635deb084561a5c720d13268089681f42cfc955fb6bc4e712e069127200eb`.
+
+Verdict: inconclusive before DriverEntry. Do not infer anything about the
+nonblocking receipt hypothesis from Phase B and never reinstall EXP402.
+
+Next experiment: EXP403 is a clean operational rerun of the identical frozen
+source in a newly built/signed package identity. The single correction is
+exclusive control-serial ownership by `run_uefi.py`; only SSH and the separate
+vUART endpoint may be observed while the guest runs.
+
+### EXP-20260904-401 — unflushed StartDevice entry receipt
+
+Status: confirmed — StartDevice and display-only admission complete; flushed
+diagnostic receipts remain correlated with the watchdog reset
+Created (UTC): 2026-09-03T23:17:31Z
+Completed (UTC): 2026-09-03T23:30:24Z
+
+WHY THIS HYPOTHESIS:
+1. EXP400 proves all StartDevice pointers valid: stage-1 status is SUCCESS, yet
+   validation stage 2 is absent.
+2. The only executed code before stage 2 is the stage-1 service receipt helper,
+   whose unique synchronous operation is `ZwFlushKey`; repeated candidate
+   failures coincide with the approximately 120-second cumulative watchdog.
+3. Removing only that first flush while preserving the two DWORD writes, close,
+   every later flushed receipt, callback vector and return behavior is the
+   strongest one-variable discriminator.
+
+WINDOWS CONTRACT: unchanged DISPLAY_ONLY WDDM 3.0. The entered receipt remains
+the same stage/status in the same service key; only its explicit synchronous
+flush is omitted. The validated stage-2 receipt still flushes the same hive and
+therefore makes both values durable if execution advances.
+
+AGX/ASAHI CONTRACT: none. No AGX/MMIO/power/RTKit/UAT/memory/HVC/queue path.
+
+TRANSLATION: diagnostic transport only; no Windows or hardware object mapping
+changes.
+
+WHAT IS STILL UNKNOWN: whether the first `ZwFlushKey` prevents return to
+StartDevice validation, or whether ZwSet/ZwClose/another concurrent platform
+condition remains the boundary.
+
+Source/artifact:
+- Root dirty diff SHA-256
+  `32b9a197ba0cefefd0a464e3aac21d76c08486271182de295470942133526b22`.
+- Source/test composite / corrected v2 archive SHA-256:
+  `3983efcc297b6b7bbe66c8048a1c50914a95a1a2f70a7799b72e98bb13dd3858` /
+  `2edd1dff7df361afcb79130278e015fec15244cc3d07bc1ae3284154c22fdc92`.
+- TDD RED/GREEN; relevant tests 161/161. The first WDK compile rejected an
+  incorrectly escaped new service-path literal before producing a package;
+  corrected v2 compile/link/analysis/Universal/Inf2Cat/sign passed with zero
+  warnings/errors.
+- ZIP / SYS / INF / CAT / CER / PDB SHA-256:
+  `b1b41347079d9d0db7a9c33f05d85d5381462206a7c95e200a26cbc015124e77` /
+  `6bcc2a4807587ee00a49ab856c52ed8f911298907db8127b602f53f05aff27d8` /
+  `c422a69637e2af643b52dea4a70ab7226f321da5322f1b8cc407ebb867f1aaf0` /
+  `317330395df842c457cf97ebc829151aa58faa5a1405034c5489da8a6c07fad2` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `de2295440950a76c8f6fe78d94617eee131ec6c82387a7e391fe516cb2d76870`.
+
+Run contract:
+- Current non-AGX stage-only with no `/install` and full 180-second gate;
+  current G2 natural enumeration only after a stable Phase A.
+- Success is any validation stage 2 or later receipt. Stage 1 only means the
+  boundary remains in the unflushed write/close return. Exact cleanup and final
+  current-G2 Code28 baseline are mandatory; never reinstall EXP401.
+
+Observed result:
+- Phase A stage-only under current-compatible non-AGX was healthy for the full
+  180-second gate with Defender/WdFilter enabled.
+- Natural current-G2 enumeration selected `oem5.inf`. The machine reset back
+  to proxy after approximately 126 seconds; recovery Windows reported bugcheck
+  `0x133 (1, 0x1e00, 0xfffff800e1e083c0, 0)` and Kernel-Power 41. The dump is
+  `evidence/phase-b/dumps/090426-12812-01.dmp`, SHA-256
+  `6529593c50fb45e14d038c0349633e6445ce473be7a42f7252d16b987359dde1`.
+- Recovery receipts prove StartDevice stage 7 / `STATUS_SUCCESS`, POST display
+  ownership and 2560x1600x10240 geometry, one child/source topology,
+  QueryChildRelations, QueryChildStatus, RecommendMonitorModes,
+  IsSupportedVidPn, EnumVidPnCofuncModality, CommitVidPn,
+  SetVidPnSourceVisibility, SetPointerPosition and PresentDisplayOnly all
+  returned success. The rolling QueryAdapterInfo receipt last held type 20 /
+  size 16 / success. QueryDeviceDescriptor returned `0xc01e0401`.
+- Phase-B receipt JSON SHA-256:
+  `b9a31fc22e09d62edc2daee975e53eebe22b390e9bb7d6306ae665a9977bcb6b`.
+- Recovery cleanup deleted exactly `oem5.inf`, stopped/deleted only
+  `AppleAgxAdmission`, removed its SYS/staging/receipts and left 8 CPUs,
+  AppleInput, sshd, stornvme and USBXHCI healthy. Cleanup receipt SHA-256:
+  `72a0594086f37bae4788fee496449d9d81ef14f2c27ab6f2965680040ab81e14`.
+
+Verdict: confirmed. Omitting the first explicit flush moves execution from
+StartDevice entry through successful StartDevice and the measured display-only
+DDIs. The later reset is not evidence that any named `0x133` bucket owns the
+failure; many later receipt calls still synchronously flush the same hive.
+
+Next experiment: EXP402 removes explicit `ZwFlushKey` from the complete
+admission diagnostic receipt transport while preserving every DWORD write,
+close, callback, DDI, INF and return value. Never reinstall EXP401.
+
+### EXP-20260904-400 — StartDevice argument-status discriminator
+
+Status: confirmed — StartDevice arguments valid; first receipt-return boundary
+Created (UTC): 2026-09-03T22:55:13Z
+Completed (UTC): 2026-09-03T23:17:31Z
+
+WHY THIS HYPOTHESIS:
+
+1. EXP399 natural enumeration proves DriverEntry, AddDevice, Type-35 query and
+   real StartDevice entry, but the final durable value is stage 1 with no
+   validation stage 2.
+2. Between those receipts the current callback performs only the first flushed
+   service receipt and a five-pointer null validation. A null argument returns
+   immediately without stage 2, while a blocked receipt also leaves no stage 2;
+   existing evidence cannot distinguish them.
+3. Encoding pointer-validation status in the already existing stage-1 status
+   changes no I/O count, callback pointer, return status, INF, hardware path or
+   WDDM behavior and yields the smallest falsifiable discriminator.
+
+WINDOWS CONTRACT: unchanged DISPLAY_ONLY WDDM 3.0 callback vector. StartDevice
+must receive non-null miniport context, start info, dxgkrnl interface and both
+output-count pointers. Invalid input still returns `STATUS_INVALID_PARAMETER`;
+valid input follows the identical existing path.
+
+AGX/ASAHI CONTRACT: none. No AGX MMIO, power, RTKit, UAT, firmware, queue,
+memory/HVC, render or GPU interrupt path is present.
+
+TRANSLATION: the existing stage-1 status field now carries the computed
+StartDevice pointer-validation result instead of unconditional
+`STATUS_PENDING`. No extra registry operation is added.
+
+WHAT IS STILL UNKNOWN: whether EXP399 stopped because dxgkrnl supplied an
+invalid argument or because execution blocked during/after the first synchronous
+service receipt before stage 2.
+
+Single changed variable: stage-1 diagnostic status only. Admission C behavior,
+callback vector, source INF and return decisions are otherwise unchanged.
+
+Source/artifact:
+- Root commit `5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`; dirty diff
+  SHA-256 `d6f3e529ab61c46fdf371745e29f6a837c1115215ea4e04504d9d3f25cd265ba`.
+- Source/test composite / source archive SHA-256:
+  `59e5597b1c564009c5c25f145108a2a6770410d0187f8aa703673ba4dc34e447` /
+  `30feedfc10c2ef3083c945ae88de0236d50ad0248ef7f559da8c1f00ac604d45`.
+- TDD RED observed on the absent validationStatus contract; GREEN focused and
+  full admission suites pass. Relevant suite: 160/160.
+- Frozen builder context remains direct `C:\Users\pauls`, inherited NuGet
+  WDK/SDK `10.0.28000.2526`, ARM64 Release/code analysis/Universal/Inf2Cat/sign.
+  Build completed with zero warnings/errors.
+- ZIP / SYS / INF / CAT / CER / PDB SHA-256:
+  `9cb603fca2194575553165623e1524c251fb8dc538aca21031be18c43ef86467` /
+  `320beb8dffadfa4e598c3601f608076d940e376a89a1d5e426a79df37b6ccc99` /
+  `7a087596ad2bedd63f9ba96eb2de10f6aac5ec951482bcb6deadaaebbc474f77` /
+  `799a4dfb4c0ef55b945607043eb57f7d06d571f2a4df340b0d721a2d96ac14d7` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `94764973a01d84582f598062c89683a8642d9f74e4c25855546251e7d87184b7`.
+
+Run contract:
+- Stage only under current non-AGX, with APPL0002 absent and no `/install`;
+  retain a full 180-second health/filter gate because the watchdog period is
+  approximately 120 seconds.
+- If stable, cleanly switch to current G2 and allow natural enumeration only.
+  Preserve the foreground observer and collect crash-durable stage-1 status,
+  stage 2 and all later receipts.
+- `stage1 status = STATUS_INVALID_PARAMETER` confirms invalid args. Stage1
+  `STATUS_SUCCESS` with no stage 2 excludes invalid args and localizes the next
+  boundary to the first receipt return/second receipt entry. Any later receipt
+  advances the ladder accordingly.
+- Exact non-AGX cleanup and current-G2 Code28 baseline restoration are mandatory;
+  EXP400 is never reinstalled.
+
+Evidence paths:
+- host `.local/experiments/EXP-20260904-400-start-arg-receipt/`;
+- guest `C:\Users\pavel\AppleAgxEvidence\EXP400`.
+
+Observed result:
+- Stage-only `oem5.inf` remained stable through 180 seconds with Defender and
+  WdFilter enabled, zero APPL/receipts/service/SYS and zero 41/129/1001.
+- Natural G2 bind again reset to proxy at approximately 122 seconds. Recovery
+  receipts reproduce DriverEntry/DxgkInitialize/AddDevice/Type35 success and
+  StartDevice stage 1; the new stage-1 status is `STATUS_SUCCESS`, proving all
+  five StartDevice pointers valid. Validation stage 2 remains absent.
+- Bugcheck remained `0x133 (1, 0x1e00, 0xfffff8004f4083c0, 0)`; WinDbg bucket
+  is generic `nt!KeAccumulateTicks`, with default-monitor PnP blackbox and no
+  AppleAgxAdmission owner stack. Treat it as starvation symptom.
+- Phase-B result / dump / analysis SHA-256:
+  `8e7ace13f46ec923a793dc719968fdfa1e4556dd0122c0c8048041f4a56f9f77` /
+  `6f77eb44fadef0ab92304e649f72ef3b986f269ebef69baea21c928ee6260098` /
+  `af1d3e0b747f71eda66e7c1a47745ef5766d0ed510b78b0e28b2be96d28138d6`.
+- Exact `oem5.inf`/service/SYS/staging/receipts cleanup passed; cleanup SHA-256
+  `7b3c75b6f809de9eaa58ebff5ec9246062c8e2c6db741f958fdc4cbf322c0b00`.
+
+Verdict: CONFIRMED. Invalid StartDevice arguments are excluded. Execution does
+not reach the validation receipt after the first synchronous service receipt.
+
+Next experiment: EXP401 removes only the first receipt's `ZwFlushKey` while
+retaining its writes and every later flushed receipt.
+
+### EXP-20260904-399 — stage-only then natural APPL0002 bind
+
+Status: confirmed — Phase A stable; natural Phase B reached StartDevice entry
+Created (UTC): 2026-09-03T22:35:53Z
+Completed (UTC): 2026-09-03T22:53:32Z
+
+WHY THIS HYPOTHESIS:
+
+1. EXP398 mixed Driver Store import/security-filter work with live APPL0002 PnP
+   restart through `pnputil /add-driver ... /install`, then ended in cumulative
+   `0x133` on a WdFilter system thread after AddDevice success and before any
+   StartDevice receipt.
+2. The EXP398 dump and blackbox do not attribute the watchdog to
+   AppleAgxAdmission: the active stack is `WdFilter -> FLTMGR!FltSendMessage`,
+   the pending DPC list has no admission routine, and blackbox PnP names the
+   default monitor rather than APPL0002.
+3. A non-AGX guest makes AddDevice/StartDevice unreachable while preserving the
+   same Windows, package, Defender/WdFilter, Driver Store and signing path.
+   Pre-staging there followed by natural G2 publication separates the two
+   causal phases without disabling a security filter.
+
+WINDOWS CONTRACT: DISPLAY_ONLY WDDM 3.0, byte-identical source and callback
+vector to EXP398. Phase A performs Driver Store import only while APPL0002 is
+absent. Phase B performs no package-install command; normal ACPI enumeration and
+PnP ranking select the already staged package.
+
+AGX/ASAHI CONTRACT: none. The admission package has no AGX MMIO, power, RTKit,
+UAT, firmware, queue, scheduler, render or GPU interrupt path. Current EXP377
+m1n1 is unchanged; only current Mu switches between non-AGX and G2 publication.
+
+TRANSLATION: Phase A translates no Windows device into a driver object. Phase B
+translates one naturally published `ACPI\APPL0002` devnode into the existing
+DriverEntry/AddDevice/StartDevice receipt contract. No memory/HVC or Apple GPU
+object is created.
+
+WHAT IS STILL UNKNOWN: whether WdFilter/package staging alone reproduces the
+watchdog; if it does not, whether natural enumeration reaches StartDevice or
+reproduces the AddDevice-success/missing-Start boundary without an active
+pnputil install transaction.
+
+Single changed variable:
+- relative to EXP398 source: none; admission C, callbacks, source INF and
+  project are byte-identical;
+- Phase A versus Phase B: only APPL0002 publication changes through current Mu;
+  package bytes and Windows state remain fixed;
+- relative to EXP398 execution: staging and PnP binding are separated in time.
+
+Source contract:
+- Repository / branch: `paulsmir/windows-on-m1` /
+  `feature/j313-gpu-acceleration`.
+- Root commit `5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`; dirty diff
+  SHA-256 `e350f7cc8e3e6fcb46995cac125c1536827f1b337a0806c220e6d8132c39e2ee`.
+- m1n1 commit `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`; clean diff
+  SHA-256 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Mu commit `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; dirty diff
+  SHA-256 `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+- EXP399 admission source matches the frozen EXP398 archive file-for-file.
+  Source/test composite SHA-256:
+  `c47e0aca63d1ce70412299b77daeae15ca24ef4af291e68ac6a4f12f7a93b478`.
+
+Artifact:
+- Build root: `C:\Users\pauls\EXP399-stage-natural-bind`, inheriting
+  `C:\Users\pauls\Directory.Build.props` and NuGet WDK/SDK
+  `10.0.28000.2526`.
+- Build command: `msbuild
+  drivers\apple-agx\admission\AppleAgxAdmission.vcxproj /m /t:Clean,Build
+  /p:Configuration=Release /p:Platform=ARM64 /p:RunCodeAnalysis=true
+  /p:Inf2CatUseLocalTime=true`.
+- Source archive / ZIP SHA-256:
+  `7fdfabe73d32283f9a00691d1c4b65b4a177d731affbba896e637a745320bbb1` /
+  `50e86fa727151015e69ca62d3b67ca5809d1c3ade2385427db8a50bcc403b29e`.
+- SYS / INF / CAT / CER / PDB SHA-256:
+  `8831f31129c6b2731329a39b07909926e6b3ecb724960e08b4a216cdb1ee42ea` /
+  `fddb2434b25f554bca3426f45c3c9e0efd86c3a676f5c932edf0b259caeebf3b` /
+  `905a7296cac5d8645fd01b14fe4bd746a110f248c32dcc41adb2f820074e9841` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda` /
+  `b2f2abbbf971927db92d95c76eb89050cb4727c3d15b8bdfbb4e303ae708ad80`.
+- Offline gates: source identity comparison GREEN; relevant tests 159/159;
+  pinned ARM64 Release compile/link/code analysis, Universal validation,
+  Inf2Cat and signing passed with zero warnings/errors.
+- Phase-A recovery: current non-AGX Mu FD
+  `279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`
+  plus accepted m1n1
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`.
+- Phase-B/final baseline: current G2 Mu FD
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`
+  with the same accepted m1n1.
+
+Run contract — Phase A:
+- Cleanly leave current G2 and boot current non-AGX; require SSH, 8 CPUs,
+  APPL0002 absent, no project Display package/service/SYS, and healthy
+  AppleInput/stornvme/USBXHCI/sshd.
+- Verify exact package hashes and existing shared signer trust, then execute
+  only `pnputil /add-driver AppleAgxAdmission.inf` with no `/install`.
+- Resolve exactly one new `oemN.inf`; require no AppleAgxAdmission service,
+  System32 SYS, module or receipt, and keep a 180-second bounded health window.
+- Capture SSH/CPU/services, System 41/129/1001, Defender Operational events,
+  Defender status and `fltmc filters` before/after. Any watchdog/reset ends the
+  experiment before Phase B.
+
+Run contract — Phase B, allowed only after Phase A passes:
+- Clean shutdown current non-AGX and launch current G2 without modifying the
+  Driver Store and without any pnputil install/restart/enable command.
+- Keep the foreground m1n1/Mu observer alive. Natural ACPI publication and PnP
+  ranking must select the staged exact `oemN.inf`.
+- Capture crash-durable DriverEntry, AddDevice and StartDevice receipts,
+  SetupAPI, System/Defender events, dump/blackbox if present, and full platform
+  health. No memory/HVC work is permitted.
+- After evidence, use current non-AGX if necessary to delete only the exact
+  `oemN.inf` with `/delete-driver /uninstall`, remove only stopped stale
+  AppleAgxAdmission state, and return to current G2 Code 28 clean baseline.
+
+Decision tree:
+- Phase A watchdog: package/security/filter path confirmed; Phase B forbidden.
+- Phase A stable + Phase B StartDevice: EXP398 install transaction confounded
+  admission; continue from the first later callback boundary.
+- Phase A stable + natural AddDevice success/no StartDevice: genuine WDDM/PnP
+  admission failure strengthened; only then reconstruct/diff callback contract.
+- Phase A stable + Phase B WdFilter watchdog: broader filter correlation;
+  investigate security/filter interaction, not admission C code.
+
+Evidence paths:
+- host: `.local/experiments/EXP-20260904-399-stage-natural-bind/`;
+- guest: `C:\Users\pavel\AppleAgxEvidence\EXP399`.
+
+Phase A result — CONFIRMED STABLE:
+- Current non-AGX boot passed SSH/8-CPU/APPL0002-absent/package/service/SYS and
+  AppleInput/stornvme/USBXHCI/sshd preflight. Stale EXP398 admission receipt
+  values were removed before staging and verified absent.
+- Exact `pnputil /add-driver AppleAgxAdmission.inf` without `/install` returned
+  success and published only `oem5.inf`; installed INF hash is
+  `fddb2434b25f554bca3426f45c3c9e0efd86c3a676f5c932edf0b259caeebf3b`.
+- Checkpoints at 0/30/60/90/120/150/180 seconds all retained SSH, 8 CPUs,
+  four running health services, zero present APPL0002, zero admission receipts,
+  zero AppleAgx/AppleAgxAdmission service or System32 SYS, and zero fresh
+  System 41/129/1001 events.
+- Defender AM/antivirus/antispyware/behavior/IOAV/NIS/on-access/realtime flags
+  remained enabled before and after. WdFilter remained loaded at altitude
+  328010 with four instances; Defender Operational event delta was zero.
+- Verdict A: package staging/security-filter activity alone does not reproduce
+  EXP398. Phase B natural enumeration is authorized with the staged package
+  unchanged and no pnputil install transaction.
+- Phase-A result / System EVTX / Defender EVTX / SetupAPI SHA-256:
+  `d7a3b0573c6e073caf6471cb115d62b4ba4b3d392c7c90e99162206383a60acd` /
+  `63d346c886e66558044632bf52c8a74dfe9435cfc06871a76258ae27431919fa` /
+  `0d0a6addf817eda53b48c6e8bc505d04586ce78d9be1ce3a4e630fc74b7a7b70` /
+  `661cce2ce8f4e2300a88990d8a127d8e134459730eed925b41a349eafbcab7d6`.
+
+Phase B result:
+- Non-AGX shutdown and current G2 launch used the unchanged staged `oem5.inf`;
+  no pnputil install/enable/restart/rescan command occurred. Foreground runner
+  stayed attached until Windows reset to a responsive eight-CPU proxy after
+  approximately 122 seconds; SSH never became available in the candidate boot.
+- Recovery under current non-AGX preserved exact natural-enumeration receipts:
+  DriverEntry stage 2, DxgkInitialize SUCCESS, AddDevice service stage 6/SUCCESS,
+  device AddDevice stage 2/SUCCESS, QueryAdapterInfo stage 2/SUCCESS for Type 35
+  size 4, and `Wom1AdmissionStartDeviceServiceStage=1` with status
+  `STATUS_PENDING`. This proves natural StartDevice entry. No validation stage
+  2, device Start receipt or later callback receipt exists.
+- Exact package remained `oem5.inf`; service was stopped and System32 SYS hash
+  remained `8831f31129c6b2731329a39b07909926e6b3ecb724960e08b4a216cdb1ee42ea`.
+  AppleInput/stornvme/USBXHCI/sshd and eight CPUs were healthy in recovery.
+- Candidate produced bugcheck `0x133 (1, 0x1e00, 0xfffff801b06083c0, 0)`.
+  Unlike EXP398's WdFilter bucket, WinDbg attributes this cumulative watchdog
+  to `stornvme!ProcessCompletionQueues`; watchdog records repeatedly contain
+  Storport interrupt handling, and pending DPC includes
+  `stornvme!NVMeCompletionDpcRoutine`. AppleAgxAdmission is loaded but absent
+  from the active and pending-DPC stacks. Blackbox PnP again names the default
+  monitor, not APPL0002.
+- Phase-B result / System EVTX / SetupAPI / dump / WinDbg SHA-256:
+  `7f2280aac2db761b64455112c550e3e1d67bc9645dd25c2c4c4d8491004758ad` /
+  `abafc28246108614de4debabc449c42f21fde1bb71fdcb9faf5c74ffea047839` /
+  `3388180ad754d221952a900178ec32fd6b7b8e282ffc7e87d6691bead5fadc3c` /
+  `0df597a99133c813eead34b35eab15fe393428148997f9a3346b54d26e47ac58` /
+  `1b248f498525c17a6f5d3c5f7efe3af44061782e2aa3623c98fa009a3820d258`.
+- Exact non-AGX cleanup removed `oem5.inf` with `/delete-driver /uninstall`,
+  stopped stale service, SYS, staging and admission receipts. Cleanup receipt
+  SHA-256: `b2a2123bcb802885bd2a5180ca4ac6930f9f54b98b2f5925be5ce7b93f5347f0`.
+- Ordinary current G2 was restored: SSH, 8 CPUs and four health services are
+  alive; APPL0002 is fresh Code 28/unbound; project package/service/SYS are
+  absent; no 41/129/1001 event occurred since the clean final boot.
+
+Verdict: CASE 2 CONFIRMED. Package staging with active Defender/WdFilter is
+stable, and natural enumeration reaches StartDevice. EXP398 was confounded by
+the combined install transaction. The next boundary is inside StartDevice after
+the entered receipt and before validation stage 2; do not reconstruct the
+callback vector and never reinstall EXP399.
+
+Next experiment: EXP400 changes only the existing stage-1 status value to
+encode pointer-validation success/failure before the receipt call, adding no
+registry operation and changing no callback, INF, return status or hardware
+behavior. This distinguishes invalid StartDevice arguments from blocking in
+the first synchronous receipt operation.
+
+### EXP-20260904-398 — EXP214-controlled current display admission
+
+Status: inconclusive
+Created (UTC): 2026-09-03T22:10:13Z
+Completed (UTC): 2026-09-03T22:25:29Z
+
+WHY THIS HYPOTHESIS:
+
+1. The byte-exact EXP214 source/test tree reproduces its recorded composite
+   SHA-256 `25718ba071971c8cb94a6847908f0a722ffdb4f6767b9ca4d548514ea6713d63`
+   and builds on the current FRYZZING with pinned NuGet WDK
+   `10.0.28000.2526`, proving that `ntddk.h` is not an architectural unknown.
+2. The unchanged current `AppleAgxAdmission` project also builds, validates and
+   signs with zero warnings/errors when it inherits that same root
+   `Directory.Build.props`; the prior failure used a nested builder root plus
+   disabled Directory.Build imports and therefore selected the incomplete
+   system WDK context.
+3. EXP397's clean render-only vector returned success from AddDevice but never
+   received StartDevice.  The current DISPLAY_ONLY project carries the already
+   hardware-admitted complete KMDDOD callback group and is the smallest existing
+   control that distinguishes callback-model admission from platform/GPU code.
+
+WINDOWS CONTRACT: DISPLAY_ONLY WDDM 3.0 through
+`DxgkInitializeDisplayOnlyDriver`, with the complete KMDDOD callback group, one
+firmware-owned POST source/child, persistent lifecycle receipts and no render
+scheduler contract.  This is a display-admission control; its assumptions are
+not transferred to the FULL GRAPHICS AppleAgx KMD.
+
+AGX/ASAHI CONTRACT: none.  The package has no AGX MMIO, power, RTKit, UAT,
+firmware, queue, scheduler, render or Apple GPU interrupt path.  It may use only
+the inherited firmware POST framebuffer described by Windows post-display
+ownership.
+
+TRANSLATION: dxgkrnl PnP/display-admission callbacks and POST geometry are
+translated into bounded registry receipts.  No Windows object is translated
+to AGX hardware state.
+
+WHAT IS STILL UNKNOWN: whether the current clean Windows installation admits
+this complete DISPLAY_ONLY callback vector through natural StartDevice while
+the render-only EXP397 vector is rejected before StartDevice.
+
+ATOMIC CONTRACT: `KMDDOD_INITIALIZATION_DATA`,
+`DxgkInitializeDisplayOnlyDriver`, and its complete documented callback set form
+one driver-model invariant.  Individual callback probing is prohibited.
+
+Single changed variable: relative to EXP397, use the complete current
+DISPLAY_ONLY admission vector.  Mu, m1n1, APPL0002, Windows, signer and all AGX
+hardware paths remain unchanged.  Relative to the failed local build, only the
+effective builder context changes to the EXP214-proven root
+`Directory.Build.props`; no C, INF or callback code was changed for the build.
+
+Source contract:
+- Repository / branch: `paulsmir/windows-on-m1` /
+  `feature/j313-gpu-acceleration`.
+- Root commit `5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`; dirty diff
+  SHA-256 `294f49089638ff37d0c9f476bbb3064bc52ba97c7cc56f7a95d2a25c13abbae0`.
+- m1n1 commit `e7fba8ab6df027c1089c4cf5f2e121c6fc906ac1`; clean diff
+  SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- Mu commit `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; dirty diff
+  SHA-256 `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+
+Artifact:
+- Exact EXP214 build invocation:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  drivers\apple-agx\render-admission\scripts\build-driver.ps1
+  -Configuration Release`.
+- Current build invocation: `msbuild
+  drivers\apple-agx\admission\AppleAgxAdmission.vcxproj /m /t:Clean,Build
+  /p:Configuration=Release /p:Platform=ARM64 /p:RunCodeAnalysis=true
+  /p:Inf2CatUseLocalTime=true`, inheriting
+  `C:\Users\pauls\Directory.Build.props`.
+- Source archive
+  `.local/experiments/EXP-20260904-398-exp214-control/current-admission-source-v2.tar.gz`,
+  SHA-256 `2403dc086628ba1ab6dacd96cc87be4b1326e3ee2f42ff0d74925d8ec9099c58`.
+- ZIP / SYS / INF / CAT / CER SHA-256:
+  `2c7fce256368a36c04a2baf003d1aa4e44eec09229b1a304e74eeb5f97d078fe` /
+  `1f3153eeb1b1a9c45f76675c7982f9a3fd9952f44956726494780ccf1c5d8de4` /
+  `259c893854b3e8aa9a26ca2708c4756522e773257da95269a34c156ac8a99c22` /
+  `a42717dec324f4f81938cdb9b3f993bd3e2c63e0ba6b1d4053bffa86e900facd` /
+  `97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda`.
+- Offline gates: current pinned-WDK Release build, code analysis, Universal
+  validation, Inf2Cat and signing passed with 0 warnings/0 errors; focused
+  admission suite passed 37/37.
+- Recovery artifact: current G2 Mu FD
+  `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`
+  with EXP377 m1n1
+  `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`.
+
+Run contract:
+- Preflight observed Windows SSH, 8 CPUs, CIM/PnP APPL0002 present/OK and
+  unbound, no AppleAgx/AppleAgxAdmission service or package, all four health
+  services running, and zero System 41/129/1001 events in the 30-minute gate.
+- Install command: `pnputil /add-driver AppleAgxAdmission.inf /install` after
+  exact file and signer verification.  No reboot, enable, rescan or retry is
+  allowed before evidence collection.
+- Expected checkpoint: natural `Wom1AdmissionStartDeviceServiceStage=7` or
+  device `Wom1AdmissionStartDeviceStage`, followed by bounded exact callback
+  receipts.  SUCCESS means StartDevice is reached; the later PnP outcome is
+  secondary to this discriminator.
+- Failure criterion: DriverEntry/AddDevice receipts with no StartDevice receipt,
+  package/signature mismatch, SSH loss, Event129, bugcheck, reset, or any AGX
+  hardware activity.  On failure preserve evidence and do not reinstall.
+- Evidence paths:
+  `.local/experiments/EXP-20260904-398-exp214-control/evidence/` and
+  `C:\Users\pavel\AppleAgxEvidence\EXP398`.
+- Exact cleanup immediately after evidence: delete only the dynamically
+  resolved bound `oemN.inf` with `/delete-driver /uninstall`, remove only a
+  stopped stale `AppleAgxAdmission` service/SYS if package removal leaves it,
+  rescan, remove experiment staging, and prove package/service/SYS/bind absence
+  plus CPU/services/events health.
+
+Observed result:
+- The exact current package was imported as `oem5.inf`. SetupAPI reached
+  `Restarting Devices -> Start`, but the install transaction never returned to
+  the script and Windows stopped serving SSH.
+- Crash-durable APPL0002 receipts contain only
+  `Wom1AdmissionAddDeviceStage=2` and `Wom1AdmissionAddDeviceStatus=0`; no
+  StartDevice or later callback receipt exists. No AGX MMIO, power, RTKit, UAT,
+  queue, render or GPU interrupt path was present in this package.
+- Windows reset to `Running proxy`. A current-compatible non-AGX Mu boot
+  restored SSH with eight CPUs and hid APPL0002. Exact inspection resolved one
+  matching package: `oem5.inf`, INF
+  `259c893854b3e8aa9a26ca2708c4756522e773257da95269a34c156ac8a99c22`,
+  stopped `AppleAgxAdmission`, and SYS
+  `1f3153eeb1b1a9c45f76675c7982f9a3fd9952f44956726494780ccf1c5d8de4`.
+- `pnputil /delete-driver oem5.inf /uninstall` reported package uninstalled and
+  deleted. The stopped stale service was deleted; SYS and staging were removed.
+  After returning to the ordinary current G2 platform, APPL0002 is fresh Code
+  28/unbound, Driver Store has only Microsoft Display packages, no AGX service
+  or SYS exists, SSH/8 CPUs/input/NVMe/xHCI are healthy, and the post-recovery
+  30-minute 41/129/1001 gate is empty.
+- The failed run produced bugcheck `0x133` parameters
+  `(0x1, 0x1e00, 0xfffff802810083c0, 0x0)`. WinDbg classifies the cumulative
+  DPC timeout as `0x133_ISR_WdFilter!unknown_function`; the interrupted stack is
+  `WdFilter -> FLTMGR!FltSendMessage`, and the pending DPC list contains no
+  AppleAgxAdmission routine. The extended watchdog capture covers 1,754 stacks;
+  the current WdFilter system thread had waited about 120 seconds, and PnP
+  blackbox reports `DISPLAY\Default_Monitor` Problem 24 with no PnP event in
+  progress rather than APPL0002. Therefore this dump does not attribute the
+  reset to the admission driver.
+- Evidence SHA-256: minidump
+  `5c587331249fb66373405c39730d2d79188164a425a20721c831f63228c50502`,
+  WinDbg analysis
+  `968688a954a0d7f81b63d0aeafdba057d1649a8928c35437558cf6490a79a050`,
+  extended WinDbg analysis
+  `b7201d8ac59a87c3234ff87140325a834552e4ae3621db9d64c3c3afd7f64717`,
+  System EVTX
+  `2d3914fcd8f344269b49d074e72fba5dbbbffcad6d4bbac767b2ea33b59f329a`,
+  SetupAPI
+  `18f46cfd198717090db87eefba31bdb2c531329cae2e8a6f77a7c104c4cbc130`,
+  recovery receipts
+  `735b3fbe8d23d791db3fd8d028cc3fa9604b5c82e5ee2782dc1a5865b2561ad4`,
+  cleanup receipt
+  `59ba6c525e42673917875c37c7c5ecd99520367630cc4a35abaa5bb33bacb804`.
+
+Verdict: INCONCLUSIVE BEFORE STARTDEVICE. The build/environment blocker is
+CONFIRMED FIXED, but the DISPLAY_ONLY admission discriminator was interrupted
+by a WdFilter-attributed DPC watchdog after AddDevice success. Do not infer a
+callback-vector or AppleAgx cause, and never reinstall EXP398.
+
+Next experiment: no hardware run until the WdFilter/system-install confounder
+is separated offline or a new one-variable control can guarantee that a package
+install is not being judged through the same cumulative DPC timeout. Preserve
+EXP214 as the byte-exact build control; do not alter admission C code based on
+this inconclusive run.
 
 ### EXP-20260830-227 — candidate lifecycle boundary via frozen offline hive
 
@@ -4821,6 +13657,45 @@ Single changed variable relative to EXP-051: asynchronous telemetry delivery
 keeps one pending sample until `usb_iodev_send_event()` succeeds.  NVMe, xHCI,
 vGIC, timer and WFx policy, Mu, Windows, topology, memory and display are
 unchanged.
+
+# EXP-338 — omit internal-only Mu autoboot for physical USB selection
+
+**Status:** PREREGISTERED; diagnostic Mu build pending. **UTC:**
+2026-09-02T22:53:00Z.
+
+**WHY THIS HYPOTHESIS:** (1) EXP337 directly proves the physical-USB launch is
+preempted by `WindowsAutoBootDxe` selecting non-removable internal NVMe.
+(2) The current driver source explicitly rejects `RemovableMedia` and starts
+the first internal filesystem containing the fallback loader. (3) xHCI and
+internal NVMe both initialized normally, so changing storage, USB, WIM, or the
+reinstall payload would not address the observed boundary.
+
+**Single variable:** build the same J313 Mu source with only the
+`WindowsAutoBootDxe` component entries omitted from the platform DSC/FDF.  Do
+not change BDS, Shell, xHCI, NVMe, ACPI, m1n1, WIM, payload, or any disk.  Exact
+build command:
+
+```text
+STANDALONE_BUILD_MU_ONLY=1 STANDALONE_PRESERVE_COMPONENTS=1 scripts/build-standalone.sh --debug-build --display both --debug monitor
+```
+
+Root / m1n1 / Mu commits are
+`5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68` /
+`c81b3a2da7422ad1a68e969eea6fa9063959c9ec` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`.  Pre-existing root / Mu dirty
+diff SHA-256 is
+`b3bb64e425a1955924bde6522731f7e1fa4b19db9c99662ca695c51d2c1995e1` /
+`d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da`.
+The unchanged recovery Mu is EXP241 SHA-256
+`e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074`.
+
+**Build PASS:** the exact two component references are absent, the J313 Debug
+FD builds, AppleInput ACPI verification passes, and an experiment-local copy is
+hashed before the source lines are restored.  **Hardware PASS:** Mu reaches
+Shell/BDS and starts the removable USB `EFI\BOOT\BOOTAA64.EFI`; **REJECTED:**
+internal Windows still starts or USB is not enumerated; **FAIL:** platform
+initialization regresses.  Recovery is the untouched EXP241 Mu plus Stage1
+proxy reboot.  The destructive installer confirmation remains prohibited.
 
 Software/build checkpoint:
 - m1n1 commit `86433fd0dc69ec52d3507e4d05f68d62bf0c0293`;
@@ -19877,3 +28752,3032 @@ manifest SHA-256:
 `0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2` /
 `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
 `9c03e167028696757038d16f465d16c40652c76d0e8875f3cb05c6e41b0252ad`.
+# EXP-288 — platform-owner StartDevice receipt-only discriminator
+
+**Status:** INCONCLUSIVE — invalid detached host lifetime; no identical retry.
+
+**WHY THIS HYPOTHESIS:**
+
+1. EXP287 freshly proved that rejected EXP272 was selected and reached a PnP
+   post-start Code 43, but its platform-owner profile compiled no durable
+   internal lifecycle receipts.
+2. Source inspection proves the old diagnostics macro also selects the
+   fail-closed path, so enabling it for platform-owner would suppress the
+   production memory/owner/backend path being measured.
+3. The new receipt-only macro leaves that production path unchanged and can
+   distinguish stages 11–16 or final admitted stage 9 after a crash/reset.
+
+**Single variable:** compile crash-durable StartDevice receipts independently
+of qualification execution. The platform-owner candidate retains the exact
+production submission-resource, GDI pool, memory bridge, platform-owner and
+backend path, then stops at qualification admission. It adds no display,
+scanout, workload, capability, scheduler, Mu, m1n1 or hardware behavior.
+
+**Repository identity:** root commit
+`4005c1f8ee8c5a8e07a2f213c0360c984cdd1952`, root tracked diff SHA-256
+`4d54e093b388f2515f19b8c86034b5e857ca929b86b400a386b1dc7b4da91973`;
+m1n1 commit `c81b3a2da7422ad1a68e969eea6fa9063959c9ec`, empty tracked diff SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+Mu commit `5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`, tracked diff SHA-256
+`d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da`.
+
+**Build:** source v1 SHA-256
+`4aa1ecd5b38b74d569bc31f74555462661b6bba70dbecf18e7fa1f205c646134`
+failed before link because it omitted the project-declared external header
+`m1n1_windows/src/hv_guest_ipa_pa.h`. Source v2 differs only by adding that
+header, SHA-256
+`b39c03a21647f35e2bda92c8e9547affbc930336c8349c3ae014a85806892029`.
+Exact command: `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy
+Bypass -File C:\Users\pauls\windows-on-m1-builder\build-exp288.ps1` on
+FRYZZING with pinned WDK `10.0.26100.0`. Build, Universal ApiValidator and
+Inf2Cat passed; exact WDK signer thumbprint is
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+
+**Exact candidate:** package ZIP / SYS / INF / CAT SHA-256:
+`3572c246cec6d9f8182c9f2f1aa88f0de7b1718d076fc48e048d01c1b14d20ae` /
+`eb1918a5b505cc021373698f6f94b37a033ee7ea6cef66ab9dde4abd23870820` /
+`c86cbe1bafdc80f2c3991d7610f3fb3ec3e7e5b8f894d29fc12644a6bd52fed3` /
+`7590f199cc6e741552dffe7c640a804f5dc6ded9306cc99ae526bee031cb9293`.
+
+**Install / launch commands:** stage with
+`powershell.exe -ExecutionPolicy Bypass -File C:\Users\pavel\stage-exp288.ps1`,
+arm with `powershell.exe -ExecutionPolicy Bypass -File
+C:\Users\pavel\arm-exp288.ps1`, shut down Windows normally, then run
+`scripts/run-assisted.sh --chainload --m1n1
+.local/experiments/EXP-20260901-270-retain-owner-foreground/assisted-boot/m1n1.macho
+--firmware
+.local/experiments/EXP-20260901-270-retain-owner-foreground/assisted-boot/J313_EFI.fd
+--display both --debug full`. The launch uses exact unchanged EXP270 m1n1 / Mu /
+manifest SHA-256
+`b2ae6570a72372d4bf2e6966a62ee9dcd8bc5dfed99137199bca41ca9509a13e` /
+`e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
+`d61c0e016e5735804c3a35de4605932312bb9d6195e462ffc48f18c7087dfaf0`.
+
+**Checkpoint / failure / recovery:** collect exact DriverInf, ProblemCode,
+loaded SYS hash, signer, lifecycle receipts, CodeIntegrity/PnP and Event129
+after the first boot only. No DriverEntry receipt localizes image load/CI;
+stages 11–16 localize the last entered internal call; stage 9 success proves
+owner/backend returned. Any hang, reset, bugcheck, lost SSH, Event129 or stale
+receipt stops the candidate with no retry. After evidence, remove the exact
+published INF/SYS/service/signer and return APPL0002 to Problem 28. Emergency
+rollback is EXP164; normal clean recovery is exact EXP241.
+
+**Invalid run / verdict — 2026-09-02:** the preregistered `--debug uart`
+failed manifest validation before chainload; it was not a hardware attempt.
+The corrected `--debug full` invocation then reached retained-owner A408
+APPLIED, exact D589, Mu and the UEFI runtime-image dump, but was accidentally
+launched detached. The short-lived exec session reaped both host observers and
+truncated `hv.log` mid-UEFI. Windows and AppleAgx did not run; no receipt,
+Event129, bugcheck or reset signature was observed. Stage-2 returned and its
+proxy answered a fresh hardware probe. HV / empty guest UART / empty reader
+SHA-256:
+`985dcaa820dd9ea912571fe0e11718e47e8873a3e39223b87dcd029988c6bc68` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Verdict: **INCONCLUSIVE; INVALID DETACHED HOST LIFETIME; NO IDENTICAL RETRY**.
+
+# EXP-289 — persistent-foreground qualification of EXP288
+
+**Status:** REJECTED — guest PSCI SYSTEM_RESET; no retry.
+
+**Single variable:** host observer lifetime only. Reuse the exact EXP288
+package and exact EXP270 m1n1/Mu/manifest because the invalid EXP288 attempt
+never entered Windows or exercised package selection. Perform a real stage-2
+`p.reboot()` first, then invoke the same `--display both --debug full` launch
+with `--foreground` as the direct process in a retained PTY.
+
+**Hardware discriminator:** keep the PTY alive through first Windows SSH or a
+terminal failure, then collect the unchanged EXP288 package/receipt/CI/PnP/
+Event129 inventory before mutation. Any reset, bugcheck, host-runner loss,
+lost SSH, Event129 or stale/missing receipt stops without retry. Full contract
+and exact hashes are frozen in
+`.local/experiments/EXP-20260902-289-exp288-persistent-foreground/PREREGISTRATION.md`.
+
+**Hardware result — 2026-09-02:** a real stage-2 reboot returned fresh
+stage-1. Exact hashes and foreground dry-run revalidated, then `run_uefi.py`
+remained direct process of retained PTY 58889. A408 APPLIED and exact D589
+preceded Mu; all eight Windows CPUs, NVMe/xHCI routes and `guest runtime ready`
+were observed. Before SSH, Windows invoked PSCI SYSTEM_RESET with
+`x0=0x84000009`; the foreground runner captured registers and kernel stack and
+exited only on USB deconfiguration. HV / empty guest UART / reader-reset log:
+`44cd007efae2b69b673f6def76402d7f6afff571c59f7edc33246d5338eeeb96` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` /
+`517b1b91c822047c34063fc11a2cba46d2dbd1ac69250f6d69edd8465a82db7f`.
+Verdict: **REJECTED; GUEST PSCI SYSTEM_RESET; NO RETRY**. EXP290 must freeze
+the offline SYSTEM before any normal Windows boot can overwrite receipts.
+
+# EXP-290 — offline EXP289 receipt freeze and exact cleanup
+
+**Status:** INCONCLUSIVE — registry hard-stop; cached capture did not persist;
+no cleanup ran.
+
+**Single recovery variable:** boot a unique RAM-WinPE under exact EXP241,
+freeze SYSTEM/LOG1/LOG2, SetupAPI, System and CodeIntegrity evidence under
+`Windows\Temp\EXP290-offline`, and query only the copied hive. Only after a
+successful capture, verify exact `oem18.inf` / `AppleAgx.inf` / `11.45.1.921`
+/ provider, remove that one package and AppleAgx service, and remove the SYS
+only after byte-exact comparison with the embedded EXP288 binary.
+
+**Exact artifacts:** EXP241 m1n1 / Mu / final WinPE image / capture script /
+shell / embedded SYS SHA-256:
+`0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2` /
+`e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074` /
+`2baa416daa33f9ab1183f5e84b18e4336e239a6ecdb15975ac94ab3619842a67` /
+`2168b504dca1c03e225dbdeca90c52cb70f29f77bf936877fd790213850ca76f` /
+`bfb843eacaba7447c325e1e001b333cc4b256880bafe218166fde6d451e3a027` /
+`eb1918a5b505cc021373698f6f94b37a033ee7ea6cef66ab9dde4abd23870820`.
+Focused and adjacent WinPE tests pass 13/13; WIM verifies and all three
+injected files extract byte-identically. Any mismatch or capture/cleanup error
+holds WinPE without additional mutation. Full frozen contract is in the EXP290
+preregistration.
+
+**Hardware result — 2026-09-02:** exact EXP290 reached WinPE on all eight CPUs
+and hard-stopped at `CAPTURE REGISTRY FAILED`, before package validation, DISM,
+service or SYS mutation. The output existed only in the live NTFS cache. After
+the controlled reset, EXP291/292 proved that neither the directory nor raw
+SYSTEM copy existed on any volume. The installed SYSTEM was never loaded or
+mutated. Pre-stop HV / post-stop HV / framebuffer / PNG SHA-256:
+`bd761753ff6fb07c0da7892b6564acbdff34568561efbeb06c97446735ab9ba4` /
+`f5cc579cef79c1440f9b7ea1fe8c7733e58b32e27b9de94d18887693da2859a5` /
+`0680f62d230cf1f685d3fc7281b81c9a301ab1089f724001a34be57cae2f64dc` /
+`6fcc5a255795945ad059b87974aae4db96bf7d7351c512800e45045a2cb2f469`.
+Verdict: **INCONCLUSIVE; NO RETRY; NO CLEANUP RAN**.
+
+# EXP-291 — read-only EXP290 persistence check
+
+**Status:** CONFIRMED — EXP290 raw SYSTEM capture missing.
+
+**Single variable:** read the exact expected EXP290 output path from RAM-WinPE;
+do not write the installed volume. The framebuffer reported
+`EXP291 ERROR: EXP290 RAW SYSTEM CAPTURE MISSING`. PNG / HV SHA-256:
+`1e7517048a9a079e40ae57bd6dc5d26acf2dafdbe20fd7188abcf98c4ec66bb8` /
+`3eff2cbeb527f3992013af06a094073d7ac349ebf214c188b444e2ff44f899c7`.
+No package, hive, service, SYS or certificate mutation occurred.
+
+# EXP-292 — discover EXP290 output on every volume
+
+**Status:** CONFIRMED — no EXP290 output directory on any volume.
+
+**Single variable:** search all drive letters read-only rather than assume the
+installed volume letter. The framebuffer reported
+`EXP292 RESULT: NO EXP290-OFFLINE DIRECTORY ON ANY VOLUME`. PNG / HV SHA-256:
+`85373f460d1f375aac4dcd609186b47d1dee3485f2453b3cd7cc030e5aeb958b` /
+`61a6fcdcb9a72683b0e5723de0781c6d0887d9025e60fe8fa5e61ebbba5fbf44`.
+This proves EXP290's NTFS writes were cache-resident and lost on reset.
+
+# EXP-293 — load complete installed SYSTEM set from RAM
+
+**Status:** REJECTED — RAM hive load failed; installed volume unchanged.
+
+**Single variable:** reuse the hardware-proven complete-hive copy method to
+copy SYSTEM and any LOG1/LOG2 into `X:` RAM, then load only the RAM copy. The
+copy succeeded but `reg load` failed. PNG / HV SHA-256:
+`e3342dc3d868cf3f44c1652d0f7f7c30dd508b98dfbb30bd1ae231c48179cbee` /
+`d33f4d305df3c9308173206e9585947c738d0e9640a9b6830d24197c58c90edd`.
+No installed write or cleanup occurred.
+
+# EXP-294 — expose the exact RAM hive load error
+
+**Status:** CONFIRMED — SYSTEM is dirty/corrupt to reg API and logs are absent.
+
+**Single variable:** unsuppress the same RAM-copy `reg load` result and show
+the copied directory. SYSTEM copied byte-exactly at 12,582,912 bytes;
+SYSTEM.LOG1/LOG2 were absent. `reg load` returned error level 1 and
+`The configuration registry database is corrupt.` PNG / raw framebuffer / HV:
+`9b74848ff4c0fe0c4034e26a5b357b7365018fc0b92a78c41956809be4ad1e99` /
+`82052cfeb862a4b7ea15ffcfb7f24efbe39173989ce7291bb8f4d090402ff0ba` /
+`32489c3d244528b3a20d644c8b9fcbfff852b2f672611423281fa2dff181d03a`.
+
+# EXP-295 — RAM-only hive base-block repair and EXP289 receipts
+
+**Status:** CONFIRMED — zero receipts; EXP289 stopped before DriverEntry.
+
+**Single variable:** on the RAM SYSTEM copy only, reconcile a one-step dirty
+base-block sequence and checksum before `reg load`. A locally built
+freestanding PE32+ ARM64 utility has no CRT, accepts no path, imports only ten
+KERNEL32 functions and can open only `X:\EXP295CFG\SYSTEM`. Algorithm/safety
+contracts pass 3/3; WIM verifies and all injected files compare byte-identical.
+
+Exact WinPE / utility / script SHA-256:
+`8e66a0df2c0cfa1ca0d2109f86b3ccf67fbe29ec8d576c2e451f432c85ba6f8a` /
+`a73d6e9d6c74046f98f5640a89f93eac988411cd3cf506d11d92d5c1740fd66d` /
+`8820a447a59e4eeb601ab9c4b529b23ac506218bfc562df46597afd47d477961`.
+
+**Hardware result:** exact EXP241 reached eight CPUs and runtime. The utility
+reported primary/repaired sequence 91889, `RepairComplete=1`, repaired checksum
+`0x2cccef8b` and error level zero. `reg load` then succeeded; selected
+`ControlSet001` had `ReceiptLineCount=0`. By the preregistered mapping, EXP289
+never entered DriverEntry; the smallest supported boundary is image load /
+Code Integrity, not platform-owner or any StartDevice substage. Repair /
+receipt PNG and final HV SHA-256:
+`58fb2a5bd483bc93e461312144765a10e329406caaa850940fbca676a71a61b7` /
+`99619e83466fac0539a1e27bef00d97f65e3412ab522c836e53393f8338e2ee3` /
+`1d80ca7d378fb1b2a75c8f0aac82bd390bcce35ef093136c209cc3bd78a24073`.
+EXP295 wrote nothing to the installed volume. SIGTERM after capture returned
+Air to Stage 1 `b791225`, J313, eight CPUs and 8 GiB.
+
+# EXP-296 — exact offline EXP288 package/SYS cleanup
+
+**Status:** READY BUT NOT LAUNCHED — exact destructive cleanup requires
+explicit user authorization.
+
+The separate frozen rollback validates `oem18.inf` as `AppleAgx.inf`, version
+`11.45.1.921`, exact provider, and compares installed SYS byte-for-byte with
+EXP288 before mutation. It then removes only that INF without force, proves it
+absent, and deletes SYS only if the remaining file still matches exactly. It
+does not load the dirty installed hive; service/certificate/staging cleanup is
+deferred to a clean EXP241 live boot.
+
+Exact WinPE / script / reference SYS SHA-256:
+`bdc6a6b38da33704532bdf5e44823fd128f67eff73b5683795b23543eacaa43f` /
+`e303d38a21e7e1b82dfb5e86e2d86ad94274c66e09d93c5569d2532795e0773e` /
+`eb1918a5b505cc021373698f6f94b37a033ee7ea6cef66ab9dde4abd23870820`.
+Cleanup contracts pass 2/2; WIM integrity and byte-exact extraction pass. The
+attempted launcher authorization was rejected before chainload; therefore no
+EXP296 hardware attempt and no installed-volume mutation occurred. Air remains
+at verified Stage 1.
+
+# EXP-306 — known-good Windows recovery inventory
+
+**Status:** PREREGISTERED — read-only hardware inventory pending.
+
+**UTC:** 2026-09-02T15:13:48Z. **Single variable:** recovery-artifact
+observability only. Exact EXP241 m1n1/Mu boot a dedicated WinPE that reads
+System Restore/VSS evidence, RegBack, current and backup hive/log sets,
+WindowsImageBackup, EXP289-305 directories, ESP BCD/EXP rollback paths,
+recovery directories, dumps, and restore/VSS event records. It writes reports
+only to `X:` RAM. `mountvol S: /S` changes only the volatile WinPE mount
+namespace; no installed or ESP content is written.
+
+Exact WinPE / inventory script / shell SHA-256:
+`8f246c7ef544827c481853f015c81a670119d7bfec3cf5e30965f568c8664a17` /
+`17d8750aff897fc43bea6556089e8331d4fd951dcad2045afe11de25c65b3dd9` /
+`ef35ff32d17e3a03bb803d462dc46f3d0efa59df911dbd3ba4e2a21853378666`.
+Focused contracts pass 3/3 and the two-image WIM passes full verification.
+
+## EXP308 partial result — 2026-09-02
+
+The exact shadow contains the current installation loader and all five base
+hives: SYSTEM 12,582,912; SOFTWARE 81,264,640; DEFAULT 786,432; SAM 65,536;
+SECURITY 65,536 bytes. Their modification time is 2026-08-30 22:18 local.
+No adjacent LOG1/LOG2 appeared. Querying the snapshot System.evtx returned
+`The event log file is corrupted.` This prevents using snapshot event history
+as known-good proof, but does not yet reject an application-consistent clean
+base-hive set. EXP308 was stopped before the already-generated RAM load page
+was captured; no installed or shadow mutation occurred.
+
+# EXP-309 — targeted VSS hive verdict display
+
+**Status:** PREREGISTERED — exact EXP308 validator with display-only change.
+
+Only `X:\EXP308-B.TXT` is displayed until stop, preserving the exact read-only
+copy/compare/load logic. Exact WinPE / script / shell SHA-256:
+`e3b42c3dcf3300c77ddd400b19e693621ed2175e3a8044af176d936995440fe4` /
+`82bb1720eed33cbf619546630e763b11f4442603c00eed4b2cd895b41d59c749` /
+`f085d3ffda65a5dc613ae1649cdef53c67da79840fec0ea0231c102b1078e077`.
+Targeted contract passes 1/1 and the WIM passes full verification.
+
+## EXP307 hardware result — 2026-09-02
+
+**CONFIRMED; ONE PRE-CORRUPTION VSS CANDIDATE.** Exact EXP241 reached stable
+WinPE. RegBack exists but contains zero files. `SystemRestore` recursively
+contains only the `FRStaging` directory, not a demonstrated restore-point
+payload. `vssadmin` exposes one shadow of the current `C:` volume: persistent,
+client-accessible, auto-recovered `HarddiskVolumeShadowCopy1`, ID
+`{7b246b66-8345-4641-bc52-0b6913d8ff25}`, created 2026-08-31 09:37 local.
+This predates EXP289 and the first proven hive/0x74 failure. The current BCD is
+readable and includes a resumeobject; the previously recorded EXP286 rollback
+BCD was unavailable through the exact current query. No restore or installed
+mutation occurred. The runner returned to freshly probed Stage-1.
+
+# EXP-308 — VSS shadow completeness validation
+
+**Status:** PREREGISTERED — read-only candidate validation pending.
+
+**UTC:** 2026-09-02T15:43:55Z. **Single variable:** prove whether exact
+`HarddiskVolumeShadowCopy1` is a coherent recovery source. The script reads
+the shadow's loader and registry set, copies all available hive/log files only
+to `X:` RAM, byte-compares SYSTEM/SOFTWARE/DEFAULT/SAM/SECURITY with their
+snapshot sources, loads/unloads only RAM copies, reads snapshot event evidence,
+and re-checks the current ESP. Installed Windows, shadow, and ESP content are
+read-only.
+
+Exact WinPE / script / shell SHA-256:
+`fd969a4532b3cd4d6efdca9ec86ddb96f3b78f691b74cfd28be91930adcf0848` /
+`e82d940d95da62aad92158f1057261efc9fcc833ac3b3b3c47b2676de26ebc57` /
+`103a4f3f5e6b23ca2156b23ea783369a7fe37d6af021f52f25e98e70b52e1793`.
+Focused contracts pass 3/3 and the two-image WIM passes full verification.
+Full hypothesis, repo state, launch command, pass/fail mapping, and recovery
+contract are frozen in the EXP306 preregistration.
+
+## EXP306 hardware result — 2026-09-02
+
+**CONFIRMED READ-ONLY INVENTORY; CANDIDATE VALIDATION REQUIRED.** Exact EXP241
+reached all eight CPUs and stable WinPE pages. `System Volume Information` and
+its `SystemRestore` subdirectory are present. `WindowsImageBackup` is absent;
+`wbadmin get versions` reports no backup. Visible Windows Temp experiment
+directories are only `EXP302-hive-recovery`, `EXP304-hive-resume`, and
+`EXP273-offline`; the generic wildcard found no complete hive set. Five old
+minidumps remain, while `MEMORY.DMP` is absent. The unsupported `mountvol /S`
+query did not mount the ESP and therefore makes no statement about ESP/BCD
+backups. Reports existed only on `X:` RAM; installed mutation remained NONE.
+The runner was terminated after evidence capture and Stage-1 was freshly
+probed on J313 with eight CPUs.
+
+# EXP-307 — recovery candidate validation
+
+**Status:** PREREGISTERED — narrow read-only validation pending.
+
+**UTC:** 2026-09-02T15:26:11Z. **Single variable:** validate completeness of
+the sources exposed by EXP306. Exact EXP241 boots WinPE; the script reads
+RegBack and recursive SystemRestore content, queries VSS, assigns only the
+unique `WINESP` label through the hardware-proven EXP286 diskpart contract,
+reads current and EXP286 rollback BCD sets, removes the volatile `S:` mapping,
+and inventories exact EXP302/304/273 paths. Reports are written only to `X:`
+RAM; no Windows or ESP content is changed.
+
+Exact WinPE / script / shell SHA-256:
+`ba32f9c84731dec7327ce3364efda6753dce4d644ddec25a68a6da244688ddab` /
+`a360ec463aa2237b18d7f57ada9f7fc63d35cf1c079292376030a7833e7d9e0e` /
+`94b34381f653b2a26d358743be344d29133429fa835dc715ded2a86778f78ca7`.
+Focused contracts pass 3/3 and the two-image WIM passes full verification.
+
+# EXP-310 — preserve current post-0x74 rollback state
+
+**Status:** PREREGISTERED — exact preservation run pending.
+
+**UTC:** 2026-09-02T16:06:55Z. **Single variable:** create one new,
+non-overwriting `C:\Windows\Temp\EXP310-pre-vss-restore` directory before any
+restore. It captures the current five-hive set plus every present transaction
+log, current BCD/logs, dumps, boot/SetupAPI/CodeIntegrity evidence, and
+EXP302/304 receipts. Required payloads are byte-compared after copy; all
+preserved payloads and compare receipts are SHA-256 hashed. Any ambiguity or
+copy/compare/hash failure hard-stops and forbids restore. No existing Windows,
+ESP, registry, BCD, VSS, driver, service, or certificate state is changed.
+
+Exact WinPE / script / shell SHA-256:
+`b134672847168a65e94a834480ad99a5b9c8f0765fc75f0ca95245f98fbb76f0` /
+`fc11f54a26b2f4664b40c28b13088139a74073a8cfd902a3dcf5a5c883dce4ed` /
+`7d8cd5b6a92adb3aaae8b1d9a9a711e0d1d1424361b38958e92b33d77e1791b4`.
+Focused contracts pass 3/3 and the WIM passes full verification. Full frozen
+contract is in the EXP310 preregistration.
+
+## EXP310 first launch superseded; EXP310B ready — 2026-09-02
+
+The initial image displayed the old EXP309 command: only WIM index 1 had been
+updated while hardware boots index 2. The preservation script never executed;
+there was no installed mutation. Runner stop returned Air to freshly probed
+Stage-1, J313, eight CPUs, 8 GiB. EXP310B places the identical pinned script
+and shell in both indices, passes full WIM verification, and confirms both
+files in index 2. Revised WinPE SHA-256:
+`8a2560515df3b5d3029839177ae276fea219c763c14d274c9484c1221892702c`.
+All other preregistered contracts and artifact hashes are unchanged.
+
+## EXP310B hardware result — 2026-09-02
+
+**REJECTED PRESERVATION; RESTORE NOT PERFORMED.** After a hardware-proven
+stage-2 `p.reboot()`, exact EXP310B reached all eight CPUs, NVMe/xHCI runtime,
+and the intended WinPE script. It created only the preregistered new partial
+directory, then hard-stopped at `BACKUP COPY FAILED` with
+`RestoreNotPerformed=1`. No existing installed/ESP/VSS/registry/BCD state was
+changed. Exact hard-stop PNG SHA-256:
+`25c59f2ee9e3c7d7f33841b3bb8c11452b748c90054d6c4869dc21ad4c0b1e01`.
+The preserved HV log SHA-256 is
+`113b64ced763021e45f88ef6aef76d73962f107908ede628997b10518f1f8ed5`.
+No restore is allowed until the partial stage is localized and a complete
+rollback set exists.
+
+# EXP-311 — read-only EXP310 partial-backup forensics
+
+**Status:** PREREGISTERED — hardware read pending.
+
+**UTC:** 2026-09-02T16:22:13Z. **Single variable:** display only the durable
+EXP310 partial manifest plus presence/sizes of each expected Config and BCD
+file. There is no installed, ESP, registry, BCD, VSS, package, service, or
+certificate mutation. The manifest stage and first missing ordered file will
+localize the failed copy boundary; restore remains forbidden.
+
+Exact WinPE / script / shell SHA-256:
+`4c916eea4fc63b9fed58eeda9ae4dec13c1f45bc12a86be406afcf85925a5249` /
+`1d08b7b139bc3c400dd49dbf2ca9c03a1f832e7d2c903117fea691063226b874` /
+`813968d8a1951c606ab4370558501a688d5d1050836a37bf905ce3745918e005`.
+Focused contracts pass 2/2 and the two-image WIM passes full verification.
+
+## EXP313 hardware result — 2026-09-02
+
+**CONFIRMED CMD SOURCE-SELECTION FAILURE.** SYSTEM.LOG2 existed and statted at
+3,145,728 bytes. The identical RAM-only `copy /b` returned 1, created no
+destination, and emitted `The system cannot find the file specified` followed
+by `0 file(s) copied.` Installed mutation and restore remained NONE. Exact PNG
+SHA-256: `d42035a2cc5c6b61bb34149bf42eaa8cb2594dc4f057c218dced657299910a3f`.
+
+# EXP-314 — base-hive versus transaction-log attributes
+
+**Status:** PREREGISTERED — read-only hardware discriminator pending.
+
+**UTC:** 2026-09-02T16:41:41Z. **Single variable:** display read-only
+`attrib.exe` results for current SYSTEM and SYSTEM.LOG2. Hidden/system flags on
+only the log would explain why cmd COPY says not found for every log while base
+hives copy exactly. No attribute, installed, ESP, registry, BCD, VSS or driver
+state is changed and no restore occurs.
+
+Exact WinPE / script / shell SHA-256:
+`8f6e902f162fdd667b69f3bed9e4c511d3241668a50d79705d31d1a76c7d942b` /
+`fe1344b76e1fdaadff0501fbd873a69bbddd5966a48c7741375e2c307f9838b0` /
+`82bb1d81777e7a66d1d4691f70b16a6cd8d15fdca664bde3207db1c99e566b74`.
+Focused contract passes 1/1 and the two-image WIM passes full verification.
+
+## EXP312 hardware result — 2026-09-02
+
+**CONFIRMED; CMD COPY FAILS ON EVERY CURRENT TRANSACTION LOG.** The five base
+hives copied to `X:` RAM with CopyRc=0 and byte CompareRc=0. Every present
+LOG1/LOG2 returned CopyRc=1 with no destination, including nonempty
+SYSTEM.LOG2 (3,145,728 bytes), SOFTWARE.LOG1 (156,725,248), SOFTWARE.LOG2
+(20,083,712), and all DEFAULT/SAM/SECURITY logs. SYSTEM.LOG1 is zero bytes and
+also failed. This localizes EXP310B's first hard-stop to SYSTEM.LOG1 and proves
+base-hive source reads are not the failing boundary. Installed mutation and
+restore remained NONE. PNG SHA-256:
+`6bb69fa6226e8d3d2fc3ba8728d48136e97441c85f2f026b53e9a28df87e4e7b`.
+
+# EXP-313 — exact SYSTEM.LOG2 cmd-copy error
+
+**Status:** PREREGISTERED — RAM-only hardware read pending.
+
+**UTC:** 2026-09-02T16:34:58Z. **Single variable:** repeat only the nonempty
+SYSTEM.LOG2 `copy /b` to `X:` RAM and expose the exact cmd output, CopyRc,
+sizes, and CompareRc. This distinguishes a cmd semantic/access error from
+source data loss before any alternative copier is built. There is no installed
+or ESP mutation and no restore.
+
+Exact WinPE / script / shell SHA-256:
+`89f7e6a41d33a3ecadc6c6def4e0f08adc773aa1ff39135a60948d3fc95f4e9d` /
+`34961ab09814a0e066d78c012cd6628d75552aba50fecf253f1896e70de69ed9` /
+`ca677975cd4956ec697dec69a87e6ba545ae5d5b7441086d713935f6b41c5ed1`.
+Focused contracts pass 2/2 and the two-image WIM passes full verification.
+
+## EXP311 hardware result — 2026-09-02
+
+**CONFIRMED; PARTIAL BACKUP NOT DURABLE.** Exact read-only EXP311 found the
+unique installed Windows volume but reported
+`C:\Windows\Temp\EXP310-pre-vss-restore` missing after platform reboot.
+Installed mutation was NONE and restore remained unperformed. Thus EXP310B
+did not create a usable rollback set; its exact failing source/destination
+boundary cannot be inferred from post-reset NTFS state. PNG SHA-256:
+`515fa1acbeda046d3fab9fcab1372d01637df79d980ebf370592197dddff7bf0`.
+
+# EXP-312 — current hive/log RAM-copy matrix
+
+**Status:** PREREGISTERED — RAM-only hardware discriminator pending.
+
+**UTC:** 2026-09-02T16:28:33Z. **Single variable:** copy the same ordered
+current hive/log sources only to `X:` RAM and show source size, CopyRc,
+destination size and byte-CompareRc for each. This separates source
+readability from installed NTFS destination durability. There is no installed,
+ESP, registry, BCD, VSS or driver mutation and no restore.
+
+Exact WinPE / script / shell SHA-256:
+`49b7119e0b4ce59895335f95c60edfdec66695a1005eaee45343eede59db62e2` /
+`723d107a047bc94fe508d82dea2a7ffaf1c59c9e7db1aaa5b341680b8881e918` /
+`fa2ae0fb0210788ab0e45457c214295d84544b1b03fdd59b1eab85848e9c5a2c`.
+Focused contracts pass 2/2 and the two-image WIM passes full verification.
+
+## EXP314 hardware result — 2026-09-02
+
+**CONFIRMED HIDDEN/SYSTEM CMD-SELECTION ROOT CAUSE.** Read-only `attrib`
+reported `A` for current SYSTEM and `A S H` for current SYSTEM.LOG2. Both
+queries returned 0. This explains why cmd COPY handled every base hive but
+reported every hidden/system LOG1/LOG2 source missing. Installed mutation was
+NONE and restore remained unperformed. Exact PNG SHA-256:
+`349b41ed88c399d5c7870f102b821a4689c8f83d9411c4afe2b1e1217a12c650`.
+
+# EXP-315 — exact-path hidden/system log copy qualification
+
+**Status:** PREREGISTERED — RAM-only hardware qualification pending.
+
+**UTC:** 2026-09-02T16:56:11Z. **Single variable:** copy current SYSTEM.LOG1
+and SYSTEM.LOG2 through a freestanding ARM64 helper that opens exact source
+paths with `CreateFileA`, writing only to `X:` RAM; then byte-compare both
+destinations. CopyRc=0 and CompareRc=0 for the zero and nonzero logs qualifies
+the mechanism for the pre-restore current-state backup. No installed, ESP,
+registry, BCD, VSS, package, service, or certificate state is changed and no
+restore occurs.
+
+Exact WinPE / script / shell / exact-copy SHA-256:
+`ed06b183697177cc28e62d062e4637de73ba235b62a7bbd08e50287d4784e2ec` /
+`63e062960406439feab82caf9a9c4deab56927f326f03b1bfc26921ce3406756` /
+`052e17e6eaa67a3cfa6fec8295f4a947ec769c3707ae7860835d80e8efe43b43` /
+`2546dcb630208696d358364b37ae9ff5686998e7f60865c1c807ffb73c8c6b98`.
+Focused contracts pass 2/2; both WIM indices contain the pinned payload and
+the full two-image WIM passes verification.
+
+## EXP315 hardware result — 2026-09-02
+
+**CONFIRMED EXACT-PATH COPIER.** On physical J313 WinPE, the helper copied
+current hidden/system SYSTEM.LOG1 (0 bytes) and SYSTEM.LOG2 (3,145,728 bytes)
+to `X:` RAM with CopyRc=0, `DestinationFlush=1`, exact source/destination
+lengths, and byte CompareRc=0 / `Exact=1` for both. Installed mutation remained
+NONE and restore remained unperformed. This clears the deterministic blocker
+that rejected EXP310B and qualifies the helper for a new non-overwriting
+current-state preservation candidate. Exact PNG / HV-log SHA-256:
+`53f6656275f5e50d64e59232781d679bd437ff6fe7ba1ea1f11313e23b265ab8` /
+`13ccfc3bb1cb2516cbc8739a262fe6cedee2991c0c52f2fb6b8dc1ecc933f2c3`.
+
+# EXP-316 — durable current-state preservation before VSS restore
+
+**Status:** PREREGISTERED — hardware preservation pending.
+
+**UTC:** 2026-09-02T17:06:48Z. **Single variable:** create the previously
+absent, non-overwriting `C:\Windows\Temp\EXP316-pre-vss-restore` directory and
+preserve current five base hives plus every present transaction log, BCD plus
+logs and enumeration, dumps, current boot/SetupAPI/event/SRT evidence, and
+EXP302/304 recovery receipts. Direct payloads use the EXP315 hardware-qualified
+exact-path copier and byte comparator; all preserved payloads are SHA-256
+hashed and final control files are sealed. Existing installed/ESP/VSS/registry/
+BCD/driver state is not changed; only the new backup directory is written and
+no restore occurs. A separate post-reboot read-only durability gate is required
+even after success.
+
+Exact WinPE / script / shell SHA-256:
+`861e1ed35ae745ae305c58d099333e8d156e42a7c1ef50644adc6ef3f2e86cb6` /
+`184fe039ea67becbe31cfe4a0ec56f5152babfe2df70f8631ca748f5c556dc06` /
+`411e8a4166334c631d571428d5fdb49ce1467355dd4b9fe37e74486bd0e3b746`.
+Focused contracts pass 3/3; both WIM indices contain the exact payload and the
+full WIM passes integrity verification.
+
+## EXP316 hardware result — 2026-09-02
+
+**CONFIRMED CURRENT-STATE PRESERVATION; RESTORE NOT PERFORMED.** On physical
+J313 WinPE, the new non-overwriting
+`C:\Windows\Temp\EXP316-pre-vss-restore` completed with exact/flushed current
+hive and BCD gates, current dump/log/recovery-receipt preservation, SHA-256
+receipts for 29 preserved payloads, a sealed manifest, `Complete=1`, and
+`CurrentStateRollbackReady=1`. Existing hives, BCD, VSS, packages, drivers,
+and certificates were not changed. A full platform reboot was executed after
+capturing evidence; restore remains forbidden until EXP317 proves the backup
+durable and byte/hash-consistent from a fresh WinPE session. Exact PNG / HV-log
+SHA-256:
+`9c5c3368f63c7ddcc28a165d4641ffa12fce076f3b07beb9722595d018d8535b` /
+`7521448590fb1a6d9f42407b6be2f53ab1a0716b42395d9ef938b4be230a968f`.
+
+# EXP-317 — post-reboot read-only EXP316 durability verification
+
+**Status:** PREREGISTERED — hardware verification pending.
+
+**UTC:** 2026-09-02T17:15:32Z. **Single variable:** from a new WinPE session
+after full platform reboot, validate EXP316 control gates, compare all current
+hives/logs and BCD/logs to the backup through a read-only-only comparator,
+compare failure evidence/recovery trees, and recompute both the preserved
+payload SHA-256 receipt and the control seal. Installed Windows/backup/ESP/VSS/
+registry/BCD/driver content is read-only; reports exist only in `X:` RAM and no
+restore occurs.
+
+Exact WinPE / script / shell / read-only comparator SHA-256:
+`9eaf23fd5b9c1539c3296e1f3ad1999afd65abd824a4f93578f3637e2454d3e6` /
+`63700f27cfc2404128855bb71196cfa2c7cc848150d5b453b1622d7c86dbaf16` /
+`5adcd8d1bab2f6e57251f85af6f12998247f7a5454603e91ec529904fde2a787` /
+`feda26ba17e27cc6979c79a77b930b9bda4017892c6b631add73e1c203a1fe76`.
+Focused contracts pass 5/5; both WIM indices contain the exact payload and the
+full WIM passes integrity verification.
+
+## EXP317 hardware result — 2026-09-02
+
+**CONFIRMED DURABLE ROLLBACK; RESTORE NOT PERFORMED.** From a fresh WinPE
+session after full platform reboot, the EXP316 directory and all control files
+were present. Current config and BCD sets matched the preserved copies through
+the read-only comparator; current failure evidence and recovery trees matched;
+the complete payload hash receipt and control seal recomputed byte-exactly.
+The stable screen reported `CurrentConfigExact=1`, `CurrentBcdExact=1`,
+`EvidenceExact=1`, `HashReceiptExact=1`, `ControlSealExact=1`, and
+`CurrentStateRollbackReady=1`. Installed mutation was NONE. This clears the
+rollback-insurance gate for the single strongest recovery candidate: VSS
+shadow `{7b246b66-8345-4641-bc52-0b6913d8ff25}`. Exact PNG / HV-log SHA-256:
+`662b65e5c616da2b8aa6d990e4b23d5e671aa2b9bd9ad4d65ed28b97fc54d390` /
+`fe96d6d60d77f5fd78663b954b5f9e5859a45b1bdbad1fa48feb99d94c17d677`.
+
+# EXP-318 — RAM-only atomic replacement helper qualification
+
+**Status:** PREREGISTERED — hardware qualification pending.
+
+**UTC:** 2026-09-02T17:24:05Z. **Single variable:** use the freestanding ARM64
+`MoveFileExA(REPLACE_EXISTING|WRITE_THROUGH)` helper to replace a pre-existing
+destination only in `X:` RAM, then require source absence and read-only
+byte-exact destination validation. Installed Windows/backup/registry/BCD/ESP/
+VSS/driver state remains read-only and no restore occurs.
+
+Exact WinPE / script / shell / helper SHA-256:
+`905fc71b0a8f3b8dcf136539aad2c3da1c6d1a1493690176e25f08a7b6a5dc8b` /
+`a92d243474e15355b928445580b475d90742fdef16bd23b3565f87aaa91d63ad` /
+`a8d0dc4c8093b38b55b323d00b6d1375c3f22105ed728b8da4a0881794e68a49` /
+`24d8919ea2cae5836e585b8756f4e9e7d5856c99eaef2cb68c7002b58d4892d2`.
+Focused contracts pass 3/3; both WIM indices contain the exact payload and the
+full WIM passes verification.
+
+## EXP318 hardware result — 2026-09-02
+
+**CONFIRMED ATOMIC REPLACEMENT PRIMITIVE; RESTORE NOT PERFORMED.** On physical
+J313 WinPE, the helper replaced a pre-existing `X:` RAM destination with the
+distinct source using `MoveFileExA(REPLACE_EXISTING|WRITE_THROUGH)`. It returned
+0 / `AtomicMove=1`; the source was absent afterward; and the destination
+read-only byte-compared exact to the expected 30-byte payload. Installed
+mutation was NONE. This clears the final mechanism-risk gate for the prepared
+VSS hive restore/automatic rollback candidate. Exact PNG / HV-log SHA-256:
+`c7028e87d2890b62c89685fa876a6b63a826853bb76a2f5f54d85ad1d42de80d` /
+`4e15b83f8d4b9e801c7adae0f841f7cf87dd521b17d7504596d47b26b47d6ff3`.
+
+# EXP-319 — single coherent VSS hive restore with automatic rollback
+
+**Status:** PREREGISTERED AND FULLY PREPARED — destructive hardware launch is
+behind the execution safety gate.
+
+**UTC:** 2026-09-02T17:31:53Z. **Single variable:** restore exactly the five
+base hives from VSS shadow `{7b246b66-8345-4641-bc52-0b6913d8ff25}` after
+runtime revalidation of the current durable EXP316 rollback, VSS ID/device
+mapping, candidate exact copies/loadability, and all same-volume stages. The
+candidate has no logs, so current canonical logs are moved to recoverable
+`.EXP319.STALE` sidecars rather than mixed. Any post-replacement failure
+automatically restores and verifies the complete EXP316 base+log set. BCD/ESP,
+VSS, driver packages/files, and certificates are not changed; Windows is not
+booted automatically.
+
+Exact WinPE / script / shell SHA-256:
+`24f7c585ae88f203d98b9dcb057ff425536de425b104ce2f93e1f3e0b41b2890` /
+`f75a8964b563a28307a031d705053b82a36b7fa3208f091030228d6666625c0e` /
+`df7bf1242b1062e0a634946cab377d9d886558949e022137bdac6bcd8bcb6cb1`.
+Focused contracts pass 4/4; both WIM indices contain the exact payload and the
+full WIM passes verification.
+
+## EXP319 authorized pre-run addendum — 2026-09-02T17:36:03Z
+
+The operator explicitly authorized the exact destructive EXP319 VSS restore.
+Root / m1n1 / Mu commits are
+`4005c1f8ee8c5a8e07a2f213c0360c984cdd1952` /
+`c81b3a2da7422ad1a68e969eea6fa9063959c9ec` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; their current tracked binary-diff
+SHA-256 values are
+`395db18a6a1e97c4b34279d80419faa623bc1e8afbf1b410c69643b48ee954fa` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` /
+`d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da`.
+The artifact was constructed by copying the qualified EXP318 WinPE image,
+mounting it read-write, applying `wim-update.txt` to boot.wim indices 1 and 2
+with `wimlib-imagex update`, and running `wimlib-imagex verify`; the already
+verified EXP319 image is launched unchanged.
+
+Exact launch command is `./scripts/run-assisted.sh --proxy
+/dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43
+--chainload --m1n1
+.local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho
+--firmware
+.local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd
+--ramdisk
+.local/experiments/EXP-20260902-319-vss-hive-restore/winpe-exp319.img
+--display both --debug monitor --foreground`.
+
+PASS requires stable `EXP319 VSS HIVE RESTORE COMPLETE`,
+`RestorePerformed=1`, `CanonicalTransactionLogsAbsent=1`, and
+`InstalledRestoredHivesLoadable=1`, with no BCD/VSS mutation. A pre-write hard
+stop must retain `RestorePerformed=0`; an accepted post-write failure must show
+`CURRENT STATE ROLLED BACK` and `RollbackVerified=1`. Any critical rollback
+failure forbids physical boot. Evidence is written under
+`.local/experiments/EXP-20260902-319-vss-hive-restore/evidence`; the recovery
+artifact is the exact durable `C:\Windows\Temp\EXP316-pre-vss-restore` set.
+
+## EXP319 hardware result — 2026-09-02T17:41:54Z
+
+**INCONCLUSIVE BEFORE CANDIDATE / RESTORE NOT PERFORMED.** Exact EXP319 reached
+all eight CPUs, NVMe/xHCI runtime, and the intended WinPE script. The durable
+EXP316 rollback set revalidated byte-exactly, after which the new live
+`vssadmin` mapping gate hard-stopped with `VSS ID TO DEVICE MAPPING INVALID`.
+The screen proves `CurrentRollbackRevalidated=1` and `RestorePerformed=0`; no
+EXP319 output directory, hive stage, replacement, or transaction-log move was
+reached, so installed Windows remained unchanged. The runner was stopped only
+after evidence capture and a full platform reboot returned J313 to a freshly
+probed eight-CPU/8-GiB Stage1 proxy.
+
+Boot phases observed: EXP241 chainload; Mu/bootmgfw; eight secondary CPUs;
+NVMe backend=1 and xHCI runtime; intended EXP319 WinPE; pre-write hard stop.
+Display and USB framebuffer were alive; SSH is not expected in WinPE. Exact
+hard-stop PNG / HV-log / guest-UART SHA-256:
+`2fe858e41e63d712384637f0da920b5d0ad0a76b3096bc284e591291103dcf3a` /
+`f6e75216b954a8c5e58a0aac0300b4fccee7c74c90581350a90fcc6ac562251a` /
+`2571a7293fb04662afaa622f85709870c9983d60e834b11b1d0f6b271f13189b`.
+
+The exact gate combines four distinct conditions: installed `vssadmin.exe`
+presence, its process exit code, the ID token, and the device token. EXP307
+proved the same exact command prints the correct ID/device mapping but did not
+record its process exit code. **Next causal discriminator:** a read-only EXP320
+must display that exit code, both token matches, and direct candidate-path
+presence separately. No destructive retry is permitted from this combined
+error screen.
+
+# EXP-320 — read-only VSS mapping discriminator
+
+**Status:** PREREGISTERED; hardware read pending. **UTC:**
+2026-09-02T17:41:54Z. **WHY THIS HYPOTHESIS:** EXP319 failed only at a combined
+pre-write gate; EXP307 already proved that the same command prints the correct
+ID/device mapping, but did not record its process exit code. The EXP319-only
+exit-code rejection is the closest untested difference.
+
+**Single variable:** display installed `vssadmin.exe` presence, exact exit
+code, ID-token match, device-token match, and direct snapshot SYSTEM/SOFTWARE
+path presence separately, followed by the full command output. All reports are
+written only to `X:` RAM. Installed Windows, registry, transaction logs,
+BCD/ESP, VSS, packages, certificates, and GPU state remain read-only.
+
+Exact image / script / shell SHA-256:
+`d755a88b083bdec45f168e6e70d0212627f5f3d010d63724d8df33dddf343061` /
+`6b3a531d16feb33d1862952fad0549fe8d49ba7a1e0b4ca1bdd4468b0e02857a` /
+`0e0ec1f5d779db33ed598824683fc377b2b05ffb73bdad22f2387dabe612c4ab`.
+Focused contracts pass 2/2; both WIM indices were extracted and matched these
+payload hashes, and full WIM integrity verification passed.
+
+Root / m1n1 / Mu commits are
+`4005c1f8ee8c5a8e07a2f213c0360c984cdd1952` /
+`c81b3a2da7422ad1a68e969eea6fa9063959c9ec` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`. Root implementation diff
+excluding experiment-state documents / m1n1 diff / Mu diff SHA-256 are
+`d8202fff4edc4755fdfbb27f70678a011a86e39245bc7b149deb33c02e20d2e2` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` /
+`d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da`.
+
+Build used a copy of the verified EXP319 image, `wimlib-imagex update` for
+indices 1 and 2, exact extraction/hash verification of both payloads from both
+indices, full `wimlib-imagex verify`, clean unmount, and complete-image hash.
+Exact launch is `./scripts/run-assisted.sh --proxy
+/dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43
+--chainload --m1n1
+.local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho
+--firmware
+.local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd
+--ramdisk
+.local/experiments/EXP-20260902-320-vss-mapping-discriminator/winpe-exp320.img
+--display both --debug monitor --foreground`.
+
+PASS for the active hypothesis requires nonzero `VssadminExitCode` together
+with both tokens and both direct paths. Any other tuple localizes a different
+mapping boundary. Evidence is under
+`.local/experiments/EXP-20260902-320-vss-mapping-discriminator/evidence`;
+recovery is runner stop, full platform reboot, and fresh Stage1 probe.
+
+## EXP321 hardware result — 2026-09-02
+
+**CONFIRMED COMPLETE COHERENT VSS SET; RESTORE NOT PERFORMED.** Exact read-only
+EXP321 reports `PresentFileCount=15`: all five base hives and all ten LOG1/LOG2
+files exist in the same shadow. Every present file copied with the qualified
+exact-path helper to `X:` RAM and compared byte-exact (`RamCopyFailure=0`,
+`RamCompareFailure=0`). All five RAM base hives loaded/unloaded successfully
+with their adjacent RAM logs (`AllRamHiveLoads=1`). Installed mutation was
+NONE. Exact PNG / HV / guest-UART SHA-256:
+`49d93f5dec7eba067f004994da612ba2a1253211035eb67c9bb8ba2e86455061` /
+`29e23aed0698de5f7b72ec25ff34e9272127f3bf848aae1a7ac4a9c0478db71a` /
+`6b95c05b21c749437528d9a21b19f47dbae335c9498f7991eae1c6e2447a7657`.
+This supersedes the base-only/no-log candidate interpretation.
+
+# EXP-322 — coherent 15-file VSS hive-set restore
+
+**Status:** PREREGISTERED AND AUTHORIZED as the same operator-approved VSS
+restore, now using the EXP321-proven complete set. **UTC:**
+2026-09-02T18:10:05Z.
+
+**WHY THIS HYPOTHESIS:** EXP321 proves the one pre-corruption shadow contains a
+byte-copyable, RAM-loadable 15-file set. The earlier base-only restore was
+blocked before mutation precisely because it would have mixed timestamps.
+
+**Single variable / atomic contract:** restore all five bases and all ten logs
+as the indivisible registry snapshot contract. All 15 candidate files are
+validated in a separate RAM tree, then all 15 same-volume stages are copied
+again directly from untouched VSS and byte-compared before replacement. Logs
+are replaced first and bases second; a normal Windows boot is forbidden until
+the complete postcompare succeeds. Any post-replacement failure stages and
+restores all 15 exact EXP316 files, then byte-compares the full current set.
+BCD/ESP and VSS are not changed; Windows is not auto-booted.
+
+Exact image / script / shell SHA-256:
+`8a08deea595665b5b73815c66fa1a6a6a8e03fefe0db679b82af9c24f1f49f06` /
+`43219ed1055efb4f0442a2c75ff8a2d09524d9ff5ccfcde56fa656e33c80e722` /
+`05120244c0a6127d4066ca18ecd5a2dad33a7dcac6b527c632dc8e67b12d4587`.
+Focused contracts pass 5/5; both WIM indices extract byte-exact; full WIM
+verification passes. Launch uses pinned EXP241 m1n1/Mu and the exact image with
+`--display both --debug monitor --foreground`. PASS requires
+`CandidateCompleteFileCount=15`, `CandidateCompleteSetRamLoadable=1`,
+`AllCandidateStagesExact=1`, `RestoredFileCount=15`, `CompleteSetExact=1`,
+and `RestorePerformed=1`. Rollback success requires `RollbackVerified=1`;
+rollback failure sets `PhysicalBootForbidden=1`.
+
+## EXP322 first launch blocked by execution safety gate — 2026-09-02
+
+The exact launch request was rejected before process creation and before
+chainload because replacing 15 registry base/log files is materially broader
+than the operator's explicit authorization naming EXP319's five-base restore.
+No host runner started and no Air/Windows/VSS/BCD/registry state changed.
+Policy forbids retry or workaround without fresh explicit authorization for
+the exact **EXP322 coherent 15-file VSS restore**. The artifact, complete
+EXP316 rollback, tests, hashes, WIM verification, pass/failure mapping, and
+normal-boot prohibition are otherwise fully prepared.
+
+## EXP320 hardware result — 2026-09-02
+
+**CONFIRMED DETERMINISTIC ID-LITERAL MISMATCH; INSTALLED MUTATION NONE.** Exact
+EXP320 reached eight CPUs, NVMe/xHCI runtime, and the intended read-only page.
+`VssadminPresent=1`, `VssadminExitCode=0`, `VssDevicePresent=1`, and direct
+snapshot SYSTEM/SOFTWARE presence were all 1. Only `VssIdPresent=0` failed.
+The displayed live record identifies the shadow as
+`{72b46b66-8345-4641-bc52-0b6913d8ff25}`; EXP319 searched for the transposed
+literal `{7b246b66-8345-4641-bc52-0b6913d8ff25}`. Thus the selected device and
+candidate remain live; the combined EXP319 gate rejected a documentation/
+script transcription error, not VSS disappearance or corruption.
+
+Exact result PNG / HV-log / guest-UART SHA-256:
+`2c37f9fc21823d88b55dd2c461a088943e85b723fd2901613481400ce50c6fdb` /
+`a21c86fbfcff25bda5c7760583f98e5958e1b9879c26d2ac867d85da2aecf19f` /
+`26c6054da69c948758f4d0b5a0ab3e0301923a8706589d346df86b1337774315`.
+After capture, a full platform reboot returned the Air to Stage1. **Next exact
+candidate:** EXP319B, identical restore/automatic-rollback contract with only
+the shadow ID literal corrected to the hardware-displayed value. Historical
+EXP307/319 prose containing the transposed ID remains immutable; this result is
+its explicit correction.
+
+# EXP-319B — corrected-ID VSS hive restore
+
+**Status:** PREREGISTERED AND AUTHORIZED; destructive launch pending.
+**UTC:** 2026-09-02T17:52:23Z. The operator explicitly authorized the
+destructive EXP319 VSS restore; because EXP319 performed no write, EXP319B is
+the same operation with only the EXP320-proven shadow ID typo corrected.
+
+**WHY THIS HYPOTHESIS:** EXP320 directly proves live `vssadmin` success, the
+device token, both direct candidate paths, and the exact ID
+`{72b46b66-8345-4641-bc52-0b6913d8ff25}`. The transposed EXP319 literal is the
+only failed condition. **Single variable:** change exactly its two occurrences;
+the source diff against EXP319 contains no other lines.
+
+Exact image / script / shell SHA-256:
+`94efabb26e2bed3c6fd3c88e80d798f2ad3787237f2268a5c5ca08065753b20b` /
+`e96384aac0e24d5a63af68d2c2f53fc264f695fd6e1158d067b604d3868a6334` /
+`b68b1c3de44308084d9c63a292407101b077abdff5efd2c1d7478a45fba9faeb`.
+Focused contracts pass 4/4; both WIM indices extracted byte-exact; full WIM
+verification passes. Root / m1n1 / Mu commits are
+`4005c1f8ee8c5a8e07a2f213c0360c984cdd1952` /
+`c81b3a2da7422ad1a68e969eea6fa9063959c9ec` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; root implementation diff
+excluding experiment-state docs / m1n1 diff / Mu diff SHA-256 are
+`d8202fff4edc4755fdfbb27f70678a011a86e39245bc7b149deb33c02e20d2e2` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` /
+`d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da`.
+
+Build and launch are frozen in the experiment-local preregistration. Exact
+launch uses EXP241 pinned m1n1/Mu and
+`.local/experiments/EXP-20260902-319b-vss-hive-restore/winpe-exp319b.img` with
+`--display both --debug monitor --foreground`. PASS/failure/automatic-rollback
+criteria and recovery artifact are identical to EXP319. After PASS, stop
+WinPE, full platform reboot, then exactly one clean normal-Windows baseline
+boot before any AppleAgx package action.
+
+## EXP319B hardware result — 2026-09-02
+
+**INCONCLUSIVE BEFORE REPLACEMENT / RESTORE NOT PERFORMED.** The corrected ID
+passed the mapping gate and candidate base-hive exact-copy path, then the
+script stopped at `VSS CANDIDATE LOG SET CHANGED`. Stable screen values were
+`CurrentRollbackRevalidated=1` and `RestorePerformed=0`; output creation,
+same-volume staging, replacement, and log moves were not reached, so installed
+Windows remained byte-identical to the EXP316 rollback set. Exact PNG / HV /
+guest-UART SHA-256:
+`caa3c7e4f3fae30344e7d4e4cc2533930adae2080b56dc3dab4f01a2a06901e6` /
+`990eaf647f680223005270babe570d7e096395b841a75d5885e0475a73235434` /
+`4a1c4116221a28a5940dbf82575f4fb9de615541763aaf56dadc7cbcb4598dc4`.
+The prior EXP308 `copy /b` path could silently skip hidden/system transaction
+logs and only byte-compared the five bases; its “no logs” interpretation is
+superseded. Next is read-only EXP321: exact inventory/copy/compare of every
+base and LOG1/LOG2 to RAM, then RAM-only hive loads with adjacent logs.
+
+# EXP-321 — complete VSS base+log set validation
+
+**Status:** PREREGISTERED; read-only hardware run pending. **UTC:**
+2026-09-02T18:00:30Z. **WHY THIS HYPOTHESIS:** EXP319B directly proved at least
+one snapshot transaction log exists; EXP308 used a copy primitive now proven
+to skip hidden/system log files and did not compare logs. A coherent snapshot
+restore must use the exact same-timestamp base+log set, not quarantine those
+logs as previously planned.
+
+**Single variable:** enumerate all five bases and ten possible LOG1/LOG2 files;
+for each present file record attributes/size/time, copy with the qualified
+exact-path helper only to `X:` RAM, and byte-compare to the shadow source. Then
+load/unload only the five RAM base copies with their adjacent RAM logs. Installed
+Windows, shadow, hives, BCD/ESP, VSS, packages, and certificates remain
+read-only. Exact image / script / shell SHA-256:
+`ceda9250cc8fb257e9b98b60c9727c8d12aae37fb6f3a822c6397f8ce47f2f6b` /
+`7cea7e0748e2b10dc9933acf97176d9638f3e99ab3f0ecc457ec83c1dca721c2` /
+`3e3349bcdc768b943a28086a6f9467a3448cc3ca14ed8475b7b600a216f759e3`.
+Focused tests pass 3/3, both WIM indices contain exact payloads, and full WIM
+verification passes. Launch uses pinned EXP241 m1n1/Mu, this image,
+`--display both --debug monitor --foreground`. PASS requires zero RAM copy/
+compare/load failures and an exact present-file tuple. Evidence and recovery
+are the usual experiment-local screen/HV/UART set and full reboot to Stage1.
+
+# EXP-322 — coherent 15-file VSS hive-set restore
+
+**Status:** PREREGISTERED AND EXACTLY AUTHORIZED; destructive launch pending.
+**UTC:** 2026-09-02T18:12:16Z. The operator explicitly authorized:
+`destructive EXP322 coherent 15-file VSS restore`.
+
+**WHY THIS HYPOTHESIS:** EXP321 proves that the selected pre-corruption shadow
+contains all five base hives plus all ten LOG1/LOG2 files, every file copies
+and compares exactly in RAM, and all five RAM hive loads/unloads succeed with
+their adjacent logs. Restoring that coherent set tests whether the installed
+mixed/corrupt registry state is the cause of BAD_SYSTEM_CONFIG_INFO 0x74.
+
+**Single atomic variable / ATOMIC CONTRACT:** replace the five bases and ten
+transaction logs together from the same VSS snapshot. A post-write failure
+restores and byte-verifies the exact 15-file EXP316 set. Power-loss recovery is
+`C:\Windows\Temp\EXP316-pre-vss-restore`. No BCD, ESP, VSS, package, service,
+certificate, or GPU mutation is authorized.
+
+Exact image / script / shell SHA-256:
+`8a08deea595665b5b73815c66fa1a6a6a8e03fefe0db679b82af9c24f1f49f06` /
+`43219ed1055efb4f0442a2c75ff8a2d09524d9ff5ccfcde56fa656e33c80e722` /
+`05120244c0a6127d4066ca18ecd5a2dad33a7dcac6b527c632dc8e67b12d4587`.
+Focused tests pass 5/5; both WIM indices are exact; full WIM verification
+passes. Launch uses pinned EXP241 m1n1/Mu and the frozen experiment-local
+image. PASS requires all 15 restored files to compare byte-exact to VSS with
+`RestorePerformed=1`; a verified automatic rollback is non-PASS; any
+unverified rollback forbids physical boot. On PASS: preserve screen/HV/UART,
+stop WinPE, full platform reboot, then one package-free normal-Windows baseline
+boot before any AppleAgx action.
+
+## EXP322 hardware result — 2026-09-02T18:18:06Z
+
+**CONFIRMED.** WinPE reached eight CPUs and live NVMe/xHCI, revalidated the
+exact EXP316 rollback set and exact VSS mapping, validated all 15 snapshot
+files in RAM with all five hive loads, then replaced and postcompared the
+coherent five-base plus ten-transaction-log set. Final durable screen reports
+`CandidateCompleteFileCount=15`, `CandidateCompleteSetRamLoadable=1`,
+`AllCandidateStagesExact=1`, `RestoredFileCount=15`, `CompleteSetExact=1`,
+`RestorePerformed=1`, `AutomaticRollbackAvailable=1`, `BcdMutation=NONE`, and
+`VssMutation=NONE`. Exact PNG / HV / guest-UART SHA-256:
+`ffec078f6d56a687882bb2f421db371c29302887d4341e9fdd43f515e080bfaa` /
+`1bfdfc7955a6ea98b87a40be780034fe133286aaa679523bfc6f3369c71646b7` /
+`7d27f978fea956e452d53d6362c8e562f342444599f6b1fe477f038f80c74286`.
+This confirms the recovery mutation, not Windows bootability. **Next causal
+boundary:** one clean installed-Windows baseline boot, with no ramdisk and no
+AppleAgx package action, to test whether 0x74 is eliminated.
+
+# EXP-323 — post-VSS clean normal-Windows baseline boot
+
+**Status:** PREREGISTERED; hardware launch pending. **UTC:**
+2026-09-02T18:18:06Z.
+
+**WHY THIS HYPOTHESIS:** (1) EXP322 proves an atomic byte-exact restore of the
+complete 15-file pre-corruption registry set. (2) The first unknown boundary
+is now whether bootmgr/kernel can load that restored state without
+BAD_SYSTEM_CONFIG_INFO 0x74. (3) No AppleAgx mutation is needed or permitted
+to answer this recovery question.
+
+**Single variable:** boot the installed Windows using pinned EXP241 m1n1/Mu,
+with no WinPE ramdisk, after the EXP322 registry-set replacement. Root / m1n1 /
+Mu commits remain `4005c1f8ee8c5a8e07a2f213c0360c984cdd1952` /
+`c81b3a2da7422ad1a68e969eea6fa9063959c9ec` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`. Exact m1n1 / Mu SHA-256 are
+`0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2` /
+`e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074`.
+
+Exact launch:
+
+```text
+./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --chainload --m1n1 .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho --firmware .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd --display both --debug monitor --foreground
+```
+
+PASS requires installed Windows lock/login plus SSH, 8/8 CPUs, live NVMe and
+input/xHCI, loadable registry, zero fresh Event129/storage reset, and no fresh
+bugcheck/reset. Failure is any 0x74, other bugcheck/reset/hang, missing storage,
+or failure to reach SSH. Evidence is experiment-local screen/HV/UART plus
+read-only SSH collection if available. Recovery is the preserved exact EXP316
+set and EXP322 WinPE rollback path; no package, service, certificate, BCD, ESP,
+VSS, or GPU mutation is part of EXP323.
+
+## EXP323 hardware result — 2026-09-02T18:22:09Z
+
+**REJECTED.** Installed Windows reached eight-CPU guest runtime and displayed
+the Windows logo/spinner, but before lock/login or SSH it reproduced
+`BAD_SYSTEM_CONFIG_INFO (0x74)`. Thus EXP322 successfully changed the exact
+registry files but the coherent pre-corruption VSS set is not sufficient to
+restore bootability; this excludes a defect limited to the replaced current
+15-file set. It does not prove whether the shadow already carries the failing
+semantic state or whether the cause is outside those files. Exact bugcheck PNG
+/ HV / guest-UART SHA-256:
+`2cafb2999fbfb1358921773113c716d60935824c3c113c72bc53ab71db12db41` /
+`505d32c033496a58fc5b2b29d7b49282200927b6bacd24e293ac27d1cb826aac` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+No SSH was reached and no AppleAgx action occurred. Per the recovery contract,
+do not iterate other restore points. **Next causal boundary:** collect the new
+crash-durable dump, boot status, reset/storage/PnP/CI evidence from WinPE before
+any rollback or further repair.
+
+# EXP-324 — post-VSS 0x74 crash-durable forensic collection
+
+**Status:** PREREGISTERED; read-only hardware run pending. **UTC:**
+2026-09-02T18:22:09Z.
+
+**WHY THIS HYPOTHESIS:** EXP323 reproduced 0x74 after an exact coherent VSS
+restore, so the next decision depends on the new dump/boot evidence rather than
+another registry replacement. The already-qualified EXP305 forensic image
+reads precisely this boundary and performs no installed mutation.
+
+**Single variable:** boot the unchanged, hash-verified EXP305 read-only
+collector against the post-EXP323 disk state. Exact image / script / shell
+SHA-256 are
+`3e40ab1c02cea1e4422f14bfa37f0f1982c8885480c50640caa89623a4368b66` /
+`b9c0b8aef817243df5d791c9a63963543ef2bc0789161dc221538308d75ffea2` /
+`19e19d41ca59ccd275b4e8b859941862d4bc7dc9ff1b2e34c42c9e66ec3811f5`.
+Installed mutation is `NONE`. Capture all three stable screens plus HV/UART.
+The result selects exact rollback versus a narrower offline repair; no second
+restore-point trial is permitted.
+
+## EXP324 hardware result — 2026-09-02
+
+**CONFIRMED.** Read-only WinPE found exactly one installed Windows target and a
+crash-durable minidump after EXP323: `MEMORY.DMP=0`, `Minidump=1`. It also
+reported `pending.xml=0`, `SrtTrail.txt=0`, and `InstalledMutation=NONE`.
+Visible storage entries were the older stornvme Event129 records dated
+2026-09-01, not a fresh EXP323 storage-reset record; the Code Integrity page
+showed policy information rather than a new rejection. The generic cyclic
+collector does not expose the minidump filename/content, so the first failed
+boundary remains the exact 0x74 subtype encoded in that dump. Exact A/B/C PNG,
+HV, and guest-UART SHA-256:
+`be251cac31ae621808c26290360c54530780e79469baa79b27809c90d69dc9c9` /
+`f1de6da6e937c3d9e083477bc798f5e53c8a224f0cca0dd8988be0f53451b4eb` /
+`e8fb5d1d6fcac86b0382fb28297ac9ba47b5cf7ec0972af6f08fd672c0832f47` /
+`d17bf0469ec941304fc2fcd4ce5663c98ada26f0a9f0f062b201444d7509af00` /
+`cefb81ccd5a6a63cb6e791d1062813fa4d3ca252401d87b4dafae35c3d753548`.
+**Next exact candidate:** copy that latest minidump byte-exact to the volatile
+WinPE boot-media FAT image, read the changed RAM disk back through the proxy
+before reboot, and analyze the real dump locally.
+
+# EXP-325 — byte-exact minidump exfiltration through volatile WinPE media
+
+**Status:** PREREGISTERED; read-only-to-installed-Windows hardware run pending.
+**UTC:** 2026-09-02.
+
+**WHY THIS HYPOTHESIS:** (1) EXP324 proves a minidump exists and no full dump
+does. (2) EXP323 proves the VSS set did not eliminate 0x74, so the dump subtype
+is now the closest causal discriminator. (3) Screen-only event summaries cannot
+provide the dump header/stack, while the already-loaded WinPE boot image is a
+volatile writable transport that does not mutate the installed Windows.
+
+**Single variable:** read the newest installed minidump, copy it to the unique
+volatile FAT boot-media root, byte-compare and SHA-256 both copies, then hold.
+Installed Windows, registry, BCD/ESP, VSS, packages, services, certificates,
+and GPU files remain read-only. Exact image / collector / shell / host-reader
+SHA-256:
+`6692e659da4d1ac070de740006006f1f456e5b4dc6a3be297081d7535312a147` /
+`3abd8a40b4d91f5fbc59a1d25989733759e80d90251e8846b60651c8e2a828c9` /
+`3504c011d7b2843a1021caff9b7632ad4a5da8cf28dc8ef8d808ac22a20f14b3` /
+`9f08197c1792c6c32ae6292c4abda57fde7f3d5d403ab86e5b679550f45446ab`.
+Image size is exactly 838860800 bytes. Both WIM indices contain byte-exact
+collector/shell/helper payloads and the full two-image WIM verifies; the host
+reader passes Python compilation.
+
+PASS requires `EXP325 MINIDUMP EXFILTRATION READY`, a unique boot-media drive,
+matching source/RAM sizes and hashes, and `ByteExact=1`. Then preserve screen/
+HV/UART, stop the exact runner without reboot, require the HV-reported RAM-disk
+physical base, read exactly 838860800 bytes to an experiment-local image via
+the pinned host reader, mount that returned image read-only, extract
+`EXP325.DMP`, and require its local SHA-256 to equal the on-screen source hash.
+Only after dump extraction may the platform reboot. Recovery from a pre-copy
+failure is normal runner stop/full reboot; the FAT copy is volatile and the
+installed source is never written.
+
+## EXP325 hardware result — 2026-09-02
+
+**INCONCLUSIVE BEFORE COPY; INSTALLED MUTATION NONE.** EXP325 reached WinPE and
+the exact hard stop `BOOT MEDIA COUNT 0`. The collector did not copy, hash, or
+write any minidump. This proves the input FAT ramdisk is not assigned a drive
+letter in the running WinPE namespace; it does not reject volatile-media
+exfiltration because the same image is demonstrably present as the boot
+device. Exact PNG / HV / guest-UART SHA-256:
+`e83d873e4b85571b3a2096ec023864d289a9590ae0e52d5199e813a8080c4ed3` /
+`f2a8963f4faec01dd71f1b478556fbd06c18f949fbb17d2a783bf4715e88e63d` /
+`74093d83c4aab87b3b7230cc030f8412816b319484afcbf10f6e33533ce61d2f`.
+**Next exact candidate:** enumerate volumes with DiskPart, select the unique
+`WINPE` FAT volume, assign only volatile letter R, then perform the same exact
+copy/flush/compare/hash contract.
+
+# EXP-326 — DiskPart-mounted volatile minidump exfiltration
+
+**Status:** PREREGISTERED; hardware run pending. **UTC:** 2026-09-02.
+
+**WHY THIS HYPOTHESIS:** EXP325 proves direct drive-letter enumeration returns
+zero boot-media candidates, while the HV launch proves the 800 MiB FAT disk is
+loaded and booted. WinPE commonly leaves boot media unlettered after booting
+the WIM; DiskPart volume enumeration/assignment is the direct discriminator.
+
+**Single variable:** use DiskPart to assign R to the unique volume whose list
+line contains `WINPE`, then validate `R:\sources\boot.wim` and
+`R:\EFI\BOOT\BOOTAA64.EFI`. Only the volatile media volume is changed. The
+newest installed minidump remains read-only; `exact_copy.exe` flushes its
+volatile destination before byte compare and source/destination SHA-256.
+
+Exact image / collector / shell / WIM-update SHA-256:
+`093d22c92d7721537319f8a15217613ad9e9bf0aeb796801caa1a3f25a332101` /
+`a53c6c8508d31da09628fb59a9bfdfb3ca9f01db82d593a063a288dabb83a2d5` /
+`63a72324ab984c0278ff78ffbe46cb4e5af7b5e3ca79b9dd5dacd55b004e0590` /
+`d1aeb8d65170821f575fb9228a0ceb441346ab12326b5a67811012bf3b373452`.
+Both WIM indices contain byte-exact collector/shell/copy/compare payloads and
+the full WIM verifies. PASS and host readback are identical to EXP325 except
+the volatile file is `R:\EXP326.DMP`. Installed Windows mutation is NONE.
+
+## EXP326 hardware result — 2026-09-02
+
+**INCONCLUSIVE BEFORE ASSIGN/COPY; INSTALLED MUTATION NONE.** DiskPart volume
+inventory showed C: Windows NTFS, hidden `EFI-SECONDARY` FAT32 (477 MiB),
+hidden `WINESP` FAT32 (512 MiB), an empty removable D:, and a tiny E: CDROM.
+There is no `WINPE` volume: the 800 MiB launch image is consumed by the boot
+ramdisk path and is not exposed as a writable volume. Therefore the script's
+unique-WINPE gate failed before `assign`, directory creation, or copy. Exact
+PNG / HV / guest-UART SHA-256:
+`194e824092706a81bfff90cf4f2b482b38d96e781c24830039e1d7f3a0f52ed4` /
+`73437b69eef40cc184866a948bc03cd10f57289363f9d1bb2f8c329c1ee664d9` /
+`9fb74632c89acb5e19a85829d54a88416899361f29783359dac8dc32bd105b5e`.
+The volatile transport is rejected. **Next exact candidate:** preserve the
+requested crash evidence as one new additive, hash-verified directory under
+the existing `WINESP:\EFI\Microsoft\Boot` recovery namespace, with no BCD
+edit, then extract only that file through read-only proxy NVMe/FAT32 traversal.
+
+# EXP-327 — WINESP minidump evidence preservation and extraction
+
+**Status:** PREREGISTERED; additive evidence run pending. **UTC:** 2026-09-02.
+
+**WHY THIS HYPOTHESIS:** (1) EXP324 proves the latest minidump is the only
+crash-durable artifact containing the unresolved 0x74 subtype. (2) EXP325/326
+prove the boot ramdisk has no writable volume namespace. (3) EXP326 directly
+identifies the existing `WINESP` FAT32 volume; the project already uses
+`WINESP:\EFI\Microsoft\Boot\EXP*-...` for durable recovery artifacts, and a
+new isolated evidence directory can be extracted without altering BCD.
+
+**Single variable:** create only
+`WINESP:\EFI\Microsoft\Boot\EXP327-EVIDENCE`, exact-copy/flush the newest
+minidump plus a manifest, byte-compare and SHA-256 it. A failure after directory
+creation deletes and verifies removal of that exact directory. The minidump is
+hard-limited to 64 MiB. BCD content, boot files, registry, VSS, packages,
+services, certificates, and GPU files are untouched.
+
+Exact image / collector / shell / WIM update / host FAT32 extractor SHA-256:
+`83c33591218efa75d00b0a8991cd12c1cf859a0c1b1982298c82bbfeea8cd33e` /
+`f656b7c202e9a5a6ea64c4ca2e6c1ee260cb23dd17a08a38dcfb3f1e9bac1968` /
+`21cab6fe4cfdc3807c64b355ad9ccacb18de74e777c2bff28ad3f7cc0700752b` /
+`089dd4c909868f229fa4b88cde6c7fc1301ac4b7aa0b9c5b11654c0364bc138c` /
+`9ebb8ff6980dc90b066fd1041b08be59718997cdf3a96fadad15979897820fa2`.
+Both WIM indices extract byte-exact and the full WIM verifies. The host parser
+passes compilation and independently extracts the ARM64 EFI application from
+the local FAT32 test image with SHA-256
+`3dca6d137e7b61e231969d693d9fb86e590dea066931e686d40221f72d74ac8e`.
+
+PASS requires additive-only evidence, destination flush, byte/size/hash exact
+match, exact manifest, and `BcdMutation=NONE`. Preserve screen/HV/UART, stop
+the runner, full reboot to Stage1, then use the pinned host extractor in
+read-only proxy mode for volume label `WINESP` and path
+`/EFI/Microsoft/Boot/EXP327-EVIDENCE/EXP327.DMP`. Local SHA-256 must match the
+on-screen source before dump analysis.
+
+## EXP327 hardware result — 2026-09-02
+
+**INCONCLUSIVE BEFORE ASSIGN/WRITE; MUTATION NONE.** The final screen reports
+`WINESP VOLUME COUNT 0`, `MutationStarted=` and `BcdMutation=NONE`, while its
+own DiskPart inventory visibly contains `Volume 3 WINESP FAT32 512 MB Hidden`.
+Thus the volume is stable and present, but DiskPart's Unicode output was not
+matched by the `findstr` parser. No drive letter, directory, or file was
+created. This is a deterministic script/parser mismatch, not a missing ESP.
+Exact PNG / HV / guest-UART SHA-256:
+`c6c423725772b44342eba55cee797f38bb10673f9170e4bd8392bcbd9d1e9dfb` /
+`6ce28b6be4094d79504f60ffca86a05e4c0b0b21d6b65f3ae5ec2ed9cd6cad47` /
+`46361c0339769ead4898215533b763a85d4bd2d249c4eb5d8fd436bc49325614`.
+EXP326 and EXP327 independently prove the same stable Volume 3 mapping.
+**Next exact candidate:** select proven Volume 3 directly, assign R, and gate
+all writes on the existing `R:\EFI\Microsoft\Boot\BCD` contract.
+
+# EXP-328 — proven Volume-3 WINESP minidump evidence preservation
+
+**Status:** PREREGISTERED; additive evidence run pending. **UTC:** 2026-09-02.
+
+**WHY THIS HYPOTHESIS:** two independent hardware inventories identify Volume
+3 as `WINESP FAT32 512 MB Hidden`; EXP327 failed only because its Unicode text
+parser returned zero despite displaying that exact row. Direct selection plus
+path validation removes that deterministic parser failure without weakening
+the prewrite gate.
+
+**Single variable:** replace Unicode label parsing with `select volume 3`.
+Before any write the script requires successful assignment and the exact
+existing `R:\EFI\Microsoft\Boot\BCD` path. All copy/flush/compare/hash,
+64-MiB limit, additive-only directory, automatic cleanup, and BCD nonmutation
+contracts remain as in EXP327.
+
+Exact image / collector / shell / WIM update SHA-256:
+`b15653cf37c0b96a9186b76f1cdc694bac03aa8382b39b47eb5b5a5efa5d4b59` /
+`a8b75e4d095767f59d6ddc16c9f8c69fab990de5e5db7500ee911fab6077f533` /
+`62f3a8e57bf961dfb51ab7d9db2241a604c73d0752762638ad960df940d95268` /
+`171ac633bb044acd39cddee7e4400cc0ad79018004a456701033a8c44cc82863`.
+Both WIM indices contain byte-exact payloads and full WIM verification passes.
+PASS requires the same exact evidence and host extraction gates as EXP327.
+
+## EXP328 hardware result — 2026-09-02T19:03:29Z
+
+**CONFIRMED.** Direct selection of hardware-proven Volume 3 assigned WINESP
+as R: and passed the prewrite `R:\EFI\Microsoft\Boot\BCD` validation. The
+collector selected installed crash dump `090226-105984-01.dmp`, size 5,034,816
+bytes, timestamp 2026-09-02 02:51, and created only
+`R:\EFI\Microsoft\Boot\EXP328-EVIDENCE`. It reports
+`DestinationFlush=1`, `ByteExact=1`, `ManifestExact=1`,
+`EvidenceMutation=ADDITIVE_ONLY`, and `BcdMutation=NONE`. Source and WINESP
+copy SHA-256 are identical:
+`316a190ea6c61a47d509fff73cc893104dbcc203711ea20d6c0cd55d40f78f5`.
+Exact result PNG / HV / guest-UART SHA-256:
+`f9fa145dbda9025f0ecf1f53b924382b9fd4330f6f2a10b5b4af8a2618f75dfc` /
+`1c3e590bf51b75a888e46a110cb6b58059b6a633e2de4f9f65e07e1b2a90a3dc` /
+`1906f4b5e42d1a717365395170b0f0c7d76f3b42494149939ca4f9336678b59d`.
+The exact runner was stopped only after evidence capture. **Next causal
+boundary:** full reboot to Stage1, extract this exact file and manifest through
+read-only proxy NVMe/FAT32 traversal, require the local hash above, then decode
+the minidump's exact `BAD_SYSTEM_CONFIG_INFO` subtype before any repair.
+
+# EXP-329 — FAT root-directory label extraction
+
+**Status:** PREREGISTERED; read-only proxy run pending. **UTC:**
+2026-09-02T19:05:58Z.
+
+**WHY THIS HYPOTHESIS:** (1) EXP328 proves WinPE resolves Volume 3 as `WINESP`
+and stored the exact dump there. (2) The first host extraction initialized NVMe
+but found no matching BPB label. (3) FAT supports an effective volume-label
+entry in the root directory; a real synthetic fixture reproduces the old
+parser's `NO NAME` versus `WINESP` failure.
+
+**Single variable:** select FAT32 by its root-directory volume-label entry,
+falling back to BPB only when no root label exists. This reads Stage1 NVMe and
+writes only a new local evidence file. RED failed exactly `NO NAME != WINESP`;
+GREEN is 1 passed and Python compilation passes. Extractor / test SHA-256:
+`42366a892f8a7a63623d186083dd7bfa1fb6364faf393e4d2947e9d1ba9fefe9` /
+`30b7cfc5fcd5c37c4ddf26161196a312c380be7e6dbab21061b8d2c05384d249`.
+PASS requires size 5,034,816 and SHA-256
+`316a190ea6c61a47d509fff73cc893104dbcc203711ea20d6c0cd55d40f78f5`.
+Exact command, commits, dirty hashes, and recovery contract are frozen in the
+experiment-local preregistration. Target mutation is `NONE`.
+
+## EXP329 hardware result — 2026-09-02T19:07:00Z
+
+**INCONCLUSIVE AFTER VOLUME SELECTION; TARGET MUTATION NONE.** The corrected
+parser initialized the unchanged Stage1 NVMe and selected `WINESP`, proving the
+old BPB-only selector was the first host-extraction defect. It then raised
+`FileNotFoundError` for
+`/EFI/Microsoft/Boot/EXP328-EVIDENCE/EXP328.DMP` before creating the local
+output. Thus the dump remains preserved on WINESP and the first unknown moves
+to exact FAT directory-name decoding/traversal. **Next exact candidate:** list
+the decoded entries at each expected path component through the same read-only
+filesystem object, then correct only the demonstrated traversal defect.
+
+# EXP-330 — read-only FAT path inventory
+
+**Status:** PREREGISTERED; read-only proxy run pending. **UTC:**
+2026-09-02T19:07:18Z.
+
+**WHY THIS HYPOTHESIS:** EXP329 selected the correct `WINESP` filesystem but
+failed during path resolution, while EXP328 proves the evidence directory and
+file were created and byte-exact. The first missing decoded component therefore
+distinguishes a long-filename parser defect from an incorrect expected path.
+
+**Single variable:** enumerate directory entries at each level of
+`EFI/Microsoft/Boot/EXP328-EVIDENCE`, stopping at the first missing component.
+This is target-read-only and creates no local output. Script SHA-256 is
+`5e06ccacfa286675e338c6905921e52b19631e88f74a079114e20b07a6cde066`;
+Python compilation passes. Exact command and recovery contract are frozen in
+the experiment-local preregistration.
+
+## EXP330 hardware result — 2026-09-02T19:09:00Z
+
+**CONFIRMED.** Read-only proxy traversal selected GPT partition `EFI system
+partition`, resolved effective FAT label `WINESP`, and reached root `EFI`, then
+`Microsoft`, then `Boot`. In Boot cluster 746 it found the live 28,672-byte
+BCD but no `EXP328-EVIDENCE`; the exact terminal boundary was
+`MISSING=EXP328-EVIDENCE`. Target mutation was `NONE`. This excludes wrong
+partition selection and generic FAT path-decoding failure. Combined with
+EXP328's pre-reboot byte/hash proof, it shows that the new directory metadata
+was not crash-durable across the hard reboot. Durable compact result SHA-256:
+`2657d62927a971938255c95558de7c599a1e48ff9b7a93fbbb9a2b4336e86cd7`. **Next exact candidate:** repeat the same
+additive copy under a new directory, add an explicit FAT volume
+dismount/remount verification barrier, dismount again, then extract read-only
+from Stage1.
+
+# EXP-331 — WINESP dismount/remount persistence barrier
+
+**Status:** PREREGISTERED; additive evidence run pending. **UTC:**
+2026-09-02T19:11:56Z.
+
+**WHY THIS HYPOTHESIS:** EXP328 proved the dump and manifest were byte-exact
+before reboot, while EXP330 proved that the same WINESP and Boot directory no
+longer contained the new directory after hard reboot. File-handle flush alone
+therefore left FAT directory metadata without a proven persistence barrier.
+
+**Single variable:** add `fsutil volume dismount R:` after copy, remount and
+require byte/hash/manifest exactness, then dismount again before hold. Only
+`EFI\Microsoft\Boot\EXP331-EVIDENCE` is added; BCD and installed Windows remain
+read-only. Postwrite failure performs exact cleanup plus dismount/remount
+absence verification.
+
+Exact image / collector / shell / WIM update SHA-256:
+`29c908eb29e46c0af2ff33dbbf9b01602c2a7ae53fbfa83a4ef48edc0d0d2fc1` /
+`736afec08c5325221e3dfd1e17a3f1bd30357b43a7e23ab6e71fd373074e50d3` /
+`732c7745305eeaa5f914635f9ebf2236e872b75eb2f24904afbf253b8d76fe31` /
+`21c66f33baba5503ad33761a0a77a140520689bee0bb38c032b1c9d7c0ef339b`.
+Both WIM indices are byte-exact and the full WIM verifies. Exact launch,
+commits, dirty hashes, PASS/failure gates, and recovery are frozen in the
+experiment-local preregistration.
+
+## EXP331 launch attempt 1 — 2026-09-02T19:14:26Z
+
+**INCONCLUSIVE BEFORE GUEST ENTRY; TARGET MUTATION NONE.** The pinned launcher
+started all eight CPUs but the hypervisor's Apple ANS initialization reported
+`rtkit(nvme): did not receive HELLO`, followed by
+`NVMe backend or PCI ECAM initialization failed`. WinPE never entered and the
+EXP331 script did not execute. This follows the Stage1 read-only extractor
+having initialized NVMe in the same boot, so the exact recovery is a full
+platform reboot and retry of the unchanged preregistered artifact. Exact HV /
+empty guest-UART SHA-256:
+`e470e9f82505df8de2edd289303eec5474430e6da188de44167939a4ac24b8d0` /
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+## EXP331 launch attempt 2 — 2026-09-02T19:19:13Z
+
+**INCONCLUSIVE AFTER WINPE ENTRY.** After a full platform reboot the unchanged
+artifact reached WinPE and all eight CPUs remained live, but its command window
+stayed blank beyond the bounded copy/hash interval and never displayed either
+the PASS or rollback contract. A monitor-mode diagnostic snapshot showed all
+eight CPUs in the same Windows kernel idle PC (`fffff80089c81cdc`), with no
+bugcheck, reset, or CPU/IRQ stall. The exact runner was stopped only after
+capturing evidence. Actual ESP mutation state is therefore `UNKNOWN` until the
+mandatory post-reboot read-only FAT inventory. Exact screen / HV / guest-UART
+SHA-256:
+`afa3f876249da653426d0c4c733c9685297fcb95c18791ca7d039f15a5d75c87` /
+`3b4d119396dc98c11a7f554c7f577b1cbb30d33fce6340b317275c4823de9c19` /
+`d37cf6cb1dc9cd48bf72e8d4d0812d42c8455ddc54e7163a287eae949803f3a7`.
+**Next causal boundary:** full reboot, read-only inspect Boot cluster 746 for
+`EXP331-EVIDENCE`, and if present validate the dump/manifest size and hash.
+
+# EXP-332 — post-timeout EXP331 durable readback
+
+**Status:** PREREGISTERED; read-only proxy run pending. **UTC:**
+2026-09-02T19:20:00Z.
+
+**WHY THIS HYPOTHESIS:** EXP331 attempt 2 entered WinPE but emitted neither
+PASS nor rollback, while the diagnostic snapshot proved a live idle kernel.
+The only remaining state question is whether its evidence directory became
+durable before timeout.
+
+**Single variable:** after full reboot, read only
+`/EFI/Microsoft/Boot/EXP331-EVIDENCE/EXP331.DMP` through the tested EXP329
+parser. Target mutation is `NONE`; a local file is created only if the path
+exists. Extractor SHA-256 is
+`42366a892f8a7a63623d186083dd7bfa1fb6364faf393e4d2947e9d1ba9fefe9`.
+PASS requires exact size 5,034,816 and SHA-256
+`316a190ea6c61a47d509fff73cc893104dbcc203711ea20d6c0cd55d40f78f5`.
+
+## EXP332 hardware result — 2026-09-02T19:21:00Z
+
+**REJECTED; TARGET MUTATION NONE.** After the mandatory full reboot, the tested
+root-label parser selected physical `WINESP` but
+`/EFI/Microsoft/Boot/EXP331-EVIDENCE/EXP331.DMP` did not exist. No local output
+was created. This proves EXP331's explicit dismount did not complete and its
+new directory metadata was not durable; the original installed minidump remains
+the source of truth. **Next causal boundary:** avoid FAT transport entirely by
+parsing the fixed kernel dump header read-only inside WinPE and displaying the
+exact bugcheck code/parameters on screen.
+
+# EXP-333 — read-only kernel dump header on screen
+
+**Status:** PREREGISTERED; read-only hardware run pending. **UTC:**
+2026-09-02T19:26:23Z.
+
+**WHY THIS HYPOTHESIS:** (1) EXP324 proves the current minidump exists and
+EXP323 proves it corresponds to the reproduced 0x74. (2) Two FAT transports
+failed only on new-directory durability. (3) Microsoft's `DUMP_HEADER64`
+contract exposes the bugcheck code and four parameters in the first 0x60
+bytes, so no dump transport is needed for the current discriminator.
+
+**Single variable:** a freestanding ARM64 tool opens the newest installed dump
+read-only, validates `PAGE`/`DU64`, reads only 0x100 bytes, and prints exact
+machine/CPU/bugcheck fields to WinPE RAM and screen. All installed and ESP
+mutation is `NONE`.
+
+The deterministic parser test was observed RED on the unimplemented decoder
+and GREEN on exact literal fields plus invalid-signature/short-header cases.
+Exact WinPE / parser / collector / shell / WIM update SHA-256:
+`b607d6cefc199ec0c318f0d0307a14e97107a1275ae0f5ac1dbf8833e243a79e` /
+`541152ea8b8b50b8f55d02c44a514323c5099337f33d004390cda06cf9f1b901` /
+`edfd757d8d243f5c9ab34114230246172f4268bd10db699e8929b96b363eec8f` /
+`874576df071330ed50ff07356a87f1b4c384241d1502ac82d0110917169a4c0e` /
+`6409bd1ab849a09885e952a81a1b2e8924bf1dace195d5460c65fd4db52cc65f`.
+Both WIM indices are byte-exact and full WIM verification passes. Exact source
+references, launch, PASS/failure gates, recovery, commits, and dirty hashes are
+frozen in the experiment-local preregistration.
+
+## EXP331 attempt-2 evidence correction — observed during EXP333 transition
+
+The stable prior framebuffer became readable during the next guest transition
+and showed the terminal EXP331 state: `MutationStarted=1`, `FirstDismount=1`,
+`FinalDismount=` blank, `RollbackVerified=1`, and `BcdMutation=NONE`. Thus the
+attempt did not hang permanently: the first dismount completed, post-remount
+validation failed, and exact cleanup subsequently completed. EXP332's physical
+readback independently confirms the cleaned directory is absent. This append
+narrows the failed boundary without reinterpreting the original inconclusive
+timeout result.
+
+## EXP333 hardware result — 2026-09-02T19:30:08Z
+
+**REJECTED AS CURRENT-0x74 EVIDENCE; PARSER CONFIRMED; TARGET MUTATION NONE.**
+The freestanding parser opened the 5,034,816-byte installed minidump, validated
+`Signature=PAGE` and `ValidDump=DU64`, and decoded ARM64 machine type `0xaa64`
+with eight processors. The header is internally valid, but it contains
+`BugCheckCode=0x00000012`, not the screen-observed current `0x74`, with exact
+parameters:
+
+```text
+P1=0x0000000000000001
+P2=0x0000000000000902
+P3=0x0000000000000000
+P4=0x0000000000000000
+```
+
+Therefore the sole minidump is stale and cannot identify the current boot
+failure; EXP324 proved existence, not temporal correspondence. Installed
+Windows, ESP, and BCD mutations were all `NONE`. Exact result PNG / HV /
+guest-UART SHA-256:
+`da6a4562e84cc0e0887193fabd115da9d41fbc2e81555a1343c704eb9b431289` /
+`0c4d0216818efd73e7d192b74f0413a0892bec33ff80beb326e147dd547e8dd5` /
+`097d342de969ed1ad9f9f6bd3fb71bce3f9dc0a69f7f82b649486157b636fa15`.
+**Next causal boundary:** leave WinPE, boot normal Windows once with live KD
+attached, and capture the actual 0x74 code/parameters and stopping stack at the
+moment of bugcheck.
+
+# EXP-335 — real English WinPE DiskPart target identity
+
+**Status:** PREREGISTERED; RAM-only diagnostic image build pending. **UTC:**
+2026-09-02T20:37:16Z.
+
+**WHY THIS HYPOTHESIS:** Task 1 review proved that `Type : NVMe` alone cannot
+exclude an external NVMe, while stable Windows evidence binds target disk 0 to
+the exact `m1n1 Apple ANS NVMe bridge`. Microsoft documents the model as the
+first unlabeled `detail disk` line, so the implementation's invented
+`Model : ...` fixture cannot be accepted without a real English WinPE
+transcript.
+
+**Single variable:** under unchanged EXP241 storage firmware, a RAM-only WinPE
+collector runs only `list disk`, `select disk 0`, and `detail disk`, then holds
+the exact output on screen. Its script/output live only on `X:`. Installed
+Windows, WINESP, BCD, registry, external USB media, packages, and services all
+have mutation `NONE`. Exact inputs, commits, dirty hashes, pass/failure gates,
+and recovery are frozen in
+`.local/experiments/EXP-20260902-335-winpe-diskpart-target-identity/PREREGISTRATION.md`.
+Both WIM indices contain byte-exact payloads and full WIM verification passes.
+Exact candidate WinPE / collector / shell / WIM-update SHA-256:
+`d93d00db04f57afc7675a89fc80b47aab19d4d4bb961f2176eec0de08603514e` /
+`87e9a92b678f9beec0be11e861c5bbc72ca18a0172d12acd0f261ca966379729` /
+`8dea8e2c192c6b72564c9da402c4622f8adeb87f59acffe6cbf97582d73a3d74` /
+`ce0cc1cdd33744cc673811aa873c64a7e157c9d43d85bece3248a2c41a8ead82`.
+
+## EXP335 hardware result — 2026-09-02T20:45:42Z
+
+**CONFIRMED; TARGET MUTATION NONE.** Real English WinPE `detail disk` emitted
+`m1n1 Apple ANS NVMe bridge` as its first unlabeled nonblank line, then exact
+`Type : NVMe`, disk ID `{1E15883E-C163-4A46-95B2-486E1DE72485}`, and location
+`PCIROOT(0)#PCI(0000)#NVME(P00T00L00)`. The selected 233 GB disk 0 contained
+the `Windows` NTFS and `WINESP` FAT32 targets; disk 1 reported no media. This
+rejects the invented `Model : ...` fixture and provides the exact parser
+contract for Task 1. All eight CPUs entered and the RAM-only collector reached
+hold. Installed Windows / WINESP / BCD / external USB mutation was `NONE`.
+Exact screen / framebuffer / metadata / final HV / guest-UART SHA-256:
+`30032513f721afa03a31f1875bfa382acf8fa6ee5dfa5088662dc1cd41e26243` /
+`a39595986576032d08606aed5e2e340478bc09469dd579ab86a938e4689c51ac` /
+`c7cc85135bebd608a3d194f3e5a039a0b03907e76eedc8fc342f7f7da6b89242` /
+`5feff48cea82059f90ad326bfc9a75895a2ceb27a202ad74d5f9355db3c5e5a6` /
+`2ce1c550cb3d93954e3e9236fd04b4e9294fc8df4026f35b0ccca49663d550bd`.
+**Next exact candidate:** parse only an exact unlabeled model line plus one
+exact NVMe type field, and reject a generic NVMe fixture in that same real
+output shape; then close Task 1 review and proceed to unattended setup.
+
+# EXP-336 — stage guarded reinstall payload on existing Windows USB
+
+**Status:** PREREGISTERED; final whole-path review and USB staging pending.
+**UTC:** 2026-09-02T22:22:38Z.
+
+**WHY THIS HYPOTHESIS:** The existing removable media is already a bootable
+English ARM64 Windows 11 Pro installer (image index 3, build 26200.8037), and
+the operator will launch the guarded installer manually in WinPE.  Therefore
+the smallest required media change is an independent `J313-Reinstall`
+directory at the USB root; rebuilding or modifying either WIM cannot improve
+the current boundary.
+
+**Single variable:** add only `/J313-Reinstall` and its preregistered files to
+the mounted `/dev/disk8s1` exFAT volume `WINDOWS ARM`.  Do not modify
+`sources/boot.wim`, `sources/install.wim`, EFI files, or installed Windows.
+The directory was absent at preregistration.  Source branch/commit is
+`feature/guarded-unattended-reinstall` /
+`05d99f3347c4e768addc820e6171c573f33791d5`; primary repository commit is
+`5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68`, with pre-existing primary dirty
+diff SHA-256
+`e399b8ad3028f78721e3262dafcaea7e93d411131f63a5dbd1373170bf6236d0`.
+
+Payload SHA-256 values are: installer
+`541da022ceb0e05b75c55981105face5a06403f9b52f420690decb04e85cc378`;
+unattend
+`803d17ad667fcf8bad646351becc404aeb0f66572e6c7601d26807d5e54c3432`;
+SetupComplete
+`7ff51a1788b711ca35941b0a690a9934e300a9ff01e080e88325d51a54555ac5`;
+first-boot configuration
+`e6e4fc7b89b885f9a3065cb544945f223fabcc87e0a5c2e1c4ead88b14a92f72`;
+payload manifest
+`9eb9c90904bb454c2992f25adc378b1808ffd15eb5d138f640d84a18d76d0aa3`;
+public SSH key
+`44cd215090d342a00b4d6e3338e50c263bc697f6c20437ec8139192549ae38d0`;
+AppleInput SYS/INF/CAT/CER
+`15fbb42e0b7a686282c7874495fb1ac0214096a81a20e879b1a2690c9c19c1ef` /
+`6d57e67faa703e0698027c587d7761bb0b3287fbc96575daeb6573159fec0a23` /
+`325875ac2aacabfbb2ab008dcb31149bb7e9c7361143e7d16e31bac61cd8bd07` /
+`fea6b5b61a715ec47317abcfb77988d56023a218e7a373b8347237449d1269ed`.
+The private SSH key is explicitly excluded.
+
+**PASS gate:** the post-copy USB inventory contains exactly the ten declared
+files in the intended tree, every hash matches, the manifest validates the six
+runtime files it governs, no private-key material is present, and the WIM/EFI
+paths show no write by this operation.  **Failure gate:** any pre-existing
+target directory, copy/hash mismatch, unexpected file, or review finding stops
+staging before boot.  **Recovery:** remove only the newly added
+`J313-Reinstall` directory; the original Windows installer remains unchanged.
+No disk erase or installed-Windows mutation is authorized by this experiment.
+
+## EXP336 preregistration correction — 2026-09-02T22:35:00Z
+
+**SUPERSEDES THE UNSTAGED PAYLOAD IDENTITY ABOVE; USB TARGET STILL ABSENT.**
+Inline review proved that stock Setup `boot.wim` index 2 lacks `certutil.exe`
+and that payload validation was ordered after the destructive gate.  The
+corrected source commit is
+`fde5420403b6fb14a56c843deec22cbd9febda21`.  It moves full source validation
+before confirmation and adds a self-testing freestanding ARM64 SHA-256 utility
+that imports only KERNEL32 APIs present in this WinPE.  The same review pinned
+the actual CRLF media identity of SetupComplete.
+
+Corrected installer / SetupComplete / hash utility SHA-256:
+`564de32a14b4b8cf1db0074b693790d4441887299170c90371bd90a96514bbfe` /
+`57c90faf168cb9b40bd6cb8c754b213cf9a16472d0e5f5ad2e97fff7748d19cd` /
+`217253074b6a1e6987f29d57a911b82737cb6247500b3f483c1f4b96893f3ed3`.
+All other hashes above remain unchanged.  The expected USB inventory is now
+exactly eleven files because `hashfile-arm64.exe` is added at the payload root.
+Host execution matched 19 SHA-256 boundary vectors; the PE identity is
+AArch64 and two deterministic builds were byte-exact.  Focused installer,
+unattend, first-boot, and documentation tests pass 75/75.  No USB or target
+write occurred before this correction.
+
+## EXP336 media-staging result — 2026-09-02T22:46:00Z
+
+**CONFIRMED; INSTALLER MEDIA PAYLOAD READY; INSTALLED WINDOWS MUTATION NONE.**
+The existing `/dev/disk8s1` exFAT English ARM64 installer received only the new
+root directory `J313-Reinstall`.  macOS initially created twelve `._*`
+AppleDouble metadata files; they were enumerated and removed before acceptance.
+The final recursive inventory contains exactly the eleven preregistered files,
+no AppleDouble file, and no private-key marker.  All eleven post-copy SHA-256
+values match the corrected preregistration.  The SSH file is public key only.
+`sources/boot.wim` and `sources/install.wim` retain sizes 642,381,727 and
+7,078,951,087 bytes and original 2026-03-07 modification times; neither WIM nor
+EFI was written by staging.  After `sync`, `/dev/disk8` was force-unmounted only
+because macOS `loginwindow` dissented from normal eject; no project file handle
+was open.
+
+**Next exact boundary:** physically connect this USB to the J313 already proven
+at `Running proxy`, launch stock Setup WinPE, and run the payload only through
+its non-destructive discovery, ARM64 hash-tool execution, payload-validation,
+and evidence-preservation boundary.  Do not enter `ERASE WINDOWS` until the
+printed target identities and EXP336 WinPE receipts are reviewed and a separate
+destructive authorization is recorded.
+
+# EXP-337 — stock installer USB boot through unchanged EXP241 platform
+
+**Status:** PREREGISTERED; hardware launch pending. **UTC:**
+2026-09-02T22:48:54Z.
+
+**WHY THIS HYPOTHESIS:** (1) EXP335 confirms the unchanged EXP241 platform
+reaches WinPE with eight CPUs and the exact internal ANS target. (2) EXP336
+confirms the physical English ARM64 installer and manual payload are ready.
+(3) The project installation contract exposes removable-media SimpleFS to Mu;
+therefore a launch without the preloaded diagnostic RAM disk is the smallest
+test of whether BDS selects the attached USB loader before the installed-system
+fallback.
+
+**Single variable:** attach the confirmed EXP336 JetFlash to the guest-visible
+USB port and launch the exact EXP241 m1n1/Mu pair without `--ramdisk`.  No
+package, firmware, WIM, ESP, BCD, registry, or installed volume is changed by
+the launch command.  Exact command:
+
+```text
+./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --chainload --m1n1 .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho --firmware .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd --display both --debug monitor --foreground
+```
+
+Pinned run-assisted / m1n1 / Mu SHA-256:
+`7a8f8e11b9f5d3578b5500c2766b6916a0da1c5e38ccae5256b3ed0e861d5b29` /
+`0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2` /
+`e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074`.
+
+**PASS:** stock Windows Setup/WinPE from the physical USB reaches its UI or
+Command Prompt.  **REJECTED:** Mu selects the internal fallback or cannot see
+the removable loader.  **FAIL:** reset, hang, or storage/USB initialization
+failure before the boot decision.  Recovery is to stop the foreground runner
+and return the already-present J313 to Stage1/proxy.  Even on PASS, stop at the
+payload's literal `ERASE WINDOWS` prompt; destructive redeployment remains a
+separate authorization.
+
+## EXP337 hardware result — 2026-09-02T22:51:00Z
+
+**REJECTED AT BOOT SELECTION; USB/PAYLOAD MUTATION NONE.** The unchanged EXP241
+platform reached Mu, initialized xHCI and internal NVMe, and entered Windows
+with all eight CPUs.  However the decisive Mu trace is
+`WindowsAutoBootDxe: starting \EFI\BOOT\BOOTAA64.EFI` from the non-removable
+internal NVMe path `HD(5, GPT, F05B9952-...)`.  The framebuffer independently
+shows the installed Windows boot logo.  Therefore attaching the physical USB
+does not override the internal-only automatic loader; this result says nothing
+against the USB media itself.  The runner was terminated through its defined
+diagnostic-reboot handler and Stage1/proxy is live again.
+
+Exact framebuffer PNG / framebuffer metadata / HV log SHA-256:
+`b3fe6e842385e342bd4e8e46ee9fc296fbd44a8a06d52497813770df4521ac9e` /
+`2703bb0b51d29356b40b4875018a1e502f7a34740e1b9bfc25ed5656a9ca54cd` /
+`f9e96558ad30b533adea581e166d88a50785089b72da4739514c323a42fefd5b`.
+
+**Next causal boundary:** use the same EXP241 platform contract with only the
+Mu internal `WindowsAutoBootDxe` omitted, leaving BDS/UEFI shell to select the
+physical removable `FSn:\EFI\BOOT\BOOTAA64.EFI`.  This is a boot-selection
+diagnostic only; NVMe, xHCI, ACPI, WIM, payload, and installed volumes remain
+unchanged.
+
+# EXP-338 — physical USB boot with internal Windows auto-boot omitted
+
+**Status:** PREREGISTERED; diagnostic Mu build complete; hardware launch
+pending. **UTC:** 2026-09-02T22:54:00Z.
+
+**WHY THIS HYPOTHESIS:** (1) EXP337 proved xHCI and NVMe initialization but
+showed `WindowsAutoBootDxe` deliberately starting the non-removable internal
+`\EFI\BOOT\BOOTAA64.EFI`. (2) Current Mu DSC/FDF source packages that driver,
+so it preempts normal removable-media selection. (3) EXP336 independently
+validated the physical USB contents. Omitting only this internal-only driver is
+therefore the smallest causal discriminator.
+
+**Single variable:** build the current Mu platform with only
+`AppleSiliconPkg/Drivers/WindowsAutoBootDxe/WindowsAutoBootDxe.inf` omitted from
+both the DSC component list and FDF firmware volume. Use unchanged EXP241 m1n1,
+no RAM disk, unchanged ACPI/NVMe/xHCI, and the already attached EXP336 USB.
+Repository / m1n1 / Mu commits are
+`5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68` /
+`c81b3a2da7422ad1a68e969eea6fa9063959c9ec` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`; the pre-existing Mu
+`J313AppleAgx.asl.inc` change is out of scope and preserved.
+
+Exact build command:
+
+```text
+STANDALONE_BUILD_MU_ONLY=1 STANDALONE_PRESERVE_COMPONENTS=1 scripts/build-standalone.sh --debug-build --display both --debug monitor
+```
+
+Exact launch command after build acceptance:
+
+```text
+./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --chainload --m1n1 .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho --firmware .local/experiments/EXP-20260902-338-no-internal-autoboot/J313_EFI-no-autoboot.fd --display both --debug monitor --foreground
+```
+
+**PASS:** Mu/BDS starts the physical removable loader and stock Windows Setup
+WinPE reaches UI or Command Prompt. **REJECTED:** boot still selects internal
+Windows. **INCONCLUSIVE:** UEFI shell exposes ambiguous mappings without enough
+identity evidence to select one safely. **FAIL:** reset/hang or loss of proven
+xHCI/NVMe initialization before selection. Recovery is the exact EXP241 Mu FD
+SHA-256 `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074`
+and Stage1/proxy. No disk erase is authorized; even on PASS, stop at the
+installer's literal `ERASE WINDOWS` gate.
+
+## EXP338 build result — 2026-09-02T22:56:37Z
+
+**BUILD ACCEPTED; HARDWARE VERDICT PENDING.** Mu completed successfully and
+post-build validation passed all 96 UEFI images. The build script also
+validated the existing Apple input ACPI contract. The experiment-local FD is
+`.local/experiments/EXP-20260902-338-no-internal-autoboot/J313_EFI-no-autoboot.fd`,
+size 30,965,760 bytes, SHA-256
+`a49eecb3f0ef84de88419abc67d68d3639155a00a0566f29c7ffa432a05ba43e`.
+Its build log SHA-256 is
+`7a7cdd8ae5b7731f0d4fa3292478991f0c8a08f2a56199dc4c639d9e75e3c8fd`.
+It differs from the recovery EXP241 FD. The two temporary DSC/FDF omissions
+were restored byte-clean after copying and hashing the artifact; the
+pre-existing AppleAgx ACPI source change remains untouched.
+
+# EXP-339 — user-requested working-state recovery, live KD discriminator
+
+PREREGISTERED 2026-09-02T23:13:28Z. Fresh SSH timeout, no runner/USB owner,
+then successful Stage1 NOP proves Air is already at Running proxy. User confirms
+Windows was not reinstalled. EXP338 selected UEFI Shell by design; EXP323 had
+an independent installed-Windows 0x74, whose extracted dump proved stale.
+Restore exact accepted EXP241 firmware and attempt one live KD observation,
+not another package/caps test. No installed hive/BCD/driver/partition mutation.
+Exact hashes, commands, evidence and STOP gates:
+`.local/experiments/EXP-20260903-339-recovery-live-kd/PREREGISTRATION.md`.
+Artifact manifest and 15 relevant tests GREEN. No disk erase authorized.
+
+# EXP-350 — reinstalled Windows SSH/bootstrap and baseline qualification
+
+User now confirms Windows was reinstalled and requests SSH, registry backup,
+accepted keyboard/trackpad driver, stability, then GPU continuation. Old OS
+inventory is superseded. Fresh hostname J313-WIN resolves to 192.168.1.37;
+IPv4 and IPv6 TCP/22 attempts time out before authentication. EXP349 runner
+remains live; no reboot or second proxy reader was started.
+
+SSH-only script was parsed by Windows PowerShell (SYNTAX_OK; not executed),
+then copied to a new `J313-SSH-20260903` directory on the exact external
+31.6 GB exFAT `/dev/disk8s1` WINDOWS ARM USB. Exactly three files, all destination
+hashes match source; installer/EFI/WIM and existing evidence remain untouched.
+Exact SHA-256 and scope:
+`.local/experiments/EXP-20260903-350-new-windows-baseline/PREREGISTRATION.md`.
+MEDIA READY; AIR SSH, BACKUP, INPUT AND STABILITY NOT YET VERIFIED.
+
+## EXP338 hardware result / route correction — 2026-09-02T23:20:00Z
+
+**DIRECT-USB BOOT REJECTED; INTERNAL-AUTOBOOT SUPPRESSION CONFIRMED.**
+The successful invocation used the byte-exact EXP241 m1n1 copied beside the
+new Mu FD, satisfying launcher co-location. Manifest SHA-256:
+`d050410dd01bf192f94ceab80bb1fced0edc473a994627bef2ef8128e5e26486`.
+Mu reached Internal UEFI Shell, and the physical USB appeared as block media
+but its exFAT partition had no SimpleFS mapping. Current Mu contains
+EnhancedFatDxe and no exFAT filesystem driver. Screen SHA-256:
+`d6f68888626e19a42da40b49800d079d933522a98283fad891f3a910a689e533`.
+This rejects direct UEFI loading from this exFAT volume, NOT its use from
+Windows PE. The earlier suggestion to reformat the physical USB was unnecessary
+and is withdrawn: user correctly selected the existing RAM-WinPE path.
+
+## EXP339 transition result — 2026-09-02T23:20:00Z
+
+**SUPERSEDED BY USER-REQUESTED RAM-WINPE INSTALLATION PATH.** The previous
+thread was interrupted with PID 58049 still owning the proxy. Fresh SSH failed;
+the saved log ended at Mu FV decompression and the KD observer reported no
+STATE_CHANGE64. No new Windows bugcheck was proven. Sent SIGTERM to that exact
+runner through its documented snapshot/reboot handler. Fresh probe subsequently
+confirmed J313 Running proxy, 8 CPUs and 8 GiB. No recovery-file mutation was
+performed. Experiment-local HV / KD log hashes:
+`2d5ec731bf11b2ce5f4b1c6f856439a8dd5c4720dd3c5dcc26c7ebe378354c3d` /
+`0d7940910c9958c50ea04166c62a44c3cfdc57874a4b609e66dd04fbeb79cffd`.
+
+# EXP-340 — RAM WinPE interactive shell, unchanged exFAT installer USB
+
+**PREREGISTERED 2026-09-02T23:20:00Z; no destructive installation authorized.**
+
+**WHY THIS HYPOTHESIS:** EXP335 hardware-proved the EXP241 RAM-WinPE launch
+and internal ANS visibility. EXP338 isolated direct USB failure to UEFI
+filesystem access; the exact EXP335 WIM contains exfat.sys. User requests
+booting WinPE first and launching the already-prepared installer from there.
+
+**Single variable versus EXP335:** interactive manual shell in place of the
+read-only diagnostic hold. Clone the exact 800 MiB EXP335 RAM image (source
+SHA-256 d93d00db04f57afc7675a89fc80b47aab19d4d4bb961f2176eec0de08603514e),
+replace winpeshl.ini and add start-exp340.cmd in both WIM indices. Startup runs
+stock wpeinit, requests French keyboard, then cmd /k which only prints detected
+installer paths. It does not execute setup, diskpart, format, DISM, bcdboot,
+registry recovery, or any old collector. Existing historical collectors remain
+in the image but are not invoked. USB files, partitioning and installed Windows
+are not deliberately changed by this boot. No AppleAgx experiment.
+
+Sources: Microsoft Winpeshl.ini reference and Wpeutil SetKeyboardLayout
+documentation; exact EXP335 shell/collector and manifest; current run_uefi.py
+SIGTERM recovery handler. Hardware/runtime ownership is unchanged EXP241.
+WIM inspection confirmed exfat.sys, wpeinit.exe, wpeutil.exe, KBDFR.DLL and no
+unattend XML. Full WIM verification and byte-exact extraction of both added
+files from both indices passed. Build used wimlib-imagex update on indices 1/2
+with experiment-local wim-update.txt, then copied BOOT.WIM into only the local
+cloned image and detached it after byte comparison.
+
+Root/m1n1/Mu commits remain 5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68 /
+c81b3a2da7422ad1a68e969eea6fa9063959c9ec /
+5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b. Root and Mu pre-ledger tracked diff
+SHA-256: 0bf71d113936fed99f674047f93ef369c3e03473a75806f75ad2d7c3f69c0c03 /
+d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da.
+Profile debug/display both/monitor; exact EXP241 pair and manifest retained.
+RAM image / shell / startup SHA-256:
+`aa55df1d169405529837a345a7d92465380b1ffe91e96e9eeef4366f201ad871` /
+`f4e484bd106b0f563b0909807c2a174b1a8596f81e1a1249127c69a44852b967` /
+`e134b6d6156e2af19ff26a831d37ace0c673f664502f67f317f80d4c4b7152eb`.
+
+Exact launch:
+```text
+./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --chainload --m1n1 .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho --firmware .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd --ramdisk .local/experiments/EXP-20260903-340-ram-winpe-usb-install/winpe-exp340.img --display both --debug monitor --foreground
+```
+
+PASS: interactive X: command prompt plus readable physical-USB reinstall path.
+Fail/stop: no shell, no USB access, reset/hang, or unexpected automatic mutation.
+Evidence: EXP340/evidence framebuffer and copied final logs. Recovery: existing
+SIGTERM snapshot/reboot handler to Stage1 proxy and unchanged EXP241/EXP335.
+After PASS user may run the payload only through its existing non-destructive
+validation and evidence gate; review exact target before ERASE WINDOWS.
+
+## EXP340 hardware result — 2026-09-02T23:24:16Z
+
+**CONFIRMED: RAM-WINPE SHELL AND PHYSICAL EXFAT USB ACCESS.** Transfer of the
+800 MiB RAM image completed; Windows PE entered with all eight CPUs, NVMe
+ready, and xHCI runtime routing enabled. Fresh framebuffer shows the EXP340
+interactive `X:\Windows\System32>` prompt and detected installer path
+`D:\J313-Reinstall\reinstall-windows.cmd`. This proves the physical exFAT
+USB is readable from WinPE without reformatting. The startup did not run the
+installer, format, DISM, BCD editing or registry recovery. French keyboard
+was requested; actual physical input remains for operator validation. Normal
+Windows/SSH/installed-baseline recovery is NOT yet proven.
+
+Screen / HV-at-shell / framebuffer metadata SHA-256:
+`c2f2889695c80f18febab7f95f0c81a629387d8df3ed8fd91cd54631a8151390` /
+`abab483849a018084d644493afaa5fbb823f975307e2fee010d8a4c2e8260913` /
+`92df707dba118b77d2da48f14840c00ab170e68b64859d3b10cd3de794a4d119`.
+Evidence is under EXP340/evidence. Runner exec session 17145 is intentionally
+left running for the user's requested manual script launch. Next boundary:
+payload runtime hash validation and exact target/evidence review, then obtain
+destructive installation authorization at the existing ERASE WINDOWS gate.
+
+## EXP340 manual installer preflight result — 2026-09-03
+
+**STOPPED BEFORE DESTRUCTIVE CONFIRMATION.** User launched the exact staged
+installer. Live framebuffer independently proves index 3 ARM64 Professional
+image query succeeded (26200.8037, default en-GB), followed by
+`Payload source validation: PASS`. The evidence phase then printed
+`The system cannot find the file specified` and the required-evidence failure
+message, before ERASE WINDOWS. Partial evidence directory exists on D: as
+printed on screen. Saved screen: `evidence/exp340-preinstall-error.png`.
+Do not bypass preservation or repeat the installer blindly. First unknown is
+the exact failed source copy; read the partial manifest to locate the last
+successful hive/log/BCD copy, then distinguish missing source from COPY
+attribute semantics or destination failure. Installed-volume format/apply
+did not run in this invocation.
+
+# EXP-341 — required evidence copy correction and short USB launcher
+
+**PREREGISTERED 2026-09-02T23:32Z.** User attached the same exFAT installer
+USB to the host and authorized writing the needed correction; no full test
+campaign, no reformat or Windows installation authorized by this step.
+
+**WHY THIS HYPOTHESIS:** USB manifest proves SYSTEM/SOFTWARE/DEFAULT/SAM/
+SECURITY copies succeeded; no transaction log receipt was written. The first
+transaction-log COPY is the exact failing boundary. Source-existence checks
+preceded COPY, and Microsoft documents COPY does not preserve zero-byte files.
+Hidden/system and empty log handling remain hypotheses until fresh source
+attributes are printed; the failure is not evidence against running in WinPE.
+
+**Single variable:** replace the three required-file COPY call sites with
+one Robocopy /COPY:DAT helper accepting return codes below 8, then require
+source/destination SHA-256 equality. Record source size/attributes and exact
+failed filename plus copy.log. No source attributes are changed. Add root
+go.cmd as a typing shortcut to the same guarded installer; it bypasses no gate.
+The five partial hive copies and original USB script were preserved under
+EXP341/pre-change before overwrite. All USB evidence remains in place.
+
+Target: /Volumes/WINDOWS ARM, USB disk8s1, volume UUID
+331E7756-C915-35D6-88F6-D7D3C30EDE3A, partition UUID
+630B3B56-14D8-4D7A-A54C-A89391471013. Only J313-Reinstall/reinstall-windows.cmd
+and new root go.cmd will be written. WIM/EFI/drivers/key/installed Windows
+are unchanged. Candidate installer / launcher SHA-256:
+78bd4d09b84c712f2c3bcc0515103e537dcaf417acbd82985ba791b39a2de9a3 /
+2ed6d9ae7c1b220578172e4356541fcd1238e92bc38300831d29bc473533e9c6.
+Verification: existing 33 installer checks pass in 0.005s; diff check passes.
+No new source-text pseudo-test is claimed as runtime proof. Hardware acceptance
+remains actual file copies/hash checks before ERASE WINDOWS. Recovery is the
+preserved original script; no installed-state rollback is needed for staging.
+
+## EXP341 staging result
+
+**CONFIRMED MEDIA WRITE; WINPE COPY RESULT PENDING.** Commit
+e7228c6f171dff1a8587968fb5d1b291374bcecb was staged on the exact USB. Both
+destination files byte-match local source and the preregistered SHA-256 values.
+Only the installer and new go.cmd were written; existing evidence retained.
+Next action: return USB to the running WinPE and run D:\go; stop at the
+unchanged ERASE WINDOWS gate for target/evidence review.
+
+## EXP341 runtime result — required copies CONFIRMED, inventory FAILED
+
+Fresh USB manifest has all 15 hive/log files and BCD=COPIED, each after
+source/destination hash equality. SYSTEM.LOG1 is exactly zero bytes; transaction
+logs have hidden/system attributes, confirming the previous COPY limitation.
+BCD is 28,672 bytes and Robocopy reports zero failed files. Optional directories
+were recorded ABSENT. No SHA256.txt was created. The displayed Last file BCD
+was stale diagnostic context, not proof of BCD failure. Required-copy correction
+is accepted; next failure is the final hash inventory.
+
+# EXP-342 — correct delayed-variable evidence enumeration
+
+**PREREGISTERED; media update only, no disk erase authorized.**
+WHY THIS HYPOTHESIS: EXP341 proves all required files copied and verified;
+final SHA256.txt is absent and MOVE printed file-not-found. Current script uses
+FOR /R with a delayed-expanded root argument, so its inventory can enumerate
+zero files and never create the hash file. Replace this with DIR /A:-D /S /B
+into an external temporary file list, covering hidden/system logs too; hash
+every listed file, reject an empty list, and show the actual failed phase.
+This is the single causal variable; no changes to payload, WIM, drivers,
+disk selection, required copies, or destructive confirmation.
+
+Previous script and complete partial evidence set preserved in EXP342/pre-change;
+all existing USB evidence retained. Candidate installer SHA-256:
+c49dfcc6d3ef160250feac1eec96d64ed8835b38df34f07301772ceec730b99b.
+Destination is the same physical USB volume UUID
+331E7756-C915-35D6-88F6-D7D3C30EDE3A, J313-Reinstall/reinstall-windows.cmd only.
+Short launcher D:\go unchanged. Existing 33 software checks pass; added real
+Windows CMD inventory regression is skipped on this Mac and NOT claimed as
+runtime proof. Next hardware gate: nonempty complete SHA256.txt and evidence
+PASS before ERASE WINDOWS. Recovery: restore saved script, no Windows rollback.
+
+## EXP342 staging result
+
+Exact candidate from commit 404ce8a31e6c026e931613daf0ebc3f1d599b0a1 copied
+onto the identity-checked USB. Post-copy byte comparison and SHA-256 match.
+USB safely ejected. No hardware acceptance claimed yet; next command D:\go
+in the existing RAM-WinPE, stop at destructive confirmation.
+
+## EXP342 operator-run result — evidence PASS, format/apply PASS, locale FAIL
+
+Operator independently crossed the literal confirmation. USB log and submitted
+photo prove both Windows and WINESP formats returned 0 and image index 3 apply
+returned 0. The next locale command failed with DISM 87, unrecognized argument
+Standard. Existing Windows data has therefore been replaced; do NOT rerun the
+full installer or claim the old installation remains intact. The successfully
+preserved preinstall evidence remains on USB and host. Fresh applied Windows
+has not booted and EFI setup has not yet run.
+
+# EXP-343 — finish applied Windows without format/reapply
+
+**PREREGISTERED; continuation of requested installation, no further erase.**
+WHY THIS HYPOTHESIS: exact script uses /Image:"C:\"; Microsoft Windows argv
+rules make the final backslash escape the closing quote, consuming later
+arguments and splitting the time-zone name. This matches the displayed error
+Standard. Correct to the unquoted validated drive root /Image:C:\ and preserve
+the quoted time-zone name. No locale/model or firmware variable changes.
+
+Add explicit --resume-config entry after existing exact disk/volume discovery.
+It requires the frozen successful apply log and matching target letters, checks
+the installed winload.efi against the exact image, validates all configuration
+payloads, and jumps directly to configure_offline. It cannot reach formatting
+or Apply-Image. Root USB go.cmd now invokes this mode only. Original apply log
+is retained; new operations append windows-resume.log and use a dedicated DISM
+log. Expected next boundary: offline config and Microsoft EFI artifacts complete,
+then one normal Windows baseline boot. No AppleAgx install.
+
+Source commit: 7bba68a703db6c9aa3fc23170fdd351f730e440f.
+Installer / resume launcher / apply receipt SHA-256:
+daeab980d436c9bbdb7a4f9f8a9dff426b046ef2bc5781f1656827a2f821aa3d /
+ebd0faef08cf240737adbe9c7cc299641fd73be9aa2b8759eb308bd2c46acc81 /
+e3fa6bd83d2aaf0623125234e0ff5f4ad0d8474bd038c4efbe674571230a321a.
+Exact winload.efi from both host ISO and USB WIM index 3:
+cce44a3beddbfb9a0b980522ab6b442d99507b1880e020ad637306921dbb5c7e.
+Source documents: Microsoft Parsing C command-line arguments; DISM Languages
+and International Servicing Command-Line Options. Verification: 33 existing
+checks pass; two Windows-runtime regressions are skipped on Mac, not claimed
+as executed. USB target remains volume UUID
+331E7756-C915-35D6-88F6-D7D3C30EDE3A. Only main script, root go.cmd, and pinned
+resume-apply.log will be staged. Preserve pre-change scripts/logs/photo in
+EXP343/pre-change. STOP on any target/hash mismatch or command failure; never
+fall back to a full reinstall automatically. Keep RAM-WinPE until success.
+
+## EXP343 staging result
+
+All three files on the identity-checked USB byte-match their preregistered
+sources and hashes. USB safely ejected. Current root go.cmd invokes only
+--resume-config. User returns it to the existing WinPE and runs D:\go without
+index or erase prompts. Windows baseline boot remains pending.
+
+## EXP343 runtime result — 2026-09-03T00:01Z
+
+CONFIRMED offline deployment completion. User reports SUCCESS and live captured
+framebuffer independently shows boot files created, ARM64 fallback copied,
+test signing enabled, artifact verification and RESULT SUCCESS. Screenshot:
+.local/experiments/EXP-20260903-343-resume-after-apply/exp343-success.png,
+SHA-256 4faaea755c8262dcaf6d3cf6d027a448279adf9e32acc46b946d4a4e59171de5.
+Runner logs preserved in that experiment's runner-final directory before next
+launch. Normal Windows, account provisioning, input and SSH are not yet proven.
+Next boundary: first normal boot of newly applied Windows, EXP344.
+
+# EXP-344 — first installed Windows boot after clean deployment
+
+PREREGISTERED 2026-09-03T00:01:15Z. WHY THIS HYPOTHESIS:
+1. EXP342 applied index 3 successfully; EXP343 completed locale/config/EFI and
+   artifact checks, so a first boot is now justified instead of more WinPE work.
+2. Exact EXP241 m1n1/Mu previously reached stable Windows/8 CPU/SSH (EXP286).
+3. Fresh SSH timeout, no runner, and live probe confirm Running proxy on J313.
+
+Single variable: boot the newly installed Windows instead of RAM-WinPE. No
+firmware rebuild, no AppleAgx package, no new platform behavior. Sources inspected:
+scripts/run-assisted.sh, EXP241 manifest, reinstall first-boot provisioner and
+EXP343 evidence. Firmware/runtime ownership is unchanged from EXP241.
+
+Root branch feature/j313-gpu-acceleration; root commit
+5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68; m1n1 commit
+c81b3a2da7422ad1a68e969eea6fa9063959c9ec. Pre-ledger root diff SHA-256
+c84e8bf71b9416db063dc1925c14a7141c0504178d4feac935ddf5cb01a0fab7;
+m1n1 diff is empty. No build. Exact artifacts under
+Mu source commit 5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b; diff SHA-256
+d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da.
+These source diffs are not rebuilt for this run. Artifact directory:
+.local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/:
+m1n1 0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2;
+Mu e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074;
+manifest 9c03e167028696757038d16f465d16c40652c76d0e8875f3cb05c6e41b0252ad.
+Launch script SHA-256
+7a8f8e11b9f5d3578b5500c2766b6916a0da1c5e38ccae5256b3ed0e861d5b29.
+
+Command: ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41
+--vuart /dev/cu.usbmodemC02HDNCCQ6L43 --chainload
+--m1n1 .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho
+--firmware .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd
+--display both --debug monitor --foreground
+--contract-output .local/experiments/EXP-20260903-344-first-clean-windows-boot/launch-contract.json
+
+Expected: Windows setup/login, provisioned pavel account, SSH, 8 CPU, NVMe,
+AppleInput/xHCI; fresh Event129/bugcheck/reset zero. Fail: stop screen, guest
+reset or stalled setup. Preserve framebuffer and UART/HV traces before recovery.
+Evidence directory: .local/experiments/EXP-20260903-344-first-clean-windows-boot/.
+Recovery: exact EXP340 RAM-WinPE image SHA-256
+aa55df1d169405529837a345a7d92465380b1ffe91e96e9eeef4366f201ad871;
+no automatic reformat or reinstall. Preserve preinstall evidence already on host.
+
+## EXP343 media finalization — preregistered after SUCCESS
+
+Physical USB returned to host, volume UUID 331E7756-C915-35D6-88F6-D7D3C30EDE3A
+reverified. Final resume log independently confirms every phase exit 0 and
+SUCCESS; preserved in EXP343/usb-final, SHA-256
+739a5e2cc4bdf9fceca7a713ad53b4c85a214b92b27e2925c469604bbef41a50.
+Resume DISM log SHA-256
+a2a0340d9273529d61988334d280491496a44cb63660144ab50f58c31e0156c3.
+Restore normal root go.cmd from committed source (SHA-256
+2ed6d9ae7c1b220578172e4356541fcd1238e92bc38300831d29bc473533e9c6)
+and preserve temporary launcher as root resume.cmd (SHA-256
+ebd0faef08cf240737adbe9c7cc299641fd73be9aa2b8759eb308bd2c46acc81).
+No installer execution, no installed-Windows change. Original go preserved in
+usb-final; WIM, main installer, evidence and payload remain unchanged.
+
+Media finalization result: CONFIRMED both destination launchers byte-match
+committed sources and the preregistered hashes. Main installer hash unchanged.
+No Windows writes from this media operation. USB go is full reinstall again;
+resume is only the pinned EXP343 continuation, not a generic recovery command.
+
+## EXP344 interim observation — 2026-09-03T00:03:47Z
+
+All 8 Windows CPU entries observed, NVMe initialized and runtime ready, xHCI
+route enabled. Framebuffer advanced from Windows logo to Getting ready within
+about two minutes of launch. No observed stop/reset yet; SSH still unavailable.
+This is setup progress, not final clean baseline acceptance. Evidence images
+are first-boot.png and boot-progress.png in EXP344/evidence.
+
+## EXP344 result — setup requested reset after Getting ready
+
+CONFIRMED first Windows kernel/setup reached; final baseline INCONCLUSIVE.
+At about 00:06Z (roughly 4 minutes after guest start), Windows disabled xHCI
+route and issued PSCI SYSTEM_RESET x0=0x84000009 from
+ELR_EL2=0xfffff8035a6261d8, x30=0xfffff8035a498484. Runner exited after USB
+disconnect. No stop screen captured. User independently observed first-setup
+reboot and requests continuing. A normal setup reboot is the leading explanation,
+not yet proof of absence of bugcheck. Preserve runner-final logs; next launch
+continues setup without changing any artifacts. SSH/login not reached yet.
+
+# EXP-345 — continue Windows setup after its first reboot
+
+PREREGISTERED 2026-09-03T00:08Z. WHY THIS HYPOTHESIS: EXP344 reached
+Getting ready then guest-requested reset; user confirms first-install reboot.
+This justifies continuing setup rather than returning to WinPE. Single state
+change: progress made by Windows setup before reboot. Same EXP344/EXP241
+root/m1n1/Mu commits, source diff identities, exact artifact hashes and manifest;
+no build or driver changes. No input/SSH acceptance assumed. Ethernet attached
+according to user. Expected next checkpoint: OOBE/login or explicit setup error.
+Failure: bugcheck or repeated same-state restart. Recovery remains EXP340 RAM
+WinPE, no automatic reinstall. Preserve each boot's logs before next launch.
+
+Exact command is EXP344 command with contract output changed to
+.local/experiments/EXP-20260903-345-windows-setup-second-boot/launch-contract.json.
+Evidence under that experiment directory. Host source ledgers changed only;
+executed artifact digests remain those verified for EXP344.
+
+## EXP345 initial result — OOBE preparation reached
+
+Second normal boot starts all 8 CPUs, NVMe and xHCI runtime, then shows
+Just a moment rather than previous Getting ready. Framebuffer saved as
+EXP345/evidence/progress.png. This confirms forward setup progress; account,
+AppleInput and SSH provisioning remain pending. Runner remains foreground.
+
+# EXP-346 — live non-rebooting snapshot of prolonged OOBE wait
+
+PREREGISTERED 2026-09-03T00:30Z. WHY THIS HYPOTHESIS:
+1. EXP345 has remained at Just a moment for about 21 minutes with no SSH;
+   user reports Shift+F10 ineffective, requiring a host-side discriminator.
+2. Framebuffer generation advances, but animation does not prove disk or setup
+   progress. Need CPU/timer/NVMe receipts before choosing recovery.
+3. Current run_uefi.py SIGINT path captures diagnostics then returns HANDLED;
+   SIGTERM is the separate reboot path and is NOT used for this snapshot.
+
+Single variable: diagnostic snapshot request in already running EXP345 guest;
+no image changes, no filesystem writes requested, no guest reboot. Same exact
+EXP344/345 artifacts, commits and launch-contract; no build. Expected evidence:
+lock-free CPU records, NVMe/IRQ/timer counters and continuing-guest receipt.
+Failure: unavailable receipt; do not open a second proxy client while runner owns
+it. Command: kill -INT 61027 (fresh ps validated exact EXP345 run_uefi.py PID).
+Evidence: .local/experiments/EXP-20260903-346-oobe-live-snapshot/.
+Recovery remains EXP340 RAM-WinPE, only if logs cannot be obtained live; no
+automatic reinstall or hive repair. One later snapshot permitted to distinguish
+advancing counters from stasis if first receipt alone cannot do so.
+
+## EXP346 result — whole-guest freeze REJECTED; OOBE blocker unknown
+
+Both SIGINT requests returned HOST CONTROL: diagnostic snapshot captured;
+continuing guest. CPU0 tick_fire advanced 6028291 -> 6174152, IAR/EOI advanced
+1821096 -> 1832220. CPU0/1 first observed in EL0 at 0x7ffed5291a3c /
+0x7ffed2c58958; second sampled at kernel 0xfffff80283681cdc. Interrupt/timer
+progress and responsive snapshot contradict a whole-guest CPU freeze. They do
+not prove storage progress or identify the waiting Setup component. No reboot
+was requested. Snapshots in EXP346 have SHA-256
+fdfb0d453d67f64642980da8fbddd31e8fc7e8e2c2ef5e3c5ef20b7c51bdc5a0 /
+bbe071618bf677a1c7c8baa20d4edf2defa6f54e02a83404554c9dc1767a1f5d.
+
+EXP345 baseline remains INCONCLUSIVE: 27+ minutes of Just a moment, no SSH,
+operator cannot use Shift+F10. Next boundary is Setup/OOBE log evidence, not AGX,
+registry repair or another Windows image application.
+
+# EXP-347 — capture installed setup logs from RAM-WinPE
+
+PREREGISTERED 2026-09-03T00:36Z. WHY THIS HYPOTHESIS:
+1. EXP346 disproves complete CPU/timer freeze; need Windows Setup logs to
+   distinguish unattended processing, OOBE and synchronous SetupComplete work.
+2. Microsoft documents SetupComplete invocation in Panther/UnattendGC/setupact.log.
+   Current SetupComplete synchronously invokes our provisioning script, whose
+   OpenSSH Add-WindowsCapability has no explicit time bound. This is a candidate,
+   NOT yet established as the cause.
+3. SSH and keyboard console are unavailable, while EXP340 proves RAM-WinPE
+   filesystem access; automatic capture needs no keyboard and no reinstallation.
+
+Sources: EXP340 startup/WIM, run_uefi.py signal handler, reinstall
+SetupComplete.cmd/configure-first-boot.ps1, Microsoft Add a Custom Script to
+Windows Setup. No hardware protocol or firmware change. Owner of current
+unknown boundary is Windows Setup/provisioning.
+
+Single variable versus EXP340: replace interactive startup with read-only log
+collector. Clone exact EXP340 RAM image and update both WIM indices with
+experiment-local winpeshl.ini and collect-exp347.cmd via wimlib-imagex update;
+verify WIM; copy boot.wim into cloned image; byte-compare; detach. No rebuild of
+m1n1/Mu. Same commits/artifact hashes/profile as EXP344/345; root tracked diff
+before latest ledger SHA-256
+92825ee39b5ee9b164324e6c7fc8a748fc65d23d7dee9428974f5709d58a26d1.
+Collector/shell SHA-256:
+5c73fb395cdb460a20d008a3970890c7ea2e718fcb8bd4d4911ccdec3d44344f /
+1a407970ca3a94ecb61fe81321d3471d5141b0d4e81c9fd554018bb49b725129.
+
+Collector reads exactly one target with fresh Panther unattend and J313 payload,
+copies Panther, DISM, optional bounded CBS, SetupAPI, provisioning receipts and
+System/Application/Setup event logs into X: RAM. It never loads registry hives,
+formats/applies an image, edits BCD or installs a driver. If matching installer
+USB is inserted, exports to new EXP347-OOBE-LOGS only, never overwriting an
+existing directory. Without USB it still cycles relevant log tails on screen.
+Ordinary WinPE filesystem mounting is not claimed to be a forensic write blocker.
+
+Transition: preserve EXP345 logs; SIGTERM exact runner PID 61027 to return to
+proxy, then fresh probe. Launch is EXP344 command with --ramdisk
+.local/experiments/EXP-20260903-347-oobe-log-capture/winpe-exp347.img and
+--contract-output .local/experiments/EXP-20260903-347-oobe-log-capture/launch-contract.json.
+Expected: log pages identify last Setup stage; failure: absent/ambiguous target,
+copy failures or unreadable logs. Evidence EXP347/evidence. Recovery: same
+EXP241 normal Windows boot; no reinstall or registry repair without evidence.
+
+Final EXP347 RAM image SHA-256:
+9a6ccee6bfedd6d111c800afcbcfe6ad32fc3f5724f3696d572137808f198bd3.
+WIM verification passed and image BOOT.WIM byte-matched before detach.
+
+EXP347 pre-runtime caveat: image inspection after dispatch found ping.exe absent
+in this stock PE. Collector's optional page-delay commands will fail, so pages
+can cycle rapidly; file capture is independent. Do not interpret rapid screen
+changes as Setup activity. Prefer preserved USB files. No silent claim of
+successful page-delay validation; no second boot solely to fix presentation.
+
+## EXP347 runtime evidence — log capture CONFIRMED, provisioning FAILED
+
+Automatic WinPE collector found fresh Windows at C:. All attempted copy groups
+returned Robocopy RC=1; CBS.log exceeded the 20 MiB bound and was explicitly
+skipped. Panther/UnattendGC log tail shows RunUserProvidedScript successfully
+returned 0x0 at local 02:25:26, registry flush completed, and WinDeploy exiting
+0x0. Crucially, C:\J313-Reinstall\setupcomplete-exit.txt contains 1: the wrapper
+always returns 0 to Windows but its PowerShell child failed. First-boot JSON
+exists and copied; display filter findstr is absent in PE, so its errors have
+not yet been read. Snapshot log-page-c.png captures this distinction.
+
+Thus a still-running SetupComplete is rejected at end of EXP345; failure inside
+provisioning is confirmed but exact error remains unknown. Requested operator
+insert existing installer USB for automatic new-directory evidence export.
+Keep WinPE alive; no registry repair, no reinstall, no speculative installed fix.
+
+# EXP-348 — user-requested normal Windows boot, no configuration changes
+
+PREREGISTERED 2026-09-03T00:42:18Z. User explicitly requests ending WinPE and
+starting Windows again; this supersedes waiting for USB export. Original logs
+and JSON remain on installed Windows; only temporary X: copies expire on reset.
+Host screenshots and HV/UART evidence are retained under EXP347.
+
+WHY THIS HYPOTHESIS: EXP347 proves SetupComplete has already returned, unlike
+the early EXP345 boot; a normal next boot can distinguish a transient setup
+transition from a persistent wait. No fix is claimed or silently installed.
+Single variable: next normal boot of the same installed state, no RAM disk.
+Same root/m1n1/Mu commits and exact EXP241 artifacts recorded in EXP344;
+source behavior unchanged. Fresh artifact hashes reverified:
+m1n1 0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2;
+Mu e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074;
+manifest 9c03e167028696757038d16f465d16c40652c76d0e8875f3cb05c6e41b0252ad;
+launcher 7a8f8e11b9f5d3578b5500c2766b6916a0da1c5e38ccae5256b3ed0e861d5b29.
+
+No build. Transition: fresh ps identifies EXP347 run_uefi PID 1186; send SIGTERM
+through inspected snapshot/reboot handler, probe only after runner exits. Launch
+exact EXP344 command, no --ramdisk, with contract output
+.local/experiments/EXP-20260903-348-user-requested-normal-boot/launch-contract.bin.
+Expected checkpoint Windows boot/login; report observed screen, not an assumed
+baseline PASS. Failure is stop/reset or persisting setup wait. Recovery remains
+EXP347 RAM-WinPE, but no automatic return there in this user-directed turn.
+
+EXP348 runtime result: EXP347 runner exited after host-requested SIGTERM;
+fresh proxy probe confirmed J313 and 8 CPUs. Exact normal boot command launched
+in foreground session 47768 without RAM disk. Fresh framebuffer normal-boot.png
+shows Windows logo and loading spinner; trace shows secondary CPU entry and
+NVMe enabled/ready. Normal Windows boot dispatch CONFIRMED; completed login and
+resolution of the previous OOBE wait remain INCONCLUSIVE at this checkpoint.
+Windows left running. No installed configuration changes or further recovery.
+Evidence: EXP348/evidence/{normal-boot.png,hv.log,guest-uart.log}; launch contract
+EXP348/launch-contract.bin. Next boundary is login/OOBE completion, not GPU.
+
+EXP348 follow-up 2026-09-03T00:54Z: user reports another reset. Fresh trace
+contains PSCI RESET STACK and runner is gone; SSH timed out, proxy responds.
+Final logs retained under EXP348/runner-final. Guest reset confirmed; its
+setup-versus-bugcheck cause remains UNKNOWN. User requests another normal boot.
+
+# EXP-349 — user-requested continuation of installed Windows boot
+
+PREREGISTERED 2026-09-03T00:54:37Z. WHY THIS HYPOTHESIS: EXP348 reached Windows
+and then issued a guest reset; Air is now freshly proven at Running proxy, not
+running Windows. A new assisted launch is required to continue the installed
+system after that reset. This is the requested boot continuation, not a GPU
+experiment or claimed fix. Single variable: next boot; no installed changes.
+Root feature/j313-gpu-acceleration HEAD 5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68;
+root pre-ledger diff SHA-256 1f4d5952c6e904cc6daa6ed7b96f0997dcecae33299d1b9eb3d2949b9b22621a.
+m1n1 c81b3a2da7422ad1a68e969eea6fa9063959c9ec;
+Mu 5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b. No build or source changes.
+Exact EXP241 assisted-boot artifacts freshly hash-verified:
+m1n1.macho 0da268f41b06b546f898f53815e39b1b27f8c62e5844b8ea240825f530d2dae2;
+J313_EFI.fd e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074;
+manifest.json 9c03e167028696757038d16f465d16c40652c76d0e8875f3cb05c6e41b0252ad.
+Launch command: ./scripts/run-assisted.sh --proxy /dev/cu.usbmodemC02HDNCCQ6L41 --vuart /dev/cu.usbmodemC02HDNCCQ6L43 --chainload --m1n1 .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/m1n1.macho --firmware .local/experiments/EXP-20260831-241-nvme-level-intx/assisted-boot/J313_EFI.fd --display both --debug monitor --foreground --contract-output .local/experiments/EXP-20260903-349-user-requested-normal-boot/launch-contract.bin
+No RAM disk, reinstall, driver install or registry edit. Checkpoint: fresh
+Windows screen; failure: stop/reset before it. Evidence EXP349/evidence.
+Recovery artifact remains exact EXP347 RAM-WinPE, not launched this turn.
+Leave Windows running and report observed screen, not assumed baseline PASS.
+
+EXP349 source diff receipts: m1n1 clean (empty diff SHA-256
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855);
+Mu diff SHA-256 d743a3082929a233f26d8ea167f8712d1cebe96e6ded9e059d5aac89cdc533da.
+
+EXP349 observed result: foreground session 26801 reconnected and entered the
+Windows kernel, secondaries and NVMe ready. Fresh framebuffer generation 4
+shows Windows logo and loading spinner, stored as evidence/normal-boot.png;
+contemporary hv.log and guest-uart.log copied alongside. Boot dispatch and
+kernel/display checkpoint CONFIRMED. Completed login, SSH, input and clean
+event baseline remain UNKNOWN, not a baseline PASS. No stop/reset observed
+before this checkpoint. Windows left running; next boundary is setup/login.
+
+# EXP-350 — reinstalled Windows baseline and input recovery
+
+Fresh Windows inventory supersedes every old installed-driver receipt. SSH
+bootstrap succeeded after correcting the host-key ACLs: the project key
+authenticated to `J313-WIN` and the recovered server key is pinned only in
+`.local/air-ssh/known_hosts`. A recovery checkpoint at
+`C:\Users\pavel\J313-Recovery\baseline-20260903T011643Z` was copied to the
+host evidence directory and checked against its manifest: BCD plus six hives,
+7/7 SHA-256 matches. A second identical copy was made to
+`J313-Recovery-20260903/baseline-20260903T011643Z` on the operator USB and
+rechecked 7/7.
+
+The accepted AppleInput package was revalidated 4/4 by SHA-256. Its attempted
+remote installation stopped at the first LocalMachine certificate operation
+with E_ACCESSDENIED because an SSH session receives a non-elevated UAC token;
+therefore no certificate, INF, service, or APPL0001 driver mutation occurred.
+The exact package and local elevated installer are now staged under
+`J313-AppleInput-20260903` on the operator USB. Next: one local admin run,
+then collect its result and perform bounded non-GPU stability checks. GPU work
+is deliberately paused; no previous AppleAgx state is assumed installed.
+
+EXP350 SSH-admin transport: operator ran the separately staged local elevated
+enabler on this disposable Air. A newly authenticated key-only SSH session
+proves `LocalAccountTokenFilterPolicy=1`, Administrator membership, successful
+`fltmc filters`, and a Running sshd service. This replaces the prior local-only
+AppleInput installation prerequisite. No password was persisted. Next action is
+the already hash-pinned AppleInput install through this freshly proven elevated
+transport, followed by input and stability validation.
+# EXP351 — platform-owner live admission on freshly reinstalled Windows
+
+Status: **REJECTED; exact cleanup complete; no retry.**
+
+- Clean preflight proved APPL0002 Problem 28, no AppleAgx package/service and
+  8 CPUs with AppleInput, NVMe, xHCI and SSH running.
+- Exact receipt-enabled PlatformOwnerQualification package was stage-only
+  verified as `oem3.inf`; SYS/INF/CAT hashes were
+  `eb1918a5b505cc021373698f6f94b37a033ee7ea6cef66ab9dde4abd23870820` /
+  `c86cbe1bafdc80f2c3991d7610f3fb3ec3e7e5b8f894d29fc12644a6bd52fed3` /
+  `7590f199cc6e741552dffe7c640a804f5dc6ded9306cc99ae526bee031cb9293`.
+- One device rediscovery loaded the driver: DriverEntry, DxgkInitialize,
+  AddDevice and StartDevice all returned success.  It then received
+  QueryAdapterInfo Type 34 / output size 8 and returned `0xC00000BB`.
+  Windows set Code 43 without Event129, critical or CodeIntegrity events.
+- Pinned WDK and Microsoft ABI identify Type 34 as
+  `DXGKQAITYPE_PHYSICAL_MEMORY_CAPS`, not DRIVERCAPS.  The full KMD omitted
+  this mandatory post-Start reply.  EXP352 adds only truthful T8103 40-bit
+  `HighestVisibleAddress`; it claims neither Windows IOMMU nor MapAperture2.
+- Evidence `EXP351-collect.json` SHA-256:
+  `95c237c7c1b284444f62cc78eeac24b72cae7756f6747204dc95a4361523f0ae`.
+- Exact cleanup removed only `oem3.inf`, its SYS and signer; APPL0002 is again
+  present at Problem 28 and 8 CPU/input/NVMe/xHCI/SSH checks remained healthy.
+
+# EXP352 / EXP353 — full-KMD physical-memory and IOMMU caps
+
+Status: **CONFIRMED; both exact packages cleaned.**
+
+- EXP352 changed only Type 34 `PHYSICAL_MEMORY_CAPS`; Type 34 returned success
+  and Windows immediately issued Type 35 / four-byte IOMMU caps.
+  Evidence SHA-256: `c32c0d5951b2820143506878405613839dd5282340e8c264c855cc9f2bb0c36d`.
+- EXP353 changed only Type 35 and returned truthful all-zero IOMMU caps.
+  Type 35 returned success; no later QueryAdapterInfo callback was requested,
+  while PnP still reported Code 43 with no reset, Event129, Code Integrity or
+  critical System event.  Evidence SHA-256:
+  `fbd218c2f86b60da847583dec1acea60ddcbd248635448676bf2f0305f065714`.
+- This is not a lower-stack failure.  The PlatformOwnerQualification profile
+  intentionally returns zero sources/children after backend startup, so its
+  next natural boundary is full display admission.  The next candidate must be
+  a receipt-enabled Full Graphics build, not another qualification retry.
+- Exact cleanup restored APPL0002 Problem 28 and 8 CPU/input/NVMe/xHCI/SSH.
+# EXP354 — production-receipts Full Graphics admission (2026-09-03)
+
+- **Verdict: REJECTED.** Exact package bound as `oem3.inf` to
+  `ACPI\APPL0002\0`; `DriverEntry`, `DxgkInitialize`, `AddDevice`,
+  `StartDevice`, QueryAdapterInfo Type 34 and Type 35 all returned success.
+- Code 43 occurred before the first full-graphics receipt. No bugcheck,
+  Event129, storage reset or Code Integrity failure. Evidence:
+  `.local/experiments/EXP-20260903-354-production-receipts/evidence/EXP354-collect.json`
+  (`c7ce35fb1559585539264678740063d1855c46a3ca5efe5a28570a77fbebcd64`).
+- Exact `oem3.inf` package and its certificate were removed. Next: EXP355,
+  receipt-only coverage of the three early production StartDevice validations.
+
+# EXP386 — current-compatible non-AGX online cleanup boot
+
+**PREREGISTERED 2026-09-03T20:11:09Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP384 is terminal after its first real bind lost SSH
+and both proxy transports; a GPU-visible normal boot can only reload the exact
+rejected package.  Fresh probes find Windows SSH unreachable, no active host
+launcher, both USB endpoints present, and a read-only m1n1 handshake reports
+J313/T8103 with eight CPUs at `Running proxy`.  Current Mu's
+`J313_AGX_G2_PROFILE=FALSE` branch omits the complete G2 ACPI module containing
+`J313AppleAgxSsdt`/`APPL0002`, while retaining current Windows auto-boot, input,
+NVMe, xHCI and CPU platform code.
+
+**Single variable:** Mu ACPI table selection is non-G2/non-AGX.  The executed
+m1n1 remains accepted EXP377.  No AppleAgx package is installed or exercised by
+the host; after Windows SSH the only authorized mutation is exact online
+identity-checked removal of the rejected AppleAgx package/service/device state.
+
+Root / executed-m1n1 / Mu commits are
+`5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68` /
+`d703f87e7031717a3dc56d0cd6b8c3827eff8c54` /
+`5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b`. Root and Mu tracked diff SHA-256
+are `c40382724023ec769be97df703a73f4c08006ac506f0a30428f4826c67f1330a`
+and `7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`;
+the current m1n1 checkout is clean. Exact m1n1 / Mu SHA-256 are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c`.
+The Mu build selector is `TARGET=RELEASE BLD_*_AIC_BUILD=FALSE
+BLD_*_J313_AGX_G2_PROFILE=FALSE`; 26 focused source/profile tests pass.
+
+Manifest, complete command, pass/failure gates and recovery are frozen in
+`.local/experiments/EXP-20260903-386-no-agx-online-cleanup/PREREGISTRATION.md`.
+Launch profile is physical display, diagnostics off and low memory. PASS is
+administrative SSH with APPL0002 absent, followed by exact package cleanup and
+clean-baseline verification. Evidence paths are the experiment launch contract,
+`assisted-runner.log`, and cleanup receipts. Any ambiguous package identity or
+pre-SSH reset/hang stops mutation. The recovery artifact is this same current
+non-AGX pair; old EXP164/EXP241 m1n1 artifacts remain prohibited.
+
+## EXP386 attempt 1 result — detached host lifetime, no driver verdict
+
+**INCONCLUSIVE BEFORE CLEANUP; HOST OBSERVER LIFETIME IDENTIFIED.** The exact
+manifest-gated non-AGX pair reached Windows: auto-boot selected the installed
+loader, all seven secondary CPUs entered, NVMe became ready and xHCI routing
+was enabled.  The launch helper then returned from its short-lived host session
+and the detached `run_uefi.py` observer was reaped.  A subsequent read-only
+control-plane attach drained the live trace and requested a diagnostic
+interrupt; no AppleAgx package command or Windows filesystem mutation ran.
+
+The experiment was programmatically rebooted and a fresh read-only handshake
+again proves J313/T8103, eight CPUs and `Running proxy`.  Attempt-1 host log and
+launch-contract SHA-256 are
+`8311f25fa873e70a362329ebc7cd8805d7de50fdaaa9c4a8f3220aca78c9f1c0` /
+`7dc0e90632c77a3c704723a872a7944de556368c83682f2ded08f394c8beba72`.
+No Windows stop code, reset, Event129 or package result is available from this
+host-lifetime failure.
+
+**ATTEMPT 2 PREREGISTERED:** artifact, manifest, Mu profile, display/debug,
+guest state and expected checkpoint are unchanged.  The only changed variable
+is host execution lifetime: add `--foreground` and retain the unified terminal
+session through SSH acceptance.  This directly tests the identified dispatch
+failure and is the final permitted focused recovery attempt for these exact
+bits.  Failure to obtain SSH with a live foreground runner rejects this recovery
+artifact for the incident; do not layer another launch-mode change on top.
+
+## EXP386 attempt 2 result — normal non-AGX recovery rejected
+
+**REJECTED FOR THIS INCIDENT; NO RETRY.** Foreground execution removed the
+attempt-1 host-lifetime ambiguity.  The same exact package-free platform reached
+the installed Windows loader, all eight CPUs, NVMe ready and xHCI route enable.
+Before SSH opened, the physical proxy transport disconnected and the foreground
+runner failed with `SerialException: [Errno 6] Device not configured`; the Air
+then re-enumerated at stage-1 `Running proxy`.  SSH remained unreachable.  No
+AppleAgx cleanup command or Windows filesystem mutation ran.  No stop code,
+Event129 or bugcheck parameter was available.  Launch-contract SHA-256 is
+`9cbb111fa53eb69fadaec5c8a060a8a57e5a479ce961afe5d0e1af1dcd8ecd24`.
+
+The normal non-AGX path cannot provide online cleanup for this incident.  The
+next boundary is the documented offline path, not a third normal boot.
+
+# EXP387 — current non-AGX generic WinPE AppleAgx cleanup
+
+**PREREGISTERED 2026-09-03T20:19:02Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP386 proved online cleanup unavailable. Direct
+binary extraction found the accepted golden recovery image's generic cleanup
+script only in WIM index 1 while its Boot Index is 2.  EXP387 repairs only this
+deterministic packaging defect, then boots the verified preloaded RAM disk with
+current non-AGX Mu and accepted EXP377 m1n1.
+
+**Single recovery variable:** boot the corrected WinPE cleanup payload instead
+of installed Windows.  The payload fail-closes unless it finds exactly one
+offline Windows and exactly one OEM INF declaring both APPL0002 and AppleAgx;
+it disables only an existing service, removes only that INF with DISM, records
+durable receipts and reboots.  No GPU hardware path is exposed.
+
+Exact m1n1 / Mu / WinPE SHA-256 are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`26c0f599705bc2c8dd8de2ce0f5ff58eba99582755592dd91e69cde0f80be710` /
+`21dd6843fc273a4256374e80b105ae0053d18d1b5411d25dc466780679e44301`.
+Both WIM indices extract the exact cleanup/launcher hashes
+`6f12087eb47d1ce626db786dfa2e3cb44e4373f2e413830a48fa5e1cdd04d4cf` /
+`b695109d831ce951fbce5d19fb06f264cc1071bb6002b2b1d52627f680da8e21`;
+Boot Index is 2 and full WIM verification passes.  The real missing-service-key
+RED test failed before correction and six focused tests are GREEN.
+
+Commits, diff hashes, manifest, exact launch, PASS/failure criteria and recovery
+are frozen in
+`.local/experiments/EXP-20260903-387-generic-winpe-appleagx-cleanup/PREREGISTRATION.md`.
+PASS requires the durable offline manifest to name exactly one INF and contain
+`COMPLETE=1`, followed by return to `Running proxy` and a clean GPU-capable
+Windows baseline check.  Any identity ambiguity hard-stops without removal.
+
+## EXP387 result — cleanup terminal state requires receipt readback
+
+**INCONCLUSIVE PENDING DURABLE RECEIPT; NO CLEANUP RETRY.** The exact current
+WinPE was selected from the preloaded virtual disk, all eight guest CPUs entered,
+NVMe and xHCI were healthy, and the foreground control plane remained live.
+The guest did not perform the required automatic reboot within more than six
+minutes.  Two non-destructive snapshots showed advancing timer/IRQ counters and
+all eight CPUs in the Windows idle loop at `0xfffff80089a81cdc`, rejecting a
+whole-guest hang.  The host then used the defined diagnostic-reboot handler and
+the Air returned toward `Running proxy`.  No stop code or reset preceded the
+host-requested transition.
+
+This distinguishes platform health but not cleanup `COMPLETE` from a fail-closed
+hold.  Do not run the cleanup payload again.  The next discriminator is one
+read-only display of its already-durable fixed-path manifest.
+
+# EXP388 — read-only AppleAgx recovery receipt
+
+**PREREGISTERED 2026-09-03T20:27:13Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP387's script durably records `COMPLETE`, `HARD_STOP`
+or partial state before its terminal behavior; reading that fixed path resolves
+the only remaining recovery decision.  The current virtual framebuffer can
+return the text to the host without another Windows-volume mutation.
+
+**Single variable:** replace the WinPE cleanup launcher with a read-only receipt
+collector.  Same current non-AGX Mu and EXP377 m1n1; no hive load, DISM, package,
+service, ESP or installed-Windows write.  Display `both`/debug `monitor` is
+observation-only and publishes `fb.raw` plus UART/HV logs.
+
+Exact m1n1 / Mu / collector image SHA-256 are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`26c0f599705bc2c8dd8de2ce0f5ff58eba99582755592dd91e69cde0f80be710` /
+`a163b46da0165ea4dfe161a3d4710e8263761d94f860b217bd230d7e7b7794d7`.
+Both WIM indices match the preregistered collector/launcher hashes and full WIM
+verify passes.  Complete provenance, command and gates are in the experiment
+PREREGISTRATION. PASS-for-cleanup is one target, one INF and
+`VERDICT=COMPLETE`; every other screen forbids assuming cleanup.
+
+## EXP388 result — EXP387 never reached cleanup mutation
+
+**CONFIRMED READ-ONLY; EXP387 REJECTED BEFORE RECEIPT CREATION.** The collector
+booted from the current preloaded image, reached 8/8 CPUs, NVMe and xHCI, and
+published a fresh host-visible framebuffer.  The exact screen reports:
+
+```text
+TARGET_COUNT=1
+TARGET=C:
+RECEIPT_ROOT=C:\Windows\Temp\AppleAgxOfflineRecovery
+MANIFEST=ABSENT
+```
+
+Therefore EXP387 did not create its receipt directory and did not reach INF,
+service, hive or DISM mutation.  The later collector sees one valid Windows,
+proving the initial cleanup raced volume readiness.  Screen / raw framebuffer /
+metadata / HV log SHA-256 are
+`c8f2bb2d06a4df19717e9c828a812c6d9908799e530c4c51e77c284e698bcc29` /
+`1783b48242c88c2dfd3fb10b27d5e3962ff7444a3003b198fb8a6db4f92a3106` /
+`7d099e6c2647e49ee377df41404f61010915853b8555a045bcab3e2ff1b57039` /
+`091b9cfe2600b3d99f772d7e47b043b5cfedd1c953daba70d127a1c7039630f8`.
+The collector made no installed-volume change and was ended through the defined
+host diagnostic-reboot handler.
+
+# EXP389 — bounded Windows-target readiness then exact cleanup
+
+**PREREGISTERED 2026-09-03T20:32:10Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP388 proves cleanup ran before its target was mounted,
+then the identical WinPE environment later found exactly one `C:` target.  The
+image includes `PING.EXE`, so a 60-second bounded rescan directly fixes the
+identified readiness race without changing package identity or removal.
+
+**Single variable:** bounded target readiness.  Every scan clears target/count;
+only exactly one Windows proceeds.  Exact OEM-INF identity, existing-service-only
+disable, DISM removal, absence check, durable receipt and auto-reboot are
+unchanged.  No APPL0002 is published.
+
+Exact m1n1 / Mu / WinPE SHA-256 are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`26c0f599705bc2c8dd8de2ce0f5ff58eba99582755592dd91e69cde0f80be710` /
+`89ce3193366a3f3bc29443c9621748ea3336347392bb3235b30cd91cb890b03c`.
+Both WIM indices and full integrity verify pass; the real readiness RED test is
+now GREEN with seven focused tests.  Complete source/diff identity, command and
+gates are in the EXP389 preregistration.  PASS still requires automatic reboot
+and subsequent exact manifest plus clean Windows baseline.
+
+## EXP389 result — unavailable WinPE executable, package untouched
+
+**REJECTED BEFORE PACKAGE MUTATION; NO RETRY.** The bounded target wait passed,
+but the fresh framebuffer shows repeated `'findstr.exe' is not recognized`,
+then `APPLEAGX OFFLINE RECOVERY HARD STOP`.  Thus INF enumeration yielded no
+candidate and service/DISM removal did not run.  The script created only its
+failure receipt directory/`HARD_STOP`; the AppleAgx package remains unchanged.
+Screen / framebuffer / metadata / HV log SHA-256 are
+`d5908259335a450431dc519ca461791206329371de743823c0f0bcb168e13a20` /
+`86fab79f3914265d5c2bc577008c63c38d16db606842df7298772d54ef7bbbb2` /
+`a8f8bbe2625a4a75be12c6b3d6db88d696704de6db3ca4cbff7d078b53fe29f2` /
+`581ebe6bad97a99e76d2bd356acb2767cd674aae463ccfc5ba36cf5af051b07`.
+Boot-index inspection confirms `find.exe` and `PING.EXE` exist and `findstr.exe`
+does not.  Guest ended through the defined host handler.
+
+# EXP390 — final targeted WinPE AppleAgx cleanup
+
+**PREREGISTERED 2026-09-03T20:37:23Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP389 isolates the sole failed operation to an absent
+text-search executable before any package mutation; boot WIM proves `find.exe`
+is present and supplies the required case-insensitive substring exit status.
+
+**Single atomic correction:** replace all three unavailable `findstr` calls
+with `find`, strengthen service matching to `AddService=AppleAgx`, and use a
+new versioned receipt root to preserve EXP389's hard stop.  Exact-one-target,
+exact-one-INF, existing-service-only, DISM and auto-reboot gates are unchanged.
+
+Exact m1n1 / Mu / WinPE hashes are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`26c0f599705bc2c8dd8de2ce0f5ff58eba99582755592dd91e69cde0f80be710` /
+`8236df69237c4345a4b0dfebc78a2c0a417518b0224828dfc985308809a5e482`.
+Both WIM indices and full integrity pass; eight focused tests are GREEN.
+Complete identities/gates are in the preregistration.  This is the final
+targeted cleanup attempt; failure transitions to golden restore/reinstall.
+
+## EXP390 hardware result — exact offline cleanup reached automatic reboot
+
+**CLEANUP CHECKPOINT CONFIRMED; ONLINE BASELINE VERIFICATION PENDING.** Current
+WinPE selected the preloaded virtual disk, entered all eight CPUs with NVMe/xHCI
+healthy, then issued PSCI `SYSTEM_RESET` (`x0=0x84000009`) about ten seconds
+after runtime-ready.  In the frozen script that call is reachable only after an
+exact INF was selected, its existing service state was disabled, offline DISM
+removed it, the post-list no longer contained it, and `COMPLETE=1` was written.
+No fail-closed screen or host-requested reset occurred. HV / UART / framebuffer
+/ metadata / screen SHA-256 are recorded under EXP390 evidence; HV is
+`673ae8bb2cfb66a47231dd93a6a84e3a82d0bb06a27902c057e3fe63c5191ff9`.
+
+Fresh stage-1 handshake again reports J313/T8103 and eight CPUs.  Next is the
+accepted GPU-visible baseline boot and online receipt/package verification.
+
+# EXP391 — post-cleanup accepted GPU-visible baseline
+
+**PREREGISTERED 2026-09-03T20:40:53Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP390's automatic reboot is gated after durable
+`COMPLETE=1`; the accepted EXP377/matching Mu pair is the documented platform
+for proving Windows SSH and the clean GPU-visible baseline.  Exact m1n1 / Mu
+hashes are `fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
+/ `e8312e967604dbbac4780a50ed37dea98a25aea45cbfc8636535fad04c3be074`.
+AGX power broker stays disabled and no driver package is installed.  Full
+identity, launch and PASS gates are frozen in EXP391 preregistration.
+
+## EXP391 in-run stale-state cleanup preregistration
+
+Windows SSH is authenticated with the pinned host fingerprint/key and reports
+8 CPUs.  EXP390 durable receipt proves exact `oem5.inf` removal and
+`COMPLETE=1`; `pnputil /enum-drivers /class Display` reports no packages.
+Read-only follow-up finds `AppleAgx` service STOPPED and the SYS file still
+present.  Before deleting either, the guarded cleanup requires APPL0002 to have
+no bound INF, the service to be stopped, and the SYS SHA-256 to equal rejected
+EXP384 `78f1bbf79857758cf5de2af33a8087215330fe443a5ab60ec9f71879080d96ef`.
+It preserves a byte/hash-verified copy under the versioned EXP390 receipt root,
+deletes only the exact stopped service and SYS, rescans PnP, and records JSON.
+Any hash/bind/state mismatch stops before mutation.
+
+The first guarded invocation stopped before mutation because APPL0002 retains
+the stale `oem5.inf` property after offline package removal.  The amended guard
+accepts that state only when the EXP390 manifest names exactly `oem5.inf` and
+the corresponding Windows INF file is absent; it then disables/removes only the
+exact APPL0002 devnode before deleting the exact-hash stopped service/SYS and
+rescanning.  A different binding or surviving INF still fails closed.
+
+The amended guard then stopped again before mutation because the live SYS hash
+is `f72f548d37fd50e73cde5c1d47b35df16be5fcead8c30a648ae6bacc5598269f`,
+not EXP384.  The durable pre-removal INF SHA-256 is
+`70aaf0506f1227ec7cf0ac05168a92ec1f7b7ec67ad8008bd84648165321b770`;
+both values exactly match local EXP385.  Fresh installed-state evidence thus
+supersedes the compact assumption: EXP385 was the boot-bound package removed by
+EXP390 and is terminal/rejected, not the next candidate.  Final stale cleanup
+is now pinned to both exact EXP385 SYS and INF hashes.
+
+The exact EXP385 stale cleanup then passed: disabled/removed only
+`ACPI\APPL0002\0`, deleted the stopped AppleAgx service, removed the exact SYS
+after a byte/hash-verified receipt copy, and rescanned.  Service is absent
+(1060), production SYS absent, Display Driver Store empty, while AppleInput,
+stornvme, USBXHCI and sshd are RUNNING.  The current session has no APPL0002
+devnode after removal/rescan.  **EXP391 restart continuation preregistered:**
+issue one normal Windows restart and relaunch the unchanged accepted EXP377/Mu
+hashes to force ACPI rediscovery.  PASS requires unbound Problem-28 APPL0002,
+SSH/8 CPU/health unchanged and no fresh 41/129/1001 events.  No package install.
+
+After restart, firmware has recreated the exact Enum key with
+`FirmwareIdentified=1` and matching APPL0002 HardwareID, but it retains only
+`ConfigFlags=0x40` (`FAILEDINSTALL`) and `pnputil` does not list the instance.
+The final device-state cleanup changes only that exact key's ConfigFlags from
+0x40 to 0 and rescans.  This is the rejected package's stale PnP state; no INF,
+service, SYS or unrelated Enum entry is touched.
+
+The live rescan after `ConfigFlags=0` did not recreate the PDO.  One final
+ordinary restart/relaunch of the unchanged EXP391 artifacts is preregistered so
+the ACPI parent enumerates from boot with the failed-install flag already clear.
+No further PnP-state retries are allowed if APPL0002 is still absent afterward.
+
+Final restart confirms the clean Windows baseline (SSH, 8 CPUs, no package,
+service or SYS; health services running) but APPL0002 remains absent.  This
+rejects further PnP-state work.  Artifact/source audit shows `e8312...` is not
+the current G2 publication output.  A fresh current-source FRYZZING Mu build
+with `J313_AGX_G2_PROFILE=TRUE` succeeded and verified 97 images; FD SHA-256 is
+`16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+Compiled AML was decompiled and passed the J313 G2 contract verifier.
+
+# EXP392 — current-source AGX-G2 Mu publication
+
+**PREREGISTERED 2026-09-03T21:19:58Z; HARDWARE RUN PENDING.**
+
+**WHY THIS HYPOTHESIS:** the selected clean FD does not publish APPL0002; fresh
+current G2 Mu deterministically includes the verified SSDT.  Single variable is
+Mu ACPI publication.  EXP377 m1n1, clean Windows, no package and disabled AGX
+power broker are unchanged.  Exact m1n1/Mu hashes are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+Full provenance and PASS/failure gates are frozen in EXP392 preregistration.
+
+## EXP392 hardware result — current G2 publication confirmed
+
+**CONFIRMED.** The fresh Mu FD reached live Windows/SSH with eight CPUs.  The
+updated Enum BootConfig includes the current `0x9fff70000..0x9fff73fff` AGX
+resource.  CIM reports `ACPI\APPL0002\0` present, status OK, error code 0,
+with null INF/service.  Display Driver Store is empty, AppleAgx service/SYS are
+absent, AppleInput/stornvme/USBXHCI/sshd run, and native 41/129/1001 query for
+the last 30 minutes is empty.  Evidence hashes: native baseline
+`24959721ce7e55b9a2107f2e661dadd9d33306f42184a3dd8d9c74a98b618813`,
+PnP JSON `1e8085014725a4843e89a79eb1ef8a2cac3dbee7339b701f87c6c427fbdc1a08`,
+events `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+# EXP393 — DXGK physical object only
+
+**PREREGISTERED 2026-09-03T21:30:17Z; ONE CLEAN BIND PENDING.**
+
+**WHY THIS HYPOTHESIS:** EXP385 is fresh-proven as the rejected boot-bound
+single-page-HVC package and grouped object/ADL/map/HVC.  EXP393 isolates the
+earliest unproven callback: create one DXGK physical object, record stage 21,
+destroy it immediately, then admit StartDevice.  No ADL, map, HVC, GDI pool or
+AGX path runs.
+
+WINDOWS CONTRACT, AGX/ASAHI CONTRACT, TRANSLATION, WHAT IS STILL UNKNOWN,
+source/build/package/platform hashes, exact install and recovery are frozen in
+the EXP393 preregistration.  WDK v3 build/sign/Inf2Cat succeeds after two
+build-only wiring corrections; 159 focused tests pass.  Exact SYS/INF/CAT/ZIP:
+`8972580e5252322ce4c292463112ff06c7c5683ece9421bdc488b80a845f036f` /
+`0d69aed16fd425d61225fb75632ca6374dfa6f1730e0f5b472c2ee32c2f95e51` /
+`d2716fb2ab22506ee519960848b898aeb40d8aa180c31d2c2388e396ffb16e4c` /
+`cc63bd31e42c295bfab687aa330e68ba4c21b5e259ef23e33ff96bd8154fd1ea`.
+
+## EXP393 hardware result and exact cleanup
+
+**REJECTED BEFORE StartDevice; stage 21 NOT EXECUTED.** Exact `oem5.inf` bound
+once. DriverEntry/DxgkInitialize/AddDevice receipts are success, but no
+StartDevice or GDI receipt exists. CIM reports Code 31. SetupAPI records
+`CM_PROB_FAILED_ADD`, problem status `0xC0000182`, at the device Start line.
+Therefore CreatePhysicalMemoryObject, ADL, map, HVC and every AGX path are
+outside this verdict. SSH, 8 CPUs and health services stayed alive.
+
+Evidence was captured, then exact-hash `oem5.inf`/SYS was uninstalled and
+deleted; stale stopped service removed, bound INF cleared. Cleanup JSON SHA-256
+is `0fc06a42aada9ed19a4b1f3247aef9dfdb57a5684f1bc1d3608cdda27831319f`.
+SetupAPI noted the image remained in use by one source during unpublish, so a
+normal reboot is required before another PnP decision.
+
+# EXP394 — post-failed-Add clean PnP control
+
+**PREREGISTERED; NO PACKAGE.** WHY THIS HYPOTHESIS: EXP393 cleanup removed the
+package/service/SYS/bind, but failed AddDevice can keep its image/devnode state
+until reboot. Single variable is one ordinary reboot/relaunch of the unchanged
+EXP392 current G2 m1n1/Mu pair. PASS is one clean unbound APPL0002 visible to
+the PnP API; failure is the same absent/phantom view, which assigns the next
+cause to stale Enum/PnP state. No driver install or GPU access.
+
+## EXP394 result and EXP395 preregistration
+
+**EXP394 REJECTED the image-residency-only hypothesis.** After a package-free
+restart, CIM remains Present/OK but Get-PnpDevice/pnputil still cannot enumerate
+the instance.  Therefore the next owner is the stale active-ControlSet Enum
+instance, not EXP393 memory code.
+
+**EXP395 PREREGISTERED 2026-09-03T21:37:45Z.** It verifies and exports only the
+active `Enum\ACPI\APPL0002\0` key offline, deletes that one stale instance and
+reboots. Exact m1n1/Mu/WinPE hashes are
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a` /
+`26c0f599705bc2c8dd8de2ce0f5ff58eba99582755592dd91e69cde0f80be710` /
+`f7310c683c93534f09045c424e3da9a4e09a911170b300504d5e253bcbf4652e`.
+No package/service/INF/SYS is touched; complete gates are in preregistration.
+
+## EXP395 / EXP396 final results
+
+**EXP395 CONFIRMED:** WinPE exported and deleted only the verified active
+APPL0002 Enum instance and issued its gated PSCI reboot.  The next current-G2
+boot created a fresh CIM-present Code-28 device with null INF/service.
+
+**EXP396 REJECTED BEFORE StartDevice:** the unchanged physical-object-only
+package was rebound once on that fresh device. It again produced AddDevice
+success, Code 31, and no StartDevice/GDI receipts. This definitively rejects
+stale Enum state as the missing-Start cause; physical object, ADL, map, HVC and
+all AGX paths remain unexecuted. Exact package/service/SYS/bind cleanup passed.
+Result / cleanup SHA-256:
+`40efd426d59b9cc6e26d7f5d42caab52331f23397172c84d9283f5e37f2095b0` /
+`fa59508fd91f2ce89c671199f2abcbc13e7ae5cf62ea6c04dbc62480d0256ab1`.
+
+# EXP397 — minimal WDDM admission reconstruction build status
+
+The repository's separate admission source passes 38 focused tests, including
+the newly pinned WDK 10.0.26100.0 project contract.  Five build dispatches on
+FRYZZING produced no package: v1 lacked MSBuild on PATH; v2 found stable
+MSBuild but did not import WDK driver targets; v3/v4/v5 reproduced the same
+`ntddk.h` absence even after the proven WDK environment block and pinned project
+version.  Hardware was not touched.  Per anti-loop, build variants stop here.
+
+**ACTIVE BLOCKER:** unlike the accumulated KMD project on the same builder,
+`AppleAgxAdmission.vcxproj` resolves ordinary C++ targets instead of installed
+WDK driver targets (`DriverBuildNotifications` absent).  The next offline task
+is an MSBuild preprocessed-import comparison between the two projects, not a
+new KMD or GPU hardware experiment.
+
+## EXP397 correction and clean-admission package
+
+MSBuild `/pp` and evaluated-property comparison showed the separate display-only
+admission project and working project see the same WDK imports/properties; its
+standalone build path remains closed.  The repository's actual clean
+reconstruction profile is `AppleAgxCleanAdmission` inside the proven KMD project.
+It links only `clean_admission.c`, preserves the pinned full-WDDM 3.0 vector,
+writes Add/Start receipts, and StartDevice immediately returns unsupported with
+zero sources/children and no GPU access.
+
+The CleanAdmission WDK 26100 build passed with zero warnings/errors, Universal
+API validation, Inf2Cat and signing. Exact SYS/INF/CAT/ZIP hashes are
+`b1120bdc5fff3c004ccb91587702a0eabd47acc33372e43148a3144dfeb51ecb` /
+`22862e56f19e9dd20065d355aac61f44409435d2aae955373c6dba835966faea` /
+`5654c6a38f4822ec0055a410d7461312c9ddb3064942b3609cf0d42b45104280` /
+`68f5dab12bf8ffd7c58655e92c2521be2329617d9bb025d845cbe2e5f48e1eb1`.
+**EXP397 PREREGISTERED:** one clean bind; PASS only if
+`Wom1CleanStartEntered` is durable. Full contracts/gates are in preregistration.
+
+## EXP397 hardware result and current causal target
+
+**REJECTED BEFORE StartDevice; exact cleanup complete.** The link-isolated
+CleanAdmission package installed as `oem5.inf`. DriverEntry and AddDevice
+receipts are present/success, but `Wom1CleanStartEntered` is absent after the
+20-second durable poll; device is Code 31. Result JSON SHA-256 is
+`408b6fd5384b8326e373b310c941266279bf4fe3bd08c87f5d13c5db4ce0c04d`.
+Exact package/service/SYS/bind cleanup passed; cleanup JSON SHA-256 is
+`9eab8afe3fe2e93a97f7c9402b2e9b6e216d773504a60cd7ab79a88d89c37064`.
+
+This proves the missing-Start boundary is independent of accumulated KMD,
+physical-memory/HVC code, AGX hardware, and stale Enum state.  First and only
+comparison pass against the current hardware-admitted full KMD vector finds one
+strong contract difference: both failing clean/lifecycle vectors are render-only
+and omit the full display callback set, while the last admitted vector registers
+that set.  Do not probe callbacks individually.  Next offline task: derive the
+smallest truthful full-graphics admission vector from pinned WDK and implement
+fail-closed stubs as one documented invariant before any new hardware run.
+
+Fresh post-cleanup verification: 189 focused tests pass; Windows is live with
+SSH/8 CPUs, no Display package/AppleAgx service/SYS, APPL0002 CIM-present/OK and
+unbound, AppleInput/stornvme/USBXHCI/sshd running, and no 41/129/1001 events in
+the 30-minute query.
+
+## EXP395 result and EXP396 preregistration
+
+**EXP395 CONFIRMED.** WinPE issued its script-owned PSCI reset after exporting
+and deleting only the verified active APPL0002 Enum key.  On the next current
+G2 boot, CIM reports a newly enumerated present device at natural Code 28 with
+null INF/service.  Before reset the stale instance reported Code 0 while PnP
+APIs could not enumerate it.  This confirms stale Enum state as the EXP393
+pre-Start admission confounder.
+
+**EXP396 PREREGISTERED 2026-09-03T21:42:41Z.** Fresh evidence changed the
+environment, so one clean rebind of the unchanged exact EXP393 package is
+allowed to test its previously unexecuted stage-21 boundary.  Preflight now
+requires CIM Present/Code28, null INF/service, no package/service/SYS and 8
+CPUs.  It performs only `pnputil /add-driver ... /install` and polls durable
+service-key receipts; the unsupported explicit enable call is removed.
+Installer SHA-256 is
+`843d2ef78b5b39fde15ff052ae86623d8fe2557adbb2961cac5fe362549f471a`.
+Package/platform/recovery hashes and Windows/AGX contracts remain exactly the
+EXP393 preregistration.  No second rebind is permitted.
+
+## EXP396 result — clean Enum did not restore StartDevice admission
+
+**REJECTED BEFORE StartDevice; exact cleanup complete.** On the fresh natural
+Code-28 devnode, the same hash-pinned package again produced AddDevice success,
+Code 31 and no StartDevice/GDI receipts. Result JSON SHA-256 is
+`40efd426d59b9cc6e26d7f5d42caab52331f23397172c84d9283f5e37f2095b0`.
+This rejects stale Enum state as the missing-Start cause and leaves every memory,
+HVC and AGX path unexecuted. Exact package/service/SYS/bind cleanup passed;
+cleanup JSON SHA-256 is
+`fa59508fd91f2ce89c671199f2abcbc13e7ae5cf62ea6c04dbc62480d0256ab1`.
+
+**WHY CLEAN RECONSTRUCTION:** two current accumulated-driver profiles stop at
+the same AddDevice-to-StartDevice admission boundary under clean PnP state.
+Proceed with the repository's separate minimal WDDM 3.x admission driver;
+do not edit memory/HVC/AGX code until natural StartDevice is proven there.
+# EXP486 — DxgKrnl diagnostic receipt attempt and exact recovery
+
+**RESULT 2026-09-05T18:45:16Z; diagnostic attempt inconclusive, recovery complete.**
+The exact EXP485 package (`24a376c...`, INF `DE7A2F...`) was reused with only
+`Microsoft-Windows-DxgKrnl/Diagnostic` enabled. The package staged as `oem5.inf`
+and the channel was enabled, but Windows became unreachable while exporting the
+analytic channel; no DxgKrnl EVTX or internal-owner receipt was obtained and no
+new GPU conclusion is drawn. Current-compatible ordinary recovery was retried;
+the first recovery attempts reset before completion. Once SSH returned, exact
+inspection showed no Driver Store package but stale EXP485 device/service state
+(`oem5.inf`, Code 32) and the EXP485 SYS/UMD files with their pinned hashes.
+Only that stale state was removed, the diagnostic channel was disabled, and the
+device was rescanned. Final health proves APPL0002 Code 28 with null INF/service,
+zero Pavel Build Lab packages, no AppleAgx SYS/UMD/module, eight CPUs, SSH,
+AppleInput/stornvme/USBXHCI running, and no 41/129/1001 events. Final cleanup
+JSON SHA-256 is `4a2154daf6a594a6271a67e419997012aa1738ba16ddb291220253742039bddb`.
+The diagnostic path is closed without changing source behavior; next work must
+continue from the post-child-enumeration display-core boundary using a new
+falsifiable source-derived discriminator.
+
+# EXP487 — portable interruptible child contract
+
+**PREREGISTERED 2026-09-05T18:48:00Z; one clean bind only.**
+
+WHY THIS HYPOTHESIS:
+- EXP485 proved `QueryChildRelations` returned success but the portable MacBook
+  Air still failed inside Windows child/display-core before any VidPn callback.
+- The exact EXP485 render-admission source classified the integrated panel as
+  `HpdAwarenessAlwaysConnected`, while Microsoft documents a portable computer's
+  integrated LCD as `HpdAwarenessInterruptible` and requires the child-status
+  query path for that contract.
+- The existing `AdmissionDdiQueryChildStatus` already implements the documented
+  `StatusConnection` response, so changing only the descriptor's HPD enum is a
+  falsifiable one-field correction with no runtime/AGX change.
+
+WINDOWS CONTRACT: use `HpdAwarenessInterruptible` for a portable integrated
+panel; Windows may call `DxgkDdiQueryChildStatus(StatusConnection)` during child
+enumeration. `QueryChildRelations` remains one video-output child plus a zero
+terminator; all other display behavior is unchanged.
+AGX/ASAHI CONTRACT: no AGX, RTKit, memory, queue, IRQ, or platform change.
+TRANSLATION: expose the physical J313 panel's portable hot-plug semantics to
+dxgkrnl and answer its connection query as already implemented.
+WHAT IS STILL UNKNOWN: whether this removes the pre-VidPn C000000D branch and
+allows an initial VidPn DDI to run.
+
+Source commit `810f0a0`; current-compatible native/Mu pair and ordinary G2
+recovery remain frozen. Source archive SHA-256 is
+`b2d6e720816c85aea538b5e3d4a9b366ccc138aa9c38215d9f56735611f6182c`.
+Pinned build is WDK 10.0.26100.0 / MSVC 14.44.35207, FullProduction version
+30.0.487.0. Source archive SHA-256 is
+`b2d6e720816c85aea538b5e3d4a9b366ccc138aa9c38215d9f56735611f6182c` and the
+builder manifest records ZIP `79e0d9c992405ef68adfcf5b340bb67e6c7f2166fc1871c1fe8a11aa0daef1c`,
+INF `500ba728491ca624d6139375e60f09e4b91b3eeb9302c43ee76141ac00005835`,
+SYS `d399b4636a8ad9ee795f0b6708d3ba364172336ac365d62659c85bc9290d53b5`,
+CAT `aea8b99c61c36d0c4ad179f9fe9987d146f1bf0c5880d12095b4641f71fe647b`,
+UMD `d71898d199a231ce352aa1e58f383489e38147b06ee9f3e674896cff8b8c74e2`.
+PASS requires a new durable child-status
+receipt followed by at least one initial VidPn callback and no C000000D/noLUID;
+failure remains limited to the same first Windows owner. Cleanup is exact
+package removal and ordinary Code-28 baseline restoration. ANS untouched.
+
+**HARDWARE RESULT 2026-09-05T21:05Z — REJECTED; boundary unchanged.** The exact
+30.0.487.0 package was installed once on the current full-owner/synthetic-889
+guest (`oem5.inf`, SYS `d399b463...`). DxgKrnl record 74 again reported
+`StartAdapter_AddAdapterFailed`, `STATUS_INVALID_PARAMETER`, Code 43 and no
+LUID. The HPD correction did not move the external status. Because `/install`
+was performed after boot, PnP removed the device-key receipt during failure;
+no child-status or later VidPn callback can be claimed from this run. No AGX
+submission, fence, present or workload executed. The package was uninstalled
+and deleted exactly. Ordinary recovery then encountered a separate guest/boot
+reset before SSH returned; no clean-baseline claim is made until a current-G2
+health poll succeeds. Event129/reset activity is retained as platform telemetry
+and is not attributed to this GPU correction.
+
+**RECOVERY CORRECTION 2026-09-05T21:24Z:** exact cleanup completed before the
+ordinary recovery attempts. Current-compatible `m1n1-final` chainload reaches
+the proxy and `hv_start`, but the ordinary guest repeatedly resets or stalls
+before SSH; the custom current WinPE also reaches guest runtime without
+completing its offline command. This is a recovery/platform blocker only. No
+EXP488 package has been staged or installed, and no further GPU hardware run is
+permitted until the ordinary Code-28 health contract is independently proven.
+
+# EXP488-R — current-compatible boot-state recovery
+
+**PREREGISTERED 2026-09-05T22:40:00Z; recovery-only run pending.**
+
+WHY THIS HYPOTHESIS:
+- USB framebuffer proves the ordinary guest is not a GPU boot crash: it first
+  showed Boot Manager `0xc0000001` after multiple failed starts, then remained
+  byte-identical at `Scanning and repairing drive (C:): 100% complete` while
+  the frame stream and hypervisor stayed live.
+- The exact EXP487 package was already removed. No AppleAgx package remains to
+  diagnose in this recovery branch.
+- Prior hardware evidence on this same Windows installation proved a stale
+  `{default}` resumeobject plus `hiberfil.sys` can own this post-reset boundary,
+  and established a backup-first BCD repair contract.
+
+Single recovery variable: boot a current-compatible WinPE through current
+`m1n1-final`, back up the exact WINESP BCD, delete only `{default}` resumeobject
+when present, remove only `hiberfil.sys` when present, preserve then clear only
+WINESP `bootstat.dat`, and enforce the already accepted `{default}` values
+`recoveryenabled No` and `bootstatuspolicy IgnoreAllFailures`. Unknown target,
+volume count, BCD path, or command failure is fail-closed with rollback. GPU,
+ANS, Mu, m1n1, ACPI and driver packages are unchanged.
+
+Artifacts: m1n1 SHA-256 `b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0`;
+Mu FD `16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`;
+WinPE image `fe87d65c27d5a94c8d4273949e4fcbb620c80dbc6d05c5bea5637d546fd19526`;
+BOOT.WIM `8443d153182a6e837c28a682994c45926c14a9c92ff99418e8d2727f50f8fca2`.
+The current stalled screen evidence is
+`f032bf662da426ec84aa9011c852b1274b4d63ea7400f7e85984787902ff88f2`.
+PASS requires a `COMPLETE=1` offline manifest followed by ordinary Windows SSH,
+Code28/null INF/service, no package/SYS/UMD, eight CPUs and healthy input/NVMe/
+xHCI. Failure is a WinPE hard stop or another identical boot boundary. EXP488
+GPU package remains not staged throughout recovery.
+
+Build-only correction: the first EXP488-R WinPE invocation reached its hard
+stop before a success receipt because the script incorrectly invoked the
+`cmd.exe` builtin as nonexistent `del.exe`. No successful boot-state mutation
+is claimed. The corrected v2 uses `del`, emits visible STEP receipts, and writes
+to a fresh `BootRecovery-EXP488-v2` evidence directory. Verified v2 BOOT.WIM
+SHA-256 is `2f1e108b1b1a20bf0be05bd40648d8065e7c256a9ef6a1f0df5ab487fe69b0c9`;
+WinPE image SHA-256 is
+`3c50ca3ae79678e030b5d80e6548244b473fb10dc8ef4b277327ac5c390e0d29`.
+
+V2 hardware receipt reached TARGET/VOLUME/WINESP/BCD backup/BCD policy and
+hiberfile stages, then failed only at the additional `bootstat.dat` deletion;
+the rollback path executed and no completed mutation is claimed. Because the
+prior hardware-proven repair contract is specifically resumeobject plus
+hiberfile, v3 removes the unproven bootstat mutation and changes no other
+operation. Verified v3 BOOT.WIM SHA-256 is
+`18392b3fa454af0d5d9d9d1425ff397fcbe1ae66ba708d523f25997356d5a34f`;
+WinPE image SHA-256 is
+`04e71929abdc997ba195643adc4e25e0eb7fd720d2cd69de04f03d7ba78a3f5b`.
+
+V3 reached its success-owned PSCI reboot, but the following ordinary boot again
+remained byte-exact at Autochk `100% complete` with all eight CPUs alive and no
+SSH. This rejects stale resume/hiberfile/BCD policy as the complete cause and
+localizes the current recovery boundary to boot-time NTFS check completion.
+EXP488 remains unstaged.
+
+**EXP488-R4 preregistered:** one current WinPE run may additionally inspect the
+active offline ControlSet's exact `BootExecute`, require the default
+`autocheck autochk *`, and replace it with `autocheck autochk /k:C *`. It does
+not touch any other service or driver state. Once Windows is live, online
+`chkdsk /scan` must be run and BootExecute restored to the exact default before
+GPU work resumes. Unknown Select/ControlSet/value or any write failure is
+fail-closed; the default value is restored before rollback. BOOT.WIM SHA-256
+`bcbfde1d630343cab3abc9bb46b51bfe3202fd74cd908709d80e4218ee836a0b`;
+WinPE image SHA-256
+`df2a4a4f9d34cf18c9861472eff66175e36fd66afa9a7e82eef185f5b1b28193`.
