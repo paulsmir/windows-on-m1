@@ -1,5 +1,42 @@
 # Hardware Experiment Ledger
 
+## EXP533 exact Render Patch guard — preregistration 2026-09-06T22:12:06Z
+
+WHY THIS HYPOTHESIS:
+- EXP532 proves `FenceOutstanding=0` while Submit carries fence255.
+- Current source assigns `FenceOutstanding` only after the nonpaging Render
+  `DxgkDdiPatch` path successfully seals the shadow and prepares the packet.
+- A final-only Patch receipt distinguishes no callback from the exact first
+  callback-internal failure without changing submission or backend behavior.
+
+Single variable commit `878f8124127cb232e82ec84f5cb0a6d03dabd468`
+adds qualification-only0x5330 final guard/status receipts to the existing
+nonpaging Render Patch path. Paging and Present routing are unchanged and do not
+emit this tag; production calls are no-ops. No return value, firmware, RTKit,
+UAT, memory, scheduler, AGX, completion, IRQ, display or producer change.
+New RED then4 focused and106 render regressions GREEN. Pinned WDK26100 build/
+analysis/Universal/Inf2Cat/TestSign/version30.0.533.0 PASS with inherited C28251.
+
+Overlay/build SHA `eefc192c...`/`b45db7e9...`; ZIP/SYS/INF/CAT/UMD/producer
+SHA `6ab69d70...`/`46f24e20...`/`5c61cf58...`/`a0a9a221...`/`b0948025...`/
+`c88b2fd7...`; manifest SHA `ba35991d...`. Stage/run/cleanup/launch SHA
+`b2186144...`/`424d4d08...`/`5d366ad9...`/`4e3ae7cf...`.
+Preflight is current ordinary377/392 Code28/no package/service/SYS/UMD/8CPU/SSH
+after exact EXP532 cleanup. One natural bind and producer with host tee. PASS is
+either no0x5330 (Patch not called) or one exact guard/status naming the first
+Patch failure; then cleanup and one causal correction only.
+
+## EXP532 exact mismatched fence values — result 2026-09-06T22:12Z
+
+CONFIRMED. Exact30.0.532.0 natural bind was Code0 with matching oem5/SYS and8CPU.
+One producer reset Windows. Host log SHA
+`b8579fe19a7b00d221f93d0a628c928dff308c8ea4605a86ccda6e7d41077165`
+contains exact repeated word `53200000000000ff`: `FenceOutstanding=0`,
+`SubmissionFenceId=255`. Thus Submit does not carry a different established
+fence; Patch never established packet/fence ownership. No AGX execution.
+Ordinary GPU-visible recovery succeeded; exact oem5 and hash-matched stopped
+service/SYS/UMD removed. Cleanup/stale SHA `bdbc6c4f...`/`7915b8f3...`.
+
 ## EXP532 exact mismatched fence values — preregistration 2026-09-06T22:04:44Z
 
 WHY THIS HYPOTHESIS:

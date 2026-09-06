@@ -316,6 +316,13 @@ ordinary recovery failed; no kill-9 used. Commit433c9af adds only one0x5320
 receipt carrying current outstanding and submitted fences;108 tests and pinned
 30.0.532.0 gates PASS. ZIP/SYS/producer SHAa3ce0b20.../c7b1c601.../7569ae94....
 EXP532 preregistered after ordinary clean verification.
+EXP532 FINAL CONFIRMED: host word `53200000000000ff`, log SHAb8579fe1...,
+proves FenceOutstanding0 vs SubmissionFenceId255. Patch did not establish packet/
+fence ownership; this is not a nonzero fence mismatch. Ordinary recovery and
+exact cleanup succeeded. Commit878f812 adds only final0x5330 guard/status to the
+existing nonpaging Render Patch path;110 focused tests and pinned30.0.533.0 gates
+PASS. ZIP/SYS/producer SHA6ab69d70.../46f24e20.../c88b2fd7.... EXP533
+preregistered. No physical AGX/fence readiness change.
 
 ## Final live ordinary clean baseline
 
