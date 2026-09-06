@@ -420,10 +420,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     info->hDeviceSpecificAllocation = opened;
     ++device->Object.AllocationCount;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    AdmissionUmdRenderTraceArm(adapter);
     if (allocation->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE &&
         submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
       InterlockedExchange(&adapter->PagingCorrelationArmed, 1);
-      AdmissionUmdRenderTraceArm(adapter);
     }
 #endif
     /* The returned binding follows Close-before-Destroy lifetime. Only this
@@ -475,14 +475,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCloseAllocation(
     ADMISSION_OPEN_ALLOCATION *opened =
         (ADMISSION_OPEN_ALLOCATION *)Args->pOpenHandleList[index];
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    ADMISSION_CONTEXT *adapter = CONTAINING_RECORD(
+        device->Object.Adapter, ADMISSION_CONTEXT, ObjectAdapter);
     ADMISSION_ALLOCATION_HANDLE *owner = CONTAINING_RECORD(
         opened->Allocation, ADMISSION_ALLOCATION_HANDLE, Object);
     if (owner->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE) {
-      ADMISSION_CONTEXT *adapter = CONTAINING_RECORD(
-          device->Object.Adapter, ADMISSION_CONTEXT, ObjectAdapter);
       InterlockedExchange(&adapter->PagingCorrelationArmed, 0);
-      AdmissionUmdRenderTraceDisarm(adapter);
     }
+    AdmissionUmdRenderTraceDisarm(adapter);
 #endif
     (void)AdmissionAllocationClose(opened->Allocation);
     opened->Magic = 0u;

@@ -63,7 +63,7 @@ class AppleAgxRenderUmdTraceTests(unittest.TestCase):
         self.assertIn("UmdRenderTraceClaimed", context)
         self.assertIn("PagingCorrelationArmed", context)
         self.assertIn("#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)", source)
-        self.assertIn("&Context->PagingCorrelationArmed", source)
+        self.assertNotIn("&Context->PagingCorrelationArmed", source)
         self.assertNotIn(
             "&Context->UmdRenderTraceClaimed, 1, 0", source
         )

@@ -59,9 +59,7 @@ static BOOLEAN AdmissionUmdRenderTraceBegin(
     ADMISSION_CONTEXT *Context, const ADMISSION_RENDER_CONTEXT *RenderContext,
     const DXGKARG_RENDER *Args) {
   ULONG contextFlags = ~0u;
-  if (Context == NULL || Context->BrokerBase == NULL ||
-      InterlockedCompareExchange(
-          &Context->PagingCorrelationArmed, 0, 0) == 0)
+  if (Context == NULL || Context->BrokerBase == NULL)
     return FALSE;
   if (RenderContext != NULL &&
       RenderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC)
