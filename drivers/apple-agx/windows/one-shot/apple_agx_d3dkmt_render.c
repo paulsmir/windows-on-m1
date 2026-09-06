@@ -92,6 +92,10 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   selectedSources = adapters[selectedAdapter].NumOfSources;
 
   createDevice.hAdapter = adapters[selectedAdapter].hAdapter;
+  /* D3DKMTRender is the legacy command-buffer thunk used by an OpenGL ICD.
+     Request that documented device contract explicitly instead of letting a
+     direct service-session caller be classified as a GDI-only client. */
+  createDevice.Flags.LegacyMode = 1u;
   deviceStatus = D3DKMTCreateDevice(&createDevice);
   if (!NT_SUCCESS(deviceStatus))
     goto cleanup;

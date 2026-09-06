@@ -87,6 +87,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("adapterType.Value", source)
         self.assertNotIn("D3DKMTOpenAdapterFromGdiDisplayName", source)
         self.assertNotIn("D3DKMTOpenAdapterFromLuid", source)
+        self.assertIn("createDevice.Flags.LegacyMode = 1u", source)
         self.assertIn("createContext.Flags.Value = 0u", source)
         self.assertIn("D3DKMT_RENDER render = {0}", source)
         self.assertNotIn("render.Flags.RenderKm = 1", source)
