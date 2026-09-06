@@ -1,5 +1,27 @@
 # Hardware Experiment Ledger
 
+## EXP539 exact Submit packet subguard — preregistration 2026-09-06T23:45Z
+
+WHY THIS HYPOTHESIS: EXP538 exact0x5280 guard22/status80000011 proves adoption
+succeeds but the prepared-packet/bind/scheduler/queue chain returns DEVICE_BUSY.
+Commit `1022e988d4fe00399d710f99b4bd655b420d8aef` preserves the original
+short-circuit order and emits one final-only0x5390 subguard for state, fence,
+context, private token/end, DMA start/end, backend bind, scheduler fence, or
+packet queue. No return value or hardware owner changes. 108 render regressions
+GREEN; pinned WDK26100 version30.0.539.0 package gates PASS. ZIP/SYS/INF/producer
+SHA `3117b001...`/`de809c50...`/`1c68d41e...`/`7de15aeb...`. Clean ordinary
+preflight SHA `6e6cc23b...`. One natural bind/producer, then exact cleanup and
+one correction only to the named subowner.
+
+## EXP538 final Submit result after adopted packet — result 2026-09-06T23:45Z
+
+CONFIRMED new boundary: exact word `5280001680000011`, Submit guard22,
+STATUS_DEVICE_BUSY. Host log SHA
+`df9c6e134dc476a75ef8b02d42a6fe4b219865cd95c24bcb2c318c496a7378c0`.
+Adoption is closed; failure is inside prepared packet/bind/scheduler/queue.
+Ordinary recovery succeeded; exact oem5/service/SYS/UMD removed. Clean health
+SHA `6e6cc23bd53fffbecfa79332430f77c4b064b0f631bd9ce7b433a7dfe97a9e68`.
+
 ## EXP538 final Submit result after adopted packet — preregistration 2026-09-06T23:35Z
 
 WHY THIS HYPOTHESIS: EXP537 exact0x5350 guard0/status0 proves prepatch adoption,

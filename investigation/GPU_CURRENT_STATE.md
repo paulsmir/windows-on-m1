@@ -355,6 +355,11 @@ verify, seal and packet preparation. Success receipt masked immediate Submit
 result. Commitb5926c5 removes only success diagnostic so existing Submit guard is
 first;108 tests and pinned30.0.538.0 gates PASS. ZIP/SYS/producer SHA9bc8a0b7.../
 aa71ac38.../5878f708.... EXP538 preregistered after exact cleanup/ordinary restore.
+EXP538 FINAL: exact Submit guard22/statusDEVICE_BUSY, host SHAdf9c6e13...;
+adoption is closed and first unknown is prepared packet/bind/scheduler/queue.
+Exact cleanup complete, ordinary health SHA6e6cc23b.... Commit1022e98 adds only
+final0x5390 subguard preserving short-circuit behavior;108 tests and pinned
+30.0.539.0 gates PASS. ZIP/SYS/producer SHA3117b001.../de809c50.../7de15aeb....
 
 ## Final live ordinary clean baseline
 
