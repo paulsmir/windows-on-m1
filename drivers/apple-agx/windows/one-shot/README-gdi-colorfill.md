@@ -80,6 +80,23 @@ operation in software or choose a different underlying command, color/alpha
 representation, or subrectangle shape. Actual KMD routing and AGX/Windows fence
 evidence must be collected separately by the experiment.
 
+## Explicit display-target routing draw
+
+`--draw-display` performs the same exact attached/non-mirror display and LUID
+checks, then issues one 16-by-16 PATCOPY directly to the named display DC. It
+does not create a memory DC or bitmap, read back pixels, infer a primary target,
+or fabricate a D3DKMT render packet. It intentionally modifies only the
+top-left 16-by-16 display pixels and does not restore their previous contents.
+
+```powershell
+.\AppleAgxGdiColorFill.exe --draw-display '\\.\DISPLAY2' 0x00000000 0x0003eb39
+```
+
+Those values are the exact EXP509 discovery result, not permanent constants;
+every later boot must rediscover and revalidate its display and LUID. This mode
+distinguishes the WDDM GDI display target from the software offscreen DDB path.
+API success remains insufficient without KMD and physical AGX receipts.
+
 Exit codes: `0` means listing completed or the single GDI draw/flush and cleanup
 calls succeeded; `1` means an API/cleanup or enumeration failure; `2` means invalid
 arguments; `3` means a target identity/state or bitmap format rejection. Cleanup

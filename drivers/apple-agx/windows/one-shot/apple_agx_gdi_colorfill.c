@@ -304,6 +304,84 @@ cleanup:
     return result;
 }
 
+static int draw_display_once(const wchar_t *name, DWORD high, DWORD low)
+{
+    DISPLAY_DEVICEW display = {0};
+    D3DKMT_OPENADAPTERFROMHDC adapter = {0};
+    HDC display_dc = NULL;
+    HBRUSH brush = NULL;
+    HGDIOBJ old_brush = NULL, previous;
+    BOOL brush_selected = FALSE;
+    BOOL painted = FALSE, flushed = FALSE, cleanup_ok = TRUE;
+    ULONGLONG hold_start;
+    int result = 1;
+
+    if (!find_display(name, &display)) {
+        log_event(L"event=display_target_rejected name=\"%ls\" reason=not_attached_nonmirror",
+                  name);
+        return 3;
+    }
+    if (!open_display(display.DeviceName, &display_dc, &adapter))
+        goto cleanup;
+    if ((DWORD)adapter.AdapterLuid.HighPart != high ||
+        adapter.AdapterLuid.LowPart != low) {
+        log_event(L"event=display_target_rejected reason=luid_mismatch "
+                  L"expected_high=0x%08lx expected_low=0x%08lx", high, low);
+        result = 3;
+        goto cleanup;
+    }
+    log_event(L"event=display_target_verified display=\"%ls\" "
+              L"luid_high=0x%08lx luid_low=0x%08lx",
+              display.DeviceName, high, low);
+    brush = CreateSolidBrush(RGB(0x11, 0x22, 0x33));
+    log_event(L"api=CreateSolidBrush target=display brush=%p "
+              L"red=0x11 green=0x22 blue=0x33", (void *)brush);
+    if (!brush)
+        goto cleanup;
+    old_brush = SelectObject(display_dc, brush);
+    log_event(L"api=SelectObject target=display kind=brush previous=%p",
+              (void *)old_brush);
+    if (!old_brush || old_brush == HGDI_ERROR)
+        goto cleanup;
+    brush_selected = TRUE;
+    log_event(L"event=display_draw_begin operation=PatBlt rop=PATCOPY "
+              L"x=0 y=0 width=16 height=16");
+    painted = PatBlt(display_dc, 0, 0, DRAW_WIDTH, DRAW_HEIGHT, PATCOPY);
+    log_event(L"api=PatBlt target=display result=%d", painted);
+    flushed = GdiFlush();
+    log_event(L"api=GdiFlush target=display result=%d gpu_completion=unproven",
+              flushed);
+    hold_start = GetTickCount64();
+    Sleep(HOLD_MS);
+    log_event(L"event=display_hold_returned elapsed_ms=%llu",
+              GetTickCount64() - hold_start);
+    result = painted && flushed ? 0 : 1;
+
+cleanup:
+    if (brush_selected) {
+        previous = SelectObject(display_dc, old_brush);
+        log_event(L"api=SelectObject target=display kind=restore_brush "
+                  L"previous=%p expected_owned=%p",
+                  (void *)previous, (void *)brush);
+        if (previous && previous != HGDI_ERROR)
+            brush_selected = FALSE;
+        if (previous != (HGDIOBJ)brush)
+            cleanup_ok = FALSE;
+    }
+    if (!delete_object((HGDIOBJ)brush, L"display_brush", brush_selected))
+        cleanup_ok = FALSE;
+    if (!close_adapter(adapter.hAdapter))
+        cleanup_ok = FALSE;
+    if (!delete_dc(display_dc, L"display_target"))
+        cleanup_ok = FALSE;
+    if (!cleanup_ok)
+        result = 1;
+    log_event(L"event=display_draw_complete result=%d draw_calls=1 patblt=%d "
+              L"gdiflush=%d cleanup_ok=%d gpu_completion=unproven",
+              result, painted, flushed, cleanup_ok);
+    return result;
+}
+
 int __cdecl wmain(int argc, wchar_t **argv)
 {
     DWORD high = 0, low = 0;
@@ -313,8 +391,12 @@ int __cdecl wmain(int argc, wchar_t **argv)
     if (argc == 5 && wcscmp(argv[1], L"--draw") == 0 &&
         parse_word(argv[3], &high) && parse_word(argv[4], &low))
         return draw_once(argv[2], high, low);
+    if (argc == 5 && wcscmp(argv[1], L"--draw-display") == 0 &&
+        parse_word(argv[3], &high) && parse_word(argv[4], &low))
+        return draw_display_once(argv[2], high, low);
     fwprintf(stderr, L"usage: AppleAgxGdiColorFill.exe [--list]\n"
                      L"       AppleAgxGdiColorFill.exe --draw <display> <luid-high> <luid-low>\n"
+                     L"       AppleAgxGdiColorFill.exe --draw-display <display> <luid-high> <luid-low>\n"
                      L"LUID words must be unsigned 32-bit decimal or 0x-prefixed hexadecimal.\n");
     log_event(L"event=arguments_rejected result=2 draw_calls=0");
     return 2;
