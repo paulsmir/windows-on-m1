@@ -16,13 +16,23 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertIn("AdmissionSubmitRenderGuardWindows", header)
         self.assertIn("ADMISSION_SUBMIT_RENDER_GUARD_TAG", guards)
         self.assertIn("AdmissionSubmitRenderGuardWord", guards)
+        self.assertIn("ADMISSION_SUBMIT_FENCE_DETAIL_TAG", guards)
+        self.assertIn("AdmissionSubmitFenceDetailWindows", header)
+        self.assertIn("AdmissionSubmitFenceDetailWindows", trace)
         self.assertIn("AdmissionSubmitRenderGuardWindows", trace)
         self.assertIn("J313_AGX_G2_POWER_CMD_QUERY", trace)
         helper = trace.split(
             "_Use_decl_annotations_ VOID AdmissionSubmitRenderGuardWindows", 1
-        )[1].split("static VOID AdmissionSubmitTraceU64", 1)[0]
+        )[1].split(
+            "_Use_decl_annotations_ VOID AdmissionSubmitFenceDetailWindows", 1
+        )[0]
         self.assertEqual(helper.count("WRITE_REGISTER_ULONG64"), 1)
         self.assertEqual(helper.count("WRITE_REGISTER_ULONG(command"), 1)
+        fence_helper = trace.split(
+            "_Use_decl_annotations_ VOID AdmissionSubmitFenceDetailWindows", 1
+        )[1].split("static VOID AdmissionSubmitTraceU64", 1)[0]
+        self.assertEqual(fence_helper.count("WRITE_REGISTER_ULONG64"), 1)
+        self.assertEqual(fence_helper.count("WRITE_REGISTER_ULONG(command"), 1)
         self.assertIn("ADMISSION_SUBMIT_RENDER_GUARD", guards)
         self.assertIn("AdmissionSubmitRenderGuardContextMagic", submit)
         self.assertIn("AdmissionSubmitRenderGuardContextDevice", submit)
@@ -32,6 +42,12 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertIn("AdmissionSubmitRenderGuardNode", submit)
         self.assertIn("AdmissionSubmitRenderGuardEngine", submit)
         self.assertIn("AdmissionSubmitRenderGuardFence", submit)
+        self.assertIn(
+            "AdmissionSubmitFenceDetailWindows(Context,\n"
+            "        render_context->Object.FenceOutstanding,\n"
+            "        Args->SubmissionFenceId)",
+            submit,
+        )
         self.assertIn("AdmissionSubmitRenderGuardAccepted", submit)
         self.assertNotIn(
             "AdmissionSubmitRenderGuardWindows(Context, MAXULONG, STATUS_PENDING)",

@@ -7,6 +7,7 @@
 #define ADMISSION_OPEN_ALLOCATION_TRACE_TAG 0x5130000000000000ULL
 #define ADMISSION_PAGING_BUILD_TRACE_TAG 0x5140000000000000ULL
 #define ADMISSION_SUBMIT_RENDER_GUARD_TAG 0x5280000000000000ULL
+#define ADMISSION_SUBMIT_FENCE_DETAIL_TAG 0x5320000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -231,6 +232,14 @@ static inline unsigned long long AdmissionSubmitRenderGuardWord(
       ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Value;
+}
+
+static inline unsigned long long AdmissionSubmitFenceDetailWord(
+    unsigned int Outstanding, unsigned int Submitted) {
+  return ADMISSION_SUBMIT_FENCE_DETAIL_TAG |
+      ((unsigned long long)(Outstanding & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Submitted;
 }
 
 static inline unsigned int AdmissionSubmitTraceField(unsigned long long Word) {

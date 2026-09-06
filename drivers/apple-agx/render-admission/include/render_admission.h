@@ -441,6 +441,8 @@ VOID AdmissionSubmitTraceValueWindows(_In_ ADMISSION_CONTEXT *Context,
     BOOLEAN Enabled, ULONG Field, ULONG Value);
 VOID AdmissionSubmitRenderGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Guard, NTSTATUS Status);
+VOID AdmissionSubmitFenceDetailWindows(_In_opt_ ADMISSION_CONTEXT *Context,
+    ULONG Outstanding, ULONG Submitted);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -472,6 +474,12 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Context);                                                           \
     (void)(Guard);                                                             \
     (void)(Status);                                                            \
+  } while (0)
+#define AdmissionSubmitFenceDetailWindows(Context, Outstanding, Submitted)     \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Outstanding);                                                       \
+    (void)(Submitted);                                                         \
   } while (0)
 #define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
 #define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)

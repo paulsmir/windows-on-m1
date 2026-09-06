@@ -81,9 +81,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
        (1u << Args->EngineOrdinal)) == 0u)
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardEngine,
                       STATUS_INVALID_HANDLE);
-  if (render_context->Object.FenceOutstanding != Args->SubmissionFenceId)
+  if (render_context->Object.FenceOutstanding != Args->SubmissionFenceId) {
+    AdmissionSubmitFenceDetailWindows(Context,
+        render_context->Object.FenceOutstanding,
+        Args->SubmissionFenceId);
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardFence,
                       STATUS_INVALID_HANDLE);
+  }
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
