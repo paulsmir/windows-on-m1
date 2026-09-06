@@ -39,7 +39,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("AdmissionGdiPrepareColorFill", wrapper)
         self.assertIn("AppleAgxDmaShadowAppend", wrapper)
         self.assertIn("AdmissionGdiReceiptBeginWindows", wrapper)
-        self.assertIn("pPatchLocationListIn != NULL", wrapper)
+        self.assertNotIn("pPatchLocationListIn != NULL", wrapper)
         self.assertIn("PatchLocationListInSize != 0u", wrapper)
         patch_render = patch[patch.index("NTSTATUS AdmissionDdiPatch("):]
         self.assertIn("ADMISSION_CONTEXT_SYSTEM", patch_render)

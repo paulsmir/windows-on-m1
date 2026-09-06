@@ -214,8 +214,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   if (Args->pAllocationList == NULL || Args->AllocationListSize == 0u)
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardAllocations,
                       STATUS_INVALID_PARAMETER);
-  if (Args->pPatchLocationListIn != NULL ||
-      Args->PatchLocationListInSize != 0u)
+  if (Args->PatchLocationListInSize != 0u)
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardPatchIn,
                       STATUS_INVALID_PARAMETER);
   if (Args->pPatchLocationListOut == NULL ||
