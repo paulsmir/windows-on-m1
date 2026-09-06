@@ -168,6 +168,23 @@ producer SHAf4a26107a5a0544b23fc5df28ad5e49fd66ca711971af2190f2c81747edbb997.
 Preregistered next: one natural bind and one producer run; decode exact first
 Render guard, cleanup, then fix only that guard.
 
+EXP512 FINAL: exact30.0.512.0 Code0/healthy; producer device/context/allocation0,
+RenderC0000001; zero0x5120 Render-entry words, zero0x5090 Submit and no hardware
+receipt. This proves failure before KMD DxgkDdiRender. Exact cleanup and ordinary
+health SHA c795df040e42d4593c1e048cd08ce86318348d60d993f9d6d628a59d5d680c2f;
+Code28/no package/service/files,8CPU/SSH/platform healthy. Do not repeat512.
+
+EXP513 current: Microsoft says dxgkrnl converts the Render allocation list via
+DxgkDdiOpenAllocation before Render. Commit
+d9e866cec2a77edb0895172801dbe56794b7fd6c adds qualification-only0x5130 exact
+OpenAllocation input/guard/status trace;103 render tests PASS. Pinned30.0.513.0
+build/sign/Universal/analysis PASS. ZIP SHA
+a3d9d2d77d19e645acae641f4b4c6984e63270b3e1d61f015045a51e11e0637d,
+SYS SHA36e61aee166f197b8713a8170cbd346dfcb78a3fa42d641e39dcd6b3934035b1,
+producer SHA369265698727db368e7e6c7d54fd559db8af0e8d534faa48ed8bd56366774652.
+Preregistered next: one exact natural bind/producer, decode first OpenAllocation
+guard, cleanup, then change only its owner.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,

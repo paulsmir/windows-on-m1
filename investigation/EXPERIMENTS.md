@@ -1,5 +1,55 @@
 # Hardware Experiment Ledger
 
+## EXP513 crash-durable OpenAllocation guard — preregistration 2026-09-06T19:04:00Z
+
+WHY THIS HYPOTHESIS:
+- EXP512 proved the exact producer's device/context/allocation creation succeeds
+  but neither the first DxgkDdiRender entry nor any Submit receipt executes.
+- Microsoft states that during the D3DKMTRender kernel transition dxgkrnl
+  validates/converts every D3DDDI_ALLOCATIONLIST entry by calling the KMD's
+  DxgkDdiOpenAllocation before invoking DxgkDdiRender.
+- Current AdmissionDdiOpenAllocation has multiple fail-closed ownership guards
+  and this creator allocation has not yet been hardware-proven through that DDI.
+
+Single variable: qualification-only tag0x5130 records the first OpenAllocation
+version/IRQL/device flags/count/open flags/subresource/nondevice handle/private
+size/preexisting device-specific state, then one numbered guard and exact status.
+Guards:0 accepted;1 device;2 args;3 interface callbacks;4 private input;
+5 AcquireHandleData;6 description/open-count;7 pool. Existing rollback, result
+status, ownership and functional path are unchanged. Normal build contains no
+trace; producer/UMD/Render/backend/platform/firmware/UAT/queue/IRQ/display are
+unchanged.
+
+Commit d9e866cec2a77edb0895172801dbe56794b7fd6c. Deterministic decoder and
+portable actual-callback rollback tests RED then GREEN;103 render tests PASS.
+Source base SHA12768f312649e8e7c39dfaa9e4b4629310b550955231642a88e6acca044c74fc
+plus overlay SHA58a813fb079afd86b9b6361307d1c1f933d31d0c2ba9a9e9ab9c99e0f9cbfcf0.
+Pinned WDK26100/MSVC14.44 normal+SubmitQualification KMD/UMD, analysis,
+Universal, Inf2Cat/signing, version and unchanged producer PASS; only inherited
+C28251 remains.
+
+Exact30.0.513.0 hashes: ZIP
+a3d9d2d77d19e645acae641f4b4c6984e63270b3e1d61f015045a51e11e0637d;
+SYS36e61aee166f197b8713a8170cbd346dfcb78a3fa42d641e39dcd6b3934035b1;
+INF82efec3cac235d763dda326f55e709572f28b1932a2e067147528602179ab384;
+CAT1e83e2b0afecb3f10ea30a2c8d622b6af356258116a254c70e1e484eddeba808;
+UMDf1bf3c678bc39fb63c5a494031b3d2c8b01aa6a4fd68178c3ef53a971f433794;
+PDBe157b033fd59a7484123c63019ea1d7a2905a88f7fa0996cff07ce628b7cc732;
+producer369265698727db368e7e6c7d54fd559db8af0e8d534faa48ed8bd56366774652.
+Stage/collect/cleanup/run/launch SHA-256:
+16d3196768c521c02a93d8dfb44c3c1f4658fd67a93ebdc7d58f249f8eff9210 /
+8f7e60929c8ee24fee098d7ce41ce35d057bfb0ec5fd3a52011537fdaff3dc57 /
+1d5e7cb2e54ee3182cd7e9d9462a3a4d23718fef99a82c7454ab4e494b6b8cfa /
+c5550e8e21bf22952b86c44ef6dc9cd09f0819901ec0b8b06abce4d096ab9b79 /
+fe555eca2f00bf9a8b2450391b5dcdaf79c37888bdb6d4fd11ac98d4cb38845e.
+
+Hardware: exact clean ordinary Code28 -> exact stage -> graceful reboot -> one
+immutable full-owner477/406 bind -> Code0/hash/health preflight -> one unchanged
+producer -> decode0x5130 and0x5120 -> collect -> exact cleanup -> ordinary restore.
+PASS is one complete OpenAllocation receipt. If accepted but Render remains absent,
+the next owner is a later dxgkrnl pre-Render rule; otherwise fix only the named
+OpenAllocation guard. This is a discriminator, not acceleration proof.
+
 ## EXP512 crash-durable UMD Render guard — preregistration 2026-09-06T18:54:00Z
 
 WHY THIS HYPOTHESIS:
@@ -54,6 +104,24 @@ producer once over SSH, decode0x5120 before collect, then exact package cleanup
 and ordinary recovery. PASS is a complete trace naming one guard/status; this is
 a discriminator, not TA/3D completion. If guard0 appears, the next boundary is
 dxgkrnl between Render return and Patch; otherwise fix only the named guard.
+
+HARDWARE RESULT 2026-09-06T18:56Z — CONFIRMED NO DxgkDdiRender ENTRY;
+FUNCTIONAL CANDIDATE REJECTED. Exact30.0.512.0 bound Code0 with exact hashes,
+8CPU/SSH/platform healthy and no fresh fault events. Exact producer again selected
+one hardware adapter and returned success for device/context/allocation, then
+D3DKMTRender C0000001 and all cleanup success. There is no single tag0x5120 word,
+no0x5090 Submit trace and no hardware receipt. Therefore the first failure is
+owned before KMD Render entry; no KMD guard, Patch, Submit, backend, TA/3D or
+fence executed. Producer / observation / ETL / host-log SHA-256:
+ac69702fd13ffbb4e4ad138a24e96a932d14be00f74f85dd8aea410ebc76a900 /
+ffd3b88d5c624f1e7833c2e6243ff98495b0354481fc8807177f8f48cc1194f5 /
+c31b7d1fed8dd83d35927de56036225b3a8ce16721764fd0453ca1afd3276d72 /
+f6d04ff7a572c3b2cb1e40b8c2e6a7b79a01979b69016268c7c24df7bb578d99.
+WPA Telemetry profile had no matching event; it adds no technical conclusion.
+Exact package cleanup and ordinary restore completed. Final health SHA
+c795df040e42d4593c1e048cd08ce86318348d60d993f9d6d628a59d5d680c2f
+proves Code28/null INF/service, zero package/SYS/UMD,8CPU/SSH, input/xHCI/NVMe
+Running and no fresh fault events. Next is EXP513; do not repeat512.
 
 ## EXP511 normal D3DKMT render to physical AGX — preregistration 2026-09-06T18:31:00Z
 
