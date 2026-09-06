@@ -20,7 +20,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_CREATEALLOCATION createAllocation = {0};
   D3DDDI_ALLOCATIONINFO allocationInfo = {0};
   ADMISSION_ALLOCATION_DESCRIPTION allocation = {0};
-  ADMISSION_UMD_COLOR_FILL_COMMAND command = {0};
+  DXGK_RENDERKM_COMMAND command = {0};
+  D3DDDI_ALLOCATIONLIST allocationList = {0};
   D3DKMT_RENDER render = {0};
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_DESTROYCONTEXT destroyContext = {0};
@@ -99,7 +100,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   createContext.hDevice = createDevice.hDevice;
   createContext.NodeOrdinal = 0u;
   createContext.EngineAffinity = 1u;
-  createContext.Flags.Value = 0u;
+  createContext.Flags.GdiContext = 1u;
   createContext.ClientHint = D3DKMT_CLIENTHINT_OPENGL;
   contextStatus = D3DKMTCreateContext(&createContext);
   if (!NT_SUCCESS(contextStatus) || createContext.hContext == 0u ||
@@ -126,28 +127,24 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     goto cleanup;
   allocationHandle = allocationInfo.hAllocation;
 
-  command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
-  command.Version = ADMISSION_UMD_COMMAND_VERSION;
-  command.Bytes = sizeof(command);
-  command.Opcode = AdmissionUmdOpcodeColorFill;
-  command.Destination.Right = 2560u;
-  command.Destination.Bottom = 1600u;
-  command.DestinationAllocationIndex = 0u;
-  command.Color = 0xff336699u;
-  command.Rop = AdmissionUmdRopPatCopy;
-  CopyMemory(createContext.pCommandBuffer, &command, sizeof(command));
-  ZeroMemory(createContext.pAllocationList,
-             sizeof(createContext.pAllocationList[0]));
-  createContext.pAllocationList[0].hAllocation = allocationHandle;
-  createContext.pAllocationList[0].WriteOperation = 1u;
-  ZeroMemory(createContext.pPatchLocationList,
-             sizeof(createContext.pPatchLocationList[0]));
+  command.OpCode = DXGK_GDIOP_COLORFILL;
+  command.CommandSize = 48u;
+  command.Command.ColorFill.DstRect.right = 2560;
+  command.Command.ColorFill.DstRect.bottom = 1600;
+  command.Command.ColorFill.DstAllocationIndex = 0u;
+  command.Command.ColorFill.Color = 0xff336699u;
+  command.Command.ColorFill.Rop = DXGK_GDIROPCF_PATCOPY;
+  allocationList.hAllocation = allocationHandle;
+  allocationList.WriteOperation = 1u;
 
   render.hContext = createContext.hContext;
   render.CommandOffset = 0u;
-  render.CommandLength = sizeof(command);
+  render.CommandLength = 48u;
   render.AllocationCount = 1u;
   render.PatchLocationCount = 0u;
+  render.pNewCommandBuffer = &command;
+  render.pNewAllocationList = &allocationList;
+  render.Flags.RenderKm = 1u;
   wprintf(L"BUFFERS device_command=%p device_command_bytes=%u "
           L"device_allocations=%p device_allocation_count=%u "
           L"device_patches=%p device_patch_count=%u "
