@@ -285,6 +285,15 @@ no fresh fault events. Commit4dec75a adds qualification-only crash-durable exact
 SubmitRender guard/status;108 focused tests GREEN. Pinned30.0.528.0 build/sign/
 Universal/Inf2Cat PASS; ZIP/SYS/producer SHA8aa6d65b.../d2772955.../33f1b31c....
 EXP528 is preregistered for one exact natural bind and producer run.
+EXP528 FINAL INCONCLUSIVE: natural bind was exact Code0, producer reset at the
+same Submit boundary, but post-reset registry guard values were absent. Pinned
+WDK26100 marks SubmitCommand DISPATCH_LEVEL, so registry I/O was an invalid
+diagnostic transport and is not a driver verdict. Exact package plus stopped
+service/SYS/UMD orphans removed; ordinary377/392 remains Code28/no AGX state,
+8CPU/SSH. Commitcada19c replaces only that diagnostic transport with dedicated
+dispatch-safe broker tag0x5280;108 focused tests and pinned30.0.529.0 gates PASS.
+ZIP/SYS/producer SHA689b22ab.../2ec1192d.../ca60430e.... EXP529 preregistered;
+first unknown remains the exact SubmitRender invariant returning INVALID_HANDLE.
 
 ## Final live ordinary clean baseline
 

@@ -1,5 +1,55 @@
 # Hardware Experiment Ledger
 
+## EXP529 dispatch-safe SubmitRender guard — preregistration 2026-09-06T21:34:14Z
+
+WHY THIS HYPOTHESIS:
+- EXP527 and EXP528 both reach `DxgkDdiSubmitCommand` and reset with the same
+  driver-failed-submit shape; current source has one exact group of existing
+  validation branches returning `STATUS_INVALID_HANDLE`.
+- EXP528 registry fields were absent after reset. Pinned WDK26100 declares
+  `DXGKDDI_SUBMITCOMMAND` `_IRQL_requires_(DISPATCH_LEVEL)`, so registry I/O was
+  the wrong receipt mechanism and cannot be treated as a driver result.
+- The current qualification profile already carries a dispatch-safe broker/MMIO
+  receipt path observed by the host; a dedicated tag avoids the first-global
+  claim that made the prior generic Submit trace ambiguous.
+
+Single variable: commit `cada19c5874ef87389c415725b5100bbf7071fa1`
+removes the EXP528 registry writes and emits exact guard/status words under tag
+`0x5280` through the existing broker in qualification only. Production calls are
+no-ops. No return status, KMD validation, producer, firmware, RTKit, UAT, memory,
+scheduler, AGX queue/completion, IRQ, display or capability behavior changes.
+New RED then2/2 and106 render regressions GREEN. Pinned WDK26100/MSVC14.44 build,
+analysis, Universal, Inf2Cat, TestSign and coherent version30.0.529.0 PASS with
+only inherited C28251.
+
+Repository/branch `public_windows`/`feature/j313-gpu-acceleration`; commit above;
+dirty inventory SHA `c3781d7a...`. Overlay/build script SHA `c0de4ccd...`/
+`0678f031...`. ZIP/SYS/INF/CAT/UMD/producer SHA `689b22ab...`/`2ec1192d...`/
+`fa8b3817...`/`20e17ba3...`/`c56d09f0...`/`ca60430e...`; manifest SHA
+`acd214a6...`. Stage/run/cleanup/launch SHA `16f19939...`/`6bdd9b55...`/
+`37b04721...`/`79ed223d...`.
+
+Preflight after exact EXP528 cleanup: APPL0002 Code28, null INF, no package/
+service/SYS/UMD,8CPU/SSH; orphan cleanup SHA `de0db8c6...`. Launch is current
+full-owner EXP477 m1n1 plus EXP406 Mu. Execute launcher with stdout/stderr tee to
+`.local/experiments/EXP529-dispatch-submit-guard/hardware.log`; one natural bind
+and one exact producer invocation. PASS requires a complete final `0x5280`
+guard/status pair naming the first failing invariant. Then exact hash-gated
+cleanup on ordinary377/392; emergency377/385 only if ordinary recovery fails.
+
+## EXP528 exact SubmitRender guard — result 2026-09-06T21:34Z
+
+INCONCLUSIVE. Exact30.0.528.0 natural bind was Code0/serviceRunning/8CPU with
+matching oem5/SYS hashes. One producer invocation reset Windows at the same
+Submit boundary. Post-reset ordinary recovery showed no Submit guard values and
+the new dump `090626-23078-01.dmp` SHA
+`9e14364961332020c09a0bf39ac6918ee4527150e3c6c91d4037390788404e27`.
+No new driver hypothesis is accepted: pinned WDK proves SubmitCommand runs at
+DISPATCH_LEVEL, while EXP528 attempted registry writes. Exact oem5 was deleted;
+stopped service and exact SYS/UMD orphans were then hash-checked and removed.
+Cleanup SHA `de0db8c644464b36343b7413b30e0bec2969261c17d7fa9d70951b25606df6c8`;
+current ordinary GPU-visible guest is Code28/no package/service/files/8CPU/SSH.
+
 ## EXP528 exact SubmitRender guard — preregistration 2026-09-06T21:26:22Z
 
 WHY THIS HYPOTHESIS:
