@@ -11,7 +11,10 @@
 #endif
 
 int __cdecl wmain(int argc, wchar_t **argv) {
-  D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME openAdapter = {0};
+  D3DKMT_ENUMADAPTERS3 enumeration = {0};
+  D3DKMT_ADAPTERINFO adapters[MAX_ENUM_ADAPTERS] = {0};
+  D3DKMT_ADAPTERTYPE adapterType = {0};
+  D3DKMT_QUERYADAPTERINFO query = {0};
   D3DKMT_CREATEDEVICE createDevice = {0};
   D3DKMT_CREATECONTEXT createContext = {0};
   D3DKMT_CREATEALLOCATION createAllocation = {0};
@@ -24,6 +27,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_DESTROYDEVICE destroyDevice = {0};
   D3DKMT_CLOSEADAPTER closeAdapter = {0};
   D3DKMT_HANDLE allocationHandle = 0;
+  ULONG selectedAdapter = MAX_ENUM_ADAPTERS;
+  ULONG matchingAdapters = 0u;
+  ULONG index;
+  LUID selectedLuid = {0};
+  ULONG selectedSources = 0u;
   NTSTATUS openStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS deviceStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS contextStatus = (NTSTATUS)0xc0000001L;
@@ -35,18 +43,38 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
   int result = 1;
 
-  if (argc != 2 || wcslen(argv[1]) >= ARRAYSIZE(openAdapter.DeviceName)) {
-    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe <gdi-display-name>\n");
+  UNREFERENCED_PARAMETER(argv);
+  if (argc != 1) {
+    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe\n");
     return 2;
   }
-  if (wcscpy_s(openAdapter.DeviceName,
-               ARRAYSIZE(openAdapter.DeviceName), argv[1]) != 0)
-    return 2;
-  openStatus = D3DKMTOpenAdapterFromGdiDisplayName(&openAdapter);
+  enumeration.NumAdapters = ARRAYSIZE(adapters);
+  enumeration.pAdapters = adapters;
+  openStatus = D3DKMTEnumAdapters3(&enumeration);
   if (!NT_SUCCESS(openStatus))
     goto cleanup;
 
-  createDevice.hAdapter = openAdapter.hAdapter;
+  for (index = 0u; index < enumeration.NumAdapters; ++index) {
+    ZeroMemory(&adapterType, sizeof(adapterType));
+    ZeroMemory(&query, sizeof(query));
+    query.hAdapter = adapters[index].hAdapter;
+    query.Type = KMTQAITYPE_ADAPTERTYPE;
+    query.pPrivateDriverData = &adapterType;
+    query.PrivateDriverDataSize = sizeof(adapterType);
+    if (NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)) &&
+        adapterType.RenderSupported && adapterType.DisplaySupported &&
+        !adapterType.SoftwareDevice && !adapterType.ComputeOnly &&
+        adapters[index].NumOfSources == 1u) {
+      selectedAdapter = index;
+      ++matchingAdapters;
+    }
+  }
+  if (matchingAdapters != 1u || selectedAdapter >= enumeration.NumAdapters)
+    goto cleanup;
+  selectedLuid = adapters[selectedAdapter].AdapterLuid;
+  selectedSources = adapters[selectedAdapter].NumOfSources;
+
+  createDevice.hAdapter = adapters[selectedAdapter].hAdapter;
   deviceStatus = D3DKMTCreateDevice(&createDevice);
   if (!NT_SUCCESS(deviceStatus))
     goto cleanup;
@@ -130,14 +158,17 @@ cleanup:
     if (!NT_SUCCESS(destroyDeviceStatus))
       result = 1;
   }
-  if (openAdapter.hAdapter != 0u) {
-    closeAdapter.hAdapter = openAdapter.hAdapter;
-    closeAdapterStatus = D3DKMTCloseAdapter(&closeAdapter);
-    if (!NT_SUCCESS(closeAdapterStatus))
-      result = 1;
+  for (index = 0u; index < enumeration.NumAdapters; ++index) {
+    if (adapters[index].hAdapter != 0u) {
+      closeAdapter.hAdapter = adapters[index].hAdapter;
+      closeAdapterStatus = D3DKMTCloseAdapter(&closeAdapter);
+      if (!NT_SUCCESS(closeAdapterStatus))
+        result = 1;
+      adapters[index].hAdapter = 0u;
+    }
   }
-  wprintf(L"{\"display\":\"%ls\",\"luid_high\":%ld,"
-          L"\"luid_low\":%lu,\"source\":%u,"
+  wprintf(L"{\"enumerated\":%lu,\"matching\":%lu,"
+          L"\"luid_high\":%ld,\"luid_low\":%lu,\"sources\":%lu,"
           L"\"open\":\"0x%08lx\",\"device\":\"0x%08lx\","
           L"\"context\":\"0x%08lx\",\"allocation\":\"0x%08lx\","
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
@@ -145,8 +176,8 @@ cleanup:
           L"\"destroy_context\":\"0x%08lx\","
           L"\"destroy_device\":\"0x%08lx\","
           L"\"close_adapter\":\"0x%08lx\",\"result\":%d}\n",
-          openAdapter.DeviceName, openAdapter.AdapterLuid.HighPart,
-          openAdapter.AdapterLuid.LowPart, openAdapter.VidPnSourceId,
+          enumeration.NumAdapters, matchingAdapters,
+          selectedLuid.HighPart, selectedLuid.LowPart, selectedSources,
           (ULONG)openStatus, (ULONG)deviceStatus, (ULONG)contextStatus,
           (ULONG)allocationStatus, (ULONG)renderStatus,
           render.QueuedBufferCount, (ULONG)destroyAllocationStatus,
