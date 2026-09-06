@@ -109,6 +109,10 @@ static void discovery_tests(void)
     p = prep(c, 6, 64);
     assert(p.metadata_length == 36 && p.metadata[4] == 31 && p.metadata[7] == 0);
     assert(!memcmp(p.metadata + 8, ns.vendor, 8));
+    ns.tagged_queuing = 1;
+    p = prep(c, 6, 64);
+    assert(p.metadata[7] == 2 && p.metadata[5] == 0 && p.metadata[6] == 0);
+    ns.tagged_queuing = 0;
     c[1] = 1; p = prep(c, 6, 64);
     assert(p.metadata_length == 5 && p.metadata[3] == 1 && p.metadata[4] == 0);
     c[2] = 0x80; sense(prep(c, 6, 64), 5, 0x24);

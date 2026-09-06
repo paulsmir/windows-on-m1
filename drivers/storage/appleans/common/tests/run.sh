@@ -8,3 +8,8 @@ trap 'rm -rf "$build"' EXIT HUP INT TERM
     "$here/../ans_scsi.c" "$here/../ans_prp.c" "$here/test_common.c" \
     -o "$build/test_common"
 "$build/test_common"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pedantic -g \
+    -fsanitize=address,undefined -fno-omit-frame-pointer \
+    "$here/../ans_order.c" "$here/test_order.c" -o "$build/test_order"
+"$build/test_order"

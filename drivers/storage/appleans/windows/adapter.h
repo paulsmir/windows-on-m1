@@ -1,0 +1,73 @@
+/* SPDX-License-Identifier: MIT */
+#ifndef APPLE_ANS_ADAPTER_H
+#define APPLE_ANS_ADAPTER_H
+#include <ntddk.h>
+#include <storport.h>
+#include "transport.h"
+#include "identify.h"
+#include "../common/ans_order.h"
+#include "telemetry.h"
+#ifndef APPLE_ANS_NATIVE_READ_ONLY
+#define APPLE_ANS_NATIVE_READ_ONLY 0
+#endif
+#ifndef APPLE_ANS_QUALIFICATION_STOP
+#define APPLE_ANS_QUALIFICATION_STOP 0
+#endif
+#if APPLE_ANS_QUALIFICATION_STOP < 0 || APPLE_ANS_QUALIFICATION_STOP > 3
+#error Invalid ANS qualification stop level
+#endif
+#define APPLE_ANS_METADATA_PAGES (ANS_QUEUE_DEPTH + 2)
+#define APPLE_ANS_METADATA_BYTES (APPLE_ANS_METADATA_PAGES * ANS_PRP_PAGE_SIZE + ANS_PRP_PAGE_SIZE - 1)
+enum APPLE_ANS_STAGE {
+    AppleAnsStageEntry=1, AppleAnsStageFindAdapter=2, AppleAnsStageResourcesRejected=3,
+    AppleAnsStageResourcesAccepted=4, AppleAnsStageTransportUnavailable=5,
+    AppleAnsStageStopped=6, AppleAnsStageQuery=10, AppleAnsStageClaim=11,
+    AppleAnsStageIdentifyController=12, AppleAnsStageIdentifyNamespace=13,
+    AppleAnsStageCache=14, AppleAnsStageCreateCq=15, AppleAnsStageCreateSq=16,
+    AppleAnsStageReady=17, AppleAnsStageQuarantined=18, AppleAnsStageReset=19,
+    AppleAnsStageAdminReady=20, AppleAnsStageQualificationStop=21
+};
+typedef struct _APPLE_ANS_SRB {
+    UCHAR Cdb[16], CdbLength, Valid, PrpFailure;
+    ULONG Length;
+    struct ans_logical_prps Prps;
+} APPLE_ANS_SRB, *PAPPLE_ANS_SRB;
+typedef struct _APPLE_ANS_SLOT {
+    PSCSI_REQUEST_BLOCK Srb;
+    ULONG Length;
+    BOOLEAN Busy, Shutdown;
+    struct ans_order_token Token;
+    struct ans_scsi_plan Plan;
+    struct ans_broker_request Request;
+} APPLE_ANS_SLOT;
+typedef struct _APPLE_ANS_ADAPTER {
+    ULONG Signature, Version;
+    volatile ULONG Stage;
+    ULONG Failure, FailureStage, LastCheckpoint;
+    STOR_PHYSICAL_ADDRESS BrokerAddress;
+    ULONG BrokerLength, AssignedInterruptVector, AssignedInterruptLevel;
+    BOOLEAN ResourcesAccepted, Claimed, MayOwn, Ready;
+    PUCHAR Broker;
+    PVOID Common;
+    PUCHAR Pages[APPLE_ANS_METADATA_PAGES];
+    ULONGLONG PageDma[APPLE_ANS_METADATA_PAGES];
+    struct ans_wire Wire;
+    struct ans_namespace Namespace;
+    struct ans_sense Sense;
+    APPLE_ANS_SLOT Slots[ANS_QUEUE_DEPTH];
+    struct ans_order Order;
+    struct ans_telemetry Stats;
+    STOR_DPC ShutdownDpc;
+    volatile LONG DpcReady;
+    BOOLEAN ShuttingDown, ShutdownFlushOk;
+    unsigned ShutdownTag;
+} APPLE_ANS_ADAPTER, *PAPPLE_ANS_ADAPTER;
+BOOLEAN AppleAnsNativeResources(PAPPLE_ANS_ADAPTER a, PPORT_CONFIGURATION_INFORMATION config);
+BOOLEAN AppleAnsNativeInitialize(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsNativeStart(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb);
+BOOLEAN AppleAnsNativeInterrupt(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsNativeReset(PAPPLE_ANS_ADAPTER a);
+BOOLEAN AppleAnsNativeStop(PAPPLE_ANS_ADAPTER a);
+HW_PASSIVE_INITIALIZE_ROUTINE AppleAnsPassiveInitialize;
+VOID AppleAnsComplete(PAPPLE_ANS_ADAPTER a, PSCSI_REQUEST_BLOCK srb, UCHAR status, ULONG length);
+#endif
