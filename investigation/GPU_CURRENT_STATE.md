@@ -309,6 +309,13 @@ USB endpoint timing, not a driver run. Commit4563e0a removes only the nonverdict
 prologue so the final guard is the sole command;108 tests and pinned30.0.531.0
 gates PASS. ZIP/SYS/producer SHA15bb5b93.../b19fb303.../cb093183.... EXP531
 preregistered; EXP530 emergency cleanup/ordinary restore must complete first.
+EXP531 FINAL CONFIRMED: exact host word `52800014c0000008`, log SHA46945dcd...,
+proves SubmitRender guard20/FenceOutstanding mismatch and closes every earlier
+guard. No AGX execution. Exact package/service/files removed via emergency after
+ordinary recovery failed; no kill-9 used. Commit433c9af adds only one0x5320
+receipt carrying current outstanding and submitted fences;108 tests and pinned
+30.0.532.0 gates PASS. ZIP/SYS/producer SHAa3ce0b20.../c7b1c601.../7569ae94....
+EXP532 preregistered after ordinary clean verification.
 
 ## Final live ordinary clean baseline
 

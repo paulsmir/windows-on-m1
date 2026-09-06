@@ -1,5 +1,45 @@
 # Hardware Experiment Ledger
 
+## EXP532 exact mismatched fence values — preregistration 2026-09-06T22:04:44Z
+
+WHY THIS HYPOTHESIS:
+- EXP531 conclusively names guard20: `FenceOutstanding != SubmissionFenceId`.
+- `FenceOutstanding` is assigned only by `AdmissionDdiPatch`; therefore value0
+  distinguishes missing/unsuccessful Patch from a nonzero cross-DDI fence change.
+- Both values fit one dispatch-safe broker word for the first submission; an
+  overflow sentinel remains fail-closed and would prevent an exact claim.
+
+Single variable commit `433c9afa4ecb743e8d366b6d12d0d47d72d99dca` emits a
+qualification-only0x5320 word immediately on guard20 with outstanding fence in
+the16-bit field and full submitted fence in the32-bit value. It precedes the
+existing rejected return, so no KMD result or production behavior changes. No
+backend/firmware/RTKit/UAT/memory/scheduler/AGX/IRQ/display/producer change.
+New RED then2/2 and106 render regressions GREEN. Pinned WDK26100 build/analysis/
+Universal/Inf2Cat/TestSign/version30.0.532.0 PASS with inherited C28251 only.
+
+Overlay/build SHA `b7c5bddb...`/`7a429743...`; ZIP/SYS/INF/CAT/UMD/producer
+SHA `a3ce0b20...`/`c7b1c601...`/`401d55c1...`/`da9f8838...`/`c495b6ad...`/
+`7569ae94...`; manifest SHA `cde8c996...`. Stage/run/cleanup/launch SHA
+`d921e338...`/`b12ff227...`/`5e81882a...`/`07ea8491...`.
+Preflight requires completed EXP531 cleanup and ordinary377/392 Code28/no AGX
+state/8CPU/SSH. One natural bind and one producer with host tee. PASS is one
+0x5320 receipt naming exact outstanding/submitted fences. Then cleanup and one
+correction only to the proven Patch/fence owner.
+
+## EXP531 final-only SubmitRender guard — result 2026-09-06T22:04Z
+
+CONFIRMED. Exact30.0.531.0 natural bind was Code0 with matching oem5/SYS and8CPU.
+One producer reset Windows. Host log SHA
+`46945dcdf51f63b040fc612a8e0102e91a1a588b34bda3c467b2b969581bd41f`
+contains exact word `52800014c0000008`: guard20 and STATUS_INVALID_HANDLE.
+Thus the first failing primitive is exactly
+`render_context->Object.FenceOutstanding != Args->SubmissionFenceId`; all prior
+Submit guards are closed. No physical AGX/fence completion. Ordinary recovery
+did not regain SSH. Its host process required the documented snapshot path then
+SIGUSR2 exit (never kill-9); first emergency attempt encountered stale m1n1
+`Bad Command`, second fresh emergency boot succeeded. Exact oem5 and hash-matched
+stopped service/SYS/UMD were removed. Ordinary restoration is underway.
+
 ## EXP531 final-only SubmitRender guard — preregistration 2026-09-06T21:50:09Z
 
 WHY THIS HYPOTHESIS:
