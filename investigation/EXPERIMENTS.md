@@ -19950,3 +19950,1346 @@ Archive02 was superseded without building. Final frozen archive03 is
 It removes an explicit DriverEntry override so normal WDK GsDriverEntry cookie
 initialization remains intact. Exact command/profile/output gates above remain.
 This is a pre-first-source-compilation correction, not a hardware variable.
+
+### ANSBUILD001 C result and D preregistration
+
+C failed before compilation: builder-parent `C:\Users\pauls\Directory.Build.props`
+overrode kit selection with private28000 packages. Log
+`.local/ans-native/build-host/appleans-build-03.log`. No SYS/driver install/run.
+Verdict: build-environment failure; native hardware not tested.
+
+D is preregistered with the SAME archive03 SHA f6d46b83218a4e8733910639a8e5ddd65b8f3ef63484065a25e7ded5cc259564.
+Single build variable: isolate project from parent Directory.Build.props/targets,
+without editing the parent files used by GPU development. Exact command:
+```powershell
+& 'C:\VS2022Community\MSBuild\Current\Bin\amd64\MSBuild.exe' 'C:\Users\pauls\ans-native-offline-20260905\windows\AppleAns.vcxproj' /m:1 /t:Rebuild /p:Configuration=Release /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:SignMode=Off '/p:WDKContentRoot=C:/Program Files (x86)/Windows Kits/10/' /p:WDKBuildFolder=10.0.26100.0 /p:ImportDirectoryBuildProps=false /p:ImportDirectoryBuildTargets=false /v:minimal
+```
+Read-only MSBuild property evaluation already resolved all kit versions to26100.
+Expected build/sign/INF gates, output/profile/recovery and no-launch restrictions
+remain as in C. D has not started at the time of this entry.
+
+### ANSBUILD001 D result and E preregistration
+
+D reached actual WDK26100 compilation, then failed because storport.h's NT base
+types were not yet defined (C2061 USHORT). No SYS/link. Evidence
+`.local/ans-native/build-host/appleans-build-04.log`.
+E adds only `<ntddk.h>` before `<storport.h>`, preserving physical miniport
+behavior. Frozen archive04 SHA256
+`9868043b3ce058e837cdcba1729e3a371b86bc3163cba2d4193090e10a6b554e` at
+`.local/ans-native/build-host/appleans-source-04.tar`.
+Exact command is D above, including explicit26100 and parent-props exclusion;
+profile/output/signing and no-install/no-launch restrictions remain unchanged.
+E preregistered before execution; this is source compilation, not hardware.
+
+### ANSBUILD001 E result and F preregistration
+
+E reached ARM64 compilation, failed /WX because generated ABI stdint imported
+user CRT after WDK kernel CRT (C4083/C4005), plus WDK's documented PVOID
+HwFindAdapter member assignment produced C4152. No linked SYS. Log
+`.local/ans-native/build-host/appleans-build-05.log`.
+F uses generated prefixed fixed-width aliases: ntddk kernel types under
+_KERNEL_MODE, UEFI types under ANS_BROKER_UEFI, stdint for portable host builds.
+No wire-layout changes. Only assignment-local C4152 suppression retains the
+HW_FIND_ADAPTER checked prototype. No global warning disabling.
+Preregister frozen archive05 SHA256
+`00303bafc3d0ae0609d56ff3c4cf530185f646ae58186753fc3819446dda2ad1`;
+header SHA256 `66ed5ae34f41b503bd1e9bd0e6728328074484f229164d15cbc86870d82b377d`.
+Exact D command, WDK26100, same isolated output/profile and no-install/no-launch.
+F recorded before compilation; expected ARM64/analysis/INF/sign gates as above.
+
+### ANSBUILD001 F result and G preregistration
+
+F ARM64 compilation/link and actual MSVC analysis passed (analysis XML empty
+DEFECTS). SYS5632 bytes SHA256
+`224f1a68e28234cbb853eaa334d8e327266267d5576eb2df4b3ecd4d6a106716`;
+AA64 Native PE, normal GsDriverEntry. Full package build failed Inf2Cat22.9.1:
+SYS was not copied to package folder. No signing/installation/hardware run.
+Evidence `.local/ans-native/build-host/attempt-F.zip`, build-06/f-evidence logs.
+G changes only project packaging to include `FilesToPackage $(TargetPath)`.
+Frozen archive06 SHA256
+`d07b02f16c7a47af26928b4e682f39c19c6f2beb429ce465f9fc8f693472ce84` at
+`.local/ans-native/build-host/appleans-source-06.tar`. Same exact D command,
+26100/ARM64/analysis/isolated paths; complete package/InfVerif/existing-certificate
+signing verification expected. G not run at entry; no install/launch allowed.
+
+### ANSBUILD001 G result; H source correction and preregistration
+
+G complete ARM64 build and actual MSVC DriverMinimumRules analysis passed;
+imports only storport.sys StorPortInitialize/StorPortLogError/StorPortNotification.
+Unsigned SYS SHA6e35894202c27583df5b6aca708d53ff4891b053f54393472e11363a0da0a609;
+INF98356ef8ea97bee62602ea5560a1ec320901fbc7913047c8a51276342a28c68d;
+CATde3f9f6b746d112700b05b65b44bda43fb90fccd499db06dba9cf4c61c0955b8.
+G is superseded without installation/signing: independent iasl found the
+original requested APPLANS0 HID invalid. ACPI _HID and Microsoft require a
+hexadecimal product suffix. Canonical corrected HID is APPL0003; GPU APPL0002
+unchanged. The platform generation has RED/GREEN iasl proof, not a hardware run.
+Also pin catalog OS to intended Windows11 24H2 ARM64 (10_GE_ARM64), instead of
+WDK default Server10_arm64. No compiler warnings hidden or architecture changed.
+
+H preregistered frozen archive08 SHA256
+`5db6e52bf2f9aa5e44252359e309e6abd5eaa55b0d651896f2fead61c1085183` at
+`.local/ans-native/build-host/appleans-source-08.tar`.
+Generated ABI header SHA bcee3f1f1e24dd09bf3349f3a50184067b1d3a0b435cee4625e1c4ee52ff012d.
+Archive07 was a local intermediate, not uploaded or built. Same exact D build
+command and isolated directories. Driver still stops before broker transport,
+never reports namespace ready. Post-build packaging/signing commands follow;
+each requires zero LASTEXITCODE before continuing, no certificate-store changes:
+```powershell
+$p='C:\Users\pauls\ans-native-offline-20260905\windows\out\ARM64\Release\AppleAns'
+$s='C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe'
+$c='C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x86\Inf2Cat.exe'
+& $s sign /v /fd SHA256 /s My /sha1 E9BE15BD2A184BFABA0C8035B3C620C58037A241 "$p\AppleAns.sys"
+& $c "/driver:$p" /os:10_GE_ARM64 /uselocaltime
+& $s sign /v /fd SHA256 /s My /sha1 E9BE15BD2A184BFABA0C8035B3C620C58037A241 "$p\appleans.cat"
+& $s verify /pa /v "$p\AppleAns.sys"
+& $s verify /pa /v "$p\appleans.cat"
+& $s verify /pa /v /c "$p\appleans.cat" "$p\AppleAns.sys"
+```
+Independent pinned InfVerif /w /v and PE/import checks included. Kernel-policy
+`signtool verify /kp /v` is reported separately; a locally trusted test signature
+is not production Microsoft signing. No install/launch/hardware permission.
+
+# ANSBUILD002-A — offline native read-only StorPort build
+
+PREREGISTERED 2026-09-05T12:44:18.998945+00:00, before Windows build. No installation or hardware run.
+HYPOTHESIS: integrated native read-only transport/admin/SRB/ordering/shutdown
+code satisfies actual ARM64 WDK26100 compilation, analysis and package checks.
+ONE VARIABLE: source implementation beyond prior inert qualification skeleton;
+this is software build verification, not a hardware experiment or hardware proof.
+Sourcearchive .local/ans-native/build-host/appleans-native-source-01.tar
+SHA256 b01e564d270c552f83d2b653232059a51f274422e84539471fe20371f3cf472c.
+Generatedheader SHA f7dd8010d7198dbd7642e9219d9e5f9de0ded1b7b96201e4a29b52528210e76e.
+Thirty remote source files verified against local per-file manifest; transfer
+gzip SHA937a68b5dd50b1dd54f97f24100665317c52b7d58616e0a90e85866f5765d683.
+
+Exact command:
+```powershell
+& 'C:\VS2022Community\MSBuild\Current\Bin\amd64\MSBuild.exe' 'C:\Users\pauls\ans-native-offline-20260905\native-v1\windows\AppleAns.vcxproj' /m:1 /t:Rebuild /p:Configuration=Release /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:SignMode=Off '/p:WDKContentRoot=C:/Program Files (x86)/Windows Kits/10/' /p:WDKBuildFolder=10.0.26100.0 /p:ImportDirectoryBuildProps=false /p:ImportDirectoryBuildTargets=false /p:AppleAnsNativeReadOnly=true /p:AppleAnsQualificationStop=0 /v:minimal
+```
+Profile native-read-only-stop0; remote output
+C:\Users\pauls\ans-native-offline-20260905\native-v1\windows\out\native-read-only-stop0\ARM64\Release\AppleAns.
+ExpectedPASS ARM64PE/analysis/InfVerif/correctOS catalog; failure criterion any
+compiler/analysis/INF error. Existing-certificate signing can be checked after
+package exists; trust gate known pending UntrustedRoot (no store modification).
+Artifacthash pending build; no launch/install command authorized.
+Recovery immutable EXP377/392 pair indexed investigation/ans/RECOVERY_BASELINE.json.
+Evidence .local/ans-native/build-host/; all GPU folders/processes untouched.
+Exact source identities (archive above covers untracked build inputs):
+```json
+{
+  ".": {
+    "commit": "cf70dba37a88e7af9ee8b4b0f224fdf628fbc451",
+    "diff_sha256": "f9ca09063655abacdf0d95483dd983cb617dd2eda000e73cf56d5aec6fb06d27"
+  },
+  "m1n1_windows": {
+    "commit": "b0e62f45f0690beed536204dddf37dfeaef69830",
+    "diff_sha256": "6cae0119ea8e884424b3dfaf53db9d96bd9febf5bbd38d774a1c83e5bbd2a251"
+  },
+  "mu": {
+    "commit": "92b94133446acac2129288a4308cd93607ffec35",
+    "diff_sha256": "4eafd95267d1757b3a1554daaa756a205aded3ea59621071c7e279b35ac17832"
+  }
+}
+```
+Native EL2 integration and overall offline plan still in progress. Do not call
+this a hardware candidate or successful native SSD path from a compiler result.
+
+### ANSBUILD002-A result; B preregistration
+
+A failed before link: C4389 state signedness comparison plus actual MSVC analysis
+C6001 for three uninitialized STOR_LOCK_HANDLE instances (annotated InOut).
+Evidence `.local/ans-native/build-host/native-attempt-A.zip`,
+`appleans-native-build-01.log`, `appleans-native-analysis-01.json`.
+B casts the expected state to ans_u32 and zero-initializes the three handles;
+no warnings suppressed. Portable tests pass. Preregister sourcearchive02
+SHA256 `863ea0728a70213238c1a72de9d30f6e2f1da1de0ea3794684d503496c2bdf96`
+at `.local/ans-native/build-host/appleans-native-source-02.tar`.
+Same exact A command, native-read-only-stop0 output, WDK26100 and isolated
+builder path. Manifest02 records only three changed Windows source files;
+common code and ABI header identical. B not started at entry. No install/launch.
+
+#### ANSBUILD002-B pre-execution source correction
+
+Before B ran, source02 was superseded without building by source03:
+`.local/ans-native/build-host/appleans-native-source-03.tar`, SHA256
+`f8407aab14a01b2ff683cec3302c0e2cd210f6dc21b982c35d2eb96d09307981`.
+Only native pending-register read implementation/documentation changes:
+low DWORD captures the complete broker pending bitmap; high DWORD reads that
+same capture. No second drain on the high half. Atomic64 was also permitted;
+this version makes the split-read contract explicit. Same B command/profile.
+
+# ANSVERIFY001 — disposable SOFTWARE WinPE signature verification
+
+PREREGISTERED 2026-09-05T14:01:39.579961+00:00 for PRIVATE
+image preparation only; VM launch awaits final private-image hashes and entry.
+This is software signature verification, not an ANS/MacBook Air hardware test.
+
+WHY THIS HYPOTHESIS: real SDK26100 Signtool signed the package, but its existing
+self-signed root is untrusted on shared FRYZZING. SDK26100 ARM64 Signtool and
+CertMgr dependencies are present in existing ARM64 WinPE26100.8037. A disposable
+VM can trust the expected public root in its own RAM registry without modifying
+FRYZZING/GPU trust, source, processes, or any Air state.
+
+Exact preparation/VM proposal .local/ans-native/signature-vm/PROPOSAL.md
+SHA256 aafc488ec49d07153adff72feb4a65804dd6cd3355dd463f83c71a34e00f8af8; input inventory
+.local/ans-native/signature-vm/inventory.json SHA256 bacfb06bf550caecb8574f69f71633972109431568fe5787d3c5d9778f1aed68.
+Source recovery image SHA5bc762a6130dd9f0655a39d768381191f9ba18b369e30d55c7932260f9fc1e8a,
+extracted boot.wim SHA79f0e6788527cd1aece3601356db5722af78774361282d5a59fba85190fbf97c.
+Only own signature-vm/private-media.img, private-boot.wim and private-vars.fd
+may be modified. MUST replace original AGX cleanup auto-start and fallback shell
+script with signature-only startup in the PRIVATE copy, never run cleanup.
+Use existing wimlib and bounded private FAT writer or ephemeral-container tools;
+no global toolchain install, no host filesystem mount/raw disk access. Verify
+FAT copies/chains, extract and hash replaced WIM, record script/image hashes
+before launch. Original recovery bytes remain unchanged.
+
+Expected proof is real SignTool /pa and separately /kp outputs, exit codes,
+catalog membership and signer identity. No claim /kp must pass for test signing.
+No AppleAns installation/execution, no device passthrough or networking, no
+TESTSIGNING change. Root public CER SHA97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+thumbprint E9BE15BD2A184BFABA0C8035B3C620C58037A241; trust import only inside
+disposable WinPE RAM registry. Host/FRYZZING certificate stores remain untouched.
+
+Evidence .local/ans-native/signature-vm/. Rollback: stop only the owned QEMU
+process/QMP socket; retain artifacts/logs, no external deployed state to restore.
+No MacBook Air SSH, USB endpoint, proxy, guest or power control operation.
+
+### ANSBUILD002-B result; C–G final profile gates preregistration
+
+Recorded 2026-09-05T14:33:25.208885+00:00. B ARM64 Release/link, eight actual analysis XMLs with zero
+DEFECTS, InfVerif /w and 10_GE_ARM64 catalog passed. UnsignedSYS SHA
+58121448b66cbd3712a606981f48b1f0cff8d889a05db60d6df0da47d4e554cf;
+package AppleAns-native-read-only-unsigned.zip SHA
+ffe038db063fef9abceecfba5e7fb0fe12431dd7508defe0dca10738d46d584d.
+Full native-attempt-B.zip SHA d5f72041faa1ba98b998377c343b6f36abeaf43a81b7567064f64cafdfa27ef6.
+No signing/install/hardware run.
+
+C–G preregister final source05 (source04 never built), adding documented
+level-or-vector IRQ admission and mandatory read-only telemetry:
+.local/ans-native/build-host/appleans-native-source-05.tar SHA
+672fa0fd11e72b09d42bd1e74266c9f2b77c709fbad3da4f3ee316e3f75b4533.
+Header SHA20b1f0961842978a8a90515babca9ed0c53271d8ddd4bc407bc41a53bef048ae;
+37 file hashes verified in source manifest; transfer gzip
+1c0704b711e527a2adf1c78f98bb133323222ad560269d3c7b3e4a866dd04f96.
+
+Exact command for each profile uses ANSBUILD002-A command verbatim, replacing
+only its two final profile properties as follows:
+- C: /p:AppleAnsNativeReadOnly=true /p:AppleAnsQualificationStop=0
+- D: /p:AppleAnsNativeReadOnly=false /p:AppleAnsQualificationStop=0
+- E: /p:AppleAnsNativeReadOnly=true /p:AppleAnsQualificationStop=1
+- F: /p:AppleAnsNativeReadOnly=true /p:AppleAnsQualificationStop=2
+- G: /p:AppleAnsNativeReadOnly=true /p:AppleAnsQualificationStop=3
+
+Each /m:1 /t:Rebuild is independently expected to pass actual ARM64/analysis/
+InfVerif/catalog gates, with profile-specific out/int directories. Scope:
+C full read-only; D resource-only transport-unavailable; E QUERY/CLAIM stop;
+F admin-ready stop before Identify; G both Identify then stop before features/IO.
+This preserves the requested ANS002/003/004 lifecycle ladder; no extra stop4.
+These are offline build variants, not repeated hardware experiments.
+On a build failure record it and stop the affected build; do not silently alter
+source for another attempt. Existing test certificate signing can follow each
+package using ANSBUILD001-H's exact sign/catalog commands with its profile path;
+shared-host trust remains unchanged/pending, actual verification is delegated
+to disposable ANSVERIFY001. No driver installation or Air access.
+
+### ANSVERIFY001-PREP result and software VM launch preregistration
+
+PRIVATE preparation passed: both WIM indices signature-only, no AGX cleanup
+auto-start; matching FAT copies, read-only filesystem check and re-extracted
+WIM/payload hashes. Original recovery image unchanged.
+Prepared manifest SHA 3d2b7de3c90d1fd06faf1868a133d52bf7ee5281f937866ee4b4d2da1d7da432.
+Launch preregistered 2026-09-05T14:33:25.208885+00:00; exact command:
+```sh
+python3 .local/ans-native/signature-vm/launch.py
+```
+Sealed QEMU argument vector (TCG software, no NIC/passthrough/raw disks):
+```json
+[
+  "/opt/homebrew/bin/qemu-system-aarch64",
+  "-name",
+  "ans-signature-only",
+  "-machine",
+  "virt-11.0,gic-version=3",
+  "-accel",
+  "tcg,thread=multi",
+  "-cpu",
+  "max",
+  "-smp",
+  "2",
+  "-m",
+  "4096",
+  "-nodefaults",
+  "-nic",
+  "none",
+  "-drive",
+  "if=pflash,format=raw,unit=0,readonly=on,file=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+  "-drive",
+  "if=pflash,format=raw,unit=1,file=private-vars.fd",
+  "-device",
+  "ramfb",
+  "-device",
+  "qemu-xhci,id=xhci",
+  "-device",
+  "usb-kbd,bus=xhci.0",
+  "-drive",
+  "if=none,id=verification_media,format=raw,file=private-media.img",
+  "-device",
+  "usb-storage,drive=verification_media,bus=xhci.0,bootindex=1",
+  "-display",
+  "none",
+  "-monitor",
+  "none",
+  "-serial",
+  "file:serial.log",
+  "-qmp",
+  "unix:qmp.sock,server=on,wait=off",
+  "-no-reboot"
+]
+```
+Inputs: private-media.img SHA10f36e7f38ee7b161c284fd85fddeff4c343fd79aa55d033fb35c305674b9c13;
+private-vars.fd SHAb3b855c5a80310168051164986855692d1bdb06e67619856177965cd87c6774f;
+launch.py SHA0fd8109f5ffa7b15b369174b106bc4cfc18dab8cb042f0d1a8095e117933b12b;
+RUN.CMD SHA151da89a595a63407bbece0a9e547841e5e8a3bb4b713d66cb23faec8d5c7b2b.
+Harness checks all input hashes and has a1200-second hard cap, terminates only
+its child. No AppleAns device or driver execution. Certificate trust change
+occurs ONLY in disposable WinPE RAM registry. Results require actual SignTool
+exit codes and DONE marker; QEMU exit0 alone is not proof. /kp and /pa outcomes
+reported separately; no claim of production signing or native kernel admission.
+Evidence private ANSVERIFY/RESULTS and QMP/serial logs. No edits to media while
+VM is running. Rollback only own process; no MacBook Air state touched.
+
+### ANSBUILD002-C result; C2/D/E/F/G updated source preregistration
+
+C failed before link because the two telemetry _Static_assert declarations were
+not accepted by the actual WDK/MSVC path. D through G did not run. Evidence:
+`.local/ans-native/build-host/native-attempt-C.zip` and `appleans-native-build-C.log`.
+Minimal correction uses the same typedef-char size assertions as the generated
+ABI, preserving the enforced sizes and runtime behavior. Host tests passed.
+Preregister frozen source06 SHA256
+`d028c69cf7a83b7736f11f04e7468992f06c1e93634712d9c9bd374dd7fb4e23`
+at `.local/ans-native/build-host/appleans-native-source-06.tar`.
+Only telemetry.c differs from source05. Repeat C as C2, then D/E/F/G with the
+previously recorded exact commands/properties and per-profile outputs. No
+source change or install/launch authorized by this build entry.
+
+### ANSVERIFY001 observed SOFTWARE result
+
+Disposable WinPE shut down after97.384s. DONE, CSV and actual SignTool logs exist.
+Pretrust /pa failed UntrustedRoot; VM-only import of exact public test root
+succeeded. EmbeddedSYS, catalog and INF/SYS catalog membership /pa all passed.
+Catalog/member /kp correctly failed: signer does not chain to a Microsoft root.
+Embedded /kp was NOT evaluated because the script combined incompatible /kp
+and /all; correct that invocation before later verification, not this result.
+Result JSON SHA f428e6dc152eaaf075617675fdfc6064938a165b45e57afcd4e6dd8a0d245e13;
+CSV SHA3a910511920cf65c5e1e0e8dd5555655d7acaf6050aef208f59c644219783262;
+LOG SHAf6c9ef41efb8c39cd99a427381aa1d537e39e5f24ca64e6080925ea71ac3e7ee.
+Paths .local/ans-native/signature-vm/ANSVERIFY001-result.json and extracted/
+ANSVERIFY/RESULTS. Verdict: test-root Authenticode/catalog integrity confirmed;
+Microsoft production-signing policy not passed; no native driver execution or
+hardware qualification. Host and FRYZZING trust stores unchanged; Air untouched.
+
+### ANSBUILD002-C2/D/E observed result; ANSBUILD003-A–E preregistration
+
+Recorded 2026-09-06T16:19:08.903218+00:00.
+Source06 C2 full read-only and D resource-only passed ARM64 build, ten analysis
+outputs with zero defects, InfVerif/catalog and signing. E stop1 failed C4702
+unreachable code; F/G did not run. These results establish source06 build
+behavior only, and are superseded as candidate packages by the reset fix below.
+Evidence: .local/ans-native/build-host/native-attempt-E.zip and sibling C2/D
+receipts. No package was installed or launched on the Air.
+
+ANSBUILD003 freezes source07 `.local/ans-native/build-host/appleans-native-source-07.tar` SHA256 `3f1c5832955519f250733dfbbdb160b5479b7ef18009e019456783d31f1af164`. It fixes qualification-profile
+unreachable branches and the confirmed healthy-reset state mismatch: Windows
+must QUIESCE before RESET from CLAIMED; FAULTED retains direct RESET. Actual
+Windows/EL2 integration regression rejects the former sequence.
+Repositories on feature/j313-ans-native-offline: .: cf70dba37a88e7af9ee8b4b0f224fdf628fbc451; m1n1_windows: b0e62f45f0690beed536204dddf37dfeaef69830; mu: 92b94133446acac2129288a4308cd93607ffec35; mu/MU_BASECORE: dcb182ecc8a20aaf191cfe97fabd31e21e02af01.
+Dirty implementation is captured by this exact source archive and its adjacent
+per-file JSON manifest; no unarchived edits may enter these builds.
+
+Dedicated FRYZZING project root C:\Users\pauls\ans-native-offline-20260905\native-v1.
+Exact base command (append the profile properties below and isolated output dirs):
+```powershell
+& 'C:\VS2022Community\MSBuild\Current\Bin\amd64\MSBuild.exe' 'C:\Users\pauls\ans-native-offline-20260905\native-v1\windows\AppleAns.vcxproj' /m:1 /t:Rebuild /p:Configuration=Release /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:SignMode=Off '/p:WDKContentRoot=C:/Program Files (x86)/Windows Kits/10/' /p:WDKBuildFolder=10.0.26100.0 /p:ImportDirectoryBuildProps=false /p:ImportDirectoryBuildTargets=false /v:minimal
+```
+- A: AppleAnsNativeReadOnly=true; AppleAnsQualificationStop=0; full read-only.
+- B: AppleAnsNativeReadOnly=false; AppleAnsQualificationStop=0; resource-only.
+- C: AppleAnsNativeReadOnly=true; AppleAnsQualificationStop=1; logical CLAIM.
+- D: AppleAnsNativeReadOnly=true; AppleAnsQualificationStop=2; admin ready.
+- E: AppleAnsNativeReadOnly=true; AppleAnsQualificationStop=3; both Identify.
+Pass each as /p:Name=value; OutDir and IntDir use dedicated source07/A through E
+subdirectories under the project root, never shared GPU outputs. Existing exact
+ANSBUILD001-H test-sign and Inf2Cat commands apply to each profile package;
+certificate E9BE15BD2A184BFABA0C8035B3C620C58037A241 only, no trust-store changes.
+Expected: actual AA64/link, analysis zero new defects, InfVerif, catalog and
+signing exit zero. Record exact commands, per-file hashes and logs in a local
+ANSBUILD003 receipt after each attempt. Stop on failure before changing source.
+Recovery artifacts remain separate immutable EXP377/EXP392 copies; these are
+software build gates only, with no launch/install command and no Air access.
+
+### ANSBUILD003-A result; A2 and B–E command-path correction
+
+Recorded 2026-09-06T16:21:49.667658+00:00. A stopped before C compilation: WDK stampinf treated
+forward-slash IntDir as relative (./C:/Users/.../AppleAns.inf), exit1359.
+Source07 unchanged; B–E not run. Exact command/log in local build-host
+ANSBUILD003-A-command.ps1 and ANSBUILD003-A-build.log.
+Preregister A2 with identical frozen source07/properties except Windows-native
+backslash OutDir/IntDir notation. Exact overrides for A2:
+```powershell
+/p:OutDir=C:\Users\pauls\ans-native-offline-20260905\source07\A\output\
+/p:IntDir=C:\Users\pauls\ans-native-offline-20260905\source07\A\intermediate\
+```
+B–E use the same dedicated source07 layout with their own profile letter.
+No source/WDK/profile/signing changes. Stop on another failure and preserve
+receipts. No Air, installation, shared trust or shared GPU path changes.
+
+### ANSBUILD004 — complete m1n1 offline image build preregistration
+
+Recorded 2026-09-06T16:25:40.013865+00:00. Freeze isolated ANS source file hashes and repository
+HEAD/diff hashes in `.local/ans-native/m1n1-build/ANSBUILD004-source.json`, SHA256 `a33049dc98b3f14a75df7a89700d55c22c3fff66bb71ef1a261fd3beb86f4b10`.
+Dependency archives use exact pinned artwork and rust-fatfs Git objects,
+materialized only into empty isolated directories; dependencies.json records
+their archive hashes. Shared original working files/refs/config are untouched.
+
+Hypothesis: complete linked assisted m1n1 image resolves the new broker, native
+controller and containment interfaces under the existing eight-CPU configuration.
+This is an offline link/ABI gate, not proof of boot or storage correctness.
+Profile: ordinary debug with UART, no verbose diagnostics or AGX full owner;
+ANS runtime remains opt-in and candidate launch is unapproved.
+Exact commands, cwd isolated m1n1_windows:
+```sh
+make clean
+PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_NET_OFFLINE=true make -j4 RELEASE=0 RUNTIME_DIAG_VERBOSE=0 build/m1n1.macho build/m1n1.bin
+```
+Outputs build/m1n1.macho and build/m1n1.bin, copied into root
+.local/ans-native/m1n1-build/ANSBUILD004 only after a successful build; record
+SHA-256/tool versions/log and check frozen inputs after build. Expected complete
+link exit0, no undefined symbols; failure stops this attempt before source edits.
+Recovery remains immutable EXP377 m1n1 and EXP392 Mu (RECOVERY_BASELINE.json).
+No install/launch command, no Air endpoints or control planes accessed.
+
+### ANSBUILD004 observed offline result
+
+Full assisted Mach-O, raw binary and ELF link passed, exit0. Frozen958 source
+file hashes unchanged after build. ANS objects compiled without warnings;
+hv_exc emits13 pre-existing warnings, DCP one GNU-extension warning, Rust two
+feature/lifetime warnings. No hardware proof or launch admission.
+Artifacts under .local/ans-native/m1n1-build/ANSBUILD004:
+- m1n1.macho: SHA256 `0b25bb3d2204db2f5cc26b6f9fcef7d7cb6ad70fecdd89b8c2c4eda4ad74caea`
+- m1n1.bin: SHA256 `c52b36a57c280287a0afecd29f9ddec887e07ad7e5fad05bd6afccc9cb422805`
+- m1n1.elf: SHA256 `aa1fb83d8d0b66c5a2e05056c2a62ba5d36d80ecdc3e864f8456fb86eddeb701`
+Log SHA256 `11323be6738c387df77abd78e4246e6f85d864715d863fae91a077f11723ad60`; exact tool versions in receipt.json.
+The first receipt collector guessed ld.lld under llvm and failed; actual build
+log names opt/lld/bin/ld.lld. Corrected receipt collection only; no rebuild.
+
+### ANSBUILD003-A2/B/C/D/E observed offline results
+
+All five frozen-source07 profiles passed ARM64 link, ten Code Analysis outputs
+with zero defects per profile, InfVerif /w /v, 10_GE_ARM64 catalog and test signing.
+Exact commands and evidence archives are indexed in
+.local/ans-native/build-host/ANSBUILD003-final-packages.json, SHA256
+24564091a17b80254d6da723ecbe5fd89b8b77038d71fa85d5cfdc85fc254d68.
+- ANSBUILD003-A2 (full native read-only): ANSBUILD003-A2-package.zip SHA256 6356177b82e1c5b31d953946e982f1d92137653526590104a73e1d121e6adafe.
+- ANSBUILD003-B (resource-only qualification): ANSBUILD003-B-package.zip SHA256 c0acd857aa3e0cefdcff250262ea439fe2c10c4181abb1dc008c4a28c63153cd.
+- ANSBUILD003-C (CLAIM stop): ANSBUILD003-C-package.zip SHA256 199492d0c1795de82cb36a9e379eeac4c9651516597ff6eac2aa54f4d15fa15a.
+- ANSBUILD003-D (admin-ready stop): ANSBUILD003-D-package.zip SHA256 a3db22aebfecd152c0157a46a61051226718cfabadf7b6368d03d6ed523d8bcc.
+- ANSBUILD003-E (Identify stop): ANSBUILD003-E-package.zip SHA256 3fce850f79e9347d1e327b00aa2d3a758e5e8ceed288891d12ced2fc2941c825.
+Local archive hashes independently rechecked. Test-root integrity checks
+for these final packages still pending disposable ANSVERIFY002. No host trust
+changes, installation, driver execution or Air access.
+
+### ANSBUILD005-PREP — isolated Mu environment preparation
+
+Recorded 2026-09-06T16:31:43.132214+00:00.
+Approve offline preparation only from BUILD_PLAN.md SHA256 feb77602f87cd0f013bf93e851696551a15473c70abc93e577250966484619df
+and build-in-container.sh SHA256 ec6de3257dc3bfac65b6373a4d987e63ef3e64c5ee7d360f1fd34d46f903a6d8.
+Seal identical Mu source snapshots into separate recovery/native owned work
+roots listed by the plan. Exclude Git control files/build outputs; record all
+source commits/diff and per-file hashes. Run only the plan's two exact Docker
+setup commands (desktop-linux, pinned image sha256:67ba6e1fea2d7272519d1c6117228f5d21d5bf667fb887a5abc5f88fd1f73749).
+Private Linux venvs, pinned Mu requirements, setuptools<81/wheel and wheel
+provenance report; Stuart update only inside disposable snapshots. Do not
+change shared host packages, original source, Docker context or image.
+No FD build until exact snapshot hashes are separately preregistered. Record
+setup results, dependency changes and actual package versions. No Air access.
+
+### ANSBUILD004B — committed m1n1 build identity preregistration
+
+Recorded 2026-09-06T16:34:43.078091+00:00. m1n1 HEAD22099426466813f702795338e6498000f4bc1810,
+clean status and BUILD_TAG2209942. Frozen input manifest
+.local/ans-native/m1n1-build/ANSBUILD004B-source.json SHA256 88973ed3b1f7cc71dbd35cb83418ce0f55b7316ee104b87e1706ff184470e92d.
+Production code identical to ANSBUILD004; commit identity is now clean and the
+IRQ coexistence regression additionally checks ANS alongside all GPU/input routes.
+Exact clean/build commands, environment, profile and toolchain unchanged from
+ANSBUILD004. Store log ANSBUILD004B.log, outputs ANSBUILD004B/m1n1.macho,
+m1n1.bin, m1n1.elf plus hash/tool/source receipt. Expected complete link exit0
+and embedded identity2209942 without dirty suffix. No installation/launch or Air.
+
+### ANSBUILD004B observed offline result
+
+Complete link exit0; frozen inputs unchanged; actual embedded Mach-O identity
+2209942 verified without dirty suffix. Same warning categories as ANSBUILD004.
+- m1n1.macho: SHA256 e1e47eb9500a3f7b6a7eeab4e2706ff476d5499558a51252c1a4563a2f5ef6bc.
+- m1n1.bin: SHA256 2487fad41d75ee71718fc934115ebbec21357df86d0ddb83808765eae72152fb.
+- m1n1.elf: SHA256 0d2943c514184734d50876e907c7fb492094a73497278945a517cb7f8cd1883a.
+Evidence .local/ans-native/m1n1-build/ANSBUILD004B/receipt.json; no hardware
+execution or readiness admission.
+
+### ANSBUILD005-PREP result; ANSBUILD005-R/N full Mu preregistration
+
+Recorded 2026-09-06T16:36:33.706992+00:00. Both isolated setup commands exit0; two dependencies verified,
+identical pinned Linux environment (freeze SHA256
+ff68fdd389764e88558258c3d9329eabe8d8e2235217ba3d9bf43eeb2facd944).
+All26635 frozen source files unchanged in both workspaces;37 added cache/log
+files per profile recorded separately. Exact setup receipt SHA256
+a45321225620bd64548dedd8f8ed1f2d1f964fac5a54086eaf51c8c35758eeb8.
+
+ANSBUILD005-R recovery and ANSBUILD005-N native use identical sealed source
+archive SHA2563a8d1e36bfb8948c375e4ad23442239e15b6e5afdcda6649d1d1a0c13af42007
+and source-files.json SHA2561fe3f656c0bb0c46a8d804f865f9be7485c85afbe9af1d296c30a1ec6a8ae5bd.
+Exact repository commits/diff hashes and dependency sources are recorded in
+mu-build/snapshot-receipt.json and the frozen plan. No new source edits enter
+these attempts. This falsifies unresolved library/PCD/ACPI integration at full
+FD link, not any hardware behavior.
+
+Execute BUILD_PLAN.md's exact two build commands, each own mount, pinned Docker
+image sha256:67ba6e1fea2d7272519d1c6117228f5d21d5bf667fb887a5abc5f88fd1f73749,
+explicit desktop-linux context, --network none, /work/build-in-container.sh
+build recovery or build native. Stuart RELEASE CLANGPDB, AIC FALSE, G2 TRUE,
+AGX_ABI_ADMISSION FALSE, ANS_NATIVE FALSE for R and TRUE for N.
+Expected FD at each snapshot's work/mu/Build/MacBookAirMid2020-AARCH64/
+RELEASE_CLANGPDB/FV/J313MACBOOKAIRMID2020_EFI.fd. Preserve logs and exact module/
+FD hashes; verify native/null EBS binding, native boot-source guard and ANS
+ACPI only in native, one inert APPL0002 in both. Stop failed attempt before
+changing source or retrying. No install/launch command. Saved EXP377/EXP392
+recovery remains immutable; neither new FD replaces hardware-proven recovery.
+No Air endpoints, control-plane queries or GPU-owned paths/processes.
+
+### ANSBUILD005-R/N first attempt result: snapshot omitted source templates
+
+Recorded 2026-09-06T16:38:19.703174+00:00. Both attempts exit255 before compilation: Stuart SetEnv reports
+Template File Missing /work/mu/Conf/target.txt. Snapshot filter erroneously
+excluded every directory named Conf, including source MU_BASECORE/BaseTools/
+Conf; only generated workspace-root Conf should have been excluded. Original
+isolated source templates remain intact. No firmware code defect inferred.
+Immutable failure receipt .local/ans-native/mu-build/ANSBUILD005-first-build-failure.json SHA256 4a527e041808a4d5260e2e3f1c5d579d79d59328732060f1d9a0922b29e6f135.
+Prepare one correction: restore exact source nested Conf files to both private
+snapshots and record added-file hashes/new manifest. No retry before the new
+manifest is preregistered. No Air or shared GPU state affected.
+
+### ANSBUILD005-R1/N1 — restore omitted source Conf templates
+
+Recorded 2026-09-06T16:39:27.531698+00:00. Nine original source files under MU_BASECORE/BaseTools/Conf
+restored identically into both snapshots; no other nested Conf/Build source
+omission found. No production code changed. Original archive remains
+3a8d1e36bfb8948c375e4ad23442239e15b6e5afdcda6649d1d1a0c13af42007;
+exact additional input/final manifest/recipe hashes:
+- ANSBUILD005-Conf-additions.tar: SHA256 36ac232277b75f8bd18bf4cab977bc9fe937402b623c0fefeb88f5c9a4e83bbc.
+- source-files-corrected.json: SHA256 49f6a39896e64e9b049e3c722ddad710b1b819f666e4f07bbfc5dcebcc4117fd.
+- seal_snapshots.py: SHA256 47274db6735a506d5c5198464e37826e2edcb5392bb8bd18890360805276813c.
+Repeat the identical R/N build commands, image, environment, profile and
+outputs under attempt IDs R1/N1 with new log files; preserve first failure.
+Expected source-template initialization now succeeds and full compile/link
+completes. Stop on any new failure before changing source. No Air access.
+
+### ANSVERIFY002-PREP — five final package software verification medium
+
+Recorded 2026-09-06T16:40:54.434966+00:00. Exact preparation command from isolated root:
+```sh
+python3 .local/ans-native/signature-vm-002/prepare.py
+```
+Reviewed frozen inputs:
+- prepare.py: SHA256 38de630e20e5b5e21bdac16cce207fa91b8817e851895882dcffcf2f849a835b.
+- inventory.json: SHA256 d1f9de967ce37d48663f414f8c62880b7509b367a9f9654119be622d0fea9d41.
+- RUN.CMD: SHA256 ccc5af633fe3f47d208b1c7dc41316e019c4409a8864701c396fc07c4a937e1f.
+The script refuses collisions, copies stopped ANSVERIFY001 private media/vars
+only to its new002 directory, replaces only copied ANSVERIFY data with five
+ANSBUILD003 hash-pinned packages/public cert/tools and corrected embedded
+/kp /v invocation. Both-index signature-only WIM remains byte-identical.
+Disposable Docker desktop-linux image67ba6e1fea2d7272519d1c6117228f5d21d5bf667fb887a5abc5f88fd1f73749
+installs FAT tools only in own removed container; exact command and versions
+are captured. No host/builder trust changes or driver install/load.
+Expected matching FAT copies, read-only fsck, every payload hash and unchanged
+WIM/input hashes; output manifest seals image/vars/QEMU/script hashes.
+No VM launch until separate entry after outputs exist; no Air.
+
+### ANSVERIFY002-PREP result and software VM launch preregistration
+
+Recorded 2026-09-06T16:43:55.456795+00:00. Preparation passed matching FAT copies, read-only fsck and all20
+payload file hashes; five exact profiles. Signature-only WIM unchanged
+b1416d5033824079a03e8d9ded9017eb31b06a855942818811043780ef19cd41.
+Original001/package inputs rechecked unchanged. Sealed prepared manifest
+SHA256 8d9a929519c051708fab50d8700de3610f6e618a60e2c6660c8876e7c2a41f9f. Root independently rechecked every launch input.
+Exact software launch command:
+```sh
+python3 .local/ans-native/signature-vm-002/launch.py
+```
+Exact sealed QEMU argv:
+```json
+[
+  "/opt/homebrew/bin/qemu-system-aarch64",
+  "-name",
+  "ans-signature-002",
+  "-machine",
+  "virt-11.0,gic-version=3",
+  "-accel",
+  "tcg,thread=multi",
+  "-cpu",
+  "max",
+  "-smp",
+  "2",
+  "-m",
+  "4096",
+  "-nodefaults",
+  "-nic",
+  "none",
+  "-drive",
+  "if=pflash,format=raw,unit=0,readonly=on,file=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+  "-drive",
+  "if=pflash,format=raw,unit=1,file=private-vars.fd",
+  "-device",
+  "ramfb",
+  "-device",
+  "qemu-xhci,id=xhci",
+  "-device",
+  "usb-kbd,bus=xhci.0",
+  "-drive",
+  "if=none,id=verification_media,format=raw,file=private-media.img",
+  "-device",
+  "usb-storage,drive=verification_media,bus=xhci.0,bootindex=1",
+  "-display",
+  "none",
+  "-monitor",
+  "none",
+  "-serial",
+  "file:serial.log",
+  "-qmp",
+  "unix:qmp.sock,server=on,wait=off",
+  "-no-reboot"
+]
+```
+Cwd is private signature-vm-002; no NIC, physical device passthrough or raw
+host disks; TCG2CPU/4GiB/stock ARM64 firmware only. Private media SHA256
+0d9e279c0dc54265b79d6e29b5655651a1b6e56a85869cf1f7ec10c74a6e6620;
+private vars SHA256c6d0bcce4b06deb963d42f00382fb046e4575fc7d169a2851aefdf32076bffcc.
+Expected DONE and all actual per-package /pa and /kp exit codes, not QEMU exit
+alone. Public certificate import only in disposable WinPE RAM registry.
+No AppleAns install/load, no trust modification on host/builder, no Air access.
+1200s bound stops only own child; preserve raw results and negative controls.
+
+### ANS001-PREP — private package-free WinPE image build preregistration
+
+Recorded 2026-09-06T16:45:46.741618+00:00. Exact command from isolated root:
+```sh
+python3 .local/ans-native/ans001-winpe/build-private.py --preregistered-experiment ANS001-PREP --output-name prepared-ANS001
+```
+Frozen scripts/inputs independently rehashed:
+- build-private.py: SHA256 ac5991f2600428479b7f606585a02c8f7cba70167e7416a5d78a48db3e47b8b2.
+- BUILD-INPUTS.json: SHA256 71c0e4d25a983795f93243dbe0e8cf93a00b6ca9b6908c42e1aa39b0cd1930d6.
+Full plan/evidence in ans001-winpe/PREREGISTRATION.md. Source image
+5bc762a6130dd9f0655a39d768381191f9ba18b369e30d55c7932260f9fc1e8a andWIM
+79f0e6788527cd1aece3601356db5722af78774361282d5a59fba85190fbf97c
+remain read-only. New output prepared-ANS001 must not exist beforehand.
+Builder edits only copied SYSTEM SanPolicy1->3 at the structurally observed
+key; full semantic comparison must prove no other hive change. Removes exact
+inert GPU leftovers and replaces startup in both WIM indices, compacts resources,
+constructs fresh allowlisted EFI/BOOT/SOURCES FAT, and re-extracts all files.
+Pinned offline Docker tools and wimlib hashes in BUILD-INPUTS. No driver
+installation, host disk mounts, source writes or trust changes.
+Expected both-index startup/hive/no-AppleAns-or-AppleAgx audit, fsck and full
+file hash checks, input hashes unchanged, final image/WIM manifest. Preserve
+failed output if any; no silent retry/source edit. No VM or Air launch.
+Collector writes RAM X: only; separately approved exact external evidence
+target and collector execution qualification remain later gates.
+
+### ANSBUILD005-R1/N1 observed full Mu result
+
+Both builds exit0;97 PE/COFF images validated each; all26644 frozen source
+files unchanged. Actual recovery/null and native ownership/AutoBoot bindings
+verified in build reports/maps. Actual ACPI FFS contains exact compiled AML:
+APPL0002 once in both, identical inert G2 SSDT, APPL0003 only native.
+Both FDs30965760bytes; recovery SHA2564cc330f5ead47ab8c5ff2d8403f8c0890e5455648f178d75ab48923b24f8ffd8,
+native SHA25685157f29fd43f562559e45dd15c42549befe8f54f20f95d3d5b79db221c880d5.
+Full receipt SHA25687e65b9c71378fdccca3ee47986af3caacde9d351e1538efeac09393db617f0a;
+root independently rehashed every referenced artifact.145 warning lines each,
+identical multisets and no native-only warnings; existing source/linker/tooling
+warnings remain. No launch/install or hardware-working claim.
+
+### ANS001-PREP result; ANS001-PREP-B quoting correction preregistration
+
+Recorded 2026-09-06T16:48:57.620934+00:00. First attempt failed before hive/WIM mutation: shell unterminated
+quoted string around hivex root-key backslash. Private WIM still original
+79f0e6788527cd1aece3601356db5722af78774361282d5a59fba85190fbf97c;
+no image/manifest. Failed output and original frozen script retained. Log SHA
+ef1796a68997ee867b765e7508eb0954076a27928e9f33db73e38d780731e3e2.
+Correction uses shlex.quote for that root argument and parses all generated
+shell strings before output creation. Original failure reproduced; corrected
+strings parse under both host sh and exact pinned container sh without executing
+commands. No production/WIM/startup/tool/input changes. New script SHA256
+b5817365f5ae6ef6ea24bfe838af96fc03f782f82b96cfd0d9e095fd96a3b679.
+Unchanged BUILD-INPUTS SHA25671c0e4d25a983795f93243dbe0e8cf93a00b6ca9b6908c42e1aa39b0cd1930d6.
+Preregister exact new attempt:
+```sh
+python3 .local/ans-native/ans001-winpe/build-private.py --preregistered-experiment ANS001-PREP-B --output-name prepared-ANS001-B
+```
+Same validation/failure/recovery/no-hardware contract as ANS001-PREP, new output
+only. Stop on any failure before changing source or retrying.
+
+### ANSVERIFY002 observed software signature result
+
+VM exit0 after119.4s, no timeout/retry. Pretrust FULL /pa failedUntrustedRoot;
+public-root import into disposable RAM registry succeeded. All20 post-import
+/pa embedded/catalog/member checks passed across allfive profiles. All20 /kp
+checks failed explicit Microsoft-root policy; corrected embedded /kp /v was
+actually evaluated. DONE failed_checks20 correctly counts those policy failures;
+do not call this a production signature pass. Result JSON SHA256
+0ec7a1136b2e77eacf8a0bbd5c875f0928a678be1f25e41384fd2bb2d68dd849.
+CSV99179e809c51017b56b0eabd2af310b4fbae12f88e83a3ffb6c04c7edc3b0a6d;
+LOGd3388231c859798b7e54f2c98a02381fdce8e84196bdf69f00a5fa2cead4c6e5.
+No AppleAns execution/installation, host/builder trust change or Air access.
+
+### ANS001-PREP-B observed image build result
+
+Both-index policy-only semantic SYSTEM change, startup/collector equality and
+no AppleAns/AppleAgx/cleanup path gates passed.260 INF files per index and
+SOFTWARE/DRIVERS hives match structurally audited originals. Fresh FAT fsck
+passes67files/162708of204393clusters, FAT copies and every file hash match.
+Image838860800bytes SHA256bd4b24cc22589a0ddf82cf64397272214b4468e03aee22e60f13a9b50796796d;
+WIM SHA256f3c3f75a3cf2b7c0fcecfdc1636c7cf640a0d3d4748979f84b850c6929fb04ea.
+MANIFEST SHA256c2594830364e9fe972d97b13569e40ad1f5e8e2616640a13674b88a5d0a88508;
+WINPE-AUDIT SHA2565c6e41f94aff9de2f5e8cc3b7db5d53bb8470e5b9d694e03c4034e31e5e72138.
+Root independently rehashed final image and WIM. Original source images remain
+unchanged. Audit pass is structural only; collector execution/boot not yet
+tested. Separate software VM checkpoint is next; no Air launch permission.
+
+### ANSCOLLECT001-PREP — disposable WinPE collector software test preparation
+
+Recorded 2026-09-06T17:07:56.358921+00:00. Exact command:
+```sh
+python3 .local/ans-native/ans001-collector-vm/prepare.py
+```
+Frozen scripts/inputs:
+- prepare.py: SHA256 b2f8d35f798881f6b5b1bab4272c9a2d8143542be9602116e4358b5c11d48500.
+- ANS001-VM-START.CMD: SHA256 8ca09398fc8146ff3b2a5b984d1c134d35539273613219456349c8ead978d0e7.
+- inventory.json: SHA256 5b89ce3b687bf316fa99c2074e823b476aabd20150aff054487a7b18f8f0f6d6.
+Use only new private copies of clean ANS001-B source image/WIM. Preserve exact
+collector and startnet bytes in both indices; copied WinPE startup calls a
+software-only wrapper which invokes the real collector before evidence export.
+Second private file-backed USB/FAT disk has MBR ID A001E002 and exact UUID marker
+e7fa0f8d-7e52-4073-9a93-459287001a02; source boot MBR ID0 cannot match.
+No physical disks/NIC/passthrough, no AppleAns device or driver package.
+Pinned Docker image67ba6e1fea2d7272519d1c6117228f5d21d5bf667fb887a5abc5f88fd1f73749
+and stock software QEMU inputs in inventory; FAT tools only inside disposable
+container. Script bounds WIM/FAT operations and refuses existing outputs.
+Expected both-index exact collector/startnet re-extraction, FAT/fsck/marker/
+source-input hash verification and sealed output manifest. No VM launch until
+separate preregistration. This does not qualify physical USB identity or Air.
+
+### ANSCOLLECT001-PREP result; software VM launch preregistration
+
+Recorded 2026-09-06T17:12:11.856431+00:00. Prep exit0; both-index original collector/startnet byte identities
+verified, both private FATs fsck passed, source hashes unchanged. This software
+image differs from the hardware candidate only in its test wrapper/fallback;
+receipt must identify both hashes and must not claim original image hardware
+boot. Sealed manifest SHA256 4fafbdcb52c9d276bb8c6709ec024c64f0883d89dbbfd33b2edd02c9c7e7b548.
+Root rehashed every launch input. Exact software launch command:
+```sh
+python3 .local/ans-native/ans001-collector-vm/launch.py
+```
+Exact QEMU argv:
+```json
+[
+  "/opt/homebrew/bin/qemu-system-aarch64",
+  "-name",
+  "ans001-collector-software",
+  "-machine",
+  "virt-11.0,gic-version=3",
+  "-accel",
+  "tcg,thread=multi",
+  "-cpu",
+  "max",
+  "-smp",
+  "2",
+  "-m",
+  "4096",
+  "-nodefaults",
+  "-nic",
+  "none",
+  "-drive",
+  "if=pflash,format=raw,unit=0,readonly=on,file=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+  "-drive",
+  "if=pflash,format=raw,unit=1,file=private-vars.fd",
+  "-device",
+  "ramfb",
+  "-device",
+  "qemu-xhci,id=xhci",
+  "-device",
+  "usb-kbd,bus=xhci.0",
+  "-drive",
+  "if=none,id=boot_media,format=raw,file=boot-media.img",
+  "-device",
+  "usb-storage,drive=boot_media,bus=xhci.0,bootindex=1",
+  "-drive",
+  "if=none,id=evidence_media,format=raw,file=evidence.img",
+  "-device",
+  "usb-storage,drive=evidence_media,bus=xhci.0,serial=ANS001EVID0001",
+  "-display",
+  "none",
+  "-monitor",
+  "none",
+  "-serial",
+  "file:serial.log",
+  "-qmp",
+  "unix:qmp.sock,server=on,wait=off",
+  "-no-reboot"
+]
+```
+TCG2CPU/4GiB/stockEDK2, noNIC/passthrough/host disks. Only private boot/evidence
+USB files, exact MBR+UUID identity, no AppleAns device or package. Wrapper runs
+unchanged collector first, then discovers unique virtual evidence disk, checks
+marker, exports RAM logs and shuts down. On ambiguity it refuses writes.
+Expected actual SAN3 proof, wpeinit/collection receipts, expected absent APPL0003,
+complete exported raw command results, no source-input changes. Nonzero optional
+commands must remain visible and correctly classified.1200s bound only own child.
+No Air access or hardware approval implied.
+
+### ANSCOLLECT001 observed failure; ANS001-PREP-C correction preregistration
+
+Recorded 2026-09-06T17:25:27.200773+00:00. Software WinPE booted and invoked real collector, but findstr
+was absent. SAN3 proof refused before wpeinit; export identity checks likewise
+refused. Exact VM stopped with QMP after221.738s; exit0 is not a qualification
+pass. Evidence disk unchanged with marker only; no exported command receipts.
+FAIL result SHA256616d0ee937f686c3d6158da62307c50db9d4e65015fe0c20f1ca14d34450531b;
+screenshot SHA2563e1cafa2942670ad419fa55cf89ee81fec90ba268de6df48042bbe4ff7039042.
+
+One complete both-index external-command audit found only findstr and sc absent.
+Corrected collector uses CMD built-in FOR/F for exact SAN3 parse; optional sc
+query records127/unavailable, never masquerading registry config as active
+services. All remaining binaries present bothindices. Exact replacement parser
+lines passed14 Windows CMD cases on separate FRYZZING builder.
+New frozen inputs:
+- build-private-C.py: SHA256 d0a7ca52e1d8970ced4c7bfacb273625e92da6176432c8b5523ded67d243de5d.
+- BUILD-INPUTS-C.json: SHA256 f41f77eb33d9673d1d89b0353b338fd1fc8735e0097a5f11026fb7d536df7b1d.
+- FREEZE-C.json: SHA256 cf10122c40fd24f8ed0ed61947cfb409151dc4bd1b9bcfa4849699026b9e4c43.
+Corrected collector SHA25614981c4a50dd820279f6f6bf0185c4145b8b150e2c1373d7d9c1ae56c9459387.
+Exact new clean-image build command:
+```sh
+python3 .local/ans-native/ans001-winpe/build-private-C.py --preregistered-experiment ANS001-PREP-C --output-name prepared-ANS001-C
+```
+Rebuild only newC output from original read-only recovery WIM, with startup-C;
+same policy/hive/FAT/both-index/input hashes and failure gates as B. Previous
+images/scripts/failures retained. No VM retry until C outputs and next inputs
+are separately preregistered; no Air or hardware permission.
+
+### ANS001-PREP-C result; ANSCOLLECT002-PREP preregistration
+
+Recorded 2026-09-06T17:29:28.321061+00:00. CleanC build exit0; both-index startup/SAN3/FAT and structural
+INF/hive checks passed. Image SHA2561bacaa01a4580df1fe7b4b512d0143f306dcfbe9693ed2509b4994b6058f588d;
+WIM b3b6ba881b36aa923eaed8a919bd26ce907f8e3426d90a17c1b0e4d1eedbf5ff.
+New normalized structural audit SHA2560eb8ec406e0ec4e8b937c525ee2905624c8608f36d4621da1d17fa13572e61c1.
+No collector execution pass yet.
+
+Preregister second disposable collector preparation against those actual C
+bytes, preserving collector/startnet in bothindices and using corrected CMD
+wrapper plus new virtual evidence identity A001E003/UUID ending1a03.
+```sh
+python3 .local/ans-native/ans001-collector-vm-002/prepare.py
+```
+Frozen inputs:
+- prepare.py: SHA256 49952570e3525c5636fca14cb38a0fd102c25bd7db8cf61fb114440ea6971fce.
+- inventory.json: SHA256 57c21a79dad3df0777eab190b47a5f52282541dcfa53b8fc4bf6c920b4addb34.
+- proposal-files.json: SHA256 ee4ea2c32ebe1afb4360876259c2210ef156abd6e3934c1445f90f883e4ac1f4.
+Same isolated private-output, FAT/both-index/source-hash checks and bounded
+preparation as first software test; no existing media mutated, no Air. Return
+exact new image/vars/manifest hashes before separate VM launch preregistration.
+
+### ANSBUILD004C — correct actual-descriptor ANS001 handoff boundary
+
+Recorded 2026-09-06T17:31:41.768639+00:00. Freeze clean m1n1 commit2d869ebb723b69285810eb376808f039a63e6ecc.
+Source manifest .local/ans-native/m1n1-build/ANSBUILD004C-source.json
+SHA256776a3fb7218caf9759b3a4d75acae0a4f2f5711b67c6d7a61416e11f26fc79e4. Actual descriptor regression exposed UNOBSERVED DART region;
+strict rejection is correct, but must not invalidate already-proven recovery
+stop/retire/hide for package-free enumeration. Native boot and all guest DMA
+remain denied; this candidate does NOT enable full V1 or ANS003/Identify/READ.
+Smallest change separates hiding from memory qualification. No flags cleared
+or invented reservation; no DART/GPU behavior changes. New test includes actual
+runner descriptor, C publish/capture and platform boundaries.
+Exact same clean/build commands, toolchain/profile as ANSBUILD004B; expected
+full link exit0 and embedded clean identity2d869eb. New outputs/log/receipt under
+ANSBUILD004C. Previous4B retained and superseded for ANS001 by this correction.
+No Air/install/launch; immutable recovery unchanged.
+
+### ANSBUILD004C observed offline result
+
+Complete link exit0; source hashes unchanged; actual Mach-O tag2d869eb verified.
+- m1n1.macho: SHA256 29e8897cb1daf8755f153e1c1fc9900a0464401f000833ddd847797c2bdb3acb.
+- m1n1.bin: SHA256 64a4395ace4ac62e2b24c025dcb9221d40701a8c2602d91d9c1502aa854ebda6.
+- m1n1.elf: SHA256 0a16bfe5fbe8860a0bc5b8ffe19628d21962fe1b25ed73e289b241278685ac15.
+Receipt .local/ans-native/m1n1-build/ANSBUILD004C/receipt.json. Scope only
+ANS001 unbound handoff; no native DMA/admin/Identify/READ admission. No Air.
+
+### ANSCOLLECT002-PREP result; corrected collector software VM launch
+
+Recorded 2026-09-06T17:32:58.173222+00:00. Prep exit0, both FAT checks passed; both-index C collector/startnet
+identities and original inputs unchanged. Sealed manifest SHA2565406f159e8b67edc2b06815c16add88f53ef5d2a54c3089afc26b878519150dd.
+All launch inputs independently rehashed. Exact launch command:
+```sh
+python3 .local/ans-native/ans001-collector-vm-002/launch.py
+```
+Exact QEMU argv:
+```json
+[
+  "/opt/homebrew/bin/qemu-system-aarch64",
+  "-name",
+  "ans001-collector-software-002",
+  "-machine",
+  "virt-11.0,gic-version=3",
+  "-accel",
+  "tcg,thread=multi",
+  "-cpu",
+  "max",
+  "-smp",
+  "2",
+  "-m",
+  "4096",
+  "-nodefaults",
+  "-nic",
+  "none",
+  "-drive",
+  "if=pflash,format=raw,unit=0,readonly=on,file=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+  "-drive",
+  "if=pflash,format=raw,unit=1,file=private-vars.fd",
+  "-device",
+  "ramfb",
+  "-device",
+  "qemu-xhci,id=xhci",
+  "-device",
+  "usb-kbd,bus=xhci.0",
+  "-drive",
+  "if=none,id=boot_media,format=raw,file=boot-media.img",
+  "-device",
+  "usb-storage,drive=boot_media,bus=xhci.0,bootindex=1",
+  "-drive",
+  "if=none,id=evidence_media,format=raw,file=evidence.img",
+  "-device",
+  "usb-storage,drive=evidence_media,bus=xhci.0,serial=ANS001EVID0002",
+  "-display",
+  "none",
+  "-monitor",
+  "none",
+  "-serial",
+  "file:serial.log",
+  "-qmp",
+  "unix:qmp.sock,server=on,wait=off",
+  "-no-reboot"
+]
+```
+Same TCG/noNIC/nohostdisk/noAppleAns boundary as ANSCOLLECT001. Only new private
+C-derived boot/evidence/vars; corrected dependency-free mandatory parser, exact
+virtual evidence identity A001E003/UUID ending1a03. Expected SAN3 proof before
+wpeinit, actual RAM collection and exact private export. sc unavailable is
+explicit optional127; absent APPL0003 expected in QEMU. Preserve every actual
+command status; no pass from VM exit alone.1200s cap; one bounded read-only
+QMP view after180s if no completion, preserve and stop own VM on concrete error.
+No Air access or hardware approval.
+
+### ANSCOLLECT002 failure; ANSCOLLECT003-PREP format/diagnostic gate
+
+Recorded 2026-09-06T17:47:47.285631+00:00. Second software test booted and collector stopped normally,
+but export REFUSED without a branch identifier. A pause consumed diagnostic
+input and VM exited; exact SAN3/wpeinit/command results unavailable, no pass.
+FAIL receipt SHA2568f00ddf85268d6b03e9b7d782bd351d159fe720361e904934bf441abc3ef44be.
+Evidence marker/ID remain correct, no exported files.
+
+Root inspected actual FAT: MBR start1 but evidence BPB_HiddSec0; source candidate
+and boot medium use1. Correct confirmed format inconsistency with source-supported
+mformat -H1; do not yet infer it caused export refusal. Actual validator rejects
+old evidence and accepts C; check primary+backup BPB and partition bounds.
+Wrapper adds exact failure stages and prints RAM/probe/online diagnostics before
+persistent shell; it preserves identity checks and the actual C collector.
+Exact preparation command:
+```sh
+python3 .local/ans-native/ans001-collector-vm-003/prepare.py
+```
+Frozen inputs:
+- prepare.py: SHA256 372a64b046695eae14e22e40d2bea57e217e8ca3e4c13a6cb0142e2bfc512a94.
+- inventory.json: SHA256 edf3db46ee6397a701a35e5610d25ccab29d54a90910f50d8094feee9f3be9be.
+- proposal-files.json: SHA256 09a05879e4241e860b9cb1f5d9bcf5a52cc3c35220eedd16d3c8e6caf5ce5309.
+Same isolated TCG/private-two-USB/noNIC/nohostdisk/noANS scope as prior software
+checks; new virtual identity A001E004/freshmarker, C source unchanged.
+After prep, assigned executor must append exact prepared manifest/input hashes
+and sealed QEMU argv HERE before executing launch.py, then record actual result.
+This is not permission to omit the pre-launch entry or change the frozen scope.
+Root grants that bounded software-only ledger/launch sequence without another
+internal roundtrip; no Air action or hardware approval. Stop on preparation
+failure or concrete runtime failure; no silent source changes/retry.
+
+### ANSCOLLECT003-PREP result and ANSCOLLECT003 software launch preregistration
+
+Recorded 2026-09-06T17:50:09.179086+00:00. Preparation completed exit 0. Both FAT checks passed; primary and backup BPB hidden sectors equal MBR start 1 on both private disks. Exact C collector/startnet preserved in both indices; source inputs rehashed unchanged.
+
+WHY THIS HYPOTHESIS:
+
+- ANSCOLLECT002 proved a private evidence FAT format defect (hidden sectors 0 with MBR start 1), now corrected to 1 using mformat -H 1 and verified in both boot records. This is a confirmed format correction, not yet a proven cause of export refusal.
+- Prior refusal lacked its branch. The frozen wrapper now records stages and prints RAM logs before a persistent shell, so this run can distinguish discovery, online/assignment, marker, or export failure even without export.
+
+Scope: software-only QEMU TCG, two private file-backed USB media, no NIC, no raw host disk, no physical passthrough, no AppleAns device/driver, no Air access. Original hardware candidate C SHA256 1bacaa01a4580df1fe7b4b512d0143f306dcfbe9693ed2509b4994b6058f588d remains unchanged. Prior test media and failure receipts preserved; recovery is terminating only this disposable child.
+
+Repository /Users/pavel/public_windows/.worktrees/ans-native; root commit 1a19136d7b396a753f42cc57589365418846fbe8. No source/build change in this launch; exact scripts/media are bound below.
+
+Prepared manifest: .local/ans-native/ans001-collector-vm-003/prepared-manifest.json SHA256 10530eba2e956cbcacd8a28cd981c0f1a3f178a2b8d394e807794cbd250d04ea.
+
+Launch inputs independently rehashed immediately before this entry:
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/boot-media.img: SHA256 5bca56974367a02421cadaa62252dcfd2e8ee04c1789b16127238d33dd483fc5; bytes 838860800.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/evidence.img: SHA256 1f0eab96a308e75e13cc488232a763032f09854171144464a237a92572025ca6; bytes 536870912.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/private-vars.fd: SHA256 b3b855c5a80310168051164986855692d1bdb06e67619856177965cd87c6774f; bytes 67108864.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/launch.py: SHA256 1fdbe2ad9926ad045e26f7e83d14d980492118d1b9825b0e99324da2e9c2c966; bytes 1762.
+- /opt/homebrew/share/qemu/edk2-aarch64-code.fd: SHA256 47765fe344818cbc464b1c14ae658fb4b854f5c2ceffa982411731eb4865594d; bytes 67108864.
+- /opt/homebrew/bin/qemu-system-aarch64: SHA256 45fa769772f3823a32ba49c94e30968685a7343bc409f170a53de75993fe6388; bytes 31124720.
+
+Exact launcher from isolated repository root:
+```sh
+python3 .local/ans-native/ans001-collector-vm-003/launch.py
+```
+
+Exact sealed QEMU argv (cwd /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003):
+```json
+[
+  "/opt/homebrew/bin/qemu-system-aarch64",
+  "-name",
+  "ans001-collector-software-003",
+  "-machine",
+  "virt-11.0,gic-version=3",
+  "-accel",
+  "tcg,thread=multi",
+  "-cpu",
+  "max",
+  "-smp",
+  "2",
+  "-m",
+  "4096",
+  "-nodefaults",
+  "-nic",
+  "none",
+  "-drive",
+  "if=pflash,format=raw,unit=0,readonly=on,file=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+  "-drive",
+  "if=pflash,format=raw,unit=1,file=private-vars.fd",
+  "-device",
+  "ramfb",
+  "-device",
+  "qemu-xhci,id=xhci",
+  "-device",
+  "usb-kbd,bus=xhci.0",
+  "-drive",
+  "if=none,id=boot_media,format=raw,file=boot-media.img",
+  "-device",
+  "usb-storage,drive=boot_media,bus=xhci.0,bootindex=1",
+  "-drive",
+  "if=none,id=evidence_media,format=raw,file=evidence.img",
+  "-device",
+  "usb-storage,drive=evidence_media,bus=xhci.0,serial=ANS001EVID0003",
+  "-display",
+  "none",
+  "-monitor",
+  "none",
+  "-serial",
+  "file:serial.log",
+  "-qmp",
+  "unix:qmp.sock,server=on,wait=off",
+  "-no-reboot"
+]
+```
+
+Expected checkpoint: actual C collector SAN3 proof before wpeinit, real COMMANDS.CSV, exact private medium identity and successful export/shutdown. Pass requires exported evidence, not VM exit. Optional sc127 and expected QEMU APPL0003 absence remain explicit. Failure: any unproven core gate or export refusal; preserve precise stage/screen/logs, stop own child, no retry. Runtime cap1200s; inspect QMP at about180s if no completion. Evidence directory .local/ans-native/ans001-collector-vm-003.
+
+### ANSCOLLECT003 observed result — precise export volume-focus failure
+
+Recorded 2026-09-06T17:56:33.927312+00:00. Software VM booted; exact C startup/collector executed. Actual RAM console TYPE evidence proves SanPolicy REG_DWORD0x3, wpeinit exit0, and X:\ANS001-RESULTS files. Pnputil exact APPL0003 query returned no devices (expected QEMU absence); registry query exit1.
+
+Export FAILED at S41_MARKER_PRESENT: matches1, evidence disk1, letterV, online_exit -2147024809 (0x80070057). DiskPart log reports successful disk selection, clearing attributes, online, and partition1 selection. It then reports no volume selected for remove and no volume specified for assign. Exact identity checks were not bypassed; no manual disk commands or export attempted. Correcting BPB_HiddSec0→1 did not resolve refusal.
+
+Actual command exits (from screenshot transcription, not raw file export):
+```json
+{
+  "wpeinit": 0,
+  "ans": 0,
+  "connected": 0,
+  "problems": 0,
+  "packages": 0,
+  "ans-reg": 1,
+  "services-sc-optional-unavailable": 127,
+  "loaded": 0,
+  "disks": 0,
+  "volumes": 0,
+  "disk-wmi": 44220,
+  "dism-drivers": -2147467262,
+  "registry-services": 0,
+  "pnp-all-reg": 0
+}
+```
+
+sc127 is explicit optional-unavailable. WMIC returned Invalid GET Expression (44220), DISM returned0x80004002 No such interface supported; both remain failed inventory, never PASS. Other captured queries exited0. No export files exist on evidence medium.
+
+Exact QEMU child stopped via QMP quit after 315.18 seconds following diagnostics; exit0 reflects requested stop, not qualification success. No Air, host device, driver install, or retry. Original C inputs rehashed unchanged. Read-only console diagnostic commands and screenshots are retained. No claims about display/USB/SSH/RDP/storage/CPU health on J313; this was software QEMU only.
+
+Normalized apple-ans-winpe-collector-test/v1 receipt /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/ANSCOLLECT003-result.json SHA256 aec7e6e3344999164d44c5126a8c954687c3b44d532461d99559259a592c04c0 has resultfail and binds actual C image SHA1bacaa01a4580df1fe7b4b512d0143f306dcfbe9693ed2509b4994b6058f588d.
+
+Evidence hashes:
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/screen-checkpoint.png: SHA256 5e740e24c1f7af647f588a6ce55d9db4c582e62cae197a17b43ab408d5c61385.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/diagnostic-online.png: SHA256 77b3522a0395fe504abfd8413a0b53e190f873f8a240205ea42ffbea2ec2b001.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/diagnostic-core.png: SHA256 26eccc4ee7aaf0122b94f53e58dcb692af5c78325530a652c2740a6a5e0710e7.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/diagnostic-identity.png: SHA256 0e0cd170fb2fa97d0a9a4c952003bd0c5b938b3ac9eaeaf3eba28f7c86c5c723.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/diagnostic-optional.png: SHA256 2202b3f59272e7aecbb111607c79c1cc8811cb503c0851a2a1c8e976844a1655.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/observed-console-transcription.json: SHA256 dfa1ffb92ec1995add41fce2508c706d4ffcdbea2410b369a67da0e1c0c4fb01.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/readonly-diagnostic-commands.jsonl: SHA256 665a7ad274495596b14c6a9c06a20a554e060f99703d1f9d1b5ccf0d9ea90f05.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/vm-result.json: SHA256 371580d4f50f3e5a7073cb91410be315cf25e97d329350663fa3455f4ba97d15.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/vm-process.json: SHA256 a40c420451258acdce2dbab4f360040023e3a5a32a93da37410f0fad69501007.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/prepared-manifest.json: SHA256 10530eba2e956cbcacd8a28cd981c0f1a3f178a2b8d394e807794cbd250d04ea.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/partition-bpb-check.json: SHA256 f2f3372a7e8af90c729fc96464313630afa2298dcf51385891f447654e2f2245.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-003/postrun-evidence-directory.json: SHA256 b6340be26f7b1dd6cddb965567aaf5df7ad08a619f06f387d6b0a70672e5198a.
+
+Verdict: collector SAN3/initialization checkpoint observed, export failed; overall qualification FAIL. Next causal target is private evidence partition-to-volume availability/focus after online, using documented DiskPart behavior. Investigate offline before any new frozen software run; do not assume arbitrary volume identity or bypass marker. Separately correct/explicitly classify failed WMIC/DISM inventory without hiding results.
+
+### ANS001-PREP-D clean WinPE build preregistration
+
+Recorded 2026-09-06T18:04:04.220511+00:00. Bounded offline clean build; no VM launch or Air access. Root delegated this preentry/build/result sequence.
+
+WHY THIS HYPOTHESIS:
+
+- ANSCOLLECT003 WMIC Invalid GET Expression reproduced with actual FRYZZING CMD: unquoted comma list splits parameters and loses /format:list at capture limit. Source D quotes only that property argument.
+- ANSCOLLECT003 DISM /online Get-Drivers returned0x80004002. D preserves invocation/status/output but explicitly marks it optional-unsupported, keeping pnputil and structural audit as actual package evidence.
+
+Proven C builder copied with only D startup/input/output/experiment names; original recovery WIM, policy3, removal, recompression, both-index extraction, FAT and original-input checks unchanged. Existing images and artifacts preserved. Expected checkpoint: new D image passes exact startup/registry/file/FAT/input gates. Failure: any mismatch or failed command; preserve artifacts, no retry. No claim of successful collector software qualification; next VM remains unapproved pending separate export analysis.
+
+Exact command from /Users/pavel/public_windows/.worktrees/ans-native:
+```sh
+python3 .local/ans-native/ans001-winpe/build-private-D.py --preregistered-experiment ANS001-PREP-D --output-name prepared-ANS001-D
+```
+
+Freeze .local/ans-native/ans001-winpe/FREEZE-D.json SHA256 6f67455205d16c3ecce9f4b434225e5655f3f38f045ef4c169fed7f91601c7c3.
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/build-private-D.py: SHA256 6381fcb57a5445d119e1fb6024e3bf5998ae350b45ec47436f34b55120cf4826.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/BUILD-INPUTS-D.json: SHA256 1ba43ad874ca386f8bbd9049e38f2d22fbe3ffb5aca3321f21ca4e46ac011fe5.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/COLLECTOR-D-FREEZE.json: SHA256 a9f7e247f089ce95a2832f910c07e67533453cb8a15501a308270b9614b70c5f.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/startup-D/ANS001-COLLECT.CMD: SHA256 01e22a7ede40380f0acd5a4e475e5ef09f2d23bc59c6d6f86a5b8a10b4fdb61e.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/startup-D/startnet.cmd: SHA256 3586fb3f3214f43ddba659e308dffa12a78f9b024e6d1c0376a11b95fd2038ac.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/startup-D/winpeshl.ini: SHA256 bd9547ae8192cd98f261b8321b8fd898deb8bb99ad992ad89dea9da703638254.
+
+Output .local/ans-native/ans001-winpe/prepared-ANS001-D; log .local/ans-native/ans001-winpe/ANS001-PREP-D-build.log. Preserve candidate C and all prior failures as recovery/reference. No installed Windows boot, driver operation, host disk mount or physical passthrough.
+
+### ANS001-PREP-D observed result
+
+Recorded 2026-09-06T18:05:21.474469+00:00. Exact preregistered builder completed exit0. Both-index startup/collector bytes and SYSTEM hashes verified; semantic SYSTEM change remains only SanPolicy1→3. Both final INF trees and SOFTWARE/DRIVERS hives re-extracted and matched structurally audited source hashes. Required executable presence checked against both final inventories. Fresh FAT fsck/re-extraction checks passed; original recovery inputs unchanged.
+
+Outputs:
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/prepared-ANS001-D/ANS001-WinPE.img: SHA256 3db37261578a0fb2793e980f5d0e737adc7d7bab2eb1529e9cf0ec70ce29e8da; bytes 838860800.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/prepared-ANS001-D/boot.wim: SHA256 044bfc1ac9ab27d7539cff089c2ace1b61c903b5ab76cd665cacc09a00e80220; bytes 625843364.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/prepared-ANS001-D/MANIFEST.json: SHA256 812dea1c322087563fdebf5a1312bffac5e494902294f06c7e7792bf0f187802; bytes 1007.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/prepared-ANS001-D/WINPE-AUDIT.json: SHA256 6cb29b40d1a6ec276612575af9abd976824d7c0bc6c04448458b1407bf748067; bytes 6184.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-winpe/ANS001-PREP-D-build.log: SHA256 586860e0eb27be66903da10ef5c07f5d97135499c09f1e1980eccf372a688d59; bytes 91258.
+
+Result receipt .local/ans-native/ans001-winpe/ANS001-PREP-D-result.json SHA256 8f68f7404a66d18795242f9b91a776025358fd593a4756edd0702cbb7c5c25a8. Verdict: offline clean build/audit PASS, D collector runtime and export qualification still PENDING. No new VM, driver load, Air access, or hardware launch. Prior images preserved. Next runtime discriminator belongs to separately preregistered private evidence-volume investigation; this build is not a hardware-qualified image.
+
+### ANSCOLLECT004-PREP preregistration — one-rescan volume association discriminator
+
+Recorded 2026-09-06T18:10:18.656748+00:00. Root delegated this frozen software-only prep/launch/result sequence; no Air, physical passthrough, driver installation or real storage operation.
+
+WHY THIS HYPOTHESIS:
+
+- ANSCOLLECT003 selected and onlined exact evidence disk but detail showed no selected volume for assignment. Microsoft select-partition documentation says corresponding volume is automatically selected when present; this supports investigating absence/association rather than assuming focus alone.
+- One documented DiskPart rescan followed by exact-ID rediscovery and before/after detaildisk/detailpartition/listvolume can distinguish a missing association from a newly enumerated volume without format/type/SAN changes.
+
+Sources: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/select-partition ; https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/detail-volume ; https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/rescan . Actual CMD row-parser regression passed header/missing/nonnumeric/duplicate/selected-row cases; no guessed volume number.
+
+Frozen wrapper: exact evidence ID A001E005/marker UUID ending1a05, online uniquely identified disk, full snapshot before, EXACTLY ONE rescan, exact-ID rediscovery, full snapshot after. Derive volume only from identified partition association; detailvolume must show exactly one backing disk matching rediscovered disk and exact ID before any assign. No remove-all, format/type/SAN change, refresh loop or identity bypass. Missing/ambiguous volume stops mutations and prints RAM/disk/partition/volume/PnP relation diagnostics in persistent shell. D collector remains byte-identical. Same valid FATgeometry/HiddSec1 and bounded isolated TCG two-private-USB/noNIC/nohostdisk scope.
+
+Exact preparation command from isolated root:
+```sh
+python3 .local/ans-native/ans001-collector-vm-004/prepare.py
+```
+
+Proposal .local/ans-native/ans001-collector-vm-004/proposal-files.json SHA256 6fd9b70ac08cecc20de93f99cc6d956f2f6a331f6594c84599669f0acdd4d79b. Source D image SHA256 3db37261578a0fb2793e980f5d0e737adc7d7bab2eb1529e9cf0ec70ce29e8da.
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/prepare.py: SHA256 2495ffccef8aa7f0519d26c5dd527193a09b1e1d1923962f036dd5cb20d91962.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/inventory.json: SHA256 ff393307fd2df77645c4589df5166242d914acc44237e8302cd02bff8731e835.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/ANS001-VM-START.CMD: SHA256 e2df85a13b8152e078bdf0cabea63d16925bc27830d7fc00859f29f7e00dc552.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/launch.py: SHA256 27fbc9626a99a3340dfb8f28d8ad008b78b36f69370ea9d07de5c2e0185f29b3.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/read_fat.py: SHA256 91fb3829086d8966be49f7907710e28030b0a521f46074d4ddf1b9e68c3d0e94.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/row-parser-test.cmd: SHA256 15a4fe415fed1d86d8b45b7b5fb04676dbe3fb79a9029357045580fdb666e273.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/row-parser-test.log: SHA256 63a3241288b6569174698049bd4c23a3bf5c361b298106ef73cb9651615a62d1.
+
+Expected prep: source/collector integrity, FAT and primary/backup BPB checks pass. Failure preserves artifacts and stops. After prep executor must independently rehash outputs and append exact sealed QEMU argv BEFORE one launch. Runtime pass requires actual core/required inventory results and successful evidence export, never VM-exit-only. No silent retry.
+
+### ANSCOLLECT004-PREP result and ANSCOLLECT004 software launch preregistration
+
+Recorded 2026-09-06T18:12:12.000322+00:00. Preparation exit0; exact D collector/startnet in both indices, original inputs unchanged, both FAT/BPB agreement gates passed. Prepared manifest .local/ans-native/ans001-collector-vm-004/prepared-manifest.json SHA256 1a8e212e56e9f6c9ab48d1cd6632f4e1a724428592794526e69f76b2821d9d93.
+
+Exact launch inputs independently rehashed immediately before this entry:
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/boot-media.img: SHA256 4d67aaaeb6c47ae5826dc7af56df1b94469f382f65b88a115f09b5383c1ef691; bytes 838860800.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/evidence.img: SHA256 d5add6c4afe049955ee047755159754053b3418983734ebc852f272253b1a19c; bytes 536870912.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/private-vars.fd: SHA256 b3b855c5a80310168051164986855692d1bdb06e67619856177965cd87c6774f; bytes 67108864.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/launch.py: SHA256 27fbc9626a99a3340dfb8f28d8ad008b78b36f69370ea9d07de5c2e0185f29b3; bytes 1762.
+- /opt/homebrew/share/qemu/edk2-aarch64-code.fd: SHA256 47765fe344818cbc464b1c14ae658fb4b854f5c2ceffa982411731eb4865594d; bytes 67108864.
+- /opt/homebrew/bin/qemu-system-aarch64: SHA256 45fa769772f3823a32ba49c94e30968685a7343bc409f170a53de75993fe6388; bytes 31124720.
+
+Exact command from isolated root:
+```sh
+python3 .local/ans-native/ans001-collector-vm-004/launch.py
+```
+
+Sealed QEMU argv, cwd /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004:
+```json
+[
+  "/opt/homebrew/bin/qemu-system-aarch64",
+  "-name",
+  "ans001-collector-software-004",
+  "-machine",
+  "virt-11.0,gic-version=3",
+  "-accel",
+  "tcg,thread=multi",
+  "-cpu",
+  "max",
+  "-smp",
+  "2",
+  "-m",
+  "4096",
+  "-nodefaults",
+  "-nic",
+  "none",
+  "-drive",
+  "if=pflash,format=raw,unit=0,readonly=on,file=/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+  "-drive",
+  "if=pflash,format=raw,unit=1,file=private-vars.fd",
+  "-device",
+  "ramfb",
+  "-device",
+  "qemu-xhci,id=xhci",
+  "-device",
+  "usb-kbd,bus=xhci.0",
+  "-drive",
+  "if=none,id=boot_media,format=raw,file=boot-media.img",
+  "-device",
+  "usb-storage,drive=boot_media,bus=xhci.0,bootindex=1",
+  "-drive",
+  "if=none,id=evidence_media,format=raw,file=evidence.img",
+  "-device",
+  "usb-storage,drive=evidence_media,bus=xhci.0,serial=ANS001EVID0004",
+  "-display",
+  "none",
+  "-monitor",
+  "none",
+  "-serial",
+  "file:serial.log",
+  "-qmp",
+  "unix:qmp.sock,server=on,wait=off",
+  "-no-reboot"
+]
+```
+
+Same software-only scope and hypotheses as ANSCOLLECT004-PREP entry. 1200s exact child cap, read-only screen inspection around180s if incomplete. If concrete failure, capture all read-only association/PnP/collector evidence while alive, then stop ownchild. No second rescan, guessed volume, manual write bypass, format/SAN changes, Air or retry. Pass requires actual D required collector results and verified private export; optional127/DISMunsupported remain actual records. Recovery: stop disposable child; preserve D and prior media.
+
+### ANSCOLLECT004 observed result — verified export succeeds; WMIC runtime inventory incomplete
+
+Recorded 2026-09-06T18:19:09.061284+00:00. One sealed software VM run completed guest shutdown normally, exit0 after257.15s; no timeout, manual disk action or retry. Actual raw export VM-DONE proves export_exit0, collector_return0, rescan_count1. Seventy-three RAM files copied;76 files extracted including export receipts and marker.
+
+Actual SAN3 REG_DWORD0x3, wpeinit0, RAMenvironment/collector execution, expected absent APPL0003 and exact identity/partition/volume/backing verification passed. Source D image/collector/startnet unchanged. Required pnputil device/package, loaded driver and registry queries passed; no AppleAns/AppleAgx tokens in packages/loaded/registry-services outputs.
+
+Evidence disk was disk0 this run (never hardcoded), ID A001E005, partition1 associated with volume0 ALREADY BEFORE rescan and still after. Exactly one rescan returned0. Detailvolume backingdisk0 and reread exactID verified before assignV0, markerexact and export. Therefore this run does NOT prove rescan caused recovery; previous absent association remains unexplained. No geometry/type/SAN change.
+
+Actual command exits:
+```json
+{
+  "wpeinit": 0,
+  "ans": 0,
+  "connected": 0,
+  "problems": 0,
+  "packages": 0,
+  "ans-reg": 1,
+  "services-sc-optional-unavailable": 127,
+  "loaded": 0,
+  "disks": 0,
+  "volumes": 0,
+  "disk-wmi": -2147024770,
+  "dism-drivers": -2147467262,
+  "registry-services": 0,
+  "pnp-all-reg": 0
+}
+```
+
+sc127 and DISM0x80004002 remain explicit optional checks. WMIC quoting repair removed earlier argument44220 but runtime now returned0x8007007e with Invalid query and The specified module could not be found. Frozen D OPTIONAL-CHECKS.CSV does not classify WMIC optional. Preserve actual failure: overall strict complete-inventory receipt is fail/incomplete while core collector and export gates are true. No silent reclassification or VM-exit-only PASS. Root may issue a separate evidence-backed qualification ruling; it must preserve this outcome.
+
+Receipt .local/ans-native/ans001-collector-vm-004/ANSCOLLECT004-result.json SHA256 8ea0cb6410aca20931510f1b5ce18310b81fd70e6f9edc2f6dcaf3015f942abe. Raw extraction manifest .local/ans-native/ans001-collector-vm-004/extraction-manifest.json SHA256 366429d05e8f829e59288fcde26a4aed86c8f6d7718b355ae1ca23f5f468feda.
+
+Key evidence:
+
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/COMMANDS.CSV: SHA256 eeb2015eda8d0ab1aa532a1ae4f1e51edf3e94dd5384a15ce032a94002752c36.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/SAN-POLICY.TXT: SHA256 ed7807c2bdc1ec1996eca52112645a304e38319fe78bbc64927049519f090efb.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/IDENTITY.TXT: SHA256 3b8b4d7ac6daf0a3d6305d090416780e7fc66c7e9a4196331180aeae2586ac72.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-DONE.TXT: SHA256 d151f51166ff4e44aa97e01933b2a8270e0dbf94e8b60ef97ef51461ef6109ac.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-WRAPPER.TXT: SHA256 cb09f936e7075980fbf06b4e2e18894b0b08a92fb05ee23758b98ada08ba6233.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-PRE-SNAPSHOT.LOG: SHA256 d544dfc1305359ccf016770a97d07a1fc149c962f6df745781ac92e7ccfb6a09.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-POST-SNAPSHOT.LOG: SHA256 d544dfc1305359ccf016770a97d07a1fc149c962f6df745781ac92e7ccfb6a09.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-PRE-PARTITION.LOG: SHA256 ee202e330eac5db3babdfb938ff4791fec2450ead6197596643e68a1f28048af.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-POST-PARTITION.LOG: SHA256 ee202e330eac5db3babdfb938ff4791fec2450ead6197596643e68a1f28048af.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-VOLUME.LOG: SHA256 8fcec61a5968df3a0b235384246c5fe25f3fc5b5bfc2d3f87e8a76e37a0040c5.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-VERIFY-ID.LOG: SHA256 0bbcbd5ca7947fea4cc5ddb683b6f278132bd7d83b9c12956d3fa92ae4760fbf.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/VM-ASSIGN.LOG: SHA256 0f1993fa3e13dc9b765df49d4837813c5736e09b88de63dbd2e80dff739ff1ea.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/EXPORT.LOG: SHA256 a40cfb41b3134e1660c200c8b6f6197e1b09685f45ca3cbae421c854f378b6e4.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/disk-wmi.TXT: SHA256 5abeb11c223124b40c3142a1ef8197c1d964cac8122765825256c411129e6d9e.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/OPTIONAL-CHECKS.CSV: SHA256 92f10c8ef8e0a2b8d38ec81bf14f06b0cd80cb4627823ffcef90b2f9de569678.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/disks.TXT: SHA256 30f65d4153533925352e3e971b33d7a3a25a20b0597a60b1ede8feb11c3a16e3.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/packages.TXT: SHA256 dd25e083418f2d63f3a055ab6d0ac94fc9bc01194765b8a7a6a78d52869e7220.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/loaded.TXT: SHA256 70311c578c4e6e6e35ffd2dc84395e2d5e118bd1d7420be10a1104b46c297b37.
+- /Users/pavel/public_windows/.worktrees/ans-native/.local/ans-native/ans001-collector-vm-004/extracted/ANSCOLLECT004-RESULTS/registry-services.TXT: SHA256 a00205452bb82d24321e9f3a2d82c5220c089e2a096e7488dc5090ec93dc282b.
+
+No Air/device passthrough/driver installation/hardware launch. This software proof does not establish physical medium identity, J313 storage readiness, or safety of an installed Windows disk. Next offline target: classify or resolve observed WMIC runtime dependency/query limitation using actual supported inventory alternatives, preserve successful raw export and do not rerun the volume hypothesis without new evidence.
+
+### ANSCOLLECT004 mandatory-scope audit ruling (preserves prior strict outcome)
+
+Recorded 2026-09-06T18:19:59.560542+00:00. Root reviewed original scope and actual raw evidence: disk-wmi is supplementary optional disk identity inventory, not a mandatory ANS001 collector/export gate. Required PnP disk/device/package, loaded-driver, registry queries and exact DiskPart disk/partition/volume/ID/marker evidence are successful. SAN3, wpeinit and actual73-file RAM export passed.
+
+Frozen source OPTIONAL-CHECKS.CSV lists only sc and DISM. This final audit additionally classifies observed WMIC0x8007007e as optional unsupported. Raw COMMANDS.CSV and WMIC output are unchanged; all_commands_succeeded=false and wmic_succeeded=false. No claim DISM/sc/WMIC succeeded. Earlier strict receipt .local/ans-native/ans001-collector-vm-004/ANSCOLLECT004-result.json SHA256 8ea0cb6410aca20931510f1b5ce18310b81fd70e6f9edc2f6dcaf3015f942abe remains unchanged and linked; this is a scope correction, not a rewritten test result.
+
+Normalized mandatory-scope PASS receipt .local/ans-native/ans001-collector-vm-004/ANSCOLLECT004-mandatory-result.json SHA256 7530fe81cfcbfe961f9aec3adf5a344d7a9bdc7ea259329a0aa1b6d83d152e0c binds exact D image SHA2563db37261578a0fb2793e980f5d0e737adc7d7bab2eb1529e9cf0ec70ce29e8da and the same actual raw evidence. This PASS is limited to disposable software collector/export qualification, not hardware boot/device/storage readiness. Volume existed PRE-rescan, so rescan necessity and prior format causality are unproven. No new VM or media mutation was performed for this audit ruling.
+
+### ANS001-PACK — final offline enumeration-only packet assembly
+
+Recorded 2026-09-06T18:30:01.727127+00:00. Exact hardware-free assembly command:
+```sh
+proxyenv/bin/python .local/ans-native/assemble-final.py
+```
+Frozen assembly script SHA256caac18b193cf403c07d83a342e85ceba765c7c3e514e940a866b334fb45c3e38. It verifies canonical generated
+headers against frozen m1n1/Mu source manifests, rehashes exact build/image/test/
+collector/signature inputs, copies a new owned packet, writes/validates the
+qualification manifest and makes copied files read-only. No serial/device API.
+Inputs: m1n1 ANSBUILD004C29e8897cb1daf8755f153e1c1fc9900a0464401f000833ddd847797c2bdb3acb;
+Mu native85157f29fd43f562559e45dd15c42549befe8f54f20f95d3d5b79db221c880d5;
+WinPE D3db37261578a0fb2793e980f5d0e737adc7d7bab2eb1529e9cf0ec70ce29e8da;
+mandatory collector scope7530fe81cfcbfe961f9aec3adf5a344d7a9bdc7ea259329a0aa1b6d83d152e0c;
+immutable96Python-plus-ANS gate receipt
+e2be12bc257ebc361dde7883048c5cb44819b71f5389702b05ceb440f9338b69.
+ANSCOLLECT004 strict supplementary-command failure stays preserved alongside
+explicit mandatory-scope ruling; no all-command/WMIC/production-signing pass.
+Output .local/ans-native/ANS001-ready must not exist. Scope only unbound ANS001;
+native controller boot and guest DMA remain denied. No Air permission or test
+preregistration is implied by this packet. After assembly run only validator/
+launcher --dry-run, independently review bindings and exact readonly outputs.
+
+### ANS001-PACK observed offline readiness
+
+Final assembly and all11 artifact bindings passed; compiled header/source
+manifest consistency checked. Actual validator and full assisted-shell dry-run
+exit0 with physical/UART/lowmem/8CPU/noAGXbroker. No port discovery/chainload/UART
+was performed. Independent packet review found no blocker within unbound
+ANS001 scope. Final manifest SHA256
+466036d0f86d9e3a6adff573b25ce1253bf1907811910f95c952f7bf777aecaf.
+Directory .local/ans-native/ANS001-ready, exact COMMANDS.json and DRY-RUN.log
+retained; copies read-only. READINESS explicitly denies hardware permission,
+hardware proof, native controller/DMA admission and installed-Windows boot
+readiness. User hardware approval, free GPU slot, fresh control-plane/current
+recovery check and exact external evidence-medium identity remain prerequisites.
+No ANS001 Air experiment has been preregistered or executed by this entry.
