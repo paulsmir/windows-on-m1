@@ -96,6 +96,17 @@ producer SHA78c2b86d2303fcf3661ee8d5941fe0ce8e9a086e65cac0183f02450e94106382.
 Remote hash matches. Exact R5 with no arguments is the sole remaining workload;
 the installed driver remains the original exact30.0.511.0 package.
 
+R5 RESULT — INCONCLUSIVE BEFORE DRIVER. EnumAdapters3 returned2 entries but the
+strict hardware/full-graphics/one-source predicate matched0; every context and
+render status remained C0000001 and no KMD/AGX receipt executed. Commit
+940622911506de81b801fb6aa296eb5fc5010026 adds only one scalar line per returned
+entry with index,LUID,source count,query status and exact ADAPTERTYPE bits before
+the unchanged fail-closed predicate. R6 build/analysis PASS, ARM64 static
+886784bytes; overlay SHAd5acd7bac6a8c9555c141ef15123e4f0d5e045c2ac6be8f05a90b7860a9a0840,
+producer SHA385519319b7a467add06d4e7c16c795dbe385bffcda0e0b1ed918147153ea7d0.
+One exact R6 diagnostic invocation is permitted. It may render only if the
+unchanged predicate uniquely matches; otherwise it must stop before CreateDevice.
+
 Hardware workflow: collect and remove exact installed EXP509 first; restore the
 current ordinary377/392 Code28 baseline; transfer exact EXP511 ZIP/producer and
 scripts; stage only; graceful reboot; launch immutable full-owner477/406 once;

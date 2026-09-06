@@ -136,6 +136,12 @@ fail-closed. R5 build/analysis PASS; remote SHA
 78c2b86d2303fcf3661ee8d5941fe0ce8e9a086e65cac0183f02450e94106382.
 Driver30.0.511.0 remains Code0/unchanged. Next is one no-argument R5 run.
 
+R5 enumerated2 but strict predicate matched0; all driver stages unexecuted.
+Commit940622911506de81b801fb6aa296eb5fc5010026 adds read-only per-adapter
+LUID/source/query/type scalar output. R6 analysis build PASS and remote SHA
+385519319b7a467add06d4e7c16c795dbe385bffcda0e0b1ed918147153ea7d0.
+One R6 diagnostic run is next; no driver/package/platform change.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,
