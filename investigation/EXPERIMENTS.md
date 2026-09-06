@@ -107,6 +107,19 @@ producer SHA385519319b7a467add06d4e7c16c795dbe385bffcda0e0b1ed918147153ea7d0.
 One exact R6 diagnostic invocation is permitted. It may render only if the
 unchanged predicate uniquely matches; otherwise it must stop before CreateDevice.
 
+R6 RESULT — exact causal selection evidence. Entry0 LUID0:262440 has sources0,
+query0,type0x10b = Render+Display+Post+ACG hardware; entry1 LUID0:25221 has
+sources0,query0,type0x105 = Render+Software+ACG. Matching remained0 and no KMD
+call occurred. Commit18393385522a92f189035a4f674389430076cf60 removes only the
+session-zero NumOfSources==1 predicate and requires the uniquely observed
+Render+Display+Post,!Software,!Compute identity. R7 pinned ARM64 static analysis
+build PASS, zero warnings/errors; overlay SHA
+3af4061b9ff4413efc86ffa70d303f50ceee6e68d7b4808349e4ccbe7bd68b73,
+producer SHA3c9e342ed916fecc166b3a960d0a9c14e6809fa1f9be3f8273010fa5ef78bc2f.
+Remote transfer completed. One exact R7 invocation is permitted against the
+unchanged installed30.0.511.0 driver; it is the first launch expected to reach
+CreateDevice/Context/Allocation/Render.
+
 Hardware workflow: collect and remove exact installed EXP509 first; restore the
 current ordinary377/392 Code28 baseline; transfer exact EXP511 ZIP/producer and
 scripts; stage only; graceful reboot; launch immutable full-owner477/406 once;

@@ -142,6 +142,14 @@ LUID/source/query/type scalar output. R6 analysis build PASS and remote SHA
 385519319b7a467add06d4e7c16c795dbe385bffcda0e0b1ed918147153ea7d0.
 One R6 diagnostic run is next; no driver/package/platform change.
 
+R6 exact inventory: hardware Apple adapter LUID0:262440,type0x10b
+Render+Display+Post+ACG,sources0; software adapter LUID0:25221,type0x105.
+Commit18393385522a92f189035a4f674389430076cf60 removes only the invalid
+session0 source-count condition while preserving exact-one hardware identity.
+R7 analysis build PASS; remote SHA
+3c9e342ed916fecc166b3a960d0a9c14e6809fa1f9be3f8273010fa5ef78bc2f.
+Next is one exact R7 run against unchanged Code0 driver30.0.511.0.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,
