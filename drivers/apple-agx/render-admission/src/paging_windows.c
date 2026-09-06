@@ -27,7 +27,7 @@ static NTSTATUS AdmissionEncodePaging(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
+static NTSTATUS AdmissionBuildPagingBuffer(
     HANDLE Adapter, DXGKARG_BUILDPAGINGBUFFER *Args) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   APPLE_AGX_PHYSICAL_PAGING_PLAN plan;
@@ -112,6 +112,57 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
   if (result != AppleAgxPhysicalPagingOk)
     return STATUS_INVALID_PARAMETER;
   return AdmissionEncodePaging(Args, &plan, mdl);
+}
+
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static VOID AdmissionPagingBuildTraceWrite(
+    ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(
+      request, AdmissionPagingBuildTraceWord(Field, Value));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
+static VOID AdmissionPagingBuildTrace(
+    ADMISSION_CONTEXT *Context, ULONG Irql, ULONG Operation,
+    ULONG DmaSize, ULONG PrivateSize, NTSTATUS Status) {
+  if (Context == NULL || Context->BrokerBase == NULL ||
+      InterlockedCompareExchange(
+          &Context->PagingBuildTraceClaimed, 1, 0) != 0)
+    return;
+  AdmissionPagingBuildTraceWrite(Context, 1u, 1u);
+  AdmissionPagingBuildTraceWrite(Context, 2u, Irql);
+  AdmissionPagingBuildTraceWrite(Context, 3u, Operation);
+  AdmissionPagingBuildTraceWrite(Context, 4u, DmaSize);
+  AdmissionPagingBuildTraceWrite(Context, 5u, PrivateSize);
+  AdmissionPagingBuildTraceWrite(Context, 6u, (ULONG)Status);
+}
+#else
+#define AdmissionPagingBuildTrace(Context, Irql, Operation, DmaSize, PrivateSize, Status) \
+  do {                                                                                     \
+    (void)(Context); (void)(Irql); (void)(Operation); (void)(DmaSize);                     \
+    (void)(PrivateSize); (void)(Status);                                                    \
+  } while (0)
+#endif
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiBuildPagingBuffer(
+    HANDLE Adapter, DXGKARG_BUILDPAGINGBUFFER *Args) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  ULONG irql = (ULONG)KeGetCurrentIrql();
+  ULONG operation = Args == NULL ? MAXULONG : (ULONG)Args->Operation;
+  ULONG dmaSize = Args == NULL ? 0u : Args->DmaSize;
+  ULONG privateSize = Args == NULL ? 0u : Args->DmaBufferPrivateDataSize;
+  NTSTATUS status = AdmissionBuildPagingBuffer(Adapter, Args);
+  AdmissionPagingBuildTrace(
+      context, irql, operation, dmaSize, privateSize, status);
+  return status;
 }
 
 typedef struct _ADMISSION_PAGING_NOTIFICATION {

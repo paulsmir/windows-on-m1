@@ -205,6 +205,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG SubmitTraceClaimed;
   volatile LONG UmdRenderTraceClaimed;
   volatile LONG OpenAllocationTraceClaimed;
+  volatile LONG PagingBuildTraceClaimed;
   volatile LONG GdiReceiptClaimed;
   volatile LONG GdiSubmitTraceClaimed;
   KSPIN_LOCK GdiReceiptLock;
