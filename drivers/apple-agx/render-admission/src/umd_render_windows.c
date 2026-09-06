@@ -299,7 +299,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   location->SplitOffset = prepared.Patches[0].SplitOffset;
   Args->pDmaBuffer = (PUCHAR)Args->pDmaBuffer + prepared.DmaBytes;
   Args->pPatchLocationListOut = location + 1;
-  --Args->PatchLocationListOutSize;
   Args->MultipassOffset = sizeof(command);
 
   AdmissionGdiReceiptBeginWindows(
