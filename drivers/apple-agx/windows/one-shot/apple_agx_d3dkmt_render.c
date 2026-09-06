@@ -80,8 +80,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
             adapterType.Value);
     if (NT_SUCCESS(typeStatus) &&
         adapterType.RenderSupported && adapterType.DisplaySupported &&
-        !adapterType.SoftwareDevice && !adapterType.ComputeOnly &&
-        adapters[index].NumOfSources == 1u) {
+        adapterType.PostDevice && !adapterType.SoftwareDevice &&
+        !adapterType.ComputeOnly) {
       selectedAdapter = index;
       ++matchingAdapters;
     }
