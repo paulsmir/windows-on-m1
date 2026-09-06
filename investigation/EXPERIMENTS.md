@@ -1,5 +1,42 @@
 # Hardware Experiment Ledger
 
+## EXP534 preserve Render patch capacity — preregistration 2026-09-06T22:19:07Z
+
+WHY THIS HYPOTHESIS:
+- EXP533 produced no0x5330 Patch receipt while Submit again proved outstanding0;
+  therefore dxgkrnl skipped Patch rather than Patch rejecting internally.
+- Pinned `DXGKARG_RENDER` defines `PatchLocationListOutSize` as input capacity,
+  while the existing production GDI path advances only the output pointer.
+- Admission advanced the pointer and also decremented the input capacity, an
+  inconsistent output accounting pair adjacent to dxgkrnl's decision to build a
+  Patch submission.
+
+Single variable commit `647a30498e90de547b1f95944ea1f64da52b10c8`
+removes only `--Args->PatchLocationListOutSize`; pointer advancement, one patch
+entry, DMA output, MultipassOffset and all validation remain unchanged. No
+producer/backend/firmware/RTKit/UAT/memory/scheduler/AGX/IRQ/display change.
+Regression was RED then7 focused and106 render tests GREEN. Pinned WDK26100
+build/analysis/Universal/Inf2Cat/TestSign/version30.0.534.0 PASS with inherited
+C28251 only.
+
+Overlay/build SHA `41acae9f...`/`6ef4966e...`; ZIP/SYS/INF/CAT/UMD/producer
+SHA `4c9a8453...`/`aa82550b...`/`00c37cf7...`/`e9cdd828...`/`1842c29e...`/
+`3f4c1da6...`; manifest SHA `644d1f9f...`. Stage/run/cleanup/launch SHA
+`e6ed95bc...`/`54fbae0f...`/`1d74e80e...`/`8c9ae19b...`.
+Preflight requires exact EXP533 cleanup and ordinary377/392 Code28/no AGX state/
+8CPU/SSH. One natural bind and one producer with host tee. PASS requires0x5330
+Patch accepted and progress past Submit guard20; then exact cleanup and continue
+to the first new boundary.
+
+## EXP533 exact Render Patch guard — result 2026-09-06T22:19Z
+
+CONFIRMED: Patch callback absent. Exact30.0.533.0 bound Code0 with matching
+oem5/SYS and8CPU. One producer reset Windows. Host log SHA
+`6d4f8076bb11558d4da7b08608f8ac83dfa340d98b0a93195b016ab232360ac0`
+contains no0x5330 word at all, followed by the same0x5320 outstanding0/submitted255
+receipt. Thus no internal Patch guard ran. No AGX execution. Ordinary recovery
+did not regain SSH; exact emergency cleanup is in progress.
+
 ## EXP533 exact Render Patch guard — preregistration 2026-09-06T22:12:06Z
 
 WHY THIS HYPOTHESIS:

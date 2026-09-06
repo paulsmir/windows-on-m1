@@ -323,6 +323,13 @@ exact cleanup succeeded. Commit878f812 adds only final0x5330 guard/status to the
 existing nonpaging Render Patch path;110 focused tests and pinned30.0.533.0 gates
 PASS. ZIP/SYS/producer SHA6ab69d70.../46f24e20.../c88b2fd7.... EXP533
 preregistered. No physical AGX/fence readiness change.
+EXP533 FINAL: no0x5330 Patch receipt at all, host log SHA6d4f8076..., followed by
+outstanding0/submitted255. DxgkDdiPatch is skipped, not internally rejected.
+Pinned DXGKARG_RENDER and existing production GDI path keep
+PatchLocationListOutSize as input capacity; admission incorrectly decremented it
+after also advancing the pointer. Commit647a304 removes only that decrement;
+113 focused tests and pinned30.0.534.0 gates PASS. ZIP/SYS/producer SHA
+4c9a8453.../aa82550b.../3f4c1da6.... EXP534 preregistered after exact cleanup.
 
 ## Final live ordinary clean baseline
 
