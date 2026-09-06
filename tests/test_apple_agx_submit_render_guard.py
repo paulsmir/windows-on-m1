@@ -51,6 +51,20 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
             submit,
         )
         self.assertIn("AdmissionSubmitRenderGuardAccepted", submit)
+        self.assertIn("AdmissionSubmitPacketGuardWindows", submit)
+        for name in (
+            "AdmissionSubmitPacketGuardState",
+            "AdmissionSubmitPacketGuardFence",
+            "AdmissionSubmitPacketGuardContext",
+            "AdmissionSubmitPacketGuardPrivate",
+            "AdmissionSubmitPacketGuardPrivateEnd",
+            "AdmissionSubmitPacketGuardDmaStart",
+            "AdmissionSubmitPacketGuardDmaEnd",
+            "AdmissionSubmitPacketGuardBind",
+            "AdmissionSubmitPacketGuardScheduler",
+            "AdmissionSubmitPacketGuardQueue",
+        ):
+            self.assertIn(name, submit)
         self.assertNotIn(
             "AdmissionSubmitRenderGuardWindows(Context, MAXULONG, STATUS_PENDING)",
             submit,

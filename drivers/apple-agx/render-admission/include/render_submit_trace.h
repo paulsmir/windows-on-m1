@@ -10,6 +10,7 @@
 #define ADMISSION_SUBMIT_FENCE_DETAIL_TAG 0x5320000000000000ULL
 #define ADMISSION_PATCH_RENDER_GUARD_TAG 0x5330000000000000ULL
 #define ADMISSION_PREPATCH_ADOPT_GUARD_TAG 0x5350000000000000ULL
+#define ADMISSION_SUBMIT_PACKET_GUARD_TAG 0x5390000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -143,6 +144,20 @@ typedef enum _ADMISSION_PREPATCH_ADOPT_GUARD {
   AdmissionPrepatchAdoptGuardPrepare = 4u,
 } ADMISSION_PREPATCH_ADOPT_GUARD;
 
+typedef enum _ADMISSION_SUBMIT_PACKET_GUARD {
+  AdmissionSubmitPacketGuardAccepted = 0u,
+  AdmissionSubmitPacketGuardState = 1u,
+  AdmissionSubmitPacketGuardFence = 2u,
+  AdmissionSubmitPacketGuardContext = 3u,
+  AdmissionSubmitPacketGuardPrivate = 4u,
+  AdmissionSubmitPacketGuardPrivateEnd = 5u,
+  AdmissionSubmitPacketGuardDmaStart = 6u,
+  AdmissionSubmitPacketGuardDmaEnd = 7u,
+  AdmissionSubmitPacketGuardBind = 8u,
+  AdmissionSubmitPacketGuardScheduler = 9u,
+  AdmissionSubmitPacketGuardQueue = 10u,
+} ADMISSION_SUBMIT_PACKET_GUARD;
+
 typedef enum _ADMISSION_OPEN_ALLOCATION_TRACE_FIELD {
   AdmissionOpenAllocationTraceVersion = 1u,
   AdmissionOpenAllocationTraceIrql = 2u,
@@ -274,6 +289,14 @@ static inline unsigned long long AdmissionPatchRenderGuardWord(
 static inline unsigned long long AdmissionPrepatchAdoptGuardWord(
     unsigned int Guard, unsigned int Status) {
   return ADMISSION_PREPATCH_ADOPT_GUARD_TAG |
+      ((unsigned long long)(Guard & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Status;
+}
+
+static inline unsigned long long AdmissionSubmitPacketGuardWord(
+    unsigned int Guard, unsigned int Status) {
+  return ADMISSION_SUBMIT_PACKET_GUARD_TAG |
       ((unsigned long long)(Guard & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Status;

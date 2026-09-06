@@ -10,6 +10,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   APPLE_AGX_EXP208_GDI_BINDING binding;
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
+  ULONG packet_guard = AdmissionSubmitPacketGuardAccepted;
 #define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
@@ -116,36 +117,46 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
                       STATUS_INVALID_USER_BUFFER);
 
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
-  if (AdmissionRenderPacketState(&Context->RenderPacket) ==
-          AdmissionRenderPacketPrepared &&
-      Context->RenderPacket.Description.Fence ==
-          Args->SubmissionFenceId &&
-      Context->RenderPacket.Description.ContextToken ==
-          (ULONGLONG)(ULONG_PTR)render_context &&
-      Context->RenderPacket.Description.PrivateDataToken ==
-          (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData &&
-      Context->RenderPacket.Description.PrivateDataEnd ==
-          shadow.BytesUsed &&
-      Context->RenderPacket.Description.DmaStart ==
-          Args->DmaBufferSubmissionStartOffset &&
-      Context->RenderPacket.Description.DmaEnd ==
-          Args->DmaBufferSubmissionEndOffset &&
-      AdmissionBackendImageBindSubmission(
+  if (AdmissionRenderPacketState(&Context->RenderPacket) !=
+      AdmissionRenderPacketPrepared)
+    packet_guard = AdmissionSubmitPacketGuardState;
+  else if (Context->RenderPacket.Description.Fence != Args->SubmissionFenceId)
+    packet_guard = AdmissionSubmitPacketGuardFence;
+  else if (Context->RenderPacket.Description.ContextToken !=
+           (ULONGLONG)(ULONG_PTR)render_context)
+    packet_guard = AdmissionSubmitPacketGuardContext;
+  else if (Context->RenderPacket.Description.PrivateDataToken !=
+           (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData)
+    packet_guard = AdmissionSubmitPacketGuardPrivate;
+  else if (Context->RenderPacket.Description.PrivateDataEnd != shadow.BytesUsed)
+    packet_guard = AdmissionSubmitPacketGuardPrivateEnd;
+  else if (Context->RenderPacket.Description.DmaStart !=
+           Args->DmaBufferSubmissionStartOffset)
+    packet_guard = AdmissionSubmitPacketGuardDmaStart;
+  else if (Context->RenderPacket.Description.DmaEnd !=
+           Args->DmaBufferSubmissionEndOffset)
+    packet_guard = AdmissionSubmitPacketGuardDmaEnd;
+  else if (!AdmissionBackendImageBindSubmission(
           &Context->BackendImage,
           &Context->RenderPacket.Description,
           (PVOID)(ULONG_PTR)Context->RenderPacket.Description
               .DestinationCpuToken,
-          view.Bytes, view.DmaBytes, &binding)) {
+          view.Bytes, view.DmaBytes, &binding))
+    packet_guard = AdmissionSubmitPacketGuardBind;
+  else {
     bound = TRUE;
-    if (AppleAgxSchedulerQueueFence(
-          &Context->Scheduler, Args->NodeOrdinal,
-          Args->EngineOrdinal, Args->SubmissionFenceId) &&
-        AdmissionRenderPacketQueue(
+    if (!AppleAgxSchedulerQueueFence(
+            &Context->Scheduler, Args->NodeOrdinal,
+            Args->EngineOrdinal, Args->SubmissionFenceId))
+      packet_guard = AdmissionSubmitPacketGuardScheduler;
+    else if (!AdmissionRenderPacketQueue(
           &Context->RenderPacket, Args->SubmissionFenceId,
           (ULONGLONG)(ULONG_PTR)render_context,
           (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData,
           Args->DmaBufferSubmissionStartOffset,
           Args->DmaBufferSubmissionEndOffset))
+      packet_guard = AdmissionSubmitPacketGuardQueue;
+    else
       accepted = TRUE;
   }
   if (bound && !accepted &&
@@ -153,9 +164,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
           &Context->BackendImage, Args->SubmissionFenceId))
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
-  if (!accepted)
+  if (!accepted) {
+    AdmissionSubmitPacketGuardWindows(
+        Context, packet_guard, STATUS_DEVICE_BUSY);
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPacket,
                       STATUS_DEVICE_BUSY);
+  }
   AdmissionSubmitRenderGuardWindows(
       Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS);
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
