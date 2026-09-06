@@ -350,6 +350,11 @@ combined unsealed requirement with sealed-only MatchesU64. Commit086a2db adds a
 separate read-only writable verifier before existing seal;108 regressions and
 pinned30.0.537.0 gates PASS. ZIP/SYS/producer SHA6c6f118e.../f875cbac.../
 07361327.... EXP537 preregistered after exact cleanup/ordinary restore.
+EXP537 FINAL: exact adoption guard0/status0, host SHA2fbee1de..., proves writable
+verify, seal and packet preparation. Success receipt masked immediate Submit
+result. Commitb5926c5 removes only success diagnostic so existing Submit guard is
+first;108 tests and pinned30.0.538.0 gates PASS. ZIP/SYS/producer SHA9bc8a0b7.../
+aa71ac38.../5878f708.... EXP538 preregistered after exact cleanup/ordinary restore.
 
 ## Final live ordinary clean baseline
 

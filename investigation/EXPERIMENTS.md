@@ -1,5 +1,26 @@
 # Hardware Experiment Ledger
 
+## EXP538 final Submit result after adopted packet — preregistration 2026-09-06T23:35Z
+
+WHY THIS HYPOTHESIS: EXP537 exact0x5350 guard0/status0 proves prepatch adoption,
+shadow seal and packet preparation all succeed. That success receipt occupies the
+single broker slot and hides the immediately following Submit guard. Commit
+`b5926c5423b779baf030db46c813bd43a0547ad8` removes only the success adoption
+diagnostic; all failure receipts and behavior remain. Existing final Submit guard
+will distinguish accepted0 from packet/bind/queue guard22. 108 render regressions
+GREEN; pinned WDK26100 version30.0.538.0 build/analysis/Universal/Inf2Cat/signing
+PASS. ZIP/SYS/INF/producer SHA `9bc8a0b7...`/`aa71ac38...`/`2e31dd22...`/
+`5878f708...`. One natural bind/producer after exact EXP537 cleanup and clean
+ordinary preflight. No backend/firmware/memory/scheduler/display change.
+
+## EXP537 writable prepatch verification — result 2026-09-06T23:35Z
+
+CONFIRMED: exact0x5350 guard0/status0, host log SHA
+`2fbee1deeaa5348c65f30e77d22db888820f35461955611c3877579abf9ec9ba`.
+Writable shadow verification, seal and packet preparation succeed. No physical
+AGX/completion claim yet. Established emergency recovery removed exact oem5 and
+hash-matched service/SYS/UMD; ordinary377/392 restoration is active.
+
 ## EXP537 writable prepatch verification — preregistration 2026-09-06T23:10Z
 
 WHY THIS HYPOTHESIS: EXP536 exact0x5350 guard3/statusC00000E8 localizes failure
