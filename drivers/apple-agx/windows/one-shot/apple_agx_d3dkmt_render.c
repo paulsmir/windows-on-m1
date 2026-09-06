@@ -5,6 +5,7 @@
 
 #include "render_allocation.h"
 #include "render_umd_command.h"
+#include "apple_agx_exp208_gdi.h"
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
@@ -127,7 +128,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     goto cleanup;
 
   if (!AdmissionAllocationDescribe(
-          2560u, 1600u, 4u,
+          APPLE_AGX_EXP208_GDI_WIDTH,
+          APPLE_AGX_EXP208_GDI_HEIGHT, 4u,
           (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
           (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation))
     goto cleanup;
@@ -166,10 +168,10 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   command.Version = ADMISSION_UMD_COMMAND_VERSION;
   command.Bytes = sizeof(command);
   command.Opcode = AdmissionUmdOpcodeColorFill;
-  command.Destination.Right = 2560u;
-  command.Destination.Bottom = 1600u;
+  command.Destination.Right = APPLE_AGX_EXP208_GDI_WIDTH;
+  command.Destination.Bottom = APPLE_AGX_EXP208_GDI_HEIGHT;
   command.DestinationAllocationIndex = 0u;
-  command.Color = 0xff336699u;
+  command.Color = APPLE_AGX_EXP208_GDI_COLOR;
   command.Rop = AdmissionUmdRopPatCopy;
   CopyMemory(createContext.pCommandBuffer, &command, sizeof(command));
   ZeroMemory(createContext.pAllocationList,

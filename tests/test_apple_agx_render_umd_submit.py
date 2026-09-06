@@ -108,6 +108,11 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("BUFFERS device_command=", source)
         self.assertIn("RENDER_OUT command=", source)
         self.assertIn("render_umd_command.h", project)
+        self.assertIn("apple_agx_exp208_gdi.h", source)
+        self.assertIn("APPLE_AGX_EXP208_GDI_WIDTH", source)
+        self.assertIn("APPLE_AGX_EXP208_GDI_HEIGHT", source)
+        self.assertIn("APPLE_AGX_EXP208_GDI_COLOR", source)
+        self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 
 
