@@ -1,5 +1,38 @@
 # Hardware Experiment Ledger
 
+## EXP522 explicit producer residency — preregistration 2026-09-06T20:35:56Z
+
+WHY THIS HYPOTHESIS:
+- EXP515 proved successful OpenAllocation but zero implicit producer-correlated
+  BuildPagingBuffer calls before Render failure.
+- EXP517 proved dxgkrnl creates the Render DMA buffer then marks the device
+  error Reason16; EXP519 proved no callback entry.
+- Pinned WDK26100 defines the supported WDDM2 owner chain as
+  CreatePagingQueue -> MakeResident -> wait returned monitored paging fence
+  before submitting commands that reference those allocations.
+
+Single variable: producer explicitly makes its exact allocation resident and
+waits the exact paging fence; KMD remains exact EXP519. Commit
+`e591b88c2981f40ec0f76ff5bd92192734c3fc9f`; four focused and 106 render tests
+GREEN. EXP521 attempted a direct user GDI context but pinned WDK rejected it at
+compile because GdiContext and DXGK_RENDERKM_COMMAND are KMD-only; no EXP521
+package or hardware run exists, and commits 911b506/13b418f preserve that
+offline rejection. Producer build/analysis PASS SHA
+`d8084560fa88a64ad184e94bb0d0ae6b4393fa547a13c043689972c15347f8fc`;
+overlay SHA `703a3e6f3a08f7226bbca6717aa32b7b787f86a2ea95567497fe32ca1a0f5d16`.
+Driver ZIP/SYS/INF are exact EXP519 hashes `5068cc42...` / `441f3751...` /
+`3d2a8a71...`. Stage/run/collect/cleanup/launch SHA are `36ac776e...` /
+`ee80068f...` / `df65b117...` / `18f51d06...` / `d683c939...`.
+PASS requires CreatePagingQueue and MakeResident success, producer-correlated
+BuildPagingBuffer plus paging fence completion, then progress to 0x5120; failure
+localizes the exact explicit residency primitive. One run only, exact cleanup.
+
+EXP520 FINAL: LegacyMode=1 was REJECTED. KMD device_flags remained2, exact
+OpenAllocation guard0/status0 and zero0x5120; D3DKMTRender C0000001. Producer /
+host/observation SHA `c75fa134...` / `128158d1...` / `c0241172...`. Exact cleanup
+and ordinary recovery health SHA `231bb762...`. Commit c59cbb2 removes the
+rejected flag. Do not repeat EXP520.
+
 ## EXP520 documented legacy OpenGL device contract — preregistration 2026-09-06T20:23:53Z
 
 WHY THIS HYPOTHESIS:

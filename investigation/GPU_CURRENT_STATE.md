@@ -246,6 +246,13 @@ CREATEDEVICE.LegacyMode=1 for documented OpenGL command-buffer client routing;
 exact519 KMD reused.106 tests and pinned producer analysis PASS. Producer SHA
 e65a8ffddb1b79721c33f375073b38cc9a2d08c8b84fcfcf68b2dbbf967bf67b.
 Next: one exact520 run; require changed device classification plus0x5120 or reject.
+EXP520 FINAL: LegacyMode rejected; device_flags stayed2, Open success, zero5120.
+Cleanup/ordinary health231bb7625cbd3956496d8ce6719537f753727b4e2f048b3b052c160b13553c20.
+EXP521 direct GDI-context path rejected offline by pinned WDK (GdiContext and
+DXGK_RENDERKM_COMMAND are KMD-only); no hardware run. EXP522 commit e591b88 adds
+supported CreatePagingQueue/MakeResident/exact paging-fence wait before Render;
+producer SHAd8084560fa88a64ad184e94bb0d0ae6b4393fa547a13c043689972c15347f8fc.
+Next one exact522 run; require paging operation/fence then Render progress.
 
 ## Final live ordinary clean baseline
 
