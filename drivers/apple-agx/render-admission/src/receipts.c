@@ -89,6 +89,18 @@ _Use_decl_annotations_ VOID AdmissionRecordUmdRenderGuard(
   WriteDword(key, L"Wom1UmdRenderStatus", (ULONG)Status);
   ZwClose(key);
 }
+
+_Use_decl_annotations_ VOID AdmissionRecordSubmitRenderGuard(
+    ADMISSION_CONTEXT *Context, ULONG Guard, NTSTATUS Status) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1SubmitRenderGuard", Guard);
+  WriteDword(key, L"Wom1SubmitRenderStatus", (ULONG)Status);
+  ZwClose(key);
+}
 #endif
 
 _Use_decl_annotations_ void AdmissionRecordContext0Inventory(

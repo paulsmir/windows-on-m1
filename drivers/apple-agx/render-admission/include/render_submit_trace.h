@@ -94,6 +94,32 @@ typedef enum _ADMISSION_UMD_RENDER_GUARD {
   AdmissionUmdRenderGuardShadow = 20u,
 } ADMISSION_UMD_RENDER_GUARD;
 
+typedef enum _ADMISSION_SUBMIT_RENDER_GUARD {
+  AdmissionSubmitRenderGuardAccepted = 0u,
+  AdmissionSubmitRenderGuardArgs = 1u,
+  AdmissionSubmitRenderGuardStarted = 2u,
+  AdmissionSubmitRenderGuardRuntime = 3u,
+  AdmissionSubmitRenderGuardFlags = 4u,
+  AdmissionSubmitRenderGuardFenceArgument = 5u,
+  AdmissionSubmitRenderGuardNodeArgument = 6u,
+  AdmissionSubmitRenderGuardEngineArgument = 7u,
+  AdmissionSubmitRenderGuardContextArgument = 8u,
+  AdmissionSubmitRenderGuardPrivateArgument = 9u,
+  AdmissionSubmitRenderGuardPrivateSize = 10u,
+  AdmissionSubmitRenderGuardPrivateRange = 11u,
+  AdmissionSubmitRenderGuardDmaRange = 12u,
+  AdmissionSubmitRenderGuardContextMagic = 13u,
+  AdmissionSubmitRenderGuardContextDevice = 14u,
+  AdmissionSubmitRenderGuardAdapter = 15u,
+  AdmissionSubmitRenderGuardSystem = 16u,
+  AdmissionSubmitRenderGuardSchedulerInactive = 17u,
+  AdmissionSubmitRenderGuardNode = 18u,
+  AdmissionSubmitRenderGuardEngine = 19u,
+  AdmissionSubmitRenderGuardFence = 20u,
+  AdmissionSubmitRenderGuardShadow = 21u,
+  AdmissionSubmitRenderGuardPacket = 22u,
+} ADMISSION_SUBMIT_RENDER_GUARD;
+
 typedef enum _ADMISSION_OPEN_ALLOCATION_TRACE_FIELD {
   AdmissionOpenAllocationTraceVersion = 1u,
   AdmissionOpenAllocationTraceIrql = 2u,

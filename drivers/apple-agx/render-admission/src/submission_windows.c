@@ -1,5 +1,10 @@
 #include "render_admission.h"
 
+#if !defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#define AdmissionRecordSubmitRenderGuard(Context, Guard, Status)             \
+  ((void)(Context), (void)(Guard), (void)(Status))
+#endif
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     ADMISSION_CONTEXT *Context,
     const DXGKARG_SUBMITCOMMAND *Args) {
@@ -10,40 +15,81 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   APPLE_AGX_EXP208_GDI_BINDING binding;
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
-#define GDI_SUBMIT_RETURN(value)                                              \
+#define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
+    AdmissionRecordSubmitRenderGuard(Context, (guard), gdiStatus);           \
     AdmissionGdiReceiptSubmitWindows(Context, Args, gdiStatus);              \
     return gdiStatus;                                                        \
   } while (0)
 
-  if (Context == NULL || Args == NULL || !Context->Started ||
-      !AdmissionPlatformRuntimeReady(Context) ||
-      Args->Flags.Value != 0u || Args->SubmissionFenceId == 0u ||
-      Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
-      Args->hContext == NULL || Args->pDmaBufferPrivateData == NULL ||
-      Args->DmaBufferPrivateDataSize != ADMISSION_GDI_DMA_PRIVATE_SIZE ||
-      Args->DmaBufferPrivateDataSubmissionStartOffset != 0u ||
+  AdmissionRecordSubmitRenderGuard(Context, MAXULONG, STATUS_PENDING);
+  if (Context == NULL || Args == NULL)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardArgs,
+                      STATUS_INVALID_PARAMETER);
+  if (!Context->Started)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardStarted,
+                      STATUS_INVALID_PARAMETER);
+  if (!AdmissionPlatformRuntimeReady(Context))
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardRuntime,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->Flags.Value != 0u)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardFlags,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->SubmissionFenceId == 0u)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardFenceArgument,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->NodeOrdinal != 0u)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardNodeArgument,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->EngineOrdinal != 0u)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardEngineArgument,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->hContext == NULL)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardContextArgument,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pDmaBufferPrivateData == NULL)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPrivateArgument,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->DmaBufferPrivateDataSize != ADMISSION_GDI_DMA_PRIVATE_SIZE)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPrivateSize,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->DmaBufferPrivateDataSubmissionStartOffset != 0u ||
       Args->DmaBufferPrivateDataSubmissionEndOffset >
-          Args->DmaBufferPrivateDataSize ||
-      Args->DmaBufferSubmissionStartOffset >=
+          Args->DmaBufferPrivateDataSize)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPrivateRange,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->DmaBufferSubmissionStartOffset >=
           Args->DmaBufferSubmissionEndOffset ||
       Args->DmaBufferSubmissionEndOffset > Args->DmaBufferSize)
-    GDI_SUBMIT_RETURN(STATUS_INVALID_PARAMETER);
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardDmaRange,
+                      STATUS_INVALID_PARAMETER);
   render_context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
-  if (render_context->Object.Magic !=
-          ADMISSION_OBJECT_CONTEXT_MAGIC ||
-      render_context->Object.Device == NULL ||
-      render_context->Object.Device->Adapter !=
-          &Context->ObjectAdapter ||
-      (render_context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
-      !render_context->SchedulerContext.Active ||
-      render_context->SchedulerContext.NodeOrdinal != Args->NodeOrdinal ||
-      (render_context->SchedulerContext.EngineAffinity &
-       (1u << Args->EngineOrdinal)) == 0u ||
-      render_context->Object.FenceOutstanding !=
-          Args->SubmissionFenceId)
-    GDI_SUBMIT_RETURN(STATUS_INVALID_HANDLE);
+  if (render_context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardContextMagic,
+                      STATUS_INVALID_HANDLE);
+  if (render_context->Object.Device == NULL)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardContextDevice,
+                      STATUS_INVALID_HANDLE);
+  if (render_context->Object.Device->Adapter != &Context->ObjectAdapter)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardAdapter,
+                      STATUS_INVALID_HANDLE);
+  if ((render_context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardSystem,
+                      STATUS_INVALID_HANDLE);
+  if (!render_context->SchedulerContext.Active)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardSchedulerInactive,
+                      STATUS_INVALID_HANDLE);
+  if (render_context->SchedulerContext.NodeOrdinal != Args->NodeOrdinal)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardNode,
+                      STATUS_INVALID_HANDLE);
+  if ((render_context->SchedulerContext.EngineAffinity &
+       (1u << Args->EngineOrdinal)) == 0u)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardEngine,
+                      STATUS_INVALID_HANDLE);
+  if (render_context->Object.FenceOutstanding != Args->SubmissionFenceId)
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardFence,
+                      STATUS_INVALID_HANDLE);
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
@@ -63,7 +109,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
           &view) ||
       !AdmissionGdiDescribePreparedRecord(
           view.Bytes, view.DmaBytes, view.DmaOffset, &prepared))
-    GDI_SUBMIT_RETURN(STATUS_INVALID_USER_BUFFER);
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardShadow,
+                      STATUS_INVALID_USER_BUFFER);
 
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
   if (AdmissionRenderPacketState(&Context->RenderPacket) ==
@@ -104,7 +151,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted)
-    GDI_SUBMIT_RETURN(STATUS_DEVICE_BUSY);
+    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPacket,
+                      STATUS_DEVICE_BUSY);
+  AdmissionRecordSubmitRenderGuard(
+      Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS);
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionDispatchQueuedWork(Context);
   return STATUS_SUCCESS;

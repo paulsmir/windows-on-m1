@@ -262,6 +262,9 @@ VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
                                    _In_ ULONG Guard,
                                    _In_ NTSTATUS Status);
+VOID AdmissionRecordSubmitRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
+                                      _In_ ULONG Guard,
+                                      _In_ NTSTATUS Status);
 #endif
 
 typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
