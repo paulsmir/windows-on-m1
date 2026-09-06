@@ -115,6 +115,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
           (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation))
     goto cleanup;
+  allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE;
   allocationInfo.pPrivateDriverData = &allocation;
   allocationInfo.PrivateDriverDataSize = sizeof(allocation);
   createAllocation.hDevice = createDevice.hDevice;

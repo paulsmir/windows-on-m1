@@ -211,6 +211,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
   ADMISSION_ALLOCATION_HANDLE *allocation;
   ULONGLONG aligned;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_ALLOCATION_DESCRIPTION normalized;
+  BOOLEAN correlated = FALSE;
+#endif
 
   if (context == NULL || Args == NULL || Args->NumAllocations != 1u ||
       Args->pAllocationInfo == NULL || Args->PrivateDriverDataSize != 0u ||
@@ -227,6 +231,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
     return STATUS_INVALID_PARAMETER;
   description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
       info->pPrivateDriverData;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (description->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
+    normalized = *description;
+    normalized.Reserved = 0u;
+    description = &normalized;
+    correlated = TRUE;
+  }
+#endif
   if (!AdmissionAllocationDescriptionValid(description) ||
       !AdmissionAllocationAlign64K(description->Size, &aligned) ||
       aligned > MAXSIZE_T)
@@ -240,6 +252,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
     return STATUS_INVALID_PARAMETER;
   }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  allocation->QualificationCookie = correlated
+      ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
+#endif
   info->Alignment = (UINT)ADMISSION_ALLOCATION_ALIGNMENT;
   info->Size = (SIZE_T)aligned;
   info->PitchAlignedSize = (SIZE_T)aligned;
@@ -345,6 +361,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     DXGK_OPENALLOCATIONINFO *info = &Args->pOpenAllocation[index];
     DXGKARGCB_GETHANDLEDATA query;
     const ADMISSION_ALLOCATION_DESCRIPTION *description;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    const ADMISSION_ALLOCATION_DESCRIPTION *submittedDescription;
+    ADMISSION_ALLOCATION_DESCRIPTION normalized;
+#endif
     ADMISSION_ALLOCATION_HANDLE *allocation;
     ADMISSION_OPEN_ALLOCATION *opened;
     if (info->hDeviceSpecificAllocation != NULL ||
@@ -355,6 +375,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     }
     description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
         info->pPrivateDriverData;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    submittedDescription = description;
+    if (description->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
+      normalized = *description;
+      normalized.Reserved = 0u;
+      description = &normalized;
+    }
+#endif
     /* hAllocation is a dxgkrnl token, not the KMD object returned at Create. */
     RtlZeroMemory(&query, sizeof(query));
     query.hObject = info->hAllocation;
@@ -391,6 +419,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     opened->ReadOnly = Args->Flags.ReadOnly ? TRUE : FALSE;
     info->hDeviceSpecificAllocation = opened;
     ++device->Object.AllocationCount;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    if (allocation->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE &&
+        submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE)
+      InterlockedExchange(&adapter->PagingCorrelationArmed, 1);
+#endif
     /* The returned binding follows Close-before-Destroy lifetime. Only this
        lookup needs the transient dxgkrnl reference; do not retain a cycle. */
     adapter->Interface.DxgkCbReleaseHandleData(reference);
@@ -439,6 +472,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCloseAllocation(
   for (index = 0u; index < Args->NumAllocations; ++index) {
     ADMISSION_OPEN_ALLOCATION *opened =
         (ADMISSION_OPEN_ALLOCATION *)Args->pOpenHandleList[index];
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    ADMISSION_ALLOCATION_HANDLE *owner = CONTAINING_RECORD(
+        opened->Allocation, ADMISSION_ALLOCATION_HANDLE, Object);
+    if (owner->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE) {
+      ADMISSION_CONTEXT *adapter = CONTAINING_RECORD(
+          device->Object.Adapter, ADMISSION_CONTEXT, ObjectAdapter);
+      InterlockedExchange(&adapter->PagingCorrelationArmed, 0);
+    }
+#endif
     (void)AdmissionAllocationClose(opened->Allocation);
     opened->Magic = 0u;
     ExFreePoolWithTag(opened, ADMISSION_POOL_TAG);

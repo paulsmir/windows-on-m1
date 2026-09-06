@@ -3,6 +3,7 @@
 
 #define ADMISSION_UMD_COMMAND_MAGIC 0x434d5552u /* "RUMC" */
 #define ADMISSION_UMD_COMMAND_VERSION 1u
+#define ADMISSION_UMD_CORRELATION_COOKIE 0x51504341u /* "ACPQ" */
 
 typedef enum _ADMISSION_UMD_OPCODE {
   AdmissionUmdOpcodeColorFill = 1u,

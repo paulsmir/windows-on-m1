@@ -40,5 +40,19 @@ class PagingBuildTraceTests(unittest.TestCase):
         self.assertIn("AdmissionPagingBuildTraceWord", source)
         self.assertIn("#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)", source)
 
+    def test_trace_is_armed_only_by_exact_producer_allocation(self):
+        abi = (RENDER / "include/render_umd_command.h").read_text()
+        context = (RENDER / "include/render_admission.h").read_text()
+        allocation = (RENDER / "src/allocation_windows.c").read_text()
+        paging = (RENDER / "src/paging_windows.c").read_text()
+        producer = (ROOT / "drivers/apple-agx/windows/one-shot/apple_agx_d3dkmt_render.c").read_text()
+        self.assertIn("ADMISSION_UMD_CORRELATION_COOKIE", abi)
+        self.assertIn("PagingCorrelationArmed", context)
+        self.assertIn("QualificationCookie", context)
+        self.assertIn("normalized.Reserved = 0u", allocation)
+        self.assertIn("PagingCorrelationArmed", allocation)
+        self.assertIn("PagingCorrelationArmed", paging)
+        self.assertIn("allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE", producer)
+
 if __name__ == "__main__":
     unittest.main()

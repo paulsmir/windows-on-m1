@@ -135,6 +135,8 @@ static VOID AdmissionPagingBuildTrace(
     ULONG DmaSize, ULONG PrivateSize, NTSTATUS Status) {
   if (Context == NULL || Context->BrokerBase == NULL ||
       InterlockedCompareExchange(
+          &Context->PagingCorrelationArmed, 0, 0) == 0 ||
+      InterlockedCompareExchange(
           &Context->PagingBuildTraceClaimed, 1, 0) != 0)
     return;
   AdmissionPagingBuildTraceWrite(Context, 1u, 1u);

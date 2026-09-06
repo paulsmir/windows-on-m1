@@ -206,6 +206,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG UmdRenderTraceClaimed;
   volatile LONG OpenAllocationTraceClaimed;
   volatile LONG PagingBuildTraceClaimed;
+  volatile LONG PagingCorrelationArmed;
   volatile LONG GdiReceiptClaimed;
   volatile LONG GdiSubmitTraceClaimed;
   KSPIN_LOCK GdiReceiptLock;
@@ -243,6 +244,7 @@ typedef struct _ADMISSION_RENDER_CONTEXT {
 
 typedef struct _ADMISSION_ALLOCATION_HANDLE {
   ADMISSION_ALLOCATION_OBJECT Object;
+  ULONG QualificationCookie;
 } ADMISSION_ALLOCATION_HANDLE;
 
 #define ADMISSION_OPEN_ALLOCATION_MAGIC 0x4f504152u
