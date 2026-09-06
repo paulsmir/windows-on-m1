@@ -33,10 +33,7 @@ _Use_decl_annotations_ VOID AdmissionSubmitRenderGuardWindows(
   command = (volatile ULONG *)(Context->BrokerBase +
       J313_AGX_G2_POWER_REG_COMMAND);
   WRITE_REGISTER_ULONG64(request,
-      AdmissionSubmitRenderGuardWord(1u, Guard));
-  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
-  WRITE_REGISTER_ULONG64(request,
-      AdmissionSubmitRenderGuardWord(2u, (ULONG)Status));
+      AdmissionSubmitRenderGuardWord(Guard, (ULONG)Status));
   WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
 }
 

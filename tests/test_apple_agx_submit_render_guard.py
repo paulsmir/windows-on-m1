@@ -18,6 +18,11 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertIn("AdmissionSubmitRenderGuardWord", guards)
         self.assertIn("AdmissionSubmitRenderGuardWindows", trace)
         self.assertIn("J313_AGX_G2_POWER_CMD_QUERY", trace)
+        helper = trace.split(
+            "_Use_decl_annotations_ VOID AdmissionSubmitRenderGuardWindows", 1
+        )[1].split("static VOID AdmissionSubmitTraceU64", 1)[0]
+        self.assertEqual(helper.count("WRITE_REGISTER_ULONG64"), 1)
+        self.assertEqual(helper.count("WRITE_REGISTER_ULONG(command"), 1)
         self.assertIn("ADMISSION_SUBMIT_RENDER_GUARD", guards)
         self.assertIn("AdmissionSubmitRenderGuardContextMagic", submit)
         self.assertIn("AdmissionSubmitRenderGuardContextDevice", submit)
