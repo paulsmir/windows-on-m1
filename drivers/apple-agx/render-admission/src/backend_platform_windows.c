@@ -1224,6 +1224,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
         &reported);
     if (!NT_SUCCESS(sync_status) || !reported)
       return APPLE_AGX_BACKEND_FALSE;
+    AdmissionGdiReceiptCompleteWindows(adapter, Fence,
+        (ULONG)Status, TRUE);
   }
   if (runtime->Completion.Phase != AppleAgxCompletionReported ||
       !AppleAgxCompletionTransactionFinish(
@@ -1301,6 +1303,10 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN activated = FALSE;
   BOOLEAN cancelled = FALSE;
   BOOLEAN deferred = FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
+  BOOLEAN finalProgressValid = FALSE;
+#endif
   KIRQL old_irql;
 
   UNREFERENCED_PARAMETER(DeviceObject);
@@ -1357,8 +1363,12 @@ static VOID AdmissionPlatformWorker(
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+  AdmissionGdiReceiptBackendWindows(adapter, description.Fence, (ULONG)result,
+      result == AppleAgxBackendRuntimeResultOk
+          ? &runtime->Backend.PendingJob : NULL);
   if (result != AppleAgxBackendRuntimeResultOk) {
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    AdmissionFlushGdiReceipt(adapter);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
@@ -1411,6 +1421,15 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  RtlZeroMemory(&finalProgress, sizeof(finalProgress));
+  finalProgressValid = AppleAgxG13QueueProviderQueryProgress(
+      &runtime->Provider.QueueProvider, &finalProgress) ? TRUE : FALSE;
+  if (finalProgressValid)
+    AdmissionGdiReceiptProgressWindows(adapter, description.Fence,
+        &finalProgress, (ULONG)runtime->Backend.Phase);
+  AdmissionFlushGdiReceipt(adapter);
+#endif
   AdmissionPlatformWorkerFinished(runtime);
 }
 

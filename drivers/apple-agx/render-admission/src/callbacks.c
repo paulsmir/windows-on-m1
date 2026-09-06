@@ -93,6 +93,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
   if (device != NULL && device->Object.Adapter != NULL)
     AdmissionFlushPresentTransfer(CONTAINING_RECORD(device->Object.Adapter,
         ADMISSION_CONTEXT, ObjectAdapter));
+  if (device != NULL && device->Object.Adapter != NULL)
+    AdmissionFlushGdiReceipt(CONTAINING_RECORD(device->Object.Adapter,
+        ADMISSION_CONTEXT, ObjectAdapter));
   if (device != NULL && Present != NULL && Present->Flags.Value == 1u) {
     status = AdmissionPresentBlt(device, Context, Present);
     if (!NT_SUCCESS(status))

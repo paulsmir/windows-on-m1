@@ -137,6 +137,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
   ADMISSION_GDI_PREPARED prepared;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *location;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_CONTEXT *adapter;
+#endif
 
   if (context == NULL ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
@@ -238,6 +241,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
   Args->pPatchLocationListOut = location + 1;
   --Args->PatchLocationListOutSize;
   Args->MultipassOffset = Args->CommandLength;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
+                              ADMISSION_CONTEXT, ObjectAdapter);
+  AdmissionGdiReceiptBeginWindows(adapter,
+      (ULONGLONG)(ULONG_PTR)context, (ULONG)command->OpCode,
+      command->Command.ColorFill.Color,
+      command->Command.ColorFill.NumSubRects, prepared.DmaBytes);
+#endif
   return STATUS_SUCCESS;
 }
 
@@ -416,6 +427,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           adapter, context, opened, Args, shadow.BytesUsed,
           &destination)))
     return STATUS_DEVICE_BUSY;
+  AdmissionGdiReceiptPatchWindows(adapter,
+      (ULONGLONG)(ULONG_PTR)context, Args->SubmissionFenceId,
+      destination.GpuVirtualAddress, destination.HostPhysicalAddress,
+      (ULONG)destination.Bytes);
   RtlCopyMemory(
       (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,
       &destination.GpuVirtualAddress,

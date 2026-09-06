@@ -10,6 +10,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   APPLE_AGX_EXP208_GDI_BINDING binding;
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
+#define GDI_SUBMIT_RETURN(value)                                              \
+  do {                                                                       \
+    NTSTATUS gdiStatus = (value);                                            \
+    AdmissionGdiReceiptSubmitWindows(Context, Args, gdiStatus);              \
+    return gdiStatus;                                                        \
+  } while (0)
 
   if (Context == NULL || Args == NULL || !Context->Started ||
       !AdmissionPlatformRuntimeReady(Context) ||
@@ -23,7 +29,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
       Args->DmaBufferSubmissionStartOffset >=
           Args->DmaBufferSubmissionEndOffset ||
       Args->DmaBufferSubmissionEndOffset > Args->DmaBufferSize)
-    return STATUS_INVALID_PARAMETER;
+    GDI_SUBMIT_RETURN(STATUS_INVALID_PARAMETER);
   render_context = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (render_context->Object.Magic !=
           ADMISSION_OBJECT_CONTEXT_MAGIC ||
@@ -37,7 +43,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
        (1u << Args->EngineOrdinal)) == 0u ||
       render_context->Object.FenceOutstanding !=
           Args->SubmissionFenceId)
-    return STATUS_INVALID_HANDLE;
+    GDI_SUBMIT_RETURN(STATUS_INVALID_HANDLE);
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
@@ -57,7 +63,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
           &view) ||
       !AdmissionGdiDescribePreparedRecord(
           view.Bytes, view.DmaBytes, view.DmaOffset, &prepared))
-    return STATUS_INVALID_USER_BUFFER;
+    GDI_SUBMIT_RETURN(STATUS_INVALID_USER_BUFFER);
 
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
   if (AdmissionRenderPacketState(&Context->RenderPacket) ==
@@ -98,9 +104,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted)
-    return STATUS_DEVICE_BUSY;
+    GDI_SUBMIT_RETURN(STATUS_DEVICE_BUSY);
+  AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionDispatchQueuedWork(Context);
   return STATUS_SUCCESS;
+#undef GDI_SUBMIT_RETURN
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCancelCommand(

@@ -1,4 +1,5 @@
 #include "render_submission.h"
+#include "render_gdi_receipt.h"
 
 #include <assert.h>
 
@@ -123,11 +124,36 @@ static void test_nonpaging_private_range_uses_full_buffer_when_subrange_empty(vo
   assert(!AdmissionNonPagingPrivateRangeCovers(256u, 0u, 8193u, 8192u));
 }
 
+static void test_gdi_receipt_requires_one_context_fence_and_physical_completion(void) {
+  ADMISSION_GDI_HW_RECEIPT receipt;
+  assert(sizeof(receipt) == 160u);
+  AdmissionGdiReceiptInitialize(&receipt);
+  assert(AdmissionGdiReceiptBegin(&receipt, 0x1000ULL, 1u, 0x00332211u, 1u, 96u));
+  assert(!AdmissionGdiReceiptPatch(&receipt, 0x2000ULL, 7u,
+      0x1500000000ULL, 0x9d0000000ULL, 0x10000u));
+  assert(AdmissionGdiReceiptPatch(&receipt, 0x1000ULL, 7u,
+      0x1500000000ULL, 0x9d0000000ULL, 0x10000u));
+  assert(!AdmissionGdiReceiptSubmit(&receipt, 0x1000ULL, 8u, 0u));
+  assert(AdmissionGdiReceiptSubmit(&receipt, 0x1000ULL, 7u, 0u));
+  assert(AdmissionGdiReceiptBackend(&receipt, 7u, 0u,
+      3u, 4u, 5u, 6u, 1u, 1u));
+  assert(!AdmissionGdiReceiptComplete(&receipt, 8u, 0u, 1u));
+  assert(AdmissionGdiReceiptComplete(&receipt, 7u, 0u, 1u));
+  assert(AdmissionGdiReceiptDpc(&receipt, 7u));
+  assert(AdmissionGdiReceiptProgress(&receipt, 7u,
+      1u, 5u, 1u, 1u, 1u, 6u, 1u, 1u, 2u));
+  assert(receipt.Stage == AdmissionGdiReceiptStageDpc);
+  assert(receipt.NotifyInterrupt == 1u && receipt.NotifyDpc == 1u);
+  assert(receipt.TaComplete == 1u && receipt.D3Complete == 1u);
+  assert(receipt.Fence == 7u && receipt.CompletionFence == 7u);
+}
+
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
   test_prepare_rejects_missing_identity_and_bad_intervals();
   test_cancel_and_preemption_never_synthesize_completion();
   test_active_reset_requires_backend_quiesce();
   test_nonpaging_private_range_uses_full_buffer_when_subrange_empty();
+  test_gdi_receipt_requires_one_context_fence_and_physical_completion();
   return 0;
 }

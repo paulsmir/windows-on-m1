@@ -20,6 +20,7 @@ class AppleAgxRenderSubmissionTests(unittest.TestCase):
                 "-I", str(RENDER / "include"),
                 str(RENDER / "tests" / "render_submission_test.c"),
                 str(RENDER / "src" / "render_submission.c"),
+                str(RENDER / "src" / "render_gdi_receipt.c"),
                 "-o", str(binary),
             ], check=True, cwd=ROOT)
             subprocess.run([str(binary)], check=True, cwd=ROOT)
@@ -33,6 +34,11 @@ class AppleAgxRenderSubmissionTests(unittest.TestCase):
         self.assertIn("AdmissionDdiSubmitRender", paging)
         self.assertIn("AppleAgxDmaShadowIsSealedForFence", submit)
         self.assertIn("AdmissionNonPagingPrivateRangeCovers", submit)
+        self.assertIn("AdmissionGdiReceiptSubmitWindows", submit)
+        self.assertLess(
+            submit.rindex("AdmissionGdiReceiptSubmitWindows"),
+            submit.index("AdmissionDispatchQueuedWork")
+        )
         self.assertIn("AdmissionGdiDescribePreparedRecord", submit)
         self.assertIn("AppleAgxSchedulerQueueFence", submit)
         self.assertIn("AdmissionRenderPacketQueue", submit)

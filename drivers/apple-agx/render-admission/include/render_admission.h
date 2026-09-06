@@ -19,6 +19,7 @@
 #include "apple_agx_uat_publication.h"
 #include "render_paging.h"
 #include "render_gdi.h"
+#include "render_gdi_receipt.h"
 #include "render_present.h"
 #include "render_submit_trace.h"
 #include "render_submission.h"
@@ -201,6 +202,10 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   volatile LONG SubmitTraceClaimed;
+  volatile LONG GdiReceiptClaimed;
+  volatile LONG GdiSubmitTraceClaimed;
+  KSPIN_LOCK GdiReceiptLock;
+  ADMISSION_GDI_HW_RECEIPT GdiReceipt;
 #endif
   UINT PagingFence;
   UINT PagingLastSubmittedFence;
@@ -420,6 +425,23 @@ BOOLEAN AdmissionSubmitTraceBegin(_In_ ADMISSION_CONTEXT *Context,
     _In_opt_ const ADMISSION_PRESENT_BLT_COMMAND *Command);
 VOID AdmissionSubmitTraceValueWindows(_In_ ADMISSION_CONTEXT *Context,
     BOOLEAN Enabled, ULONG Field, ULONG Value);
+VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
+    ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
+    ULONG DmaBytes);
+VOID AdmissionGdiReceiptPatchWindows(_In_ ADMISSION_CONTEXT *Context,
+    ULONGLONG ContextToken, ULONG Fence, ULONGLONG DestinationGpuVa,
+    ULONGLONG DestinationPhysical, ULONG DestinationBytes);
+VOID AdmissionGdiReceiptSubmitWindows(_In_ ADMISSION_CONTEXT *Context,
+    _In_opt_ const DXGKARG_SUBMITCOMMAND *Args, NTSTATUS Status);
+VOID AdmissionGdiReceiptBackendWindows(_In_ ADMISSION_CONTEXT *Context,
+    ULONG Fence, ULONG Result, _In_opt_ const APPLE_AGX_BACKEND_JOB_IMAGE *Job);
+VOID AdmissionGdiReceiptCompleteWindows(_In_ ADMISSION_CONTEXT *Context,
+    ULONG Fence, ULONG Status, BOOLEAN NotifyInterrupt);
+VOID AdmissionGdiReceiptProgressWindows(_In_ ADMISSION_CONTEXT *Context,
+    ULONG Fence, _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress,
+    ULONG WorkerFinalPhase);
+VOID AdmissionGdiReceiptDpcWindows(_In_ ADMISSION_CONTEXT *Context, ULONG Fence);
+VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
 #else
 #define AdmissionSubmitTraceBegin(Context, Args, PrivateStage, Command) FALSE
 #define AdmissionSubmitTraceValueWindows(Context, Enabled, Field, Value)       \
@@ -429,6 +451,14 @@ VOID AdmissionSubmitTraceValueWindows(_In_ ADMISSION_CONTEXT *Context,
     (void)(Field);                                                             \
     (void)(Value);                                                             \
   } while (0)
+#define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
+#define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)
+#define AdmissionGdiReceiptSubmitWindows(Context, Args, Status) ((void)0)
+#define AdmissionGdiReceiptBackendWindows(Context, Fence, Result, Job) ((void)0)
+#define AdmissionGdiReceiptCompleteWindows(Context, Fence, Status, NotifyInterrupt) ((void)0)
+#define AdmissionGdiReceiptProgressWindows(Context, Fence, Progress, WorkerFinalPhase) ((void)0)
+#define AdmissionGdiReceiptDpcWindows(Context, Fence) ((void)0)
+#define AdmissionFlushGdiReceipt(Context) ((void)0)
 #endif
 NTSTATUS AdmissionPagingSubmitPresent(_In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args,

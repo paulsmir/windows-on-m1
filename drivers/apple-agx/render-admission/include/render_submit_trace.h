@@ -2,6 +2,7 @@
 #define APPLE_AGX_RENDER_SUBMIT_TRACE_H
 
 #define ADMISSION_SUBMIT_TRACE_TAG 0x5070000000000000ULL
+#define ADMISSION_GDI_SUBMIT_TRACE_TAG 0x5090000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -85,6 +86,14 @@ typedef enum _ADMISSION_PRESENT_SUBMIT_GUARD {
 static inline unsigned long long AdmissionSubmitTraceWord(
     unsigned int Field, unsigned int Value) {
   return ADMISSION_SUBMIT_TRACE_TAG |
+      ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Value;
+}
+
+static inline unsigned long long AdmissionGdiSubmitTraceWord(
+    unsigned int Field, unsigned int Value) {
+  return ADMISSION_GDI_SUBMIT_TRACE_TAG |
       ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Value;

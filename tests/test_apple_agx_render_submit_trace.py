@@ -19,9 +19,11 @@ int main(void) {
   unsigned long long a = AdmissionSubmitTraceWord(1u, 0xffffffffu);
   unsigned long long b = AdmissionSubmitTraceWord(2u, 0u);
   unsigned long long c = AdmissionSubmitTraceWord(41u, 0xc000000du);
+  unsigned long long d = AdmissionGdiSubmitTraceWord(9u, 0xc000000du);
   assert(a == 0x50700001ffffffffULL);
   assert(b == 0x5070000200000000ULL);
   assert(c == 0x50700029c000000dULL);
+  assert(d == 0x50900009c000000dULL);
   assert(a < b && b < c);
   assert(AdmissionSubmitTraceField(a) == 1u);
   assert(AdmissionSubmitTraceValue(a) == 0xffffffffu);
@@ -83,6 +85,27 @@ int main(void) {
         self.assertEqual(decoded["route"], 1)
         self.assertEqual(decoded["status"], 0)
         self.assertEqual(decoded["word_count"], 5)
+
+    def test_gdi_submit_decoder_preserves_exact_status(self):
+        values = {1: 1, 2: 0, 3: 253, 4: 0, 5: 96,
+                  6: 0, 7: 0, 8: 8192, 9: 0xC000000D}
+        log = "\n".join(
+            "TTY> HV: AGX power receipt "
+            f"seq={0x5090000000000000 | (field << 32) | value} "
+            "cmd=0 state=3 result=0"
+            for field, value in values.items()
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "hardware.log"
+            path.write_text(log)
+            result = subprocess.run([
+                "python3", str(RENDER / "scripts" / "decode-gdi-submit-trace.py"),
+                str(path)
+            ], check=True, text=True, capture_output=True)
+            decoded = json.loads(result.stdout)
+        self.assertEqual(decoded["fence"], 253)
+        self.assertEqual(decoded["private_end"], 0)
+        self.assertEqual(decoded["status"], 0xC000000D)
 
 
 if __name__ == "__main__":

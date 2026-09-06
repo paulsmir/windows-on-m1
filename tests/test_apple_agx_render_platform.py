@@ -41,6 +41,23 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         self.assertIn("AdmissionPlatformRuntimeSubmit", dispatch)
         self.assertNotIn("AdmissionSchedulerRecordCompletion(", source)
 
+    def test_gdi_hardware_receipt_observes_existing_pipeline_only(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        scheduler = (RENDER / "src" / "scheduler_windows.c").read_text()
+        lifecycle = (RENDER / "src" / "lifecycle.c").read_text()
+        project = (RENDER / "AppleAgxRenderAdmission.vcxproj").read_text()
+        self.assertIn("AdmissionGdiReceiptBackendWindows", platform)
+        self.assertIn("AdmissionGdiReceiptCompleteWindows", platform)
+        self.assertLess(
+            platform.index("DxgkCbSynchronizeExecution", platform.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete")),
+            platform.index("AdmissionGdiReceiptCompleteWindows", platform.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete"))
+        )
+        self.assertIn("AdmissionGdiReceiptProgressWindows", platform)
+        self.assertIn("AdmissionGdiReceiptDpcWindows", scheduler)
+        self.assertIn("AdmissionFlushGdiReceipt", lifecycle)
+        self.assertIn(r"src\render_gdi_receipt.c", project)
+        self.assertIn(r"src\gdi_receipt_windows.c", project)
+
     def test_bootstrap_profile_excludes_physical_agx_irq_routes(self):
         source = (RENDER / "src" / "backend_platform_windows.c").read_text()
         self.assertIn("memory_count == 4u", source)
