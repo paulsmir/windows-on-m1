@@ -16,15 +16,18 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_ADAPTERTYPE adapterType = {0};
   D3DKMT_QUERYADAPTERINFO query = {0};
   D3DKMT_CREATEDEVICE createDevice = {0};
+  D3DKMT_CREATEPAGINGQUEUE createPagingQueue = {0};
   D3DKMT_CREATECONTEXT createContext = {0};
   D3DKMT_CREATEALLOCATION createAllocation = {0};
   D3DDDI_ALLOCATIONINFO allocationInfo = {0};
   ADMISSION_ALLOCATION_DESCRIPTION allocation = {0};
   ADMISSION_UMD_COLOR_FILL_COMMAND command = {0};
   D3DKMT_RENDER render = {0};
+  D3DDDI_MAKERESIDENT makeResident = {0};
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_DESTROYCONTEXT destroyContext = {0};
   D3DKMT_DESTROYDEVICE destroyDevice = {0};
+  D3DDDI_DESTROYPAGINGQUEUE destroyPagingQueue = {0};
   D3DKMT_CLOSEADAPTER closeAdapter = {0};
   D3DKMT_HANDLE allocationHandle = 0;
   PFND3DKMT_ENUMADAPTERS3 enumAdapters3 = NULL;
@@ -34,14 +37,18 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG index;
   LUID selectedLuid = {0};
   ULONG selectedSources = 0u;
+  UINT residencyPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
   NTSTATUS openStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS deviceStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS pagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS contextStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS allocationStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS residentStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS renderStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyContextStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyDeviceStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS destroyPagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
   int result = 1;
 
@@ -96,6 +103,15 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   if (!NT_SUCCESS(deviceStatus))
     goto cleanup;
 
+  createPagingQueue.hDevice = createDevice.hDevice;
+  createPagingQueue.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
+  createPagingQueue.PhysicalAdapterIndex = 0u;
+  pagingQueueStatus = D3DKMTCreatePagingQueue(&createPagingQueue);
+  if (!NT_SUCCESS(pagingQueueStatus) ||
+      createPagingQueue.hPagingQueue == 0u ||
+      createPagingQueue.FenceValueCPUVirtualAddress == NULL)
+    goto cleanup;
+
   createContext.hDevice = createDevice.hDevice;
   createContext.NodeOrdinal = 0u;
   createContext.EngineAffinity = 1u;
@@ -125,6 +141,26 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   if (!NT_SUCCESS(allocationStatus) || allocationInfo.hAllocation == 0u)
     goto cleanup;
   allocationHandle = allocationInfo.hAllocation;
+
+  makeResident.hPagingQueue = createPagingQueue.hPagingQueue;
+  makeResident.NumAllocations = 1u;
+  makeResident.AllocationList = &allocationHandle;
+  makeResident.PriorityList = &residencyPriority;
+  residentStatus = D3DKMTMakeResident(&makeResident);
+  if (!NT_SUCCESS(residentStatus) || makeResident.NumAllocations != 1u)
+    goto cleanup;
+  {
+    ULONGLONG deadline = GetTickCount64() + 15000u;
+    volatile const UINT64 *fence =
+        (volatile const UINT64 *)createPagingQueue.FenceValueCPUVirtualAddress;
+    while (*fence < makeResident.PagingFenceValue &&
+           GetTickCount64() < deadline)
+      Sleep(1u);
+    if (*fence < makeResident.PagingFenceValue) {
+      residentStatus = (NTSTATUS)0x00000102L;
+      goto cleanup;
+    }
+  }
 
   command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
   command.Version = ADMISSION_UMD_COMMAND_VERSION;
@@ -190,6 +226,12 @@ cleanup:
     if (!NT_SUCCESS(destroyContextStatus))
       result = 1;
   }
+  if (createPagingQueue.hPagingQueue != 0u) {
+    destroyPagingQueue.hPagingQueue = createPagingQueue.hPagingQueue;
+    destroyPagingQueueStatus = D3DKMTDestroyPagingQueue(&destroyPagingQueue);
+    if (!NT_SUCCESS(destroyPagingQueueStatus))
+      result = 1;
+  }
   if (createDevice.hDevice != 0u) {
     destroyDevice.hDevice = createDevice.hDevice;
     destroyDeviceStatus = D3DKMTDestroyDevice(&destroyDevice);
@@ -208,18 +250,24 @@ cleanup:
   wprintf(L"{\"enumerated\":%lu,\"matching\":%lu,"
           L"\"luid_high\":%ld,\"luid_low\":%lu,\"sources\":%lu,"
           L"\"open\":\"0x%08lx\",\"device\":\"0x%08lx\","
+          L"\"paging_queue\":\"0x%08lx\","
           L"\"context\":\"0x%08lx\",\"allocation\":\"0x%08lx\","
+          L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
+          L"\"destroy_paging_queue\":\"0x%08lx\","
           L"\"destroy_device\":\"0x%08lx\","
           L"\"close_adapter\":\"0x%08lx\",\"result\":%d}\n",
           enumeration.NumAdapters, matchingAdapters,
           selectedLuid.HighPart, selectedLuid.LowPart, selectedSources,
-          (ULONG)openStatus, (ULONG)deviceStatus, (ULONG)contextStatus,
-          (ULONG)allocationStatus, (ULONG)renderStatus,
+          (ULONG)openStatus, (ULONG)deviceStatus, (ULONG)pagingQueueStatus,
+          (ULONG)contextStatus, (ULONG)allocationStatus,
+          (ULONG)residentStatus, makeResident.PagingFenceValue,
+          (ULONG)renderStatus,
           render.QueuedBufferCount, (ULONG)destroyAllocationStatus,
-          (ULONG)destroyContextStatus, (ULONG)destroyDeviceStatus,
+          (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,
+          (ULONG)destroyDeviceStatus,
           (ULONG)closeAdapterStatus, result);
   return result;
 }
