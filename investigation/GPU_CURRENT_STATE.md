@@ -262,6 +262,10 @@ EXP523 FINAL: ETW proves Event169+ReferenceAllocations(write=true)+DdiRender
 profiler5030, returning C000000D in43us. Dispatch exists; old5120 arm was false.
 EXP524 commit46b1901 arms trace on exact Open lifetime unconditionally;106 tests
 and pinned524 gates PASS. Next exact524 run names KMD guard, then causal fix.
+EXP524 FINAL unchanged C000000D/no5120; broker receipt unusable for this path.
+EXP525 commit7869f37 uses truthful generic ClientHint because no OpenGL ICD is
+registered; explicit residency retained, exact524 KMD reused. Producer
+SHA38f83ccf448ee85bf4e0b3e38585c72c05b437c785f453ecdd99f4cc626377e0.
 
 ## Final live ordinary clean baseline
 

@@ -1,5 +1,18 @@
 # Hardware Experiment Ledger
 
+## EXP525 truthful generic qualification client — preregistration 2026-09-06T20:54Z
+
+WHY THIS HYPOTHESIS: EXP523 proves post-residency DdiRender wrapper execution;
+EXP524 again shows the broker receipt cannot observe this 43us callback. Official
+Microsoft OpenGL loading contract requires OpenGLDriverName/Version/Flags and
+KMTQAITYPE_UMOPENGLINFO, but current INF has none and current UMD is not an ICD.
+Therefore the standalone qualification producer must not claim OPENGL. Single
+variable commit7869f37 changes ClientHint to UNKNOWN, retaining explicit
+residency and exact EXP524 KMD. Producer SHA38f83ccf...; four tests and pinned
+build/analysis pass. PASS is Render progress/Submit receipt; one run and cleanup.
+EXP524 result unchanged C000000D with no5120; exact cleanup/ordinary health
+572b781e8a5de710b3bb978e802da4df6cb4e14d96c36b2ad0682ed41c92d25b.
+
 ## EXP524 unconditional exact-open Render guard — preregistration 2026-09-06T20:47Z
 
 WHY THIS HYPOTHESIS: EXP523 ETW proves explicit residency reaches Event169,
