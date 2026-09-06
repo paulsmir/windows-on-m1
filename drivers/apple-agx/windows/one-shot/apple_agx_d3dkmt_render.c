@@ -11,7 +11,7 @@
 #endif
 
 int __cdecl wmain(int argc, wchar_t **argv) {
-  D3DKMT_OPENADAPTERFROMLUID openAdapter = {0};
+  D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME openAdapter = {0};
   D3DKMT_CREATEDEVICE createDevice = {0};
   D3DKMT_CREATECONTEXT createContext = {0};
   D3DKMT_CREATEALLOCATION createAllocation = {0};
@@ -35,13 +35,14 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
   int result = 1;
 
-  if (argc != 3) {
-    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe <luid-high> <luid-low>\n");
+  if (argc != 2 || wcslen(argv[1]) >= ARRAYSIZE(openAdapter.DeviceName)) {
+    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe <gdi-display-name>\n");
     return 2;
   }
-  openAdapter.AdapterLuid.HighPart = (LONG)wcstol(argv[1], NULL, 0);
-  openAdapter.AdapterLuid.LowPart = (DWORD)wcstoul(argv[2], NULL, 0);
-  openStatus = D3DKMTOpenAdapterFromLuid(&openAdapter);
+  if (wcscpy_s(openAdapter.DeviceName,
+               ARRAYSIZE(openAdapter.DeviceName), argv[1]) != 0)
+    return 2;
+  openStatus = D3DKMTOpenAdapterFromGdiDisplayName(&openAdapter);
   if (!NT_SUCCESS(openStatus))
     goto cleanup;
 
@@ -135,13 +136,17 @@ cleanup:
     if (!NT_SUCCESS(closeAdapterStatus))
       result = 1;
   }
-  wprintf(L"{\"open\":\"0x%08lx\",\"device\":\"0x%08lx\","
+  wprintf(L"{\"display\":\"%ls\",\"luid_high\":%ld,"
+          L"\"luid_low\":%lu,\"source\":%u,"
+          L"\"open\":\"0x%08lx\",\"device\":\"0x%08lx\","
           L"\"context\":\"0x%08lx\",\"allocation\":\"0x%08lx\","
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
           L"\"destroy_device\":\"0x%08lx\","
           L"\"close_adapter\":\"0x%08lx\",\"result\":%d}\n",
+          openAdapter.DeviceName, openAdapter.AdapterLuid.HighPart,
+          openAdapter.AdapterLuid.LowPart, openAdapter.VidPnSourceId,
           (ULONG)openStatus, (ULONG)deviceStatus, (ULONG)contextStatus,
           (ULONG)allocationStatus, (ULONG)renderStatus,
           render.QueuedBufferCount, (ULONG)destroyAllocationStatus,
