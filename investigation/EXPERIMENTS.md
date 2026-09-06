@@ -1,5 +1,47 @@
 # Hardware Experiment Ledger
 
+## EXP517 DxgKrnl pre-Render ETW owner — preregistration 2026-09-06T19:52:29Z
+
+WHY THIS HYPOTHESIS:
+- EXP515 proved the producer allocation opens successfully and causes no
+  correlated paging operation before it closes, excluding residency as the
+  missing owner.
+- EXP516 proved CreateContext returned valid 4096/64/64 command, allocation and
+  patch buffers and D3DKMTRender used and returned those exact buffers without a
+  resize; buffer selection/capacity is therefore not the pre-Render failure.
+- The exact Windows `dxgkrnl.sys` SHA-256
+  `fd417addb93f4d31d0f0fa9216d9bf41bace190b2891b632dd3e5fcb031c0f66`
+  exposes Microsoft-Windows-DxgKrnl Base/Profiler/Patch/Memory/Scheduler event
+  classes around `NtGdiDdDDIRender`, while KMD tag 0x5120 proves the DDI itself
+  is not entered. A producer-window ETW trace is the smallest remaining owner
+  discriminator.
+
+WINDOWS CONTRACT: `D3DKMTRender` with a valid context uses the context-owned
+command/allocation/patch buffers; dxgkrnl resolves the context and allocation,
+performs pre-Render checks, and calls `DxgkDdiRender`. The exact provider keyword
+inventory is preserved at
+`.local/experiments/EXP516-thunk-buffers/dxg-provider.txt` SHA-256
+`5535711eed0549079d8d79b0e7280891f6426547687356614f4aa13b165915a3`.
+AGX/ASAHI CONTRACT: no AGX, firmware, RTKit, UAT, queue, IRQ, display, scheduler,
+completion or mapping behavior changes.
+TRANSLATION: reuse the exact EXP515 package and EXP516 producer, enabling only a
+bounded Microsoft-Windows-DxgKrnl ETW session immediately around the single
+producer call, then decode the exact process/context/render events and status.
+WHAT IS STILL UNKNOWN: which dxgkrnl pre-Render primitive rejects the otherwise
+valid context/allocation/buffer tuple, and whether session-0/GDI-device
+classification is causal.
+
+Single variable: trace visibility only. Exact driver ZIP/SYS/INF remain
+`9247498782b88cb66b4212f11b84847a3fd98172be8c9e268d151dc38731b1e9` /
+`afaec7e83b4287b2b95834e4eaaf61eabd32c34ec0562e27c63306eda62f8f1e` /
+`c0594d7c925fa4f8318d50df9374d186c48e48e4729c55a70d13de25c1811578`;
+producer SHA-256 is
+`e2ab5db6d0265fbf8b92da0dcaeef11c69aaca490f66b736f7a493718d394974`.
+One clean stage, natural bind, one producer call inside one bounded trace,
+collect/decode, exact package cleanup and ordinary recovery. PASS is an exact
+dxgkrnl event/status/ordering that names the first pre-Render owner. Absence of a
+matching event is inconclusive and will not be treated as a driver verdict.
+
 ## EXP516 exact D3DKMT buffer ownership — preregistration 2026-09-06T19:40:30Z
 
 EXP515 proved producer OpenAllocation guard0/status0 and zero correlated paging
@@ -11,6 +53,27 @@ or field changes.106 tests PASS; producer-only pinned build/analysis PASS SHA
 e2ab5db6d0265fbf8b92da0dcaeef11c69aaca490f66b736f7a493718d394974.
 Reuse exact515 driver ZIP SHA9247498782b88cb66b4212f11b84847a3fd98172be8c9e268d151dc38731b1e9
 under new EXP516 identity. One clean bind/producer, evidence, cleanup only.
+
+HARDWARE RESULT 2026-09-06T19:44Z — BUFFER OWNERSHIP CONFIRMED; FUNCTIONAL
+CANDIDATE REJECTED BEFORE KMD RENDER. CreateDevice returned null device-level
+buffers, while CreateContext returned command `0x0000028F66ED0000`/4096,
+allocation `0x0000028F66EE0000`/64 and patch
+`0x0000028F66EF0000`/64. D3DKMTRender used and returned those same addresses and
+sizes, GPU VA remained zero for the physical-address context, and no resize was
+requested. Device/context/allocation and all cleanup calls returned success;
+Render returned C0000001, with no KMD Render entry. Thus neither buffer owner,
+capacity nor returned-buffer rotation explains the missing DDI. Producer,
+hardware log, observation and ETL SHA-256 are
+`a22bbb17587e6e38f023bd75ea9cc1e29bd9345a88a7fea00671b30dce02052d` /
+`2e635fe83b850a0b60ea2c2beb225100e72f136e4e3ecf9c49d26caab71da87d` /
+`ea86d8d241202b85a930c35a73fe61800208d455d9801c8d8ddfdb71b682a6b2` /
+`05a028be72bce562eafd31d743ce2254439c30ba14b3ed46fe713a44ddddf70e`.
+Seven Event129 records were retained as storage telemetry only. Exact oem5
+cleanup completed. Ordinary 377/392 health SHA-256
+`c30fb3b2dd7e2f3085bb0485e6a8c812b6da26d7f50214fac5e655fcdcec8542`
+proves Code28/null INF/service, zero package/SYS/UMD, eight CPUs, SSH,
+AppleInput/USBXHCI/stornvme running and no fresh fault event after that ordinary
+boot. Do not repeat EXP516.
 
 ## EXP515 producer-correlated paging — preregistration 2026-09-06T19:33:00Z
 

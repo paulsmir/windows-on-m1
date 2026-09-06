@@ -206,7 +206,15 @@ zero Render entry; residency closed. Cleanup/ordinary health
 EXP516 commit6e762320b2d8d3f7e8887e2f7cb4a5fa1fd539a5 adds producer-only
 device/context/render buffer scalar output; build SHA
 e2ab5db6d0265fbf8b92da0dcaeef11c69aaca490f66b736f7a493718d394974.
-Next one exact516 run using unchanged515 driver package.
+EXP516 FINAL: CreateContext returned valid4096/64/64 buffers and D3DKMTRender
+used/returned those exact addresses with GPUVA0 and no resize. Render remains
+C0000001 before KMD entry. Buffer owner/capacity/rotation closed. Exact cleanup
+and ordinary health SHA
+c30fb3b2dd7e2f3085bb0485e6a8c812b6da26d7f50214fac5e655fcdcec8542;
+Code28/no package/service/files,8CPU/SSH/platform healthy. Do not repeat516.
+EXP517 preregistered: reuse exact515 driver and516 producer, add only bounded
+Microsoft-Windows-DxgKrnl ETW around the one producer call to identify the first
+pre-Render Windows owner/status; then exact cleanup and causal next experiment.
 
 ## Final live ordinary clean baseline
 
