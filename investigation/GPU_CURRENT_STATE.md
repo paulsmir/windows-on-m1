@@ -104,6 +104,18 @@ APPL0002 remains Code0, AppleAgxAdmission RUNNING,8CPU/SSH live and exact EXP509
 R2/PID75166 soleL41 retained while deriving the next supported D3D runtime/UMD
 producer. Do not repeat GDI producers or restore TestContext/private one-shot ABI.
 
+EXP511 current: commits a0817e3dcba326e07d2f4b32987a24c98af3330e,
+5cacde457d4c7111ff7a98820dc38c9b11bbd3fc and
+f85bec3f6afbfee80fff460491984e439dbda4f6 implement the documented normal
+D3DKMT/OpenGL-style flags0 context and DxgkDdiRender->Patch->Submit seam with a
+pointer-free48-byte command and no TestContext token.98 render tests PASS. Exact
+30.0.511.0 pinned R2 build/sign/Universal/analysis PASS; ZIP SHA
+dea30440fbe3d977974139a7c2eb921f9f38007826e626628043b87d233db5df,
+SYS SHA7a6dac96eac9372280c0768a0f5e4744e7acc9ceec8b539eb83322a378c441cb,
+producer SHA3c576b5b46c5d320516bb55d3f547cba0c7f7b6e6863d9e37c90e892992c0b43.
+EXP511 is preregistered. Next execute exact EXP509 evidence/cleanup, restore
+ordinary Code28, then one EXP511 natural bind and one SSH producer invocation.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,

@@ -1,5 +1,83 @@
 # Hardware Experiment Ledger
 
+## EXP511 normal D3DKMT render to physical AGX — preregistration 2026-09-06T18:31:00Z
+
+WHY THIS HYPOTHESIS:
+- EXP509 and EXP510 each completed a supported GDI PATCOPY but produced no
+  RenderKm/0x5090/receipt; modern Windows did not route either operation through
+  this adapter's GDI hardware callback.
+- Microsoft documents a separate normal producer path used by an OpenGL ICD:
+  D3DKMTCreateContext returns command/allocation/patch buffers, D3DKMTRender
+  submits them, and DxgkDdiRender must safely validate/translate the user buffer.
+- The current KMD still had DxgkDdiRender fail-closed while EXP478 proves the
+  exact backend runtime/arena/context/queues Ready and EXP509 qualification
+  receipts already observe the unchanged TA/3D completion path.
+
+WINDOWS CONTRACT: one normal flags0, no-private-data context; one pointer-free,
+versioned48-byte color-fill command; user command copied only inside
+__try/__except; empty user patch list; KMD recreates one output patch. Context,
+allocation, ownership, bounds, ROP and system-context denial are fail-closed.
+Patch and Submit accept GDI or normal render contexts but never system contexts.
+
+AGX/ASAHI CONTRACT: unchanged EXP208 materialization plus existing TA and3D queue
+publication/event/stamp/done-pointer completion. No firmware, RTKit, UAT, queue,
+IRQ, DCP or scanout modification.
+
+TRANSLATION: D3DKMT user command -> AdmissionDdiRender -> existing
+AdmissionGdiPrepareColorFill/DMA shadow -> existing Patch/local UAT view ->
+existing SubmitRender/backend -> physical TA+3D -> exact fence interrupt/DPC.
+
+WHAT IS STILL UNKNOWN: whether current dxgkrnl admits the normal context,
+allocation and render packet and whether both physical queues complete its exact
+Windows fence.
+
+ATOMIC CONTRACT: command ABI/validator, normal-context private DMA shadow,
+DxgkDdiRender translation, normal-context Patch/Submit and the producer using
+dxgkrnl-returned buffers are one documented WDDM pipeline. No capability bit or
+D3D-pipeline claim changes. The old TestContext/private token is absent.
+
+Source commits:
+- a0817e3dcba326e07d2f4b32987a24c98af3330e implements the seam;
+- 5cacde457d4c7111ff7a98820dc38c9b11bbd3fc makes the producer static-runtime;
+- f85bec3f6afbfee80fff460491984e439dbda4f6 matches the pinned public
+  D3DKMT_RENDERFLAGS layout.98 render tests PASS.
+
+Freeze/build: exact EXP509 R2 source SHA
+12768f312649e8e7c39dfaa9e4b4629310b550955231642a88e6acca044c74fc plus
+EXP511 overlay SHA
+be12b93b7b9b8fcf3ef5b875ea1a496cc12426969be85d3964e1e1be7d6a4690.
+R1 KMD/UMD build passed but producer failed only because the public flags struct
+has no Value member; R1 is prohibited from staging. R2 pinned WDK26100/MSVC14.44
+normal+SubmitQualification KMD/UMD, analysis, Universal, Inf2Cat/signing,
+version and static ARM64 producer PASS. Only inherited C28251 remains.
+
+Exact30.0.511.0 qualification hashes: ZIP
+dea30440fbe3d977974139a7c2eb921f9f38007826e626628043b87d233db5df;
+SYS7a6dac96eac9372280c0768a0f5e4744e7acc9ceec8b539eb83322a378c441cb;
+INFdddaea005c9c210dcd581a1504900153c444ea71f5cca12c224a8eadcacf4e8a;
+CAT90f47e98678b76986e7b2591d30f90090bc2baa8dbe86d2c4d0faa785198305a;
+UMD4009e4bff86d0d6114b70cc4868540380b0a5737792411c4800f5729cf83ce3d;
+PDB4694473264780de81de16f087789efa5ef399aa6e180be86bdbb2827f3350487;
+producer3c576b5b46c5d320516bb55d3f547cba0c7f7b6e6863d9e37c90e892992c0b43.
+Stage/collect/cleanup scripts SHA-256:
+758d22cb175dc6b69582ccc06026859ccda58b837268e9146c2c73d4c6d150fc /
+74cbb0a484f443b95e1f6e2fdb11c37615539010d7090494161f0264c0eafc95 /
+898037e4cee5f0c9046480512ad8e323e8490b98f550e01359761a06fdba135d.
+
+Hardware workflow: collect and remove exact installed EXP509 first; restore the
+current ordinary377/392 Code28 baseline; transfer exact EXP511 ZIP/producer and
+scripts; stage only; graceful reboot; launch immutable full-owner477/406 once;
+verify Code0/8CPU/SSH/hash/LUID; invoke exact producer once over SSH with that
+fresh LUID; collect output,0x5090 trace,160-byte receipt,ETL/events/health before
+exact cleanup and ordinary restore.
+
+PASS requires Render/Patch/Submit status0, backend result0, matching TA and3D
+event/stamp/done completion, exact fence, NotifyInterrupt and DPC. Producer/API
+success alone is not PASS. Failure is localized to the first receipt or returned
+status. No retry of the same candidate. Recovery is exact experiment package
+removal and current ordinary377/392; emergency377/385 only if ordinary SSH cannot
+be recovered. ANS untouched; Event129 remains timestamped telemetry only.
+
 ## EXP510 explicit display-target GDI producer — preregistration 2026-09-06T18:10:18Z
 
 EXP509 offscreen producer result: helper target/LUID/API/cleanup all succeeded,
