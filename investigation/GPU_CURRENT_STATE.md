@@ -266,6 +266,9 @@ EXP524 FINAL unchanged C000000D/no5120; broker receipt unusable for this path.
 EXP525 commit7869f37 uses truthful generic ClientHint because no OpenGL ICD is
 registered; explicit residency retained, exact524 KMD reused. Producer
 SHA38f83ccf448ee85bf4e0b3e38585c72c05b437c785f453ecdd99f4cc626377e0.
+EXP525 FINAL unchanged C000000D; hint rejected. EXP526 e02bfaa persists exact
+KMD Render prologue/guard/status to device registry; pinned gates PASS. Next one
+exact526 run, then fix named guard or callback-vector owner.
 
 ## Final live ordinary clean baseline
 

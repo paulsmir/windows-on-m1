@@ -1,5 +1,16 @@
 # Hardware Experiment Ledger
 
+## EXP526 device-registry Render guard — preregistration 2026-09-06T20:58Z
+
+WHY THIS HYPOTHESIS: EXP523 proves DdiRender wrapper5030 runs; EXP524 broker
+receipt remains absent, so the MMIO receipt is not reliable for this short path.
+Commit e02bfaa adds qualification-only `Wom1UmdRenderGuard/Status` device-key
+writes at KMD Render prologue and every return, with no result change.106 tests
+and pinned526 build/sign/Universal/analysis pass. ZIP/SYS/producer SHA
+f0d4b162.../3a2855db.../d5b218b6.... One exact run and cleanup.
+EXP525 UNKNOWN hint rejected: explicit residency still succeeds and Render is
+C000000D, so current failure is not OpenGL client hint. Cleanup initiated.
+
 ## EXP525 truthful generic qualification client — preregistration 2026-09-06T20:54Z
 
 WHY THIS HYPOTHESIS: EXP523 proves post-residency DdiRender wrapper execution;
