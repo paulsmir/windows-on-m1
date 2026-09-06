@@ -262,9 +262,6 @@ VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
                                    _In_ ULONG Guard,
                                    _In_ NTSTATUS Status);
-VOID AdmissionRecordSubmitRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
-                                      _In_ ULONG Guard,
-                                      _In_ NTSTATUS Status);
 #endif
 
 typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
@@ -442,6 +439,8 @@ BOOLEAN AdmissionSubmitTraceBegin(_In_ ADMISSION_CONTEXT *Context,
     _In_opt_ const ADMISSION_PRESENT_BLT_COMMAND *Command);
 VOID AdmissionSubmitTraceValueWindows(_In_ ADMISSION_CONTEXT *Context,
     BOOLEAN Enabled, ULONG Field, ULONG Value);
+VOID AdmissionSubmitRenderGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
+    ULONG Guard, NTSTATUS Status);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -467,6 +466,12 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Enabled);                                                           \
     (void)(Field);                                                             \
     (void)(Value);                                                             \
+  } while (0)
+#define AdmissionSubmitRenderGuardWindows(Context, Guard, Status)              \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Guard);                                                             \
+    (void)(Status);                                                            \
   } while (0)
 #define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
 #define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)

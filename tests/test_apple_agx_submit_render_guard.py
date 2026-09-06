@@ -7,15 +7,17 @@ RENDER = ROOT / "drivers" / "apple-agx" / "render-admission"
 
 
 class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
-    def test_submit_render_persists_exact_guard_and_status(self):
+    def test_submit_render_emits_exact_dispatch_safe_guard_and_status(self):
         header = (RENDER / "include" / "render_admission.h").read_text()
         guards = (RENDER / "include" / "render_submit_trace.h").read_text()
-        receipts = (RENDER / "src" / "receipts.c").read_text()
+        trace = (RENDER / "src" / "submit_trace_windows.c").read_text()
         submit = (RENDER / "src" / "submission_windows.c").read_text()
 
-        self.assertIn("AdmissionRecordSubmitRenderGuard", header)
-        self.assertIn('L"Wom1SubmitRenderGuard"', receipts)
-        self.assertIn('L"Wom1SubmitRenderStatus"', receipts)
+        self.assertIn("AdmissionSubmitRenderGuardWindows", header)
+        self.assertIn("ADMISSION_SUBMIT_RENDER_GUARD_TAG", guards)
+        self.assertIn("AdmissionSubmitRenderGuardWord", guards)
+        self.assertIn("AdmissionSubmitRenderGuardWindows", trace)
+        self.assertIn("J313_AGX_G2_POWER_CMD_QUERY", trace)
         self.assertIn("ADMISSION_SUBMIT_RENDER_GUARD", guards)
         self.assertIn("AdmissionSubmitRenderGuardContextMagic", submit)
         self.assertIn("AdmissionSubmitRenderGuardContextDevice", submit)
@@ -28,9 +30,12 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertIn("AdmissionSubmitRenderGuardAccepted", submit)
 
     def test_production_build_has_no_registry_receipt_calls(self):
+        header = (RENDER / "include" / "render_admission.h").read_text()
         submit = (RENDER / "src" / "submission_windows.c").read_text()
-        self.assertIn("#if !defined(APPLE_AGX_SUBMIT_QUALIFICATION)", submit)
-        self.assertIn("#define AdmissionRecordSubmitRenderGuard", submit)
+        trace = (RENDER / "src" / "submit_trace_windows.c").read_text()
+        self.assertIn("#define AdmissionSubmitRenderGuardWindows", header)
+        self.assertNotIn("AdmissionRecordSubmitRenderGuard", submit)
+        self.assertNotIn("IoOpenDeviceRegistryKey", trace)
 
 
 if __name__ == "__main__":

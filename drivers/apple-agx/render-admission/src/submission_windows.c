@@ -1,10 +1,5 @@
 #include "render_admission.h"
 
-#if !defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-#define AdmissionRecordSubmitRenderGuard(Context, Guard, Status)             \
-  ((void)(Context), (void)(Guard), (void)(Status))
-#endif
-
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     ADMISSION_CONTEXT *Context,
     const DXGKARG_SUBMITCOMMAND *Args) {
@@ -18,12 +13,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
 #define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
-    AdmissionRecordSubmitRenderGuard(Context, (guard), gdiStatus);           \
+    AdmissionSubmitRenderGuardWindows(Context, (guard), gdiStatus);          \
     AdmissionGdiReceiptSubmitWindows(Context, Args, gdiStatus);              \
     return gdiStatus;                                                        \
   } while (0)
 
-  AdmissionRecordSubmitRenderGuard(Context, MAXULONG, STATUS_PENDING);
+  AdmissionSubmitRenderGuardWindows(Context, MAXULONG, STATUS_PENDING);
   if (Context == NULL || Args == NULL)
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardArgs,
                       STATUS_INVALID_PARAMETER);
@@ -153,7 +148,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   if (!accepted)
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPacket,
                       STATUS_DEVICE_BUSY);
-  AdmissionRecordSubmitRenderGuard(
+  AdmissionSubmitRenderGuardWindows(
       Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS);
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionDispatchQueuedWork(Context);
