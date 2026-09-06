@@ -215,6 +215,18 @@ Code28/no package/service/files,8CPU/SSH/platform healthy. Do not repeat516.
 EXP517 preregistered: reuse exact515 driver and516 producer, add only bounded
 Microsoft-Windows-DxgKrnl ETW around the one producer call to identify the first
 pre-Render Windows owner/status; then exact cleanup and causal next experiment.
+EXP517 FINAL: session0 producer reached dxgkrnl Render Event169 with exact DMA
+buffer; 3.1us later Event467 marked exact device error, FromUserMode=false,
+Reason16. D3DKMTRender C0000001. Thus pre-Render/session/paging/buffers are
+closed and EXP512 missing-DDI inference is superseded: first-global0x5120 could
+have been consumed earlier. Cleanup/ordinary health SHA
+e0e1c4b4a33c7b9b2c466b37a12659bbd1f076cd1276feb4fb636d4133603045.
+EXP518 commit75784c6686f4e2c124951c3d3c4c400c7b63530d arms0x5120 only during exact
+producer allocation lifetime.106 tests and pinned518 normal+qualification/
+analysis/Universal/Inf2Cat/sign/version gates PASS. ZIP
+e122914b25a9e118e118f7dbf93eb1fd67b1b0e691a07df8c5374f18613740c8.
+Next: one exact518 bind/producer, decode the real KMD Render guard/status, exact
+cleanup, then one causal correction only.
 
 ## Final live ordinary clean baseline
 

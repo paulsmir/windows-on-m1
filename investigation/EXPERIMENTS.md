@@ -1,5 +1,56 @@
 # Hardware Experiment Ledger
 
+## EXP518 producer-correlated Render guard — preregistration 2026-09-06T20:03:55Z
+
+WHY THIS HYPOTHESIS:
+- EXP517 captured exact dxgkrnl Event169 `Render` for DMA buffer
+  `0xFFFF900F9EA448B0`, immediately followed 3.1 microseconds later by Event467
+  `VidSchMarkDeviceAsError`, `FromUserMode=false`, `Reason=16` for the exact
+  producer device. The failure is therefore in Render processing, not before
+  the render system call.
+- The previous 0x5120 trace was boot-global first-call only. Any earlier system
+  Render could consume `UmdRenderTraceClaimed`, so its absence cannot prove the
+  producer missed `AdmissionDdiRender`.
+- EXP515 already supplies an exact qualification-only allocation lifetime nonce
+  from successful OpenAllocation through CloseAllocation. Reusing that state is
+  sufficient to identify this exact producer call without a second memory or
+  render implementation.
+
+WINDOWS CONTRACT: dxgkrnl may invoke Render more than once per adapter lifetime;
+the diagnostic must correlate to the producer allocation, while the production
+`DxgkDdiRender` behavior and accepted return statuses remain unchanged.
+AGX/ASAHI CONTRACT: no AGX, firmware, RTKit, UAT, queue, IRQ, display, scheduler,
+completion, mapping or capability change.
+TRANSLATION: in SubmitQualification only, arm 0x5120 entry/arguments/command/
+guard/status writes whenever `PagingCorrelationArmed` is true. That bit is set
+only by the exact normalized producer nonce and cleared at its CloseAllocation.
+WHAT IS STILL UNKNOWN: the exact `AdmissionDdiRender` guard/status that causes
+dxgkrnl to mark the device error; if no correlated receipt appears despite the
+ETW Render event, callback dispatch rather than a KMD guard remains the owner.
+
+Commit `75784c6686f4e2c124951c3d3c4c400c7b63530d`; RED trace ownership assertion
+then 106 render tests GREEN. Pinned WDK 10.0.26100.0 / MSVC 14.44.35207 normal,
+SubmitQualification, code analysis, Universal validation, Inf2Cat, TestSign,
+version and producer builds passed; only inherited C28251 remains. Version
+30.0.518.0. Exact ZIP/SYS/INF/CAT/UMD/PDB/producer SHA-256:
+`e122914b25a9e118e118f7dbf93eb1fd67b1b0e691a07df8c5374f18613740c8` /
+`8476365b6ffa7800f4848653d4b0ae83adb23887a80d3ffce022b9f16a00eea5` /
+`457abe6f4a03cde36400028a760d58f869477ac77e07e7d712707cadaa9f5981` /
+`562fb1a4ce3535b104e828a7d77d0208d23702a3cc247f5ae1cd6eba6abf4706` /
+`eb7f334a0d0c34fbae01c090d008cfdb04647bd929e400ceb02a696a9a147c32` /
+`723996519bf2ab7c78e42dd5eaceff848f220537f78fa47d6144726b0252c47e` /
+`c383b170385115cf2a87cf15f5c9d4ef2504c1dbc13fd529a202574b2b52ca3c`.
+Overlay SHA-256 is
+`fa71bc9e8b650ada1c8640b39ee42fe221cad88dfa558faff3e58758d2579337`.
+Stage/run/collect/cleanup/launch SHA-256:
+`a0ed8a592eae84a7dde7435f944559e2b7050b3ded8afaf4c181048f402fd818` /
+`e1976e636b78966f3ad1983bba648d85cb45e044f39db1f2d6a7785a3eb15719` /
+`ff29c1190b56399fd441548ca56b9055981b5af828d3a18a90a4452fe2f0bc87` /
+`2a75c8cea2f29ac710efae45929618ce70fa5ec1008a56ab9d8d192ce5d1933d` /
+`d9f9ed217835216570b0c0240329ae0c8ec9fc4673f1562ce5d5dc8be55b530e`.
+One clean natural bind and one producer call only; decode correlated 0x5120,
+collect, exact cleanup, ordinary recovery, then fix only the named guard.
+
 ## EXP517 DxgKrnl pre-Render ETW owner — preregistration 2026-09-06T19:52:29Z
 
 WHY THIS HYPOTHESIS:
@@ -41,6 +92,25 @@ One clean stage, natural bind, one producer call inside one bounded trace,
 collect/decode, exact package cleanup and ordinary recovery. PASS is an exact
 dxgkrnl event/status/ordering that names the first pre-Render owner. Absence of a
 matching event is inconclusive and will not be treated as a driver verdict.
+
+HARDWARE RESULT 2026-09-06T19:55Z — CONFIRMED RENDER PROCESSING THEN DEVICE
+ERROR; OLD NO-ENTRY CONCLUSION SUPERSEDED. Exact process 5620/session0 created
+context `0x400000C0`, device/context/allocation all succeeded, and ETW Event169
+records Render of DMA buffer `0xFFFF900F9EA448B0`. Event467 follows at the same
+thread/CPU 3.1 microseconds later and records `VidSchMarkDeviceAsError` on exact
+device `0xFFFFCA03A7875240`, `FromUserMode=false`, `Reason=16`. D3DKMTRender then
+returns C0000001. This proves session0 is not rejected before Render and corrects
+EXP512's over-strong inference: missing first-global 0x5120 did not prove missing
+DDI dispatch. Trace/decoded XML/producer/observation/host-log SHA-256:
+`c63fdcbffaa7e99dd85e0e058665a44c612b01e887870a5899fa923db37de12a` /
+`40ff8119dc23a69225d993c5d226ed257aca515011894e979cb4d40192ad3306` /
+`bf35502221074ed34c0b9a31d14a97e3b6095455f31706ad7c765b46c45ee5ef` /
+`3e3a94deb7844b8a04b517ee5e2d1de8afd64d43a9fb25c4e12eea0a66328527` /
+`87417c71a1b17ad6acabe5e019ffccbb2684fde0a3e91465ff7a2e9551448f5b`.
+Exact cleanup and ordinary 377/392 restore completed. Health SHA-256
+`e0e1c4b4a33c7b9b2c466b37a12659bbd1f076cd1276feb4fb636d4133603045`
+proves Code28/null INF/service, zero package/SYS/UMD, eight CPUs, SSH and required
+devices with no fresh fault events. Do not repeat EXP517.
 
 ## EXP516 exact D3DKMT buffer ownership — preregistration 2026-09-06T19:40:30Z
 
