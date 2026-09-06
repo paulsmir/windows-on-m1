@@ -1,5 +1,50 @@
 # Hardware Experiment Ledger
 
+## EXP535 resident prepatch and Submit fence adoption — preregistration 2026-09-06T22:31:31Z
+
+WHY THIS HYPOTHESIS: EXP533/534 prove dxgkrnl skips Patch even with a valid
+output reference. Official Microsoft `DxgkDdiRender` requires prepatching when
+the allocation list already has nonzero SegmentId because dxgkrnl may omit Patch,
+while still requiring the output reference. Current admission emitted the
+reference but left the resident DMA address unpatched and stored no state from
+which Submit could adopt its later fence.
+
+WINDOWS CONTRACT: prepatch resident SegmentId addresses in Render; always emit
+the allocation reference; Patch may be omitted; Submit owns the actual fence.
+AGX/ASAHI CONTRACT: the existing context63 local mapping provides the exact
+GPUVA/host-PA/CPU view. TRANSLATION: Render resolves the existing placement,
+prepatches the DMA record, and retains Windows-owned pending metadata; if Patch
+is omitted, Submit seals that shadow with its fence and reuses existing packet
+preparation. WHAT IS STILL UNKNOWN: whether this reaches the existing backend.
+
+ATOMIC CONTRACT: prepatch plus pending metadata plus Submit fence adoption are
+indivisible because Render has placement but no submission fence, while Submit
+has the fence but no allocation list. Commits
+`7321c7b62dd14e6a6942a4221566035ad035523a` and builder-only initializer
+`122fa129833fff05a33b228acb325989f0801c5f` implement this without a second
+memory owner. Output patch publication remains. No capability, producer,
+firmware, RTKit, UAT, scheduler policy, AGX image, IRQ or display change.
+
+New RED then9 focused and108 render tests GREEN. First pinned build found C4701;
+the initializer-only fix followed, then pinned WDK26100 build/analysis/Universal/
+Inf2Cat/TestSign/version30.0.535.0 PASS with inherited C28251. Overlay/build SHA
+`e276dc8f...`/`e2b2b1fc...`; ZIP/SYS/INF/CAT/UMD/producer SHA `56d1bab2...`/
+`22e4cb45...`/`33f2a25b...`/`00d8d570...`/`4d2bacd8...`/`e6674c72...`;
+manifest SHA `03d2d1c3...`. Stage/run/cleanup/launch SHA `c3c2ea5a...`/
+`47ac5923...`/`6c0105ab...`/`a84d5635...`. Preflight requires exact EXP534
+cleanup and ordinary377/392 Code28/no AGX state/8CPU/SSH. One natural bind and
+producer with host tee. PASS requires progress past outstanding0 into accepted
+Submit/backend; any new first receipt becomes the sole next owner.
+
+## EXP534 preserve Render patch capacity — result 2026-09-06T22:31Z
+
+REJECTED. Exact30.0.534.0 natural bind was Code0 with matching oem5/SYS and8CPU.
+One producer reset Windows. Host log SHA
+`911c33b915842af02d8a78d1ce4c253b2f91501fa85f2771c5c7805449844d23`
+again has no Patch receipt and reports outstanding0/submitted255. Leaving input
+capacity unchanged is correct but insufficient. No AGX execution. Ordinary
+recovery did not regain SSH; emergency exact cleanup is in progress.
+
 ## EXP534 preserve Render patch capacity — preregistration 2026-09-06T22:19:07Z
 
 WHY THIS HYPOTHESIS:

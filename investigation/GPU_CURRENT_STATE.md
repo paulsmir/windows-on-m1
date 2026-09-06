@@ -330,6 +330,14 @@ PatchLocationListOutSize as input capacity; admission incorrectly decremented it
 after also advancing the pointer. Commit647a304 removes only that decrement;
 113 focused tests and pinned30.0.534.0 gates PASS. ZIP/SYS/producer SHA
 4c9a8453.../aa82550b.../3f4c1da6.... EXP534 preregistered after exact cleanup.
+EXP534 FINAL REJECTED: correct capacity accounting still produced no Patch and
+outstanding0/submitted255; host SHA911c33b9.... Microsoft requires resident
+nonzero-SegmentId Render to be prepatched because Patch may be omitted.
+Commits7321c7b+122fa12 add one atomic translation: Render resolves/prepatches the
+existing local mapping and retains Windows-owned pending metadata; Submit adopts
+its later fence and reuses packet preparation; output patch reference remains.
+108 render tests and pinned30.0.535.0 gates PASS. ZIP/SYS/producer SHA
+56d1bab2.../22e4cb45.../e6674c72.... EXP535 preregistered after exact cleanup.
 
 ## Final live ordinary clean baseline
 
