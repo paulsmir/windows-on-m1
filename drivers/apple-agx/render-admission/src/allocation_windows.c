@@ -421,8 +421,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     ++device->Object.AllocationCount;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     if (allocation->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE &&
-        submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE)
+        submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
       InterlockedExchange(&adapter->PagingCorrelationArmed, 1);
+      AdmissionUmdRenderTraceArm(adapter);
+    }
 #endif
     /* The returned binding follows Close-before-Destroy lifetime. Only this
        lookup needs the transient dxgkrnl reference; do not retain a cycle. */
@@ -479,6 +481,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCloseAllocation(
       ADMISSION_CONTEXT *adapter = CONTAINING_RECORD(
           device->Object.Adapter, ADMISSION_CONTEXT, ObjectAdapter);
       InterlockedExchange(&adapter->PagingCorrelationArmed, 0);
+      AdmissionUmdRenderTraceDisarm(adapter);
     }
 #endif
     (void)AdmissionAllocationClose(opened->Allocation);

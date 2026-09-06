@@ -67,6 +67,14 @@ class AppleAgxRenderUmdTraceTests(unittest.TestCase):
         self.assertNotIn(
             "&Context->UmdRenderTraceClaimed, 1, 0", source
         )
+        self.assertIn("AdmissionUmdRenderTraceArm", source)
+        self.assertIn("AdmissionUmdRenderTraceDisarm", source)
+        self.assertIn("AdmissionUmdRenderTraceAdapterGet", source)
+        self.assertIn("AdmissionUmdRenderGuardContext", source)
+        self.assertIn("AdmissionUmdRenderGuardDevice", source)
+        self.assertIn("AdmissionUmdRenderTraceArm(adapter)", (
+            RENDER / "src" / "allocation_windows.c"
+        ).read_text())
         self.assertIn("UMD_RENDER_RETURN", source)
         self.assertIn("AdmissionUmdRenderGuardUserCopy", source)
         self.assertIn("AdmissionUmdRenderGuardAccepted", source)

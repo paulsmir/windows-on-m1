@@ -256,6 +256,11 @@ typedef struct _ADMISSION_OPEN_ALLOCATION {
   BOOLEAN ReadOnly;
 } ADMISSION_OPEN_ALLOCATION;
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+VOID AdmissionUmdRenderTraceArm(_In_ ADMISSION_CONTEXT *Context);
+VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
+#endif
+
 typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
   PDXGKRNL_INTERFACE Interface;
   HANDLE PhysicalMemoryObject;

@@ -23,6 +23,24 @@ static BOOLEAN AdmissionUmdRenderOpenValid(
 }
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static PVOID volatile AdmissionUmdRenderTraceAdapter;
+
+_Use_decl_annotations_ VOID AdmissionUmdRenderTraceArm(
+    ADMISSION_CONTEXT *Context) {
+  InterlockedExchangePointer(&AdmissionUmdRenderTraceAdapter, Context);
+}
+
+_Use_decl_annotations_ VOID AdmissionUmdRenderTraceDisarm(
+    ADMISSION_CONTEXT *Context) {
+  (void)InterlockedCompareExchangePointer(
+      &AdmissionUmdRenderTraceAdapter, NULL, Context);
+}
+
+static ADMISSION_CONTEXT *AdmissionUmdRenderTraceAdapterGet(VOID) {
+  return (ADMISSION_CONTEXT *)InterlockedCompareExchangePointer(
+      &AdmissionUmdRenderTraceAdapter, NULL, NULL);
+}
+
 static VOID AdmissionUmdRenderTraceWrite(
     ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
   volatile ULONG64 *request;
@@ -40,18 +58,21 @@ static VOID AdmissionUmdRenderTraceWrite(
 static BOOLEAN AdmissionUmdRenderTraceBegin(
     ADMISSION_CONTEXT *Context, const ADMISSION_RENDER_CONTEXT *RenderContext,
     const DXGKARG_RENDER *Args) {
-  if (Context == NULL || RenderContext == NULL ||
-      Context->BrokerBase == NULL ||
+  ULONG contextFlags = ~0u;
+  if (Context == NULL || Context->BrokerBase == NULL ||
       InterlockedCompareExchange(
           &Context->PagingCorrelationArmed, 0, 0) == 0)
     return FALSE;
+  if (RenderContext != NULL &&
+      RenderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC)
+    contextFlags = RenderContext->Object.Flags;
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceVersion, 1u);
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceIrql, (ULONG)KeGetCurrentIrql());
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceContextFlags,
-      RenderContext->Object.Flags);
+      contextFlags);
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceCommandLength,
       Args == NULL ? 0u : Args->CommandLength);
@@ -111,6 +132,7 @@ static VOID AdmissionUmdRenderTraceResult(
       Context, AdmissionUmdRenderTraceStatus, (ULONG)Status);
 }
 #else
+#define AdmissionUmdRenderTraceAdapterGet() ((ADMISSION_CONTEXT *)NULL)
 #define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args)            \
   ((void)(Context), (void)(RenderContext), (void)(Args), FALSE)
 #define AdmissionUmdRenderTraceCommand(Context, Enabled, Command)             \
@@ -147,16 +169,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     return renderStatus;                                                     \
   } while (0)
 
+  adapter = AdmissionUmdRenderTraceAdapterGet();
+  trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);
   if (context == NULL ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC)
-    return STATUS_INVALID_PARAMETER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardContext,
+                      STATUS_INVALID_PARAMETER);
   if (context->Object.Device == NULL ||
       context->Object.Device->Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
       context->Object.Device->Adapter == NULL)
-    return STATUS_INVALID_PARAMETER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardDevice,
+                      STATUS_INVALID_PARAMETER);
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);
-  trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (trace && adapter != AdmissionUmdRenderTraceAdapterGet())
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardDevice,
+                      STATUS_INVALID_PARAMETER);
+#endif
   if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardSystem,
                       STATUS_INVALID_PARAMETER);
