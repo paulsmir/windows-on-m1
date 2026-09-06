@@ -24,12 +24,26 @@ def run(argv, cwd=ROOT):
     if p.returncode: raise RuntimeError(f'gate failed: {argv[0]} (exit {p.returncode})')
     return p.stdout
 
+def persist_receipt(out, receipt):
+    """Keep ledger targets immutable; receipt.json is only a latest-run convenience."""
+    data=(json.dumps(receipt,indent=2)+'\n').encode()
+    archive=Path(out)/'receipts'/(hashlib.sha256(data).hexdigest()+'.json')
+    archive.parent.mkdir(parents=True,exist_ok=True)
+    try:
+        with archive.open('xb') as stream: stream.write(data)
+    except FileExistsError:
+        if archive.read_bytes()!=data:
+            raise RuntimeError('existing receipt archive does not match its content hash')
+    (Path(out)/'receipt.json').write_bytes(data)
+    return archive
+
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
     (OUT/'receipt.json').unlink(missing_ok=True)
     run([sys.executable,'tools/generate_j313_ans_contract.py','--check'])
     run([sys.executable,'-m','unittest','tests.test_j313_ans_contract','tests.test_ans_launcher_mode',
          'tests.test_ans_qualification','tests.test_ans_launch_lock','tests.test_assisted_session',
+         'tests.test_ans_gate_receipts',
          'tests.test_public_scripts','tests.test_guest_layout_generation','tests.test_launch_profile',
          'tests.test_virtual_display','tests.test_launch_contract_proxy','-q'])
     cc=shutil.which('cc')
@@ -74,7 +88,8 @@ def main():
     receipt=dict(scope='offline ANS001 contract gates; full V1 DMA not admitted',
                  passed=True,hardware_candidate_ready=False,native_dma_admitted=False,
                  tests=records,commands=COMMANDS)
-    (OUT/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    archive=persist_receipt(OUT,receipt)
+    print('Immutable gate receipt:',archive.relative_to(ROOT))
     print('ANS offline contract gates GREEN; hardware candidate NOT admitted')
 
 if __name__=='__main__': main()
