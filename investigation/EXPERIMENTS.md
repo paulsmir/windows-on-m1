@@ -1,5 +1,42 @@
 # Hardware Experiment Ledger
 
+## EXP520 documented legacy OpenGL device contract — preregistration 2026-09-06T20:23:53Z
+
+WHY THIS HYPOTHESIS:
+- EXP517 proved dxgkrnl creates/processes the exact Render DMA buffer then marks
+  the device error Reason16, while EXP519 proved the registered
+  `AdmissionDdiRender` is not entered even when its receipt is armed before
+  context validation. Callback-internal guards are therefore closed.
+- ETW identifies the direct zero-flag device as `ClientType=1`; the KMD receives
+  `DXGK_CREATEDEVICEFLAGS.GdiDevice=1`. That is the only observed classification
+  difference adjacent to callback selection.
+- Microsoft defines `D3DKMT_CREATEDEVICEFLAGS.LegacyMode` as the supported
+  request for legacy command-buffer device behavior, and `D3DKMTRender` is the
+  command-buffer thunk used by the OpenGL ICD. The producer currently leaves
+  the flag zero while claiming ClientHint OpenGL.
+
+Single variable: producer sets `createDevice.Flags.LegacyMode=1`; exact EXP519
+KMD ZIP remains byte-identical. No KMD callback, capability, memory, paging,
+firmware, scheduler, queue, IRQ, display or AGX behavior changes. Commit
+`db2b8d4a8e8366fd692326aad5d76582d2fe027e`; RED producer contract then 106
+render tests GREEN. Pinned WDK26100/MSVC14.44 producer build/analysis PASS.
+Producer SHA-256
+`e65a8ffddb1b79721c33f375073b38cc9a2d08c8b84fcfcf68b2dbbf967bf67b`;
+overlay SHA `ac26404484a027c1c1d9bc290871b5839600543a5b06cf54f50544c81abf7009`.
+Driver ZIP/SYS/INF remain EXP519 hashes
+`5068cc42afa8203d462b87caa655963952514a6e5d92c28b1a03be989cbe5dfc` /
+`441f37514280860e130c05eca7648dc25d5b65ba7d117f3a768dfdc1e528f51d` /
+`3d2a8a715ac306ece3f6926506aa2ebe2c17cf074813c49bbb2498337ec58bc8`.
+Stage/run/collect/cleanup/launch SHA:
+`1d05294e1f374a20dfb15dd7108ea73f0816c282043ece38f780f8c5a03e720f` /
+`0fccc721907c675befe67153198e3af7f757fc4ea9e3bb75241b6f6a53585927` /
+`35da91714d5928077a73ca178f1a9a9a0c5bb873059aa39cac89784e487c87d6` /
+`6c362c6aafd380f3ebf166002fdd6df89d72eb968d39e21919cb6e0a244a1eb7` /
+`540521498a7c88819bc0e2161f163aeeaa2f88023395f99424e0c4905bcdb533`.
+One exact natural bind/producer. PASS is changed KMD device flags and a complete
+0x5120 callback receipt; otherwise reject LegacyMode and re-anchor to the exact
+dxgkrnl callback-selection contract without another flag probe.
+
 ## EXP519 pre-context correlated Render entry — preregistration 2026-09-06T20:15:41Z
 
 WHY THIS HYPOTHESIS:
@@ -44,6 +81,21 @@ Stage/run/collect/cleanup/launch SHA:
 One clean bind/producer only. PASS is a complete 0x5120 naming context/device or
 later guard. If no 0x5120 appears while 0x5130 succeeds, callback dispatch is
 confirmed as owner and no third equivalent trace experiment is permitted.
+
+HARDWARE RESULT 2026-09-06T20:18Z — CALLBACK NON-DISPATCH CONFIRMED. Exact
+30.0.519.0 KMD reached the matching OpenAllocation guard0/status0 and armed the
+qualification adapter pointer before context validation. The exact producer
+still returned D3DKMTRender C0000001, and no 0x5120 word appeared. Therefore
+neither context/device nor any later `AdmissionDdiRender` guard ran: dxgkrnl did
+not dispatch the registered callback for this client/device classification.
+No Patch, Submit, AGX work or fence executed. Producer/host/observation SHA:
+`448f9771710c52a1e28f37b854b62091ed711ac3d7d9f26775915f401f41676f` /
+`bc0edbcba0510260e41016c50dd7defbdd83c1a01192a5ac21f1c3057f13892d` /
+`72c037d30f38288aeb272a6c7ddf6acc45ea875c9581adafd9eb920c5aa5585f`.
+Exact cleanup and ordinary recovery passed; health SHA
+`9133d7eca50617e485de13aae4e43e5fc445560fbb5de5737beb5f8149037f67`
+proves Code28/no package/service/files, eight CPUs, SSH and required devices with
+no fresh faults. Do not repeat EXP519 or add another equivalent receipt probe.
 
 ## EXP518 producer-correlated Render guard — preregistration 2026-09-06T20:03:55Z
 

@@ -237,6 +237,15 @@ build unchanged.106 tests and pinned519 gates PASS. ZIP
 5068cc42afa8203d462b87caa655963952514a6e5d92c28b1a03be989cbe5dfc.
 Next: one exact519 bind/producer. A guard names the causal fix; no receipt with
 successful0x5130 confirms callback dispatch owner and ends equivalent probing.
+EXP519 FINAL: exact OpenAllocation success and pre-context adapter arm, but zero
+0x5120. Therefore AdmissionDdiRender is not dispatched; all callback-internal
+guards are closed. Cleanup/ordinary health SHA
+9133d7eca50617e485de13aae4e43e5fc445560fbb5de5737beb5f8149037f67.
+EXP520 commitdb2b8d4a8e8366fd692326aad5d76582d2fe027e changes only producer
+CREATEDEVICE.LegacyMode=1 for documented OpenGL command-buffer client routing;
+exact519 KMD reused.106 tests and pinned producer analysis PASS. Producer SHA
+e65a8ffddb1b79721c33f375073b38cc9a2d08c8b84fcfcf68b2dbbf967bf67b.
+Next: one exact520 run; require changed device classification plus0x5120 or reject.
 
 ## Final live ordinary clean baseline
 
