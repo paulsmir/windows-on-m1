@@ -32,6 +32,10 @@ typedef struct _ADMISSION_RENDER_PACKET {
   ADMISSION_RENDER_PACKET_DESCRIPTION Description;
 } ADMISSION_RENDER_PACKET;
 
+int AdmissionNonPagingPrivateRangeCovers(
+    unsigned int PrivateBytesUsed, unsigned int SubmissionStart,
+    unsigned int SubmissionEnd, unsigned int PrivateBufferBytes);
+
 void AdmissionRenderPacketInitialize(ADMISSION_RENDER_PACKET *Packet);
 ADMISSION_RENDER_PACKET_STATE AdmissionRenderPacketState(
     const ADMISSION_RENDER_PACKET *Packet);

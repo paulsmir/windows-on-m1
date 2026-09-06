@@ -32,6 +32,7 @@ class PresentBltTests(unittest.TestCase):
 #include "render_objects.h"
 #include "render_allocation.h"
 #include "render_present.h"
+#include "render_submission.h"
 #include "render_submit_trace.h"
 #include "apple_agx_dma_shadow.h"
 #define _Use_decl_annotations_
@@ -194,5 +195,6 @@ int main(void){
             subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',
                             '-fsanitize=address,undefined','-I',str(RENDER/'include'),'-I',str(SHARED/'include'),str(program),
                             str(RENDER/'src/render_allocation.c'),str(RENDER/'src/render_present.c'),
+                            str(RENDER/'src/render_submission.c'),
                             str(SHARED/'src/apple_agx_dma_shadow.c'),'-o',str(binary)],check=True)
             subprocess.run([str(binary)],check=True)

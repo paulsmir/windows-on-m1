@@ -353,7 +353,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
-      Args->DmaBufferPrivateDataSubmissionEndOffset < shadow.BytesUsed ||
+      !AdmissionNonPagingPrivateRangeCovers(
+          shadow.BytesUsed,
+          Args->DmaBufferPrivateDataSubmissionStartOffset,
+          Args->DmaBufferPrivateDataSubmissionEndOffset,
+          Args->DmaBufferPrivateDataSize) ||
       !AppleAgxDmaShadowFind(
           shadow.Storage, shadow.BytesUsed,
           Args->DmaBufferSubmissionStartOffset,

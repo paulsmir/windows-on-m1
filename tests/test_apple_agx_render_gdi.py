@@ -41,6 +41,7 @@ class AppleAgxRenderGdiTests(unittest.TestCase):
         self.assertIn("AdmissionMemoryRuntimeResolveLocal", wrapper)
         self.assertIn("AdmissionGdiPatchAuthorized", wrapper)
         self.assertIn("AppleAgxDmaShadowSeal", wrapper)
+        self.assertIn("AdmissionNonPagingPrivateRangeCovers", wrapper)
         self.assertNotIn("AppleAgxBackendRuntimeSubmit", wrapper)
         self.assertNotIn("FeatureReadyMask", wrapper)
         self.assertNotIn("APPLE_AGX_EXP208_SUPPORTED_GDI_PRIMITIVE_MASK",

@@ -12,6 +12,15 @@ static void AdmissionRenderPacketClear(ADMISSION_RENDER_PACKET *Packet) {
   Packet->State = AdmissionRenderPacketEmpty;
 }
 
+int AdmissionNonPagingPrivateRangeCovers(
+    unsigned int PrivateBytesUsed, unsigned int SubmissionStart,
+    unsigned int SubmissionEnd, unsigned int PrivateBufferBytes) {
+  if (PrivateBytesUsed == 0u || PrivateBytesUsed > PrivateBufferBytes ||
+      SubmissionStart != 0u || SubmissionEnd > PrivateBufferBytes)
+    return 0;
+  return SubmissionEnd == 0u || SubmissionEnd >= PrivateBytesUsed;
+}
+
 static int AdmissionRenderFenceAtOrAfter(unsigned int Candidate,
                                          unsigned int Reference) {
   unsigned int distance = Candidate - Reference;

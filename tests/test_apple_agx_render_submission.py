@@ -32,6 +32,7 @@ class AppleAgxRenderSubmissionTests(unittest.TestCase):
 
         self.assertIn("AdmissionDdiSubmitRender", paging)
         self.assertIn("AppleAgxDmaShadowIsSealedForFence", submit)
+        self.assertIn("AdmissionNonPagingPrivateRangeCovers", submit)
         self.assertIn("AdmissionGdiDescribePreparedRecord", submit)
         self.assertIn("AppleAgxSchedulerQueueFence", submit)
         self.assertIn("AdmissionRenderPacketQueue", submit)

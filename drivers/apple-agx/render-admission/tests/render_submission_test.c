@@ -115,10 +115,19 @@ static void test_active_reset_requires_backend_quiesce(void) {
          AdmissionRenderPacketEmpty);
 }
 
+static void test_nonpaging_private_range_uses_full_buffer_when_subrange_empty(void) {
+  assert(AdmissionNonPagingPrivateRangeCovers(256u, 0u, 0u, 8192u));
+  assert(AdmissionNonPagingPrivateRangeCovers(256u, 0u, 256u, 8192u));
+  assert(!AdmissionNonPagingPrivateRangeCovers(256u, 1u, 256u, 8192u));
+  assert(!AdmissionNonPagingPrivateRangeCovers(256u, 0u, 255u, 8192u));
+  assert(!AdmissionNonPagingPrivateRangeCovers(256u, 0u, 8193u, 8192u));
+}
+
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
   test_prepare_rejects_missing_identity_and_bad_intervals();
   test_cancel_and_preemption_never_synthesize_completion();
   test_active_reset_requires_backend_quiesce();
+  test_nonpaging_private_range_uses_full_buffer_when_subrange_empty();
   return 0;
 }

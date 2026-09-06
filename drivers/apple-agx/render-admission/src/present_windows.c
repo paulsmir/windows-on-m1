@@ -158,9 +158,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentPatch(
       Args->DmaBufferSubmissionStartOffset != 0u ||
       Args->DmaBufferSubmissionEndOffset != view.DmaBytes ||
       view.DmaBytes > Args->DmaBufferSize ||
-      Args->DmaBufferPrivateDataSubmissionStartOffset != 0u ||
-      Args->DmaBufferPrivateDataSubmissionEndOffset < shadow.BytesUsed ||
-      Args->DmaBufferPrivateDataSubmissionEndOffset > Args->DmaBufferPrivateDataSize)
+      !AdmissionNonPagingPrivateRangeCovers(shadow.BytesUsed,
+          Args->DmaBufferPrivateDataSubmissionStartOffset,
+          Args->DmaBufferPrivateDataSubmissionEndOffset,
+          Args->DmaBufferPrivateDataSize))
     return STATUS_INVALID_PARAMETER;
   render = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
   if (render->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
