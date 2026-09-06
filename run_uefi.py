@@ -24,6 +24,16 @@ ap = argparse.ArgumentParser()
 ap.add_argument("payload", nargs="?", type=pathlib.Path)
 ap.add_argument("--dry-run", action="store_true",
                 help="validate and print the virtual framebuffer contract without USB")
+ap.add_argument("--storage-mode", choices=("VNVME_RECOVERY", "ANS_NATIVE"),
+                default="VNVME_RECOVERY", help="explicit storage ownership profile")
+ap.add_argument("--qualification-manifest", type=pathlib.Path)
+ap.add_argument("--qualification-sha256")
+ap.add_argument("--qualified-m1n1", type=pathlib.Path)
+ap.add_argument("--managed-vuart", help="runner-owned recovery UART reader endpoint")
+ap.add_argument("--qualified-vuart", help="native UART reader endpoint, started only after chainload")
+ap.add_argument("--confirm-experiment", choices=("ANS001",))
+ap.add_argument("--require-execution-confirmation", action="store_true",
+                help="require execution confirmation during shell's hardware-free preflight")
 ap.add_argument("--layout", type=pathlib.Path, default=DEFAULT_LAYOUT_PATH,
                 help="canonical J313 guest-layout JSON")
 ap.add_argument("--device", default=os.environ.get("M1N1DEVICE"))
@@ -63,6 +73,30 @@ ap.add_argument("--wdt-cpu", type=int, choices=range(8), default=None,
 ap.add_argument("--contract-output", type=pathlib.Path,
                 help="write four CRC-framed launch-contract checkpoints")
 args = ap.parse_args()
+# Ambient environment cannot opt an ordinary launch into native ANS ownership.
+os.environ["WOM1_STORAGE_MODE"] = args.storage_mode
+qualification_paths = None
+if args.storage_mode == "ANS_NATIVE":
+    from tools.ans_qualification import validate_launch, OVERRIDES
+    root = pathlib.Path(__file__).resolve().parent
+    try:
+        _, qualification_paths = validate_launch(
+            args.qualification_manifest, args.qualification_sha256, root,
+            firmware=args.payload, m1n1=args.qualified_m1n1, ramdisk=args.ramdisk,
+            layout=args.layout, display=args.display_mode, debug=args.debug_mode,
+            low_mem=args.low_mem, no_pin=args.no_pin, wdt_cpu=args.wdt_cpu,
+            overrides=[name for name in OVERRIDES if getattr(args, name) is not None],
+            confirmation=args.confirm_experiment, contract_output=args.contract_output,
+            execute=(not args.dry_run or args.require_execution_confirmation))
+        args.payload = qualification_paths['mu']
+        args.qualified_m1n1 = qualification_paths['m1n1']
+        args.ramdisk = qualification_paths['winpe']
+    except (ValueError, OSError, TypeError) as error:
+        ap.error(str(error))
+elif any((args.qualification_manifest, args.qualification_sha256, args.qualified_m1n1,
+          args.confirm_experiment, args.require_execution_confirmation, args.qualified_vuart)):
+    ap.error("qualification arguments require explicit --storage-mode ANS_NATIVE")
+
 profile = parse_profile("assisted", args.display_mode, args.debug_mode)
 
 layout = load_layout(args.layout)
@@ -104,6 +138,7 @@ fb.validate((args.phys_base, args.guest_ram_end), preflight_windows)
 print("=" * 60)
 print(f"virtual framebuffer       : 0x{fb.base:x}..0x{fb.end:x}")
 print(f"geometry / stride / size  : {fb.width}x{fb.height} / {fb.stride} / 0x{fb.size:x}")
+print(f"storage mode             : {args.storage_mode}")
 print(f"display mode             : {profile.display.value}")
 print(f"debug mode               : {profile.debug.value}")
 print(f"physical DCP             : {'enabled' if profile.physical_display else 'disabled'}")
@@ -117,10 +152,48 @@ print("=" * 60)
 if args.dry_run or args.payload is None:
     sys.exit(0)
 
+if qualification_paths is not None and not args.qualified_vuart:
+    ap.error("native UART qualification requires --qualified-vuart before hardware access")
+
 if not args.device:
     ap.error("--device or M1N1DEVICE is required for a hardware run")
 
-os.environ.setdefault("M1N1DEVICE", args.device)
+if qualification_paths is None:
+    os.environ.setdefault("M1N1DEVICE", args.device)
+else:
+    os.environ["M1N1DEVICE"] = args.device
+# Shared lock covers direct recovery as well as native entry, and is inherited
+# from run-assisted.sh when that wrapper already owns bootstrap admission.
+from tools.ans_launch_lock import acquire as acquire_launch_lock
+from tools.ans_qualification import reject_running_launcher
+try:
+    assisted_lock_fd = acquire_launch_lock(pathlib.Path(__file__).resolve().parent)
+    reject_running_launcher()
+except ValueError as error:
+    ap.error(str(error))
+from tools.assisted_session import AssistedSession
+assisted_session = AssistedSession(assisted_lock_fd)
+try:
+    if qualification_paths is not None:
+        import subprocess
+        # subprocess.run reaps its exact chainload child before propagating failure.
+        subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve().parent /
+                        "m1n1_windows/proxyclient/tools/chainload.py"),
+                        str(args.qualified_m1n1)], check=True, pass_fds=(assisted_lock_fd,))
+    reader_device = args.qualified_vuart if qualification_paths is not None else args.managed_vuart
+    if reader_device:
+        import time
+        reader_root = pathlib.Path(__file__).resolve().parent
+        owned_uart_reader = assisted_session.start_reader(
+            [sys.executable, "-u", str(reader_root / "extra/uart-reader.py"), reader_device, "2400"],
+            reader_root / "guest-uart-reader.log", reader_root)
+        time.sleep(2)
+        if owned_uart_reader.poll() is not None:
+            ap.error("owned UART reader exited before guest bootstrap")
+except BaseException:
+    assisted_session.close()
+    raise
+
 sys.path.insert(0, str(pathlib.Path(__file__).parent / "m1n1_windows" / "proxyclient"))
 
 from m1n1.proxy import *

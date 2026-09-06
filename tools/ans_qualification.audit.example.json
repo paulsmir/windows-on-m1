@@ -1,0 +1,24 @@
+{
+  "schema": "apple-ans-qualification-audit/v1",
+  "result": "pending",
+  "bindings": {
+    "m1n1": "PENDING",
+    "mu": "PENDING",
+    "winpe": "PENDING",
+    "layout": "PENDING",
+    "broker_config": "PENDING",
+    "broker_abi": "PENDING",
+    "m1n1_build": "PENDING",
+    "mu_build": "PENDING",
+    "winpe_audit": "PENDING",
+    "winpe_collector": "PENDING"
+  },
+  "offline_gates_passed": false,
+  "mu_ramdisk_only": false,
+  "mu_native_gate_bound": false,
+  "mu_native_autoboot_bound": false,
+  "agx_power_broker_disabled": false,
+  "winpe_no_appleans": false,
+  "no_installed_windows_boot": false,
+  "collector_test_passed": false
+}

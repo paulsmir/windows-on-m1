@@ -183,3 +183,20 @@ unmodified in plans/J313_NATIVE_ANS_REQUEST.md, with this explicit correction.
 No installed package or launched image ever used either native ID.
 Sources: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/06_Device_Configuration/Device_Configuration.html
 and https://learn.microsoft.com/en-us/windows-hardware/drivers/bringup/device-management-namespace-objects .
+
+## Current ANS001 boundary: handoff does not imply DMA admission
+
+The actual assisted descriptor publishes DART_TABLES with UNOBSERVED and zero
+size. The shared capture preserves that marker. The strict ANS memory policy
+correctly rejects it; prior synthetic all-observed fixtures concealed that
+production integration boundary. The new actual descriptor/capture/platform
+regression reproduces it.
+
+Commit2d869eb separates already-proven recovery stop/retire/seal/hide from
+independent DMA qualification. Package-free ANS001 and logical QUERY/CLAIM may
+proceed; native boot, Identify and all guest DMA remain denied. No flag was
+cleared and no zero reservation or complete DART census was fabricated.
+Tracking only opened DARTs would miss inherited owners discovered later; a
+live callback alone cannot retroactively protect previously authorized DMA.
+Full V1 readiness is therefore NOT established. See the owning source audit
+in m1n1_windows/docs/ans-native-memory-admission.md.
