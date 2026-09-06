@@ -171,3 +171,15 @@ tagset reserves **two** slots despite only one blk-mq admin request. Canonical
 V1 reservation is corrected to two slots, rather than mistaking active admin
 request depth for reserved tag count. Initial foundation used one slot; this
 is an offline correction, with no hardware artifact launched under either.
+
+## Source-required ACPI identity correction
+
+The supplied original spec says APPLANS0. Actual iasl ERROR6035 rejects its
+non-hex product suffix. ACPI _HID requires NNNN#### with four hexadecimal
+product digits; Microsoft documents the same rule. Canonical native ANS HID is
+therefore **APPL0003**; ACPI, INF and validation change together. APPL0001/input
+and APPL0002/GPU remain unchanged. The original user attachment is preserved
+unmodified in plans/J313_NATIVE_ANS_REQUEST.md, with this explicit correction.
+No installed package or launched image ever used either native ID.
+Sources: https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/06_Device_Configuration/Device_Configuration.html
+and https://learn.microsoft.com/en-us/windows-hardware/drivers/bringup/device-management-namespace-objects .

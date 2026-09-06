@@ -49,6 +49,11 @@ class AnsContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'collision'):
             self.module.validate(self.cfg, ROOT)
 
+    def test_reject_nonhex_acpi_product_id(self):
+        self.cfg['acpi_hid'] = 'APPLANS0'
+        with self.assertRaisesRegex(ValueError, 'ACPI'):
+            self.module.validate(self.cfg, ROOT)
+
     def test_reject_payload_bounce(self):
         self.cfg['dma']['payload_bounce'] = True
         with self.assertRaises(ValueError):

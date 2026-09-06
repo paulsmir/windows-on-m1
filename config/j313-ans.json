@@ -2,7 +2,7 @@
   "contract_version": 1,
   "platform": "J313",
   "hardware_generation": "T8103_ANS2",
-  "acpi_hid": "APPLANS0",
+  "acpi_hid": "APPL0003",
   "acpi_uid": 0,
   "storage_modes": [
     "VNVME_RECOVERY",
@@ -17,7 +17,17 @@
     "abi_major": 1,
     "abi_minor": 0,
     "magic": "0x31534e41",
-    "allocation_kind": "synthetic_guest_resource"
+    "allocation_kind": "synthetic_guest_resource",
+    "handoff_request_offset": 15872,
+    "handoff_receipt_offset": 16128,
+    "handoff_required_proofs": 127,
+    "request_offset": 256,
+    "response_offset": 512,
+    "doorbell_offset": 768,
+    "pending_offset": 2048,
+    "completion_offset": 4096,
+    "abort_offset": 776,
+    "telemetry_offset": 2304
   },
   "interrupt": {
     "guest_gsiv": 889,
@@ -63,6 +73,10 @@
     "sart": {
       "base": "0x27bc50000",
       "size": "0x10000"
+    },
+    "mailbox": {
+      "base": "0x277408000",
+      "size": "0x4000"
     }
   }
 }
