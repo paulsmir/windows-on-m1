@@ -10,6 +10,7 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG PresentGate;
   volatile LONG PendingValid;
   volatile LONG IrqEnabled;
+  volatile LONG VsyncNotifyEnabled;
   volatile LONG Faulted;
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
@@ -169,6 +170,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     return STATUS_DEVICE_HARDWARE_ERROR;
   }
   Context->ScanoutRuntime = runtime;
+  /* Physical latch retirement is an internal runtime requirement, including
+   * initial modeset before Windows subscribes to VSync notifications. */
+  InterlockedExchange(&runtime->IrqEnabled, 1);
+  if (AppleAgxScanoutEnableInterrupts(&runtime->Panel.Scanout) !=
+      AppleAgxScanoutOk) {
+    InterlockedExchange(&runtime->IrqEnabled, 0);
+    return STATUS_DEVICE_HARDWARE_ERROR;
+  }
   return STATUS_SUCCESS;
 }
 
@@ -302,6 +311,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutInterrupt(
   DXGKARGCB_NOTIFY_INTERRUPT_DATA data;
   LONG64 pending_sequence;
   LONG64 physical_address;
+  BOOLEAN notify_vsync;
   if (runtime == NULL ||
       InterlockedCompareExchange(&runtime->IrqEnabled, 0, 0) == 0 ||
       !Context->InterfaceValid ||
@@ -330,48 +340,37 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutInterrupt(
     InterlockedExchange(&runtime->Faulted, 1);
     return TRUE;
   }
-  RtlZeroMemory(&data, sizeof(data));
-  data.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-  data.CrtcVsync.VidPnTargetId = 0u;
-  data.CrtcVsync.PhysicalAddress.QuadPart = physical_address;
-  Context->Interface.DxgkCbNotifyInterrupt(
-      Context->Interface.DeviceHandle, &data);
+  notify_vsync = InterlockedCompareExchange(
+      &runtime->VsyncNotifyEnabled, 0, 0) != 0;
+  if (notify_vsync) {
+    RtlZeroMemory(&data, sizeof(data));
+    data.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
+    data.CrtcVsync.VidPnTargetId = 0u;
+    data.CrtcVsync.PhysicalAddress.QuadPart = physical_address;
+    Context->Interface.DxgkCbNotifyInterrupt(
+        Context->Interface.DeviceHandle, &data);
+  }
+  /* This sequence also guards internal completions while reporting is off. */
   InterlockedExchange64(
       &runtime->LastNotifiedSequence, (LONG64)latched_sequence);
   InterlockedExchange(&runtime->PendingValid, 0);
   InterlockedExchange64(&runtime->PendingSequence, 0);
   InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
   InterlockedExchange(&runtime->PresentGate, 0);
-  InterlockedExchange(&Context->SchedulerDpcPending, 1);
-  (void)Context->Interface.DxgkCbQueueDpc(Context->Interface.DeviceHandle);
+  if (notify_vsync) {
+    InterlockedExchange(&Context->SchedulerDpcPending, 1);
+    (void)Context->Interface.DxgkCbQueueDpc(Context->Interface.DeviceHandle);
+  }
   return TRUE;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutControlInterrupt(
     ADMISSION_CONTEXT *Context, BOOLEAN Enable) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
-  APPLE_AGX_SCANOUT_RESULT result;
-  LONG previous;
   if (runtime == NULL)
     return STATUS_DEVICE_NOT_READY;
-  if (Enable) {
-    previous = InterlockedExchange(&runtime->IrqEnabled, 1);
-    if (previous != 0)
-      return STATUS_SUCCESS;
-    result = AppleAgxScanoutEnableInterrupts(&runtime->Panel.Scanout);
-    if (result != AppleAgxScanoutOk) {
-      InterlockedExchange(&runtime->IrqEnabled, 0);
-      return STATUS_DEVICE_HARDWARE_ERROR;
-    }
-    return STATUS_SUCCESS;
-  }
-  previous = InterlockedExchange(&runtime->IrqEnabled, 0);
-  if (previous == 0)
-    return STATUS_SUCCESS;
-  result = AppleAgxScanoutDisableInterrupts(&runtime->Panel.Scanout);
-  if (result != AppleAgxScanoutOk) {
-    InterlockedExchange(&runtime->IrqEnabled, 1);
-    return STATUS_DEVICE_HARDWARE_ERROR;
-  }
+  /* WDDM permits keeping an interrupt enabled for an internal purpose.
+   * Disable only the OS reporting subscription, never pending latch ingress. */
+  InterlockedExchange(&runtime->VsyncNotifyEnabled, Enable ? 1 : 0);
   return STATUS_SUCCESS;
 }
