@@ -1,5 +1,36 @@
 # Hardware Experiment Ledger
 
+## EXP536 exact prepatch-adoption guard — preregistration 2026-09-06T23:03:20Z
+
+WHY THIS HYPOTHESIS: EXP535 crossed Render into `AdmissionGdiAdoptPrepatchedPacket`
+but returned through Submit guard20 before installing the fence. The helper has
+four ordered failure groups: missing/mismatched pending metadata, shadow/seal,
+packet preparation, or accepted. Commit
+`2b4f4d5b6b05158678d866d9fc98d9491a704b36` adds one final-only dispatch-safe
+0x5350 guard/status word to those unchanged returns. Production is a no-op; no
+validation, memory mapping, scheduler policy, backend, firmware, queue, IRQ,
+display or producer behavior changes.
+
+108 render regressions GREEN. Pinned WDK26100 build/analysis/Universal/Inf2Cat/
+TestSign/version30.0.536.0 PASS. Overlay/build SHA `6448621b...`/`2641de2c...`.
+ZIP/SYS/INF/CAT/UMD/producer SHA `19d930c5...`/`6ba0e2ff...`/`a3831cb9...`/
+`f25101b2...`/`5338f8d4...`/`884295b5...`; manifest SHA `3f9a4eff...`.
+Stage/run/cleanup/launch SHA `7878c2d3...`/`14a42401...`/`431c11f0...`/
+`f96a7d8f...`. Preflight is ordinary377/392 health SHA `41400625...`: Code28,
+no package/service/SYS/UMD,8CPU/SSH/no fresh fault events. One natural bind and
+one producer with host tee. PASS is one exact0x5350 guard/status naming the first
+adoption owner; cleanup and the corresponding single causal fix follow.
+
+## EXP535 resident prepatch and Submit fence adoption — result 2026-09-06T23:03Z
+
+INCONCLUSIVE inside adoption, causal architecture reached. Exact30.0.535.0 bound
+Code0 with matching hashes and8CPU. One producer reset Windows. Host log SHA
+`13304c7033bb541cad4b6c8af9bd0084e1adce2a821773637c563a4eb664fab6`
+shows Submit guard20, but no fence-detail word: the new adoption helper returned
+before the old direct mismatch branch. No physical AGX claim. Emergency recovery
+removed exact oem5 and hash-matched stopped service/SYS/UMD. Ordinary377/392 is
+clean; final health SHA `41400625de63966b23671a97b667bb3540093bd716cda509785908bb236460a0`.
+
 ## EXP535 resident prepatch and Submit fence adoption — preregistration 2026-09-06T22:31:31Z
 
 WHY THIS HYPOTHESIS: EXP533/534 prove dxgkrnl skips Patch even with a valid

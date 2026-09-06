@@ -338,6 +338,12 @@ existing local mapping and retains Windows-owned pending metadata; Submit adopts
 its later fence and reuses packet preparation; output patch reference remains.
 108 render tests and pinned30.0.535.0 gates PASS. ZIP/SYS/producer SHA
 56d1bab2.../22e4cb45.../e6674c72.... EXP535 preregistered after exact cleanup.
+EXP535 FINAL: adoption helper was reached but returned before fence install;
+Submit guard20 remained, host SHA13304c70.... Exact cleanup and ordinary restore
+complete; health SHA41400625..., Code28/no AGX package/service/files,8CPU/SSH.
+Commit2b4f4d5 adds only final0x5350 adoption guard/status. Pinned30.0.536.0 gates
+and108 tests PASS; ZIP/SYS/producer SHA19d930c5.../6ba0e2ff.../884295b5....
+EXP536 preregistered; first unknown is exact Adoption pending/shadow/prepare guard.
 
 ## Final live ordinary clean baseline
 
