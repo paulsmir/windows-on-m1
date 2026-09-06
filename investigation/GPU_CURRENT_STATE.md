@@ -227,6 +227,16 @@ analysis/Universal/Inf2Cat/sign/version gates PASS. ZIP
 e122914b25a9e118e118f7dbf93eb1fd67b1b0e691a07df8c5374f18613740c8.
 Next: one exact518 bind/producer, decode the real KMD Render guard/status, exact
 cleanup, then one causal correction only.
+EXP518 FINAL: exact correlated OpenAllocation guard0/status0 again, but no0x5120.
+This is inconclusive between callback non-dispatch and the two pre-trace context/
+device guards. Cleanup/ordinary health SHA
+d9d9b9ba889fec94d779355ceed6723e8152747666e49a42c40bddfeb69cc851.
+EXP519 commit6d730bb16ff6c1c66ddf0f36518fae84f2affc0a arms exact adapter pointer at
+correlated OpenAllocation and traces Render before context validation; normal
+build unchanged.106 tests and pinned519 gates PASS. ZIP
+5068cc42afa8203d462b87caa655963952514a6e5d92c28b1a03be989cbe5dfc.
+Next: one exact519 bind/producer. A guard names the causal fix; no receipt with
+successful0x5130 confirms callback dispatch owner and ends equivalent probing.
 
 ## Final live ordinary clean baseline
 

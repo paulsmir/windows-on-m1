@@ -1,5 +1,50 @@
 # Hardware Experiment Ledger
 
+## EXP519 pre-context correlated Render entry — preregistration 2026-09-06T20:15:41Z
+
+WHY THIS HYPOTHESIS:
+- EXP518 again proved exact correlated OpenAllocation guard0/status0, but no
+  0x5120 word appeared. The correlation bit alone therefore did not distinguish
+  callback non-dispatch from the two `AdmissionDdiRender` returns before its
+  adapter pointer and trace are obtained.
+- EXP517 independently proved dxgkrnl's normal DdiRender path processes the
+  exact DMA buffer and marks the device error Reason16, so one of those two
+  states is now the nearest unresolved owner.
+- The matching OpenAllocation already has the valid adapter/broker pointer and
+  exact producer lifetime; arming that pointer there can observe Render entry
+  without dereferencing a possibly invalid hContext.
+
+Single variable: qualification-only pre-context receipt visibility. Commit
+`6d730bb16ff6c1c66ddf0f36518fae84f2affc0a` atomically arms the exact adapter
+pointer at correlated OpenAllocation and clears it with compare-exchange at the
+matching CloseAllocation. `AdmissionDdiRender` begins 0x5120 from that pointer
+before context validation, records guard1 for context and guard2 for device, and
+then runs the unchanged production path. Normal build has no pointer or calls.
+No callback result, AGX, memory mapping, paging, scheduler, display, firmware,
+queue, IRQ, completion, capability or producer behavior changes.
+
+RED pre-context assertions then 106 render tests GREEN. Pinned WDK26100/
+MSVC14.44 normal+SubmitQualification, analysis, Universal, Inf2Cat, TestSign,
+version and producer gates PASS with only inherited C28251. Version30.0.519.0.
+ZIP/SYS/INF/CAT/UMD/PDB/producer SHA-256:
+`5068cc42afa8203d462b87caa655963952514a6e5d92c28b1a03be989cbe5dfc` /
+`441f37514280860e130c05eca7648dc25d5b65ba7d117f3a768dfdc1e528f51d` /
+`3d2a8a715ac306ece3f6926506aa2ebe2c17cf074813c49bbb2498337ec58bc8` /
+`33e0d599c98d697325d6fcb196055108d38048c1c774cc1d52e81be1041840c6` /
+`9d6536d274a8be9dc8d5ec6f2441003d8eaf7a296cb2554a97531f5ad2c5cf3e` /
+`20cccebce8347907d1811c041f7ed5fdbebefcd975d41d2961ed734364c75637` /
+`dad2a750a57756da08474eae1be2c81b73847263300965833e7e376f7eb7358c`.
+Overlay SHA `a959fab8506a86196bc4faeab14743f0e6fcd178dd6a10d073279850290b344a`.
+Stage/run/collect/cleanup/launch SHA:
+`816f7a92dc9d1d023e1ee1967915712e432e6a9b24f8315c000704f254e4a83f` /
+`77af67b0c05410cca0f03c204ea693619b27b6aaa5b91d093811919c68ec4c41` /
+`13e6164ff39f7b656a9b7757813d3ff88307de8110238f9d0c97b3123de22012` /
+`854b8d7b2fcbb12d8b622a2f58c4d3f9b53f526a686f46e03e4c174ebfd22b9a` /
+`c85cf9d0a0acc494af4aaf6f110734b7df4e71d68952553efa2e048840752fee`.
+One clean bind/producer only. PASS is a complete 0x5120 naming context/device or
+later guard. If no 0x5120 appears while 0x5130 succeeds, callback dispatch is
+confirmed as owner and no third equivalent trace experiment is permitted.
+
 ## EXP518 producer-correlated Render guard — preregistration 2026-09-06T20:03:55Z
 
 WHY THIS HYPOTHESIS:
@@ -50,6 +95,21 @@ Stage/run/collect/cleanup/launch SHA-256:
 `d9f9ed217835216570b0c0240329ae0c8ec9fc4673f1562ce5d5dc8be55b530e`.
 One clean natural bind and one producer call only; decode correlated 0x5120,
 collect, exact cleanup, ordinary recovery, then fix only the named guard.
+
+HARDWARE RESULT 2026-09-06T20:07Z — INCONCLUSIVE 0x5120, BUT OPEN LIFETIME
+CONFIRMED. Exact 30.0.518.0 package and producer reached OpenAllocation
+guard0/status0 with the correlation nonce and again returned D3DKMTRender
+C0000001. No 0x5120 word appeared, so the adapter-level correlation test did not
+distinguish callback non-dispatch from the two early context/device returns that
+occur before the trace obtains an adapter. No Render guard/status, Patch, Submit,
+AGX work or fence is claimed. Producer/host/observation SHA-256:
+`a5cae7cc1e66e1fc845c71f84ad23740e6263066a491599756a7998c22b48ec1` /
+`8ae36bd4a2d161265ac75b6a01d948bbbf48da9c63c0ea0ec67a51a9bc27373e` /
+`209b9a99fe0eee1452463dd46ffc2c70d8d5bbf949b2a46be7b5a4508f6a99a6`.
+Exact package cleanup and ordinary restore completed. Health SHA
+`d9d9b9ba889fec94d779355ceed6723e8152747666e49a42c40bddfeb69cc851`
+proves Code28/null INF/service, zero package/SYS/UMD, eight CPUs, SSH and required
+devices with no fresh faults. Do not repeat EXP518.
 
 ## EXP517 DxgKrnl pre-Render ETW owner — preregistration 2026-09-06T19:52:29Z
 
