@@ -2,6 +2,10 @@
 
 #define ADMISSION_LOCAL_SEGMENT_SET \
   (1u << (ADMISSION_MEMORY_LOCAL_SEGMENT - 1u))
+#define ADMISSION_APERTURE_SEGMENT_SET \
+  (1u << (ADMISSION_MEMORY_APERTURE_SEGMENT - 1u))
+#define ADMISSION_CPU_VISIBLE_SEGMENT_SET \
+  (ADMISSION_APERTURE_SEGMENT_SET | ADMISSION_LOCAL_SEGMENT_SET)
 
 static BOOLEAN AdmissionFormatBytesPerPixel(D3DDDIFORMAT Format,
                                              PULONG BytesPerPixel) {
@@ -164,8 +168,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   info->HintedBank.Value = 0u;
   info->PreferredSegment.Value = 0u;
   info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;
-  info->SupportedReadSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
-  info->SupportedWriteSegmentSet = ADMISSION_LOCAL_SEGMENT_SET;
+  info->SupportedReadSegmentSet = description->CpuVisible != 0u
+                                      ? ADMISSION_CPU_VISIBLE_SEGMENT_SET
+                                      : ADMISSION_LOCAL_SEGMENT_SET;
+  info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;

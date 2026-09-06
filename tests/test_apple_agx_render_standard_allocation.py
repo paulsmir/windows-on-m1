@@ -29,7 +29,10 @@ class StandardAllocationTests(unittest.TestCase):
 #define POOL_FLAG_NON_PAGED 0
 #define ADMISSION_POOL_TAG 0
 #define ADMISSION_MEMORY_LOCAL_SEGMENT 2
+#define ADMISSION_MEMORY_APERTURE_SEGMENT 1
 #define ADMISSION_LOCAL_SEGMENT_SET 2
+#define ADMISSION_APERTURE_SEGMENT_SET 1
+#define ADMISSION_CPU_VISIBLE_SEGMENT_SET 3
 #define D3DDDI_ALLOCATIONPRIORITY_NORMAL 0x78000000u
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define ExAllocatePool2(flags,n,tag) malloc(n)
@@ -44,7 +47,10 @@ static int AdmissionMemoryReady(const int *m) {return *m;}
 typedef struct {ADMISSION_ALLOCATION_OBJECT Object;} ADMISSION_ALLOCATION_HANDLE;
 typedef struct {const void *pPrivateDriverData;UINT PrivateDriverDataSize;
  UINT Alignment;SIZE_T Size,PitchAlignedSize;struct {UINT Value;} HintedBank;
- struct {UINT Value,SegmentId0;} PreferredSegment;
+ union {UINT Value;struct {UINT SegmentId0:5;UINT Direction0:1;
+  UINT SegmentId1:5;UINT Direction1:1;UINT SegmentId2:5;UINT Direction2:1;
+  UINT SegmentId3:5;UINT Direction3:1;UINT SegmentId4:5;UINT Direction4:1;
+  UINT Reserved:2;};} PreferredSegment;
  UINT SupportedReadSegmentSet,SupportedWriteSegmentSet,EvictionSegmentSet;
  HANDLE hAllocation;union {UINT Value;struct {UINT CpuVisible:1;UINT Low:14;
  UINT AccessedPhysically:1;UINT High:16;};} FlagsWddm2;
@@ -68,7 +74,8 @@ int main(void) {
  ADMISSION_ALLOCATION_HANDLE *h=info.hAllocation;
  assert(AdmissionAllocationDescriptionValid(&h->Object.Description));
  assert(info.Size==16384000 && info.Alignment==65536);
- assert(info.PreferredSegment.SegmentId0==2 && info.SupportedWriteSegmentSet==2);
+ assert(info.PreferredSegment.Value==2);
+ assert(info.SupportedReadSegmentSet==2 && info.SupportedWriteSegmentSet==2);
  assert(info.FlagsWddm2.Value==0x8000);
  assert(AdmissionAllocationOpen(&h->Object));
  assert(!AdmissionAllocationDestroy(&h->Object));
@@ -76,9 +83,15 @@ int main(void) {
  assert(AdmissionAllocationDestroy(&h->Object));free(h);info.hAllocation=NULL;
  assert(AdmissionAllocationDescribe(2560,1600,4,3,21,1,&d));
  assert(AdmissionDdiCreateAllocation(&ctx,&a)==0);
+ assert(info.PreferredSegment.Value==2);
+ assert(info.SupportedReadSegmentSet==3 && info.SupportedWriteSegmentSet==3);
  assert(info.FlagsWddm2.Value==0x8001);
  h=info.hAllocation;
  assert(AdmissionAllocationDestroy(&h->Object));free(h);info.hAllocation=NULL;
+ assert(AdmissionAllocationDescribe(2560,1600,4,3,21,1,&d));
+ d.CpuVisible=2;
+ assert(AdmissionDdiCreateAllocation(&ctx,&a)==STATUS_INVALID_PARAMETER);
+ assert(info.hAllocation==NULL);
  a.hResource=&ctx;
  assert(AdmissionDdiCreateAllocation(&ctx,&a)==STATUS_INVALID_PARAMETER);
  assert(info.hAllocation==NULL);a.hResource=NULL;a.NumAllocations=2;
