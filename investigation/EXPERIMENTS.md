@@ -1,5 +1,25 @@
 # Hardware Experiment Ledger
 
+## EXP540 exact EXP208 Windows producer — preregistration 2026-09-06T23:55Z
+
+WHY THIS HYPOTHESIS: EXP539 exact0x5390 subguard8 proves every packet identity
+check passes and `AdmissionBackendImageBindSubmission` rejects the command.
+The hardware-proven EXP208 binder requires 16x16/pitch64/color0xff112233, while
+the producer supplied 2560x1600/pitch10240/color0xff336699. Commit
+`7ebb58402e10bb606bc535f95a4baf9b3a1f3128` changes only the Windows producer
+allocation/command to the named shared EXP208 constants. Exact30.0.539.0 KMD is
+reused byte-for-byte. 108 render regressions and pinned producer analysis build
+PASS; producer SHA `b75c9e13...`. One natural bind/producer after exact cleanup.
+PASS requires backend bind and Submit progress toward real TA/3D.
+
+## EXP539 exact Submit packet subguard — result 2026-09-06T23:55Z
+
+CONFIRMED: exact word `5390000880000011`, subguard8/DEVICE_BUSY. Host log SHA
+`49d7bc2a327f30e023a6c256ad634b63affe511dca5663c84df55942fb01246f`.
+Packet state/fence/context/private/DMA all pass; backend image binding is first
+failure. No AGX execution. Established emergency cleanup removed exact package
+and service/files; ordinary restoration is active.
+
 ## EXP539 exact Submit packet subguard — preregistration 2026-09-06T23:45Z
 
 WHY THIS HYPOTHESIS: EXP538 exact0x5280 guard22/status80000011 proves adoption

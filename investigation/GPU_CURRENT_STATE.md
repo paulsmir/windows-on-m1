@@ -360,6 +360,10 @@ adoption is closed and first unknown is prepared packet/bind/scheduler/queue.
 Exact cleanup complete, ordinary health SHA6e6cc23b.... Commit1022e98 adds only
 final0x5390 subguard preserving short-circuit behavior;108 tests and pinned
 30.0.539.0 gates PASS. ZIP/SYS/producer SHA3117b001.../de809c50.../7de15aeb....
+EXP539 FINAL: subguard8/DEVICE_BUSY, host SHA49d7bc2a...; exact first failure is
+BackendImageBindSubmission. Binder requires EXP208 16x16/pitch64/colorff112233,
+producer sent 2560x1600/pitch10240/colorff336699. Commit7ebb584 changes only
+producer to shared EXP208 constants; exact539 KMD reused. Producer SHAb75c9e13....
 
 ## Final live ordinary clean baseline
 
