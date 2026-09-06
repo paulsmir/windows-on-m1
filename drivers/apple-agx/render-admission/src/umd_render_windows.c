@@ -22,6 +22,100 @@ static BOOLEAN AdmissionUmdRenderOpenValid(
          (!Write || !opened->ReadOnly);
 }
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static VOID AdmissionUmdRenderTraceWrite(
+    ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(request, AdmissionUmdRenderTraceWord(Field, Value));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
+static BOOLEAN AdmissionUmdRenderTraceBegin(
+    ADMISSION_CONTEXT *Context, const ADMISSION_RENDER_CONTEXT *RenderContext,
+    const DXGKARG_RENDER *Args) {
+  if (Context == NULL || RenderContext == NULL ||
+      Context->BrokerBase == NULL ||
+      InterlockedCompareExchange(
+          &Context->UmdRenderTraceClaimed, 1, 0) != 0)
+    return FALSE;
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceVersion, 1u);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceIrql, (ULONG)KeGetCurrentIrql());
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceContextFlags,
+      RenderContext->Object.Flags);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandLength,
+      Args == NULL ? 0u : Args->CommandLength);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceDmaSize,
+      Args == NULL ? 0u : Args->DmaSize);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTracePrivateSize,
+      Args == NULL ? 0u : Args->DmaBufferPrivateDataSize);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceAllocationCount,
+      Args == NULL ? 0u : Args->AllocationListSize);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTracePatchInCount,
+      Args == NULL ? 0u : Args->PatchLocationListInSize);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTracePatchOutCount,
+      Args == NULL ? 0u : Args->PatchLocationListOutSize);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceMultipass,
+      Args == NULL ? 0u : Args->MultipassOffset);
+  return TRUE;
+}
+
+static VOID AdmissionUmdRenderTraceCommand(
+    ADMISSION_CONTEXT *Context, BOOLEAN Enabled,
+    const ADMISSION_UMD_COLOR_FILL_COMMAND *Command) {
+  if (!Enabled || Context == NULL || Command == NULL)
+    return;
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandMagic, Command->Magic);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandVersion, Command->Version);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandBytes, Command->Bytes);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandOpcode, Command->Opcode);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceDestinationIndex,
+      Command->DestinationAllocationIndex);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceColor, Command->Color);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceRop, Command->Rop);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceRop3, Command->Rop3);
+}
+
+static VOID AdmissionUmdRenderTraceResult(
+    ADMISSION_CONTEXT *Context, BOOLEAN Enabled, ULONG Guard,
+    NTSTATUS Status) {
+  if (!Enabled || Context == NULL)
+    return;
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceGuard, Guard);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceStatus, (ULONG)Status);
+}
+#else
+#define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args) FALSE
+#define AdmissionUmdRenderTraceCommand(Context, Enabled, Command) ((void)0)
+#define AdmissionUmdRenderTraceResult(Context, Enabled, Guard, Status) ((void)0)
+#endif
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     HANDLE Context, DXGKARG_RENDER *Args) {
   ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
@@ -32,39 +126,81 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ADMISSION_GDI_PREPARED prepared;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *location;
+  BOOLEAN trace;
+
+#define UMD_RENDER_RETURN(guard, value)                                      \
+  do {                                                                       \
+    NTSTATUS renderStatus = (value);                                         \
+    AdmissionUmdRenderTraceResult(adapter, trace, (guard), renderStatus);     \
+    return renderStatus;                                                     \
+  } while (0)
 
   if (context == NULL ||
-      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
-      context->Object.Device == NULL ||
-      context->Object.Device->Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
-      (context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
-      !context->SchedulerContext.Active || Args == NULL ||
-      Args->pCommand == NULL || Args->CommandLength != sizeof(command) ||
-      Args->pDmaBuffer == NULL || Args->DmaSize == 0u ||
-      Args->pDmaBufferPrivateData == NULL ||
-      Args->DmaBufferPrivateDataSize != ADMISSION_GDI_DMA_PRIVATE_SIZE ||
-      Args->pAllocationList == NULL || Args->AllocationListSize == 0u ||
-      Args->pPatchLocationListIn != NULL ||
-      Args->PatchLocationListInSize != 0u ||
-      Args->pPatchLocationListOut == NULL ||
-      Args->PatchLocationListOutSize <
-          ADMISSION_GDI_COLOR_FILL_PATCH_COUNT ||
-      Args->MultipassOffset != 0u)
+      context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC)
     return STATUS_INVALID_PARAMETER;
+  if (context->Object.Device == NULL ||
+      context->Object.Device->Magic != ADMISSION_OBJECT_DEVICE_MAGIC ||
+      context->Object.Device->Adapter == NULL)
+    return STATUS_INVALID_PARAMETER;
+  adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
+                              ADMISSION_CONTEXT, ObjectAdapter);
+  trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);
+  if ((context->Object.Flags & ADMISSION_CONTEXT_SYSTEM) != 0u)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardSystem,
+                      STATUS_INVALID_PARAMETER);
+  if (!context->SchedulerContext.Active)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardInactive,
+                      STATUS_INVALID_PARAMETER);
+  if (Args == NULL)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardArgs,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pCommand == NULL)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardCommandPointer,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->CommandLength != sizeof(command))
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardCommandLength,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pDmaBuffer == NULL || Args->DmaSize == 0u)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardDma,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pDmaBufferPrivateData == NULL ||
+      Args->DmaBufferPrivateDataSize != ADMISSION_GDI_DMA_PRIVATE_SIZE)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrivate,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pAllocationList == NULL || Args->AllocationListSize == 0u)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardAllocations,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pPatchLocationListIn != NULL ||
+      Args->PatchLocationListInSize != 0u)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPatchIn,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->pPatchLocationListOut == NULL ||
+      Args->PatchLocationListOutSize <
+          ADMISSION_GDI_COLOR_FILL_PATCH_COUNT)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPatchOut,
+                      STATUS_INVALID_PARAMETER);
+  if (Args->MultipassOffset != 0u)
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardMultipass,
+                      STATUS_INVALID_PARAMETER);
 
   __try {
     RtlCopyMemory(&command, Args->pCommand, sizeof(command));
   }
   __except(EXCEPTION_EXECUTE_HANDLER) {
-    return STATUS_INVALID_USER_BUFFER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
+                      STATUS_INVALID_USER_BUFFER);
   }
+  AdmissionUmdRenderTraceCommand(adapter, trace, &command);
 
   if (!AdmissionUmdColorFillCommandValid(
-          &command, Args->AllocationListSize) ||
-      !AdmissionUmdRenderOpenValid(
+          &command, Args->AllocationListSize))
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardCommand,
+                      STATUS_INVALID_USER_BUFFER);
+  if (!AdmissionUmdRenderOpenValid(
           context, Args->pAllocationList, Args->AllocationListSize,
           command.DestinationAllocationIndex, TRUE))
-    return STATUS_INVALID_USER_BUFFER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardOpenedAllocation,
+                      STATUS_INVALID_USER_BUFFER);
   opened = (const ADMISSION_OPEN_ALLOCATION *)
       Args->pAllocationList[command.DestinationAllocationIndex]
           .hDeviceSpecificAllocation;
@@ -72,11 +208,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
           opened->Allocation->Description.Width ||
       command.Destination.Bottom >
           opened->Allocation->Description.Height)
-    return STATUS_INVALID_USER_BUFFER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardBounds,
+                      STATUS_INVALID_USER_BUFFER);
   if (!AppleAgxDmaShadowIsVirgin(
           Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize))
-    return STATUS_INVALID_USER_BUFFER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrivateVirgin,
+                      STATUS_INVALID_USER_BUFFER);
 
   RtlZeroMemory(&input, sizeof(input));
   input.Destination.Left = command.Destination.Left;
@@ -94,7 +232,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   if (!AdmissionGdiPrepareColorFill(
           &input, 0u, (unsigned char *)Args->pDmaBuffer,
           Args->DmaSize, &prepared))
-    return STATUS_INVALID_USER_BUFFER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
+                      STATUS_INVALID_USER_BUFFER);
 
   AppleAgxDmaShadowInitialize(
       &shadow, Args->pDmaBufferPrivateData,
@@ -104,7 +243,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
           prepared.DmaBytes)) {
     RtlZeroMemory(Args->pDmaBufferPrivateData,
                   Args->DmaBufferPrivateDataSize);
-    return STATUS_INVALID_USER_BUFFER;
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardShadow,
+                      STATUS_INVALID_USER_BUFFER);
   }
 
   location = Args->pPatchLocationListOut;
@@ -119,10 +259,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   --Args->PatchLocationListOutSize;
   Args->MultipassOffset = sizeof(command);
 
-  adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
-                              ADMISSION_CONTEXT, ObjectAdapter);
   AdmissionGdiReceiptBeginWindows(
       adapter, (ULONGLONG)(ULONG_PTR)context, command.Opcode,
       command.Color, 0u, prepared.DmaBytes);
-  return STATUS_SUCCESS;
+  UMD_RENDER_RETURN(AdmissionUmdRenderGuardAccepted, STATUS_SUCCESS);
+#undef UMD_RENDER_RETURN
 }

@@ -3,6 +3,7 @@
 
 #define ADMISSION_SUBMIT_TRACE_TAG 0x5070000000000000ULL
 #define ADMISSION_GDI_SUBMIT_TRACE_TAG 0x5090000000000000ULL
+#define ADMISSION_UMD_RENDER_TRACE_TAG 0x5120000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -43,6 +44,53 @@ typedef enum _ADMISSION_SUBMIT_TRACE_FIELD {
   AdmissionSubmitTracePresentGuard = 40u,
   AdmissionSubmitTraceStatus = 41u,
 } ADMISSION_SUBMIT_TRACE_FIELD;
+
+typedef enum _ADMISSION_UMD_RENDER_TRACE_FIELD {
+  AdmissionUmdRenderTraceVersion = 1u,
+  AdmissionUmdRenderTraceIrql = 2u,
+  AdmissionUmdRenderTraceContextFlags = 3u,
+  AdmissionUmdRenderTraceCommandLength = 4u,
+  AdmissionUmdRenderTraceDmaSize = 5u,
+  AdmissionUmdRenderTracePrivateSize = 6u,
+  AdmissionUmdRenderTraceAllocationCount = 7u,
+  AdmissionUmdRenderTracePatchInCount = 8u,
+  AdmissionUmdRenderTracePatchOutCount = 9u,
+  AdmissionUmdRenderTraceMultipass = 10u,
+  AdmissionUmdRenderTraceCommandMagic = 11u,
+  AdmissionUmdRenderTraceCommandVersion = 12u,
+  AdmissionUmdRenderTraceCommandBytes = 13u,
+  AdmissionUmdRenderTraceCommandOpcode = 14u,
+  AdmissionUmdRenderTraceDestinationIndex = 15u,
+  AdmissionUmdRenderTraceColor = 16u,
+  AdmissionUmdRenderTraceRop = 17u,
+  AdmissionUmdRenderTraceRop3 = 18u,
+  AdmissionUmdRenderTraceGuard = 19u,
+  AdmissionUmdRenderTraceStatus = 20u,
+} ADMISSION_UMD_RENDER_TRACE_FIELD;
+
+typedef enum _ADMISSION_UMD_RENDER_GUARD {
+  AdmissionUmdRenderGuardAccepted = 0u,
+  AdmissionUmdRenderGuardContext = 1u,
+  AdmissionUmdRenderGuardDevice = 2u,
+  AdmissionUmdRenderGuardSystem = 3u,
+  AdmissionUmdRenderGuardInactive = 4u,
+  AdmissionUmdRenderGuardArgs = 5u,
+  AdmissionUmdRenderGuardCommandPointer = 6u,
+  AdmissionUmdRenderGuardCommandLength = 7u,
+  AdmissionUmdRenderGuardDma = 8u,
+  AdmissionUmdRenderGuardPrivate = 9u,
+  AdmissionUmdRenderGuardAllocations = 10u,
+  AdmissionUmdRenderGuardPatchIn = 11u,
+  AdmissionUmdRenderGuardPatchOut = 12u,
+  AdmissionUmdRenderGuardMultipass = 13u,
+  AdmissionUmdRenderGuardUserCopy = 14u,
+  AdmissionUmdRenderGuardCommand = 15u,
+  AdmissionUmdRenderGuardOpenedAllocation = 16u,
+  AdmissionUmdRenderGuardBounds = 17u,
+  AdmissionUmdRenderGuardPrivateVirgin = 18u,
+  AdmissionUmdRenderGuardPrepare = 19u,
+  AdmissionUmdRenderGuardShadow = 20u,
+} ADMISSION_UMD_RENDER_GUARD;
 
 typedef enum _ADMISSION_SUBMIT_TRACE_ROUTE {
   AdmissionSubmitRoutePresent = 1u,
@@ -94,6 +142,14 @@ static inline unsigned long long AdmissionSubmitTraceWord(
 static inline unsigned long long AdmissionGdiSubmitTraceWord(
     unsigned int Field, unsigned int Value) {
   return ADMISSION_GDI_SUBMIT_TRACE_TAG |
+      ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Value;
+}
+
+static inline unsigned long long AdmissionUmdRenderTraceWord(
+    unsigned int Field, unsigned int Value) {
+  return ADMISSION_UMD_RENDER_TRACE_TAG |
       ((unsigned long long)(Field & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Value;

@@ -203,6 +203,7 @@ typedef struct _ADMISSION_CONTEXT {
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   volatile LONG SubmitTraceClaimed;
+  volatile LONG UmdRenderTraceClaimed;
   volatile LONG GdiReceiptClaimed;
   volatile LONG GdiSubmitTraceClaimed;
   KSPIN_LOCK GdiReceiptLock;
