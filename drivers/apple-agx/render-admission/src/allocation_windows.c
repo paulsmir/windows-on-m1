@@ -52,6 +52,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
     HANDLE Adapter,
     DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA *StandardAllocation) {
   D3DKMDT_GDISURFACEDATA *surface = NULL;
+  D3DKMDT_SHADOWSURFACEDATA *shadow = NULL;
   ADMISSION_ALLOCATION_DESCRIPTION description;
   ULONG bytesPerPixel;
   UINT suppliedBytes;
@@ -61,7 +62,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
       (StandardAllocation->StandardAllocationType !=
            D3DKMDT_STANDARDALLOCATION_GDISURFACE &&
        StandardAllocation->StandardAllocationType !=
-           D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE) ||
+           D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE &&
+       StandardAllocation->StandardAllocationType !=
+           D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE) ||
       StandardAllocation->PhysicalAdapterIndex != 0u ||
       StandardAllocation->pResourcePrivateDriverData != NULL)
     return STATUS_INVALID_PARAMETER;
@@ -89,6 +92,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
             (UINT)D3DKMDT_GDISURFACE_TEXTURE, (UINT)primary->Format,
             0u, &description))
       return STATUS_INVALID_PARAMETER;
+  } else if (StandardAllocation->StandardAllocationType ==
+             D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE) {
+    shadow = StandardAllocation->pCreateShadowSurfaceData;
+    if (shadow == NULL || shadow->Format != D3DDDIFMT_A8R8G8B8 ||
+        !AdmissionAllocationDescribe(
+            shadow->Width, shadow->Height, 4u,
+            (UINT)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE,
+            (UINT)shadow->Format, 1u, &description))
+      return STATUS_INVALID_PARAMETER;
   } else {
     surface = StandardAllocation->pCreateGdiSurfaceData;
     if (surface == NULL || surface->Flags.Value != 0u ||
@@ -103,6 +115,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
   }
   if (surface != NULL)
     surface->Pitch = description.Pitch;
+  if (shadow != NULL)
+    shadow->Pitch = description.Pitch;
   RtlCopyMemory(StandardAllocation->pAllocationPrivateDriverData,
                 &description, sizeof(description));
   return STATUS_SUCCESS;
@@ -155,6 +169,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;
   info->FlagsWddm2.Value = 0u;
+  info->FlagsWddm2.CpuVisible = description->CpuVisible != 0u;
   info->FlagsWddm2.AccessedPhysically = 1u;
   info->pAllocationUsageHint = NULL;
   info->AllocationPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;

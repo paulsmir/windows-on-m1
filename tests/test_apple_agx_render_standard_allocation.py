@@ -46,7 +46,7 @@ typedef struct {const void *pPrivateDriverData;UINT PrivateDriverDataSize;
  UINT Alignment;SIZE_T Size,PitchAlignedSize;struct {UINT Value;} HintedBank;
  struct {UINT Value,SegmentId0;} PreferredSegment;
  UINT SupportedReadSegmentSet,SupportedWriteSegmentSet,EvictionSegmentSet;
- HANDLE hAllocation;union {UINT Value;struct {UINT Low:15;
+ HANDLE hAllocation;union {UINT Value;struct {UINT CpuVisible:1;UINT Low:14;
  UINT AccessedPhysically:1;UINT High:16;};} FlagsWddm2;
  void *pAllocationUsageHint;UINT AllocationPriority;struct {UINT Value;} Flags2;
  UINT PhysicalAdapterIndex;} DXGK_ALLOCATIONINFO;
@@ -74,6 +74,11 @@ int main(void) {
  assert(!AdmissionAllocationDestroy(&h->Object));
  assert(AdmissionAllocationClose(&h->Object));
  assert(AdmissionAllocationDestroy(&h->Object));free(h);info.hAllocation=NULL;
+ assert(AdmissionAllocationDescribe(2560,1600,4,3,21,1,&d));
+ assert(AdmissionDdiCreateAllocation(&ctx,&a)==0);
+ assert(info.FlagsWddm2.Value==0x8001);
+ h=info.hAllocation;
+ assert(AdmissionAllocationDestroy(&h->Object));free(h);info.hAllocation=NULL;
  a.hResource=&ctx;
  assert(AdmissionDdiCreateAllocation(&ctx,&a)==STATUS_INVALID_PARAMETER);
  assert(info.hAllocation==NULL);a.hResource=NULL;a.NumAllocations=2;
@@ -93,7 +98,7 @@ int main(void) {
                            check=True)
             subprocess.run([str(binary)], check=True)
 
-    def test_size_phase_and_native_primary_translation(self):
+    def test_size_phase_and_primary_shadow_translation(self):
         source = (RENDER / 'src/allocation_windows.c').read_text()
         callback = source[source.index('static BOOLEAN AdmissionFormatBytesPerPixel'):
                           source.index('_Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation')]
@@ -122,15 +127,19 @@ enum {D3DKMDT_GDISURFACE_TEXTURE=1,D3DKMDT_GDISURFACE_STAGING=2,
  D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE=3,D3DKMDT_GDISURFACE_LOOKUPTABLE=4,
  D3DKMDT_GDISURFACE_EXISTINGSYSMEM=5};
 enum {D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE=1,
+ D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE=2,
  D3DKMDT_STANDARDALLOCATION_GDISURFACE=4};
 typedef struct {UINT Width,Height;D3DDDIFORMAT Format;
  struct {UINT Numerator,Denominator;} RefreshRate;UINT VidPnSourceId;
 } D3DKMDT_SHAREDPRIMARYSURFACEDATA;
+typedef struct {UINT Width,Height;D3DDDIFORMAT Format;UINT Pitch;
+} D3DKMDT_SHADOWSURFACEDATA;
 typedef struct {UINT Width,Height;D3DDDIFORMAT Format;
  D3DKMDT_GDISURFACETYPE Type;struct {UINT Value;} Flags;UINT Pitch;
 } D3DKMDT_GDISURFACEDATA;
 typedef struct {UINT StandardAllocationType;union {
  D3DKMDT_SHAREDPRIMARYSURFACEDATA *pCreateSharedPrimarySurfaceData;
+ D3DKMDT_SHADOWSURFACEDATA *pCreateShadowSurfaceData;
  D3DKMDT_GDISURFACEDATA *pCreateGdiSurfaceData;};
  void *pAllocationPrivateDriverData;UINT AllocationPrivateDriverDataSize;
  void *pResourcePrivateDriverData;UINT ResourcePrivateDriverDataSize;
@@ -175,9 +184,31 @@ int main(void) {
  assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==STATUS_INVALID_PARAMETER);
  a.PhysicalAdapterIndex=0;
  assert(AdmissionDdiGetStandardAllocationDriverData(NULL,&a)==STATUS_INVALID_PARAMETER);
+ D3DKMDT_SHADOWSURFACEDATA shadow={2560,1600,21,0x12345678};
+ D3DKMDT_SHADOWSURFACEDATA shadowBefore=shadow;
+ a.StandardAllocationType=2;a.pCreateShadowSurfaceData=&shadow;
+ a.pAllocationPrivateDriverData=NULL;
+ assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==0);
+ assert(a.AllocationPrivateDriverDataSize==48 && a.ResourcePrivateDriverDataSize==0);
+ assert(memcmp(&shadow,&shadowBefore,sizeof(shadow))==0);
+ a.pAllocationPrivateDriverData=&desc;
+ assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==0);
+ assert(shadow.Pitch==10240 && desc.Pitch==10240);
+ assert(desc.Width==2560 && desc.Height==1600 && desc.Size==16384000ULL);
+ assert(desc.BytesPerPixel==4 && desc.Format==21);
+ assert(desc.Type==3 && desc.CpuVisible==1);
+ assert(AdmissionAllocationDescriptionValid(&desc));
+ shadow=shadowBefore;shadow.Format=28;sentinel=desc;
+ assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==STATUS_INVALID_PARAMETER);
+ assert(shadow.Pitch==0x12345678 && memcmp(&desc,&sentinel,sizeof(desc))==0);
+ shadow=shadowBefore;shadow.Width=0;
+ assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==STATUS_INVALID_PARAMETER);
+ shadow=shadowBefore;a.pCreateShadowSurfaceData=NULL;
+ assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==STATUS_INVALID_PARAMETER);
  D3DKMDT_GDISURFACEDATA gdi={17,2,21,1,{0},0x12345678};
  D3DKMDT_GDISURFACEDATA gdiBefore=gdi;
  a.StandardAllocationType=4;a.pCreateGdiSurfaceData=&gdi;
+ a.pAllocationPrivateDriverData=NULL;
  assert(AdmissionDdiGetStandardAllocationDriverData(&adapter,&a)==0);
  assert(memcmp(&gdi,&gdiBefore,sizeof(gdi))==0);
  a.pAllocationPrivateDriverData=&desc;
