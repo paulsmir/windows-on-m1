@@ -1,5 +1,23 @@
 # Hardware Experiment Ledger
 
+## EXP523 post-residency DxgKrnl owner — preregistration 2026-09-06T20:42Z
+
+WHY THIS HYPOTHESIS: EXP522 proved explicit MakeResident is causal: paging queue
+success, correlated BuildPagingBuffer Operation1/status0 and fence7001 complete,
+then Render changed from C0000001/device-error to C000000D before KMD entry.
+Single variable is bounded DxgKrnl ETW around the unchanged EXP522 producer and
+exact EXP519 KMD. It will distinguish argument rejection before Event169 from a
+new scheduler/device error after Event169. No code or hardware behavior changes.
+Exact package/producer hashes remain `5068cc42...` and `d8084560...`; one run,
+evidence, exact cleanup, ordinary restore.
+
+EXP522 HARDWARE RESULT: CreatePagingQueue0; MakeResident STATUS_PENDING(0x103),
+correlated BuildPagingBuffer Operation1/IRQL0/status0, paging fence7001 completed;
+D3DKMTRender now C000000D, no0x5120. Producer/host/observation SHA
+`dbe7d787...`/`93f325ba...`/`29ca3a00...`. Exact cleanup and ordinary health
+`1d7fba3260c46944a68ad51b443450082c7027d81d9ff1a9445538b0bfcd8c17`.
+Explicit residency is confirmed; no Patch/Submit/AGX/fence claim yet.
+
 ## EXP522 explicit producer residency — preregistration 2026-09-06T20:35:56Z
 
 WHY THIS HYPOTHESIS:

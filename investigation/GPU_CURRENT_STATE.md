@@ -253,6 +253,11 @@ DXGK_RENDERKM_COMMAND are KMD-only); no hardware run. EXP522 commit e591b88 adds
 supported CreatePagingQueue/MakeResident/exact paging-fence wait before Render;
 producer SHAd8084560fa88a64ad184e94bb0d0ae6b4393fa547a13c043689972c15347f8fc.
 Next one exact522 run; require paging operation/fence then Render progress.
+EXP522 FINAL: explicit residency CONFIRMED: paging queue0, MakeResident103,
+correlated BuildPagingBuffer op1/status0, fence7001 complete. Render moved to
+C000000D but KMD entry absent. Cleanup/ordinary health1d7fba3260c46944a68ad51b443450082c7027d81d9ff1a9445538b0bfcd8c17.
+EXP523 preregistered: unchanged522 producer/package with bounded DxgKrnl ETW to
+name post-residency C000000D owner; then exact cleanup and causal fix.
 
 ## Final live ordinary clean baseline
 
