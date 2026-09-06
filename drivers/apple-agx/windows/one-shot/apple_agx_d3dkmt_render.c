@@ -148,7 +148,27 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   render.CommandLength = sizeof(command);
   render.AllocationCount = 1u;
   render.PatchLocationCount = 0u;
+  wprintf(L"BUFFERS device_command=%p device_command_bytes=%u "
+          L"device_allocations=%p device_allocation_count=%u "
+          L"device_patches=%p device_patch_count=%u "
+          L"context_command=%p context_command_bytes=%u "
+          L"context_allocations=%p context_allocation_count=%u "
+          L"context_patches=%p context_patch_count=%u context_gpuva=0x%llx\n",
+          createDevice.pCommandBuffer, createDevice.CommandBufferSize,
+          createDevice.pAllocationList, createDevice.AllocationListSize,
+          createDevice.pPatchLocationList, createDevice.PatchLocationListSize,
+          createContext.pCommandBuffer, createContext.CommandBufferSize,
+          createContext.pAllocationList, createContext.AllocationListSize,
+          createContext.pPatchLocationList, createContext.PatchLocationListSize,
+          createContext.CommandBuffer);
   renderStatus = D3DKMTRender(&render);
+  wprintf(L"RENDER_OUT command=%p command_bytes=%u allocations=%p "
+          L"allocation_count=%u patches=%p patch_count=%u gpuva=0x%llx "
+          L"queued=%u\n", render.pNewCommandBuffer,
+          render.NewCommandBufferSize, render.pNewAllocationList,
+          render.NewAllocationListSize, render.pNewPatchLocationList,
+          render.NewPatchLocationListSize, render.NewCommandBuffer,
+          render.QueuedBufferCount);
   if (!NT_SUCCESS(renderStatus))
     goto cleanup;
   result = 0;

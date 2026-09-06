@@ -95,6 +95,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("createContext.pAllocationList", source)
         self.assertIn("createContext.pPatchLocationList", source)
         self.assertIn("destroy.Flags.SynchronousDestroy = 1", source)
+        self.assertIn("BUFFERS device_command=", source)
+        self.assertIn("RENDER_OUT command=", source)
         self.assertIn("render_umd_command.h", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 
