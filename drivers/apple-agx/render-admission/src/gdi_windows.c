@@ -177,10 +177,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
         Adapter, Context,
         (ADMISSION_OPEN_ALLOCATION *)pending.OpenedAllocation,
         &patchArgs, shadow.BytesUsed, &pending.Destination);
-    PREPATCH_ADOPT_RETURN(
-        NT_SUCCESS(status) ? AdmissionPrepatchAdoptGuardAccepted
-                           : AdmissionPrepatchAdoptGuardPrepare,
-        status);
+    if (!NT_SUCCESS(status))
+      PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPrepare, status);
+    return STATUS_SUCCESS;
   }
 #undef PREPATCH_ADOPT_RETURN
 }

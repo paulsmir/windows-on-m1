@@ -24,7 +24,7 @@ class AppleAgxRenderPrepatchTests(unittest.TestCase):
         self.assertIn("PREPATCH_ADOPT_RETURN", patch)
         self.assertIn("AdmissionPrepatchAdoptGuardPending", patch)
         self.assertIn("AdmissionPrepatchAdoptGuardShadow", patch)
-        self.assertIn("AdmissionPrepatchAdoptGuardAccepted", patch)
+        self.assertNotIn("AdmissionPrepatchAdoptGuardAccepted", patch)
         self.assertIn("AppleAgxDmaShadowSeal", patch)
         self.assertIn("AdmissionGdiAdoptPrepatchedPacket", submit)
         self.assertIn("PrepatchedRender.Active", callbacks)
