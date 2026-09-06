@@ -64,13 +64,21 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     goto cleanup;
 
   for (index = 0u; index < enumeration.NumAdapters; ++index) {
+    NTSTATUS typeStatus;
     ZeroMemory(&adapterType, sizeof(adapterType));
     ZeroMemory(&query, sizeof(query));
     query.hAdapter = adapters[index].hAdapter;
     query.Type = KMTQAITYPE_ADAPTERTYPE;
     query.pPrivateDriverData = &adapterType;
     query.PrivateDriverDataSize = sizeof(adapterType);
-    if (NT_SUCCESS(D3DKMTQueryAdapterInfo(&query)) &&
+    typeStatus = D3DKMTQueryAdapterInfo(&query);
+    wprintf(L"ADAPTER index=%lu luid_high=%ld luid_low=%lu sources=%lu "
+            L"query=0x%08lx type=0x%08lx\n",
+            index, adapters[index].AdapterLuid.HighPart,
+            adapters[index].AdapterLuid.LowPart,
+            adapters[index].NumOfSources, (ULONG)typeStatus,
+            adapterType.Value);
+    if (NT_SUCCESS(typeStatus) &&
         adapterType.RenderSupported && adapterType.DisplaySupported &&
         !adapterType.SoftwareDevice && !adapterType.ComputeOnly &&
         adapters[index].NumOfSources == 1u) {

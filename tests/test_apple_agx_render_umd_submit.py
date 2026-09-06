@@ -82,6 +82,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("!adapterType.SoftwareDevice", source)
         self.assertIn("adapters[index].NumOfSources == 1u", source)
         self.assertIn("matchingAdapters != 1u", source)
+        self.assertIn("ADAPTER index=", source)
+        self.assertIn("adapterType.Value", source)
         self.assertNotIn("D3DKMTOpenAdapterFromGdiDisplayName", source)
         self.assertNotIn("D3DKMTOpenAdapterFromLuid", source)
         self.assertIn("createContext.Flags.Value = 0u", source)
