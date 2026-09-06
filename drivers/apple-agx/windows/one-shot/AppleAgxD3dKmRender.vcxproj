@@ -24,6 +24,7 @@
       <WarningLevel>Level4</WarningLevel>
       <LanguageStandard_C>stdc11</LanguageStandard_C>
       <SDLCheck>true</SDLCheck>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link><AdditionalDependencies>gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>

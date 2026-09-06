@@ -81,6 +81,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("createContext.pPatchLocationList", source)
         self.assertIn("destroy.Flags.SynchronousDestroy = 1", source)
         self.assertIn("render_umd_command.h", project)
+        self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 
 
 if __name__ == "__main__":
