@@ -64,11 +64,26 @@ Stage/collect/cleanup scripts SHA-256:
 74cbb0a484f443b95e1f6e2fdb11c37615539010d7090494161f0264c0eafc95 /
 898037e4cee5f0c9046480512ad8e323e8490b98f550e01359761a06fdba135d.
 
+PRE-WORKLOAD PRODUCER CORRECTION: the exact driver bound Code0 with all hashes
+matched, but DEVPKEY_Gpu_Luid is null and the read-only interactive GDI enumerator
+correctly found zero displays from SSH session0. No D3DKMTRender or receipt ran.
+Pinned WDK exposes D3DKMTOpenAdapterFromGdiDisplayName specifically for an exact
+GDI name. Commit d6314b273816ed86892c392574c0ca30c932865e changes only producer
+adapter acquisition to that API with bounded32-WCHAR input and preserves the
+normal flags0/no-private context and command. Four tests GREEN. Fresh producer-
+only R3 build/analysis passed at886272bytes, ARM64 static, zero warnings/errors;
+overlay SHA92137d80c1d6178a296730c1738d16c4a7bd9409489485362e246b20676b46cb,
+producer SHA27a74e32c1433a1854c5d0cb9a8f59b94b07a6d41f9ab8098250b5620b2a59c8.
+Remote hash matches. The installed driver remains exact30.0.511.0 and unchanged.
+The sole workload command is now exact R3 with argument \\.\DISPLAY2; no stale
+LUID, interactive task or display enumeration is used.
+
 Hardware workflow: collect and remove exact installed EXP509 first; restore the
 current ordinary377/392 Code28 baseline; transfer exact EXP511 ZIP/producer and
 scripts; stage only; graceful reboot; launch immutable full-owner477/406 once;
 verify Code0/8CPU/SSH/hash/LUID; invoke exact producer once over SSH with that
-fresh LUID; collect output,0x5090 trace,160-byte receipt,ETL/events/health before
+exact GDI display name and let the thunk return its fresh LUID/source; collect
+output,0x5090 trace,160-byte receipt,ETL/events/health before
 exact cleanup and ordinary restore.
 
 PASS requires Render/Patch/Submit status0, backend result0, matching TA and3D

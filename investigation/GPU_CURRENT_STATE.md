@@ -116,6 +116,16 @@ producer SHA3c576b5b46c5d320516bb55d3f547cba0c7f7b6e6863d9e37c90e892992c0b43.
 EXP511 is preregistered. Next execute exact EXP509 evidence/cleanup, restore
 ordinary Code28, then one EXP511 natural bind and one SSH producer invocation.
 
+EXP511 live18:35Z: exact30.0.511.0 bound Code0/serviceRunning/hash-matched with
+8CPU/SSH/platform healthy and no fresh fault events. PnP LUID property is null;
+session0 GDI enumeration returned zero without invoking render. Producer-only
+commit d6314b273816ed86892c392574c0ca30c932865e uses supported bounded
+D3DKMTOpenAdapterFromGdiDisplayName on exact \\.\DISPLAY2. R3 ARM64 static build/
+analysis PASS and remote SHA
+27a74e32c1433a1854c5d0cb9a8f59b94b07a6d41f9ab8098250b5620b2a59c8 matches.
+No workload has run. Next action is exactly one R3 invocation over SSH, then
+collect receipt/trace/health before exact cleanup.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,
