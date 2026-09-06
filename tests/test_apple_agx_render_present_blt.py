@@ -32,6 +32,7 @@ class PresentBltTests(unittest.TestCase):
 #include "render_objects.h"
 #include "render_allocation.h"
 #include "render_present.h"
+#include "render_submit_trace.h"
 #include "apple_agx_dma_shadow.h"
 #define _Use_decl_annotations_
 #define C_ASSERT(x) _Static_assert(x,#x)
@@ -58,6 +59,7 @@ typedef void *HANDLE;
 typedef void *PVOID;
 typedef void VOID;
 typedef unsigned UINT;
+typedef unsigned ULONG;
 typedef int NTSTATUS;
 typedef int BOOLEAN;
 typedef unsigned long long ULONGLONG;
@@ -98,6 +100,9 @@ typedef struct {HANDLE hContext;union {unsigned Value;struct {unsigned Paging:1,
  unsigned DmaBufferSubmissionStartOffset,DmaBufferSubmissionEndOffset;
  unsigned DmaBufferPrivateDataSubmissionStartOffset,DmaBufferPrivateDataSubmissionEndOffset;
 } DXGKARG_SUBMITCOMMAND;
+static unsigned traced_field,traced_value;
+static void AdmissionSubmitTraceValueWindows(ADMISSION_CONTEXT *c,BOOLEAN enabled,
+ unsigned field,unsigned value){(void)c;if(enabled){traced_field=field;traced_value=value;}}
 static unsigned queue_calls,queued_fence,queued_bytes;
 static unsigned char queued_copy[4096];
 static NTSTATUS AdmissionPagingSubmitPresent(ADMISSION_CONTEXT *c,const DXGKARG_SUBMITCOMMAND *a,
@@ -159,6 +164,15 @@ int main(void){
  assert(AppleAgxDmaShadowPatchU64(private_data,shadow.BytesUsed,144,0));
  assert(AdmissionPresentSubmit(&adapter,&submit)==STATUS_INVALID_PARAMETER);
  assert(queue_calls==2); /* cannot submit unresolved source */
+ traced_field=traced_value=0;
+ assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
+ assert(traced_field==AdmissionSubmitTracePresentGuard);
+ assert(traced_value==AdmissionPresentSubmitResidency);
+ assert(AppleAgxDmaShadowPatchU64(private_data,shadow.BytesUsed,144,0x0200001501800000ULL));
+ submit.DmaBufferSubmissionStartOffset=1;traced_field=traced_value=0;
+ assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
+ assert(traced_field==AdmissionSubmitTracePresentGuard);
+ assert(traced_value==AdmissionPresentSubmitDmaStart);
  return 0;
 }
 '''

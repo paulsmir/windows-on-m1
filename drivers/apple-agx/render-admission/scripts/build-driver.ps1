@@ -7,6 +7,7 @@ param(
     [switch]$StopAfterEndpoints,
     [switch]$FirmwareQualification,
     [switch]$BackendQualification,
+    [switch]$SubmitQualification,
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
@@ -17,6 +18,9 @@ if ($BackendQualification -and ($MemoryQualification -or $ManagementQualificatio
 }
 if ($FirmwareQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints)) {
     throw "FirmwareQualification must not be combined with an earlier terminal qualification profile"
+}
+if ($SubmitQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification)) {
+    throw "SubmitQualification must be a full-production-only discriminator"
 }
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "AppleAgxRenderAdmission.vcxproj"
@@ -54,6 +58,7 @@ $retainedRootValue = if ($RetainedRootQualification) { "true" } else { "false" }
 $endpointStopValue = if ($StopAfterEndpoints) { "true" } else { "false" }
 $firmwareQualificationValue = if ($FirmwareQualification) { "true" } else { "false" }
 $backendQualificationValue = if ($BackendQualification) { "true" } else { "false" }
+$submitQualificationValue = if ($SubmitQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
@@ -61,7 +66,8 @@ $backendQualificationValue = if ($BackendQualification) { "true" } else { "false
     "/p:AppleAgxRetainedRootQualification=$retainedRootValue" `
     "/p:AppleAgxStopAfterEndpoints=$endpointStopValue" `
     "/p:AppleAgxFirmwareQualification=$firmwareQualificationValue" `
-    "/p:AppleAgxBackendQualification=$backendQualificationValue"
+    "/p:AppleAgxBackendQualification=$backendQualificationValue" `
+    "/p:AppleAgxSubmitQualification=$submitQualificationValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

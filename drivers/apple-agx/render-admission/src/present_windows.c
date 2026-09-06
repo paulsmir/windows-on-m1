@@ -87,19 +87,51 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
 
 static BOOLEAN AdmissionPresentPrivateView(PVOID Data, UINT Bytes,
     APPLE_AGX_DMA_SHADOW *Shadow, APPLE_AGX_DMA_SHADOW_VIEW *View,
-    ADMISSION_PRESENT_BLT_COMMAND *Command) {
+    ADMISSION_PRESENT_BLT_COMMAND *Command, ULONG *Stage) {
   UINT extent;
-  return Data != NULL && AppleAgxDmaShadowOpen(Shadow, Data, Bytes) &&
-      AppleAgxDmaShadowExtent(Data, Shadow->BytesUsed, &extent) &&
-      AppleAgxDmaShadowFind(Data, Shadow->BytesUsed, 0u, extent, View) &&
-      AdmissionPresentBltValidate(View->Bytes, View->DmaBytes, 0, Command);
+  if (Stage != NULL)
+    *Stage = AdmissionPresentPrivateMissing;
+  if (Data == NULL)
+    return FALSE;
+  if (Stage != NULL)
+    *Stage = AdmissionPresentPrivateShadow;
+  if (!AppleAgxDmaShadowOpen(Shadow, Data, Bytes))
+    return FALSE;
+  if (Stage != NULL)
+    *Stage = AdmissionPresentPrivateExtent;
+  if (!AppleAgxDmaShadowExtent(Data, Shadow->BytesUsed, &extent))
+    return FALSE;
+  if (Stage != NULL)
+    *Stage = AdmissionPresentPrivateRecord;
+  if (!AppleAgxDmaShadowFind(Data, Shadow->BytesUsed, 0u, extent, View))
+    return FALSE;
+  if (Stage != NULL)
+    *Stage = AdmissionPresentPrivateCommand;
+  if (!AdmissionPresentBltValidate(View->Bytes, View->DmaBytes, 0, Command))
+    return FALSE;
+  if (Stage != NULL)
+    *Stage = AdmissionPresentPrivateValid;
+  return TRUE;
 }
 
 _Use_decl_annotations_ BOOLEAN AdmissionPresentIsBltPrivate(PVOID Data, UINT Bytes) {
   APPLE_AGX_DMA_SHADOW shadow;
   APPLE_AGX_DMA_SHADOW_VIEW view;
   ADMISSION_PRESENT_BLT_COMMAND command;
-  return AdmissionPresentPrivateView(Data, Bytes, &shadow, &view, &command);
+  return AdmissionPresentPrivateView(Data, Bytes, &shadow, &view, &command, NULL);
+}
+
+_Use_decl_annotations_ ULONG AdmissionPresentPrivateStage(
+    PVOID Data, UINT Bytes, ADMISSION_PRESENT_BLT_COMMAND *Command) {
+  APPLE_AGX_DMA_SHADOW shadow;
+  APPLE_AGX_DMA_SHADOW_VIEW view;
+  ADMISSION_PRESENT_BLT_COMMAND local;
+  ULONG stage = AdmissionPresentPrivateMissing;
+  RtlZeroMemory(&local, sizeof(local));
+  (void)AdmissionPresentPrivateView(Data, Bytes, &shadow, &view, &local, &stage);
+  if (Command != NULL)
+    *Command = local;
+  return stage;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionPresentPatch(
@@ -121,7 +153,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentPatch(
       Args->PatchLocationListSubmissionStart > Args->PatchLocationListSize ||
       2u > Args->PatchLocationListSize - Args->PatchLocationListSubmissionStart ||
       !AdmissionPresentPrivateView(Args->pDmaBufferPrivateData,
-          Args->DmaBufferPrivateDataSize, &shadow, &view, &command) ||
+          Args->DmaBufferPrivateDataSize, &shadow, &view, &command, NULL) ||
       command.ContextToken != (ULONGLONG)(ULONG_PTR)Args->hContext ||
       Args->DmaBufferSubmissionStartOffset != 0u ||
       Args->DmaBufferSubmissionEndOffset != view.DmaBytes ||
@@ -162,32 +194,84 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentPatch(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionPresentSubmit(
-    ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args) {
+_Use_decl_annotations_ NTSTATUS AdmissionPresentSubmitTraced(
+    ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args,
+    BOOLEAN Trace) {
   APPLE_AGX_DMA_SHADOW shadow;
   APPLE_AGX_DMA_SHADOW_VIEW view;
   ADMISSION_PRESENT_BLT_COMMAND command;
   ADMISSION_RENDER_CONTEXT *render;
-  if (Context == NULL || Args == NULL || !Context->Started ||
-      Args->hContext == NULL || (Args->Flags.Value & ~0x82u) != 0u ||
-      !Args->Flags.Present || Args->SubmissionFenceId == 0u ||
-      Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
-      !AdmissionPresentPrivateView(Args->pDmaBufferPrivateData,
-          Args->DmaBufferPrivateDataSize, &shadow, &view, &command) ||
-      !AdmissionPresentBltValidate(view.Bytes, view.DmaBytes, 1, &command) ||
-      command.ContextToken != (ULONGLONG)(ULONG_PTR)Args->hContext ||
-      Args->DmaBufferSubmissionStartOffset != 0u ||
-      Args->DmaBufferSubmissionEndOffset != view.DmaBytes ||
-      view.DmaBytes > Args->DmaBufferSize ||
-      Args->DmaBufferPrivateDataSubmissionStartOffset != 0u ||
-      Args->DmaBufferPrivateDataSubmissionEndOffset < shadow.BytesUsed ||
-      Args->DmaBufferPrivateDataSubmissionEndOffset > Args->DmaBufferPrivateDataSize)
+  ULONG guard = AdmissionPresentSubmitAccepted;
+#if !defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  (void)Trace;
+#endif
+#define PRESENT_GUARD(condition, value)                                      \
+  do {                                                                       \
+    if (condition) {                                                         \
+      guard = (value);                                                       \
+      AdmissionSubmitTraceValueWindows(Context, Trace,                       \
+          AdmissionSubmitTracePresentGuard, guard);                          \
+      return STATUS_INVALID_PARAMETER;                                       \
+    }                                                                        \
+  } while (0)
+  if (Context == NULL || Args == NULL)
     return STATUS_INVALID_PARAMETER;
+  PRESENT_GUARD(!Context->Started, AdmissionPresentSubmitNotStarted);
+  PRESENT_GUARD(Args->hContext == NULL, AdmissionPresentSubmitContextMissing);
+  PRESENT_GUARD((Args->Flags.Value & ~0x82u) != 0u,
+                AdmissionPresentSubmitFlags);
+  PRESENT_GUARD(!Args->Flags.Present, AdmissionPresentSubmitPresentFlag);
+  PRESENT_GUARD(Args->SubmissionFenceId == 0u, AdmissionPresentSubmitFence);
+  PRESENT_GUARD(Args->NodeOrdinal != 0u, AdmissionPresentSubmitNode);
+  PRESENT_GUARD(Args->EngineOrdinal != 0u, AdmissionPresentSubmitEngine);
+  PRESENT_GUARD(!AdmissionPresentPrivateView(Args->pDmaBufferPrivateData,
+      Args->DmaBufferPrivateDataSize, &shadow, &view, &command, NULL),
+      AdmissionPresentSubmitPrivate);
+  PRESENT_GUARD(!AdmissionPresentBltValidate(view.Bytes, view.DmaBytes, 1,
+      &command), AdmissionPresentSubmitResidency);
+  PRESENT_GUARD(command.ContextToken != (ULONGLONG)(ULONG_PTR)Args->hContext,
+                AdmissionPresentSubmitContextToken);
+  PRESENT_GUARD(Args->DmaBufferSubmissionStartOffset != 0u,
+                AdmissionPresentSubmitDmaStart);
+  PRESENT_GUARD(Args->DmaBufferSubmissionEndOffset != view.DmaBytes,
+                AdmissionPresentSubmitDmaEnd);
+  PRESENT_GUARD(view.DmaBytes > Args->DmaBufferSize,
+                AdmissionPresentSubmitDmaSize);
+  PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionStartOffset != 0u,
+                AdmissionPresentSubmitPrivateStart);
+  PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionEndOffset < shadow.BytesUsed,
+                AdmissionPresentSubmitPrivateEndLow);
+  PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionEndOffset >
+      Args->DmaBufferPrivateDataSize, AdmissionPresentSubmitPrivateEndHigh);
   render = (ADMISSION_RENDER_CONTEXT *)Args->hContext;
-  if (render->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
-      render->Object.Device == NULL || render->Object.Device->Adapter != &Context->ObjectAdapter ||
-      !render->SchedulerContext.Active)
-    return STATUS_INVALID_HANDLE;
+  if (render->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC) {
+    guard = AdmissionPresentSubmitObject;
+    goto InvalidHandle;
+  }
+  if (render->Object.Device == NULL) {
+    guard = AdmissionPresentSubmitDevice;
+    goto InvalidHandle;
+  }
+  if (render->Object.Device->Adapter != &Context->ObjectAdapter) {
+    guard = AdmissionPresentSubmitAdapter;
+    goto InvalidHandle;
+  }
+  if (!render->SchedulerContext.Active) {
+    guard = AdmissionPresentSubmitInactive;
+    goto InvalidHandle;
+  }
   /* Binding is deliberately at Submit: legal prepatch can skip Patch. */
+  AdmissionSubmitTraceValueWindows(Context, Trace,
+      AdmissionSubmitTracePresentGuard, AdmissionPresentSubmitAccepted);
   return AdmissionPagingSubmitPresent(Context, Args, view.Bytes, view.DmaBytes);
+InvalidHandle:
+  AdmissionSubmitTraceValueWindows(Context, Trace,
+      AdmissionSubmitTracePresentGuard, guard);
+  return STATUS_INVALID_HANDLE;
+#undef PRESENT_GUARD
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionPresentSubmit(
+    ADMISSION_CONTEXT *Context, const DXGKARG_SUBMITCOMMAND *Args) {
+  return AdmissionPresentSubmitTraced(Context, Args, FALSE);
 }

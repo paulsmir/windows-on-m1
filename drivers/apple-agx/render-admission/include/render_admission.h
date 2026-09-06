@@ -20,6 +20,7 @@
 #include "render_paging.h"
 #include "render_gdi.h"
 #include "render_present.h"
+#include "render_submit_trace.h"
 #include "render_submission.h"
 #include "render_backend_image.h"
 #include "apple_agx_wddm_feature_contract.h"
@@ -198,6 +199,9 @@ typedef struct _ADMISSION_CONTEXT {
   UCHAR PresentCopyCommand[ADMISSION_PRESENT_BLT_DMA_MAX];
   volatile LONG PresentTransferState;
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  volatile LONG SubmitTraceClaimed;
+#endif
   UINT PagingFence;
   UINT PagingLastSubmittedFence;
   UINT PagingLastCompletedFence;
@@ -401,10 +405,31 @@ ULONG AdmissionScanoutReceiptState(_In_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionPresentBlt(_In_ ADMISSION_DEVICE *Device, HANDLE Context,
                              _Inout_ DXGKARG_PRESENT *Present);
 BOOLEAN AdmissionPresentIsBltPrivate(_In_opt_ PVOID Data, UINT Bytes);
+ULONG AdmissionPresentPrivateStage(
+    _In_opt_ PVOID Data, UINT Bytes,
+    _Out_opt_ ADMISSION_PRESENT_BLT_COMMAND *Command);
 NTSTATUS AdmissionPresentPatch(_In_ ADMISSION_CONTEXT *Context,
                                _In_ const DXGKARG_PATCH *Args);
 NTSTATUS AdmissionPresentSubmit(_In_ ADMISSION_CONTEXT *Context,
                                 _In_ const DXGKARG_SUBMITCOMMAND *Args);
+NTSTATUS AdmissionPresentSubmitTraced(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMAND *Args, BOOLEAN Trace);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+BOOLEAN AdmissionSubmitTraceBegin(_In_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMAND *Args, ULONG PrivateStage,
+    _In_opt_ const ADMISSION_PRESENT_BLT_COMMAND *Command);
+VOID AdmissionSubmitTraceValueWindows(_In_ ADMISSION_CONTEXT *Context,
+    BOOLEAN Enabled, ULONG Field, ULONG Value);
+#else
+#define AdmissionSubmitTraceBegin(Context, Args, PrivateStage, Command) FALSE
+#define AdmissionSubmitTraceValueWindows(Context, Enabled, Field, Value)       \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Enabled);                                                           \
+    (void)(Field);                                                             \
+    (void)(Value);                                                             \
+  } while (0)
+#endif
 NTSTATUS AdmissionPagingSubmitPresent(_In_ ADMISSION_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args,
     _In_reads_bytes_(Bytes) const VOID *Command, UINT Bytes);

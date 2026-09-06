@@ -337,14 +337,47 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitCommand(
   SIZE_T privateBytes;
   UINT dmaBytes;
   UINT count;
+  ADMISSION_PRESENT_BLT_COMMAND presentCommand;
+  ULONG privateStage;
+  ULONG route;
+  NTSTATUS status;
+  BOOLEAN trace;
 
   if (context == NULL || Args == NULL)
     return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(&presentCommand, sizeof(presentCommand));
+  privateStage = AdmissionPresentPrivateMissing;
+  if (!Args->Flags.Paging && Args->Flags.Present)
+    privateStage = AdmissionPresentPrivateStage(
+        Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize,
+        &presentCommand);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  else if (!Args->Flags.Paging)
+    privateStage = AdmissionPresentPrivateStage(
+        Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize,
+        &presentCommand);
+#endif
+  trace = AdmissionSubmitTraceBegin(context, Args, privateStage,
+      privateStage == AdmissionPresentPrivateValid ? &presentCommand : NULL);
   if (!Args->Flags.Paging && Args->Flags.Present &&
-      AdmissionPresentIsBltPrivate(Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize))
-    return AdmissionPresentSubmit(context, Args);
-  if (!Args->Flags.Paging)
-    return AdmissionDdiSubmitRender(context, Args);
+      privateStage == AdmissionPresentPrivateValid) {
+    route = AdmissionSubmitRoutePresent;
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceRoute, route);
+    status = AdmissionPresentSubmitTraced(context, Args, trace);
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceStatus, (ULONG)status);
+    return status;
+  }
+  if (!Args->Flags.Paging) {
+    route = AdmissionSubmitRouteRender;
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceRoute, route);
+    status = AdmissionDdiSubmitRender(context, Args);
+    AdmissionSubmitTraceValueWindows(context, trace,
+        AdmissionSubmitTraceStatus, (ULONG)status);
+    return status;
+  }
   if (!context->Started || Args->Flags.Reserved != 0u ||
       Args->NodeOrdinal != 0u || Args->EngineOrdinal != 0u ||
       Args->SubmissionFenceId == 0u ||

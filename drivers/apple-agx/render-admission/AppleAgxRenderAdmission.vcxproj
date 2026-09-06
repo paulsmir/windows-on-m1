@@ -69,6 +69,11 @@
       <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxSubmitQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
     <OutDir>$(MSBuildProjectDirectory)\build\memory-qualification\$(Configuration)\</OutDir>
     <IntDir>$(MSBuildProjectDirectory)\build\memory-qualification\obj\$(Configuration)\</IntDir>
@@ -96,6 +101,7 @@
     <ClCompile Include="src\gdi_windows.c" />
     <ClCompile Include="src\render_submission.c" />
     <ClCompile Include="src\submission_windows.c" />
+    <ClCompile Include="src\submit_trace_windows.c" />
     <ClCompile Include="src\render_backend_image.c" />
     <ClCompile Include="src\backend_image_windows.c" />
     <ClCompile Include="src\backend_platform_windows.c" />
@@ -164,6 +170,7 @@
     <ClInclude Include="include\render_gdi.h" />
     <ClInclude Include="include\render_present.h" />
     <ClInclude Include="include\render_submission.h" />
+    <ClInclude Include="include\render_submit_trace.h" />
     <ClInclude Include="include\render_backend_image.h" />
     <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
