@@ -51,37 +51,58 @@ static BOOLEAN AdmissionSurfaceTypeSupported(D3DKMDT_GDISURFACETYPE Type,
 _Use_decl_annotations_ NTSTATUS AdmissionDdiGetStandardAllocationDriverData(
     HANDLE Adapter,
     DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA *StandardAllocation) {
-  D3DKMDT_GDISURFACEDATA *surface;
+  D3DKMDT_GDISURFACEDATA *surface = NULL;
   ADMISSION_ALLOCATION_DESCRIPTION description;
   ULONG bytesPerPixel;
   UINT suppliedBytes;
   BOOLEAN cpuVisible;
 
   if (Adapter == NULL || StandardAllocation == NULL ||
-      StandardAllocation->StandardAllocationType !=
-          D3DKMDT_STANDARDALLOCATION_GDISURFACE ||
-      StandardAllocation->PhysicalAdapterIndex != 0u)
-    return STATUS_INVALID_PARAMETER;
-  surface = StandardAllocation->pCreateGdiSurfaceData;
-  if (surface == NULL || surface->Flags.Value != 0u ||
-      !AdmissionFormatBytesPerPixel(surface->Format, &bytesPerPixel) ||
-      !AdmissionSurfaceTypeSupported(surface->Type, surface->Format,
-                                     &cpuVisible) ||
-      !AdmissionAllocationDescribe(
-          surface->Width, surface->Height, bytesPerPixel,
-          (UINT)surface->Type, (UINT)surface->Format,
-          cpuVisible ? 1u : 0u, &description))
+      (StandardAllocation->StandardAllocationType !=
+           D3DKMDT_STANDARDALLOCATION_GDISURFACE &&
+       StandardAllocation->StandardAllocationType !=
+           D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE) ||
+      StandardAllocation->PhysicalAdapterIndex != 0u ||
+      StandardAllocation->pResourcePrivateDriverData != NULL)
     return STATUS_INVALID_PARAMETER;
   suppliedBytes = StandardAllocation->AllocationPrivateDriverDataSize;
   StandardAllocation->AllocationPrivateDriverDataSize = sizeof(description);
   StandardAllocation->ResourcePrivateDriverDataSize = 0u;
-  surface->Pitch = description.Pitch;
-  if (StandardAllocation->pResourcePrivateDriverData != NULL)
-    return STATUS_INVALID_PARAMETER;
+  /* The sizing phase must not modify the standard creation-data union. */
   if (StandardAllocation->pAllocationPrivateDriverData == NULL)
     return STATUS_SUCCESS;
   if (suppliedBytes < sizeof(description))
     return STATUS_BUFFER_TOO_SMALL;
+
+  if (StandardAllocation->StandardAllocationType ==
+      D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE) {
+    const D3DKMDT_SHAREDPRIMARYSURFACEDATA *primary =
+        StandardAllocation->pCreateSharedPrimarySurfaceData;
+    /* Windows tags/pins the primary. Its backing uses our existing linear
+       local-segment allocation, not a new resource or platform owner. */
+    if (primary == NULL || primary->VidPnSourceId != 0u ||
+        primary->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
+        primary->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
+        primary->Format != D3DDDIFMT_A8R8G8B8 ||
+        !AdmissionAllocationDescribe(
+            primary->Width, primary->Height, 4u,
+            (UINT)D3DKMDT_GDISURFACE_TEXTURE, (UINT)primary->Format,
+            0u, &description))
+      return STATUS_INVALID_PARAMETER;
+  } else {
+    surface = StandardAllocation->pCreateGdiSurfaceData;
+    if (surface == NULL || surface->Flags.Value != 0u ||
+        !AdmissionFormatBytesPerPixel(surface->Format, &bytesPerPixel) ||
+        !AdmissionSurfaceTypeSupported(surface->Type, surface->Format,
+                                       &cpuVisible) ||
+        !AdmissionAllocationDescribe(
+            surface->Width, surface->Height, bytesPerPixel,
+            (UINT)surface->Type, (UINT)surface->Format,
+            cpuVisible ? 1u : 0u, &description))
+      return STATUS_INVALID_PARAMETER;
+  }
+  if (surface != NULL)
+    surface->Pitch = description.Pitch;
   RtlCopyMemory(StandardAllocation->pAllocationPrivateDriverData,
                 &description, sizeof(description));
   return STATUS_SUCCESS;
@@ -97,9 +118,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
 
   if (context == NULL || Args == NULL || Args->NumAllocations != 1u ||
       Args->pAllocationInfo == NULL || Args->PrivateDriverDataSize != 0u ||
-      Args->pPrivateDriverData != NULL || Args->Flags.Resource ||
+      Args->pPrivateDriverData != NULL ||
       Args->hResource != NULL)
     return STATUS_INVALID_PARAMETER;
+  /* Resource grouping needs no additional KMD handle: the one allocation
+     object below owns all private state and its existing open-count lifetime. */
   if (!AdmissionMemoryReady(&context->Memory))
     return STATUS_NOT_SUPPORTED;
   info = &Args->pAllocationInfo[0];
