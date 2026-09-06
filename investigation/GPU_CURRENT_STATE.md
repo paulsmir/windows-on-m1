@@ -192,6 +192,14 @@ BuildPagingBuffer operation/status only;105 tests and pinned30.0.514.0 gates PAS
 ZIP95b914689aab1ac27f83f882301673deeb91f616780e368981b678d226c76c6f.
 Preregistered next: one exact bind/producer then decode paging receipt.
 
+EXP514 FINAL: global first BuildPagingBuffer op5/status0 was not correlated;
+producer Render still absent. Cleanup/ordinary health9a355419da07fd27b4f8fc2aca864e2de4d7a2d85387b4f4b3d9c4774792452e.
+EXP515 commit aed39ef56cf709d3405129a7ea6a3539918e618a adds qualification-only
+allocation nonce correlation normalized before production validation and armed
+only from matching OpenAllocation to CloseAllocation.106 tests and pinned515
+gates PASS; ZIP9247498782b88cb66b4212f11b84847a3fd98172be8c9e268d151dc38731b1e9.
+Next: one exact EXP515 bind/producer and correlated paging decode.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,

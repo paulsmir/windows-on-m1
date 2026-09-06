@@ -1,5 +1,32 @@
 # Hardware Experiment Ledger
 
+## EXP515 producer-correlated paging — preregistration 2026-09-06T19:33:00Z
+
+WHY THIS HYPOTHESIS: EXP514's first global BuildPagingBuffer was boot-time
+Operation5/status0 and not producer-correlated. EXP513 separately proved the
+producer allocation's OpenAllocation succeeds. Correlation must therefore be
+owned by that exact allocation lifetime, not wall-clock timing.
+
+Single variable: qualification producer puts nonce0x51504341 in the allocation
+Reserved field. Qualification KMD alone recognizes it, normalizes Reserved to0
+before the unchanged production validator/object, verifies the same nonce at
+OpenAllocation, arms paging observation only for that allocation, and disarms on
+CloseAllocation. Production KMD rejects the nonce exactly as before. No memory/
+AGX behavior changes. Commit aed39ef56cf709d3405129a7ea6a3539918e618a;
+106 render tests PASS. Pinned30.0.515.0 build/sign/Universal/analysis PASS.
+ZIP/SYS/INF/producer SHA:
+9247498782b88cb66b4212f11b84847a3fd98172be8c9e268d151dc38731b1e9 /
+afaec7e83b4287b2b95834e4eaaf61eabd32c34ec0562e27c63306eda62f8f1e /
+c0594d7c925fa4f8318d50df9374d186c48e48e4729c55a70d13de25c1811578 /
+3cd886ea7b79700cbd40c50160883c8e3982303ee7a35d00be9e2d7b5f7840ac.
+Stage/collect/cleanup/run/launch SHA:
+081beca0c70fcee0c311070018ec9e85482bf661774d95f1c84e3c19a1f26af5 /
+0682a81630b831c3bc579e5d818256344522f1aa4cacd975406404c1a1e18ee3 /
+f2c97fe6ac3c74ec9a07d0b0e44b1a341f0531edc6382444c80388f5f16b6a52 /
+29f0cc86c55d83a34aebbdb114c962d11f2e5485a4bea1be1491d0b3546a6964 /
+18ca894f2270e57843ea909dc25b8fce167cd30d0630e5354bbf03fd019200a6.
+One clean bind/producer only; decode correlated514 plus513/512, collect, cleanup.
+
 ## EXP514 first BuildPagingBuffer trace — preregistration 2026-09-06T19:14:30Z
 
 WHY THIS HYPOTHESIS: EXP513 proved OpenAllocation guard0/status0 while Render
@@ -25,6 +52,13 @@ Stage/collect/cleanup/run/launch SHA:
 3a446ee6b4e024d9166da8d65e2320ba10d08ca1f8e0a9f09b1e9790c5874268.
 Run one clean natural bind/producer; decode0x5140/5130/5120; collect, exact cleanup,
 ordinary restore. PASS is an exact paging operation/status or proven absence.
+
+HARDWARE RESULT19:16Z: first global BuildPagingBuffer operation5,IRQL0,DMA0,
+private0,status0. Producer still RenderC0000001; no Render entry. OpenAllocation
+trace was absent in this boot, proving the first-call receipt was not reliably
+producer-correlated. Exact cleanup complete; ordinary health SHA
+9a355419da07fd27b4f8fc2aca864e2de4d7a2d85387b4f4b3d9c4774792452e
+proves Code28/no package/service/files,8CPU/SSH/platform healthy. Do not repeat514.
 
 ## EXP513 crash-durable OpenAllocation guard — preregistration 2026-09-06T19:04:00Z
 
