@@ -390,6 +390,40 @@ APPLE_AGX_BOOL AppleAgxDmaShadowMatchesU64(
   return APPLE_AGX_FALSE;
 }
 
+APPLE_AGX_BOOL AppleAgxDmaShadowMatchesWritableU64(
+    const void *Storage, APPLE_AGX_U32 BytesUsed,
+    APPLE_AGX_U32 PatchOffset, APPLE_AGX_U64 Value) {
+  const unsigned char *bytes = (const unsigned char *)Storage;
+  const APPLE_AGX_DMA_SHADOW_HEADER *header;
+  APPLE_AGX_U32 cursor =
+      (APPLE_AGX_U32)sizeof(APPLE_AGX_DMA_SHADOW_HEADER);
+
+  if (PatchOffset > ~0u - (APPLE_AGX_U32)sizeof(Value) ||
+      !AppleAgxDmaShadowValidate(Storage, BytesUsed))
+    return APPLE_AGX_FALSE;
+  header = AppleAgxDmaShadowConstHeader(Storage);
+  if (header->State != (APPLE_AGX_U32)AppleAgxDmaShadowWritable)
+    return APPLE_AGX_FALSE;
+  while (cursor < BytesUsed) {
+    const APPLE_AGX_DMA_SHADOW_RECORD *record =
+        (const APPLE_AGX_DMA_SHADOW_RECORD *)(bytes + cursor);
+    APPLE_AGX_U32 patchEnd = PatchOffset + (APPLE_AGX_U32)sizeof(Value);
+    APPLE_AGX_U32 recordEnd = record->DmaOffset + record->DmaBytes;
+    if (PatchOffset >= record->DmaOffset && patchEnd <= recordEnd) {
+      const unsigned char *stored = (const unsigned char *)(record + 1) +
+                                    (PatchOffset - record->DmaOffset);
+      APPLE_AGX_U32 index;
+      for (index = 0u; index < sizeof(Value); ++index) {
+        if (stored[index] != (unsigned char)(Value >> (index * 8u)))
+          return APPLE_AGX_FALSE;
+      }
+      return APPLE_AGX_TRUE;
+    }
+    cursor += record->RecordBytes;
+  }
+  return APPLE_AGX_FALSE;
+}
+
 static const APPLE_AGX_DMA_SHADOW_RECORD *AppleAgxDmaShadowRecordAtOffset(
     const unsigned char *Storage, APPLE_AGX_U32 BytesUsed,
     APPLE_AGX_U32 DmaOffset) {

@@ -158,7 +158,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
           Args->DmaBufferPrivateDataSize) ||
       AppleAgxDmaShadowIsSealed(shadow.Storage, shadow.BytesUsed) ||
       shadow.BytesUsed != pending.PrivateBytesUsed ||
-      !AppleAgxDmaShadowMatchesU64(
+      !AppleAgxDmaShadowMatchesWritableU64(
           shadow.Storage, shadow.BytesUsed, pending.PatchOffset,
           pending.Destination.GpuVirtualAddress) ||
       !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))

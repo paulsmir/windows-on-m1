@@ -226,7 +226,13 @@ static void test_sealed_patch_receipt_matches_exact_value_and_fence(void) {
   assert(AppleAgxDmaShadowAppend(&shadow, 0x40u, bytes, sizeof(bytes)));
   assert(AppleAgxDmaShadowPatchU64(storage, shadow.BytesUsed, 0x48u,
                                   address));
+  assert(AppleAgxDmaShadowMatchesWritableU64(
+      storage, shadow.BytesUsed, 0x48u, address));
+  assert(!AppleAgxDmaShadowMatchesWritableU64(
+      storage, shadow.BytesUsed, 0x48u, address + 1ULL));
   assert(AppleAgxDmaShadowSeal(&shadow, 91u));
+  assert(!AppleAgxDmaShadowMatchesWritableU64(
+      storage, shadow.BytesUsed, 0x48u, address));
   assert(AppleAgxDmaShadowMatchesU64(storage, shadow.BytesUsed, 0x48u,
                                     address));
   assert(!AppleAgxDmaShadowMatchesU64(storage, shadow.BytesUsed, 0x48u,
