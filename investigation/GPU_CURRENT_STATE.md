@@ -185,6 +185,13 @@ producer SHA369265698727db368e7e6c7d54fd559db8af0e8d534faa48ed8bd56366774652.
 Preregistered next: one exact natural bind/producer, decode first OpenAllocation
 guard, cleanup, then change only its owner.
 
+EXP513 FINAL: OpenAllocation guard0/status0 exact receipt; Render still absent.
+Cleanup/ordinary health SHA954f229f6d6f8bac427a016a143c8dd04a91856968eeb803975a411054c655da.
+EXP514 commit1d8d6412f48d827ad5bf08e33e67241b645bc2ee records first
+BuildPagingBuffer operation/status only;105 tests and pinned30.0.514.0 gates PASS.
+ZIP95b914689aab1ac27f83f882301673deeb91f616780e368981b678d226c76c6f.
+Preregistered next: one exact bind/producer then decode paging receipt.
+
 ## Final live ordinary clean baseline
 
 At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,

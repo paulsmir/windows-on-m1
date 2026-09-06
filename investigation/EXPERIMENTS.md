@@ -1,5 +1,31 @@
 # Hardware Experiment Ledger
 
+## EXP514 first BuildPagingBuffer trace — preregistration 2026-09-06T19:14:30Z
+
+WHY THIS HYPOTHESIS: EXP513 proved OpenAllocation guard0/status0 while Render
+entry remains absent. Microsoft places VidMm residency/paging between allocation
+binding and Render translation. Current BuildPagingBuffer has no hardware receipt.
+
+Single variable: qualification-only first-call tag0x5140 records version,IRQL,
+Operation,initial DMA/private capacities and final status around the unchanged
+AdmissionBuildPagingBuffer inner implementation. No functional/producer/AGX/
+platform/display change. Commit1d8d6412f48d827ad5bf08e33e67241b645bc2ee;
+105 render tests PASS. Source overlay SHA
+79e262057783c7cfbbb9fe8eebd3f38d3cdd99dc5143da22c077375a4296b9ec.
+Pinned30.0.514.0 build/sign/Universal/analysis PASS. ZIP/SYS/INF/producer SHA:
+95b914689aab1ac27f83f882301673deeb91f616780e368981b678d226c76c6f /
+3e73f7d0417f8b8c64cb5cf304e74b804f07ec912f970f599b0a1fe8cde8c497 /
+6236962b4564c28637683910498285806c9d4636041dfe732a08be4d28d37051 /
+d18e56cbd0876fed567742f55304d5b6b9c402513a8ffbdfabd5702f499b8f93.
+Stage/collect/cleanup/run/launch SHA:
+7521674d305277a994535d235402329c2d1090cc0f53727c41f692103184c1bc /
+6d4d39814511a82770dda163bff0c6b7e855612df577776365e32cd230862ece /
+6a7ddaffed121eb4238604e133b7b73c11bdb2068211226be9a14383124a261a /
+1bd10181fc7e44ac893bfbe6a9fefd53646f9e49cd6a896347f7359b68e6610e /
+3a446ee6b4e024d9166da8d65e2320ba10d08ca1f8e0a9f09b1e9790c5874268.
+Run one clean natural bind/producer; decode0x5140/5130/5120; collect, exact cleanup,
+ordinary restore. PASS is an exact paging operation/status or proven absence.
+
 ## EXP513 crash-durable OpenAllocation guard — preregistration 2026-09-06T19:04:00Z
 
 WHY THIS HYPOTHESIS:
@@ -49,6 +75,19 @@ producer -> decode0x5130 and0x5120 -> collect -> exact cleanup -> ordinary resto
 PASS is one complete OpenAllocation receipt. If accepted but Render remains absent,
 the next owner is a later dxgkrnl pre-Render rule; otherwise fix only the named
 OpenAllocation guard. This is a discriminator, not acceleration proof.
+
+HARDWARE RESULT19:08Z: OpenAllocation CONFIRMED guard0/status0 at IRQL0,
+deviceFlags2,count1,Create flag1,handle0x400001c0,private48; Render entry remains
+absent and D3DKMTRender C0000001. Event129 count1 retained as telemetry only.
+Evidence producer/decoded/host/result SHA:
+4ce8090c35d7a7b0db2c8fa327df266b638f3c2e21419de5471f067e8d1309c7 /
+96fccd5719f0d66b71e315abec6db2b15bccf2d2f2a4dbef0391f0b5840cce08 /
+561530e3731b8fa210acbb5f53527a7b177b8dfda3dd91ce87a6984a3b891950 /
+04b93bdfb30f4f0e81263286bd95e1600fcdbe3a815d47ea1e384ea2d7ef1a80.
+Exact cleanup complete; ordinary health SHA
+954f229f6d6f8bac427a016a143c8dd04a91856968eeb803975a411054c655da
+proves Code28/no package/service/files,8CPU/SSH/platform healthy/no fresh faults.
+Next EXP514; do not repeat513.
 
 ## EXP512 crash-durable UMD Render guard — preregistration 2026-09-06T18:54:00Z
 
