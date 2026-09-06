@@ -223,7 +223,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyContext(HANDLE Context) {
   if (context == NULL ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC ||
       context->Object.Device == NULL || context->Object.Device->Adapter == NULL ||
-      context->Object.FenceOutstanding != 0u)
+      context->Object.FenceOutstanding != 0u ||
+      context->PrepatchedRender.Active)
     return STATUS_DEVICE_BUSY;
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);

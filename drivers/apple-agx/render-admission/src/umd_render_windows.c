@@ -160,6 +160,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ADMISSION_GDI_PREPARED prepared;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *location;
+  DXGK_ALLOCATIONLIST *allocation;
+  ADMISSION_LOCAL_MEMORY_VIEW destination;
+  ULONGLONG alignedSize;
+  KIRQL oldIrql;
+  BOOLEAN prepatched = FALSE;
   BOOLEAN trace;
 
 #define UMD_RENDER_RETURN(guard, value)                                      \
@@ -278,6 +283,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
                       STATUS_INVALID_USER_BUFFER);
 
+  allocation = &Args->pAllocationList[
+      command.DestinationAllocationIndex];
+  if (allocation->SegmentId != 0u) {
+    if (allocation->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+        allocation->PhysicalAddress.QuadPart <= 0 ||
+        !AdmissionAllocationAlign64K(
+            opened->Allocation->Description.Size, &alignedSize) ||
+        !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
+            adapter, (ULONGLONG)allocation->PhysicalAddress.QuadPart,
+            alignedSize, 0u, &destination)) ||
+        prepared.Patches[0].PatchOffset >
+            prepared.DmaBytes - sizeof(destination.GpuVirtualAddress))
+      UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
+                        STATUS_INVALID_ADDRESS);
+    RtlCopyMemory(
+        (PUCHAR)Args->pDmaBuffer + prepared.Patches[0].PatchOffset,
+        &destination.GpuVirtualAddress,
+        sizeof(destination.GpuVirtualAddress));
+    prepatched = TRUE;
+  }
+
   AppleAgxDmaShadowInitialize(
       &shadow, Args->pDmaBufferPrivateData,
       Args->DmaBufferPrivateDataSize);
@@ -288,6 +314,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
                   Args->DmaBufferPrivateDataSize);
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardShadow,
                       STATUS_INVALID_USER_BUFFER);
+  }
+
+  if (prepatched) {
+    KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
+    if (context->PrepatchedRender.Active ||
+        context->Object.FenceOutstanding != 0u) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
+      UMD_RENDER_RETURN(AdmissionUmdRenderGuardShadow,
+                        STATUS_DEVICE_BUSY);
+    }
+    context->PrepatchedRender.Active = TRUE;
+    context->PrepatchedRender.OpenedAllocation = (PVOID)opened;
+    context->PrepatchedRender.PrivateData = Args->pDmaBufferPrivateData;
+    context->PrepatchedRender.PrivateBytesUsed = shadow.BytesUsed;
+    context->PrepatchedRender.DmaStart = prepared.DmaOffset;
+    context->PrepatchedRender.DmaEnd =
+        prepared.DmaOffset + prepared.DmaBytes;
+    context->PrepatchedRender.PatchOffset =
+        prepared.Patches[0].PatchOffset;
+    context->PrepatchedRender.Destination = destination;
+    KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
   }
 
   location = Args->pPatchLocationListOut;

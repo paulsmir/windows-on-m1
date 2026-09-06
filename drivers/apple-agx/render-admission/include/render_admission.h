@@ -237,9 +237,21 @@ typedef struct _ADMISSION_DEVICE {
   ADMISSION_OBJECT_DEVICE Object;
 } ADMISSION_DEVICE;
 
+typedef struct _ADMISSION_PREPATCHED_RENDER {
+  BOOLEAN Active;
+  PVOID OpenedAllocation;
+  PVOID PrivateData;
+  ULONG PrivateBytesUsed;
+  ULONG DmaStart;
+  ULONG DmaEnd;
+  ULONG PatchOffset;
+  ADMISSION_LOCAL_MEMORY_VIEW Destination;
+} ADMISSION_PREPATCHED_RENDER;
+
 typedef struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_OBJECT_CONTEXT Object;
   APPLE_AGX_SCHEDULER_CONTEXT SchedulerContext;
+  ADMISSION_PREPATCHED_RENDER PrepatchedRender;
 } ADMISSION_RENDER_CONTEXT;
 
 typedef struct _ADMISSION_ALLOCATION_HANDLE {
@@ -576,6 +588,10 @@ BOOLEAN AdmissionSchedulerRecordCompletion(
 VOID AdmissionSchedulerDpc(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionDdiSubmitRender(
     _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const DXGKARG_SUBMITCOMMAND *Args);
+NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
+    _Inout_ ADMISSION_CONTEXT *Adapter,
+    _Inout_ ADMISSION_RENDER_CONTEXT *Context,
     _In_ const DXGKARG_SUBMITCOMMAND *Args);
 NTSTATUS AdmissionBackendImageStart(
     _Inout_ ADMISSION_CONTEXT *Context);

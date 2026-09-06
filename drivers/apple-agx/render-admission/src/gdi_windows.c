@@ -112,6 +112,7 @@ static NTSTATUS AdmissionGdiPreparePacket(
         AdmissionRenderPacketPrepare(
             &Adapter->RenderPacket, &description)) {
       Context->Object.FenceOutstanding = Args->SubmissionFenceId;
+      Context->PrepatchedRender.Active = FALSE;
       accepted = TRUE;
     }
   } else if (Context->Object.FenceOutstanding ==
@@ -123,6 +124,49 @@ static NTSTATUS AdmissionGdiPreparePacket(
   }
   KeReleaseSpinLock(&Adapter->SchedulerLock, old_irql);
   return accepted ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    const DXGKARG_SUBMITCOMMAND *Args) {
+  ADMISSION_PREPATCHED_RENDER pending;
+  APPLE_AGX_DMA_SHADOW shadow;
+  DXGKARG_PATCH patchArgs;
+  KIRQL oldIrql;
+
+  if (Adapter == NULL || Context == NULL || Args == NULL)
+    return STATUS_INVALID_PARAMETER;
+  KeAcquireSpinLock(&Adapter->SchedulerLock, &oldIrql);
+  pending = Context->PrepatchedRender;
+  KeReleaseSpinLock(&Adapter->SchedulerLock, oldIrql);
+  if (!pending.Active || pending.OpenedAllocation == NULL ||
+      pending.PrivateData != Args->pDmaBufferPrivateData ||
+      pending.DmaStart != Args->DmaBufferSubmissionStartOffset ||
+      pending.DmaEnd != Args->DmaBufferSubmissionEndOffset ||
+      pending.PrivateBytesUsed > Args->DmaBufferPrivateDataSize)
+    return STATUS_INVALID_HANDLE;
+  if (!AppleAgxDmaShadowOpen(
+          &shadow, Args->pDmaBufferPrivateData,
+          Args->DmaBufferPrivateDataSize) ||
+      AppleAgxDmaShadowIsSealed(shadow.Storage, shadow.BytesUsed) ||
+      shadow.BytesUsed != pending.PrivateBytesUsed ||
+      !AppleAgxDmaShadowMatchesU64(
+          shadow.Storage, shadow.BytesUsed, pending.PatchOffset,
+          pending.Destination.GpuVirtualAddress) ||
+      !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
+    return STATUS_INVALID_USER_BUFFER;
+  RtlZeroMemory(&patchArgs, sizeof(patchArgs));
+  patchArgs.SubmissionFenceId = Args->SubmissionFenceId;
+  patchArgs.pDmaBufferPrivateData = Args->pDmaBufferPrivateData;
+  patchArgs.DmaBufferPrivateDataSize = Args->DmaBufferPrivateDataSize;
+  patchArgs.DmaBufferSubmissionStartOffset =
+      Args->DmaBufferSubmissionStartOffset;
+  patchArgs.DmaBufferSubmissionEndOffset =
+      Args->DmaBufferSubmissionEndOffset;
+  return AdmissionGdiPreparePacket(
+      Adapter, Context,
+      (ADMISSION_OPEN_ALLOCATION *)pending.OpenedAllocation,
+      &patchArgs, shadow.BytesUsed, &pending.Destination);
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiRenderKm(
