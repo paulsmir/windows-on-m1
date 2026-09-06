@@ -27,6 +27,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_DESTROYDEVICE destroyDevice = {0};
   D3DKMT_CLOSEADAPTER closeAdapter = {0};
   D3DKMT_HANDLE allocationHandle = 0;
+  PFND3DKMT_ENUMADAPTERS3 enumAdapters3 = NULL;
+  HMODULE gdiModule = NULL;
   ULONG selectedAdapter = MAX_ENUM_ADAPTERS;
   ULONG matchingAdapters = 0u;
   ULONG index;
@@ -48,9 +50,16 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe\n");
     return 2;
   }
+  gdiModule = GetModuleHandleW(L"gdi32.dll");
+  if (gdiModule == NULL)
+    goto cleanup;
+  enumAdapters3 = (PFND3DKMT_ENUMADAPTERS3)GetProcAddress(
+      gdiModule, "D3DKMTEnumAdapters3");
+  if (enumAdapters3 == NULL)
+    goto cleanup;
   enumeration.NumAdapters = ARRAYSIZE(adapters);
   enumeration.pAdapters = adapters;
-  openStatus = D3DKMTEnumAdapters3(&enumeration);
+  openStatus = enumAdapters3(&enumeration);
   if (!NT_SUCCESS(openStatus))
     goto cleanup;
 
