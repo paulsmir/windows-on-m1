@@ -147,23 +147,33 @@ int main(void){
  submit.DmaBufferSubmissionEndOffset=184;submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
  assert(AdmissionPresentSubmit(&adapter,&submit)==0); /* no Patch call */
  assert(queue_calls==1 && queued_fence==37 && queued_bytes==184);
+ submit.SubmissionFenceId=38;submit.DmaBufferPrivateDataSubmissionEndOffset=0;
+ assert(AdmissionPresentSubmit(&adapter,&submit)==0); /* nonpaging zero private subrange */
+ assert(queue_calls==2 && queued_fence==38 && queued_bytes==184);
+ submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed-1;
+ traced_field=traced_value=0;
+ assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
+ assert(traced_field==AdmissionSubmitTracePresentGuard);
+ assert(traced_value==AdmissionPresentSubmitPrivateEndLow);
+ assert(queue_calls==2);
+ submit.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
  DXGKARG_PATCH patch={0};patch.hContext=&context;patch.Flags.Value=2;
  patch.pDmaBuffer=dma;patch.DmaBufferSize=4096;patch.pDmaBufferPrivateData=private_data;
  patch.DmaBufferPrivateDataSize=8192;patch.pAllocationList=a;patch.AllocationListSize=3;
  patch.pPatchLocationList=patches;patch.PatchLocationListSize=2;patch.PatchLocationListSubmissionLength=2;
  patch.DmaBufferSubmissionEndOffset=184;patch.DmaBufferPrivateDataSubmissionEndOffset=shadow.BytesUsed;
- patch.SubmissionFenceId=38;a[1].PhysicalAddress.QuadPart=0x1501800000LL;
+ patch.SubmissionFenceId=39;a[1].PhysicalAddress.QuadPart=0x1501800000LL;
  assert(AdmissionPresentPatch(&adapter,&patch)==0);
  assert(AdmissionPresentPatch(&adapter,&patch)==0); /* idempotent relocation */
  assert(AdmissionPresentBltValidate(view.Bytes,184,1,&command));
  assert(command.SourceLocation==0x0200001501800000ULL);
  assert(AdmissionPresentBltValidate(queued_copy,queued_bytes,1,&command));
  assert(command.SourceLocation==0x0200001501000000ULL); /* prior queued snapshot immutable */
- submit.SubmissionFenceId=38;assert(AdmissionPresentSubmit(&adapter,&submit)==0);
- assert(queue_calls==2 && queued_fence==38);
+ submit.SubmissionFenceId=39;assert(AdmissionPresentSubmit(&adapter,&submit)==0);
+ assert(queue_calls==3 && queued_fence==39);
  assert(AppleAgxDmaShadowPatchU64(private_data,shadow.BytesUsed,144,0));
  assert(AdmissionPresentSubmit(&adapter,&submit)==STATUS_INVALID_PARAMETER);
- assert(queue_calls==2); /* cannot submit unresolved source */
+ assert(queue_calls==3); /* cannot submit unresolved source */
  traced_field=traced_value=0;
  assert(AdmissionPresentSubmitTraced(&adapter,&submit,TRUE)==STATUS_INVALID_PARAMETER);
  assert(traced_field==AdmissionSubmitTracePresentGuard);

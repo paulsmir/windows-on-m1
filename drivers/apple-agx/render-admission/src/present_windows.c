@@ -239,7 +239,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentSubmitTraced(
                 AdmissionPresentSubmitDmaSize);
   PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionStartOffset != 0u,
                 AdmissionPresentSubmitPrivateStart);
-  PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionEndOffset < shadow.BytesUsed,
+  PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionEndOffset != 0u &&
+      Args->DmaBufferPrivateDataSubmissionEndOffset < shadow.BytesUsed,
                 AdmissionPresentSubmitPrivateEndLow);
   PRESENT_GUARD(Args->DmaBufferPrivateDataSubmissionEndOffset >
       Args->DmaBufferPrivateDataSize, AdmissionPresentSubmitPrivateEndHigh);
