@@ -77,6 +77,20 @@ static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
   (void)ZwSetValueKey(Key,&name,0,REG_QWORD,&Value,sizeof(Value));
 }
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+_Use_decl_annotations_ VOID AdmissionRecordUmdRenderGuard(
+    ADMISSION_CONTEXT *Context, ULONG Guard, NTSTATUS Status) {
+  HANDLE key = NULL;
+  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  WriteDword(key, L"Wom1UmdRenderGuard", Guard);
+  WriteDword(key, L"Wom1UmdRenderStatus", (ULONG)Status);
+  ZwClose(key);
+}
+#endif
+
 _Use_decl_annotations_ void AdmissionRecordContext0Inventory(
     ADMISSION_CONTEXT *Context, ULONG Stage, ULONG Result,
     const APPLE_AGX_CONTEXT0_BROKER *Journal) {

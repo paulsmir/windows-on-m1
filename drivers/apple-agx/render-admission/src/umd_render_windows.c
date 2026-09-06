@@ -130,6 +130,8 @@ static VOID AdmissionUmdRenderTraceResult(
       Context, AdmissionUmdRenderTraceStatus, (ULONG)Status);
 }
 #else
+#define AdmissionRecordUmdRenderGuard(Context, Guard, Status)                 \
+  ((void)(Context), (void)(Guard), (void)(Status))
 #define AdmissionUmdRenderTraceAdapterGet() ((ADMISSION_CONTEXT *)NULL)
 #define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args)            \
   ((void)(Context), (void)(RenderContext), (void)(Args), FALSE)
@@ -163,11 +165,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
 #define UMD_RENDER_RETURN(guard, value)                                      \
   do {                                                                       \
     NTSTATUS renderStatus = (value);                                         \
+    AdmissionRecordUmdRenderGuard(adapter, (guard), renderStatus);           \
     AdmissionUmdRenderTraceResult(adapter, trace, (guard), renderStatus);     \
     return renderStatus;                                                     \
   } while (0)
 
   adapter = AdmissionUmdRenderTraceAdapterGet();
+  AdmissionRecordUmdRenderGuard(adapter, MAXULONG, STATUS_PENDING);
   trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);
   if (context == NULL ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC)

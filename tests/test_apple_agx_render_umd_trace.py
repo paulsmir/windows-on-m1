@@ -70,6 +70,10 @@ class AppleAgxRenderUmdTraceTests(unittest.TestCase):
         self.assertIn("AdmissionUmdRenderTraceArm", source)
         self.assertIn("AdmissionUmdRenderTraceDisarm", source)
         self.assertIn("AdmissionUmdRenderTraceAdapterGet", source)
+        self.assertIn("AdmissionRecordUmdRenderGuard", source)
+        self.assertIn('L"Wom1UmdRenderGuard"', (
+            RENDER / "src" / "receipts.c"
+        ).read_text())
         self.assertIn("AdmissionUmdRenderGuardContext", source)
         self.assertIn("AdmissionUmdRenderGuardDevice", source)
         self.assertIn("AdmissionUmdRenderTraceArm(adapter)", (

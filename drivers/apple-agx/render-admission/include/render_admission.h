@@ -259,6 +259,9 @@ typedef struct _ADMISSION_OPEN_ALLOCATION {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 VOID AdmissionUmdRenderTraceArm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
+VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _In_ ULONG Guard,
+                                   _In_ NTSTATUS Status);
 #endif
 
 typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
