@@ -1,5 +1,30 @@
 # GPU experiment-agent protocol
 
+## Current binding workflow — 2026-09-06, effective from EXP503
+
+One long-lived implementation agent owns the entire remaining GPU mission.
+`/root/gpu_long_lived_implementation` exclusively controls source, Air, proxy,
+launcher, builds and experiment ledgers. The parent only orchestrates and waits.
+The same implementation agent performs EXP503, evidence, exact cleanup, causal
+correction, EXP504 and every subsequent iteration through hardware-accelerated
+OpenGL and CS1.6 rendering a real game scene. Individual experiments, admission,
+first submission, fence, frame or present are internal checkpoints, never a
+handoff or completion. Read-only review is permitted; implementation and hardware
+ownership cannot be delegated away.
+
+Continue permitted independent work after any platform restriction; never retry
+or rephrase a restricted action or treat refusal as hardware evidence. Return
+early only for unavoidable physical action, an indispensable platform restriction
+or unrecoverable environment failure, after permitted independent work is spent.
+At final acceptance leave the known-good KMD/UMD installed, enabled and active.
+Intermediate exact package cleanup and GPU-visible ordinary recovery still apply.
+
+The following EXP500–502 workflow is preserved as superseded history. It no
+longer controls live execution. `.local/gpu-long-lived-mission.md` contains the
+complete binding mission and proof requirements.
+
+## Superseded workflow — effective EXP500 through EXP502
+
 User-requested workflow, effective from EXP500 (2026-09-06).
 
 ## One new executor per experiment
