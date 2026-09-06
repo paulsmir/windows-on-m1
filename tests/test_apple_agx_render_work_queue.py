@@ -28,6 +28,7 @@ class WorkQueueTests(unittest.TestCase):
 #include "render_submission.h"
 #include "render_paging.h"
 #define _Use_decl_annotations_
+#define __declspec(x)
 #define ADMISSION_MAX_PAGING_RECORDS 64u
 #define ADMISSION_PRESENT_BLT_DMA_MAX 4096u
 #define ADMISSION_CPU_PACKET_PAGING 1u
@@ -193,6 +194,7 @@ int main(void){
 }
 '''
         queue=(RENDER/'src/work_queue_windows.c').read_text().replace('#include "render_admission.h"','')
+        reset_helper=re.search(r'static __declspec\(noinline\) NTSTATUS AdmissionResetEngineInternal\(.*?^}',scheduler,re.S|re.M).group(0)
         body=(shim+function(scheduler,'AdmissionSchedulerRecordCompletion')+
               function(scheduler,'AdmissionSchedulerSubmitFence')+queue+
               function(paging,'AdmissionPagingSubmitPresent')+
@@ -200,7 +202,7 @@ int main(void){
               function(paging,'AdmissionPagingDpc')+
               function(scheduler,'AdmissionDdiPreemptCommand')+
               function(scheduler,'AdmissionSchedulerDpc')+
-              function(scheduler,'AdmissionDdiResetEngine')+cases)
+              reset_helper+function(scheduler,'AdmissionDdiResetEngine')+cases)
         with tempfile.TemporaryDirectory() as tmp:
             program=Path(tmp)/'queue.c';program.write_text(body);binary=Path(tmp)/'queue'
             subprocess.run([os.environ.get('CC','clang'),'-std=c11','-Wall','-Wextra','-Werror',

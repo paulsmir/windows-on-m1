@@ -343,7 +343,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryEngineStatus(
   return STATUS_SUCCESS;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
+/* Lock-bearing code stays in .text even when the PASSIVE wrapper is pageable.
+ * noinline prevents optimization from moving these sections back into PAGE. */
+static __declspec(noinline) NTSTATUS AdmissionResetEngineInternal(
     HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine) {
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   APPLE_AGX_U32 lastAborted = 0u;
@@ -353,7 +355,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
   BOOLEAN reset;
   KIRQL oldIrql;
 
-  PAGED_CODE();
   if (context == NULL || ResetEngine == NULL ||
       ResetEngine->NodeOrdinal != ADMISSION_SCHEDULER_NODE ||
       ResetEngine->EngineOrdinal != ADMISSION_SCHEDULER_ENGINE ||
@@ -424,6 +425,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
     packetContext->Object.FenceOutstanding = 0u;
   InterlockedExchange(&context->SchedulerFaulted, 0);
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiResetEngine(
+    HANDLE Adapter, DXGKARG_RESETENGINE *ResetEngine) {
+  DXGKARG_RESETENGINE local;
+  NTSTATUS status;
+  PAGED_CODE();
+  if (ResetEngine == NULL)
+    return STATUS_INVALID_PARAMETER;
+  local = *ResetEngine;
+  status = AdmissionResetEngineInternal(Adapter, &local);
+  if (NT_SUCCESS(status))
+    ResetEngine->LastAbortedFenceId = local.LastAbortedFenceId;
+  return status;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiResetFromTimeout(HANDLE Adapter) {
