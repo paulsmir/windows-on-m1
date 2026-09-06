@@ -101,7 +101,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   render.CommandLength = sizeof(command);
   render.AllocationCount = 1u;
   render.PatchLocationCount = 0u;
-  render.Flags.Value = 0u;
   renderStatus = D3DKMTRender(&render);
   if (!NT_SUCCESS(renderStatus))
     goto cleanup;
