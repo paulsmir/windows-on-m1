@@ -272,6 +272,19 @@ exact526 run, then fix named guard or callback-vector owner.
 EXP526 FINAL: device receipt guard11/statusC000000D proves empty patch input
 pointer validation is owner. EXP527 c9caf00 ignores pointer when input count0;
 all other validation unchanged,106 tests+pinned gates PASS. Next exact527 run.
+EXP527 FINAL: empty nonnull patch-list acceptance crossed Render into
+DxgkDdiSubmitCommand. The producer no longer returned immediately; Windows reset
+with VIDEO_SCHEDULER_INTERNAL_ERROR 0x119/2. Dump
+090626-9359-01.dmp SHA3caf5b3e...: dxgmms2!VidSchiSendToExecutionQueue reports
+driver SubmitCommand returned STATUS_INVALID_HANDLE. No physical AGX execution
+or fence is proven. Emergency377/385 was used only to delete exact oem5; ordinary
+377/392 is restored and additionally stripped of the stopped orphan service and
+exact EXP527 SYS/UMD. Current health SHA689cf106... plus cleanup receipt
+SHA9cbd37c...: one APPL0002 Code28, no INF/package/service/SYS/UMD,8CPU/SSH,
+no fresh fault events. Commit4dec75a adds qualification-only crash-durable exact
+SubmitRender guard/status;108 focused tests GREEN. Pinned30.0.528.0 build/sign/
+Universal/Inf2Cat PASS; ZIP/SYS/producer SHA8aa6d65b.../d2772955.../33f1b31c....
+EXP528 is preregistered for one exact natural bind and producer run.
 
 ## Final live ordinary clean baseline
 

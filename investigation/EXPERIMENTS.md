@@ -1,5 +1,73 @@
 # Hardware Experiment Ledger
 
+## EXP528 exact SubmitRender guard — preregistration 2026-09-06T21:26:22Z
+
+WHY THIS HYPOTHESIS:
+- EXP527 crossed Render and the `0x119/2` dump proves
+  `dxgmms2!VidSchiSendToExecutionQueue` received `STATUS_INVALID_HANDLE` from
+  `DxgkDdiSubmitCommand`.
+- Current `AdmissionDdiSubmitRender` has exactly eight independently checkable
+  context/scheduler invariants that return that status; the old first-global
+  broker trace emitted no usable receipt.
+- Device-registry guard/status writes already survived the equivalent EXP526
+  short callback, so the same crash-durable transport is the nearest exact
+  discriminator.
+
+Single variable: commit `4dec75a61b18c3922192d3da6761d4701ff33fc8`
+splits the unchanged validation into numbered qualification-only
+`Wom1SubmitRenderGuard/Status` receipts. Production calls compile to no-ops. No
+return value, firmware, RTKit, UAT, memory, scheduler behavior, AGX queue,
+completion, IRQ, display, capability or producer behavior changes.
+
+REFERENCE/CONTRACT: pinned WDK26100 `DXGKARG_SUBMITCOMMAND`; current dxgmms2 dump
+and current KMD source. OUR BEHAVIOR: Render succeeds, Submit rejects one existing
+handle/state invariant. DIFFERENCE: exact rejected invariant is not persisted.
+WHY IT CAN MATTER: changing anything downstream before naming that invariant
+would not affect the observed `STATUS_INVALID_HANDLE`. OFFLINE PROOF: new test was
+RED, then2/2 and106 render regressions GREEN. Failed first copied build was
+builder-only `ntddk.h` resolution; restoring the exact successful EXP527
+`WDKContentRoot`/VCToolsVersion invocation produced pinned build/sign/Universal/
+Inf2Cat/version30.0.528.0 PASS with only inherited C28251.
+
+Repository `public_windows`, branch `feature/j313-gpu-acceleration`, commit above;
+unrelated dirty-state inventory SHA
+`f8ec56222586303a7790909540b3053e6750869328e87ecfba84ca5fdea2766e`.
+Builder command is `.local/experiments/EXP528-submit-render-guard/build.ps1` SHA
+`edfb1b2b...`; overlay SHA `f6ee7b2e...`. Exact package ZIP/SYS/INF/CAT/UMD/
+producer SHA are `8aa6d65b...`/`d2772955...`/`25416405...`/`32b98df5...`/
+`480fa2f9...`/`33f1b31c...`. Manifest SHA `71bcfa6d...`.
+
+Preflight is ordinary377/392: one APPL0002 Code28, no INF/package/service/SYS/
+UMD,8CPU/SSH/no fresh fault events; cleanup receipt SHA `9cbd37c...`. Stage script
+SHA `14fcc9bc...`; launch current full-owner EXP477 m1n1 SHA `b970a7fe...` plus
+EXP406 Mu SHA `c7ddcfb2...`, launch SHA `80b5fadd...`; run/collect/cleanup SHA
+`c3f2b779...`/`dcbb58ef...`/`6df68b79...`. Recovery is exact hash-gated package
+delete on the same GPU-visible guest, ordinary377/392 restore; immutable377/385
+GPU-hidden only if that guest cannot recover.
+
+PASS criterion: exact guard/status identifies one existing SubmitRender invariant;
+failure is absent/malformed receipt. Expected checkpoint is after Render and before
+physical AGX submission. One natural bind and one producer invocation only, then
+evidence and exact cleanup; the next change will address only the named owner.
+
+## EXP527 accept empty nonnull patch-list buffer — result 2026-09-06T21:20Z
+
+CONFIRMED for the Render boundary; REJECTED as a complete submission. Exact
+30.0.527.0 crossed `DxgkDdiRender` and reached `DxgkDdiSubmitCommand`, then the
+KMD returned `STATUS_INVALID_HANDLE`. Windows bugchecked `0x119/2`; cdb names
+`dxgmms2!VidSchiSendToExecutionQueue` and the driver-failed-submit bucket.
+Minidump `090626-9359-01.dmp` SHA
+`3caf5b3eab9b839d626c067c66bc2088a3b676262b075cb6c760cdb2e1be2ce3`;
+analysis is `.local/experiments/EXP527-empty-patch-list/analysis.txt`. No physical
+AGX execution or Windows fence completion is claimed. Exact oem5 was removed in
+emergency377/385 after validating INF SHA `c382f47d...`; ordinary377/392 was then
+restored. A stopped orphan `AppleAgxAdmission` plus exact EXP527 SYS/UMD remained
+without a package; exact hash-gated cleanup removed only those objects. Final
+cleanup receipt SHA `9cbd37c78800fbbdb0921fe226f68568401b464892e20b991fc8adff3fee5bc5`;
+ordinary health SHA `689cf1069cf64f45be3d99711094ca89384d6cef950da2ec8b48045765f058b6`.
+Current baseline: APPL0002 Code28, null INF, no package/service/SYS/UMD,8CPU/SSH,
+AppleInput/USBXHCI/stornvme running, no fresh41/46/129/161/1001.
+
 ## EXP527 accept empty nonnull patch-list buffer — preregistration 2026-09-06T21:06Z
 
 WHY THIS HYPOTHESIS: EXP526 registry receipt proved exact KMD Render guard11,
