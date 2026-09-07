@@ -35448,3 +35448,13 @@ qualification-cookie allocation's SupportedRead/WriteSegmentSet from
 aperture-or-local to local-only while retaining CpuVisible and Lock2. Ordinary
 allocations are unchanged. Typed PBE patch remains the sole downstream
 functional variable. Seven focused tests GREEN. Build/sign/hash then one run.
+
+**EXP583 FREEZE 2026-09-07T18:46Z:** pinned build/analysis/Universal/Inf2Cat/
+sign/version PASS. ZIP/SYS/INF/CAT/UMD/producer SHA are
+f8bf8d4b4c0d9c5bbdcc7684c90e948b8425fac2355d4d3a562e04eeb06d46ad,
+fdd22e58428349ce10fdfbdec329f7b810ea6c62066782dea683f0d4426efcba,
+93da71f6bfd73e09cc39f4f388fbdbf9897fa17ec3327d80523b2c187d0f59b0,
+e855e8cb13006495d71eff2141e0ed37bfc45f5c79dd1869be0e21ea7e97b1c9,
+b49e80e48a739c6563b85498b3039cf81a695c1a1717cdf4c8a35c84f9576271,
+7dbb7b41f66c270251c0d5034ffdf9831c36a54d7fa0aac75df5a059a46d8a31.
+Same m1n1/Mu. Clean ordinary preflight required, then one run.
