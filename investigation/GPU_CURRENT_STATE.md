@@ -521,16 +521,23 @@ RED/GREEN and111 regressions PASS. Exact cleanup; ordinary health SHA71353de9...
 Next EXP559 changes only this deterministic first-TA-item word.
 Pinned30.0.559.0 gates PASS; ZIP/SYS/producer SHAe9db6216.../d2f7bfde.../
 f452fab7.... EXP559 preregistered.
+EXP559 FINAL: hardware receipt proves total16/wptr16, but TA stays
+active/rptr2/done0 and D3 unstarted; word correction necessary but insufficient.
+Buffer/QueueInfo/host SHA5a90a5b2.../5fdc50ea.../7d8f03ba.... No snapshot was
+written because provider poll exited before50ms. Exact cleanup; ordinary health
+SHAa9824f22.... Direct cached-write audit closed. Next use existing KTrace RX
+state/ring: baseline pointer plus bounded final tail identifies last firmware
+StartTA/InitBM trace without work/UAT changes.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T10:37Z after exact558 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T10:49Z after exact559 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA71353de9b6d4fed8d0ed92db9b4046b102f97813bd5c866f45afd9eeeeb2dd68.
+SHAa9824f2210862768d2b6cee2c86187f6b3ed8336de0018523c02fb67c56b0d81.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

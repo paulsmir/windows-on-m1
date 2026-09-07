@@ -1,5 +1,23 @@
 # Hardware Experiment Ledger
 
+## EXP559 populated BufferManager control — result 2026-09-07T10:49Z
+
+CONFIRMED exact word correction, but no later TA progress. Exact30.0.559.0 ran
+once. Buffer receipt SHA `5a90a5b2926d906df590e05737d63bd3377e1d1ed01a9a14f6675d22ccbf1da5`
+proves BlockControl total16/wptr16; the intended source contract reached hardware.
+TA QueueInfo remains active/rptr2/busy1/has_commands1 with done0 and D3 remains
+unstarted (receipt SHA `5fdc50eabe6a6394a84befb35d7ded6cbbf6171d4ae86bf109e50ab8e5d770d8`).
+No fault snapshot was written because the existing provider poll exited before
+its50-ms capture; Windows again TDR116. Host SHA
+`7d8f03ba3e68fba09719047c86fe6501b1a40477ed2776d24ce1a2b0a1268fda`.
+Thus BlockControl was required but insufficient. Direct cached-write audit is
+closed. Next source-backed discriminator is the already published KTrace RX
+channel: capture its pre-submit pointer and bounded final tail to identify the
+last firmware StartTA/InitBM trace code without changing behavior.
+
+Exact cleanup complete and ordinary377/392 healthy; SHA
+`a9824f2210862768d2b6cee2c86187f6b3ed8336de0018523c02fb67c56b0d81`.
+
 ## EXP559 populated BufferManager control — preregistration 2026-09-07T10:41Z
 
 WHY THIS HYPOTHESIS: EXP558 directly proves first TA InitBM sees total16/wptr0;
