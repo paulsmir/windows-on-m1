@@ -1,5 +1,33 @@
 # Hardware Experiment Ledger
 
+## EXP557 SGX fault-info after TA ingress — preregistration 2026-09-07T10:14Z
+
+WHY THIS HYPOTHESIS: EXP556 proves firmware accepted the TA queue and advanced
+its read state to2, but TA done/stamp/event remain absent and RegionB/C fault
+records remain zero. Pinned J313 m1n1 diagnoses this exact physical-execution
+boundary from SGX `FAULT_INFO` at MMIO offset0x17030; production never captured
+that register. A nonzero word would directly identify context/reason/unit/address.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: J313 SGX FAULT_INFO is the
+hardware owner for GPU/UAT execution faults. TRANSLATION: add one read-only64-bit
+field to the existing50-ms crash-durable fault snapshot; no queue/work/UAT state
+is changed. WHAT IS STILL UNKNOWN: exact SGX fault word, or zero proving the TA
+stall occurs without a latched hardware fault.
+
+Commit `7c2f180cb1e744384d50fe577def32a64a608a55`;111 render/ledger tests pass.
+Pinned30.0.557.0 WDK26100 build/analysis/Universal/Inf2Cat/signing/version and
+producer gates pass with inherited C28251 only. Overlay SHA
+`8ae192045fa45aecbb57d0b1eb42cdf610b4f4fac89450bb293a5b23166df843`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`44332a7143001544165fea7b7c495a1aacabd36b321b2f21f07dc52dc0361369` /
+`1cadfcf78d4aef4ec39397b0a16fdd4c071388d8ab91e06ef923ae96b331031d` /
+`31e5c60c3444c7d5d7403f0d75112f63a00627fe7bebc16186ce351d58d8f277` /
+`42bc04cd6869bddaffb0d522ad870f7cc9cec5d39bd3557dd0e6edca08adfe7a` /
+`437662146125f5d3c1c4af3c7e185444bb13140be84e4a0341b762b04793ceec` /
+`47e633f72b7c303d0bd6f73bd9b24e4c5c0ee52740e47441e2ec37bec38f653a`.
+Clean ordinary SHA `43a6104be8b8690537d08574d66045e8979047ab7b4026aee95fe3f2274d5e08`.
+One bind/producer, decode snapshot v2, exact cleanup, then fix only named owner.
+
 ## EXP556 active QueueInfo receipt — result 2026-09-07T10:10Z
 
 CONFIRMED discriminator and first physical TA ingress. Exact30.0.556.0 ran once.

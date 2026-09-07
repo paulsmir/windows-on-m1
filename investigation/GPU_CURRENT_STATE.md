@@ -500,6 +500,9 @@ RegionB/C faults zero. Host SHA7a0a9c1c.... Exact cleanup; ordinary health
 SHA43a6104b.... Current first unknown is physical TA execution before done/stamp/
 event. Next minimal receipt reads pinned J313 SGX FAULT_INFO at MMIO+0x17030 in
 the existing50-ms snapshot; do not change work bytes/UAT until that verdict.
+Commit7c2f180 extends only the existing snapshot with read-only SGX
+FAULT_INFO@+0x17030.111 tests and pinned30.0.557.0 gates PASS;
+ZIP/SYS/producer SHA44332a71.../1cadfcf7.../47e633f7.... EXP557 preregistered.
 
 ## Final live ordinary clean baseline
 
