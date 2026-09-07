@@ -35986,3 +35986,13 @@ changes only deadline origin to immediately before QueuePresent, preserving the
 same2s window, pattern, surface, broker and receipt. PASS requires stage4/status0,
 requested=applied=latched, active offset0, poolPA=filled hostPA, Code0 and physical
 frame590 confirmation. Build from exact EXP590R2 source plus this one-file overlay.
+
+**EXP591 FREEZE 2026-09-07T21:18Z.** Pinned build/sign/Universal/version gates
+PASS. Overlay SHA `1f67bde801d3511308dd3604230eb7eada29b8b914fd771c9131b0bd2b34ddc9`.
+ZIP/SYS/INF/CAT/UMD hashes:
+`498ebbf6f5ca437a90cdd96223c45d95c9817760a9184624de74a039e527fd4a`,
+`9e991e408ddd27e8ff0247ceb6b58d25268205fa73d03e652759a17af45c1bda`,
+`521959123c7181dbdb01586bc0652725f75b2a7d2c3ca68ea9dd3c30eed53824`,
+`b16f32dc6f8f6eae630bc00213bbe95c589f0aafcac101cdd66105ce79e4d98e`,
+`d5da47b64b694dda8395a5ae3a0e372fc93e80833b0e48faa331348c5c694300`.
+Ordinary baseline verification then one natural bind only.
