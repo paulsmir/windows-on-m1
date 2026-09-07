@@ -35475,3 +35475,77 @@ unbind captures 1024 target bytes plus the remaining16KiB binding guard into
 the same identity-bound terminal receipt: actual/mismatch/expected/A5 counts,
 changed bytes, guard corruption, FNV-1a and64-byte prefix. Typed PBE relocation
 is unchanged.18 focused tests GREEN. One build and hardware run.
+
+**EXP584 FINAL 2026-09-07T19:01Z — COMPLETION PASS; OUTPUT EXACTLY
+UNCHANGED; cleanup physically blocked.** Exact30.0.584.0 terminal receipt has
+ValidMaskff, sequence1, fence/completed255, exact TA/D3 stamps and done2/2, raw
+polling event, NotifyInterrupt1, DPC1, Completed exit, Created provider and Ready
+backend with no scheduler fault. KMD output capture proves destination bytes did
+not change: FirstPixel/FirstMismatch a5a5a5a5, mismatch index0, expected pixels0,
+A5 pixels256, ChangedBytes0, GuardCorrupt0, BytesExamined4000,
+FNV41c2a9c77516b725 and64-byte all-A5 prefix. This rejects object36+3008 typed
+Render Target.Buffer relocation as sufficient and removes color-order/layout/
+CPU-visibility ambiguity for this run. Evidence ZIP SHA
+`f2a9c1b2320f3b1a4dc97797b443a0c05d740f991d57dca1934c10fb7980e099`;
+host log SHA `96760aa9e2e47a54029756c79398815c1279f48e4e0781b33dfeb8ebe2ff066f`.
+
+Recovery: full-owner lost SSH. Fresh platform reboot plus ordinary392 proved the
+package boot-bound (AGX IRQ880/881 enabled, no SSH). Fresh current c6d10e0+
+GPU-hidden385 reached8CPU/NVMe but no network in the bounded recovery window.
+Legacy recovery reconstruction was rejected before Windows because the binary/
+Python runtime was not byte-matched. No candidate was rerun and no package was
+deleted. Exact EXP584 remains installed. A physical power cycle to Running proxy
+is now indispensable before hash-gated cleanup; this operational blocker is not
+a GPU verdict. Recovery logs are preserved under
+`.local/experiments/EXP584-kmd-output/`.
+
+# EXP585 — atomic store-pipeline Texture/Uniform relocation
+
+**PREREGISTERED 2026-09-07T19:23Z; one exact run after EXP584 cleanup only.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP584 proves physical TA/D3 completion and an exact all-A5 destination, so
+  the first remaining primitive is PBE/store address selection, not completion,
+  visibility, color ordering or layout interpretation.
+- EXP568/569 hardware prove context63 fetches fixed object73 at1100020000 and
+  object74 at1100010000 through exact aliases of the template bytes.
+- Exact fixture object73+2000/+2008 contains typed USC Texture/Uniform words
+  whose36-bit shr3 addresses decode to stale1500003000/1500004000. Exact
+  Asahilina Mesa commit7a4f2406 `agx_build_store_pipeline` creates these two
+  bindings together and points them at the Render Target descriptor and its
+  companion uniform. Active object36 is1503920000.
+
+**ATOMIC CONTRACT:** USC Texture and USC Uniform are the two register bindings
+of one Mesa-built store pipeline. Relocating only the Texture leaves the same
+pipeline consuming the stale companion uniform. They are therefore one
+indivisible address-rebase invariant, not two independent capability changes.
+
+**WINDOWS CONTRACT:** unchanged local-segment producer allocation, KMD-owned
+poison/readback, terminal completion and exact fence notification.
+
+**AGX/ASAHI CONTRACT:** fixed object73 is fetched at its original pipeline VA;
+its Texture binding selects the Render Target descriptor and its Uniform binding
+selects the companion `{0,~0}` data. Both addresses use a36-bit field at bit27
+with address divided by8. The Render Target descriptor continues to use its
+independently typed36-bit divided-by16 destination field.
+
+**TRANSLATION:** commit
+`7bbc06c50dc87a5e68d529bd6038dc62ddb3187e` validates the captured words and
+all non-address bits, then changes only the two USC address fields to active
+object36+3000/+4000. All three typed words and object40 metadata are restored
+only after exact validation, making bind/unbind atomic and rollback-safe.
+
+**WHAT IS STILL UNKNOWN:** whether the stale USC pair is the causal reason PBE
+writes no bytes. PASS requires the same terminal completion/fence plus any
+non-A5 target change; full functional PASS requires256 expected pixels and
+guard0. Exact unchanged A5 rejects the hypothesis. Any earlier fault is
+classified separately.
+
+**OFFLINE PROOF:** real production fixture test was RED on stale1500003000,
+then GREEN with active1503923000/1503924000 and exact reverse restore. Malformed
+Uniform input is rejected without changing output object, descriptor or Texture.
+Focused test PASS. Broad AppleAgx run:391 PASS; one unrelated pre-existing
+source-text assertion failure in stop/remove qualification guards. Build/sign/
+hash gates are pending. Same m1n1/Mu, producer and output receipt; no scheduler,
+completion, retained-root, UAT, queue, display or capability change.

@@ -1,8 +1,43 @@
 # GPU current state
 
-Updated2026-09-07T17:31Z. Authoritative live state; read first after context reset.
+Updated2026-09-07T19:23Z. Authoritative live state; read first after context reset.
 Detailed handoff: .local/experiments/EXP506-cdd-blt/handoff.md.
 Historical snapshot: .local/experiments/EXP506-cdd-blt/state-before-final-compact.md.
+
+## Current boundary — EXP584 final / EXP585 prepared source
+
+EXP581 remains the first hardware proof of Windows-originated physical TA+3D
+execution and exact Windows fence completion. Completion source is polling;
+physical GPU IRQ is not proven. Do not reopen retained-root, queues, stats,
+completion or fence without contradictory evidence.
+
+EXP584 exact30.0.584.0 completed TA/D3 and fence255 with terminal ValidMaskff,
+but the exact KMD-owned output snapshot after completion remained byte-exact A5:
+first/mismatch A5, expected pixels0, A5 pixels256, changed bytes0, guard0,
+FNV41c2a9c77516b725 and64-byte A5 prefix. Thus typed object36+3008 Render
+Target.Buffer relocation is necessary but not sufficient. Evidence ZIP SHA
+f2a9c1b2320f3b1a4dc97797b443a0c05d740f991d57dca1934c10fb7980e099.
+
+Source-first root cause: EXP568/569 prove the GPU reads fixed object73/74 through
+original context63 aliases. Exact Asahilina Mesa commit7a4f2406 constructs the
+store pipeline as an atomic Texture+Uniform pair. Captured object73+2000 points
+Texture to stale object36+3000 at1500003000; +2008 points Uniform to stale
+object36+4000 at1500004000. Active object36 is1503920000. Commit
+7bbc06c50dc87a5e68d529bd6038dc62ddb3187e validates both typed USC fields,
+rebases only their36-bit shr3 addresses to active object36+3000/+4000, preserves
+all other bits, and restores both plus the PBE descriptor and object40 atomically.
+Focused real-fixture RED then GREEN. AppleAgx regression:391 PASS with one
+unrelated pre-existing source-text test failure.
+
+EXP584 exact package cleanup is physically blocked: installed package is
+boot-bound under ordinary392; fresh current-m1n1+hidden385 reaches8CPU/NVMe but
+does not restore Windows network. All established non-physical recovery paths
+were exhausted, including fresh platform `p.reboot()`. Machine currently runs
+the fresh hidden recovery guest under the retained launcher; SSH is absent.
+Next unavoidable operator action is one physical power cycle to Running proxy.
+Then boot current-compatible hidden recovery, delete only INF SHA
+B661E61E69EB0EC06E4AECB9F54DA4AC3AF1C0D94AD2E42AA93CF8AED0F20FE0,
+restore ordinary392 clean, and run the already prepared EXP585 candidate.
 
 ## Binding scope and current executor
 
