@@ -1918,6 +1918,19 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalObserve(runtime, Fence, Status);
 #endif
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (Status == AppleAgxBackendCompletionSuccess &&
+      (runtime->TerminalReceipt.ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) != 0u &&
+      runtime->TerminalReceipt.OutputPixelsExpected == 256u) {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
+        &runtime->Adapter->BackendImage.Objects[
+            APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+    (void)AdmissionScanoutPresentAgxResult(
+        runtime->Adapter, output->Data, output->Size,
+        runtime->TerminalReceipt.DestinationGpuVa,
+        runtime->TerminalReceipt.DestinationPhysical, Fence);
+  }
+#endif
   if (Fence == 0u || Node != 0u || Engine != 0u ||
       Status != AppleAgxBackendCompletionSuccess)
     return APPLE_AGX_BACKEND_FALSE;

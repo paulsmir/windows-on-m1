@@ -42,11 +42,31 @@ typedef struct _ADMISSION_VISIBLE_SCANOUT_RECEIPT {
   unsigned int Reserved;
 } ADMISSION_VISIBLE_SCANOUT_RECEIPT;
 
+#define ADMISSION_VISIBLE_AGX_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_VISIBLE_AGX_RECEIPT {
+  unsigned int Version, Bytes, Stage, Status, Fence;
+  unsigned int SourceWidth, SourceHeight, SourcePitch;
+  unsigned long long SourceBytes, SourceGpuAddress, SourcePhysicalAddress;
+  unsigned long long SourceHash;
+  unsigned long long DestinationCpuAddress, DestinationGuestIpa;
+  unsigned long long DestinationPhysicalAddress, DestinationOffset;
+  unsigned long long DestinationBytes, DestinationHash;
+  unsigned long long ActiveOffsetBefore, RequestedSequence;
+  unsigned long long AppliedSequence, LatchedSequence, ActiveOffsetAfter;
+  unsigned int SwapId, ElapsedMs;
+  unsigned char SourcePrefix[64];
+} ADMISSION_VISIBLE_AGX_RECEIPT;
+
 int AdmissionVisiblePatternFill(
     void *Surface, unsigned long long SurfaceBytes, unsigned int Frame,
     ADMISSION_VISIBLE_PATTERN_RECEIPT *Receipt);
 
 int AdmissionVisibleScanoutReceiptValid(
     const ADMISSION_VISIBLE_SCANOUT_RECEIPT *Receipt);
+
+int AdmissionVisibleAgxScale16x16(
+    const void *Source, unsigned long long SourceBytes,
+    void *Destination, unsigned long long DestinationBytes,
+    ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);
 
 #endif /* APPLE_AGX_RENDER_VISIBLE_SCANOUT_H */

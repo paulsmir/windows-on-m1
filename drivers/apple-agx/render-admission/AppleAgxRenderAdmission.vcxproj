@@ -79,6 +79,11 @@
       <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxVisibleAgxQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_VISIBLE_AGX_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
     <OutDir>$(MSBuildProjectDirectory)\build\memory-qualification\$(Configuration)\</OutDir>
     <IntDir>$(MSBuildProjectDirectory)\build\memory-qualification\obj\$(Configuration)\</IntDir>

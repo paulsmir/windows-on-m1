@@ -17,6 +17,7 @@ C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
 C_ASSERT(sizeof(ADMISSION_TERMINAL_RECEIPT) == 368);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_PATTERN_RECEIPT) == 112);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_SCANOUT_RECEIPT) == 216);
+C_ASSERT(sizeof(ADMISSION_VISIBLE_AGX_RECEIPT) == 224);
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -115,6 +116,30 @@ _Use_decl_annotations_ VOID AdmissionRecordVisibleScanout(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1VisibleScanoutReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+}
+#endif
+
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+_Use_decl_annotations_ VOID AdmissionRecordVisibleAgx(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_VISIBLE_AGX_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1VisibleAgxReceipt", Receipt, sizeof(*Receipt));
     (void)ZwFlushKey(key);
     ZwClose(key);
   }

@@ -14,6 +14,8 @@ int main(void) {
   ADMISSION_VISIBLE_PATTERN_RECEIPT first;
   ADMISSION_VISIBLE_PATTERN_RECEIPT second;
   ADMISSION_VISIBLE_SCANOUT_RECEIPT scanout;
+  ADMISSION_VISIBLE_AGX_RECEIPT agx;
+  unsigned int source[256];
   unsigned int before = 0xa5a5a5a5u;
   assert(surface != NULL);
   memset(surface, 0xa5, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
@@ -57,6 +59,17 @@ int main(void) {
   scanout.LatchedSequence = 9ULL;
   scanout.PoolPhysicalAddress += APPLE_AGX_SCANOUT_ALIGNMENT;
   assert(!AdmissionVisibleScanoutReceiptValid(&scanout));
+  memset(&agx, 0, sizeof(agx));
+  for (before = 0u; before < 256u; ++before)
+    source[before] = 0xff112233u;
+  assert(AdmissionVisibleAgxScale16x16(
+      source, sizeof(source), surface, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE,
+      &agx));
+  assert(agx.SourceWidth == 16u && agx.SourceHeight == 16u &&
+         agx.SourcePitch == 64u && agx.SourceBytes == 1024u);
+  assert(agx.SourceHash != 0ULL && agx.DestinationHash != 0ULL);
+  assert(pixel(surface, 0u, 0u) == 0xff112233u);
+  assert(pixel(surface, 2559u, 1599u) == 0xff112233u);
   free(surface);
   return 0;
 }

@@ -978,6 +978,15 @@ NTSTATUS AdmissionScanoutQueuePresent(
 BOOLEAN AdmissionScanoutInterrupt(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutControlInterrupt(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Enable);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+NTSTATUS AdmissionScanoutPresentAgxResult(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_reads_bytes_(SourceBytes) const VOID *Source,
+    _In_ ULONG SourceBytes, _In_ ULONGLONG SourceGpuAddress,
+    _In_ ULONGLONG SourcePhysicalAddress, _In_ ULONG Fence);
+VOID AdmissionRecordVisibleAgx(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);
+#endif
 #if defined(APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION)
 VOID AdmissionRecordVisibleScanout(
     _Inout_ ADMISSION_CONTEXT *Context,

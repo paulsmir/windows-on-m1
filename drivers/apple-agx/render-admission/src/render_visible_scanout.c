@@ -101,4 +101,36 @@ int AdmissionVisibleScanoutReceiptValid(
   return 1;
 }
 
+int AdmissionVisibleAgxScale16x16(
+    const void *Source, unsigned long long SourceBytes,
+    void *Destination, unsigned long long DestinationBytes,
+    ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
+  const unsigned int *source = (const unsigned int *)Source;
+  unsigned int *destination = (unsigned int *)Destination;
+  unsigned int x;
+  unsigned int y;
+  unsigned int index;
+  if (Source == VISIBLE_NULL || Destination == VISIBLE_NULL ||
+      Receipt == VISIBLE_NULL || SourceBytes < 16ULL * 16ULL * 4ULL ||
+      DestinationBytes != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+    return 0;
+  Receipt->SourceWidth = 16u;
+  Receipt->SourceHeight = 16u;
+  Receipt->SourcePitch = 64u;
+  Receipt->SourceBytes = 16ULL * 16ULL * 4ULL;
+  Receipt->DestinationBytes = DestinationBytes;
+  Receipt->SourceHash = visible_hash(
+      (const unsigned char *)Source, Receipt->SourceBytes);
+  for (index = 0u; index < 64u; ++index)
+    Receipt->SourcePrefix[index] = ((const unsigned char *)Source)[index];
+  for (y = 0u; y < APPLE_AGX_SCANOUT_J313_HEIGHT; ++y)
+    for (x = 0u; x < APPLE_AGX_SCANOUT_J313_WIDTH; ++x)
+      destination[y * APPLE_AGX_SCANOUT_J313_WIDTH + x] =
+          source[(y * 16u / APPLE_AGX_SCANOUT_J313_HEIGHT) * 16u +
+                 (x * 16u / APPLE_AGX_SCANOUT_J313_WIDTH)];
+  Receipt->DestinationHash = visible_hash(
+      (const unsigned char *)Destination, DestinationBytes);
+  return Receipt->SourceHash != 0ULL && Receipt->DestinationHash != 0ULL;
+}
+
 #undef VISIBLE_NULL
