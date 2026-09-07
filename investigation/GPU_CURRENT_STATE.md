@@ -558,16 +558,23 @@ captures the rejected 0x38 bytes plus queue-ingest guard/runtime result in a
 crash-durable receipt;356 tests PASS. Next build/run is EXP563 only.
 Pinned30.0.563.0 gates PASS; ZIP/SYS/producer SHA072d1faa.../01b11917.../
 4d063c32.... EXP563 preregistered for one exact receipt and no event ACK.
+EXP563 FINAL: receipt SHA063f1021... is kind4 Timeout/counter0/stamp_index-1,
+ingest runtime result9 ResetFailed. BufferManagerInfo last_id advanced
+ffffffff->0. Exact EXP208 comparison proves BM PageList has four pages/block
+while the159-edge table relocated only the first; three interior entries/block
+stayed at old0x1600 pages. Commitf3628eb adds exact48 aligned interior-page
+edges and regenerates a207-edge template; RED/GREEN and356 tests PASS. Exact
+cleanup/ordinary health SHAa8415695.... Next EXP564 tests only this correction.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T11:33Z after exact562 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA2b996ceea6cfc6aa5971ec70b1ecbd48090897ddad3062308660e5c6abbd632c.
+SHAa8415695557327411ad8f3964f1ab7e70b80c97d39109578e34b70c41ace23ab.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

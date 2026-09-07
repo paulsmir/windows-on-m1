@@ -39,6 +39,35 @@ from EXP562. One hash-gated stage, natural bind, producer, service-key receipt
 collection, exact cleanup and ordinary restore. PASS is a valid 96-byte receipt
 naming one causal ingest owner and exact message; it is not a completion PASS.
 
+## EXP563 rejected event receipt — result 2026-09-07T11:57Z
+
+CONFIRMED firmware timeout and first causal InitBM data defect. Exact30.0.563.0
+ran once. Receipt SHA
+`063f102169562a69873a0c3381d4c81526e59f1eb4f46ca16b6b389d6fc0f24d`
+decodes version1/bytes96/fence255/poll2/drain8/read0/write1/ingest2/
+runtime-result9/message-valid1. Exact event is kind4 Timeout, counter0,
+stamp_index `-1`, remaining bytes zero. Decoder recognized a terminal firmware
+timeout; truthful quiesce then failed and returned ResetFailed. It must not be
+ignored or converted to success. Hardware log SHA
+`ec94e890c23670e5e6ef54f1a7d4048fcdf8b57dad599cd7caea1c6e554d2d51`.
+
+Focused EXP208/current comparison found the deterministic owner. Hardware
+mutated BufferManagerInfo `last_id` from initial `0xffffffff` to 0 before the
+timeout, proving InitBM consumed its first page. Accepted EXP208 `BM PageList`
+contains four consecutive 32-KiB page numbers per block, but the generated
+159-edge template relocated only offsets 0,16,32... (the first page of each
+block). Offsets +4/+8/+12 retained old `0x1600...` page numbers after rebasing
+to `0x1503...`. This predicts first-page progress then timeout on the next stale
+page.
+
+Commit `f3628eb22972a1917fef0077beb275f6040b5c45` adds the missing 48
+interior-page edges, allows only aligned in-object target offsets in both
+validators, and regenerates the exact template from 159 to 207 edges. Interior
+page tests were RED then GREEN and all356 AppleAgx tests pass. No firmware/UAT/
+queue/scheduler/display/capability change. Exact EXP563 cleanup and ordinary
+restore complete; health SHA `a8415695...`. EXP564 changes only these PageList
+relocations and requires the timeout to disappear or a new exact boundary.
+
 ## EXP562 exact event-drain owner — preregistration 2026-09-07T11:26Z
 
 WHY THIS HYPOTHESIS:
