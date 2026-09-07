@@ -134,7 +134,6 @@ static NTSTATUS AdmissionScanoutQualifyVisible(
   receipt.SurfaceOffset = 0ULL;
   receipt.SourceVisible = 1u;
   started = AdmissionScanoutNow(Runtime);
-  deadline = started + ADMISSION_SCANOUT_TIMEOUT_MS;
   if (!AdmissionVisiblePatternFill(
           Memory->CpuAddress, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 590u,
           &receipt.Pattern)) {
@@ -152,6 +151,7 @@ static NTSTATUS AdmissionScanoutQualifyVisible(
     goto Exit;
   }
   receipt.Stage = 2u;
+  deadline = AdmissionScanoutNow(Runtime) + ADMISSION_SCANOUT_TIMEOUT_MS;
   if (InterlockedCompareExchange(&Runtime->PresentGate, 1, 0) != 0) {
     status = STATUS_DEVICE_BUSY;
     goto Exit;
