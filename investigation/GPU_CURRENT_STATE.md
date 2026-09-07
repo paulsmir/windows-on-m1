@@ -448,25 +448,32 @@ alignment and TTBR1/range checks; exact native-offset RED then GREEN and focused
 regressions PASS. Pinned30.0.553.0 gates PASS; ZIP/SYS/producer SHA
 42761bb7.../51182bb7.../753694c2.... EXP553 preregistered for one natural
 bind/producer and exact0x5460/5420 verdict with no other behavioral change.
+EXP553 FINAL: corrected guard reached Code0, then one producer produced neither
+0x5460 nor0x5420 and ended in0x116 Arg3C0000483/Arg4=3 at uptime71s. Private
+symbols name AdmissionDdiResetFromTimeout/image30.0.553.0. Dump/analysis/host
+SHAd9f2ac43.../4ce3a849.../d75f7c66.... Native channel offsets are correct
+enough for Start but rejected as the ingestion fix. Current first unknown stays
+before firmware command-channel consumption; do not repeat offset/identity/wake/
+ordering/fault-record hypotheses. Source-first compare exact ChannelState/ring/
+ChannelInfo publication lifecycle and choose only one remaining causal mismatch.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T09:00Z after exact552 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T09:16Z after exact553 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAd44edfa925d4c3b099e4b449222a5477a646c22db21d47c1b8ffc3f79ead2f81.
+SHAa67f3d6cf7fba350c74f67510b33e33aab8d2a7fdaac794777e08b5fddd801d0.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
-Recovery: ordinary377/392 withR2 failed to reachSSH and reset. Emergency377/385
-restoredSSH for evidence. Exactoem5 and phantom removed. Stale stoppedservice
-Owners{oem5.inf} removed only after package/INF/devnode absence and exactidentity
-checks. SYS/UMD moved to C:\Users\pavel\EXP506-observation\removed-orphans
-and copied locally (recoverable, not installed). Final graceful restart restored
-ordinary377/392. No candidate retry/unrelated removal/ANS change.
+Recovery: EXP553 ordinary377/392 was boot-bound and TDR-reset beforeSSH.
+Emergency377/385 restoredSSH/evidence access. Exactoem5/devnode and hash-matched
+SYS/UMD were removed; stopped service was deleted only after package absence.
+Final graceful shutdown restored ordinary377/392. No candidate retry, unrelated
+removal or ANS change.
 
 ## Source, verification and artifacts
 

@@ -1,5 +1,34 @@
 # Hardware Experiment Ledger
 
+## EXP553 native channel offset validation — result 2026-09-07T09:16Z
+
+REJECTED as the queue-ingestion fix. Exact 30.0.553.0 ran once. The corrected
+guard moved EXP552 from Platform9 failure to a clean Code0/service Running bind,
+with exact INF/SYS hashes and 8 CPUs. One producer then submitted but produced
+neither `0x5460` channel-read nor `0x5420` physical-work progress. At uptime
+71.335s Windows bugchecked `VIDEO_TDR_FAILURE 0x116` with Arg3 `0xC0000483` and
+Arg4 `3`; private symbols identify `AdmissionDdiResetFromTimeout` and exact
+image 30.0.553.0. Dump SHA
+`d9f2ac438e279fa94ba5e420db937bfca147e56f1174cb2ff3b516a81d57a42e`;
+analysis SHA
+`4ce3a849dca38b57dcb98723fe1afa7019f89b05f042392a6915bcad5dd37232`;
+host SHA
+`d75f7c66d5dce025161ddbc5b7ba78fa870a9d66933a79c2b5e908e8f0614430`.
+The 288-byte queue receipt is deterministic and byte-identical to the prior
+publication receipt (`5283ee88...`); the fault snapshot remains all-zero and
+byte-identical to EXP547 (`ed3592b1...`). No physical TA/3D or fence completion
+is claimed.
+
+Ordinary GPU-visible recovery repeated the boot-bound TDR and did not return
+SSH. Established compatible emergency 377/385 recovered Windows; exact oem5,
+devnode, stopped service, SYS and UMD were removed with hash gates. Final
+ordinary 377/392 health is Code28, no INF/package/service/SYS/UMD, 8 CPUs,
+AppleInput/stornvme/USBXHCI running and no new events after the clean boot.
+Health SHA
+`a67f3d6cf7fba350c74f67510b33e33aab8d2a7fdaac794777e08b5fddd801d0`.
+Current first unknown remains before firmware command-channel consumption; do
+not repeat offset, identity, wake, ordering, or fault-record hypotheses.
+
 ## EXP553 native channel offset validation — preregistration 2026-09-07T09:04Z
 
 WHY THIS HYPOTHESIS: EXP552 reached StartDevice stage 8 / Platform stage 9 and
