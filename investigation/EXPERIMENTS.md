@@ -1,5 +1,42 @@
 # Hardware Experiment Ledger
 
+## EXP550 exact queue-infrastructure identity only — preregistration 2026-09-07T08:18Z
+
+WHY THIS HYPOTHESIS: EXP549 failed before producer with context0 broker range71;
+mapping181/failed object18 proves all36 exact VAs collided with retained native
+state at `0xffffffa020000000`. Objects18/19 are unused shared copies in the
+external path. The actual queue infrastructure is objects0–13 and23–27, whose
+exact original VAs are collision-free and directly referenced by queue info.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT preserves exact identities only
+for context, queue info/rings/buffers/job list/pointers/stamps. TRANSLATION:
+those19 objects retain exact VA/offset; unused objects14–22/28–35 stay in the
+proven Windows range. Physical pages remain Windows-owned. WHAT IS STILL UNKNOWN:
+whether this passes broker mapping and enables channel consumption.
+
+Commit `c3c779a0da2f188955659652dc91dcac1a830ddc`; selective identity test RED
+then GREEN, sanitizer and110 regressions pass. Pinned30.0.550.0 gates pass.
+Overlay SHA `73af98c5f16749ba1c29dbb561f7b7171c6d473fa33ab936d846069b33f372de`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`1beab56963e52812901990dcabe6606ae16315a1b8e4542194490b6d74924004` /
+`832f8dd78af07dfc4e539dc475448c69c7b1ffdce13e5a17be6a917b46fe2b7f` /
+`b9063889c7fba239d0555c17a0131e8edfb64675cafa1f638419a553eee61e7c` /
+`c34bf03ecf85dfcd98b03b891d8f39d9659c2cb52a18dc69e543fb9cac71ae43` /
+`715dfae96251ba96885959524a7198a809dc1e2c86a8033cfcdf79ca9f2769f1` /
+`679e38621c4e2be6899401408388f0846a2324e2262c5990665c09ede61d327c`.
+Clean ordinary SHA `8d225b866bb79448acec3742ece9eac2e2488350e88b6086ab2b59d4b0c2f54a`.
+One bind; if Code0 one producer. Require0x5460/5420. Exact cleanup.
+
+## EXP549 exact firmware-shared object identity — result 2026-09-07T08:17Z
+
+INCONCLUSIVE BEFORE PRODUCER. Exact package bound but Code43/service Stopped.
+Start8/Platform12 statusC0000483, FirmwareResult5; broker mapped181 leaves then
+failed range71, which resolves to shared object18 original VA
+`0xffffffa020000000` colliding with retained-root contents. Evidence SHA
+`e5b3837a0f505a8baeb2929be135de0e009fa80d991da8229ed01766844abe0a`.
+No queue verdict. Exact cleanup and ordinary health SHA
+`8d225b866bb79448acec3742ece9eac2e2488350e88b6086ab2b59d4b0c2f54a`.
+
 ## EXP549 exact firmware-shared object identity — preregistration 2026-09-07T08:08Z
 
 WHY THIS HYPOTHESIS: EXP547 proved silent non-consumption with zero faults;

@@ -418,17 +418,22 @@ Windows-owned mapping pages but restores exact original VA+intra-page offsets
 for all36 firmware-managed EXP208 shared objects; sanitizer identity test and
 110 regressions PASS. Pinned30.0.549.0 gates PASS; ZIP/SYS/producer
 SHA93ad0855.../ccb0237f.../2c903b3a.... EXP549 preregistered. Clean ordinary
-health SHA43ae066a....
+FINAL: inconclusive before producer; broker mapped181 then failed range71 at
+retained collision object18, evidence SHAe5b3837a.... Commitc3c779a limits
+exact identity to referenced queue objects0-13/23-27 and leaves unused copies
+in proven Windows range; sanitizer+110 regressions and pinned30.0.550.0 gates
+PASS. ZIP/SYS/producer SHA1beab569.../832f8dd7.../679e3862.... EXP550
+preregistered. Clean ordinary health SHA8d225b86....
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T08:07Z after exact548 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T08:17Z after exact549 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA43ae066a7d1abf43882e13f57e59457a42bcddbac900fad15dc4a88f5182a516.
+SHA8d225b866bb79448acec3742ece9eac2e2488350e88b6086ab2b59d4b0c2f54a.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
