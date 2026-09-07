@@ -24,6 +24,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ADMISSION_ALLOCATION_DESCRIPTION allocation = {0};
   ADMISSION_UMD_COLOR_FILL_COMMAND command = {0};
   D3DKMT_RENDER render = {0};
+  D3DKMT_ESCAPE escape = {0};
+  D3DKMT_TDRDBGCTRL_ESCAPE tdr = {0};
   D3DDDI_MAKERESIDENT makeResident = {0};
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_DESTROYCONTEXT destroyContext = {0};
@@ -46,16 +48,19 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS allocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS residentStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS renderStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS resetStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyContextStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyDeviceStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyPagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
   int result = 1;
+  BOOL requestEngineTdr = FALSE;
 
-  UNREFERENCED_PARAMETER(argv);
-  if (argc != 1) {
-    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe\n");
+  if (argc == 2 && wcscmp(argv[1], L"--engine-tdr") == 0)
+    requestEngineTdr = TRUE;
+  else if (argc != 1) {
+    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe [--engine-tdr]\n");
     return 2;
   }
   gdiModule = GetModuleHandleW(L"gdi32.dll");
@@ -209,6 +214,21 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           render.QueuedBufferCount);
   if (!NT_SUCCESS(renderStatus))
     goto cleanup;
+  if (requestEngineTdr) {
+    tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
+    tdr.NodeOrdinal = 0u;
+    escape.hAdapter = adapters[selectedAdapter].hAdapter;
+    escape.hDevice = createDevice.hDevice;
+    escape.hContext = createContext.hContext;
+    escape.Type = D3DKMT_ESCAPE_TDRDBGCTRL;
+    escape.pPrivateDriverData = &tdr;
+    escape.PrivateDriverDataSize = sizeof(tdr);
+    resetStatus = D3DKMTEscape(&escape);
+    wprintf(L"ENGINE_TDR status=0x%08lx node=%lu\n",
+            (ULONG)resetStatus, tdr.NodeOrdinal);
+    if (!NT_SUCCESS(resetStatus))
+      goto cleanup;
+  }
   result = 0;
 
 cleanup:
@@ -256,6 +276,7 @@ cleanup:
           L"\"context\":\"0x%08lx\",\"allocation\":\"0x%08lx\","
           L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
+          L"\"engine_tdr\":\"0x%08lx\","
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
           L"\"destroy_paging_queue\":\"0x%08lx\","
@@ -267,6 +288,7 @@ cleanup:
           (ULONG)contextStatus, (ULONG)allocationStatus,
           (ULONG)residentStatus, makeResident.PagingFenceValue,
           (ULONG)renderStatus, render.QueuedBufferCount,
+          (ULONG)resetStatus,
           (ULONG)destroyAllocationStatus,
           (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,
           (ULONG)destroyDeviceStatus,
