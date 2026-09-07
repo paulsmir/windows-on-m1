@@ -1,5 +1,45 @@
 # Hardware Experiment Ledger
 
+## EXP548 firmware wake before queue — preregistration 2026-09-07T07:52Z
+
+WHY THIS HYPOTHESIS: EXP546 proves no late channel consumption; EXP547 proves
+both firmware fault records remain zero at63ms, so firmware neither parses nor
+faults on the queue. EXP477 proves the same endpoint consumes channel0x11.
+Upstream m1n1 `agx_1tri.py` explicitly sends `kick_firmware()` channel0x10
+before context/queue use, while Windows waits seconds after UpdateIdleTimestamp
+and never wakes firmware. This is closer than changing correct queue bytes.
+
+WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: doorbell0x10 is the upstream
+firmware kick; queue1 remains doorbells4/5. TRANSLATION: once per runtime, send
+0x83/channel0x10 on endpoint0x21 immediately before the first unchanged group-1
+doorbell; fail closed if it cannot be sent. Reset clears the one-shot state.
+WHAT IS STILL UNKNOWN: whether idle wake enables command-channel ingestion.
+
+Commit `721553bab64c0e385120e1253e6b3dc5e45cc737`; test RED/GREEN and110
+render regressions pass. Pinned package30.0.548.0 gates pass. Overlay SHA
+`9763c82b197a4d6f6b3f20805d6bff2d5e29856aaf51aa15f51bf75ddee5f11a`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`248e08dd0f9c96c6f938c97ea8804e7ab3dd9ea77fbc01deac4eae29ce3d8094` /
+`222c85d57da4d2a52e9f8e169286bd4e2bef4ca3689e287d23a4f226d403a450` /
+`e2065fe1fd4045b591be26c3a1f580339f8fbd6347a4d12275ca36699125ede0` /
+`619e85b37a93bdf8c8606fd093337ed2d4e5cccb3d4dceedaf4cb181383cc59c` /
+`93f57f18e8816a5cc81663587fdbc4e55c142c240ab0c835499cb1256a179900` /
+`1c38c9da173c575e9e40304ef5bd9b167f9f0227e3a958e657b6bcc5e0163600`.
+Clean ordinary SHA `febf777b224d6689aa42cfa57b87ce6ef4516148ba42615b6633c949e7e9a836`.
+One bind/producer; require0x5460 then continue. Exact cleanup.
+
+## EXP547 bounded firmware fault snapshot — result 2026-09-07T07:51Z
+
+CONFIRMED discriminator: exact30.0.547.0 ran once. At63ms fence255 both channel
+read pointers were0; all32 RegionB fault words and all6 RegionC queue-fault words
+were zero. Snapshot SHA
+`ed3592b1740dfdb807d29c8c74e7a40f918c0bdfdb924e8470d2b384ac70f8b0`,
+decoded SHA `45ff6082520a29e653784eff4e7857db5304a48c46963eef260d61303de4cf76`,
+host SHA `f30344a3f9b01ec9377e738f493a0e4827a3a0e6b20befea8d54f0a848f5b0fe`.
+Firmware ignored/not-reached queue ingestion without a queue fault or halt.
+Exact cleanup and ordinary health SHA
+`febf777b224d6689aa42cfa57b87ce6ef4516148ba42615b6633c949e7e9a836`.
+
 ## EXP547 bounded firmware fault snapshot — preregistration 2026-09-07T07:41Z
 
 WHY THIS HYPOTHESIS:

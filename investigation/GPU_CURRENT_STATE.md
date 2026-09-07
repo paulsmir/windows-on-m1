@@ -407,17 +407,22 @@ reset; host SHAeda0750b.... Stall is at/before firmware queue ingestion.
 Commitab41611 captures existing RegionB/RegionC firmware fault records at50ms
 without behavior changes;109 regressions and pinned30.0.547.0 gates PASS.
 ZIP/SYS/producer SHAabcaa1e3.../08d2c635.../a613bbaf.... EXP547
-preregistered. Clean ordinary health SHA1871c122....
+FINAL: at63ms channel reads0 and RegionB32/RegionC6 fault words all zero,
+snapshot SHAed3592b1.... Firmware neither consumed nor faulted. Commit721553b
+adds the upstream m1n1 channel0x10 firmware kick once before first queue
+doorbell;110 regressions and pinned30.0.548.0 gates PASS. ZIP/SYS/producer
+SHA248e08dd.../222c85d5.../1c38c9da.... EXP548 preregistered. Clean ordinary
+health SHAfebf777b....
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T07:38Z after exact546 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T07:51Z after exact547 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA1871c122023f128cbc3dd44edb4e238e0167a78fb6a554081edfd044814da726.
+SHAfebf777b224d6689aa42cfa57b87ce6ef4516148ba42615b6633c949e7e9a836.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
