@@ -506,6 +506,9 @@ VOID AdmissionBackendSubmitResultWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Result, ULONG Phase);
 VOID AdmissionBackendProgressWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress);
+VOID AdmissionBackendChannelProgressWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context, ULONG TaRead, ULONG D3Read,
+    ULONG Fence);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueSubmission(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_SUBMISSION_RECEIPT *Receipt);
@@ -575,6 +578,13 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Progress);                                                          \
+  } while (0)
+#define AdmissionBackendChannelProgressWindows(Context, TaRead, D3Read, Fence) \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(TaRead);                                                            \
+    (void)(D3Read);                                                            \
+    (void)(Fence);                                                             \
   } while (0)
 #define AdmissionRecordQueueSubmission(Context, Receipt)                       \
   do {                                                                         \

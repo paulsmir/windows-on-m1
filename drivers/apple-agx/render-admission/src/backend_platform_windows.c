@@ -1413,6 +1413,10 @@ static VOID AdmissionPlatformWorker(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
   BOOLEAN finalProgressValid = FALSE;
+  BOOLEAN channelBaselineValid = FALSE;
+  BOOLEAN channelProgressReported = FALSE;
+  ULONG initialTaChannelRead = 0u;
+  ULONG initialD3ChannelRead = 0u;
 #endif
   KIRQL old_irql;
 
@@ -1492,8 +1496,12 @@ static VOID AdmissionPlatformWorker(
   {
     ADMISSION_QUEUE_SUBMISSION_RECEIPT receipt;
     if (AdmissionCaptureQueueSubmission(runtime, &runtime->Progress,
-                                        runtime->ProgressValid, &receipt))
+                                        runtime->ProgressValid, &receipt)) {
+      initialTaChannelRead = receipt.TaChannelReadPointer;
+      initialD3ChannelRead = receipt.D3ChannelReadPointer;
+      channelBaselineValid = TRUE;
       AdmissionRecordQueueSubmission(adapter, &receipt);
+    }
   }
 #endif
   InterlockedExchange64(
@@ -1512,6 +1520,30 @@ static VOID AdmissionPlatformWorker(
     }
     UNREFERENCED_PARAMETER(drained);
     UNREFERENCED_PARAMETER(completed);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    if (channelBaselineValid && !channelProgressReported) {
+      volatile APPLE_AGX_BACKEND_U32 *taRead =
+          (volatile APPLE_AGX_BACKEND_U32 *)(
+              runtime->Provider.Channels.Ta.StateCpuAddress +
+              APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+      volatile APPLE_AGX_BACKEND_U32 *d3Read =
+          (volatile APPLE_AGX_BACKEND_U32 *)(
+              runtime->Provider.Channels.D3.StateCpuAddress +
+              APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+      APPLE_AGX_BACKEND_U32 currentTaRead;
+      APPLE_AGX_BACKEND_U32 currentD3Read;
+      if (runtime->TransportIo.ReadU32(runtime, taRead, &currentTaRead) &&
+          runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
+          currentTaRead < APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT &&
+          currentD3Read < APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT &&
+          (currentTaRead != initialTaChannelRead ||
+           currentD3Read != initialD3ChannelRead)) {
+        AdmissionBackendChannelProgressWindows(
+            adapter, currentTaRead, currentD3Read, description.Fence);
+        channelProgressReported = TRUE;
+      }
+    }
+#endif
     if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) {
       APPLE_AGX_G13_QUEUE_PROGRESS current;
       if (AppleAgxG13QueueProviderQueryProgress(
