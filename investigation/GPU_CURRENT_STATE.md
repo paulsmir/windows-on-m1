@@ -30,14 +30,27 @@ Focused real-fixture RED then GREEN. AppleAgx regression:391 PASS with one
 unrelated pre-existing source-text test failure.
 
 EXP584 exact package cleanup is physically blocked: installed package is
-boot-bound under ordinary392; fresh current-m1n1+hidden385 reaches8CPU/NVMe but
-does not restore Windows network. All established non-physical recovery paths
-were exhausted, including fresh platform `p.reboot()`. Machine currently runs
-the fresh hidden recovery guest under the retained launcher; SSH is absent.
+boot-bound under ordinary392. Exact immutable377 binary was reconstructed with
+its recorded d703f87 Python runtime after a fresh platform `p.reboot()`; hidden385
+then reaches Mu and all8 Windows CPUs but still does not restore Windows network.
+All established non-physical recovery paths are exhausted. Machine currently
+runs that exact hidden recovery guest under launcher PID85588; SSH is absent.
 Next unavoidable operator action is one physical power cycle to Running proxy.
 Then boot current-compatible hidden recovery, delete only INF SHA
 B661E61E69EB0EC06E4AECB9F54DA4AC3AF1C0D94AD2E42AA93CF8AED0F20FE0,
 restore ordinary392 clean, and run the already prepared EXP585 candidate.
+
+EXP585 exact30.0.585.0 is BUILT/SIGNED/READY. Pinned WDK/SDK26100, MSVC14.44,
+code analysis, Universal validation, Inf2Cat, TestSign and coherent version all
+PASS; only inherited C28251. ZIP/SYS/INF/CAT/UMD/producer hashes:
+e41dffefa6f88b70dfb08bb8f0d11e834a68abb6639b0cdc35e11e93b4034a27,
+df205a135462a8719f75c2c628d494a1da28946e2de59f03cc9a1dc585cca9ec,
+0c383082907c773a718af0dc4f6db187185d100f9d4d1bc402d6f2089e98782d,
+bc98439f7f3bd0c56f01508027bd0369650603262c66e0c48b569b8cb9ba8d14,
+b96f637bfc2ec205b382cea923d959cf72c5988dc87ac8b1b7211dce3e8ae527,
+1b3938199608b444d354af36ed8411ed8a6cff4819599576011223b835341580.
+Exact EXP584 cleanup and EXP585 stage/run/collect/cleanup/ordinary scripts are
+prepared and PowerShell-parser GREEN under `.local/experiments/EXP585-store-pipeline/`.
 
 ## Binding scope and current executor
 

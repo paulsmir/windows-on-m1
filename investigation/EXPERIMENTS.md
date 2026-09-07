@@ -35549,3 +35549,29 @@ Focused test PASS. Broad AppleAgx run:391 PASS; one unrelated pre-existing
 source-text assertion failure in stop/remove qualification guards. Build/sign/
 hash gates are pending. Same m1n1/Mu, producer and output receipt; no scheduler,
 completion, retained-root, UAT, queue, display or capability change.
+
+**EXP585 FREEZE 2026-09-07T19:33Z — CANDIDATE READY; hardware blocked only by
+physical recovery.** Pinned FRYZZING WDK/SDK26100 and MSVC14.44 build, KMD/UMD
+code analysis, Universal validation, Inf2Cat, TestSign and coherent package
+version30.0.585.0 all PASS with0 errors and only inherited C28251. Overlay SHA
+`c0c85fd105d17f3dc43aff8adbf08a13383ec0623bdcf38fd2726824c0ee058c`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`e41dffefa6f88b70dfb08bb8f0d11e834a68abb6639b0cdc35e11e93b4034a27`,
+`df205a135462a8719f75c2c628d494a1da28946e2de59f03cc9a1dc585cca9ec`,
+`0c383082907c773a718af0dc4f6db187185d100f9d4d1bc402d6f2089e98782d`,
+`bc98439f7f3bd0c56f01508027bd0369650603262c66e0c48b569b8cb9ba8d14`,
+`b96f637bfc2ec205b382cea923d959cf72c5988dc87ac8b1b7211dce3e8ae527`,
+`1b3938199608b444d354af36ed8411ed8a6cff4819599576011223b835341580`.
+Manifest SHA `d69a039de900d61d58cbc5da3d39d3ebf48834372a857a10319a81b05d5ffe83`.
+Exact cleanup-exp584, stage/preflight/run/collect/cleanup/health and ordinary/full-
+owner launch scripts are prepared; both PowerShell scripts parse GREEN on the
+builder. No hardware launch may occur until exact EXP584 is removed and ordinary
+Code28/no-package baseline is verified.
+
+Final recovery attempt used a fresh platform `p.reboot()`, exact immutable377
+binary (embedded d703f87) and the d703f87 Python hypervisor runtime with hidden
+Mu385. It reached Mu and all8 Windows CPUs but no SSH in the full bounded window.
+Launcher PID85588 remains the sole L41 owner; L43 is present. This exhausts all
+known reversible non-physical recovery paths. Minimal operator action: one
+physical power cycle until Running proxy. Resume with exact hidden cleanup,
+ordinary verification and the already frozen EXP585; do not rebuild or modify it.
