@@ -1,5 +1,37 @@
 # Hardware Experiment Ledger
 
+## EXP556 active QueueInfo receipt — preregistration 2026-09-07T10:01Z
+
+WHY THIS HYPOTHESIS: EXP555 hardware-proves active context-0 work roots yet the
+firmware still leaves both channel read pointers at0 with no fault words. The
+next object dereferenced from the byte-correct RunCmdQueue message is exact
+CommandQueueInfo and its CommandQueuePointers. Root ownership is closed, while
+the actual queue-info edges/fields have never been captured from the active
+post-dynamic graph.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: each 184-byte QueueInfo and
+96-byte pointer block must remain byte-exact after active graph refresh and
+carry current pointers/ring/job-list/gpu-buffer/context/event/UUID plus
+done/read/write/ring-size state. TRANSLATION: receipt-only copy of exact D3/TA
+info and pointer objects after unchanged BackendRuntimeSubmit; no field is
+changed. WHAT IS STILL UNKNOWN: first malformed scalar/edge, or a fully correct
+queue-info contract that moves the boundary deeper into firmware acceptance.
+
+Commit `aeb1be92983387aca1f89410fca6358975359c49`;111 render/ledger tests pass.
+Pinned WDK26100/MSVC14.44 build, analysis, Universal, Inf2Cat/signing,
+version30.0.556.0 and producer gates pass with inherited C28251 only. Overlay
+SHA `8ba1649256ab401bd0b38bbfa104427721751c0585c4fa2c9d683d6a9d3a9af1`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`9736509e7f409aa5f5ce0b854e97658c315e1c0b2e9fc895ffed544332938480` /
+`ab2e445bfb1e7e2c38d5c55e27266d30e3d2398a979b7854dad2720e8c984705` /
+`7ed5d44839a1d109224ccc1b72d8815e2f7db2f4ae188417325483a7dbafbd13` /
+`9e80787c2d22780e36f31f78d945896b75d3f83f8399c54d5d3501da09c40ba9` /
+`dd919a7d38b35395d5a55eaae712d2d54521ed4ec5e8b0e903ee02ebda51004f` /
+`b91f19f52bb557215ed1ab642ac2bf7748cc97faec40251a78239968a2b4e108`.
+Clean ordinary SHA `5a1ea93ac98fbbb6a43142db0075ed1258d5309f120f6fcfbb785b875d3cc50c`.
+One bind/producer, recover exact576-byte receipt, decode against m1n1 V13.5,
+then cleanup and change only the first mismatching primitive.
+
 ## EXP555 active shared job graph — result 2026-09-07T09:57Z
 
 CONFIRMED active-graph correction; not yet functional queue execution. Exact

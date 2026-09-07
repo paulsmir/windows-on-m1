@@ -489,6 +489,9 @@ then116/C0000483/3. Receipt/fault/dump/host SHA9fa9e628.../52f1acf9.../
 unknown is now exact CommandQueueInfo/CommandQueuePointers contents/edges in the
 active shared graph. Next discriminator snapshots only those scalar fields and
 compares them with the EXP208 structure; no firmware/UAT/scheduler/display change.
+Commit aeb1be9 adds only a crash-durable exact576-byte D3/TA QueueInfo+Pointers
+receipt after unchanged submit.111 regressions and pinned30.0.556.0 gates PASS;
+ZIP/SYS/producer SHA9736509e.../ab2e445b.../b91f19f5.... EXP556 preregistered.
 
 ## Final live ordinary clean baseline
 
