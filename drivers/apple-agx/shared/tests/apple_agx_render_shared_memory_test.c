@@ -52,6 +52,7 @@ int main(void) {
   unsigned char *arena;
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
   APPLE_AGX_U32 index;
+  APPLE_AGX_U64 next_windows_va = 0xffffffa001000000ULL;
   APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG queue_config;
 
   memset(&fake, 0, sizeof(fake));
@@ -74,13 +75,20 @@ int main(void) {
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
-    assert(owner.ObjectAddresses[index] == layouts[index].OriginalGpuVa);
-    assert(owner.DataOffsets[index] ==
-           (layouts[index].OriginalGpuVa &
-            (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)));
-    assert(owner.VirtualAddresses[index] ==
-           (layouts[index].OriginalGpuVa &
-            ~(APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)));
+    if (index <= 13u || (index >= 23u && index <= 27u)) {
+      assert(owner.ObjectAddresses[index] == layouts[index].OriginalGpuVa);
+      assert(owner.DataOffsets[index] ==
+             (layouts[index].OriginalGpuVa &
+              (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)));
+      assert(owner.VirtualAddresses[index] ==
+             (layouts[index].OriginalGpuVa &
+              ~(APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)));
+    } else {
+      assert(owner.VirtualAddresses[index] == next_windows_va);
+      assert(owner.ObjectAddresses[index] == next_windows_va);
+      assert(owner.DataOffsets[index] == 0u);
+      next_windows_va += 2u * APPLE_AGX_MEMORY_PAGE_SIZE;
+    }
   }
   assert(AppleAgxRenderSharedMemoryBindRelocationObjects(
       &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES, objects,

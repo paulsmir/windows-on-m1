@@ -26,6 +26,12 @@ static APPLE_AGX_BOOL storage_empty(
   return APPLE_AGX_TRUE;
 }
 
+static APPLE_AGX_BOOL exact_queue_identity(APPLE_AGX_U32 Index) {
+  return Index <= 13u || (Index >= 23u && Index <= 27u)
+             ? APPLE_AGX_TRUE
+             : APPLE_AGX_FALSE;
+}
+
 APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryDestroy(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
   if (Owner == RENDER_SHARED_NULL)
@@ -73,6 +79,7 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
     const APPLE_AGX_MEMORY_IO *MemoryIo,
     APPLE_AGX_U64 FirstVirtualAddress) {
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  APPLE_AGX_U64 virtual_address;
   APPLE_AGX_U32 index;
   if (Owner == RENDER_SHARED_NULL || MemoryIo == RENDER_SHARED_NULL ||
       MemoryIo->AllocateContiguous == RENDER_SHARED_NULL ||
@@ -84,6 +91,7 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
   layouts = AppleAgxRenderTemplateObjectLayouts();
   Owner->MemoryIo = MemoryIo;
   Owner->Initialized = APPLE_AGX_TRUE;
+  virtual_address = FirstVirtualAddress;
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
     APPLE_AGX_U64 allocation_bytes;
@@ -93,8 +101,14 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
         layouts[index].Size == 0u)
       return rollback(Owner,
                       AppleAgxRenderSharedMemoryResultInvalidArgument);
-    data_offset = layouts[index].OriginalGpuVa & RENDER_SHARED_PAGE_MASK;
-    mapping_address = layouts[index].OriginalGpuVa & ~RENDER_SHARED_PAGE_MASK;
+    if (exact_queue_identity(index)) {
+      data_offset = layouts[index].OriginalGpuVa & RENDER_SHARED_PAGE_MASK;
+      mapping_address =
+          layouts[index].OriginalGpuVa & ~RENDER_SHARED_PAGE_MASK;
+    } else {
+      data_offset = 0ULL;
+      mapping_address = virtual_address;
+    }
     allocation_bytes = align_up(
         data_offset + (APPLE_AGX_U64)layouts[index].Size,
         APPLE_AGX_MEMORY_PAGE_SIZE);
@@ -111,8 +125,14 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
     ++Owner->ObjectCount;
     zero_bytes(Owner->Objects[index].CpuAddress, allocation_bytes);
     Owner->VirtualAddresses[index] = mapping_address;
-    Owner->ObjectAddresses[index] = layouts[index].OriginalGpuVa;
+    Owner->ObjectAddresses[index] = exact_queue_identity(index)
+                                         ? layouts[index].OriginalGpuVa
+                                         : mapping_address;
     Owner->DataOffsets[index] = (APPLE_AGX_U32)data_offset;
+    if (!exact_queue_identity(index))
+      virtual_address = align_up(
+          mapping_address + allocation_bytes + APPLE_AGX_MEMORY_PAGE_SIZE,
+          RENDER_SHARED_VA_ALIGNMENT);
   }
   Owner->Built = APPLE_AGX_TRUE;
   Owner->LastResult = AppleAgxRenderSharedMemoryResultOk;
