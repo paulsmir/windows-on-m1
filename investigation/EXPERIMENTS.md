@@ -1,5 +1,30 @@
 # Hardware Experiment Ledger
 
+## EXP558 buffer-manager state after TA ingress — preregistration 2026-09-07T10:26Z
+
+WHY THIS HYPOTHESIS: EXP556 proves firmware consumed both TA ring entries and
+marked TA busy; EXP557 proves no SGX/RegionB/RegionC fault. In the hardware-
+proven EXP208 sequence the first TA entry is WorkCommandInitBM, whose first
+externally readable state is BufferManagerInfo/BlockControl/Counter/Misc. Their
+actual post-ingress bytes are unobserved and distinguish InitBM stall from the
+following WorkCommandTA/microsequence.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: the first TA batch is InitBM then
+WorkTA. TRANSLATION: receipt-only copy of active objects1/20/21/22 after the
+unchanged submit. WHAT IS STILL UNKNOWN: whether firmware mutated buffer-manager
+state. Commit `ce1161f1f6403ea6cb8cb7fdef79f93c5faee5ed`;111 tests pass.
+Pinned30.0.558.0 WDK26100/analysis/Universal/Inf2Cat/signing/version/producer
+gates pass. Overlay SHA `b37ef10569d010474c214f30dd97d26b07bff92848bbad3eb68061147a8d9dd4`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`f9353db8568e940b3c50ac06af5581017fc962c4e6c4590fb9c06b8c68e1d0c8` /
+`635c28d337b85b94a9eac34d8f2cc19767f5932d6eac16f45d0b7ab685ba42f2` /
+`99acedc953efc165893c2c9a8ff817d5b5f68c090e7afea9f74a47e2dc906e0c` /
+`0ad1f05ba4e1555f972d9a07495355c3b9acad85e559da87643af7345e364ef0` /
+`fdbb11232548b37d657cc8230824c1af56f5c5ba7ea7b54996c1245aff990032` /
+`73072aa340ecc60c888cf5d391ffabfabc265f2e9e3a7472aa00708a6ffe65cd`.
+Clean ordinary SHA `ef394f0b511bc8cf318a6f3d6434ad35702b89600e8ab29ad11a701411b1b797`.
+One bind/producer, decode exact396-byte receipt, cleanup, next causal owner.
+
 ## EXP557 SGX fault-info after TA ingress — result 2026-09-07T10:22Z
 
 REJECTED latched-hardware-fault hypothesis. Exact30.0.557.0 ran once and

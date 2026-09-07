@@ -510,6 +510,9 @@ SHAa8d115b0.../2f7a4f48.... Exact cleanup; ordinary health SHAef394f0b....
 First unknown is nonfaulting TA batch stall. Next capture only active EXP208
 BufferManagerInfo/BlockControl/Counter/Misc to distinguish first InitBM item
 from subsequent TA work/microsequence; no behavior change.
+Commitce1161f implements that exact396-byte receipt.111 tests and pinned
+30.0.558.0 gates PASS; ZIP/SYS/producer SHAf9353db8.../635c28d3.../73072aa3....
+EXP558 preregistered.
 
 ## Final live ordinary clean baseline
 
