@@ -12,6 +12,10 @@
 #define ADMISSION_QUEUE_OBJECT_TA_INFO 6u
 #define ADMISSION_QUEUE_OBJECT_D3_POINTERS 24u
 #define ADMISSION_QUEUE_OBJECT_TA_POINTERS 25u
+#define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_INFO 1u
+#define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_CONTROL 20u
+#define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_COUNTER 21u
+#define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC 22u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
 #define ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET 0x17030u
@@ -221,6 +225,38 @@ static BOOLEAN AdmissionCaptureQueueInfo(
                 sizeof(Receipt->D3Pointers));
   RtlCopyMemory(Receipt->TaPointers, taPointers->Data,
                 sizeof(Receipt->TaPointers));
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureBufferManager(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
+    ADMISSION_BUFFER_MANAGER_RECEIPT *Receipt) {
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *info;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *control;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *counter;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *misc;
+  if (Runtime == NULL || Fence == 0u || Receipt == NULL)
+    return FALSE;
+  info = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_INFO];
+  control = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_CONTROL];
+  counter = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_COUNTER];
+  misc = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC];
+  if (info->Data == NULL || info->Size != ADMISSION_BUFFER_MANAGER_INFO_BYTES ||
+      control->Data == NULL ||
+      control->Size != ADMISSION_BUFFER_MANAGER_STATE_BYTES ||
+      counter->Data == NULL ||
+      counter->Size != ADMISSION_BUFFER_MANAGER_STATE_BYTES ||
+      misc->Data == NULL || misc->Size != ADMISSION_BUFFER_MANAGER_STATE_BYTES)
+    return FALSE;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = ADMISSION_BUFFER_MANAGER_RECEIPT_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  RtlCopyMemory(Receipt->Info, info->Data, sizeof(Receipt->Info));
+  RtlCopyMemory(Receipt->BlockControl, control->Data,
+                sizeof(Receipt->BlockControl));
+  RtlCopyMemory(Receipt->Counter, counter->Data, sizeof(Receipt->Counter));
+  RtlCopyMemory(Receipt->Misc, misc->Data, sizeof(Receipt->Misc));
   return TRUE;
 }
 
@@ -1596,6 +1632,7 @@ static VOID AdmissionPlatformWorker(
   {
     ADMISSION_QUEUE_SUBMISSION_RECEIPT receipt;
     ADMISSION_QUEUE_INFO_RECEIPT infoReceipt;
+    ADMISSION_BUFFER_MANAGER_RECEIPT bufferManagerReceipt;
     if (AdmissionCaptureQueueSubmission(runtime, &runtime->Progress,
                                         runtime->ProgressValid, &receipt)) {
       initialTaChannelRead = receipt.TaChannelReadPointer;
@@ -1605,6 +1642,9 @@ static VOID AdmissionPlatformWorker(
     }
     if (AdmissionCaptureQueueInfo(runtime, description.Fence, &infoReceipt))
       AdmissionRecordQueueInfo(adapter, &infoReceipt);
+    if (AdmissionCaptureBufferManager(
+            runtime, description.Fence, &bufferManagerReceipt))
+      AdmissionRecordBufferManager(adapter, &bufferManagerReceipt);
   }
 #endif
   InterlockedExchange64(

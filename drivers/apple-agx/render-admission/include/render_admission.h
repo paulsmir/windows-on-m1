@@ -201,6 +201,20 @@ typedef struct _ADMISSION_QUEUE_INFO_RECEIPT {
   UCHAR TaPointers[ADMISSION_QUEUE_POINTERS_BYTES];
 } ADMISSION_QUEUE_INFO_RECEIPT;
 
+#define ADMISSION_BUFFER_MANAGER_RECEIPT_VERSION 1u
+#define ADMISSION_BUFFER_MANAGER_INFO_BYTES 188u
+#define ADMISSION_BUFFER_MANAGER_STATE_BYTES 64u
+typedef struct _ADMISSION_BUFFER_MANAGER_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Fence;
+  ULONG Reserved;
+  UCHAR Info[ADMISSION_BUFFER_MANAGER_INFO_BYTES];
+  UCHAR BlockControl[ADMISSION_BUFFER_MANAGER_STATE_BYTES];
+  UCHAR Counter[ADMISSION_BUFFER_MANAGER_STATE_BYTES];
+  UCHAR Misc[ADMISSION_BUFFER_MANAGER_STATE_BYTES];
+} ADMISSION_BUFFER_MANAGER_RECEIPT;
+
 #define ADMISSION_QUEUE_FAULT_SNAPSHOT_VERSION 2u
 #define ADMISSION_QUEUE_FAULT_REGIONB_WORDS 32u
 #define ADMISSION_QUEUE_FAULT_REGIONC_WORDS 6u
@@ -550,6 +564,9 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueInfo(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_INFO_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordBufferManager(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_BUFFER_MANAGER_RECEIPT *Receipt);
+_IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueFaultSnapshot(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
@@ -638,6 +655,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Receipt);                                                           \
   } while (0)
 #define AdmissionRecordQueueInfo(Context, Receipt)                             \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Receipt);                                                           \
+  } while (0)
+#define AdmissionRecordBufferManager(Context, Receipt)                         \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \
