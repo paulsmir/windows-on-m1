@@ -594,6 +594,11 @@ VA0x1100020000, exact EXP208 256KiB frame input omitted as scanner-unreachable.
 Commit28fd06c appends only that captured object and maps exact context63 alias.
 Pinned30.0.568.0 ZIP/SYS/producer SHAbba1fb85.../1380b764.../0355d475....
 EXP568 preregistered with same proven m1n1.
+EXP568 FINAL: fixed0x110002 fault gone; new snapshot63c1f46e at63ms is
+context63 READ INVALID UL1C7 VA0x1100010000. Hardware log b14b574d. Exact
+cleanup complete. Commit7d62dc4 appends/maps only this proven16KiB object.
+Pinned30.0.569.0 ZIP/SYS/producer SHAbec812e3.../676dc77b.../146cd509....
+EXP569 preregistered.
 
 ## Final live ordinary clean baseline
 

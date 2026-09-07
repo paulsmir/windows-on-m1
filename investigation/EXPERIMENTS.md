@@ -1,5 +1,34 @@
 # Hardware Experiment Ledger
 
+## EXP569 second fixed EXP208 frame input — preregistration 2026-09-07T13:14Z
+
+WHY THIS HYPOTHESIS: EXP568 removes fault VA0x1100020000 and immediately exposes
+the next context63 UL1C7 READ INVALID at VA0x1100010000. Accepted EXP208 maps
+this exact 16-KiB captured object; template excluded it for the same hidden
+encoding reason. Single change: append/map only this proven object, retaining
+the first fixed input and all other behavior. Commit
+`7d62dc434d0ebafe22d4b71507f1f6c12815ea4d`; object74 offset0x5c8000,
+size0x4000, fixed VA0x1100010000; runtime object75. Ten focused and356 AppleAgx
+tests pass. Same m1n1/Mu. Pinned30.0.569.0 gates pass. Overlay/ZIP/SYS/INF/CAT/
+UMD/producer SHA `c7bc317503d3f9139b8e1fcae6b3259a3be83cacb512e23773cf2d8d659422f3` /
+`bec812e3b33e3c153daff375602b9a5d05aa89f8a1280571164a1d62d9c35245` /
+`676dc77bf2ce3c3de27c091d44b7e447333e13aeb415638191a8ea42e2152821` /
+`6f3f2e40127625359136ebb89586b8629ba561d46fef7773cbabf2f8cef0e805` /
+`87dad588127e9bb98abff71c2367b695317ce6cc72414b7d8fba535da483e581` /
+`a3da708dcf724efae87cc934e6352a9fb87bc6270c16eb043e41efecf5d87bb9` /
+`146cd509d6a5c84fcdc0cd0fdb60546eae1b66a2bef477fce1d64d8bd94bb2eb`.
+One bind/producer, require next exact boundary, cleanup.
+
+## EXP568 restore fixed EXP208 frame input — result 2026-09-07T13:14Z
+
+CONFIRMED causal architecture/new boundary. Exact30.0.568.0 removed the
+0x1100020000 fault. Snapshot SHA
+`63c1f46ecee722151e449432cb1f4edcd12953bf51d0dd90f50deff96273aaf2`
+at63ms now decodes context63 READ INVALID level0 UL1C7 at VA0x1100010000.
+Hardware log SHA `b14b574d3728d0aa8a0bc595e4da978d5ad9cf7f3aa0817b5f1ebcde355fe0c0`.
+Thus fixed hidden input mapping works; completion still absent. Evidence then
+exact cleanup complete. EXP569 adds only the newly faulting proven object.
+
 ## EXP568 restore fixed EXP208 frame input — preregistration 2026-09-07T12:50Z
 
 WHY THIS HYPOTHESIS: EXP567 removes the 0x420 alias fault, advances both command
