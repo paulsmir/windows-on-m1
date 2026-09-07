@@ -6,6 +6,10 @@
 #include "apple_agx_render_template.h"
 
 #define APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT 40u
+#define APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OBJECT 36u
+#define APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET 0x3008u
+#define APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_ADDRESS_MASK 0xfffffffffULL
+#define APPLE_AGX_EXP208_GDI_CAPTURED_OUTPUT_GPU_VA 0x15001d0000ULL
 #define APPLE_AGX_EXP208_GDI_OUTPUT_BYTES 0x4000u
 #define APPLE_AGX_EXP208_GDI_WIDTH 16u
 #define APPLE_AGX_EXP208_GDI_HEIGHT 16u
@@ -17,6 +21,14 @@ typedef struct _APPLE_AGX_EXP208_GDI_BINDING {
   APPLE_AGX_U64 DestinationGpuVa;
   APPLE_AGX_U64 DestinationPhysical;
   APPLE_AGX_U32 DestinationBytes;
+  APPLE_AGX_U32 StoreDescriptorObject;
+  APPLE_AGX_U32 StoreDescriptorOffset;
+  APPLE_AGX_U64 OriginalOutputGpuVa;
+  APPLE_AGX_U64 OriginalOutputPhysical;
+  APPLE_AGX_U32 OriginalOutputBytes;
+  void *OriginalOutputData;
+  APPLE_AGX_U64 OriginalStoreDescriptor;
+  APPLE_AGX_U64 PatchedStoreDescriptor;
 } APPLE_AGX_EXP208_GDI_BINDING;
 
 APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
@@ -31,5 +43,9 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
     const APPLE_AGX_EXP208_RELOCATION *Relocations,
     APPLE_AGX_U32 RelocationCount,
     APPLE_AGX_EXP208_GDI_BINDING *Binding);
+APPLE_AGX_BOOL AppleAgxExp208UnbindGdiColorFill(
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    const APPLE_AGX_EXP208_GDI_BINDING *Binding);
 
 #endif /* APPLE_AGX_EXP208_GDI_H */

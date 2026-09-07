@@ -81,6 +81,7 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
     APPLE_AGX_EXP208_GDI_BINDING *Binding) {
   APPLE_AGX_EXP208_RELOCATION_OBJECT saved_output;
   APPLE_AGX_EXP208_GDI_BINDING candidate;
+  APPLE_AGX_BOOL bound = APPLE_AGX_FALSE;
 
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
       Packet == ADMISSION_BACKEND_IMAGE_NULL ||
@@ -103,14 +104,19 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
           Image->Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           AppleAgxRenderTemplateRelocations(),
-          AppleAgxRenderTemplateRelocationCount(), &candidate) ||
-      !AppleAgxApplyRelocations(
+          AppleAgxRenderTemplateRelocationCount(), &candidate))
+    return APPLE_AGX_FALSE;
+  bound = APPLE_AGX_TRUE;
+  if (!AppleAgxApplyRelocations(
           Image->Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           AppleAgxRenderTemplateRelocations(),
           AppleAgxRenderTemplateRelocationCount())) {
-    Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT] =
-        saved_output;
+    if (bound)
+      (void)AppleAgxExp208UnbindGdiColorFill(
+          Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          &candidate);
+    Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT] = saved_output;
     if (!AppleAgxApplyRelocations(
             Image->Objects,
             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
@@ -134,6 +140,14 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
       Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
       Image->BoundFence != Fence)
+    return APPLE_AGX_FALSE;
+  if (!AppleAgxExp208UnbindGdiColorFill(
+          Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          &Image->Binding) ||
+      !AppleAgxApplyRelocations(
+          Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount()))
     return APPLE_AGX_FALSE;
   Image->BoundFence = 0u;
   Image->JobFence = 0u;

@@ -60,7 +60,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS destroyPagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
   ULONG output_pixels_verified = 0u;
+  ULONG output_pixels_still_a5 = 0u;
+  ULONG output_first_pixel_actual = 0u;
+  ULONG output_first_mismatch_index = MAXULONG;
+  ULONG output_first_mismatch_actual = 0u;
+  ULONG output_changed_bytes = 0u;
   ULONG output_guard_corrupt = 0u;
+  ULONGLONG output_target_fnv1a = 0xcbf29ce484222325ULL;
   int result = 1;
 
   UNREFERENCED_PARAMETER(argv);
@@ -243,10 +249,31 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   for (index = 0u;
        index < APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT;
        ++index) {
-    if (((const ULONG *)lock.pData)[index] != APPLE_AGX_EXP208_GDI_COLOR)
-      break;
-    ++output_pixels_verified;
+    ULONG actual = ((const ULONG *)lock.pData)[index];
+    if (index == 0u)
+      output_first_pixel_actual = actual;
+    if (actual == APPLE_AGX_EXP208_GDI_COLOR)
+      ++output_pixels_verified;
+    else if (output_first_mismatch_index == MAXULONG) {
+      output_first_mismatch_index = index;
+      output_first_mismatch_actual = actual;
+    }
+    if (actual == 0xa5a5a5a5u)
+      ++output_pixels_still_a5;
   }
+  for (index = 0u;
+       index < APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
+       ++index) {
+    UCHAR value = ((const UCHAR *)lock.pData)[index];
+    if (value != APPLE_AGX_OUTPUT_INITIAL_PATTERN)
+      ++output_changed_bytes;
+    output_target_fnv1a ^= value;
+    output_target_fnv1a *= 0x100000001b3ULL;
+  }
+  wprintf(L"OUTPUT_PREFIX");
+  for (index = 0u; index < 16u; ++index)
+    wprintf(L" %08lx", ((const ULONG *)lock.pData)[index]);
+  wprintf(L"\n");
   for (index = APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
        index < ADMISSION_ALLOCATION_ALIGNMENT; ++index)
     if (((const UCHAR *)lock.pData)[index] !=
@@ -310,7 +337,12 @@ cleanup:
           L"\"initial_lock\":\"0x%08lx\",\"initial_unlock\":\"0x%08lx\","
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
           L"\"result_lock\":\"0x%08lx\",\"result_unlock\":\"0x%08lx\","
-          L"\"output_pixels_verified\":%lu,\"output_guard_corrupt\":%lu,"
+          L"\"output_first_pixel_actual\":\"0x%08lx\","
+          L"\"output_first_mismatch_index\":%lu,"
+          L"\"output_first_mismatch_actual\":\"0x%08lx\","
+          L"\"output_pixels_verified\":%lu,\"output_pixels_still_a5\":%lu,"
+          L"\"output_changed_bytes\":%lu,\"output_target_fnv1a\":\"0x%016llx\","
+          L"\"output_guard_corrupt\":%lu,"
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
           L"\"destroy_paging_queue\":\"0x%08lx\","
@@ -324,7 +356,10 @@ cleanup:
           (ULONG)initialLockStatus, (ULONG)initialUnlockStatus,
           (ULONG)renderStatus, render.QueuedBufferCount,
           (ULONG)resultLockStatus, (ULONG)resultUnlockStatus,
-          output_pixels_verified, output_guard_corrupt,
+          output_first_pixel_actual, output_first_mismatch_index,
+          output_first_mismatch_actual, output_pixels_verified,
+          output_pixels_still_a5, output_changed_bytes, output_target_fnv1a,
+          output_guard_corrupt,
           (ULONG)destroyAllocationStatus,
           (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,
           (ULONG)destroyDeviceStatus,
