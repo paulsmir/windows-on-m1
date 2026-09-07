@@ -632,11 +632,24 @@ VOID AdmissionSubmitPacketGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Guard, NTSTATUS Status);
 VOID AdmissionBackendSubmitResultWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Result, ULONG Phase);
+VOID AdmissionTerminalObservationTraceWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context, ULONG Source,
+    ULONG CompletionStatus, ULONG RuntimePhase, ULONG ProviderPhase,
+    ULONG Fence);
+VOID AdmissionTerminalExitTraceWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context, ULONG Reason, ULONG ValidMask,
+    ULONG RuntimePhase, ULONG ProviderPhase, ULONG Fence);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordPreSubmitHeartbeat(
     _In_opt_ ADMISSION_CONTEXT *Context,
     APPLE_AGX_RTKIT_SESSION_RESULT Result,
     _In_ const APPLE_AGX_RTKIT_SESSION *Session);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordTerminalReceipt(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_TERMINAL_RECEIPT *Receipt);
+VOID AdmissionTerminalReceiptDpcWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context, ULONG Fence);
 VOID AdmissionBackendProgressWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress);
 VOID AdmissionBackendChannelProgressWindows(
@@ -737,11 +750,35 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Result);                                                            \
     (void)(Phase);                                                             \
   } while (0)
+#define AdmissionTerminalObservationTraceWindows(Context, Source,             \
+                                                  CompletionStatus,            \
+                                                  RuntimePhase, ProviderPhase, \
+                                                  Fence)                       \
+  do {                                                                         \
+    (void)(Context); (void)(Source); (void)(CompletionStatus);                 \
+    (void)(RuntimePhase); (void)(ProviderPhase); (void)(Fence);                \
+  } while (0)
+#define AdmissionTerminalExitTraceWindows(Context, Reason, ValidMask,          \
+                                           RuntimePhase, ProviderPhase, Fence) \
+  do {                                                                         \
+    (void)(Context); (void)(Reason); (void)(ValidMask);                        \
+    (void)(RuntimePhase); (void)(ProviderPhase); (void)(Fence);                \
+  } while (0)
 #define AdmissionRecordPreSubmitHeartbeat(Context, Result, Session)            \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Result);                                                            \
     (void)(Session);                                                           \
+  } while (0)
+#define AdmissionRecordTerminalReceipt(Context, Receipt)                       \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Receipt);                                                           \
+  } while (0)
+#define AdmissionTerminalReceiptDpcWindows(Context, Fence)                     \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Fence);                                                             \
   } while (0)
 #define AdmissionBackendProgressWindows(Context, Progress)                     \
   do {                                                                         \

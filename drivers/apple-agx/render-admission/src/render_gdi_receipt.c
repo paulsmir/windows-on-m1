@@ -69,8 +69,9 @@ int AdmissionGdiReceiptBackend(ADMISSION_GDI_HW_RECEIPT *Receipt,
     unsigned int D3ExpectedDone) {
   if (Receipt == (void *)0 || Receipt->Stage != AdmissionGdiReceiptStageSubmit ||
       Receipt->Fence != Fence ||
-      (Result == 0u && (TaEvent == 0u || D3Event == 0u ||
-       TaExpectedStamp == 0u || D3ExpectedStamp == 0u)))
+      (Result == 0u && (TaEvent >= 128u || D3Event >= 128u ||
+       TaEvent == D3Event || TaExpectedStamp == 0u ||
+       D3ExpectedStamp == 0u)))
     return 0;
   Receipt->BackendSubmitResult = Result;
   Receipt->TaEvent = TaEvent;
@@ -85,13 +86,16 @@ int AdmissionGdiReceiptBackend(ADMISSION_GDI_HW_RECEIPT *Receipt,
 
 int AdmissionGdiReceiptComplete(ADMISSION_GDI_HW_RECEIPT *Receipt,
     unsigned int Fence, unsigned int Status, unsigned int NotifyInterrupt) {
-  if (Receipt == (void *)0 || Receipt->Stage != AdmissionGdiReceiptStageBackend ||
+  if (Receipt == (void *)0 ||
+      Receipt->Stage != AdmissionGdiReceiptStageBackend ||
       Receipt->Fence != Fence)
     return 0;
   Receipt->CompletionStatus = Status;
   Receipt->CompletionFence = Fence;
   Receipt->NotifyInterrupt = NotifyInterrupt;
-  Receipt->Stage = AdmissionGdiReceiptStageComplete;
+  Receipt->Stage = Receipt->NotifyDpc
+                       ? AdmissionGdiReceiptStageDpc
+                       : AdmissionGdiReceiptStageComplete;
   return 1;
 }
 
@@ -101,7 +105,7 @@ int AdmissionGdiReceiptProgress(ADMISSION_GDI_HW_RECEIPT *Receipt,
     unsigned int D3Stamp, unsigned int D3EventSeen, unsigned int D3Complete,
     unsigned int WorkerFinalPhase) {
   if (Receipt == (void *)0 ||
-      Receipt->Stage < AdmissionGdiReceiptStageComplete ||
+      Receipt->Stage < AdmissionGdiReceiptStageBackend ||
       Receipt->Fence != Fence)
     return 0;
   Receipt->ProgressFence = Fence;
@@ -114,7 +118,8 @@ int AdmissionGdiReceiptProgress(ADMISSION_GDI_HW_RECEIPT *Receipt,
   Receipt->D3EventSeen = D3EventSeen;
   Receipt->D3Complete = D3Complete;
   Receipt->WorkerFinalPhase = WorkerFinalPhase;
-  if (Receipt->Stage < AdmissionGdiReceiptStageProgress)
+  if (Receipt->Stage >= AdmissionGdiReceiptStageComplete &&
+      Receipt->Stage < AdmissionGdiReceiptStageProgress)
     Receipt->Stage = AdmissionGdiReceiptStageProgress;
   return 1;
 }
@@ -122,10 +127,143 @@ int AdmissionGdiReceiptProgress(ADMISSION_GDI_HW_RECEIPT *Receipt,
 int AdmissionGdiReceiptDpc(ADMISSION_GDI_HW_RECEIPT *Receipt,
     unsigned int Fence) {
   if (Receipt == (void *)0 ||
-      Receipt->Stage < AdmissionGdiReceiptStageComplete ||
+      Receipt->Stage < AdmissionGdiReceiptStageBackend ||
       Receipt->Fence != Fence)
     return 0;
   Receipt->NotifyDpc = 1u;
-  Receipt->Stage = AdmissionGdiReceiptStageDpc;
+  if (Receipt->Stage >= AdmissionGdiReceiptStageComplete)
+    Receipt->Stage = AdmissionGdiReceiptStageDpc;
+  return 1;
+}
+
+void AdmissionTerminalReceiptInitialize(ADMISSION_TERMINAL_RECEIPT *Receipt) {
+  if (Receipt == (void *)0)
+    return;
+  AdmissionGdiReceiptZero(Receipt, (unsigned int)sizeof(*Receipt));
+  Receipt->Version = ADMISSION_TERMINAL_RECEIPT_VERSION;
+  Receipt->Bytes = (unsigned int)sizeof(*Receipt);
+}
+
+int AdmissionTerminalReceiptBegin(ADMISSION_TERMINAL_RECEIPT *Receipt,
+    unsigned int SubmissionSequence, unsigned long long BootEpoch,
+    unsigned long long RootIdentity, unsigned int Fence,
+    unsigned long long ContextToken, unsigned long long AllocationToken,
+    unsigned long long DestinationGpuVa,
+    unsigned long long DestinationPhysical, unsigned int DestinationBytes,
+    unsigned int TaEvent, unsigned int D3Event,
+    unsigned int TaExpectedStamp, unsigned int D3ExpectedStamp,
+    unsigned int TaExpectedDone, unsigned int D3ExpectedDone,
+    unsigned long long StatsTaStart, unsigned long long StatsTaFinalize,
+    unsigned long long Stats3dStart, unsigned long long Stats3dFinalize) {
+  if (Receipt == (void *)0 ||
+      Receipt->Version != ADMISSION_TERMINAL_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->ValidMask != 0u ||
+      SubmissionSequence == 0u || BootEpoch == 0ULL ||
+      RootIdentity == 0ULL || Fence == 0u || ContextToken == 0ULL ||
+      AllocationToken == 0ULL || DestinationGpuVa == 0ULL ||
+      DestinationPhysical == 0ULL || DestinationBytes == 0u ||
+      TaEvent >= 128u || D3Event >= 128u || TaEvent == D3Event ||
+      TaExpectedStamp == 0u || D3ExpectedStamp == 0u ||
+      StatsTaStart == 0ULL || StatsTaFinalize == 0ULL ||
+      Stats3dStart == 0ULL || Stats3dFinalize == 0ULL)
+    return 0;
+  Receipt->SubmissionSequence = SubmissionSequence;
+  Receipt->BootEpoch = BootEpoch;
+  Receipt->RootIdentity = RootIdentity;
+  Receipt->Fence = Fence;
+  Receipt->ContextToken = ContextToken;
+  Receipt->AllocationToken = AllocationToken;
+  Receipt->DestinationGpuVa = DestinationGpuVa;
+  Receipt->DestinationPhysical = DestinationPhysical;
+  Receipt->DestinationBytes = DestinationBytes;
+  Receipt->TaEvent = TaEvent;
+  Receipt->D3Event = D3Event;
+  Receipt->TaExpectedStamp = TaExpectedStamp;
+  Receipt->D3ExpectedStamp = D3ExpectedStamp;
+  Receipt->TaExpectedDone = TaExpectedDone;
+  Receipt->D3ExpectedDone = D3ExpectedDone;
+  Receipt->StatsTaStart = StatsTaStart;
+  Receipt->StatsTaFinalize = StatsTaFinalize;
+  Receipt->Stats3dStart = Stats3dStart;
+  Receipt->Stats3dFinalize = Stats3dFinalize;
+  Receipt->ValidMask = ADMISSION_TERMINAL_VALID_BEGIN;
+  return 1;
+}
+
+int AdmissionTerminalReceiptObserve(ADMISSION_TERMINAL_RECEIPT *Receipt,
+    unsigned int Fence, unsigned int BackendResult,
+    unsigned int CompletionStatus, unsigned int Source,
+    const unsigned char *RawEvent, unsigned int RawEventBytes,
+    unsigned int ActualValid,
+    unsigned int TaObservedStamp, unsigned int TaObservedDone,
+    unsigned int D3ObservedStamp, unsigned int D3ObservedDone) {
+  unsigned int index;
+  if (Receipt == (void *)0 ||
+      Receipt->ValidMask != ADMISSION_TERMINAL_VALID_BEGIN ||
+      Receipt->Fence != Fence || Source == AdmissionTerminalSourceNone ||
+      Source > AdmissionTerminalSourceCancellation || ActualValid > 1u ||
+      ((RawEvent == (void *)0 && RawEventBytes != 0u) ||
+       (RawEvent != (void *)0 &&
+        RawEventBytes != ADMISSION_TERMINAL_RAW_EVENT_BYTES)))
+    return 0;
+  Receipt->BackendResult = BackendResult;
+  Receipt->CompletionStatus = CompletionStatus;
+  Receipt->CompletedFence = Fence;
+  Receipt->Source = Source;
+  if (ActualValid) {
+    Receipt->TaObservedStamp = TaObservedStamp;
+    Receipt->TaObservedDone = TaObservedDone;
+    Receipt->D3ObservedStamp = D3ObservedStamp;
+    Receipt->D3ObservedDone = D3ObservedDone;
+    Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_ACTUAL;
+  }
+  if (RawEvent != (void *)0) {
+    Receipt->RawEventBytes = RawEventBytes;
+    for (index = 0u; index < RawEventBytes; ++index)
+      Receipt->RawEvent[index] = RawEvent[index];
+    Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_RAW_EVENT;
+  }
+  Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_TERMINAL;
+  return 1;
+}
+
+int AdmissionTerminalReceiptNotifyInterrupt(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence) {
+  if (Receipt == (void *)0 || Receipt->Fence != Fence ||
+      !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_TERMINAL))
+    return 0;
+  Receipt->NotifyInterrupt = 1u;
+  Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_INTERRUPT;
+  return 1;
+}
+
+int AdmissionTerminalReceiptNotifyDpc(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence) {
+  if (Receipt == (void *)0 || Receipt->Fence != Fence ||
+      !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_INTERRUPT))
+    return 0;
+  Receipt->NotifyDpc = 1u;
+  Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_DPC;
+  return 1;
+}
+
+int AdmissionTerminalReceiptExit(ADMISSION_TERMINAL_RECEIPT *Receipt,
+    unsigned int WorkerExitReason, unsigned int ProviderPhase,
+    unsigned int RuntimePhase, unsigned int Stopping, unsigned int Resetting,
+    unsigned int SchedulerFaulted) {
+  if (Receipt == (void *)0 ||
+      !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_BEGIN) ||
+      (Receipt->ValidMask & ADMISSION_TERMINAL_VALID_EXIT) ||
+      WorkerExitReason == AdmissionTerminalExitNone ||
+      WorkerExitReason > AdmissionTerminalExitNonterminal ||
+      Stopping > 1u || Resetting > 1u || SchedulerFaulted > 1u)
+    return 0;
+  Receipt->WorkerExitReason = WorkerExitReason;
+  Receipt->ProviderPhase = ProviderPhase;
+  Receipt->RuntimePhase = RuntimePhase;
+  Receipt->Stopping = Stopping;
+  Receipt->Resetting = Resetting;
+  Receipt->SchedulerFaulted = SchedulerFaulted;
+  Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_EXIT;
   return 1;
 }

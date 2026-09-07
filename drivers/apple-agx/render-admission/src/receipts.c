@@ -14,6 +14,7 @@ C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_SAMPLE) == 148);
 C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_RECEIPT) == 312);
 C_ASSERT(sizeof(ADMISSION_KTRACE_RECEIPT) == 928);
 C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
+C_ASSERT(sizeof(ADMISSION_TERMINAL_RECEIPT) == 264);
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -87,6 +88,34 @@ static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
 }
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+_Use_decl_annotations_ VOID AdmissionRecordTerminalReceipt(
+    ADMISSION_CONTEXT *Context, const ADMISSION_TERMINAL_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_TERMINAL_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) ||
+      !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_EXIT) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1TerminalReceipt", Receipt, sizeof(*Receipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1TerminalReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+}
+
 static VOID AdmissionWritePreSubmitHeartbeat(
     HANDLE Key, APPLE_AGX_RTKIT_SESSION_RESULT Result,
     const APPLE_AGX_RTKIT_SESSION *Session) {

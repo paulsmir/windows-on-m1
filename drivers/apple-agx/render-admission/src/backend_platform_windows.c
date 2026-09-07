@@ -100,6 +100,10 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN ProgressValid;
   APPLE_AGX_COMPLETION_TRANSACTION Completion;
   ADMISSION_RENDER_CONTEXT *CompletionContext;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_TERMINAL_RECEIPT TerminalReceipt;
+  volatile LONG TerminalSequence;
+#endif
   BOOLEAN Powered;
   BOOLEAN RenderBorrowed;
   BOOLEAN QueueImageReady;
@@ -113,6 +117,156 @@ typedef struct _ADMISSION_COMPLETION_NOTIFICATION {
   APPLE_AGX_U32 Node;
   APPLE_AGX_U32 Engine;
 } ADMISSION_COMPLETION_NOTIFICATION;
+
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static ULONGLONG AdmissionTerminalReadU64(const UCHAR *Address) {
+  ULONGLONG value = 0ULL;
+  ULONG index;
+  for (index = 0u; index < sizeof(value); ++index)
+    value |= (ULONGLONG)Address[index] << (index * 8u);
+  return value;
+}
+
+static VOID AdmissionTerminalBegin(
+    ADMISSION_PLATFORM_RUNTIME *Runtime,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Description) {
+  const APPLE_AGX_BACKEND_JOB_IMAGE *job;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *ta;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *d3;
+  ULONG sequence;
+  if (Runtime == NULL || Description == NULL)
+    return;
+  job = &Runtime->Backend.PendingJob;
+  ta = &Runtime->QueueObjects[17u];
+  d3 = &Runtime->QueueObjects[15u];
+  AdmissionTerminalReceiptInitialize(&Runtime->TerminalReceipt);
+  if (ta->Data == NULL || ta->Size < 548u ||
+      d3->Data == NULL || d3->Size < 612u)
+    return;
+  sequence = (ULONG)InterlockedIncrement(&Runtime->TerminalSequence);
+  (void)AdmissionTerminalReceiptBegin(
+      &Runtime->TerminalReceipt, sequence, Runtime->RetainedEpoch,
+      Runtime->RetainedRoot, Description->Fence, Description->ContextToken,
+      Description->AllocationToken, Description->DestinationGpuVa,
+      Description->DestinationPhysical, Description->DestinationBytes,
+      job->TaEvent, job->D3Event, job->TaExpectedStamp,
+      job->D3ExpectedStamp, job->TaExpectedDonePointer,
+      job->D3ExpectedDonePointer,
+      AdmissionTerminalReadU64(ta->Data + 36u),
+      AdmissionTerminalReadU64(ta->Data + 540u),
+      AdmissionTerminalReadU64(d3->Data + 28u),
+      AdmissionTerminalReadU64(d3->Data + 604u));
+}
+
+static VOID AdmissionTerminalObserve(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
+    APPLE_AGX_BACKEND_COMPLETION_STATUS Status) {
+  const APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *config;
+  APPLE_AGX_BACKEND_U32 taStamp = 0u, taDone = 0u;
+  APPLE_AGX_BACKEND_U32 d3Stamp = 0u, d3Done = 0u;
+  ULONG source;
+  BOOLEAN actualValid;
+  const UCHAR *rawEvent = NULL;
+  ULONG rawEventBytes = 0u;
+  if (Runtime == NULL || Fence == 0u)
+    return;
+  config = &Runtime->Provider.QueueProvider.Runtime.Config;
+  actualValid = Runtime->TransportIo.ReadU32(
+                    Runtime, config->Ta.Stamp, &taStamp) &&
+                Runtime->TransportIo.ReadU32(
+                    Runtime, config->Ta.GpuDonePointer, &taDone) &&
+                Runtime->TransportIo.ReadU32(
+                    Runtime, config->D3.Stamp, &d3Stamp) &&
+                Runtime->TransportIo.ReadU32(
+                    Runtime, config->D3.GpuDonePointer, &d3Done);
+  if (Runtime->Provider.LastEventMessageValid) {
+    rawEvent = Runtime->Provider.LastEventMessage;
+    rawEventBytes = sizeof(Runtime->Provider.LastEventMessage);
+  }
+  if (Status == AppleAgxBackendCompletionSuccess)
+    source = AdmissionTerminalSourcePollingEvent;
+  else if (Status == AppleAgxBackendCompletionTimedOut)
+    source = AdmissionTerminalSourceTimeout;
+  else if (Status == AppleAgxBackendCompletionCancelled)
+    source = AdmissionTerminalSourceCancellation;
+  else
+    source = AdmissionTerminalSourceFault;
+  if (AdmissionTerminalReceiptObserve(
+          &Runtime->TerminalReceipt, Fence,
+          Status == AppleAgxBackendCompletionSuccess
+              ? (ULONG)AppleAgxBackendRuntimeResultOk
+              : (ULONG)AppleAgxBackendRuntimeResultFaulted,
+          (ULONG)Status, source, rawEvent, rawEventBytes,
+          actualValid ? 1u : 0u, taStamp, taDone, d3Stamp, d3Done)) {
+    Runtime->TerminalReceipt.EventReadPointer =
+        Runtime->Provider.LastEventReadPointer;
+    Runtime->TerminalReceipt.EventWritePointer =
+        Runtime->Provider.LastEventWritePointer;
+    AdmissionTerminalObservationTraceWindows(
+        Runtime->Adapter, source, (ULONG)Status,
+        (ULONG)Runtime->Backend.Phase,
+        (ULONG)Runtime->Provider.QueueProvider.Phase, Fence);
+  }
+}
+
+static VOID AdmissionTerminalExit(ADMISSION_PLATFORM_RUNTIME *Runtime) {
+  ULONG reason;
+  ULONG fence;
+  if (Runtime == NULL ||
+      !(Runtime->TerminalReceipt.ValidMask & ADMISSION_TERMINAL_VALID_BEGIN))
+    return;
+  fence = Runtime->TerminalReceipt.Fence;
+  if (Runtime->TerminalReceipt.ValidMask & ADMISSION_TERMINAL_VALID_TERMINAL)
+    reason = Runtime->TerminalReceipt.CompletionStatus ==
+                     (ULONG)AppleAgxBackendCompletionSuccess
+                 ? AdmissionTerminalExitCompleted
+                 : AdmissionTerminalExitBackendFailure;
+  else if (Runtime->Provider.LastPollGuard != AppleAgxPlatformPollGuardOk)
+    reason = AdmissionTerminalExitPollFailure;
+  else if (InterlockedCompareExchange(&Runtime->Resetting, 0, 0) != 0)
+    reason = AdmissionTerminalExitReset;
+  else if (InterlockedCompareExchange(&Runtime->Stopping, 0, 0) != 0)
+    reason = AdmissionTerminalExitStopped;
+  else
+    reason = AdmissionTerminalExitNonterminal;
+  Runtime->TerminalReceipt.WorkerExitReason = reason;
+  Runtime->TerminalReceipt.ProviderPhase =
+      (ULONG)Runtime->Provider.QueueProvider.Phase;
+  Runtime->TerminalReceipt.RuntimePhase = (ULONG)Runtime->Backend.Phase;
+  Runtime->TerminalReceipt.Stopping =
+      InterlockedCompareExchange(&Runtime->Stopping, 0, 0) != 0 ? 1u : 0u;
+  Runtime->TerminalReceipt.Resetting =
+      InterlockedCompareExchange(&Runtime->Resetting, 0, 0) != 0 ? 1u : 0u;
+  Runtime->TerminalReceipt.SchedulerFaulted = InterlockedCompareExchange(
+      &Runtime->Adapter->SchedulerFaulted, 0, 0) != 0 ? 1u : 0u;
+  KeMemoryBarrier();
+  (void)InterlockedOr(
+      (volatile LONG *)&Runtime->TerminalReceipt.ValidMask,
+      ADMISSION_TERMINAL_VALID_EXIT);
+  AdmissionTerminalExitTraceWindows(
+      Runtime->Adapter, reason, Runtime->TerminalReceipt.ValidMask,
+      (ULONG)Runtime->Backend.Phase,
+      (ULONG)Runtime->Provider.QueueProvider.Phase, fence);
+  AdmissionRecordTerminalReceipt(Runtime->Adapter,
+                                 &Runtime->TerminalReceipt);
+}
+
+_Use_decl_annotations_ VOID AdmissionTerminalReceiptDpcWindows(
+    ADMISSION_CONTEXT *Context, ULONG Fence) {
+  ADMISSION_PLATFORM_RUNTIME *runtime =
+      Context != NULL ? Context->PlatformRuntime : NULL;
+  if (runtime != NULL && runtime->TerminalReceipt.Fence == Fence &&
+      (InterlockedCompareExchange(
+          (volatile LONG *)&runtime->TerminalReceipt.ValidMask, 0, 0) &
+       ADMISSION_TERMINAL_VALID_INTERRUPT)) {
+    InterlockedExchange(
+        (volatile LONG *)&runtime->TerminalReceipt.NotifyDpc, 1);
+    (void)InterlockedOr(
+        (volatile LONG *)&runtime->TerminalReceipt.ValidMask,
+        ADMISSION_TERMINAL_VALID_DPC);
+  }
+}
+#endif
 
 static VOID AdmissionPlatformWorker(
     _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context);
@@ -1706,6 +1860,10 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
   runtime->Adapter->Interface.DxgkCbNotifyInterrupt(
       runtime->Adapter->Interface.DeviceHandle, &data);
   AppleAgxCompletionTransactionMarkReported(&runtime->Completion);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  (void)AdmissionTerminalReceiptNotifyInterrupt(
+      &runtime->TerminalReceipt, notification->Fence);
+#endif
   InterlockedExchange(&runtime->Adapter->RenderDpcFence, (LONG)notification->Fence);
   InterlockedExchange(&runtime->Adapter->SchedulerDpcPending, 1);
   (void)runtime->Adapter->Interface.DxgkCbQueueDpc(
@@ -1726,7 +1884,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   NTSTATUS sync_status;
   KIRQL old_irql;
 
-  if (runtime == NULL || Fence == 0u || Node != 0u || Engine != 0u ||
+  if (runtime == NULL)
+    return APPLE_AGX_BACKEND_FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionTerminalObserve(runtime, Fence, Status);
+#endif
+  if (Fence == 0u || Node != 0u || Engine != 0u ||
       Status != AppleAgxBackendCompletionSuccess)
     return APPLE_AGX_BACKEND_FALSE;
   adapter = runtime->Adapter;
@@ -2016,6 +2179,9 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionTerminalBegin(runtime, &description);
+#endif
   RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
   runtime->ProgressValid =
       AppleAgxG13QueueProviderQueryProgress(
@@ -2154,27 +2320,6 @@ static VOID AdmissionPlatformWorker(
         AdmissionBackendChannelProgressWindows(
             adapter, currentTaRead, currentD3Read, description.Fence);
         channelProgressReported = TRUE;
-        if (currentTaRead != initialTaChannelRead) {
-          ULONGLONG nowMs = AdmissionPlatformNowMs();
-          if (!taProgressReported) {
-            ADMISSION_TA_PROGRESS_RECEIPT taProgress;
-            if (AdmissionCaptureTaProgress(
-                    runtime, description.Fence, nowMs - queueSubmitMs,
-                    &taProgress)) {
-              AdmissionRecordTaProgress(adapter, &taProgress);
-              taProgressReported = TRUE;
-            }
-          }
-          if (!taRetireReported) {
-            ADMISSION_TA_RETIRE_RECEIPT taRetire;
-            if (AdmissionCaptureTaRetire(
-                    runtime, description.Fence, nowMs - queueSubmitMs,
-                    &taRetire)) {
-              AdmissionRecordTaRetire(adapter, &taRetire);
-              taRetireReported = TRUE;
-            }
-          }
-        }
       }
     }
     if (!faultSnapshotReported) {
@@ -2281,12 +2426,17 @@ static VOID AdmissionPlatformWorker(
       AdmissionRecordKTrace(adapter, &ktraceReceipt);
   }
   RtlZeroMemory(&finalProgress, sizeof(finalProgress));
-  finalProgressValid = AppleAgxG13QueueProviderQueryProgress(
-      &runtime->Provider.QueueProvider, &finalProgress) ? TRUE : FALSE;
+  finalProgressValid = runtime->Backend.Phase ==
+                               AppleAgxBackendRuntimeSubmitted &&
+                       AppleAgxG13QueueProviderQueryProgress(
+                           &runtime->Provider.QueueProvider, &finalProgress)
+                   ? TRUE
+                   : FALSE;
   if (finalProgressValid)
     AdmissionGdiReceiptProgressWindows(adapter, description.Fence,
         &finalProgress, (ULONG)runtime->Backend.Phase);
   AdmissionFlushGdiReceipt(adapter);
+  AdmissionTerminalExit(runtime);
 #endif
   AdmissionPlatformWorkerFinished(runtime);
 }

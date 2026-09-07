@@ -112,6 +112,38 @@ _Use_decl_annotations_ VOID AdmissionBackendSubmitResultWindows(
   WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
 }
 
+_Use_decl_annotations_ VOID AdmissionTerminalObservationTraceWindows(
+    ADMISSION_CONTEXT *Context, ULONG Source, ULONG CompletionStatus,
+    ULONG RuntimePhase, ULONG ProviderPhase, ULONG Fence) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(request, AdmissionTerminalObservationWord(
+      Source, CompletionStatus, RuntimePhase, ProviderPhase, Fence));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
+_Use_decl_annotations_ VOID AdmissionTerminalExitTraceWindows(
+    ADMISSION_CONTEXT *Context, ULONG Reason, ULONG ValidMask,
+    ULONG RuntimePhase, ULONG ProviderPhase, ULONG Fence) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(request, AdmissionTerminalExitWord(
+      Reason, ValidMask, RuntimePhase, ProviderPhase, Fence));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
 _Use_decl_annotations_ VOID AdmissionBackendProgressWindows(
     ADMISSION_CONTEXT *Context,
     const APPLE_AGX_G13_QUEUE_PROGRESS *Progress) {

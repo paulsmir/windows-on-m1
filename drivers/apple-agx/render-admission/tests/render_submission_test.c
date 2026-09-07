@@ -2,6 +2,7 @@
 #include "render_gdi_receipt.h"
 
 #include <assert.h>
+#include <string.h>
 
 static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
     unsigned int fence) {
@@ -136,16 +137,58 @@ static void test_gdi_receipt_requires_one_context_fence_and_physical_completion(
   assert(!AdmissionGdiReceiptSubmit(&receipt, 0x1000ULL, 8u, 0u));
   assert(AdmissionGdiReceiptSubmit(&receipt, 0x1000ULL, 7u, 0u));
   assert(AdmissionGdiReceiptBackend(&receipt, 7u, 0u,
-      3u, 4u, 5u, 6u, 1u, 1u));
+      0u, 1u, 5u, 6u, 1u, 1u));
+  assert(AdmissionGdiReceiptProgress(&receipt, 7u,
+      0u, 4u, 0u, 0u, 0u, 6u, 0u, 0u, 1u));
+  assert(receipt.Stage == AdmissionGdiReceiptStageBackend);
+  assert(AdmissionGdiReceiptDpc(&receipt, 7u));
+  assert(receipt.Stage == AdmissionGdiReceiptStageBackend);
   assert(!AdmissionGdiReceiptComplete(&receipt, 8u, 0u, 1u));
   assert(AdmissionGdiReceiptComplete(&receipt, 7u, 0u, 1u));
-  assert(AdmissionGdiReceiptDpc(&receipt, 7u));
+  assert(receipt.Stage == AdmissionGdiReceiptStageDpc);
   assert(AdmissionGdiReceiptProgress(&receipt, 7u,
       1u, 5u, 1u, 1u, 1u, 6u, 1u, 1u, 2u));
   assert(receipt.Stage == AdmissionGdiReceiptStageDpc);
   assert(receipt.NotifyInterrupt == 1u && receipt.NotifyDpc == 1u);
   assert(receipt.TaComplete == 1u && receipt.D3Complete == 1u);
   assert(receipt.Fence == 7u && receipt.CompletionFence == 7u);
+}
+
+static void test_terminal_receipt_preserves_preclear_completion(void) {
+  ADMISSION_TERMINAL_RECEIPT receipt;
+  unsigned char event[ADMISSION_TERMINAL_RAW_EVENT_BYTES];
+  unsigned int index;
+  for (index = 0u; index < sizeof(event); ++index)
+    event[index] = (unsigned char)(0x80u + index);
+  AdmissionTerminalReceiptInitialize(&receipt);
+  assert(!AdmissionTerminalReceiptBegin(
+      &receipt, 1u, 9u, 0x9fff78000ULL, 255u, 0x1000ULL, 0x2000ULL,
+      0xffffffa000400000ULL, 0x8f0000000ULL, 0x10000u,
+      0u, 0u, 0x7a000100u, 0x3d000100u, 2u, 2u,
+      0xffffffa000304004ULL, 0xffffffa000304004ULL,
+      0xffffffa00030c008ULL, 0xffffffa00030c008ULL));
+  assert(AdmissionTerminalReceiptBegin(
+      &receipt, 1u, 9u, 0x9fff78000ULL, 255u, 0x1000ULL, 0x2000ULL,
+      0xffffffa000400000ULL, 0x8f0000000ULL, 0x10000u,
+      0u, 1u, 0x7a000100u, 0x3d000100u, 2u, 2u,
+      0xffffffa000304004ULL, 0xffffffa000304004ULL,
+      0xffffffa00030c008ULL, 0xffffffa00030c008ULL));
+  assert(AdmissionTerminalReceiptObserve(
+      &receipt, 255u, 0u, 0u, AdmissionTerminalSourcePollingEvent,
+      event, sizeof(event), 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
+  assert(AdmissionTerminalReceiptNotifyInterrupt(&receipt, 255u));
+  assert(AdmissionTerminalReceiptNotifyDpc(&receipt, 255u));
+  assert(AdmissionTerminalReceiptExit(
+      &receipt, AdmissionTerminalExitCompleted, 3u, 1u, 0u, 0u, 0u));
+  assert((receipt.ValidMask & ADMISSION_TERMINAL_VALID_ALL) ==
+         ADMISSION_TERMINAL_VALID_ALL);
+  assert(receipt.TaEvent == 0u && receipt.D3Event == 1u);
+  assert(receipt.TaObservedStamp == 0x7a000100u &&
+         receipt.D3ObservedStamp == 0x3d000100u);
+  assert(receipt.TaObservedDone == 2u && receipt.D3ObservedDone == 2u);
+  assert(receipt.CompletedFence == 255u && receipt.NotifyInterrupt == 1u &&
+         receipt.NotifyDpc == 1u);
+  assert(memcmp(receipt.RawEvent, event, sizeof(event)) == 0);
 }
 
 int main(void) {
@@ -155,5 +198,6 @@ int main(void) {
   test_active_reset_requires_backend_quiesce();
   test_nonpaging_private_range_uses_full_buffer_when_subrange_empty();
   test_gdi_receipt_requires_one_context_fence_and_physical_completion();
+  test_terminal_receipt_preserves_preclear_completion();
   return 0;
 }

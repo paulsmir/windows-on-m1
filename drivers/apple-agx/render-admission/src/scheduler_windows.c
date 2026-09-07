@@ -231,6 +231,8 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
   }
   if (notified && renderFence != 0u)
     AdmissionGdiReceiptDpcWindows(Context, renderFence);
+  if (notified && renderFence != 0u)
+    AdmissionTerminalReceiptDpcWindows(Context, renderFence);
   if (renderFence != 0u) {
     KeAcquireSpinLock(&Context->SchedulerLock, &oldIrql);
     if (Context->DispatchedFence == renderFence)

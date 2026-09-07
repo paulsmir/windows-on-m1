@@ -179,6 +179,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
         &patchArgs, shadow.BytesUsed, &pending.Destination);
     if (!NT_SUCCESS(status))
       PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPrepare, status);
+    AdmissionGdiReceiptPatchWindows(
+        Adapter, (ULONGLONG)(ULONG_PTR)Context, Args->SubmissionFenceId,
+        pending.Destination.GpuVirtualAddress,
+        pending.Destination.HostPhysicalAddress,
+        (ULONG)pending.Destination.Bytes);
     return STATUS_SUCCESS;
   }
 #undef PREPATCH_ADOPT_RETURN

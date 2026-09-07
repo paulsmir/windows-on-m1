@@ -14,6 +14,8 @@
 #define ADMISSION_BACKEND_SUBMIT_RESULT_TAG 0x5410000000000000ULL
 #define ADMISSION_BACKEND_PROGRESS_TAG 0x5420000000000000ULL
 #define ADMISSION_BACKEND_CHANNEL_PROGRESS_TAG 0x5460000000000000ULL
+#define ADMISSION_TERMINAL_OBSERVATION_TAG 0x54a0000000000000ULL
+#define ADMISSION_TERMINAL_EXIT_TAG 0x54b0000000000000ULL
 #define ADMISSION_PROVIDER_POLL_GUARD_TAG 0x5610000000000000ULL
 #define ADMISSION_PROVIDER_DRAIN_TRACE_TAG 0x5620000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
@@ -331,6 +333,30 @@ static inline unsigned long long AdmissionBackendChannelProgressWord(
       ((unsigned long long)(D3Read & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << 16u) |
       (unsigned long long)(Fence & ADMISSION_SUBMIT_TRACE_FIELD_MASK);
+}
+
+static inline unsigned long long AdmissionTerminalObservationWord(
+    unsigned int Source, unsigned int CompletionStatus,
+    unsigned int RuntimePhase, unsigned int ProviderPhase,
+    unsigned int Fence) {
+  return ADMISSION_TERMINAL_OBSERVATION_TAG |
+      ((unsigned long long)(Source & 0xffu) << 40u) |
+      ((unsigned long long)(CompletionStatus & 0xffu) << 32u) |
+      ((unsigned long long)(RuntimePhase & 0xffu) << 24u) |
+      ((unsigned long long)(ProviderPhase & 0xffu) << 16u) |
+      (unsigned long long)(Fence & 0xffffu);
+}
+
+static inline unsigned long long AdmissionTerminalExitWord(
+    unsigned int Reason, unsigned int ValidMask,
+    unsigned int RuntimePhase, unsigned int ProviderPhase,
+    unsigned int Fence) {
+  return ADMISSION_TERMINAL_EXIT_TAG |
+      ((unsigned long long)(Reason & 0xffu) << 40u) |
+      ((unsigned long long)(ValidMask & 0xffu) << 32u) |
+      ((unsigned long long)(RuntimePhase & 0xffu) << 24u) |
+      ((unsigned long long)(ProviderPhase & 0xffu) << 16u) |
+      (unsigned long long)(Fence & 0xffffu);
 }
 
 static inline unsigned long long AdmissionProviderPollGuardWord(

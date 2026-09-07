@@ -2,6 +2,53 @@
 #define APPLE_AGX_RENDER_GDI_RECEIPT_H
 
 #define ADMISSION_GDI_RECEIPT_VERSION 1u
+#define ADMISSION_TERMINAL_RECEIPT_VERSION 1u
+#define ADMISSION_TERMINAL_RAW_EVENT_BYTES 56u
+#define ADMISSION_TERMINAL_VALID_BEGIN 0x01u
+#define ADMISSION_TERMINAL_VALID_TERMINAL 0x02u
+#define ADMISSION_TERMINAL_VALID_INTERRUPT 0x04u
+#define ADMISSION_TERMINAL_VALID_DPC 0x08u
+#define ADMISSION_TERMINAL_VALID_EXIT 0x10u
+#define ADMISSION_TERMINAL_VALID_RAW_EVENT 0x20u
+#define ADMISSION_TERMINAL_VALID_ACTUAL 0x40u
+#define ADMISSION_TERMINAL_VALID_ALL 0x7fu
+
+typedef enum _ADMISSION_TERMINAL_SOURCE {
+  AdmissionTerminalSourceNone = 0u,
+  AdmissionTerminalSourcePollingEvent = 1u,
+  AdmissionTerminalSourceTimeout = 2u,
+  AdmissionTerminalSourceFault = 3u,
+  AdmissionTerminalSourceCancellation = 4u,
+} ADMISSION_TERMINAL_SOURCE;
+
+typedef enum _ADMISSION_TERMINAL_EXIT_REASON {
+  AdmissionTerminalExitNone = 0u,
+  AdmissionTerminalExitCompleted = 1u,
+  AdmissionTerminalExitBackendFailure = 2u,
+  AdmissionTerminalExitPollFailure = 3u,
+  AdmissionTerminalExitStopped = 4u,
+  AdmissionTerminalExitReset = 5u,
+  AdmissionTerminalExitNonterminal = 6u,
+} ADMISSION_TERMINAL_EXIT_REASON;
+
+typedef struct _ADMISSION_TERMINAL_RECEIPT {
+  unsigned int Version, Bytes, ValidMask, SubmissionSequence;
+  unsigned int Fence, BackendResult, CompletionStatus, CompletedFence;
+  unsigned int TaEvent, D3Event, TaExpectedStamp, D3ExpectedStamp;
+  unsigned int TaExpectedDone, D3ExpectedDone;
+  unsigned int TaObservedStamp, TaObservedDone;
+  unsigned int D3ObservedStamp, D3ObservedDone;
+  unsigned int Source, NotifyInterrupt, NotifyDpc, WorkerExitReason;
+  unsigned int ProviderPhase, RuntimePhase, Stopping, Resetting;
+  unsigned int SchedulerFaulted, DestinationBytes, RawEventBytes;
+  unsigned int EventReadPointer, EventWritePointer;
+  unsigned long long BootEpoch, RootIdentity;
+  unsigned long long ContextToken, AllocationToken;
+  unsigned long long DestinationGpuVa, DestinationPhysical;
+  unsigned long long StatsTaStart, StatsTaFinalize;
+  unsigned long long Stats3dStart, Stats3dFinalize;
+  unsigned char RawEvent[ADMISSION_TERMINAL_RAW_EVENT_BYTES];
+} ADMISSION_TERMINAL_RECEIPT;
 
 typedef enum _ADMISSION_GDI_RECEIPT_STAGE {
   AdmissionGdiReceiptStageEmpty = 0u,
@@ -55,5 +102,32 @@ int AdmissionGdiReceiptProgress(ADMISSION_GDI_HW_RECEIPT *Receipt,
     unsigned int WorkerFinalPhase);
 int AdmissionGdiReceiptDpc(ADMISSION_GDI_HW_RECEIPT *Receipt,
     unsigned int Fence);
+void AdmissionTerminalReceiptInitialize(ADMISSION_TERMINAL_RECEIPT *Receipt);
+int AdmissionTerminalReceiptBegin(ADMISSION_TERMINAL_RECEIPT *Receipt,
+    unsigned int SubmissionSequence, unsigned long long BootEpoch,
+    unsigned long long RootIdentity, unsigned int Fence,
+    unsigned long long ContextToken, unsigned long long AllocationToken,
+    unsigned long long DestinationGpuVa,
+    unsigned long long DestinationPhysical, unsigned int DestinationBytes,
+    unsigned int TaEvent, unsigned int D3Event,
+    unsigned int TaExpectedStamp, unsigned int D3ExpectedStamp,
+    unsigned int TaExpectedDone, unsigned int D3ExpectedDone,
+    unsigned long long StatsTaStart, unsigned long long StatsTaFinalize,
+    unsigned long long Stats3dStart, unsigned long long Stats3dFinalize);
+int AdmissionTerminalReceiptObserve(ADMISSION_TERMINAL_RECEIPT *Receipt,
+    unsigned int Fence, unsigned int BackendResult,
+    unsigned int CompletionStatus, unsigned int Source,
+    const unsigned char *RawEvent, unsigned int RawEventBytes,
+    unsigned int ActualValid,
+    unsigned int TaObservedStamp, unsigned int TaObservedDone,
+    unsigned int D3ObservedStamp, unsigned int D3ObservedDone);
+int AdmissionTerminalReceiptNotifyInterrupt(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence);
+int AdmissionTerminalReceiptNotifyDpc(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence);
+int AdmissionTerminalReceiptExit(ADMISSION_TERMINAL_RECEIPT *Receipt,
+    unsigned int WorkerExitReason, unsigned int ProviderPhase,
+    unsigned int RuntimePhase, unsigned int Stopping, unsigned int Resetting,
+    unsigned int SchedulerFaulted);
 
 #endif /* APPLE_AGX_RENDER_GDI_RECEIPT_H */

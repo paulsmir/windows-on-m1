@@ -44,6 +44,11 @@ class AppleAgxRenderGdiTests(unittest.TestCase):
         self.assertIn("AdmissionNonPagingPrivateRangeCovers", wrapper)
         self.assertIn("AdmissionGdiReceiptBeginWindows", wrapper)
         self.assertIn("AdmissionGdiReceiptPatchWindows", wrapper)
+        adopt = wrapper[
+            wrapper.index("NTSTATUS AdmissionGdiAdoptPrepatchedPacket"):
+            wrapper.index("NTSTATUS AdmissionDdiRenderKm")
+        ]
+        self.assertIn("AdmissionGdiReceiptPatchWindows", adopt)
         self.assertNotIn("AppleAgxBackendRuntimeSubmit", wrapper)
         self.assertNotIn("FeatureReadyMask", wrapper)
         self.assertNotIn("APPLE_AGX_EXP208_SUPPORTED_GDI_PRIMITIVE_MASK",

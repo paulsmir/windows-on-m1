@@ -102,6 +102,8 @@ static int AdmissionSchedulerTryNotifyPreemption(ADMISSION_CONTEXT *c){
  return AppleAgxSchedulerCommitBoundaryPreemption(&c->Scheduler,p.PreemptionFence);
 }
 static int AdmissionBackendImageReleaseSubmission(int *image,unsigned fence){(void)image;released_backend=fence;return 1;}
+#define AdmissionGdiReceiptDpcWindows(c,f) ((void)(c),(void)(f))
+#define AdmissionTerminalReceiptDpcWindows(c,f) ((void)(c),(void)(f))
 static NTSTATUS AdmissionPlatformRuntimeReset(ADMISSION_CONTEXT *c,unsigned *fence){(void)c;(void)fence;assert(0);return -4;}
 void AdmissionPagingWorker(void){}
 #define IoQueueWorkItem(a,b,c,d) ((void)(a),(void)(b),(void)(c),AdmissionPagingQueueActive(d))
