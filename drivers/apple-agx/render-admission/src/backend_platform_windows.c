@@ -16,6 +16,9 @@
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_CONTROL 20u
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_COUNTER 21u
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC 22u
+#define ADMISSION_CHANNEL_OBJECT_KTRACE_STATE 31u
+#define ADMISSION_CHANNEL_OBJECT_KTRACE_RING 32u
+#define ADMISSION_KTRACE_RING_ENTRIES 0x200u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
 #define ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET 0x17030u
@@ -257,6 +260,52 @@ static BOOLEAN AdmissionCaptureBufferManager(
                 sizeof(Receipt->BlockControl));
   RtlCopyMemory(Receipt->Counter, counter->Data, sizeof(Receipt->Counter));
   RtlCopyMemory(Receipt->Misc, misc->Data, sizeof(Receipt->Misc));
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureKTrace(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONG InitialWrite,
+    ADMISSION_KTRACE_RECEIPT *Receipt) {
+  const APPLE_AGX_MEMORY_OBJECT *state;
+  const APPLE_AGX_MEMORY_OBJECT *ring;
+  volatile APPLE_AGX_BACKEND_U32 *writePointer;
+  APPLE_AGX_BACKEND_U32 finalWrite;
+  APPLE_AGX_BACKEND_U32 entry;
+  if (Runtime == NULL || Fence == 0u || Receipt == NULL ||
+      InitialWrite >= ADMISSION_KTRACE_RING_ENTRIES)
+    return FALSE;
+  state = &Runtime->Initdata.ChannelMemory.Objects[
+      ADMISSION_CHANNEL_OBJECT_KTRACE_STATE];
+  ring = &Runtime->Initdata.ChannelMemory.Objects[
+      ADMISSION_CHANNEL_OBJECT_KTRACE_RING];
+  if (state->CpuAddress == NULL || state->Length < 0x24u ||
+      ring->CpuAddress == NULL ||
+      ring->Length < ADMISSION_KTRACE_RING_ENTRIES *
+                         ADMISSION_KTRACE_ENTRY_BYTES)
+    return FALSE;
+  writePointer = (volatile APPLE_AGX_BACKEND_U32 *)(
+      (unsigned char *)state->CpuAddress +
+      APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
+  if (!Runtime->TransportIo.ReadU32(
+          Runtime, writePointer, &finalWrite) ||
+      finalWrite >= ADMISSION_KTRACE_RING_ENTRIES)
+    return FALSE;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = ADMISSION_KTRACE_RECEIPT_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  Receipt->InitialWritePointer = InitialWrite;
+  Receipt->FinalWritePointer = finalWrite;
+  for (entry = 0u; entry < ADMISSION_KTRACE_ENTRY_COUNT; ++entry) {
+    APPLE_AGX_BACKEND_U32 slot =
+        (finalWrite + ADMISSION_KTRACE_RING_ENTRIES -
+         ADMISSION_KTRACE_ENTRY_COUNT + entry) %
+        ADMISSION_KTRACE_RING_ENTRIES;
+    RtlCopyMemory(Receipt->Entries[entry],
+        (const unsigned char *)ring->CpuAddress +
+            slot * ADMISSION_KTRACE_ENTRY_BYTES,
+        ADMISSION_KTRACE_ENTRY_BYTES);
+  }
   return TRUE;
 }
 
@@ -1541,9 +1590,11 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN channelBaselineValid = FALSE;
   BOOLEAN channelProgressReported = FALSE;
   BOOLEAN faultSnapshotReported = FALSE;
+  BOOLEAN ktraceBaselineValid = FALSE;
   ULONG initialTaChannelRead = 0u;
   ULONG initialD3ChannelRead = 0u;
   ULONGLONG queueSubmitMs = 0ULL;
+  ULONG initialKtraceWrite = 0u;
 #endif
   KIRQL old_irql;
 
@@ -1610,6 +1661,21 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  {
+    APPLE_AGX_MEMORY_OBJECT *state = &runtime->Initdata.ChannelMemory.Objects[
+        ADMISSION_CHANNEL_OBJECT_KTRACE_STATE];
+    if (state->CpuAddress != NULL && state->Length >= 0x24u) {
+      volatile APPLE_AGX_BACKEND_U32 *writePointer =
+          (volatile APPLE_AGX_BACKEND_U32 *)(
+              (unsigned char *)state->CpuAddress +
+              APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
+      ktraceBaselineValid = runtime->TransportIo.ReadU32(
+          runtime, writePointer, &initialKtraceWrite) &&
+          initialKtraceWrite < ADMISSION_KTRACE_RING_ENTRIES;
+    }
+  }
+#endif
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
   if (result != AppleAgxBackendRuntimeResultOk)
     AdmissionBackendSubmitResultWindows(
@@ -1744,6 +1810,12 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (ktraceBaselineValid) {
+    ADMISSION_KTRACE_RECEIPT ktraceReceipt;
+    if (AdmissionCaptureKTrace(
+            runtime, description.Fence, initialKtraceWrite, &ktraceReceipt))
+      AdmissionRecordKTrace(adapter, &ktraceReceipt);
+  }
   RtlZeroMemory(&finalProgress, sizeof(finalProgress));
   finalProgressValid = AppleAgxG13QueueProviderQueryProgress(
       &runtime->Provider.QueueProvider, &finalProgress) ? TRUE : FALSE;
