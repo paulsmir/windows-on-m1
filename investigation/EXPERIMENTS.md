@@ -1,5 +1,40 @@
 # Hardware Experiment Ledger
 
+## EXP570 TA microsequence progress — preregistration 2026-09-07T13:34Z
+
+WHY THIS HYPOTHESIS:
+- EXP569 proves the firmware consumed the two-entry TA batch and no longer has a
+  latched SGX/UAT fault, but TA done/stamp/event remain unchanged and D3 never
+  starts.
+- Pinned m1n1 and Asahi define the exact TA sequence as StartTA, timestamp,
+  wait-for-interrupt, timestamp, FinalizeTA. The first timestamp target and
+  RegionB TA stats are firmware-written progress markers at this boundary.
+- Accepted EXP208 completes the same two TA entries in about6ms with stamp and
+  done advancing; the current candidate remains incomplete after500ms.
+
+WINDOWS CONTRACT: unchanged; the qualification worker may persist read-only
+diagnostics at PASSIVE_LEVEL and does not report completion. AGX/ASAHI CONTRACT:
+TA microsequence opcodes are StartTA0x22, Timestamp0x19, WaitForIdle0x101,
+Timestamp0x19 and FinalizeTA0x23; timestamp targets, EventControl and RegionB TA
+stats are firmware-written progress state. TRANSLATION: commit
+`9e4d7e11bdc4d45673d5170acc1fd7fd4487fbc9` captures one bounded916-byte
+`Wom1TaProgressReceipt` at the existing >=50ms snapshot. It includes exact
+InitBM/opcode identity, delayed TA QueueInfo/Pointers, EventControl,
+WorkCommandTA timestamp tail, RegionB stats head/timestamps and TA stamp/
+timestamp targets. It has no write path and changes no work, mapping, firmware,
+queue or scheduler behavior. WHAT IS STILL UNKNOWN: whether execution remains
+inside StartTA, reaches WaitForIdle, or reaches FinalizeTA without retirement.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH: any unbounded offset, missing
+qualification gate or accidental mutation in the receipt path. The receipt test
+was RED before implementation then GREEN;358 AppleAgx tests pass. Single
+variable: read-only diagnostic receipt only. Same m1n1 `ff761784...` / Mach-O
+`e25606eb...`, same Mu and full-owner platform as EXP569. Pinned WDK26100 build,
+signing, Universal validation, exact hashes and commands will be appended before
+the single natural bind. PASS is an exact source-derived first TA stage; absence
+of receipt is inconclusive. Evidence first, then exact package cleanup and
+ordinary377/392 restoration.
+
 ## EXP569 second fixed EXP208 frame input — result 2026-09-07T13:24Z
 
 CONFIRMED causal fix/new boundary. Exact30.0.569.0 removed the

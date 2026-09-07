@@ -605,6 +605,13 @@ ed4a1c66. Exact cleanup complete; ordinary restore verified Code28/8CPU/SSH.
 First unknown is
 nonfaulting TA work/microsequence progress. Do not add a third fixed object
 without a new fault.
+EXP570 commit9e4d7e1 adds only one read-only916-byte TA progress receipt at the
+existing >=50ms snapshot. Pinned m1n1/Asahi derive the discriminator:
+StartTA -> timestamp -> wait-for-interrupt -> timestamp -> FinalizeTA. The
+receipt captures exact firmware-written timestamp/EventControl/RegionB TA stats
+and delayed queue state; no work bytes, mappings or behavior change. Receipt
+RED/GREEN and358 AppleAgx tests pass. Pinned build/hashes and one hardware run
+are next.
 
 ## Final live ordinary clean baseline
 
