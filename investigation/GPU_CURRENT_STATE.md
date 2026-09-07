@@ -169,6 +169,15 @@ while `VISIBLE_AGX_RESULT_HW_PROVEN=NO` and `WINDOWS_DESKTOP_VISIBLE=NO`.
 Next: exact cleanup, then display the proven AGX16x16 result through a controlled
 CPU-assisted transfer to an inactive full-size pool surface.
 
+EXP592 source commit `faaf98323326b4346f6c670cd315cfbe2e506063`
+implements that exact B discriminator. After terminal receipt proves all256 AGX
+pixels, it nearest-neighbor scales only those completed pixels into pool surface2
+offset0x1f40000, after verifying that the destination is not the active surface
+and does not overlap the AGX allocation. It then uses existing QueuePresent/D589.
+The receipt binds source GPU/PA/hash/prefix/fence to destination CPU/GPA/PA/hash
+and exact applied/latched/active sequence. This is explicitly CPU-assisted;
+`FULLY_ACCELERATED_PRESENT=NO`. Build/test next from EXP591 base.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

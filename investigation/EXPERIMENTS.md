@@ -36015,3 +36015,17 @@ receipt SHA `b93098aeae210d6baf1f60a601c2506f45895dc6c338083b99242ef9323b48f6`;
 host log SHA `a6b7813b2776ac5da9b3da2f5da880634a6a01e76c6fe3a997a5d3889c988610`.
 Next exact cleanup, then controlled AGX-output-to-display transfer using existing
 scanout; do not reopen DCP publication.
+
+# EXP592 — visible completed AGX result via CPU-assisted scale
+
+**PREREGISTERED 2026-09-07T21:28Z. WHY THIS HYPOTHESIS:** EXP588 proves exact
+AGX16x16 output and EXP591 proves physical scanout. The remaining B boundary is
+only their transfer. Commit `faaf98323326b4346f6c670cd315cfbe2e506063`
+waits for terminal validation of all256 pixels, rejects overlap with active or
+source ranges, scales the completed16x16 bytes into inactive full-size pool
+surface2, barriers, then reuses QueuePresent/D589. One receipt correlates source
+fence/GPU/PA/hash/prefix with destination CPU/GPA/PA/offset/hash and exact
+requested/applied/latched/active sequence. PASS requires terminal AGX completion,
+visible-AGX receipt status0 at offset0x1f40000, host A408/D589, and physical panel
+showing full-screen `0xff112233`. `PRESENT_TRANSFER=CPU_ASSISTED` and
+`FULLY_ACCELERATED_PRESENT=NO`. Focused14 tests PASS. Build pending.
