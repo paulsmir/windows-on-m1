@@ -1751,6 +1751,28 @@ static VOID AdmissionPlatformWorker(
               sizeof(eventReceipt.Message));
         }
         AdmissionRecordEventDrain(adapter, &eventReceipt);
+        if (!faultSnapshotReported) {
+          volatile APPLE_AGX_BACKEND_U32 *taRead =
+              (volatile APPLE_AGX_BACKEND_U32 *)(
+                  runtime->Provider.Channels.Ta.StateCpuAddress +
+                  APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+          volatile APPLE_AGX_BACKEND_U32 *d3Read =
+              (volatile APPLE_AGX_BACKEND_U32 *)(
+                  runtime->Provider.Channels.D3.StateCpuAddress +
+                  APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+          APPLE_AGX_BACKEND_U32 currentTaRead;
+          APPLE_AGX_BACKEND_U32 currentD3Read;
+          ADMISSION_QUEUE_FAULT_SNAPSHOT snapshot;
+          ULONGLONG nowMs = AdmissionPlatformNowMs();
+          if (runtime->TransportIo.ReadU32(runtime, taRead, &currentTaRead) &&
+              runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
+              AdmissionCaptureQueueFaultSnapshot(
+                  runtime, description.Fence, nowMs - queueSubmitMs,
+                  currentTaRead, currentD3Read, &snapshot)) {
+            AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
+            faultSnapshotReported = TRUE;
+          }
+        }
         AdmissionProviderDrainTraceWindows(
             adapter, runtime->Provider.LastDrainGuard,
             runtime->Provider.LastEventReadPointer,

@@ -21,6 +21,10 @@ class QueueFaultSnapshotTests(unittest.TestCase):
         self.assertIn("ADMISSION_REGIONC_FAULT_INFO_OFFSET", worker)
         self.assertIn('L"Wom1QueueFaultSnapshot"', receipts)
         self.assertGreaterEqual(receipts.count("ZwFlushKey(key)"), 4)
+        failure = worker.index("AdmissionRecordEventDrain(adapter, &eventReceipt)")
+        immediate = worker.index("AdmissionCaptureQueueFaultSnapshot(", failure)
+        drain_trace = worker.index("AdmissionProviderDrainTraceWindows(", failure)
+        self.assertLess(immediate, drain_trace)
 
 
 if __name__ == "__main__":
