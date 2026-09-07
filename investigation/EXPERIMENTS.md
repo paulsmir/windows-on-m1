@@ -1,5 +1,27 @@
 # Hardware Experiment Ledger
 
+## EXP557 SGX fault-info after TA ingress — result 2026-09-07T10:22Z
+
+REJECTED latched-hardware-fault hypothesis. Exact30.0.557.0 ran once and
+reproduced EXP556 TA ingress. Snapshot v2 SHA
+`a8d115b0fd685e14aafe7d1f030045a149f4b12523007f67ad222fdbdfaeb901`
+contains SGX word `0x469baae3117cf794`; pinned `R_FAULT_INFO` decoding gives
+`FAULTED=0`. Therefore reason/context/unit/address subfields are stale/undefined
+and must not be treated as fault evidence. RegionB/C fault words remain all
+zero. QueueInfo remains byte-exact EXP556 SHA `c36da2cc...`: TA active/rptr2,
+done0, D3 not started. Host SHA
+`2f7a4f48e61abcea89a2d7271f78713b2ef31c7df90ea694c3eb936764a4b9f7`.
+
+The first unknown is a nonfaulting stall inside the two-entry TA batch. The
+first item is EXP208 WorkCommandInitBM; source identifies BufferManagerInfo,
+BlockControl, Counter and Misc as its earliest externally readable owner state.
+Next discriminator must snapshot only those four active context-0 objects to
+separate InitBM progress from the following WorkCommandTA/microsequence.
+
+Exact cleanup/restoration complete. Ordinary377/392 is Code28/no package/
+service/files,8CPU healthy; health SHA
+`ef394f0b511bc8cf318a6f3d6434ad35702b89600e8ab29ad11a701411b1b797`.
+
 ## EXP557 SGX fault-info after TA ingress — preregistration 2026-09-07T10:14Z
 
 WHY THIS HYPOTHESIS: EXP556 proves firmware accepted the TA queue and advanced

@@ -503,16 +503,23 @@ the existing50-ms snapshot; do not change work bytes/UAT until that verdict.
 Commit7c2f180 extends only the existing snapshot with read-only SGX
 FAULT_INFO@+0x17030.111 tests and pinned30.0.557.0 gates PASS;
 ZIP/SYS/producer SHA44332a71.../1cadfcf7.../47e633f7.... EXP557 preregistered.
+EXP557 FINAL: SGX word469baae3117cf794 decodes FAULTED=0; do not interpret
+undefined reason/context/unit/address bits. RegionB/C zero; TA remains active
+rptr2/done0 and D3 unstarted. Latched SGX/UAT fault rejected. Snapshot/host
+SHAa8d115b0.../2f7a4f48.... Exact cleanup; ordinary health SHAef394f0b....
+First unknown is nonfaulting TA batch stall. Next capture only active EXP208
+BufferManagerInfo/BlockControl/Counter/Misc to distinguish first InitBM item
+from subsequent TA work/microsequence; no behavior change.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T10:10Z after exact556 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T10:22Z after exact557 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA43a6104be8b8690537d08574d66045e8979047ab7b4026aee95fe3f2274d5e08.
+SHAef394f0b511bc8cf318a6f3d6434ad35702b89600e8ab29ad11a701411b1b797.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
