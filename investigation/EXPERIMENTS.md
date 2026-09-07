@@ -1,5 +1,26 @@
 # Hardware Experiment Ledger
 
+## EXP541 backend runtime submit result — preregistration 2026-09-07T00:05Z
+
+WHY THIS HYPOTHESIS: EXP540 exact0x5280 guard0/status0 proves Windows Submit,
+backend bind, scheduler and packet queue all pass. Reset occurs later in the
+PASSIVE worker; its registry receipt did not survive. Commit
+`f07ed5ed0e94a81df8607a744bd362633648919e` removes only successful Submit
+diagnostic and emits one0x5410 result/phase immediately after unchanged
+`AppleAgxBackendRuntimeSubmit`. Failure guards remain. Exact EXP208 producer is
+retained. 108 render regressions and pinned WDK26100 version30.0.541.0 package
+gates PASS. ZIP/SYS/INF/producer SHA `34393111...`/`daa3bcc8...`/`623786c4...`/
+`33762438...`. One natural bind/producer after clean baseline; exact cleanup and
+next worker/completion boundary follow.
+
+## EXP540 exact EXP208 Windows producer — result 2026-09-07T00:05Z
+
+CONFIRMED first accepted Windows Submit: exact word `5280000000000000`, host log
+SHA `800da7395b6d201ac2b405ff9f825561b7bf7582548b3e74135b55ebb05fe987`.
+Backend bind, scheduler queue and packet queue pass. Reset occurs after dispatch;
+no physical TA/3D or fence completion claim. PASSIVE GDI receipt was absent after
+recovery. Exact package/service/files removed; ordinary restoration is active.
+
 ## EXP540 exact EXP208 Windows producer — preregistration 2026-09-06T23:55Z
 
 WHY THIS HYPOTHESIS: EXP539 exact0x5390 subguard8 proves every packet identity

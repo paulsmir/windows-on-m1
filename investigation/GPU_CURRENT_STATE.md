@@ -364,6 +364,11 @@ EXP539 FINAL: subguard8/DEVICE_BUSY, host SHA49d7bc2a...; exact first failure is
 BackendImageBindSubmission. Binder requires EXP208 16x16/pitch64/colorff112233,
 producer sent 2560x1600/pitch10240/colorff336699. Commit7ebb584 changes only
 producer to shared EXP208 constants; exact539 KMD reused. Producer SHAb75c9e13....
+EXP540 FINAL: exact Submit guard0/status0, host SHA800da739...; Windows Submit,
+backend bind, scheduler and packet queue pass. First unknown is worker
+BackendRuntimeSubmit/TA3D/completion. Commitf07ed5e adds only host-visible backend
+submit result after suppressing success Submit diagnostic. Pinned30.0.541.0 gates
+PASS; ZIP/SYS/producer SHA34393111.../daa3bcc8.../33762438....
 
 ## Final live ordinary clean baseline
 
