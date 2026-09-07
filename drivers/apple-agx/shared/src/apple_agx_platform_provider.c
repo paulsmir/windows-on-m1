@@ -75,29 +75,21 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(
 
   AppleAgxPlatformZero(Bindings,
                        (APPLE_AGX_BACKEND_U32)sizeof(*Bindings));
-  Bindings->Ta.StateCpuAddress = (unsigned char *)ta_state->CpuAddress +
-      ChannelMemory->DataOffsets[AppleAgxChannelMemoryCommandStateBase +
-                                 APPLE_AGX_PLATFORM_TA_CHANNEL_INDEX];
-  Bindings->Ta.RingCpuAddress = (unsigned char *)ta_ring->CpuAddress +
-      ChannelMemory->DataOffsets[AppleAgxChannelMemoryCommandRingBase +
-                                 APPLE_AGX_PLATFORM_TA_CHANNEL_INDEX];
-  Bindings->Ta.StateGpuAddress = ChannelMemory->ObjectAddresses[
+  Bindings->Ta.StateCpuAddress = ta_state->CpuAddress;
+  Bindings->Ta.RingCpuAddress = ta_ring->CpuAddress;
+  Bindings->Ta.StateGpuAddress = ChannelMemory->VirtualAddresses[
       AppleAgxChannelMemoryCommandStateBase +
       APPLE_AGX_PLATFORM_TA_CHANNEL_INDEX];
-  Bindings->Ta.RingGpuAddress = ChannelMemory->ObjectAddresses[
+  Bindings->Ta.RingGpuAddress = ChannelMemory->VirtualAddresses[
       AppleAgxChannelMemoryCommandRingBase +
       APPLE_AGX_PLATFORM_TA_CHANNEL_INDEX];
   Bindings->Ta.Doorbell = APPLE_AGX_PLATFORM_TA_DOORBELL;
-  Bindings->D3.StateCpuAddress = (unsigned char *)d3_state->CpuAddress +
-      ChannelMemory->DataOffsets[AppleAgxChannelMemoryCommandStateBase +
-                                 APPLE_AGX_PLATFORM_D3_CHANNEL_INDEX];
-  Bindings->D3.RingCpuAddress = (unsigned char *)d3_ring->CpuAddress +
-      ChannelMemory->DataOffsets[AppleAgxChannelMemoryCommandRingBase +
-                                 APPLE_AGX_PLATFORM_D3_CHANNEL_INDEX];
-  Bindings->D3.StateGpuAddress = ChannelMemory->ObjectAddresses[
+  Bindings->D3.StateCpuAddress = d3_state->CpuAddress;
+  Bindings->D3.RingCpuAddress = d3_ring->CpuAddress;
+  Bindings->D3.StateGpuAddress = ChannelMemory->VirtualAddresses[
       AppleAgxChannelMemoryCommandStateBase +
       APPLE_AGX_PLATFORM_D3_CHANNEL_INDEX];
-  Bindings->D3.RingGpuAddress = ChannelMemory->ObjectAddresses[
+  Bindings->D3.RingGpuAddress = ChannelMemory->VirtualAddresses[
       AppleAgxChannelMemoryCommandRingBase +
       APPLE_AGX_PLATFORM_D3_CHANNEL_INDEX];
   Bindings->D3.Doorbell = APPLE_AGX_PLATFORM_D3_DOORBELL;

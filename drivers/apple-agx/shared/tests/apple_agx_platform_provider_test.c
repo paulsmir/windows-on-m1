@@ -341,16 +341,9 @@ static void prepare_channel_memory(APPLE_AGX_CHANNEL_MEMORY_OWNER *Owner,
     Owner->Objects[index].State = AppleAgxMemoryGpuMapped;
     Owner->VirtualAddresses[index] =
         0xffffffa000100000ULL + index * 0x8000ULL;
-    Owner->ObjectAddresses[index] = Owner->VirtualAddresses[index];
   }
-  Owner->DataOffsets[3] = 0x3fd0u;
-  Owner->DataOffsets[4] = 0x3fd0u;
-  Owner->DataOffsets[15] = 0x1000u;
-  Owner->DataOffsets[16] = 0x1000u;
-  Owner->ObjectAddresses[3] += Owner->DataOffsets[3];
-  Owner->ObjectAddresses[4] += Owner->DataOffsets[4];
-  Owner->ObjectAddresses[15] += Owner->DataOffsets[15];
-  Owner->ObjectAddresses[16] += Owner->DataOffsets[16];
+  Owner->Objects[AppleAgxChannelMemoryCommandRingBase + 3u].Length = 0x3000u;
+  Owner->Objects[AppleAgxChannelMemoryCommandRingBase + 4u].Length = 0x3000u;
   Owner->Objects[AppleAgxChannelMemoryEventRing].Length = 0x3800u;
 }
 
@@ -362,15 +355,15 @@ static void test_exact_group1_bindings(void) {
   memset(&bindings, 0, sizeof(bindings));
 
   assert(AppleAgxPlatformProviderBindChannels(&owner, &bindings));
-  assert(bindings.Ta.StateCpuAddress == storage[3] + 0x3fd0u);
-  assert(bindings.Ta.RingCpuAddress == storage[15] + 0x1000u);
-  assert(bindings.Ta.StateGpuAddress == owner.ObjectAddresses[3]);
-  assert(bindings.Ta.RingGpuAddress == owner.ObjectAddresses[15]);
+  assert(bindings.Ta.StateCpuAddress == storage[3]);
+  assert(bindings.Ta.RingCpuAddress == storage[15]);
+  assert(bindings.Ta.StateGpuAddress == owner.VirtualAddresses[3]);
+  assert(bindings.Ta.RingGpuAddress == owner.VirtualAddresses[15]);
   assert(bindings.Ta.Doorbell == 4u);
-  assert(bindings.D3.StateCpuAddress == storage[4] + 0x3fd0u);
-  assert(bindings.D3.RingCpuAddress == storage[16] + 0x1000u);
-  assert(bindings.D3.StateGpuAddress == owner.ObjectAddresses[4]);
-  assert(bindings.D3.RingGpuAddress == owner.ObjectAddresses[16]);
+  assert(bindings.D3.StateCpuAddress == storage[4]);
+  assert(bindings.D3.RingCpuAddress == storage[16]);
+  assert(bindings.D3.StateGpuAddress == owner.VirtualAddresses[4]);
+  assert(bindings.D3.RingGpuAddress == owner.VirtualAddresses[16]);
   assert(bindings.D3.Doorbell == 5u);
   assert(bindings.Event.StateCpuAddress == storage[26]);
   assert(bindings.Event.RingCpuAddress == storage[27]);
@@ -401,24 +394,24 @@ static void test_exact_run_channel_publication(void) {
   for (index = 0u; index < sizeof(message); ++index)
     message[index] = (unsigned char)(index + 1u);
 
-  read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[3] + 0x3fd0u);
-  write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[3] + 0x3ff0u);
+  read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[3] + 0x00u);
+  write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[3] + 0x20u);
   *read = 0u;
   *write = 0u;
   assert(AppleAgxPlatformProviderPublishRun(
       &bindings, &io, AppleAgxG13QueueTa, message));
   assert(*write == 1u);
-  assert(memcmp(storage[15] + 0x1000u, message, sizeof(message)) == 0);
+  assert(memcmp(storage[15], message, sizeof(message)) == 0);
   assert(fake.LastDoorbell == 4u);
 
-  read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[4] + 0x3fd0u);
-  write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[4] + 0x3ff0u);
+  read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[4] + 0x00u);
+  write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[4] + 0x20u);
   *read = 2u;
   *write = 255u;
   assert(AppleAgxPlatformProviderPublishRun(
       &bindings, &io, AppleAgxG13Queue3d, message));
   assert(*write == 0u);
-  assert(memcmp(storage[16] + 0x1000u + 255u * sizeof(message), message,
+  assert(memcmp(storage[16] + 255u * sizeof(message), message,
                 sizeof(message)) == 0);
   assert(fake.LastDoorbell == 5u);
 
