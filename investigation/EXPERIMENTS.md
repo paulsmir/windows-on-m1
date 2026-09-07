@@ -35057,3 +35057,16 @@ Source commits `11c2d112348bc08fb7be3cb8f3784b7902bd40ae` and
 seven focused and369 relevant tests GREEN. Next gates: full-owner m1n1 build,
 pinned WDK package577/sign/version/hash, clean ordinary preflight, one producer,
 durable TA retirement/completion evidence, exact cleanup/recovery.
+
+**EXP577 FREEZE 2026-09-07T16:50Z:** pinned WDK build/sign/code-analysis/
+Universal/Inf2Cat/version gates PASS,0 errors, inherited C28251 only. ZIP/SYS/
+INF/CAT/UMD/producer SHA-256: `2359007fd2bb6aa0d3bee257cfe2af2cb45a483a4c5053db6a00dd3fb11c6ad9`,
+`91c9ef1781c8c08e67a707007a5d7ec6c516368b2b183afca9b7751bd12e4bd5`,
+`fcc0918b5f942b10a61c7e6904006f887b7ba130257454cdbf0ab134de2d89f5`,
+`7fb878135e9086dacfc5f2dc0288443f2dff788b58af54a29ae315d6b3a57886`,
+`169340b2add798d2e776d2e8504e44c5497af7fb60c8ffbf5179d3e249d631ad`,
+`0ed630b0e3fbf0c1045403e87fd1cd30682bb12ebf55d4e262ee144bb3570159`.
+Full-owner m1n1 SHA `12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3`;
+overlay/workflow/launch SHA `a0e8a1c99177f0126306a7b9a73683c930234e2f59231530a4d143feaf23be4d`,
+`abdc367b693512bdfdfe9b09c98e66c81ce860e20a18b389bd5e7cecff4c946b`,
+`2212f33fa7f7822c251ce9eaaf6780456a5a9f2fbc4030dddf3c7f8d23236436`.
