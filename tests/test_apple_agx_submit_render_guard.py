@@ -50,7 +50,10 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
             "        Args->SubmissionFenceId)",
             submit,
         )
-        self.assertIn("AdmissionSubmitRenderGuardAccepted", submit)
+        self.assertNotIn(
+            "Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS",
+            submit,
+        )
         self.assertIn("AdmissionSubmitPacketGuardWindows", submit)
         for name in (
             "AdmissionSubmitPacketGuardState",

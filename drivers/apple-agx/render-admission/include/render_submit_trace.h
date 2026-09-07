@@ -11,6 +11,7 @@
 #define ADMISSION_PATCH_RENDER_GUARD_TAG 0x5330000000000000ULL
 #define ADMISSION_PREPATCH_ADOPT_GUARD_TAG 0x5350000000000000ULL
 #define ADMISSION_SUBMIT_PACKET_GUARD_TAG 0x5390000000000000ULL
+#define ADMISSION_BACKEND_SUBMIT_RESULT_TAG 0x5410000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -300,6 +301,14 @@ static inline unsigned long long AdmissionSubmitPacketGuardWord(
       ((unsigned long long)(Guard & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Status;
+}
+
+static inline unsigned long long AdmissionBackendSubmitResultWord(
+    unsigned int Result, unsigned int Phase) {
+  return ADMISSION_BACKEND_SUBMIT_RESULT_TAG |
+      ((unsigned long long)(Result & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Phase;
 }
 
 static inline unsigned int AdmissionSubmitTraceField(unsigned long long Word) {

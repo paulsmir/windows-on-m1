@@ -170,8 +170,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPacket,
                       STATUS_DEVICE_BUSY);
   }
-  AdmissionSubmitRenderGuardWindows(
-      Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS);
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionDispatchQueuedWork(Context);
   return STATUS_SUCCESS;

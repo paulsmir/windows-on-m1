@@ -1363,6 +1363,8 @@ static VOID AdmissionPlatformWorker(
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
+  AdmissionBackendSubmitResultWindows(
+      adapter, (ULONG)result, (ULONG)runtime->Backend.Phase);
   AdmissionGdiReceiptBackendWindows(adapter, description.Fence, (ULONG)result,
       result == AppleAgxBackendRuntimeResultOk
           ? &runtime->Backend.PendingJob : NULL);
