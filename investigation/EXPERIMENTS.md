@@ -35216,3 +35216,36 @@ Mu remains EXP406.  Fresh ordinary preflight at17:27Z proves Code28, zero
 package/service/module,8CPU,NVMe2/USB5/keyboard1 and no Event129/bugcheck in
 the current15-minute window.  One stage/natural bind/producer only, collect
 existing progress/retire/temporal/fault receipts and exact cleanup.
+
+**EXP579 FINAL 2026-09-07T17:39Z — INCONCLUSIVE AT LIVE-STATS
+DISCRIMINATOR; exact cleanup complete.**  Exact30.0.579.0 was staged from the
+clean ordinary baseline and its producer ran once.  Host trace
+`0x54600001000100ff` proves fence255 reached the physical queue and TA channel
+read advanced to1 while D3 remained0.  Windows stayed Code0/service Running,
+SSH and8CPU responsive for more than six minutes; no TDR, bugcheck or reset
+occurred.  A normal shutdown then completed promptly.
+
+The existing >=50ms TA receipts were not produced.  Source ordering narrows
+the missing discriminator: the first poll returned and recorded TA read1; the
+next code applies sub-50ms receipt guards and a1ms relative delay, but no later
+worker iteration was observable.  Evidence cannot distinguish a delay wakeup
+failure from a block in the following iteration.  Consequently hardware did
+not preserve the actual FinalizeTA
+stats pointer or live StatsTA bytes, so this run neither confirms nor rejects
+the four-pointer correction as sufficient.  It does prove the correction did
+not prevent queue creation/publication or TA dequeue.  Do not rerun579.
+
+Host/live/final evidence SHA-256 are `4919bb41...`, `3325999f...`, and
+`2f16bad210e7cf2cab4e8a14e517c3822f8fd00cfb24a74d33dbd604a577dc48`.
+Candidate-window Event129x2 is telemetry; Bugcheck0.  Emergency guest was used
+only for exact package cleanup.  Ordinary377/392 is restored Code28 with zero
+package/service/module,8CPU,NVMe2/USB5/keyboard1; health SHA `4e13064f...`.
+
+Next experiment is qualification-only and changes no command byte or runtime
+behavior: at the already observed TA-channel read transition, capture the
+existing TA progress and retire receipts immediately before the first relative
+delay.  This guarantees the FinalizeTA pointer and contemporaneous StatsTA
+owner bytes are durable even if the delay never wakes.  It is the minimum
+discriminator between correct live binding with later firmware stall and an
+unapplied/wrong binding; no queue, timeout, timer, scheduler or polling fix is
+authorized by this one run.

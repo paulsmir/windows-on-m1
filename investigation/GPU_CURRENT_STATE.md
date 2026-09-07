@@ -741,6 +741,17 @@ ZIP/SYS/producer SHA cd7470ce.../02590363.../04c76338.... Fresh ordinary
 preflight is Code28, zero package/service/module,8CPU,NVMe2/USB5/keyboard1,
 Event1290/Bugcheck0 in the current window. Candidate is ready for its sole run.
 
+EXP579 FINAL: INCONCLUSIVE only at the intended live-stats receipt. One producer
+reached physical TA dequeue (host0x5460: TA read1,D3 read0,fence255), then no
+later observable worker iteration/TA receipt occurred; delay wakeup versus a
+following-iteration block is not distinguished. Windows remained Code0/SSH/8CPU for
+over6min, no TDR/bugcheck, and normal shutdown succeeded. Thus live-stats patch
+is not rejected and queue ingress remains proven, but hardware did not preserve
+the actual pointer/StatsTA bytes. Exact cleanup done; ordinary Code28/no package/
+service/module/8CPU restored. Next EXP is receipt-only: capture existing TA
+progress+retire state immediately on the already observed TA-read transition,
+before the first1ms delay. No functional subsystem change.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
