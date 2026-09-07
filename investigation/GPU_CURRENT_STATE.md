@@ -466,16 +466,28 @@ PASS. Pinned30.0.554.0 gates PASS; ZIP/SYS/producer SHA
 5710110d.../8809b9bb.../4da2eed5.... EXP554 preregistered. If Pong succeeds
 without0x5460/5420, management liveness is closed and only queue acceptance
 remains; if it fails, localize RTKit liveness before touching queue contents.
+EXP554 FINAL: pre-submit heartbeat result0/RXendpoint0/exact Pong
+0x0040000000000000, then no0x5460/5420 and116/C0000483/3. RTKit liveness at
+submit is hardware-proven; heartbeat is retained as a fail-closed guard, not a
+completion claim. Queue/fault/dump/host SHA669b4fbd.../ed3592b1.../8bd1a981.../
+decad709.... Exact cleanup and ordinary health SHA55e2176e.... Offline exact
+EXP208 comparison exposes first causal graph mismatch: proven TA/D3 roots are
+ffffffa... context0, current receipt roots are stale15038... BackendImage VAs.
+Platform startup's shared QueueObjects table was correct but discarded for
+per-submit StageJob, so dynamic bytes and159 relocations were reapplied through
+the stale source table. Commit60634ac refreshes the shared active graph on each
+submit and builds job roots from that table; exact RED/GREEN and122 regressions
+PASS. Next candidate EXP555 changes only this graph-owner correction.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T09:16Z after exact553 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T09:37Z after exact554 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAa67f3d6cf7fba350c74f67510b33e33aab8d2a7fdaac794777e08b5fddd801d0.
+SHA55e2176e2ef5e396219c81dd302aa6b450d5cee28ce94cb7160680f9b3d3c063.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

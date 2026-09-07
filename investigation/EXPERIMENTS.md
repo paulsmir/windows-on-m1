@@ -1,5 +1,40 @@
 # Hardware Experiment Ledger
 
+## EXP554 pre-submit RTKit heartbeat — result 2026-09-07T09:37Z
+
+CONFIRMED discriminator; rejected as a functional queue fix. Exact30.0.554.0
+ran once. Immediately before BackendRuntimeSubmit, management heartbeat returned
+result0 with RX count7, endpoint0 and payload decimal18014398509481984 = exact
+Pong `0x0040000000000000`. Firmware management is therefore live at the submit
+boundary. The unchanged queue then produced neither `0x5460` nor `0x5420`, the
+50-ms fault snapshot remained byte-exact all-zero, and Windows bugchecked116 /
+Arg3 C0000483 / Arg4 3. Receipt/queue/fault/dump/host SHA:
+`9a2309c6b1c57ad033d2d3c61351e2040455793ffb81e4b20f5485b4bacd660c` /
+`669b4fbd1d5c54609d9c035f8c7980ba57eed863bc151e1b041e1de0ec0a2b3b` /
+`ed3592b1740dfdb807d29c8c74e7a40f918c0bdfdb924e8470d2b384ac70f8b0` /
+`8bd1a9813ab33b8471a2bae2f8f48586e3c8c6a6c88b3e53f5b3df19ebe067fc` /
+`decad7095ea353f7327298a74d381c5b426f059f6bc66aef24a0931fd9fc08c8`.
+This closes RTKit liveness and keeps the first unknown at command-queue graph
+acceptance.
+
+Exact package cleanup used established emergency377/385 because the package is
+boot-bound; final ordinary377/392 is Code28 with no package/service/SYS/UMD,
+8 CPUs and healthy input/storage/xHCI. Health SHA
+`55e2176e2ef5e396219c81dd302aa6b450d5cee28ce94cb7160680f9b3d3c063`.
+
+Focused offline re-anchor found a deterministic causal mismatch already visible
+in the queue receipt. Hardware-proven EXP208 roots are context-0 addresses
+TA=`ffffffa000aeffe0,ffffffa0200479e0` and
+D3=`ffffffa000a67fe0,ffffffa020003680`; current production publishes stale
+BackendImage roots TA=`1503880000,1503898000` and
+D3=`1503870000,1503890000`. Platform startup builds the correct shared
+RelocationObjects copy, but per-submit StageJob/BindSubmission uses the original
+rebased table and never refreshes dynamic bytes/roots in the active shared graph.
+Commit `60634acb8d1274a66ce38dcad5bf9334077c7683` refreshes all active descriptors,
+copies dynamic first36 context-0 objects, reapplies159 relocations and builds the
+published job from exact shared roots. The root-identity test was RED then GREEN;
+122 focused/render/ledger tests pass. Next is one EXP555 build/hardware run.
+
 ## EXP554 pre-submit RTKit heartbeat — preregistration 2026-09-07T09:29Z
 
 WHY THIS HYPOTHESIS: EXP553 proves exact queue publication followed by no
