@@ -35,6 +35,8 @@ typedef struct _APPLE_AGX_CHANNEL_MEMORY_OWNER {
   const APPLE_AGX_MEMORY_IO *MemoryIo;
   APPLE_AGX_MEMORY_OBJECT Objects[APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT];
   unsigned long long VirtualAddresses[APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT];
+  unsigned long long ObjectAddresses[APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT];
+  unsigned int DataOffsets[APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT];
   APPLE_AGX_CHANNEL_INFO_INPUT ChannelInfo;
   unsigned long long RealFwlogRingAddress;
   unsigned int ObjectCount;

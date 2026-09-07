@@ -40,6 +40,15 @@ static unsigned long long AppleAgxChannelMemoryContentSize(
   }
 }
 
+static unsigned long long AppleAgxChannelMemoryDataOffset(
+    unsigned int Index) {
+  if (Index == 3u || Index == 4u)
+    return APPLE_AGX_MEMORY_PAGE_SIZE - J313_AGX_G2_CHANNEL_STATE_STRIDE;
+  if (Index == 15u || Index == 16u)
+    return APPLE_AGX_MEMORY_PAGE_SIZE - J313_AGX_G2_CMD_QUEUE_RING_SIZE;
+  return 0ULL;
+}
+
 static void AppleAgxChannelMemoryZero(void *Address,
                                       unsigned long long Length) {
   unsigned long long index;
@@ -107,8 +116,9 @@ APPLE_AGX_CHANNEL_MEMORY_RESULT AppleAgxChannelMemoryBuild(
   Owner->LastResult = AppleAgxChannelMemoryResultOk;
   for (index = 0u; index < APPLE_AGX_CHANNEL_MEMORY_OBJECT_COUNT; ++index) {
     unsigned long long content_size = AppleAgxChannelMemoryContentSize(index);
+    unsigned long long data_offset = AppleAgxChannelMemoryDataOffset(index);
     unsigned long long allocation_size =
-        AppleAgxChannelMemoryAlignUp(content_size);
+        AppleAgxChannelMemoryAlignUp(data_offset + content_size);
     if (content_size == 0ULL ||
         AppleAgxChannelMemoryRangeIsValid(virtual_address,
                                           allocation_size) == 0u)
@@ -123,14 +133,16 @@ APPLE_AGX_CHANNEL_MEMORY_RESULT AppleAgxChannelMemoryBuild(
     AppleAgxChannelMemoryZero(Owner->Objects[index].CpuAddress,
                               allocation_size);
     Owner->VirtualAddresses[index] = virtual_address;
+    Owner->ObjectAddresses[index] = virtual_address + data_offset;
+    Owner->DataOffsets[index] = (unsigned int)data_offset;
     virtual_address += allocation_size + APPLE_AGX_MEMORY_PAGE_SIZE;
   }
 
   for (index = 0u; index < J313_AGX_G2_CMD_QUEUE_CHANNEL_COUNT; ++index) {
     Owner->ChannelInfo.Entries[index].StateAddress =
-        Owner->VirtualAddresses[AppleAgxChannelMemoryCommandStateBase + index];
+        Owner->ObjectAddresses[AppleAgxChannelMemoryCommandStateBase + index];
     Owner->ChannelInfo.Entries[index].RingAddress =
-        Owner->VirtualAddresses[AppleAgxChannelMemoryCommandRingBase + index];
+        Owner->ObjectAddresses[AppleAgxChannelMemoryCommandRingBase + index];
   }
   Owner->ChannelInfo.Entries[12].StateAddress =
       Owner->VirtualAddresses[AppleAgxChannelMemoryDevctrlState];
@@ -182,6 +194,8 @@ APPLE_AGX_CHANNEL_MEMORY_RESULT AppleAgxChannelMemoryDestroy(
       return Owner->LastResult;
     }
     Owner->VirtualAddresses[index] = 0ULL;
+    Owner->ObjectAddresses[index] = 0ULL;
+    Owner->DataOffsets[index] = 0u;
     --Owner->ObjectCount;
   }
   Owner->MemoryIo = 0;

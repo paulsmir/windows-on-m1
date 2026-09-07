@@ -101,12 +101,16 @@ static void test_builds_exact_owned_channel_set(void) {
     assert_all_zero(&owner.Objects[index]);
   for (index = 0u; index < J313_AGX_G2_CMD_QUEUE_CHANNEL_COUNT; ++index) {
     assert(owner.ChannelInfo.Entries[index].StateAddress ==
-           owner.VirtualAddresses[AppleAgxChannelMemoryCommandStateBase +
+           owner.ObjectAddresses[AppleAgxChannelMemoryCommandStateBase +
                                   index]);
     assert(owner.ChannelInfo.Entries[index].RingAddress ==
-           owner.VirtualAddresses[AppleAgxChannelMemoryCommandRingBase +
+           owner.ObjectAddresses[AppleAgxChannelMemoryCommandRingBase +
                                   index]);
   }
+  assert(owner.DataOffsets[3] == 0x3fd0u);
+  assert(owner.DataOffsets[4] == 0x3fd0u);
+  assert(owner.DataOffsets[15] == 0x1000u);
+  assert(owner.DataOffsets[16] == 0x1000u);
   assert(owner.ChannelInfo.Entries[12].StateAddress ==
          owner.VirtualAddresses[AppleAgxChannelMemoryDevctrlState]);
   assert(owner.ChannelInfo.Entries[12].RingAddress ==
