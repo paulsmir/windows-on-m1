@@ -35090,3 +35090,21 @@ queue-retirement group objects23--27 (`JobList`, two
 `CommandQueuePointers`, TA/3D stamp1) under the existing nonzero shared-arena
 bias. Objects20--22 and28--35 stay at EXP574 A000 addresses. This group is the
 only firmware-owned queue state updated immediately after microsequence End.
+
+# EXP578 — selective A040 retirement group
+
+**PREREGISTERED 2026-09-07T17:02Z; one exact run only.** WHY THIS HYPOTHESIS:
+EXP577 restores physical TA and ends with private stamp2 complete but shared
+stamp1/done/event unchanged; native GPURenderer allocates JobList, both
+CommandQueuePointers and stamp1 objects23-27 from kshared A040; EXP575 moved
+unrelated20-22/28-35 too and regressed before TA. Single variable: retain A021
+objects18/19 and additionally place only23-27 at original VA plus0x01000000 in
+the queried A040 arena. All others retain EXP574 addresses. Existing broker,
+relocations, firmware, queue logic and completion path are unchanged.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: this is the indivisible queue
+retirement state mutated after microsequence End. TRANSLATION: existing class1
+and class3 queries authorize exact Windows pages. WHAT IS STILL UNKNOWN: whether
+this lets firmware publish shared stamp/done/event. Commit
+`018abf4690ad6ba7a8ed055f8b40457069d3d300`; seven focused and369 relevant
+tests GREEN. Next pinned build578/sign/hash then one hardware run and cleanup.

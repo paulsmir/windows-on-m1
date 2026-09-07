@@ -703,6 +703,9 @@ ordinary Code28/8CPU baseline restored. Next boundary remains post-End queue
 retirement. Next discriminator moves only coupled native-kshared retirement
 objects23-27 into the already approved biased A040 arena;20-22/28-35 stay A000.
 
+EXP578 commit018abf4 implements that selective retirement group;369 tests
+GREEN and hardware preregistered. Next build/sign/hash then one exact run.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
