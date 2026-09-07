@@ -34869,3 +34869,22 @@ packet is launch-inconclusive, not a driver verdict.  Collect host log,
 producer output, retained-root operations, queue submission/fault/info,
 TA progress/retire/temporal, event drain, KTrace, buffer-manager and health
 receipts.  Preserve evidence before exact package cleanup and ordinary restore.
+
+**EXP575 FREEZE 2026-09-07T15:19Z:** pinned FRYZZING build, KMD/UMD code
+analysis, Universal validation, Inf2Cat, test signing and coherent version
+30.0.575.0 PASS; 0 build errors, only inherited C28251.  Exact ZIP/SYS/INF/CAT/
+UMD/producer SHA-256 are `94a8a57157f31acf698de46a970f199b2535bb0fc3dde60578f7ba6c9f0e1e9b`,
+`c3a4c4d2f88e4c7b3ce60cc355b1548d584082d1d19c2a26c270e6d1a7f5298f`,
+`1d706fe04729ba884f88775eb8e581038d2c427750a1f7d3ec3158bb454c55a2`,
+`9cfb93e0e0fcf2bf3f50d1972a17e514329bb7939b5ec77193492d1316b68cf1`,
+`ed05996a8bc961fcaa15b6df302effbb527fa2947dc111cf191abd70cbf074b2`,
+and `359c190c07293a42b68b673782f0ee8718a5b56b15279099972a1eb4f04e2d91`.
+Current ABI-v4 m1n1 built successfully with validated Homebrew clang22.1.8;
+Mach-O SHA-256 is
+`ee3287bcb4cd9e556dcc7a95017b49cf3bf2275a88dc69fe6f1f7b5d6f840e6c`.
+Local ZIP-member hashes match the builder manifest.  Workflow parses under
+PowerShell and its SHA-256 is
+`b918ee86312d2d65c1c70f889c4bac632a1b6d773813f6b2e980731aca6a9a9e`.
+Immediately before staging, ordinary 377/392 proves Code28, zero package/
+service/module, 8 CPUs, NVMe2/USB5/keyboard1 and no fresh Event129/bugcheck;
+PID13357 is the sole L41 owner.  No candidate has yet been staged.
