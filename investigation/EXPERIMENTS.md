@@ -36085,3 +36085,82 @@ Workflow prepared. Physical power cycle is now indispensable: two compatible
 emergency launches reached proxy but all secondary CPUs remained unavailable.
 After Running proxy, launch hidden recovery, collect persisted EXP592 evidence,
 remove exact package, restore ordinary, then stage/run EXP593 once.
+
+**EXP593 FINAL 2026-09-07T22:09Z — REJECTED BEFORE PRODUCER/AGX.** The exact
+candidate reached natural bind but reset before the producer ran. Recovery
+preserved dump `090826-14718-01.dmp`. Bugcheck is `0x10E/0xB`; Arg3 is
+`0xffffffffc0000141` (`STATUS_INVALID_ADDRESS`). Exact stack is
+`dxgmms2!VIDMM_GLOBAL::CompleteBuildPagingBufferIteration ->
+MemoryTransferInternal -> TransferToSystem -> EvictResource`. The only topology
+change was the qualification-only reduction of advertised segment2 allocation
+bytes while VidMm still managed the full production pool. That made a valid
+BuildPagingBuffer transfer fail its local range check. The producer never ran,
+so EXP593 is not a post-fence visible-transfer verdict. Dump SHA
+`f1fb377b3a6545af1d6e7085a514b55bf295c938603733b7fe87be094f1849c0`;
+analysis SHA `3c9447881fa015d1a32cde82e732a417530d217059d9267beb6e312fce9553f7`;
+host log SHA `1342b1900dc7a04e2a008d7a112c470c76ea98d6fa8dc6ecb0d1fe1b9f10cba6`.
+Exact oem5 package/service cleanup completed in compatible hidden recovery;
+8 CPUs and SSH are alive. Restore ordinary377/392 before the next candidate.
+
+# EXP594 — explicit Windows-owned visible destination
+
+**PREREGISTERED 2026-09-07T22:29Z; one exact candidate.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP593's exact dump proves the segment-capacity reservation itself violated
+  VidMm before producer entry; no AGX or post-fence code ran.
+- EXP588 already proves the 16x16 AGX result and real Windows fence, while
+  EXP591 proves the same local pool can be latched by D589.
+- A second ordinary Windows allocation gives the destination explicit VidMm
+  ownership/lifetime without changing segment topology or hiding capacity.
+
+**WINDOWS CONTRACT:** segment2 retains its full production base, size and commit
+limit. The producer creates two allocations together, makes both resident, keeps
+both alive through synchronous destroy, and supplies both in the same render
+allocation list. Allocation0 remains the 16x16 render target; allocation1 is a
+2560x1600 pitch10240 A8R8G8B8 writable destination.
+
+**AGX/ASAHI CONTRACT:** the existing physical TA/3D job still writes only the
+16x16 allocation. After its terminal bytes are copied and the exact Windows
+fence is completed, CPU-assisted transfer writes the second allocation and the
+already proven retained broker/QueuePresent/D589 path publishes it. No firmware,
+queue, UAT, completion or physical AGX command changes.
+
+**TRANSLATION:** commit `43ae915dc0c45a17d5445e1b16518872a5fb2570`
+removes the segment shrink. Patch validates allocation-list index1 against the
+full-size scanout description, segment2 placement, production CPU/GPU/physical
+view and source non-overlap, then captures its token and fence. Post-fence
+display consumes only that captured allocation and records its token in the
+crash-durable receipt.
+
+**WHAT IS STILL UNKNOWN:** whether dxgkrnl preserves both supplied allocations
+through Patch with the expected segment2 placement, and whether the post-fence
+copy/latch displays the completed `0xff112233` AGX result. PASS requires normal
+bind, producer terminal/fence PASS, visible receipt stage3/status0 with matching
+allocation token/source/destination identities, exact A408/D589, physical panel
+showing the full-screen result, no TDR/reset and healthy system. This remains
+`PRESENT_TRANSFER=CPU_ASSISTED`; `FULLY_ACCELERATED_PRESENT=NO`.
+
+**OFFLINE PROOF:** focused visible/producer/paging/scanout suite18 PASS; full
+AppleAgx suite366 PASS; diff check clean. A deterministic source contract rejects
+reintroduction of any visible qualification segment shrink and requires the
+explicit two-allocation producer and exact KMD capture. Build pending from the
+hardware-proven EXP591 base plus only the post-fence/safe-diagnostic and explicit
+destination overlay; dormant EXP589 reset remains excluded.
+
+**EXP594 FREEZE 2026-09-07T22:32Z.** Exact30.0.594.0 pinned WDK/SDK26100,
+MSVC14.44 KMD/UMD, code analysis, Universal API validation, Inf2Cat, TestSign,
+coherent-version and producer gates PASS. The base is exact EXP591; overlay
+contains the post-fence/safe-diagnostic path and explicit-destination change;
+dormant EXP589 reset is absent. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`3f925a6b7dc2cf750d5c6a88131deffd37bdb1361c195c1b166c7ae18496df39`,
+`a784cd7abfc1066b939a041e9395bbf6832e20bdd92bb5ed20a0520b437bfa8d`,
+`ca0a0fea5fcf6f85b69e4fe0539e479a1c4756c31557346b0498ea344becfff1`,
+`c04cc3c7d25e912cea67e0736eb73218dc4d41bd100c69a128ebea23c4dfd24f`,
+`bbaa0f23aab36e82f0d5aa55be763ad5eaa0006fd865d4ce7b6c0258be3523e6`,
+`ab97ce4abe5ff1affadb5a03b6073263b3c2fd97cf8b7f096b41bf36fcaf749d`,
+`23671e3697876d7be4fab18e4395d371600949941adfd4a76e0a84091d1c2614`.
+The Air remains package-clean with8 CPUs in compatible hidden recovery. Graceful
+shutdown, restore ordinary377/392, verify Code28/no package, then stage this exact
+candidate and run one natural bind/producer.

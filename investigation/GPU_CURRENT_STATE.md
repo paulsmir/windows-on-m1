@@ -186,13 +186,12 @@ The direct hook also blocked normal fence retirement while scaling/hashing/latch
 Two validated emergency recovery attempts reached proxy but failed secondary CPU
 startup; a physical power cycle is now required after offline work is complete.
 
-Commit `b6a65d7b793cdf0e21e1cef1fc52813b6b827db1` prepares EXP593:
+Commit `b6a65d7b793cdf0e21e1cef1fc52813b6b827db1` prepared EXP593:
 copy only1024 validated AGX bytes before allocation release; finish real Windows
 completion/fence normally; then scale/present from the owned copy. Delayed SGX/
-queue diagnostics now run only while backend phase is Submitted. Surface2 is
-reserved by reducing the qualification-only advertised Windows local allocation
-range to offset0x1f40000 while broker retains the full pool; overlap/active checks
-remain. Build next from EXP591 base, excluding reset code.
+queue diagnostics run only while backend phase is Submitted. Its additional
+qualification-only reservation reduced the advertised Windows local allocation
+range to offset0x1f40000 while broker retained the full pool.
 
 EXP593 exact30.0.593.0 pinned build is ready. ZIP/SYS/INF/CAT/UMD/producer SHA256:
 `0fb7a4af48e209c9dcc162ad96ea106d1ddadf7c42c78f35925e49a00781dc3e`,
@@ -201,8 +200,37 @@ EXP593 exact30.0.593.0 pinned build is ready. ZIP/SYS/INF/CAT/UMD/producer SHA25
 `b456e9d6f3a6c317bf97ce730fe715545bf233a095c1bc9b8f6a4b17523ad2b7`,
 `7c565fb44ada084b96d2c3a64b99d96fc7c922070777c88419716d18cf433f72`,
 `25181fa8f1e529d751b2a4fb1a40dae40f44639e58abe0c8c7e8bc9e3ae7b516`.
-Exact workflow/rollback is prepared. Only blocker is a physical power cycle to
-restore proxy/CPU state, then hidden recovery must remove EXP592 before EXP593.
+EXP593 is REJECTED before producer/AGX. Natural bind triggered bugcheck10E/B;
+Arg3 was `STATUS_INVALID_ADDRESS`. Exact dump stack is
+`dxgmms2!VIDMM_GLOBAL::CompleteBuildPagingBufferIteration -> MemoryTransferInternal
+-> TransferToSystem -> EvictResource`. The qualification-only segment shrink
+made otherwise valid VidMm paging exceed the advertised local segment. This is
+not a verdict on post-fence transfer. Dump SHA
+`f1fb377b3a6545af1d6e7085a514b55bf295c938603733b7fe87be094f1849c0`;
+analysis SHA `3c9447881fa015d1a32cde82e732a417530d217059d9267beb6e312fce9553f7`;
+host log SHA `1342b1900dc7a04e2a008d7a112c470c76ea98d6fa8dc6ecb0d1fe1b9f10cba6`.
+Exact oem5/service cleanup completed in compatible hidden recovery; Windows is
+currently healthy with8 CPUs in that recovery guest.
+
+Commit `43ae915dc0c45a17d5445e1b16518872a5fb2570` prepares EXP594 without changing
+segment topology. The producer creates and keeps resident an explicit second
+2560x1600 BGRA Windows allocation. Patch validates its exact segment2 placement,
+size/format and non-overlap, captures its production local-memory identity, and
+the existing post-fence copy scales into that allocation before the proven
+QueuePresent/D589 path. The visible receipt binds the allocation token. Focused
+tests18 PASS; full AppleAgx suite366 PASS. Build from EXP591 base with the
+post-fence/safe-diagnostic changes and no dormant EXP589 reset.
+
+EXP594 exact30.0.594.0 pinned build/sign/Universal/version and producer gates
+PASS. ZIP/SYS/INF/CAT/UMD/producer hashes are
+`a784cd7abfc1066b939a041e9395bbf6832e20bdd92bb5ed20a0520b437bfa8d`,
+`ca0a0fea5fcf6f85b69e4fe0539e479a1c4756c31557346b0498ea344becfff1`,
+`c04cc3c7d25e912cea67e0736eb73218dc4d41bd100c69a128ebea23c4dfd24f`,
+`bbaa0f23aab36e82f0d5aa55be763ad5eaa0006fd865d4ce7b6c0258be3523e6`,
+`ab97ce4abe5ff1affadb5a03b6073263b3c2fd97cf8b7f096b41bf36fcaf749d`,
+`23671e3697876d7be4fab18e4395d371600949941adfd4a76e0a84091d1c2614`.
+Next: graceful hidden shutdown, ordinary377/392 clean preflight, then one exact
+EXP594 natural bind and producer.
 
 ## Standing constraints
 
