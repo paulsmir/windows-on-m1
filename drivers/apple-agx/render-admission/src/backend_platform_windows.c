@@ -16,6 +16,23 @@
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_CONTROL 20u
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_COUNTER 21u
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC 22u
+#define ADMISSION_QUEUE_OBJECT_EVENT_CONTROL 11u
+#define ADMISSION_QUEUE_OBJECT_INITBM 16u
+#define ADMISSION_QUEUE_OBJECT_TA_MICROSEQUENCE 17u
+#define ADMISSION_QUEUE_OBJECT_TA_WORK 19u
+#define ADMISSION_QUEUE_OBJECT_TA_STAMP2 9u
+#define ADMISSION_QUEUE_OBJECT_TA_STAMP1 26u
+#define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START 30u
+#define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END 31u
+#define ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_START 34u
+#define ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_END 35u
+#define ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET 0x5b4u
+#define ADMISSION_TA_STATS_TIMESTAMPS_OFFSET 0x5d0u
+#define ADMISSION_TA_MICROSEQUENCE_START_OFFSET 0x0u
+#define ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_START_OFFSET 0x180u
+#define ADMISSION_TA_MICROSEQUENCE_WAIT_OFFSET 0x1c8u
+#define ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_END_OFFSET 0x1d0u
+#define ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET 0x208u
 #define ADMISSION_CHANNEL_OBJECT_KTRACE_STATE 31u
 #define ADMISSION_CHANNEL_OBJECT_KTRACE_RING 32u
 #define ADMISSION_KTRACE_RING_ENTRIES 0x200u
@@ -260,6 +277,111 @@ static BOOLEAN AdmissionCaptureBufferManager(
                 sizeof(Receipt->BlockControl));
   RtlCopyMemory(Receipt->Counter, counter->Data, sizeof(Receipt->Counter));
   RtlCopyMemory(Receipt->Misc, misc->Data, sizeof(Receipt->Misc));
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureTaProgress(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONGLONG ElapsedMs,
+    ADMISSION_TA_PROGRESS_RECEIPT *Receipt) {
+  static const ULONG opcodeOffsets[ADMISSION_TA_MICROSEQUENCE_OPCODE_COUNT] = {
+      ADMISSION_TA_MICROSEQUENCE_START_OFFSET,
+      ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_START_OFFSET,
+      ADMISSION_TA_MICROSEQUENCE_WAIT_OFFSET,
+      ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_END_OFFSET,
+      ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET};
+  static const ULONG stampObjects[2] = {
+      ADMISSION_QUEUE_OBJECT_TA_STAMP1,
+      ADMISSION_QUEUE_OBJECT_TA_STAMP2};
+  static const ULONG timestampObjects[4] = {
+      ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START,
+      ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END,
+      ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_START,
+      ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_END};
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *initBm;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *microsequence;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taWork;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *eventControl;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taInfo;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taPointers;
+  const APPLE_AGX_MEMORY_OBJECT *stats;
+  ULONG index;
+  if (Runtime == NULL || Fence == 0u || Receipt == NULL)
+    return FALSE;
+  initBm = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_INITBM];
+  microsequence =
+      &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_MICROSEQUENCE];
+  taWork = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_WORK];
+  eventControl =
+      &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_EVENT_CONTROL];
+  taInfo = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_INFO];
+  taPointers = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_POINTERS];
+  stats = &Runtime->Initdata.RegionBMemory.Objects[
+      AppleAgxRegionBMemoryStatsTa];
+  if (initBm->Data == NULL || initBm->Size != ADMISSION_TA_INITBM_BYTES ||
+      microsequence->Data == NULL ||
+      ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET > microsequence->Size ||
+      sizeof(ULONG) >
+          microsequence->Size - ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET ||
+      taWork->Data == NULL ||
+      ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET > taWork->Size ||
+      ADMISSION_TA_WORK_TIMESTAMP_TAIL_BYTES >
+          taWork->Size - ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET ||
+      eventControl->Data == NULL || eventControl->Size != 176u ||
+      taInfo->Data == NULL || taInfo->Size != ADMISSION_QUEUE_INFO_BYTES ||
+      taPointers->Data == NULL ||
+      taPointers->Size != ADMISSION_QUEUE_POINTERS_BYTES ||
+      stats->CpuAddress == NULL ||
+      ADMISSION_TA_STATS_HEAD_BYTES > stats->Length ||
+      ADMISSION_TA_STATS_TIMESTAMPS_OFFSET > stats->Length ||
+      ADMISSION_TA_STATS_TIMESTAMPS_BYTES >
+          stats->Length - ADMISSION_TA_STATS_TIMESTAMPS_OFFSET)
+    return FALSE;
+  for (index = 0u; index < RTL_NUMBER_OF(stampObjects); ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &Runtime->QueueObjects[stampObjects[index]];
+    if (object->Data == NULL || object->Size != sizeof(ULONG))
+      return FALSE;
+  }
+  for (index = 0u; index < RTL_NUMBER_OF(timestampObjects); ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &Runtime->QueueObjects[timestampObjects[index]];
+    if (object->Data == NULL || object->Size != sizeof(ULONGLONG))
+      return FALSE;
+  }
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = ADMISSION_TA_PROGRESS_RECEIPT_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  Receipt->ElapsedMs = ElapsedMs > MAXULONG ? MAXULONG : (ULONG)ElapsedMs;
+  RtlCopyMemory(Receipt->InitBm, initBm->Data, sizeof(Receipt->InitBm));
+  for (index = 0u; index < ADMISSION_TA_MICROSEQUENCE_OPCODE_COUNT;
+       ++index) {
+    RtlCopyMemory(&Receipt->MicrosequenceOpcodes[index],
+        (const UCHAR *)microsequence->Data + opcodeOffsets[index],
+        sizeof(Receipt->MicrosequenceOpcodes[index]));
+  }
+  RtlCopyMemory(Receipt->TaInfo, taInfo->Data, sizeof(Receipt->TaInfo));
+  RtlCopyMemory(Receipt->TaPointers, taPointers->Data,
+                sizeof(Receipt->TaPointers));
+  RtlCopyMemory(Receipt->EventControl, eventControl->Data,
+                sizeof(Receipt->EventControl));
+  RtlCopyMemory(Receipt->WorkTimestampTail,
+      (const UCHAR *)taWork->Data + ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET,
+      sizeof(Receipt->WorkTimestampTail));
+  RtlCopyMemory(Receipt->StatsHead, stats->CpuAddress,
+                sizeof(Receipt->StatsHead));
+  RtlCopyMemory(Receipt->StatsTimestamps,
+      (const UCHAR *)stats->CpuAddress + ADMISSION_TA_STATS_TIMESTAMPS_OFFSET,
+      sizeof(Receipt->StatsTimestamps));
+  for (index = 0u; index < RTL_NUMBER_OF(stampObjects); ++index) {
+    RtlCopyMemory(&Receipt->TaStamps[index * sizeof(ULONG)],
+        Runtime->QueueObjects[stampObjects[index]].Data, sizeof(ULONG));
+  }
+  for (index = 0u; index < RTL_NUMBER_OF(timestampObjects); ++index) {
+    RtlCopyMemory(&Receipt->TimestampTargets[index * sizeof(ULONGLONG)],
+        Runtime->QueueObjects[timestampObjects[index]].Data,
+        sizeof(ULONGLONG));
+  }
   return TRUE;
 }
 
@@ -1593,6 +1715,7 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN channelBaselineValid = FALSE;
   BOOLEAN channelProgressReported = FALSE;
   BOOLEAN faultSnapshotReported = FALSE;
+  BOOLEAN taProgressReported = FALSE;
   BOOLEAN ktraceBaselineValid = FALSE;
   ULONG initialTaChannelRead = 0u;
   ULONG initialD3ChannelRead = 0u;
@@ -1775,6 +1898,16 @@ static VOID AdmissionPlatformWorker(
             faultSnapshotReported = TRUE;
           }
         }
+        if (!taProgressReported) {
+          ADMISSION_TA_PROGRESS_RECEIPT taProgress;
+          ULONGLONG nowMs = AdmissionPlatformNowMs();
+          if (AdmissionCaptureTaProgress(
+                  runtime, description.Fence, nowMs - queueSubmitMs,
+                  &taProgress)) {
+            AdmissionRecordTaProgress(adapter, &taProgress);
+            taProgressReported = TRUE;
+          }
+        }
         AdmissionProviderDrainTraceWindows(
             adapter, runtime->Provider.LastDrainGuard,
             runtime->Provider.LastEventReadPointer,
@@ -1833,6 +1966,18 @@ static VOID AdmissionPlatformWorker(
                 currentTaRead, currentD3Read, FALSE, &snapshot)) {
           AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
           faultSnapshotReported = TRUE;
+        }
+      }
+    }
+    if (!taProgressReported) {
+      ULONGLONG nowMs = AdmissionPlatformNowMs();
+      if (nowMs >= queueSubmitMs + ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS) {
+        ADMISSION_TA_PROGRESS_RECEIPT taProgress;
+        if (AdmissionCaptureTaProgress(
+                runtime, description.Fence, nowMs - queueSubmitMs,
+                &taProgress)) {
+          AdmissionRecordTaProgress(adapter, &taProgress);
+          taProgressReported = TRUE;
         }
       }
     }

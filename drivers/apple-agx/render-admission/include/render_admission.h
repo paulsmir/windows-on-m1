@@ -215,6 +215,31 @@ typedef struct _ADMISSION_BUFFER_MANAGER_RECEIPT {
   UCHAR Misc[ADMISSION_BUFFER_MANAGER_STATE_BYTES];
 } ADMISSION_BUFFER_MANAGER_RECEIPT;
 
+#define ADMISSION_TA_PROGRESS_RECEIPT_VERSION 1u
+#define ADMISSION_TA_INITBM_BYTES 32u
+#define ADMISSION_TA_MICROSEQUENCE_OPCODE_COUNT 5u
+#define ADMISSION_TA_WORK_TIMESTAMP_TAIL_BYTES 0x68u
+#define ADMISSION_TA_STATS_HEAD_BYTES 0x78u
+#define ADMISSION_TA_STATS_TIMESTAMPS_BYTES 0x80u
+#define ADMISSION_TA_STAMP_BYTES 8u
+#define ADMISSION_TA_TIMESTAMP_TARGET_BYTES 32u
+typedef struct _ADMISSION_TA_PROGRESS_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Fence;
+  ULONG ElapsedMs;
+  UCHAR InitBm[ADMISSION_TA_INITBM_BYTES];
+  ULONG MicrosequenceOpcodes[ADMISSION_TA_MICROSEQUENCE_OPCODE_COUNT];
+  UCHAR TaInfo[ADMISSION_QUEUE_INFO_BYTES];
+  UCHAR TaPointers[ADMISSION_QUEUE_POINTERS_BYTES];
+  UCHAR EventControl[176u];
+  UCHAR WorkTimestampTail[ADMISSION_TA_WORK_TIMESTAMP_TAIL_BYTES];
+  UCHAR StatsHead[ADMISSION_TA_STATS_HEAD_BYTES];
+  UCHAR StatsTimestamps[ADMISSION_TA_STATS_TIMESTAMPS_BYTES];
+  UCHAR TaStamps[ADMISSION_TA_STAMP_BYTES];
+  UCHAR TimestampTargets[ADMISSION_TA_TIMESTAMP_TARGET_BYTES];
+} ADMISSION_TA_PROGRESS_RECEIPT;
+
 #define ADMISSION_KTRACE_RECEIPT_VERSION 1u
 #define ADMISSION_KTRACE_ENTRY_BYTES 0x38u
 #define ADMISSION_KTRACE_ENTRY_COUNT 16u
@@ -601,6 +626,9 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordBufferManager(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_BUFFER_MANAGER_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordTaProgress(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_TA_PROGRESS_RECEIPT *Receipt);
+_IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordKTrace(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_KTRACE_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
@@ -717,6 +745,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Receipt);                                                           \
   } while (0)
 #define AdmissionRecordBufferManager(Context, Receipt)                         \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Receipt);                                                           \
+  } while (0)
+#define AdmissionRecordTaProgress(Context, Receipt)                            \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \
