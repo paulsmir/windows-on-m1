@@ -648,6 +648,12 @@ EXP574 commit115ae467 preserves native low14 object offsets inside the same
 Windows-owned mapped pages; shared-memory sanitizer RED/GREEN and361 tests pass.
 Pinned30.0.574.0 gates pass; ZIP/SYS/producer SHAfdd30725.../b07eb56a.../
 3189a22f.... Hardware next.
+EXP574 FINAL: preserving low14 offsets did not move RetireStamp; rejected as
+sufficient. Exact cleanup and ordinary Code28/8CPU restore complete. After two
+focused causal fixes, next difference is allocator-class VA identity (native
+A000/A040/A071 bands vs production all-A000). Any fix needs broker-approved
+non-overlapping per-class Windows ranges and therefore changes the retained-root
+publication architecture; do not map over firmware-owned original VAs.
 
 ## Final live ordinary clean baseline
 

@@ -1,5 +1,23 @@
 # Hardware Experiment Ledger
 
+## EXP574 native intra-page object geometry — result 2026-09-07T14:39Z
+
+REJECTED as sufficient. Exact30.0.574.0 ran once. Object addresses now preserve
+native low14 offsets, but temporal receipt SHA `a0afa344...` remains stable and
+Retire receipt SHA `599f40ad...` still shows event0/0 and empty pending table;
+shared stamp/done/D3 do not advance. Exact cleanup and ordinary Code28/8CPU
+baseline restored; Event129x1 telemetry.
+
+Two causal fixes (full visibility and intra-page offsets) did not move
+RetireStamp. Focused standalone re-anchor leaves a larger semantic difference:
+native objects retain allocator-class VA bands (`A000` private/command,
+`A040` shared stamps/queue pointers, `A071` timestamps), while production
+publishes all36 in one `A000` band. Correcting this requires a broker-approved
+per-class Windows-owned VA layout that proves non-overlap with retained
+firmware-private mappings; it must not overwrite original native VAs or expose
+firmware-private ownership. This is an ownership/publication architecture
+change, not an ordinary implementation detail.
+
 ## EXP574 native intra-page object geometry — candidate ready 2026-09-07T14:48Z
 
 Pinned30.0.574.0 build/analysis/Universal/Inf2Cat/sign/version/producer PASS.
