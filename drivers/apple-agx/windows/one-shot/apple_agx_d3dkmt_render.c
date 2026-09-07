@@ -62,7 +62,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG output_pixels_verified = 0u;
   ULONG output_pixels_still_a5 = 0u;
   ULONG output_first_pixel_actual = 0u;
-  ULONG output_first_mismatch_index = MAXULONG;
+  ULONG output_first_mismatch_index = 0xffffffffu;
   ULONG output_first_mismatch_actual = 0u;
   ULONG output_changed_bytes = 0u;
   ULONG output_guard_corrupt = 0u;
@@ -254,7 +254,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       output_first_pixel_actual = actual;
     if (actual == APPLE_AGX_EXP208_GDI_COLOR)
       ++output_pixels_verified;
-    else if (output_first_mismatch_index == MAXULONG) {
+    else if (output_first_mismatch_index == 0xffffffffu) {
       output_first_mismatch_index = index;
       output_first_mismatch_actual = actual;
     }
