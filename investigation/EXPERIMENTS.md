@@ -1,5 +1,25 @@
 # Hardware Experiment Ledger
 
+## EXP574 native intra-page object geometry — preregistration 2026-09-07T14:40Z
+
+WHY THIS HYPOTHESIS: EXP573 rejects full-graph visibility as sufficient and
+leaves exact RetireStamp. Standalone EXP208 allocators place QueueInfo at...7f48,
+JobList...3fe8, stamps...fffc and timestamps...fff8; production mapped each
+object page but used object pointer offset0. RetireStamp is the first primitive
+whose implicit stamp/event geometry is not explained by ordinary relocated
+pointer dereferences. Single causal change: preserve each layout's original
+low14 bits inside its already mapped Windows-owned page.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: mapping bases remain16KiB
+aligned, while object pointers retain required intra-page alignment/geometry.
+TRANSLATION: commit `115ae4673018e02555e6439b02eb2045f67d0ea2`
+stores36 bounded offsets, allocates enough page space, copies/relocates at the
+offset, and derives QueueInfo/ring/pointer/stamp CPU+GPU addresses from mapping
+base+offset. Broker maps and owns the same pages; no private ownership changes.
+WHAT IS STILL UNKNOWN: whether native pointer geometry permits RetireStamp,
+event, D3 and Windows fence progress. Deterministic sanitizer test RED/GREEN;
+361 AppleAgx tests pass. One hardware candidate, exact cleanup.
+
 ## EXP573 active graph device visibility — result 2026-09-07T14:27Z
 
 REJECTED as sufficient. Exact30.0.573.0 ran once; complete active-graph flush

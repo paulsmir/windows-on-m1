@@ -644,6 +644,9 @@ EXP573 FINAL: full active-graph flush did not move any retirement scalar;
 rejected as sufficient. Boundary stays RetireStamp. Next exact difference is
 production page-offset0 objects vs native captured intra-page offsets; preserve
 those offsets within the same mapped pages. Clean ordinary baseline restored.
+EXP574 commit115ae467 preserves native low14 object offsets inside the same
+Windows-owned mapped pages; shared-memory sanitizer RED/GREEN and361 tests pass.
+Pinned build/hardware next.
 
 ## Final live ordinary clean baseline
 
