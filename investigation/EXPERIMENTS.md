@@ -1,5 +1,48 @@
 # Hardware Experiment Ledger
 
+## EXP564 complete BufferManager PageList rebase — preregistration 2026-09-07T12:02Z
+
+WHY THIS HYPOTHESIS:
+- EXP563 captured a real firmware Timeout counter0/stamp_index-1 after InitBM
+  changed BufferManagerInfo last_id from `0xffffffff` to 0.
+- Accepted EXP208 source populates four consecutive 32-KiB page numbers for
+  each block. The current generated table has only one PageList relocation per
+  block, so three entries retain the old unmapped `0x1600...` pages after the
+  arena moves to `0x1503...`.
+- The observed first-page progress followed by timeout is the exact behavior
+  predicted by this stale interior-page list; no nearer alternative remains.
+
+WINDOWS CONTRACT: unchanged Windows packet/fence and fail-closed event handling.
+AGX/ASAHI CONTRACT: every one of the 64 PageList entries is the 32-KiB page
+number of its exact four-page BM block; BlockList remains 16 base pages plus
+zero companions. TRANSLATION: relocate each PageList interior page to target
+block +0/+0x8000/+0x10000/+0x18000, allowing only aligned in-range offsets.
+WHAT IS STILL UNKNOWN: whether InitBM proceeds past timeout into TA work/event/
+done and then D3.
+
+ATOMIC CONTRACT: 48 new PageList edges plus both validators and regenerated
+table are indivisible; without validator support the correct table is rejected,
+and without all edges the list is internally inconsistent. No other bytes,
+runtime behavior or capability changes. Commit
+`f3628eb22972a1917fef0077beb275f6040b5c45`; exact interior-page tests were
+RED then GREEN; 356 AppleAgx tests pass. Template now has 207 edges, generated
+source SHA `ca1af11365d56b6ffac91f0870d568104f01aa7046577897f763b8357141fa6c`.
+
+Pinned WDK26100/MSVC14.44 build, code analysis, Universal validation, Inf2Cat,
+signing, KMD/UMD and producer pass with inherited C28251 only. Version
+30.0.564.0. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`f48c4595c7f3eb5ea27eed38f9ec62140383bea2ce47afe962eabb408dec6e5e` /
+`35d0fcde255e23dc32b9f94520acfbd38cbad8bd33bdb08f1b15b14c1a0e1512` /
+`1a454616092155c2f360a4bbe1b85acd450743c23748bf18749558b2e9352659` /
+`f7dce78bfadea49ec0257fd50446de2361a16ed2d3deb954294e5418b35fdcf0` /
+`5c66c57ebd300a6212b8c2bed2d034690e1898526537c194d0e008893f686b64` /
+`eea6df06aee55626aa20a4b782d7bbd5cd0f0b36b4d3597c2ebd42d45f52cc55` /
+`f79776a2daa2b1c522c5cb24a8960142d82d991ca9b3f6515edb03305549c328`.
+Full-owner/recovery artifacts unchanged. One hash-gated stage, natural bind and
+producer. PASS requires no kind4 timeout and TA progress/done/event or a later
+exact boundary; collect all available receipts before exact cleanup. ANS
+untouched.
+
 ## EXP563 rejected event receipt — preregistration 2026-09-07T11:38Z
 
 WHY THIS HYPOTHESIS:
