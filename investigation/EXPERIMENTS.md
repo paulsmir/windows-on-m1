@@ -1,5 +1,21 @@
 # Hardware Experiment Ledger
 
+## EXP572 TA retirement temporal progress — candidate ready 2026-09-07T14:12Z
+
+Pinned30.0.572.0 WDK26100/MSVC14.44 build, analysis, Universal, Inf2Cat,
+test signing, coherent version and producer gates PASS. Implementation commit
+`9ce62042c6d1e06fa4a6068a984e8ed18a4ef712`; builder base EXP571 plus exact
+overlay. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`54b13a3c3732aa031882bed4e69dd7fddff19d4daa41bc29ef2429dbefcaa493` /
+`87d7cea50cf1c5a00fd3ea1b2550bb6c2ee6a8203acaec8e84c153f287ef0002` /
+`f67d17979c2eba5eb9de42d009ac38ec8411ec5265f7511b62054648a17a2285` /
+`c6c43b21c86c95c0e218302eddec26f98790454072f0d8e33556afd13cb9392e` /
+`7c66e074decb6c0b8d8ed1cd4a7a76ebfc1a7a57f0c8621c584771b0bf902c8c` /
+`ca35c2d8ea2690fdbe17308e2a2772ff9c3e8c03e6e354db16f81e4b88f68944` /
+`ac56ecc5def25a2df55b2ae944a4fca469f08a6d683d3b926077bbd680fc2cf6`.
+Workflow/launch SHA `de455a63...` / `92190f2b...`; same m1n1/Mu and recovery.
+One exact bind and producer, collect temporal receipt, cleanup.
+
 ## EXP572 TA retirement temporal progress — preregistration 2026-09-07T14:07Z
 
 WHY THIS HYPOTHESIS: EXP571 proves FinalizeTA private completion, byte-exact

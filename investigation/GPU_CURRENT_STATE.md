@@ -631,7 +631,8 @@ Thus event decoder is not first owner. SceneList rejected because G13 encoding
 omits it. First unknown is FinalizeTA restart loop vs single RetireStamp stop;
 next compare two timestamp/stamp samples. Exact cleanup and ordinary restore done.
 EXP572 commit9ce6204 adds only two read-only50/100ms samples to distinguish
-Finalize restart from Retire stop;360 AppleAgx tests pass. Build/hardware next.
+Finalize restart from Retire stop;360 AppleAgx tests pass. Pinned30.0.572.0
+gates pass; ZIP/SYS/producer SHA87d7cea5.../f67d1797.../ac56ecc5.... Hardware next.
 
 ## Final live ordinary clean baseline
 
