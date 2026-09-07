@@ -76,7 +76,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(AppleAgxVisibleScanoutQualification)'=='true'">
     <ClCompile>
-      <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
