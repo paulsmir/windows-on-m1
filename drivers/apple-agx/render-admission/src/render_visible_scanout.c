@@ -133,4 +133,16 @@ int AdmissionVisibleAgxScale16x16(
   return Receipt->SourceHash != 0ULL && Receipt->DestinationHash != 0ULL;
 }
 
+int AdmissionVisibleAgxReservationValid(
+    unsigned long long WindowsAllocationBytes,
+    unsigned long long BackendOffset) {
+  return WindowsAllocationBytes == ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET &&
+                 ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET +
+                         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE <=
+                     BackendOffset &&
+                 BackendOffset <= APPLE_AGX_SCANOUT_J313_POOL_SIZE
+             ? 1
+             : 0;
+}
+
 #undef VISIBLE_NULL

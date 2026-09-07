@@ -70,6 +70,12 @@ int main(void) {
   assert(agx.SourceHash != 0ULL && agx.DestinationHash != 0ULL);
   assert(pixel(surface, 0u, 0u) == 0xff112233u);
   assert(pixel(surface, 2559u, 1599u) == 0xff112233u);
+  assert(AdmissionVisibleAgxReservationValid(
+      ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET,
+      APPLE_AGX_SCANOUT_J313_POOL_SIZE));
+  assert(!AdmissionVisibleAgxReservationValid(
+      APPLE_AGX_SCANOUT_J313_POOL_SIZE,
+      APPLE_AGX_SCANOUT_J313_POOL_SIZE));
   free(surface);
   return 0;
 }

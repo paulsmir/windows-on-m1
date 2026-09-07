@@ -5,6 +5,8 @@
 
 #define ADMISSION_VISIBLE_PATTERN_VERSION 1u
 #define ADMISSION_VISIBLE_PATTERN_PREFIX_BYTES 64u
+#define ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET \
+  (2ULL * APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
 
 typedef struct _ADMISSION_VISIBLE_PATTERN_RECEIPT {
   unsigned int Version;
@@ -68,5 +70,9 @@ int AdmissionVisibleAgxScale16x16(
     const void *Source, unsigned long long SourceBytes,
     void *Destination, unsigned long long DestinationBytes,
     ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);
+
+int AdmissionVisibleAgxReservationValid(
+    unsigned long long WindowsAllocationBytes,
+    unsigned long long BackendOffset);
 
 #endif /* APPLE_AGX_RENDER_VISIBLE_SCANOUT_H */

@@ -225,7 +225,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     ADMISSION_CONTEXT *Context, const VOID *Source, ULONG SourceBytes,
     ULONGLONG SourceGpuAddress, ULONGLONG SourcePhysicalAddress, ULONG Fence) {
   const ULONGLONG destinationOffset =
-      2ULL * APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+      ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET;
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   ADMISSION_SCANOUT_MEMORY_VIEW memory;
   ADMISSION_VISIBLE_AGX_RECEIPT receipt;

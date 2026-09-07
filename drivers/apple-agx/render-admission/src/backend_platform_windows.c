@@ -104,6 +104,13 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_TERMINAL_RECEIPT TerminalReceipt;
   volatile LONG TerminalSequence;
 #endif
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  UCHAR VisibleAgxSource[1024];
+  ULONGLONG VisibleAgxGpuAddress;
+  ULONGLONG VisibleAgxPhysicalAddress;
+  ULONG VisibleAgxFence;
+  BOOLEAN VisibleAgxValid;
+#endif
   BOOLEAN Powered;
   BOOLEAN RenderBorrowed;
   BOOLEAN QueueImageReady;
@@ -206,12 +213,25 @@ static VOID AdmissionTerminalObserve(
         Runtime->TransportIo.FlushForCpu(
             Runtime, output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES)) {
       Runtime->TransportIo.MemoryBarrier(Runtime);
-      (void)AdmissionTerminalReceiptCaptureOutput(
+      if (AdmissionTerminalReceiptCaptureOutput(
           &Runtime->TerminalReceipt, Fence,
           (const UCHAR *)output->Data,
           APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u,
           APPLE_AGX_EXP208_GDI_OUTPUT_BYTES,
-          APPLE_AGX_EXP208_GDI_COLOR, 0xa5u);
+          APPLE_AGX_EXP208_GDI_COLOR, 0xa5u)) {
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+        if (Runtime->TerminalReceipt.OutputPixelsExpected == 256u) {
+          RtlCopyMemory(Runtime->VisibleAgxSource, output->Data,
+                        sizeof(Runtime->VisibleAgxSource));
+          Runtime->VisibleAgxGpuAddress =
+              Runtime->TerminalReceipt.DestinationGpuVa;
+          Runtime->VisibleAgxPhysicalAddress =
+              Runtime->TerminalReceipt.DestinationPhysical;
+          Runtime->VisibleAgxFence = Fence;
+          Runtime->VisibleAgxValid = TRUE;
+        }
+#endif
+      }
     }
     Runtime->TerminalReceipt.EventReadPointer =
         Runtime->Provider.LastEventReadPointer;
@@ -1918,19 +1938,6 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalObserve(runtime, Fence, Status);
 #endif
-#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-  if (Status == AppleAgxBackendCompletionSuccess &&
-      (runtime->TerminalReceipt.ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) != 0u &&
-      runtime->TerminalReceipt.OutputPixelsExpected == 256u) {
-    APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
-        &runtime->Adapter->BackendImage.Objects[
-            APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
-    (void)AdmissionScanoutPresentAgxResult(
-        runtime->Adapter, output->Data, output->Size,
-        runtime->TerminalReceipt.DestinationGpuVa,
-        runtime->TerminalReceipt.DestinationPhysical, Fence);
-  }
-#endif
   if (Fence == 0u || Node != 0u || Engine != 0u ||
       Status != AppleAgxBackendCompletionSuccess)
     return APPLE_AGX_BACKEND_FALSE;
@@ -2364,7 +2371,8 @@ static VOID AdmissionPlatformWorker(
         channelProgressReported = TRUE;
       }
     }
-    if (!faultSnapshotReported) {
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+        !faultSnapshotReported) {
       ULONGLONG nowMs = AdmissionPlatformNowMs();
       if (nowMs >= queueSubmitMs + ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS) {
         volatile APPLE_AGX_BACKEND_U32 *taRead =
@@ -2388,7 +2396,8 @@ static VOID AdmissionPlatformWorker(
         }
       }
     }
-    if (!taProgressReported) {
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+        !taProgressReported) {
       ULONGLONG nowMs = AdmissionPlatformNowMs();
       if (nowMs >= queueSubmitMs + ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS) {
         ADMISSION_TA_PROGRESS_RECEIPT taProgress;
@@ -2400,7 +2409,8 @@ static VOID AdmissionPlatformWorker(
         }
       }
     }
-    if (!taRetireReported) {
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+        !taRetireReported) {
       ULONGLONG nowMs = AdmissionPlatformNowMs();
       if (nowMs >= queueSubmitMs + ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS) {
         ADMISSION_TA_RETIRE_RECEIPT taRetire;
@@ -2412,7 +2422,8 @@ static VOID AdmissionPlatformWorker(
         }
       }
     }
-    if (!taTemporalReported) {
+    if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
+        !taTemporalReported) {
       ULONGLONG nowMs = AdmissionPlatformNowMs();
       ULONGLONG elapsedMs = nowMs - queueSubmitMs;
       if (taTemporal.SampleCount == 0u &&
@@ -2458,6 +2469,17 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
+      runtime->VisibleAgxValid &&
+      runtime->VisibleAgxFence == description.Fence) {
+    (void)AdmissionScanoutPresentAgxResult(
+        adapter, runtime->VisibleAgxSource,
+        sizeof(runtime->VisibleAgxSource), runtime->VisibleAgxGpuAddress,
+        runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence);
+  }
+  runtime->VisibleAgxValid = FALSE;
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!taTemporalReported && taTemporal.SampleCount != 0u)
     AdmissionRecordTaTemporal(adapter, &taTemporal);

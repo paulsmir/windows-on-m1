@@ -431,6 +431,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     status = STATUS_INVALID_DEVICE_STATE;
     goto Fail;
   }
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (!AdmissionVisibleAgxReservationValid(
+          ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET,
+          Context->Memory.BackendOffset)) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Fail;
+  }
+  Context->Memory.LocalAllocationBytes =
+      ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET;
+#endif
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartComplete,
                              STATUS_SUCCESS);
   return STATUS_SUCCESS;
@@ -558,8 +568,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
       runtime->LocalObject.CpuAddress == NULL ||
       runtime->LocalObject.DeviceAddress == 0ULL ||
       runtime->LocalObject.GpuVirtualAddress != ADMISSION_LOCAL_GPU_VA ||
-      Context->Memory.LocalAllocationBytes !=
-          ADMISSION_LOCAL_ALLOCATION_BYTES)
+      Context->Memory.LocalAllocationBytes == 0ULL ||
+      Context->Memory.LocalAllocationBytes > ADMISSION_LOCAL_ALLOCATION_BYTES)
     return STATUS_INVALID_DEVICE_STATE;
   allocation = (ADMISSION_PHYSICAL_ALLOCATION *)
       runtime->LocalObject.AllocationHandle;
@@ -574,7 +584,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   View->GuestIpaAddress = allocation->GuestIpaBase + offset;
   View->HostPhysicalAddress = runtime->LocalObject.DeviceAddress;
   View->GpuVirtualAddress = runtime->LocalObject.GpuVirtualAddress;
-  View->Bytes = Context->Memory.LocalAllocationBytes;
+  View->Bytes = ADMISSION_LOCAL_ALLOCATION_BYTES;
   return STATUS_SUCCESS;
 }
 
