@@ -467,6 +467,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   ADMISSION_OPEN_ALLOCATION *opened;
   BOOLEAN sealed;
   ADMISSION_LOCAL_MEMORY_VIEW destination;
+  const ADMISSION_LOCAL_MEMORY_VIEW *visibleDestinationForPacket = NULL;
+  ULONGLONG visibleAllocationTokenForPacket = 0ULL;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_LOCAL_MEMORY_VIEW visibleDestination;
   ULONGLONG visibleAllocationToken = 0ULL;
@@ -565,6 +567,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           &visibleAllocationToken)))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,
                         STATUS_INVALID_ADDRESS);
+  visibleDestinationForPacket = &visibleDestination;
+  visibleAllocationTokenForPacket = visibleAllocationToken;
 #endif
 
   sealed = AppleAgxDmaShadowIsSealed(
@@ -590,13 +594,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   }
   if (!NT_SUCCESS(AdmissionGdiPreparePacket(
           adapter, context, opened, Args, shadow.BytesUsed,
-          &destination,
-#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-          &visibleDestination, visibleAllocationToken
-#else
-          NULL, 0ULL
-#endif
-          )))
+          &destination, visibleDestinationForPacket,
+          visibleAllocationTokenForPacket)))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardPrepare,
                         STATUS_DEVICE_BUSY);
   AdmissionGdiReceiptPatchWindows(adapter,
