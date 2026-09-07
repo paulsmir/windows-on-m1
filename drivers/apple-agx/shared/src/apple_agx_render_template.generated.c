@@ -1,15 +1,15 @@
 #include "apple_agx_render_template.h"
 
 /* Generated from the validated EXP208 G13/V13_5 relocation template.
- * Template SHA-256: b7053ae654b4629e863db50999a17811e696ba91cadcf8bc807b5a6758bd3f99
- * Materialized image SHA-256: 73c17c6e1aab1877c14151e8b0d9b8f469dcf459c5ce5072e06b4d05bd529d57
+ * Template SHA-256: 40a47f17f21f87125c52e657d154cfa985879f928336676a6452b134d9f27a36
+ * Materialized image SHA-256: a3651eda7378690599ef35458e35a7904827c0675c24986a582196b31caab122
  * Do not edit by hand; regenerate with generate_agx_render_template.py.
  */
-#define APPLE_AGX_RENDER_TEMPLATE_BYTES 5799936u
-#define APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT 73u
+#define APPLE_AGX_RENDER_TEMPLATE_BYTES 6062080u
+#define APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT 74u
 #define APPLE_AGX_RENDER_TEMPLATE_RELOCATION_COUNT 207u
-#define APPLE_AGX_RENDER_TEMPLATE_ARENA_OBJECT_INDEX 73u
-#define APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT 74u
+#define APPLE_AGX_RENDER_TEMPLATE_ARENA_OBJECT_INDEX 74u
+#define APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT 75u
 
 typedef struct _APPLE_AGX_RENDER_TEMPLATE_RUN {
   APPLE_AGX_U32 ImageOffset;
@@ -200,7 +200,10 @@ static const unsigned char AppleAgxRenderTemplateData[] = {
   0x03, 0xe6, 0x03, 0xe7, 0x03, 0xe8, 0x03, 0xe9, 0x03, 0xea, 0x03, 0xeb, 0x03, 0xec, 0x03, 0xed,
   0x03, 0xee, 0x03, 0xef, 0x03, 0xf0, 0x03, 0xf1, 0x03, 0xf2, 0x03, 0xf3, 0x03, 0xf4, 0x03, 0xf5,
   0x03, 0xf6, 0x03, 0xf7, 0x03, 0xf8, 0x03, 0xf9, 0x03, 0xfa, 0x03, 0xfb, 0x03, 0xfc, 0x03, 0xfd,
-  0x03, 0xfe, 0x03, 0xff, 0x03, 0x04,
+  0x03, 0xfe, 0x03, 0xff, 0x03, 0x04, 0x1d, 0x0c, 0x40, 0x15, 0x4d, 0xbd, 0x10, 0x20, 0x0d, 0x0c,
+  0x01, 0x8d, 0x01, 0x01, 0x88, 0xdd, 0x10, 0x20, 0x15, 0x9d, 0x10, 0x10, 0x15, 0x4d, 0xbd, 0x10,
+  0x20, 0x0d, 0x0c, 0x82, 0x01, 0x8d, 0x01, 0x88, 0xdd, 0x10, 0x30, 0x15, 0x1d, 0x04, 0x40, 0x40,
+  0x15, 0x4d, 0xbd, 0x10, 0x20, 0x0d, 0x0c, 0x04, 0x01, 0x8d, 0x01, 0x01, 0x88,
 };
 
 static const APPLE_AGX_RENDER_TEMPLATE_RUN AppleAgxRenderTemplateRuns[] = {
@@ -1646,6 +1649,30 @@ static const APPLE_AGX_RENDER_TEMPLATE_RUN AppleAgxRenderTemplateRuns[] = {
   {5480424u, 2913u, 2u},
   {5480432u, 2915u, 2u},
   {5480441u, 2917u, 1u},
+  {5799936u, 2918u, 3u},
+  {5799943u, 2921u, 7u},
+  {5799952u, 2928u, 1u},
+  {5799954u, 2929u, 2u},
+  {5799957u, 2931u, 2u},
+  {5804032u, 2933u, 1u},
+  {5804034u, 2934u, 1u},
+  {5804036u, 2935u, 1u},
+  {5804039u, 2936u, 2u},
+  {5804042u, 2938u, 1u},
+  {5804044u, 2939u, 1u},
+  {5804047u, 2940u, 7u},
+  {5804055u, 2947u, 2u},
+  {5804058u, 2949u, 1u},
+  {5804061u, 2950u, 2u},
+  {5808128u, 2952u, 1u},
+  {5808130u, 2953u, 1u},
+  {5808132u, 2954u, 1u},
+  {5808135u, 2955u, 4u},
+  {5808140u, 2959u, 1u},
+  {5808143u, 2960u, 7u},
+  {5808151u, 2967u, 2u},
+  {5808154u, 2969u, 2u},
+  {5808157u, 2971u, 2u},
 };
 
 static const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT
@@ -1723,6 +1750,7 @@ AppleAgxRenderTemplateLayouts[APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT] = {
   {70u, "Unk tile buf 4", 63u, 0x1600322c00ULL, 0x80f176c00ULL, 5701632u, 0x1503d70000ULL, 5120u},
   {71u, "Unk tile buf 5", 63u, 0x160032be80ULL, 0x80f17be80ULL, 5734400u, 0x1503d78000ULL, 384u},
   {72u, "BufferThing.unkptr_18", 63u, 0x1600333f80ULL, 0x80f17ff80ULL, 5767168u, 0x1503d80000ULL, 128u},
+  {73u, "GBM offset 0xfff78000", 63u, 0x1100020000ULL, 0x80ecd0000ULL, 5799936u, 0x1503d88000ULL, 262144u},
 };
 
 static const APPLE_AGX_EXP208_RELOCATION
