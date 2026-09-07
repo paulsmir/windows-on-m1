@@ -10,10 +10,12 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
     def test_external_render_materializes_firmware_queue_image_before_mapping(self):
         platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
         prepare = platform.index("AppleAgxInitdataMemoryPrepareBroker(")
+        seed = platform.index("Context->BackendImage.Objects", prepare)
         bind = platform.index("AppleAgxRenderSharedMemoryBindRelocationObjects(", prepare)
         relocate = platform.index("AppleAgxApplyRelocations(", bind)
         firmware = platform.index("AppleAgxFirmwareProviderInitialize(", relocate)
         self.assertLess(prepare, bind)
+        self.assertLess(seed, bind)
         self.assertLess(bind, relocate)
         self.assertLess(relocate, firmware)
         self.assertIn("QueueImageReady", platform)

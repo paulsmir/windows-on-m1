@@ -1755,6 +1755,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata, status);
     goto Fail;
   }
+  RtlCopyMemory(runtime->QueueObjects, Context->BackendImage.Objects,
+                sizeof(runtime->QueueObjects));
   if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,
           Context->BackendImage.ArenaCpuAddress,
