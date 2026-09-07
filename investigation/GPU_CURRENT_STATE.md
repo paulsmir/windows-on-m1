@@ -1,10 +1,10 @@
 # GPU current state
 
-Updated2026-09-07T19:51Z. Authoritative live state; read first after context reset.
+Updated2026-09-07T20:04Z. Authoritative live state; read first after context reset.
 Detailed handoff: .local/experiments/EXP506-cdd-blt/handoff.md.
 Historical snapshot: .local/experiments/EXP506-cdd-blt/state-before-final-compact.md.
 
-## Current boundary — EXP585 PBE write proven / EXP586 clear color
+## Current boundary — EXP586 offscreen target proven / visible Present NO
 
 EXP581 remains the first hardware proof of Windows-originated physical TA+3D
 execution and exact Windows fence completion. Completion source is polling;
@@ -71,6 +71,26 @@ bd2828b84d3e268bb854eaffcd0ff495e320736c46f0d3802042f5b41921b117,
 fb0b2f07bed78e8ad2e6be75c436232b2530b610c3ffbcf4475d3668728e559a,
 f59e72788693be09dcceab5ba8ef38775c1fc0d035e2c9ee34cca32fc6171f31.
 Workflow parser GREEN. Ordinary392 restore is active; verify clean then stage/run.
+
+EXP586 HARDWARE PASS closes first offscreen render-target memory correctness.
+The physical panel remained black because this producer did not issue Present;
+no visible-frame or DCP-latch claim follows. Terminal ValidMaskff
+proves TA/D3 exact stamps/done2/2, fence/completed255, NotifyInterrupt/DPC and
+clean Ready exit. OutputFirstPixel ff112233, mismatch index ffffffff,
+PixelsExpected256, Poison0, ChangedBytes1024, Guard0, BytesExamined16384,
+FNV16c4fd3d3ba00d25 and repeated raw bytes332211ff. Evidence ZIP SHA
+900559100f24fbacd5e46d3e05ec9f66988aa9b3f7a1c22753d446fd974c303b.
+Health8CPU/NVMe2/USB5/keyboard1, bugcheck/critical0; Event129x2 telemetry.
+Exact package/service/SYS/UMD cleanup complete. No EXP586 repeat.
+
+Next boundary is second Windows-originated submit in one firmware/queue lifetime.
+Accepted source defect: BuildActiveJob recopies all36 template shared objects on
+every job although queue provider retains live ring pointers, stamps, JobList and
+BufferManagerInitialized. Derive the smallest persistent/per-submission split and
+host-test it before a two-submit hardware candidate. Do not combine firmware-reset
+sequence correction yet; that is a later independent boundary.
+After repeated submit is proven, the next visible boundary is exact Present to
+DCP; a black panel before that boundary is expected and not an EXP586 regression.
 
 ## Binding scope and current executor
 

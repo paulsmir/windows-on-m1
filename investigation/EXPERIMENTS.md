@@ -35664,3 +35664,30 @@ Manifest SHA `d1e6e0bc6c20dc437ce5a0500a815075e9db899195a023bf587c2a29779fc3ec`.
 Hash-gated workflow and full-owner/ordinary scripts prepared; PowerShell parser
 GREEN. Preflight requires the active ordinary392 Code28/no package/service/SYS/
 UMD state. One natural bind and one producer only; evidence then exact cleanup.
+
+**EXP586 FINAL 2026-09-07T20:03Z — OFFSCREEN RENDER-TARGET MEMORY PASS;
+VISIBLE PRESENT NOT RUN.** Exact
+30.0.586.0 staged from a clean ordinary baseline, naturally bound Code0 with
+matching oem5/INF/SYS, service Running and8CPU, then producer ran once.
+Terminal ValidMaskff proves sequence1, fence/completed255, TA/D3 events0/1,
+expected=actual stamps7a000100/3d000100, expected=actual done2/2, raw polling
+event, NotifyInterrupt1, DPC1, Completed exit, Created provider, Ready backend
+and zero stop/reset/scheduler fault.
+
+The exact KMD-owned target is correct: FirstPixelActual ff112233,
+FirstMismatchIndex ffffffff, PixelsExpected256, PixelsPoison0,
+ChangedBytes1024, GuardCorrupt0, BytesExamined4000, FNV16c4fd3d3ba00d25 and
+64-byte prefix of repeated332211ff. This is the first hardware proof of correct
+Windows-originated physical TA/3D render-target contents through an exact Windows
+fence. The physical panel remained black: the producer did not issue Present and
+there was no new DCP latch requirement. It does not yet prove a second submit,
+visible frame, Present or OpenGL.
+
+Evidence ZIP SHA
+`900559100f24fbacd5e46d3e05ec9f66988aa9b3f7a1c22753d446fd974c303b`;
+terminal SHA `055359b6db4dd0c37c90c4ab24d2a75cea6b830a578bb9a4c4d27d9d80b73bfc`;
+host log SHA `0948fd9b7ba54b1925d8106f37eb2dfc636a3e1a0b7b3fd98108f49022b458f4`.
+Health8CPU/NVMe2/USB5/keyboard1, bugcheck/critical0; Event129x2 is telemetry.
+Exact oem5/package/service/SYS/UMD cleanup complete. Next restore ordinary392,
+then fix only the already source-confirmed persistent shared-object recopy before
+one two-submit candidate. Firmware-reset sequence remains separate.
