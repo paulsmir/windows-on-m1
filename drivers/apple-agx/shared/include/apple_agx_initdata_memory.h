@@ -105,5 +105,9 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyRenderArenas(
 APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyCommandArena(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
     unsigned long long CommandVa, unsigned long long CommandBytes);
+APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyQueueArenas(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    unsigned long long CommandVa, unsigned long long CommandBytes,
+    unsigned long long SharedVa, unsigned long long SharedBytes);
 
 #endif /* APPLE_AGX_INITDATA_MEMORY_H */

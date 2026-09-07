@@ -1082,7 +1082,7 @@ static unsigned char AdmissionContext0Ipa(void *ctx,const APPLE_AGX_MEMORY_OBJEC
 
 static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
   AGX_RR_RESPONSE response={0};
-  AGX_RR_ARENA_DESCRIPTOR command={0};
+  AGX_RR_ARENA_DESCRIPTOR command={0},shared={0};
   AGX_RR_IO io={runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
   int result;
   if(!runtime->RetainedPrepared || !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
@@ -1091,9 +1091,11 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
       !(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
       response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
   if (!AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_COMMAND,&command) ||
+      !AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_SHARED,&shared) ||
       command.Va > MAXULONGLONG-command.Bytes ||
-      AppleAgxInitdataMemoryApplyCommandArena(
-          &runtime->Initdata,command.Va,command.Bytes) !=
+      shared.Va > MAXULONGLONG-shared.Bytes ||
+      AppleAgxInitdataMemoryApplyQueueArenas(
+          &runtime->Initdata,command.Va,command.Bytes,shared.Va,shared.Bytes) !=
           AppleAgxInitdataMemoryResultOk ||
       !AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,

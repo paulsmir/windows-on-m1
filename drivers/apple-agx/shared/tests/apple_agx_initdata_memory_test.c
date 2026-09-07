@@ -448,13 +448,15 @@ int main(void) {
            AppleAgxUatFirmwareGpuSharedReadWrite);
     for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i)
       original_vas[i]=graph.RenderSharedMemory.VirtualAddresses[i];
-    assert(AppleAgxInitdataMemoryApplyCommandArena(
-        &graph,AGX_RR_COMMAND_ARENA_VA,APPLE_AGX_MEMORY_PAGE_SIZE) ==
+    assert(AppleAgxInitdataMemoryApplyQueueArenas(
+        &graph,AGX_RR_COMMAND_ARENA_VA,APPLE_AGX_MEMORY_PAGE_SIZE,
+        AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultInvalidArgument);
     for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i)
       assert(graph.RenderSharedMemory.VirtualAddresses[i]==original_vas[i]);
-    assert(AppleAgxInitdataMemoryApplyCommandArena(
-        &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES) ==
+    assert(AppleAgxInitdataMemoryApplyQueueArenas(
+        &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES,
+        AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultOk);
     for(i=0;i<graph.Inventory.MappingCount;++i) {
       assert(graph.MappingObjects[i]);
@@ -473,11 +475,16 @@ int main(void) {
         assert(graph.RenderSharedMemory.VirtualAddresses[i]+
                graph.RenderSharedMemory.ObjectOffsets[i] ==
                layouts[i].OriginalGpuVa+0x01000000ULL);
+      else if(i>=23u && i<=27u)
+        assert(graph.RenderSharedMemory.VirtualAddresses[i]+
+               graph.RenderSharedMemory.ObjectOffsets[i] ==
+               layouts[i].OriginalGpuVa+0x01000000ULL);
       else
         assert(graph.RenderSharedMemory.VirtualAddresses[i]==original_vas[i]);
     }
-    assert(AppleAgxInitdataMemoryApplyCommandArena(
-        &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES) ==
+    assert(AppleAgxInitdataMemoryApplyQueueArenas(
+        &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES,
+        AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultInvalidArgument);
     assert(leaves==200);
     graph.BrokerOutstanding=1;

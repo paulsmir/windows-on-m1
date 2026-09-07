@@ -197,6 +197,53 @@ AppleAgxRenderSharedMemoryApplyCommandArena(
   return Owner->LastResult;
 }
 
+APPLE_AGX_RENDER_SHARED_MEMORY_RESULT
+AppleAgxRenderSharedMemoryApplyQueueArenas(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U64 CommandVa, APPLE_AGX_U64 CommandBytes,
+    APPLE_AGX_U64 SharedVa, APPLE_AGX_U64 SharedBytes) {
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  APPLE_AGX_U64 proposed[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+  APPLE_AGX_U64 bias;
+  APPLE_AGX_U32 index;
+  if (Owner == RENDER_SHARED_NULL || !Owner->Initialized || !Owner->Built ||
+      Owner->ClassArenasApplied ||
+      Owner->ObjectCount != APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT ||
+      !arena_valid(CommandVa, CommandBytes, RENDER_SHARED_NATIVE_COMMAND_BASE,
+                   RENDER_SHARED_NATIVE_COMMAND_END) ||
+      !arena_valid(SharedVa, SharedBytes, RENDER_SHARED_NATIVE_SHARED_BASE,
+                   RENDER_SHARED_NATIVE_SHARED_END) ||
+      CommandVa > ~0ULL - CommandBytes || SharedVa > ~0ULL - SharedBytes ||
+      SharedVa <= RENDER_SHARED_NATIVE_SHARED_BASE)
+    return AppleAgxRenderSharedMemoryResultInvalidArgument;
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index)
+    proposed[index] = Owner->VirtualAddresses[index];
+  if (!place_class(Owner, layouts, RENDER_SHARED_NATIVE_COMMAND_BASE,
+                   RENDER_SHARED_NATIVE_COMMAND_END, CommandVa, CommandBytes,
+                   proposed))
+    return AppleAgxRenderSharedMemoryResultInvalidArgument;
+  bias = SharedVa - RENDER_SHARED_NATIVE_SHARED_BASE;
+  for (index = 23u; index <= 27u; ++index) {
+    APPLE_AGX_U64 gpu_va, mapping_va;
+    if (layouts[index].OriginalGpuVa > ~0ULL - bias)
+      return AppleAgxRenderSharedMemoryResultInvalidArgument;
+    gpu_va = layouts[index].OriginalGpuVa + bias;
+    mapping_va = gpu_va & ~RENDER_SHARED_PAGE_MASK;
+    if (mapping_va < SharedVa || mapping_va > SharedVa + SharedBytes ||
+        Owner->Objects[index].Length > SharedVa + SharedBytes - mapping_va)
+      return AppleAgxRenderSharedMemoryResultInvalidArgument;
+    proposed[index] = mapping_va;
+  }
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index)
+    Owner->VirtualAddresses[index] = proposed[index];
+  Owner->ClassArenasApplied = APPLE_AGX_TRUE;
+  Owner->LastResult = AppleAgxRenderSharedMemoryResultOk;
+  return Owner->LastResult;
+}
+
 static APPLE_AGX_RENDER_SHARED_MEMORY_RESULT rollback(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     APPLE_AGX_RENDER_SHARED_MEMORY_RESULT Failure) {
