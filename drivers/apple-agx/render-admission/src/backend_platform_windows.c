@@ -6,6 +6,7 @@
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS 50ULL
+#define ADMISSION_TA_TEMPORAL_SECOND_DELAY_MS 100ULL
 #define ADMISSION_REGIONC_FAULT_INFO_OFFSET 0x11a2cu
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
 #define ADMISSION_QUEUE_OBJECT_D3_INFO 3u
@@ -450,6 +451,56 @@ static BOOLEAN AdmissionCaptureTaRetire(
       (const UCHAR *)regionC->CpuAddress +
           ADMISSION_REGIONC_PENDING_STAMPS_OFFSET,
       sizeof(Receipt->PendingStamps));
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureTaTemporalSample(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONGLONG ElapsedMs,
+    ADMISSION_TA_TEMPORAL_SAMPLE *Sample) {
+  static const ULONG stampObjects[2] = {
+      ADMISSION_QUEUE_OBJECT_TA_STAMP1,
+      ADMISSION_QUEUE_OBJECT_TA_STAMP2};
+  static const ULONG timestampObjects[4] = {
+      ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_START,
+      ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END,
+      ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_START,
+      ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_END};
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taWork;
+  ULONG index;
+  if (Runtime == NULL || Sample == NULL)
+    return FALSE;
+  taWork = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_WORK];
+  if (taWork->Data == NULL ||
+      ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET > taWork->Size ||
+      ADMISSION_TA_WORK_TIMESTAMP_TAIL_BYTES >
+          taWork->Size - ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET)
+    return FALSE;
+  for (index = 0u; index < RTL_NUMBER_OF(stampObjects); ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &Runtime->QueueObjects[stampObjects[index]];
+    if (object->Data == NULL || object->Size != sizeof(ULONG))
+      return FALSE;
+  }
+  for (index = 0u; index < RTL_NUMBER_OF(timestampObjects); ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &Runtime->QueueObjects[timestampObjects[index]];
+    if (object->Data == NULL || object->Size != sizeof(ULONGLONG))
+      return FALSE;
+  }
+  RtlZeroMemory(Sample, sizeof(*Sample));
+  Sample->ElapsedMs = ElapsedMs > MAXULONG ? MAXULONG : (ULONG)ElapsedMs;
+  for (index = 0u; index < RTL_NUMBER_OF(stampObjects); ++index) {
+    RtlCopyMemory(&Sample->TaStamps[index * sizeof(ULONG)],
+        Runtime->QueueObjects[stampObjects[index]].Data, sizeof(ULONG));
+  }
+  for (index = 0u; index < RTL_NUMBER_OF(timestampObjects); ++index) {
+    RtlCopyMemory(&Sample->TimestampTargets[index * sizeof(ULONGLONG)],
+        Runtime->QueueObjects[timestampObjects[index]].Data,
+        sizeof(ULONGLONG));
+  }
+  RtlCopyMemory(Sample->WorkTimestampTail,
+      (const UCHAR *)taWork->Data + ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET,
+      sizeof(Sample->WorkTimestampTail));
   return TRUE;
 }
 
@@ -1785,6 +1836,8 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN faultSnapshotReported = FALSE;
   BOOLEAN taProgressReported = FALSE;
   BOOLEAN taRetireReported = FALSE;
+  BOOLEAN taTemporalReported = FALSE;
+  ADMISSION_TA_TEMPORAL_RECEIPT taTemporal;
   BOOLEAN ktraceBaselineValid = FALSE;
   ULONG initialTaChannelRead = 0u;
   ULONG initialD3ChannelRead = 0u;
@@ -1800,6 +1853,11 @@ static VOID AdmissionPlatformWorker(
   InterlockedIncrement(&runtime->WorkersActive);
   RtlZeroMemory(&description, sizeof(description));
   RtlZeroMemory(&submission, sizeof(submission));
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  RtlZeroMemory(&taTemporal, sizeof(taTemporal));
+  taTemporal.Version = ADMISSION_TA_TEMPORAL_RECEIPT_VERSION;
+  taTemporal.Bytes = sizeof(taTemporal);
+#endif
 
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   cancelled = AdmissionRenderPacketState(&adapter->RenderPacket) == AdmissionRenderPacketEmpty ||
@@ -1870,6 +1928,7 @@ static VOID AdmissionPlatformWorker(
           initialKtraceWrite < ADMISSION_KTRACE_RING_ENTRIES;
     }
   }
+  taTemporal.Fence = description.Fence;
 #endif
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
   if (result != AppleAgxBackendRuntimeResultOk)
@@ -2072,6 +2131,23 @@ static VOID AdmissionPlatformWorker(
         }
       }
     }
+    if (!taTemporalReported) {
+      ULONGLONG nowMs = AdmissionPlatformNowMs();
+      ULONGLONG elapsedMs = nowMs - queueSubmitMs;
+      if (taTemporal.SampleCount == 0u &&
+          elapsedMs >= ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS &&
+          AdmissionCaptureTaTemporalSample(
+              runtime, elapsedMs, &taTemporal.Samples[0]))
+        taTemporal.SampleCount = 1u;
+      if (taTemporal.SampleCount == 1u &&
+          elapsedMs >= ADMISSION_TA_TEMPORAL_SECOND_DELAY_MS &&
+          AdmissionCaptureTaTemporalSample(
+              runtime, elapsedMs, &taTemporal.Samples[1])) {
+        taTemporal.SampleCount = ADMISSION_TA_TEMPORAL_SAMPLE_COUNT;
+        AdmissionRecordTaTemporal(adapter, &taTemporal);
+        taTemporalReported = TRUE;
+      }
+    }
 #endif
     if (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted) {
       APPLE_AGX_G13_QUEUE_PROGRESS current;
@@ -2102,6 +2178,8 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (!taTemporalReported && taTemporal.SampleCount != 0u)
+    AdmissionRecordTaTemporal(adapter, &taTemporal);
   if (ktraceBaselineValid) {
     ADMISSION_KTRACE_RECEIPT ktraceReceipt;
     if (AdmissionCaptureKTrace(

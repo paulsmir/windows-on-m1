@@ -10,6 +10,8 @@ C_ASSERT(sizeof(ADMISSION_QUEUE_FAULT_SNAPSHOT) == 184);
 C_ASSERT(sizeof(ADMISSION_BUFFER_MANAGER_RECEIPT) == 396);
 C_ASSERT(sizeof(ADMISSION_TA_PROGRESS_RECEIPT) == 920);
 C_ASSERT(sizeof(ADMISSION_TA_RETIRE_RECEIPT) == 2236);
+C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_SAMPLE) == 148);
+C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_RECEIPT) == 312);
 C_ASSERT(sizeof(ADMISSION_KTRACE_RECEIPT) == 928);
 C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
 
@@ -257,6 +259,36 @@ _Use_decl_annotations_ VOID AdmissionRecordTaRetire(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1TaRetireReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordTaTemporal(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_TA_TEMPORAL_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_TA_TEMPORAL_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->SampleCount == 0u ||
+      Receipt->SampleCount > ADMISSION_TA_TEMPORAL_SAMPLE_COUNT ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1TaTemporalReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1TaTemporalReceipt", Receipt, sizeof(*Receipt));
     (void)ZwFlushKey(key);
     ZwClose(key);
   }
