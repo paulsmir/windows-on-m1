@@ -17,6 +17,7 @@
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_COUNTER 21u
 #define ADMISSION_QUEUE_OBJECT_BUFFER_MANAGER_MISC 22u
 #define ADMISSION_QUEUE_OBJECT_EVENT_CONTROL 11u
+#define ADMISSION_QUEUE_OBJECT_EVENT_COUNT 12u
 #define ADMISSION_QUEUE_OBJECT_INITBM 16u
 #define ADMISSION_QUEUE_OBJECT_TA_MICROSEQUENCE 17u
 #define ADMISSION_QUEUE_OBJECT_TA_WORK 19u
@@ -26,13 +27,16 @@
 #define ADMISSION_QUEUE_OBJECT_TA_TIMESTAMP_END 31u
 #define ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_START 34u
 #define ADMISSION_QUEUE_OBJECT_TA_USER_TIMESTAMP_END 35u
+#define ADMISSION_QUEUE_OBJECT_JOB_LIST 23u
 #define ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET 0x5b4u
 #define ADMISSION_TA_STATS_TIMESTAMPS_OFFSET 0x5d0u
+#define ADMISSION_REGIONC_PENDING_STAMPS_OFFSET 0x111a8u
 #define ADMISSION_TA_MICROSEQUENCE_START_OFFSET 0x0u
-#define ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_START_OFFSET 0x180u
+#define ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_START_OFFSET 0x18cu
 #define ADMISSION_TA_MICROSEQUENCE_WAIT_OFFSET 0x1c8u
-#define ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_END_OFFSET 0x1d0u
+#define ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_END_OFFSET 0x1ccu
 #define ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET 0x208u
+#define ADMISSION_TA_MICROSEQUENCE_RETIRE_OFFSET 0x28cu
 #define ADMISSION_CHANNEL_OBJECT_KTRACE_STATE 31u
 #define ADMISSION_CHANNEL_OBJECT_KTRACE_RING 32u
 #define ADMISSION_KTRACE_RING_ENTRIES 0x200u
@@ -288,7 +292,8 @@ static BOOLEAN AdmissionCaptureTaProgress(
       ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_START_OFFSET,
       ADMISSION_TA_MICROSEQUENCE_WAIT_OFFSET,
       ADMISSION_TA_MICROSEQUENCE_TIMESTAMP_END_OFFSET,
-      ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET};
+      ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET,
+      ADMISSION_TA_MICROSEQUENCE_RETIRE_OFFSET};
   static const ULONG stampObjects[2] = {
       ADMISSION_QUEUE_OBJECT_TA_STAMP1,
       ADMISSION_QUEUE_OBJECT_TA_STAMP2};
@@ -319,9 +324,9 @@ static BOOLEAN AdmissionCaptureTaProgress(
       AppleAgxRegionBMemoryStatsTa];
   if (initBm->Data == NULL || initBm->Size != ADMISSION_TA_INITBM_BYTES ||
       microsequence->Data == NULL ||
-      ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET > microsequence->Size ||
+      ADMISSION_TA_MICROSEQUENCE_RETIRE_OFFSET > microsequence->Size ||
       sizeof(ULONG) >
-          microsequence->Size - ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET ||
+          microsequence->Size - ADMISSION_TA_MICROSEQUENCE_RETIRE_OFFSET ||
       taWork->Data == NULL ||
       ADMISSION_TA_WORK_TIMESTAMP_TAIL_OFFSET > taWork->Size ||
       ADMISSION_TA_WORK_TIMESTAMP_TAIL_BYTES >
@@ -382,6 +387,69 @@ static BOOLEAN AdmissionCaptureTaProgress(
         Runtime->QueueObjects[timestampObjects[index]].Data,
         sizeof(ULONGLONG));
   }
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureTaRetire(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONGLONG ElapsedMs,
+    ADMISSION_TA_RETIRE_RECEIPT *Receipt) {
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *microsequence;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *eventCount;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *jobList;
+  const APPLE_AGX_MEMORY_OBJECT *regionC;
+  const APPLE_AGX_PLATFORM_RX_CHANNEL_BINDING *event;
+  volatile APPLE_AGX_BACKEND_U32 *readPointer;
+  volatile APPLE_AGX_BACKEND_U32 *writePointer;
+  APPLE_AGX_BACKEND_U32 read;
+  APPLE_AGX_BACKEND_U32 write;
+  if (Runtime == NULL || Fence == 0u || Receipt == NULL)
+    return FALSE;
+  microsequence =
+      &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_MICROSEQUENCE];
+  eventCount = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_EVENT_COUNT];
+  jobList = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_JOB_LIST];
+  regionC = &Runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC];
+  event = &Runtime->Provider.Channels.Event;
+  if (microsequence->Data == NULL ||
+      ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET > microsequence->Size ||
+      ADMISSION_TA_FINALIZE_RETIRE_BYTES >
+          microsequence->Size - ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET ||
+      eventCount->Data == NULL || eventCount->Size != 4u ||
+      jobList->Data == NULL || jobList->Size != 24u ||
+      regionC->CpuAddress == NULL ||
+      ADMISSION_REGIONC_PENDING_STAMPS_OFFSET > regionC->Length ||
+      ADMISSION_REGIONC_PENDING_STAMPS_BYTES >
+          regionC->Length - ADMISSION_REGIONC_PENDING_STAMPS_OFFSET ||
+      event->StateCpuAddress == NULL)
+    return FALSE;
+  readPointer = (volatile APPLE_AGX_BACKEND_U32 *)(
+      event->StateCpuAddress + APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+  writePointer = (volatile APPLE_AGX_BACKEND_U32 *)(
+      event->StateCpuAddress + APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
+  if (!Runtime->TransportIo.ReadU32(Runtime, readPointer, &read) ||
+      !Runtime->TransportIo.ReadU32(Runtime, writePointer, &write) ||
+      read >= APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT ||
+      write >= APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT)
+    return FALSE;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = ADMISSION_TA_RETIRE_RECEIPT_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  Receipt->ElapsedMs = ElapsedMs > MAXULONG ? MAXULONG : (ULONG)ElapsedMs;
+  Receipt->EventReadPointer = read;
+  Receipt->EventWritePointer = write;
+  RtlCopyMemory(Receipt->FinalizeAndRetire,
+      (const UCHAR *)microsequence->Data +
+          ADMISSION_TA_MICROSEQUENCE_FINALIZE_OFFSET,
+      sizeof(Receipt->FinalizeAndRetire));
+  RtlCopyMemory(Receipt->EventCount, eventCount->Data,
+                sizeof(Receipt->EventCount));
+  RtlCopyMemory(Receipt->JobList, jobList->Data,
+                sizeof(Receipt->JobList));
+  RtlCopyMemory(Receipt->PendingStamps,
+      (const UCHAR *)regionC->CpuAddress +
+          ADMISSION_REGIONC_PENDING_STAMPS_OFFSET,
+      sizeof(Receipt->PendingStamps));
   return TRUE;
 }
 
@@ -1716,6 +1784,7 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN channelProgressReported = FALSE;
   BOOLEAN faultSnapshotReported = FALSE;
   BOOLEAN taProgressReported = FALSE;
+  BOOLEAN taRetireReported = FALSE;
   BOOLEAN ktraceBaselineValid = FALSE;
   ULONG initialTaChannelRead = 0u;
   ULONG initialD3ChannelRead = 0u;
@@ -1908,6 +1977,16 @@ static VOID AdmissionPlatformWorker(
             taProgressReported = TRUE;
           }
         }
+        if (!taRetireReported) {
+          ADMISSION_TA_RETIRE_RECEIPT taRetire;
+          ULONGLONG nowMs = AdmissionPlatformNowMs();
+          if (AdmissionCaptureTaRetire(
+                  runtime, description.Fence, nowMs - queueSubmitMs,
+                  &taRetire)) {
+            AdmissionRecordTaRetire(adapter, &taRetire);
+            taRetireReported = TRUE;
+          }
+        }
         AdmissionProviderDrainTraceWindows(
             adapter, runtime->Provider.LastDrainGuard,
             runtime->Provider.LastEventReadPointer,
@@ -1978,6 +2057,18 @@ static VOID AdmissionPlatformWorker(
                 &taProgress)) {
           AdmissionRecordTaProgress(adapter, &taProgress);
           taProgressReported = TRUE;
+        }
+      }
+    }
+    if (!taRetireReported) {
+      ULONGLONG nowMs = AdmissionPlatformNowMs();
+      if (nowMs >= queueSubmitMs + ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS) {
+        ADMISSION_TA_RETIRE_RECEIPT taRetire;
+        if (AdmissionCaptureTaRetire(
+                runtime, description.Fence, nowMs - queueSubmitMs,
+                &taRetire)) {
+          AdmissionRecordTaRetire(adapter, &taRetire);
+          taRetireReported = TRUE;
         }
       }
     }
