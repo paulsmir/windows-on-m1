@@ -141,7 +141,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           APPLE_AGX_EXP208_GDI_WIDTH,
           APPLE_AGX_EXP208_GDI_HEIGHT, 4u,
           (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
-          (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation))
+          (unsigned int)D3DDDIFMT_A8R8G8B8, 1u, &allocation))
     goto cleanup;
   allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE;
   allocationInfo.pPrivateDriverData = &allocation;

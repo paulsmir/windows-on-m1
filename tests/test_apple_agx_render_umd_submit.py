@@ -95,6 +95,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertNotIn("createContext.ClientHint = D3DKMT_CLIENTHINT_OPENGL", source)
         self.assertIn("D3DKMTCreatePagingQueue", source)
         self.assertIn("D3DKMTMakeResident", source)
+        self.assertIn("D3DDDIFMT_A8R8G8B8, 1u, &allocation", source)
         self.assertIn("PagingFenceValue", source)
         self.assertIn("FenceValueCPUVirtualAddress", source)
         self.assertIn("D3DKMTDestroyPagingQueue", source)
