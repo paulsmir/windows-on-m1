@@ -34888,3 +34888,27 @@ PowerShell and its SHA-256 is
 Immediately before staging, ordinary 377/392 proves Code28, zero package/
 service/module, 8 CPUs, NVMe2/USB5/keyboard1 and no fresh Event129/bugcheck;
 PID13357 is the sole L41 owner.  No candidate has yet been staged.
+
+**EXP575-A LAUNCH-INCONCLUSIVE 2026-09-07T15:23Z:** exact driver package bound
+once, but the locally rebuilt m1n1 was inadvertently compiled without the
+already-preregistered `IOMFB_FULL_OWNER=1` platform flag.  Host log explicitly
+reported Scanout ABI v1.  Driver evidence proves retained ABI v4 queries for
+class1/class2 succeeded, all 200 production leaves mapped and verified, real
+management IOP/AP ACKs passed, endpoints20/21, DC_Init, idle update and
+BackendRuntimeStart all returned success.  StartDevice then stopped at stage10
+Scanout with `STATUS_NOT_SUPPORTED`/Code43 before producer execution.  No TA/D3
+retirement verdict follows.  Host log SHA-256 is
+`edec9e3209051910d423f2ee07c7eb948d290441038f39428931b49060c452ab`;
+device-registry evidence ZIP SHA-256 is
+`5e3882a10c1f1d163afe6f311c1424d999c70f0480F28BC513105E07621D29A7`.
+Two Event129 records are retained as telemetry with no GPU causal claim.
+
+Exact oem5 package/devnode cleanup, stopped-service/file cleanup and ordinary
+377/392 restore completed.  Clean health is Code28, zero package/service/module,
+8 CPUs, NVMe2/USB5/keyboard1, Bugcheck0.  Build-environment-only correction:
+the same m1n1 source commit was rebuilt as `RELEASE=1 IOMFB_FULL_OWNER=1`;
+`build_cfg.h` contains both exact defines and the replacement Mach-O SHA-256 is
+`cf26c6581e12e94e120829a84c3555ed94238e0533f81eee84b2a1fde09ba467`.
+KMD/UMD/producer and every GPU causal source byte remain unchanged.  Because
+EXP575-A did not reach the intended producer boundary, one corrected exact
+EXP575 run remains the preregistered discriminator; this is not a blind retry.
