@@ -456,6 +456,16 @@ enough for Start but rejected as the ingestion fix. Current first unknown stays
 before firmware command-channel consumption; do not repeat offset/identity/wake/
 ordering/fault-record hypotheses. Source-first compare exact ChannelState/ring/
 ChannelInfo publication lifecycle and choose only one remaining causal mismatch.
+Source re-anchor: device-control success disproves an intra-page-address
+requirement, so commitsc1c605a/188c0e2 remove the rejected offset series. The
+EXP208 gate's remaining causal ordering difference is an exact management
+heartbeat after firmware start and before submission; production had no liveness
+proof at the later producer boundary. Commitc718a0d adds a bounded endpoint0
+Ping(type3)->Pong(type4), fails closed, and persists result/RX only.120 tests
+PASS. Pinned30.0.554.0 gates PASS; ZIP/SYS/producer SHA
+5710110d.../8809b9bb.../4da2eed5.... EXP554 preregistered. If Pong succeeds
+without0x5460/5420, management liveness is closed and only queue acceptance
+remains; if it fails, localize RTKit liveness before touching queue contents.
 
 ## Final live ordinary clean baseline
 

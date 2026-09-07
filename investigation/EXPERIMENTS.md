@@ -1,5 +1,46 @@
 # Hardware Experiment Ledger
 
+## EXP554 pre-submit RTKit heartbeat — preregistration 2026-09-07T09:29Z
+
+WHY THIS HYPOTHESIS: EXP553 proves exact queue publication followed by no
+channel read/work progress and a TDR, while the all-zero firmware fault records
+do not distinguish a live firmware scheduler from a dead/idle management loop.
+The hardware-proven EXP208 render gate explicitly performs a management
+Ping/Pong heartbeat after firmware start and before context configuration and
+submission. Current production proves management only during StartDevice, not
+at the later Windows producer boundary. Device-control success proves the same
+ChannelMemory/ASC path at startup but not its continued liveness.
+
+WINDOWS CONTRACT: unchanged; a failed pre-submit liveness check fails closed and
+does not synthesize completion. AGX/ASAHI CONTRACT: management Ping is type 3 on
+endpoint 0 and must return exact Pong type 4 on endpoint 0. TRANSLATION: one
+bounded Ping/Pong immediately before the existing unchanged BackendRuntimeSubmit;
+persist exact result/RX endpoint/payload, then either continue the existing
+queue path or leave the packet for ordinary TDR recovery. WHAT IS STILL UNKNOWN:
+whether management is alive at submit time; if alive, the first unknown narrows
+to command-channel/queue acceptance rather than firmware liveness.
+
+Rejected EXP552/553 offset changes are removed by commits
+`c1c605a057ca3206ca57f1c41219edd563b0a66a` and
+`188c0e2d6ec2a7d2d7d04b906400e3accc266a90`. Single diagnostic commit
+`c718a0d594558491287bbb48e13d6ccde64b968e` adds the reusable fail-closed
+session heartbeat and crash-durable receipt. Exact Pong test was RED before
+implementation; 120 focused/render/ledger tests pass. Pinned WDK26100,
+MSVC14.44.35207 build, code analysis, Universal validation, Inf2Cat/signing,
+version30.0.554.0 and producer gates pass with inherited C28251 only. Overlay
+SHA `2725ec4e23d789718bb80d20f737f73b4ca9c28995bb2243e2734b02710efa72`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`5710110d3a6600afbceea5bb5855c7d13e3e41bbdaa10e5e5bf8bdd9d815f981` /
+`8809b9bb6ed2407ecb8ea2b382d7800bba964d9d82fa9086ef255178e22c59bb` /
+`05e09584edb2cf6fb621fbae85d54ead8d4a6ecfb0e89d6401cd9c017cff475a` /
+`b2fafd8b311ce7deae72ad156a2cd98114bd1333ac65441af39ee4391b4d3e5b` /
+`24b8b50aafc4327818ba80db191caf97d0dfb785df6a40f864bcc9d5755acd27` /
+`4da2eed558ad3c3e23bf283b54273a8bee0b4f2f9ee98e7736a083a6f7737297`.
+Clean ordinary SHA
+`a67f3d6cf7fba350c74f67510b33e33aab8d2a7fdaac794777e08b5fddd801d0`.
+One natural bind/producer; collect exact heartbeat receipt and queue progress;
+then exact cleanup and ordinary recovery. Do not repeat native-offset candidate.
+
 ## EXP553 native channel offset validation — result 2026-09-07T09:16Z
 
 REJECTED as the queue-ingestion fix. Exact 30.0.553.0 ran once. The corrected
