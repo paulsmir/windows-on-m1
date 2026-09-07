@@ -61,6 +61,17 @@ GREEN; object73+1000 reload bytes are explicitly unchanged.391 broad tests PASS
 with the same unrelated pre-existing stop/remove source-text assertion failure.
 Next pinned build/sign/hash and one hardware run from clean ordinary392.
 
+EXP586 exact30.0.586.0 pinned gates PASS: WDK/SDK26100, MSVC14.44, KMD/UMD,
+analysis, Universal, Inf2Cat, TestSign, coherent version,0 errors and inherited
+C28251 only. ZIP/SYS/INF/CAT/UMD/producer hashes are
+f32862b77460866af5f04cf6cbf1429e70b619ebc3aed39af2260ac31a8dce90,
+bee098d8fb92d37f08f43835ac2f91b0c0c9a8aa1a9eaa5176b10cf85e7f9dcc,
+246b2967b202102884fe5bb8c40c44da16aa5e16db70b4b059b8367c140c41f0,
+bd2828b84d3e268bb854eaffcd0ff495e320736c46f0d3802042f5b41921b117,
+fb0b2f07bed78e8ad2e6be75c436232b2530b610c3ffbcf4475d3668728e559a,
+f59e72788693be09dcceab5ba8ef38775c1fc0d035e2c9ee34cca32fc6171f31.
+Workflow parser GREEN. Ordinary392 restore is active; verify clean then stage/run.
+
 ## Binding scope and current executor
 
 The post-EXP506 model handoff is complete. Latest user instruction explicitly

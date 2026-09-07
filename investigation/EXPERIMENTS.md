@@ -35648,3 +35648,19 @@ GREEN on1503920000 with exact reverse restore. Malformed clear input rejects
 without mutating output, PBE or store pair. Reload Texture/Sampler remain
 byte-exact. Focused test PASS; broad run391 PASS with one unrelated existing
 source-text assertion failure. Same m1n1/Mu/producer/receipts. Build pending.
+
+**EXP586 FREEZE 2026-09-07T19:59Z.** Pinned FRYZZING WDK/SDK26100,
+MSVC14.44 KMD/UMD build, code analysis, Universal validation, Inf2Cat, TestSign
+and coherent30.0.586.0 version PASS with0 errors and inherited C28251 only.
+Overlay SHA `21a0c83fe8f9d7532def71b08a68d682db322188a8f09f31f19cc0baed96a83b`.
+ZIP/SYS/INF/CAT/UMD/producer hashes:
+`f32862b77460866af5f04cf6cbf1429e70b619ebc3aed39af2260ac31a8dce90`,
+`bee098d8fb92d37f08f43835ac2f91b0c0c9a8aa1a9eaa5176b10cf85e7f9dcc`,
+`246b2967b202102884fe5bb8c40c44da16aa5e16db70b4b059b8367c140c41f0`,
+`bd2828b84d3e268bb854eaffcd0ff495e320736c46f0d3802042f5b41921b117`,
+`fb0b2f07bed78e8ad2e6be75c436232b2530b610c3ffbcf4475d3668728e559a`,
+`f59e72788693be09dcceab5ba8ef38775c1fc0d035e2c9ee34cca32fc6171f31`.
+Manifest SHA `d1e6e0bc6c20dc437ce5a0500a815075e9db899195a023bf587c2a29779fc3ec`.
+Hash-gated workflow and full-owner/ordinary scripts prepared; PowerShell parser
+GREEN. Preflight requires the active ordinary392 Code28/no package/service/SYS/
+UMD state. One natural bind and one producer only; evidence then exact cleanup.
