@@ -556,6 +556,8 @@ Binding/flush/read/range are closed; event is not ACKed. Hardware log
 SHA1a9afa99.... Exact cleanup and ordinary health SHA2b996cee.... Commit0e5df92
 captures the rejected 0x38 bytes plus queue-ingest guard/runtime result in a
 crash-durable receipt;356 tests PASS. Next build/run is EXP563 only.
+Pinned30.0.563.0 gates PASS; ZIP/SYS/producer SHA072d1faa.../01b11917.../
+4d063c32.... EXP563 preregistered for one exact receipt and no event ACK.
 
 ## Final live ordinary clean baseline
 

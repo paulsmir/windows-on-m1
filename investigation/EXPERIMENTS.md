@@ -1,5 +1,44 @@
 # Hardware Experiment Ledger
 
+## EXP563 rejected event receipt — preregistration 2026-09-07T11:38Z
+
+WHY THIS HYPOTHESIS:
+- EXP562 proves read0/write1 and guard8 PrepareEvent: exactly one firmware event
+  is mapped, flushed and presented to the queue provider but rejected pre-ACK.
+- Pinned m1n1 recognizes kinds 0,1,4,7,8 while the Windows decoder accepts the
+  same set; the remaining failure can therefore be an exact message kind/bytes,
+  queue runtime state, observation read, or completion-fence mismatch.
+- Capturing the rejected bytes and existing internal result is closer and safer
+  than accepting/ignoring an event without knowing its semantics.
+
+WINDOWS CONTRACT: unknown/malformed events remain fail-closed and are never
+ACKed or converted into completion. AGX/ASAHI CONTRACT: event entry is exactly
+0x38 bytes at ring index0. TRANSLATION: persist that immutable entry plus outer
+and queue-ingest guards before returning the same failure. WHAT IS STILL
+UNKNOWN: exact kind/payload and whether runtime decode/state or later ingest
+logic rejected it.
+
+Single diagnostic variable. Commit
+`0e5df926d82b9837f096145198c2c60e036a4095` adds byte-exact message capture,
+queue-ingest guard/runtime result and a 96-byte crash-durable
+`Wom1EventDrainReceipt`; it does not ACK or mutate the event. Exact unknown-kind
+test was RED then GREEN; 356 AppleAgx tests pass. Pinned WDK26100/MSVC14.44
+build, analysis, Universal validation, Inf2Cat, signing, KMD/UMD and producer
+pass with inherited C28251 only. Version30.0.563.0.
+
+Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`289682ef8f33c45870d7ccfc79df540ac2c48512850290f5334ed996b573af25` /
+`072d1faa736f3c10012c41a72f9c82122078948753dafca9360366b99770e399` /
+`01b11917f7df0fdd088b5d432956e6d8bec14fabd635262a073d47bfd28ef929` /
+`089a14d793ffcc223d48bddf2aedd80e51e518b3adc743e6a28f4b9510483e30` /
+`eface32d5ce27d7526c705776934bcd5bf273e93d2982c1ecba8138ea34309d7` /
+`94f34eba21ef5ece289e74f775179f0e0f9dd06eb1f5c177488c7acb189af1ec` /
+`4d063c322497ccea860bf1b32e8471a158b6ec5e0e5131b3a5552e90fa4702cc`.
+Root/m1n1/Mu dirty state and exact full-owner/recovery artifacts are unchanged
+from EXP562. One hash-gated stage, natural bind, producer, service-key receipt
+collection, exact cleanup and ordinary restore. PASS is a valid 96-byte receipt
+naming one causal ingest owner and exact message; it is not a completion PASS.
+
 ## EXP562 exact event-drain owner — preregistration 2026-09-07T11:26Z
 
 WHY THIS HYPOTHESIS:
