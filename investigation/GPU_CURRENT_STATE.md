@@ -309,6 +309,17 @@ packet. Post-fence display consumes that worker-local description; global adapte
 scratch is removed. Focused14/full366 tests PASS. Build from EXP596 base, reuse
 EXP595 producer.
 
+EXP597 R2 exact30.0.597.0 build/sign gates PASS (R1 was builder syntax only).
+ZIP/SYS hashes `fc1b3b28511a18c58859e39e7a82fc1265b7e5da795b64a5df2e5aeec37dc6ae` /
+`e201e55d1c0554a7ee9e4523bca7d3812e7b1b78cce7e1f56b47c52e39858436`.
+Hardware: natural bind, producer and TA/3D/fence PASS, but visible receipt remains
+Guard3 with CapturedValid0 while CapturedFence256 now arrives. This proves the
+actual producer uses the prepatched-adoption route, whose current call passes a
+NULL visible destination; ordinary Patch capture is not the route. Receipt SHA
+`5049941236a38bc1c5866a8a2e8161ab82cc8d589da4f3aad0145ea2a0a266b9`.
+Exact cleanup completed. Next: carry allocation1 placement through existing
+PrepatchedRender into AdmissionGdiAdoptPrepatchedPacket, then EXP598.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

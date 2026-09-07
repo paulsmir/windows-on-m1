@@ -36352,3 +36352,27 @@ adapter-global destination fields are removed.
 scale and D589. PASS requires Guard11/Stage3/Status0, exact terminal/fence, host
 latch and physical full-screen color. Focused14/full366 tests PASS. Build exact597
 from EXP596 base plus packet-lifetime files; reuse EXP595 producer.
+
+**EXP597 R1 BUILD FAILURE / R2 FREEZE.** R1 failed before artifact creation on a
+preprocessor directive embedded inside a function-call argument. Commit
+`3a9cb758f11d4cbadba5e3374b2bb02e009db01c` expresses the same arguments through
+ordinary locals. R2 pinned gates PASS. Overlay/ZIP/SYS/INF/CAT/UMD hashes:
+`fb6491188a5bfc2d8cdca3fb3ddb0ecb1f33c86cf542ff3b89cd9f655dd809c1`,
+`fc1b3b28511a18c58859e39e7a82fc1265b7e5da795b64a5df2e5aeec37dc6ae`,
+`e201e55d1c0554a7ee9e4523bca7d3812e7b1b78cce7e1f56b47c52e39858436`,
+`f03c6f4889f9c152419020f6fcc50ce9ee0522873020e613ca2c8276c7552aa5`,
+`df29b21dd2800316f1df62b37289a02a511ffe4bd372ca11c956932515da20f0`,
+`84fbf473166bfc88123734bd95803a9a8d6e97bd519b630a14bbee38f81a1134`.
+
+**EXP597 FINAL — PREPATCHED ROUTE CONFIRMED.** Natural bind and producer again
+passed allocations/residency/Render/physical TA3D/fence. Visible receipt Guard3,
+CapturedValid0, CapturedFence256 and zero destination fields proves the render
+packet reaches the worker but its visible fields were never populated. Source
+shows the actual path is `PrepatchedRender -> AdmissionGdiAdoptPrepatchedPacket`,
+whose packet preparation currently passes NULL/0 for visible destination; the
+ordinary Patch capture is bypassed. No scale/D589. Receipt/terminal/host/run SHA:
+`5049941236a38bc1c5866a8a2e8161ab82cc8d589da4f3aad0145ea2a0a266b9`,
+`3e8e46b4bd517179a3f1675827625c71c5c1ccf9caa5968c4a6a5ea0da1a572f`,
+`ee2d2f356ab1de33a77227451e71d3e585f98009356eb5271508884187c27308`,
+`bf41469590ee71555fd15cc9b4a1c8c74aed607da747132f596c5ad99e55bf5e`.
+Exact cleanup completed. EXP598 must change only the prepatched ownership link.
