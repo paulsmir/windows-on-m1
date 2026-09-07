@@ -14,6 +14,7 @@
 #define ADMISSION_QUEUE_OBJECT_TA_POINTERS 25u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
+#define ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET 0x17030u
 #define ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES                              \
   (APPLE_AGX_CONFIG_MMIO_OFFSET + APPLE_AGX_CONFIG_WIRE_SIZE)
 
@@ -228,7 +229,8 @@ static BOOLEAN AdmissionCaptureQueueFaultSnapshot(
     ULONG TaRead, ULONG D3Read, ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot) {
   const APPLE_AGX_MEMORY_OBJECT *regionB;
   const APPLE_AGX_MEMORY_OBJECT *regionC;
-  if (Runtime == NULL || Snapshot == NULL || Fence == 0u ||
+  if (Runtime == NULL || Runtime->SgxBase == NULL || Snapshot == NULL ||
+      Fence == 0u ||
       ElapsedMs < ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS)
     return FALSE;
   regionB = &Runtime->Initdata.RegionBMemory.Objects[
@@ -248,6 +250,9 @@ static BOOLEAN AdmissionCaptureQueueFaultSnapshot(
   Snapshot->ElapsedMs = ElapsedMs > MAXULONG ? MAXULONG : (ULONG)ElapsedMs;
   Snapshot->TaChannelReadPointer = TaRead;
   Snapshot->D3ChannelReadPointer = D3Read;
+  Snapshot->SgxFaultInfo = READ_REGISTER_ULONG64(
+      (volatile ULONG64 *)(Runtime->SgxBase +
+                           ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET));
   RtlCopyMemory(Snapshot->RegionBFault, regionB->CpuAddress,
                 sizeof(Snapshot->RegionBFault));
   RtlCopyMemory(Snapshot->RegionCFault,
