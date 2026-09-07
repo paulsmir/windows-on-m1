@@ -676,6 +676,12 @@ A040/A071 arenas preserve exact native intra-class relative geometry using
 nonzero constant biases (+0x01000000 shared, +0x00100000 timestamp). A000/A020,
 broker ownership, firmware, queue logic and all other layers remain unchanged.
 
+EXP576 commit342877d implements the next one-variable correction: exact native
+relative object geometry under nonzero class biases inside the same proven
+broker arenas. Five focused and369 relevant tests are GREEN. EXP576 is
+preregistered; next is pinned build/sign/hash and one hardware run. No m1n1/Mu
+or other subsystem change.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,

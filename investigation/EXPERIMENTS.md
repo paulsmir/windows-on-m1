@@ -34948,3 +34948,48 @@ as `OriginalGpuVa + 0x01000000` and A071 objects as
 `OriginalGpuVa + 0x00100000`.  These ranges remain inside the already queried
 windows and never equal the original native mappings.  No broker, page,
 firmware, queue, scheduler, IRQ, completion, display or A000/A020 change.
+
+# EXP576 — biased native intra-class geometry
+
+**PREREGISTERED 2026-09-07T15:38Z; one exact hardware run only.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP575 proves ABI-v4 A040/A071 arena query and 200-leaf publication are valid,
+  but sequential placement moved the boundary backward to before physical TA.
+- EXP575 preserved allocator band and every low-14-bit offset, leaving the
+  relative object positions within each native allocator as the exact changed
+  address component.
+- Frozen EXP208 A040 objects are separated by their native roughly-0x44000
+  allocation cadence, while the rejected layout packed them at 0x8000 cadence;
+  RetireStamp and queue firmware consume an opaque linked graph that may derive
+  companion addresses from this geometry.
+
+Single variable: preserve exact intra-class relative VA geometry with a
+constant nonzero relocation.  Objects20--31 use
+`OriginalGpuVa + 0x01000000`; objects32--35 use
+`OriginalGpuVa + 0x00100000`.  Both sets fit the already approved and queried
+A040/A071 arenas and never equal original native mappings.  A000/A020 objects,
+physical pages/content/offsets, retained ABI and ownership, m1n1, Mu, firmware,
+queue logic, scheduler, IRQ, completion and display remain unchanged.
+
+WINDOWS CONTRACT, AGX/ASAHI CONTRACT and TRANSLATION remain EXP575 except for
+the deterministic in-arena address function.  WHAT IS STILL UNKNOWN: whether
+restoring native relative geometry recovers physical StartTA and then advances
+past the EXP574 RetireStamp boundary.
+
+Source commit `342877d8f9a50378fc356b79816060f1039b7c71`; m1n1 commit
+`215a062129383e87ee74c4f180a6f36418a47d38`, full-owner Mach-O SHA-256
+`cf26c6581e12e94e120829a84c3555ed94238e0533f81eee84b2a1fde09ba467`;
+Mu remains EXP406 SHA-256
+`c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+RED relative-geometry assertion then 5 focused and 369 relevant tests GREEN.
+Build is pinned FRYZZING WDK26100/MSVC14.44, package build576,
+SubmitQualification, code analysis, Universal, Inf2Cat/sign/version/hash gates.
+
+PASS requires at least recovery of EXP574 physical TA timestamps/private stamp2
+and, for causal confirmation, progress beyond RetireStamp into shared stamp,
+event, done pointer or exact completion.  TA read0/timestamps0 rejects the bias;
+recovered EXP574 state without retirement movement rejects relative geometry as
+sufficient.  Preserve evidence, exact cleanup and ordinary restore before any
+following hypothesis.
