@@ -354,8 +354,14 @@ TA/D3 done2/2, exact fence256, NotifyInterrupt/DPC and all256 `0xff112233`.
 Visible/terminal hashes `1f96c9e63be63b63df2c5af8e4b685d4580d2a358fae222d9d150a9767f229b3` /
 `c93b43da9d09f5233a62681c2092d55eb6fa73e4431903b2597bb0194f89321c`.
 System healthy:8CPU/NVMe2/USB5/keyboard1/no bugcheck; Event129x2 telemetry.
-Physical full-screen color confirmation is pending; leave EXP598 installed and
-active until it is observed, then exact cleanup and ordinary restore.
+Operator physically observed the expected dark-blue full-screen result. Therefore
+`VISIBLE_AGX_RESULT_HW_PROVEN=YES`; this is the first physical panel image whose
+pixels originated in a Windows-requested AGX TA/3D job and completed exact fence.
+Confirmation evidence SHA
+`fc3fed4d1a164bf3c499c78aa93b0ea47018a238f6792104cae861663c193a62`.
+`PRESENT_TRANSFER=CPU_ASSISTED` and `FULLY_ACCELERATED_PRESENT=NO` remain exact.
+Exact EXP598 package/devnode cleanup completed; persist it with graceful restart
+and restore ordinary377/392 before the next production Present experiment.
 
 ## Standing constraints
 

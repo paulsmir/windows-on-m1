@@ -36446,3 +36446,14 @@ Visible/terminal/host/run/evidence SHA:
 Health8CPU/NVMe2/USB5/keyboard1/no bugcheck; Event129x2 telemetry. Package is
 intentionally retained pending operator confirmation of the full-screen
 `0xff112233` result. No physical-visible claim until that confirmation.
+
+**EXP598 PHYSICAL FINAL 2026-09-08T00:38Z — VISIBLE AGX RESULT PASS.** The
+operator reported `вижу темно синий экран`, matching the expected full-screen
+dark-blue `0xff112233` result while the exact machine receipt bound the same AGX
+source hash to active offset0xfb0000 and D589 swap11. Confirmation evidence SHA
+`fc3fed4d1a164bf3c499c78aa93b0ea47018a238f6792104cae861663c193a62`.
+Thus `VISIBLE_AGX_RESULT_HW_PROVEN=YES`: Windows-originated request -> physical
+TA/3D -> exact fence -> CPU-assisted scale -> physical panel is proven. This is
+not fully accelerated Present and does not prove a production swapchain lifetime.
+Exact EXP598 package/devnode cleanup completed after evidence. Persist cleanup
+and return ordinary377/392 before continuing production Present ownership.
