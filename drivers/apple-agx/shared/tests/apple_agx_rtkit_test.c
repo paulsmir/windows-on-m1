@@ -18,6 +18,7 @@ static void test_literal_message_vectors(void) {
          0x0050002000000001ULL);
   assert(AppleAgxRtkitStopEndpoint(0x21u) ==
          0x0050002100000001ULL);
+  assert(AppleAgxRtkitPing() == 0x0030000000000000ULL);
   assert(AppleAgxRtkitDoorbell(0x11u) ==
          0x0083000000000011ULL);
   assert(AppleAgxRtkitInitdata(0x00000abcde000ULL) ==

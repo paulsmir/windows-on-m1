@@ -78,6 +78,40 @@ static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
 }
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static VOID AdmissionWritePreSubmitHeartbeat(
+    HANDLE Key, APPLE_AGX_RTKIT_SESSION_RESULT Result,
+    const APPLE_AGX_RTKIT_SESSION *Session) {
+  WriteDword(Key, L"Wom1PreSubmitHeartbeatResult", (ULONG)Result);
+  WriteDword(Key, L"Wom1PreSubmitHeartbeatRxCount", Session->ReceivedCount);
+  WriteDword(Key, L"Wom1PreSubmitHeartbeatRxEndpoint", Session->LastRxEndpoint);
+  WriteQword(Key, L"Wom1PreSubmitHeartbeatRxPayload", Session->LastRxPayload);
+  (void)ZwFlushKey(Key);
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordPreSubmitHeartbeat(
+    ADMISSION_CONTEXT *Context, APPLE_AGX_RTKIT_SESSION_RESULT Result,
+    const APPLE_AGX_RTKIT_SESSION *Session) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Session == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    AdmissionWritePreSubmitHeartbeat(key, Result, Session);
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    AdmissionWritePreSubmitHeartbeat(key, Result, Session);
+    ZwClose(key);
+  }
+}
+
 _Use_decl_annotations_ VOID AdmissionRecordQueueSubmission(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_QUEUE_SUBMISSION_RECEIPT *Receipt) {

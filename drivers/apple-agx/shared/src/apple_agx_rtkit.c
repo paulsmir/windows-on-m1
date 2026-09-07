@@ -83,6 +83,10 @@ AppleAgxRtkitStopEndpoint(APPLE_AGX_RTKIT_U32 Endpoint) {
   return AppleAgxRtkitStartEndpoint(Endpoint, 1u);
 }
 
+APPLE_AGX_RTKIT_U64 AppleAgxRtkitPing(void) {
+  return AppleAgxRtkitManagementType(AppleAgxRtkitManagementPing);
+}
+
 APPLE_AGX_RTKIT_U64 AppleAgxRtkitDoorbell(APPLE_AGX_RTKIT_U32 Channel) {
   if (Channel > APPLE_AGX_RTKIT_DOORBELL_CHANNEL_MASK)
     return APPLE_AGX_RTKIT_INVALID_MESSAGE;

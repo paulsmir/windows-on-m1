@@ -518,6 +518,11 @@ VOID AdmissionSubmitPacketGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Guard, NTSTATUS Status);
 VOID AdmissionBackendSubmitResultWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Result, ULONG Phase);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordPreSubmitHeartbeat(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    APPLE_AGX_RTKIT_SESSION_RESULT Result,
+    _In_ const APPLE_AGX_RTKIT_SESSION *Session);
 VOID AdmissionBackendProgressWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress);
 VOID AdmissionBackendChannelProgressWindows(
@@ -590,6 +595,12 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Context);                                                           \
     (void)(Result);                                                            \
     (void)(Phase);                                                             \
+  } while (0)
+#define AdmissionRecordPreSubmitHeartbeat(Context, Result, Session)            \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Result);                                                            \
+    (void)(Session);                                                           \
   } while (0)
 #define AdmissionBackendProgressWindows(Context, Progress)                     \
   do {                                                                         \

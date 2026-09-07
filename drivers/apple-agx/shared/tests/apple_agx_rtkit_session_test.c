@@ -198,6 +198,33 @@ static void TestBootWaitsForCpuReadyBeforeSendingWake(void) {
   assert(fake.SendCount == 4u);
 }
 
+static void TestHeartbeatRequiresExactManagementPong(void) {
+  FAKE_SESSION_ASC fake = {0};
+  APPLE_AGX_ASC_IO io;
+  APPLE_AGX_RTKIT_SESSION session;
+
+  QueueBoot(&fake);
+  Queue(&fake, 0x0040000000000000ULL);
+  io = MakeIo(&fake);
+  AppleAgxRtkitSessionInitialize(&session);
+  assert(AppleAgxRtkitSessionBoot(&session, &io, NULL, NULL, NULL, 100u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(AppleAgxRtkitSessionHeartbeat(&session, &io, 200u) ==
+         AppleAgxRtkitSessionResultOk);
+  assert(fake.SendCount == 5u);
+  assert(fake.SendEndpoint[4] == 0u);
+  assert(fake.SendPayload[4] == 0x0030000000000000ULL);
+  assert(session.ReceivedCount == 5u);
+  assert(session.LastRxEndpoint == 0u);
+  assert(session.LastRxPayload == 0x0040000000000000ULL);
+  assert(session.Running && session.CpuReady);
+
+  Queue(&fake, 0x0030000000000000ULL);
+  assert(AppleAgxRtkitSessionHeartbeat(&session, &io, 300u) ==
+         AppleAgxRtkitSessionResultProtocolViolation);
+  assert(session.Running && session.CpuReady);
+}
+
 static void TestHelloTimeoutPreservesMailboxSnapshots(void) {
   FAKE_SESSION_ASC fake;
   APPLE_AGX_ASC_IO io;
@@ -401,6 +428,7 @@ int main(void) {
   TestBootAndStopAreExactAndBounded();
   TestProtocolFailureClearsRun();
   TestBootWaitsForCpuReadyBeforeSendingWake();
+  TestHeartbeatRequiresExactManagementPong();
   TestHelloTimeoutPreservesMailboxSnapshots();
   TestStopCleanupFailurePreservesRetryState();
   TestStopResumesApAckWithoutReplayingRequest();

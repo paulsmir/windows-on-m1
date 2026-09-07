@@ -1442,6 +1442,7 @@ static VOID AdmissionPlatformWorker(
   ADMISSION_RENDER_PACKET_DESCRIPTION description;
   APPLE_AGX_BACKEND_SUBMISSION submission;
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
+  APPLE_AGX_RTKIT_SESSION_RESULT heartbeatResult;
   BOOLEAN activated = FALSE;
   BOOLEAN cancelled = FALSE;
   BOOLEAN deferred = FALSE;
@@ -1510,6 +1511,16 @@ static VOID AdmissionPlatformWorker(
   submission.PrivateDataEnd = description.PrivateDataEnd;
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
+  heartbeatResult = AppleAgxRtkitSessionHeartbeat(
+      &runtime->Rtkit, &runtime->AscIo,
+      AdmissionPlatformNowMs() + J313_AGX_G2_HEARTBEAT_TIMEOUT_MS);
+  AdmissionRecordPreSubmitHeartbeat(adapter, heartbeatResult, &runtime->Rtkit);
+  if (heartbeatResult != AppleAgxRtkitSessionResultOk) {
+    InterlockedExchange(&adapter->SchedulerFaulted, 1);
+    AdmissionFlushGdiReceipt(adapter);
+    AdmissionPlatformWorkerFinished(runtime);
+    return;
+  }
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
   if (result != AppleAgxBackendRuntimeResultOk)
     AdmissionBackendSubmitResultWindows(
