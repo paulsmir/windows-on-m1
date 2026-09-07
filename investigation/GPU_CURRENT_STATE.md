@@ -575,6 +575,12 @@ m1n1's timeout diagnostic order as closely as possible after failed quiesce.
 Next EXP565 reads only this snapshot; no TA/event behavior change.
 Pinned30.0.565.0 gates PASS; ZIP/SYS/producer SHA8cd3dc94.../2d64f0fb.../
 9ae31345.... EXP565 preregistered for one timeout-path snapshot.
+EXP565 FINAL: INCONCLUSIVE discriminator; known timeout reproduced but snapshot
+helper rejected actual elapsed<50ms. No new GPU inference. Exact cleanup health
+SHAa8415695.... Commitce9f830 allows early snapshot only for explicit decoded
+Timeout and preserves actual elapsed plus normal50ms gate. Pinned30.0.566.0
+gates PASS; ZIP/SYS/producer SHA192dc943.../88362de5.../d73e1bed.... EXP566
+preregistered.
 
 ## Final live ordinary clean baseline
 

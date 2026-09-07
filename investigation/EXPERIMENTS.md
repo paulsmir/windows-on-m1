@@ -1,5 +1,27 @@
 # Hardware Experiment Ledger
 
+## EXP566 early timeout fault snapshot — preregistration 2026-09-07T12:22Z
+
+WHY THIS HYPOTHESIS: EXP565 reproduced the exact timeout but wrote no snapshot;
+source proves the helper rejected actual elapsed below its generic 50-ms delay.
+The explicit firmware Timeout itself is sufficient trigger evidence, so only
+this diagnostic gate should differ. Delayed polling retains the 50-ms gate.
+
+Commit `ce9f83014b53da56a3cffb793589d08a1e81768c` passes explicit
+`AllowEarly=TRUE` only from decoded-timeout failure and records honest actual
+elapsed; normal delayed call passes FALSE. No AGX/event/queue behavior changes.
+356 tests and pinned WDK26100/MSVC14.44 build/analysis/Universal/Inf2Cat/sign/
+KMD/UMD/producer gates pass. Version30.0.566.0. Overlay/ZIP/SYS/INF/CAT/UMD/
+producer SHA:
+`7a8e410be0c0b4aae347d351feeeb7cebd2cd67738498b49bc994810d03e70df` /
+`192dc9434d52d6df42bec788ba6f73bc3e60e0a377af77792eab911380c715bd` /
+`88362de5b7fd4d8886be3876c1859ce1949ce40420b038cc883d86769db1689e` /
+`22901f812e81657b7a5feca1925acfdc955d657dbac80f3f3b22c199c68f742f` /
+`bc9fff6cfc02bbef886aa78cbba1f4ba9edf2ce33bbd8d18c8218eda3c1fcf1a` /
+`5f76a0fc31d29afdb85006550b44ce07ed0fa8dc5abc242a697d32053020c26d` /
+`d73e1bed58037a83862922d6ccc2ee753910b26814f0ca8ce36c130bc0175528`.
+One exact bind/producer, require184-byte snapshot, cleanup and continue.
+
 ## EXP565 timeout-path AGX fault snapshot — preregistration 2026-09-07T12:13Z
 
 WHY THIS HYPOTHESIS:
@@ -30,6 +52,16 @@ Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
 Contracts/recovery unchanged. One natural bind/producer. PASS is an exact184-
 byte fault snapshot at timeout; then cleanup and act only on its first nonzero
 primitive. No hardware completion claim.
+
+## EXP565 timeout-path AGX fault snapshot — result 2026-09-07T12:22Z
+
+INCONCLUSIVE for the intended snapshot, not a new GPU verdict. Exact30.0.565.0
+reproduced the known Timeout/TDR, but `Wom1QueueFaultSnapshot` was absent.
+Source proves `AdmissionCaptureQueueFaultSnapshot` rejected the call solely
+because actual timeout elapsed was below 50 ms. Hardware log SHA
+`cd69f20b73e3977bfea45ac35fe45218a7287026d81745ea2eaffe1e1d6ac419`.
+No technical inference beyond EXP564. Exact cleanup/ordinary restore health
+SHA `a8415695...`. EXP566 corrects only this receipt gate.
 
 ## EXP564 complete BufferManager PageList rebase — preregistration 2026-09-07T12:02Z
 
