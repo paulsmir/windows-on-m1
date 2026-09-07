@@ -93,3 +93,16 @@ at least one new authenticated shared-stamp/event/done/completion receipt.  If
 the retirement scalars remain byte-identical, the class-identity hypothesis is
 rejected and EXP575 is not repeated.
 
+## A020 command-arena addendum
+
+EXP575/576 hardware rejected A040/A071 placement and moved the boundary before
+physical TA. Exact standalone comparison instead identifies objects 18/19 as
+native `cmdbuf` allocations in A020, while EXP574 executed through FinalizeTA
+with those WorkCommand objects rebased into A000 but did not retire the queue.
+
+ABI v4 therefore adds class `COMMAND` at the broker-selected free window
+`0xffffffa021000000/0x01000000`. It has the same current-epoch query-before-map,
+guest-page ownership, bounds, exact-handle, rollback, barrier, TLB and cleanup
+rules. Production maps only objects18/19 there with effective address
+`OriginalGpuVa + 0x01000000`; all other render-shared objects use the EXP574
+all-A000 layout. Exact original A020 mappings remain denied.

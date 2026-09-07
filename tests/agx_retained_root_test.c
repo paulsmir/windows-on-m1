@@ -10,6 +10,7 @@
 #define PA 0x810000000ULL
 #define SHARED_VA 0xffffffa041000000ULL
 #define TIMESTAMP_VA 0xffffffa071100000ULL
+#define COMMAND_VA 0xffffffa021000000ULL
 
 /* Real heap-backed tables, synthetic addresses: no firmware memory can be freed.
  * A removed ownership guard or premature release is an assertion/ASan failure. */
@@ -604,8 +605,8 @@ static void low_alias_rollback(void)
 static void class_arenas(void)
 {
     struct fixture f;
-    AGX_RR_ARENA_DESCRIPTOR shared = {0}, timestamp = {0};
-    unsigned long long shared_handle, timestamp_handle, ignored, pa;
+    AGX_RR_ARENA_DESCRIPTOR shared = {0}, timestamp = {0}, command = {0};
+    unsigned long long shared_handle, timestamp_handle, command_handle, ignored, pa;
     initialize(&f);
     assert(prepare(&f, 1) == HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_query_arena(&f.core, 1, AGX_RR_ARENA_SHARED,
@@ -613,6 +614,8 @@ static void class_arenas(void)
     firmware_boot(&f);
     assert(hv_agx_retained_activate(&f.core) == HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_map(&f.core, 1, SHARED_VA, IPA, PAGE, &ignored) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_map(&f.core, 1, COMMAND_VA, IPA, PAGE, &ignored) ==
            HV_AGX_RETAINED_RANGE);
     assert(hv_agx_retained_query_arena(&f.core, 0, AGX_RR_ARENA_SHARED,
                                         &shared) == HV_AGX_RETAINED_STATE);
@@ -630,6 +633,11 @@ static void class_arenas(void)
     assert(timestamp.Version == AGX_RR_ARENA_VERSION);
     assert(timestamp.Class == AGX_RR_ARENA_TIMESTAMP);
     assert(timestamp.Va == TIMESTAMP_VA && timestamp.Bytes == 0x01000000ULL);
+    assert(hv_agx_retained_query_arena(&f.core, 1, AGX_RR_ARENA_COMMAND,
+                                        &command) == HV_AGX_RETAINED_OK);
+    assert(command.Version == AGX_RR_ARENA_VERSION);
+    assert(command.Class == AGX_RR_ARENA_COMMAND);
+    assert(command.Va == COMMAND_VA && command.Bytes == 0x01000000ULL);
     assert(shared.Va + shared.Bytes <= timestamp.Va);
     assert(hv_agx_retained_map(&f.core, 1, shared.Va - PAGE, IPA, PAGE,
                                 &ignored) == HV_AGX_RETAINED_RANGE);
@@ -639,10 +647,14 @@ static void class_arenas(void)
                                 &shared_handle) == HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_map(&f.core, 1, timestamp.Va, IPA + PAGE, PAGE,
                                 &timestamp_handle) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_map(&f.core, 1, command.Va, IPA + 2 * PAGE, PAGE,
+                                &command_handle) == HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_query(&f.core, 1, shared_handle, shared.Va, IPA,
                                   PAGE, &pa) == HV_AGX_RETAINED_OK && pa == PA);
     assert(hv_agx_retained_unmap(&f.core, 1, timestamp_handle, timestamp.Va,
                                   IPA + PAGE, PAGE) == HV_AGX_RETAINED_OK);
+    assert(hv_agx_retained_unmap(&f.core, 1, command_handle, command.Va,
+                                  IPA + 2 * PAGE, PAGE) == HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_unmap(&f.core, 1, shared_handle, shared.Va, IPA,
                                   PAGE) == HV_AGX_RETAINED_OK);
     check_prefix(&f);
@@ -652,6 +664,8 @@ static void class_arenas(void)
     firmware_boot(&f);
     assert(hv_agx_retained_activate(&f.core) == HV_AGX_RETAINED_OK);
     assert(hv_agx_retained_map(&f.core, 2, SHARED_VA, IPA, PAGE, &ignored) ==
+           HV_AGX_RETAINED_RANGE);
+    assert(hv_agx_retained_map(&f.core, 2, COMMAND_VA, IPA, PAGE, &ignored) ==
            HV_AGX_RETAINED_RANGE);
     assert(hv_agx_retained_close(&f.core, 2, 1) == HV_AGX_RETAINED_OK);
     assert(!f.live);
