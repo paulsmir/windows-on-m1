@@ -519,6 +519,8 @@ after its earlier cached push; EXP208 cached-data capture lost this exact live
 write. Commit840ebbb publishes wptr=total only for first IncludeInitBm; exact
 RED/GREEN and111 regressions PASS. Exact cleanup; ordinary health SHA71353de9....
 Next EXP559 changes only this deterministic first-TA-item word.
+Pinned30.0.559.0 gates PASS; ZIP/SYS/producer SHAe9db6216.../d2f7bfde.../
+f452fab7.... EXP559 preregistered.
 
 ## Final live ordinary clean baseline
 

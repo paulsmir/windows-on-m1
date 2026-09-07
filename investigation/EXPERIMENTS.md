@@ -1,5 +1,26 @@
 # Hardware Experiment Ledger
 
+## EXP559 populated BufferManager control — preregistration 2026-09-07T10:41Z
+
+WHY THIS HYPOTHESIS: EXP558 directly proves first TA InitBM sees total16/wptr0;
+pinned m1n1 populate writes wptr=16 before submit and the cached EXP208 artifact
+lost that physical write. Page/block lists are already present. Single variable:
+publish BlockControl wptr=total for first IncludeInitBm. WINDOWS contract and all
+other AGX paths unchanged. WHAT IS STILL UNKNOWN: whether InitBM/TA now reaches
+done/stamp/event or the next exact internal boundary.
+
+Commit `840ebbb03892b0ee65049740cd5930695f8b69b5`; exact RED/GREEN and111
+regressions pass. Pinned30.0.559.0 gates pass. Overlay SHA
+`9cd3b03e26e9a72ea7b847a15617d1c937b1e32a7c5cb50000922fae7a8c7884`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`e9db621663f6a4fe881583d186d981cfb8e70419e02bf651a415bd520fce01d0` /
+`d2f7bfdeea60ea397897027eafd98f11b487b72c4708c7784448ecbef7b367a7` /
+`9e5eb068b11e2262427e38a4fd3269580598f223a3ca70ca9ba2834f12eb91aa` /
+`dcd41d3372fd1b77fa3b860cbc10fcc3f4300feb0eddd97d17be5b316dfde3c6` /
+`def633d33a97c2d23e547d194dac7d46f3257cf2c9179c278da1b32b8b2d8b6a` /
+`f452fab7749d803f9ce0918ff2738af254f666ac4d62cd8284f8e00c45a48631`.
+One bind/producer, exact progress/fault/BufferManager receipts, cleanup.
+
 ## EXP558 buffer-manager state after TA ingress — result 2026-09-07T10:37Z
 
 CONFIRMED first failing TA primitive. Exact30.0.558.0 reproduced TA active/rptr2,
