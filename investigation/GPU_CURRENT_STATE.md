@@ -752,6 +752,11 @@ service/module/8CPU restored. Next EXP is receipt-only: capture existing TA
 progress+retire state immediately on the already observed TA-read transition,
 before the first1ms delay. No functional subsystem change.
 
+EXP580 commitafb2e1d is preregistered receipt-only instrumentation. It records
+the existing TA progress+retire structures at the already-proven TA-read
+transition, before any relative delay. Five focused tests GREEN. Next pinned
+build/sign/hash and one run; functional bytes remain EXP579.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,

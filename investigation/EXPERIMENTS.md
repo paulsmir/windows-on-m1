@@ -35249,3 +35249,32 @@ owner bytes are durable even if the delay never wakes.  It is the minimum
 discriminator between correct live binding with later firmware stall and an
 unapplied/wrong binding; no queue, timeout, timer, scheduler or polling fix is
 authorized by this one run.
+
+# EXP580 — immediate TA-dequeue stats receipt
+
+**PREREGISTERED 2026-09-07T17:42Z; one exact run only.**
+
+**WHY THIS HYPOTHESIS:** EXP579 proves TA read advances to1 but the existing
+receipts wait for >=50ms and no later worker iteration was observable.  The
+source already observes the distinguishing TA-read transition after a
+successful bounded poll and before the next delay.  Capturing the existing
+progress/retire structures at that exact point is sufficient to preserve
+FinalizeTA.stats_ptr and the live StatsTA head without modifying work bytes.
+
+WINDOWS CONTRACT, AGX/ASAHI CONTRACT and TRANSLATION are byte-identical to
+EXP579.  WHAT IS STILL UNKNOWN: whether hardware-visible object17 FinalizeTA
+contains current StatsTA owner+4, and whether that owner has been mutated at TA
+dequeue.  Commit `afb2e1d1ac3f9a64a46c03b690a43ee3b217b6fd` changes only
+`APPLE_AGX_SUBMIT_QUALIFICATION`: when the already-existing TA channel-progress
+condition fires, it records the already-defined TA progress and retire receipts
+immediately.  The later >=50ms captures remain as fallback and are suppressed
+by the same one-shot booleans.  No queue poll, delay, timeout, firmware, work
+byte, scheduler, IRQ, completion, display, broker, m1n1 or Mu behavior changes.
+
+This is diagnostic instrumentation; no artificial RED test is warranted.
+Five focused tests and diff validation are GREEN; complete relevant suite and
+pinned build/sign/hash gates follow.  PASS as discriminator requires a durable
+FinalizeTA stats pointer equal to current StatsTA owner+4.  A stale value
+rejects the implementation/wiring; an exact value with no owner mutation moves
+the boundary inside firmware execution; any shared retirement/D3/completion
+progress is preserved but not assumed.
