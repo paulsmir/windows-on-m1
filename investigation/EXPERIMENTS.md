@@ -34993,3 +34993,19 @@ event, done pointer or exact completion.  TA read0/timestamps0 rejects the bias;
 recovered EXP574 state without retirement movement rejects relative geometry as
 sufficient.  Preserve evidence, exact cleanup and ordinary restore before any
 following hypothesis.
+
+**EXP576 FREEZE 2026-09-07T15:42Z:** pinned build/sign/code-analysis/Universal/
+Inf2Cat/version gates PASS with 0 errors and inherited C28251 only.  Exact ZIP,
+SYS, INF, CAT, UMD and producer SHA-256 are
+`fc08db15982ee45d8a1ab417e23da0226d9e64b36cc3bb59a050c35fc7b4b9ce`,
+`98e07f7112516104585338ed72923f862138f4ce99a3d479d7c3a936ec2ffcce`,
+`130a9a0d03cdce5a0133efcad16703d3e2cbe85103cf9e205d1c5c3e61a572a1`,
+`dd6f9ba068f33674ced526bb9778df25581c2e08c07b12f68ec453a67311e372`,
+`312f2e6ea58161701b6b4376bfdfb8fd9f33eb0338fe9b0470223aa6b038e3e4`,
+and `a87eaaf3c7f9d3748067bb882d1f3182676ee5dbf537af296a0cfbf7bccd67c5`.
+Overlay/workflow/launch SHA-256 are
+`3868d5a5f44998f7fc1331ce6f80b6365fdb207a70712d79e0444d7f70185bd2`,
+`ae065f81b3fc176eca23e6a9e3c0de60a34300c1ba0f34e167e43fd98f563396`,
+and `48dacbe80aa1196f2d3dc929aac78a64bca73351da5a98c1447f2935a5bca1f1`.
+Full-owner m1n1/Mu hashes remain the preregistered values. Ordinary preflight
+must again prove Code28/zero package/service/module/8CPU before staging.
