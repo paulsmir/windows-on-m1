@@ -35812,3 +35812,18 @@ stamps/done/fences, correct target contents and no 0x119/TDR/reset.
 the fix. Exact endpoint0x20/type0x43 and management Ping remain protocol
 violations. Relevant suite 29 PASS; one known unrelated stop/remove source-text
 assertion remains RED. Build pending.
+
+**EXP588 FREEZE 2026-09-07T20:39Z.** Pinned FRYZZING WDK/SDK26100,
+MSVC14.44 KMD/UMD build, code analysis, Universal validation, Inf2Cat, TestSign
+and coherent30.0.588.0 version PASS with0 errors and inherited C28251 only.
+Overlay SHA `78b53cb7171e6baef1408fad41e13e0c59ef190b3d624b75a1f3f79b8fb15f38`.
+ZIP/SYS/INF/CAT/UMD/producer hashes:
+`a474b01029f9750cc9a8544007b4f4bdac85ad87bedeecbbe55daf9c8cef6801`,
+`482bb7e8b97c4fc9acc47f3c0cc51b48c39769e258f5f21c0c3bda3d490d0d0c`,
+`b911dfda0bc91333641024c8206c1c21ce003d3c570e031152ad1259a5902b86`,
+`76ac642612f76df64223cb0d62665f6ca18a9e221a6e0ed9f648ea12b9096338`,
+`0634b1138f2219601da18527047e95c9941665dda917b6fe238d6efb47e1b94b`,
+`b081d56593ea66777c7792e57a3eb42ea0672d06ca35ff5b60d8165d2e55865d`.
+Local ZIP stream hashes match the signed manifest. Next restore ordinary377/392,
+verify clean Code28/no package/service/SYS/UMD, then one natural bind and two
+ordered producer calls with separate evidence capture.

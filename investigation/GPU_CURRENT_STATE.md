@@ -74,6 +74,17 @@ receipt after each. PASS requires the second call to reach sequence2 and prove
 monotonic stamps/done/fence plus correct target contents. Then clean up and move
 to the next causal boundary. Visible Present remains a later independent stage.
 
+EXP588 exact 30.0.588.0 pinned build is frozen. WDK/SDK 26100, MSVC 14.44,
+KMD/UMD, code analysis, Universal validation, Inf2Cat, TestSign and coherent
+version gates passed with zero errors and inherited C28251 only. ZIP/SYS/INF/CAT/
+UMD/producer hashes are respectively
+`a474b01029f9750cc9a8544007b4f4bdac85ad87bedeecbbe55daf9c8cef6801`,
+`482bb7e8b97c4fc9acc47f3c0cc51b48c39769e258f5f21c0c3bda3d490d0d0c`,
+`b911dfda0bc91333641024c8206c1c21ce003d3c570e031152ad1259a5902b86`,
+`76ac642612f76df64223cb0d62665f6ca18a9e221a6e0ed9f648ea12b9096338`,
+`0634b1138f2219601da18527047e95c9941665dda917b6fe238d6efb47e1b94b`,
+`b081d56593ea66777c7792e57a3eb42ea0672d06ca35ff5b60d8165d2e55865d`.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
