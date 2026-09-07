@@ -146,6 +146,47 @@ typedef struct _ADMISSION_PRESENT_TRANSFER_RECEIPT {
   ULONG Width, Height, NotifyInterrupt, NotifyDpc;
 } ADMISSION_PRESENT_TRANSFER_RECEIPT;
 
+#define ADMISSION_QUEUE_SUBMISSION_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_QUEUE_SUBMISSION_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Fence;
+  ULONG BackendPhase;
+  ULONG ProviderPhase;
+  ULONG RuntimePhase;
+  ULONG InitialProgressValid;
+  ULONG TaEventNumber;
+  ULONG D3EventNumber;
+  ULONG TaRingCapacity;
+  ULONG D3RingCapacity;
+  ULONG TaCpuWritePointer;
+  ULONG TaGpuDonePointer;
+  ULONG TaStamp;
+  ULONG TaExpectedStamp;
+  ULONG TaExpectedDonePointer;
+  ULONG D3CpuWritePointer;
+  ULONG D3GpuDonePointer;
+  ULONG D3Stamp;
+  ULONG D3ExpectedStamp;
+  ULONG D3ExpectedDonePointer;
+  ULONG TaChannelReadPointer;
+  ULONG TaChannelWritePointer;
+  ULONG D3ChannelReadPointer;
+  ULONG D3ChannelWritePointer;
+  ULONG TaDoorbell;
+  ULONG D3Doorbell;
+  ULONGLONG TaQueueInfoGpuAddress;
+  ULONGLONG D3QueueInfoGpuAddress;
+  ULONGLONG TaChannelStateGpuAddress;
+  ULONGLONG TaChannelRingGpuAddress;
+  ULONGLONG D3ChannelStateGpuAddress;
+  ULONGLONG D3ChannelRingGpuAddress;
+  ULONGLONG TaWorkAddresses[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
+  ULONGLONG D3WorkAddresses[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
+  UCHAR TaRunMessage[APPLE_AGX_G13_RUN_MESSAGE_SIZE];
+  UCHAR D3RunMessage[APPLE_AGX_G13_RUN_MESSAGE_SIZE];
+} ADMISSION_QUEUE_SUBMISSION_RECEIPT;
+
 #define ADMISSION_CPU_PACKET_PAGING 1u
 #define ADMISSION_CPU_PACKET_PRESENT 2u
 typedef struct _ADMISSION_CPU_PACKET {
@@ -465,6 +506,9 @@ VOID AdmissionBackendSubmitResultWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Result, ULONG Phase);
 VOID AdmissionBackendProgressWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordQueueSubmission(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_QUEUE_SUBMISSION_RECEIPT *Receipt);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -531,6 +575,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Progress);                                                          \
+  } while (0)
+#define AdmissionRecordQueueSubmission(Context, Receipt)                       \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Receipt);                                                           \
   } while (0)
 #define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
 #define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)

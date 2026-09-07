@@ -78,6 +78,110 @@ typedef struct _ADMISSION_COMPLETION_NOTIFICATION {
 static VOID AdmissionPlatformWorker(
     _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context);
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static BOOLEAN AdmissionCaptureQueueSubmission(
+    ADMISSION_PLATFORM_RUNTIME *Runtime,
+    const APPLE_AGX_G13_QUEUE_PROGRESS *Progress,
+    BOOLEAN ProgressValid,
+    ADMISSION_QUEUE_SUBMISSION_RECEIPT *Receipt) {
+  const APPLE_AGX_G13_QUEUE_RUNTIME *queue;
+  const APPLE_AGX_PLATFORM_CHANNEL_BINDINGS *channels;
+  ULONG taMessageIndex;
+  ULONG d3MessageIndex;
+  if (Runtime == NULL || Receipt == NULL ||
+      Runtime->Provider.QueueProvider.Phase !=
+          AppleAgxG13QueueProviderSubmitted)
+    return FALSE;
+  queue = &Runtime->Provider.QueueProvider.Runtime;
+  channels = &Runtime->Provider.Channels;
+  if (queue->Phase != AppleAgxG13QueueRuntimeSubmitted ||
+      queue->Config.Ta.RingCpuAddress == NULL ||
+      queue->Config.D3.RingCpuAddress == NULL ||
+      queue->Config.Ta.CpuWritePointer == NULL ||
+      queue->Config.D3.CpuWritePointer == NULL ||
+      queue->Config.Ta.GpuDonePointer == NULL ||
+      queue->Config.D3.GpuDonePointer == NULL ||
+      queue->Config.Ta.Stamp == NULL || queue->Config.D3.Stamp == NULL ||
+      channels->Ta.StateCpuAddress == NULL ||
+      channels->Ta.RingCpuAddress == NULL ||
+      channels->D3.StateCpuAddress == NULL ||
+      channels->D3.RingCpuAddress == NULL)
+    return FALSE;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = ADMISSION_QUEUE_SUBMISSION_RECEIPT_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = queue->PendingFence;
+  Receipt->BackendPhase = Runtime->Backend.Phase;
+  Receipt->ProviderPhase = Runtime->Provider.QueueProvider.Phase;
+  Receipt->RuntimePhase = queue->Phase;
+  Receipt->InitialProgressValid = ProgressValid ? 1u : 0u;
+  Receipt->TaEventNumber = queue->Config.Ta.EventNumber;
+  Receipt->D3EventNumber = queue->Config.D3.EventNumber;
+  Receipt->TaRingCapacity = queue->Config.Ta.RingCapacity;
+  Receipt->D3RingCapacity = queue->Config.D3.RingCapacity;
+  Receipt->TaCpuWritePointer = *queue->Config.Ta.CpuWritePointer;
+  Receipt->TaGpuDonePointer = *queue->Config.Ta.GpuDonePointer;
+  Receipt->TaStamp = *queue->Config.Ta.Stamp;
+  Receipt->TaExpectedStamp = queue->TaPending.ExpectedStamp;
+  Receipt->TaExpectedDonePointer = queue->TaPending.ExpectedDonePointer;
+  Receipt->D3CpuWritePointer = *queue->Config.D3.CpuWritePointer;
+  Receipt->D3GpuDonePointer = *queue->Config.D3.GpuDonePointer;
+  Receipt->D3Stamp = *queue->Config.D3.Stamp;
+  Receipt->D3ExpectedStamp = queue->D3Pending.ExpectedStamp;
+  Receipt->D3ExpectedDonePointer = queue->D3Pending.ExpectedDonePointer;
+  if (ProgressValid && Progress != NULL) {
+    Receipt->TaGpuDonePointer = Progress->TaDonePointer;
+    Receipt->TaStamp = Progress->TaStamp;
+    Receipt->D3GpuDonePointer = Progress->D3DonePointer;
+    Receipt->D3Stamp = Progress->D3Stamp;
+  }
+  Receipt->TaChannelReadPointer = *(volatile ULONG *)(
+      channels->Ta.StateCpuAddress +
+      APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+  Receipt->TaChannelWritePointer = *(volatile ULONG *)(
+      channels->Ta.StateCpuAddress +
+      APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
+  Receipt->D3ChannelReadPointer = *(volatile ULONG *)(
+      channels->D3.StateCpuAddress +
+      APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+  Receipt->D3ChannelWritePointer = *(volatile ULONG *)(
+      channels->D3.StateCpuAddress +
+      APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
+  if (Receipt->TaChannelWritePointer >=
+          APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT ||
+      Receipt->D3ChannelWritePointer >=
+          APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT)
+    return FALSE;
+  Receipt->TaDoorbell = channels->Ta.Doorbell;
+  Receipt->D3Doorbell = channels->D3.Doorbell;
+  Receipt->TaQueueInfoGpuAddress = queue->Config.Ta.QueueInfoGpuAddress;
+  Receipt->D3QueueInfoGpuAddress = queue->Config.D3.QueueInfoGpuAddress;
+  Receipt->TaChannelStateGpuAddress = channels->Ta.StateGpuAddress;
+  Receipt->TaChannelRingGpuAddress = channels->Ta.RingGpuAddress;
+  Receipt->D3ChannelStateGpuAddress = channels->D3.StateGpuAddress;
+  Receipt->D3ChannelRingGpuAddress = channels->D3.RingGpuAddress;
+  RtlCopyMemory(Receipt->TaWorkAddresses, queue->Config.Ta.RingCpuAddress,
+                sizeof(Receipt->TaWorkAddresses));
+  RtlCopyMemory(Receipt->D3WorkAddresses, queue->Config.D3.RingCpuAddress,
+                sizeof(Receipt->D3WorkAddresses));
+  taMessageIndex = (Receipt->TaChannelWritePointer +
+      APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT - 1u) %
+      APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT;
+  d3MessageIndex = (Receipt->D3ChannelWritePointer +
+      APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT - 1u) %
+      APPLE_AGX_PLATFORM_COMMAND_RING_ENTRY_COUNT;
+  RtlCopyMemory(Receipt->TaRunMessage,
+      channels->Ta.RingCpuAddress +
+          taMessageIndex * APPLE_AGX_G13_RUN_MESSAGE_SIZE,
+      sizeof(Receipt->TaRunMessage));
+  RtlCopyMemory(Receipt->D3RunMessage,
+      channels->D3.RingCpuAddress +
+          d3MessageIndex * APPLE_AGX_G13_RUN_MESSAGE_SIZE,
+      sizeof(Receipt->D3RunMessage));
+  return TRUE;
+}
+#endif
+
 static ULONGLONG AdmissionPlatformNowMs(void) {
   return (ULONGLONG)(KeQueryInterruptTime() / 10000ULL);
 }
@@ -1381,6 +1485,14 @@ static VOID AdmissionPlatformWorker(
           &runtime->Provider.QueueProvider, &runtime->Progress)
           ? TRUE
           : FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  {
+    ADMISSION_QUEUE_SUBMISSION_RECEIPT receipt;
+    if (AdmissionCaptureQueueSubmission(runtime, &runtime->Progress,
+                                        runtime->ProgressValid, &receipt))
+      AdmissionRecordQueueSubmission(adapter, &receipt);
+  }
+#endif
   InterlockedExchange64(
       &runtime->LastProgressMs, (LONG64)AdmissionPlatformNowMs());
 
