@@ -264,7 +264,8 @@ static BOOLEAN AdmissionCaptureBufferManager(
 }
 
 static BOOLEAN AdmissionCaptureKTrace(
-    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONG InitialWrite,
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
+    APPLE_AGX_BACKEND_U32 InitialWrite,
     ADMISSION_KTRACE_RECEIPT *Receipt) {
   const APPLE_AGX_MEMORY_OBJECT *state;
   const APPLE_AGX_MEMORY_OBJECT *ring;
@@ -1594,7 +1595,7 @@ static VOID AdmissionPlatformWorker(
   ULONG initialTaChannelRead = 0u;
   ULONG initialD3ChannelRead = 0u;
   ULONGLONG queueSubmitMs = 0ULL;
-  ULONG initialKtraceWrite = 0u;
+  APPLE_AGX_BACKEND_U32 initialKtraceWrite = 0u;
 #endif
   KIRQL old_irql;
 
