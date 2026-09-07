@@ -1,5 +1,36 @@
 # Hardware Experiment Ledger
 
+## EXP565 timeout-path AGX fault snapshot — preregistration 2026-09-07T12:13Z
+
+WHY THIS HYPOTHESIS:
+- EXP563/564 prove firmware emits kind4 Timeout before the delayed 50-ms
+  snapshot, and the EXP564 PageList correction does not change that event.
+- Pinned m1n1 timeout handling immediately inspects RegionC fault_info, IRQs and
+  SGX fault state before recovery; current Windows has the same existing
+  snapshot implementation but never calls it on this early branch.
+- A fault snapshot at the exact timeout boundary distinguishes hidden UAT/GPU/
+  firmware fault state from a nonfaulting command stall without changing work.
+
+Single variable: qualification-only reuse of
+`AdmissionCaptureQueueFaultSnapshot` and existing crash-durable receipt after
+the failed truthful quiesce and before worker exit. Commit
+`0af53996098d4b76a2705e995fb4ce1688837bf1`; no new parser/backend and no
+event ACK, TA, UAT, firmware, timeout, scheduler or display change. 356 AppleAgx
+tests pass. Pinned WDK26100/MSVC14.44 build/analysis/Universal/Inf2Cat/sign/KMD/
+UMD/producer gates pass with inherited C28251. Version30.0.565.0.
+
+Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`e372883dc09fbd310392ac4f409577e2bf6c61a3f1306b558fcd85a4f6d103bc` /
+`8cd3dc9491baa49a65712a16011b8eda3e82bd9fd317bf00096b0fa8d6786851` /
+`2d64f0fbe487fa67b75454400a8ce3ad007d9d47a1f004581f7d4e8eb07385b8` /
+`0555741eb0edd6b33118eb51b2d9c8989bf406ab6e58526fdd59c7c9e742bab8` /
+`329005ef60d56ad3ae0775618633b7642937cad1eb8aab88cb5f674387f87d8a` /
+`e1f013f06ec78fa94ede4cba5ba3cf91087db254547b4a8fc6c7d62a805627d1` /
+`9ae31345f49a92a744517b079a5a8943b8130c70afd01b34e11820e8955939c8`.
+Contracts/recovery unchanged. One natural bind/producer. PASS is an exact184-
+byte fault snapshot at timeout; then cleanup and act only on its first nonzero
+primitive. No hardware completion claim.
+
 ## EXP564 complete BufferManager PageList rebase — preregistration 2026-09-07T12:02Z
 
 WHY THIS HYPOTHESIS:

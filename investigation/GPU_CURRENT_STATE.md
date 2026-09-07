@@ -573,6 +573,8 @@ log SHA69bbb215.... Exact cleanup/ordinary health SHAa8415695.... Commit0af5399
 reuses existing QueueFaultSnapshot immediately on kind4 timeout path, matching
 m1n1's timeout diagnostic order as closely as possible after failed quiesce.
 Next EXP565 reads only this snapshot; no TA/event behavior change.
+Pinned30.0.565.0 gates PASS; ZIP/SYS/producer SHA8cd3dc94.../2d64f0fb.../
+9ae31345.... EXP565 preregistered for one timeout-path snapshot.
 
 ## Final live ordinary clean baseline
 
