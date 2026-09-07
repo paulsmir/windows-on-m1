@@ -36238,3 +36238,79 @@ The package is byte-exact EXP594 ZIP SHA
 Persist EXP594 cleanup via Windows graceful restart, restore ordinary clean,
 stage this unchanged package plus exact EXP595 producer, graceful restart, then
 one boot-time natural bind and one producer.
+
+**EXP595 FINAL 2026-09-07T22:54Z — SEPARATE ALLOCATION CALLS CONFIRMED;
+VISIBLE EARLY GUARD STILL UNKNOWN.** Exact EXP594 package naturally bound Code0
+with matching hashes/service Running/8CPU. The EXP595 producer returned both
+allocation statuses0, MakeResident `0x103` with completed paging fence7002,
+Render0/queued1 and clean synchronous teardown. Terminal receipt ValidMaskff,
+sequence1/fence256/completed256, backend/completion0, TA/D3 stamps
+`7a000100/3d000100`, observed done2/2, polling source, NotifyInterrupt1/DPC1,
+Ready exit, 256 exact `0xff112233` pixels, changed1024, guard0. Thus allocation,
+physical TA/3D and exact fence remain hardware proven for the two-allocation
+lifetime. Terminal SHA
+`1222418965bab344c41089c44d4f03994a22159b257e30bad3fe041a2281157f`.
+
+The visible receipt is version1/bytes232, fence256 and exact source GPU
+`0x1500fa0000`/hostPA `0x9bcf90000`, but stage0/status `0xC0000483`; all source
+shape/hash and destination fields are zero. Therefore the post-fence function
+entered but failed its compound early validation before scale, QueuePresent or
+D589. The current receipt cannot distinguish panel, captured destination,
+scanout view or destination range/identity. One Event129 is storage telemetry;
+no bugcheck. Host/run/evidence SHA256:
+`40da8ad28b93c2b14e1cdecebff5d7f4e53c4f78a93c2ada0035eaba543884d8`,
+`8c1fa6b333ffdb5cd944638c5e1ed5903309304849b7f47269886971a165e650`,
+`454a6f447d7f3391c4f7ef792d0b931c0dcdc3ec7192e74a2c690a839359604e`.
+Exact package/devnode cleanup completed.
+
+# EXP596 — visible post-fence early-guard receipt
+
+**PREREGISTERED 2026-09-07T23:00Z; receipt-only candidate.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP595 terminal receipt proves the post-fence caller has exact completed AGX
+  bytes, fence256 and Ready backend state.
+- Visible receipt stage0 proves failure occurs inside the compound validation
+  before any scale or display publication, but does not name the failed scalar.
+- No source evidence ranks captured lifetime, panel state, scanout view and
+  destination identity strongly enough for a causal fix without one scalar guard.
+
+**WINDOWS CONTRACT:** no DDI return/capability/lifetime changes. The receipt only
+records which existing validation boundary was last passed and the already read
+captured-valid/fence scalars.
+
+**AGX/ASAHI CONTRACT:** physical TA/3D, terminal copy, Windows completion/fence,
+retained root and queues are unchanged. DCP is untouched unless every existing
+precondition already passes.
+
+**TRANSLATION:** commit `ce9d1156b4b4c52655f178e758f0cc57709c6dad`
+expands the visible receipt from232 to248 bytes and adds a monotonic Guard plus
+CapturedValid/CapturedFence. Existing destination fields are populated as soon
+as their source is available. Success validation additionally requires Complete
+guard and captured fence identity.
+
+**WHAT IS STILL UNKNOWN:** the exact first failed primitive among arguments,
+panel, captured destination, scanout view, destination range, physical identity,
+active overlap, scale, queue or latch. One receipt names it. This candidate does
+not attempt a behavioral fix.
+
+**OFFLINE PROOF:** receipt validator test was RED before the fields and GREEN
+afterwards; incomplete identity guard is rejected. Focused visible/scanout/
+producer suite12 PASS; full AppleAgx suite366 PASS; diff check clean. Build
+exact30.0.596.0 from the exact EXP594 package source plus only receipt header,
+validator, writer size and scanout guard changes. Reuse exact EXP595 producer.
+
+**EXP596 FREEZE 2026-09-07T23:04Z.** Pinned WDK/SDK26100, MSVC14.44 KMD/UMD,
+code analysis, Universal validation, Inf2Cat, TestSign and coherent-version gates
+PASS with inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD SHA256:
+`bcee3e18e39c0b171b072a1b64d9a1e9f027cc0cbd3f9536601cc71f518950fe`,
+`551623fdb50632915567b958a91d351d8f8f91e9e9b5baafddf20b8eeee2c281`,
+`a8c98efc51f0ab28fd776db3670b34b0f86fdbead645cfc5160fb3ca505d789e`,
+`b12a6377cec1fa357e05903613d7b153ed4321ad0e4f04d410fbee9de08eabfe`,
+`d3a46428c65fb1a493b0f453341d5a9c3c820765b0b681e179011fc6ef6b2524`,
+`f906ead852184601b60ca9a58c4f815ea2102eb425a2887cd353275ba1b40ac1`.
+Producer is byte-exact EXP595 SHA
+`3e1a0a0a144711d5cd773a63985a0fe8f8256bcf6bc2e9c84cc532bb60fcce61`.
+Persist cleanup, verify ordinary clean, stage exact package, graceful restart,
+then one natural bind and one producer.

@@ -261,6 +261,38 @@ The exact signed EXP594 ZIP remains unchanged at
 Next: persist current exact cleanup with graceful restart, verify ordinary clean,
 stage unchanged package plus EXP595 producer, graceful restart, natural bind/run.
 
+EXP595 hardware CONFIRMED the separate-call fix. Both allocation statuses are0;
+MakeResident completed through paging fence7002, Render returned0/queued1, and
+terminal receipt ValidMaskff proves physical TA+3D, expected/observed stamps
+`7a000100/3d000100`, done2/2, exact fence/completed `0x100`, NotifyInterrupt1,
+DPC1, all256 output pixels `0xff112233`, changed1024 and guard0. Terminal SHA
+`1222418965bab344c41089c44d4f03994a22159b257e30bad3fe041a2281157f`.
+The post-fence visible function was called but its receipt is stage0/status
+`0xC0000483`; fence/source GPU/PA are present while all captured-destination
+fields remain zero. No scale/QueuePresent/D589 occurred. Host/run/evidence SHA:
+`40da8ad28b93c2b14e1cdecebff5d7f4e53c4f78a93c2ada0035eaba543884d8`,
+`8c1fa6b333ffdb5cd944638c5e1ed5903309304849b7f47269886971a165e650`,
+`454a6f447d7f3391c4f7ef792d0b931c0dcdc3ec7192e74a2c690a839359604e`.
+Exact package cleanup completed; one Event129 remains storage telemetry.
+
+Commit `ce9d1156b4b4c52655f178e758f0cc57709c6dad` prepares EXP596 with only a
+crash-durable early-guard discriminator. The receipt records argument, panel,
+captured-destination, scanout-view, range, identity, active-surface, scale, queue
+and completion boundaries plus captured-valid/fence. It does not change mapping,
+AGX, fence or DCP behavior. Focused12 and full AppleAgx366 tests PASS. Build
+exact30.0.596.0 from EXP594 package source plus only these receipt files; reuse
+the EXP595 producer.
+
+EXP596 exact30.0.596.0 pinned build/sign/Universal/version gates PASS with the
+existing inherited C28251 only. ZIP/SYS/INF/CAT/UMD hashes:
+`551623fdb50632915567b958a91d351d8f8f91e9e9b5baafddf20b8eeee2c281`,
+`a8c98efc51f0ab28fd776db3670b34b0f86fdbead645cfc5160fb3ca505d789e`,
+`b12a6377cec1fa357e05903613d7b153ed4321ad0e4f04d410fbee9de08eabfe`,
+`d3a46428c65fb1a493b0f453341d5a9c3c820765b0b681e179011fc6ef6b2524`,
+`f906ead852184601b60ca9a58c4f815ea2102eb425a2887cd353275ba1b40ac1`.
+Producer remains exact EXP595 SHA `3e1a0a0a...fcce61`. Persist current cleanup,
+ordinary clean stage, graceful restart, one boot-time bind and producer.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
