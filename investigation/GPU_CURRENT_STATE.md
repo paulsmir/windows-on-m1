@@ -101,6 +101,17 @@ sentinels while updating second-job commands/stamps/done expectations.17 focused
 and391 broad tests PASS; same unrelated source-text assertion remains. Next
 pinned build and one two-invocation hardware experiment, receipts after each.
 
+EXP587 exact30.0.587.0 pinned gates PASS with0 errors/inherited C28251.
+ZIP/SYS/INF/CAT/UMD/producer hashes:
+65b248501509697aac359af7df39a25efcc12edb8fb67ae6595d2554c4ba6ec1,
+aaa8b03fcaec96ec9299d62a4fa160b52b7e1fb63ad437fe97057c44601bd29c,
+43d61d2f4026943550409cae6c3006f74128ed95c0e9be9a73bf7029d0512a48,
+e65e2b4eb5814cf330ac2154edf96fe57c1f8253baa2fca7d03344f212897163,
+625daf18a1286e727f0a7dde1ef20323a6179ec99517c40e04f308bf22c4e012,
+e26ddcbce28fcc56b4cd05aca23d37b1aa7b3864402876721405e82f31798558.
+Workflow parser GREEN. Restore ordinary after EXP586, then one candidate with
+two producer invocations and evidence capture after each.
+
 ## Binding scope and current executor
 
 The post-EXP506 model handoff is complete. Latest user instruction explicitly

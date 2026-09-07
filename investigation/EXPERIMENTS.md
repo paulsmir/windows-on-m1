@@ -35734,3 +35734,19 @@ job. It was RED because all sentinels were overwritten; GREEN preserves each
 byte-exact while copying second-job command/stamp objects and expected done3/4.
 17 focused tests and391 broad tests PASS with one unrelated existing source-text
 assertion. Same m1n1/Mu/producer/output receipt. Build pending.
+
+**EXP587 FREEZE 2026-09-07T20:12Z.** Pinned FRYZZING build, KMD/UMD analysis,
+Universal, Inf2Cat, TestSign and coherent30.0.587.0 version PASS with0 errors and
+inherited C28251. Overlay SHA
+`decb77aef5ef7e7dbeb6ded423e4873d51e718999ff69a82b32a1301cf61ca26`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`65b248501509697aac359af7df39a25efcc12edb8fb67ae6595d2554c4ba6ec1`,
+`aaa8b03fcaec96ec9299d62a4fa160b52b7e1fb63ad437fe97057c44601bd29c`,
+`43d61d2f4026943550409cae6c3006f74128ed95c0e9be9a73bf7029d0512a48`,
+`e65e2b4eb5814cf330ac2154edf96fe57c1f8253baa2fca7d03344f212897163`,
+`625daf18a1286e727f0a7dde1ef20323a6179ec99517c40e04f308bf22c4e012`,
+`e26ddcbce28fcc56b4cd05aca23d37b1aa7b3864402876721405e82f31798558`.
+Manifest SHA `f86611313a45b7c04d8afd2f0ec9bbc03302121931428f069ddebb0966d17e2c`.
+Workflow parser GREEN. Restore clean ordinary after EXP586, stage/natural bind,
+run unchanged producer once and capture receipt1, then run the same producer a
+second time without reboot/rebind and capture receipt2. Cleanup follows evidence.
