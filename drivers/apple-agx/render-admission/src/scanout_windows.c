@@ -222,7 +222,9 @@ Exit:
 
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
-    ADMISSION_CONTEXT *Context, const VOID *Source, ULONG SourceBytes,
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    const VOID *Source, ULONG SourceBytes,
     ULONGLONG SourceGpuAddress, ULONGLONG SourcePhysicalAddress, ULONG Fence) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   ADMISSION_SCANOUT_MEMORY_VIEW memory;
@@ -245,27 +247,39 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   receipt.SourcePhysicalAddress = SourcePhysicalAddress;
   receipt.Guard = AdmissionVisibleAgxGuardEntry;
   started = AdmissionScanoutNow(runtime);
-  if (Context == NULL || runtime == NULL || Source == NULL ||
+  if (Context == NULL || Packet == NULL || runtime == NULL || Source == NULL ||
       SourceBytes < 1024u || Fence == 0u ||
+      Packet->Fence != Fence ||
       SourcePhysicalAddress > MAXULONGLONG - 1024ULL)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardArguments;
   if (!runtime->Panel.Committed || !runtime->Panel.Visible)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardPanel;
-  receipt.CapturedValid = Context->VisibleAgxDestinationValid ? 1u : 0u;
-  receipt.CapturedFence = Context->VisibleAgxDestinationFence;
+  receipt.CapturedValid =
+      Packet->VisibleDestinationCpuToken != 0ULL &&
+              Packet->VisibleDestinationGpuVa != 0ULL &&
+              Packet->VisibleDestinationPhysical != 0ULL &&
+              Packet->VisibleDestinationAllocationToken != 0ULL &&
+              Packet->VisibleDestinationBytes != 0u
+          ? 1u
+          : 0u;
+  receipt.CapturedFence = Packet->Fence;
   receipt.DestinationAllocationToken =
-      Context->VisibleAgxDestinationAllocationToken;
+      Packet->VisibleDestinationAllocationToken;
   if (receipt.CapturedValid != 1u ||
-      Context->VisibleAgxDestinationFence != Fence ||
+      Packet->Fence != Fence ||
       receipt.DestinationAllocationToken == 0ULL)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardCapturedDestination;
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)))
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardScanoutView;
-  destination = Context->VisibleAgxDestination;
+  destination.CpuAddress =
+      (PVOID)(ULONG_PTR)Packet->VisibleDestinationCpuToken;
+  destination.GpuVirtualAddress = Packet->VisibleDestinationGpuVa;
+  destination.HostPhysicalAddress = Packet->VisibleDestinationPhysical;
+  destination.Bytes = Packet->VisibleDestinationBytes;
   receipt.DestinationCpuAddress =
       (ULONGLONG)(ULONG_PTR)destination.CpuAddress;
   receipt.DestinationPhysicalAddress = destination.HostPhysicalAddress;
@@ -364,13 +378,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   if (!AdmissionVisibleAgxReceiptValid(&receipt))
     status = STATUS_DATA_ERROR;
 Exit:
-  if (Context != NULL && Context->VisibleAgxDestinationFence == Fence) {
-    Context->VisibleAgxDestinationValid = FALSE;
-    Context->VisibleAgxDestinationFence = 0u;
-    Context->VisibleAgxDestinationAllocationToken = 0ULL;
-    RtlZeroMemory(&Context->VisibleAgxDestination,
-                  sizeof(Context->VisibleAgxDestination));
-  }
   receipt.Status = (ULONG)status;
   receipt.ElapsedMs = runtime == NULL ? 0u :
       (ULONG)(AdmissionScanoutNow(runtime) - started);

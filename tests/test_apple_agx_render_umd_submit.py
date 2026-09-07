@@ -160,8 +160,16 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("const UINT index = 1u", patch)
         self.assertIn("entry->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT", patch)
         self.assertIn("description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE", patch)
-        self.assertIn("Adapter->VisibleAgxDestination = view", patch)
-        self.assertIn("Adapter->VisibleAgxDestinationFence = Args->SubmissionFenceId", patch)
+        self.assertNotIn("Adapter->VisibleAgxDestination = view", patch)
+        self.assertIn("*VisibleDestination = view", patch)
+        self.assertIn(
+            "description.VisibleDestinationAllocationToken = VisibleAllocationToken",
+            patch,
+        )
+        self.assertIn(
+            "description.VisibleDestinationGpuVa =",
+            patch,
+        )
 
         self.assertNotIn("ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET", memory)
         self.assertNotIn(

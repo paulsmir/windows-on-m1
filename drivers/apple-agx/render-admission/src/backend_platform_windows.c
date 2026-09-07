@@ -2474,7 +2474,7 @@ static VOID AdmissionPlatformWorker(
       runtime->VisibleAgxValid &&
       runtime->VisibleAgxFence == description.Fence) {
     (void)AdmissionScanoutPresentAgxResult(
-        adapter, runtime->VisibleAgxSource,
+        adapter, &description, runtime->VisibleAgxSource,
         sizeof(runtime->VisibleAgxSource), runtime->VisibleAgxGpuAddress,
         runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence);
   }

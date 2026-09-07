@@ -94,7 +94,17 @@ int AdmissionRenderPacketMatches(
          current->DestinationPhysical ==
              Description->DestinationPhysical &&
          current->DestinationBytes ==
-             Description->DestinationBytes;
+             Description->DestinationBytes &&
+         current->VisibleDestinationCpuToken ==
+             Description->VisibleDestinationCpuToken &&
+         current->VisibleDestinationGpuVa ==
+             Description->VisibleDestinationGpuVa &&
+         current->VisibleDestinationPhysical ==
+             Description->VisibleDestinationPhysical &&
+         current->VisibleDestinationAllocationToken ==
+             Description->VisibleDestinationAllocationToken &&
+         current->VisibleDestinationBytes ==
+             Description->VisibleDestinationBytes;
 }
 
 int AdmissionRenderPacketQueue(

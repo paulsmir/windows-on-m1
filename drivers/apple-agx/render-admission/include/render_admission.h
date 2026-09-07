@@ -371,12 +371,6 @@ typedef struct _ADMISSION_CONTEXT {
   UCHAR PresentCopyCommand[ADMISSION_PRESENT_BLT_DMA_MAX];
   volatile LONG PresentTransferState;
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
-#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-  ADMISSION_LOCAL_MEMORY_VIEW VisibleAgxDestination;
-  ULONGLONG VisibleAgxDestinationAllocationToken;
-  ULONG VisibleAgxDestinationFence;
-  BOOLEAN VisibleAgxDestinationValid;
-#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   volatile LONG SubmitTraceClaimed;
   volatile LONG UmdRenderTraceClaimed;
@@ -986,7 +980,9 @@ NTSTATUS AdmissionScanoutControlInterrupt(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Enable);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
 NTSTATUS AdmissionScanoutPresentAgxResult(
-    _Inout_ ADMISSION_CONTEXT *Context, _In_reads_bytes_(SourceBytes) const VOID *Source,
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    _In_reads_bytes_(SourceBytes) const VOID *Source,
     _In_ ULONG SourceBytes, _In_ ULONGLONG SourceGpuAddress,
     _In_ ULONGLONG SourcePhysicalAddress, _In_ ULONG Fence);
 VOID AdmissionRecordVisibleAgx(

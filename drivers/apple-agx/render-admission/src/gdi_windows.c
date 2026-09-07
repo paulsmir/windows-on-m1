@@ -74,15 +74,22 @@ static NTSTATUS AdmissionGdiTranslatePatch(
 static NTSTATUS AdmissionVisibleAgxCaptureDestination(
     ADMISSION_CONTEXT *Adapter, const ADMISSION_RENDER_CONTEXT *Context,
     const DXGKARG_PATCH *Args,
-    const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination) {
+    const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination,
+    ADMISSION_LOCAL_MEMORY_VIEW *VisibleDestination,
+    ULONGLONG *AllocationToken) {
   const UINT index = 1u;
   const DXGK_ALLOCATIONLIST *entry;
   ADMISSION_OPEN_ALLOCATION *opened;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
   ADMISSION_LOCAL_MEMORY_VIEW view;
   ULONGLONG aligned_size;
+  if (VisibleDestination != NULL)
+    RtlZeroMemory(VisibleDestination, sizeof(*VisibleDestination));
+  if (AllocationToken != NULL)
+    *AllocationToken = 0ULL;
   if (Adapter == NULL || Context == NULL || Args == NULL ||
-      RenderDestination == NULL || Args->AllocationListSize <= index ||
+      RenderDestination == NULL || VisibleDestination == NULL ||
+      AllocationToken == NULL || Args->AllocationListSize <= index ||
       !AdmissionGdiOpenValid(
           Context, Args->pAllocationList, Args->AllocationListSize,
           index, TRUE))
@@ -112,13 +119,9 @@ static NTSTATUS AdmissionVisibleAgxCaptureDestination(
        RenderDestination->HostPhysicalAddress <
            view.HostPhysicalAddress + view.Bytes))
     return STATUS_INVALID_ADDRESS;
-  Adapter->VisibleAgxDestination = view;
-  Adapter->VisibleAgxDestination.Bytes =
-      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
-  Adapter->VisibleAgxDestinationAllocationToken =
-      (ULONGLONG)(ULONG_PTR)opened;
-  Adapter->VisibleAgxDestinationFence = Args->SubmissionFenceId;
-  Adapter->VisibleAgxDestinationValid = TRUE;
+  view.Bytes = APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+  *VisibleDestination = view;
+  *AllocationToken = (ULONGLONG)(ULONG_PTR)opened;
   return STATUS_SUCCESS;
 }
 #endif
@@ -127,7 +130,9 @@ static NTSTATUS AdmissionGdiPreparePacket(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     ADMISSION_OPEN_ALLOCATION *Opened, const DXGKARG_PATCH *Args,
     APPLE_AGX_U32 PrivateBytesUsed,
-    const ADMISSION_LOCAL_MEMORY_VIEW *Destination) {
+    const ADMISSION_LOCAL_MEMORY_VIEW *Destination,
+    const ADMISSION_LOCAL_MEMORY_VIEW *VisibleDestination,
+    ULONGLONG VisibleAllocationToken) {
   ADMISSION_RENDER_PACKET_DESCRIPTION description;
   KIRQL old_irql;
   BOOLEAN accepted = FALSE;
@@ -157,6 +162,23 @@ static NTSTATUS AdmissionGdiPreparePacket(
   description.DestinationPhysical =
       Destination->HostPhysicalAddress;
   description.DestinationBytes = (UINT)Destination->Bytes;
+  if (VisibleDestination != NULL) {
+    if (VisibleDestination->CpuAddress == NULL ||
+        VisibleDestination->GpuVirtualAddress == 0ULL ||
+        VisibleDestination->HostPhysicalAddress == 0ULL ||
+        VisibleDestination->Bytes == 0ULL ||
+        VisibleDestination->Bytes > MAXUINT32 ||
+        VisibleAllocationToken == 0ULL)
+      return STATUS_INVALID_PARAMETER;
+    description.VisibleDestinationCpuToken =
+        (ULONGLONG)(ULONG_PTR)VisibleDestination->CpuAddress;
+    description.VisibleDestinationGpuVa =
+        VisibleDestination->GpuVirtualAddress;
+    description.VisibleDestinationPhysical =
+        VisibleDestination->HostPhysicalAddress;
+    description.VisibleDestinationAllocationToken = VisibleAllocationToken;
+    description.VisibleDestinationBytes = (UINT)VisibleDestination->Bytes;
+  }
 
   KeAcquireSpinLock(&Adapter->SchedulerLock, &old_irql);
   if (AdmissionRenderPacketState(&Adapter->RenderPacket) ==
@@ -229,7 +251,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
     NTSTATUS status = AdmissionGdiPreparePacket(
         Adapter, Context,
         (ADMISSION_OPEN_ALLOCATION *)pending.OpenedAllocation,
-        &patchArgs, shadow.BytesUsed, &pending.Destination);
+        &patchArgs, shadow.BytesUsed, &pending.Destination, NULL, 0ULL);
     if (!NT_SUCCESS(status))
       PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPrepare, status);
     AdmissionGdiReceiptPatchWindows(
@@ -445,6 +467,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   ADMISSION_OPEN_ALLOCATION *opened;
   BOOLEAN sealed;
   ADMISSION_LOCAL_MEMORY_VIEW destination;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_LOCAL_MEMORY_VIEW visibleDestination;
+  ULONGLONG visibleAllocationToken = 0ULL;
+#endif
 
 #define PATCH_RENDER_RETURN(guard, value)                                    \
   do {                                                                       \
@@ -535,7 +561,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
 
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (!NT_SUCCESS(AdmissionVisibleAgxCaptureDestination(
-          adapter, context, Args, &destination)))
+          adapter, context, Args, &destination, &visibleDestination,
+          &visibleAllocationToken)))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,
                         STATUS_INVALID_ADDRESS);
 #endif
@@ -563,7 +590,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   }
   if (!NT_SUCCESS(AdmissionGdiPreparePacket(
           adapter, context, opened, Args, shadow.BytesUsed,
-          &destination)))
+          &destination,
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+          &visibleDestination, visibleAllocationToken
+#else
+          NULL, 0ULL
+#endif
+          )))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardPrepare,
                         STATUS_DEVICE_BUSY);
   AdmissionGdiReceiptPatchWindows(adapter,

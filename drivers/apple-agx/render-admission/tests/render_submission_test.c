@@ -20,6 +20,11 @@ static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
   description.DestinationGpuVa = 0x1500010000ULL;
   description.DestinationPhysical = 0x9d0010000ULL;
   description.DestinationBytes = 0x10000u;
+  description.VisibleDestinationCpuToken = 0x5000ULL;
+  description.VisibleDestinationGpuVa = 0x1500100000ULL;
+  description.VisibleDestinationPhysical = 0x9d0100000ULL;
+  description.VisibleDestinationAllocationToken = 0x6000ULL;
+  description.VisibleDestinationBytes = 0xfa0000u;
   return description;
 }
 
@@ -38,6 +43,10 @@ static void test_exact_packet_moves_prepared_queued_active_completed(void) {
   assert(!AdmissionRenderPacketMatches(&packet, &description,
                                        AdmissionRenderPacketPrepared));
   description.DmaEnd--;
+  description.VisibleDestinationAllocationToken++;
+  assert(!AdmissionRenderPacketMatches(&packet, &description,
+                                       AdmissionRenderPacketPrepared));
+  description.VisibleDestinationAllocationToken--;
   assert(AdmissionRenderPacketState(&packet) ==
          AdmissionRenderPacketPrepared);
   assert(!AdmissionRenderPacketComplete(&packet, 11u));

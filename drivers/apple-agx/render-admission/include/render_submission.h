@@ -24,6 +24,11 @@ typedef struct _ADMISSION_RENDER_PACKET_DESCRIPTION {
   unsigned long long DestinationGpuVa;
   unsigned long long DestinationPhysical;
   unsigned int DestinationBytes;
+  unsigned long long VisibleDestinationCpuToken;
+  unsigned long long VisibleDestinationGpuVa;
+  unsigned long long VisibleDestinationPhysical;
+  unsigned long long VisibleDestinationAllocationToken;
+  unsigned int VisibleDestinationBytes;
 } ADMISSION_RENDER_PACKET_DESCRIPTION;
 
 typedef struct _ADMISSION_RENDER_PACKET {
