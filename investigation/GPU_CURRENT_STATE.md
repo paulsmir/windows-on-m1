@@ -762,6 +762,12 @@ adds an automatic trace decoder, and makes the producer Lock2-initialize/wait/
 readback-verify the exact16x16 output plus untouched64KiB guard. Hardware not yet
 run.
 
+EXP581 FREEZE: exact30.0.581.0 passes pinned WDK build/analysis/Universal/
+Inf2Cat/sign/version and producer build; ZIP/SYS/producer SHA
+40a96fc2.../4893a106.../71812154.... Fresh ordinary preflight is Code28,
+zero package/service/module,8CPU,NVMe2/USB5/keyboard1,Event1290/Bugcheck0.
+Next is its sole hardware run.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,

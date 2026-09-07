@@ -35336,3 +35336,18 @@ present, Windows NotifyInterrupt and DPC observed, worker exit Completed, both
 Lock2 operations succeed,256 pixels match and guard corruption is zero. A
 missing individual validity bit names the first diagnostic/functional boundary.
 No OpenGL/present/repeated-submit claim follows yet.
+
+**EXP581 FREEZE 2026-09-07T17:57Z:** pinned FRYZZING WDK/SDK26100 and
+MSVC14.44 build, code analysis, Universal validation, Inf2Cat, test signing,
+version30.0.581.0 and producer rebuild PASS with0 errors and only inherited
+C28251. ZIP/SYS/INF/CAT/UMD/producer SHA-256:
+`40a96fc29fa065daa15b9534e8bdbafac5b4d80c1733cf13f89a90473c5b8743`,
+`4893a106cf68d89f40642050d8cafb85a5e8aa056f5092b1c05c442ecbf92b53`,
+`4fcffd6759e91d2e2007e4660fa3e1ab843a1f971ac4564e2a9ead8f529e9eb6`,
+`e23cf62a721e552b982418b58db77253f16292c3aa59752a77c15dd139d11cc5`,
+`f3c61a5aa24c2ade77ecd8aba79483c85120fc1d0e91f9049c9f40d2571fc082`,
+`71812154b47f2b4585fc9f4fbdff365aa5e4ba43db0763937020115a11968e21`.
+Overlay/manifest/build-script SHA are `277839b9...`, `45d8f020...`,
+`6fa42536...`. m1n1/Mu are unchanged. Fresh ordinary preflight proves
+Code28, zero package/service/module,8CPU,NVMe2/USB5/keyboard1 and current-window
+Event1290/Bugcheck0. One exact stage/natural bind/producer only.
