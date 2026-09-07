@@ -1,5 +1,25 @@
 # Hardware Experiment Ledger
 
+## EXP560 firmware KTrace tail — preregistration 2026-09-07T10:55Z
+
+WHY THIS HYPOTHESIS: EXP559 proves TA remains active after the corrected InitBM
+control and direct cached-write audit is exhausted. Firmware already publishes
+KTrace channel15 (0x200 entries x0x38); its post-worker tail can identify the
+last internal StartTA/InitBM code without changing queue behavior. Single
+variable: record baseline/final KTrace WRITE_PTR and final16 messages.
+
+Commit `29fa22e657855da44331c8c65c02b22714816bea`, builder-only exact-type fix
+`5bb1d98ee01d499ebc09f45c73e5819ae02264ab`.111 tests pass. Pinned30.0.560.0
+gates pass. Overlay SHA `9ea31c2f087bbe2a224214a6085d0eebd1b4abc50d8b1eb9c0143eb78a81b736`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`d09f1f315361de52d2db411835599d11ad134dbccd7c416db2e7b4d107ce8d0f` /
+`8ca1db14760bd47d566afbe0d9617ad4193510c43c01626cff7b52ba4c6bacc7` /
+`f3ef2f356124b62d23bb7940c342d1d66f969f8a88350c4851da1bc2f44f9031` /
+`56a3aca74a94432b5704123a990224da177ce154ec96b29b37aead910d2236cc` /
+`6c45e44b42df0220bafa350e368f46729a4787b183cb5690ac8205ec70208d3a` /
+`ea32b9b9eb12dcff48a9340021e722e7aeec45e2a5c1339b861013be6d9ebc25`.
+One bind/producer, decode pinned KTrace schema, exact cleanup.
+
 ## EXP559 populated BufferManager control — result 2026-09-07T10:49Z
 
 CONFIRMED exact word correction, but no later TA progress. Exact30.0.559.0 ran

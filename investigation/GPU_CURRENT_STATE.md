@@ -528,6 +528,9 @@ written because provider poll exited before50ms. Exact cleanup; ordinary health
 SHAa9824f22.... Direct cached-write audit closed. Next use existing KTrace RX
 state/ring: baseline pointer plus bounded final tail identifies last firmware
 StartTA/InitBM trace without work/UAT changes.
+Commits29fa22e/5bb1d98 add exact KTrace receipt and builder type correction.
+Pinned30.0.560.0 gates PASS; ZIP/SYS/producer SHAd09f1f31.../8ca1db14.../
+ea32b9b9.... EXP560 preregistered.
 
 ## Final live ordinary clean baseline
 
