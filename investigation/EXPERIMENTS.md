@@ -36480,3 +36480,20 @@ wait both and preserve separate logs. No source change.
 remains owned, receives a distinct non-active offset and replaces it before P1
 teardown. PASS requires both result0, final terminal sequence2, final visible
 Guard11/Stage3/status0 with new offset/sequence/swap, two host latches and health.
+
+**EXP599 FINAL 2026-09-08T00:53Z — REPEATED VISIBLE/LIFETIME PASS.** P1 and P2
+both returned result0. P2 final terminal sequence2/fence259/completed259,
+TA7a000200/done3, D3 3d000200/done4, interrupt1/DPC1. P1 visible offset0xfb0000
+sequence3/swap11 remained owned when P2 started; P2 received distinct offset
+0x1f60000 and final receipt Guard11/Stage3/status0 shows ActiveOffsetBefore
+0xfb0000, requested=applied=latched4, ActiveOffsetAfter0x1f60000, swap12. Host
+logged exact A408/D589 swap11 then swap12 before P1 teardown. Final visible/
+terminal/host/producers/evidence SHA:
+`78245cf2128008a18c788b9a2186bec7bf52d4691fb7b91f50acd97513de6b7e`,
+`3e094d0d1a8de48d940cc8ad40e87f8dbd984126b9282da58087d8437f559aa7`,
+`e72e1c9c565a0417231d064b5a9a7a152f1ad93c7afaf2ce46231d5beae67045`,
+`946bd0764f810f7c882894ecba54c95a8aada942356966bd5e47a75ff1c2d80b`,
+`ad3fa733a29f0710f0b458d213269956cfd3346add676e8dda50b4ee770ac3e7`.
+Health8CPU/NVMe2/USB5/keyboard1/bugcheck0; Event129x10 telemetry. Exact package
+cleanup completed. Next boundary is fully accelerated full-size render/PBE;
+CPU-assisted scale remains explicitly non-final.

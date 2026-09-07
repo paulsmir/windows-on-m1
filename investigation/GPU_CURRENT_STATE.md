@@ -370,6 +370,17 @@ after4s while producer1 still holds its displayed allocation. Require distinct
 destination offsets, monotonic visible sequences/swaps, two TA/3D/fences and the
 second latch before producer1 destroys its allocation.
 
+EXP599 PASS. P1/P2 both result0. Final terminal sequence2/fence259 completed259,
+TA stamp7a000200/done3 and D3 stamp3d000200/done4 with interrupt+DPC. First
+visible offset0xfb0000 sequence3/swap11 was replaced while P1 remained alive by
+distinct offset0x1f60000 sequence4/swap12; final receipt Guard11/Stage3/status0
+has ActiveOffsetBefore0xfb0000 and ActiveOffsetAfter0x1f60000. Host logged both
+A408/D589 pairs. Thus repeated visible submission and replacement-before-release
+are proven for the qualification lifetime. Exact cleanup completed. Event129x10
+is recorded as storage telemetry;8CPU/NVMe2/USB5/keyboard1,bugcheck0.
+Next first unknown: remove CPU scale by deriving a full-size AGX PBE/tiling job;
+do not guess fields from the fixed16x16 EXP208 capture.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
