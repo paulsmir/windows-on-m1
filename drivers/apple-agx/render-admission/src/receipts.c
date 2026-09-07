@@ -9,6 +9,7 @@ C_ASSERT(sizeof(ADMISSION_QUEUE_INFO_RECEIPT) == 576);
 C_ASSERT(sizeof(ADMISSION_QUEUE_FAULT_SNAPSHOT) == 184);
 C_ASSERT(sizeof(ADMISSION_BUFFER_MANAGER_RECEIPT) == 396);
 C_ASSERT(sizeof(ADMISSION_KTRACE_RECEIPT) == 928);
+C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -226,6 +227,40 @@ _Use_decl_annotations_ VOID AdmissionRecordKTrace(
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1KTraceReceipt", Receipt, sizeof(*Receipt));
     (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+}
+
+static VOID AdmissionWriteEventDrain(
+    HANDLE Key, const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
+  WriteBinary(Key, L"Wom1EventDrainReceipt", Receipt, sizeof(*Receipt));
+  (void)ZwFlushKey(Key);
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordEventDrain(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_EVENT_DRAIN_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key))) {
+    AdmissionWriteEventDrain(key, Receipt);
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    AdmissionWriteEventDrain(key, Receipt);
     ZwClose(key);
   }
 }

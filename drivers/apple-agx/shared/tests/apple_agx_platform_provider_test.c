@@ -700,6 +700,16 @@ static void test_poll_records_exact_failure_owner(void) {
   assert(provider.LastEventWritePointer ==
          APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT);
 
+  *event_write = 1u;
+  storage[27][0] = 2u;
+  components.FailPrepareAt = components.PrepareCalls + 1u;
+  assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastDrainGuard == AppleAgxPlatformDrainGuardPrepareEvent);
+  assert(provider.LastEventMessageValid);
+  assert(memcmp(provider.LastEventMessage, storage[27],
+                APPLE_AGX_G13_EVENT_MESSAGE_SIZE) == 0);
+  components.FailPrepareAt = 0u;
+
   *event_write = 0u;
   transport.ZeroNow = 1u;
   assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));

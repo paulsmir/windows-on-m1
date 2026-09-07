@@ -160,6 +160,8 @@ typedef struct _APPLE_AGX_PLATFORM_PROVIDER {
   APPLE_AGX_BACKEND_U32 LastDrainGuard;
   APPLE_AGX_BACKEND_U32 LastEventReadPointer;
   APPLE_AGX_BACKEND_U32 LastEventWritePointer;
+  unsigned char LastEventMessage[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  APPLE_AGX_BACKEND_BOOL LastEventMessageValid;
 } APPLE_AGX_PLATFORM_PROVIDER;
 
 APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(

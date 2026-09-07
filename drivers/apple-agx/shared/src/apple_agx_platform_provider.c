@@ -674,6 +674,10 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
     Provider->LastDrainGuard = AppleAgxPlatformDrainGuardInvalid;
     Provider->LastEventReadPointer = 0xffffffffu;
     Provider->LastEventWritePointer = 0xffffffffu;
+    Provider->LastEventMessageValid = APPLE_AGX_BACKEND_FALSE;
+    AppleAgxPlatformZero(
+        Provider->LastEventMessage,
+        (APPLE_AGX_BACKEND_U32)sizeof(Provider->LastEventMessage));
   }
   if (Provider == PLATFORM_NULL || !Provider->Initialized ||
       MaxMessages == 0u || DrainedMessages == PLATFORM_NULL ||
@@ -733,6 +737,10 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
         return APPLE_AGX_BACKEND_FALSE;
       }
       Provider->Transport.MemoryBarrier(Provider->Transport.Context);
+      AppleAgxPlatformCopy(
+          Provider->LastEventMessage, message,
+          APPLE_AGX_G13_EVENT_MESSAGE_SIZE);
+      Provider->LastEventMessageValid = APPLE_AGX_BACKEND_TRUE;
       if (!AppleAgxPlatformComposerPrepareEvent(
               &Provider->Composer, message, APPLE_AGX_G13_EVENT_MESSAGE_SIZE,
               &Provider->PendingEventBatch)) {

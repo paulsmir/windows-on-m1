@@ -44,6 +44,10 @@ class ChannelProgressTraceTests(unittest.TestCase):
         self.assertLess(drain_report, report)
         self.assertIn("LastEventReadPointer", worker[drain_report:drain_report + 500])
         self.assertIn("LastEventWritePointer", worker[drain_report:drain_report + 500])
+        self.assertIn("ADMISSION_EVENT_DRAIN_RECEIPT", header)
+        self.assertIn("AdmissionRecordEventDrain", header)
+        self.assertIn("Wom1EventDrainReceipt", (RENDER / "src" / "receipts.c").read_text())
+        self.assertIn("AdmissionRecordEventDrain(adapter, &eventReceipt)", worker)
 
 
 if __name__ == "__main__":

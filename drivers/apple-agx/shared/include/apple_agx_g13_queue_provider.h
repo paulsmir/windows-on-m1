@@ -13,6 +13,15 @@ typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_PHASE {
   AppleAgxG13QueueProviderFaulted,
 } APPLE_AGX_G13_QUEUE_PROVIDER_PHASE;
 
+typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_INGEST_GUARD {
+  AppleAgxG13QueueProviderIngestGuardOk = 0u,
+  AppleAgxG13QueueProviderIngestGuardInvalid = 1u,
+  AppleAgxG13QueueProviderIngestGuardRuntime = 2u,
+  AppleAgxG13QueueProviderIngestGuardD3Observation = 3u,
+  AppleAgxG13QueueProviderIngestGuardTaObservation = 4u,
+  AppleAgxG13QueueProviderIngestGuardCompletionFence = 5u,
+} APPLE_AGX_G13_QUEUE_PROVIDER_INGEST_GUARD;
+
 typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER_IO {
   void *Context;
   APPLE_AGX_BACKEND_BOOL (*BuildSubmission)(
@@ -69,6 +78,8 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER {
   APPLE_AGX_G13_QUEUE_PROVIDER_STAGED_3D Staged3d;
   APPLE_AGX_BACKEND_U32 PendingFence;
   APPLE_AGX_BACKEND_BOOL FailureQuiesced;
+  APPLE_AGX_BACKEND_U32 LastIngestGuard;
+  APPLE_AGX_BACKEND_U32 LastIngestRuntimeResult;
 } APPLE_AGX_G13_QUEUE_PROVIDER;
 
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderInitialize(

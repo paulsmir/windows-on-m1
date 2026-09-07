@@ -1731,6 +1731,26 @@ static VOID AdmissionPlatformWorker(
             &runtime->Provider, 64u, &drained, &completed)) {
       if (runtime->Provider.LastPollGuard ==
           AppleAgxPlatformPollGuardDrainEvents) {
+        ADMISSION_EVENT_DRAIN_RECEIPT eventReceipt;
+        RtlZeroMemory(&eventReceipt, sizeof(eventReceipt));
+        eventReceipt.Version = ADMISSION_EVENT_DRAIN_RECEIPT_VERSION;
+        eventReceipt.Bytes = sizeof(eventReceipt);
+        eventReceipt.Fence = description.Fence;
+        eventReceipt.PollGuard = runtime->Provider.LastPollGuard;
+        eventReceipt.DrainGuard = runtime->Provider.LastDrainGuard;
+        eventReceipt.ReadPointer = runtime->Provider.LastEventReadPointer;
+        eventReceipt.WritePointer = runtime->Provider.LastEventWritePointer;
+        eventReceipt.IngestGuard =
+            runtime->Provider.QueueProvider.LastIngestGuard;
+        eventReceipt.RuntimeResult =
+            runtime->Provider.QueueProvider.LastIngestRuntimeResult;
+        eventReceipt.MessageValid = runtime->Provider.LastEventMessageValid;
+        if (runtime->Provider.LastEventMessageValid) {
+          RtlCopyMemory(
+              eventReceipt.Message, runtime->Provider.LastEventMessage,
+              sizeof(eventReceipt.Message));
+        }
+        AdmissionRecordEventDrain(adapter, &eventReceipt);
         AdmissionProviderDrainTraceWindows(
             adapter, runtime->Provider.LastDrainGuard,
             runtime->Provider.LastEventReadPointer,

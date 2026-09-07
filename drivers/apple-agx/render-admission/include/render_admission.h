@@ -228,6 +228,21 @@ typedef struct _ADMISSION_KTRACE_RECEIPT {
   UCHAR Entries[ADMISSION_KTRACE_ENTRY_COUNT][ADMISSION_KTRACE_ENTRY_BYTES];
 } ADMISSION_KTRACE_RECEIPT;
 
+#define ADMISSION_EVENT_DRAIN_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_EVENT_DRAIN_RECEIPT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Fence;
+  ULONG PollGuard;
+  ULONG DrainGuard;
+  ULONG ReadPointer;
+  ULONG WritePointer;
+  ULONG IngestGuard;
+  ULONG RuntimeResult;
+  ULONG MessageValid;
+  UCHAR Message[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+} ADMISSION_EVENT_DRAIN_RECEIPT;
+
 #define ADMISSION_QUEUE_FAULT_SNAPSHOT_VERSION 2u
 #define ADMISSION_QUEUE_FAULT_REGIONB_WORDS 32u
 #define ADMISSION_QUEUE_FAULT_REGIONC_WORDS 6u
@@ -589,6 +604,9 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordKTrace(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_KTRACE_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordEventDrain(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt);
+_IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueFaultSnapshot(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
@@ -704,6 +722,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Receipt);                                                           \
   } while (0)
 #define AdmissionRecordKTrace(Context, Receipt)                                \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Receipt);                                                           \
+  } while (0)
+#define AdmissionRecordEventDrain(Context, Receipt)                            \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \

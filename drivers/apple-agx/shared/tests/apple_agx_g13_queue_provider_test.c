@@ -215,6 +215,20 @@ static void TestExactCompletion(void) {
   assert(batch.ObservationCount==1u && batch.Observations[0].Queue==AppleAgxBackendQueueTa);
   assert(batch.CompletedFence==41u);
 }
+static void TestIngestFailureNamesDecoderOwner(void) {
+  FIXTURE f;
+  APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE] = {0};
+  Init(&f);
+  Submit(&f);
+  event[0] = 2u;
+  assert(!AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider, event, sizeof(event), &batch));
+  assert(f.Provider.LastIngestGuard ==
+         AppleAgxG13QueueProviderIngestGuardRuntime);
+  assert(f.Provider.LastIngestRuntimeResult ==
+         AppleAgxG13QueueRuntimeResultInvalidArgument);
+}
 static void TestSecondSubmitPublishesOnlyWorkTa(void) {
   FIXTURE f;
   Init(&f); Submit(&f);
@@ -389,6 +403,7 @@ static void TestProgressReceiptFailsClosedForInvalidStateAndRead(void) {
 }
 int main(void) {
   TestAtomicStagingAndOrder(); TestExactCompletion(); TestFailClosedQuiesce();
+  TestIngestFailureNamesDecoderOwner();
   TestReadOnlyJobPlanTracksQueueLifetime();
   TestSecondSubmitPublishesOnlyWorkTa();
   TestSuccessfulStopAndResetAreSynchronous();
