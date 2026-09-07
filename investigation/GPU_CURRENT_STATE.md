@@ -439,17 +439,25 @@ removes rejected wake. Commit0b854e8 preserves native m1n1 intra-page offsets
 for TA1/D3_1 ChannelState(3fd0) and run rings(1000) with unchanged mapping
 bases/pages. Channel/provider sanitizer tests and109 render regressions PASS;
 pinned30.0.552.0 gates PASS. ZIP/SYS/producer SHA1cf8d8f6.../0effa997.../
-d1a154ea.... EXP552 preregistered.
+d1a154ea.... EXP552 FINAL: INCONCLUSIVE BEFORE PRODUCER. Start8/Platform9
+failed C000009A because the ChannelInfo validator incorrectly required a page-
+aligned object address after the new native +3fd0 offsets. Evidence SHA
+ab8ac0df.... Exact package/devnode/files and stale stopped service removed.
+Commitfd341cf validates the containing mapped page while retaining 8-byte
+alignment and TTBR1/range checks; exact native-offset RED then GREEN and focused
+regressions PASS. Pinned30.0.553.0 gates PASS; ZIP/SYS/producer SHA
+42761bb7.../51182bb7.../753694c2.... EXP553 preregistered for one natural
+bind/producer and exact0x5460/5420 verdict with no other behavioral change.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T08:37Z after exact551 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T09:00Z after exact552 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAb01cb539fdce0e49a9229791e5e6e2ac578d376401cb320edb081c5bbc265673.
+SHAd44edfa925d4c3b099e4b449222a5477a646c22db21d47c1b8ffc3f79ead2f81.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

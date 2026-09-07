@@ -1,5 +1,62 @@
 # Hardware Experiment Ledger
 
+## EXP553 native channel offset validation — preregistration 2026-09-07T09:04Z
+
+WHY THIS HYPOTHESIS: EXP552 reached StartDevice stage 8 / Platform stage 9 and
+returned `0xC000009A` before the producer. Source tracing identifies the first
+new rejection exactly: ChannelInfo encoding received hardware-correct group-1
+addresses at mapping-base `+0x3fd0`, but its old guard accepted only page-base
+addresses. The same containing 16-KiB pages are already broker-mapped and the
+objects remain 8-byte aligned. No queue-ingestion conclusion can be drawn until
+this deterministic guard is corrected.
+
+WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: group-1 ChannelState and run
+ring addresses preserve native intra-page offsets. TRANSLATION: validate the
+containing context-0 TTBR1 mapping, encode the exact unmodified object address,
+and continue rejecting misaligned or out-of-range input. WHAT IS STILL UNKNOWN:
+whether the corrected candidate reaches Code0 and whether firmware consumes the
+TA1/D3D1 command channels (`0x5460`) or advances queue work (`0x5420`).
+
+Single source variable: commit
+`fd341cf7c0143b425faba532cd72c7b39387ca68`. Exact native-offset test was RED
+then GREEN; 114 focused/render/change-ledger tests pass. Pinned WDK 26100,
+MSVC 14.44.35207 build, code analysis, Universal validation, Inf2Cat, test
+signing, coherent version 30.0.553.0, and producer build pass; only inherited
+C28251 remains. Overlay SHA
+`868f7c1aae117fe03df92a75acb69906b4787c1e26c50b80a6656da1a51cee28`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`42761bb7a03a3c98d8ab715eb1a6269485aaf6989004c2013aaa0b71b9f232f0` /
+`51182bb787e2351b5e07119e1b5ac82b366f771c18a81e17a4121c8f5cd18988` /
+`5661979f36271e53dfa368245f80cedbcbc4c9295a111a440efdade411a0f624` /
+`d9c878c01cb4ce983b43ade8d13ffbbc4ea32a079e976ce319ddf2cc9f47be5c` /
+`efb04878aee98e35abd99270aa5b9b4734b3d7e6bb2855ebdee9635fc0f97bfb` /
+`753694c2c109e6ed819aebbf982b209402b34f17f40126fc45a8b997096b27aa`.
+Clean ordinary health SHA
+`d44edfa925d4c3b099e4b449222a5477a646c22db21d47c1b8ffc3f79ead2f81`.
+Run one exact natural bind. If Code0, invoke the exact producer once and require
+late channel-consumption/work-progress receipts. Preserve evidence, then exact
+package cleanup and ordinary 377/392 recovery regardless of verdict.
+
+## EXP552 native group-1 channel offsets — result 2026-09-07T09:00Z
+
+INCONCLUSIVE BEFORE PRODUCER. Exact 30.0.552.0 bound once but stopped at
+StartDevice stage 8 / Platform stage 9 with `STATUS_INSUFFICIENT_RESOURCES`
+(`0xC000009A`); Code43/service stopped and the producer was not run. The exact
+cause is offline-proven: `AppleAgxChannelInfoAddressIsValid` still required a
+16-KiB-aligned address, while the newly correct native ChannelState addresses
+are page-base `+0x3fd0`. Evidence SHA
+`ab8ac0dfc49ad1c8247534d9fded44306ba41bd89bb8dd80d97de50b1d4b5002`.
+This is a launch/validation failure, not a queue-ingestion verdict.
+
+Exact oem package/devnode/files were removed; an observed stopped/disabled
+stale service was deleted only after package/file absence was verified.
+Ordinary 377/392 recovery is clean: one Code28 APPL0002, no INF/package/service/
+SYS/UMD, 8 CPUs, AppleInput/stornvme/USBXHCI running, and no fresh fault events.
+Health SHA is recorded with the EXP553 preregistration. Commit
+`fd341cf7c0143b425faba532cd72c7b39387ca68` validates the containing 16-KiB
+mapping while retaining 8-byte object-address alignment and fail-closed range
+checks. The native-offset test was RED before the implementation and is GREEN.
+
 ## EXP552 native group-1 channel offsets — preregistration 2026-09-07T08:43Z
 
 WHY THIS HYPOTHESIS: EXP551 rejected QueueInfo/ring object identity; retained C
