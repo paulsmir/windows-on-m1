@@ -156,7 +156,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             producer,
         )
 
-        self.assertIn("AdmissionVisibleAgxCaptureDestination", patch)
+        self.assertIn("AdmissionVisibleAgxResolveDestination", patch)
         self.assertIn("const UINT index = 1u", patch)
         self.assertIn("entry->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT", patch)
         self.assertIn("description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE", patch)
@@ -180,6 +180,26 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             "Context->Memory.LocalAllocationBytes !=\n"
             "          ADMISSION_LOCAL_ALLOCATION_BYTES",
             memory,
+        )
+
+    def test_visible_qualification_keeps_destination_alive_past_latch(self):
+        producer = (
+            WINDOWS / "one-shot" / "apple_agx_d3dkmt_render.c"
+        ).read_text()
+        backend = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        complete = backend[
+            backend.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete("):
+            backend.index("static VOID AdmissionPlatformWorkerFinished(")
+        ]
+        self.assertEqual(backend.count("AdmissionScanoutPresentAgxResult("), 1)
+        self.assertLess(
+            complete.index("AdmissionScanoutPresentAgxResult("),
+            complete.index("DxgkCbSynchronizeExecution("),
+        )
+        self.assertIn("Sleep(10000u);", producer)
+        self.assertLess(
+            producer.index("Sleep(10000u);"),
+            producer.index("cleanup:"),
         )
 
 

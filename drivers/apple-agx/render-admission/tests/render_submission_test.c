@@ -16,6 +16,7 @@ static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
   description.PrivateDataEnd = 256u;
   description.DmaStart = 0u;
   description.DmaEnd = 160u;
+  description.PatchOffset = 8u;
   description.DestinationCpuToken = 0x4000ULL;
   description.DestinationGpuVa = 0x1500010000ULL;
   description.DestinationPhysical = 0x9d0010000ULL;
@@ -64,6 +65,66 @@ static void test_exact_packet_moves_prepared_queued_active_completed(void) {
   assert(AdmissionRenderPacketComplete(&packet, 11u));
   assert(AdmissionRenderPacketState(&packet) ==
          AdmissionRenderPacketEmpty);
+}
+
+static void test_prepatched_capture_adopt_and_worker_copy_are_exact(void) {
+  ADMISSION_PREPATCHED_RENDER pending;
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION captured = packet_description(0u);
+  ADMISSION_RENDER_PACKET_DESCRIPTION adopted;
+  ADMISSION_RENDER_PACKET_DESCRIPTION worker;
+
+  AdmissionPrepatchedInitialize(&pending);
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionPrepatchedCapture(&pending, &captured));
+  assert(AdmissionPrepatchedActive(&pending));
+  assert(AdmissionPrepatchedAdopt(
+      &pending, 41u, captured.ContextToken, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd, &adopted));
+  assert(!AdmissionPrepatchedActive(&pending));
+  assert(adopted.Fence == 41u);
+  assert(adopted.AllocationToken == 0x2000ULL);
+  assert(adopted.DestinationCpuToken == 0x4000ULL);
+  assert(adopted.DestinationGpuVa == 0x1500010000ULL);
+  assert(adopted.DestinationPhysical == 0x9d0010000ULL);
+  assert(adopted.DestinationBytes == 0x10000u);
+  assert(adopted.VisibleDestinationCpuToken == 0x5000ULL);
+  assert(adopted.VisibleDestinationGpuVa == 0x1500100000ULL);
+  assert(adopted.VisibleDestinationPhysical == 0x9d0100000ULL);
+  assert(adopted.VisibleDestinationAllocationToken == 0x6000ULL);
+  assert(adopted.VisibleDestinationBytes == 0xfa0000u);
+  assert(AdmissionRenderPacketPrepare(&packet, &adopted));
+  assert(AdmissionRenderPacketQueue(
+      &packet, 41u, captured.ContextToken, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd));
+  assert(AdmissionRenderPacketActivate(&packet, 41u));
+  worker = packet.Description;
+  assert(AdmissionRenderPacketComplete(&packet, 41u));
+  assert(worker.VisibleDestinationAllocationToken == 0x6000ULL);
+  assert(worker.VisibleDestinationCpuToken == 0x5000ULL);
+  assert(worker.VisibleDestinationGpuVa == 0x1500100000ULL);
+  assert(worker.VisibleDestinationPhysical == 0x9d0100000ULL);
+  assert(worker.VisibleDestinationBytes == 0xfa0000u);
+}
+
+static void test_prepatched_rejects_incomplete_or_cross_context_state(void) {
+  ADMISSION_PREPATCHED_RENDER pending;
+  ADMISSION_RENDER_PACKET_DESCRIPTION captured = packet_description(0u);
+  ADMISSION_RENDER_PACKET_DESCRIPTION adopted;
+
+  AdmissionPrepatchedInitialize(&pending);
+  captured.VisibleDestinationPhysical = 0ULL;
+  assert(!AdmissionPrepatchedCapture(&pending, &captured));
+  assert(!AdmissionPrepatchedActive(&pending));
+  captured = packet_description(0u);
+  assert(AdmissionPrepatchedCapture(&pending, &captured));
+  assert(!AdmissionPrepatchedAdopt(
+      &pending, 42u, 0x9999ULL, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd, &adopted));
+  assert(!AdmissionPrepatchedActive(&pending));
+  assert(!AdmissionPrepatchedAdopt(
+      &pending, 42u, captured.ContextToken, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd, &adopted));
 }
 
 static void test_prepare_rejects_missing_identity_and_bad_intervals(void) {
@@ -216,6 +277,8 @@ static void test_terminal_receipt_preserves_preclear_completion(void) {
 
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
+  test_prepatched_capture_adopt_and_worker_copy_are_exact();
+  test_prepatched_rejects_incomplete_or_cross_context_state();
   test_prepare_rejects_missing_identity_and_bad_intervals();
   test_cancel_and_preemption_never_synthesize_completion();
   test_active_reset_requires_backend_quiesce();

@@ -238,6 +238,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           render.QueuedBufferCount);
   if (!NT_SUCCESS(renderStatus))
     goto cleanup;
+  Sleep(10000u);
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
     tdr.NodeOrdinal = 0u;

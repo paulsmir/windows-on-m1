@@ -71,9 +71,9 @@ static NTSTATUS AdmissionGdiTranslatePatch(
 }
 
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-static NTSTATUS AdmissionVisibleAgxCaptureDestination(
+_Use_decl_annotations_ NTSTATUS AdmissionVisibleAgxResolveDestination(
     ADMISSION_CONTEXT *Adapter, const ADMISSION_RENDER_CONTEXT *Context,
-    const DXGKARG_PATCH *Args,
+    const DXGK_ALLOCATIONLIST *Allocations, UINT AllocationCount,
     const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination,
     ADMISSION_LOCAL_MEMORY_VIEW *VisibleDestination,
     ULONGLONG *AllocationToken) {
@@ -87,14 +87,13 @@ static NTSTATUS AdmissionVisibleAgxCaptureDestination(
     RtlZeroMemory(VisibleDestination, sizeof(*VisibleDestination));
   if (AllocationToken != NULL)
     *AllocationToken = 0ULL;
-  if (Adapter == NULL || Context == NULL || Args == NULL ||
+  if (Adapter == NULL || Context == NULL || Allocations == NULL ||
       RenderDestination == NULL || VisibleDestination == NULL ||
-      AllocationToken == NULL || Args->AllocationListSize <= index ||
+      AllocationToken == NULL || AllocationCount <= index ||
       !AdmissionGdiOpenValid(
-          Context, Args->pAllocationList, Args->AllocationListSize,
-          index, TRUE))
+          Context, Allocations, AllocationCount, index, TRUE))
     return STATUS_INVALID_PARAMETER;
-  entry = &Args->pAllocationList[index];
+  entry = &Allocations[index];
   opened = (ADMISSION_OPEN_ALLOCATION *)entry->hDeviceSpecificAllocation;
   description = &opened->Allocation->Description;
   if (entry->Reserved != 0u || entry->WriteOperation == 0u ||
@@ -187,7 +186,7 @@ static NTSTATUS AdmissionGdiPreparePacket(
         AdmissionRenderPacketPrepare(
             &Adapter->RenderPacket, &description)) {
       Context->Object.FenceOutstanding = Args->SubmissionFenceId;
-      Context->PrepatchedRender.Active = FALSE;
+      AdmissionPrepatchedInitialize(&Context->PrepatchedRender);
       accepted = TRUE;
     }
   } else if (Context->Object.FenceOutstanding ==
@@ -205,12 +204,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     const DXGKARG_SUBMITCOMMAND *Args) {
   ADMISSION_PREPATCHED_RENDER pending;
+  ADMISSION_RENDER_PACKET_DESCRIPTION description;
   APPLE_AGX_DMA_SHADOW shadow;
-  DXGKARG_PATCH patchArgs;
   KIRQL oldIrql;
+  BOOLEAN pendingClaimed = FALSE;
+  BOOLEAN accepted = FALSE;
 #define PREPATCH_ADOPT_RETURN(guard, value)                                  \
   do {                                                                       \
     NTSTATUS adoptStatus = (value);                                          \
+    if (pendingClaimed && Adapter != NULL && Context != NULL) {               \
+      KeAcquireSpinLock(&Adapter->SchedulerLock, &oldIrql);                   \
+      (void)AdmissionPrepatchedCancel(                                       \
+          &Context->PrepatchedRender, (ULONGLONG)(ULONG_PTR)Context);         \
+      KeReleaseSpinLock(&Adapter->SchedulerLock, oldIrql);                    \
+    }                                                                        \
     AdmissionPrepatchAdoptGuardWindows(Adapter, (guard), adoptStatus);       \
     return adoptStatus;                                                      \
   } while (0)
@@ -221,46 +228,54 @@ _Use_decl_annotations_ NTSTATUS AdmissionGdiAdoptPrepatchedPacket(
   KeAcquireSpinLock(&Adapter->SchedulerLock, &oldIrql);
   pending = Context->PrepatchedRender;
   KeReleaseSpinLock(&Adapter->SchedulerLock, oldIrql);
-  if (!pending.Active || pending.OpenedAllocation == NULL ||
-      pending.PrivateData != Args->pDmaBufferPrivateData ||
-      pending.DmaStart != Args->DmaBufferSubmissionStartOffset ||
-      pending.DmaEnd != Args->DmaBufferSubmissionEndOffset ||
-      pending.PrivateBytesUsed > Args->DmaBufferPrivateDataSize)
+  pendingClaimed = pending.Active == 1u ? TRUE : FALSE;
+  if (!pendingClaimed || pending.Description.AllocationToken == 0ULL ||
+      pending.Description.PrivateDataToken !=
+          (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData ||
+      pending.Description.DmaStart != Args->DmaBufferSubmissionStartOffset ||
+      pending.Description.DmaEnd != Args->DmaBufferSubmissionEndOffset ||
+      pending.Description.PrivateDataEnd > Args->DmaBufferPrivateDataSize)
     PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPending,
                           STATUS_INVALID_HANDLE);
   if (!AppleAgxDmaShadowOpen(
           &shadow, Args->pDmaBufferPrivateData,
           Args->DmaBufferPrivateDataSize) ||
       AppleAgxDmaShadowIsSealed(shadow.Storage, shadow.BytesUsed) ||
-      shadow.BytesUsed != pending.PrivateBytesUsed ||
+      shadow.BytesUsed != pending.Description.PrivateDataEnd ||
       !AppleAgxDmaShadowMatchesWritableU64(
-          shadow.Storage, shadow.BytesUsed, pending.PatchOffset,
-          pending.Destination.GpuVirtualAddress) ||
+          shadow.Storage, shadow.BytesUsed, pending.Description.PatchOffset,
+          pending.Description.DestinationGpuVa) ||
       !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
     PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardShadow,
                           STATUS_INVALID_USER_BUFFER);
-  RtlZeroMemory(&patchArgs, sizeof(patchArgs));
-  patchArgs.SubmissionFenceId = Args->SubmissionFenceId;
-  patchArgs.pDmaBufferPrivateData = Args->pDmaBufferPrivateData;
-  patchArgs.DmaBufferPrivateDataSize = Args->DmaBufferPrivateDataSize;
-  patchArgs.DmaBufferSubmissionStartOffset =
-      Args->DmaBufferSubmissionStartOffset;
-  patchArgs.DmaBufferSubmissionEndOffset =
-      Args->DmaBufferSubmissionEndOffset;
-  {
-    NTSTATUS status = AdmissionGdiPreparePacket(
-        Adapter, Context,
-        (ADMISSION_OPEN_ALLOCATION *)pending.OpenedAllocation,
-        &patchArgs, shadow.BytesUsed, &pending.Destination, NULL, 0ULL);
-    if (!NT_SUCCESS(status))
-      PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPrepare, status);
-    AdmissionGdiReceiptPatchWindows(
-        Adapter, (ULONGLONG)(ULONG_PTR)Context, Args->SubmissionFenceId,
-        pending.Destination.GpuVirtualAddress,
-        pending.Destination.HostPhysicalAddress,
-        (ULONG)pending.Destination.Bytes);
-    return STATUS_SUCCESS;
+  RtlZeroMemory(&description, sizeof(description));
+  KeAcquireSpinLock(&Adapter->SchedulerLock, &oldIrql);
+  if (AdmissionRenderPacketState(&Adapter->RenderPacket) ==
+          AdmissionRenderPacketEmpty &&
+      Context->Object.FenceOutstanding == 0u &&
+      AdmissionPrepatchedAdopt(
+          &Context->PrepatchedRender, Args->SubmissionFenceId,
+          (ULONGLONG)(ULONG_PTR)Context,
+          (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData,
+          Args->DmaBufferSubmissionStartOffset,
+          Args->DmaBufferSubmissionEndOffset, &description) &&
+      AdmissionRenderPacketPrepare(&Adapter->RenderPacket, &description)) {
+    Context->Object.FenceOutstanding = Args->SubmissionFenceId;
+    accepted = TRUE;
   }
+  if (!accepted)
+    (void)AdmissionPrepatchedCancel(
+        &Context->PrepatchedRender, (ULONGLONG)(ULONG_PTR)Context);
+  pendingClaimed = FALSE;
+  KeReleaseSpinLock(&Adapter->SchedulerLock, oldIrql);
+  if (!accepted)
+    PREPATCH_ADOPT_RETURN(AdmissionPrepatchAdoptGuardPrepare,
+                          STATUS_DEVICE_BUSY);
+  AdmissionGdiReceiptPatchWindows(
+      Adapter, (ULONGLONG)(ULONG_PTR)Context, Args->SubmissionFenceId,
+      description.DestinationGpuVa, description.DestinationPhysical,
+      description.DestinationBytes);
+  return STATUS_SUCCESS;
 #undef PREPATCH_ADOPT_RETURN
 }
 
@@ -562,8 +577,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           .hDeviceSpecificAllocation;
 
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-  if (!NT_SUCCESS(AdmissionVisibleAgxCaptureDestination(
-          adapter, context, Args, &destination, &visibleDestination,
+  if (!NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
+          adapter, context, Args->pAllocationList, Args->AllocationListSize,
+          &destination, &visibleDestination,
           &visibleAllocationToken)))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,
                         STATUS_INVALID_ADDRESS);

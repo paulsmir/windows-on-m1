@@ -201,6 +201,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCancelCommand(
           (ULONGLONG)(ULONG_PTR)context)) {
     context->Object.FenceOutstanding = 0u;
     cancelled = TRUE;
+  } else if (AdmissionPrepatchedCancel(
+                 &context->PrepatchedRender,
+                 (ULONGLONG)(ULONG_PTR)context)) {
+    cancelled = TRUE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
   return cancelled ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;

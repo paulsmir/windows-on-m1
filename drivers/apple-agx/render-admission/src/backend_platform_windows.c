@@ -1932,6 +1932,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   BOOLEAN preemption_waiting = FALSE;
   NTSTATUS sync_status;
   KIRQL old_irql;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_RENDER_PACKET_DESCRIPTION visibleDescription;
+  BOOLEAN visibleReady = FALSE;
+#endif
 
   if (runtime == NULL)
     return APPLE_AGX_BACKEND_FALSE;
@@ -1947,6 +1951,26 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       adapter->Interface.DxgkCbNotifyInterrupt == NULL ||
       adapter->Interface.DxgkCbQueueDpc == NULL)
     return APPLE_AGX_BACKEND_FALSE;
+
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  RtlZeroMemory(&visibleDescription, sizeof(visibleDescription));
+  KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
+  if (AdmissionRenderPacketState(&adapter->RenderPacket) ==
+          AdmissionRenderPacketActive &&
+      adapter->RenderPacket.Description.Fence == Fence) {
+    visibleDescription = adapter->RenderPacket.Description;
+    visibleReady = TRUE;
+  }
+  KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+  if (!visibleReady || !runtime->VisibleAgxValid ||
+      runtime->VisibleAgxFence != Fence ||
+      !NT_SUCCESS(AdmissionScanoutPresentAgxResult(
+          adapter, &visibleDescription, runtime->VisibleAgxSource,
+          sizeof(runtime->VisibleAgxSource), runtime->VisibleAgxGpuAddress,
+          runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence)))
+    return APPLE_AGX_BACKEND_FALSE;
+  runtime->VisibleAgxValid = FALSE;
+#endif
 
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
   if (runtime->Completion.Phase == AppleAgxCompletionIdle) {
@@ -2469,17 +2493,6 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
-#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-  if (runtime->Backend.Phase == AppleAgxBackendRuntimeReady &&
-      runtime->VisibleAgxValid &&
-      runtime->VisibleAgxFence == description.Fence) {
-    (void)AdmissionScanoutPresentAgxResult(
-        adapter, &description, runtime->VisibleAgxSource,
-        sizeof(runtime->VisibleAgxSource), runtime->VisibleAgxGpuAddress,
-        runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence);
-  }
-  runtime->VisibleAgxValid = FALSE;
-#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!taTemporalReported && taTemporal.SampleCount != 0u)
     AdmissionRecordTaTemporal(adapter, &taTemporal);

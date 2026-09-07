@@ -407,17 +407,6 @@ typedef struct _ADMISSION_DEVICE {
   ADMISSION_OBJECT_DEVICE Object;
 } ADMISSION_DEVICE;
 
-typedef struct _ADMISSION_PREPATCHED_RENDER {
-  BOOLEAN Active;
-  PVOID OpenedAllocation;
-  PVOID PrivateData;
-  ULONG PrivateBytesUsed;
-  ULONG DmaStart;
-  ULONG DmaEnd;
-  ULONG PatchOffset;
-  ADMISSION_LOCAL_MEMORY_VIEW Destination;
-} ADMISSION_PREPATCHED_RENDER;
-
 typedef struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_OBJECT_CONTEXT Object;
   APPLE_AGX_SCHEDULER_CONTEXT SchedulerContext;
@@ -979,6 +968,14 @@ BOOLEAN AdmissionScanoutInterrupt(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutControlInterrupt(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Enable);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+NTSTATUS AdmissionVisibleAgxResolveDestination(
+    _Inout_ ADMISSION_CONTEXT *Adapter,
+    _In_ const ADMISSION_RENDER_CONTEXT *Context,
+    _In_reads_(AllocationCount) const DXGK_ALLOCATIONLIST *Allocations,
+    _In_ UINT AllocationCount,
+    _In_ const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination,
+    _Out_ ADMISSION_LOCAL_MEMORY_VIEW *VisibleDestination,
+    _Out_ ULONGLONG *AllocationToken);
 NTSTATUS AdmissionScanoutPresentAgxResult(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,

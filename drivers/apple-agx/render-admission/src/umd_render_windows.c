@@ -162,6 +162,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   D3DDDI_PATCHLOCATIONLIST *location;
   DXGK_ALLOCATIONLIST *allocation;
   ADMISSION_LOCAL_MEMORY_VIEW destination = {0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION prepatchedDescription = {0};
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_LOCAL_MEMORY_VIEW visibleDestination = {0};
+  ULONGLONG visibleAllocationToken = 0ULL;
+#endif
   ULONGLONG alignedSize;
   KIRQL oldIrql;
   BOOLEAN prepatched = FALSE;
@@ -304,6 +309,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     prepatched = TRUE;
   }
 
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (prepatched && !NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
+          adapter, context, Args->pAllocationList,
+          Args->AllocationListSize, &destination, &visibleDestination,
+          &visibleAllocationToken)))
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
+                      STATUS_INVALID_ADDRESS);
+#endif
+
   AppleAgxDmaShadowInitialize(
       &shadow, Args->pDmaBufferPrivateData,
       Args->DmaBufferPrivateDataSize);
@@ -317,23 +331,43 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   }
 
   if (prepatched) {
+    prepatchedDescription.ContextToken = (ULONGLONG)(ULONG_PTR)context;
+    prepatchedDescription.AllocationToken =
+        (ULONGLONG)(ULONG_PTR)opened;
+    prepatchedDescription.PrivateDataToken =
+        (ULONGLONG)(ULONG_PTR)Args->pDmaBufferPrivateData;
+    prepatchedDescription.PrivateDataBytes = Args->DmaBufferPrivateDataSize;
+    prepatchedDescription.PrivateDataStart = 0u;
+    prepatchedDescription.PrivateDataEnd = shadow.BytesUsed;
+    prepatchedDescription.DmaStart = prepared.DmaOffset;
+    prepatchedDescription.DmaEnd = prepared.DmaOffset + prepared.DmaBytes;
+    prepatchedDescription.PatchOffset = prepared.Patches[0].PatchOffset;
+    prepatchedDescription.DestinationCpuToken =
+        (ULONGLONG)(ULONG_PTR)destination.CpuAddress;
+    prepatchedDescription.DestinationGpuVa = destination.GpuVirtualAddress;
+    prepatchedDescription.DestinationPhysical = destination.HostPhysicalAddress;
+    prepatchedDescription.DestinationBytes = (UINT)destination.Bytes;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+    prepatchedDescription.VisibleDestinationCpuToken =
+        (ULONGLONG)(ULONG_PTR)visibleDestination.CpuAddress;
+    prepatchedDescription.VisibleDestinationGpuVa =
+        visibleDestination.GpuVirtualAddress;
+    prepatchedDescription.VisibleDestinationPhysical =
+        visibleDestination.HostPhysicalAddress;
+    prepatchedDescription.VisibleDestinationAllocationToken =
+        visibleAllocationToken;
+    prepatchedDescription.VisibleDestinationBytes =
+        (UINT)visibleDestination.Bytes;
+#endif
     KeAcquireSpinLock(&adapter->SchedulerLock, &oldIrql);
-    if (context->PrepatchedRender.Active ||
-        context->Object.FenceOutstanding != 0u) {
+    if (AdmissionPrepatchedActive(&context->PrepatchedRender) ||
+        context->Object.FenceOutstanding != 0u ||
+        !AdmissionPrepatchedCapture(
+            &context->PrepatchedRender, &prepatchedDescription)) {
       KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
       UMD_RENDER_RETURN(AdmissionUmdRenderGuardShadow,
                         STATUS_DEVICE_BUSY);
     }
-    context->PrepatchedRender.Active = TRUE;
-    context->PrepatchedRender.OpenedAllocation = (PVOID)opened;
-    context->PrepatchedRender.PrivateData = Args->pDmaBufferPrivateData;
-    context->PrepatchedRender.PrivateBytesUsed = shadow.BytesUsed;
-    context->PrepatchedRender.DmaStart = prepared.DmaOffset;
-    context->PrepatchedRender.DmaEnd =
-        prepared.DmaOffset + prepared.DmaBytes;
-    context->PrepatchedRender.PatchOffset =
-        prepared.Patches[0].PatchOffset;
-    context->PrepatchedRender.Destination = destination;
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
   }
 

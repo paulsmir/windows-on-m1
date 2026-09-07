@@ -12,6 +12,24 @@ static void AdmissionRenderPacketClear(ADMISSION_RENDER_PACKET *Packet) {
   Packet->State = AdmissionRenderPacketEmpty;
 }
 
+static void AdmissionPrepatchedClear(ADMISSION_PREPATCHED_RENDER *State) {
+  unsigned char *bytes = (unsigned char *)State;
+  unsigned int index;
+  for (index = 0u; index < (unsigned int)sizeof(*State); ++index)
+    bytes[index] = 0u;
+}
+
+static int AdmissionVisibleDescriptionComplete(
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Description) {
+  unsigned int present = 0u;
+  present += Description->VisibleDestinationCpuToken != 0ULL;
+  present += Description->VisibleDestinationGpuVa != 0ULL;
+  present += Description->VisibleDestinationPhysical != 0ULL;
+  present += Description->VisibleDestinationAllocationToken != 0ULL;
+  present += Description->VisibleDestinationBytes != 0u;
+  return present == 0u || present == 5u;
+}
+
 int AdmissionNonPagingPrivateRangeCovers(
     unsigned int PrivateBytesUsed, unsigned int SubmissionStart,
     unsigned int SubmissionEnd, unsigned int PrivateBufferBytes) {
@@ -87,6 +105,7 @@ int AdmissionRenderPacketMatches(
          current->PrivateDataEnd == Description->PrivateDataEnd &&
          current->DmaStart == Description->DmaStart &&
          current->DmaEnd == Description->DmaEnd &&
+         current->PatchOffset == Description->PatchOffset &&
          current->DestinationCpuToken ==
              Description->DestinationCpuToken &&
          current->DestinationGpuVa ==
@@ -187,5 +206,78 @@ int AdmissionRenderPacketReset(
        BackendQuiesced == 0u))
     return 0;
   AdmissionRenderPacketClear(Packet);
+  return 1;
+}
+
+void AdmissionPrepatchedInitialize(ADMISSION_PREPATCHED_RENDER *State) {
+  if (State != ADMISSION_RENDER_NULL)
+    AdmissionPrepatchedClear(State);
+}
+
+int AdmissionPrepatchedActive(const ADMISSION_PREPATCHED_RENDER *State) {
+  return State != ADMISSION_RENDER_NULL && State->Active == 1u;
+}
+
+int AdmissionPrepatchedCapture(
+    ADMISSION_PREPATCHED_RENDER *State,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Description) {
+  if (State == ADMISSION_RENDER_NULL || Description == ADMISSION_RENDER_NULL ||
+      State->Active != 0u || Description->Fence != 0u ||
+      Description->ContextToken == 0ULL ||
+      Description->AllocationToken == 0ULL ||
+      Description->PrivateDataToken == 0ULL ||
+      Description->PrivateDataBytes == 0u ||
+      Description->PrivateDataStart >= Description->PrivateDataEnd ||
+      Description->PrivateDataEnd > Description->PrivateDataBytes ||
+      Description->DmaStart >= Description->DmaEnd ||
+      Description->DestinationCpuToken == 0ULL ||
+      Description->DestinationGpuVa == 0ULL ||
+      Description->DestinationPhysical == 0ULL ||
+      Description->DestinationBytes == 0u ||
+      !AdmissionVisibleDescriptionComplete(Description)) {
+    if (State != ADMISSION_RENDER_NULL)
+      AdmissionPrepatchedClear(State);
+    return 0;
+  }
+  State->Description = *Description;
+  State->Active = 1u;
+  return 1;
+}
+
+int AdmissionPrepatchedAdopt(
+    ADMISSION_PREPATCHED_RENDER *State, unsigned int Fence,
+    unsigned long long ContextToken, unsigned long long PrivateDataToken,
+    unsigned int DmaStart, unsigned int DmaEnd,
+    ADMISSION_RENDER_PACKET_DESCRIPTION *Description) {
+  ADMISSION_RENDER_PACKET_DESCRIPTION captured;
+  int valid;
+  if (Description != ADMISSION_RENDER_NULL) {
+    unsigned char *bytes = (unsigned char *)Description;
+    unsigned int index;
+    for (index = 0u; index < (unsigned int)sizeof(*Description); ++index)
+      bytes[index] = 0u;
+  }
+  if (State == ADMISSION_RENDER_NULL || Description == ADMISSION_RENDER_NULL)
+    return 0;
+  captured = State->Description;
+  valid = State->Active == 1u && Fence != 0u &&
+          captured.Fence == 0u && captured.ContextToken == ContextToken &&
+          captured.PrivateDataToken == PrivateDataToken &&
+          captured.DmaStart == DmaStart && captured.DmaEnd == DmaEnd &&
+          AdmissionVisibleDescriptionComplete(&captured);
+  AdmissionPrepatchedClear(State);
+  if (!valid)
+    return 0;
+  captured.Fence = Fence;
+  *Description = captured;
+  return 1;
+}
+
+int AdmissionPrepatchedCancel(
+    ADMISSION_PREPATCHED_RENDER *State, unsigned long long ContextToken) {
+  if (State == ADMISSION_RENDER_NULL || State->Active != 1u ||
+      State->Description.ContextToken != ContextToken)
+    return 0;
+  AdmissionPrepatchedClear(State);
   return 1;
 }

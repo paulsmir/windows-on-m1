@@ -18,7 +18,8 @@ class AppleAgxRenderPrepatchTests(unittest.TestCase):
         self.assertIn("ADMISSION_PREPATCHED_RENDER", header)
         self.assertIn("AdmissionGdiAdoptPrepatchedPacket", header)
         self.assertIn("AdmissionMemoryRuntimeResolveLocal", render)
-        self.assertIn("PrepatchedRender.Active", render)
+        self.assertIn("AdmissionPrepatchedCapture", render)
+        self.assertIn("visibleDestination", render)
         self.assertIn("AdmissionGdiAdoptPrepatchedPacket", patch)
         self.assertIn("ADMISSION_PREPATCH_ADOPT_GUARD", guards)
         self.assertIn("PREPATCH_ADOPT_RETURN", patch)
@@ -27,7 +28,7 @@ class AppleAgxRenderPrepatchTests(unittest.TestCase):
         self.assertNotIn("AdmissionPrepatchAdoptGuardAccepted", patch)
         self.assertIn("AppleAgxDmaShadowSeal", patch)
         self.assertIn("AdmissionGdiAdoptPrepatchedPacket", submit)
-        self.assertIn("PrepatchedRender.Active", callbacks)
+        self.assertIn("AdmissionPrepatchedActive", callbacks)
 
     def test_output_patch_reference_is_still_published(self):
         render = (RENDER / "src" / "umd_render_windows.c").read_text()
