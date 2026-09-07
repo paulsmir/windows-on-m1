@@ -692,6 +692,11 @@ restore EXP574 layout and move only18/19 into a bounded free biased A020 broker
 arena. This is outside the currently enumerated A000/A040/A071 approval and
 requires one narrow architecture authorization before source change.
 
+EXP577 approved and offline implemented. Commits11c2d11/2b873f3 plus m1n1
+c6d10e0 add bounded read-only A021 command arena and move only WorkCommand
+objects18/19 there; all other objects use EXP574 layout.369 relevant tests
+GREEN. EXP577 preregistered; next build/sign/hash and one hardware run.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,

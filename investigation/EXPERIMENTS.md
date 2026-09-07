@@ -35033,3 +35033,27 @@ shared/timestamp layout and map only objects18/19 in a free broker-owned A020
 arena with a nonzero bias. Exact original A020 addresses remain forbidden and
 were already observed colliding in EXP549. This requires extending the approved
 arena-class list to A020 before implementation or hardware.
+
+# EXP577 — retained A020 WorkCommand identity
+
+**PREREGISTERED 2026-09-07T16:46Z; one exact run only.** User explicitly
+approved the bounded A020 command arena. WHY THIS HYPOTHESIS: EXP574 proves
+physical TA through FinalizeTA/End but no retirement; EXP575/576 prove moving
+A040/A071 objects is causally harmful; native `GPURenderer` allocates exactly
+WorkCommand3D/TA objects18/19 from A020 `cmdbuf`, the firmware object returned to
+the queue owner after End. Single variable: map only18/19 at
+`OriginalGpuVa+0x01000000` inside queried A021/16MiB. Every other object returns
+to EXP574 all-A000 placement. Original native A020 mappings remain inaccessible.
+
+WINDOWS CONTRACT: unchanged producer/fence. AGX/ASAHI CONTRACT: ring items are
+A020 cmdbuf objects. TRANSLATION: ABI-v4 class3 query authorizes only exact
+Windows-owned pages; existing relocation and broker-map paths publish them.
+WHAT IS STILL UNKNOWN: whether A020 WorkCommand identity restores TA and lets
+firmware retire past FinalizeTA/End.
+
+Source commits `11c2d112348bc08fb7be3cb8f3784b7902bd40ae` and
+`2b873f322433965dcd21706885f6a93d6b74aaa6`; m1n1
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000`; Mu unchanged. Four retained,
+seven focused and369 relevant tests GREEN. Next gates: full-owner m1n1 build,
+pinned WDK package577/sign/version/hash, clean ordinary preflight, one producer,
+durable TA retirement/completion evidence, exact cleanup/recovery.
