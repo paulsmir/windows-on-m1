@@ -35,11 +35,6 @@ static void test_golden_channel_info_set(void) {
   unsigned char output[J313_AGX_G2_CHANNEL_INFO_SET_SIZE] = {0};
   unsigned int index;
 
-  input.Entries[3].StateAddress += 0x3fd0ULL;
-  input.Entries[3].RingAddress += 0x1000ULL;
-  input.Entries[4].StateAddress += 0x3fd0ULL;
-  input.Entries[4].RingAddress += 0x1000ULL;
-
   memset(&manifest, 0, sizeof(manifest));
   assert(AppleAgxChannelInfoEncodeG13V13_5(
              &input, output, sizeof(output), &manifest) ==
