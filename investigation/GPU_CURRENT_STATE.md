@@ -625,6 +625,11 @@ EXP571 commit1b76ab3 adds only that read-only retirement receipt and corrects
 the old receipt-only opcode offsets. RegionC pending-stamp table and exact
 FinalizeTA+Retire bytes are bounded;359 AppleAgx tests pass. Pinned30.0.571.0
 gates pass; ZIP/SYS/producer SHAf94e33c5.../2f6cc5e9.../0b971fe1.... Hardware next.
+EXP571 FINAL: exact FinalizeTA and RetireStamp bytes present; event_count2 and
+JobList linked, but event channel0/0 and all256 pending stamps zero at58ms.
+Thus event decoder is not first owner. SceneList rejected because G13 encoding
+omits it. First unknown is FinalizeTA restart loop vs single RetireStamp stop;
+next compare two timestamp/stamp samples. Exact cleanup and ordinary restore done.
 
 ## Final live ordinary clean baseline
 

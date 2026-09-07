@@ -1,5 +1,32 @@
 # Hardware Experiment Ledger
 
+## EXP571 TA RetireStamp pending state — result 2026-09-07T14:02Z
+
+CONFIRMED discriminator. Exact30.0.571.0 ran once. Retire receipt SHA
+`967b61406360a519fe26f9824ef4eb5928d781482e78f829d043131e3ce1a093`
+is v1/2236/fence255/elapsed58ms. FinalizeTA fields match accepted EXP208,
+including private stamp address/value and restart offset-520; RetireStamp
+`0x40000018` is byte-exact at0x28c. event_count=2. JobList is actively linked
+to EventControl (`first=ffffffa0003b8000`, `last=...3b8098`). Event channel is
+read0/write0 and all256 RegionC pending-stamp entries are zero. Corrected
+progress receipt opcode vector is exactly22/80000019/101/19/23/40000018;
+private stamp2 and both timestamps again advance while shared stamp1/done do not.
+
+This rejects the Windows event decoder/channel as first owner and proves no
+pending retirement was published. First unknown is FinalizeTA restart loop vs
+single-stop RetireStamp. Source-first SceneList hypothesis is rejected: G13
+BufferThing omits those G14X-only fields and no accepted object contains its
+address encoding. Do not add SceneList or0x1100018000. Next discriminator takes
+the same mutable timestamp/stamp sample at about50 and100ms: changing timestamps
+confirms restart; stable values localize RetireStamp itself.
+
+TDR116/C0000483/3 repeated; dump SHA `010984f4...`, hardware log SHA
+`7afbf61e...`. Two Event129 occurred before the reset and remain storage
+telemetry without a GPU-visible causal link. Exact oem5/devnode/service/files
+removed through emergency; ordinary377/392 restored Code28/no package/service/
+module,8CPU/NVMe/xHCI/input healthy. Emergency/ordinary logs SHA
+`0f54a4be...` / `d65461c0...`.
+
 ## EXP571 TA RetireStamp pending state — candidate ready 2026-09-07T13:58Z
 
 Implementation commit `1b76ab3574b1724f07eca997df951f92c3902c58`,
