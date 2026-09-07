@@ -35945,3 +35945,21 @@ border, frame-dependent hash and marker are tested. Receipt rejects sequence,
 backing or offset mismatch. Existing fixed-panel/scanout/Present/VSync tests and
 full suite are GREEN:29 focused,365 AppleAgx. Build from EXP588 source base plus
 only the display overlay; exclude EXP589 reset commits. Build pending.
+
+**EXP590 R1 BUILD FAILURE / R2 FREEZE 2026-09-07T21:12Z.** R1 failed before
+artifact creation: building the base without SubmitQualification exposed existing
+unguarded diagnostic references in backend_platform. No display compile error and
+no hardware action occurred. Build-profile commit
+`1dc525fa384794b1ebea47f4d0c007e42c363f2d` makes VisibleScanoutQualification
+inherit the already proven submit-diagnostic macro only; it does not change the
+render or display algorithm. R2 pinned WDK/SDK26100, MSVC14.44, KMD/UMD analysis,
+Universal, Inf2Cat, TestSign and coherent30.0.590.0 gates PASS. R2 overlay SHA
+`b596bfd39efcae219d5d0e982b90fe06270b1fcd582ef43481a9cf4266d52350`.
+ZIP/SYS/INF/CAT/UMD hashes:
+`87c426c8895c2152782058c6ff5efb3f5116c1aabe8e872234911e7fdf842710`,
+`0ea3c5565319d7cc09cc31f74214584a7025a61d1c844afbb3b42f39a81193de`,
+`d48e09cb68a98ec21445ae4e81f612b4d2e6f989983d4c87aed64feccbd9a9d7`,
+`8e036e35c6254e1f6781bed9a154ce2cef881e3eda63b8e99994d584da00015e`,
+`0fa35f0b5f7012029c58310fcfea0c078da4d1205fd1c6332c9cd51878abb9eb`.
+Workflow parser GREEN. Ordinary377/392 is clean; stage only R2, natural bind,
+collect visible receipt/host log/health, and leave marker for physical confirmation.

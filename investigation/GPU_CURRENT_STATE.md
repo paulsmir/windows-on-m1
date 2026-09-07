@@ -133,6 +133,18 @@ active after exact A408/D589 and preserve the receipt. Machine evidence alone
 does not prove the physical panel; after it is latched, request only visual/photo
 confirmation if direct physical observation remains unavailable.
 
+EXP590 R1 was a builder-only failure before artifact creation because the base
+normal profile omits existing submit-diagnostic declarations. Commit
+`1dc525fa384794b1ebea47f4d0c007e42c363f2d` makes the visible profile inherit
+those already hardware-used receipts; no runtime submit behavior changes. R2
+exact30.0.590.0 build/sign/Universal gates PASS. ZIP/SYS/INF/CAT/UMD hashes:
+`87c426c8895c2152782058c6ff5efb3f5116c1aabe8e872234911e7fdf842710`,
+`0ea3c5565319d7cc09cc31f74214584a7025a61d1c844afbb3b42f39a81193de`,
+`d48e09cb68a98ec21445ae4e81f612b4d2e6f989983d4c87aed64feccbd9a9d7`,
+`8e036e35c6254e1f6781bed9a154ce2cef881e3eda63b8e99994d584da00015e`,
+`0fa35f0b5f7012029c58310fcfea0c078da4d1205fd1c6332c9cd51878abb9eb`.
+Ordinary377/392 remains clean and running. Stage R2 only.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
