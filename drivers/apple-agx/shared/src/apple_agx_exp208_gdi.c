@@ -25,6 +25,27 @@ static void Exp208GdiWriteU64(unsigned char *Address, APPLE_AGX_U64 Value) {
     Address[index] = (unsigned char)(Value >> (index * 8u));
 }
 
+static APPLE_AGX_U64 Exp208GdiUscAddress(APPLE_AGX_U64 Word) {
+  return ((Word >> APPLE_AGX_EXP208_GDI_USC_ADDRESS_SHIFT) &
+          0xfffffffffULL) << 3u;
+}
+
+static APPLE_AGX_BOOL Exp208GdiPatchUscAddress(
+    APPLE_AGX_U64 Word, APPLE_AGX_U64 CapturedWord,
+    APPLE_AGX_U64 Address, APPLE_AGX_U64 *Patched) {
+  if (Patched == EXP208_GDI_NULL ||
+      (Word & ~APPLE_AGX_EXP208_GDI_USC_ADDRESS_MASK) !=
+          (CapturedWord & ~APPLE_AGX_EXP208_GDI_USC_ADDRESS_MASK) ||
+      Exp208GdiUscAddress(Word) != Exp208GdiUscAddress(CapturedWord) ||
+      (Address & 0x7ULL) != 0ULL ||
+      (Address >> 3u) > 0xfffffffffULL)
+    return APPLE_AGX_FALSE;
+  *Patched =
+      (Word & ~APPLE_AGX_EXP208_GDI_USC_ADDRESS_MASK) |
+      ((Address >> 3u) << APPLE_AGX_EXP208_GDI_USC_ADDRESS_SHIFT);
+  return APPLE_AGX_TRUE;
+}
+
 static APPLE_AGX_BOOL Exp208GdiCommandValid(
     const unsigned char *SubmissionBytes,
     APPLE_AGX_U32 SubmissionByteCount,
@@ -103,9 +124,15 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
     APPLE_AGX_EXP208_GDI_BINDING *Binding) {
   APPLE_AGX_EXP208_RELOCATION_OBJECT *output;
   APPLE_AGX_EXP208_RELOCATION_OBJECT *descriptor;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT *pipeline;
   APPLE_AGX_EXP208_GDI_BINDING candidate;
   APPLE_AGX_U64 descriptorWord;
   APPLE_AGX_U64 patchedDescriptor;
+  APPLE_AGX_U64 textureWord;
+  APPLE_AGX_U64 uniformWord;
+  APPLE_AGX_U64 patchedTexture;
+  APPLE_AGX_U64 patchedUniform;
+  APPLE_AGX_U64 descriptorGpuVa;
 
   if (DestinationCpuAddress == EXP208_GDI_NULL ||
       Objects == EXP208_GDI_NULL || Binding == EXP208_GDI_NULL ||
@@ -125,11 +152,17 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
     return APPLE_AGX_FALSE;
   output = &Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   descriptor = &Objects[APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OBJECT];
+  pipeline = &Objects[APPLE_AGX_EXP208_GDI_STORE_PIPELINE_OBJECT];
   if (output->GpuVa == 0ULL || output->PhysicalAddress == 0ULL ||
       output->Size != APPLE_AGX_EXP208_GDI_OUTPUT_BYTES ||
       output->Data == EXP208_GDI_NULL || descriptor->Data == EXP208_GDI_NULL ||
       descriptor->Size <
-          APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET + 8u)
+          APPLE_AGX_EXP208_GDI_UNIFORM_DATA_OFFSET + 8u ||
+      descriptor->GpuVa == 0ULL ||
+      descriptor->GpuVa >
+          ~0ULL - APPLE_AGX_EXP208_GDI_UNIFORM_DATA_OFFSET ||
+      pipeline->Data == EXP208_GDI_NULL ||
+      pipeline->Size < APPLE_AGX_EXP208_GDI_STORE_UNIFORM_OFFSET + 8u)
     return APPLE_AGX_FALSE;
 
   descriptorWord = Exp208GdiReadU64(
@@ -142,6 +175,20 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
       (descriptorWord &
        ~APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_ADDRESS_MASK) |
       (DestinationGpuVa >> 4u);
+  textureWord = Exp208GdiReadU64(
+      pipeline->Data + APPLE_AGX_EXP208_GDI_STORE_TEXTURE_OFFSET);
+  uniformWord = Exp208GdiReadU64(
+      pipeline->Data + APPLE_AGX_EXP208_GDI_STORE_UNIFORM_OFFSET);
+  descriptorGpuVa = descriptor->GpuVa;
+  if (!Exp208GdiPatchUscAddress(
+          textureWord, APPLE_AGX_EXP208_GDI_CAPTURED_TEXTURE_WORD,
+          descriptorGpuVa + APPLE_AGX_EXP208_GDI_TEXTURE_DESCRIPTOR_OFFSET,
+          &patchedTexture) ||
+      !Exp208GdiPatchUscAddress(
+          uniformWord, APPLE_AGX_EXP208_GDI_CAPTURED_UNIFORM_WORD,
+          descriptorGpuVa + APPLE_AGX_EXP208_GDI_UNIFORM_DATA_OFFSET,
+          &patchedUniform))
+    return APPLE_AGX_FALSE;
 
   candidate.OutputObject = APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT;
   candidate.DestinationGpuVa = DestinationGpuVa;
@@ -157,6 +204,14 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
   candidate.OriginalOutputData = output->Data;
   candidate.OriginalStoreDescriptor = descriptorWord;
   candidate.PatchedStoreDescriptor = patchedDescriptor;
+  candidate.StorePipelineObject =
+      APPLE_AGX_EXP208_GDI_STORE_PIPELINE_OBJECT;
+  candidate.StoreTextureOffset = APPLE_AGX_EXP208_GDI_STORE_TEXTURE_OFFSET;
+  candidate.StoreUniformOffset = APPLE_AGX_EXP208_GDI_STORE_UNIFORM_OFFSET;
+  candidate.OriginalStoreTexture = textureWord;
+  candidate.PatchedStoreTexture = patchedTexture;
+  candidate.OriginalStoreUniform = uniformWord;
+  candidate.PatchedStoreUniform = patchedUniform;
   output->GpuVa = DestinationGpuVa;
   output->PhysicalAddress = DestinationPhysical;
   output->Size = APPLE_AGX_EXP208_GDI_OUTPUT_BYTES;
@@ -164,6 +219,12 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
   Exp208GdiWriteU64(
       descriptor->Data + APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET,
       patchedDescriptor);
+  Exp208GdiWriteU64(
+      pipeline->Data + APPLE_AGX_EXP208_GDI_STORE_TEXTURE_OFFSET,
+      patchedTexture);
+  Exp208GdiWriteU64(
+      pipeline->Data + APPLE_AGX_EXP208_GDI_STORE_UNIFORM_OFFSET,
+      patchedUniform);
   *Binding = candidate;
   return APPLE_AGX_TRUE;
 }
@@ -174,23 +235,37 @@ APPLE_AGX_BOOL AppleAgxExp208UnbindGdiColorFill(
     const APPLE_AGX_EXP208_GDI_BINDING *Binding) {
   APPLE_AGX_EXP208_RELOCATION_OBJECT *output;
   APPLE_AGX_EXP208_RELOCATION_OBJECT *descriptor;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT *pipeline;
   if (Objects == EXP208_GDI_NULL || Binding == EXP208_GDI_NULL ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       Binding->OutputObject != APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT ||
       Binding->StoreDescriptorObject !=
           APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OBJECT ||
       Binding->StoreDescriptorOffset !=
-          APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET)
+          APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET ||
+      Binding->StorePipelineObject !=
+          APPLE_AGX_EXP208_GDI_STORE_PIPELINE_OBJECT ||
+      Binding->StoreTextureOffset !=
+          APPLE_AGX_EXP208_GDI_STORE_TEXTURE_OFFSET ||
+      Binding->StoreUniformOffset !=
+          APPLE_AGX_EXP208_GDI_STORE_UNIFORM_OFFSET)
     return APPLE_AGX_FALSE;
   output = &Objects[Binding->OutputObject];
   descriptor = &Objects[Binding->StoreDescriptorObject];
+  pipeline = &Objects[Binding->StorePipelineObject];
   if (output->GpuVa != Binding->DestinationGpuVa ||
       output->PhysicalAddress != Binding->DestinationPhysical ||
       output->Size != Binding->DestinationBytes ||
       descriptor->Data == EXP208_GDI_NULL ||
       descriptor->Size < Binding->StoreDescriptorOffset + 8u ||
       Exp208GdiReadU64(descriptor->Data + Binding->StoreDescriptorOffset) !=
-          Binding->PatchedStoreDescriptor)
+          Binding->PatchedStoreDescriptor ||
+      pipeline->Data == EXP208_GDI_NULL ||
+      pipeline->Size < Binding->StoreUniformOffset + 8u ||
+      Exp208GdiReadU64(pipeline->Data + Binding->StoreTextureOffset) !=
+          Binding->PatchedStoreTexture ||
+      Exp208GdiReadU64(pipeline->Data + Binding->StoreUniformOffset) !=
+          Binding->PatchedStoreUniform)
     return APPLE_AGX_FALSE;
   output->GpuVa = Binding->OriginalOutputGpuVa;
   output->PhysicalAddress = Binding->OriginalOutputPhysical;
@@ -198,5 +273,9 @@ APPLE_AGX_BOOL AppleAgxExp208UnbindGdiColorFill(
   output->Data = Binding->OriginalOutputData;
   Exp208GdiWriteU64(descriptor->Data + Binding->StoreDescriptorOffset,
                     Binding->OriginalStoreDescriptor);
+  Exp208GdiWriteU64(pipeline->Data + Binding->StoreTextureOffset,
+                    Binding->OriginalStoreTexture);
+  Exp208GdiWriteU64(pipeline->Data + Binding->StoreUniformOffset,
+                    Binding->OriginalStoreUniform);
   return APPLE_AGX_TRUE;
 }
