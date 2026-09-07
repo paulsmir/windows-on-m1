@@ -1,5 +1,31 @@
 # Hardware Experiment Ledger
 
+## EXP568 restore fixed EXP208 frame input — preregistration 2026-09-07T12:50Z
+
+WHY THIS HYPOTHESIS: EXP567 removes the 0x420 alias fault, advances both command
+channels, then proves context63 READ INVALID at exact `0x1100020000`, UL1C7.
+Accepted EXP208 maps this 256-KiB `GBM offset 0xfff78000` object and its captured
+bytes, but the relocation template excluded it as unreachable because its GPU
+reference uses an unrecognized command encoding. Single causal change: append
+only that proven object to the backend arena and alias its exact physical pages
+at original context63 VA; no guessed command bitfield and no other excluded
+object.
+
+Commit `28fd06ca038f88bea41d2a83c49e9c152647015a`; template object count74,
+runtime75, fixed object index73/offset0x588000/size0x40000. Memory owner maps
+only VA0x1100020000 to that backend subrange before publishing context63.
+356 AppleAgx tests pass. Same m1n1 `ff761784...`, Mach-O SHA `e25606eb...`.
+Pinned30.0.568.0 gates pass. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`7b3881157d8ad7eec0b117a3abf7164c3f56aa92fd3dbecf9b6203473c491921` /
+`bba1fb8504bfbf6998cdf373db3215678c76927724141deb582ffa3a959a9c1a` /
+`1380b764a16db2815d8adc89cf020dde9318328835a0a67f265a78b400b8ef60` /
+`2e23acab8d1b953ff655aca794131025746287b615613410b8e3ff2f506b2a86` /
+`43652c2eaac8478684742e6f654bdf7b2154eacd11ed37f071f3b74974d30a42` /
+`c3d819ba3167a8f60ab3e333e63d3ccdafb62f385a2adbe43996485e301081a4` /
+`0355d475d1bc58d642e33ed43951b3b3ac87a7aa600f74a33237091f055cdc74`.
+One exact bind/producer. PASS requires 0x110002 fault absent and later progress
+or next exact fault; evidence then cleanup.
+
 ## EXP567 GPU-readable BufferMgrCtl alias — preregistration 2026-09-07T12:33Z
 
 WHY THIS HYPOTHESIS:
@@ -41,6 +67,17 @@ Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
 One exact current m1n1 + unchanged Mu bind/producer. PASS requires fault at
 0x420000000 absent and TA/done/event progress or a new exact fault. Evidence
 first, then exact cleanup. ANS untouched.
+
+## EXP567 GPU-readable BufferMgrCtl alias — result 2026-09-07T12:50Z
+
+CONFIRMED causal fix and new boundary. Firmware kind4 timeout and fault
+0x420000000 disappeared. Both command channels reached read1; host emitted
+channel progress, then Windows deadline guard4. Delayed snapshot SHA
+`3ecac29d59a06355b5702b9e6e900bd2410c0ba736975279bdd5f06488e55642`
+at60ms proves new SGX fault `0x11000200227ee291`: context63 READ INVALID,
+level1, unit UL1C7, VA0x1100020000. This exact 256-KiB EXP208 frame object was
+excluded from the template. Hardware log SHA `7437a67338892f09cf41f3cbda70e3cc0f58b9a5e2d8f976c520815df8490bd3`.
+Evidence collected and exact cleanup complete. EXP568 restores only that object.
 
 ## EXP566 early timeout fault snapshot — preregistration 2026-09-07T12:22Z
 

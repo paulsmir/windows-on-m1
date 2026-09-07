@@ -588,6 +588,12 @@ Shared/AP1 firmware-only. Root commit a09f3b4 and m1n1 ff76178 enforce native
 protection only for exact alias; RED/GREEN and357 relevant tests PASS. New
 full-owner m1n1 SHAe25606eb.... Pinned30.0.567.0 ZIP/SYS/producer
 SHAf013a709.../5fd6a13f.../b0c0405b.... EXP567 preregistered.
+EXP567 FINAL: 0x420 fault/firmware Timeout gone; channel progress then snapshot
+at60ms. New fault0x11000200227ee291 = context63 READ INVALID level1 UL1C7 at
+VA0x1100020000, exact EXP208 256KiB frame input omitted as scanner-unreachable.
+Commit28fd06c appends only that captured object and maps exact context63 alias.
+Pinned30.0.568.0 ZIP/SYS/producer SHAbba1fb85.../1380b764.../0355d475....
+EXP568 preregistered with same proven m1n1.
 
 ## Final live ordinary clean baseline
 
