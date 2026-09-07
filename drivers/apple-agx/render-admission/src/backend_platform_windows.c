@@ -2154,6 +2154,27 @@ static VOID AdmissionPlatformWorker(
         AdmissionBackendChannelProgressWindows(
             adapter, currentTaRead, currentD3Read, description.Fence);
         channelProgressReported = TRUE;
+        if (currentTaRead != initialTaChannelRead) {
+          ULONGLONG nowMs = AdmissionPlatformNowMs();
+          if (!taProgressReported) {
+            ADMISSION_TA_PROGRESS_RECEIPT taProgress;
+            if (AdmissionCaptureTaProgress(
+                    runtime, description.Fence, nowMs - queueSubmitMs,
+                    &taProgress)) {
+              AdmissionRecordTaProgress(adapter, &taProgress);
+              taProgressReported = TRUE;
+            }
+          }
+          if (!taRetireReported) {
+            ADMISSION_TA_RETIRE_RECEIPT taRetire;
+            if (AdmissionCaptureTaRetire(
+                    runtime, description.Fence, nowMs - queueSubmitMs,
+                    &taRetire)) {
+              AdmissionRecordTaRetire(adapter, &taRetire);
+              taRetireReported = TRUE;
+            }
+          }
+        }
       }
     }
     if (!faultSnapshotReported) {
