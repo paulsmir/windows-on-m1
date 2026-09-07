@@ -42,6 +42,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence);
 
+APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
+    ADMISSION_BACKEND_IMAGE *Image);
+
 APPLE_AGX_BOOL AdmissionBackendImageStageJob(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
     APPLE_AGX_U32 TaEvent, APPLE_AGX_U32 D3Event,

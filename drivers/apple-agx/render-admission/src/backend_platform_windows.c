@@ -2954,6 +2954,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
     goto Exit;
   }
   runtime->ProviderReady = FALSE;
+  if (!AdmissionBackendImageRestartQueueLifetime(&Context->BackendImage)) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Exit;
+  }
 
   /* The stopped firmware lifetime must not donate its copied private prefix
    * to the next boot. Rebuild only our owned graph before channel providers

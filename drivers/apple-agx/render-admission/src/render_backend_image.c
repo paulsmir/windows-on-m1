@@ -162,6 +162,16 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageRestartQueueLifetime(
+    ADMISSION_BACKEND_IMAGE *Image) {
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Image->BoundFence != 0u ||
+      Image->JobFence != 0u || Image->JobReady != APPLE_AGX_FALSE)
+    return APPLE_AGX_FALSE;
+  Image->Sequence = 0u;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageStageJob(
     ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
     APPLE_AGX_U32 TaEvent, APPLE_AGX_U32 D3Event,

@@ -170,9 +170,75 @@ static void test_exact_packet_binds_output_and_reapplies_relocations(void) {
   free(storage);
 }
 
+static void test_restart_queue_lifetime_resets_only_firmware_sequence(void) {
+  unsigned char *storage = (unsigned char *)malloc(TEST_BACKEND_BYTES);
+  unsigned char *destination = (unsigned char *)malloc(0x4000u);
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_GDI_DMA_COMMAND command;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_BACKEND_JOB_IMAGE job;
+
+  assert(storage != NULL && destination != NULL);
+  view.CpuAddress = storage;
+  view.HostPhysicalAddress = TEST_BACKEND_PHYSICAL;
+  view.GpuVirtualAddress = TEST_BACKEND_GPU;
+  view.Bytes = TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image, &view));
+
+  memset(&packet, 0, sizeof(packet));
+  packet.Fence = 91u;
+  packet.DestinationCpuToken =
+      (unsigned long long)(unsigned long)destination;
+  packet.DestinationGpuVa = 0x1500040000ULL;
+  packet.DestinationPhysical = 0x9d0040000ULL;
+  packet.DestinationBytes = 0x4000u;
+  command = exact_color_fill(packet.DestinationGpuVa);
+  assert(AdmissionBackendImageBindSubmission(
+      &image, &packet, destination, (const unsigned char *)&command,
+      sizeof(command), &binding));
+  assert(AdmissionBackendImageStageJob(
+      &image, packet.Fence, 1u, 2u, 2u, 2u, APPLE_AGX_TRUE, &job));
+  assert(image.Sequence == 1u);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+
+  packet.Fence = 92u;
+  assert(AdmissionBackendImageBindSubmission(
+      &image, &packet, destination, (const unsigned char *)&command,
+      sizeof(command), &binding));
+  assert(AdmissionBackendImageStageJob(
+      &image, packet.Fence, 1u, 2u, 3u, 4u, APPLE_AGX_FALSE, &job));
+  assert(image.Sequence == 2u);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+
+  assert(AdmissionBackendImageRestartQueueLifetime(&image));
+  assert(image.Sequence == 0u);
+  assert(image.Ready == APPLE_AGX_TRUE);
+  assert(image.BoundFence == 0u && image.JobReady == APPLE_AGX_FALSE);
+
+  packet.Fence = 193u;
+  assert(AdmissionBackendImageBindSubmission(
+      &image, &packet, destination, (const unsigned char *)&command,
+      sizeof(command), &binding));
+  assert(AdmissionBackendImageStageJob(
+      &image, packet.Fence, 1u, 2u, 2u, 2u, APPLE_AGX_TRUE, &job));
+  assert(image.Sequence == 1u);
+  assert(job.TaExpectedStamp == 0x7a000100u);
+  assert(job.D3ExpectedStamp == 0x3d000100u);
+  assert(packet.Fence == 193u);
+  assert(!AdmissionBackendImageRestartQueueLifetime(&image));
+  assert(image.Sequence == 1u && image.BoundFence == packet.Fence);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+
+  free(destination);
+  free(storage);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
   test_exact_packet_binds_output_and_reapplies_relocations();
+  test_restart_queue_lifetime_resets_only_firmware_sequence();
   return 0;
 }
