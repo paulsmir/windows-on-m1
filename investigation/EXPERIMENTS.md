@@ -35108,3 +35108,15 @@ and class3 queries authorize exact Windows pages. WHAT IS STILL UNKNOWN: whether
 this lets firmware publish shared stamp/done/event. Commit
 `018abf4690ad6ba7a8ed055f8b40457069d3d300`; seven focused and369 relevant
 tests GREEN. Next pinned build578/sign/hash then one hardware run and cleanup.
+
+**EXP578 FREEZE 2026-09-07T17:06Z:** pinned package578 build, analysis,
+Universal, Inf2Cat, signing and version gates PASS. ZIP/SYS/INF/CAT/UMD/producer
+SHA are `89a09635ba4d72a4073c55fd2da710e6d8d5eed470f4ebc265db543e93a85ee9`,
+`45c1dfeb60fa6e9d62c2e673f22bd3527c420e17bc45445b8bbc3615bc7ae6a5`,
+`a6d357b8f4f02ad0094d821b1feb91800204f3e69d2431cf986f6c207de04531`,
+`21680644f5b0ab10c992d92c5cde3de7151bfd6025dd7a25e702d21c696c1084`,
+`5afe04e08dbfede7b1187ac21c2e7e155f3140c6d509e3631a5f8a738769bbf2`,
+`5b69139bddec06829e6d74ae3a6135d55d43f2e0a78cb72f7221e3ae7ff53849`.
+m1n1/workflow/launch SHA are `12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3`,
+`7068b33c65d382cb9d44481231260c1d602237636230e7a0c213b13e285d492a`,
+`bbd5c3bfc9dff0115c501e879df99412d60047844b237f259d5a892d058d384c`.
