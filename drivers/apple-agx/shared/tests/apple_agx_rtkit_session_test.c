@@ -204,6 +204,8 @@ static void TestHeartbeatRequiresExactManagementPong(void) {
   APPLE_AGX_RTKIT_SESSION session;
 
   QueueBoot(&fake);
+  Queue(&fake, 0x0042000000000000ULL);
+  fake.ReceiveEndpoint[fake.ReceiveCount - 1u] = 0x20u;
   Queue(&fake, 0x0040000000000000ULL);
   io = MakeIo(&fake);
   AppleAgxRtkitSessionInitialize(&session);
@@ -214,13 +216,19 @@ static void TestHeartbeatRequiresExactManagementPong(void) {
   assert(fake.SendCount == 5u);
   assert(fake.SendEndpoint[4] == 0u);
   assert(fake.SendPayload[4] == 0x0030000000000000ULL);
-  assert(session.ReceivedCount == 5u);
+  assert(session.ReceivedCount == 6u);
   assert(session.LastRxEndpoint == 0u);
   assert(session.LastRxPayload == 0x0040000000000000ULL);
   assert(session.Running && session.CpuReady);
 
-  Queue(&fake, 0x0030000000000000ULL);
+  Queue(&fake, 0x0043000000000000ULL);
+  fake.ReceiveEndpoint[fake.ReceiveCount - 1u] = 0x20u;
   assert(AppleAgxRtkitSessionHeartbeat(&session, &io, 300u) ==
+         AppleAgxRtkitSessionResultProtocolViolation);
+  assert(session.Running && session.CpuReady);
+
+  Queue(&fake, 0x0030000000000000ULL);
+  assert(AppleAgxRtkitSessionHeartbeat(&session, &io, 400u) ==
          AppleAgxRtkitSessionResultProtocolViolation);
   assert(session.Running && session.CpuReady);
 }
