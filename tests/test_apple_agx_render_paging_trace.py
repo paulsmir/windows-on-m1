@@ -50,6 +50,7 @@ class PagingBuildTraceTests(unittest.TestCase):
         self.assertIn("PagingCorrelationArmed", context)
         self.assertIn("QualificationCookie", context)
         self.assertIn("normalized.Reserved = 0u", allocation)
+        self.assertIn("correlated ? ADMISSION_LOCAL_SEGMENT_SET", allocation)
         self.assertIn("PagingCorrelationArmed", allocation)
         self.assertIn("PagingCorrelationArmed", paging)
         self.assertIn("allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE", producer)
