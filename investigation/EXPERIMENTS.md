@@ -1,5 +1,47 @@
 # Hardware Experiment Ledger
 
+## EXP567 GPU-readable BufferMgrCtl alias — preregistration 2026-09-07T12:33Z
+
+WHY THIS HYPOTHESIS:
+- EXP566 hardware snapshot `0x042000000001c019` decodes FAULTED=1, context0,
+  read, NO_ACCESS, level0, unit gPM_SP0, exact VA `0x420000000`.
+- Pinned m1n1 native initdata maps this BufferMgrCtl alias Shared/AP=0/UXN/PXN,
+  permitting firmware and GPU; retained broker currently maps Shared/AP=1,
+  firmware-only. The observed GPU read fault follows exactly.
+- Broker query proved physical presence but did not previously validate leaf
+  access bits; no other current mapping or command byte can cause this exact
+  level0 NO_ACCESS result.
+
+WINDOWS CONTRACT: Windows still requests only the fixed alias already present
+in its 90-range inventory and cannot choose arbitrary permissions. AGX/ASAHI
+CONTRACT: exact alias uses Shared/AP=0/UXN/PXN; every other context0 range
+retains its existing protection. TRANSLATION: add one exact protection enum,
+record it only for range89, and have EL2 broker enforce it solely when VA equals
+`0x420000000`. WHAT IS STILL UNKNOWN: whether clearing this first fault permits
+InitBM/TA completion or reveals the next exact fault.
+
+ATOMIC CONTRACT: KMD inventory and EL2 leaf encoder must agree; changing either
+alone produces a dishonest query/leaf contract. Root commit
+`a09f3b4c9be8b6f2bcff77df04ddad4e2a24018e`, m1n1 commit
+`ff761784e5c6ada8d4a1dba6bfaf052486cddc27`. Exact descriptor/inventory/
+retained-root tests were RED then GREEN;356 AppleAgx plus retained-root tests
+pass. Current full-owner m1n1 built cleanly with `IOMFB_FULL_OWNER=1`; inherited
+warnings only. Mach-O SHA
+`e25606eb7dcde3951af1550f134698e1741acd2469583e0677321fb4ecbff290`.
+
+Pinned WDK26100/MSVC14.44 KMD/UMD/producer gates pass, version30.0.567.0.
+Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`0589ab4a19251612e4aa80f50a9cd6b79fc118024f727413a3bc4bb14b6d58fd` /
+`f013a7090f17c0df91d2f87e0872cc9fd1e896cdcea5b870cde766cd7f08cbab` /
+`5fd6a13f71468ef3b97b0b6ce85c5c0365d39d513419666f85cb3cb407443612` /
+`75c97d561a8def1c5d457c47b290d0cb2398c56891a0e8dce623fbcb399dc3e8` /
+`4b3efc997c5ed410b9eea148a1e45e998f7ce6e02e6371a138e9996becc519f1` /
+`d5097265ae6b9191944893e24dc268c4327f9fa8649f84dee4982353aa1a1e83` /
+`b0c0405bcbbdd76f5d578cc630fdd9b908505245b8bc50502ac45ce896eed262`.
+One exact current m1n1 + unchanged Mu bind/producer. PASS requires fault at
+0x420000000 absent and TA/done/event progress or a new exact fault. Evidence
+first, then exact cleanup. ANS untouched.
+
 ## EXP566 early timeout fault snapshot — preregistration 2026-09-07T12:22Z
 
 WHY THIS HYPOTHESIS: EXP565 reproduced the exact timeout but wrote no snapshot;
@@ -21,6 +63,18 @@ producer SHA:
 `5f76a0fc31d29afdb85006550b44ce07ed0fa8dc5abc242a697d32053020c26d` /
 `d73e1bed58037a83862922d6ccc2ee753910b26814f0ca8ce36c130bc0175528`.
 One exact bind/producer, require184-byte snapshot, cleanup and continue.
+
+## EXP566 early timeout fault snapshot — result 2026-09-07T12:33Z
+
+CONFIRMED first physical fault. Exact30.0.566.0 ran once and produced snapshot
+SHA `01f3292318de68ad434d29c132d5067ea956bb543654b648a753cedb9aa1676d`
+at honest elapsed0ms, TA/D3 channel reads1/1. SGX word
+`0x042000000001c019` decodes context0 VA `0x420000000`, read, NO_ACCESS,
+level0, unit gPM_SP0. RegionB/RegionC are preserved in the receipt. This is the
+fixed BufferMgrCtl alias, not an unknown address. Known timeout/TDR remains.
+Hardware log SHA `2e861cfda7297818146ff1a3a8716caf9e6143dee48b1b1346812cbee27cd224`.
+Evidence was collected and exact package cleanup completed. EXP567 corrects
+only this exact alias protection in both KMD inventory and retained-root broker.
 
 ## EXP565 timeout-path AGX fault snapshot — preregistration 2026-09-07T12:13Z
 

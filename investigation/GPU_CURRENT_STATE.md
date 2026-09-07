@@ -581,6 +581,13 @@ SHAa8415695.... Commitce9f830 allows early snapshot only for explicit decoded
 Timeout and preserves actual elapsed plus normal50ms gate. Pinned30.0.566.0
 gates PASS; ZIP/SYS/producer SHA192dc943.../88362de5.../d73e1bed.... EXP566
 preregistered.
+EXP566 FINAL: snapshot SHA01f32923... at elapsed0ms proves SGX fault
+0x042000000001c019 = context0 read NO_ACCESS level0 gPM_SP0 at VA0x420000000.
+Pinned native maps this exact BufferMgrCtl alias Shared/AP0/UXN/PXN; broker used
+Shared/AP1 firmware-only. Root commit a09f3b4 and m1n1 ff76178 enforce native
+protection only for exact alias; RED/GREEN and357 relevant tests PASS. New
+full-owner m1n1 SHAe25606eb.... Pinned30.0.567.0 ZIP/SYS/producer
+SHAf013a709.../5fd6a13f.../b0c0405b.... EXP567 preregistered.
 
 ## Final live ordinary clean baseline
 
