@@ -89,6 +89,7 @@ int main(void) {
              &owner, &io, 0xffffffa001000000ULL) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(owner.ObjectCount == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
+  layouts = AppleAgxRenderTemplateObjectLayouts();
   assert((owner.VirtualAddresses[0] & 0x7fffULL) == 0ULL);
   assert((owner.VirtualAddresses[35] & 0x7fffULL) == 0ULL);
   memcpy(original_vas, owner.VirtualAddresses, sizeof(original_vas));
@@ -107,11 +108,15 @@ int main(void) {
     assert(owner.VirtualAddresses[index] >= AGX_RR_SHARED_ARENA_VA);
     assert(owner.VirtualAddresses[index] + owner.Objects[index].Length <=
            AGX_RR_SHARED_ARENA_VA + AGX_RR_SHARED_ARENA_BYTES);
+    assert(owner.VirtualAddresses[index] + owner.ObjectOffsets[index] ==
+           layouts[index].OriginalGpuVa + 0x01000000ULL);
   }
   for (index = 32u; index < 36u; ++index) {
     assert(owner.VirtualAddresses[index] >= AGX_RR_TIMESTAMP_ARENA_VA);
     assert(owner.VirtualAddresses[index] + owner.Objects[index].Length <=
            AGX_RR_TIMESTAMP_ARENA_VA + AGX_RR_TIMESTAMP_ARENA_BYTES);
+    assert(owner.VirtualAddresses[index] + owner.ObjectOffsets[index] ==
+           layouts[index].OriginalGpuVa + 0x00100000ULL);
   }
   assert(AppleAgxRenderSharedMemoryApplyClassArenas(
              &owner, AGX_RR_SHARED_ARENA_VA, AGX_RR_SHARED_ARENA_BYTES,

@@ -86,23 +86,29 @@ static APPLE_AGX_BOOL place_class(
     APPLE_AGX_U64 NativeBase, APPLE_AGX_U64 NativeEnd,
     APPLE_AGX_U64 ArenaVa, APPLE_AGX_U64 ArenaBytes,
     APPLE_AGX_U64 *Proposed) {
-  APPLE_AGX_U64 next = ArenaVa;
+  APPLE_AGX_U64 bias;
   APPLE_AGX_U32 index;
+  if (ArenaVa <= NativeBase)
+    return APPLE_AGX_FALSE;
+  bias = ArenaVa - NativeBase;
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
     APPLE_AGX_U64 original = Layouts[index].OriginalGpuVa;
+    APPLE_AGX_U64 gpu_va;
+    APPLE_AGX_U64 mapping_va;
     APPLE_AGX_U64 bytes;
     if (original < NativeBase || original >= NativeEnd)
       continue;
     bytes = Owner->Objects[index].Length;
-    if (bytes == 0ULL || next < ArenaVa || next > ArenaVa + ArenaBytes ||
-        bytes > ArenaVa + ArenaBytes - next)
+    if (original > ~0ULL - bias)
       return APPLE_AGX_FALSE;
-    Proposed[index] = next;
-    if (next > ~0ULL - bytes - APPLE_AGX_MEMORY_PAGE_SIZE)
+    gpu_va = original + bias;
+    mapping_va = gpu_va & ~RENDER_SHARED_PAGE_MASK;
+    if (bytes == 0ULL || mapping_va < ArenaVa ||
+        mapping_va > ArenaVa + ArenaBytes ||
+        bytes > ArenaVa + ArenaBytes - mapping_va)
       return APPLE_AGX_FALSE;
-    next = align_up(next + bytes + APPLE_AGX_MEMORY_PAGE_SIZE,
-                    RENDER_SHARED_VA_ALIGNMENT);
+    Proposed[index] = mapping_va;
   }
   return APPLE_AGX_TRUE;
 }
@@ -139,6 +145,18 @@ AppleAgxRenderSharedMemoryApplyClassArenas(
                    RENDER_SHARED_NATIVE_TIMESTAMP_END, TimestampVa,
                    TimestampBytes, proposed))
     return AppleAgxRenderSharedMemoryResultInvalidArgument;
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index) {
+    APPLE_AGX_U32 previous;
+    for (previous = 0u; previous < index; ++previous) {
+      APPLE_AGX_U64 a = proposed[index];
+      APPLE_AGX_U64 b = proposed[previous];
+      APPLE_AGX_U64 a_bytes = Owner->Objects[index].Length;
+      APPLE_AGX_U64 b_bytes = Owner->Objects[previous].Length;
+      if (a < b + b_bytes && b < a + a_bytes)
+        return AppleAgxRenderSharedMemoryResultInvalidArgument;
+    }
+  }
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index)
     Owner->VirtualAddresses[index] = proposed[index];
