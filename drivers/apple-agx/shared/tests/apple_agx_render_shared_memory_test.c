@@ -75,7 +75,7 @@ int main(void) {
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
-    if (index <= 13u || (index >= 23u && index <= 27u)) {
+    if (index == 0u || (index >= 3u && index <= 8u)) {
       assert(owner.ObjectAddresses[index] == layouts[index].OriginalGpuVa);
       assert(owner.DataOffsets[index] ==
              (layouts[index].OriginalGpuVa &
