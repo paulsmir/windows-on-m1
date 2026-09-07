@@ -539,16 +539,23 @@ complete; health SHA97edc755.... Absence of the existing50-ms snapshot proves
 the worker exits on its first provider poll. Commitf51b8b0 records exact
 invalid/drain/clock/timeout-check/timeout-apply guard without behavior change;
 356 AppleAgx tests pass. EXP561 is the next single-variable hardware receipt.
+EXP561 FINAL: host word `0x56100204000300ff` proves first poll guard2
+DrainEvents, QueueProvider phase4, Backend Submitted phase3, fence255. Thus
+clock/timeout/apply are excluded and the missing50-ms snapshot is explained.
+No TA completion/fence claim. Hardware log SHAc83fd777.... Exact cleanup and
+ordinary restore complete; health SHAa8415695.... Next EXP562 records only the
+first internal DrainEvents owner and raw read/write pointers; do not change TA,
+UAT, firmware, queues, scheduler or timeout behavior.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T11:06Z after exact560 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T11:21Z after exact561 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA97edc75551142134c935ca3b280219333136e6325e609d949aaf47d8c75c1d4f.
+SHAa8415695557327411ad8f3964f1ab7e70b80c97d39109578e34b70c41ace23ab.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

@@ -54,6 +54,27 @@ trace. Collect host log and unchanged queue/buffer receipts first. Cleanup uses
 only hash-gated EXP561 package removal; ordinary377/392 is primary recovery,
 emergency377/385 (`fae3444c...` / `279bd36a...`) only if boot-bound. ANS untouched.
 
+## EXP561 exact provider-poll owner — result 2026-09-07T11:21Z
+
+CONFIRMED discriminator. Exact 30.0.561.0 ran once; the earlier L41 `ENOENT`
+was preserved as a prelaunch control-plane race and never reached hardware.
+The single hardware producer emitted decimal `6201458903092494591`, exact
+`0x56100204000300ff`: poll guard 2 `DrainEvents`, QueueProvider phase 4,
+Backend phase 3 Submitted, fence 255. Therefore the first worker poll fails
+inside event-channel drain before `NowTicks`, timeout check and the existing
+50-ms snapshot. This is not a TA completion or fence PASS. Hardware log SHA
+`c83fd777f71e7a73b174a1d9c31eefe3273df468da67639911a94c4d3526cc3e`.
+QueueInfo/BufferManager/KTrace receipt SHA are `6d8d0370...`, `5a90a5b2...`,
+and `973704e6...`; the latter remains inactive. TDR 0x116 repeated with
+parameter 3 and driver status `0xc0000483`. Event129 count 2 is telemetry.
+
+Evidence was collected first. Exact oem5 package and hash-matched SYS/UMD were
+removed through emergency377/385, then ordinary377/392 restored. Final health
+SHA `a8415695557327411ad8f3964f1ab7e70b80c97d39109578e34b70c41ace23ab`
+proves Code28/no package/service/module, eight CPUs, SSH and healthy NVMe/xHCI/
+keyboard. Next action is not another TA change: add only an exact internal
+DrainEvents guard plus raw event read/write pointers, then run once.
+
 ## EXP560 firmware KTrace tail — preregistration 2026-09-07T10:55Z
 
 WHY THIS HYPOTHESIS: EXP559 proves TA remains active after the corrected InitBM
