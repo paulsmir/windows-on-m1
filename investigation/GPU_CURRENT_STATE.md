@@ -232,6 +232,35 @@ PASS. ZIP/SYS/INF/CAT/UMD/producer hashes are
 Next: graceful hidden shutdown, ordinary377/392 clean preflight, then one exact
 EXP594 natural bind and producer.
 
+EXP594 R2 reached an exact boot-time natural bind: Code0, oem5/SYS hashes match,
+service Running and8 CPUs. Its one producer stopped at `D3DKMTCreateAllocation`
+with `STATUS_INVALID_PARAMETER`; Render/Patch/Submit/AGX were not reached.
+Source identifies the exact owner: `AdmissionDdiCreateAllocation` has a tested
+single-allocation contract, while the EXP594 producer supplied NumAllocations2.
+This rejects only batching both independent allocations into one call. Host log
+SHA `194f230d6d5a3cc134e88766fb8de921ae0cfa473eef21651cc72af04bb75356`;
+producer log SHA `527e0b8686e1322f52c93d73e9f999a02557d4a3d7fd1c6ae93401e2f3775cd0`;
+evidence JSON SHA `7de2ef7fbf90e5e4c7af5fb7b52cda53533b71f07be82e676230bc3eb8a8623f`.
+Exact package cleanup completed.
+
+Commit `48bb3bea323367227675fcc62893740ead65ce99` prepares producer-only EXP595:
+create the 16x16 target and full-size visible destination with two separate
+standard single-allocation calls, then keep the proven joint residency/render
+list and synchronous lifetime. KMD/package remain byte-exact EXP594. Focused9
+and full AppleAgx366 tests PASS. Build/hash only the producer on FRYZZING, then
+persist cleanup, restore ordinary, stage exact EXP594 package and run one EXP595
+producer through the boot-time natural bind.
+
+EXP595 producer-only FRYZZING build/code-analysis PASS with zero warnings/errors.
+Producer source SHA
+`0c07d6fb0e575029c094df6c24ef52a2861b624836c84d5767dca6cb1ca7b365`;
+producer SHA
+`3e1a0a0a144711d5cd773a63985a0fe8f8256bcf6bc2e9c84cc532bb60fcce61`.
+The exact signed EXP594 ZIP remains unchanged at
+`a784cd7abfc1066b939a041e9395bbf6832e20bdd92bb5ed20a0520b437bfa8d`.
+Next: persist current exact cleanup with graceful restart, verify ordinary clean,
+stage unchanged package plus EXP595 producer, graceful restart, natural bind/run.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

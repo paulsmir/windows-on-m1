@@ -36164,3 +36164,77 @@ dormant EXP589 reset is absent. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256:
 The Air remains package-clean with8 CPUs in compatible hidden recovery. Graceful
 shutdown, restore ordinary377/392, verify Code28/no package, then stage this exact
 candidate and run one natural bind/producer.
+
+**EXP594 R1 OPERATIONAL ATTEMPT 2026-09-07T22:38Z — INCONCLUSIVE BEFORE
+NATURAL BIND.** The first controlled host reset did not flush the virtual-NVMe
+staging writes. The full-owner guest therefore booted Code28 with no package;
+live `/install` reached only DriverEntry/DxgkInitialize and ended Code43 without
+AddDevice receipts. No producer ran and this is not a driver hardware verdict.
+Exact package cleanup followed. The workflow was corrected operationally: use a
+Windows-initiated graceful restart to persist cleanup/staging before changing
+profiles.
+
+**EXP594 R2 FINAL 2026-09-07T22:47Z — REJECTED AT PRODUCER ALLOCATION CALL.**
+After persisted clean ordinary baseline and staging, exact30.0.594.0 boot-time
+natural bind passed Code0/service Running/8CPU with matching oem5/INF/SYS. The
+single producer selected the Apple adapter and passed CreateDevice,
+CreatePagingQueue and CreateContext, then `D3DKMTCreateAllocation` returned
+`0xC000000D`; residency/render remained uncalled. Source inspection identifies
+the exact deterministic mismatch: KMD `AdmissionDdiCreateAllocation` requires
+and tests `NumAllocations == 1`, while EXP594 supplied two independent
+allocations in one call. Render/Patch/Submit/physical AGX are untested. One
+Event129 is preserved as storage telemetry; no bugcheck. Host/producer/evidence
+SHA256 are respectively
+`194f230d6d5a3cc134e88766fb8de921ae0cfa473eef21651cc72af04bb75356`,
+`527e0b8686e1322f52c93d73e9f999a02557d4a3d7fd1c6ae93401e2f3775cd0`,
+`7de2ef7fbf90e5e4c7af5fb7b52cda53533b71f07be82e676230bc3eb8a8623f`.
+Exact package/devnode cleanup completed.
+
+# EXP595 — separate allocation calls, shared render list
+
+**PREREGISTERED 2026-09-07T22:50Z; producer-only candidate.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP594 R2 returned exactly `STATUS_INVALID_PARAMETER` at CreateAllocation;
+  all earlier producer steps and natural bind passed.
+- Current KMD source and deterministic tests intentionally accept exactly one
+  allocation per `DXGKARG_CREATEALLOCATION`.
+- WDDM permits separately created allocations to be made resident together and
+  supplied in the same render allocation list; those later KMD paths already
+  accept multiple entries.
+
+**WINDOWS CONTRACT:** two sequential `D3DKMTCreateAllocation` calls each pass
+NumAllocations1. Both handles belong to the same device, are made resident in
+one call, remain alive across Render, and are synchronously destroyed afterward.
+
+**AGX/ASAHI CONTRACT:** unchanged from EXP594: only allocation0 receives TA/3D
+output; allocation1 is consumed by the post-fence CPU-assisted visible transfer.
+
+**TRANSLATION:** commit `48bb3bea323367227675fcc62893740ead65ce99`
+changes only producer call grouping and reports both allocation statuses.
+Package/SYS/KMD/UMD remain byte-exact EXP594.
+
+**WHAT IS STILL UNKNOWN:** whether the second independent allocation receives
+segment2 placement and survives into Patch index1; if so, whether the existing
+AGX completion/fence and visible receipt/latch pass. PASS requires both allocation
+statuses0, residency/render0, terminal/fence PASS, visible receipt stage3/status0,
+host A408/D589 and physical full-screen `0xff112233`.
+
+**OFFLINE PROOF:** the exact EXP594 behavior made the separate-call source test
+RED; commit48bb3be makes it GREEN. Focused producer/paging/visible suite9 PASS;
+full AppleAgx suite366 PASS; diff check clean. Rebuild/code-analyze only the
+producer on FRYZZING from exact EXP594 source. Reuse the already signed exact
+EXP594 package so producer call grouping is the single hardware variable.
+
+**EXP595 FREEZE 2026-09-07T22:54Z.** FRYZZING rebuilt only the producer from
+exact EXP594 source with pinned MSVC14.44/ARM64/Release/code analysis; zero
+warnings/errors. Producer source SHA
+`0c07d6fb0e575029c094df6c24ef52a2861b624836c84d5767dca6cb1ca7b365`;
+producer SHA
+`3e1a0a0a144711d5cd773a63985a0fe8f8256bcf6bc2e9c84cc532bb60fcce61`.
+The package is byte-exact EXP594 ZIP SHA
+`a784cd7abfc1066b939a041e9395bbf6832e20bdd92bb5ed20a0520b437bfa8d`.
+Persist EXP594 cleanup via Windows graceful restart, restore ordinary clean,
+stage this unchanged package plus exact EXP595 producer, graceful restart, then
+one boot-time natural bind and one producer.
