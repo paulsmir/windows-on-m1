@@ -1004,19 +1004,56 @@ static void AdmissionRetainedWrite32(void *ctx,unsigned int offset,unsigned int 
   ADMISSION_PLATFORM_RUNTIME *r=ctx;
   WRITE_REGISTER_ULONG((volatile ULONG *)(r->Adapter->BrokerBase+offset),value);
 }
+static BOOLEAN AdmissionRetainedExchange(ADMISSION_PLATFORM_RUNTIME *runtime,
+    AGX_RR_REQUEST *request, AGX_RR_RESPONSE *response) {
+  AGX_RR_IO io = {runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
+  BOOLEAN exchanged;
+  if (!runtime || !request || !response) return FALSE;
+  exchanged = AgxRrExchange(&io,request,response) ? TRUE : FALSE;
+  AdmissionRecordRetainedRoot(runtime->Adapter,request->Command,response);
+  return exchanged &&
+      response->Epoch != 0 && response->Root != 0 && !(response->Root & 0x3fff) &&
+      (request->Command == AGX_RR_PREPARE ||
+       (response->Epoch == runtime->RetainedEpoch && response->Root == runtime->RetainedRoot));
+}
+
 static BOOLEAN AdmissionRetainedCommand(ADMISSION_PLATFORM_RUNTIME *runtime,
     ULONG operation, AGX_RR_RESPONSE *response) {
   AGX_RR_REQUEST request = {0};
-  AGX_RR_IO io = {runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
-  BOOLEAN exchanged;
   request.Command = operation;
   request.Epoch = operation == AGX_RR_PREPARE ? 0 : runtime->RetainedEpoch;
-  exchanged = AgxRrExchange(&io,&request,response) ? TRUE : FALSE;
-  AdmissionRecordRetainedRoot(runtime->Adapter,operation,response);
-  return exchanged &&
-      response->Epoch != 0 && response->Root != 0 && !(response->Root & 0x3fff) &&
-      (operation == AGX_RR_PREPARE ||
-       (response->Epoch == runtime->RetainedEpoch && response->Root == runtime->RetainedRoot));
+  return AdmissionRetainedExchange(runtime,&request,response);
+}
+
+static BOOLEAN AdmissionRetainedQueryArena(ADMISSION_PLATFORM_RUNTIME *runtime,
+    ULONG ArenaClass, AGX_RR_ARENA_DESCRIPTOR *Arena) {
+  AGX_RR_REQUEST request = {0};
+  AGX_RR_RESPONSE response = {0};
+  ULONGLONG expectedVa, expectedBytes;
+  if (!runtime || !Arena ||
+      (ArenaClass != AGX_RR_ARENA_SHARED &&
+       ArenaClass != AGX_RR_ARENA_TIMESTAMP)) return FALSE;
+  request.Command = AGX_RR_QUERY_ARENA;
+  request.Epoch = runtime->RetainedEpoch;
+  request.Va = ArenaClass;
+  if (!AdmissionRetainedExchange(runtime,&request,&response) ||
+      response.Epoch != runtime->RetainedEpoch ||
+      response.Root != runtime->RetainedRoot ||
+      response.ArenaVersion != AGX_RR_ARENA_VERSION ||
+      response.ArenaClass != ArenaClass) return FALSE;
+  expectedVa = ArenaClass == AGX_RR_ARENA_SHARED
+      ? AGX_RR_SHARED_ARENA_VA : AGX_RR_TIMESTAMP_ARENA_VA;
+  expectedBytes = ArenaClass == AGX_RR_ARENA_SHARED
+      ? AGX_RR_SHARED_ARENA_BYTES : AGX_RR_TIMESTAMP_ARENA_BYTES;
+  if (response.ArenaVa != expectedVa || response.ArenaBytes != expectedBytes ||
+      !response.ArenaBytes ||
+      ((response.ArenaVa | response.ArenaBytes) & 0x3fffULL) ||
+      response.ArenaVa > MAXULONGLONG - response.ArenaBytes) return FALSE;
+  Arena->Version = response.ArenaVersion;
+  Arena->Class = response.ArenaClass;
+  Arena->Va = response.ArenaVa;
+  Arena->Bytes = response.ArenaBytes;
+  return TRUE;
 }
 
 
@@ -1040,6 +1077,7 @@ static unsigned char AdmissionContext0Ipa(void *ctx,const APPLE_AGX_MEMORY_OBJEC
 
 static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
   AGX_RR_RESPONSE response={0};
+  AGX_RR_ARENA_DESCRIPTOR shared={0},timestamp={0};
   AGX_RR_IO io={runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
   int result;
   if(!runtime->RetainedPrepared || !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
@@ -1047,6 +1085,26 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
   if(!AdmissionRetainedCommand(runtime,AGX_RR_ACTIVATE,&response) ||
       !(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
       response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
+  if (!AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_SHARED,&shared) ||
+      !AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_TIMESTAMP,&timestamp) ||
+      shared.Va > MAXULONGLONG-shared.Bytes ||
+      timestamp.Va > MAXULONGLONG-timestamp.Bytes ||
+      (shared.Va < timestamp.Va+timestamp.Bytes &&
+       timestamp.Va < shared.Va+shared.Bytes) ||
+      AppleAgxInitdataMemoryApplyRenderArenas(
+          &runtime->Initdata,shared.Va,shared.Bytes,timestamp.Va,timestamp.Bytes) !=
+          AppleAgxInitdataMemoryResultOk ||
+      !AppleAgxRenderSharedMemoryBindRelocationObjects(
+          &runtime->Initdata.RenderSharedMemory,
+          runtime->Adapter->BackendImage.ArenaCpuAddress,
+          runtime->Adapter->BackendImage.ArenaBytes,
+          runtime->QueueObjects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) ||
+      !AppleAgxApplyRelocations(
+          runtime->QueueObjects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount())) return 0;
   runtime->Rtkit.CrashlogGpuAddress=response.SystemVa&((1ULL<<44)-1);
   runtime->Rtkit.CrashlogCapacityBytes=(ULONG)response.SystemBytes;
   {
