@@ -1,5 +1,24 @@
 # Hardware Experiment Ledger
 
+## EXP551 exact noncolliding queue core — result 2026-09-07T08:37Z
+
+REJECTED. Exact30.0.551.0 passed broker/StartDevice Code0 and ran once, but
+again produced neither late channel-consumption `0x5460` nor work-progress
+`0x5420`. Host SHA
+`6f02d3f96934a622aa8ddcefc1fbf577bafdd8f263cfe43c8e73977c91e05ae0`.
+This closes firmware-shared render-object VA identity as the cause. Exact
+package/service/SYS/UMD cleanup completed; ordinary health SHA
+`b01cb539fdce0e49a9229791e5e6e2ac578d376401cb320edb081c5bbc265673`.
+
+The rejected identity series was reverted by commits `f66dd29`, `dbe978e` and
+`a861eff`, restoring the last Code0 sequential RenderSharedMemory behavior while
+retaining materialization and diagnostics. Sanitizer and110 regressions pass.
+Current first unknown is native retained command-channel ownership: the
+firmware does not consume Windows' parallel ChannelMemory even though the
+doorbell path, queue data, faults, wake and ordering have been closed. Next
+architecture is a bounded retained-owner queue broker (publish/query only), not
+another VA/capability probe.
+
 ## EXP551 exact noncolliding queue core — preregistration 2026-09-07T08:27Z
 
 WHY THIS HYPOTHESIS: EXP550 advanced broker mapping from181 to186 then failed
