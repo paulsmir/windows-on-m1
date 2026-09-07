@@ -531,16 +531,24 @@ StartTA/InitBM trace without work/UAT changes.
 Commits29fa22e/5bb1d98 add exact KTrace receipt and builder type correction.
 Pinned30.0.560.0 gates PASS; ZIP/SYS/producer SHAd09f1f31.../8ca1db14.../
 ea32b9b9.... EXP560 preregistered.
+EXP560 FINAL: exact KTrace receipt SHA973704e6... has initial/final write0 and
+all16 tail entries zero. The channel is inactive, so this rejects KTrace as a
+firmware-stage discriminator; it does not prove a firmware stage. TA remains
+rptr2/busy1/done0, D3 unstarted, TDR116. Exact cleanup and ordinary restore
+complete; health SHA97edc755.... Absence of the existing50-ms snapshot proves
+the worker exits on its first provider poll. Commitf51b8b0 records exact
+invalid/drain/clock/timeout-check/timeout-apply guard without behavior change;
+356 AppleAgx tests pass. EXP561 is the next single-variable hardware receipt.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T10:49Z after exact559 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T11:06Z after exact560 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAa9824f2210862768d2b6cee2c86187f6b3ed8336de0018523c02fb67c56b0d81.
+SHA97edc75551142134c935ca3b280219333136e6325e609d949aaf47d8c75c1d4f.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

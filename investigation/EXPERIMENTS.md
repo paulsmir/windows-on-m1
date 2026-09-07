@@ -20,6 +20,31 @@ ZIP/SYS/INF/CAT/UMD/producer SHA:
 `ea32b9b9eb12dcff48a9340021e722e7aeec45e2a5c1339b861013be6d9ebc25`.
 One bind/producer, decode pinned KTrace schema, exact cleanup.
 
+## EXP560 firmware KTrace tail — result 2026-09-07T11:06Z
+
+REJECTED as a firmware-internal discriminator. Exact 30.0.560.0 ran once.
+`Wom1KTraceReceipt.bin` SHA
+`973704e6615c9d572832bb88bd78476c3380d54443925f008c8d61cb18bca713`
+has version 1, bytes 928, fence 255, initial write pointer 0, final write
+pointer 0, and sixteen all-zero 0x38-byte tail entries. This proves only that
+the published KTrace channel is inactive for this workload; it is not evidence
+about firmware's last internal TA stage. TA remains physically consumed/active
+with rptr 2, busy 1, has_commands 1, done 0; D3 remains unstarted. QueueInfo and
+BufferManager receipt SHA remain `5fdc50eabe6a6394a84befb35d7ded6cbbf6171d4ae86bf109e50ab8e5d770d8`
+and `5a90a5b2926d906df590e05737d63bd3377e1d1ed01a9a14f6675d22ccbf1da5`.
+Windows TDR 0x116 repeated; no TA completion/fence/present is claimed. Hardware
+log SHA `be33d2a5cf7f9ad615d2b356ab16b8de97c8173f5a86bcd9761a00ce5ee53b4f`.
+
+Exact package cleanup completed through the established emergency guest, then
+ordinary 377/392 was restored. Final health SHA
+`97edc75551142134c935ca3b280219333136e6325e609d949aaf47d8c75c1d4f`
+proves APPL0002 Code 28, zero AppleAgx package/service/module, eight CPUs, SSH,
+NVMe/xHCI/keyboard healthy. Three Event129 and one bugcheck in the rolling
+15-minute query are the preserved EXP560/TDR window, not fresh post-recovery
+GPU evidence. Because the existing 50-ms snapshot never ran, the closest first
+unknown is an early `AppleAgxPlatformProviderPoll` false return. EXP561 records
+only its exact invalid/drain/clock/timeout-check/timeout-apply owner.
+
 ## EXP559 populated BufferManager control — result 2026-09-07T10:49Z
 
 CONFIRMED exact word correction, but no later TA progress. Exact30.0.559.0 ran
