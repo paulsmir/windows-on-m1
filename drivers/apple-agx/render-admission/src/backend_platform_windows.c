@@ -1729,6 +1729,13 @@ static VOID AdmissionPlatformWorker(
     LARGE_INTEGER interval;
     if (!AppleAgxPlatformProviderPoll(
             &runtime->Provider, 64u, &drained, &completed)) {
+      if (runtime->Provider.LastPollGuard ==
+          AppleAgxPlatformPollGuardDrainEvents) {
+        AdmissionProviderDrainTraceWindows(
+            adapter, runtime->Provider.LastDrainGuard,
+            runtime->Provider.LastEventReadPointer,
+            runtime->Provider.LastEventWritePointer);
+      }
       AdmissionProviderPollGuardWindows(
           adapter, runtime->Provider.LastPollGuard,
           (ULONG)runtime->Provider.QueueProvider.Phase,

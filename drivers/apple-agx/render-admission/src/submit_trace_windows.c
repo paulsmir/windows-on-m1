@@ -167,6 +167,28 @@ _Use_decl_annotations_ VOID AdmissionProviderPollGuardWindows(
   WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
 }
 
+_Use_decl_annotations_ VOID AdmissionProviderDrainTraceWindows(
+    ADMISSION_CONTEXT *Context, ULONG Guard, ULONG ReadPointer,
+    ULONG WritePointer) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  if (Context == NULL || Context->BrokerBase == NULL)
+    return;
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(
+      request, AdmissionProviderDrainTraceWord(1u, Guard));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+  WRITE_REGISTER_ULONG64(
+      request, AdmissionProviderDrainTraceWord(2u, ReadPointer));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+  WRITE_REGISTER_ULONG64(
+      request, AdmissionProviderDrainTraceWord(3u, WritePointer));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
 static VOID AdmissionSubmitTraceU64(
     _In_ ADMISSION_CONTEXT *Context, _In_ ULONG LowField,
     _In_ ULONGLONG Value) {

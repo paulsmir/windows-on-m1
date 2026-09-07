@@ -36,6 +36,14 @@ class ChannelProgressTraceTests(unittest.TestCase):
         report = worker.index("AdmissionProviderPollGuardWindows(", poll)
         self.assertGreater(report, poll)
         self.assertIn("runtime->Provider.LastPollGuard", worker[report:report + 400])
+        self.assertIn("ADMISSION_PROVIDER_DRAIN_TRACE_TAG", guards)
+        self.assertIn("AdmissionProviderDrainTraceWord", guards)
+        self.assertIn("AdmissionProviderDrainTraceWindows", header)
+        self.assertIn("AdmissionProviderDrainTraceWindows", trace)
+        drain_report = worker.index("AdmissionProviderDrainTraceWindows(", poll)
+        self.assertLess(drain_report, report)
+        self.assertIn("LastEventReadPointer", worker[drain_report:drain_report + 500])
+        self.assertIn("LastEventWritePointer", worker[drain_report:drain_report + 500])
 
 
 if __name__ == "__main__":

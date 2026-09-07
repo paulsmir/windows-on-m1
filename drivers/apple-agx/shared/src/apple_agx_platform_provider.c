@@ -670,6 +670,11 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
     *DrainedMessages = 0u;
   if (CompletedFence != PLATFORM_NULL)
     *CompletedFence = 0u;
+  if (Provider != PLATFORM_NULL) {
+    Provider->LastDrainGuard = AppleAgxPlatformDrainGuardInvalid;
+    Provider->LastEventReadPointer = 0xffffffffu;
+    Provider->LastEventWritePointer = 0xffffffffu;
+  }
   if (Provider == PLATFORM_NULL || !Provider->Initialized ||
       MaxMessages == 0u || DrainedMessages == PLATFORM_NULL ||
       CompletedFence == PLATFORM_NULL ||
@@ -678,11 +683,16 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
 
   binding = &Provider->Channels.Event;
   if (binding->StateCpuAddress == PLATFORM_NULL ||
-      binding->RingCpuAddress == PLATFORM_NULL ||
-      !Provider->Transport.FlushForCpu(
-          Provider->Transport.Context, binding->StateCpuAddress,
-          J313_AGX_G2_CHANNEL_STATE_STRIDE))
+      binding->RingCpuAddress == PLATFORM_NULL) {
+    Provider->LastDrainGuard = AppleAgxPlatformDrainGuardBinding;
     return APPLE_AGX_BACKEND_FALSE;
+  }
+  if (!Provider->Transport.FlushForCpu(
+          Provider->Transport.Context, binding->StateCpuAddress,
+          J313_AGX_G2_CHANNEL_STATE_STRIDE)) {
+    Provider->LastDrainGuard = AppleAgxPlatformDrainGuardFlushState;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
   Provider->Transport.MemoryBarrier(Provider->Transport.Context);
   read_pointer = (volatile APPLE_AGX_BACKEND_U32 *)(
       binding->StateCpuAddress +
@@ -691,12 +701,22 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
       binding->StateCpuAddress +
       APPLE_AGX_PLATFORM_CHANNEL_WRITE_POINTER_OFFSET);
   if (!Provider->Transport.ReadU32(Provider->Transport.Context,
-                                   read_pointer, &read) ||
-      !Provider->Transport.ReadU32(Provider->Transport.Context,
-                                   write_pointer, &write) ||
-      read >= APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT ||
-      write >= APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT)
+                                   read_pointer, &read)) {
+    Provider->LastDrainGuard = AppleAgxPlatformDrainGuardReadPointer;
     return APPLE_AGX_BACKEND_FALSE;
+  }
+  Provider->LastEventReadPointer = read;
+  if (!Provider->Transport.ReadU32(Provider->Transport.Context,
+                                   write_pointer, &write)) {
+    Provider->LastDrainGuard = AppleAgxPlatformDrainGuardWritePointer;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
+  Provider->LastEventWritePointer = write;
+  if (read >= APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT ||
+      write >= APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT) {
+    Provider->LastDrainGuard = AppleAgxPlatformDrainGuardPointerRange;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
 
   drained = 0u;
   completed = 0u;
@@ -708,12 +728,15 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
     if (!Provider->EventBatchPending) {
       if (!Provider->Transport.FlushForCpu(
               Provider->Transport.Context, message,
-              APPLE_AGX_G13_EVENT_MESSAGE_SIZE))
+              APPLE_AGX_G13_EVENT_MESSAGE_SIZE)) {
+        Provider->LastDrainGuard = AppleAgxPlatformDrainGuardFlushMessage;
         return APPLE_AGX_BACKEND_FALSE;
+      }
       Provider->Transport.MemoryBarrier(Provider->Transport.Context);
       if (!AppleAgxPlatformComposerPrepareEvent(
               &Provider->Composer, message, APPLE_AGX_G13_EVENT_MESSAGE_SIZE,
               &Provider->PendingEventBatch)) {
+        Provider->LastDrainGuard = AppleAgxPlatformDrainGuardPrepareEvent;
         *DrainedMessages = drained;
         *CompletedFence = completed;
         return APPLE_AGX_BACKEND_FALSE;
@@ -727,6 +750,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
       if (!Provider->Transport.PublishU32(
               Provider->Transport.Context, read_pointer,
               Provider->PendingEventNextRead)) {
+        Provider->LastDrainGuard = AppleAgxPlatformDrainGuardPublishRead;
         *DrainedMessages = drained;
         *CompletedFence = completed;
         return APPLE_AGX_BACKEND_FALSE;
@@ -738,6 +762,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
     if (!AppleAgxPlatformComposerApplyEvent(
             &Provider->Composer, &Provider->PendingEventBatch,
             &message_fence)) {
+      Provider->LastDrainGuard = AppleAgxPlatformDrainGuardApplyEvent;
       *DrainedMessages = drained;
       *CompletedFence = completed;
       return APPLE_AGX_BACKEND_FALSE;
@@ -754,6 +779,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderDrainEvents(
   }
   *DrainedMessages = drained;
   *CompletedFence = completed;
+  Provider->LastDrainGuard = AppleAgxPlatformDrainGuardOk;
   return APPLE_AGX_BACKEND_TRUE;
 }
 

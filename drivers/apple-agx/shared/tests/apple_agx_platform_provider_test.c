@@ -695,6 +695,10 @@ static void test_poll_records_exact_failure_owner(void) {
   *event_write = APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT;
   assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
   assert(provider.LastPollGuard == AppleAgxPlatformPollGuardDrainEvents);
+  assert(provider.LastDrainGuard == AppleAgxPlatformDrainGuardPointerRange);
+  assert(provider.LastEventReadPointer == 0u);
+  assert(provider.LastEventWritePointer ==
+         APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT);
 
   *event_write = 0u;
   transport.ZeroNow = 1u;
@@ -714,6 +718,9 @@ static void test_poll_records_exact_failure_owner(void) {
   components.FailApplyAt = 0u;
   assert(AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
   assert(provider.LastPollGuard == AppleAgxPlatformPollGuardOk);
+  assert(provider.LastDrainGuard == AppleAgxPlatformDrainGuardOk);
+  assert(provider.LastEventReadPointer == 0u);
+  assert(provider.LastEventWritePointer == 0u);
   assert(AppleAgxPlatformProviderDestroy(&provider));
 }
 

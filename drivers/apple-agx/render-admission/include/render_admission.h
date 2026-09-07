@@ -573,6 +573,9 @@ VOID AdmissionBackendChannelProgressWindows(
 VOID AdmissionProviderPollGuardWindows(
     _In_opt_ ADMISSION_CONTEXT *Context, ULONG Guard, ULONG ProviderPhase,
     ULONG RuntimePhase, ULONG Fence);
+VOID AdmissionProviderDrainTraceWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context, ULONG Guard, ULONG ReadPointer,
+    ULONG WritePointer);
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueSubmission(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_SUBMISSION_RECEIPT *Receipt);
@@ -676,6 +679,14 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(ProviderPhase);                                                     \
     (void)(RuntimePhase);                                                      \
     (void)(Fence);                                                             \
+  } while (0)
+#define AdmissionProviderDrainTraceWindows(Context, Guard, ReadPointer,        \
+                                           WritePointer)                       \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Guard);                                                             \
+    (void)(ReadPointer);                                                       \
+    (void)(WritePointer);                                                      \
   } while (0)
 #define AdmissionRecordQueueSubmission(Context, Receipt)                       \
   do {                                                                         \
