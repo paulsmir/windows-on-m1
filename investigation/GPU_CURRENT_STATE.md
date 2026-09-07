@@ -1,10 +1,10 @@
 # GPU current state
 
-Updated2026-09-07T19:23Z. Authoritative live state; read first after context reset.
+Updated2026-09-07T19:51Z. Authoritative live state; read first after context reset.
 Detailed handoff: .local/experiments/EXP506-cdd-blt/handoff.md.
 Historical snapshot: .local/experiments/EXP506-cdd-blt/state-before-final-compact.md.
 
-## Current boundary — EXP584 final / EXP585 prepared source
+## Current boundary — EXP585 PBE write proven / EXP586 clear color
 
 EXP581 remains the first hardware proof of Windows-originated physical TA+3D
 execution and exact Windows fence completion. Completion source is polling;
@@ -29,28 +29,29 @@ all other bits, and restores both plus the PBE descriptor and object40 atomicall
 Focused real-fixture RED then GREEN. AppleAgx regression:391 PASS with one
 unrelated pre-existing source-text test failure.
 
-EXP584 exact package cleanup is physically blocked: installed package is
-boot-bound under ordinary392. Exact immutable377 binary was reconstructed with
-its recorded d703f87 Python runtime after a fresh platform `p.reboot()`; hidden385
-then reaches Mu and all8 Windows CPUs but still does not restore Windows network.
-All established non-physical recovery paths are exhausted. Machine currently
-runs that exact hidden recovery guest under launcher PID85588; SSH is absent.
-Next unavoidable operator action is one physical power cycle to Running proxy.
-Then boot current-compatible hidden recovery, delete only INF SHA
-B661E61E69EB0EC06E4AECB9F54DA4AC3AF1C0D94AD2E42AA93CF8AED0F20FE0,
-restore ordinary392 clean, and run the already prepared EXP585 candidate.
+The apparent recovery blocker was a wrong endpoint assumption: hidden Windows
+was live on Wi-Fi192.168.1.37 while USB-network192.168.137.2 was absent. Exact
+EXP584 cleanup completed, ordinary392 was verified Code28/no package/service/
+SYS/UMD with8CPU/NVMe2/USB5/keyboard1, then exact EXP585 ran once.
 
-EXP585 exact30.0.585.0 is BUILT/SIGNED/READY. Pinned WDK/SDK26100, MSVC14.44,
-code analysis, Universal validation, Inf2Cat, TestSign and coherent version all
-PASS; only inherited C28251. ZIP/SYS/INF/CAT/UMD/producer hashes:
-e41dffefa6f88b70dfb08bb8f0d11e834a68abb6639b0cdc35e11e93b4034a27,
-df205a135462a8719f75c2c628d494a1da28946e2de59f03cc9a1dc585cca9ec,
-0c383082907c773a718af0dc4f6db187185d100f9d4d1bc402d6f2089e98782d,
-bc98439f7f3bd0c56f01508027bd0369650603262c66e0c48b569b8cb9ba8d14,
-b96f637bfc2ec205b382cea923d959cf72c5988dc87ac8b1b7211dce3e8ae527,
-1b3938199608b444d354af36ed8411ed8a6cff4819599576011223b835341580.
-Exact EXP584 cleanup and EXP585 stage/run/collect/cleanup/ordinary scripts are
-prepared and PowerShell-parser GREEN under `.local/experiments/EXP585-store-pipeline/`.
+EXP585 HARDWARE CONFIRMED the typed store-pipeline pair as causal. Terminal
+ValidMaskff again proves TA/D3 stamps and done2/2, fence/completed255,
+NotifyInterrupt/DPC and clean Ready exit. Unlike EXP584 all-A5 output, EXP585
+changed exactly the first1024 target bytes to zero: FirstPixel0, expected0,
+poison0, ChangedBytes1024, GuardCorrupt0, BytesExamined16384,64-byte zero prefix.
+Therefore PBE now writes the correct target; output content is the first unknown.
+Evidence ZIP SHA
+e6510d702c8c5dbea4d54e92e9e89e091e19910ee3132479867ee585647cb45b.
+Exact package/service/SYS/UMD cleanup completed and ordinary392 restoration is
+running; no EXP585 retry.
+
+Next causal fix is only captured clear-pipeline Uniform object73+0000. It decodes
+to stale1500000000 while exact Mesa agx_build_clear_pipeline and captured
+load_pipeline20000 prove the active full-clear path consumes the half-float
+clear color at active object36+0. The object73+1000 reload Texture points at
+object36+2000 but is conditional and inactive for this PIPE_CLEAR_COLOR0 job;
+do not patch it in EXP586. Persistent queue lifetime and reset sequence remain
+later separate fixes after first correct output.
 
 ## Binding scope and current executor
 

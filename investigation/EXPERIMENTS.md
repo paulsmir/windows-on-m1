@@ -35575,3 +35575,36 @@ Launcher PID85588 remains the sole L41 owner; L43 is present. This exhausts all
 known reversible non-physical recovery paths. Minimal operator action: one
 physical power cycle until Running proxy. Resume with exact hidden cleanup,
 ordinary verification and the already frozen EXP585; do not rebuild or modify it.
+
+**EXP585 FINAL 2026-09-07T19:49Z — CONFIRMED PBE WRITE; COLOR OUTPUT RED.**
+Windows was actually reachable at Wi-Fi `192.168.1.37`; no physical action was
+needed. Exact EXP584 was hash-gated and removed, ordinary392 verified Code28,
+zero package/service/SYS/UMD,8CPU,NVMe2/USB5/keyboard1, then exact30.0.585.0
+staged and naturally bound as oem5 with matching INF/SYS and service Running.
+The producer ran once.
+
+Terminal receipt ValidMaskff, sequence1, fence/completed255, TA/D3 events0/1,
+expected=actual stamps7a000100/3d000100, expected=actual done2/2, raw polling
+event, NotifyInterrupt1, DPC1, Completed exit, Created provider, Ready backend,
+no stopping/reset/scheduler fault. PBE output changed exactly the first1024 bytes
+from A5 to zero: FirstPixel/Mismatch0, expected pixels0, poison pixels0,
+ChangedBytes1024, GuardCorrupt0, BytesExamined4000, FNV51d88627df287325,
+64-byte zero prefix. Thus the store Texture/Uniform pair is hardware-confirmed
+causal for target writes, but the correct color remains unproven.
+
+Evidence ZIP SHA
+`e6510d702c8c5dbea4d54e92e9e89e091e19910ee3132479867ee585647cb45b`;
+terminal SHA `31d3240ca2d9e71164b0941d769e294d361fb8c5384bcb80c605888bc55bb2cf`;
+host log SHA `55bbba0830537b6b993ebda32437f24cc8a78a19642d717a903c3896754146b7`.
+Health after run:8CPU,NVMe2,USB5,keyboard1, no bugcheck/critical41; Event129x18
+is preserved storage telemetry without a GPU causal claim. Exact oem5/package,
+service,SYS/UMD cleanup completed and ordinary392 restoration started.
+
+Source-first next boundary: captured full clear uses load_pipeline0x20000,
+selecting fixed object73+0000. Its typed USC Uniform word
+`0x1500000000400c1d` decodes stale1500000000. Exact object36+0 contains
+half-floats for17/255,34/255,51/255,1 and active object36 is1503920000.
+Mesa commit7a4f2406 `agx_build_clear_pipeline` identifies this Uniform as the
+clear-color input. Object73+1000 is the conditional reload pipeline and is
+inactive because this workload sets PIPE_CLEAR_COLOR0. EXP586 changes only the
+clear Uniform address; no store/queue/completion/reload changes.
