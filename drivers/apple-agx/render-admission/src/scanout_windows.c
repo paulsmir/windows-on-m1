@@ -243,37 +243,52 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   receipt.Fence = Fence;
   receipt.SourceGpuAddress = SourceGpuAddress;
   receipt.SourcePhysicalAddress = SourcePhysicalAddress;
+  receipt.Guard = AdmissionVisibleAgxGuardEntry;
   started = AdmissionScanoutNow(runtime);
-  if (runtime == NULL || Source == NULL || SourceBytes < 1024u || Fence == 0u ||
-      !runtime->Panel.Committed || !runtime->Panel.Visible ||
-      !Context->VisibleAgxDestinationValid ||
-      Context->VisibleAgxDestinationFence != Fence ||
-      Context->VisibleAgxDestinationAllocationToken == 0ULL ||
-      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)) ||
+  if (Context == NULL || runtime == NULL || Source == NULL ||
+      SourceBytes < 1024u || Fence == 0u ||
       SourcePhysicalAddress > MAXULONGLONG - 1024ULL)
     goto Exit;
+  receipt.Guard = AdmissionVisibleAgxGuardArguments;
+  if (!runtime->Panel.Committed || !runtime->Panel.Visible)
+    goto Exit;
+  receipt.Guard = AdmissionVisibleAgxGuardPanel;
+  receipt.CapturedValid = Context->VisibleAgxDestinationValid ? 1u : 0u;
+  receipt.CapturedFence = Context->VisibleAgxDestinationFence;
+  receipt.DestinationAllocationToken =
+      Context->VisibleAgxDestinationAllocationToken;
+  if (receipt.CapturedValid != 1u ||
+      Context->VisibleAgxDestinationFence != Fence ||
+      receipt.DestinationAllocationToken == 0ULL)
+    goto Exit;
+  receipt.Guard = AdmissionVisibleAgxGuardCapturedDestination;
+  if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)))
+    goto Exit;
+  receipt.Guard = AdmissionVisibleAgxGuardScanoutView;
   destination = Context->VisibleAgxDestination;
+  receipt.DestinationCpuAddress =
+      (ULONGLONG)(ULONG_PTR)destination.CpuAddress;
+  receipt.DestinationPhysicalAddress = destination.HostPhysicalAddress;
+  receipt.DestinationBytes = destination.Bytes;
   if (destination.CpuAddress == NULL ||
+      memory.Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
       destination.GpuVirtualAddress < memory.GpuVirtualAddress ||
       destination.GpuVirtualAddress - memory.GpuVirtualAddress >
           memory.Bytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
       destination.Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
     goto Exit;
+  receipt.Guard = AdmissionVisibleAgxGuardDestinationRange;
   destinationOffset =
       destination.GpuVirtualAddress - memory.GpuVirtualAddress;
+  receipt.DestinationOffset = destinationOffset;
   if ((destinationOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
       memory.HostPhysicalAddress > MAXULONGLONG - destinationOffset ||
       memory.GuestIpaAddress > MAXULONGLONG - destinationOffset ||
       destination.HostPhysicalAddress !=
           memory.HostPhysicalAddress + destinationOffset)
     goto Exit;
-  receipt.DestinationOffset = destinationOffset;
-  receipt.DestinationCpuAddress =
-      (ULONGLONG)(ULONG_PTR)destination.CpuAddress;
   receipt.DestinationGuestIpa = memory.GuestIpaAddress + destinationOffset;
-  receipt.DestinationPhysicalAddress = destination.HostPhysicalAddress;
-  receipt.DestinationAllocationToken =
-      Context->VisibleAgxDestinationAllocationToken;
+  receipt.Guard = AdmissionVisibleAgxGuardDestinationIdentity;
   if (!AdmissionScanoutRead64(runtime,
           APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET,
           &receipt.ActiveOffsetBefore) ||
@@ -284,6 +299,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     status = STATUS_CONFLICTING_ADDRESSES;
     goto Exit;
   }
+  receipt.Guard = AdmissionVisibleAgxGuardActiveSurface;
   if (!AdmissionVisibleAgxScale16x16(
           Source, SourceBytes,
           destination.CpuAddress,
@@ -291,6 +307,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     status = STATUS_INVALID_BUFFER_SIZE;
     goto Exit;
   }
+  receipt.Guard = AdmissionVisibleAgxGuardScaled;
   KeMemoryBarrier();
   receipt.Stage = 1u;
   if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {
@@ -311,6 +328,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
   receipt.Stage = 2u;
+  receipt.Guard = AdmissionVisibleAgxGuardQueued;
   deadline = AdmissionScanoutNow(runtime) + ADMISSION_SCANOUT_TIMEOUT_MS;
   while ((APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
              &runtime->LastNotifiedSequence, 0, 0) != sequence &&
@@ -340,6 +358,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     goto Exit;
   }
   receipt.Stage = 3u;
+  receipt.Guard = AdmissionVisibleAgxGuardComplete;
   status = STATUS_SUCCESS;
   receipt.Status = STATUS_SUCCESS;
   if (!AdmissionVisibleAgxReceiptValid(&receipt))

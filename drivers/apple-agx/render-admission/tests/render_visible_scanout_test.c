@@ -73,6 +73,9 @@ int main(void) {
   agx.Version = ADMISSION_VISIBLE_AGX_RECEIPT_VERSION;
   agx.Bytes = sizeof(agx);
   agx.Stage = 3u;
+  agx.Guard = AdmissionVisibleAgxGuardComplete;
+  agx.CapturedValid = 1u;
+  agx.CapturedFence = 17u;
   agx.Status = 0u;
   agx.Fence = 17u;
   agx.SourceGpuAddress = 0x1500fa0000ULL;
@@ -89,6 +92,9 @@ int main(void) {
   agx.ActiveOffsetAfter = agx.DestinationOffset;
   agx.SwapId = 12u;
   assert(AdmissionVisibleAgxReceiptValid(&agx));
+  agx.Guard = AdmissionVisibleAgxGuardDestinationIdentity;
+  assert(!AdmissionVisibleAgxReceiptValid(&agx));
+  agx.Guard = AdmissionVisibleAgxGuardComplete;
   agx.DestinationAllocationToken = 0u;
   assert(!AdmissionVisibleAgxReceiptValid(&agx));
   free(surface);

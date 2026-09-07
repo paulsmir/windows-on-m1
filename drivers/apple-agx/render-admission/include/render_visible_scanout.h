@@ -43,9 +43,24 @@ typedef struct _ADMISSION_VISIBLE_SCANOUT_RECEIPT {
 } ADMISSION_VISIBLE_SCANOUT_RECEIPT;
 
 #define ADMISSION_VISIBLE_AGX_RECEIPT_VERSION 1u
+typedef enum _ADMISSION_VISIBLE_AGX_GUARD {
+  AdmissionVisibleAgxGuardEntry = 1u,
+  AdmissionVisibleAgxGuardArguments = 2u,
+  AdmissionVisibleAgxGuardPanel = 3u,
+  AdmissionVisibleAgxGuardCapturedDestination = 4u,
+  AdmissionVisibleAgxGuardScanoutView = 5u,
+  AdmissionVisibleAgxGuardDestinationRange = 6u,
+  AdmissionVisibleAgxGuardDestinationIdentity = 7u,
+  AdmissionVisibleAgxGuardActiveSurface = 8u,
+  AdmissionVisibleAgxGuardScaled = 9u,
+  AdmissionVisibleAgxGuardQueued = 10u,
+  AdmissionVisibleAgxGuardComplete = 11u,
+} ADMISSION_VISIBLE_AGX_GUARD;
+
 typedef struct _ADMISSION_VISIBLE_AGX_RECEIPT {
   unsigned int Version, Bytes, Stage, Status, Fence;
   unsigned int SourceWidth, SourceHeight, SourcePitch;
+  unsigned int Guard, CapturedValid, CapturedFence, Reserved;
   unsigned long long SourceBytes, SourceGpuAddress, SourcePhysicalAddress;
   unsigned long long SourceHash;
   unsigned long long DestinationCpuAddress, DestinationGuestIpa;

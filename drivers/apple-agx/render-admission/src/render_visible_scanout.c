@@ -138,6 +138,9 @@ int AdmissionVisibleAgxReceiptValid(
   return Receipt != VISIBLE_NULL &&
                  Receipt->Version == ADMISSION_VISIBLE_AGX_RECEIPT_VERSION &&
                  Receipt->Bytes == sizeof(*Receipt) && Receipt->Stage == 3u &&
+                 Receipt->Guard == AdmissionVisibleAgxGuardComplete &&
+                 Receipt->CapturedValid == 1u &&
+                 Receipt->CapturedFence == Receipt->Fence &&
                  Receipt->Status == 0u && Receipt->Fence != 0u &&
                  Receipt->SourceWidth == 16u && Receipt->SourceHeight == 16u &&
                  Receipt->SourcePitch == 64u && Receipt->SourceBytes == 1024ULL &&
