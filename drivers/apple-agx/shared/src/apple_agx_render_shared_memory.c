@@ -17,6 +17,13 @@ static void zero_bytes(void *Address, APPLE_AGX_U64 Bytes) {
     ((unsigned char *)Address)[index] = 0u;
 }
 
+static void put_u32(unsigned char *Address, APPLE_AGX_U32 Value) {
+  Address[0] = (unsigned char)(Value & 0xffu);
+  Address[1] = (unsigned char)((Value >> 8u) & 0xffu);
+  Address[2] = (unsigned char)((Value >> 16u) & 0xffu);
+  Address[3] = (unsigned char)((Value >> 24u) & 0xffu);
+}
+
 static APPLE_AGX_BOOL storage_empty(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
   APPLE_AGX_U32 index;
@@ -155,6 +162,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
     APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_BOOL IncludeInitBm,
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
@@ -181,6 +189,19 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
           Owner, TemplateArena, TemplateArenaBytes, ActiveObjects,
           SourceObjectCount))
     return APPLE_AGX_FALSE;
+  if (IncludeInitBm) {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *control = &ActiveObjects[20];
+    APPLE_AGX_U32 total;
+    if (control->Data == RENDER_SHARED_NULL || control->Size < 8u)
+      return APPLE_AGX_FALSE;
+    total = (APPLE_AGX_U32)control->Data[0] |
+            ((APPLE_AGX_U32)control->Data[1] << 8u) |
+            ((APPLE_AGX_U32)control->Data[2] << 16u) |
+            ((APPLE_AGX_U32)control->Data[3] << 24u);
+    if (total == 0u)
+      return APPLE_AGX_FALSE;
+    put_u32(control->Data + 4u, total);
+  }
   if (!AppleAgxApplyRelocations(
           ActiveObjects, SourceObjectCount,
           AppleAgxRenderTemplateRelocations(),

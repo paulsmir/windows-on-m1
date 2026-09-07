@@ -154,13 +154,16 @@ int main(void) {
   assert(AppleAgxRenderSharedMemoryBuildActiveJob(
       &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
       source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-      0x1500800000ULL, &staged_job, active_objects, &active_job));
+      0x1500800000ULL, APPLE_AGX_TRUE, &staged_job, active_objects,
+      &active_job));
   assert(active_job.TaWorkAddresses[0] == owner.VirtualAddresses[16]);
   assert(active_job.TaWorkAddresses[1] == owner.VirtualAddresses[19]);
   assert(active_job.D3WorkAddresses[0] == owner.VirtualAddresses[14]);
   assert(active_job.D3WorkAddresses[1] == owner.VirtualAddresses[18]);
   assert(active_job.TaWorkAddresses[0] != staged_job.TaWorkAddresses[0]);
   assert(((unsigned char *)owner.Objects[0].CpuAddress)[0] == 0x5au);
+  assert(*(unsigned int *)(active_objects[20].Data + 4u) ==
+         *(unsigned int *)active_objects[20].Data);
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(fake.Freed == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);

@@ -1171,7 +1171,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
                      runtime->Adapter->BackendImage.Objects,
                      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
                      runtime->Adapter->BackendImage.ArenaGpuAddress,
-                     &staged, runtime->QueueObjects, Job)
+                     Plan->IncludeInitBm, &staged,
+                     runtime->QueueObjects, Job)
              ? APPLE_AGX_BACKEND_TRUE
              : APPLE_AGX_BACKEND_FALSE;
 }

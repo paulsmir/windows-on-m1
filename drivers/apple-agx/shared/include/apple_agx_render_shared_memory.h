@@ -44,6 +44,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
     APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_BOOL IncludeInitBm,
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob);
