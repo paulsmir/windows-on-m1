@@ -567,6 +567,12 @@ edges and regenerates a207-edge template; RED/GREEN and356 tests PASS. Exact
 cleanup/ordinary health SHAa8415695.... Next EXP564 tests only this correction.
 Pinned30.0.564.0 gates PASS; ZIP/SYS/producer SHA35d0fcde.../1a454616.../
 f79776a2.... EXP564 preregistered: only48 missing BM interior-page edges.
+EXP564 FINAL: same Timeout/EventDrain/BufferManager/QueueInfo receipts and
+TDR116; PageList fix is offline-correct but rejected as sufficient. Hardware
+log SHA69bbb215.... Exact cleanup/ordinary health SHAa8415695.... Commit0af5399
+reuses existing QueueFaultSnapshot immediately on kind4 timeout path, matching
+m1n1's timeout diagnostic order as closely as possible after failed quiesce.
+Next EXP565 reads only this snapshot; no TA/event behavior change.
 
 ## Final live ordinary clean baseline
 

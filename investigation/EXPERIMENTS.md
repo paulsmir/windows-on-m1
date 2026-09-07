@@ -43,6 +43,25 @@ producer. PASS requires no kind4 timeout and TA progress/done/event or a later
 exact boundary; collect all available receipts before exact cleanup. ANS
 untouched.
 
+## EXP564 complete BufferManager PageList rebase — result 2026-09-07T12:09Z
+
+REJECTED as the sufficient timeout fix. Exact30.0.564.0 ran once and reproduced
+the same kind4 Timeout/counter0/stamp_index-1 receipt SHA `063f1021...`, same
+QueueSubmission/BufferManager/QueueInfo/KTrace receipts, and TDR116. Hardware
+log SHA `69bbb215cd0e3d943ba77a279ff6c393fe383da5d89df617caa2f65e1c06f80f`.
+BufferManagerInfo last_id remains 0, so the 48 PageList corrections did not move
+the first observable primitive. The offline relocation fix remains correct but
+does not close hardware and must not be reported as such.
+
+Exact cleanup and ordinary restore complete; health SHA `a8415695...`. Pinned
+m1n1 timeout handling captures regionC fault_info, IRQ state and hardware fault
+before recovery. Current Windows skipped its existing fault snapshot because
+the event made Poll fail before 50 ms. Commit
+`0af53996098d4b76a2705e995fb4ce1688837bf1` reuses the same production
+snapshot immediately on this exact failure path after the unsuccessful
+quiesce; it changes no AGX data/ACK/queue behavior. EXP565 is this one read-only
+discriminator.
+
 ## EXP563 rejected event receipt — preregistration 2026-09-07T11:38Z
 
 WHY THIS HYPOTHESIS:
