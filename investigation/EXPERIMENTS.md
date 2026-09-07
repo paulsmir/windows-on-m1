@@ -36497,3 +36497,15 @@ terminal/host/producers/evidence SHA:
 Health8CPU/NVMe2/USB5/keyboard1/bugcheck0; Event129x10 telemetry. Exact package
 cleanup completed. Next boundary is fully accelerated full-size render/PBE;
 CPU-assisted scale remains explicitly non-final.
+
+**EXP599 FINAL RECOVERY 2026-09-07T23:54Z.** The full-owner launcher recorded
+complete retained-root reverse cleanup (`count=0`), firmware stop and an orderly
+PSCI reset before the USB serial endpoint re-enumerated at `Running proxy`; its
+serial disconnect was therefore expected and is not a GPU crash. The validated
+ordinary377/392 profile then booted Windows with all8 CPUs and healthy NVMe/xHCI.
+Read-only health collection proves APPL0002 Code28, zero AppleAgx package/service/
+module, NVMe2, USB5, keyboard1 and bugcheck0. Event129x8 is storage telemetry.
+Health JSON SHA256:
+`4155b362d49196935ed1db8f876bfbfe7ea3a26e7859f87fc9ac62ad20fa5a47`.
+The dark-blue panel seen immediately before recovery was the last DCP-latched
+EXP599 surface; it is not evidence of a Windows hang in the ordinary guest.

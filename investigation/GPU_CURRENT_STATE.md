@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-07T20:34Z. Authoritative compact state; read this first after
+Updated 2026-09-07T23:54Z. Authoritative compact state; read this first after
 context reset. Detailed evidence remains in `EXPERIMENTS.md` and experiment-local
 archives. Continue in the current main process without implementation agents.
 
@@ -380,6 +380,13 @@ are proven for the qualification lifetime. Exact cleanup completed. Event129x10
 is recorded as storage telemetry;8CPU/NVMe2/USB5/keyboard1,bugcheck0.
 Next first unknown: remove CPU scale by deriving a full-size AGX PBE/tiling job;
 do not guess fields from the fixed16x16 EXP208 capture.
+
+EXP599 cleanup is now persisted through a graceful PSCI reset and ordinary
+377/392 restart. Current Air state is the clean GPU-visible baseline:
+APPL0002 Code28, zero AppleAgx packages/services/modules, 8CPU, NVMe2, USB5,
+keyboard1 and bugcheck0. Event129x8 is retained as storage telemetry. Final
+ordinary health JSON SHA256 is
+`4155b362d49196935ed1db8f876bfbfe7ea3a26e7859f87fc9ac62ad20fa5a47`.
 
 ## Standing constraints
 
