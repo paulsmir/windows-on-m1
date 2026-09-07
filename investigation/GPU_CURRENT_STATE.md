@@ -741,21 +741,26 @@ ZIP/SYS/producer SHA cd7470ce.../02590363.../04c76338.... Fresh ordinary
 preflight is Code28, zero package/service/module,8CPU,NVMe2/USB5/keyboard1,
 Event1290/Bugcheck0 in the current window. Candidate is ready for its sole run.
 
-EXP579 FINAL: INCONCLUSIVE only at the intended live-stats receipt. One producer
-reached physical TA dequeue (host0x5460: TA read1,D3 read0,fence255), then no
-later observable worker iteration/TA receipt occurred; delay wakeup versus a
-following-iteration block is not distinguished. Windows remained Code0/SSH/8CPU for
-over6min, no TDR/bugcheck, and normal shutdown succeeded. Thus live-stats patch
-is not rejected and queue ingress remains proven, but hardware did not preserve
-the actual pointer/StatsTA bytes. Exact cleanup done; ordinary Code28/no package/
-service/module/8CPU restored. Next EXP is receipt-only: capture existing TA
-progress+retire state immediately on the already observed TA-read transition,
-before the first1ms delay. No functional subsystem change.
+EXP579 CORRECTED FINAL: INCONCLUSIVE only because terminal evidence was lost.
+Automatic decode of host0x54600001000100ff is TA read1,D3 read1,fence255: both
+command channels consumed work. Wom1KTraceReceipt v1/928/fence255 already
+existed in the5s collection and is emitted only after the polling loop, so a
+stuck worker/delay is not supported. Producer returned0, synchronous destroys
+returned0, Windows remained Code0/SSH/8CPU, no TDR/bugcheck, and normal shutdown
+succeeded. These facts strongly support a fast terminal path but do not prove
+physical stamps/done/fence/output. Stats patch remains not rejected. Exact
+cleanup done; ordinary Code28/no package/service/module/8CPU restored.
 
-EXP580 commitafb2e1d is preregistered receipt-only instrumentation. It records
-the existing TA progress+retire structures at the already-proven TA-read
-transition, before any relative delay. Five focused tests GREEN. Next pinned
-build/sign/hash and one run; functional bytes remain EXP579.
+EXP580 immediate synchronous TA receipt (commitafb2e1d) was superseded before
+build/stage/hardware and its source removed: it could not prove terminal outcome
+and registry I/O in the hot worker would perturb timing. Next is EXP581 coherent
+terminal evidence at unchanged EXP579 functional bytes. Commit3b5f32a fixes the
+prepatched GDI receipt path, accepts unique event0/1, records precompletion
+progress, snapshots boot/submission/output/stats/raw event/actual+expected
+stamp/done before backend pending clear, tracks interrupt/DPC/exit separately,
+adds an automatic trace decoder, and makes the producer Lock2-initialize/wait/
+readback-verify the exact16x16 output plus untouched64KiB guard. Hardware not yet
+run.
 
 ## Final live ordinary clean baseline
 

@@ -35278,3 +35278,61 @@ FinalizeTA stats pointer equal to current StatsTA owner+4.  A stale value
 rejects the implementation/wiring; an exact value with no owner mutation moves
 the boundary inside firmware execution; any shared retirement/D3/completion
 progress is preserved but not assumed.
+
+**CORRECTION 2026-09-07T17:49Z — EXP580 SUPERSEDED BEFORE BUILD/HARDWARE.**
+No EXP580 package was staged or run. Automatic decoding proves EXP579 host word
+`0x54600001000100ff` means TA read1, D3 read1, fence255, not D3 read0.
+`Wom1KTraceReceipt` v1/928/fence255 was already present in the5s live
+collection and can only be generated after the polling loop. Therefore the
+prior stuck-worker/delay interpretation is unsupported. Immediate TA dequeue
+receipts would still miss the terminal result and would add synchronous
+registry I/O to the measured path. Commit `afb2e1d...` instrumentation was
+removed without a build; retain it only as superseded history.
+
+# EXP581 — preclear terminal outcome and output verification
+
+**PREREGISTERED 2026-09-07T17:50Z; one exact run only.**
+
+**WHY THIS HYPOTHESIS:**
+
+- Corrected EXP579 proves both TA and3D command channels advanced to1 and its
+  post-loop KTrace receipt already existed at5s, while no TDR/bugcheck occurred
+  and synchronous producer destruction plus normal shutdown succeeded.
+- The old GDI receipt stayed at RenderKm because the prepatched path never
+  recorded Patch, event0 was incorrectly rejected, precompletion progress was
+  rejected, and successful completion clears provider/runtime pending state
+  before the final QueryProgress call.
+- These deterministic diagnostic defects exactly explain how a fast hardware
+  completion could leave no terminal receipt. No new evidence supports a
+  functional AGX/VA/queue/timeout change.
+
+WINDOWS CONTRACT: D3DKMTRender success is submission only; Lock2 after the
+render supplies a Windows synchronization/readback boundary before destruction.
+AGX/ASAHI CONTRACT: TA and3D completion requires the raw event plus both exact
+stamp and done values. TRANSLATION: commit
+`3b5f32aa1077606d05ac57b9d3edfe54eac3187d` keeps EXP579 command bytes and
+stats bindings unchanged, but captures a versioned264-byte in-memory terminal
+transaction from the backend completion callback before pending state is
+cleared. It stores boot/root/submission/context/allocation identity, four
+materialized stats pointers, raw polling event, expected and observed TA/3D
+stamp/done, completion status/fence, notification/DPC state and worker exit
+reason/phases. One registry persistence occurs only after worker exit;
+terminal/exit host trace words provide crash-durable evidence. The automatic
+decoder handles0x5460/0x54a0/0x54b0 without manual bit slicing.
+WHAT IS STILL UNKNOWN: whether EXP579 actually reached physical dual completion,
+Windows fence notification/DPC and correct output bytes.
+
+The producer now Lock2-initializes the64KiB backing to0xA5, submits the same
+single fixed16x16 color fill, Lock2-waits/reads before destruction, requires all
+256 output pixels equal0xff112233, and requires every byte after the1024-byte
+target through64KiB remain0xA5. It reports all four lock/unlock statuses and
+verification counts. This changes only qualification producer/evidence, not
+the driver workload. RED then16 focused tests and the full364 AppleAgx suite
+are GREEN locally; pinned WDK build remains required.
+
+PASS requires one coherent identity across terminal receipt and producer:
+TA/D3 observed stamp+done equal expected, completed fence255, raw polling event
+present, Windows NotifyInterrupt and DPC observed, worker exit Completed, both
+Lock2 operations succeed,256 pixels match and guard corruption is zero. A
+missing individual validity bit names the first diagnostic/functional boundary.
+No OpenGL/present/repeated-submit claim follows yet.
