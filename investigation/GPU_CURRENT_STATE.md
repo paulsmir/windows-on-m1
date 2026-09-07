@@ -373,19 +373,26 @@ EXP541 FINAL: backend resultOK/phaseSubmitted, exact0x5410 word, host SHAa523005
 Relocation/cache flush/Run3d/RunTa acceptance proven; physical progress unknown.
 Commitf6495a8 gives first actual queue-progress change the broker slot. Pinned
 30.0.542.0 gates PASS; ZIP/SYS/producer SHA19c63ee4.../cce82667.../57776594....
+EXP542 FINAL: no0x5420 before reset, host SHAbed7e05c...; no TA/D3 done/stamp/
+event/complete progress was observed. This rejects physical-progress PASS but
+does not identify which publication primitive failed. Exact emergency cleanup
+and ordinary restoration are complete. Clean health SHAad8e4a0e... proves
+Code28/null INF/service, no package/SYS/UMD,8CPU/SSH/input/xHCI/stornvme and no
+fresh41/129/1001. Source comparison closes queue selection: production group-1
+indices3/4 and doorbells4/5 match standalone EXP208 queue_index1. Commit8b34310
+adds only a crash-durable immediate full queue-publication receipt; local RED to
+GREEN plus108 render regressions PASS. EXP543 build/hardware are pending.
 
 ## Final live ordinary clean baseline
 
-At16:36:09Z after exact508 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T06:36Z after exact542 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
-InteractiveUsernull/TermServiceStopped; RDP and interactive input/display not
-workload-tested. final-ordinary-health.log SHA
-1d262413da4fe1e7495be62e7f80e1982a4f9ce4dbd85c485d641f1780582594.
-Launcher exec97110/Python60927, soleL41owner; L43present/unowned. KEEP RUNNING.
-EXP508 ordinary-contract.bin SHAb1ab2b612813447ff812aae35544eb172266952ecc6b98e6ceafb4a279d6dcfd.
+Interactive session was not required for this producer. final ordinary health
+SHAad8e4a0eea8089108aa9cb68985359ec8e2e957c36b86678a19768bf9a0cd61a.
+Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
 Recovery: ordinary377/392 withR2 failed to reachSSH and reset. Emergency377/385

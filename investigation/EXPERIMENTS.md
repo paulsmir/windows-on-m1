@@ -1,5 +1,87 @@
 # Hardware Experiment Ledger
 
+## EXP543 exact queue publication receipt — preregistration 2026-09-07T06:45Z
+
+WHY THIS HYPOTHESIS:
+- EXP541 proved backend result0/Submitted, while EXP542 observed no TA/3D
+  done-pointer, stamp, event or completion change before reset.
+- Source comparison proves production already selects the same group-1 TA/3D
+  channels as standalone EXP208, so the next unknown is the exact publication
+  content/order rather than the logical queue index.
+- The existing end-of-worker receipt never runs before reset; an immediate
+  PASSIVE registry write plus `ZwFlushKey` can preserve the entire publication
+  in one run without altering AGX behavior.
+
+WINDOWS CONTRACT: one already-proven normal D3DKMT producer reaches the PASSIVE
+backend worker with the exact Windows fence; the diagnostic write occurs only
+after successful backend Submit and before polling.
+
+AGX/ASAHI CONTRACT: group-1 is TA channel3/doorbell4 and 3D
+channel4/doorbell5. Each 0x30-byte message must contain queue type, exact
+CommandQueueInfo GPU address, head, event and first-run flag; two work addresses
+and expected done/stamp state must match the materialized EXP208 job.
+
+TRANSLATION: snapshot the exact queue bindings, two TA/two 3D work-ring entries,
+CPU/done/stamp values, channel read/write pointers and both run messages from the
+existing production objects; write the fixed versioned record to device and
+service keys and synchronously flush both keys. No queue value is changed.
+
+WHAT IS STILL UNKNOWN: whether Windows published byte-correct EXP208-equivalent
+queue/run data and whether firmware consumed either command-channel message.
+
+Single variable: qualification-only crash-durable receipt. Source commit
+`8b34310c91fbab39fb77cdbc5c7448e9d1652cb0`; branch
+`feature/j313-gpu-acceleration`. Local receipt tests were RED then GREEN and all
+108 render regressions pass. Pinned builder WDK10.0.26100.0/MSVC14.44.35207,
+command `build-driver.ps1 -Configuration Release -PackageBuild 543
+-SubmitQualification`; code analysis, Universal validation, Inf2Cat, signing
+and version gates pass with only inherited C28251. Source overlay SHA-256
+`2b17211f3170a77e9746053848aa570087d4c965980f2118d4ce62bf7b938f97`.
+ZIP/SYS/INF/CAT/UMD/producer SHA-256:
+`3aceef64f600b918c55326889e593ee076a5f4677ad7f574f7d0568673b2e8e2` /
+`f301fde9359c96dad918d4dca6e3c25a5de407be4981986a005a7ae10a5e58c8` /
+`951ace70f08042f9f7798db2205a52ec57ed73f6736cec5088624f6da6505aea` /
+`800b1e56035321155e29ffeb4c143cb460e9a7561875e6ebd8ca6eabac597cdb` /
+`5a62978ed23b60477afa31fbcc95509a832882b12bfa141f0f6db294b5e06aee` /
+`9d4b7081ece80074af955da5e458bf13869dde81383aae5dd4eab544082ec317`.
+Recovery is exact package removal in the same ordinary guest; if boot-bound,
+use established 377/385 emergency cleanup, then restore ordinary377/392.
+PASS is not acceleration: it requires a complete fixed-size receipt that can be
+decoded and compared with EXP208. Failure is missing/malformed receipt. One
+natural bind and one producer run only.
+
+## EXP542 first physical queue progress — result 2026-09-07T06:36Z
+
+REJECTED as physical-progress candidate; exact recovery complete. The exact
+30.0.542.0 package ran once. `AppleAgxBackendRuntimeSubmit` had already been
+proved successful by EXP541, but the EXP542 host trace contains no `0x5420`
+word before the Windows reset. Therefore none of TA/3D done pointer, stamp,
+event-seen or complete state was observed to advance. This does not prove which
+publication primitive is wrong. Host log SHA-256 is
+`bed7e05caac47a1a458467f7545ed423a4f2d2c4d0ee45ba40f946c913b7c8fb`.
+
+The first ordinary 377/392 recovery boot remained healthy at the hypervisor but
+did not return SSH while the exact package was still boot-bound. It was stopped
+with the established SIGUSR2 path. The first emergency launch encountered the
+known stale-guest exception/old-proxy `Bad Command`; a fresh current proxy then
+booted the established 377/385 GPU-hidden profile. Pre-cleanup proved
+`oem5.inf`, stopped service and 8 CPUs with zero fresh Event129; JSON SHA-256
+`6252ef63b8ec0cfb7a7c52dc9e658a3641244ef89a2cb2441be51c5d54e33f5b`.
+Only the exact hash-matched package, service, SYS and UMD were removed. Cleanup
+outputs SHA-256 are `bdbc6c4fb1c63317c545a2124b7c2985bf541b4bcf58386a21dffd774817af1e`
+and `7915b8f38eb9cce1962251d181e2a1c8dc3df0e54f790dbf87f4a29890343b79`.
+Final ordinary 377/392 health SHA-256
+`ad8e4a0eea8089108aa9cb68985359ec8e2e957c36b86678a19768bf9a0cd61a`
+proves Code28/null INF/service, no package/SYS/UMD, 8 CPUs, SSH and healthy
+AppleInput/stornvme/USBXHCI with no fresh 41/129/1001 events.
+
+Offline comparison closed channel selection as the immediate difference:
+production uses group-1 TA/3D channel indices 3/4 and doorbells 4/5, matching
+standalone EXP208 queue index 1. The next single variable is receipt-only:
+capture and crash-durably flush the exact queue bindings, work-ring addresses,
+channel pointers and both 0x30-byte run messages immediately after successful
+Submit, before polling.
+
 ## EXP542 first physical queue progress — preregistration 2026-09-07T00:15Z
 
 WHY THIS HYPOTHESIS: EXP541 exact0x5410 result0/phase3 proves relocation, device
