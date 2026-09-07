@@ -36029,3 +36029,18 @@ requested/applied/latched/active sequence. PASS requires terminal AGX completion
 visible-AGX receipt status0 at offset0x1f40000, host A408/D589, and physical panel
 showing full-screen `0xff112233`. `PRESENT_TRANSFER=CPU_ASSISTED` and
 `FULLY_ACCELERATED_PRESENT=NO`. Focused14 tests PASS. Build pending.
+
+**EXP592 R1 COMPOSITION FAILURE / R2 FREEZE 2026-09-07T21:35Z.** R1 never
+produced an artifact: current local backend file accidentally carried the dormant
+EXP589 reset call into an EXP591 base without its API. R2 uses backend_platform
+byte-exact from the EXP591 builder plus only the visible-AGX completion hook.
+R2 pinned gates PASS. Overlay SHA
+`3ccfc22461c4a84e9fa4f24581760c84b23c474eb5d897b8105d0865fafcf3c3`.
+ZIP/SYS/INF/CAT/UMD/producer hashes:
+`c7d4ebe2d270b6917cee70ae2213a8ae0bf81e5203865b45bf52791353c73877`,
+`3a72af87110def42c8bd6451c9f50e45e8e31ac98728c9bf184983159374fb8d`,
+`78d8a3b40bfbd0ba15f167ec6b39d653661c3e41bdd99819fc41163e327ea44c`,
+`c9bf775c3329a6511c461a6bd35410122ef9b401b228ef34bcbffca54adcf918`,
+`2b3ec74b933a9a5e7fd388cc1a0ccd7b866a04c5280e140d4506af7b2799dd6e`,
+`9610b6c1891092fde94f9dc482e8c431ab8d4eb7f994a87f0c5a35fe40bbfce0`.
+Use R2 only after clean ordinary baseline.
