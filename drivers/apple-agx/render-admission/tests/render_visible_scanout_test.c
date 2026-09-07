@@ -70,12 +70,27 @@ int main(void) {
   assert(agx.SourceHash != 0ULL && agx.DestinationHash != 0ULL);
   assert(pixel(surface, 0u, 0u) == 0xff112233u);
   assert(pixel(surface, 2559u, 1599u) == 0xff112233u);
-  assert(AdmissionVisibleAgxReservationValid(
-      ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET,
-      APPLE_AGX_SCANOUT_J313_POOL_SIZE));
-  assert(!AdmissionVisibleAgxReservationValid(
-      APPLE_AGX_SCANOUT_J313_POOL_SIZE,
-      APPLE_AGX_SCANOUT_J313_POOL_SIZE));
+  agx.Version = ADMISSION_VISIBLE_AGX_RECEIPT_VERSION;
+  agx.Bytes = sizeof(agx);
+  agx.Stage = 3u;
+  agx.Status = 0u;
+  agx.Fence = 17u;
+  agx.SourceGpuAddress = 0x1500fa0000ULL;
+  agx.SourcePhysicalAddress = 0x9c0fa0000ULL;
+  agx.DestinationCpuAddress = 0xffff800012340000ULL;
+  agx.DestinationGuestIpa = 0x8c1f40000ULL;
+  agx.DestinationPhysicalAddress = 0x9c1f40000ULL;
+  agx.DestinationOffset = 0x1f40000ULL;
+  agx.DestinationAllocationToken = 0xffff800045670000ULL;
+  agx.ActiveOffsetBefore = 0u;
+  agx.RequestedSequence = 3u;
+  agx.AppliedSequence = 3u;
+  agx.LatchedSequence = 3u;
+  agx.ActiveOffsetAfter = agx.DestinationOffset;
+  agx.SwapId = 12u;
+  assert(AdmissionVisibleAgxReceiptValid(&agx));
+  agx.DestinationAllocationToken = 0u;
+  assert(!AdmissionVisibleAgxReceiptValid(&agx));
   free(surface);
   return 0;
 }

@@ -133,14 +133,31 @@ int AdmissionVisibleAgxScale16x16(
   return Receipt->SourceHash != 0ULL && Receipt->DestinationHash != 0ULL;
 }
 
-int AdmissionVisibleAgxReservationValid(
-    unsigned long long WindowsAllocationBytes,
-    unsigned long long BackendOffset) {
-  return WindowsAllocationBytes == ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET &&
-                 ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET +
-                         APPLE_AGX_SCANOUT_J313_SURFACE_SIZE <=
-                     BackendOffset &&
-                 BackendOffset <= APPLE_AGX_SCANOUT_J313_POOL_SIZE
+int AdmissionVisibleAgxReceiptValid(
+    const ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
+  return Receipt != VISIBLE_NULL &&
+                 Receipt->Version == ADMISSION_VISIBLE_AGX_RECEIPT_VERSION &&
+                 Receipt->Bytes == sizeof(*Receipt) && Receipt->Stage == 3u &&
+                 Receipt->Status == 0u && Receipt->Fence != 0u &&
+                 Receipt->SourceWidth == 16u && Receipt->SourceHeight == 16u &&
+                 Receipt->SourcePitch == 64u && Receipt->SourceBytes == 1024ULL &&
+                 Receipt->SourceHash != 0ULL &&
+                 Receipt->DestinationCpuAddress != 0ULL &&
+                 Receipt->DestinationGuestIpa != 0ULL &&
+                 Receipt->DestinationPhysicalAddress != 0ULL &&
+                 Receipt->DestinationAllocationToken != 0ULL &&
+                 Receipt->DestinationBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
+                 Receipt->DestinationHash != 0ULL &&
+                 (Receipt->DestinationOffset &
+                  (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) == 0ULL &&
+                 Receipt->DestinationOffset <= APPLE_AGX_SCANOUT_J313_POOL_SIZE -
+                                                   APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
+                 Receipt->ActiveOffsetBefore != Receipt->DestinationOffset &&
+                 Receipt->RequestedSequence != 0ULL &&
+                 Receipt->AppliedSequence == Receipt->RequestedSequence &&
+                 Receipt->LatchedSequence == Receipt->RequestedSequence &&
+                 Receipt->ActiveOffsetAfter == Receipt->DestinationOffset &&
+                 Receipt->SwapId != 0u
              ? 1
              : 0;
 }

@@ -117,6 +117,44 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 
+    def test_visible_agx_destination_is_explicit_windows_owned_allocation(self):
+        producer = (
+            WINDOWS / "one-shot" / "apple_agx_d3dkmt_render.c"
+        ).read_text()
+        patch = (RENDER / "src" / "gdi_windows.c").read_text()
+        memory = (RENDER / "src" / "memory_runtime_windows.c").read_text()
+
+        self.assertIn("D3DDDI_ALLOCATIONINFO allocationInfo[2]", producer)
+        self.assertIn("ADMISSION_ALLOCATION_DESCRIPTION allocation[2]", producer)
+        self.assertIn("APPLE_AGX_SCANOUT_J313_WIDTH", producer)
+        self.assertIn("APPLE_AGX_SCANOUT_J313_HEIGHT", producer)
+        self.assertIn("createAllocation.NumAllocations = ARRAYSIZE(allocationInfo)", producer)
+        self.assertIn("makeResident.NumAllocations = ARRAYSIZE(allocationHandles)", producer)
+        self.assertIn("render.AllocationCount = ARRAYSIZE(allocationHandles)", producer)
+        self.assertIn("createContext.pAllocationList[1].WriteOperation = 1u", producer)
+        self.assertNotIn(
+            "allocation[1].Reserved = ADMISSION_UMD_CORRELATION_COOKIE",
+            producer,
+        )
+
+        self.assertIn("AdmissionVisibleAgxCaptureDestination", patch)
+        self.assertIn("const UINT index = 1u", patch)
+        self.assertIn("entry->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT", patch)
+        self.assertIn("description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE", patch)
+        self.assertIn("Adapter->VisibleAgxDestination = view", patch)
+        self.assertIn("Adapter->VisibleAgxDestinationFence = Args->SubmissionFenceId", patch)
+
+        self.assertNotIn("ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET", memory)
+        self.assertNotIn(
+            "Context->Memory.LocalAllocationBytes =",
+            memory[memory.index("NTSTATUS AdmissionMemoryRuntimeStart("):],
+        )
+        self.assertIn(
+            "Context->Memory.LocalAllocationBytes !=\n"
+            "          ADMISSION_LOCAL_ALLOCATION_BYTES",
+            memory,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

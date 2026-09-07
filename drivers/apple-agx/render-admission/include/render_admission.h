@@ -371,6 +371,12 @@ typedef struct _ADMISSION_CONTEXT {
   UCHAR PresentCopyCommand[ADMISSION_PRESENT_BLT_DMA_MAX];
   volatile LONG PresentTransferState;
   ADMISSION_PRESENT_TRANSFER_RECEIPT PresentTransferReceipt;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_LOCAL_MEMORY_VIEW VisibleAgxDestination;
+  ULONGLONG VisibleAgxDestinationAllocationToken;
+  ULONG VisibleAgxDestinationFence;
+  BOOLEAN VisibleAgxDestinationValid;
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   volatile LONG SubmitTraceClaimed;
   volatile LONG UmdRenderTraceClaimed;

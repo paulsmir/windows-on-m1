@@ -70,6 +70,59 @@ static NTSTATUS AdmissionGdiTranslatePatch(
       aligned_size, 0u, View);
 }
 
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+static NTSTATUS AdmissionVisibleAgxCaptureDestination(
+    ADMISSION_CONTEXT *Adapter, const ADMISSION_RENDER_CONTEXT *Context,
+    const DXGKARG_PATCH *Args,
+    const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination) {
+  const UINT index = 1u;
+  const DXGK_ALLOCATIONLIST *entry;
+  ADMISSION_OPEN_ALLOCATION *opened;
+  const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  ULONGLONG aligned_size;
+  if (Adapter == NULL || Context == NULL || Args == NULL ||
+      RenderDestination == NULL || Args->AllocationListSize <= index ||
+      !AdmissionGdiOpenValid(
+          Context, Args->pAllocationList, Args->AllocationListSize,
+          index, TRUE))
+    return STATUS_INVALID_PARAMETER;
+  entry = &Args->pAllocationList[index];
+  opened = (ADMISSION_OPEN_ALLOCATION *)entry->hDeviceSpecificAllocation;
+  description = &opened->Allocation->Description;
+  if (entry->Reserved != 0u || entry->WriteOperation == 0u ||
+      entry->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||
+      entry->PhysicalAddress.QuadPart <= 0 ||
+      description->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
+      description->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
+      description->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
+      description->BytesPerPixel != 4u ||
+      description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      description->Format != (UINT)D3DDDIFMT_A8R8G8B8 ||
+      !AdmissionAllocationAlign64K(description->Size, &aligned_size) ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
+          Adapter, (ULONGLONG)entry->PhysicalAddress.QuadPart,
+          aligned_size, 0u, &view)) ||
+      view.Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      view.HostPhysicalAddress > MAXULONGLONG - view.Bytes ||
+      RenderDestination->HostPhysicalAddress >
+          MAXULONGLONG - RenderDestination->Bytes ||
+      (view.HostPhysicalAddress <
+           RenderDestination->HostPhysicalAddress + RenderDestination->Bytes &&
+       RenderDestination->HostPhysicalAddress <
+           view.HostPhysicalAddress + view.Bytes))
+    return STATUS_INVALID_ADDRESS;
+  Adapter->VisibleAgxDestination = view;
+  Adapter->VisibleAgxDestination.Bytes =
+      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+  Adapter->VisibleAgxDestinationAllocationToken =
+      (ULONGLONG)(ULONG_PTR)opened;
+  Adapter->VisibleAgxDestinationFence = Args->SubmissionFenceId;
+  Adapter->VisibleAgxDestinationValid = TRUE;
+  return STATUS_SUCCESS;
+}
+#endif
+
 static NTSTATUS AdmissionGdiPreparePacket(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     ADMISSION_OPEN_ALLOCATION *Opened, const DXGKARG_PATCH *Args,
@@ -479,6 +532,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   opened = (ADMISSION_OPEN_ALLOCATION *)
       Args->pAllocationList[patch.AllocationIndex]
           .hDeviceSpecificAllocation;
+
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (!NT_SUCCESS(AdmissionVisibleAgxCaptureDestination(
+          adapter, context, Args, &destination)))
+    PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,
+                        STATUS_INVALID_ADDRESS);
+#endif
 
   sealed = AppleAgxDmaShadowIsSealed(
                shadow.Storage, shadow.BytesUsed)

@@ -224,11 +224,11 @@ Exit:
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     ADMISSION_CONTEXT *Context, const VOID *Source, ULONG SourceBytes,
     ULONGLONG SourceGpuAddress, ULONGLONG SourcePhysicalAddress, ULONG Fence) {
-  const ULONGLONG destinationOffset =
-      ADMISSION_VISIBLE_AGX_DESTINATION_OFFSET;
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
   ADMISSION_SCANOUT_MEMORY_VIEW memory;
+  ADMISSION_LOCAL_MEMORY_VIEW destination;
   ADMISSION_VISIBLE_AGX_RECEIPT receipt;
+  ULONGLONG destinationOffset = 0ULL;
   APPLE_AGX_SCANOUT_U64 deadline;
   APPLE_AGX_SCANOUT_U64 started;
   APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
@@ -243,20 +243,37 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   receipt.Fence = Fence;
   receipt.SourceGpuAddress = SourceGpuAddress;
   receipt.SourcePhysicalAddress = SourcePhysicalAddress;
-  receipt.DestinationOffset = destinationOffset;
   started = AdmissionScanoutNow(runtime);
   if (runtime == NULL || Source == NULL || SourceBytes < 1024u || Fence == 0u ||
       !runtime->Panel.Committed || !runtime->Panel.Visible ||
+      !Context->VisibleAgxDestinationValid ||
+      Context->VisibleAgxDestinationFence != Fence ||
+      Context->VisibleAgxDestinationAllocationToken == 0ULL ||
       !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)) ||
-      destinationOffset > memory.Bytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
-      memory.HostPhysicalAddress > MAXULONGLONG - destinationOffset ||
       SourcePhysicalAddress > MAXULONGLONG - 1024ULL)
     goto Exit;
+  destination = Context->VisibleAgxDestination;
+  if (destination.CpuAddress == NULL ||
+      destination.GpuVirtualAddress < memory.GpuVirtualAddress ||
+      destination.GpuVirtualAddress - memory.GpuVirtualAddress >
+          memory.Bytes - APPLE_AGX_SCANOUT_J313_SURFACE_SIZE ||
+      destination.Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+    goto Exit;
+  destinationOffset =
+      destination.GpuVirtualAddress - memory.GpuVirtualAddress;
+  if ((destinationOffset & (APPLE_AGX_SCANOUT_ALIGNMENT - 1ULL)) != 0ULL ||
+      memory.HostPhysicalAddress > MAXULONGLONG - destinationOffset ||
+      memory.GuestIpaAddress > MAXULONGLONG - destinationOffset ||
+      destination.HostPhysicalAddress !=
+          memory.HostPhysicalAddress + destinationOffset)
+    goto Exit;
+  receipt.DestinationOffset = destinationOffset;
   receipt.DestinationCpuAddress =
-      (ULONGLONG)(ULONG_PTR)((PUCHAR)memory.CpuAddress + destinationOffset);
+      (ULONGLONG)(ULONG_PTR)destination.CpuAddress;
   receipt.DestinationGuestIpa = memory.GuestIpaAddress + destinationOffset;
-  receipt.DestinationPhysicalAddress =
-      memory.HostPhysicalAddress + destinationOffset;
+  receipt.DestinationPhysicalAddress = destination.HostPhysicalAddress;
+  receipt.DestinationAllocationToken =
+      Context->VisibleAgxDestinationAllocationToken;
   if (!AdmissionScanoutRead64(runtime,
           APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET,
           &receipt.ActiveOffsetBefore) ||
@@ -269,7 +286,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   }
   if (!AdmissionVisibleAgxScale16x16(
           Source, SourceBytes,
-          (PUCHAR)memory.CpuAddress + destinationOffset,
+          destination.CpuAddress,
           APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &receipt)) {
     status = STATUS_INVALID_BUFFER_SIZE;
     goto Exit;
@@ -324,7 +341,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   }
   receipt.Stage = 3u;
   status = STATUS_SUCCESS;
+  receipt.Status = STATUS_SUCCESS;
+  if (!AdmissionVisibleAgxReceiptValid(&receipt))
+    status = STATUS_DATA_ERROR;
 Exit:
+  if (Context != NULL && Context->VisibleAgxDestinationFence == Fence) {
+    Context->VisibleAgxDestinationValid = FALSE;
+    Context->VisibleAgxDestinationFence = 0u;
+    Context->VisibleAgxDestinationAllocationToken = 0ULL;
+    RtlZeroMemory(&Context->VisibleAgxDestination,
+                  sizeof(Context->VisibleAgxDestination));
+  }
   receipt.Status = (ULONG)status;
   receipt.ElapsedMs = runtime == NULL ? 0u :
       (ULONG)(AdmissionScanoutNow(runtime) - started);

@@ -6,6 +6,7 @@
 #include "render_allocation.h"
 #include "render_umd_command.h"
 #include "apple_agx_exp208_gdi.h"
+#include "apple_agx_scanout.h"
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
@@ -20,8 +21,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_CREATEPAGINGQUEUE createPagingQueue = {0};
   D3DKMT_CREATECONTEXT createContext = {0};
   D3DKMT_CREATEALLOCATION createAllocation = {0};
-  D3DDDI_ALLOCATIONINFO allocationInfo = {0};
-  ADMISSION_ALLOCATION_DESCRIPTION allocation = {0};
+  D3DDDI_ALLOCATIONINFO allocationInfo[2] = {0};
+  ADMISSION_ALLOCATION_DESCRIPTION allocation[2] = {0};
   ADMISSION_UMD_COLOR_FILL_COMMAND command = {0};
   D3DKMT_RENDER render = {0};
   D3DKMT_ESCAPE escape = {0};
@@ -32,7 +33,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_DESTROYDEVICE destroyDevice = {0};
   D3DDDI_DESTROYPAGINGQUEUE destroyPagingQueue = {0};
   D3DKMT_CLOSEADAPTER closeAdapter = {0};
-  D3DKMT_HANDLE allocationHandle = 0;
+  D3DKMT_HANDLE allocationHandles[2] = {0};
   PFND3DKMT_ENUMADAPTERS3 enumAdapters3 = NULL;
   HMODULE gdiModule = NULL;
   ULONG selectedAdapter = MAX_ENUM_ADAPTERS;
@@ -40,7 +41,9 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG index;
   LUID selectedLuid = {0};
   ULONG selectedSources = 0u;
-  UINT residencyPriority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
+  UINT residencyPriority[2] = {
+      D3DDDI_ALLOCATIONPRIORITY_NORMAL,
+      D3DDDI_ALLOCATIONPRIORITY_NORMAL};
   NTSTATUS openStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS deviceStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS pagingQueueStatus = (NTSTATUS)0xc0000001L;
@@ -128,7 +131,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       createContext.pCommandBuffer == NULL ||
       createContext.CommandBufferSize < sizeof(command) ||
       createContext.pAllocationList == NULL ||
-      createContext.AllocationListSize < 1u ||
+      createContext.AllocationListSize < 2u ||
       createContext.pPatchLocationList == NULL)
     goto cleanup;
 
@@ -136,25 +139,36 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           APPLE_AGX_EXP208_GDI_WIDTH,
           APPLE_AGX_EXP208_GDI_HEIGHT, 4u,
           (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
-          (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation))
+          (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation[0]) ||
+      !AdmissionAllocationDescribe(
+          APPLE_AGX_SCANOUT_J313_WIDTH,
+          APPLE_AGX_SCANOUT_J313_HEIGHT, 4u,
+          (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
+          (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation[1]))
     goto cleanup;
-  allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE;
-  allocationInfo.pPrivateDriverData = &allocation;
-  allocationInfo.PrivateDriverDataSize = sizeof(allocation);
+  allocation[0].Reserved = ADMISSION_UMD_CORRELATION_COOKIE;
+  allocationInfo[0].pPrivateDriverData = &allocation[0];
+  allocationInfo[0].PrivateDriverDataSize = sizeof(allocation[0]);
+  allocationInfo[1].pPrivateDriverData = &allocation[1];
+  allocationInfo[1].PrivateDriverDataSize = sizeof(allocation[1]);
   createAllocation.hDevice = createDevice.hDevice;
-  createAllocation.NumAllocations = 1u;
-  createAllocation.pAllocationInfo = &allocationInfo;
+  createAllocation.NumAllocations = ARRAYSIZE(allocationInfo);
+  createAllocation.pAllocationInfo = allocationInfo;
   allocationStatus = D3DKMTCreateAllocation(&createAllocation);
-  if (!NT_SUCCESS(allocationStatus) || allocationInfo.hAllocation == 0u)
+  if (!NT_SUCCESS(allocationStatus) ||
+      allocationInfo[0].hAllocation == 0u ||
+      allocationInfo[1].hAllocation == 0u)
     goto cleanup;
-  allocationHandle = allocationInfo.hAllocation;
+  allocationHandles[0] = allocationInfo[0].hAllocation;
+  allocationHandles[1] = allocationInfo[1].hAllocation;
 
   makeResident.hPagingQueue = createPagingQueue.hPagingQueue;
-  makeResident.NumAllocations = 1u;
-  makeResident.AllocationList = &allocationHandle;
-  makeResident.PriorityList = &residencyPriority;
+  makeResident.NumAllocations = ARRAYSIZE(allocationHandles);
+  makeResident.AllocationList = allocationHandles;
+  makeResident.PriorityList = residencyPriority;
   residentStatus = D3DKMTMakeResident(&makeResident);
-  if (!NT_SUCCESS(residentStatus) || makeResident.NumAllocations != 1u)
+  if (!NT_SUCCESS(residentStatus) ||
+      makeResident.NumAllocations != ARRAYSIZE(allocationHandles))
     goto cleanup;
   {
     ULONGLONG deadline = GetTickCount64() + 15000u;
@@ -180,16 +194,18 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   command.Rop = AdmissionUmdRopPatCopy;
   CopyMemory(createContext.pCommandBuffer, &command, sizeof(command));
   ZeroMemory(createContext.pAllocationList,
-             sizeof(createContext.pAllocationList[0]));
-  createContext.pAllocationList[0].hAllocation = allocationHandle;
+             2u * sizeof(createContext.pAllocationList[0]));
+  createContext.pAllocationList[0].hAllocation = allocationHandles[0];
   createContext.pAllocationList[0].WriteOperation = 1u;
+  createContext.pAllocationList[1].hAllocation = allocationHandles[1];
+  createContext.pAllocationList[1].WriteOperation = 1u;
   ZeroMemory(createContext.pPatchLocationList,
              sizeof(createContext.pPatchLocationList[0]));
 
   render.hContext = createContext.hContext;
   render.CommandOffset = 0u;
   render.CommandLength = sizeof(command);
-  render.AllocationCount = 1u;
+  render.AllocationCount = ARRAYSIZE(allocationHandles);
   render.PatchLocationCount = 0u;
   wprintf(L"BUFFERS device_command=%p device_command_bytes=%u "
           L"device_allocations=%p device_allocation_count=%u "
@@ -232,10 +248,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   result = 0;
 
 cleanup:
-  if (allocationHandle != 0u) {
+  if (allocationHandles[0] != 0u) {
     destroy.hDevice = createDevice.hDevice;
-    destroy.phAllocationList = &allocationHandle;
-    destroy.AllocationCount = 1u;
+    destroy.phAllocationList = allocationHandles;
+    destroy.AllocationCount =
+        allocationHandles[1] != 0u ? 2u : 1u;
     destroy.Flags.AssumeNotInUse = 0;
     destroy.Flags.SynchronousDestroy = 1;
     destroyAllocationStatus = D3DKMTDestroyAllocation2(&destroy);

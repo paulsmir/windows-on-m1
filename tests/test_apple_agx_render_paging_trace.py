@@ -52,7 +52,7 @@ class PagingBuildTraceTests(unittest.TestCase):
         self.assertIn("normalized.Reserved = 0u", allocation)
         self.assertIn("PagingCorrelationArmed", allocation)
         self.assertIn("PagingCorrelationArmed", paging)
-        self.assertIn("allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE", producer)
+        self.assertIn("allocation[0].Reserved = ADMISSION_UMD_CORRELATION_COOKIE", producer)
 
 if __name__ == "__main__":
     unittest.main()
