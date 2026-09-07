@@ -1,5 +1,59 @@
 # Hardware Experiment Ledger
 
+## EXP561 exact provider-poll owner — preregistration 2026-09-07T11:15Z
+
+WHY THIS HYPOTHESIS:
+- EXP559 and EXP560 both leave TA physically consumed/active at rptr 2 but do
+  not write the existing 50-ms fault snapshot.
+- The worker checks elapsed time only after `AppleAgxPlatformProviderPoll`, so
+  absence of that snapshot means the first poll returned false before 50 ms.
+- KTrace is inactive and therefore cannot distinguish firmware internals; the
+  exact Windows poll guard is causally closer than any further TA-byte change.
+
+WINDOWS CONTRACT: the PASSIVE worker must drain bounded firmware events, read a
+monotonic clock, check the 500-ms queue deadline, and apply any timeout batch.
+AGX/ASAHI CONTRACT: no UAT, queue, work, firmware, MMIO or doorbell behavior
+changes. TRANSLATION: retain all existing return values and order while storing
+one of invalid(1), drain-events(2), clock(3), timeout-check(4),
+timeout-apply(5), or success(0), then emit only the failure tuple through the
+existing broker trace. WHAT IS STILL UNKNOWN: which exact guard returns false
+on the first hardware poll.
+
+Single variable: diagnostic-only `LastPollGuard` plus host word
+`0x561[guard:8][provider-phase:8][runtime-phase:16][fence:16]`. Implementation
+commit `f51b8b09dbe1c4a8f042b37677b0526db408de85`; ledger HEAD
+`b9beac6eeed04f34341255db452989785f1ed344`. Branch
+`feature/j313-gpu-acceleration`. Root tracked-diff SHA
+`9804463e525e87652b57f0cda7325bf04d32f500d7eeef5979eed9acda418827`;
+m1n1 `336d365ff8951e6ecd343d37f8c2fa4e15d94aa6` clean; Mu
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`, dirty-diff SHA
+`7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`.
+The candidate uses only the commit-pinned overlay, not unrelated dirty files.
+
+Exact RED then GREEN covers every existing poll failure and success; 356
+AppleAgx tests pass. Pinned WDK 10.0.26100.0 / MSVC 14.44.35207 build, analysis,
+Universal validation, Inf2Cat, signing, KMD/UMD and producer gates pass with
+only inherited C28251. Package version 30.0.561.0. Overlay/ZIP/SYS/INF/CAT/UMD/
+producer SHA:
+`a2211d7f7b92985203aeed8f6c6baf6ec4e656bd50a4b0cfc471ef190b06fc10` /
+`23fae2f743b579d68b6972491536b667d34564c37e3a92d5804582a7ff109e4e` /
+`a54ccafefee1d54efbe69426febe67b9e9fc34e5bbfc92c004fc4264ad686390` /
+`277d27ff8e95183184df9e825754b103e8a4941507bcdab7eb48fb7f4d8bd205` /
+`a45ea18043cd127888464d56202ebca1963a9874528b8f328ae670ab908de847` /
+`3aeffd86327a0dc356dca3f304f6d5c61b7c12133251b6f18b371f3ea57a76c3` /
+`bdd5404918d16a8b79e0404f869a8d96a706a78dfa8a85434ab4f5967f45288c`.
+Artifact `.local/experiments/EXP561-provider-poll-guard/EXP561.zip`.
+
+Hardware launch uses frozen full-owner m1n1
+`b970a7fee599f384031487b715dc575ceb9e5129d248c0f726fca45f1758e9c0`
+and Mu `c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+Stage command is exact hash-gated `stage.ps1`; launch is `launch.sh`; bind uses
+one `pnputil /scan-devices`; producer is the exact hash above. PASS is one
+`0x561` word naming the false guard. Failure is no producer/poll boundary or no
+trace. Collect host log and unchanged queue/buffer receipts first. Cleanup uses
+only hash-gated EXP561 package removal; ordinary377/392 is primary recovery,
+emergency377/385 (`fae3444c...` / `279bd36a...`) only if boot-bound. ANS untouched.
+
 ## EXP560 firmware KTrace tail — preregistration 2026-09-07T10:55Z
 
 WHY THIS HYPOTHESIS: EXP559 proves TA remains active after the corrected InitBM
