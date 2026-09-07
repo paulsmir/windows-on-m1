@@ -45,6 +45,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_FIRMWARE_IO FirmwareIo;
   APPLE_AGX_PLATFORM_TRANSPORT_IO TransportIo;
   APPLE_AGX_G13_QUEUE_RUNTIME_IO QueueIo;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      QueueObjects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
   APPLE_AGX_PLATFORM_PROVIDER Provider;
   APPLE_AGX_PLATFORM_PROVIDER_CONFIG ProviderConfig;
   APPLE_AGX_BACKEND_RUNTIME Backend;
@@ -64,6 +66,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_RENDER_CONTEXT *CompletionContext;
   BOOLEAN Powered;
   BOOLEAN RenderBorrowed;
+  BOOLEAN QueueImageReady;
   BOOLEAN ProviderReady;
   BOOLEAN BackendStarted;
 } ADMISSION_PLATFORM_RUNTIME;
@@ -1752,6 +1755,22 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata, status);
     goto Fail;
   }
+  if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
+          &runtime->Initdata.RenderSharedMemory,
+          Context->BackendImage.ArenaCpuAddress,
+          Context->BackendImage.ArenaBytes,
+          runtime->QueueObjects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) ||
+      !AppleAgxApplyRelocations(
+          runtime->QueueObjects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount())) {
+    status = STATUS_INVALID_IMAGE_FORMAT;
+    AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata, status);
+    goto Fail;
+  }
+  runtime->QueueImageReady = TRUE;
   AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata,
                                STATUS_SUCCESS);
 

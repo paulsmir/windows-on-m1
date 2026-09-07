@@ -7,6 +7,17 @@ RENDER = ROOT / "drivers" / "apple-agx" / "render-admission"
 
 
 class AppleAgxRenderPlatformTests(unittest.TestCase):
+    def test_external_render_materializes_firmware_queue_image_before_mapping(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        prepare = platform.index("AppleAgxInitdataMemoryPrepareBroker(")
+        bind = platform.index("AppleAgxRenderSharedMemoryBindRelocationObjects(", prepare)
+        relocate = platform.index("AppleAgxApplyRelocations(", bind)
+        firmware = platform.index("AppleAgxFirmwareProviderInitialize(", relocate)
+        self.assertLess(prepare, bind)
+        self.assertLess(bind, relocate)
+        self.assertLess(relocate, firmware)
+        self.assertIn("QueueImageReady", platform)
+
     def test_production_lifetime_uses_existing_external_image_provider(self):
         source = (RENDER / "src" / "backend_platform_windows.c").read_text()
         lifecycle = (RENDER / "src" / "lifecycle.c").read_text()
