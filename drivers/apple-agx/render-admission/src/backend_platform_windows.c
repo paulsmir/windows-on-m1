@@ -312,12 +312,14 @@ static BOOLEAN AdmissionCaptureKTrace(
 
 static BOOLEAN AdmissionCaptureQueueFaultSnapshot(
     ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONGLONG ElapsedMs,
-    ULONG TaRead, ULONG D3Read, ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot) {
+    ULONG TaRead, ULONG D3Read, BOOLEAN AllowEarly,
+    ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot) {
   const APPLE_AGX_MEMORY_OBJECT *regionB;
   const APPLE_AGX_MEMORY_OBJECT *regionC;
   if (Runtime == NULL || Runtime->SgxBase == NULL || Snapshot == NULL ||
       Fence == 0u ||
-      ElapsedMs < ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS)
+      (!AllowEarly &&
+       ElapsedMs < ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS))
     return FALSE;
   regionB = &Runtime->Initdata.RegionBMemory.Objects[
       AppleAgxRegionBMemoryFaultInfo];
@@ -1768,7 +1770,7 @@ static VOID AdmissionPlatformWorker(
               runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
               AdmissionCaptureQueueFaultSnapshot(
                   runtime, description.Fence, nowMs - queueSubmitMs,
-                  currentTaRead, currentD3Read, &snapshot)) {
+                  currentTaRead, currentD3Read, TRUE, &snapshot)) {
             AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
             faultSnapshotReported = TRUE;
           }
@@ -1828,7 +1830,7 @@ static VOID AdmissionPlatformWorker(
             runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
             AdmissionCaptureQueueFaultSnapshot(
                 runtime, description.Fence, nowMs - queueSubmitMs,
-                currentTaRead, currentD3Read, &snapshot)) {
+                currentTaRead, currentD3Read, FALSE, &snapshot)) {
           AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
           faultSnapshotReported = TRUE;
         }

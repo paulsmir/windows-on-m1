@@ -25,6 +25,9 @@ class QueueFaultSnapshotTests(unittest.TestCase):
         immediate = worker.index("AdmissionCaptureQueueFaultSnapshot(", failure)
         drain_trace = worker.index("AdmissionProviderDrainTraceWindows(", failure)
         self.assertLess(immediate, drain_trace)
+        self.assertIn("currentTaRead, currentD3Read, TRUE, &snapshot", worker)
+        self.assertIn("currentTaRead, currentD3Read, FALSE, &snapshot", worker)
+        self.assertIn("(!AllowEarly &&", worker)
 
 
 if __name__ == "__main__":
