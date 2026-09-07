@@ -480,16 +480,25 @@ submit and builds job roots from that table; exact RED/GREEN and122 regressions
 PASS. Pinned30.0.555.0 gates PASS; ZIP/SYS/producer SHA
 70ec0d03.../674bebb5.../9a9d5365.... EXP555 preregistered and changes only
 this graph-owner correction.
+EXP555 FINAL: heartbeat exact Pong; active roots moved exactly as predicted to
+TA ffffffa0003e0000/ffffffa0003f8000 and D3 ffffffa0003d0000/
+ffffffa0003f0000. Root ownership/address-space correction is HARDWARE PROVEN.
+No channel read/work progress followed; 58-ms RegionB/C fault words all zero,
+then116/C0000483/3. Receipt/fault/dump/host SHA9fa9e628.../52f1acf9.../
+3217064d.../69f14439.... Exact cleanup; ordinary health SHA5a1ea93a.... First
+unknown is now exact CommandQueueInfo/CommandQueuePointers contents/edges in the
+active shared graph. Next discriminator snapshots only those scalar fields and
+compares them with the EXP208 structure; no firmware/UAT/scheduler/display change.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T09:37Z after exact554 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T09:57Z after exact555 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA55e2176e2ef5e396219c81dd302aa6b450d5cee28ce94cb7160680f9b3d3c063.
+SHA5a1ea93ac98fbbb6a43142db0075ed1258d5309f120f6fcfbb785b875d3cc50c.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

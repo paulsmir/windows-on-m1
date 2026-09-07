@@ -1,5 +1,32 @@
 # Hardware Experiment Ledger
 
+## EXP555 active shared job graph — result 2026-09-07T09:57Z
+
+CONFIRMED active-graph correction; not yet functional queue execution. Exact
+30.0.555.0 ran once. Pre-submit heartbeat again returned exact endpoint0 Pong.
+The crash-durable queue receipt proves the four published roots moved from stale
+local `0x15038...` VAs to the intended active firmware context-0 graph:
+TA=`ffffffa0003e0000,ffffffa0003f8000`,
+D3=`ffffffa0003d0000,ffffffa0003f0000`. This is the first hardware proof that
+the production submission uses the same address-space class as EXP208. Receipt
+SHA `9fa9e628bd37a7034cbf4547f2b35cff67fa83a6edf5d0d6aa662d46aa3baa1b`.
+
+Firmware still left both command-channel read pointers at0 and no `0x5420`
+progress appeared; Windows again ended in116/C0000483/3. The 58-ms fault
+snapshot SHA `52f1acf9c54f91d31f64dc7252aebb113bde89ed3a8b3b528e1818fa09d93ac2`
+differs from EXP554 only in elapsed time; all RegionB/C fault words remain zero.
+Dump/host SHA `3217064d33ac7e628ddcdb18aa31ab6b623d8273fd2682571a1af30338e842b2` /
+`69f144397627954ef3f72a94b9bd7ab382303357728b3edf908ff831de0e67c5`.
+Therefore root ownership is closed and the first unknown narrows to the exact
+firmware-visible CommandQueueInfo/CommandQueuePointers contents and their edges.
+
+Exact emergency cleanup removed oem5/devnode/service/SYS/UMD. Final ordinary
+377/392 is Code28, no package/service/files, 8 CPUs and healthy platform;
+health SHA `5a1ea93ac98fbbb6a43142db0075ed1258d5309f120f6fcfbb785b875d3cc50c`.
+Next experiment must snapshot only the active queue-info/pointer scalar contract
+and compare it against the rebased EXP208 structure before any new behavioral
+change.
+
 ## EXP555 active shared job graph — preregistration 2026-09-07T09:42Z
 
 WHY THIS HYPOTHESIS: EXP554 proves exact RTKit Pong at submit time yet no queue
