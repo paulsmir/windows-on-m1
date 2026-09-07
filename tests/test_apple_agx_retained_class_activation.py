@@ -7,16 +7,15 @@ SOURCE = ROOT / "drivers/apple-agx/render-admission/src/backend_platform_windows
 
 
 class RetainedClassActivationTests(unittest.TestCase):
-    def test_class_arenas_are_adopted_before_the_only_graph_map(self):
+    def test_command_arena_is_adopted_before_the_only_graph_map(self):
         source = SOURCE.read_text()
         start = source.index("static unsigned char AdmissionRetainedActivate(")
         end = source.index("static unsigned char AdmissionFirmwareCreateUat(", start)
         body = source[start:end]
         ordered = (
             "AGX_RR_ACTIVATE",
-            "AGX_RR_ARENA_SHARED",
-            "AGX_RR_ARENA_TIMESTAMP",
-            "AppleAgxInitdataMemoryApplyRenderArenas",
+            "AGX_RR_ARENA_COMMAND",
+            "AppleAgxInitdataMemoryApplyCommandArena",
             "AppleAgxRenderSharedMemoryBindRelocationObjects",
             "AppleAgxApplyRelocations",
             "AppleAgxContext0BrokerMap",
@@ -25,6 +24,8 @@ class RetainedClassActivationTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertEqual(body.count("AppleAgxContext0BrokerMap("), 1)
         self.assertNotIn("AppleAgxUatMap(", body)
+        self.assertNotIn("AGX_RR_ARENA_SHARED", body)
+        self.assertNotIn("AGX_RR_ARENA_TIMESTAMP", body)
 
     def test_query_validates_exact_version_class_and_broker_range(self):
         source = SOURCE.read_text()
@@ -43,6 +44,7 @@ class RetainedClassActivationTests(unittest.TestCase):
             self.assertIn(token, body)
         self.assertIn("request.Va = ArenaClass", body)
         self.assertIn("request.Epoch = runtime->RetainedEpoch", body)
+        self.assertIn("AGX_RR_ARENA_COMMAND", body)
 
 
 if __name__ == "__main__":

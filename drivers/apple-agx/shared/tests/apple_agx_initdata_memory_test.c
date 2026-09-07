@@ -432,7 +432,9 @@ int main(void) {
     APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
     APPLE_AGX_CONFIG_SNAPSHOT snapshot=physical_snapshot();
     unsigned i; unsigned long long leaves=0;
-    unsigned long long original_vas[20];
+    unsigned long long original_vas[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+    const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts=
+        AppleAgxRenderTemplateObjectLayouts();
     init_fixture(&fake,&io,&graph);
     assert(AppleAgxInitdataMemoryPrepareBroker(&graph,&io,&snapshot)==0);
     assert(fake.AllocateCount==89 && graph.DataObjectCount==7);
@@ -444,17 +446,15 @@ int main(void) {
            J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA);
     assert(graph.UatMappings[89].Protection ==
            AppleAgxUatFirmwareGpuSharedReadWrite);
-    for(i=0;i<20;++i)
+    for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i)
       original_vas[i]=graph.RenderSharedMemory.VirtualAddresses[i];
-    assert(AppleAgxInitdataMemoryApplyRenderArenas(
-        &graph,AGX_RR_SHARED_ARENA_VA,APPLE_AGX_MEMORY_PAGE_SIZE,
-        AGX_RR_TIMESTAMP_ARENA_VA,AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+    assert(AppleAgxInitdataMemoryApplyCommandArena(
+        &graph,AGX_RR_COMMAND_ARENA_VA,APPLE_AGX_MEMORY_PAGE_SIZE) ==
         AppleAgxInitdataMemoryResultInvalidArgument);
-    for(i=0;i<20;++i)
+    for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i)
       assert(graph.RenderSharedMemory.VirtualAddresses[i]==original_vas[i]);
-    assert(AppleAgxInitdataMemoryApplyRenderArenas(
-        &graph,AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES,
-        AGX_RR_TIMESTAMP_ARENA_VA,AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+    assert(AppleAgxInitdataMemoryApplyCommandArena(
+        &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultOk);
     for(i=0;i<graph.Inventory.MappingCount;++i) {
       assert(graph.MappingObjects[i]);
@@ -468,21 +468,16 @@ int main(void) {
       }
       leaves+=graph.UatMappings[i].Length/0x4000;
     }
-    for(i=0;i<20;++i)
-      assert(graph.RenderSharedMemory.VirtualAddresses[i]==original_vas[i]);
-    for(i=20;i<32;++i)
-      assert(graph.RenderSharedMemory.VirtualAddresses[i]>=
-             AGX_RR_SHARED_ARENA_VA &&
-             graph.RenderSharedMemory.VirtualAddresses[i]<
-             AGX_RR_SHARED_ARENA_VA+AGX_RR_SHARED_ARENA_BYTES);
-    for(i=32;i<36;++i)
-      assert(graph.RenderSharedMemory.VirtualAddresses[i]>=
-             AGX_RR_TIMESTAMP_ARENA_VA &&
-             graph.RenderSharedMemory.VirtualAddresses[i]<
-             AGX_RR_TIMESTAMP_ARENA_VA+AGX_RR_TIMESTAMP_ARENA_BYTES);
-    assert(AppleAgxInitdataMemoryApplyRenderArenas(
-        &graph,AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES,
-        AGX_RR_TIMESTAMP_ARENA_VA,AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+    for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i) {
+      if(i==18u || i==19u)
+        assert(graph.RenderSharedMemory.VirtualAddresses[i]+
+               graph.RenderSharedMemory.ObjectOffsets[i] ==
+               layouts[i].OriginalGpuVa+0x01000000ULL);
+      else
+        assert(graph.RenderSharedMemory.VirtualAddresses[i]==original_vas[i]);
+    }
+    assert(AppleAgxInitdataMemoryApplyCommandArena(
+        &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultInvalidArgument);
     assert(leaves==200);
     graph.BrokerOutstanding=1;

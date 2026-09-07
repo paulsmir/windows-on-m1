@@ -9,6 +9,8 @@
 #define RENDER_SHARED_NATIVE_SHARED_END 0xffffffa060000000ULL
 #define RENDER_SHARED_NATIVE_TIMESTAMP_BASE 0xffffffa071000000ULL
 #define RENDER_SHARED_NATIVE_TIMESTAMP_END 0xffffffa075000000ULL
+#define RENDER_SHARED_NATIVE_COMMAND_BASE 0xffffffa020000000ULL
+#define RENDER_SHARED_NATIVE_COMMAND_END 0xffffffa040000000ULL
 
 static APPLE_AGX_U64 align_up(APPLE_AGX_U64 Value,
                               APPLE_AGX_U64 Alignment) {
@@ -157,6 +159,36 @@ AppleAgxRenderSharedMemoryApplyClassArenas(
         return AppleAgxRenderSharedMemoryResultInvalidArgument;
     }
   }
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index)
+    Owner->VirtualAddresses[index] = proposed[index];
+  Owner->ClassArenasApplied = APPLE_AGX_TRUE;
+  Owner->LastResult = AppleAgxRenderSharedMemoryResultOk;
+  return Owner->LastResult;
+}
+
+APPLE_AGX_RENDER_SHARED_MEMORY_RESULT
+AppleAgxRenderSharedMemoryApplyCommandArena(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U64 CommandVa, APPLE_AGX_U64 CommandBytes) {
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  APPLE_AGX_U64 proposed[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+  APPLE_AGX_U32 index;
+  if (Owner == RENDER_SHARED_NULL || !Owner->Initialized || !Owner->Built ||
+      Owner->ClassArenasApplied ||
+      Owner->ObjectCount != APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT ||
+      !arena_valid(CommandVa, CommandBytes, RENDER_SHARED_NATIVE_COMMAND_BASE,
+                   RENDER_SHARED_NATIVE_COMMAND_END) ||
+      CommandVa > ~0ULL - CommandBytes)
+    return AppleAgxRenderSharedMemoryResultInvalidArgument;
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index)
+    proposed[index] = Owner->VirtualAddresses[index];
+  if (!place_class(Owner, layouts, RENDER_SHARED_NATIVE_COMMAND_BASE,
+                   RENDER_SHARED_NATIVE_COMMAND_END, CommandVa, CommandBytes,
+                   proposed))
+    return AppleAgxRenderSharedMemoryResultInvalidArgument;
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index)
     Owner->VirtualAddresses[index] = proposed[index];

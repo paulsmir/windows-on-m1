@@ -38,6 +38,10 @@ AppleAgxRenderSharedMemoryApplyClassArenas(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     APPLE_AGX_U64 SharedVa, APPLE_AGX_U64 SharedBytes,
     APPLE_AGX_U64 TimestampVa, APPLE_AGX_U64 TimestampBytes);
+APPLE_AGX_RENDER_SHARED_MEMORY_RESULT
+AppleAgxRenderSharedMemoryApplyCommandArena(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U64 CommandVa, APPLE_AGX_U64 CommandBytes);
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,

@@ -422,6 +422,51 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyRenderArenas(
   return AppleAgxInitdataMemoryResultOk;
 }
 
+APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyCommandArena(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    unsigned long long CommandVa, unsigned long long CommandBytes) {
+  unsigned int mapping_indexes[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+  unsigned int mapping, object;
+  if (!Graph || !Graph->Initialized || !Graph->Built || !Graph->BrokerOnly ||
+      Graph->MappingsReady || Graph->BrokerOutstanding ||
+      Graph->Inventory.MappingCount != 90u ||
+      Graph->RenderSharedMemory.ClassArenasApplied)
+    return AppleAgxInitdataMemoryResultInvalidArgument;
+  for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++object)
+    mapping_indexes[object] = ~0u;
+  for (mapping = 0u; mapping < Graph->Inventory.MappingCount; ++mapping) {
+    for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+         ++object) {
+      if (Graph->MappingObjects[mapping] !=
+          &Graph->RenderSharedMemory.Objects[object])
+        continue;
+      if (mapping_indexes[object] != ~0u ||
+          Graph->UatMappings[mapping].VirtualAddress !=
+              Graph->RenderSharedMemory.VirtualAddresses[object] ||
+          Graph->UatMappings[mapping].PhysicalAddress !=
+              Graph->RenderSharedMemory.Objects[object].DeviceAddress ||
+          Graph->UatMappings[mapping].Length !=
+              Graph->RenderSharedMemory.Objects[object].Length)
+        return AppleAgxInitdataMemoryResultInvalidArgument;
+      mapping_indexes[object] = mapping;
+    }
+  }
+  for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++object)
+    if (mapping_indexes[object] == ~0u)
+      return AppleAgxInitdataMemoryResultInvalidArgument;
+  if (AppleAgxRenderSharedMemoryApplyCommandArena(
+          &Graph->RenderSharedMemory, CommandVa, CommandBytes) !=
+      AppleAgxRenderSharedMemoryResultOk)
+    return AppleAgxInitdataMemoryResultInvalidArgument;
+  for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++object)
+    Graph->UatMappings[mapping_indexes[object]].VirtualAddress =
+        Graph->RenderSharedMemory.VirtualAddresses[object];
+  return AppleAgxInitdataMemoryResultOk;
+}
+
 #ifndef APPLE_AGX_FULL_CONTEXT0_BROKER
 static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryMapPrepared(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph) {
