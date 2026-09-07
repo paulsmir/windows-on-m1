@@ -128,7 +128,26 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("ADMISSION_ALLOCATION_DESCRIPTION allocation[2]", producer)
         self.assertIn("APPLE_AGX_SCANOUT_J313_WIDTH", producer)
         self.assertIn("APPLE_AGX_SCANOUT_J313_HEIGHT", producer)
-        self.assertIn("createAllocation.NumAllocations = ARRAYSIZE(allocationInfo)", producer)
+        self.assertEqual(
+            producer.count("D3DKMTCreateAllocation(&createAllocation)"),
+            2,
+        )
+        self.assertEqual(
+            producer.count("createAllocation.NumAllocations = 1u"),
+            2,
+        )
+        self.assertIn(
+            "createAllocation.pAllocationInfo = &allocationInfo[0]",
+            producer,
+        )
+        self.assertIn(
+            "createAllocation.pAllocationInfo = &allocationInfo[1]",
+            producer,
+        )
+        self.assertNotIn(
+            "createAllocation.NumAllocations = ARRAYSIZE(allocationInfo)",
+            producer,
+        )
         self.assertIn("makeResident.NumAllocations = ARRAYSIZE(allocationHandles)", producer)
         self.assertIn("render.AllocationCount = ARRAYSIZE(allocationHandles)", producer)
         self.assertIn("createContext.pAllocationList[1].WriteOperation = 1u", producer)

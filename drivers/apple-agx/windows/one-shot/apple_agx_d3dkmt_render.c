@@ -49,6 +49,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS pagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS contextStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS allocationStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS destinationAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS residentStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS renderStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS resetStatus = (NTSTATUS)0xc0000001L;
@@ -152,14 +153,21 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   allocationInfo[1].pPrivateDriverData = &allocation[1];
   allocationInfo[1].PrivateDriverDataSize = sizeof(allocation[1]);
   createAllocation.hDevice = createDevice.hDevice;
-  createAllocation.NumAllocations = ARRAYSIZE(allocationInfo);
-  createAllocation.pAllocationInfo = allocationInfo;
+  createAllocation.NumAllocations = 1u;
+  createAllocation.pAllocationInfo = &allocationInfo[0];
   allocationStatus = D3DKMTCreateAllocation(&createAllocation);
-  if (!NT_SUCCESS(allocationStatus) ||
-      allocationInfo[0].hAllocation == 0u ||
-      allocationInfo[1].hAllocation == 0u)
+  if (!NT_SUCCESS(allocationStatus) || allocationInfo[0].hAllocation == 0u)
     goto cleanup;
   allocationHandles[0] = allocationInfo[0].hAllocation;
+
+  ZeroMemory(&createAllocation, sizeof(createAllocation));
+  createAllocation.hDevice = createDevice.hDevice;
+  createAllocation.NumAllocations = 1u;
+  createAllocation.pAllocationInfo = &allocationInfo[1];
+  destinationAllocationStatus = D3DKMTCreateAllocation(&createAllocation);
+  if (!NT_SUCCESS(destinationAllocationStatus) ||
+      allocationInfo[1].hAllocation == 0u)
+    goto cleanup;
   allocationHandles[1] = allocationInfo[1].hAllocation;
 
   makeResident.hPagingQueue = createPagingQueue.hPagingQueue;
@@ -291,6 +299,7 @@ cleanup:
           L"\"open\":\"0x%08lx\",\"device\":\"0x%08lx\","
           L"\"paging_queue\":\"0x%08lx\","
           L"\"context\":\"0x%08lx\",\"allocation\":\"0x%08lx\","
+          L"\"destination_allocation\":\"0x%08lx\","
           L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
           L"\"engine_tdr\":\"0x%08lx\","
@@ -303,6 +312,7 @@ cleanup:
           selectedLuid.HighPart, selectedLuid.LowPart, selectedSources,
           (ULONG)openStatus, (ULONG)deviceStatus, (ULONG)pagingQueueStatus,
           (ULONG)contextStatus, (ULONG)allocationStatus,
+          (ULONG)destinationAllocationStatus,
           (ULONG)residentStatus, makeResident.PagingFenceValue,
           (ULONG)renderStatus, render.QueuedBufferCount,
           (ULONG)resetStatus,
