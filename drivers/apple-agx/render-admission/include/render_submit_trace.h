@@ -12,6 +12,7 @@
 #define ADMISSION_PREPATCH_ADOPT_GUARD_TAG 0x5350000000000000ULL
 #define ADMISSION_SUBMIT_PACKET_GUARD_TAG 0x5390000000000000ULL
 #define ADMISSION_BACKEND_SUBMIT_RESULT_TAG 0x5410000000000000ULL
+#define ADMISSION_BACKEND_PROGRESS_TAG 0x5420000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -309,6 +310,14 @@ static inline unsigned long long AdmissionBackendSubmitResultWord(
       ((unsigned long long)(Result & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
       (unsigned long long)Phase;
+}
+
+static inline unsigned long long AdmissionBackendProgressWord(
+    unsigned int Flags, unsigned int Fence) {
+  return ADMISSION_BACKEND_PROGRESS_TAG |
+      ((unsigned long long)(Flags & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
+       << ADMISSION_SUBMIT_TRACE_FIELD_SHIFT) |
+      (unsigned long long)Fence;
 }
 
 static inline unsigned int AdmissionSubmitTraceField(unsigned long long Word) {

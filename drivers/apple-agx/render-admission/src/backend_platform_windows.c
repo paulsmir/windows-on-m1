@@ -1363,8 +1363,9 @@ static VOID AdmissionPlatformWorker(
   submission.DmaSubmissionStart = description.DmaStart;
   submission.DmaSubmissionEnd = description.DmaEnd;
   result = AppleAgxBackendRuntimeSubmit(&runtime->Backend, &submission);
-  AdmissionBackendSubmitResultWindows(
-      adapter, (ULONG)result, (ULONG)runtime->Backend.Phase);
+  if (result != AppleAgxBackendRuntimeResultOk)
+    AdmissionBackendSubmitResultWindows(
+        adapter, (ULONG)result, (ULONG)runtime->Backend.Phase);
   AdmissionGdiReceiptBackendWindows(adapter, description.Fence, (ULONG)result,
       result == AppleAgxBackendRuntimeResultOk
           ? &runtime->Backend.PendingJob : NULL);
@@ -1403,6 +1404,7 @@ static VOID AdmissionPlatformWorker(
           (!runtime->ProgressValid ||
            AppleAgxG13QueueProgressHasAdvanced(
                &runtime->Progress, &current))) {
+        AdmissionBackendProgressWindows(adapter, &current);
         runtime->Progress = current;
         runtime->ProgressValid = TRUE;
         InterlockedExchange64(

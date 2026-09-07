@@ -463,6 +463,8 @@ VOID AdmissionSubmitPacketGuardWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Guard, NTSTATUS Status);
 VOID AdmissionBackendSubmitResultWindows(_In_opt_ ADMISSION_CONTEXT *Context,
     ULONG Result, ULONG Phase);
+VOID AdmissionBackendProgressWindows(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const APPLE_AGX_G13_QUEUE_PROGRESS *Progress);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -524,6 +526,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Context);                                                           \
     (void)(Result);                                                            \
     (void)(Phase);                                                             \
+  } while (0)
+#define AdmissionBackendProgressWindows(Context, Progress)                     \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Progress);                                                          \
   } while (0)
 #define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
 #define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)

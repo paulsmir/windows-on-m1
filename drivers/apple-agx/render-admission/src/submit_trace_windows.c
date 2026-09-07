@@ -112,6 +112,29 @@ _Use_decl_annotations_ VOID AdmissionBackendSubmitResultWindows(
   WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
 }
 
+_Use_decl_annotations_ VOID AdmissionBackendProgressWindows(
+    ADMISSION_CONTEXT *Context,
+    const APPLE_AGX_G13_QUEUE_PROGRESS *Progress) {
+  volatile ULONG64 *request;
+  volatile ULONG *command;
+  ULONG flags;
+  if (Context == NULL || Context->BrokerBase == NULL || Progress == NULL)
+    return;
+  flags = ((ULONG)Progress->ProviderPhase & 0xfu) |
+      (((ULONG)Progress->RuntimePhase & 0xfu) << 4u) |
+      ((Progress->TaEventSeen ? 1u : 0u) << 8u) |
+      ((Progress->TaComplete ? 1u : 0u) << 9u) |
+      ((Progress->D3EventSeen ? 1u : 0u) << 10u) |
+      ((Progress->D3Complete ? 1u : 0u) << 11u);
+  request = (volatile ULONG64 *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_REQUEST_SEQUENCE);
+  command = (volatile ULONG *)(Context->BrokerBase +
+      J313_AGX_G2_POWER_REG_COMMAND);
+  WRITE_REGISTER_ULONG64(request,
+      AdmissionBackendProgressWord(flags, Progress->Fence));
+  WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
+}
+
 static VOID AdmissionSubmitTraceU64(
     _In_ ADMISSION_CONTEXT *Context, _In_ ULONG LowField,
     _In_ ULONGLONG Value) {
