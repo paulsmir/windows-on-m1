@@ -1,5 +1,68 @@
 # Hardware Experiment Ledger
 
+## EXP546 delayed command-channel consumption — preregistration 2026-09-07T07:26Z
+
+WHY THIS HYPOTHESIS:
+- EXP545 restored Code0 and correctly materialized shared stamp baselines, but
+  produced no TA/3D done/stamp/event progress tag before reset.
+- The 288-byte receipt samples channel read pointers immediately after Submit;
+  its read0 values cannot prove whether firmware consumed the messages later.
+- The existing PASSIVE polling loop already runs until the same 500-ms
+  boundary, so a host-visible tag only when either command-channel read pointer
+  changes is the smallest discriminator and changes no queue state.
+
+WINDOWS CONTRACT: unchanged exact producer and fence255.
+
+AGX/ASAHI CONTRACT: firmware consumption of a 0x30-byte run message advances
+the corresponding ChannelState READ_PTR after the producer published WRITE_PTR
+and rang the exact group-1 doorbell.
+
+TRANSLATION: remember the immediate TA/D3 READ_PTR values from the existing
+receipt and, after each unchanged provider poll, read both state words through
+the existing transport accessor. Emit one `0x5460` broker word only on a real
+change; payload contains TA read, D3 read and fence.
+
+WHAT IS STILL UNKNOWN: whether firmware consumes either command-channel entry
+before work-queue execution stalls.
+
+Single receipt-only commit `cbfd370de0bf53367999043334145d1492d9cb6c`.
+The trace wiring was RED then GREEN; 109 render regressions pass. Pinned
+WDK10.0.26100.0/MSVC14.44.35207 package30.0.546.0 analysis, Universal,
+Inf2Cat, signing and version gates pass with inherited C28251. Overlay SHA-256
+`8b13602f216f3c9312b10c51320a9eca927692d6ed4797b9a330235692aaec01`.
+ZIP/SYS/INF/CAT/UMD/producer SHA-256:
+`28df56b5e7c3f16de1c290aa71a03048baaefb92217cafd1320438b5920f76b1` /
+`7a0300ef58207207ff07e18ce388d1ac32caa4217b206c250ea62ef5b5d4c507` /
+`65d4725b30298b31398af71a5479b9d353ea81e59a534049ed0d125dfaddaa65` /
+`7c45b8fd4d64bea70a271c0ddc053ade9ad13ca0627f354f376b7c127cd6507a` /
+`3233bbf089b897cd2acc50d9b20be7ffae2a60b7a9fb30bd2bb1e6895e3673c5` /
+`8871366d9c8cc5a9f9913a07b8f50f9ef0fc724374df5754060ddb4ac8bac630`.
+Clean ordinary health SHA-256
+`68d57556113b751ccd1e8c1a42f23273d9cde69e31c6dfea627d33437dcdaca1`.
+One natural bind/producer. Presence of0x5460 proves channel consumption; absence
+before reset localizes the stall at/before firmware channel ingestion. Exact
+cleanup and ordinary recovery follow either result.
+
+## EXP545 seed complete queue relocation set — result 2026-09-07T07:25Z
+
+CONFIRMED offline correction and StartDevice recovery; physical execution still
+rejected. Exact30.0.545.0 bound Code0/service Running and one producer reached
+the backend, then reset without any `0x5420` work-progress tag. The immediate
+queue receipt SHA-256
+`669b4fbd1d5c54609d9c035f8c7980ba57eed863bc151e1b041e1de0ec0a2b3b`
+retains the exact EXP543 messages/addresses/pointers but now shows shared queue
+stamp baselines TA `0x7a000000` and 3D `0x3d000000`, proving the complete-set
+materialization actually executed. Host log SHA-256
+`aa2d99dc34f6d813223522a607364716839264abebeec0aa24b2fb4f63d3a2f5`.
+
+Correction to prior interpretation: the receipt's channel read0/write1 snapshot
+is immediate, not a late sample. It does not by itself prove that firmware
+never consumed the message during the subsequent polling window. No physical
+TA/3D or fence completion is claimed. Exact package/service/SYS/UMD cleanup and
+ordinary restoration completed; health SHA-256
+`68d57556113b751ccd1e8c1a42f23273d9cde69e31c6dfea627d33437dcdaca1`
+proves Code28/null INF/service, no package/files,8 CPUs,SSH and healthy platform.
+
 ## EXP545 seed complete queue relocation set — preregistration 2026-09-07T07:14Z
 
 WHY THIS HYPOTHESIS:
