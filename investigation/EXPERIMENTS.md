@@ -35009,3 +35009,27 @@ Overlay/workflow/launch SHA-256 are
 and `48dacbe80aa1196f2d3dc929aac78a64bca73351da5a98c1447f2935a5bca1f1`.
 Full-owner m1n1/Mu hashes remain the preregistered values. Ordinary preflight
 must again prove Code28/zero package/service/module/8CPU before staging.
+
+**EXP576 FINAL 2026-09-07T16:34Z — REJECTED; exact recovery complete.** Exact
+30.0.576.0 reached Code0/Running and one Windows producer. Host receipts prove
+the requested biased mappings (`A041924000...A041c10000` and A071) were live.
+The hardware result is nevertheless byte-equivalent to EXP575 at the causal
+boundary: TA read0, private/shared stamps at base, all timestamp targets zero,
+event0/0, pending stamps zero, D3 unstarted and SGX/RegionB/C fault records zero,
+followed by 0x116 `(ffff9c0a99b9c3e0, fffff8015c086f10, c0000483, 3)`.
+Relative A040/A071 geometry is rejected and must not be repeated. Host/evidence
+SHA-256 are `fd05d4c204f888012867ded8bae22f633f20da1608a98b994902af0e74b737f3`
+and `397b70932fb080f164ec7e64f3ab1d2e32c364b68427b90a7d6261801c4cb983`.
+Emergency recovery preserved the minidump and receipts; exact oem5/devnode/
+service/files were removed. Ordinary377/392 is Code28, zero AGX package/service/
+module, 8CPU, NVMe2/USB5/keyboard1 and no fresh fault event in its health window.
+
+Anti-loop comparison after two focused failures: native `GPURenderer` allocates
+objects18/19 `WorkCommand3D/TA` through the A020 `cmdbuf` allocator. EXP574's
+rebased A000 WorkCommand executes through FinalizeTA/End but is not retired;
+A040/A071 movement is causally earlier and harmful. The next minimal hypothesis
+is therefore command-object allocator identity: restore the EXP574 all-A000
+shared/timestamp layout and map only objects18/19 in a free broker-owned A020
+arena with a nonzero bias. Exact original A020 addresses remain forbidden and
+were already observed colliding in EXP549. This requires extending the approved
+arena-class list to A020 before implementation or hardware.

@@ -682,6 +682,16 @@ broker arenas. Five focused and369 relevant tests are GREEN. EXP576 is
 preregistered; next is pinned build/sign/hash and one hardware run. No m1n1/Mu
 or other subsystem change.
 
+EXP576 FINAL: biased A040/A071 mappings were hardware-live but TA still read0,
+stamps/timestamps0 and faults0 before0x116. REJECTED; do not repeat. Exact
+cleanup and ordinary Code28/8CPU baseline restored. Anti-loop exact comparison
+identifies the next causal owner: native objects18/19 WorkCommand3D/TA belong to
+the A020 cmdbuf allocator. EXP574 all-A000 reached FinalizeTA/End but could not
+retire; later A040/A071 moves only regress ingress. Proposed next candidate:
+restore EXP574 layout and move only18/19 into a bounded free biased A020 broker
+arena. This is outside the currently enumerated A000/A040/A071 approval and
+requires one narrow architecture authorization before source change.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
