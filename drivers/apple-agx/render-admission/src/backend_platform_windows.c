@@ -5,6 +5,8 @@
 #define ADMISSION_PLATFORM_TAG 'pRGA'
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
+#define ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS 50ULL
+#define ADMISSION_REGIONC_FAULT_INFO_OFFSET 0x11a2cu
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
@@ -181,6 +183,39 @@ static BOOLEAN AdmissionCaptureQueueSubmission(
       channels->D3.RingCpuAddress +
           d3MessageIndex * APPLE_AGX_G13_RUN_MESSAGE_SIZE,
       sizeof(Receipt->D3RunMessage));
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureQueueFaultSnapshot(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONGLONG ElapsedMs,
+    ULONG TaRead, ULONG D3Read, ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot) {
+  const APPLE_AGX_MEMORY_OBJECT *regionB;
+  const APPLE_AGX_MEMORY_OBJECT *regionC;
+  if (Runtime == NULL || Snapshot == NULL || Fence == 0u ||
+      ElapsedMs < ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS)
+    return FALSE;
+  regionB = &Runtime->Initdata.RegionBMemory.Objects[
+      AppleAgxRegionBMemoryFaultInfo];
+  regionC = &Runtime->Initdata.DataObjects[AppleAgxInitdataMemoryRegionC];
+  if (regionB->CpuAddress == NULL ||
+      regionB->Length < sizeof(Snapshot->RegionBFault) ||
+      regionC->CpuAddress == NULL ||
+      ADMISSION_REGIONC_FAULT_INFO_OFFSET > regionC->Length ||
+      sizeof(Snapshot->RegionCFault) >
+          regionC->Length - ADMISSION_REGIONC_FAULT_INFO_OFFSET)
+    return FALSE;
+  RtlZeroMemory(Snapshot, sizeof(*Snapshot));
+  Snapshot->Version = ADMISSION_QUEUE_FAULT_SNAPSHOT_VERSION;
+  Snapshot->Bytes = sizeof(*Snapshot);
+  Snapshot->Fence = Fence;
+  Snapshot->ElapsedMs = ElapsedMs > MAXULONG ? MAXULONG : (ULONG)ElapsedMs;
+  Snapshot->TaChannelReadPointer = TaRead;
+  Snapshot->D3ChannelReadPointer = D3Read;
+  RtlCopyMemory(Snapshot->RegionBFault, regionB->CpuAddress,
+                sizeof(Snapshot->RegionBFault));
+  RtlCopyMemory(Snapshot->RegionCFault,
+      (const UCHAR *)regionC->CpuAddress + ADMISSION_REGIONC_FAULT_INFO_OFFSET,
+      sizeof(Snapshot->RegionCFault));
   return TRUE;
 }
 #endif
@@ -1415,8 +1450,10 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN finalProgressValid = FALSE;
   BOOLEAN channelBaselineValid = FALSE;
   BOOLEAN channelProgressReported = FALSE;
+  BOOLEAN faultSnapshotReported = FALSE;
   ULONG initialTaChannelRead = 0u;
   ULONG initialD3ChannelRead = 0u;
+  ULONGLONG queueSubmitMs = 0ULL;
 #endif
   KIRQL old_irql;
 
@@ -1506,6 +1543,9 @@ static VOID AdmissionPlatformWorker(
 #endif
   InterlockedExchange64(
       &runtime->LastProgressMs, (LONG64)AdmissionPlatformNowMs());
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  queueSubmitMs = AdmissionPlatformNowMs();
+#endif
 
   while (runtime->Backend.Phase == AppleAgxBackendRuntimeSubmitted &&
          InterlockedCompareExchange(&runtime->Stopping, 0, 0) == 0 &&
@@ -1541,6 +1581,30 @@ static VOID AdmissionPlatformWorker(
         AdmissionBackendChannelProgressWindows(
             adapter, currentTaRead, currentD3Read, description.Fence);
         channelProgressReported = TRUE;
+      }
+    }
+    if (!faultSnapshotReported) {
+      ULONGLONG nowMs = AdmissionPlatformNowMs();
+      if (nowMs >= queueSubmitMs + ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS) {
+        volatile APPLE_AGX_BACKEND_U32 *taRead =
+            (volatile APPLE_AGX_BACKEND_U32 *)(
+                runtime->Provider.Channels.Ta.StateCpuAddress +
+                APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+        volatile APPLE_AGX_BACKEND_U32 *d3Read =
+            (volatile APPLE_AGX_BACKEND_U32 *)(
+                runtime->Provider.Channels.D3.StateCpuAddress +
+                APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+        APPLE_AGX_BACKEND_U32 currentTaRead;
+        APPLE_AGX_BACKEND_U32 currentD3Read;
+        ADMISSION_QUEUE_FAULT_SNAPSHOT snapshot;
+        if (runtime->TransportIo.ReadU32(runtime, taRead, &currentTaRead) &&
+            runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
+            AdmissionCaptureQueueFaultSnapshot(
+                runtime, description.Fence, nowMs - queueSubmitMs,
+                currentTaRead, currentD3Read, &snapshot)) {
+          AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
+          faultSnapshotReported = TRUE;
+        }
       }
     }
 #endif

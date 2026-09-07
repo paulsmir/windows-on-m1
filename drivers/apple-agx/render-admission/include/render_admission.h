@@ -187,6 +187,20 @@ typedef struct _ADMISSION_QUEUE_SUBMISSION_RECEIPT {
   UCHAR D3RunMessage[APPLE_AGX_G13_RUN_MESSAGE_SIZE];
 } ADMISSION_QUEUE_SUBMISSION_RECEIPT;
 
+#define ADMISSION_QUEUE_FAULT_SNAPSHOT_VERSION 1u
+#define ADMISSION_QUEUE_FAULT_REGIONB_WORDS 32u
+#define ADMISSION_QUEUE_FAULT_REGIONC_WORDS 6u
+typedef struct _ADMISSION_QUEUE_FAULT_SNAPSHOT {
+  ULONG Version;
+  ULONG Bytes;
+  ULONG Fence;
+  ULONG ElapsedMs;
+  ULONG TaChannelReadPointer;
+  ULONG D3ChannelReadPointer;
+  ULONG RegionBFault[ADMISSION_QUEUE_FAULT_REGIONB_WORDS];
+  ULONG RegionCFault[ADMISSION_QUEUE_FAULT_REGIONC_WORDS];
+} ADMISSION_QUEUE_FAULT_SNAPSHOT;
+
 #define ADMISSION_CPU_PACKET_PAGING 1u
 #define ADMISSION_CPU_PACKET_PRESENT 2u
 typedef struct _ADMISSION_CPU_PACKET {
@@ -512,6 +526,9 @@ VOID AdmissionBackendChannelProgressWindows(
 _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordQueueSubmission(_In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_QUEUE_SUBMISSION_RECEIPT *Receipt);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordQueueFaultSnapshot(_In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot);
 VOID AdmissionGdiReceiptBeginWindows(_In_ ADMISSION_CONTEXT *Context,
     ULONGLONG ContextToken, ULONG Opcode, ULONG Color, ULONG RectCount,
     ULONG DmaBytes);
@@ -590,6 +607,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \
+  } while (0)
+#define AdmissionRecordQueueFaultSnapshot(Context, Snapshot)                   \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Snapshot);                                                          \
   } while (0)
 #define AdmissionGdiReceiptBeginWindows(Context, ContextToken, Opcode, Color, RectCount, DmaBytes) ((void)0)
 #define AdmissionGdiReceiptPatchWindows(Context, ContextToken, Fence, DestinationGpuVa, DestinationPhysical, DestinationBytes) ((void)0)
