@@ -35120,3 +35120,35 @@ SHA are `89a09635ba4d72a4073c55fd2da710e6d8d5eed470f4ebc265db543e93a85ee9`,
 m1n1/workflow/launch SHA are `12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3`,
 `7068b33c65d382cb9d44481231260c1d602237636230e7a0c213b13e285d492a`,
 `bbd5c3bfc9dff0115c501e879df99412d60047844b237f259d5a892d058d384c`.
+
+**EXP578 FINAL 2026-09-07T17:31Z — REJECTED AS SUFFICIENT; cleanup complete.**
+Exact30.0.578.0 reached Code0/Running and one Windows-originated producer,
+then TDR0x116 `(ffff81097f5ac010,fffff8020e6c6e80,c0000483,3)`.  Physical TA
+again produced timestamp targets `0x7d5b18e3/0x7d5b1949` and private stamp2
+`0x7a000100`; shared stamp1 stayed `0x7a000000`, queue done stayed0, event
+read/write stayed0/0, all256 pending-stamp entries remained zero and D3 did not
+start.  The61/108ms temporal samples are stable.  SGX FAULTED is clear and all
+captured RegionB/RegionC fault words are zero.  Thus selectively moving
+objects23--27 into A040 is not sufficient and must not be repeated.  The
+receipts prove these observed side effects, not the exact firmware instruction
+pointer or that FinalizeTA returned.
+
+Evidence ZIP/minidump/host SHA-256 are
+`0e67540e53a79555128ac39d306826290167019185363e41cd8f3a5526cf18bb`,
+`687818a38c3aac0d971dabcaa2745baa946eb51b49389f4b4ca6cda12435d150`,
+and the preregistered host stream is preserved in `hardware.log`.  Event129x2
+remains storage telemetry.  Emergency recovery preserved receipts/dump; exact
+oem package, APPL0002 devnode, service and hash-matched files were removed.
+Ordinary377/392 is restored with Code28, zero package/service/module,8CPU,
+NVMe2/USB5/keyboard1.
+
+Focused source re-anchor identifies a deterministic graph defect closer than
+another VA experiment.  Materialized object17 TA microsequence offsets36/540
+still contain captured `0xffffffa000403974`; object15 D3 offsets28/604 still
+contain captured `0xffffffa0004478c0`.  None is in the207-entry relocation
+table.  Native G13 assigns Start/Finalize TA and3D `stats_ptr` from the current
+RegionB `stats_ta.stats`/`stats_3d.stats`, whose nested offsets are +4/+8.
+Current production allocates different context0 StatsTA/Stats3D objects, so the
+template pointers do not name those live owners.  Next experiment changes only
+these four external runtime bindings; retained-root, VA arenas, firmware,
+queues, scheduler, IRQ, completion and display remain unchanged.

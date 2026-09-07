@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated2026-09-07T15:14Z. Authoritative live state; read first after context reset.
+Updated2026-09-07T17:31Z. Authoritative live state; read first after context reset.
 Detailed handoff: .local/experiments/EXP506-cdd-blt/handoff.md.
 Historical snapshot: .local/experiments/EXP506-cdd-blt/state-before-final-compact.md.
 
@@ -705,6 +705,28 @@ objects23-27 into the already approved biased A040 arena;20-22/28-35 stay A000.
 
 EXP578 commit018abf4 implements that selective retirement group;369 tests
 GREEN and hardware preregistered. Next build/sign/hash then one exact run.
+
+EXP578 FINAL: exact30.0.578.0 ran once. It recovered the observable physical
+TA side effects (timestamp start/end nonzero and private stamp2=0x7a000100),
+but shared stamp1 stayed0x7a000000, event read/write0/0, all256 pending stamps
+zero, queue done0 and D3 unstarted. Two temporal samples at61/108ms are stable;
+SGX and RegionB/C fault receipts are zero. Selective A040 objects23--27 are
+REJECTED AS SUFFICIENT and must not be repeated. The evidence proves observed
+TA side effects only, not an exact firmware instruction pointer or a completed
+FinalizeTA return. Evidence ZIP0e67540e...; dump687818a3.... Exact package,
+devnode, stopped service and files were removed through emergency recovery.
+Ordinary377/392 is restored: exactly one Code28 APPL0002, zero AGX package/
+service/module,8CPU,NVMe2/USB5/keyboard1. Candidate-window Event129x2 and
+bugcheck0x116 are retained as telemetry/result, not ordinary-baseline faults.
+
+Current first causal defect is no longer VA placement. Source plus EXP577/578
+receipt bytes prove the active EXP208 microsequences retain captured external
+stats pointers: object17 TA offsets36/540 point at0xffffffa000403974 and
+object15 D3 offsets28/604 point at0xffffffa0004478c0. Current RegionB owns
+different StatsTA/Stats3D allocations; native G13 binds their nested `.stats`
+fields at base+4/base+8. Next one-variable correction must bind those four
+fields to the exact current context0 owner and prove ownership/range/lifetime
+offline before one hardware run. Do not make another VA-arena change.
 
 ## Final live ordinary clean baseline
 
