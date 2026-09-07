@@ -34794,3 +34794,78 @@ fail-closed; the default value is restored before rollback. BOOT.WIM SHA-256
 `bcbfde1d630343cab3abc9bb46b51bfe3202fd74cd908709d80e4218ee836a0b`;
 WinPE image SHA-256
 `df2a4a4f9d34cf18c9861472eff66175e36fd66afa9a7e82eef185f5b1b28193`.
+
+# EXP575 — retained-root A040/A071 class arenas
+
+**PREREGISTERED 2026-09-07T15:14:56Z; one exact hardware run only.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP570 proves physical TA executes through `FinalizeTA`, while shared stamp1,
+  event, done pointer and D3 remain unchanged at the following `RetireStamp`.
+- EXP573 flushed all 36 active context-0 objects and EXP574 restored every
+  native low-14-bit object offset; neither changed a retirement scalar.
+- The frozen EXP208 graph assigns objects 20--31 to native A040 shared VA and
+  objects 32--35 to native A071 timestamp VA, while production still assigned
+  every object to one sequential A000 arena.  Allocator-class VA identity is
+  therefore the first remaining source-derived difference at this boundary.
+
+**WINDOWS CONTRACT:** the existing Windows-originated Render/Patch/Submit,
+scheduler fence, context-0 physical allocations and exact cleanup are
+unchanged.  Windows owns only its allocated pages and broker handles.
+
+**AGX/ASAHI CONTRACT:** m1n1 native AGX uses distinct `kobj`, `kshared`, and
+`ktimestamp` allocator bands.  Firmware retains TTBR1 root identity and private
+prefix ownership.  Table stores remain broker-owned and use the existing
+barrier/TLB maintenance sequence.
+
+**TRANSLATION:** retained-root ABI v4 adds read-only current-epoch arena query.
+After firmware boot and `ACTIVATE`, Windows authenticates bounded free A040 and
+A071 ranges, atomically rebinds only the existing render-shared objects and
+159-relocation graph, then uses the unchanged production context-0 MAP path.
+No raw table or firmware-private memory is exposed.
+
+**WHAT IS STILL UNKNOWN:** whether firmware `RetireStamp` requires the native
+allocator-class VA identity, rather than only valid translated backing and
+intra-page pointer geometry.
+
+Single variable: objects 20--31 move to broker-approved
+`0xffffffa041000000/0x01000000`; objects 32--35 move to
+`0xffffffa071100000/0x01000000`.  A000 objects 0--17, A020 command objects
+18--19, physical pages, content, offsets, relocations, firmware, queues,
+scheduler, IRQ, completion and display behavior remain otherwise unchanged.
+
+Source commits: superproject `10f48308fa2ce55b5906293a0c8d3e7d0a31abe0`;
+m1n1 `215a062129383e87ee74c4f180a6f36418a47d38`; Mu
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`.  Scoped uncommitted diff SHA-256
+before preregistration is `9804463e525e87652b57f0cda7325bf04d32f500d7eeef5979eed9acda418827`;
+full porcelain-state SHA-256 is
+`35a0d05ca1a6fa1251c50c7bc5f9fd2f8a25606485b62385744cc9753ce07529`.
+Mu FD remains exact SHA-256
+`c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+
+Offline proof: retained-root/MMIO/firmware-IO/backing RED then GREEN; render
+relayout/initdata/context0 RED then GREEN; exact activation-order RED then
+GREEN; complete AppleAgx suite 361 PASS and combined focused batch 383 PASS
+after correcting a ledger-only schema value.  The unrelated legacy
+`test_agx_initdata_defaults` harness omits the already-existing relocation
+object at link time and is not part of the EXP575 causal diff.
+
+Build command: current proven pinned FRYZZING WDK 10.0.26100.0 / MSVC
+14.44.35207, `build-driver.ps1 -Configuration Release -PackageBuild 575
+-SubmitQualification`, followed by version check, ARM64 producer rebuild with
+code analysis, Universal validation, Inf2Cat/signing and local SHA verification.
+Platform command: current RELEASE m1n1 from the exact m1n1 commit, current
+EXP406 Mu, `WOM1_AGX_G2_POWER_BROKER=1`, physical display, debug off, low memory,
+synthetic-889/full-owner profile.  Recovery is the validated ordinary 377/392
+GPU-visible Code-28 profile; immutable emergency377/385 only if ordinary access
+cannot be recovered.
+
+PASS requires an authenticated arena query/map receipt and movement beyond the
+EXP574 `RetireStamp` boundary: a new shared-stamp, event, done-pointer or exact
+completion/fence receipt.  Byte-identical retirement state rejects the
+allocator-class hypothesis.  Failure before the candidate reaches the intended
+packet is launch-inconclusive, not a driver verdict.  Collect host log,
+producer output, retained-root operations, queue submission/fault/info,
+TA progress/retire/temporal, event drain, KTrace, buffer-manager and health
+receipts.  Preserve evidence before exact package cleanup and ordinary restore.

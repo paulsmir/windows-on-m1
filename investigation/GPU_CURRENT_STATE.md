@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated2026-09-06T17:11Z. Authoritative live state; read first after context reset.
+Updated2026-09-07T15:14Z. Authoritative live state; read first after context reset.
 Detailed handoff: .local/experiments/EXP506-cdd-blt/handoff.md.
 Historical snapshot: .local/experiments/EXP506-cdd-blt/state-before-final-compact.md.
 
@@ -654,6 +654,16 @@ focused causal fixes, next difference is allocator-class VA identity (native
 A000/A040/A071 bands vs production all-A000). Any fix needs broker-approved
 non-overlapping per-class Windows ranges and therefore changes the retained-root
 publication architecture; do not map over firmware-owned original VAs.
+
+EXP575 is preregistered and offline implemented. User approved retained-root
+ABI expansion. Superproject commits1e34d99/ad03e2a/2f1c3b2 plus m1n1
+215a062 implement version4 read-only current-epoch A040/A071 arena query,
+fail-closed broker validation, atomic production render-shared relayout and
+relocation rebind before the unchanged context0 MAP. Firmware root/prefix/pages,
+A000/A020, context63, firmware, queue execution, scheduler, IRQ, completion and
+display behavior are unchanged.361 AppleAgx tests and focused retained tests
+GREEN. Next: pinned575 build/sign/hash, clean preflight, one exact hardware run.
+PASS only if retirement advances beyond EXP574; candidate-ready is not a verdict.
 
 ## Final live ordinary clean baseline
 
