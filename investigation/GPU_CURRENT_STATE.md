@@ -212,7 +212,7 @@ host log SHA `1342b1900dc7a04e2a008d7a112c470c76ea98d6fa8dc6ecb0d1fe1b9f10cba6`.
 Exact oem5/service cleanup completed in compatible hidden recovery; Windows is
 currently healthy with8 CPUs in that recovery guest.
 
-Commit `43ae915dc0c45a17d5445e1b16518872a5fb2570` prepares EXP594 without changing
+Commit `43ae915c3e451eaa875bc2dcb4e982d3238f9221` prepares EXP594 without changing
 segment topology. The producer creates and keeps resident an explicit second
 2560x1600 BGRA Windows allocation. Patch validates its exact segment2 placement,
 size/format and non-overlap, captures its production local-memory identity, and
@@ -243,7 +243,7 @@ producer log SHA `527e0b8686e1322f52c93d73e9f999a02557d4a3d7fd1c6ae93401e2f3775c
 evidence JSON SHA `7de2ef7fbf90e5e4c7af5fb7b52cda53533b71f07be82e676230bc3eb8a8623f`.
 Exact package cleanup completed.
 
-Commit `48bb3bea323367227675fcc62893740ead65ce99` prepares producer-only EXP595:
+Commit `48bb3be603729c0dc5ea4e26a6dcadadaa0962ce` prepares producer-only EXP595:
 create the 16x16 target and full-size visible destination with two separate
 standard single-allocation calls, then keep the proven joint residency/render
 list and synchronous lifetime. KMD/package remain byte-exact EXP594. Focused9
@@ -275,7 +275,7 @@ fields remain zero. No scale/QueuePresent/D589 occurred. Host/run/evidence SHA:
 `454a6f447d7f3391c4f7ef792d0b931c0dcdc3ec7192e74a2c690a839359604e`.
 Exact package cleanup completed; one Event129 remains storage telemetry.
 
-Commit `ce9d1156b4b4c52655f178e758f0cc57709c6dad` prepares EXP596 with only a
+Commit `ce9d1151fea1c81c59cfdedd4cd85dd7a92f0a8b` prepares EXP596 with only a
 crash-durable early-guard discriminator. The receipt records argument, panel,
 captured-destination, scanout-view, range, identity, active-surface, scale, queue
 and completion boundaries plus captured-valid/fence. It does not change mapping,
@@ -292,6 +292,22 @@ existing inherited C28251 only. ZIP/SYS/INF/CAT/UMD hashes:
 `f906ead852184601b60ca9a58c4f815ea2102eb425a2887cd353275ba1b40ac1`.
 Producer remains exact EXP595 SHA `3e1a0a0a...fcce61`. Persist current cleanup,
 ordinary clean stage, graceful restart, one boot-time bind and producer.
+
+EXP596 exact natural bind/producer again proved TA/3D/fence. Its new receipt
+locates the first visible failure exactly: Guard3 `Panel` passed, then
+CapturedValid0/CapturedFence0, so the per-submit destination identity was absent
+at worker consumption. Visible receipt SHA
+`160bcffdd3c6b5f162270fd353d472ccd84b8224976eebd411cb0e8344dafa93`;
+terminal SHA `a9f48927fb0c0d366fb9d034382795742dd2268b9218de20446464a5135ba336`.
+Exact cleanup completed; Event129 remains storage telemetry.
+
+Commits `af19d5a2284bf775e0ce01c5e44feded0cba9d25` and
+`3a9cb758f11d4cbadba5e3374b2bb02e009db01c` prepare EXP597. The visible
+destination identity is now part of the exact render packet description, matched
+through its state machine and copied into the worker before completion clears the
+packet. Post-fence display consumes that worker-local description; global adapter
+scratch is removed. Focused14/full366 tests PASS. Build from EXP596 base, reuse
+EXP595 producer.
 
 ## Standing constraints
 

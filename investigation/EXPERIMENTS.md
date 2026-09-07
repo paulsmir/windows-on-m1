@@ -36127,7 +36127,7 @@ fence is completed, CPU-assisted transfer writes the second allocation and the
 already proven retained broker/QueuePresent/D589 path publishes it. No firmware,
 queue, UAT, completion or physical AGX command changes.
 
-**TRANSLATION:** commit `43ae915dc0c45a17d5445e1b16518872a5fb2570`
+**TRANSLATION:** commit `43ae915c3e451eaa875bc2dcb4e982d3238f9221`
 removes the segment shrink. Patch validates allocation-list index1 against the
 full-size scanout description, segment2 placement, production CPU/GPU/physical
 view and source non-overlap, then captures its token and fence. Post-fence
@@ -36211,7 +36211,7 @@ one call, remain alive across Render, and are synchronously destroyed afterward.
 **AGX/ASAHI CONTRACT:** unchanged from EXP594: only allocation0 receives TA/3D
 output; allocation1 is consumed by the post-fence CPU-assisted visible transfer.
 
-**TRANSLATION:** commit `48bb3bea323367227675fcc62893740ead65ce99`
+**TRANSLATION:** commit `48bb3be603729c0dc5ea4e26a6dcadadaa0962ce`
 changes only producer call grouping and reports both allocation statuses.
 Package/SYS/KMD/UMD remain byte-exact EXP594.
 
@@ -36284,7 +36284,7 @@ captured-valid/fence scalars.
 retained root and queues are unchanged. DCP is untouched unless every existing
 precondition already passes.
 
-**TRANSLATION:** commit `ce9d1156b4b4c52655f178e758f0cc57709c6dad`
+**TRANSLATION:** commit `ce9d1151fea1c81c59cfdedd4cd85dd7a92f0a8b`
 expands the visible receipt from232 to248 bytes and adds a monotonic Guard plus
 CapturedValid/CapturedFence. Existing destination fields are populated as soon
 as their source is available. Success validation additionally requires Complete
@@ -36314,3 +36314,41 @@ Producer is byte-exact EXP595 SHA
 `3e1a0a0a144711d5cd773a63985a0fe8f8256bcf6bc2e9c84cc532bb60fcce61`.
 Persist cleanup, verify ordinary clean, stage exact package, graceful restart,
 then one natural bind and one producer.
+
+**EXP596 FINAL 2026-09-07T23:03Z — CAPTURED DESTINATION LIFETIME FAILURE
+CONFIRMED.** Natural bind and unchanged producer passed both allocations,
+residency, Render, physical TA/3D and fence. Receipt Guard3 (`Panel`),
+CapturedValid0/CapturedFence0 proves arguments/panel passed but the adapter-global
+destination state was absent at post-fence worker consumption. No scale,
+QueuePresent or D589 occurred. Visible/terminal SHA:
+`160bcffdd3c6b5f162270fd353d472ccd84b8224976eebd411cb0e8344dafa93`,
+`a9f48927fb0c0d366fb9d034382795742dd2268b9218de20446464a5135ba336`.
+Host/run/evidence SHA:
+`4d27f7c43578763e24b2f846630ce153ce8703f52afdb851fa3468ed31828149`,
+`84aa39a8cce1be723feaf1d5429a1f4b79ad72f09ae6327acc9665d9de4b3de7`,
+`4437d3cc57f302202539b18f6c27e64a2732ef705f0ecf95de96c0840d86776f`.
+Exact cleanup completed.
+
+# EXP597 — bind visible destination to render packet lifetime
+
+**PREREGISTERED 2026-09-07T23:08Z. WHY THIS HYPOTHESIS:** EXP596 proves the
+global captured state is lost between Patch and worker, while the worker already
+copies the exact render packet description under SchedulerLock before completion
+clears the packet. The destination belongs to that submit and must travel with it.
+
+**WINDOWS CONTRACT:** Patch validates both resident allocation-list entries and
+copies the second allocation identity into the internal per-fence packet. No
+Windows allocation ownership or lifetime is extended.
+
+**AGX/ASAHI CONTRACT:** unchanged physical job, terminal copy and fence.
+
+**TRANSLATION:** commits `af19d5a2284bf775e0ce01c5e44feded0cba9d25`
+and `3a9cb758f11d4cbadba5e3374b2bb02e009db01c`
+adds visible CPU/GPU/PA/bytes/allocation token to packet Description and exact
+Matches. Worker-local description is passed to visible transfer after Ready;
+adapter-global destination fields are removed.
+
+**WHAT IS STILL UNKNOWN:** whether packet-bound state passes range/identity,
+scale and D589. PASS requires Guard11/Stage3/Status0, exact terminal/fence, host
+latch and physical full-screen color. Focused14/full366 tests PASS. Build exact597
+from EXP596 base plus packet-lifetime files; reuse EXP595 producer.
