@@ -513,16 +513,22 @@ from subsequent TA work/microsequence; no behavior change.
 Commitce1161f implements that exact396-byte receipt.111 tests and pinned
 30.0.558.0 gates PASS; ZIP/SYS/producer SHAf9353db8.../635c28d3.../73072aa3....
 EXP558 preregistered.
+EXP558 FINAL: BufferManager receipt1738452d... shows total16/wptr0, counter1,
+cpu_flag1 during TA active stall. m1n1 source proves populate writes wptr=total16
+after its earlier cached push; EXP208 cached-data capture lost this exact live
+write. Commit840ebbb publishes wptr=total only for first IncludeInitBm; exact
+RED/GREEN and111 regressions PASS. Exact cleanup; ordinary health SHA71353de9....
+Next EXP559 changes only this deterministic first-TA-item word.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T10:22Z after exact557 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T10:37Z after exact558 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAef394f0b511bc8cf318a6f3d6434ad35702b89600e8ab29ad11a701411b1b797.
+SHA71353de9b6d4fed8d0ed92db9b4046b102f97813bd5c866f45afd9eeeeb2dd68.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

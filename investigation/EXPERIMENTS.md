@@ -1,5 +1,25 @@
 # Hardware Experiment Ledger
 
+## EXP558 buffer-manager state after TA ingress — result 2026-09-07T10:37Z
+
+CONFIRMED first failing TA primitive. Exact30.0.558.0 reproduced TA active/rptr2,
+done0 without fault. Buffer receipt SHA
+`1738452dc096e4208ac785fcd56f68f1b2805811702cecc7f30fc25ee47c813e`
+decodes BufferManager BlockControl `total=16,wptr=0,unk=0`, Counter count1 and
+Misc cpu_flag1. Pinned m1n1 `GPUBufferManager.populate()` allocates all16 blocks,
+then writes `block_ctl.wptr=16` through the physical RegMap before InitBM.
+EXP208 capture deliberately used cached pushed `_data`; BlockControl was pushed
+before populate, so the captured template lost this later direct write while
+page/block lists were pushed afterward. This is a deterministic capture defect,
+not an unknown hardware protocol.
+
+Commit `840ebbb03892b0ee65049740cd5930695f8b69b5` publishes `wptr=total` only
+for the first IncludeInitBm active graph. The exact invariant was RED then GREEN;
+111 regressions pass. Exact cleanup complete; ordinary health SHA
+`71353de9b6d4fed8d0ed92db9b4046b102f97813bd5c866f45afd9eeeeb2dd68`.
+Next candidate EXP559 changes only this BlockControl word and requires TA
+done/stamp/event or a new exact boundary.
+
 ## EXP558 buffer-manager state after TA ingress — preregistration 2026-09-07T10:26Z
 
 WHY THIS HYPOTHESIS: EXP556 proves firmware consumed both TA ring entries and
