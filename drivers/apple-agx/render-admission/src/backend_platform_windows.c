@@ -1082,7 +1082,7 @@ static unsigned char AdmissionContext0Ipa(void *ctx,const APPLE_AGX_MEMORY_OBJEC
 
 static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runtime) {
   AGX_RR_RESPONSE response={0};
-  AGX_RR_ARENA_DESCRIPTOR command={0},shared={0};
+  AGX_RR_ARENA_DESCRIPTOR command={0};
   AGX_RR_IO io={runtime,AdmissionRetainedRead,AdmissionRetainedWrite64,AdmissionRetainedWrite32};
   int result;
   if(!runtime->RetainedPrepared || !runtime->Handoff.Locked || !runtime->Initdata.BrokerOnly)
@@ -1091,11 +1091,9 @@ static unsigned char AdmissionRetainedActivate(ADMISSION_PLATFORM_RUNTIME *runti
       !(response.Flags&AGX_RR_FLAG_ACTIVE) || !(response.Flags&AGX_RR_FLAG_PREFIX_UNCHANGED) ||
       response.SystemVa!=0xffffffa080000000ULL || response.SystemBytes!=0x4000) return 0;
   if (!AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_COMMAND,&command) ||
-      !AdmissionRetainedQueryArena(runtime,AGX_RR_ARENA_SHARED,&shared) ||
       command.Va > MAXULONGLONG-command.Bytes ||
-      shared.Va > MAXULONGLONG-shared.Bytes ||
-      AppleAgxInitdataMemoryApplyQueueArenas(
-          &runtime->Initdata,command.Va,command.Bytes,shared.Va,shared.Bytes) !=
+      AppleAgxInitdataMemoryApplyCommandArena(
+          &runtime->Initdata,command.Va,command.Bytes) !=
           AppleAgxInitdataMemoryResultOk ||
       !AppleAgxRenderSharedMemoryBindRelocationObjects(
           &runtime->Initdata.RenderSharedMemory,
@@ -1507,6 +1505,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   APPLE_AGX_BACKEND_JOB_IMAGE staged;
+  APPLE_AGX_RENDER_RUNTIME_BINDINGS bindings;
   APPLE_AGX_U32 index;
   if (runtime == NULL || Submission == NULL || Plan == NULL ||
       Submission->Submission.Fence == 0u)
@@ -1514,19 +1513,22 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   UNREFERENCED_PARAMETER(SubmissionBytes);
   UNREFERENCED_PARAMETER(SubmissionByteCount);
   RtlZeroMemory(&staged, sizeof(staged));
+  RtlZeroMemory(&bindings, sizeof(bindings));
   if (!AdmissionBackendImageStageJob(
           &runtime->Adapter->BackendImage,
           Submission->Submission.Fence, TaEvent, D3Event,
           Plan->TaExpectedDonePointer, Plan->D3ExpectedDonePointer,
           Plan->IncludeInitBm, &staged) ||
+      !AppleAgxInitdataMemoryGetRenderBindings(&runtime->Initdata,
+                                               &bindings) ||
       !AppleAgxRenderSharedMemoryBuildActiveJob(
           &runtime->Initdata.RenderSharedMemory,
           runtime->Adapter->BackendImage.ArenaCpuAddress,
           runtime->Adapter->BackendImage.ArenaBytes,
           runtime->Adapter->BackendImage.Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-          runtime->Adapter->BackendImage.ArenaGpuAddress,
-          Plan->IncludeInitBm, &staged, runtime->QueueObjects, Job))
+          runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
+          &bindings, &staged, runtime->QueueObjects, Job))
     return APPLE_AGX_BACKEND_FALSE;
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {

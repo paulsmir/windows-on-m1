@@ -7,6 +7,15 @@
 #include "apple_agx_retained_root_abi.h"
 
 #define APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT 36u
+#define APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET 4u
+#define APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET 8u
+
+typedef struct _APPLE_AGX_RENDER_RUNTIME_BINDINGS {
+  APPLE_AGX_U64 StatsTaOwnerGpuAddress;
+  APPLE_AGX_U64 StatsTaOwnerBytes;
+  APPLE_AGX_U64 Stats3dOwnerGpuAddress;
+  APPLE_AGX_U64 Stats3dOwnerBytes;
+} APPLE_AGX_RENDER_RUNTIME_BINDINGS;
 
 typedef enum _APPLE_AGX_RENDER_SHARED_MEMORY_RESULT {
   AppleAgxRenderSharedMemoryResultOk = 0,
@@ -63,6 +72,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
     APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
     APPLE_AGX_BOOL IncludeInitBm,
+    const APPLE_AGX_RENDER_RUNTIME_BINDINGS *RuntimeBindings,
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob);

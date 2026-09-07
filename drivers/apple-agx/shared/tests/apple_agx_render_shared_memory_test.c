@@ -44,6 +44,14 @@ static unsigned char free_contiguous(void *Context, void *Handle) {
   return 1u;
 }
 
+static APPLE_AGX_U64 read_u64(const unsigned char *Address) {
+  APPLE_AGX_U64 value = 0ULL;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 8u; ++index)
+    value |= (APPLE_AGX_U64)Address[index] << (index * 8u);
+  return value;
+}
+
 int main(void) {
   FAKE_MEMORY fake;
   APPLE_AGX_MEMORY_IO io;
@@ -57,6 +65,7 @@ int main(void) {
   APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
   APPLE_AGX_BACKEND_JOB_IMAGE staged_job;
   APPLE_AGX_BACKEND_JOB_IMAGE active_job;
+  APPLE_AGX_RENDER_RUNTIME_BINDINGS bindings;
   unsigned char *arena;
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
   APPLE_AGX_U32 index;
@@ -200,12 +209,38 @@ int main(void) {
   staged_job.D3ExpectedStamp = 0x3d000100u;
   staged_job.TaExpectedDonePointer = 2u;
   staged_job.D3ExpectedDonePointer = 2u;
+  memset(&bindings, 0, sizeof(bindings));
+  bindings.StatsTaOwnerGpuAddress = 0xffffffa000304000ULL;
+  bindings.StatsTaOwnerBytes = J313_AGX_G2_REGIONB_STATS_TA_SIZE;
+  bindings.Stats3dOwnerGpuAddress = 0xffffffa00030c000ULL;
+  bindings.Stats3dOwnerBytes = J313_AGX_G2_REGIONB_STATS_3D_SIZE;
   arena[layouts[0].ArenaOffset] = 0x5au;
+  {
+    APPLE_AGX_RENDER_RUNTIME_BINDINGS invalid = bindings;
+    invalid.StatsTaOwnerBytes = APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET;
+    assert(!AppleAgxRenderSharedMemoryBuildActiveJob(
+        &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+        source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        0x1500800000ULL, APPLE_AGX_TRUE, &invalid, &staged_job,
+        active_objects, &active_job));
+  }
   assert(AppleAgxRenderSharedMemoryBuildActiveJob(
       &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
       source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-      0x1500800000ULL, APPLE_AGX_TRUE, &staged_job, active_objects,
-      &active_job));
+      0x1500800000ULL, APPLE_AGX_TRUE, &bindings, &staged_job,
+      active_objects, &active_job));
+  assert(read_u64(active_objects[17].Data + 36u) ==
+         bindings.StatsTaOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
+  assert(read_u64(active_objects[17].Data + 540u) ==
+         bindings.StatsTaOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
+  assert(read_u64(active_objects[15].Data + 28u) ==
+         bindings.Stats3dOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
+  assert(read_u64(active_objects[15].Data + 604u) ==
+         bindings.Stats3dOwnerGpuAddress +
+             APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
   assert(active_job.TaWorkAddresses[0] ==
          owner.VirtualAddresses[16] + owner.ObjectOffsets[16]);
   assert(active_job.TaWorkAddresses[1] ==

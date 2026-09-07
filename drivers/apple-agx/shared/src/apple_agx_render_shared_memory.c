@@ -30,6 +30,35 @@ static void put_u32(unsigned char *Address, APPLE_AGX_U32 Value) {
   Address[3] = (unsigned char)((Value >> 24u) & 0xffu);
 }
 
+static void put_u64(unsigned char *Address, APPLE_AGX_U64 Value) {
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 8u; ++index)
+    Address[index] = (unsigned char)((Value >> (index * 8u)) & 0xffu);
+}
+
+static APPLE_AGX_BOOL runtime_bindings_valid(
+    const APPLE_AGX_RENDER_RUNTIME_BINDINGS *Bindings) {
+  if (Bindings == RENDER_SHARED_NULL ||
+      Bindings->StatsTaOwnerGpuAddress == 0ULL ||
+      Bindings->Stats3dOwnerGpuAddress == 0ULL ||
+      (Bindings->StatsTaOwnerGpuAddress &
+       (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) != 0ULL ||
+      (Bindings->Stats3dOwnerGpuAddress &
+       (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) != 0ULL ||
+      Bindings->StatsTaOwnerBytes < J313_AGX_G2_REGIONB_STATS_TA_SIZE ||
+      Bindings->Stats3dOwnerBytes < J313_AGX_G2_REGIONB_STATS_3D_SIZE ||
+      Bindings->StatsTaOwnerGpuAddress >
+          ~0ULL - Bindings->StatsTaOwnerBytes ||
+      Bindings->Stats3dOwnerGpuAddress >
+          ~0ULL - Bindings->Stats3dOwnerBytes ||
+      APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET >=
+          Bindings->StatsTaOwnerBytes ||
+      APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET >=
+          Bindings->Stats3dOwnerBytes)
+    return APPLE_AGX_FALSE;
+  return APPLE_AGX_TRUE;
+}
+
 static APPLE_AGX_BOOL storage_empty(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
   APPLE_AGX_U32 index;
@@ -351,6 +380,7 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
     APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
     APPLE_AGX_BOOL IncludeInitBm,
+    const APPLE_AGX_RENDER_RUNTIME_BINDINGS *RuntimeBindings,
     const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
@@ -369,7 +399,8 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
       StagedJob->TaExpectedStamp == 0u ||
       StagedJob->D3ExpectedStamp == 0u ||
       StagedJob->TaExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY ||
-      StagedJob->D3ExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY)
+      StagedJob->D3ExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY ||
+      !runtime_bindings_valid(RuntimeBindings))
     return APPLE_AGX_FALSE;
   for (index = 0u; index < SourceObjectCount; ++index)
     ActiveObjects[index] = SourceObjects[index];
@@ -399,6 +430,23 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
       ActiveObjects[APPLE_AGX_EXP208_D3_BARRIER_OBJECT].GpuVa == 0ULL ||
       ActiveObjects[APPLE_AGX_EXP208_D3_WORK_OBJECT].GpuVa == 0ULL)
     return APPLE_AGX_FALSE;
+  if (ActiveObjects[17u].Data == RENDER_SHARED_NULL ||
+      ActiveObjects[17u].Size < 548u ||
+      ActiveObjects[15u].Data == RENDER_SHARED_NULL ||
+      ActiveObjects[15u].Size < 612u)
+    return APPLE_AGX_FALSE;
+  put_u64(ActiveObjects[17u].Data + 36u,
+          RuntimeBindings->StatsTaOwnerGpuAddress +
+              APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
+  put_u64(ActiveObjects[17u].Data + 540u,
+          RuntimeBindings->StatsTaOwnerGpuAddress +
+              APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);
+  put_u64(ActiveObjects[15u].Data + 28u,
+          RuntimeBindings->Stats3dOwnerGpuAddress +
+              APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
+  put_u64(ActiveObjects[15u].Data + 604u,
+          RuntimeBindings->Stats3dOwnerGpuAddress +
+              APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET);
   candidate = *StagedJob;
   candidate.TaWorkAddresses[0] =
       ActiveObjects[APPLE_AGX_EXP208_TA_INITBM_OBJECT].GpuVa;

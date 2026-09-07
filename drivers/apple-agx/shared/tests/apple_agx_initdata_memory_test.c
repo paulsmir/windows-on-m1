@@ -430,6 +430,7 @@ int main(void) {
   {
     FAKE_MEMORY fake; APPLE_AGX_MEMORY_IO io;
     APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
+    APPLE_AGX_RENDER_RUNTIME_BINDINGS bindings;
     APPLE_AGX_CONFIG_SNAPSHOT snapshot=physical_snapshot();
     unsigned i; unsigned long long leaves=0;
     unsigned long long original_vas[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
@@ -487,6 +488,29 @@ int main(void) {
         AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultInvalidArgument);
     assert(leaves==200);
+    memset(&bindings,0,sizeof(bindings));
+    assert(!AppleAgxInitdataMemoryGetRenderBindings(&graph,&bindings));
+    graph.MappingsReady=1;
+    graph.BrokerOutstanding=(unsigned int)leaves;
+    assert(AppleAgxInitdataMemoryGetRenderBindings(&graph,&bindings));
+    assert(bindings.StatsTaOwnerGpuAddress ==
+           graph.RegionBMemory.VirtualAddresses[AppleAgxRegionBMemoryStatsTa]);
+    assert(bindings.StatsTaOwnerBytes ==
+           graph.RegionBMemory.Objects[AppleAgxRegionBMemoryStatsTa].Length);
+    assert(bindings.Stats3dOwnerGpuAddress ==
+           graph.RegionBMemory.VirtualAddresses[AppleAgxRegionBMemoryStats3d]);
+    assert(bindings.Stats3dOwnerBytes ==
+           graph.RegionBMemory.Objects[AppleAgxRegionBMemoryStats3d].Length);
+    for(i=0;i<graph.Inventory.MappingCount;++i)
+      if(graph.MappingObjects[i]==
+         &graph.RegionBMemory.Objects[AppleAgxRegionBMemoryStatsTa]) {
+        graph.UatMappings[i].VirtualAddress+=APPLE_AGX_MEMORY_PAGE_SIZE;
+        assert(!AppleAgxInitdataMemoryGetRenderBindings(&graph,&bindings));
+        graph.UatMappings[i].VirtualAddress-=APPLE_AGX_MEMORY_PAGE_SIZE;
+        break;
+      }
+    graph.MappingsReady=0;
+    graph.BrokerOutstanding=0;
     graph.BrokerOutstanding=1;
     assert(AppleAgxInitdataMemoryDestroy(&graph)==AppleAgxInitdataMemoryResultReleaseFailed);
     assert(fake.FreeCount==0);

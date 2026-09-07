@@ -109,5 +109,8 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyQueueArenas(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
     unsigned long long CommandVa, unsigned long long CommandBytes,
     unsigned long long SharedVa, unsigned long long SharedBytes);
+APPLE_AGX_BOOL AppleAgxInitdataMemoryGetRenderBindings(
+    const APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    APPLE_AGX_RENDER_RUNTIME_BINDINGS *Bindings);
 
 #endif /* APPLE_AGX_INITDATA_MEMORY_H */

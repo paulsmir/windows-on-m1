@@ -502,6 +502,68 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyQueueArenas(
   return AppleAgxInitdataMemoryResultOk;
 }
 
+static unsigned char AppleAgxInitdataMemoryFindRenderBinding(
+    const APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    const APPLE_AGX_MEMORY_OBJECT *Object, unsigned long long ExpectedVa,
+    unsigned long long *OwnerVa, unsigned long long *OwnerBytes) {
+  unsigned int index;
+  unsigned int found = 0u;
+  if (!Object || !Object->CpuAddress || Object->State == AppleAgxMemoryEmpty ||
+      !Object->Length || !OwnerVa || !OwnerBytes)
+    return 0u;
+  for (index = 0u; index < Graph->Inventory.MappingCount; ++index) {
+    const APPLE_AGX_UAT_MAPPING *mapping = &Graph->UatMappings[index];
+    if (Graph->MappingObjects[index] != Object)
+      continue;
+    if (found || mapping->Context != 0u ||
+        mapping->VirtualAddress != ExpectedVa ||
+        mapping->PhysicalAddress != Object->DeviceAddress ||
+        mapping->Length != Object->Length ||
+        mapping->Protection != AppleAgxUatFirmwareSharedReadWrite)
+      return 0u;
+    *OwnerVa = mapping->VirtualAddress;
+    *OwnerBytes = mapping->Length;
+    found = 1u;
+  }
+  return (unsigned char)found;
+}
+
+APPLE_AGX_BOOL AppleAgxInitdataMemoryGetRenderBindings(
+    const APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    APPLE_AGX_RENDER_RUNTIME_BINDINGS *Bindings) {
+  APPLE_AGX_RENDER_RUNTIME_BINDINGS candidate = {0};
+  unsigned int index;
+  unsigned int leaves = 0u;
+  if (!Graph || !Bindings || !Graph->Initialized || !Graph->Built ||
+      !Graph->BrokerOnly || !Graph->MappingsReady ||
+      Graph->Inventory.MappingCount != 90u)
+    return APPLE_AGX_FALSE;
+  for (index = 0u; index < Graph->Inventory.MappingCount; ++index) {
+    const APPLE_AGX_UAT_MAPPING *mapping = &Graph->UatMappings[index];
+    if (!mapping->Length ||
+        (mapping->Length & (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)) != 0ULL ||
+        mapping->Length / APPLE_AGX_MEMORY_PAGE_SIZE > ~0u - leaves)
+      return APPLE_AGX_FALSE;
+    leaves += (unsigned int)(mapping->Length / APPLE_AGX_MEMORY_PAGE_SIZE);
+  }
+  if (leaves == 0u || Graph->BrokerOutstanding != leaves ||
+      !AppleAgxInitdataMemoryFindRenderBinding(
+          Graph,
+          &Graph->RegionBMemory.Objects[AppleAgxRegionBMemoryStatsTa],
+          Graph->RegionBMemory.VirtualAddresses[AppleAgxRegionBMemoryStatsTa],
+          &candidate.StatsTaOwnerGpuAddress,
+          &candidate.StatsTaOwnerBytes) ||
+      !AppleAgxInitdataMemoryFindRenderBinding(
+          Graph,
+          &Graph->RegionBMemory.Objects[AppleAgxRegionBMemoryStats3d],
+          Graph->RegionBMemory.VirtualAddresses[AppleAgxRegionBMemoryStats3d],
+          &candidate.Stats3dOwnerGpuAddress,
+          &candidate.Stats3dOwnerBytes))
+    return APPLE_AGX_FALSE;
+  *Bindings = candidate;
+  return APPLE_AGX_TRUE;
+}
+
 #ifndef APPLE_AGX_FULL_CONTEXT0_BROKER
 static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryMapPrepared(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph) {
