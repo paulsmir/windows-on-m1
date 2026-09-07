@@ -35827,3 +35827,29 @@ ZIP/SYS/INF/CAT/UMD/producer hashes:
 Local ZIP stream hashes match the signed manifest. Next restore ordinary377/392,
 verify clean Code28/no package/service/SYS/UMD, then one natural bind and two
 ordered producer calls with separate evidence capture.
+
+**EXP588 FINAL 2026-09-07T20:46Z — REPEATED PHYSICAL TA/3D AND FENCES PASS.**
+Exact30.0.588.0 staged from clean ordinary377/392 and naturally bound Code0 with
+hash-matched oem5/INF/SYS, service Running and8CPU. Two unchanged producer calls
+both returned success. Receipt1: ValidMaskff, sequence1, fence/completed255,
+TA/D3 stamps7a000100/3d000100, done2/2. Receipt2: ValidMaskff, sequence2,
+fence/completed258, stamps7a000200/3d000200, done3/4. Both show polling event,
+NotifyInterrupt1, DPC1, clean Completed/Ready, scheduler fault0, 256 exact
+ff112233 pixels,1024 changed bytes and guard0. Heartbeat result0; RX count advanced
+7 to10. No bugcheck/reset. Event129x2 is preserved as storage telemetry.
+
+This confirms the exact event-wake/PONG multiplexing correction and proves the
+EXP587 persistent queue split on real second-job execution. The physical panel
+remained black because neither producer call issues Present; visible Present is
+still NO. Evidence archive SHA
+`4961be1cd3bfcf8d6c7ee79ad8cdf4f1bedd7cca6364f648bf108e27cc87b742`;
+receipt1 SHA `2d1af4c171abbe79fff4000c824f5ceabc4069a4e667ab07e5b1c3d20acd46f4`;
+receipt2 SHA `7e3b3900786c323fc825163d0dcef88c75190a8b1310f1422ec15f22ffb9c0f6`;
+host log SHA `e6174aa07cd1b2eea46cc29a428ef3e0c9fb2d17446298524e7e58f23e76afeb`.
+Exact package/devnode/SYS/UMD cleanup completed. Final ordinary377/392 health:
+Code28, no package/service/module,8CPU,NVMe2,USB5,keyboard1, bugcheck0.
+
+Next causal boundary follows the accepted source review: firmware reset recreates
+queues but `BackendImage.Sequence` remains in the old queue lifetime. Fix and
+test only queue-local sequence restart; do not reset Windows fence identity or
+combine Present changes.

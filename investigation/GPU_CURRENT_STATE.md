@@ -53,7 +53,7 @@ the validated GPU-hidden emergency recovery guest; Wi-Fi SSH
 `pavel@192.168.1.37` works. Restore ordinary GPU-visible 377/392 and verify its
 Code28/no-package baseline before staging the next package.
 
-## EXP588 — current candidate source
+## EXP588 — repeated-submit hardware PASS
 
 Commit `5d3367531c2f39d2bba57e795e530d01b98e772a` changes one causal variable:
 after sending heartbeat Ping, wait within the same absolute deadline for the
@@ -67,12 +67,22 @@ fix. It also proves endpoint0x20/type0x43 and management Ping remain rejected.
 Focused RTKit/backend/render suite: 29 PASS; one pre-existing unrelated cleanup
 source-text assertion remains RED.
 
-Next executable sequence: record/freeze EXP588, pinned FRYZZING KMD/UMD build,
-analysis/Universal/Inf2Cat/sign/hash gates; restore and verify ordinary 377/392;
-stage one exact EXP588 candidate; invoke the unchanged producer twice with a
-receipt after each. PASS requires the second call to reach sequence2 and prove
-monotonic stamps/done/fence plus correct target contents. Then clean up and move
-to the next causal boundary. Visible Present remains a later independent stage.
+EXP588 ran once from a clean ordinary baseline and passed both ordered producer
+calls. Terminal receipt one: sequence1, fence255, TA/D3 stamps
+`0x7a000100/0x3d000100`, done2/2. Receipt two: sequence2, fence258, stamps
+`0x7a000200/0x3d000200`, done3/4. Both have ValidMaskff, backend/completion0,
+NotifyInterrupt/DPC, clean Ready exit, 256 expected `0xff112233` pixels,
+1024 changed bytes and intact guard. Heartbeat result is0 and RX count advances
+7 to10. No bugcheck/reset; Event129x2 remains storage telemetry.
+
+This confirms both the EXP588 event-wake/PONG fix and the EXP587 persistent queue
+state split. Evidence archive SHA256
+`4961be1cd3bfcf8d6c7ee79ad8cdf4f1bedd7cca6364f648bf108e27cc87b742`;
+terminal receipt hashes are
+`2d1af4c171abbe79fff4000c824f5ceabc4069a4e667ab07e5b1c3d20acd46f4`
+and `7e3b3900786c323fc825163d0dcef88c75190a8b1310f1422ec15f22ffb9c0f6`.
+Exact candidate cleanup completed and ordinary377/392 is restored: Code28, no
+package/service/module, 8CPU/NVMe2/USB5/keyboard1 and no fresh bugcheck.
 
 EXP588 exact 30.0.588.0 pinned build is frozen. WDK/SDK 26100, MSVC 14.44,
 KMD/UMD, code analysis, Universal validation, Inf2Cat, TestSign and coherent
@@ -84,6 +94,16 @@ UMD/producer hashes are respectively
 `76ac642612f76df64223cb0d62665f6ca18a9e221a6e0ed9f648ea12b9096338`,
 `0634b1138f2219601da18527047e95c9941665dda917b6fe238d6efb47e1b94b`,
 `b081d56593ea66777c7792e57a3eb42ea0672d06ca35ff5b60d8165d2e55865d`.
+
+## Current next boundary
+
+Before Present, close the source-confirmed firmware-reset lifetime mismatch:
+`AdmissionPlatformRuntimeReset` recreates firmware/provider/queues but leaves
+`BackendImage.Sequence` in the old queue epoch. The first job of the new queue
+requires InitBM and firmware-local sequence1. Windows fences remain global and
+must not be reset. Implement an image queue-lifetime restart contract, prove
+`sequence2 -> reset -> InitBM sequence1` offline, and derive the smallest safe
+hardware reset discriminator. Do not change Present/DCP in that experiment.
 
 ## Standing constraints
 
