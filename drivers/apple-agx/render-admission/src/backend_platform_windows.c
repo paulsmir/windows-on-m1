@@ -1446,28 +1446,38 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   APPLE_AGX_BACKEND_JOB_IMAGE staged;
+  APPLE_AGX_U32 index;
   if (runtime == NULL || Submission == NULL || Plan == NULL ||
       Submission->Submission.Fence == 0u)
     return APPLE_AGX_BACKEND_FALSE;
   UNREFERENCED_PARAMETER(SubmissionBytes);
   UNREFERENCED_PARAMETER(SubmissionByteCount);
   RtlZeroMemory(&staged, sizeof(staged));
-  return AdmissionBackendImageStageJob(
-             &runtime->Adapter->BackendImage,
-             Submission->Submission.Fence, TaEvent, D3Event,
-             Plan->TaExpectedDonePointer, Plan->D3ExpectedDonePointer,
-             Plan->IncludeInitBm, &staged) &&
-                 AppleAgxRenderSharedMemoryBuildActiveJob(
-                     &runtime->Initdata.RenderSharedMemory,
-                     runtime->Adapter->BackendImage.ArenaCpuAddress,
-                     runtime->Adapter->BackendImage.ArenaBytes,
-                     runtime->Adapter->BackendImage.Objects,
-                     APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-                     runtime->Adapter->BackendImage.ArenaGpuAddress,
-                     Plan->IncludeInitBm, &staged,
-                     runtime->QueueObjects, Job)
-             ? APPLE_AGX_BACKEND_TRUE
-             : APPLE_AGX_BACKEND_FALSE;
+  if (!AdmissionBackendImageStageJob(
+          &runtime->Adapter->BackendImage,
+          Submission->Submission.Fence, TaEvent, D3Event,
+          Plan->TaExpectedDonePointer, Plan->D3ExpectedDonePointer,
+          Plan->IncludeInitBm, &staged) ||
+      !AppleAgxRenderSharedMemoryBuildActiveJob(
+          &runtime->Initdata.RenderSharedMemory,
+          runtime->Adapter->BackendImage.ArenaCpuAddress,
+          runtime->Adapter->BackendImage.ArenaBytes,
+          runtime->Adapter->BackendImage.Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          runtime->Adapter->BackendImage.ArenaGpuAddress,
+          Plan->IncludeInitBm, &staged, runtime->QueueObjects, Job))
+    return APPLE_AGX_BACKEND_FALSE;
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index) {
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+        &runtime->QueueObjects[index];
+    if (object->Data == NULL || object->Size == 0u ||
+        !runtime->TransportIo.FlushForDevice(
+            runtime, object->Data, object->Size))
+      return APPLE_AGX_BACKEND_FALSE;
+  }
+  runtime->TransportIo.MemoryBarrier(runtime);
+  return APPLE_AGX_BACKEND_TRUE;
 }
 
 static APPLE_AGX_BACKEND_BOOL AdmissionExternalResolveRange(

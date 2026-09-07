@@ -82,6 +82,19 @@ class TaProgressReceiptTests(unittest.TestCase):
         self.assertNotIn("WriteU32", capture_body)
         self.assertNotIn("WriteU64", capture_body)
 
+    def test_active_graph_is_flushed_before_queue_publication(self):
+        worker = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        start = worker.index("static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(")
+        end = worker.index("static APPLE_AGX_BACKEND_BOOL AdmissionExternalResolveRange(", start)
+        body = worker[start:end]
+
+        build = body.index("AppleAgxRenderSharedMemoryBuildActiveJob(")
+        flush = body.index("runtime->TransportIo.FlushForDevice(")
+        barrier = body.index("runtime->TransportIo.MemoryBarrier(runtime)")
+        self.assertLess(build, flush)
+        self.assertLess(flush, barrier)
+        self.assertIn("APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT", body)
+
 
 if __name__ == "__main__":
     unittest.main()
