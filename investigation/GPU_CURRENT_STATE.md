@@ -423,17 +423,21 @@ retained collision object18, evidence SHAe5b3837a.... Commitc3c779a limits
 exact identity to referenced queue objects0-13/23-27 and leaves unused copies
 in proven Windows range; sanitizer+110 regressions and pinned30.0.550.0 gates
 PASS. ZIP/SYS/producer SHA1beab569.../832f8dd7.../679e3862.... EXP550
-preregistered. Clean ordinary health SHA8d225b86....
+FINAL: inconclusive before producer; broker mapped186 then failed retained
+collision range76/object23, evidence SHA811844d9.... Commit78db955 limits exact
+identity to noncolliding queue core objects0,3-8; sanitizer+110 tests and pinned
+30.0.551.0 gates PASS. ZIP/SYS/producer SHAf45eb2b1.../bbcc354a.../a89d1ae3....
+EXP551 preregistered. Clean ordinary health SHA26b5fc51....
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T08:17Z after exact549 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T08:26Z after exact550 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA8d225b866bb79448acec3742ece9eac2e2488350e88b6086ab2b59d4b0c2f54a.
+SHA26b5fc51cb475f81fa628bfd35b350026c5176126957adacfcf0e58623b0951a.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

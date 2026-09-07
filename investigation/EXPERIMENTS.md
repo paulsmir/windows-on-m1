@@ -1,5 +1,36 @@
 # Hardware Experiment Ledger
 
+## EXP551 exact noncolliding queue core — preregistration 2026-09-07T08:27Z
+
+WHY THIS HYPOTHESIS: EXP550 advanced broker mapping from181 to186 then failed
+range76 = original JobList object23 in retained `+0x40` space. Objects0 and3–8
+(GPUContextData, D3/TA QueueInfo, rings and gpu buffers) mapped successfully and
+are the only noncolliding identities directly needed before channel ingestion.
+
+WINDOWS/AGX contract unchanged. TRANSLATION: exact VA/offset only objects0,3–8;
+all other objects remain collision-free Windows mappings and all pointers are
+relocated accordingly. WHAT IS STILL UNKNOWN: broker/firmware success and
+channel consumption. Commit `78db955ce7b7f59c28b64444fb067aa82f862235`;
+sanitizer+110 tests and pinned30.0.551.0 gates pass. Overlay SHA
+`1df46c8b9a5c4993cfd3d91fca37cf72695c1d532f9b36a9d8a6b5142bcbe4e9`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`f45eb2b1ef4636c0701a29a0a1b9237d966ae3a3e195e24d4a1596a51d433273` /
+`bbcc354aff8ddbaef4d6123560a53f7dc871588bb1bb645b944307eb4b0ff220` /
+`773c7da522128bb37b7bfe71e9b29b8b7f1bd6783b07f53d136c882111d4725a` /
+`9638a883b0cbaec5b1726a5be6ca1f2cc5fb87ab55947f9b18f85a56cd825072` /
+`d31c6dbc8bfac1d401dd1c25cae39b41c2e8caa2a5b67d14156f74aeae237837` /
+`a89d1ae35c29463593a9ed7e7c8cbf1a2d691e7bab0959a0b091a57d04f17841`.
+Clean SHA `26b5fc51cb475f81fa628bfd35b350026c5176126957adacfcf0e58623b0951a`.
+One bind; Code0 then one producer. Exact cleanup.
+
+## EXP550 exact queue-infrastructure identity only — result 2026-09-07T08:26Z
+
+INCONCLUSIVE BEFORE PRODUCER. Code43; broker mapped186 then failed range76,
+identifying retained collision at original object23/JobList. Evidence SHA
+`811844d93ed2d8e0b83f7a60e23a79c5da6066dde82f18169070ec2d849a36c3`.
+No queue verdict. Exact cleanup; ordinary health SHA
+`26b5fc51cb475f81fa628bfd35b350026c5176126957adacfcf0e58623b0951a`.
+
 ## EXP550 exact queue-infrastructure identity only — preregistration 2026-09-07T08:18Z
 
 WHY THIS HYPOTHESIS: EXP549 failed before producer with context0 broker range71;
