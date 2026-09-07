@@ -35152,3 +35152,49 @@ Current production allocates different context0 StatsTA/Stats3D objects, so the
 template pointers do not name those live owners.  Next experiment changes only
 these four external runtime bindings; retained-root, VA arenas, firmware,
 queues, scheduler, IRQ, completion and display remain unchanged.
+
+# EXP579 — bind microsequence stats to live RegionB owners
+
+**PREREGISTERED 2026-09-07T17:23Z; one exact hardware run only.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP578/577 hardware bytes prove TA object17 Finalize `stats_ptr` remains the
+  captured `0xffffffa000403974`; materializing the frozen template proves the
+  same stale value at TA Start/Finalize offsets36/540 and stale 3D value
+  `0xffffffa0004478c0` at object15 offsets28/604.
+- The207-entry relocation table does not bind any of those four fields, while
+  current production owns different StatsTA/Stats3D context0 allocations.
+- Native G13/V13_5 sets Start/Finalize TA and3D `stats_ptr` to the current
+  `regionB.stats_ta.stats`/`stats_3d.stats` objects at owner base+4/base+8.
+  The stale TA address aliases unrelated current memory and the stale3D address
+  is not a valid current owner, so zero SGX fault bits do not reject this cause.
+
+**WINDOWS CONTRACT:** unchanged Windows producer, Render/Patch/Submit, fence,
+TDR and completion contract.  **AGX/ASAHI CONTRACT:** each materialized
+microsequence refers to live RegionB global-stats children from the same
+firmware lifetime.  **TRANSLATION:** commit
+`07ab701d0de5540a6a3901d540119ea191b917cc` derives StatsTA/Stats3D only from
+the mapped production context0 inventory, verifies exact owner/VA/PA/length,
+protection and full broker-leaf lifetime, then replaces exactly four external
+fields with base+4/base+8.  The rejected EXP578 A040 query/layout is removed
+from the runtime path, restoring the EXP577-effective A021-only layout.
+**WHAT IS STILL UNKNOWN:** whether correcting these references advances the
+observable TA state into live StatsTA and then shared retirement/D3/completion.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH: any captured stats address,
+wrong nested-field offset, wrong current mapping, stale/partial broker lifetime,
+or undersized owner makes materialization fail closed.  Tests were RED at the
+missing contract, then the two sanitizer suites and all363 `test_apple_agx_*`
+tests were GREEN.  Sixteen additional J313/ledger tests passed; the unrelated
+pre-existing generated-template synthetic fixture remains RED because it lacks
+its required fixed-input objects and does not touch this change.
+
+Single hardware variable relative to the EXP577-effective baseline: four live
+stats bindings.  m1n1 ABI/platform/Mu, physical pages, A021 WorkCommands,
+firmware, RTKit, queue publication, scheduler, IRQ, completion and display are
+unchanged.  PASS requires the TA Finalize receipt to contain the exact current
+StatsTA nested address and either live StatsTA mutation or progress in shared
+stamp/done/event/D3/completion.  If the pointer is exact but all observable
+state remains at the EXP577 boundary, reject stats binding as sufficient and
+localize the next command-graph external reference; never repeat EXP579.

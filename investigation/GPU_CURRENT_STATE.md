@@ -728,6 +728,14 @@ fields at base+4/base+8. Next one-variable correction must bind those four
 fields to the exact current context0 owner and prove ownership/range/lifetime
 offline before one hardware run. Do not make another VA-arena change.
 
+EXP579 implementation commit07ab701 is preregistered. Production now obtains
+StatsTA/Stats3D bases only from the exact active broker inventory and rewrites
+the four TA/3D Start/Finalize stats fields to current base+4/base+8. Malformed,
+partial, stale or mismatched ownership fails closed. Runtime layout is restored
+to EXP577-effective A021-only; EXP578 A040 placement is not active. RED then
+363 relevant tests GREEN. Next: pinned579 build/sign/hash, clean ordinary
+preflight, one run, exact evidence and cleanup.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
