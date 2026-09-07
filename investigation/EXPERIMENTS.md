@@ -36315,11 +36315,12 @@ Producer is byte-exact EXP595 SHA
 Persist cleanup, verify ordinary clean, stage exact package, graceful restart,
 then one natural bind and one producer.
 
-**EXP596 FINAL 2026-09-07T23:03Z — CAPTURED DESTINATION LIFETIME FAILURE
-CONFIRMED.** Natural bind and unchanged producer passed both allocations,
+**EXP596 FINAL 2026-09-07T23:03Z — DESTINATION ABSENT AT CONSUMER.** Natural
+bind and unchanged producer passed both allocations,
 residency, Render, physical TA/3D and fence. Receipt Guard3 (`Panel`),
-CapturedValid0/CapturedFence0 proves arguments/panel passed but the adapter-global
-destination state was absent at post-fence worker consumption. No scale,
+CapturedValid0/CapturedFence0 proves arguments/panel passed but the consumer had
+no destination. This does not prove loss of already-written global state; EXP597
+later established that this route never performed ordinary Patch capture. No scale,
 QueuePresent or D589 occurred. Visible/terminal SHA:
 `160bcffdd3c6b5f162270fd353d472ccd84b8224976eebd411cb0e8344dafa93`,
 `a9f48927fb0c0d366fb9d034382795742dd2268b9218de20446464a5135ba336`.
@@ -36331,10 +36332,10 @@ Exact cleanup completed.
 
 # EXP597 — bind visible destination to render packet lifetime
 
-**PREREGISTERED 2026-09-07T23:08Z. WHY THIS HYPOTHESIS:** EXP596 proves the
-global captured state is lost between Patch and worker, while the worker already
-copies the exact render packet description under SchedulerLock before completion
-clears the packet. The destination belongs to that submit and must travel with it.
+**PREREGISTERED 2026-09-07T23:08Z. WHY THIS HYPOTHESIS:** EXP596 proves only
+that the consumer lacks destination state. The worker already copies the exact
+render packet description under SchedulerLock before completion clears it, so
+testing packet transport distinguishes missing capture from later loss.
 
 **WINDOWS CONTRACT:** Patch validates both resident allocation-list entries and
 copies the second allocation identity into the internal per-fence packet. No
@@ -36364,10 +36365,11 @@ ordinary locals. R2 pinned gates PASS. Overlay/ZIP/SYS/INF/CAT/UMD hashes:
 `df29b21dd2800316f1df62b37289a02a511ffe4bd372ca11c956932515da20f0`,
 `84fbf473166bfc88123734bd95803a9a8d6e97bd519b630a14bbee38f81a1134`.
 
-**EXP597 FINAL — PREPATCHED ROUTE CONFIRMED.** Natural bind and producer again
+**EXP597 FINAL — PREPATCHED ROUTE CONFIRMED; PACKET CARRY CONFIRMED.** Natural bind and producer again
 passed allocations/residency/Render/physical TA3D/fence. Visible receipt Guard3,
-CapturedValid0, CapturedFence256 and zero destination fields proves the render
-packet reaches the worker but its visible fields were never populated. Source
+CapturedValid0, CapturedFence256 and zero destination fields prove the render
+packet reaches the worker; packet carry is not rejected. Its visible fields were
+never populated. Source
 shows the actual path is `PrepatchedRender -> AdmissionGdiAdoptPrepatchedPacket`,
 whose packet preparation currently passes NULL/0 for visible destination; the
 ordinary Patch capture is bypassed. No scale/D589. Receipt/terminal/host/run SHA:
@@ -36376,3 +36378,51 @@ ordinary Patch capture is bypassed. No scale/D589. Receipt/terminal/host/run SHA
 `ee2d2f356ab1de33a77227451e71d3e585f98009356eb5271508884187c27308`,
 `bf41469590ee71555fd15cc9b4a1c8c74aed607da747132f596c5ad99e55bf5e`.
 Exact cleanup completed. EXP598 must change only the prepatched ownership link.
+
+# EXP598 — complete allocation1 prepatched capture/adoption
+
+**PREREGISTERED 2026-09-08T00:20Z. WHY THIS HYPOTHESIS:** EXP597 proves the
+per-fence packet/fence reaches the worker and source shows exactly one missing
+edge: Render has allocation1 resident placement but PrepatchedRender does not
+store it, so adoption passes NULL/0.
+
+**WINDOWS CONTRACT:** while Render owns the two-entry allocation list, validate
+allocation1 device/write access, segment2 placement/range, full-size geometry and
+source non-overlap. Capture exact identities into one-use pending state. Adoption
+requires exact context/private/DMA identity; success, mismatch, cancel and error
+clear pending state. CPU transfer and D589 occur before Windows fence retirement.
+The qualification producer retains both allocations for10s and performs no new
+allocation before exact driver Stop, preventing reuse during observation.
+
+**AGX/ASAHI CONTRACT:** TA/3D command, completion source, PBE, DCP format,
+broker and timeouts are unchanged.
+
+**TRANSLATION:** commit `0aea8b24843c5277b7d5eca828baf1d500c2bfbf`
+uses production `AdmissionVisibleAgxResolveDestination` from Render, a portable
+prepatched capture/adopt state, exact packet matching and worker-local identity.
+
+**WHAT IS STILL UNKNOWN:** whether this completed route yields Guard11/Stage3/
+Status0, exact scale hash and A408/D589 on hardware. Physical confirmation is
+required while the producer hold keeps allocation1 alive. This does not claim a
+final production Present lifetime design.
+
+**OFFLINE PROOF:** a real state-machine integration fixture executes capture,
+exact adoption, packet Prepare/Queue/Active, worker-local copy and Complete. It
+checks literal allocation/render/visible CPU/GPU/PA/bytes/token equality, rejects
+incomplete identity and cross-context reuse, and proves pending clears. Full
+AppleAgx suite367 PASS; diff check clean. Build/sign/hash next.
+
+**EXP598 FREEZE 2026-09-08T00:27Z.** Exact30.0.598.0 pinned WDK/SDK26100,
+MSVC14.44 KMD/UMD and producer code analysis, Universal validation, Inf2Cat,
+TestSign and coherent-version gates PASS with the inherited C28251 only. Overlay/
+ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`adbb6e6cb3b102a0010f41f5f8327244a7d080f687389e83a6fa5316bc52afdd`,
+`3030d1c68d3c4c647c5752029396bab05b5179f3f86d39eee947b87c1c3325c1`,
+`8bb20bf07187534e9933b04c12ebd4d1b6c170679e61e16a27f0533aa9a2483b`,
+`1d7af9d620d21504b687ccabbb49823ca30d380c2f7046d8ff91c9f032e9abeb`,
+`a56b183e6e44f9a06198ae3979c194ce87211f72417628c227789d45baa26973`,
+`4050cb72d24ff572f69bf7abe0758f78c688fb5d6b7a29a409f60d37a077985d`,
+`478dfe1093b98ead912cbf5fff340d33b4d0e91b30719321dcb2b4184fec3cb8`.
+Exact EXP597R2 base and sanitized backend exclude dormant reset. Persist current
+cleanup, verify ordinary Code28/no package, stage, graceful restart, then one
+boot-time natural bind and producer. Observe panel during the10s hold.

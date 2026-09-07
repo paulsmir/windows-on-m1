@@ -295,8 +295,9 @@ ordinary clean stage, graceful restart, one boot-time bind and producer.
 
 EXP596 exact natural bind/producer again proved TA/3D/fence. Its new receipt
 locates the first visible failure exactly: Guard3 `Panel` passed, then
-CapturedValid0/CapturedFence0, so the per-submit destination identity was absent
-at worker consumption. Visible receipt SHA
+CapturedValid0/CapturedFence0, so the consumer had no destination. It did not
+prove that already-written global state was lost; EXP597 later showed the actual
+prepatched route never performed ordinary Patch capture. Visible receipt SHA
 `160bcffdd3c6b5f162270fd353d472ccd84b8224976eebd411cb0e8344dafa93`;
 terminal SHA `a9f48927fb0c0d366fb9d034382795742dd2268b9218de20446464a5135ba336`.
 Exact cleanup completed; Event129 remains storage telemetry.
@@ -312,13 +313,35 @@ EXP595 producer.
 EXP597 R2 exact30.0.597.0 build/sign gates PASS (R1 was builder syntax only).
 ZIP/SYS hashes `fc1b3b28511a18c58859e39e7a82fc1265b7e5da795b64a5df2e5aeec37dc6ae` /
 `e201e55d1c0554a7ee9e4523bca7d3812e7b1b78cce7e1f56b47c52e39858436`.
-Hardware: natural bind, producer and TA/3D/fence PASS, but visible receipt remains
-Guard3 with CapturedValid0 while CapturedFence256 now arrives. This proves the
-actual producer uses the prepatched-adoption route, whose current call passes a
-NULL visible destination; ordinary Patch capture is not the route. Receipt SHA
+Hardware: natural bind, producer and TA/3D/fence PASS. CapturedFence256 confirms
+the per-fence packet reaches the worker; packet carry itself is not rejected.
+Guard3/CapturedValid0 instead proves its destination part was never populated:
+the actual prepatched-adoption route passes NULL, and ordinary Patch capture is
+not the route. Receipt SHA
 `5049941236a38bc1c5866a8a2e8161ab82cc8d589da4f3aad0145ea2a0a266b9`.
 Exact cleanup completed. Next: carry allocation1 placement through existing
 PrepatchedRender into AdmissionGdiAdoptPrepatchedPacket, then EXP598.
+
+Commit `0aea8b24843c5277b7d5eca828baf1d500c2bfbf` implements that exact EXP598
+route plus its required qualification lifetime. Render validates allocation1
+while its resident list is available, captures exact CPU/GPU/PA/bytes/token in a
+portable prepatched state, adoption consumes it once into the same per-fence
+packet, and mismatch/cancel/error clear it. Visible scale/latch now completes
+before Windows fence retirement; the producer retains both allocations for a
+bounded10s observation window, with no intervening allocation reuse before exact
+Stop/cleanup. This is qualification ownership, not final production Present.
+Integration and full AppleAgx tests are GREEN (367 total). Build next.
+
+EXP598 exact30.0.598.0 pinned WDK/SDK26100 build, code analysis, Universal,
+Inf2Cat, TestSign, coherent-version and producer gates PASS. ZIP/SYS/INF/CAT/
+UMD/producer hashes are
+`3030d1c68d3c4c647c5752029396bab05b5179f3f86d39eee947b87c1c3325c1`,
+`8bb20bf07187534e9933b04c12ebd4d1b6c170679e61e16a27f0533aa9a2483b`,
+`1d7af9d620d21504b687ccabbb49823ca30d380c2f7046d8ff91c9f032e9abeb`,
+`a56b183e6e44f9a06198ae3979c194ce87211f72417628c227789d45baa26973`,
+`4050cb72d24ff572f69bf7abe0758f78c688fb5d6b7a29a409f60d37a077985d`,
+`478dfe1093b98ead912cbf5fff340d33b4d0e91b30719321dcb2b4184fec3cb8`.
+Next: persist EXP597 cleanup, ordinary clean preflight, stage and one natural run.
 
 ## Standing constraints
 
