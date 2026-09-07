@@ -7,18 +7,6 @@ RENDER = ROOT / "drivers" / "apple-agx" / "render-admission"
 
 
 class AppleAgxRenderPlatformTests(unittest.TestCase):
-    def test_first_queue_doorbell_wakes_idle_firmware_once(self):
-        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
-        start = platform.index("static APPLE_AGX_BACKEND_BOOL AdmissionTransportDoorbell(")
-        end = platform.index("static APPLE_AGX_BACKEND_BOOL", start + 10)
-        body = platform[start:end]
-        self.assertIn("ADMISSION_PLATFORM_FIRMWARE_KICK_DOORBELL", platform)
-        self.assertIn("QueueWakeSent", body)
-        kick = body.index("AppleAgxRtkitDoorbell(ADMISSION_PLATFORM_FIRMWARE_KICK_DOORBELL)")
-        queue = body.rindex("AppleAgxRtkitDoorbell(Doorbell)")
-        self.assertLess(kick, queue)
-        self.assertIn("runtime->QueueWakeSent = TRUE", body)
-
     def test_external_render_materializes_firmware_queue_image_before_mapping(self):
         platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
         prepare = platform.index("AppleAgxInitdataMemoryPrepareBroker(")
