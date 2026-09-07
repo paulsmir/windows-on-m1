@@ -35750,3 +35750,65 @@ Manifest SHA `f86611313a45b7c04d8afd2f0ec9bbc03302121931428f069ddebb0966d17e2c`.
 Workflow parser GREEN. Restore clean ordinary after EXP586, stage/natural bind,
 run unchanged producer once and capture receipt1, then run the same producer a
 second time without reboot/rebind and capture receipt2. Cleanup follows evidence.
+
+**EXP587 FINAL 2026-09-07T20:31Z — FIRST CALL PASS; SECOND CALL INCONCLUSIVE
+BEFORE ACTIVE JOB.** Exact 30.0.587.0 ran once. Producer invocation one completed
+sequence1/fence259 with exact TA/D3 stamps/done2/2 and 256 pixels `ff112233`.
+Invocation two produced no terminal output and Windows reset. Fresh dump proves
+`VIDEO_SCHEDULER_INTERNAL_ERROR 0x119/2`; argument2 is `STATUS_DEVICE_BUSY`, and
+the stack is `dxgmms2!VidSchiSendToExecutionQueue -> VidSchiSubmitPagingCommand`.
+
+Crash-durable `Wom1PreSubmitHeartbeatResult=6`, RX endpoint0x20 and payload
+`0042000000000000` identify the preceding primitive: heartbeat received a valid
+AGX application event wake (type0x42) before management PONG, classified it as a
+protocol violation and set SchedulerFaulted. A later dxgkrnl paging submit then
+received DEVICE_BUSY and bugchecked. The second job never reached terminal
+materialization, so the persistent-state change is not yet hardware-confirmed.
+This is not a Present result; the panel remained black because no Present/DCP
+latch was issued.
+
+Evidence archive SHA
+`e709fbb50ba8efb1d3a958561c96cae02cdeb81f5a95feec0ace30cca78443c7`;
+dump SHA `e6c9ef4bfd3c38bb4eef884ec2ea27c55f46c47dbe5fb259f52252e46a4206f3`;
+debugger analysis SHA
+`41ad56cc3b86882919639bbabe9fa98baf77c827d858bb0352a2f2c89f987a27`.
+Exact oem5/package/service/SYS/UMD cleanup completed through compatible emergency
+recovery. Next candidate changes only heartbeat mailbox multiplexing.
+
+# EXP588 — accept exact event wake while awaiting heartbeat PONG
+
+**PREREGISTERED 2026-09-07T20:34Z; one candidate, two ordered producer calls.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP587 crash-durable receipt names the exact rejected message: endpoint0x20,
+  payload type0x42, immediately before SchedulerFaulted and DEVICE_BUSY.
+- Current `AppleAgxRtkitSessionHeartbeat` receives exactly one message after Ping
+  and requires it to be management PONG; it cannot represent valid mailbox
+  interleaving.
+- Pinned m1n1 AGX implementation defines type0x42 on application endpoint0x20 as
+  an event wake, while management PONG is endpoint0/type4.
+
+**WINDOWS CONTRACT:** unchanged two-producer sequence and dxgkrnl submission
+lifetime. A valid asynchronous firmware notification must not convert future
+SubmitCommand calls into DEVICE_BUSY.
+
+**AGX/ASAHI CONTRACT:** application endpoint0x20 type0x42 is a wake notification;
+the completion/event ring is authoritative. Management PONG is endpoint0/type4.
+
+**TRANSLATION:** commit
+`5d3367531c2f39d2bba57e795e530d01b98e772a` waits within the same absolute
+deadline for exact management PONG and skips only endpoint0x20/type0x42 wakes.
+All other unexpected messages fail closed. No event ring, queue or render state
+is modified.
+
+**WHAT IS STILL UNKNOWN:** whether accepting the exact interleaved wake allows
+the second producer call to reach BuildActiveJob and whether the EXP587
+persistent-state fix then advances sequence/stamps/done/fence correctly. PASS
+requires two separate terminal receipts, sequence1 then sequence2, monotonic
+stamps/done/fences, correct target contents and no 0x119/TDR/reset.
+
+**OFFLINE PROOF:** deterministic test was RED on wake-then-PONG and GREEN after
+the fix. Exact endpoint0x20/type0x43 and management Ping remain protocol
+violations. Relevant suite 29 PASS; one known unrelated stop/remove source-text
+assertion remains RED. Build pending.
