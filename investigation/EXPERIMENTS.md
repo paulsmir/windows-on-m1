@@ -35963,3 +35963,26 @@ ZIP/SYS/INF/CAT/UMD hashes:
 `0fa35f0b5f7012029c58310fcfea0c078da4d1205fd1c6332c9cd51878abb9eb`.
 Workflow parser GREEN. Ordinary377/392 is clean; stage only R2, natural bind,
 collect visible receipt/host log/health, and leave marker for physical confirmation.
+
+**EXP590 R2 FINAL 2026-09-07T21:11Z — INCONCLUSIVE BEFORE VISIBLE PROOF.**
+Exact package bound far enough to fill frame590 and issue publication. Host log
+proves A408 applied and D589 latched swap9, but receipt stage3 returned
+`STATUS_IO_TIMEOUT` after3403ms and StartDevice unwound to Code43/service Stopped.
+The receipt contains exact pattern hash/prefix and matching GPA/host PA before
+publication, but applied/latched fields were not sampled after timeout, so this is
+not VISIBLE_SCANOUT PASS. Root cause is local: deadline was based before the
+full-surface fill/hash, consuming its latch window. Evidence ZIP SHA
+`08d6ec03b7e02375c566228429a67ef07dc9c0baeb548a1dd6016f1350c3333f`;
+receipt SHA `ba5ff133780a41187678fbfb69fafc4040eb0624625c01e85f9110bd9fa419de`;
+host log SHA `380c782fc87ba6085c57ceca5251c88dddf7d03c6d27d8c739673cef9510fd8a`.
+Exact cleanup and ordinary restore complete.
+
+# EXP591 — latch deadline begins at publication
+
+**PREREGISTERED 2026-09-07T21:15Z. WHY THIS HYPOTHESIS:** EXP590 consumed the
+deadline during pattern generation yet host D589 arrived; no address/format/broker
+failure is indicated. Commit `df2284e5e3afbfc4093fbb403f8515fd6fc94476`
+changes only deadline origin to immediately before QueuePresent, preserving the
+same2s window, pattern, surface, broker and receipt. PASS requires stage4/status0,
+requested=applied=latched, active offset0, poolPA=filled hostPA, Code0 and physical
+frame590 confirmation. Build from exact EXP590R2 source plus this one-file overlay.

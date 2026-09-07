@@ -145,6 +145,16 @@ exact30.0.590.0 build/sign/Universal gates PASS. ZIP/SYS/INF/CAT/UMD hashes:
 `0fa35f0b5f7012029c58310fcfea0c078da4d1205fd1c6332c9cd51878abb9eb`.
 Ordinary377/392 remains clean and running. Stage R2 only.
 
+EXP590 R2 hardware is INCONCLUSIVE before visible proof. The driver filled frame590
+and host logged exact A408/D589 swap9, but the receipt ended stage3 with
+`STATUS_IO_TIMEOUT` after3403ms; StartDevice unwound to Code43. The latch deadline
+was incorrectly based before the full15.6MiB pattern fill/hash. Evidence ZIP SHA
+`08d6ec03b7e02375c566228429a67ef07dc9c0baeb548a1dd6016f1350c3333f`;
+receipt SHA `ba5ff133780a41187678fbfb69fafc4040eb0624625c01e85f9110bd9fa419de`.
+Exact cleanup and ordinary restore completed. Commit
+`df2284e5e3afbfc4093fbb403f8515fd6fc94476` moves only the existing2s deadline
+start to immediately before QueuePresent. Next EXP591 reruns frame590 once.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
