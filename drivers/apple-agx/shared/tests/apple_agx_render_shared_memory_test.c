@@ -104,33 +104,49 @@ int main(void) {
   memset(&queue_config, 0, sizeof(queue_config));
   assert(AppleAgxRenderSharedMemoryBuildQueueConfig(
       &owner, 500u, &queue_config));
-  assert(queue_config.D3.QueueInfoGpuAddress == owner.VirtualAddresses[3]);
+  assert(queue_config.D3.QueueInfoGpuAddress ==
+         owner.VirtualAddresses[3] + owner.ObjectOffsets[3]);
   assert(queue_config.D3.RingCpuAddress ==
-         (APPLE_AGX_U64 *)owner.Objects[4].CpuAddress);
+         (APPLE_AGX_U64 *)((unsigned char *)owner.Objects[4].CpuAddress +
+                           owner.ObjectOffsets[4]));
   assert(queue_config.D3.GpuDonePointer ==
-         (volatile APPLE_AGX_U32 *)owner.Objects[24].CpuAddress);
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[24].CpuAddress + owner.ObjectOffsets[24]));
   assert(queue_config.D3.CpuWritePointer ==
          (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[24].CpuAddress + 0x40u));
+             owner.Objects[24].CpuAddress + owner.ObjectOffsets[24] + 0x40u));
   assert(queue_config.D3.Stamp ==
-         (volatile APPLE_AGX_U32 *)owner.Objects[27].CpuAddress);
-  assert(queue_config.Ta.QueueInfoGpuAddress == owner.VirtualAddresses[6]);
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[27].CpuAddress + owner.ObjectOffsets[27]));
+  assert(queue_config.Ta.QueueInfoGpuAddress ==
+         owner.VirtualAddresses[6] + owner.ObjectOffsets[6]);
   assert(queue_config.Ta.RingCpuAddress ==
-         (APPLE_AGX_U64 *)owner.Objects[7].CpuAddress);
+         (APPLE_AGX_U64 *)((unsigned char *)owner.Objects[7].CpuAddress +
+                           owner.ObjectOffsets[7]));
   assert(queue_config.Ta.GpuDonePointer ==
-         (volatile APPLE_AGX_U32 *)owner.Objects[25].CpuAddress);
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[25].CpuAddress + owner.ObjectOffsets[25]));
   assert(queue_config.Ta.CpuWritePointer ==
          (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[25].CpuAddress + 0x40u));
+             owner.Objects[25].CpuAddress + owner.ObjectOffsets[25] + 0x40u));
   assert(queue_config.Ta.Stamp ==
-         (volatile APPLE_AGX_U32 *)owner.Objects[26].CpuAddress);
+         (volatile APPLE_AGX_U32 *)((unsigned char *)
+             owner.Objects[26].CpuAddress + owner.ObjectOffsets[26]));
   assert(queue_config.TimeoutTicks == 500u);
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
-    assert(objects[index].GpuVa == owner.VirtualAddresses[index]);
-    assert(objects[index].PhysicalAddress == owner.Objects[index].DeviceAddress);
-    assert(objects[index].Data == owner.Objects[index].CpuAddress);
+    APPLE_AGX_U64 object_offset =
+        layouts[index].OriginalGpuVa & (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL);
+    assert(owner.ObjectOffsets[index] == object_offset);
+    assert(object_offset + layouts[index].Size <=
+           owner.Objects[index].Length);
+    assert(objects[index].GpuVa ==
+           owner.VirtualAddresses[index] + object_offset);
+    assert(objects[index].PhysicalAddress ==
+           owner.Objects[index].DeviceAddress + object_offset);
+    assert(objects[index].Data ==
+           (unsigned char *)owner.Objects[index].CpuAddress + object_offset);
     assert(objects[index].Size == layouts[index].Size);
     assert(memcmp(objects[index].Data,
                   arena + layouts[index].ArenaOffset,
@@ -156,12 +172,17 @@ int main(void) {
       source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
       0x1500800000ULL, APPLE_AGX_TRUE, &staged_job, active_objects,
       &active_job));
-  assert(active_job.TaWorkAddresses[0] == owner.VirtualAddresses[16]);
-  assert(active_job.TaWorkAddresses[1] == owner.VirtualAddresses[19]);
-  assert(active_job.D3WorkAddresses[0] == owner.VirtualAddresses[14]);
-  assert(active_job.D3WorkAddresses[1] == owner.VirtualAddresses[18]);
+  assert(active_job.TaWorkAddresses[0] ==
+         owner.VirtualAddresses[16] + owner.ObjectOffsets[16]);
+  assert(active_job.TaWorkAddresses[1] ==
+         owner.VirtualAddresses[19] + owner.ObjectOffsets[19]);
+  assert(active_job.D3WorkAddresses[0] ==
+         owner.VirtualAddresses[14] + owner.ObjectOffsets[14]);
+  assert(active_job.D3WorkAddresses[1] ==
+         owner.VirtualAddresses[18] + owner.ObjectOffsets[18]);
   assert(active_job.TaWorkAddresses[0] != staged_job.TaWorkAddresses[0]);
-  assert(((unsigned char *)owner.Objects[0].CpuAddress)[0] == 0x5au);
+  assert(((unsigned char *)owner.Objects[0].CpuAddress)
+             [owner.ObjectOffsets[0]] == 0x5au);
   assert(*(unsigned int *)(active_objects[20].Data + 4u) ==
          *(unsigned int *)active_objects[20].Data);
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==

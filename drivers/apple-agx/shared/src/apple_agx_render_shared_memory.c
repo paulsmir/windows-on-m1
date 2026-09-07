@@ -56,6 +56,7 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryDestroy(
       return Owner->LastResult;
     }
     Owner->VirtualAddresses[index] = 0ULL;
+    Owner->ObjectOffsets[index] = 0ULL;
     --Owner->ObjectCount;
   }
   Owner->MemoryIo = RENDER_SHARED_NULL;
@@ -96,13 +97,19 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
     APPLE_AGX_U64 allocation_bytes;
+    APPLE_AGX_U64 object_offset;
     if (layouts[index].OriginalIndex != index || layouts[index].ContextId != 0u ||
         layouts[index].Size == 0u)
       return rollback(Owner,
                       AppleAgxRenderSharedMemoryResultInvalidArgument);
-    allocation_bytes =
-        align_up((APPLE_AGX_U64)layouts[index].Size,
-                 APPLE_AGX_MEMORY_PAGE_SIZE);
+    object_offset = layouts[index].OriginalGpuVa & RENDER_SHARED_PAGE_MASK;
+    if (object_offset > APPLE_AGX_MEMORY_PAGE_SIZE ||
+        layouts[index].Size > APPLE_AGX_MEMORY_PAGE_SIZE - object_offset)
+      return rollback(Owner,
+                      AppleAgxRenderSharedMemoryResultInvalidArgument);
+    allocation_bytes = align_up(
+        object_offset + (APPLE_AGX_U64)layouts[index].Size,
+        APPLE_AGX_MEMORY_PAGE_SIZE);
     if (AppleAgxMemoryAllocate(MemoryIo, allocation_bytes,
                                &Owner->Objects[index]) !=
         AppleAgxMemoryResultOk)
@@ -111,6 +118,7 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
     ++Owner->ObjectCount;
     zero_bytes(Owner->Objects[index].CpuAddress, allocation_bytes);
     Owner->VirtualAddresses[index] = virtual_address;
+    Owner->ObjectOffsets[index] = object_offset;
     virtual_address = align_up(
         virtual_address + allocation_bytes + APPLE_AGX_MEMORY_PAGE_SIZE,
         RENDER_SHARED_VA_ALIGNMENT);
@@ -142,15 +150,17 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     const unsigned char *source =
         (const unsigned char *)TemplateArena + layouts[index].ArenaOffset;
     unsigned char *destination =
-        (unsigned char *)Owner->Objects[index].CpuAddress;
+        (unsigned char *)Owner->Objects[index].CpuAddress +
+        Owner->ObjectOffsets[index];
     if (layouts[index].ArenaOffset > TemplateArenaBytes ||
         layouts[index].Size > TemplateArenaBytes - layouts[index].ArenaOffset)
       return APPLE_AGX_FALSE;
     for (byte = 0u; byte < layouts[index].Size; ++byte)
       destination[byte] = source[byte];
-    RelocationObjects[index].GpuVa = Owner->VirtualAddresses[index];
+    RelocationObjects[index].GpuVa =
+        Owner->VirtualAddresses[index] + Owner->ObjectOffsets[index];
     RelocationObjects[index].PhysicalAddress =
-        Owner->Objects[index].DeviceAddress;
+        Owner->Objects[index].DeviceAddress + Owner->ObjectOffsets[index];
     RelocationObjects[index].Size = layouts[index].Size;
     RelocationObjects[index].Data = destination;
   }
@@ -229,7 +239,9 @@ static APPLE_AGX_BOOL queue_object_valid(
     APPLE_AGX_U32 Index, APPLE_AGX_U64 MinimumBytes, APPLE_AGX_BOOL Prepared) {
   return Index < Owner->ObjectCount && Owner->VirtualAddresses[Index] != 0ULL &&
                  Owner->Objects[Index].CpuAddress != RENDER_SHARED_NULL &&
-                 Owner->Objects[Index].Length >= MinimumBytes &&
+                 Owner->ObjectOffsets[Index] <= Owner->Objects[Index].Length &&
+                 MinimumBytes <=
+                     Owner->Objects[Index].Length - Owner->ObjectOffsets[Index] &&
                  ((Prepared && Owner->Objects[Index].State == AppleAgxMemoryPrepared &&
                    Owner->Objects[Index].GpuVirtualAddress == 0ULL) ||
                   (!Prepared && Owner->Objects[Index].State == AppleAgxMemoryGpuMapped &&
@@ -268,29 +280,41 @@ static APPLE_AGX_BOOL queue_config(
 
   zero_bytes(Config, (APPLE_AGX_U64)sizeof(*Config));
   Config->Ta.QueueType = (APPLE_AGX_U32)AppleAgxG13QueueTa;
-  Config->Ta.QueueInfoGpuAddress = Owner->VirtualAddresses[ta_queue_info];
+  Config->Ta.QueueInfoGpuAddress = Owner->VirtualAddresses[ta_queue_info] +
+                                   Owner->ObjectOffsets[ta_queue_info];
   Config->Ta.RingCpuAddress =
-      (APPLE_AGX_U64 *)Owner->Objects[ta_ring].CpuAddress;
+      (APPLE_AGX_U64 *)((unsigned char *)Owner->Objects[ta_ring].CpuAddress +
+                        Owner->ObjectOffsets[ta_ring]);
   Config->Ta.RingCapacity = APPLE_AGX_G13_RING_CAPACITY;
   Config->Ta.GpuDonePointer =
-      (volatile APPLE_AGX_U32 *)Owner->Objects[ta_pointers].CpuAddress;
+      (volatile APPLE_AGX_U32 *)((unsigned char *)
+          Owner->Objects[ta_pointers].CpuAddress +
+          Owner->ObjectOffsets[ta_pointers]);
   Config->Ta.CpuWritePointer = (volatile APPLE_AGX_U32 *)(
-      (unsigned char *)Owner->Objects[ta_pointers].CpuAddress + 0x40u);
+      (unsigned char *)Owner->Objects[ta_pointers].CpuAddress +
+      Owner->ObjectOffsets[ta_pointers] + 0x40u);
   Config->Ta.Stamp =
-      (volatile APPLE_AGX_U32 *)Owner->Objects[ta_stamp].CpuAddress;
+      (volatile APPLE_AGX_U32 *)((unsigned char *)
+          Owner->Objects[ta_stamp].CpuAddress + Owner->ObjectOffsets[ta_stamp]);
   Config->Ta.EventNumber = 0u;
 
   Config->D3.QueueType = (APPLE_AGX_U32)AppleAgxG13Queue3d;
-  Config->D3.QueueInfoGpuAddress = Owner->VirtualAddresses[d3_queue_info];
+  Config->D3.QueueInfoGpuAddress = Owner->VirtualAddresses[d3_queue_info] +
+                                   Owner->ObjectOffsets[d3_queue_info];
   Config->D3.RingCpuAddress =
-      (APPLE_AGX_U64 *)Owner->Objects[d3_ring].CpuAddress;
+      (APPLE_AGX_U64 *)((unsigned char *)Owner->Objects[d3_ring].CpuAddress +
+                        Owner->ObjectOffsets[d3_ring]);
   Config->D3.RingCapacity = APPLE_AGX_G13_RING_CAPACITY;
   Config->D3.GpuDonePointer =
-      (volatile APPLE_AGX_U32 *)Owner->Objects[d3_pointers].CpuAddress;
+      (volatile APPLE_AGX_U32 *)((unsigned char *)
+          Owner->Objects[d3_pointers].CpuAddress +
+          Owner->ObjectOffsets[d3_pointers]);
   Config->D3.CpuWritePointer = (volatile APPLE_AGX_U32 *)(
-      (unsigned char *)Owner->Objects[d3_pointers].CpuAddress + 0x40u);
+      (unsigned char *)Owner->Objects[d3_pointers].CpuAddress +
+      Owner->ObjectOffsets[d3_pointers] + 0x40u);
   Config->D3.Stamp =
-      (volatile APPLE_AGX_U32 *)Owner->Objects[d3_stamp].CpuAddress;
+      (volatile APPLE_AGX_U32 *)((unsigned char *)
+          Owner->Objects[d3_stamp].CpuAddress + Owner->ObjectOffsets[d3_stamp]);
   Config->D3.EventNumber = 1u;
   Config->TimeoutTicks = TimeoutTicks;
   return APPLE_AGX_TRUE;
