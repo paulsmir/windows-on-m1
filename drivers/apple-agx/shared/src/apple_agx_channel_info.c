@@ -21,12 +21,14 @@ static unsigned char AppleAgxChannelInfoDestinationIsZero(
 static unsigned char AppleAgxChannelInfoAddressIsValid(
     unsigned long long Address) {
   APPLE_AGX_UAT_HALF half;
+  unsigned long long mapping_base;
   APPLE_AGX_UAT_RESULT result;
 
-  if ((Address & (J313_AGX_G2_PAGE_SIZE - 1ULL)) != 0ULL)
+  if ((Address & 7ULL) != 0ULL)
     return 0u;
+  mapping_base = Address & ~(J313_AGX_G2_PAGE_SIZE - 1ULL);
   result = AppleAgxUatValidateRange(
-      J313_AGX_G2_UAT_FIRMWARE_CONTEXT, Address, 0ULL,
+      J313_AGX_G2_UAT_FIRMWARE_CONTEXT, mapping_base, 0ULL,
       J313_AGX_G2_PAGE_SIZE, AppleAgxUatFirmwareSharedReadWrite, &half);
   return result == AppleAgxUatResultOk && half == AppleAgxUatTtbr1;
 }
