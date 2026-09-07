@@ -613,6 +613,14 @@ and delayed queue state; no work bytes, mappings or behavior change. Receipt
 RED/GREEN and358 AppleAgx tests pass. Pinned30.0.570.0 gates pass; ZIP/SYS/
 producer SHA5b105c78.../b507ba84.../417ad971.... One exact hardware run is
 next with unchanged m1n1/Mu.
+EXP570 FINAL: receipt63d0468d at62ms proves both TA timestamp targets written
+(start5dbd1c4e/end5dbd1cb4) and firmware-private stamp2 reached7a000100.
+Thus StartTA, physical TA WaitForIdle and FinalizeTA private-stamp write are
+HARDWARE PROVEN. Shared stamp1 stays7a000000, done0, no event/D3/fence; SGX
+FAULTED=0. First unknown is FinalizeTA-to-RetireStamp/event retirement. The
+receipt's two static Timestamp opcode offsets were wrong; do not rerun570 for
+that. Next capture exact Finalize/Retire bytes plus pending-stamp/EventControl/
+JobList state. Exact cleanup and ordinary Code28/8CPU restore complete.
 
 ## Final live ordinary clean baseline
 

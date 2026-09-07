@@ -1,5 +1,44 @@
 # Hardware Experiment Ledger
 
+## EXP570 TA microsequence progress — result 2026-09-07T13:42Z
+
+CONFIRMED discriminator and physical TA execution checkpoint. Exact30.0.570.0
+ran once. `Wom1TaProgressReceipt` SHA
+`63d0468dd09a9ec9e39866e01a8fa5322215b7bbead4f0b44058b2f3ddf7e73a`
+is v1/916 bytes/fence255/elapsed62ms. TA queue remains rptr1/2/3=2,
+ring rptr/wptr=2, done0, busy1. SGX word `0x47dfaae3117cf694` has FAULTED=0.
+Both TA timestamp targets are firmware-written, start `0x5dbd1c4e` and end
+`0x5dbd1cb4`; the embedded trailing timestamp also equals `0x5dbd1cb4`.
+Firmware-private TA stamp2 advanced from `0x7a000000` to expected
+`0x7a000100`, while shared driver stamp1 remains `0x7a000000`. EventControl is
+in-list with next=`0xffffffa000418000`, but no TA flag/pstamp; RegionB TA stats
+remain zero. No event, done, D3 or Windows fence followed.
+
+Pinned m1n1/Asahi contract is StartTA -> timestamp -> WaitForIdle -> timestamp
+-> FinalizeTA -> RetireStamp. Therefore physical TA execution and its wait are
+HARDWARE PROVEN, and FinalizeTA progressed far enough to write the private
+stamp. The first unknown is private-stamp-to-shared-stamp/ring/event retirement,
+at or immediately before RetireStamp. This is not correct Windows fence
+completion and not acceleration PASS.
+
+The receipt's diagnostic opcode offsets0x180/0x1d0 selected pointer fields;
+correct Timestamp offsets are0x18c/0x1cc and RetireStamp is0x28c. This does not
+affect any submitted bytes or the independent mutable timestamp/stamp verdict.
+Do not rerun EXP570 merely to correct static opcode fields. Next discriminator
+captures the exact FinalizeTA+Retire bytes, EventControl event_count/JobList and
+the bounded RegionC pending-stamp table to distinguish a pending retirement
+from a missing RetireStamp publication.
+
+TDR event is116 `(Arg3=C0000483, Arg4=3)`; dump
+`090726-14062-01.dmp` SHA
+`c052445e1eaf1f780954c09017f651760ef251ff0649bfe13b2ac45ea7d4f706`.
+Fault snapshot SHA `3bf2aa70...`; recovery JSON SHA `082fc638...`.
+Exact oem5 package/devnode/service/SYS/UMD cleanup completed through validated
+emergency377/385. Ordinary377/392 restored and verified Code28/no package,
+service or module,8CPU, NVMe/xHCI/input healthy; Event129=0. The one recent
+Bugcheck1001 is this recorded EXP570 result. Emergency/ordinary logs SHA
+`61e04c1c...` / `4ced72f1...`; ordinary launcher PID94668 owns L41.
+
 ## EXP570 TA microsequence progress — candidate ready 2026-09-07T13:38Z
 
 Source commit `9e4d7e11bdc4d45673d5170acc1fd7fd4487fbc9`; ledger HEAD
