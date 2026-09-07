@@ -92,6 +92,15 @@ sequence correction yet; that is a later independent boundary.
 After repeated submit is proven, the next visible boundary is exact Present to
 DCP; a black panel before that boundary is expected and not an EXP586 regression.
 
+EXP587 source commit e73f518e0742d746047d4c9350715765bf71d441
+splits one-time persistent initialization from per-submission materialization.
+Later jobs preserve BufferManager, rings, JobList, queue pointers and InitBM;
+only dynamic objects9/10/12/14/15/17/18/19/26/27 are copied/relocated. Object16
+is first-job-only. RED reproduced persistent recopy; GREEN preserves exact live
+sentinels while updating second-job commands/stamps/done expectations.17 focused
+and391 broad tests PASS; same unrelated source-text assertion remains. Next
+pinned build and one two-invocation hardware experiment, receipts after each.
+
 ## Binding scope and current executor
 
 The post-EXP506 model handoff is complete. Latest user instruction explicitly

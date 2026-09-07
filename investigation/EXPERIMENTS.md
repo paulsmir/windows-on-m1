@@ -35691,3 +35691,46 @@ Health8CPU/NVMe2/USB5/keyboard1, bugcheck/critical0; Event129x2 is telemetry.
 Exact oem5/package/service/SYS/UMD cleanup complete. Next restore ordinary392,
 then fix only the already source-confirmed persistent shared-object recopy before
 one two-submit candidate. Firmware-reset sequence remains separate.
+
+# EXP587 — preserve persistent queue state across second submit
+
+**PREREGISTERED 2026-09-07T20:09Z; one candidate, two ordered producer calls.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP586 proves the first physical job, correct offscreen target and exact fence;
+  the next first unknown is a second job in the same firmware/queue lifetime.
+- Current BuildActiveJob recopies all36 template context0 objects although the
+  queue provider retains BufferManagerInitialized and advances live ring/done
+  pointers. That deterministic lifetime mismatch destroys the state needed by
+  its own second-job plan.
+- Dynamic patch offsets map exactly to objects9/10/12/14/15/16/17/18/19/26/27;
+  object16 is InitBM-only. Queue info/rings/JobList/pointers are not per-job data.
+
+**WINDOWS CONTRACT:** two independent calls of the unchanged Windows producer,
+each with its own context/allocation/fence lifetime, while the bound adapter and
+backend queue lifetime remain continuous.
+
+**AGX/ASAHI CONTRACT:** InitBM and persistent queue objects initialize once;
+subsequent TA publishes only the work root and advances from current write/done
+pointers. D3 publishes its next two roots. Live firmware-written state is not
+replaced from the captured template.
+
+**TRANSLATION:** commit e73f518e0742d746047d4c9350715765bf71d441
+uses IncludeInitBm as the existing queue-lifetime discriminator. First job copies
+and relocates all shared objects. Later jobs bind live addresses without copy,
+copy only objects9/10/12/14/15/17/18/19/26/27, skip object16, and apply only
+relocations whose source is one of those per-job objects.
+
+**WHAT IS STILL UNKNOWN:** whether the real second job advances TA from done2 to3,
+D3 from2 to4, produces stamps7a000200/3d000200, completes its exact Windows fence
+and writes the correct target. PASS requires separate receipts after each call,
+monotonic sequence/stamps/done,256 expected pixels both times, no stale/duplicate
+completion and healthy system. First-call failure is classified separately.
+
+**OFFLINE PROOF:** test mutates live BufferManagerInfo, D3 ring, JobList, queue
+pointers and InitBM after the first active job, then builds a non-InitBM second
+job. It was RED because all sentinels were overwritten; GREEN preserves each
+byte-exact while copying second-job command/stamp objects and expected done3/4.
+17 focused tests and391 broad tests PASS with one unrelated existing source-text
+assertion. Same m1n1/Mu/producer/output receipt. Build pending.
