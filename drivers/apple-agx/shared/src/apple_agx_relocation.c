@@ -90,7 +90,8 @@ APPLE_AGX_BOOL AppleAgxApplyRelocations(
             (APPLE_AGX_U32)AppleAgxRelocationGpuVaPage32kU32 &&
         (relocation->AddressSpace !=
              (APPLE_AGX_U32)AppleAgxRelocationGpuVa ||
-         relocation->TargetOffset != 0u ||
+         (relocation->TargetOffset &
+          (APPLE_AGX_BM_PAGE_SIZE - 1ULL)) != 0u ||
          (address & (APPLE_AGX_BM_PAGE_SIZE - 1ULL)) != 0ULL ||
          address / APPLE_AGX_BM_PAGE_SIZE > 0xffffFFFFULL))
       return APPLE_AGX_FALSE;

@@ -27,6 +27,7 @@ int main(void) {
   APPLE_AGX_EXP208_JOB_PARAMETERS parameters;
   APPLE_AGX_BACKEND_JOB_IMAGE job;
   APPLE_AGX_U32 index;
+  APPLE_AGX_U32 pageRelocations = 0u;
 
   assert(bytes == 5799936u);
   assert(arena != NULL);
@@ -36,12 +37,12 @@ int main(void) {
   assert(roots.Ta[1] == 0x1503898000ULL);
   assert(roots.D3[0] == 0x1503870000ULL);
   assert(roots.D3[1] == 0x1503890000ULL);
-  assert(fnv1a64(arena, bytes) == 0x20db8e26b2f418bcULL);
+  assert(fnv1a64(arena, bytes) == 0xc18ebe30137ee8ccULL);
 
   assert(AppleAgxRenderTemplateObjectCount() == 73u);
   assert(AppleAgxRenderTemplateRuntimeObjectCount() == 74u);
   assert(AppleAgxRenderTemplateArenaObjectIndex() == 73u);
-  assert(AppleAgxRenderTemplateRelocationCount() == 159u);
+  assert(AppleAgxRenderTemplateRelocationCount() == 207u);
   layouts = AppleAgxRenderTemplateObjectLayouts();
   relocations = AppleAgxRenderTemplateRelocations();
   assert(layouts != NULL);
@@ -79,10 +80,10 @@ int main(void) {
   assert(relocations[0].TargetOffset == 0u);
   assert(relocations[0].AddressSpace == AppleAgxExp208RelocationGpuVa);
   assert(relocations[0].Encoding == AppleAgxExp208RelocationExactU64);
-  assert(relocations[158].SourceObject == 63u);
-  assert(relocations[158].SourceOffset == 164u);
-  assert(relocations[158].TargetObject == 41u);
-  for (index = 0u; index < 159u; ++index) {
+  assert(relocations[206].SourceObject == 63u);
+  assert(relocations[206].SourceOffset == 164u);
+  assert(relocations[206].TargetObject == 41u);
+  for (index = 0u; index < 207u; ++index) {
     APPLE_AGX_U32 width =
         relocations[index].Encoding ==
                 AppleAgxExp208RelocationGpuVaPage32kU32
@@ -101,7 +102,18 @@ int main(void) {
                AppleAgxExp208RelocationPhysical);
     assert(relocations[index].Encoding <=
            AppleAgxExp208RelocationGpuVaPage32kU32);
+    if (relocations[index].SourceObject == 41u &&
+        relocations[index].Encoding ==
+            AppleAgxExp208RelocationGpuVaPage32kU32) {
+      assert(relocations[index].SourceOffset == pageRelocations * 4u);
+      assert(relocations[index].TargetObject ==
+             43u + pageRelocations / 4u);
+      assert(relocations[index].TargetOffset ==
+             (pageRelocations % 4u) * 0x8000u);
+      ++pageRelocations;
+    }
   }
+  assert(pageRelocations == 64u);
 
   assert(!AppleAgxRenderTemplateBuildRelocationObjects(
       arena, bytes - 1u, 0x900000000ULL, objects, 74u));

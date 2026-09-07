@@ -154,7 +154,8 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxExp208ValidateRelocations(
                 AppleAgxExp208RelocationGpuVaPage32kU32 &&
         (relocation->AddressSpace !=
              (APPLE_AGX_BACKEND_U32)AppleAgxExp208RelocationGpuVa ||
-         relocation->TargetOffset != 0u ||
+         (relocation->TargetOffset &
+          (APPLE_AGX_EXP208_PAGE_32K - 1ULL)) != 0u ||
          (address & (APPLE_AGX_EXP208_PAGE_32K - 1ULL)) != 0ULL ||
          address / APPLE_AGX_EXP208_PAGE_32K > 0xffffffffULL))
       return APPLE_AGX_BACKEND_FALSE;
