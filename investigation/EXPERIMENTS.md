@@ -1,5 +1,27 @@
 # Hardware Experiment Ledger
 
+## EXP571 TA RetireStamp pending state — candidate ready 2026-09-07T13:58Z
+
+Implementation commit `1b76ab3574b1724f07eca997df951f92c3902c58`,
+ledger HEAD `681860a05df1d386751a02f58dd5fcf28c93d7b5`; root tracked
+diff/inventory SHA remain `9804463e...` / `9f4b2d6c...`. m1n1/Mu identities
+and dirty-state hashes are unchanged from EXP570. Builder base EXP570 plus exact
+overlay; pinned WDK26100/MSVC14.44 invocation is
+`build-driver.ps1 -Configuration Release -PackageBuild 571 -SubmitQualification`
+followed by producer ARM64 Rebuild/analysis. KMD/UMD build, analysis, Universal,
+Inf2Cat, test signing and version30.0.571.0 PASS with inherited C28251 only.
+Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`99c9b2a11662f59f9a320c8588bd50e62442d4bb33e2d740d93f6589bf481e73` /
+`f94e33c5beca87596be4eef41e4cba02212a7079ab96dd63b0c0cbb88235955f` /
+`2f6cc5e9c73f1d7419b98c5d87f1faf76e5c3b5e3ca2c31742f521a711ecc8e0` /
+`8aec5c781042a390f865c0cd952e87d63f6e4e9a37daa9101f18b57ee6a89a31` /
+`0187aaaf3fecf2100bf69e721b1b88ce8c55d68df1caf5e063681c9698ef7f63` /
+`d33daede31f0a6391beee0a67fee59f84f2fc6a898b27444b0a7176e7a2bf10d` /
+`0b971fe16070d53f9a3b7ab04dea56a798eb1e02f1f4639a66cc5a364caac355`.
+Workflow/launch SHA `0c95cb20...` / `5796458f...`; same full-owner m1n1
+`e25606eb...`, Mu `c7ddcfb2...`, and established emergency/ordinary recovery.
+One natural bind and one producer only; collect receipt before exact cleanup.
+
 ## EXP571 TA RetireStamp pending state — preregistration 2026-09-07T13:55Z
 
 WHY THIS HYPOTHESIS:

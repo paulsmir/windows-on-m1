@@ -623,7 +623,8 @@ that. Next capture exact Finalize/Retire bytes plus pending-stamp/EventControl/
 JobList state. Exact cleanup and ordinary Code28/8CPU restore complete.
 EXP571 commit1b76ab3 adds only that read-only retirement receipt and corrects
 the old receipt-only opcode offsets. RegionC pending-stamp table and exact
-FinalizeTA+Retire bytes are bounded;359 AppleAgx tests pass. Build/hardware next.
+FinalizeTA+Retire bytes are bounded;359 AppleAgx tests pass. Pinned30.0.571.0
+gates pass; ZIP/SYS/producer SHAf94e33c5.../2f6cc5e9.../0b971fe1.... Hardware next.
 
 ## Final live ordinary clean baseline
 
