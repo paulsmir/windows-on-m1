@@ -95,15 +95,12 @@ UMD/producer hashes are respectively
 `0634b1138f2219601da18527047e95c9941665dda917b6fe238d6efb47e1b94b`,
 `b081d56593ea66777c7792e57a3eb42ea0672d06ca35ff5b60d8165d2e55865d`.
 
-## Current next boundary
+## Current next boundary — visible scanout first
 
-Before Present, close the source-confirmed firmware-reset lifetime mismatch:
-`AdmissionPlatformRuntimeReset` recreates firmware/provider/queues but leaves
-`BackendImage.Sequence` in the old queue epoch. The first job of the new queue
-requires InitBM and firmware-local sequence1. Windows fences remain global and
-must not be reset. Implement an image queue-lifetime restart contract, prove
-`sequence2 -> reset -> InitBM sequence1` offline, and derive the smallest safe
-hardware reset discriminator. Do not change Present/DCP in that experiment.
+The latest operator instruction makes the nearest mandatory result a meaningful
+physical-panel image. EXP589 reset support is offline GREEN and its exact signed
+artifact was built, but it was never staged or run and is deferred. Do not mix
+it into the display candidate.
 
 Source commit `d4b88bc86178db602c73ab2c2c330a8d76533a69` adds the bounded
 queue-lifetime restart: only when the backend image is Ready and has no bound/job
@@ -118,6 +115,23 @@ qualification mode using the pinned WDK public `D3DKMT_ESCAPE_TDRDBGCTRL` with
 `D3DKMT_TDRDBGCTRLTYPE_ENGINETDR`, node0. It does not add a private KMD escape or
 alter production render commands. EXP589 will use it immediately after Render,
 then run a fresh normal producer after dxgkrnl reset recovery.
+
+Display source commit `63285c06aa76db3f03c50120a35a8b6e841beb29` adds a
+dedicated `VisibleScanoutQualification` profile. It uses the existing 56MiB
+driver-owned scanout pool, fills offset0 before any Windows primary publication
+with frame590 (white border, red/green/blue/yellow quadrants and binary marker),
+then uses the existing fixed-panel QueuePresent/D589 path. A single 216-byte
+receipt binds CPU/GPA/HPA, broker pool PA, surface offset/geometry/format/hash,
+requested/applied/latched sequence, active offset and swap ID. Validation requires
+the pool PA to equal the filled surface backing and all three sequences/offsets
+to match. No capability, render, RTKit, scheduler, VA or VSync behavior changes.
+Relevant tests29 PASS; full AppleAgx suite365 PASS.
+
+Build EXP590 from the exact EXP588 builder base plus only this display overlay,
+excluding EXP589 reset files. One natural bind must leave the diagnostic marker
+active after exact A408/D589 and preserve the receipt. Machine evidence alone
+does not prove the physical panel; after it is latched, request only visual/photo
+confirmation if direct physical observation remains unavailable.
 
 ## Standing constraints
 

@@ -35894,3 +35894,54 @@ GREEN for sequence1/2 -> restart -> InitBM sequence1, unchanged later Windows
 fence and rejection while bound. Relevant suite21 PASS; full AppleAgx suite364
 PASS. Pinned WDK source confirms exact public escape structures/constants.
 Build pending. No Present/DCP change in this candidate.
+
+**EXP589 BUILD 2026-09-07T20:59Z; HARDWARE DEFERRED BY DISPLAY PRIORITY.**
+Exact30.0.589.0 pinned build/sign gates passed. ZIP SHA
+`7733aa65faac29710c0993bb929992ac63eaebe432bbe62f61aac408d24ea1ae`;
+producer SHA `2f628c252e0e23346d5c96919f2eeae038df168a718e320dba9f21607956370e`.
+It was never transferred to/staged on the Air and has no hardware verdict. The
+new user instruction requires visible scanout first, so EXP589 remains an offline
+artifact and must not be combined with the display candidate.
+
+# EXP590 — identity-bound visible scanout marker
+
+**PREREGISTERED 2026-09-07T21:08Z; one exact visible-display candidate.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP586/588 prove correct offscreen pixels and repeated TA/D3/fences, but the
+  physical panel remains black and no visible Present has been proven.
+- The production KMD already owns one contiguous56MiB pool and the proven broker
+  v2 accepts a full2560x1600 BGRA8888 surface offset and returns exact D589
+  sequence; no second display backend is required.
+- Current D3DKMT enumeration reports zero sources and no natural Windows primary
+  is known to replace the pool. A driver-owned marker latched directly through
+  the existing path is the smallest discriminator of display address/format.
+
+**WINDOWS CONTRACT:** this is DISPLAY_ONLY qualification. The driver fills its
+own pre-publication scanout surface, not an active Windows allocation; it does not
+report a synthetic Windows fence/completion or advertise new caps.
+
+**PLATFORM CONTRACT:** memory runtime owns the contiguous pool and provides exact
+CPU/GPA/host-PA identity. Existing broker REGISTER maps the pool, QueuePresent
+publishes offset0, A408 applies it and D589 latches the same sequence. DCP retains
+the active surface until a later valid presentation or release.
+
+**TRANSLATION:** commit
+`63285c06aa76db3f03c50120a35a8b6e841beb29` fills offset0 with frame590
+(white border, four contrasting quadrants and binary marker), barriers, commits
+the fixed mode and calls the existing QueuePresent/interrupt-consume path. Its
+receipt requires filled host PA == broker pool PA, requested==applied==latched,
+active offset==filled offset, exact mode/size/hash and nonzero swap ID.
+
+**WHAT IS STILL UNKNOWN:** whether the exact filled backing is accepted and
+latched, and whether the physical panel actually shows frame590. PASS A requires
+valid receipt plus operator-visible/photo confirmation; A408/D589 alone is not
+visible proof. If latch succeeds but panel is black, inspect only DCP-visible
+address/format/handoff.
+
+**OFFLINE PROOF:** pattern rejects wrong size without mutation; exact colors,
+border, frame-dependent hash and marker are tested. Receipt rejects sequence,
+backing or offset mismatch. Existing fixed-panel/scanout/Present/VSync tests and
+full suite are GREEN:29 focused,365 AppleAgx. Build from EXP588 source base plus
+only the display overlay; exclude EXP589 reset commits. Build pending.
