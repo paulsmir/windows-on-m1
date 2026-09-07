@@ -599,6 +599,11 @@ context63 READ INVALID UL1C7 VA0x1100010000. Hardware log b14b574d. Exact
 cleanup complete. Commit7d62dc4 appends/maps only this proven16KiB object.
 Pinned30.0.569.0 ZIP/SYS/producer SHAbec812e3.../676dc77b.../146cd509....
 EXP569 preregistered.
+EXP569 FINAL: second fixed-input fault gone. Snapshot7681cd9b at62ms has
+FAULTED=0, TA channel read1/D3 read0; no completion by500ms. Hardware log
+ed4a1c66. Exact cleanup complete; ordinary restore underway. First unknown is
+nonfaulting TA work/microsequence progress. Do not add a third fixed object
+without a new fault.
 
 ## Final live ordinary clean baseline
 

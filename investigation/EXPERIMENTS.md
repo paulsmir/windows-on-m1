@@ -1,5 +1,18 @@
 # Hardware Experiment Ledger
 
+## EXP569 second fixed EXP208 frame input — result 2026-09-07T13:24Z
+
+CONFIRMED causal fix/new boundary. Exact30.0.569.0 removed the
+0x1100010000 fault. Snapshot SHA
+`7681cd9b43651a16316251f2fc906382c0804f4b70374b942ee091effa3c13a1`
+at62ms has SGX FAULTED=0, TA channel read1, D3 read0. No physical completion
+before500ms; Windows timeout-check guard4 remains. Hardware log SHA
+`ed4a1c66edb1ce39ff9b10aff19e56814082d51d8c999a50f9a95041ed4bfe0c`.
+Thus both proven hidden inputs are closed. Do not add 0x1100018000 without a
+fault. Exact cleanup complete; ordinary restore in progress. Next boundary is
+nonfaulting TA execution after command-channel consumption; use a source-derived
+TA work/microsequence progress discriminator.
+
 ## EXP569 second fixed EXP208 frame input — preregistration 2026-09-07T13:14Z
 
 WHY THIS HYPOTHESIS: EXP568 removes fault VA0x1100020000 and immediately exposes
