@@ -18,11 +18,7 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   const APPLE_AGX_MEMORY_IO *MemoryIo;
   APPLE_AGX_MEMORY_OBJECT
       Objects[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
-  /* Page-aligned broker mapping bases remain separate from the exact
-   * firmware-visible EXP208 object identities inside those pages. */
   APPLE_AGX_U64 VirtualAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
-  APPLE_AGX_U64 ObjectAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
-  APPLE_AGX_U32 DataOffsets[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
   APPLE_AGX_U32 ObjectCount;
   APPLE_AGX_BOOL Initialized;
   APPLE_AGX_BOOL Built;

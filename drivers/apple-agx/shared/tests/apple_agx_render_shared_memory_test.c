@@ -71,17 +71,8 @@ int main(void) {
              &owner, &io, 0xffffffa001000000ULL) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(owner.ObjectCount == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
-  layouts = AppleAgxRenderTemplateObjectLayouts();
-  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
-       ++index) {
-    assert(owner.ObjectAddresses[index] == layouts[index].OriginalGpuVa);
-    assert(owner.DataOffsets[index] ==
-           (layouts[index].OriginalGpuVa &
-            (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)));
-    assert(owner.VirtualAddresses[index] ==
-           (layouts[index].OriginalGpuVa &
-            ~(APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL)));
-  }
+  assert((owner.VirtualAddresses[0] & 0x7fffULL) == 0ULL);
+  assert((owner.VirtualAddresses[35] & 0x7fffULL) == 0ULL);
   assert(AppleAgxRenderSharedMemoryBindRelocationObjects(
       &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES, objects,
       APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
@@ -96,41 +87,33 @@ int main(void) {
   memset(&queue_config, 0, sizeof(queue_config));
   assert(AppleAgxRenderSharedMemoryBuildQueueConfig(
       &owner, 500u, &queue_config));
-  assert(queue_config.D3.QueueInfoGpuAddress == owner.ObjectAddresses[3]);
+  assert(queue_config.D3.QueueInfoGpuAddress == owner.VirtualAddresses[3]);
   assert(queue_config.D3.RingCpuAddress ==
-         (APPLE_AGX_U64 *)((unsigned char *)owner.Objects[4].CpuAddress +
-                           owner.DataOffsets[4]));
+         (APPLE_AGX_U64 *)owner.Objects[4].CpuAddress);
   assert(queue_config.D3.GpuDonePointer ==
-         (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[24].CpuAddress + owner.DataOffsets[24]));
+         (volatile APPLE_AGX_U32 *)owner.Objects[24].CpuAddress);
   assert(queue_config.D3.CpuWritePointer ==
          (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[24].CpuAddress + owner.DataOffsets[24] + 0x40u));
+             owner.Objects[24].CpuAddress + 0x40u));
   assert(queue_config.D3.Stamp ==
-         (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[27].CpuAddress + owner.DataOffsets[27]));
-  assert(queue_config.Ta.QueueInfoGpuAddress == owner.ObjectAddresses[6]);
+         (volatile APPLE_AGX_U32 *)owner.Objects[27].CpuAddress);
+  assert(queue_config.Ta.QueueInfoGpuAddress == owner.VirtualAddresses[6]);
   assert(queue_config.Ta.RingCpuAddress ==
-         (APPLE_AGX_U64 *)((unsigned char *)owner.Objects[7].CpuAddress +
-                           owner.DataOffsets[7]));
+         (APPLE_AGX_U64 *)owner.Objects[7].CpuAddress);
   assert(queue_config.Ta.GpuDonePointer ==
-         (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[25].CpuAddress + owner.DataOffsets[25]));
+         (volatile APPLE_AGX_U32 *)owner.Objects[25].CpuAddress);
   assert(queue_config.Ta.CpuWritePointer ==
          (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[25].CpuAddress + owner.DataOffsets[25] + 0x40u));
+             owner.Objects[25].CpuAddress + 0x40u));
   assert(queue_config.Ta.Stamp ==
-         (volatile APPLE_AGX_U32 *)((unsigned char *)
-             owner.Objects[26].CpuAddress + owner.DataOffsets[26]));
+         (volatile APPLE_AGX_U32 *)owner.Objects[26].CpuAddress);
   assert(queue_config.TimeoutTicks == 500u);
+  layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
-    assert(objects[index].GpuVa == owner.ObjectAddresses[index]);
-    assert(objects[index].PhysicalAddress ==
-           owner.Objects[index].DeviceAddress + owner.DataOffsets[index]);
-    assert(objects[index].Data ==
-           (unsigned char *)owner.Objects[index].CpuAddress +
-               owner.DataOffsets[index]);
+    assert(objects[index].GpuVa == owner.VirtualAddresses[index]);
+    assert(objects[index].PhysicalAddress == owner.Objects[index].DeviceAddress);
+    assert(objects[index].Data == owner.Objects[index].CpuAddress);
     assert(objects[index].Size == layouts[index].Size);
     assert(memcmp(objects[index].Data,
                   arena + layouts[index].ArenaOffset,
