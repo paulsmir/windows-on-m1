@@ -391,16 +391,23 @@ Commitd115084 materializes that existing image before broker mapping; RED then
 GREEN and109 render regressions PASS. Pinned30.0.544.0 gates PASS;
 ZIP/SYS/producer SHA610dcdb2.../f00525a1.../5ac2614d.... EXP544 is
 preregistered for one natural bind and exact channel-consumption verdict.
+EXP544 INCONCLUSIVE before producer: Code43, Start8/Platform9 statusC000007B,
+evidence SHA76c5143f.... New all-or-nothing relocation received only36 populated
+objects although the table names74. Commit9d1f3de seeds all74 from the proven
+BackendImage, then overrides the shared36 and applies159 relocations, matching
+legacy coordinator order. RED/GREEN and109 regressions PASS; pinned30.0.545.0
+gates PASS, ZIP/SYS/producer SHAf879f6f2.../8ab626cc.../392b9654.... EXP545
+preregistered. Clean ordinary health SHAd5f4a574....
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T06:54Z after exact543 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T07:12Z after exact544 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAbb9f1e450ae7689026d5729a800fc26832afd4e03251fc0e171faab5787f930f.
+SHAd5f4a5743de302fe0af39a38c0df04f59f4700fcc0fde3fcb6997e1ca9ba7b6d.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

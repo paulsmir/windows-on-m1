@@ -1,5 +1,69 @@
 # Hardware Experiment Ledger
 
+## EXP545 seed complete queue relocation set — preregistration 2026-09-07T07:14Z
+
+WHY THIS HYPOTHESIS:
+- EXP544 did not run the producer; StartDevice stopped exactly at platform
+  stage9 with `STATUS_INVALID_IMAGE_FORMAT`, the new fail-closed branch.
+- The shared owner has 36 objects but the relocation table names 74 runtime
+  objects. The legacy coordinator first seeds all 74 arena-backed entries, then
+  overwrites the first 36 with shared objects; EXP544 incorrectly began from a
+  zero 74-entry array, so batch validation correctly rejected targets36..73.
+- The current `BackendImage.Objects` is already the exact validated 74-entry
+  arena relocation set, making a bounded copy before the existing shared bind
+  the deterministic missing step.
+
+WINDOWS CONTRACT: unchanged from EXP544; natural StartDevice must first pass,
+then one normal producer may run.
+
+AGX/ASAHI CONTRACT: the atomic 159-relocation batch must resolve every source
+and target. Shared firmware queue objects replace entries0..35; context63 work
+objects36..73 and the arena entry remain the already validated backend image.
+
+TRANSLATION: seed the heap-backed 74-entry queue relocation set from
+`Context->BackendImage.Objects`, then overwrite only the existing 36 shared
+objects and apply the unchanged relocation table. No runtime behavior changes.
+
+WHAT IS STILL UNKNOWN: whether this completed materialization advances
+StartDevice and then firmware command-channel consumption.
+
+Single follow-up commit `9d1f3deb2c3af2b72c45b64326c1f3b3592ce530`.
+The complete-set invariant was RED then GREEN; 109 render regressions pass.
+Pinned WDK10.0.26100.0/MSVC14.44.35207 package30.0.545.0 analysis, Universal,
+Inf2Cat, signing and version gates pass with inherited C28251. Overlay SHA-256
+`11c58a348fe9e6c18751e82c3d8d5e6df477ddb10c6c1026f187a536ac32b64b`.
+ZIP/SYS/INF/CAT/UMD/producer SHA-256:
+`f879f6f23210b1463cd470ed54f16a70355027a0bbd9469edab4e2791678c0a5` /
+`8ab626ccd91c1839d4a5a98cc3bba28d448278d810217d57ff1ffae114944051` /
+`ae1bd3a29de22a88a44169ede21a2842b72459e7e22e02e70a0cab4c0fcf1502` /
+`816064d8a9d0e465ea9a0b41dbc20b41b716a7b7b3ea3bebace165d790347cac` /
+`e7f394064e99e8f000e18d0bc660a8fec584b8517ecc165f7d3ef90d6fd240e7` /
+`392b9654ab2c9afe287639bf8df3b118b1c2e06b0c8fd7a1b85ce081d3ac7001`.
+Clean ordinary baseline SHA-256
+`d5f4a5743de302fe0af39a38c0df04f59f4700fcc0fde3fcb6997e1ca9ba7b6d`.
+One natural bind; if Code0, one producer. PASS requires read-pointer advance.
+Recovery remains exact package removal and ordinary377/392 restoration.
+
+## EXP544 materialize firmware queue image — result 2026-09-07T07:12Z
+
+INCONCLUSIVE BEFORE INTENDED BOUNDARY; no producer ran. Exact natural bind
+selected 30.0.544.0 but returned Code43/service Stopped. Durable device receipt
+localized StartDevice stage8/platform stage9 to `0xC000007B
+(STATUS_INVALID_IMAGE_FORMAT)`, exactly the new fail-closed materialization
+branch. Evidence JSON SHA-256
+`76c5143f7305720ce78437c5d5dabe5dc1a3a44b4927aedd77f315a418a1ce58`.
+Two Event129 records occurred during this launch and remain storage telemetry;
+they do not explain the exact synchronous platform-stage status.
+
+Offline reproduction identified the local implementation error: the 159
+relocations reference 74 objects while the new `QueueObjects` array was zero
+beyond the 36 shared objects. Legacy coordinator ordering proves the required
+sequence is full arena seed, then shared-object override, then relocation.
+Exact package/service/files were removed. Ordinary health SHA-256
+`d5f4a5743de302fe0af39a38c0df04f59f4700fcc0fde3fcb6997e1ca9ba7b6d`
+proves Code28/null INF/service, no package/SYS/UMD,8 CPUs,SSH and healthy
+AppleInput/stornvme/USBXHCI with no remaining fresh events in its health window.
+
 ## EXP544 materialize firmware queue image — preregistration 2026-09-07T07:00Z
 
 WHY THIS HYPOTHESIS:
