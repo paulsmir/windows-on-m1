@@ -71,6 +71,11 @@ int main(void) {
   APPLE_AGX_U32 index;
   APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG queue_config;
   APPLE_AGX_U64 original_vas[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
+  unsigned char persistent_bm[188u];
+  unsigned char persistent_ring[10240u];
+  unsigned char persistent_job_list[24u];
+  unsigned char persistent_queue_pointers[96u];
+  unsigned char persistent_init_bm[32u];
 
   memset(&fake, 0, sizeof(fake));
   memset(&owner, 0, sizeof(owner));
@@ -254,6 +259,51 @@ int main(void) {
              [owner.ObjectOffsets[0]] == 0x5au);
   assert(*(unsigned int *)(active_objects[20].Data + 4u) ==
          *(unsigned int *)active_objects[20].Data);
+
+  memset(active_objects[1].Data, 0xa1, sizeof(persistent_bm));
+  memset(active_objects[4].Data, 0xa4, sizeof(persistent_ring));
+  memset(active_objects[23].Data, 0xb7, sizeof(persistent_job_list));
+  memset(active_objects[24].Data, 0xb8, sizeof(persistent_queue_pointers));
+  memset(active_objects[16].Data, 0xc0, sizeof(persistent_init_bm));
+  memcpy(persistent_bm, active_objects[1].Data, sizeof(persistent_bm));
+  memcpy(persistent_ring, active_objects[4].Data, sizeof(persistent_ring));
+  memcpy(persistent_job_list, active_objects[23].Data,
+         sizeof(persistent_job_list));
+  memcpy(persistent_queue_pointers, active_objects[24].Data,
+         sizeof(persistent_queue_pointers));
+  memcpy(persistent_init_bm, active_objects[16].Data,
+         sizeof(persistent_init_bm));
+  arena[layouts[9].ArenaOffset] = 0x92u;
+  arena[layouts[14].ArenaOffset + layouts[14].Size - 1u] = 0xaeu;
+  arena[layouts[18].ArenaOffset + layouts[18].Size - 1u] = 0xbeu;
+  arena[layouts[19].ArenaOffset + layouts[19].Size - 1u] = 0xbfu;
+  staged_job.TaExpectedStamp = 0x7a000200u;
+  staged_job.D3ExpectedStamp = 0x3d000200u;
+  staged_job.TaExpectedDonePointer = 3u;
+  staged_job.D3ExpectedDonePointer = 4u;
+  assert(AppleAgxRenderSharedMemoryBuildActiveJob(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, APPLE_AGX_FALSE, &bindings, &staged_job,
+      active_objects, &active_job));
+  assert(memcmp(active_objects[1].Data, persistent_bm,
+                sizeof(persistent_bm)) == 0);
+  assert(memcmp(active_objects[4].Data, persistent_ring,
+                sizeof(persistent_ring)) == 0);
+  assert(memcmp(active_objects[23].Data, persistent_job_list,
+                sizeof(persistent_job_list)) == 0);
+  assert(memcmp(active_objects[24].Data, persistent_queue_pointers,
+                sizeof(persistent_queue_pointers)) == 0);
+  assert(memcmp(active_objects[16].Data, persistent_init_bm,
+                sizeof(persistent_init_bm)) == 0);
+  assert(active_objects[9].Data[0] == 0x92u);
+  assert(active_objects[14].Data[active_objects[14].Size - 1u] == 0xaeu);
+  assert(active_objects[18].Data[active_objects[18].Size - 1u] == 0xbeu);
+  assert(active_objects[19].Data[active_objects[19].Size - 1u] == 0xbfu);
+  assert(active_job.TaExpectedStamp == 0x7a000200u);
+  assert(active_job.D3ExpectedStamp == 0x3d000200u);
+  assert(active_job.TaExpectedDonePointer == 3u);
+  assert(active_job.D3ExpectedDonePointer == 4u);
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(fake.Freed == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
