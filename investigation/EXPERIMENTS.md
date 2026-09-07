@@ -36426,3 +36426,23 @@ ZIP/SYS/INF/CAT/UMD/producer SHA256:
 Exact EXP597R2 base and sanitized backend exclude dormant reset. Persist current
 cleanup, verify ordinary Code28/no package, stage, graceful restart, then one
 boot-time natural bind and producer. Observe panel during the10s hold.
+
+**EXP598 MACHINE FINAL 2026-09-08T00:35Z — PREPATCHED ROUTE, SCALE AND LATCH
+PASS; PHYSICAL CONFIRMATION PENDING.** Exact natural bind passed Code0/service
+Running/8CPU. Producer: both allocation statuses0, MakeResident fence7002,
+Render0/queued1, clean result0. Visible receipt Guard11/Stage3/Status0 binds
+captured fence256 and nonzero allocation token to source GPU0x1500fa0000,
+hostPA0x9bd160000, hash16c4fd3d3ba00d25 and destination offset0xfb0000,
+hostPA0x9bd170000, bytes0xfa0000, hash27592755b9c32325. Requested/applied/
+latched sequence3, active offset0xfb0000, swap11; host independently logged A408
+and D589 swap11. Terminal ValidMaskff proves TA/D3 stamps and done2/2, exact
+fence256, NotifyInterrupt/DPC, 256 exact ff112233 pixels and intact guard.
+Visible/terminal/host/run/evidence SHA:
+`1f96c9e63be63b63df2c5af8e4b685d4580d2a358fae222d9d150a9767f229b3`,
+`c93b43da9d09f5233a62681c2092d55eb6fa73e4431903b2597bb0194f89321c`,
+`d1fb344bfc3160c2f2928dfd2dbc25433fba4901078138dd74c842c9902d5200`,
+`eca83cff2f85a93e2d43fbc036ead5e086a1cf59f6fb985da273ced430a61e37`,
+`0f06feb9b586f66df261fe37290f8be74c72067f47bfe4d079887deea5535079`.
+Health8CPU/NVMe2/USB5/keyboard1/no bugcheck; Event129x2 telemetry. Package is
+intentionally retained pending operator confirmation of the full-screen
+`0xff112233` result. No physical-visible claim until that confirmation.

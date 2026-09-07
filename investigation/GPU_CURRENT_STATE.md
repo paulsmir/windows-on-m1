@@ -343,6 +343,20 @@ UMD/producer hashes are
 `478dfe1093b98ead912cbf5fff340d33b4d0e91b30719321dcb2b4184fec3cb8`.
 Next: persist EXP597 cleanup, ordinary clean preflight, stage and one natural run.
 
+EXP598 machine-side hardware PASS. Natural bind Code0/exact package/8CPU; one
+producer returned both allocations0, residency fence7002 and Render0/queued1.
+Visible receipt is Guard11/Stage3/Status0: captured fence256, exact allocation
+token, source `0x1500fa0000`/PA `0x9bd160000`/hash `16c4fd3d3ba00d25`,
+destination offset `0xfb0000`/PA `0x9bd170000`/15.6MiB/hash
+`27592755b9c32325`, requested=applied=latched sequence3, active offset0xfb0000,
+swap11. Host independently logged A408/D589 swap11. Terminal remains ValidMaskff,
+TA/D3 done2/2, exact fence256, NotifyInterrupt/DPC and all256 `0xff112233`.
+Visible/terminal hashes `1f96c9e63be63b63df2c5af8e4b685d4580d2a358fae222d9d150a9767f229b3` /
+`c93b43da9d09f5233a62681c2092d55eb6fa73e4431903b2597bb0194f89321c`.
+System healthy:8CPU/NVMe2/USB5/keyboard1/no bugcheck; Event129x2 telemetry.
+Physical full-screen color confirmation is pending; leave EXP598 installed and
+active until it is observed, then exact cleanup and ordinary restore.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
