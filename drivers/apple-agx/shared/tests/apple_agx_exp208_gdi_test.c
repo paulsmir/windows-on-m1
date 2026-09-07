@@ -66,6 +66,9 @@ static void init_objects(APPLE_AGX_EXP208_RELOCATION_OBJECT *objects,
   objects[73u].PhysicalAddress = 0x9d3400000ULL;
   objects[73u].Size = 0x40000u;
   objects[73u].Data = store_pipeline;
+  write_u64(store_pipeline, 0x1500000000400c1dULL);
+  write_u64(store_pipeline + 0x1000u, 0x15000020001000ddULL);
+  write_u64(store_pipeline + 0x1008u, 0x150000100010009dULL);
   write_u64(store_pipeline + 0x2000u, 0x15000030001000ddULL);
   write_u64(store_pipeline + 0x2008u, 0x150000400040041dULL);
 }
@@ -108,6 +111,11 @@ static void test_exact_clear_binds_hardware_proven_output_object(void) {
                    APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET) &
           APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_ADDRESS_MASK) ==
          (0x1500010000ULL >> 4u));
+  assert(read_usc_buffer(store_pipeline) == 0x1503920000ULL);
+  assert(read_u64(store_pipeline + 0x1000u) ==
+         0x15000020001000ddULL);
+  assert(read_u64(store_pipeline + 0x1008u) ==
+         0x150000100010009dULL);
   assert(read_usc_buffer(store_pipeline + 0x2000u) == 0x1503923000ULL);
   assert(read_usc_buffer(store_pipeline + 0x2008u) == 0x1503924000ULL);
   assert(AppleAgxExp208UnbindGdiColorFill(
@@ -116,6 +124,7 @@ static void test_exact_clear_binds_hardware_proven_output_object(void) {
   assert(read_u64(store_descriptors +
                   APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET) ==
          0x100000015001d000ULL);
+  assert(read_u64(store_pipeline) == 0x1500000000400c1dULL);
   assert(read_u64(store_pipeline + 0x2000u) == 0x15000030001000ddULL);
   assert(read_u64(store_pipeline + 0x2008u) == 0x150000400040041dULL);
 }
@@ -185,6 +194,23 @@ static void test_wrong_workload_or_physical_edge_is_rejected_atomically(void) {
   assert(memcmp(&before,
                 &objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT],
                 sizeof(before)) == 0);
+
+  write_u64(store_pipeline + 0x2008u, 0x150000400040041dULL);
+  write_u64(store_pipeline, 0x1500001000400c1dULL);
+  assert(!AppleAgxExp208BindGdiColorFill(
+      dma, bytes, destination, 0x1500010000ULL, 0x9d2000000ULL,
+      sizeof(destination), objects,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &relocation, 1u,
+      &binding));
+  assert(read_u64(store_descriptors +
+                  APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET) ==
+         0x100000015001d000ULL);
+  assert(read_u64(store_pipeline) == 0x1500001000400c1dULL);
+  assert(read_u64(store_pipeline + 0x2000u) == 0x15000030001000ddULL);
+  assert(read_u64(store_pipeline + 0x2008u) == 0x150000400040041dULL);
+  assert(memcmp(&before,
+                &objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT],
+                sizeof(before)) == 0);
 }
 
 static void test_generated_exp208_graph_has_one_bindable_output_edge(void) {
@@ -216,12 +242,16 @@ static void test_generated_exp208_graph_has_one_bindable_output_edge(void) {
   assert((read_u64(objects[36].Data + 0x3008u) &
           APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_ADDRESS_MASK) ==
          (0x1500010000ULL >> 4u));
+  assert(read_usc_buffer(objects[73].Data) == objects[36].GpuVa);
+  assert(read_u64(objects[73].Data + 0x1000u) ==
+         0x15000020001000ddULL);
   assert(read_usc_buffer(objects[73].Data + 0x2000u) ==
          objects[36].GpuVa + 0x3000u);
   assert(read_usc_buffer(objects[73].Data + 0x2008u) ==
          objects[36].GpuVa + 0x4000u);
   assert(AppleAgxExp208UnbindGdiColorFill(
       objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &binding));
+  assert(read_u64(objects[73].Data) == 0x1500000000400c1dULL);
   assert(read_u64(objects[73].Data + 0x2000u) ==
          0x15000030001000ddULL);
   assert(read_u64(objects[73].Data + 0x2008u) ==
