@@ -61,6 +61,7 @@ int main(void) {
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
   APPLE_AGX_U32 index;
   APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG queue_config;
+  APPLE_AGX_U64 original_vas[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT];
 
   memset(&fake, 0, sizeof(fake));
   memset(&owner, 0, sizeof(owner));
@@ -90,6 +91,32 @@ int main(void) {
   assert(owner.ObjectCount == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
   assert((owner.VirtualAddresses[0] & 0x7fffULL) == 0ULL);
   assert((owner.VirtualAddresses[35] & 0x7fffULL) == 0ULL);
+  memcpy(original_vas, owner.VirtualAddresses, sizeof(original_vas));
+  assert(AppleAgxRenderSharedMemoryApplyClassArenas(
+             &owner, AGX_RR_SHARED_ARENA_VA, APPLE_AGX_MEMORY_PAGE_SIZE,
+             AGX_RR_TIMESTAMP_ARENA_VA, AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+         AppleAgxRenderSharedMemoryResultInvalidArgument);
+  assert(memcmp(original_vas, owner.VirtualAddresses, sizeof(original_vas)) == 0);
+  assert(AppleAgxRenderSharedMemoryApplyClassArenas(
+             &owner, AGX_RR_SHARED_ARENA_VA, AGX_RR_SHARED_ARENA_BYTES,
+             AGX_RR_TIMESTAMP_ARENA_VA, AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+         AppleAgxRenderSharedMemoryResultOk);
+  for (index = 0u; index < 20u; ++index)
+    assert(owner.VirtualAddresses[index] == original_vas[index]);
+  for (index = 20u; index < 32u; ++index) {
+    assert(owner.VirtualAddresses[index] >= AGX_RR_SHARED_ARENA_VA);
+    assert(owner.VirtualAddresses[index] + owner.Objects[index].Length <=
+           AGX_RR_SHARED_ARENA_VA + AGX_RR_SHARED_ARENA_BYTES);
+  }
+  for (index = 32u; index < 36u; ++index) {
+    assert(owner.VirtualAddresses[index] >= AGX_RR_TIMESTAMP_ARENA_VA);
+    assert(owner.VirtualAddresses[index] + owner.Objects[index].Length <=
+           AGX_RR_TIMESTAMP_ARENA_VA + AGX_RR_TIMESTAMP_ARENA_BYTES);
+  }
+  assert(AppleAgxRenderSharedMemoryApplyClassArenas(
+             &owner, AGX_RR_SHARED_ARENA_VA, AGX_RR_SHARED_ARENA_BYTES,
+             AGX_RR_TIMESTAMP_ARENA_VA, AGX_RR_TIMESTAMP_ARENA_BYTES) ==
+         AppleAgxRenderSharedMemoryResultInvalidArgument);
   assert(AppleAgxRenderSharedMemoryBindRelocationObjects(
       &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES, objects,
       APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
@@ -143,6 +170,8 @@ int main(void) {
            owner.Objects[index].Length);
     assert(objects[index].GpuVa ==
            owner.VirtualAddresses[index] + object_offset);
+    if (index >= 20u)
+      assert(objects[index].GpuVa != layouts[index].OriginalGpuVa);
     assert(objects[index].PhysicalAddress ==
            owner.Objects[index].DeviceAddress + object_offset);
     assert(objects[index].Data ==

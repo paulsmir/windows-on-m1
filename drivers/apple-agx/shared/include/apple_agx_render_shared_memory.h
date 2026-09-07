@@ -4,6 +4,7 @@
 #include "apple_agx_memory.h"
 #include "apple_agx_g13_queue_runtime.h"
 #include "apple_agx_render_template.h"
+#include "apple_agx_retained_root_abi.h"
 
 #define APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT 36u
 
@@ -23,6 +24,7 @@ typedef struct _APPLE_AGX_RENDER_SHARED_MEMORY_OWNER {
   APPLE_AGX_U32 ObjectCount;
   APPLE_AGX_BOOL Initialized;
   APPLE_AGX_BOOL Built;
+  APPLE_AGX_BOOL ClassArenasApplied;
   APPLE_AGX_RENDER_SHARED_MEMORY_RESULT LastResult;
 } APPLE_AGX_RENDER_SHARED_MEMORY_OWNER;
 
@@ -30,6 +32,12 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     const APPLE_AGX_MEMORY_IO *MemoryIo,
     APPLE_AGX_U64 FirstVirtualAddress);
+
+APPLE_AGX_RENDER_SHARED_MEMORY_RESULT
+AppleAgxRenderSharedMemoryApplyClassArenas(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    APPLE_AGX_U64 SharedVa, APPLE_AGX_U64 SharedBytes,
+    APPLE_AGX_U64 TimestampVa, APPLE_AGX_U64 TimestampBytes);
 
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,

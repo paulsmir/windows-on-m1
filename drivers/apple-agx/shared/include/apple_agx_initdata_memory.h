@@ -98,5 +98,9 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepareBroker(
     APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
     const APPLE_AGX_MEMORY_IO *MemoryIo,
     const APPLE_AGX_CONFIG_SNAPSHOT *Snapshot);
+APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyRenderArenas(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *Graph,
+    unsigned long long SharedVa, unsigned long long SharedBytes,
+    unsigned long long TimestampVa, unsigned long long TimestampBytes);
 
 #endif /* APPLE_AGX_INITDATA_MEMORY_H */
