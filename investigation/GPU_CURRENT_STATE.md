@@ -178,6 +178,22 @@ The receipt binds source GPU/PA/hash/prefix/fence to destination CPU/GPA/PA/hash
 and exact applied/latched/active sequence. This is explicitly CPU-assisted;
 `FULLY_ACCELERATED_PRESENT=NO`. Build/test next from EXP591 base.
 
+EXP592 R2 is REJECTED. Host logged Windows swap9 and qualification swap10/D589,
+then CPU5 entered a repeating data abort at FAR0x204017030 before producer return;
+SSH was lost. Exact R2 disassembly maps faulting RVA0xe4a4 to
+`AdmissionCaptureQueueFaultSnapshot` reading `SgxBase+0x17030`, not scaler memory.
+The direct hook also blocked normal fence retirement while scaling/hashing/latching.
+Two validated emergency recovery attempts reached proxy but failed secondary CPU
+startup; a physical power cycle is now required after offline work is complete.
+
+Commit `b6a65d7b793cdf0e21e1cef1fc52813b6b827db1` prepares EXP593:
+copy only1024 validated AGX bytes before allocation release; finish real Windows
+completion/fence normally; then scale/present from the owned copy. Delayed SGX/
+queue diagnostics now run only while backend phase is Submitted. Surface2 is
+reserved by reducing the qualification-only advertised Windows local allocation
+range to offset0x1f40000 while broker retains the full pool; overlap/active checks
+remain. Build next from EXP591 base, excluding reset code.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

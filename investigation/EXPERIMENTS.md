@@ -36044,3 +36044,29 @@ ZIP/SYS/INF/CAT/UMD/producer hashes:
 `2b3ec74b933a9a5e7fd388cc1a0ccd7b866a04c5280e140d4506af7b2799dd6e`,
 `9610b6c1891092fde94f9dc482e8c431ab8d4eb7f994a87f0c5a35fe40bbfce0`.
 Use R2 only after clean ordinary baseline.
+
+**EXP592 R2 FINAL 2026-09-07T21:42Z — REJECTED; VISIBLE AGX NOT PROVEN.**
+Exact candidate bound Code0 and producer began. Host logged natural Windows
+swap9/D589 and qualification swap10/D589, but producer never returned and SSH
+disappeared. CPU5 repeated one EL1 data abort at FAR0x204017030. Exact R2
+dumpbin disassembly maps faulting RVA0xe4a4 to
+`AdmissionCaptureQueueFaultSnapshot`: `READ_REGISTER_ULONG64(SgxBase+0x17030)`.
+This does not prove a scaler source/destination fault. Direct completion hook
+spent seconds scaling/hash/latch before Windows fence notification, causing the
+same loop iteration to enter delayed fault diagnostics after terminal completion.
+Host log SHA `1cfd9d1bc46dd96ed0ddde9683e6027d9d57d3cc0a6f965cb45bb4ed963b307b`.
+No visible AGX claim. Two emergency recovery attempts failed at secondary CPU
+startup; physical power cycle remains required for exact package cleanup.
+
+# EXP593 — post-fence visible AGX transfer with owned destination
+
+**PREREGISTERED 2026-09-07T21:49Z. WHY THIS HYPOTHESIS:** exact ELR proves the
+EXP592 abort is late SGX diagnostic sampling, while source inspection proves the
+heavy display hook ran before Windows completion. Commit
+`b6a65d7b793cdf0e21e1cef1fc52813b6b827db1` copies only1024 terminal-validated
+AGX bytes before release, completes the real fence, then scales/presents from that
+owned copy. Delayed SGX/queue snapshots require phase Submitted. Qualification
+reserves surface2 by excluding it from the advertised Windows allocation range;
+broker still owns/registers the full pool. PASS requires exact terminal/fence,
+visible receipt status0, swap/D589 and physical `0xff112233` display. Focused15
+tests PASS. Build before requesting the unavoidable power cycle.
