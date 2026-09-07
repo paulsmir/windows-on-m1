@@ -1,5 +1,48 @@
 # Hardware Experiment Ledger
 
+## EXP562 exact event-drain owner — preregistration 2026-09-07T11:26Z
+
+WHY THIS HYPOTHESIS:
+- EXP561 exact word `0x56100204000300ff` proves the first provider poll fails
+  specifically in `AppleAgxPlatformProviderDrainEvents`.
+- The pinned m1n1 `GPURXChannel` contract uses modulo-ring read/write indices
+  and rejects a write pointer at or above the ring size; current Windows has
+  equivalent fail-closed bounds but no internal owner receipt.
+- TA/UAT/firmware changes are now more remote than identifying whether the
+  event binding, cache validation, pointer read/range, message decode, ACK or
+  event apply failed.
+
+WINDOWS CONTRACT: preserve the bounded, fail-closed event consumer and never
+complete a fence before the matching event is decoded and acknowledged.
+AGX/ASAHI CONTRACT: event state contains 32-bit read at +0x00 and write at
++0x20, each modulo 0x100; ring entries are 0x38 bytes. TRANSLATION: record only
+the existing failing guard and raw pointers, then return the same result.
+WHAT IS STILL UNKNOWN: the first internal DrainEvents guard and raw pointer
+values on the first hardware poll.
+
+Single variable: diagnostic state/trace only. Guards are invalid1, binding2,
+state-flush3, read4, write5, pointer-range6, message-flush7, prepare/decode8,
+publish-ACK9, apply10; success0. Three existing broker trace writes carry guard,
+read and write under tag `0x562`. Commit
+`c347da4ae59e94d8d7b198fad606338576d12421`. Exact pointer-range test was RED
+then GREEN; 356 AppleAgx tests pass. Root tracked-diff SHA
+`9804463e525e87652b57f0cda7325bf04d32f500d7eeef5979eed9acda418827`;
+m1n1/Mu and launch/recovery contracts unchanged from EXP561.
+
+Pinned WDK26100/MSVC14.44 build, code analysis, Universal validation, Inf2Cat,
+signing, KMD/UMD and producer pass with inherited C28251 only. Version
+30.0.562.0. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA:
+`881a736504e427f85f8da585421d9a2315054e512ed2594502c7aef63bd97f80` /
+`e7f6cc12f03e2aa232aa0bc598dd899d6c596b2a4573e5ace6fb0ea51cf741eb` /
+`ac25ec9462da253651bd7a3d23e7c56e014ed5da63e179432f14dedebf5e9bf1` /
+`c418f313e5da5c1eda627022a29c918cd1373f2ab8b67b9051af273990b2938d` /
+`af3b71aa7a21d2ad3d63852558bfe30c98ba56870b6353c1924c00f9e90aba0a` /
+`9bcb002ee4ec978ca7a109d8fdef666a1f6636c34f6206ad43e48d4b57d71dac` /
+`9588251b5cb0ffff723ddf56a86d137288488811bdbd96c114b7ed380669801e`.
+One hash-gated stage, natural bind, exact producer, decode all `0x562` words,
+collect old receipts, exact cleanup and ordinary restore. PASS identifies one
+internal owner plus raw pointers; no completion claim. Recovery pair unchanged.
+
 ## EXP561 exact provider-poll owner — preregistration 2026-09-07T11:15Z
 
 WHY THIS HYPOTHESIS:

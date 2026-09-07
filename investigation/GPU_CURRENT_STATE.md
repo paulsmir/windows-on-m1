@@ -546,6 +546,10 @@ No TA completion/fence claim. Hardware log SHAc83fd777.... Exact cleanup and
 ordinary restore complete; health SHAa8415695.... Next EXP562 records only the
 first internal DrainEvents owner and raw read/write pointers; do not change TA,
 UAT, firmware, queues, scheduler or timeout behavior.
+Commitc347da4 implements exact DrainEvents guard/raw pointers with no return or
+ordering change; pointer-range test RED/GREEN and356 AppleAgx tests PASS.
+Pinned30.0.562.0 gates PASS; ZIP/SYS/producer SHAe7f6cc12.../ac25ec94.../
+9588251b.... EXP562 preregistered for one natural bind.
 
 ## Final live ordinary clean baseline
 
