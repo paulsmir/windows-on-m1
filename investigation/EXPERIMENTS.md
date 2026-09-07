@@ -1,5 +1,42 @@
 # Hardware Experiment Ledger
 
+## EXP555 active shared job graph — preregistration 2026-09-07T09:42Z
+
+WHY THIS HYPOTHESIS: EXP554 proves exact RTKit Pong at submit time yet no queue
+progress. Its crash-durable queue receipt exposes a deterministic mismatch
+against hardware-proven EXP208: current TA/D3 work roots are stale local
+`0x15038...` BackendImage VAs, while EXP208 publishes the corresponding
+firmware context-0 `0xffffffa...` objects. PlatformStart creates a correct
+shared relocation table, but per-submit dynamic patching and BuildJob return to
+the stale table, so firmware receives roots and cross-object edges from the
+wrong address space.
+
+WINDOWS CONTRACT: unchanged; the same accepted Windows packet/fence enters the
+same worker. AGX/ASAHI CONTRACT: queue work roots and all159 relocation edges
+must name the active firmware-visible graph, with first36 objects in context0.
+TRANSLATION: after the existing dynamic patch, rebuild the active descriptor
+table, copy current first36 bytes into their shared owner, reapply all
+relocations, build TA/D3 roots from that table, and resolve prepared ranges from
+the same table. WHAT IS STILL UNKNOWN: whether firmware now accepts/consumes the
+channel and reaches a first physical work/fault boundary.
+
+Commit `60634acb8d1274a66ce38dcad5bf9334077c7683`; exact active-root invariant
+was RED then GREEN and122 focused/render/ledger tests pass. Pinned WDK26100,
+MSVC14.44.35207 build, analysis, Universal validation, Inf2Cat/signing,
+version30.0.555.0 and producer gates pass with inherited C28251 only. Overlay
+SHA `65b6580a940d60cda2f4689c743210cc89becdb850b880c64cbe2197180a3dfa`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`70ec0d030373e6287fb51bb8154ced8bb9d4cd8abf9ec967e2943aa776e1ec0e` /
+`674bebb57f5e5e962ca691f2e92527ba168160c938f7a6df916904833dff1a99` /
+`e75a29a2f153955b0a36779ee2032b1341b1a4ef866a9851d0ef256b8f15a496` /
+`c0443a384b2ec80b1c172b0a682edd8aad5b282773cbc4f42ae6682c5623eb04` /
+`e8a0ed81e737c4394546613cc752df63e4034331ccff885cc0f9a4f43faa240d` /
+`9a9d536548fefe0bc0dbff9a6f2d5c3322ece6d3078907175963ee0b27012855`.
+Clean ordinary SHA
+`55e2176e2ef5e396219c81dd302aa6b450d5cee28ce94cb7160680f9b3d3c063`.
+One bind/producer. Require heartbeat Pong and exact shared-root queue receipt;
+then classify first `0x5460`, `0x5420`, fault, or unchanged TDR. Exact cleanup.
+
 ## EXP554 pre-submit RTKit heartbeat — result 2026-09-07T09:37Z
 
 CONFIRMED discriminator; rejected as a functional queue fix. Exact30.0.554.0

@@ -477,7 +477,9 @@ Platform startup's shared QueueObjects table was correct but discarded for
 per-submit StageJob, so dynamic bytes and159 relocations were reapplied through
 the stale source table. Commit60634ac refreshes the shared active graph on each
 submit and builds job roots from that table; exact RED/GREEN and122 regressions
-PASS. Next candidate EXP555 changes only this graph-owner correction.
+PASS. Pinned30.0.555.0 gates PASS; ZIP/SYS/producer SHA
+70ec0d03.../674bebb5.../9a9d5365.... EXP555 preregistered and changes only
+this graph-owner correction.
 
 ## Final live ordinary clean baseline
 
