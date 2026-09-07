@@ -35415,3 +35415,15 @@ actual raw bytes, BGRA/RGBA interpretation and linear/tiled layout.
 RED missing typed contract/unbind, then focused and364 AppleAgx tests GREEN.
 Single functional variable is object36+0x3008 address. Build/sign/hash and clean
 preflight precede one hardware run.
+
+**EXP582 FREEZE 2026-09-07T18:31Z:** pinned KMD/UMD build, analysis,
+Universal, Inf2Cat, signing and version30.0.582.0 PASS; producer R2 build/analysis
+PASS after portability-only commit2ca7fb2 replaced unavailable MAXULONG with
+ffffffff. ZIP/SYS/INF/CAT/UMD/producer SHA:
+35956663a7e4b894c202ddcda6315447b46ec1b69da73a1e3311e918bee7bc6e,
+7b49ffcdbfb31fc914574de4942a30887e0d00bb5827db346568e71896ab4768,
+a6806fb44b7f8573deac7b9d929ed4894e316b20b5e05174b4a5dc4460eee406,
+47e6f7a369ea288c557abbaaaa6d8d3129424d212eeea70ddde24eeef2cf6659,
+85ad130f6a66aabae62b99ba512f5d5d97f51c25dafd1e36304825318955a36c,
+da06ab723c8d17d047566050587a4c7a3b36503a24aa2b7cffbf9536d98c284d.
+m1n1/Mu unchanged. Ordinary baseline remains clean before staging.
