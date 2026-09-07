@@ -550,16 +550,22 @@ Commitc347da4 implements exact DrainEvents guard/raw pointers with no return or
 ordering change; pointer-range test RED/GREEN and356 AppleAgx tests PASS.
 Pinned30.0.562.0 gates PASS; ZIP/SYS/producer SHAe7f6cc12.../ac25ec94.../
 9588251b.... EXP562 preregistered for one natural bind.
+EXP562 FINAL: words `0x5620000100000008`, `...0200000000`,
+`...0300000001` prove PrepareEvent/ingest failure with exact event read0/write1.
+Binding/flush/read/range are closed; event is not ACKed. Hardware log
+SHA1a9afa99.... Exact cleanup and ordinary health SHA2b996cee.... Commit0e5df92
+captures the rejected 0x38 bytes plus queue-ingest guard/runtime result in a
+crash-durable receipt;356 tests PASS. Next build/run is EXP563 only.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T11:21Z after exact561 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T11:33Z after exact562 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAa8415695557327411ad8f3964f1ab7e70b80c97d39109578e34b70c41ace23ab.
+SHA2b996ceea6cfc6aa5971ec70b1ecbd48090897ddad3062308660e5c6abbd632c.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

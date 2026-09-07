@@ -43,6 +43,25 @@ One hash-gated stage, natural bind, exact producer, decode all `0x562` words,
 collect old receipts, exact cleanup and ordinary restore. PASS identifies one
 internal owner plus raw pointers; no completion claim. Recovery pair unchanged.
 
+## EXP562 exact event-drain owner — result 2026-09-07T11:33Z
+
+CONFIRMED discriminator. Exact 30.0.562.0 ran once and emitted three successful
+trace words: `0x5620000100000008` (Drain guard 8 PrepareEvent),
+`0x5620000200000000` (read 0), and `0x5620000300000001` (write 1).
+Thus binding, state/ring containment, flush, pointer reads and range validation
+all pass; exactly one 0x38-byte event is pending and the failure is inside
+`AppleAgxPlatformComposerPrepareEvent`/queue-provider ingest before ACK. Hardware
+log SHA `1a9afa9978d849a07c566ddef58aa823e910dd177f07eae7e050379d68c19a30`.
+TDR 0x116 with driver status `0xc0000483` remains; no completion/fence claim.
+
+Evidence collected first; exact oem5 package and matching SYS/UMD removed in
+emergency recovery. Ordinary377/392 restored. Final health SHA
+`2b996ceea6cfc6aa5971ec70b1ecbd48090897ddad3062308660e5c6abbd632c`
+proves Code28/no package/service/module, eight CPUs, SSH and healthy NVMe/xHCI/
+keyboard. One Event129 and one bugcheck are the just-recorded experiment window.
+Next EXP563 captures only the exact rejected 0x38-byte message plus ingest guard
+and runtime result; no event is acknowledged and no runtime behavior changes.
+
 ## EXP561 exact provider-poll owner — preregistration 2026-09-07T11:15Z
 
 WHY THIS HYPOTHESIS:
