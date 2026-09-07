@@ -35351,3 +35351,67 @@ Overlay/manifest/build-script SHA are `277839b9...`, `45d8f020...`,
 `6fa42536...`. m1n1/Mu are unchanged. Fresh ordinary preflight proves
 Code28, zero package/service/module,8CPU,NVMe2/USB5/keyboard1 and current-window
 Event1290/Bugcheck0. One exact stage/natural bind/producer only.
+
+**EXP581-A 2026-09-07T18:02Z — INCONCLUSIVE BEFORE RENDER.** Exact driver
+30.0.581.0 reached Code0/Running/8CPU, but the first producer Lock2 returned
+`STATUS_INVALID_PARAMETER` because its allocation descriptor still declared
+`CpuVisible=0`. Render, queue submission and AGX execution were not reached;
+this is not a driver verdict. The package remains exact and installed only for
+the prepared producer-only R2 correction; no second driver candidate is being
+introduced.
+
+Commit `4b281f06b81cbdd01a42e0f6e1f09419fdbdc04d` changes the producer
+descriptor only to `CpuVisible=1`. The pinned KMD advertises the CPU-visible
+set as aperture1 or preferred local2, while the unchanged GDI patch path still
+requires actual segment2 before AGX. Seven focused tests GREEN. Rebuild only
+the producer, verify its hash, then run once against the already installed
+unchanged KMD. If initial Lock2 still fails, output readback needs a different
+supported Windows mapping seam and no AGX verdict is possible.
+
+**EXP581-R2 FINAL 2026-09-07T18:13Z — HARDWARE COMPLETION PASS; OUTPUT
+CORRECTNESS RED.** Producer R2 SHA
+adbc3e38005f87a9f449b19c98022102ac14c61d2f76e5f781a97f5e39fe00ce
+ran once against unchanged exact30.0.581.0. Terminal receipt ValidMask7f for
+sequence1/fence256/root9fff78000 proves TA event0 and3D event1; expected/actual
+stamps7a000100/3d000100; expected/actual done2/2; raw polling event;
+CompletedFence256; NotifyInterrupt1; NotifyDpc1; exit Completed; provider
+Created; backend Ready; Stopping/Resetting/SchedulerFaulted all0. All four stats
+pointers are exact live owners ...304004/...30c008.
+
+This is the first hardware proof of Windows-originated physical TA+3D through
+exact Windows fence completion. Completion source is polling; physical GPU IRQ
+delivery is not claimed. Output correctness did not pass:
+output_pixels_verified=0 and guard corruption0. The old producer proves only
+pixel0 differs from ff112233; it did not record the actual value.
+Evidence ZIP/host/producer SHA are
+3d4a6c242f672bfd8554bb9e9d2846f178937847529fc1d100aa6f30fd3c5602,
+5147c3611a1f83744296ef4bfd6909d70c0affbcf051efd2e491f2f1b4034f8d,
+e529be2cd68c423e3bc6f4d29de1333c2a4e302378964dc609d99a3ae415dd65.
+Event129x2 remains telemetry; no TDR/bugcheck. Exact cleanup and ordinary377/392
+restore completed Code28/no package/service/module/8CPU/NVMe2/USB5/keyboard1.
+
+# EXP582 — typed Render Target.Buffer relocation
+
+**PREREGISTERED 2026-09-07T18:17Z; one exact run only.**
+
+**WHY THIS HYPOTHESIS:** EXP581 proves dual completion but the Windows target
+pixel0 differs from expected. Exact fixture object36+0x3008 contains
+100000015001d000. Asahilina Mesa commit7a4f2406 defines it as Render
+Target.Buffer low36 address with shr4, decoding to captured object40
+VA15001d0000. The typed chain is WorkCommand3D→object63→object36 and cmdbuf
+store_pipeline22000→pipeline1100022000→USC Texture→object36+3000. Existing
+relocations update only Start3D attachment object15+148 and have no source36.
+
+WINDOWS CONTRACT: unchanged Lock2 synchronization and fence. AGX/ASAHI
+CONTRACT: PBE writes through the typed Render Target descriptor. TRANSLATION:
+commit7a17e7b3a70d542716908f452a6834e44c2a8d12 validates the captured
+descriptor, preserves upper layout/format/stride bits, replaces only low36 with
+Windows DestinationGpuVa>>4, and records reversible binding. Completion,
+rollback and reset restore object40 and descriptor. No global replacement.
+Producer now records actual first/mismatch values, expected/A5 counts, changed
+bytes, first16 ULONGs and FNV-1a of the1024-byte target. WHAT IS STILL UNKNOWN:
+actual raw bytes, BGRA/RGBA interpretation and linear/tiled layout.
+
+RED missing typed contract/unbind, then focused and364 AppleAgx tests GREEN.
+Single functional variable is object36+0x3008 address. Build/sign/hash and clean
+preflight precede one hardware run.

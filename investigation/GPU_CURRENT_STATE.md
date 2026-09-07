@@ -768,6 +768,28 @@ Inf2Cat/sign/version and producer build; ZIP/SYS/producer SHA
 zero package/service/module,8CPU,NVMe2/USB5/keyboard1,Event1290/Bugcheck0.
 Next is its sole hardware run.
 
+EXP581-A was INCONCLUSIVE BEFORE RENDER: exact KMD Code0/8CPU, producer initial
+Lock2 C000000D because descriptor CpuVisible=0; no queue/AGX work occurred.
+Package remains installed unchanged for producer-only R2 commit4b281f0, which
+sets CpuVisible=1 while retaining preferred/required local2. Seven tests GREEN;
+rebuild only producer and run once.
+
+EXP581-R2 HARDWARE PASS: terminal ValidMask7f, fence/completed256, TA event0/
+D3 event1, expected=actual stamps7a000100/3d000100 and done2/2, raw polling
+event, NotifyInterrupt1/DPC1, exit Completed, backend Ready/provider Created,
+no scheduler fault/TDR/bugcheck. Live stats pointers exact. This closes first
+Windows-originated physical TA+3D and correct Windows fence completion; physical
+GPU IRQ is not claimed. Output remains first unknown: Lock2 succeeded, pixel0
+was not ff112233, guard stayed A5; actual pixel was not recorded. Exact cleanup
+and ordinary Code28/no package/service/module/8CPU restore completed.
+
+EXP582 commit7a17e7b is preregistered. Exact Mesa G13 Render Target descriptor
+proves object36+0x3008 low36 encodes captured output15001d0000 via shr4 and is
+reached through store pipeline/USC Texture. Production validates upper bits,
+patches only address to Windows DestinationGpuVa, and restores descriptor plus
+object40 on completion/rollback. Enhanced producer records actual bytes/stats.
+364 tests GREEN; next pinned build and one run.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
