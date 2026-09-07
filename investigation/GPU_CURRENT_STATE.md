@@ -155,6 +155,20 @@ Exact cleanup and ordinary restore completed. Commit
 `df2284e5e3afbfc4093fbb403f8515fd6fc94476` moves only the existing2s deadline
 start to immediately before QueuePresent. Next EXP591 reruns frame590 once.
 
+EXP591 exact30.0.591.0 is the first physical-panel proof. Receipt stage4/status0
+binds frame590 hash to pool hostPA, requested=applied=latched sequence2, active
+offset0 and swap10. Operator photo visibly shows the exact white border,
+red/green/blue/yellow quadrants and marker for several seconds. Therefore
+`VISIBLE_SCANOUT_HW_PROVEN=YES`. Photo SHA
+`a225ee18d917252b252b4a156dffa031465f0aa8c35ecf86dd3dc86626ef4fad`;
+evidence ZIP SHA
+`502e6e26553dffaeec7449480cfc9d450c9d2ce6a5906c05883434bee0462f6a`.
+Windows then naturally queued its primary at local offset0 and host logged exact
+swap11/D589; the panel became black. Thus DCP/address/format scanout is closed,
+while `VISIBLE_AGX_RESULT_HW_PROVEN=NO` and `WINDOWS_DESKTOP_VISIBLE=NO`.
+Next: exact cleanup, then display the proven AGX16x16 result through a controlled
+CPU-assisted transfer to an inactive full-size pool surface.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

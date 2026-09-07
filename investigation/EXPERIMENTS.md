@@ -35996,3 +35996,22 @@ ZIP/SYS/INF/CAT/UMD hashes:
 `b16f32dc6f8f6eae630bc00213bbe95c589f0aafcac101cdd66105ce79e4d98e`,
 `d5da47b64b694dda8395a5ae3a0e372fc93e80833b0e48faa331348c5c694300`.
 Ordinary baseline verification then one natural bind only.
+
+**EXP591 FINAL 2026-09-07T21:20Z — VISIBLE_SCANOUT HARDWARE PASS.** Exact
+30.0.591.0 naturally bound Code0/service Running/8CPU. Unified receipt is
+stage4/status0, frame590,2560x1600,pitch10240,BGRA8888,size0xfa0000, hash
+`66e7813684ee9325`, requested/applied/latched sequence2, active offset0,
+filled hostPA equals broker poolPA, swap10 and elapsed483ms. Host independently
+logged A408/D589 swap10. Operator photo visibly confirms the exact white border,
+four red/green/blue/yellow quadrants and binary marker for several seconds.
+Photo SHA `a225ee18d917252b252b4a156dffa031465f0aa8c35ecf86dd3dc86626ef4fad`.
+
+Windows then issued natural SetVidPnSourceAddress for segment2/base offset0;
+host logged swap11/D589 and the panel became black. This proves physical DCP
+scanout and localizes black desktop to Windows primary contents/path. It does not
+prove visible AGX pixels or desktop. Evidence ZIP SHA
+`502e6e26553dffaeec7449480cfc9d450c9d2ce6a5906c05883434bee0462f6a`;
+receipt SHA `b93098aeae210d6baf1f60a601c2506f45895dc6c338083b99242ef9323b48f6`;
+host log SHA `a6b7813b2776ac5da9b3da2f5da880634a6a01e76c6fe3a997a5d3889c988610`.
+Next exact cleanup, then controlled AGX-output-to-display transfer using existing
+scanout; do not reopen DCP publication.
