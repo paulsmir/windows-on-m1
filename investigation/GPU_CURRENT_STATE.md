@@ -412,17 +412,23 @@ snapshot SHAed3592b1.... Firmware neither consumed nor faulted. Commit721553b
 adds the upstream m1n1 channel0x10 firmware kick once before first queue
 doorbell;110 regressions and pinned30.0.548.0 gates PASS. ZIP/SYS/producer
 SHA248e08dd.../222c85d5.../1c38c9da.... EXP548 preregistered. Clean ordinary
-health SHAfebf777b....
+FINAL: wake rejected, no0x5460/5420; host SHA63879562.... WDK26100 proves
+MemoryBarrier=dmb sy, so ordering is not weaker than m1n1. Commitf09d7f2 keeps
+Windows-owned mapping pages but restores exact original VA+intra-page offsets
+for all36 firmware-managed EXP208 shared objects; sanitizer identity test and
+110 regressions PASS. Pinned30.0.549.0 gates PASS; ZIP/SYS/producer
+SHA93ad0855.../ccb0237f.../2c903b3a.... EXP549 preregistered. Clean ordinary
+health SHA43ae066a....
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T07:51Z after exact547 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T08:07Z after exact548 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAfebf777b224d6689aa42cfa57b87ce6ef4516148ba42615b6633c949e7e9a836.
+SHA43ae066a7d1abf43882e13f57e59457a42bcddbac900fad15dc4a88f5182a516.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 

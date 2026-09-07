@@ -1,5 +1,46 @@
 # Hardware Experiment Ledger
 
+## EXP549 exact firmware-shared object identity — preregistration 2026-09-07T08:08Z
+
+WHY THIS HYPOTHESIS: EXP547 proved silent non-consumption with zero faults;
+EXP548 rejected idle wake. Pinned WDK proves `MemoryBarrier` uses `dmb sy`, so
+ordering is not weaker than m1n1. The remaining direct difference is that
+standalone EXP208 places all36 firmware-managed objects at exact original VAs
+and intra-page offsets, while production rebased each to page start. Firmware
+queue object identity/placement has never been hardware-proven after rebase.
+
+WINDOWS CONTRACT: unchanged. AGX/ASAHI CONTRACT: the reference queue info,
+pointers, stamps, job list and context objects use their exact captured high VA
+identities and page offsets. TRANSLATION: keep Windows-owned fresh physical
+pages and page-aligned broker mapping bases, but publish exact original object
+VAs and use the matching CPU/PA intra-page offsets for all36 objects. No private
+ownership or work image change. WHAT IS STILL UNKNOWN: whether exact shared
+object identity enables firmware channel consumption.
+
+Commit `f09d7f20021acee9a836e27066ad5e38f3b91507`; all36 identity assertions
+RED then GREEN, sanitizer shared-memory test and110 render regressions pass.
+Pinned30.0.549.0 gates pass. Overlay SHA
+`ebdc0d219f5c53d6b1ac736bde470b321731869933fa820e63c38c5afc5cf090`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`93ad0855547fc4578319aa4c5a4d615b4c173ecf5ad42da744802cda25272dcc` /
+`ccb0237f5d558facb06b0cf0b2ef84d334dc8c866a69dcc02d97c418262aa961` /
+`22320b89f9cd46dd98a74a850389e3b6b34991087113825f9a999d39a162fc2f` /
+`cc6db35d030077ce8768abafd851c710e44d8f1f8cc0fdf0ce3821a40cd442ef` /
+`ee52bee894e4e0dcefe8ad2ef343d8f42629c5d508d719f768edb2dc8c6b89cb` /
+`2c903b3a7c6886b4cc8e32b56f492a0b192d8cb99dc78b60decdc7d6efc0f7c2`.
+Clean ordinary SHA `43ae066a7d1abf43882e13f57e59457a42bcddbac900fad15dc4a88f5182a516`.
+One bind/producer; require0x5460/0x5420. Exact cleanup.
+
+## EXP548 firmware wake before queue — result 2026-09-07T08:07Z
+
+REJECTED. Exact30.0.548.0 ran once; added channel0x10 wake did not produce
+`0x5460` channel consumption or `0x5420` work progress before reset. Host SHA
+`6387956230808e8f93b6a8df99c74ed41638cf9591abbaf77e094eedbee4bc58`.
+The wake hypothesis is closed. Pinned WDK26100 inspection separately shows the
+ARM64 MemoryBarrier implementation is `__dmb(_ARM64_BARRIER_SY)`, rejecting a
+weaker-than-m1n1 ordering hypothesis. Exact cleanup and ordinary health SHA
+`43ae066a7d1abf43882e13f57e59457a42bcddbac900fad15dc4a88f5182a516`.
+
 ## EXP548 firmware wake before queue — preregistration 2026-09-07T07:52Z
 
 WHY THIS HYPOTHESIS: EXP546 proves no late channel consumption; EXP547 proves
