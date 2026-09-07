@@ -1,5 +1,16 @@
 # Hardware Experiment Ledger
 
+## EXP573 active graph device visibility — result 2026-09-07T14:27Z
+
+REJECTED as sufficient. Exact30.0.573.0 ran once; complete active-graph flush
+did not move the RetireStamp boundary. Temporal receipt SHA `9368a2ba...` again
+has byte-identical ~50/100ms samples; event0/0 and pending stamps remain empty,
+shared stamp/done/D3 unchanged. Exact cleanup and ordinary Code28/8CPU baseline
+restored. Next source-derived difference is original intra-page object geometry:
+native stamps/timestamps/QueueInfo/JobList use captured end-of-page offsets,
+while production currently rebases every object to page offset0. Preserve those
+offsets inside the same mapped Windows-owned pages; do not alter root ownership.
+
 ## EXP573 active graph device visibility — candidate ready 2026-09-07T14:29Z
 
 Pinned30.0.573.0 build/analysis/Universal/Inf2Cat/sign/version/producer PASS.

@@ -640,6 +640,10 @@ graph rewrites36 objects but old code flushed only roots. New code flushes all36
 then barriers before queue publication; RED/GREEN and361 tests pass.
 Pinned30.0.573.0 gates pass; ZIP/SYS/producer SHA9c5865de.../f1c76d51.../
 5668975e.... Hardware next.
+EXP573 FINAL: full active-graph flush did not move any retirement scalar;
+rejected as sufficient. Boundary stays RetireStamp. Next exact difference is
+production page-offset0 objects vs native captured intra-page offsets; preserve
+those offsets within the same mapped pages. Clean ordinary baseline restored.
 
 ## Final live ordinary clean baseline
 
