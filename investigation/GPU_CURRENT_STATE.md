@@ -621,6 +621,9 @@ FAULTED=0. First unknown is FinalizeTA-to-RetireStamp/event retirement. The
 receipt's two static Timestamp opcode offsets were wrong; do not rerun570 for
 that. Next capture exact Finalize/Retire bytes plus pending-stamp/EventControl/
 JobList state. Exact cleanup and ordinary Code28/8CPU restore complete.
+EXP571 commit1b76ab3 adds only that read-only retirement receipt and corrects
+the old receipt-only opcode offsets. RegionC pending-stamp table and exact
+FinalizeTA+Retire bytes are bounded;359 AppleAgx tests pass. Build/hardware next.
 
 ## Final live ordinary clean baseline
 

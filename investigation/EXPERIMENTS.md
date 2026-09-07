@@ -1,5 +1,39 @@
 # Hardware Experiment Ledger
 
+## EXP571 TA RetireStamp pending state — preregistration 2026-09-07T13:55Z
+
+WHY THIS HYPOTHESIS:
+- EXP570 proves StartTA, the physical WaitForIdle, both timestamp commands and
+  the FinalizeTA firmware-private stamp write, while shared stamp1, done, event,
+  D3 and the Windows fence remain unchanged.
+- Pinned m1n1 names opcode0x40000018 after FinalizeTA as EndCmd; current Asahi
+  names the same opcode RetireStamp and uses it to publish the driver-visible
+  event stamp. RegionC `pending_stamps` is the firmware table inspected by both
+  implementations for in-flight event retirement.
+- EXP570 EventControl remains in-list, so pending-stamp/event publication is
+  causally closer than another context63 input or TA command change.
+
+WINDOWS CONTRACT: unchanged; no completion is reported from diagnostics.
+AGX/ASAHI CONTRACT: FinalizeTA writes the firmware-private stamp, RetireStamp
+publishes the shared event stamp and firmware event channel; RegionC
+`pending_stamps` contains256 exact `{info,wait_value}` entries. TRANSLATION:
+commit `1b76ab3574b1724f07eca997df951f92c3902c58` adds one read-only
+`Wom1TaRetireReceipt` at the existing >=50ms boundary. It captures exact
+FinalizeTA+Retire bytes0x208..0x28f, event read/write pointers, event_count,
+JobList and bounded RegionC0x111a8..0x119a7. It also corrects the prior
+receipt-only Timestamp offsets to0x18c/0x1cc and includes Retire0x28c; submitted
+work bytes are unchanged. WHAT IS STILL UNKNOWN: whether a pending entry for
+TA event0/value0x7a000100 exists and the event channel failed later, or no
+retirement entry was published.
+
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH: wrong RegionC bounds, wrong
+Finalize/Retire range, unintended write path, or stale opcode schema. RED then
+GREEN;359 AppleAgx tests pass. Single hardware variable is the read-only
+receipt. Same m1n1/Mu/full-owner platform and same work bytes as EXP570. Pinned
+WDK build/sign/hash details will be appended before one natural bind. Evidence
+first, exact cleanup, ordinary377/392 restoration, then fix only the named
+retirement owner.
+
 ## EXP570 TA microsequence progress — result 2026-09-07T13:42Z
 
 CONFIRMED discriminator and physical TA execution checkpoint. Exact30.0.570.0
