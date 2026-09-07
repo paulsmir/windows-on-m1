@@ -21,7 +21,7 @@ int main(void) {
   APPLE_AGX_U32 bytes = AppleAgxRenderTemplateBytes();
   unsigned char *arena = (unsigned char *)malloc(bytes);
   APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
-  APPLE_AGX_EXP208_RELOCATION_OBJECT objects[75];
+  APPLE_AGX_EXP208_RELOCATION_OBJECT objects[76];
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
   const APPLE_AGX_EXP208_RELOCATION *relocations;
   APPLE_AGX_EXP208_JOB_PARAMETERS parameters;
@@ -29,7 +29,7 @@ int main(void) {
   APPLE_AGX_U32 index;
   APPLE_AGX_U32 pageRelocations = 0u;
 
-  assert(bytes == 6062080u);
+  assert(bytes == 6094848u);
   assert(arena != NULL);
   assert(!AppleAgxRenderTemplateMaterialize(arena, bytes - 1u, &roots));
   assert(AppleAgxRenderTemplateMaterialize(arena, bytes, &roots));
@@ -37,11 +37,11 @@ int main(void) {
   assert(roots.Ta[1] == 0x1503898000ULL);
   assert(roots.D3[0] == 0x1503870000ULL);
   assert(roots.D3[1] == 0x1503890000ULL);
-  assert(fnv1a64(arena, bytes) == 0xea9100ca24c88aa8ULL);
+  assert(fnv1a64(arena, bytes) == 0x031b74bcc073c5e2ULL);
 
-  assert(AppleAgxRenderTemplateObjectCount() == 74u);
-  assert(AppleAgxRenderTemplateRuntimeObjectCount() == 75u);
-  assert(AppleAgxRenderTemplateArenaObjectIndex() == 74u);
+  assert(AppleAgxRenderTemplateObjectCount() == 75u);
+  assert(AppleAgxRenderTemplateRuntimeObjectCount() == 76u);
+  assert(AppleAgxRenderTemplateArenaObjectIndex() == 75u);
   assert(AppleAgxRenderTemplateRelocationCount() == 207u);
   layouts = AppleAgxRenderTemplateObjectLayouts();
   relocations = AppleAgxRenderTemplateRelocations();
@@ -61,11 +61,13 @@ int main(void) {
   assert(layouts[72].ArenaOffset == 0x580000u);
   assert(layouts[72].PackedGpuVa == 0x1503d80000ULL);
   assert(layouts[72].Size == 0x80u);
-  assert(layouts[73].OriginalGpuVa ==
-         APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_GPU_VA);
+  assert(layouts[73].OriginalGpuVa == 0x1100020000ULL);
   assert(layouts[73].ArenaOffset == 0x588000u);
-  assert(layouts[73].Size == APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_BYTES);
-  for (index = 0u; index < 74u; ++index) {
+  assert(layouts[73].Size == 0x40000u);
+  assert(layouts[74].OriginalGpuVa == 0x1100010000ULL);
+  assert(layouts[74].ArenaOffset == 0x5c8000u);
+  assert(layouts[74].Size == 0x4000u);
+  for (index = 0u; index < 75u; ++index) {
     assert(layouts[index].OriginalIndex == index);
     assert(layouts[index].Name != NULL);
     assert(layouts[index].ArenaOffset % APPLE_AGX_RENDER_TEMPLATE_ALIGNMENT ==
@@ -93,8 +95,8 @@ int main(void) {
                 AppleAgxExp208RelocationGpuVaPage32kU32
             ? 4u
             : 8u;
-    assert(relocations[index].SourceObject < 74u);
-    assert(relocations[index].TargetObject < 74u);
+    assert(relocations[index].SourceObject < 75u);
+    assert(relocations[index].TargetObject < 75u);
     assert(layouts[relocations[index].SourceObject].Size >= width);
     assert(relocations[index].SourceOffset <=
            layouts[relocations[index].SourceObject].Size - width);
@@ -120,13 +122,13 @@ int main(void) {
   assert(pageRelocations == 64u);
 
   assert(!AppleAgxRenderTemplateBuildRelocationObjects(
-      arena, bytes - 1u, 0x900000000ULL, objects, 75u));
+      arena, bytes - 1u, 0x900000000ULL, objects, 76u));
   assert(!AppleAgxRenderTemplateBuildRelocationObjects(
-      arena, bytes, 0x900000000ULL, objects, 74u));
-  assert(!AppleAgxRenderTemplateBuildRelocationObjects(
-      arena, bytes, ~(APPLE_AGX_U64)0 - bytes + 2u, objects, 75u));
-  assert(AppleAgxRenderTemplateBuildRelocationObjects(
       arena, bytes, 0x900000000ULL, objects, 75u));
+  assert(!AppleAgxRenderTemplateBuildRelocationObjects(
+      arena, bytes, ~(APPLE_AGX_U64)0 - bytes + 2u, objects, 76u));
+  assert(AppleAgxRenderTemplateBuildRelocationObjects(
+      arena, bytes, 0x900000000ULL, objects, 76u));
   assert(objects[0].Data == arena);
   assert(objects[0].GpuVa == APPLE_AGX_RENDER_TEMPLATE_GPU_BASE);
   assert(objects[0].PhysicalAddress == 0x900000000ULL);
@@ -137,11 +139,14 @@ int main(void) {
   assert(objects[72].Size == 0x80u);
   assert(objects[73].Data == arena + 0x588000u);
   assert(objects[73].GpuVa == 0x1503d88000ULL);
-  assert(objects[73].Size == APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_BYTES);
-  assert(objects[74].Data == arena);
-  assert(objects[74].GpuVa == APPLE_AGX_RENDER_TEMPLATE_GPU_BASE);
-  assert(objects[74].PhysicalAddress == 0x900000000ULL);
-  assert(objects[74].Size == bytes);
+  assert(objects[73].Size == 0x40000u);
+  assert(objects[74].Data == arena + 0x5c8000u);
+  assert(objects[74].GpuVa == 0x1503dc8000ULL);
+  assert(objects[74].Size == 0x4000u);
+  assert(objects[75].Data == arena);
+  assert(objects[75].GpuVa == APPLE_AGX_RENDER_TEMPLATE_GPU_BASE);
+  assert(objects[75].PhysicalAddress == 0x900000000ULL);
+  assert(objects[75].Size == bytes);
   parameters.ArenaGpuAddress = APPLE_AGX_RENDER_TEMPLATE_GPU_BASE;
   parameters.ArenaBytes = bytes;
   parameters.TaEvent = 1u;
@@ -163,7 +168,7 @@ int main(void) {
   assert(AppleAgxRenderTemplateMaterialize(arena, bytes, &roots));
   assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
       arena, bytes, 0x9d0800000ULL, 0x1500800000ULL,
-      0x1500000000ULL, 0x01000000ULL, objects, 75u, &roots));
+      0x1500000000ULL, 0x01000000ULL, objects, 76u, &roots));
   parameters.ArenaGpuAddress = 0x1500800000ULL;
   assert(AppleAgxExp208BuildJob(
       &parameters, objects, AppleAgxRenderTemplateRuntimeObjectCount(),

@@ -341,37 +341,48 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
     goto Fail;
   }
   {
+    static const ULONGLONG fixedGpuVa[
+        APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT] = {
+        0x1100020000ULL, 0x1100010000ULL};
+    static const ULONG fixedBytes[
+        APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT] = {
+        0x40000u, 0x4000u};
     const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts =
         AppleAgxRenderTemplateObjectLayouts();
-    const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *fixedInput;
-    ULONGLONG fixedPhysical;
+    ULONG fixedIndex;
     if (layouts == NULL) {
       status = STATUS_INVALID_IMAGE_FORMAT;
       goto Fail;
     }
-    fixedInput = &layouts[APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_OBJECT];
-    if (fixedInput->OriginalGpuVa !=
-            APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_GPU_VA ||
-        fixedInput->Size != APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_BYTES ||
-        fixedInput->ArenaOffset > ADMISSION_BACKEND_BYTES ||
-        fixedInput->Size > ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
-        runtime->LocalObject.DeviceAddress >
-            MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
-                fixedInput->ArenaOffset) {
-      status = STATUS_INVALID_IMAGE_FORMAT;
-      goto Fail;
-    }
-    fixedPhysical = runtime->LocalObject.DeviceAddress +
-                    ADMISSION_LOCAL_ALLOCATION_BYTES +
-                    fixedInput->ArenaOffset;
-    if (AppleAgxUatMap(
-            ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
-            APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_GPU_VA, fixedPhysical,
-            APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_BYTES,
-            AppleAgxUatGpuSharedReadWrite, &runtime->Residency.Allocator,
-            &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
-      status = STATUS_INVALID_ADDRESS;
-      goto Fail;
+    for (fixedIndex = 0u;
+         fixedIndex < APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_COUNT;
+         ++fixedIndex) {
+      const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *fixedInput =
+          &layouts[APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_FIRST_OBJECT +
+                   fixedIndex];
+      ULONGLONG fixedPhysical;
+      if (fixedInput->OriginalGpuVa != fixedGpuVa[fixedIndex] ||
+          fixedInput->Size != fixedBytes[fixedIndex] ||
+          fixedInput->ArenaOffset > ADMISSION_BACKEND_BYTES ||
+          fixedInput->Size >
+              ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
+          runtime->LocalObject.DeviceAddress >
+              MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
+                  fixedInput->ArenaOffset) {
+        status = STATUS_INVALID_IMAGE_FORMAT;
+        goto Fail;
+      }
+      fixedPhysical = runtime->LocalObject.DeviceAddress +
+                      ADMISSION_LOCAL_ALLOCATION_BYTES +
+                      fixedInput->ArenaOffset;
+      if (AppleAgxUatMap(
+              ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
+              fixedGpuVa[fixedIndex], fixedPhysical, fixedBytes[fixedIndex],
+              AppleAgxUatGpuSharedReadWrite, &runtime->Residency.Allocator,
+              &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
+        status = STATUS_INVALID_ADDRESS;
+        goto Fail;
+      }
     }
   }
   runtime->MappingReady = TRUE;

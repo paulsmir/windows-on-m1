@@ -45,7 +45,8 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
 
         self.assertIn("AppleAgxPlatformProviderPoll", source)
         memory = (RENDER / "src" / "memory_runtime_windows.c").read_text()
-        self.assertIn("APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_GPU_VA", memory)
+        self.assertIn("APPLE_AGX_RENDER_TEMPLATE_FIXED_INPUT_FIRST_OBJECT", memory)
+        self.assertIn("0x1100010000ULL", memory)
         self.assertIn("AppleAgxUatGpuSharedReadWrite", memory)
         self.assertIn("AppleAgxSchedulerActiveFence", source)
         self.assertIn("AppleAgxSchedulerCompleteActiveFence", source)
