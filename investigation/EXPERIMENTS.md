@@ -1,5 +1,51 @@
 # Hardware Experiment Ledger
 
+## EXP547 bounded firmware fault snapshot — preregistration 2026-09-07T07:41Z
+
+WHY THIS HYPOTHESIS:
+- EXP546 emitted neither late channel-consumption `0x5460` nor work-progress
+  `0x5420` during the full poll window, proving the stall is at/before firmware
+  command-channel ingestion.
+- Doorbell endpoint0x21 and channel0x11 are hardware-proven by EXP477, while
+  queue4/5 messages and shared queue state are now exact; a firmware halt/fault
+  while dereferencing CommandQueueInfo is the closest remaining discriminator.
+- RegionB and RegionC already contain firmware-owned fault records mapped before
+  start; a read-only snapshot at50ms needs no new transport or behavior.
+
+WINDOWS CONTRACT: unchanged producer/worker/fence. AGX/ASAHI CONTRACT: firmware
+writes its 0x80-byte RegionB status and six-word RegionC queue fault record on a
+queue parse/access fault. TRANSLATION: after50ms of unchanged polling, copy both
+existing records plus TA/D3 read pointers to a fixed service-key binary and
+`ZwFlushKey`; no queue state is changed. WHAT IS STILL UNKNOWN: whether the
+firmware is halted/faulted and which queue UUID/status it names.
+
+Receipt-only commit `ab4161181239b05d7600963c58c8fe9b3964fcf7`; snapshot
+test RED then GREEN and109 render regressions pass. Pinned WDK26100/MSVC14.44
+package30.0.547.0 analysis/Universal/Inf2Cat/signing gates pass with inherited
+C28251. Overlay SHA `fc6969c6fd83b8cc37fdd417315b97b70ed2eea285ab0c3fb985b739f253c549`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`abcaa1e33c192a20b286011551741354f5ff95f7e4c92587bb70648bf971bae8` /
+`08d2c635ae8b8bb9d59f49c1d33900e4da4ab408f411acd920d92fc01506cb12` /
+`f7494d6bf3a93a97a650b65c8590a9d423b0637555e67a9eceaff72b7fb7c713` /
+`90204192968727f06a91c0d97103a6340a09c1832dbf331dc5d124a1bb6d0e77` /
+`c4f04705101369f67788167d3e4f0e4803d3e70cc071015bd306022625df76dd` /
+`a613bbaf9e3b670c93626fe12c875c680ddbcc15de48bd91a87bd3e1f0420307`.
+Clean ordinary SHA is
+`1871c122023f128cbc3dd44edb4e238e0167a78fb6a554081edfd044814da726`.
+One bind/producer; PASS is an exact snapshot, not acceleration. Exact cleanup.
+
+## EXP546 delayed command-channel consumption — result 2026-09-07T07:38Z
+
+CONFIRMED discriminator: exact30.0.546.0 bound Code0 and ran once, but the host
+log contains neither `0x5460` nor `0x5420` before reset. Thus neither TA nor D3
+ChannelState READ_PTR advanced during the existing polling window and no work
+progress occurred. Immediate receipt remained byte-identical to EXP545,
+SHA `669b4fbd1d5c54609d9c035f8c7980ba57eed863bc151e1b041e1de0ec0a2b3b`.
+Host log SHA `eda0750b24b3b1d9336827359fc9f9fff494955f0d68005636c449cb4703ba4c`.
+Exact emergency cleanup and ordinary restoration completed; final health SHA
+`1871c122023f128cbc3dd44edb4e238e0167a78fb6a554081edfd044814da726`
+proves Code28/no package/service/files,8CPU/SSH and healthy platform.
+
 ## EXP546 delayed command-channel consumption — preregistration 2026-09-07T07:26Z
 
 WHY THIS HYPOTHESIS:

@@ -402,17 +402,22 @@ materialization, but no0x5420 before reset. Immediate channel read0 is not a
 late no-consumption proof. Commitcbfd370 adds one0x5460 only when TA/D3 channel
 READ_PTR changes in the existing poll loop;109 regressions and pinned30.0.546.0
 gates PASS. ZIP/SYS/producer SHA28df56b5.../7a0300ef.../8871366d.... EXP546
-preregistered. Clean ordinary health SHA68d57556....
+FINAL: neither late0x5460 channel consumption nor0x5420 work progress before
+reset; host SHAeda0750b.... Stall is at/before firmware queue ingestion.
+Commitab41611 captures existing RegionB/RegionC firmware fault records at50ms
+without behavior changes;109 regressions and pinned30.0.547.0 gates PASS.
+ZIP/SYS/producer SHAabcaa1e3.../08d2c635.../a613bbaf.... EXP547
+preregistered. Clean ordinary health SHA1871c122....
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T07:25Z after exact545 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T07:38Z after exact546 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA68d57556113b751ccd1e8c1a42f23273d9cde69e31c6dfea627d33437dcdaca1.
+SHA1871c122023f128cbc3dd44edb4e238e0167a78fb6a554081edfd044814da726.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
