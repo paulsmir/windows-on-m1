@@ -646,7 +646,8 @@ production page-offset0 objects vs native captured intra-page offsets; preserve
 those offsets within the same mapped pages. Clean ordinary baseline restored.
 EXP574 commit115ae467 preserves native low14 object offsets inside the same
 Windows-owned mapped pages; shared-memory sanitizer RED/GREEN and361 tests pass.
-Pinned build/hardware next.
+Pinned30.0.574.0 gates pass; ZIP/SYS/producer SHAfdd30725.../b07eb56a.../
+3189a22f.... Hardware next.
 
 ## Final live ordinary clean baseline
 

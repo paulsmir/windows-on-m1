@@ -1,5 +1,14 @@
 # Hardware Experiment Ledger
 
+## EXP574 native intra-page object geometry — candidate ready 2026-09-07T14:48Z
+
+Pinned30.0.574.0 build/analysis/Universal/Inf2Cat/sign/version/producer PASS.
+Commit `115ae4673018e02555e6439b02eb2045f67d0ea2`; overlay/ZIP/SYS/INF/
+CAT/UMD/producer SHA `1097d5ea...` / `fdd30725...` / `b07eb56a...` /
+`aa8b7e2e...` / `83a8afc2...` / `b9046c93...` / `3189a22f...`.
+Workflow/launch SHA `764f4706...` / `4c93c399...`; unchanged m1n1/Mu.
+One natural bind/producer, exact evidence and cleanup.
+
 ## EXP574 native intra-page object geometry — preregistration 2026-09-07T14:40Z
 
 WHY THIS HYPOTHESIS: EXP573 rejects full-graph visibility as sufficient and
