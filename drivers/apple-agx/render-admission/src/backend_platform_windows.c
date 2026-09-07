@@ -8,6 +8,10 @@
 #define ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS 50ULL
 #define ADMISSION_REGIONC_FAULT_INFO_OFFSET 0x11a2cu
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
+#define ADMISSION_QUEUE_OBJECT_D3_INFO 3u
+#define ADMISSION_QUEUE_OBJECT_TA_INFO 6u
+#define ADMISSION_QUEUE_OBJECT_D3_POINTERS 24u
+#define ADMISSION_QUEUE_OBJECT_TA_POINTERS 25u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
 #define ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES                              \
@@ -183,6 +187,39 @@ static BOOLEAN AdmissionCaptureQueueSubmission(
       channels->D3.RingCpuAddress +
           d3MessageIndex * APPLE_AGX_G13_RUN_MESSAGE_SIZE,
       sizeof(Receipt->D3RunMessage));
+  return TRUE;
+}
+
+static BOOLEAN AdmissionCaptureQueueInfo(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
+    ADMISSION_QUEUE_INFO_RECEIPT *Receipt) {
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *d3Info;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taInfo;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *d3Pointers;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *taPointers;
+  if (Runtime == NULL || Fence == 0u || Receipt == NULL)
+    return FALSE;
+  d3Info = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_D3_INFO];
+  taInfo = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_INFO];
+  d3Pointers = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_D3_POINTERS];
+  taPointers = &Runtime->QueueObjects[ADMISSION_QUEUE_OBJECT_TA_POINTERS];
+  if (d3Info->Data == NULL || d3Info->Size != ADMISSION_QUEUE_INFO_BYTES ||
+      taInfo->Data == NULL || taInfo->Size != ADMISSION_QUEUE_INFO_BYTES ||
+      d3Pointers->Data == NULL ||
+      d3Pointers->Size != ADMISSION_QUEUE_POINTERS_BYTES ||
+      taPointers->Data == NULL ||
+      taPointers->Size != ADMISSION_QUEUE_POINTERS_BYTES)
+    return FALSE;
+  RtlZeroMemory(Receipt, sizeof(*Receipt));
+  Receipt->Version = ADMISSION_QUEUE_INFO_RECEIPT_VERSION;
+  Receipt->Bytes = sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  RtlCopyMemory(Receipt->D3Info, d3Info->Data, sizeof(Receipt->D3Info));
+  RtlCopyMemory(Receipt->TaInfo, taInfo->Data, sizeof(Receipt->TaInfo));
+  RtlCopyMemory(Receipt->D3Pointers, d3Pointers->Data,
+                sizeof(Receipt->D3Pointers));
+  RtlCopyMemory(Receipt->TaPointers, taPointers->Data,
+                sizeof(Receipt->TaPointers));
   return TRUE;
 }
 
@@ -1553,6 +1590,7 @@ static VOID AdmissionPlatformWorker(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   {
     ADMISSION_QUEUE_SUBMISSION_RECEIPT receipt;
+    ADMISSION_QUEUE_INFO_RECEIPT infoReceipt;
     if (AdmissionCaptureQueueSubmission(runtime, &runtime->Progress,
                                         runtime->ProgressValid, &receipt)) {
       initialTaChannelRead = receipt.TaChannelReadPointer;
@@ -1560,6 +1598,8 @@ static VOID AdmissionPlatformWorker(
       channelBaselineValid = TRUE;
       AdmissionRecordQueueSubmission(adapter, &receipt);
     }
+    if (AdmissionCaptureQueueInfo(runtime, description.Fence, &infoReceipt))
+      AdmissionRecordQueueInfo(adapter, &infoReceipt);
   }
 #endif
   InterlockedExchange64(

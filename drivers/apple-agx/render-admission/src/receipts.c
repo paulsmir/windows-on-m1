@@ -5,6 +5,7 @@
 
 C_ASSERT(sizeof(ADMISSION_SOURCE_ADDRESS_RECEIPT) == 88);
 C_ASSERT(sizeof(ADMISSION_PRESENT_TRANSFER_RECEIPT) == 64);
+C_ASSERT(sizeof(ADMISSION_QUEUE_INFO_RECEIPT) == 576);
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -138,6 +139,34 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueSubmission(
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1QueueSubmissionReceipt", Receipt,
                 sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordQueueInfo(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_QUEUE_INFO_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_QUEUE_INFO_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1QueueInfoReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1QueueInfoReceipt", Receipt, sizeof(*Receipt));
     (void)ZwFlushKey(key);
     ZwClose(key);
   }
