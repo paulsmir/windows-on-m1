@@ -630,6 +630,8 @@ JobList linked, but event channel0/0 and all256 pending stamps zero at58ms.
 Thus event decoder is not first owner. SceneList rejected because G13 encoding
 omits it. First unknown is FinalizeTA restart loop vs single RetireStamp stop;
 next compare two timestamp/stamp samples. Exact cleanup and ordinary restore done.
+EXP572 commit9ce6204 adds only two read-only50/100ms samples to distinguish
+Finalize restart from Retire stop;360 AppleAgx tests pass. Build/hardware next.
 
 ## Final live ordinary clean baseline
 

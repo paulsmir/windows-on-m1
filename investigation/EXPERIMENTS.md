@@ -1,5 +1,24 @@
 # Hardware Experiment Ledger
 
+## EXP572 TA retirement temporal progress — preregistration 2026-09-07T14:07Z
+
+WHY THIS HYPOTHESIS: EXP571 proves FinalizeTA private completion, byte-exact
+RetireStamp, linked JobList, event0/0 and an empty pending table. Pinned
+FinalizeTA contains `restart_branch_offset=-520`; if it loops, the firmware
+timestamp targets must change between two observations. If it stops once at
+RetireStamp, they remain stable. SceneList and further hidden-object mapping are
+rejected/forbidden without a fault.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: each pass through the TA
+microsequence writes start/end timestamps before FinalizeTA; RetireStamp follows
+at0x28c. TRANSLATION: commit
+`9ce62042c6d1e06fa4a6068a984e8ed18a4ef712` captures only TA stamps,
+timestamp targets and WorkCommandTA timestamp tail at >=50ms and >=100ms into
+one312-byte crash-durable receipt. WHAT IS STILL UNKNOWN: restart loop vs stable
+RetireStamp stop. RED/GREEN and360 AppleAgx tests pass. Same source/platform/
+work bytes as EXP571 except read-only instrumentation. One candidate, one
+producer, evidence, exact cleanup, then change only the confirmed owner.
+
 ## EXP571 TA RetireStamp pending state — result 2026-09-07T14:02Z
 
 CONFIRMED discriminator. Exact30.0.571.0 ran once. Retire receipt SHA
