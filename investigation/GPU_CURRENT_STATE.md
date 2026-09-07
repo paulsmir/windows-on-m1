@@ -610,8 +610,9 @@ existing >=50ms snapshot. Pinned m1n1/Asahi derive the discriminator:
 StartTA -> timestamp -> wait-for-interrupt -> timestamp -> FinalizeTA. The
 receipt captures exact firmware-written timestamp/EventControl/RegionB TA stats
 and delayed queue state; no work bytes, mappings or behavior change. Receipt
-RED/GREEN and358 AppleAgx tests pass. Pinned build/hashes and one hardware run
-are next.
+RED/GREEN and358 AppleAgx tests pass. Pinned30.0.570.0 gates pass; ZIP/SYS/
+producer SHA5b105c78.../b507ba84.../417ad971.... One exact hardware run is
+next with unchanged m1n1/Mu.
 
 ## Final live ordinary clean baseline
 

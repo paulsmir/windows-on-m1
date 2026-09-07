@@ -1,5 +1,39 @@
 # Hardware Experiment Ledger
 
+## EXP570 TA microsequence progress — candidate ready 2026-09-07T13:38Z
+
+Source commit `9e4d7e11bdc4d45673d5170acc1fd7fd4487fbc9`; ledger HEAD
+`85f80846d233868ab52b9c156a394acdca6ceb5c`; root tracked-diff SHA
+`9804463e525e87652b57f0cda7325bf04d32f500d7eeef5979eed9acda418827`
+and porcelain inventory SHA
+`9f4b2d6c8bcee9c9d045de67e3295c5171054555d9615cecc35edcf1eb92fa2f`.
+m1n1 `ff761784e5c6ada8d4a1dba6bfaf052486cddc27`, clean tracked diff,
+porcelain SHA `214af2d6...`; Mu `f1ef718e08db0e4c30fdb5d8555973513ad9a004`,
+pre-existing tracked-diff SHA `7febae89...` and porcelain SHA `6578efdc...`.
+No ANS worktree was read or changed.
+
+Build invocation: upload exact overlay then run
+`powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\pauls\EXP570-upload\build.ps1`;
+the script clones builder base `C:\Users\pauls\EXP569\src`, applies only the
+overlay, pins WDK10.0.26100.0/MSVC14.44.35207, and runs
+`build-driver.ps1 -Configuration Release -PackageBuild 570 -SubmitQualification`
+plus producer Rebuild with code analysis. KMD/UMD build, code analysis,
+Universal API validation, Inf2Cat, test signing and coherent version30.0.570.0
+all PASS; only inherited C28251 remains. Overlay/ZIP/SYS/INF/CAT/UMD/producer
+SHA:
+`6d4caa29d46cf84adb599a4e02a1314d35fac0a53d5deab58c2d0cc02a4bcfb4` /
+`5b105c78a5d2185d8a9c465d7925dde984edbf56b40f7a01640336f25f2963f7` /
+`b507ba8489e18947abe0f8694350385d617a9776204acc9acf04ef980ed982d5` /
+`ccc6874c64849e59716cafa56194ee526c2dd9c153194d52640b7317b19f83bd` /
+`724dd518ba917b907fa2e5fbaa7cde4095378d786787b8beb36ef95ca83327ba` /
+`11bb2608d3e9da70e4566d6d0d469259f0c6cdeed73dd7bd1e9db6fbb7a123fb` /
+`417ad97188e06c61a01d896aeeda9f4323c9d23a2999793f1875b7784208fa06`.
+Full-owner m1n1 Mach-O SHA `e25606eb...`; unchanged Mu EXP406 FD SHA
+`c7ddcfb2...`. Recovery is ordinary377/392 first, emergency377/385 only if
+needed. Stage command is exact hash-gated `stage.ps1`; launch is `launch.sh`;
+one natural bind, hash-gated `preflight.ps1`, one `run.ps1`, collect all binary
+receipts including `Wom1TaProgressReceipt`, then exact hash-gated cleanup.
+
 ## EXP570 TA microsequence progress — preregistration 2026-09-07T13:34Z
 
 WHY THIS HYPOTHESIS:
