@@ -74,6 +74,11 @@
       <PreprocessorDefinitions>APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxVisibleScanoutQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
     <OutDir>$(MSBuildProjectDirectory)\build\memory-qualification\$(Configuration)\</OutDir>
     <IntDir>$(MSBuildProjectDirectory)\build\memory-qualification\obj\$(Configuration)\</IntDir>
@@ -98,6 +103,7 @@
     <ClCompile Include="src\render_umd_command.c" />
     <ClCompile Include="src\umd_render_windows.c" />
     <ClCompile Include="src\render_present.c" />
+    <ClCompile Include="src\render_visible_scanout.c" />
     <ClCompile Include="src\present_windows.c" />
     <ClCompile Include="src\work_queue_windows.c" />
     <ClCompile Include="src\gdi_windows.c" />

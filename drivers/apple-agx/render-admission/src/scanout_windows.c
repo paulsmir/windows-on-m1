@@ -112,6 +112,114 @@ static ADMISSION_SCANOUT_RUNTIME *AdmissionScanoutGet(
              : NULL;
 }
 
+#if defined(APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION)
+static NTSTATUS AdmissionScanoutQualifyVisible(
+    ADMISSION_CONTEXT *Context, ADMISSION_SCANOUT_RUNTIME *Runtime,
+    const ADMISSION_SCANOUT_MEMORY_VIEW *Memory) {
+  ADMISSION_VISIBLE_SCANOUT_RECEIPT receipt;
+  APPLE_AGX_FIXED_PANEL_RESULT panel_result;
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+  APPLE_AGX_SCANOUT_U64 started;
+  APPLE_AGX_SCANOUT_U64 deadline;
+  BOOLEAN (*consume_interrupt)(ADMISSION_CONTEXT *) =
+      AdmissionScanoutInterrupt;
+  NTSTATUS status = STATUS_DEVICE_HARDWARE_ERROR;
+  RtlZeroMemory(&receipt, sizeof(receipt));
+  receipt.Version = ADMISSION_VISIBLE_SCANOUT_RECEIPT_VERSION;
+  receipt.Bytes = sizeof(receipt);
+  receipt.Status = STATUS_PENDING;
+  receipt.CpuAddress = (ULONGLONG)(ULONG_PTR)Memory->CpuAddress;
+  receipt.GuestIpaAddress = Memory->GuestIpaAddress;
+  receipt.HostPhysicalAddress = Memory->HostPhysicalAddress;
+  receipt.SurfaceOffset = 0ULL;
+  receipt.SourceVisible = 1u;
+  started = AdmissionScanoutNow(Runtime);
+  deadline = started + ADMISSION_SCANOUT_TIMEOUT_MS;
+  if (!AdmissionVisiblePatternFill(
+          Memory->CpuAddress, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 590u,
+          &receipt.Pattern)) {
+    status = STATUS_INVALID_BUFFER_SIZE;
+    goto Exit;
+  }
+  KeMemoryBarrier();
+  receipt.Stage = 1u;
+  panel_result = AppleAgxFixedPanelCommit(
+      &Runtime->Panel, 0u, 0u, APPLE_AGX_SCANOUT_J313_WIDTH,
+      APPLE_AGX_SCANOUT_J313_HEIGHT, APPLE_AGX_SCANOUT_J313_STRIDE,
+      APPLE_AGX_SCANOUT_FORMAT_BGRA8888);
+  if (panel_result != AppleAgxFixedPanelOk) {
+    status = STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+    goto Exit;
+  }
+  receipt.Stage = 2u;
+  if (InterlockedCompareExchange(&Runtime->PresentGate, 1, 0) != 0) {
+    status = STATUS_DEVICE_BUSY;
+    goto Exit;
+  }
+  panel_result = AppleAgxFixedPanelQueuePresent(
+      &Runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
+  if (panel_result != AppleAgxFixedPanelOk) {
+    InterlockedExchange(&Runtime->PresentGate, 0);
+    status = STATUS_DEVICE_HARDWARE_ERROR;
+    goto Exit;
+  }
+  receipt.RequestedSequence = sequence;
+  InterlockedExchange64(&Runtime->PendingPhysicalAddress,
+                        (LONG64)Memory->GuestIpaAddress);
+  InterlockedExchange64(&Runtime->PendingSequence, (LONG64)sequence);
+  InterlockedExchange(&Runtime->PendingValid, 1);
+  receipt.Stage = 3u;
+  while ((APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
+             &Runtime->LastNotifiedSequence, 0, 0) != sequence &&
+         AdmissionScanoutNow(Runtime) < deadline) {
+    (void)consume_interrupt(Context);
+    if ((APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
+            &Runtime->LastNotifiedSequence, 0, 0) == sequence)
+      break;
+    if (!AdmissionScanoutPause(Runtime))
+      break;
+  }
+  if ((APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
+          &Runtime->LastNotifiedSequence, 0, 0) != sequence) {
+    status = STATUS_IO_TIMEOUT;
+    goto Exit;
+  }
+  receipt.Stage = 4u;
+  receipt.LatchedSequence = sequence;
+  Runtime->Panel.ActiveOffset = 0ULL;
+  if (!AdmissionScanoutRead64(Runtime,
+          APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_APPLIED_SEQUENCE,
+          &receipt.AppliedSequence) ||
+      !AdmissionScanoutRead64(Runtime,
+          APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_LATCHED_SEQUENCE,
+          &receipt.LatchedSequence) ||
+      !AdmissionScanoutRead64(Runtime,
+          APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET,
+          &receipt.ActiveOffset) ||
+      !AdmissionScanoutRead64(Runtime,
+          APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_POOL_PA,
+          &receipt.PoolPhysicalAddress) ||
+      !AdmissionScanoutRead32(Runtime,
+          APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_SWAP_ID,
+          &receipt.SwapId) ||
+      receipt.AppliedSequence != sequence ||
+      receipt.LatchedSequence != sequence || receipt.ActiveOffset != 0ULL) {
+    status = STATUS_DATA_ERROR;
+    goto Exit;
+  }
+  Runtime->Panel.LastSwapId = receipt.SwapId;
+  status = STATUS_SUCCESS;
+  receipt.Status = STATUS_SUCCESS;
+  if (!AdmissionVisibleScanoutReceiptValid(&receipt))
+    status = STATUS_DATA_ERROR;
+Exit:
+  receipt.Status = (ULONG)status;
+  receipt.ElapsedMs = (ULONG)(AdmissionScanoutNow(Runtime) - started);
+  AdmissionRecordVisibleScanout(Context, &receipt);
+  return status;
+}
+#endif
+
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     ADMISSION_CONTEXT *Context) {
   ADMISSION_SCANOUT_RUNTIME *runtime;
@@ -178,6 +286,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     InterlockedExchange(&runtime->IrqEnabled, 0);
     return STATUS_DEVICE_HARDWARE_ERROR;
   }
+#if defined(APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION)
+  {
+    NTSTATUS qualification_status =
+        AdmissionScanoutQualifyVisible(Context, runtime, &memory);
+    if (!NT_SUCCESS(qualification_status))
+      return qualification_status;
+  }
+#endif
   return STATUS_SUCCESS;
 }
 

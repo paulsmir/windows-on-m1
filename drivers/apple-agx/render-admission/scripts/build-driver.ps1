@@ -8,6 +8,7 @@ param(
     [switch]$FirmwareQualification,
     [switch]$BackendQualification,
     [switch]$SubmitQualification,
+    [switch]$VisibleScanoutQualification,
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
@@ -21,6 +22,9 @@ if ($FirmwareQualification -and ($MemoryQualification -or $ManagementQualificati
 }
 if ($SubmitQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification)) {
     throw "SubmitQualification must be a full-production-only discriminator"
+}
+if ($VisibleScanoutQualification -and ($MemoryQualification -or $ManagementQualification -or $RetainedRootQualification -or $StopAfterEndpoints -or $FirmwareQualification -or $BackendQualification -or $SubmitQualification)) {
+    throw "VisibleScanoutQualification must be the only qualification profile"
 }
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "AppleAgxRenderAdmission.vcxproj"
@@ -59,6 +63,7 @@ $endpointStopValue = if ($StopAfterEndpoints) { "true" } else { "false" }
 $firmwareQualificationValue = if ($FirmwareQualification) { "true" } else { "false" }
 $backendQualificationValue = if ($BackendQualification) { "true" } else { "false" }
 $submitQualificationValue = if ($SubmitQualification) { "true" } else { "false" }
+$visibleScanoutQualificationValue = if ($VisibleScanoutQualification) { "true" } else { "false" }
 & $msbuild $project /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true /p:Inf2CatUseLocalTime=true `
     "/p:AppleAgxMemoryQualification=$memoryQualificationValue" "/p:AppleAgxVersionBuild=$PackageBuild" `
@@ -67,7 +72,8 @@ $submitQualificationValue = if ($SubmitQualification) { "true" } else { "false" 
     "/p:AppleAgxStopAfterEndpoints=$endpointStopValue" `
     "/p:AppleAgxFirmwareQualification=$firmwareQualificationValue" `
     "/p:AppleAgxBackendQualification=$backendQualificationValue" `
-    "/p:AppleAgxSubmitQualification=$submitQualificationValue"
+    "/p:AppleAgxSubmitQualification=$submitQualificationValue" `
+    "/p:AppleAgxVisibleScanoutQualification=$visibleScanoutQualificationValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }

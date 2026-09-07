@@ -1,0 +1,52 @@
+#ifndef APPLE_AGX_RENDER_VISIBLE_SCANOUT_H
+#define APPLE_AGX_RENDER_VISIBLE_SCANOUT_H
+
+#include "apple_agx_scanout.h"
+
+#define ADMISSION_VISIBLE_PATTERN_VERSION 1u
+#define ADMISSION_VISIBLE_PATTERN_PREFIX_BYTES 64u
+
+typedef struct _ADMISSION_VISIBLE_PATTERN_RECEIPT {
+  unsigned int Version;
+  unsigned int Bytes;
+  unsigned int Frame;
+  unsigned int Width;
+  unsigned int Height;
+  unsigned int Pitch;
+  unsigned int Format;
+  unsigned int Reserved;
+  unsigned long long SurfaceBytes;
+  unsigned long long ContentHash;
+  unsigned char Prefix[ADMISSION_VISIBLE_PATTERN_PREFIX_BYTES];
+} ADMISSION_VISIBLE_PATTERN_RECEIPT;
+
+#define ADMISSION_VISIBLE_SCANOUT_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_VISIBLE_SCANOUT_RECEIPT {
+  unsigned int Version;
+  unsigned int Bytes;
+  unsigned int Stage;
+  unsigned int Status;
+  ADMISSION_VISIBLE_PATTERN_RECEIPT Pattern;
+  unsigned long long CpuAddress;
+  unsigned long long GuestIpaAddress;
+  unsigned long long HostPhysicalAddress;
+  unsigned long long SurfaceOffset;
+  unsigned long long RequestedSequence;
+  unsigned long long AppliedSequence;
+  unsigned long long LatchedSequence;
+  unsigned long long ActiveOffset;
+  unsigned long long PoolPhysicalAddress;
+  unsigned int SwapId;
+  unsigned int SourceVisible;
+  unsigned int ElapsedMs;
+  unsigned int Reserved;
+} ADMISSION_VISIBLE_SCANOUT_RECEIPT;
+
+int AdmissionVisiblePatternFill(
+    void *Surface, unsigned long long SurfaceBytes, unsigned int Frame,
+    ADMISSION_VISIBLE_PATTERN_RECEIPT *Receipt);
+
+int AdmissionVisibleScanoutReceiptValid(
+    const ADMISSION_VISIBLE_SCANOUT_RECEIPT *Receipt);
+
+#endif /* APPLE_AGX_RENDER_VISIBLE_SCANOUT_H */

@@ -15,6 +15,8 @@ C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_RECEIPT) == 312);
 C_ASSERT(sizeof(ADMISSION_KTRACE_RECEIPT) == 928);
 C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
 C_ASSERT(sizeof(ADMISSION_TERMINAL_RECEIPT) == 368);
+C_ASSERT(sizeof(ADMISSION_VISIBLE_PATTERN_RECEIPT) == 112);
+C_ASSERT(sizeof(ADMISSION_VISIBLE_SCANOUT_RECEIPT) == 216);
 
 typedef struct _ADMISSION_PRESENT_RECEIPT {
   ULONG Version, Bytes, Branch, Status, Irql, DevicePresent, ArgsPresent, Flags;
@@ -86,6 +88,38 @@ static void WriteQword(HANDLE Key, PCWSTR Name, ULONGLONG Value) {
   RtlInitUnicodeString(&name,Name);
   (void)ZwSetValueKey(Key,&name,0,REG_QWORD,&Value,sizeof(Value));
 }
+
+#if defined(APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION)
+_Use_decl_annotations_ VOID AdmissionRecordVisibleScanout(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_VISIBLE_SCANOUT_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_VISIBLE_SCANOUT_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1VisibleScanoutReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1VisibleScanoutReceipt", Receipt, sizeof(*Receipt));
+    (void)ZwFlushKey(key);
+    ZwClose(key);
+  }
+}
+#endif
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 _Use_decl_annotations_ VOID AdmissionRecordTerminalReceipt(

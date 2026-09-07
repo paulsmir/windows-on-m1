@@ -22,6 +22,7 @@
 #include "render_umd_command.h"
 #include "render_gdi_receipt.h"
 #include "render_present.h"
+#include "render_visible_scanout.h"
 #include "render_submit_trace.h"
 #include "render_submission.h"
 #include "render_backend_image.h"
@@ -977,6 +978,11 @@ NTSTATUS AdmissionScanoutQueuePresent(
 BOOLEAN AdmissionScanoutInterrupt(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutControlInterrupt(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ BOOLEAN Enable);
+#if defined(APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION)
+VOID AdmissionRecordVisibleScanout(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_VISIBLE_SCANOUT_RECEIPT *Receipt);
+#endif
 
 DXGKDDI_ADD_DEVICE AdmissionDdiAddDevice;
 DXGKDDI_START_DEVICE AdmissionDdiStartDevice;
