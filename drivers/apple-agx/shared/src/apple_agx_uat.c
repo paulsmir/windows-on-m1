@@ -56,6 +56,12 @@ static APPLE_AGX_UAT_RESULT AppleAgxUatProtectionBits(
       uxn = 1u;
       pxn = 0u;
       break;
+    case AppleAgxUatFirmwareGpuSharedReadWrite:
+      attribute = APPLE_AGX_UAT_ATTR_SHARED_INNER_NC;
+      ap = APPLE_AGX_UAT_AP_FIRMWARE_GPU;
+      uxn = 1u;
+      pxn = 1u;
+      break;
     case AppleAgxUatFirmwarePrivateReadWrite:
       attribute = APPLE_AGX_UAT_ATTR_CACHED;
       ap = APPLE_AGX_UAT_AP_FIRMWARE;

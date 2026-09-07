@@ -316,19 +316,27 @@ static APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepareInternal(
 
 
 
-static unsigned char AppleAgxInitdataRecordRange(APPLE_AGX_INITDATA_MEMORY_GRAPH *g,
-    APPLE_AGX_MEMORY_OBJECT *object, unsigned long long va) {
+static unsigned char AppleAgxInitdataRecordRangeProtection(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *g, APPLE_AGX_MEMORY_OBJECT *object,
+    unsigned long long va, APPLE_AGX_UAT_PROTECTION protection) {
   unsigned int i = g->Inventory.MappingCount;
   APPLE_AGX_UAT_HALF half;
   if (i >= g->Inventory.MappingCapacity || !object || object->State == AppleAgxMemoryEmpty ||
       AppleAgxUatValidateRange(0,va,object->DeviceAddress,object->Length,
-          AppleAgxUatFirmwareSharedReadWrite,&half) != AppleAgxUatResultOk)
+          protection,&half) != AppleAgxUatResultOk)
     return 0;
   g->UatMappings[i] = (APPLE_AGX_UAT_MAPPING){0,va,object->DeviceAddress,object->Length,
-      AppleAgxUatFirmwareSharedReadWrite,APPLE_AGX_MEMORY_PAGE_SIZE};
+      protection,APPLE_AGX_MEMORY_PAGE_SIZE};
   g->MappingObjects[i] = object;
   ++g->Inventory.MappingCount;
   return 1;
+}
+
+static unsigned char AppleAgxInitdataRecordRange(
+    APPLE_AGX_INITDATA_MEMORY_GRAPH *g, APPLE_AGX_MEMORY_OBJECT *object,
+    unsigned long long va) {
+  return AppleAgxInitdataRecordRangeProtection(
+      g, object, va, AppleAgxUatFirmwareSharedReadWrite);
 }
 
 #ifndef APPLE_AGX_FULL_CONTEXT0_BROKER
@@ -359,9 +367,10 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryPrepareBroker(
   for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i)
     if (!AppleAgxInitdataRecordRange(Graph,&Graph->RenderSharedMemory.Objects[i],Graph->RenderSharedMemory.VirtualAddresses[i]))
       goto Fail;
-  if (!AppleAgxInitdataRecordRange(Graph,
+  if (!AppleAgxInitdataRecordRangeProtection(Graph,
       &Graph->RegionBMemory.Objects[AppleAgxRegionBMemoryBufferManager],
-      J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA)) goto Fail;
+      J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA,
+      AppleAgxUatFirmwareGpuSharedReadWrite)) goto Fail;
   return AppleAgxInitdataMemoryResultOk;
 Fail:
   return AppleAgxInitdataMemoryRollback(Graph,AppleAgxInitdataMemoryResultUatFailed);

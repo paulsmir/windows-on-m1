@@ -358,7 +358,7 @@ static void production_inventory(void)
 {
     struct fixture f;
     unsigned long long handles[200], alias, ignored, pa, descriptor;
-    unsigned long long root0, system_pa;
+    unsigned long long root0, system_pa, expected;
     unsigned int i, lifetime;
     initialize(&f);
     for (lifetime = 1; lifetime <= 2; ++lifetime) {
@@ -379,6 +379,12 @@ static void production_inventory(void)
             PAGE, &alias) == 0);
         assert(hv_agx_retained_query(&f.core, lifetime, alias, 0x420000000ULL,
             IPA, PAGE, &pa) == 0 && pa == PA);
+        assert(AppleAgxUatResolvePage(0, &f.core.Roots, 0x420000000ULL,
+            &f.core.Inventory, &pa, &descriptor) == AppleAgxUatResultOk);
+        assert(AppleAgxUatEncodePageDescriptor(
+            0, PA, AppleAgxUatFirmwareGpuSharedReadWrite,
+            &expected) == AppleAgxUatResultOk);
+        assert(descriptor == expected);
         assert(hv_agx_retained_map(&f.core, lifetime, 0x420004000ULL, IPA,
             PAGE, &ignored) == HV_AGX_RETAINED_RANGE);
         assert(hv_agx_retained_map(&f.core, lifetime, 0x41fffc000ULL, IPA,

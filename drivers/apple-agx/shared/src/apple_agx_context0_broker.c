@@ -25,7 +25,10 @@ static unsigned char graph_valid(const APPLE_AGX_INITDATA_MEMORY_GRAPH *g) {
     if(!o || o->State==AppleAgxMemoryEmpty || !o->CpuAddress || o->DevicePages ||
         o->DevicePageCount || m->Context || !m->Length || (m->Length&0x3fff) ||
         (m->VirtualAddress&0x3fff) || m->PhysicalAddress!=o->DeviceAddress ||
-        m->Length!=o->Length || m->Protection!=AppleAgxUatFirmwareSharedReadWrite ||
+        m->Length!=o->Length ||
+        (m->VirtualAddress==J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA
+             ? m->Protection!=AppleAgxUatFirmwareGpuSharedReadWrite
+             : m->Protection!=AppleAgxUatFirmwareSharedReadWrite) ||
         m->VirtualAddress>~0ULL-m->Length || m->PhysicalAddress>~0ULL-m->Length ||
         m->Length/0x4000 > APPLE_AGX_CONTEXT0_MAX_LEAVES-total) return 0;
     total+=(unsigned)(m->Length/0x4000);

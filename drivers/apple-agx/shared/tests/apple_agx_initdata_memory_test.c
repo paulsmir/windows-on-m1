@@ -439,6 +439,10 @@ int main(void) {
            graph.Roots.Ttbr1PhysicalAddress==0 && graph.Inventory.PageCount==0);
     assert(graph.TtbrPair.Ttbr0==0 && graph.TtbrPair.Ttbr1==0);
     assert(graph.Inventory.MappingCount==90 && !graph.MappingsReady);
+    assert(graph.UatMappings[89].VirtualAddress ==
+           J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA);
+    assert(graph.UatMappings[89].Protection ==
+           AppleAgxUatFirmwareGpuSharedReadWrite);
     for(i=0;i<graph.Inventory.MappingCount;++i) {
       assert(graph.MappingObjects[i]);
       assert(graph.UatMappings[i].VirtualAddress!=APPLE_AGX_RTKIT_CRASHLOG_GPU_VA);
