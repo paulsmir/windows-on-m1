@@ -1,5 +1,7 @@
 #include "apple_agx_render_shared_memory.h"
 #include "apple_agx_exp208_adapter.h"
+#include "apple_agx_relocation.h"
+#include "apple_agx_render_template_rebase.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -48,7 +50,13 @@ int main(void) {
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER owner;
   APPLE_AGX_EXP208_RELOCATION_OBJECT
       objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      source_objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      active_objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
   APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
+  APPLE_AGX_BACKEND_JOB_IMAGE staged_job;
+  APPLE_AGX_BACKEND_JOB_IMAGE active_job;
   unsigned char *arena;
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
   APPLE_AGX_U32 index;
@@ -66,6 +74,15 @@ int main(void) {
   assert(arena != NULL);
   assert(AppleAgxRenderTemplateMaterialize(
       arena, APPLE_AGX_EXP208_ARENA_BYTES, &roots));
+  assert(AppleAgxRenderTemplateBuildRelocationObjectsRebased(
+      arena, APPLE_AGX_EXP208_ARENA_BYTES, 0x9d5000000ULL,
+      0x1500800000ULL, 0x1500000000ULL, 0x01000000ULL,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      &roots));
+  assert(AppleAgxApplyRelocations(
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      AppleAgxRenderTemplateRelocations(),
+      AppleAgxRenderTemplateRelocationCount()));
 
   assert(AppleAgxRenderSharedMemoryBuild(
              &owner, &io, 0xffffffa001000000ULL) ==
@@ -119,6 +136,31 @@ int main(void) {
                   arena + layouts[index].ArenaOffset,
                   layouts[index].Size) == 0);
   }
+
+  memset(&staged_job, 0, sizeof(staged_job));
+  staged_job.TaWorkAddresses[0] = source_objects[16].GpuVa;
+  staged_job.TaWorkAddresses[1] = source_objects[19].GpuVa;
+  staged_job.D3WorkAddresses[0] = source_objects[14].GpuVa;
+  staged_job.D3WorkAddresses[1] = source_objects[18].GpuVa;
+  staged_job.TaWorkAddressCount = 2u;
+  staged_job.D3WorkAddressCount = 2u;
+  staged_job.TaEvent = 0u;
+  staged_job.D3Event = 1u;
+  staged_job.TaExpectedStamp = 0x7a000100u;
+  staged_job.D3ExpectedStamp = 0x3d000100u;
+  staged_job.TaExpectedDonePointer = 2u;
+  staged_job.D3ExpectedDonePointer = 2u;
+  arena[layouts[0].ArenaOffset] = 0x5au;
+  assert(AppleAgxRenderSharedMemoryBuildActiveJob(
+      &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES,
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      0x1500800000ULL, &staged_job, active_objects, &active_job));
+  assert(active_job.TaWorkAddresses[0] == owner.VirtualAddresses[16]);
+  assert(active_job.TaWorkAddresses[1] == owner.VirtualAddresses[19]);
+  assert(active_job.D3WorkAddresses[0] == owner.VirtualAddresses[14]);
+  assert(active_job.D3WorkAddresses[1] == owner.VirtualAddresses[18]);
+  assert(active_job.TaWorkAddresses[0] != staged_job.TaWorkAddresses[0]);
+  assert(((unsigned char *)owner.Objects[0].CpuAddress)[0] == 0x5au);
   assert(AppleAgxRenderSharedMemoryDestroy(&owner) ==
          AppleAgxRenderSharedMemoryResultOk);
   assert(fake.Freed == APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);

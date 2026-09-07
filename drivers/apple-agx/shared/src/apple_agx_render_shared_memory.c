@@ -1,4 +1,6 @@
 #include "apple_agx_render_shared_memory.h"
+#include "apple_agx_exp208_adapter.h"
+#include "apple_agx_relocation.h"
 
 #define RENDER_SHARED_NULL ((void *)0)
 #define RENDER_SHARED_VA_ALIGNMENT 0x8000ULL
@@ -145,6 +147,59 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     RelocationObjects[index].Size = layouts[index].Size;
     RelocationObjects[index].Data = destination;
   }
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
+    APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob) {
+  APPLE_AGX_BACKEND_JOB_IMAGE candidate;
+  APPLE_AGX_U32 index;
+  if (SourceObjects == RENDER_SHARED_NULL ||
+      SourceObjectCount != APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
+      StagedJob == RENDER_SHARED_NULL || ActiveObjects == RENDER_SHARED_NULL ||
+      ActiveJob == RENDER_SHARED_NULL || ArenaGpuAddress == 0ULL ||
+      (ArenaGpuAddress & (APPLE_AGX_EXP208_ARENA_ALIGNMENT - 1u)) != 0ULL ||
+      TemplateArenaBytes != APPLE_AGX_EXP208_ARENA_BYTES ||
+      StagedJob->TaWorkAddressCount != APPLE_AGX_EXP208_ROOT_COUNT ||
+      StagedJob->D3WorkAddressCount != APPLE_AGX_EXP208_ROOT_COUNT ||
+      StagedJob->TaEvent >= 128u || StagedJob->D3Event >= 128u ||
+      StagedJob->TaEvent == StagedJob->D3Event ||
+      StagedJob->TaExpectedStamp == 0u ||
+      StagedJob->D3ExpectedStamp == 0u ||
+      StagedJob->TaExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY ||
+      StagedJob->D3ExpectedDonePointer >= APPLE_AGX_EXP208_QUEUE_CAPACITY)
+    return APPLE_AGX_FALSE;
+  for (index = 0u; index < SourceObjectCount; ++index)
+    ActiveObjects[index] = SourceObjects[index];
+  if (!AppleAgxRenderSharedMemoryBindRelocationObjects(
+          Owner, TemplateArena, TemplateArenaBytes, ActiveObjects,
+          SourceObjectCount))
+    return APPLE_AGX_FALSE;
+  if (!AppleAgxApplyRelocations(
+          ActiveObjects, SourceObjectCount,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount()) ||
+      ActiveObjects[APPLE_AGX_EXP208_TA_INITBM_OBJECT].GpuVa == 0ULL ||
+      ActiveObjects[APPLE_AGX_EXP208_TA_WORK_OBJECT].GpuVa == 0ULL ||
+      ActiveObjects[APPLE_AGX_EXP208_D3_BARRIER_OBJECT].GpuVa == 0ULL ||
+      ActiveObjects[APPLE_AGX_EXP208_D3_WORK_OBJECT].GpuVa == 0ULL)
+    return APPLE_AGX_FALSE;
+  candidate = *StagedJob;
+  candidate.TaWorkAddresses[0] =
+      ActiveObjects[APPLE_AGX_EXP208_TA_INITBM_OBJECT].GpuVa;
+  candidate.TaWorkAddresses[1] =
+      ActiveObjects[APPLE_AGX_EXP208_TA_WORK_OBJECT].GpuVa;
+  candidate.D3WorkAddresses[0] =
+      ActiveObjects[APPLE_AGX_EXP208_D3_BARRIER_OBJECT].GpuVa;
+  candidate.D3WorkAddresses[1] =
+      ActiveObjects[APPLE_AGX_EXP208_D3_WORK_OBJECT].GpuVa;
+  *ActiveJob = candidate;
   return APPLE_AGX_TRUE;
 }
 

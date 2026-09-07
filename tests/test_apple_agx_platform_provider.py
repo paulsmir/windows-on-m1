@@ -26,6 +26,7 @@ class AppleAgxPlatformProviderHostTest(unittest.TestCase):
                     str(SHARED / "src" / "apple_agx_event_allocator.c"),
                     str(SHARED / "src" / "apple_agx_platform_provider.c"),
                     str(SHARED / "src" / "apple_agx_render_shared_memory.c"),
+                    str(SHARED / "src" / "apple_agx_relocation.c"),
                     str(SHARED / "src" / "apple_agx_render_template.generated.c"),
                     str(SHARED / "src" / "apple_agx_memory.c"),
                     str(SHARED / "tests" / "apple_agx_platform_provider_test.c"),

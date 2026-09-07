@@ -37,6 +37,17 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *RelocationObjects,
     APPLE_AGX_U32 RelocationObjectCapacity);
 
+/* Refresh the firmware-visible context-0 objects from the dynamically patched
+ * template arena, then build the job from that active relocation graph. */
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildActiveJob(
+    const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const void *TemplateArena, APPLE_AGX_U32 TemplateArenaBytes,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *SourceObjects,
+    APPLE_AGX_U32 SourceObjectCount, APPLE_AGX_U64 ArenaGpuAddress,
+    const APPLE_AGX_BACKEND_JOB_IMAGE *StagedJob,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_BACKEND_JOB_IMAGE *ActiveJob);
+
 APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildQueueConfig(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     APPLE_AGX_U64 TimeoutTicks,
