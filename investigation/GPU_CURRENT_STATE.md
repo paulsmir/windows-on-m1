@@ -601,7 +601,8 @@ Pinned30.0.569.0 ZIP/SYS/producer SHAbec812e3.../676dc77b.../146cd509....
 EXP569 preregistered.
 EXP569 FINAL: second fixed-input fault gone. Snapshot7681cd9b at62ms has
 FAULTED=0, TA channel read1/D3 read0; no completion by500ms. Hardware log
-ed4a1c66. Exact cleanup complete; ordinary restore underway. First unknown is
+ed4a1c66. Exact cleanup complete; ordinary restore verified Code28/8CPU/SSH.
+First unknown is
 nonfaulting TA work/microsequence progress. Do not add a third fixed object
 without a new fault.
 

@@ -9,7 +9,7 @@ at62ms has SGX FAULTED=0, TA channel read1, D3 read0. No physical completion
 before500ms; Windows timeout-check guard4 remains. Hardware log SHA
 `ed4a1c66edb1ce39ff9b10aff19e56814082d51d8c999a50f9a95041ed4bfe0c`.
 Thus both proven hidden inputs are closed. Do not add 0x1100018000 without a
-fault. Exact cleanup complete; ordinary restore in progress. Next boundary is
+fault. Exact cleanup complete; ordinary restore verified Code28/8CPU/SSH. Next boundary is
 nonfaulting TA execution after command-channel consumption; use a source-derived
 TA work/microsequence progress discriminator.
 
