@@ -7,6 +7,7 @@
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS 50ULL
 #define ADMISSION_REGIONC_FAULT_INFO_OFFSET 0x11a2cu
+#define ADMISSION_PLATFORM_FIRMWARE_KICK_DOORBELL 0x10u
 #define ADMISSION_PLATFORM_INITDATA_ADDRESS_MASK ((1ULL << 44u) - 1ULL)
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_OFFSET 0xd14000u
 #define ADMISSION_PLATFORM_SGX_PRE_ASC_VALUE 0x00070001u
@@ -69,6 +70,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   BOOLEAN Powered;
   BOOLEAN RenderBorrowed;
   BOOLEAN QueueImageReady;
+  BOOLEAN QueueWakeSent;
   BOOLEAN ProviderReady;
   BOOLEAN BackendStarted;
 } ADMISSION_PLATFORM_RUNTIME;
@@ -948,8 +950,19 @@ static APPLE_AGX_BACKEND_BOOL AdmissionTransportDoorbell(
        Doorbell != APPLE_AGX_PLATFORM_D3_DOORBELL &&
        Doorbell != APPLE_AGX_DEVICE_CONTROL_DOORBELL_CHANNEL))
     return APPLE_AGX_BACKEND_FALSE;
-  message = AppleAgxRtkitDoorbell(Doorbell);
   deadline = AdmissionPlatformNowMs() + J313_AGX_G2_INITDATA_TIMEOUT_MS;
+  if ((Doorbell == APPLE_AGX_PLATFORM_TA_DOORBELL ||
+       Doorbell == APPLE_AGX_PLATFORM_D3_DOORBELL) &&
+      !runtime->QueueWakeSent) {
+    message = AppleAgxRtkitDoorbell(ADMISSION_PLATFORM_FIRMWARE_KICK_DOORBELL);
+    if (message == APPLE_AGX_RTKIT_INVALID_MESSAGE ||
+        AppleAgxAscSend(&runtime->AscIo, message,
+                        J313_AGX_G2_DOORBELL_ENDPOINT, deadline) !=
+            AppleAgxAscResultOk)
+      return APPLE_AGX_BACKEND_FALSE;
+    runtime->QueueWakeSent = TRUE;
+  }
+  message = AppleAgxRtkitDoorbell(Doorbell);
   return message != APPLE_AGX_RTKIT_INVALID_MESSAGE &&
                  AppleAgxAscSend(
                      &runtime->AscIo, message,
@@ -2156,6 +2169,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
     goto Exit;
   }
   runtime->ProviderReady = TRUE;
+  runtime->QueueWakeSent = FALSE;
   runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
   runtime->CompletionContext = NULL;
