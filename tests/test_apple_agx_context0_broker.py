@@ -8,7 +8,7 @@ class Context0BrokerTests(unittest.TestCase):
     def test_full_inventory_and_every_failed_leaf(self):
         sources=['context0_broker','initdata_memory','initdata','firmware_status',
                  'channel_info','channel_memory','regionb','regionb_memory',
-                 'render_shared_memory','render_template.generated','regionc',
+                 'render_shared_memory','render_template.generated','relocation','regionc',
                  'uat_memory','uat_table','uat','memory']
         with tempfile.TemporaryDirectory() as temp:
             exe=Path(temp)/'test'

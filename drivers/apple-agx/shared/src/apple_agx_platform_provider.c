@@ -771,34 +771,54 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderPoll(
     *DrainedMessages = 0u;
   if (CompletedFence != PLATFORM_NULL)
     *CompletedFence = 0u;
+  if (Provider != PLATFORM_NULL)
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardInvalid;
   if (Provider == PLATFORM_NULL || !Provider->Initialized ||
       MaxMessages == 0u || DrainedMessages == PLATFORM_NULL ||
       CompletedFence == PLATFORM_NULL || Provider->Runtime == PLATFORM_NULL ||
-      Provider->Transport.NowTicks == PLATFORM_NULL ||
-      !AppleAgxPlatformProviderDrainEvents(Provider, MaxMessages, &drained,
-                                           &completed))
+      Provider->Transport.NowTicks == PLATFORM_NULL)
     return APPLE_AGX_BACKEND_FALSE;
+  if (!AppleAgxPlatformProviderDrainEvents(Provider, MaxMessages, &drained,
+                                           &completed)) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardDrainEvents;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
   *DrainedMessages = drained;
   *CompletedFence = completed;
-  if (Provider->Runtime->Phase != AppleAgxBackendRuntimeSubmitted)
+  if (Provider->Runtime->Phase != AppleAgxBackendRuntimeSubmitted) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardOk;
     return APPLE_AGX_BACKEND_TRUE;
+  }
   /*
    * Consuming the complete caller budget does not prove the event ring is
    * empty.  A matching completion may already be queued behind this batch;
    * defer timeout classification until a later poll observes spare budget.
    */
-  if (drained == MaxMessages)
+  if (drained == MaxMessages) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardOk;
     return APPLE_AGX_BACKEND_TRUE;
+  }
   now = Provider->Transport.NowTicks(Provider->Transport.Context);
-  if (now == 0ULL || !AppleAgxG13QueueProviderCheckTimeout(
-                         &Provider->QueueProvider, now, &timeout_batch))
+  if (now == 0ULL) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardClock;
     return APPLE_AGX_BACKEND_FALSE;
-  if (timeout_batch.ObservationCount == 0u)
+  }
+  if (!AppleAgxG13QueueProviderCheckTimeout(
+          &Provider->QueueProvider, now, &timeout_batch)) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardTimeoutCheck;
+    return APPLE_AGX_BACKEND_FALSE;
+  }
+  if (timeout_batch.ObservationCount == 0u) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardOk;
     return APPLE_AGX_BACKEND_TRUE;
+  }
   if (!AppleAgxPlatformComposerApplyEvent(&Provider->Composer,
-                                           &timeout_batch, &completed))
+                                           &timeout_batch, &completed)) {
+    Provider->LastPollGuard = AppleAgxPlatformPollGuardTimeoutApply;
     return APPLE_AGX_BACKEND_FALSE;
+  }
   *CompletedFence = completed;
+  Provider->LastPollGuard = AppleAgxPlatformPollGuardOk;
   return APPLE_AGX_BACKEND_TRUE;
 }
 

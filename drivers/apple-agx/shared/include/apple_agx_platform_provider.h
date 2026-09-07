@@ -111,6 +111,15 @@ typedef struct _APPLE_AGX_PLATFORM_PROVIDER_CONFIG {
   APPLE_AGX_BACKEND_BOOL DeferFirmwareMappings;
 } APPLE_AGX_PLATFORM_PROVIDER_CONFIG;
 
+typedef enum _APPLE_AGX_PLATFORM_POLL_GUARD {
+  AppleAgxPlatformPollGuardOk = 0u,
+  AppleAgxPlatformPollGuardInvalid = 1u,
+  AppleAgxPlatformPollGuardDrainEvents = 2u,
+  AppleAgxPlatformPollGuardClock = 3u,
+  AppleAgxPlatformPollGuardTimeoutCheck = 4u,
+  AppleAgxPlatformPollGuardTimeoutApply = 5u,
+} APPLE_AGX_PLATFORM_POLL_GUARD;
+
 typedef struct _APPLE_AGX_PLATFORM_PROVIDER {
   APPLE_AGX_PLATFORM_CHANNEL_BINDINGS Channels;
   APPLE_AGX_PLATFORM_TRANSPORT_IO Transport;
@@ -133,6 +142,7 @@ typedef struct _APPLE_AGX_PLATFORM_PROVIDER {
   APPLE_AGX_BACKEND_BOOL BindingReady;
   APPLE_AGX_BACKEND_BOOL ExternalRenderReady;
   APPLE_AGX_BACKEND_BOOL Initialized;
+  APPLE_AGX_BACKEND_U32 LastPollGuard;
 } APPLE_AGX_PLATFORM_PROVIDER;
 
 APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(

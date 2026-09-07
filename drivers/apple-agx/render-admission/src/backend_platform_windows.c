@@ -1729,6 +1729,10 @@ static VOID AdmissionPlatformWorker(
     LARGE_INTEGER interval;
     if (!AppleAgxPlatformProviderPoll(
             &runtime->Provider, 64u, &drained, &completed)) {
+      AdmissionProviderPollGuardWindows(
+          adapter, runtime->Provider.LastPollGuard,
+          (ULONG)runtime->Provider.QueueProvider.Phase,
+          (ULONG)runtime->Backend.Phase, description.Fence);
       InterlockedExchange(&adapter->SchedulerFaulted, 1);
       break;
     }

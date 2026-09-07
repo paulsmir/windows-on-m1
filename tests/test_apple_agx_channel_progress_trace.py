@@ -22,6 +22,21 @@ class ChannelProgressTraceTests(unittest.TestCase):
         self.assertGreater(report, poll)
         self.assertIn("channelProgressReported", worker)
 
+    def test_provider_poll_failure_names_exact_owner(self):
+        guards = (RENDER / "include" / "render_submit_trace.h").read_text()
+        header = (RENDER / "include" / "render_admission.h").read_text()
+        trace = (RENDER / "src" / "submit_trace_windows.c").read_text()
+        worker = (RENDER / "src" / "backend_platform_windows.c").read_text()
+
+        self.assertIn("ADMISSION_PROVIDER_POLL_GUARD_TAG", guards)
+        self.assertIn("AdmissionProviderPollGuardWord", guards)
+        self.assertIn("AdmissionProviderPollGuardWindows", header)
+        self.assertIn("AdmissionProviderPollGuardWindows", trace)
+        poll = worker.index("AppleAgxPlatformProviderPoll(")
+        report = worker.index("AdmissionProviderPollGuardWindows(", poll)
+        self.assertGreater(report, poll)
+        self.assertIn("runtime->Provider.LastPollGuard", worker[report:report + 400])
+
 
 if __name__ == "__main__":
     unittest.main()

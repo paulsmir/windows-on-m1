@@ -14,6 +14,7 @@
 #define ADMISSION_BACKEND_SUBMIT_RESULT_TAG 0x5410000000000000ULL
 #define ADMISSION_BACKEND_PROGRESS_TAG 0x5420000000000000ULL
 #define ADMISSION_BACKEND_CHANNEL_PROGRESS_TAG 0x5460000000000000ULL
+#define ADMISSION_PROVIDER_POLL_GUARD_TAG 0x5610000000000000ULL
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
@@ -329,6 +330,16 @@ static inline unsigned long long AdmissionBackendChannelProgressWord(
       ((unsigned long long)(D3Read & ADMISSION_SUBMIT_TRACE_FIELD_MASK)
        << 16u) |
       (unsigned long long)(Fence & ADMISSION_SUBMIT_TRACE_FIELD_MASK);
+}
+
+static inline unsigned long long AdmissionProviderPollGuardWord(
+    unsigned int Guard, unsigned int ProviderPhase,
+    unsigned int RuntimePhase, unsigned int Fence) {
+  return ADMISSION_PROVIDER_POLL_GUARD_TAG |
+      ((unsigned long long)(Guard & 0xffu) << 40u) |
+      ((unsigned long long)(ProviderPhase & 0xffu) << 32u) |
+      ((unsigned long long)(RuntimePhase & 0xffffu) << 16u) |
+      (unsigned long long)(Fence & 0xffffu);
 }
 
 static inline unsigned int AdmissionSubmitTraceField(unsigned long long Word) {

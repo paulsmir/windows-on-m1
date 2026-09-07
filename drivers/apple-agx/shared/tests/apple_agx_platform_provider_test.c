@@ -12,6 +12,7 @@ typedef struct _FAKE_TRANSPORT {
   unsigned int FailPublishAt;
   unsigned int DoorbellCalls;
   unsigned int LastDoorbell;
+  unsigned int ZeroNow;
 } FAKE_TRANSPORT;
 
 typedef struct _FAKE_COMPONENTS {
@@ -23,6 +24,7 @@ typedef struct _FAKE_COMPONENTS {
   unsigned int TimeoutChecks;
   unsigned int FailPrepareAt;
   unsigned int FailApplyAt;
+  unsigned int FailTimeout;
   APPLE_AGX_G13_QUEUE_PROVIDER_IO CapturedProviderIo;
   APPLE_AGX_BACKEND_IO CapturedRenderIo;
   APPLE_AGX_BACKEND_IO CapturedQueueIo;
@@ -120,6 +122,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
     APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH *Batch) {
   assert(Provider != NULL && NowTicks == 1234ULL && Batch != NULL);
   ++g_components->TimeoutChecks;
+  if (g_components->FailTimeout)
+    return APPLE_AGX_BACKEND_FALSE;
   memset(Batch, 0, sizeof(*Batch));
   Batch->ObservationCount = 1u;
   Batch->Observations[0].Status = AppleAgxBackendObservationTimeout;
@@ -285,8 +289,8 @@ static APPLE_AGX_BACKEND_BOOL ring_doorbell(
 }
 
 static APPLE_AGX_BACKEND_U64 now_ticks(void *Context) {
-  (void)Context;
-  return 1234ULL;
+  FAKE_TRANSPORT *fake = Context;
+  return fake->ZeroNow ? 0ULL : 1234ULL;
 }
 
 static APPLE_AGX_BACKEND_BOOL quiesce(void *Context,
@@ -515,6 +519,8 @@ static void test_persistent_owner_and_bounded_event_drain(void) {
   memset(&provider, 0, sizeof(provider));
   memset(&runtime, 0, sizeof(runtime));
   memset(&io, 0, sizeof(io));
+  assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastPollGuard == AppleAgxPlatformPollGuardInvalid);
   prepare_channel_memory(&owner, storage);
   prepare_render_shared_memory(&render_shared, render_storage);
   config = provider_config(&owner, &transport, &runtime, &render_shared);
@@ -655,6 +661,62 @@ static void test_bounded_poll_checks_timeout_after_empty_event_ring(void) {
   assert(components.ApplyCalls == 2u);
 }
 
+static void test_poll_records_exact_failure_owner(void) {
+  APPLE_AGX_CHANNEL_MEMORY_OWNER owner;
+  APPLE_AGX_PLATFORM_PROVIDER provider;
+  APPLE_AGX_PLATFORM_PROVIDER_CONFIG config;
+  APPLE_AGX_BACKEND_RUNTIME runtime;
+  APPLE_AGX_BACKEND_IO io;
+  FAKE_TRANSPORT transport = {0};
+  FAKE_COMPONENTS components = {0};
+  unsigned char storage[35][0x4000];
+  APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
+  static unsigned char
+      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+  APPLE_AGX_BACKEND_U32 drained = 99u;
+  APPLE_AGX_BACKEND_U32 completed = 99u;
+  volatile APPLE_AGX_BACKEND_U32 *event_read;
+  volatile APPLE_AGX_BACKEND_U32 *event_write;
+
+  memset(&provider, 0, sizeof(provider));
+  memset(&runtime, 0, sizeof(runtime));
+  memset(&io, 0, sizeof(io));
+  prepare_channel_memory(&owner, storage);
+  prepare_render_shared_memory(&render_shared, render_storage);
+  config = provider_config(&owner, &transport, &runtime, &render_shared);
+  g_components = &components;
+  g_transport = &transport;
+  assert(AppleAgxPlatformProviderInitialize(&provider, &config, &io));
+  runtime.Phase = AppleAgxBackendRuntimeSubmitted;
+  event_read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[26] + 0x00u);
+  event_write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[26] + 0x20u);
+
+  *event_read = 0u;
+  *event_write = APPLE_AGX_PLATFORM_EVENT_RING_ENTRY_COUNT;
+  assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastPollGuard == AppleAgxPlatformPollGuardDrainEvents);
+
+  *event_write = 0u;
+  transport.ZeroNow = 1u;
+  assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastPollGuard == AppleAgxPlatformPollGuardClock);
+
+  transport.ZeroNow = 0u;
+  components.FailTimeout = 1u;
+  assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastPollGuard == AppleAgxPlatformPollGuardTimeoutCheck);
+
+  components.FailTimeout = 0u;
+  components.FailApplyAt = components.ApplyCalls + 1u;
+  assert(!AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastPollGuard == AppleAgxPlatformPollGuardTimeoutApply);
+
+  components.FailApplyAt = 0u;
+  assert(AppleAgxPlatformProviderPoll(&provider, 8u, &drained, &completed));
+  assert(provider.LastPollGuard == AppleAgxPlatformPollGuardOk);
+  assert(AppleAgxPlatformProviderDestroy(&provider));
+}
+
 static void test_external_rebased_image_mode_uses_exact_job_and_ranges(void) {
   APPLE_AGX_CHANNEL_MEMORY_OWNER owner;
   APPLE_AGX_PLATFORM_PROVIDER provider;
@@ -749,6 +811,7 @@ int main(void) {
   test_exact_run_channel_publication();
   test_persistent_owner_and_bounded_event_drain();
   test_bounded_poll_checks_timeout_after_empty_event_ring();
+  test_poll_records_exact_failure_owner();
   test_external_rebased_image_mode_uses_exact_job_and_ranges();
   puts("apple_agx_platform_provider_test: ok");
   return 0;
