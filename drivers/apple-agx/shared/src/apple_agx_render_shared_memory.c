@@ -27,7 +27,7 @@ static APPLE_AGX_BOOL storage_empty(
 }
 
 static APPLE_AGX_BOOL exact_queue_identity(APPLE_AGX_U32 Index) {
-  return Index == 0u || (Index >= 3u && Index <= 8u)
+  return Index <= 13u || (Index >= 23u && Index <= 27u)
              ? APPLE_AGX_TRUE
              : APPLE_AGX_FALSE;
 }
