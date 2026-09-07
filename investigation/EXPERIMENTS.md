@@ -1,5 +1,90 @@
 # Hardware Experiment Ledger
 
+## EXP544 materialize firmware queue image — preregistration 2026-09-07T07:00Z
+
+WHY THIS HYPOTHESIS:
+- EXP543 proves byte-correct run messages reach read0/write1 channel state and
+  names valid group-1 queue-info addresses, but firmware consumes neither.
+- In external-render mode the code skips `SubmissionCoordinator`; source
+  inspection proves that was also the only caller that populated and relocated
+  `RenderSharedMemory`, leaving the named CommandQueueInfo object zero.
+- Device-control traffic on the same endpoint/memory/broker stack is already
+  hardware-proven, so an uninitialized per-queue object is causally closer than
+  changing ASC, retained-root, UAT or endpoint ownership.
+
+WINDOWS CONTRACT: unchanged D3DKMT producer, Render/Patch/Submit, worker and
+fence255 flow.
+
+AGX/ASAHI CONTRACT: before a group-1 run message, firmware-visible
+CommandQueueInfo must name initialized pointers/ring/job-list/gpu-buffer/context
+objects; all recognized pointers must target the live shared object set.
+
+TRANSLATION: after the existing broker-only initdata allocations and before any
+broker mapping/firmware start, reuse
+`AppleAgxRenderSharedMemoryBindRelocationObjects` and the same 159-relocation
+table to materialize the already-owned shared queue image from the frozen
+EXP208 template. The external context63 work image, run messages, doorbells,
+scheduler and completion are unchanged.
+
+WHAT IS STILL UNKNOWN: whether firmware will now consume the channel message
+and, if so, the first later queue/work/completion boundary.
+
+Single correction commit `d115084c4a011696bce29f73567609de6731b806`.
+The wiring invariant was RED then GREEN; 109 render regressions pass. Pinned
+WDK10.0.26100.0/MSVC14.44.35207 command `build-driver.ps1 -Configuration
+Release -PackageBuild 544 -SubmitQualification`; analysis, Universal,
+Inf2Cat, signing and version gates pass with inherited C28251 only. Overlay
+SHA-256 `fa5ec76ab73f1b7788a0cb589dbf4cd56d18f4ba8b512e0d11944e3c043f17f0`.
+ZIP/SYS/INF/CAT/UMD/producer SHA-256:
+`610dcdb286debc886f503d828ca006d5466e05cf4bea079156733c8cbb0c08b9` /
+`f00525a154b5a1034408e438ef2158e8f42acea81819121383ea763e62164d57` /
+`e528d3bd8bd5eb1b78169ac5f176f2481feb57e361f74576f522f2841d7a8495` /
+`d743627b6cab6a087dfd8dda09b89c6f64b63429c7026340163d89ce0dd4dc75` /
+`0f680ae23df62c4257ad0a3ccbf2f8d32e8a485f2f15cb7d47cc92f80eb91d3e` /
+`5ac2614d2f3454eaec1a689a1f554807bd766a0951ec573493cd51fe06e86f0a`.
+Clean ordinary baseline SHA-256 is
+`bb9f1e450ae7689026d5729a800fc26832afd4e03251fc0e171faab5787f930f`.
+One natural bind and one producer only. PASS requires channel read-pointer
+advance; physical TA/3D and fence remain separate claims. Recovery is exact
+package removal, emergency377/385 only if boot-bound, then ordinary377/392.
+
+## EXP543 exact queue publication receipt — result 2026-09-07T06:54Z
+
+CONFIRMED discriminator; rejected as execution candidate. Exact 30.0.543.0
+preflight proved Code0, `oem5.inf`, service Running, exact INF/SYS hashes and
+8 CPUs. One producer invocation produced a crash-durable 288-byte service-key
+receipt before the same reset. Receipt SHA-256
+`7bfb080552b246a10bd094e98ca10dda89272003cd98777772705c7cfe236ede`;
+decoded JSON SHA-256
+`db0907a1ed14418786699380bbbca3b0be78bd00ad440df4cbca8fbb99930cda`;
+host log SHA-256
+`025f2bfbdbf01d405c431b8547042b837ba587b34174aa21d615661577642c62`.
+
+The publication itself is exact: fence255, backend/provider/runtime phases
+3/3/1; initial progress valid; TA/D3 capacities0x500, CPU write2, done0,
+expected done2, events0/1 and expected stamps0x7a000100/0x3d000100. Work roots
+are exactly `0x1503880000,0x1503898000` and
+`0x1503870000,0x1503890000`. TA run is type0/head2/event0/new1/doorbell4;
+3D run is type1/head2/event1/new1/doorbell5, with their exact queue-info
+addresses and zero timestamp/tail. Both command-channel states are read0/write1.
+Thus firmware consumed neither run message; physical TA/3D remains unproven.
+
+Focused source inspection found the causal omitted owner: external-render mode
+allocates/maps `RenderSharedMemory` but skips `SubmissionCoordinator`, so it
+also skips the only existing
+`AppleAgxRenderSharedMemoryBindRelocationObjects`/159-relocation call. The
+firmware-visible CommandQueueInfo address in the correct run message therefore
+names an all-zero queue structure. This explains the failure before channel
+read-pointer advancement without changing any prior proven layer.
+
+Exact package/service/SYS/UMD cleanup completed in established 377/385 recovery,
+then ordinary377/392 was restored. Final health SHA-256
+`bb9f1e450ae7689026d5729a800fc26832afd4e03251fc0e171faab5787f930f`
+proves Code28/null INF/service, no package/SYS/UMD, 8 CPUs, SSH and healthy
+AppleInput/stornvme/USBXHCI with no fresh events. Next single correction is to
+materialize and relocate the existing shared queue image before broker mapping;
+the external work image, scheduling, doorbells and completion are unchanged.
+
 ## EXP543 exact queue publication receipt — preregistration 2026-09-07T06:45Z
 
 WHY THIS HYPOTHESIS:

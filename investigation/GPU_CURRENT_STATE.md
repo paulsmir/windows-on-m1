@@ -381,17 +381,26 @@ Code28/null INF/service, no package/SYS/UMD,8CPU/SSH/input/xHCI/stornvme and no
 fresh41/129/1001. Source comparison closes queue selection: production group-1
 indices3/4 and doorbells4/5 match standalone EXP208 queue_index1. Commit8b34310
 adds only a crash-durable immediate full queue-publication receipt; local RED to
-GREEN plus108 render regressions PASS. EXP543 build/hardware are pending.
+GREEN plus108 render regressions PASS. EXP543 FINAL receipt SHA7bfb0805...:
+exact TA/D3 run messages, queue/work addresses, events, heads, expected stamps
+and done pointers all match EXP208, but both command channels are read0/write1;
+firmware consumed neither message. Focused source inspection found external
+render skips SubmissionCoordinator and therefore the only shared queue-image
+materialization/relocation call: firmware-visible CommandQueueInfo is zero.
+Commitd115084 materializes that existing image before broker mapping; RED then
+GREEN and109 render regressions PASS. Pinned30.0.544.0 gates PASS;
+ZIP/SYS/producer SHA610dcdb2.../f00525a1.../5ac2614d.... EXP544 is
+preregistered for one natural bind and exact channel-consumption verdict.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T06:36Z after exact542 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T06:54Z after exact543 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHAad8e4a0eea8089108aa9cb68985359ec8e2e957c36b86678a19768bf9a0cd61a.
+SHAbb9f1e450ae7689026d5729a800fc26832afd4e03251fc0e171faab5787f930f.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
