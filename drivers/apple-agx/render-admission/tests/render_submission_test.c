@@ -157,9 +157,13 @@ static void test_gdi_receipt_requires_one_context_fence_and_physical_completion(
 static void test_terminal_receipt_preserves_preclear_completion(void) {
   ADMISSION_TERMINAL_RECEIPT receipt;
   unsigned char event[ADMISSION_TERMINAL_RAW_EVENT_BYTES];
+  unsigned char output[0x4000];
   unsigned int index;
   for (index = 0u; index < sizeof(event); ++index)
     event[index] = (unsigned char)(0x80u + index);
+  memset(output, 0xa5, sizeof(output));
+  for (index = 0u; index < 256u; ++index)
+    ((unsigned int *)output)[index] = 0xff112233u;
   AdmissionTerminalReceiptInitialize(&receipt);
   assert(!AdmissionTerminalReceiptBegin(
       &receipt, 1u, 9u, 0x9fff78000ULL, 255u, 0x1000ULL, 0x2000ULL,
@@ -178,6 +182,8 @@ static void test_terminal_receipt_preserves_preclear_completion(void) {
       event, sizeof(event), 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
   assert(AdmissionTerminalReceiptNotifyInterrupt(&receipt, 255u));
   assert(AdmissionTerminalReceiptNotifyDpc(&receipt, 255u));
+  assert(AdmissionTerminalReceiptCaptureOutput(
+      &receipt, 255u, output, 1024u, sizeof(output), 0xff112233u, 0xa5u));
   assert(AdmissionTerminalReceiptExit(
       &receipt, AdmissionTerminalExitCompleted, 3u, 1u, 0u, 0u, 0u));
   assert((receipt.ValidMask & ADMISSION_TERMINAL_VALID_ALL) ==
@@ -189,6 +195,14 @@ static void test_terminal_receipt_preserves_preclear_completion(void) {
   assert(receipt.CompletedFence == 255u && receipt.NotifyInterrupt == 1u &&
          receipt.NotifyDpc == 1u);
   assert(memcmp(receipt.RawEvent, event, sizeof(event)) == 0);
+  assert(receipt.OutputFirstPixelActual == 0xff112233u);
+  assert(receipt.OutputFirstMismatchIndex == 0xffffffffu);
+  assert(receipt.OutputPixelsExpected == 256u);
+  assert(receipt.OutputPixelsPoison == 0u);
+  assert(receipt.OutputChangedBytes == 1024u);
+  assert(receipt.OutputGuardCorrupt == 0u);
+  assert(memcmp(receipt.OutputPrefix, output,
+                ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES) == 0);
 }
 
 int main(void) {

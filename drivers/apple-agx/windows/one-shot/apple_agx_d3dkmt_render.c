@@ -11,8 +11,6 @@
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #endif
 
-#define APPLE_AGX_OUTPUT_INITIAL_PATTERN 0xa5u
-
 int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_ENUMADAPTERS3 enumeration = {0};
   D3DKMT_ADAPTERINFO adapters[MAX_ENUM_ADAPTERS] = {0};
@@ -26,8 +24,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ADMISSION_ALLOCATION_DESCRIPTION allocation = {0};
   ADMISSION_UMD_COLOR_FILL_COMMAND command = {0};
   D3DKMT_RENDER render = {0};
-  D3DKMT_LOCK2 lock = {0};
-  D3DKMT_UNLOCK2 unlock = {0};
   D3DDDI_MAKERESIDENT makeResident = {0};
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_DESTROYCONTEXT destroyContext = {0};
@@ -50,23 +46,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS allocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS residentStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS renderStatus = (NTSTATUS)0xc0000001L;
-  NTSTATUS initialLockStatus = (NTSTATUS)0xc0000001L;
-  NTSTATUS initialUnlockStatus = (NTSTATUS)0xc0000001L;
-  NTSTATUS resultLockStatus = (NTSTATUS)0xc0000001L;
-  NTSTATUS resultUnlockStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyContextStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyDeviceStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyPagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
-  ULONG output_pixels_verified = 0u;
-  ULONG output_pixels_still_a5 = 0u;
-  ULONG output_first_pixel_actual = 0u;
-  ULONG output_first_mismatch_index = 0xffffffffu;
-  ULONG output_first_mismatch_actual = 0u;
-  ULONG output_changed_bytes = 0u;
-  ULONG output_guard_corrupt = 0u;
-  ULONGLONG output_target_fnv1a = 0xcbf29ce484222325ULL;
   int result = 1;
 
   UNREFERENCED_PARAMETER(argv);
@@ -147,7 +131,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           APPLE_AGX_EXP208_GDI_WIDTH,
           APPLE_AGX_EXP208_GDI_HEIGHT, 4u,
           (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
-          (unsigned int)D3DDDIFMT_A8R8G8B8, 1u, &allocation))
+          (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation))
     goto cleanup;
   allocation.Reserved = ADMISSION_UMD_CORRELATION_COOKIE;
   allocationInfo.pPrivateDriverData = &allocation;
@@ -159,20 +143,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   if (!NT_SUCCESS(allocationStatus) || allocationInfo.hAllocation == 0u)
     goto cleanup;
   allocationHandle = allocationInfo.hAllocation;
-
-  lock.hDevice = createDevice.hDevice;
-  lock.hAllocation = allocationHandle;
-  lock.Flags.Value = 0u;
-  initialLockStatus = D3DKMTLock2(&lock);
-  if (!NT_SUCCESS(initialLockStatus) || lock.pData == NULL)
-    goto cleanup;
-  FillMemory(lock.pData, ADMISSION_ALLOCATION_ALIGNMENT,
-             APPLE_AGX_OUTPUT_INITIAL_PATTERN);
-  unlock.hDevice = createDevice.hDevice;
-  unlock.hAllocation = allocationHandle;
-  initialUnlockStatus = D3DKMTUnlock2(&unlock);
-  if (!NT_SUCCESS(initialUnlockStatus))
-    goto cleanup;
 
   makeResident.hPagingQueue = createPagingQueue.hPagingQueue;
   makeResident.NumAllocations = 1u;
@@ -239,55 +209,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           render.QueuedBufferCount);
   if (!NT_SUCCESS(renderStatus))
     goto cleanup;
-  ZeroMemory(&lock, sizeof(lock));
-  lock.hDevice = createDevice.hDevice;
-  lock.hAllocation = allocationHandle;
-  lock.Flags.Value = 0u;
-  resultLockStatus = D3DKMTLock2(&lock);
-  if (!NT_SUCCESS(resultLockStatus) || lock.pData == NULL)
-    goto cleanup;
-  for (index = 0u;
-       index < APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT;
-       ++index) {
-    ULONG actual = ((const ULONG *)lock.pData)[index];
-    if (index == 0u)
-      output_first_pixel_actual = actual;
-    if (actual == APPLE_AGX_EXP208_GDI_COLOR)
-      ++output_pixels_verified;
-    else if (output_first_mismatch_index == 0xffffffffu) {
-      output_first_mismatch_index = index;
-      output_first_mismatch_actual = actual;
-    }
-    if (actual == 0xa5a5a5a5u)
-      ++output_pixels_still_a5;
-  }
-  for (index = 0u;
-       index < APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
-       ++index) {
-    UCHAR value = ((const UCHAR *)lock.pData)[index];
-    if (value != APPLE_AGX_OUTPUT_INITIAL_PATTERN)
-      ++output_changed_bytes;
-    output_target_fnv1a ^= value;
-    output_target_fnv1a *= 0x100000001b3ULL;
-  }
-  wprintf(L"OUTPUT_PREFIX");
-  for (index = 0u; index < 16u; ++index)
-    wprintf(L" %08lx", ((const ULONG *)lock.pData)[index]);
-  wprintf(L"\n");
-  for (index = APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
-       index < ADMISSION_ALLOCATION_ALIGNMENT; ++index)
-    if (((const UCHAR *)lock.pData)[index] !=
-        APPLE_AGX_OUTPUT_INITIAL_PATTERN)
-      ++output_guard_corrupt;
-  ZeroMemory(&unlock, sizeof(unlock));
-  unlock.hDevice = createDevice.hDevice;
-  unlock.hAllocation = allocationHandle;
-  resultUnlockStatus = D3DKMTUnlock2(&unlock);
-  if (!NT_SUCCESS(resultUnlockStatus) ||
-      output_pixels_verified !=
-          APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT ||
-      output_guard_corrupt != 0u)
-    goto cleanup;
   result = 0;
 
 cleanup:
@@ -334,15 +255,7 @@ cleanup:
           L"\"paging_queue\":\"0x%08lx\","
           L"\"context\":\"0x%08lx\",\"allocation\":\"0x%08lx\","
           L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
-          L"\"initial_lock\":\"0x%08lx\",\"initial_unlock\":\"0x%08lx\","
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
-          L"\"result_lock\":\"0x%08lx\",\"result_unlock\":\"0x%08lx\","
-          L"\"output_first_pixel_actual\":\"0x%08lx\","
-          L"\"output_first_mismatch_index\":%lu,"
-          L"\"output_first_mismatch_actual\":\"0x%08lx\","
-          L"\"output_pixels_verified\":%lu,\"output_pixels_still_a5\":%lu,"
-          L"\"output_changed_bytes\":%lu,\"output_target_fnv1a\":\"0x%016llx\","
-          L"\"output_guard_corrupt\":%lu,"
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
           L"\"destroy_paging_queue\":\"0x%08lx\","
@@ -353,13 +266,7 @@ cleanup:
           (ULONG)openStatus, (ULONG)deviceStatus, (ULONG)pagingQueueStatus,
           (ULONG)contextStatus, (ULONG)allocationStatus,
           (ULONG)residentStatus, makeResident.PagingFenceValue,
-          (ULONG)initialLockStatus, (ULONG)initialUnlockStatus,
           (ULONG)renderStatus, render.QueuedBufferCount,
-          (ULONG)resultLockStatus, (ULONG)resultUnlockStatus,
-          output_first_pixel_actual, output_first_mismatch_index,
-          output_first_mismatch_actual, output_pixels_verified,
-          output_pixels_still_a5, output_changed_bytes, output_target_fnv1a,
-          output_guard_corrupt,
           (ULONG)destroyAllocationStatus,
           (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,
           (ULONG)destroyDeviceStatus,

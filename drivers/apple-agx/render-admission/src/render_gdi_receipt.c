@@ -267,3 +267,57 @@ int AdmissionTerminalReceiptExit(ADMISSION_TERMINAL_RECEIPT *Receipt,
   Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_EXIT;
   return 1;
 }
+
+int AdmissionTerminalReceiptCaptureOutput(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
+    const unsigned char *Bytes, unsigned int TargetBytes,
+    unsigned int ExaminedBytes, unsigned int ExpectedPixel,
+    unsigned char PoisonByte) {
+  unsigned int index;
+  unsigned int prefixBytes;
+  unsigned int poisonPixel = (unsigned int)PoisonByte * 0x01010101u;
+  unsigned long long hash = 0xcbf29ce484222325ULL;
+  if (Receipt == (void *)0 || Bytes == (void *)0 ||
+      !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_TERMINAL) ||
+      Receipt->Fence != Fence || TargetBytes == 0u ||
+      (TargetBytes & 3u) != 0u || ExaminedBytes < TargetBytes)
+    return 0;
+  Receipt->OutputFirstMismatchIndex = 0xffffffffu;
+  Receipt->OutputFirstPixelActual =
+      (unsigned int)Bytes[0] | ((unsigned int)Bytes[1] << 8u) |
+      ((unsigned int)Bytes[2] << 16u) |
+      ((unsigned int)Bytes[3] << 24u);
+  for (index = 0u; index < TargetBytes / 4u; ++index) {
+    const unsigned char *pixel = Bytes + index * 4u;
+    unsigned int actual =
+        (unsigned int)pixel[0] | ((unsigned int)pixel[1] << 8u) |
+        ((unsigned int)pixel[2] << 16u) |
+        ((unsigned int)pixel[3] << 24u);
+    if (actual == ExpectedPixel)
+      ++Receipt->OutputPixelsExpected;
+    else if (Receipt->OutputFirstMismatchIndex == 0xffffffffu) {
+      Receipt->OutputFirstMismatchIndex = index;
+      Receipt->OutputFirstMismatchActual = actual;
+    }
+    if (actual == poisonPixel)
+      ++Receipt->OutputPixelsPoison;
+  }
+  for (index = 0u; index < TargetBytes; ++index) {
+    if (Bytes[index] != PoisonByte)
+      ++Receipt->OutputChangedBytes;
+    hash ^= Bytes[index];
+    hash *= 0x100000001b3ULL;
+  }
+  for (index = TargetBytes; index < ExaminedBytes; ++index)
+    if (Bytes[index] != PoisonByte)
+      ++Receipt->OutputGuardCorrupt;
+  prefixBytes = ExaminedBytes < ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES
+                    ? ExaminedBytes
+                    : ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES;
+  for (index = 0u; index < prefixBytes; ++index)
+    Receipt->OutputPrefix[index] = Bytes[index];
+  Receipt->OutputBytesExamined = ExaminedBytes;
+  Receipt->OutputTargetFnv1a = hash;
+  Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_OUTPUT;
+  return 1;
+}

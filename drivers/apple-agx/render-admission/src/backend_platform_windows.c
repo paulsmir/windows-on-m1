@@ -198,6 +198,21 @@ static VOID AdmissionTerminalObserve(
               : (ULONG)AppleAgxBackendRuntimeResultFaulted,
           (ULONG)Status, source, rawEvent, rawEventBytes,
           actualValid ? 1u : 0u, taStamp, taDone, d3Stamp, d3Done)) {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
+        &Runtime->Adapter->BackendImage.Objects[
+            APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+    if (output->Data != NULL &&
+        output->Size >= APPLE_AGX_EXP208_GDI_OUTPUT_BYTES &&
+        Runtime->TransportIo.FlushForCpu(
+            Runtime, output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES)) {
+      Runtime->TransportIo.MemoryBarrier(Runtime);
+      (void)AdmissionTerminalReceiptCaptureOutput(
+          &Runtime->TerminalReceipt, Fence,
+          (const UCHAR *)output->Data,
+          APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u,
+          APPLE_AGX_EXP208_GDI_OUTPUT_BYTES,
+          APPLE_AGX_EXP208_GDI_COLOR, 0xa5u);
+    }
     Runtime->TerminalReceipt.EventReadPointer =
         Runtime->Provider.LastEventReadPointer;
     Runtime->TerminalReceipt.EventWritePointer =
@@ -1684,6 +1699,20 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
           &bindings, &staged, runtime->QueueObjects, Job))
     return APPLE_AGX_BACKEND_FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
+        &runtime->Adapter->BackendImage.Objects[
+            APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+    if (output->Data == NULL ||
+        output->Size < APPLE_AGX_EXP208_GDI_OUTPUT_BYTES)
+      return APPLE_AGX_BACKEND_FALSE;
+    RtlFillMemory(output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES, 0xa5u);
+    if (!runtime->TransportIo.FlushForDevice(
+            runtime, output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES))
+      return APPLE_AGX_BACKEND_FALSE;
+  }
+#endif
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =

@@ -262,17 +262,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   info->HintedBank.Value = 0u;
   info->PreferredSegment.Value = 0u;
   info->PreferredSegment.SegmentId0 = ADMISSION_MEMORY_LOCAL_SEGMENT;
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  info->SupportedReadSegmentSet =
-      correlated ? ADMISSION_LOCAL_SEGMENT_SET
-                 : (description->CpuVisible != 0u
-                        ? ADMISSION_CPU_VISIBLE_SEGMENT_SET
-                        : ADMISSION_LOCAL_SEGMENT_SET);
-#else
   info->SupportedReadSegmentSet = description->CpuVisible != 0u
                                       ? ADMISSION_CPU_VISIBLE_SEGMENT_SET
                                       : ADMISSION_LOCAL_SEGMENT_SET;
-#endif
   info->SupportedWriteSegmentSet = info->SupportedReadSegmentSet;
   info->EvictionSegmentSet = 0u;
   info->hAllocation = allocation;

@@ -11,7 +11,9 @@
 #define ADMISSION_TERMINAL_VALID_EXIT 0x10u
 #define ADMISSION_TERMINAL_VALID_RAW_EVENT 0x20u
 #define ADMISSION_TERMINAL_VALID_ACTUAL 0x40u
-#define ADMISSION_TERMINAL_VALID_ALL 0x7fu
+#define ADMISSION_TERMINAL_VALID_OUTPUT 0x80u
+#define ADMISSION_TERMINAL_VALID_ALL 0xffu
+#define ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES 64u
 
 typedef enum _ADMISSION_TERMINAL_SOURCE {
   AdmissionTerminalSourceNone = 0u,
@@ -42,12 +44,18 @@ typedef struct _ADMISSION_TERMINAL_RECEIPT {
   unsigned int ProviderPhase, RuntimePhase, Stopping, Resetting;
   unsigned int SchedulerFaulted, DestinationBytes, RawEventBytes;
   unsigned int EventReadPointer, EventWritePointer;
+  unsigned int OutputFirstPixelActual, OutputFirstMismatchIndex;
+  unsigned int OutputFirstMismatchActual, OutputPixelsExpected;
+  unsigned int OutputPixelsPoison, OutputChangedBytes;
+  unsigned int OutputGuardCorrupt, OutputBytesExamined;
   unsigned long long BootEpoch, RootIdentity;
   unsigned long long ContextToken, AllocationToken;
   unsigned long long DestinationGpuVa, DestinationPhysical;
   unsigned long long StatsTaStart, StatsTaFinalize;
   unsigned long long Stats3dStart, Stats3dFinalize;
+  unsigned long long OutputTargetFnv1a;
   unsigned char RawEvent[ADMISSION_TERMINAL_RAW_EVENT_BYTES];
+  unsigned char OutputPrefix[ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES];
 } ADMISSION_TERMINAL_RECEIPT;
 
 typedef enum _ADMISSION_GDI_RECEIPT_STAGE {
@@ -129,5 +137,10 @@ int AdmissionTerminalReceiptExit(ADMISSION_TERMINAL_RECEIPT *Receipt,
     unsigned int WorkerExitReason, unsigned int ProviderPhase,
     unsigned int RuntimePhase, unsigned int Stopping, unsigned int Resetting,
     unsigned int SchedulerFaulted);
+int AdmissionTerminalReceiptCaptureOutput(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
+    const unsigned char *Bytes, unsigned int TargetBytes,
+    unsigned int ExaminedBytes, unsigned int ExpectedPixel,
+    unsigned char PoisonByte);
 
 #endif /* APPLE_AGX_RENDER_GDI_RECEIPT_H */
