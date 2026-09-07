@@ -105,6 +105,20 @@ must not be reset. Implement an image queue-lifetime restart contract, prove
 `sequence2 -> reset -> InitBM sequence1` offline, and derive the smallest safe
 hardware reset discriminator. Do not change Present/DCP in that experiment.
 
+Source commit `d4b88bc86178db602c73ab2c2c330a8d76533a69` adds the bounded
+queue-lifetime restart: only when the backend image is Ready and has no bound/job
+state, set its firmware-local Sequence to0 after the old provider is destroyed
+and before the new provider/queues start. Windows fence IDs are untouched.
+`sequence1 -> sequence2 -> restart -> InitBM sequence1` was RED before the API
+and is GREEN; restart during an active binding is rejected atomically. Full
+AppleAgx regression is 364 PASS.
+
+Commit `d823de565f2aaf28faef47ecf13a358b681ee07f` adds only a producer-side
+qualification mode using the pinned WDK public `D3DKMT_ESCAPE_TDRDBGCTRL` with
+`D3DKMT_TDRDBGCTRLTYPE_ENGINETDR`, node0. It does not add a private KMD escape or
+alter production render commands. EXP589 will use it immediately after Render,
+then run a fresh normal producer after dxgkrnl reset recovery.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

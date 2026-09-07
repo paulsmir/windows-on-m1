@@ -35853,3 +35853,44 @@ Next causal boundary follows the accepted source review: firmware reset recreate
 queues but `BackendImage.Sequence` remains in the old queue lifetime. Fix and
 test only queue-local sequence restart; do not reset Windows fence identity or
 combine Present changes.
+
+# EXP589 — restart firmware-local image sequence with queue lifetime
+
+**PREREGISTERED 2026-09-07T20:56Z; one reset/recovery candidate.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP588 proves sequence2 and persistent queue advancement; reset is now the
+  first accepted untested lifetime boundary before Present.
+- `AdmissionPlatformRuntimeReset` destroys/recreates firmware, provider,
+  initdata and queues but did not restart `BackendImage.Sequence`.
+- `AppleAgxExp208DeriveDynamic` requires IncludeInitBm jobs to use sequence1;
+  the first new queue job would otherwise be derived as sequence3 and rejected.
+
+**WINDOWS CONTRACT:** per-engine TDR reports the exact aborted Windows fence and
+recreates the engine. Windows fence identity remains global and is not reset.
+The pinned WDK26100 exposes the standard debug discriminator
+`D3DKMT_ESCAPE_TDRDBGCTRL` / `D3DKMT_TDRDBGCTRLTYPE_ENGINETDR` with NodeOrdinal.
+
+**AGX/ASAHI CONTRACT:** recreated firmware/queues form a new local queue epoch;
+their first job includes InitBM and uses local sequence/stamps1, independent of
+the Windows fence value.
+
+**TRANSLATION:** commit
+`d4b88bc86178db602c73ab2c2c330a8d76533a69` restarts only image Sequence after
+the old backend/provider retire all active binding/job state. It fails closed if
+the image is not Ready or remains bound. Commit
+`d823de565f2aaf28faef47ecf13a358b681ee07f` adds producer-only standard engine
+TDR mode; no private KMD ABI or production command change.
+
+**WHAT IS STILL UNKNOWN:** whether the public engine-TDR escape reaches ResetEngine
+while the first render is active; whether firmware/provider restart succeeds;
+and whether a fresh normal producer then executes InitBM local sequence1 with
+physical TA/D3 completion and correct fence/output. If the escape races after
+completion and no firmware restart occurs, verdict is INCONCLUSIVE, not failure.
+
+**OFFLINE PROOF:** deterministic image test was RED before the restart API and
+GREEN for sequence1/2 -> restart -> InitBM sequence1, unchanged later Windows
+fence and rejection while bound. Relevant suite21 PASS; full AppleAgx suite364
+PASS. Pinned WDK source confirms exact public escape structures/constants.
+Build pending. No Present/DCP change in this candidate.
