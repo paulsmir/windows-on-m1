@@ -34912,3 +34912,39 @@ the same m1n1 source commit was rebuilt as `RELEASE=1 IOMFB_FULL_OWNER=1`;
 KMD/UMD/producer and every GPU causal source byte remain unchanged.  Because
 EXP575-A did not reach the intended producer boundary, one corrected exact
 EXP575 run remains the preregistered discriminator; this is not a blind retry.
+
+**EXP575 FINAL 2026-09-07T15:32Z — REJECTED; exact recovery complete.** The
+corrected full-owner Mach-O (`cf26c658...`) published Scanout ABI v2 and exact
+A408/D589.  Exact 30.0.575.0 reached Code0/Running and the Windows-originated
+producer ran once.  Retained queries class1/class2, all 200 MAP/QUERY leaves,
+management ACKs, application endpoints, DC_Init, BackendRuntimeStart and
+scanout preflight passed.  The run ended in TDR 0x116
+`(ffffbd889138e010, fffff803f3646eb0, c0000483, 3)` and produced a minidump.
+
+The discriminator moved backward relative to EXP574: TA channel read pointer
+is 0, private stamp2 remains `0x7a000000`, all four timestamp targets are zero,
+shared stamp1 remains `0x7a000000`, event read/write are 0/0, pending stamps are
+zero, D3 did not start and SGX/RegionB/RegionC fault receipts are zero.  Thus
+the sequential A040/A071 arena layout is rejected as sufficient and cannot be
+repeated.  It does not disprove the broker contract itself; it proves native
+allocator band alone is insufficient and the opaque queue graph depends on
+additional intra-class address geometry before physical TA start.
+
+Exact evidence: host log SHA-256
+`1133e2914018ac7ab535dd50422c1a3d1a27c46f04507f7684bdbe2cc3542f1f`;
+registry/receipts/minidump ZIP SHA-256
+`948559350b115fa95e49651028c27b1503fec09f7a0c3b00d00af08b9e9251d3`;
+TA progress/retire/temporal SHA-256
+`3bf6bec4fa842af72eee7199ec367bd214be00f7346e321156d9b570435b1cc0`,
+`ca659042fce2f51233b3eddcca64de5841248237b353344c83bbddbe3a5acbbd`,
+`9c99bd9eba6a9f1840c3cd77454a0712a16bbfdd6c7aade8e8849e3b798e52aa`.
+Event129 count3 is telemetry only.  Emergency GPU-hidden recovery preserved
+evidence; exact oem5/devnode/service/files were removed.  Ordinary 377/392 is
+restored: Code28, zero package/service/module, 8 CPUs, NVMe2/USB5/keyboard1.
+
+Next causal correction is within the approved arenas: retain the original
+relative VA geometry under a constant nonzero class bias, mapping A040 objects
+as `OriginalGpuVa + 0x01000000` and A071 objects as
+`OriginalGpuVa + 0x00100000`.  These ranges remain inside the already queried
+windows and never equal the original native mappings.  No broker, page,
+firmware, queue, scheduler, IRQ, completion, display or A000/A020 change.

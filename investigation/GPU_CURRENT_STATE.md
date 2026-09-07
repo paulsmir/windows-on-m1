@@ -665,6 +665,17 @@ display behavior are unchanged.361 AppleAgx tests and focused retained tests
 GREEN. Next: pinned575 build/sign/hash, clean preflight, one exact hardware run.
 PASS only if retirement advances beyond EXP574; candidate-ready is not a verdict.
 
+EXP575 FINAL: corrected full-owner run reached Code0 and one producer, then TDR
+0x116/C0000483. ABI-v4 class queries and 200-leaf map/verify are hardware-proven,
+but sequential class layout moved backward: TA read0, stamp2 unchanged, all
+timestamps0, no SGX/RegionB/C fault. Band identity alone is REJECTED; do not
+repeat575. Exact evidence host1133e291... ZIP94855935.... Exact cleanup and
+ordinary Code28/8CPU baseline restored. First new boundary is TA queue ingress
+before physical StartTA. Next one-variable correction: within the same approved
+A040/A071 arenas preserve exact native intra-class relative geometry using
+nonzero constant biases (+0x01000000 shared, +0x00100000 timestamp). A000/A020,
+broker ownership, firmware, queue logic and all other layers remain unchanged.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
