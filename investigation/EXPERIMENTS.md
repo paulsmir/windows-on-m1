@@ -1,5 +1,34 @@
 # Hardware Experiment Ledger
 
+## EXP556 active QueueInfo receipt — result 2026-09-07T10:10Z
+
+CONFIRMED discriminator and first physical TA ingress. Exact30.0.556.0 ran once.
+The 576-byte receipt SHA
+`c36da2ccff945902a7148bc99ad0b24bbc98d80ca721360c96df9819e7bc2151`
+decodes cleanly as G13/V13.5. D3 remains initial with GPU_RPTR0, busy0,
+has_commands0, CPU_WPTR2. TA is firmware-mutated after publication:
+QueueInfo gpu_rptr1/2/3 all2, event0, busy1, has_commands1; its pointer block has
+GPU_RPTR2 and CPU_WPTR2 while GPU_DONEPTR0 and rb_size0x500. All static edges
+(pointers, ring, job list, gpu buffer, GPU context), priorities and UUIDs are
+valid active context-0 addresses/values. This proves firmware accepted the TA
+queue and began the two-entry TA batch. The old `0x5460` run-channel read receipt
+was too late to detect this partial ingress.
+
+No TA done/stamp/event followed and D3 remained unstarted; Windows ended in
+116/C0000483/3. Queue/fault/host SHA
+`9fa9e628bd37a7034cbf4547f2b35cff67fa83a6edf5d0d6aa662d46aa3baa1b` /
+`f3cfa776efc563cd7777eb5857851cb9403aaf98f307beba10a1e47ab7bfa81f` /
+`7a0a9c1c04f1bf08951f89fc9cb23dd59b0be38b4c345c4cb437462cb1fcdeca`.
+Fault snapshot differences remain header timing only; RegionB/C words are zero.
+First unknown is now inside physical TA execution before done/stamp/event.
+Pinned m1n1 names the next hardware primitive SGX `FAULT_INFO` at MMIO
+offset0x17030; capture it once at the existing 50-ms snapshot before changing
+TA work/UAT data.
+
+Exact package/service/files removed through emergency377/385. Final ordinary
+377/392 is clean Code28/8CPU with health SHA
+`43a6104be8b8690537d08574d66045e8979047ab7b4026aee95fe3f2274d5e08`.
+
 ## EXP556 active QueueInfo receipt — preregistration 2026-09-07T10:01Z
 
 WHY THIS HYPOTHESIS: EXP555 hardware-proves active context-0 work roots yet the

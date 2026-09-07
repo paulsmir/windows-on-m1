@@ -492,16 +492,24 @@ compares them with the EXP208 structure; no firmware/UAT/scheduler/display chang
 Commit aeb1be9 adds only a crash-durable exact576-byte D3/TA QueueInfo+Pointers
 receipt after unchanged submit.111 regressions and pinned30.0.556.0 gates PASS;
 ZIP/SYS/producer SHA9736509e.../ab2e445b.../b91f19f5.... EXP556 preregistered.
+EXP556 FINAL: receipt C36da2cc... decodes valid D3/TA QueueInfo edges. Firmware
+mutated TA to gpu_rptr1/2/3=2, pointer GPU_RPTR=2, busy1, has_commands1 with
+CPU_WPTR2, while done/stamp remain0 and D3 stays rptr0. FIRST PHYSICAL TA QUEUE
+INGRESS IS HARDWARE PROVEN. No completion/event followed;116/C0000483/3.
+RegionB/C faults zero. Host SHA7a0a9c1c.... Exact cleanup; ordinary health
+SHA43a6104b.... Current first unknown is physical TA execution before done/stamp/
+event. Next minimal receipt reads pinned J313 SGX FAULT_INFO at MMIO+0x17030 in
+the existing50-ms snapshot; do not change work bytes/UAT until that verdict.
 
 ## Final live ordinary clean baseline
 
-At2026-09-07T09:57Z after exact555 cleanup and ordinary restore: SSH8CPU,
+At2026-09-07T10:10Z after exact556 cleanup and ordinary restore: SSH8CPU,
 AppleInput/USBXHCI/stornvmeRunning, no fresh41/46/129/161/1001 after this boot;
 exactlyoneCode28APPL0002/INFnull; noAGXpackage,
 service,CIMdriverentry,runningdriver,signedbinding,SYSorUMD. AppleInput/USBXHCI/
 stornvmeRunning. No fresh41/129/1001/46/161. WPRnotrecording.
 Interactive session was not required for this producer. final ordinary health
-SHA5a1ea93ac98fbbb6a43142db0075ed1258d5309f120f6fcfbb785b875d3cc50c.
+SHA43a6104be8b8690537d08574d66045e8979047ab7b4026aee95fe3f2274d5e08.
 Current ordinary377/392 launcher owns L41; L43 is present/unowned. KEEP RUNNING.
 Always freshly check SSH/process/endpoints before any replacement.
 
