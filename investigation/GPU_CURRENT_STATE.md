@@ -194,6 +194,16 @@ reserved by reducing the qualification-only advertised Windows local allocation
 range to offset0x1f40000 while broker retains the full pool; overlap/active checks
 remain. Build next from EXP591 base, excluding reset code.
 
+EXP593 exact30.0.593.0 pinned build is ready. ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`0fb7a4af48e209c9dcc162ad96ea106d1ddadf7c42c78f35925e49a00781dc3e`,
+`e10fa52ddc6683205b386be82192c1492049f254a334480724e7107c33c15c7b`,
+`c1dbf4e051c2fdfc02e659ad3515317161b2201d7227a9af111c092c01cf522a`,
+`b456e9d6f3a6c317bf97ce730fe715545bf233a095c1bc9b8f6a4b17523ad2b7`,
+`7c565fb44ada084b96d2c3a64b99d96fc7c922070777c88419716d18cf433f72`,
+`25181fa8f1e529d751b2a4fb1a40dae40f44639e58abe0c8c7e8bc9e3ae7b516`.
+Exact workflow/rollback is prepared. Only blocker is a physical power cycle to
+restore proxy/CPU state, then hidden recovery must remove EXP592 before EXP593.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

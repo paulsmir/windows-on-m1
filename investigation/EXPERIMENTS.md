@@ -36070,3 +36070,18 @@ reserves surface2 by excluding it from the advertised Windows allocation range;
 broker still owns/registers the full pool. PASS requires exact terminal/fence,
 visible receipt status0, swap/D589 and physical `0xff112233` display. Focused15
 tests PASS. Build before requesting the unavoidable power cycle.
+
+**EXP593 FREEZE 2026-09-07T21:56Z.** Pinned build/sign/Universal/version and
+producer gates PASS from exact EXP591 base; dormant EXP589 reset excluded.
+Overlay SHA `c7184cdfba2ed1c168b78e90c9e5989752898d90ecebb5cf1bdeb4998c07cf5c`.
+ZIP/SYS/INF/CAT/UMD/producer hashes:
+`0fb7a4af48e209c9dcc162ad96ea106d1ddadf7c42c78f35925e49a00781dc3e`,
+`e10fa52ddc6683205b386be82192c1492049f254a334480724e7107c33c15c7b`,
+`c1dbf4e051c2fdfc02e659ad3515317161b2201d7227a9af111c092c01cf522a`,
+`b456e9d6f3a6c317bf97ce730fe715545bf233a095c1bc9b8f6a4b17523ad2b7`,
+`7c565fb44ada084b96d2c3a64b99d96fc7c922070777c88419716d18cf433f72`,
+`25181fa8f1e529d751b2a4fb1a40dae40f44639e58abe0c8c7e8bc9e3ae7b516`.
+Workflow prepared. Physical power cycle is now indispensable: two compatible
+emergency launches reached proxy but all secondary CPUs remained unavailable.
+After Running proxy, launch hidden recovery, collect persisted EXP592 evidence,
+remove exact package, restore ordinary, then stage/run EXP593 once.
