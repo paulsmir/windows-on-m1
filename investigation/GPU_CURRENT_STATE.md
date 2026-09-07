@@ -790,6 +790,12 @@ patches only address to Windows DestinationGpuVa, and restores descriptor plus
 object40 on completion/rollback. Enhanced producer records actual bytes/stats.
 364 tests GREEN; next pinned build and one run.
 
+EXP583 INCONCLUSIVE before allocation: local-only+CpuVisible rejected
+C000000D; no AGX. Clean baseline restored. EXP584 commitde459cd returns normal
+CpuVisible0/local2 and captures the exact bound backing inside KMD after proven
+completion and before unbind, including actual bytes/hash/guard. Typed PBE patch
+unchanged;18 tests GREEN. Next build/run.
+
 EXP582 FREEZE: exact30.0.582.0 all pinned gates PASS; ZIP/SYS/producer
 35956663.../7b49ffcd.../da06ab72.... Producer-only portability commit2ca7fb2
 changes no behavior. Ordinary baseline remains clean; next one hardware run.

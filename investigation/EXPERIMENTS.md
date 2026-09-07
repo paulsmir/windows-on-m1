@@ -35458,3 +35458,20 @@ e855e8cb13006495d71eff2141e0ed37bfc45f5c79dd1869be0e21ea7e97b1c9,
 b49e80e48a739c6563b85498b3039cf81a695c1a1717cdf4c8a35c84f9576271,
 7dbb7b41f66c270251c0d5034ffdf9831c36a54d7fa0aac75df5a059a46d8a31.
 Same m1n1/Mu. Clean ordinary preflight required, then one run.
+
+**EXP583 FINAL — INCONCLUSIVE BEFORE ALLOCATION.** Local-only+CpuVisible was
+rejected by CreateAllocation C000000D; no Render/AGX. Exact cleanup and ordinary
+restore complete. This proves local2 cannot be the sole supported CPU-visible
+segment under the current descriptor.
+
+# EXP584 — KMD-owned post-completion output snapshot
+
+**PREREGISTERED.** WHY: EXP581 proves local2 hardware completion; EXP582/583
+prove Lock2 visibility cannot deterministically preserve local2. Commit
+de459cd93194ac8432eaa6a1a61abd0d1d434dba returns producer to CpuVisible0 and
+ordinary local2. Qualification KMD poisons the exact bound object40 backing A5,
+flushes it before submit, then after terminal hardware completion and before
+unbind captures 1024 target bytes plus the remaining16KiB binding guard into
+the same identity-bound terminal receipt: actual/mismatch/expected/A5 counts,
+changed bytes, guard corruption, FNV-1a and64-byte prefix. Typed PBE relocation
+is unchanged.18 focused tests GREEN. One build and hardware run.
