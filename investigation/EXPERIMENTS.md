@@ -1,5 +1,34 @@
 # Hardware Experiment Ledger
 
+## EXP552 native group-1 channel offsets — preregistration 2026-09-07T08:43Z
+
+WHY THIS HYPOTHESIS: EXP551 rejected QueueInfo/ring object identity; retained C
+source confirms Windows initdata remains channel owner, so a new broker is not
+source-supported. The remaining concrete m1n1 ABI difference is group-1
+ChannelState placement at page offset0x3fd0 and 0x3000 run rings at0x1000;
+production used page offset0 for both. Device-control success does not prove the
+firmware's distinct queue-channel access pattern.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: native group1 state/ring object
+addresses carry those exact intra-page offsets. TRANSLATION: mapping bases and
+physical pages remain unchanged/Windows-owned; only ChannelInfo3/4 and provider
+CPU/GPU views add native offsets. WHAT IS STILL UNKNOWN: whether firmware now
+consumes the run channels.
+
+Commit `0b854e8e2df786b981807431c2733905a25da039`; channel owner and provider
+tests RED then GREEN, sanitizer suites and109 render regressions pass. Pinned
+30.0.552.0 gates pass. Overlay SHA
+`d667df1de82f76a78e9d3754d53fb99094c478ff521b9aa2e068c5f44326808b`.
+ZIP/SYS/INF/CAT/UMD/producer SHA:
+`1cf8d8f6a6fffcec6c8e3eca7121fb54878ad0d64caee37aa8911a0692b733d0` /
+`0effa9976fc18d517fb42d56a6e1eb84a0b15cbc9d37d82220e7558da581fee3` /
+`c30d2cf56739bb66c81b8dd4d8f29449bcb4f27f76869bd20c3e4d6db12137d0` /
+`add9ed42c32a2aea9dce8a2410f4b8ce7a7f8efdfaae64e5a22b4411c5e95c7d` /
+`f3cd05975550292b7aca59fd35c602a500acf5ac53dca119bb4f6e20a894c557` /
+`d1a154ea34e195e96637597b402010125dbe27dbf8263e207596a1fef04d72a4`.
+Clean ordinary SHA `b01cb539fdce0e49a9229791e5e6e2ac578d376401cb320edb081c5bbc265673`.
+One bind/producer; require0x5460/5420; exact cleanup.
+
 ## EXP551 exact noncolliding queue core — result 2026-09-07T08:37Z
 
 REJECTED. Exact30.0.551.0 passed broker/StartDevice Code0 and ran once, but

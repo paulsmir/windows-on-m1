@@ -433,6 +433,13 @@ to last Code0 sequential mapping; sanitizer+110 regressions PASS. Exact cleanup
 and clean ordinary health SHAb01cb539.... Current first unknown is retained
 native command-channel ownership versus Windows parallel ChannelMemory. Next
 design: bounded retained-owner queue publish/query broker, no raw page access.
+Source re-anchor rejected that broker: retained C state owns root/mappings but
+not native channels; Windows initdata remains channel owner. Commit69f07c7
+removes rejected wake. Commit0b854e8 preserves native m1n1 intra-page offsets
+for TA1/D3_1 ChannelState(3fd0) and run rings(1000) with unchanged mapping
+bases/pages. Channel/provider sanitizer tests and109 render regressions PASS;
+pinned30.0.552.0 gates PASS. ZIP/SYS/producer SHA1cf8d8f6.../0effa997.../
+d1a154ea.... EXP552 preregistered.
 
 ## Final live ordinary clean baseline
 
