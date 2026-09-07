@@ -736,6 +736,11 @@ to EXP577-effective A021-only; EXP578 A040 placement is not active. RED then
 363 relevant tests GREEN. Next: pinned579 build/sign/hash, clean ordinary
 preflight, one run, exact evidence and cleanup.
 
+EXP579 FREEZE: exact30.0.579.0 build/sign/analysis/Universal/version gates pass;
+ZIP/SYS/producer SHA cd7470ce.../02590363.../04c76338.... Fresh ordinary
+preflight is Code28, zero package/service/module,8CPU,NVMe2/USB5/keyboard1,
+Event1290/Bugcheck0 in the current window. Candidate is ready for its sole run.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,

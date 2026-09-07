@@ -35198,3 +35198,21 @@ StatsTA nested address and either live StatsTA mutation or progress in shared
 stamp/done/event/D3/completion.  If the pointer is exact but all observable
 state remains at the EXP577 boundary, reject stats binding as sufficient and
 localize the next command-graph external reference; never repeat EXP579.
+
+**EXP579 FREEZE 2026-09-07T17:26Z:** pinned FRYZZING WDK/SDK26100,
+MSVC14.44 build, code analysis, Universal validation, Inf2Cat, test signing,
+KMD/UMD/producer rebuild and coherent version30.0.579.0 all PASS.  The only
+diagnostic is inherited C28251;0 errors.  ZIP/SYS/INF/CAT/UMD/producer SHA-256:
+`cd7470ce2a40bad2fb987cccf82146319599cfad1869a45f8905bd51a25c3639`,
+`02590363a9e7891a2fd44370aa76456622868a31612616b33e8f1d552874e83a`,
+`3d498744b2e160f20f1c343cf051d0a956541bf2b3877693a61073d23681c56a`,
+`e90358cef1d3fcc9ced3b4062482cb6bd16a653d06132eff019669ef2d4b70c5`,
+`71a4c1f2cffe90c9cb65d616c10eab379feca93985ba76a3f7c63c7f9699f91e`,
+`04c763381b7a23372b6f71448269e3fa9bdde7deba25b145769d6263563a4342`.
+Overlay/manifest/build-script SHA-256 are `7e373fb9...`, `25a89d13...`,
+`f24e3947...`.  m1n1 remains exact EXP577/578 full-owner
+`12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3`;
+Mu remains EXP406.  Fresh ordinary preflight at17:27Z proves Code28, zero
+package/service/module,8CPU,NVMe2/USB5/keyboard1 and no Event129/bugcheck in
+the current15-minute window.  One stage/natural bind/producer only, collect
+existing progress/retire/temporal/fault receipts and exact cleanup.
