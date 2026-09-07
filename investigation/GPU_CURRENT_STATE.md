@@ -53,6 +53,14 @@ object36+2000 but is conditional and inactive for this PIPE_CLEAR_COLOR0 job;
 do not patch it in EXP586. Persistent queue lifetime and reset sequence remain
 later separate fixes after first correct output.
 
+EXP586 source commit6a5280c198d86e82ba19a93aed2440453426769b implements
+only that active clear Uniform rebase to Objects[36].GpuVa. It validates the
+captured typed word/non-address bits, records exact reverse state and restores
+atomically with the existing store/PBE binding. Production fixture RED then
+GREEN; object73+1000 reload bytes are explicitly unchanged.391 broad tests PASS
+with the same unrelated pre-existing stop/remove source-text assertion failure.
+Next pinned build/sign/hash and one hardware run from clean ordinary392.
+
 ## Binding scope and current executor
 
 The post-EXP506 model handoff is complete. Latest user instruction explicitly

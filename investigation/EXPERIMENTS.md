@@ -35608,3 +35608,43 @@ Mesa commit7a4f2406 `agx_build_clear_pipeline` identifies this Uniform as the
 clear-color input. Object73+1000 is the conditional reload pipeline and is
 inactive because this workload sets PIPE_CLEAR_COLOR0. EXP586 changes only the
 clear Uniform address; no store/queue/completion/reload changes.
+
+# EXP586 — active clear-color Uniform relocation
+
+**PREREGISTERED 2026-09-07T19:56Z; one exact run only.**
+
+**WHY THIS HYPOTHESIS:**
+
+- EXP585 changed exactly the1024-byte target from A5 to zero while preserving
+  TA/D3 completion and the guard. PBE target/store selection is therefore
+  closed; the first unknown is the data supplied to the active clear pipeline.
+- Captured cmdbuf load_pipeline is0x20000, selecting fixed object73+0000.
+  Its typed USC Uniform word decodes1500000000, while active object36 is
+  1503920000 and its first8 bytes are the exact half-float clear color.
+- Exact Mesa commit7a4f2406 `agx_build_clear_pipeline` constructs this Uniform
+  from clear_buf. The separate object73+1000 pipeline is reload-only and the
+  current full clear keeps `clear_pipeline_textures=false`.
+
+**WINDOWS CONTRACT:** unchanged producer, local placement, exact KMD output
+snapshot and Windows fence completion.
+
+**AGX/ASAHI CONTRACT:** the full-clear pipeline consumes one USC Uniform at
+object73+0000; its36-bit shr3 Buffer address selects the clear color. Reload
+Texture/Sampler at+1000/+1008 are conditional and inactive here.
+
+**TRANSLATION:** commit6a5280c198d86e82ba19a93aed2440453426769b
+validates the captured clear Uniform word and non-address bits, patches only its
+address to active Objects[36].GpuVa, leaves reload bytes unchanged, and adds
+exact atomic unbind/rollback alongside the proven store pair.
+
+**WHAT IS STILL UNKNOWN:** whether the active clear Uniform produces the expected
+raw target value0xff112233. PASS requires ValidMaskff, exact completion/fence,
+256 expected pixels, zero poison,1024 changed bytes, guard0 and matching raw
+prefix/hash. Any other nonzero uniform color is interpreted before changing
+format; all zero rejects the hypothesis.
+
+**OFFLINE PROOF:** production fixture test was RED on stale1500000000, then
+GREEN on1503920000 with exact reverse restore. Malformed clear input rejects
+without mutating output, PBE or store pair. Reload Texture/Sampler remain
+byte-exact. Focused test PASS; broad run391 PASS with one unrelated existing
+source-text assertion failure. Same m1n1/Mu/producer/receipts. Build pending.
