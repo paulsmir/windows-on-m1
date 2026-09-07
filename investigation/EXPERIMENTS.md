@@ -1,5 +1,36 @@
 # Hardware Experiment Ledger
 
+## EXP573 active graph device visibility — preregistration 2026-09-07T14:22Z
+
+WHY THIS HYPOTHESIS: EXP572 samples at60/107ms are byte-identical, rejecting
+Finalize restart and localizing the stop to RetireStamp. Exact source trace shows
+`BuildActiveJob` copies and relocates all36 context0 shared objects on every
+submit, including event_count/EventControl/JobList/stamp pair, but the old path
+flushes only the two work roots and ring slots. CPU receipts therefore do not
+prove firmware saw dynamic event_count2. This is the first exact production/
+standalone memory-publication mismatch at RetireStamp.
+
+WINDOWS CONTRACT unchanged. AGX/ASAHI CONTRACT: all CPU-mutated shared work
+objects must be visible before queue head/doorbell publication. TRANSLATION:
+commit `f89c0d70e488f65c601a81c6ea693412fc5fe200` flushes each of the36
+active graph objects after successful copy+relocation, fails closed on any flush,
+then issues the existing memory barrier before queue publication. No work bytes,
+mapping, event semantics or completion criteria change. WHAT IS STILL UNKNOWN:
+whether device visibility advances RetireStamp to shared stamp/done/event/D3.
+Ordering test RED/GREEN;361 AppleAgx tests pass. One hardware candidate only.
+
+## EXP572 TA retirement temporal progress — result 2026-09-07T14:16Z
+
+CONFIRMED discriminator. Exact30.0.572.0 ran once after one launcher attempt
+failed before chainload while L41 re-enumerated; that pre-hardware failure is not
+a driver run. Temporal receipt SHA `91128fe9...` contains samples at60 and107ms.
+Both are byte-identical: shared/private stamps7a000000/7a000100, timestamp
+targets8f86f447/8f86f4af/0/0, identical WorkCommandTA tail. Finalize restart
+loop is rejected; stop is at RetireStamp publication. TDR116 repeated; dump SHA
+`17dd43f9...`, hardware log SHA `afd66ec7...`. Event129x2 remains telemetry.
+Exact cleanup and ordinary restore complete; recovery logs SHA44046b67.../
+b4e6cfb9.... Next EXP573 tests complete active-graph flush.
+
 ## EXP572 TA retirement temporal progress — candidate ready 2026-09-07T14:12Z
 
 Pinned30.0.572.0 WDK26100/MSVC14.44 build, analysis, Universal, Inf2Cat,

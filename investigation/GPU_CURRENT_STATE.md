@@ -633,6 +633,11 @@ next compare two timestamp/stamp samples. Exact cleanup and ordinary restore don
 EXP572 commit9ce6204 adds only two read-only50/100ms samples to distinguish
 Finalize restart from Retire stop;360 AppleAgx tests pass. Pinned30.0.572.0
 gates pass; ZIP/SYS/producer SHA87d7cea5.../f67d1797.../ac56ecc5.... Hardware next.
+EXP572 FINAL: 60/107ms samples byte-identical; restart loop rejected, stable
+RetireStamp stop confirmed. Exact cleanup/ordinary restore complete.
+EXP573 commitf89c0d7 fixes the first source-derived mismatch: per-submit active
+graph rewrites36 objects but old code flushed only roots. New code flushes all36
+then barriers before queue publication; RED/GREEN and361 tests pass. Build next.
 
 ## Final live ordinary clean baseline
 
