@@ -794,6 +794,13 @@ EXP582 FREEZE: exact30.0.582.0 all pinned gates PASS; ZIP/SYS/producer
 35956663.../7b49ffcd.../da06ab72.... Producer-only portability commit2ca7fb2
 changes no behavior. Ordinary baseline remains clean; next one hardware run.
 
+EXP582 FINAL INCONCLUSIVE BEFORE SUBMIT: CPU-visible output landed in aperture1;
+Patch guard5/Translate C0000141 truthfully rejected non-local placement, then
+0x119/3. No typed descriptor/AGX verdict. Evidence preserved, exact cleanup and
+ordinary Code28/8CPU restored. EXP583 commit7cdb5bc restricts only the exact
+qualification allocation to local2 while retaining CpuVisible/Lock2; seven tests
+GREEN. Next build and one run.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,

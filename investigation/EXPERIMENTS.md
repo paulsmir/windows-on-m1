@@ -35427,3 +35427,24 @@ a6806fb44b7f8573deac7b9d929ed4894e316b20b5e05174b4a5dc4460eee406,
 85ad130f6a66aabae62b99ba512f5d5d97f51c25dafd1e36304825318955a36c,
 da06ab723c8d17d047566050587a4c7a3b36503a24aa2b7cffbf9536d98c284d.
 m1n1/Mu unchanged. Ordinary baseline remains clean before staging.
+
+**EXP582 FINAL 2026-09-07T18:40Z — INCONCLUSIVE BEFORE SUBMIT; cleanup
+complete.** Exact30.0.582.0 reached Code0, but Windows placed the CPU-visible
+qualification allocation in aperture segment1. Patch guard5/Translate returned
+C0000141 because the unchanged AGX path truthfully requires local segment2.
+No Submit, PBE descriptor consumption or AGX work occurred. The resulting
+0x119/3 is a failed-submission recovery result, not evidence about typed target
+relocation. Dump/evidence ZIP and host SHA are4100bd48... andd18dae76....
+Exact package cleanup and ordinary377/392 Code28/8CPU restore complete.
+
+# EXP583 — local-only CPU-visible qualification placement
+
+**PREREGISTERED 2026-09-07T18:42Z.** WHY THIS HYPOTHESIS: EXP581 proves the
+same CpuVisible allocation can be Lock2-mapped and execute when VidMm chooses
+preferred local2; EXP582 selected permitted aperture1 and failed at the exact
+local-only translation guard before Submit. Commit
+7cdb5bc11d6ce19ef872b3622054835003062ad8 changes only the exact
+qualification-cookie allocation's SupportedRead/WriteSegmentSet from
+aperture-or-local to local-only while retaining CpuVisible and Lock2. Ordinary
+allocations are unchanged. Typed PBE patch remains the sole downstream
+functional variable. Seven focused tests GREEN. Build/sign/hash then one run.
