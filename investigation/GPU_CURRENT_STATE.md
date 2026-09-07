@@ -637,7 +637,9 @@ EXP572 FINAL: 60/107ms samples byte-identical; restart loop rejected, stable
 RetireStamp stop confirmed. Exact cleanup/ordinary restore complete.
 EXP573 commitf89c0d7 fixes the first source-derived mismatch: per-submit active
 graph rewrites36 objects but old code flushed only roots. New code flushes all36
-then barriers before queue publication; RED/GREEN and361 tests pass. Build next.
+then barriers before queue publication; RED/GREEN and361 tests pass.
+Pinned30.0.573.0 gates pass; ZIP/SYS/producer SHA9c5865de.../f1c76d51.../
+5668975e.... Hardware next.
 
 ## Final live ordinary clean baseline
 

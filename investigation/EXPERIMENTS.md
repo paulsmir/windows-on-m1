@@ -1,5 +1,14 @@
 # Hardware Experiment Ledger
 
+## EXP573 active graph device visibility — candidate ready 2026-09-07T14:29Z
+
+Pinned30.0.573.0 build/analysis/Universal/Inf2Cat/sign/version/producer PASS.
+Commit `f89c0d70e488f65c601a81c6ea693412fc5fe200`; overlay/ZIP/SYS/INF/
+CAT/UMD/producer SHA `531efa98...` / `9c5865de...` / `f1c76d51...` /
+`00711837...` / `100cfbfc...` / `0e5a1c68...` / `5668975e...`.
+Workflow/launch SHA `cd951d0e...` / `45aba7bd...`; unchanged m1n1/Mu.
+One natural bind/producer, collect all receipts, exact cleanup.
+
 ## EXP573 active graph device visibility — preregistration 2026-09-07T14:22Z
 
 WHY THIS HYPOTHESIS: EXP572 samples at60/107ms are byte-identical, rejecting
