@@ -369,6 +369,10 @@ backend bind, scheduler and packet queue pass. First unknown is worker
 BackendRuntimeSubmit/TA3D/completion. Commitf07ed5e adds only host-visible backend
 submit result after suppressing success Submit diagnostic. Pinned30.0.541.0 gates
 PASS; ZIP/SYS/producer SHA34393111.../daa3bcc8.../33762438....
+EXP541 FINAL: backend resultOK/phaseSubmitted, exact0x5410 word, host SHAa5230056....
+Relocation/cache flush/Run3d/RunTa acceptance proven; physical progress unknown.
+Commitf6495a8 gives first actual queue-progress change the broker slot. Pinned
+30.0.542.0 gates PASS; ZIP/SYS/producer SHA19c63ee4.../cce82667.../57776594....
 
 ## Final live ordinary clean baseline
 

@@ -1,5 +1,26 @@
 # Hardware Experiment Ledger
 
+## EXP542 first physical queue progress — preregistration 2026-09-07T00:15Z
+
+WHY THIS HYPOTHESIS: EXP541 exact0x5410 result0/phase3 proves relocation, device
+flush, Run3d and RunTa acceptance and backend Submitted. Reset occurs while
+waiting for physical events. Commit `f6495a896d5fa5e8b7caeac3ad760612c0eada89`
+keeps failure submit result, suppresses success receipt, and emits one0x5420 only
+when `AppleAgxG13QueueProgressHasAdvanced` reports real queue progress. Flags
+encode provider/runtime phase and TA/3D event/complete; value is exact fence.
+No queue submission/completion behavior changes. 108 regressions and pinned
+WDK26100 version30.0.542.0 gates PASS. ZIP/SYS/INF/producer SHA `19c63ee4...`/
+`cce82667...`/`947eb11e...`/`57776594...`. One natural bind/producer after clean
+baseline. Presence proves physical progress; absence before reset localizes no
+observed event/progress.
+
+## EXP541 backend runtime submit result — result 2026-09-07T00:15Z
+
+CONFIRMED: exact word `5410000000000003`, backend resultOK/phaseSubmitted. Host
+SHA `a5230056f211afb68355718e1b146fe5168a65172d7d688772fc9624677d8b41`.
+Relocation, flush, Run3d and RunTa accepted. Physical execution/completion still
+unproven. Exact emergency cleanup complete; ordinary restoration active.
+
 ## EXP541 backend runtime submit result — preregistration 2026-09-07T00:05Z
 
 WHY THIS HYPOTHESIS: EXP540 exact0x5280 guard0/status0 proves Windows Submit,
