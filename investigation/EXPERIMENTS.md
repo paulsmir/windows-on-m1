@@ -35070,3 +35070,23 @@ Full-owner m1n1 SHA `12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b
 overlay/workflow/launch SHA `a0e8a1c99177f0126306a7b9a73683c930234e2f59231530a4d143feaf23be4d`,
 `abdc367b693512bdfdfe9b09c98e66c81ce860e20a18b389bd5e7cecff4c946b`,
 `2212f33fa7f7822c251ce9eaaf6780456a5a9f2fbc4030dddf3c7f8d23236436`.
+
+**EXP577 FINAL 2026-09-07T16:55Z — REJECTED AS SUFFICIENT; cleanup complete.**
+The first SSH attempt ended before process creation and was not a workload; the
+subsequent sole producer ran and produced 0x116
+`(ffffab8cf207a3d0, fffff801e35a6cd0, c0000483, 3)`. Hardware proves class3
+query and biased A021 mappings for objects18/19. Physical TA recovered to the
+EXP574 boundary: TA read1, timestamp start/end nonzero, private stamp2
+`0x7a000100`, no SGX/RegionB/C fault. Shared stamp1 remains `0x7a000000`,
+event0/0, pending stamps0 and done0. Thus A020 WorkCommand identity is accepted
+as ingress-compatible but rejected as sufficient for retirement. Host/evidence
+SHA are `c9d674172807e2d96d180b0dd1bba0bba1b7509687405f025d2761600409fe23`
+and `666edae2ac53bbd046e693edeee91438ed8416af3ca734736ec943a4dd30f477`.
+Exact cleanup and ordinary377/392 restoration prove Code28, no package/service/
+module,8CPU,NVMe2/USB5/keyboard1. Event129 remains telemetry.
+
+Next single variable: retain A021 WorkCommands and move only the native A040
+queue-retirement group objects23--27 (`JobList`, two
+`CommandQueuePointers`, TA/3D stamp1) under the existing nonzero shared-arena
+bias. Objects20--22 and28--35 stay at EXP574 A000 addresses. This group is the
+only firmware-owned queue state updated immediately after microsequence End.

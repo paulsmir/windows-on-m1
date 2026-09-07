@@ -697,6 +697,12 @@ c6d10e0 add bounded read-only A021 command arena and move only WorkCommand
 objects18/19 there; all other objects use EXP574 layout.369 relevant tests
 GREEN. EXP577 preregistered; next build/sign/hash and one hardware run.
 
+EXP577 FINAL: A021 WorkCommands restored physical TA through FinalizeTA/End but
+did not move shared stamp/done/event. REJECTED as sufficient. Exact cleanup and
+ordinary Code28/8CPU baseline restored. Next boundary remains post-End queue
+retirement. Next discriminator moves only coupled native-kshared retirement
+objects23-27 into the already approved biased A040 arena;20-22/28-35 stay A000.
+
 ## Final live ordinary clean baseline
 
 At2026-09-07T11:57Z after exact563 cleanup and ordinary restore: SSH8CPU,
