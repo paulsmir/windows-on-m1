@@ -36457,3 +36457,26 @@ TA/3D -> exact fence -> CPU-assisted scale -> physical panel is proven. This is
 not fully accelerated Present and does not prove a production swapchain lifetime.
 Exact EXP598 package/devnode cleanup completed after evidence. Persist cleanup
 and return ordinary377/392 before continuing production Present ownership.
+
+# EXP599 — repeated visible submissions with overlapping allocation lifetime
+
+**PREREGISTERED 2026-09-08T00:45Z; no source/package change. WHY THIS
+HYPOTHESIS:** EXP598 proves one visible AGX result but not replacement-before-
+release. The producer holds both allocations10s. Starting P2 after4s should be
+after the first ~2.7s latch yet before P1 teardown, forcing a distinct live range
+and allowing P2 to replace it before P1 releases.
+
+**WINDOWS CONTRACT:** two ordinary processes own separate device/context/
+allocation lifetimes. P1 remains alive through P2 latch. Exact cleanup follows
+evidence before further allocation workload.
+
+**AGX/ASAHI CONTRACT:** unchanged EXP598 TA/3D, completion and DCP paths. Require
+two monotonically sequenced jobs/fences and two D589s.
+
+**TRANSLATION:** exact30.0.598.0 package/producer; start P1, wait4s, start P2,
+wait both and preserve separate logs. No source change.
+
+**WHAT IS STILL UNKNOWN:** whether P2 is accepted while P1 displayed allocation
+remains owned, receives a distinct non-active offset and replaces it before P1
+teardown. PASS requires both result0, final terminal sequence2, final visible
+Guard11/Stage3/status0 with new offset/sequence/swap, two host latches and health.

@@ -363,6 +363,13 @@ Confirmation evidence SHA
 Exact EXP598 package/devnode cleanup completed; persist it with graceful restart
 and restore ordinary377/392 before the next production Present experiment.
 
+Cleanup persistence and ordinary377/392 are verified: Code28, no package/service/
+module,8CPU,NVMe2,USB5,keyboard1,bugcheck0; Event129x2 telemetry. Next EXP599 is
+orchestration-only using exact EXP598 artifacts: start producer1, then producer2
+after4s while producer1 still holds its displayed allocation. Require distinct
+destination offsets, monotonic visible sequences/swaps, two TA/3D/fences and the
+second latch before producer1 destroys its allocation.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
