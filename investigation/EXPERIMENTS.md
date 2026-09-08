@@ -39880,3 +39880,87 @@ and `22f2b5472e1f89b66012c62f8e13c2b981229bb28e043792c2850efb60d8fa87`.
 Air remains clean ordinary Code28/packages0/service/module/files absent,
 8CPU/NVMe2/USB5/keyboard1/no fresh events. No package was staged by the failed
 invocation.
+
+**EXP650 ACTUAL — FRAME1 PASS; FRAME2 BAND LATCH THEN BASE/SUBRANGE IDENTITY
+FAILURE 2026-09-08T21:13:03Z.** Exact30.0.650.0 bound as oem5/Code0/Running
+with exact hashes and8CPU. Frame1 dynamic green completed Render/Patch/Submit,
+physical fence256, full4,096,000-pixel hash
+`0xb844371c0d762325`, query sequence3 at offset0xfa0000/PA0x9bcf90000,
+and host A408/D589 swap11. The one-variable EXP649 classifier fix is therefore
+hardware-confirmed.
+
+Frame2's distinct128-byte blue-band command also returned Render success
+queued1. Durable correlation build650 boot356062746 contains two ordered slots,
+overflow0/durable1. Slot2 has allocations2/destination1/segment2, Render0,
+DMA168/patch1/prepatched1, Submit0, physical fence257, worker2,
+SynchronizeExecution0/DPC1, and output verification0. Host then records the
+second A408/D589 swap12, but presentation exit is
+`0xc000003e STATUS_DATA_ERROR`, so no frame2 query is published and HOLD does
+not start. Device stays Code0/ACTIVE with8CPU/NVMe2/USB5/keyboard1. One Event129
+occurred at boot before the workload and has no shown GPU-step causality.
+
+Source deterministically explains the post-latch failure. Terminal receipt
+`DestinationPhysical/DestinationGpuVa/DestinationBytes` are initialized from
+the submission's allocation base/capacity. For a bottom-band binding,
+`Completed->View.RenderedPhysicalAddress` is allocation base plus
+`APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET`. The post-latch query guard compared
+those unequal base and subrange addresses directly; full frame offset0 passes,
+band offset8,192,000 fails. This is the first failing primitive. AGX and DCP
+both advanced and are not changed.
+
+Producer/collector/correlation/hardware/raw-correlation SHA256 are
+`f04c75ecbb6859979f9d55a81d76fe26061d9eb505b8f198233db9fea0fe31d1`,
+`fabad6777ab23d61d6e66c58cff48b7ba27f422ce557c2e1e0fdc2a508c8af24`,
+`d6d4a46fc0ad462f012ab3b769aae8ca0046a416df0d99087fd7f3aecc984cc5`,
+`70a921a1b5b9941fba12ec20e77c689cd38735e192dccfb9b929c8dfbafb4576`
+and `77f1b4d9f59221770e2622cebe910ae440f1c91dbbd29eddcfeeef4620787cb6`.
+
+**EXP650-R1 CLEAN RECOVERY 2026-09-08T21:15:32Z.** Evidence was collected
+before exact producer stop. Hash-matched oem5 was deleted, the devnode
+rescanned, full-owner cleanup emitted a separate fallback D589 swap13, and
+immutable ordinary377/392 was restored. Current health is Code28/null INF,
+packages/service/module/SYS/UMD absent, SSH/8CPU/NVMe2/USB5/keyboard1 and no
+fresh41/1001/129. Recovery/health SHA256 are
+`c0fa70387cd639984d1f462ea6074c14fa7bde34e69b88b28b428734902e8c86`
+and `11fd90455b0fa806c008a75cbadaf54346b5ba3fa11c94b68265045827f47856`.
+
+**EXP651 OFFLINE CAUSAL FIX.** Commit
+`d88cde2216ef600f6ef18b80a3c75c96e088362b` adds one portable
+base/capacity-to-rendered-subrange validator and uses it in the existing
+post-latch guard. It requires exact allocation GPU/PA/bytes from the terminal
+receipt, checked offset/length, exact CPU/GPU/PA rendered offset and exact
+examined rendered bytes. The band test was RED before implementation; full and
+band pass, while rendered-address, capacity, examined-length and offset
+mismatches fail closed. 24 adjacent tests are GREEN. Exact three-file overlay
+and test log SHA256 are
+`fd4df49cd5b0bfc98cc7283ee655b9f534bb95bd3f1d6503b7d870bbb999a54d`
+and `5cf140837105e22925298bec6ab84b943037c3cbd73ce2e6fbdaa27dd8dde083`.
+
+# EXP651 — allocation-base versus rendered-subrange query contract
+
+**PREREGISTERED 2026-09-08T21:16:56Z. WHY THIS HYPOTHESIS:** (1) EXP650
+durably proves both dynamic commands, both physical fences and both output
+verifications, plus two corresponding host latches; (2) only frame2 returns
+DATA_ERROR and it is the only nonzero rendered offset; (3) source and RED→GREEN
+test prove the post-latch guard compared allocation-base receipt PA to rendered
+band PA instead of validating base plus offset.
+
+**WINDOWS CONTRACT:** terminal submission identity owns allocation base and
+capacity; completed-output identity owns a checked rendered offset and length.
+Both must refer to the same WDDM allocation, but their addresses are equal only
+for offset0. **AGX/ASAHI CONTRACT:** unchanged physical jobs, fences and DCP
+latches already pass in EXP650. **TRANSLATION:** exact receipt allocation
+base/capacity plus completed rendered offset must reconstruct the completed
+CPU/GPU/PA subrange and exact examined bytes before query publication.
+**WHAT IS STILL UNKNOWN:** whether this corrected one-to-one relation publishes
+frame2 query and permits unchanged HOLD and retirement.
+
+Single variable is commit
+`d88cde2216ef600f6ef18b80a3c75c96e088362b`; overlay contains only
+`render_completed_output.h/.c` and `scanout_windows.c` over immutable
+`C:\Users\pauls\EXP650\src`, SHA256
+`fd4df49cd5b0bfc98cc7283ee655b9f534bb95bd3f1d6503b7d870bbb999a54d`.
+Build is Release PackageBuild651 VisibleAgxQualification plus the unchanged
+producer rebuilt only with AdmissionExpectedBuild651. Platform, workload,
+PASS/failure and recovery predicates remain exact EXP650. Artifact hashes are
+appended before staging.

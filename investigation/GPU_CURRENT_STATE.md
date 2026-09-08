@@ -10,7 +10,7 @@ EXP648's caps0 rejection. Current gate is AD02; execute
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-08T21:06Z. Main process only; no agents.
+Updated 2026-09-08T21:17Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -30,6 +30,16 @@ EXP649 exact oem5 was removed. Ordinary377/392 is clean and verified at
 2026-09-08T21:04Z: APPL0002 Code28/null INF, no package/service/module/SYS/UMD,
 SSH,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129. AD02 is not yet
 HW_PROVEN; pipeline caps remain0.
+
+EXP650 hardware-confirms the dynamic-colour scanout fix for frame1: full green
+has physical fence256,4,096,000 verified pixels, hash
+0xb844371c0d762325, query sequence3 and exact A408/D589. Frame2 also reaches
+physical fence257, output verification and a second D589, but its query guard
+returns STATUS_DATA_ERROR. The exact defect is allocation-base terminal PA
+being compared directly to rendered-band PA (base+8,192,000). Commit
+d88cde2216ef600f6ef18b80a3c75c96e088362b validates base/capacity and exact
+rendered CPU/GPU/PA offset instead. EXP651 is preregistered with only this
+variable. EXP650 package is removed and ordinary377/392 is clean at21:15Z.
 
 EXP648 definitively names the D3D11 admission boundary. The unchanged probe
 loaded and executed exact UMD30.0.648.0 in the Apple-adapter process. Correlated
