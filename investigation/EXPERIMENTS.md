@@ -37859,3 +37859,19 @@ GPU/PA identities and byte-exact cleanup. RED before, GREEN after; full373 tests
 GREEN. Build exact626 from exact625 plus shared GDI/framebuffer and diagnostic
 cleanup. Require two Submit/worker/physical TA+3D/fences and two D589 latches on
 distinct inactive allocations with expected full-frame hashes; no 0x119/TDR.
+
+**EXP626 BUILD FREEZE.** Exact30.0.626.0 from immutable EXP625 plus the shared
+GDI/framebuffer fix and removal of completed diagnostic encoding. Pinned
+WDK/SDK26100, MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign and
+coherent version gates pass with inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/
+UMD/producer SHA256 are
+`b250f646f1b957e844f0d9c9301a8df8775a1e4164bb841a3a4da264d0b84994`,
+`8ed8e82b646b0a9bffd10cd96b6c90eef7e3ab14ba9e9b5eb1fd0691692846a6`,
+`bc665505efc2b37c5ea0b4b7ce9afecf9adeb3dfaa7b6609de05715aca03e08d`,
+`96c3a31fa45a660d20db269638831b4bbcb9f5a30891a86b2fe38b48b7ac55a1`,
+`86a0d0c76eb6d4ff670f940db18e9e675fccaeb364048b57bc21a1bd98dfdb5f`,
+`81b991cfc84413341ab243e70e1a018b8cd885c14d60a5d2aecb20a72d7ac654`,
+`09ee2b4da6ee3996d9055fd678a3965727bb1f98a7ecc95a0d6bf636e051b885`.
+Workflow/launch SHA256 are
+`91626193b0b6f4e858e1d9c5220e21458f51dfed650ba277d63a92ce3437857e`
+and `4b8a7e593f19b061000a6c1c0ccff194c0a4ec3e56b60b21f3a42897ef5ba022`.
