@@ -39868,3 +39868,15 @@ evidence/full-owner/ordinary SHA256 are
 `03eeae9ea989972ed8fce31cb91e9554c7a2a54d3af840e7d482689de5cc2a8f`
 and `c45e4f881c96c661c4890a1bd56acce30e898ab1a565bfefef8ca819fc8dd6d6`.
 Candidate is frozen but not staged.
+
+**EXP650 WORKFLOW CORRECTION 2026-09-08T21:10:19Z.** The first read-only
+Health invocation stopped before staging because PowerShell treats `$home` as
+the reserved read-only `$HOME`; this is a tooling result, not a driver or
+hardware verdict. Both workflow files now use task-specific `$airRoot`, contain
+no HOME variable, parse on FRYZZING, and execute Health on Air. Corrected
+workflow/evidence-collector SHA256 are
+`da157a5f71e535bd314f277be82dfca230db75c42c04b44927ab4db6a6f2f834`
+and `22f2b5472e1f89b66012c62f8e13c2b981229bb28e043792c2850efb60d8fa87`.
+Air remains clean ordinary Code28/packages0/service/module/files absent,
+8CPU/NVMe2/USB5/keyboard1/no fresh events. No package was staged by the failed
+invocation.
