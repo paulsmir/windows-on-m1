@@ -37355,3 +37355,22 @@ memory, scheduler or capability change. Full371 tests GREEN. Build exact615 and
 retain the EXP614 device-state producer. PASS requires execution ACTIVE before
 pass2, two Render/Patch/Submit/worker chains, fences256/257, two exact full-frame
 colors and two alternate D589 results.
+
+**EXP615 BUILD FREEZE.** Exact30.0.615.0 pinned WDK26100/MSVC14.44 KMD, UMD
+and canonical device-state producer build passed code analysis, Universal
+validation, Inf2Cat/TestSign and coherent-version gates. Producer has zero
+warnings/errors; KMD has only inherited C28251. Source commit is
+`ab6c769ae6af3851209c11233e0660ca80775c4d`; immutable EXP612R5 base plus the
+single completion-order overlay SHA256 is
+`51ef1b9ad570451b9529888714bf70b71f28bc875639a67e0ef0d416024a856b`.
+ZIP/SYS/INF/CAT/UMD/producer SHA256 are respectively
+`dddc17a49ecbeafd37a81dcd7de0f23f75a2731bb2b9611605c7bea5c3b30c67`,
+`814e7602e4b611dbbd11b5ba8de85f082a0e87c4eb579a0bd774cb309d2620ca`,
+`0ad4519b345f1afb8597f828a5c742e8c6ca5a41c4325c4a6fdfbb45e89d7a79`,
+`d28d8ef3e033b2959f108b3f08569a6519bb3bac32509a15af72a5fdad7950da`,
+`e647a98920eba094d80ce6f0973db4b1ba5260923ce1e5c26a30bc203501294e`,
+`cb8c293794449ea433b7da907cfb295a76a8e4a73c3abe003eb1b30d690ce706`.
+Workflow/launch SHA256 are
+`641e9a731c4231c488bfd0223b51d23236b47969bde039b44feecc05d2da547c`
+and `6e31adb7349913fde7be4505fcc0f7970828287e1e5932593e197056b1329228`.
+Run once only after ordinary377/392 Code28/no-package health verification.
