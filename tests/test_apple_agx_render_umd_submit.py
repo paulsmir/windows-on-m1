@@ -119,6 +119,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         )
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR", source)
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR", source)
+        self.assertIn("Sleep(15000u);", source)
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 

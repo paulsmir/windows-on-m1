@@ -207,7 +207,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           createContext.CommandBuffer);
   for (pass = 0u; pass < 2u; ++pass) {
     if (pass != 0u)
-      Sleep(5000u);
+      Sleep(15000u);
     ZeroMemory(&command, sizeof(command));
     command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
     command.Version = ADMISSION_UMD_COMMAND_VERSION;
