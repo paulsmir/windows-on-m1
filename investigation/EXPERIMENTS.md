@@ -38996,3 +38996,55 @@ in progress. Next boundary after clean health: standard Windows producer and
 Present path. Re-anchor to current UMD DXGI Present/Present1 and KMD Present
 implementation; derive smallest normal application path from pinned WDK.
 Do not reopen AGX completion, output, DCP or qualification retirement.
+
+# EXP641 — correlated standard MMIO flip
+
+**PREREGISTERED 2026-09-08T16:41:12Z. WHY THIS HYPOTHESIS:** (1) EXP640
+closes repeated Windows Render/Patch/Submit, physical TA/3D, exact fences and
+DCP latch under private qualification; (2) current UMD/KMD source already
+implements Microsoft's FlipOnVSyncMmIo split, but no normal producer has
+called D3DKMTPresent; (3) the current source-address registry receipt is
+first-call-only and cannot attribute a new flip, so a bounded boot-scoped
+in-memory correlation record is required for one distinguishing run.
+
+**WINDOWS CONTRACT:** a flip source must be a primary allocation and
+D3DKMTSetDisplayMode must precede D3DKMTPresent. An OpenGL-style direct KMT
+producer obtains exclusive VidPN source ownership with
+D3DKMTSetVidPnSourceOwner. With FlipOnVSyncMmIo, DxgkDdiPresent validates a
+NULL-DMA flip and dxgkrnl later calls DxgkDdiSetVidPnSourceAddress for the
+actual display update. The producer may not destroy its primaries until it
+has flipped back and released exclusive ownership.
+
+**AGX/ASAHI CONTRACT:** retained-root, RTKit, PBE, UAT, queue, physical
+completion, output verification and DCP programming are unchanged from
+EXP640. **TRANSLATION:** commit
+3659f2fbcf91aaa164a91316cb55da531755877f marks two exact full-frame
+allocations as real primaries, sets allocation0 as the initial exclusive
+primary, renders by the proven AGX path into allocation1, submits one standard
+Flip present, and requires matching KMD Present ENTRY/EXIT followed by
+SetVidPnSourceAddress ENTRY/EXIT for the same driver allocation identity.
+After evidence HOLD, it flips back to allocation0 and releases source
+ownership before cleanup. Private qualification presentation/query is absent.
+
+**WHAT IS STILL UNKNOWN:** whether current Windows accepts the exclusive
+primary/mode request, whether D3DKMTPresent reaches the KMD MMIO-flip DDI, and
+whether dxgkrnl then invokes the existing source-address path and produces the
+corresponding physical D589 latch. The first failed operation names the next
+Windows-facing boundary; it does not reopen AGX or DCP internals.
+
+Single variable: route one already-proven AGX output through the standard
+Windows flip contract instead of AdmissionScanoutPresentAgxResult. Offline
+tests:122 render tests GREEN; new executable trace tests prove boot-scoped
+arming, bounded overflow, exact entry/exit ordering, same-allocation
+correlation, stale/error rejection and cleanup prohibition before flip-back /
+owner release. Pinned FRYZZING WDK/SDK26100 and MSVC14.44 check build accepts
+the SubmitQualification KMD and ARM64 producer; final committed source build,
+analysis, Universal validation, Inf2Cat, TestSign, version and hashes follow.
+Base is immutable FRYZZING EXP640/src; overlay contains only the thirteen
+implementation-commit files. Hardware uses ordinary377/392 clean preflight,
+release EXP584 m1n1 plus Mu406 full-owner/synthetic-889, exact641 package,
+one `--standard-present-hold` producer, evidence before flip-back signal, then
+exact package cleanup and ordinary restore. PASS requires KMD Present and
+source-address correlation, one new exact D589 for the rendered primary,
+device ACTIVE/no reset, followed by flip-back, ownership release and clean
+teardown. Build/artifact hashes are appended before staging.
