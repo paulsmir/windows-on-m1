@@ -28,6 +28,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_RENDER render = {0};
   D3DKMT_ESCAPE escape = {0};
   D3DKMT_TDRDBGCTRL_ESCAPE tdr = {0};
+  D3DKMT_LOCK2 lock = {0};
+  D3DKMT_UNLOCK2 unlock = {0};
   D3DDDI_MAKERESIDENT makeResident = {0};
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_DESTROYCONTEXT destroyContext = {0};
@@ -54,6 +56,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS destinationAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS residentStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS renderStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS lockStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS unlockStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS resetStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyContextStatus = (NTSTATUS)0xc0000001L;
@@ -289,6 +293,16 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
   }
+  lock.hDevice = createDevice.hDevice;
+  lock.hAllocation = allocationHandles[1];
+  lockStatus = D3DKMTLock2(&lock);
+  if (!NT_SUCCESS(lockStatus))
+    goto cleanup;
+  unlock.hDevice = createDevice.hDevice;
+  unlock.hAllocation = allocationHandles[1];
+  unlockStatus = D3DKMTUnlock2(&unlock);
+  if (lock.pData == NULL || !NT_SUCCESS(unlockStatus))
+    goto cleanup;
   Sleep(10000u);
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
@@ -362,6 +376,7 @@ cleanup:
           L"\"destination_allocation\":\"0x%08lx\","
           L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
+          L"\"lock\":\"0x%08lx\",\"unlock\":\"0x%08lx\","
           L"\"engine_tdr\":\"0x%08lx\","
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
@@ -375,6 +390,7 @@ cleanup:
           (ULONG)destinationAllocationStatus,
           (ULONG)residentStatus, makeResident.PagingFenceValue,
           (ULONG)renderStatus, render.QueuedBufferCount,
+          (ULONG)lockStatus, (ULONG)unlockStatus,
           (ULONG)resetStatus,
           (ULONG)destroyAllocationStatus,
           (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,

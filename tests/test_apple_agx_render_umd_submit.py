@@ -112,7 +112,9 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             "D3DKMTDestroyContext(&destroyContext)",
             source[render_loop:source.index("cleanup:")],
         )
-        self.assertNotIn("D3DKMTLock2(", source)
+        self.assertEqual(source.count("D3DKMTLock2(&lock)"), 1)
+        self.assertEqual(source.count("D3DKMTUnlock2(&unlock)"), 1)
+        self.assertIn("lock.hAllocation = allocationHandles[1]", source)
         self.assertIn("D3DDDIFMT_A8R8G8B8, 0u, &allocation", source)
         self.assertIn("createContext.pCommandBuffer", source)
         self.assertIn("createContext.pAllocationList", source)
