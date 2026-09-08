@@ -274,7 +274,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     wprintf(L"RENDER_IN pass=%lu context=%lu command_offset=%u "
             L"command_length=%u command_capacity=%u "
             L"command_hash=0x%016llx destination_index=%lu\n",
-            pass, activeContext->hContext, commandOffset, sizeof(command),
+            pass, activeContext->hContext, commandOffset, (UINT)sizeof(command),
             activeContext->CommandBufferSize,
             HashBytes((unsigned char *)activeContext->pCommandBuffer +
                           commandOffset,
