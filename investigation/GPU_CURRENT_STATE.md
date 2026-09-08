@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-08T18:16Z. Main process only; no agents.
+Updated 2026-09-08T18:51Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -25,9 +25,11 @@ first unknown is therefore a coherent minimal truthful UMD device/pipeline and
 runtime-managed presentation contract; no capability bit may be enabled alone.
 Caps remain unchanged. EXP646's post-failure `GetModuleHandleW==NULL` is not
 evidence that the UMD was never loaded; cold-path callback ordering remains
-unobserved. Work now proceeds offline at format-query semantics, exact resource
-deallocation/deferred-destruction rules, and loader/callback tracing before the
-larger Mesa frontend integration.
+unobserved. Commitfac65c79f4b179219b6afaf3bad64d0064b0049e now fixes
+format-query error semantics and exact allocation association/primary release/
+deferred Flush lifetime with pipeline caps still zero. Mock-runtime tests and
+ARM64 code-analysis build are GREEN. Next is one unchanged-cap loader/callback
+trace to name the exact runtime rejection before larger Mesa frontend work.
 
 ## Hardware proof retained
 

@@ -39468,6 +39468,37 @@ the WDDM1.3 device table lacks shader/state/draw/RTV/Flush implementation.
 Next exact discriminator is a cold-path UMD callback trace plus executable
 mock-runtime contract, without changing pipeline caps.
 
+# EXP648 — UMD admission semantics and callback boundary
+
+**OFFLINE IMPLEMENTATION 2026-09-08T18:50:49Z.** Source/WDK comparison
+confirmed two independent defects before any new hardware: an existing but
+unsupported DXGI format incorrectly called SetError(E_FAIL), and
+DestroyResource discarded the only allocation identity without
+pfnDeallocateCb. Microsoft D3D11 rules require non-shared primaries to release
+inside DestroyResource and other resource destruction to be deferred until a
+safe Flush/DestroyDevice point.
+
+Executable x64 mock-runtime test calls the real OpenAdapter/GetCaps/
+CreateDevice/device-table/Create/Open/Destroy/Flush paths. Frozen pre-fix
+source produced11 named contract violations. The isolated format correction
+removed exactly one, leaving10 lifetime failures. Commit
+fac65c79f4b179219b6afaf3bad64d0064b0049e makes the full test GREEN: pipeline
+caps0; unsupported R8G8B8A8 query caps0/no SetError; exact runtime-resource
+association; non-shared-primary immediate deallocation; opened/shared queue;
+unsafe future command-bearing drain rejection; deallocation retry during
+DestroyDevice. The queue is a separate WDK-independent module.
+
+Pinned builder ARM64 UMD30.0.648.0 with cold-path OutputDebugString trace and
+code analysis builds with0 warnings/errors. UMD DLL/PDB/build log SHA256:
+2cdf5409a34b71a9ccf1fed852ef3a3d3bf8e582dcefb3115720dc7c0ab7544b,
+59f3aec36ca04b2d89de33ba4bad798962d29a5285052f0e4e6cfed4413bea5e,
+209e8d2342ef54c0537f7bacd9032d6ba16b726ba99e43595f242482054ce661.
+The x64 test binary SHA256 is
+f7017aabe0751176e9ec98129ef831abf26b0859113a66f626c03b9c4dbb2f4a.
+Existing22 admission/direct-flip/ledger tests GREEN. No Air package was staged;
+ordinary377/392 remains clean. Next is one unchanged-cap loader/callback trace,
+not a pipeline-cap probe or rendering experiment.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
