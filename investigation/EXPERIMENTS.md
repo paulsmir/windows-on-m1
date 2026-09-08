@@ -39499,6 +39499,56 @@ Existing22 admission/direct-flip/ledger tests GREEN. No Air package was staged;
 ordinary377/392 remains clean. Next is one unchanged-cap loader/callback trace,
 not a pipeline-cap probe or rendering experiment.
 
+**HARDWARE PREREGISTERED 2026-09-08T18:57:58Z. WHY THIS HYPOTHESIS:**
+(1) EXP646 proves D3D11 device creation returns DXGI_ERROR_UNSUPPORTED but its
+post-return module sample cannot distinguish never-loaded from loaded/queried/
+unloaded; (2) current source independently returns pipeline caps0, so an exact
+cold-path callback trace can name the runtime boundary without guessing a cap;
+(3) the x64 mock-runtime test proves OpenAdapter/GetSupportedVersions/GetCaps/
+CreateDevice trace sites and corrected lifetime behavior before hardware.
+
+Single variable: exact EXP643 KMD/source platform plus commit
+fac65c79f4b179219b6afaf3bad64d0064b0049e UMD and cold-path diagnostic commit
+3a44a29cf6a88117ae10dba85980cb2119be57ec. Pipeline caps remain zero. The run
+starts an ARM64 DBWIN listener and the unchanged EXP646 D3D11 probe together in
+SSH session0; it issues no Render or Present. PASS for the discriminator is a
+correlated UMD callback sequence and exact D3D11 HRESULT, not device creation.
+
+Source freeze: base `C:\Users\pauls\EXP643\src`, overlay SHA256
+61c94cf08a35a3f1c9a06a42b941281d1baf6e0cd1fee8e0708fabc6c1d56609.
+Root HEAD3a44a29cf6a88117ae10dba85980cb2119be57ec; tracked diff/status hashes
+9adca67313bb0af5f2dcaa24997a850db44183ed558bd475ca0922292ed76bc4 and
+073eb23e579c78b981e44e59d3d9639a26f64e9c286cdb9a0c97f00752c2ed8d.
+m1n1 source c6d10e04afdad5314e8ac1e67bc3919b094ab000; Mu source
+f1ef718e08db0e4c30fdb5d8555973513ad9a004. Full-owner artifacts are immutable
+EXP584 m1n1 SHA256
+12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3 and
+Mu406 SHA256 c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+
+Pinned build command is build-driver.ps1 Release PackageBuild648
+SubmitQualification UmdAdmissionTrace. WDK26100 KMD/UMD analysis, Universal,
+Inf2Cat, TestSign and version gates PASS with the inherited C28251 only. Exact
+ZIP/SYS/INF/CAT/UMD SHA256:
+b2f633219b549c0205043ebed3827574ae659ab3be3110bb7eb7f64a877df5f5,
+23cf123d03c9131fc24fd7f9ecacef7480a577aa1b3082ab20351f5cf5fd3a3c,
+92bf2264e96247f6800083427e47bf6387f88d38968d32f1b14d39256eb867eb,
+6482802dbeb5ba6f5496db0e031bbbd2f809434fc4f770a24eecf771080c53f0,
+f76def92971ed6f991f1f38efcf4f69a509e2e4022add4ee68442dba0d8ff227.
+Probe/capture SHA256:
+f8995269757ef278cd02de1ecffca72cde017942c9c06c64c30cab678a596b8a,
+1b2a26ba93a7f268abfcf47a241df6b5ef6d4496ffd9dac0c5cfcc743c73a81f.
+Workflow/run/collector/launch/ordinary SHA256:
+b42138c66f3a5013003561675d2f9c91d89bd62fd7845777bb5eeb41290cb596,
+9494b5ad50887acd2d84b146079e18fb2c9a42a50c7b335587e0b0b8417c7491,
+2b285e5d27c1a47c4930142df0246e5cf81327ffa212515b4d80033cfcf305fe,
+8b70b24ac67975755f0c1f97d6f59b6e15799ceaaf7649eaac478e1e65a41b0c,
+1f0abbc8a0bc6a0b170511adeb8a407497f31a04fc8eec187a1721beecf5d973.
+
+Recovery: collect trace/result/health first; delete only the hash-matched
+oem package; rescan one inert APPL0002; graceful reset; immutable ordinary
+EXP377/392 broker-disabled restore. Failure is missing/uncorrelated trace or a
+launch failure, not a GPU verdict.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
