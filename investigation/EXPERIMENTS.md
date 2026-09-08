@@ -38120,7 +38120,7 @@ retained-root mappings and exact DCP A408/D589 latch path remain unchanged.
 Accepted publication transfers the exact owner to the active display lease;
 post-publication uncertainty retains it rather than aborting.
 
-**TRANSLATION:** Commit `43a0254d401cbf40bd65399fd38ae6c9200ea8c5`
+**TRANSLATION:** Commit `43a0254c329ce62d771034f0b61238b870cc1d05`
 builds a version2 render-frame query from candidate/boot/fence/surface identity
 and measured terminal pixel count/hash before completed-state transfer, then
 publishes it only after exact latch and lease transfer. Producer validates exact
