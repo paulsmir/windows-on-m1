@@ -87,15 +87,15 @@ pointer-free, versioned, bounded and expressed in WDDM allocation references.
 `tools/verify_apple_agx_ad03_source_contract.py`,
 `tests/test_apple_agx_ad03_source_contract.py`.
 
-- [ ] Record every upstream file compiled or adapted, its exact path/license,
+- [x] Record every upstream file compiled or adapted, its exact path/license,
       classification (`FRONTEND`, `COMPILER`, `ENCODER`, `DRM_ONLY`,
       `SOFTWARE_ONLY`) and intended Windows replacement.
-- [ ] Machine-check the pinned commit, clean checkout and MIT hash.
-- [ ] Assert source signatures for DXBC→TGSI, TGSI→NIR, AGX compile, VDM/render
+- [x] Machine-check the pinned commit, clean checkout and MIT hash.
+- [x] Assert source signatures for DXBC→TGSI, TGSI→NIR, AGX compile, VDM/render
       finalization, software-only d3d target and DRM-only screen/BO/submit.
-- [ ] Fail if a proposed target links softpipe/llvmpipe, `gdi_create_sw_winsys`,
+- [x] Fail if a proposed target links softpipe/llvmpipe, `gdi_create_sw_winsys`,
       DRM fd/ioctl/syncobj or reports software output as AGX.
-- [ ] Record generated-source commands and hashes before compiling Mesa files.
+- [x] Record generated-source commands and hashes before compiling Mesa files.
 
 **Gate:** exact source inventory is complete and the verifier distinguishes
 reusable compiler/encoder code from the two owners that must be replaced.
@@ -105,19 +105,25 @@ reusable compiler/encoder code from the two owners that must be replaced.
 **Files:** create under `drivers/apple-agx/mesa/compiler-host/` only build glue,
 fixture inputs and project-owned serializers; use pinned Mesa sources in place.
 
-- [ ] Build the pinned NIR/AGX compiler and generated opcode/algebraic sources
+- [x] Build the pinned NIR/AGX compiler and generated opcode/algebraic sources
       in a project-local reproducible environment; do not edit the reference
       checkout.
-- [ ] Compile a passthrough vertex shader and solid-colour fragment shader.
-- [ ] Export project-owned metadata: stage, binary bytes, main/preamble offsets,
+- [x] Compile two source-distinct compute NIR fixtures through the compiler core.
+      Vertex/fragment output lowering is intentionally deferred to the Asahi
+      driver/encoder adapter: calling the backend compiler directly on generic
+      `store_output` bypasses required tilebuffer/UVS lowering and is invalid.
+- [x] Export project-owned metadata: stage, binary bytes, main/preamble offsets,
       register counts, rodata, scratch and content hash. Reject unknown fields,
       overflows and nondeterministic uninitialized bytes.
-- [ ] Compile at least two source variants and require different shader binary
+- [x] Compile at least two source variants and require different shader binary
       or metadata hashes. Rebuild identical input twice and require equality.
 - [ ] Disassemble/validate with the same pinned compiler tooling; software pixel
       output is not a hardware result.
 
-**Gate:** `AGX_COMPILER_OFFLINE_PROVEN=YES`; no KMD/capability/hardware change.
+**Intermediate gate:** `AGX_COMPILER_CORE_OFFLINE_PROVEN=YES` after deterministic
+compute fixtures. `AGX_COMPILER_OFFLINE_PROVEN` remains NO until Task3 supplies
+the driver lowering required for vertex/fragment programs. No KMD/capability/
+hardware change.
 
 ## Task 3 — Windows Asahi screen/BO/fence adapter
 
