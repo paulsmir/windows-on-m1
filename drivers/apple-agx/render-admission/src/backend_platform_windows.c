@@ -245,7 +245,7 @@ static VOID AdmissionTerminalObserve(
         Runtime->TransportIo.FlushForCpu(
             Runtime, Output->RenderedCpuAddress, Output->RenderedBytes)) {
       BOOLEAN captured;
-      ULONG foreground = 0u;
+      unsigned int foreground = 0u;
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (Output->VerificationKind ==
           AdmissionBackendOutputVerificationTriangle) {
