@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T01:14Z. Main process only; no agents.
+Updated 2026-09-09T02:02Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -26,9 +26,10 @@ teardown statuses0. `TRANSPORT_HW_PROVEN=YES` and
 
 Exact intermediate package was removed. Ordinary377/392 is clean at
 2026-09-08T21:24Z: Code28/null INF, no AppleAgx package/service/module/SYS/UMD,
-SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current boundary is AD03:
-source-first Mesa compiler/encoder integration for non-replay geometry/shader/
-resource workloads. Caps remain0 until AD04 mandatory contract completion.
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current boundary is AD03
+hardware qualification of the first source-derived triangle through the
+production Render/Patch/Submit/worker path. Caps remain0 until AD04 mandatory
+contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
@@ -102,11 +103,19 @@ ASan/UBSan tests and WDK26100 build661 are GREEN. The render-pass store/EOT
 pipeline remains explicitly owned by the hardware-proven EXP208 3D skeleton;
 it is not duplicated. `AGX_COMPILER_OFFLINE_PROVEN=YES` and
 `DYNAMIC_JOB_ABI_OFFLINE_PROVEN=YES`; dynamic physical Draw remains NO.
-Current first boundary is a transaction-owned production overlay that copies
-these validated objects into the unused regions of EXP208 objects71/73/74,
-preserves fixed store-pipeline data, resolves exact original shader-base VAs,
-and carries the immutable result through Render/Submit/worker. No Air package
-was staged and pipeline caps remain0.
+The transaction-owned production overlay copies these validated objects into
+the unused regions of EXP208 objects71/73/74, preserves fixed store-pipeline
+data and resolves exact original shader-base VAs. Commit
+`c42b8574e8db04fe80aa08295e27f8c81e86b64b` now carries the sealed Draw record
+through Render/Patch/Submit/worker, binds a full-frame Windows target, applies
+and reverses the overlay at the exact fence, and verifies the complete output
+with a two-colour triangle oracle. The exact generated-fixture composition path
+and 142 focused tests are GREEN; ARM64 build664 passes analysis, Universal,
+Inf2Cat/signing with only the inherited KMD C28251. A bounded ARM64 producer is
+implemented. This is `DYNAMIC_DRAW_OFFLINE_PROVEN=YES`, not hardware proof.
+The exact `VisibleAgxQualification` candidate still requires a fresh source
+freeze/build because build664 was the non-qualification compile gate. No Air
+package was staged and pipeline caps remain0.
 
 Commit08bd67a3063990b16683bac5a747343b205bbb95 now implements the bounded
 overlay primitive. It uses only template-zero ranges: encoder object71,
@@ -117,8 +126,8 @@ zero ranges; release requires the exact generation/fence/materialized hash and
 zeros only owned slots. Original object73/74 VA aliases preserve the existing
 0x1100000000 pipeline base, while background/EOT store data at object73
 offsets0/0x2000 remains byte-exact. Sanitizer tests and WDK26100 build662 are
-GREEN. Windows Render DMA carry, worker application and dynamic target binding
-remain the first boundary; this is still offline proof only.
+GREEN. Its former Windows carry/bind boundary is closed offline by `c42b857`;
+physical triangle execution/output/presentation is the first unknown.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed

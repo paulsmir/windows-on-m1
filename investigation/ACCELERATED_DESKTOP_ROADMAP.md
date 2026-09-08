@@ -30,12 +30,16 @@ bottom-band-blue output hashes, два query/latch,15s HOLD и clean retirement.
 plan. Hardware допускается только после typed job/relocation/resource tests;
 feature-level readiness и advertised mask остаются0.
 
-AD03 compiler and complete first-triangle encoder fixture are OFFLINE_PROVEN.
-Pinned Mesa produces source-sensitive VS/FS, a linked BGRA8 fragment epilog,
-exact USC pipeline, complete VDM/PPP draw stream, scissor/depth arrays and seven
-typed relocations. The unchanged EXP208 3D skeleton remains the proven owner of
-render-pass store/EOT. Current task is transaction-owned production overlay and
-publication into that skeleton; dynamic physical Draw is not yet proven.
+AD03 compiler, complete first-triangle encoder fixture and production
+Render/Patch/Submit/worker composition are OFFLINE_PROVEN. Pinned Mesa produces
+source-sensitive VS/FS, a linked BGRA8 fragment epilog, exact USC pipeline,
+complete VDM/PPP draw stream, scissor/depth arrays and seven typed relocations.
+The unchanged EXP208 3D skeleton remains the proven owner of render-pass
+store/EOT. Commit `c42b8574e8db04fe80aa08295e27f8c81e86b64b` adds the
+bounded DMA carry, transaction-owned overlay, full-frame target, completion
+release and two-colour output oracle. Current task is a fresh exact
+`VisibleAgxQualification` build and one physical triangle discriminator;
+dynamic physical Draw is not yet proven and pipeline caps remain zero.
 
 ## Как читать и обновлять карту
 
