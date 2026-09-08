@@ -1,83 +1,74 @@
 # GPU current state
 
-Current boundary: EXP634 frame5 PrivateVirgin guard. EXP635 built and staged. Main process,
-no agents. Historical state preserved in
-`.local/experiments/EXP633-repeated-ping-pong/current-state-before-compaction.md`.
-Consult only relevant EXP631–633 evidence before the next experiment.
+## Active experiment and machine
 
-## Current machine
+EXP636: diagnose recurring CPU4 watchdog with Automatic Kernel Dump, reusing
+identical signed EXP635 KMD/UMD/producer. No rebuild. Exact oem5.inf is now
+staged from verified ordinary377/392 Code28/no-package baseline. Next controlled
+shutdown and one full-owner natural bind, config/hash Preflight, live collector,
+single16-frame producer. Evidence root: .local/experiments/EXP636-kernel-dump.
 
-EXP634 evidence saved and exact package/devnode cleanup completed. Ordinary377/392
-verified Code28/no package/service/module,8CPU/NVMe2/USB5/keyboard1. EXP635
-now staged as exact oem5.inf; next controlled shutdown/full-profile natural bind.
+CrashDumpEnabled temporarily7, original3 backed up at
+C:\Users\pavel\EXP636-crashcontrol-before.json and locally. Restore3 after
+diagnostic evidence. AutoReboot/LogEvent/DumpFile unchanged; system-managed
+pagefile1600MiB, free C:80GB. Script32c804bb4e38e3d8e2cfa93350cbab9dde566f10.
+If reset: collect full MEMORY.DMP before cleanup; verify dump completeness and
+matching635 symbols before attributing owner. Kernel dump is not guaranteed.
 
-## Hardware proven
+## Hardware proof retained
 
-- EXP475/477/478: retained root, context0, RTKit, native initdata, firmware,
+- EXP475/477/478: retained-root/context0/RTKit/firmware/native initdata,
   BackendRuntimeStart, arena/context/queues.
-- EXP581/585/586/588: Windows-originated physical TA/3D, correct offscreen
-  output and exact Windows fences. Completion ingress remains polling.
-- EXP591: physical-panel photo proves scanout.
-- EXP631: two complete2560x1600 outputs, exact query/latch identities,15s HOLD.
-  User reported probable visual color change, not instrumented confirmation.
-- EXP632: two full frames, HOLD, explicit replacement by retained Windows
-  primary at offset0, exact newer latch, all allocation/context/device destroy
-  statuses0. ACTIVE, no fresh41/1001/129 through uptime189s.
-  Source36168a9f2802e8dd6e2c5f1fe5875161192f7722.
+- EXP581/585/586/588: physical Windows-originated TA/3D and exact fences/output.
+  Completion ingress remains polling.
+- EXP591 photo: physical scanout. EXP631/632: two full2560x1600 outputs,
+  exact latches and15s HOLD. EXP632 additionally proves explicit owned-primary
+  replacement/retirement then all producer destruction statuses0, no reset.
+- EXP634: FOUR exact full frames, fences256/257/258/260, sequences3/4/5/6,
+  latches10/11/12/13, alternating same owners and offsetsfa0000/1f40000,
+  PAs9bcf90000/9bdf30000, colorsff112233/ffcc8844, full4096000 pixels,
+  hashes27592755b9c32325/ad1245c8bf762325. Both targeted output stages succeed
+  at sampled IRQL0. No watchdog in634; not proof diagnostics cured0x101.
+  Physical color-change confirmation remains pending/probable only.
 
-## EXP633 actual result
+## Latest causal fix and limits
 
-Frozen source eb249e6439b2faf2d6cd1c86bc2f66eb9b3b4832, package30.0.633.0.
-One16-frame attempt reached two Render/Submit/worker/Notify/DPC calls,
-fences256/257. Correlation build633/boot354696813, generation18, durable1,
-export status0; binary SHA256
-`b8e3563dfdb034a1f867f591c905f3940100175b2a0e60b23b1cf36eebf42d91`.
-Host has initial swap8, Windows-primary swap9, frame1 swap10; no saved frame2
-latch. Live frame1 query passed, but recovered stdout ends earlier: stdout
-disk persistence is incomplete. Missing stdout does not prove absent calls.
+EXP634 frame5 returned0xc00000e8 with device ACTIVE. Saved guard18 identifies
+PrivateVirgin. Microsoft DXGK_DEVICEINFO promises zeroed private DMA data at
+creation only. Commit653e4d85bdea4262d6e71cdcae9144979c0c1ebf removes the
+per-Render zero precondition, retaining existing Initialize/Append and guards.
+Commit9c1dbfd8f6c4041ea2cdabf30d81667fe87cd141 gates ALL producer cleanup
+routes on existing retirement state;634 had incorrectly destroyed on error
+with CleanupAllowed0. Executable shadow16 requests/four recycled blocks and
+producer cleanup tests plus122 render tests pass. Pinned635 build/sign/
+Universal/version pass. Corrected frame5 remains hardware unproven.
 
-Bugcheck0x101 (0x18,0,ffffdb805de5a980,4), uptime81.697s. Dump
-090826-21875-01.dmp SHA256
-`a734514abdf06038032cca40e376b04059416d5ee878516d7f268888489d45b1`.
-Private633 PDB matches. CPU4 is an ExpWorkerThread; truncated KiSwapContext
-stack does not identify an AppleAgx callback. No attribution to cleanup,
-DCP, output hashing or storage is proven. Frame3 not reached; repeated
-acceptance INCONCLUSIVE, two render completions confirmed.
+EXP635 passed two full frames then reset after frame3 Render0/queued1/ACTIVE.
+No cleanup occurred. Dump090826-13171-01.dmp matches635, uptime126.872s,
+0x101 CPU4 with truncated KiSwapContext. SHA256
+9df2934e9cf6dc783e0a8f7de704cb19091895978c75ca549eef01314fabf532.
+EXP633 had the same bucket. Neither small dump identifies the callback.
+Two-slot v3 output correlation is complete for first two calls, explicit
+overflow for third. Do not infer absent execution from missing third record.
+Exact635 cleanup and ordinary recovery completed before636 staging.
 
-Evidence: `.local/experiments/EXP633-repeated-ping-pong/` contains
-hardware.log, correlation.json and evidence with raw binary, stdout, events,
-dump, kd-analyze.txt and kd-cpu-progress.txt.
+## Exact artifacts / current discriminator
 
-## Latest EXP634 verdict / EXP635 next
+Actual package/query version stays30.0.635.0 in EXP636:
+ZIP bd57291980575de8c029e38d5054c4eb3f900dd8462ffc7229c52eecbfc4e0e2;
+SYS1056bc8d4cb2f8058ca1c619c0389489001fa21ff43df3eb122809d264299357;
+producer7b44fabcf756c05d4aa2414e9158385300d743627b31476fc7d25898b2a40177.
+All hashes/workflows in EXPERIMENTS.md and636 manifest. Collector records initial
+same-build stale bytes as BASELINE_CORRELATION, excludes them from current-run
+records. Preserve raw binary/decoded JSON and host producer output.
+Only new diagnostic variable is CrashDumpEnabled3->7; hardware code unchanged.
 
-EXP634 completed FOUR full frames: fences256/257/258/260, presentation
-sequences3/4/5/6, latches10/11/12/13. Every frame4096000/4096000 correct
-pixels, alternating exact two owners/offsets/PAs/hashes. Both targeted v3
-output records show entry/verification/presentation success at sampled IRQL0.
-No watchdog in this run; no claim the diagnostic change cured0x101. Physical
-color-change question remains pending. Event129x5 occurred before producer.
+## Constraints / remaining goal
 
-Frame5 Render returned0xc00000e8; saved Wom1UmdRenderGuard18 names
-PrivateVirgin. Microsoft's DXGK_DEVICEINFO guarantees zeroed private DMA
-storage at creation only. Our per-Render zero requirement rejects reuse.
-Source653e4d85bdea4262d6e71cdcae9144979c0c1ebf removes that precondition;
-existing Initialize/Append reconstructs new request, preserves other guards.
-Source9c1dbfd8f6c4041ea2cdabf30d81667fe87cd141 fixes producer's common
-cleanup label: direct Render failure cannot bypass retirement. EXP634 had
-called DestroyAllocation while CleanupAllowed0; safe retirement is NOT proven
-by that run. EXP632 remains the validated normal retirement reference.
-
-Executable sixteen-request/four-recycled-block shadow test and producer
-failure cleanup state test pass; render122 tests pass. Exact635 overlay
-024aff141e0e2215a6bb0b84ca26616c10e44bdef252b203d88b9a15be11f152 over
-immutable FRYZZING EXP634. Pinned635 build/sign/hash/Universal PASS; staged only, hardware verdict pending.
-Next execute635 one unchanged16-frame workload after health and build gates;
-save every record, HOLD, explicit retirement then health/cleanup. Evidence
-and exact634 hashes are in EXPERIMENTS.md and EXP634-output-progress.
-
-## Constraints
-
-No speculative AGX/PBE/UAT/RTKit/DCP/capability changes. No ANS modifications.
-Event129 remains telemetry without causal evidence. No blind candidate retry.
-Remove failed packages after evidence; retain final working accelerated driver.
-Desktop/standard Present/OpenGL/CS1.6 acceptance remains unproven.
+Main process only, no agents. Preserve unrelated dirty tree and native-ANS.
+No speculative AGX/PBE/UAT/RTKit/DCP/capability or timer changes.
+Event129 remains telemetry without causal proof. One justified run then evidence,
+exact cleanup/recovery. At final accelerated OpenGL/CS1.6 PASS retain driver.
+Desktop/standard Present/OpenGL/CS1.6 and stable16-frame run remain unproven.
+Historical expanded current state is archived under EXP633; consult only
+relevant experiment-local evidence and ledger entries, not full archaeology.

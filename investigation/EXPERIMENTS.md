@@ -38571,3 +38571,75 @@ then controlled shutdown, EXP635-recycled-dma/launch.sh, exact natural bind
 and Preflight. Collector before single producer Run; all commands retain
 established process ExecutionPolicy. Immutable platform unchanged. Evidence
 under EXP635-recycled-dma with host streams, per-generation binary and JSON.
+
+**EXP635 interruption:** single run passed two full queries/fences256257 and
+sequences3/4, then frame3 Render returned0 queued1 with device ACTIVE. Host
+recorded a later PSCI reset and launcher disconnected; both SSH streams timed
+out. Frame5 was not reached, so recycled-DMA hardware correction is still
+unproven. No duplicate producer run. Preserve streams and recover through
+established compatible EXP499 emergency to collect crash evidence before exact
+package cleanup. Next read current CrashControl and any full MEMORY.DMP as
+well as newest minidump; avoid inferring owner from truncated previous dumps.
+**EXP635 recovered evidence:** dump090826-13171-01.dmp SHA256
+9df2934e9cf6dc783e0a8f7de704cb19091895978c75ca549eef01314fabf532
+matches private PDB/driver30.0.635.0, uptime126.872s, 0x101
+(0x18,0,ffff9e0041c5a980,4), CPU4 KiSwapContext with a truncated stack.
+Only two targeted v3 slots exist; their output/presentation are successful,
+IRQL0, with explicit overflow for frame3. Never attribute missing third slot
+to absent execution. Producer still had live resources at reset; no cleanup
+phase occurred. Exact code fix for frame5 remains hardware INCONCLUSIVE.
+
+Host producer hash c8b3ae58fa3c7f170863555900d61b6041c04403490cc2df55bcab6874877839;
+host log1515cda8bbef72bff33bdcd3b580c351254082f529ef71a5be0d54686da0c891;
+device binary40ceceae7ca10edf63fc46b3bcf724bb608e09feaec449732b24f78f542ebcf4.
+Guest wall-clock event times do not align perfectly with host stream time;
+candidate identity/PDB/boot-relative timestamps establish attribution.
+Emergency SSH recovered; exact package removal succeeded, stale cleanup
+performed. CrashControl currently3 (small dumps), no MEMORY.DMP, system-managed
+pagefile1600MiB, free C:80266936320 bytes. Small dumps cannot expose full
+worker/runtime state; this observation is an evidence limitation, not GPU cause.
+
+# EXP636 — automatic kernel dump for recurring watchdog
+
+**PREREGISTERED 2026-09-08T14:16Z. WHY THIS HYPOTHESIS:** EXP633/635 both
+have CPU4 watchdog and truncated KiSwapContext stacks; observed output work
+at PASSIVE does not identify the hung worker; only small dumps are configured.
+Capture kernel memory before attempting an unsupported functional fix.
+
+**WINDOWS CONTRACT:** Automatic Memory Dump contains the same kernel data as
+Kernel Memory Dump and works with the already system-managed pagefile.
+Change only CrashDumpEnabled3->7, backing up3 for exact restoration. Keep
+AutoReboot/LogEvent/DumpFile unchanged; require no pre-existing MEMORY.DMP.
+https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/automatic-memory-dump
+https://learn.microsoft.com/en-us/troubleshoot/windows-server/performance/memory-dump-file-options
+
+**AGX/ASAHI CONTRACT:** unchanged. **TRANSLATION:** identical signed635
+KMD/UMD/producer and16-frame workload, new experiment identity only in wrapper/
+evidence paths. Do not rebuild unchanged code or claim kernel-capture setting
+fixes watchdog. Clean ordinary baseline then exact restaging is still required.
+**WHAT IS STILL UNKNOWN:** runtime/worker/CPU state at the next watchdog, or
+successful repeated completion if no watchdog occurs. Kernel dump capability
+is the sole new diagnostic variable. Capture may still be incomplete; inspect
+dump attributes before claiming all required pages exist.
+
+Configure/Restore script: EXP636-kernel-dump/crash-dump.ps1. Backup exact
+original value before setting7; reboot ordinary before candidate. Available
+disk80GB and existing managed pagefile verified; do not silently resize fixed
+storage or alter unrelated settings. After evidence, restore3 unless kernel
+capture is needed for a specifically recorded continuation. Run once, collect
+full MEMORY.DMP and matching635 symbols if present; preserve before recovery.
+
+**EXP636 freeze/config verified:** CrashDumpEnabled7 after ordinary reboot,
+original3 backup hash67dd71c2b8eee4e90bfebbdf3196b353076b25c64acd69983077e1db463e98b5;
+script hashc7681078dbccffb09d3b24c7145668ad0e4d25b47d21f970c0857f172d10ede6.
+Identical635 ZIP and producer hashes remain bd57291980575de8c029e38d5054c4eb3f900dd8462ffc7229c52eecbfc4e0e2
+and7b44fabcf756c05d4aa2414e9158385300d743627b31476fc7d25898b2a40177.
+SYS/INF/CAT/UMD hashes identical to EXP635 freeze; no rebuild.
+Wrapper/launch/collector hashes cab1fe1fdb5970362c7164bf8070cca35fcde0e7a20d20808b732589ec50d537,
+21e6be04ffc04aa96cd2dec1f6fde0301d5405c13320e4aa22f7b85ab66568f7,
+f52079b74eafd844bc7defc63f4b7a10b0558a366736c8bf90aac879114a1f71.
+Collector emits initial pre-producer bytes as BASELINE_CORRELATION and only
+changed bytes as CORRELATION; same-build old boot data remains separately
+labelled. Stage via EXP636-workflow.ps1 -Mode Stage from verified clean
+Code28/8CPU baseline, then established shutdown/launch.sh and Preflight.
+Configuration and collector ready; single producer has not run yet.
