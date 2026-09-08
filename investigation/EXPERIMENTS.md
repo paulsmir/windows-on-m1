@@ -39325,3 +39325,35 @@ absent. Wait for one fresh DWM crash, preserve dump/Report.wer/events, then
 remove the exact LocalDumps key. No producer, driver build, capability, AGX or
 DCP change. Analyze the dump with Microsoft public symbols and current system
 binaries; then fix only the first proven DWM/UMD contract mismatch.
+
+**EXP645 ACTUAL — NO NEW CRASH DUMP, MODULE OWNER NARROWED.** The scoped
+LocalDumps key was created from a confirmed-absent baseline, but after the DWM
+restart-limit fallback the new dwm processes remained alive and produced no
+new dump. Killing/restarting the current DWM instances also produced no crash;
+the replacements load DXGI, D3D11, WarpPal and d3d10warp but not
+AppleAgxRenderAdmissionUmd.dll. LocalDumps key and empty DwmDumps folder were
+removed and verified absent. Do not repeat dump capture without a new crash.
+
+# EXP646 — exact D3D11 adapter device-creation probe
+
+**PREREGISTERED 2026-09-08T17:52:00Z. WHY THIS HYPOTHESIS:** (1) WER defines
+the DWM failure as MILERR_DEVICE_CREATION_FAILURE; (2) current registry
+correctly publishes four UserModeDriverName entries for
+AppleAgxRenderAdmissionUmd.dll, yet no DWM process loads it; (3) a direct
+D3D11CreateDevice on each enumerated adapter gives the supported Windows
+owner/status without another driver or DWM restart.
+
+Read-only user probe uses CreateDXGIFactory1/EnumAdapters1 and, for each exact
+adapter, D3D11CreateDevice with non-null adapter plus
+D3D_DRIVER_TYPE_UNKNOWN as Microsoft requires. It records description/LUID,
+HRESULT, feature level and whether AppleAgxRenderAdmissionUmd.dll entered the
+process. A WARP create is the environment control. No swap chain, Present,
+driver Escape or GPU command is issued. Package643 retention is explicitly
+the diagnostic variable. ARM64 probe built on pinned SDK26100/MSVC14.44 with
+analysis0 warnings/errors. Source/project/binary SHA256:
+7faa1330d5c03fef80e1d1aa3e449b1487ac31544343b96b5bcd2ef75cb2fbaf,
+042cc81572fdb5a777b990ed995b5044cf454a7fc83302dc0c892c26756d3eb9,
+f8995269757ef278cd02de1ecffca72cde017942c9c06c64c30cab678a596b8a.
+Transfer/hash and run once over SSH; D3D device creation does not require an
+interactive HWND. Exact HRESULT and module presence determine the next UMD
+contract inspection.
