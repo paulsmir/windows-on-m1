@@ -37542,3 +37542,33 @@ ZIP/SYS/INF/CAT/UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `8ce068ec6f8a8876982d9fcfd7de38df0d6662f226b035033af866a2c78e3c13`
 and `21ac0b37bf972e49523f90d42119a1e69de6992d7bd76a15a23e221dcda7beed`.
+
+**EXP618 FINAL — REJECTED.** Exact single-adapter-DPC candidate still reset
+with the same scheduler failure. Durable candidate618/boot260132584 has two
+calls, generation10/status0/durable1/overflow0. Call1 reaches fence256 worker;
+call2 reaches successful Render EXIT with168 DMA bytes/one patch/prepatched1
+but no preserved Submit. Thus duplicate/conditional DPC ownership is not the
+cause. Correlation/raw/host/evidence/dump SHA256 are
+`41aa6686f332d1c34d1bff29f65be0ce1283ab60db74a44b150fd645f7f8bd28`,
+`8f25b73a6d1a8f7909786579be7deb70c097719a6f21c431baabb65403e85762`,
+`ede9987ee27e6ffa99f71a4496145157889e215e6350d4285877072c84d5cd5c`,
+`c5294845a4d9bf405f48b2c9883d4e4d3c2f46e4ceeef9200cc4845157847084`,
+`67eb22b55a9229b77308259a4cfbe1fb21940bcda576201fcf4bc1214b9c3b0b`.
+Exact package/service/stale cleanup completed.
+
+# EXP619 — exact Windows completion timing and acceptance correlation
+
+**PREREGISTERED 2026-09-08T09:45Z. WHY THIS HYPOTHESIS:** (1) EXP615–618 prove
+physical fence256 and at least driver-side notification code ran, yet Windows
+enters HUNG. (2) Neither persistence nor DPC call multiplicity changes the
+result. (3) Existing receipts do not bind interrupt timestamp, QueueDpc return,
+DPC timestamp and QueryCurrentFence observation to the same call/boot.
+
+Extend the already proven bounded correlation state, not rendering ABI, with
+exact per-fence NotifyInterrupt timestamp, QueueDpc result, NotifyDpc timestamp,
+and QueryCurrentFence count/value. DIRQL capture must be bounded/interlocked and
+must not perform I/O; the existing asynchronous exporter performs persistence
+from DPC/PASSIVE. Update executable state-machine/decoder tests first. One run
+then distinguishes late/missing notification, failed DPC queue, missing DPC, or
+fence-query disagreement without treating absence of an unproven receipt as a
+technical verdict. No AGX/PBE/UAT/DCP/capability/producer change.

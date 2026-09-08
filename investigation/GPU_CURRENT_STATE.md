@@ -596,6 +596,14 @@ one DPC object per adapter. Commit
 exactly once and leaves subroutines to local retirement/bookkeeping. Full373
 tests are GREEN. EXP618 is the next exact hardware discriminator.
 
+EXP618 repeated the same HUNG/0x119 path with both Render calls correlated, so
+single-adapter-DPC ownership is rejected. Current first unknown is now inside
+the exact Windows completion acceptance sequence despite physical fence256.
+EXP619 must extend the proven bounded correlation state with per-fence
+NotifyInterrupt time, QueueDpc result, NotifyDpc time and QueryCurrentFence
+count/value. Capture at DIRQL is interlocked/in-memory only; export remains on
+the existing asynchronous path. Do not change rendering, AGX or display ABI.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
