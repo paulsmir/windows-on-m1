@@ -37966,3 +37966,18 @@ were checked before commit. Final overlay relative immutable EXP626 SHA256
 `77aa9fbba5b4fb30b15520d6a7097259192a8a0c045d441fecd1965cdfb12b9c`.
 Build exact628; hardware PASS requires two full pixel records, two distinct
 D589 latches, safe fallback latch during cleanup, producer result0 and ACTIVE.
+
+**EXP628 BUILD FREEZE.** Exact30.0.628.0 built from immutable EXP626 plus final
+committed lease overlay. Pinned WDK/SDK26100, MSVC14.44, KMD/UMD and producer
+analysis, Universal, Inf2Cat/TestSign and coherent version gates pass with the
+inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`77aa9fbba5b4fb30b15520d6a7097259192a8a0c045d441fecd1965cdfb12b9c`,
+`e04e0f2e813764d59a49c0c9177de266da8dca16861f1cf054c69994f910ba54`,
+`4b6d9c5ad8fd8a2aea496b232230d33ca99d70540dc1f136376aab7f0c640bbb`,
+`cd30e1e7a7e63e7de931ee6f4b01f303a156dbea2c5cc669fccd29d700721a2f`,
+`2c4e7c25b38f80f0f713fd7631d809db3b20da94d3b888150c2dbc393122ce33`,
+`355f1b3dea405bd4883224eea085b56390c11478352e5145237cbc5d0d41097c`,
+`cf91525c4d09d4d64e3ebd3c8bc02115d3e18e587144045e92f8a152a894eae7`.
+Workflow/launch SHA256 are
+`2f633c618ad5f5177d1e37908441f8c61a9f30f199d85891b5870de9555c6e19`
+and `aacbe1df0f4ab51a509e55c63b16c10135a99ce75cf35aec2c56227240c80647`.
