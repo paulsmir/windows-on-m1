@@ -103,6 +103,25 @@ AdmissionRenderCorrelationFindFenceWindows(
   return NULL;
 }
 
+_Use_decl_annotations_ VOID AdmissionRenderCorrelationOutputWindows(
+    ADMISSION_CONTEXT *Context, ULONG Fence, ULONG Stage, ULONG Status) {
+  KIRQL oldIrql;
+  ULONG irql = KeGetCurrentIrql();
+  ULONG processor;
+  ULONGLONG timestamp;
+  int captured;
+  if (Context == NULL)
+    return;
+  KeAcquireSpinLock(&Context->RenderCorrelationLock, &oldIrql);
+  processor = KeGetCurrentProcessorNumberEx(NULL);
+  timestamp = KeQueryInterruptTime();
+  captured = AdmissionRenderCorrelationOutput(&Context->RenderCorrelation,
+      Fence, Stage, Status, processor, irql, timestamp);
+  KeReleaseSpinLock(&Context->RenderCorrelationLock, oldIrql);
+  if (captured)
+    AdmissionRenderCorrelationQueueExport(Context);
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionRenderCorrelationStartWindows(
     ADMISSION_CONTEXT *Context) {
   ULONG bootGeneration;

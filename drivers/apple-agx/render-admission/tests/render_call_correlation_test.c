@@ -2,13 +2,14 @@
 
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 
-int main(void) {
+int main(int argc, char **argv) {
   ADMISSION_RENDER_CORRELATION_STATE state;
   unsigned long long allocations[2] = {0x11110000ULL, 0x22220000ULL};
   unsigned int first = 0u, second = 0u, third = 0u;
-  assert(sizeof(ADMISSION_RENDER_CORRELATION_SLOT) == 176u);
-  assert(sizeof(ADMISSION_RENDER_CORRELATION_STATE) == 400u);
+  assert(sizeof(ADMISSION_RENDER_CORRELATION_SLOT) == 272u);
+  assert(sizeof(ADMISSION_RENDER_CORRELATION_STATE) == 592u);
   memset(&state, 0, sizeof(state));
   assert(AdmissionRenderCorrelationInitialize(&state, 612u, 9u));
   assert(AdmissionRenderCorrelationBegin(&state, 100u, 0xa000u, 0xc001u,
@@ -29,6 +30,11 @@ int main(void) {
   assert(AdmissionRenderCorrelationSubmit(&state, 0xc001u, 0u, 256u, 0u, 0u));
   assert(AdmissionRenderCorrelationWorker(&state, 256u, 1u, 0u));
   assert(AdmissionRenderCorrelationWorker(&state, 256u, 0u, 0u));
+  /* Bounded capture must not relabel call1 when its context is reused. */
+  assert(!AdmissionRenderCorrelationSubmit(
+      &state, 0xc001u, 1u, 258u, 0u, 0u));
+  assert(!AdmissionRenderCorrelationPatch(&state, 0xc001u, 1u, 0u, 0u));
+  assert(state.Slot[0].Fence == 256u);
 
   assert(AdmissionRenderCorrelationBegin(&state, 200u, 0xa000u, 0xc002u,
       48u, &second));
@@ -46,6 +52,27 @@ int main(void) {
   assert(state.Slot[1].Fence == 257u);
   assert(state.Slot[1].SubmitGuard == 22u);
   assert(state.Slot[1].SubmitStatus == 0x80000011u);
+  /* A completed render fence does not imply entry into output work. */
+  assert(!state.Slot[0].Output[AdmissionOutputTraceEntry].Valid);
+  assert(AdmissionRenderCorrelationOutput(&state, 256u,
+      AdmissionOutputTraceEntry, 0x103u, 4u, 0u, 230u));
+  assert(state.Slot[0].Output[AdmissionOutputTraceEntry].Timestamp == 230u);
+  assert(!state.Slot[0].Output[AdmissionOutputTraceVerified].Valid);
+  assert(!state.Slot[1].Output[AdmissionOutputTraceEntry].Valid);
+  assert(!AdmissionRenderCorrelationOutput(&state, 999u,
+      AdmissionOutputTraceEntry, 0u, 0u, 0u, 231u));
+  assert(!AdmissionRenderCorrelationOutput(&state, 256u,
+      AdmissionOutputTraceEntry, 0u, 0u, 0u, 231u));
+  assert(!AdmissionRenderCorrelationOutput(&state, 256u,
+      AdmissionOutputTracePresentExit, 0u, 0u, 0u, 231u));
+  assert(AdmissionRenderCorrelationOutput(&state, 256u,
+      AdmissionOutputTraceVerified, 0xc000003eu, 5u, 0u, 240u));
+  assert(state.Slot[0].Output[AdmissionOutputTraceVerified].Status ==
+      0xc000003eu);
+  assert(AdmissionRenderCorrelationOutput(&state, 257u,
+      AdmissionOutputTraceEntry, 0x103u, 6u, 0u, 250u));
+  assert(state.Slot[0].Output[AdmissionOutputTraceEntry].Processor == 4u);
+  assert(state.Slot[1].Output[AdmissionOutputTraceEntry].Processor == 6u);
   assert(!AdmissionRenderCorrelationBegin(&state, 300u, 0xa000u, 0xc003u,
       48u, &third));
   assert(state.Overflow == 1u);
@@ -57,6 +84,12 @@ int main(void) {
       &state, state.CapturedGeneration, 0u, 1u));
   assert(state.ExportedGeneration == state.CapturedGeneration);
   assert(state.Durable == 1u);
+  if (argc == 2) {
+    FILE *fixture = fopen(argv[1], "wb");
+    assert(fixture != NULL);
+    assert(fwrite(&state, sizeof(state), 1u, fixture) == 1u);
+    assert(fclose(fixture) == 0);
+  }
 
   memset(&state, 0, sizeof(state));
   assert(AdmissionRenderCorrelationInitialize(&state, 612u, 10u));

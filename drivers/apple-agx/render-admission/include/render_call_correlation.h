@@ -1,8 +1,20 @@
 #ifndef APPLE_AGX_RENDER_CALL_CORRELATION_H
 #define APPLE_AGX_RENDER_CALL_CORRELATION_H
 
-#define ADMISSION_RENDER_CORRELATION_VERSION 2u
+#define ADMISSION_RENDER_CORRELATION_VERSION 3u
 #define ADMISSION_RENDER_CORRELATION_CAPACITY 2u
+
+enum {
+  AdmissionOutputTraceEntry,
+  AdmissionOutputTraceVerified,
+  AdmissionOutputTracePresentEntry,
+  AdmissionOutputTracePresentExit,
+  ADMISSION_OUTPUT_TRACE_COUNT
+};
+typedef struct _ADMISSION_OUTPUT_TRACE {
+  unsigned int Valid, Status, Processor, Irql;
+  unsigned long long Timestamp;
+} ADMISSION_OUTPUT_TRACE;
 
 #define ADMISSION_RENDER_CAPTURE_ENTRY       (1u << 0)
 #define ADMISSION_RENDER_CAPTURE_VALIDATED   (1u << 1)
@@ -30,6 +42,7 @@ typedef struct _ADMISSION_RENDER_CORRELATION_SLOT {
   unsigned long long NotifyTimestamp, DpcTimestamp;
   unsigned long long AdapterToken, ContextToken, CommandHash;
   unsigned long long AllocationToken[2];
+  ADMISSION_OUTPUT_TRACE Output[ADMISSION_OUTPUT_TRACE_COUNT];
 } ADMISSION_RENDER_CORRELATION_SLOT;
 
 typedef struct _ADMISSION_RENDER_CORRELATION_STATE {
@@ -72,5 +85,9 @@ int AdmissionRenderCorrelationMarkExport(
     ADMISSION_RENDER_CORRELATION_STATE *State,
     unsigned int CapturedGeneration, unsigned int Status,
     unsigned int Durable);
+int AdmissionRenderCorrelationOutput(
+    ADMISSION_RENDER_CORRELATION_STATE *State, unsigned int Fence,
+    unsigned int Stage, unsigned int Status, unsigned int Processor,
+    unsigned int Irql, unsigned long long Timestamp);
 
 #endif

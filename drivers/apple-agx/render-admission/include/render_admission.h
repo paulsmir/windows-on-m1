@@ -471,6 +471,9 @@ VOID AdmissionRenderCorrelationSubmitWindows(
 VOID AdmissionRenderCorrelationWorkerWindows(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
     _In_ BOOLEAN Entry, _In_ ULONG Status);
+VOID AdmissionRenderCorrelationOutputWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ ULONG Stage, _In_ ULONG Status);
 VOID AdmissionRenderCorrelationNotifyAtInterruptWindows(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
     _In_ ULONGLONG Timestamp, _In_ BOOLEAN QueueDpcResult);

@@ -23,7 +23,8 @@ static ADMISSION_RENDER_CORRELATION_SLOT *correlation_context(
   if (State == CORRELATION_NULL || ContextToken == 0ULL)
     return CORRELATION_NULL;
   for (index = 0u; index < State->Count; ++index)
-    if (State->Slot[index].ContextToken == ContextToken)
+    if (State->Slot[index].ContextToken == ContextToken &&
+        !(State->Slot[index].ValidMask & ADMISSION_RENDER_CAPTURE_WORKER_EXIT))
       return &State->Slot[index];
   return CORRELATION_NULL;
 }
@@ -178,6 +179,36 @@ int AdmissionRenderCorrelationWorker(
     State->Slot[index].ValidMask |= Entry
         ? ADMISSION_RENDER_CAPTURE_WORKER_ENTRY
         : ADMISSION_RENDER_CAPTURE_WORKER_EXIT;
+    ++State->CapturedGeneration;
+    return 1;
+  }
+  return 0;
+}
+
+int AdmissionRenderCorrelationOutput(
+    ADMISSION_RENDER_CORRELATION_STATE *State, unsigned int Fence,
+    unsigned int Stage, unsigned int Status, unsigned int Processor,
+    unsigned int Irql, unsigned long long Timestamp) {
+  unsigned int index;
+  if (State == CORRELATION_NULL || Fence == 0u ||
+      State->Version != ADMISSION_RENDER_CORRELATION_VERSION ||
+      State->Count > ADMISSION_RENDER_CORRELATION_CAPACITY ||
+      Stage >= ADMISSION_OUTPUT_TRACE_COUNT || Timestamp == 0ULL)
+    return 0;
+  for (index = 0u; index < State->Count; ++index) {
+    ADMISSION_RENDER_CORRELATION_SLOT *slot = &State->Slot[index];
+    ADMISSION_OUTPUT_TRACE *record = &slot->Output[Stage];
+    if (slot->Fence != Fence)
+      continue;
+    if (record->Valid || (Stage != AdmissionOutputTraceEntry &&
+        (!slot->Output[Stage - 1u].Valid ||
+         Timestamp < slot->Output[Stage - 1u].Timestamp)))
+      return 0;
+    record->Status = Status;
+    record->Processor = Processor;
+    record->Irql = Irql;
+    record->Timestamp = Timestamp;
+    record->Valid = 1u;
     ++State->CapturedGeneration;
     return 1;
   }

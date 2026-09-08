@@ -2203,6 +2203,9 @@ static VOID AdmissionOutputWorker(
   UNREFERENCED_PARAMETER(DeviceObject);
   if (runtime == NULL)
     return;
+  fence = runtime->CompletedOutput.Fence;
+  AdmissionRenderCorrelationOutputWindows(runtime->Adapter, fence,
+      AdmissionOutputTraceEntry, (ULONG)STATUS_PENDING);
   KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
   generation = runtime->OutputQueue.Generation;
   if (!AdmissionOutputQueueBegin(&runtime->OutputQueue, generation)) {
@@ -2211,20 +2214,29 @@ static VOID AdmissionOutputWorker(
     return;
   }
   KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
-  fence = runtime->CompletedOutput.Fence;
   AdmissionTerminalObserve(
       runtime, fence, AppleAgxBackendCompletionSuccess,
       &runtime->CompletedOutput);
+  AdmissionRenderCorrelationOutputWindows(runtime->Adapter, fence,
+      AdmissionOutputTraceVerified,
+      runtime->CompletedOutput.AccessAttempted
+          ? runtime->CompletedOutput.AccessStatus
+          : (ULONG)STATUS_INVALID_DEVICE_STATE);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (runtime->VisibleAgxValid && runtime->VisibleAgxFence == fence &&
       AdmissionCompletedOutputBeginPresent(
           &runtime->CompletedOutput, fence)) {
-    NTSTATUS presentStatus = AdmissionScanoutPresentAgxResult(
+    NTSTATUS presentStatus;
+    AdmissionRenderCorrelationOutputWindows(runtime->Adapter, fence,
+        AdmissionOutputTracePresentEntry, (ULONG)STATUS_PENDING);
+    presentStatus = AdmissionScanoutPresentAgxResult(
         runtime->Adapter, &runtime->CompletedPacket,
         &runtime->CompletedOutput, &runtime->TerminalReceipt,
         runtime->VisibleAgxSourceAddress,
         runtime->VisibleAgxSourceBytes, runtime->VisibleAgxGpuAddress,
         runtime->VisibleAgxPhysicalAddress, fence);
+    AdmissionRenderCorrelationOutputWindows(runtime->Adapter, fence,
+        AdmissionOutputTracePresentExit, (ULONG)presentStatus);
     if (!NT_SUCCESS(presentStatus) &&
         runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty)
       (void)AdmissionCompletedOutputAbort(
