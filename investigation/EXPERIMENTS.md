@@ -38866,3 +38866,90 @@ Ordinary377/392 verified Code28/packages0/service/module absent,8CPU,
 NVMe2/USB5/keyboard1. Transfer exact artifacts/scripts, parse and hash remotely,
 then stage. Natural bind uses release EXP584 m1n1 and Mu406/full-owner;
 one producer only. Candidate-ready is not a verdict.
++
+**EXP639 STAGED:** remote workflow/collector SHA256 match frozen values and
+PowerShell parser reports no errors. Clean ordinary baseline gate passed;
+exact package added as oem5.inf. Controlled shutdown next, then one natural
+bind/run. No driver result yet.
++
+**EXP639 ACTUAL interruption:** natural bind/preflight exact639 Code0/service
+Running/8CPU. Three full frames passed (fences256/257/258, sequences3/4/5,
+exact owners/PAs/colors/full4096000 pixels); frame4 Render0/queued1/ACTIVE
+preceded reset. No HOLD/cleanup. Thus moving output to driver-owned thread did
+not eliminate recurring0x101; the system-worker-pool causal hypothesis is
+hardware REJECTED. The Microsoft execution-context correction remains valid.
+Local postprocessor stopped because its copied literal expected build stayed635;
+raw current producer lines explicitly carry build639 and are authoritative.
+Fix this collector-only literal offline; do not reinterpret the driver result.
+Recover via established emergency, preserve newest minidump and exact thread
+stack before package cleanup. Kernel dump setting is original3, so expect
+triage limits. Compare whether CPU4 is AdmissionOutputThread rather than
+ExpWorkerThread. No new GPU/timer fix until that exact result is read.
+**EXP639 recovered verdict:** exact package/stale cleanup succeeded. Small dump
+090826-14062-01.dmp SHA256
+2f9a3e68c35eb4e190a906b3b1fb6fc68c864777367d476597afbcbf4e7c1ba3,
+driver30.0.639.0, 0x101 CPU4, uptime143.968s; stack is truncated KiSwapContext
+and cannot name the new thread. Three full producer records passed. Durable
+correlation build639/boot353537929 count2/overflow1, both output/present
+complete at IRQL0; SHA256
+a7c58ee9bbdf93c9a4acd2a4fea351dc23de4fac30cf3ecf8f1e5938d42a0250.
+Host producer/log SHA256
+4d7e404c09a2b03e5941eaa022df2439964dd169456cf888c1b4f95bdbfa1e1b,
+d8c874cb831cd26c6205979e87b0fcdb8ccae102984c91b67e363e989c4e1ca2.
+Result: dedicated-thread contract IMPLEMENTED; watchdog hypothesis REJECTED.
+Emergency shutdown succeeded; ordinary377/392 restoration in progress.
+
+# EXP640 — bounded noncached output verification
+
+**PREREGISTERED 2026-09-08T16:09Z. WHY THIS HYPOTHESIS:** (1) EXP636/638
+kernel dumps both capture CPU4 in the uninterrupted byte pass over a DXGK
+noncached contiguous physical-memory mapping; (2) EXP639 still resets after
+moving the same loop to a dedicated thread, rejecting shared-worker ownership;
+(3) EXP637 completes sixteen same-helper scans over user noncached section
+memory. The production mapping/read interval is the closest remaining difference.
+
+**WINDOWS CONTRACT:** production memory is created as
+DXGK_PHYSICAL_MEMORY_TYPE_CONTIGUOUS_MEMORY with
+DXGK_MEMORY_CACHING_TYPE_NON_CACHED and mapped through
+DxgkCbMapPhysicalMemory. Long verification stays on the driver-owned PASSIVE
+thread. Non-alertable one-millisecond delays split reads into bounded quanta.
+Detailed design: docs/superpowers/plans/2026-09-08-exp640-bounded-output-read.md.
+
+**AGX/ASAHI CONTRACT:** unchanged. **TRANSLATION:** commit
+6a7e3aa4c976c7cc66077aa2099a77f27b18208f adds an atomic progress form of
+the exact output verifier. Pixel and byte-hash passes retain identical results
+but call progress between256KiB ranges. Windows callback checks PASSIVE and
+stop/reset then performs relative1ms delay. No callback in completion/DPC,
+spinlock, AGX, firmware, queue, DCP, fence or ownership code.
+
+**WHAT IS STILL UNKNOWN:** whether breaking the continuous physical-memory
+read interval eliminates CPU4 clock loss and permits16 exact frames, HOLD,
+retirement and teardown. One run after pinned build answers it. If it fails,
+existing progress validity identifies whether verification completed; preserve
+dump and do not stack further timing changes.
+
+Executable helper test was RED before API; GREEN proves two literal progress
+boundaries, exact hand-derived hash/pixels and atomic abort without VALID_OUTPUT
+or partial published counters. Full render suite122 GREEN. Build exact640 from
+immutable FRYZZING EXP639 plus four committed files only, pinned WDK26100 gates.
+Use release EXP584/Mu406 full-owner and unchanged producer. Save HOLD evidence
+before retirement signal; exact package cleanup/recovery after verdict.
++
+**EXP640 BUILD FREEZE.** Exact30.0.640.0 from immutable EXP639 plus only
+commit6a7e3aa4c976c7cc66077aa2099a77f27b18208f. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign, version and
+producer640 gates PASS; inherited KMD C28251 only,0 errors. SHA256:
+overlay f2a29bac9b23f76be16ec41306d90560deec55fbae314abb3fe48ccb559afa58;
+ZIP 2de1a31d762773134824b40e48554d093b935d2ece6dc4f9095f28444f96113f;
+SYS 2f2cbcf88ecefb5eed4af365a50d84eb50b9ab9a04f0311505d8100ccb33ac67;
+INF ba16ad7e204f1269cb0a4503065ca1606e80feb6d10a37441bb7985eb701a13b;
+CAT cc0a6a3dbf6a432122de76c25bae82f68e643248fa8a51e2788692ad3a4b2f82;
+UMD cc7485f12480773541eee6f83a21c0af0cacb5b7519d2f5c9b25fed7aade6638;
+producer ac0b236e9d8571fe0a836c76a696eed04b383403842f58ccc2721227d8929af5.
+Workflow/launch/collector SHA256:
+68bc89a367ecabb60761cdd75213046f6b84de6d33dd14b40414230325080000,
+5a3d7ffd473954ce8d62e5be543806efb96ff77c26222e26a45af28cb5b24df5,
+c4cf45a20deb6f719f1965b19f2d276f96606fec15049b8f33004c0d7c585019.
+Ordinary377/392 clean health to be read immediately before Stage. Transfer,
+remote parser/hashes, then exact stage; release EXP584/Mu406 natural bind and
+one unchanged16-frame run. No extra monitor/dump setting variable.
