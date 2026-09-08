@@ -37255,3 +37255,29 @@ Collector reads the device key and preserves raw state; PowerShell parser GREEN.
 Workflow SHA256
 `5c7979ca929b132d22f6857383a2a194ae64faa78fb5ca062f066cedd111729a`.
 Stage/run R5 only after clean ordinary preflight.
+
+**EXP612 R5 FINAL — CORRELATION PASS; FUNCTIONAL BOUNDARY PROVEN.** Raw state
+SHA256 `c3d8139e9a6d22f008cf2673e615e54deb2d66a20b8e8a05e3f81bbc987f91b5`
+decodes to candidate612, boot357148004, two calls, overflow0,
+captured_generation=exported_generation=10, export_status0 and durable1.
+Call1 has complete Render/Patch/Submit/worker milestones and fence256. Call2
+context differs, command FNV `0x83dade57c173c265` matches producer, destination
+index1/segment2 and both allocation identities match; Render ENTRY, validated
+and EXIT success are set with168 DMA bytes, one patch and prepatched1. Call2 has
+no Patch ENTRY, Submit ENTRY, fence or worker. Decoded JSON SHA256
+`fce29c8b2909f376e3687ba1a59aa138b28ff5dbfe162076c57304c4e6688cc7`.
+Thus Render2 reaches and successfully exits KMD; first missing owner is dxgkrnl
+post-Render before Patch. After collection Windows reset; emergency recovery
+found the package already absent and removed only matching stale state.
+
+# EXP613 — canonical pass2 command placement
+
+**PREREGISTERED 2026-09-08T08:10Z. WHY THIS HYPOTHESIS:** (1) EXP612 proves
+Render2 success with correct DMA output but no Patch. (2) pass1 uses the working
+CommandOffset0. (3) pass2 offset4048 exists only from the rejected fullness
+experiment. Commit `6c48c2ab496342fb2f728cbfff4aa5db0dc5fa8e` changes only
+pass2 placement to offset0; length48, context2, allocation1, residency, exact
+KMD612 correlation, ping-pong, AGX and DCP remain unchanged. Full371 tests
+GREEN. Rebuild/hash producer only and reuse exact signed EXP612 R5 package.
+PASS requires call2 Render/Patch/Submit/worker, fence257, second full-frame
+hardware pixels and D589. If Patch remains absent, canonical layout is closed.

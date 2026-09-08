@@ -546,6 +546,14 @@ R5 ZIP SHA is `d9a89cc4...8836a9`. Next is one R5 run, raw device-key state plus
 decoded JSON, then a functional fix chosen strictly from its first missing
 milestone.
 
+EXP612 R5 correlation is hardware PASS: both Render calls entered, validated
+and exited success with exact hashes; call2 produced168 DMA bytes/one patch/
+prepatched1 but never received Patch ENTRY, Submit, fence or worker. First
+missing owner is dxgkrnl post-Render. Commit
+`6c48c2ab496342fb2f728cbfff4aa5db0dc5fa8e` prepares EXP613 by removing only
+the obsolete pass2 offset4048 and using canonical offset0 like pass1. Exact612
+R5 KMD/UMD are reused.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
