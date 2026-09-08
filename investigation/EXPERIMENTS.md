@@ -36862,3 +36862,11 @@ build log SHA256
 `36b3dd7049a00f1161a5bcbc830da9b8405f3e08039755581201b528c8574db9`.
 Reuse exact602 ZIP
 `439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`.
+
+**EXP604 FINAL — INCONCLUSIVE BEFORE PASS2 RENDER.** Pass1 completed normally.
+After15s, context1 destroyed successfully, but standard context2 creation returned
+`STATUS_NO_MEMORY (0xC0000017)`; pass2 Render/AGX/D589 were not reached. Exact
+receipts collected and exact602 package removed. Ordinary restored: Code28/no
+package/service/module,8CPU/NVMe2/USB5/keyboard1,bugcheck0, Event129x1 telemetry.
+Next boundary is the KMD DestroyContext/CreateContext resource lifetime; inspect
+context/DMA allocation release before another hardware run.
