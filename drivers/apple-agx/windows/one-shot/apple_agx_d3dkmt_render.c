@@ -206,8 +206,28 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           createContext.pPatchLocationList, createContext.PatchLocationListSize,
           createContext.CommandBuffer);
   for (pass = 0u; pass < 2u; ++pass) {
-    if (pass != 0u)
+    if (pass != 0u) {
       Sleep(15000u);
+      ZeroMemory(&destroyContext, sizeof(destroyContext));
+      destroyContext.hContext = createContext.hContext;
+      destroyContextStatus = D3DKMTDestroyContext(&destroyContext);
+      if (!NT_SUCCESS(destroyContextStatus))
+        goto cleanup;
+      ZeroMemory(&createContext, sizeof(createContext));
+      createContext.hDevice = createDevice.hDevice;
+      createContext.NodeOrdinal = 0u;
+      createContext.EngineAffinity = 1u;
+      createContext.Flags.Value = 0u;
+      createContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
+      contextStatus = D3DKMTCreateContext(&createContext);
+      if (!NT_SUCCESS(contextStatus) || createContext.hContext == 0u ||
+          createContext.pCommandBuffer == NULL ||
+          createContext.CommandBufferSize < sizeof(command) ||
+          createContext.pAllocationList == NULL ||
+          createContext.AllocationListSize < 2u ||
+          createContext.pPatchLocationList == NULL)
+        goto cleanup;
+    }
     ZeroMemory(&command, sizeof(command));
     command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
     command.Version = ADMISSION_UMD_COMMAND_VERSION;

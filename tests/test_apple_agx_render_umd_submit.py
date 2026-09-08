@@ -101,6 +101,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("D3DKMT_RENDER render = {0}", source)
         self.assertNotIn("render.Flags.RenderKm = 1", source)
         self.assertEqual(source.count("D3DKMTRender(&render)"), 1)
+        self.assertEqual(source.count("D3DKMTCreateContext(&createContext)"), 2)
         self.assertNotIn("D3DKMTLock2(", source)
         self.assertIn("D3DDDIFMT_A8R8G8B8, 0u, &allocation", source)
         self.assertIn("createContext.pCommandBuffer", source)
