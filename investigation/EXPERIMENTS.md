@@ -37078,3 +37078,19 @@ progress. Microsoft command-submission contract explicitly lists locking a
 resource used by the current command batch as a submission trigger. EXP609 will
 therefore perform one zero-flag D3DKMTLock2/Unlock2 on allocation1 after pass2;
 exact607 KMD/UMD and the ping-pong implementation remain unchanged.
+
+# EXP609 — lock-triggered legacy batch submission
+
+**PREREGISTERED 2026-09-08T07:15Z. WHY THIS HYPOTHESIS:** (1) EXP608 proved a
+successful resize does not submit the current batch. (2) allocation1 is the
+exact writable resource referenced by pass2. (3) Microsoft documents Lock of a
+resource used in the current command batch as a submission trigger. Commit
+`aa08b9e25ace1bc683a54e3e67cf1d4f06b0327b` adds only zero-flag
+`D3DKMTLock2`/`D3DKMTUnlock2` after pass2 and records both statuses. Exact607
+KMD/UMD, ping-pong, AGX and DCP remain unchanged; full367 tests GREEN.
+
+Build only the producer on pinned FRYZZING and reuse exact607 signed package.
+PASS requires lock/unlock0, sequence2/fence257, 4,096,000 second-color pixels,
+fresh D589 to the inactive offset, Resetting0/SchedulerFaulted0. A lock error or
+unchanged sequence localizes the next Windows synchronization boundary. Exact
+cleanup and ordinary377/392 recovery follow.
