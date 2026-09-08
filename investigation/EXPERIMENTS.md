@@ -38552,3 +38552,22 @@ Record manifest before staging. Ordinary377/392 recovery/clean health required;
 same full-owner platform and one natural bind. Preserve each full query and
 host latches; HOLD before signaling known-good retirement. Any error preserves
 live producer resources for controlled recovery.
+**EXP635 build freeze / preflight.** Exact30.0.635.0 pinned KMD/UMD/
+analysis/Universal/Inf2Cat/sign/version gates passed (inherited C28251 only).
+ZIP/SYS/INF/CAT/UMD/producer SHA256:
+bd57291980575de8c029e38d5054c4eb3f900dd8462ffc7229c52eecbfc4e0e2,
+1056bc8d4cb2f8058ca1c619c0389489001fa21ff43df3eb122809d264299357,
+e8a0f720b8a496f068c03872cf9138625c6643e20b99a1bd2d3f6d3e7fe602b8,
+691785f8b4553dc2f65aca769b4f3c89200dbcc73d00dc22b5b9ac95d1e035dd,
+8d4a7bbb8ab7f8d82e23fbe23a3e347be648e4b06ebec157d307d58001ce7698,
+7b44fabcf756c05d4aa2414e9158385300d743627b31476fc7d25898b2a40177.
+Workflow/collector/launch hashes:
+ef650269b5caa7a0b50b8206ed224ef0860826b441b02b4158a761c9fb775192,
+895f7d717c5543d1671355fe95c551c4e1f32c51bf00cbd4a4eb2e2651c82fc3,
+9a87306e0c664b177b8f8290df157e99b5bc1c4716bc359431908022007ff71f.
+Ordinary377/392 verified Code28/packages0/service absent/module absent,
+8CPU/NVMe2/USB5/keyboard1. Stage using EXP635-workflow.ps1 -Mode Stage,
+then controlled shutdown, EXP635-recycled-dma/launch.sh, exact natural bind
+and Preflight. Collector before single producer Run; all commands retain
+established process ExecutionPolicy. Immutable platform unchanged. Evidence
+under EXP635-recycled-dma with host streams, per-generation binary and JSON.

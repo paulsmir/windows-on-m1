@@ -1,15 +1,15 @@
 # GPU current state
 
-Current boundary: EXP634 frame5 PrivateVirgin guard. EXP635 build in progress. Main process,
+Current boundary: EXP634 frame5 PrivateVirgin guard. EXP635 built and staged. Main process,
 no agents. Historical state preserved in
 `.local/experiments/EXP633-repeated-ping-pong/current-state-before-compaction.md`.
 Consult only relevant EXP631–633 evidence before the next experiment.
 
 ## Current machine
 
-EXP634 raw evidence saved and exact package/devnode/stale cleanup succeeded
-in the live guest. Controlled shutdown succeeded; ordinary377/392 restoration
-is running in session66395. Verify clean health before staging EXP635.
+EXP634 evidence saved and exact package/devnode cleanup completed. Ordinary377/392
+verified Code28/no package/service/module,8CPU/NVMe2/USB5/keyboard1. EXP635
+now staged as exact oem5.inf; next controlled shutdown/full-profile natural bind.
 
 ## Hardware proven
 
@@ -48,22 +48,6 @@ Evidence: `.local/experiments/EXP633-repeated-ping-pong/` contains
 hardware.log, correlation.json and evidence with raw binary, stdout, events,
 dump, kd-analyze.txt and kd-cpu-progress.txt.
 
-## Active source work / next gate
-
-Source16f7e308154781dccfed4936d8bd3e68fc85d844 appends
-four version3 per-fence output records: entry, verification, presentation entry
-and exit, each with validity/status/CPU/IRQL/time. Decoder retains version2
-support. Existing asynchronous device-key exporter is reused; no functional
-render result changes.122 render tests pass, including production C records
-decoded by the actual decoder. Pinned634 build/sign/Universal/version gates
-PASS; exact manifest and build logs in EXP634-output-progress. Staged only;
-hardware outcome pending.
-
-Next: finish composition review/tests, freeze only explicit overlay over
-immutable633, build/sign/hash and preregister bounded live collection.
-Missing asynchronous export alone cannot prove callback absence. Keep
-captured/exported/durable distinct. Select causal fix from exact output stage.
-
 ## Latest EXP634 verdict / EXP635 next
 
 EXP634 completed FOUR full frames: fences256/257/258/260, presentation
@@ -86,7 +70,7 @@ by that run. EXP632 remains the validated normal retirement reference.
 Executable sixteen-request/four-recycled-block shadow test and producer
 failure cleanup state test pass; render122 tests pass. Exact635 overlay
 024aff141e0e2215a6bb0b84ca26616c10e44bdef252b203d88b9a15be11f152 over
-immutable FRYZZING EXP634. Build/sign/hash in progress; no635 hardware yet.
+immutable FRYZZING EXP634. Pinned635 build/sign/hash/Universal PASS; staged only, hardware verdict pending.
 Next execute635 one unchanged16-frame workload after health and build gates;
 save every record, HOLD, explicit retirement then health/cleanup. Evidence
 and exact634 hashes are in EXPERIMENTS.md and EXP634-output-progress.
