@@ -37220,3 +37220,38 @@ destination/color, guard/status, DMA bytes, patch count and prepatched flag;
 `ZwFlushKey` makes them crash durable. No AGX/DCP/scheduler/memory behavior
 changes. Full368 tests GREEN. Build exact30.0.612.0 and run once; call count1
 means Render2 was never entered, count2 names its exact exit and output.
+
+**EXP612 R1/R2 SUPERSEDED BEFORE HARDWARE.** Review found that synchronous
+registry flush inside Render still coupled diagnostics to DDI timing and did
+not distinguish captured/exported/durable. Neither artifact was staged or run.
+
+**EXP612 R5 FINAL FREEZE.** Commit
+`3049158f82b52a6d049c348434ba0bda2eeb9a9f` replaces the prior design with two
+adapter/boot-owned in-memory slots. ENTRY/validated/EXIT/Patch/Submit/worker are
+separate flags; candidate build, boot generation, contexts, command FNV,
+allocation identities/indices/segment, timestamps, DMA/patch output, guard,
+status and fence are retained. Re-arm preserves records; overflow and export
+failure are explicit. A dedicated work item exports outside DDIs and marks
+captured/exported generations and durable only after successful `ZwFlushKey`.
+Diagnostic filtering cannot change functional Render status.
+
+Portable state-machine and raw decoder tests cover direct-create/no-broker, two
+contexts, ENTRY without EXIT, early error, successful DMA output, slow consumer,
+re-arm, overflow, persistence failure and boot separation. Full371 tests GREEN.
+R3/R4 found only offline WDK integration warnings; commits
+`9d58fd7959d62babef0980df76ad16b382c153d5` and
+`9e5a767ef530f98e1dc53050a6fe73f2f874b198` fix them without suppression.
+R5 exact30.0.612.0 passes KMD/UMD/producer, analysis, Universal, signing and
+version gates with only inherited C28251.
+
+R5 ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`d9a89cc4f29f31f8c80abd21cfb7f44312a057dfc00c261b002d24f4a08836a9`,
+`aadfef9830b5051ca2241fe4149fd1967922720bff72642f99108d6d30f49dc2`,
+`35237bf3f9641b1b897237d00336d018ec9c2f1ce4368f91e8b4645e255343d3`,
+`78857098a28ce851cc343fdbf910b3912d58d4467e9eed29ac4222a20cd48c95`,
+`c8e3e8fc05e3961bc7fa5604b58a5201990267bd47915dd6564623749efacd34`,
+`91a98fba1cc5e058870799c7b99be58036ad592035a27b1698a6b5fc227831b6`.
+Collector reads the device key and preserves raw state; PowerShell parser GREEN.
+Workflow SHA256
+`5c7979ca929b132d22f6857383a2a194ae64faa78fb5ca062f066cedd111729a`.
+Stage/run R5 only after clean ordinary preflight.

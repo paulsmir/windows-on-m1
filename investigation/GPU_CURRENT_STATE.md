@@ -538,6 +538,14 @@ Commit `596a0a4652a01850a97e6a8b88c1e303c51ac174` prepares EXP612 with bounded
 crash-durable 64-byte call1/call2 device-registry receipts. This is now the
 authoritative discriminator for Render2 entry/exit/DMA output.
 
+EXP612 R1/R2 were never launched and are superseded. R5 is the completed
+correlation contract: two adapter/boot-owned in-memory slots, separate ENTRY/
+EXIT and downstream milestones, explicit overflow/persistence states, and an
+out-of-DDI work-item exporter. Full371 tests and pinned build gates pass; exact
+R5 ZIP SHA is `d9a89cc4...8836a9`. Next is one R5 run, raw device-key state plus
+decoded JSON, then a functional fix chosen strictly from its first missing
+milestone.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
