@@ -39457,6 +39457,17 @@ ordinary host log and launch contract SHA256:
 Recovery PASS. Continue offline at the truthful UMD device/pipeline contract;
 do not repeat direct exclusive-owner or window-timing experiments.
 
+**EXP646 INTERPRETATION CORRECTION 2026-09-08T18:28:00Z.** The probe's
+`apple_umd=0` was sampled with `GetModuleHandleW` only after
+`D3D11CreateDevice` returned DXGI_ERROR_UNSUPPORTED. It proves that the Apple
+UMD was not resident at that later observation point; it does not prove the
+DLL was never loaded, queried, and unloaded during the failed call. Preserve
+the actual device-creation rejection and Basic/WARP controls. Source still
+independently proves the frontend is incomplete: pipeline caps are zero and
+the WDDM1.3 device table lacks shader/state/draw/RTV/Flush implementation.
+Next exact discriminator is a cold-path UMD callback trace plus executable
+mock-runtime contract, without changing pipeline caps.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver

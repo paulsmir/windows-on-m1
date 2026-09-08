@@ -23,7 +23,11 @@ UMD has no truthful 3D pipeline/device contract. EXP647 now rejects the
 independent fullscreen direct-KMT seam even from a real console token. Current
 first unknown is therefore a coherent minimal truthful UMD device/pipeline and
 runtime-managed presentation contract; no capability bit may be enabled alone.
-Caps remain unchanged. Work now proceeds offline at this UMD/runtime boundary.
+Caps remain unchanged. EXP646's post-failure `GetModuleHandleW==NULL` is not
+evidence that the UMD was never loaded; cold-path callback ordering remains
+unobserved. Work now proceeds offline at format-query semantics, exact resource
+deallocation/deferred-destruction rules, and loader/callback tracing before the
+larger Mesa frontend integration.
 
 ## Hardware proof retained
 
