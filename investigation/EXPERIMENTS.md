@@ -37692,3 +37692,28 @@ Workflow/launch SHA256
 `24ce091bd8fab52e41f86fb790812cadbe75d0c5053ba89d26e2b675710ff1cf`.
 PASS requires both physical fences and ACTIVE state; regardless of PASS, a
 production render FIFO remains required before accelerated applications.
+
+**EXP622 FINAL — PACKET ADMISSION BUSY.** Pass2 Render enters251.35ms after
+pass1 and ~220ms after prompt fence256 notification, but no second Submit is
+preserved; Windows bugchecks0x119/2 with `STATUS_DEVICE_BUSY`. Thus runtime-ready
+guard is passed, while one of packet state/fence/context/private/bind/scheduler/
+queue rejects. Version2 candidate619/boot259584207 remains durable1.
+
+# EXP623 — exact packet subguard hold
+
+**PREREGISTERED 2026-09-08T10:49Z. WHY THIS HYPOTHESIS:** EXP622 proves the
+failure is packet-level DEVICE_BUSY, but immediate bugcheck prevents asynchronous
+subguard export and the host poller sees only the earlier word. Commit
+`3cf12d88179547b15170a56ba3dd4d09b973a28e` adds a qualification-only50ms
+hold immediately after writing the existing 0x539 packet subguard and before
+returning the already-fatal status. It changes no successful path. Full373 tests
+GREEN. Exact623 ZIP/SYS/INF/CAT/UMD are
+`ab56d34109aa0422521c2c0e810484f5fe0066db2f324c09e96878a9f8188f85`,
+`60c3e9639bef73855d40a10233ec42739bd85e58404a87f4cfc65cacb6b13c4d`,
+`4b2764aafbd8d52329e554d63e34350867e59217eda51c04ac68f58a820b5121`,
+`3797d8138f2e6f5d8b9210f35774bad091328a548c93177b72fa7ea65e46d08c`,
+`f52b7cd268df4bf73f8952c3ad0f877d568974ebb8b0d891cfc4f2fd84c51b18`.
+Reuse exact622 producer SHA `09ee2b4d...51b885`. Workflow/launch SHA
+`d99256d85653a363e51be28a91b09446622b7cd0e7c973572ca7c5ff335dc772`,
+`6f8fd54e917360979431152ebbdf57b2ea2a75601a0d3c6a7cec6d6c080c74d0`.
+One run, read exact0x539 subguard, then remove hold and fix that owner.

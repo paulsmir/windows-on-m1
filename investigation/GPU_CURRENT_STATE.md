@@ -625,6 +625,11 @@ the first single worker is still completing. EXP622 uses only a hardware-derived
 two-frame checkpoint. It is not a production queue replacement; a render FIFO
 is still mandatory afterward.
 
+EXP622 reaches second Render after fence256 notification but Submit fails packet
+admission with DEVICE_BUSY. EXP623 contains only a50ms hold on that already-fatal
+qualification path so the existing0x539 subguard survives host polling. Use its
+exact subguard for one causal fix; do not continue spacing experiments.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
