@@ -11,7 +11,7 @@ typedef struct _VALID_CLEAR_COMMAND {
 } VALID_CLEAR_COMMAND;
 
 #define DRAW_REFERENCE_COUNT 9u
-#define DRAW_RELOCATION_COUNT 6u
+#define DRAW_RELOCATION_COUNT 7u
 typedef struct _VALID_DRAW_COMMAND {
   APPLE_AGX_WIN32_COMMAND_HEADER Header;
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE References[DRAW_REFERENCE_COUNT];
@@ -274,6 +274,10 @@ static VALID_DRAW_COMMAND valid_draw(void) {
   command.Relocations[5].Kind = AppleAgxWin32RelocationUscBufferAddress40;
   command.Relocations[5].DestinationReference = 4u;
   command.Relocations[5].TargetReference = 5u;
+  command.Relocations[6].Kind = AppleAgxWin32RelocationPppStateAddress40;
+  command.Relocations[6].DestinationReference = 8u;
+  command.Relocations[6].TargetReference = 8u;
+  command.Relocations[6].TargetOffset = 0x100u;
   seal_draw(&command);
   return command;
 }
@@ -330,6 +334,12 @@ static void test_draw_graph_rejections(void) {
               AppleAgxWin32AbiRange);
   REJECT_DRAW(Relocations[0].AddressFlags, 1ULL,
               AppleAgxWin32AbiRelocation);
+  REJECT_DRAW(Relocations[6].TargetReference, 0u,
+              AppleAgxWin32AbiRelocation);
+  REJECT_DRAW(Relocations[6].DestinationOffset, 51u,
+              AppleAgxWin32AbiRange);
+  REJECT_DRAW(Relocations[6].TargetOffset, 0x101u,
+              AppleAgxWin32AbiRange);
   command = valid_draw();
   command.Relocations[1].DestinationOffset =
       command.Relocations[0].DestinationOffset;

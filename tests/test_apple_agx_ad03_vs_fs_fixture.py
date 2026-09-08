@@ -38,20 +38,46 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 records.append((json.loads(run.stdout), output))
             first, repeat, changed = records
             self.assertEqual(first[0], repeat[0])
+            self.assertEqual(first[0]["schema"], 2)
             self.assertEqual(first[0]["uvs_size"], 8)
             self.assertEqual(first[0]["uvs_user_size"], 4)
             self.assertEqual(first[0]["epilog_loc_written"], 1)
             self.assertGreater(first[0]["pipeline_bytes"], 0)
-            self.assertGreater(first[0]["encoder_bytes"], 0)
+            self.assertGreater(first[0]["encoder_bytes"], 68)
+            self.assertGreater(first[0]["ppp_bytes"], 0)
+            self.assertEqual(first[0]["draw"], {
+                "topology": "triangle-list",
+                "vertex_count": 3,
+                "instance_count": 1,
+                "stream_terminated": True,
+            })
+            self.assertEqual(first[0]["viewport"], {
+                "width": 2560,
+                "height": 1600,
+                "scissor_count": 1,
+                "depth_bias_count": 1,
+            })
+            self.assertEqual(first[0]["render_pass"], {
+                "owner": "EXP208-hardware-proven-3D-skeleton",
+                "dynamic_scope": "VDM-PPP-USC",
+                "store_pipeline_reused": True,
+            })
+            self.assertTrue(first[0]["generated_unpack_valid"])
             self.assertEqual(
                 [entry["kind"] for entry in first[0]["relocations"]],
                 [
-                    "UscShaderOffset32", "UscBufferAddress40",
+                    "UscBufferAddress40", "UscShaderOffset32",
+                    "UscBufferAddress40",
                     "UscShaderOffset32", "VdmPipelineOffset32",
-                    "VdmPipelineOffset32",
+                    "PppStateAddress40", "VdmPipelineOffset32",
                 ],
             )
-            for name in ("pipeline", "encoder"):
+            ppp_relocation = first[0]["relocations"][5]
+            self.assertEqual(ppp_relocation["target"], "encoder.ppp")
+            self.assertEqual(
+                first[0]["relocations"][3]["target"], "fragment-linked"
+            )
+            for name in ("pipeline", "encoder", "scissor", "depth_bias"):
                 self.assertEqual(
                     (first[1] / f"{name}.bin").read_bytes(),
                     (changed[1] / f"{name}.bin").read_bytes(),
@@ -68,6 +94,9 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 assembly = (first[1] / f"{stage}.asm").read_text()
                 self.assertTrue(assembly.strip())
                 self.assertNotIn("XXX error here", assembly)
+            linked_assembly = (first[1] / "fragment-linked.asm").read_text()
+            self.assertTrue(linked_assembly.strip())
+            self.assertNotIn("XXX error here", linked_assembly)
 
 
 if __name__ == "__main__":

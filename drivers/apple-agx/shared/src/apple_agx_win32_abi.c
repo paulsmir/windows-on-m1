@@ -94,6 +94,9 @@ static int AppleAgxWin32RelocationPolicy(
   case AppleAgxWin32RelocationVdmPipelineOffset32:
     return destinationRole == AppleAgxWin32RoleEncoder &&
            targetRole == AppleAgxWin32RoleUscPipeline;
+  case AppleAgxWin32RelocationPppStateAddress40:
+    return destinationRole == AppleAgxWin32RoleEncoder &&
+           targetRole == AppleAgxWin32RoleEncoder;
   default:
     return 0;
   }
@@ -310,6 +313,9 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       return AppleAgxWin32AbiRelocation;
     if ((relocation->Kind == AppleAgxWin32RelocationVdmPipelineOffset32 &&
          (relocation->DestinationOffset & 3ULL) != 0ULL) ||
+        (relocation->Kind == AppleAgxWin32RelocationPppStateAddress40 &&
+         (((relocation->DestinationOffset | relocation->TargetOffset) &
+           3ULL) != 0ULL)) ||
         (relocation->Kind == AppleAgxWin32RelocationUscBufferAddress40 &&
          (relocation->DestinationOffset & 7ULL) != 0ULL) ||
         relocation->DestinationOffset >

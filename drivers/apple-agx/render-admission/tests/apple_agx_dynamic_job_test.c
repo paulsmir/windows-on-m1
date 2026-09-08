@@ -33,7 +33,9 @@ static int resolve_object(void *Context, APPLE_AGX_U64 Token,
   if (fixture->FailResolve || Token == 0ULL || ClassId > 3u ||
       Offset >= 0x10000ULL || Bytes != 1u)
     return 0;
-  *GpuVirtualAddress = 0x10000000ULL + Token * 0x10000ULL + Offset;
+  *GpuVirtualAddress = Token == 9ULL
+                           ? 0x1500000000ULL + Offset
+                           : 0x10000000ULL + Token * 0x10000ULL + Offset;
   return 1;
 }
 
@@ -50,19 +52,19 @@ static void make_view(APPLE_AGX_WIN32_COMMAND_VIEW *View,
                       APPLE_AGX_WIN32_COMMAND_HEADER *Header,
                       APPLE_AGX_WIN32_ALLOCATION_REFERENCE References[9],
                       APPLE_AGX_WIN32_DRAW_PAYLOAD *Draw,
-                      APPLE_AGX_WIN32_RELOCATION Relocations[6],
+                      APPLE_AGX_WIN32_RELOCATION Relocations[7],
                       ADMISSION_WIN32_ALLOCATION_FACT Facts[9]) {
   unsigned index;
   memset(Header, 0, sizeof(*Header));
   memset(References, 0, 9u * sizeof(*References));
   memset(Draw, 0, sizeof(*Draw));
-  memset(Relocations, 0, 6u * sizeof(*Relocations));
+  memset(Relocations, 0, 7u * sizeof(*Relocations));
   memset(Facts, 0, 9u * sizeof(*Facts));
   memset(View, 0, sizeof(*View));
   Header->Opcode = AppleAgxWin32OpcodeDraw;
   Header->Generation = 7u;
   Header->ReferenceCount = 9u;
-  Draw->RelocationCount = 6u;
+  Draw->RelocationCount = 7u;
   View->Header = Header;
   View->References = References;
   View->Draw = Draw;
@@ -89,7 +91,7 @@ static void make_view(APPLE_AGX_WIN32_COMMAND_VIEW *View,
   References[8].Role = AppleAgxWin32RoleEncoder;
   Facts[0].ClassId = 0u;
   Facts[2].ClassId = Facts[3].ClassId = AgxWin32BufferClassShader;
-  for (index = 0u; index < 6u; ++index) {
+  for (index = 0u; index < 7u; ++index) {
     Relocations[index].WidthBytes = 8u;
     Relocations[index].DestinationOffset = index * 8u;
   }
@@ -109,6 +111,9 @@ static void make_view(APPLE_AGX_WIN32_COMMAND_VIEW *View,
   Relocations[5] = (APPLE_AGX_WIN32_RELOCATION){
       AppleAgxWin32RelocationUscBufferAddress40, 8u, 0u,
       4u, 5u, 16u, 0u, 0u};
+  Relocations[6] = (APPLE_AGX_WIN32_RELOCATION){
+      AppleAgxWin32RelocationPppStateAddress40, 8u, 0u,
+      8u, 8u, 24u, 0x100u, 0u};
 }
 
 int main(void) {
@@ -117,7 +122,7 @@ int main(void) {
   APPLE_AGX_WIN32_COMMAND_HEADER header;
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[9];
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw;
-  APPLE_AGX_WIN32_RELOCATION relocations[6];
+  APPLE_AGX_WIN32_RELOCATION relocations[7];
   ADMISSION_WIN32_ALLOCATION_FACT facts[9];
   unsigned char storage[APPLE_AGX_DYNAMIC_JOB_MAX_STORAGE_BYTES];
   unsigned char copy[APPLE_AGX_DYNAMIC_JOB_MAX_STORAGE_BYTES];
@@ -131,14 +136,22 @@ int main(void) {
       &view, facts, 9u, 0x10000000ULL, read_object, resolve_object, &fixture,
       storage, sizeof(storage), &job) == AppleAgxDynamicJobSuccess);
   assert(job.Magic == APPLE_AGX_DYNAMIC_JOB_MAGIC && job.Generation == 7u);
-  assert(job.ObjectCount == 2u && job.RelocationCount == 6u);
-  assert(fixture.Reads == 2u && fixture.Resolves == 6u);
+  assert(job.ObjectCount == 2u && job.RelocationCount == 7u);
+  assert(fixture.Reads == 2u && fixture.Resolves == 7u);
   assert(job.Objects[0].ReferenceIndex == 8u);
   assert(job.Objects[1].ReferenceIndex == 4u);
   assert(read_le(storage + job.Objects[0].StorageOffset, 8u) ==
          0x10010000ULL);
   assert((read_le(storage + job.Objects[0].StorageOffset + 16u, 4u) &
           ~0x3fULL) == 0x50000ULL);
+  assert((read_le(storage + job.Objects[0].StorageOffset + 24u, 4u) &
+          0xffULL) == 0x15ULL);
+  assert((read_le(storage + job.Objects[0].StorageOffset + 24u, 4u) &
+          ~0xffULL) == 0x18181800ULL);
+  assert(read_le(storage + job.Objects[0].StorageOffset + 28u, 4u) ==
+         0x100ULL);
+  assert(job.Relocations[6].ResolvedAddress == 0x1500000100ULL);
+  assert(job.Relocations[6].EncodedValue == 0x1500000100ULL);
   assert(read_le(storage + job.Objects[1].StorageOffset, 6u) ==
          ((0x30000ULL << 16u) | 0x1414ULL));
   assert(job.Relocations[2].EncodedValue == 0x50000ULL);
@@ -167,6 +180,14 @@ int main(void) {
       storage, sizeof(storage), &job) == AppleAgxDynamicJobResolve);
   assert(job.Magic == 0u && storage[0] == 0u);
   fixture.FailResolve = 0u;
+
+  make_view(&view, &header, references, &draw, relocations, facts);
+  relocations[6].TargetOffset = 0x102u;
+  memset(storage, 0xa5, sizeof(storage));
+  assert(AppleAgxDynamicJobMaterialize(
+      &view, facts, 9u, 0x10000000ULL, read_object, resolve_object, &fixture,
+      storage, sizeof(storage), &job) == AppleAgxDynamicJobRelocation);
+  assert(job.Magic == 0u && storage[0] == 0u);
 
   make_view(&view, &header, references, &draw, relocations, facts);
   references[8].Bytes = APPLE_AGX_DYNAMIC_JOB_MAX_OBJECT_BYTES + 1u;

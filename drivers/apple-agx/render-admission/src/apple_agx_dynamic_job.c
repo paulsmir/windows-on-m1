@@ -100,6 +100,16 @@ static int dynamic_patch(void *Destination,
     dynamic_write_le(Destination, encoded, 4u);
     *EncodedValue = relative;
     return 1;
+  case AppleAgxWin32RelocationPppStateAddress40:
+    if (Relocation->WidthBytes != 8u || (GpuAddress & 3ULL) != 0ULL ||
+        GpuAddress >= DYNAMIC_40_BIT_LIMIT)
+      return 0;
+    current = dynamic_read_le(Destination, 4u);
+    encoded = (current & ~0xffULL) | ((GpuAddress >> 32u) & 0xffULL);
+    dynamic_write_le(Destination, encoded, 4u);
+    dynamic_write_le((unsigned char *)Destination + 4u, GpuAddress, 4u);
+    *EncodedValue = GpuAddress;
+    return 1;
   default:
     return 0;
   }
