@@ -532,6 +532,12 @@ depended on OpenAllocation. Commit
 adapter for qualification tracing. EXP611 is the same receipt-only experiment
 and will decisively count Render1/Render2 before any behavioral patch.
 
+EXP611 broker tracing remained empty because rapid multiword request-register
+writes are overwritten by later Submit diagnostics. No KMD-entry conclusion.
+Commit `596a0a4652a01850a97e6a8b88c1e303c51ac174` prepares EXP612 with bounded
+crash-durable 64-byte call1/call2 device-registry receipts. This is now the
+authoritative discriminator for Render2 entry/exit/DMA output.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

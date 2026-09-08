@@ -37197,3 +37197,26 @@ producer SHA256 are
 `929437335bb9b75bcb3aa245bacfbed91997356f5551894a21dc960f9238092f`.
 Workflow SHA256
 `349a2444740ea02d64ba747740ddbc70a0040b8a6f21591a3ac4024db2ed2c9f`.
+
+**EXP611 FINAL — BROKER TRANSPORT INCONCLUSIVE.** Pass2 returned status0 with
+the exact preregistered context/range/FNV but no second terminal result. Even
+with self-derived adapter, the host log retained no 0x5120 group and only a
+later 0x5320 Submit fence word; rapid multiword broker writes are overwritten
+before host consumption. The working device-registry path still shows only
+ambiguous last guard0/status0. Host/device-registry SHA256 are
+`f167e37d2ea95080400a79582794a7b1b1436799918495c84b834693eb383afe`
+and `5d99a0bd0cf6991a4faa0646ba40ae13aa2e5462f7bd11c3c39cdb2c5cd9cc62`.
+Exact cleanup completed. No Render/Patch/Submit conclusion is taken.
+
+# EXP612 — crash-durable bounded Render call receipts
+
+**PREREGISTERED 2026-09-08T07:43Z. WHY THIS HYPOTHESIS:** (1) device-registry
+Render guard writes survive and are readable. (2) EXP611 proves multiword broker
+transport loses the call group. (3) two bounded binary receipts are sufficient
+to distinguish call1 from call2 without behavior changes. Commit
+`596a0a4652a01850a97e6a8b88c1e303c51ac174` writes 64-byte call1/call2 device
+receipts at PASSIVE_LEVEL with call sequence, context, exact command FNV,
+destination/color, guard/status, DMA bytes, patch count and prepatched flag;
+`ZwFlushKey` makes them crash durable. No AGX/DCP/scheduler/memory behavior
+changes. Full368 tests GREEN. Build exact30.0.612.0 and run once; call count1
+means Render2 was never entered, count2 names its exact exit and output.
