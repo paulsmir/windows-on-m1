@@ -91,11 +91,16 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
   int result = 1;
   BOOL requestEngineTdr = FALSE;
+  BOOL observeOnePass = FALSE;
 
   if (argc == 2 && wcscmp(argv[1], L"--engine-tdr") == 0)
     requestEngineTdr = TRUE;
+  else if (argc == 2 && wcscmp(argv[1], L"--observe-one-pass") == 0)
+    observeOnePass = TRUE;
   else if (argc != 1) {
-    fwprintf(stderr, L"usage: AppleAgxD3dKmRender.exe [--engine-tdr]\n");
+    fwprintf(stderr,
+             L"usage: AppleAgxD3dKmRender.exe "
+             L"[--engine-tdr|--observe-one-pass]\n");
     return 2;
   }
   gdiModule = GetModuleHandleW(L"gdi32.dll");
@@ -326,8 +331,23 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->AllocationListSize = render.NewAllocationListSize;
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
+    if (observeOnePass && pass == 0u) {
+      static const DWORD delays[] = {250u, 250u, 500u, 1000u,
+                                     3000u, 5000u, 5000u};
+      static const wchar_t *points[] = {
+          L"pass1_250ms", L"pass1_500ms", L"pass1_1s", L"pass1_2s",
+          L"pass1_5s", L"pass1_10s", L"pass1_15s"};
+      ULONG sample;
+      for (sample = 0u; sample < ARRAYSIZE(delays); ++sample) {
+        Sleep(delays[sample]);
+        (void)QueryDeviceExecutionState(
+            createDevice.hDevice, points[sample], &executionState);
+      }
+      break;
+    }
   }
-  Sleep(10000u);
+  if (!observeOnePass)
+    Sleep(10000u);
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
     tdr.NodeOrdinal = 0u;
