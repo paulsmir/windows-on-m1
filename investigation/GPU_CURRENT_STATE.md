@@ -766,6 +766,34 @@ and prove FRAME1, FRAME2 and a bounded15s HOLD with allocations alive and no
 cleanup. Retirement remains a separate later phase after a real owned fallback
 contract.
 
+EXP631 closes that target in machine-verifiable terms. Exact candidate631/
+boot257775620 records two complete Render/Patch/Submit/worker/Notify/DPC calls.
+Frame1: fence256, purpose RenderFrame, allocation `ffffb30601030cd0`, DCP
+sequence3, offset `fa0000`, PA `9bcf90000`, color `ff112233`, format21,
+2560x1600/10240, 4096000/4096000 pixels, hash `27592755b9c32325`.
+Frame2: fence257, distinct allocation `ffffb30601031290`, sequence4, offset
+`1f40000`, PA `9bdf30000`, color `ffcc8844`, full4096000/4096000 pixels and
+hash `ad1245c8bf762325`. Both resolve to pool base `9bbff0000`; records are
+captured/published in memory, explicitly not exported/durable.
+
+After15 seconds both records remained byte-exact, device execution was ACTIVE,
+producer and allocations remained alive, uptime exceeded203s, and there were
+no fresh System41/1001/129 events. Therefore:
+
+- `TWO_FRAME_RENDER_PASS=YES`
+- `TWO_FRAME_OUTPUT_PASS=YES`
+- `TWO_FRAME_PRESENT_MACHINE_PASS=YES`
+- `TWO_FRAME_PRESENT_PASS=PENDING_PHYSICAL_PANEL_CONFIRMATION`
+- `HOLD_STABILITY_PASS=YES`
+- `RETIREMENT_PASS=NO` (not run)
+
+Controlled whole-guest shutdown, not DestroyAllocation, followed evidence and
+produced a separate shutdown latch. Exact EXP631 package cleanup completed and
+ordinary377/392 is restored Code28, no AppleAgx package/service/module, 8 CPUs,
+healthy NVMe/xHCI/input. Next source boundary is an explicitly owned fallback/
+replacement surface and separate retirement operation before DestroyAllocation;
+do not hide it inside resource destruction or assume pool offset0 is owned.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

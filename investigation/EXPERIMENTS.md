@@ -38162,3 +38162,42 @@ and `e882f6e7e4cb1eba3ea8f796b4ae68422db4a0d1bbf6ced3e51812ed75f85b6f`.
 The exact hardware stop condition is flushed `PHASE HOLD_PASS`; collect A-C
 evidence while the process and allocations remain alive, then shut down the
 whole guest and clean the exact package from emergency. No retirement DDI runs.
+
+**EXP631 FINAL — RENDER/OUTPUT/HOLD PASS; MACHINE-CORRELATED PRESENT PASS;
+PHYSICAL VISUAL CONFIRMATION PENDING.** Exact producer stdout and durable
+correlation agree on candidate631/boot257775620 and two distinct requests.
+Call1 destination0 completes fence256 and publishes render-frame sequence3,
+allocation `ffffb30601030cd0`, offset `fa0000`, PA `9bcf90000`, color
+`ff112233`, format21, geometry2560x1600/10240 and exactly
+4096000/4096000 pixels with hash `27592755b9c32325`. Call2 destination1
+completes fence257 and publishes sequence4, allocation `ffffb30601031290`,
+offset `1f40000`, PA `9bdf30000`, color `ffcc8844`, the same full geometry and
+4096000/4096000 pixels with distinct hash `ad1245c8bf762325`. Both physical
+addresses minus active offsets equal scanout pool base `9bbff0000`.
+
+Both query records are purpose RenderFrame, captured1/published1/exported0/
+durable0; the producer reread both records byte-exact after15 seconds. At
+`HOLD_PASS`, uptime203.407s, producer was alive, device Code0/service Running,
+execution ACTIVE, 8 CPUs and NVMe/xHCI/input healthy, with no System41/1001/129
+since boot. This rejects cleanup as a necessary condition for the earlier
+EXP630 reset and proves the output worker/lease remains stable while resources
+stay alive.
+
+Host order contains initial swap8, a pre-producer/platform swap10, then the two
+render-frame latches swap11/12; controlled whole-guest shutdown later produces
+separate swap13. KMD query sequences3/4 include exact applied/latched sequence
+and active identity, so swap13 is excluded from the two-frame result. No
+DestroyAllocation or explicit retirement ran. A human did not report the
+physical panel color transition during this run, so machine-correlated
+presentation is proven but the stricter physical-visible confirmation remains
+pending. `RETIREMENT_PASS=NO` by design.
+
+Correlation raw/decoded, producer stdout, live health and host-log SHA256 are
+`ab020a886b58ad2a16113528c554e19ab5592b43dd88f3c9cc29746759c5e290`,
+`73ad14476a402ed75eb36b05f93d4b495dc9334fee87355912f6615fc97fe195`,
+`9b0aca217b5ec35798ba2d42b2896cbcb87064e8ae68a53b7ded20de5a955ffc`,
+`b97478eed34dd6861253389fc342dbe29f2609c89c849d53c8e693e5472c2cbd`,
+`a6c0f4a4ddacf3752c18bed51d71081ee8717ac795ec2a82bb9cd77a18edaeb5`.
+Evidence was preserved before controlled shutdown; exact package/service/stale
+state was removed in emergency, and ordinary377/392 is restored Code28 with
+8 CPUs and healthy NVMe/xHCI/input.
