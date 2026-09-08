@@ -37,6 +37,15 @@ int main(void) {
   assert(AdmissionRenderCorrelationExit(&state, second, 201u, 6u,
       0xc000000du, 0u, 0u, 0u)); /* error before command validation */
   assert(!(state.Slot[1].ValidMask & ADMISSION_RENDER_CAPTURE_VALIDATED));
+  assert(AdmissionRenderCorrelationSubmit(
+      &state, 0xc002u, 1u, 257u, 0xffffffffu, 0x00000103u));
+  assert(AdmissionRenderCorrelationSubmit(
+      &state, 0xc002u, 0u, 257u, 22u, 0x80000011u));
+  assert(state.Slot[1].ValidMask & ADMISSION_RENDER_CAPTURE_SUBMIT_ENTRY);
+  assert(state.Slot[1].ValidMask & ADMISSION_RENDER_CAPTURE_SUBMIT_EXIT);
+  assert(state.Slot[1].Fence == 257u);
+  assert(state.Slot[1].SubmitGuard == 22u);
+  assert(state.Slot[1].SubmitStatus == 0x80000011u);
   assert(!AdmissionRenderCorrelationBegin(&state, 300u, 0xa000u, 0xc003u,
       48u, &third));
   assert(state.Overflow == 1u);

@@ -187,16 +187,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted) {
+    /* Capture the return owner in the adapter/boot record before touching the
+     * optional broker transport.  The PASSIVE exporter can run on another CPU
+     * during the bounded qualification-only hold below. */
+    ADMISSION_CORRELATE_SUBMIT_EXIT(
+        Context, Args, AdmissionSubmitRenderGuardPacket,
+        STATUS_DEVICE_BUSY);
     AdmissionSubmitPacketGuardWindows(
         Context, packet_guard, STATUS_DEVICE_BUSY);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-    /* EXP623: preserve the already-written single-word subguard long enough
-     * for the host broker poller before dxgkrnl bugchecks on this fatal DDI
-     * status. This delay exists only on the rejected qualification path. */
-    KeStallExecutionProcessor(50000u);
+    /* The fatal DDI result makes dxgkrnl bugcheck immediately.  Give only this
+     * already-rejected path a bounded window for the independent PASSIVE
+     * registry exporter; no successful rendering request is delayed. */
+    KeStallExecutionProcessor(250000u);
 #endif
-    GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPacket,
-                      STATUS_DEVICE_BUSY);
+    AdmissionSubmitRenderGuardWindows(
+        Context, AdmissionSubmitRenderGuardPacket, STATUS_DEVICE_BUSY);
+    AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_DEVICE_BUSY);
+    return STATUS_DEVICE_BUSY;
   }
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionSubmitRenderGuardWindows(
