@@ -85,6 +85,10 @@ int AdmissionVisibleAgxScale16x16(
     void *Destination, unsigned long long DestinationBytes,
     ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);
 
+int AdmissionVisibleAgxUseFramebuffer(
+    const void *Source, unsigned long long SourceBytes,
+    ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);
+
 int AdmissionVisibleAgxReceiptValid(
     const ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);
 

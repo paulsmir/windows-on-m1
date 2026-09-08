@@ -133,17 +133,48 @@ int AdmissionVisibleAgxScale16x16(
   return Receipt->SourceHash != 0ULL && Receipt->DestinationHash != 0ULL;
 }
 
+int AdmissionVisibleAgxUseFramebuffer(
+    const void *Source, unsigned long long SourceBytes,
+    ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
+  const unsigned char *source = (const unsigned char *)Source;
+  unsigned int index;
+  if (Source == VISIBLE_NULL || Receipt == VISIBLE_NULL ||
+      SourceBytes != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+    return 0;
+  Receipt->SourceWidth = APPLE_AGX_SCANOUT_J313_WIDTH;
+  Receipt->SourceHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;
+  Receipt->SourcePitch = APPLE_AGX_SCANOUT_J313_STRIDE;
+  Receipt->SourceBytes = SourceBytes;
+  Receipt->DestinationBytes = SourceBytes;
+  Receipt->SourceHash = visible_hash(source, SourceBytes);
+  Receipt->DestinationHash = Receipt->SourceHash;
+  for (index = 0u; index < sizeof(Receipt->SourcePrefix); ++index)
+    Receipt->SourcePrefix[index] = source[index];
+  return Receipt->SourceHash != 0ULL;
+}
+
 int AdmissionVisibleAgxReceiptValid(
     const ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
-  return Receipt != VISIBLE_NULL &&
+  int scaled;
+  int framebuffer;
+  if (Receipt == VISIBLE_NULL)
+    return 0;
+  scaled = Receipt->SourceWidth == 16u && Receipt->SourceHeight == 16u &&
+           Receipt->SourcePitch == 64u && Receipt->SourceBytes == 1024ULL;
+  framebuffer =
+      Receipt->SourceWidth == APPLE_AGX_SCANOUT_J313_WIDTH &&
+      Receipt->SourceHeight == APPLE_AGX_SCANOUT_J313_HEIGHT &&
+      Receipt->SourcePitch == APPLE_AGX_SCANOUT_J313_STRIDE &&
+      Receipt->SourceBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
+      Receipt->DestinationPhysicalAddress == Receipt->SourcePhysicalAddress &&
+      Receipt->DestinationHash == Receipt->SourceHash;
+  return (scaled || framebuffer) &&
                  Receipt->Version == ADMISSION_VISIBLE_AGX_RECEIPT_VERSION &&
                  Receipt->Bytes == sizeof(*Receipt) && Receipt->Stage == 3u &&
                  Receipt->Guard == AdmissionVisibleAgxGuardComplete &&
                  Receipt->CapturedValid == 1u &&
                  Receipt->CapturedFence == Receipt->Fence &&
                  Receipt->Status == 0u && Receipt->Fence != 0u &&
-                 Receipt->SourceWidth == 16u && Receipt->SourceHeight == 16u &&
-                 Receipt->SourcePitch == 64u && Receipt->SourceBytes == 1024ULL &&
                  Receipt->SourceHash != 0ULL &&
                  Receipt->DestinationCpuAddress != 0ULL &&
                  Receipt->DestinationGuestIpa != 0ULL &&

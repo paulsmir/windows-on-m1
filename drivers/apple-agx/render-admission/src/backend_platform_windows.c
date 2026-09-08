@@ -106,6 +106,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
 #endif
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   UCHAR VisibleAgxSource[1024];
+  PVOID VisibleAgxSourceAddress;
+  ULONG VisibleAgxSourceBytes;
   ULONGLONG VisibleAgxGpuAddress;
   ULONGLONG VisibleAgxPhysicalAddress;
   ULONG VisibleAgxFence;
@@ -208,21 +210,34 @@ static VOID AdmissionTerminalObserve(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
         &Runtime->Adapter->BackendImage.Objects[
             APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+    ULONG targetBytes =
+        output->Size == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES
+            ? APPLE_AGX_EXP208_FRAMEBUFFER_BYTES
+            : APPLE_AGX_EXP208_GDI_WIDTH *
+                  APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
     if (output->Data != NULL &&
-        output->Size >= APPLE_AGX_EXP208_GDI_OUTPUT_BYTES &&
+        output->Size >= targetBytes &&
         Runtime->TransportIo.FlushForCpu(
-            Runtime, output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES)) {
+            Runtime, output->Data, output->Size)) {
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (AdmissionTerminalReceiptCaptureOutput(
           &Runtime->TerminalReceipt, Fence,
           (const UCHAR *)output->Data,
-          APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u,
-          APPLE_AGX_EXP208_GDI_OUTPUT_BYTES,
+          targetBytes, output->Size,
           APPLE_AGX_EXP208_GDI_COLOR, 0xa5u)) {
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-        if (Runtime->TerminalReceipt.OutputPixelsExpected == 256u) {
-          RtlCopyMemory(Runtime->VisibleAgxSource, output->Data,
-                        sizeof(Runtime->VisibleAgxSource));
+        if (Runtime->TerminalReceipt.OutputPixelsExpected ==
+            targetBytes / 4u) {
+          if (targetBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES) {
+            Runtime->VisibleAgxSourceAddress = output->Data;
+            Runtime->VisibleAgxSourceBytes = targetBytes;
+          } else {
+            RtlCopyMemory(Runtime->VisibleAgxSource, output->Data,
+                          sizeof(Runtime->VisibleAgxSource));
+            Runtime->VisibleAgxSourceAddress = Runtime->VisibleAgxSource;
+            Runtime->VisibleAgxSourceBytes =
+                sizeof(Runtime->VisibleAgxSource);
+          }
           Runtime->VisibleAgxGpuAddress =
               Runtime->TerminalReceipt.DestinationGpuVa;
           Runtime->VisibleAgxPhysicalAddress =
@@ -1727,9 +1742,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     if (output->Data == NULL ||
         output->Size < APPLE_AGX_EXP208_GDI_OUTPUT_BYTES)
       return APPLE_AGX_BACKEND_FALSE;
-    RtlFillMemory(output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES, 0xa5u);
+    RtlFillMemory(output->Data, output->Size, 0xa5u);
     if (!runtime->TransportIo.FlushForDevice(
-            runtime, output->Data, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES))
+            runtime, output->Data, output->Size))
       return APPLE_AGX_BACKEND_FALSE;
   }
 #endif
@@ -1741,6 +1756,21 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
         !runtime->TransportIo.FlushForDevice(
             runtime, object->Data, object->Size))
       return APPLE_AGX_BACKEND_FALSE;
+  }
+  if (runtime->Adapter->BackendImage.Binding.Framebuffer.Active ==
+      APPLE_AGX_TRUE) {
+    static const APPLE_AGX_U32 expandedObjects[] = {64u, 65u, 67u};
+    for (index = 0u;
+         index < (APPLE_AGX_U32)(sizeof(expandedObjects) /
+                                 sizeof(expandedObjects[0]));
+         ++index) {
+      const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
+          &runtime->QueueObjects[expandedObjects[index]];
+      if (object->Data == NULL || object->Size == 0u ||
+          !runtime->TransportIo.FlushForDevice(
+              runtime, object->Data, object->Size))
+        return APPLE_AGX_BACKEND_FALSE;
+    }
   }
   runtime->TransportIo.MemoryBarrier(runtime);
   return APPLE_AGX_BACKEND_TRUE;
@@ -1965,11 +1995,13 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   if (!visibleReady || !runtime->VisibleAgxValid ||
       runtime->VisibleAgxFence != Fence ||
       !NT_SUCCESS(AdmissionScanoutPresentAgxResult(
-          adapter, &visibleDescription, runtime->VisibleAgxSource,
-          sizeof(runtime->VisibleAgxSource), runtime->VisibleAgxGpuAddress,
+          adapter, &visibleDescription, runtime->VisibleAgxSourceAddress,
+          runtime->VisibleAgxSourceBytes, runtime->VisibleAgxGpuAddress,
           runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence)))
     return APPLE_AGX_BACKEND_FALSE;
   runtime->VisibleAgxValid = FALSE;
+  runtime->VisibleAgxSourceAddress = NULL;
+  runtime->VisibleAgxSourceBytes = 0u;
 #endif
 
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);

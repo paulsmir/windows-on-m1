@@ -20,6 +20,7 @@ class AppleAgxExp208GdiTests(unittest.TestCase):
                 "-I", str(SHARED / "include"),
                 str(SHARED / "tests" / "apple_agx_exp208_gdi_test.c"),
                 str(SHARED / "src" / "apple_agx_exp208_gdi.c"),
+                str(SHARED / "src" / "apple_agx_exp208_framebuffer.c"),
                 str(SHARED / "src" / "apple_agx_gdi.c"),
                 str(SHARED / "src" / "apple_agx_memory.c"),
                 str(SHARED / "src" / "apple_agx_render_template.generated.c"),

@@ -237,6 +237,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   APPLE_AGX_FIXED_PANEL_RESULT panel_result;
   BOOLEAN (*consume_interrupt)(ADMISSION_CONTEXT *) =
       AdmissionScanoutInterrupt;
+  BOOLEAN directFramebuffer = FALSE;
   NTSTATUS status = STATUS_DEVICE_HARDWARE_ERROR;
   RtlZeroMemory(&receipt, sizeof(receipt));
   receipt.Version = ADMISSION_VISIBLE_AGX_RECEIPT_VERSION;
@@ -250,23 +251,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   if (Context == NULL || Packet == NULL || runtime == NULL || Source == NULL ||
       SourceBytes < 1024u || Fence == 0u ||
       Packet->Fence != Fence ||
-      SourcePhysicalAddress > MAXULONGLONG - 1024ULL)
+      SourcePhysicalAddress > MAXULONGLONG - SourceBytes)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardArguments;
   if (!runtime->Panel.Committed || !runtime->Panel.Visible)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardPanel;
-  receipt.CapturedValid =
-      Packet->VisibleDestinationCpuToken != 0ULL &&
-              Packet->VisibleDestinationGpuVa != 0ULL &&
-              Packet->VisibleDestinationPhysical != 0ULL &&
-              Packet->VisibleDestinationAllocationToken != 0ULL &&
-              Packet->VisibleDestinationBytes != 0u
-          ? 1u
-          : 0u;
+  directFramebuffer =
+      SourceBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
+      Packet->DestinationCpuToken == (ULONGLONG)(ULONG_PTR)Source &&
+      Packet->DestinationGpuVa == SourceGpuAddress &&
+      Packet->DestinationPhysical == SourcePhysicalAddress &&
+      Packet->DestinationBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+  receipt.CapturedValid = directFramebuffer
+      ? (Packet->AllocationToken != 0ULL ? 1u : 0u)
+      : (Packet->VisibleDestinationCpuToken != 0ULL &&
+                 Packet->VisibleDestinationGpuVa != 0ULL &&
+                 Packet->VisibleDestinationPhysical != 0ULL &&
+                 Packet->VisibleDestinationAllocationToken != 0ULL &&
+                 Packet->VisibleDestinationBytes != 0u
+             ? 1u
+             : 0u);
   receipt.CapturedFence = Packet->Fence;
-  receipt.DestinationAllocationToken =
-      Packet->VisibleDestinationAllocationToken;
+  receipt.DestinationAllocationToken = directFramebuffer
+      ? Packet->AllocationToken
+      : Packet->VisibleDestinationAllocationToken;
   if (receipt.CapturedValid != 1u ||
       Packet->Fence != Fence ||
       receipt.DestinationAllocationToken == 0ULL)
@@ -275,11 +284,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   if (!NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)))
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardScanoutView;
-  destination.CpuAddress =
-      (PVOID)(ULONG_PTR)Packet->VisibleDestinationCpuToken;
-  destination.GpuVirtualAddress = Packet->VisibleDestinationGpuVa;
-  destination.HostPhysicalAddress = Packet->VisibleDestinationPhysical;
-  destination.Bytes = Packet->VisibleDestinationBytes;
+  destination.CpuAddress = (PVOID)(ULONG_PTR)(directFramebuffer
+      ? Packet->DestinationCpuToken
+      : Packet->VisibleDestinationCpuToken);
+  destination.GpuVirtualAddress = directFramebuffer
+      ? Packet->DestinationGpuVa
+      : Packet->VisibleDestinationGpuVa;
+  destination.HostPhysicalAddress = directFramebuffer
+      ? Packet->DestinationPhysical
+      : Packet->VisibleDestinationPhysical;
+  destination.Bytes = directFramebuffer
+      ? Packet->DestinationBytes
+      : Packet->VisibleDestinationBytes;
   receipt.DestinationCpuAddress =
       (ULONGLONG)(ULONG_PTR)destination.CpuAddress;
   receipt.DestinationPhysicalAddress = destination.HostPhysicalAddress;
@@ -307,17 +323,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
           APPLE_AGX_SCANOUT_MMIO_OFFSET + APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET,
           &receipt.ActiveOffsetBefore) ||
       receipt.ActiveOffsetBefore == destinationOffset ||
-      (SourcePhysicalAddress < receipt.DestinationPhysicalAddress +
+      (!directFramebuffer &&
+       SourcePhysicalAddress < receipt.DestinationPhysicalAddress +
                                    APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
-       receipt.DestinationPhysicalAddress < SourcePhysicalAddress + 1024ULL)) {
+       receipt.DestinationPhysicalAddress <
+           SourcePhysicalAddress + SourceBytes)) {
     status = STATUS_CONFLICTING_ADDRESSES;
     goto Exit;
   }
   receipt.Guard = AdmissionVisibleAgxGuardActiveSurface;
-  if (!AdmissionVisibleAgxScale16x16(
-          Source, SourceBytes,
-          destination.CpuAddress,
-          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &receipt)) {
+  if ((directFramebuffer &&
+       !AdmissionVisibleAgxUseFramebuffer(Source, SourceBytes, &receipt)) ||
+      (!directFramebuffer &&
+       !AdmissionVisibleAgxScale16x16(
+           Source, SourceBytes, destination.CpuAddress,
+           APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &receipt))) {
     status = STATUS_INVALID_BUFFER_SIZE;
     goto Exit;
   }

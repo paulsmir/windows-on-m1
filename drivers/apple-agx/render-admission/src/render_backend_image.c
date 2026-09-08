@@ -67,6 +67,7 @@ APPLE_AGX_BOOL AdmissionBackendImagePrepare(
   candidate.ArenaPhysicalAddress = BackendView->HostPhysicalAddress;
   candidate.ArenaGpuAddress = BackendView->GpuVirtualAddress;
   candidate.ArenaBytes = template_bytes;
+  candidate.ArenaCapacity = (APPLE_AGX_U32)BackendView->Bytes;
   candidate.Ready = APPLE_AGX_TRUE;
   *Image = candidate;
   return APPLE_AGX_TRUE;
@@ -97,15 +98,29 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
 
   saved_output =
       Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
-  if (!AppleAgxExp208BindGdiColorFill(
-          SubmissionBytes, SubmissionByteCount,
-          DestinationCpuAddress, Packet->DestinationGpuVa,
-          Packet->DestinationPhysical, Packet->DestinationBytes,
-          Image->Objects,
-          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-          AppleAgxRenderTemplateRelocations(),
-          AppleAgxRenderTemplateRelocationCount(), &candidate))
+  if (Packet->DestinationBytes ==
+      APPLE_AGX_EXP208_FRAMEBUFFER_BYTES) {
+    if (!AppleAgxExp208BindGdiFramebufferColorFill(
+            SubmissionBytes, SubmissionByteCount,
+            Image->ArenaCpuAddress, Image->ArenaGpuAddress,
+            Image->ArenaPhysicalAddress, Image->ArenaCapacity,
+            DestinationCpuAddress, Packet->DestinationGpuVa,
+            Packet->DestinationPhysical, Packet->DestinationBytes,
+            Image->Objects,
+            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+            AppleAgxRenderTemplateRelocations(),
+            AppleAgxRenderTemplateRelocationCount(), &candidate))
+      return APPLE_AGX_FALSE;
+  } else if (!AppleAgxExp208BindGdiColorFill(
+                 SubmissionBytes, SubmissionByteCount,
+                 DestinationCpuAddress, Packet->DestinationGpuVa,
+                 Packet->DestinationPhysical, Packet->DestinationBytes,
+                 Image->Objects,
+                 APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+                 AppleAgxRenderTemplateRelocations(),
+                 AppleAgxRenderTemplateRelocationCount(), &candidate)) {
     return APPLE_AGX_FALSE;
+  }
   bound = APPLE_AGX_TRUE;
   if (!AppleAgxApplyRelocations(
           Image->Objects,

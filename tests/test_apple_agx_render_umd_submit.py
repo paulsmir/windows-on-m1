@@ -111,8 +111,12 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("RENDER_OUT command=", source)
         self.assertIn("render_umd_command.h", project)
         self.assertIn("apple_agx_exp208_gdi.h", source)
-        self.assertIn("APPLE_AGX_EXP208_GDI_WIDTH", source)
-        self.assertIn("APPLE_AGX_EXP208_GDI_HEIGHT", source)
+        self.assertGreaterEqual(
+            source.count("APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH"), 2
+        )
+        self.assertGreaterEqual(
+            source.count("APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT"), 2
+        )
         self.assertIn("APPLE_AGX_EXP208_GDI_COLOR", source)
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
@@ -200,6 +204,37 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertLess(
             producer.index("Sleep(10000u);"),
             producer.index("cleanup:"),
+        )
+
+    def test_fullscreen_agx_output_is_latched_without_cpu_scale(self):
+        producer = (
+            WINDOWS / "one-shot" / "apple_agx_d3dkmt_render.c"
+        ).read_text()
+        backend = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        scanout = (RENDER / "src" / "scanout_windows.c").read_text()
+
+        self.assertGreaterEqual(
+            producer.count("APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH"), 2
+        )
+        self.assertGreaterEqual(
+            producer.count("APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT"), 2
+        )
+        self.assertIn(
+            "output->Size == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES",
+            backend,
+        )
+        self.assertIn("Runtime->VisibleAgxSourceAddress = output->Data", backend)
+        self.assertIn("expandedObjects[] = {64u, 65u, 67u}", backend)
+        self.assertIn("BOOLEAN directFramebuffer = FALSE", scanout)
+        self.assertIn(
+            "Packet->DestinationPhysical == SourcePhysicalAddress",
+            scanout,
+        )
+        self.assertIn("AdmissionVisibleAgxUseFramebuffer", scanout)
+        direct = scanout[scanout.index("directFramebuffer ="):]
+        self.assertLess(
+            direct.index("AdmissionVisibleAgxUseFramebuffer"),
+            direct.index("AppleAgxFixedPanelQueuePresent"),
         )
 
 

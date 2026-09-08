@@ -97,6 +97,43 @@ int main(void) {
   agx.Guard = AdmissionVisibleAgxGuardComplete;
   agx.DestinationAllocationToken = 0u;
   assert(!AdmissionVisibleAgxReceiptValid(&agx));
+
+  memset(surface, 0, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  for (before = 0u;
+       before < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE / 4u; ++before)
+    surface[before] = 0xff112233u;
+  memset(&agx, 0, sizeof(agx));
+  assert(AdmissionVisibleAgxUseFramebuffer(
+      surface, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &agx));
+  assert(agx.SourceWidth == APPLE_AGX_SCANOUT_J313_WIDTH);
+  assert(agx.SourceHeight == APPLE_AGX_SCANOUT_J313_HEIGHT);
+  assert(agx.SourcePitch == APPLE_AGX_SCANOUT_J313_STRIDE);
+  assert(agx.SourceBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(agx.DestinationBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(agx.SourceHash != 0ULL &&
+         agx.DestinationHash == agx.SourceHash);
+  agx.Version = ADMISSION_VISIBLE_AGX_RECEIPT_VERSION;
+  agx.Bytes = sizeof(agx);
+  agx.Stage = 3u;
+  agx.Guard = AdmissionVisibleAgxGuardComplete;
+  agx.CapturedValid = 1u;
+  agx.CapturedFence = 18u;
+  agx.Status = 0u;
+  agx.Fence = 18u;
+  agx.SourceGpuAddress = 0x1500fa0000ULL;
+  agx.SourcePhysicalAddress = 0x9c0fa0000ULL;
+  agx.DestinationCpuAddress = 0xffff800012340000ULL;
+  agx.DestinationGuestIpa = 0x8c0fa0000ULL;
+  agx.DestinationPhysicalAddress = agx.SourcePhysicalAddress;
+  agx.DestinationOffset = 0xfa0000ULL;
+  agx.DestinationAllocationToken = 0xffff800045670000ULL;
+  agx.ActiveOffsetBefore = 0u;
+  agx.RequestedSequence = 4u;
+  agx.AppliedSequence = 4u;
+  agx.LatchedSequence = 4u;
+  agx.ActiveOffsetAfter = agx.DestinationOffset;
+  agx.SwapId = 13u;
+  assert(AdmissionVisibleAgxReceiptValid(&agx));
   free(surface);
   return 0;
 }

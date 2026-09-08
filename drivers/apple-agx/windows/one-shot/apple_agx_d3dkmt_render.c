@@ -137,8 +137,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     goto cleanup;
 
   if (!AdmissionAllocationDescribe(
-          APPLE_AGX_EXP208_GDI_WIDTH,
-          APPLE_AGX_EXP208_GDI_HEIGHT, 4u,
+          APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
+          APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT, 4u,
           (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
           (unsigned int)D3DDDIFMT_A8R8G8B8, 0u, &allocation[0]) ||
       !AdmissionAllocationDescribe(
@@ -195,8 +195,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   command.Version = ADMISSION_UMD_COMMAND_VERSION;
   command.Bytes = sizeof(command);
   command.Opcode = AdmissionUmdOpcodeColorFill;
-  command.Destination.Right = APPLE_AGX_EXP208_GDI_WIDTH;
-  command.Destination.Bottom = APPLE_AGX_EXP208_GDI_HEIGHT;
+  command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+  command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
   command.DestinationAllocationIndex = 0u;
   command.Color = APPLE_AGX_EXP208_GDI_COLOR;
   command.Rop = AdmissionUmdRopPatCopy;

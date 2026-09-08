@@ -127,6 +127,7 @@
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_gdi.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_framebuffer.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_adapter.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_dynamic.c" />
     <ClCompile Include="..\shared\src\apple_agx_dma_shadow.c" />

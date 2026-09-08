@@ -33,6 +33,15 @@ static APPLE_AGX_GDI_DMA_COMMAND exact_color_fill(
   return command;
 }
 
+static APPLE_AGX_GDI_DMA_COMMAND fullscreen_color_fill(
+    unsigned long long destination_gpu) {
+  APPLE_AGX_GDI_DMA_COMMAND command = exact_color_fill(destination_gpu);
+  command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+  command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+  command.DestinationPitch = APPLE_AGX_EXP208_FRAMEBUFFER_PITCH;
+  return command;
+}
+
 static void test_materializes_and_relocates_exact_rebased_image(void) {
   unsigned char *storage = (unsigned char *)malloc(TEST_BACKEND_BYTES);
   ADMISSION_LOCAL_MEMORY_VIEW view;
@@ -54,6 +63,7 @@ static void test_materializes_and_relocates_exact_rebased_image(void) {
   assert(image.ArenaPhysicalAddress == TEST_BACKEND_PHYSICAL);
   assert(image.ArenaGpuAddress == TEST_BACKEND_GPU);
   assert(image.ArenaBytes == AppleAgxRenderTemplateBytes());
+  assert(image.ArenaCapacity == TEST_BACKEND_BYTES);
   assert(image.Roots.Ta[0] == TEST_BACKEND_GPU + 0x80000ULL);
   assert(image.Roots.D3[0] == TEST_BACKEND_GPU + 0x70000ULL);
   assert(image.Objects[APPLE_AGX_RENDER_TEMPLATE_ARENA_OBJECT_INDEX].GpuVa ==
@@ -235,10 +245,85 @@ static void test_restart_queue_lifetime_resets_only_firmware_sequence(void) {
   free(storage);
 }
 
+static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(void) {
+  unsigned char *storage = (unsigned char *)malloc(TEST_BACKEND_BYTES);
+  unsigned char *template_before =
+      (unsigned char *)malloc(AppleAgxRenderTemplateBytes());
+  unsigned char *destination =
+      (unsigned char *)malloc(APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_GDI_DMA_COMMAND command;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  const APPLE_AGX_EXP208_RELOCATION *relocations;
+  unsigned int index;
+  unsigned int tpc_edges = 0u;
+  unsigned int tilemap_edges = 0u;
+  unsigned int cluster_edges = 0u;
+
+  assert(storage != NULL && template_before != NULL && destination != NULL);
+  memset(storage, 0xa5, TEST_BACKEND_BYTES);
+  view.CpuAddress = storage;
+  view.HostPhysicalAddress = TEST_BACKEND_PHYSICAL;
+  view.GpuVirtualAddress = TEST_BACKEND_GPU;
+  view.Bytes = TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image, &view));
+  memcpy(template_before, storage, AppleAgxRenderTemplateBytes());
+
+  memset(&packet, 0, sizeof(packet));
+  packet.Fence = 200u;
+  packet.DestinationCpuToken =
+      (unsigned long long)(unsigned long)destination;
+  packet.DestinationGpuVa = 0x1501000000ULL;
+  packet.DestinationPhysical = 0x9d1000000ULL;
+  packet.DestinationBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
+  command = fullscreen_color_fill(packet.DestinationGpuVa);
+  assert(AdmissionBackendImageBindSubmission(
+      &image, &packet, destination, (const unsigned char *)&command,
+      sizeof(command), &binding));
+  assert(binding.Framebuffer.Active == APPLE_AGX_TRUE);
+  assert(image.Objects[64u].GpuVa == TEST_BACKEND_GPU + 0x5d0000ULL);
+  assert(image.Objects[65u].GpuVa == TEST_BACKEND_GPU + 0x620000ULL);
+  assert(image.Objects[67u].GpuVa == TEST_BACKEND_GPU + 0x628000ULL);
+  relocations = AppleAgxRenderTemplateRelocations();
+  for (index = 0u; index < AppleAgxRenderTemplateRelocationCount(); ++index) {
+    const APPLE_AGX_EXP208_RELOCATION *relocation = &relocations[index];
+    unsigned long long expected;
+    if (relocation->TargetObject != 64u &&
+        relocation->TargetObject != 65u &&
+        relocation->TargetObject != 67u)
+      continue;
+    assert(relocation->AddressSpace == AppleAgxExp208RelocationGpuVa);
+    assert(relocation->Encoding == AppleAgxExp208RelocationExactU64);
+    expected = image.Objects[relocation->TargetObject].GpuVa +
+               relocation->TargetOffset;
+    assert(read_u64(image.Objects[relocation->SourceObject].Data +
+                    relocation->SourceOffset) == expected);
+    if (relocation->TargetObject == 64u)
+      ++tpc_edges;
+    else if (relocation->TargetObject == 65u)
+      ++tilemap_edges;
+    else
+      ++cluster_edges;
+  }
+  assert(tpc_edges == 2u && tilemap_edges == 3u && cluster_edges == 1u);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+  assert(memcmp(template_before, storage,
+                AppleAgxRenderTemplateBytes()) == 0);
+  assert(image.Objects[64u].GpuVa == TEST_BACKEND_GPU + 0x540000ULL);
+  assert(image.Objects[65u].GpuVa == TEST_BACKEND_GPU + 0x548000ULL);
+  assert(image.Objects[67u].GpuVa == TEST_BACKEND_GPU + 0x558000ULL);
+  free(destination);
+  free(template_before);
+  free(storage);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
   test_exact_packet_binds_output_and_reapplies_relocations();
   test_restart_queue_lifetime_resets_only_firmware_sequence();
+  test_fullscreen_packet_repoints_tiling_graph_and_restores_template();
   return 0;
 }
