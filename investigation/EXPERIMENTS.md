@@ -39402,6 +39402,18 @@ All PowerShell wrappers parse. Ordinary clean health is required immediately
 before stage. Task waits at producer HOLD until evidence is collected and the
 exact flip-back signal is created.
 
+**EXP647 STAGED / NATURAL BIND PASS / WAITING CURRENT-BOOT LOGON
+2026-09-08T18:04:00Z.** Ordinary377/392 preflight was clean. Remote artifact
+hashes matched the preregistered exact643 package and producer; package staged
+as oem5.inf and task EXP647-Interactive armed with an Interactive principal.
+Fresh full-owner boot reached SSH and APPL0002 Problem0/Status OK. The current
+task remains Ready with LastTaskResult0x00041303, has no phase/result file, and
+explorer.exe/session inventory is empty. Therefore the producer has not run
+and the black panel is not an EXP647 technical result. Minimal physical action
+is a Windows login on this fresh boot; no command must be launched manually.
+After login collect HOLD evidence before signalling flip-back and exact
+cleanup/recovery.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver

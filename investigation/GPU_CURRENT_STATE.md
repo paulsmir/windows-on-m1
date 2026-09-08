@@ -1,29 +1,28 @@
 # GPU current state
 
-Updated 2026-09-08T17:15Z. Main process only; no agents.
+Updated 2026-09-08T18:04Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
-EXP643/644/646 evidence and exact cleanup are complete. Ordinary377/392 is
-restored: APPL0002 Code28, packages0, service/module absent,8CPU,NVMe2/USB5/
-keyboard1. No GPU package is installed or staged.
+EXP643/644/646 evidence and exact cleanup are complete. EXP647 is now staged
+from the verified ordinary377/392 baseline and booted on the full-owner
+platform. Exact package30.0.643.0 is oem5.inf; APPL0002 is Code0/OK and SSH is
+healthy. Task EXP647-Interactive is armed but has not run: state Ready,
+LastTaskResult0x00041303, no phase/result file and no explorer.exe or logged-in
+interactive session. The earlier operator login belonged to the preceding
+boot; the current black screen is not a driver or EXP647 verdict.
 
 Current first unknown remains standard Windows presentation. EXP641 proved
-only that an SSH session0 producer cannot acquire exclusive VidPN source0:
-D3DKMTSetVidPnSourceOwner returned STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE before
-SetDisplayMode, Render or Present. KMD Present/SetVidPnSourceAddress remain
-untested. EXP642 attempted the DWM-coexisting interactive windowed BLT route,
-but its scheduled producer never ran: exact dump localizes a pre-producer CDD
-Present crash to the new diagnostic reading DXGK_ALLOCATIONLIST through the
-wrong pAllocationInfo stride. Commit9beed62 corrects only that view. Next is
-fresh EXP643 with the unchanged interactive HWND/BLT discriminator.
-EXP644 late launch changed Present denial to STATUS_GRAPHICS_PRESENT_OCCLUDED.
-DWM repeatedly reported MILERR_DEVICE_CREATION_FAILURE. EXP646 directly proves
-D3D11CreateDevice(Apple) returns DXGI_ERROR_UNSUPPORTED while Basic/WARP pass;
-the exact Apple UMD is installed/registered but never loaded. Current first
-unknown for DWM is a truthful minimal UMD 3D pipeline/device contract. Before
-that broad layer, EXP647 will test the still-untried interactive fullscreen
-OpenGL-style KMT owner/present seam using exact643. Caps remain unchanged.
+only that an SSH session0 producer cannot acquire exclusive VidPN source0.
+EXP643 proved one interactive Windows render and physical AGX completion
+fence269, but windowed BLT Present was denied before the KMD DDI. EXP644
+advanced the denial to OCCLUDED while DWM reported
+MILERR_DEVICE_CREATION_FAILURE. EXP646 proves D3D11CreateDevice(Apple) returns
+DXGI_ERROR_UNSUPPORTED while Basic/WARP pass because the exact installed Apple
+UMD has no truthful 3D pipeline/device contract. EXP647 tests the independent
+documented fullscreen OpenGL-style KMT owner/present seam from a real console
+session using the unchanged exact643 bits. Caps remain unchanged. Immediate
+action is one physical Windows login; the task then starts automatically.
 
 ## Hardware proof retained
 
