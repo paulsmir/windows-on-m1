@@ -74,10 +74,11 @@ static NTSTATUS AdmissionGdiTranslatePatch(
 _Use_decl_annotations_ NTSTATUS AdmissionVisibleAgxResolveDestination(
     ADMISSION_CONTEXT *Adapter, const ADMISSION_RENDER_CONTEXT *Context,
     const DXGK_ALLOCATIONLIST *Allocations, UINT AllocationCount,
+    UINT RenderAllocationIndex,
     const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination,
     ADMISSION_LOCAL_MEMORY_VIEW *VisibleDestination,
     ULONGLONG *AllocationToken) {
-  const UINT index = 1u;
+  UINT index;
   const DXGK_ALLOCATIONLIST *entry;
   ADMISSION_OPEN_ALLOCATION *opened;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
@@ -89,7 +90,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionVisibleAgxResolveDestination(
     *AllocationToken = 0ULL;
   if (Adapter == NULL || Context == NULL || Allocations == NULL ||
       RenderDestination == NULL || VisibleDestination == NULL ||
-      AllocationToken == NULL || AllocationCount <= index ||
+      AllocationToken == NULL ||
+      !AdmissionVisibleAgxCompanionIndex(
+          RenderAllocationIndex, AllocationCount, &index) ||
       !AdmissionGdiOpenValid(
           Context, Allocations, AllocationCount, index, TRUE))
     return STATUS_INVALID_PARAMETER;
@@ -579,6 +582,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (!NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
           adapter, context, Args->pAllocationList, Args->AllocationListSize,
+          patch.AllocationIndex,
           &destination, &visibleDestination,
           &visibleAllocationToken)))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,

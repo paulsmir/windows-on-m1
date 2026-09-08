@@ -130,6 +130,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         )
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR", source)
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR", source)
+        self.assertIn("command.Destination.Top = 0u;", source)
+        self.assertIn("command.DestinationAllocationIndex = pass;", source)
         self.assertIn("Sleep(15000u);", source)
         self.assertIn(
             "commandOffset = pass == 0u\n"
@@ -184,7 +186,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         )
 
         self.assertIn("AdmissionVisibleAgxResolveDestination", patch)
-        self.assertIn("const UINT index = 1u", patch)
+        self.assertIn("AdmissionVisibleAgxCompanionIndex", patch)
+        self.assertIn("UINT RenderAllocationIndex", patch)
         self.assertIn("entry->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT", patch)
         self.assertIn("description->Size != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE", patch)
         self.assertNotIn("Adapter->VisibleAgxDestination = view", patch)

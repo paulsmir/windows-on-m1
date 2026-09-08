@@ -312,7 +312,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (prepatched && !NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
           adapter, context, Args->pAllocationList,
-          Args->AllocationListSize, &destination, &visibleDestination,
+          Args->AllocationListSize, command.DestinationAllocationIndex,
+          &destination, &visibleDestination,
           &visibleAllocationToken)))
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
                       STATUS_INVALID_ADDRESS);

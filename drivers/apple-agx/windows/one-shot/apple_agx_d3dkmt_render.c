@@ -231,11 +231,10 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     command.Version = ADMISSION_UMD_COMMAND_VERSION;
     command.Bytes = sizeof(command);
     command.Opcode = AdmissionUmdOpcodeColorFill;
-    command.Destination.Top = pass == 0u
-        ? 0u : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
+    command.Destination.Top = 0u;
     command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
     command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
-    command.DestinationAllocationIndex = 0u;
+    command.DestinationAllocationIndex = pass;
     command.Color = pass == 0u
         ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
         : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;

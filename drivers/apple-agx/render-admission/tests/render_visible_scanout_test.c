@@ -18,6 +18,14 @@ int main(void) {
   ADMISSION_VISIBLE_AGX_RECEIPT agx;
   unsigned int source[256];
   unsigned int before = 0xa5a5a5a5u;
+  unsigned int companion = 99u;
+  assert(AdmissionVisibleAgxCompanionIndex(0u, 2u, &companion));
+  assert(companion == 1u);
+  assert(AdmissionVisibleAgxCompanionIndex(1u, 2u, &companion));
+  assert(companion == 0u);
+  assert(!AdmissionVisibleAgxCompanionIndex(2u, 2u, &companion));
+  assert(!AdmissionVisibleAgxCompanionIndex(0u, 1u, &companion));
+  assert(!AdmissionVisibleAgxCompanionIndex(0u, 2u, NULL));
   assert(surface != NULL);
   memset(surface, 0xa5, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
   assert(!AdmissionVisiblePatternFill(surface,
@@ -122,6 +130,18 @@ int main(void) {
       surface, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &agx));
   assert(pixel(surface, 10u, 10u) ==
          APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR);
+  assert(pixel(surface, 10u, 1200u) ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
+  assert(agx.SourceHash != 0ULL &&
+         agx.DestinationHash == agx.SourceHash);
+  for (before = 0u;
+       before < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE / 4u; ++before)
+    surface[before] = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+  memset(&agx, 0, sizeof(agx));
+  assert(AdmissionVisibleAgxUseFramebuffer(
+      surface, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &agx));
+  assert(pixel(surface, 10u, 10u) ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
   assert(pixel(surface, 10u, 1200u) ==
          APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
   assert(agx.SourceHash != 0ULL &&

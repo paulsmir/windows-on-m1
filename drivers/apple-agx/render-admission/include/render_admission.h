@@ -973,6 +973,7 @@ NTSTATUS AdmissionVisibleAgxResolveDestination(
     _In_ const ADMISSION_RENDER_CONTEXT *Context,
     _In_reads_(AllocationCount) const DXGK_ALLOCATIONLIST *Allocations,
     _In_ UINT AllocationCount,
+    _In_ UINT RenderAllocationIndex,
     _In_ const ADMISSION_LOCAL_MEMORY_VIEW *RenderDestination,
     _Out_ ADMISSION_LOCAL_MEMORY_VIEW *VisibleDestination,
     _Out_ ULONGLONG *AllocationToken);

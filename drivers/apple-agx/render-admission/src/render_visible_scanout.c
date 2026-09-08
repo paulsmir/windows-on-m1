@@ -134,6 +134,16 @@ int AdmissionVisibleAgxScale16x16(
   return Receipt->SourceHash != 0ULL && Receipt->DestinationHash != 0ULL;
 }
 
+int AdmissionVisibleAgxCompanionIndex(
+    unsigned int RenderIndex, unsigned int AllocationCount,
+    unsigned int *CompanionIndex) {
+  if (CompanionIndex == VISIBLE_NULL || AllocationCount != 2u ||
+      RenderIndex >= AllocationCount)
+    return 0;
+  *CompanionIndex = RenderIndex == 0u ? 1u : 0u;
+  return 1;
+}
+
 int AdmissionVisibleAgxUseFramebuffer(
     const void *Source, unsigned long long SourceBytes,
     ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
@@ -141,6 +151,7 @@ int AdmissionVisibleAgxUseFramebuffer(
   const unsigned int *pixels = (const unsigned int *)Source;
   unsigned int index;
   int uniform = 1;
+  int uniformBand = 1;
   int twoBand = 1;
   if (Source == VISIBLE_NULL || Receipt == VISIBLE_NULL ||
       SourceBytes != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
@@ -153,10 +164,12 @@ int AdmissionVisibleAgxUseFramebuffer(
             : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
     if (pixels[index] != APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR)
       uniform = 0;
+    if (pixels[index] != APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR)
+      uniformBand = 0;
     if (pixels[index] != bandExpected)
       twoBand = 0;
   }
-  if (!uniform && !twoBand)
+  if (!uniform && !uniformBand && !twoBand)
     return 0;
   Receipt->SourceWidth = APPLE_AGX_SCANOUT_J313_WIDTH;
   Receipt->SourceHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;
