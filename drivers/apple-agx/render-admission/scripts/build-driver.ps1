@@ -10,6 +10,7 @@ param(
     [switch]$SubmitQualification,
     [switch]$VisibleScanoutQualification,
     [switch]$VisibleAgxQualification,
+    [switch]$UmdAdmissionTrace,
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
@@ -48,8 +49,10 @@ if ($null -ne $msbuildCommand) {
     }
 }
 
+$umdAdmissionTraceValue = if ($UmdAdmissionTrace) { "true" } else { "false" }
 & $msbuild $umdProject /m /t:Clean,Build "/p:Configuration=$Configuration" `
-    /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild"
+    /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild" `
+    "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue"
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 UMD build failed with exit code $LASTEXITCODE"
 }
