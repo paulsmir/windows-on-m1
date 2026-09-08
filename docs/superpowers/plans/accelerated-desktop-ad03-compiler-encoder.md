@@ -117,13 +117,19 @@ fixture inputs and project-owned serializers; use pinned Mesa sources in place.
       overflows and nondeterministic uninitialized bytes.
 - [x] Compile at least two source variants and require different shader binary
       or metadata hashes. Rebuild identical input twice and require equality.
-- [ ] Disassemble/validate with the same pinned compiler tooling; software pixel
+- [x] Disassemble/validate with the same pinned compiler tooling; software pixel
       output is not a hardware result.
 
 **Intermediate gate:** `AGX_COMPILER_CORE_OFFLINE_PROVEN=YES` after deterministic
-compute fixtures. `AGX_COMPILER_OFFLINE_PROVEN` remains NO until Task3 supplies
-the driver lowering required for vertex/fragment programs. No KMD/capability/
+compute fixtures. Full compiler readiness remained NO until the driver lowering
+required for vertex/fragment programs was executed below. No KMD/capability/
 hardware change.
+
+Compiler update: commit 0aa10b4d35cbdb88554873434d318f4c35aaa632
+executes the pinned Asahi VS prolog/UVS and FS epilog/sample-mask lowerings,
+then compiles and disassembles deterministic source-distinct graphics-stage
+binaries. `AGX_COMPILER_OFFLINE_PROVEN=YES`; this is still offline shader
+evidence, not USC/VDM encoder or hardware Draw proof.
 
 ## Task 3 — Windows Asahi screen/BO/fence adapter
 

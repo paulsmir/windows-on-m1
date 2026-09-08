@@ -83,6 +83,14 @@ absent, so validated Draw returns STATUS_NOT_SUPPORTED and cannot reach a
 queue. That production composition with the pinned Mesa encoder is the current
 first boundary. No hardware candidate is justified and pipeline caps remain0.
 
+AD03 graphics-stage compiler is OFFLINE_PROVEN at commit
+0aa10b4d35cbdb88554873434d318f4c35aaa632: exact pinned Asahi VS
+input/prolog+UVS and FS output-to-epilog+sample-mask lowerings produce
+deterministic source-sensitive binaries and both main programs pass the pinned
+AGX disassembler. `AGX_COMPILER_OFFLINE_PROVEN=YES`; USC pipeline VDM/render
+pass encoder serialization and production Draw publication remain the first
+boundary. This is not hardware or desktop evidence.
+
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
 Render/Patch/Submit, physical completion fence256, DPC and exact terminal output
