@@ -611,6 +611,13 @@ not KMD delivery. EXP620 reuses exact619 KMD and runs a one-pass-only producer
 under built-in WPR GPU tracing, sampling ACTIVE/HUNG through15s without issuing
 the fatal second request. Parse ETL/CSV before any further KMD change.
 
+EXP620 WPR GPU profile is unavailable (0x80070032), but its one-pass control is
+hardware decisive: fence256 remains ACTIVE through15s and cleans up normally.
+Thus first completion is accepted; HUNG belongs to the second-request sequence.
+Commit `d01223a4a725c18b0b8ca6cf696ce403a93c199e` removes only the obsolete15s
+inter-frame spacing from normal two-pass producer. EXP621 reuses exact619 KMD
+and must test immediate canonical ping-pong/fences256-257.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

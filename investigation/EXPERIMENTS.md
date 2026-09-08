@@ -37633,3 +37633,37 @@ raw CSV with tracerpt, and collects both plus correlation. Workflow/launch
 SHA256 `14dc1765cc8a3c52d2827c32d9111f6bc1103a2187c0c3d25ecbdcd1197d33a5`
 and `695f951ba88495f5f6a5eea70c8d71c2905c01df250a2e4c0e8b840b62b21089`.
 No KMD rebuild or hardware behavior change.
+
+**EXP620 FINAL — ACTIVE THROUGH15S; ETW UNAVAILABLE.** Built-in WPR GPU profile
+returned0x80070032 before producer start, so no ETW conclusion. The one-pass
+producer itself passed: fence256 physical/correlation path completed, device
+execution remained ACTIVE at immediate,250ms,500ms,1s,2s,5s,10s and15s, and
+all cleanup calls returned0. Therefore first completion alone does not cause
+HUNG; the previous fatal transition requires the second request path. Exact
+correlation candidate619/boot359514892 is durable1, fence256 notify in31.47ms,
+QueueDpc1/DPC present. Correlation/raw/host/evidence/result SHA256 are
+`8095cf1835abe49f23015d1c259c58a29e3d52449b610946afd367aa928ba1b9`,
+`728e174fe4a50b5056cae7e76fcda5c22af16641ab01f7cad8cf4824d19ccef4`,
+`ad19e9209fe8fa8f28c40faf90fcf83893684361602a3c2452b6e9bc95e4aa13`,
+`1bccd85d4f77537115e7db73a229f55c37fda1036d82428f1b440f407dadad84`,
+`116d08239946ca0b653d92e7ea32e58ed73496ee2f1888818fcac64b198531a1`.
+Exact cleanup completed.
+
+# EXP621 — immediate canonical ping-pong
+
+**PREREGISTERED 2026-09-08T10:18Z. WHY THIS HYPOTHESIS:** (1) EXP620 proves
+fence256 stays ACTIVE through15s when no second request is made. (2) EXP606
+already completed a second physical job when submitted without the later
+spacing workaround. (3) The normal producer still carried an artificial15s
+gap from EXP603; it is not a workload or WDDM requirement.
+
+Commit `d01223a4a725c18b0b8ca6cf696ce403a93c199e` removes only the normal
+inter-frame Sleep; the one-pass observation mode remains separate. Full373
+tests GREEN. Reuse exact619 KMD ZIP. Producer overlay/EXE/build-log SHA256:
+`306cff9dca721a46d6c8aef4b08d5355da652820cb8a467a4afb92c7ddac9eec`,
+`a2c57bf8f72dd378df89e49367efeba14285e2532d9a1dad81d35b275144431b`,
+`12a9bd620574f1d748da0ba7efd2ec46297f182b547fd3b7c7b63c7c9d35b9ec`.
+Workflow/launch SHA256
+`b14e32e0a2d7046bfc16ef7132a525f3a2cd8118619397338bc8af7f0d22ea55`,
+`33a5f03b9f8cea2bb6eb3ee09bff20b26a5a27147817d98e71c554819eaf7c59`.
+PASS requires both Render/Submit/worker/fence256/257 and ACTIVE state.
