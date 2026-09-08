@@ -37491,3 +37491,38 @@ ZIP/SYS/INF/CAT/UMD/producer SHA256 are respectively
 Workflow/launch SHA256 are
 `48bcdae95453c1f778ce837b1c1d0480f79928a79f6865b8235db8a97211ec2e`
 and `3f12b828a88523288e20f3238c0550f809fe26a54f1cec8eeff61b59baca3b08`.
+
+**EXP617 FINAL — REJECTED; PERSISTENCE BRANCH CLOSED.** Exact bind passed, then
+the same reset occurred. Durable candidate617/boot354274280 has two correlated
+Render calls, generation10/status0/durable1/overflow0. Call1 reached
+Submit/worker fence256; call2 reached Render EXIT success with168 DMA bytes,
+one patch and prepatched1 but no preserved Submit. Windows again produced
+`0x119/2 STATUS_DEVICE_BUSY`. Therefore both removing `ZwFlushKey` and moving
+initial registry export behind completion polling fail to change HUNG; no more
+persistence candidates. Correlation/raw/host/evidence/dump SHA256 are
+`ddb81b64dc4eeca7c66e446c11d14d8a7200f7e1694983cb4132815f05d206b8`,
+`668f6c8429f957cc13c52f7d2d0e131e8ee51f70406ac07dd18d6f08314bf81b`,
+`bc118e87d98ef36cd36b5b6b29c132f38921d5d499e6cd04e61870f0896966b8`,
+`c0a56313e92ead375aaa7dc14bc9b36854c1fbc070188f53114ba267a3825889`,
+`8c24de03620c1ecda9a0ecd1c3c44794d917fb17c98391720b1c6bc7ac7c5504`.
+The package was already absent after reset; exact matching stale state is clean.
+
+# EXP618 — one OS notification per adapter DPC
+
+**PREREGISTERED 2026-09-08T09:27Z. WHY THIS HYPOTHESIS:** (1) EXP615–617
+preserve physical fence256 completion and driver-local interrupt/DPC receipts,
+but Windows still marks the device HUNG. (2) Microsoft ROS calls
+`DxgkCbNotifyDpc` exactly once from the adapter DPC routine. (3) Our adapter DPC
+delegated OS notification independently to paging and render subroutines, so a
+coalesced adapter DPC could issue zero or two OS callbacks despite one queued
+DPC object.
+
+Commit `a29417c52b84de6a91e6ff200ff00b5d8277262e` centralizes the OS callback:
+`AdmissionDdiDpcRoutine` retires paging-local state, calls
+`DxgkCbNotifyDpc` exactly once, then performs render-local bookkeeping and
+dispatch. Paging and scheduler helpers no longer call dxgkrnl independently.
+This matches the Microsoft adapter-level DPC ownership contract; it changes no
+interrupt payload, fence, render ABI, producer, AGX, DCP, timeout, capability or
+placement. Focused executable queue/paging tests and full373 suite are GREEN.
+Build exact618 from exact617 plus interrupt/paging/scheduler only. PASS requires
+device ACTIVE before pass2 and two completed physical fences.

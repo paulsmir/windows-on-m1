@@ -587,6 +587,15 @@ terminal transition. EXP617 tests this one ordering change. If HUNG repeats,
 diagnostic persistence is closed and only the core Windows DMA completion
 notification contract remains in scope.
 
+EXP617 repeated the same `0x119/2 STATUS_DEVICE_BUSY` with both correlated
+Render calls, so persistence is closed. The first core mismatch versus the
+official Microsoft ROS sample is adapter-DPC ownership: our paging and render
+subroutines could independently call `DxgkCbNotifyDpc`, while Windows provides
+one DPC object per adapter. Commit
+`a29417c52b84de6a91e6ff200ff00b5d8277262e` makes the adapter DPC call dxgkrnl
+exactly once and leaves subroutines to local retirement/bookkeeping. Full373
+tests are GREEN. EXP618 is the next exact hardware discriminator.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
