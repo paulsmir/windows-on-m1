@@ -38340,3 +38340,19 @@ WDK/SDK26100 KMD/UMD/producer provisional build and Universal validation GREEN
 with inherited C28251 only. Build/sign/hash exact633, run to HOLD_PASS frames16,
 save evidence, signal retirement, then require sequence18 fallback, cleanup0,
 ACTIVE health and no reset.
+
+**EXP633 BUILD FREEZE.** Exact30.0.633.0 from immutable EXP632 plus only
+commit `eb249e6439b2faf2d6cd1c86bc2f66eb9b3b4832`. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign, coherent version,
+expected-build633 producer and workflow parser gates pass with inherited C28251
+only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`98b494e5f18180dba0fc686953e64d7e61112d25cf424cabcf72953d940169a3`,
+`85093f7606c0c885560be99d7bf540e3a4dbdee83e579cf3e77549a5ec60f6e7`,
+`65d6da15d867550e6b5840a87d3c672c41e29ac58bc6e54a26fccd7f18009cad`,
+`3b9f8eb2b1aafedef3f0aa0f577ed7d0e1325d7b6936f56b0446fc7249513d54`,
+`077c98a3ab178471609928a465ad4efd00b7495ea637d9186d608b8fafb81edf`,
+`c730f4b36bd04f98a5b2db8ac6b5ecb72ae21501adbb566d36904c0de87614d1`,
+`a93d18f9a2244d461a5ff2b023d19a7512687506a5b7e1178708b4cf716b971f`.
+Workflow/launch SHA256 are
+`7e78c490fb372ae811ee4616bcfc0f20c38fd97a989f4609c21604c5a02c5105`
+and `19c18b0e2ab48ea3ad81669555749fcc8127f72d50c605b41b2ad9c51b4dcdbf`.
