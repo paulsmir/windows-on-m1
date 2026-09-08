@@ -37058,3 +37058,10 @@ SHA `8c2f1833664dbd47301418830fe0100ce4837b58eda4044a16911894e7634bc2`.
 PASS requires pass2 queued1, sequence2/fence257, all4,096,000 second-color
 pixels and fresh D589 to the other offset with no TDR/fault. Recovery is exact
 EXP607-package cleanup and ordinary377/392.
+
+**EXP608 PRODUCER FREEZE.** Pinned ARM64 Release/code-analysis build passed with
+zero warnings/errors. Producer/build-log/workflow SHA256 are respectively
+`9436b0b4508f5ec0f1bd3202d869bc1b467e946c3c061d2581dc750ab960147c`,
+`38989a0c86962ac64a3b114dbf0fca10f35a42052c39c54adaa97473a706c115`,
+`09a31d0ca4a78ae070b74eebcc4335111a129bbb915f5773c44ab63b183f96f2`.
+Exact signed EXP607 ZIP remains `8c2f1833...34bc2`.
