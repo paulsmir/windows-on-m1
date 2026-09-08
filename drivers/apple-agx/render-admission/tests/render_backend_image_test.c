@@ -256,6 +256,7 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
   ADMISSION_RENDER_PACKET_DESCRIPTION packet;
   APPLE_AGX_GDI_DMA_COMMAND command;
   APPLE_AGX_EXP208_GDI_BINDING binding;
+  ADMISSION_BACKEND_OUTPUT_VIEW completed_output;
   const APPLE_AGX_EXP208_RELOCATION *relocations;
   unsigned int index;
   unsigned int tpc_edges = 0u;
@@ -283,6 +284,15 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
       &image, &packet, destination, (const unsigned char *)&command,
       sizeof(command), &binding));
   assert(binding.Framebuffer.Active == APPLE_AGX_TRUE);
+  assert(AdmissionBackendImageCaptureOutput(
+      &image, packet.Fence, &completed_output));
+  assert(completed_output.CpuAddress == destination);
+  assert(completed_output.GpuAddress == packet.DestinationGpuVa);
+  assert(completed_output.PhysicalAddress == packet.DestinationPhysical);
+  assert(completed_output.Bytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  assert(completed_output.ExpectedColor ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR);
+  assert(completed_output.Framebuffer == APPLE_AGX_TRUE);
   assert(image.Objects[64u].GpuVa == TEST_BACKEND_GPU + 0x5d0000ULL);
   assert(image.Objects[65u].GpuVa == TEST_BACKEND_GPU + 0x620000ULL);
   assert(image.Objects[67u].GpuVa == TEST_BACKEND_GPU + 0x628000ULL);
@@ -309,6 +319,11 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
   }
   assert(tpc_edges == 2u && tilemap_edges == 3u && cluster_edges == 1u);
   assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+  assert(completed_output.CpuAddress == destination);
+  assert(completed_output.GpuAddress == packet.DestinationGpuVa);
+  assert(completed_output.PhysicalAddress == packet.DestinationPhysical);
+  assert(completed_output.Bytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  assert(completed_output.Framebuffer == APPLE_AGX_TRUE);
   assert(memcmp(template_before, storage,
                 AppleAgxRenderTemplateBytes()) == 0);
   assert(image.Objects[64u].GpuVa == TEST_BACKEND_GPU + 0x540000ULL);

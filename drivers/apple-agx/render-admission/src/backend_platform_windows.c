@@ -169,7 +169,8 @@ static VOID AdmissionTerminalBegin(
 
 static VOID AdmissionTerminalObserve(
     ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
-    APPLE_AGX_BACKEND_COMPLETION_STATUS Status) {
+    APPLE_AGX_BACKEND_COMPLETION_STATUS Status,
+    const ADMISSION_BACKEND_OUTPUT_VIEW *Output) {
   const APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *config;
   APPLE_AGX_BACKEND_U32 taStamp = 0u, taDone = 0u;
   APPLE_AGX_BACKEND_U32 d3Stamp = 0u, d3Done = 0u;
@@ -207,53 +208,35 @@ static VOID AdmissionTerminalObserve(
               : (ULONG)AppleAgxBackendRuntimeResultFaulted,
           (ULONG)Status, source, rawEvent, rawEventBytes,
           actualValid ? 1u : 0u, taStamp, taDone, d3Stamp, d3Done)) {
-    APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
-        &Runtime->Adapter->BackendImage.Objects[
-            APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
-    BOOLEAN framebuffer =
-        Runtime->Adapter->BackendImage.Binding.Framebuffer.Active ==
-        APPLE_AGX_TRUE;
-    ULONG targetBytes = framebuffer
-        ? output->Size
-        : APPLE_AGX_EXP208_GDI_WIDTH *
-              APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
-    ULONG expectedColor = framebuffer
-        ? Runtime->Adapter->BackendImage.Binding.Framebuffer.ClearColor
-        : APPLE_AGX_EXP208_GDI_COLOR;
-    if (output->Data != NULL &&
-        output->Size >= targetBytes &&
+    if (Output != NULL && Output->CpuAddress != NULL &&
+        Output->Bytes >= Output->TargetBytes &&
         Runtime->TransportIo.FlushForCpu(
-            Runtime, output->Data, output->Size)) {
+            Runtime, Output->CpuAddress, Output->Bytes)) {
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (AdmissionTerminalReceiptCaptureOutput(
           &Runtime->TerminalReceipt, Fence,
-          (const UCHAR *)output->Data,
-          targetBytes, output->Size,
-          expectedColor, 0xa5u)) {
+          (const UCHAR *)Output->CpuAddress,
+          Output->TargetBytes, Output->Bytes,
+          Output->ExpectedColor, 0xa5u)) {
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
         if (Runtime->TerminalReceipt.OutputPixelsExpected ==
-            targetBytes / 4u) {
-          if (framebuffer) {
-            ULONG outputOffset =
-                Runtime->Adapter->BackendImage.Binding.Framebuffer.RenderHeight ==
-                        APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT
-                    ? APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET
-                    : 0u;
+            Output->TargetBytes / 4u) {
+          if (Output->Framebuffer == APPLE_AGX_TRUE) {
             Runtime->VisibleAgxSourceAddress =
-                (PUCHAR)output->Data - outputOffset;
+                Output->CpuAddress;
             Runtime->VisibleAgxSourceBytes =
-                APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
-            Runtime->VisibleAgxGpuAddress = output->GpuVa - outputOffset;
+                Output->Bytes;
+            Runtime->VisibleAgxGpuAddress = Output->GpuAddress;
             Runtime->VisibleAgxPhysicalAddress =
-                output->PhysicalAddress - outputOffset;
+                Output->PhysicalAddress;
           } else {
-            RtlCopyMemory(Runtime->VisibleAgxSource, output->Data,
+            RtlCopyMemory(Runtime->VisibleAgxSource, Output->CpuAddress,
                           sizeof(Runtime->VisibleAgxSource));
             Runtime->VisibleAgxSourceAddress = Runtime->VisibleAgxSource;
             Runtime->VisibleAgxSourceBytes =
                 sizeof(Runtime->VisibleAgxSource);
           }
-          if (!framebuffer) {
+          if (Output->Framebuffer != APPLE_AGX_TRUE) {
             Runtime->VisibleAgxGpuAddress =
                 Runtime->TerminalReceipt.DestinationGpuVa;
             Runtime->VisibleAgxPhysicalAddress =
@@ -1986,6 +1969,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   ADMISSION_RENDER_PACKET_DESCRIPTION visibleDescription;
   BOOLEAN visibleReady = FALSE;
 #endif
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_BACKEND_OUTPUT_VIEW completedOutput;
+  BOOLEAN completedOutputReady = FALSE;
+#endif
 
   if (runtime == NULL)
     return APPLE_AGX_BACKEND_FALSE;
@@ -2045,6 +2032,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     }
   }
   if (runtime->Completion.Phase == AppleAgxCompletionSchedulerCommitted) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    completedOutputReady = AdmissionBackendImageCaptureOutput(
+        &adapter->BackendImage, Fence, &completedOutput) == APPLE_AGX_TRUE;
+#endif
     if (!AdmissionBackendImageReleaseSubmission(
             &adapter->BackendImage, Fence) ||
         !AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
@@ -2107,7 +2098,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     return APPLE_AGX_BACKEND_FALSE;
   runtime->CompletionContext = NULL;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  AdmissionTerminalObserve(runtime, Fence, Status);
+  AdmissionTerminalObserve(
+      runtime, Fence, Status,
+      completedOutputReady ? &completedOutput : NULL);
 #endif
   if (preemption_waiting)
     InterlockedExchange(&adapter->SchedulerDpcPending, 1);

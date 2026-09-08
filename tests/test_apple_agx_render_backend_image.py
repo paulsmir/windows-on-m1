@@ -60,6 +60,29 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
         self.assertIn("AdmissionBackendImageBindSubmission", submission)
         self.assertIn("AdmissionBackendImageReleaseSubmission", scheduler)
 
+    def test_completion_uses_bound_output_snapshot_after_release(self):
+        source = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        complete = source[
+            source.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete("):
+            source.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        capture = complete.index("AdmissionBackendImageCaptureOutput")
+        release = complete.index("AdmissionBackendImageReleaseSubmission")
+        finish = complete.index("AppleAgxCompletionTransactionFinish")
+        observe = complete.index("AdmissionTerminalObserve(")
+        self.assertLess(capture, release)
+        self.assertLess(release, finish)
+        self.assertLess(finish, observe)
+
+        terminal = source[
+            source.index("static VOID AdmissionTerminalObserve("):
+            source.index("static VOID AdmissionTerminalExit(")
+        ]
+        self.assertIn("const ADMISSION_BACKEND_OUTPUT_VIEW *Output", terminal)
+        self.assertIn("Output->CpuAddress", terminal)
+        self.assertIn("Output->ExpectedColor", terminal)
+        self.assertNotIn("BackendImage.Binding", terminal)
+
 
 if __name__ == "__main__":
     unittest.main()

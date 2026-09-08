@@ -21,6 +21,15 @@ static void AdmissionBackendBindingZero(
     bytes[index] = 0u;
 }
 
+static void AdmissionBackendOutputZero(
+    ADMISSION_BACKEND_OUTPUT_VIEW *Output) {
+  unsigned char *bytes = (unsigned char *)Output;
+  APPLE_AGX_U32 index;
+  for (index = 0u;
+       index < (APPLE_AGX_U32)sizeof(*Output); ++index)
+    bytes[index] = 0u;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImagePrepare(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_LOCAL_MEMORY_VIEW *BackendView) {
@@ -143,6 +152,48 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
   Image->Binding = candidate;
   Image->BoundFence = Packet->Fence;
   *Binding = candidate;
+  return APPLE_AGX_TRUE;
+}
+
+APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
+    const ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    ADMISSION_BACKEND_OUTPUT_VIEW *Output) {
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *object;
+  ADMISSION_BACKEND_OUTPUT_VIEW candidate;
+  APPLE_AGX_BOOL framebuffer;
+  if (Output != ADMISSION_BACKEND_IMAGE_NULL)
+    AdmissionBackendOutputZero(&candidate);
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Output == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
+      Image->BoundFence != Fence)
+    return APPLE_AGX_FALSE;
+  object = &Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+  framebuffer = Image->Binding.Framebuffer.Active;
+  if (object->Data == ADMISSION_BACKEND_IMAGE_NULL ||
+      object->GpuVa != Image->Binding.DestinationGpuVa ||
+      object->PhysicalAddress != Image->Binding.DestinationPhysical ||
+      object->Size != Image->Binding.DestinationBytes ||
+      object->Size == 0u ||
+      (framebuffer == APPLE_AGX_TRUE &&
+       (object->Size != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES ||
+        (Image->Binding.Framebuffer.ClearColor !=
+             APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR &&
+         Image->Binding.Framebuffer.ClearColor !=
+             APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR))))
+    return APPLE_AGX_FALSE;
+  candidate.CpuAddress = object->Data;
+  candidate.GpuAddress = object->GpuVa;
+  candidate.PhysicalAddress = object->PhysicalAddress;
+  candidate.Bytes = object->Size;
+  candidate.TargetBytes = framebuffer == APPLE_AGX_TRUE
+      ? object->Size
+      : APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
+  candidate.ExpectedColor = framebuffer == APPLE_AGX_TRUE
+      ? Image->Binding.Framebuffer.ClearColor
+      : APPLE_AGX_EXP208_GDI_COLOR;
+  candidate.Framebuffer = framebuffer;
+  *Output = candidate;
   return APPLE_AGX_TRUE;
 }
 

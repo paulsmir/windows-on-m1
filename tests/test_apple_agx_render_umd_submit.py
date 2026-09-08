@@ -231,7 +231,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         ]
         self.assertLess(
             complete.index("DxgkCbSynchronizeExecution("),
-            complete.index("AdmissionTerminalObserve(runtime"),
+            complete.index("AdmissionTerminalObserve("),
         )
         self.assertEqual(backend.count("AdmissionScanoutPresentAgxResult("), 1)
         self.assertGreater(
@@ -262,8 +262,10 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertGreaterEqual(
             producer.count("APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT"), 2
         )
-        self.assertIn("ULONG targetBytes = framebuffer", backend)
-        self.assertIn("(PUCHAR)output->Data - outputOffset", backend)
+        self.assertIn("AdmissionBackendImageCaptureOutput(", backend)
+        self.assertIn("Output->TargetBytes", backend)
+        self.assertIn("Output->CpuAddress", backend)
+        self.assertIn("Output->PhysicalAddress", backend)
         self.assertIn("expandedObjects[] = {64u, 65u, 67u}", backend)
         self.assertIn("BOOLEAN directFramebuffer = FALSE", scanout)
         self.assertIn(
