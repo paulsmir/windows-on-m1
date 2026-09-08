@@ -179,16 +179,16 @@ pipeline mask remains0.
 **Files:** extend `apple_agx_win32_abi.[ch]`, `render_win32_transport.[ch]` and
 their tests; create `apple_agx_dynamic_job.[ch]` and tests.
 
-- [ ] Add one versioned Draw opcode with bounded references for render target,
+- [x] Add one versioned Draw opcode with bounded references for render target,
       vertex/index/constants, shader code/rodata, USC pipelines, descriptors,
       scissor/depth-bias and encoder stream.
-- [ ] Every pointer-like field is an allocation index plus checked offset/size;
+- [x] Every pointer-like field is an allocation index plus checked offset/size;
       typed relocations have a finite allow-list for destination structure,
       width, alignment, access and target role.
-- [ ] Validate non-overlap, executable/read/write policy, device generation,
+- [x] Validate non-overlap, executable/read/write policy, device generation,
       active-display exclusion, attachment geometry/format and exact graph
       reachability before publishing state.
-- [ ] Copy command and graph bytes once. Mutation, duplicate/missing object,
+- [x] Copy command and graph bytes once. Mutation, duplicate/missing object,
       stale VA, relocation into opcode bytes, arithmetic overflow and rollback
       failures must be executable negative tests.
 - [ ] KMD resolves VAs only after validation and reuses the existing retained-
@@ -197,6 +197,14 @@ their tests; create `apple_agx_dynamic_job.[ch]` and tests.
 
 **Gate:** `DYNAMIC_JOB_ABI_OFFLINE_PROVEN=YES`; malformed graphs cannot reach
 queue publication.
+
+Task4 progress: commit c9c20e507fa84440a31c59f9315b4373a2549035
+implements the versioned Draw graph, allocation-role/class policy, alias-aware
+relocation validation, immutable command builder and rollback-safe copy-once
+materializer. `DYNAMIC_JOB_ABI_OFFLINE_PROVEN=YES`. Production physical-range
+reader/resolver callbacks and backend publication are intentionally absent;
+validated Draw currently returns `STATUS_NOT_SUPPORTED`, so the final KMD
+resolve/publication item remains open and no queue can observe the new graph.
 
 ## Task 5 — one encoder graph through the production backend
 

@@ -72,8 +72,16 @@ versioned internal allocation descriptor and preserves General/Shader/Encoder
 plus exact access through UMD Allocate and KMD Create/Open/Render facts; RED to
 GREEN parser tests real callback mock and ARM64 Universal/sign build pass.
 Typed Draw graph validation and role-to-class relocation policy are now the
-current first boundary. No hardware candidate is justified and pipeline caps
-remain0.
+current first boundary. Commit
+c9c20e507fa84440a31c59f9315b4373a2549035 now implements a versioned
+pointer-free Draw graph, immutable UMD builder, class/alias/range/reachability
+validation and rollback-safe copy-once encoder/pipeline materialization with
+callback-resolved40-bit VAs. Malformed and mutation tests are GREEN; the module
+is compiled into ARM64 KMD build659. `DYNAMIC_JOB_ABI_OFFLINE_PROVEN=YES`, but
+production physical-range reader/resolver and backend publication remain
+absent, so validated Draw returns STATUS_NOT_SUPPORTED and cannot reach a
+queue. That production composition with the pinned Mesa encoder is the current
+first boundary. No hardware candidate is justified and pipeline caps remain0.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
