@@ -39693,3 +39693,37 @@ Evidence paths will be under
 `.local/experiments/EXP649-dynamic-win32-transport/{hold-evidence,final-evidence}`
 with raw producer and host logs. Artifact and workflow hashes are appended after
 the pinned build and before staging.
+
+**EXP649 BUILD FREEZE 2026-09-08T20:55:20Z.** FRYZZING built exact
+30.0.649.0 from immutable `C:\Users\pauls\EXP648\src` plus only overlay
+SHA256 `a71c8b66dab31c08dfebd5094257e926a4efb4395d2868866fb11d163b827773`.
+VisibleAgxQualification expands to the established submit-qualification and
+full context0 broker defines. WDK26100 KMD/UMD analysis, Universal validation,
+Inf2Cat, TestSign and coherent-version tests PASS; KMD has only the inherited
+C28251 worker-annotation warning. ARM64 producer analysis builds with zero
+warnings/errors. Exact ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`280536f95b8dcde6ebd5c047d6c0722957b1b4130a4e9b1502aadcf846a7d00d`,
+`4ee836cfd2e7702492ea62fb84a04fc242105f1ea85be2c1fb3cc418d942fee0`,
+`7a95fd4a47d28153b92a08f212ced7cbb362dba176ca4efa12508e2dccf9cde5`,
+`83a6f23fc854733b865e4570e6449c77647679990bb9e6335c89d930a4bf5414`,
+`59fb6ff2eed182fac9c0e8d0b5f839a54d50dba6ae424123df21ec24b18719df`
+and
+`afa26f8dc1bcee0dd0dbb16fa954d6ca407add903b440fb9d842d36ae6309999`.
+Build/producer/version logs SHA256 are
+`7da2b7a535d0383617d2b201e7dec207a3955b2eea5b03c3328c51664aaa8a33`,
+`f070d587b994c7b2a73f4dc71e469b1dc6a83a7210d1f340785291f2b7882b3e`
+and `69e09d41f517b71943ba0f68b1e98d71bc03a46f4986db0018ec39b91b4846ea`.
+
+The exact25-test ABI/ownership/KMD/Mesa/dynamic-backend/output/presentation/
+ledger regression set is GREEN; log SHA256
+`4cf96a85a2e70ecf4b0c6535b8e4c9277e3834d9dd77a5b6a85aa4da9a6122f3`.
+PowerShell parsed every experiment script without errors. Workflow,
+evidence-collector, live-collector, validator, full-owner launch and ordinary
+restore SHA256 are
+`e232e6bfb3db7c25cf80cfc3054ac8900e9d14fd72a94704073ffd85770170bf`,
+`7b0112f69e1100ec812fe5d80ccf379ce289830c30adcab04a7b4962fd8d9919`,
+`af97023c5ddde09ff3a68834c7e1796040de33769076b13fd0c3b7a994e4f3ee`,
+`0dda51efd955888dd1ef2a8ae42d2411350035e3f4d4f9c99069637308059b08`,
+`f03c36f2d73b755110e80f9c50231afac66fd6994ac12732491afbb777fcb1b0`
+and `297da838c4f1ccff0c8de276a90533343964034fbd1e7297345b77b05cb8423d`.
+Candidate is ready but not yet staged; hardware readiness is unchanged.
