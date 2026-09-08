@@ -37323,3 +37323,35 @@ warnings/errors. Producer/build-log/workflow SHA256:
 `533927c879be145911baed679fb61db1824e5851c1cfcf7a1237d74688ee31ff`,
 `ba966003b18b7234b69fe36531e41435583961c878580894e450c130087527c2`.
 Exact612 R5 package unchanged.
+
+**EXP614 FINAL — DEVICE HUNG BEFORE PASS2.** Immediately after pass1 the same
+D3DKMT device reported ACTIVE1. After the15s interval, before pass2, it reported
+HUNG3 and remained HUNG3 after pass2. Call2 nevertheless entered/exited KMD
+successfully with168 DMA bytes/one patch/prepatched1, but received no Patch or
+Submit. Correlation candidate612/boot356309938 is durable1, generation10,
+overflow0. Decoded/raw/host SHA256 are
+`5019070ef42ab882f2dc95547a19f7690e48a1246902e6a45e45b026070765e6`,
+`0e4966c399d913ecade8a2ff34c1add5c7722f8c2fa7d0087963cdc716b1f308`,
+`cbc3180d792862e37d999b819744aee41a0f304b8d0e512e1e40d34d3811dd12`.
+Exact cleanup completed.
+
+Source re-anchor finds the completion ordering defect: EXP601 moved D589 after
+fence notification, but `AdmissionBackendComplete` still executed
+`AdmissionTerminalObserve` first. Full-frame qualification performs uncached
+FlushForCpu/16MiB validation there, delaying `DXGK_INTERRUPT_DMA_COMPLETED`
+after physical AGX completion. This explains ACTIVE immediately after submit
+then HUNG at the TDR interval despite correct terminal pixels.
+
+# EXP615 — notify completion before terminal output capture
+
+**PREREGISTERED 2026-09-08T08:28Z. WHY THIS HYPOTHESIS:** (1) EXP614 directly
+measures ACTIVE→HUNG before pass2. (2) TA/3D completion/fence identity is already
+hardware proven. (3) source shows the only heavy qualification operation still
+before notification is full output capture/hash. Commit
+`ab6c769ae6af3851209c11233e0660ca80775c4d` moves only terminal output
+observation after successful synchronized DMA_COMPLETED notification and
+completion transaction finish; D589 remains later. No timeout, AGX, PBE, DCP,
+memory, scheduler or capability change. Full371 tests GREEN. Build exact615 and
+retain the EXP614 device-state producer. PASS requires execution ACTIVE before
+pass2, two Render/Patch/Submit/worker chains, fences256/257, two exact full-frame
+colors and two alternate D589 results.

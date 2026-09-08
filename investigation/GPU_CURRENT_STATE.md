@@ -560,6 +560,13 @@ correlation count stayed1, while PnP remained Code0/service Running. Commit
 same-device execution-state samples after pass1, before pass2 and after pass2;
 no KMD/AGX or synchronization change.
 
+EXP614 proves device execution ACTIVE immediately after pass1 then HUNG before
+pass2. Root cause is pre-notify full-frame terminal output capture still left in
+`AdmissionBackendComplete` despite EXP601's D589 move. Commit
+`ab6c769ae6af3851209c11233e0660ca80775c4d` moves this qualification capture
+after synchronized DMA_COMPLETED and transaction finish. EXP615 must prove the
+device stays ACTIVE and complete both ping-pong frames/fences/D589.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
