@@ -36631,3 +36631,76 @@ Manifest/build/producer/version log hashes are
 `347bc29aecc935c65253a90ea8c5eb3839ca39c57ea506c853453669e493ef64`.
 Hardware gate is open only for this exact package/producer and the preregistered
 single natural run.
+
+**EXP600 HARDWARE FINAL 2026-09-08T00:21Z — DIRECT FULL-SIZE OUTPUT PASS;
+TDR-SAFE ORDERING FAIL.** Natural bind is exact Code0/oem5/service Running/SYS
+hash/8CPU. The producer created both full-size allocations, completed residency
+fence7002, returned Render0/queued1 and clean result0. Terminal receipt ValidMask
+`0xff` proves physical TA/D3 expected=observed stamps
+`0x7a000100/0x3d000100`, done2/2, fence=completed256, NotifyInterrupt1/DPC1.
+The PBE output at GPU `0x1500fa0000`, PA `0x9bcf90000` contains all4,096,000
+expected `0xff112233` pixels over exactly `0xfa0000` changed bytes, mismatch
+index `0xffffffff`, poison0 and guard0; FNV is `0x27592755b9c32325`.
+Visible receipt Guard11/Stage3/Status0 proves the same CPU/GPU/PA allocation is
+both source and destination with identical hash, width2560/height1600/pitch10240,
+requested=applied=latched sequence3, active offset `0xfa0000` and swap10. Host
+independently logged A408 then exact D589 swap10. No CPU scale occurred, so
+`DIRECT_FULLSIZE_AGX_OUTPUT_HW_PROVEN=YES` and the fixed16x16 geometry boundary
+is closed.
+
+The run is not fully GREEN. Visible processing elapsed2519ms and terminal exit
+records `Resetting=1`, `SchedulerFaulted=1`. Source ordering is exact:
+`AdmissionTerminalObserve` and `AdmissionScanoutPresentAgxResult` execute before
+the completion transaction reaches `DxgkCbSynchronizeExecution`. The already
+completed GPU fence was therefore withheld while qualification hashed/latches
+the full surface, entering Windows' TDR window. System remained reachable with
+8CPU/NVMe2/USB5/keyboard1 and bugcheck0; Event129x2 is telemetry. Exact oem5
+cleanup, retained-root reverse teardown and graceful reset completed. Ordinary
+377/392 is restored Code28 with no package/service/module and the same healthy
+device counts.
+
+Terminal/visible/evidence/decoded/host-excerpt SHA256:
+`b67adf51708c59185cdd99b4e4ea2fcbad40e91a1fc2c6ec64aedfbd07ddab05`,
+`727a65621fe7e9f68fb32e3d8e26ecf2e857c731a18a555d252e3a32d3179751`,
+`1a570967f78340e1c9617519e23a07a2a8b8688ba1a322db64881546fee72de2`,
+`761c23cc93cb816d63f9f62f7f1e31e2973f8665f39e856c7b0386f1c8c80162`,
+`6194f23f83fb1660782e566112aef21d164daec6d22b54d82ece64dd3982e447`.
+
+# EXP601 — report exact hardware fence before qualification latch
+
+**PREREGISTERED 2026-09-08T00:28:16Z. WHY THIS HYPOTHESIS:**
+
+1. EXP600 proves the full-size physical AGX job and DCP latch succeed; neither
+   command geometry nor display addressing remains the failed boundary.
+2. The only negative receipt fields are `Resetting=1/SchedulerFaulted=1`, while
+   visible elapsed2519ms exceeds the normal completion window.
+3. Current source places the blocking full-surface validation/DCP latch before
+   `DxgkCbSynchronizeExecution`, directly withholding an already proven fence.
+
+**WINDOWS CONTRACT:** once physical TA/3D completion is validated, commit the
+scheduler/backend packet and notify exact `DXGK_INTERRUPT_DMA_COMPLETED` through
+the existing synchronization callback immediately. Qualification presentation
+is not allowed to delay, revoke or retry that reported fence. The producer's
+existing10s allocation lifetime remains the bounded owner during the later latch.
+
+**AGX/ASAHI CONTRACT:** byte-exact EXP600 geometry, PBE, queues, events, stamps,
+done pointers and output validation; no change.
+
+**TRANSLATION:** commit
+`1f6b93419222bc92cf65358340ef56c421ceaf3d` captures the packet/source identity
+while active, performs the existing completion transaction and exact interrupt/
+DPC first, then invokes the existing qualification latch from the saved local
+identity. A display failure after a successfully reported fence remains solely
+in `Wom1VisibleAgxReceipt` and cannot return backend completion false.
+
+**WHAT IS STILL UNKNOWN:** whether the same full-size run now records
+`Resetting=0/SchedulerFaulted=0` while retaining all4,096,000 expected pixels,
+exact fence/interrupt/DPC and D589. One run distinguishes ordering from any
+remaining full-size execution problem. RED ordering assertion then full367
+AppleAgx tests GREEN; no AGX/DCP/broker/memory/capability change.
+
+Build exact30.0.601.0 from frozen EXP600 source plus only
+`backend_platform_windows.c` and its source-contract test. After hash/sign gates,
+stage from the verified ordinary Code28 baseline, one natural bind and one
+producer. Preserve receipts, cleanup exact package and restore ordinary before
+the next causal decision.

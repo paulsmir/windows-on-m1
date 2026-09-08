@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-08T00:13Z. Authoritative compact state; read this first after
+Updated 2026-09-08T00:28Z. Authoritative compact state; read this first after
 context reset. Detailed evidence remains in `EXPERIMENTS.md` and experiment-local
 archives. Continue in the current main process without implementation agents.
 
@@ -408,6 +408,25 @@ frozen: ZIP/SYS/INF/CAT/UMD/producer SHA256 are
 `36477e809cd8e31c8af609e55083fce6437c26e636ef4dbf4c85ac082449493d`,
 `0abcbc7aee994615277233165c76d62fa9aebdc452aae8d5f5e988ab21ec2829`.
 All WDK/Universal/sign/version gates passed with inherited C28251 only.
+
+EXP600 is a machine-side direct-full-size PASS with a new completion-ordering
+boundary. Exact terminal receipt proves TA/D3 stamps `0x7a000100/0x3d000100`,
+done2/2, fence/completed256, interrupt/DPC, and all4,096,000 pixels
+`0xff112233` across `0xfa0000` bytes with no mismatch, poison or guard damage.
+Visible receipt proves source=destination GPU `0x1500fa0000`, PA
+`0x9bcf90000`, hash `0x27592755b9c32325`, sequence3, offset `0xfa0000`,
+status0 and host D589 swap10. Therefore
+`DIRECT_FULLSIZE_AGX_OUTPUT_HW_PROVEN=YES`; no CPU scale occurred.
+
+EXP600 is not TDR-safe: visible elapsed2519ms and terminal
+`Resetting=1/SchedulerFaulted=1` prove the qualification hash/latch ran before
+dxgkrnl fence notification and entered the TDR window. There was no bugcheck;
+exact cleanup is persisted and ordinary377/392 is clean with Code28/no package/
+service/module,8CPU/NVMe2/USB5/keyboard1, Event129x2 telemetry. Commit
+`1f6b93419222bc92cf65358340ef56c421ceaf3d` moves only the qualification
+latch after successful exact fence notification/transaction finish. Full367
+tests GREEN. EXP601 must rerun the same full-size job and require Resetting0,
+SchedulerFaulted0 plus unchanged pixel/fence/D589 proof.
 
 ## Standing constraints
 
