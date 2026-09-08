@@ -259,6 +259,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
         pass == 0u ? &createContext : &secondContext;
     UINT commandOffset;
     if (pass != 0u) {
+      Sleep(250u);
       (void)QueryDeviceExecutionState(
           createDevice.hDevice, L"before_pass2", &executionState);
     }
