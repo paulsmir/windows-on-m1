@@ -142,5 +142,12 @@ int AdmissionTerminalReceiptCaptureOutput(
     const unsigned char *Bytes, unsigned int TargetBytes,
     unsigned int ExaminedBytes, unsigned int ExpectedPixel,
     unsigned char PoisonByte);
+typedef int (*ADMISSION_TERMINAL_OUTPUT_PROGRESS)(void *Context);
+int AdmissionTerminalReceiptCaptureOutputProgress(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
+    const unsigned char *Bytes, unsigned int TargetBytes,
+    unsigned int ExaminedBytes, unsigned int ExpectedPixel,
+    unsigned char PoisonByte, unsigned int ChunkBytes,
+    ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress, void *ProgressContext);
 
 #endif /* APPLE_AGX_RENDER_GDI_RECEIPT_H */

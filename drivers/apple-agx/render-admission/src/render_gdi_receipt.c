@@ -268,22 +268,48 @@ int AdmissionTerminalReceiptExit(ADMISSION_TERMINAL_RECEIPT *Receipt,
   return 1;
 }
 
-int AdmissionTerminalReceiptCaptureOutput(
+static int terminal_output_progress(
+    ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress, void *Context,
+    unsigned int ChunkBytes, unsigned int CompletedBytes,
+    unsigned int TotalBytes) {
+  if (Progress == (void *)0 || CompletedBytes == TotalBytes ||
+      (CompletedBytes % ChunkBytes) != 0u)
+    return 1;
+  return Progress(Context);
+}
+
+int AdmissionTerminalReceiptCaptureOutputProgress(
     ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
     const unsigned char *Bytes, unsigned int TargetBytes,
     unsigned int ExaminedBytes, unsigned int ExpectedPixel,
-    unsigned char PoisonByte) {
+    unsigned char PoisonByte, unsigned int ChunkBytes,
+    ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress, void *ProgressContext) {
+  ADMISSION_TERMINAL_RECEIPT candidate;
   unsigned int index;
   unsigned int prefixBytes;
   unsigned int poisonPixel = (unsigned int)PoisonByte * 0x01010101u;
   unsigned long long hash = 0xcbf29ce484222325ULL;
   if (Receipt == (void *)0 || Bytes == (void *)0 ||
       !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_TERMINAL) ||
+      (Receipt->ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) ||
       Receipt->Fence != Fence || TargetBytes == 0u ||
-      (TargetBytes & 3u) != 0u || ExaminedBytes < TargetBytes)
+      (TargetBytes & 3u) != 0u || ExaminedBytes < TargetBytes ||
+      ((Progress == (void *)0) != (ChunkBytes == 0u)) ||
+      (Progress != (void *)0 && (ChunkBytes & 3u) != 0u))
     return 0;
-  Receipt->OutputFirstMismatchIndex = 0xffffffffu;
-  Receipt->OutputFirstPixelActual =
+  candidate = *Receipt;
+  candidate.OutputFirstPixelActual = 0u;
+  candidate.OutputFirstMismatchIndex = 0xffffffffu;
+  candidate.OutputFirstMismatchActual = 0u;
+  candidate.OutputPixelsExpected = 0u;
+  candidate.OutputPixelsPoison = 0u;
+  candidate.OutputChangedBytes = 0u;
+  candidate.OutputGuardCorrupt = 0u;
+  candidate.OutputBytesExamined = 0u;
+  candidate.OutputTargetFnv1a = 0ULL;
+  AdmissionGdiReceiptZero(candidate.OutputPrefix,
+                          ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES);
+  candidate.OutputFirstPixelActual =
       (unsigned int)Bytes[0] | ((unsigned int)Bytes[1] << 8u) |
       ((unsigned int)Bytes[2] << 16u) |
       ((unsigned int)Bytes[3] << 24u);
@@ -294,30 +320,54 @@ int AdmissionTerminalReceiptCaptureOutput(
         ((unsigned int)pixel[2] << 16u) |
         ((unsigned int)pixel[3] << 24u);
     if (actual == ExpectedPixel)
-      ++Receipt->OutputPixelsExpected;
-    else if (Receipt->OutputFirstMismatchIndex == 0xffffffffu) {
-      Receipt->OutputFirstMismatchIndex = index;
-      Receipt->OutputFirstMismatchActual = actual;
+      ++candidate.OutputPixelsExpected;
+    else if (candidate.OutputFirstMismatchIndex == 0xffffffffu) {
+      candidate.OutputFirstMismatchIndex = index;
+      candidate.OutputFirstMismatchActual = actual;
     }
     if (actual == poisonPixel)
-      ++Receipt->OutputPixelsPoison;
+      ++candidate.OutputPixelsPoison;
+    if (!terminal_output_progress(
+            Progress, ProgressContext, ChunkBytes, (index + 1u) * 4u,
+            TargetBytes))
+      return 0;
   }
   for (index = 0u; index < TargetBytes; ++index) {
     if (Bytes[index] != PoisonByte)
-      ++Receipt->OutputChangedBytes;
+      ++candidate.OutputChangedBytes;
     hash ^= Bytes[index];
     hash *= 0x100000001b3ULL;
+    if (!terminal_output_progress(
+            Progress, ProgressContext, ChunkBytes, index + 1u,
+            TargetBytes))
+      return 0;
   }
-  for (index = TargetBytes; index < ExaminedBytes; ++index)
+  for (index = TargetBytes; index < ExaminedBytes; ++index) {
     if (Bytes[index] != PoisonByte)
-      ++Receipt->OutputGuardCorrupt;
+      ++candidate.OutputGuardCorrupt;
+    if (!terminal_output_progress(
+            Progress, ProgressContext, ChunkBytes,
+            index - TargetBytes + 1u, ExaminedBytes - TargetBytes))
+      return 0;
+  }
   prefixBytes = ExaminedBytes < ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES
                     ? ExaminedBytes
                     : ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES;
   for (index = 0u; index < prefixBytes; ++index)
-    Receipt->OutputPrefix[index] = Bytes[index];
-  Receipt->OutputBytesExamined = ExaminedBytes;
-  Receipt->OutputTargetFnv1a = hash;
-  Receipt->ValidMask |= ADMISSION_TERMINAL_VALID_OUTPUT;
+    candidate.OutputPrefix[index] = Bytes[index];
+  candidate.OutputBytesExamined = ExaminedBytes;
+  candidate.OutputTargetFnv1a = hash;
+  candidate.ValidMask |= ADMISSION_TERMINAL_VALID_OUTPUT;
+  *Receipt = candidate;
   return 1;
+}
+
+int AdmissionTerminalReceiptCaptureOutput(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
+    const unsigned char *Bytes, unsigned int TargetBytes,
+    unsigned int ExaminedBytes, unsigned int ExpectedPixel,
+    unsigned char PoisonByte) {
+  return AdmissionTerminalReceiptCaptureOutputProgress(
+      Receipt, Fence, Bytes, TargetBytes, ExaminedBytes, ExpectedPixel,
+      PoisonByte, 0u, (void *)0, (void *)0);
 }

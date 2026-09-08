@@ -4,6 +4,7 @@
 
 #define ADMISSION_PLATFORM_TAG 'pRGA'
 #define ADMISSION_PLATFORM_QUEUE_TIMEOUT_MS 500ULL
+#define ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES 0x40000u
 #define ADMISSION_PLATFORM_DEVICE_CONTROL_STALL_US 50u
 #define ADMISSION_QUEUE_FAULT_SNAPSHOT_DELAY_MS 50ULL
 #define ADMISSION_TA_TEMPORAL_SECOND_DELAY_MS 100ULL
@@ -176,6 +177,19 @@ static VOID AdmissionTerminalBegin(
       AdmissionTerminalReadU64(d3->Data + 604u));
 }
 
+static int AdmissionOutputCaptureProgress(void *Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime =
+      (ADMISSION_PLATFORM_RUNTIME *)Context;
+  LARGE_INTEGER interval;
+  if (runtime == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      InterlockedCompareExchange(&runtime->Stopping, 0, 0) != 0 ||
+      InterlockedCompareExchange(&runtime->Resetting, 0, 0) != 0)
+    return 0;
+  interval.QuadPart = -10000LL; /* one millisecond, relative */
+  return NT_SUCCESS(KeDelayExecutionThread(
+      KernelMode, FALSE, &interval)) ? 1 : 0;
+}
+
 static VOID AdmissionTerminalObserve(
     ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
     APPLE_AGX_BACKEND_COMPLETION_STATUS Status,
@@ -225,11 +239,13 @@ static VOID AdmissionTerminalObserve(
         Runtime->TransportIo.FlushForCpu(
             Runtime, Output->RenderedCpuAddress, Output->RenderedBytes)) {
       Runtime->TransportIo.MemoryBarrier(Runtime);
-      if (AdmissionTerminalReceiptCaptureOutput(
+      if (AdmissionTerminalReceiptCaptureOutputProgress(
           &Runtime->TerminalReceipt, Fence,
           (const UCHAR *)Output->RenderedCpuAddress,
           Output->RenderedBytes, Output->RenderedBytes,
-          Output->ExpectedColor, 0xa5u)) {
+          Output->ExpectedColor, 0xa5u,
+          ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
+          AdmissionOutputCaptureProgress, Runtime)) {
         BOOLEAN outputValid =
             Runtime->TerminalReceipt.OutputPixelsExpected ==
                 Output->RenderedBytes / 4u &&

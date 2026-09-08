@@ -4,6 +4,17 @@
 #include <assert.h>
 #include <string.h>
 
+typedef struct _OUTPUT_PROGRESS_TEST {
+  unsigned int Calls;
+  unsigned int FailAt;
+} OUTPUT_PROGRESS_TEST;
+
+static int output_progress(void *Context) {
+  OUTPUT_PROGRESS_TEST *progress = (OUTPUT_PROGRESS_TEST *)Context;
+  ++progress->Calls;
+  return progress->FailAt == 0u || progress->Calls != progress->FailAt;
+}
+
 static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
     unsigned int fence) {
   ADMISSION_RENDER_PACKET_DESCRIPTION description = {0};
@@ -278,6 +289,51 @@ static void test_terminal_receipt_preserves_preclear_completion(void) {
                 ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES) == 0);
 }
 
+static void test_terminal_output_progress_bounds_reads_and_aborts_cleanly(void) {
+  ADMISSION_TERMINAL_RECEIPT receipt;
+  OUTPUT_PROGRESS_TEST progress = {0};
+  unsigned char event[ADMISSION_TERMINAL_RAW_EVENT_BYTES] = {0};
+  unsigned int output[4] = {
+      0xff112233u, 0xff112233u, 0xff112233u, 0xff112233u};
+  AdmissionTerminalReceiptInitialize(&receipt);
+  assert(AdmissionTerminalReceiptBegin(
+      &receipt, 1u, 9u, 0x9fff78000ULL, 17u, 0x1000ULL, 0x2000ULL,
+      0x1500000000ULL, 0x9bc000000ULL, sizeof(output),
+      0u, 1u, 0x7a000100u, 0x3d000100u, 2u, 2u,
+      0x3000ULL, 0x3000ULL, 0x4000ULL, 0x4000ULL));
+  assert(AdmissionTerminalReceiptObserve(
+      &receipt, 17u, 0u, 0u, AdmissionTerminalSourcePollingEvent,
+      event, sizeof(event), 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
+  assert(AdmissionTerminalReceiptCaptureOutputProgress(
+      &receipt, 17u, (const unsigned char *)output, sizeof(output),
+      sizeof(output), 0xff112233u, 0xa5u, 8u,
+      output_progress, &progress));
+  /* One boundary in the pixel pass and one in the byte-hash pass. */
+  assert(progress.Calls == 2u);
+  assert(receipt.OutputPixelsExpected == 4u);
+  assert(receipt.OutputBytesExamined == sizeof(output));
+  assert(receipt.OutputTargetFnv1a == 0x38093307db8f7f0dULL);
+
+  AdmissionTerminalReceiptInitialize(&receipt);
+  assert(AdmissionTerminalReceiptBegin(
+      &receipt, 1u, 9u, 0x9fff78000ULL, 18u, 0x1000ULL, 0x2000ULL,
+      0x1500000000ULL, 0x9bc000000ULL, sizeof(output),
+      0u, 1u, 0x7a000100u, 0x3d000100u, 2u, 2u,
+      0x3000ULL, 0x3000ULL, 0x4000ULL, 0x4000ULL));
+  assert(AdmissionTerminalReceiptObserve(
+      &receipt, 18u, 0u, 0u, AdmissionTerminalSourcePollingEvent,
+      event, sizeof(event), 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
+  progress.Calls = 0u;
+  progress.FailAt = 1u;
+  assert(!AdmissionTerminalReceiptCaptureOutputProgress(
+      &receipt, 18u, (const unsigned char *)output, sizeof(output),
+      sizeof(output), 0xff112233u, 0xa5u, 8u,
+      output_progress, &progress));
+  assert(progress.Calls == 1u);
+  assert(!(receipt.ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT));
+  assert(receipt.OutputPixelsExpected == 0u);
+}
+
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
   test_prepatched_capture_adopt_and_worker_copy_are_exact();
@@ -288,5 +344,6 @@ int main(void) {
   test_nonpaging_private_range_uses_full_buffer_when_subrange_empty();
   test_gdi_receipt_requires_one_context_fence_and_physical_completion();
   test_terminal_receipt_preserves_preclear_completion();
+  test_terminal_output_progress_bounds_reads_and_aborts_cleanly();
   return 0;
 }
