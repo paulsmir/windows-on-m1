@@ -4,10 +4,10 @@ Updated 2026-09-08T17:15Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
-EXP641 evidence and cleanup are complete. Exact experimental package/devnode/
-service/SYS/UMD was removed. Ordinary377/392 is restored and verified:
-APPL0002 Code28, packages0, no service/module,8CPU,NVMe2/USB5/keyboard1.
-No test package is installed or staged.
+EXP643 is currently installed and naturally bound on the full-owner release
+platform: APPL0002 Code0, exact oem5/INF/SYS hashes, service Running,8CPU.
+The corrected boot is stable and SSH works. Task EXP643-Interactive is Ready,
+but console session1 has no logged-in user; no producer result exists yet.
 
 Current first unknown remains standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0:
@@ -18,6 +18,8 @@ but its scheduled producer never ran: exact dump localizes a pre-producer CDD
 Present crash to the new diagnostic reading DXGK_ALLOCATIONLIST through the
 wrong pAllocationInfo stride. Commit9beed62 corrects only that view. Next is
 fresh EXP643 with the unchanged interactive HWND/BLT discriminator.
+EXP643 now awaits only physical console login; the hash-gated task starts
+automatically and performs the15s visible windowed BLT test.
 
 ## Hardware proof retained
 

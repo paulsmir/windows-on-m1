@@ -39242,3 +39242,14 @@ cff7bf1af767b7aeaa6a05dd100f6be53db5c85d58b34fb340a4e9e49026142f,
 2d2127befd60db0a17b4dd6cb5fd3403120a29f60385ca0e1e5ddb3c280aa2fe.
 All wrappers parse on FRYZZING. Ordinary clean health is verified; transfer,
 arm, stage and one fresh release boot next.
+
+**EXP643 STAGED / NATURAL BIND PASS / WAITING INTERACTIVE LOGON.** Ordinary
+preflight was clean; remote artifact hashes matched; exact package is oem5.inf
+and task EXP643-Interactive is armed with Interactive principal. Fresh release
+boot no longer reproduces EXP642 0x7E. Current preflight: Code0, exact INF/SYS
+hashes, service Running,8CPU, task Ready and SSH healthy. Console session1 has
+no logged-in user, so the task cannot start and no producer result exists.
+No additional offline or session0 action can create the required interactive
+window token. Minimal operator action: log into Windows at the Air; do not run
+commands. The task starts automatically and holds the visible test for15s.
+Collect result/receipts immediately after logon, classify, cleanup and continue.
