@@ -39171,3 +39171,13 @@ ce5800768e42ec29f955788ebfb3af91c830efaad689a74db876394319be7cd5.
 Candidate-ready is not a verdict. Parse wrappers, verify clean ordinary,
 transfer/hash, arm the interactive logon task, stage exact package, then one
 full-owner boot. If console does not auto-logon, only physical login remains.
+
+**EXP642 STAGED/ARMED.** Ordinary gate immediately before transfer/stage is
+Code28/packages0/service/module absent,8CPU,NVMe2/USB5/keyboard1. All remote
+artifact/wrapper hashes equal the freeze. Exact package is oem5.inf only.
+Scheduled task EXP642-Interactive is Ready with principal pavel and
+Interactive logon type; it runs only the hash-gated run-interactive wrapper on
+the next user logon. Ordinary console session1 is connected but has no logged
+in user; SSH remains session0. Controlled shutdown and exact release launch
+follow. Do not run the producer over SSH and do not count task arming as a
+driver verdict.
