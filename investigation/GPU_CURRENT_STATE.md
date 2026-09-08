@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-08T18:13Z. Main process only; no agents.
+Updated 2026-09-08T18:16Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -8,8 +8,9 @@ EXP647 ran after a confirmed physical login in session1. Exact source0
 D3DKMTSetVidPnSourceOwner(EXCLUSIVE) returned0xC0000022 STATUS_ACCESS_DENIED
 before SetDisplayMode, Render or Present; standard trace has zero KMD events.
 All producer-owned WDDM objects were destroyed with status0 and the device
-remained healthy. Exact oem5 package has now been removed and APPL0002 rescanned
-to Code28; ordinary377/392 restoration is preregistered and in progress.
+remained healthy. Exact oem5 package was removed. Ordinary377/392 is restored
+and verified: SSH, one inert APPL0002 Code28/null INF, packages/service/module/
+SYS/UMD absent,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129.
 
 Current first unknown remains standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0.
@@ -22,7 +23,7 @@ UMD has no truthful 3D pipeline/device contract. EXP647 now rejects the
 independent fullscreen direct-KMT seam even from a real console token. Current
 first unknown is therefore a coherent minimal truthful UMD device/pipeline and
 runtime-managed presentation contract; no capability bit may be enabled alone.
-Caps remain unchanged. First finish and verify ordinary recovery.
+Caps remain unchanged. Work now proceeds offline at this UMD/runtime boundary.
 
 ## Hardware proof retained
 

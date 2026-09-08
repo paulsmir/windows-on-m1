@@ -39445,6 +39445,18 @@ e5abfc1e4bdb06a030bbd796fe63c79fb8a5115b428bbc9ddb3dafbef7754358.
 PASS requires SSH, one inert APPL0002 Code28, packages/service/module/SYS/UMD
 absent,8CPU and healthy NVMe/USB/keyboard. This recovery is not a GPU verdict.
 
+**EXP647-R1 ACTUAL — CLEAN ORDINARY377/392 RESTORED
+2026-09-08T18:15:35Z.** Graceful reset completed and the full-owner launcher
+released USB naturally. Immutable EXP377/392 broker-disabled boot reached SSH.
+Health proves one inert APPL0002 Problem28/null INF, packages0, service/module/
+SYS/UMD absent,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129. Health,
+ordinary host log and launch contract SHA256:
+74ca0b4aeb6c832fb75c5553222d66dfbcfc76bedf8e80e4b0abeb950354811c,
+5838e51d95d79f6e45dc5adc8a66dd5ff5dce3cb770b201e2b5c158340e38b9a,
+7ab49269c8af352b71c0ce90517d5020e64134399d158cb29fc1bf9b7f627f51.
+Recovery PASS. Continue offline at the truthful UMD device/pipeline contract;
+do not repeat direct exclusive-owner or window-timing experiments.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
