@@ -39358,6 +39358,39 @@ Transfer/hash and run once over SSH; D3D device creation does not require an
 interactive HWND. Exact HRESULT and module presence determine the next UMD
 contract inspection.
 
+**EXP646 ACTUAL — APPLE D3D11 DEVICE UNSUPPORTED, CONTROLS PASS.** The exact
+probe returns factory0. Apple adapter index0/LUID0:267740 returns0x887A0004
+DXGI_ERROR_UNSUPPORTED, feature level0, Apple UMD module absent. Basic Render
+adapter and independent WARP both return0 at feature level11_0. Exact Apple
+UMD file30.0.643.0/hash and four registry names were present, so this is the
+runtime contract rather than installation. Result SHA256
+781452ef1aeae58dbe85ddbe051859c331cd3fe79d0182ff6770cc86c08c9ba8.
+
+Microsoft's 3D pipeline contract confirms Caps=0 cannot create a D3D device;
+it must not be changed without implementing the corresponding mandatory UMD
+DDIs. This closes the DWM device-creation explanation. It does not block the
+separate documented fullscreen OpenGL ICD KMT path: EXP641 tried exclusive
+ownership only from SSH session0, while the now-proven interactive session1
+has not tried it. Exact package cleanup and ordinary health are complete.
+
+# EXP647 — interactive exclusive standard MMIO flip
+
+**PREREGISTERED 2026-09-08T18:00:00Z. WHY THIS HYPOTHESIS:** (1) pinned
+D3DKMTSetVidPnSourceOwner documentation defines exclusive ownership as the
+OpenGL ICD fullscreen path; (2) EXP641's SOURCE_IN_USE was from session0,
+whereas EXP643 proves the task can run in active console session1; (3) AGX
+render/fence and source-address/DCP paths are already proven independently.
+
+No source/build change. Reuse exact package30.0.643.0 and producer hash with
+`--standard-present-hold` from a hash-gated interactive task. Stage fresh from
+clean ordinary baseline. Single variable: interactive console token instead
+of SSH session0 for exclusive source ownership. On success, require owner0,
+SetDisplayMode0, Render0/physical completion, D3DKMTPresent0, KMD Present
+ENTRY/EXIT plus same-allocation SetVidPnSourceAddress ENTRY/EXIT and physical
+D589, then preserve evidence at HOLD before signalling flip-back/release.
+If SOURCE_IN_USE repeats, reject exclusive fullscreen KMT for the current
+desktop state and return to coherent UMD/DWM work. No D3D11 caps or DCP change.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver

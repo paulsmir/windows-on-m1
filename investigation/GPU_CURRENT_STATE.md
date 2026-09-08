@@ -21,9 +21,9 @@ EXP644 late launch changed Present denial to STATUS_GRAPHICS_PRESENT_OCCLUDED.
 DWM repeatedly reported MILERR_DEVICE_CREATION_FAILURE. EXP646 directly proves
 D3D11CreateDevice(Apple) returns DXGI_ERROR_UNSUPPORTED while Basic/WARP pass;
 the exact Apple UMD is installed/registered but never loaded. Current first
-unknown is a truthful minimal UMD 3D pipeline/device contract. Caps=0 plus a
-partial function table is insufficient; do not advertise a level until its
-mandatory DDIs and translation are implemented.
+unknown for DWM is a truthful minimal UMD 3D pipeline/device contract. Before
+that broad layer, EXP647 will test the still-untried interactive fullscreen
+OpenGL-style KMT owner/present seam using exact643. Caps remain unchanged.
 
 ## Hardware proof retained
 
