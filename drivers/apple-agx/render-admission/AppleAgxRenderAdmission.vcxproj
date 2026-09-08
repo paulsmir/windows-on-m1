@@ -121,6 +121,8 @@
     <ClCompile Include="src\submit_trace_windows.c" />
     <ClCompile Include="src\render_backend_image.c" />
     <ClCompile Include="src\render_completed_output.c" />
+    <ClCompile Include="src\render_qualification.c" />
+    <ClCompile Include="src\render_output_queue.c" />
     <ClCompile Include="src\backend_image_windows.c" />
     <ClCompile Include="src\backend_platform_windows.c" />
     <ClCompile Include="src\scanout_windows.c" />

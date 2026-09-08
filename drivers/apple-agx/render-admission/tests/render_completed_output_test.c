@@ -1,4 +1,5 @@
 #include "render_completed_output.h"
+#include "render_qualification.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -48,6 +49,8 @@ int main(void) {
       make_full(second, 0x1501f40000ULL, 0x9bdfa0000ULL, 0xffcc8844u);
   ADMISSION_COMPLETED_OUTPUT completed;
   ADMISSION_DISPLAY_OUTPUT_LEASE display;
+  ADMISSION_PRESENT_QUERY history;
+  ADMISSION_PRESENT_VERIFICATION verified;
 
   assert(first != NULL && second != NULL);
   assert(AdmissionCompletedOutputPlatformRangeValid(
@@ -83,9 +86,34 @@ int main(void) {
   assert(AdmissionCompletedOutputMarkNotified(&completed, 256u));
   assert(AdmissionCompletedOutputRecordAccess(&completed, 256u, 0u));
   assert(AdmissionCompletedOutputBeginPresent(&completed, 256u));
+  assert(AdmissionCompletedOutputMarkPublished(&completed, 256u, 9u));
+  assert(AdmissionCompletedOutputMarkLatched(&completed, 256u, 9u));
   assert(AdmissionCompletedOutputRecordPresentation(&completed, 256u, 0u));
+  memset(&verified, 0, sizeof(verified));
+  verified.CandidateBuild = 631u;
+  verified.BootGeneration = 7u;
+  verified.Index = 0u;
+  verified.Purpose = AdmissionPresentPurposeRenderFrame;
+  verified.Fence = 256u;
+  verified.AllocationToken = 0x12340000ULL;
+  verified.ExpectedColor = view1.ExpectedColor;
+  verified.PixelsExpected = 4096000u;
+  verified.PixelsVerified = 4096000u;
+  verified.Format = view1.AllocationFormat;
+  verified.Width = view1.AllocationWidth;
+  verified.Height = view1.AllocationHeight;
+  verified.Pitch = view1.AllocationPitch;
+  verified.Sequence = 9u;
+  verified.ActiveOffset = 0x00fa0000ULL;
+  verified.PhysicalAddress = view1.AllocationPhysicalAddress;
+  verified.ContentHash = 0x1122334455667788ULL;
+  assert(AdmissionPresentQueryBuild(&history, &verified));
   assert(AdmissionCompletedOutputTransferToDisplay(
       &completed, &display, 256u));
+  assert(history.ExpectedColor == 0xff112233u);
+  assert(history.PixelsExpected == 4096000u);
+  assert(history.PixelsVerified == 4096000u);
+  assert(history.Format == 21u && history.Fence == 256u);
   assert(display.Active && owner1.OpenCount == 1u);
   assert(!AdmissionDisplayOutputLeaseAllowsRender(&display, &owner1));
   assert(AdmissionDisplayOutputLeaseAllowsRender(&display, &owner2));
@@ -97,6 +125,8 @@ int main(void) {
   assert(AdmissionCompletedOutputMarkNotified(&completed, 257u));
   assert(AdmissionCompletedOutputRecordAccess(&completed, 257u, 0u));
   assert(AdmissionCompletedOutputBeginPresent(&completed, 257u));
+  assert(AdmissionCompletedOutputMarkPublished(&completed, 257u, 10u));
+  assert(AdmissionCompletedOutputMarkLatched(&completed, 257u, 10u));
   assert(AdmissionCompletedOutputRecordPresentation(&completed, 257u, 0u));
   assert(AdmissionCompletedOutputTransferToDisplay(
       &completed, &display, 257u));
@@ -148,6 +178,39 @@ int main(void) {
   assert(!AdmissionCompletedOutputTransferToDisplay(
       &completed, &display, 259u));
   assert(AdmissionCompletedOutputAbort(&completed, 259u));
+  assert(owner1.OpenCount == 0u);
+
+  /* Once DCP accepted publication, a diagnostic timeout cannot release the
+   * owner. Only an exact later resolution may retire it. */
+  assert(AdmissionCompletedOutputCapture(&completed, 5u, 260u,
+                                         &view1, &owner1));
+  assert(AdmissionCompletedOutputMarkReleased(&completed, 260u));
+  assert(AdmissionCompletedOutputMarkPacketRetired(&completed, 260u));
+  assert(AdmissionCompletedOutputMarkNotified(&completed, 260u));
+  assert(AdmissionCompletedOutputRecordAccess(&completed, 260u, 0u));
+  assert(AdmissionCompletedOutputBeginPresent(&completed, 260u));
+  assert(AdmissionCompletedOutputMarkPublished(&completed, 260u, 11u));
+  assert(AdmissionCompletedOutputMarkOwnershipUnknown(
+      &completed, 260u, 11u, 0x00000102u));
+  assert(!AdmissionCompletedOutputAbort(&completed, 260u));
+  assert(owner1.OpenCount == 1u);
+  assert(AdmissionCompletedOutputResolveUnknown(&completed, 260u, 11u));
+  assert(owner1.OpenCount == 0u);
+
+  assert(AdmissionCompletedOutputCapture(&completed, 6u, 261u,
+                                         &view1, &owner1));
+  assert(AdmissionCompletedOutputMarkReleased(&completed, 261u));
+  assert(AdmissionCompletedOutputMarkPacketRetired(&completed, 261u));
+  assert(AdmissionCompletedOutputMarkNotified(&completed, 261u));
+  assert(AdmissionCompletedOutputRecordAccess(&completed, 261u, 0u));
+  assert(AdmissionCompletedOutputBeginPresent(&completed, 261u));
+  assert(AdmissionCompletedOutputMarkPublished(&completed, 261u, 12u));
+  assert(AdmissionCompletedOutputMarkLatched(&completed, 261u, 12u));
+  assert(AdmissionCompletedOutputRecordPresentation(&completed, 261u, 0u));
+  assert(AdmissionCompletedOutputTransferToDisplay(
+      &completed, &display, 261u));
+  assert(display.Active && display.Fence == 261u && owner1.OpenCount == 1u);
+  assert(AdmissionDisplayOutputLeaseRetire(&display));
   assert(owner1.OpenCount == 0u);
   free(pool);
   return 0;

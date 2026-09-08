@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <d3dkmthk.h>
 #include <stdio.h>
+#include <string.h>
 #include <wchar.h>
 
 #include "render_allocation.h"
@@ -24,6 +25,19 @@ static ULONGLONG HashBytes(const void *Data, UINT Bytes) {
   return hash;
 }
 
+static ULONGLONG HashUniformPixel(UINT Pixel, UINT Count) {
+  ULONGLONG hash = 14695981039346656037ULL;
+  UINT index;
+  UINT byteIndex;
+  for (index = 0u; index < Count; ++index) {
+    for (byteIndex = 0u; byteIndex < 4u; ++byteIndex) {
+      hash ^= (unsigned char)(Pixel >> (byteIndex * 8u));
+      hash *= 1099511628211ULL;
+    }
+  }
+  return hash;
+}
+
 static NTSTATUS QueryDeviceExecutionState(
     D3DKMT_HANDLE Device, const wchar_t *Point,
     D3DKMT_DEVICEEXECUTION_STATE *ExecutionState) {
@@ -41,19 +55,23 @@ static NTSTATUS QueryDeviceExecutionState(
   return status;
 }
 
-static NTSTATUS WaitForPresentation(
+static ADMISSION_PRESENT_WAIT_RESULT WaitForPresentation(
     D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device, D3DKMT_HANDLE Context,
-    UINT Index, ADMISSION_PRESENT_QUERY *Result) {
+    const ADMISSION_PRESENT_EXPECTATION *Expected,
+    ADMISSION_PRESENT_QUERY *Result, NTSTATUS *QueryStatus) {
   ULONGLONG deadline = GetTickCount64() + 15000u;
   NTSTATUS status = (NTSTATUS)0x00000103L;
-  if (Result == NULL || Index >= ADMISSION_PRESENT_QUERY_CAPACITY)
-    return (NTSTATUS)0xc000000dL;
+  ADMISSION_PRESENT_WAIT_RESULT waitResult = AdmissionPresentWaitTimedOut;
+  BOOL sawInvalid = FALSE;
+  if (Expected == NULL || Result == NULL || QueryStatus == NULL ||
+      Expected->Index >= ADMISSION_PRESENT_QUERY_CAPACITY)
+    return AdmissionPresentWaitInvalidRecord;
   do {
     D3DKMT_ESCAPE escape = {0};
     ZeroMemory(Result, sizeof(*Result));
     Result->Magic = ADMISSION_PRESENT_QUERY_MAGIC;
     Result->Version = ADMISSION_PRESENT_QUERY_VERSION;
-    Result->Index = Index;
+    Result->Index = Expected->Index;
     escape.hAdapter = Adapter;
     escape.hDevice = Device;
     escape.hContext = Context;
@@ -61,24 +79,41 @@ static NTSTATUS WaitForPresentation(
     escape.pPrivateDriverData = Result;
     escape.PrivateDriverDataSize = sizeof(*Result);
     status = D3DKMTEscape(&escape);
-    if (NT_SUCCESS(status) && Result->Valid == 1u &&
-        Result->PresentCount >= Index + 1u && Result->Status == 0u)
+    if (!NT_SUCCESS(status)) {
+      waitResult = AdmissionPresentWaitClassify(0, 0, 0, 0);
       break;
+    }
+    if (AdmissionPresentQueryAccept(Result, Expected)) {
+      waitResult = AdmissionPresentWaitClassify(1, 1, 0, 0);
+      break;
+    }
+    if (Result->Valid != 0u ||
+        Result->PresentCount >= Expected->Index + 1u)
+      sawInvalid = TRUE;
     Sleep(1u);
   } while (GetTickCount64() < deadline);
-  wprintf(L"PRESENT_RESULT index=%u query=0x%08lx count=%u fence=%u "
+  if (waitResult != AdmissionPresentWaitCompleted && NT_SUCCESS(status))
+    waitResult = AdmissionPresentWaitClassify(1, 0, sawInvalid, 1);
+  *QueryStatus = status;
+  wprintf(L"PRESENT_RESULT wait=%u index=%u query=0x%08lx build=%u boot=%u "
+          L"count=%u purpose=%u destination=%u fence=%u allocation=0x%llx "
           L"status=0x%08x valid=%u color=0x%08x pixels=%u/%u "
-          L"sequence=%llu offset=0x%llx physical=0x%llx hash=0x%llx "
-          L"captured=%u exported=%u durable=%u\n",
-          Index, (ULONG)status, Result->PresentCount, Result->Fence,
+          L"format=%u geometry=%ux%u/%u sequence=%llu offset=0x%llx "
+          L"physical=0x%llx hash=0x%llx captured=%u published=%u "
+          L"exported=%u durable=%u\n",
+          waitResult, Expected->Index, (ULONG)status,
+          Result->CandidateBuild, Result->BootGeneration,
+          Result->PresentCount, Result->Purpose, Result->DestinationIndex,
+          Result->Fence, Result->AllocationToken,
           Result->Status, Result->Valid, Result->ExpectedColor,
           Result->PixelsVerified, Result->PixelsExpected,
+          Result->Format, Result->Width, Result->Height, Result->Pitch,
           Result->Sequence, Result->ActiveOffset,
           Result->PhysicalAddress, Result->ContentHash,
-          Result->Captured, Result->Exported, Result->Durable);
-  return NT_SUCCESS(status) && Result->Valid == 1u &&
-                 Result->PresentCount >= Index + 1u && Result->Status == 0u
-             ? (NTSTATUS)0 : (NTSTATUS)0x00000102L;
+          Result->Captured, Result->PublishedToQuery,
+          Result->Exported, Result->Durable);
+  fflush(stdout);
+  return waitResult;
 }
 
 int __cdecl wmain(int argc, wchar_t **argv) {
@@ -112,6 +147,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG pass;
   D3DKMT_DEVICEEXECUTION_STATE executionState;
   ADMISSION_PRESENT_QUERY presentation[2] = {0};
+  ADMISSION_PRESENT_EXPECTATION presentExpected[2] = {0};
+  ADMISSION_PRESENT_QUERY heldPresentation[2] = {0};
+  ADMISSION_PRESENT_PRODUCER_STATE producerState = {0};
+  ADMISSION_PRESENT_PRODUCER_ACTION producerAction =
+      AdmissionPresentProducerCleanup;
+  ADMISSION_PRESENT_WAIT_RESULT presentWait = AdmissionPresentWaitTimedOut;
+  NTSTATUS presentQueryStatus = (NTSTATUS)0xc0000001L;
   LUID selectedLuid = {0};
   ULONG selectedSources = 0u;
   UINT residencyPriority[2] = {
@@ -134,17 +176,23 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   int result = 1;
   BOOL requestEngineTdr = FALSE;
   BOOL observeOnePass = FALSE;
+  BOOL holdNoCleanup = FALSE;
+
+  (void)setvbuf(stdout, NULL, _IONBF, 0);
 
   if (argc == 2 && wcscmp(argv[1], L"--engine-tdr") == 0)
     requestEngineTdr = TRUE;
   else if (argc == 2 && wcscmp(argv[1], L"--observe-one-pass") == 0)
     observeOnePass = TRUE;
+  else if (argc == 2 && wcscmp(argv[1], L"--hold-no-cleanup") == 0)
+    holdNoCleanup = TRUE;
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
-             L"[--engine-tdr|--observe-one-pass]\n");
+             L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup]\n");
     return 2;
   }
+  AdmissionPresentProducerInitialize(&producerState, holdNoCleanup);
   gdiModule = GetModuleHandleW(L"gdi32.dll");
   if (gdiModule == NULL)
     goto cleanup;
@@ -337,6 +385,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     render.CommandLength = sizeof(command);
     render.AllocationCount = ARRAYSIZE(allocationHandles);
     render.PatchLocationCount = 0u;
+    wprintf(L"PHASE FRAME%lu_RENDER_BEGIN\n", pass + 1u);
+    fflush(stdout);
     wprintf(L"RENDER_IN pass=%lu context=%lu command_offset=%u "
             L"command_length=%u command_capacity=%u "
             L"command_hash=0x%016llx destination_index=%lu\n",
@@ -372,10 +422,59 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->AllocationListSize = render.NewAllocationListSize;
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
-    if (!NT_SUCCESS(WaitForPresentation(
+    ZeroMemory(&presentExpected[pass], sizeof(presentExpected[pass]));
+    presentExpected[pass].CandidateBuild = ADMISSION_EXPECTED_CANDIDATE_BUILD;
+    presentExpected[pass].BootGeneration =
+        pass == 0u ? 0u : presentation[0].BootGeneration;
+    presentExpected[pass].Index = pass;
+    presentExpected[pass].DestinationIndex = pass;
+    presentExpected[pass].ExpectedColor = command.Color;
+    presentExpected[pass].PixelsExpected =
+        APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH *
+        APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+    presentExpected[pass].Format = (unsigned int)D3DDDIFMT_A8R8G8B8;
+    presentExpected[pass].Width = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+    presentExpected[pass].Height = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+    presentExpected[pass].Pitch = APPLE_AGX_EXP208_FRAMEBUFFER_PITCH;
+    presentExpected[pass].ExpectedContentHash = HashUniformPixel(
+        command.Color, presentExpected[pass].PixelsExpected);
+    if (pass != 0u) {
+      presentExpected[pass].PreviousFence = presentation[0].Fence;
+      presentExpected[pass].PreviousAllocationToken =
+          presentation[0].AllocationToken;
+      presentExpected[pass].PreviousSequence = presentation[0].Sequence;
+      presentExpected[pass].PreviousActiveOffset = presentation[0].ActiveOffset;
+      presentExpected[pass].PreviousPhysicalAddress =
+          presentation[0].PhysicalAddress;
+      presentExpected[pass].PreviousContentHash = presentation[0].ContentHash;
+    }
+    presentWait = WaitForPresentation(
             adapters[selectedAdapter].hAdapter, createDevice.hDevice,
-            activeContext->hContext, pass, &presentation[pass])))
+            activeContext->hContext, &presentExpected[pass],
+            &presentation[pass], &presentQueryStatus);
+    producerAction = AdmissionPresentProducerAfterWait(
+        &producerState, presentWait);
+    if (presentWait != AdmissionPresentWaitCompleted) {
+      wprintf(L"PHASE FRAME%lu_FAIL wait=%u query=0x%08lx action=%u\n",
+              pass + 1u, presentWait, (ULONG)presentQueryStatus,
+              producerAction);
+      fflush(stdout);
+      if (producerAction == AdmissionPresentProducerPreserveForRecovery)
+        goto preserve_resources;
       goto cleanup;
+    }
+    wprintf(L"PHASE FRAME%lu_PASS fence=%u sequence=%llu allocation=0x%llx\n",
+            pass + 1u, presentation[pass].Fence,
+            presentation[pass].Sequence,
+            presentation[pass].AllocationToken);
+    fflush(stdout);
+    if ((pass == 0u &&
+         producerAction != AdmissionPresentProducerSubmitNextFrame) ||
+        (pass == 1u && holdNoCleanup &&
+         producerAction != AdmissionPresentProducerBeginHold) ||
+        (pass == 1u && !holdNoCleanup &&
+         producerAction != AdmissionPresentProducerCleanup))
+      goto preserve_resources;
     if (observeOnePass && pass == 0u) {
       static const DWORD delays[] = {250u, 250u, 500u, 1000u,
                                      3000u, 5000u, 5000u};
@@ -390,6 +489,41 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       }
       break;
     }
+  }
+  if (holdNoCleanup) {
+    ULONG holdSample;
+    NTSTATUS heldQueryStatus = (NTSTATUS)0xc0000001L;
+    wprintf(L"PHASE HOLD_BEGIN duration_ms=15000\n");
+    fflush(stdout);
+    for (holdSample = 0u; holdSample < 15u; ++holdSample)
+      Sleep(1000u);
+    for (pass = 0u; pass < 2u; ++pass) {
+      if (WaitForPresentation(
+              adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+              pass == 0u ? createContext.hContext : secondContext.hContext,
+              &presentExpected[pass], &heldPresentation[pass],
+              &heldQueryStatus) != AdmissionPresentWaitCompleted ||
+          memcmp(&heldPresentation[pass], &presentation[pass],
+                 sizeof(presentation[pass])) != 0) {
+        wprintf(L"PHASE HOLD_FAIL index=%lu query=0x%08lx\n",
+                pass, (ULONG)heldQueryStatus);
+        fflush(stdout);
+        goto preserve_resources;
+      }
+    }
+    if (!NT_SUCCESS(QueryDeviceExecutionState(
+            createDevice.hDevice, L"hold_15s", &executionState)) ||
+        executionState != D3DKMT_DEVICEEXECUTION_ACTIVE) {
+      wprintf(L"PHASE HOLD_FAIL device_execution=%u\n", executionState);
+      fflush(stdout);
+      goto preserve_resources;
+    }
+    wprintf(L"PHASE HOLD_PASS duration_ms=15000 fence0=%u fence1=%u "
+            L"sequence0=%llu sequence1=%llu\n",
+            presentation[0].Fence, presentation[1].Fence,
+            presentation[0].Sequence, presentation[1].Sequence);
+    fflush(stdout);
+    goto preserve_resources;
   }
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
@@ -407,6 +541,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       goto cleanup;
   }
   result = 0;
+  goto cleanup;
+
+preserve_resources:
+  for (;;)
+    Sleep(1000u);
 
 cleanup:
   if (allocationHandles[0] != 0u) {

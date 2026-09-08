@@ -13,6 +13,9 @@ typedef enum _ADMISSION_COMPLETED_OUTPUT_PHASE {
   AdmissionCompletedOutputPacketRetired,
   AdmissionCompletedOutputNotified,
   AdmissionCompletedOutputPresenting,
+  AdmissionCompletedOutputPublishedPending,
+  AdmissionCompletedOutputLatched,
+  AdmissionCompletedOutputOwnershipUnknown,
 } ADMISSION_COMPLETED_OUTPUT_PHASE;
 
 typedef struct _ADMISSION_COMPLETED_OUTPUT {
@@ -20,6 +23,7 @@ typedef struct _ADMISSION_COMPLETED_OUTPUT {
   unsigned int CaptureCount, ReleaseCount, NotifyCount, PresentCount;
   unsigned int AccessAttempted, AccessStatus;
   unsigned int PresentationAttempted, PresentationStatus;
+  unsigned long long PresentationSequence;
   ADMISSION_BACKEND_OUTPUT_VIEW View;
   ADMISSION_ALLOCATION_OBJECT *Owner;
 } ADMISSION_COMPLETED_OUTPUT;
@@ -44,6 +48,18 @@ int AdmissionCompletedOutputMarkNotified(
     ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence);
 int AdmissionCompletedOutputBeginPresent(
     ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence);
+int AdmissionCompletedOutputMarkPublished(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence);
+int AdmissionCompletedOutputMarkLatched(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence);
+int AdmissionCompletedOutputMarkOwnershipUnknown(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence, unsigned int Status);
+int AdmissionCompletedOutputResolveUnknown(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence);
 int AdmissionCompletedOutputRecordAccess(
     ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
     unsigned int Status);

@@ -11,6 +11,32 @@ SHARED = ROOT / "drivers/apple-agx/shared"
 
 
 class CompletedOutputTests(unittest.TestCase):
+    def test_output_idle_is_generation_safe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "output_queue"
+            subprocess.run([
+                os.environ.get("CC", "clang"), "-std=c11", "-Wall",
+                "-Wextra", "-Werror", "-fsanitize=address,undefined",
+                "-I", str(RENDER / "include"),
+                str(RENDER / "tests/render_output_queue_test.c"),
+                str(RENDER / "src/render_output_queue.c"),
+                "-o", str(binary),
+            ], check=True, cwd=ROOT)
+            subprocess.run([str(binary)], check=True, cwd=ROOT)
+
+    def test_present_query_is_built_from_verified_frame_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "present_query"
+            subprocess.run([
+                os.environ.get("CC", "clang"), "-std=c11", "-Wall",
+                "-Wextra", "-Werror", "-fsanitize=address,undefined",
+                "-I", str(RENDER / "include"),
+                str(RENDER / "tests/render_qualification_test.c"),
+                str(RENDER / "src/render_qualification.c"),
+                "-o", str(binary),
+            ], check=True, cwd=ROOT)
+            subprocess.run([str(binary)], check=True, cwd=ROOT)
+
     def test_transaction_owned_output_and_display_lease(self):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "completed_output"
@@ -22,6 +48,7 @@ class CompletedOutputTests(unittest.TestCase):
                 str(RENDER / "tests/render_completed_output_test.c"),
                 str(RENDER / "src/render_completed_output.c"),
                 str(RENDER / "src/render_allocation.c"),
+                str(RENDER / "src/render_qualification.c"),
                 "-o", str(binary),
             ], check=True, cwd=ROOT)
             subprocess.run([str(binary)], check=True, cwd=ROOT)

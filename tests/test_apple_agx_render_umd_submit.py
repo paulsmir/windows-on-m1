@@ -147,7 +147,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("RENDER_IN pass=%lu", source)
         self.assertIn("command_hash=0x%016llx", source)
         self.assertEqual(source.count("D3DKMTGetDeviceState(&deviceState)"), 1)
-        self.assertEqual(source.count("QueryDeviceExecutionState("), 4)
+        self.assertGreaterEqual(source.count("QueryDeviceExecutionState("), 5)
         self.assertIn('wcscmp(argv[1], L"--observe-one-pass")', source)
         self.assertIn('L"pass1_15s"', source)
         self.assertIn("DEVICE_STATE point=%ls", source)

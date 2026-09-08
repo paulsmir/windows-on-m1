@@ -231,6 +231,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
     ADMISSION_COMPLETED_OUTPUT *Completed,
+    const ADMISSION_TERMINAL_RECEIPT *OutputReceipt,
     const VOID *Source, ULONG SourceBytes,
     ULONGLONG SourceGpuAddress, ULONGLONG SourcePhysicalAddress, ULONG Fence) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
@@ -242,11 +243,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   APPLE_AGX_SCANOUT_U64 started;
   APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
   APPLE_AGX_FIXED_PANEL_RESULT panel_result;
+  ADMISSION_PRESENT_QUERY historyRecord;
+  ADMISSION_PRESENT_VERIFICATION verified;
+  ULONG historyIndex = 0u;
   BOOLEAN (*consume_interrupt)(ADMISSION_CONTEXT *) =
       AdmissionScanoutInterrupt;
   BOOLEAN directFramebuffer = FALSE;
   NTSTATUS status = STATUS_DEVICE_HARDWARE_ERROR;
   RtlZeroMemory(&receipt, sizeof(receipt));
+  RtlZeroMemory(&historyRecord, sizeof(historyRecord));
+  RtlZeroMemory(&verified, sizeof(verified));
   receipt.Version = ADMISSION_VISIBLE_AGX_RECEIPT_VERSION;
   receipt.Bytes = sizeof(receipt);
   receipt.Status = STATUS_PENDING;
@@ -256,12 +262,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   receipt.Guard = AdmissionVisibleAgxGuardEntry;
   started = AdmissionScanoutNow(runtime);
   if (Context == NULL || Packet == NULL || Completed == NULL ||
+      OutputReceipt == NULL ||
       runtime == NULL || Source == NULL ||
       SourceBytes < 1024u || Fence == 0u ||
       Packet->Fence != Fence ||
       SourcePhysicalAddress > MAXULONGLONG - SourceBytes)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardArguments;
+  {
+    KIRQL oldIrql;
+    KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+    historyIndex = runtime->PresentCount;
+    KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  }
+  if (historyIndex >= ADMISSION_PRESENT_QUERY_CAPACITY) {
+    status = STATUS_BUFFER_OVERFLOW;
+    goto Exit;
+  }
   if (!runtime->Panel.Committed || !runtime->Panel.Visible)
     goto Exit;
   receipt.Guard = AdmissionVisibleAgxGuardPanel;
@@ -363,6 +380,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     InterlockedExchange(&runtime->PresentGate, 0);
     goto Exit;
   }
+  if (!AdmissionCompletedOutputMarkPublished(Completed, Fence, sequence)) {
+    (void)AdmissionCompletedOutputMarkOwnershipUnknown(
+        Completed, Fence, sequence, (ULONG)STATUS_INVALID_DEVICE_STATE);
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Exit;
+  }
   receipt.RequestedSequence = sequence;
   InterlockedExchange64(&runtime->PendingPhysicalAddress,
                         (LONG64)(Context->Memory.Topology.Local.Base +
@@ -399,12 +422,44 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     status = STATUS_DATA_ERROR;
     goto Exit;
   }
+  if (!AdmissionCompletedOutputMarkLatched(Completed, Fence, sequence)) {
+    status = STATUS_INVALID_DEVICE_STATE;
+    goto Exit;
+  }
   receipt.Stage = 3u;
   receipt.Guard = AdmissionVisibleAgxGuardComplete;
   status = STATUS_SUCCESS;
   receipt.Status = STATUS_SUCCESS;
   if (!AdmissionVisibleAgxReceiptValid(&receipt))
     status = STATUS_DATA_ERROR;
+  if (NT_SUCCESS(status)) {
+    verified.CandidateBuild = APPLE_AGX_VERSION_BUILD;
+    verified.BootGeneration = Context->RenderCorrelation.BootGeneration;
+    verified.Index = historyIndex;
+    verified.Purpose = AdmissionPresentPurposeRenderFrame;
+    verified.Fence = Fence;
+    verified.DestinationIndex = historyIndex;
+    verified.ExpectedColor = Completed->View.ExpectedColor;
+    verified.PixelsExpected = Completed->View.RenderedBytes / 4u;
+    verified.PixelsVerified = OutputReceipt->OutputPixelsExpected;
+    verified.Format = Completed->View.AllocationFormat;
+    verified.Width = Completed->View.AllocationWidth;
+    verified.Height = Completed->View.AllocationHeight;
+    verified.Pitch = Completed->View.AllocationPitch;
+    verified.AllocationToken = receipt.DestinationAllocationToken;
+    verified.Sequence = sequence;
+    verified.ActiveOffset = receipt.ActiveOffsetAfter;
+    verified.PhysicalAddress = receipt.DestinationPhysicalAddress;
+    verified.ContentHash = OutputReceipt->OutputTargetFnv1a;
+    if (!(OutputReceipt->ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) ||
+        OutputReceipt->Fence != Fence ||
+        OutputReceipt->DestinationPhysical !=
+            Completed->View.RenderedPhysicalAddress ||
+        OutputReceipt->OutputBytesExamined !=
+            Completed->View.RenderedBytes ||
+        !AdmissionPresentQueryBuild(&historyRecord, &verified))
+      status = STATUS_DATA_ERROR;
+  }
   if (NT_SUCCESS(status) &&
       !AdmissionCompletedOutputRecordPresentation(
           Completed, Fence, STATUS_SUCCESS))
@@ -412,43 +467,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   if (NT_SUCCESS(status)) {
     KIRQL oldIrql;
     KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
-    if (!AdmissionCompletedOutputTransferToDisplay(
+    if (runtime->PresentCount != historyIndex ||
+        !AdmissionCompletedOutputTransferToDisplay(
             Completed, &runtime->ActiveLease, Fence))
       status = STATUS_INVALID_DEVICE_STATE;
-    else if (runtime->PresentCount < ADMISSION_PRESENT_QUERY_CAPACITY) {
-      ADMISSION_PRESENT_QUERY *history =
-          &runtime->PresentHistory[runtime->PresentCount];
-      history->Magic = ADMISSION_PRESENT_QUERY_MAGIC;
-      history->Version = ADMISSION_PRESENT_QUERY_VERSION;
-      history->Index = runtime->PresentCount;
-      history->PresentCount = runtime->PresentCount + 1u;
-      history->Fence = Fence;
-      history->Status = STATUS_SUCCESS;
-      history->Valid = 1u;
-      history->ExpectedColor =
-          Completed->View.ExpectedColor;
-      history->PixelsExpected =
-          Completed->View.RenderedBytes / 4u;
-      history->PixelsVerified = history->PixelsExpected;
-      history->Format = Completed->View.AllocationFormat;
-      history->Captured = 1u;
-      history->Exported = 1u;
-      history->Durable = 0u;
-      history->Sequence = sequence;
-      history->ActiveOffset = receipt.ActiveOffsetAfter;
-      history->PhysicalAddress = receipt.DestinationPhysicalAddress;
-      history->ContentHash = receipt.SourceHash;
+    else {
+      historyRecord.PublishedToQuery = 1u;
+      runtime->PresentHistory[historyIndex] = historyRecord;
       ++runtime->PresentCount;
-    } else
-      status = STATUS_BUFFER_OVERFLOW;
+    }
     KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
   }
 Exit:
-  if (Completed != NULL &&
-      Completed->Phase == AdmissionCompletedOutputPresenting &&
-      Completed->PresentationAttempted == 0u)
-    (void)AdmissionCompletedOutputRecordPresentation(
-        Completed, Fence, (ULONG)status);
+  if (Completed != NULL && !NT_SUCCESS(status)) {
+    if (Completed->Phase == AdmissionCompletedOutputPublishedPending ||
+        Completed->Phase == AdmissionCompletedOutputLatched)
+      (void)AdmissionCompletedOutputMarkOwnershipUnknown(
+          Completed, Fence, sequence, (ULONG)status);
+    else if (Completed->Phase == AdmissionCompletedOutputPresenting &&
+             Completed->PresentationAttempted == 0u)
+      (void)AdmissionCompletedOutputRecordPresentation(
+          Completed, Fence, (ULONG)status);
+  }
   receipt.Status = (ULONG)status;
   receipt.ElapsedMs = runtime == NULL ? 0u :
       (ULONG)(AdmissionScanoutNow(runtime) - started);

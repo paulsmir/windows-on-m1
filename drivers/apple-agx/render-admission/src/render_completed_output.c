@@ -135,6 +135,59 @@ int AdmissionCompletedOutputBeginPresent(
   return 1;
 }
 
+int AdmissionCompletedOutputMarkPublished(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence) {
+  if (State == COMPLETED_NULL || State->Fence != Fence || Sequence == 0ULL ||
+      State->Phase != AdmissionCompletedOutputPresenting ||
+      State->PresentationSequence != 0ULL)
+    return 0;
+  State->Phase = AdmissionCompletedOutputPublishedPending;
+  State->PresentationSequence = Sequence;
+  return 1;
+}
+
+int AdmissionCompletedOutputMarkLatched(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence) {
+  if (State == COMPLETED_NULL || State->Fence != Fence || Sequence == 0ULL ||
+      State->Phase != AdmissionCompletedOutputPublishedPending ||
+      State->PresentationSequence != Sequence)
+    return 0;
+  State->Phase = AdmissionCompletedOutputLatched;
+  return 1;
+}
+
+int AdmissionCompletedOutputMarkOwnershipUnknown(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence, unsigned int Status) {
+  if (State == COMPLETED_NULL || State->Fence != Fence || Sequence == 0ULL ||
+      Status == 0u ||
+      (State->Phase != AdmissionCompletedOutputPresenting &&
+       State->Phase != AdmissionCompletedOutputPublishedPending &&
+       State->Phase != AdmissionCompletedOutputLatched) ||
+      (State->PresentationSequence != 0ULL &&
+       State->PresentationSequence != Sequence))
+    return 0;
+  State->Phase = AdmissionCompletedOutputOwnershipUnknown;
+  State->PresentationSequence = Sequence;
+  State->PresentationAttempted = 1u;
+  State->PresentationStatus = Status;
+  return 1;
+}
+
+int AdmissionCompletedOutputResolveUnknown(
+    ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
+    unsigned long long Sequence) {
+  if (State == COMPLETED_NULL || State->Fence != Fence || Sequence == 0ULL ||
+      State->Phase != AdmissionCompletedOutputOwnershipUnknown ||
+      State->PresentationSequence != Sequence || State->Owner == COMPLETED_NULL ||
+      !AdmissionAllocationClose(State->Owner))
+    return 0;
+  AdmissionCompletedOutputInitialize(State);
+  return 1;
+}
+
 int AdmissionCompletedOutputRecordAccess(
     ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
     unsigned int Status) {
@@ -151,8 +204,10 @@ int AdmissionCompletedOutputRecordPresentation(
     ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence,
     unsigned int Status) {
   if (State == COMPLETED_NULL || State->Fence != Fence ||
-      State->Phase != AdmissionCompletedOutputPresenting ||
-      State->PresentationAttempted != 0u)
+      State->PresentationAttempted != 0u ||
+      (Status == 0u
+           ? State->Phase != AdmissionCompletedOutputLatched
+           : State->Phase != AdmissionCompletedOutputPresenting))
     return 0;
   State->PresentationAttempted = 1u;
   State->PresentationStatus = Status;
@@ -211,7 +266,7 @@ int AdmissionCompletedOutputTransferToDisplay(
     ADMISSION_DISPLAY_OUTPUT_LEASE *Lease, unsigned int Fence) {
   ADMISSION_DISPLAY_OUTPUT_LEASE next;
   if (State == COMPLETED_NULL || Lease == COMPLETED_NULL ||
-      State->Phase != AdmissionCompletedOutputPresenting ||
+      State->Phase != AdmissionCompletedOutputLatched ||
       State->Fence != Fence || State->Owner == COMPLETED_NULL ||
       State->PresentationAttempted != 1u ||
       State->PresentationStatus != 0u ||
@@ -234,6 +289,9 @@ int AdmissionCompletedOutputTransferToDisplay(
 int AdmissionCompletedOutputAbort(
     ADMISSION_COMPLETED_OUTPUT *State, unsigned int Fence) {
   if (State == COMPLETED_NULL || State->Phase == AdmissionCompletedOutputEmpty ||
+      State->Phase == AdmissionCompletedOutputPublishedPending ||
+      State->Phase == AdmissionCompletedOutputLatched ||
+      State->Phase == AdmissionCompletedOutputOwnershipUnknown ||
       State->Fence != Fence || State->Owner == COMPLETED_NULL ||
       !AdmissionAllocationClose(State->Owner))
     return 0;
