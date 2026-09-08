@@ -37526,3 +37526,19 @@ interrupt payload, fence, render ABI, producer, AGX, DCP, timeout, capability or
 placement. Focused executable queue/paging tests and full373 suite are GREEN.
 Build exact618 from exact617 plus interrupt/paging/scheduler only. PASS requires
 device ACTIVE before pass2 and two completed physical fences.
+
+**EXP618 BUILD FREEZE.** Exact30.0.618.0 pinned KMD/UMD/producer passed WDK26100
+analysis, Universal, Inf2Cat/TestSign and version gates; producer has zero
+warnings/errors, KMD inherited C28251 only. Exact617 base plus interrupt/paging/
+scheduler overlay SHA256 is
+`914c7b7c4138735c8b9bc3d048168781d40908e1373f5ceee4549f1350bf16f9`.
+ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`c55743a1cd1b3dcbe838ce6533eee29a504c7ba97bc87e8813bdd4cbea1496eb`,
+`9077ca84e97c45f37a2bc967bd6384aebe76795c7abae3d31e1daed68a54e0ac`,
+`a9747d3e83506ef4c6c548bf27d217290e29bdb5a6591c8b8c20fb9d90aa2002`,
+`83e9b0e45eb4d537954a7fe2f9ec5441d85ffd73abef8926f3475b1384ea5fcb`,
+`0240a24751a34a09d0c86ec67a56b76173ae223acad763b6f72ebffaff9fe6ed`,
+`b3ccfba763abe84281d4d5fa6515aeb221319481df04812a474cef730ae20d5b`.
+Workflow/launch SHA256 are
+`8ce068ec6f8a8876982d9fcfd7de38df0d6662f226b035033af866a2c78e3c13`
+and `21ac0b37bf972e49523f90d42119a1e69de6992d7bd76a15a23e221dcda7beed`.
