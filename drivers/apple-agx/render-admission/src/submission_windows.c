@@ -189,6 +189,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   if (!accepted) {
     AdmissionSubmitPacketGuardWindows(
         Context, packet_guard, STATUS_DEVICE_BUSY);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    /* EXP623: preserve the already-written single-word subguard long enough
+     * for the host broker poller before dxgkrnl bugchecks on this fatal DDI
+     * status. This delay exists only on the rejected qualification path. */
+    KeStallExecutionProcessor(50000u);
+#endif
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardPacket,
                       STATUS_DEVICE_BUSY);
   }
