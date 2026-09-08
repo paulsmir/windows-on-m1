@@ -37025,3 +37025,18 @@ ZIP/SYS/INF/CAT/UMD/producer SHA256 are respectively
 `98e8b521ecf0318ec25157e334189321fd2c317c65534951e374fa21b4cd8ea7`.
 Workflow SHA256
 `07b788ac8e1030319c29a03c58ed1de36d6822ba81ff47ca264bd9aa579a6242`.
+
+**EXP607 FINAL — INCONCLUSIVE BEFORE PASS2 KMD.** Natural bind and pass1 are
+GREEN: sequence1/fence256, all4,096,000 base-color pixels and exact direct D589
+swap10 at offset `0xfa0000`. Pass2 nevertheless returned status0/
+QueuedBufferCount0 and terminal remained sequence1, so the symmetric ping-pong
+path was never executed. This does not reject the ping-pong implementation.
+It shows that end-offset fullness is not a deterministic flush request across
+the new call shape. Decoded/evidence SHA256 are
+`12aac50f5c8a76168c5bfeeef5bbacb0d968e190c6304af8c4964010336f85e0`
+and `242b3274f8140f47097a9684d0e123c92540f4c06cf7268ccbaa5d4caca67ad0`.
+No bugcheck/TDR occurred. Exact cleanup completed; ordinary restore is in
+progress. Next producer-only discriminator adds the documented pass2 command-
+buffer resize request while retaining the full submitted range. A successful
+resize necessarily returns a distinct next buffer and must queue the current
+full buffer; KMD607 remains byte-exact.

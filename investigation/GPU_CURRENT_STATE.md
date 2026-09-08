@@ -504,6 +504,12 @@ qualification resolver validates/selects the exact opposite companion. Pass2
 is a complete distinct full-size frame. Full367 tests GREEN; build and one
 hardware run are next.
 
+EXP607 pass1 remained fully GREEN, but pass2 again returned queued0 before KMD;
+therefore ping-pong is still untested, not rejected. End-offset fullness alone
+is not deterministic. Next EXP608 changes only producer pass2 to request a
+documented command-buffer resize while retaining its exact full submitted
+range; exact607 KMD/UMD are reused.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
