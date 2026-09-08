@@ -604,6 +604,13 @@ NotifyInterrupt time, QueueDpc result, NotifyDpc time and QueryCurrentFence
 count/value. Capture at DIRQL is interlocked/in-memory only; export remains on
 the existing asynchronous path. Do not change rendering, AGX or display ABI.
 
+EXP619 proves exact prompt delivery: fence256 NotifyInterrupt follows Render by
+31.5ms, synchronize status0, QueueDpc TRUE and DPC present; Windows does not call
+QueryCurrentFence. The unknown is therefore VidSch acceptance/outstanding state,
+not KMD delivery. EXP620 reuses exact619 KMD and runs a one-pass-only producer
+under built-in WPR GPU tracing, sampling ACTIVE/HUNG through15s without issuing
+the fatal second request. Parse ETL/CSV before any further KMD change.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

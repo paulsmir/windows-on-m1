@@ -37596,3 +37596,40 @@ ZIP/SYS/INF/CAT/UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `9f90e091a196a4653cff5826b7f2d2d77d43d30882f75cf2a23d896b970561ec`
 and `07be2ca0046d2bda5b33944ad74a58cfc55693c284370eb9c3a38e5304404d54`.
+
+**EXP619 FINAL — COMPLETION DELIVERY PROVEN, VIDSch ACCEPTANCE UNKNOWN.** Exact
+version2 state candidate619/boot359255160 is durable1/status0/overflow0.
+Fence256 Render entry timestamp545983801; NotifyInterrupt timestamp546298888,
+only31.5087ms later. Synchronize status0, QueueDpc result1, DPC timestamp
+546298888, exact fence256. QueryCurrentFence count/value are0/0 because Windows
+did not invoke it. Call2 again reaches Render success but not preserved Submit,
+then the repeated scheduler reset occurs. Thus late notify, failed synchronize,
+failed DPC queue, missing DPC and wrong reported fence are all rejected.
+Correlation/raw/host/evidence/dump SHA256 are
+`73ef8932485e7d30e7835bc82e42712e127025db69c2ea42760025eb34d1ab13`,
+`a38bc703f903e3459002eb2bec1a6a8e10ca9b9a402680033b416d28dd8bfe2b`,
+`81d6c7dbac2b9acfb48107b79e0bb697c19edcc4c3cfb97336fde4cde3b760ca`,
+`b4a9a5c014c9adfd69234765515e531f8fcf93a82634f846cd4df800cebb0901`,
+`68b7069f3f310af6b055e9aac7d26b29bd9a18e0ba76390615a31ed6fa87f52a`.
+Exact package/service/stale cleanup completed.
+
+# EXP620 — one-pass VidSch ETW owner capture
+
+**PREREGISTERED 2026-09-08T10:02Z. WHY THIS HYPOTHESIS:** (1) EXP619 proves
+prompt correct fence256 interrupt and DPC delivery. (2) Windows still becomes
+HUNG, so the next evidence must identify VidSch's outstanding owner rather than
+alter another KMD callback. (3) Built-in WPR GPU tracing can capture that state
+without modifying KMD or sending the fatal second request.
+
+Commit `64cb01abc9465f5ca098f673261a6aad72319ea4` adds producer-only
+`--observe-one-pass`: after pass1 it samples the same D3DKMT device at250ms,
+500ms,1s,2s,5s,10s,15s, then exits without pass2. Normal two-pass behavior is
+unchanged. Exact619 KMD ZIP is reused. Producer overlay/EXE/build-log SHA256 are
+`47477b961ee92711fca52dddf36638fb9019d712d63a20a12a00f3c91a31d71e`,
+`fa07e4d12c8949f443ed876ae79a6d3685c855b6d765f6c7fdd746db934aef70`,
+`202e10ac5272085b3e1745a2fb07ee442011b158bb034b4f5ce81368806d69f2`.
+Workflow starts built-in WPR GPU/filemode, runs one-pass, stops ETL, converts a
+raw CSV with tracerpt, and collects both plus correlation. Workflow/launch
+SHA256 `14dc1765cc8a3c52d2827c32d9111f6bc1103a2187c0c3d25ecbdcd1197d33a5`
+and `695f951ba88495f5f6a5eea70c8d71c2905c01df250a2e4c0e8b840b62b21089`.
+No KMD rebuild or hardware behavior change.
