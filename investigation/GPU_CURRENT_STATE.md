@@ -712,6 +712,24 @@ the view remains byte-exact after release; ordering and full374 tests GREEN.
 EXP627 must produce full-size expected pixels for fence257 and post-render D589
 for both destination0 then destination1.
 
+CORRECTION: unrun EXP627 is superseded before staging. Its metadata-only stack
+view would fail `AdmissionPlatformContains` after object40 unbind, did not hold
+the allocation, lost identity on completion retry, and collapsed bottom-band
+subrange semantics. No EXP627 hardware verdict exists.
+
+Commit `744d5eb36545cec7a4b3e6228db9eef69cdf88ec` replaces it with the narrow
+completed-output ownership contract. A transaction-owned state captures
+allocation base plus rendered subrange/geometry and acquires the existing
+`ADMISSION_ALLOCATION_OBJECT` owner once before unbind. Exact leased range is
+the only external range admitted by late `FlushForCpu`; adjacent/stale/freed
+ranges fail. Release, packet retirement, notification, access and presentation
+are separate retry-safe states. After D589 the lease moves to scanout; the old
+active owner releases only after replacement. Active allocation cannot be a new
+render target. Final DestroyAllocation switches DCP to driver-owned offset0,
+waits exact latch, then releases the displayed allocation. Producer uses exact
+per-frame read-only Escape receipts instead of fixed sleeps. Full376 tests and
+pinned WDK KMD/producer analysis are GREEN. EXP628 is the hardware candidate.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

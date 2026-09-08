@@ -37930,3 +37930,39 @@ SHA256 are
 Workflow/launch SHA256 are
 `b643cb8e65c6cc90eaeb362e686ae544d77537e00e953976a8266c68f651f4a5`
 and `12b2dd8533dc77d9179814815ae9d70a4d09b8a55935cfba3655d7534562ed45`.
+
+**EXP627 SUPERSEDED BEFORE HARDWARE.** Source review proved its stack-local
+metadata view was incomplete: after unbind it was outside
+`AdmissionPlatformContains`; it held no allocation/residency owner; retry lost
+the view; and its full-size-only rule regressed bottom-band subranges. The exact
+signed EXP627 package was never staged or run and has no hardware verdict.
+
+# EXP628 — transaction-owned completed output and display lease
+
+**PREREGISTERED 2026-09-08T11:32Z. WHY THIS HYPOTHESIS:** (1) EXP626 proves two
+physical fences but late access uses restored object40. (2) Review and source
+prove pointer metadata alone cannot pass exact transport ownership or prevent
+reuse. (3) Existing allocation OpenCount, exact local-pool identity and D589
+lifecycle provide all required ownership primitives without a new allocator.
+
+Commit `744d5eb36545cec7a4b3e6228db9eef69cdf88ec` adds one transaction-owned
+completed-output state and one scanout active lease. Capture stores allocation
+base and rendered subrange separately, validates full/base-band geometry and
+local pool CPU/GPU/PA offsets, and acquires the existing allocation owner once.
+The state survives retries and admits only its exact rendered range to
+`FlushForCpu`. Successful D589 transfers the ref to scanout and retires the old
+active ref; final DestroyAllocation latches driver-owned offset0 before release.
+Rendering into the active owner is rejected. A read-only qualification Escape
+returns two bounded per-frame records with fence/color/full pixel count/hash/
+sequence/offset/physical address and honest captured/exported/durable state;
+producer waits these records rather than a fixed sleep. No registry export is
+on the functional path.
+
+Executable tests cover full and band capture, pool range coherence, neighbor and
+stale rejection, retry without double acquire/release/notify, frame overlap,
+access/presentation failure states, display replacement and retirement. Full376
+tests GREEN. Pinned WDK KMD Universal/sign compile and ARM64 producer analysis
+were checked before commit. Final overlay relative immutable EXP626 SHA256
+`77aa9fbba5b4fb30b15520d6a7097259192a8a0c045d441fecd1965cdfb12b9c`.
+Build exact628; hardware PASS requires two full pixel records, two distinct
+D589 latches, safe fallback latch during cleanup, producer result0 and ACTIVE.
