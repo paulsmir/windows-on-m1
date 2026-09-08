@@ -38779,3 +38779,90 @@ local. Recovery continues to use the untouched releaseEXP584 and ordinary392.
 Stage exact wrapper/package from Code28, natural bind, read-only SIGINT
 snapshot preflight, then one producer only if snapshot records/resume verified.
 Kernel capture7 retained; reset evidence must be preserved before cleanup.
+
+**EXP638 ACTUAL interruption:** monitor preflight snapshot returned all8 CPU
+records and unattended handler continued Windows. Before producer, CPU4
+pctl7/vctl6, VM_TMR3, queues0, LRs empty and SGI counters balanced; some marker
+text fields concatenate because printf formatting is malformed, so do not use
+those truncated marker values. Producer then passed8 full frames/latches:
+fences258,259,260,261,263,264,265,266; sequences3–10. Frame9 Render0/queued1/
+ACTIVE preceded reset. No HOLD/cleanup. Last delivered telemetry through seq91
+still shows host_fiq_count/host_tick_count increasing, NVMe/xHCI IAR=EOI,
+pending/active LRs0. It is not a per-CPU sample at exact failure time. Preserve
+kernel dump and exact monitor/producer streams before cleanup; do not infer
+timer root cause from preflight or missing post-reset event.
++
+**EXP638 kernel verdict:** second kernel bitmap dump SHA256
+893e4dddfd2d4340eec3f3a42d82bd021cbc36aa6494f1564758854edfe02a4e,
+required pages readable, header98 percent/success. Matching635 PDB again resolves
+CPU4 inside AdmissionTerminalReceiptCaptureOutput byte load at IRQL0; trap
+SPSR20001344 has IRQ-mask bit clear. Eight frames had completed; frame9 hardware
+completion/output processing was active. Host log SHA256
+03bcfd01e330346ebfbe5d6ce623f4992ee7f09bb968d26ccb14b0b7f32f1f46;
+producer443b1ec09f0cfee101d48d629bf27047417cc7cdb55c0485ef617bad0afa7968;
+telemetryb9e9ceeda508a5fb2c3d832585e2042f6ae95c2320b50e7a5c12323ed3771814.
+Monitor did not prevent failure. Its last samples showed advancing aggregate
+FIQ/tick and balanced NVMe/xHCI IRQs, but no per-CPU exact-failure snapshot.
+No timer-policy conclusion. Exact package/stale cleanup complete; CrashDumpEnabled
+restored7->original3 and verified. Emergency shutdown completed; ordinary restore
+required before next staging.
+
+# EXP639 — driver-owned output thread
+
+**PREREGISTERED 2026-09-08T16:01Z. WHY THIS HYPOTHESIS:** (1) EXP636 and
+EXP638 kernel dumps both stop CPU4 inside the same nine-second full-frame
+verification on an ExpWorkerThread; (2) EXP637 executes the same verifier
+sixteen times on CPU4 as a user thread without reset; (3) Microsoft states
+system work items share a limited pool and long processing belongs on a
+driver-created thread. This is the nearest proven contract mismatch.
+
+**WINDOWS CONTRACT:** PsCreateSystemThread creates a PASSIVE_LEVEL system
+thread; it terminates itself with PsTerminateSystemThread and the driver
+closes the kernel handle with ZwClose. Stop drains queued/active work before
+exit. References and full design:
+docs/superpowers/plans/2026-09-08-exp639-output-thread.md.
+
+**AGX/ASAHI CONTRACT:** unchanged retained-root, firmware, queue, completion,
+memory, DCP and render command path. **TRANSLATION:** commit
+b17e53a5fe7ae2b52481117080be7c559e79a5b4 replaces only the long output
+IoQueueWorkItem with one per-runtime driver system thread and explicit
+wake/stop/exit events. Completion supplies the same completed output/fence;
+verification and presentation functions are unchanged. The short AGX worker
+remains an ordinary work item.
+
+**WHAT IS STILL UNKNOWN:** whether removing the nine-second operation from the
+limited system worker pool eliminates recurring0x101 and permits all16 frames,
+HOLD, exact owned-primary retirement and teardown. One run answers this. If it
+fails, preserve exact thread/phase/dump and do not add a timer fix without
+corresponding evidence.
+
+Executable queue lifecycle test was RED before new start/stop API and now proves
+unstarted/post-stop rejection, drain-before-exit and one exit. Render suite
+122 GREEN. Build exact30.0.639.0 from immutable FRYZZING EXP635 source plus only
+six committed thread/state/test files. Pinned WDK/SDK26100/MSVC14.44,
+KMD/UMD/producer, code analysis, Universal, Inf2Cat/TestSign, coherent version
+and hashes. Hardware uses release EXP584 m1n1, current Mu406/full-owner profile
+and unchanged16-frame producer. Save evidence before retirement signal; require
+HOLD then exact retirement and full cleanup. Recovery is established emergency/
+ordinary. Kernel dump setting is back to3; changing it is not part of EXP639.
++
+**EXP639 BUILD FREEZE.** Exact30.0.639.0 built from immutable EXP635 plus
+commit b17e53a5fe7ae2b52481117080be7c559e79a5b4 only. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD code analysis, Universal validation, Inf2Cat/TestSign,
+coherent version and producer639 gates PASS. KMD has inherited C28251 only;
+producer0 warnings/errors. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256:
+6b7975147d38cc8aacbf783e34425860491ddba0875a53aa5297b2dc22b9fb90,
+363ade63bc8a50719a278058a3c3d70c24756de1c304d9ea334b7ddfabc0d3bd,
+91c7814a0f4358dc179f242b4cc775549822f92130ddef71421637dc0dc79cb0,
+889eaf0d44e457796e557366741c14b3e71386f1435472c65e5468f941ac00d1,
+792b1debf8f4b1f12113a3c5f41ef291ac6125ec84de057b8bfcd6abc6848481,
+368a031daa2ff9629e46b5937ef8c3f96225fbb69a3b3fea1b9abc129d35b660,
+9bfabd6ff266f767ab916e0bd0fa80cc8ac452a21566f52b10f63ac51c1f2039.
+Workflow/launch/collector hashes:
+cba9c90ea223146246865578824af9af8365172147445cf625473f167c8805b5,
+7b800de7d7da147de00bb41dd9933d7293b849405cc93607b465b23e060f0c5b,
+9089a3bcfe0410d316bdfe5cece678ee2281f2b61b99aad8cd76f327b40ccfc3.
+Ordinary377/392 verified Code28/packages0/service/module absent,8CPU,
+NVMe2/USB5/keyboard1. Transfer exact artifacts/scripts, parse and hash remotely,
+then stage. Natural bind uses release EXP584 m1n1 and Mu406/full-owner;
+one producer only. Candidate-ready is not a verdict.
