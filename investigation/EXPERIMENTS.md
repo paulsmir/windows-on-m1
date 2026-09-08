@@ -38251,3 +38251,23 @@ C28251 only. Build exact632 from EXP631 plus the retirement overlay. Run until
 HOLD_PASS, preserve A-C evidence, create the exact signal, then require
 RETIRE_PASS, a new host D589 for offset0, DestroyAllocation status0 and full
 cleanup with device ACTIVE/no reset.
+
+**EXP632 BUILD FREEZE.** Exact30.0.632.0 from immutable EXP631 plus only the
+owned-primary retirement overlay at
+`36168a9f2802e8dd6e2c5f1fe5875161192f7722`. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign, coherent version,
+expected-build632 producer and workflow parser gates pass with inherited C28251
+only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`26322d58f0a745e01270e47db2a552d6a3f755286bca3845858476387723a49c`,
+`a809228a236313eb1c0b4b66b8ff83bf70d77bd0429a0e5d586b3b8d2da8b72d`,
+`532533ae39345b60bd1f9ac71f5ba14d3dc135d7ab2b86e9bca6264ac9ca8571`,
+`e7d7dbe1e78a3b097162d42f9d94216257cd72e85edf8f50c33f4680c8fb8356`,
+`a71869f2db36671a1fc98e8674976e1b9655ee07a874fb7358d9b61e7daa7fdd`,
+`c3aaeed91c8a3616f97a9dbc00b59c94ee89ed01c56ecc9ac563c633a8e142eb`,
+`e71af76d27853a23273de6655b0c59136ed9bfe6e6a2c3af8c138e1ef9130cbf`.
+Workflow/launch SHA256 are
+`27cdffa9038e76e8b0c8c896be595542774fda4c6a054a8bc08758f248a16891`
+and `42d702cd2442811d52bc306ac3d08247956706ee93c2533c43079659912739a0`.
+Run stops at flushed RETIRE_WAIT. Preserve live HOLD proof before Signal mode
+creates the exact gate file; then require a newer fallback record and explicit
+DestroyAllocation end status.
