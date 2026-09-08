@@ -10,9 +10,25 @@ EXP648's caps0 rejection. Current gate is AD02; execute
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-08T21:17Z. Main process only; no agents.
+Updated 2026-09-08T21:25Z. Main process only; no agents.
 
 ## Current machine / next boundary
+
+AD02 is HW_PROVEN by EXP651. Two distinct immutable128-byte allocation-relative
+commands passed KMD Render/Patch/Submit and physical AGX execution with exact
+fences256/257. Dynamic green full-frame output verified4,096,000 pixels/hash
+0xb844371c0d762325; dynamic blue bottom-band verified2,048,000 pixels/hash
+0x679fbd632040a325. They used distinct allocations/offsets/PAs and produced exact
+query sequences3/4 plus host A408/D589 swap10/11. HOLD15s stayed ACTIVE and
+records were byte-exact. Explicit retirement sequence5/fallback swap12 and all
+teardown statuses0. `TRANSPORT_HW_PROVEN=YES` and
+`DYNAMIC_CLEAR_HW_PROVEN=YES`; D3D pipeline/desktop remain NO.
+
+Exact intermediate package was removed. Ordinary377/392 is clean at
+2026-09-08T21:24Z: Code28/null INF, no AppleAgx package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current boundary is AD03:
+source-first Mesa compiler/encoder integration for non-replay geometry/shader/
+resource workloads. Caps remain0 until AD04 mandatory contract completion.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed

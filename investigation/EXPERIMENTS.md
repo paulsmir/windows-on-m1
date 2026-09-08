@@ -39982,3 +39982,49 @@ Manifest/build/producer/version SHA256 are
 `dc40f704229e50f041e32aeee9323545d4ec899e9f358decbdc5c948f57c8966`
 and `49bc90ec73db709e284725137c59b5430f55084054fc6a810d5786d050e66f88f`.
 Workflow/collectors parse on Windows; candidate is frozen, not staged.
+
+**EXP651 ACTUAL — AD02 TRANSPORT AND DYNAMIC CLEAR HW_PROVEN
+2026-09-08T21:23:10Z.** Exact30.0.651.0 bound naturally as oem5/Code0/Running
+with exact package hashes and8CPU. Two independent128-byte commands entered
+KMD with distinct producer hashes. Durable correlation v3 build651
+boot353321320 contains two ordered calls, overflow0/durable1; both have
+allocations2, destinations0/1 in segment2, Render0, DMA168, one patch,
+prepatched1, Submit0, physical fences256/257, worker2,
+SynchronizeExecution0/DPC1, output verification0 and presentation exit0.
+
+Frame1 query is exact dynamic green: allocation0xffff89041f0a2950,
+4,096,000/4,096,000 pixels, hash0xb844371c0d762325, sequence3,
+offset0xfa0000, PA0x9bcf90000. Frame2 is exact dynamic blue bottom band:
+allocation0xffff89041f0a2990,2,048,000/2,048,000 pixels,
+hash0x679fbd632040a325, sequence4, offset0x1f40000, PA0x9bdf30000.
+Host records corresponding A408/D589 swap10 and swap11 after initial startup
+swaps8/9. The15-second HOLD re-read both records byte-exact and device execution
+remained ACTIVE. One boot-time Event129 preceded the workload and has no shown
+causal link.
+
+After hold evidence was saved, explicit retirement returned query0/status0,
+purpose3, sequence5, live fallback owner at offset0/PA0x9bbff0000; host records
+A408/D589 swap12. DestroyAllocation, both contexts, paging queue, device and
+adapter close all returned0; producer result0. Therefore
+`TRANSPORT_HW_PROVEN=YES` and `DYNAMIC_CLEAR_HW_PROVEN=YES` for the exact full
+and bottom-band profiles. This does not publish a D3D pipeline and does not
+prove DWM or accelerated desktop.
+
+Producer/collector/correlation/host/validated/hold/final SHA256 are
+`b297e5f720c2a7a53bbc090e6a1666bb14186eac4f51fcb25c1925e2c33b06cf`,
+`e9c198a2769df7cbf60b7fbaa9ed5823f5f0983dfe232b954e0fac4d1a68ee91`,
+`3a6856ca23553f1cadcb1678a8ed5a8e6b4e33049786c8ca4b7ff959c96436d8`,
+`900ec55e0196c6f95eaf1b365d962f2122b4fa98b3bbaa80e29a59c2bfb81f35`,
+`9bee6ade3c2d5bb32c514d0bdb38df231d5c7205dd08398f745e1af946640665`,
+`b1671aba27fd170e1b1aae63c47b94cdae5a4ca97bba2a79daf39ed22f361bfc`
+and `442a762387098e0bf846d0a4b70fb7b99cfec641537d8586c9c0cd18c8fb219d`.
+
+**EXP651-R1 CLEAN ORDINARY RECOVERY 2026-09-08T21:24:49Z.** Exact oem5 was
+hash-gated/uninstalled/deleted after all evidence, full-owner reset completed,
+and immutable ordinary377/392 is restored. Health: APPL0002 Problem28/null INF,
+packages/service/module/SYS/UMD absent, SSH/8CPU/NVMe2/USB5/keyboard1, no fresh
+41/1001/129. Ordinary launch/health SHA256 are
+`961e6b15dbc2ea2c7604d508e2766f0ff720d6bf34cc994d95ee0c46a34ce930`
+and `91b6abf9441b1d22ed358ab45d9d9bf85c5550aa2ced0b8e6a37448b709e70c2`.
+AD02 closes here. Next is AD03 source-first compiler/encoder planning; no
+pipeline capability may be enabled by this result alone.

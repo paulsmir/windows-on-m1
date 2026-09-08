@@ -4,7 +4,7 @@
 
 ## Где мы сейчас
 
-**Текущий этап: AD02 — immutable Windows allocation/command transport.**
+**Текущий этап: AD03 — Mesa compiler/encoder для изменяемых GPU workloads.**
 AD00 завершён в ограниченном объёме fixed/private qualification.
 EXP648 hardware доказал: UMD loaded → GetCaps pipeline0 → CreateDevice не вызван.
 Loader/admission-location investigation закончено; следующий EXP ради того же ответа не нужен.
@@ -23,10 +23,12 @@ PID/token и loss-aware acceptance. x64 mock/runtime и ARM64 analysis gates GRE
 8 CPU, healthy storage/USB/input по сохранённому health. Перед любой операцией состояние
 проверяется заново; эта строка не заменяет live preflight.
 
-Ближайшее действие: исполнить Task1 в
-`docs/superpowers/plans/accelerated-desktop-ad02-transport.md`: portable
-versioned command envelope и mutation/range tests. Hardware допускается только
-после всех AD02 offline tasks и не изменяет feature-level readiness.
+AD02 HW_PROVEN по EXP651: два distinct immutable128-byte commands прошли
+Render/Patch/Submit, physical AGX fences256/257, exact dynamic full-green и
+bottom-band-blue output hashes, два query/latch,15s HOLD и clean retirement.
+Ближайшее действие: написать и исполнить source-first AD03 compiler/encoder
+plan. Hardware допускается только после typed job/relocation/resource tests;
+feature-level readiness и advertised mask остаются0.
 
 ## Как читать и обновлять карту
 
@@ -53,8 +55,8 @@ proof map и краткий GPU_CURRENT_STATE.md. Detailed logs — experiment-l
 |---|---|---|---|---|
 | AD00 | Fixed AGX render/fence/scanout foundation | — | HW_PROVEN | EXP640 + EXP591/598; ограничения ниже |
 | AD01 | Выбранный D3D/frontend contract, исправный lifetime, полный gap inventory | AD00 | OFFLINE_PROVEN | Contract matrix, offline tests, source/build lock |
-| AD02 | Windows allocation/command transport для динамического renderer | AD01 | IN_PROGRESS | Boundary tests + dynamic non-fixed clear hardware |
-| AD03 | Mesa compiler/encoder исполняет изменяемые GPU workloads | AD02 | NOT_STARTED | Geometry/texture/blend outputs и повторные fences |
+| AD02 | Windows allocation/command transport для динамического renderer | AD01 | HW_PROVEN | EXP651 two distinct dynamic commands/outputs/fences/latches |
+| AD03 | Mesa compiler/encoder исполняет изменяемые GPU workloads | AD02 | IN_PROGRESS | Geometry/texture/blend outputs и повторные fences |
 | AD04 | Полный обязательный UMD contract выбранного feature level | AD01–03 | NOT_STARTED | Callback/caps/format matrix и executable conformance gates |
 | AD05 | Стандартный D3D device и аппаратное offscreen rendering | AD04 | NOT_STARTED | D3D11CreateDevice на Apple + реальные API workloads |
 | AD06 | DWM/runtime-managed presentation и кадр на панели | AD05 | NOT_STARTED | Корреляция DWM/API → AGX → primary → D589 |
@@ -64,8 +66,8 @@ proof map и краткий GPU_CURRENT_STATE.md. Detailed logs — experiment-l
 ```text
 AD00 DONE
   → AD01 OFFLINE_PROVEN
-  → AD02 CURRENT transport
-  → AD03 dynamic GPU
+  → AD02 HW_PROVEN transport
+  → AD03 CURRENT dynamic GPU
   → AD04 complete UMD
   → AD05 D3D device
   → AD06 standard Present/DWM
@@ -81,6 +83,7 @@ AD00 DONE
 | EXP581/585/586/588 | Windows-triggered fixed render, output, fence | Arbitrary shader/state/resource support |
 | EXP591/598 | Физически наблюдённый scanout/AGX image | Рабочий desktop |
 | EXP631/632/634/640 | 2/4/16 fixed frames, output/latches/HOLD/retirement | Standard DXGI Present или DWM |
+| EXP649/650/651 | immutable dynamic command transport, two colors/geometries, fences/output/latches | General shader/encoder or D3D pipeline |
 | EXP636–640 | Scope0x101 расследован; bounded verifier16 runs проходит | Все CPU/driver stability причины устранены навсегда |
 | EXP646/648 | Caps0 blocks D3D CreateDevice; DLL load подтверждён | Нужно просто включить bit |
 | EXP641/643/644/647 | Direct presentation обходные пути не закрыли desktop | Нужно ещё менять token/timing/exclusive owner |
@@ -116,13 +119,13 @@ Hardware: не требуется; EXP648 не повторять.
 `mesa/winsys/agx_win32_transport.[ch]`, `shared/tests/apple_agx_win32_abi_test.c`,
 `tests/test_apple_agx_win32_abi.py`. Пути относительно `drivers/apple-agx/`, кроме `tests/`.
 
-- [ ] Immutable allocation-relative command snapshot: sizes/version/generation/count/access/ranges.
-- [ ] Не доверять CPU/physical/firmware pointers; referenced BO ranges принадлежат device.
-- [ ] Pin/residency semantics различены с private OpenCount; queued references сохраняются.
-- [ ] Map/unmap/upload/readback/reset epochs и rollback before/after publication покрыты.
-- [ ] Нужное desktop resource sharing спланировано через supported Windows handles,
+- [x] Immutable allocation-relative command snapshot: sizes/version/generation/count/access/ranges.
+- [x] Не доверять CPU/physical/firmware pointers; referenced BO ranges принадлежат device.
+- [x] Pin/residency semantics различены с private OpenCount; queued references сохраняются.
+- [x] Map/unmap/upload/readback/reset epochs и rollback before/after publication покрыты.
+- [x] Нужное desktop resource sharing спланировано через supported Windows handles,
       с per-process ownership; не переносить «single process/no sharing» как desktop architecture.
-- [ ] Generic clear меняет цвет/размер/attachment через данные запроса, не patch констант.
+- [x] Generic clear меняет цвет/размер/attachment через данные запроса, не patch констант.
 
 **Offline:** malformed/overflow/stale owner/generation, producer mutation after validation,
 noncontiguous ADL/range handling, active surface write, failure rollback, fence lifetime.
