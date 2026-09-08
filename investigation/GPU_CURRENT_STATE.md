@@ -1,18 +1,36 @@
 # GPU current state
 
-Updated 2026-09-08T18:51Z. Main process only; no agents.
+## Active user-priority roadmap — accelerated desktop first
+
+See [ACCELERATED_DESKTOP_ROADMAP.md](ACCELERATED_DESKTOP_ROADMAP.md).
+The user requests accelerated Windows/DWM desktop before OpenGL/CS1.6 work;
+software/display-only is not the next target. AD01 is OFFLINE_PROVEN after
+EXP648's caps0 rejection. Current gate is AD02; execute
+`docs/superpowers/plans/accelerated-desktop-ad02-transport.md` inline.
+This roadmap pointer changes planning priority only, not hardware readiness or
+the last verified machine state recorded below.
+
+Updated 2026-09-08T20:10Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
-EXP647 ran after a confirmed physical login in session1. Exact source0
-D3DKMTSetVidPnSourceOwner(EXCLUSIVE) returned0xC0000022 STATUS_ACCESS_DENIED
-before SetDisplayMode, Render or Present; standard trace has zero KMD events.
-All producer-owned WDDM objects were destroyed with status0 and the device
-remained healthy. Exact oem5 package was removed. Ordinary377/392 is restored
-and verified: SSH, one inert APPL0002 Code28/null INF, packages/service/module/
-SYS/UMD absent,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129.
+EXP648 definitively names the D3D11 admission boundary. The unchanged probe
+loaded and executed exact UMD30.0.648.0 in the Apple-adapter process. Correlated
+DBWIN records for probe PID5456 show OpenAdapter10_2, GetCaps pipeline0 and
+GetSupportedVersions; CreateDevice is never called. D3D11CreateDevice returns
+DXGI_ERROR_UNSUPPORTED while Basic Render and WARP both create feature-level11_0
+devices. Thus the runtime rejects the truthful zero-pipeline contract before
+UMD CreateDevice. This also definitively corrects EXP646: post-return module
+absence meant queried then unloaded, not never loaded.
 
-Current first unknown remains standard Windows presentation. EXP641 proved
+Exact oem5 package was removed after evidence. Ordinary377/392 is restored and
+verified at 2026-09-08T19:08Z: SSH, one inert APPL0002 Code28/null INF,
+packages/service/module/SYS/UMD absent,8CPU,NVMe2,USB5,keyboard1 and no fresh
+41/1001/129. Current SSH ED25519 key matches the previously pinned project-local
+key; the global known_hosts file was not changed.
+
+Current first unknown remains a coherent accelerated Windows frontend plus
+standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0.
 EXP643 proved one interactive Windows render and physical AGX completion
 fence269, but windowed BLT Present was denied before the KMD DDI. EXP644
@@ -23,13 +41,22 @@ UMD has no truthful 3D pipeline/device contract. EXP647 now rejects the
 independent fullscreen direct-KMT seam even from a real console token. Current
 first unknown is therefore a coherent minimal truthful UMD device/pipeline and
 runtime-managed presentation contract; no capability bit may be enabled alone.
-Caps remain unchanged. EXP646's post-failure `GetModuleHandleW==NULL` is not
-evidence that the UMD was never loaded; cold-path callback ordering remains
-unobserved. Commitfac65c79f4b179219b6afaf3bad64d0064b0049e now fixes
+Caps remain unchanged. Commitfac65c79f4b179219b6afaf3bad64d0064b0049e fixes
 format-query error semantics and exact allocation association/primary release/
-deferred Flush lifetime with pipeline caps still zero. Mock-runtime tests and
-ARM64 code-analysis build are GREEN. Next is one unchanged-cap loader/callback
-trace to name the exact runtime rejection before larger Mesa frontend work.
+deferred Flush lifetime with pipeline caps still zero. EXP648 closes the cold
+loader/callback question; do not run another callback or capability probe.
+AD01 source/build gate is closed. Commit e8007fac4630fa1fab82cbbe591d6e2d3a2c9b28
+selects Mesa D3D10 reuse at feature level10_0 and records121 mandatory adapter,
+device, DXGI, semantic, transport and sharing rows. All current missing rows are
+false and the advertised pipeline mask remains0. Commit
+f9ff9b92f9124db6777638975661e213efba2289 replaces silent terminal resource
+Abandon with explicit attempted/deallocated/undeallocated accounting and raw
+errors. Commit dfdd31ef615ef6b3a2ff57c566b6ae5fc88e779c makes DBWIN capture
+ready/stop, PID/token and loss-aware. x64 real mock and ARM64 code-analysis
+builds are GREEN. Current executable boundary is AD02 Task1: versioned,
+allocation-relative, copy-once command envelope. A truthful nonzero pipeline is
+still forbidden until all mandatory rows are implemented/tested. DWM/standard
+Present remains an explicit later gate; WARP control success does not prove it.
 
 ## Hardware proof retained
 
