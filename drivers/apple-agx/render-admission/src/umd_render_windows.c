@@ -75,7 +75,7 @@ static BOOLEAN AdmissionUmdRenderTraceBegin(
     ADMISSION_UMD_RENDER_CALL_RECEIPT *Receipt) {
   ULONG contextFlags = ~0u;
   ULONG callSequence;
-  if (Context == NULL || Context->BrokerBase == NULL || Receipt == NULL)
+  if (Context == NULL || Receipt == NULL)
     return FALSE;
   if (RenderContext != NULL &&
       RenderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC)
@@ -86,6 +86,8 @@ static BOOLEAN AdmissionUmdRenderTraceBegin(
   Receipt->Version = ADMISSION_UMD_RENDER_CALL_RECEIPT_VERSION;
   Receipt->Bytes = sizeof(*Receipt);
   Receipt->CallSequence = callSequence;
+  Receipt->Guard = MAXULONG;
+  Receipt->Status = (ULONG)STATUS_PENDING;
   Receipt->ContextToken = (ULONGLONG)(ULONG_PTR)RenderContext;
   Receipt->CommandLength = Args == NULL ? 0u : Args->CommandLength;
   AdmissionUmdRenderTraceWrite(
@@ -267,6 +269,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
                               ADMISSION_CONTEXT, ObjectAdapter);
   AdmissionRecordUmdRenderGuard(adapter, MAXULONG, STATUS_PENDING);
   trace = AdmissionUmdRenderTraceBegin(adapter, context, Args, &callReceipt);
+  if (trace)
+    AdmissionRecordUmdRenderCall(adapter, &callReceipt);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (trace && AdmissionUmdRenderTraceAdapterGet() != NULL &&
       adapter != AdmissionUmdRenderTraceAdapterGet())

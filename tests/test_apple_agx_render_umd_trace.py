@@ -115,6 +115,16 @@ class AppleAgxRenderUmdTraceTests(unittest.TestCase):
         self.assertIn("AdmissionUmdRenderTraceArm", source)
         self.assertIn("AdmissionUmdRenderTraceDisarm", source)
         self.assertIn("AdmissionUmdRenderTraceAdapterGet", source)
+        begin = source[
+            source.index("static BOOLEAN AdmissionUmdRenderTraceBegin("):
+            source.index("static VOID AdmissionUmdRenderTraceCommand(")
+        ]
+        self.assertNotIn("Context->BrokerBase", begin)
+        entry = source.index("AdmissionRecordUmdRenderCall(adapter, &callReceipt)")
+        command_copy = source.index("RtlCopyMemory(&command")
+        self.assertLess(entry, command_copy)
+        self.assertIn("Receipt->Guard = MAXULONG", begin)
+        self.assertIn("Receipt->Status = (ULONG)STATUS_PENDING", begin)
         self.assertIn("AdmissionRecordUmdRenderGuard", source)
         self.assertIn('L"Wom1UmdRenderGuard"', (
             RENDER / "src" / "receipts.c"
