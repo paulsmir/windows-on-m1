@@ -38098,3 +38098,47 @@ Correlation raw/decoded, host, dump and kd SHA256 are
 Exact package/service/stale cleanup completed in the compatible emergency guest.
 Next run must fix query publication/acceptance and hold both allocations alive
 for a bounded no-cleanup phase, separating two-frame stability from retirement.
+
+# EXP631 — exact two-frame query and no-cleanup hold
+
+**PREREGISTERED 2026-09-08T12:31Z. WHY THIS HYPOTHESIS:** (1) EXP630 reaches
+two complete Windows Render/Submit/Notify/DPC paths and host swap9/10, so the
+next unknown is not AGX execution. (2) Source proves history reads `Completed`
+after transfer cleared it. (3) Source proves positive `STATUS_TIMEOUT` passed
+the producer's `NT_SUCCESS` test, so EXP630 cannot distinguish valid frame2
+acceptance from timeout followed by cleanup.
+
+**WINDOWS CONTRACT:** Render completion and the Windows fence end GPU use, not
+display ownership. The qualification producer keeps both D3DKMT allocations
+created, resident and unmodified through the explicit hold; it does not invoke
+DestroyAllocation, context/device destruction or process exit in the hardware
+observation window. Driver `OpenCount` is only the KMD object-lifetime guard and
+is not claimed as a general VidMm residency pin.
+
+**AGX/ASAHI CONTRACT:** Existing physical TA/3D submission, terminal pixel scan,
+retained-root mappings and exact DCP A408/D589 latch path remain unchanged.
+Accepted publication transfers the exact owner to the active display lease;
+post-publication uncertainty retains it rather than aborting.
+
+**TRANSLATION:** Commit `43a0254d401cbf40bd65399fd38ae6c9200ea8c5`
+builds a version2 render-frame query from candidate/boot/fence/surface identity
+and measured terminal pixel count/hash before completed-state transfer, then
+publishes it only after exact latch and lease transfer. Producer validates exact
+build, same boot, per-frame color/full4096000 pixels/format/geometry, distinct
+allocation/fence/sequence/offset, common physical pool identity and exact
+content hash. Wait returns explicit Completed/TimedOut/QueryFailed/InvalidRecord.
+Output scheduling uses a generation-checked lock-owned state; idle requires no
+scheduled or active worker. Publication uncertainty retains ownership.
+
+**WHAT IS STILL UNKNOWN:** whether two exact records and both corresponding
+latches complete before the recurring 0x101; and whether the machine remains
+healthy for15 seconds with both allocations/process alive and no cleanup. This
+run does not test retirement and will recover by controlled whole-guest shutdown
+after evidence, leaving no implicit resource destruction in the discriminator.
+
+Offline RED/GREEN covers cleared completed state, measured pixels, wrong/stale
+record rejection, timeout progression, post-publication retention, active lease
+replacement and stale output generation. Render-focused122 tests GREEN; pinned
+WDK/SDK26100 KMD/UMD/producer provisional build and Universal validation GREEN
+with inherited C28251 only. Freeze exact source, build/sign/hash candidate631,
+then execute phases FRAME1, FRAME2 and HOLD_BEGIN/HOLD_PASS only.
