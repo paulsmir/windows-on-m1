@@ -1,4 +1,5 @@
 #include "render_visible_scanout.h"
+#include "apple_agx_exp208_framebuffer.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -110,6 +111,19 @@ int main(void) {
   assert(agx.SourcePitch == APPLE_AGX_SCANOUT_J313_STRIDE);
   assert(agx.SourceBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
   assert(agx.DestinationBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(agx.SourceHash != 0ULL &&
+         agx.DestinationHash == agx.SourceHash);
+  for (before = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP *
+                    APPLE_AGX_SCANOUT_J313_WIDTH;
+       before < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE / 4u; ++before)
+    surface[before] = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+  memset(&agx, 0, sizeof(agx));
+  assert(AdmissionVisibleAgxUseFramebuffer(
+      surface, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &agx));
+  assert(pixel(surface, 10u, 10u) ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR);
+  assert(pixel(surface, 10u, 1200u) ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
   assert(agx.SourceHash != 0ULL &&
          agx.DestinationHash == agx.SourceHash);
   agx.Version = ADMISSION_VISIBLE_AGX_RECEIPT_VERSION;

@@ -108,7 +108,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("createContext.pPatchLocationList", source)
         self.assertIn("destroy.Flags.SynchronousDestroy = 1", source)
         self.assertIn("BUFFERS device_command=", source)
-        self.assertIn("RENDER_OUT command=", source)
+        self.assertIn("RENDER_OUT pass=", source)
         self.assertIn("render_umd_command.h", project)
         self.assertIn("apple_agx_exp208_gdi.h", source)
         self.assertGreaterEqual(
@@ -117,7 +117,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertGreaterEqual(
             source.count("APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT"), 2
         )
-        self.assertIn("APPLE_AGX_EXP208_GDI_COLOR", source)
+        self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR", source)
+        self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR", source)
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 
@@ -224,11 +225,8 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertGreaterEqual(
             producer.count("APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT"), 2
         )
-        self.assertIn(
-            "output->Size == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES",
-            backend,
-        )
-        self.assertIn("Runtime->VisibleAgxSourceAddress = output->Data", backend)
+        self.assertIn("ULONG targetBytes = framebuffer", backend)
+        self.assertIn("(PUCHAR)output->Data - outputOffset", backend)
         self.assertIn("expandedObjects[] = {64u, 65u, 67u}", backend)
         self.assertIn("BOOLEAN directFramebuffer = FALSE", scanout)
         self.assertIn(

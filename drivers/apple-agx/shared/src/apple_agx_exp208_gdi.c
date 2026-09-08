@@ -58,8 +58,10 @@ static APPLE_AGX_BOOL Exp208GdiCommandValid(
     APPLE_AGX_U32 SubmissionByteCount,
     APPLE_AGX_U64 DestinationGpuVa,
     APPLE_AGX_U32 ExpectedWidth,
-    APPLE_AGX_U32 ExpectedHeight,
-    APPLE_AGX_U32 ExpectedPitch) {
+    APPLE_AGX_U32 ExpectedTop,
+    APPLE_AGX_U32 ExpectedBottom,
+    APPLE_AGX_U32 ExpectedPitch,
+    APPLE_AGX_U32 ExpectedColor) {
   APPLE_AGX_GDI_DMA_COMMAND command;
   APPLE_AGX_GDI_LOWERING_RECEIPT receipt;
 
@@ -80,12 +82,12 @@ static APPLE_AGX_BOOL Exp208GdiCommandValid(
                  command.Opcode == AppleAgxGdiColorFill &&
                  command.SubRectCount == 0u && command.Reserved == 0u &&
                  command.Destination.Left == 0u &&
-                 command.Destination.Top == 0u &&
+                 command.Destination.Top == ExpectedTop &&
                  command.Destination.Right == ExpectedWidth &&
-                 command.Destination.Bottom == ExpectedHeight &&
+                 command.Destination.Bottom == ExpectedBottom &&
                  command.DestinationGpuAddress == DestinationGpuVa &&
                  command.DestinationPitch == ExpectedPitch &&
-                 command.Color == APPLE_AGX_EXP208_GDI_COLOR &&
+                 command.Color == ExpectedColor &&
                  command.Rop == AppleAgxGdiColorFillPatCopy &&
                  command.Rop3 == 0u && command.Flags == 0u &&
                  command.SourceGpuAddress == 0ULL &&
@@ -123,6 +125,7 @@ static APPLE_AGX_BOOL Exp208GdiRelocationsValid(
 static APPLE_AGX_BOOL Exp208GdiBindColorFill(
     const unsigned char *SubmissionBytes,
     APPLE_AGX_U32 SubmissionByteCount,
+    APPLE_AGX_U64 CommandDestinationGpuVa,
     void *DestinationCpuAddress,
     APPLE_AGX_U64 DestinationGpuVa,
     APPLE_AGX_U64 DestinationPhysical,
@@ -132,8 +135,10 @@ static APPLE_AGX_BOOL Exp208GdiBindColorFill(
     const APPLE_AGX_EXP208_RELOCATION *Relocations,
     APPLE_AGX_U32 RelocationCount,
     APPLE_AGX_U32 ExpectedWidth,
-    APPLE_AGX_U32 ExpectedHeight,
+    APPLE_AGX_U32 ExpectedTop,
+    APPLE_AGX_U32 ExpectedBottom,
     APPLE_AGX_U32 ExpectedPitch,
+    APPLE_AGX_U32 ExpectedColor,
     APPLE_AGX_U32 ExpectedOutputBytes,
     const APPLE_AGX_EXP208_FRAMEBUFFER_BINDING *Framebuffer,
     APPLE_AGX_EXP208_GDI_BINDING *Binding) {
@@ -164,8 +169,9 @@ static APPLE_AGX_BOOL Exp208GdiBindColorFill(
       DestinationPhysical >= (1ULL << 40u) ||
       DestinationCapacity < ExpectedOutputBytes ||
       !Exp208GdiCommandValid(
-          SubmissionBytes, SubmissionByteCount, DestinationGpuVa,
-          ExpectedWidth, ExpectedHeight, ExpectedPitch) ||
+          SubmissionBytes, SubmissionByteCount, CommandDestinationGpuVa,
+          ExpectedWidth, ExpectedTop, ExpectedBottom, ExpectedPitch,
+          ExpectedColor) ||
       !Exp208GdiRelocationsValid(Relocations, RelocationCount))
     return APPLE_AGX_FALSE;
   output = &Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
@@ -276,11 +282,13 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
     APPLE_AGX_U32 RelocationCount,
     APPLE_AGX_EXP208_GDI_BINDING *Binding) {
   return Exp208GdiBindColorFill(
-      SubmissionBytes, SubmissionByteCount, DestinationCpuAddress,
+      SubmissionBytes, SubmissionByteCount, DestinationGpuVa,
+      DestinationCpuAddress,
       DestinationGpuVa, DestinationPhysical, DestinationCapacity, Objects,
       ObjectCount, Relocations, RelocationCount,
-      APPLE_AGX_EXP208_GDI_WIDTH, APPLE_AGX_EXP208_GDI_HEIGHT,
-      APPLE_AGX_EXP208_GDI_PITCH, APPLE_AGX_EXP208_GDI_OUTPUT_BYTES,
+      APPLE_AGX_EXP208_GDI_WIDTH, 0u, APPLE_AGX_EXP208_GDI_HEIGHT,
+      APPLE_AGX_EXP208_GDI_PITCH, APPLE_AGX_EXP208_GDI_COLOR,
+      APPLE_AGX_EXP208_GDI_OUTPUT_BYTES,
       EXP208_GDI_NULL, Binding);
 }
 
@@ -301,19 +309,67 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiFramebufferColorFill(
     APPLE_AGX_U32 RelocationCount,
     APPLE_AGX_EXP208_GDI_BINDING *Binding) {
   APPLE_AGX_EXP208_FRAMEBUFFER_BINDING framebuffer;
+  APPLE_AGX_GDI_DMA_COMMAND command;
+  APPLE_AGX_U32 renderHeight;
+  APPLE_AGX_U32 expectedTop;
+  APPLE_AGX_U32 expectedBottom;
+  APPLE_AGX_U32 expectedColor;
+  APPLE_AGX_U32 outputBytes;
+  APPLE_AGX_U32 outputOffset;
+  unsigned char *outputCpu;
+  APPLE_AGX_U64 outputGpu;
+  APPLE_AGX_U64 outputPhysical;
   Exp208GdiZero(&framebuffer, (APPLE_AGX_U32)sizeof(framebuffer));
+  if (SubmissionBytes == EXP208_GDI_NULL ||
+      SubmissionByteCount != sizeof(command) ||
+      DestinationCpuAddress == EXP208_GDI_NULL)
+    return APPLE_AGX_FALSE;
+  Exp208GdiCopy(&command, SubmissionBytes, sizeof(command));
+  if (command.Destination.Top == 0u &&
+      command.Destination.Bottom == APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
+      command.Color == APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR) {
+    renderHeight = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+    expectedTop = 0u;
+    expectedBottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+    expectedColor = APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR;
+    outputOffset = 0u;
+    outputBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
+  } else if (command.Destination.Top ==
+                 APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP &&
+             command.Destination.Bottom ==
+                 APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
+             command.Color == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR) {
+    renderHeight = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT;
+    expectedTop = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
+    expectedBottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+    expectedColor = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+    outputOffset = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET;
+    outputBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_BYTES;
+  } else {
+    return APPLE_AGX_FALSE;
+  }
+  if (DestinationCapacity < outputOffset ||
+      outputBytes > DestinationCapacity - outputOffset ||
+      DestinationGpuVa > ~0ULL - outputOffset ||
+      DestinationPhysical > ~0ULL - outputOffset)
+    return APPLE_AGX_FALSE;
+  outputCpu = (unsigned char *)DestinationCpuAddress + outputOffset;
+  outputGpu = DestinationGpuVa + outputOffset;
+  outputPhysical = DestinationPhysical + outputOffset;
   if (!AppleAgxExp208FramebufferBind(
           ArenaCpuAddress, ArenaGpuAddress, ArenaPhysicalAddress,
-          ArenaCapacity, Objects, ObjectCount, &framebuffer))
+          ArenaCapacity, renderHeight, expectedColor,
+          Objects, ObjectCount, &framebuffer))
     return APPLE_AGX_FALSE;
   if (!Exp208GdiBindColorFill(
-          SubmissionBytes, SubmissionByteCount, DestinationCpuAddress,
-          DestinationGpuVa, DestinationPhysical, DestinationCapacity,
+          SubmissionBytes, SubmissionByteCount, DestinationGpuVa,
+          outputCpu, outputGpu, outputPhysical,
+          DestinationCapacity - outputOffset,
           Objects, ObjectCount, Relocations, RelocationCount,
           APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
-          APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT,
+          expectedTop, expectedBottom,
           APPLE_AGX_EXP208_FRAMEBUFFER_PITCH,
-          APPLE_AGX_EXP208_FRAMEBUFFER_BYTES, &framebuffer, Binding)) {
+          expectedColor, outputBytes, &framebuffer, Binding)) {
     (void)AppleAgxExp208FramebufferUnbind(
         Objects, ObjectCount, &framebuffer);
     return APPLE_AGX_FALSE;

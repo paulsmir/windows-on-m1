@@ -1,4 +1,5 @@
 #include "render_visible_scanout.h"
+#include "apple_agx_exp208_framebuffer.h"
 
 #define VISIBLE_NULL ((void *)0)
 #define VISIBLE_BORDER 32u
@@ -137,9 +138,25 @@ int AdmissionVisibleAgxUseFramebuffer(
     const void *Source, unsigned long long SourceBytes,
     ADMISSION_VISIBLE_AGX_RECEIPT *Receipt) {
   const unsigned char *source = (const unsigned char *)Source;
+  const unsigned int *pixels = (const unsigned int *)Source;
   unsigned int index;
+  int uniform = 1;
+  int twoBand = 1;
   if (Source == VISIBLE_NULL || Receipt == VISIBLE_NULL ||
       SourceBytes != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+    return 0;
+  for (index = 0u; index < SourceBytes / 4u; ++index) {
+    unsigned int y = index / APPLE_AGX_SCANOUT_J313_WIDTH;
+    unsigned int bandExpected =
+        y < APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP
+            ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
+            : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+    if (pixels[index] != APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR)
+      uniform = 0;
+    if (pixels[index] != bandExpected)
+      twoBand = 0;
+  }
+  if (!uniform && !twoBand)
     return 0;
   Receipt->SourceWidth = APPLE_AGX_SCANOUT_J313_WIDTH;
   Receipt->SourceHeight = APPLE_AGX_SCANOUT_J313_HEIGHT;

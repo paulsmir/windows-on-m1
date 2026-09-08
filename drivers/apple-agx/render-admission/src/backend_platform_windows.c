@@ -210,11 +210,16 @@ static VOID AdmissionTerminalObserve(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
         &Runtime->Adapter->BackendImage.Objects[
             APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
-    ULONG targetBytes =
-        output->Size == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES
-            ? APPLE_AGX_EXP208_FRAMEBUFFER_BYTES
-            : APPLE_AGX_EXP208_GDI_WIDTH *
-                  APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
+    BOOLEAN framebuffer =
+        Runtime->Adapter->BackendImage.Binding.Framebuffer.Active ==
+        APPLE_AGX_TRUE;
+    ULONG targetBytes = framebuffer
+        ? output->Size
+        : APPLE_AGX_EXP208_GDI_WIDTH *
+              APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
+    ULONG expectedColor = framebuffer
+        ? Runtime->Adapter->BackendImage.Binding.Framebuffer.ClearColor
+        : APPLE_AGX_EXP208_GDI_COLOR;
     if (output->Data != NULL &&
         output->Size >= targetBytes &&
         Runtime->TransportIo.FlushForCpu(
@@ -224,13 +229,23 @@ static VOID AdmissionTerminalObserve(
           &Runtime->TerminalReceipt, Fence,
           (const UCHAR *)output->Data,
           targetBytes, output->Size,
-          APPLE_AGX_EXP208_GDI_COLOR, 0xa5u)) {
+          expectedColor, 0xa5u)) {
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
         if (Runtime->TerminalReceipt.OutputPixelsExpected ==
             targetBytes / 4u) {
-          if (targetBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES) {
-            Runtime->VisibleAgxSourceAddress = output->Data;
-            Runtime->VisibleAgxSourceBytes = targetBytes;
+          if (framebuffer) {
+            ULONG outputOffset =
+                Runtime->Adapter->BackendImage.Binding.Framebuffer.RenderHeight ==
+                        APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT
+                    ? APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET
+                    : 0u;
+            Runtime->VisibleAgxSourceAddress =
+                (PUCHAR)output->Data - outputOffset;
+            Runtime->VisibleAgxSourceBytes =
+                APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
+            Runtime->VisibleAgxGpuAddress = output->GpuVa - outputOffset;
+            Runtime->VisibleAgxPhysicalAddress =
+                output->PhysicalAddress - outputOffset;
           } else {
             RtlCopyMemory(Runtime->VisibleAgxSource, output->Data,
                           sizeof(Runtime->VisibleAgxSource));
@@ -238,10 +253,12 @@ static VOID AdmissionTerminalObserve(
             Runtime->VisibleAgxSourceBytes =
                 sizeof(Runtime->VisibleAgxSource);
           }
-          Runtime->VisibleAgxGpuAddress =
-              Runtime->TerminalReceipt.DestinationGpuVa;
-          Runtime->VisibleAgxPhysicalAddress =
-              Runtime->TerminalReceipt.DestinationPhysical;
+          if (!framebuffer) {
+            Runtime->VisibleAgxGpuAddress =
+                Runtime->TerminalReceipt.DestinationGpuVa;
+            Runtime->VisibleAgxPhysicalAddress =
+                Runtime->TerminalReceipt.DestinationPhysical;
+          }
           Runtime->VisibleAgxFence = Fence;
           Runtime->VisibleAgxValid = TRUE;
         }

@@ -39,6 +39,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG selectedAdapter = MAX_ENUM_ADAPTERS;
   ULONG matchingAdapters = 0u;
   ULONG index;
+  ULONG pass;
   LUID selectedLuid = {0};
   ULONG selectedSources = 0u;
   UINT residencyPriority[2] = {
@@ -191,30 +192,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     }
   }
 
-  command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
-  command.Version = ADMISSION_UMD_COMMAND_VERSION;
-  command.Bytes = sizeof(command);
-  command.Opcode = AdmissionUmdOpcodeColorFill;
-  command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
-  command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
-  command.DestinationAllocationIndex = 0u;
-  command.Color = APPLE_AGX_EXP208_GDI_COLOR;
-  command.Rop = AdmissionUmdRopPatCopy;
-  CopyMemory(createContext.pCommandBuffer, &command, sizeof(command));
-  ZeroMemory(createContext.pAllocationList,
-             2u * sizeof(createContext.pAllocationList[0]));
-  createContext.pAllocationList[0].hAllocation = allocationHandles[0];
-  createContext.pAllocationList[0].WriteOperation = 1u;
-  createContext.pAllocationList[1].hAllocation = allocationHandles[1];
-  createContext.pAllocationList[1].WriteOperation = 1u;
-  ZeroMemory(createContext.pPatchLocationList,
-             sizeof(createContext.pPatchLocationList[0]));
-
-  render.hContext = createContext.hContext;
-  render.CommandOffset = 0u;
-  render.CommandLength = sizeof(command);
-  render.AllocationCount = ARRAYSIZE(allocationHandles);
-  render.PatchLocationCount = 0u;
   wprintf(L"BUFFERS device_command=%p device_command_bytes=%u "
           L"device_allocations=%p device_allocation_count=%u "
           L"device_patches=%p device_patch_count=%u "
@@ -228,16 +205,61 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           createContext.pAllocationList, createContext.AllocationListSize,
           createContext.pPatchLocationList, createContext.PatchLocationListSize,
           createContext.CommandBuffer);
-  renderStatus = D3DKMTRender(&render);
-  wprintf(L"RENDER_OUT command=%p command_bytes=%u allocations=%p "
-          L"allocation_count=%u patches=%p patch_count=%u gpuva=0x%llx "
-          L"queued=%u\n", render.pNewCommandBuffer,
-          render.NewCommandBufferSize, render.pNewAllocationList,
-          render.NewAllocationListSize, render.pNewPatchLocationList,
-          render.NewPatchLocationListSize, render.NewCommandBuffer,
-          render.QueuedBufferCount);
-  if (!NT_SUCCESS(renderStatus))
-    goto cleanup;
+  for (pass = 0u; pass < 2u; ++pass) {
+    if (pass != 0u)
+      Sleep(5000u);
+    ZeroMemory(&command, sizeof(command));
+    command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
+    command.Version = ADMISSION_UMD_COMMAND_VERSION;
+    command.Bytes = sizeof(command);
+    command.Opcode = AdmissionUmdOpcodeColorFill;
+    command.Destination.Top = pass == 0u
+        ? 0u : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
+    command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+    command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+    command.DestinationAllocationIndex = 0u;
+    command.Color = pass == 0u
+        ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
+        : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+    command.Rop = AdmissionUmdRopPatCopy;
+    CopyMemory(createContext.pCommandBuffer, &command, sizeof(command));
+    ZeroMemory(createContext.pAllocationList,
+               2u * sizeof(createContext.pAllocationList[0]));
+    createContext.pAllocationList[0].hAllocation = allocationHandles[0];
+    createContext.pAllocationList[0].WriteOperation = 1u;
+    createContext.pAllocationList[1].hAllocation = allocationHandles[1];
+    createContext.pAllocationList[1].WriteOperation = 1u;
+    ZeroMemory(createContext.pPatchLocationList,
+               sizeof(createContext.pPatchLocationList[0]));
+    ZeroMemory(&render, sizeof(render));
+    render.hContext = createContext.hContext;
+    render.CommandOffset = 0u;
+    render.CommandLength = sizeof(command);
+    render.AllocationCount = ARRAYSIZE(allocationHandles);
+    render.PatchLocationCount = 0u;
+    renderStatus = D3DKMTRender(&render);
+    wprintf(L"RENDER_OUT pass=%lu command=%p command_bytes=%u allocations=%p "
+            L"allocation_count=%u patches=%p patch_count=%u gpuva=0x%llx "
+            L"queued=%u status=0x%08lx\n", pass, render.pNewCommandBuffer,
+            render.NewCommandBufferSize, render.pNewAllocationList,
+            render.NewAllocationListSize, render.pNewPatchLocationList,
+            render.NewPatchLocationListSize, render.NewCommandBuffer,
+            render.QueuedBufferCount, (ULONG)renderStatus);
+    if (!NT_SUCCESS(renderStatus))
+      goto cleanup;
+    if (render.pNewCommandBuffer == NULL ||
+        render.NewCommandBufferSize < sizeof(command) ||
+        render.pNewAllocationList == NULL ||
+        render.NewAllocationListSize < 2u ||
+        render.pNewPatchLocationList == NULL)
+      goto cleanup;
+    createContext.pCommandBuffer = render.pNewCommandBuffer;
+    createContext.CommandBufferSize = render.NewCommandBufferSize;
+    createContext.pAllocationList = render.pNewAllocationList;
+    createContext.AllocationListSize = render.NewAllocationListSize;
+    createContext.pPatchLocationList = render.pNewPatchLocationList;
+    createContext.PatchLocationListSize = render.NewPatchLocationListSize;
+  }
   Sleep(10000u);
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
