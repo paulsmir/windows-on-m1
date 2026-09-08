@@ -2577,6 +2577,7 @@ static VOID AdmissionPlatformWorker(
               sizeof(eventReceipt.Message));
         }
         AdmissionRecordEventDrain(adapter, &eventReceipt);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
         if (!faultSnapshotReported) {
           volatile APPLE_AGX_BACKEND_U32 *taRead =
               (volatile APPLE_AGX_BACKEND_U32 *)(
@@ -2619,6 +2620,7 @@ static VOID AdmissionPlatformWorker(
             taRetireReported = TRUE;
           }
         }
+#endif
         AdmissionProviderDrainTraceWindows(
             adapter, runtime->Provider.LastDrainGuard,
             runtime->Provider.LastEventReadPointer,

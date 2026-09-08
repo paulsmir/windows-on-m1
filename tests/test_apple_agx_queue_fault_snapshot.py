@@ -7,6 +7,24 @@ RENDER = ROOT / "drivers" / "apple-agx" / "render-admission"
 
 
 class QueueFaultSnapshotTests(unittest.TestCase):
+    def test_failure_only_receipts_are_qualification_guarded(self):
+        """Catches referencing qualification-only capture state in FullProduction."""
+        worker = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        start = worker.index("AdmissionRecordEventDrain(adapter, &eventReceipt)")
+        end = worker.index("AdmissionProviderDrainTraceWindows(", start)
+        failure_receipts = worker[start:end]
+        self.assertIn(
+            "#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)", failure_receipts
+        )
+        guard = failure_receipts.index(
+            "#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)"
+        )
+        first_capture = failure_receipts.index("if (!faultSnapshotReported)")
+        last_capture = failure_receipts.index("taRetireReported = TRUE")
+        close = failure_receipts.index("#endif", last_capture)
+        self.assertLess(guard, first_capture)
+        self.assertGreater(close, last_capture)
+
     def test_bounded_fault_snapshot_is_captured_without_blocking_flush(self):
         header = (RENDER / "include" / "render_admission.h").read_text()
         worker = (RENDER / "src" / "backend_platform_windows.c").read_text()
