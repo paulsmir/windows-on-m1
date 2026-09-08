@@ -39066,3 +39066,17 @@ ba9c08449f2b7fbbd83e07effa56977e356debdbd86af1548fe620c12fc85531,
 f1a466b8f5b0497e5c83a24e51ea36ab76512e2085fef7f745137b8f24d6e500.
 Candidate is frozen but not yet staged; ordinary clean preflight and exact
 workflow/collector hashes precede hardware.
+
+**EXP641 STAGED.** Ordinary preflight immediately before stage: Code28,
+packages0, service/module absent,8CPU,NVMe2/USB5/keyboard1. Remote hashes
+match frozen ZIP and producer; package added only as oem5.inf. Workflow,
+hold collector, final collector, launch and pinned-current-host-key SHA256:
+923a7b706862ffbcd43bcf11aa020bc09f9103cbc6a38abd7565f7ceeed89d11,
+bdbbbab20bb22bf297019a460b9d84dcde973bcf1e30b3c0eaf10a30396a8816,
+88ec6928c6d2ac24714467005a52451ce42f27a0d6576bcb98665daf64f7981f,
+af68e287d31651c6da21607742851aaf29335afef6fcec9970a045495559d349,
+aeeaeb85c869b5d744b309631e9aa521dbe22bd510bf0690273cf51833b3c300.
+Current ordinary Windows SSH and both vUART endpoints are alive; perform
+controlled guest shutdown, stop only the exited ordinary launcher, start the
+frozen release launch, then require exact641 natural-bind preflight before the
+single producer. No driver verdict yet.
