@@ -37155,3 +37155,33 @@ producer SHA256 are respectively
 `b046f905af0ecaaad96e880ca292ed485b3e44edd13f38aa2390a894924666b1`.
 Workflow SHA256
 `ec5b4f9dee78d9c14e6a7b4e3727ab8ca036b10e747b05ffab20b5ac14ffbe59`.
+
+**EXP610 FINAL — INCONCLUSIVE TRACE ARM; NEW THUNK STATUS.** Pass1 remained
+hardware GREEN. Producer recorded pass2 context1073742208, offset4048,
+length48/capacity4096, command FNV `0x83dade57c173c265`, destination index1.
+The second `D3DKMTRender` returned `STATUS_DEVICE_REMOVED (0xC00002B6)` with
+all output pointers/sizes zero. Device registry still held Render guard0/status0,
+but the broker log contained no 0x5120 Render group: trace arming depended on
+OpenAllocation, which this direct CreateAllocation route never invokes. Thus
+EXP610 cannot distinguish whether the registry value is pass1 or pass2.
+Host/evidence/terminal SHA256 are
+`fb04bb22e70acfccf9564356f4613e7b955ccb399272c83377f5b466d8515c1f`,
+`326a77773f22e2bf301e6819b92d1021bac71ceb15aa55fafa4bd13fefb62826`,
+`79c727090a9a177806a004ff98e13ccb1c299d3d1913a5cd75643bf80571da62`.
+Exact cleanup completed; ordinary restore follows.
+
+# EXP611 — self-derived per-call Render trace
+
+**PREREGISTERED 2026-09-08T07:34Z. WHY THIS HYPOTHESIS:** (1) EXP610 exposed
+`STATUS_DEVICE_REMOVED` at pass2 but its trace was never armed. (2) A valid
+DXGK Render context already contains the exact adapter pointer, independent of
+OpenAllocation. (3) No behavior change is needed to distinguish no Render2
+from a successful Render2 followed by dxgkrnl post-processing.
+
+Commit `efe33414f77546021ca1f46b9aa1b054a1696137` derives the qualification trace
+adapter only after validating context/device and starts the per-call trace from
+that adapter even when OpenAllocation did not arm the optional filter. Invalid
+contexts remain fail-closed. All other EXP610 instrumentation and exact
+ping-pong behavior are unchanged; full368 tests GREEN. Build exact30.0.611.0
+from EXP610 R2 plus this one file, preserve complete host stdout, run once, and
+classify the first missing Render/Patch/Submit transition before any fix.

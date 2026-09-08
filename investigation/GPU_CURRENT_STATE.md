@@ -525,6 +525,13 @@ context/hash/DMA output and existing Patch/adoption/Submit guards in a preserved
 host log. This exact run will name whether Render2 is entered before any new
 behavior change.
 
+EXP610 pass2 is now known to return `STATUS_DEVICE_REMOVED (C00002B6)` with
+zero outputs, but its 0x5120 trace was absent because arming incorrectly
+depended on OpenAllocation. Commit
+`efe33414f77546021ca1f46b9aa1b054a1696137` makes valid Render self-derive the
+adapter for qualification tracing. EXP611 is the same receipt-only experiment
+and will decisively count Render1/Render2 before any behavioral patch.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
