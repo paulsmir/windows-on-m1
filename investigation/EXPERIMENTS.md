@@ -37040,3 +37040,21 @@ progress. Next producer-only discriminator adds the documented pass2 command-
 buffer resize request while retaining the full submitted range. A successful
 resize necessarily returns a distinct next buffer and must queue the current
 full buffer; KMD607 remains byte-exact.
+
+# EXP608 — explicit next-command-buffer resize
+
+**PREREGISTERED 2026-09-08T07:08Z. WHY THIS HYPOTHESIS:** (1) EXP607's full
+pass2 range still returned QueuedBufferCount0 and unchanged runtime buffer
+pointers. (2) Pinned WDK defines `ResizeCommandBuffer` plus
+`NewCommandBufferSize` as the supported request for the next buffer. (3) A
+successful resize supplies a different next buffer and cannot retain the full
+current buffer as the same writable batch. Commit
+`ca5d677330e30e54e8a687b651704d629871b6ac` sets only pass2's resize flag and
+requests twice its current capacity; the submitted command, allocations,
+ping-pong KMD607, AGX and DCP paths are unchanged. Full367 tests GREEN.
+
+Build only the producer on pinned FRYZZING and reuse exact signed EXP607 ZIP
+SHA `8c2f1833664dbd47301418830fe0100ce4837b58eda4044a16911894e7634bc2`.
+PASS requires pass2 queued1, sequence2/fence257, all4,096,000 second-color
+pixels and fresh D589 to the other offset with no TDR/fault. Recovery is exact
+EXP607-package cleanup and ordinary377/392.
