@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-07T23:54Z. Authoritative compact state; read this first after
+Updated 2026-09-08T00:13Z. Authoritative compact state; read this first after
 context reset. Detailed evidence remains in `EXPERIMENTS.md` and experiment-local
 archives. Continue in the current main process without implementation agents.
 
@@ -387,6 +387,19 @@ APPL0002 Code28, zero AppleAgx packages/services/modules, 8CPU, NVMe2, USB5,
 keyboard1 and bugcheck0. Event129x8 is retained as storage telemetry. Final
 ordinary health JSON SHA256 is
 `4155b362d49196935ed1db8f876bfbfe7ea3a26e7859f87fc9ac62ad20fa5a47`.
+
+EXP600 implementation commit
+`cd4373e8b86578a2ff9a3dbd8da33528ccfc5799` is offline GREEN and
+preregistered for build. Pinned m1n1 G13/V13.5 geometry derives a 2560x1600
+job with TPC/tilemap/cluster buffers `0x50000/0x6400/0x32000`; they replace
+only objects64/65/67 in the unused backend tail. Exact Construct-derived
+WorkCommand3D/TA fields and a Mesa-defined linear PBE descriptor/10240-byte
+stride are patched atomically and restored byte-exact. The same full-size
+Windows allocation is presented through the proven D589 path before fence
+retirement; no CPU scale occurs. Full AppleAgx367 tests are GREEN. Hardware is
+pending and `FULLY_ACCELERATED_PRESENT=NO` until exact AGX completion, full
+surface content and DCP latch are observed; the uniform clear will not by
+itself prove nonuniform layout correctness.
 
 ## Standing constraints
 

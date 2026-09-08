@@ -36509,3 +36509,105 @@ Health JSON SHA256:
 `4155b362d49196935ed1db8f876bfbfe7ea3a26e7859f87fc9ac62ad20fa5a47`.
 The dark-blue panel seen immediately before recovery was the last DCP-latched
 EXP599 surface; it is not evidence of a Windows hang in the ordinary guest.
+
+# EXP600 — full-size G13 PBE output into the displayed Windows allocation
+
+**PREREGISTERED 2026-09-08T00:13:46Z. WHY THIS HYPOTHESIS:**
+
+1. EXP598/599 prove the entire Windows request -> physical TA/3D -> exact fence
+   -> D589 chain, but only after CPU scaling a 16x16 AGX result. Removing that
+   copy makes the captured render geometry the nearest first unknown.
+2. Pinned m1n1 `render.py` derives the tiler sizes from framebuffer geometry.
+   The captured objects64/65/67 are only `0x4000/0x500/0x2800`; 2560x1600 on
+   eight G13 clusters requires `0x50000/0x6400/0x32000`, so scalar width changes
+   without replacing those buffers are deterministically invalid.
+3. Pinned Mesa PBE definitions identify layout0 as linear and encode width-1,
+   height-1 and stride-4. DCP already consumes a linear 10240-byte BGRA surface,
+   making a direct store to the same Windows allocation the smallest coherent
+   translation rather than another display or broker experiment.
+
+**WINDOWS CONTRACT:** create a normal 2560x1600 A8R8G8B8 allocation0 plus the
+existing separately owned qualification allocation1; make both resident and
+submit the same pointer-free color-fill command through D3DKMTRender. Allocation0
+remains owned by the producer for the bounded10s observation interval. On exact
+hardware completion the KMD validates the full surface while the allocation is
+still in use, queues that same allocation to the existing DCP path, waits for
+the exact latch and only then retires the Windows fence. No capability, segment,
+paging, scheduler or allocation-ownership change is made.
+
+**AGX/ASAHI CONTRACT:** pinned m1n1 commit
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000`, G13/V13.5
+`proxyclient/m1n1/agx/render.py` and `fw/agx/cmdqueue.py` define tiles80x50,
+macrotiles20x16, size1=400, tile screen `0x3104f`, TPC `0x50000`, tilemap
+`0x6400` and per-cluster tilemap `0x32000`. Mesa commit
+`acbb4f6b8de2768b5ea7d6a83a8e52a263eac5cc` files `agx_state.c`,
+`agx_pipe.c` and `cmdbuf.xml` are SPDX-MIT and were inspected, not copied;
+they define PBE linear layout0, 14-bit width/height and stride-4 bits104..124.
+The repository's generated EXP208 bytes and relocation graph remain the actual
+implementation source.
+
+**TRANSLATION:** commit
+`cd4373e8b86578a2ff9a3dbd8da33528ccfc5799` adds a fail-closed shared
+framebuffer binder. The fixed template occupies `0x5d0000` of the existing
+8MiB backend reservation. The binder zeroes and borrows offsets `0x5d0000`,
+`0x620000`, `0x628000`, repoints only objects64/65/67, applies the six existing
+relocation edges, patches only the Construct-derived WorkCommand3D/TA fields
+and PBE geometry/layout/stride, and flushes the expanded ranges. Unbind first
+validates every bound scalar/object, restores the original template byte-exact
+and zeroes scratch. The old16x16 binding remains unchanged. Completion selects
+direct source=destination only when CPU/GPU/PA/size identity is exact; otherwise
+the already proven16x16 scale branch remains the control.
+
+**ATOMIC CONTRACT:** WorkCommand3D/TA geometry, PBE linear geometry/stride and
+the three tiler buffer capacities change together because m1n1 derives them from
+one framebuffer extent and they are invalid separately. No AGX queue, firmware,
+event, stamp, completion, DCP, WDDM capability, Mu or broker variable changes.
+
+**WHAT IS STILL UNKNOWN:** whether this larger job completes physical TA/3D on
+J313, writes all4,096,000 expected pixels to the linear Windows allocation,
+completes the exact Windows fence and reaches the existing A408/D589 latch. A
+uniform dark-blue frame is the first direct-PBE checkpoint only; it does not yet
+prove nonuniform linear layout correctness or final production Present.
+
+**OFFLINE PROOF:** `.local/analysis/EXP600-fullsize-pbe/analyze_fullsize.py`
+SHA256 `0aad9226178276b887d915d31fab0c46e9b833b9213ba03f77f2f36bd27d8633`
+round-trips objects18/19 byte-exact through pinned m1n1 Construct and emits the
+exact offset diff and tail plan. Tests reproduce the old full-size rejection,
+then prove exact geometry, PBE, relocation edges, short-capacity fail-closed,
+corruption-before-unbind rejection, byte-exact template restoration, direct
+receipt identity and legacy16x16 control. Full AppleAgx suite:367 PASS; diff
+check clean.
+
+**SOURCE/ENVIRONMENT FREEZE:** root
+`cd4373e8b86578a2ff9a3dbd8da33528ccfc5799`; m1n1
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000`; Mu
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`. Root tracked-diff/status hashes
+for unrelated preserved user state are
+`9adca67313bb0af5f2dcaa24997a850db44183ed558bd475ca0922292ed76bc4` /
+`073eb23e579c78b981e44e59d3d9639a26f64e9c286cdb9a0c97f00752c2ed8d`;
+m1n1/Mu status hashes are
+`214af2d6c00a494695aaf2c23cac894863bf634cd0608be62aa151747eeb486a` /
+`6578efdc8c9ec1bb2aac683ab43ba5717b1115ee74b78e8a7adc0cac31f905a2`.
+Exact EXP598-base overlay SHA256 is
+`e168a0448d1e9b1375f64cc603411f3797497dda728025832eefe1cd01370608`.
+
+**BUILD INTENT:** transfer only `overlay.tar.gz` and `build.ps1` to
+`pauls@FRYZZING:C:\Users\pauls\EXP600-upload`; execute the pinned WDK/SDK26100,
+MSVC14.44 script from exact `C:\Users\pauls\EXP598\src`, package version
+30.0.600.0 with `-VisibleAgxQualification`, KMD/UMD code analysis, Universal
+validation, Inf2Cat/TestSign/version gates and producer ARM64 Release analysis.
+Retrieve ZIP/manifest/logs/producer and record every SHA before hardware.
+
+**HARDWARE INTENT (only after build freeze):** current preflight is ordinary
+377/392 Code28/no-package/service/module,8CPU/NVMe2/USB5/keyboard1/bugcheck0;
+health JSON SHA
+`4155b362d49196935ed1db8f876bfbfe7ea3a26e7859f87fc9ac62ad20fa5a47`.
+Stage only exact EXP600 hashes, graceful restart, launch current full-owner/
+synthetic889 profile, one natural bind and one producer. PASS requires exact
+package Code0, TA/3D stamps/done, full-surface expected pixel count4,096,000,
+changed bytes0xfa0000, zero mismatch/poison, exact Windows fence/interrupt/DPC,
+direct receipt source=destination identity, A408/D589 and physical dark-blue
+panel. Failure is the first unmet receipt/queue/timeout field. Evidence paths:
+`.local/experiments/EXP600-fullsize-pbe/{hardware.log,run.log,observation}`.
+Recovery is exact package cleanup followed by the validated ordinary377/392
+script; the immutable GPU-hidden profile remains emergency-only.
