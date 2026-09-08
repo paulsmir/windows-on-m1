@@ -399,7 +399,15 @@ Windows allocation is presented through the proven D589 path before fence
 retirement; no CPU scale occurs. Full AppleAgx367 tests are GREEN. Hardware is
 pending and `FULLY_ACCELERATED_PRESENT=NO` until exact AGX completion, full
 surface content and DCP latch are observed; the uniform clear will not by
-itself prove nonuniform layout correctness.
+itself prove nonuniform layout correctness. Exact30.0.600.0 pinned build is
+frozen: ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`2babae53493a149180256d004150aa75cdae69859b0f95f8d5faeae1d8e71940`,
+`4f40fe863b2068e445e206ac6d100ef2c6c799e9ef7951f8a88557cb7ff959af`,
+`e2b35968503b374adb470de2516451e46d8cfd7b2d6a5d52c85953a37f26e46b`,
+`39bd620da01b03031302ac3df6876fb234d5d97fb4a79c27278c6e7b042182de`,
+`36477e809cd8e31c8af609e55083fce6437c26e636ef4dbf4c85ac082449493d`,
+`0abcbc7aee994615277233165c76d62fa9aebdc452aae8d5f5e988ab21ec2829`.
+All WDK/Universal/sign/version gates passed with inherited C28251 only.
 
 ## Standing constraints
 

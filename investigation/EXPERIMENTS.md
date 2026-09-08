@@ -36611,3 +36611,23 @@ panel. Failure is the first unmet receipt/queue/timeout field. Evidence paths:
 `.local/experiments/EXP600-fullsize-pbe/{hardware.log,run.log,observation}`.
 Recovery is exact package cleanup followed by the validated ordinary377/392
 script; the immutable GPU-hidden profile remains emergency-only.
+
+**EXP600 BUILD FREEZE 2026-09-08T00:18Z.** Pinned FRYZZING build from exact
+EXP598 source plus overlay
+`e168a0448d1e9b1375f64cc603411f3797497dda728025832eefe1cd01370608`
+passed KMD/UMD and producer code analysis, Universal validation, Inf2Cat,
+TestSign and coherent version30.0.600.0. The only KMD diagnostic is inherited
+C28251; producer has zero warnings/errors. ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`2babae53493a149180256d004150aa75cdae69859b0f95f8d5faeae1d8e71940`,
+`4f40fe863b2068e445e206ac6d100ef2c6c799e9ef7951f8a88557cb7ff959af`,
+`e2b35968503b374adb470de2516451e46d8cfd7b2d6a5d52c85953a37f26e46b`,
+`39bd620da01b03031302ac3df6876fb234d5d97fb4a79c27278c6e7b042182de`,
+`36477e809cd8e31c8af609e55083fce6437c26e636ef4dbf4c85ac082449493d`,
+`0abcbc7aee994615277233165c76d62fa9aebdc452aae8d5f5e988ab21ec2829`.
+Manifest/build/producer/version log hashes are
+`d26cf81e6ee3231e79647fbac57caf0be3239320ac5ba86526fdf8b708ecb0f3`,
+`45333731a51194c06d7c260b70a80f5e236ef83bca803688816ddce85c687ff1`,
+`9ed330518fe2cc1c5f79c9aab20852d917e08b3dac72935313e7a3e0ff87963f`,
+`347bc29aecc935c65253a90ea8c5eb3839ca39c57ea506c853453669e493ef64`.
+Hardware gate is open only for this exact package/producer and the preregistered
+single natural run.
