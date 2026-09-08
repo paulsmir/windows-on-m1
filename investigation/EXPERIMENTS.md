@@ -37374,3 +37374,52 @@ Workflow/launch SHA256 are
 `641e9a731c4231c488bfd0223b51d23236b47969bde039b44feecc05d2da547c`
 and `6e31adb7349913fde7be4505fcc0f7970828287e1e5932593e197056b1329228`.
 Run once only after ordinary377/392 Code28/no-package health verification.
+
+**EXP615 FINAL — REJECTED; SYNCHRONOUS RECEIPT FLUSH IS THE NEXT OWNER.**
+Natural bind passed exact oem5/SYS hashes, Code0/service Running and8 CPUs.
+Durable correlation candidate615/boot252843916 contains two exact Render calls,
+overflow0, captured=exported generation10/status0/durable1. Call1 reached
+Submit/worker and physical TA+3D completion fence256; its GDI receipt proves
+both NotifyInterrupt and NotifyDpc. Call2 context and command hash match the
+producer and Render exits success with168 DMA bytes/one patch/prepatched1, but
+the device had already transitioned to HUNG and no second successful Submit is
+preserved. Windows bugchecked `0x119/2`, argument2 `STATUS_DEVICE_BUSY`; the
+dump command is the second context/fence257 and the stack is
+`dxgmms2!VidSchiSendToExecutionQueue -> VidSchiSubmitRenderCommand`.
+
+This rejects moving terminal capture after notification as sufficient. Source
+inspection finds the nearer functional defect: after queueing the AGX job and
+before its first completion poll, the qualification worker writes queue info,
+submission and buffer-manager receipts to both registry keys, with repeated
+`ZwFlushKey`; heartbeat persistence also precedes hardware submission. Thus
+storage-backed diagnostics are on the scheduler watchdog path. This is a direct
+contract mismatch even though Event129 remains telemetry rather than an asserted
+GPU cause. Correlation/raw/host/evidence/dump/analysis SHA256 are
+`020d39418a782cd27dbc993e7e1544bfe0af74ca8e903e5871ce4115ce3f9a57`,
+`035e312c118fcc1f7befd8a12a5847c9623addbc1bce1252d2efda95aa4ed753`,
+`1d1394a5b321e0b68b16e138e4fe486d6d68458881a6fe0340e57ed3fcd6a1f4`,
+`2b07cb5fb35ee9cd3600876c7068547807b280fc18ea86be0c46f4b8777da2f4`,
+`3f53b7585638666fa1436c04ba666054257a685e2e40a8d7d3ba26aed34c8c31`,
+`fe0fe151f0029c872adc775b93346b45bbc1052c98dd8f3ab3d06359ecdcd546`.
+Exact oem5/package/service cleanup completed in compatible hidden recovery.
+
+# EXP616 — remove synchronous persistence from render request progress
+
+**PREREGISTERED 2026-09-08T08:48Z. WHY THIS HYPOTHESIS:** (1) EXP615 proves
+fence256 TA+3D, NotifyInterrupt and NotifyDpc yet the device becomes HUNG before
+fence257. (2) Source performs multiple `ZwFlushKey` operations after hardware
+queueing and before first completion polling. (3) The new bounded correlation
+exporter is already asynchronous and independently reports durable/export
+status, so legacy receipts need not synchronously flush the hive.
+
+Commit `e1a66695ba3040be0de27a8c2f88275612023ddf` removes only synchronous
+`ZwFlushKey` from per-render legacy heartbeat/queue/TA/KTrace/terminal/visible
+receipt writers. Values are still exported to registry, but only the correlation
+state is called crash-durable. Start-time visible-scanout qualification flushing
+is unchanged. No render ABI, scheduler, timeout, AGX, PBE, UAT, DCP, placement,
+capability or producer change. The focused regression was RED before the patch;
+full373 AppleAgx tests and change-ledger tests are GREEN. Build exact616 from
+the exact615 builder tree plus only `receipts.c`. One natural run must keep the
+same device ACTIVE through pass2 and reach two Submit/worker/fence results; if
+HUNG remains, synchronous flush is rejected and the next owner is the core
+Windows completion-notification contract, not another producer flush API.

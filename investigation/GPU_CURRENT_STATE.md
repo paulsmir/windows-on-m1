@@ -567,6 +567,17 @@ pass2. Root cause is pre-notify full-frame terminal output capture still left in
 after synchronized DMA_COMPLETED and transaction finish. EXP615 must prove the
 device stays ACTIVE and complete both ping-pong frames/fences/D589.
 
+EXP615 rejects that move as sufficient. Fence256 still has physical TA+3D plus
+driver-local NotifyInterrupt/NotifyDpc proof, but the device becomes HUNG and
+the second exact Render output later causes `0x119/2 STATUS_DEVICE_BUSY` during
+fence257 submission. The proven correlation transport remained durable and
+separates both calls. Source now identifies repeated synchronous `ZwFlushKey`
+diagnostic persistence on the active render/watchdog path before completion
+polling. Commit `e1a66695ba3040be0de27a8c2f88275612023ddf` removes only those
+per-render flushes; legacy receipts remain exported but are not called durable,
+while the asynchronous correlation state retains explicit durability status.
+Full373 tests are GREEN. EXP616 is the next exact hardware discriminator.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
