@@ -111,7 +111,7 @@ typedef struct _APPLE_AGX_WIN32_CLEAR_PAYLOAD {
 - Produces `AppleAgxWin32CommandHash`, `AppleAgxWin32CommandValidate`, `AppleAgxWin32ReferenceValidate`.
 - Consumes an already copied byte array; it never probes user memory.
 
-- [ ] **Step 1: write the RED portable test.** Assert exact struct sizes, one literal valid clear, bad magic/version/header size/total size/count/offset/alignment/hash, arithmetic overflow, stale generation, unknown opcode/flags/access/role, duplicate render target, zero length and out-of-range allocation index.
+- [x] **Step 1: write the RED portable test.** Assert exact struct sizes, one literal valid clear, bad magic/version/header size/total size/count/offset/alignment/hash, arithmetic overflow, stale generation, unknown opcode/flags/access/role, duplicate render target, zero length and out-of-range allocation index.
 
 ```c
 APPLE_AGX_WIN32_COMMAND_VIEW view;
@@ -122,10 +122,10 @@ CHECK(AppleAgxWin32CommandValidate(bytes, sizeof(bytes), 7u, 2u, &view) ==
       AppleAgxWin32AbiStaleGeneration);
 ```
 
-- [ ] **Step 2: run the test and require RED because the ABI/functions do not exist.** Use the repository's existing portable C-test compile pattern from `tests/test_apple_agx_render_job.py`.
-- [ ] **Step 3: implement only structural/hash/generation validation.** Validate all `offset + size` operations as `offset <= total && size <= total - offset`; require reference and payload arrays to be naturally aligned; require exactly one write-only render-target reference for `AppleAgxWin32OpcodeClear`.
-- [ ] **Step 4: prove producer mutation isolation.** Copy a valid command into `snapshot`, mutate the producer buffer, then require the validated view/hash and clear fields in `snapshot` to remain byte-exact.
-- [ ] **Step 5: run portable tests plus existing shared render-job, memory and submission tests GREEN, then commit only the four files.**
+- [x] **Step 2: run the test and require RED because the ABI/functions do not exist.** Use the repository's existing portable C-test compile pattern from `tests/test_apple_agx_render_job.py`.
+- [x] **Step 3: implement only structural/hash/generation validation.** Validate all `offset + size` operations as `offset <= total && size <= total - offset`; require reference and payload arrays to be naturally aligned; require exactly one write-only render-target reference for `AppleAgxWin32OpcodeClear`.
+- [x] **Step 4: prove producer mutation isolation.** Copy a valid command into `snapshot`, mutate the producer buffer, then require the validated view/hash and clear fields in `snapshot` to remain byte-exact.
+- [x] **Step 5: run portable tests plus existing shared render-job, memory and submission tests GREEN, then commit only the four files.**
 
 ### Task 2: Device-owned allocation/range validation
 
@@ -151,18 +151,20 @@ typedef int (*ADMISSION_WIN32_LOOKUP_ALLOCATION)(
     void *Context, uint32_t AllocationIndex,
     ADMISSION_WIN32_ALLOCATION_FACT *Fact);
 
-APPLE_AGX_WIN32_ABI_RESULT AdmissionWin32ValidateReferences(
+ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
     const APPLE_AGX_WIN32_COMMAND_VIEW *View,
     uint32_t ExpectedGeneration,
     ADMISSION_WIN32_LOOKUP_ALLOCATION Lookup,
-    void *LookupContext);
+    void *LookupContext,
+    ADMISSION_WIN32_ALLOCATION_FACT *Facts,
+    uint32_t FactCapacity);
 ```
 
-- [ ] **Step 1: write RED table tests** for wrong device owner, stale allocation generation, read-only destination, active display surface write, zero/misaligned/overflowing range, valid nonzero subrange, noncontiguous allocation-list indices and lookup failure.
-- [ ] **Step 2: implement the lookup-driven validator** without importing WDK types into the portable ABI module. The callback supplies facts; the validator never accepts a global address or pool-wide containment as ownership.
-- [ ] **Step 3: add exact overlap rules.** Two writable references may not overlap the same allocation token; a read/write overlap is rejected unless a future opcode documents it. Clear accepts one writable destination and no other reference.
-- [ ] **Step 4: prove rollback has no state.** Every rejected command leaves the caller's packet, fence, allocation counters and display ownership byte-exact.
-- [ ] **Step 5: run the new tests plus allocation/completed-output/presentation lifetime suites GREEN and commit.**
+- [x] **Step 1: write RED table tests** for wrong device owner, stale allocation generation, read-only destination, active display surface write, zero/misaligned/overflowing range, valid nonzero subrange, noncontiguous allocation-list indices and lookup failure.
+- [x] **Step 2: implement the lookup-driven validator** without importing WDK types into the portable ABI module. The callback supplies facts; the validator never accepts a global address or pool-wide containment as ownership.
+- [x] **Step 3: add exact overlap rules.** Two writable references may not overlap the same allocation token; a read/write overlap is rejected unless a future opcode documents it. Clear accepts one writable destination and no other reference.
+- [x] **Step 4: prove rollback has no state.** Every rejected command leaves the caller's packet, fence, allocation counters and display ownership byte-exact.
+- [x] **Step 5: run the new tests plus allocation/completed-output/presentation lifetime suites GREEN and commit.**
 
 ### Task 3: KMD copy-once Render translation
 
