@@ -38271,3 +38271,36 @@ and `42d702cd2442811d52bc306ac3d08247956706ee93c2533c43079659912739a0`.
 Run stops at flushed RETIRE_WAIT. Preserve live HOLD proof before Signal mode
 creates the exact gate file; then require a newer fallback record and explicit
 DestroyAllocation end status.
+
+**EXP632 FINAL — EXPLICIT RETIREMENT AND FULL CLEANUP PASS.** Exact
+candidate632/boot252649707 repeats two full verified render frames and reaches
+HOLD_PASS with producer/resources alive. HOLD evidence was copied at
+uptime130.802s before the retirement signal; Code0/service Running, 8 CPUs and
+healthy NVMe/xHCI/input, no System41/1001/129 since boot.
+
+After the exact external gate, the driver returned a versioned fallback record:
+query0, build632, same boot, command1, status0, valid1, purpose Fallback,
+sequence5 newer than frame2 sequence4, allocation `ffffd203e8aa2510` distinct
+from both render owners, offset0 and physical pool base `9bbff0000`. Host logs a
+new exact A408/D589 swap12 after frame latches swap10/11. Only then producer
+entered DestroyAllocation: status0, both context destroys0, paging queue/device/
+adapter cleanup0, final result0. Post-run uptime189.840s remained Code0/service
+Running, 8 CPUs, healthy devices and no fresh41/1001/129. This closes the bare
+offset0 defect and proves the prior 0x101 was not an inherent consequence of
+correct output verification, HOLD, retirement or resource cleanup.
+
+Correlation, pre-retirement HOLD stdout/health, final stdout/health and host log
+SHA256 are
+`8ac0143b8078bef3b94a411c3aedc8f469cfcf0d2394c065b4a89933ea1d4e14`,
+`4881456837ad186fb12fe39555e6e4aee0de1ac8e1fc64f10cd9aab9099ae8cf`,
+`6c4b4e89a289a51525e86cd2aa75ac0616df0550663801249ec7978f71ed4daa`,
+`cc942a75e0e4e1520ca7837a05877668f48d484a1807f5714a3a59492486fe02`,
+`7279871aa7f1b2feb402e1edaf02f9f7a439bd3bf0907b53080fb339ec7ba0f2`,
+`b396c08bf024a68ad66d205b068a779ace33df1b8142ff5d8fc21bd60450081d`.
+Exact package cleanup and ordinary377/392 Code28 restoration completed.
+
+Verdicts: `TWO_FRAME_RENDER_PASS=YES`, `TWO_FRAME_OUTPUT_PASS=YES`,
+`TWO_FRAME_PRESENT_MACHINE_PASS=YES`, `HOLD_STABILITY_PASS=YES`,
+`RETIREMENT_PASS=YES`. Physical visibility remains user-reported probable.
+Next boundary is bounded repeated ping-pong using the same two owners, monotonic
+fences/sequences and exact per-frame records; do not alter AGX/DCP protocols.

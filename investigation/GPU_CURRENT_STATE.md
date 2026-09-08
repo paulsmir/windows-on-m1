@@ -810,6 +810,21 @@ EXP631 HOLD evidence, then on an external signal latch the retained Windows
 primary at offset0, prove a newer exact sequence/owner/pool identity, and only
 then destroy the two qualification allocations.
 
+EXP632 proves that contract end to end. Candidate632/boot252649707 repeats both
+full frames and HOLD; evidence was saved before the gate. Retirement returns
+purpose Fallback, sequence5 after frame sequence4, exact Windows-primary token
+`ffffd203e8aa2510`, offset0 and PA `9bbff0000`; host records the corresponding
+new D589. DestroyAllocation, both contexts, paging queue, device and adapter then
+all return0, producer result0. No reset or fresh41/1001/129 through uptime189s.
+`RETIREMENT_PASS=YES`.
+
+Exact package cleanup is complete and ordinary377/392 is restored: Code28, no
+AppleAgx package/service/module, SSH, 8 CPUs, NVMe/xHCI/input healthy. Current
+first unknown is repeated ping-pong beyond two frames using the same two
+allocations. Extend only the bounded per-frame history/producer loop; require
+monotonic fences and sequences, alternating inactive offsets, exact full pixels,
+no stale/duplicate completion, a final explicit retirement and clean teardown.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
