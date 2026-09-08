@@ -196,10 +196,15 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             backend.index("static VOID AdmissionPlatformWorkerFinished(")
         ]
         self.assertEqual(backend.count("AdmissionScanoutPresentAgxResult("), 1)
-        self.assertLess(
+        self.assertGreater(
             complete.index("AdmissionScanoutPresentAgxResult("),
             complete.index("DxgkCbSynchronizeExecution("),
         )
+        after_present = complete[
+            complete.index("AdmissionScanoutPresentAgxResult("):
+            complete.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        self.assertNotIn("return APPLE_AGX_BACKEND_FALSE", after_present)
         self.assertIn("Sleep(10000u);", producer)
         self.assertLess(
             producer.index("Sleep(10000u);"),

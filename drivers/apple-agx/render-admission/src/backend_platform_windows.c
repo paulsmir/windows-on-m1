@@ -1992,16 +1992,6 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     visibleReady = TRUE;
   }
   KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
-  if (!visibleReady || !runtime->VisibleAgxValid ||
-      runtime->VisibleAgxFence != Fence ||
-      !NT_SUCCESS(AdmissionScanoutPresentAgxResult(
-          adapter, &visibleDescription, runtime->VisibleAgxSourceAddress,
-          runtime->VisibleAgxSourceBytes, runtime->VisibleAgxGpuAddress,
-          runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence)))
-    return APPLE_AGX_BACKEND_FALSE;
-  runtime->VisibleAgxValid = FALSE;
-  runtime->VisibleAgxSourceAddress = NULL;
-  runtime->VisibleAgxSourceBytes = 0u;
 #endif
 
   KeAcquireSpinLock(&adapter->SchedulerLock, &old_irql);
@@ -2099,6 +2089,18 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   runtime->CompletionContext = NULL;
   if (preemption_waiting)
     InterlockedExchange(&adapter->SchedulerDpcPending, 1);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (visibleReady && runtime->VisibleAgxValid &&
+      runtime->VisibleAgxFence == Fence) {
+    (void)AdmissionScanoutPresentAgxResult(
+        adapter, &visibleDescription, runtime->VisibleAgxSourceAddress,
+        runtime->VisibleAgxSourceBytes, runtime->VisibleAgxGpuAddress,
+        runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence);
+  }
+  runtime->VisibleAgxValid = FALSE;
+  runtime->VisibleAgxSourceAddress = NULL;
+  runtime->VisibleAgxSourceBytes = 0u;
+#endif
   return APPLE_AGX_BACKEND_TRUE;
 }
 
