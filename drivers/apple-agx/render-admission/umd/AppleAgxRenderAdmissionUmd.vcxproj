@@ -43,6 +43,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\umd.c" />
+    <ClCompile Include="src\umd_win32_screen.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
     <ClCompile Include="src\umd_resource_lifetime.c" />
     <ClCompile Include="src\direct_flip_contract.c" />
     <ClCompile Include="..\src\render_allocation.c" />

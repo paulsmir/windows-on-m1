@@ -307,6 +307,8 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
       Args->pKTCallbacks->pfnDestroyContextCb == NULL ||
       Args->pKTCallbacks->pfnAllocateCb == NULL ||
       Args->pKTCallbacks->pfnDeallocateCb == NULL ||
+      Args->pKTCallbacks->pfnLockCb == NULL ||
+      Args->pKTCallbacks->pfnUnlockCb == NULL ||
       Args->pKTCallbacks->pfnRenderCb == NULL ||
       Args->p11UMCallbacks == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL ||
@@ -363,6 +365,16 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
   device->AllocationListSize = createContext.AllocationListSize;
   device->PatchList = createContext.pPatchLocationList;
   device->PatchListSize = createContext.PatchLocationListSize;
+  result = AdmissionUmdScreenInitialize(device);
+  if (FAILED(result)) {
+    D3DDDICB_DESTROYCONTEXT destroyContext;
+    ZeroMemory(&destroyContext, sizeof(destroyContext));
+    destroyContext.hContext = device->KernelContext;
+    (void)device->KernelCallbacks->pfnDestroyContextCb(
+        device->RuntimeDevice.handle, &destroyContext);
+    ZeroMemory(device, sizeof(*device));
+    return result;
+  }
 
   deviceFunctions = Args->pWDDM1_3DeviceFuncs;
   ZeroMemory(deviceFunctions, sizeof(*deviceFunctions));
@@ -620,8 +632,13 @@ static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RETIREMENT_FINALIZE_RESULT retirement;
   D3DDDICB_DESTROYCONTEXT destroyContext;
+  HRESULT screenResult;
+  ULONG screenUndeallocated = 0u;
   if (device == NULL)
     return;
+  screenResult = AdmissionUmdScreenFinalize(device, &screenUndeallocated);
+  if (FAILED(screenResult) || screenUndeallocated != 0u)
+    AdmissionUmdSetError(device, FAILED(screenResult) ? screenResult : E_FAIL);
   AdmissionUmdRetirementFinalize(&device->Retirement, &retirement);
   if (retirement.Undeallocated != 0u) {
     device->LastRetirementError = retirement.LastError;

@@ -39,6 +39,14 @@ typedef struct _TEST_STATE {
   unsigned int ContextGeneration;
   unsigned int RenderCalls;
   unsigned int QueryAdapterCalls;
+  unsigned int InternalAllocateCalls;
+  unsigned int InternalDeallocateCalls;
+  unsigned int LockCalls;
+  unsigned int UnlockCalls;
+  D3DKMT_HANDLE InternalAllocation;
+  D3DKMT_HANDLE LastLockedAllocation;
+  D3DKMT_HANDLE LastUnlockedAllocation;
+  ADMISSION_ALLOCATION_DESCRIPTION InternalDescription;
   unsigned char RenderCommand[128];
   AGX_WIN32_CLEAR_REQUEST *MutatedRequest;
 } TEST_STATE;
@@ -57,6 +65,7 @@ static D3DDDI_ALLOCATIONLIST AllocationList[16];
 static D3DDDI_ALLOCATIONLIST NextAllocationList[16];
 static D3DDDI_PATCHLOCATIONLIST PatchList[16];
 static D3DDDI_PATCHLOCATIONLIST NextPatchList[16];
+static unsigned char InternalAllocationData[0x8000];
 
 #define CHECK(value)                                                          \
   do {                                                                        \
@@ -162,6 +171,42 @@ static HRESULT APIENTRY TestRender(HANDLE Device, D3DDDICB_RENDER *Render) {
 static HRESULT APIENTRY TestAllocate(HANDLE Device,
                                      D3DDDICB_ALLOCATE *Allocate) {
   (void)Device;
+  if (Allocate == NULL)
+    return E_INVALIDARG;
+  if (Allocate->hResource == NULL) {
+    const ADMISSION_ALLOCATION_DESCRIPTION *description;
+    CHECK(Allocate->NumAllocations == 1u);
+    CHECK(Allocate->pAllocationInfo != NULL);
+    if (Allocate->NumAllocations != 1u ||
+        Allocate->pAllocationInfo == NULL)
+      return E_INVALIDARG;
+    description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
+        Allocate->pAllocationInfo[0].pPrivateDriverData;
+    CHECK(description != NULL);
+    CHECK(Allocate->pAllocationInfo[0].PrivateDriverDataSize ==
+          sizeof(*description));
+    CHECK(Allocate->pAllocationInfo[0].pSystemMem == NULL);
+    CHECK(Allocate->pAllocationInfo[0].Flags.Value == 0u);
+    if (description == NULL ||
+        Allocate->pAllocationInfo[0].PrivateDriverDataSize !=
+            sizeof(*description))
+      return E_INVALIDARG;
+    CHECK(AdmissionAllocationDescriptionValid(description));
+    CHECK(description->Type ==
+          (unsigned int)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE);
+    CHECK(description->Format == (unsigned int)D3DDDIFMT_A8);
+    CHECK(description->Width == sizeof(InternalAllocationData));
+    CHECK(description->Height == 1u);
+    CHECK(description->Pitch == sizeof(InternalAllocationData));
+    CHECK(description->Size == sizeof(InternalAllocationData));
+    CHECK(description->CpuVisible == 1u);
+    State.InternalDescription = *description;
+    State.InternalAllocation = 0xb001u + State.InternalAllocateCalls;
+    ++State.InternalAllocateCalls;
+    Allocate->hKMResource = 0u;
+    Allocate->pAllocationInfo[0].hAllocation = State.InternalAllocation;
+    return S_OK;
+  }
   ++State.AllocateCalls;
   State.LastAllocateResource = Allocate->hResource;
   CHECK(Allocate->NumAllocations == 1u);
@@ -182,8 +227,21 @@ static HRESULT APIENTRY TestAllocate(HANDLE Device,
 static HRESULT APIENTRY TestDeallocate(
     HANDLE Device, const D3DDDICB_DEALLOCATE *Deallocate) {
   HRESULT result = S_OK;
-  unsigned int index = State.DeallocateCalls++;
   (void)Device;
+  if (Deallocate == NULL)
+    return E_INVALIDARG;
+  if (Deallocate->hResource == NULL) {
+    CHECK(Deallocate->NumAllocations == 1u);
+    CHECK(Deallocate->HandleList != NULL);
+    if (Deallocate->NumAllocations != 1u ||
+        Deallocate->HandleList == NULL)
+      return E_INVALIDARG;
+    CHECK(Deallocate->HandleList[0] == State.InternalAllocation);
+    ++State.InternalDeallocateCalls;
+    return S_OK;
+  }
+  {
+  unsigned int index = State.DeallocateCalls++;
   CHECK(index < ARRAYSIZE(State.DeallocateResources));
   if (index < ARRAYSIZE(State.DeallocateResources))
     State.DeallocateResources[index] = Deallocate->hResource;
@@ -203,6 +261,42 @@ static HRESULT APIENTRY TestDeallocate(
     ++State.ReleasedKernelResources;
   }
   return result;
+  }
+}
+
+static HRESULT APIENTRY TestLock(HANDLE Device, D3DDDICB_LOCK *Lock) {
+  (void)Device;
+  CHECK(Lock != NULL);
+  if (Lock == NULL)
+    return E_INVALIDARG;
+  CHECK(Lock->hAllocation == State.InternalAllocation);
+  CHECK(Lock->PrivateDriverData == 0u);
+  CHECK(Lock->NumPages == 0u);
+  CHECK(Lock->pPages == NULL);
+  CHECK(Lock->Flags.LockEntire == 1u);
+  CHECK(Lock->Flags.WriteOnly == 1u);
+  CHECK(Lock->Flags.ReadOnly == 0u);
+  CHECK(Lock->GpuVirtualAddress == 0u);
+  State.LastLockedAllocation = Lock->hAllocation;
+  ++State.LockCalls;
+  Lock->pData = InternalAllocationData;
+  return S_OK;
+}
+
+static HRESULT APIENTRY TestUnlock(
+    HANDLE Device, const D3DDDICB_UNLOCK *Unlock) {
+  (void)Device;
+  CHECK(Unlock != NULL);
+  if (Unlock == NULL)
+    return E_INVALIDARG;
+  CHECK(Unlock->NumAllocations == 1u);
+  CHECK(Unlock->phAllocations != NULL);
+  if (Unlock->NumAllocations != 1u || Unlock->phAllocations == NULL)
+    return E_INVALIDARG;
+  CHECK(Unlock->phAllocations[0] == State.InternalAllocation);
+  State.LastUnlockedAllocation = Unlock->phAllocations[0];
+  ++State.UnlockCalls;
+  return S_OK;
 }
 
 static VOID APIENTRY TestSetError(D3D10DDI_HRTCORELAYER CoreLayer,
@@ -350,6 +444,10 @@ int main(void) {
   ADMISSION_UMD_DEVICE *deviceState;
   AGX_WIN32_CLEAR_REQUEST clearRequest;
   APPLE_AGX_WIN32_COMMAND_VIEW clearView;
+  AGX_WIN32_SCREEN_BUFFER shaderBuffer;
+  AGX_WIN32_SCREEN_BUFFER encoderBuffer;
+  void *shaderMap = NULL;
+  void *encoderMap = NULL;
 
   memset(&State, 0, sizeof(State));
   memset(&adapterCallbacks, 0, sizeof(adapterCallbacks));
@@ -394,6 +492,8 @@ int main(void) {
   kernelCallbacks.pfnCreateContextCb = TestCreateContext;
   kernelCallbacks.pfnDestroyContextCb = TestDestroyContext;
   kernelCallbacks.pfnRenderCb = TestRender;
+  kernelCallbacks.pfnLockCb = TestLock;
+  kernelCallbacks.pfnUnlockCb = TestUnlock;
   memset(&userCallbacks, 0, sizeof(userCallbacks));
   userCallbacks.pfnSetErrorCb = TestSetError;
   memset(&dxgiCallbacks, 0, sizeof(dxgiCallbacks));
@@ -410,11 +510,42 @@ int main(void) {
   createDevice.DXGIBaseDDI.pDXGIDDIBaseFunctions4 = &dxgiFunctions;
   createDevice.hRTCoreLayer.handle = (VOID *)(UINT_PTR)0x102u;
   createDevice.p11UMCallbacks = &userCallbacks;
+  kernelCallbacks.pfnLockCb = NULL;
+  CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
+                                         &createDevice) == E_INVALIDARG);
+  CHECK(State.CreateContextCalls == 0u);
+  kernelCallbacks.pfnLockCb = TestLock;
   CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
                                          &createDevice) == S_OK);
   CHECK(State.CreateContextCalls == 1u);
   CHECK(State.ContextGeneration != 0u);
   deviceState = (ADMISSION_UMD_DEVICE *)device.pDrvPrivate;
+  if (deviceState == NULL)
+    return 1;
+
+  memset(&shaderBuffer, 0, sizeof(shaderBuffer));
+  CHECK(AgxWin32ScreenCreateBuffer(
+            &deviceState->Screen, AgxWin32BufferClassShader,
+            sizeof(InternalAllocationData), 0x4000u,
+            AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead,
+            &shaderBuffer) == AgxWin32ScreenSuccess);
+  CHECK(State.InternalAllocateCalls == 1u);
+  CHECK(shaderBuffer.Transport.Token != 0u);
+  CHECK(AgxWin32ScreenMapBuffer(
+            &deviceState->Screen, &shaderBuffer, 0x4000u, 0x4000u,
+            AppleAgxWin32BufferCpuWrite,
+            &shaderMap) == AgxWin32ScreenSuccess);
+  CHECK(shaderMap == InternalAllocationData + 0x4000u);
+  CHECK(State.LockCalls == 1u);
+  CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &shaderBuffer) ==
+        AgxWin32ScreenState);
+  CHECK(State.InternalDeallocateCalls == 0u);
+  CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &shaderBuffer) ==
+        AgxWin32ScreenSuccess);
+  CHECK(State.UnlockCalls == 1u);
+  CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &shaderBuffer) ==
+        AgxWin32ScreenSuccess);
+  CHECK(State.InternalDeallocateCalls == 1u);
 
   errorsBefore = State.SetErrorCalls;
   formatSupport = 0xffffffffu;
@@ -511,6 +642,22 @@ int main(void) {
   CHECK(State.SetErrorDdis[errorsBefore] == TEST_DDI_FLUSH);
   free(retry.pDrvPrivate);
 
+  memset(&encoderBuffer, 0, sizeof(encoderBuffer));
+  CHECK(AgxWin32ScreenCreateBuffer(
+            &deviceState->Screen, AgxWin32BufferClassEncoder,
+            sizeof(InternalAllocationData), 0x4000u,
+            AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead,
+            &encoderBuffer) == AgxWin32ScreenSuccess);
+  CHECK(AgxWin32ScreenMapBuffer(
+            &deviceState->Screen, &encoderBuffer, 0u,
+            sizeof(InternalAllocationData), AppleAgxWin32BufferCpuWrite,
+            &encoderMap) == AgxWin32ScreenSuccess);
+  CHECK(encoderMap == InternalAllocationData);
+  CHECK(State.InternalAllocateCalls == 2u);
+  CHECK(State.LockCalls == 2u);
+  CHECK(AgxWin32ScreenWaitFence(&deviceState->Screen, 1u, 1u) ==
+        AgxWin32ScreenCallback);
+
   State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
   deviceFunctions.pfnDestroyDevice(device);
   State.ActiveDdi = TEST_DDI_NONE;
@@ -518,6 +665,8 @@ int main(void) {
   CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
         retryRuntime.handle);
   CHECK(State.DestroyContextCalls == 1u);
+  CHECK(State.UnlockCalls == 2u);
+  CHECK(State.InternalDeallocateCalls == 2u);
   CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
                                             State.OutstandingKernelResources);
   CHECK(State.OutstandingKernelResources == 0u);
