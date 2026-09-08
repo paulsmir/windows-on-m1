@@ -89,10 +89,9 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
 
         correlation = rejected.index("ADMISSION_CORRELATE_SUBMIT_EXIT")
         broker = rejected.index("AdmissionSubmitPacketGuardWindows")
-        fatal_return = rejected.index("return packet_status")
+        fatal_return = rejected.index("return STATUS_DEVICE_BUSY")
         self.assertLess(correlation, broker)
         self.assertLess(broker, fatal_return)
-        self.assertIn("AdmissionSubmitPacketFailureStatus(packet_guard)", rejected)
         self.assertNotIn("KeStallExecutionProcessor", rejected)
         self.assertNotIn("ZwFlushKey", rejected)
 

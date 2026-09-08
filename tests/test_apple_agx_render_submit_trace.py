@@ -27,9 +27,6 @@ int main(void) {
   assert(a < b && b < c);
   assert(AdmissionSubmitTraceField(a) == 1u);
   assert(AdmissionSubmitTraceValue(a) == 0xffffffffu);
-  assert(AdmissionSubmitPacketFailureStatus(1u) == 0xe5390001u);
-  assert(AdmissionSubmitPacketFailureStatus(8u) == 0xe5390008u);
-  assert(AdmissionSubmitPacketFailureStatus(10u) == 0xe539000au);
   return 0;
 }
 '''

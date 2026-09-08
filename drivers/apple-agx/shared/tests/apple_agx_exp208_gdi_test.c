@@ -42,6 +42,23 @@ static APPLE_AGX_U32 make_fullscreen_clear(unsigned char *dma,
   return written;
 }
 
+static APPLE_AGX_U32 make_fullscreen_color_clear(
+    unsigned char *dma, APPLE_AGX_U64 gpu_va, APPLE_AGX_U32 color) {
+  APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
+  APPLE_AGX_U32 written = 0u;
+  memset(&description, 0, sizeof(description));
+  description.Command.Opcode = AppleAgxGdiColorFill;
+  description.Command.Destination = (APPLE_AGX_GDI_RECT){
+      0u, 0u, APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
+      APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT};
+  description.Command.DestinationGpuAddress = gpu_va;
+  description.Command.DestinationPitch = APPLE_AGX_EXP208_FRAMEBUFFER_PITCH;
+  description.Command.Color = color;
+  description.Command.Rop = AppleAgxGdiColorFillPatCopy;
+  assert(AppleAgxGdiEncodeDmaCommand(&description, dma, 256u, &written));
+  return written;
+}
+
 static APPLE_AGX_U32 make_bottom_band_clear(unsigned char *dma,
                                             APPLE_AGX_U64 gpu_va) {
   APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
@@ -590,6 +607,69 @@ static void test_bottom_band_uses_aligned_subregion_and_distinct_fp16_color(void
   free(arena);
 }
 
+static void test_two_fullscreen_ping_pong_colors_bind_after_exact_release(void) {
+  const APPLE_AGX_U32 backend_bytes =
+      APPLE_AGX_EXP208_FRAMEBUFFER_BACKEND_BYTES;
+  unsigned char dma[256];
+  unsigned char *arena = (unsigned char *)malloc(backend_bytes);
+  unsigned char *before =
+      (unsigned char *)malloc(AppleAgxRenderTemplateBytes());
+  unsigned char *destination0 =
+      (unsigned char *)malloc(APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  unsigned char *destination1 =
+      (unsigned char *)malloc(APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_U32 bytes;
+
+  assert(arena != NULL && before != NULL &&
+         destination0 != NULL && destination1 != NULL);
+  assert(AppleAgxRenderTemplateMaterialize(arena, backend_bytes, &roots));
+  assert(AppleAgxRenderTemplateBuildRelocationObjects(
+      arena, backend_bytes, 0x9d3000000ULL, objects,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+  memcpy(before, arena, AppleAgxRenderTemplateBytes());
+
+  bytes = make_fullscreen_color_clear(
+      dma, 0x1500010000ULL, APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR);
+  assert(AppleAgxExp208BindGdiFramebufferColorFill(
+      dma, bytes, arena, 0x1503800000ULL, 0x9d3000000ULL,
+      backend_bytes, destination0, 0x1500010000ULL, 0x9d2000000ULL,
+      APPLE_AGX_EXP208_FRAMEBUFFER_BYTES, objects,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      AppleAgxRenderTemplateRelocations(),
+      AppleAgxRenderTemplateRelocationCount(), &binding));
+  assert(AppleAgxExp208UnbindGdiColorFill(
+      objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &binding));
+  assert(memcmp(before, arena, AppleAgxRenderTemplateBytes()) == 0);
+
+  bytes = make_fullscreen_color_clear(
+      dma, 0x1500fb0000ULL, APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
+  assert(AppleAgxExp208BindGdiFramebufferColorFill(
+      dma, bytes, arena, 0x1503800000ULL, 0x9d3000000ULL,
+      backend_bytes, destination1, 0x1500fb0000ULL, 0x9d2fa0000ULL,
+      APPLE_AGX_EXP208_FRAMEBUFFER_BYTES, objects,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+      AppleAgxRenderTemplateRelocations(),
+      AppleAgxRenderTemplateRelocationCount(), &binding));
+  assert(binding.Framebuffer.RenderHeight ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT);
+  assert(binding.Framebuffer.ClearColor ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
+  assert(read_u64(objects[36u].Data) == 0x3c00344438443a66ULL);
+  assert(binding.DestinationGpuVa == 0x1500fb0000ULL);
+  assert(binding.DestinationPhysical == 0x9d2fa0000ULL);
+  assert(AppleAgxExp208UnbindGdiColorFill(
+      objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &binding));
+  assert(memcmp(before, arena, AppleAgxRenderTemplateBytes()) == 0);
+  free(destination1);
+  free(destination0);
+  free(before);
+  free(arena);
+}
+
 int main(void) {
   test_exact_clear_binds_hardware_proven_output_object();
   test_wrong_workload_or_physical_edge_is_rejected_atomically();
@@ -597,5 +677,6 @@ int main(void) {
   test_fullscreen_clear_binds_exact_g13_geometry_and_rolls_back();
   test_fullscreen_rejects_short_backend_without_mutation();
   test_bottom_band_uses_aligned_subregion_and_distinct_fp16_color();
+  test_two_fullscreen_ping_pong_colors_bind_after_exact_release();
   return 0;
 }

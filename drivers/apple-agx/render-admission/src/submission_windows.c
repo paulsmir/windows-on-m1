@@ -23,7 +23,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
   ULONG packet_guard = AdmissionSubmitPacketGuardAccepted;
-  NTSTATUS packet_status = STATUS_DEVICE_BUSY;
 #define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
@@ -188,20 +187,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted) {
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-    packet_status = (NTSTATUS)AdmissionSubmitPacketFailureStatus(packet_guard);
-#endif
     /* Capture the return owner in the adapter/boot record before touching the
      * optional broker transport. */
     ADMISSION_CORRELATE_SUBMIT_EXIT(
         Context, Args, AdmissionSubmitRenderGuardPacket,
-        packet_status);
+        STATUS_DEVICE_BUSY);
     AdmissionSubmitPacketGuardWindows(
-        Context, packet_guard, packet_status);
+        Context, packet_guard, STATUS_DEVICE_BUSY);
     AdmissionSubmitRenderGuardWindows(
-        Context, AdmissionSubmitRenderGuardPacket, packet_status);
-    AdmissionGdiReceiptSubmitWindows(Context, Args, packet_status);
-    return packet_status;
+        Context, AdmissionSubmitRenderGuardPacket, STATUS_DEVICE_BUSY);
+    AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_DEVICE_BUSY);
+    return STATUS_DEVICE_BUSY;
   }
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionSubmitRenderGuardWindows(

@@ -316,14 +316,6 @@ static inline unsigned long long AdmissionSubmitPacketGuardWord(
       (unsigned long long)Status;
 }
 
-/* Qualification-only fatal status discriminator.  dxgmms2 preserves the
- * driver-returned status as VIDEO_SCHEDULER_INTERNAL_ERROR argument2 even when
- * optional MMIO and registry transports do not survive the reset. */
-static inline unsigned int AdmissionSubmitPacketFailureStatus(
-    unsigned int Guard) {
-  return 0xe5390000u | (Guard & 0xffu);
-}
-
 static inline unsigned long long AdmissionBackendSubmitResultWord(
     unsigned int Result, unsigned int Phase) {
   return ADMISSION_BACKEND_SUBMIT_RESULT_TAG |
