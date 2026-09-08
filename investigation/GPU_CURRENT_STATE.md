@@ -691,6 +691,27 @@ GREEN after; full373 tests GREEN. Temporary status encoding and hold are removed
 EXP626 must prove two physical full-frame jobs/fences and distinct D589 visible
 presentations.
 
+EXP626 proves the bind fix and closes two Windows-originated hardware submits:
+both Render calls return0/queued1; correlation has complete Render/Patch/Submit/
+worker plus prompt Notify/DPC for fences256 and257; terminal sequence2 observes
+TA/D3 stamps `0x7a000200/0x3d000200`, done3/4, completed fence257, no reset or
+scheduler fault. Device stays ACTIVE and producer cleanup returns0.
+
+Output/presentation is not yet a two-frame PASS. The terminal sequence2 claims a
+full-size destination (`0xFA0000`) but captures only the restored internal
+16x16 object: examined0x4000, changed0x400, expected pixels0. Host logs only one
+post-render A408/D589 swap10. Source proves completion releases/unbinds
+`BackendImage` before the intentionally late TDR-safe terminal capture; capture
+then reads mutable restored metadata instead of the completed allocation.
+
+Commit `d528881e1a5ad50367b2b6cc10a156bcc20044c5` adds a validated immutable
+output view captured before release and consumed after Windows fence notification.
+It carries CPU/GPU/PA/extent/target bytes/exact color/framebuffer identity; it
+does not retain backend ownership or delay notification. Executable test proves
+the view remains byte-exact after release; ordering and full374 tests GREEN.
+EXP627 must produce full-size expected pixels for fence257 and post-render D589
+for both destination0 then destination1.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

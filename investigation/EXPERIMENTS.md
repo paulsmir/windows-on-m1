@@ -37875,3 +37875,42 @@ UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `91626193b0b6f4e858e1d9c5220e21458f51dfed650ba277d63a92ce3437857e`
 and `4b8a7e593f19b061000a6c1c0ccff194c0a4ec3e56b60b21f3a42897ef5ba022`.
+
+**EXP626 FINAL — TWO HARDWARE FENCES PASS; SECOND OUTPUT/PRESENT NOT YET.** Both
+producer calls return0/queued1 and device remains ACTIVE. Durable correlation
+candidate626/boot261174914, generation18, proves complete Render/Patch/Submit/
+worker and prompt Notify/DPC for fence256 and fence257. Terminal sequence2 has
+TA/D3 expected=observed stamps `7a000200/3d000200`, done3/4, completion0,
+completed fence257, Resetting0/SchedulerFaulted0. This validates the full-frame
+second-color bind fix and second physical TA/3D execution.
+
+The final terminal output fields expose the next exact defect: DestinationBytes
+is0xFA0000, but OutputBytesExamined is0x4000, OutputChangedBytes0x400 and
+OutputPixelsExpected0. Host has only one post-render A408/D589 swap10. Completion
+calls `AdmissionBackendImageReleaseSubmission` before late terminal output
+capture, so the mutable binding/output object has already reverted to internal
+16x16. Correlation/terminal/producer/host SHA256 are
+`c4f697b498e951c691a32bce6aa3676d7e8cba32d44eb2648fc8de6ada8ce63d`,
+`f835ec83fa80288ac2792a9af79488cbeffb413b0e03a0ee4f99fbdb62a23c78`,
+`f6a342c54f84fbeb6665dd3a7a52765d28d17d85f7330b3677a38ab2a65d819f`,
+`b81548d0a153ab456083467b12777a691b91bba913513e206aa72b0677d13f25`.
+Exact cleanup completed.
+
+# EXP627 — immutable completed-output identity
+
+**PREREGISTERED 2026-09-08T11:10Z. WHY THIS HYPOTHESIS:** (1) EXP626 proves
+fence257 physical completion but terminal examines the 16x16 restored object.
+(2) Source order releases the binding before late capture. (3) The packet and
+bound output contain exact allocation identity before release, and producer
+holds both allocations for10s after both submissions.
+
+Commit `d528881e1a5ad50367b2b6cc10a156bcc20044c5` snapshots the validated bound
+output CPU/GPU/PA/extent/target/color/framebuffer identity before release and
+uses that local immutable view only after exact Windows fence notification. The
+view confers no ownership and the binding is still released at the same point.
+Executable backend test captures the view, releases/restores the template, then
+proves the view still identifies the original full-frame allocation; source
+ordering and full374 tests GREEN. Build from exact626 plus backend-image and
+completion files. Require terminal sequence2 all4,096,000 pixels exact second
+color,16MiB changed/no poison/guard, two hardware fences and a second post-render
+A408/D589 on destination1 distinct from the first.
