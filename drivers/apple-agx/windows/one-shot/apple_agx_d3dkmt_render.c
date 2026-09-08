@@ -252,8 +252,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     command.Rop = AdmissionUmdRopPatCopy;
     if (activeContext->CommandBufferSize < sizeof(command))
       goto cleanup;
-    commandOffset = pass == 0u
-        ? 0u : activeContext->CommandBufferSize - sizeof(command);
+    commandOffset = 0u;
     CopyMemory(
         (unsigned char *)activeContext->pCommandBuffer + commandOffset,
         &command, sizeof(command));

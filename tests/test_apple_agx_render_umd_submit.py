@@ -134,10 +134,9 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("command.Destination.Top = 0u;", source)
         self.assertIn("command.DestinationAllocationIndex = pass;", source)
         self.assertIn("Sleep(15000u);", source)
-        self.assertIn(
-            "commandOffset = pass == 0u\n"
-            "        ? 0u : activeContext->CommandBufferSize - sizeof(command);",
-            source,
+        self.assertIn("commandOffset = 0u;", source)
+        self.assertNotIn(
+            "activeContext->CommandBufferSize - sizeof(command)", source
         )
         self.assertIn(
             "(unsigned char *)activeContext->pCommandBuffer + commandOffset",
