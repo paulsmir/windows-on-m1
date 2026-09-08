@@ -241,7 +241,34 @@ static void test_sealed_patch_receipt_matches_exact_value_and_fence(void) {
                                      address));
 }
 
+static void test_recycled_dma_storage_starts_new_request(void) {
+  unsigned char storage[4][512] = {{0}};
+  unsigned char command[168];
+  APPLE_AGX_DMA_SHADOW shadow;
+  APPLE_AGX_DMA_SHADOW_VIEW view;
+  unsigned int request;
+  for (request = 0u; request < 16u; ++request) {
+    unsigned char *block = storage[request % 4u];
+    if (request >= 4u)
+      assert(!AppleAgxDmaShadowIsVirgin(block, sizeof(storage[0])));
+    memset(command, (int)(request + 1u), sizeof(command));
+    /* Dxgkrnl supplies the block for a new request after previous completion.
+       Zero-on-creation does not imply zero-on-reuse. */
+    AppleAgxDmaShadowInitialize(&shadow, block, sizeof(storage[0]));
+    assert(AppleAgxDmaShadowAppend(&shadow, 0u, command, sizeof(command)));
+    assert(AppleAgxDmaShadowSeal(&shadow, 256u + request));
+    assert(AppleAgxDmaShadowIsSealedForFence(block, shadow.BytesUsed,
+                                           256u + request));
+    assert(!AppleAgxDmaShadowIsSealedForFence(block, shadow.BytesUsed,
+                                            255u + request));
+    assert(AppleAgxDmaShadowFind(block, shadow.BytesUsed, 0u,
+                               sizeof(command), &view));
+    assert(memcmp(view.Bytes, command, sizeof(command)) == 0);
+  }
+}
+
 int main(void) {
+  test_recycled_dma_storage_starts_new_request();
   test_append_preserves_exact_dma_interval();
   test_append_rejects_overflow_overlap_and_truncation();
   test_patch_updates_exactly_one_containing_record();

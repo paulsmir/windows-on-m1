@@ -38,6 +38,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("AdmissionUmdColorFillCommandValid", wrapper)
         self.assertIn("AdmissionGdiPrepareColorFill", wrapper)
         self.assertIn("AppleAgxDmaShadowAppend", wrapper)
+        self.assertNotIn("AppleAgxDmaShadowIsVirgin(", wrapper)
         self.assertIn("Args->pPatchLocationListOut = location + 1", wrapper)
         self.assertNotIn("--Args->PatchLocationListOutSize", wrapper)
         self.assertIn("AdmissionGdiReceiptBeginWindows", wrapper)

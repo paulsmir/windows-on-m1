@@ -319,11 +319,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
           opened->Allocation->Description.Height)
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardBounds,
                       STATUS_INVALID_USER_BUFFER);
-  if (!AppleAgxDmaShadowIsVirgin(
-          Args->pDmaBufferPrivateData,
-          Args->DmaBufferPrivateDataSize))
-    UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrivateVirgin,
-                      STATUS_INVALID_USER_BUFFER);
 
   RtlZeroMemory(&input, sizeof(input));
   input.Destination.Left = command.Destination.Left;
@@ -385,6 +380,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
       Args->AllocationListSize, command.DestinationAllocationIndex,
       allocation->SegmentId, allocationTokens);
 
+  /* VidMm zeroes private data only when the DMA buffer is created.
+     This new Render request owns the supplied range; reconstruct its shadow
+     even when the DMA buffer retains private bytes from an earlier request. */
   AppleAgxDmaShadowInitialize(
       &shadow, Args->pDmaBufferPrivateData,
       Args->DmaBufferPrivateDataSize);
