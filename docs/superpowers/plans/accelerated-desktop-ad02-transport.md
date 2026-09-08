@@ -200,12 +200,12 @@ NTSTATUS AdmissionWin32SnapshotRenderCommand(
     ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot);
 ```
 
-- [ ] **Step 1: RED-test context epochs.** A non-system, non-GDI desktop context supplies the exact create struct; zero/stale/unknown fields fail closed. Existing System/GDI and explicitly compiled qualification contexts preserve their proven no-private-data path.
-- [ ] **Step 2: implement copy-once.** `AdmissionWin32SnapshotRenderCommand` checks `CommandLength <= 4096`, copies under `__try/__except` into nonpaged local storage exactly once, then invokes the portable validator and Task 2 lookup adapter. No later code reads `Args->pCommand`.
-- [ ] **Step 3: translate validated clear payload** into the existing `ADMISSION_GDI_COLOR_FILL_INPUT`, existing DMA shadow and existing Patch/prepatched packet flow. Color, rect, format, pitch and destination range come from the snapshot/allocation fact; no fixed test color or address is introduced.
-- [ ] **Step 4: keep submission lifetime with WDDM.** Emit exact `D3DDDI_PATCHLOCATIONLIST` entries for every referenced allocation. The packet retains allocation/context identity through its scheduler fence; `DMA_COMPLETED` remains the point at which dxgkrnl may release in-flight submission references. `AdmissionAllocationOpen/Close` continues to guard driver object lifetime only and is not documented as residency pinning.
-- [ ] **Step 5: prove reset behavior.** Device/context teardown invalidates its generation, cancels only unpublished packets, and never reuses a pre-reset snapshot or fence. Failure before packet publication rolls back all local state; failure after publication enters the existing owned fault/reset state and is not immediately freed.
-- [ ] **Step 6: run all Render/Patch/Submit/completion/presentation tests GREEN and commit this KMD integration separately.**
+- [x] **Step 1: RED-test context epochs.** A non-system, non-GDI desktop context supplies the exact create struct; zero/stale/unknown fields fail closed. Existing System/GDI and explicitly compiled qualification contexts preserve their proven no-private-data path.
+- [x] **Step 2: implement copy-once.** `AdmissionWin32SnapshotRenderCommand` checks `CommandLength <= 4096`, copies under `__try/__except` into nonpaged local storage exactly once, then invokes the portable validator and Task 2 lookup adapter. No later code reads `Args->pCommand`.
+- [x] **Step 3: translate validated clear payload** into the existing `ADMISSION_GDI_COLOR_FILL_INPUT`, existing DMA shadow and existing Patch/prepatched packet flow. Color, rect, format, pitch and destination range come from the snapshot/allocation fact; no fixed test color or address is introduced.
+- [x] **Step 4: keep submission lifetime with WDDM.** Emit exact `D3DDDI_PATCHLOCATIONLIST` entries for every referenced allocation. The packet retains allocation/context identity through its scheduler fence; `DMA_COMPLETED` remains the point at which dxgkrnl may release in-flight submission references. `AdmissionAllocationOpen/Close` continues to guard driver object lifetime only and is not documented as residency pinning.
+- [x] **Step 5: prove reset behavior.** Device/context teardown invalidates its generation, cancels only unpublished packets, and never reuses a pre-reset snapshot or fence. Failure before packet publication rolls back all local state; failure after publication enters the existing owned fault/reset state and is not immediately freed.
+- [x] **Step 6: run all Render/Patch/Submit/completion/presentation tests GREEN and commit this KMD integration separately.**
 
 ### Task 4: Mesa-facing Windows UMD transport
 

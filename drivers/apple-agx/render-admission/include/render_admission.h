@@ -20,6 +20,7 @@
 #include "render_paging.h"
 #include "render_gdi.h"
 #include "render_umd_command.h"
+#include "render_win32_transport.h"
 #include "render_gdi_receipt.h"
 #include "render_call_correlation.h"
 #include "render_present.h"
@@ -420,12 +421,15 @@ typedef struct _ADMISSION_CONTEXT {
 
 typedef struct _ADMISSION_DEVICE {
   ADMISSION_OBJECT_DEVICE Object;
+  volatile LONG Win32Generation;
 } ADMISSION_DEVICE;
 
 typedef struct _ADMISSION_RENDER_CONTEXT {
   ADMISSION_OBJECT_CONTEXT Object;
   APPLE_AGX_SCHEDULER_CONTEXT SchedulerContext;
   ADMISSION_PREPATCHED_RENDER PrepatchedRender;
+  ULONG Win32Generation;
+  BOOLEAN Win32Transport;
 } ADMISSION_RENDER_CONTEXT;
 
 typedef struct _ADMISSION_ALLOCATION_HANDLE {
@@ -440,6 +444,7 @@ typedef struct _ADMISSION_OPEN_ALLOCATION {
   D3DKMT_HANDLE RuntimeAllocation;
   ADMISSION_ALLOCATION_OBJECT *Allocation;
   BOOLEAN ReadOnly;
+  ULONG Win32Generation;
 } ADMISSION_OPEN_ALLOCATION;
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
@@ -1046,6 +1051,10 @@ NTSTATUS AdmissionPlatformRuntimeReset(
     _Out_ APPLE_AGX_U32 *LastAbortedFence);
 BOOLEAN AdmissionPlatformRuntimeResponsive(
     _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionWin32SnapshotRenderCommand(
+    _In_ ADMISSION_RENDER_CONTEXT *Context,
+    _In_ const DXGKARG_RENDER *Args,
+    _Out_ ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot);
 NTSTATUS AdmissionScanoutStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutCommit(

@@ -11,6 +11,34 @@ WINDOWS = ROOT / "drivers" / "apple-agx" / "windows"
 
 
 class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
+    def test_win32_command_is_copied_once_before_owner_validation(self):
+        """Catches reparsing mutable user bytes or omitting the context epoch."""
+        callbacks = (RENDER / "src" / "callbacks.c").read_text()
+        allocation = (RENDER / "src" / "allocation_windows.c").read_text()
+        header = (RENDER / "include" / "render_admission.h").read_text()
+        wrapper = (RENDER / "src" / "umd_render_windows.c").read_text()
+        project = (RENDER / "AppleAgxRenderAdmission.vcxproj").read_text()
+
+        self.assertIn("Win32Generation", header)
+        self.assertIn("Win32Transport", header)
+        self.assertIn("AdmissionWin32ContextCreateValidate", callbacks)
+        self.assertIn("ADMISSION_WIN32_CONTEXT_CREATE", callbacks)
+        snapshot_start = wrapper.index("NTSTATUS AdmissionWin32SnapshotRenderCommand(")
+        render_start = wrapper.index("NTSTATUS AdmissionDdiRender(")
+        snapshot = wrapper[snapshot_start:render_start]
+        self.assertEqual(snapshot.count("Args->pCommand"), 2)
+        self.assertEqual(snapshot.count("RtlCopyMemory("), 1)
+        self.assertIn("Snapshot->Storage", snapshot)
+        self.assertIn("AppleAgxWin32CommandValidate", snapshot)
+        self.assertIn("AdmissionWin32ValidateReferences", snapshot)
+        self.assertIn("Fact->Generation = opened->Win32Generation", wrapper)
+        self.assertIn("device->Win32Generation", callbacks)
+        self.assertIn("opened->Win32Generation", allocation)
+        self.assertIn("AdmissionWin32SnapshotRenderCommand", wrapper[render_start:])
+        self.assertIn("Args->AllocationListSize > 1u ?", wrapper[render_start:])
+        self.assertIn(r"src\render_win32_transport.c", project)
+        self.assertIn(r"..\shared\src\apple_agx_win32_abi.c", project)
+
     def test_pointer_free_command_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "render_umd_command_test"

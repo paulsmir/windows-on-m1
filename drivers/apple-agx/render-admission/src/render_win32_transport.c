@@ -14,6 +14,42 @@ static int AdmissionWin32RangesOverlap(
   return Left->Offset < rightEnd && Right->Offset < leftEnd;
 }
 
+ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ContextCreateValidate(
+    const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
+    APPLE_AGX_BOOL SystemOrGdi, APPLE_AGX_BOOL LegacyQualificationAllowed,
+    APPLE_AGX_U32 *Generation, APPLE_AGX_BOOL *Win32Transport) {
+  const ADMISSION_WIN32_CONTEXT_CREATE *create =
+      (const ADMISSION_WIN32_CONTEXT_CREATE *)PrivateData;
+  APPLE_AGX_U32 generation;
+  APPLE_AGX_BOOL win32;
+  if (Generation == ADMISSION_WIN32_NULL ||
+      Win32Transport == ADMISSION_WIN32_NULL)
+    return AdmissionWin32TransportArgument;
+  if (SystemOrGdi) {
+    if (PrivateData != ADMISSION_WIN32_NULL || PrivateDataBytes != 0u)
+      return AdmissionWin32TransportContext;
+    generation = 0u;
+    win32 = APPLE_AGX_FALSE;
+  } else if (PrivateData == ADMISSION_WIN32_NULL && PrivateDataBytes == 0u &&
+             LegacyQualificationAllowed) {
+    generation = 0u;
+    win32 = APPLE_AGX_FALSE;
+  } else {
+    if (create == ADMISSION_WIN32_NULL ||
+        PrivateDataBytes != sizeof(*create) ||
+        create->Magic != ADMISSION_WIN32_CONTEXT_MAGIC ||
+        create->Version != ADMISSION_WIN32_CONTEXT_VERSION ||
+        create->Bytes != sizeof(*create) || create->Generation == 0u ||
+        create->Reserved != 0u)
+      return AdmissionWin32TransportContext;
+    generation = create->Generation;
+    win32 = APPLE_AGX_TRUE;
+  }
+  *Generation = generation;
+  *Win32Transport = win32;
+  return AdmissionWin32TransportSuccess;
+}
+
 ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
     const APPLE_AGX_WIN32_COMMAND_VIEW *View,
     APPLE_AGX_U32 ExpectedGeneration,

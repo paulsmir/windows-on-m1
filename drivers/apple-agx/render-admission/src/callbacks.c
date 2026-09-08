@@ -251,30 +251,77 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
   ADMISSION_DEVICE *device = (ADMISSION_DEVICE *)Device;
   ADMISSION_CONTEXT *adapter;
   ADMISSION_RENDER_CONTEXT *context;
+  ADMISSION_WIN32_CONTEXT_CREATE win32Create;
   KIRQL oldIrql;
   ULONG flags;
+  APPLE_AGX_U32 win32Generation = 0u;
+  APPLE_AGX_BOOL win32Transport = APPLE_AGX_FALSE;
+  const VOID *privateData = NULL;
+  APPLE_AGX_BOOL legacyQualification = APPLE_AGX_FALSE;
+  APPLE_AGX_BOOL systemOrGdi;
+  ADMISSION_WIN32_TRANSPORT_RESULT win32Result;
+  BOOLEAN generationClaimed = FALSE;
+  LONG previousGeneration;
 
   if (device == NULL ||
-      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL ||
-      Args->pPrivateDriverData != NULL ||
-      Args->PrivateDriverDataSize != 0u)
+      device->Object.Magic != ADMISSION_OBJECT_DEVICE_MAGIC || Args == NULL)
     return STATUS_INVALID_PARAMETER;
   flags = Args->Flags.Value;
   if ((flags & ~ADMISSION_CONTEXT_VALID_FLAGS) != 0u)
     return STATUS_NOT_SUPPORTED;
+  systemOrGdi = ((flags & ADMISSION_CONTEXT_SYSTEM) != 0u ||
+                 Args->Flags.GdiContext)
+                    ? APPLE_AGX_TRUE
+                    : APPLE_AGX_FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  legacyQualification = APPLE_AGX_TRUE;
+#endif
+  if (Args->pPrivateDriverData != NULL &&
+      Args->PrivateDriverDataSize == sizeof(win32Create)) {
+    __try {
+      RtlCopyMemory(&win32Create, Args->pPrivateDriverData,
+                    sizeof(win32Create));
+      privateData = &win32Create;
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+      return STATUS_INVALID_USER_BUFFER;
+    }
+  }
+  win32Result = AdmissionWin32ContextCreateValidate(
+      privateData, Args->PrivateDriverDataSize, systemOrGdi,
+      legacyQualification, &win32Generation, &win32Transport);
+  if (win32Result != AdmissionWin32TransportSuccess)
+    return STATUS_INVALID_PARAMETER;
   /* VidSch also supplies no runtime handle for its paging SystemContext. */
   if (Args->hContext == NULL && (flags & ADMISSION_CONTEXT_SYSTEM) == 0u)
     return STATUS_INVALID_PARAMETER;
+  if (win32Transport) {
+    previousGeneration = InterlockedCompareExchange(
+        &device->Win32Generation, (LONG)win32Generation, 0);
+    if (previousGeneration != 0 &&
+        (ULONG)previousGeneration != win32Generation)
+      return STATUS_INVALID_PARAMETER;
+    generationClaimed = previousGeneration == 0 ? TRUE : FALSE;
+  }
   context = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*context),
                             ADMISSION_POOL_TAG);
-  if (context == NULL)
+  if (context == NULL) {
+    if (generationClaimed)
+      (void)InterlockedCompareExchange(
+          &device->Win32Generation, 0, (LONG)win32Generation);
     return STATUS_INSUFFICIENT_RESOURCES;
+  }
   RtlZeroMemory(context, sizeof(*context));
+  context->Win32Generation = win32Generation;
+  context->Win32Transport = win32Transport ? TRUE : FALSE;
   AppleAgxSchedulerContextInitialize(&context->SchedulerContext);
   AdmissionPrepatchedInitialize(&context->PrepatchedRender);
   if (!AdmissionObjectsCreateContext(
           &device->Object, Args->hContext, Args->NodeOrdinal,
           Args->EngineAffinity, flags, &context->Object)) {
+    if (generationClaimed)
+      (void)InterlockedCompareExchange(
+          &device->Win32Generation, 0, (LONG)win32Generation);
     ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
     return STATUS_INVALID_PARAMETER;
   }
@@ -286,6 +333,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
           Args->NodeOrdinal, Args->EngineAffinity)) {
     KeReleaseSpinLock(&adapter->SchedulerLock, oldIrql);
     (void)AdmissionObjectsDestroyContext(&context->Object);
+    if (generationClaimed)
+      (void)InterlockedCompareExchange(
+          &device->Win32Generation, 0, (LONG)win32Generation);
     ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
     return STATUS_INVALID_DEVICE_STATE;
   }

@@ -1,6 +1,105 @@
 #include "render_admission.h"
 
 C_ASSERT(sizeof(ADMISSION_UMD_COLOR_FILL_COMMAND) == 48u);
+C_ASSERT(sizeof(APPLE_AGX_WIN32_COMMAND_HEADER) == 48u);
+C_ASSERT(sizeof(APPLE_AGX_WIN32_ALLOCATION_REFERENCE) == 32u);
+C_ASSERT(sizeof(APPLE_AGX_WIN32_CLEAR_PAYLOAD) == 48u);
+
+static ULONGLONG AdmissionUmdCommandHash(const VOID *Data, ULONG Bytes) {
+  const UCHAR *data = (const UCHAR *)Data;
+  ULONGLONG hash = 14695981039346656037ULL;
+  ULONG index;
+  for (index = 0u; index < Bytes; ++index) {
+    hash ^= data[index];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+typedef struct _ADMISSION_WIN32_RENDER_LOOKUP_CONTEXT {
+  ADMISSION_RENDER_CONTEXT *RenderContext;
+  const DXGKARG_RENDER *Args;
+  ADMISSION_CONTEXT *Adapter;
+} ADMISSION_WIN32_RENDER_LOOKUP_CONTEXT;
+
+static int AdmissionWin32RenderLookupAllocation(
+    void *LookupContext, APPLE_AGX_U32 AllocationIndex,
+    ADMISSION_WIN32_ALLOCATION_FACT *Fact) {
+  ADMISSION_WIN32_RENDER_LOOKUP_CONTEXT *lookup =
+      (ADMISSION_WIN32_RENDER_LOOKUP_CONTEXT *)LookupContext;
+  const ADMISSION_OPEN_ALLOCATION *opened;
+  if (lookup == NULL || lookup->RenderContext == NULL ||
+      lookup->RenderContext->Object.Device == NULL || lookup->Args == NULL ||
+      lookup->Args->pAllocationList == NULL ||
+      AllocationIndex >= lookup->Args->AllocationListSize || Fact == NULL)
+    return 0;
+  opened = (const ADMISSION_OPEN_ALLOCATION *)
+      lookup->Args->pAllocationList[AllocationIndex]
+          .hDeviceSpecificAllocation;
+  if (opened == NULL || opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
+      opened->Device == NULL ||
+      &opened->Device->Object != lookup->RenderContext->Object.Device ||
+      opened->Allocation == NULL ||
+      !AdmissionAllocationDescriptionValid(&opened->Allocation->Description))
+    return 0;
+  RtlZeroMemory(Fact, sizeof(*Fact));
+  Fact->AllocationToken = (ULONGLONG)(ULONG_PTR)opened;
+  Fact->Bytes = opened->Allocation->Description.Size;
+  Fact->SegmentId = lookup->Args->pAllocationList[AllocationIndex].SegmentId;
+  Fact->Writable = opened->ReadOnly ? 0u : 1u;
+  Fact->Generation = opened->Win32Generation;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  Fact->ActiveForDisplay =
+      AdmissionScanoutAllowsRender(lookup->Adapter, opened->Allocation)
+          ? 0u
+          : 1u;
+#else
+  Fact->ActiveForDisplay = 0u;
+#endif
+  return 1;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionWin32SnapshotRenderCommand(
+    ADMISSION_RENDER_CONTEXT *Context, const DXGKARG_RENDER *Args,
+    ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot) {
+  ADMISSION_WIN32_RENDER_LOOKUP_CONTEXT lookup;
+  APPLE_AGX_WIN32_ABI_RESULT abiResult;
+  ADMISSION_WIN32_TRANSPORT_RESULT referenceResult;
+  if (Context == NULL || !Context->Win32Transport ||
+      Context->Win32Generation == 0u || Args == NULL ||
+      Context->Object.Device == NULL ||
+      Context->Object.Device->Adapter == NULL ||
+      Args->pCommand == NULL || Args->pAllocationList == NULL ||
+      Args->AllocationListSize == 0u || Snapshot == NULL ||
+      Args->CommandLength < sizeof(APPLE_AGX_WIN32_COMMAND_HEADER) ||
+      Args->CommandLength > APPLE_AGX_WIN32_COMMAND_MAX_BYTES)
+    return STATUS_INVALID_PARAMETER;
+  RtlZeroMemory(Snapshot, sizeof(*Snapshot));
+  __try {
+    RtlCopyMemory(Snapshot->Storage, Args->pCommand, Args->CommandLength);
+  }
+  __except(EXCEPTION_EXECUTE_HANDLER) {
+    return STATUS_INVALID_USER_BUFFER;
+  }
+  Snapshot->Bytes = Args->CommandLength;
+  Snapshot->Generation = Context->Win32Generation;
+  abiResult = AppleAgxWin32CommandValidate(
+      Snapshot->Storage, Snapshot->Bytes, Snapshot->Generation,
+      Args->AllocationListSize, &Snapshot->View);
+  if (abiResult != AppleAgxWin32AbiSuccess)
+    return STATUS_INVALID_USER_BUFFER;
+  lookup.RenderContext = Context;
+  lookup.Args = Args;
+  lookup.Adapter = CONTAINING_RECORD(Context->Object.Device->Adapter,
+                                     ADMISSION_CONTEXT, ObjectAdapter);
+  referenceResult = AdmissionWin32ValidateReferences(
+      &Snapshot->View, Snapshot->Generation,
+      AdmissionWin32RenderLookupAllocation, &lookup, Snapshot->Facts,
+      ARRAYSIZE(Snapshot->Facts));
+  return referenceResult == AdmissionWin32TransportSuccess
+             ? STATUS_SUCCESS
+             : STATUS_INVALID_USER_BUFFER;
+}
 
 static BOOLEAN AdmissionUmdRenderOpenValid(
     const ADMISSION_RENDER_CONTEXT *Context,
@@ -54,18 +153,6 @@ static VOID AdmissionUmdRenderTraceWrite(
       J313_AGX_G2_POWER_REG_COMMAND);
   WRITE_REGISTER_ULONG64(request, AdmissionUmdRenderTraceWord(Field, Value));
   WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
-}
-
-static ULONGLONG AdmissionUmdRenderTraceHash(
-    const VOID *Data, ULONG Bytes) {
-  const UCHAR *data = (const UCHAR *)Data;
-  ULONGLONG hash = 14695981039346656037ULL;
-  ULONG index;
-  for (index = 0u; index < Bytes; ++index) {
-    hash ^= data[index];
-    hash *= 1099511628211ULL;
-  }
-  return hash;
 }
 
 static BOOLEAN AdmissionUmdRenderTraceBegin(
@@ -138,7 +225,7 @@ static VOID AdmissionUmdRenderTraceCommand(
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceRop3, Command->Rop3);
   contextToken = (ULONGLONG)(ULONG_PTR)RenderContext;
-  commandHash = AdmissionUmdRenderTraceHash(Command, sizeof(*Command));
+  commandHash = AdmissionUmdCommandHash(Command, sizeof(*Command));
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceContextLow, (ULONG)contextToken);
   AdmissionUmdRenderTraceWrite(
@@ -200,6 +287,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
   ADMISSION_CONTEXT *adapter;
   ADMISSION_UMD_COLOR_FILL_COMMAND command;
+  ADMISSION_WIN32_RENDER_SNAPSHOT win32Snapshot = {0};
   const ADMISSION_OPEN_ALLOCATION *opened;
   ADMISSION_GDI_COLOR_FILL_INPUT input;
   ADMISSION_GDI_PREPARED prepared;
@@ -213,8 +301,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ULONGLONG visibleAllocationToken = 0ULL;
 #endif
   ULONGLONG alignedSize;
+  ULONGLONG allocationOffset = 0ULL;
+  ULONGLONG allocationBytes = 0ULL;
+  ULONGLONG commandHash = 0ULL;
   KIRQL oldIrql;
   BOOLEAN prepatched = FALSE;
+  BOOLEAN win32Command = FALSE;
   BOOLEAN trace;
   ULONG traceDmaBytes = 0u;
   ULONG tracePatches = 0u;
@@ -267,7 +359,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   if (Args->pCommand == NULL)
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardCommandPointer,
                       STATUS_INVALID_PARAMETER);
-  if (Args->CommandLength != sizeof(command))
+  if ((!context->Win32Transport && Args->CommandLength != sizeof(command)) ||
+      (context->Win32Transport &&
+       (Args->CommandLength < sizeof(APPLE_AGX_WIN32_COMMAND_HEADER) ||
+        Args->CommandLength > APPLE_AGX_WIN32_COMMAND_MAX_BYTES)))
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardCommandLength,
                       STATUS_INVALID_PARAMETER);
   if (Args->pDmaBuffer == NULL || Args->DmaSize == 0u)
@@ -292,12 +387,45 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardMultipass,
                       STATUS_INVALID_PARAMETER);
 
-  __try {
-    RtlCopyMemory(&command, Args->pCommand, sizeof(command));
-  }
-  __except(EXCEPTION_EXECUTE_HANDLER) {
-    UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
-                      STATUS_INVALID_USER_BUFFER);
+  if (context->Win32Transport) {
+    if (!NT_SUCCESS(AdmissionWin32SnapshotRenderCommand(
+            context, Args, &win32Snapshot)))
+      UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
+                        STATUS_INVALID_USER_BUFFER);
+    RtlZeroMemory(&command, sizeof(command));
+    command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
+    command.Version = ADMISSION_UMD_COMMAND_VERSION;
+    command.Bytes = sizeof(command);
+    command.Opcode = AdmissionUmdOpcodeColorFill;
+    command.Destination.Left = win32Snapshot.View.Clear->Left;
+    command.Destination.Top = win32Snapshot.View.Clear->Top;
+    command.Destination.Right = win32Snapshot.View.Clear->Right;
+    command.Destination.Bottom = win32Snapshot.View.Clear->Bottom;
+    command.DestinationAllocationIndex =
+        win32Snapshot.View.References[
+            win32Snapshot.View.Clear->DestinationReference]
+            .AllocationIndex;
+    command.Color = win32Snapshot.View.Clear->Color;
+    command.Rop = AdmissionUmdRopPatCopy;
+    command.Rop3 = 0u;
+    allocationOffset =
+        win32Snapshot.View.References[
+            win32Snapshot.View.Clear->DestinationReference]
+            .Offset;
+    allocationBytes =
+        win32Snapshot.View.References[
+            win32Snapshot.View.Clear->DestinationReference]
+            .Bytes;
+    commandHash = win32Snapshot.View.Header->ContentHash;
+    win32Command = TRUE;
+  } else {
+    __try {
+      RtlCopyMemory(&command, Args->pCommand, sizeof(command));
+    }
+    __except(EXCEPTION_EXECUTE_HANDLER) {
+      UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
+                        STATUS_INVALID_USER_BUFFER);
+    }
   }
   AdmissionUmdRenderTraceCommand(adapter, trace, context, &command);
 
@@ -313,6 +441,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   opened = (const ADMISSION_OPEN_ALLOCATION *)
       Args->pAllocationList[command.DestinationAllocationIndex]
           .hDeviceSpecificAllocation;
+  if (!win32Command)
+    allocationBytes = opened->Allocation->Description.Size;
+  if (win32Command &&
+      (win32Snapshot.View.Clear->Format !=
+           (ULONG)AppleAgxWin32FormatBgra8Unorm ||
+       win32Snapshot.View.Clear->SurfaceWidth !=
+           opened->Allocation->Description.Width ||
+       win32Snapshot.View.Clear->SurfaceHeight !=
+           opened->Allocation->Description.Height ||
+       win32Snapshot.View.Clear->SurfacePitch !=
+           opened->Allocation->Description.Pitch ||
+       allocationOffset > MAXULONG || allocationBytes > MAXULONG))
+    UMD_RENDER_RETURN(AdmissionUmdRenderGuardBounds,
+                      STATUS_INVALID_USER_BUFFER);
   if (command.Destination.Right >
           opened->Allocation->Description.Width ||
       command.Destination.Bottom >
@@ -348,7 +490,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
             opened->Allocation->Description.Size, &alignedSize) ||
         !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
             adapter, (ULONGLONG)allocation->PhysicalAddress.QuadPart,
-            alignedSize, 0u, &destination)) ||
+            alignedSize, allocationOffset, &destination)) ||
+        allocationBytes > destination.Bytes ||
         prepared.Patches[0].PatchOffset >
             prepared.DmaBytes - sizeof(destination.GpuVirtualAddress))
       UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
@@ -357,6 +500,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
         (PUCHAR)Args->pDmaBuffer + prepared.Patches[0].PatchOffset,
         &destination.GpuVirtualAddress,
         sizeof(destination.GpuVirtualAddress));
+    destination.Bytes = allocationBytes;
     prepatched = TRUE;
   }
 
@@ -372,11 +516,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
 
   allocationTokens[0] = (ULONGLONG)(ULONG_PTR)
       Args->pAllocationList[0].hDeviceSpecificAllocation;
-  allocationTokens[1] = (ULONGLONG)(ULONG_PTR)
-      Args->pAllocationList[1].hDeviceSpecificAllocation;
+  allocationTokens[1] = Args->AllocationListSize > 1u ?
+      (ULONGLONG)(ULONG_PTR)
+          Args->pAllocationList[1].hDeviceSpecificAllocation : 0ULL;
   AdmissionRenderCorrelationValidatedWindows(
       adapter, correlationSequence,
-      AdmissionUmdRenderTraceHash(&command, sizeof(command)),
+      commandHash != 0ULL ? commandHash :
+          AdmissionUmdCommandHash(&command, sizeof(command)),
       Args->AllocationListSize, command.DestinationAllocationIndex,
       allocation->SegmentId, allocationTokens);
 
@@ -442,7 +588,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   RtlZeroMemory(location, sizeof(*location));
   location->AllocationIndex = prepared.Patches[0].AllocationIndex;
   location->SlotId = prepared.Patches[0].SlotId;
-  location->AllocationOffset = 0u;
+  location->AllocationOffset = (UINT)allocationOffset;
   location->PatchOffset = prepared.Patches[0].PatchOffset;
   location->SplitOffset = prepared.Patches[0].SplitOffset;
   Args->pDmaBuffer = (PUCHAR)Args->pDmaBuffer + prepared.DmaBytes;

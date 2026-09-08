@@ -212,11 +212,70 @@ static void test_overlapping_writable_ranges_are_rejected(void) {
          AdmissionWin32TransportOverlap);
 }
 
+static void test_context_generation_contract(void) {
+  ADMISSION_WIN32_CONTEXT_CREATE create;
+  APPLE_AGX_U32 generation = 0xa5a5a5a5u;
+  APPLE_AGX_BOOL win32 = APPLE_AGX_TRUE;
+  memset(&create, 0, sizeof(create));
+  create.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
+  create.Version = ADMISSION_WIN32_CONTEXT_VERSION;
+  create.Bytes = sizeof(create);
+  create.Generation = 7u;
+
+  assert(AdmissionWin32ContextCreateValidate(
+             &create, sizeof(create), APPLE_AGX_FALSE, APPLE_AGX_FALSE,
+             &generation, &win32) == AdmissionWin32TransportSuccess);
+  assert(generation == 7u);
+  assert(win32 == APPLE_AGX_TRUE);
+
+  generation = 99u;
+  win32 = APPLE_AGX_TRUE;
+  assert(AdmissionWin32ContextCreateValidate(
+             NULL, 0u, APPLE_AGX_TRUE, APPLE_AGX_FALSE, &generation,
+             &win32) == AdmissionWin32TransportSuccess);
+  assert(generation == 0u);
+  assert(win32 == APPLE_AGX_FALSE);
+
+  assert(AdmissionWin32ContextCreateValidate(
+             NULL, 0u, APPLE_AGX_FALSE, APPLE_AGX_TRUE, &generation,
+             &win32) == AdmissionWin32TransportSuccess);
+  assert(generation == 0u);
+  assert(win32 == APPLE_AGX_FALSE);
+  assert(AdmissionWin32ContextCreateValidate(
+             NULL, 0u, APPLE_AGX_FALSE, APPLE_AGX_FALSE, &generation,
+             &win32) == AdmissionWin32TransportContext);
+
+  create.Generation = 0u;
+  assert(AdmissionWin32ContextCreateValidate(
+             &create, sizeof(create), APPLE_AGX_FALSE, APPLE_AGX_FALSE,
+             &generation, &win32) == AdmissionWin32TransportContext);
+  create.Generation = 7u;
+  create.Magic ^= 1u;
+  assert(AdmissionWin32ContextCreateValidate(
+             &create, sizeof(create), APPLE_AGX_FALSE, APPLE_AGX_FALSE,
+             &generation, &win32) == AdmissionWin32TransportContext);
+  create.Magic ^= 1u;
+  create.Reserved = 1u;
+  assert(AdmissionWin32ContextCreateValidate(
+             &create, sizeof(create), APPLE_AGX_FALSE, APPLE_AGX_FALSE,
+             &generation, &win32) == AdmissionWin32TransportContext);
+
+  memset(&create, 0, sizeof(create));
+  create.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
+  create.Version = ADMISSION_WIN32_CONTEXT_VERSION;
+  create.Bytes = sizeof(create);
+  create.Generation = 7u;
+  assert(AdmissionWin32ContextCreateValidate(
+             &create, sizeof(create), APPLE_AGX_TRUE, APPLE_AGX_FALSE,
+             &generation, &win32) == AdmissionWin32TransportContext);
+}
+
 int main(void) {
   test_valid_noncontiguous_index_and_range();
   test_owner_generation_and_access_rejections();
   test_alignment_capacity_and_lookup_rejections();
   test_failed_validation_does_not_publish_partial_facts();
   test_overlapping_writable_ranges_are_rejected();
+  test_context_generation_contract();
   return 0;
 }

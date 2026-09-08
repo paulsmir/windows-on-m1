@@ -433,6 +433,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     opened->RuntimeAllocation = info->hAllocation;
     opened->Allocation = &allocation->Object;
     opened->ReadOnly = Args->Flags.ReadOnly ? TRUE : FALSE;
+    opened->Win32Generation = (ULONG)InterlockedCompareExchange(
+        &device->Win32Generation, 0, 0);
     info->hDeviceSpecificAllocation = opened;
     ++device->Object.AllocationCount;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)

@@ -41,7 +41,7 @@ class OpenAllocationTests(unittest.TestCase):
 #define ExAllocatePool2(flags,n,tag) allocate(n)
 #define ExFreePoolWithTag(p,tag) free(p)
 #define CONTAINING_RECORD(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
-typedef int32_t NTSTATUS;
+typedef int32_t NTSTATUS,LONG;
 typedef void *HANDLE;
 typedef unsigned int UINT,ULONG,D3DKMT_HANDLE;
 typedef unsigned char BOOLEAN;
@@ -55,10 +55,10 @@ typedef struct {ADMISSION_OBJECT_ADAPTER ObjectAdapter;BOOLEAN InterfaceValid;
  void *(*DxgkCbAcquireHandleData)(const DXGKARGCB_GETHANDLEDATA *,DXGKARG_RELEASE_HANDLE *);
  void (*DxgkCbReleaseHandleData)(DXGKARGCB_RELEASEHANDLEDATA);} Interface;
 } ADMISSION_CONTEXT;
-typedef struct {ADMISSION_OBJECT_DEVICE Object;} ADMISSION_DEVICE;
+typedef struct {ADMISSION_OBJECT_DEVICE Object;volatile LONG Win32Generation;} ADMISSION_DEVICE;
 typedef struct {ADMISSION_ALLOCATION_OBJECT Object;} ADMISSION_ALLOCATION_HANDLE;
 typedef struct {ULONG Magic;ADMISSION_DEVICE *Device;D3DKMT_HANDLE RuntimeAllocation;
- ADMISSION_ALLOCATION_OBJECT *Allocation;BOOLEAN ReadOnly;} ADMISSION_OPEN_ALLOCATION;
+ ADMISSION_ALLOCATION_OBJECT *Allocation;BOOLEAN ReadOnly;ULONG Win32Generation;} ADMISSION_OPEN_ALLOCATION;
 typedef struct {D3DKMT_HANDLE hAllocation;void *pPrivateDriverData;
  UINT PrivateDriverDataSize;HANDLE hDeviceSpecificAllocation;} DXGK_OPENALLOCATIONINFO;
 typedef struct {UINT NumAllocations;DXGK_OPENALLOCATIONINFO *pOpenAllocation;
@@ -70,6 +70,9 @@ static ADMISSION_ALLOCATION_HANDLE backing;
 static unsigned calls,releases,refs;
 static int failAllocation;
 static void *allocate(size_t n) {return failAllocation?NULL:malloc(n);}
+static LONG InterlockedCompareExchange(volatile LONG *target,LONG exchange,LONG compare) {
+ LONG original=*target;if(original==compare)*target=exchange;return original;
+}
 static int referenceToken;
 enum {AdmissionOpenAllocationGuardAccepted=0,
  AdmissionOpenAllocationGuardArgs=2,AdmissionOpenAllocationGuardInterface=3,
@@ -101,12 +104,14 @@ int main(void) {
  adapter.Interface.DxgkCbReleaseHandleData=release;
  device.Object.Magic=ADMISSION_OBJECT_DEVICE_MAGIC;
  device.Object.Adapter=&adapter.ObjectAdapter;
+ device.Win32Generation=7;
  DXGK_OPENALLOCATIONINFO info[2]={{0x400001c0u,&d,48,NULL},{0x400001c4u,&d,48,NULL}};
  DXGKARG_OPENALLOCATION a={1,info,NULL,0,{.ReadOnly=1},0};
  assert(AdmissionDdiOpenAllocation(&device,&a)==0);
  ADMISSION_OPEN_ALLOCATION *opened=info[0].hDeviceSpecificAllocation;
  assert(opened && opened->Allocation==&backing.Object && opened->Device==&device);
  assert(opened->RuntimeAllocation==0x400001c0u && opened->ReadOnly);
+ assert(opened->Win32Generation==7u);
  assert(calls==1 && releases==1 && refs==0);
  assert(backing.Object.OpenCount==1 && device.Object.AllocationCount==1);
  HANDLE handles[1]={opened};DXGKARG_CLOSEALLOCATION closeArgs={1,handles};

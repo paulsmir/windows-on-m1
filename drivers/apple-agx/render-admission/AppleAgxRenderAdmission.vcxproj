@@ -106,6 +106,7 @@
     <ClCompile Include="src\render_paging.c" />
     <ClCompile Include="src\render_gdi.c" />
     <ClCompile Include="src\render_umd_command.c" />
+    <ClCompile Include="src\render_win32_transport.c" />
     <ClCompile Include="src\umd_render_windows.c" />
     <ClCompile Include="src\render_present.c" />
     <ClCompile Include="src\render_visible_scanout.c" />
@@ -130,6 +131,7 @@
     <ClCompile Include="src\scheduler_windows.c" />
     <ClCompile Include="src\receipts.c" />
     <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
+    <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
     <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
     <ClCompile Include="..\shared\src\apple_agx_exp208_gdi.c" />
@@ -184,6 +186,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\render_admission.h" />
+    <ClInclude Include="include\render_win32_transport.h" />
     <ClInclude Include="include\render_objects.h" />
     <ClInclude Include="include\render_memory.h" />
     <ClInclude Include="include\render_allocation.h" />
@@ -197,6 +200,7 @@
     <ClInclude Include="include\render_backend_image.h" />
     <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
+    <ClInclude Include="..\shared\include\apple_agx_win32_abi.h" />
     <ClInclude Include="..\shared\include\apple_agx_scheduler.h" />
     <ClInclude Include="..\shared\include\apple_agx_gdi.h" />
     <ClInclude Include="..\shared\include\apple_agx_exp208_gdi.h" />
