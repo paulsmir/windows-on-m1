@@ -39104,3 +39104,47 @@ reached. Exact package/devnode/service/SYS/UMD cleanup completed; ordinary
 8CPU/NVMe2/USB5/keyboard1. Next causal boundary is a DWM-coexisting standard
 windowed BLT/DXGI producer in the interactive console session; do not retry
 exclusive owner acquisition from session0 and do not alter AGX/DCP.
+
+# EXP642 — interactive DWM-coexisting windowed BLT present
+
+**PREREGISTERED 2026-09-08T16:58:16Z. WHY THIS HYPOTHESIS:** (1) EXP641
+fails only because SSH session0 cannot take source0 away from the active
+DWM/logon owner; (2) Microsoft's D3DKMTPresent documentation gives windowed
+Blt with a real HWND as the OpenGL ICD path that does not require exclusive
+SetDisplayMode ownership; (3) the current KMD already implements and tests the
+BLT Present DMA/copy path, while AGX render/output is hardware proven.
+
+**WINDOWS CONTRACT:** run in the active interactive console session, create a
+real visible HWND, submit D3DKMTPresent with Blt/SrcRectValid/DstRectValid,
+one source subrect, hSource equal to the rendered allocation and unknown
+hDestination for dxgkrnl to resolve to the DWM/GDI primary. No
+D3DKMTSetVidPnSourceOwner or D3DKMTSetDisplayMode is used. Keep source/window
+alive until KMD Present entry/exit, present DMA completion and a bounded HOLD.
+
+**AGX/ASAHI CONTRACT:** unchanged EXP640 retained-root, queues, physical TA/3D
+completion, exact output and Windows fence. **TRANSLATION:** commit
+8937f1a14031168d0929d5ce6e192f155e72aff7 renders one exact full frame into
+allocation1, then submits the documented windowed BLT from that AGX output.
+The boot-scoped trace now preserves the exact validated BLT source allocation
+on KMD Present exit; a portable decoder requires matching ENTRY/EXIT and
+rejects stale, error, overflow and wrong-count records. This presentation is
+explicitly CPU-assisted through the existing KMD BLT copy and is a standard
+Windows/DWM checkpoint, not final hardware scanout acceleration.
+
+**WHAT IS STILL UNKNOWN:** whether an interactive HWND/D3DKMTPresent reaches
+DxgkDdiPresent on this full WDDM adapter, whether dxgkrnl supplies the expected
+source/destination allocation pair, whether the existing copy Submit/fence
+completes, and whether the console visibly shows the rendered color. One run
+distinguishes these without exclusive ownership or DCP changes.
+
+Single variable: DWM-coexisting windowed BLT instead of rejected exclusive
+flip. Producer refuses session0 before creating WDDM objects. Offline
+executable trace tests and full122 render tests GREEN; pinned WDK26100 check
+build KMD/UMD/producer/analysis/Universal/Inf2Cat/TestSign accepts the exact
+contracts. Final committed build and hashes follow. Hardware uses an
+interactive-token scheduled task armed in ordinary Windows and triggered only
+after physical console login on the exact full-owner release platform. PASS is
+one physical AGX render/fence, successful D3DKMTPresent, exact KMD Present
+ENTRY/EXIT with one source/one destination, successful PresentTransfer receipt,
+15s ACTIVE HOLD, visible interactive window, no reset, and clean teardown.
+No new D589 is required or claimed because DWM keeps its primary active.
