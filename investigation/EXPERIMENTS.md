@@ -37740,3 +37740,41 @@ recovery. Do not repeat EXP623. Next: on the same existing correlation path,
 record Submit EXIT before the unreliable broker trace and before the bounded
 fatal-path hold, then require a durable generation containing exact guard22 and
 status BUSY. No functional rendering change.
+
+# EXP624 — independent rejected-Submit correlation
+
+**PREREGISTERED 2026-09-08T10:24Z. WHY THIS HYPOTHESIS:** (1) EXP623's private-
+symbol dump proves exact pass2 Submit args and BUSY, but its broker-only subguard
+was absent. (2) The durable correlation exporter is independent of BrokerBase,
+but the rejected Submit EXIT was previously recorded only after the hold, too
+late to export before bugcheck. (3) Recording that already-known return before
+the optional broker write names the existing packet owner without changing any
+functional result.
+
+Commit `1d9cc1ea22882ab31950111c307ec62d41d1afff` calls the existing bounded
+correlation Submit EXIT with guard22/status BUSY before broker trace, then gives
+only that already-fatal qualification path250ms for the existing PASSIVE
+exporter. No synchronous registry I/O occurs in the DDI; no successful request
+is delayed. The exact functional return remains BUSY. Executable correlation
+tests prove two contexts, Submit ENTRY without conflation, and exact call2
+EXIT/fence257/guard22/status; focused10 and full373 tests GREEN. Build exact624
+from immutable EXP623 source plus only `submission_windows.c`; reuse exact622
+producer. PASS for the discriminator requires durable call2 Submit ENTRY+EXIT
+guard22/status BUSY. Then remove the hold and fix only the separately captured
+packet subguard.
+
+**EXP624 BUILD FREEZE.** Exact30.0.624.0 built from immutable EXP623 source plus
+only `submission_windows.c`; exact622 producer is reused. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD analysis, Universal validation, Inf2Cat/TestSign and coherent
+version gates pass with the inherited C28251 warning only. Overlay/ZIP/SYS/INF/
+CAT/UMD/producer SHA256 are
+`8557a65964893abd6f419ff2313eb4d568ee799999d6cc6e14cd919c4259dae8`,
+`f6686dfd257dac11f8990973d42e06aa608e55a5cf34755fab49c7b1c8a46d01`,
+`2eb320453ba5bda0ddbec95e38495cde2df6fdc9c4668f15c754bae4f85f310e`,
+`76bf93991313d64edb7f04d7947a2b0c148552a490f9cf7be7fd1e4233dcd68c`,
+`324d522d40339f2b2ba5efeadc3a94afc3a93c996c0bc92801027b603205ae22`,
+`715f63b7ab9b4feaad438a452aa08510ea092b177febef1db8fdb4b3b71fd9ba`,
+`09ee2b4da6ee3996d9055fd678a3965727bb1f98a7ecc95a0d6bf636e051b885`.
+Workflow/launch SHA256 are
+`b76177490438e6d5980f0271cef0b7a6166ebe2e02d5fd0d45e6ec2463968bcd`
+and `fe97ff2a01ffb42d9ebc50b8741f405cd5381689628ad884155b25079d295245`.

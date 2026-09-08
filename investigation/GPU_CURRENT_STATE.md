@@ -650,6 +650,15 @@ correlation EXIT before any broker write or fatal return, then give its existing
 PASSIVE exporter a bounded qualification-only window. This is the final repair
 of the observation path; use its durable exact guard for one functional fix.
 
+Commit `1d9cc1ea22882ab31950111c307ec62d41d1afff` implements that final
+observation repair. On only the already-rejected packet path it records
+correlation Submit EXIT guard22/status BUSY before the optional broker write,
+then allows the existing PASSIVE exporter a bounded250ms window before returning
+the unchanged fatal status. The successful path and production build have no
+delay or new I/O. Executable correlation state-machine tests preserve distinct
+call2 ENTRY/EXIT/fence/guard/status; focused10 and full373 tests are GREEN.
+EXP624 is the next and last diagnostic-only candidate for this boundary.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
