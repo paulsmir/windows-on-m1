@@ -38070,3 +38070,31 @@ Workflow/launch SHA256 are
 and `be0090c38715b37583c822903f43c8c60079569ea40141714ece5f8c9d5288bf`.
 Hardware requires two complete per-frame output records, two distinct exact
 D589 latches, safe fallback retirement, producer cleanup0 and no reset.
+
+**EXP630 FINAL — TWO RENDER/FENCE AND TWO OBSERVED LATCHES; OUTPUT QUERY AND
+RESET OWNER UNPROVEN.** Exact candidate630/boot351383955 correlation has two
+complete Render/Patch/Submit/worker/Notify/DPC records, fences256/257, both
+worker statuses completed and device remained admitted through both requests.
+The host log contains A408/D589 swap9 and swap10 after initial swap8. This proves
+the PASSIVE output consumer moved past the EXP628/629 frame1 boundary, but the
+latches are not counted as two correct user frames without exact query purpose,
+surface and pixel correlation.
+
+Source review found a deterministic query defect: successful
+`AdmissionCompletedOutputTransferToDisplay` clears `Completed`, after which
+`AdmissionScanoutPresentAgxResult` reads `Completed->View` into history. A record
+can therefore be valid/status0 with zero color/pixel/format. The producer also
+treats positive `STATUS_TIMEOUT` from `WaitForPresentation` as success through
+`NT_SUCCESS`, so no producer result is available to prove either query. The run
+then reset at uptime75.844s with `0x101`, processor4,
+`CLOCK_WATCHDOG_TIMEOUT_INTERRUPTS_DISABLED_nt!KiSwapContext`; the minidump does
+not identify AppleAgx, output worker, DCP or DestroyAllocation as owner.
+Correlation raw/decoded, host, dump and kd SHA256 are
+`74503b73adf894b35ac02dd6cc91d41cb5bd376f40e99168fb575453c95f38c6`,
+`480f6b612c43958a4edab1999cff88a75c727a841d4a86eaa65e05df55aa7660`,
+`6c2169419afbf990ccbc053c0ae6b34c744f1fd5aebbaf892a4b0de3f710da4e`,
+`04ec5058a4f564193614a90641c9a62217b8ee9c4eaf4531633e29d5a1f8c895`,
+`8062bf83e9a697f3c45dba43c7ddfac441123c1075f9c684c6fa5b16d6cebbdb`.
+Exact package/service/stale cleanup completed in the compatible emergency guest.
+Next run must fix query publication/acceptance and hold both allocations alive
+for a bounded no-cleanup phase, separating two-frame stability from retirement.

@@ -743,14 +743,28 @@ successful-visible legacy writes. Per-frame Escape records retain full output/
 present proof; failure receipts and asynchronous correlation remain. EXP629
 reruns the same lease design with no rendering change.
 
-EXP629 REJECTS legacy export as the cause: it reproduces `0x101` after call1
-fence256 with no query/call2 and no qualification D589. Correlation again ends
-with worker Pending. The first remaining synchronous owner is now exact: full
-15.6MiB validation/presentation still runs inside the backend completion callback
-after Notify/DPC. Commit `fadd52a038437cc1fbb8806128635b9f9630e2f5`
-schedules the transaction-owned consumer on a separate PASSIVE work item;
-completion returns immediately after queuing it. The query waits its exact
-presentation record. Full376 tests and WDK build GREEN. EXP630 is next.
+EXP629 REJECTS legacy export as the cause. Commit
+`fadd52a038437cc1fbb8806128635b9f9630e2f5` moves full output consumption to a
+PASSIVE work item. EXP630 proves the move reaches both Windows submissions:
+candidate630/boot351383955 has complete Render/Patch/Submit/worker/Notify/DPC for
+fences256/257, and host logs post-initial A408/D589 swap9 and swap10.
+
+EXP630 does not yet prove two correct presented frames. Source shows
+`AdmissionCompletedOutputTransferToDisplay` clears the transaction before
+history copies its color/pixel/format, allowing valid/status0 zero-content
+records. Producer `WaitForPresentation` also returns positive `STATUS_TIMEOUT`,
+which its caller accepts through `NT_SUCCESS`. No stdout record survived. After
+swap10 the system reset at uptime75.844s with `0x101`, CPU4 and the generic
+interrupts-disabled `nt!KiSwapContext` bucket; the minidump does not name an
+AppleAgx/DCP/output/cleanup owner. Exact package cleanup is complete; the machine
+is currently in the compatible GPU-hidden emergency guest.
+
+Current target: publish a pre-transfer immutable, fully verified per-frame
+record; strictly accept only matching frame/fence/allocation/color/full-pixel/
+format/sequence/offset/purpose data; preserve uncertain published ownership;
+and prove FRAME1, FRAME2 and a bounded15s HOLD with allocations alive and no
+cleanup. Retirement remains a separate later phase after a real owned fallback
+contract.
 
 ## Standing constraints
 
