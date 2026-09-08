@@ -510,6 +510,12 @@ is not deterministic. Next EXP608 changes only producer pass2 to request a
 documented command-buffer resize while retaining its exact full submitted
 range; exact607 KMD/UMD are reused.
 
+EXP608 proved ResizeCommandBuffer returns a new 8192-byte buffer but does not
+flush the current batch; pass2 stayed queued0 and sequence1 remained final.
+Next EXP609 adds only the documented lock synchronization of allocation1 after
+pass2. A lock on a resource used by the current batch is an official submission
+trigger; exact607 KMD/UMD remain unchanged.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

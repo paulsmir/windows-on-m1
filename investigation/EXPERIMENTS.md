@@ -37065,3 +37065,16 @@ zero warnings/errors. Producer/build-log/workflow SHA256 are respectively
 `38989a0c86962ac64a3b114dbf0fca10f35a42052c39c54adaa97473a706c115`,
 `09a31d0ca4a78ae070b74eebcc4335111a129bbb915f5773c44ab63b183f96f2`.
 Exact signed EXP607 ZIP remains `8c2f1833...34bc2`.
+
+**EXP608 FINAL — RESIZE REJECTED AS FLUSH.** Pass2 returned a distinct 8192-byte
+next command buffer, proving dxgkrnl honored ResizeCommandBuffer, but
+QueuedBufferCount remained0 and terminal/visible receipts remained sequence1/
+fence256. Thus resize changes only the next buffer and does not submit the
+current batch. Decoded/evidence SHA256 are
+`95fa8a518d0ab832884ad3e9a2c710ebfd301526394643e76538454b4e7c328e`
+and `26b73f22a1bf906b1a020bdee9e8ba408c9ab196bd202468ebd57b71ba2c50ec`.
+No bugcheck/TDR occurred; exact cleanup completed and ordinary restore is in
+progress. Microsoft command-submission contract explicitly lists locking a
+resource used by the current command batch as a submission trigger. EXP609 will
+therefore perform one zero-flag D3DKMTLock2/Unlock2 on allocation1 after pass2;
+exact607 KMD/UMD and the ping-pong implementation remain unchanged.
