@@ -38304,3 +38304,39 @@ Verdicts: `TWO_FRAME_RENDER_PASS=YES`, `TWO_FRAME_OUTPUT_PASS=YES`,
 `RETIREMENT_PASS=YES`. Physical visibility remains user-reported probable.
 Next boundary is bounded repeated ping-pong using the same two owners, monotonic
 fences/sequences and exact per-frame records; do not alter AGX/DCP protocols.
+
+# EXP633 — sixteen-frame repeated ping-pong
+
+**PREREGISTERED 2026-09-08T13:25Z. WHY THIS HYPOTHESIS:** (1) EXP632 proves two
+frames, HOLD, explicit retirement and full cleanup. (2) After each D589 the old
+active render lease releases, so the opposite surface is eligible for reuse.
+(3) The remaining untested property is bounded repetition, not a new AGX or DCP
+primitive.
+
+**WINDOWS CONTRACT:** Keep the same device, two contexts, two resident
+allocations and exact D3DKMTRender contract for all16 requests. Each next request
+starts only after the preceding exact query record. The retained Windows primary
+remains the retirement owner.
+
+**AGX/ASAHI CONTRACT:** Reuse the hardware-proven queue materialization,
+TA/3D completion, fence notification, full output verification and DCP latch.
+No command format, queue, firmware, retained-root or scanout ABI change.
+
+**TRANSLATION:** Commit `eb249e6439b2faf2d6cd1c86bc2f66eb9b3b4832`
+extends bounded history to16 and carries the actual destination index through
+the immutable packet. Producer alternates only allocation/context0/1 and the two
+proven colors. For frames3–16 it requires exact reuse of the corresponding first
+owner/offset/physical identity, while every adjacent fence and DCP sequence must
+increase and alternate. After frame16 it repeats the15s HOLD and exact owned
+retirement gate from EXP632.
+
+**WHAT IS STILL UNKNOWN:** whether all16 Windows requests produce16 physical
+TA/3D completions, monotonic fences and latches without stale/duplicate output,
+then retire and clean up. One exact run answers this.
+
+Executable tests cover target16 producer progression, bounded capacity, packet
+destination carry and exact owner reuse. Render-focused122 tests GREEN; pinned
+WDK/SDK26100 KMD/UMD/producer provisional build and Universal validation GREEN
+with inherited C28251 only. Build/sign/hash exact633, run to HOLD_PASS frames16,
+save evidence, signal retirement, then require sequence18 fallback, cleanup0,
+ACTIVE health and no reset.
