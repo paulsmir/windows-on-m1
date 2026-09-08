@@ -24,10 +24,12 @@ static BOOLEAN AdmissionUmdRenderOpenValid(
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 static PVOID volatile AdmissionUmdRenderTraceAdapter;
+static volatile LONG AdmissionUmdRenderTraceCallCount;
 
 _Use_decl_annotations_ VOID AdmissionUmdRenderTraceArm(
     ADMISSION_CONTEXT *Context) {
   InterlockedExchangePointer(&AdmissionUmdRenderTraceAdapter, Context);
+  InterlockedExchange(&AdmissionUmdRenderTraceCallCount, 0);
 }
 
 _Use_decl_annotations_ VOID AdmissionUmdRenderTraceDisarm(
@@ -55,17 +57,33 @@ static VOID AdmissionUmdRenderTraceWrite(
   WRITE_REGISTER_ULONG(command, J313_AGX_G2_POWER_CMD_QUERY);
 }
 
+static ULONGLONG AdmissionUmdRenderTraceHash(
+    const VOID *Data, ULONG Bytes) {
+  const UCHAR *data = (const UCHAR *)Data;
+  ULONGLONG hash = 14695981039346656037ULL;
+  ULONG index;
+  for (index = 0u; index < Bytes; ++index) {
+    hash ^= data[index];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
 static BOOLEAN AdmissionUmdRenderTraceBegin(
     ADMISSION_CONTEXT *Context, const ADMISSION_RENDER_CONTEXT *RenderContext,
     const DXGKARG_RENDER *Args) {
   ULONG contextFlags = ~0u;
+  ULONG callSequence;
   if (Context == NULL || Context->BrokerBase == NULL)
     return FALSE;
   if (RenderContext != NULL &&
       RenderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC)
     contextFlags = RenderContext->Object.Flags;
+  callSequence = (ULONG)InterlockedIncrement(
+      &AdmissionUmdRenderTraceCallCount);
   AdmissionUmdRenderTraceWrite(
-      Context, AdmissionUmdRenderTraceVersion, 1u);
+      Context, AdmissionUmdRenderTraceVersion,
+      (2u << 16) | (callSequence & 0xffffu));
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceIrql, (ULONG)KeGetCurrentIrql());
   AdmissionUmdRenderTraceWrite(
@@ -97,7 +115,10 @@ static BOOLEAN AdmissionUmdRenderTraceBegin(
 
 static VOID AdmissionUmdRenderTraceCommand(
     ADMISSION_CONTEXT *Context, BOOLEAN Enabled,
+    const ADMISSION_RENDER_CONTEXT *RenderContext,
     const ADMISSION_UMD_COLOR_FILL_COMMAND *Command) {
+  ULONGLONG contextToken;
+  ULONGLONG commandHash;
   if (!Enabled || Context == NULL || Command == NULL)
     return;
   AdmissionUmdRenderTraceWrite(
@@ -117,17 +138,36 @@ static VOID AdmissionUmdRenderTraceCommand(
       Context, AdmissionUmdRenderTraceRop, Command->Rop);
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceRop3, Command->Rop3);
+  contextToken = (ULONGLONG)(ULONG_PTR)RenderContext;
+  commandHash = AdmissionUmdRenderTraceHash(Command, sizeof(*Command));
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceContextLow, (ULONG)contextToken);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceContextHigh,
+      (ULONG)(contextToken >> 32));
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandHashLow, (ULONG)commandHash);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceCommandHashHigh,
+      (ULONG)(commandHash >> 32));
 }
 
 static VOID AdmissionUmdRenderTraceResult(
     ADMISSION_CONTEXT *Context, BOOLEAN Enabled, ULONG Guard,
-    NTSTATUS Status) {
+    NTSTATUS Status, ULONG DmaBytesProduced, ULONG PatchesProduced,
+    BOOLEAN Prepatched) {
   if (!Enabled || Context == NULL)
     return;
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceGuard, Guard);
   AdmissionUmdRenderTraceWrite(
       Context, AdmissionUmdRenderTraceStatus, (ULONG)Status);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTraceDmaBytesProduced, DmaBytesProduced);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTracePatchesProduced, PatchesProduced);
+  AdmissionUmdRenderTraceWrite(
+      Context, AdmissionUmdRenderTracePrepatched, Prepatched ? 1u : 0u);
 }
 #else
 #define AdmissionRecordUmdRenderGuard(Context, Guard, Status)                 \
@@ -135,18 +175,24 @@ static VOID AdmissionUmdRenderTraceResult(
 #define AdmissionUmdRenderTraceAdapterGet() ((ADMISSION_CONTEXT *)NULL)
 #define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args)            \
   ((void)(Context), (void)(RenderContext), (void)(Args), FALSE)
-#define AdmissionUmdRenderTraceCommand(Context, Enabled, Command)             \
+#define AdmissionUmdRenderTraceCommand(Context, Enabled, RenderContext,       \
+                                       Command)                               \
   do {                                                                        \
     (void)(Context);                                                          \
     (void)(Enabled);                                                          \
+    (void)(RenderContext);                                                    \
     (void)(Command);                                                          \
   } while (0)
-#define AdmissionUmdRenderTraceResult(Context, Enabled, Guard, Status)        \
+#define AdmissionUmdRenderTraceResult(Context, Enabled, Guard, Status,        \
+                                      DmaBytes, Patches, Prepatched)          \
   do {                                                                        \
     (void)(Context);                                                          \
     (void)(Enabled);                                                          \
     (void)(Guard);                                                            \
     (void)(Status);                                                           \
+    (void)(DmaBytes);                                                         \
+    (void)(Patches);                                                          \
+    (void)(Prepatched);                                                       \
   } while (0)
 #endif
 
@@ -171,12 +217,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   KIRQL oldIrql;
   BOOLEAN prepatched = FALSE;
   BOOLEAN trace;
+  ULONG traceDmaBytes = 0u;
+  ULONG tracePatches = 0u;
 
 #define UMD_RENDER_RETURN(guard, value)                                      \
   do {                                                                       \
     NTSTATUS renderStatus = (value);                                         \
     AdmissionRecordUmdRenderGuard(adapter, (guard), renderStatus);           \
-    AdmissionUmdRenderTraceResult(adapter, trace, (guard), renderStatus);     \
+    AdmissionUmdRenderTraceResult(adapter, trace, (guard), renderStatus,     \
+                                  traceDmaBytes, tracePatches, prepatched);   \
     return renderStatus;                                                     \
   } while (0)
 
@@ -243,7 +292,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
                       STATUS_INVALID_USER_BUFFER);
   }
-  AdmissionUmdRenderTraceCommand(adapter, trace, &command);
+  AdmissionUmdRenderTraceCommand(adapter, trace, context, &command);
 
   if (!AdmissionUmdColorFillCommandValid(
           &command, Args->AllocationListSize))
@@ -382,6 +431,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   Args->pDmaBuffer = (PUCHAR)Args->pDmaBuffer + prepared.DmaBytes;
   Args->pPatchLocationListOut = location + 1;
   Args->MultipassOffset = sizeof(command);
+  traceDmaBytes = prepared.DmaBytes;
+  tracePatches = 1u;
 
   AdmissionGdiReceiptBeginWindows(
       adapter, (ULONGLONG)(ULONG_PTR)context, command.Opcode,

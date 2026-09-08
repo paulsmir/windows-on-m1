@@ -17,6 +17,51 @@ def load_decoder():
 
 
 class AppleAgxRenderUmdTraceTests(unittest.TestCase):
+    def test_decoder_keeps_two_render_calls_separate(self):
+        decoder = load_decoder()
+        lines = []
+        for call, context, command_hash in (
+            (1, 0x1111222233334444, 0xAAAABBBBCCCCDDDD),
+            (2, 0x5555666677778888, 0x123456789ABCDEF0),
+        ):
+            values = {
+                1: (2 << 16) | call,
+                2: 0,
+                3: 0,
+                4: 48,
+                5: 4096,
+                6: 8192,
+                7: 2,
+                8: 0,
+                9: 64,
+                10: 0,
+                19: 0,
+                20: 0,
+                21: context & 0xFFFFFFFF,
+                22: context >> 32,
+                23: command_hash & 0xFFFFFFFF,
+                24: command_hash >> 32,
+                25: 168,
+                26: 1,
+                27: 1,
+            }
+            for field, value in values.items():
+                word = (0x5120 << 48) | (field << 32) | value
+                lines.append(
+                    f"TTY> HV: AGX power receipt seq={word} "
+                    "cmd=0 state=3 result=0"
+                )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "host.log"
+            path.write_text("\n".join(lines))
+            calls = decoder.decode_calls(path)
+        self.assertEqual([call["call_sequence"] for call in calls], [1, 2])
+        self.assertEqual(calls[1]["context_token"], 0x5555666677778888)
+        self.assertEqual(calls[1]["command_hash"], 0x123456789ABCDEF0)
+        self.assertEqual(calls[1]["dma_bytes_produced"], 168)
+        self.assertEqual(calls[1]["patches_produced"], 1)
+        self.assertEqual(calls[1]["prepatched"], 1)
+
     def test_decoder_preserves_entry_command_guard_and_status(self):
         decoder = load_decoder()
         names = decoder.NAMES

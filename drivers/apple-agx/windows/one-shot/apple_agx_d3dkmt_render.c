@@ -12,6 +12,17 @@
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #endif
 
+static ULONGLONG HashBytes(const void *Data, UINT Bytes) {
+  const unsigned char *data = (const unsigned char *)Data;
+  ULONGLONG hash = 14695981039346656037ULL;
+  UINT index;
+  for (index = 0u; index < Bytes; ++index) {
+    hash ^= data[index];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
 int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_ENUMADAPTERS3 enumeration = {0};
   D3DKMT_ADAPTERINFO adapters[MAX_ENUM_ADAPTERS] = {0};
@@ -28,8 +39,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_RENDER render = {0};
   D3DKMT_ESCAPE escape = {0};
   D3DKMT_TDRDBGCTRL_ESCAPE tdr = {0};
-  D3DKMT_LOCK2 lock = {0};
-  D3DKMT_UNLOCK2 unlock = {0};
   D3DDDI_MAKERESIDENT makeResident = {0};
   D3DKMT_DESTROYALLOCATION2 destroy = {0};
   D3DKMT_DESTROYCONTEXT destroyContext = {0};
@@ -56,8 +65,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS destinationAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS residentStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS renderStatus = (NTSTATUS)0xc0000001L;
-  NTSTATUS lockStatus = (NTSTATUS)0xc0000001L;
-  NTSTATUS unlockStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS resetStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyAllocationStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyContextStatus = (NTSTATUS)0xc0000001L;
@@ -264,12 +271,15 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     render.CommandLength = sizeof(command);
     render.AllocationCount = ARRAYSIZE(allocationHandles);
     render.PatchLocationCount = 0u;
-    if (pass != 0u) {
-      if (activeContext->CommandBufferSize > MAXUINT / 2u)
-        goto cleanup;
-      render.Flags.ResizeCommandBuffer = 1u;
-      render.NewCommandBufferSize = activeContext->CommandBufferSize * 2u;
-    }
+    wprintf(L"RENDER_IN pass=%lu context=%lu command_offset=%u "
+            L"command_length=%u command_capacity=%u "
+            L"command_hash=0x%016llx destination_index=%lu\n",
+            pass, activeContext->hContext, commandOffset, sizeof(command),
+            activeContext->CommandBufferSize,
+            HashBytes((unsigned char *)activeContext->pCommandBuffer +
+                          commandOffset,
+                      sizeof(command)),
+            pass);
     renderStatus = D3DKMTRender(&render);
     wprintf(L"RENDER_OUT pass=%lu command=%p command_bytes=%u allocations=%p "
             L"allocation_count=%u patches=%p patch_count=%u gpuva=0x%llx "
@@ -293,16 +303,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
   }
-  lock.hDevice = createDevice.hDevice;
-  lock.hAllocation = allocationHandles[1];
-  lockStatus = D3DKMTLock2(&lock);
-  if (!NT_SUCCESS(lockStatus))
-    goto cleanup;
-  unlock.hDevice = createDevice.hDevice;
-  unlock.hAllocation = allocationHandles[1];
-  unlockStatus = D3DKMTUnlock2(&unlock);
-  if (lock.pData == NULL || !NT_SUCCESS(unlockStatus))
-    goto cleanup;
   Sleep(10000u);
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
@@ -376,7 +376,6 @@ cleanup:
           L"\"destination_allocation\":\"0x%08lx\","
           L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
-          L"\"lock\":\"0x%08lx\",\"unlock\":\"0x%08lx\","
           L"\"engine_tdr\":\"0x%08lx\","
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
@@ -390,7 +389,6 @@ cleanup:
           (ULONG)destinationAllocationStatus,
           (ULONG)residentStatus, makeResident.PagingFenceValue,
           (ULONG)renderStatus, render.QueuedBufferCount,
-          (ULONG)lockStatus, (ULONG)unlockStatus,
           (ULONG)resetStatus,
           (ULONG)destroyAllocationStatus,
           (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,

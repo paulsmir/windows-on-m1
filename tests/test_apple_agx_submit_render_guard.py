@@ -50,7 +50,7 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
             "        Args->SubmissionFenceId)",
             submit,
         )
-        self.assertNotIn(
+        self.assertIn(
             "Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS",
             submit,
         )

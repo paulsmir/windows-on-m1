@@ -80,6 +80,13 @@ typedef enum _ADMISSION_UMD_RENDER_TRACE_FIELD {
   AdmissionUmdRenderTraceRop3 = 18u,
   AdmissionUmdRenderTraceGuard = 19u,
   AdmissionUmdRenderTraceStatus = 20u,
+  AdmissionUmdRenderTraceContextLow = 21u,
+  AdmissionUmdRenderTraceContextHigh = 22u,
+  AdmissionUmdRenderTraceCommandHashLow = 23u,
+  AdmissionUmdRenderTraceCommandHashHigh = 24u,
+  AdmissionUmdRenderTraceDmaBytesProduced = 25u,
+  AdmissionUmdRenderTracePatchesProduced = 26u,
+  AdmissionUmdRenderTracePrepatched = 27u,
 } ADMISSION_UMD_RENDER_TRACE_FIELD;
 
 typedef enum _ADMISSION_UMD_RENDER_GUARD {

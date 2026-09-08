@@ -82,15 +82,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
        (1u << Args->EngineOrdinal)) == 0u)
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardEngine,
                       STATUS_INVALID_HANDLE);
+  AdmissionSubmitFenceDetailWindows(Context,
+        render_context->Object.FenceOutstanding,
+        Args->SubmissionFenceId);
   if (render_context->Object.FenceOutstanding == 0u &&
       !NT_SUCCESS(AdmissionGdiAdoptPrepatchedPacket(
           Context, render_context, Args)))
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardFence,
                       STATUS_INVALID_HANDLE);
   if (render_context->Object.FenceOutstanding != Args->SubmissionFenceId) {
-    AdmissionSubmitFenceDetailWindows(Context,
-        render_context->Object.FenceOutstanding,
-        Args->SubmissionFenceId);
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardFence,
                       STATUS_INVALID_HANDLE);
   }
@@ -171,6 +171,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
                       STATUS_DEVICE_BUSY);
   }
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
+  AdmissionSubmitRenderGuardWindows(
+      Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS);
   AdmissionDispatchQueuedWork(Context);
   return STATUS_SUCCESS;
 #undef GDI_SUBMIT_RETURN

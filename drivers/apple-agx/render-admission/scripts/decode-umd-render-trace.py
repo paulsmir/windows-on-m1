@@ -33,13 +33,43 @@ NAMES = {
     18: "rop3",
     19: "guard",
     20: "status",
+    21: "context_low",
+    22: "context_high",
+    23: "command_hash_low",
+    24: "command_hash_high",
+    25: "dma_bytes_produced",
+    26: "patches_produced",
+    27: "prepatched",
 }
 REQUIRED = {NAMES[field] for field in list(range(1, 11)) + [19, 20]}
 
 
-def decode(path: Path) -> dict:
-    output = {}
-    last_field = 0
+def _finish(output: dict, ordinal: int) -> dict:
+    missing = sorted(REQUIRED - set(output))
+    if missing:
+        raise ValueError(f"incomplete UMD Render trace: {missing}")
+    raw_version = output["version"]
+    if raw_version >= 0x10000:
+        output["version"] = raw_version >> 16
+        output["call_sequence"] = raw_version & 0xFFFF
+    else:
+        output["call_sequence"] = ordinal
+    if "context_low" in output and "context_high" in output:
+        output["context_token"] = (
+            output.pop("context_low") |
+            (output.pop("context_high") << 32)
+        )
+    if "command_hash_low" in output and "command_hash_high" in output:
+        output["command_hash"] = (
+            output.pop("command_hash_low") |
+            (output.pop("command_hash_high") << 32)
+        )
+    return output
+
+
+def decode_calls(path: Path) -> list[dict]:
+    calls = []
+    output = None
     for line in path.read_text(errors="replace").splitlines():
         match = LINE.search(line)
         if not match:
@@ -50,25 +80,32 @@ def decode(path: Path) -> dict:
             continue
         field = (word >> 32) & 0xFFFF
         value = word & 0xFFFFFFFF
-        if field <= last_field:
-            raise ValueError(
-                f"non-monotonic UMD Render field {field} after {last_field}"
-            )
         if field not in NAMES:
             raise ValueError(f"unknown UMD Render field {field}")
+        if field == 1:
+            if output is not None:
+                calls.append(_finish(output, len(calls) + 1))
+            output = {}
+        if output is None:
+            continue
         output[NAMES[field]] = value
-        last_field = field
-    missing = sorted(REQUIRED - set(output))
-    if missing:
-        raise ValueError(f"incomplete UMD Render trace: {missing}")
-    return output
+    if output is not None:
+        calls.append(_finish(output, len(calls) + 1))
+    if not calls:
+        raise ValueError("incomplete UMD Render trace: no calls")
+    return calls
+
+
+def decode(path: Path) -> dict:
+    return decode_calls(path)[-1]
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("host_log", type=Path)
     args = parser.parse_args()
-    print(json.dumps(decode(args.host_log), indent=2, sort_keys=True))
+    print(json.dumps({"calls": decode_calls(args.host_log)},
+                     indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
