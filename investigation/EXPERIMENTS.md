@@ -37572,3 +37572,12 @@ from DPC/PASSIVE. Update executable state-machine/decoder tests first. One run
 then distinguishes late/missing notification, failed DPC queue, missing DPC, or
 fence-query disagreement without treating absence of an unproven receipt as a
 technical verdict. No AGX/PBE/UAT/DCP/capability/producer change.
+
+Commit `9a17c8442dd57c20fa407f81678905109039fc3a` implements correlation version2:
+two 400-byte boot/candidate-bound slots now retain interlocked DIRQL notify time
+and QueueDpc result, post-synchronize status, adapter-DPC time, and
+QueryCurrentFence count/value. DIRQL performs no I/O; DPC/PASSIVE schedules the
+existing asynchronous exporter. Decoder identity is versioned and rejects old
+or mixed layouts. Executable state-machine/decoder/queue/paging tests and the
+full373 AppleAgx suite are GREEN. Build exact619 from exact618 plus only these
+correlation/wiring files.
