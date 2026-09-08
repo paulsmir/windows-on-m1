@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-08T00:28Z. Authoritative compact state; read this first after
+Updated 2026-09-08T06:41Z. Authoritative compact state; read this first after
 context reset. Detailed evidence remains in `EXPERIMENTS.md` and experiment-local
 archives. Continue in the current main process without implementation agents.
 
@@ -465,6 +465,21 @@ bugchecked119/2. Dump SHA `655c32f3...b351ee`; exact package/stale service clean
 completed and ordinary is Code28/no package/service/module. EXP603 commit
 `246054076646ad93058198ad6e635d25700acdfc` changes only producer spacing from
 5s to15s; KMD602 remains exact.
+
+EXP603 removed the overlap and both user Render calls returned success, but
+pass2 had QueuedBufferCount0 and never reached KMD/AGX. EXP604 made pass2 the
+first command on a replacement standard context. Pass1 completed and context1
+destroyed successfully, but the post-render replacement `D3DKMTCreateContext`
+returned `STATUS_NO_MEMORY (0xC0000017)` before pass2. Exact cleanup completed;
+ordinary377/392 is restored with Code28, no AppleAgx package/service/module,
+8CPU/NVMe2/USB5/keyboard1 and no fresh bugcheck; Event129x1 is telemetry.
+
+Current first boundary is execution of the nonuniform bottom-band command on an
+independent dxgkrnl context, not AGX geometry. Commit
+`12d01b82db4916a4a360a6e52357bfc41d246baa` pre-creates both standard contexts
+before pass1, as permitted by the pinned WDK multiple-context contract, and
+routes pass2 through context2. EXP605 is preregistered; build only the producer,
+reuse byte-exact signed EXP602 package SHA `439d2ffc...05ad5e2`, then run once.
 
 ## Standing constraints
 

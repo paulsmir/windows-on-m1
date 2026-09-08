@@ -36870,3 +36870,39 @@ receipts collected and exact602 package removed. Ordinary restored: Code28/no
 package/service/module,8CPU/NVMe2/USB5/keyboard1,bugcheck0, Event129x1 telemetry.
 Next boundary is the KMD DestroyContext/CreateContext resource lifetime; inspect
 context/DMA allocation release before another hardware run.
+
+# EXP605 — pre-created independent context for pass2
+
+**PREREGISTERED 2026-09-08T06:41:33Z. WHY THIS HYPOTHESIS:** (1) EXP604
+completed pass1 and successfully destroyed context1, but the replacement
+`D3DKMTCreateContext` returned `STATUS_NO_MEMORY`; no branch in the current KMD
+CreateContext returns that status. (2) Pinned WDK26100 and Microsoft
+`DXGKDDI_CREATECONTEXT` contract require multiple contexts on one device and
+permit each to reference resources owned by that device. (3) EXP603 already
+proved that pass2 on the reused context remains batched with QueuedBufferCount0.
+
+Single variable: commit `12d01b82db4916a4a360a6e52357bfc41d246baa`
+creates two independent standard contexts before the first render and routes
+pass2 through context2. It does not destroy/recreate a context between passes.
+The render allocation, resident placement, 15s separation, exact602 KMD/UMD,
+AGX workload, completion and D589 path are unchanged.
+
+Repository `public_windows`, branch `feature/j313-gpu-acceleration`, ledger HEAD
+`00319d89c99f5ded66304d2e287d8ce87232caa8`; unrelated existing dirty files are
+excluded. Exact602 signed package remains
+`.local/experiments/EXP604-fresh-context/EXP604.zip`, SHA256
+`439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`.
+Build only `AppleAgxD3dKmRender.exe` on pinned FRYZZING WDK/SDK26100 and MSVC
+14.44 from the frozen EXP604 tree plus the two-file producer overlay. Record the
+new producer SHA before staging. Launch with the current full-owner 377/392
+physical profile and recovery with ordinary GPU-visible377/392; immutable
+GPU-hidden recovery remains the emergency fallback.
+
+PASS: both pre-created contexts have valid independent runtime buffers; pass1
+and pass2 each report QueuedBufferCount1; sequence2 physically completes TA/3D;
+terminal/visible receipts prove the bottom band and combined full-frame FNV
+`0xa94060683c9ca325`; exact fence and D589 complete with Resetting0 and
+SchedulerFaulted0. FAIL: context2 cannot be created before pass1, pass2 remains
+buffered, or any first later guard names a different boundary. Collect producer
+output, terminal/visible/queue/buffer/KTrace receipts, system events and host
+trace; then remove only the exact602 package and restore ordinary baseline.
