@@ -456,10 +456,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     verified.ContentHash = OutputReceipt->OutputTargetFnv1a;
     if (!(OutputReceipt->ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) ||
         OutputReceipt->Fence != Fence ||
-        OutputReceipt->DestinationPhysical !=
-            Completed->View.RenderedPhysicalAddress ||
-        OutputReceipt->OutputBytesExamined !=
-            Completed->View.RenderedBytes ||
+        !AdmissionCompletedOutputReceiptMatchesView(
+            &Completed->View, OutputReceipt->DestinationGpuVa,
+            OutputReceipt->DestinationPhysical,
+            OutputReceipt->DestinationBytes,
+            OutputReceipt->OutputBytesExamined) ||
         !AdmissionPresentQueryBuild(&historyRecord, &verified))
       status = STATUS_DATA_ERROR;
   }

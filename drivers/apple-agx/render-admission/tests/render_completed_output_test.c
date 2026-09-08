@@ -61,6 +61,35 @@ int main(void) {
       &view1, pool, 0x1500000000ULL, 0x9bc060000ULL, 0x03800000u));
   assert(!AdmissionCompletedOutputPlatformRangeValid(
       &view1, pool, 0x1500000000ULL, 0x9bc050000ULL, 0x03800000u));
+  assert(AdmissionCompletedOutputReceiptMatchesView(
+      &view1, view1.AllocationGpuAddress, view1.AllocationPhysicalAddress,
+      view1.AllocationBytes, view1.RenderedBytes));
+  {
+    ADMISSION_BACKEND_OUTPUT_VIEW band = view1;
+    band.RenderedOffset = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET;
+    band.RenderedCpuAddress = first + band.RenderedOffset;
+    band.RenderedGpuAddress = band.AllocationGpuAddress + band.RenderedOffset;
+    band.RenderedPhysicalAddress =
+        band.AllocationPhysicalAddress + band.RenderedOffset;
+    band.RenderedBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_BYTES;
+    band.RenderHeight = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT;
+    assert(AdmissionCompletedOutputReceiptMatchesView(
+        &band, band.AllocationGpuAddress, band.AllocationPhysicalAddress,
+        band.AllocationBytes, band.RenderedBytes));
+    assert(!AdmissionCompletedOutputReceiptMatchesView(
+        &band, band.AllocationGpuAddress, band.RenderedPhysicalAddress,
+        band.AllocationBytes, band.RenderedBytes));
+    assert(!AdmissionCompletedOutputReceiptMatchesView(
+        &band, band.AllocationGpuAddress, band.AllocationPhysicalAddress,
+        band.RenderedBytes, band.RenderedBytes));
+    assert(!AdmissionCompletedOutputReceiptMatchesView(
+        &band, band.AllocationGpuAddress, band.AllocationPhysicalAddress,
+        band.AllocationBytes, band.AllocationBytes));
+    ++band.RenderedPhysicalAddress;
+    assert(!AdmissionCompletedOutputReceiptMatchesView(
+        &band, band.AllocationGpuAddress, band.AllocationPhysicalAddress,
+        band.AllocationBytes, band.RenderedBytes));
+  }
   {
     ADMISSION_BACKEND_OUTPUT_VIEW outside = view1;
     outside.AllocationBytes = 0x03000000u;

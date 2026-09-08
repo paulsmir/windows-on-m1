@@ -261,6 +261,41 @@ int AdmissionCompletedOutputPlatformRangeValid(
       View->AllocationBytes <= PoolBytes - cpuOffset;
 }
 
+int AdmissionCompletedOutputReceiptMatchesView(
+    const ADMISSION_BACKEND_OUTPUT_VIEW *View,
+    unsigned long long ReceiptAllocationGpuAddress,
+    unsigned long long ReceiptAllocationPhysicalAddress,
+    unsigned int ReceiptAllocationBytes,
+    unsigned int OutputBytesExamined) {
+  const unsigned char *allocation;
+  const unsigned char *rendered;
+  unsigned long long cpuOffset;
+  if (View == COMPLETED_NULL || View->AllocationCpuAddress == COMPLETED_NULL ||
+      View->RenderedCpuAddress == COMPLETED_NULL ||
+      View->AllocationGpuAddress == 0ULL ||
+      View->AllocationPhysicalAddress == 0ULL ||
+      View->AllocationBytes == 0u || View->RenderedBytes == 0u ||
+      ReceiptAllocationGpuAddress != View->AllocationGpuAddress ||
+      ReceiptAllocationPhysicalAddress != View->AllocationPhysicalAddress ||
+      ReceiptAllocationBytes != View->AllocationBytes ||
+      OutputBytesExamined != View->RenderedBytes ||
+      View->RenderedOffset > View->AllocationBytes ||
+      View->RenderedBytes > View->AllocationBytes - View->RenderedOffset ||
+      View->AllocationGpuAddress > ~0ULL - View->RenderedOffset ||
+      View->AllocationPhysicalAddress > ~0ULL - View->RenderedOffset)
+    return 0;
+  allocation = (const unsigned char *)View->AllocationCpuAddress;
+  rendered = (const unsigned char *)View->RenderedCpuAddress;
+  if (rendered < allocation)
+    return 0;
+  cpuOffset = (unsigned long long)(rendered - allocation);
+  return cpuOffset == View->RenderedOffset &&
+      View->RenderedGpuAddress ==
+          View->AllocationGpuAddress + View->RenderedOffset &&
+      View->RenderedPhysicalAddress ==
+          View->AllocationPhysicalAddress + View->RenderedOffset;
+}
+
 int AdmissionCompletedOutputTransferToDisplay(
     ADMISSION_COMPLETED_OUTPUT *State,
     ADMISSION_DISPLAY_OUTPUT_LEASE *Lease, unsigned int Fence) {

@@ -74,6 +74,12 @@ int AdmissionCompletedOutputPlatformRangeValid(
     unsigned long long PoolGpuAddress,
     unsigned long long PoolPhysicalAddress,
     unsigned long long PoolBytes);
+int AdmissionCompletedOutputReceiptMatchesView(
+    const ADMISSION_BACKEND_OUTPUT_VIEW *View,
+    unsigned long long ReceiptAllocationGpuAddress,
+    unsigned long long ReceiptAllocationPhysicalAddress,
+    unsigned int ReceiptAllocationBytes,
+    unsigned int OutputBytesExamined);
 int AdmissionCompletedOutputTransferToDisplay(
     ADMISSION_COMPLETED_OUTPUT *State,
     ADMISSION_DISPLAY_OUTPUT_LEASE *Lease, unsigned int Fence);
