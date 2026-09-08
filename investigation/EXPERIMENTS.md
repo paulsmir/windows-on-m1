@@ -36967,3 +36967,23 @@ build log SHA256
 workflow SHA256
 `a5db524ca6c924286c7af0953617d954866e496f3c0f04487b41d94a4baa981a`.
 Reuse exact signed EXP602 package SHA `439d2ffc...05ad5e2`.
+
+**EXP606 FINAL — FULLNESS CONFIRMED; NEW DISPLAY BOUNDARY.** Both renders
+returned status0/QueuedBufferCount1. Terminal receipt sequence2/fence257 proves
+TA/D3 stamps `0x7a000200/0x3d000200`, done3/4, NotifyInterrupt/DPC, all2,048,000
+bottom-band pixels `0xffcc8844`, 8,192,000 changed bytes, no poison/guard damage,
+Resetting0 and SchedulerFaulted0. Thus full-buffer placement is confirmed and
+the second Windows-originated physical AGX command/fence is hardware proven.
+
+Visible publication alone failed at guard7 with
+`STATUS_CONFLICTING_ADDRESSES (0xC0000018)`: destination/active offset were both
+`0xfa0000`. This is expected because pass1 latched allocation0 and pass2 updated
+the same active framebuffer. Exact decoded evidence SHA256
+`a7c629cb0498b8099f0a0cef1a5c001b2a111f45d4146e76d9ee828bdc7b068b`;
+terminal SHA256
+`86ca11553dec47449ab30c6416cc5079499908c03b63d79d91522f2e64932412`.
+Exact cleanup and ordinary377/392 restore are complete: Code28, no package/
+service/module,8CPU,NVMe2,USB5,keyboard1,bugcheck0. Event129x8 is telemetry.
+Next: use the two existing Windows-owned full-size allocations as a symmetric
+ping-pong pair; render a complete second frame into the inactive allocation and
+present it through the existing exact D589 path.

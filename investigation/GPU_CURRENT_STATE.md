@@ -490,6 +490,14 @@ pass2's valid submitted range at the end of its 4096-byte runtime buffer so
 offset+length equals capacity, retaining exact command length and byte-exact
 EXP602 KMD/UMD.
 
+EXP606 confirms that contract. Both passes queued1; sequence2/fence257 reached
+physical TA/3D completion with exact 2560x800 bottom-band contents and no TDR or
+scheduler fault. Visible publication then failed exactly at guard7 because the
+render allocation offset `0xfa0000` was already active after pass1. Current
+first boundary is a real inactive-surface flip: route pass2 as a complete frame
+to the other existing Windows-owned full-size allocation and make qualification
+destination resolution symmetric. Do not weaken the active-surface guard.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
