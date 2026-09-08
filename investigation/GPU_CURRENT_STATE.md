@@ -516,6 +516,15 @@ Next EXP609 adds only the documented lock synchronization of allocation1 after
 pass2. A lock on a resource used by the current batch is an official submission
 trigger; exact607 KMD/UMD remain unchanged.
 
+EXP609 direct Lock2 returned C000000D because the allocations remain
+CpuVisible0; this route is rejected and removed. QueuedBufferCount0 is not
+treated as a submission boolean. Commit
+`033957f20a1d85eb5fdbe8864e717281ace26ba4` prepares EXP610 receipt-only
+correlation: producer pass/context/range/hash plus versioned per-call KMD Render
+context/hash/DMA output and existing Patch/adoption/Submit guards in a preserved
+host log. This exact run will name whether Render2 is entered before any new
+behavior change.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

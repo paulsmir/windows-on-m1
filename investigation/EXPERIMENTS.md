@@ -37101,3 +37101,42 @@ zero warnings/errors. Producer/build-log/workflow SHA256 are respectively
 `d3a7f35193a27f1659fca93f5bfd4554d69a531ee39adab581600812581c5a00`,
 `1c44f284f9f1ce75d4771cd008b956420f6bb0849b95210c166d1b5707e4e602`.
 Exact607 package SHA remains `8c2f1833...34bc2`.
+
+**EXP609 FINAL — REJECTED BEFORE SUBMISSION; REVIEW CORRECTION.** The direct
+`D3DKMTLock2` returned `STATUS_INVALID_PARAMETER (0xC000000D)` and Unlock was
+not called. Both allocations were created with CpuVisible0; this repeats the
+already-known incompatibility of CPU lock with the current local2 render
+allocation and is not a submission verdict. Pass2 still reported queued0 and
+terminal remained sequence1/fence256. Decoded/evidence SHA256 are
+`1f5bd184fc1f52b8aee4dbd13fe3cfa56ea7b7577ea56a48f483f9c16575d107`
+and `fb3aa8792d4c78c06299d4e8338d94e3a49710acabb738d5d7deb483af4a48c5`.
+Exact cleanup completed; ordinary restore is in progress.
+
+**CORRECTION TO EXP608 INTERPRETATION.** QueuedBufferCount is the number of DMA
+buffers queued after the call, not a submission boolean. EXP608 proves only
+that resize supplied a distinct next buffer and no second hardware result was
+observed; it does not by itself explain the fate of the previous command.
+
+# EXP610 — per-call Render/Patch/Submit correlation
+
+**PREREGISTERED 2026-09-08T07:27Z. WHY THIS HYPOTHESIS:** (1) EXP607–609 show
+no second hardware receipt, but QueuedBufferCount does not name whether KMD
+Render was entered. (2) Existing UMD-Render broker trace restarts at field1 on
+each call but its decoder kept only one call and lacked context/hash/output
+identity. (3) Patch/adoption failure and Submit absence are distinguishable by
+existing broker guard tags once the full host trace is preserved.
+
+Commit `033957f20a1d85eb5fdbe8864e717281ace26ba4` removes the rejected resize and
+Lock2 paths, logs producer pass/context/offset/length/capacity/exact FNV, versions
+each KMD Render trace with a monotonic call number, adds context token, exact
+command FNV, DMA bytes, patch count and prepatched state, emits accepted Submit
+guard plus every Submit fence pair, and decodes multiple Render calls. This is
+receipt-only instrumentation; KMD607 ping-pong, allocations, AGX, DCP,
+capabilities and timing are unchanged. Full368 tests GREEN.
+
+Build exact30.0.610.0 KMD/UMD/producer from frozen EXP607 plus only the trace and
+producer overlay. Capture the complete host stdout to a file. Verdict branches:
+two Render call groups absent => user/kernel D3DKMT boundary; Render2 present
+without produced DMA => Render DDI; Render2 DMA with no Patch => dxgkrnl
+residency/ordering; Patch2 without Submit2 => scheduler ordering; Submit2 with
+no worker => driver dispatch. One run, then exact cleanup and ordinary restore.
