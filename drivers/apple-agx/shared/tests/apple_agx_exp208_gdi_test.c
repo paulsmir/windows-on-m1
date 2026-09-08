@@ -60,7 +60,8 @@ static APPLE_AGX_U32 make_fullscreen_color_clear(
 }
 
 static APPLE_AGX_U32 make_bottom_band_clear(unsigned char *dma,
-                                            APPLE_AGX_U64 gpu_va) {
+                                            APPLE_AGX_U64 gpu_va,
+                                            APPLE_AGX_U32 color) {
   APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
   APPLE_AGX_U32 written = 0u;
   memset(&description, 0, sizeof(description));
@@ -71,7 +72,7 @@ static APPLE_AGX_U32 make_bottom_band_clear(unsigned char *dma,
       APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT};
   description.Command.DestinationGpuAddress = gpu_va;
   description.Command.DestinationPitch = APPLE_AGX_EXP208_FRAMEBUFFER_PITCH;
-  description.Command.Color = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+  description.Command.Color = color;
   description.Command.Rop = AppleAgxGdiColorFillPatCopy;
   assert(AppleAgxGdiEncodeDmaCommand(&description, dma, 256u, &written));
   return written;
@@ -512,7 +513,9 @@ static void test_bottom_band_uses_aligned_subregion_and_distinct_fp16_color(void
   APPLE_AGX_EXP208_RELOCATION_OBJECT
       objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
   APPLE_AGX_EXP208_GDI_BINDING binding;
-  APPLE_AGX_U32 bytes = make_bottom_band_clear(dma, 0x1500010000ULL);
+  const APPLE_AGX_U32 color = 0xff0000ffu;
+  APPLE_AGX_U32 bytes = make_bottom_band_clear(
+      dma, 0x1500010000ULL, color);
   APPLE_AGX_U64 pbe0;
   APPLE_AGX_U64 pbe1;
 
@@ -539,8 +542,8 @@ static void test_bottom_band_uses_aligned_subregion_and_distinct_fp16_color(void
          destination + APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET);
   assert(binding.Framebuffer.RenderHeight == 800u);
   assert(binding.Framebuffer.ClearColor ==
-         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
-  assert(read_u64(objects[36u].Data) == 0x3c00344438443a66ULL);
+         color);
+  assert(read_u64(objects[36u].Data) == 0x3c003c0000000000ULL);
   assert(read_u16(objects[18u].Data + 0x54u) == 8u);
   assert(read_u16(objects[18u].Data + 0x56u) == 20u);
   assert(read_u32(objects[18u].Data + 0x68u) == 0x3a315caeu);
@@ -646,7 +649,7 @@ static void test_two_fullscreen_ping_pong_colors_bind_after_exact_release(void) 
   assert(memcmp(before, arena, AppleAgxRenderTemplateBytes()) == 0);
 
   bytes = make_fullscreen_color_clear(
-      dma, 0x1500fb0000ULL, APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
+      dma, 0x1500fb0000ULL, 0xff00ff00u);
   assert(AppleAgxExp208BindGdiFramebufferColorFill(
       dma, bytes, arena, 0x1503800000ULL, 0x9d3000000ULL,
       backend_bytes, destination1, 0x1500fb0000ULL, 0x9d2fa0000ULL,
@@ -657,8 +660,8 @@ static void test_two_fullscreen_ping_pong_colors_bind_after_exact_release(void) 
   assert(binding.Framebuffer.RenderHeight ==
          APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT);
   assert(binding.Framebuffer.ClearColor ==
-         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR);
-  assert(read_u64(objects[36u].Data) == 0x3c00344438443a66ULL);
+         0xff00ff00u);
+  assert(read_u64(objects[36u].Data) == 0x3c0000003c000000ULL);
   assert(binding.DestinationGpuVa == 0x1500fb0000ULL);
   assert(binding.DestinationPhysical == 0x9d2fa0000ULL);
   assert(AppleAgxExp208UnbindGdiColorFill(
@@ -671,6 +674,10 @@ static void test_two_fullscreen_ping_pong_colors_bind_after_exact_release(void) 
 }
 
 int main(void) {
+  assert(AppleAgxExp208PackClearColor(0x00000000u) == 0x0000000000000000ULL);
+  assert(AppleAgxExp208PackClearColor(0xffffffffu) == 0x3c003c003c003c00ULL);
+  assert(AppleAgxExp208PackClearColor(0xff112233u) == 0x3c00326630442c44ULL);
+  assert(AppleAgxExp208PackClearColor(0xffcc8844u) == 0x3c00344438443a66ULL);
   test_exact_clear_binds_hardware_proven_output_object();
   test_wrong_workload_or_physical_edge_is_rejected_atomically();
   test_generated_exp208_graph_has_one_bindable_output_edge();

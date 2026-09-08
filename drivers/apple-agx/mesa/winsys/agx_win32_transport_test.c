@@ -149,6 +149,36 @@ static void test_built_bytes_are_independent_of_request_storage(void) {
   assert(view.References[0].Offset == 0x20000ULL);
 }
 
+static void test_two_data_driven_clears_have_distinct_hashes(void) {
+  AGX_WIN32_CLEAR_REQUEST first = request();
+  AGX_WIN32_CLEAR_REQUEST second = request();
+  unsigned char firstBytes[128];
+  unsigned char secondBytes[128];
+  APPLE_AGX_WIN32_COMMAND_VIEW firstView;
+  APPLE_AGX_WIN32_COMMAND_VIEW secondView;
+  APPLE_AGX_U32 firstCount;
+  APPLE_AGX_U32 secondCount;
+  second.Color = 0xff0000ffu;
+  second.Top = 256u;
+  second.Bottom = 512u;
+  assert(AgxWin32TransportBuildClear(
+             &first, firstBytes, sizeof(firstBytes), &firstCount) ==
+         AppleAgxWin32AbiSuccess);
+  assert(AgxWin32TransportBuildClear(
+             &second, secondBytes, sizeof(secondBytes), &secondCount) ==
+         AppleAgxWin32AbiSuccess);
+  assert(AppleAgxWin32CommandValidate(
+             firstBytes, firstCount, 7u, 4u, &firstView) ==
+         AppleAgxWin32AbiSuccess);
+  assert(AppleAgxWin32CommandValidate(
+             secondBytes, secondCount, 7u, 4u, &secondView) ==
+         AppleAgxWin32AbiSuccess);
+  assert(firstView.Header->ContentHash != secondView.Header->ContentHash);
+  assert(firstView.Clear->Color == 0xffabcdefu);
+  assert(secondView.Clear->Color == 0xff0000ffu);
+  assert(firstView.Clear->Top == 32u && secondView.Clear->Top == 256u);
+}
+
 static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   FAKE_WINSYS fake;
   AGX_WIN32_WINSYS_OPERATIONS operations;
@@ -226,6 +256,7 @@ int main(void) {
   test_exact_clear_envelope();
   test_capacity_generation_and_geometry_fail_closed();
   test_built_bytes_are_independent_of_request_storage();
+  test_two_data_driven_clears_have_distinct_hashes();
   test_resource_facing_winsys_has_no_fd_or_physical_contract();
   test_winsys_rejects_stale_and_out_of_range_buffers();
   return 0;

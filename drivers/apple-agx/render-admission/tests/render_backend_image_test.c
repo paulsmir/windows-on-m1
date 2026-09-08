@@ -280,6 +280,7 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
   packet.DestinationPhysical = 0x9d1000000ULL;
   packet.DestinationBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
   command = fullscreen_color_fill(packet.DestinationGpuVa);
+  command.Color = 0xff00ff00u;
   assert(AdmissionBackendImageBindSubmission(
       &image, &packet, destination, (const unsigned char *)&command,
       sizeof(command), &binding));
@@ -295,8 +296,7 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
   assert(completed_output.AllocationPhysicalAddress == packet.DestinationPhysical);
   assert(completed_output.AllocationBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
   assert(completed_output.RenderedBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
-  assert(completed_output.ExpectedColor ==
-         APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR);
+  assert(completed_output.ExpectedColor == 0xff00ff00u);
   assert(completed_output.Framebuffer == APPLE_AGX_TRUE);
   assert(image.Objects[64u].GpuVa == TEST_BACKEND_GPU + 0x5d0000ULL);
   assert(image.Objects[65u].GpuVa == TEST_BACKEND_GPU + 0x620000ULL);
@@ -337,7 +337,7 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
 
   packet.Fence = 201u;
   command.Destination.Top = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
-  command.Color = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+  command.Color = 0xff0000ffu;
   assert(AdmissionBackendImageBindSubmission(
       &image, &packet, destination, (const unsigned char *)&command,
       sizeof(command), &binding));
@@ -356,6 +356,7 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
          APPLE_AGX_EXP208_FRAMEBUFFER_BAND_BYTES);
   assert(completed_output.RenderHeight ==
          APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT);
+  assert(completed_output.ExpectedColor == 0xff0000ffu);
   assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
   free(destination);
   free(template_before);

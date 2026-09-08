@@ -254,34 +254,27 @@ HRESULT AgxWin32TransportSubmit(
 ### Task 5: Dynamic clear integration without a second backend
 
 **Files:**
-- Create: `drivers/apple-agx/render-admission/src/render_dynamic_windows.c`
-- Create: `drivers/apple-agx/shared/include/apple_agx_dynamic_job.h`
-- Create: `drivers/apple-agx/shared/src/apple_agx_dynamic_job.c`
-- Create: `drivers/apple-agx/shared/tests/apple_agx_dynamic_job_test.c`
-- Modify: existing backend materialization entry only where the validated dynamic fields are consumed.
+- Modify: `drivers/apple-agx/shared/include/apple_agx_exp208_framebuffer.h`
+- Modify: `drivers/apple-agx/shared/src/apple_agx_exp208_framebuffer.c`
+- Modify: `drivers/apple-agx/shared/src/apple_agx_exp208_gdi.c`
+- Modify: `drivers/apple-agx/render-admission/src/render_backend_image.c`
+- Test: `drivers/apple-agx/shared/tests/apple_agx_exp208_gdi_test.c`
+- Test: `drivers/apple-agx/render-admission/tests/render_backend_image_test.c`
 
 **Interfaces:**
 
 ```c
-typedef struct _APPLE_AGX_DYNAMIC_CLEAR {
-  uint32_t Color;
-  uint32_t Format;
-  uint32_t SurfaceWidth;
-  uint32_t SurfaceHeight;
-  uint32_t SurfacePitch;
-  uint32_t Left, Top, Right, Bottom;
-  uint64_t DestinationGpuVa;
-  uint64_t DestinationBytes;
-} APPLE_AGX_DYNAMIC_CLEAR;
-
-APPLE_AGX_BOOL AppleAgxDynamicClearValidate(
-    const APPLE_AGX_DYNAMIC_CLEAR *clear);
+APPLE_AGX_U64 AppleAgxExp208PackClearColor(APPLE_AGX_U32 Color);
 ```
 
-- [ ] **Step 1: RED-test two clears** with different colors and rectangles and literal expected patched scalar sets. Change geometry, color and destination independently; reject out-of-bounds pitch/range and an active display destination.
-- [ ] **Step 2: map the validated clear into the one existing backend image/materializer.** Reuse current queue objects, firmware job, retained-root mappings and completion/fence. EXP208 fixed structures may provide the encoder template, but every variable named above comes from the validated request.
-- [ ] **Step 3: prove there is no fixed replay.** The two materialized jobs have different command hashes at the exact documented dynamic scalar locations and produce different predicted destination hashes while preserving invariant firmware pointers.
-- [ ] **Step 4: run all shared/backend/submission tests GREEN and pinned KMD/UMD analysis/Universal/sign/version/hash gates. Commit the dynamic consumer separately.**
+- [x] **Step 1: RED-test two clears** with different colors and the two already proven full1600/bottom-band800 geometries. Require literal FP16 PBE words for arbitrary green and blue; keep out-of-bounds/range/active-display rejection in Tasks1–3.
+- [x] **Step 2: map the validated clear into the one existing backend image/materializer.** Reuse current queue objects, firmware job, retained-root mappings and completion/fence. Encode ARGB8 to four normalized binary16 lanes with integer round-to-nearest; do not create a second dynamic-job owner.
+- [x] **Step 3: prove there is no fixed replay.** The two envelopes have different immutable hashes; the existing binder accepts distinct destination identities, colors and full/band geometry, emits literal distinct PBE clear words, and restores invariant template objects after unbind.
+- [x] **Step 4: run all shared/backend/submission tests GREEN and pinned KMD/UMD analysis/Universal/sign/version/hash gates. Commit the dynamic consumer separately.**
+
+Scope correction from implementation review: arbitrary color is now data-driven,
+but geometry remains exactly the two hardware-proven tiling profiles. New arbitrary
+TA/PBE geometry formulas require AD03 source evidence and are not inferred here.
 
 ### Task 6: One AD02 hardware discriminator
 

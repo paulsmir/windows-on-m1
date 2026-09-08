@@ -62,6 +62,46 @@ static void FramebufferZero(unsigned char *Address, APPLE_AGX_U32 Bytes) {
     Address[index] = 0u;
 }
 
+static APPLE_AGX_U32 FramebufferNormalizedU8ToHalf(
+    APPLE_AGX_U32 Component) {
+  APPLE_AGX_U32 highest = 0u;
+  APPLE_AGX_U32 scan;
+  APPLE_AGX_U32 significand;
+  APPLE_AGX_U32 remainder;
+  APPLE_AGX_U32 exponent;
+  if (Component == 0u)
+    return 0u;
+  if (Component >= 255u)
+    return 0x3c00u;
+  scan = Component;
+  while (scan > 1u) {
+    scan >>= 1u;
+    ++highest;
+  }
+  significand = (Component << (8u - highest)) * 1024u;
+  remainder = significand % 255u;
+  significand /= 255u;
+  if (remainder * 2u > 255u)
+    ++significand;
+  exponent = highest + 7u;
+  if (significand >= 2048u) {
+    significand >>= 1u;
+    ++exponent;
+  }
+  return (exponent << 10u) | (significand - 1024u);
+}
+
+APPLE_AGX_U64 AppleAgxExp208PackClearColor(APPLE_AGX_U32 Color) {
+  APPLE_AGX_U64 red =
+      FramebufferNormalizedU8ToHalf((Color >> 16u) & 0xffu);
+  APPLE_AGX_U64 green =
+      FramebufferNormalizedU8ToHalf((Color >> 8u) & 0xffu);
+  APPLE_AGX_U64 blue = FramebufferNormalizedU8ToHalf(Color & 0xffu);
+  APPLE_AGX_U64 alpha =
+      FramebufferNormalizedU8ToHalf((Color >> 24u) & 0xffu);
+  return red | (green << 16u) | (blue << 32u) | (alpha << 48u);
+}
+
 static APPLE_AGX_BOOL FramebufferObjectMatches(
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *Object,
     const void *Data, APPLE_AGX_U64 GpuVa,
@@ -301,11 +341,8 @@ APPLE_AGX_BOOL AppleAgxExp208FramebufferBind(
       Binding == FRAMEBUFFER_NULL ||
       ObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       ArenaCapacity != APPLE_AGX_EXP208_FRAMEBUFFER_BACKEND_BYTES ||
-      !((RenderHeight == APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
-         (ClearColor == APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR ||
-          ClearColor == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR)) ||
-        (RenderHeight == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT &&
-         ClearColor == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR)) ||
+      (RenderHeight != APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
+       RenderHeight != APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT) ||
       (ArenaGpuAddress & (APPLE_AGX_RENDER_TEMPLATE_ALIGNMENT - 1u)) != 0ULL ||
       (ArenaPhysicalAddress & 0x3fffULL) != 0ULL ||
       ArenaGpuAddress > ~0ULL - ArenaCapacity ||
@@ -350,10 +387,7 @@ APPLE_AGX_BOOL AppleAgxExp208FramebufferBind(
   candidate.OriginalClearColor = FramebufferReadU64(pbe - 0x3000u);
   candidate.BoundPbe0 = 0ULL;
   candidate.BoundPbe1 = 0ULL;
-  candidate.BoundClearColor =
-      ClearColor == APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
-          ? 0x3c00326630442c44ULL
-          : 0x3c00344438443a66ULL;
+  candidate.BoundClearColor = AppleAgxExp208PackClearColor(ClearColor);
   candidate.RenderHeight = RenderHeight;
   candidate.ClearColor = ClearColor;
   candidate.Active = APPLE_AGX_TRUE;

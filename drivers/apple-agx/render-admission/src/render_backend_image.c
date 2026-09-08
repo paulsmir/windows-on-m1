@@ -207,10 +207,6 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
         Allocation->Height != APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT ||
         Allocation->Pitch != APPLE_AGX_EXP208_FRAMEBUFFER_PITCH ||
         Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES ||
-        (Image->Binding.Framebuffer.ClearColor !=
-             APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR &&
-         Image->Binding.Framebuffer.ClearColor !=
-             APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR) ||
         !((Image->Binding.Framebuffer.RenderHeight ==
                APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
            gpu_offset == 0u &&

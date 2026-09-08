@@ -34,6 +34,8 @@ typedef struct _APPLE_AGX_EXP208_FRAMEBUFFER_BINDING {
   APPLE_AGX_BOOL Active;
 } APPLE_AGX_EXP208_FRAMEBUFFER_BINDING;
 
+APPLE_AGX_U64 AppleAgxExp208PackClearColor(APPLE_AGX_U32 Color);
+
 APPLE_AGX_BOOL AppleAgxExp208FramebufferBind(
     void *ArenaCpuAddress, APPLE_AGX_U64 ArenaGpuAddress,
     APPLE_AGX_U64 ArenaPhysicalAddress, APPLE_AGX_U32 ArenaCapacity,

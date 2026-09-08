@@ -326,9 +326,7 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiFramebufferColorFill(
     return APPLE_AGX_FALSE;
   Exp208GdiCopy(&command, SubmissionBytes, sizeof(command));
   if (command.Destination.Top == 0u &&
-      command.Destination.Bottom == APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
-      (command.Color == APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR ||
-       command.Color == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR)) {
+      command.Destination.Bottom == APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT) {
     renderHeight = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
     expectedTop = 0u;
     expectedBottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
@@ -338,12 +336,11 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiFramebufferColorFill(
   } else if (command.Destination.Top ==
                  APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP &&
              command.Destination.Bottom ==
-                 APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
-             command.Color == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR) {
+                 APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT) {
     renderHeight = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT;
     expectedTop = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
     expectedBottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
-    expectedColor = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+    expectedColor = command.Color;
     outputOffset = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET;
     outputBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_BYTES;
   } else {
