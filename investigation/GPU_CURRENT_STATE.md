@@ -66,8 +66,14 @@ c574d40520befed878050a2f20a4131b758f936d now constructs real Mesa
 buffer/BGRA8 resources and checked transfers over the Windows screen; exact
 pinned-header clang sanitizers and MSVC14.44 analysis execution pass, with no
 DRM/fd/software target. Production ARM64 UMD linkage plus vertex/fragment
-lowering and typed draw graph submission are the current first boundary. No
-hardware candidate is justified and pipeline caps remain0.
+lowering and typed draw graph submission were blocked first by missing KMD
+class identity. Commit29aa0281c7f0d3c93203bfc9e3ce9e9e61f13dc4 adds a
+versioned internal allocation descriptor and preserves General/Shader/Encoder
+plus exact access through UMD Allocate and KMD Create/Open/Render facts; RED to
+GREEN parser tests real callback mock and ARM64 Universal/sign build pass.
+Typed Draw graph validation and role-to-class relocation policy are now the
+current first boundary. No hardware candidate is justified and pipeline caps
+remain0.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed

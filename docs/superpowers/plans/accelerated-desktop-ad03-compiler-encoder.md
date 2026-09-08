@@ -164,6 +164,13 @@ It is not yet linked into the production ARM64 UMD; broker VA/typed relocation,
 draw/encoder callbacks and typed graph submission remain the next boundary,
 and the generic screen submit callback stays fail-closed.
 
+Commit 29aa0281c7f0d3c93203bfc9e3ce9e9e61f13dc4 adds the prerequisite
+versioned internal-allocation descriptor and retains General/Shader/Encoder
+class and access through UMD Allocate and KMD Create/Open/Render facts.
+Ordinary surface descriptors remain compatible. This is offline-proven only;
+no class is mapped into a broker arena until the typed Draw graph passes the
+Task4 policy.
+
 **Gate:** fake-runtime BO/map/fence/reset tests and ARM64 analysis build GREEN;
 pipeline mask remains0.
 
