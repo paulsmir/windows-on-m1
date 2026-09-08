@@ -230,8 +230,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   } while (0)
 
   adapter = AdmissionUmdRenderTraceAdapterGet();
-  AdmissionRecordUmdRenderGuard(adapter, MAXULONG, STATUS_PENDING);
-  trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);
+  trace = FALSE;
   if (context == NULL ||
       context->Object.Magic != ADMISSION_OBJECT_CONTEXT_MAGIC)
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardContext,
@@ -243,8 +242,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
                       STATUS_INVALID_PARAMETER);
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);
+  AdmissionRecordUmdRenderGuard(adapter, MAXULONG, STATUS_PENDING);
+  trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  if (trace && adapter != AdmissionUmdRenderTraceAdapterGet())
+  if (trace && AdmissionUmdRenderTraceAdapterGet() != NULL &&
+      adapter != AdmissionUmdRenderTraceAdapterGet())
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardDevice,
                       STATUS_INVALID_PARAMETER);
 #endif
