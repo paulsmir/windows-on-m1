@@ -4,13 +4,13 @@
 
 See [ACCELERATED_DESKTOP_ROADMAP.md](ACCELERATED_DESKTOP_ROADMAP.md).
 The user requests accelerated Windows/DWM desktop before OpenGL/CS1.6 work;
-software/display-only is not the next target. AD01 is OFFLINE_PROVEN after
-EXP648's caps0 rejection. Current gate is AD02; execute
-`docs/superpowers/plans/accelerated-desktop-ad02-transport.md` inline.
+software/display-only is not the next target. AD01 is OFFLINE_PROVEN and AD02
+is HW_PROVEN by EXP651. Current gate is AD03 production composition of the
+pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-08T21:25Z. Main process only; no agents.
+Updated 2026-09-09T01:14Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -91,16 +91,22 @@ AGX disassembler. `AGX_COMPILER_OFFLINE_PROVEN=YES`; USC pipeline VDM/render
 pass encoder serialization and production Draw publication remain the first
 boundary. This is not hardware or desktop evidence.
 
-AD03 encoder progressed at commits
-cbac2d60d629e71f1a241860536c6c17dc8715f3 and
-9c121992a768ab03119ca1a04ebed3bc6f850135. Generated Mesa pack source proved
-that USC shader and VDM pipeline fields are shader-base-relative32-bit and USC
-buffers are packed40-bit addresses; typed KMD relocation now encodes those
-exact fields and ARM64 build660 passes. The pinned fixture serializes and
-unpacks deterministic88-byte USC pipeline plus68-byte partial VDM/fragment
-encoder objects with five exact relocations. Full PPP/render-pass/PBE/EOT,
-complete VDM draw command and production broker/backend publication are the
-current first boundary. No Air package was staged and pipeline caps remain0.
+AD03 encoder progressed through commit
+5e98915c78067181462123857e52b3c2ab9b4901. The pinned fixture now compiles a
+vertex-ID triangle, links the fragment main with the Asahi BGRA8 tilebuffer
+epilog, serializes92-byte USC pipelines plus a complete228-byte VDM/PPP stream
+(`VDM state -> PPP state -> triangle draw -> terminate`), and emits exact
+scissor/depth arrays. Seven typed relocations include both shader rodata
+addresses and the split40-bit PPP self-pointer; generated unpack, disassembly,
+ASan/UBSan tests and WDK26100 build661 are GREEN. The render-pass store/EOT
+pipeline remains explicitly owned by the hardware-proven EXP208 3D skeleton;
+it is not duplicated. `AGX_COMPILER_OFFLINE_PROVEN=YES` and
+`DYNAMIC_JOB_ABI_OFFLINE_PROVEN=YES`; dynamic physical Draw remains NO.
+Current first boundary is a transaction-owned production overlay that copies
+these validated objects into the unused regions of EXP208 objects71/73/74,
+preserves fixed store-pipeline data, resolves exact original shader-base VAs,
+and carries the immutable result through Render/Submit/worker. No Air package
+was staged and pipeline caps remain0.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed

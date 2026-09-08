@@ -30,12 +30,12 @@ bottom-band-blue output hashes, два query/latch,15s HOLD и clean retirement.
 plan. Hardware допускается только после typed job/relocation/resource tests;
 feature-level readiness и advertised mask остаются0.
 
-AD03 Task1 source boundary and compiler core are OFFLINE_PROVEN. Pinned Mesa
-produces deterministic source-sensitive AGX compute binaries. Direct generic
-VS/FS compilation is deliberately rejected because required Asahi UVS/
-tilebuffer driver lowering is not yet connected. Current task is the Windows
-Asahi screen/BO/fence adapter; upstream encoder build stops first at its DRM
-header, exactly matching the owner to replace.
+AD03 compiler and complete first-triangle encoder fixture are OFFLINE_PROVEN.
+Pinned Mesa produces source-sensitive VS/FS, a linked BGRA8 fragment epilog,
+exact USC pipeline, complete VDM/PPP draw stream, scissor/depth arrays and seven
+typed relocations. The unchanged EXP208 3D skeleton remains the proven owner of
+render-pass store/EOT. Current task is transaction-owned production overlay and
+publication into that skeleton; dynamic physical Draw is not yet proven.
 
 ## Как читать и обновлять карту
 
@@ -148,8 +148,8 @@ geometry/color, exact full output/fence. Это ещё не D3D feature-level PA
 `drivers/apple-agx/shared/src/apple_agx_dynamic_job.c`,
 `drivers/apple-agx/shared/tests/apple_agx_dynamic_job_test.c`.
 
-- [ ] Compile validated API shader input through chosen frontend → NIR → AGX compiler.
-- [ ] Typed relocations cover complete encoder/pipeline/descriptor graph; no stale captured VA.
+- [x] Compile validated first-triangle shader input through NIR → AGX compiler.
+- [x] Typed relocations cover its complete encoder/pipeline graph; no stale captured VA.
 - [ ] Vertex/index/constants/textures/samplers/attachments have allocation-relative references.
 - [ ] Geometry, viewport/scissor, texture and blend changes give distinct predicted output.
 - [ ] Resource barriers/readback/format/color-space are explicit, not inferred from one color.
