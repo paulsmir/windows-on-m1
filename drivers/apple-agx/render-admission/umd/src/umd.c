@@ -127,7 +127,12 @@ static HRESULT APIENTRY AdmissionUmdDeallocateResource(
 
 static VOID APIENTRY AdmissionUmdReportResourceError(
     void *Context, HRESULT Error) {
-  AdmissionUmdSetError((ADMISSION_UMD_DEVICE *)Context, Error);
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
+  if (device != NULL) {
+    device->LastRetirementError = Error;
+    ++device->RetirementErrorCount;
+  }
+  AdmissionUmdSetError(device, Error);
 }
 
 static BOOLEAN AdmissionUmdDescribePrimary(
@@ -509,11 +514,18 @@ static BOOL APIENTRY AdmissionUmdFlush(D3D10DDI_HDEVICE DeviceHandle,
 
 static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
+  ADMISSION_UMD_RETIREMENT_FINALIZE_RESULT retirement;
   D3DDDICB_DESTROYCONTEXT destroyContext;
   if (device == NULL)
     return;
-  if (!AdmissionUmdRetirementDrain(&device->Retirement))
-    AdmissionUmdRetirementAbandon(&device->Retirement);
+  AdmissionUmdRetirementFinalize(&device->Retirement, &retirement);
+  if (retirement.Undeallocated != 0u) {
+    device->LastRetirementError = retirement.LastError;
+    device->RetirementErrorCount += retirement.Undeallocated;
+    device->RetirementUndeallocated = retirement.Undeallocated;
+    device->RetirementTerminal = TRUE;
+    AdmissionUmdSetError(device, retirement.FirstError);
+  }
   if (device->KernelContext != NULL && device->KernelCallbacks != NULL &&
       device->KernelCallbacks->pfnDestroyContextCb != NULL) {
     ZeroMemory(&destroyContext, sizeof(destroyContext));

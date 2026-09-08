@@ -23,11 +23,27 @@ typedef struct _TEST_STATE {
   unsigned int AllocateCalls;
   unsigned int DeallocateCalls;
   unsigned int SetErrorCalls;
+  unsigned int FailAllocations;
   unsigned int FailDeallocations;
+  unsigned int CreatedKernelResources;
+  unsigned int ReleasedKernelResources;
+  unsigned int OutstandingKernelResources;
+  unsigned int ActiveDdi;
+  BOOL RuntimeTerminal;
+  HRESULT LastSetError;
   HANDLE LastAllocateResource;
-  HANDLE DeallocateResources[8];
-  HRESULT DeallocateResults[8];
+  HANDLE DeallocateResources[16];
+  HRESULT DeallocateResults[16];
+  HRESULT SetErrors[8];
+  unsigned int SetErrorDdis[8];
 } TEST_STATE;
+
+enum {
+  TEST_DDI_NONE = 0u,
+  TEST_DDI_FLUSH = 1u,
+  TEST_DDI_DESTROY_DEVICE = 2u,
+  TEST_DDI_CREATE_RESOURCE = 3u,
+};
 
 static TEST_STATE State;
 static unsigned char CommandBuffer[4096];
@@ -73,9 +89,16 @@ static HRESULT APIENTRY TestAllocate(HANDLE Device,
   State.LastAllocateResource = Allocate->hResource;
   CHECK(Allocate->NumAllocations == 1u);
   CHECK(Allocate->pAllocationInfo != NULL);
+  if (State.FailAllocations != 0u) {
+    --State.FailAllocations;
+    return E_OUTOFMEMORY;
+  }
   Allocate->hKMResource = 0x700u + State.AllocateCalls;
-  if (Allocate->pAllocationInfo != NULL)
+  if (Allocate->pAllocationInfo != NULL) {
     Allocate->pAllocationInfo[0].hAllocation = 0x800u + State.AllocateCalls;
+    ++State.CreatedKernelResources;
+    ++State.OutstandingKernelResources;
+  }
   return S_OK;
 }
 
@@ -96,6 +119,12 @@ static HRESULT APIENTRY TestDeallocate(
   }
   if (index < ARRAYSIZE(State.DeallocateResults))
     State.DeallocateResults[index] = result;
+  if (SUCCEEDED(result)) {
+    CHECK(State.OutstandingKernelResources != 0u);
+    if (State.OutstandingKernelResources != 0u)
+      --State.OutstandingKernelResources;
+    ++State.ReleasedKernelResources;
+  }
   return result;
 }
 
@@ -103,6 +132,13 @@ static VOID APIENTRY TestSetError(D3D10DDI_HRTCORELAYER CoreLayer,
                                   HRESULT Error) {
   CHECK(CoreLayer.handle == (VOID *)(UINT_PTR)0x102u);
   CHECK(FAILED(Error));
+  CHECK(!State.RuntimeTerminal);
+  if (State.SetErrorCalls < ARRAYSIZE(State.SetErrors)) {
+    State.SetErrors[State.SetErrorCalls] = Error;
+    State.SetErrorDdis[State.SetErrorCalls] = State.ActiveDdi;
+  }
+  State.LastSetError = Error;
+  State.RuntimeTerminal = TRUE;
   ++State.SetErrorCalls;
 }
 
@@ -150,15 +186,19 @@ static void initialize_open_resource(
   Open->hKMResource.handle = ResourceHandle;
 }
 
-static D3D10DDI_HRESOURCE create_primary(
+static D3D10DDI_HRESOURCE create_resource(
     D3DWDDM1_3DDI_DEVICEFUNCS *Functions, D3D10DDI_HDEVICE Device,
-    D3D10DDI_HRTRESOURCE RuntimeResource) {
+    D3D10DDI_HRTRESOURCE RuntimeResource, BOOL Primary, BOOL Shared) {
   D3D11DDIARG_CREATERESOURCE create;
   D3D10DDI_MIPINFO mip;
   DXGI_DDI_PRIMARY_DESC primary;
   D3D10DDI_HRESOURCE resource;
   SIZE_T bytes;
   initialize_create_resource(&create, &mip, &primary);
+  if (!Primary)
+    create.pPrimaryDesc = NULL;
+  if (Shared)
+    create.MiscFlags |= D3D10_DDI_RESOURCE_MISC_SHARED;
   bytes = Functions->pfnCalcPrivateResourceSize(Device, &create);
   CHECK(bytes != 0u);
   resource.pDrvPrivate = calloc(1u, bytes);
@@ -185,6 +225,12 @@ static D3D10DDI_HRESOURCE open_resource(
   CHECK(resource.pDrvPrivate != NULL);
   if (resource.pDrvPrivate != NULL)
     Functions->pfnOpenResource(Device, &open, resource, RuntimeResource);
+  if (resource.pDrvPrivate != NULL &&
+      ((ADMISSION_UMD_RESOURCE *)resource.pDrvPrivate)->Magic ==
+          ADMISSION_UMD_RESOURCE_MAGIC) {
+    ++State.CreatedKernelResources;
+    ++State.OutstandingKernelResources;
+  }
   return resource;
 }
 
@@ -204,17 +250,26 @@ int main(void) {
   D3D10DDI_HDEVICE device;
   D3D10DDI_HRTRESOURCE primaryRuntime;
   D3D10DDI_HRTRESOURCE openRuntime;
+  D3D10DDI_HRTRESOURCE sharedRuntime;
+  D3D10DDI_HRTRESOURCE nonPrimaryRuntime;
+  D3D10DDI_HRTRESOURCE allocationFailureRuntime;
   D3D10DDI_HRTRESOURCE retryRuntime;
+  D3D10DDI_HRTRESOURCE permanentRuntime1;
+  D3D10DDI_HRTRESOURCE permanentRuntime2;
   D3D10DDI_HRESOURCE primary;
   D3D10DDI_HRESOURCE opened;
+  D3D10DDI_HRESOURCE shared;
+  D3D10DDI_HRESOURCE nonPrimary;
+  D3D10DDI_HRESOURCE allocationFailure;
   D3D10DDI_HRESOURCE retry;
+  D3D10DDI_HRESOURCE permanent1;
+  D3D10DDI_HRESOURCE permanent2;
   SIZE_T deviceBytes;
   UINT formatSupport;
   UINT32 versionCount;
   UINT64 version;
   unsigned int errorsBefore;
   unsigned int deallocationsBefore;
-  ADMISSION_UMD_DEVICE *deviceState;
 
   memset(&State, 0, sizeof(State));
   memset(&adapterCallbacks, 0, sizeof(adapterCallbacks));
@@ -275,7 +330,6 @@ int main(void) {
   CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
                                          &createDevice) == S_OK);
   CHECK(State.CreateContextCalls == 1u);
-  deviceState = (ADMISSION_UMD_DEVICE *)device.pDrvPrivate;
 
   errorsBefore = State.SetErrorCalls;
   formatSupport = 0xffffffffu;
@@ -285,7 +339,8 @@ int main(void) {
   CHECK(State.SetErrorCalls == errorsBefore);
 
   primaryRuntime.handle = (VOID *)(UINT_PTR)0x300u;
-  primary = create_primary(&deviceFunctions, device, primaryRuntime);
+  primary = create_resource(&deviceFunctions, device, primaryRuntime, TRUE,
+                            FALSE);
   CHECK(State.AllocateCalls == 1u);
   CHECK(State.LastAllocateResource == primaryRuntime.handle);
   if (primary.pDrvPrivate != NULL)
@@ -294,6 +349,25 @@ int main(void) {
   CHECK(State.DeallocateResources[0] == primaryRuntime.handle);
   free(primary.pDrvPrivate);
 
+  sharedRuntime.handle = (VOID *)(UINT_PTR)0x350u;
+  shared = create_resource(&deviceFunctions, device, sharedRuntime, TRUE, TRUE);
+  nonPrimaryRuntime.handle = (VOID *)(UINT_PTR)0x360u;
+  nonPrimary = create_resource(&deviceFunctions, device, nonPrimaryRuntime,
+                               FALSE, FALSE);
+  deallocationsBefore = State.DeallocateCalls;
+  if (shared.pDrvPrivate != NULL)
+    deviceFunctions.pfnDestroyResource(device, shared);
+  if (nonPrimary.pDrvPrivate != NULL)
+    deviceFunctions.pfnDestroyResource(device, nonPrimary);
+  CHECK(State.DeallocateCalls == deallocationsBefore);
+  CHECK(deviceFunctions.pfnFlush(device, 0u));
+  CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
+  CHECK(State.DeallocateResources[deallocationsBefore] == sharedRuntime.handle);
+  CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
+        nonPrimaryRuntime.handle);
+  free(shared.pDrvPrivate);
+  free(nonPrimary.pDrvPrivate);
+
   openRuntime.handle = (VOID *)(UINT_PTR)0x400u;
   opened = open_resource(&deviceFunctions, device, openRuntime, 0x900u, 0xa00u);
   deallocationsBefore = State.DeallocateCalls;
@@ -301,13 +375,6 @@ int main(void) {
     deviceFunctions.pfnDestroyResource(device, opened);
   CHECK(State.DeallocateCalls == deallocationsBefore);
   CHECK(deviceFunctions.pfnFlush != NULL);
-  errorsBefore = State.SetErrorCalls;
-  deviceState->Retirement.HasImmediateCommands = TRUE;
-  if (deviceFunctions.pfnFlush != NULL)
-    CHECK(!deviceFunctions.pfnFlush(device, 0u));
-  CHECK(State.DeallocateCalls == deallocationsBefore);
-  CHECK(State.SetErrorCalls == errorsBefore + 1u);
-  deviceState->Retirement.HasImmediateCommands = FALSE;
   if (deviceFunctions.pfnFlush != NULL)
     CHECK(deviceFunctions.pfnFlush(device, 0u));
   CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
@@ -321,17 +388,104 @@ int main(void) {
   State.FailDeallocations = 1u;
   deallocationsBefore = State.DeallocateCalls;
   errorsBefore = State.SetErrorCalls;
-  if (deviceFunctions.pfnFlush != NULL)
+  State.ActiveDdi = TEST_DDI_FLUSH;
+  if (deviceFunctions.pfnFlush != NULL) {
     CHECK(!deviceFunctions.pfnFlush(device, 0u));
+  }
+  State.ActiveDdi = TEST_DDI_NONE;
   CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
   CHECK(State.SetErrorCalls == errorsBefore + 1u);
+  CHECK(State.RuntimeTerminal);
+  CHECK(State.LastSetError == E_FAIL);
+  CHECK(State.SetErrorDdis[errorsBefore] == TEST_DDI_FLUSH);
   free(retry.pDrvPrivate);
 
+  State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
   deviceFunctions.pfnDestroyDevice(device);
+  State.ActiveDdi = TEST_DDI_NONE;
   CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
   CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
         retryRuntime.handle);
   CHECK(State.DestroyContextCalls == 1u);
+  CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
+                                            State.OutstandingKernelResources);
+  CHECK(State.OutstandingKernelResources == 0u);
+  free(device.pDrvPrivate);
+
+  /* Allocation failure is terminal for this resource handle; do not continue. */
+  State.RuntimeTerminal = FALSE;
+  State.LastSetError = S_OK;
+  device.pDrvPrivate = calloc(1u, deviceBytes);
+  CHECK(device.pDrvPrivate != NULL);
+  createDevice.hDrvDevice = device;
+  memset(&deviceFunctions, 0, sizeof(deviceFunctions));
+  memset(&dxgiFunctions, 0, sizeof(dxgiFunctions));
+  CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
+                                         &createDevice) == S_OK);
+  State.FailAllocations = 1u;
+  errorsBefore = State.SetErrorCalls;
+  allocationFailureRuntime.handle = (VOID *)(UINT_PTR)0x550u;
+  State.ActiveDdi = TEST_DDI_CREATE_RESOURCE;
+  allocationFailure = create_resource(&deviceFunctions, device,
+                                      allocationFailureRuntime, TRUE, FALSE);
+  State.ActiveDdi = TEST_DDI_NONE;
+  CHECK(State.SetErrorCalls == errorsBefore + 1u);
+  CHECK(State.SetErrors[errorsBefore] == E_OUTOFMEMORY);
+  CHECK(State.SetErrorDdis[errorsBefore] == TEST_DDI_CREATE_RESOURCE);
+  CHECK(State.RuntimeTerminal);
+  CHECK(((ADMISSION_UMD_RESOURCE *)allocationFailure.pDrvPrivate)->Magic == 0u);
+  free(allocationFailure.pDrvPrivate);
+  State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
+  deviceFunctions.pfnDestroyDevice(device);
+  State.ActiveDdi = TEST_DDI_NONE;
+  CHECK(State.OutstandingKernelResources == 0u);
+  free(device.pDrvPrivate);
+
+  /* A third runtime device exercises terminal cleanup independently. */
+  State.RuntimeTerminal = FALSE;
+  State.LastSetError = S_OK;
+  device.pDrvPrivate = calloc(1u, deviceBytes);
+  CHECK(device.pDrvPrivate != NULL);
+  createDevice.hDrvDevice = device;
+  memset(&deviceFunctions, 0, sizeof(deviceFunctions));
+  memset(&dxgiFunctions, 0, sizeof(dxgiFunctions));
+  CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
+                                         &createDevice) == S_OK);
+
+  permanentRuntime1.handle = (VOID *)(UINT_PTR)0x600u;
+  permanent1 = open_resource(&deviceFunctions, device, permanentRuntime1,
+                             0x902u, 0xa02u);
+  permanentRuntime2.handle = (VOID *)(UINT_PTR)0x601u;
+  permanent2 = open_resource(&deviceFunctions, device, permanentRuntime2,
+                             0x903u, 0xa03u);
+  if (permanent1.pDrvPrivate != NULL)
+    deviceFunctions.pfnDestroyResource(device, permanent1);
+  if (permanent2.pDrvPrivate != NULL)
+    deviceFunctions.pfnDestroyResource(device, permanent2);
+  free(permanent1.pDrvPrivate);
+  free(permanent2.pDrvPrivate);
+
+  State.FailDeallocations = 2u;
+  deallocationsBefore = State.DeallocateCalls;
+  errorsBefore = State.SetErrorCalls;
+  State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
+  deviceFunctions.pfnDestroyDevice(device);
+  State.ActiveDdi = TEST_DDI_NONE;
+  CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
+  CHECK(State.DeallocateResources[deallocationsBefore] ==
+        permanentRuntime1.handle);
+  CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
+        permanentRuntime2.handle);
+  CHECK(State.DeallocateResults[deallocationsBefore] == E_FAIL);
+  CHECK(State.DeallocateResults[deallocationsBefore + 1u] == E_FAIL);
+  CHECK(State.SetErrorCalls == errorsBefore + 1u);
+  CHECK(State.SetErrors[errorsBefore] == E_FAIL);
+  CHECK(State.SetErrorDdis[errorsBefore] == TEST_DDI_DESTROY_DEVICE);
+  CHECK(State.RuntimeTerminal);
+  CHECK(State.DestroyContextCalls == 3u);
+  CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
+                                            State.OutstandingKernelResources);
+  CHECK(State.OutstandingKernelResources == 2u);
   free(device.pDrvPrivate);
   CHECK(adapterFunctions.pfnCloseAdapter(openAdapter.hAdapter) == S_OK);
   return State.Failures == 0u ? 0 : (int)State.Failures;

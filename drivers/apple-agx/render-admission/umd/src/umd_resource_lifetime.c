@@ -102,10 +102,29 @@ BOOL AdmissionUmdRetirementDrain(ADMISSION_UMD_RETIREMENT_QUEUE *Queue) {
   return TRUE;
 }
 
-VOID AdmissionUmdRetirementAbandon(ADMISSION_UMD_RETIREMENT_QUEUE *Queue) {
+VOID AdmissionUmdRetirementFinalize(
+    ADMISSION_UMD_RETIREMENT_QUEUE *Queue,
+    ADMISSION_UMD_RETIREMENT_FINALIZE_RESULT *Result) {
   ADMISSION_UMD_RETIREMENT *retirement;
-  if (Queue == NULL)
+  HRESULT status;
+  if (Result != NULL) {
+    ZeroMemory(Result, sizeof(*Result));
+    Result->FirstError = S_OK;
+    Result->LastError = S_OK;
+  }
+  if (Queue == NULL || Result == NULL)
     return;
-  while ((retirement = AdmissionUmdRetirementPop(Queue)) != NULL)
+  while ((retirement = AdmissionUmdRetirementPop(Queue)) != NULL) {
+    ++Result->Attempted;
+    status = AdmissionUmdRetirementDeallocate(Queue, retirement);
+    if (SUCCEEDED(status)) {
+      ++Result->Deallocated;
+    } else {
+      if (Result->Undeallocated == 0u)
+        Result->FirstError = status;
+      Result->LastError = status;
+      ++Result->Undeallocated;
+    }
     AdmissionUmdRetirementFree(retirement);
+  }
 }

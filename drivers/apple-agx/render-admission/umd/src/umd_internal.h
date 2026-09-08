@@ -26,6 +26,10 @@ typedef struct _ADMISSION_UMD_DEVICE {
   DXGI_DDI_BASE_CALLBACKS *DxgiCallbacks;
   HANDLE KernelContext;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
+  HRESULT LastRetirementError;
+  ULONG RetirementErrorCount;
+  ULONG RetirementUndeallocated;
+  BOOL RetirementTerminal;
 } ADMISSION_UMD_DEVICE;
 
 typedef struct _ADMISSION_UMD_RESOURCE {
