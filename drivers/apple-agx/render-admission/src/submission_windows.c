@@ -23,6 +23,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
   ULONG packet_guard = AdmissionSubmitPacketGuardAccepted;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_OPEN_ALLOCATION *output_owner;
+#endif
 #define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
@@ -139,6 +142,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
                       STATUS_INVALID_USER_BUFFER);
 
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  output_owner = (ADMISSION_OPEN_ALLOCATION *)(ULONG_PTR)
+      Context->RenderPacket.Description.AllocationToken;
+#endif
   if (AdmissionRenderPacketState(&Context->RenderPacket) !=
       AdmissionRenderPacketPrepared)
     packet_guard = AdmissionSubmitPacketGuardState;
@@ -158,6 +165,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   else if (Context->RenderPacket.Description.DmaEnd !=
            Args->DmaBufferSubmissionEndOffset)
     packet_guard = AdmissionSubmitPacketGuardDmaEnd;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  else if (output_owner == NULL ||
+           output_owner->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
+           output_owner->Allocation == NULL ||
+           !AdmissionScanoutAllowsRender(Context, output_owner->Allocation))
+    packet_guard = AdmissionSubmitPacketGuardBind;
+#endif
   else if (!AdmissionBackendImageBindSubmission(
           &Context->BackendImage,
           &Context->RenderPacket.Description,

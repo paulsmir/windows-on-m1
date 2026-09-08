@@ -103,6 +103,8 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_TERMINAL_RECEIPT TerminalReceipt;
   volatile LONG TerminalSequence;
+  volatile LONG CompletedOutputGeneration;
+  ADMISSION_COMPLETED_OUTPUT CompletedOutput;
 #endif
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   UCHAR VisibleAgxSource[1024];
@@ -170,7 +172,9 @@ static VOID AdmissionTerminalBegin(
 static VOID AdmissionTerminalObserve(
     ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence,
     APPLE_AGX_BACKEND_COMPLETION_STATUS Status,
-    const ADMISSION_BACKEND_OUTPUT_VIEW *Output) {
+    ADMISSION_COMPLETED_OUTPUT *Completed) {
+  const ADMISSION_BACKEND_OUTPUT_VIEW *Output =
+      Completed != NULL ? &Completed->View : NULL;
   const APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *config;
   APPLE_AGX_BACKEND_U32 taStamp = 0u, taDone = 0u;
   APPLE_AGX_BACKEND_U32 d3Stamp = 0u, d3Done = 0u;
@@ -178,6 +182,7 @@ static VOID AdmissionTerminalObserve(
   BOOLEAN actualValid;
   const UCHAR *rawEvent = NULL;
   ULONG rawEventBytes = 0u;
+  BOOLEAN accessRecorded = FALSE;
   if (Runtime == NULL || Fence == 0u)
     return;
   config = &Runtime->Provider.QueueProvider.Runtime.Config;
@@ -208,29 +213,40 @@ static VOID AdmissionTerminalObserve(
               : (ULONG)AppleAgxBackendRuntimeResultFaulted,
           (ULONG)Status, source, rawEvent, rawEventBytes,
           actualValid ? 1u : 0u, taStamp, taDone, d3Stamp, d3Done)) {
-    if (Output != NULL && Output->CpuAddress != NULL &&
-        Output->Bytes >= Output->TargetBytes &&
+    if (Output != NULL && Output->RenderedCpuAddress != NULL &&
+        Output->RenderedBytes != 0u &&
         Runtime->TransportIo.FlushForCpu(
-            Runtime, Output->CpuAddress, Output->Bytes)) {
+            Runtime, Output->RenderedCpuAddress, Output->RenderedBytes)) {
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (AdmissionTerminalReceiptCaptureOutput(
           &Runtime->TerminalReceipt, Fence,
-          (const UCHAR *)Output->CpuAddress,
-          Output->TargetBytes, Output->Bytes,
+          (const UCHAR *)Output->RenderedCpuAddress,
+          Output->RenderedBytes, Output->RenderedBytes,
           Output->ExpectedColor, 0xa5u)) {
+        BOOLEAN outputValid =
+            Runtime->TerminalReceipt.OutputPixelsExpected ==
+                Output->RenderedBytes / 4u &&
+            Runtime->TerminalReceipt.OutputFirstMismatchIndex == 0xffffffffu &&
+            Runtime->TerminalReceipt.OutputPixelsPoison == 0u &&
+            Runtime->TerminalReceipt.OutputGuardCorrupt == 0u &&
+            Runtime->TerminalReceipt.OutputBytesExamined ==
+                Output->RenderedBytes;
+        accessRecorded = AdmissionCompletedOutputRecordAccess(
+            Completed, Fence,
+            (ULONG)(outputValid ? STATUS_SUCCESS : STATUS_DATA_ERROR))
+            ? TRUE : FALSE;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-        if (Runtime->TerminalReceipt.OutputPixelsExpected ==
-            Output->TargetBytes / 4u) {
+        if (outputValid) {
           if (Output->Framebuffer == APPLE_AGX_TRUE) {
             Runtime->VisibleAgxSourceAddress =
-                Output->CpuAddress;
+                Output->AllocationCpuAddress;
             Runtime->VisibleAgxSourceBytes =
-                Output->Bytes;
-            Runtime->VisibleAgxGpuAddress = Output->GpuAddress;
+                Output->AllocationBytes;
+            Runtime->VisibleAgxGpuAddress = Output->AllocationGpuAddress;
             Runtime->VisibleAgxPhysicalAddress =
-                Output->PhysicalAddress;
+                Output->AllocationPhysicalAddress;
           } else {
-            RtlCopyMemory(Runtime->VisibleAgxSource, Output->CpuAddress,
+            RtlCopyMemory(Runtime->VisibleAgxSource, Output->RenderedCpuAddress,
                           sizeof(Runtime->VisibleAgxSource));
             Runtime->VisibleAgxSourceAddress = Runtime->VisibleAgxSource;
             Runtime->VisibleAgxSourceBytes =
@@ -248,6 +264,9 @@ static VOID AdmissionTerminalObserve(
 #endif
       }
     }
+    if (!accessRecorded && Completed != NULL)
+      (void)AdmissionCompletedOutputRecordAccess(
+          Completed, Fence, (ULONG)STATUS_INVALID_ADDRESS);
     Runtime->TerminalReceipt.EventReadPointer =
         Runtime->Provider.LastEventReadPointer;
     Runtime->TerminalReceipt.EventWritePointer =
@@ -825,6 +844,12 @@ static BOOLEAN AdmissionPlatformContains(
   APPLE_AGX_U32 index;
   if (Runtime == NULL || Address == NULL || Bytes == 0u)
     return FALSE;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (AdmissionCompletedOutputContains(
+          &Runtime->CompletedOutput, Runtime->CompletedOutput.Fence,
+          Address, Bytes))
+    return TRUE;
+#endif
   for (index = 0u; index < Runtime->Initdata.ChannelMemory.ObjectCount;
        ++index) {
     if (AdmissionPlatformRangeContains(
@@ -1953,6 +1978,21 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
   return TRUE;
 }
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+static BOOLEAN AdmissionCompletedOutputPlatformValid(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_BACKEND_OUTPUT_VIEW *Output) {
+  ADMISSION_SCANOUT_MEMORY_VIEW memory;
+  if (Context == NULL || Output == NULL ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)))
+    return FALSE;
+  return AdmissionCompletedOutputPlatformRangeValid(
+             Output, memory.CpuAddress, memory.GpuVirtualAddress,
+             memory.HostPhysicalAddress, memory.Bytes)
+             ? TRUE : FALSE;
+}
+#endif
+
 static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     void *Context, APPLE_AGX_BACKEND_U32 Fence,
     APPLE_AGX_BACKEND_U32 Node, APPLE_AGX_BACKEND_U32 Engine,
@@ -1968,10 +2008,6 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_RENDER_PACKET_DESCRIPTION visibleDescription;
   BOOLEAN visibleReady = FALSE;
-#endif
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  ADMISSION_BACKEND_OUTPUT_VIEW completedOutput;
-  BOOLEAN completedOutputReady = FALSE;
 #endif
 
   if (runtime == NULL)
@@ -2033,9 +2069,53 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
   }
   if (runtime->Completion.Phase == AppleAgxCompletionSchedulerCommitted) {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-    completedOutputReady = AdmissionBackendImageCaptureOutput(
-        &adapter->BackendImage, Fence, &completedOutput) == APPLE_AGX_TRUE;
-#endif
+    if (runtime->CompletedOutput.Phase == AdmissionCompletedOutputEmpty) {
+      ADMISSION_OPEN_ALLOCATION *opened =
+          (ADMISSION_OPEN_ALLOCATION *)(ULONG_PTR)
+              adapter->RenderPacket.Description.AllocationToken;
+      ADMISSION_BACKEND_OUTPUT_VIEW output;
+      ULONG generation = (ULONG)InterlockedIncrement(
+          &runtime->CompletedOutputGeneration);
+      if (opened == NULL || opened->Magic != ADMISSION_OPEN_ALLOCATION_MAGIC ||
+          opened->Allocation == NULL ||
+          AdmissionBackendImageCaptureOutput(
+              &adapter->BackendImage, &adapter->RenderPacket.Description,
+              &opened->Allocation->Description, &output) != APPLE_AGX_TRUE ||
+          !AdmissionCompletedOutputPlatformValid(adapter, &output) ||
+          !AdmissionCompletedOutputCapture(
+              &runtime->CompletedOutput, generation, Fence, &output,
+              opened->Allocation)) {
+        KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+        return APPLE_AGX_BACKEND_FALSE;
+      }
+    } else if (runtime->CompletedOutput.Fence != Fence) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    if (runtime->CompletedOutput.Phase == AdmissionCompletedOutputCaptured &&
+        (!AdmissionBackendImageReleaseSubmission(
+             &adapter->BackendImage, Fence) ||
+         !AdmissionCompletedOutputMarkReleased(
+             &runtime->CompletedOutput, Fence))) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    if (runtime->CompletedOutput.Phase ==
+            AdmissionCompletedOutputBackendReleased &&
+        (!AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
+        runtime->CompletionContext == NULL ||
+        runtime->CompletionContext->Object.FenceOutstanding != Fence ||
+         !AdmissionCompletedOutputMarkPacketRetired(
+             &runtime->CompletedOutput, Fence))) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    if (runtime->CompletedOutput.Phase !=
+        AdmissionCompletedOutputPacketRetired) {
+      KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+#else
     if (!AdmissionBackendImageReleaseSubmission(
             &adapter->BackendImage, Fence) ||
         !AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
@@ -2044,6 +2124,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
       return APPLE_AGX_BACKEND_FALSE;
     }
+#endif
     runtime->CompletionContext->Object.FenceOutstanding = 0u;
     if (!AppleAgxCompletionTransactionAdvance(
             &runtime->Completion, Fence, Node, Engine,
@@ -2098,23 +2179,39 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     return APPLE_AGX_BACKEND_FALSE;
   runtime->CompletionContext = NULL;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  AdmissionTerminalObserve(
-      runtime, Fence, Status,
-      completedOutputReady ? &completedOutput : NULL);
+  if (!AdmissionCompletedOutputMarkNotified(
+          &runtime->CompletedOutput, Fence))
+    return APPLE_AGX_BACKEND_FALSE;
+  AdmissionTerminalObserve(runtime, Fence, Status, &runtime->CompletedOutput);
 #endif
   if (preemption_waiting)
     InterlockedExchange(&adapter->SchedulerDpcPending, 1);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (visibleReady && runtime->VisibleAgxValid &&
-      runtime->VisibleAgxFence == Fence) {
-    (void)AdmissionScanoutPresentAgxResult(
-        adapter, &visibleDescription, runtime->VisibleAgxSourceAddress,
+      runtime->VisibleAgxFence == Fence &&
+      AdmissionCompletedOutputBeginPresent(
+          &runtime->CompletedOutput, Fence)) {
+    NTSTATUS presentStatus = AdmissionScanoutPresentAgxResult(
+        adapter, &visibleDescription, &runtime->CompletedOutput,
+        runtime->VisibleAgxSourceAddress,
         runtime->VisibleAgxSourceBytes, runtime->VisibleAgxGpuAddress,
         runtime->VisibleAgxPhysicalAddress, runtime->VisibleAgxFence);
+    if (!NT_SUCCESS(presentStatus) &&
+        runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty)
+      (void)AdmissionCompletedOutputAbort(
+          &runtime->CompletedOutput, Fence);
+  } else if (runtime->CompletedOutput.Phase !=
+             AdmissionCompletedOutputEmpty) {
+    (void)AdmissionCompletedOutputAbort(&runtime->CompletedOutput, Fence);
   }
   runtime->VisibleAgxValid = FALSE;
   runtime->VisibleAgxSourceAddress = NULL;
   runtime->VisibleAgxSourceBytes = 0u;
+#else
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty)
+    (void)AdmissionCompletedOutputAbort(&runtime->CompletedOutput, Fence);
+#endif
 #endif
   return APPLE_AGX_BACKEND_TRUE;
 }
@@ -2645,6 +2742,12 @@ static NTSTATUS AdmissionPlatformDestroy(
     KeReleaseSpinLock(&Runtime->Adapter->SchedulerLock, oldIrql);
     IoFreeWorkItem(workItem);
   }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (Runtime->CompletedOutput.Phase != AdmissionCompletedOutputEmpty &&
+      !AdmissionCompletedOutputAbort(
+          &Runtime->CompletedOutput, Runtime->CompletedOutput.Fence))
+    return STATUS_DEVICE_BUSY;
+#endif
   if (Runtime->BackendStarted ||
       Runtime->Backend.Phase != AppleAgxBackendRuntimeStopped) {
     if (AppleAgxBackendRuntimeStop(&Runtime->Backend) !=
@@ -2729,6 +2832,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
                                STATUS_SUCCESS);
   RtlZeroMemory(runtime, sizeof(*runtime));
   runtime->Adapter = Context;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionCompletedOutputInitialize(&runtime->CompletedOutput);
+#endif
   Context->PlatformRuntime = runtime;
   status = AdmissionMemoryRuntimeBorrowIo(Context, &runtime->MemoryIo);
   AdmissionRecordPlatformStage(Context, AdmissionPlatformMemoryIo, status);

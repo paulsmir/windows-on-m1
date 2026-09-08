@@ -285,11 +285,16 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
       sizeof(command), &binding));
   assert(binding.Framebuffer.Active == APPLE_AGX_TRUE);
   assert(AdmissionBackendImageCaptureOutput(
-      &image, packet.Fence, &completed_output));
-  assert(completed_output.CpuAddress == destination);
-  assert(completed_output.GpuAddress == packet.DestinationGpuVa);
-  assert(completed_output.PhysicalAddress == packet.DestinationPhysical);
-  assert(completed_output.Bytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+      &image, &packet, &(ADMISSION_ALLOCATION_DESCRIPTION){
+          ADMISSION_ALLOCATION_MAGIC, ADMISSION_ALLOCATION_VERSION,
+          1u, 21u, 2560u, 1600u, 10240u, 4u,
+          APPLE_AGX_EXP208_FRAMEBUFFER_BYTES, 0u, 0u},
+      &completed_output));
+  assert(completed_output.AllocationCpuAddress == destination);
+  assert(completed_output.AllocationGpuAddress == packet.DestinationGpuVa);
+  assert(completed_output.AllocationPhysicalAddress == packet.DestinationPhysical);
+  assert(completed_output.AllocationBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  assert(completed_output.RenderedBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
   assert(completed_output.ExpectedColor ==
          APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR);
   assert(completed_output.Framebuffer == APPLE_AGX_TRUE);
@@ -319,16 +324,39 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
   }
   assert(tpc_edges == 2u && tilemap_edges == 3u && cluster_edges == 1u);
   assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
-  assert(completed_output.CpuAddress == destination);
-  assert(completed_output.GpuAddress == packet.DestinationGpuVa);
-  assert(completed_output.PhysicalAddress == packet.DestinationPhysical);
-  assert(completed_output.Bytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  assert(completed_output.AllocationCpuAddress == destination);
+  assert(completed_output.AllocationGpuAddress == packet.DestinationGpuVa);
+  assert(completed_output.AllocationPhysicalAddress == packet.DestinationPhysical);
+  assert(completed_output.AllocationBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
   assert(completed_output.Framebuffer == APPLE_AGX_TRUE);
   assert(memcmp(template_before, storage,
                 AppleAgxRenderTemplateBytes()) == 0);
   assert(image.Objects[64u].GpuVa == TEST_BACKEND_GPU + 0x540000ULL);
   assert(image.Objects[65u].GpuVa == TEST_BACKEND_GPU + 0x548000ULL);
   assert(image.Objects[67u].GpuVa == TEST_BACKEND_GPU + 0x558000ULL);
+
+  packet.Fence = 201u;
+  command.Destination.Top = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
+  command.Color = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+  assert(AdmissionBackendImageBindSubmission(
+      &image, &packet, destination, (const unsigned char *)&command,
+      sizeof(command), &binding));
+  assert(AdmissionBackendImageCaptureOutput(
+      &image, &packet, &(ADMISSION_ALLOCATION_DESCRIPTION){
+          ADMISSION_ALLOCATION_MAGIC, ADMISSION_ALLOCATION_VERSION,
+          1u, 21u, 2560u, 1600u, 10240u, 4u,
+          APPLE_AGX_EXP208_FRAMEBUFFER_BYTES, 0u, 0u},
+      &completed_output));
+  assert(completed_output.AllocationCpuAddress == destination);
+  assert(completed_output.RenderedCpuAddress ==
+         destination + APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET);
+  assert(completed_output.RenderedOffset ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET);
+  assert(completed_output.RenderedBytes ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_BYTES);
+  assert(completed_output.RenderHeight ==
+         APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
   free(destination);
   free(template_before);
   free(storage);

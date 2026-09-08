@@ -280,16 +280,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyAllocation(
     HANDLE Adapter, const DXGKARG_DESTROYALLOCATION *Args) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   UINT index;
-  if (Adapter == NULL || Args == NULL || Args->hResource != NULL ||
+  if (context == NULL || Args == NULL || Args->hResource != NULL ||
       Args->NumAllocations == 0u || Args->pAllocationList == NULL)
     return STATUS_INVALID_PARAMETER;
   for (index = 0u; index < Args->NumAllocations; ++index) {
     ADMISSION_ALLOCATION_HANDLE *allocation =
         (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];
     if (allocation == NULL ||
-        allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC ||
-        allocation->Object.OpenCount != 0u)
+        allocation->Object.Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC)
+      return STATUS_DEVICE_BUSY;
+  }
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  for (index = 0u; index < Args->NumAllocations; ++index) {
+    ADMISSION_ALLOCATION_HANDLE *allocation =
+        (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];
+    NTSTATUS retire = AdmissionScanoutRetireAllocation(
+        context, &allocation->Object);
+    if (!NT_SUCCESS(retire))
+      return retire;
+  }
+#endif
+  for (index = 0u; index < Args->NumAllocations; ++index) {
+    ADMISSION_ALLOCATION_HANDLE *allocation =
+        (ADMISSION_ALLOCATION_HANDLE *)Args->pAllocationList[index];
+    if (allocation->Object.OpenCount != 0u)
       return STATUS_DEVICE_BUSY;
   }
   for (index = 0u; index < Args->NumAllocations; ++index) {

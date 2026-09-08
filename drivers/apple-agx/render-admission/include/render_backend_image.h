@@ -3,6 +3,7 @@
 
 #include "render_memory.h"
 #include "render_submission.h"
+#include "render_allocation.h"
 #include "apple_agx_exp208_gdi.h"
 #include "apple_agx_exp208_adapter.h"
 #include "apple_agx_exp208_dynamic.h"
@@ -29,11 +30,22 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
 } ADMISSION_BACKEND_IMAGE;
 
 typedef struct _ADMISSION_BACKEND_OUTPUT_VIEW {
-  void *CpuAddress;
-  APPLE_AGX_U64 GpuAddress;
-  APPLE_AGX_U64 PhysicalAddress;
-  APPLE_AGX_U32 Bytes;
-  APPLE_AGX_U32 TargetBytes;
+  void *AllocationCpuAddress;
+  APPLE_AGX_U64 AllocationGpuAddress;
+  APPLE_AGX_U64 AllocationPhysicalAddress;
+  APPLE_AGX_U32 AllocationBytes;
+  void *RenderedCpuAddress;
+  APPLE_AGX_U64 RenderedGpuAddress;
+  APPLE_AGX_U64 RenderedPhysicalAddress;
+  APPLE_AGX_U32 RenderedOffset;
+  APPLE_AGX_U32 RenderedBytes;
+  APPLE_AGX_U32 AllocationWidth;
+  APPLE_AGX_U32 AllocationHeight;
+  APPLE_AGX_U32 AllocationPitch;
+  APPLE_AGX_U32 AllocationFormat;
+  APPLE_AGX_U32 RenderWidth;
+  APPLE_AGX_U32 RenderHeight;
+  APPLE_AGX_U32 RenderPitch;
   APPLE_AGX_U32 ExpectedColor;
   APPLE_AGX_BOOL Framebuffer;
 } ADMISSION_BACKEND_OUTPUT_VIEW;
@@ -51,7 +63,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
     APPLE_AGX_EXP208_GDI_BINDING *Binding);
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
-    const ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    const ADMISSION_ALLOCATION_DESCRIPTION *Allocation,
     ADMISSION_BACKEND_OUTPUT_VIEW *Output);
 
 APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(

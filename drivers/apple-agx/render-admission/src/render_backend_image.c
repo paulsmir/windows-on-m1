@@ -156,39 +156,96 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
 }
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
-    const ADMISSION_BACKEND_IMAGE *Image, APPLE_AGX_U32 Fence,
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    const ADMISSION_ALLOCATION_DESCRIPTION *Allocation,
     ADMISSION_BACKEND_OUTPUT_VIEW *Output) {
   const APPLE_AGX_EXP208_RELOCATION_OBJECT *object;
   ADMISSION_BACKEND_OUTPUT_VIEW candidate;
   APPLE_AGX_BOOL framebuffer;
+  APPLE_AGX_U64 gpu_offset;
+  APPLE_AGX_U64 physical_offset;
+  APPLE_AGX_U64 cpu_offset;
   if (Output != ADMISSION_BACKEND_IMAGE_NULL)
     AdmissionBackendOutputZero(&candidate);
   if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Packet == ADMISSION_BACKEND_IMAGE_NULL ||
+      Allocation == ADMISSION_BACKEND_IMAGE_NULL ||
       Output == ADMISSION_BACKEND_IMAGE_NULL ||
-      Image->Ready != APPLE_AGX_TRUE || Fence == 0u ||
-      Image->BoundFence != Fence)
+      Image->Ready != APPLE_AGX_TRUE || Packet->Fence == 0u ||
+      Image->BoundFence != Packet->Fence ||
+      !AdmissionAllocationDescriptionValid(Allocation) ||
+      Packet->DestinationCpuToken == 0ULL ||
+      Packet->DestinationGpuVa == 0ULL ||
+      Packet->DestinationPhysical == 0ULL ||
+      Packet->DestinationBytes != Allocation->Size ||
+      Packet->DestinationBytes > 0xffffffffULL)
     return APPLE_AGX_FALSE;
   object = &Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   framebuffer = Image->Binding.Framebuffer.Active;
-  if (object->Data == ADMISSION_BACKEND_IMAGE_NULL ||
+  if (object->Data == ADMISSION_BACKEND_IMAGE_NULL || object->Size == 0u ||
       object->GpuVa != Image->Binding.DestinationGpuVa ||
       object->PhysicalAddress != Image->Binding.DestinationPhysical ||
       object->Size != Image->Binding.DestinationBytes ||
-      object->Size == 0u ||
-      (framebuffer == APPLE_AGX_TRUE &&
-       (object->Size != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES ||
+      object->GpuVa < Packet->DestinationGpuVa ||
+      object->PhysicalAddress < Packet->DestinationPhysical ||
+      (const unsigned char *)object->Data <
+          (const unsigned char *)(unsigned long long)
+              Packet->DestinationCpuToken)
+    return APPLE_AGX_FALSE;
+  gpu_offset = object->GpuVa - Packet->DestinationGpuVa;
+  physical_offset = object->PhysicalAddress - Packet->DestinationPhysical;
+  cpu_offset = (APPLE_AGX_U64)((const unsigned char *)object->Data -
+      (const unsigned char *)(unsigned long long)
+          Packet->DestinationCpuToken);
+  if (gpu_offset != physical_offset || gpu_offset != cpu_offset ||
+      gpu_offset > Packet->DestinationBytes ||
+      object->Size > Packet->DestinationBytes - gpu_offset)
+    return APPLE_AGX_FALSE;
+  if (framebuffer == APPLE_AGX_TRUE) {
+    if (Allocation->Width != APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH ||
+        Allocation->Height != APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT ||
+        Allocation->Pitch != APPLE_AGX_EXP208_FRAMEBUFFER_PITCH ||
+        Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES ||
         (Image->Binding.Framebuffer.ClearColor !=
              APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR &&
          Image->Binding.Framebuffer.ClearColor !=
-             APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR))))
+             APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR) ||
+        !((Image->Binding.Framebuffer.RenderHeight ==
+               APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT &&
+           gpu_offset == 0u &&
+           object->Size == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES) ||
+          (Image->Binding.Framebuffer.RenderHeight ==
+               APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT &&
+           gpu_offset == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_OFFSET &&
+           object->Size == APPLE_AGX_EXP208_FRAMEBUFFER_BAND_BYTES)))
+      return APPLE_AGX_FALSE;
+  } else if (gpu_offset != 0u ||
+             object->Size < APPLE_AGX_EXP208_GDI_OUTPUT_BYTES) {
     return APPLE_AGX_FALSE;
-  candidate.CpuAddress = object->Data;
-  candidate.GpuAddress = object->GpuVa;
-  candidate.PhysicalAddress = object->PhysicalAddress;
-  candidate.Bytes = object->Size;
-  candidate.TargetBytes = framebuffer == APPLE_AGX_TRUE
+  }
+  candidate.AllocationCpuAddress =
+      (void *)(unsigned long long)Packet->DestinationCpuToken;
+  candidate.AllocationGpuAddress = Packet->DestinationGpuVa;
+  candidate.AllocationPhysicalAddress = Packet->DestinationPhysical;
+  candidate.AllocationBytes = Packet->DestinationBytes;
+  candidate.RenderedCpuAddress = object->Data;
+  candidate.RenderedGpuAddress = object->GpuVa;
+  candidate.RenderedPhysicalAddress = object->PhysicalAddress;
+  candidate.RenderedOffset = (APPLE_AGX_U32)gpu_offset;
+  candidate.RenderedBytes = framebuffer == APPLE_AGX_TRUE
       ? object->Size
       : APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
+  candidate.AllocationWidth = Allocation->Width;
+  candidate.AllocationHeight = Allocation->Height;
+  candidate.AllocationPitch = Allocation->Pitch;
+  candidate.AllocationFormat = Allocation->Format;
+  candidate.RenderWidth = framebuffer == APPLE_AGX_TRUE
+      ? APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH : APPLE_AGX_EXP208_GDI_WIDTH;
+  candidate.RenderHeight = framebuffer == APPLE_AGX_TRUE
+      ? Image->Binding.Framebuffer.RenderHeight : APPLE_AGX_EXP208_GDI_HEIGHT;
+  candidate.RenderPitch = framebuffer == APPLE_AGX_TRUE
+      ? APPLE_AGX_EXP208_FRAMEBUFFER_PITCH : APPLE_AGX_EXP208_GDI_PITCH;
   candidate.ExpectedColor = framebuffer == APPLE_AGX_TRUE
       ? Image->Binding.Framebuffer.ClearColor
       : APPLE_AGX_EXP208_GDI_COLOR;

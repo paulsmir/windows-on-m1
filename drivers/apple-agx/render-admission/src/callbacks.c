@@ -152,7 +152,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyOverlay(HANDLE Overlay) {
   return STATUS_NOT_SUPPORTED;
 }
 
-FAIL2(AdmissionDdiEscape, HANDLE, Adapter, const DXGKARG_ESCAPE *, Args)
+_Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
+    HANDLE Adapter, const DXGKARG_ESCAPE *Args) {
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  ADMISSION_PRESENT_QUERY *query;
+  if (context == NULL || !context->Started || Args == NULL ||
+      Args->pPrivateDriverData == NULL ||
+      Args->PrivateDriverDataSize != sizeof(*query))
+    return STATUS_INVALID_PARAMETER;
+  query = (ADMISSION_PRESENT_QUERY *)Args->pPrivateDriverData;
+  return AdmissionScanoutQueryQualification(context, query);
+#else
+  UNREFERENCED_PARAMETER(Adapter);
+  UNREFERENCED_PARAMETER(Args);
+  return STATUS_NOT_SUPPORTED;
+#endif
+}
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateContext(
     HANDLE Device, DXGKARG_CREATECONTEXT *Args) {

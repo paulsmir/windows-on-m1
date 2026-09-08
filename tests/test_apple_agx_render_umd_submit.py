@@ -243,9 +243,11 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             complete.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
         ]
         self.assertNotIn("return APPLE_AGX_BACKEND_FALSE", after_present)
-        self.assertIn("Sleep(10000u);", producer)
+        self.assertNotIn("Sleep(10000u);", producer)
+        self.assertIn("WaitForPresentation(", producer)
+        self.assertIn("ADMISSION_PRESENT_QUERY", producer)
         self.assertLess(
-            producer.index("Sleep(10000u);"),
+            producer.index("WaitForPresentation("),
             producer.index("cleanup:"),
         )
 
@@ -263,9 +265,9 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             producer.count("APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT"), 2
         )
         self.assertIn("AdmissionBackendImageCaptureOutput(", backend)
-        self.assertIn("Output->TargetBytes", backend)
-        self.assertIn("Output->CpuAddress", backend)
-        self.assertIn("Output->PhysicalAddress", backend)
+        self.assertIn("Output->RenderedBytes", backend)
+        self.assertIn("Output->RenderedCpuAddress", backend)
+        self.assertIn("Output->AllocationPhysicalAddress", backend)
         self.assertIn("expandedObjects[] = {64u, 65u, 67u}", backend)
         self.assertIn("BOOLEAN directFramebuffer = FALSE", scanout)
         self.assertIn(

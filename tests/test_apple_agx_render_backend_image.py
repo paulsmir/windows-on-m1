@@ -22,6 +22,7 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
                 "-I", str(SHARED / "include"),
                 str(RENDER / "tests" / "render_backend_image_test.c"),
                 str(RENDER / "src" / "render_backend_image.c"),
+                str(RENDER / "src" / "render_allocation.c"),
                 str(SHARED / "src" / "apple_agx_render_template.generated.c"),
                 str(SHARED / "src" / "apple_agx_render_template_rebase.c"),
                 str(SHARED / "src" / "apple_agx_relocation.c"),
@@ -79,7 +80,7 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
             source.index("static VOID AdmissionTerminalExit(")
         ]
         self.assertIn("const ADMISSION_BACKEND_OUTPUT_VIEW *Output", terminal)
-        self.assertIn("Output->CpuAddress", terminal)
+        self.assertIn("Output->RenderedCpuAddress", terminal)
         self.assertIn("Output->ExpectedColor", terminal)
         self.assertNotIn("BackendImage.Binding", terminal)
 

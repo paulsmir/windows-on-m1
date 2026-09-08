@@ -36,6 +36,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\render-admission\include\render_allocation.h" />
     <ClInclude Include="..\..\render-admission\include\render_umd_command.h" />
+    <ClInclude Include="..\..\render-admission\include\render_qualification.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

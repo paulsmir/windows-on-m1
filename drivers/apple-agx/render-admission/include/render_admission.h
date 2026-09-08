@@ -27,6 +27,8 @@
 #include "render_submit_trace.h"
 #include "render_submission.h"
 #include "render_backend_image.h"
+#include "render_completed_output.h"
+#include "render_qualification.h"
 #include "apple_agx_wddm_feature_contract.h"
 #include "apple_agx_scheduler.h"
 #include "apple_agx_platform_provider.h"
@@ -1057,9 +1059,19 @@ NTSTATUS AdmissionVisibleAgxResolveDestination(
 NTSTATUS AdmissionScanoutPresentAgxResult(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    _Inout_ ADMISSION_COMPLETED_OUTPUT *Completed,
     _In_reads_bytes_(SourceBytes) const VOID *Source,
     _In_ ULONG SourceBytes, _In_ ULONGLONG SourceGpuAddress,
     _In_ ULONGLONG SourcePhysicalAddress, _In_ ULONG Fence);
+BOOLEAN AdmissionScanoutAllowsRender(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_ALLOCATION_OBJECT *Owner);
+NTSTATUS AdmissionScanoutRetireAllocation(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Inout_ ADMISSION_ALLOCATION_OBJECT *Owner);
+NTSTATUS AdmissionScanoutQueryQualification(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Inout_ ADMISSION_PRESENT_QUERY *Query);
 VOID AdmissionRecordVisibleAgx(
     _Inout_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_VISIBLE_AGX_RECEIPT *Receipt);

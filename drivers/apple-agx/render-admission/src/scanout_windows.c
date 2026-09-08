@@ -15,6 +15,12 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
   volatile LONG64 PendingPhysicalAddress;
   volatile LONG64 PendingSequence;
   volatile LONG64 LastNotifiedSequence;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  KSPIN_LOCK LeaseLock;
+  ADMISSION_DISPLAY_OUTPUT_LEASE ActiveLease;
+  ULONG PresentCount;
+  ADMISSION_PRESENT_QUERY PresentHistory[ADMISSION_PRESENT_QUERY_CAPACITY];
+#endif
 } ADMISSION_SCANOUT_RUNTIME;
 
 _Use_decl_annotations_ ULONG AdmissionScanoutReceiptState(
@@ -224,6 +230,7 @@ Exit:
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    ADMISSION_COMPLETED_OUTPUT *Completed,
     const VOID *Source, ULONG SourceBytes,
     ULONGLONG SourceGpuAddress, ULONGLONG SourcePhysicalAddress, ULONG Fence) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
@@ -248,7 +255,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   receipt.SourcePhysicalAddress = SourcePhysicalAddress;
   receipt.Guard = AdmissionVisibleAgxGuardEntry;
   started = AdmissionScanoutNow(runtime);
-  if (Context == NULL || Packet == NULL || runtime == NULL || Source == NULL ||
+  if (Context == NULL || Packet == NULL || Completed == NULL ||
+      runtime == NULL || Source == NULL ||
       SourceBytes < 1024u || Fence == 0u ||
       Packet->Fence != Fence ||
       SourcePhysicalAddress > MAXULONGLONG - SourceBytes)
@@ -397,11 +405,53 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
   receipt.Status = STATUS_SUCCESS;
   if (!AdmissionVisibleAgxReceiptValid(&receipt))
     status = STATUS_DATA_ERROR;
+  if (NT_SUCCESS(status) &&
+      !AdmissionCompletedOutputRecordPresentation(
+          Completed, Fence, STATUS_SUCCESS))
+    status = STATUS_INVALID_DEVICE_STATE;
+  if (NT_SUCCESS(status)) {
+    KIRQL oldIrql;
+    KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+    if (!AdmissionCompletedOutputTransferToDisplay(
+            Completed, &runtime->ActiveLease, Fence))
+      status = STATUS_INVALID_DEVICE_STATE;
+    else if (runtime->PresentCount < ADMISSION_PRESENT_QUERY_CAPACITY) {
+      ADMISSION_PRESENT_QUERY *history =
+          &runtime->PresentHistory[runtime->PresentCount];
+      history->Magic = ADMISSION_PRESENT_QUERY_MAGIC;
+      history->Version = ADMISSION_PRESENT_QUERY_VERSION;
+      history->Index = runtime->PresentCount;
+      history->PresentCount = runtime->PresentCount + 1u;
+      history->Fence = Fence;
+      history->Status = STATUS_SUCCESS;
+      history->Valid = 1u;
+      history->ExpectedColor =
+          Completed->View.ExpectedColor;
+      history->PixelsExpected =
+          Completed->View.RenderedBytes / 4u;
+      history->PixelsVerified = history->PixelsExpected;
+      history->Format = Completed->View.AllocationFormat;
+      history->Captured = 1u;
+      history->Exported = 1u;
+      history->Durable = 0u;
+      history->Sequence = sequence;
+      history->ActiveOffset = receipt.ActiveOffsetAfter;
+      history->PhysicalAddress = receipt.DestinationPhysicalAddress;
+      history->ContentHash = receipt.SourceHash;
+      ++runtime->PresentCount;
+    } else
+      status = STATUS_BUFFER_OVERFLOW;
+    KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  }
 Exit:
+  if (Completed != NULL &&
+      Completed->Phase == AdmissionCompletedOutputPresenting &&
+      Completed->PresentationAttempted == 0u)
+    (void)AdmissionCompletedOutputRecordPresentation(
+        Completed, Fence, (ULONG)status);
   receipt.Status = (ULONG)status;
   receipt.ElapsedMs = runtime == NULL ? 0u :
       (ULONG)(AdmissionScanoutNow(runtime) - started);
-  AdmissionRecordVisibleAgx(Context, &receipt);
   return status;
 }
 #endif
@@ -427,6 +477,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(runtime, sizeof(*runtime));
   runtime->Adapter = Context;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  KeInitializeSpinLock(&runtime->LeaseLock);
+  AdmissionDisplayOutputLeaseInitialize(&runtime->ActiveLease);
+#endif
   RtlZeroMemory(&io, sizeof(io));
   io.Context = runtime;
   io.NowMs = AdmissionScanoutNow;
@@ -515,10 +569,120 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
       return STATUS_DEVICE_BUSY;
     runtime->Panel.Ownership = AppleAgxFixedPanelUnregistered;
   }
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  if (runtime->ActiveLease.Active &&
+      !AdmissionDisplayOutputLeaseRetire(&runtime->ActiveLease))
+    return STATUS_DEVICE_BUSY;
+#endif
   Context->ScanoutRuntime = NULL;
   ExFreePoolWithTag(runtime, ADMISSION_SCANOUT_TAG);
   return STATUS_SUCCESS;
 }
+
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+_Use_decl_annotations_ BOOLEAN AdmissionScanoutAllowsRender(
+    ADMISSION_CONTEXT *Context, const ADMISSION_ALLOCATION_OBJECT *Owner) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  BOOLEAN allowed;
+  KIRQL oldIrql;
+  if (runtime == NULL || Owner == NULL)
+    return FALSE;
+  KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+  allowed = AdmissionDisplayOutputLeaseAllowsRender(
+      &runtime->ActiveLease, Owner) ? TRUE : FALSE;
+  KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  return allowed;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireAllocation(
+    ADMISSION_CONTEXT *Context, ADMISSION_ALLOCATION_OBJECT *Owner) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  APPLE_AGX_SCANOUT_U64 active = 0ULL;
+  APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
+  APPLE_AGX_SCANOUT_U64 applied = 0ULL;
+  APPLE_AGX_SCANOUT_U64 latched = 0ULL;
+  APPLE_AGX_SCANOUT_U64 deadline;
+  APPLE_AGX_FIXED_PANEL_RESULT result;
+  BOOLEAN (*consumeInterrupt)(ADMISSION_CONTEXT *) =
+      AdmissionScanoutInterrupt;
+  KIRQL oldIrql;
+  BOOLEAN matches;
+  if (runtime == NULL || Owner == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+  matches = AdmissionDisplayOutputLeaseMatches(
+      &runtime->ActiveLease, Owner) ? TRUE : FALSE;
+  KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  if (!matches)
+    return STATUS_SUCCESS;
+  if (!AdmissionScanoutRead64(
+          runtime, APPLE_AGX_SCANOUT_MMIO_OFFSET +
+                       APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET, &active) ||
+      active == 0ULL ||
+      InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0)
+    return STATUS_DEVICE_BUSY;
+  result = AppleAgxFixedPanelQueuePresent(
+      &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
+  if (result != AppleAgxFixedPanelOk) {
+    InterlockedExchange(&runtime->PresentGate, 0);
+    return STATUS_DEVICE_BUSY;
+  }
+  InterlockedExchange64(&runtime->PendingPhysicalAddress,
+                        (LONG64)Context->Memory.Topology.Local.Base);
+  InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
+  InterlockedExchange(&runtime->PendingValid, 1);
+  deadline = AdmissionScanoutNow(runtime) + ADMISSION_SCANOUT_TIMEOUT_MS;
+  while ((APPLE_AGX_SCANOUT_U64)InterlockedCompareExchange64(
+             &runtime->LastNotifiedSequence, 0, 0) != sequence &&
+         AdmissionScanoutNow(runtime) < deadline) {
+    (void)consumeInterrupt(Context);
+    if (!AdmissionScanoutPause(runtime))
+      break;
+  }
+  if (!AdmissionScanoutRead64(
+          runtime, APPLE_AGX_SCANOUT_MMIO_OFFSET +
+                       APPLE_AGX_SCANOUT_REG_APPLIED_SEQUENCE, &applied) ||
+      !AdmissionScanoutRead64(
+          runtime, APPLE_AGX_SCANOUT_MMIO_OFFSET +
+                       APPLE_AGX_SCANOUT_REG_LATCHED_SEQUENCE, &latched) ||
+      !AdmissionScanoutRead64(
+          runtime, APPLE_AGX_SCANOUT_MMIO_OFFSET +
+                       APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET, &active) ||
+      applied != sequence || latched != sequence || active != 0ULL)
+    return STATUS_DEVICE_BUSY;
+  KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+  matches = AdmissionDisplayOutputLeaseMatches(
+      &runtime->ActiveLease, Owner) &&
+      AdmissionDisplayOutputLeaseRetire(&runtime->ActiveLease);
+  KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  return matches ? STATUS_SUCCESS : STATUS_INVALID_DEVICE_STATE;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutQueryQualification(
+    ADMISSION_CONTEXT *Context, ADMISSION_PRESENT_QUERY *Query) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  ADMISSION_PRESENT_QUERY result;
+  KIRQL oldIrql;
+  if (runtime == NULL || Query == NULL ||
+      Query->Magic != ADMISSION_PRESENT_QUERY_MAGIC ||
+      Query->Version != ADMISSION_PRESENT_QUERY_VERSION ||
+      Query->Index >= ADMISSION_PRESENT_QUERY_CAPACITY)
+    return STATUS_INVALID_PARAMETER;
+  if (!AdmissionPlatformRuntimeReady(Context))
+    return STATUS_SUCCESS;
+  RtlZeroMemory(&result, sizeof(result));
+  result.Magic = ADMISSION_PRESENT_QUERY_MAGIC;
+  result.Version = ADMISSION_PRESENT_QUERY_VERSION;
+  result.Index = Query->Index;
+  KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+  result.PresentCount = runtime->PresentCount;
+  if (Query->Index < runtime->PresentCount)
+    result = runtime->PresentHistory[Query->Index];
+  KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  *Query = result;
+  return STATUS_SUCCESS;
+}
+#endif
 
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutCommit(
     ADMISSION_CONTEXT *Context, ULONG Width, ULONG Height, ULONG Stride,

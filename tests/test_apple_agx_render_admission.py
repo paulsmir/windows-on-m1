@@ -71,7 +71,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         self.assertIn("Interlocked", scanline)
         present = callbacks[
             callbacks.index("AdmissionDdiPresent("):
-            callbacks.index("FAIL2(AdmissionDdiEscape")
+            callbacks.index("AdmissionDdiEscape(")
         ]
         self.assertIn("Present->pDmaBuffer != NULL", present)
         self.assertIn("Present->Flags.Value != 0x4u", present)
@@ -109,7 +109,7 @@ class AppleAgxRenderAdmissionTests(unittest.TestCase):
         for name in ("CreateOverlay", "UpdateOverlay", "FlipOverlay"):
             self.assertIn(f"FAIL2(AdmissionDdi{name}", callbacks)
         destroy = callbacks[callbacks.index("AdmissionDdiDestroyOverlay"):
-                            callbacks.index("FAIL2(AdmissionDdiEscape")]
+                            callbacks.index("AdmissionDdiEscape(")]
         self.assertIn("return STATUS_NOT_SUPPORTED", destroy)
 
         self.assertNotIn("SupportMultiPlaneOverlay = TRUE", lifecycle)

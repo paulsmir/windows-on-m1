@@ -7,6 +7,7 @@
 #include "render_umd_command.h"
 #include "apple_agx_exp208_gdi.h"
 #include "apple_agx_scanout.h"
+#include "render_qualification.h"
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
@@ -40,6 +41,46 @@ static NTSTATUS QueryDeviceExecutionState(
   return status;
 }
 
+static NTSTATUS WaitForPresentation(
+    D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device, D3DKMT_HANDLE Context,
+    UINT Index, ADMISSION_PRESENT_QUERY *Result) {
+  ULONGLONG deadline = GetTickCount64() + 15000u;
+  NTSTATUS status = (NTSTATUS)0x00000103L;
+  if (Result == NULL || Index >= ADMISSION_PRESENT_QUERY_CAPACITY)
+    return (NTSTATUS)0xc000000dL;
+  do {
+    D3DKMT_ESCAPE escape = {0};
+    ZeroMemory(Result, sizeof(*Result));
+    Result->Magic = ADMISSION_PRESENT_QUERY_MAGIC;
+    Result->Version = ADMISSION_PRESENT_QUERY_VERSION;
+    Result->Index = Index;
+    escape.hAdapter = Adapter;
+    escape.hDevice = Device;
+    escape.hContext = Context;
+    escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    escape.pPrivateDriverData = Result;
+    escape.PrivateDriverDataSize = sizeof(*Result);
+    status = D3DKMTEscape(&escape);
+    if (NT_SUCCESS(status) && Result->Valid == 1u &&
+        Result->PresentCount >= Index + 1u && Result->Status == 0u)
+      break;
+    Sleep(1u);
+  } while (GetTickCount64() < deadline);
+  wprintf(L"PRESENT_RESULT index=%u query=0x%08lx count=%u fence=%u "
+          L"status=0x%08x valid=%u color=0x%08x pixels=%u/%u "
+          L"sequence=%llu offset=0x%llx physical=0x%llx hash=0x%llx "
+          L"captured=%u exported=%u durable=%u\n",
+          Index, (ULONG)status, Result->PresentCount, Result->Fence,
+          Result->Status, Result->Valid, Result->ExpectedColor,
+          Result->PixelsVerified, Result->PixelsExpected,
+          Result->Sequence, Result->ActiveOffset,
+          Result->PhysicalAddress, Result->ContentHash,
+          Result->Captured, Result->Exported, Result->Durable);
+  return NT_SUCCESS(status) && Result->Valid == 1u &&
+                 Result->PresentCount >= Index + 1u && Result->Status == 0u
+             ? (NTSTATUS)0 : (NTSTATUS)0x00000102L;
+}
+
 int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_ENUMADAPTERS3 enumeration = {0};
   D3DKMT_ADAPTERINFO adapters[MAX_ENUM_ADAPTERS] = {0};
@@ -70,6 +111,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG index;
   ULONG pass;
   D3DKMT_DEVICEEXECUTION_STATE executionState;
+  ADMISSION_PRESENT_QUERY presentation[2] = {0};
   LUID selectedLuid = {0};
   ULONG selectedSources = 0u;
   UINT residencyPriority[2] = {
@@ -259,7 +301,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
         pass == 0u ? &createContext : &secondContext;
     UINT commandOffset;
     if (pass != 0u) {
-      Sleep(250u);
       (void)QueryDeviceExecutionState(
           createDevice.hDevice, L"before_pass2", &executionState);
     }
@@ -331,6 +372,10 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->AllocationListSize = render.NewAllocationListSize;
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
+    if (!NT_SUCCESS(WaitForPresentation(
+            adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+            activeContext->hContext, pass, &presentation[pass])))
+      goto cleanup;
     if (observeOnePass && pass == 0u) {
       static const DWORD delays[] = {250u, 250u, 500u, 1000u,
                                      3000u, 5000u, 5000u};
@@ -346,8 +391,6 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       break;
     }
   }
-  if (!observeOnePass)
-    Sleep(10000u);
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
     tdr.NodeOrdinal = 0u;
