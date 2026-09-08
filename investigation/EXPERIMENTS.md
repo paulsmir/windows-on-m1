@@ -37441,3 +37441,37 @@ Workflow/launch SHA256 are
 `80e3e6f9f45a5d7bbb9ff7a3393f0886e6d3d7cc9f36547d6cd87e3afbc5d335`
 and `4e1ed7a94f5afa7ec2384ce6a281d61779086aebab987028c39e57fcdeb18501`.
 Run once after exact ordinary377/392 baseline verification.
+
+**EXP616 FINAL — REJECTED AS SUFFICIENT.** Exact bind passed, but Windows again
+reset with `0x119/2 STATUS_DEVICE_BUSY`. The durable candidate616 state is
+boot355079340, count1, generation7, overflow0/status0/durable1: call1 reached
+Render/Submit/worker fence256; pass2 did not enter KMD in this run. Removing
+explicit `ZwFlushKey` therefore did not prevent ACTIVE→HUNG. It remains a valid
+diagnostic-side correction, but not the causal closure. Correlation/raw/host/
+evidence/dump SHA256 are
+`96c77b1169f624b9584d402a42529327c6b8f017ea019b8a9561c5ccee091df7`,
+`54a37cab708ec5c371fed78a64faf730731060f89719a4fd935f5c881de473c0`,
+`b5ce14d6dcbc4db3c74a7d7e58f208f39c1820dafbbe3822b807f02aeb91d2cb`,
+`dd73131030a0fde6b512708e105a583a6cc540a2c40931b72dd7a80711591d5f`,
+`06540c4fc0b00c75f52488c3af4674295988ef46b63d81cb9837c20ca0871d9e`.
+Exact oem5/package/service cleanup completed in hidden recovery.
+
+# EXP617 — poll hardware completion before legacy receipt export
+
+**PREREGISTERED 2026-09-08T09:08Z. WHY THIS HYPOTHESIS:** (1) EXP615/616 both
+show fence256 hardware completion and driver callbacks followed by HUNG. (2)
+Removing explicit flush did not help, but source still performs synchronous
+registry value writes after queueing hardware and before the first event poll.
+(3) The existing receipt structs can capture exact values in memory and be
+exported after the terminal transition without changing any functional DDI.
+
+Commit `2a92847b954634050ac48506b9ed81243f7323a9` snapshots pre-submit heartbeat,
+queue submission, queue info and buffer-manager receipts in memory, polls AGX
+completion first, then exports the snapshots. Heartbeat failure still records
+before return because no hardware job was accepted. Combined with EXP616, no
+legacy durable flush or initial registry export lies between successful AGX
+queueing and the first completion poll. No scheduler, notification, producer,
+AGX, PBE, UAT, DCP, timeout, capability or placement change. Full373 tests
+GREEN. Build exact617 from exact616 plus only `backend_platform_windows.c`.
+PASS requires device ACTIVE before pass2 and fence257 Submit/worker; identical
+HUNG closes diagnostic persistence and requires a core completion-contract fix.

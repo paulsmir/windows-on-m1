@@ -578,6 +578,15 @@ per-render flushes; legacy receipts remain exported but are not called durable,
 while the asynchronous correlation state retains explicit durability status.
 Full373 tests are GREEN. EXP616 is the next exact hardware discriminator.
 
+EXP616 still reset with `0x119/2 STATUS_DEVICE_BUSY`; durable correlation has a
+complete fence256 call and no KMD entry for pass2. Removing `ZwFlushKey` alone
+is not sufficient. Commit `2a92847b954634050ac48506b9ed81243f7323a9`
+implements the second and final focused persistence fix: capture heartbeat and
+initial queue receipts in memory, poll completion first, export only after the
+terminal transition. EXP617 tests this one ordering change. If HUNG repeats,
+diagnostic persistence is closed and only the core Windows DMA completion
+notification contract remains in scope.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
