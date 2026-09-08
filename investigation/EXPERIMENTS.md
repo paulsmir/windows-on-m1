@@ -39181,3 +39181,44 @@ the next user logon. Ordinary console session1 is connected but has no logged
 in user; SSH remains session0. Controlled shutdown and exact release launch
 follow. Do not run the producer over SSH and do not count task arming as a
 driver verdict.
+
+**EXP642 ACTUAL — INCONCLUSIVE BEFORE PRODUCER, DIAGNOSTIC BUG CONFIRMED.**
+The full guest reset at uptime42.436s before SSH and before any interactive
+task run. Recovery proves EXP642-Interactive LastRun remained the ancient
+default, LastTaskResult267011 and no EXP642-result.txt existed. Event1001 is
+0x7E with c0000005 at exact AppleAgxRenderAdmission30.0.642.0. Matching-PDB
+analysis resolves `AV_AppleAgxRenderAdmission!AdmissionDdiPresent+0x4b4`,
+callbacks.c:128, process csrss.exe, CDD PresentFromCdd/PresentWorkerThread;
+the instruction read address0x2. Minidump/kd/host SHA256:
+de9ebb993819f91106fa4939f0d5ba9412b6e1e1ccbc2b4366662b9556e8f827,
+9778927445236b02d26a01c9e9d0714f03d03873a70b50631e24cc78f83ed6fc,
+22170253d3cb96f4939886b33fd6e1b653de716af9388e776642c35363aa2b4d.
+
+Source/pinned-WDK comparison confirms the cause: production
+AdmissionPresentBlt successfully consumed `DXGK_ALLOCATIONLIST[]`, but the new
+post-success diagnostic reinterpreted the same union as
+`DXGK_PRESENTALLOCATIONINFO[]`; their element sizes differ, so index1 yielded
+the bogus handle0x2. Commit9beed620cda3e561a99e4408389a8c1d613df73d
+uses the already-validated `pAllocationList` view and changes no functional
+Present/AGX/DCP behavior. Full122 tests GREEN. Exact642 package/task cleanup
+and ordinary377/392 health are complete: Code28/packages0/service/module
+absent,8CPU/NVMe2/USB5/keyboard1. EXP642 does not verdict the interactive BLT
+hypothesis; rebuild the one-line causal fix as fresh EXP643 and repeat only
+that intended discriminator.
+
+# EXP643 — corrected interactive DWM windowed BLT
+
+**PREREGISTERED 2026-09-08T17:15:00Z. WHY THIS HYPOTHESIS:** (1) EXP642 dump
+names the exact diagnostic union-view fault before producer; (2) pinned WDK
+and production AdmissionPresentBlt agree on DXGK_ALLOCATIONLIST for the CDD
+route; (3) correcting that read removes the only changed boot-path fault and
+leaves the untested windowed-BLT hypothesis intact.
+
+Single variable versus EXP642: callbacks.c diagnostic source-token read uses
+pAllocationList instead of pAllocationInfo. WINDOWS CONTRACT, AGX/ASAHI
+CONTRACT and TRANSLATION are otherwise byte-for-byte the EXP642 design.
+**WHAT IS STILL UNKNOWN:** the same intended interactive HWND -> D3DKMTPresent
+Blt -> KMD Present -> copy Submit/fence -> visible DWM result. Build exact643
+from immutable642 plus commit9beed62 only, re-arm the interactive task, perform
+one fresh full boot, and collect task/KMD/terminal/health evidence. No producer
+run over SSH, no exclusive ownership retry and no DCP change.

@@ -1,6 +1,6 @@
 # GPU current state
 
-Updated 2026-09-08T16:52Z. Main process only; no agents.
+Updated 2026-09-08T17:15Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -13,9 +13,11 @@ Current first unknown remains standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0:
 D3DKMTSetVidPnSourceOwner returned STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE before
 SetDisplayMode, Render or Present. KMD Present/SetVidPnSourceAddress remain
-untested. Next causal action is the documented DWM-coexisting windowed BLT or
-DXGI Present path from the interactive console session, reusing proven AGX
-render and retaining honest CPU-assisted-vs-hardware presentation labels.
+untested. EXP642 attempted the DWM-coexisting interactive windowed BLT route,
+but its scheduled producer never ran: exact dump localizes a pre-producer CDD
+Present crash to the new diagnostic reading DXGK_ALLOCATIONLIST through the
+wrong pAllocationInfo stride. Commit9beed62 corrects only that view. Next is
+fresh EXP643 with the unchanged interactive HWND/BLT discriminator.
 
 ## Hardware proof retained
 
@@ -52,6 +54,9 @@ render and retaining honest CPU-assisted-vs-hardware presentation labels.
   acquisition returned0xC01E0342 before Render/Present. All WDDM objects
   teardown0 and clean ordinary recovery PASS. Exclusive session0 route is
   rejected; no standard-present hardware readiness bit changes.
+- EXP642: 0x7E c0000005 at AdmissionDdiPresent line128 before scheduled task;
+  wrong diagnostic union view read handle0x2. Windowed BLT producer remains
+  untested. Exact cleanup and ordinary recovery PASS.
 
 ## Validated architecture/change
 
