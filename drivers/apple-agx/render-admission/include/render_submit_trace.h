@@ -21,6 +21,24 @@
 #define ADMISSION_SUBMIT_TRACE_FIELD_SHIFT 32u
 #define ADMISSION_SUBMIT_TRACE_FIELD_MASK 0xffffu
 
+#define ADMISSION_UMD_RENDER_CALL_RECEIPT_VERSION 1u
+typedef struct _ADMISSION_UMD_RENDER_CALL_RECEIPT {
+  unsigned int Version;
+  unsigned int Bytes;
+  unsigned int CallSequence;
+  unsigned int Guard;
+  unsigned int Status;
+  unsigned int CommandLength;
+  unsigned int DmaBytesProduced;
+  unsigned int PatchesProduced;
+  unsigned int Prepatched;
+  unsigned int DestinationIndex;
+  unsigned int Color;
+  unsigned int Reserved;
+  unsigned long long ContextToken;
+  unsigned long long CommandHash;
+} ADMISSION_UMD_RENDER_CALL_RECEIPT;
+
 typedef enum _ADMISSION_SUBMIT_TRACE_FIELD {
   AdmissionSubmitTraceVersion = 1u,
   AdmissionSubmitTraceIrql = 2u,

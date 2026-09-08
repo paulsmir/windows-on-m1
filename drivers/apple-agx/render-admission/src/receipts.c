@@ -147,6 +147,8 @@ _Use_decl_annotations_ VOID AdmissionRecordVisibleAgx(
 #endif
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+
+C_ASSERT(sizeof(ADMISSION_UMD_RENDER_CALL_RECEIPT) == 64u);
 _Use_decl_annotations_ VOID AdmissionRecordTerminalReceipt(
     ADMISSION_CONTEXT *Context, const ADMISSION_TERMINAL_RECEIPT *Receipt) {
   HANDLE key = NULL;
@@ -483,6 +485,31 @@ _Use_decl_annotations_ VOID AdmissionRecordUmdRenderGuard(
     return;
   WriteDword(key, L"Wom1UmdRenderGuard", Guard);
   WriteDword(key, L"Wom1UmdRenderStatus", (ULONG)Status);
+  ZwClose(key);
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordUmdRenderCall(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_UMD_RENDER_CALL_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  PCWSTR receiptName;
+  if (Context == NULL || Receipt == NULL ||
+      Receipt->Version != ADMISSION_UMD_RENDER_CALL_RECEIPT_VERSION ||
+      Receipt->Bytes != sizeof(*Receipt) ||
+      Receipt->CallSequence == 0u ||
+      Context->PhysicalDeviceObject == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    return;
+  receiptName = Receipt->CallSequence == 1u
+      ? L"Wom1UmdRenderCall1Receipt"
+      : Receipt->CallSequence == 2u
+            ? L"Wom1UmdRenderCall2Receipt"
+            : L"Wom1UmdRenderCallLastReceipt";
+  WriteBinary(key, receiptName, Receipt, sizeof(*Receipt));
+  WriteDword(key, L"Wom1UmdRenderCallCount", Receipt->CallSequence);
+  (void)ZwFlushKey(key);
   ZwClose(key);
 }
 
