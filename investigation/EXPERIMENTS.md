@@ -38025,3 +38025,29 @@ producer SHA256 are
 Workflow/launch SHA256 are
 `a69261de487e1a39c7a8605dfe9e2f6e6fd33ba454efb7f97f3a5dda2c0d5f20`
 and `efb9161f6a879d6c1c31195babcbe35c07af46eb1c609b5889fa37284910f843`.
+
+**EXP629 FINAL — REJECTED; HEAVY COMPLETION CALLBACK REMAINS.** With legacy
+visible registry writes suppressed, call1 still reaches fence256 Notify/DPC but
+worker remains Pending, no query/call2 occurs and Windows repeats `0x101`, now
+faulting CPU4. No qualification D589 follows. Thus legacy export is not
+sufficient. Dump/correlation/host SHA256 are
+`f7bf920d8de78737673cf3f8e45220129dbc6c62d2a85c9a2a441f15e9b012fd`,
+`84c091ce99efcf32b23920366f69ef1a7716aa1fb79c228b71113db2e5c1a380`,
+`44843817b7f6904fc06b2add4039b9c44258614d9bb45c4f33d5aa6717b72bda`.
+Exact cleanup completed.
+
+# EXP630 — PASSIVE post-completion output consumer
+
+**PREREGISTERED 2026-09-08T12:02Z. WHY THIS HYPOTHESIS:** (1) EXP628/629 both
+repeat 0x101 after fence256 Notify/DPC and before worker exit. (2) Removing
+legacy registry I/O does not move it. (3) Source leaves full-frame scan/hash and
+D589 synchronous inside `AdmissionBackendComplete`, the last long operation in
+that callback.
+
+Commit `fadd52a038437cc1fbb8806128635b9f9630e2f5` makes completion only mark the
+transaction notified and queue a dedicated PASSIVE output work item. That item
+uses the already-leased exact range for full validation and D589, then publishes
+the query record. Runtime Ready and the producer handshake include
+OutputScheduled, so frame2 cannot overtake frame1. Destroy waits the output idle
+event. No AGX/DCP/lease/content semantics change. Full376 tests and pinned WDK
+build GREEN. Build exact630 from EXP629 plus backend completion file only.

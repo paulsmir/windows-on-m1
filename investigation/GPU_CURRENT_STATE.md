@@ -743,6 +743,15 @@ successful-visible legacy writes. Per-frame Escape records retain full output/
 present proof; failure receipts and asynchronous correlation remain. EXP629
 reruns the same lease design with no rendering change.
 
+EXP629 REJECTS legacy export as the cause: it reproduces `0x101` after call1
+fence256 with no query/call2 and no qualification D589. Correlation again ends
+with worker Pending. The first remaining synchronous owner is now exact: full
+15.6MiB validation/presentation still runs inside the backend completion callback
+after Notify/DPC. Commit `fadd52a038437cc1fbb8806128635b9f9630e2f5`
+schedules the transaction-owned consumer on a separate PASSIVE work item;
+completion returns immediately after queuing it. The query waits its exact
+presentation record. Full376 tests and WDK build GREEN. EXP630 is next.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
