@@ -37140,3 +37140,18 @@ two Render call groups absent => user/kernel D3DKMT boundary; Render2 present
 without produced DMA => Render DDI; Render2 DMA with no Patch => dxgkrnl
 residency/ordering; Patch2 without Submit2 => scheduler ordering; Submit2 with
 no worker => driver dispatch. One run, then exact cleanup and ordinary restore.
+
+**EXP610 BUILD.** R1 produced no artifact: producer code analysis caught only a
+variadic `%u`/`size_t` mismatch. Commit
+`fd7c690f145b90e518c4455c97c3e4c335b32a11` casts the diagnostic argument to
+UINT; no runtime value changes. R2 exact30.0.610.0 KMD/UMD/producer, analysis,
+Universal, Inf2Cat/TestSign and version gates passed. ZIP/SYS/INF/CAT/UMD/
+producer SHA256 are respectively
+`81ce5c6c6a8216bb583d7c0b26fcea9b0c2e994dd05aa9e91ba3817a4e58ac26`,
+`88e681f9c0e9c7f8afce491a683b905be2227aeca95df55ed0659021ac50e3e0`,
+`3b88f740770777e5db6d888d0dc9edf31fe404c9dbad7d284dab7f40afe01540`,
+`8843714a57e8e2a76e2d072232101aec2d43b566ac0ed7acba352bb642b49b3e`,
+`993f887e5f056847b47374bd8c416c9d16b22a2721b5ac2430b84eebbaa5a0d9`,
+`b046f905af0ecaaad96e880ca292ed485b3e44edd13f38aa2390a894924666b1`.
+Workflow SHA256
+`ec5b4f9dee78d9c14e6a7b4e3727ab8ca036b10e747b05ffab20b5ac14ffbe59`.
