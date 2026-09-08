@@ -114,6 +114,8 @@
     <ClCompile Include="src\gdi_windows.c" />
     <ClCompile Include="src\render_submission.c" />
     <ClCompile Include="src\render_gdi_receipt.c" />
+    <ClCompile Include="src\render_call_correlation.c" />
+    <ClCompile Include="src\render_call_correlation_windows.c" />
     <ClCompile Include="src\gdi_receipt_windows.c" />
     <ClCompile Include="src\submission_windows.c" />
     <ClCompile Include="src\submit_trace_windows.c" />

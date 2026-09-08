@@ -1,5 +1,16 @@
 #include "render_admission.h"
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#define ADMISSION_CORRELATE_PATCH_EXIT(Adapter, Arguments, Guard, Status)     \
+  AdmissionRenderCorrelationPatchWindows(                                    \
+      (Adapter), (Arguments) == NULL ? 0ULL :                                \
+          (ULONGLONG)(ULONG_PTR)(Arguments)->hContext,                        \
+      FALSE, (Guard), (Status))
+#else
+#define ADMISSION_CORRELATE_PATCH_EXIT(Adapter, Arguments, Guard, Status)     \
+  ((void)0)
+#endif
+
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE, AdmissionDdiPatch)
 #endif
@@ -495,6 +506,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
 #define PATCH_RENDER_RETURN(guard, value)                                    \
   do {                                                                       \
     NTSTATUS patchStatus = (value);                                          \
+    ADMISSION_CORRELATE_PATCH_EXIT(                                           \
+        adapter, Args, (guard), patchStatus);                                 \
     AdmissionPatchRenderGuardWindows(adapter, (guard), patchStatus);         \
     return patchStatus;                                                      \
   } while (0)
@@ -505,6 +518,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   if (adapter != NULL && Args != NULL &&
       AdmissionPresentIsBltPrivate(Args->pDmaBufferPrivateData, Args->DmaBufferPrivateDataSize))
     return AdmissionPresentPatch(adapter, Args);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionRenderCorrelationPatchWindows(
+      adapter, Args == NULL ? 0ULL :
+                   (ULONGLONG)(ULONG_PTR)Args->hContext,
+      TRUE, MAXULONG, STATUS_PENDING);
+#endif
   if (adapter == NULL || Args == NULL || Args->hContext == NULL ||
       Args->pDmaBuffer == NULL || Args->DmaBufferSize == 0u ||
       Args->pDmaBufferPrivateData == NULL ||
@@ -629,3 +648,5 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   PATCH_RENDER_RETURN(AdmissionPatchRenderGuardAccepted, STATUS_SUCCESS);
 #undef PATCH_RENDER_RETURN
 }
+
+#undef ADMISSION_CORRELATE_PATCH_EXIT

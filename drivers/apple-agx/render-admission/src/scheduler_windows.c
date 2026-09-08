@@ -113,6 +113,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStart(
   AdmissionGdiReceiptInitialize(&Context->GdiReceipt);
   InterlockedExchange(&Context->GdiReceiptClaimed, 0);
   InterlockedExchange(&Context->GdiSubmitTraceClaimed, 0);
+  if (!NT_SUCCESS(AdmissionRenderCorrelationStartWindows(Context)))
+    return STATUS_INSUFFICIENT_RESOURCES;
 #endif
   AppleAgxSchedulerInitialize(&Context->Scheduler);
   AdmissionRenderPacketInitialize(&Context->RenderPacket);
@@ -143,6 +145,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionSchedulerStop(
       InterlockedCompareExchange(&Context->PagingDpcsActive, 0, 0) != 0 ||
       InterlockedCompareExchange(&Context->SchedulerDpcPending, 0, 0) != 0)
     return STATUS_DEVICE_BUSY;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (!NT_SUCCESS(AdmissionRenderCorrelationStopWindows(Context)))
+    return STATUS_DEVICE_BUSY;
+#endif
   (void)InterlockedAnd(&Context->FeatureReadyMask,
                        ~((LONG)APPLE_AGX_WDDM_READY_ONE_NODE_TOPOLOGY));
   InterlockedExchange(&Context->SchedulerInitialized, 0);

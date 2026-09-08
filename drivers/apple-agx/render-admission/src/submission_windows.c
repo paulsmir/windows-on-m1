@@ -1,5 +1,17 @@
 #include "render_admission.h"
 
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#define ADMISSION_CORRELATE_SUBMIT_EXIT(Context, Arguments, Guard, Status)    \
+  AdmissionRenderCorrelationSubmitWindows(                                   \
+      (Context), (Arguments) == NULL ? 0ULL :                                \
+          (ULONGLONG)(ULONG_PTR)(Arguments)->hContext,                        \
+      FALSE, (Arguments) == NULL ? 0u : (Arguments)->SubmissionFenceId,       \
+      (Guard), (Status))
+#else
+#define ADMISSION_CORRELATE_SUBMIT_EXIT(Context, Arguments, Guard, Status)    \
+  ((void)0)
+#endif
+
 _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     ADMISSION_CONTEXT *Context,
     const DXGKARG_SUBMITCOMMAND *Args) {
@@ -14,10 +26,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
 #define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
+    ADMISSION_CORRELATE_SUBMIT_EXIT(                                          \
+        Context, Args, (guard), gdiStatus);                                   \
     AdmissionSubmitRenderGuardWindows(Context, (guard), gdiStatus);          \
     AdmissionGdiReceiptSubmitWindows(Context, Args, gdiStatus);              \
     return gdiStatus;                                                        \
   } while (0)
+
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionRenderCorrelationSubmitWindows(
+      Context, Args == NULL ? 0ULL :
+                   (ULONGLONG)(ULONG_PTR)Args->hContext,
+      TRUE, Args == NULL ? 0u : Args->SubmissionFenceId,
+      MAXULONG, STATUS_PENDING);
+#endif
 
   if (Context == NULL || Args == NULL)
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardArgs,
@@ -173,10 +195,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionSubmitRenderGuardWindows(
       Context, AdmissionSubmitRenderGuardAccepted, STATUS_SUCCESS);
+  AdmissionRenderCorrelationSubmitWindows(
+      Context, (ULONGLONG)(ULONG_PTR)Args->hContext, FALSE,
+      Args->SubmissionFenceId, AdmissionSubmitRenderGuardAccepted,
+      STATUS_SUCCESS);
   AdmissionDispatchQueuedWork(Context);
   return STATUS_SUCCESS;
 #undef GDI_SUBMIT_RETURN
 }
+
+#undef ADMISSION_CORRELATE_SUBMIT_EXIT
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiCancelCommand(
     HANDLE Adapter, const DXGKARG_CANCELCOMMAND *Args) {

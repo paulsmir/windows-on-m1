@@ -2249,6 +2249,8 @@ static VOID AdmissionPlatformWorker(
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
+  AdmissionRenderCorrelationWorkerWindows(
+      adapter, description.Fence, TRUE, (ULONG)STATUS_PENDING);
 
   submission.Submission.Kind = AppleAgxSubmissionGdi;
   submission.Submission.Fence = description.Fence;
@@ -2271,6 +2273,8 @@ static VOID AdmissionPlatformWorker(
   if (heartbeatResult != AppleAgxRtkitSessionResultOk) {
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
     AdmissionFlushGdiReceipt(adapter);
+    AdmissionRenderCorrelationWorkerWindows(
+        adapter, description.Fence, FALSE, (ULONG)heartbeatResult);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
@@ -2300,6 +2304,8 @@ static VOID AdmissionPlatformWorker(
   if (result != AppleAgxBackendRuntimeResultOk) {
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
     AdmissionFlushGdiReceipt(adapter);
+    AdmissionRenderCorrelationWorkerWindows(
+        adapter, description.Fence, FALSE, (ULONG)result);
     AdmissionPlatformWorkerFinished(runtime);
     return;
   }
@@ -2566,6 +2572,8 @@ static VOID AdmissionPlatformWorker(
   AdmissionFlushGdiReceipt(adapter);
   AdmissionTerminalExit(runtime);
 #endif
+  AdmissionRenderCorrelationWorkerWindows(
+      adapter, description.Fence, FALSE, (ULONG)runtime->Backend.Phase);
   AdmissionPlatformWorkerFinished(runtime);
 }
 

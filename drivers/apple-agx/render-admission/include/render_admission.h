@@ -21,6 +21,7 @@
 #include "render_gdi.h"
 #include "render_umd_command.h"
 #include "render_gdi_receipt.h"
+#include "render_call_correlation.h"
 #include "render_present.h"
 #include "render_visible_scanout.h"
 #include "render_submit_trace.h"
@@ -381,6 +382,13 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG GdiSubmitTraceClaimed;
   KSPIN_LOCK GdiReceiptLock;
   ADMISSION_GDI_HW_RECEIPT GdiReceipt;
+  KSPIN_LOCK RenderCorrelationLock;
+  PIO_WORKITEM RenderCorrelationWorkItem;
+  KEVENT RenderCorrelationIdle;
+  volatile LONG RenderCorrelationDirty;
+  volatile LONG RenderCorrelationWorkerQueued;
+  volatile LONG RenderCorrelationStopping;
+  ADMISSION_RENDER_CORRELATION_STATE RenderCorrelation;
 #endif
   UINT PagingFence;
   UINT PagingLastSubmittedFence;
@@ -433,9 +441,54 @@ VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
                                    _In_ ULONG Guard,
                                    _In_ NTSTATUS Status);
-VOID AdmissionRecordUmdRenderCall(
-    _In_opt_ ADMISSION_CONTEXT *Context,
-    _In_ const ADMISSION_UMD_RENDER_CALL_RECEIPT *Receipt);
+NTSTATUS AdmissionRenderCorrelationStartWindows(
+    _Inout_ ADMISSION_CONTEXT *Context);
+NTSTATUS AdmissionRenderCorrelationStopWindows(
+    _Inout_ ADMISSION_CONTEXT *Context);
+ULONG AdmissionRenderCorrelationBeginWindows(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_RENDER_CONTEXT *RenderContext,
+    _In_opt_ const DXGKARG_RENDER *Args);
+VOID AdmissionRenderCorrelationValidatedWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG CallSequence,
+    _In_ ULONGLONG CommandHash, _In_ UINT AllocationCount,
+    _In_ UINT DestinationIndex, _In_ UINT DestinationSegment,
+    _In_reads_(2) const ULONGLONG *AllocationTokens);
+VOID AdmissionRenderCorrelationExitWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG CallSequence,
+    _In_ ULONG Guard, _In_ NTSTATUS Status, _In_ ULONG DmaBytes,
+    _In_ ULONG Patches, _In_ BOOLEAN Prepatched);
+VOID AdmissionRenderCorrelationPatchWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ContextToken,
+    _In_ BOOLEAN Entry, _In_ ULONG Guard, _In_ NTSTATUS Status);
+VOID AdmissionRenderCorrelationSubmitWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ContextToken,
+    _In_ BOOLEAN Entry, _In_ ULONG Fence, _In_ ULONG Guard,
+    _In_ NTSTATUS Status);
+VOID AdmissionRenderCorrelationWorkerWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ BOOLEAN Entry, _In_ ULONG Status);
+#else
+#define AdmissionRenderCorrelationStartWindows(Context) STATUS_SUCCESS
+#define AdmissionRenderCorrelationStopWindows(Context) STATUS_SUCCESS
+#define AdmissionRenderCorrelationBeginWindows(Context, RenderContext, Args) \
+  (0u)
+#define AdmissionRenderCorrelationValidatedWindows(                          \
+    Context, CallSequence, CommandHash, AllocationCount, DestinationIndex,   \
+    DestinationSegment, AllocationTokens)                                    \
+  ((void)0)
+#define AdmissionRenderCorrelationExitWindows(                               \
+    Context, CallSequence, Guard, Status, DmaBytes, Patches, Prepatched)     \
+  ((void)0)
+#define AdmissionRenderCorrelationPatchWindows(                              \
+    Context, ContextToken, Entry, Guard, Status)                             \
+  ((void)0)
+#define AdmissionRenderCorrelationSubmitWindows(                             \
+    Context, ContextToken, Entry, Fence, Guard, Status)                      \
+  ((void)0)
+#define AdmissionRenderCorrelationWorkerWindows(                             \
+    Context, Fence, Entry, Status)                                           \
+  ((void)0)
 #endif
 
 typedef struct _ADMISSION_PHYSICAL_ALLOCATION {
