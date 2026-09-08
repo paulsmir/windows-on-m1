@@ -82,6 +82,18 @@ static int AppleAgxWin32RelocationPolicy(
     return targetRole == AppleAgxWin32RoleTexture ||
            targetRole == AppleAgxWin32RoleConstant ||
            targetRole == AppleAgxWin32RoleRenderTarget;
+  case AppleAgxWin32RelocationUscShaderOffset32:
+    return destinationRole == AppleAgxWin32RoleUscPipeline &&
+           targetRole == AppleAgxWin32RoleShader;
+  case AppleAgxWin32RelocationUscBufferAddress40:
+    return destinationRole == AppleAgxWin32RoleUscPipeline &&
+           (targetRole == AppleAgxWin32RoleShaderRodata ||
+            targetRole == AppleAgxWin32RoleDescriptor ||
+            targetRole == AppleAgxWin32RoleConstant ||
+            targetRole == AppleAgxWin32RoleTexture);
+  case AppleAgxWin32RelocationVdmPipelineOffset32:
+    return destinationRole == AppleAgxWin32RoleEncoder &&
+           targetRole == AppleAgxWin32RoleUscPipeline;
   default:
     return 0;
   }
@@ -283,16 +295,28 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     APPLE_AGX_U32 other;
     if (relocation->Reserved != 0u)
       return AppleAgxWin32AbiReserved;
-    if (relocation->WidthBytes != 8u || relocation->AddressFlags != 0ULL ||
+    if (relocation->AddressFlags != 0ULL ||
         relocation->DestinationReference >= header->ReferenceCount ||
         relocation->TargetReference >= header->ReferenceCount ||
         !AppleAgxWin32RelocationPolicy(relocation, references))
       return AppleAgxWin32AbiRelocation;
-    if ((relocation->DestinationOffset & 7ULL) != 0ULL ||
+    if ((relocation->Kind == AppleAgxWin32RelocationUscShaderOffset32 &&
+         relocation->WidthBytes != 6u) ||
+        (relocation->Kind == AppleAgxWin32RelocationVdmPipelineOffset32 &&
+         relocation->WidthBytes != 4u) ||
+        (relocation->Kind != AppleAgxWin32RelocationUscShaderOffset32 &&
+         relocation->Kind != AppleAgxWin32RelocationVdmPipelineOffset32 &&
+         relocation->WidthBytes != 8u))
+      return AppleAgxWin32AbiRelocation;
+    if ((relocation->Kind == AppleAgxWin32RelocationVdmPipelineOffset32 &&
+         (relocation->DestinationOffset & 3ULL) != 0ULL) ||
+        (relocation->Kind == AppleAgxWin32RelocationUscBufferAddress40 &&
+         (relocation->DestinationOffset & 7ULL) != 0ULL) ||
         relocation->DestinationOffset >
             references[relocation->DestinationReference].Bytes ||
-        8ULL > references[relocation->DestinationReference].Bytes -
-                   relocation->DestinationOffset ||
+        relocation->WidthBytes >
+            references[relocation->DestinationReference].Bytes -
+                relocation->DestinationOffset ||
         relocation->TargetOffset >=
             references[relocation->TargetReference].Bytes)
       return AppleAgxWin32AbiRange;
@@ -300,9 +324,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       if (relocations[other].DestinationReference ==
               relocation->DestinationReference &&
           relocations[other].DestinationOffset <
-              relocation->DestinationOffset + 8ULL &&
+              relocation->DestinationOffset + relocation->WidthBytes &&
           relocation->DestinationOffset <
-              relocations[other].DestinationOffset + 8ULL)
+              relocations[other].DestinationOffset +
+                  relocations[other].WidthBytes)
         return AppleAgxWin32AbiRelocation;
     }
     reachable[relocation->DestinationReference] = 1u;

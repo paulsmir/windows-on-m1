@@ -71,6 +71,9 @@ typedef enum _APPLE_AGX_WIN32_RELOCATION_KIND {
   AppleAgxWin32RelocationEncoderAddress = 1u,
   AppleAgxWin32RelocationPipelineAddress = 2u,
   AppleAgxWin32RelocationDescriptorAddress = 3u,
+  AppleAgxWin32RelocationUscShaderOffset32 = 4u,
+  AppleAgxWin32RelocationUscBufferAddress40 = 5u,
+  AppleAgxWin32RelocationVdmPipelineOffset32 = 6u,
 } APPLE_AGX_WIN32_RELOCATION_KIND;
 
 typedef struct _APPLE_AGX_WIN32_COMMAND_HEADER {

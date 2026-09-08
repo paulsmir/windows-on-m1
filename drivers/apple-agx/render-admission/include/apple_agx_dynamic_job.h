@@ -34,6 +34,7 @@ typedef struct _APPLE_AGX_DYNAMIC_JOB_RELOCATION {
   APPLE_AGX_U32 Reserved;
   APPLE_AGX_U64 DestinationOffset;
   APPLE_AGX_U64 ResolvedAddress;
+  APPLE_AGX_U64 EncodedValue;
 } APPLE_AGX_DYNAMIC_JOB_RELOCATION;
 
 typedef struct _APPLE_AGX_DYNAMIC_JOB {
@@ -62,7 +63,8 @@ typedef int (*APPLE_AGX_DYNAMIC_JOB_RESOLVE)(
 APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
     const APPLE_AGX_WIN32_COMMAND_VIEW *View,
     const ADMISSION_WIN32_ALLOCATION_FACT *Facts,
-    APPLE_AGX_U32 FactCount, APPLE_AGX_DYNAMIC_JOB_READ Read,
+    APPLE_AGX_U32 FactCount, APPLE_AGX_U64 ShaderBase,
+    APPLE_AGX_DYNAMIC_JOB_READ Read,
     APPLE_AGX_DYNAMIC_JOB_RESOLVE Resolve, void *CallbackContext,
     void *Storage, APPLE_AGX_U32 StorageCapacity,
     APPLE_AGX_DYNAMIC_JOB *Job);
