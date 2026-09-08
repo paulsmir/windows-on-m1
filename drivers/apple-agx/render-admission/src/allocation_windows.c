@@ -217,8 +217,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   ADMISSION_WIN32_TRANSPORT_RESULT parseResult;
   ADMISSION_ALLOCATION_HANDLE *allocation;
   ULONGLONG aligned;
-  ULONG classId = 0u;
-  ULONG flags = 0u;
+  APPLE_AGX_U32 classId = 0u;
+  APPLE_AGX_U32 flags = 0u;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_ALLOCATION_DESCRIPTION normalized;
   BOOLEAN correlated = FALSE;
@@ -401,8 +401,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     const ADMISSION_ALLOCATION_DESCRIPTION *description;
     ADMISSION_ALLOCATION_DESCRIPTION parsedDescription;
     ADMISSION_WIN32_TRANSPORT_RESULT parseResult;
-    ULONG classId = 0u;
-    ULONG flags = 0u;
+    APPLE_AGX_U32 classId = 0u;
+    APPLE_AGX_U32 flags = 0u;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     const ADMISSION_ALLOCATION_DESCRIPTION *submittedDescription;
     ADMISSION_ALLOCATION_DESCRIPTION normalized;

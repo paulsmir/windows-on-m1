@@ -4,6 +4,8 @@ C_ASSERT(sizeof(ADMISSION_UMD_COLOR_FILL_COMMAND) == 48u);
 C_ASSERT(sizeof(APPLE_AGX_WIN32_COMMAND_HEADER) == 48u);
 C_ASSERT(sizeof(APPLE_AGX_WIN32_ALLOCATION_REFERENCE) == 32u);
 C_ASSERT(sizeof(APPLE_AGX_WIN32_CLEAR_PAYLOAD) == 48u);
+C_ASSERT(sizeof(APPLE_AGX_WIN32_DRAW_PAYLOAD) == 128u);
+C_ASSERT(sizeof(APPLE_AGX_WIN32_RELOCATION) == 40u);
 
 static ULONGLONG AdmissionUmdCommandHash(const VOID *Data, ULONG Bytes) {
   const UCHAR *data = (const UCHAR *)Data;
@@ -394,6 +396,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
             context, Args, &win32Snapshot)))
       UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
                         STATUS_INVALID_USER_BUFFER);
+    if (win32Snapshot.View.Draw != NULL)
+      UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
+                        STATUS_NOT_SUPPORTED);
     RtlZeroMemory(&command, sizeof(command));
     command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
     command.Version = ADMISSION_UMD_COMMAND_VERSION;

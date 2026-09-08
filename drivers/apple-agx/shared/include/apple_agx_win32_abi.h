@@ -9,9 +9,12 @@ typedef unsigned short APPLE_AGX_U16;
 #define APPLE_AGX_WIN32_COMMAND_VERSION 1u
 #define APPLE_AGX_WIN32_COMMAND_MAX_BYTES 4096u
 #define APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES 16u
+#define APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS 64u
+#define APPLE_AGX_WIN32_OPTIONAL_REFERENCE 0xffffffffu
 
 typedef enum _APPLE_AGX_WIN32_OPCODE {
   AppleAgxWin32OpcodeClear = 1u,
+  AppleAgxWin32OpcodeDraw = 2u,
 } APPLE_AGX_WIN32_OPCODE;
 
 typedef enum _APPLE_AGX_WIN32_ACCESS {
@@ -28,6 +31,11 @@ typedef enum _APPLE_AGX_WIN32_ROLE {
   AppleAgxWin32RoleTexture = 5u,
   AppleAgxWin32RoleShader = 6u,
   AppleAgxWin32RoleDescriptor = 7u,
+  AppleAgxWin32RoleShaderRodata = 8u,
+  AppleAgxWin32RoleUscPipeline = 9u,
+  AppleAgxWin32RoleEncoder = 10u,
+  AppleAgxWin32RoleScissor = 11u,
+  AppleAgxWin32RoleDepthBias = 12u,
 } APPLE_AGX_WIN32_ROLE;
 
 typedef enum _APPLE_AGX_WIN32_FORMAT {
@@ -51,7 +59,19 @@ typedef enum _APPLE_AGX_WIN32_ABI_RESULT {
   AppleAgxWin32AbiReserved,
   AppleAgxWin32AbiRange,
   AppleAgxWin32AbiPayload,
+  AppleAgxWin32AbiRelocation,
+  AppleAgxWin32AbiReachability,
 } APPLE_AGX_WIN32_ABI_RESULT;
+
+typedef enum _APPLE_AGX_WIN32_TOPOLOGY {
+  AppleAgxWin32TopologyTriangleList = 1u,
+} APPLE_AGX_WIN32_TOPOLOGY;
+
+typedef enum _APPLE_AGX_WIN32_RELOCATION_KIND {
+  AppleAgxWin32RelocationEncoderAddress = 1u,
+  AppleAgxWin32RelocationPipelineAddress = 2u,
+  AppleAgxWin32RelocationDescriptorAddress = 3u,
+} APPLE_AGX_WIN32_RELOCATION_KIND;
 
 typedef struct _APPLE_AGX_WIN32_COMMAND_HEADER {
   APPLE_AGX_U32 Magic;
@@ -92,10 +112,54 @@ typedef struct _APPLE_AGX_WIN32_CLEAR_PAYLOAD {
   APPLE_AGX_U32 Reserved;
 } APPLE_AGX_WIN32_CLEAR_PAYLOAD;
 
+typedef struct _APPLE_AGX_WIN32_DRAW_PAYLOAD {
+  APPLE_AGX_U32 StructBytes;
+  APPLE_AGX_U32 Format;
+  APPLE_AGX_U32 SurfaceWidth;
+  APPLE_AGX_U32 SurfaceHeight;
+  APPLE_AGX_U32 SurfacePitch;
+  APPLE_AGX_U32 Topology;
+  APPLE_AGX_U32 VertexCount;
+  APPLE_AGX_U32 InstanceCount;
+  APPLE_AGX_U32 FirstVertex;
+  APPLE_AGX_U32 FirstInstance;
+  APPLE_AGX_U32 DestinationReference;
+  APPLE_AGX_U32 VertexReference;
+  APPLE_AGX_U32 IndexReference;
+  APPLE_AGX_U32 ConstantReference;
+  APPLE_AGX_U32 TextureReference;
+  APPLE_AGX_U32 VertexShaderReference;
+  APPLE_AGX_U32 FragmentShaderReference;
+  APPLE_AGX_U32 VertexRodataReference;
+  APPLE_AGX_U32 FragmentRodataReference;
+  APPLE_AGX_U32 UscPipelineReference;
+  APPLE_AGX_U32 DescriptorReference;
+  APPLE_AGX_U32 ScissorReference;
+  APPLE_AGX_U32 DepthBiasReference;
+  APPLE_AGX_U32 EncoderReference;
+  APPLE_AGX_U32 RelocationsOffset;
+  APPLE_AGX_U32 RelocationCount;
+  APPLE_AGX_U32 Flags;
+  APPLE_AGX_U32 Reserved[5];
+} APPLE_AGX_WIN32_DRAW_PAYLOAD;
+
+typedef struct _APPLE_AGX_WIN32_RELOCATION {
+  APPLE_AGX_U32 Kind;
+  APPLE_AGX_U16 WidthBytes;
+  APPLE_AGX_U16 Reserved;
+  APPLE_AGX_U32 DestinationReference;
+  APPLE_AGX_U32 TargetReference;
+  APPLE_AGX_U64 DestinationOffset;
+  APPLE_AGX_U64 TargetOffset;
+  APPLE_AGX_U64 AddressFlags;
+} APPLE_AGX_WIN32_RELOCATION;
+
 typedef struct _APPLE_AGX_WIN32_COMMAND_VIEW {
   const APPLE_AGX_WIN32_COMMAND_HEADER *Header;
   const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *References;
   const APPLE_AGX_WIN32_CLEAR_PAYLOAD *Clear;
+  const APPLE_AGX_WIN32_DRAW_PAYLOAD *Draw;
+  const APPLE_AGX_WIN32_RELOCATION *Relocations;
 } APPLE_AGX_WIN32_COMMAND_VIEW;
 
 APPLE_AGX_U64 AppleAgxWin32CommandHash(const void *Command,

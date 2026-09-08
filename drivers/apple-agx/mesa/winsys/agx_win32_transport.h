@@ -20,6 +20,16 @@ typedef struct _AGX_WIN32_CLEAR_REQUEST {
   APPLE_AGX_U32 Bottom;
 } AGX_WIN32_CLEAR_REQUEST;
 
+typedef struct _AGX_WIN32_DRAW_REQUEST {
+  APPLE_AGX_U32 Generation;
+  APPLE_AGX_U32 AllocationCount;
+  APPLE_AGX_U32 ReferenceCount;
+  APPLE_AGX_U32 RelocationCount;
+  const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *References;
+  const APPLE_AGX_WIN32_RELOCATION *Relocations;
+  APPLE_AGX_WIN32_DRAW_PAYLOAD Draw;
+} AGX_WIN32_DRAW_REQUEST;
+
 typedef enum _AGX_WIN32_WINSYS_RESULT {
   AgxWin32WinsysSuccess = 0,
   AgxWin32WinsysArgument,
@@ -61,6 +71,9 @@ typedef struct _AGX_WIN32_WINSYS {
 
 APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildClear(
     const AGX_WIN32_CLEAR_REQUEST *Request, void *CommandBuffer,
+    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);
+APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
+    const AGX_WIN32_DRAW_REQUEST *Request, void *CommandBuffer,
     APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysInitialize(
     AGX_WIN32_WINSYS *Winsys, void *Context, APPLE_AGX_U32 Generation,

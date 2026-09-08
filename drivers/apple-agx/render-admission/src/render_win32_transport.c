@@ -75,6 +75,49 @@ static int AdmissionWin32RangesOverlap(
   return Left->Offset < rightEnd && Right->Offset < leftEnd;
 }
 
+static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference,
+    const ADMISSION_WIN32_ALLOCATION_FACT *Fact) {
+  APPLE_AGX_U32 requiredClass;
+  if (Reference == ADMISSION_WIN32_NULL || Fact == ADMISSION_WIN32_NULL)
+    return AdmissionWin32TransportArgument;
+  switch (Reference->Role) {
+  case AppleAgxWin32RoleRenderTarget:
+    if (Fact->ClassId == 0u)
+      return AdmissionWin32TransportSuccess;
+    requiredClass = AgxWin32BufferClassGeneral;
+    break;
+  case AppleAgxWin32RoleVertex:
+  case AppleAgxWin32RoleIndex:
+  case AppleAgxWin32RoleConstant:
+  case AppleAgxWin32RoleTexture:
+    requiredClass = AgxWin32BufferClassGeneral;
+    break;
+  case AppleAgxWin32RoleShader:
+  case AppleAgxWin32RoleShaderRodata:
+    requiredClass = AgxWin32BufferClassShader;
+    break;
+  case AppleAgxWin32RoleDescriptor:
+  case AppleAgxWin32RoleUscPipeline:
+  case AppleAgxWin32RoleEncoder:
+  case AppleAgxWin32RoleScissor:
+  case AppleAgxWin32RoleDepthBias:
+    requiredClass = AgxWin32BufferClassEncoder;
+    break;
+  default:
+    return AdmissionWin32TransportClass;
+  }
+  if (Fact->ClassId != requiredClass)
+    return AdmissionWin32TransportClass;
+  if (((Reference->Access & (AppleAgxWin32AccessRead |
+                             AppleAgxWin32AccessExecute)) != 0u &&
+       (Fact->Flags & AppleAgxWin32BufferGpuRead) == 0u) ||
+      ((Reference->Access & AppleAgxWin32AccessWrite) != 0u &&
+       (Fact->Flags & AppleAgxWin32BufferGpuWrite) == 0u))
+    return AdmissionWin32TransportAccess;
+  return AdmissionWin32TransportSuccess;
+}
+
 ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ContextCreateValidate(
     const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
     APPLE_AGX_BOOL SystemOrGdi, APPLE_AGX_BOOL LegacyQualificationAllowed,
@@ -155,12 +198,53 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
     if ((reference->Access & (APPLE_AGX_U32)AppleAgxWin32AccessWrite) != 0u &&
         local[index].ActiveForDisplay)
       return AdmissionWin32TransportActiveDisplay;
+    if (View->Header->Opcode == AppleAgxWin32OpcodeDraw) {
+      ADMISSION_WIN32_TRANSPORT_RESULT classResult =
+          AdmissionWin32ReferenceClass(reference, &local[index]);
+      if (classResult != AdmissionWin32TransportSuccess)
+        return classResult;
+    }
     if (View->Clear != ADMISSION_WIN32_NULL &&
         View->Clear->DestinationReference == index) {
       requiredBytes = (APPLE_AGX_U64)View->Clear->SurfacePitch *
                       (APPLE_AGX_U64)View->Clear->SurfaceHeight;
       if (reference->Bytes < requiredBytes)
         return AdmissionWin32TransportRange;
+    }
+    if (View->Draw != ADMISSION_WIN32_NULL &&
+        View->Draw->DestinationReference == index) {
+      requiredBytes = (APPLE_AGX_U64)View->Draw->SurfacePitch *
+                      (APPLE_AGX_U64)View->Draw->SurfaceHeight;
+      if (reference->Bytes < requiredBytes)
+        return AdmissionWin32TransportRange;
+    }
+  }
+
+  if (View->Header->Opcode == AppleAgxWin32OpcodeDraw) {
+    if (View->Draw == ADMISSION_WIN32_NULL ||
+        View->Relocations == ADMISSION_WIN32_NULL)
+      return AdmissionWin32TransportArgument;
+    for (index = 0u; index < View->Draw->RelocationCount; ++index) {
+      const APPLE_AGX_WIN32_RELOCATION *left = &View->Relocations[index];
+      APPLE_AGX_U32 relocationOther;
+      APPLE_AGX_U32 leftReference = left->DestinationReference;
+      APPLE_AGX_U64 leftOffset =
+          View->References[leftReference].Offset + left->DestinationOffset;
+      for (relocationOther = index + 1u;
+           relocationOther < View->Draw->RelocationCount;
+           ++relocationOther) {
+        const APPLE_AGX_WIN32_RELOCATION *right =
+            &View->Relocations[relocationOther];
+        APPLE_AGX_U32 rightReference = right->DestinationReference;
+        APPLE_AGX_U64 rightOffset =
+            View->References[rightReference].Offset +
+            right->DestinationOffset;
+        if (local[leftReference].AllocationToken ==
+                local[rightReference].AllocationToken &&
+            leftOffset < rightOffset + left->WidthBytes &&
+            rightOffset < leftOffset + right->WidthBytes)
+          return AdmissionWin32TransportOverlap;
+      }
     }
   }
 

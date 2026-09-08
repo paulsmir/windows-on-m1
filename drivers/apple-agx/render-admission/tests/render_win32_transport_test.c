@@ -17,7 +17,7 @@ typedef struct _TEST_ALLOCATION {
 
 typedef struct _TEST_LOOKUP {
   APPLE_AGX_U64 ExpectedOwner;
-  TEST_ALLOCATION Allocations[3];
+  TEST_ALLOCATION Allocations[16];
   APPLE_AGX_U32 Count;
 } TEST_LOOKUP;
 
@@ -196,6 +196,7 @@ static void test_overlapping_writable_ranges_are_rejected(void) {
   memset(&header, 0, sizeof(header));
   memset(references, 0, sizeof(references));
   memset(&clear, 0, sizeof(clear));
+  memset(&view, 0, sizeof(view));
   header.Generation = 7u;
   header.ReferenceCount = 2u;
   references[0].AllocationIndex = 1u;
@@ -325,6 +326,104 @@ static void test_class_allocation_contract(void) {
       AdmissionWin32TransportClass);
 }
 
+static void test_draw_role_class_and_relocation_ownership(void) {
+  APPLE_AGX_WIN32_COMMAND_HEADER header;
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[5];
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw;
+  APPLE_AGX_WIN32_RELOCATION relocations[2];
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  TEST_LOOKUP lookup;
+  ADMISSION_WIN32_ALLOCATION_FACT facts[5];
+  unsigned index;
+  memset(&header, 0, sizeof(header));
+  memset(references, 0, sizeof(references));
+  memset(&draw, 0, sizeof(draw));
+  memset(relocations, 0, sizeof(relocations));
+  memset(&view, 0, sizeof(view));
+  memset(&lookup, 0, sizeof(lookup));
+  lookup.ExpectedOwner = 0x1111ULL;
+  lookup.Count = 5u;
+  header.Opcode = AppleAgxWin32OpcodeDraw;
+  header.Generation = 7u;
+  header.ReferenceCount = 5u;
+  view.Header = &header;
+  view.References = references;
+  view.Draw = &draw;
+  view.Relocations = relocations;
+  references[0] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      0u, AppleAgxWin32AccessWrite, AppleAgxWin32RoleRenderTarget,
+      0u, 0u, 0x1000000ULL};
+  references[1] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      1u, AppleAgxWin32AccessRead | AppleAgxWin32AccessExecute,
+      AppleAgxWin32RoleShader, 0u, 0u, 0x4000ULL};
+  references[2] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      2u, AppleAgxWin32AccessRead, AppleAgxWin32RoleEncoder,
+      0u, 0u, 0x4000ULL};
+  references[3] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      3u, AppleAgxWin32AccessRead, AppleAgxWin32RoleVertex,
+      0u, 0u, 0x4000ULL};
+  references[4] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      4u, AppleAgxWin32AccessRead, AppleAgxWin32RoleEncoder,
+      0u, 0u, 0x4000ULL};
+  draw.SurfacePitch = 10240u;
+  draw.SurfaceHeight = 1600u;
+  draw.DestinationReference = 0u;
+  draw.RelocationCount = 2u;
+  relocations[0].WidthBytes = 8u;
+  relocations[0].DestinationReference = 2u;
+  relocations[0].TargetReference = 1u;
+  relocations[1] = relocations[0];
+  relocations[1].DestinationOffset = 8u;
+  relocations[1].TargetReference = 3u;
+  for (index = 0u; index < lookup.Count; ++index) {
+    lookup.Allocations[index].Index = index;
+    lookup.Allocations[index].Owner = lookup.ExpectedOwner;
+    lookup.Allocations[index].Fact.AllocationToken = 0xa000ULL + index;
+    lookup.Allocations[index].Fact.Bytes = 0x1000000ULL;
+    lookup.Allocations[index].Fact.SegmentId = 2u;
+    lookup.Allocations[index].Fact.Writable = 1u;
+    lookup.Allocations[index].Fact.Generation = 7u;
+  }
+  lookup.Allocations[0].Fact.ClassId = 0u;
+  lookup.Allocations[1].Fact.ClassId = AgxWin32BufferClassShader;
+  lookup.Allocations[1].Fact.Flags =
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead;
+  lookup.Allocations[2].Fact.ClassId = AgxWin32BufferClassEncoder;
+  lookup.Allocations[2].Fact.Flags =
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead;
+  lookup.Allocations[3].Fact.ClassId = AgxWin32BufferClassGeneral;
+  lookup.Allocations[3].Fact.Flags =
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead;
+  lookup.Allocations[4].Fact.ClassId = AgxWin32BufferClassEncoder;
+  lookup.Allocations[4].Fact.Flags =
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 5u) ==
+      AdmissionWin32TransportSuccess);
+
+  lookup.Allocations[1].Fact.ClassId = AgxWin32BufferClassGeneral;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 5u) ==
+      AdmissionWin32TransportClass);
+  lookup.Allocations[1].Fact.ClassId = AgxWin32BufferClassShader;
+  lookup.Allocations[2].Fact.Flags = AppleAgxWin32BufferCpuWrite;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 5u) ==
+      AdmissionWin32TransportAccess);
+  lookup.Allocations[2].Fact.Flags =
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead;
+  lookup.Allocations[2].Fact.AllocationToken = 0xc000ULL;
+  lookup.Allocations[4].Fact.AllocationToken = 0xc000ULL;
+  references[2].Offset = 0x1000ULL;
+  references[4].Offset = 0x1008ULL;
+  relocations[0].DestinationOffset = 8u;
+  relocations[1].DestinationReference = 4u;
+  relocations[1].DestinationOffset = 0u;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 5u) ==
+      AdmissionWin32TransportOverlap);
+}
+
 int main(void) {
   test_valid_noncontiguous_index_and_range();
   test_owner_generation_and_access_rejections();
@@ -333,5 +432,6 @@ int main(void) {
   test_overlapping_writable_ranges_are_rejected();
   test_context_generation_contract();
   test_class_allocation_contract();
+  test_draw_role_class_and_relocation_ownership();
   return 0;
 }
