@@ -70,10 +70,11 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
         capture = complete.index("AdmissionBackendImageCaptureOutput")
         release = complete.index("AdmissionBackendImageReleaseSubmission")
         finish = complete.index("AppleAgxCompletionTransactionFinish")
-        observe = complete.index("AdmissionTerminalObserve(")
+        schedule = complete.index("IoQueueWorkItem(runtime->OutputWorkItem")
         self.assertLess(capture, release)
         self.assertLess(release, finish)
-        self.assertLess(finish, observe)
+        self.assertLess(finish, schedule)
+        self.assertNotIn("AdmissionTerminalObserve(runtime", complete)
 
         terminal = source[
             source.index("static VOID AdmissionTerminalObserve("):
@@ -83,6 +84,13 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
         self.assertIn("Output->RenderedCpuAddress", terminal)
         self.assertIn("Output->ExpectedColor", terminal)
         self.assertNotIn("BackendImage.Binding", terminal)
+        output_worker = source[
+            source.index("static VOID AdmissionOutputWorker(",
+                         source.index("AdmissionBackendComplete(")):
+            source.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        self.assertIn("AdmissionTerminalObserve(", output_worker)
+        self.assertIn("AdmissionScanoutPresentAgxResult(", output_worker)
 
 
 if __name__ == "__main__":

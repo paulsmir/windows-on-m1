@@ -231,16 +231,16 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         ]
         self.assertLess(
             complete.index("DxgkCbSynchronizeExecution("),
-            complete.index("AdmissionTerminalObserve("),
+            complete.index("IoQueueWorkItem(runtime->OutputWorkItem"),
         )
         self.assertEqual(backend.count("AdmissionScanoutPresentAgxResult("), 1)
-        self.assertGreater(
-            complete.index("AdmissionScanoutPresentAgxResult("),
-            complete.index("DxgkCbSynchronizeExecution("),
-        )
-        after_present = complete[
-            complete.index("AdmissionScanoutPresentAgxResult("):
+        output_worker = complete[
+            complete.index("static VOID AdmissionOutputWorker("):
             complete.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        self.assertIn("AdmissionScanoutPresentAgxResult(", output_worker)
+        after_present = output_worker[
+            output_worker.index("AdmissionScanoutPresentAgxResult("):
         ]
         self.assertNotIn("return APPLE_AGX_BACKEND_FALSE", after_present)
         self.assertNotIn("Sleep(10000u);", producer)
