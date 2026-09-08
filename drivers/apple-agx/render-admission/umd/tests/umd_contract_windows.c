@@ -36,6 +36,10 @@ typedef struct _TEST_STATE {
   HRESULT DeallocateResults[16];
   HRESULT SetErrors[8];
   unsigned int SetErrorDdis[8];
+  unsigned int ContextGeneration;
+  unsigned int RenderCalls;
+  unsigned char RenderCommand[128];
+  AGX_WIN32_CLEAR_REQUEST *MutatedRequest;
 } TEST_STATE;
 
 enum {
@@ -47,8 +51,11 @@ enum {
 
 static TEST_STATE State;
 static unsigned char CommandBuffer[4096];
+static unsigned char NextCommandBuffer[4096];
 static D3DDDI_ALLOCATIONLIST AllocationList[16];
+static D3DDDI_ALLOCATIONLIST NextAllocationList[16];
 static D3DDDI_PATCHLOCATIONLIST PatchList[16];
+static D3DDDI_PATCHLOCATIONLIST NextPatchList[16];
 
 #define CHECK(value)                                                          \
   do {                                                                        \
@@ -63,6 +70,19 @@ static HRESULT APIENTRY TestCreateContext(HANDLE Device,
                                           D3DDDICB_CREATECONTEXT *Create) {
   (void)Device;
   ++State.CreateContextCalls;
+  CHECK(Create->pPrivateDriverData != NULL);
+  CHECK(Create->PrivateDriverDataSize == sizeof(ADMISSION_WIN32_CONTEXT_CREATE));
+  if (Create->pPrivateDriverData != NULL &&
+      Create->PrivateDriverDataSize == sizeof(ADMISSION_WIN32_CONTEXT_CREATE)) {
+    const ADMISSION_WIN32_CONTEXT_CREATE *context =
+        (const ADMISSION_WIN32_CONTEXT_CREATE *)Create->pPrivateDriverData;
+    CHECK(context->Magic == ADMISSION_WIN32_CONTEXT_MAGIC);
+    CHECK(context->Version == ADMISSION_WIN32_CONTEXT_VERSION);
+    CHECK(context->Bytes == sizeof(*context));
+    CHECK(context->Generation != 0u);
+    CHECK(context->Reserved == 0u);
+    State.ContextGeneration = context->Generation;
+  }
   Create->hContext = (HANDLE)(UINT_PTR)0x200u;
   Create->pCommandBuffer = CommandBuffer;
   Create->CommandBufferSize = sizeof(CommandBuffer);
@@ -79,6 +99,29 @@ static HRESULT APIENTRY TestDestroyContext(
   ++State.DestroyContextCalls;
   CHECK(Destroy != NULL);
   CHECK(Destroy != NULL && Destroy->hContext == (HANDLE)(UINT_PTR)0x200u);
+  return S_OK;
+}
+
+static HRESULT APIENTRY TestRender(HANDLE Device, D3DDDICB_RENDER *Render) {
+  (void)Device;
+  ++State.RenderCalls;
+  CHECK(Render != NULL);
+  CHECK(Render != NULL && Render->hContext == (HANDLE)(UINT_PTR)0x200u);
+  CHECK(Render != NULL && Render->CommandOffset == 0u);
+  CHECK(Render != NULL && Render->CommandLength == sizeof(State.RenderCommand));
+  CHECK(Render != NULL && Render->NumAllocations == 1u);
+  CHECK(Render != NULL && Render->NumPatchLocations == 0u);
+  CHECK(AllocationList[0].hAllocation == 0x801u);
+  CHECK(AllocationList[0].WriteOperation == 1u);
+  memcpy(State.RenderCommand, CommandBuffer, sizeof(State.RenderCommand));
+  if (State.MutatedRequest != NULL)
+    State.MutatedRequest->Color = 0u;
+  Render->pNewCommandBuffer = NextCommandBuffer;
+  Render->NewCommandBufferSize = sizeof(NextCommandBuffer);
+  Render->pNewAllocationList = NextAllocationList;
+  Render->NewAllocationListSize = ARRAYSIZE(NextAllocationList);
+  Render->pNewPatchLocationList = NextPatchList;
+  Render->NewPatchLocationListSize = ARRAYSIZE(NextPatchList);
   return S_OK;
 }
 
@@ -270,6 +313,9 @@ int main(void) {
   UINT64 version;
   unsigned int errorsBefore;
   unsigned int deallocationsBefore;
+  ADMISSION_UMD_DEVICE *deviceState;
+  AGX_WIN32_CLEAR_REQUEST clearRequest;
+  APPLE_AGX_WIN32_COMMAND_VIEW clearView;
 
   memset(&State, 0, sizeof(State));
   memset(&adapterCallbacks, 0, sizeof(adapterCallbacks));
@@ -311,6 +357,7 @@ int main(void) {
   kernelCallbacks.pfnDeallocateCb = TestDeallocate;
   kernelCallbacks.pfnCreateContextCb = TestCreateContext;
   kernelCallbacks.pfnDestroyContextCb = TestDestroyContext;
+  kernelCallbacks.pfnRenderCb = TestRender;
   memset(&userCallbacks, 0, sizeof(userCallbacks));
   userCallbacks.pfnSetErrorCb = TestSetError;
   memset(&dxgiCallbacks, 0, sizeof(dxgiCallbacks));
@@ -330,6 +377,8 @@ int main(void) {
   CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
                                          &createDevice) == S_OK);
   CHECK(State.CreateContextCalls == 1u);
+  CHECK(State.ContextGeneration != 0u);
+  deviceState = (ADMISSION_UMD_DEVICE *)device.pDrvPrivate;
 
   errorsBefore = State.SetErrorCalls;
   formatSupport = 0xffffffffu;
@@ -343,6 +392,32 @@ int main(void) {
                             FALSE);
   CHECK(State.AllocateCalls == 1u);
   CHECK(State.LastAllocateResource == primaryRuntime.handle);
+  memset(&clearRequest, 0, sizeof(clearRequest));
+  clearRequest.Generation = State.ContextGeneration;
+  clearRequest.AllocationIndex = 0u;
+  clearRequest.AllocationBytes = 0xfa0000ULL;
+  clearRequest.Format = AppleAgxWin32FormatBgra8Unorm;
+  clearRequest.Color = 0xff224466u;
+  clearRequest.SurfaceWidth = 2560u;
+  clearRequest.SurfaceHeight = 1600u;
+  clearRequest.SurfacePitch = 10240u;
+  clearRequest.Right = 2560u;
+  clearRequest.Bottom = 1600u;
+  State.MutatedRequest = &clearRequest;
+  CHECK(AdmissionUmdSubmitClear(
+            deviceState, (ADMISSION_UMD_RESOURCE *)primary.pDrvPrivate,
+            &clearRequest) == S_OK);
+  CHECK(State.RenderCalls == 1u);
+  CHECK(clearRequest.Color == 0u);
+  CHECK(AppleAgxWin32CommandValidate(
+            State.RenderCommand, sizeof(State.RenderCommand),
+            State.ContextGeneration, 1u, &clearView) ==
+        AppleAgxWin32AbiSuccess);
+  CHECK(clearView.Clear->Color == 0xff224466u);
+  CHECK(deviceState->CommandBuffer == NextCommandBuffer);
+  CHECK(deviceState->AllocationList == NextAllocationList);
+  CHECK(deviceState->PatchList == NextPatchList);
+  State.MutatedRequest = NULL;
   if (primary.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, primary);
   CHECK(State.DeallocateCalls == 1u);

@@ -244,12 +244,12 @@ HRESULT AgxWin32TransportSubmit(
     uint32_t allocation_count);
 ```
 
-- [ ] **Step 1: RED-test the builder** for exact literal bytes/hash, capacity, stale generation, invalid destination, and mutation after `pfnRenderCb` begins. Fake callbacks must copy the command/allocation list exactly as the runtime contract does.
-- [ ] **Step 2: implement D3D10 callback wiring** for `pfnCreateContextCb`, command/allocation/patch buffers, and `pfnRenderCb`. Use `pfnLockCb/pfnUnlockCb` only for supported CPU map/update paths; never treat `D3DKMTLock2` as a submission flush.
-- [ ] **Step 3: implement UMD resource ownership adapter.** Created resources use `D3DDDICB_ALLOCATE.hResource`; opened shared resources keep exact runtime/kernel handles; destroy/Flush uses the corrected retirement queue. Per-process handles are never accepted from another device.
-- [ ] **Step 4: add Mesa adapter boundary without importing its DRM target.** Expose a `pipe_screen`/resource-facing shim whose BO create/map/submit/fence methods call this Windows transport. Do not call `agx_screen_create(fd, ...)`, DRM ioctls, syncobj fds or the GDI software winsys.
-- [ ] **Step 5: keep the selected pipeline unpublished.** The new transport unit and its clear helper compile and pass, but `GetCaps` remains zero because the 121-row AD01 UMD contract is incomplete.
-- [ ] **Step 6: run x64 real mock runtime, ARM64 UMD analysis and source-lock/license manifest checks GREEN, then commit.** Any Mesa files later copied into the repository retain their exact license headers and enter a per-file manifest before compilation.
+- [x] **Step 1: RED-test the builder** for exact literal bytes/hash, capacity, stale generation, invalid destination, and mutation after `pfnRenderCb` begins. Fake callbacks must copy the command/allocation list exactly as the runtime contract does.
+- [x] **Step 2: implement D3D10 callback wiring** for `pfnCreateContextCb`, command/allocation/patch buffers, and `pfnRenderCb`. Use `pfnLockCb/pfnUnlockCb` only for supported CPU map/update paths; never treat `D3DKMTLock2` as a submission flush.
+- [x] **Step 3: implement UMD resource ownership adapter.** Created resources use `D3DDDICB_ALLOCATE.hResource`; opened shared resources keep exact runtime/kernel handles; destroy/Flush uses the corrected retirement queue. Per-process handles are never accepted from another device.
+- [x] **Step 4: add Mesa adapter boundary without importing its DRM target.** Expose a `pipe_screen`/resource-facing shim whose BO create/map/submit/fence methods call this Windows transport. Do not call `agx_screen_create(fd, ...)`, DRM ioctls, syncobj fds or the GDI software winsys.
+- [x] **Step 5: keep the selected pipeline unpublished.** The new transport unit and its clear helper compile and pass, but `GetCaps` remains zero because the 121-row AD01 UMD contract is incomplete.
+- [x] **Step 6: run x64 real mock runtime, ARM64 UMD analysis and source-lock/license manifest checks GREEN, then commit.** Any Mesa files later copied into the repository retain their exact license headers and enter a per-file manifest before compilation.
 
 ### Task 5: Dynamic clear integration without a second backend
 

@@ -23,7 +23,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\..\include;$(PinnedWindowsKitInclude)\um;$(PinnedWindowsKitInclude)\shared;$(PinnedWindowsKitInclude)\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\include;..\..\include;..\..\..\shared\include;..\..\..\mesa\winsys;$(PinnedWindowsKitInclude)\um;$(PinnedWindowsKitInclude)\shared;$(PinnedWindowsKitInclude)\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>UNICODE;_UNICODE;DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_UMD_ADMISSION_TRACE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -39,6 +39,8 @@
     <ClCompile Include="..\src\umd_resource_lifetime.c" />
     <ClCompile Include="..\src\direct_flip_contract.c" />
     <ClCompile Include="..\..\src\render_allocation.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_win32_abi.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_transport.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

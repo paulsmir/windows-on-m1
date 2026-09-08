@@ -30,7 +30,7 @@
       <PreprocessorDefinitions>APPLE_AGX_PACKAGE_DLL=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <ClCompile>
-      <AdditionalIncludeDirectories>include;..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;..\include;..\..\shared\include;..\..\mesa\winsys;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
@@ -46,11 +46,16 @@
     <ClCompile Include="src\umd_resource_lifetime.c" />
     <ClCompile Include="src\direct_flip_contract.c" />
     <ClCompile Include="..\src\render_allocation.c" />
+    <ClCompile Include="..\..\shared\src\apple_agx_win32_abi.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_transport.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\direct_flip_contract.h" />
     <ClInclude Include="include\umd_resource_lifetime.h" />
     <ClInclude Include="src\umd_internal.h" />
+    <ClInclude Include="..\include\render_win32_transport.h" />
+    <ClInclude Include="..\..\shared\include\apple_agx_win32_abi.h" />
+    <ClInclude Include="..\..\mesa\winsys\agx_win32_transport.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\package-version.rc" />

@@ -19,6 +19,16 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #define ADMISSION_UMD_TRACE(Text) ((void)0)
 #endif
 
+static volatile LONG AdmissionUmdGenerationCounter;
+
+static ULONG AdmissionUmdNextGeneration(VOID) {
+  ULONG counter = (ULONG)InterlockedIncrement(&AdmissionUmdGenerationCounter);
+  ULONG generation = ((GetCurrentProcessId() & 0xffffu) << 16) ^ counter;
+  if (generation == 0u)
+    generation = (ULONG)InterlockedIncrement(&AdmissionUmdGenerationCounter);
+  return generation == 0u ? 1u : generation;
+}
+
 static SIZE_T APIENTRY AdmissionUmdCalcPrivateDeviceSize(
     D3D10DDI_HADAPTER Adapter,
     const D3D10DDIARG_CALCPRIVATEDEVICESIZE *Args);
@@ -173,6 +183,54 @@ static BOOLEAN AdmissionUmdResourceIsExact(
              : FALSE;
 }
 
+static HRESULT AdmissionUmdSubmitClear(
+    ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_RESOURCE *Resource,
+    const AGX_WIN32_CLEAR_REQUEST *Request) {
+  D3DDDICB_RENDER render;
+  APPLE_AGX_U32 commandBytes = 0u;
+  APPLE_AGX_WIN32_ABI_RESULT build;
+  HRESULT result;
+  if (Device == NULL || !AdmissionUmdResourceIsExact(Resource) ||
+      Request == NULL || Request->Generation != Device->Win32Generation ||
+      Device->KernelCallbacks == NULL ||
+      Device->KernelCallbacks->pfnRenderCb == NULL ||
+      Device->KernelContext == NULL || Device->CommandBuffer == NULL ||
+      Device->CommandBufferSize < sizeof(APPLE_AGX_WIN32_COMMAND_HEADER) ||
+      Device->AllocationList == NULL || Device->AllocationListSize < 1u ||
+      Device->PatchList == NULL)
+    return E_INVALIDARG;
+  build = AgxWin32TransportBuildClear(
+      Request, Device->CommandBuffer, Device->CommandBufferSize,
+      &commandBytes);
+  if (build != AppleAgxWin32AbiSuccess)
+    return E_INVALIDARG;
+  ZeroMemory(&Device->AllocationList[0], sizeof(Device->AllocationList[0]));
+  Device->AllocationList[0].hAllocation = Resource->KernelAllocation;
+  Device->AllocationList[0].WriteOperation = 1u;
+  ZeroMemory(&render, sizeof(render));
+  render.CommandLength = commandBytes;
+  render.CommandOffset = 0u;
+  render.NumAllocations = 1u;
+  render.NumPatchLocations = 0u;
+  render.hContext = Device->KernelContext;
+  result = Device->KernelCallbacks->pfnRenderCb(
+      Device->RuntimeDevice.handle, &render);
+  if (FAILED(result))
+    return result;
+  if (render.pNewCommandBuffer == NULL || render.NewCommandBufferSize == 0u ||
+      render.pNewAllocationList == NULL || render.NewAllocationListSize == 0u ||
+      render.pNewPatchLocationList == NULL ||
+      render.NewPatchLocationListSize == 0u)
+    return E_FAIL;
+  Device->CommandBuffer = render.pNewCommandBuffer;
+  Device->CommandBufferSize = render.NewCommandBufferSize;
+  Device->AllocationList = render.pNewAllocationList;
+  Device->AllocationListSize = render.NewAllocationListSize;
+  Device->PatchList = render.pNewPatchLocationList;
+  Device->PatchListSize = render.NewPatchLocationListSize;
+  return S_OK;
+}
+
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
   UNREFERENCED_PARAMETER(Instance);
   UNREFERENCED_PARAMETER(Reason);
@@ -221,6 +279,7 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
     D3D10DDI_HADAPTER Adapter, D3D10DDIARG_CREATEDEVICE *Args) {
   ADMISSION_UMD_ADAPTER *adapter = AdmissionUmdAdapterFromHandle(Adapter);
   ADMISSION_UMD_DEVICE *device;
+  ADMISSION_WIN32_CONTEXT_CREATE win32Context;
   D3DDDICB_CREATECONTEXT createContext;
   D3DWDDM1_3DDI_DEVICEFUNCS *deviceFunctions;
   DXGI1_3_DDI_BASE_FUNCTIONS *dxgiFunctions;
@@ -233,6 +292,7 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
       Args->pKTCallbacks->pfnDestroyContextCb == NULL ||
       Args->pKTCallbacks->pfnAllocateCb == NULL ||
       Args->pKTCallbacks->pfnDeallocateCb == NULL ||
+      Args->pKTCallbacks->pfnRenderCb == NULL ||
       Args->p11UMCallbacks == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL ||
       Args->DXGIBaseDDI.pDXGIDDIBaseFunctions4 == NULL)
@@ -246,12 +306,20 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
   device->KernelCallbacks = Args->pKTCallbacks;
   device->UserCallbacks = Args->p11UMCallbacks;
   device->DxgiCallbacks = Args->DXGIBaseDDI.pDXGIBaseCallbacks;
+  device->Win32Generation = AdmissionUmdNextGeneration();
   AdmissionUmdRetirementInitialize(
       &device->Retirement, device, AdmissionUmdDeallocateResource,
       AdmissionUmdReportResourceError);
   ZeroMemory(&createContext, sizeof(createContext));
+  ZeroMemory(&win32Context, sizeof(win32Context));
+  win32Context.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
+  win32Context.Version = ADMISSION_WIN32_CONTEXT_VERSION;
+  win32Context.Bytes = sizeof(win32Context);
+  win32Context.Generation = device->Win32Generation;
   createContext.NodeOrdinal = 0u;
   createContext.EngineAffinity = 1u;
+  createContext.pPrivateDriverData = &win32Context;
+  createContext.PrivateDriverDataSize = sizeof(win32Context);
   result = device->KernelCallbacks->pfnCreateContextCb(
       device->RuntimeDevice.handle, &createContext);
   if (FAILED(result)) {
@@ -259,6 +327,27 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
     return result;
   }
   device->KernelContext = createContext.hContext;
+  if (device->KernelContext == NULL || createContext.pCommandBuffer == NULL ||
+      createContext.CommandBufferSize == 0u ||
+      createContext.pAllocationList == NULL ||
+      createContext.AllocationListSize == 0u ||
+      createContext.pPatchLocationList == NULL ||
+      createContext.PatchLocationListSize == 0u) {
+    D3DDDICB_DESTROYCONTEXT destroyContext;
+    ZeroMemory(&destroyContext, sizeof(destroyContext));
+    destroyContext.hContext = device->KernelContext;
+    if (device->KernelContext != NULL)
+      (void)device->KernelCallbacks->pfnDestroyContextCb(
+          device->RuntimeDevice.handle, &destroyContext);
+    ZeroMemory(device, sizeof(*device));
+    return E_FAIL;
+  }
+  device->CommandBuffer = createContext.pCommandBuffer;
+  device->CommandBufferSize = createContext.CommandBufferSize;
+  device->AllocationList = createContext.pAllocationList;
+  device->AllocationListSize = createContext.AllocationListSize;
+  device->PatchList = createContext.pPatchLocationList;
+  device->PatchListSize = createContext.PatchLocationListSize;
 
   deviceFunctions = Args->pWDDM1_3DeviceFuncs;
   ZeroMemory(deviceFunctions, sizeof(*deviceFunctions));

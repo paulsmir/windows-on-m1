@@ -2,7 +2,9 @@
 #define APPLE_AGX_UMD_INTERNAL_H
 
 #include "direct_flip_contract.h"
+#include "render_win32_transport.h"
 #include "umd_resource_lifetime.h"
+#include "agx_win32_transport.h"
 
 #define ADMISSION_UMD_ADAPTER_MAGIC 0x50414455u /* "UDAP" */
 #define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
@@ -25,6 +27,13 @@ typedef struct _ADMISSION_UMD_DEVICE {
   const D3D11DDI_CORELAYER_DEVICECALLBACKS *UserCallbacks;
   DXGI_DDI_BASE_CALLBACKS *DxgiCallbacks;
   HANDLE KernelContext;
+  ULONG Win32Generation;
+  PVOID CommandBuffer;
+  UINT CommandBufferSize;
+  D3DDDI_ALLOCATIONLIST *AllocationList;
+  UINT AllocationListSize;
+  D3DDDI_PATCHLOCATIONLIST *PatchList;
+  UINT PatchListSize;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
   HRESULT LastRetirementError;
   ULONG RetirementErrorCount;
