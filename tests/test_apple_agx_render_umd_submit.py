@@ -146,6 +146,9 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertNotIn("render.Flags.ResizeCommandBuffer", source)
         self.assertIn("RENDER_IN pass=%lu", source)
         self.assertIn("command_hash=0x%016llx", source)
+        self.assertEqual(source.count("D3DKMTGetDeviceState(&deviceState)"), 1)
+        self.assertEqual(source.count("QueryDeviceExecutionState("), 3)
+        self.assertIn("DEVICE_STATE point=%ls", source)
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 

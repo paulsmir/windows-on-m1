@@ -23,6 +23,23 @@ static ULONGLONG HashBytes(const void *Data, UINT Bytes) {
   return hash;
 }
 
+static NTSTATUS QueryDeviceExecutionState(
+    D3DKMT_HANDLE Device, const wchar_t *Point,
+    D3DKMT_DEVICEEXECUTION_STATE *ExecutionState) {
+  D3DKMT_GETDEVICESTATE deviceState = {0};
+  NTSTATUS status;
+  if (ExecutionState == NULL)
+    return (NTSTATUS)0xc000000dL;
+  deviceState.hDevice = Device;
+  deviceState.StateType = D3DKMT_DEVICESTATE_EXECUTION;
+  status = D3DKMTGetDeviceState(&deviceState);
+  *ExecutionState = NT_SUCCESS(status)
+      ? deviceState.ExecutionState : (D3DKMT_DEVICEEXECUTION_STATE)0;
+  wprintf(L"DEVICE_STATE point=%ls status=0x%08lx execution=%u\n",
+          Point, (ULONG)status, (UINT)*ExecutionState);
+  return status;
+}
+
 int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_ENUMADAPTERS3 enumeration = {0};
   D3DKMT_ADAPTERINFO adapters[MAX_ENUM_ADAPTERS] = {0};
@@ -52,6 +69,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG matchingAdapters = 0u;
   ULONG index;
   ULONG pass;
+  D3DKMT_DEVICEEXECUTION_STATE executionState;
   LUID selectedLuid = {0};
   ULONG selectedSources = 0u;
   UINT residencyPriority[2] = {
@@ -235,8 +253,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     D3DKMT_CREATECONTEXT *activeContext =
         pass == 0u ? &createContext : &secondContext;
     UINT commandOffset;
-    if (pass != 0u)
+    if (pass != 0u) {
       Sleep(15000u);
+      (void)QueryDeviceExecutionState(
+          createDevice.hDevice, L"before_pass2", &executionState);
+    }
     ZeroMemory(&command, sizeof(command));
     command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
     command.Version = ADMISSION_UMD_COMMAND_VERSION;
@@ -287,6 +308,10 @@ int __cdecl wmain(int argc, wchar_t **argv) {
             render.NewAllocationListSize, render.pNewPatchLocationList,
             render.NewPatchLocationListSize, render.NewCommandBuffer,
             render.QueuedBufferCount, (ULONG)renderStatus);
+    (void)QueryDeviceExecutionState(
+        createDevice.hDevice,
+        pass == 0u ? L"after_pass1" : L"after_pass2",
+        &executionState);
     if (!NT_SUCCESS(renderStatus))
       goto cleanup;
     if (render.pNewCommandBuffer == NULL ||
