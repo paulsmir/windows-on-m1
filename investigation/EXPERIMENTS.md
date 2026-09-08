@@ -38356,3 +38356,82 @@ only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `7e78c490fb372ae811ee4616bcfc0f20c38fd97a989f4609c21604c5a02c5105`
 and `19c18b0e2ab48ea3ad81669555749fcc8127f72d50c605b41b2ad9c51b4dcdbf`.
+
+**EXP633 ACTUAL / recovery continuation.** One run reached two Render,
+prepatched adoption, Submit, worker success and Notify/DPC fences256/257.
+Device binary correlation is build633/boot354696813, count2, overflow0,
+captured=exported generation18, durable1, export status0; SHA256
+`b8e3563dfdb034a1f867f591c905f3940100175b2a0e60b23b1cf36eebf42d91`.
+Host records initial swap8, Windows-primary swap9 and qualification swap10;
+there is no saved frame2 latch. Live observation saw the full frame1 query,
+but the recovered producer file ends after pass1 Render/device state: its
+disk persistence did not retain all live stdout. Do not infer missing calls
+from this truncated file.
+
+The guest bugchecked 0x101 (0x18,0,ffffdb805de5a980,4), uptime81.697s.
+Dump `090826-21875-01.dmp` SHA256
+`a734514abdf06038032cca40e376b04059416d5ee878516d7f268888489d45b1`.
+Private PDB matches 30.0.633.0. CPU4 thread is an ExpWorkerThread; its
+KiSwapContext stack is truncated and does not identify an AppleAgx callback.
+The triage dump cannot provide all-CPU progress. Do not assign the watchdog
+to cleanup, DCP, storage or output scanning from this stack.
+Evidence is in `.local/experiments/EXP633-repeated-ping-pong/evidence/`,
+with decoded `correlation.json` and exact `hardware.log` in the parent.
+Verdict: repeated sixteen-frame acceptance INCONCLUSIVE before frame3;
+two render completions confirmed, frame2 output/present not proven.
+
+Compatible emergency recovery reached SSH/8CPU. Evidence was copied before
+hash-gated EXP633 package deletion; pnputil deletion succeeded, stale service
+was deleted, matching SYS/UMD removed. Emergency APPL0002 is absent, so the
+legacy Health script's default AgxProblem0 is invalid as a devnode verdict.
+Controlled shutdown succeeded. Next recovery action: established ordinary
+377/392 launcher `EXP587-repeated-submit/restore-ordinary.sh`, unchanged
+EXP584 m1n1 and EXP392 Mu; verify one inert Code28 devnode and no package,
+service or module. No new hardware candidate is authorized by this verdict
+without a causal discriminator for the post-fence/pre-presentation interval.
+
+**EXP633 recovery verified 2026-09-08T13:44Z:** ordinary377/392 Code28,
+packages0/service absent/module absent, SSH,8CPU,NVMe2/USB5/keyboard1.
+Direct execution of the existing ordinary shell script lacked its executable
+bit; invoking it through sh succeeded. This was a launcher invocation error,
+not a boot or driver result.
+
+# EXP634 — bounded post-fence output correlation
+
+**PREREGISTERED 2026-09-08T13:46Z. WHY THIS HYPOTHESIS:** EXP633 has
+durable success for both render fences but no second saved presentation;
+its CPU4 ExpWorkerThread stack cannot name the callback; existing correlation
+contains no output worker progress. A per-fence stage record is needed to
+distinguish entry, output verification and presentation before any causal fix.
+
+**WINDOWS CONTRACT:** IoQueueWorkItem callbacks execute at PASSIVE_LEVEL;
+capture scalar stages under a short lock and use the existing separate
+export worker. Asynchronous registry persistence is not guaranteed to survive
+a crash. Missing export cannot prove absence of execution.
+Reference: https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/system-worker-threads
+
+**AGX/ASAHI CONTRACT:** unchanged hardware-proven EXP633 queue, completion,
+retained-root and display path. No platform or hardware protocol variable.
+**TRANSLATION:** source16f7e308154781dccfed4936d8bd3e68fc85d844 adds
+version3 output entry/verified/present-entry/present-exit records, each with
+validity/status/CPU/original IRQL/time; preserves completed slots on context
+reuse. The same sixteen-frame producer runs; only build identity changes.
+**WHAT IS STILL UNKNOWN:** exact post-fence operation reached before watchdog,
+and whether valid second output/presentation completes in this run.
+
+Offline:122 render tests GREEN; production C binary decoded through actual
+v3 decoder; v2 compatibility maintained. Reused context relabeling reproduced
+RED and fixed GREEN. Reviewed code/plan in
+docs/superpowers/plans/2026-09-08-exp634-output-progress.md.
+Immutable base FRYZZING EXP633/src plus explicit nine-file git archive;
+overlay SHA256 ecce2e90f4453f96d55d7aac41db210853672941bc1e9ec23fcf7ecdc4fc2f81.
+Build command: powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP634-upload\build.ps1. Script pins established26100/MSVC
+projects, builds KMD/UMD/producer634, runs analysis/Universal/Inf2Cat/TestSign
+and version checks. Artifact hashes must be added before staging.
+One hardware run after clean preflight; live collect each binary generation
+and producer output, preserve raw records and host trace. Stop on exact
+failure, do not infer a missing callback from missing asynchronous evidence.
+Established rollback: exact hash-gated package cleanup in ordinary377/392;
+compatible EXP499 emergency only if ordinary cannot boot. No hardware launch
+until all manifest/staging/collector gates are recorded.
