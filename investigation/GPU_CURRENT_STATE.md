@@ -674,6 +674,23 @@ disk/MMIO timing. Accepted requests and production failure status are unchanged.
 Executable mapping/wiring tests plus full373 tests are GREEN. EXP625 is the
 final discriminator before the functional fix.
 
+EXP625 is hardware decisive: bugcheck argument2 is
+`0xFFFFFFFFE5390008`; subguard8 is `AdmissionSubmitPacketGuardBind`.
+Pass2 therefore reaches exact KMD Submit and passes packet/adoption identity
+through the DMA checks; scheduler/queue are not reached. Source comparison finds
+the deterministic mismatch: producer pass2 requests full2560x1600 using
+`FRAMEBUFFER_BAND_COLOR`, while the binder allowed that color only for the
+bottom-half geometry and allowed only BASE_COLOR for full geometry.
+
+Commit `48f45fc3275e2f4389af5fd2c86185fa0fc08b80` admits both already-defined
+exact colors for full-frame binding, preserving the existing FP16/PBE encoding
+and rejecting other colors. An executable sequential test binds BASE to
+destination0, unbinds byte-exact, then binds BAND_COLOR full-frame to distinct
+destination1 and verifies geometry/color/GPU/PA plus reverse cleanup. RED before,
+GREEN after; full373 tests GREEN. Temporary status encoding and hold are removed.
+EXP626 must prove two physical full-frame jobs/fences and distinct D589 visible
+presentations.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

@@ -37828,3 +37828,34 @@ CAT/UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `cb74dcd0aa775abfdb9532be96f85a193c5a9f3d01437ea14b04313da5106eb4`
 and `71643c461d22abe8890962ed2c7c8102ea6b8333cb7f0476251da1f4493abd9c`.
+
+**EXP625 FINAL — CONFIRMED BIND GUARD.** Exact candidate produced `0x119/2`
+with argument2 `0xFFFFFFFFE5390008`; subguard8 is
+`AdmissionSubmitPacketGuardBind`. This is independent of registry and broker
+timing. Events/dump/host SHA256 are
+`300abc84eaef588b3544b280194d5256971137a2a13988308ebb25ebe5bf5184`,
+`8a8a0b54ea9fac71497503a7e02f5725b81cb4bbdcf67c5b5a55dd6a2281fde6`,
+`59608f69a90e77a9fcf9c809fea0b3b388e97f5183908ce894c2e071397581e1`.
+Exact cleanup completed. Source mismatch: pass2 combines full-frame geometry
+with `APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR`, while the shared binder admitted
+that color only for bottom-half geometry. The lower framebuffer layer already
+owns exact encodings for both known colors; no AGX value is guessed.
+
+# EXP626 — two full-frame colors through ping-pong
+
+**PREREGISTERED 2026-09-08T10:55Z. WHY THIS HYPOTHESIS:** (1) EXP625 names bind
+subguard8 exactly. (2) The only pass1/pass2 binder-input mismatch rejected by
+source is full-frame BAND_COLOR. (3) The framebuffer backend already derives
+and validates both known color encodings, and EXP606 proved physical second
+TA/3D for the bottom-band form.
+
+Commit `48f45fc3275e2f4389af5fd2c86185fa0fc08b80` makes full-frame geometry
+admit either exact known color and passes `command.Color` into the existing
+framebuffer binder. Unknown colors and all address/size/ownership guards remain
+fail-closed. The temporary status encoding and hold are removed. Executable
+regression performs BASE full-frame bind/unbind on destination0 followed by
+BAND_COLOR full-frame bind/unbind on distinct destination1, verifying FP16,
+GPU/PA identities and byte-exact cleanup. RED before, GREEN after; full373 tests
+GREEN. Build exact626 from exact625 plus shared GDI/framebuffer and diagnostic
+cleanup. Require two Submit/worker/physical TA+3D/fences and two D589 latches on
+distinct inactive allocations with expected full-frame hashes; no 0x119/TDR.
