@@ -36704,3 +36704,22 @@ Build exact30.0.601.0 from frozen EXP600 source plus only
 stage from the verified ordinary Code28 baseline, one natural bind and one
 producer. Preserve receipts, cleanup exact package and restore ordinary before
 the next causal decision.
+
+**EXP601 BUILD FREEZE 2026-09-08T00:36Z.** Exact EXP600 builder source plus
+ordering-only overlay SHA
+`75c1d022b34a40536937b9d1f15633a8169bd581aced6bc028588fb13f154e56`
+passed pinned WDK/SDK26100 KMD/UMD/producer analysis, Universal, Inf2Cat,
+TestSign and version30.0.601.0 gates. KMD has inherited C28251 only; producer is
+0 warnings/0 errors. ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`0a5cfb50cc14498f8d69f2841fd5a4f1abc50a3768d1bc89091f43e7d19efc96`,
+`2bdb81c60b901a392b53f550fe993f64136281fbf664749c2c56a5fdc0c57029`,
+`5b0d2edc82d382597a7d19c5a214be5bd4eff0971718de377207e9dfaea6b4d5`,
+`08153331c71133371442238e79a74a8ff00f10933eedc3c888a82b112f24bf56`,
+`e7c213fddf6e08430bbd72f7b3c22b33b48b0d033e7ca0656277cce556ffa6ad`,
+`ea8f98dd8449ab64e34021b41cb23cdb2285507bd8905710ad6e42834b647a61`.
+Manifest/build/producer/version hashes:
+`a115a9f1144ea97174ff83d508835595a60c2acefd6958b687e7d0fc33ae139c`,
+`d6706083bbf64764d84539e365f2b09dabe979154afae633727d8de0a0d6da44`,
+`3063afa0f4722401b6ba1dabffacf4fd9643a74cd55e91a2134a0f1cb0ede4d5`,
+`d4df6d22e62c25b039570a9d01036a1dd618bc73e32e86c4d7affc4ee2843202`.
+Run exactly once from the current clean ordinary baseline.

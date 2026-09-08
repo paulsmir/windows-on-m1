@@ -428,6 +428,15 @@ latch after successful exact fence notification/transaction finish. Full367
 tests GREEN. EXP601 must rerun the same full-size job and require Resetting0,
 SchedulerFaulted0 plus unchanged pixel/fence/D589 proof.
 
+EXP601 exact30.0.601.0 is build-frozen. ZIP/SYS/INF/CAT/UMD/producer SHA256:
+`0a5cfb50cc14498f8d69f2841fd5a4f1abc50a3768d1bc89091f43e7d19efc96`,
+`2bdb81c60b901a392b53f550fe993f64136281fbf664749c2c56a5fdc0c57029`,
+`5b0d2edc82d382597a7d19c5a214be5bd4eff0971718de377207e9dfaea6b4d5`,
+`08153331c71133371442238e79a74a8ff00f10933eedc3c888a82b112f24bf56`,
+`e7c213fddf6e08430bbd72f7b3c22b33b48b0d033e7ca0656277cce556ffa6ad`,
+`ea8f98dd8449ab64e34021b41cb23cdb2285507bd8905710ad6e42834b647a61`.
+All gates pass with inherited C28251 only.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
