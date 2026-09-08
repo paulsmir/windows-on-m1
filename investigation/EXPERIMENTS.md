@@ -39549,6 +39549,46 @@ oem package; rescan one inert APPL0002; graceful reset; immutable ordinary
 EXP377/392 broker-disabled restore. Failure is missing/uncorrelated trace or a
 launch failure, not a GPU verdict.
 
+**EXP648 ACTUAL — UMD LOADED AND QUERIED; ZERO PIPELINE REJECTED BEFORE
+CREATEDEVICE 2026-09-08T19:02:00Z.** Exact package30.0.648.0 staged as oem5 and
+bound naturally on the immutable full-owner EXP584/Mu406 platform. APPL0002 was
+Problem0/Running with8CPU and exact package hashes. The unchanged ARM64 probe
+enumerated Apple LUID0:268679, then D3D11CreateDevice returned0x887A0004
+DXGI_ERROR_UNSUPPORTED at feature0. Basic Render and WARP controls both returned
+0 at feature11_0.
+
+The DBWIN evidence is non-empty and correlated to probe PID5456. In exact order
+it records Apple UMD OpenAdapter10_2 ENTRY; GetCaps ENTRY and PIPELINE no
+implemented level; GetSupportedVersions ENTRY twice; a second OpenAdapter10_2
+ENTRY; then GetSupportedVersions twice. UMD CreateDevice is absent. Therefore
+the runtime did load and execute this UMD, queried its truthful zero-pipeline
+contract, unloaded it and rejected device creation before CreateDevice. This is
+a distinguishing PASS for the diagnostic and supersedes the older EXP646
+wording that inferred no UMD load from a post-return module sample. It is not a
+3D pipeline, desktop, Present or acceleration PASS.
+
+Result/trace/summary/evidence SHA256:
+ea8efb7a0758750381c4cee0c3ece811807e3e63815e71a3b770de7d6e23bf9e,
+0e4a4a7fbd2f0d7ed97a9069b8acf515c2ffec651ab9574757e85a353af68590,
+61dea5959c412458776933631fe302b0cba5d5963d9e31de172cb00bf4bdc918,
+69ea5ed3e2970e89f8634f0191137106ec0f267940f8283f12539478866053ca.
+No fresh41/1001/129 and the device stayed healthy. Exact oem5 package was
+hash-gated, removed, APPL0002 rescanned to Code28, and stale test files removed.
+
+**EXP648-R1 ACTUAL — CLEAN ORDINARY377/392 RESTORED
+2026-09-08T19:08:12Z.** The full-owner launcher exited after graceful PSCI reset.
+Immutable ordinary EXP377/392 broker-disabled boot reached SSH. Health proves
+APPL0002 Problem28/null INF/null service, packages0, service/module/SYS/UMD
+absent,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129. Health/launch-contract
+SHA256:
+a8a30c9e8d2c24ad09bee8db87481214bcb1387e4a2ad8c2b66c4fb97331a877,
+d865d99d16e687440378ae5e22828f471f632db32f2bf7ea7360e97cdd3e81b3.
+The current ED25519 key fingerprint matches the previously pinned
+project-local Air key; no global known_hosts mutation was made. Recovery PASS.
+Do not repeat EXP648. Next close reviewed UMD cleanup/error-policy and DBWIN
+self-test defects offline, then proceed to the versioned frontend command
+envelope with pipeline caps still zero.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
