@@ -37094,3 +37094,10 @@ PASS requires lock/unlock0, sequence2/fence257, 4,096,000 second-color pixels,
 fresh D589 to the inactive offset, Resetting0/SchedulerFaulted0. A lock error or
 unchanged sequence localizes the next Windows synchronization boundary. Exact
 cleanup and ordinary377/392 recovery follow.
+
+**EXP609 PRODUCER FREEZE.** Pinned ARM64 Release/code-analysis build passed with
+zero warnings/errors. Producer/build-log/workflow SHA256 are respectively
+`4f41fb646cd36408898f770d4d3704e5422a1852adf14e31f97953da6951cf44`,
+`d3a7f35193a27f1659fca93f5bfd4554d69a531ee39adab581600812581c5a00`,
+`1c44f284f9f1ce75d4771cd008b956420f6bb0849b95210c166d1b5707e4e602`.
+Exact607 package SHA remains `8c2f1833...34bc2`.
