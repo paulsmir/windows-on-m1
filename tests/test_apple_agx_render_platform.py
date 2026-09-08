@@ -76,6 +76,11 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         self.assertIn(r"src\gdi_receipt_windows.c", project)
 
     def test_submit_worker_does_not_persist_diagnostics_before_completion_poll(self):
+        platform = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        worker = platform[platform.index("static VOID AdmissionPlatformWorker("):]
+        submitted = worker.index("AppleAgxBackendRuntimeSubmit(")
+        first_poll = worker.index("while (runtime->Backend.Phase ==", submitted)
+        critical = worker[submitted:first_poll]
         receipts = (RENDER / "src" / "receipts.c").read_text()
         render_receipts = receipts[receipts.index(
             "VOID AdmissionRecordVisibleAgx("):]
@@ -85,6 +90,14 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         # Legacy per-submit evidence is exported but not made synchronously
         # durable on the render worker. The bounded correlation exporter owns
         # the only explicit flush and reports whether durability succeeded.
+        self.assertNotIn("AdmissionRecordQueueSubmission(", critical)
+        self.assertNotIn("AdmissionRecordQueueInfo(", critical)
+        self.assertNotIn("AdmissionRecordBufferManager(", critical)
+        after_poll = worker[first_poll:]
+        self.assertIn("AdmissionRecordPreSubmitHeartbeat(", after_poll)
+        self.assertIn("AdmissionRecordQueueSubmission(", after_poll)
+        self.assertIn("AdmissionRecordQueueInfo(", after_poll)
+        self.assertIn("AdmissionRecordBufferManager(", after_poll)
         self.assertNotIn("ZwFlushKey", render_receipts)
         self.assertIn("status = ZwFlushKey(key);", correlation)
 

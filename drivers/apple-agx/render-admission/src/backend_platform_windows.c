@@ -2190,7 +2190,14 @@ static VOID AdmissionPlatformWorker(
   BOOLEAN deferred = FALSE;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   APPLE_AGX_G13_QUEUE_PROGRESS finalProgress;
+  APPLE_AGX_RTKIT_SESSION heartbeatSnapshot;
+  ADMISSION_QUEUE_SUBMISSION_RECEIPT queueSubmissionReceipt;
+  ADMISSION_QUEUE_INFO_RECEIPT queueInfoReceipt;
+  ADMISSION_BUFFER_MANAGER_RECEIPT bufferManagerReceipt;
   BOOLEAN finalProgressValid = FALSE;
+  BOOLEAN queueSubmissionCaptured = FALSE;
+  BOOLEAN queueInfoCaptured = FALSE;
+  BOOLEAN bufferManagerCaptured = FALSE;
   BOOLEAN channelBaselineValid = FALSE;
   BOOLEAN channelProgressReported = FALSE;
   BOOLEAN faultSnapshotReported = FALSE;
@@ -2215,6 +2222,10 @@ static VOID AdmissionPlatformWorker(
   RtlZeroMemory(&submission, sizeof(submission));
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   RtlZeroMemory(&taTemporal, sizeof(taTemporal));
+  RtlZeroMemory(&heartbeatSnapshot, sizeof(heartbeatSnapshot));
+  RtlZeroMemory(&queueSubmissionReceipt, sizeof(queueSubmissionReceipt));
+  RtlZeroMemory(&queueInfoReceipt, sizeof(queueInfoReceipt));
+  RtlZeroMemory(&bufferManagerReceipt, sizeof(bufferManagerReceipt));
   taTemporal.Version = ADMISSION_TA_TEMPORAL_RECEIPT_VERSION;
   taTemporal.Bytes = sizeof(taTemporal);
 #endif
@@ -2269,8 +2280,14 @@ static VOID AdmissionPlatformWorker(
   heartbeatResult = AppleAgxRtkitSessionHeartbeat(
       &runtime->Rtkit, &runtime->AscIo,
       AdmissionPlatformNowMs() + J313_AGX_G2_HEARTBEAT_TIMEOUT_MS);
-  AdmissionRecordPreSubmitHeartbeat(adapter, heartbeatResult, &runtime->Rtkit);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  heartbeatSnapshot = runtime->Rtkit;
+#endif
   if (heartbeatResult != AppleAgxRtkitSessionResultOk) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    AdmissionRecordPreSubmitHeartbeat(
+        adapter, heartbeatResult, &heartbeatSnapshot);
+#endif
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
     AdmissionFlushGdiReceipt(adapter);
     AdmissionRenderCorrelationWorkerWindows(
@@ -2320,21 +2337,20 @@ static VOID AdmissionPlatformWorker(
           : FALSE;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   {
-    ADMISSION_QUEUE_SUBMISSION_RECEIPT receipt;
-    ADMISSION_QUEUE_INFO_RECEIPT infoReceipt;
-    ADMISSION_BUFFER_MANAGER_RECEIPT bufferManagerReceipt;
     if (AdmissionCaptureQueueSubmission(runtime, &runtime->Progress,
-                                        runtime->ProgressValid, &receipt)) {
-      initialTaChannelRead = receipt.TaChannelReadPointer;
-      initialD3ChannelRead = receipt.D3ChannelReadPointer;
+                                        runtime->ProgressValid,
+                                        &queueSubmissionReceipt)) {
+      initialTaChannelRead = queueSubmissionReceipt.TaChannelReadPointer;
+      initialD3ChannelRead = queueSubmissionReceipt.D3ChannelReadPointer;
       channelBaselineValid = TRUE;
-      AdmissionRecordQueueSubmission(adapter, &receipt);
+      queueSubmissionCaptured = TRUE;
     }
-    if (AdmissionCaptureQueueInfo(runtime, description.Fence, &infoReceipt))
-      AdmissionRecordQueueInfo(adapter, &infoReceipt);
+    if (AdmissionCaptureQueueInfo(
+            runtime, description.Fence, &queueInfoReceipt))
+      queueInfoCaptured = TRUE;
     if (AdmissionCaptureBufferManager(
             runtime, description.Fence, &bufferManagerReceipt))
-      AdmissionRecordBufferManager(adapter, &bufferManagerReceipt);
+      bufferManagerCaptured = TRUE;
   }
 #endif
   InterlockedExchange64(
@@ -2551,6 +2567,14 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionRecordPreSubmitHeartbeat(
+      adapter, heartbeatResult, &heartbeatSnapshot);
+  if (queueSubmissionCaptured)
+    AdmissionRecordQueueSubmission(adapter, &queueSubmissionReceipt);
+  if (queueInfoCaptured)
+    AdmissionRecordQueueInfo(adapter, &queueInfoReceipt);
+  if (bufferManagerCaptured)
+    AdmissionRecordBufferManager(adapter, &bufferManagerReceipt);
   if (!taTemporalReported && taTemporal.SampleCount != 0u)
     AdmissionRecordTaTemporal(adapter, &taTemporal);
   if (ktraceBaselineValid) {
