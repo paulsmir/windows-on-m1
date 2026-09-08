@@ -212,6 +212,17 @@ reader/resolver callbacks and backend publication are intentionally absent;
 validated Draw currently returns `STATUS_NOT_SUPPORTED`, so the final KMD
 resolve/publication item remains open and no queue can observe the new graph.
 
+Source review of the generated pack format found that raw64 relocation is not a
+universal AGX pointer encoding. Commit
+cbac2d60d629e71f1a241860536c6c17dc8715f3 adds exact USC shader32,
+USC buffer40 and VDM pipeline32 encodings with control-bit preservation and
+shader-base-relative validation. Commit
+9c121992a768ab03119ca1a04ebed3bc6f850135 then serializes deterministic
+Mesa USC pipelines and partial VDM/fragment state into88-byte pipeline and
+68-byte encoder objects and verifies the five placeholder locations with the
+same generated unpack code. Full PPP/render-pass/PBE/EOT and production
+publication remain open.
+
 ## Task 5 — one encoder graph through the production backend
 
 **Files:** create `render_dynamic_windows.c` and minimally generalize the

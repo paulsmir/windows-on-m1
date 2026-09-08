@@ -91,6 +91,17 @@ AGX disassembler. `AGX_COMPILER_OFFLINE_PROVEN=YES`; USC pipeline VDM/render
 pass encoder serialization and production Draw publication remain the first
 boundary. This is not hardware or desktop evidence.
 
+AD03 encoder progressed at commits
+cbac2d60d629e71f1a241860536c6c17dc8715f3 and
+9c121992a768ab03119ca1a04ebed3bc6f850135. Generated Mesa pack source proved
+that USC shader and VDM pipeline fields are shader-base-relative32-bit and USC
+buffers are packed40-bit addresses; typed KMD relocation now encodes those
+exact fields and ARM64 build660 passes. The pinned fixture serializes and
+unpacks deterministic88-byte USC pipeline plus68-byte partial VDM/fragment
+encoder objects with five exact relocations. Full PPP/render-pass/PBE/EOT,
+complete VDM draw command and production broker/backend publication are the
+current first boundary. No Air package was staged and pipeline caps remain0.
+
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
 Render/Patch/Submit, physical completion fence256, DPC and exact terminal output
