@@ -101,7 +101,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionRenderCorrelationStartWindows(
   InterlockedExchange(&Context->RenderCorrelationStopping, 0);
   RtlZeroMemory(&Context->RenderCorrelation,
                 sizeof(Context->RenderCorrelation));
-  bootGeneration = (ULONG)KeQueryInterruptTimePrecise(NULL);
+  bootGeneration = (ULONG)KeQueryInterruptTime();
   if (bootGeneration == 0u)
     bootGeneration = 1u;
   if (!AdmissionRenderCorrelationInitialize(
@@ -141,7 +141,7 @@ _Use_decl_annotations_ ULONG AdmissionRenderCorrelationBeginWindows(
     return 0u;
   KeAcquireSpinLock(&Context->RenderCorrelationLock, &oldIrql);
   (void)AdmissionRenderCorrelationBegin(&Context->RenderCorrelation,
-      KeQueryInterruptTimePrecise(NULL),
+      KeQueryInterruptTime(),
       (ULONGLONG)(ULONG_PTR)Context,
       (ULONGLONG)(ULONG_PTR)RenderContext,
       Args->CommandLength, &sequence);
@@ -174,7 +174,7 @@ _Use_decl_annotations_ VOID AdmissionRenderCorrelationExitWindows(
     return;
   KeAcquireSpinLock(&Context->RenderCorrelationLock, &oldIrql);
   (void)AdmissionRenderCorrelationExit(&Context->RenderCorrelation,
-      CallSequence, KeQueryInterruptTimePrecise(NULL), Guard, (ULONG)Status,
+      CallSequence, KeQueryInterruptTime(), Guard, (ULONG)Status,
       DmaBytes, Patches, Prepatched ? 1u : 0u);
   KeReleaseSpinLock(&Context->RenderCorrelationLock, oldIrql);
   AdmissionRenderCorrelationQueueExport(Context);

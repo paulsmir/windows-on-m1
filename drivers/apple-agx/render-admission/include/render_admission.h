@@ -459,10 +459,10 @@ VOID AdmissionRenderCorrelationExitWindows(
     _In_ ULONG Guard, _In_ NTSTATUS Status, _In_ ULONG DmaBytes,
     _In_ ULONG Patches, _In_ BOOLEAN Prepatched);
 VOID AdmissionRenderCorrelationPatchWindows(
-    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ContextToken,
+    _In_opt_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ContextToken,
     _In_ BOOLEAN Entry, _In_ ULONG Guard, _In_ NTSTATUS Status);
 VOID AdmissionRenderCorrelationSubmitWindows(
-    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ContextToken,
+    _In_opt_ ADMISSION_CONTEXT *Context, _In_ ULONGLONG ContextToken,
     _In_ BOOLEAN Entry, _In_ ULONG Fence, _In_ ULONG Guard,
     _In_ NTSTATUS Status);
 VOID AdmissionRenderCorrelationWorkerWindows(
