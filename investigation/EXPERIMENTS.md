@@ -38435,3 +38435,29 @@ failure, do not infer a missing callback from missing asynchronous evidence.
 Established rollback: exact hash-gated package cleanup in ordinary377/392;
 compatible EXP499 emergency only if ordinary cannot boot. No hardware launch
 until all manifest/staging/collector gates are recorded.
+
+**EXP634 frozen 2026-09-08T13:50Z.** WDK/SDK26100/MSVC14.44 KMD/UMD
+analysis and Universal, Inf2Cat/TestSign and coherent30.0.634.0 gates PASS;
+producer build has0 warnings/errors, KMD inherited C28251 only. SHA256:
+ZIP `3afe03e2210737fb10ef676f33b8f60ae15c6e4428ef4f24098ba75db835a842`;
+SYS `1b0b048c0e278ffde5dc367a697c4c227598e08cbf184e8dbcd65848c54366ce`;
+INF `237f03df59cb0442a02ab4ea0af1d92bb15b9c461878c1f8e9d5ebd86e4e716a`;
+CAT `697acc0b99af3e6569d39bf9fbdf7c5d267df46ec97c973296e662450430a6b7`;
+UMD `a2c3ed944560874cf1e90db0c49acbe49723250aff22b89118e112a8bec9cabe`;
+producer `68977c95f592a619fe343ffb0da12772b23aad89253b9d17f8c0976fcef01387`.
+Workflow `70e71a9fa95bc608b5858795641bcfe184df13bb9a971ee0e99e161aa17e5428`,
+launch `cfe28bfde7e9dab23dc1e4909cf7fc8316f7f973db1529cb53abf47c2a45b5be`,
+collector `8a95e9374eea9aa040d52b421c4fb4561382f9d245300c7687e99ffb3d985a54`.
+Air copies of workflow/collector match and parse without errors. An initial
+Health invocation omitted the established process ExecutionPolicy flag and
+was rejected by PowerShell before running; no driver action occurred.
+
+Stage: powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP634-workflow.ps1 -Mode Stage. Then graceful shutdown and
+sh .local/experiments/EXP634-output-progress/launch.sh, unchanged full-owner
+EXP584 m1n1 / EXP406 Mu, synthetic889. Preflight exact hash/Code0/8CPU.
+Launch collector before producer; stream both SSH outputs to host-local files.
+Collector reads only the existing device key, filters build634/version3/592
+bytes, emits changed base64 records every500ms and liveness every5s, bounded
+300s. No writes to registry. Producer remains identical16-frame workload with
+same HOLD/retirement gate. Candidate file transfer is complete; staging next.

@@ -7,10 +7,10 @@ Consult only relevant EXP631–633 evidence before the next experiment.
 
 ## Current machine
 
-EXP633 evidence saved; exact package/SYS/UMD/service removed in compatible
-emergency guest, followed by controlled shutdown. Ordinary377/392 restored
-and verified: APPL0002 Code28, packages0, no service/module, SSH,8CPU,
-NVMe2/USB5/keyboard1. Live ordinary launcher session47063.
+EXP633 evidence saved and exact cleanup completed. Ordinary377/392 restored
+and verified Code28/no package/service/module, SSH,8CPU,NVMe2/USB5/keyboard1.
+EXP634 has now been hash-verified and staged as oem5.inf from that baseline;
+next is graceful shutdown and one full-profile natural bind.
 
 ## Hardware proven
 
@@ -51,12 +51,14 @@ dump, kd-analyze.txt and kd-cpu-progress.txt.
 
 ## Active source work / next gate
 
-Existing correlation ends at Notify/DPC. Uncommitted diagnostic change appends
+Source16f7e308154781dccfed4936d8bd3e68fc85d844 appends
 four version3 per-fence output records: entry, verification, presentation entry
 and exit, each with validity/status/CPU/IRQL/time. Decoder retains version2
 support. Existing asynchronous device-key exporter is reused; no functional
-render result changes. Ten relevant tests pass, including production C records
-decoded by the actual decoder. WDK build still required; no new run/staging.
+render result changes.122 render tests pass, including production C records
+decoded by the actual decoder. Pinned634 build/sign/Universal/version gates
+PASS; exact manifest and build logs in EXP634-output-progress. Staged only;
+hardware outcome pending.
 
 Next: finish composition review/tests, freeze only explicit overlay over
 immutable633, build/sign/hash and preregister bounded live collection.
