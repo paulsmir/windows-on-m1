@@ -36937,3 +36937,24 @@ submitted range. EXP606 will place only pass2's exact fixed-size command at the
 end of its otherwise independent 4096-byte runtime buffer, so
 `CommandOffset + CommandLength == CommandBufferSize`. KMD still receives the
 same exact command length and no KMD/AGX/display behavior changes.
+
+# EXP606 — full-buffer submission of pass2
+
+**PREREGISTERED 2026-09-08T06:51Z. WHY THIS HYPOTHESIS:** (1) EXP603 pass2 on
+the reused context and EXP605 pass2 on an untouched independent context both
+returned success with QueuedBufferCount0, excluding context identity. (2) The
+pinned `D3DKMT_RENDER` ABI defines the submitted range as CommandOffset plus
+CommandLength. (3) Microsoft documents that the UMD always initiates submission
+when its command buffer is full. Commit
+`a2deb0d57c79c02741fd9dd790529bef435407fd` leaves pass1 at offset0 and places
+only pass2's exact command at `CommandBufferSize-sizeof(command)`, making its
+submitted end equal capacity. Exact command length, allocations, residency,
+contexts, KMD/UMD, AGX and DCP are otherwise unchanged.
+
+Build only the producer on pinned FRYZZING MSVC14.44/WDK26100; reuse signed
+EXP602 ZIP SHA
+`439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`.
+PASS requires pass2 QueuedBufferCount1, sequence2 physical TA/3D completion,
+exact Windows fence, bottom-band combined FNV `0xa94060683c9ca325`, D589 and
+Resetting0/SchedulerFaulted0. Any earlier failure or queued0 rejects the
+fullness hypothesis. Recovery is exact package cleanup and ordinary377/392.
