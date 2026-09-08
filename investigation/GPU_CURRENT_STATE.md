@@ -787,12 +787,28 @@ no fresh System41/1001/129 events. Therefore:
 - `HOLD_STABILITY_PASS=YES`
 - `RETIREMENT_PASS=NO` (not run)
 
+The operator subsequently reported that the physical color transition was
+probably visible. Preserve this as `PHYSICAL_VISIBLE_CHANGE=USER_REPORTED_PROBABLE`,
+not as instrumented proof.
+
 Controlled whole-guest shutdown, not DestroyAllocation, followed evidence and
 produced a separate shutdown latch. Exact EXP631 package cleanup completed and
 ordinary377/392 is restored Code28, no AppleAgx package/service/module, 8 CPUs,
 healthy NVMe/xHCI/input. Next source boundary is an explicitly owned fallback/
 replacement surface and separate retirement operation before DestroyAllocation;
 do not hide it inside resource destruction or assume pool offset0 is owned.
+
+Source-first retirement anchor: EXP631's first source-address receipt proves a
+live Windows primary at segment2 address `1500000000` (pool offset0), KMD handle
+`ffffb30601159500`, full2560x1600/10240/format21, queue status0 at IRQL0.
+Dxgkrnl continues to regard this allocation as the active primary because the
+qualification flips are private. Commit
+`36168a9f2802e8dd6e2c5f1fe5875161192f7722` retains that exact allocation as
+the fallback owner, adds a separate PASSIVE retirement Escape and makes
+DestroyAllocation only reject a still-active owner. EXP632 must preserve the
+EXP631 HOLD evidence, then on an external signal latch the retained Windows
+primary at offset0, prove a newer exact sequence/owner/pool identity, and only
+then destroy the two qualification allocations.
 
 ## Standing constraints
 

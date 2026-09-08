@@ -38201,3 +38201,53 @@ Correlation raw/decoded, producer stdout, live health and host-log SHA256 are
 Evidence was preserved before controlled shutdown; exact package/service/stale
 state was removed in emergency, and ordinary377/392 is restored Code28 with
 8 CPUs and healthy NVMe/xHCI/input.
+
+Operator follow-up: the physical frame/color transition was probably observed.
+Record this as user-reported probable visibility, not instrumented confirmation.
+
+# EXP632 — explicit retirement through retained Windows primary
+
+**PREREGISTERED 2026-09-08T13:08Z. WHY THIS HYPOTHESIS:** (1) EXP631 proves
+two correct frames and15s stability when cleanup is absent. (2) Its exact first
+`Wom1SourceAddressReceipt` identifies a successful full-size Windows primary at
+segment2 address `0x1500000000`, pool offset0, KMD allocation handle
+`0xffffb30601159500`, IRQL0. (3) Microsoft specifies that
+`DxgkDdiSetVidPnSourceAddress` receives the KMD allocation handle and segment
+address of the primary surface, while `DxgkDdiDestroyAllocation` should clean
+internal references after VidMm/scheduler synchronization rather than start a
+new hidden display workflow.
+
+**WINDOWS CONTRACT:** Dxgkrnl continues to own and regard the offset0 primary as
+active throughout private qualification flips. The driver retains the exact
+KMD allocation object passed in the successful source-address callback; it does
+not invent offset0 ownership. The producer retains both render allocations until
+retirement succeeds. DestroyAllocation is PASSIVE and only verifies that neither
+render owner remains active.
+
+**AGX/ASAHI CONTRACT:** No AGX, retained-root, firmware or DCP ABI changes. The
+existing fixed-panel queue, exact applied/latched receipt, interrupt/DPC path and
+registered scanout pool are reused. A publication timeout retains both fallback
+and render owners and prohibits cleanup.
+
+**TRANSLATION:** Commit `36168a9f2802e8dd6e2c5f1fe5875161192f7722`
+captures the exact full-size offset0 Windows primary with an independent owner
+reference. After EXP631-equivalent FRAME1/FRAME2/HOLD, producer waits for an
+external file signal. A versioned PASSIVE retirement Escape validates the
+currently active render lease and retained primary, queues offset0, waits a new
+exact D589, verifies active0 and pool PA, moves the fallback lease active, and
+releases the old render lease once. Only a validated retirement record enables
+producer cleanup. DestroyAllocation contains no DCP commands.
+
+**WHAT IS STILL UNKNOWN:** whether the retained primary owner is present on the
+current boot, whether a new offset0 latch succeeds after HOLD, and whether
+DestroyAllocation/context/device cleanup completes without the prior reset.
+One hardware run distinguishes these without changing rendering.
+
+Offline tests cover owned fallback capture, non-aliasing with render surfaces,
+move-after-new-sequence, exact owner counts, strict retirement record acceptance
+and producer cleanup gating. Render-focused122 tests GREEN; pinned WDK/SDK26100
+KMD/UMD/producer provisional build and Universal validation GREEN with inherited
+C28251 only. Build exact632 from EXP631 plus the retirement overlay. Run until
+HOLD_PASS, preserve A-C evidence, create the exact signal, then require
+RETIRE_PASS, a new host D589 for offset0, DestroyAllocation status0 and full
+cleanup with device ACTIVE/no reset.
