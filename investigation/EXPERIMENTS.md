@@ -37288,3 +37288,31 @@ zero warnings/errors. Producer/build-log/workflow SHA256 are
 `cbf7f9deda6f3d7ed9bf11e4432bad8bd251fed58040533e8a24953aa9ea3a7b`,
 `29d07074d87f293c4b698c94739a006a272bddfc203e49bf70310565f785f50a`.
 Reuse exact signed EXP612 R5 ZIP SHA `d9a89cc4...8836a9`.
+
+**EXP613 FINAL — CANONICAL OFFSET REJECTED.** Pass1 completed. Before KMD entry,
+pass2 `D3DKMTRender` returned `STATUS_DEVICE_REMOVED (0xC00002B6)` with zero
+outputs. Durable correlation candidate612/boot355733910 contains only call1;
+captured/exported generation7, status0, durable1, overflow0. Thus offset0 did
+not repair the path and Render2 was not entered in this run. PnP immediately
+afterward remained Code0 and AppleAgxAdmission Running; no Event4101/bugcheck.
+Decoded/raw/host SHA256 are
+`6af59c60b9b7b09cce59fad4b3b3d9a0f4ad675c40217b67f8afddc07eee00df`,
+`d65b6d99854c3ac201934b04f8628db271ba4b61ddb657ea536dc1fbe802d27f`,
+`f1e8f7471c1f1fe281b743543f41b6afe0979cbc2c35d6a21c99ab914428ad54`.
+Exact cleanup completed and ordinary restore started.
+
+# EXP614 — same-device execution-state discriminator
+
+**PREREGISTERED 2026-09-08T08:18Z. WHY THIS HYPOTHESIS:** (1) EXP610/613
+returned DEVICE_REMOVED before Render2 while PnP stayed Code0. (2) EXP611/612
+returned success for the same high-level request, so the status is a runtime
+device/context state transition, not a stable KMD guard. (3) Pinned WDK exposes
+read-only `D3DKMTGetDeviceState(EXECUTION)` on the same device handle.
+
+Commit `6157182327c6bed20d0fe01d51694162e4710d04` samples execution state immediately
+after pass1, after the15s interval before pass2, and after pass2. It does not
+fail or alter the functional route and adds no flush/sync operation. Canonical
+offset0, exact KMD612 correlation and all GPU/display paths remain unchanged.
+Full371 tests GREEN. Build producer only and reuse exact612 R5 package. The first
+non-ACTIVE sample names the transition; ACTIVE before a DEVICE_REMOVED return
+localizes it inside the second thunk call.

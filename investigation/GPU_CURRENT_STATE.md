@@ -554,6 +554,12 @@ missing owner is dxgkrnl post-Render. Commit
 the obsolete pass2 offset4048 and using canonical offset0 like pass1. Exact612
 R5 KMD/UMD are reused.
 
+EXP613 canonical offset0 is rejected: pass2 returned C00002B6 before KMD and
+correlation count stayed1, while PnP remained Code0/service Running. Commit
+`6157182327c6bed20d0fe01d51694162e4710d04` prepares EXP614 with read-only
+same-device execution-state samples after pass1, before pass2 and after pass2;
+no KMD/AGX or synchronization change.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
