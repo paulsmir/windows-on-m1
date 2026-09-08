@@ -498,6 +498,12 @@ first boundary is a real inactive-surface flip: route pass2 as a complete frame
 to the other existing Windows-owned full-size allocation and make qualification
 destination resolution symmetric. Do not weaken the active-surface guard.
 
+EXP607 commit `8049f36f605c59362389f261ab8ca7cb0638eb2e` implements that
+atomic ping-pong contract: producer alternates allocation0/allocation1 and the
+qualification resolver validates/selects the exact opposite companion. Pass2
+is a complete distinct full-size frame. Full367 tests GREEN; build and one
+hardware run are next.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

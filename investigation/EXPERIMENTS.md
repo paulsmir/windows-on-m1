@@ -36987,3 +36987,29 @@ service/module,8CPU,NVMe2,USB5,keyboard1,bugcheck0. Event129x8 is telemetry.
 Next: use the two existing Windows-owned full-size allocations as a symmetric
 ping-pong pair; render a complete second frame into the inactive allocation and
 present it through the existing exact D589 path.
+
+# EXP607 — two-allocation full-frame ping-pong
+
+**PREREGISTERED 2026-09-08T07:01Z. WHY THIS HYPOTHESIS:** (1) EXP606 proves
+pass2 TA/3D and fence257 but visible guard7 reports destination offset equal to
+the active offset. (2) Both existing allocations are Windows-owned, resident,
+full-size and already carried in the packet; no new memory ownership is needed.
+(3) The active-surface guard is correct and must remain fail-closed.
+
+**ATOMIC CONTRACT:** commit `8049f36f605c59362389f261ab8ca7cb0638eb2e`
+routes pass1 to allocation0 and pass2 to allocation1, while the qualification
+resolver selects exactly the opposite index as the companion. These sides are
+invalid separately: selecting allocation1 as a fixed companion overlaps when
+allocation1 is the render target, while changing producer index alone would be
+rejected by that same resolver. Pass2 is a complete 2560x1600 frame in the
+existing second diagnostic color; the direct-frame validator accepts this
+exact uniform color. No active-surface exception, CPU scale, AGX queue, PBE,
+completion, DCP or capability change is included.
+
+Offline deterministic companion-index and full-frame validation tests were RED
+before implementation and GREEN after; full AppleAgx suite is367 PASS. Build
+exact30.0.607.0 KMD/UMD/producer from the frozen EXP602 base plus only this
+overlay using pinned WDK/SDK26100 and MSVC14.44. PASS requires sequence2,
+fence257, all4,096,000 second-color pixels, direct destination identity at the
+other pool offset, a fresh exact D589, Resetting0/SchedulerFaulted0 and no
+bugcheck. Recovery remains exact package cleanup then ordinary377/392.
