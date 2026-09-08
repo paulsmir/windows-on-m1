@@ -38953,3 +38953,46 @@ c4cf45a20deb6f719f1965b19f2d276f96606fec15049b8f33004c0d7c585019.
 Ordinary377/392 clean health to be read immediately before Stage. Transfer,
 remote parser/hashes, then exact stage; release EXP584/Mu406 natural bind and
 one unchanged16-frame run. No extra monitor/dump setting variable.
++
+**EXP640 STAGED:** remote workflow/collector parser and frozen SHA256 PASS.
+Clean ordinary gate passed; exact package staged as oem5.inf. Controlled
+shutdown and one natural bind/run next. No hardware verdict yet.
++
+**EXP640 HARDWARE PASS.** One exact release-platform run completes16
+Windows-originated Render/Patch/Submit/TA+3D/completion/fence operations.
+Fences256–271 and presentation sequences3–18 are strictly increasing.
+Every2560x1600 allocation is verified4096000/4096000 pixels with exact
+alternating colors/hashes; ownersffffd3817a7709d0/ffffd3817a770cd0,
+offsetsfa0000/1f40000 and PAs9bcf90000/9bdf30000 remain exact on reuse.
+Host records16 corresponding A408/D589 latches swap10–25. No active-surface
+write, stale/duplicate completion or corruption is observed.
+
+Fifteen-second HOLD re-queries all16 immutable records byte-exact, device
+ACTIVE, producer alive, Code0/service Running,8CPU,NVMe2/USB5/keyboard1 and
+no fresh41/1001/129. HOLD evidence captured before retirement: hold.json
+SHA256f481b52d90e07fa1a81cc67c26bb9c054893c2f950ddcd925c65b1e94fd904a6;
+stdout5d24eb21798f877c7afe51eb502671d7ba5f65841f7ece462a0c9cf3ed2472af.
+
+Explicit retirement latches retained Windows primary as sequence19, owner
+ffffd3817b01f670, offset0, PA9bbff0000; host exact D589 swap27. Allocation,
+both contexts, paging queue, device and adapter destroy/close statuses are0;
+producer result0, proving output thread drain/exit and handle close through
+normal runtime teardown. Final uptime205s, producer absent, device Code0,
+health8CPU/NVMe2/USB5/keyboard1, no fresh events. Final.json SHA256
+02be12ef852a077ec6b55445f2ec8396d723feb5252452df641ce246adc9ddf5;
+stdoutc06ed83ad7574d421f9f01ffd7f4a1477975d4b79eee6ff58ba296d8440c2bf7;
+host7ac09f8cadee1c2d7b7ff9ebc90b1d82710d07fa16175ee3752f030488390be2;
+host producer15c19d9afe969faa78b326cea8da9bb50c5e91a1e184ba1f3a73ba5fd1095e7e.
+
+Verdicts: REPEATED_RENDER_16=YES; REPEATED_OUTPUT_16=YES;
+REPEATED_MACHINE_LATCH_16=YES; HOLD_STABILITY=YES; RETIREMENT=YES;
+BOUNDED_NONCACHED_READ_FIX_HW_VALIDATED=YES. Physical repeated color
+observation remains uninstrumented/pending. This is private qualification
+presentation, not standard Windows Present/DWM/OpenGL.
+
+Exact experimental package/devnode/service/SYS/UMD cleanup succeeded after
+all evidence. Full guest shut down cleanly; ordinary377/392 restoration is
+in progress. Next boundary after clean health: standard Windows producer and
+Present path. Re-anchor to current UMD DXGI Present/Present1 and KMD Present
+implementation; derive smallest normal application path from pinned WDK.
+Do not reopen AGX completion, output, DCP or qualification retirement.
