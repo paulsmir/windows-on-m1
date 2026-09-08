@@ -223,6 +223,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   for (pass = 0u; pass < 2u; ++pass) {
     D3DKMT_CREATECONTEXT *activeContext =
         pass == 0u ? &createContext : &secondContext;
+    UINT commandOffset;
     if (pass != 0u)
       Sleep(15000u);
     ZeroMemory(&command, sizeof(command));
@@ -239,7 +240,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
         ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
         : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
     command.Rop = AdmissionUmdRopPatCopy;
-    CopyMemory(activeContext->pCommandBuffer, &command, sizeof(command));
+    if (activeContext->CommandBufferSize < sizeof(command))
+      goto cleanup;
+    commandOffset = pass == 0u
+        ? 0u : activeContext->CommandBufferSize - sizeof(command);
+    CopyMemory(
+        (unsigned char *)activeContext->pCommandBuffer + commandOffset,
+        &command, sizeof(command));
     ZeroMemory(activeContext->pAllocationList,
                2u * sizeof(activeContext->pAllocationList[0]));
     activeContext->pAllocationList[0].hAllocation = allocationHandles[0];
@@ -250,7 +257,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
                sizeof(activeContext->pPatchLocationList[0]));
     ZeroMemory(&render, sizeof(render));
     render.hContext = activeContext->hContext;
-    render.CommandOffset = 0u;
+    render.CommandOffset = commandOffset;
     render.CommandLength = sizeof(command);
     render.AllocationCount = ARRAYSIZE(allocationHandles);
     render.PatchLocationCount = 0u;

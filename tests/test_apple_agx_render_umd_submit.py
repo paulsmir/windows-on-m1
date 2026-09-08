@@ -131,6 +131,16 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR", source)
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR", source)
         self.assertIn("Sleep(15000u);", source)
+        self.assertIn(
+            "commandOffset = pass == 0u\n"
+            "        ? 0u : activeContext->CommandBufferSize - sizeof(command);",
+            source,
+        )
+        self.assertIn(
+            "(unsigned char *)activeContext->pCommandBuffer + commandOffset",
+            source,
+        )
+        self.assertIn("render.CommandOffset = commandOffset;", source)
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 
