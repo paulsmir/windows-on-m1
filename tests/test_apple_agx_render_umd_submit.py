@@ -133,7 +133,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR", source)
         self.assertIn("command.Destination.Top = 0u;", source)
         self.assertIn("command.DestinationAllocationIndex = pass;", source)
-        self.assertIn("Sleep(15000u);", source)
+        self.assertNotIn("Sleep(15000u);", source)
         self.assertIn("commandOffset = 0u;", source)
         self.assertNotIn(
             "activeContext->CommandBufferSize - sizeof(command)", source
