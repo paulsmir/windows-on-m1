@@ -37667,3 +37667,28 @@ Workflow/launch SHA256
 `b14e32e0a2d7046bfc16ef7132a525f3a2cd8118619397338bc8af7f0d22ea55`,
 `33a5f03b9f8cea2bb6eb3ee09bff20b26a5a27147817d98e71c554819eaf7c59`.
 PASS requires both Render/Submit/worker/fence256/257 and ACTIVE state.
+
+**EXP621 FINAL — SECOND SUBMIT TOO EARLY.** Immediate pass2 caused
+`0x119/2`, now with argument2 `STATUS_INVALID_PARAMETER` rather than DEVICE_BUSY.
+The package remained accessible for exact cleanup, but the asynchronous
+correlation export did not persist before reset. Source supplies the causal
+guard: `AdmissionDdiSubmitRender` requires BackendRuntimeReady, while pass2 can
+reach Submit before the first worker returns Ready. This is not a first-fence
+failure. Exact cleanup completed.
+
+# EXP622 — bounded hardware-measured frame spacing
+
+**PREREGISTERED 2026-09-08T10:31Z. WHY THIS HYPOTHESIS:** EXP619 measures first
+completion at31.5ms; EXP620 proves ACTIVE at250ms; EXP621 proves immediate
+second Submit is earlier than current single-worker Ready. Commit
+`763c35caea9f80b978c9317265ff97f913ff147f` adds only250ms qualification
+spacing before pass2. This is not the final render-queue design. Full373 tests
+GREEN. Reuse exact619 KMD. Producer overlay/EXE/build-log SHA256 are
+`aa017368d92a4e3c3694c9d282588694bcc709b7c23490828a2201b42380ddb6`,
+`09ee2b4da6ee3996d9055fd678a3965727bb1f98a7ecc95a0d6bf636e051b885`,
+`21b6394fdb1248ef8ae2abf704b3a96732535a8891f41c55b42a81f3a0c683e3`.
+Workflow/launch SHA256
+`ee7b1775e78aff5c4df3f37aad7b9c2aff99d13861fe128edce030edd4e5872f`,
+`24ce091bd8fab52e41f86fb790812cadbe75d0c5053ba89d26e2b675710ff1cf`.
+PASS requires both physical fences and ACTIVE state; regardless of PASS, a
+production render FIFO remains required before accelerated applications.

@@ -618,6 +618,13 @@ Commit `d01223a4a725c18b0b8ca6cf696ce403a93c199e` removes only the obsolete15s
 inter-frame spacing from normal two-pass producer. EXP621 reuses exact619 KMD
 and must test immediate canonical ping-pong/fences256-257.
 
+EXP621 immediate pass2 reaches a new exact 0x119/2 status:
+`STATUS_INVALID_PARAMETER`, matching the current BackendRuntimeReady guard while
+the first single worker is still completing. EXP622 uses only a hardware-derived
+250ms qualification spacing (first completion31.5ms, ACTIVE at250ms) to close the
+two-frame checkpoint. It is not a production queue replacement; a render FIFO
+is still mandatory afterward.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
