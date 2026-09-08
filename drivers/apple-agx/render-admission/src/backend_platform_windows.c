@@ -2662,6 +2662,13 @@ static VOID AdmissionPlatformWorker(
       InterlockedCompareExchange(&runtime->Resetting, 0, 0) == 0)
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+  /* EXP629: successful visible qualification is exported through the bounded
+   * per-frame Escape record. Do not hold WorkScheduled across storage-backed
+   * legacy receipt writes after a completed D589. */
+  UNREFERENCED_PARAMETER(finalProgress);
+  UNREFERENCED_PARAMETER(finalProgressValid);
+#else
   AdmissionRecordPreSubmitHeartbeat(
       adapter, heartbeatResult, &heartbeatSnapshot);
   if (queueSubmissionCaptured)
@@ -2690,6 +2697,7 @@ static VOID AdmissionPlatformWorker(
         &finalProgress, (ULONG)runtime->Backend.Phase);
   AdmissionFlushGdiReceipt(adapter);
   AdmissionTerminalExit(runtime);
+#endif
 #endif
   AdmissionRenderCorrelationWorkerWindows(
       adapter, description.Fence, FALSE, (ULONG)runtime->Backend.Phase);
