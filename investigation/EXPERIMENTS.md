@@ -38009,3 +38009,19 @@ stdout captures them; durable is explicitly0. Failure-before-acceptance receipts
 and all render/lease/AGX/DCP behavior are unchanged. Full376 tests GREEN. Build
 exact629 from EXP628 plus only backend worker; same producer. Require two query
 records, two D589, producer cleanup0 and no reset.
+
+**EXP629 BUILD FREEZE.** Exact30.0.629.0 from immutable EXP628 plus only the
+successful-visible export ordering file; exact EXP628 producer reused. Pinned
+WDK/SDK26100, MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign and
+coherent version pass with inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD/
+producer SHA256 are
+`7f7bc0b535c3b06222175ce5ba88de4905dc48bb3b3537b455a124b60eccb4d4`,
+`759963f2b61ab90245c551bae507ca9e30603bbda3cbc558612b8bae69936d44`,
+`710acc112b53b0a21bfbb3fd2cb497397262de26ca7d8651e7cec1c435e02e17`,
+`7ec253a078fc06c2f79a489b156265bcd315b1343133679e78525b1371041a0e`,
+`0373933f21149d26c3499460aab66d7f24335e347b8a5e35822c1fa89d8a0cdd`,
+`dcaff86495b384705c38cdf5d76f94831680655f5f14fa99fd9093254eb3f975`,
+`cf91525c4d09d4d64e3ebd3c8bc02115d3e18e587144045e92f8a152a894eae7`.
+Workflow/launch SHA256 are
+`a69261de487e1a39c7a8605dfe9e2f6e6fd33ba454efb7f97f3a5dda2c0d5f20`
+and `efb9161f6a879d6c1c31195babcbe35c07af46eb1c609b5889fa37284910f843`.
