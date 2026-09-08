@@ -50,6 +50,7 @@ typedef struct _AGX_WIN32_WINSYS_OPERATIONS {
                      APPLE_AGX_U32 *Fence);
   int (*WaitFence)(void *Context, APPLE_AGX_U32 Fence,
                    APPLE_AGX_U32 TimeoutMs);
+  int (*RetireFence)(void *Context, APPLE_AGX_U32 Fence);
 } AGX_WIN32_WINSYS_OPERATIONS;
 
 typedef struct _AGX_WIN32_WINSYS {
@@ -81,5 +82,7 @@ AGX_WIN32_WINSYS_RESULT AgxWin32WinsysSubmitClear(
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysWaitFence(
     AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U32 Fence,
     APPLE_AGX_U32 TimeoutMs);
+AGX_WIN32_WINSYS_RESULT AgxWin32WinsysRetireFence(
+    AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U32 Fence);
 
 #endif /* APPLE_AGX_MESA_WIN32_TRANSPORT_H */

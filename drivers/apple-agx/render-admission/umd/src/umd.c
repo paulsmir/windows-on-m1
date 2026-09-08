@@ -309,6 +309,7 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
       Args->pKTCallbacks->pfnDeallocateCb == NULL ||
       Args->pKTCallbacks->pfnLockCb == NULL ||
       Args->pKTCallbacks->pfnUnlockCb == NULL ||
+      Args->pKTCallbacks->pfnSignalSynchronizationObject2Cb == NULL ||
       Args->pKTCallbacks->pfnRenderCb == NULL ||
       Args->p11UMCallbacks == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL ||
@@ -633,19 +634,21 @@ static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
   ADMISSION_UMD_RETIREMENT_FINALIZE_RESULT retirement;
   D3DDDICB_DESTROYCONTEXT destroyContext;
   HRESULT screenResult;
+  HRESULT terminalError = S_OK;
   ULONG screenUndeallocated = 0u;
   if (device == NULL)
     return;
   screenResult = AdmissionUmdScreenFinalize(device, &screenUndeallocated);
   if (FAILED(screenResult) || screenUndeallocated != 0u)
-    AdmissionUmdSetError(device, FAILED(screenResult) ? screenResult : E_FAIL);
+    terminalError = FAILED(screenResult) ? screenResult : E_FAIL;
   AdmissionUmdRetirementFinalize(&device->Retirement, &retirement);
   if (retirement.Undeallocated != 0u) {
     device->LastRetirementError = retirement.LastError;
     device->RetirementErrorCount += retirement.Undeallocated;
     device->RetirementUndeallocated = retirement.Undeallocated;
     device->RetirementTerminal = TRUE;
-    AdmissionUmdSetError(device, retirement.FirstError);
+    if (SUCCEEDED(terminalError))
+      terminalError = retirement.FirstError;
   }
   if (device->KernelContext != NULL && device->KernelCallbacks != NULL &&
       device->KernelCallbacks->pfnDestroyContextCb != NULL) {
@@ -654,6 +657,8 @@ static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
     (void)device->KernelCallbacks->pfnDestroyContextCb(
         device->RuntimeDevice.handle, &destroyContext);
   }
+  if (FAILED(terminalError))
+    AdmissionUmdSetError(device, terminalError);
   ZeroMemory(device, sizeof(*device));
 }
 

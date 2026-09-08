@@ -78,7 +78,7 @@ AGX_WIN32_WINSYS_RESULT AgxWin32WinsysInitialize(
       Operations == NULL || Operations->CreateBuffer == NULL ||
       Operations->MapBuffer == NULL || Operations->UnmapBuffer == NULL ||
       Operations->DestroyBuffer == NULL || Operations->SubmitClear == NULL ||
-      Operations->WaitFence == NULL)
+      Operations->WaitFence == NULL || Operations->RetireFence == NULL)
     return AgxWin32WinsysArgument;
   memset(&initialized, 0, sizeof(initialized));
   initialized.Context = Context;
@@ -185,6 +185,15 @@ AGX_WIN32_WINSYS_RESULT AgxWin32WinsysWaitFence(
   if (Winsys == NULL || Winsys->Generation == 0u || Fence == 0u)
     return AgxWin32WinsysArgument;
   return Winsys->Operations.WaitFence(Winsys->Context, Fence, TimeoutMs)
+             ? AgxWin32WinsysSuccess
+             : AgxWin32WinsysCallback;
+}
+
+AGX_WIN32_WINSYS_RESULT AgxWin32WinsysRetireFence(
+    AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U32 Fence) {
+  if (Winsys == NULL || Winsys->Generation == 0u || Fence == 0u)
+    return AgxWin32WinsysArgument;
+  return Winsys->Operations.RetireFence(Winsys->Context, Fence)
              ? AgxWin32WinsysSuccess
              : AgxWin32WinsysCallback;
 }

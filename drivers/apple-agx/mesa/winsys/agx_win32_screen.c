@@ -172,6 +172,13 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenWaitFence(
       &Screen->Transport, Fence, TimeoutMs));
 }
 
+AGX_WIN32_SCREEN_RESULT AgxWin32ScreenRetireFence(
+    AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 Fence) {
+  if (Screen == NULL || !Screen->Active)
+    return AgxWin32ScreenState;
+  return translate(AgxWin32WinsysRetireFence(&Screen->Transport, Fence));
+}
+
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInvalidate(
     AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 NewGeneration) {
   if (Screen == NULL || !Screen->Active || NewGeneration == 0u ||

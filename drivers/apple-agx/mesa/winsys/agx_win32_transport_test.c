@@ -10,6 +10,7 @@ typedef struct _FAKE_WINSYS {
   APPLE_AGX_U32 Destroys;
   APPLE_AGX_U32 Submits;
   APPLE_AGX_U32 Waits;
+  APPLE_AGX_U32 RetiredFences;
 } FAKE_WINSYS;
 
 static int fake_create(void *context, APPLE_AGX_U64 bytes,
@@ -62,6 +63,13 @@ static int fake_wait(void *context, APPLE_AGX_U32 fence,
   FAKE_WINSYS *fake = (FAKE_WINSYS *)context;
   assert(fence == 44u && timeout_ms == 1000u);
   ++fake->Waits;
+  return 1;
+}
+
+static int fake_retire_fence(void *context, APPLE_AGX_U32 fence) {
+  FAKE_WINSYS *fake = (FAKE_WINSYS *)context;
+  assert(fence == 44u);
+  ++fake->RetiredFences;
   return 1;
 }
 
@@ -195,6 +203,7 @@ static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   operations.DestroyBuffer = fake_destroy;
   operations.SubmitClear = fake_submit;
   operations.WaitFence = fake_wait;
+  operations.RetireFence = fake_retire_fence;
   assert(AgxWin32WinsysInitialize(&winsys, &fake, 7u, &operations) ==
          AgxWin32WinsysSuccess);
   assert(AgxWin32WinsysCreateBuffer(
@@ -214,11 +223,14 @@ static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   assert(fence == 44u);
   assert(AgxWin32WinsysWaitFence(&winsys, fence, 1000u) ==
          AgxWin32WinsysSuccess);
+  assert(AgxWin32WinsysRetireFence(&winsys, fence) ==
+         AgxWin32WinsysSuccess);
   assert(AgxWin32WinsysDestroyBuffer(&winsys, &buffer) ==
          AgxWin32WinsysSuccess);
   assert(buffer.Token == 0ULL);
   assert(fake.Creates == 1u && fake.Maps == 1u && fake.Unmaps == 1u &&
-         fake.Submits == 1u && fake.Waits == 1u && fake.Destroys == 1u);
+         fake.Submits == 1u && fake.Waits == 1u &&
+         fake.RetiredFences == 1u && fake.Destroys == 1u);
 }
 
 static void test_winsys_rejects_stale_and_out_of_range_buffers(void) {
@@ -235,6 +247,7 @@ static void test_winsys_rejects_stale_and_out_of_range_buffers(void) {
   operations.DestroyBuffer = fake_destroy;
   operations.SubmitClear = fake_submit;
   operations.WaitFence = fake_wait;
+  operations.RetireFence = fake_retire_fence;
   assert(AgxWin32WinsysInitialize(&winsys, &fake, 7u, &operations) ==
          AgxWin32WinsysSuccess);
   assert(AgxWin32WinsysCreateBuffer(

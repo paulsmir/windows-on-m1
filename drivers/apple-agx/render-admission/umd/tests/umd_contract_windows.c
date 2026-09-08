@@ -43,9 +43,13 @@ typedef struct _TEST_STATE {
   unsigned int InternalDeallocateCalls;
   unsigned int LockCalls;
   unsigned int UnlockCalls;
+  unsigned int SignalCompletionCalls;
+  unsigned int FailCompletionSignals;
+  BOOL AutoCompleteFence;
   D3DKMT_HANDLE InternalAllocation;
   D3DKMT_HANDLE LastLockedAllocation;
   D3DKMT_HANDLE LastUnlockedAllocation;
+  HANDLE LastCompletionEvent;
   ADMISSION_ALLOCATION_DESCRIPTION InternalDescription;
   unsigned char RenderCommand[128];
   AGX_WIN32_CLEAR_REQUEST *MutatedRequest;
@@ -299,6 +303,30 @@ static HRESULT APIENTRY TestUnlock(
   return S_OK;
 }
 
+static HRESULT APIENTRY TestSignalSynchronizationObject2(
+    HANDLE Device, const D3DDDICB_SIGNALSYNCHRONIZATIONOBJECT2 *Signal) {
+  (void)Device;
+  CHECK(Signal != NULL);
+  if (Signal == NULL)
+    return E_INVALIDARG;
+  CHECK(Signal->hContext == (HANDLE)(UINT_PTR)0x200u);
+  CHECK(Signal->ObjectCount == 0u);
+  CHECK(Signal->Flags.Value == 0x2u);
+  CHECK(Signal->BroadcastContextCount == 0u);
+  CHECK(Signal->CpuEventHandle != NULL);
+  if (Signal->CpuEventHandle == NULL)
+    return E_INVALIDARG;
+  State.LastCompletionEvent = Signal->CpuEventHandle;
+  ++State.SignalCompletionCalls;
+  if (State.FailCompletionSignals != 0u) {
+    --State.FailCompletionSignals;
+    return E_FAIL;
+  }
+  if (State.AutoCompleteFence)
+    CHECK(SetEvent(Signal->CpuEventHandle));
+  return S_OK;
+}
+
 static VOID APIENTRY TestSetError(D3D10DDI_HRTCORELAYER CoreLayer,
                                   HRESULT Error) {
   CHECK(CoreLayer.handle == (VOID *)(UINT_PTR)0x102u);
@@ -444,12 +472,16 @@ int main(void) {
   ADMISSION_UMD_DEVICE *deviceState;
   AGX_WIN32_CLEAR_REQUEST clearRequest;
   APPLE_AGX_WIN32_COMMAND_VIEW clearView;
+  APPLE_AGX_U32 completionFence = 0u;
   AGX_WIN32_SCREEN_BUFFER shaderBuffer;
   AGX_WIN32_SCREEN_BUFFER encoderBuffer;
   void *shaderMap = NULL;
   void *encoderMap = NULL;
+  HANDLE failedCompletionEvent = NULL;
+  HANDLE teardownCompletionEvent = NULL;
 
   memset(&State, 0, sizeof(State));
+  State.AutoCompleteFence = TRUE;
   memset(&adapterCallbacks, 0, sizeof(adapterCallbacks));
   adapterCallbacks.pfnQueryAdapterInfoCb = TestQueryAdapterInfo;
   memset(&adapterFunctions, 0, sizeof(adapterFunctions));
@@ -494,6 +526,8 @@ int main(void) {
   kernelCallbacks.pfnRenderCb = TestRender;
   kernelCallbacks.pfnLockCb = TestLock;
   kernelCallbacks.pfnUnlockCb = TestUnlock;
+  kernelCallbacks.pfnSignalSynchronizationObject2Cb =
+      TestSignalSynchronizationObject2;
   memset(&userCallbacks, 0, sizeof(userCallbacks));
   userCallbacks.pfnSetErrorCb = TestSetError;
   memset(&dxgiCallbacks, 0, sizeof(dxgiCallbacks));
@@ -515,6 +549,12 @@ int main(void) {
                                          &createDevice) == E_INVALIDARG);
   CHECK(State.CreateContextCalls == 0u);
   kernelCallbacks.pfnLockCb = TestLock;
+  kernelCallbacks.pfnSignalSynchronizationObject2Cb = NULL;
+  CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
+                                         &createDevice) == E_INVALIDARG);
+  CHECK(State.CreateContextCalls == 0u);
+  kernelCallbacks.pfnSignalSynchronizationObject2Cb =
+      TestSignalSynchronizationObject2;
   CHECK(adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,
                                          &createDevice) == S_OK);
   CHECK(State.CreateContextCalls == 1u);
@@ -585,6 +625,36 @@ int main(void) {
   CHECK(deviceState->AllocationList == NextAllocationList);
   CHECK(deviceState->PatchList == NextPatchList);
   State.MutatedRequest = NULL;
+  CHECK(AdmissionUmdScreenSignalFence(deviceState, &completionFence) == S_OK);
+  CHECK(completionFence != 0u);
+  CHECK(State.SignalCompletionCalls == 1u);
+  CHECK(AgxWin32ScreenWaitFence(
+            &deviceState->Screen, completionFence, 100u) ==
+        AgxWin32ScreenSuccess);
+  CHECK(AgxWin32ScreenRetireFence(
+            &deviceState->Screen, completionFence) ==
+        AgxWin32ScreenSuccess);
+  State.AutoCompleteFence = FALSE;
+  completionFence = 0u;
+  CHECK(AdmissionUmdScreenSignalFence(deviceState, &completionFence) == S_OK);
+  CHECK(AgxWin32ScreenWaitFence(
+            &deviceState->Screen, completionFence, 0u) ==
+        AgxWin32ScreenCallback);
+  CHECK(SetEvent(State.LastCompletionEvent));
+  CHECK(AgxWin32ScreenWaitFence(
+            &deviceState->Screen, completionFence, 100u) ==
+        AgxWin32ScreenSuccess);
+  CHECK(AgxWin32ScreenRetireFence(
+            &deviceState->Screen, completionFence) ==
+        AgxWin32ScreenSuccess);
+  State.FailCompletionSignals = 1u;
+  completionFence = 0u;
+  CHECK(AdmissionUmdScreenSignalFence(deviceState, &completionFence) == E_FAIL);
+  CHECK(completionFence == 0u);
+  failedCompletionEvent = State.LastCompletionEvent;
+  CHECK(WaitForSingleObject(failedCompletionEvent, 0u) == WAIT_FAILED);
+  CHECK(GetLastError() == ERROR_INVALID_HANDLE);
+  State.AutoCompleteFence = TRUE;
   if (primary.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, primary);
   CHECK(State.DeallocateCalls == 1u);
@@ -657,6 +727,10 @@ int main(void) {
   CHECK(State.LockCalls == 2u);
   CHECK(AgxWin32ScreenWaitFence(&deviceState->Screen, 1u, 1u) ==
         AgxWin32ScreenCallback);
+  State.AutoCompleteFence = FALSE;
+  completionFence = 0u;
+  CHECK(AdmissionUmdScreenSignalFence(deviceState, &completionFence) == S_OK);
+  teardownCompletionEvent = State.LastCompletionEvent;
 
   State.ActiveDdi = TEST_DDI_DESTROY_DEVICE;
   deviceFunctions.pfnDestroyDevice(device);
@@ -667,6 +741,8 @@ int main(void) {
   CHECK(State.DestroyContextCalls == 1u);
   CHECK(State.UnlockCalls == 2u);
   CHECK(State.InternalDeallocateCalls == 2u);
+  CHECK(WaitForSingleObject(teardownCompletionEvent, 0u) == WAIT_FAILED);
+  CHECK(GetLastError() == ERROR_INVALID_HANDLE);
   CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
                                             State.OutstandingKernelResources);
   CHECK(State.OutstandingKernelResources == 0u);

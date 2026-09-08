@@ -59,6 +59,8 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenDestroyBuffer(
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenWaitFence(
     AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 Fence,
     APPLE_AGX_U32 TimeoutMs);
+AGX_WIN32_SCREEN_RESULT AgxWin32ScreenRetireFence(
+    AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 Fence);
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInvalidate(
     AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 NewGeneration);
 

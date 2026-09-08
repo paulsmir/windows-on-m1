@@ -36,6 +36,30 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFreeSlot(
   return NULL;
 }
 
+static ADMISSION_UMD_SCREEN_FENCE *AdmissionUmdScreenFenceFind(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U32 Token) {
+  UINT index;
+  if (Device == NULL || Token == 0u)
+    return NULL;
+  for (index = 0u; index < ADMISSION_UMD_SCREEN_FENCE_LIMIT; ++index) {
+    ADMISSION_UMD_SCREEN_FENCE *fence = &Device->ScreenFences[index];
+    if (fence->Active && fence->Token == Token)
+      return fence;
+  }
+  return NULL;
+}
+
+static ADMISSION_UMD_SCREEN_FENCE *AdmissionUmdScreenFenceFreeSlot(
+    ADMISSION_UMD_DEVICE *Device) {
+  UINT index;
+  if (Device == NULL)
+    return NULL;
+  for (index = 0u; index < ADMISSION_UMD_SCREEN_FENCE_LIMIT; ++index)
+    if (!Device->ScreenFences[index].Active)
+      return &Device->ScreenFences[index];
+  return NULL;
+}
+
 static const AGX_WIN32_BUFFER_CLASS_INFO *AdmissionUmdScreenClass(
     const ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U32 ClassId) {
   APPLE_AGX_U32 index;
@@ -82,7 +106,7 @@ static int AdmissionUmdScreenCreateClassBuffer(
       (Flags & ~classInfo->Flags) != 0u || Flags == 0u)
     return 0;
   slot = AdmissionUmdScreenFreeSlot(device);
-  if (slot == NULL ||
+  if (slot == NULL || device->NextScreenToken == ~0ULL ||
       !AdmissionAllocationDescribe(
           (UINT)Bytes, 1u, 1u,
           (UINT)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE,
@@ -115,6 +139,7 @@ static int AdmissionUmdScreenCreateClassBuffer(
   slot->ClassId = ClassId;
   slot->Flags = Flags;
   slot->Active = TRUE;
+  device->LastScreenError = S_OK;
   *Token = token;
   return 1;
 }
@@ -168,6 +193,7 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   buffer->LockedBase = lock.pData;
   buffer->LockedAccess = Access;
   buffer->Mapped = TRUE;
+  device->LastScreenError = S_OK;
   *Address = (PVOID)((BYTE *)lock.pData + (SIZE_T)Offset);
   return 1;
 }
@@ -197,6 +223,7 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   buffer->LockedBase = NULL;
   buffer->LockedAccess = 0u;
   buffer->Mapped = FALSE;
+  device->LastScreenError = S_OK;
   return 1;
 }
 
@@ -223,6 +250,7 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     return 0;
   }
   ZeroMemory(buffer, sizeof(*buffer));
+  device->LastScreenError = S_OK;
   return 1;
 }
 
@@ -237,10 +265,40 @@ static int AdmissionUmdScreenSubmitClear(
 
 static int AdmissionUmdScreenWaitFence(void *Context, APPLE_AGX_U32 Fence,
                                         APPLE_AGX_U32 TimeoutMs) {
-  UNREFERENCED_PARAMETER(Context);
-  UNREFERENCED_PARAMETER(Fence);
-  UNREFERENCED_PARAMETER(TimeoutMs);
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
+  ADMISSION_UMD_SCREEN_FENCE *fence =
+      AdmissionUmdScreenFenceFind(device, Fence);
+  DWORD waitResult;
+  if (fence == NULL || fence->Event == NULL)
+    return 0;
+  if (fence->Completed)
+    return 1;
+  waitResult = WaitForSingleObject(fence->Event, TimeoutMs);
+  if (waitResult == WAIT_OBJECT_0) {
+    fence->Completed = TRUE;
+    device->LastScreenError = S_OK;
+    return 1;
+  }
+  device->LastScreenError =
+      waitResult == WAIT_TIMEOUT ? HRESULT_FROM_WIN32(ERROR_TIMEOUT)
+                                 : HRESULT_FROM_WIN32(GetLastError());
   return 0;
+}
+
+static int AdmissionUmdScreenRetireFence(void *Context,
+                                          APPLE_AGX_U32 Fence) {
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
+  ADMISSION_UMD_SCREEN_FENCE *fence =
+      AdmissionUmdScreenFenceFind(device, Fence);
+  if (fence == NULL || fence->Event == NULL)
+    return 0;
+  if (!CloseHandle(fence->Event)) {
+    device->LastScreenError = HRESULT_FROM_WIN32(GetLastError());
+    return 0;
+  }
+  ZeroMemory(fence, sizeof(*fence));
+  device->LastScreenError = S_OK;
+  return 1;
 }
 
 HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device) {
@@ -255,16 +313,61 @@ HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device) {
   transport.DestroyBuffer = AdmissionUmdScreenDestroyBuffer;
   transport.SubmitClear = AdmissionUmdScreenSubmitClear;
   transport.WaitFence = AdmissionUmdScreenWaitFence;
+  transport.RetireFence = AdmissionUmdScreenRetireFence;
   ZeroMemory(&screen, sizeof(screen));
   screen.QueryDevice = AdmissionUmdScreenQueryDevice;
   screen.CreateClassBuffer = AdmissionUmdScreenCreateClassBuffer;
   Device->NextScreenToken = 0ULL;
+  Device->NextScreenFence = 0u;
   Device->LastScreenError = S_OK;
   return AgxWin32ScreenInitialize(
              &Device->Screen, Device, Device->Win32Generation,
              &transport, &screen) == AgxWin32ScreenSuccess
              ? S_OK
              : E_FAIL;
+}
+
+HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
+                                      APPLE_AGX_U32 *Fence) {
+  ADMISSION_UMD_SCREEN_FENCE *slot;
+  D3DDDICB_SIGNALSYNCHRONIZATIONOBJECT2 signal;
+  APPLE_AGX_U32 token;
+  HANDLE eventHandle;
+  HRESULT result;
+  if (Fence == NULL)
+    return E_INVALIDARG;
+  *Fence = 0u;
+  if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
+      Device->KernelContext == NULL ||
+      Device->KernelCallbacks == NULL ||
+      Device->KernelCallbacks->pfnSignalSynchronizationObject2Cb == NULL)
+    return E_INVALIDARG;
+  slot = AdmissionUmdScreenFenceFreeSlot(Device);
+  if (slot == NULL || Device->NextScreenFence == MAXUINT32)
+    return E_OUTOFMEMORY;
+  token = ++Device->NextScreenFence;
+  eventHandle = CreateEventW(NULL, TRUE, FALSE, NULL);
+  if (eventHandle == NULL)
+    return HRESULT_FROM_WIN32(GetLastError());
+  ZeroMemory(&signal, sizeof(signal));
+  signal.hContext = Device->KernelContext;
+  signal.ObjectCount = 0u;
+  signal.Flags.EnqueueCpuEvent = 1u;
+  signal.CpuEventHandle = eventHandle;
+  result = Device->KernelCallbacks->pfnSignalSynchronizationObject2Cb(
+      Device->RuntimeDevice.handle, &signal);
+  if (FAILED(result)) {
+    (void)CloseHandle(eventHandle);
+    Device->LastScreenError = result;
+    return result;
+  }
+  ZeroMemory(slot, sizeof(*slot));
+  slot->Event = eventHandle;
+  slot->Token = token;
+  slot->Active = TRUE;
+  Device->LastScreenError = S_OK;
+  *Fence = token;
+  return S_OK;
 }
 
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
@@ -288,6 +391,17 @@ HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
       continue;
     }
     if (!AdmissionUmdScreenDestroyBuffer(Device, buffer->Token)) {
+      if (SUCCEEDED(firstError))
+        firstError = FAILED(Device->LastScreenError)
+                         ? Device->LastScreenError : E_FAIL;
+      ++undeallocated;
+    }
+  }
+  for (index = 0u; index < ADMISSION_UMD_SCREEN_FENCE_LIMIT; ++index) {
+    ADMISSION_UMD_SCREEN_FENCE *fence = &Device->ScreenFences[index];
+    if (!fence->Active)
+      continue;
+    if (!AdmissionUmdScreenRetireFence(Device, fence->Token)) {
       if (SUCCEEDED(firstError))
         firstError = FAILED(Device->LastScreenError)
                          ? Device->LastScreenError : E_FAIL;

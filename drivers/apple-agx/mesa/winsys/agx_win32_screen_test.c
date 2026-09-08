@@ -5,7 +5,7 @@
 
 typedef struct _FAKE_SCREEN {
   AGX_WIN32_DEVICE_INFO Info;
-  unsigned int Queries, Creates, Destroys;
+  unsigned int Queries, Creates, Destroys, RetiredFences;
 } FAKE_SCREEN;
 
 static int query(void *context, AGX_WIN32_DEVICE_INFO *info) {
@@ -57,6 +57,11 @@ static int unused_submit(void *context, const AGX_WIN32_CLEAR_REQUEST *request,
 static int wait(void *context, unsigned int fence, unsigned int timeout_ms) {
   (void)context; return fence == 9u && timeout_ms == 100u;
 }
+static int retire_fence(void *context, unsigned int fence) {
+  FAKE_SCREEN *fake = context;
+  if (fence != 9u) return 0;
+  ++fake->RetiredFences; return 1;
+}
 
 static AGX_WIN32_DEVICE_INFO make_info(void) {
   AGX_WIN32_DEVICE_INFO info;
@@ -85,7 +90,7 @@ static AGX_WIN32_DEVICE_INFO make_info(void) {
 int main(void) {
   FAKE_SCREEN fake = {.Info = make_info()};
   AGX_WIN32_WINSYS_OPERATIONS transport_ops = {
-      unused_create, map, unmap, destroy, unused_submit, wait};
+      unused_create, map, unmap, destroy, unused_submit, wait, retire_fence};
   AGX_WIN32_SCREEN_OPERATIONS screen_ops = {query, create_class};
   AGX_WIN32_SCREEN screen;
   AGX_WIN32_SCREEN_BUFFER buffer;
@@ -109,6 +114,9 @@ int main(void) {
          AgxWin32ScreenSuccess);
   assert(AgxWin32ScreenWaitFence(&screen, 9u, 100u) ==
          AgxWin32ScreenSuccess);
+  assert(AgxWin32ScreenRetireFence(&screen, 9u) ==
+         AgxWin32ScreenSuccess);
+  assert(fake.RetiredFences == 1u);
   assert(AgxWin32ScreenInvalidate(&screen, 18u) ==
          AgxWin32ScreenSuccess);
   assert(AgxWin32ScreenDestroyBuffer(&screen, &buffer) ==

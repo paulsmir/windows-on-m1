@@ -11,6 +11,7 @@
 #define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
 #define ADMISSION_UMD_RESOURCE_MAGIC 0x53455255u /* "URES" */
 #define ADMISSION_UMD_SCREEN_BUFFER_LIMIT 64u
+#define ADMISSION_UMD_SCREEN_FENCE_LIMIT 64u
 
 typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Token;
@@ -24,6 +25,13 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Active;
   BOOL Mapped;
 } ADMISSION_UMD_SCREEN_BUFFER;
+
+typedef struct _ADMISSION_UMD_SCREEN_FENCE {
+  HANDLE Event;
+  APPLE_AGX_U32 Token;
+  BOOL Active;
+  BOOL Completed;
+} ADMISSION_UMD_SCREEN_FENCE;
 
 typedef struct _ADMISSION_UMD_ADAPTER {
   ULONG Magic;
@@ -52,7 +60,9 @@ typedef struct _ADMISSION_UMD_DEVICE {
   UINT PatchListSize;
   AGX_WIN32_SCREEN Screen;
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
+  ADMISSION_UMD_SCREEN_FENCE ScreenFences[ADMISSION_UMD_SCREEN_FENCE_LIMIT];
   APPLE_AGX_U64 NextScreenToken;
+  APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
   HRESULT LastRetirementError;
@@ -76,6 +86,8 @@ extern "C" {
 HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);
+HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
+                                      APPLE_AGX_U32 *Fence);
 #if defined(__cplusplus)
 }
 #endif
