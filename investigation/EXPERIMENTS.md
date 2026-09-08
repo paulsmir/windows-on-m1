@@ -38461,3 +38461,94 @@ Collector reads only the existing device key, filters build634/version3/592
 bytes, emits changed base64 records every500ms and liveness every5s, bounded
 300s. No writes to registry. Producer remains identical16-frame workload with
 same HOLD/retirement gate. Candidate file transfer is complete; staging next.
+
+**EXP634 ACTUAL 2026-09-08T13:59Z.** Natural bind/preflight Code0,
+oem5 exact hashes,8CPU. First collector SSH timed out before producer;
+successful second connection emitted START/ALIVE before the single producer
+launch. Five Event129 occurred during boot before producer (13:51:47 through
+13:52:27); none of the captured fresh events are41/1001. No watchdog occurred.
+
+Four full-frame query results passed, each4096000/4096000 expected pixels:
+frame1 fence256 sequence3 offsetfa0000 colorff112233;
+frame2 fence257 sequence4 offset1f40000 colorffcc8844;
+frame3 fence258 sequence5 repeats exact first owner/offset/PA/hash;
+frame4 fence260 sequence6 repeats exact second owner/offset/PA/hash.
+Owners ffffe4097df7bb90 / ffffe4097df7bfd0, PAs9bcf90000 /9bdf30000,
+hashes27592755b9c32325 /ad1245c8bf762325. Host latches swap10/11/12/13.
+Both targeted output records have entry/verified/present-entry/present-exit,
+verification/presentation status0, all sampled original IRQL0. Full pixel
+verification took about9s; presentation about3s. No proof that instrumentation
+fixed the intermittent watchdog. Physical color-change confirmation pending.
+
+Frame5 Render returned0xc00000e8 with device ACTIVE. Saved device scalar
+Wom1UmdRenderGuard18 identifies PrivateVirgin exactly. Microsoft
+DXGK_DEVICEINFO specifies private DMA data zeroed at buffer creation and
+untouched by VidMm during its lifetime; our per-Render all-zero precondition
+is invalid on reuse. This is now the first functional boundary, before TA/3D
+for frame5. Reference:
+https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmddi/ns-d3dkmddi-_dxgk_deviceinfo
+
+Producer also entered cleanup after that Render error despite CleanupAllowed0,
+called DestroyAllocation2/status0, and exited result1 without explicit
+retirement. This is a confirmed producer failure-path defect; this run does
+not prove safe retirement. Fix the common cleanup gate before another run.
+Sixteen-frame/HOLD/retirement acceptance NOT PASS; four-render/output/machine
+present results PASS. Binary evidence captured before package cleanup.
+
+Host stdout SHA256 ae0910dbc3b847c878f5cf3795de036b79b2db9f4ba6a7bafebfe74db9b3d8e3;
+final host log c0bdbcefe005614f263e0e3273a80f9c2a059c4bd1bb2a31d4ce76e4a1f55285;
+collector log9899686064362070f42107a2a90687ab07fbb96bc5d32e154d40945c9d57e220;
+final correlation dcdffd573c07f65d0b8984bdc38f33577aa8ba0ddc189c95dea91edc60390b22;
+guard JSON1a17848dec04aa4276f90be6df5934ae68b8665b8e37261ec73749a430b17d0e.
+All paths are under .local/experiments/EXP634-output-progress.
+
+Exact pnputil package removal and devnode rescan succeeded in the live guest;
+stale cleanup completed. Controlled guest shutdown succeeded. Restore the
+same established ordinary377/392 through EXP587 restore-ordinary.sh and verify
+clean state before the next candidate. No emergency was required this time.
+# EXP635 — recycled DMA private data
+
+**PREREGISTERED 2026-09-08T14:02Z. WHY THIS HYPOTHESIS:** EXP634 completes
+four frames and returns exact UMD Render guard18/STATUS_INVALID_USER_BUFFER
+for frame5. Guard18 demands all-zero private DMA storage on every Render.
+Microsoft DXGK_DEVICEINFO guarantees zero only at creation; VidMm does not
+access that private structure during its lifetime. Existing Initialize already
+correctly reconstructs it. This mismatch is causal and requires no new probing.
+
+**WINDOWS CONTRACT:** DXGKARG_RENDER supplies driver-resident private storage
+for the current operation. The driver initializes per-request contents;
+zero-on-creation is not zero-on-reuse. Caller/buffer bounds, command validation,
+allocation identity, multipass restriction, shadow/fence sealing and pending
+submission guards remain in force.
+https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmddi/ns-d3dkmddi-_dxgk_deviceinfo
+https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmddi/ns-d3dkmddi-_dxgkarg_render
+
+**AGX/ASAHI CONTRACT:** no change to AGX ABI/commands, firmware, retained-root,
+queues, scheduler or display. **TRANSLATION:** source
+653e4d85bdea4262d6e71cdcae9144979c0c1ebf removes only the all-zero gate;
+existing Initialize/Append rebuild the new private request. Separate prerequisite
+safety commit9c1dbfd8f6c4041ea2cdabf30d81667fe87cd141 gates the common producer
+cleanup label, including early Render failure, on completed retirement. This
+does not change successful-frame behavior; it prevents repeating EXP634's
+unsafe failure-path cleanup. No direct allocation destruction without retirement.
+
+**WHAT IS STILL UNKNOWN:** frame5 onward through16 complete with recycled
+private blocks, exact full outputs/ping-pong latches, HOLD and owned retirement.
+One unchanged sixteen-frame workload tests this. Diagnostic634 v3 remains.
+
+Executable shared shadow test rotates four blocks across16 requests and
+verifies exact new payload/fence and stale-fence rejection. Producer-state test
+models four successful waits followed by direct Render failure and disallows
+cleanup before retirement. Render122 tests and DMA shadow suite GREEN.
+The source-wiring guard assertion was RED before removal; shared initializer
+already passed reuse contract, so no artificial helper RED is claimed.
+
+Immutable builder base EXP634/src plus seven exact committed files; overlay
+SHA256024aff141e0e2215a6bb0b84ca26616c10e44bdef252b203d88b9a15be11f152.
+Build command powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pauls\EXP635-upload\build.ps1. Pinned26100/MSVC14.44 KMD/UMD,
+analysis, Universal, Inf2Cat/TestSign, producer635 and version/hash gates.
+Record manifest before staging. Ordinary377/392 recovery/clean health required;
+same full-owner platform and one natural bind. Preserve each full query and
+host latches; HOLD before signaling known-good retirement. Any error preserves
+live producer resources for controlled recovery.

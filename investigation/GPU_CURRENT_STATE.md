@@ -1,16 +1,15 @@
 # GPU current state
 
-Current boundary: EXP633 post-fence output/presentation watchdog. Main process,
+Current boundary: EXP634 frame5 PrivateVirgin guard. EXP635 build in progress. Main process,
 no agents. Historical state preserved in
 `.local/experiments/EXP633-repeated-ping-pong/current-state-before-compaction.md`.
 Consult only relevant EXP631–633 evidence before the next experiment.
 
 ## Current machine
 
-EXP633 evidence saved and exact cleanup completed. Ordinary377/392 restored
-and verified Code28/no package/service/module, SSH,8CPU,NVMe2/USB5/keyboard1.
-EXP634 has now been hash-verified and staged as oem5.inf from that baseline;
-next is graceful shutdown and one full-profile natural bind.
+EXP634 raw evidence saved and exact package/devnode/stale cleanup succeeded
+in the live guest. Controlled shutdown succeeded; ordinary377/392 restoration
+is running in session66395. Verify clean health before staging EXP635.
 
 ## Hardware proven
 
@@ -64,6 +63,33 @@ Next: finish composition review/tests, freeze only explicit overlay over
 immutable633, build/sign/hash and preregister bounded live collection.
 Missing asynchronous export alone cannot prove callback absence. Keep
 captured/exported/durable distinct. Select causal fix from exact output stage.
+
+## Latest EXP634 verdict / EXP635 next
+
+EXP634 completed FOUR full frames: fences256/257/258/260, presentation
+sequences3/4/5/6, latches10/11/12/13. Every frame4096000/4096000 correct
+pixels, alternating exact two owners/offsets/PAs/hashes. Both targeted v3
+output records show entry/verification/presentation success at sampled IRQL0.
+No watchdog in this run; no claim the diagnostic change cured0x101. Physical
+color-change question remains pending. Event129x5 occurred before producer.
+
+Frame5 Render returned0xc00000e8; saved Wom1UmdRenderGuard18 names
+PrivateVirgin. Microsoft's DXGK_DEVICEINFO guarantees zeroed private DMA
+storage at creation only. Our per-Render zero requirement rejects reuse.
+Source653e4d85bdea4262d6e71cdcae9144979c0c1ebf removes that precondition;
+existing Initialize/Append reconstructs new request, preserves other guards.
+Source9c1dbfd8f6c4041ea2cdabf30d81667fe87cd141 fixes producer's common
+cleanup label: direct Render failure cannot bypass retirement. EXP634 had
+called DestroyAllocation while CleanupAllowed0; safe retirement is NOT proven
+by that run. EXP632 remains the validated normal retirement reference.
+
+Executable sixteen-request/four-recycled-block shadow test and producer
+failure cleanup state test pass; render122 tests pass. Exact635 overlay
+024aff141e0e2215a6bb0b84ca26616c10e44bdef252b203d88b9a15be11f152 over
+immutable FRYZZING EXP634. Build/sign/hash in progress; no635 hardware yet.
+Next execute635 one unchanged16-frame workload after health and build gates;
+save every record, HOLD, explicit retirement then health/cleanup. Evidence
+and exact634 hashes are in EXPERIMENTS.md and EXP634-output-progress.
 
 ## Constraints
 
