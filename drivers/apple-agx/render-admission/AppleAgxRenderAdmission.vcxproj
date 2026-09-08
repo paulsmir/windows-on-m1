@@ -108,6 +108,7 @@
     <ClCompile Include="src\render_umd_command.c" />
     <ClCompile Include="src\render_win32_transport.c" />
     <ClCompile Include="src\apple_agx_dynamic_job.c" />
+    <ClCompile Include="src\render_dynamic_overlay.c" />
     <ClCompile Include="src\umd_render_windows.c" />
     <ClCompile Include="src\render_present.c" />
     <ClCompile Include="src\render_visible_scanout.c" />
@@ -189,6 +190,7 @@
     <ClInclude Include="include\render_admission.h" />
     <ClInclude Include="include\render_win32_transport.h" />
     <ClInclude Include="include\apple_agx_dynamic_job.h" />
+    <ClInclude Include="include\render_dynamic_overlay.h" />
     <ClInclude Include="include\render_objects.h" />
     <ClInclude Include="include\render_memory.h" />
     <ClInclude Include="include\render_allocation.h" />

@@ -115,10 +115,14 @@ static int dynamic_patch(void *Destination,
   }
 }
 
-static int dynamic_destination_role(APPLE_AGX_U32 Role) {
-  return Role == AppleAgxWin32RoleEncoder ||
+static int dynamic_copy_role(APPLE_AGX_U32 Role) {
+  return Role == AppleAgxWin32RoleShader ||
+         Role == AppleAgxWin32RoleShaderRodata ||
+         Role == AppleAgxWin32RoleEncoder ||
          Role == AppleAgxWin32RoleUscPipeline ||
-         Role == AppleAgxWin32RoleDescriptor;
+         Role == AppleAgxWin32RoleDescriptor ||
+         Role == AppleAgxWin32RoleScissor ||
+         Role == AppleAgxWin32RoleDepthBias;
 }
 
 static APPLE_AGX_DYNAMIC_JOB_OBJECT *dynamic_object(
@@ -170,9 +174,8 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
     return dynamic_fail(AppleAgxDynamicJobArgument, Storage, 0u, Job);
   dynamic_zero(Job, (APPLE_AGX_U32)sizeof(*Job));
 
-  for (index = 0u; index < View->Draw->RelocationCount; ++index) {
-    const APPLE_AGX_WIN32_RELOCATION *relocation = &View->Relocations[index];
-    APPLE_AGX_U32 referenceIndex = relocation->DestinationReference;
+  for (index = 0u; index < View->Header->ReferenceCount; ++index) {
+    APPLE_AGX_U32 referenceIndex = index;
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *reference;
     const ADMISSION_WIN32_ALLOCATION_FACT *fact;
     APPLE_AGX_DYNAMIC_JOB_OBJECT *object;
@@ -181,9 +184,8 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
       return dynamic_fail(AppleAgxDynamicJobLayout, Storage, storageBytes, Job);
     reference = &View->References[referenceIndex];
     fact = &Facts[referenceIndex];
-    if (!dynamic_destination_role(reference->Role))
-      return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, storageBytes,
-                          Job);
+    if (!dynamic_copy_role(reference->Role))
+      continue;
     object = dynamic_object(Job, referenceIndex);
     if (object != DYNAMIC_NULL)
       continue;
@@ -237,7 +239,8 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
       return dynamic_fail(AppleAgxDynamicJobRange, Storage, storageBytes, Job);
     absoluteOffset = target->Offset + relocation->TargetOffset;
     if (!Resolve(CallbackContext, targetFact->AllocationToken,
-                 targetFact->ClassId, absoluteOffset, 1u, &gpuAddress) ||
+                 targetFact->ClassId, relocation->TargetReference,
+                 target->Role, absoluteOffset, 1u, &gpuAddress) ||
         gpuAddress == 0ULL || gpuAddress >= DYNAMIC_40_BIT_LIMIT)
       return dynamic_fail(AppleAgxDynamicJobResolve, Storage, storageBytes,
                           Job);

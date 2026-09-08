@@ -25,12 +25,16 @@ static int read_object(void *Context, APPLE_AGX_U64 Token,
 }
 
 static int resolve_object(void *Context, APPLE_AGX_U64 Token,
-                          APPLE_AGX_U32 ClassId, APPLE_AGX_U64 Offset,
+                          APPLE_AGX_U32 ClassId,
+                          APPLE_AGX_U32 ReferenceIndex,
+                          APPLE_AGX_U32 Role, APPLE_AGX_U64 Offset,
                           APPLE_AGX_U32 Bytes,
                           APPLE_AGX_U64 *GpuVirtualAddress) {
   DYNAMIC_FIXTURE *fixture = Context;
   ++fixture->Resolves;
   if (fixture->FailResolve || Token == 0ULL || ClassId > 3u ||
+      ReferenceIndex >= 9u || Role < AppleAgxWin32RoleRenderTarget ||
+      Role > AppleAgxWin32RoleDepthBias ||
       Offset >= 0x10000ULL || Bytes != 1u)
     return 0;
   *GpuVirtualAddress = Token == 9ULL
@@ -136,28 +140,37 @@ int main(void) {
       &view, facts, 9u, 0x10000000ULL, read_object, resolve_object, &fixture,
       storage, sizeof(storage), &job) == AppleAgxDynamicJobSuccess);
   assert(job.Magic == APPLE_AGX_DYNAMIC_JOB_MAGIC && job.Generation == 7u);
-  assert(job.ObjectCount == 2u && job.RelocationCount == 7u);
-  assert(fixture.Reads == 2u && fixture.Resolves == 7u);
-  assert(job.Objects[0].ReferenceIndex == 8u);
-  assert(job.Objects[1].ReferenceIndex == 4u);
-  assert(read_le(storage + job.Objects[0].StorageOffset, 8u) ==
+  assert(job.ObjectCount == 7u && job.RelocationCount == 7u);
+  assert(fixture.Reads == 7u && fixture.Resolves == 7u);
+  assert(job.Objects[0].ReferenceIndex == 2u);
+  assert(job.Objects[1].ReferenceIndex == 3u);
+  assert(job.Objects[2].ReferenceIndex == 4u);
+  assert(job.Objects[3].ReferenceIndex == 5u);
+  assert(job.Objects[4].ReferenceIndex == 6u);
+  assert(job.Objects[5].ReferenceIndex == 7u);
+  assert(job.Objects[6].ReferenceIndex == 8u);
+  assert(storage[job.Objects[0].StorageOffset] == 0x12u);
+  assert(storage[job.Objects[1].StorageOffset] == 0x13u);
+  assert(read_le(storage + job.Objects[6].StorageOffset, 8u) ==
          0x10010000ULL);
-  assert((read_le(storage + job.Objects[0].StorageOffset + 16u, 4u) &
+  assert((read_le(storage + job.Objects[6].StorageOffset + 16u, 4u) &
           ~0x3fULL) == 0x50000ULL);
-  assert((read_le(storage + job.Objects[0].StorageOffset + 24u, 4u) &
+  assert((read_le(storage + job.Objects[6].StorageOffset + 24u, 4u) &
           0xffULL) == 0x15ULL);
-  assert((read_le(storage + job.Objects[0].StorageOffset + 24u, 4u) &
+  assert((read_le(storage + job.Objects[6].StorageOffset + 24u, 4u) &
           ~0xffULL) == 0x18181800ULL);
-  assert(read_le(storage + job.Objects[0].StorageOffset + 28u, 4u) ==
+  assert(read_le(storage + job.Objects[6].StorageOffset + 28u, 4u) ==
          0x100ULL);
   assert(job.Relocations[6].ResolvedAddress == 0x1500000100ULL);
   assert(job.Relocations[6].EncodedValue == 0x1500000100ULL);
-  assert(read_le(storage + job.Objects[1].StorageOffset, 6u) ==
+  assert(read_le(storage + job.Objects[2].StorageOffset, 6u) ==
          ((0x30000ULL << 16u) | 0x1414ULL));
   assert(job.Relocations[2].EncodedValue == 0x50000ULL);
   assert(job.Relocations[3].ResolvedAddress == 0x10030000ULL);
   assert(job.Relocations[3].EncodedValue == 0x30000ULL);
   memcpy(copy, storage, job.StorageBytes);
+  memset(fixture.Data[2], 0xdd, sizeof(fixture.Data[2]));
+  memset(fixture.Data[3], 0xcc, sizeof(fixture.Data[3]));
   memset(fixture.Data[8], 0xff, sizeof(fixture.Data[8]));
   memset(fixture.Data[4], 0xee, sizeof(fixture.Data[4]));
   assert(memcmp(copy, storage, job.StorageBytes) == 0);

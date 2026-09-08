@@ -57,6 +57,7 @@ typedef int (*APPLE_AGX_DYNAMIC_JOB_READ)(
     APPLE_AGX_U32 Bytes, void *Destination);
 typedef int (*APPLE_AGX_DYNAMIC_JOB_RESOLVE)(
     void *Context, APPLE_AGX_U64 AllocationToken, APPLE_AGX_U32 ClassId,
+    APPLE_AGX_U32 ReferenceIndex, APPLE_AGX_U32 Role,
     APPLE_AGX_U64 Offset, APPLE_AGX_U32 Bytes,
     APPLE_AGX_U64 *GpuVirtualAddress);
 
