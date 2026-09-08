@@ -37281,3 +37281,10 @@ KMD612 correlation, ping-pong, AGX and DCP remain unchanged. Full371 tests
 GREEN. Rebuild/hash producer only and reuse exact signed EXP612 R5 package.
 PASS requires call2 Render/Patch/Submit/worker, fence257, second full-frame
 hardware pixels and D589. If Patch remains absent, canonical layout is closed.
+
+**EXP613 PRODUCER FREEZE.** Pinned ARM64 Release/code-analysis build passes with
+zero warnings/errors. Producer/build-log/workflow SHA256 are
+`6c5052bb7ea0b1a9ad0bdb0c895dff466a042bb68e0e6984a2dfc04088e86cbd`,
+`cbf7f9deda6f3d7ed9bf11e4432bad8bd251fed58040533e8a24953aa9ea3a7b`,
+`29d07074d87f293c4b698c94739a006a272bddfc203e49bf70310565f785f50a`.
+Reuse exact signed EXP612 R5 ZIP SHA `d9a89cc4...8836a9`.
