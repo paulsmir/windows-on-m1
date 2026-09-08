@@ -481,6 +481,15 @@ before pass1, as permitted by the pinned WDK multiple-context contract, and
 routes pass2 through context2. EXP605 is preregistered; build only the producer,
 reuse byte-exact signed EXP602 package SHA `439d2ffc...05ad5e2`, then run once.
 
+EXP605 rejected context identity as the batching owner. Both contexts were
+created before pass1 with distinct runtime buffers; pass1 queued1, but pass2 on
+the untouched context still returned status0/QueuedBufferCount0 and never
+reached KMD/AGX. Exact cleanup and clean ordinary restore completed. The first
+boundary is now documented D3DKMT command-buffer fullness. Next EXP606 sets only
+pass2's valid submitted range at the end of its 4096-byte runtime buffer so
+offset+length equals capacity, retaining exact command length and byte-exact
+EXP602 KMD/UMD.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

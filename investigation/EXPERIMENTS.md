@@ -36916,3 +36916,24 @@ Workflow SHA256
 `4a1a2b16e957b0b82434a3e552eef23c7465097e88db96154217a0da1d3cc685`.
 Exact signed package remains byte-identical to EXP602, SHA256
 `439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`.
+
+**EXP605 FINAL — REJECTED AS SUFFICIENT.** Both standard contexts were created
+successfully before allocations and had distinct runtime command/list buffers.
+Pass1 returned status0/QueuedBufferCount1 and completed the proven uniform
+hardware path. After15s, pass2 on the untouched independent context returned
+status0 but QueuedBufferCount0; terminal and visible receipts remained pass1.
+Thus context identity and post-render context allocation are not the batching
+owner. Producer/evidence hashes are respectively
+`03c1ac6783d10004774965cb3cc0cd87ac55923a84bc50f4e98be78089e5cbd2`
+and `14f291382599fc62b2856927cf0decb4fd55cc738639b367af66f00539d69dc0`.
+No bugcheck occurred; Event129x2 is storage telemetry. Exact oem5/package/service
+cleanup completed and ordinary377/392 is restored: Code28, no package/service/
+module,8CPU,NVMe2,USB5,keyboard1,bugcheck0.
+
+The next owner is documented command-buffer fullness. Microsoft states that a
+UMD initiates submission whenever its command buffer is full, while the pinned
+`D3DKMT_RENDER` contract supplies `CommandOffset` and `CommandLength` as the
+submitted range. EXP606 will place only pass2's exact fixed-size command at the
+end of its otherwise independent 4096-byte runtime buffer, so
+`CommandOffset + CommandLength == CommandBufferSize`. KMD still receives the
+same exact command length and no KMD/AGX/display behavior changes.
