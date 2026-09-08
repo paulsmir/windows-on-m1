@@ -39253,3 +39253,40 @@ No additional offline or session0 action can create the required interactive
 window token. Minimal operator action: log into Windows at the Air; do not run
 commands. The task starts automatically and holds the visible test for15s.
 Collect result/receipts immediately after logon, classify, cleanup and continue.
+
+**EXP643 ACTUAL — AGX RENDER PASS, STANDARD PRESENT DENIED BEFORE KMD DDI.**
+The operator login is confirmed by explorer.exe and task execution in session1.
+The hash-gated task created HWND0x300ae with process_session=active_session=1.
+One Windows render returned status0/queued1. Durable receipts prove physical
+TA/3D and exact Windows completion fence269: backend/completion status0,
+TA/D3 observed stamps and done pointers equal expected, NotifyInterrupt/DPC1,
+device ACTIVE. D3DKMTPresent(Blt) then returned0xC01E0007. Pinned WDK ntstatus.h
+defines this as STATUS_GRAPHICS_PRESENT_DENIED, “denial of desktop access”.
+No successful KMD Present trace exists; all producer WDDM objects destroyed
+with status0, task exited1, device remains Code0/Running/8CPU and no fresh
+41/1001/129. The observed black screen is consistent with no accepted Present.
+Result/evidence SHA256:
+c2617651084961280edae483ce8106d68bfb907764dbd65da38a77f1afe266e5,
+05ddb8df0d29d7f98846fe1208f86b8e795e77c6595ea92a668dd4cc30c5f5e9.
+
+Verdict: corrected boot and interactive AGX producer PASS; windowed BLT is
+rejected before DxgkDdiPresent by desktop-access admission. The task ran at
+the logon edge. One launch-only discriminator remains: start the same exact
+interactive-token task after explorer/default desktop is fully established.
+
+# EXP644 — late interactive launch after Explorer readiness
+
+**PREREGISTERED 2026-09-08T17:45:00Z. WHY THIS HYPOTHESIS:** (1) EXP643 ran
+at the logon trigger edge and received STATUS_GRAPHICS_PRESENT_DENIED; (2)
+Explorer is now confirmed in session1 and the same task principal remains an
+interactive token; (3) no driver/KMD/AGX change is implicated because render
+and physical completion passed and D3DKMTPresent was rejected before KMD.
+
+Single variable: start the exact same task after Explorer/default desktop is
+already established instead of at logon. Package/artifacts remain installed
+only because retention itself is preregistered; hashes and code are unchanged
+from EXP643. Preserve the first result under a new name, then Start-ScheduledTask
+once. PASS requires D3DKMTPresent0, KMD Present ENTRY/EXIT, PresentTransfer
+completion and15s hold. If0xC01E0007 repeats, reject scheduled-task desktop
+access and prepare an Explorer/manual-console launch rather than changing GPU
+code. No blind retry, rebuild, exclusive owner or DCP change.

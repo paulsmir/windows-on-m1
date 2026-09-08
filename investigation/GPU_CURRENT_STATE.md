@@ -6,8 +6,10 @@ Updated 2026-09-08T17:15Z. Main process only; no agents.
 
 EXP643 is currently installed and naturally bound on the full-owner release
 platform: APPL0002 Code0, exact oem5/INF/SYS hashes, service Running,8CPU.
-The corrected boot is stable and SSH works. Task EXP643-Interactive is Ready,
-but console session1 has no logged-in user; no producer result exists yet.
+The corrected boot is stable and SSH works. Interactive task ran in session1:
+AGX Render/physical completion fence269 PASS, but D3DKMTPresent returned
+STATUS_GRAPHICS_PRESENT_DENIED before KMD Present. All producer objects
+teardown0 and no fresh system events.
 
 Current first unknown remains standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0:
@@ -18,8 +20,8 @@ but its scheduled producer never ran: exact dump localizes a pre-producer CDD
 Present crash to the new diagnostic reading DXGK_ALLOCATIONLIST through the
 wrong pAllocationInfo stride. Commit9beed62 corrects only that view. Next is
 fresh EXP643 with the unchanged interactive HWND/BLT discriminator.
-EXP643 now awaits only physical console login; the hash-gated task starts
-automatically and performs the15s visible windowed BLT test.
+EXP644 is preregistered as a launch-only check on the same exact installed
+package: rerun the task once after Explorer/default desktop is established.
 
 ## Hardware proof retained
 
