@@ -37316,3 +37316,10 @@ offset0, exact KMD612 correlation and all GPU/display paths remain unchanged.
 Full371 tests GREEN. Build producer only and reuse exact612 R5 package. The first
 non-ACTIVE sample names the transition; ACTIVE before a DEVICE_REMOVED return
 localizes it inside the second thunk call.
+
+**EXP614 PRODUCER FREEZE.** Pinned ARM64 Release/code-analysis passes zero
+warnings/errors. Producer/build-log/workflow SHA256:
+`2c51941c8b4c4a87505a34eff434dbf80f5c548870e5e3f1feb01f986d9dc9fd`,
+`533927c879be145911baed679fb61db1824e5851c1cfcf7a1237d74688ee31ff`,
+`ba966003b18b7234b69fe36531e41435583961c878580894e450c130087527c2`.
+Exact612 R5 package unchanged.
