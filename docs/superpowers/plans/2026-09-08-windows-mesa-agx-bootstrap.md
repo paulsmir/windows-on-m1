@@ -65,7 +65,7 @@ def test_pinned_mesa_checkout_and_mit_sources(self):
     self.assertTrue(result["license_sha256"])
 ```
 
-The lock must require `COPYING`, `meson.build`,
+The lock must require `licenses/MIT`, `meson.build`,
 `src/gallium/frontends/wgl`, `src/gallium/targets/wgl`,
 `src/gallium/targets/libgl-gdi`, `src/gallium/drivers/asahi`, and
 `src/asahi/compiler`.
@@ -78,7 +78,7 @@ Expected: FAIL because the lock and verifier do not exist.
 
 - [ ] **Step 3: Implement the exact lock verifier**
 
-The verifier must use `git -C <source> rev-parse HEAD`, hash `COPYING`, reject
+The verifier must use `git -C <source> rev-parse HEAD`, hash `licenses/MIT`, reject
 dirty tracked files, check every required path, and emit only:
 
 ```json
