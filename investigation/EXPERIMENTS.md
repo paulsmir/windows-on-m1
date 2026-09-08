@@ -37013,3 +37013,15 @@ overlay using pinned WDK/SDK26100 and MSVC14.44. PASS requires sequence2,
 fence257, all4,096,000 second-color pixels, direct destination identity at the
 other pool offset, a fresh exact D589, Resetting0/SchedulerFaulted0 and no
 bugcheck. Recovery remains exact package cleanup then ordinary377/392.
+
+**EXP607 BUILD FREEZE.** Exact30.0.607.0 pinned build, KMD/UMD code analysis,
+Universal validation, Inf2Cat/TestSign, version and producer gates passed.
+ZIP/SYS/INF/CAT/UMD/producer SHA256 are respectively
+`8c2f1833664dbd47301418830fe0100ce4837b58eda4044a16911894e7634bc2`,
+`fe74f359f9a8d050832c99676715edbaf5edb667e579d354769541ced8d5908c`,
+`5b0d08f0a3619d59c005fc26a5ee1966d1a5257da91017b8d699eb72a1de8ee7`,
+`bbabb60a9c54a48e766ab17f97549742642abbd7f4a833d80e3fd8088dd8366a`,
+`1ff600ca2d13fc36029a4f5dc3ff43cb81068d7693412c661d69eeda2dc04174`,
+`98e8b521ecf0318ec25157e334189321fd2c317c65534951e374fa21b4cd8ea7`.
+Workflow SHA256
+`07b788ac8e1030319c29a03c58ed1de36d6822ba81ff47ca264bd9aa579a6242`.
