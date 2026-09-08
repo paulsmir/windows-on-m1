@@ -86,5 +86,12 @@ int AdmissionDisplayOutputLeaseMatches(
     const ADMISSION_DISPLAY_OUTPUT_LEASE *Lease,
     const ADMISSION_ALLOCATION_OBJECT *Owner);
 int AdmissionDisplayOutputLeaseRetire(ADMISSION_DISPLAY_OUTPUT_LEASE *Lease);
+int AdmissionDisplayOutputLeaseCapture(
+    ADMISSION_DISPLAY_OUTPUT_LEASE *Lease, unsigned int Generation,
+    unsigned int Fence, const ADMISSION_BACKEND_OUTPUT_VIEW *View,
+    ADMISSION_ALLOCATION_OBJECT *Owner);
+int AdmissionDisplayOutputLeaseMove(
+    ADMISSION_DISPLAY_OUTPUT_LEASE *Destination,
+    ADMISSION_DISPLAY_OUTPUT_LEASE *Source);
 
 #endif

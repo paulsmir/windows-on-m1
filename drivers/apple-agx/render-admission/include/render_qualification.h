@@ -4,6 +4,8 @@
 #define ADMISSION_PRESENT_QUERY_MAGIC 0x51504741u /* AGPQ */
 #define ADMISSION_PRESENT_QUERY_VERSION 2u
 #define ADMISSION_PRESENT_QUERY_CAPACITY 2u
+#define ADMISSION_RETIREMENT_QUERY_MAGIC 0x51524741u /* AGRQ */
+#define ADMISSION_RETIREMENT_QUERY_VERSION 1u
 
 typedef enum _ADMISSION_PRESENT_PURPOSE {
   AdmissionPresentPurposeUnknown = 0u,
@@ -61,6 +63,23 @@ typedef struct _ADMISSION_PRESENT_EXPECTATION {
   unsigned long long ExpectedContentHash, PreviousContentHash;
 } ADMISSION_PRESENT_EXPECTATION;
 
+typedef enum _ADMISSION_RETIREMENT_COMMAND {
+  AdmissionRetirementCommandExecute = 1u,
+} ADMISSION_RETIREMENT_COMMAND;
+
+typedef struct _ADMISSION_RETIREMENT_QUERY {
+  unsigned int Magic, Version, Command, Status;
+  unsigned int CandidateBuild, BootGeneration, Purpose, Valid;
+  unsigned long long Sequence, AllocationToken, ActiveOffset;
+  unsigned long long PhysicalAddress;
+} ADMISSION_RETIREMENT_QUERY;
+
+typedef struct _ADMISSION_RETIREMENT_EXPECTATION {
+  unsigned int CandidateBuild, BootGeneration;
+  unsigned long long PreviousSequence, ExpectedPoolPhysical;
+  unsigned long long RenderAllocation0, RenderAllocation1;
+} ADMISSION_RETIREMENT_EXPECTATION;
+
 int AdmissionPresentQueryBuild(
     ADMISSION_PRESENT_QUERY *Record,
     const ADMISSION_PRESENT_VERIFICATION *Verified);
@@ -75,5 +94,15 @@ void AdmissionPresentProducerInitialize(
 ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
     ADMISSION_PRESENT_PRODUCER_STATE *State,
     ADMISSION_PRESENT_WAIT_RESULT Result);
+int AdmissionPresentProducerRetirementComplete(
+    ADMISSION_PRESENT_PRODUCER_STATE *State);
+int AdmissionRetirementQueryBuild(
+    ADMISSION_RETIREMENT_QUERY *Record, unsigned int CandidateBuild,
+    unsigned int BootGeneration, unsigned long long Sequence,
+    unsigned long long AllocationToken, unsigned long long ActiveOffset,
+    unsigned long long PhysicalAddress);
+int AdmissionRetirementQueryAccept(
+    const ADMISSION_RETIREMENT_QUERY *Record,
+    const ADMISSION_RETIREMENT_EXPECTATION *Expected);
 
 #endif

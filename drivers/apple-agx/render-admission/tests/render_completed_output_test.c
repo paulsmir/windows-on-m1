@@ -43,12 +43,16 @@ int main(void) {
   unsigned char *second = pool == NULL ? NULL : pool + 0x01f40000u;
   ADMISSION_ALLOCATION_OBJECT owner1 = make_owner(0xff112233u);
   ADMISSION_ALLOCATION_OBJECT owner2 = make_owner(0xffcc8844u);
+  ADMISSION_ALLOCATION_OBJECT fallbackOwner = make_owner(0u);
+  ADMISSION_BACKEND_OUTPUT_VIEW fallbackView =
+      make_full(pool, 0x1500000000ULL, 0x9bc060000ULL, 0u);
   ADMISSION_BACKEND_OUTPUT_VIEW view1 =
       make_full(first, 0x1500fa0000ULL, 0x9bd000000ULL, 0xff112233u);
   ADMISSION_BACKEND_OUTPUT_VIEW view2 =
       make_full(second, 0x1501f40000ULL, 0x9bdfa0000ULL, 0xffcc8844u);
   ADMISSION_COMPLETED_OUTPUT completed;
   ADMISSION_DISPLAY_OUTPUT_LEASE display;
+  ADMISSION_DISPLAY_OUTPUT_LEASE fallback;
   ADMISSION_PRESENT_QUERY history;
   ADMISSION_PRESENT_VERIFICATION verified;
 
@@ -65,6 +69,7 @@ int main(void) {
   }
   AdmissionCompletedOutputInitialize(&completed);
   AdmissionDisplayOutputLeaseInitialize(&display);
+  AdmissionDisplayOutputLeaseInitialize(&fallback);
   assert(AdmissionCompletedOutputCapture(&completed, 1u, 256u,
                                          &view1, &owner1));
   assert(owner1.OpenCount == 1u && completed.CaptureCount == 1u);
@@ -134,6 +139,36 @@ int main(void) {
   assert(AdmissionDisplayOutputLeaseMatches(&display, &owner2));
   assert(AdmissionDisplayOutputLeaseRetire(&display));
   assert(owner2.OpenCount == 0u);
+
+  /* The original Windows primary is an owned fallback, not a bare offset.
+   * Moving it active after an exact replacement latch retires only the old
+   * render surface and preserves one reference to the displayed primary. */
+  assert(AdmissionDisplayOutputLeaseCapture(
+      &fallback, 7u, 0u, &fallbackView, &fallbackOwner));
+  assert(fallbackOwner.OpenCount == 1u);
+  assert(!AdmissionDisplayOutputLeaseCapture(
+      &fallback, 8u, 0u, &view1, &owner1));
+  assert(owner1.OpenCount == 0u);
+  assert(AdmissionCompletedOutputCapture(&completed, 8u, 262u,
+                                         &view2, &owner2));
+  assert(AdmissionCompletedOutputMarkReleased(&completed, 262u));
+  assert(AdmissionCompletedOutputMarkPacketRetired(&completed, 262u));
+  assert(AdmissionCompletedOutputMarkNotified(&completed, 262u));
+  assert(AdmissionCompletedOutputRecordAccess(&completed, 262u, 0u));
+  assert(AdmissionCompletedOutputBeginPresent(&completed, 262u));
+  assert(AdmissionCompletedOutputMarkPublished(&completed, 262u, 13u));
+  assert(AdmissionCompletedOutputMarkLatched(&completed, 262u, 13u));
+  assert(AdmissionCompletedOutputRecordPresentation(&completed, 262u, 0u));
+  assert(AdmissionCompletedOutputTransferToDisplay(
+      &completed, &display, 262u));
+  assert(owner2.OpenCount == 1u && fallbackOwner.OpenCount == 1u);
+  assert(AdmissionDisplayOutputLeaseMove(&display, &fallback));
+  assert(owner2.OpenCount == 0u);
+  assert(!fallback.Active && fallback.Owner == NULL);
+  assert(display.Active && display.Owner == &fallbackOwner);
+  assert(fallbackOwner.OpenCount == 1u);
+  assert(AdmissionDisplayOutputLeaseRetire(&display));
+  assert(fallbackOwner.OpenCount == 0u);
 
   /* A band lease permits only the exact rendered subrange while preserving
    * allocation-base identity for later presentation. */

@@ -1071,6 +1071,9 @@ BOOLEAN AdmissionScanoutAllowsRender(
 NTSTATUS AdmissionScanoutRetireAllocation(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Inout_ ADMISSION_ALLOCATION_OBJECT *Owner);
+NTSTATUS AdmissionScanoutRetireQualification(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Inout_ ADMISSION_RETIREMENT_QUERY *Query);
 NTSTATUS AdmissionScanoutQueryQualification(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Inout_ ADMISSION_PRESENT_QUERY *Query);

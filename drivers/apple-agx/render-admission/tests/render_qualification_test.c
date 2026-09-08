@@ -41,6 +41,8 @@ int main(void) {
   ADMISSION_PRESENT_EXPECTATION expected;
   ADMISSION_PRESENT_QUERY record;
   ADMISSION_PRESENT_PRODUCER_STATE producer;
+  ADMISSION_RETIREMENT_QUERY retirement;
+  ADMISSION_RETIREMENT_EXPECTATION retirementExpected;
 
   memset(&record, 0, sizeof(record));
   assert(AdmissionPresentQueryBuild(&record, &first));
@@ -151,5 +153,25 @@ int main(void) {
              &producer, AdmissionPresentWaitCompleted) ==
          AdmissionPresentProducerBeginHold);
   assert(producer.CompletedFrames == 2u && producer.CleanupAllowed == 0u);
+  assert(AdmissionPresentProducerRetirementComplete(&producer));
+  assert(producer.CleanupAllowed == 1u);
+
+  memset(&retirement, 0, sizeof(retirement));
+  assert(AdmissionRetirementQueryBuild(
+      &retirement, 632u, 0x12345678u, 5u,
+      0xffff800099990000ULL, 0ULL, 0x9bbff0000ULL));
+  memset(&retirementExpected, 0, sizeof(retirementExpected));
+  retirementExpected.CandidateBuild = 632u;
+  retirementExpected.BootGeneration = 0x12345678u;
+  retirementExpected.PreviousSequence = 4u;
+  retirementExpected.ExpectedPoolPhysical = 0x9bbff0000ULL;
+  retirementExpected.RenderAllocation0 = first.AllocationToken;
+  retirementExpected.RenderAllocation1 = second.AllocationToken;
+  assert(AdmissionRetirementQueryAccept(&retirement, &retirementExpected));
+  retirement.ActiveOffset = 0xfa0000ULL;
+  assert(!AdmissionRetirementQueryAccept(&retirement, &retirementExpected));
+  retirement.ActiveOffset = 0ULL;
+  retirement.AllocationToken = first.AllocationToken;
+  assert(!AdmissionRetirementQueryAccept(&retirement, &retirementExpected));
   return 0;
 }

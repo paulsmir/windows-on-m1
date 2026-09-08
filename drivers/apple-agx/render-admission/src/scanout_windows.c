@@ -18,6 +18,9 @@ typedef struct _ADMISSION_SCANOUT_RUNTIME {
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   KSPIN_LOCK LeaseLock;
   ADMISSION_DISPLAY_OUTPUT_LEASE ActiveLease;
+  ADMISSION_DISPLAY_OUTPUT_LEASE FallbackLease;
+  volatile LONG FallbackGeneration;
+  ULONGLONG FallbackAllocationToken;
   ULONG PresentCount;
   ADMISSION_PRESENT_QUERY PresentHistory[ADMISSION_PRESENT_QUERY_CAPACITY];
 #endif
@@ -520,6 +523,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStart(
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   KeInitializeSpinLock(&runtime->LeaseLock);
   AdmissionDisplayOutputLeaseInitialize(&runtime->ActiveLease);
+  AdmissionDisplayOutputLeaseInitialize(&runtime->FallbackLease);
 #endif
   RtlZeroMemory(&io, sizeof(io));
   io.Context = runtime;
@@ -613,6 +617,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutStop(
   if (runtime->ActiveLease.Active &&
       !AdmissionDisplayOutputLeaseRetire(&runtime->ActiveLease))
     return STATUS_DEVICE_BUSY;
+  if (runtime->FallbackLease.Active &&
+      !AdmissionDisplayOutputLeaseRetire(&runtime->FallbackLease))
+    return STATUS_DEVICE_BUSY;
 #endif
   Context->ScanoutRuntime = NULL;
   ExFreePoolWithTag(runtime, ADMISSION_SCANOUT_TAG);
@@ -634,9 +641,14 @@ _Use_decl_annotations_ BOOLEAN AdmissionScanoutAllowsRender(
   return allowed;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireAllocation(
-    ADMISSION_CONTEXT *Context, ADMISSION_ALLOCATION_OBJECT *Owner) {
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireQualification(
+    ADMISSION_CONTEXT *Context, ADMISSION_RETIREMENT_QUERY *Query) {
   ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  ADMISSION_SCANOUT_MEMORY_VIEW memory;
+  ADMISSION_DISPLAY_OUTPUT_LEASE temporary;
+  ADMISSION_ALLOCATION_OBJECT *fallbackOwner = NULL;
+  ULONGLONG fallbackToken = 0ULL;
+  ULONGLONG expectedActiveOffset = 0ULL;
   APPLE_AGX_SCANOUT_U64 active = 0ULL;
   APPLE_AGX_SCANOUT_U64 sequence = 0ULL;
   APPLE_AGX_SCANOUT_U64 applied = 0ULL;
@@ -646,25 +658,63 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireAllocation(
   BOOLEAN (*consumeInterrupt)(ADMISSION_CONTEXT *) =
       AdmissionScanoutInterrupt;
   KIRQL oldIrql;
-  BOOLEAN matches;
-  if (runtime == NULL || Owner == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+  BOOLEAN captured = FALSE;
+  BOOLEAN moved = FALSE;
+  AdmissionDisplayOutputLeaseInitialize(&temporary);
+  if (runtime == NULL || Query == NULL ||
+      Query->Magic != ADMISSION_RETIREMENT_QUERY_MAGIC ||
+      Query->Version != ADMISSION_RETIREMENT_QUERY_VERSION ||
+      Query->Command != AdmissionRetirementCommandExecute ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      !AdmissionPlatformRuntimeReady(Context) ||
+      !NT_SUCCESS(AdmissionMemoryRuntimeScanoutView(Context, &memory)))
     return STATUS_INVALID_PARAMETER;
   KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
-  matches = AdmissionDisplayOutputLeaseMatches(
-      &runtime->ActiveLease, Owner) ? TRUE : FALSE;
+  if (runtime->ActiveLease.Active && runtime->FallbackLease.Active &&
+      runtime->ActiveLease.Owner != runtime->FallbackLease.Owner &&
+      runtime->FallbackAllocationToken != 0ULL &&
+      runtime->FallbackLease.View.AllocationGpuAddress ==
+          memory.GpuVirtualAddress &&
+      runtime->FallbackLease.View.AllocationPhysicalAddress ==
+          memory.HostPhysicalAddress &&
+      runtime->FallbackLease.View.AllocationCpuAddress == memory.CpuAddress &&
+      runtime->FallbackLease.View.AllocationBytes ==
+          APPLE_AGX_SCANOUT_J313_SURFACE_SIZE &&
+      runtime->FallbackLease.View.AllocationWidth ==
+          APPLE_AGX_SCANOUT_J313_WIDTH &&
+      runtime->FallbackLease.View.AllocationHeight ==
+          APPLE_AGX_SCANOUT_J313_HEIGHT &&
+      runtime->FallbackLease.View.AllocationPitch ==
+          APPLE_AGX_SCANOUT_J313_STRIDE &&
+      runtime->FallbackLease.View.AllocationFormat ==
+          (ULONG)D3DDDIFMT_A8R8G8B8 &&
+      runtime->ActiveLease.View.AllocationGpuAddress >=
+          memory.GpuVirtualAddress) {
+    fallbackOwner = runtime->FallbackLease.Owner;
+    fallbackToken = runtime->FallbackAllocationToken;
+    expectedActiveOffset =
+        runtime->ActiveLease.View.AllocationGpuAddress -
+        memory.GpuVirtualAddress;
+    captured = AdmissionDisplayOutputLeaseCapture(
+        &temporary, runtime->FallbackLease.Generation, 0u,
+        &runtime->FallbackLease.View, fallbackOwner) ? TRUE : FALSE;
+  }
   KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
-  if (!matches)
-    return STATUS_SUCCESS;
+  if (!captured)
+    return STATUS_DEVICE_NOT_READY;
   if (!AdmissionScanoutRead64(
           runtime, APPLE_AGX_SCANOUT_MMIO_OFFSET +
                        APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET, &active) ||
-      active == 0ULL ||
-      InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0)
+      active == 0ULL || active != expectedActiveOffset ||
+      InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {
+    (void)AdmissionDisplayOutputLeaseRetire(&temporary);
     return STATUS_DEVICE_BUSY;
+  }
   result = AppleAgxFixedPanelQueuePresent(
       &runtime->Panel, ADMISSION_MEMORY_LOCAL_SEGMENT, 0ULL, &sequence);
   if (result != AppleAgxFixedPanelOk) {
     InterlockedExchange(&runtime->PresentGate, 0);
+    (void)AdmissionDisplayOutputLeaseRetire(&temporary);
     return STATUS_DEVICE_BUSY;
   }
   InterlockedExchange64(&runtime->PendingPhysicalAddress,
@@ -688,14 +738,41 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireAllocation(
       !AdmissionScanoutRead64(
           runtime, APPLE_AGX_SCANOUT_MMIO_OFFSET +
                        APPLE_AGX_SCANOUT_REG_ACTIVE_OFFSET, &active) ||
-      applied != sequence || latched != sequence || active != 0ULL)
+      applied != sequence || latched != sequence || active != 0ULL) {
+    InterlockedExchange(&runtime->Faulted, 1);
+    (void)AdmissionDisplayOutputLeaseRetire(&temporary);
     return STATUS_DEVICE_BUSY;
+  }
   KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
-  matches = AdmissionDisplayOutputLeaseMatches(
-      &runtime->ActiveLease, Owner) &&
-      AdmissionDisplayOutputLeaseRetire(&runtime->ActiveLease);
+  if (runtime->FallbackLease.Active &&
+      runtime->FallbackLease.Owner == fallbackOwner &&
+      runtime->FallbackAllocationToken == fallbackToken)
+    moved = AdmissionDisplayOutputLeaseMove(
+        &runtime->ActiveLease, &runtime->FallbackLease) ? TRUE : FALSE;
   KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
-  return matches ? STATUS_SUCCESS : STATUS_INVALID_DEVICE_STATE;
+  if (!AdmissionDisplayOutputLeaseRetire(&temporary))
+    return STATUS_INVALID_DEVICE_STATE;
+  if (!moved || !AdmissionRetirementQueryBuild(
+                    Query, APPLE_AGX_VERSION_BUILD,
+                    Context->RenderCorrelation.BootGeneration,
+                    sequence, fallbackToken, active,
+                    memory.HostPhysicalAddress))
+    return STATUS_INVALID_DEVICE_STATE;
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionScanoutRetireAllocation(
+    ADMISSION_CONTEXT *Context, ADMISSION_ALLOCATION_OBJECT *Owner) {
+  ADMISSION_SCANOUT_RUNTIME *runtime = AdmissionScanoutGet(Context);
+  KIRQL oldIrql;
+  BOOLEAN active;
+  if (runtime == NULL || Owner == NULL || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_PARAMETER;
+  KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+  active = AdmissionDisplayOutputLeaseMatches(
+      &runtime->ActiveLease, Owner) ? TRUE : FALSE;
+  KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+  return active ? STATUS_DEVICE_BUSY : STATUS_SUCCESS;
 }
 
 _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueryQualification(
@@ -762,6 +839,15 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   APPLE_AGX_FIXED_PANEL_RESULT result;
   APPLE_AGX_U64 surface_offset = 0ULL;
   APPLE_AGX_U64 sequence = 0ULL;
+  ADMISSION_DISPLAY_OUTPUT_LEASE fallbackCandidate;
+  ADMISSION_BACKEND_OUTPUT_VIEW fallbackView;
+  ADMISSION_LOCAL_MEMORY_VIEW fallbackMemory;
+  BOOLEAN fallbackCandidateValid = FALSE;
+  ULONG fallbackGeneration;
+  KIRQL oldIrql;
+  AdmissionDisplayOutputLeaseInitialize(&fallbackCandidate);
+  RtlZeroMemory(&fallbackView, sizeof(fallbackView));
+  RtlZeroMemory(&fallbackMemory, sizeof(fallbackMemory));
   if (runtime == NULL || Args == NULL || Args->VidPnSourceId != 0u ||
       Args->hAllocation == NULL ||
       Args->PrimarySegment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
@@ -789,8 +875,44 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0ULL, &surface_offset);
   if (address_result != AppleAgxLocalSegmentAddressOk)
     return STATUS_INVALID_ADDRESS;
-  if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0)
+  if (surface_offset == 0ULL) {
+    if (!NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
+            Context, (ULONGLONG)Args->PrimaryAddress.QuadPart,
+            description->Size, 0ULL, &fallbackMemory)))
+      return STATUS_INVALID_ADDRESS;
+    fallbackView.AllocationCpuAddress = fallbackMemory.CpuAddress;
+    fallbackView.AllocationGpuAddress = fallbackMemory.GpuVirtualAddress;
+    fallbackView.AllocationPhysicalAddress =
+        fallbackMemory.HostPhysicalAddress;
+    fallbackView.AllocationBytes = (ULONG)description->Size;
+    fallbackView.RenderedCpuAddress = fallbackMemory.CpuAddress;
+    fallbackView.RenderedGpuAddress = fallbackMemory.GpuVirtualAddress;
+    fallbackView.RenderedPhysicalAddress = fallbackMemory.HostPhysicalAddress;
+    fallbackView.RenderedBytes = (ULONG)description->Size;
+    fallbackView.AllocationWidth = fallbackView.RenderWidth =
+        description->Width;
+    fallbackView.AllocationHeight = fallbackView.RenderHeight =
+        description->Height;
+    fallbackView.AllocationPitch = fallbackView.RenderPitch =
+        description->Pitch;
+    fallbackView.AllocationFormat = description->Format;
+    fallbackView.Framebuffer = APPLE_AGX_TRUE;
+    fallbackGeneration = (ULONG)InterlockedIncrement(
+        &runtime->FallbackGeneration);
+    if (fallbackGeneration == 0u)
+      fallbackGeneration = (ULONG)InterlockedIncrement(
+          &runtime->FallbackGeneration);
+    if (!AdmissionDisplayOutputLeaseCapture(
+            &fallbackCandidate, fallbackGeneration, 0u,
+            &fallbackView, &allocation->Object))
+      return STATUS_DEVICE_BUSY;
+    fallbackCandidateValid = TRUE;
+  }
+  if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {
+    if (fallbackCandidateValid)
+      (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
     return STATUS_DEVICE_BUSY;
+  }
   InterlockedExchange64(
       &runtime->PendingPhysicalAddress,
       Args->PrimaryAddress.QuadPart);
@@ -799,12 +921,36 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   if (result != AppleAgxFixedPanelOk) {
     InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
     InterlockedExchange(&runtime->PresentGate, 0);
+    if (fallbackCandidateValid)
+      (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
     return result == AppleAgxFixedPanelPresentPending
                ? STATUS_DEVICE_BUSY
                : STATUS_DEVICE_HARDWARE_ERROR;
   }
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
+  if (fallbackCandidateValid) {
+    BOOLEAN retained;
+    KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
+    if (AdmissionDisplayOutputLeaseMatches(
+            &runtime->FallbackLease, &allocation->Object)) {
+      retained = AdmissionDisplayOutputLeaseRetire(&fallbackCandidate)
+                     ? TRUE
+                     : FALSE;
+    } else {
+      retained = AdmissionDisplayOutputLeaseMove(
+          &runtime->FallbackLease, &fallbackCandidate) ? TRUE : FALSE;
+    }
+    if (retained)
+      runtime->FallbackAllocationToken =
+          (ULONGLONG)(ULONG_PTR)Args->hAllocation;
+    KeReleaseSpinLock(&runtime->LeaseLock, oldIrql);
+    if (!retained) {
+      if (fallbackCandidate.Active)
+        (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
+      return STATUS_INVALID_DEVICE_STATE;
+    }
+  }
   return STATUS_SUCCESS;
 }
 

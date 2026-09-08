@@ -150,6 +150,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ADMISSION_PRESENT_EXPECTATION presentExpected[2] = {0};
   ADMISSION_PRESENT_QUERY heldPresentation[2] = {0};
   ADMISSION_PRESENT_PRODUCER_STATE producerState = {0};
+  ADMISSION_RETIREMENT_QUERY retirement = {0};
+  ADMISSION_RETIREMENT_EXPECTATION retirementExpected = {0};
   ADMISSION_PRESENT_PRODUCER_ACTION producerAction =
       AdmissionPresentProducerCleanup;
   ADMISSION_PRESENT_WAIT_RESULT presentWait = AdmissionPresentWaitTimedOut;
@@ -177,6 +179,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   BOOL requestEngineTdr = FALSE;
   BOOL observeOnePass = FALSE;
   BOOL holdNoCleanup = FALSE;
+  BOOL retireAfterSignal = FALSE;
 
   (void)setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -186,10 +189,15 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     observeOnePass = TRUE;
   else if (argc == 2 && wcscmp(argv[1], L"--hold-no-cleanup") == 0)
     holdNoCleanup = TRUE;
+  else if (argc == 2 && wcscmp(argv[1], L"--retire-after-signal") == 0) {
+    holdNoCleanup = TRUE;
+    retireAfterSignal = TRUE;
+  }
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
-             L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup]\n");
+             L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup|"
+             L"--retire-after-signal]\n");
     return 2;
   }
   AdmissionPresentProducerInitialize(&producerState, holdNoCleanup);
@@ -523,7 +531,56 @@ int __cdecl wmain(int argc, wchar_t **argv) {
             presentation[0].Fence, presentation[1].Fence,
             presentation[0].Sequence, presentation[1].Sequence);
     fflush(stdout);
-    goto preserve_resources;
+    if (!retireAfterSignal)
+      goto preserve_resources;
+    wprintf(L"PHASE RETIRE_WAIT signal=C:\\Users\\pavel\\AppleAgx-retire.go\n");
+    fflush(stdout);
+    while (GetFileAttributesW(L"C:\\Users\\pavel\\AppleAgx-retire.go") ==
+           INVALID_FILE_ATTRIBUTES)
+      Sleep(100u);
+    wprintf(L"PHASE RETIRE_BEGIN previous_sequence=%llu\n",
+            presentation[1].Sequence);
+    fflush(stdout);
+    retirement.Magic = ADMISSION_RETIREMENT_QUERY_MAGIC;
+    retirement.Version = ADMISSION_RETIREMENT_QUERY_VERSION;
+    retirement.Command = AdmissionRetirementCommandExecute;
+    ZeroMemory(&escape, sizeof(escape));
+    escape.hAdapter = adapters[selectedAdapter].hAdapter;
+    escape.hDevice = createDevice.hDevice;
+    escape.hContext = secondContext.hContext;
+    escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    escape.pPrivateDriverData = &retirement;
+    escape.PrivateDriverDataSize = sizeof(retirement);
+    presentQueryStatus = D3DKMTEscape(&escape);
+    retirementExpected.CandidateBuild = ADMISSION_EXPECTED_CANDIDATE_BUILD;
+    retirementExpected.BootGeneration = presentation[1].BootGeneration;
+    retirementExpected.PreviousSequence = presentation[1].Sequence;
+    retirementExpected.ExpectedPoolPhysical =
+        presentation[1].PhysicalAddress - presentation[1].ActiveOffset;
+    retirementExpected.RenderAllocation0 = presentation[0].AllocationToken;
+    retirementExpected.RenderAllocation1 = presentation[1].AllocationToken;
+    wprintf(L"RETIRE_RESULT query=0x%08lx build=%u boot=%u command=%u "
+            L"status=0x%08x valid=%u purpose=%u sequence=%llu "
+            L"allocation=0x%llx offset=0x%llx physical=0x%llx\n",
+            (ULONG)presentQueryStatus, retirement.CandidateBuild,
+            retirement.BootGeneration, retirement.Command, retirement.Status,
+            retirement.Valid, retirement.Purpose, retirement.Sequence,
+            retirement.AllocationToken, retirement.ActiveOffset,
+            retirement.PhysicalAddress);
+    fflush(stdout);
+    if (!NT_SUCCESS(presentQueryStatus) ||
+        !AdmissionRetirementQueryAccept(
+            &retirement, &retirementExpected) ||
+        !AdmissionPresentProducerRetirementComplete(&producerState)) {
+      wprintf(L"PHASE RETIRE_FAIL\n");
+      fflush(stdout);
+      goto preserve_resources;
+    }
+    wprintf(L"PHASE RETIRE_PASS sequence=%llu allocation=0x%llx\n",
+            retirement.Sequence, retirement.AllocationToken);
+    fflush(stdout);
+    result = 0;
+    goto cleanup;
   }
   if (requestEngineTdr) {
     tdr.TdrControl = D3DKMT_TDRDBGCTRLTYPE_ENGINETDR;
@@ -549,6 +606,9 @@ preserve_resources:
 
 cleanup:
   if (allocationHandles[0] != 0u) {
+    wprintf(L"PHASE DESTROY_ALLOCATION_BEGIN allowed=%u\n",
+            producerState.CleanupAllowed);
+    fflush(stdout);
     destroy.hDevice = createDevice.hDevice;
     destroy.phAllocationList = allocationHandles;
     destroy.AllocationCount =
@@ -556,6 +616,9 @@ cleanup:
     destroy.Flags.AssumeNotInUse = 0;
     destroy.Flags.SynchronousDestroy = 1;
     destroyAllocationStatus = D3DKMTDestroyAllocation2(&destroy);
+    wprintf(L"PHASE DESTROY_ALLOCATION_END status=0x%08lx\n",
+            (ULONG)destroyAllocationStatus);
+    fflush(stdout);
     if (!NT_SUCCESS(destroyAllocationStatus))
       result = 1;
   }

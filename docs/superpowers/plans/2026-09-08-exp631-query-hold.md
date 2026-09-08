@@ -73,3 +73,27 @@
 - [ ] Freeze exact overlay, build/sign/analyze on FRYZZING, record every hash and preregister FRAME1/FRAME2/HOLD recovery.
 - [ ] Restore ordinary Code28 baseline, stage exact EXP631, run once, preserve stdout/query/correlation/host/events and recover by controlled guest shutdown without allocation destruction.
 - [ ] Classify TWO_FRAME_RENDER, TWO_FRAME_OUTPUT, TWO_FRAME_PRESENT and HOLD_STABILITY independently; do not start retirement in this experiment.
+
+### Task 4: Owned Windows-primary retirement
+
+**Files:**
+- Modify: `drivers/apple-agx/render-admission/include/render_completed_output.h`
+- Modify: `drivers/apple-agx/render-admission/src/render_completed_output.c`
+- Modify: `drivers/apple-agx/render-admission/include/render_qualification.h`
+- Modify: `drivers/apple-agx/render-admission/src/render_qualification.c`
+- Modify: `drivers/apple-agx/render-admission/src/scanout_windows.c`
+- Modify: `drivers/apple-agx/render-admission/src/callbacks.c`
+- Modify: `drivers/apple-agx/windows/one-shot/apple_agx_d3dkmt_render.c`
+- Test: `drivers/apple-agx/render-admission/tests/render_completed_output_test.c`
+- Test: `drivers/apple-agx/render-admission/tests/render_qualification_test.c`
+
+**Interfaces:**
+- Consumes: the exact offset0 Windows primary passed by `DxgkDdiSetVidPnSourceAddress` and still considered active by Dxgkrnl during private qualification flips.
+- Produces: `AdmissionScanoutRetireQualification` and a versioned retirement result proving a new fallback latch before producer allocations are destroyed.
+
+- [ ] Add RED tests proving the fallback has a live allocation owner, cannot alias either render owner, moves active only after a newer exact sequence, and releases the old render owner once.
+- [ ] Capture the exact full-size offset0 primary owner during the supported Windows source-address callback; keep it separate from the qualification active lease.
+- [ ] Add a PASSIVE driver-private retirement command that validates the current active render surface, presents the retained Windows primary, verifies applied/latched offset0, and atomically moves display ownership.
+- [ ] Make `DestroyAllocation` reject an active owner but perform no hidden DCP workflow.
+- [ ] Extend the producer with a post-HOLD external signal gate; preserve A-C evidence before executing retirement, then require the exact fallback record before cleanup.
+- [ ] Run focused tests, pinned WDK/Universal/sign/hash gates and one EXP632 hardware run with separately recorded HOLD and RETIREMENT verdicts.

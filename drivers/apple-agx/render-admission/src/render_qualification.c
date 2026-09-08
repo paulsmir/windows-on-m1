@@ -142,4 +142,57 @@ ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
   return AdmissionPresentProducerCleanup;
 }
 
+int AdmissionPresentProducerRetirementComplete(
+    ADMISSION_PRESENT_PRODUCER_STATE *State) {
+  if (State == QUERY_NULL || !State->HoldNoCleanup || !State->Terminal ||
+      State->CompletedFrames != ADMISSION_PRESENT_QUERY_CAPACITY ||
+      State->CleanupAllowed)
+    return 0;
+  State->CleanupAllowed = 1u;
+  return 1;
+}
+
+int AdmissionRetirementQueryBuild(
+    ADMISSION_RETIREMENT_QUERY *Record, unsigned int CandidateBuild,
+    unsigned int BootGeneration, unsigned long long Sequence,
+    unsigned long long AllocationToken, unsigned long long ActiveOffset,
+    unsigned long long PhysicalAddress) {
+  if (Record == QUERY_NULL || CandidateBuild == 0u || BootGeneration == 0u ||
+      Sequence == 0ULL || AllocationToken == 0ULL || ActiveOffset != 0ULL ||
+      PhysicalAddress == 0ULL)
+    return 0;
+  query_zero(Record, sizeof(*Record));
+  Record->Magic = ADMISSION_RETIREMENT_QUERY_MAGIC;
+  Record->Version = ADMISSION_RETIREMENT_QUERY_VERSION;
+  Record->Command = AdmissionRetirementCommandExecute;
+  Record->Status = 0u;
+  Record->CandidateBuild = CandidateBuild;
+  Record->BootGeneration = BootGeneration;
+  Record->Purpose = AdmissionPresentPurposeFallback;
+  Record->Valid = 1u;
+  Record->Sequence = Sequence;
+  Record->AllocationToken = AllocationToken;
+  Record->ActiveOffset = ActiveOffset;
+  Record->PhysicalAddress = PhysicalAddress;
+  return 1;
+}
+
+int AdmissionRetirementQueryAccept(
+    const ADMISSION_RETIREMENT_QUERY *Record,
+    const ADMISSION_RETIREMENT_EXPECTATION *Expected) {
+  return Record != QUERY_NULL && Expected != QUERY_NULL &&
+      Record->Magic == ADMISSION_RETIREMENT_QUERY_MAGIC &&
+      Record->Version == ADMISSION_RETIREMENT_QUERY_VERSION &&
+      Record->Command == AdmissionRetirementCommandExecute &&
+      Record->Status == 0u && Record->CandidateBuild == Expected->CandidateBuild &&
+      Record->BootGeneration == Expected->BootGeneration &&
+      Record->Purpose == AdmissionPresentPurposeFallback && Record->Valid == 1u &&
+      Record->Sequence > Expected->PreviousSequence &&
+      Record->AllocationToken != 0ULL &&
+      Record->AllocationToken != Expected->RenderAllocation0 &&
+      Record->AllocationToken != Expected->RenderAllocation1 &&
+      Record->ActiveOffset == 0ULL &&
+      Record->PhysicalAddress == Expected->ExpectedPoolPhysical;
+}
+
 #undef QUERY_NULL

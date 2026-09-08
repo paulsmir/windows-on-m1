@@ -323,4 +323,38 @@ int AdmissionDisplayOutputLeaseRetire(ADMISSION_DISPLAY_OUTPUT_LEASE *Lease) {
   return 1;
 }
 
+int AdmissionDisplayOutputLeaseCapture(
+    ADMISSION_DISPLAY_OUTPUT_LEASE *Lease, unsigned int Generation,
+    unsigned int Fence, const ADMISSION_BACKEND_OUTPUT_VIEW *View,
+    ADMISSION_ALLOCATION_OBJECT *Owner) {
+  if (Lease == COMPLETED_NULL || Generation == 0u ||
+      Lease->Version != ADMISSION_COMPLETED_OUTPUT_VERSION || Lease->Active ||
+      !owner_valid(Owner, View) || !AdmissionAllocationOpen(Owner))
+    return 0;
+  Lease->Active = 1u;
+  Lease->Generation = Generation;
+  Lease->Fence = Fence;
+  Lease->View = *View;
+  Lease->Owner = Owner;
+  return 1;
+}
+
+int AdmissionDisplayOutputLeaseMove(
+    ADMISSION_DISPLAY_OUTPUT_LEASE *Destination,
+    ADMISSION_DISPLAY_OUTPUT_LEASE *Source) {
+  ADMISSION_DISPLAY_OUTPUT_LEASE next;
+  if (Destination == COMPLETED_NULL || Source == COMPLETED_NULL ||
+      Destination == Source || !Source->Active || Source->Owner == COMPLETED_NULL ||
+      Source->Version != ADMISSION_COMPLETED_OUTPUT_VERSION ||
+      Destination->Version != ADMISSION_COMPLETED_OUTPUT_VERSION ||
+      (Destination->Active && Destination->Owner == Source->Owner))
+    return 0;
+  next = *Source;
+  if (Destination->Active && !AdmissionAllocationClose(Destination->Owner))
+    return 0;
+  *Destination = next;
+  AdmissionDisplayOutputLeaseInitialize(Source);
+  return 1;
+}
+
 #undef COMPLETED_NULL

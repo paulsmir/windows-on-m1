@@ -156,9 +156,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     HANDLE Adapter, const DXGKARG_ESCAPE *Args) {
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  ULONG magic;
   ADMISSION_PRESENT_QUERY *query;
   if (context == NULL || !context->Started || Args == NULL ||
-      Args->pPrivateDriverData == NULL ||
+      Args->pPrivateDriverData == NULL || Args->PrivateDriverDataSize < sizeof(magic))
+    return STATUS_INVALID_PARAMETER;
+  magic = *(const ULONG *)Args->pPrivateDriverData;
+  if (magic == ADMISSION_RETIREMENT_QUERY_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_RETIREMENT_QUERY))
+    return AdmissionScanoutRetireQualification(
+        context, (ADMISSION_RETIREMENT_QUERY *)Args->pPrivateDriverData);
+  if (magic != ADMISSION_PRESENT_QUERY_MAGIC ||
       Args->PrivateDriverDataSize != sizeof(*query))
     return STATUS_INVALID_PARAMETER;
   query = (ADMISSION_PRESENT_QUERY *)Args->pPrivateDriverData;
