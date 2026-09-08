@@ -135,7 +135,7 @@ _Use_decl_annotations_ ULONG AdmissionRenderCorrelationBeginWindows(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_RENDER_CONTEXT *RenderContext,
     const DXGKARG_RENDER *Args) {
-  ULONG sequence = 0u;
+  unsigned int sequence = 0u;
   KIRQL oldIrql;
   if (Context == NULL || RenderContext == NULL || Args == NULL)
     return 0u;
@@ -147,7 +147,7 @@ _Use_decl_annotations_ ULONG AdmissionRenderCorrelationBeginWindows(
       Args->CommandLength, &sequence);
   KeReleaseSpinLock(&Context->RenderCorrelationLock, oldIrql);
   AdmissionRenderCorrelationQueueExport(Context);
-  return sequence;
+  return (ULONG)sequence;
 }
 
 _Use_decl_annotations_ VOID AdmissionRenderCorrelationValidatedWindows(

@@ -5,6 +5,9 @@
     <AppleAgxPackageVersion>30.0.$(AppleAgxVersionBuild).0</AppleAgxPackageVersion>
   </PropertyGroup>
   <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_VERSION_BUILD=$(AppleAgxVersionBuild);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>APPLE_AGX_VERSION_BUILD=$(AppleAgxVersionBuild);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
