@@ -1,16 +1,15 @@
 # GPU current state
 
-Updated 2026-09-08T18:04Z. Main process only; no agents.
+Updated 2026-09-08T18:13Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
-EXP643/644/646 evidence and exact cleanup are complete. EXP647 is now staged
-from the verified ordinary377/392 baseline and booted on the full-owner
-platform. Exact package30.0.643.0 is oem5.inf; APPL0002 is Code0/OK and SSH is
-healthy. Task EXP647-Interactive is armed but has not run: state Ready,
-LastTaskResult0x00041303, no phase/result file and no explorer.exe or logged-in
-interactive session. The earlier operator login belonged to the preceding
-boot; the current black screen is not a driver or EXP647 verdict.
+EXP647 ran after a confirmed physical login in session1. Exact source0
+D3DKMTSetVidPnSourceOwner(EXCLUSIVE) returned0xC0000022 STATUS_ACCESS_DENIED
+before SetDisplayMode, Render or Present; standard trace has zero KMD events.
+All producer-owned WDDM objects were destroyed with status0 and the device
+remained healthy. Exact oem5 package has now been removed and APPL0002 rescanned
+to Code28; ordinary377/392 restoration is preregistered and in progress.
 
 Current first unknown remains standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0.
@@ -19,10 +18,11 @@ fence269, but windowed BLT Present was denied before the KMD DDI. EXP644
 advanced the denial to OCCLUDED while DWM reported
 MILERR_DEVICE_CREATION_FAILURE. EXP646 proves D3D11CreateDevice(Apple) returns
 DXGI_ERROR_UNSUPPORTED while Basic/WARP pass because the exact installed Apple
-UMD has no truthful 3D pipeline/device contract. EXP647 tests the independent
-documented fullscreen OpenGL-style KMT owner/present seam from a real console
-session using the unchanged exact643 bits. Caps remain unchanged. Immediate
-action is one physical Windows login; the task then starts automatically.
+UMD has no truthful 3D pipeline/device contract. EXP647 now rejects the
+independent fullscreen direct-KMT seam even from a real console token. Current
+first unknown is therefore a coherent minimal truthful UMD device/pipeline and
+runtime-managed presentation contract; no capability bit may be enabled alone.
+Caps remain unchanged. First finish and verify ordinary recovery.
 
 ## Hardware proof retained
 

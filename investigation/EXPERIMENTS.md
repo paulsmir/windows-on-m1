@@ -39414,6 +39414,37 @@ is a Windows login on this fresh boot; no command must be launched manually.
 After login collect HOLD evidence before signalling flip-back and exact
 cleanup/recovery.
 
+**EXP647 ACTUAL — INTERACTIVE EXCLUSIVE OWNER ACCESS DENIED BEFORE RENDER
+2026-09-08T18:12:00Z.** Physical login is proven by explorer.exe and the
+scheduled producer running in session1. Exact source0 acquisition returned
+0xC0000022 STATUS_ACCESS_DENIED. SetDisplayMode, Render, Present and owner
+release remained at their untouched sentinel0xC0000001; standard trace stayed
+events0/overflow0. The producer destroyed allocation/context/paging queue/
+device and closed the adapter with status0, then exited1. APPL0002 remained
+Problem0/Running,8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Raw result
+SHA256 aadec1ef471dd5d6c1701f50961f706f2720f039dcaa069485de4949f1ceb594;
+evidence.json SHA256
+378b3c5268139a3f02ac65e75f70dbfe5744f2501e475aa2ff1c7a35a9b0ad83.
+
+Verdict: REJECTED before KMD Render/Present. A real interactive token changes
+the session0 SOURCE_IN_USE result but does not authorize a normal user process
+to take exclusive VidPN ownership. Do not retry direct-KMT exclusive ownership
+or change AGX/DCP. The remaining supported boundary is a coherent truthful UMD
+device/pipeline plus runtime-managed DWM/windowed presentation path.
+
+**EXP647-R1 RECOVERY PREREGISTERED 2026-09-08T18:13:26Z.** Exact oem5 package
+was hash-gated, uninstalled and deleted; APPL0002 rescanned to Code28 and the
+AppleAgx service/driver stopped/absent before reboot. Gracefully restart the
+current full-owner guest, wait for its launcher to release USB, then launch the
+immutable ordinary EXP377 m1n1 SHA256
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a with
+Mu392 SHA256
+16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06 and
+broker unset. Recovery script SHA256
+e5abfc1e4bdb06a030bbd796fe63c79fb8a5115b428bbc9ddb3dafbef7754358.
+PASS requires SSH, one inert APPL0002 Code28, packages/service/module/SYS/UMD
+absent,8CPU and healthy NVMe/USB/keyboard. This recovery is not a GPU verdict.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
