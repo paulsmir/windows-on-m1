@@ -75,6 +75,19 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
         self.assertIn(r"src\render_gdi_receipt.c", project)
         self.assertIn(r"src\gdi_receipt_windows.c", project)
 
+    def test_submit_worker_does_not_persist_diagnostics_before_completion_poll(self):
+        receipts = (RENDER / "src" / "receipts.c").read_text()
+        render_receipts = receipts[receipts.index(
+            "VOID AdmissionRecordVisibleAgx("):]
+        correlation = (RENDER / "src" /
+                       "render_call_correlation_windows.c").read_text()
+
+        # Legacy per-submit evidence is exported but not made synchronously
+        # durable on the render worker. The bounded correlation exporter owns
+        # the only explicit flush and reports whether durability succeeded.
+        self.assertNotIn("ZwFlushKey", render_receipts)
+        self.assertIn("status = ZwFlushKey(key);", correlation)
+
     def test_bootstrap_profile_excludes_physical_agx_irq_routes(self):
         source = (RENDER / "src" / "backend_platform_windows.c").read_text()
         self.assertIn("memory_count == 4u", source)

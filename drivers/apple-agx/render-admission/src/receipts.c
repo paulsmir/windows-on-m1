@@ -140,7 +140,6 @@ _Use_decl_annotations_ VOID AdmissionRecordVisibleAgx(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1VisibleAgxReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -171,7 +170,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTerminalReceipt(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1TerminalReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -183,7 +181,6 @@ static VOID AdmissionWritePreSubmitHeartbeat(
   WriteDword(Key, L"Wom1PreSubmitHeartbeatRxCount", Session->ReceivedCount);
   WriteDword(Key, L"Wom1PreSubmitHeartbeatRxEndpoint", Session->LastRxEndpoint);
   WriteQword(Key, L"Wom1PreSubmitHeartbeatRxPayload", Session->LastRxPayload);
-  (void)ZwFlushKey(Key);
 }
 
 _Use_decl_annotations_ VOID AdmissionRecordPreSubmitHeartbeat(
@@ -226,7 +223,6 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueSubmission(
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1QueueSubmissionReceipt", Receipt,
                 sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -236,7 +232,6 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueSubmission(
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1QueueSubmissionReceipt", Receipt,
                 sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -255,7 +250,6 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueInfo(
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1QueueInfoReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -264,7 +258,6 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueInfo(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1QueueInfoReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -283,7 +276,6 @@ _Use_decl_annotations_ VOID AdmissionRecordBufferManager(
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1BufferManagerReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -292,7 +284,6 @@ _Use_decl_annotations_ VOID AdmissionRecordBufferManager(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1BufferManagerReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -311,7 +302,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTaProgress(
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1TaProgressReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -320,7 +310,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTaProgress(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1TaProgressReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -339,7 +328,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTaRetire(
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1TaRetireReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -348,7 +336,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTaRetire(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1TaRetireReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -369,7 +356,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTaTemporal(
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1TaTemporalReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -378,7 +364,6 @@ _Use_decl_annotations_ VOID AdmissionRecordTaTemporal(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1TaTemporalReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -396,7 +381,6 @@ _Use_decl_annotations_ VOID AdmissionRecordKTrace(
       NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1KTraceReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -405,7 +389,6 @@ _Use_decl_annotations_ VOID AdmissionRecordKTrace(
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1KTraceReceipt", Receipt, sizeof(*Receipt));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
@@ -413,7 +396,6 @@ _Use_decl_annotations_ VOID AdmissionRecordKTrace(
 static VOID AdmissionWriteEventDrain(
     HANDLE Key, const ADMISSION_EVENT_DRAIN_RECEIPT *Receipt) {
   WriteBinary(Key, L"Wom1EventDrainReceipt", Receipt, sizeof(*Receipt));
-  (void)ZwFlushKey(Key);
 }
 
 _Use_decl_annotations_ VOID AdmissionRecordEventDrain(
@@ -460,7 +442,6 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueFaultSnapshot(
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
     WriteBinary(key, L"Wom1QueueFaultSnapshot", Snapshot,
                 sizeof(*Snapshot));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
   RtlInitUnicodeString(&servicePath,
@@ -470,7 +451,6 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueFaultSnapshot(
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1QueueFaultSnapshot", Snapshot,
                 sizeof(*Snapshot));
-    (void)ZwFlushKey(key);
     ZwClose(key);
   }
 }
