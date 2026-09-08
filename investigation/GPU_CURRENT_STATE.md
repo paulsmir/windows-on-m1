@@ -50,9 +50,14 @@ contract and supported UMD `pfnQueryAdapterInfoCb`/KMD
 `DXGKQAITYPE_UMDRIVERPRIVATE` path. The read-only response reports G13G,16K
 pages, boot generation and bounded logical classes without raw VA; context
 generation remains separately owned by CreateContext. FullProduction ARM64
-Universal/sign build and real x64 UMD callback mock pass. Actual class-buffer
-Allocate/Lock/unlock/fence wiring and Mesa `pipe_screen` are still missing;
-those are the current first boundary. No hardware candidate is justified.
+Universal/sign build and real x64 UMD callback mock pass. Commit
+3aa5741c4e605051b9804749c121bc9a034680cd now wires class buffers to real
+internal WDDM Allocate/Lock/Unlock/Deallocate callbacks with opaque bounded
+tokens and exact teardown; portable tests real x64 callback mock and ARM64
+WDK26100 Universal/sign build pass. Broker VA/typed relocation and Windows
+fence waits remain fail-closed, followed by actual Mesa `pipe_screen`; those
+are the current first boundary. No hardware candidate is justified and
+pipeline caps remain0.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed

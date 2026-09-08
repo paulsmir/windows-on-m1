@@ -147,8 +147,12 @@ create `agx_win32_screen.[ch]`, `agx_win32_bo.[ch]` and portable tests.
 Task3 progress: `pfnQueryAdapterInfoCb` now retrieves a versioned G13G/16K
 device/class contract before GetCaps/CreateDevice; boot generation and UMD
 context generation remain distinct. Portable class-buffer state validates
-alignment/access/reset with opaque tokens. Actual WDDM Allocate/Lock/fence
-callbacks and `pipe_screen` construction remain open.
+alignment/access/reset with opaque tokens. Internal logical class buffers now
+use real `Allocate(hResource=NULL)` plus paired Lock/Unlock and exact handle-list
+Deallocate callbacks over the existing KMD CPU-visible staging allocation path;
+bounded tokens and teardown are tested with the real WDK callback structures.
+Broker VA/typed relocation, fence waits and `pipe_screen` construction remain
+open, so submit and wait callbacks are still deliberately fail-closed.
 
 **Gate:** fake-runtime BO/map/fence/reset tests and ARM64 analysis build GREEN;
 pipeline mask remains0.
