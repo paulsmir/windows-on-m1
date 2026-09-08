@@ -39048,3 +39048,21 @@ exact package cleanup and ordinary restore. PASS requires KMD Present and
 source-address correlation, one new exact D589 for the rendered primary,
 device ACTIVE/no reset, followed by flip-back, ownership release and clean
 teardown. Build/artifact hashes are appended before staging.
+
+**EXP641 BUILD FREEZE.** Exact30.0.641.0 was built from immutable
+FRYZZING EXP640/src plus only the thirteen files in implementation commit
+3659f2fbcf91aaa164a91316cb55da531755877f. Profile is SubmitQualification;
+VisibleAgxQualification is false. Pinned WDK/SDK10.0.26100.0 and
+MSVC14.44.35207 KMD/UMD code analysis, Universal ApiValidator, Inf2Cat,
+TestSign, coherent version gates and ARM64 producer analysis all PASS.
+KMD retains only inherited C28251; the new nullable-adapter warning from the
+check build is gone. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256:
+f2d5ef503b4a1ee6c49b6a478e45912ff0911a6c087bee13a9023d9a5b155dc6,
+d65c0277906d78c3992eca2646102e1453216cacc139f75ba0c31f133375054f,
+46bc77edba393541446e56a3c601cd8dcf0c344440a37fe1d148dcba4f76265e,
+11ed282b18811d31a8df67abae984bf08029a7fa4017bc8c5fbc3c2aae3698b5,
+9027873114b12633f7fd93bdc531866af15618bbae374baa9b26b6130c699cd3,
+ba9c08449f2b7fbbd83e07effa56977e356debdbd86af1548fe620c12fc85531,
+f1a466b8f5b0497e5c83a24e51ea36ab76512e2085fef7f745137b8f24d6e500.
+Candidate is frozen but not yet staged; ordinary clean preflight and exact
+workflow/collector hashes precede hardware.
