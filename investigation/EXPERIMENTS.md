@@ -37778,3 +37778,37 @@ CAT/UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `b76177490438e6d5980f0271cef0b7a6166ebe2e02d5fd0d45e6ec2463968bcd`
 and `fe97ff2a01ffb42d9ebc50b8741f405cd5381689628ad884155b25079d295245`.
+
+**EXP624 FINAL — REGISTRY EXPORT BLOCKED; SUBGUARD STILL UNKNOWN.** Exact624
+again produced `0x119/2 STATUS_DEVICE_BUSY`. The registry record proves Render2
+ENTRY but persisted while its exporter was in progress: candidate624,
+boot359164055, captured generation10, exported9, ExportStatus259/PENDING,
+durable0. Thus the250ms hold cannot make `ZwFlushKey` a reliable crash transport
+on this storage path; its absent Submit EXIT is not interpreted as absent DDI.
+The exact dump again decodes pass2 Submit context `ffffcd0d4598c7f0`, fence257,
+flags0 and DMA0..168. Correlation/dump/kd/host SHA256 are
+`150db7a7217c77881871f5ab2feaadcb146c094ec684b6990eefdb574f032467`,
+`eb0ad1eb3c12f4e9df4ca9bda79301b610273e4817a360fdbd655f85a9066139`,
+`2ba866b2ae9988b794173fdc89d7e1f55f895b73142c2e6cf298b07cfa746f5a`,
+`254dba3e40d18d71c407c812d96b3e122c99ae137d47d62fcc837e5b7cfd78a0`.
+Exact package/service/stale cleanup completed. Do not repeat registry/broker
+durability attempts for this failure.
+
+# EXP625 — bugcheck-argument packet discriminator
+
+**PREREGISTERED 2026-09-08T10:38Z. WHY THIS HYPOTHESIS:** (1) EXP623/624 exact
+dumps prove dxgmms2 preserves the driver's fatal Submit status as bugcheck
+argument2. (2) Both BrokerBase and PASSIVE registry persistence fail to retain
+the later subguard. (3) `packet_guard` is already computed before the unchanged
+fatal return, so encoding it in that error status is independent of both failed
+transports and cannot affect accepted requests.
+
+Commit `06b80212aac5d06389856282ff592225f6448e27` removes the delay and defines
+qualification-only status `0xE5390000 | packet_guard`; production retains
+`STATUS_DEVICE_BUSY`. It changes no validation, packet state, scheduler, AGX,
+completion, display, producer or capability. Executable C mapping and source
+wiring tests plus full373 AppleAgx tests are GREEN. Build from exact624 source
+plus only `render_submit_trace.h` and `submission_windows.c`; reuse exact622
+producer. One run must yield Arg2 `0xFFFFFFFFE5390001..0A`, naming the exact
+first functional owner; then immediately remove diagnostic encoding and fix
+only that owner.

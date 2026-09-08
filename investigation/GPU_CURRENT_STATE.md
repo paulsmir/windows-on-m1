@@ -659,6 +659,21 @@ delay or new I/O. Executable correlation state-machine tests preserve distinct
 call2 ENTRY/EXIT/fence/guard/status; focused10 and full373 tests are GREEN.
 EXP624 is the next and last diagnostic-only candidate for this boundary.
 
+EXP624 is INCONCLUSIVE for the subguard and closes registry durability on the
+fatal DDI path. Its first exported snapshot contains Render2 ENTRY, but the
+exporter was still in `ZwFlushKey`: captured generation10, exported9,
+`ExportStatus=STATUS_PENDING`, durable0. The exact dump again decodes pass2
+Submit context/fence257/flags0/DMA0..168 and `0x119/2 STATUS_DEVICE_BUSY`.
+No further registry or BrokerBase capture is allowed for this boundary.
+
+Commit `06b80212aac5d06389856282ff592225f6448e27` removes the fatal-path hold
+and, only in the qualification profile, returns a deterministic customer error
+`0xE5390000 | packet_guard`. dxgmms2 already preserves the exact driver return
+as bugcheck argument2, so the next single dump names the computed guard without
+disk/MMIO timing. Accepted requests and production failure status are unchanged.
+Executable mapping/wiring tests plus full373 tests are GREEN. EXP625 is the
+final discriminator before the functional fix.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
