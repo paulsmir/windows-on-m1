@@ -121,6 +121,26 @@ int main(void) {
   assert(agx.DestinationBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
   assert(agx.SourceHash != 0ULL &&
          agx.DestinationHash == agx.SourceHash);
+  /* A completed framebuffer is already content-verified by the terminal
+   * output contract. Presentation must preserve an arbitrary validated frame,
+   * not reclassify it against the two historical qualification colours. */
+  for (before = 0u;
+       before < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE / 4u; ++before)
+    surface[before] = 0xff00ff00u;
+  memset(&agx, 0, sizeof(agx));
+  assert(AdmissionVisibleAgxUseFramebuffer(
+      surface, APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, &agx));
+  assert(agx.SourceBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(agx.DestinationBytes == APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
+  assert(agx.SourcePrefix[0] == 0x00u);
+  assert(agx.SourcePrefix[1] == 0xffu);
+  assert(agx.SourcePrefix[2] == 0x00u);
+  assert(agx.SourcePrefix[3] == 0xffu);
+  assert(agx.SourceHash != 0ULL &&
+         agx.DestinationHash == agx.SourceHash);
+  for (before = 0u;
+       before < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE / 4u; ++before)
+    surface[before] = APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR;
   for (before = APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP *
                     APPLE_AGX_SCANOUT_J313_WIDTH;
        before < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE / 4u; ++before)
