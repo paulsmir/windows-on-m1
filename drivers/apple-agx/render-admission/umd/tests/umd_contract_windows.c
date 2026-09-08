@@ -38,6 +38,7 @@ typedef struct _TEST_STATE {
   unsigned int SetErrorDdis[8];
   unsigned int ContextGeneration;
   unsigned int RenderCalls;
+  unsigned int QueryAdapterCalls;
   unsigned char RenderCommand[128];
   AGX_WIN32_CLEAR_REQUEST *MutatedRequest;
 } TEST_STATE;
@@ -65,6 +66,39 @@ static D3DDDI_PATCHLOCATIONLIST NextPatchList[16];
       ++State.Failures;                                                       \
     }                                                                         \
   } while (0)
+
+static HRESULT APIENTRY TestQueryAdapterInfo(
+    HANDLE Adapter, const D3DDDICB_QUERYADAPTERINFO *Query) {
+  AGX_WIN32_DEVICE_INFO *info;
+  CHECK(Adapter == (HANDLE)(UINT_PTR)0x100u);
+  CHECK(Query != NULL && Query->pPrivateDriverData != NULL &&
+        Query->PrivateDriverDataSize == sizeof(AGX_WIN32_DEVICE_INFO));
+  if (Query == NULL || Query->pPrivateDriverData == NULL ||
+      Query->PrivateDriverDataSize != sizeof(AGX_WIN32_DEVICE_INFO))
+    return E_INVALIDARG;
+  ++State.QueryAdapterCalls;
+  info = (AGX_WIN32_DEVICE_INFO *)Query->pPrivateDriverData;
+  memset(info, 0, sizeof(*info));
+  info->Magic = AGX_WIN32_DEVICE_INFO_MAGIC;
+  info->Version = AGX_WIN32_DEVICE_INFO_VERSION;
+  info->Bytes = sizeof(*info);
+  info->BootGeneration = 9u;
+  info->GpuGeneration = 13u;
+  info->GpuVariant = AgxWin32GpuG13G;
+  info->PageBytes = 0x4000u;
+  info->ClassCount = 3u;
+  info->Classes[0] = (AGX_WIN32_BUFFER_CLASS_INFO){
+      AgxWin32BufferClassGeneral, 0x4000u, 0x01000000ULL,
+      AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+          AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite};
+  info->Classes[1] = (AGX_WIN32_BUFFER_CLASS_INFO){
+      AgxWin32BufferClassShader, 0x4000u, 0x01000000ULL,
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead};
+  info->Classes[2] = (AGX_WIN32_BUFFER_CLASS_INFO){
+      AgxWin32BufferClassEncoder, 0x4000u, 0x01000000ULL,
+      AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead};
+  return S_OK;
+}
 
 static HRESULT APIENTRY TestCreateContext(HANDLE Device,
                                           D3DDDICB_CREATECONTEXT *Create) {
@@ -319,6 +353,7 @@ int main(void) {
 
   memset(&State, 0, sizeof(State));
   memset(&adapterCallbacks, 0, sizeof(adapterCallbacks));
+  adapterCallbacks.pfnQueryAdapterInfoCb = TestQueryAdapterInfo;
   memset(&adapterFunctions, 0, sizeof(adapterFunctions));
   memset(&openAdapter, 0, sizeof(openAdapter));
   openAdapter.hRTAdapter.handle = (VOID *)(UINT_PTR)0x100u;
@@ -327,6 +362,7 @@ int main(void) {
   openAdapter.pAdapterCallbacks = &adapterCallbacks;
   openAdapter.pAdapterFuncs_2 = &adapterFunctions;
   CHECK(OpenAdapter10_2(&openAdapter) == S_OK);
+  CHECK(State.QueryAdapterCalls == 1u);
 
   versionCount = 1u;
   version = 0u;

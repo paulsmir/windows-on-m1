@@ -13,6 +13,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
     return STATUS_INSUFFICIENT_RESOURCES;
   RtlZeroMemory(context, sizeof(*context));
   AdmissionObjectsInitializeAdapter(&context->ObjectAdapter);
+  context->Win32BootGeneration = (ULONG)KeQueryInterruptTime();
+  if (context->Win32BootGeneration == 0u)
+    context->Win32BootGeneration = 1u;
   context->FeatureReadyMask =
       APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
       APPLE_AGX_WDDM_READY_DEVICE_CONTEXT;
@@ -332,6 +335,45 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
     return STATUS_INVALID_PARAMETER;
 
   switch (QueryAdapterInfo->Type) {
+  case DXGKQAITYPE_UMDRIVERPRIVATE: {
+    AGX_WIN32_DEVICE_INFO *info;
+    if (QueryAdapterInfo->pInputData != NULL ||
+        QueryAdapterInfo->InputDataSize != 0u ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize != sizeof(*info)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    info = (AGX_WIN32_DEVICE_INFO *)QueryAdapterInfo->pOutputData;
+    RtlZeroMemory(info, sizeof(*info));
+    info->Magic = AGX_WIN32_DEVICE_INFO_MAGIC;
+    info->Version = AGX_WIN32_DEVICE_INFO_VERSION;
+    info->Bytes = sizeof(*info);
+    info->BootGeneration = context->Win32BootGeneration;
+    info->GpuGeneration = 13u;
+    info->GpuVariant = AgxWin32GpuG13G;
+    info->PageBytes = 0x4000u;
+    info->ClassCount = AGX_WIN32_BUFFER_CLASS_COUNT;
+    info->Classes[0].ClassId = AgxWin32BufferClassGeneral;
+    info->Classes[0].MinimumAlignment = 0x4000u;
+    info->Classes[0].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    info->Classes[0].Flags = AppleAgxWin32BufferCpuRead |
+        AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
+        AppleAgxWin32BufferGpuWrite;
+    info->Classes[1].ClassId = AgxWin32BufferClassShader;
+    info->Classes[1].MinimumAlignment = 0x4000u;
+    info->Classes[1].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    info->Classes[1].Flags = AppleAgxWin32BufferCpuWrite |
+        AppleAgxWin32BufferGpuRead;
+    info->Classes[2].ClassId = AgxWin32BufferClassEncoder;
+    info->Classes[2].MinimumAlignment = 0x4000u;
+    info->Classes[2].MaximumBytes = AGX_RR_COMMAND_ARENA_BYTES;
+    info->Classes[2].Flags = AppleAgxWin32BufferCpuWrite |
+        AppleAgxWin32BufferGpuRead;
+    status = STATUS_SUCCESS;
+    break;
+  }
+
   case DXGKQAITYPE_DRIVERCAPS: {
     DXGK_DRIVERCAPS *caps;
     APPLE_AGX_WDDM_FEATURE_INPUT featureInput;

@@ -5,6 +5,7 @@
 #include "render_win32_transport.h"
 #include "umd_resource_lifetime.h"
 #include "agx_win32_transport.h"
+#include "agx_win32_screen.h"
 
 #define ADMISSION_UMD_ADAPTER_MAGIC 0x50414455u /* "UDAP" */
 #define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
@@ -16,6 +17,7 @@ typedef struct _ADMISSION_UMD_ADAPTER {
   UINT Interface;
   UINT Version;
   const D3DDDI_ADAPTERCALLBACKS *Callbacks;
+  AGX_WIN32_DEVICE_INFO DeviceInfo;
 } ADMISSION_UMD_ADAPTER;
 
 typedef struct _ADMISSION_UMD_DEVICE {

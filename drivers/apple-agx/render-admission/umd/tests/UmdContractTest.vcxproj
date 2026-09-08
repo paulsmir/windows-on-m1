@@ -41,6 +41,7 @@
     <ClCompile Include="..\..\src\render_allocation.c" />
     <ClCompile Include="..\..\..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_transport.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_screen.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

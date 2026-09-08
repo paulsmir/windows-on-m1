@@ -21,6 +21,7 @@
 #include "render_gdi.h"
 #include "render_umd_command.h"
 #include "render_win32_transport.h"
+#include "apple_agx_win32_device_info.h"
 #include "render_gdi_receipt.h"
 #include "render_call_correlation.h"
 #include "render_present.h"
@@ -416,6 +417,7 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG SchedulerFaulted;
   volatile LONG SchedulerDpcPending;
   volatile LONG RenderDpcFence;
+  ULONG Win32BootGeneration;
   volatile LONG FeatureReadyMask;
 } ADMISSION_CONTEXT;
 

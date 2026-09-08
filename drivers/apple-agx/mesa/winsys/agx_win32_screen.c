@@ -24,7 +24,7 @@ int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info) {
   APPLE_AGX_U32 seen = 0u;
   if (Info == NULL || Info->Magic != AGX_WIN32_DEVICE_INFO_MAGIC ||
       Info->Version != AGX_WIN32_DEVICE_INFO_VERSION ||
-      Info->Bytes != sizeof(*Info) || Info->Generation == 0u ||
+      Info->Bytes != sizeof(*Info) || Info->BootGeneration == 0u ||
       Info->GpuGeneration != 13u || Info->GpuVariant != AgxWin32GpuG13G ||
       Info->PageBytes != 0x4000u ||
       Info->ClassCount != AGX_WIN32_BUFFER_CLASS_COUNT)
@@ -62,11 +62,12 @@ static AGX_WIN32_SCREEN_RESULT translate(AGX_WIN32_WINSYS_RESULT result) {
 }
 
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInitialize(
-    AGX_WIN32_SCREEN *Screen, void *Context,
+    AGX_WIN32_SCREEN *Screen, void *Context, APPLE_AGX_U32 Generation,
     const AGX_WIN32_WINSYS_OPERATIONS *TransportOperations,
     const AGX_WIN32_SCREEN_OPERATIONS *ScreenOperations) {
   AGX_WIN32_SCREEN initialized;
-  if (Screen == NULL || Context == NULL || TransportOperations == NULL ||
+  if (Screen == NULL || Context == NULL || Generation == 0u ||
+      TransportOperations == NULL ||
       ScreenOperations == NULL || ScreenOperations->QueryDevice == NULL ||
       ScreenOperations->CreateClassBuffer == NULL)
     return AgxWin32ScreenArgument;
@@ -75,12 +76,13 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInitialize(
       !AgxWin32DeviceInfoValid(&initialized.Info))
     return AgxWin32ScreenDeviceInfo;
   if (AgxWin32WinsysInitialize(&initialized.Transport, Context,
-                               initialized.Info.Generation,
+                               Generation,
                                TransportOperations) !=
       AgxWin32WinsysSuccess)
     return AgxWin32ScreenArgument;
   initialized.Context = Context;
   initialized.Operations = *ScreenOperations;
+  initialized.Generation = Generation;
   initialized.Active = APPLE_AGX_TRUE;
   *Screen = initialized;
   return AgxWin32ScreenSuccess;
@@ -111,7 +113,7 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenCreateBuffer(
   memset(&created, 0, sizeof(created));
   created.Transport.Token = token;
   created.Transport.Bytes = Bytes;
-  created.Transport.Generation = Screen->Info.Generation;
+  created.Transport.Generation = Screen->Generation;
   created.Transport.Flags = Flags;
   created.ClassId = ClassId;
   created.Alignment = Alignment;
@@ -125,7 +127,7 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenMapBuffer(
     void **Address) {
   if (Screen == NULL || Buffer == NULL)
     return AgxWin32ScreenArgument;
-  if (Buffer->Transport.Generation != Screen->Info.Generation)
+  if (Buffer->Transport.Generation != Screen->Generation)
     return AgxWin32ScreenStaleGeneration;
   if (!Screen->Active)
     return AgxWin32ScreenState;
@@ -137,7 +139,7 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenUnmapBuffer(
     AGX_WIN32_SCREEN *Screen, AGX_WIN32_SCREEN_BUFFER *Buffer) {
   if (Screen == NULL || Buffer == NULL)
     return AgxWin32ScreenArgument;
-  if (Buffer->Transport.Generation != Screen->Info.Generation)
+  if (Buffer->Transport.Generation != Screen->Generation)
     return AgxWin32ScreenStaleGeneration;
   if (!Screen->Active)
     return AgxWin32ScreenState;
@@ -150,7 +152,7 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenDestroyBuffer(
   AGX_WIN32_SCREEN_RESULT result;
   if (Screen == NULL || Buffer == NULL)
     return AgxWin32ScreenArgument;
-  if (Buffer->Transport.Generation != Screen->Info.Generation)
+  if (Buffer->Transport.Generation != Screen->Generation)
     return AgxWin32ScreenStaleGeneration;
   if (!Screen->Active)
     return AgxWin32ScreenState;
@@ -173,9 +175,9 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenWaitFence(
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInvalidate(
     AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 NewGeneration) {
   if (Screen == NULL || !Screen->Active || NewGeneration == 0u ||
-      NewGeneration == Screen->Info.Generation)
+      NewGeneration == Screen->Generation)
     return AgxWin32ScreenArgument;
-  Screen->Info.Generation = NewGeneration;
+  Screen->Generation = NewGeneration;
   Screen->Transport.Generation = NewGeneration;
   Screen->Active = APPLE_AGX_FALSE;
   return AgxWin32ScreenSuccess;

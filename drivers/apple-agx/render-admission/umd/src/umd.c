@@ -242,6 +242,8 @@ HRESULT APIENTRY OpenAdapter10_2(
     D3D10DDIARG_OPENADAPTER *OpenAdapter) {
   ADMISSION_UMD_ADAPTER *adapter;
   D3D10_2DDI_ADAPTERFUNCS functions;
+  D3DDDICB_QUERYADAPTERINFO query;
+  HRESULT queryResult;
   ADMISSION_UMD_TRACE(L"OpenAdapter10_2 ENTER");
   if (OpenAdapter == NULL || OpenAdapter->pAdapterFuncs_2 == NULL ||
       OpenAdapter->pAdapterCallbacks == NULL)
@@ -255,6 +257,19 @@ HRESULT APIENTRY OpenAdapter10_2(
   adapter->Interface = OpenAdapter->Interface;
   adapter->Version = OpenAdapter->Version;
   adapter->Callbacks = OpenAdapter->pAdapterCallbacks;
+  if (adapter->Callbacks->pfnQueryAdapterInfoCb == NULL) {
+    HeapFree(GetProcessHeap(), 0u, adapter);
+    return E_INVALIDARG;
+  }
+  ZeroMemory(&query, sizeof(query));
+  query.pPrivateDriverData = &adapter->DeviceInfo;
+  query.PrivateDriverDataSize = sizeof(adapter->DeviceInfo);
+  queryResult = adapter->Callbacks->pfnQueryAdapterInfoCb(
+      adapter->RuntimeAdapter.handle, &query);
+  if (FAILED(queryResult) || !AgxWin32DeviceInfoValid(&adapter->DeviceInfo)) {
+    HeapFree(GetProcessHeap(), 0u, adapter);
+    return FAILED(queryResult) ? queryResult : E_FAIL;
+  }
   ZeroMemory(&functions, sizeof(functions));
   functions.pfnCalcPrivateDeviceSize = AdmissionUmdCalcPrivateDeviceSize;
   functions.pfnCreateDevice = AdmissionUmdCreateDevice;

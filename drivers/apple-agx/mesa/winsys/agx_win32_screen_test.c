@@ -64,7 +64,7 @@ static AGX_WIN32_DEVICE_INFO make_info(void) {
   info.Magic = AGX_WIN32_DEVICE_INFO_MAGIC;
   info.Version = AGX_WIN32_DEVICE_INFO_VERSION;
   info.Bytes = sizeof(info);
-  info.Generation = 17u;
+  info.BootGeneration = 17u;
   info.GpuGeneration = 13u;
   info.GpuVariant = AgxWin32GpuG13G;
   info.PageBytes = 0x4000u;
@@ -90,14 +90,16 @@ int main(void) {
   AGX_WIN32_SCREEN screen;
   AGX_WIN32_SCREEN_BUFFER buffer;
   void *address = NULL;
-  assert(AgxWin32ScreenInitialize(&screen, &fake, &transport_ops,
+  assert(AgxWin32ScreenInitialize(&screen, &fake, 23u, &transport_ops,
                                   &screen_ops) == AgxWin32ScreenSuccess);
-  assert(fake.Queries == 1u && screen.Info.Generation == 17u);
+  assert(fake.Queries == 1u && screen.Info.BootGeneration == 17u &&
+         screen.Generation == 23u);
   assert(AgxWin32ScreenCreateBuffer(
       &screen, AgxWin32BufferClassShader, 0x8000ULL, 0x4000ULL,
       AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead,
       &buffer) == AgxWin32ScreenSuccess);
   assert(buffer.Transport.Token == 0x5001ULL &&
+         buffer.Transport.Generation == 23u &&
          buffer.ClassId == AgxWin32BufferClassShader);
   assert(AgxWin32ScreenMapBuffer(
       &screen, &buffer, 0ULL, 0x4000ULL, AppleAgxWin32BufferCpuWrite,
@@ -116,7 +118,7 @@ int main(void) {
   fake.Info = make_info();
   fake.Info.Classes[1].Flags = AppleAgxWin32BufferGpuRead;
   assert(AgxWin32DeviceInfoValid(&fake.Info));
-  assert(AgxWin32ScreenInitialize(&screen, &fake, &transport_ops,
+  assert(AgxWin32ScreenInitialize(&screen, &fake, 24u, &transport_ops,
                                   &screen_ops) == AgxWin32ScreenSuccess);
   memset(&buffer, 0xa5, sizeof(buffer));
   assert(AgxWin32ScreenCreateBuffer(
@@ -131,7 +133,7 @@ int main(void) {
   fake.Info.PageBytes = 0x1000u;
   assert(!AgxWin32DeviceInfoValid(&fake.Info));
   fake.Info = make_info();
-  fake.Info.Generation = 0u;
+  fake.Info.BootGeneration = 0u;
   assert(!AgxWin32DeviceInfoValid(&fake.Info));
   return 0;
 }

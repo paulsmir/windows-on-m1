@@ -3,33 +3,6 @@
 
 #include "agx_win32_transport.h"
 
-#define AGX_WIN32_DEVICE_INFO_MAGIC 0x49445741u /* AWDI */
-#define AGX_WIN32_DEVICE_INFO_VERSION 1u
-#define AGX_WIN32_BUFFER_CLASS_COUNT 3u
-
-typedef enum _AGX_WIN32_GPU_VARIANT {
-  AgxWin32GpuG13G = 1u,
-} AGX_WIN32_GPU_VARIANT;
-
-typedef enum _AGX_WIN32_BUFFER_CLASS {
-  AgxWin32BufferClassGeneral = 1u,
-  AgxWin32BufferClassShader = 2u,
-  AgxWin32BufferClassEncoder = 3u,
-} AGX_WIN32_BUFFER_CLASS;
-
-typedef struct _AGX_WIN32_BUFFER_CLASS_INFO {
-  APPLE_AGX_U32 ClassId;
-  APPLE_AGX_U32 MinimumAlignment;
-  APPLE_AGX_U64 MaximumBytes;
-  APPLE_AGX_U32 Flags;
-} AGX_WIN32_BUFFER_CLASS_INFO;
-
-typedef struct _AGX_WIN32_DEVICE_INFO {
-  APPLE_AGX_U32 Magic, Version, Bytes, Generation;
-  APPLE_AGX_U32 GpuGeneration, GpuVariant, PageBytes, ClassCount;
-  AGX_WIN32_BUFFER_CLASS_INFO Classes[AGX_WIN32_BUFFER_CLASS_COUNT];
-} AGX_WIN32_DEVICE_INFO;
-
 typedef struct _AGX_WIN32_SCREEN_OPERATIONS {
   int (*QueryDevice)(void *Context, AGX_WIN32_DEVICE_INFO *Info);
   int (*CreateClassBuffer)(
@@ -55,6 +28,7 @@ typedef struct _AGX_WIN32_SCREEN {
   AGX_WIN32_DEVICE_INFO Info;
   AGX_WIN32_WINSYS Transport;
   AGX_WIN32_SCREEN_OPERATIONS Operations;
+  APPLE_AGX_U32 Generation;
   APPLE_AGX_BOOL Active;
 } AGX_WIN32_SCREEN;
 
@@ -67,7 +41,7 @@ typedef struct _AGX_WIN32_SCREEN_BUFFER {
 
 int AgxWin32DeviceInfoValid(const AGX_WIN32_DEVICE_INFO *Info);
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenInitialize(
-    AGX_WIN32_SCREEN *Screen, void *Context,
+    AGX_WIN32_SCREEN *Screen, void *Context, APPLE_AGX_U32 Generation,
     const AGX_WIN32_WINSYS_OPERATIONS *TransportOperations,
     const AGX_WIN32_SCREEN_OPERATIONS *ScreenOperations);
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenCreateBuffer(

@@ -48,6 +48,7 @@
     <ClCompile Include="..\src\render_allocation.c" />
     <ClCompile Include="..\..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\..\mesa\winsys\agx_win32_transport.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_screen.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\direct_flip_contract.h" />
@@ -56,6 +57,7 @@
     <ClInclude Include="..\include\render_win32_transport.h" />
     <ClInclude Include="..\..\shared\include\apple_agx_win32_abi.h" />
     <ClInclude Include="..\..\mesa\winsys\agx_win32_transport.h" />
+    <ClInclude Include="..\..\mesa\winsys\agx_win32_screen.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\package-version.rc" />

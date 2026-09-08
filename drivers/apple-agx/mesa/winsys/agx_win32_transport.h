@@ -2,6 +2,7 @@
 #define APPLE_AGX_MESA_WIN32_TRANSPORT_H
 
 #include "apple_agx_win32_abi.h"
+#include "apple_agx_win32_device_info.h"
 
 typedef struct _AGX_WIN32_CLEAR_REQUEST {
   APPLE_AGX_U32 Generation;
@@ -18,14 +19,6 @@ typedef struct _AGX_WIN32_CLEAR_REQUEST {
   APPLE_AGX_U32 Right;
   APPLE_AGX_U32 Bottom;
 } AGX_WIN32_CLEAR_REQUEST;
-
-typedef enum _AGX_WIN32_BUFFER_FLAGS {
-  AppleAgxWin32BufferCpuRead = 0x1u,
-  AppleAgxWin32BufferCpuWrite = 0x2u,
-  AppleAgxWin32BufferGpuRead = 0x4u,
-  AppleAgxWin32BufferGpuWrite = 0x8u,
-  AppleAgxWin32BufferShareable = 0x10u,
-} AGX_WIN32_BUFFER_FLAGS;
 
 typedef enum _AGX_WIN32_WINSYS_RESULT {
   AgxWin32WinsysSuccess = 0,
