@@ -39222,3 +39222,23 @@ Blt -> KMD Present -> copy Submit/fence -> visible DWM result. Build exact643
 from immutable642 plus commit9beed62 only, re-arm the interactive task, perform
 one fresh full boot, and collect task/KMD/terminal/health evidence. No producer
 run over SSH, no exclusive ownership retry and no DCP change.
+
+**EXP643 BUILD FREEZE.** Exact30.0.643.0 from immutable EXP642/src plus only
+callbacks.c from commit9beed620cda3e561a99e4408389a8c1d613df73d.
+Pinned KMD/UMD/producer analysis, Universal, Inf2Cat, TestSign and version
+gates PASS; inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD/producer:
+226db083ad4ea63bde15c380a6b1406c65f5c92b4bb8fb633baeb5ffbe55b218,
+2031498d0d607005a8d251d7cd36df822a74b74419bec26497a767ab7288ad6b,
+2061c8e957f3b384057eba8c626d93a77ddf656be7260757ed66252442f66a1e,
+a172de95f3e9f34b2e1ea81afc945707567015165367c6af9a531c319d286c0a,
+0cc4667b7f9dbdacf1bcb6bce7499e760f90554bfc0959ff27b19a76be957075,
+897661ca285353e7957467b883d7612cc05774e8264e170106eacf435f244612,
+dcf7ede2d291fd91ceebd6f4d6d94046ac3c2520f90efe4e45aab20bd73e431d.
+Workflow/run/arm/collector/launch hashes:
+1a2e31f343bd0311fcb45900485fa6eea069173815994030fe26e3b43172d350,
+be4c07e6c0822c9b2dfc47dedbb4acbcce0e7415c11275723af82599da80c7b8,
+876ef66e7cb9f609bd07a5469c27b220d781ac657fdfbda745faed6a09e35a66,
+cff7bf1af767b7aeaa6a05dd100f6be53db5c85d58b34fb340a4e9e49026142f,
+2d2127befd60db0a17b4dd6cb5fd3403120a29f60385ca0e1e5ddb3c280aa2fe.
+All wrappers parse on FRYZZING. Ordinary clean health is verified; transfer,
+arm, stage and one fresh release boot next.
