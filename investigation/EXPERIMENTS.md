@@ -37581,3 +37581,18 @@ existing asynchronous exporter. Decoder identity is versioned and rejects old
 or mixed layouts. Executable state-machine/decoder/queue/paging tests and the
 full373 AppleAgx suite are GREEN. Build exact619 from exact618 plus only these
 correlation/wiring files.
+
+**EXP619 BUILD FREEZE.** Exact30.0.619.0 pinned KMD/UMD/producer passed
+WDK26100 analysis, Universal, Inf2Cat/TestSign and version gates; producer zero
+warnings/errors, KMD inherited C28251 only. Exact618 plus correlation-v2 overlay
+SHA256 `b938d62551b10f84016f0efbf18517889e2ef5c3db3a4912489efdd532ce0eec`.
+ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`402017b87522067f415b5054f2e5d9e05d63d0ad1d34deb8124c84a4ecc56881`,
+`78bb6c0b3909a8069d01a9b65d6cbc2e834f65cd375c82211688e424b9d3184c`,
+`475c458387d65a67499c0ae8129feaffc18b8ca85eca9ea05b7c86f0edb08e91`,
+`fafc09166ab7ecde141d026c3a55af827c70981bd2a25f9dc575de41cf91822c`,
+`dc4743540ef95d0109d6b1bb5c82299cfc03516a46d5b3eb31a181853e67f345`,
+`879bcb86bc1fdffb23065d38e99b8ce5f8d5ca83344b0dd2ecc0503055640046`.
+Workflow/launch SHA256 are
+`9f90e091a196a4653cff5826b7f2d2d77d43d30882f75cf2a23d896b970561ec`
+and `07be2ca0046d2bda5b33944ad74a58cfc55693c284370eb9c3a38e5304404d54`.
