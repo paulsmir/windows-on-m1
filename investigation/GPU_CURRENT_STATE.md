@@ -10,9 +10,26 @@ EXP648's caps0 rejection. Current gate is AD02; execute
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-08T20:10Z. Main process only; no agents.
+Updated 2026-09-08T21:06Z. Main process only; no agents.
 
 ## Current machine / next boundary
+
+EXP649 is rejected at one source-exact post-output presentation guard, not at
+the Win32 transport or AGX backend. Its first128-byte full-green command passed
+Render/Patch/Submit, physical completion fence256, DPC and exact terminal output
+verification. `AdmissionScanoutPresentAgxResult` then exited
+`0xc0000206 STATUS_INVALID_BUFFER_SIZE`, no query record was published, and
+frame2 correctly did not start. The sole corresponding source return is the old
+`AdmissionVisibleAgxUseFramebuffer` fixed-colour classifier. Commit
+e22ebc160c3a3a91d6c9393766d4c41f5e6631dc removes only that stale classifier;
+full-size/hash/prefix and all owner/range/active/latch guards remain. Offline
+RED→GREEN and adjacent tests pass. EXP650 is preregistered to repeat the same
+two dynamic commands with this one variable.
+
+EXP649 exact oem5 was removed. Ordinary377/392 is clean and verified at
+2026-09-08T21:04Z: APPL0002 Code28/null INF, no package/service/module/SYS/UMD,
+SSH,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129. AD02 is not yet
+HW_PROVEN; pipeline caps remain0.
 
 EXP648 definitively names the D3D11 admission boundary. The unchanged probe
 loaded and executed exact UMD30.0.648.0 in the Apple-adapter process. Correlated

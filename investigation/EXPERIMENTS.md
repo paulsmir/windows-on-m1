@@ -39737,3 +39737,109 @@ all input and expanded package hashes, then added exactly `oem5.inf` without
 installing it into the broker-disabled ordinary devnode. Next action is a
 graceful Windows reset, existing launcher exit, immutable full-owner launch and
 one natural bind.
+
+**EXP649 ACTUAL — FIRST DYNAMIC COMMAND AND PHYSICAL FENCE PASS; LEGACY
+SCANOUT COLOUR CLASSIFIER REJECTED 2026-09-08T21:01:45Z.** Exact30.0.649.0
+bound naturally as oem5 on immutable EXP584/Mu406: APPL0002 Problem0, service
+Running, exact SYS/UMD hashes and8CPU. The frozen producer selected the sole
+hardware render/display adapter and submitted a128-byte full-green Win32
+envelope. `D3DKMTRender` returned success with queued1.
+
+Crash-durable correlation v3 build649 boot370432012 has one exact call,
+overflow0/durable1: command_length128, allocations2, destination0/segment2,
+render_guard/status0, DMA168, one patch, prepatched1, submit_guard/status0,
+fence256, worker_status2, SynchronizeExecution0 and DPC result1. Output entry
+and verification are present at PASSIVE_LEVEL with verification status0.
+Presentation entry follows, but presentation exit is exactly
+`0xc0000206 STATUS_INVALID_BUFFER_SIZE`; no per-frame query record is
+published, so the producer times out frame1 and preserves resources. Frame2,
+HOLD and retirement were correctly not started. No fresh41/1001/129 occurred;
+device remained Problem0/Running with8CPU,NVMe2,USB5,keyboard1.
+
+This proves one dynamic allocation-relative command survives the live
+Windows/KMD transport and reaches physical completion plus exact fence256 and
+output verification. It does not satisfy the two-command
+`TRANSPORT_HW_PROVEN` or `DYNAMIC_CLEAR_HW_PROVEN` predicates, and the
+uncorrelated host A408/D589 during startup is not counted as the rejected
+frame's presentation.
+
+The first failing primitive is source-exact. After completed output
+verification, `AdmissionScanoutPresentAgxResult` maps the only
+`STATUS_INVALID_BUFFER_SIZE` return in this path to
+`AdmissionVisibleAgxUseFramebuffer`. That helper still accepts only the two
+historical fixed colours or their historical two-band composition; it rejects
+the already verified uniform dynamic green framebuffer. No AGX, PBE, DCP,
+UAT, scheduler or capability change is justified.
+
+Producer/live-collector/final-correlation JSON/raw/recovery summary SHA256 are
+`dd15e20a374cad83ceb989fc65b8ebdf8615d3b3de67e7883896578c386df13c`,
+`23b24317d565b276f40ecb380c116df79c23e722722d5fb1c30ee616657349e2`,
+`51f609bf4ae5a3e579a302aac98e141c00eb97c44add75baead2ccc45a1e6f6f`,
+`3050992ba3e12b16d2e3211d20cf7c6263ffb42fa1df04f6ee5a56fd237fb224`
+and `ed10b63b67cbfec2aec4eb946fbe1d6e942262b200b493601b3acb388426dcd2`.
+
+**EXP649-R1 CLEAN RECOVERY 2026-09-08T21:04:30Z.** After evidence, only the
+exact preserving producer was stopped. The hash-matched oem5 package was
+uninstalled/deleted, APPL0002 removed/rescanned, and a graceful reset completed
+full-owner broker teardown. Immutable ordinary EXP377/392 is restored. Exact
+health reports Problem28/null INF, packages/service/module/SYS/UMD absent,
+8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129. Ordinary launch/health
+SHA256 are
+`9b9a1ca68c994f32c8d5182c2513348b0b85cf87c0bcdf0271ae779dd870bdcc`
+and `f5dc7f12aa2af2fd02550c56ce06b6b554e40784dd5453db025f96df49ab9510`.
+
+**EXP650 OFFLINE CAUSAL FIX.** Commit
+`e22ebc160c3a3a91d6c9393766d4c41f5e6631dc` removes only the stale fixed-colour
+classification from `AdmissionVisibleAgxUseFramebuffer`. The function still
+requires the exact full scanout size, hashes the complete bytes and captures
+the exact prefix/geometry; per-fence terminal output verification remains the
+owner of expected rendered content. The test first failed on a uniform dynamic
+green completed frame, then passed after the correction while the historical
+base/band and receipt validity cases stayed GREEN. The24 related transport,
+ownership, KMD, backend, output, presentation and ledger tests are GREEN.
+Offline-test and exact one-file overlay SHA256 are
+`cd392b591cf7a137f2a5fc6e8e2ea0902b37a0ceb5730c29d092d5c98f4579ef`
+and `5b48bc79b53faead26e7a6aa76b21bde3a1d1718599d779671e68581f1150373`.
+
+# EXP650 — present already verified dynamic frame
+
+**PREREGISTERED 2026-09-08T21:06:15Z. WHY THIS HYPOTHESIS:** (1) EXP649
+durably proves the first128-byte command reached Render/Patch/Submit, physical
+completion fence256 and output verification before present exit
+`STATUS_INVALID_BUFFER_SIZE`; (2) source has exactly one such return after that
+milestone, from `AdmissionVisibleAgxUseFramebuffer`; (3) its historical colour
+classification reproducibly rejects EXP649's uniform green, while the
+one-function correction and all adjacent lifetime/receipt tests are GREEN.
+
+**WINDOWS CONTRACT:** unchanged EXP649 immutable command and allocation-owner
+contract. A completed output is verified against its exact per-fence dynamic
+colour/range before presentation. Presentation consumes that verified output
+identity; it does not independently restrict pixel values to old test colours.
+
+**AGX/ASAHI CONTRACT:** unchanged retained-root, firmware, materializer,
+TA/3D, completion/fence and output-verification path. The same full and
+bottom-band geometry profiles and the same DCP scanout ABI are used.
+
+**TRANSLATION:** after exact terminal content verification, the direct
+framebuffer presentation helper validates the full surface size, captures its
+geometry/prefix and hashes all bytes. It no longer reclassifies contents using
+fixed EXP208 colours. All allocation, active-surface, physical-range, owner,
+latch and query guards remain unchanged.
+
+**WHAT IS STILL UNKNOWN:** whether removing that one stale classifier permits
+both dynamic frames to reach their exact query/latch/HOLD/retirement sequence,
+and whether the blue bottom-band result preserves all existing output and
+ownership invariants. This is the only variable.
+
+Source implementation commit is
+`e22ebc160c3a3a91d6c9393766d4c41f5e6631dc`; exact overlay contains only
+`render_visible_scanout.c` over immutable `C:\Users\pauls\EXP649\src` and has
+SHA256 `5b48bc79b53faead26e7a6aa76b21bde3a1d1718599d779671e68581f1150373`.
+Tracked unrelated diff/status hashes remain
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`
+and `d4b4d00c963ed62ecb731e7ba102f44ff7f1f4cb693a2cb4428a303ecbb4ce09`.
+Pinned build is Release PackageBuild650 VisibleAgxQualification plus the same
+producer source rebuilt only for AdmissionExpectedBuild650. Platform and
+ordinary recovery artifacts are byte-identical to EXP649. PASS/failure and
+evidence predicates are otherwise byte-identical to EXP649; artifact hashes
+are appended before staging.
