@@ -44,6 +44,16 @@ hardware EXP. Upstream `libasahi` failing first at `xf86drm.h` independently
 confirms the DRM owner that Task3 must replace. `AGX_COMPILER_CORE_OFFLINE_PROVEN=YES`;
 full compiler/encoder and all pipeline readiness remain NO.
 
+AD03 Task3 partial commits3d8ca2df3765d9bc2bd453a48677ec81d1d56dd4 and
+36fea56be7e127335b053be36ff75d5f958462f0 add the portable classed screen
+contract and supported UMD `pfnQueryAdapterInfoCb`/KMD
+`DXGKQAITYPE_UMDRIVERPRIVATE` path. The read-only response reports G13G,16K
+pages, boot generation and bounded logical classes without raw VA; context
+generation remains separately owned by CreateContext. FullProduction ARM64
+Universal/sign build and real x64 UMD callback mock pass. Actual class-buffer
+Allocate/Lock/unlock/fence wiring and Mesa `pipe_screen` are still missing;
+those are the current first boundary. No hardware candidate is justified.
+
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
 Render/Patch/Submit, physical completion fence256, DPC and exact terminal output

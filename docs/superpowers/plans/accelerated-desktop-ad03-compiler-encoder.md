@@ -130,7 +130,7 @@ hardware change.
 **Files:** extend `drivers/apple-agx/mesa/winsys/agx_win32_transport.[ch]`;
 create `agx_win32_screen.[ch]`, `agx_win32_bo.[ch]` and portable tests.
 
-- [ ] Construct the Asahi device key/params from an exact read-only KMD query,
+- [x] Construct the Asahi device key/params from an exact read-only KMD query,
       not DRM GET_PARAMS and not guessed J313 constants.
 - [ ] Replace BO allocate/map/bind/unbind with WDDM resource callbacks and AD02
       generation/ownership. Keep separate CPU mapping, residency and internal
@@ -143,6 +143,12 @@ create `agx_win32_screen.[ch]`, `agx_win32_bo.[ch]` and portable tests.
       BO, graph or fence objects.
 - [ ] Build a `pipe_screen`/`pipe_context` without linking the software GDI
       winsys or calling DRM/fd functions.
+
+Task3 progress: `pfnQueryAdapterInfoCb` now retrieves a versioned G13G/16K
+device/class contract before GetCaps/CreateDevice; boot generation and UMD
+context generation remain distinct. Portable class-buffer state validates
+alignment/access/reset with opaque tokens. Actual WDDM Allocate/Lock/fence
+callbacks and `pipe_screen` construction remain open.
 
 **Gate:** fake-runtime BO/map/fence/reset tests and ARM64 analysis build GREEN;
 pipeline mask remains0.
