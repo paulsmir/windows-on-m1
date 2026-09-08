@@ -152,7 +152,12 @@ use real `Allocate(hResource=NULL)` plus paired Lock/Unlock and exact handle-lis
 Deallocate callbacks over the existing KMD CPU-visible staging allocation path;
 bounded tokens and teardown are tested with the real WDK callback structures.
 Broker VA/typed relocation, fence waits and `pipe_screen` construction remain
-open, so submit and wait callbacks are still deliberately fail-closed.
+open. Commit f396856ce4af0bd612b793a6b283ee4776a5ab9b replaces Linux
+syncobj with bounded WDDM1.2+ `EnqueueCpuEvent` completion tokens ordered after
+the same Windows context's Render work; timeout, failed insertion, retirement
+and teardown are executable tests. The token is not misreported as the hidden
+Dxgk scheduler fence ID. `pipe_screen` construction and typed graph submission
+remain open, and the generic screen submit callback stays fail-closed.
 
 **Gate:** fake-runtime BO/map/fence/reset tests and ARM64 analysis build GREEN;
 pipeline mask remains0.

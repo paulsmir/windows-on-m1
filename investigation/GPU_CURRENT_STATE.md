@@ -55,9 +55,13 @@ Universal/sign build and real x64 UMD callback mock pass. Commit
 internal WDDM Allocate/Lock/Unlock/Deallocate callbacks with opaque bounded
 tokens and exact teardown; portable tests real x64 callback mock and ARM64
 WDK26100 Universal/sign build pass. Broker VA/typed relocation and Windows
-fence waits remain fail-closed, followed by actual Mesa `pipe_screen`; those
-are the current first boundary. No hardware candidate is justified and
-pipeline caps remain0.
+fence waits were the next boundary. Commit
+f396856ce4af0bd612b793a6b283ee4776a5ab9b now uses bounded Windows-context
+`EnqueueCpuEvent` completion tokens with exact timeout rollback retire and
+teardown semantics instead of Linux syncobj or receipt polling; real WDK
+callback tests and ARM64 Universal/sign build pass. Actual Mesa `pipe_screen`
+construction and typed graph submission are the current first boundary. No
+hardware candidate is justified and pipeline caps remain0.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
