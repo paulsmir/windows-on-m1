@@ -37423,3 +37423,21 @@ the exact615 builder tree plus only `receipts.c`. One natural run must keep the
 same device ACTIVE through pass2 and reach two Submit/worker/fence results; if
 HUNG remains, synchronous flush is rejected and the next owner is the core
 Windows completion-notification contract, not another producer flush API.
+
+**EXP616 BUILD FREEZE.** Exact30.0.616.0 pinned WDK26100/MSVC14.44 KMD, UMD
+and unchanged canonical producer passed code analysis, Universal validation,
+Inf2Cat/TestSign and coherent-version gates. Producer has zero warnings/errors;
+KMD has inherited C28251 only. Exact615 source base plus only `receipts.c`
+overlay SHA256 is
+`a2809b69ead3b607bc860910c337d28f42336b7adcd90109b87afde53b1b7cec`.
+ZIP/SYS/INF/CAT/UMD/producer SHA256 are respectively
+`47f64cf30c1e128cb54bc7349d97707fa0067eb3baa2c9396ebe8df60c053655`,
+`c2c82b124addfb83f65a2a832464d5a3641eada94ca2e9ffa19bf9166f118ae3`,
+`1e9f8160f39b72143d547112b647d29e67cadbbea560756450f1d92c12c6a0eb`,
+`3212900ccc4c467bf00aa54fcf1f2e21912800df4e1f17514ec72c9277232122`,
+`b3a1448964c32c78f0f1449e6780511653dad51b9bb2145386bb9276b683440c`,
+`2d91dd5cc4efeb0417b3ac962c49eb663c01b1143be6b2519ca7efe864229c6c`.
+Workflow/launch SHA256 are
+`80e3e6f9f45a5d7bbb9ff7a3393f0886e6d3d7cc9f36547d6cd87e3afbc5d335`
+and `4e1ed7a94f5afa7ec2384ce6a281d61779086aebab987028c39e57fcdeb18501`.
+Run once after exact ordinary377/392 baseline verification.
