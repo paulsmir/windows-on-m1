@@ -39391,6 +39391,17 @@ D589, then preserve evidence at HOLD before signalling flip-back/release.
 If SOURCE_IN_USE repeats, reject exclusive fullscreen KMT for the current
 desktop state and return to coherent UMD/DWM work. No D3D11 caps or DCP change.
 
+**EXP647 WORKFLOW FREEZE.** Reused package/producer hashes are exact EXP643.
+Run/workflow/collector/arm/launch SHA256:
+135bb56291cfd91441b02ef34ec8aa6362486cdd49dc7302f27c85c6d9092946,
+675dc840ccc08c1006c6f602f161d33fedcbcb7e4f1af568d615456b7341ea1c,
+04c872379396cb1da88cb5590ca5aece69b6f549ccaacf3565333382b370d9c9,
+ca1be000fcb5a05e74b49019345d43478fd2da9f7b3e89092a2098fdff9e4d81,
+7166a32c82b59b6d66de59d81981c4384f4ef1b688dc71b11d954e90f033f364.
+All PowerShell wrappers parse. Ordinary clean health is required immediately
+before stage. Task waits at producer HOLD until evidence is collected and the
+exact flip-back signal is created.
+
 **EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
 ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
 index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
