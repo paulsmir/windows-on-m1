@@ -18,9 +18,11 @@ class AppleAgxRenderSubmissionTests(unittest.TestCase):
                 "-std=c11", "-Wall", "-Wextra", "-Werror",
                 "-fsanitize=address,undefined",
                 "-I", str(RENDER / "include"),
+                "-I", str(ROOT / "drivers/apple-agx/shared/include"),
                 str(RENDER / "tests" / "render_submission_test.c"),
                 str(RENDER / "src" / "render_submission.c"),
                 str(RENDER / "src" / "render_gdi_receipt.c"),
+                str(RENDER / "src" / "render_dynamic_output.c"),
                 "-o", str(binary),
             ], check=True, cwd=ROOT)
             subprocess.run([str(binary)], check=True, cwd=ROOT)

@@ -310,6 +310,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ULONGLONG commandHash = 0ULL;
   KIRQL oldIrql;
   BOOLEAN prepatched = FALSE;
+  BOOLEAN dynamicCommand = FALSE;
   BOOLEAN win32Command = FALSE;
   BOOLEAN trace;
   ULONG traceDmaBytes = 0u;
@@ -396,9 +397,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
             context, Args, &win32Snapshot)))
       UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
                         STATUS_INVALID_USER_BUFFER);
-    if (win32Snapshot.View.Draw != NULL)
-      UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare,
-                        STATUS_NOT_SUPPORTED);
+    if (win32Snapshot.View.Draw != NULL) {
+      ADMISSION_OPEN_ALLOCATION *dynamicOpened = NULL;
+      NTSTATUS dynamicStatus = AdmissionDynamicRenderBuild(
+          adapter, context, Args, &win32Snapshot, &dynamicOpened,
+          &destination, &prepared, &allocationOffset, &allocationBytes);
+      if (!NT_SUCCESS(dynamicStatus))
+        UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare, dynamicStatus);
+      opened = dynamicOpened;
+      allocation = &Args->pAllocationList[
+          win32Snapshot.View.References[
+              win32Snapshot.View.Draw->DestinationReference]
+              .AllocationIndex];
+      RtlZeroMemory(&command, sizeof(command));
+      command.Opcode = (ULONG)AppleAgxWin32OpcodeDraw;
+      command.DestinationAllocationIndex =
+          win32Snapshot.View.References[
+              win32Snapshot.View.Draw->DestinationReference]
+              .AllocationIndex;
+      command.Color = 0xff101820u;
+      commandHash = win32Snapshot.View.Header->ContentHash;
+      win32Command = TRUE;
+      dynamicCommand = TRUE;
+      prepatched = TRUE;
+      goto CommandPrepared;
+    }
     RtlZeroMemory(&command, sizeof(command));
     command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
     command.Version = ADMISSION_UMD_COMMAND_VERSION;
@@ -511,6 +534,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     prepatched = TRUE;
   }
 
+CommandPrepared:
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (prepatched && !NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
           adapter, context, Args->pAllocationList,
@@ -607,7 +631,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
 
   AdmissionGdiReceiptBeginWindows(
       adapter, (ULONGLONG)(ULONG_PTR)context, command.Opcode,
-      command.Color, 0u, prepared.DmaBytes);
+      command.Color, dynamicCommand ? 1u : 0u, prepared.DmaBytes);
   UMD_RENDER_RETURN(AdmissionUmdRenderGuardAccepted, STATUS_SUCCESS);
 #undef UMD_RENDER_RETURN
 }

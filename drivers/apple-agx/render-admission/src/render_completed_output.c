@@ -28,6 +28,8 @@ static int view_equal(const ADMISSION_BACKEND_OUTPUT_VIEW *A,
       A->RenderHeight == B->RenderHeight &&
       A->RenderPitch == B->RenderPitch &&
       A->ExpectedColor == B->ExpectedColor &&
+      A->BackgroundColor == B->BackgroundColor &&
+      A->VerificationKind == B->VerificationKind &&
       A->Framebuffer == B->Framebuffer;
 }
 

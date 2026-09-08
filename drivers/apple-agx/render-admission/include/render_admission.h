@@ -29,6 +29,9 @@
 #include "render_submit_trace.h"
 #include "render_submission.h"
 #include "render_backend_image.h"
+#include "render_dynamic_overlay.h"
+#include "render_dynamic_dma.h"
+#include "render_dynamic_output.h"
 #include "render_completed_output.h"
 #include "render_qualification.h"
 #include "render_output_queue.h"
@@ -1061,6 +1064,16 @@ NTSTATUS AdmissionWin32SnapshotRenderCommand(
     _In_ ADMISSION_RENDER_CONTEXT *Context,
     _In_ const DXGKARG_RENDER *Args,
     _Out_ ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot);
+NTSTATUS AdmissionDynamicRenderBuild(
+    _Inout_ ADMISSION_CONTEXT *Adapter,
+    _Inout_ ADMISSION_RENDER_CONTEXT *Context,
+    _Inout_ DXGKARG_RENDER *Args,
+    _In_ const ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot,
+    _Outptr_result_maybenull_ ADMISSION_OPEN_ALLOCATION **Opened,
+    _Out_ ADMISSION_LOCAL_MEMORY_VIEW *Destination,
+    _Out_ ADMISSION_GDI_PREPARED *Prepared,
+    _Out_ ULONGLONG *AllocationOffset,
+    _Out_ ULONGLONG *AllocationBytes);
 NTSTATUS AdmissionScanoutStart(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutStop(_Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionScanoutCommit(

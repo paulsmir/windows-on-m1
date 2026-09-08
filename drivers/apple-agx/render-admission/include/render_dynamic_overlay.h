@@ -29,6 +29,18 @@ typedef struct _ADMISSION_DYNAMIC_OVERLAY_ENTRY {
   APPLE_AGX_U64 GpuVirtualAddress;
 } ADMISSION_DYNAMIC_OVERLAY_ENTRY;
 
+typedef struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS {
+  APPLE_AGX_U32 VertexShaderReference;
+  APPLE_AGX_U32 FragmentShaderReference;
+  APPLE_AGX_U32 VertexRodataReference;
+  APPLE_AGX_U32 FragmentRodataReference;
+  APPLE_AGX_U32 UscPipelineReference;
+  APPLE_AGX_U32 DescriptorReference;
+  APPLE_AGX_U32 ScissorReference;
+  APPLE_AGX_U32 DepthBiasReference;
+  APPLE_AGX_U32 EncoderReference;
+} ADMISSION_DYNAMIC_OVERLAY_BINDINGS;
+
 typedef struct _ADMISSION_DYNAMIC_OVERLAY_PLAN {
   APPLE_AGX_U32 Magic;
   APPLE_AGX_U32 Version;
@@ -54,6 +66,14 @@ void AdmissionDynamicOverlayStateInitialize(
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlan(
     const ADMISSION_BACKEND_IMAGE *Image,
     const APPLE_AGX_WIN32_COMMAND_VIEW *View,
+    ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
+    const APPLE_AGX_WIN32_COMMAND_VIEW *View,
+    ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
+    const APPLE_AGX_DYNAMIC_JOB *Job,
     ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan);
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,

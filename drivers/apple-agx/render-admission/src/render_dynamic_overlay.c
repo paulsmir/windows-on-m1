@@ -220,6 +220,91 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlan(
   return AdmissionDynamicOverlaySuccess;
 }
 
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
+    const APPLE_AGX_WIN32_COMMAND_VIEW *View,
+    ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings) {
+  if (Bindings != OVERLAY_NULL)
+    overlay_zero(Bindings, (APPLE_AGX_U32)sizeof(*Bindings));
+  if (View == OVERLAY_NULL || View->Header == OVERLAY_NULL ||
+      View->Draw == OVERLAY_NULL || Bindings == OVERLAY_NULL ||
+      View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
+      View->Header->ReferenceCount == 0u ||
+      View->Header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
+    return AdmissionDynamicOverlayArgument;
+  *Bindings = (ADMISSION_DYNAMIC_OVERLAY_BINDINGS){
+      View->Draw->VertexShaderReference,
+      View->Draw->FragmentShaderReference,
+      View->Draw->VertexRodataReference,
+      View->Draw->FragmentRodataReference,
+      View->Draw->UscPipelineReference,
+      View->Draw->DescriptorReference,
+      View->Draw->ScissorReference,
+      View->Draw->DepthBiasReference,
+      View->Draw->EncoderReference};
+  return AdmissionDynamicOverlaySuccess;
+}
+
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
+    const APPLE_AGX_DYNAMIC_JOB *Job,
+    ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan) {
+  APPLE_AGX_WIN32_COMMAND_HEADER header;
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE
+      references[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw;
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  APPLE_AGX_U32 highest = 0u;
+  APPLE_AGX_U32 index;
+  ADMISSION_DYNAMIC_OVERLAY_RESULT result;
+  if (Plan != OVERLAY_NULL)
+    overlay_zero(Plan, (APPLE_AGX_U32)sizeof(*Plan));
+  if (Image == OVERLAY_NULL || Bindings == OVERLAY_NULL ||
+      Job == OVERLAY_NULL || Plan == OVERLAY_NULL ||
+      Job->Magic != APPLE_AGX_DYNAMIC_JOB_MAGIC ||
+      Job->Version != APPLE_AGX_DYNAMIC_JOB_VERSION ||
+      Job->Generation == 0u || Job->ObjectCount == 0u ||
+      Job->ObjectCount > ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES)
+    return AdmissionDynamicOverlayArgument;
+  overlay_zero(&header, (APPLE_AGX_U32)sizeof(header));
+  overlay_zero(references, (APPLE_AGX_U32)sizeof(references));
+  overlay_zero(&draw, (APPLE_AGX_U32)sizeof(draw));
+  overlay_zero(&view, (APPLE_AGX_U32)sizeof(view));
+  draw.VertexShaderReference = Bindings->VertexShaderReference;
+  draw.FragmentShaderReference = Bindings->FragmentShaderReference;
+  draw.VertexRodataReference = Bindings->VertexRodataReference;
+  draw.FragmentRodataReference = Bindings->FragmentRodataReference;
+  draw.UscPipelineReference = Bindings->UscPipelineReference;
+  draw.DescriptorReference = Bindings->DescriptorReference;
+  draw.ScissorReference = Bindings->ScissorReference;
+  draw.DepthBiasReference = Bindings->DepthBiasReference;
+  draw.EncoderReference = Bindings->EncoderReference;
+  for (index = 0u; index < Job->ObjectCount; ++index) {
+    const APPLE_AGX_DYNAMIC_JOB_OBJECT *object = &Job->Objects[index];
+    if (object->ReferenceIndex >= APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+        object->Bytes == 0u || references[object->ReferenceIndex].Bytes != 0ULL)
+      return AdmissionDynamicOverlayLayout;
+    references[object->ReferenceIndex].Role = object->Role;
+    references[object->ReferenceIndex].Bytes = object->Bytes;
+    if (object->ReferenceIndex > highest)
+      highest = object->ReferenceIndex;
+  }
+  header.Opcode = AppleAgxWin32OpcodeDraw;
+  header.Generation = Job->Generation;
+  header.ReferenceCount = highest + 1u;
+  view.Header = &header;
+  view.References = references;
+  view.Draw = &draw;
+  result = AdmissionDynamicOverlayPlan(Image, &view, Plan);
+  if (result != AdmissionDynamicOverlaySuccess)
+    return result;
+  if (Plan->EntryCount != Job->ObjectCount) {
+    overlay_zero(Plan, (APPLE_AGX_U32)sizeof(*Plan));
+    return AdmissionDynamicOverlayLayout;
+  }
+  return AdmissionDynamicOverlaySuccess;
+}
+
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
     APPLE_AGX_U32 ReferenceIndex, APPLE_AGX_U64 ReferenceOffset,

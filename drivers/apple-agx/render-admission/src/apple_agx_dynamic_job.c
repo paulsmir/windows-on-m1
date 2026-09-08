@@ -206,8 +206,9 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
     object->StorageOffset = alignedStorage;
     object->Bytes = (APPLE_AGX_U32)reference->Bytes;
     object->AllocationToken = fact->AllocationToken;
-    if (!Read(CallbackContext, fact->AllocationToken, reference->Offset,
-              object->Bytes, storage + object->StorageOffset))
+    if (!Read(CallbackContext, fact->AllocationToken, referenceIndex,
+              reference->Role, reference->Offset, object->Bytes,
+              storage + object->StorageOffset))
       return dynamic_fail(AppleAgxDynamicJobRead, Storage,
                           alignedStorage + object->Bytes, Job);
     object->SourceHash = dynamic_hash(

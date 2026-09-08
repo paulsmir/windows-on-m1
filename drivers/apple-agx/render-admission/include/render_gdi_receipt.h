@@ -1,6 +1,8 @@
 #ifndef APPLE_AGX_RENDER_GDI_RECEIPT_H
 #define APPLE_AGX_RENDER_GDI_RECEIPT_H
 
+#include "render_dynamic_output.h"
+
 #define ADMISSION_GDI_RECEIPT_VERSION 1u
 #define ADMISSION_TERMINAL_RECEIPT_VERSION 1u
 #define ADMISSION_TERMINAL_RAW_EVENT_BYTES 56u
@@ -149,5 +151,11 @@ int AdmissionTerminalReceiptCaptureOutputProgress(
     unsigned int ExaminedBytes, unsigned int ExpectedPixel,
     unsigned char PoisonByte, unsigned int ChunkBytes,
     ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress, void *ProgressContext);
+int AdmissionTerminalReceiptCaptureTriangleOutputProgress(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
+    const unsigned char *Bytes, unsigned int TargetBytes,
+    const ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation,
+    unsigned int ChunkBytes, ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress,
+    void *ProgressContext, unsigned int *ForegroundColor);
 
 #endif /* APPLE_AGX_RENDER_GDI_RECEIPT_H */

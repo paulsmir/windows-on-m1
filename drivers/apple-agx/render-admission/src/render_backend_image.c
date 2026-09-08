@@ -155,6 +155,55 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U32 BackgroundColor,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding) {
+  APPLE_AGX_EXP208_RELOCATION_OBJECT saved_output;
+  APPLE_AGX_EXP208_GDI_BINDING candidate;
+  if (Image == ADMISSION_BACKEND_IMAGE_NULL ||
+      Packet == ADMISSION_BACKEND_IMAGE_NULL ||
+      DestinationCpuAddress == ADMISSION_BACKEND_IMAGE_NULL ||
+      Binding == ADMISSION_BACKEND_IMAGE_NULL ||
+      Image->Ready != APPLE_AGX_TRUE || Image->BoundFence != 0u ||
+      Packet->Fence == 0u || Packet->DestinationCpuToken == 0ULL ||
+      Packet->DestinationGpuVa == 0ULL ||
+      Packet->DestinationPhysical == 0ULL ||
+      Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES)
+    return APPLE_AGX_FALSE;
+  saved_output = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+  if (!AppleAgxExp208BindDynamicFramebuffer(
+          BackgroundColor, Image->ArenaCpuAddress, Image->ArenaGpuAddress,
+          Image->ArenaPhysicalAddress, Image->ArenaCapacity,
+          DestinationCpuAddress, Packet->DestinationGpuVa,
+          Packet->DestinationPhysical, Packet->DestinationBytes,
+          Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount(), &candidate))
+    return APPLE_AGX_FALSE;
+  if (!AppleAgxApplyRelocations(
+          Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          AppleAgxRenderTemplateRelocations(),
+          AppleAgxRenderTemplateRelocationCount())) {
+    (void)AppleAgxExp208UnbindGdiColorFill(
+        Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        &candidate);
+    Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT] = saved_output;
+    if (!AppleAgxApplyRelocations(
+            Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+            AppleAgxRenderTemplateRelocations(),
+            AppleAgxRenderTemplateRelocationCount()))
+      Image->Ready = APPLE_AGX_FALSE;
+    return APPLE_AGX_FALSE;
+  }
+  Image->Binding = candidate;
+  Image->BoundFence = Packet->Fence;
+  *Binding = candidate;
+  return APPLE_AGX_TRUE;
+}
+
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
@@ -245,6 +294,8 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
   candidate.ExpectedColor = framebuffer == APPLE_AGX_TRUE
       ? Image->Binding.Framebuffer.ClearColor
       : APPLE_AGX_EXP208_GDI_COLOR;
+  candidate.BackgroundColor = candidate.ExpectedColor;
+  candidate.VerificationKind = AdmissionBackendOutputVerificationUniform;
   candidate.Framebuffer = framebuffer;
   *Output = candidate;
   return APPLE_AGX_TRUE;

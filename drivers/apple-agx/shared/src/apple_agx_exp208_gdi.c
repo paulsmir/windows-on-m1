@@ -375,6 +375,45 @@ APPLE_AGX_BOOL AppleAgxExp208BindGdiFramebufferColorFill(
   return APPLE_AGX_TRUE;
 }
 
+APPLE_AGX_BOOL AppleAgxExp208BindDynamicFramebuffer(
+    APPLE_AGX_U32 BackgroundColor,
+    void *ArenaCpuAddress,
+    APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_U64 ArenaPhysicalAddress,
+    APPLE_AGX_U32 ArenaCapacity,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U64 DestinationGpuVa,
+    APPLE_AGX_U64 DestinationPhysical,
+    APPLE_AGX_U32 DestinationCapacity,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    const APPLE_AGX_EXP208_RELOCATION *Relocations,
+    APPLE_AGX_U32 RelocationCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding) {
+  APPLE_AGX_GDI_COMMAND_DESCRIPTION description;
+  unsigned char dma[sizeof(APPLE_AGX_GDI_DMA_COMMAND)];
+  APPLE_AGX_U32 written = 0u;
+  Exp208GdiZero(&description, (APPLE_AGX_U32)sizeof(description));
+  description.Command.Opcode = AppleAgxGdiColorFill;
+  description.Command.Destination = (APPLE_AGX_GDI_RECT){
+      0u, 0u, APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
+      APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT};
+  description.Command.DestinationAllocationIndex = 0u;
+  description.Command.DestinationGpuAddress = DestinationGpuVa;
+  description.Command.DestinationPitch = APPLE_AGX_EXP208_FRAMEBUFFER_PITCH;
+  description.Command.Color = BackgroundColor;
+  description.Command.Rop = AppleAgxGdiColorFillPatCopy;
+  if (!AppleAgxGdiEncodeDmaCommand(
+          &description, dma, (APPLE_AGX_U32)sizeof(dma), &written) ||
+      written != sizeof(APPLE_AGX_GDI_DMA_COMMAND))
+    return APPLE_AGX_FALSE;
+  return AppleAgxExp208BindGdiFramebufferColorFill(
+      dma, written, ArenaCpuAddress, ArenaGpuAddress,
+      ArenaPhysicalAddress, ArenaCapacity, DestinationCpuAddress,
+      DestinationGpuVa, DestinationPhysical, DestinationCapacity, Objects,
+      ObjectCount, Relocations, RelocationCount, Binding);
+}
+
 APPLE_AGX_BOOL AppleAgxExp208UnbindGdiColorFill(
     APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
     APPLE_AGX_U32 ObjectCount,

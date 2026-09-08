@@ -245,6 +245,39 @@ static void test_restart_queue_lifetime_resets_only_firmware_sequence(void) {
   free(storage);
 }
 
+static void test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma(void) {
+  unsigned char *storage = (unsigned char *)malloc(TEST_BACKEND_BYTES);
+  unsigned char *destination =
+      (unsigned char *)malloc(APPLE_AGX_EXP208_FRAMEBUFFER_BYTES);
+  ADMISSION_LOCAL_MEMORY_VIEW view;
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet;
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  assert(storage != NULL && destination != NULL);
+  view.CpuAddress = storage;
+  view.HostPhysicalAddress = TEST_BACKEND_PHYSICAL;
+  view.GpuVirtualAddress = TEST_BACKEND_GPU;
+  view.Bytes = TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image, &view));
+  memset(&packet, 0, sizeof(packet));
+  packet.Fence = 93u;
+  packet.DestinationCpuToken =
+      (unsigned long long)(unsigned long)destination;
+  packet.DestinationGpuVa = 0x1501000000ULL;
+  packet.DestinationPhysical = 0x9d1000000ULL;
+  packet.DestinationBytes = APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
+  assert(AdmissionBackendImageBindDynamicSubmission(
+      &image, &packet, destination, 0xff101820u, &binding));
+  assert(image.BoundFence == packet.Fence);
+  assert(binding.Framebuffer.Active == APPLE_AGX_TRUE);
+  assert(binding.Framebuffer.ClearColor == 0xff101820u);
+  assert(image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data ==
+         destination);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+  free(destination);
+  free(storage);
+}
+
 static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(void) {
   unsigned char *storage = (unsigned char *)malloc(TEST_BACKEND_BYTES);
   unsigned char *template_before =
@@ -368,6 +401,7 @@ int main(void) {
   test_rejects_invalid_tail_atomically();
   test_exact_packet_binds_output_and_reapplies_relocations();
   test_restart_queue_lifetime_resets_only_firmware_sequence();
+  test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma();
   test_fullscreen_packet_repoints_tiling_graph_and_restores_template();
   return 0;
 }

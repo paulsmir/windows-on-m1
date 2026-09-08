@@ -648,10 +648,8 @@ static void test_two_fullscreen_ping_pong_colors_bind_after_exact_release(void) 
       objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT, &binding));
   assert(memcmp(before, arena, AppleAgxRenderTemplateBytes()) == 0);
 
-  bytes = make_fullscreen_color_clear(
-      dma, 0x1500fb0000ULL, 0xff00ff00u);
-  assert(AppleAgxExp208BindGdiFramebufferColorFill(
-      dma, bytes, arena, 0x1503800000ULL, 0x9d3000000ULL,
+  assert(AppleAgxExp208BindDynamicFramebuffer(
+      0xff00ff00u, arena, 0x1503800000ULL, 0x9d3000000ULL,
       backend_bytes, destination1, 0x1500fb0000ULL, 0x9d2fa0000ULL,
       APPLE_AGX_EXP208_FRAMEBUFFER_BYTES, objects,
       APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,

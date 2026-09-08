@@ -496,6 +496,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
   const D3DDDI_PATCHLOCATIONLIST *location;
   ADMISSION_OPEN_ALLOCATION *opened;
   BOOLEAN sealed;
+  BOOLEAN dynamicDma = FALSE;
   ADMISSION_LOCAL_MEMORY_VIEW destination;
   const ADMISSION_LOCAL_MEMORY_VIEW *visibleDestinationForPacket = NULL;
   ULONGLONG visibleAllocationTokenForPacket = 0ULL;
@@ -566,11 +567,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           Args->DmaBufferSubmissionStartOffset,
           Args->DmaBufferSubmissionEndOffset -
               Args->DmaBufferSubmissionStartOffset,
-          &view) ||
-      !AdmissionGdiDescribePreparedRecord(
-          view.Bytes, view.DmaBytes, view.DmaOffset, &prepared))
+          &view))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardShadow,
                         STATUS_INVALID_USER_BUFFER);
+  if (!AdmissionGdiDescribePreparedRecord(
+          view.Bytes, view.DmaBytes, view.DmaOffset, &prepared)) {
+    if (!AdmissionDynamicDmaDescribePreparedRecord(
+            view.Bytes, view.DmaBytes, view.DmaOffset, &prepared))
+      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardShadow,
+                          STATUS_INVALID_USER_BUFFER);
+    dynamicDma = TRUE;
+  }
 
   location =
       &Args->pPatchLocationList[
@@ -625,12 +632,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
       PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,
                           STATUS_INVALID_DEVICE_STATE);
   } else {
-    if (!AppleAgxDmaShadowPatchU64(
-            shadow.Storage, shadow.BytesUsed,
-            patch.PatchOffset, destination.GpuVirtualAddress) ||
+    if ((dynamicDma
+             ? AdmissionDynamicDmaPatchDestination(
+                   (PVOID)view.Bytes, view.DmaBytes,
+                   destination.GpuVirtualAddress) !=
+                   AdmissionDynamicDmaSuccess
+             : !AppleAgxDmaShadowPatchU64(
+                   shadow.Storage, shadow.BytesUsed,
+                   patch.PatchOffset, destination.GpuVirtualAddress)) ||
         !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))
       PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,
                           STATUS_INVALID_DEVICE_STATE);
+  }
+  if (dynamicDma) {
+    if (AdmissionDynamicDmaPatchDestination(
+            (PUCHAR)Args->pDmaBuffer +
+                Args->DmaBufferSubmissionStartOffset,
+            Args->DmaBufferSubmissionEndOffset -
+                Args->DmaBufferSubmissionStartOffset,
+            destination.GpuVirtualAddress) != AdmissionDynamicDmaSuccess)
+      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,
+                          STATUS_INVALID_DEVICE_STATE);
+  } else {
+    RtlCopyMemory(
+        (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,
+        &destination.GpuVirtualAddress,
+        sizeof(destination.GpuVirtualAddress));
   }
   if (!NT_SUCCESS(AdmissionGdiPreparePacket(
           adapter, context, opened, Args, shadow.BytesUsed,
@@ -642,10 +669,6 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
       (ULONGLONG)(ULONG_PTR)context, Args->SubmissionFenceId,
       destination.GpuVirtualAddress, destination.HostPhysicalAddress,
       (ULONG)destination.Bytes);
-  RtlCopyMemory(
-      (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,
-      &destination.GpuVirtualAddress,
-      sizeof(destination.GpuVirtualAddress));
   PATCH_RENDER_RETURN(AdmissionPatchRenderGuardAccepted, STATUS_SUCCESS);
 #undef PATCH_RENDER_RETURN
 }

@@ -12,12 +12,15 @@ typedef struct _DYNAMIC_FIXTURE {
 } DYNAMIC_FIXTURE;
 
 static int read_object(void *Context, APPLE_AGX_U64 Token,
-                       APPLE_AGX_U64 Offset, APPLE_AGX_U32 Bytes,
-                       void *Destination) {
+                       APPLE_AGX_U32 ReferenceIndex,
+                       APPLE_AGX_U32 Role, APPLE_AGX_U64 Offset,
+                       APPLE_AGX_U32 Bytes, void *Destination) {
   DYNAMIC_FIXTURE *fixture = Context;
   unsigned index = (unsigned)(Token - 1ULL);
   ++fixture->Reads;
-  if (fixture->FailRead || index >= 9u || Offset > 0x10000ULL ||
+  if (fixture->FailRead || index >= 9u || ReferenceIndex >= 9u ||
+      Role < AppleAgxWin32RoleRenderTarget ||
+      Role > AppleAgxWin32RoleDepthBias || Offset > 0x10000ULL ||
       Bytes > 0x10000ULL - Offset)
     return 0;
   memcpy(Destination, fixture->Data[index] + (size_t)Offset, Bytes);

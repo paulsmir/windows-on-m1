@@ -371,3 +371,51 @@ int AdmissionTerminalReceiptCaptureOutput(
       Receipt, Fence, Bytes, TargetBytes, ExaminedBytes, ExpectedPixel,
       PoisonByte, 0u, (void *)0, (void *)0);
 }
+
+int AdmissionTerminalReceiptCaptureTriangleOutputProgress(
+    ADMISSION_TERMINAL_RECEIPT *Receipt, unsigned int Fence,
+    const unsigned char *Bytes, unsigned int TargetBytes,
+    const ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation,
+    unsigned int ChunkBytes, ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress,
+    void *ProgressContext, unsigned int *ForegroundColor) {
+  ADMISSION_TERMINAL_RECEIPT candidate;
+  ADMISSION_DYNAMIC_OUTPUT_RESULT result;
+  unsigned int prefixBytes;
+  unsigned int index;
+  if (ForegroundColor != (void *)0)
+    *ForegroundColor = 0u;
+  if (Receipt == (void *)0 || Bytes == (void *)0 ||
+      Expectation == (void *)0 || ForegroundColor == (void *)0 ||
+      !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_TERMINAL) ||
+      (Receipt->ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) ||
+      Receipt->Fence != Fence || TargetBytes == 0u ||
+      !AdmissionDynamicOutputVerify(
+          Bytes, TargetBytes, Expectation, ChunkBytes, Progress,
+          ProgressContext, &result))
+    return 0;
+  candidate = *Receipt;
+  candidate.OutputFirstPixelActual =
+      (unsigned int)Bytes[0] | ((unsigned int)Bytes[1] << 8u) |
+      ((unsigned int)Bytes[2] << 16u) |
+      ((unsigned int)Bytes[3] << 24u);
+  candidate.OutputFirstMismatchIndex = result.FirstInvalidPixel;
+  candidate.OutputFirstMismatchActual = result.FirstInvalidValue;
+  candidate.OutputPixelsExpected =
+      result.BackgroundPixels + result.ForegroundPixels;
+  candidate.OutputPixelsPoison = result.PoisonPixels;
+  candidate.OutputChangedBytes = result.ForegroundPixels * 4u;
+  candidate.OutputGuardCorrupt = result.Valid ? 0u : 1u;
+  candidate.OutputBytesExamined = result.BytesExamined;
+  candidate.OutputTargetFnv1a = result.Fnv1a;
+  AdmissionGdiReceiptZero(candidate.OutputPrefix,
+                          ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES);
+  prefixBytes = TargetBytes < ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES
+                    ? TargetBytes
+                    : ADMISSION_TERMINAL_OUTPUT_PREFIX_BYTES;
+  for (index = 0u; index < prefixBytes; ++index)
+    candidate.OutputPrefix[index] = Bytes[index];
+  candidate.ValidMask |= ADMISSION_TERMINAL_VALID_OUTPUT;
+  *ForegroundColor = result.ForegroundColor;
+  *Receipt = candidate;
+  return 1;
+}

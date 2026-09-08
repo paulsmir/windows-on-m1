@@ -125,6 +125,8 @@ int main(void) {
   APPLE_AGX_DYNAMIC_JOB job;
   unsigned char storage[0x300];
   ADMISSION_DYNAMIC_OVERLAY_PLAN plan;
+  ADMISSION_DYNAMIC_OVERLAY_PLAN restored_plan;
+  ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings;
   ADMISSION_DYNAMIC_OVERLAY_STATE state;
   APPLE_AGX_U64 address = 0ULL;
 
@@ -134,6 +136,24 @@ int main(void) {
   pipeline_bytes[0x2000] = 0x5au;
   assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
          AdmissionDynamicOverlaySuccess);
+  assert(AdmissionDynamicOverlayBindingsFromView(&view, &bindings) ==
+         AdmissionDynamicOverlaySuccess);
+  assert(AdmissionDynamicOverlayPlanFromJob(
+             &image, &bindings, &job, &restored_plan) ==
+         AdmissionDynamicOverlaySuccess);
+  assert(restored_plan.EntryCount == plan.EntryCount);
+  for (unsigned index = 0u; index < plan.EntryCount; ++index) {
+    assert(restored_plan.Entries[index].ReferenceIndex ==
+           plan.Entries[index].ReferenceIndex);
+    assert(restored_plan.Entries[index].Role == plan.Entries[index].Role);
+    assert(restored_plan.Entries[index].ObjectIndex ==
+           plan.Entries[index].ObjectIndex);
+    assert(restored_plan.Entries[index].ObjectOffset ==
+           plan.Entries[index].ObjectOffset);
+    assert(restored_plan.Entries[index].Bytes == plan.Entries[index].Bytes);
+    assert(restored_plan.Entries[index].GpuVirtualAddress ==
+           plan.Entries[index].GpuVirtualAddress);
+  }
   assert(plan.EntryCount == 9u && plan.Generation == 7u);
   assert(find_entry(&plan, 8u)->ObjectIndex == 71u);
   assert(find_entry(&plan, 8u)->GpuVirtualAddress == 0x1503d78000ULL);

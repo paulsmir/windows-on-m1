@@ -340,6 +340,8 @@ static void test_draw_graph_rejections(void) {
               AppleAgxWin32AbiRange);
   REJECT_DRAW(Relocations[6].TargetOffset, 0x101u,
               AppleAgxWin32AbiRange);
+  REJECT_DRAW(Relocations[5].DestinationOffset, 42u,
+              AppleAgxWin32AbiRange);
   command = valid_draw();
   command.Relocations[1].DestinationOffset =
       command.Relocations[0].DestinationOffset;

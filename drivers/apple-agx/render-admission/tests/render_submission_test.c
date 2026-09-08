@@ -334,6 +334,50 @@ static void test_terminal_output_progress_bounds_reads_and_aborts_cleanly(void) 
   assert(receipt.OutputPixelsExpected == 0u);
 }
 
+static void test_terminal_triangle_receipt_requires_two_colour_geometry(void) {
+  ADMISSION_TERMINAL_RECEIPT receipt;
+  ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {
+      8u, 8u, 32u, 0xff101820u, 4u, 4u,
+      2u, 2u, 6u, 6u, 16u, 16u, 0xa5u};
+  unsigned int output[64];
+  unsigned int foreground = 0u;
+  for (unsigned int index = 0u; index < 64u; ++index)
+    output[index] = 0xff101820u;
+  for (unsigned int y = 2u; y < 6u; ++y)
+    for (unsigned int x = 2u; x < 6u; ++x)
+      output[y * 8u + x] = 0xff1acc66u;
+  AdmissionTerminalReceiptInitialize(&receipt);
+  assert(AdmissionTerminalReceiptBegin(
+      &receipt, 1u, 9u, 0x9fff78000ULL, 19u, 0x1000ULL, 0x2000ULL,
+      0x1500000000ULL, 0x9bc000000ULL, sizeof(output),
+      0u, 1u, 0x7a000100u, 0x3d000100u, 2u, 2u,
+      0x3000ULL, 0x3000ULL, 0x4000ULL, 0x4000ULL));
+  assert(AdmissionTerminalReceiptObserve(
+      &receipt, 19u, 0u, 0u, AdmissionTerminalSourcePollingEvent,
+      NULL, 0u, 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
+  assert(AdmissionTerminalReceiptCaptureTriangleOutputProgress(
+      &receipt, 19u, (const unsigned char *)output, sizeof(output),
+      &expectation, 0u, NULL, NULL, &foreground));
+  assert(foreground == 0xff1acc66u);
+  assert(receipt.OutputPixelsExpected == 64u);
+  assert(receipt.OutputChangedBytes == 64u);
+  assert(receipt.OutputGuardCorrupt == 0u);
+  output[0] = foreground;
+  AdmissionTerminalReceiptInitialize(&receipt);
+  assert(AdmissionTerminalReceiptBegin(
+      &receipt, 1u, 9u, 0x9fff78000ULL, 20u, 0x1000ULL, 0x2000ULL,
+      0x1500000000ULL, 0x9bc000000ULL, sizeof(output),
+      0u, 1u, 0x7a000100u, 0x3d000100u, 2u, 2u,
+      0x3000ULL, 0x3000ULL, 0x4000ULL, 0x4000ULL));
+  assert(AdmissionTerminalReceiptObserve(
+      &receipt, 20u, 0u, 0u, AdmissionTerminalSourcePollingEvent,
+      NULL, 0u, 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
+  assert(AdmissionTerminalReceiptCaptureTriangleOutputProgress(
+      &receipt, 20u, (const unsigned char *)output, sizeof(output),
+      &expectation, 0u, NULL, NULL, &foreground));
+  assert(receipt.OutputGuardCorrupt == 1u);
+}
+
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
   test_prepatched_capture_adopt_and_worker_copy_are_exact();
@@ -345,5 +389,6 @@ int main(void) {
   test_gdi_receipt_requires_one_context_fence_and_physical_completion();
   test_terminal_receipt_preserves_preclear_completion();
   test_terminal_output_progress_bounds_reads_and_aborts_cleanly();
+  test_terminal_triangle_receipt_requires_two_colour_geometry();
   return 0;
 }

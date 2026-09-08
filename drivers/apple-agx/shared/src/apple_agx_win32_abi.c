@@ -317,7 +317,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
          (((relocation->DestinationOffset | relocation->TargetOffset) &
            3ULL) != 0ULL)) ||
         (relocation->Kind == AppleAgxWin32RelocationUscBufferAddress40 &&
-         (relocation->DestinationOffset & 7ULL) != 0ULL) ||
+         (relocation->DestinationOffset & 3ULL) != 0ULL) ||
         relocation->DestinationOffset >
             references[relocation->DestinationReference].Bytes ||
         relocation->WidthBytes >

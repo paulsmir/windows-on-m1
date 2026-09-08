@@ -29,6 +29,11 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_BOOL Ready;
 } ADMISSION_BACKEND_IMAGE;
 
+typedef enum _ADMISSION_BACKEND_OUTPUT_VERIFICATION {
+  AdmissionBackendOutputVerificationUniform = 1u,
+  AdmissionBackendOutputVerificationTriangle = 2u,
+} ADMISSION_BACKEND_OUTPUT_VERIFICATION;
+
 typedef struct _ADMISSION_BACKEND_OUTPUT_VIEW {
   void *AllocationCpuAddress;
   APPLE_AGX_U64 AllocationGpuAddress;
@@ -47,6 +52,8 @@ typedef struct _ADMISSION_BACKEND_OUTPUT_VIEW {
   APPLE_AGX_U32 RenderHeight;
   APPLE_AGX_U32 RenderPitch;
   APPLE_AGX_U32 ExpectedColor;
+  APPLE_AGX_U32 BackgroundColor;
+  APPLE_AGX_U32 VerificationKind;
   APPLE_AGX_BOOL Framebuffer;
 } ADMISSION_BACKEND_OUTPUT_VIEW;
 
@@ -60,6 +67,13 @@ APPLE_AGX_BOOL AdmissionBackendImageBindSubmission(
     void *DestinationCpuAddress,
     const unsigned char *SubmissionBytes,
     APPLE_AGX_U32 SubmissionByteCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
+    ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_RENDER_PACKET_DESCRIPTION *Packet,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U32 BackgroundColor,
     APPLE_AGX_EXP208_GDI_BINDING *Binding);
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(

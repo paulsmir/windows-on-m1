@@ -90,6 +90,12 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   APPLE_AGX_BACKEND_IO RenderIo;
   APPLE_AGX_BACKEND_IO PlatformIo;
   APPLE_AGX_BACKEND_IO RuntimeIo;
+  ADMISSION_DYNAMIC_OVERLAY_PLAN DynamicOverlayPlan;
+  ADMISSION_DYNAMIC_OVERLAY_STATE DynamicOverlayState;
+  const APPLE_AGX_DYNAMIC_JOB *DynamicJob;
+  const void *DynamicStorage;
+  ULONG DynamicStorageBytes;
+  ULONG DynamicBackgroundColor;
   PIO_WORKITEM WorkItem;
   KEVENT WorkIdle;
   volatile LONG WorkScheduled;
@@ -238,14 +244,40 @@ static VOID AdmissionTerminalObserve(
         Output->RenderedBytes != 0u &&
         Runtime->TransportIo.FlushForCpu(
             Runtime, Output->RenderedCpuAddress, Output->RenderedBytes)) {
+      BOOLEAN captured;
+      ULONG foreground = 0u;
       Runtime->TransportIo.MemoryBarrier(Runtime);
-      if (AdmissionTerminalReceiptCaptureOutputProgress(
-          &Runtime->TerminalReceipt, Fence,
-          (const UCHAR *)Output->RenderedCpuAddress,
-          Output->RenderedBytes, Output->RenderedBytes,
-          Output->ExpectedColor, 0xa5u,
-          ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
-          AdmissionOutputCaptureProgress, Runtime)) {
+      if (Output->VerificationKind ==
+          AdmissionBackendOutputVerificationTriangle) {
+        ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {
+            APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
+            APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT,
+            APPLE_AGX_EXP208_FRAMEBUFFER_PITCH,
+            Output->BackgroundColor,
+            1280u, 800u, 240u, 150u, 2320u, 1450u,
+            1000000u, 1600000u, 0xa5u};
+        captured = AdmissionTerminalReceiptCaptureTriangleOutputProgress(
+            &Runtime->TerminalReceipt, Fence,
+            (const UCHAR *)Output->RenderedCpuAddress,
+            Output->RenderedBytes, &expectation,
+            ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
+            AdmissionOutputCaptureProgress, Runtime, &foreground)
+                       ? TRUE
+                       : FALSE;
+        if (captured && Completed != NULL)
+          Completed->View.ExpectedColor = foreground;
+      } else {
+        captured = AdmissionTerminalReceiptCaptureOutputProgress(
+            &Runtime->TerminalReceipt, Fence,
+            (const UCHAR *)Output->RenderedCpuAddress,
+            Output->RenderedBytes, Output->RenderedBytes,
+            Output->ExpectedColor, 0xa5u,
+            ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
+            AdmissionOutputCaptureProgress, Runtime)
+                       ? TRUE
+                       : FALSE;
+      }
+      if (captured) {
         BOOLEAN outputValid =
             Runtime->TerminalReceipt.OutputPixelsExpected ==
                 Output->RenderedBytes / 4u &&
@@ -1758,14 +1790,42 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   ADMISSION_PLATFORM_RUNTIME *runtime = Context;
   APPLE_AGX_BACKEND_JOB_IMAGE staged;
   APPLE_AGX_RENDER_RUNTIME_BINDINGS bindings;
+  ADMISSION_DYNAMIC_DMA_VIEW dynamicView;
+  ADMISSION_DYNAMIC_OVERLAY_PLAN dynamicPlan;
+  BOOLEAN dynamic = FALSE;
+  BOOLEAN overlayApplied = FALSE;
+  ULONG submissionMagic = 0u;
   APPLE_AGX_U32 index;
   if (runtime == NULL || Submission == NULL || Plan == NULL ||
       Submission->Submission.Fence == 0u)
     return APPLE_AGX_BACKEND_FALSE;
-  UNREFERENCED_PARAMETER(SubmissionBytes);
-  UNREFERENCED_PARAMETER(SubmissionByteCount);
   RtlZeroMemory(&staged, sizeof(staged));
   RtlZeroMemory(&bindings, sizeof(bindings));
+  RtlZeroMemory(&dynamicView, sizeof(dynamicView));
+  RtlZeroMemory(&dynamicPlan, sizeof(dynamicPlan));
+  if (SubmissionBytes != NULL && SubmissionByteCount >= sizeof(ULONG))
+    RtlCopyMemory(&submissionMagic, SubmissionBytes, sizeof(submissionMagic));
+  if (submissionMagic == ADMISSION_DYNAMIC_DMA_MAGIC) {
+    if (AdmissionDynamicDmaOpen(
+            SubmissionBytes, SubmissionByteCount, &dynamicView) !=
+            AdmissionDynamicDmaSuccess ||
+        dynamicView.Header->DestinationGpuVa !=
+            runtime->Adapter->RenderPacket.Description.DestinationGpuVa ||
+        AdmissionDynamicOverlayPlanFromJob(
+            &runtime->Adapter->BackendImage, dynamicView.Bindings,
+            dynamicView.Job, &dynamicPlan) !=
+            AdmissionDynamicOverlaySuccess ||
+        runtime->DynamicOverlayState.Applied != 0u ||
+        AdmissionDynamicOverlayApply(
+            &runtime->Adapter->BackendImage, &dynamicPlan,
+            dynamicView.Job, dynamicView.Storage,
+            dynamicView.StorageBytes, Submission->Submission.Fence,
+            &runtime->DynamicOverlayState) !=
+            AdmissionDynamicOverlaySuccess)
+      return APPLE_AGX_BACKEND_FALSE;
+    dynamic = TRUE;
+    overlayApplied = TRUE;
+  }
   if (!AdmissionBackendImageStageJob(
           &runtime->Adapter->BackendImage,
           Submission->Submission.Fence, TaEvent, D3Event,
@@ -1781,7 +1841,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
           &bindings, &staged, runtime->QueueObjects, Job))
-    return APPLE_AGX_BACKEND_FALSE;
+    goto BuildFailure;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
@@ -1789,11 +1849,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
             APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
     if (output->Data == NULL ||
         output->Size < APPLE_AGX_EXP208_GDI_OUTPUT_BYTES)
-      return APPLE_AGX_BACKEND_FALSE;
+      goto BuildFailure;
     RtlFillMemory(output->Data, output->Size, 0xa5u);
     if (!runtime->TransportIo.FlushForDevice(
             runtime, output->Data, output->Size))
-      return APPLE_AGX_BACKEND_FALSE;
+      goto BuildFailure;
   }
 #endif
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
@@ -1803,7 +1863,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     if (object->Data == NULL || object->Size == 0u ||
         !runtime->TransportIo.FlushForDevice(
             runtime, object->Data, object->Size))
-      return APPLE_AGX_BACKEND_FALSE;
+      goto BuildFailure;
   }
   if (runtime->Adapter->BackendImage.Binding.Framebuffer.Active ==
       APPLE_AGX_TRUE) {
@@ -1817,11 +1877,52 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       if (object->Data == NULL || object->Size == 0u ||
           !runtime->TransportIo.FlushForDevice(
               runtime, object->Data, object->Size))
-        return APPLE_AGX_BACKEND_FALSE;
+        goto BuildFailure;
     }
   }
   runtime->TransportIo.MemoryBarrier(runtime);
+  if (dynamic) {
+    runtime->DynamicOverlayPlan = dynamicPlan;
+    runtime->DynamicJob = dynamicView.Job;
+    runtime->DynamicStorage = dynamicView.Storage;
+    runtime->DynamicStorageBytes = dynamicView.StorageBytes;
+    runtime->DynamicBackgroundColor = dynamicView.Header->BackgroundColor;
+  }
   return APPLE_AGX_BACKEND_TRUE;
+
+BuildFailure:
+  if (overlayApplied)
+    (void)AdmissionDynamicOverlayRelease(
+        &runtime->Adapter->BackendImage, &dynamicPlan, dynamicView.Job,
+        dynamicView.Storage, dynamicView.StorageBytes,
+        Submission->Submission.Fence, &runtime->DynamicOverlayState);
+  return APPLE_AGX_BACKEND_FALSE;
+}
+
+static BOOLEAN AdmissionDynamicOverlayReleaseActive(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence) {
+  if (Runtime == NULL || Fence == 0u)
+    return FALSE;
+  if (Runtime->DynamicOverlayState.Applied == 0u)
+    return Runtime->DynamicJob == NULL && Runtime->DynamicStorage == NULL &&
+                   Runtime->DynamicStorageBytes == 0u
+               ? TRUE
+               : FALSE;
+  if (Runtime->DynamicJob == NULL || Runtime->DynamicStorage == NULL ||
+      Runtime->DynamicStorageBytes == 0u ||
+      AdmissionDynamicOverlayRelease(
+          &Runtime->Adapter->BackendImage, &Runtime->DynamicOverlayPlan,
+          Runtime->DynamicJob, Runtime->DynamicStorage,
+          Runtime->DynamicStorageBytes, Fence,
+          &Runtime->DynamicOverlayState) != AdmissionDynamicOverlaySuccess)
+    return FALSE;
+  RtlZeroMemory(&Runtime->DynamicOverlayPlan,
+                sizeof(Runtime->DynamicOverlayPlan));
+  Runtime->DynamicJob = NULL;
+  Runtime->DynamicStorage = NULL;
+  Runtime->DynamicStorageBytes = 0u;
+  Runtime->DynamicBackgroundColor = 0u;
+  return TRUE;
 }
 
 static APPLE_AGX_BACKEND_BOOL AdmissionExternalResolveRange(
@@ -2091,8 +2192,18 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
           opened->Allocation == NULL ||
           AdmissionBackendImageCaptureOutput(
               &adapter->BackendImage, &adapter->RenderPacket.Description,
-              &opened->Allocation->Description, &output) != APPLE_AGX_TRUE ||
-          !AdmissionCompletedOutputPlatformValid(adapter, &output) ||
+              &opened->Allocation->Description, &output) != APPLE_AGX_TRUE) {
+        KeReleaseSpinLock(&adapter->SchedulerLock, old_irql);
+        return APPLE_AGX_BACKEND_FALSE;
+      }
+      if (runtime->DynamicOverlayState.Applied == 1u &&
+          runtime->DynamicOverlayState.Fence == Fence) {
+        output.VerificationKind =
+            AdmissionBackendOutputVerificationTriangle;
+        output.BackgroundColor = runtime->DynamicBackgroundColor;
+        output.ExpectedColor = 0u;
+      }
+      if (!AdmissionCompletedOutputPlatformValid(adapter, &output) ||
           !AdmissionCompletedOutputCapture(
               &runtime->CompletedOutput, generation, Fence, &output,
               opened->Allocation)) {
@@ -2105,7 +2216,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       return APPLE_AGX_BACKEND_FALSE;
     }
     if (runtime->CompletedOutput.Phase == AdmissionCompletedOutputCaptured &&
-        (!AdmissionBackendImageReleaseSubmission(
+        (!AdmissionDynamicOverlayReleaseActive(runtime, Fence) ||
+         !AdmissionBackendImageReleaseSubmission(
              &adapter->BackendImage, Fence) ||
          !AdmissionCompletedOutputMarkReleased(
              &runtime->CompletedOutput, Fence))) {
@@ -2128,7 +2240,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       return APPLE_AGX_BACKEND_FALSE;
     }
 #else
-    if (!AdmissionBackendImageReleaseSubmission(
+    if (!AdmissionDynamicOverlayReleaseActive(runtime, Fence) ||
+        !AdmissionBackendImageReleaseSubmission(
             &adapter->BackendImage, Fence) ||
         !AdmissionRenderPacketComplete(&adapter->RenderPacket, Fence) ||
         runtime->CompletionContext == NULL ||
@@ -2333,6 +2446,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(
         adapter->RenderPacket.Description.ContextToken;
     if (render_context != NULL &&
         render_context->Object.FenceOutstanding == Fence &&
+        AdmissionDynamicOverlayReleaseActive(runtime, Fence) &&
         AdmissionBackendImageReleaseSubmission(
             &adapter->BackendImage, Fence) &&
         AdmissionRenderPacketReset(
@@ -2959,6 +3073,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
                                STATUS_SUCCESS);
   RtlZeroMemory(runtime, sizeof(*runtime));
   runtime->Adapter = Context;
+  AdmissionDynamicOverlayStateInitialize(&runtime->DynamicOverlayState);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionCompletedOutputInitialize(&runtime->CompletedOutput);
   KeInitializeEvent(&runtime->OutputWake, SynchronizationEvent, FALSE);
@@ -3371,6 +3486,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
   runtime->ProviderReady = TRUE;
   runtime->RuntimeIo.Firmware = runtime->PlatformIo.Firmware;
   AppleAgxCompletionTransactionInitialize(&runtime->Completion);
+  AdmissionDynamicOverlayStateInitialize(&runtime->DynamicOverlayState);
+  RtlZeroMemory(&runtime->DynamicOverlayPlan,
+                sizeof(runtime->DynamicOverlayPlan));
+  runtime->DynamicJob = NULL;
+  runtime->DynamicStorage = NULL;
+  runtime->DynamicStorageBytes = 0u;
   runtime->CompletionContext = NULL;
   RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
   runtime->ProgressValid = FALSE;

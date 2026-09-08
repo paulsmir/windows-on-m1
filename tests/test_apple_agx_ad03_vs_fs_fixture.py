@@ -98,6 +98,47 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
             self.assertTrue(linked_assembly.strip())
             self.assertNotIn("XXX error here", linked_assembly)
 
+    def test_generated_triangle_composes_through_production_overlay_contract(self):
+        """Catches a fixture that cannot survive the real ABI/DMA/overlay path."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "fixture"
+            verifier = root / "integration"
+            output = root / "out"
+            output.mkdir()
+            env = dict(os.environ)
+            env["PATH"] = (
+                str(ROOT / ".local/tooling/mesa-build-venv/bin") + ":" +
+                "/opt/homebrew/opt/llvm/bin:" + env.get("PATH", "")
+            )
+            subprocess.run([
+                "python3", str(BUILDER), "--mesa-build", str(BUILD),
+                "--source", str(SOURCE), "--output", str(binary),
+            ], cwd=ROOT, env=env, check=True)
+            subprocess.run([str(binary), str(output), "0"], cwd=ROOT,
+                           text=True, capture_output=True, check=True)
+            driver = ROOT / "drivers/apple-agx/render-admission"
+            shared = ROOT / "drivers/apple-agx/shared"
+            subprocess.run([
+                os.environ.get("CC", "clang"), "-std=c11", "-Wall",
+                "-Wextra", "-Werror", "-fsanitize=address,undefined",
+                "-I", str(driver / "include"), "-I", str(shared / "include"),
+                str(driver / "tests/render_dynamic_fixture_integration_test.c"),
+                str(driver / "src/apple_agx_dynamic_job.c"),
+                str(driver / "src/render_dynamic_overlay.c"),
+                str(driver / "src/render_dynamic_dma.c"),
+                str(shared / "src/apple_agx_win32_abi.c"),
+                str(shared / "src/apple_agx_render_template.generated.c"),
+                "-o", str(verifier),
+            ], cwd=ROOT, check=True)
+            subprocess.run([
+                str(verifier), str(output / "vertex.bin"),
+                str(output / "fragment-linked.bin"),
+                str(output / "fragment.bin"), str(output / "pipeline.bin"),
+                str(output / "encoder.bin"), str(output / "scissor.bin"),
+                str(output / "depth_bias.bin"),
+            ], cwd=ROOT, check=True)
+
 
 if __name__ == "__main__":
     unittest.main()

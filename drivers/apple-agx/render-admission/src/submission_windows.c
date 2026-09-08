@@ -18,10 +18,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   ADMISSION_RENDER_CONTEXT *render_context;
   APPLE_AGX_DMA_SHADOW shadow;
   APPLE_AGX_DMA_SHADOW_VIEW view;
+  ADMISSION_DYNAMIC_DMA_VIEW dynamicView;
   ADMISSION_GDI_PREPARED prepared;
   APPLE_AGX_EXP208_GDI_BINDING binding;
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
+  BOOLEAN dynamicDma = FALSE;
   ULONG packet_guard = AdmissionSubmitPacketGuardAccepted;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_OPEN_ALLOCATION *output_owner;
@@ -35,6 +37,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     AdmissionGdiReceiptSubmitWindows(Context, Args, gdiStatus);              \
     return gdiStatus;                                                        \
   } while (0)
+
+  RtlZeroMemory(&dynamicView, sizeof(dynamicView));
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionRenderCorrelationSubmitWindows(
@@ -135,11 +139,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
           Args->DmaBufferSubmissionStartOffset,
           Args->DmaBufferSubmissionEndOffset -
               Args->DmaBufferSubmissionStartOffset,
-          &view) ||
-      !AdmissionGdiDescribePreparedRecord(
-          view.Bytes, view.DmaBytes, view.DmaOffset, &prepared))
+          &view))
     GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardShadow,
                       STATUS_INVALID_USER_BUFFER);
+  if (!AdmissionGdiDescribePreparedRecord(
+          view.Bytes, view.DmaBytes, view.DmaOffset, &prepared)) {
+    if (!AdmissionDynamicDmaDescribePreparedRecord(
+            view.Bytes, view.DmaBytes, view.DmaOffset, &prepared) ||
+        AdmissionDynamicDmaOpen(
+            view.Bytes, view.DmaBytes, &dynamicView) !=
+            AdmissionDynamicDmaSuccess)
+      GDI_SUBMIT_RETURN(AdmissionSubmitRenderGuardShadow,
+                        STATUS_INVALID_USER_BUFFER);
+    dynamicDma = TRUE;
+  }
 
   KeAcquireSpinLockAtDpcLevel(&Context->SchedulerLock);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
@@ -172,12 +185,23 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
            !AdmissionScanoutAllowsRender(Context, output_owner->Allocation))
     packet_guard = AdmissionSubmitPacketGuardBind;
 #endif
-  else if (!AdmissionBackendImageBindSubmission(
-          &Context->BackendImage,
-          &Context->RenderPacket.Description,
-          (PVOID)(ULONG_PTR)Context->RenderPacket.Description
-              .DestinationCpuToken,
-          view.Bytes, view.DmaBytes, &binding))
+  else if (dynamicDma &&
+           (dynamicView.Header->DestinationGpuVa !=
+                Context->RenderPacket.Description.DestinationGpuVa ||
+            !AdmissionBackendImageBindDynamicSubmission(
+                &Context->BackendImage,
+                &Context->RenderPacket.Description,
+                (PVOID)(ULONG_PTR)Context->RenderPacket.Description
+                    .DestinationCpuToken,
+                dynamicView.Header->BackgroundColor, &binding)))
+    packet_guard = AdmissionSubmitPacketGuardBind;
+  else if (!dynamicDma &&
+           !AdmissionBackendImageBindSubmission(
+               &Context->BackendImage,
+               &Context->RenderPacket.Description,
+               (PVOID)(ULONG_PTR)Context->RenderPacket.Description
+                   .DestinationCpuToken,
+               view.Bytes, view.DmaBytes, &binding))
     packet_guard = AdmissionSubmitPacketGuardBind;
   else {
     bound = TRUE;
