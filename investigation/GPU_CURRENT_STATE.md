@@ -4,12 +4,9 @@ Updated 2026-09-08T17:15Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
-EXP643 is currently installed and naturally bound on the full-owner release
-platform: APPL0002 Code0, exact oem5/INF/SYS hashes, service Running,8CPU.
-The corrected boot is stable and SSH works. Interactive task ran in session1:
-AGX Render/physical completion fence269 PASS, but D3DKMTPresent returned
-STATUS_GRAPHICS_PRESENT_DENIED before KMD Present. All producer objects
-teardown0 and no fresh system events.
+EXP643/644/646 evidence and exact cleanup are complete. Ordinary377/392 is
+restored: APPL0002 Code28, packages0, service/module absent,8CPU,NVMe2/USB5/
+keyboard1. No GPU package is installed or staged.
 
 Current first unknown remains standard Windows presentation. EXP641 proved
 only that an SSH session0 producer cannot acquire exclusive VidPN source0:
@@ -21,9 +18,12 @@ Present crash to the new diagnostic reading DXGK_ALLOCATIONLIST through the
 wrong pAllocationInfo stride. Commit9beed62 corrects only that view. Next is
 fresh EXP643 with the unchanged interactive HWND/BLT discriminator.
 EXP644 late launch changed Present denial to STATUS_GRAPHICS_PRESENT_OCCLUDED.
-DWM is in a reproducible dwmcore MILERR_DEVICE_CREATION_FAILURE restart loop;
-WER shows DXGI/D3D11/WARP but not the Apple UMD. Next is one scoped DWM
-LocalDump capture and exact device-creation analysis, not another BLT retry.
+DWM repeatedly reported MILERR_DEVICE_CREATION_FAILURE. EXP646 directly proves
+D3D11CreateDevice(Apple) returns DXGI_ERROR_UNSUPPORTED while Basic/WARP pass;
+the exact Apple UMD is installed/registered but never loaded. Current first
+unknown is a truthful minimal UMD 3D pipeline/device contract. Caps=0 plus a
+partial function table is insufficient; do not advertise a level until its
+mandatory DDIs and translation are implemented.
 
 ## Hardware proof retained
 

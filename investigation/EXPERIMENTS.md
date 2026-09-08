@@ -39357,3 +39357,24 @@ f8995269757ef278cd02de1ecffca72cde017942c9c06c64c30cab678a596b8a.
 Transfer/hash and run once over SSH; D3D device creation does not require an
 interactive HWND. Exact HRESULT and module presence determine the next UMD
 contract inspection.
+
+**EXP646 ACTUAL — D3D DEVICE CREATION REJECTED BEFORE APPLE UMD LOAD.** Exact
+ARM64 probe enumerates Apple adapter index0/LUID0:267740 and Basic Render
+index1. D3D11CreateDevice with the Apple adapter and required UNKNOWN driver
+type returns0x887A0004 DXGI_ERROR_UNSUPPORTED, feature level0, and the process
+has no AppleAgxRenderAdmissionUmd.dll module. The same call on Basic Render and
+the independent WARP control both return0 at feature level11_0. Installed
+Apple UMD file/version/hash and four UserModeDriverName registry entries are
+exact643, so file staging/registry publication is not the failure.
+Result SHA256781452ef1aeae58dbe85ddbe051859c331cd3fe79d0182ff6770cc86c08c9ba8.
+
+This confirms DWM's MILERR_DEVICE_CREATION_FAILURE is the normal D3D runtime
+rejecting the current Apple graphics contract. Current UMD source returns
+`D3D11DDICAPS_3DPIPELINESUPPORT.Caps=0` and supplies only resource/direct-flip
+callbacks; Microsoft specifies that this cap selects the maximum supported
+pipeline level and is fed into CreateDevice. Do not set a nonzero pipeline cap
+alone: its mandatory device DDIs must be implemented truthfully. Exact643
+package/task/service cleanup completed; ordinary377/392 is restored and
+verified Code28/packages0/service/module absent,8CPU/NVMe2/USB5/keyboard1.
+Next boundary is coherent minimal UMD device/pipeline admission, not KMD/AGX,
+DCP or another Present retry.
