@@ -39964,3 +39964,21 @@ Build is Release PackageBuild651 VisibleAgxQualification plus the unchanged
 producer rebuilt only with AdmissionExpectedBuild651. Platform, workload,
 PASS/failure and recovery predicates remain exact EXP650. Artifact hashes are
 appended before staging.
+
+**EXP651 BUILD FREEZE 2026-09-08T21:18:57Z.** Exact30.0.651.0 from immutable
+EXP650 plus the three-file overlay passes WDK26100 analysis, Universal,
+Inf2Cat, TestSign and version gates; inherited C28251 only, producer zero
+warnings/errors. ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`d8f464c3680dfd8f2df5e3bfe687662cc8adf1544bfa917b07d205824dacb4db`,
+`beb7b1933c75468282bb01210d4fa77524843acd7be34fa0fbead0018382489f`,
+`f99a6bac4325659844b1f9645f4255e52fe4e3cdf31380347f06ec818c98407e`,
+`34b8dc0f090408ed6ca8f74bc67ee6d3d68829d68001a8ca860694204a05e8bd`,
+`0ac903dbdcbb6849a9c6a829f07549bb3c9c61eec482a1d6ffa73aa3b021c62b`
+and
+`a03e628b73af3a2d3efa0f9c8c00b0cdf65ca37b994f598334436da57de878bc`.
+Manifest/build/producer/version SHA256 are
+`d9df6d153447e9cb52eec4fc3f894dfedf6e30003c6c4a55a3b12148dff6db8b`,
+`436228a99d278ab36fbd0187e18ce55b6afa23761d58eb0c6057699e45bc100c2`,
+`dc40f704229e50f041e32aeee9323545d4ec899e9f358decbdc5c948f57c8966`
+and `49bc90ec73db709e284725137c59b5430f55084054fc6a810d5786d050e66f88f`.
+Workflow/collectors parse on Windows; candidate is frozen, not staged.
