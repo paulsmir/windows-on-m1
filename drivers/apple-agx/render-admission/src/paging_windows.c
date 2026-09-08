@@ -368,10 +368,6 @@ _Use_decl_annotations_ VOID AdmissionPagingDpc(
    * active DPC counter still prevents teardown while notification is running. */
   AdmissionPagingUpdateIdleLocked(Context);
   KeReleaseSpinLock(&Context->PagingLock, oldIrql);
-  if (Context->InterfaceValid &&
-      Context->Interface.DxgkCbNotifyDpc != NULL)
-    Context->Interface.DxgkCbNotifyDpc(
-        Context->Interface.DeviceHandle);
   if (InterlockedCompareExchange(&Context->PresentTransferState, 3, 3) == 3 &&
       Context->PresentTransferReceipt.Fence == completedFence) {
     Context->PresentTransferReceipt.NotifyDpc = 1u;

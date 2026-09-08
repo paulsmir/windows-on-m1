@@ -116,6 +116,7 @@ static void notify_dpc(void *opaque){
  assert(c->PagingPending==0 && c->PresentCopyBytes==0 && c->PagingRecordCount==0);
  if(inject_submission){inject_submission=0;assert(AdmissionPagingSubmitPresent(c,&a,data,4)==0);}
 }
+#define RUN_PAGING_DPC(c) do { AdmissionPagingDpc(c); notify_dpc(c); } while(0)
 int main(void){
  ADMISSION_CONTEXT *c=calloc(1,sizeof(*c));assert(c);
  DXGKARG_SUBMITCOMMAND a={11};unsigned char b[4]={0xb1},d[4]={0xc1};
@@ -135,18 +136,18 @@ int main(void){
  assert(AdmissionSchedulerRecordCompletion(c,11));
  c->PagingDpcPending=1;c->PagingCompletionStatus=0;
  c->PresentTransferState=3;c->PresentTransferReceipt.Fence=11;inject_submission=1;
- AdmissionPagingDpc(c); /* notify callback immediately submits another packet */
+ RUN_PAGING_DPC(c); /* adapter DPC notification immediately submits another packet */
  assert(c->PresentTransferReceipt.NotifyDpc==1 && c->PresentTransferState==4);
  assert(cpu_launches==2 && c->Scheduler.ActiveFence==12 && c->PresentCopyCommand[0]==0xc1);
  assert(c->PagingPending==1 && c->CpuQueueCount==1); /* old cleanup must not clear new packet */
  assert(AdmissionSchedulerRecordCompletion(c,12));c->PagingDpcPending=1;c->PagingCompletionStatus=0;
- AdmissionPagingDpc(c);AdmissionDispatchQueuedWork(c);
+ RUN_PAGING_DPC(c);AdmissionDispatchQueuedWork(c);
  assert(cpu_launches==3 && c->Scheduler.ActiveFence==13 && c->PresentCopyCommand[0]==0xd1);
  assert(AppleAgxSchedulerQueueFence(&c->Scheduler,0,0,14));
  c->RenderPacket.State=AdmissionRenderPacketQueued;c->RenderPacket.Description.Fence=14;
  AdmissionDispatchQueuedWork(c);assert(render_launches==0);
  assert(AdmissionSchedulerRecordCompletion(c,13));c->PagingDpcPending=1;c->PagingCompletionStatus=0;
- platform_busy=1;AdmissionPagingDpc(c);AdmissionDispatchQueuedWork(c);
+ platform_busy=1;RUN_PAGING_DPC(c);AdmissionDispatchQueuedWork(c);
  assert(render_launches==0 && c->DispatchedFence==0);
  platform_busy=0;AdmissionDispatchQueuedWork(c);AdmissionDispatchQueuedWork(c);
  assert(render_launches==1 && c->DispatchedFence==14 && c->CpuQueueCount==0);
@@ -163,7 +164,7 @@ int main(void){
  assert(preemption_notified==100 && preemption_completed==14 && c->DispatchedFence==0);
  a.SubmissionFenceId=16;assert(AdmissionPagingSubmitPresent(c,&a,b,4)==0);
  assert(AdmissionSchedulerRecordCompletion(c,16));c->PagingDpcPending=1;c->PagingCompletionStatus=0;
- AdmissionPagingDpc(c);
+ RUN_PAGING_DPC(c);
  ADMISSION_RENDER_CONTEXT renderContext={{17}};
  assert(AppleAgxSchedulerQueueFence(&c->Scheduler,0,0,17));c->RenderPacket.State=AdmissionRenderPacketQueued;
  c->RenderPacket.Description.Fence=17;c->RenderPacket.Description.ContextToken=(unsigned long long)(uintptr_t)&renderContext;

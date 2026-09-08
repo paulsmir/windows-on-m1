@@ -167,6 +167,10 @@ VOID AdmissionDdiDpcRoutine(
   if (context != NULL) {
     InterlockedIncrement(&context->DpcCount);
     AdmissionPagingDpc(context);
+    if (context->InterfaceValid &&
+        context->Interface.DxgkCbNotifyDpc != NULL)
+      context->Interface.DxgkCbNotifyDpc(
+          context->Interface.DeviceHandle);
     AdmissionSchedulerDpc(context);
   }
 }

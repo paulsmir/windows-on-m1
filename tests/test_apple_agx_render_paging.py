@@ -70,7 +70,8 @@ class AppleAgxRenderPagingTests(unittest.TestCase):
         self.assertIn("DXGK_INTERRUPT_DMA_COMPLETED", source)
         self.assertIn("DXGK_INTERRUPT_DMA_FAULTED", source)
         self.assertIn("DxgkCbQueueDpc", source)
-        self.assertIn("DxgkCbNotifyDpc", source)
+        self.assertNotIn("DxgkCbNotifyDpc(", source)
+        self.assertEqual(interrupt.count("DxgkCbNotifyDpc("), 1)
         self.assertIn("AdmissionPagingDpc(context)", interrupt)
         self.assertIn("AdmissionMemoryMarkPagingReady", source)
 

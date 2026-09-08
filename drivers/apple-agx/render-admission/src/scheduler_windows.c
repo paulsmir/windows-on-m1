@@ -214,7 +214,7 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
   ULONG renderFence;
   ULONG reservedFence;
   BOOLEAN cpuUnreported;
-  BOOLEAN notified = FALSE;
+  BOOLEAN notified;
 
   if (Context == NULL ||
       InterlockedCompareExchange(&Context->SchedulerInitialized, 0, 0) == 0)
@@ -230,11 +230,7 @@ _Use_decl_annotations_ VOID AdmissionSchedulerDpc(
   if (phase == AppleAgxPreemptionReadyToNotify && !cpuUnreported &&
       (reservedFence == 0u || renderFence == reservedFence))
     (void)AdmissionSchedulerTryNotifyPreemption(Context);
-  if (InterlockedExchange(&Context->SchedulerDpcPending, 0) != 0 &&
-      Context->InterfaceValid && Context->Interface.DxgkCbNotifyDpc != NULL) {
-    Context->Interface.DxgkCbNotifyDpc(Context->Interface.DeviceHandle);
-    notified = TRUE;
-  }
+  notified = InterlockedExchange(&Context->SchedulerDpcPending, 0) != 0;
   if (notified && renderFence != 0u)
     AdmissionGdiReceiptDpcWindows(Context, renderFence);
   if (notified && renderFence != 0u)
