@@ -428,14 +428,27 @@ latch after successful exact fence notification/transaction finish. Full367
 tests GREEN. EXP601 must rerun the same full-size job and require Resetting0,
 SchedulerFaulted0 plus unchanged pixel/fence/D589 proof.
 
-EXP601 exact30.0.601.0 is build-frozen. ZIP/SYS/INF/CAT/UMD/producer SHA256:
+EXP601 exact30.0.601.0 is hardware GREEN. ZIP/SYS/INF/CAT/UMD/producer SHA256:
 `0a5cfb50cc14498f8d69f2841fd5a4f1abc50a3768d1bc89091f43e7d19efc96`,
 `2bdb81c60b901a392b53f550fe993f64136281fbf664749c2c56a5fdc0c57029`,
 `5b0d2edc82d382597a7d19c5a214be5bd4eff0971718de377207e9dfaea6b4d5`,
 `08153331c71133371442238e79a74a8ff00f10933eedc3c888a82b112f24bf56`,
 `e7c213fddf6e08430bbd72f7b3c22b33b48b0d033e7ca0656277cce556ffa6ad`,
 `ea8f98dd8449ab64e34021b41cb23cdb2285507bd8905710ad6e42834b647a61`.
-All gates pass with inherited C28251 only.
+All gates pass with inherited C28251 only. The unchanged full-size job again
+produced all4,096,000 exact pixels, TA/D3 done2/2, fence256, interrupt/DPC and
+D589 swap10. Crucially terminal now records `Resetting=0/SchedulerFaulted=0`
+despite qualification latch elapsed3238ms. Thus `TDR_SAFE_COMPLETION=YES` for
+this discriminator. Exact cleanup is persisted and ordinary377/392 is clean:
+Code28/no package/service/module,8CPU/NVMe2/USB5/keyboard1,bugcheck0;
+Event129x6 telemetry.
+
+Next first unknown is nonuniform render-target correctness. Uniform
+`0xff112233` cannot distinguish every incorrect tiling interpretation. Source
+inspection identifies the captured clear color as four FP16 values at object36
+offset0 and a 2560x800 bottom half begins at 16KiB-aligned byte offset
+`0x7d0000`. Derive and test a two-pass full/bottom-half hardware pattern before
+claiming linear layout or repeated production Present.
 
 ## Standing constraints
 

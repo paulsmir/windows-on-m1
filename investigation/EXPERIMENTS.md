@@ -36723,3 +36723,35 @@ Manifest/build/producer/version hashes:
 `3063afa0f4722401b6ba1dabffacf4fd9643a74cd55e91a2134a0f1cb0ede4d5`,
 `d4df6d22e62c25b039570a9d01036a1dd618bc73e32e86c4d7affc4ee2843202`.
 Run exactly once from the current clean ordinary baseline.
+
+**EXP601 HARDWARE FINAL 2026-09-08T00:50Z — PASS.** Exact natural bind is
+Code0/oem5/service Running/SYS hash/8CPU. The unchanged producer again passed
+two allocations, residency fence7002, Render0/queued1 and clean teardown.
+Terminal ValidMaskff proves TA/D3 expected=observed stamps
+`0x7a000100/0x3d000100`, done2/2, fence=completed256, interrupt1/DPC1, all
+4,096,000 expected pixels over `0xfa0000`, no mismatch/poison/guard and hash
+`0x27592755b9c32325`. Visible Guard11/Stage3/status0 proves direct
+source=destination 2560x1600/pitch10240, sequence3/offset `0xfa0000`, hash exact
+and D589 swap10. Visible work took3238ms, but after the ordering fix terminal
+records `Resetting=0` and `SchedulerFaulted=0`. This confirms the EXP600 reset
+was caused by withholding the fence before qualification latch and proves the
+corrected exact Windows completion remains TDR-safe for this run.
+
+Terminal/visible/evidence/decoded/host SHA256:
+`4ad3e3b63a62a69529d60250cc118efdb9393c0455e02e3506d21382993e037a`,
+`1cba3a62c29552dd7d14379c45c3357f8758afe7092d07d37ab5b3a8b93b5eb9`,
+`53009b84a994847d3e594d1c0e96c061d17725b9e54fdf5a16b09e65aabd0b22`,
+`9b360d429fcaf3a637d448b380b8746101670f752900fb93008896696c8ee305`,
+`6b5256386c20b1ff531e3e12668e89047b0acffe126f3295cf9d9b7618fe915d`.
+Exact package cleanup, retained-root teardown and graceful ordinary restore are
+complete. Current health: Code28/no package/service/module,8CPU/NVMe2/USB5/
+keyboard1/bugcheck0; Event129x6 telemetry.
+
+Next boundary is nonuniform render-target correctness. The uniform full-screen
+clear proves capacity, PBE execution and direct addressing, but cannot by itself
+exclude a layout interpretation that happens to preserve a constant image.
+Pinned source inspection locates the clear color as four FP16 components at
+object36 offset0 and identifies a bottom-half linear subregion at byte offset
+`800*10240 = 0x7d0000`, which is exactly 16KiB aligned. Derive a two-pass
+full-frame/bottom-half contract from the same m1n1 geometry and Mesa PBE rules;
+do not change queues, firmware, completion or DCP.
