@@ -41,6 +41,21 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
             self.assertEqual(first[0]["uvs_size"], 8)
             self.assertEqual(first[0]["uvs_user_size"], 4)
             self.assertEqual(first[0]["epilog_loc_written"], 1)
+            self.assertGreater(first[0]["pipeline_bytes"], 0)
+            self.assertGreater(first[0]["encoder_bytes"], 0)
+            self.assertEqual(
+                [entry["kind"] for entry in first[0]["relocations"]],
+                [
+                    "UscShaderOffset32", "UscBufferAddress40",
+                    "UscShaderOffset32", "VdmPipelineOffset32",
+                    "VdmPipelineOffset32",
+                ],
+            )
+            for name in ("pipeline", "encoder"):
+                self.assertEqual(
+                    (first[1] / f"{name}.bin").read_bytes(),
+                    (changed[1] / f"{name}.bin").read_bytes(),
+                )
             for stage in ("vertex", "fragment"):
                 self.assertEqual(
                     (first[1] / f"{stage}.bin").read_bytes(),

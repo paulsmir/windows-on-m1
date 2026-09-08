@@ -45,6 +45,8 @@ def main():
         "-I../../reference/mesa/src/asahi/lib",
         "-Isrc/asahi/genxml",
         "-I../../reference/mesa/src/asahi/isa",
+        "-Isrc/asahi/libagx",
+        "-I../../reference/mesa/src/asahi/libagx",
     ]
     if "-MF" in compile_args:
         compile_args[compile_args.index("-MF") + 1] = str(object_path) + ".d"
