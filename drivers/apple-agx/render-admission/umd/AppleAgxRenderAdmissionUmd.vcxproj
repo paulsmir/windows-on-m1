@@ -23,6 +23,7 @@
   <PropertyGroup>
     <EnableInf2cat>false</EnableInf2cat>
     <ApiValidator_Enable>false</ApiValidator_Enable>
+    <AppleAgxUmdAdmissionTraceDefinition Condition="'$(AppleAgxUmdAdmissionTrace)' == 'true'">APPLE_AGX_UMD_ADMISSION_TRACE=1;</AppleAgxUmdAdmissionTraceDefinition>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ResourceCompile>
@@ -30,6 +31,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <SDLCheck>true</SDLCheck>
@@ -41,11 +43,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\umd.c" />
+    <ClCompile Include="src\umd_resource_lifetime.c" />
     <ClCompile Include="src\direct_flip_contract.c" />
     <ClCompile Include="..\src\render_allocation.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\direct_flip_contract.h" />
+    <ClInclude Include="include\umd_resource_lifetime.h" />
+    <ClInclude Include="src\umd_internal.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\package-version.rc" />

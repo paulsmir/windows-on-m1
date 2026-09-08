@@ -10,36 +10,14 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(pop)
 
 #include "direct_flip_contract.h"
+#include "umd_internal.h"
 
-#define ADMISSION_UMD_ADAPTER_MAGIC 0x50414455u /* "UDAP" */
-#define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
-#define ADMISSION_UMD_RESOURCE_MAGIC 0x53455255u /* "URES" */
-
-typedef struct _ADMISSION_UMD_ADAPTER {
-  ULONG Magic;
-  D3D10DDI_HRTADAPTER RuntimeAdapter;
-  UINT Interface;
-  UINT Version;
-  const D3DDDI_ADAPTERCALLBACKS *Callbacks;
-} ADMISSION_UMD_ADAPTER;
-
-typedef struct _ADMISSION_UMD_DEVICE {
-  ULONG Magic;
-  ADMISSION_UMD_ADAPTER *Adapter;
-  D3D10DDI_HRTDEVICE RuntimeDevice;
-  D3D10DDI_HRTCORELAYER RuntimeCoreLayer;
-  const D3DDDI_DEVICECALLBACKS *KernelCallbacks;
-  const D3D11DDI_CORELAYER_DEVICECALLBACKS *UserCallbacks;
-  DXGI_DDI_BASE_CALLBACKS *DxgiCallbacks;
-  HANDLE KernelContext;
-} ADMISSION_UMD_DEVICE;
-
-typedef struct _ADMISSION_UMD_RESOURCE {
-  ULONG Magic;
-  D3D10DDI_HRTRESOURCE RuntimeResource;
-  D3DKMT_HANDLE KernelAllocation;
-  ADMISSION_UMD_DIRECT_FLIP_RESOURCE DirectFlip;
-} ADMISSION_UMD_RESOURCE;
+#if defined(APPLE_AGX_UMD_ADMISSION_TRACE)
+#define ADMISSION_UMD_TRACE(Text)                                             \
+  OutputDebugStringW(L"AppleAgxUMD: " Text L"\n")
+#else
+#define ADMISSION_UMD_TRACE(Text) ((void)0)
+#endif
 
 static SIZE_T APIENTRY AdmissionUmdCalcPrivateDeviceSize(
     D3D10DDI_HADAPTER Adapter,
@@ -69,6 +47,8 @@ static VOID APIENTRY AdmissionUmdDestroyResource(
     D3D10DDI_HDEVICE Device, D3D10DDI_HRESOURCE Resource);
 static VOID APIENTRY AdmissionUmdCheckFormatSupport(
     D3D10DDI_HDEVICE Device, DXGI_FORMAT Format, UINT *FormatSupport);
+static BOOL APIENTRY AdmissionUmdFlush(D3D10DDI_HDEVICE Device,
+                                       UINT FlushFlags);
 static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE Device);
 static VOID APIENTRY AdmissionUmdCheckDirectFlipSupport(
     D3D10DDI_HDEVICE Device, D3D10DDI_HRESOURCE CurrentResource,
@@ -125,11 +105,29 @@ static ADMISSION_UMD_RESOURCE *AdmissionUmdResourceFromDxgi(
              : NULL;
 }
 
-static VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device,
-                                 HRESULT Error) {
+VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error) {
   if (Device != NULL && Device->UserCallbacks != NULL &&
       Device->UserCallbacks->pfnSetErrorCb != NULL)
     Device->UserCallbacks->pfnSetErrorCb(Device->RuntimeCoreLayer, Error);
+}
+
+static HRESULT APIENTRY AdmissionUmdDeallocateResource(
+    void *Context, HANDLE RuntimeResource) {
+  ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
+  D3DDDICB_DEALLOCATE deallocate;
+  if (device == NULL || RuntimeResource == NULL ||
+      device->KernelCallbacks == NULL ||
+      device->KernelCallbacks->pfnDeallocateCb == NULL)
+    return E_INVALIDARG;
+  ZeroMemory(&deallocate, sizeof(deallocate));
+  deallocate.hResource = RuntimeResource;
+  return device->KernelCallbacks->pfnDeallocateCb(
+      device->RuntimeDevice.handle, &deallocate);
+}
+
+static VOID APIENTRY AdmissionUmdReportResourceError(
+    void *Context, HRESULT Error) {
+  AdmissionUmdSetError((ADMISSION_UMD_DEVICE *)Context, Error);
 }
 
 static BOOLEAN AdmissionUmdDescribePrimary(
@@ -181,6 +179,7 @@ HRESULT APIENTRY OpenAdapter10_2(
     D3D10DDIARG_OPENADAPTER *OpenAdapter) {
   ADMISSION_UMD_ADAPTER *adapter;
   D3D10_2DDI_ADAPTERFUNCS functions;
+  ADMISSION_UMD_TRACE(L"OpenAdapter10_2 ENTER");
   if (OpenAdapter == NULL || OpenAdapter->pAdapterFuncs_2 == NULL ||
       OpenAdapter->pAdapterCallbacks == NULL)
     return E_INVALIDARG;
@@ -221,9 +220,14 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
   D3DWDDM1_3DDI_DEVICEFUNCS *deviceFunctions;
   DXGI1_3_DDI_BASE_FUNCTIONS *dxgiFunctions;
   HRESULT result;
+  ADMISSION_UMD_TRACE(L"CreateDevice ENTER");
   if (adapter == NULL || Args == NULL || Args->hDrvDevice.pDrvPrivate == NULL ||
       Args->Interface != D3DWDDM1_3_DDI_INTERFACE_VERSION ||
       Args->pWDDM1_3DeviceFuncs == NULL || Args->pKTCallbacks == NULL ||
+      Args->pKTCallbacks->pfnCreateContextCb == NULL ||
+      Args->pKTCallbacks->pfnDestroyContextCb == NULL ||
+      Args->pKTCallbacks->pfnAllocateCb == NULL ||
+      Args->pKTCallbacks->pfnDeallocateCb == NULL ||
       Args->p11UMCallbacks == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL ||
       Args->DXGIBaseDDI.pDXGIDDIBaseFunctions4 == NULL)
@@ -237,6 +241,9 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
   device->KernelCallbacks = Args->pKTCallbacks;
   device->UserCallbacks = Args->p11UMCallbacks;
   device->DxgiCallbacks = Args->DXGIBaseDDI.pDXGIBaseCallbacks;
+  AdmissionUmdRetirementInitialize(
+      &device->Retirement, device, AdmissionUmdDeallocateResource,
+      AdmissionUmdReportResourceError);
   ZeroMemory(&createContext, sizeof(createContext));
   createContext.NodeOrdinal = 0u;
   createContext.EngineAffinity = 1u;
@@ -258,6 +265,7 @@ static HRESULT APIENTRY AdmissionUmdCreateDevice(
   deviceFunctions->pfnOpenResource = AdmissionUmdOpenResource;
   deviceFunctions->pfnDestroyResource = AdmissionUmdDestroyResource;
   deviceFunctions->pfnCheckFormatSupport = AdmissionUmdCheckFormatSupport;
+  deviceFunctions->pfnFlush = AdmissionUmdFlush;
   deviceFunctions->pfnDestroyDevice = AdmissionUmdDestroyDevice;
   deviceFunctions->pfnCheckDirectFlipSupport =
       AdmissionUmdCheckDirectFlipSupport;
@@ -283,6 +291,7 @@ static HRESULT APIENTRY AdmissionUmdCloseAdapter(D3D10DDI_HADAPTER Adapter) {
 
 static HRESULT APIENTRY AdmissionUmdGetSupportedVersions(
     D3D10DDI_HADAPTER Adapter, UINT32 *Entries, UINT64 *Versions) {
+  ADMISSION_UMD_TRACE(L"GetSupportedVersions ENTER");
   if (AdmissionUmdAdapterFromHandle(Adapter) == NULL || Entries == NULL)
     return E_INVALIDARG;
   if (Versions != NULL && *Entries < 1u) {
@@ -297,6 +306,7 @@ static HRESULT APIENTRY AdmissionUmdGetSupportedVersions(
 
 static HRESULT APIENTRY AdmissionUmdGetCaps(
     D3D10DDI_HADAPTER Adapter, const D3D10_2DDIARG_GETCAPS *Caps) {
+  ADMISSION_UMD_TRACE(L"GetCaps ENTER");
   if (AdmissionUmdAdapterFromHandle(Adapter) == NULL || Caps == NULL ||
       Caps->pData == NULL)
     return E_INVALIDARG;
@@ -309,6 +319,7 @@ static HRESULT APIENTRY AdmissionUmdGetCaps(
   case D3D11DDICAPS_3DPIPELINESUPPORT:
     if (Caps->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
       return E_INVALIDARG;
+    ADMISSION_UMD_TRACE(L"GetCaps PIPELINE: no implemented level");
     ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)Caps->pData)->Caps = 0u;
     return S_OK;
   default:
@@ -346,10 +357,17 @@ static VOID APIENTRY AdmissionUmdCreateResource(
   D3DDDICB_ALLOCATE allocate;
   D3DDDI_ALLOCATIONINFO allocationInfo;
   ADMISSION_UMD_DIRECT_FLIP_RESOURCE description;
+  ADMISSION_UMD_RETIREMENT *retirement;
   HRESULT result;
   if (device == NULL || resource == NULL ||
+      RuntimeResource.handle == NULL ||
       !AdmissionUmdDescribePrimary(CreateResource, &description)) {
     AdmissionUmdSetError(device, E_INVALIDARG);
+    return;
+  }
+  retirement = AdmissionUmdRetirementCreate();
+  if (retirement == NULL) {
+    AdmissionUmdSetError(device, E_OUTOFMEMORY);
     return;
   }
   ZeroMemory(resource, sizeof(*resource));
@@ -359,11 +377,13 @@ static VOID APIENTRY AdmissionUmdCreateResource(
   allocationInfo.PrivateDriverDataSize = sizeof(description.Allocation);
   allocationInfo.VidPnSourceId = 0u;
   allocationInfo.Flags.Primary = CreateResource->pPrimaryDesc != NULL;
+  allocate.hResource = RuntimeResource.handle;
   allocate.NumAllocations = 1u;
   allocate.pAllocationInfo = &allocationInfo;
   result = device->KernelCallbacks->pfnAllocateCb(
       device->RuntimeDevice.handle, &allocate);
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
+    AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, FAILED(result) ? result : E_FAIL);
     return;
   }
@@ -371,6 +391,13 @@ static VOID APIENTRY AdmissionUmdCreateResource(
   resource->RuntimeResource = RuntimeResource;
   resource->KernelAllocation = allocationInfo.hAllocation;
   resource->DirectFlip = description;
+  retirement->RuntimeResource = RuntimeResource.handle;
+  retirement->KernelResource = allocate.hKMResource;
+  retirement->KernelAllocation = allocationInfo.hAllocation;
+  retirement->Primary = CreateResource->pPrimaryDesc != NULL;
+  retirement->Shared =
+      (CreateResource->MiscFlags & D3D10_DDI_RESOURCE_MISC_SHARED) != 0u;
+  resource->Retirement = retirement;
 }
 
 static VOID APIENTRY AdmissionUmdOpenResource(
@@ -383,10 +410,17 @@ static VOID APIENTRY AdmissionUmdOpenResource(
       (ADMISSION_UMD_RESOURCE *)ResourceHandle.pDrvPrivate;
   const D3DDDI_OPENALLOCATIONINFO *info;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  ADMISSION_UMD_RETIREMENT *retirement;
   if (device == NULL || resource == NULL || OpenResource == NULL ||
+      RuntimeResource.handle == NULL ||
       OpenResource->NumAllocations != 1u ||
       OpenResource->pOpenAllocationInfo == NULL) {
     AdmissionUmdSetError(device, E_INVALIDARG);
+    return;
+  }
+  retirement = AdmissionUmdRetirementCreate();
+  if (retirement == NULL) {
+    AdmissionUmdSetError(device, E_OUTOFMEMORY);
     return;
   }
   info = &OpenResource->pOpenAllocationInfo[0];
@@ -399,6 +433,7 @@ static VOID APIENTRY AdmissionUmdOpenResource(
       description->Width != 2560u || description->Height != 1600u ||
       description->Pitch != 10240u || description->BytesPerPixel != 4u ||
       description->Size != 0xfa0000ULL || info->hAllocation == 0u) {
+    AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;
   }
@@ -412,6 +447,12 @@ static VOID APIENTRY AdmissionUmdOpenResource(
   resource->DirectFlip.SegmentId = 2u;
   resource->DirectFlip.Linear = 1u;
   resource->DirectFlip.Displayable = 1u;
+  retirement->RuntimeResource = RuntimeResource.handle;
+  retirement->KernelResource = OpenResource->hKMResource.handle;
+  retirement->KernelAllocation = info->hAllocation;
+  retirement->Primary = FALSE;
+  retirement->Shared = TRUE;
+  resource->Retirement = retirement;
 }
 
 static VOID APIENTRY AdmissionUmdDestroyResource(
@@ -419,11 +460,27 @@ static VOID APIENTRY AdmissionUmdDestroyResource(
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RESOURCE *resource =
       AdmissionUmdResourceFromHandle(ResourceHandle);
+  ADMISSION_UMD_RETIREMENT *retirement;
+  HRESULT result;
   if (device == NULL || resource == NULL) {
     AdmissionUmdSetError(device, E_INVALIDARG);
     return;
   }
+  retirement = resource->Retirement;
   ZeroMemory(resource, sizeof(*resource));
+  if (retirement == NULL)
+    return;
+  if (retirement->Primary && !retirement->Shared) {
+    result = AdmissionUmdRetirementDeallocate(&device->Retirement, retirement);
+    if (FAILED(result)) {
+      AdmissionUmdRetirementQueue(&device->Retirement, retirement);
+      AdmissionUmdSetError(device, result);
+      return;
+    }
+    AdmissionUmdRetirementFree(retirement);
+  } else {
+    AdmissionUmdRetirementQueue(&device->Retirement, retirement);
+  }
 }
 
 static VOID APIENTRY AdmissionUmdCheckFormatSupport(
@@ -436,10 +493,18 @@ static VOID APIENTRY AdmissionUmdCheckFormatSupport(
   }
   if (Format != DXGI_FORMAT_B8G8R8A8_UNORM) {
     *FormatSupport = 0u;
-    AdmissionUmdSetError(device, E_FAIL);
     return;
   }
   *FormatSupport = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET;
+}
+
+static BOOL APIENTRY AdmissionUmdFlush(D3D10DDI_HDEVICE DeviceHandle,
+                                       UINT FlushFlags) {
+  ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
+  UNREFERENCED_PARAMETER(FlushFlags);
+  if (device == NULL)
+    return FALSE;
+  return AdmissionUmdRetirementDrain(&device->Retirement);
 }
 
 static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
@@ -447,6 +512,8 @@ static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
   D3DDDICB_DESTROYCONTEXT destroyContext;
   if (device == NULL)
     return;
+  if (!AdmissionUmdRetirementDrain(&device->Retirement))
+    AdmissionUmdRetirementAbandon(&device->Retirement);
   if (device->KernelContext != NULL && device->KernelCallbacks != NULL &&
       device->KernelCallbacks->pfnDestroyContextCb != NULL) {
     ZeroMemory(&destroyContext, sizeof(destroyContext));
@@ -574,3 +641,5 @@ static HRESULT APIENTRY AdmissionUmdRotateResourceIdentities(
       Args->pResources[Args->Resources - 1u])->KernelAllocation = saved;
   return S_OK;
 }
+
+#undef ADMISSION_UMD_TRACE
