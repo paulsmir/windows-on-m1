@@ -1,21 +1,21 @@
 # GPU current state
 
-Updated 2026-09-08T16:19Z. Main process only; no agents.
+Updated 2026-09-08T16:52Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
-EXP640 evidence is complete. Exact experimental package/devnode/service/SYS/UMD
-was removed after evidence. Ordinary377/392 is restored and verified:
+EXP641 evidence and cleanup are complete. Exact experimental package/devnode/
+service/SYS/UMD was removed. Ordinary377/392 is restored and verified:
 APPL0002 Code28, packages0, no service/module,8CPU,NVMe2/USB5/keyboard1.
-Live ordinary launcher session28301. No test package is installed or staged.
+No test package is installed or staged.
 
-Current first unknown is the standard Windows producer/presentation path:
-normal UMD resource/device callbacks -> DXGI Present/Present1 -> dxgkrnl/KMD
-Present or direct flip -> proven AGX render/completion -> proven DCP latch.
-Private qualification Escape/query presentation is closed and must not be
-reported as normal Windows Present. Next source-first action: inspect current
-UMD DXGI Present/Present1, resource creation and KMD Present contracts against
-pinned WDK/Microsoft, then implement/test the smallest normal producer.
+Current first unknown remains standard Windows presentation. EXP641 proved
+only that an SSH session0 producer cannot acquire exclusive VidPN source0:
+D3DKMTSetVidPnSourceOwner returned STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE before
+SetDisplayMode, Render or Present. KMD Present/SetVidPnSourceAddress remain
+untested. Next causal action is the documented DWM-coexisting windowed BLT or
+DXGI Present path from the interactive console session, reusing proven AGX
+render and retaining honest CPU-assisted-vs-hardware presentation labels.
 
 ## Hardware proof retained
 
@@ -48,6 +48,10 @@ pinned WDK/Microsoft, then implement/test the smallest normal producer.
   - Physical repeated color observation remains pending/uninstrumented.
   - This is direct full-frame AGX output plus private qualification presentation,
     not standard Windows Present/DWM/OpenGL.
+- EXP641: exact standard-flip candidate bound Code0, but exclusive VidPN source
+  acquisition returned0xC01E0342 before Render/Present. All WDDM objects
+  teardown0 and clean ordinary recovery PASS. Exclusive session0 route is
+  rejected; no standard-present hardware readiness bit changes.
 
 ## Validated architecture/change
 

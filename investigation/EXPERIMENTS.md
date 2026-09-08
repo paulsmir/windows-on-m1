@@ -39080,3 +39080,27 @@ Current ordinary Windows SSH and both vUART endpoints are alive; perform
 controlled guest shutdown, stop only the exited ordinary launcher, start the
 frozen release launch, then require exact641 natural-bind preflight before the
 single producer. No driver verdict yet.
+
+**EXP641 ACTUAL — REJECTED BEFORE RENDER/PRESENT.** Natural bind was exact641
+Code0, oem5.inf with frozen INF/SYS hashes, service Running and8CPU. Trace ARM
+returned build641/boot353694384/events0. The first producer operation,
+D3DKMTSetVidPnSourceOwner(EXCLUSIVE), returned0xC01E0342. Pinned WDK26100
+ntstatus.h identifies it exactly as STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE.
+SetDisplayMode, Render and D3DKMTPresent were not called; therefore host D589
+swap9 is ordinary start/display activity and is not a standard-present result.
+Both allocations, contexts, paging queue, device and adapter destroyed/closed
+with status0; producer result1. At evidence time device remained Code0/service
+Running/8CPU/NVMe2/USB5/keyboard1. Three Event129 records were retained as
+storage telemetry without GPU causality. Result/final/host SHA256:
+e6eff4a7d93927f67dfaf71776ad5dc7800be2c081a94f979a52cc6976b9b245,
+d4e94629da4a531fbc5daf496b90fe1ec698a2cc058a017c8ac0bbe138572f3c,
+24910e16450d6a406a4bf913f71208e6df7f2fd5c93fc01c5d08bb0e80a097c9.
+
+Verdict: the exclusive fullscreen/OpenGL-style takeover launched from SSH
+session0 is not a valid normal-desktop producer while DWM/logon owns source0.
+This does not reject KMD Present or SetVidPnSourceAddress because neither was
+reached. Exact package/devnode/service/SYS/UMD cleanup completed; ordinary
+377/392 restored and verified Code28/packages0/service/module absent,
+8CPU/NVMe2/USB5/keyboard1. Next causal boundary is a DWM-coexisting standard
+windowed BLT/DXGI producer in the interactive console session; do not retry
+exclusive owner acquisition from session0 and do not alter AGX/DCP.
