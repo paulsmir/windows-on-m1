@@ -38051,3 +38051,22 @@ the query record. Runtime Ready and the producer handshake include
 OutputScheduled, so frame2 cannot overtake frame1. Destroy waits the output idle
 event. No AGX/DCP/lease/content semantics change. Full376 tests and pinned WDK
 build GREEN. Build exact630 from EXP629 plus backend completion file only.
+
+**EXP630 BUILD FREEZE.** Exact30.0.630.0 from immutable EXP629 plus only
+`backend_platform_windows.c` at commit
+`fadd52a038437cc1fbb8806128635b9f9630e2f5`; exact EXP628 producer reused.
+Pinned WDK/SDK26100, MSVC14.44, KMD/UMD analysis, Universal,
+Inf2Cat/TestSign, coherent version and workflow parser gates pass with the
+inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`4fe9fd200d138505216ee714418a90db332a2257d4ed4c888ca5dd398b4888eb`,
+`ef26fe8148012407c9b105d138c045901d06690f753e62b1e4649d1af1f4b07c`,
+`79aaa45ee2dd8d87dbea6f8f9a781ec7cab45c9fb6fff74a586475a2f930d88a`,
+`200b57ed84104e42861ae74b972454ba61b5e0363b38b20729f20c903adec5ca`,
+`3d76be48eceee063c90a8fda05c19621f2ef9801f3862ea8dd9e8a32072a4115`,
+`73cad579eed27a0597896ff936eccfb5ba324e660801cfe506ad5a43338cafa3`,
+`cf91525c4d09d4d64e3ebd3c8bc02115d3e18e587144045e92f8a152a894eae7`.
+Workflow/launch SHA256 are
+`b1eb5b483fbeccba28d261d425e5c49b58a7d28e31c9a6c3d0d51248e2812381`
+and `be0090c38715b37583c822903f43c8c60079569ea40141714ece5f8c9d5288bf`.
+Hardware requires two complete per-frame output records, two distinct exact
+D589 latches, safe fallback retirement, producer cleanup0 and no reset.
