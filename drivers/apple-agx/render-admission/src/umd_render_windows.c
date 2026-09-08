@@ -48,6 +48,8 @@ static int AdmissionWin32RenderLookupAllocation(
   Fact->SegmentId = lookup->Args->pAllocationList[AllocationIndex].SegmentId;
   Fact->Writable = opened->ReadOnly ? 0u : 1u;
   Fact->Generation = opened->Win32Generation;
+  Fact->ClassId = opened->Win32ClassId;
+  Fact->Flags = opened->Win32Flags;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   Fact->ActiveForDisplay =
       AdmissionScanoutAllowsRender(lookup->Adapter, opened->Allocation)

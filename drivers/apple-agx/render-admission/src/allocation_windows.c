@@ -7,6 +7,10 @@
 #define ADMISSION_CPU_VISIBLE_SEGMENT_SET \
   (ADMISSION_APERTURE_SEGMENT_SET | ADMISSION_LOCAL_SEGMENT_SET)
 
+C_ASSERT(D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE ==
+         ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE);
+C_ASSERT(D3DDDIFMT_A8 == ADMISSION_WIN32_ALLOCATION_FORMAT_A8);
+
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 static VOID AdmissionOpenAllocationTraceWrite(
     ADMISSION_CONTEXT *Context, ULONG Field, ULONG Value) {
@@ -209,8 +213,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   DXGK_ALLOCATIONINFO *info;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
+  ADMISSION_ALLOCATION_DESCRIPTION parsedDescription;
+  ADMISSION_WIN32_TRANSPORT_RESULT parseResult;
   ADMISSION_ALLOCATION_HANDLE *allocation;
   ULONGLONG aligned;
+  ULONG classId = 0u;
+  ULONG flags = 0u;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_ALLOCATION_DESCRIPTION normalized;
   BOOLEAN correlated = FALSE;
@@ -226,20 +234,32 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
   if (!AdmissionMemoryReady(&context->Memory))
     return STATUS_NOT_SUPPORTED;
   info = &Args->pAllocationInfo[0];
-  if (info->pPrivateDriverData == NULL ||
-      info->PrivateDriverDataSize != sizeof(*description))
+  if (info->pPrivateDriverData == NULL)
     return STATUS_INVALID_PARAMETER;
-  description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
-      info->pPrivateDriverData;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  if (description->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
-    normalized = *description;
+  if (info->PrivateDriverDataSize == sizeof(normalized) &&
+      ((const ADMISSION_ALLOCATION_DESCRIPTION *)
+           info->pPrivateDriverData)->Reserved ==
+          ADMISSION_UMD_CORRELATION_COOKIE) {
+    normalized = *(const ADMISSION_ALLOCATION_DESCRIPTION *)
+        info->pPrivateDriverData;
     normalized.Reserved = 0u;
-    description = &normalized;
     correlated = TRUE;
+    parseResult = AdmissionWin32AllocationCreateValidate(
+        &normalized, sizeof(normalized), &parsedDescription,
+        &classId, &flags);
+  } else {
+    parseResult = AdmissionWin32AllocationCreateValidate(
+        info->pPrivateDriverData, info->PrivateDriverDataSize,
+        &parsedDescription, &classId, &flags);
   }
+#else
+  parseResult = AdmissionWin32AllocationCreateValidate(
+      info->pPrivateDriverData, info->PrivateDriverDataSize,
+      &parsedDescription, &classId, &flags);
 #endif
-  if (!AdmissionAllocationDescriptionValid(description) ||
+  description = &parsedDescription;
+  if (parseResult != AdmissionWin32TransportSuccess ||
       !AdmissionAllocationAlign64K(description->Size, &aligned) ||
       aligned > MAXSIZE_T)
     return STATUS_INVALID_PARAMETER;
@@ -252,6 +272,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiCreateAllocation(
     ExFreePoolWithTag(allocation, ADMISSION_POOL_TAG);
     return STATUS_INVALID_PARAMETER;
   }
+  allocation->Win32ClassId = classId;
+  allocation->Win32Flags = flags;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   allocation->QualificationCookie = correlated
       ? ADMISSION_UMD_CORRELATION_COOKIE : 0u;
@@ -377,6 +399,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     DXGK_OPENALLOCATIONINFO *info = &Args->pOpenAllocation[index];
     DXGKARGCB_GETHANDLEDATA query;
     const ADMISSION_ALLOCATION_DESCRIPTION *description;
+    ADMISSION_ALLOCATION_DESCRIPTION parsedDescription;
+    ADMISSION_WIN32_TRANSPORT_RESULT parseResult;
+    ULONG classId = 0u;
+    ULONG flags = 0u;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     const ADMISSION_ALLOCATION_DESCRIPTION *submittedDescription;
     ADMISSION_ALLOCATION_DESCRIPTION normalized;
@@ -384,21 +410,37 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     ADMISSION_ALLOCATION_HANDLE *allocation;
     ADMISSION_OPEN_ALLOCATION *opened;
     if (info->hDeviceSpecificAllocation != NULL ||
-        info->pPrivateDriverData == NULL ||
-        info->PrivateDriverDataSize != sizeof(*description)) {
+        info->pPrivateDriverData == NULL) {
       guard = AdmissionOpenAllocationGuardPrivate;
       goto Rollback;
     }
-    description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
-        info->pPrivateDriverData;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-    submittedDescription = description;
-    if (description->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
-      normalized = *description;
+    submittedDescription = info->PrivateDriverDataSize ==
+        sizeof(ADMISSION_ALLOCATION_DESCRIPTION)
+        ? (const ADMISSION_ALLOCATION_DESCRIPTION *)info->pPrivateDriverData
+        : NULL;
+    if (submittedDescription != NULL &&
+        submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
+      normalized = *submittedDescription;
       normalized.Reserved = 0u;
-      description = &normalized;
+      parseResult = AdmissionWin32AllocationCreateValidate(
+          &normalized, sizeof(normalized), &parsedDescription,
+          &classId, &flags);
+    } else {
+      parseResult = AdmissionWin32AllocationCreateValidate(
+          info->pPrivateDriverData, info->PrivateDriverDataSize,
+          &parsedDescription, &classId, &flags);
     }
+#else
+    parseResult = AdmissionWin32AllocationCreateValidate(
+        info->pPrivateDriverData, info->PrivateDriverDataSize,
+        &parsedDescription, &classId, &flags);
 #endif
+    if (parseResult != AdmissionWin32TransportSuccess) {
+      guard = AdmissionOpenAllocationGuardPrivate;
+      goto Rollback;
+    }
+    description = &parsedDescription;
     /* hAllocation is a dxgkrnl token, not the KMD object returned at Create. */
     RtlZeroMemory(&query, sizeof(query));
     query.hObject = info->hAllocation;
@@ -416,6 +458,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
         !AdmissionAllocationDescriptionValid(&allocation->Object.Description) ||
         RtlCompareMemory(description, &allocation->Object.Description,
                          sizeof(*description)) != sizeof(*description) ||
+        allocation->Win32ClassId != classId ||
+        allocation->Win32Flags != flags ||
         !AdmissionAllocationOpen(&allocation->Object)) {
       guard = AdmissionOpenAllocationGuardDescription;
       goto Rollback;
@@ -435,11 +479,14 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiOpenAllocation(
     opened->ReadOnly = Args->Flags.ReadOnly ? TRUE : FALSE;
     opened->Win32Generation = (ULONG)InterlockedCompareExchange(
         &device->Win32Generation, 0, 0);
+    opened->Win32ClassId = allocation->Win32ClassId;
+    opened->Win32Flags = allocation->Win32Flags;
     info->hDeviceSpecificAllocation = opened;
     ++device->Object.AllocationCount;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
     AdmissionUmdRenderTraceArm(adapter);
-    if (allocation->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE &&
+    if (submittedDescription != NULL &&
+        allocation->QualificationCookie == ADMISSION_UMD_CORRELATION_COOKIE &&
         submittedDescription->Reserved == ADMISSION_UMD_CORRELATION_COOKIE) {
       InterlockedExchange(&adapter->PagingCorrelationArmed, 1);
     }

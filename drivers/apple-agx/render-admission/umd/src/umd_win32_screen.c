@@ -89,7 +89,7 @@ static int AdmissionUmdScreenCreateClassBuffer(
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
   ADMISSION_UMD_SCREEN_BUFFER *slot;
   const AGX_WIN32_BUFFER_CLASS_INFO *classInfo;
-  ADMISSION_ALLOCATION_DESCRIPTION description;
+  ADMISSION_WIN32_ALLOCATION_CREATE description;
   D3DDDI_ALLOCATIONINFO allocationInfo;
   D3DDDICB_ALLOCATE allocate;
   APPLE_AGX_U64 token;
@@ -106,12 +106,20 @@ static int AdmissionUmdScreenCreateClassBuffer(
       (Flags & ~classInfo->Flags) != 0u || Flags == 0u)
     return 0;
   slot = AdmissionUmdScreenFreeSlot(device);
-  if (slot == NULL || device->NextScreenToken == ~0ULL ||
-      !AdmissionAllocationDescribe(
+  if (slot == NULL || device->NextScreenToken == ~0ULL)
+    return 0;
+  ZeroMemory(&description, sizeof(description));
+  if (!AdmissionAllocationDescribe(
           (UINT)Bytes, 1u, 1u,
           (UINT)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE,
-          (UINT)D3DDDIFMT_A8, 1u, &description))
+          (UINT)D3DDDIFMT_A8, 1u, &description.Allocation))
     return 0;
+
+  description.Magic = ADMISSION_WIN32_ALLOCATION_MAGIC;
+  description.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
+  description.Bytes = sizeof(description);
+  description.ClassId = ClassId;
+  description.Flags = Flags;
 
   ZeroMemory(&allocationInfo, sizeof(allocationInfo));
   allocationInfo.pPrivateDriverData = &description;

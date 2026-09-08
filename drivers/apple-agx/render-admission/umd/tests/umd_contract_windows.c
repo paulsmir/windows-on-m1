@@ -178,23 +178,32 @@ static HRESULT APIENTRY TestAllocate(HANDLE Device,
   if (Allocate == NULL)
     return E_INVALIDARG;
   if (Allocate->hResource == NULL) {
+    const ADMISSION_WIN32_ALLOCATION_CREATE *create;
     const ADMISSION_ALLOCATION_DESCRIPTION *description;
     CHECK(Allocate->NumAllocations == 1u);
     CHECK(Allocate->pAllocationInfo != NULL);
     if (Allocate->NumAllocations != 1u ||
         Allocate->pAllocationInfo == NULL)
       return E_INVALIDARG;
-    description = (const ADMISSION_ALLOCATION_DESCRIPTION *)
+    create = (const ADMISSION_WIN32_ALLOCATION_CREATE *)
         Allocate->pAllocationInfo[0].pPrivateDriverData;
-    CHECK(description != NULL);
+    CHECK(create != NULL);
     CHECK(Allocate->pAllocationInfo[0].PrivateDriverDataSize ==
-          sizeof(*description));
+          sizeof(*create));
     CHECK(Allocate->pAllocationInfo[0].pSystemMem == NULL);
     CHECK(Allocate->pAllocationInfo[0].Flags.Value == 0u);
-    if (description == NULL ||
+    if (create == NULL ||
         Allocate->pAllocationInfo[0].PrivateDriverDataSize !=
-            sizeof(*description))
+            sizeof(*create))
       return E_INVALIDARG;
+    CHECK(create->Magic == ADMISSION_WIN32_ALLOCATION_MAGIC);
+    CHECK(create->Version == ADMISSION_WIN32_ALLOCATION_VERSION);
+    CHECK(create->Bytes == sizeof(*create));
+    CHECK(create->ClassId == AgxWin32BufferClassShader ||
+          create->ClassId == AgxWin32BufferClassEncoder);
+    CHECK(create->Flags == (AppleAgxWin32BufferCpuWrite |
+                            AppleAgxWin32BufferGpuRead));
+    description = &create->Allocation;
     CHECK(AdmissionAllocationDescriptionValid(description));
     CHECK(description->Type ==
           (unsigned int)D3DKMDT_GDISURFACE_STAGING_CPUVISIBLE);

@@ -270,6 +270,61 @@ static void test_context_generation_contract(void) {
              &generation, &win32) == AdmissionWin32TransportContext);
 }
 
+static ADMISSION_WIN32_ALLOCATION_CREATE make_class_allocation(void) {
+  ADMISSION_WIN32_ALLOCATION_CREATE create;
+  memset(&create, 0, sizeof(create));
+  create.Magic = ADMISSION_WIN32_ALLOCATION_MAGIC;
+  create.Version = ADMISSION_WIN32_ALLOCATION_VERSION;
+  create.Bytes = sizeof(create);
+  create.ClassId = AgxWin32BufferClassShader;
+  create.Flags = AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead;
+  assert(AdmissionAllocationDescribe(
+      0x8000u, 1u, 1u,
+      ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
+      ADMISSION_WIN32_ALLOCATION_FORMAT_A8, 1u, &create.Allocation));
+  return create;
+}
+
+static void test_class_allocation_contract(void) {
+  ADMISSION_WIN32_ALLOCATION_CREATE create = make_class_allocation();
+  ADMISSION_ALLOCATION_DESCRIPTION description;
+  APPLE_AGX_U32 classId = 0u;
+  APPLE_AGX_U32 flags = 0u;
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportSuccess);
+  assert(classId == AgxWin32BufferClassShader);
+  assert(flags == (AppleAgxWin32BufferCpuWrite |
+                   AppleAgxWin32BufferGpuRead));
+  assert(description.Size == 0x8000ULL);
+
+  create = make_class_allocation();
+  create.Version++;
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportClass);
+  create = make_class_allocation();
+  create.ClassId = 99u;
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportClass);
+  create = make_class_allocation();
+  create.Flags = AppleAgxWin32BufferGpuRead;
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportAccess);
+  create = make_class_allocation();
+  create.Allocation.Size -= 0x4000ULL;
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportClass);
+  create = make_class_allocation();
+  create.Reserved[0] = 1u;
+  assert(AdmissionWin32AllocationCreateValidate(
+      &create, sizeof(create), &description, &classId, &flags) ==
+      AdmissionWin32TransportClass);
+}
+
 int main(void) {
   test_valid_noncontiguous_index_and_range();
   test_owner_generation_and_access_rejections();
@@ -277,5 +332,6 @@ int main(void) {
   test_failed_validation_does_not_publish_partial_facts();
   test_overlapping_writable_ranges_are_rejected();
   test_context_generation_contract();
+  test_class_allocation_contract();
   return 0;
 }

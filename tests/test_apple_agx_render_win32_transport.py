@@ -28,6 +28,7 @@ class AppleAgxRenderWin32TransportTests(unittest.TestCase):
                 str(SHARED / "include"),
                 str(DRIVER / "tests" / "render_win32_transport_test.c"),
                 str(DRIVER / "src" / "render_win32_transport.c"),
+                str(DRIVER / "src" / "render_allocation.c"),
                 str(SHARED / "src" / "apple_agx_win32_abi.c"),
                 "-o",
                 str(binary),

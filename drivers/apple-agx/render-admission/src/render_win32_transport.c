@@ -5,6 +5,67 @@
   ((APPLE_AGX_U32)AppleAgxWin32AccessRead |                                 \
    (APPLE_AGX_U32)AppleAgxWin32AccessWrite |                                \
    (APPLE_AGX_U32)AppleAgxWin32AccessExecute)
+#define ADMISSION_WIN32_BUFFER_ACCESS_MASK                                   \
+  ((APPLE_AGX_U32)AppleAgxWin32BufferCpuRead |                              \
+   (APPLE_AGX_U32)AppleAgxWin32BufferCpuWrite |                             \
+   (APPLE_AGX_U32)AppleAgxWin32BufferGpuRead |                              \
+   (APPLE_AGX_U32)AppleAgxWin32BufferGpuWrite)
+
+ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32AllocationCreateValidate(
+    const void *PrivateData, APPLE_AGX_U32 PrivateDataBytes,
+    ADMISSION_ALLOCATION_DESCRIPTION *Description,
+    APPLE_AGX_U32 *ClassId, APPLE_AGX_U32 *Flags) {
+  const ADMISSION_WIN32_ALLOCATION_CREATE *create =
+      (const ADMISSION_WIN32_ALLOCATION_CREATE *)PrivateData;
+  const ADMISSION_ALLOCATION_DESCRIPTION *allocation;
+  APPLE_AGX_U32 classId = 0u;
+  APPLE_AGX_U32 flags = 0u;
+  if (PrivateData == ADMISSION_WIN32_NULL || Description == ADMISSION_WIN32_NULL ||
+      ClassId == ADMISSION_WIN32_NULL || Flags == ADMISSION_WIN32_NULL)
+    return AdmissionWin32TransportArgument;
+  if (PrivateDataBytes == sizeof(ADMISSION_ALLOCATION_DESCRIPTION)) {
+    allocation = (const ADMISSION_ALLOCATION_DESCRIPTION *)PrivateData;
+    if (!AdmissionAllocationDescriptionValid(allocation))
+      return AdmissionWin32TransportClass;
+  } else {
+    if (PrivateDataBytes != sizeof(*create) ||
+        create->Magic != ADMISSION_WIN32_ALLOCATION_MAGIC ||
+        create->Version != ADMISSION_WIN32_ALLOCATION_VERSION ||
+        create->Bytes != sizeof(*create) || create->Reserved[0] != 0u ||
+        create->Reserved[1] != 0u ||
+        create->ClassId < AgxWin32BufferClassGeneral ||
+        create->ClassId > AgxWin32BufferClassEncoder ||
+        create->Flags == 0u ||
+        (create->Flags & ~ADMISSION_WIN32_BUFFER_ACCESS_MASK) != 0u)
+      return AdmissionWin32TransportClass;
+    if (create->ClassId == AgxWin32BufferClassGeneral) {
+      if ((create->Flags & (AppleAgxWin32BufferCpuRead |
+                            AppleAgxWin32BufferCpuWrite)) == 0u ||
+          (create->Flags & (AppleAgxWin32BufferGpuRead |
+                            AppleAgxWin32BufferGpuWrite)) == 0u)
+        return AdmissionWin32TransportAccess;
+    } else if (create->Flags !=
+               (AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead)) {
+      return AdmissionWin32TransportAccess;
+    }
+    allocation = &create->Allocation;
+    classId = create->ClassId;
+    flags = create->Flags;
+    if (!AdmissionAllocationDescriptionValid(allocation) ||
+        allocation->Type != ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE ||
+        allocation->Format != ADMISSION_WIN32_ALLOCATION_FORMAT_A8 ||
+        allocation->CpuVisible != 1u || allocation->Height != 1u ||
+        allocation->Width != allocation->Pitch ||
+        allocation->Size != allocation->Width ||
+        allocation->Size > 0x01000000ULL ||
+        (allocation->Size & 0x3fffULL) != 0ULL)
+      return AdmissionWin32TransportClass;
+  }
+  *Description = *allocation;
+  *ClassId = classId;
+  *Flags = flags;
+  return AdmissionWin32TransportSuccess;
+}
 
 static int AdmissionWin32RangesOverlap(
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Left,
