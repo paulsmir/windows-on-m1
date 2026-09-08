@@ -37812,3 +37812,19 @@ plus only `render_submit_trace.h` and `submission_windows.c`; reuse exact622
 producer. One run must yield Arg2 `0xFFFFFFFFE5390001..0A`, naming the exact
 first functional owner; then immediately remove diagnostic encoding and fix
 only that owner.
+
+**EXP625 BUILD FREEZE.** Exact30.0.625.0 from immutable EXP624 plus only
+`render_submit_trace.h` and `submission_windows.c`; exact622 producer reused.
+Pinned WDK/SDK26100, MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign
+and coherent version gates pass with inherited C28251 only. Overlay/ZIP/SYS/INF/
+CAT/UMD/producer SHA256 are
+`6ac134b098cd74b50487c0ca79eebc6fd60947aac427562d2a6ce9e22f122de4`,
+`e966e305749f0bf38ac8fa45f3565afaaa013a28086211f6490fc9b6fb7b0e41`,
+`7a837bfa8f13a1db7e5a2bdd68461894aced0743ee429415a6722de3106ed59d`,
+`bf702aae73bc231909939abc78ca23df094c18852bfbfb27e83348ff563f4ab6`,
+`8657321f751eb326eeb475f2514114a777cd22bdda3578acba621b2386e2f55e`,
+`c86292ec0d4e2a734f065c938a0f0ab858f610f094c8ed3dbebe785438c327cd`,
+`09ee2b4da6ee3996d9055fd678a3965727bb1f98a7ecc95a0d6bf636e051b885`.
+Workflow/launch SHA256 are
+`cb74dcd0aa775abfdb9532be96f85a193c5a9f3d01437ea14b04313da5106eb4`
+and `71643c461d22abe8890962ed2c7c8102ea6b8333cb7f0476251da1f4493abd9c`.
