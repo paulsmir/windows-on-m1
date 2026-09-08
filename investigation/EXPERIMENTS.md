@@ -37717,3 +37717,26 @@ Reuse exact622 producer SHA `09ee2b4d...51b885`. Workflow/launch SHA
 `d99256d85653a363e51be28a91b09446622b7cd0e7c973572ca7c5ff335dc772`,
 `6f8fd54e917360979431152ebbdf57b2ea2a75601a0d3c6a7cec6d6c080c74d0`.
 One run, read exact0x539 subguard, then remove hold and fix that owner.
+
+**EXP623 FINAL — INCONCLUSIVE SUBGUARD; EXACT PASS2 SUBMIT ARGS PROVEN.** The
+exact30.0.623.0 candidate ran once from clean ordinary377/392 and reproduced
+`0x119/2`, argument2 `STATUS_DEVICE_BUSY`. Host broker evidence contains no
+`0x539` word, so the absence is not interpreted as absence of the DDI call.
+The independent registry state is durable1/status0/overflow0 and proves both
+Render calls; call2 is context `ffff808b7ca0a100`, DMA168/patch1/prepatched1,
+but its persisted generation predates Submit. WinDbg with exact private PDB
+decodes bugcheck Arg3 `ffffb703e166ba00` as the pass2
+`DXGKARG_SUBMITCOMMAND`: hContext `ffff808b7ca0a100`, DMA segment0/physical
+`0x9df5f1000`, size4096, submitted range0..168, private buffer8192, fence257,
+flags0, node0, engine0. The stack is
+`dxgmms2!VidSchiSendToExecutionQueue -> VidSchiSubmitRenderCommand`; thus the
+functional failure is a driver-returned BUSY during exact pass2 submission, but
+the packet subguard remains unknown. Dump/correlation/kd analysis SHA256 are
+`45ce0a25ef90f70119b22ce723762ea2947034d4f1fc242cb010a03d5cbef641`,
+`f6c84eebda38768d503bb49497449bdd60a80290715c6fdb498cd486f09c345f`,
+`895e6b95cc65707fb72847cc31f546e5f6ae34a1bbcb5d5d6620da6f1ef05531`.
+Exact oem5 package/devnode/service/stale files were removed in compatible hidden
+recovery. Do not repeat EXP623. Next: on the same existing correlation path,
+record Submit EXIT before the unreliable broker trace and before the bounded
+fatal-path hold, then require a durable generation containing exact guard22 and
+status BUSY. No functional rendering change.

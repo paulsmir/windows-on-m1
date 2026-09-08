@@ -630,6 +630,26 @@ admission with DEVICE_BUSY. EXP623 contains only a50ms hold on that already-fata
 qualification path so the existing0x539 subguard survives host polling. Use its
 exact subguard for one causal fix; do not continue spacing experiments.
 
+EXP623 is INCONCLUSIVE for the packet subguard and must not be repeated. The
+exact candidate ran once and reproduced `0x119/2 STATUS_DEVICE_BUSY`. Its
+version2 registry snapshot is durable and proves Render2 ENTRY/validated/EXIT,
+DMA168/patch1/prepatched1, but was exported before the Submit transition. The
+broker log contains no `0x539` word despite the 50ms hold, so broker absence is
+not treated as proof that Submit was absent. The crash dump supplies stronger
+caller evidence: Arg3 decodes as the exact pass2 `DXGKARG_SUBMITCOMMAND`, with
+context matching correlation slot2, fence257, flags0, node0, engine0 and DMA
+range0..168; dxgmms2 bugchecks after receiving `STATUS_DEVICE_BUSY`. Dump and
+correlation SHA256 are
+`45ce0a25ef90f70119b22ce723762ea2947034d4f1fc242cb010a03d5cbef641`
+and `f6c84eebda38768d503bb49497449bdd60a80290715c6fdb498cd486f09c345f`.
+Exact package/service/stale state is removed.
+
+Current first unknown is the exact packet guard on that proven pass2 Submit.
+The next candidate must update the existing adapter/boot-owned in-memory
+correlation EXIT before any broker write or fatal return, then give its existing
+PASSIVE exporter a bounded qualification-only window. This is the final repair
+of the observation path; use its durable exact guard for one functional fix.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
