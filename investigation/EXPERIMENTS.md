@@ -38643,3 +38643,139 @@ changed bytes as CORRELATION; same-build old boot data remains separately
 labelled. Stage via EXP636-workflow.ps1 -Mode Stage from verified clean
 Code28/8CPU baseline, then established shutdown/launch.sh and Preflight.
 Configuration and collector ready; single producer has not run yet.
+
+**EXP636 run interrupted:** same635 binaries passed13 exact full frames,
+fences256257258260261262263264265266267268269, sequences3–15,
+alternating exact owners/offsets/full pixel hashes. Frame14 Render returned0
+queued1/ACTIVE before SSH disconnect and host reset. No HOLD or cleanup phase.
+Kernel capture7 was verified in this boot. Preserve streams, use established
+EXP499 emergency to collect MEMORY.DMP before any package removal. This is
+hardware progress beyond the former frame5 guard, not full16-frame stability.
+**EXP636 kernel evidence / first exact owner:** MEMORY.DMP609631853 bytes,
+SHA256a36f8d0e3b04c53e88548067879b35f1285b527dcab7c025e6d786ebecb21acb,
+copied and hash-matched. Matching635 PDB resolves CPU4 to
+AdmissionOutputWorker+0x398, inline AdmissionTerminalReceiptCaptureOutput
+byte hash loop, ldrb w5,[x7],#1. Kernel bitmap dump header reports97 percent
+and also success; required trap/runtime/stack pages are readable, not a claim
+every page exists. Runtime generation14/fence270: capture/release/notify counts1,
+phaseNotified, owner live, presentation count0. Exact TA/D3 expected=observed
+stamps7a000e00/3d000e00, done15/28. Pixel pass4096000 correct/no mismatch;
+hash incomplete at byte0xc8a997. Thus14 physical completions,13 complete output/
+presentation records, no HOLD/retirement. Saved IRQL0; trap SPSR20001144 has
+SPSR_I bit7 clear. Bucket suffix INTERRUPTS_DISABLED is not proof IRQ was
+masked. CPU callback location alone does not prove the timer's root cause.
+Evidence kernel-analysis.txt/focus.txt/trap-runtime.txt/runtime-fields.txt.
+
+Exact package removal/stale cleanup complete. Keep crash setting7 for one
+specifically recorded CPU-only control, then restore original3 after evidence.
+This preserves kernel capture if clock failure occurs without AGX.
+
+# EXP637 — CPU-only non-cached verification control
+
+**WHY THIS HYPOTHESIS:** EXP636 hung CPU4 in ordinary byte loads at IRQL0 with
+IRQ-mask clear, after GPU/fence completion. Source has no spinlock or DDI call
+inside this hash loop. Ordinary377/392 is a validated no-driver baseline.
+Run one bounded CPU-only load on that baseline to test whether GPU execution
+is a necessary condition for the clock failure.
+
+**WINDOWS CONTRACT:** documented CreateFileMapping PAGE_READWRITE/SEC_COMMIT/
+SEC_NOCACHE for device-buffer-type diagnostics, MapViewOfFile, and explicit
+CPU4 thread affinity. No interlocked access to non-cached memory. Use exact
+production render_gdi_receipt.c helper, sixteen16MiB scans, normal priority.
+https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-createfilemappingw
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadaffinitymask
+**AGX/ASAHI CONTRACT:** no GPU package, broker, firmware start or submission in
+this control. **TRANSLATION:** helper is a standalone user-mode CPU computation;
+its synthetic helper inputs are not hardware/KMD receipts or acceleration.
+**WHAT IS STILL UNKNOWN:** whether the CPU-only load causes watchdog on the
+same platform. Failure proves GPU work unnecessary; success does not exclude
+kernel/device-mapping or migration differences and is not a GPU regression fix.
+
+One variable relative to ordinary idle baseline: run the fixed CPU load.
+Explicit differences from the failing KMD path include user-mode section
+backing and fixed affinity; do not claim those paths are identical. No new
+AGX or platform code. Exact helper/project source freeze and pinned26100
+ARM64 build/hash before run. Kernel setting7 stays constant during control.
+Recovery uses established proxy/ordinary/emergency only; preserve full dump
+first if it fails. GPU target remains stable Windows rendering and OpenGL.
+
+**EXP637 freeze/preflight:** source7e364a64fd42453df8d61725d8a8156cd966158f;
+four-file source archivebe8cebbf66a4b9da4e9024fecfd2306c0b8bb955718885f4b1c2b41ca354f607
+matches on FRYZZING. Pinned SDK26100/MSVC14.44 nativeARM64 Release with code
+analysis built0 warnings/errors. CPUControl.exe SHA256
+2510d283a8de5e4e5a10227c28f1099ab9a2b1652fabe8250ef7334078b4edf0.
+User-mode diagnostic executable, not a signed/installable KMD package.
+Ordinary377/392 Code28/no package/service/module,8CPU,NVMe2/USB5/keyboard1
+verified. Run once via powershell -NoProfile -ExecutionPolicy Bypass -File
+C:\Users\pavel\EXP637-run.ps1, exact executable hash and no prior-result gate.
+Stream host stdout and preserve crash/kernel evidence before recovery if needed.
+Crash setting7 retained for this recorded control; prior636 dump is preserved
+off-machine with verified hash before any possible replacement.
+
+**EXP637 ACTUAL:** all16 CPU4 non-cached scans passed, about9.4s each,
+exact4096000 pixels and hashad1245c8bf762325, process result0. Host log SHA256
+c501216b24dca4ae31df46db153928ac6663422c491850a77814f16e24a8a1f7.
+No GPU calls/package. This control did not reproduce watchdog; it does not
+exonerate kernel/device mapping or interrupt delivery during GPU activity.
+Post-control health/evidence collection follows.
+
+# EXP638 — existing non-verbose EL2 monitor profile (build preparation)
+
+**WHY THIS HYPOTHESIS:**636 gives CPU4 IRQL0/IRQ-mask-clear load-loop capture;
+637 completes the same verifier on uncached user pages on CPU4. Guest trap
+does not expose EL2 timer routing, VMCR/LR priority/active state or comparator
+progress. Existing m1n1 monitor already records these without changing policy.
+
+First builder-only control: exact m1n1c6d10e04afdad5314e8ac1e67bc3919b094ab000
+and original RELEASE1/IOMFB_FULL_OWNER1, immutable Rust library and only eleven
+external dependencies from original build depfiles. Original build/m1n1.macho
+matches frozenEXP584 hash12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3.
+Build in isolated archive directory, preserve original build. Require byte-exact
+release control before changing only RELEASE0, RUNTIME_DIAG_VERBOSE0.
+No source/IRQ/AGX policy edits. All RELEASE conditionals inspected: diagnostic
+gates plus Linux kboot device-tree transfer, which EFI launch does not use.
+
+Expected future discriminator: same635 package/workload, current Mu, monitor
+snapshots of timer/vGIC state. No hardware launch before profile equivalence,
+tests and hashes. Additional sampling can perturb timing; PASS without a
+failure does not itself identify or fix the watchdog.
+
+**EXP638 offline gates:** isolated RELEASE1 control is byte-exact with
+frozenEXP584, SHA25612f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3.
+No external dependency drift: only eleven depfile-selected files copied and
+hashed; original Rust library reused, original m1n1 build untouched. Switching
+only RELEASE0/RUNTIME_DIAG_VERBOSE0/IOMFB_FULL_OWNER1 yields monitor image
+31e964cdc0f6ee18d1c438f4e2a39f59a5a81565a79adc92fa6bc84aa4d43fd7.
+Existing release/monitor-gate and lock-free snapshot executable tests PASS;
+host telemetry/profile26 tests PASS. Existing compiler warnings retained,
+no new source patch. EFI raw load does not call Linux kboot DT transfer.
+
+Host --debug-mode monitor registers existing EVT_TELEMETRY handler without
+proxy takeover or inline polling. Run from experiment-local cwd with absolute
+payload/script paths, so old root telemetry files are not mixed or overwritten.
+Offline --dry-run from that cwd validates physical display/low-memory layout.
+Before producer use one established SIGUSR1 read-only pre-rendezvous snapshot
+to prove per-CPU records are actually available. This is a diagnostic timing
+perturbation before workload, not an IRQ-policy change. If snapshot transport
+is absent, do not claim missing registers prove a guest condition.
+
+Same signed635 KMD/UMD/producer hashes as636, same Mu406/full-owner platform;
+retain kernel dump7 as complementary evidence. Clean ordinary baseline verified
+after637 (uptime1069s, Code28,8CPU,no package/service,new events empty).
+No driver hardware run for638 yet; freeze wrappers and stage exact package next.
+
+**Pre-run control correction:** source inspection shows the established
+non-destructive snapshot signal is SIGINT, not SIGUSR1. SIGTERM requests
+reboot and must not be used for the observational preflight. No signal has
+been sent for638; use only the verified SIGINT handler and confirm resume.
+
+**EXP638 launch freeze:** monitor image31e964cdc0f6ee18d1c438f4e2a39f59a5a81565a79adc92fa6bc84aa4d43fd7;
+launch08158677f1ef9ddd037f13e298d60de4a91259638ca11e0d92b2695ce11076b7;
+workflow7097148f156cc8ac5ab20ee1b47e25b7b5d2abde41b6d45536ff0d7741c6aa0b;
+Windows collectorf52079b74eafd844bc7defc63f4b7a10b0558a366736c8bf90aac879114a1f71.
+Exact635 ZIP/SYS/INF/CAT/UMD/producer hashes are unchanged from635 freeze.
+Launch refuses existing telemetry/contract output; monitor cwd is experiment
+local. Recovery continues to use the untouched releaseEXP584 and ordinary392.
+Stage exact wrapper/package from Code28, natural bind, read-only SIGINT
+snapshot preflight, then one producer only if snapshot records/resume verified.
+Kernel capture7 retained; reset evidence must be preserved before cleanup.

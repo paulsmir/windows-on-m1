@@ -2,11 +2,14 @@
 
 ## Active experiment and machine
 
-EXP636: diagnose recurring CPU4 watchdog with Automatic Kernel Dump, reusing
-identical signed EXP635 KMD/UMD/producer. No rebuild. Exact oem5.inf is now
-staged from verified ordinary377/392 Code28/no-package baseline. Next controlled
-shutdown and one full-owner natural bind, config/hash Preflight, live collector,
-single16-frame producer. Evidence root: .local/experiments/EXP636-kernel-dump.
+EXP638 staged exact signed635 package as oem5 from clean ordinary377/392.
+Next shutdown and launch existing non-verbose m1n1 monitor, same functional
+sourcec6d10e0/full-owner and Mu406. Monitor31e964cdc0f6ee18d1c438f4e2a39f59a5a81565a79adc92fa6bc84aa4d43fd7.
+Release control reproduced originalEXP584 byte-for-byte; original build
+untouched. Three C diag/snapshot tests,26 host tests and isolated-cwd dry-run
+pass. Before producer send supported SIGINT snapshot once and verify per-CPU
+records/resume. SIGTERM requests reboot; do not use it for observation.
+Source/settings/artifacts in EXP638-timer-monitor; same635 KMD/UMD/producer.
 
 CrashDumpEnabled temporarily7, original3 backed up at
 C:\Users\pavel\EXP636-crashcontrol-before.json and locally. Restore3 after
@@ -30,6 +33,15 @@ matching635 symbols before attributing owner. Kernel dump is not guaranteed.
   hashes27592755b9c32325/ad1245c8bf762325. Both targeted output stages succeed
   at sampled IRQL0. No watchdog in634; not proof diagnostics cured0x101.
   Physical color-change confirmation remains pending/probable only.
+
+- EXP636:13 complete full-frame queries/latches; frame14 physical TA/D3 and
+  fence270 completed, all4096000 pixel comparisons passed, hash incomplete at
+  watchdog. Kernel dump hashA36F8D0E3B04C53E88548067879B35F1285B527DCAB7C025E6D786EBECB21ACB.
+  CPU4 at AdmissionOutputWorker+398 / output byte hash ldrb. Saved IRQL0,
+  SPSR20001144 (IRQ-mask bit clear). Do not call this proven IRQ masking by KMD.
+- EXP637:CPU-only production verifier on user noncached16MiB, fixed CPU4,
+  sixteen9.4s scans PASS. Post-health uptime1069s Code28/8CPU/no package/service,
+  no fresh events. Does not exclude kernel/mapping/migration or GPU IRQ context.
 
 ## Latest causal fix and limits
 
