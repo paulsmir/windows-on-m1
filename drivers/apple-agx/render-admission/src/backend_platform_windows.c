@@ -106,7 +106,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   volatile LONG CompletedOutputGeneration;
   ADMISSION_COMPLETED_OUTPUT CompletedOutput;
   ADMISSION_RENDER_PACKET_DESCRIPTION CompletedPacket;
-  PIO_WORKITEM OutputWorkItem;
+  HANDLE OutputThread;
+  KEVENT OutputWake;
+  KEVENT OutputExited;
   KEVENT OutputIdle;
   KSPIN_LOCK OutputLock;
   ADMISSION_OUTPUT_QUEUE_STATE OutputQueue;
@@ -1997,8 +1999,9 @@ static BOOLEAN AdmissionCompletedOutputPlatformValid(
              ? TRUE : FALSE;
 }
 
-static VOID AdmissionOutputWorker(
-    PDEVICE_OBJECT DeviceObject, PVOID Context);
+static VOID AdmissionOutputThread(PVOID Context);
+static VOID AdmissionOutputProcess(
+    ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence);
 #endif
 
 static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
@@ -2174,7 +2177,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (!AdmissionCompletedOutputMarkNotified(
           &runtime->CompletedOutput, Fence) ||
-      runtime->OutputWorkItem == NULL)
+      runtime->OutputThread == NULL)
     return APPLE_AGX_BACKEND_FALSE;
   KeAcquireSpinLock(&runtime->OutputLock, &old_irql);
   if (!AdmissionOutputQueueSchedule(
@@ -2183,9 +2186,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
     return APPLE_AGX_BACKEND_FALSE;
   }
   KeClearEvent(&runtime->OutputIdle);
+  KeSetEvent(&runtime->OutputWake, IO_NO_INCREMENT, FALSE);
   KeReleaseSpinLock(&runtime->OutputLock, old_irql);
-  IoQueueWorkItem(runtime->OutputWorkItem, AdmissionOutputWorker,
-                  DelayedWorkQueue, runtime);
 #endif
   if (preemption_waiting)
     InterlockedExchange(&adapter->SchedulerDpcPending, 1);
@@ -2193,27 +2195,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 }
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-static VOID AdmissionOutputWorker(
-    PDEVICE_OBJECT DeviceObject, PVOID Context) {
-  ADMISSION_PLATFORM_RUNTIME *runtime =
-      (ADMISSION_PLATFORM_RUNTIME *)Context;
-  ULONG fence;
-  ULONG generation;
-  KIRQL oldIrql;
-  UNREFERENCED_PARAMETER(DeviceObject);
-  if (runtime == NULL)
+static VOID AdmissionOutputProcess(
+    ADMISSION_PLATFORM_RUNTIME *runtime, ULONG fence) {
+  if (runtime == NULL || fence == 0u)
     return;
-  fence = runtime->CompletedOutput.Fence;
   AdmissionRenderCorrelationOutputWindows(runtime->Adapter, fence,
       AdmissionOutputTraceEntry, (ULONG)STATUS_PENDING);
-  KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
-  generation = runtime->OutputQueue.Generation;
-  if (!AdmissionOutputQueueBegin(&runtime->OutputQueue, generation)) {
-    KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
-    InterlockedExchange(&runtime->Adapter->SchedulerFaulted, 1);
-    return;
-  }
-  KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
   AdmissionTerminalObserve(
       runtime, fence, AppleAgxBackendCompletionSuccess,
       &runtime->CompletedOutput);
@@ -2256,12 +2243,52 @@ static VOID AdmissionOutputWorker(
 #endif
   RtlZeroMemory(&runtime->CompletedPacket,
                 sizeof(runtime->CompletedPacket));
-  KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
-  if (AdmissionOutputQueueFinish(&runtime->OutputQueue, generation))
-    KeSetEvent(&runtime->OutputIdle, IO_NO_INCREMENT, FALSE);
-  else
-    InterlockedExchange(&runtime->Adapter->SchedulerFaulted, 1);
-  KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
+}
+
+static VOID AdmissionOutputThread(PVOID Context) {
+  ADMISSION_PLATFORM_RUNTIME *runtime =
+      (ADMISSION_PLATFORM_RUNTIME *)Context;
+  ULONG fence;
+  ULONG generation;
+  KIRQL oldIrql;
+  if (runtime == NULL) {
+    PsTerminateSystemThread(STATUS_INVALID_PARAMETER);
+    return;
+  }
+  for (;;) {
+    (void)KeWaitForSingleObject(&runtime->OutputWake, Executive,
+                                KernelMode, FALSE, NULL);
+    KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
+    if (AdmissionOutputQueueCanExit(&runtime->OutputQueue)) {
+      (void)AdmissionOutputQueueMarkExited(&runtime->OutputQueue);
+      KeSetEvent(&runtime->OutputExited, IO_NO_INCREMENT, FALSE);
+      KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
+      PsTerminateSystemThread(STATUS_SUCCESS);
+      return;
+    }
+    generation = runtime->OutputQueue.Generation;
+    if (!AdmissionOutputQueueBegin(&runtime->OutputQueue, generation)) {
+      KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
+      InterlockedExchange(&runtime->Adapter->SchedulerFaulted, 1);
+      continue;
+    }
+    fence = runtime->CompletedOutput.Fence;
+    KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
+    AdmissionOutputProcess(runtime, fence);
+    KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
+    if (AdmissionOutputQueueFinish(&runtime->OutputQueue, generation))
+      KeSetEvent(&runtime->OutputIdle, IO_NO_INCREMENT, FALSE);
+    else
+      InterlockedExchange(&runtime->Adapter->SchedulerFaulted, 1);
+    if (AdmissionOutputQueueCanExit(&runtime->OutputQueue)) {
+      (void)AdmissionOutputQueueMarkExited(&runtime->OutputQueue);
+      KeSetEvent(&runtime->OutputExited, IO_NO_INCREMENT, FALSE);
+      KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
+      PsTerminateSystemThread(STATUS_SUCCESS);
+      return;
+    }
+    KeReleaseSpinLock(&runtime->OutputLock, oldIrql);
+  }
 }
 #endif
 
@@ -2787,17 +2814,27 @@ static NTSTATUS AdmissionPlatformDestroy(
     return STATUS_SUCCESS;
   InterlockedExchange(&Runtime->Stopping, 1);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  if (Runtime->OutputWorkItem != NULL) {
-    KeWaitForSingleObject(&Runtime->OutputIdle, Executive, KernelMode,
-                          FALSE, NULL);
+  if (Runtime->OutputThread != NULL) {
     KeAcquireSpinLock(&Runtime->OutputLock, &oldIrql);
-    if (!AdmissionOutputQueueIsIdle(&Runtime->OutputQueue)) {
+    if (!AdmissionOutputQueueRequestStop(&Runtime->OutputQueue)) {
+      KeReleaseSpinLock(&Runtime->OutputLock, oldIrql);
+      return STATUS_DEVICE_BUSY;
+    }
+    KeSetEvent(&Runtime->OutputWake, IO_NO_INCREMENT, FALSE);
+    KeReleaseSpinLock(&Runtime->OutputLock, oldIrql);
+    (void)KeWaitForSingleObject(&Runtime->OutputExited, Executive,
+                                KernelMode, FALSE, NULL);
+    KeAcquireSpinLock(&Runtime->OutputLock, &oldIrql);
+    if (!AdmissionOutputQueueIsIdle(&Runtime->OutputQueue) ||
+        !AdmissionOutputQueueThreadExited(&Runtime->OutputQueue)) {
       KeReleaseSpinLock(&Runtime->OutputLock, oldIrql);
       return STATUS_DEVICE_BUSY;
     }
     KeReleaseSpinLock(&Runtime->OutputLock, oldIrql);
-    IoFreeWorkItem(Runtime->OutputWorkItem);
-    Runtime->OutputWorkItem = NULL;
+    status = ZwClose(Runtime->OutputThread);
+    if (!NT_SUCCESS(status))
+      return status;
+    Runtime->OutputThread = NULL;
   }
 #endif
   if (Runtime->WorkItem != NULL) {
@@ -2906,6 +2943,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
   runtime->Adapter = Context;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionCompletedOutputInitialize(&runtime->CompletedOutput);
+  KeInitializeEvent(&runtime->OutputWake, SynchronizationEvent, FALSE);
+  KeInitializeEvent(&runtime->OutputExited, NotificationEvent, FALSE);
   KeInitializeEvent(&runtime->OutputIdle, NotificationEvent, TRUE);
   KeInitializeSpinLock(&runtime->OutputLock);
   AdmissionOutputQueueInitialize(&runtime->OutputQueue);
@@ -3183,9 +3222,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
     goto Fail;
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  runtime->OutputWorkItem = IoAllocateWorkItem(Context->PhysicalDeviceObject);
-  if (runtime->OutputWorkItem == NULL) {
-    status = STATUS_INSUFFICIENT_RESOURCES;
+  {
+    OBJECT_ATTRIBUTES attributes;
+    InitializeObjectAttributes(
+        &attributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!AdmissionOutputQueueStartThread(&runtime->OutputQueue)) {
+      status = STATUS_INVALID_DEVICE_STATE;
+      AdmissionRecordPlatformStage(Context, AdmissionPlatformWorkItem, status);
+      goto Fail;
+    }
+    status = PsCreateSystemThread(
+        &runtime->OutputThread, THREAD_ALL_ACCESS, &attributes,
+        NULL, NULL, AdmissionOutputThread, runtime);
+  }
+  if (!NT_SUCCESS(status)) {
+    AdmissionOutputQueueInitialize(&runtime->OutputQueue);
     AdmissionRecordPlatformStage(Context, AdmissionPlatformWorkItem, status);
     goto Fail;
   }
@@ -3371,6 +3422,7 @@ _Use_decl_annotations_ BOOLEAN AdmissionPlatformRuntimeReady(
     KIRQL oldIrql;
     KeAcquireSpinLock(&runtime->OutputLock, &oldIrql);
     ready = AdmissionOutputQueueIsIdle(&runtime->OutputQueue) &&
+                    AdmissionOutputQueueThreadRunning(&runtime->OutputQueue) &&
                     runtime->CompletedOutput.Phase ==
                         AdmissionCompletedOutputEmpty
                 ? TRUE

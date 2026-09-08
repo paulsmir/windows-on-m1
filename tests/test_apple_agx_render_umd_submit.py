@@ -234,11 +234,11 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         ]
         self.assertLess(
             complete.index("DxgkCbSynchronizeExecution("),
-            complete.index("IoQueueWorkItem(runtime->OutputWorkItem"),
+            complete.index("KeSetEvent(&runtime->OutputWake"),
         )
         self.assertEqual(backend.count("AdmissionScanoutPresentAgxResult("), 1)
         output_worker = complete[
-            complete.index("static VOID AdmissionOutputWorker("):
+            complete.index("static VOID AdmissionOutputProcess("):
             complete.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
         ]
         self.assertIn("AdmissionScanoutPresentAgxResult(", output_worker)
