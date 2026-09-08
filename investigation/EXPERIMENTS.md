@@ -36827,3 +36827,8 @@ wait to15s. Reuse byte-exact signed EXP602 KMD/UMD and rebuild/hash producer
 only. PASS criteria remain final sequence2, bottom color, combined hash
 `0xa94060683c9ca325`, exact fence/D589 and no reset/fault. No scheduler or GPU
 change is part of this discriminator.
+
+**EXP603 PRODUCER FREEZE.** Exact602 ZIP remains
+`439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`;
+producer-only pinned build/code analysis PASS, SHA256
+`616ceabb7a5d05a914a3d5b8d9cdfc1e35babb1c55e600f95b934dde50d5a0ed`.
