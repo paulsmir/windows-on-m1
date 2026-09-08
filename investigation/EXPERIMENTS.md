@@ -36854,3 +36854,11 @@ allocation but destroys completed context1 and creates a normal context2 before
 pass2, making it the first command on that context and reusing the hardware-
 proven queue path. KMD602 remains byte-exact. PASS remains sequence2, band
 pixels, combined hash, exact fence/D589, Resetting0/SchedulerFaulted0.
+
+**EXP604 PRODUCER FREEZE.** Producer-only pinned build/code analysis PASS.
+Producer SHA256
+`86c2cb0f6d55d56183281ef1e6c1f0e369901c43988fdea8a7f27f6add8cf7c2`;
+build log SHA256
+`36b3dd7049a00f1161a5bcbc830da9b8405f3e08039755581201b528c8574db9`.
+Reuse exact602 ZIP
+`439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`.
