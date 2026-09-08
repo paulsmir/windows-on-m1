@@ -39727,3 +39727,13 @@ restore SHA256 are
 `f03c36f2d73b755110e80f9c50231afac66fd6994ac12732491afbb777fcb1b0`
 and `297da838c4f1ccff0c8de276a90533343964034fbd1e7297345b77b05cb8423d`.
 Candidate is ready but not yet staged; hardware readiness is unchanged.
+
+**EXP649 STAGED 2026-09-08T20:58:53Z.** Both control planes were checked:
+ordinary EXP377/392 launcher PID84913 owns the expected vUART, and bounded SSH
+health reports APPL0002 Problem28/null INF, packages/service/module/SYS/UMD
+absent,8CPU,NVMe2,USB5,keyboard1 and no fresh41/1001/129. Air received only the
+exact hash-gated ZIP, producer and parsed workflow/collectors. Stage revalidated
+all input and expanded package hashes, then added exactly `oem5.inf` without
+installing it into the broker-disabled ordinary devnode. Next action is a
+graceful Windows reset, existing launcher exit, immutable full-owner launch and
+one natural bind.
