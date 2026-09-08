@@ -37914,3 +37914,19 @@ ordering and full374 tests GREEN. Build from exact626 plus backend-image and
 completion files. Require terminal sequence2 all4,096,000 pixels exact second
 color,16MiB changed/no poison/guard, two hardware fences and a second post-render
 A408/D589 on destination1 distinct from the first.
+
+**EXP627 BUILD FREEZE.** Exact30.0.627.0 from immutable EXP626 plus only
+`render_backend_image.h/.c` and `backend_platform_windows.c`. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign and coherent version
+gates pass with inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD/producer
+SHA256 are
+`3964fb7641b62c20a3651950f03e2e0b6c3e73a987c42ff5e993094f452e6f53`,
+`96d63b74809a3dea4801f8d1a60e046cb44fe25cff67aca660e2f623705be8de`,
+`d9cc40ddabdb0e2201978857c0cedc6e514aa3f7dfa1a3505f4f55ad2fe7cf6c`,
+`5485fe35703185b3a953211f69017c1fb016ca3891eb3701fb5c7e1b5ad92f91`,
+`375cc9f9cd100224e5ea3c64596c8e9f6a48b150af14a6a7095a82645c85905f`,
+`336e490581392e55a973e184c0207d9cf302b7c160f1d7807b32813f50528bd7`,
+`09ee2b4da6ee3996d9055fd678a3965727bb1f98a7ecc95a0d6bf636e051b885`.
+Workflow/launch SHA256 are
+`b643cb8e65c6cc90eaeb362e686ae544d77537e00e953976a8266c68f651f4a5`
+and `12b2dd8533dc77d9179814815ae9d70a4d09b8a55935cfba3655d7534562ed45`.
