@@ -441,7 +441,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutPresentAgxResult(
     verified.Index = historyIndex;
     verified.Purpose = AdmissionPresentPurposeRenderFrame;
     verified.Fence = Fence;
-    verified.DestinationIndex = historyIndex;
+    verified.DestinationIndex = Packet->DestinationIndex;
     verified.ExpectedColor = Completed->View.ExpectedColor;
     verified.PixelsExpected = Completed->View.RenderedBytes / 4u;
     verified.PixelsVerified = OutputReceipt->OutputPixelsExpected;

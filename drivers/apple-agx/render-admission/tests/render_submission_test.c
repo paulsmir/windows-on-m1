@@ -21,6 +21,7 @@ static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
   description.DestinationGpuVa = 0x1500010000ULL;
   description.DestinationPhysical = 0x9d0010000ULL;
   description.DestinationBytes = 0x10000u;
+  description.DestinationIndex = 1u;
   description.VisibleDestinationCpuToken = 0x5000ULL;
   description.VisibleDestinationGpuVa = 0x1500100000ULL;
   description.VisibleDestinationPhysical = 0x9d0100000ULL;
@@ -88,6 +89,7 @@ static void test_prepatched_capture_adopt_and_worker_copy_are_exact(void) {
   assert(adopted.DestinationGpuVa == 0x1500010000ULL);
   assert(adopted.DestinationPhysical == 0x9d0010000ULL);
   assert(adopted.DestinationBytes == 0x10000u);
+  assert(adopted.DestinationIndex == 1u);
   assert(adopted.VisibleDestinationCpuToken == 0x5000ULL);
   assert(adopted.VisibleDestinationGpuVa == 0x1500100000ULL);
   assert(adopted.VisibleDestinationPhysical == 0x9d0100000ULL);
@@ -105,6 +107,7 @@ static void test_prepatched_capture_adopt_and_worker_copy_are_exact(void) {
   assert(worker.VisibleDestinationGpuVa == 0x1500100000ULL);
   assert(worker.VisibleDestinationPhysical == 0x9d0100000ULL);
   assert(worker.VisibleDestinationBytes == 0xfa0000u);
+  assert(worker.DestinationIndex == 1u);
 }
 
 static void test_prepatched_rejects_incomplete_or_cross_context_state(void) {

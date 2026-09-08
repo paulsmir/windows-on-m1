@@ -414,6 +414,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     prepatchedDescription.DestinationGpuVa = destination.GpuVirtualAddress;
     prepatchedDescription.DestinationPhysical = destination.HostPhysicalAddress;
     prepatchedDescription.DestinationBytes = (UINT)destination.Bytes;
+    prepatchedDescription.DestinationIndex =
+        command.DestinationAllocationIndex;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
     prepatchedDescription.VisibleDestinationCpuToken =
         (ULONGLONG)(ULONG_PTR)visibleDestination.CpuAddress;

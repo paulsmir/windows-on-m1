@@ -112,6 +112,39 @@ int main(void) {
   record.ActiveOffset = expected.PreviousActiveOffset;
   assert(!AdmissionPresentQueryAccept(&record, &expected));
 
+  {
+    ADMISSION_PRESENT_VERIFICATION third = make_frame(
+        2u, 258u, first.AllocationToken, first.ExpectedColor, 11u,
+        first.ActiveOffset, first.PhysicalAddress, first.ContentHash);
+    third.DestinationIndex = 0u;
+    assert(AdmissionPresentQueryBuild(&record, &third));
+    record.PublishedToQuery = 1u;
+    memset(&expected, 0, sizeof(expected));
+    expected.CandidateBuild = 631u;
+    expected.BootGeneration = 0x12345678u;
+    expected.Index = 2u;
+    expected.DestinationIndex = 0u;
+    expected.ExpectedColor = first.ExpectedColor;
+    expected.PixelsExpected = 4096000u;
+    expected.Format = 21u;
+    expected.Width = 2560u;
+    expected.Height = 1600u;
+    expected.Pitch = 10240u;
+    expected.PreviousFence = second.Fence;
+    expected.PreviousAllocationToken = second.AllocationToken;
+    expected.PreviousSequence = second.Sequence;
+    expected.PreviousActiveOffset = second.ActiveOffset;
+    expected.PreviousPhysicalAddress = second.PhysicalAddress;
+    expected.PreviousContentHash = second.ContentHash;
+    expected.ExpectedContentHash = first.ContentHash;
+    expected.ExpectedAllocationToken = first.AllocationToken;
+    expected.ExpectedActiveOffset = first.ActiveOffset;
+    expected.ExpectedPhysicalAddress = first.PhysicalAddress;
+    assert(AdmissionPresentQueryAccept(&record, &expected));
+    record.AllocationToken = second.AllocationToken;
+    assert(!AdmissionPresentQueryAccept(&record, &expected));
+  }
+
   first.PixelsVerified = 4095999u;
   assert(!AdmissionPresentQueryBuild(&record, &first));
   first.PixelsVerified = 4096000u;
@@ -126,7 +159,7 @@ int main(void) {
   assert(AdmissionPresentWaitClassify(1, 0, 1, 1) ==
          AdmissionPresentWaitInvalidRecord);
 
-  AdmissionPresentProducerInitialize(&producer, 1);
+  AdmissionPresentProducerInitialize(&producer, 1, 2u);
   assert(AdmissionPresentProducerAfterWait(
              &producer, AdmissionPresentWaitTimedOut) ==
          AdmissionPresentProducerPreserveForRecovery);
@@ -135,7 +168,7 @@ int main(void) {
              &producer, AdmissionPresentWaitCompleted) ==
          AdmissionPresentProducerPreserveForRecovery);
 
-  AdmissionPresentProducerInitialize(&producer, 1);
+  AdmissionPresentProducerInitialize(&producer, 1, 2u);
   assert(AdmissionPresentProducerAfterWait(
              &producer, AdmissionPresentWaitCompleted) ==
          AdmissionPresentProducerSubmitNextFrame);
@@ -145,7 +178,7 @@ int main(void) {
          AdmissionPresentProducerPreserveForRecovery);
   assert(producer.CompletedFrames == 1u && producer.CleanupAllowed == 0u);
 
-  AdmissionPresentProducerInitialize(&producer, 1);
+  AdmissionPresentProducerInitialize(&producer, 1, 2u);
   assert(AdmissionPresentProducerAfterWait(
              &producer, AdmissionPresentWaitCompleted) ==
          AdmissionPresentProducerSubmitNextFrame);
@@ -155,6 +188,20 @@ int main(void) {
   assert(producer.CompletedFrames == 2u && producer.CleanupAllowed == 0u);
   assert(AdmissionPresentProducerRetirementComplete(&producer));
   assert(producer.CleanupAllowed == 1u);
+
+  AdmissionPresentProducerInitialize(&producer, 1, 16u);
+  {
+    unsigned int frame;
+    for (frame = 0u; frame < 16u; ++frame) {
+      ADMISSION_PRESENT_PRODUCER_ACTION action =
+          AdmissionPresentProducerAfterWait(
+              &producer, AdmissionPresentWaitCompleted);
+      assert(action == (frame == 15u
+                            ? AdmissionPresentProducerBeginHold
+                            : AdmissionPresentProducerSubmitNextFrame));
+    }
+  }
+  assert(producer.CompletedFrames == 16u && producer.CleanupAllowed == 0u);
 
   memset(&retirement, 0, sizeof(retirement));
   assert(AdmissionRetirementQueryBuild(

@@ -145,10 +145,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ULONG matchingAdapters = 0u;
   ULONG index;
   ULONG pass;
+  ULONG targetFrames = 2u;
   D3DKMT_DEVICEEXECUTION_STATE executionState;
-  ADMISSION_PRESENT_QUERY presentation[2] = {0};
-  ADMISSION_PRESENT_EXPECTATION presentExpected[2] = {0};
-  ADMISSION_PRESENT_QUERY heldPresentation[2] = {0};
+  ADMISSION_PRESENT_QUERY presentation[ADMISSION_PRESENT_QUERY_CAPACITY] = {0};
+  ADMISSION_PRESENT_EXPECTATION
+      presentExpected[ADMISSION_PRESENT_QUERY_CAPACITY] = {0};
+  ADMISSION_PRESENT_QUERY
+      heldPresentation[ADMISSION_PRESENT_QUERY_CAPACITY] = {0};
   ADMISSION_PRESENT_PRODUCER_STATE producerState = {0};
   ADMISSION_RETIREMENT_QUERY retirement = {0};
   ADMISSION_RETIREMENT_EXPECTATION retirementExpected = {0};
@@ -193,14 +196,21 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     holdNoCleanup = TRUE;
     retireAfterSignal = TRUE;
   }
+  else if (argc == 2 &&
+           wcscmp(argv[1], L"--repeat-retire-after-signal") == 0) {
+    holdNoCleanup = TRUE;
+    retireAfterSignal = TRUE;
+    targetFrames = ADMISSION_PRESENT_QUERY_CAPACITY;
+  }
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
              L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup|"
-             L"--retire-after-signal]\n");
+             L"--retire-after-signal|--repeat-retire-after-signal]\n");
     return 2;
   }
-  AdmissionPresentProducerInitialize(&producerState, holdNoCleanup);
+  AdmissionPresentProducerInitialize(
+      &producerState, holdNoCleanup, targetFrames);
   gdiModule = GetModuleHandleW(L"gdi32.dll");
   if (gdiModule == NULL)
     goto cleanup;
@@ -352,9 +362,9 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           createContext.pAllocationList, createContext.AllocationListSize,
           createContext.pPatchLocationList, createContext.PatchLocationListSize,
           createContext.CommandBuffer);
-  for (pass = 0u; pass < 2u; ++pass) {
+  for (pass = 0u; pass < targetFrames; ++pass) {
     D3DKMT_CREATECONTEXT *activeContext =
-        pass == 0u ? &createContext : &secondContext;
+        (pass & 1u) == 0u ? &createContext : &secondContext;
     UINT commandOffset;
     if (pass != 0u) {
       (void)QueryDeviceExecutionState(
@@ -368,8 +378,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     command.Destination.Top = 0u;
     command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
     command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
-    command.DestinationAllocationIndex = pass;
-    command.Color = pass == 0u
+    command.DestinationAllocationIndex = pass & 1u;
+    command.Color = (pass & 1u) == 0u
         ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
         : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
     command.Rop = AdmissionUmdRopPatCopy;
@@ -403,7 +413,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
             HashBytes((unsigned char *)activeContext->pCommandBuffer +
                           commandOffset,
                       sizeof(command)),
-            pass);
+            command.DestinationAllocationIndex);
     renderStatus = D3DKMTRender(&render);
     wprintf(L"RENDER_OUT pass=%lu command=%p command_bytes=%u allocations=%p "
             L"allocation_count=%u patches=%p patch_count=%u gpuva=0x%llx "
@@ -435,7 +445,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     presentExpected[pass].BootGeneration =
         pass == 0u ? 0u : presentation[0].BootGeneration;
     presentExpected[pass].Index = pass;
-    presentExpected[pass].DestinationIndex = pass;
+    presentExpected[pass].DestinationIndex = pass & 1u;
     presentExpected[pass].ExpectedColor = command.Color;
     presentExpected[pass].PixelsExpected =
         APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH *
@@ -447,14 +457,26 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     presentExpected[pass].ExpectedContentHash = HashUniformPixel(
         command.Color, presentExpected[pass].PixelsExpected);
     if (pass != 0u) {
-      presentExpected[pass].PreviousFence = presentation[0].Fence;
+      presentExpected[pass].PreviousFence = presentation[pass - 1u].Fence;
       presentExpected[pass].PreviousAllocationToken =
-          presentation[0].AllocationToken;
-      presentExpected[pass].PreviousSequence = presentation[0].Sequence;
-      presentExpected[pass].PreviousActiveOffset = presentation[0].ActiveOffset;
+          presentation[pass - 1u].AllocationToken;
+      presentExpected[pass].PreviousSequence =
+          presentation[pass - 1u].Sequence;
+      presentExpected[pass].PreviousActiveOffset =
+          presentation[pass - 1u].ActiveOffset;
       presentExpected[pass].PreviousPhysicalAddress =
-          presentation[0].PhysicalAddress;
-      presentExpected[pass].PreviousContentHash = presentation[0].ContentHash;
+          presentation[pass - 1u].PhysicalAddress;
+      presentExpected[pass].PreviousContentHash =
+          presentation[pass - 1u].ContentHash;
+    }
+    if (pass >= 2u) {
+      ULONG ownerIndex = pass & 1u;
+      presentExpected[pass].ExpectedAllocationToken =
+          presentation[ownerIndex].AllocationToken;
+      presentExpected[pass].ExpectedActiveOffset =
+          presentation[ownerIndex].ActiveOffset;
+      presentExpected[pass].ExpectedPhysicalAddress =
+          presentation[ownerIndex].PhysicalAddress;
     }
     presentWait = WaitForPresentation(
             adapters[selectedAdapter].hAdapter, createDevice.hDevice,
@@ -476,11 +498,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
             presentation[pass].Sequence,
             presentation[pass].AllocationToken);
     fflush(stdout);
-    if ((pass == 0u &&
+    if ((pass + 1u < targetFrames &&
          producerAction != AdmissionPresentProducerSubmitNextFrame) ||
-        (pass == 1u && holdNoCleanup &&
+        (pass + 1u == targetFrames && holdNoCleanup &&
          producerAction != AdmissionPresentProducerBeginHold) ||
-        (pass == 1u && !holdNoCleanup &&
+        (pass + 1u == targetFrames && !holdNoCleanup &&
          producerAction != AdmissionPresentProducerCleanup))
       goto preserve_resources;
     if (observeOnePass && pass == 0u) {
@@ -505,10 +527,12 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     fflush(stdout);
     for (holdSample = 0u; holdSample < 15u; ++holdSample)
       Sleep(1000u);
-    for (pass = 0u; pass < 2u; ++pass) {
+    for (pass = 0u; pass < targetFrames; ++pass) {
       if (WaitForPresentation(
               adapters[selectedAdapter].hAdapter, createDevice.hDevice,
-              pass == 0u ? createContext.hContext : secondContext.hContext,
+              (pass & 1u) == 0u
+                  ? createContext.hContext
+                  : secondContext.hContext,
               &presentExpected[pass], &heldPresentation[pass],
               &heldQueryStatus) != AdmissionPresentWaitCompleted ||
           memcmp(&heldPresentation[pass], &presentation[pass],
@@ -526,10 +550,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       fflush(stdout);
       goto preserve_resources;
     }
-    wprintf(L"PHASE HOLD_PASS duration_ms=15000 fence0=%u fence1=%u "
-            L"sequence0=%llu sequence1=%llu\n",
-            presentation[0].Fence, presentation[1].Fence,
-            presentation[0].Sequence, presentation[1].Sequence);
+    wprintf(L"PHASE HOLD_PASS duration_ms=15000 frames=%lu "
+            L"fence_first=%u fence_last=%u sequence_first=%llu "
+            L"sequence_last=%llu\n",
+            targetFrames, presentation[0].Fence,
+            presentation[targetFrames - 1u].Fence,
+            presentation[0].Sequence,
+            presentation[targetFrames - 1u].Sequence);
     fflush(stdout);
     if (!retireAfterSignal)
       goto preserve_resources;
@@ -539,7 +566,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
            INVALID_FILE_ATTRIBUTES)
       Sleep(100u);
     wprintf(L"PHASE RETIRE_BEGIN previous_sequence=%llu\n",
-            presentation[1].Sequence);
+            presentation[targetFrames - 1u].Sequence);
     fflush(stdout);
     retirement.Magic = ADMISSION_RETIREMENT_QUERY_MAGIC;
     retirement.Version = ADMISSION_RETIREMENT_QUERY_VERSION;
@@ -553,10 +580,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     escape.PrivateDriverDataSize = sizeof(retirement);
     presentQueryStatus = D3DKMTEscape(&escape);
     retirementExpected.CandidateBuild = ADMISSION_EXPECTED_CANDIDATE_BUILD;
-    retirementExpected.BootGeneration = presentation[1].BootGeneration;
-    retirementExpected.PreviousSequence = presentation[1].Sequence;
+    retirementExpected.BootGeneration =
+        presentation[targetFrames - 1u].BootGeneration;
+    retirementExpected.PreviousSequence =
+        presentation[targetFrames - 1u].Sequence;
     retirementExpected.ExpectedPoolPhysical =
-        presentation[1].PhysicalAddress - presentation[1].ActiveOffset;
+        presentation[targetFrames - 1u].PhysicalAddress -
+        presentation[targetFrames - 1u].ActiveOffset;
     retirementExpected.RenderAllocation0 = presentation[0].AllocationToken;
     retirementExpected.RenderAllocation1 = presentation[1].AllocationToken;
     wprintf(L"RETIRE_RESULT query=0x%08lx build=%u boot=%u command=%u "

@@ -77,7 +77,13 @@ int AdmissionPresentQueryAccept(
       Record->AllocationToken == 0ULL || Record->Sequence == 0ULL ||
       Record->PhysicalAddress == 0ULL || Record->ContentHash == 0ULL ||
       (Expected->ExpectedContentHash != 0ULL &&
-       Record->ContentHash != Expected->ExpectedContentHash))
+       Record->ContentHash != Expected->ExpectedContentHash) ||
+      (Expected->ExpectedAllocationToken != 0ULL &&
+       Record->AllocationToken != Expected->ExpectedAllocationToken) ||
+      (Expected->ExpectedActiveOffset != 0ULL &&
+       Record->ActiveOffset != Expected->ExpectedActiveOffset) ||
+      (Expected->ExpectedPhysicalAddress != 0ULL &&
+       Record->PhysicalAddress != Expected->ExpectedPhysicalAddress))
     return 0;
   if (Expected->PreviousFence == 0u)
     return Expected->PreviousAllocationToken == 0ULL &&
@@ -113,18 +119,24 @@ ADMISSION_PRESENT_WAIT_RESULT AdmissionPresentWaitClassify(
 }
 
 void AdmissionPresentProducerInitialize(
-    ADMISSION_PRESENT_PRODUCER_STATE *State, int HoldNoCleanup) {
+    ADMISSION_PRESENT_PRODUCER_STATE *State, int HoldNoCleanup,
+    unsigned int TargetFrames) {
   if (State == QUERY_NULL)
     return;
   query_zero(State, sizeof(*State));
   State->HoldNoCleanup = HoldNoCleanup ? 1u : 0u;
+  State->TargetFrames = TargetFrames;
   State->CleanupAllowed = HoldNoCleanup ? 0u : 1u;
+  if (TargetFrames == 0u || TargetFrames > ADMISSION_PRESENT_QUERY_CAPACITY)
+    State->Terminal = 1u;
 }
 
 ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
     ADMISSION_PRESENT_PRODUCER_STATE *State,
     ADMISSION_PRESENT_WAIT_RESULT Result) {
-  if (State == QUERY_NULL || State->Terminal != 0u)
+  if (State == QUERY_NULL || State->Terminal != 0u ||
+      State->TargetFrames == 0u ||
+      State->TargetFrames > ADMISSION_PRESENT_QUERY_CAPACITY)
     return AdmissionPresentProducerPreserveForRecovery;
   if (Result != AdmissionPresentWaitCompleted) {
     State->Terminal = 1u;
@@ -133,10 +145,10 @@ ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
         : AdmissionPresentProducerCleanup;
   }
   ++State->CompletedFrames;
-  if (State->CompletedFrames == 1u)
+  if (State->CompletedFrames < State->TargetFrames)
     return AdmissionPresentProducerSubmitNextFrame;
   State->Terminal = 1u;
-  if (State->CompletedFrames == ADMISSION_PRESENT_QUERY_CAPACITY &&
+  if (State->CompletedFrames == State->TargetFrames &&
       State->HoldNoCleanup)
     return AdmissionPresentProducerBeginHold;
   return AdmissionPresentProducerCleanup;
@@ -145,7 +157,7 @@ ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
 int AdmissionPresentProducerRetirementComplete(
     ADMISSION_PRESENT_PRODUCER_STATE *State) {
   if (State == QUERY_NULL || !State->HoldNoCleanup || !State->Terminal ||
-      State->CompletedFrames != ADMISSION_PRESENT_QUERY_CAPACITY ||
+      State->CompletedFrames != State->TargetFrames ||
       State->CleanupAllowed)
     return 0;
   State->CleanupAllowed = 1u;

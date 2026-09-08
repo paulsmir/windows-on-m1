@@ -3,7 +3,7 @@
 
 #define ADMISSION_PRESENT_QUERY_MAGIC 0x51504741u /* AGPQ */
 #define ADMISSION_PRESENT_QUERY_VERSION 2u
-#define ADMISSION_PRESENT_QUERY_CAPACITY 2u
+#define ADMISSION_PRESENT_QUERY_CAPACITY 16u
 #define ADMISSION_RETIREMENT_QUERY_MAGIC 0x51524741u /* AGRQ */
 #define ADMISSION_RETIREMENT_QUERY_VERSION 1u
 
@@ -30,6 +30,7 @@ typedef enum _ADMISSION_PRESENT_PRODUCER_ACTION {
 
 typedef struct _ADMISSION_PRESENT_PRODUCER_STATE {
   unsigned int HoldNoCleanup;
+  unsigned int TargetFrames;
   unsigned int CompletedFrames;
   unsigned int CleanupAllowed;
   unsigned int Terminal;
@@ -61,6 +62,8 @@ typedef struct _ADMISSION_PRESENT_EXPECTATION {
   unsigned long long PreviousAllocationToken, PreviousSequence;
   unsigned long long PreviousActiveOffset, PreviousPhysicalAddress;
   unsigned long long ExpectedContentHash, PreviousContentHash;
+  unsigned long long ExpectedAllocationToken, ExpectedActiveOffset;
+  unsigned long long ExpectedPhysicalAddress;
 } ADMISSION_PRESENT_EXPECTATION;
 
 typedef enum _ADMISSION_RETIREMENT_COMMAND {
@@ -90,7 +93,8 @@ ADMISSION_PRESENT_WAIT_RESULT AdmissionPresentWaitClassify(
     int QuerySucceeded, int RecordAccepted, int SawInvalidRecord,
     int DeadlineExpired);
 void AdmissionPresentProducerInitialize(
-    ADMISSION_PRESENT_PRODUCER_STATE *State, int HoldNoCleanup);
+    ADMISSION_PRESENT_PRODUCER_STATE *State, int HoldNoCleanup,
+    unsigned int TargetFrames);
 ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
     ADMISSION_PRESENT_PRODUCER_STATE *State,
     ADMISSION_PRESENT_WAIT_RESULT Result);

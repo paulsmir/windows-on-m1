@@ -105,7 +105,9 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertEqual(source.count("D3DKMTCreateContext(&secondContext)"), 1)
         first_create = source.index("D3DKMTCreateContext(&createContext)")
         second_create = source.index("D3DKMTCreateContext(&secondContext)")
-        render_loop = source.index("for (pass = 0u; pass < 2u; ++pass)")
+        render_loop = source.index(
+            "for (pass = 0u; pass < targetFrames; ++pass)"
+        )
         self.assertLess(first_create, second_create)
         self.assertLess(second_create, render_loop)
         self.assertNotIn(
@@ -132,7 +134,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR", source)
         self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR", source)
         self.assertIn("command.Destination.Top = 0u;", source)
-        self.assertIn("command.DestinationAllocationIndex = pass;", source)
+        self.assertIn("command.DestinationAllocationIndex = pass & 1u;", source)
         self.assertNotIn("Sleep(15000u);", source)
         self.assertIn("commandOffset = 0u;", source)
         self.assertNotIn(

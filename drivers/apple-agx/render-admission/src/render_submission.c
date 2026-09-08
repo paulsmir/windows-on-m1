@@ -76,7 +76,7 @@ int AdmissionRenderPacketPrepare(
       Description->DestinationCpuToken == 0ULL ||
       Description->DestinationGpuVa == 0ULL ||
       Description->DestinationPhysical == 0ULL ||
-      Description->DestinationBytes == 0u)
+      Description->DestinationBytes == 0u || Description->DestinationIndex >= 2u)
     return 0;
   Packet->Description = *Description;
   Packet->State = AdmissionRenderPacketPrepared;
@@ -114,6 +114,7 @@ int AdmissionRenderPacketMatches(
              Description->DestinationPhysical &&
          current->DestinationBytes ==
              Description->DestinationBytes &&
+         current->DestinationIndex == Description->DestinationIndex &&
          current->VisibleDestinationCpuToken ==
              Description->VisibleDestinationCpuToken &&
          current->VisibleDestinationGpuVa ==
