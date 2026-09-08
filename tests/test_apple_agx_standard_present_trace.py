@@ -86,6 +86,8 @@ static LONG InterlockedIncrement(volatile LONG *p){return __atomic_add_fetch(p,1
         ]
         self.assertIn("traceEvent.AllocationToken", blt)
         self.assertIn("source->Allocation", blt)
+        self.assertIn("Present->pAllocationList[DXGK_PRESENT_SOURCE_INDEX]", blt)
+        self.assertNotIn("Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX]", blt)
         self.assertGreaterEqual(
             source.count("AdmissionStandardPresentTraceRecordWindows"), 2
         )
