@@ -143,6 +143,11 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             source,
         )
         self.assertIn("render.CommandOffset = commandOffset;", source)
+        self.assertIn("render.Flags.ResizeCommandBuffer = 1u;", source)
+        self.assertIn(
+            "render.NewCommandBufferSize = activeContext->CommandBufferSize * 2u;",
+            source,
+        )
         self.assertIn(r"..\shared\include", project)
         self.assertIn("<RuntimeLibrary>MultiThreaded</RuntimeLibrary>", project)
 

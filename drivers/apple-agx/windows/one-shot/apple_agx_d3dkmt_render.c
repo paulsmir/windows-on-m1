@@ -260,6 +260,12 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     render.CommandLength = sizeof(command);
     render.AllocationCount = ARRAYSIZE(allocationHandles);
     render.PatchLocationCount = 0u;
+    if (pass != 0u) {
+      if (activeContext->CommandBufferSize > MAXUINT / 2u)
+        goto cleanup;
+      render.Flags.ResizeCommandBuffer = 1u;
+      render.NewCommandBufferSize = activeContext->CommandBufferSize * 2u;
+    }
     renderStatus = D3DKMTRender(&render);
     wprintf(L"RENDER_OUT pass=%lu command=%p command_bytes=%u allocations=%p "
             L"allocation_count=%u patches=%p patch_count=%u gpuva=0x%llx "
