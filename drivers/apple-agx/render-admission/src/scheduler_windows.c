@@ -259,6 +259,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiQueryCurrentFence(
       &context->Scheduler, CurrentFence->NodeOrdinal,
       CurrentFence->EngineOrdinal);
   KeReleaseSpinLock(&context->SchedulerLock, oldIrql);
+  AdmissionRenderCorrelationQueryFenceWindows(
+      context, CurrentFence->CurrentFence);
   return STATUS_SUCCESS;
 }
 

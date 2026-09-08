@@ -1940,6 +1940,7 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
   ADMISSION_COMPLETION_NOTIFICATION *notification = Context;
   ADMISSION_PLATFORM_RUNTIME *runtime;
   DXGKARGCB_NOTIFY_INTERRUPT_DATA data;
+  BOOLEAN queued;
   if (notification == NULL || notification->Runtime == NULL)
     return FALSE;
   runtime = notification->Runtime;
@@ -1962,8 +1963,10 @@ static BOOLEAN AdmissionNotifyCompletionAtInterrupt(PVOID Context) {
 #endif
   InterlockedExchange(&runtime->Adapter->RenderDpcFence, (LONG)notification->Fence);
   InterlockedExchange(&runtime->Adapter->SchedulerDpcPending, 1);
-  (void)runtime->Adapter->Interface.DxgkCbQueueDpc(
+  queued = runtime->Adapter->Interface.DxgkCbQueueDpc(
       runtime->Adapter->Interface.DeviceHandle);
+  AdmissionRenderCorrelationNotifyAtInterruptWindows(
+      runtime->Adapter, notification->Fence, KeQueryInterruptTime(), queued);
   return TRUE;
 }
 
@@ -2091,6 +2094,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
         adapter->Interface.DeviceHandle,
         AdmissionNotifyCompletionAtInterrupt, &notification, 0u,
         &reported);
+    AdmissionRenderCorrelationSynchronizeWindows(
+        adapter, Fence, sync_status, reported);
     if (!NT_SUCCESS(sync_status) || !reported)
       return APPLE_AGX_BACKEND_FALSE;
     AdmissionGdiReceiptCompleteWindows(adapter, Fence,

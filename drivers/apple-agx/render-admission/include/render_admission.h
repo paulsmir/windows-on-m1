@@ -468,6 +468,17 @@ VOID AdmissionRenderCorrelationSubmitWindows(
 VOID AdmissionRenderCorrelationWorkerWindows(
     _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
     _In_ BOOLEAN Entry, _In_ ULONG Status);
+VOID AdmissionRenderCorrelationNotifyAtInterruptWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ ULONGLONG Timestamp, _In_ BOOLEAN QueueDpcResult);
+VOID AdmissionRenderCorrelationSynchronizeWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ NTSTATUS Status, _In_ BOOLEAN CallbackResult);
+VOID AdmissionRenderCorrelationDpcWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence,
+    _In_ ULONGLONG Timestamp);
+VOID AdmissionRenderCorrelationQueryFenceWindows(
+    _Inout_ ADMISSION_CONTEXT *Context, _In_ ULONG Fence);
 #else
 #define AdmissionRenderCorrelationStartWindows(Context) STATUS_SUCCESS
 #define AdmissionRenderCorrelationStopWindows(Context) STATUS_SUCCESS
@@ -488,6 +499,16 @@ VOID AdmissionRenderCorrelationWorkerWindows(
   ((void)0)
 #define AdmissionRenderCorrelationWorkerWindows(                             \
     Context, Fence, Entry, Status)                                           \
+  ((void)0)
+#define AdmissionRenderCorrelationNotifyAtInterruptWindows(                  \
+    Context, Fence, Timestamp, QueueDpcResult)                               \
+  ((void)0)
+#define AdmissionRenderCorrelationSynchronizeWindows(                        \
+    Context, Fence, Status, CallbackResult)                                  \
+  ((void)0)
+#define AdmissionRenderCorrelationDpcWindows(Context, Fence, Timestamp)      \
+  ((void)0)
+#define AdmissionRenderCorrelationQueryFenceWindows(Context, Fence)          \
   ((void)0)
 #endif
 

@@ -18,16 +18,18 @@ def load_decoder():
 class RenderCorrelationDecoderTests(unittest.TestCase):
     def test_two_calls_remain_bound_to_one_candidate_and_boot(self):
         decoder = load_decoder()
-        header = (1, decoder.STATE_BYTES, 612, 77, 2, 0, 9, 9, 1, 0, 1, 0)
+        header = (2, decoder.STATE_BYTES, 612, 77, 2, 0, 9, 9, 1, 0, 1, 0)
         slots = []
         for sequence, context, mask in ((1, 0x1111, 0x1FF), (2, 0x2222, 1)):
             words = [
-                1, decoder.SLOT.size, 612, 77, sequence, mask, 0, 0,
+                2, decoder.SLOT.size, 612, 77, sequence, mask, 0, 0,
                 48, 2, sequence - 1, 2, 168 if sequence == 1 else 0,
                 1 if sequence == 1 else 0, 1 if sequence == 1 else 0,
                 0, 0, 0, 0, 255 + sequence, 0, 0,
+                0, 1, 0, 0,
             ]
-            qwords = [100 * sequence, 110 * sequence, 0xAAAA, context,
+            qwords = [100 * sequence, 110 * sequence, 120 * sequence,
+                      130 * sequence, 0xAAAA, context,
                       0xABC000 + sequence, 0x1000, 0x2000]
             slots.append(decoder.SLOT.pack(*(words + qwords)))
         decoded = decoder.decode_bytes(
@@ -41,9 +43,9 @@ class RenderCorrelationDecoderTests(unittest.TestCase):
 
     def test_rejects_slot_from_another_boot(self):
         decoder = load_decoder()
-        header = (1, decoder.STATE_BYTES, 612, 77, 1, 0, 1, 0, 0, 0, 0, 0)
-        words = [1, decoder.SLOT.size, 612, 78, 1, 1] + [0] * 16
-        slot = decoder.SLOT.pack(*(words + [1, 0, 1, 2, 3, 4, 5]))
+        header = (2, decoder.STATE_BYTES, 612, 77, 1, 0, 1, 0, 0, 0, 0, 0)
+        words = [2, decoder.SLOT.size, 612, 78, 1, 1] + [0] * 20
+        slot = decoder.SLOT.pack(*(words + [1, 0, 0, 0, 1, 2, 3, 4, 5]))
         empty = bytes(decoder.SLOT.size)
         with self.assertRaisesRegex(ValueError, "slot 1 identity"):
             decoder.decode_bytes(decoder.HEADER.pack(*header) + slot + empty)

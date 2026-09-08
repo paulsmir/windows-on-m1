@@ -1,7 +1,7 @@
 #ifndef APPLE_AGX_RENDER_CALL_CORRELATION_H
 #define APPLE_AGX_RENDER_CALL_CORRELATION_H
 
-#define ADMISSION_RENDER_CORRELATION_VERSION 1u
+#define ADMISSION_RENDER_CORRELATION_VERSION 2u
 #define ADMISSION_RENDER_CORRELATION_CAPACITY 2u
 
 #define ADMISSION_RENDER_CAPTURE_ENTRY       (1u << 0)
@@ -13,6 +13,9 @@
 #define ADMISSION_RENDER_CAPTURE_SUBMIT_EXIT  (1u << 6)
 #define ADMISSION_RENDER_CAPTURE_WORKER_ENTRY (1u << 7)
 #define ADMISSION_RENDER_CAPTURE_WORKER_EXIT  (1u << 8)
+#define ADMISSION_RENDER_CAPTURE_NOTIFY       (1u << 9)
+#define ADMISSION_RENDER_CAPTURE_DPC          (1u << 10)
+#define ADMISSION_RENDER_CAPTURE_QUERY_FENCE  (1u << 11)
 
 typedef struct _ADMISSION_RENDER_CORRELATION_SLOT {
   unsigned int Version, Bytes, CandidateBuild, BootGeneration;
@@ -21,7 +24,10 @@ typedef struct _ADMISSION_RENDER_CORRELATION_SLOT {
   unsigned int DestinationSegment, DmaBytesProduced, PatchesProduced;
   unsigned int Prepatched, PatchGuard, PatchStatus, SubmitGuard;
   unsigned int SubmitStatus, Fence, WorkerStatus, Reserved;
+  unsigned int SynchronizeStatus, QueueDpcResult;
+  unsigned int QueryFenceCount, QueryFenceValue;
   unsigned long long EntryTimestamp, ExitTimestamp;
+  unsigned long long NotifyTimestamp, DpcTimestamp;
   unsigned long long AdapterToken, ContextToken, CommandHash;
   unsigned long long AllocationToken[2];
 } ADMISSION_RENDER_CORRELATION_SLOT;

@@ -171,6 +171,10 @@ VOID AdmissionDdiDpcRoutine(
         context->Interface.DxgkCbNotifyDpc != NULL)
       context->Interface.DxgkCbNotifyDpc(
           context->Interface.DeviceHandle);
+    AdmissionRenderCorrelationDpcWindows(
+        context,
+        (ULONG)InterlockedCompareExchange(&context->RenderDpcFence, 0, 0),
+        KeQueryInterruptTime());
     AdmissionSchedulerDpc(context);
   }
 }

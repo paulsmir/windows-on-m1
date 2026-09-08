@@ -7,8 +7,8 @@ int main(void) {
   ADMISSION_RENDER_CORRELATION_STATE state;
   unsigned long long allocations[2] = {0x11110000ULL, 0x22220000ULL};
   unsigned int first = 0u, second = 0u, third = 0u;
-  assert(sizeof(ADMISSION_RENDER_CORRELATION_SLOT) == 144u);
-  assert(sizeof(ADMISSION_RENDER_CORRELATION_STATE) == 336u);
+  assert(sizeof(ADMISSION_RENDER_CORRELATION_SLOT) == 176u);
+  assert(sizeof(ADMISSION_RENDER_CORRELATION_STATE) == 400u);
   memset(&state, 0, sizeof(state));
   assert(AdmissionRenderCorrelationInitialize(&state, 612u, 9u));
   assert(AdmissionRenderCorrelationBegin(&state, 100u, 0xa000u, 0xc001u,
