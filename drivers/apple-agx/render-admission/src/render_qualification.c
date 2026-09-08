@@ -287,7 +287,8 @@ int AdmissionStandardPresentTraceAccept(
         event->Flags == Expected->Flags && event->ContextToken != 0ULL &&
         (Expected->ContextToken == 0ULL ||
          event->ContextToken == Expected->ContextToken) &&
-        event->NumSrc == 1u && event->NumDst == 0u)
+        event->NumSrc == Expected->NumSrc &&
+        event->NumDst == Expected->NumDst)
       presentEntry = event->Sequence;
     if (event->Kind == AdmissionStandardPresentEventPresent &&
         event->Phase == AdmissionStandardPresentPhaseExit &&
@@ -298,7 +299,8 @@ int AdmissionStandardPresentTraceAccept(
          event->ContextToken == Expected->ContextToken) &&
         (Expected->AllocationToken == 0ULL ||
          event->AllocationToken == Expected->AllocationToken) &&
-        event->NumSrc == 1u && event->NumDst == 0u)
+        event->NumSrc == Expected->NumSrc &&
+        event->NumDst == Expected->NumDst)
       present = event->Sequence, presentAllocation = event->AllocationToken;
     if (present != 0u && event->Sequence > present &&
         event->Kind == AdmissionStandardPresentEventSourceAddress &&
@@ -329,6 +331,62 @@ int AdmissionStandardPresentTraceAccept(
   *PresentSequence = present;
   *SourceAddressSequence = source;
   return 1;
+}
+
+int AdmissionStandardPresentTraceAcceptPresent(
+    const ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
+    unsigned int *PresentSequence,
+    unsigned long long *ContextToken,
+    unsigned long long *AllocationToken) {
+  unsigned int entry = 0u;
+  unsigned int previousSequence = 0u;
+  unsigned long long entryContext = 0ULL;
+  unsigned int index;
+  if (Trace == QUERY_NULL || Expected == QUERY_NULL ||
+      PresentSequence == QUERY_NULL || ContextToken == QUERY_NULL ||
+      AllocationToken == QUERY_NULL ||
+      Trace->Magic != ADMISSION_STANDARD_PRESENT_TRACE_MAGIC ||
+      Trace->Version != ADMISSION_STANDARD_PRESENT_TRACE_VERSION ||
+      Trace->Bytes != sizeof(*Trace) ||
+      Trace->CandidateBuild != Expected->CandidateBuild ||
+      Trace->BootGeneration != Expected->BootGeneration ||
+      Trace->EventCount == 0u ||
+      Trace->EventCount > ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY ||
+      Trace->Overflow != 0u)
+    return 0;
+  for (index = 0u; index < Trace->EventCount; ++index) {
+    const ADMISSION_STANDARD_PRESENT_EVENT *event = &Trace->Events[index];
+    if (event->Valid != 1u || event->Sequence <= previousSequence)
+      return 0;
+    previousSequence = event->Sequence;
+    if (event->Kind == AdmissionStandardPresentEventPresent &&
+        event->Phase == AdmissionStandardPresentPhaseEntry &&
+        event->Flags == Expected->Flags && event->ContextToken != 0ULL &&
+        (Expected->ContextToken == 0ULL ||
+         event->ContextToken == Expected->ContextToken) &&
+        event->NumSrc == Expected->NumSrc &&
+        event->NumDst == Expected->NumDst) {
+      entry = event->Sequence;
+      entryContext = event->ContextToken;
+    }
+    if (entry != 0u && event->Sequence > entry &&
+        event->Kind == AdmissionStandardPresentEventPresent &&
+        event->Phase == AdmissionStandardPresentPhaseExit &&
+        event->Status == 0u && event->Flags == Expected->Flags &&
+        event->ContextToken == entryContext &&
+        event->AllocationToken != 0ULL &&
+        (Expected->AllocationToken == 0ULL ||
+         event->AllocationToken == Expected->AllocationToken) &&
+        event->NumSrc == Expected->NumSrc &&
+        event->NumDst == Expected->NumDst) {
+      *PresentSequence = event->Sequence;
+      *ContextToken = event->ContextToken;
+      *AllocationToken = event->AllocationToken;
+      return 1;
+    }
+  }
+  return 0;
 }
 
 void AdmissionStandardPresentProducerInitialize(

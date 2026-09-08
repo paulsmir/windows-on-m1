@@ -119,6 +119,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     if (!NT_SUCCESS(status))
       AdmissionRecordPresent(device, Present, 4u, status);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    if (NT_SUCCESS(status) && Present->pAllocationInfo != NULL) {
+      source = (ADMISSION_OPEN_ALLOCATION *)
+          Present->pAllocationInfo[DXGK_PRESENT_SOURCE_INDEX]
+              .hDeviceSpecificAllocation;
+      if (source != NULL &&
+          source->Magic == ADMISSION_OPEN_ALLOCATION_MAGIC &&
+          source->Device == device && source->Allocation != NULL &&
+          source->Allocation->Magic == ADMISSION_ALLOCATION_OBJECT_MAGIC)
+        traceEvent.AllocationToken =
+            (ULONGLONG)(ULONG_PTR)source->Allocation;
+    }
     traceEvent.Phase = AdmissionStandardPresentPhaseExit;
     traceEvent.Status = (ULONG)status;
     AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);

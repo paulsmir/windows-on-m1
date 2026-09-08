@@ -41,7 +41,7 @@ typedef struct _ADMISSION_STANDARD_PRESENT_TRACE {
 
 typedef struct _ADMISSION_STANDARD_PRESENT_EXPECTATION {
   unsigned int CandidateBuild, BootGeneration, Flags, SourceId, Segment;
-  unsigned int Reserved0, Reserved1, Reserved2;
+  unsigned int NumSrc, NumDst, Reserved;
   unsigned long long ContextToken, AllocationToken;
 } ADMISSION_STANDARD_PRESENT_EXPECTATION;
 
@@ -173,6 +173,12 @@ int AdmissionStandardPresentTraceAccept(
     const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
     unsigned int *PresentSequence,
     unsigned int *SourceAddressSequence);
+int AdmissionStandardPresentTraceAcceptPresent(
+    const ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
+    unsigned int *PresentSequence,
+    unsigned long long *ContextToken,
+    unsigned long long *AllocationToken);
 void AdmissionStandardPresentProducerInitialize(
     ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State);
 int AdmissionStandardPresentProducerAdvance(

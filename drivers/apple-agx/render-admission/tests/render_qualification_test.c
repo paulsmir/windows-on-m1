@@ -48,6 +48,8 @@ int main(void) {
   ADMISSION_STANDARD_PRESENT_EXPECTATION standardExpected;
   unsigned int presentSequence = 0u;
   unsigned int sourceAddressSequence = 0u;
+  unsigned long long tracedContext = 0ULL;
+  unsigned long long tracedAllocation = 0ULL;
   ADMISSION_STANDARD_PRESENT_PRODUCER_STATE standardProducer;
 
   /* Catches a trace that reports a successful user Present without the exact
@@ -92,10 +94,33 @@ int main(void) {
   standardExpected.Flags = 0x4u;
   standardExpected.SourceId = 0u;
   standardExpected.Segment = 2u;
+  standardExpected.NumSrc = 1u;
+  standardExpected.NumDst = 0u;
   assert(AdmissionStandardPresentTraceAccept(
       &standardTrace, &standardExpected,
       &presentSequence, &sourceAddressSequence));
   assert(presentSequence == 2u && sourceAddressSequence == 4u);
+  assert(AdmissionStandardPresentTraceAcceptPresent(
+      &standardTrace, &standardExpected, &presentSequence,
+      &tracedContext, &tracedAllocation));
+  assert(presentSequence == 2u);
+  assert(tracedContext == 0x1111222233334444ULL);
+  assert(tracedAllocation == 0xffff800012340000ULL);
+  standardTrace.Events[0].Flags = 1u;
+  standardTrace.Events[0].NumDst = 1u;
+  standardTrace.Events[1].Flags = 1u;
+  standardTrace.Events[1].NumDst = 1u;
+  standardExpected.Flags = 1u;
+  standardExpected.NumDst = 1u;
+  assert(AdmissionStandardPresentTraceAcceptPresent(
+      &standardTrace, &standardExpected, &presentSequence,
+      &tracedContext, &tracedAllocation));
+  standardTrace.Events[0].Flags = 0x4u;
+  standardTrace.Events[0].NumDst = 0u;
+  standardTrace.Events[1].Flags = 0x4u;
+  standardTrace.Events[1].NumDst = 0u;
+  standardExpected.Flags = 0x4u;
+  standardExpected.NumDst = 0u;
   standardExpected.ContextToken = 0ULL;
   standardExpected.AllocationToken = 0ULL;
   assert(AdmissionStandardPresentTraceAccept(

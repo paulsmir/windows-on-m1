@@ -187,6 +187,99 @@ static NTSTATUS WaitForStandardPresent(
   return NT_SUCCESS(status) ? (NTSTATUS)0xc00000b5L : status;
 }
 
+static NTSTATUS WaitForStandardPresentDdi(
+    D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device, D3DKMT_HANDLE Context,
+    const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace) {
+  ULONGLONG deadline = GetTickCount64() + 15000u;
+  unsigned int presentSequence = 0u;
+  unsigned long long contextToken = 0ULL;
+  unsigned long long allocationToken = 0ULL;
+  NTSTATUS status = (NTSTATUS)0x00000103L;
+  do {
+    status = QueryStandardPresentTrace(
+        Adapter, Device, Context, AdmissionStandardPresentTraceRead, Trace);
+    if (!NT_SUCCESS(status))
+      break;
+    if (AdmissionStandardPresentTraceAcceptPresent(
+            Trace, Expected, &presentSequence,
+            &contextToken, &allocationToken)) {
+      wprintf(L"STANDARD_DDI_CORRELATION present_sequence=%u "
+              L"context=0x%llx allocation=0x%llx\n",
+              presentSequence, contextToken, allocationToken);
+      fflush(stdout);
+      return (NTSTATUS)0;
+    }
+    Sleep(1u);
+  } while (GetTickCount64() < deadline);
+  PrintStandardPresentTrace(L"ddi_wait_failure", Trace, status);
+  return NT_SUCCESS(status) ? (NTSTATUS)0xc00000b5L : status;
+}
+
+static LRESULT CALLBACK StandardPresentWindowProcedure(
+    HWND Window, UINT Message, WPARAM WParam, LPARAM LParam) {
+  return DefWindowProcW(Window, Message, WParam, LParam);
+}
+
+static HWND CreateStandardPresentWindow(void) {
+  static const wchar_t className[] = L"AppleAgxStandardPresentWindow";
+  WNDCLASSEXW windowClass;
+  HINSTANCE instance = GetModuleHandleW(NULL);
+  HWND window;
+  ZeroMemory(&windowClass, sizeof(windowClass));
+  windowClass.cbSize = sizeof(windowClass);
+  windowClass.lpfnWndProc = StandardPresentWindowProcedure;
+  windowClass.hInstance = instance;
+  windowClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
+  windowClass.lpszClassName = className;
+  if (RegisterClassExW(&windowClass) == 0u &&
+      GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+    return NULL;
+  window = CreateWindowExW(
+      WS_EX_TOPMOST, className, L"Apple AGX standard BLT present",
+      WS_POPUP | WS_VISIBLE, 0, 0,
+      APPLE_AGX_SCANOUT_J313_WIDTH, APPLE_AGX_SCANOUT_J313_HEIGHT,
+      NULL, NULL, instance, NULL);
+  if (window != NULL) {
+    ShowWindow(window, SW_SHOW);
+    UpdateWindow(window);
+  }
+  return window;
+}
+
+static void PumpStandardPresentWindow(DWORD DurationMs) {
+  ULONGLONG deadline = GetTickCount64() + DurationMs;
+  MSG message;
+  while (GetTickCount64() < deadline) {
+    while (PeekMessageW(&message, NULL, 0u, 0u, PM_REMOVE)) {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    }
+    Sleep(10u);
+  }
+}
+
+static NTSTATUS SubmitStandardBlt(
+    D3DKMT_HANDLE Context, D3DKMT_HANDLE Source, HWND Window) {
+  D3DKMT_PRESENT present = {0};
+  RECT rectangle = {0, 0, APPLE_AGX_SCANOUT_J313_WIDTH,
+                     APPLE_AGX_SCANOUT_J313_HEIGHT};
+  present.hContext = Context;
+  present.hWindow = Window;
+  present.VidPnSourceId = 0u;
+  present.hSource = Source;
+  present.hDestination = 0u;
+  present.DstRect = rectangle;
+  present.SrcRect = rectangle;
+  present.SubRectCnt = 1u;
+  present.pSrcSubRects = &rectangle;
+  present.FlipInterval = D3DDDI_FLIPINTERVAL_IMMEDIATE;
+  present.Flags.Blt = 1u;
+  present.Flags.SrcRectValid = 1u;
+  present.Flags.DstRectValid = 1u;
+  return D3DKMTPresent(&present);
+}
+
 static NTSTATUS SubmitStandardFlip(
     D3DKMT_HANDLE Context, D3DKMT_HANDLE Source) {
   D3DKMT_PRESENT present = {0};
@@ -230,6 +323,9 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   ADMISSION_STANDARD_PRESENT_TRACE standardTrace = {0};
   ADMISSION_STANDARD_PRESENT_EXPECTATION standardExpected = {0};
   ADMISSION_STANDARD_PRESENT_PRODUCER_STATE standardProducer = {0};
+  HWND standardWindow = NULL;
+  DWORD processSession = 0xffffffffu;
+  DWORD activeConsoleSession = 0xffffffffu;
   D3DKMT_HANDLE allocationHandles[2] = {0};
   PFND3DKMT_ENUMADAPTERS3 enumAdapters3 = NULL;
   HMODULE gdiModule = NULL;
@@ -281,6 +377,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   BOOL holdNoCleanup = FALSE;
   BOOL retireAfterSignal = FALSE;
   BOOL standardPresentMode = FALSE;
+  BOOL standardBltMode = FALSE;
 
   (void)setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -305,13 +402,27 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     standardPresentMode = TRUE;
     targetFrames = 1u;
   }
+  else if (argc == 2 &&
+           wcscmp(argv[1], L"--standard-blt-present-hold") == 0) {
+    standardBltMode = TRUE;
+    targetFrames = 1u;
+  }
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
              L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup|"
              L"--retire-after-signal|--repeat-retire-after-signal|"
-             L"--standard-present-hold]\n");
+             L"--standard-present-hold|--standard-blt-present-hold]\n");
     return 2;
+  }
+  if (standardBltMode) {
+    activeConsoleSession = WTSGetActiveConsoleSessionId();
+    if (!ProcessIdToSessionId(GetCurrentProcessId(), &processSession) ||
+        processSession != activeConsoleSession) {
+      wprintf(L"PHASE STANDARD_BLT_SESSION_REJECT process=%lu active=%lu\n",
+              processSession, activeConsoleSession);
+      return 3;
+    }
   }
   AdmissionPresentProducerInitialize(
       &producerState, holdNoCleanup, targetFrames);
@@ -460,7 +571,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     }
   }
 
-  if (standardPresentMode) {
+  if (standardPresentMode || standardBltMode) {
     standardTraceStatus = QueryStandardPresentTrace(
         adapters[selectedAdapter].hAdapter, createDevice.hDevice,
         createContext.hContext, AdmissionStandardPresentTraceArm,
@@ -472,10 +583,25 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       goto cleanup;
     standardExpected.CandidateBuild = ADMISSION_EXPECTED_CANDIDATE_BUILD;
     standardExpected.BootGeneration = standardTrace.BootGeneration;
-    standardExpected.Flags = 0x4u;
+    standardExpected.Flags = standardBltMode ? 0x1u : 0x4u;
     standardExpected.SourceId = 0u;
     standardExpected.Segment = 2u;
+    standardExpected.NumSrc = 1u;
+    standardExpected.NumDst = standardBltMode ? 1u : 0u;
 
+    if (standardBltMode) {
+      standardWindow = CreateStandardPresentWindow();
+      wprintf(L"PHASE STANDARD_BLT_WINDOW hwnd=0x%llx process_session=%lu "
+              L"active_session=%lu\n",
+              (ULONGLONG)(ULONG_PTR)standardWindow,
+              processSession, activeConsoleSession);
+      fflush(stdout);
+      if (standardWindow == NULL)
+        goto cleanup;
+    }
+
+  }
+  if (standardPresentMode) {
     sourceOwner.hDevice = createDevice.hDevice;
     sourceOwner.pType = &sourceOwnerType;
     sourceOwner.pVidPnSourceId = &sourceId;
@@ -537,7 +663,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
     command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
     command.DestinationAllocationIndex =
-        standardPresentMode ? 1u : (pass & 1u);
+        (standardPresentMode || standardBltMode) ? 1u : (pass & 1u);
     command.Color = (pass & 1u) == 0u
         ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
         : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
@@ -599,6 +725,33 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->AllocationListSize = render.NewAllocationListSize;
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
+    if (standardBltMode) {
+      wprintf(L"PHASE STANDARD_BLT_PRESENT_BEGIN source=%u hwnd=0x%llx\n",
+              allocationHandles[1], (ULONGLONG)(ULONG_PTR)standardWindow);
+      standardPresentStatus = SubmitStandardBlt(
+          activeContext->hContext, allocationHandles[1], standardWindow);
+      wprintf(L"PHASE STANDARD_BLT_PRESENT_END status=0x%08lx\n",
+              (ULONG)standardPresentStatus);
+      fflush(stdout);
+      if (!NT_SUCCESS(standardPresentStatus))
+        goto cleanup;
+      standardTraceStatus = WaitForStandardPresentDdi(
+          adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+          activeContext->hContext, &standardExpected, &standardTrace);
+      PrintStandardPresentTrace(
+          L"windowed_blt", &standardTrace, standardTraceStatus);
+      if (!NT_SUCCESS(standardTraceStatus))
+        goto preserve_resources;
+      PumpStandardPresentWindow(15000u);
+      if (!NT_SUCCESS(QueryDeviceExecutionState(
+              createDevice.hDevice, L"standard_blt_hold", &executionState)) ||
+          executionState != D3DKMT_DEVICEEXECUTION_ACTIVE)
+        goto preserve_resources;
+      wprintf(L"PHASE STANDARD_BLT_HOLD_PASS duration_ms=15000\n");
+      fflush(stdout);
+      result = 0;
+      goto cleanup;
+    }
     if (standardPresentMode) {
       wprintf(L"PHASE STANDARD_PRESENT_BEGIN source=%u\n",
               allocationHandles[1]);
@@ -892,6 +1045,10 @@ cleanup:
             producerState.CompletedFrames, producerState.CleanupAllowed);
     fflush(stdout);
     goto preserve_resources;
+  }
+  if (standardWindow != NULL) {
+    DestroyWindow(standardWindow);
+    standardWindow = NULL;
   }
   if (allocationHandles[0] != 0u) {
     wprintf(L"PHASE DESTROY_ALLOCATION_BEGIN allowed=%u\n",

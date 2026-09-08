@@ -80,6 +80,12 @@ static LONG InterlockedIncrement(volatile LONG *p){return __atomic_add_fetch(p,1
         self.assertGreaterEqual(
             present.count("AdmissionStandardPresentTraceRecordWindows"), 2
         )
+        blt = present[
+            present.index("Present->Flags.Value == 1u"):
+            present.index("Present->pDmaBuffer != NULL")
+        ]
+        self.assertIn("traceEvent.AllocationToken", blt)
+        self.assertIn("source->Allocation", blt)
         self.assertGreaterEqual(
             source.count("AdmissionStandardPresentTraceRecordWindows"), 2
         )
@@ -95,6 +101,19 @@ static LONG InterlockedIncrement(volatile LONG *p){return __atomic_add_fetch(p,1
             queue.index("#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)"),
             queue.index("ADMISSION_DISPLAY_OUTPUT_LEASE fallbackCandidate"),
         )
+
+    def test_windowed_blt_producer_uses_interactive_dwm_route(self):
+        producer = (
+            ROOT / "drivers/apple-agx/windows/one-shot/apple_agx_d3dkmt_render.c"
+        ).read_text()
+        self.assertIn('L"--standard-blt-present-hold"', producer)
+        self.assertIn("WTSGetActiveConsoleSessionId", producer)
+        self.assertIn("ProcessIdToSessionId", producer)
+        self.assertIn("present.Flags.Blt = 1u", producer)
+        self.assertIn("present.Flags.SrcRectValid = 1u", producer)
+        self.assertIn("present.Flags.DstRectValid = 1u", producer)
+        self.assertIn("AdmissionStandardPresentTraceAcceptPresent", producer)
+        self.assertIn("PHASE STANDARD_BLT_HOLD_PASS", producer)
 
 
 if __name__ == "__main__":
