@@ -36906,3 +36906,13 @@ SchedulerFaulted0. FAIL: context2 cannot be created before pass1, pass2 remains
 buffered, or any first later guard names a different boundary. Collect producer
 output, terminal/visible/queue/buffer/KTrace receipts, system events and host
 trace; then remove only the exact602 package and restore ordinary baseline.
+
+**EXP605 PRODUCER FREEZE.** Pinned MSVC14.44 ARM64 Release build and code
+analysis passed with zero warnings/errors. Producer SHA256
+`96a26ddde80b0832ebd6929ac3782013805158f6a6d39509c9e029489ea82b04`;
+build log SHA256
+`56eedfa28d93cc65000a3a965355437ca4d911aff94d749a74fb257ac5ef1830`.
+Workflow SHA256
+`4a1a2b16e957b0b82434a3e552eef23c7465097e88db96154217a0da1d3cc685`.
+Exact signed package remains byte-identical to EXP602, SHA256
+`439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`.
