@@ -39609,3 +39609,87 @@ package/task/service cleanup completed; ordinary377/392 is restored and
 verified Code28/packages0/service/module absent,8CPU/NVMe2/USB5/keyboard1.
 Next boundary is coherent minimal UMD device/pipeline admission, not KMD/AGX,
 DCP or another Present retry.
+
+# EXP649 — dynamic Win32 command transport over proven AGX backend
+
+**PREREGISTERED 2026-09-08T20:53:37Z. WHY THIS HYPOTHESIS:** (1) EXP640
+hardware-proved the existing allocation, Render/Patch/Submit, physical TA/3D,
+fence, output-verification and scanout path with fixed qualification commands;
+(2) AD02 Tasks1–5 now pass deterministic parser, immutable snapshot,
+allocation-ownership, context-generation, Mesa-facing transport and dynamic
+clear-colour tests, and both SubmitQualification and FullProduction pinned WDK
+builds pass; (3) the frozen producer emits two structurally distinct,
+hash-correlated commands: a full-frame green clear followed by a bottom-band
+blue clear into the inactive ping-pong allocation. This makes the first
+remaining uncertainty the production integration between the versioned
+command envelope and the already proven backend, not AGX execution or DCP.
+
+**WINDOWS CONTRACT:** a user-mode command is copied exactly once by
+`DxgkDdiRender`; its version, generation, content hash, allocation reference,
+access, range and geometry are validated against device-owned opened
+allocations before DMA/Patch/Submit publication. The KMD consumes no user,
+physical or CPU pointer from the wire command. The D3D advertised pipeline mask
+remains zero, so this run does not claim D3D feature-level or desktop support.
+
+**AGX/ASAHI CONTRACT:** unchanged from EXP640: the retained-root broker,
+firmware/RTKit lifecycle, UAT mappings, EXP208 materialization, TA/3D queues,
+hardware completion, Windows fence notification, output verification and DCP
+latch remain the exact hardware-proven backend. The packed PBE clear is four
+normalized binary16 lanes; only the already proven full-frame and bottom-band
+geometry profiles are used.
+
+**TRANSLATION:** `AgxWin32TransportBuildClear` creates a pointer-free 128-byte
+version1 allocation-relative envelope. KMD snapshots it once, validates the
+referenced opened allocation and normalizes its colour/range/geometry into the
+existing qualification DMA packet, Patch, Submit and backend path. Frame1 is
+ARGB `0xff00ff00` over 2560x1600; frame2 is ARGB `0xff0000ff` over the proven
+bottom 800-line band of the other full-size allocation. Each frame retains its
+allocation until exact query/latch and the existing explicit retirement signal.
+
+**WHAT IS STILL UNKNOWN:** whether the exact current dxgkrnl/KMD integration
+accepts both versioned envelopes, preserves their dynamic fields through
+Render/Patch/Submit, produces the corresponding physical clears, and reports
+the exact per-frame output/presentation identities. No D3D feature level,
+general draw, Mesa state tracker, DWM or accelerated desktop behavior is under
+test here.
+
+Single variable: replace the legacy fixed 48-byte qualification producer
+command with the versioned 128-byte Win32 envelope and data-driven clear values,
+without changing platform, firmware, AGX queue/completion, output worker,
+display, scheduler or capability behavior. Source HEAD is
+`dd8b157865054c23e4448c3ddaf4a93e633a58b5` on
+`feature/j313-gpu-acceleration`; tracked diff and tracked status SHA256 are
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`
+and `d4b4d00c963ed62ecb731e7ba102f44ff7f1f4cb693a2cb4428a303ecbb4ce09`.
+The overlay contains only the 23 enumerated AD02 production/shared/producer
+files over immutable builder base `C:\Users\pauls\EXP648\src`; overlay SHA256
+is `a71c8b66dab31c08dfebd5094257e926a4efb4395d2868866fb11d163b827773`.
+m1n1 and Mu source commits are
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`.
+
+Pinned build is WDK26100 Release PackageBuild649 VisibleAgxQualification plus
+ARM64 `AppleAgxD3dKmRender.vcxproj` with AdmissionExpectedBuild649 and code
+analysis, from the immutable base plus exact overlay. The candidate platform is
+immutable EXP584 m1n1 SHA256
+`12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3`
+plus Mu406 SHA256
+`c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0`.
+Recovery is the exact package hash-gated cleanup followed by immutable ordinary
+EXP377 m1n1 SHA256
+`fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a`
+and Mu392 SHA256
+`16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06`.
+
+PASS requires two exact copied envelopes and allocation/generation validations;
+two Render/Patch/Submit/worker paths; two physical TA/3D completions and exact
+Windows fences; complete green full-frame output verification; exact blue
+bottom-band verification with the prior band preservation contract; two
+correlated presentation query/latch records; a 15-second HOLD with both
+allocations owned and device ACTIVE; then explicit retirement and healthy
+teardown. This is `AD02_HW_PROVEN` only, not D3D/desktop readiness. Failure is
+the first exact versioned transport stage that disagrees with those predicates.
+Evidence paths will be under
+`.local/experiments/EXP649-dynamic-win32-transport/{hold-evidence,final-evidence}`
+with raw producer and host logs. Artifact and workflow hashes are appended after
+the pinned build and before staging.
