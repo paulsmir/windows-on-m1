@@ -23,6 +23,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   BOOLEAN accepted = FALSE;
   BOOLEAN bound = FALSE;
   ULONG packet_guard = AdmissionSubmitPacketGuardAccepted;
+  NTSTATUS packet_status = STATUS_DEVICE_BUSY;
 #define GDI_SUBMIT_RETURN(guard, value)                                       \
   do {                                                                       \
     NTSTATUS gdiStatus = (value);                                            \
@@ -187,24 +188,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
     InterlockedExchange(&Context->SchedulerFaulted, 1);
   KeReleaseSpinLockFromDpcLevel(&Context->SchedulerLock);
   if (!accepted) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    packet_status = (NTSTATUS)AdmissionSubmitPacketFailureStatus(packet_guard);
+#endif
     /* Capture the return owner in the adapter/boot record before touching the
-     * optional broker transport.  The PASSIVE exporter can run on another CPU
-     * during the bounded qualification-only hold below. */
+     * optional broker transport. */
     ADMISSION_CORRELATE_SUBMIT_EXIT(
         Context, Args, AdmissionSubmitRenderGuardPacket,
-        STATUS_DEVICE_BUSY);
+        packet_status);
     AdmissionSubmitPacketGuardWindows(
-        Context, packet_guard, STATUS_DEVICE_BUSY);
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-    /* The fatal DDI result makes dxgkrnl bugcheck immediately.  Give only this
-     * already-rejected path a bounded window for the independent PASSIVE
-     * registry exporter; no successful rendering request is delayed. */
-    KeStallExecutionProcessor(250000u);
-#endif
+        Context, packet_guard, packet_status);
     AdmissionSubmitRenderGuardWindows(
-        Context, AdmissionSubmitRenderGuardPacket, STATUS_DEVICE_BUSY);
-    AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_DEVICE_BUSY);
-    return STATUS_DEVICE_BUSY;
+        Context, AdmissionSubmitRenderGuardPacket, packet_status);
+    AdmissionGdiReceiptSubmitWindows(Context, Args, packet_status);
+    return packet_status;
   }
   AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS);
   AdmissionSubmitRenderGuardWindows(

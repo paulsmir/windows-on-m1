@@ -81,7 +81,7 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
         self.assertNotIn("AdmissionRecordSubmitRenderGuard", submit)
         self.assertNotIn("IoOpenDeviceRegistryKey", trace)
 
-    def test_rejected_packet_is_correlated_before_broker_and_fatal_hold(self):
+    def test_rejected_packet_is_correlated_before_broker_and_fatal_return(self):
         submit = (RENDER / "src" / "submission_windows.c").read_text()
         rejected = submit.split("if (!accepted) {", 1)[1].split(
             "AdmissionGdiReceiptSubmitWindows(Context, Args, STATUS_SUCCESS)", 1
@@ -89,11 +89,11 @@ class AppleAgxSubmitRenderGuardTests(unittest.TestCase):
 
         correlation = rejected.index("ADMISSION_CORRELATE_SUBMIT_EXIT")
         broker = rejected.index("AdmissionSubmitPacketGuardWindows")
-        hold = rejected.index("KeStallExecutionProcessor")
-        fatal_return = rejected.index("return STATUS_DEVICE_BUSY")
+        fatal_return = rejected.index("return packet_status")
         self.assertLess(correlation, broker)
-        self.assertLess(broker, hold)
-        self.assertLess(hold, fatal_return)
+        self.assertLess(broker, fatal_return)
+        self.assertIn("AdmissionSubmitPacketFailureStatus(packet_guard)", rejected)
+        self.assertNotIn("KeStallExecutionProcessor", rejected)
         self.assertNotIn("ZwFlushKey", rejected)
 
 
