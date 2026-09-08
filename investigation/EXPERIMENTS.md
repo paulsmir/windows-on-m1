@@ -39843,3 +39843,28 @@ producer source rebuilt only for AdmissionExpectedBuild650. Platform and
 ordinary recovery artifacts are byte-identical to EXP649. PASS/failure and
 evidence predicates are otherwise byte-identical to EXP649; artifact hashes
 are appended before staging.
+
+**EXP650 BUILD FREEZE 2026-09-08T21:08:32Z.** FRYZZING immutable EXP649 base
+plus the exact one-file overlay built30.0.650.0 with WDK26100 analysis,
+Universal, Inf2Cat, TestSign and version gates PASS; inherited C28251 only,
+producer zero warnings/errors. ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`45910c9295f63a2d309399ae82346f8782105a6ff6fb7a266523cae5b2ee1e57`,
+`d363cd97158fcdc21aeef22b1de95b41347a3fc92880b1022163ac843a633cdb`,
+`80d422339d5e4b0af067f7088c54a6d40b93538ba661a77b1ca82ad4bce18ac6`,
+`167a130fe4c3dcf754d1cf24289555dc9526acbbcd65f30afbbd742859bf6df6`,
+`f2e8a25db1c93376ceda48564e8fa0798d305afb6825cd30703de2ccb7f49112`
+and
+`fbcec6b46f0b4dd46faa8d7b440592368a8526f51e88804314a0582a69ef7156`.
+Manifest/build/producer/version log SHA256 are
+`c8ac3cfb4a6403865ddb39f4bddb10f37b52f4fd6fc50cb3e04f24e599cae86e`,
+`cb407634e20fabd805db755868d0c670e8d5abebe121f869dd2975da68265fe8`,
+`076418a4a24cddf3c592dc5d3aea38e391c40cebfa566b786c4602632a64ece2`
+and `a29f737cf34e94803c5b020be3a38218159ab332f6bc2a9ab951d41665427a63`.
+The manifest-driven workflow and collectors parsed on Windows; workflow/live/
+evidence/full-owner/ordinary SHA256 are
+`6a4413e9699dd425ca10b47f763691b8e3757c072c1f6493277ac37b9cd585ee`,
+`a45e3b33ec51bac9821dee87358cd59ec52511fc10ac88f41a470a1a1db6c32b`,
+`e1799b0f08964691b1ccbb0979b62bfee08d00467e0a1b1202af82b6dc443f2d`,
+`03eeae9ea989972ed8fce31cb91e9554c7a2a54d3af840e7d482689de5cc2a8f`
+and `c45e4f881c96c661c4890a1bd56acce30e898ab1a565bfefef8ca819fc8dd6d6`.
+Candidate is frozen but not staged.
