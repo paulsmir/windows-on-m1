@@ -30,6 +30,13 @@ bottom-band-blue output hashes, два query/latch,15s HOLD и clean retirement.
 plan. Hardware допускается только после typed job/relocation/resource tests;
 feature-level readiness и advertised mask остаются0.
 
+AD03 Task1 source boundary and compiler core are OFFLINE_PROVEN. Pinned Mesa
+produces deterministic source-sensitive AGX compute binaries. Direct generic
+VS/FS compilation is deliberately rejected because required Asahi UVS/
+tilebuffer driver lowering is not yet connected. Current task is the Windows
+Asahi screen/BO/fence adapter; upstream encoder build stops first at its DRM
+header, exactly matching the owner to replace.
+
 ## Как читать и обновлять карту
 
 | Статус | Значение |

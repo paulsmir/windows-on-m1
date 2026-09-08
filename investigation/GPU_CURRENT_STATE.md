@@ -30,6 +30,20 @@ SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current boundary is AD03:
 source-first Mesa compiler/encoder integration for non-replay geometry/shader/
 resource workloads. Caps remain0 until AD04 mandatory contract completion.
 
+AD03 Task1 is OFFLINE_PROVEN at commit
+ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
+only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
+target plus DRM/fd owners. Compiler core is OFFLINE_PROVEN at commit
+ce5dc1e2912d8485fbc0426335277a8f34d2da39: pinned Mesa builds, identical NIR
+input produces byte-exact160-byte AGX binary twice, changed store constant
+produces a different binary hash with the same register/scratch layout. Generic
+VS/FS output cannot be sent directly to the backend compiler; Asahi driver
+tilebuffer/UVS lowering is required. Current first boundary is therefore the
+Windows Asahi screen/BO/fence and vertex/fragment lowering adapter, not a
+hardware EXP. Upstream `libasahi` failing first at `xf86drm.h` independently
+confirms the DRM owner that Task3 must replace. `AGX_COMPILER_CORE_OFFLINE_PROVEN=YES`;
+full compiler/encoder and all pipeline readiness remain NO.
+
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
 Render/Patch/Submit, physical completion fence256, DPC and exact terminal output
