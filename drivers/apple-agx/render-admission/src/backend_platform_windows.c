@@ -1986,9 +1986,6 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
 
   if (runtime == NULL)
     return APPLE_AGX_BACKEND_FALSE;
-#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  AdmissionTerminalObserve(runtime, Fence, Status);
-#endif
   if (Fence == 0u || Node != 0u || Engine != 0u ||
       Status != AppleAgxBackendCompletionSuccess)
     return APPLE_AGX_BACKEND_FALSE;
@@ -2104,6 +2101,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
           &runtime->Completion, Fence, Node, Engine))
     return APPLE_AGX_BACKEND_FALSE;
   runtime->CompletionContext = NULL;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionTerminalObserve(runtime, Fence, Status);
+#endif
   if (preemption_waiting)
     InterlockedExchange(&adapter->SchedulerDpcPending, 1);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)

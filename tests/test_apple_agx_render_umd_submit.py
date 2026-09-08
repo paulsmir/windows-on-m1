@@ -227,6 +227,10 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             backend.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete("):
             backend.index("static VOID AdmissionPlatformWorkerFinished(")
         ]
+        self.assertLess(
+            complete.index("DxgkCbSynchronizeExecution("),
+            complete.index("AdmissionTerminalObserve(runtime"),
+        )
         self.assertEqual(backend.count("AdmissionScanoutPresentAgxResult("), 1)
         self.assertGreater(
             complete.index("AdmissionScanoutPresentAgxResult("),
