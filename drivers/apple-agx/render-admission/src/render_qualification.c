@@ -154,6 +154,13 @@ ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
   return AdmissionPresentProducerCleanup;
 }
 
+int AdmissionPresentProducerCanCleanup(
+    const ADMISSION_PRESENT_PRODUCER_STATE *State, int HasAllocations) {
+  if (State == QUERY_NULL)
+    return 0;
+  return !HasAllocations || !State->HoldNoCleanup || State->CleanupAllowed;
+}
+
 int AdmissionPresentProducerRetirementComplete(
     ADMISSION_PRESENT_PRODUCER_STATE *State) {
   if (State == QUERY_NULL || !State->HoldNoCleanup || !State->Terminal ||

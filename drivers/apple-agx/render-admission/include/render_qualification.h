@@ -100,6 +100,8 @@ ADMISSION_PRESENT_PRODUCER_ACTION AdmissionPresentProducerAfterWait(
     ADMISSION_PRESENT_WAIT_RESULT Result);
 int AdmissionPresentProducerRetirementComplete(
     ADMISSION_PRESENT_PRODUCER_STATE *State);
+int AdmissionPresentProducerCanCleanup(
+    const ADMISSION_PRESENT_PRODUCER_STATE *State, int HasAllocations);
 int AdmissionRetirementQueryBuild(
     ADMISSION_RETIREMENT_QUERY *Record, unsigned int CandidateBuild,
     unsigned int BootGeneration, unsigned long long Sequence,

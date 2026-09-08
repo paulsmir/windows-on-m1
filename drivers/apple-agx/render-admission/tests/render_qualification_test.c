@@ -44,6 +44,22 @@ int main(void) {
   ADMISSION_RETIREMENT_QUERY retirement;
   ADMISSION_RETIREMENT_EXPECTATION retirementExpected;
 
+  AdmissionPresentProducerInitialize(&producer, 1, 16u);
+  assert(AdmissionPresentProducerCanCleanup(&producer, 0));
+  assert(!AdmissionPresentProducerCanCleanup(&producer, 1));
+  for (unsigned int frame = 0u; frame < 4u; ++frame)
+    assert(AdmissionPresentProducerAfterWait(&producer,
+        AdmissionPresentWaitCompleted) == AdmissionPresentProducerSubmitNextFrame);
+  /* A fifth Render failure bypasses AfterWait, but cannot bypass retirement. */
+  assert(producer.CompletedFrames == 4u);
+  assert(!AdmissionPresentProducerCanCleanup(&producer, 1));
+  assert(!AdmissionPresentProducerRetirementComplete(&producer));
+  for (unsigned int frame = 4u; frame < 16u; ++frame)
+    (void)AdmissionPresentProducerAfterWait(&producer, AdmissionPresentWaitCompleted);
+  assert(!AdmissionPresentProducerCanCleanup(&producer, 1));
+  assert(AdmissionPresentProducerRetirementComplete(&producer));
+  assert(AdmissionPresentProducerCanCleanup(&producer, 1));
+
   memset(&record, 0, sizeof(record));
   assert(AdmissionPresentQueryBuild(&record, &first));
   assert(record.Magic == ADMISSION_PRESENT_QUERY_MAGIC);

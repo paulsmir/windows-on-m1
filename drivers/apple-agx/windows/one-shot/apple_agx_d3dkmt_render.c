@@ -635,6 +635,14 @@ preserve_resources:
     Sleep(1000u);
 
 cleanup:
+  if (!AdmissionPresentProducerCanCleanup(
+          &producerState, allocationHandles[0] != 0u)) {
+    wprintf(L"PHASE PRESERVE_AFTER_ERROR render=0x%08lx completed=%u "
+            L"cleanup_allowed=%u\n", (ULONG)renderStatus,
+            producerState.CompletedFrames, producerState.CleanupAllowed);
+    fflush(stdout);
+    goto preserve_resources;
+  }
   if (allocationHandles[0] != 0u) {
     wprintf(L"PHASE DESTROY_ALLOCATION_BEGIN allowed=%u\n",
             producerState.CleanupAllowed);
