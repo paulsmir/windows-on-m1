@@ -60,7 +60,13 @@ f396856ce4af0bd612b793a6b283ee4776a5ab9b now uses bounded Windows-context
 `EnqueueCpuEvent` completion tokens with exact timeout rollback retire and
 teardown semantics instead of Linux syncobj or receipt polling; real WDK
 callback tests and ARM64 Universal/sign build pass. Actual Mesa `pipe_screen`
-construction and typed graph submission are the current first boundary. No
+construction was the next boundary. Commit
+c574d40520befed878050a2f20a4131b758f936d now constructs real Mesa
+`pipe_screen`/`pipe_context` objects with conservative zero caps bounded
+buffer/BGRA8 resources and checked transfers over the Windows screen; exact
+pinned-header clang sanitizers and MSVC14.44 analysis execution pass, with no
+DRM/fd/software target. Production ARM64 UMD linkage plus vertex/fragment
+lowering and typed draw graph submission are the current first boundary. No
 hardware candidate is justified and pipeline caps remain0.
 
 EXP649 is rejected at one source-exact post-output presentation guard, not at
