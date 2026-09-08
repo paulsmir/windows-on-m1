@@ -37981,3 +37981,31 @@ inherited C28251 only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
 Workflow/launch SHA256 are
 `2f633c618ad5f5177d1e37908441f8c61a9f30f199d85891b5870de9555c6e19`
 and `aacbe1df0f4ab51a509e55c63b16c10135a99ce75cf35aec2c56227240c80647`.
+
+**EXP628 FINAL — INCONCLUSIVE AFTER FRAME1 D589.** Call1 reached physical
+completion and correlation records fence256 Notify/DPC; host logs exact A408/
+D589 swap9. Before the query record returned or call2 began, Windows reset with
+`0x101 CLOCK_WATCHDOG_TIMEOUT`, processor6, interrupts disabled. WinDbg bucket is
+`CLOCK_WATCHDOG_TIMEOUT_INTERRUPTS_DISABLED_nt!KiSwapContext` with no AppleAgx
+frame, so this is not classified as a GPU defect without reproducibility.
+Dump/kd/host/correlation raw SHA256 are
+`502ae31fdafce78b16c61d7b8c694a3747cd65af277005369f3a0cc6c0fbb33a`,
+`e231d2afdef42d8279e9e807c2baf04757096da2872d6c838e4ebf94febf721a`,
+`357b0ad0fff02d135cdff9aa46a75cb77f21a28309489843e8870fd68ab51e4c`,
+`68dfa259e2eabbd428ba491b811863c7cefcba18b677fda548bb31325b3d5d1a`.
+Exact cleanup completed.
+
+# EXP629 — visible completion without legacy registry I/O
+
+**PREREGISTERED 2026-09-08T11:48Z. WHY THIS HYPOTHESIS:** (1) EXP628 reaches
+frame1 D589. (2) Worker remains Pending and call2 never starts. (3) Source
+synchronously exports legacy receipts before WorkerFinished, violating slow-
+export isolation and exposing virtual storage during this exact interval.
+
+Commit `987a19e6ab0d5ff00dc8de9563e77c4e96421caf` suppresses only successful
+visible-path legacy registry writes. Exact per-frame Escape records retain
+fence/color/full pixel count/hash/sequence/offset/physical identity and producer
+stdout captures them; durable is explicitly0. Failure-before-acceptance receipts
+and all render/lease/AGX/DCP behavior are unchanged. Full376 tests GREEN. Build
+exact629 from EXP628 plus only backend worker; same producer. Require two query
+records, two D589, producer cleanup0 and no reset.

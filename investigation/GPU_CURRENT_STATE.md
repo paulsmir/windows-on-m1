@@ -730,6 +730,19 @@ waits exact latch, then releases the displayed allocation. Producer uses exact
 per-frame read-only Escape receipts instead of fixed sleeps. Full376 tests and
 pinned WDK KMD/producer analysis are GREEN. EXP628 is the hardware candidate.
 
+EXP628 is INCONCLUSIVE after the first completed frame, not a lease rejection.
+Call1 Render/Submit and fence256 Notify/DPC are present; host logs new A408/D589
+swap9. Before producer obtained its query record, Windows reset with
+`0x101 CLOCK_WATCHDOG_TIMEOUT`, CPU6/interrupts-disabled. The dump has no
+AppleAgx frame, so no causal GPU attribution. Source still violated the approved
+export contract: after D589 the worker synchronously wrote the legacy registry
+receipt set before `WorkerFinished`, blocking the exact Ready handshake.
+
+Commit `987a19e6ab0d5ff00dc8de9563e77c4e96421caf` suppresses only those
+successful-visible legacy writes. Per-frame Escape records retain full output/
+present proof; failure receipts and asynchronous correlation remain. EXP629
+reruns the same lease design with no rendering change.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
