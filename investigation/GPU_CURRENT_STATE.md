@@ -108,6 +108,18 @@ preserves fixed store-pipeline data, resolves exact original shader-base VAs,
 and carries the immutable result through Render/Submit/worker. No Air package
 was staged and pipeline caps remain0.
 
+Commit08bd67a3063990b16683bac5a747343b205bbb95 now implements the bounded
+overlay primitive. It uses only template-zero ranges: encoder object71,
+pipeline object73+0x10000, shader/rodata slots in fixed-input object74,
+descriptor object36+0x8000 and the already referenced scissor/depth objects
+38/39. Planning validates roles/ranges/nonoverlap; apply is all-or-nothing on
+zero ranges; release requires the exact generation/fence/materialized hash and
+zeros only owned slots. Original object73/74 VA aliases preserve the existing
+0x1100000000 pipeline base, while background/EOT store data at object73
+offsets0/0x2000 remains byte-exact. Sanitizer tests and WDK26100 build662 are
+GREEN. Windows Render DMA carry, worker application and dynamic target binding
+remain the first boundary; this is still offline proof only.
+
 EXP649 is rejected at one source-exact post-output presentation guard, not at
 the Win32 transport or AGX backend. Its first128-byte full-green command passed
 Render/Patch/Submit, physical completion fence256, DPC and exact terminal output
