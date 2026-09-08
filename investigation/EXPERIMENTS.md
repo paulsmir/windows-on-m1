@@ -39148,3 +39148,26 @@ one physical AGX render/fence, successful D3DKMTPresent, exact KMD Present
 ENTRY/EXIT with one source/one destination, successful PresentTransfer receipt,
 15s ACTIVE HOLD, visible interactive window, no reset, and clean teardown.
 No new D589 is required or claimed because DWM keeps its primary active.
+
+**EXP642 BUILD FREEZE.** Exact30.0.642.0 from immutable EXP641/src plus only
+the seven files in commit8937f1a14031168d0929d5ce6e192f155e72aff7.
+SubmitQualification KMD/UMD and active-console producer pass pinned
+WDK/SDK26100, MSVC14.44, code analysis, Universal ApiValidator, Inf2Cat,
+TestSign and coherent version gates. KMD has inherited C28251 only; producer
+has zero warnings/errors. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256:
+c810ea3f7fb82426469757f6ea03284964bdf77868d5886517737ce0a39aff24,
+932653d3b0230ed68b080d754a4de7fe6d2a8645ba20ffe0bd935ddbaf54613a,
+e21e6d3d2a22cde5ba1916e67436dd2465b9bbfdf83995e21f2f1c081e5a687c,
+6096cf8e3087933563cfe9138469f06678348725fb502f6517dd0fc956da1dfb,
+90b78d66587a17d297c76ed38f1cd08c46e6644f2502efb58a34def2164d29af,
+c36cfaae54bed40b4e93932811a6285fb4de1e670e54d0f225911e52efdebdc4,
+13006376b3b89918ca941ca276c4954b9a7005b3ad63ddee8f2a133d80ba17dd.
+Workflow/run/arm/collector/launch SHA256:
+0eef91aed8505ea50161495913403688714ecf6f247f2cbaf41b2b442ab2f2ce,
+4e024f76fb13a9d97b48a5bd42fd67699a9bf427cfeaddf05b93f9e9fa1c88dd,
+0aed86ccd00caedf53bbe08e9413e6e28bfc119552ecb746c2367b68a2fa7649,
+305554c85df166a7c4c2ff5673e6f47fb01440a85c1d545c592f7c371d158bd4,
+ce5800768e42ec29f955788ebfb3af91c830efaad689a74db876394319be7cd5.
+Candidate-ready is not a verdict. Parse wrappers, verify clean ordinary,
+transfer/hash, arm the interactive logon task, stage exact package, then one
+full-owner boot. If console does not auto-logon, only physical login remains.
