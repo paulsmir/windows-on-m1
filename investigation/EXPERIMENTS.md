@@ -36804,3 +36804,26 @@ ordinary. Exact cleanup and ordinary restore follow.
 `1c29a8b43c807c02da6bb1dcd449bd91661e7f34a876b8a80d7bdab0ea515a2b`,
 `40d3c723d3b2e271e918c8dd9c3d787fcfffe3f97fa818825cbd14804ddce905`.
 Run only these hashes.
+
+**EXP602 HARDWARE FINAL — INCONCLUSIVE BEFORE BAND AGX.** Pass1 reached exact
+D589 swap9. Before pass2 TA/3D or D589, Windows bugchecked119/2 with Arg2
+`STATUS_INVALID_PARAMETER`; stack is
+`dxgmms2!VidSchiSendToExecutionQueue -> VidSchiSubmitRenderCommand`. The added
+combined-frame validation extended post-fence qualification beyond the fixed5s
+producer delay, so pass2 reached SubmitCommand while Backend remained Submitted/
+WorkScheduled. This is not a band geometry verdict. Dump/analysis SHA256:
+`655c32f3ee02d6e1728765a2e32d7efe12bfa3e2324dcbcf63b2e5aaaeb351ee` /
+`a9a705e111ce51e9f92d487fe96d7570c71b9086b4b1d394f775c05ecd713c4c`.
+Hidden recovery removed exact602; ordinary cleanup also removed the hash-matched
+stale service/SYS. Current Code28/no package/service/module,8CPU/NVMe2/USB5/
+keyboard1. Bugcheck1 is retained evidence; Event129x2 telemetry.
+
+# EXP603 — producer-only spacing for the two-band discriminator
+
+**PREREGISTERED. WHY THIS HYPOTHESIS:** EXP602 pass1+D589 and119/2 occurred
+before pass2 hardware; measured qualification exceeds5s. Commit
+`246054076646ad93058198ad6e635d25700acdfc` changes only the producer inter-pass
+wait to15s. Reuse byte-exact signed EXP602 KMD/UMD and rebuild/hash producer
+only. PASS criteria remain final sequence2, bottom color, combined hash
+`0xa94060683c9ca325`, exact fence/D589 and no reset/fault. No scheduler or GPU
+change is part of this discriminator.

@@ -458,6 +458,14 @@ allocation at aligned offset `0x7d0000`, geometry2560x800 and color
 hash is `0xa94060683c9ca325`. Same-context D3DKMTRender reuses the returned Windows
 buffers; no software composition occurs. Build/hardware pending.
 
+EXP602 is INCONCLUSIVE for band geometry: pass1 reached D589 swap9, but pass2
+arrived while qualification work still held Backend.Phase=Submitted and
+WorkScheduled=1. SubmitCommand returned `STATUS_INVALID_PARAMETER`; dxgkrnl
+bugchecked119/2. Dump SHA `655c32f3...b351ee`; exact package/stale service cleanup
+completed and ordinary is Code28/no package/service/module. EXP603 commit
+`246054076646ad93058198ad6e635d25700acdfc` changes only producer spacing from
+5s to15s; KMD602 remains exact.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX
