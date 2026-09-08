@@ -37475,3 +37475,19 @@ AGX, PBE, UAT, DCP, timeout, capability or placement change. Full373 tests
 GREEN. Build exact617 from exact616 plus only `backend_platform_windows.c`.
 PASS requires device ACTIVE before pass2 and fence257 Submit/worker; identical
 HUNG closes diagnostic persistence and requires a core completion-contract fix.
+
+**EXP617 BUILD FREEZE.** Exact30.0.617.0 pinned WDK26100/MSVC14.44 KMD, UMD
+and unchanged producer passed analysis, Universal, Inf2Cat/TestSign and version
+gates; producer has zero warnings/errors and KMD inherited C28251 only. Exact616
+base plus the sole backend worker overlay SHA256 is
+`989a3ba43d1757a35383e3d51c26b893c85adda29d6ccfe91fd52083af7d6f77`.
+ZIP/SYS/INF/CAT/UMD/producer SHA256 are respectively
+`c8ed27d31142b94c1e7c7c19506e876c5b13eb4b314f4f6bc410cfc65cafc24f`,
+`9e09f73f5ec2a4a55acdeffd831008ec5c6b2b23152efc0489941d4f48184d43`,
+`4bba2af5e7588af1d4d0d0bb7aea422a9322e9100d989e1334a36c5b3dd367f4`,
+`9f95ead7ba20acfe373ac15b37f56e35703f6860e32e349a699d2356517683c4`,
+`8b47f9281ee618221a065df0e381826068d2e87fef28bb5c85b50bff9ba281b4`,
+`33ffe5c2b2e4d37a1e28fc81818db30887606dbd1646dc41887ce42e5e865ad2`.
+Workflow/launch SHA256 are
+`48bcdae95453c1f778ce837b1c1d0480f79928a79f6865b8235db8a97211ec2e`
+and `3f12b828a88523288e20f3238c0550f809fe26a54f1cec8eeff61b59baca3b08`.
