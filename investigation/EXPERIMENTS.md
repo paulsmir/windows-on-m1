@@ -36958,3 +36958,12 @@ PASS requires pass2 QueuedBufferCount1, sequence2 physical TA/3D completion,
 exact Windows fence, bottom-band combined FNV `0xa94060683c9ca325`, D589 and
 Resetting0/SchedulerFaulted0. Any earlier failure or queued0 rejects the
 fullness hypothesis. Recovery is exact package cleanup and ordinary377/392.
+
+**EXP606 PRODUCER FREEZE.** Pinned ARM64 Release/code-analysis build passed with
+zero warnings/errors. Producer SHA256
+`e8a4feedabffca8e648ffd78e35fa88153ca0af7d03b3b3e4b4f98152c005283`;
+build log SHA256
+`ebcfd47a9e58d6113bb0e965262fc00ed1fc028fa620174a43b8b493b368bff8`;
+workflow SHA256
+`a5db524ca6c924286c7af0953617d954866e496f3c0f04487b41d94a4baa981a`.
+Reuse exact signed EXP602 package SHA `439d2ffc...05ad5e2`.
