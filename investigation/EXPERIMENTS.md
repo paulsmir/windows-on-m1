@@ -37185,3 +37185,15 @@ contexts remain fail-closed. All other EXP610 instrumentation and exact
 ping-pong behavior are unchanged; full368 tests GREEN. Build exact30.0.611.0
 from EXP610 R2 plus this one file, preserve complete host stdout, run once, and
 classify the first missing Render/Patch/Submit transition before any fix.
+
+**EXP611 BUILD FREEZE.** Exact30.0.611.0 pinned KMD/UMD/producer, analysis,
+Universal, Inf2Cat/TestSign and version gates passed. ZIP/SYS/INF/CAT/UMD/
+producer SHA256 are
+`de103e3978c44f08aaa184c230ca1a41db242e701428672e71d5cd51ce90271b`,
+`d1197cf07eea1e8c25f618048cd2c209403a0b3012700072f189d3a0cb46ec05`,
+`83f57c6b14c8d78edd0952c293410d89ee27b89b9e91503f421f28f6969cd075`,
+`494a518745d9bf2d9701a4255bb69c079acae9514ad84303082246603d66ac45`,
+`a64825a6c12bf4a479bd5f14eba72ece39606a36b8e08bc2569a367a72f18f6f`,
+`929437335bb9b75bcb3aa245bacfbed91997356f5551894a21dc960f9238092f`.
+Workflow SHA256
+`349a2444740ea02d64ba747740ddbc70a0040b8a6f21591a3ac4024db2ed2c9f`.
