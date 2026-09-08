@@ -36832,3 +36832,25 @@ change is part of this discriminator.
 `439d2ffc0564914b96f7cce28205ea4f1909ae19e79e4376b9148a77006ad5e2`;
 producer-only pinned build/code analysis PASS, SHA256
 `616ceabb7a5d05a914a3d5b8d9cdfc1e35babb1c55e600f95b934dde50d5a0ed`.
+
+**EXP603 FINAL — INCONCLUSIVE BEFORE PASS2 SUBMIT.** Spacing removed119/2.
+Both D3DKMTRender calls returned success, but pass2 reported
+`QueuedBufferCount=0`; terminal/visible receipts remain sequence1/fence256 and
+uniform hash `0x27592755b9c32325`. Thus pass2 stayed in D3DKMT batching and no
+band AGX/D589 occurred. Terminal/visible/evidence hashes:
+`8550338c9b082ecc665e95a145221ffec784c4ad7828e6a7a3075a4444978dc2`,
+`e549a171f5b3dba9f213a163daabbd0d6f263542e4acceb8fc59e557f8ff4538`,
+`362c0673c28e1d971b94b2edddbf8c55b39167500e57b0e834037a514b429e47`.
+Exact cleanup and ordinary restore: Code28/no package/service/module,8CPU,
+NVMe2/USB5/keyboard1,bugcheck0; Event129x1 telemetry.
+
+# EXP604 — fresh standard context for pass2
+
+**PREREGISTERED. WHY THIS HYPOTHESIS:** pinned WDK shows D3DKMT_RENDER has no
+flush flag; its QueuedBufferCount0 exactly explains absent pass2 receipts.
+D3DKMTSubmitCommand is inapplicable because current NewCommandBuffer GPU VA is0.
+Commit `bc747f971f4e391b06dac1a2e75099ca5c449719` keeps the same resident
+allocation but destroys completed context1 and creates a normal context2 before
+pass2, making it the first command on that context and reusing the hardware-
+proven queue path. KMD602 remains byte-exact. PASS remains sequence2, band
+pixels, combined hash, exact fence/D589, Resetting0/SchedulerFaulted0.
