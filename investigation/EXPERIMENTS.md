@@ -38142,3 +38142,23 @@ replacement and stale output generation. Render-focused122 tests GREEN; pinned
 WDK/SDK26100 KMD/UMD/producer provisional build and Universal validation GREEN
 with inherited C28251 only. Freeze exact source, build/sign/hash candidate631,
 then execute phases FRAME1, FRAME2 and HOLD_BEGIN/HOLD_PASS only.
+
+**EXP631 BUILD FREEZE.** Exact30.0.631.0 built from immutable EXP630 plus the
+committed query/ownership/output-queue/producer overlay at
+`43a0254c329ce62d771034f0b61238b870cc1d05`. Pinned WDK/SDK26100,
+MSVC14.44, KMD/UMD analysis, Universal, Inf2Cat/TestSign, coherent version,
+producer expected-build631 and workflow parser gates pass with inherited C28251
+only. Overlay/ZIP/SYS/INF/CAT/UMD/producer SHA256 are
+`806d01a5cb5ffdb34dc1507aff882a0dec35424999d7b602cff8e3ed7951158d`,
+`86c2b25eaa14d7a9ee35391d44183363611234d4ef24a8e5a014d756cc68cd5f`,
+`f4fdc4c66c870271d0e5a5ffb235dd976bff98c9a5e20b2ffc1f5158ac591612`,
+`b8ef1b2360517fe3f7130f97a21e2380f998216e6ed8d56e4f23a87b38374c49`,
+`dd107b9bc63c39594bc58f214e0e350430217f60a783ab74020772b50adf7f19`,
+`6fbf916c32d4e4f2643fb7e96c67a9d5eeb3164074492faf2cb97831ac0fb382`,
+`a16cb16f9cd15e2182464835d6dd16b292943c812eb2c766925fa8c5f02b7408`.
+Workflow/launch SHA256 are
+`1f7216795bc96c9ef3f2a8c3b82d8bbd2a667e0b9e9874ea386a5369330ffcae`
+and `e882f6e7e4cb1eba3ea8f796b4ae68422db4a0d1bbf6ced3e51812ed75f85b6f`.
+The exact hardware stop condition is flushed `PHASE HOLD_PASS`; collect A-C
+evidence while the process and allocations remain alive, then shut down the
+whole guest and clean the exact package from emergency. No retirement DDI runs.
