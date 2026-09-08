@@ -20,6 +20,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_CREATEDEVICE createDevice = {0};
   D3DKMT_CREATEPAGINGQUEUE createPagingQueue = {0};
   D3DKMT_CREATECONTEXT createContext = {0};
+  D3DKMT_CREATECONTEXT secondContext = {0};
   D3DKMT_CREATEALLOCATION createAllocation = {0};
   D3DDDI_ALLOCATIONINFO allocationInfo[2] = {0};
   ADMISSION_ALLOCATION_DESCRIPTION allocation[2] = {0};
@@ -137,6 +138,20 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       createContext.pPatchLocationList == NULL)
     goto cleanup;
 
+  secondContext.hDevice = createDevice.hDevice;
+  secondContext.NodeOrdinal = 0u;
+  secondContext.EngineAffinity = 1u;
+  secondContext.Flags.Value = 0u;
+  secondContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
+  contextStatus = D3DKMTCreateContext(&secondContext);
+  if (!NT_SUCCESS(contextStatus) || secondContext.hContext == 0u ||
+      secondContext.pCommandBuffer == NULL ||
+      secondContext.CommandBufferSize < sizeof(command) ||
+      secondContext.pAllocationList == NULL ||
+      secondContext.AllocationListSize < 2u ||
+      secondContext.pPatchLocationList == NULL)
+    goto cleanup;
+
   if (!AdmissionAllocationDescribe(
           APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
           APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT, 4u,
@@ -206,28 +221,10 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           createContext.pPatchLocationList, createContext.PatchLocationListSize,
           createContext.CommandBuffer);
   for (pass = 0u; pass < 2u; ++pass) {
-    if (pass != 0u) {
+    D3DKMT_CREATECONTEXT *activeContext =
+        pass == 0u ? &createContext : &secondContext;
+    if (pass != 0u)
       Sleep(15000u);
-      ZeroMemory(&destroyContext, sizeof(destroyContext));
-      destroyContext.hContext = createContext.hContext;
-      destroyContextStatus = D3DKMTDestroyContext(&destroyContext);
-      if (!NT_SUCCESS(destroyContextStatus))
-        goto cleanup;
-      ZeroMemory(&createContext, sizeof(createContext));
-      createContext.hDevice = createDevice.hDevice;
-      createContext.NodeOrdinal = 0u;
-      createContext.EngineAffinity = 1u;
-      createContext.Flags.Value = 0u;
-      createContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
-      contextStatus = D3DKMTCreateContext(&createContext);
-      if (!NT_SUCCESS(contextStatus) || createContext.hContext == 0u ||
-          createContext.pCommandBuffer == NULL ||
-          createContext.CommandBufferSize < sizeof(command) ||
-          createContext.pAllocationList == NULL ||
-          createContext.AllocationListSize < 2u ||
-          createContext.pPatchLocationList == NULL)
-        goto cleanup;
-    }
     ZeroMemory(&command, sizeof(command));
     command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
     command.Version = ADMISSION_UMD_COMMAND_VERSION;
@@ -242,17 +239,17 @@ int __cdecl wmain(int argc, wchar_t **argv) {
         ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
         : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
     command.Rop = AdmissionUmdRopPatCopy;
-    CopyMemory(createContext.pCommandBuffer, &command, sizeof(command));
-    ZeroMemory(createContext.pAllocationList,
-               2u * sizeof(createContext.pAllocationList[0]));
-    createContext.pAllocationList[0].hAllocation = allocationHandles[0];
-    createContext.pAllocationList[0].WriteOperation = 1u;
-    createContext.pAllocationList[1].hAllocation = allocationHandles[1];
-    createContext.pAllocationList[1].WriteOperation = 1u;
-    ZeroMemory(createContext.pPatchLocationList,
-               sizeof(createContext.pPatchLocationList[0]));
+    CopyMemory(activeContext->pCommandBuffer, &command, sizeof(command));
+    ZeroMemory(activeContext->pAllocationList,
+               2u * sizeof(activeContext->pAllocationList[0]));
+    activeContext->pAllocationList[0].hAllocation = allocationHandles[0];
+    activeContext->pAllocationList[0].WriteOperation = 1u;
+    activeContext->pAllocationList[1].hAllocation = allocationHandles[1];
+    activeContext->pAllocationList[1].WriteOperation = 1u;
+    ZeroMemory(activeContext->pPatchLocationList,
+               sizeof(activeContext->pPatchLocationList[0]));
     ZeroMemory(&render, sizeof(render));
-    render.hContext = createContext.hContext;
+    render.hContext = activeContext->hContext;
     render.CommandOffset = 0u;
     render.CommandLength = sizeof(command);
     render.AllocationCount = ARRAYSIZE(allocationHandles);
@@ -273,12 +270,12 @@ int __cdecl wmain(int argc, wchar_t **argv) {
         render.NewAllocationListSize < 2u ||
         render.pNewPatchLocationList == NULL)
       goto cleanup;
-    createContext.pCommandBuffer = render.pNewCommandBuffer;
-    createContext.CommandBufferSize = render.NewCommandBufferSize;
-    createContext.pAllocationList = render.pNewAllocationList;
-    createContext.AllocationListSize = render.NewAllocationListSize;
-    createContext.pPatchLocationList = render.pNewPatchLocationList;
-    createContext.PatchLocationListSize = render.NewPatchLocationListSize;
+    activeContext->pCommandBuffer = render.pNewCommandBuffer;
+    activeContext->CommandBufferSize = render.NewCommandBufferSize;
+    activeContext->pAllocationList = render.pNewAllocationList;
+    activeContext->AllocationListSize = render.NewAllocationListSize;
+    activeContext->pPatchLocationList = render.pNewPatchLocationList;
+    activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
   }
   Sleep(10000u);
   if (requestEngineTdr) {
@@ -286,7 +283,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     tdr.NodeOrdinal = 0u;
     escape.hAdapter = adapters[selectedAdapter].hAdapter;
     escape.hDevice = createDevice.hDevice;
-    escape.hContext = createContext.hContext;
+    escape.hContext = secondContext.hContext;
     escape.Type = D3DKMT_ESCAPE_TDRDBGCTRL;
     escape.pPrivateDriverData = &tdr;
     escape.PrivateDriverDataSize = sizeof(tdr);
@@ -311,6 +308,14 @@ cleanup:
       result = 1;
   }
   if (createContext.hContext != 0u) {
+    if (secondContext.hContext != 0u) {
+      ZeroMemory(&destroyContext, sizeof(destroyContext));
+      destroyContext.hContext = secondContext.hContext;
+      destroyContextStatus = D3DKMTDestroyContext(&destroyContext);
+      if (!NT_SUCCESS(destroyContextStatus))
+        result = 1;
+    }
+    ZeroMemory(&destroyContext, sizeof(destroyContext));
     destroyContext.hContext = createContext.hContext;
     destroyContextStatus = D3DKMTDestroyContext(&destroyContext);
     if (!NT_SUCCESS(destroyContextStatus))

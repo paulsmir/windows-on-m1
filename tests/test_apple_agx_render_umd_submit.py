@@ -101,7 +101,17 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("D3DKMT_RENDER render = {0}", source)
         self.assertNotIn("render.Flags.RenderKm = 1", source)
         self.assertEqual(source.count("D3DKMTRender(&render)"), 1)
-        self.assertEqual(source.count("D3DKMTCreateContext(&createContext)"), 2)
+        self.assertEqual(source.count("D3DKMTCreateContext(&createContext)"), 1)
+        self.assertEqual(source.count("D3DKMTCreateContext(&secondContext)"), 1)
+        first_create = source.index("D3DKMTCreateContext(&createContext)")
+        second_create = source.index("D3DKMTCreateContext(&secondContext)")
+        render_loop = source.index("for (pass = 0u; pass < 2u; ++pass)")
+        self.assertLess(first_create, second_create)
+        self.assertLess(second_create, render_loop)
+        self.assertNotIn(
+            "D3DKMTDestroyContext(&destroyContext)",
+            source[render_loop:source.index("cleanup:")],
+        )
         self.assertNotIn("D3DKMTLock2(", source)
         self.assertIn("D3DDDIFMT_A8R8G8B8, 0u, &allocation", source)
         self.assertIn("createContext.pCommandBuffer", source)
@@ -157,7 +167,7 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         )
         self.assertIn("makeResident.NumAllocations = ARRAYSIZE(allocationHandles)", producer)
         self.assertIn("render.AllocationCount = ARRAYSIZE(allocationHandles)", producer)
-        self.assertIn("createContext.pAllocationList[1].WriteOperation = 1u", producer)
+        self.assertIn("activeContext->pAllocationList[1].WriteOperation = 1u", producer)
         self.assertNotIn(
             "allocation[1].Reserved = ADMISSION_UMD_CORRELATION_COOKIE",
             producer,
