@@ -450,6 +450,14 @@ offset0 and a 2560x800 bottom half begins at 16KiB-aligned byte offset
 `0x7d0000`. Derive and test a two-pass full/bottom-half hardware pattern before
 claiming linear layout or repeated production Present.
 
+EXP602 implementation commit
+`55e1cd446ab25508f783c780efe7653de121b005` is offline GREEN. It keeps the
+EXP601 full-frame pass, then submits one exact bottom-half job to the same
+allocation at aligned offset `0x7d0000`, geometry2560x800 and color
+`0xffcc8844` encoded as FP16 `0x3c00344438443a66`. The final combined expected
+hash is `0xa94060683c9ca325`. Same-context D3DKMTRender reuses the returned Windows
+buffers; no software composition occurs. Build/hardware pending.
+
 ## Standing constraints
 
 - Preserve retained-root/broker, platform, memory, display, scheduler and AGX

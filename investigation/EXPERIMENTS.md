@@ -36755,3 +36755,41 @@ object36 offset0 and identifies a bottom-half linear subregion at byte offset
 `800*10240 = 0x7d0000`, which is exactly 16KiB aligned. Derive a two-pass
 full-frame/bottom-half contract from the same m1n1 geometry and Mesa PBE rules;
 do not change queues, firmware, completion or DCP.
+
+# EXP602 — two-band nonuniform direct AGX framebuffer
+
+**PREREGISTERED 2026-09-08T01:05Z. WHY THIS HYPOTHESIS:** EXP601 proves a
+TDR-safe uniform full-size job but a constant image cannot distinguish linear
+layout correctness. Object36 offset0 contains FP16 clear quartet
+`0x3c00326630442c44`. The bottom half starts at `800*10240=0x7d0000`, exactly
+16KiB aligned, so a second clear can reuse the same allocation without a new
+mapping or unaligned PBE address.
+
+**WINDOWS CONTRACT:** one device/context/allocation lifetime issues two ordered
+D3DKMTRender calls, using returned command/allocation/patch buffers for pass2.
+The producer waits5s between submissions and retains the allocation10s after
+pass2. Both use normal residency and exact Windows fences.
+
+**AGX/ASAHI CONTRACT:** pass1 is exact EXP601. Pinned m1n1 formulas for
+2560x800 give tiles80x25, macrotiles20x8, size1=200, screen `0x1804f`, TPC
+`0x28000`, tilemap `0x3200`, cluster map `0x19000`; existing max buffers suffice.
+Mesa linear PBE keeps stride-minus4=10236. Pass2 clears only the aligned bottom
+subrange with `0xffcc8844`, FP16 `0x3c00344438443a66`.
+
+**TRANSLATION:** commit `55e1cd446ab25508f783c780efe7653de121b005`
+allows only full-frame and this exact bottom-band tuple, rejects all others,
+preserves rollback, and validates the entire combined surface before existing
+D589. Expected combined FNV is `0xa94060683c9ca325`.
+
+**WHAT IS STILL UNKNOWN:** whether same-context pass2 is accepted, physically
+executes with monotonic queue/fence state, preserves top, writes distinct bottom
+and latches the combined image with Resetting0/SchedulerFaulted0. PASS requires
+final sequence2, exact band pixels, combined hash/fence/D589. No firmware/queue/
+completion/DCP/broker/capability change. Full367 tests GREEN.
+
+Root `55e1cd446ab25508f783c780efe7653de121b005`, m1n1
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000`, Mu
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`; EXP601-base overlay SHA256
+`e485821e862a9e7469512d965153c11c17342255c248c7923f551a1932fffc8e`.
+Build exact30.0.602.0 on pinned FRYZZING, then one natural run from clean
+ordinary. Exact cleanup and ordinary restore follow.
