@@ -11,6 +11,21 @@ WINDOWS = ROOT / "drivers" / "apple-agx" / "windows"
 
 
 class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
+    def test_qualification_producer_uses_versioned_win32_transport_mode(self):
+        """Catches hardware-testing a legacy command while claiming AD02 transport."""
+        source = (WINDOWS / "one-shot" / "apple_agx_d3dkmt_render.c").read_text()
+        project = (WINDOWS / "one-shot" / "AppleAgxD3dKmRender.vcxproj").read_text()
+        self.assertIn('L"--win32-transport-two-frame"', source)
+        self.assertIn("ADMISSION_WIN32_CONTEXT_CREATE win32Context", source)
+        self.assertIn("createContext.pPrivateDriverData = &win32Context", source)
+        self.assertIn("secondContext.pPrivateDriverData = &win32Context", source)
+        self.assertIn("AgxWin32TransportBuildClear", source)
+        self.assertIn("0xff00ff00u", source)
+        self.assertIn("0xff0000ffu", source)
+        self.assertIn("APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP", source)
+        self.assertIn(r"..\..\mesa\winsys\agx_win32_transport.c", project)
+        self.assertIn(r"..\..\shared\src\apple_agx_win32_abi.c", project)
+
     def test_win32_command_is_copied_once_before_owner_validation(self):
         """Catches reparsing mutable user bytes or omitting the context epoch."""
         callbacks = (RENDER / "src" / "callbacks.c").read_text()
@@ -36,6 +51,10 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         self.assertIn("opened->Win32Generation", allocation)
         self.assertIn("AdmissionWin32SnapshotRenderCommand", wrapper[render_start:])
         self.assertIn("Args->AllocationListSize > 1u ?", wrapper[render_start:])
+        self.assertIn(
+            "Args->MultipassOffset = win32Command ? Args->CommandLength :",
+            wrapper[render_start:],
+        )
         self.assertIn(r"src\render_win32_transport.c", project)
         self.assertIn(r"..\shared\src\apple_agx_win32_abi.c", project)
 
@@ -102,8 +121,9 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
         project = (WINDOWS / "one-shot" / "AppleAgxD3dKmRender.vcxproj").read_text()
         self.assertNotIn("apple_agx_one_shot_abi.h", source)
         self.assertNotIn("TestContext", source)
-        self.assertNotIn("createContext.pPrivateDriverData", source)
-        self.assertNotIn("createContext.PrivateDriverDataSize", source)
+        self.assertIn("if (win32TransportMode)", source)
+        self.assertIn("createContext.pPrivateDriverData = &win32Context", source)
+        self.assertIn("createContext.PrivateDriverDataSize = sizeof(win32Context)", source)
         self.assertIn("GetProcAddress", source)
         self.assertIn('"D3DKMTEnumAdapters3"', source)
         self.assertIn("PFND3DKMT_ENUMADAPTERS3", source)

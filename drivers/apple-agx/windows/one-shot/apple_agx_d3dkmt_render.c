@@ -6,6 +6,8 @@
 
 #include "render_allocation.h"
 #include "render_umd_command.h"
+#include "render_win32_transport.h"
+#include "agx_win32_transport.h"
 #include "apple_agx_exp208_gdi.h"
 #include "apple_agx_scanout.h"
 #include "render_qualification.h"
@@ -306,6 +308,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DDDI_ALLOCATIONINFO allocationInfo[2] = {0};
   ADMISSION_ALLOCATION_DESCRIPTION allocation[2] = {0};
   ADMISSION_UMD_COLOR_FILL_COMMAND command = {0};
+  ADMISSION_WIN32_CONTEXT_CREATE win32Context = {0};
+  AGX_WIN32_CLEAR_REQUEST win32Clear = {0};
   D3DKMT_RENDER render = {0};
   D3DKMT_ESCAPE escape = {0};
   D3DKMT_TDRDBGCTRL_ESCAPE tdr = {0};
@@ -378,6 +382,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   BOOL retireAfterSignal = FALSE;
   BOOL standardPresentMode = FALSE;
   BOOL standardBltMode = FALSE;
+  BOOL win32TransportMode = FALSE;
 
   (void)setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -407,12 +412,20 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     standardBltMode = TRUE;
     targetFrames = 1u;
   }
+  else if (argc == 2 &&
+           wcscmp(argv[1], L"--win32-transport-two-frame") == 0) {
+    win32TransportMode = TRUE;
+    holdNoCleanup = TRUE;
+    retireAfterSignal = TRUE;
+    targetFrames = 2u;
+  }
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
              L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup|"
              L"--retire-after-signal|--repeat-retire-after-signal|"
-             L"--standard-present-hold|--standard-blt-present-hold]\n");
+             L"--standard-present-hold|--standard-blt-present-hold|"
+             L"--win32-transport-two-frame]\n");
     return 2;
   }
   if (standardBltMode) {
@@ -487,10 +500,19 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   createContext.EngineAffinity = 1u;
   createContext.Flags.Value = 0u;
   createContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
+  if (win32TransportMode) {
+    win32Context.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;
+    win32Context.Version = ADMISSION_WIN32_CONTEXT_VERSION;
+    win32Context.Bytes = sizeof(win32Context);
+    win32Context.Generation = 0x06490001u;
+    createContext.pPrivateDriverData = &win32Context;
+    createContext.PrivateDriverDataSize = sizeof(win32Context);
+  }
   contextStatus = D3DKMTCreateContext(&createContext);
   if (!NT_SUCCESS(contextStatus) || createContext.hContext == 0u ||
       createContext.pCommandBuffer == NULL ||
-      createContext.CommandBufferSize < sizeof(command) ||
+      createContext.CommandBufferSize <
+          (win32TransportMode ? 128u : sizeof(command)) ||
       createContext.pAllocationList == NULL ||
       createContext.AllocationListSize < 2u ||
       createContext.pPatchLocationList == NULL)
@@ -501,10 +523,15 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   secondContext.EngineAffinity = 1u;
   secondContext.Flags.Value = 0u;
   secondContext.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
+  if (win32TransportMode) {
+    secondContext.pPrivateDriverData = &win32Context;
+    secondContext.PrivateDriverDataSize = sizeof(win32Context);
+  }
   contextStatus = D3DKMTCreateContext(&secondContext);
   if (!NT_SUCCESS(contextStatus) || secondContext.hContext == 0u ||
       secondContext.pCommandBuffer == NULL ||
-      secondContext.CommandBufferSize < sizeof(command) ||
+      secondContext.CommandBufferSize <
+          (win32TransportMode ? 128u : sizeof(command)) ||
       secondContext.pAllocationList == NULL ||
       secondContext.AllocationListSize < 2u ||
       secondContext.pPatchLocationList == NULL)
@@ -650,30 +677,66 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     D3DKMT_CREATECONTEXT *activeContext =
         (pass & 1u) == 0u ? &createContext : &secondContext;
     UINT commandOffset;
+    UINT commandBytes;
     if (pass != 0u) {
       (void)QueryDeviceExecutionState(
           createDevice.hDevice, L"before_pass2", &executionState);
     }
     ZeroMemory(&command, sizeof(command));
-    command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
-    command.Version = ADMISSION_UMD_COMMAND_VERSION;
-    command.Bytes = sizeof(command);
-    command.Opcode = AdmissionUmdOpcodeColorFill;
-    command.Destination.Top = 0u;
-    command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
-    command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
-    command.DestinationAllocationIndex =
-        (standardPresentMode || standardBltMode) ? 1u : (pass & 1u);
-    command.Color = (pass & 1u) == 0u
-        ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
-        : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
-    command.Rop = AdmissionUmdRopPatCopy;
-    if (activeContext->CommandBufferSize < sizeof(command))
-      goto cleanup;
     commandOffset = 0u;
-    CopyMemory(
-        (unsigned char *)activeContext->pCommandBuffer + commandOffset,
-        &command, sizeof(command));
+    if (win32TransportMode) {
+      ZeroMemory(&win32Clear, sizeof(win32Clear));
+      win32Clear.Generation = win32Context.Generation;
+      win32Clear.AllocationIndex = pass & 1u;
+      win32Clear.AllocationBytes =
+          APPLE_AGX_EXP208_FRAMEBUFFER_BYTES;
+      win32Clear.Format = AppleAgxWin32FormatBgra8Unorm;
+      win32Clear.Color = (pass & 1u) == 0u ?
+          0xff00ff00u : 0xff0000ffu;
+      win32Clear.SurfaceWidth = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+      win32Clear.SurfaceHeight = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+      win32Clear.SurfacePitch = APPLE_AGX_EXP208_FRAMEBUFFER_PITCH;
+      win32Clear.Left = 0u;
+      win32Clear.Top = (pass & 1u) == 0u ?
+          0u : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_TOP;
+      win32Clear.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+      win32Clear.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+      if (AgxWin32TransportBuildClear(
+              &win32Clear, activeContext->pCommandBuffer,
+              activeContext->CommandBufferSize, &commandBytes) !=
+          AppleAgxWin32AbiSuccess)
+        goto cleanup;
+      command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
+      command.Version = ADMISSION_UMD_COMMAND_VERSION;
+      command.Bytes = sizeof(command);
+      command.Opcode = AdmissionUmdOpcodeColorFill;
+      command.Destination.Top = win32Clear.Top;
+      command.Destination.Right = win32Clear.Right;
+      command.Destination.Bottom = win32Clear.Bottom;
+      command.DestinationAllocationIndex = win32Clear.AllocationIndex;
+      command.Color = win32Clear.Color;
+      command.Rop = AdmissionUmdRopPatCopy;
+    } else {
+      command.Magic = ADMISSION_UMD_COMMAND_MAGIC;
+      command.Version = ADMISSION_UMD_COMMAND_VERSION;
+      command.Bytes = sizeof(command);
+      command.Opcode = AdmissionUmdOpcodeColorFill;
+      command.Destination.Top = 0u;
+      command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
+      command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+      command.DestinationAllocationIndex =
+          (standardPresentMode || standardBltMode) ? 1u : (pass & 1u);
+      command.Color = (pass & 1u) == 0u
+          ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
+          : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
+      command.Rop = AdmissionUmdRopPatCopy;
+      if (activeContext->CommandBufferSize < sizeof(command))
+        goto cleanup;
+      CopyMemory(
+          (unsigned char *)activeContext->pCommandBuffer + commandOffset,
+          &command, sizeof(command));
+      commandBytes = sizeof(command);
+    }
     ZeroMemory(activeContext->pAllocationList,
                2u * sizeof(activeContext->pAllocationList[0]));
     activeContext->pAllocationList[0].hAllocation = allocationHandles[0];
@@ -685,7 +748,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     ZeroMemory(&render, sizeof(render));
     render.hContext = activeContext->hContext;
     render.CommandOffset = commandOffset;
-    render.CommandLength = sizeof(command);
+    render.CommandLength = commandBytes;
     render.AllocationCount = ARRAYSIZE(allocationHandles);
     render.PatchLocationCount = 0u;
     wprintf(L"PHASE FRAME%lu_RENDER_BEGIN\n", pass + 1u);
@@ -693,11 +756,11 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     wprintf(L"RENDER_IN pass=%lu context=%lu command_offset=%u "
             L"command_length=%u command_capacity=%u "
             L"command_hash=0x%016llx destination_index=%lu\n",
-            pass, activeContext->hContext, commandOffset, (UINT)sizeof(command),
+            pass, activeContext->hContext, commandOffset, commandBytes,
             activeContext->CommandBufferSize,
             HashBytes((unsigned char *)activeContext->pCommandBuffer +
                           commandOffset,
-                      sizeof(command)),
+                      commandBytes),
             command.DestinationAllocationIndex);
     renderStatus = D3DKMTRender(&render);
     wprintf(L"RENDER_OUT pass=%lu command=%p command_bytes=%u allocations=%p "
@@ -714,7 +777,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     if (!NT_SUCCESS(renderStatus))
       goto cleanup;
     if (render.pNewCommandBuffer == NULL ||
-        render.NewCommandBufferSize < sizeof(command) ||
+        render.NewCommandBufferSize <
+            (win32TransportMode ? 128u : sizeof(command)) ||
         render.pNewAllocationList == NULL ||
         render.NewAllocationListSize < 2u ||
         render.pNewPatchLocationList == NULL)
@@ -831,7 +895,9 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     presentExpected[pass].ExpectedColor = command.Color;
     presentExpected[pass].PixelsExpected =
         APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH *
-        APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
+        ((win32TransportMode && (pass & 1u) != 0u)
+             ? APPLE_AGX_EXP208_FRAMEBUFFER_BAND_HEIGHT
+             : APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT);
     presentExpected[pass].Format = (unsigned int)D3DDDIFMT_A8R8G8B8;
     presentExpected[pass].Width = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
     presentExpected[pass].Height = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;

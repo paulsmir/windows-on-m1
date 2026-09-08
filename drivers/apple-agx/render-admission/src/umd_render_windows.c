@@ -593,7 +593,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   location->SplitOffset = prepared.Patches[0].SplitOffset;
   Args->pDmaBuffer = (PUCHAR)Args->pDmaBuffer + prepared.DmaBytes;
   Args->pPatchLocationListOut = location + 1;
-  Args->MultipassOffset = sizeof(command);
+  Args->MultipassOffset = win32Command ? Args->CommandLength :
+                                         sizeof(command);
   traceDmaBytes = prepared.DmaBytes;
   tracePatches = 1u;
 

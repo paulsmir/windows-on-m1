@@ -21,7 +21,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>..\..\render-admission\include;..\..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\render-admission\include;..\..\shared\include;..\..\mesa\winsys;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>UNICODE;_UNICODE;DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;ADMISSION_EXPECTED_CANDIDATE_BUILD=$(AdmissionExpectedBuild);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <WarningLevel>Level4</WarningLevel>
@@ -36,11 +36,16 @@
     <ClCompile Include="..\..\render-admission\src\render_allocation.c" />
     <ClCompile Include="..\..\render-admission\src\render_umd_command.c" />
     <ClCompile Include="..\..\render-admission\src\render_qualification.c" />
+    <ClCompile Include="..\..\shared\src\apple_agx_win32_abi.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_transport.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\render-admission\include\render_allocation.h" />
     <ClInclude Include="..\..\render-admission\include\render_umd_command.h" />
     <ClInclude Include="..\..\render-admission\include\render_qualification.h" />
+    <ClInclude Include="..\..\render-admission\include\render_win32_transport.h" />
+    <ClInclude Include="..\..\shared\include\apple_agx_win32_abi.h" />
+    <ClInclude Include="..\..\mesa\winsys\agx_win32_transport.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
