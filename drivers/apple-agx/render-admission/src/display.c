@@ -653,9 +653,28 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
   ADMISSION_SOURCE_ADDRESS_RECEIPT *receipt = NULL;
   NTSTATUS status = STATUS_INVALID_PARAMETER;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_STANDARD_PRESENT_EVENT traceEvent;
+#endif
 
   if (context == NULL)
     return status;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  RtlZeroMemory(&traceEvent, sizeof(traceEvent));
+  traceEvent.Kind = AdmissionStandardPresentEventSourceAddress;
+  traceEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  traceEvent.Irql = KeGetCurrentIrql();
+  if (SetVidPnSourceAddress != NULL) {
+    traceEvent.Flags = SetVidPnSourceAddress->Flags.Value;
+    traceEvent.SourceId = SetVidPnSourceAddress->VidPnSourceId;
+    traceEvent.Segment = SetVidPnSourceAddress->PrimarySegment;
+    traceEvent.PrimaryAddress =
+        (ULONGLONG)SetVidPnSourceAddress->PrimaryAddress.QuadPart;
+    traceEvent.AllocationToken =
+        (ULONGLONG)(ULONG_PTR)SetVidPnSourceAddress->hAllocation;
+  }
+  AdmissionStandardPresentTraceRecordWindows(context, &traceEvent);
+#endif
   /* A single caller owns the immutable receipt; no wait, allocation, registry
    * call or deferred work is introduced into this potentially DIRQL path. */
   if (InterlockedCompareExchange(&context->SourceAddressReceiptState, 1, 0) == 0) {
@@ -699,6 +718,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSetVidPnSourceAddress(
     receipt->Status = (ULONG)status;
     InterlockedExchange(&context->SourceAddressReceiptState, 2);
   }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+  traceEvent.Status = (ULONG)status;
+  AdmissionStandardPresentTraceRecordWindows(context, &traceEvent);
+#endif
   return status;
 }
 

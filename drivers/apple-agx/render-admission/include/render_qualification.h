@@ -6,6 +6,57 @@
 #define ADMISSION_PRESENT_QUERY_CAPACITY 16u
 #define ADMISSION_RETIREMENT_QUERY_MAGIC 0x51524741u /* AGRQ */
 #define ADMISSION_RETIREMENT_QUERY_VERSION 1u
+#define ADMISSION_STANDARD_PRESENT_TRACE_MAGIC 0x54504741u /* AGPT */
+#define ADMISSION_STANDARD_PRESENT_TRACE_VERSION 1u
+#define ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY 16u
+
+typedef enum _ADMISSION_STANDARD_PRESENT_TRACE_COMMAND {
+  AdmissionStandardPresentTraceArm = 1u,
+  AdmissionStandardPresentTraceRead = 2u,
+} ADMISSION_STANDARD_PRESENT_TRACE_COMMAND;
+
+typedef enum _ADMISSION_STANDARD_PRESENT_EVENT_KIND {
+  AdmissionStandardPresentEventPresent = 1u,
+  AdmissionStandardPresentEventSourceAddress = 2u,
+} ADMISSION_STANDARD_PRESENT_EVENT_KIND;
+
+typedef enum _ADMISSION_STANDARD_PRESENT_EVENT_PHASE {
+  AdmissionStandardPresentPhaseEntry = 1u,
+  AdmissionStandardPresentPhaseExit = 2u,
+} ADMISSION_STANDARD_PRESENT_EVENT_PHASE;
+
+typedef struct _ADMISSION_STANDARD_PRESENT_EVENT {
+  unsigned int Valid, Kind, Phase, Sequence;
+  unsigned int Status, Irql, Flags, SourceId;
+  unsigned int Segment, NumSrc, NumDst, Reserved;
+  unsigned long long ContextToken, AllocationToken, PrimaryAddress;
+} ADMISSION_STANDARD_PRESENT_EVENT;
+
+typedef struct _ADMISSION_STANDARD_PRESENT_TRACE {
+  unsigned int Magic, Version, Bytes, Command;
+  unsigned int CandidateBuild, BootGeneration, EventCount, Overflow;
+  ADMISSION_STANDARD_PRESENT_EVENT
+      Events[ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY];
+} ADMISSION_STANDARD_PRESENT_TRACE;
+
+typedef struct _ADMISSION_STANDARD_PRESENT_EXPECTATION {
+  unsigned int CandidateBuild, BootGeneration, Flags, SourceId, Segment;
+  unsigned int Reserved0, Reserved1, Reserved2;
+  unsigned long long ContextToken, AllocationToken;
+} ADMISSION_STANDARD_PRESENT_EXPECTATION;
+
+typedef enum _ADMISSION_STANDARD_PRESENT_PRODUCER_STAGE {
+  AdmissionStandardPresentOwnerAcquired = 1u,
+  AdmissionStandardPresentModeSet = 2u,
+  AdmissionStandardPresentFrameConfirmed = 3u,
+  AdmissionStandardPresentFlipBackConfirmed = 4u,
+  AdmissionStandardPresentOwnerReleased = 5u,
+} ADMISSION_STANDARD_PRESENT_PRODUCER_STAGE;
+
+typedef struct _ADMISSION_STANDARD_PRESENT_PRODUCER_STATE {
+  unsigned int OwnerAcquired, ModeSet, FrameConfirmed;
+  unsigned int FlipBackConfirmed, OwnerReleased, Invalid;
+} ADMISSION_STANDARD_PRESENT_PRODUCER_STATE;
 
 typedef enum _ADMISSION_PRESENT_PURPOSE {
   AdmissionPresentPurposeUnknown = 0u,
@@ -110,5 +161,24 @@ int AdmissionRetirementQueryBuild(
 int AdmissionRetirementQueryAccept(
     const ADMISSION_RETIREMENT_QUERY *Record,
     const ADMISSION_RETIREMENT_EXPECTATION *Expected);
+void AdmissionStandardPresentTraceInitialize(
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    ADMISSION_STANDARD_PRESENT_TRACE_COMMAND Command,
+    unsigned int CandidateBuild, unsigned int BootGeneration);
+int AdmissionStandardPresentTraceAppend(
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    const ADMISSION_STANDARD_PRESENT_EVENT *Event);
+int AdmissionStandardPresentTraceAccept(
+    const ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
+    unsigned int *PresentSequence,
+    unsigned int *SourceAddressSequence);
+void AdmissionStandardPresentProducerInitialize(
+    ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State);
+int AdmissionStandardPresentProducerAdvance(
+    ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State,
+    ADMISSION_STANDARD_PRESENT_PRODUCER_STAGE Stage);
+int AdmissionStandardPresentProducerCanCleanup(
+    const ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State);
 
 #endif

@@ -839,6 +839,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   APPLE_AGX_FIXED_PANEL_RESULT result;
   APPLE_AGX_U64 surface_offset = 0ULL;
   APPLE_AGX_U64 sequence = 0ULL;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_DISPLAY_OUTPUT_LEASE fallbackCandidate;
   ADMISSION_BACKEND_OUTPUT_VIEW fallbackView;
   ADMISSION_LOCAL_MEMORY_VIEW fallbackMemory;
@@ -848,6 +849,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   AdmissionDisplayOutputLeaseInitialize(&fallbackCandidate);
   RtlZeroMemory(&fallbackView, sizeof(fallbackView));
   RtlZeroMemory(&fallbackMemory, sizeof(fallbackMemory));
+#endif
   if (runtime == NULL || Args == NULL || Args->VidPnSourceId != 0u ||
       Args->hAllocation == NULL ||
       Args->PrimarySegment != ADMISSION_MEMORY_LOCAL_SEGMENT ||
@@ -875,6 +877,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       APPLE_AGX_SCANOUT_J313_SURFACE_SIZE, 0ULL, &surface_offset);
   if (address_result != AppleAgxLocalSegmentAddressOk)
     return STATUS_INVALID_ADDRESS;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (surface_offset == 0ULL) {
     if (!NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
             Context, (ULONGLONG)Args->PrimaryAddress.QuadPart,
@@ -908,9 +911,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       return STATUS_DEVICE_BUSY;
     fallbackCandidateValid = TRUE;
   }
+#endif
   if (InterlockedCompareExchange(&runtime->PresentGate, 1, 0) != 0) {
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
     if (fallbackCandidateValid)
       (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
+#endif
     return STATUS_DEVICE_BUSY;
   }
   InterlockedExchange64(
@@ -921,14 +927,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
   if (result != AppleAgxFixedPanelOk) {
     InterlockedExchange64(&runtime->PendingPhysicalAddress, 0);
     InterlockedExchange(&runtime->PresentGate, 0);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
     if (fallbackCandidateValid)
       (void)AdmissionDisplayOutputLeaseRetire(&fallbackCandidate);
+#endif
     return result == AppleAgxFixedPanelPresentPending
                ? STATUS_DEVICE_BUSY
                : STATUS_DEVICE_HARDWARE_ERROR;
   }
   InterlockedExchange64(&runtime->PendingSequence, (LONG64)sequence);
   InterlockedExchange(&runtime->PendingValid, 1);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (fallbackCandidateValid) {
     BOOLEAN retained;
     KeAcquireSpinLock(&runtime->LeaseLock, &oldIrql);
@@ -951,6 +960,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionScanoutQueuePresent(
       return STATUS_INVALID_DEVICE_STATE;
     }
   }
+#endif
   return STATUS_SUCCESS;
 }
 

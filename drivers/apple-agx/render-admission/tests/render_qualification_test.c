@@ -43,6 +43,135 @@ int main(void) {
   ADMISSION_PRESENT_PRODUCER_STATE producer;
   ADMISSION_RETIREMENT_QUERY retirement;
   ADMISSION_RETIREMENT_EXPECTATION retirementExpected;
+  ADMISSION_STANDARD_PRESENT_TRACE standardTrace;
+  ADMISSION_STANDARD_PRESENT_EVENT standardEvent;
+  ADMISSION_STANDARD_PRESENT_EXPECTATION standardExpected;
+  unsigned int presentSequence = 0u;
+  unsigned int sourceAddressSequence = 0u;
+  ADMISSION_STANDARD_PRESENT_PRODUCER_STATE standardProducer;
+
+  /* Catches a trace that reports a successful user Present without the exact
+   * later source-address transition for the same primary allocation. */
+  AdmissionStandardPresentTraceInitialize(
+      &standardTrace, AdmissionStandardPresentTraceRead,
+      641u, 0x12345678u);
+  memset(&standardEvent, 0, sizeof(standardEvent));
+  standardEvent.Kind = AdmissionStandardPresentEventPresent;
+  standardEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  standardEvent.Sequence = 1u;
+  standardEvent.ContextToken = 0x1111222233334444ULL;
+  standardEvent.Flags = 0x4u;
+  standardEvent.NumSrc = 1u;
+  standardEvent.NumDst = 0u;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  standardEvent.Phase = AdmissionStandardPresentPhaseExit;
+  standardEvent.Sequence = 2u;
+  standardEvent.Status = 0u;
+  standardEvent.AllocationToken = 0xffff800012340000ULL;
+  standardEvent.NumSrc = 1u;
+  standardEvent.NumDst = 0u;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  memset(&standardEvent, 0, sizeof(standardEvent));
+  standardEvent.Kind = AdmissionStandardPresentEventSourceAddress;
+  standardEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  standardEvent.Sequence = 3u;
+  standardEvent.AllocationToken = 0xffff800012340000ULL;
+  standardEvent.SourceId = 0u;
+  standardEvent.Segment = 2u;
+  standardEvent.PrimaryAddress = 0x9bcf90000ULL;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  standardEvent.Phase = AdmissionStandardPresentPhaseExit;
+  standardEvent.Sequence = 4u;
+  standardEvent.Status = 0u;
+  assert(AdmissionStandardPresentTraceAppend(&standardTrace, &standardEvent));
+  memset(&standardExpected, 0, sizeof(standardExpected));
+  standardExpected.CandidateBuild = 641u;
+  standardExpected.BootGeneration = 0x12345678u;
+  standardExpected.ContextToken = 0x1111222233334444ULL;
+  standardExpected.AllocationToken = 0xffff800012340000ULL;
+  standardExpected.Flags = 0x4u;
+  standardExpected.SourceId = 0u;
+  standardExpected.Segment = 2u;
+  assert(AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  assert(presentSequence == 2u && sourceAddressSequence == 4u);
+  standardExpected.ContextToken = 0ULL;
+  standardExpected.AllocationToken = 0ULL;
+  assert(AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardExpected.ContextToken = 0x1111222233334444ULL;
+  standardExpected.AllocationToken = 0xffff800012340000ULL;
+  standardTrace.Events[0].Valid = 0u;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[0].Valid = 1u;
+  standardTrace.Events[2].AllocationToken = 0xffff800012350000ULL;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[2].AllocationToken = standardExpected.AllocationToken;
+  standardTrace.Events[2].Sequence = 2u;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[2].Sequence = 3u;
+  standardTrace.Events[3].Status = 0xc000000dU;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[3].Status = 0u;
+  standardTrace.Events[3].AllocationToken = 0xffff800012350000ULL;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Events[3].AllocationToken = standardExpected.AllocationToken;
+  standardTrace.Overflow = 1u;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.Overflow = 0u;
+  standardTrace.BootGeneration++;
+  assert(!AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+  standardTrace.BootGeneration--;
+  assert(AdmissionStandardPresentTraceAccept(
+      &standardTrace, &standardExpected,
+      &presentSequence, &sourceAddressSequence));
+
+  /* Catches destruction of an exclusive primary before the presented surface
+   * has been replaced and VidPN source ownership has been released. */
+  AdmissionStandardPresentProducerInitialize(&standardProducer);
+  assert(AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerAcquired));
+  assert(!AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentModeSet));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentFrameConfirmed));
+  assert(!AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerReleased));
+  assert(!AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentFlipBackConfirmed));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerReleased));
+  assert(AdmissionStandardPresentProducerCanCleanup(&standardProducer));
+  assert(!AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentFrameConfirmed));
+
+  AdmissionStandardPresentProducerInitialize(&standardProducer);
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerAcquired));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentModeSet));
+  assert(AdmissionStandardPresentProducerAdvance(
+      &standardProducer, AdmissionStandardPresentOwnerReleased));
+  assert(AdmissionStandardPresentProducerCanCleanup(&standardProducer));
 
   AdmissionPresentProducerInitialize(&producer, 1, 16u);
   assert(AdmissionPresentProducerCanCleanup(&producer, 0));

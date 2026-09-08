@@ -71,11 +71,25 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyDevice(HANDLE Device) {
 _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
     HANDLE Context, DXGKARG_PRESENT *Present) {
   ADMISSION_DEVICE *device = NULL;
+  ADMISSION_CONTEXT *adapter = NULL;
   ADMISSION_RENDER_CONTEXT *renderContext =
       (ADMISSION_RENDER_CONTEXT *)Context;
   ADMISSION_OPEN_ALLOCATION *source;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
   NTSTATUS status;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  ADMISSION_STANDARD_PRESENT_EVENT traceEvent;
+  RtlZeroMemory(&traceEvent, sizeof(traceEvent));
+  traceEvent.Kind = AdmissionStandardPresentEventPresent;
+  traceEvent.Phase = AdmissionStandardPresentPhaseEntry;
+  traceEvent.ContextToken = (ULONGLONG)(ULONG_PTR)Context;
+  traceEvent.Irql = KeGetCurrentIrql();
+  if (Present != NULL) {
+    traceEvent.Flags = Present->Flags.Value;
+    traceEvent.NumSrc = Present->NumSrcAllocations;
+    traceEvent.NumDst = Present->NumDstAllocations;
+  }
+#endif
 
   if (renderContext != NULL &&
       renderContext->Object.Magic == ADMISSION_OBJECT_CONTEXT_MAGIC &&
@@ -88,16 +102,27 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
                ADMISSION_OBJECT_DEVICE_MAGIC)
     device = (ADMISSION_DEVICE *)Context;
 
-  if (device != NULL && device->Object.Adapter != NULL)
-    AdmissionFlushPresentTransfer(CONTAINING_RECORD(device->Object.Adapter,
-        ADMISSION_CONTEXT, ObjectAdapter));
-  if (device != NULL && device->Object.Adapter != NULL)
-    AdmissionFlushGdiReceipt(CONTAINING_RECORD(device->Object.Adapter,
-        ADMISSION_CONTEXT, ObjectAdapter));
+  if (device != NULL && device->Object.Adapter != NULL &&
+      device->Object.Adapter->Magic == ADMISSION_OBJECT_ADAPTER_MAGIC)
+    adapter = CONTAINING_RECORD(device->Object.Adapter,
+                                ADMISSION_CONTEXT, ObjectAdapter);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
+
+  if (adapter != NULL)
+    AdmissionFlushPresentTransfer(adapter);
+  if (adapter != NULL)
+    AdmissionFlushGdiReceipt(adapter);
   if (device != NULL && Present != NULL && Present->Flags.Value == 1u) {
     status = AdmissionPresentBlt(device, Context, Present);
     if (!NT_SUCCESS(status))
       AdmissionRecordPresent(device, Present, 4u, status);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)status;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return status;
   }
 
@@ -109,6 +134,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       Present->pAllocationInfo[DXGK_PRESENT_DESTINATION_INDEX]
               .hDeviceSpecificAllocation != NULL) {
     AdmissionRecordPresent(device, Present, 1u, STATUS_INVALID_PARAMETER);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)STATUS_INVALID_PARAMETER;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return STATUS_INVALID_PARAMETER;
   }
   source = (ADMISSION_OPEN_ALLOCATION *)
@@ -118,6 +148,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       source->Device != device || source->Allocation == NULL ||
       source->Allocation->Magic != ADMISSION_ALLOCATION_OBJECT_MAGIC) {
     AdmissionRecordPresent(device, Present, 2u, STATUS_INVALID_HANDLE);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status = (ULONG)STATUS_INVALID_HANDLE;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return STATUS_INVALID_HANDLE;
   }
   description = &source->Allocation->Description;
@@ -128,8 +163,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPresent(
       description->Format != (UINT)D3DDDIFMT_A8R8G8B8) {
     AdmissionRecordPresent(device, Present, 3u,
                             STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE);
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+    traceEvent.Status =
+        (ULONG)STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+    AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
     return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
   }
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  traceEvent.Phase = AdmissionStandardPresentPhaseExit;
+  traceEvent.Status = (ULONG)STATUS_SUCCESS;
+  traceEvent.AllocationToken = (ULONGLONG)(ULONG_PTR)source->Allocation;
+  AdmissionStandardPresentTraceRecordWindows(adapter, &traceEvent);
+#endif
   return STATUS_SUCCESS;
 }
 
@@ -154,14 +201,21 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiDestroyOverlay(HANDLE Overlay) {
 
 _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     HANDLE Adapter, const DXGKARG_ESCAPE *Args) {
-#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
   ULONG magic;
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   ADMISSION_PRESENT_QUERY *query;
+#endif
   if (context == NULL || !context->Started || Args == NULL ||
       Args->pPrivateDriverData == NULL || Args->PrivateDriverDataSize < sizeof(magic))
     return STATUS_INVALID_PARAMETER;
   magic = *(const ULONG *)Args->pPrivateDriverData;
+  if (magic == ADMISSION_STANDARD_PRESENT_TRACE_MAGIC &&
+      Args->PrivateDriverDataSize == sizeof(ADMISSION_STANDARD_PRESENT_TRACE))
+    return AdmissionStandardPresentTraceQueryWindows(
+        context, (ADMISSION_STANDARD_PRESENT_TRACE *)Args->pPrivateDriverData);
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (magic == ADMISSION_RETIREMENT_QUERY_MAGIC &&
       Args->PrivateDriverDataSize == sizeof(ADMISSION_RETIREMENT_QUERY))
     return AdmissionScanoutRetireQualification(
@@ -171,6 +225,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiEscape(
     return STATUS_INVALID_PARAMETER;
   query = (ADMISSION_PRESENT_QUERY *)Args->pPrivateDriverData;
   return AdmissionScanoutQueryQualification(context, query);
+#else
+  return STATUS_INVALID_PARAMETER;
+#endif
 #else
   UNREFERENCED_PARAMETER(Adapter);
   UNREFERENCED_PARAMETER(Args);

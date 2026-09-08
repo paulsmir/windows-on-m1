@@ -116,6 +116,90 @@ static ADMISSION_PRESENT_WAIT_RESULT WaitForPresentation(
   return waitResult;
 }
 
+static NTSTATUS QueryStandardPresentTrace(
+    D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device, D3DKMT_HANDLE Context,
+    ADMISSION_STANDARD_PRESENT_TRACE_COMMAND Command,
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace) {
+  D3DKMT_ESCAPE escape = {0};
+  if (Trace == NULL)
+    return (NTSTATUS)0xc000000dL;
+  AdmissionStandardPresentTraceInitialize(
+      Trace, Command, 0u, 0u);
+  escape.hAdapter = Adapter;
+  escape.hDevice = Device;
+  escape.hContext = Context;
+  escape.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+  escape.pPrivateDriverData = Trace;
+  escape.PrivateDriverDataSize = sizeof(*Trace);
+  return D3DKMTEscape(&escape);
+}
+
+static void PrintStandardPresentTrace(
+    const wchar_t *Point, const ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    NTSTATUS Status) {
+  unsigned int index;
+  if (Trace == NULL)
+    return;
+  wprintf(L"STANDARD_TRACE point=%ls query=0x%08lx build=%u boot=%u "
+          L"events=%u overflow=%u\n",
+          Point, (ULONG)Status, Trace->CandidateBuild,
+          Trace->BootGeneration, Trace->EventCount, Trace->Overflow);
+  for (index = 0u; index < Trace->EventCount &&
+                   index < ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY;
+       ++index) {
+    const ADMISSION_STANDARD_PRESENT_EVENT *event = &Trace->Events[index];
+    wprintf(L"STANDARD_EVENT index=%u valid=%u kind=%u phase=%u sequence=%u "
+            L"status=0x%08x irql=%u flags=0x%x context=0x%llx "
+            L"allocation=0x%llx source=%u segment=%u address=0x%llx "
+            L"src_count=%u dst_count=%u\n",
+            index, event->Valid, event->Kind, event->Phase, event->Sequence,
+            event->Status, event->Irql, event->Flags, event->ContextToken,
+            event->AllocationToken, event->SourceId, event->Segment,
+            event->PrimaryAddress, event->NumSrc, event->NumDst);
+  }
+  fflush(stdout);
+}
+
+static NTSTATUS WaitForStandardPresent(
+    D3DKMT_HANDLE Adapter, D3DKMT_HANDLE Device, D3DKMT_HANDLE Context,
+    const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace) {
+  ULONGLONG deadline = GetTickCount64() + 15000u;
+  unsigned int presentSequence = 0u;
+  unsigned int sourceAddressSequence = 0u;
+  NTSTATUS status = (NTSTATUS)0x00000103L;
+  do {
+    status = QueryStandardPresentTrace(
+        Adapter, Device, Context, AdmissionStandardPresentTraceRead, Trace);
+    if (!NT_SUCCESS(status))
+      break;
+    if (AdmissionStandardPresentTraceAccept(
+            Trace, Expected, &presentSequence, &sourceAddressSequence)) {
+      wprintf(L"STANDARD_CORRELATION present_sequence=%u "
+              L"source_address_sequence=%u\n",
+              presentSequence, sourceAddressSequence);
+      fflush(stdout);
+      return (NTSTATUS)0;
+    }
+    Sleep(1u);
+  } while (GetTickCount64() < deadline);
+  PrintStandardPresentTrace(L"wait_failure", Trace, status);
+  return NT_SUCCESS(status) ? (NTSTATUS)0xc00000b5L : status;
+}
+
+static NTSTATUS SubmitStandardFlip(
+    D3DKMT_HANDLE Context, D3DKMT_HANDLE Source) {
+  D3DKMT_PRESENT present = {0};
+  present.hContext = Context;
+  present.hWindow = NULL;
+  present.VidPnSourceId = 0u;
+  present.hSource = Source;
+  present.hDestination = 0u;
+  present.FlipInterval = D3DDDI_FLIPINTERVAL_ONE;
+  present.Flags.Flip = 1u;
+  return D3DKMTPresent(&present);
+}
+
 int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_ENUMADAPTERS3 enumeration = {0};
   D3DKMT_ADAPTERINFO adapters[MAX_ENUM_ADAPTERS] = {0};
@@ -138,6 +222,14 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   D3DKMT_DESTROYDEVICE destroyDevice = {0};
   D3DDDI_DESTROYPAGINGQUEUE destroyPagingQueue = {0};
   D3DKMT_CLOSEADAPTER closeAdapter = {0};
+  D3DKMT_SETVIDPNSOURCEOWNER sourceOwner = {0};
+  D3DKMT_VIDPNSOURCEOWNER_TYPE sourceOwnerType =
+      D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVE;
+  D3DDDI_VIDEO_PRESENT_SOURCE_ID sourceId = 0u;
+  D3DKMT_SETDISPLAYMODE setDisplayMode = {0};
+  ADMISSION_STANDARD_PRESENT_TRACE standardTrace = {0};
+  ADMISSION_STANDARD_PRESENT_EXPECTATION standardExpected = {0};
+  ADMISSION_STANDARD_PRESENT_PRODUCER_STATE standardProducer = {0};
   D3DKMT_HANDLE allocationHandles[2] = {0};
   PFND3DKMT_ENUMADAPTERS3 enumAdapters3 = NULL;
   HMODULE gdiModule = NULL;
@@ -178,11 +270,17 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   NTSTATUS destroyDeviceStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS destroyPagingQueueStatus = (NTSTATUS)0xc0000001L;
   NTSTATUS closeAdapterStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS sourceOwnerStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS setDisplayModeStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS standardPresentStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS standardTraceStatus = (NTSTATUS)0xc0000001L;
+  NTSTATUS sourceOwnerReleaseStatus = (NTSTATUS)0xc0000001L;
   int result = 1;
   BOOL requestEngineTdr = FALSE;
   BOOL observeOnePass = FALSE;
   BOOL holdNoCleanup = FALSE;
   BOOL retireAfterSignal = FALSE;
+  BOOL standardPresentMode = FALSE;
 
   (void)setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -202,15 +300,22 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     retireAfterSignal = TRUE;
     targetFrames = ADMISSION_PRESENT_QUERY_CAPACITY;
   }
+  else if (argc == 2 &&
+           wcscmp(argv[1], L"--standard-present-hold") == 0) {
+    standardPresentMode = TRUE;
+    targetFrames = 1u;
+  }
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
              L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup|"
-             L"--retire-after-signal|--repeat-retire-after-signal]\n");
+             L"--retire-after-signal|--repeat-retire-after-signal|"
+             L"--standard-present-hold]\n");
     return 2;
   }
   AdmissionPresentProducerInitialize(
       &producerState, holdNoCleanup, targetFrames);
+  AdmissionStandardPresentProducerInitialize(&standardProducer);
   gdiModule = GetModuleHandleW(L"gdi32.dll");
   if (gdiModule == NULL)
     goto cleanup;
@@ -310,6 +415,12 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   allocationInfo[0].PrivateDriverDataSize = sizeof(allocation[0]);
   allocationInfo[1].pPrivateDriverData = &allocation[1];
   allocationInfo[1].PrivateDriverDataSize = sizeof(allocation[1]);
+  if (standardPresentMode) {
+    allocationInfo[0].Flags.Primary = 1u;
+    allocationInfo[0].VidPnSourceId = 0u;
+    allocationInfo[1].Flags.Primary = 1u;
+    allocationInfo[1].VidPnSourceId = 0u;
+  }
   createAllocation.hDevice = createDevice.hDevice;
   createAllocation.NumAllocations = 1u;
   createAllocation.pAllocationInfo = &allocationInfo[0];
@@ -349,6 +460,53 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     }
   }
 
+  if (standardPresentMode) {
+    standardTraceStatus = QueryStandardPresentTrace(
+        adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+        createContext.hContext, AdmissionStandardPresentTraceArm,
+        &standardTrace);
+    PrintStandardPresentTrace(L"armed", &standardTrace, standardTraceStatus);
+    if (!NT_SUCCESS(standardTraceStatus) ||
+        standardTrace.CandidateBuild != ADMISSION_EXPECTED_CANDIDATE_BUILD ||
+        standardTrace.BootGeneration == 0u)
+      goto cleanup;
+    standardExpected.CandidateBuild = ADMISSION_EXPECTED_CANDIDATE_BUILD;
+    standardExpected.BootGeneration = standardTrace.BootGeneration;
+    standardExpected.Flags = 0x4u;
+    standardExpected.SourceId = 0u;
+    standardExpected.Segment = 2u;
+
+    sourceOwner.hDevice = createDevice.hDevice;
+    sourceOwner.pType = &sourceOwnerType;
+    sourceOwner.pVidPnSourceId = &sourceId;
+    sourceOwner.VidPnSourceCount = 1u;
+    wprintf(L"PHASE STANDARD_OWNER_ACQUIRE_BEGIN\n");
+    sourceOwnerStatus = D3DKMTSetVidPnSourceOwner(&sourceOwner);
+    wprintf(L"PHASE STANDARD_OWNER_ACQUIRE_END status=0x%08lx\n",
+            (ULONG)sourceOwnerStatus);
+    fflush(stdout);
+    if (!NT_SUCCESS(sourceOwnerStatus) ||
+        !AdmissionStandardPresentProducerAdvance(
+            &standardProducer, AdmissionStandardPresentOwnerAcquired))
+      goto cleanup;
+
+    setDisplayMode.hDevice = createDevice.hDevice;
+    setDisplayMode.hPrimaryAllocation = allocationHandles[0];
+    setDisplayMode.ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
+    setDisplayMode.DisplayOrientation = D3DDDI_ROTATION_IDENTITY;
+    wprintf(L"PHASE STANDARD_MODE_SET_BEGIN allocation=%u\n",
+            allocationHandles[0]);
+    setDisplayModeStatus = D3DKMTSetDisplayMode(&setDisplayMode);
+    wprintf(L"PHASE STANDARD_MODE_SET_END status=0x%08lx attribute=0x%x\n",
+            (ULONG)setDisplayModeStatus,
+            setDisplayMode.PrivateDriverFormatAttribute);
+    fflush(stdout);
+    if (!NT_SUCCESS(setDisplayModeStatus) ||
+        !AdmissionStandardPresentProducerAdvance(
+            &standardProducer, AdmissionStandardPresentModeSet))
+      goto cleanup;
+  }
+
   wprintf(L"BUFFERS device_command=%p device_command_bytes=%u "
           L"device_allocations=%p device_allocation_count=%u "
           L"device_patches=%p device_patch_count=%u "
@@ -378,7 +536,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     command.Destination.Top = 0u;
     command.Destination.Right = APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH;
     command.Destination.Bottom = APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT;
-    command.DestinationAllocationIndex = pass & 1u;
+    command.DestinationAllocationIndex =
+        standardPresentMode ? 1u : (pass & 1u);
     command.Color = (pass & 1u) == 0u
         ? APPLE_AGX_EXP208_FRAMEBUFFER_BASE_COLOR
         : APPLE_AGX_EXP208_FRAMEBUFFER_BAND_COLOR;
@@ -440,6 +599,76 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     activeContext->AllocationListSize = render.NewAllocationListSize;
     activeContext->pPatchLocationList = render.pNewPatchLocationList;
     activeContext->PatchLocationListSize = render.NewPatchLocationListSize;
+    if (standardPresentMode) {
+      wprintf(L"PHASE STANDARD_PRESENT_BEGIN source=%u\n",
+              allocationHandles[1]);
+      standardPresentStatus = SubmitStandardFlip(
+          activeContext->hContext, allocationHandles[1]);
+      wprintf(L"PHASE STANDARD_PRESENT_END status=0x%08lx\n",
+              (ULONG)standardPresentStatus);
+      fflush(stdout);
+      if (!NT_SUCCESS(standardPresentStatus))
+        goto preserve_resources;
+      standardTraceStatus = WaitForStandardPresent(
+          adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+          activeContext->hContext, &standardExpected, &standardTrace);
+      PrintStandardPresentTrace(
+          L"render_present", &standardTrace, standardTraceStatus);
+      if (!NT_SUCCESS(standardTraceStatus) ||
+          !AdmissionStandardPresentProducerAdvance(
+              &standardProducer, AdmissionStandardPresentFrameConfirmed))
+        goto preserve_resources;
+      wprintf(L"PHASE STANDARD_PRESENT_PASS boot=%u\n",
+              standardTrace.BootGeneration);
+      wprintf(L"PHASE STANDARD_PRESENT_HOLD "
+              L"signal=C:\\Users\\pavel\\AppleAgx-standard-present-retire.go\n");
+      fflush(stdout);
+      while (GetFileAttributesW(
+                 L"C:\\Users\\pavel\\AppleAgx-standard-present-retire.go") ==
+             INVALID_FILE_ATTRIBUTES)
+        Sleep(100u);
+
+      standardTraceStatus = QueryStandardPresentTrace(
+          adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+          activeContext->hContext, AdmissionStandardPresentTraceArm,
+          &standardTrace);
+      if (!NT_SUCCESS(standardTraceStatus))
+        goto preserve_resources;
+      standardExpected.BootGeneration = standardTrace.BootGeneration;
+      wprintf(L"PHASE STANDARD_FLIPBACK_BEGIN source=%u\n",
+              allocationHandles[0]);
+      standardPresentStatus = SubmitStandardFlip(
+          activeContext->hContext, allocationHandles[0]);
+      wprintf(L"PHASE STANDARD_FLIPBACK_END status=0x%08lx\n",
+              (ULONG)standardPresentStatus);
+      fflush(stdout);
+      if (!NT_SUCCESS(standardPresentStatus))
+        goto preserve_resources;
+      standardTraceStatus = WaitForStandardPresent(
+          adapters[selectedAdapter].hAdapter, createDevice.hDevice,
+          activeContext->hContext, &standardExpected, &standardTrace);
+      PrintStandardPresentTrace(
+          L"flip_back", &standardTrace, standardTraceStatus);
+      if (!NT_SUCCESS(standardTraceStatus) ||
+          !AdmissionStandardPresentProducerAdvance(
+              &standardProducer, AdmissionStandardPresentFlipBackConfirmed))
+        goto preserve_resources;
+
+      ZeroMemory(&sourceOwner, sizeof(sourceOwner));
+      sourceOwner.hDevice = createDevice.hDevice;
+      wprintf(L"PHASE STANDARD_OWNER_RELEASE_BEGIN\n");
+      sourceOwnerReleaseStatus = D3DKMTSetVidPnSourceOwner(&sourceOwner);
+      wprintf(L"PHASE STANDARD_OWNER_RELEASE_END status=0x%08lx\n",
+              (ULONG)sourceOwnerReleaseStatus);
+      fflush(stdout);
+      if (!NT_SUCCESS(sourceOwnerReleaseStatus) ||
+          !AdmissionStandardPresentProducerAdvance(
+              &standardProducer, AdmissionStandardPresentOwnerReleased))
+        goto preserve_resources;
+      Sleep(1000u);
+      result = 0;
+      goto cleanup;
+    }
     ZeroMemory(&presentExpected[pass], sizeof(presentExpected[pass]));
     presentExpected[pass].CandidateBuild = ADMISSION_EXPECTED_CANDIDATE_BUILD;
     presentExpected[pass].BootGeneration =
@@ -635,6 +864,27 @@ preserve_resources:
     Sleep(1000u);
 
 cleanup:
+  if (standardPresentMode && standardProducer.OwnerAcquired != 0u &&
+      standardProducer.OwnerReleased == 0u &&
+      standardProducer.FrameConfirmed == 0u) {
+    ZeroMemory(&sourceOwner, sizeof(sourceOwner));
+    sourceOwner.hDevice = createDevice.hDevice;
+    sourceOwnerReleaseStatus = D3DKMTSetVidPnSourceOwner(&sourceOwner);
+    if (NT_SUCCESS(sourceOwnerReleaseStatus))
+      (void)AdmissionStandardPresentProducerAdvance(
+          &standardProducer, AdmissionStandardPresentOwnerReleased);
+  }
+  if (standardPresentMode &&
+      !AdmissionStandardPresentProducerCanCleanup(&standardProducer)) {
+    wprintf(L"PHASE STANDARD_PRESERVE owner=%u mode=%u frame=%u "
+            L"flipback=%u released=%u\n",
+            standardProducer.OwnerAcquired, standardProducer.ModeSet,
+            standardProducer.FrameConfirmed,
+            standardProducer.FlipBackConfirmed,
+            standardProducer.OwnerReleased);
+    fflush(stdout);
+    goto preserve_resources;
+  }
   if (!AdmissionPresentProducerCanCleanup(
           &producerState, allocationHandles[0] != 0u)) {
     wprintf(L"PHASE PRESERVE_AFTER_ERROR render=0x%08lx completed=%u "
@@ -704,6 +954,11 @@ cleanup:
           L"\"resident\":\"0x%08lx\",\"paging_fence\":%llu,"
           L"\"render\":\"0x%08lx\",\"queued\":%u,"
           L"\"engine_tdr\":\"0x%08lx\","
+          L"\"source_owner\":\"0x%08lx\","
+          L"\"set_display_mode\":\"0x%08lx\","
+          L"\"standard_present\":\"0x%08lx\","
+          L"\"standard_trace\":\"0x%08lx\","
+          L"\"source_owner_release\":\"0x%08lx\","
           L"\"destroy_allocation\":\"0x%08lx\","
           L"\"destroy_context\":\"0x%08lx\","
           L"\"destroy_paging_queue\":\"0x%08lx\","
@@ -717,6 +972,9 @@ cleanup:
           (ULONG)residentStatus, makeResident.PagingFenceValue,
           (ULONG)renderStatus, render.QueuedBufferCount,
           (ULONG)resetStatus,
+          (ULONG)sourceOwnerStatus, (ULONG)setDisplayModeStatus,
+          (ULONG)standardPresentStatus, (ULONG)standardTraceStatus,
+          (ULONG)sourceOwnerReleaseStatus,
           (ULONG)destroyAllocationStatus,
           (ULONG)destroyContextStatus, (ULONG)destroyPagingQueueStatus,
           (ULONG)destroyDeviceStatus,

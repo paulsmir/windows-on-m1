@@ -392,6 +392,10 @@ typedef struct _ADMISSION_CONTEXT {
   volatile LONG RenderCorrelationWorkerQueued;
   volatile LONG RenderCorrelationStopping;
   ADMISSION_RENDER_CORRELATION_STATE RenderCorrelation;
+  volatile LONG StandardPresentTraceArmed;
+  volatile LONG StandardPresentTraceNext;
+  volatile LONG StandardPresentTraceOverflow;
+  ADMISSION_STANDARD_PRESENT_TRACE StandardPresentTrace;
 #endif
   UINT PagingFence;
   UINT PagingLastSubmittedFence;
@@ -439,6 +443,12 @@ typedef struct _ADMISSION_OPEN_ALLOCATION {
 } ADMISSION_OPEN_ALLOCATION;
 
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+NTSTATUS AdmissionStandardPresentTraceQueryWindows(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _Inout_ ADMISSION_STANDARD_PRESENT_TRACE *Query);
+VOID AdmissionStandardPresentTraceRecordWindows(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_STANDARD_PRESENT_EVENT *Event);
 VOID AdmissionUmdRenderTraceArm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,

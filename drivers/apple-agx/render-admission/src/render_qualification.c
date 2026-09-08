@@ -214,4 +214,174 @@ int AdmissionRetirementQueryAccept(
       Record->PhysicalAddress == Expected->ExpectedPoolPhysical;
 }
 
+void AdmissionStandardPresentTraceInitialize(
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    ADMISSION_STANDARD_PRESENT_TRACE_COMMAND Command,
+    unsigned int CandidateBuild, unsigned int BootGeneration) {
+  if (Trace == QUERY_NULL)
+    return;
+  query_zero(Trace, sizeof(*Trace));
+  Trace->Magic = ADMISSION_STANDARD_PRESENT_TRACE_MAGIC;
+  Trace->Version = ADMISSION_STANDARD_PRESENT_TRACE_VERSION;
+  Trace->Bytes = sizeof(*Trace);
+  Trace->Command = Command;
+  Trace->CandidateBuild = CandidateBuild;
+  Trace->BootGeneration = BootGeneration;
+}
+
+int AdmissionStandardPresentTraceAppend(
+    ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    const ADMISSION_STANDARD_PRESENT_EVENT *Event) {
+  ADMISSION_STANDARD_PRESENT_EVENT copy;
+  if (Trace == QUERY_NULL || Event == QUERY_NULL ||
+      Trace->Magic != ADMISSION_STANDARD_PRESENT_TRACE_MAGIC ||
+      Trace->Version != ADMISSION_STANDARD_PRESENT_TRACE_VERSION ||
+      Trace->Bytes != sizeof(*Trace) || Trace->CandidateBuild == 0u ||
+      Trace->BootGeneration == 0u || Event->Sequence == 0u ||
+      Event->Kind < AdmissionStandardPresentEventPresent ||
+      Event->Kind > AdmissionStandardPresentEventSourceAddress ||
+      Event->Phase < AdmissionStandardPresentPhaseEntry ||
+      Event->Phase > AdmissionStandardPresentPhaseExit)
+    return 0;
+  if (Trace->EventCount >= ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY) {
+    Trace->Overflow = 1u;
+    return 0;
+  }
+  copy = *Event;
+  copy.Valid = 1u;
+  Trace->Events[Trace->EventCount++] = copy;
+  return 1;
+}
+
+int AdmissionStandardPresentTraceAccept(
+    const ADMISSION_STANDARD_PRESENT_TRACE *Trace,
+    const ADMISSION_STANDARD_PRESENT_EXPECTATION *Expected,
+    unsigned int *PresentSequence,
+    unsigned int *SourceAddressSequence) {
+  unsigned int present = 0u;
+  unsigned int source = 0u;
+  unsigned int presentEntry = 0u;
+  unsigned int sourceEntry = 0u;
+  unsigned int previousSequence = 0u;
+  unsigned long long presentAllocation = 0ULL;
+  unsigned long long sourceAddress = 0ULL;
+  unsigned int index;
+  if (Trace == QUERY_NULL || Expected == QUERY_NULL ||
+      PresentSequence == QUERY_NULL || SourceAddressSequence == QUERY_NULL ||
+      Trace->Magic != ADMISSION_STANDARD_PRESENT_TRACE_MAGIC ||
+      Trace->Version != ADMISSION_STANDARD_PRESENT_TRACE_VERSION ||
+      Trace->Bytes != sizeof(*Trace) ||
+      Trace->CandidateBuild != Expected->CandidateBuild ||
+      Trace->BootGeneration != Expected->BootGeneration ||
+      Trace->EventCount == 0u ||
+      Trace->EventCount > ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY ||
+      Trace->Overflow != 0u)
+    return 0;
+  for (index = 0u; index < Trace->EventCount; ++index) {
+    const ADMISSION_STANDARD_PRESENT_EVENT *event = &Trace->Events[index];
+    if (event->Valid != 1u || event->Sequence <= previousSequence)
+      return 0;
+    previousSequence = event->Sequence;
+    if (event->Kind == AdmissionStandardPresentEventPresent &&
+        event->Phase == AdmissionStandardPresentPhaseEntry &&
+        event->Flags == Expected->Flags && event->ContextToken != 0ULL &&
+        (Expected->ContextToken == 0ULL ||
+         event->ContextToken == Expected->ContextToken) &&
+        event->NumSrc == 1u && event->NumDst == 0u)
+      presentEntry = event->Sequence;
+    if (event->Kind == AdmissionStandardPresentEventPresent &&
+        event->Phase == AdmissionStandardPresentPhaseExit &&
+        presentEntry != 0u && event->Sequence > presentEntry &&
+        event->Status == 0u && event->Flags == Expected->Flags &&
+        event->ContextToken != 0ULL && event->AllocationToken != 0ULL &&
+        (Expected->ContextToken == 0ULL ||
+         event->ContextToken == Expected->ContextToken) &&
+        (Expected->AllocationToken == 0ULL ||
+         event->AllocationToken == Expected->AllocationToken) &&
+        event->NumSrc == 1u && event->NumDst == 0u)
+      present = event->Sequence, presentAllocation = event->AllocationToken;
+    if (present != 0u && event->Sequence > present &&
+        event->Kind == AdmissionStandardPresentEventSourceAddress &&
+        event->Phase == AdmissionStandardPresentPhaseEntry &&
+        event->SourceId == Expected->SourceId &&
+        event->Segment == Expected->Segment &&
+        event->AllocationToken == presentAllocation &&
+        event->PrimaryAddress != 0ULL) {
+      sourceEntry = event->Sequence;
+      sourceAddress = event->PrimaryAddress;
+    }
+    if (present != 0u && event->Sequence > present &&
+        event->Kind == AdmissionStandardPresentEventSourceAddress &&
+        event->Phase == AdmissionStandardPresentPhaseExit &&
+        sourceEntry != 0u && event->Sequence > sourceEntry &&
+        event->Status == 0u && event->SourceId == Expected->SourceId &&
+        event->Segment == Expected->Segment &&
+        event->AllocationToken == presentAllocation &&
+        (Expected->AllocationToken == 0ULL ||
+         event->AllocationToken == Expected->AllocationToken) &&
+        event->PrimaryAddress == sourceAddress) {
+      source = event->Sequence;
+      break;
+    }
+  }
+  if (present == 0u || source == 0u)
+    return 0;
+  *PresentSequence = present;
+  *SourceAddressSequence = source;
+  return 1;
+}
+
+void AdmissionStandardPresentProducerInitialize(
+    ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State) {
+  if (State != QUERY_NULL)
+    query_zero(State, sizeof(*State));
+}
+
+int AdmissionStandardPresentProducerAdvance(
+    ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State,
+    ADMISSION_STANDARD_PRESENT_PRODUCER_STAGE Stage) {
+  if (State == QUERY_NULL || State->Invalid != 0u ||
+      State->OwnerReleased != 0u)
+    return 0;
+  switch (Stage) {
+  case AdmissionStandardPresentOwnerAcquired:
+    if (State->OwnerAcquired != 0u)
+      break;
+    State->OwnerAcquired = 1u;
+    return 1;
+  case AdmissionStandardPresentModeSet:
+    if (State->OwnerAcquired == 0u || State->ModeSet != 0u)
+      break;
+    State->ModeSet = 1u;
+    return 1;
+  case AdmissionStandardPresentFrameConfirmed:
+    if (State->ModeSet == 0u || State->FrameConfirmed != 0u)
+      break;
+    State->FrameConfirmed = 1u;
+    return 1;
+  case AdmissionStandardPresentFlipBackConfirmed:
+    if (State->FrameConfirmed == 0u || State->FlipBackConfirmed != 0u)
+      break;
+    State->FlipBackConfirmed = 1u;
+    return 1;
+  case AdmissionStandardPresentOwnerReleased:
+    if (State->OwnerAcquired == 0u ||
+        (State->FrameConfirmed != 0u &&
+         State->FlipBackConfirmed == 0u))
+      break;
+    State->OwnerReleased = 1u;
+    return 1;
+  default:
+    State->Invalid = 1u;
+    return 0;
+  }
+  return 0;
+}
+
+int AdmissionStandardPresentProducerCanCleanup(
+    const ADMISSION_STANDARD_PRESENT_PRODUCER_STATE *State) {
+  return State != QUERY_NULL && State->Invalid == 0u &&
+      (State->OwnerAcquired == 0u || State->OwnerReleased != 0u);
+}
+
 #undef QUERY_NULL
