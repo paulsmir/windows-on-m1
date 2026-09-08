@@ -20,8 +20,10 @@ but its scheduled producer never ran: exact dump localizes a pre-producer CDD
 Present crash to the new diagnostic reading DXGK_ALLOCATIONLIST through the
 wrong pAllocationInfo stride. Commit9beed62 corrects only that view. Next is
 fresh EXP643 with the unchanged interactive HWND/BLT discriminator.
-EXP644 is preregistered as a launch-only check on the same exact installed
-package: rerun the task once after Explorer/default desktop is established.
+EXP644 late launch changed Present denial to STATUS_GRAPHICS_PRESENT_OCCLUDED.
+DWM is in a reproducible dwmcore MILERR_DEVICE_CREATION_FAILURE restart loop;
+WER shows DXGI/D3D11/WARP but not the Apple UMD. Next is one scoped DWM
+LocalDump capture and exact device-creation analysis, not another BLT retry.
 
 ## Hardware proof retained
 

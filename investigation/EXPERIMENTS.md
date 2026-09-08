@@ -39290,3 +39290,38 @@ once. PASS requires D3DKMTPresent0, KMD Present ENTRY/EXIT, PresentTransfer
 completion and15s hold. If0xC01E0007 repeats, reject scheduled-task desktop
 access and prepare an Explorer/manual-console launch rather than changing GPU
 code. No blind retry, rebuild, exclusive owner or DCP change.
+
+**EXP644 ACTUAL — DESKTOP ACCESS ADVANCED, DWM DEVICE CREATION FAILED.** The
+late task ran in session1 after Explorer was established. It again completed
+one physical AGX render, but D3DKMTPresent changed from0xC01E0007 to
+0xC01E0006. Pinned ntstatus.h defines the latter as
+STATUS_GRAPHICS_PRESENT_OCCLUDED, “Nothing to present due to desktop
+occlusion.” This confirms late launch removed the desktop-access denial, but
+the HWND still had no viable composed target. Result/evidence SHA256:
+4df04d44d4754e46251dbb4c6a6e4faaa9b3ca9d1c5b021ddae9ecefff9c3cb8,
+50791e37185e3c284f18c8027bae8828aa4e681f2ffd0ca8f8b1743a35237cf5.
+
+Application evidence names the first new owner: DWM repeatedly exits from
+dwmcore.dll with HRESULT0x889800B0, which pinned winerror.h defines as
+MILERR_DEVICE_CREATION_FAILURE. The latest WER module list contains DXGI,
+D3D11, WarpPal and d3d10warp but not AppleAgxRenderAdmissionUmd.dll. Raw
+Report.wer SHA256784b24271878659ce4827340ca6b9789dd282e9bdb03cce93799a198b88e75f9.
+Therefore no further window visibility/BLT retry is justified. Current first
+unknown moves to DWM/D3D device creation and why the Apple UMD is not loaded or
+accepted. AGX Render/physical completion remains proven.
+
+# EXP645 — capture exact DWM device-creation failure
+
+**PREREGISTERED 2026-09-08T17:50:00Z. WHY THIS HYPOTHESIS:** (1) EXP644
+advances desktop admission but returns OCCLUDED; (2) DWM has a reproducible
+MILERR_DEVICE_CREATION_FAILURE restart loop on the Apple adapter; (3) WER lacks
+the Apple UMD module and has no archived dump, so source/caller ownership
+cannot yet be localized below “device creation”.
+
+Single variable: enable standard Windows LocalDumps only for dwm.exe, full
+user dump to C:\Users\pavel\DwmDumps, while retaining exact643 package as the
+explicit diagnostic variable. Existing LocalDumps\dwm.exe key is confirmed
+absent. Wait for one fresh DWM crash, preserve dump/Report.wer/events, then
+remove the exact LocalDumps key. No producer, driver build, capability, AGX or
+DCP change. Analyze the dump with Microsoft public symbols and current system
+binaries; then fix only the first proven DWM/UMD contract mismatch.
