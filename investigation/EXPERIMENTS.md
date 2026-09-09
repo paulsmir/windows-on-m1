@@ -41184,3 +41184,21 @@ sign/version/hash gates. One natural bind only. PASS requires physical TA/3D,
 exact Windows fence and terminal output with256 pixels,72 foreground,184
 background, poison0 and non-background FNV; any failure is localized before
 another change. Exact cleanup and ordinary recovery follow evidence.
+
+**EXP663 BUILD FREEZE 2026-09-09T07:13:11Z.** FRYZZING built the exact
+eleven-file overlay SHA256
+`80818c7b6f8bec27e918357e72f36d959f6ae42315ca75e43e4c031d9942e286`
+from immutable EXP662 source using pinned WDK26100/MSVC14.44. Package version
+is30.0.663.0; KMD/UMD/producer analysis, Universal, Inf2Cat and signing pass
+with only inherited C28251/C6011 analysis warnings. The x64 UMD contract test
+returned zero and its silent result is explicitly recorded. SYS/UMD/INF/CAT/
+producer/ZIP/air-manifest SHA256 are
+`5a1a2b0b71a9b5d31e83f9f997efe149ff2332cbff132c49e3447d6f5a2cf13a`,
+`fe593fac510405f1fb866b0f24823effd95d6282161218b581524a68b2d7ab96`,
+`901b6d74771c047d51944288da89dbbf7c36fe15d8cc6d60bbc42ad59691b025`,
+`a454dbb0487226cf56ef37ce0123c3f3b86e89c11fdb4fef493eb235a2961f6e`,
+`4d2773d6d987f28a1afb4ce2fb0bac8ed2a6e065cac0d5fee5379c24fa212c81`,
+`1421fcfe58fd4ee2219757a16162d6db36af4b9b012af70604475c81a451f15d`,
+`36b1ea3574ffd9d110596c86c43104c3061c89c25d7f4afa6c505a258913d3a5`.
+Artifacts are `.local/experiments/EXP663-v13_5-native-geometry/artifacts`.
+Ordinary377/392 is clean from EXP662-R1; stage then one full-owner run.
