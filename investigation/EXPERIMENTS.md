@@ -42372,3 +42372,42 @@ receipts. Seventy-two0xa5a5a5a5 pixels prove untouched poison;72 zero pixels
 preserve the current failure. Any different value is classified exactly.
 Failure to reach the same execution boundary is INCONCLUSIVE. Evidence precedes
 exact package cleanup and ordinary377/392 recovery.
+
+**EXP678 ACTUAL — INCONCLUSIVE BY TORN OUTPUT OBSERVATION
+2026-09-09T11:51:10Z.** Exact reused30.0.673.0 package naturally bound as
+oem5; the single request completed physical TA/3D and exact fence271 with
+expected/observed stamps0x7a000100/0x3d000100 and done pointers2/2. Active
+fragment hash0x174049abb96cc309 corresponds to the exact0x3800 variant; graph,
+store and mapped-fault records remain otherwise exact. Device stayed Code0/
+ACTIVE with8CPU/NVMe2/USB5/keyboard1 and no Event41/1001/129.
+
+The same 368-byte terminal record is internally inconsistent. Its scalar scan
+reports first invalid index88/value0,184 background,0 changed bytes and0
+poison, but `OutputTargetFnv1a` is exactly the independently preregistered gray
+oracle0xdd2c90074f6ee435. A 64-bit exact match to the72-gray/184-background
+buffer cannot be combined with the reported zero mask as a reliable PASS or
+FAIL. Terminal/graph/store/fault SHA256 are
+`db9b112ab54cd9cca54dc04ffc21b35d7070bb0b1299d64a165ce1bb40019f27`,
+`05ca79853d7c5fd37c02388b1ba1abbd05ccb252ff0bc77d4c9af83ca118fb7e`,
+`9483d529dcf9fc88d6db4fa373d88eb7c3083f7c6e9c6933a96433cfeb563ad0`,
+and `ba1f8e9c6f764a013cfac6aedc8de27a708bb6f2e19d7fa489f1b829d3f03917`.
+Verdict is INCONCLUSIVE_BY_DIAGNOSTIC for fragment output; the hardware job and
+fence remain valid controls.
+
+Source inspection names the observation defect: triangle verification reads a
+live noncached allocation repeatedly, and the terminal record retains only a
+64-byte prefix. It does not preserve the exact1024 bytes from which every
+metric was derived. Commit
+`ee43e06a9b0746778340506fcf05ff765cbc5529` adds a bounded transaction-owned
+1024-byte snapshot after completion/CPU barrier, verifies only that immutable
+copy, and exports the same bytes/fence/generation/source identities as
+`Wom1DynamicOutputSnapshot`. No render, graph, queue, firmware, context, PBE,
+DCP or capability behavior changes. RED missing helper/decoder became GREEN;
+snapshot mutation, stale capture, identity/range and hash tests pass.
+
+**EXP678-R1 CLEAN RECOVERY 2026-09-09T11:58:04Z.** Raw evidence was copied
+before exact oem5/package/devnode/service removal. Full-owner stopped and
+ordinary377/392 restored: Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next is one fresh build
+and hardware run of the same0x3800 asset with the immutable snapshot as the
+only variable.

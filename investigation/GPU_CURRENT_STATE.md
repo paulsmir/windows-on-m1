@@ -320,6 +320,17 @@ FP16 immediates to0x3800, whose U8NORM result0x80808080 is distinct from poison
 before this corrected discriminator. EXP677 is removed; ordinary377/392 is
 clean at2026-09-09T11:37:30Z.
 
+EXP678 reaches physical TA/3D/fence271 with the all-0x3800 fragment variant,
+but its terminal record is internally inconsistent: scalar fields report the
+old72-zero mask while `OutputTargetFnv1a` equals the exact preregistered
+72-gray/184-background oracle0xdd2c90074f6ee435. This is not a fragment PASS
+or FAIL. Commit `ee43e06a9b0746778340506fcf05ff765cbc5529` now captures one
+bounded1024-byte transaction-owned snapshot after completion and verifies/
+exports only that immutable copy. Offline RED to GREEN and decoder/hash tests
+pass. EXP678 is removed; ordinary377/392 is clean at2026-09-09T11:58:04Z.
+Next is build/run EXP679 with unchanged0x3800 asset and snapshot transport as
+the sole variable; no context/queue/render semantic change.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
