@@ -73,6 +73,22 @@ ARM64 library SHA256e957ea442643da32f0bec835edcc867a89e1d52b1dceb34dd8dbf8d3c99b
 Existing agx_win32_pipe_screen.c already owns a device-scoped Gallium bridge;
 reuse it and its tested Windows transport rather than introducing a new screen.
 
+2026-09-09T13:48:53Z: Windows runtime-device ownership is now extracted into
+umd/src/umd_runtime_device.c, used by the existing UMD and independently
+linkable without OpenAdapter exports. Source commit
+a433262fbd037effedc0ef7afda62d8a870967bf. Initializer accepts typed D3D10_0 or
+WDDM1_3 runtime callback views, retains a per-device error callback, creates
+the existing Windows context/winsys, and shares existing finalization.
+WDK x64 tests prove two distinct devices/contexts/buffers/generations, error
+owner isolation, malformed/context-create/winsys-init rollback, unsupported
+interface and missing callback rejection. Final test ExitCode0; ARM64 UMD
+build/sign passes with0 production warnings/errors. No hardware run/install.
+DLL SHA256e466d774530e25789524ed8a7dfb1eff70218157dcefda752e190e8a97995e46.
+Evidence: .local/experiments/AD04-runtime-device-bridge/evidence/.
+This does not complete Mesa CreateDevice/DDI tables or raise any caps.
+Next: attach this runtime owner and existing pipe screen to the selected Mesa
+per-device factory; implement missing backend callbacks before device admission.
+
 ## Preserved constraints
 Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
 physical TA3D and completion remain controls. EXP640/651 retain their private

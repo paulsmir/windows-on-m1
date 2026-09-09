@@ -42814,3 +42814,33 @@ drivers/apple-agx/mesa/scripts/build-d3d10-frontend-control.ps1.
 No library installation or hardware readiness increase. Next remains device-
 scoped frontend integration over the already existing agx_win32_pipe_screen,
 shared resources and mandatory backend pipeline operations.
+
+AD04-RUNTIME-DEVICE OFFLINE SERIES 2026-09-09T13:39..13:48Z. The selected
+frontend needs Windows device-scoped allocator/context callbacks rather than
+an adapter-scoped software screen. Added executable WDK tests for a common
+initializer/finalizer before implementation: RED C4013 missing API. Extracted
+the existing production Windows context/winsys/retirement lifecycle, selected
+the correct D3D10_0 versus WDDM1_3 core callback view, and retained the common
+SetError callback per device. Existing UMD CreateDevice/DestroyDevice call it;
+no callback table or pipeline cap changes. Initial GREEN tests passed.
+
+Separating the module exposed WDK header global-constant duplicate definitions
+in two C units (green2 linker failure). Existing project's C++ compile with C
+linkage resolved that header issue; no Windows graphics hypothesis changed.
+Final green4 includes two independent devices, buffers, contexts, generations,
+error callback owners; closing one leaves the other active. Failed context
+creation, malformed returned buffers and failed winsys initialization exercise
+existing rollback; unknown DDI and absent core callbacks are rejected before
+context creation. DestroyContext callbacks succeed in these rollback tests;
+no stronger guarantee for failed teardown callbacks is claimed.
+
+Source commit a433262fbd037effedc0ef7afda62d8a870967bf. Final WDK26100/MSVC14.44
+x64 test ExitCode0 at13:48:53Z, binary SHA256
+7ed718090408ac416075d83398629699f3465a693036216561137169c4571da5.
+The existing C6011 warning in the test Render callback remains; no new runtime
+module analysis warnings. ARM64 UMD build/analysis/sign has0 warnings/errors,
+DLL SHA256e466d774530e25789524ed8a7dfb1eff70218157dcefda752e190e8a97995e46.
+Local artifacts match builder outputs. Evidence/test-result.json and logs:
+.local/experiments/AD04-runtime-device-bridge/evidence/.
+No package staged or hardware run; ordinary machine state was not changed.
+The mandatory D3D frontend matrix and advertised pipeline mask remain unchanged.
