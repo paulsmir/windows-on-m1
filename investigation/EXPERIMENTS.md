@@ -41766,6 +41766,35 @@ INF/CAT/producer/ZIP/air-manifest SHA256:
 Artifacts: `.local/experiments/EXP670-native-pipeline-uat/artifacts`.
 Ordinary377/392 clean from EXP669-R1; stage then one full-owner run.
 
+**EXP670 ACTUAL — NATIVE LEAF ATTRIBUTES REJECTED AS SUFFICIENT
+2026-09-09T09:21:43Z.** Exact30.0.670.0 passes bind and completes physical
+TA/3D with the same byte-exact active graph receipt. Output remains184
+background+72 zero pixels, FNV0x98b3446c1b0a8215; no fresh41/1001/129 and
+device ACTIVE with8CPU/NVMe2/USB5/keyboard1. Native leaf attributes are
+hardware-admitted but do not fix fragment output. Evidence:
+`.local/experiments/EXP670-native-pipeline-uat/evidence`; graph and terminal
+SHA256 are `bd3947f8e85b86693fcbf17d31fd80f228c9090d89f54648f124b5f8a9de8a0d`
+and `55c62bfec22c903d2a69e167803f53417d5a32a0f0c82a3d3c8e871d5517a3dc`.
+No further UAT/layout edit follows without new evidence.
+
+# EXP671 — post-completion SGX/RegionB/RegionC fault snapshot
+
+**PREREGISTERED 2026-09-09T09:23:00Z. WHY THIS HYPOTHESIS:** EXP669 closes
+active graph construction and EXP670 rejects the only exact leaf mismatch.
+The first remaining split is silent USC fault versus successful shader
+execution with suppressed tile-store. The production driver already contains
+the bounded SGX/RegionB/RegionC fault snapshot implementation but quick
+successful completions did not persist it.
+
+Commit `4b7e441f3ed092c9c8b045aacffeef918a133d3b` invokes that existing read-only
+snapshot on the PASSIVE output worker after completion, recording exact channel
+read pointers, SGX fault register and both firmware fault blocks. It changes no
+queue, graph, UAT, shader, PBE or functional status and performs no I/O in the
+render/submit path. Single variable is observation. Build from immutable
+EXP670 source plus one file. A nonzero fault identifies the exact context/unit/
+address owner; an all-zero snapshot closes page/USC fault and moves the
+boundary to fragment/tile-store execution state.
+
 **EXP669-R1 CLEAN RECOVERY 2026-09-09T09:14:50Z.** Evidence was already local
 before SSH disappeared during cleanup. The established control plane showed
 the guest completed shutdown; full-owner stopped and immutable ordinary377/392
