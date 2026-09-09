@@ -42881,3 +42881,28 @@ Current sources over proven Mesa header fixture; local artifacts match builder
 manifest. Commit a4f0b0f5bf4d2a7333df5b27c6ec9f7a433a98d2.
 No new hardware proof and no installed package change. This guard is a factory
 lifetime prerequisite, not a completed Mesa factory or full D3D device claim.
+
+AD04-PIPE-DEVICE-FACTORY OFFLINE SERIES 2026-09-09T14:15..14:27Z. Compose
+the existing initialized Windows winsys into per-device screen/context storage.
+Use the runtime owner as context.priv; reject duplicate initialization and
+preserve state when checked child retirement fails. Successful close releases
+only the factory objects, leaving Windows runtime active for explicit caller
+finalization. A separate RED case exposed stale runtime generation acceptance;
+the factory now captures and verifies its owner's generation before close.
+
+Portable tests run actual production functions with ASan/UBSan. Optional WDK
+composition mode executes both common Windows device initializers and both
+factories together; separate contexts/buffers/generations/owners and busy-close
+ordering are checked. Initial compile failed due to pinned Mesa headers being
+classified as project headers; /external:I plus the installed MSVC schema's
+ExternalWarningLevel=TurnOffAllWarnings restores the existing external-header
+policy while keeping owned code W4/WX. Test callback NULL paths were guarded;
+final x64/ARM64 analysis/build has0 warnings/errors for this target.
+
+Commit b66c1a8aa06c75d48b2ac063ae47bbb0ff28a469. x64 test ExitCode0 at
+14:27:00Z, SHA2560beb235bc0937e4ea5a1446c3937442831b1c29e083c79c3dd1a231e5d875d33.
+ARM64 compile-only binary SHA2560f384741199576c171e38c93c3e319b7e4637916920981b695a314bfe106f8dc.
+Exact build.log/arm64-build.log/test-result.json and binaries are local under
+.local/experiments/AD04-pipe-device-factory/evidence/.
+No installation, hardware EXP, pipeline-cap change or desktop readiness claim.
+Selected Mesa frontend entry-point attachment is still the next integration.

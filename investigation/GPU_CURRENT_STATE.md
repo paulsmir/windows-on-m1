@@ -120,6 +120,23 @@ not call CreateEmptyShader until required pipe shader/state callbacks exist.
 The current pipe_context exposes mapping/resource operations, not a complete
 D3D graphics pipeline. Keep caps0 and do not launch admission hardware yet.
 
+Per-device pipe factory composition now implemented at
+b66c1a8aa06c75d48b2ac063ae47bbb0ff28a469:
+AgxWin32PipeDeviceInitialize consumes the existing initialized Windows winsys,
+owns a separate screen/context and binds context.priv to that runtime owner.
+It rejects duplicate initialization; Close preserves busy or stale-generation
+objects and requires checked child release before clearing its own state.
+Windows runtime finalization remains a separate caller-owned step.
+Portable ASan/UBSan tests pass. WDK composition test executes common Windows
+adapter/device initializers and two factories together, verifies independent
+owners and close ordering; x64 ExitCode0 at14:27:00Z. x64 and ARM64 builds/
+analysis report0 warnings/errors for this test target, with pinned external
+Mesa headers classified external. ARM64 binary was built, not executed.
+Evidence: .local/experiments/AD04-pipe-device-factory/evidence/.
+Remaining production integration is explicit: selected Mesa State.h,
+Adapter.cpp and Device.cpp must use these owners/factory, not the upstream
+adapter-global screen. No DDI table or graphics pipeline readiness has changed.
+
 ## Preserved constraints
 Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
 physical TA3D and completion remain controls. EXP640/651 retain their private
