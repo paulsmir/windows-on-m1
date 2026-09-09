@@ -158,6 +158,20 @@ dimensions and requires the exact72-pixel native shape. Full-frame behavior is
 unchanged. RED->GREEN and26 focused/adjacent tests pass. Hardware proof is NO;
 next is one exact EXP663 build/run from the clean ordinary baseline.
 
+EXP663 confirms the native geometry path itself: Render/Patch/Submit,
+physical TA/3D and fence271 pass with DestinationBytes16KiB and exactly1024
+output bytes examined. All256 pixels are the captured background0xff112233,
+foreground0, poison0, so exact geometry alone is rejected as the fragment fix.
+Byte-exact reapplication of the eight relocations at the original VAs reproduces
+every EXP659 descriptor/pipeline/VDM/PPP byte, excluding normalization encoding.
+The nearest remaining difference is executable placement: native VS/FS VAs are
+16KiB-aligned, while the overlay used offsets0x1000/0x2000 within one mapped
+page. Commit `4c42a39b320bd612c263cb530d8ed716bb959a14` moves only VS/FS to
+separate zero16KiB-aligned slots at object73 offsets0x4000/0x8000; pipeline,
+Vertex and all graph bytes are unchanged.17 adjacent tests pass; hardware proof
+is pending. EXP663 is removed and ordinary377/392 is clean at
+2026-09-09T07:22:51Z.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

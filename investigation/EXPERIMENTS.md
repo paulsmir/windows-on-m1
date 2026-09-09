@@ -41202,3 +41202,62 @@ producer/ZIP/air-manifest SHA256 are
 `36b1ea3574ffd9d110596c86c43104c3061c89c25d7f4afa6c505a258913d3a5`.
 Artifacts are `.local/experiments/EXP663-v13_5-native-geometry/artifacts`.
 Ordinary377/392 is clean from EXP662-R1; stage then one full-owner run.
+
+**EXP663 ACTUAL — NATIVE GEOMETRY REJECTED AS SUFFICIENT
+2026-09-09T07:16:11Z.** Exact oem5/Code0/service/hash preflight passed. The
+784-byte request returned0/queued1; durable correlation candidate663/
+boot365320076 records DMA3860, prepatched1, Patch0, Submit0, fence271,
+workerReady, physical completion, QueueDpc1 and matching Notify/DPC. The new
+small output path is active: terminal DestinationBytes16384 and
+OutputBytesExamined1024. Nevertheless all256 pixels equal captured background
+0xff112233, foreground bytes0, poison0, first missing foreground pixel88 and
+FNV0x16c4fd3d3ba00d25; Present is not reached. Device remains ACTIVE/Code0 with
+8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Evidence:
+`.local/experiments/EXP663-v13_5-native-geometry/evidence`; raw correlation and
+terminal SHA256 are
+`3462e98a4764ae48c9d4cc837fc568b2a1a27aa6a3b2d7fbf5f61e6a2591956a`
+and `95e9f0cda6b7befae7ecec7cab7633a344684832aa1f8334de3fd7491a533322`.
+
+**VERDICT / NEXT SOURCE DIFFERENCE.** The exact16x16/pitch64/16KiB
+WorkCommand contract reaches physical completion but is insufficient to create
+fragments. A byte-level offline reconstruction applies all eight normalized
+relocations at the original native VAs and reproduces the EXP659 encoder head,
+both PPP records, both USC records and descriptor byte-exact, excluding a
+missing relocation encoding. The closest remaining difference is executable
+placement: EXP659 VS/FS are separately16KiB-aligned at0x1100064000 and
+0x110006c000, but the current overlay places them at0x1100011000 and
+0x1100012000. The existing object73 mapping has verified-zero aligned ranges at
+offsets0x4000 and0x8000. Commit
+`4c42a39b320bd612c263cb530d8ed716bb959a14` moves only those two executable
+objects there; pipeline/descriptor/Vertex/encoder/WorkCommand remain unchanged.
+The overlay test was RED at the old object/offset and is GREEN after the move;
+the real generated-template composition plus17 adjacent tests pass.
+
+**EXP663-R1 CLEAN RECOVERY 2026-09-09T07:22:51Z.** Evidence was preserved,
+exact oem5/devnode removed, full-owner stopped and immutable ordinary377/392
+restored. Health: Problem28/null INF, no AppleAgx package/service/module/SYS/
+UMD, SSH/8CPU/NVMe2/USB5/keyboard1, no fresh41/1001/129. EXP663 must not be
+repeated.
+
+# EXP664 — page-aligned V13_5 shader overlay
+
+**PREREGISTERED 2026-09-09T07:23:30Z. WHY THIS HYPOTHESIS:** (1) EXP663 now
+matches native WorkCommand geometry and all relocatable graph bytes but still
+has zero fragments; (2) native hardware evidence uses separate16KiB-aligned VS
+and FS addresses; (3) Windows used two non-page-aligned executable offsets in
+one object. One variable is the shader placement alignment.
+
+**WINDOWS CONTRACT:** immutable shader allocation bytes remain device-owned and
+copy-once; no producer address enters the ABI. **AGX/ASAHI CONTRACT:** V13_5
+shader entry VAs in the hardware-proven frame are16KiB-aligned under16KiB UAT
+pages. **TRANSLATION:** place VS and FS into distinct pre-mapped, zero,
+16KiB-aligned ranges of object73 and encode their offsets relative to the same
+0x1100000000 shader base. **WHAT IS STILL UNKNOWN:** whether aligned executable
+placement is the missing condition for the byte-exact graph to rasterize.
+
+Source commit `4c42a39b320bd612c263cb530d8ed716bb959a14` changes only
+`render_dynamic_overlay.c` and its executable test. Base is immutable FRYZZING
+EXP663 source.17 tests GREEN. Build/sign/hash gates remain identical. One
+natural-bind run; PASS requires256=72 foreground+184 background with physical
+completion/fence. Uniform background rejects alignment as sufficient. Evidence,
+exact cleanup and ordinary recovery are mandatory before the next decision.
