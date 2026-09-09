@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T02:53Z. Main process only; no agents.
+Updated 2026-09-09T03:10Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -56,8 +56,15 @@ both VARYING_COUNTS words atomically; our encoder omitted the counts. Commit
 zero flat/linear/16-bit counts, updating the one downstream relocation212→220.
 Generated pack/unpack/integration tests pass; encoder is236 bytes. EXP655
 package is removed and ordinary377/392 is clean at 2026-09-09T00:51:31Z. Next
-is EXP656 with this single PPP contract fix. Caps remain0 until AD04 mandatory
-contract completion.
+EXP656 rejected that causal hypothesis: output is byte-for-byte the same
+background-only FNV. Focused pinned-Mesa re-anchor found the missing mandatory
+graphics batch prefix: VDM cache barrier plus base PPP W_CLAMP,
+OCCLUSION_QUERY_2, OUTPUT_UNKNOWN and VARYING_2 before per-draw state. Commit
+`11f89dd0c116d8b928c34b198bf10463fc5c6579` adds that exact atomic sequence,
+a second typed PPP self-relocation and a300-byte generated encoder; offline
+pack/unpack and production integration pass. EXP656 is removed and ordinary
+377/392 is clean at 2026-09-09T01:08:17Z. Next is EXP657 batch-init hardware.
+Caps remain0 until AD04 mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

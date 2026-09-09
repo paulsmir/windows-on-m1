@@ -40513,3 +40513,34 @@ PASS requires physical completion plus nonzero foreground, exact two-colour
 full-frame validation, query, D589, HOLD and retirement. Uniform background or
 a new exact output value rejects this causal fix and drives only the nearest
 PPP/VS contract. Cleanup/recovery remain mandatory.
+
+**EXP656 ACTUAL — VARYING-COUNT HYPOTHESIS REJECTED
+2026-09-09T00:57:45Z.** Exact30.0.656.0 repeated Render/Patch/Submit, physical
+TA/3D completion and fence273, but its output snapshot is semantically
+identical to EXP655: full16,384,000-byte scan, first pixel background
+0xff101820, centre mismatch2,049,280, poison0, changed bytes0,
+4,096,000 classified background pixels and FNV0xf953759ae5722325. No Present
+entry occurred. Snapshot/correlation/result/evidence SHA256 are
+`7cd2cb55a5dac17eeb2c7cd3d85e9b194523bd5c99892218c5f4d629bb1f3178`,
+`994aed5d8b2c6a86d330b7a57a75a740b5fabe15414c4cd09d123516c4afdc6b`,
+`b5d6fbf9889f9788cdbb987bf4620a5c9dbe96068fff0792d4478e1ec7ad078b`
+and `6df569b851b4c3aefd0d9f50684459ede45753e96058ef459793abb9046f1e23`.
+The varying-count contract remains source-correct but is not causal for the
+zero-fragment output and will not be repeated.
+
+Focused re-anchor to pinned Mesa found the next stronger indivisible contract:
+every new graphics batch begins with a VDM USC-cache barrier and a base PPP
+update containing W_CLAMP, FRAGMENT_OCCLUSION_QUERY_2, OUTPUT_UNKNOWN and
+VARYING_2 before per-draw VDM/PPP state. The current encoder began directly at
+per-draw VDM state. Commit `11f89dd0c116d8b928c34b198bf10463fc5c6579`
+adds that exact batch-init sequence plus a second typed PPP self-relocation;
+the encoder becomes300 bytes, with batch PPP at128 and draw PPP at192. Generated
+pack/unpack and production ABI/DMA/overlay integration are GREEN. Encoder/
+manifest SHA256 are
+`7e52bdfaeb2f4298d799f765b916629cd40d3fae5eb85d27622685342e6b8d6f`
+and `960eef5dce1002dbc68e6d17701ab69396d0b979044a05f65010985fa7999251`.
+
+**EXP656-R1 CLEAN RECOVERY 2026-09-09T01:08:17Z.** Exact package and stale
+service/process state were removed, the full-owner guest stopped and immutable
+ordinary377/392 restored. Health is Problem28/null INF, no package/service/
+module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
