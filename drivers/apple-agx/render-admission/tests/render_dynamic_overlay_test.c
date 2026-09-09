@@ -142,6 +142,8 @@ static void write_u64(unsigned char *bytes, unsigned long long value) {
 }
 
 int main(void) {
+  const ADMISSION_DYNAMIC_OVERLAY_ALIAS *aliases;
+  APPLE_AGX_U32 alias_count = 0u;
   ADMISSION_BACKEND_IMAGE image;
   APPLE_AGX_WIN32_COMMAND_VIEW view;
   APPLE_AGX_WIN32_COMMAND_HEADER header;
@@ -156,6 +158,17 @@ int main(void) {
   APPLE_AGX_U64 address = 0ULL;
 
   initialize_image(&image);
+  aliases = AdmissionDynamicOverlayShaderAliases(&alias_count);
+  assert(aliases != NULL &&
+         alias_count == ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT);
+  assert(aliases[0].ObjectIndex == 73u &&
+         aliases[0].ObjectOffset == 0x4000u && aliases[0].Bytes == 0x4000u &&
+         aliases[0].Reserved == 0u &&
+         aliases[0].GpuVirtualAddress == 0x1100064000ULL);
+  assert(aliases[1].ObjectIndex == 73u &&
+         aliases[1].ObjectOffset == 0x8000u && aliases[1].Bytes == 0x4000u &&
+         aliases[1].Reserved == 0u &&
+         aliases[1].GpuVirtualAddress == 0x110006c000ULL);
   initialize_view(&view, &header, references, &draw);
   initialize_job(&job, storage, &view);
   pipeline_bytes[0x2000] = 0x5au;
@@ -189,10 +202,10 @@ int main(void) {
   assert(find_entry(&plan, 4u)->GpuVirtualAddress == 0x1100030000ULL);
   assert(find_entry(&plan, 2u)->ObjectIndex == 73u);
   assert(find_entry(&plan, 2u)->ObjectOffset == 0x4000u);
-  assert(find_entry(&plan, 2u)->GpuVirtualAddress == 0x1100024000ULL);
+  assert(find_entry(&plan, 2u)->GpuVirtualAddress == 0x1100064000ULL);
   assert(find_entry(&plan, 3u)->ObjectIndex == 73u);
   assert(find_entry(&plan, 3u)->ObjectOffset == 0x8000u);
-  assert(find_entry(&plan, 3u)->GpuVirtualAddress == 0x1100028000ULL);
+  assert(find_entry(&plan, 3u)->GpuVirtualAddress == 0x110006c000ULL);
   assert(find_entry(&plan, 9u)->GpuVirtualAddress == 0x1100013000ULL);
   assert(find_entry(&plan, 10u)->GpuVirtualAddress == 0x1100013400ULL);
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x20u, 1u, &address) ==

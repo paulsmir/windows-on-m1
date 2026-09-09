@@ -384,6 +384,56 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
         goto Fail;
       }
     }
+    {
+      APPLE_AGX_U32 aliasCount = 0u;
+      const ADMISSION_DYNAMIC_OVERLAY_ALIAS *aliases =
+          AdmissionDynamicOverlayShaderAliases(&aliasCount);
+      ULONG aliasIndex;
+      if (aliases == NULL ||
+          aliasCount != ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT) {
+        status = STATUS_INVALID_IMAGE_FORMAT;
+        goto Fail;
+      }
+      for (aliasIndex = 0u; aliasIndex < aliasCount; ++aliasIndex) {
+        const ADMISSION_DYNAMIC_OVERLAY_ALIAS *alias = &aliases[aliasIndex];
+        const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *fixedInput;
+        ULONGLONG aliasPhysical;
+        if (alias->ObjectIndex >= APPLE_AGX_RENDER_TEMPLATE_OBJECT_COUNT ||
+            alias->Reserved != 0u || alias->Bytes != 0x4000u ||
+            (alias->ObjectOffset & 0x3fffu) != 0u ||
+            (alias->GpuVirtualAddress & 0x3fffu) != 0u) {
+          status = STATUS_INVALID_IMAGE_FORMAT;
+          goto Fail;
+        }
+        fixedInput = &layouts[alias->ObjectIndex];
+        if (alias->ObjectOffset > fixedInput->Size ||
+            alias->Bytes > fixedInput->Size - alias->ObjectOffset ||
+            fixedInput->ArenaOffset > ADMISSION_BACKEND_BYTES ||
+            alias->ObjectOffset >
+                ADMISSION_BACKEND_BYTES - fixedInput->ArenaOffset ||
+            alias->Bytes > ADMISSION_BACKEND_BYTES -
+                               fixedInput->ArenaOffset -
+                               alias->ObjectOffset ||
+            runtime->LocalObject.DeviceAddress >
+                MAXULONGLONG - ADMISSION_LOCAL_ALLOCATION_BYTES -
+                    fixedInput->ArenaOffset - alias->ObjectOffset) {
+          status = STATUS_INVALID_IMAGE_FORMAT;
+          goto Fail;
+        }
+        aliasPhysical = runtime->LocalObject.DeviceAddress +
+                        ADMISSION_LOCAL_ALLOCATION_BYTES +
+                        fixedInput->ArenaOffset + alias->ObjectOffset;
+        if (AppleAgxUatMap(
+                ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
+                alias->GpuVirtualAddress, aliasPhysical, alias->Bytes,
+                AppleAgxUatGpuSharedReadWrite,
+                &runtime->Residency.Allocator,
+                &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
+          status = STATUS_INVALID_ADDRESS;
+          goto Fail;
+        }
+      }
+    }
   }
   runtime->MappingReady = TRUE;
   AdmissionMemoryRecordStart(Context, AdmissionMemoryStartTtbr,

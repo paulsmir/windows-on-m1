@@ -14,13 +14,32 @@
 #define OVERLAY_TA_ENCODER_OFFSET 0xd0u
 #define OVERLAY_PIPELINE_COMPACT_SPLIT 0x40u
 #define OVERLAY_PIPELINE_NATIVE_SPLIT 0x1000u
+#define OVERLAY_VERTEX_SHADER_GPU_VA 0x1100064000ULL
+#define OVERLAY_FRAGMENT_SHADER_GPU_VA 0x110006c000ULL
+
+static const ADMISSION_DYNAMIC_OVERLAY_ALIAS OverlayShaderAliases[
+    ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT] = {
+    {OVERLAY_SHADER_OBJECT, 0x4000u, 0x4000u, 0u,
+     OVERLAY_VERTEX_SHADER_GPU_VA},
+    {OVERLAY_SHADER_OBJECT, 0x8000u, 0x4000u, 0u,
+     OVERLAY_FRAGMENT_SHADER_GPU_VA},
+};
 
 typedef struct _ADMISSION_DYNAMIC_OVERLAY_LOCATION {
   APPLE_AGX_U32 ObjectIndex;
   APPLE_AGX_U32 ObjectOffset;
   APPLE_AGX_U32 Capacity;
   APPLE_AGX_BOOL OriginalGpuAddress;
+  APPLE_AGX_U64 FixedGpuVirtualAddress;
 } ADMISSION_DYNAMIC_OVERLAY_LOCATION;
+
+const ADMISSION_DYNAMIC_OVERLAY_ALIAS *AdmissionDynamicOverlayShaderAliases(
+    APPLE_AGX_U32 *Count) {
+  if (Count == OVERLAY_NULL)
+    return OVERLAY_NULL;
+  *Count = ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT;
+  return OverlayShaderAliases;
+}
 
 static void overlay_zero(void *Data, APPLE_AGX_U32 Bytes) {
   unsigned char *data = (unsigned char *)Data;
@@ -84,47 +103,49 @@ static int overlay_location(APPLE_AGX_U32 ReferenceIndex,
   if (ReferenceIndex == Draw->VertexReference) {
     *ExpectedRole = AppleAgxWin32RoleVertex;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_VERTEX_OBJECT, 0x20000u, 0x10000u, APPLE_AGX_TRUE};
+        OVERLAY_VERTEX_OBJECT, 0x20000u, 0x10000u, APPLE_AGX_TRUE, 0ULL};
   } else if (ReferenceIndex == Draw->VertexShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x4000u, 0x4000u, APPLE_AGX_TRUE};
+        OVERLAY_SHADER_OBJECT, 0x4000u, 0x4000u, APPLE_AGX_TRUE,
+        OVERLAY_VERTEX_SHADER_GPU_VA};
   } else if (ReferenceIndex == Draw->FragmentShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x8000u, 0x4000u, APPLE_AGX_TRUE};
+        OVERLAY_SHADER_OBJECT, 0x8000u, 0x4000u, APPLE_AGX_TRUE,
+        OVERLAY_FRAGMENT_SHADER_GPU_VA};
   } else if (Draw->VertexRodataReference !=
                  APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
              ReferenceIndex == Draw->VertexRodataReference) {
     *ExpectedRole = AppleAgxWin32RoleShaderRodata;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_RODATA_OBJECT, 0x3000u, 0x400u, APPLE_AGX_TRUE};
+        OVERLAY_RODATA_OBJECT, 0x3000u, 0x400u, APPLE_AGX_TRUE, 0ULL};
   } else if (Draw->FragmentRodataReference !=
                  APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
              ReferenceIndex == Draw->FragmentRodataReference) {
     *ExpectedRole = AppleAgxWin32RoleShaderRodata;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_RODATA_OBJECT, 0x3400u, 0xc00u, APPLE_AGX_TRUE};
+        OVERLAY_RODATA_OBJECT, 0x3400u, 0xc00u, APPLE_AGX_TRUE, 0ULL};
   } else if (ReferenceIndex == Draw->UscPipelineReference) {
     *ExpectedRole = AppleAgxWin32RoleUscPipeline;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_PIPELINE_OBJECT, 0x10000u, 0x10000u, APPLE_AGX_TRUE};
+        OVERLAY_PIPELINE_OBJECT, 0x10000u, 0x10000u, APPLE_AGX_TRUE, 0ULL};
   } else if (ReferenceIndex == Draw->DescriptorReference) {
     *ExpectedRole = AppleAgxWin32RoleDescriptor;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_DESCRIPTOR_OBJECT, 0x8000u, 0x8000u, APPLE_AGX_FALSE};
+        OVERLAY_DESCRIPTOR_OBJECT, 0x8000u, 0x8000u, APPLE_AGX_FALSE, 0ULL};
   } else if (ReferenceIndex == Draw->ScissorReference) {
     *ExpectedRole = AppleAgxWin32RoleScissor;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SCISSOR_OBJECT, 0u, 0x4000u, APPLE_AGX_FALSE};
+        OVERLAY_SCISSOR_OBJECT, 0u, 0x4000u, APPLE_AGX_FALSE, 0ULL};
   } else if (ReferenceIndex == Draw->DepthBiasReference) {
     *ExpectedRole = AppleAgxWin32RoleDepthBias;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_DEPTH_BIAS_OBJECT, 0u, 0x4000u, APPLE_AGX_FALSE};
+        OVERLAY_DEPTH_BIAS_OBJECT, 0u, 0x4000u, APPLE_AGX_FALSE, 0ULL};
   } else if (ReferenceIndex == Draw->EncoderReference) {
     *ExpectedRole = AppleAgxWin32RoleEncoder;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_ENCODER_OBJECT, 0u, 0x180u, APPLE_AGX_FALSE};
+        OVERLAY_ENCODER_OBJECT, 0u, 0x180u, APPLE_AGX_FALSE, 0ULL};
   } else {
     return 0;
   }
@@ -172,10 +193,17 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_add(
            object->Size - location.ObjectOffset -
                OVERLAY_PIPELINE_NATIVE_SPLIT))
     return AdmissionDynamicOverlayRange;
-  base = location.OriginalGpuAddress ? layouts[location.ObjectIndex].OriginalGpuVa
-                                     : object->GpuVa;
-  if (base == 0ULL || base > ~0ULL - location.ObjectOffset ||
-      base + location.ObjectOffset >= (1ULL << 40u))
+  base = location.FixedGpuVirtualAddress != 0ULL
+             ? location.FixedGpuVirtualAddress
+             : (location.OriginalGpuAddress
+                    ? layouts[location.ObjectIndex].OriginalGpuVa
+                    : object->GpuVa);
+  if (base == 0ULL ||
+      (location.FixedGpuVirtualAddress == 0ULL &&
+       base > ~0ULL - location.ObjectOffset) ||
+      (location.FixedGpuVirtualAddress != 0ULL
+           ? base
+           : base + location.ObjectOffset) >= (1ULL << 40u))
     return AdmissionDynamicOverlayLayout;
   for (index = 0u; index < Plan->EntryCount; ++index) {
     const ADMISSION_DYNAMIC_OVERLAY_ENTRY *other = &Plan->Entries[index];
@@ -194,7 +222,9 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_add(
   entry->SourceOffset = reference->Offset;
   entry->Bytes = (APPLE_AGX_U32)reference->Bytes;
   entry->Reserved = 0u;
-  entry->GpuVirtualAddress = base + location.ObjectOffset;
+  entry->GpuVirtualAddress = location.FixedGpuVirtualAddress != 0ULL
+                                 ? base
+                                 : base + location.ObjectOffset;
   return AdmissionDynamicOverlaySuccess;
 }
 
