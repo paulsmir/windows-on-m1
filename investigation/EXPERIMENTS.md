@@ -42668,3 +42668,12 @@ ordinary then full-owner EXP584/406. Freeze final producer/package manifest
 before hardware. Require1024 bytes equal expected,72 red/184 background,
 poison0/guard0, physical TA3D/fence and healthy system. Missing intended
 boundary is INCONCLUSIVE. Evidence precedes exact cleanup and ordinary377/392.
+
+EXP681 BUILD FREEZE 2026-09-09T12:59Z: ARM64 producer WDK26100/MSVC14.44
+analysis build succeeds with zero warnings/errors. Producer SHA256
+18cdb422c6d2111cd1654a76b63ec012f80f66f9aa78da76f7698e67b9dfd9bf;
+build log9aa754cc1779bdfb9bd07eb16f0e24a50057298e919e3149e43598bbea37c74c.
+Exact signed680 ZIP/SYS/UMD/INF/CAT hashes are unchanged from EXP680 freeze.
+Air manifest SHA256d163411f6cdb255947cd9a036b42623830ce9dbb2deb4bf1a89b781a4f8826d4;
+its LedgerCommit retains the reused680 package provenance. Producer source
+commit0fe2f489f94075cea7a0e733fc4a274efebf0c85 is separately exact.
