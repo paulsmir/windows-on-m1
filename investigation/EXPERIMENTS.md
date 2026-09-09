@@ -40421,3 +40421,54 @@ completion plus a 368-byte `Wom1OutputTerminalSnapshot` whose fence and output
 fields identify the first failed pixel invariant. No pixel/present readiness
 is raised by the diagnostic itself. Evidence, exact cleanup and ordinary
 recovery follow the unchanged workflow.
+
+**EXP655 ACTUAL — OUTPUT IS EXACTLY UNIFORM BACKGROUND
+2026-09-09T00:44:38Z.** Exact30.0.655.0 bound naturally and repeated the
+EXP654 Render/Patch/Submit/physical completion/fence273 path. The corrected
+producer printed Render0/queued1, then exact presentation timeout and
+`DYNAMIC_PRESERVE`; it did not print HOLD and did not request retirement.
+`Wom1OutputTerminalSnapshot` was exported at PASSIVE and captured from both
+device and service keys with identical SHA256.
+
+The 368-byte snapshot is version1/bytes368, valid mask0xe3, sequence1,
+fence/completed-fence273, backend/completion0, exact observed TA/D3 stamps and
+done values equal expected2/2, source polling-event1, destination16,384,000
+bytes at GPU VA0x1500fa0000 / PA0x9bcf90000. Output scan examined all
+16,384,000 bytes / 4,096,000 pixels. First pixel is exact background
+0xff101820; poison count0; changed bytes0; first mismatch is exactly the centre
+pixel2,049,280 where the expected foreground probe also reads background;
+`OutputPixelsExpected=4,096,000`, so there is no unclassified third colour.
+Output FNV is0xf953759ae5722325. Therefore the complete render target is
+uniform background: the unchanged PBE/store path works, while the new
+VDM/PPP/VS path emitted no visible fragments. Present was correctly not
+entered. One Event129 was timestamped at boot before the workload and remains
+platform telemetry.
+
+Hardware/snapshot/correlation/result/evidence SHA256 are
+`84c1e17f946dd7469b182433bb456192e57c38f1a5f408e2d12b3a5ada6b729a`,
+`8f4a5fc02c8131a3a931185bd862cc40ee6e39f428657a355fa609d576d1ca99`,
+`f7280e01a70c172e4289bc754b17a77c2d32958503e7ea6d540c272259a0e2a4`,
+`b5d6fbf9889f9788cdbb987bf4620a5c9dbe96068fff0792d4478e1ec7ad078b`
+and `193f27f9ac79da28d2279c316c1e398438eb197871c0dc192e8a2bff69e881ef`.
+
+**SOURCE-FIRST CAUSAL DIFFERENCE.** Pinned Mesa Gallium `agx_state.c` defines
+`output_select`, `varying_counts_32` and `varying_counts_16` as one atomic PPP
+state group and pushes both count words whenever output select is emitted. The
+EXP655 fixture emitted output select but omitted both varying-count header bits
+and words. With zero published UVS counts the rasterizer receives no linked
+vertex outputs, which directly explains a completed background-only render.
+Commit `25768ee57bfd5225dab345bb362bd51eaba3acb0` now calls the pinned
+`agx_assign_uvs`, publishes exact smooth32=4/flat32=0/linear32=0 and zero16,
+and moves only the downstream fragment-pipeline relocation from212 to220.
+Generated pack/unpack tests were RED then GREEN; the encoder grows exactly
+228→236 bytes and PPP100→108 bytes. New encoder/manifest SHA256 are
+`9e42df1d6eb345fc7468b3235bb9fe943fb81e5bff91e7e0fef9be371330aec3`
+and `1703bf14b2ea22e6d4bab32a0f30b61d6ab8451fc4d09c396931d35d3fef96d5`.
+No PBE, render-pass, queue, DCP or capability change is included.
+
+**EXP655-R1 CLEAN RECOVERY 2026-09-09T00:51:31Z.** Exact package was removed,
+full-owner guest stopped and immutable ordinary377/392 restored. Final health:
+Problem28/null INF, packages/service/module/SYS/UMD absent,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP655 will not be
+repeated. EXP656 must test only the atomic varying-count publication with the
+new exact encoder/relocation and otherwise identical graph/platform.

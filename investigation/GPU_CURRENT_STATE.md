@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T02:41Z. Main process only; no agents.
+Updated 2026-09-09T02:53Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -48,9 +48,16 @@ pixel correctness and dynamic presentation remain NO. The producer also
 incorrectly accepted positive `STATUS_TIMEOUT` and attempted retirement; that
 is fixed at commit `5b885825640ba21cd2eb0e5489716c60ff8c341f`, which also
 exports one bounded terminal output snapshot after PASSIVE verification without
-changing the GPU graph. EXP654 package is removed and ordinary377/392 is clean
-at 2026-09-09T00:38:08Z. Next is source-identical EXP655 output discriminator.
-Caps remain0 until AD04 mandatory contract completion.
+changing the GPU graph. EXP655 exact snapshot proves the entire4,096,000-pixel
+target remained background0xff101820: changed bytes0, poison0, first mismatch
+at centre, full scan/FNV. The pinned Mesa source requires OUTPUT_SELECT plus
+both VARYING_COUNTS words atomically; our encoder omitted the counts. Commit
+`25768ee57bfd5225dab345bb362bd51eaba3acb0` publishes smooth32=4 and
+zero flat/linear/16-bit counts, updating the one downstream relocation212→220.
+Generated pack/unpack/integration tests pass; encoder is236 bytes. EXP655
+package is removed and ordinary377/392 is clean at 2026-09-09T00:51:31Z. Next
+is EXP656 with this single PPP contract fix. Caps remain0 until AD04 mandatory
+contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
