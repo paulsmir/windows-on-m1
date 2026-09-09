@@ -42844,3 +42844,18 @@ Local artifacts match builder outputs. Evidence/test-result.json and logs:
 .local/experiments/AD04-runtime-device-bridge/evidence/.
 No package staged or hardware run; ordinary machine state was not changed.
 The mandatory D3D frontend matrix and advertised pipeline mask remain unchanged.
+
+AD04-RUNTIME-ADAPTER OFFLINE 2026-09-09T13:59..14:01Z. Extract the existing
+Windows adapter-info query from OpenAdapter into shared runtime metadata
+initialization so the selected Mesa adapter no longer needs a pre-device global
+pipe screen. WDK test RED at missing API; after extraction x64 tests pass,
+including separate runtime identities/generations, malformed info and absent
+query callback. Only validated metadata is published; no DDI/capability table
+is involved. Current OpenAdapter reuses the helper. Shared API C linkage is
+explicit for both C and C++ callers.
+Source commit23ff1622f6ac1253031011bea70756c8e2809fd6. ARM64 build/analysis/sign
+has0 production warnings/errors; DLL SHA256
+3a501c5e76b41531268193ed9fcbe668998ffab3358dedd82dc721444bd24410.
+Logs/binaries retained in .local/experiments/AD04-runtime-adapter-bridge/evidence/.
+No package installed and no hardware readiness raised. Next is actual Mesa
+per-device factory attachment with retained child ownership checks.

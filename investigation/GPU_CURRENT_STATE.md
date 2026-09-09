@@ -1,5 +1,9 @@
 # GPU current state
 
+Primary goal is now FULL GRAPHICS WINDOWS DESKTOP; OpenGL/CS1.6 are later.
+Full acceptance and current unmet requirements: FULL_GRAPHICS_DESKTOP_ACCEPTANCE.md.
+Goal remains active; all eleven final requirements need integrated hardware proof.
+
 Updated 2026-09-09T13:19Z. Main process only; no agents.
 
 ## Machine
@@ -88,6 +92,19 @@ Evidence: .local/experiments/AD04-runtime-device-bridge/evidence/.
 This does not complete Mesa CreateDevice/DDI tables or raise any caps.
 Next: attach this runtime owner and existing pipe screen to the selected Mesa
 per-device factory; implement missing backend callbacks before device admission.
+
+Adapter metadata initialization is also shared, commit
+23ff1622f6ac1253031011bea70756c8e2809fd6. It queries the exact runtime adapter
+callback into a validated local candidate before publishing caller-owned state.
+No adapter-global pipe screen, DDI table or caps are created by this initializer.
+Existing UMD OpenAdapter uses it. WDK x64 tests prove two independent adapter
+identities and malformed/missing-callback rejection; ARM64 UMD build/sign passes
+with0 production warnings/errors. Evidence:
+.local/experiments/AD04-runtime-adapter-bridge/evidence/.
+Next concrete integration: selected Mesa adapter owns metadata only; each
+CreateDevice owns its common Windows runtime plus existing pipe screen/context.
+Check child resource/context retirement before releasing the runtime owner.
+No new hardware EXP and no capability change from these offline components.
 
 ## Preserved constraints
 Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
