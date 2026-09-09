@@ -40672,3 +40672,66 @@ byte-identical controls; pipeline/encoder/sampler/manifest SHA256 are
 and `3669aa1614bf85b19bee269a71110673c67ccdc7b31db71e0141d124f5f2c296`.
 This is OFFLINE_PROVEN only. A pinned fresh candidate is required before any
 hardware claim.
+
+# EXP658 — canonical USC stage binding order and sampler0
+
+**PREREGISTERED 2026-09-09T01:39:30Z. WHY THIS HYPOTHESIS:** (1) EXP657
+hardware again reaches physical TA/3D/fence273 but the entire target is the
+same background, locating the failure before rasterized fragments; (2) the
+bounded pinned-Mesa comparison found an actual structural difference in both
+stage pipelines, not a speculative bit: VS emitted SHARED before bindings and
+neither stage bound/reserved Mesa's unconditional txf sampler0; (3) the nearby
+vertex-prolog alternative was compiled offline and produces zero bytes for this
+zero-attribute shader, leaving the USC stage record sequence as the first
+remaining source-backed difference.
+
+**WINDOWS CONTRACT:** The same copy-once Draw and exact allocation roles are
+validated and submitted with ten typed relocations instead of eight; no raw
+pointer or new capability is exposed. **AGX/ASAHI CONTRACT:** Pinned
+`agx_build_pipeline` emits bindings, sampler0, SHARED, SHADER and REGISTERS in
+that order, while matching VDM/PPP shader words report4-compact sampler state.
+**TRANSLATION:** Existing Descriptor reference5 carries the exact generated
+eight-byte txf sampler to object36+0x8000; two bounded USC40 relocations point
+VS and FS at that same owned object. **WHAT IS STILL UNKNOWN:** Whether the
+malformed stage record/order was the first cause of the physical zero-fragment
+result.
+
+**ATOMIC CONTRACT:** Binding order, sampler descriptor, both USC sampler
+records, both typed addresses and both shader-word sampler counts change
+together because the pinned stage pipeline would be internally inconsistent
+if any component were emitted alone. Shaders, VDM draw, batch-init, varying
+counts, PPP raster state, destination, render pass, PBE/store, queues, output
+validator, DCP, platform and caps are controls.
+
+Source commit is `e06c29e8a4e51d39c4622d006f2dd34191c31a7b`; ledger commit
+is `5d3cb3c1f543d65f83c43e783a9345aafa3f3d9f`. Exact source overlay SHA256
+is `7335fd67fdf41af89c0ee2bbf4d08ed0f1d29990852d1675757e52b714fd318e`
+over immutable EXP657. Pinned WDK26100/MSVC14.44 Release PackageBuild658
+VisibleAgxQualification passed KMD/UMD and producer code analysis, Universal,
+Inf2Cat/signing and x64 tests with inherited warnings only. Relevant local121
+tests, generated unpack and production composition are GREEN.
+
+SYS/UMD/INF/CAT/producer/ZIP/manifest SHA256 are
+`c50662658f5f9a9fb870f64a3b65ccd66aa575e401b66818bd3e841f33a5769e`,
+`c68e88b1340c68c73d7ead1bf6efee509760b3a6aaf78cc405a1fa933afb3545`,
+`b352090b979010a62c41897f5014e6e7bee927010ce53e3752f7236d9b44f15b`,
+`89ec4107b8fe3dac7be03cb8f2dc508b7237e09832cc796cd4fbb7f59a881a82`,
+`3924df622e61a94ff30df99e854f31e7157fcfd8f40052cf4be9b5169b435634`,
+`07b4bd0be86165561a6bac78dd5ed31afade3880be9c4bc0ec132a232b081f0f`
+and `3d4b3bdececa5e4cfbad04f4802145819586d1378b473ab32d5d2c20fade46cc`.
+Vertex/fragment/fragment-linked remain exact EXP657 controls. Pipeline/encoder/
+sampler/fixture-manifest SHA256 are
+`b2e5f752c377488fd11a77ebb8dc8c85a1559fe290becb5ec3d4996cac75d3ee`,
+`96803cfb702e770f173aa75668ebbccba3515e9fe08d6db3acd75b2e6beee267`,
+`05d8d2443c555d752b0c64438cc066c8733b466f167d0af2026d1fc9a1a0b563`
+and `3669aa1614bf85b19bee269a71110673c67ccdc7b31db71e0141d124f5f2c296`.
+Root/m1n1/Mu are `5d3cb3c1f543d65f83c43e783a9345aafa3f3d9f`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`.
+
+Air is clean ordinary377/392 at 2026-09-09T01:20:25Z. Run one exact producer.
+PASS requires physical completion, nonzero foreground, full two-colour pixel
+validation, query/D589/HOLD and safe retirement. The same complete background
+snapshot rejects this stage-binding hypothesis. Earlier admission/launch
+failure is inconclusive. Evidence must precede exact cleanup and ordinary
+recovery.
