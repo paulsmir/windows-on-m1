@@ -43,8 +43,16 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
             self.assertEqual(first[0]["uvs_user_size"], 4)
             self.assertEqual(first[0]["epilog_loc_written"], 1)
             self.assertGreater(first[0]["pipeline_bytes"], 0)
-            self.assertGreater(first[0]["encoder_bytes"], 68)
-            self.assertGreater(first[0]["ppp_bytes"], 0)
+            self.assertEqual(first[0]["encoder_bytes"], 236)
+            self.assertEqual(first[0]["ppp_bytes"], 108)
+            self.assertEqual(first[0]["varying_counts"], {
+                "published_32": True,
+                "published_16": True,
+                "smooth_32": 4,
+                "flat_32": 0,
+                "linear_32": 0,
+                "total_16": 0,
+            })
             self.assertEqual(first[0]["draw"], {
                 "topology": "triangle-list",
                 "vertex_count": 3,
@@ -77,6 +85,7 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
             self.assertEqual(
                 first[0]["relocations"][3]["target"], "fragment-linked"
             )
+            self.assertEqual(first[0]["relocations"][6]["destination"], 220)
             for name in ("pipeline", "encoder", "scissor", "depth_bias"):
                 self.assertEqual(
                     (first[1] / f"{name}.bin").read_bytes(),

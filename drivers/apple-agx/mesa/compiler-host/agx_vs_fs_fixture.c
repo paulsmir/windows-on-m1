@@ -33,6 +33,12 @@ struct encoder_offsets {
    unsigned ppp_state_address_offset;
    unsigned ppp_offset;
    unsigned ppp_bytes;
+   unsigned varying_counts_32_offset;
+   unsigned varying_counts_16_offset;
+   unsigned varying_smooth_32;
+   unsigned varying_flat_32;
+   unsigned varying_linear_32;
+   unsigned varying_total_16;
    unsigned fragment_pipeline_offset;
    unsigned draw_offset;
    unsigned terminate_offset;
@@ -277,11 +283,14 @@ build_encoder_objects(const struct agx_shader_part *vs,
    enum pipe_format formats[8] = {PIPE_FORMAT_B8G8R8A8_UNORM};
    struct agx_tilebuffer_layout tib =
       agx_build_tilebuffer_layout(formats, 8u, 1u, false);
+   struct agx_unlinked_uvs_layout linked_uvs = *uvs;
+   struct agx_varyings_vs varyings;
    struct agx_usc_builder usc;
    unsigned char *head;
    memset(pipeline, 0, PIPELINE_CAPACITY);
    memset(encoder, 0, ENCODER_CAPACITY);
    memset(offsets, 0, sizeof(*offsets));
+   agx_assign_uvs(&varyings, &linked_uvs, 0u, 0u);
 
    offsets->vs_pipeline_offset = 0u;
    usc = agx_usc_builder(pipeline, PIPELINE_CAPACITY);
@@ -405,6 +414,8 @@ build_encoder_objects(const struct agx_shader_part *vs,
       .viewport = true,
       .viewport_count = 1u,
       .output_select = true,
+      .varying_counts_32 = true,
+      .varying_counts_16 = true,
       .cull = true,
       .cull_2 = true,
       .fragment_shader = true,
@@ -478,6 +489,10 @@ build_encoder_objects(const struct agx_shader_part *vs,
       cfg.scale_z = 0.5f;
    }
    agx_ppp_push_packed(&ppp, &uvs->osel, OUTPUT_SELECT);
+   offsets->varying_counts_32_offset = (unsigned)(ppp.head - encoder);
+   agx_ppp_push_packed(&ppp, &varyings.counts_32, VARYING_COUNTS);
+   offsets->varying_counts_16_offset = (unsigned)(ppp.head - encoder);
+   agx_ppp_push_packed(&ppp, &varyings.counts_16, VARYING_COUNTS);
    agx_ppp_push(&ppp, CULL, cfg) {
       cfg.flat_shading_vertex = AGX_PPP_VERTEX_2;
       cfg.depth_clip = true;
@@ -535,6 +550,8 @@ build_encoder_objects(const struct agx_shader_part *vs,
    struct AGX_VDM_STATE_VERTEX_SHADER_WORD_1 vdm_word;
    struct AGX_PPP_STATE ppp_state;
    struct AGX_FRAGMENT_SHADER_WORD_1 fragment_word;
+   struct AGX_VARYING_COUNTS varying_counts_32;
+   struct AGX_VARYING_COUNTS varying_counts_16;
    struct AGX_INDEX_LIST index_list;
    struct AGX_INDEX_LIST_COUNT index_count;
    struct AGX_INDEX_LIST_INSTANCES instance_count;
@@ -553,6 +570,16 @@ build_encoder_objects(const struct agx_shader_part *vs,
                              &ppp_state) ||
        ppp_state.pointer_hi != 0u || ppp_state.pointer_lo != 0u ||
        ppp_state.size_words != offsets->ppp_bytes / 4u ||
+       !AGX_VARYING_COUNTS_unpack(
+          NULL, encoder + offsets->varying_counts_32_offset,
+          &varying_counts_32) ||
+       varying_counts_32.smooth != uvs->user_size ||
+       varying_counts_32.flat != 0u || varying_counts_32.linear != 0u ||
+       !AGX_VARYING_COUNTS_unpack(
+          NULL, encoder + offsets->varying_counts_16_offset,
+          &varying_counts_16) ||
+       varying_counts_16.smooth != 0u || varying_counts_16.flat != 0u ||
+       varying_counts_16.linear != 0u ||
        !AGX_FRAGMENT_SHADER_WORD_1_unpack(
           NULL, encoder + offsets->fragment_pipeline_offset,
           &fragment_word) || fragment_word.pipeline != 0u ||
@@ -573,6 +600,12 @@ build_encoder_objects(const struct agx_shader_part *vs,
        !AGX_VDM_STREAM_TERMINATE_unpack(
           NULL, encoder + offsets->terminate_offset, &terminate))
       return 0;
+   offsets->varying_smooth_32 = varying_counts_32.smooth;
+   offsets->varying_flat_32 = varying_counts_32.flat;
+   offsets->varying_linear_32 = varying_counts_32.linear;
+   offsets->varying_total_16 = varying_counts_16.smooth +
+                               varying_counts_16.flat +
+                               varying_counts_16.linear;
    if (fs->info.rodata.size_16 != 0u) {
       struct AGX_USC_UNIFORM uniform;
       if (!AGX_USC_UNIFORM_unpack(NULL,
@@ -669,6 +702,9 @@ main(int argc, char **argv)
           "\"stream_terminated\":true},"
           "\"viewport\":{\"width\":%u,\"height\":%u,"
           "\"scissor_count\":1,\"depth_bias_count\":1},"
+          "\"varying_counts\":{\"published_32\":true,"
+          "\"published_16\":true,\"smooth_32\":%u,\"flat_32\":%u,"
+          "\"linear_32\":%u,\"total_16\":%u},"
           "\"render_pass\":{"
           "\"owner\":\"EXP208-hardware-proven-3D-skeleton\","
           "\"dynamic_scope\":\"VDM-PPP-USC\","
@@ -691,7 +727,9 @@ main(int argc, char **argv)
           "\"target_offset\":%u}],",
           variant, uvs.size, uvs.user_size, epilog.loc_written,
           offsets.pipeline_bytes, offsets.encoder_bytes, offsets.ppp_bytes,
-          FRAME_WIDTH, FRAME_HEIGHT,
+          FRAME_WIDTH, FRAME_HEIGHT, offsets.varying_smooth_32,
+          offsets.varying_flat_32, offsets.varying_linear_32,
+          offsets.varying_total_16,
           offsets.vs_uniform_offset, offsets.vs_shader_offset,
           offsets.fs_uniform_offset,
           offsets.fs_shader_offset, offsets.vdm_pipeline_offset,

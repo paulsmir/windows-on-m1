@@ -351,7 +351,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   RELOC(3, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
   RELOC(4, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 8u, 0u);
   RELOC(5, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 24u, 128u);
-  RELOC(6, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 212u, 64u);
+  RELOC(6, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 220u, 64u);
 #undef RELOC
   ZeroMemory(&request, sizeof(request));
   request.Generation = contextPrivate.Generation;

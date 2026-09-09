@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
   RELOC(3, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
   RELOC(4, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 8u, 0u);
   RELOC(5, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 24u, 128u);
-  RELOC(6, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 212u, 64u);
+  RELOC(6, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 220u, 64u);
 #undef RELOC
   command.Header.ContentHash = AppleAgxWin32CommandHash(&command, sizeof(command));
   assert(AppleAgxWin32CommandValidate(&command, sizeof(command), 7u,
@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
                 pipelineObject->Bytes) == 0);
   assert((read_le(image.Objects[71u].Data + 8u, 4u) & ~0x3fULL) ==
          0x30000ULL);
-  assert((read_le(image.Objects[71u].Data + 212u, 4u) & ~0x3fULL) ==
+  assert((read_le(image.Objects[71u].Data + 220u, 4u) & ~0x3fULL) ==
          0x30040ULL);
   assert((read_le(image.Objects[71u].Data + 24u, 4u) & 0xffULL) ==
          (image.Objects[71u].GpuVa >> 32u));
