@@ -121,6 +121,35 @@ static void test_prepatched_capture_adopt_and_worker_copy_are_exact(void) {
   assert(worker.DestinationIndex == 1u);
 }
 
+static void test_direct_framebuffer_needs_no_companion_identity(void) {
+  ADMISSION_PREPATCHED_RENDER pending;
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION captured = packet_description(0u);
+  ADMISSION_RENDER_PACKET_DESCRIPTION adopted;
+
+  captured.DestinationBytes = 0xfa0000u;
+  captured.DestinationIndex = 0u;
+  captured.VisibleDestinationCpuToken = 0ULL;
+  captured.VisibleDestinationGpuVa = 0ULL;
+  captured.VisibleDestinationPhysical = 0ULL;
+  captured.VisibleDestinationAllocationToken = 0ULL;
+  captured.VisibleDestinationBytes = 0u;
+  AdmissionPrepatchedInitialize(&pending);
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionPrepatchedCapture(&pending, &captured));
+  assert(AdmissionPrepatchedAdopt(
+      &pending, 43u, captured.ContextToken, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd, &adopted));
+  assert(adopted.DestinationBytes == 0xfa0000u);
+  assert(adopted.DestinationIndex == 0u);
+  assert(adopted.VisibleDestinationCpuToken == 0ULL);
+  assert(adopted.VisibleDestinationGpuVa == 0ULL);
+  assert(adopted.VisibleDestinationPhysical == 0ULL);
+  assert(adopted.VisibleDestinationAllocationToken == 0ULL);
+  assert(adopted.VisibleDestinationBytes == 0u);
+  assert(AdmissionRenderPacketPrepare(&packet, &adopted));
+}
+
 static void test_prepatched_rejects_incomplete_or_cross_context_state(void) {
   ADMISSION_PREPATCHED_RENDER pending;
   ADMISSION_RENDER_PACKET_DESCRIPTION captured = packet_description(0u);
@@ -381,6 +410,7 @@ static void test_terminal_triangle_receipt_requires_two_colour_geometry(void) {
 int main(void) {
   test_exact_packet_moves_prepared_queued_active_completed();
   test_prepatched_capture_adopt_and_worker_copy_are_exact();
+  test_direct_framebuffer_needs_no_companion_identity();
   test_prepatched_rejects_incomplete_or_cross_context_state();
   test_prepare_rejects_missing_identity_and_bad_intervals();
   test_cancel_and_preemption_never_synthesize_completion();

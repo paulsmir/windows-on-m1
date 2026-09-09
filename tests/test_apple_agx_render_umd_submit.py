@@ -335,6 +335,12 @@ class AppleAgxRenderUmdSubmitTests(unittest.TestCase):
             direct.index("AppleAgxFixedPanelQueuePresent"),
         )
 
+    def test_dynamic_full_frame_does_not_require_two_allocation_companion(self):
+        render = (RENDER / "src" / "umd_render_windows.c").read_text()
+        command_prepared = render[render.index("CommandPrepared:"):]
+        self.assertIn("prepatched && !dynamicCommand", command_prepared)
+        self.assertIn("AdmissionVisibleAgxResolveDestination(", command_prepared)
+
 
 if __name__ == "__main__":
     unittest.main()

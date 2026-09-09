@@ -536,7 +536,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
 
 CommandPrepared:
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-  if (prepatched && !NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
+  if (prepatched && !dynamicCommand &&
+      !NT_SUCCESS(AdmissionVisibleAgxResolveDestination(
           adapter, context, Args->pAllocationList,
           Args->AllocationListSize, command.DestinationAllocationIndex,
           &destination, &visibleDestination,
