@@ -42927,3 +42927,25 @@ analysis gate. Source review at agx_state.c:agx_create_shader_state proves full
 agx_context/agx_screen layout is required. Next is coherent Asahi backend and
 Windows transport integration, not assigning native callbacks to the small
 resource-control context. No new hardware run or readiness increase.
+
+## AD04 Windows Asahi compiler control / requested checkpoint — 2026-09-09
+
+Offline build control only, no new hardware EXP or Air install. At source
+853e9365b88d29fd865c12d0c0c8e143be7632cd, actual pinned Mesa agx_compile.c was
+compiled with FRYZZING MSVC14.44.35207 x64/SDK26100. b1 failed Windows timespec
+feature definition and transitive BSD sys/ioccom.h via drm_fourcc/layout.h.
+b2 used HAVE_STRUCT_TIMESPEC and isolated derived fourcc constants/types header;
+both initial errors disappeared, then native agx_index sizeof8 assertion and
+off_t declaration failed. Do not remove packing checks or alter shader semantics.
+Source/compiler scripts and raw logs/results:
+investigation/evidence/AD04-asahi-windows-compiler/.
+Official LLVM20.1.8 win64 archive SHA256
+3197846a2b19063687dd56e93e34cd941e3548d907f23a6131571321bdf9fe7b was downloaded,
+verified and extracted locally under builder AD04-asahi-windows-compiler/llvm20;
+version self-check completed ExitCode0, clang20.1.8 targetx86_64-pc-windows-msvc.
+No global installation and no clang source compile yet. User requested stop,
+recap, commit/push. Full continuation and operational procedure preserved in
+AD04_RECAP_AND_CONTINUATION_20260909.md / GPU_ENGINEERING_PROCEDURE.md.
+Verdict: compiler integration incomplete; known initial portability issues
+localized offline, not a GPU verdict. Next: establish correct internal Asahi
+layout and Windows compiler/dependency execution before hardware device testing.

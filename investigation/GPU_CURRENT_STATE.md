@@ -1,5 +1,17 @@
 # GPU current state
 
+USER-REQUESTED PAUSE / CHECKPOINT 2026-09-09 (account usage preservation).
+Read AD04_RECAP_AND_CONTINUATION_20260909.md and GPU_ENGINEERING_PROCEDURE.md.
+Full original objective preserved in FULL_GRAPHICS_MISSION.md. Not complete.
+Latest action: actual Windows compiler control b1/b2 failed offline; b2 exposes
+MSVC internal agx_index packing assertion and missing off_t after isolated
+timespec/fourcc header fixes. No shader semantics change, no hardware EXP.
+LLVM20.1.8 official SHA-verified portable preparation on FRYZZING completed
+ExitCode0; clang-cl version20.1.8 verified. No clang compile yet.
+Next: executable compiler/backend integration, first prove internal Asahi layout
+without changing WDK ABI layout, then actual compiler/NIR link+execution.
+No new installable package. Machine state below is last verified, not fresh.
+
 Primary goal is now FULL GRAPHICS WINDOWS DESKTOP; OpenGL/CS1.6 are later.
 Full acceptance and current unmet requirements: FULL_GRAPHICS_DESKTOP_ACCEPTANCE.md.
 Goal remains active; all eleven final requirements need integrated hardware proof.
