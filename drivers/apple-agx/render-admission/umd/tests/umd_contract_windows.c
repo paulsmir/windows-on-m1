@@ -443,11 +443,55 @@ static D3D10DDI_HRESOURCE open_resource(
 }
 
 static unsigned BridgeCreates, BridgeDestroys;
+static unsigned BridgeQueries;
+static BOOL BridgeBadInfo;
 static BOOL BridgeMalformed, BridgeFailCreate;
 static UINT_PTR BridgeErrorOwner;
 static unsigned char BridgeCommands[2][4096];
 static D3DDDI_ALLOCATIONLIST BridgeAllocations[2][16];
 static D3DDDI_PATCHLOCATIONLIST BridgePatches[2][16];
+
+static HRESULT APIENTRY BridgeQueryAdapter(HANDLE Adapter,
+    const D3DDDICB_QUERYADAPTERINFO *Query) {
+  HRESULT result = TestQueryAdapterInfo((HANDLE)(UINT_PTR)0x100u, Query);
+  AGX_WIN32_DEVICE_INFO *info = Query->pPrivateDriverData;
+  ++BridgeQueries;
+  CHECK(Adapter == (HANDLE)(UINT_PTR)0xc00u ||
+        Adapter == (HANDLE)(UINT_PTR)0xc01u);
+  info->BootGeneration = BridgeBadInfo ? 0u : (ULONG)(UINT_PTR)Adapter;
+  return result;
+}
+
+static void test_runtime_adapter_bridge(void) {
+  ADMISSION_UMD_ADAPTER adapters[2] = {0};
+  D3D10DDIARG_OPENADAPTER args = {0};
+  D3DDDI_ADAPTERCALLBACKS callbacks = {0};
+  callbacks.pfnQueryAdapterInfoCb = BridgeQueryAdapter;
+  args.pAdapterCallbacks = &callbacks;
+  /* The initializer owns no published adapter table or pipe_screen. */
+  args.pAdapterFuncs_2 = NULL;
+  for (UINT i = 0; i < 2; ++i) {
+    args.hRTAdapter.handle = (VOID *)(UINT_PTR)(0xc00u + i);
+    CHECK(AdmissionUmdRuntimeAdapterInitialize(&adapters[i], &args) == S_OK);
+    CHECK(adapters[i].RuntimeAdapter.handle == args.hRTAdapter.handle);
+    CHECK(adapters[i].DeviceInfo.BootGeneration == 0xc00u + i);
+  }
+  CHECK(BridgeQueries == 2u);
+  BridgeBadInfo = TRUE;
+  {
+    ADMISSION_UMD_ADAPTER rejected = {0};
+    CHECK(AdmissionUmdRuntimeAdapterInitialize(&rejected, &args) == E_FAIL);
+    CHECK(rejected.Magic == 0u);
+  }
+  BridgeBadInfo = FALSE;
+  callbacks.pfnQueryAdapterInfoCb = NULL;
+  {
+    ADMISSION_UMD_ADAPTER rejected = {0};
+    CHECK(AdmissionUmdRuntimeAdapterInitialize(&rejected, &args) == E_INVALIDARG);
+    CHECK(rejected.Magic == 0u && BridgeQueries == 3u);
+  }
+  CHECK(adapters[0].DeviceInfo.BootGeneration == 0xc00u);
+}
 
 static HRESULT APIENTRY BridgeCreateContext(HANDLE Device,
                                              D3DDDICB_CREATECONTEXT *Create) {
@@ -937,5 +981,6 @@ int main(void) {
   test_runtime_device_bridge(AdmissionUmdAdapterFromHandle(openAdapter.hAdapter),
                              createDevice);
   CHECK(adapterFunctions.pfnCloseAdapter(openAdapter.hAdapter) == S_OK);
+  test_runtime_adapter_bridge();
   return State.Failures == 0u ? 0 : (int)State.Failures;
 }

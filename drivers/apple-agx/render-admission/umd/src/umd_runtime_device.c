@@ -53,6 +53,31 @@ static VOID APIENTRY AdmissionUmdReportResourceError(
   AdmissionUmdSetError(device, Error);
 }
 
+HRESULT AdmissionUmdRuntimeAdapterInitialize(
+    ADMISSION_UMD_ADAPTER *Adapter, const D3D10DDIARG_OPENADAPTER *Args) {
+  ADMISSION_UMD_ADAPTER candidate;
+  D3DDDICB_QUERYADAPTERINFO query;
+  HRESULT result;
+  if (Adapter == NULL || Args == NULL || Args->pAdapterCallbacks == NULL ||
+      Args->pAdapterCallbacks->pfnQueryAdapterInfoCb == NULL)
+    return E_INVALIDARG;
+  ZeroMemory(&candidate, sizeof(candidate));
+  candidate.Magic = ADMISSION_UMD_ADAPTER_MAGIC;
+  candidate.RuntimeAdapter = Args->hRTAdapter;
+  candidate.Interface = Args->Interface;
+  candidate.Version = Args->Version;
+  candidate.Callbacks = Args->pAdapterCallbacks;
+  ZeroMemory(&query, sizeof(query));
+  query.pPrivateDriverData = &candidate.DeviceInfo;
+  query.PrivateDriverDataSize = sizeof(candidate.DeviceInfo);
+  result = candidate.Callbacks->pfnQueryAdapterInfoCb(
+      candidate.RuntimeAdapter.handle, &query);
+  if (FAILED(result) || !AgxWin32DeviceInfoValid(&candidate.DeviceInfo))
+    return FAILED(result) ? result : E_FAIL;
+  *Adapter = candidate;
+  return S_OK;
+}
+
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *device, ADMISSION_UMD_ADAPTER *adapter,
     const D3D10DDIARG_CREATEDEVICE *Args) {

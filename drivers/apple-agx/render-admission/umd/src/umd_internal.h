@@ -79,10 +79,13 @@ typedef struct _ADMISSION_UMD_RESOURCE {
   ADMISSION_UMD_RETIREMENT *Retirement;
 } ADMISSION_UMD_RESOURCE;
 
-VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
 #if defined(__cplusplus)
 extern "C" {
 #endif
+VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
+/* Populates validated metadata only. Caller owns stable adapter storage. */
+HRESULT AdmissionUmdRuntimeAdapterInitialize(
+    ADMISSION_UMD_ADAPTER *Adapter, const D3D10DDIARG_OPENADAPTER *Args);
 /* Initializes Windows ownership only; does not publish a DDI table or caps.
  * Storage and callback lifetimes belong to the calling runtime device. */
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
