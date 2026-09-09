@@ -79,7 +79,8 @@ static int AppleAgxWin32RelocationPolicy(
   case AppleAgxWin32RelocationDescriptorAddress:
     if (destinationRole != AppleAgxWin32RoleDescriptor)
       return 0;
-    return targetRole == AppleAgxWin32RoleTexture ||
+    return targetRole == AppleAgxWin32RoleVertex ||
+           targetRole == AppleAgxWin32RoleTexture ||
            targetRole == AppleAgxWin32RoleConstant ||
            targetRole == AppleAgxWin32RoleRenderTarget;
   case AppleAgxWin32RelocationUscShaderOffset32:

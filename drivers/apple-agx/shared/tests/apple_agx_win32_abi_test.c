@@ -299,6 +299,18 @@ static void test_valid_draw_graph(void) {
   assert(view.Clear == NULL);
 }
 
+static void test_vertex_descriptor_relocation(void) {
+  VALID_DRAW_COMMAND command = valid_draw();
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  command.Relocations[0].Kind = AppleAgxWin32RelocationDescriptorAddress;
+  command.Relocations[0].DestinationReference = 5u;
+  command.Relocations[0].TargetReference = 1u;
+  command.Relocations[0].DestinationOffset = 0u;
+  command.Relocations[0].TargetOffset = 0u;
+  seal_draw(&command);
+  assert(validate_draw(&command, &view) == AppleAgxWin32AbiSuccess);
+}
+
 static void test_draw_graph_rejections(void) {
   VALID_DRAW_COMMAND command;
   APPLE_AGX_WIN32_COMMAND_VIEW view;
@@ -374,6 +386,7 @@ int main(void) {
   test_clear_payload_rejections();
   test_snapshot_is_immutable_after_producer_mutation();
   test_valid_draw_graph();
+  test_vertex_descriptor_relocation();
   test_draw_graph_rejections();
   return 0;
 }
