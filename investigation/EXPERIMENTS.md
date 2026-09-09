@@ -41679,3 +41679,20 @@ Pinned WDK26100 gates and one natural bind apply. The receipt must match the
 offline materialized graph exactly. Any mismatch names the one causal fix. If
 all fields match and output remains zero, materialization is closed and the
 next boundary is GPU consumption/fault state rather than another layout edit.
+
+**EXP669 BUILD FREEZE 2026-09-09T09:03:25Z.** FRYZZING built exact six-file
+diagnostic overlay SHA256
+`18a637ceef2df845ae66ac30527e266daf48ac9a5e495a04bf8717dc0b3ec4e7`
+from immutable EXP668 source with pinned WDK26100/MSVC14.44. ARM64 KMD/UMD/
+producer analysis, Universal, Inf2Cat, signing and silent x64 UMD test pass;
+only inherited C28251/C6011 warnings remain. Version30.0.669.0. SYS/UMD/INF/
+CAT/producer/ZIP/air-manifest SHA256:
+`4825fa80b368006bc0fbf622fca3f2a413e02a2e307455c04c278dc0022124bf`,
+`d669e4d9e14c9ebf037299ed367363609db84e6c2f9d9876d906bd7aed0412c9`,
+`074c507a5d1b4d3c2450eee95cad1dd1238454e0c71b8dd7d802c59e89321fba`,
+`473ad552260911b5cee100de964e2574c2b9592cfb95cdca60700182c3205421`,
+`898c5cdedccfc0ea2507641d0e83939f6ac22f8f7a450c646bce549750af1b04`,
+`37e861f45041648762ee0fb23f445b2e8a3c114c7653bec89978071f97fbd9a0`,
+`fdc7f7aa75ace3908dc84e8548c164d03c58e0c115721048d654cceddcc7e302`.
+Artifacts: `.local/experiments/EXP669-active-graph-receipt/artifacts`.
+Ordinary377/392 is clean from EXP668-R1; stage then one full-owner run.
