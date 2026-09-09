@@ -80,6 +80,10 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
     APPLE_AGX_U32 ReferenceIndex, APPLE_AGX_U64 ReferenceOffset,
     APPLE_AGX_U32 Bytes, APPLE_AGX_U64 *GpuVirtualAddress);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
+    const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount);
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayApply(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,

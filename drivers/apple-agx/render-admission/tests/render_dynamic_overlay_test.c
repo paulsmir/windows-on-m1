@@ -125,6 +125,18 @@ static const ADMISSION_DYNAMIC_OVERLAY_ENTRY *find_entry(
   return NULL;
 }
 
+static unsigned long long read_u64(const unsigned char *bytes) {
+  unsigned long long value = 0ULL;
+  for (unsigned index = 0u; index < 8u; ++index)
+    value |= (unsigned long long)bytes[index] << (index * 8u);
+  return value;
+}
+
+static void write_u64(unsigned char *bytes, unsigned long long value) {
+  for (unsigned index = 0u; index < 8u; ++index)
+    bytes[index] = (unsigned char)(value >> (index * 8u));
+}
+
 int main(void) {
   ADMISSION_BACKEND_IMAGE image;
   APPLE_AGX_WIN32_COMMAND_VIEW view;
@@ -184,6 +196,41 @@ int main(void) {
   assert(address == 0x1100030020ULL);
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x40u, 1u, &address) ==
          AdmissionDynamicOverlayRange);
+
+  {
+    APPLE_AGX_EXP208_RELOCATION_OBJECT active[76];
+    const APPLE_AGX_EXP208_RELOCATION *relocations =
+        AppleAgxRenderTemplateRelocations();
+    unsigned relocation_matches = 0u;
+    unsigned char ta_work[0x100];
+    for (unsigned index = 0u;
+         index < AppleAgxRenderTemplateRelocationCount(); ++index)
+      if (relocations[index].SourceObject == 19u &&
+          relocations[index].SourceOffset == 0xd0u &&
+          relocations[index].TargetObject == 37u &&
+          relocations[index].TargetOffset == 0u &&
+          relocations[index].AddressSpace == AppleAgxExp208RelocationGpuVa &&
+          relocations[index].Encoding ==
+              AppleAgxExp208RelocationExactU64)
+        ++relocation_matches;
+    assert(relocation_matches == 1u);
+    memset(active, 0, sizeof(active));
+    memset(ta_work, 0, sizeof(ta_work));
+    active[19u].Data = ta_work;
+    active[19u].Size = sizeof(ta_work);
+    active[37u].GpuVa = 0x1500044000ULL;
+    active[71u].GpuVa = 0x1503d78000ULL;
+    write_u64(ta_work + 0xd0u, active[37u].GpuVa);
+    assert(AdmissionDynamicOverlayRouteEncoder(
+               &plan, active, 76u) == AdmissionDynamicOverlaySuccess);
+    assert(read_u64(ta_work + 0xd0u) == active[71u].GpuVa);
+    assert(AdmissionDynamicOverlayRouteEncoder(
+               &plan, active, 76u) == AdmissionDynamicOverlayContent);
+    write_u64(ta_work + 0xd0u, active[37u].GpuVa + 0x40u);
+    assert(AdmissionDynamicOverlayRouteEncoder(
+               &plan, active, 76u) == AdmissionDynamicOverlayContent);
+    assert(read_u64(ta_work + 0xd0u) == active[37u].GpuVa + 0x40u);
+  }
 
   AdmissionDynamicOverlayStateInitialize(&state);
   assert(AdmissionDynamicOverlayApply(&image, &plan, &job, storage,

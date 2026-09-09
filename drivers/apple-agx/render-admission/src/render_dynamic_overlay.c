@@ -9,6 +9,9 @@
 #define OVERLAY_DESCRIPTOR_OBJECT 36u
 #define OVERLAY_SCISSOR_OBJECT 38u
 #define OVERLAY_DEPTH_BIAS_OBJECT 39u
+#define OVERLAY_TA_WORK_OBJECT 19u
+#define OVERLAY_CAPTURED_ENCODER_OBJECT 37u
+#define OVERLAY_TA_ENCODER_OFFSET 0xd0u
 
 typedef struct _ADMISSION_DYNAMIC_OVERLAY_LOCATION {
   APPLE_AGX_U32 ObjectIndex;
@@ -51,6 +54,20 @@ static int overlay_is_zero(const void *Data, APPLE_AGX_U32 Bytes) {
     if (data[index] != 0u)
       return 0;
   return 1;
+}
+
+static APPLE_AGX_U64 overlay_read_u64(const unsigned char *Data) {
+  APPLE_AGX_U64 value = 0ULL;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 8u; ++index)
+    value |= (APPLE_AGX_U64)Data[index] << (index * 8u);
+  return value;
+}
+
+static void overlay_write_u64(unsigned char *Data, APPLE_AGX_U64 Value) {
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 8u; ++index)
+    Data[index] = (unsigned char)(Value >> (index * 8u));
 }
 
 static int overlay_location(APPLE_AGX_U32 ReferenceIndex,
@@ -365,6 +382,51 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
     return AdmissionDynamicOverlaySuccess;
   }
   return AdmissionDynamicOverlayLayout;
+}
+
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
+    const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount) {
+  const ADMISSION_DYNAMIC_OVERLAY_ENTRY *encoder = OVERLAY_NULL;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT *taWork;
+  APPLE_AGX_U32 index;
+  if (Plan == OVERLAY_NULL || ActiveObjects == OVERLAY_NULL ||
+      Plan->Magic != ADMISSION_DYNAMIC_OVERLAY_MAGIC ||
+      Plan->Version != ADMISSION_DYNAMIC_OVERLAY_VERSION ||
+      Plan->Generation == 0u || Plan->EntryCount == 0u ||
+      Plan->EntryCount > ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES ||
+      ActiveObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
+    return AdmissionDynamicOverlayArgument;
+  for (index = 0u; index < Plan->EntryCount; ++index) {
+    if (Plan->Entries[index].Role != AppleAgxWin32RoleEncoder)
+      continue;
+    if (encoder != OVERLAY_NULL)
+      return AdmissionDynamicOverlayLayout;
+    encoder = &Plan->Entries[index];
+  }
+  if (encoder == OVERLAY_NULL ||
+      encoder->ObjectIndex != OVERLAY_ENCODER_OBJECT ||
+      encoder->ObjectOffset != 0u ||
+      encoder->ObjectIndex >= ActiveObjectCount ||
+      ActiveObjects[encoder->ObjectIndex].GpuVa == 0ULL ||
+      ActiveObjects[encoder->ObjectIndex].GpuVa >
+          ~0ULL - encoder->ObjectOffset ||
+      encoder->GpuVirtualAddress !=
+          ActiveObjects[encoder->ObjectIndex].GpuVa +
+              encoder->ObjectOffset ||
+      ActiveObjects[OVERLAY_CAPTURED_ENCODER_OBJECT].GpuVa == 0ULL)
+    return AdmissionDynamicOverlayLayout;
+  taWork = &ActiveObjects[OVERLAY_TA_WORK_OBJECT];
+  if (taWork->Data == OVERLAY_NULL ||
+      taWork->Size < OVERLAY_TA_ENCODER_OFFSET + 8u)
+    return AdmissionDynamicOverlayRange;
+  if (overlay_read_u64(taWork->Data + OVERLAY_TA_ENCODER_OFFSET) !=
+      ActiveObjects[OVERLAY_CAPTURED_ENCODER_OBJECT].GpuVa)
+    return AdmissionDynamicOverlayContent;
+  overlay_write_u64(taWork->Data + OVERLAY_TA_ENCODER_OFFSET,
+                    encoder->GpuVirtualAddress);
+  return AdmissionDynamicOverlaySuccess;
 }
 
 static const APPLE_AGX_DYNAMIC_JOB_OBJECT *overlay_job_object(

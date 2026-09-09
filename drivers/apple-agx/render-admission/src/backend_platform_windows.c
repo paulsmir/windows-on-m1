@@ -1839,7 +1839,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           runtime->Adapter->BackendImage.Objects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
-          &bindings, &staged, runtime->QueueObjects, Job))
+          &bindings, &staged, runtime->QueueObjects, Job) ||
+      (dynamic &&
+       AdmissionDynamicOverlayRouteEncoder(
+           &dynamicPlan, runtime->QueueObjects,
+           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) !=
+           AdmissionDynamicOverlaySuccess))
     goto BuildFailure;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   {
