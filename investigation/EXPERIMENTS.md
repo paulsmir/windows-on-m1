@@ -40175,3 +40175,60 @@ relaunched. Final health is Problem28/null INF, packages/service/module/SYS/UMD
 absent, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP652 will not
 be repeated; the next candidate must add one causal aperture-aware copy fix and
 retain all other source/artifacts as controls.
+
+# EXP653 — aperture-aware resident dynamic input import
+
+**PREREGISTERED 2026-09-09T00:20:00Z. WHY THIS HYPOTHESIS:** (1) EXP652
+durably reaches Render ENTRY/EXIT and fails only guard19 Prepare with
+`STATUS_INVALID_IMAGE_FORMAT`, before any DMA/Patch/Submit; (2) the exact
+generated overlay plan/binding and byte-identical assets already pass the full
+offline composition test, leaving production WDDM resident access as the first
+environmental difference; (3) the KMD advertises every CPU-visible class input
+as valid in segment1 or preferred segment2, but the EXP652 `AdmissionDynamicRead`
+unconditionally rejected segment1. RED→GREEN tests now reproduce local and
+cross-page software-aperture reads plus range/short-copy failure handling.
+
+Single variable is commit
+`8ff2d82444edfc40f1935cf262a369ca145db134`: the copy-once materializer reads
+immutable class inputs through one PagingLock-owned memory-runtime function
+that accepts exactly resident segment1/2. Destination allocation, seven
+relocations, dynamic DMA, overlay, AGX/RTKit/UAT/queue/PBE/DCP, producer/assets,
+completion and zero capability mask are byte-identical EXP652 controls.
+144 focused tests are GREEN.
+
+Exact source overlay SHA256 is
+`9546a9232f1d2302f7f30558a4484f041b6a009421c7d3cecdabb6fccb1ec8b9` over
+immutable EXP652 source. Pinned WDK/SDK26100 MSVC14.44 build command is
+`build-driver.ps1 -Configuration Release -PackageBuild 653
+-VisibleAgxQualification`; analysis, Universal, Inf2Cat, TestSign, version and
+x64 UMD contract gates pass with inherited KMD C28251/x64-test C6011 only.
+Package is30.0.653.0. SYS/UMD/INF/CAT/ZIP/manifest SHA256 are
+`ab011e2c3af286f4e5cc9ddd8fa6ee21ca605cdcc4ad273cc93ef6e42e6ca343`,
+`0a303018a5219ee2a8d78691440a76ec1d98755df6f7679d557dfdc959720699`,
+`5972fb4688a269ec7dc544ad54416ea665901adeea18965c94a0caf778f73b17`,
+`ae3ce698d50bc1b1cc39c9d4b7ebfacf4565adef7a016224eb0614ed7433163a`,
+`8575c2f22b651bd0a41ef80925f982d49b236b782b13f36b2af4eafa43399a99`
+and `1529cfe5af66d58add68017be11421058afbd4486cda3a03b5a253d131020a67`.
+Exact EXP652 producer SHA256
+`e4d4289d6117c80972d736906f4c35e53bb102f5a805c17aab3745a3afd04803`
+and all seven asset hashes remain controls. Signer thumbprint remains pinned
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`.
+
+Root/m1n1/Mu commits are
+`e47e15f4ddec5a7fc675b8c8fa77fe8d99777051`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`; unstaged/staged diff SHA256 are
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`
+and empty `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Air preflight after EXP652 cleanup is ordinary377/392 Problem28/null INF,
+packages/service/module/SYS/UMD absent, SSH/8CPU/NVMe2/USB5/keyboard1 and no
+fresh41/1001/129.
+
+Run/recovery are identical EXP652. PASS first requires Render guard0 with
+nonzero DMA/patch and then Patch/Submit/worker/physical fence; full success
+requires the existing full-frame triangle oracle, query, A408/D589, HOLD and
+retirement. If guard19 remains, the candidate is rejected and the next source
+inspection stays inside the exact remaining materialize primitive. If it moves,
+the first newly failed stage owns the next fix. Evidence path is
+`.local/experiments/EXP653-aperture-resident-read/`. Exact package cleanup and
+ordinary377/392 restoration remain mandatory after evidence.
