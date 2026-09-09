@@ -41960,3 +41960,36 @@ SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
 Artifacts and complete logs are under
 `.local/experiments/EXP673-final-store-graph`. Candidate-ready is not a
 verdict; clean ordinary preflight precedes staging and one natural bind.
+
+**EXP673 ACTUAL — FINAL ACTIVE STORE GRAPH CONFIRMED
+2026-09-09T10:33:00Z.** Exact `30.0.673.0` naturally bound as oem5 with Code0,
+service Running and exact SYS/UMD hashes. The unchanged784-byte Windows request
+passed Render and physical TA/3D completed with exact fence271. Raw
+`Wom1DynamicStoreReceipt` is248 bytes, version1/valid1, fence271, generation
+0x06640001 and SHA256
+`bb92e6b30b0dace9e446836314884f1a57c8e669350090cdf4f95d030342716f`.
+It reports destination/attachment0x1500fa0000, physical0x9bcfc0000,
+load0x22004, both reload0x23004, store and both partial store0x24004,
+pipeline-base raw0x14000000, clear/store-page FNV
+0xb4f04eb2fd87523d/0x30c354d48249bb26, store shader0x1100010400 with
+FNV0xc3387ebea1b9f34d, RT qwords
+0x000003c00fc60a22/0x10000001500fa000/0 and exact companion
+0xffffffff00000000/0/0/0. These equal the independent offline/native-normalized
+table. Derived JSON is `evidence/store.json`; the raw binary remains primary.
+
+The active encoder/VS-USC/FS-USC/VS/FS receipt remains byte-identical to EXP669
+(SHA256 `bd3947f8e85b86693fcbf17d31fd80f228c9090d89f54648f124b5f8a9de8a0d`)
+and the safe mapped fault snapshot remains byte-identical to EXP672 (SHA256
+`ba1f8e9c6f764a013cfac6aedc8de27a708bb6f2e19d7fa489f1b829d3f03917`).
+Output remains the same stable184 accepted background/zero-colour result,
+FNV0x98b3446c1b0a8215; no presentation occurred. Device stayed ACTIVE with
+8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Verdict: CONFIRMED for final
+active store graph, REJECTED as a colour fix by design. The first unknown is
+fragment USC invocation/tile write, not graph construction, UAT, store/PBE or
+completion.
+
+**EXP673-R1 CLEAN RECOVERY 2026-09-09T10:36:00Z.** Evidence was saved first.
+Exact oem5/package/devnode was removed, the stopped experiment service was
+deleted, full-owner shut down, and immutable ordinary377/392 restored. Health:
+Problem28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.

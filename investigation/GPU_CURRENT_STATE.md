@@ -285,6 +285,21 @@ package is removed; ordinary377/392 clean at2026-09-09T09:48:18Z with Code28,
 no package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh
 41/1001/129.
 
+EXP673 closes the final active WorkCommand/PBE/store graph on hardware. Its
+fence271 `Wom1DynamicStoreReceipt` is valid and reports load0x22004,
+reload0x23004, store/partial-store0x24004, exact attachment0x1500fa0000,
+native-normalized clear/store page hashes, store shader0x1100010400 with
+FNV0xc3387ebea1b9f34d, the exact16x16 tiled format40 RT descriptor and exact
+companion uniforms. The existing encoder/USC/shader receipt and mapped-fault
+snapshot remain byte-identical; physical TA/3D and fence complete, but output
+is unchanged at184 accepted background pixels and the stable zero-colour
+boundary. Thus final graph construction/publication is closed. The first
+unknown is now fragment USC invocation/tile write itself; no new VA/UAT,
+shader-byte, encoder-route, PBE/store or DCP change is justified without a
+fragment-only discriminator. EXP673 package/service were removed and ordinary
+377/392 is clean at2026-09-09T10:36:00Z: Code28/null INF, no package/service/
+module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
