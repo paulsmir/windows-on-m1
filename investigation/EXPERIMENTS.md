@@ -40952,3 +40952,32 @@ yet match the full-frame production oracle. Same background FNV rejects the
 V13_5 graph compatibility hypothesis; earlier guard/launch failure is
 inconclusive. Preserve evidence, exact-clean the reused package and restore
 ordinary377/392.
+
+**EXP660 ACTUAL — INCONCLUSIVE BEFORE RENDER 2026-09-09T02:10:22Z.** Exact
+EXP658 package bound Code0/service Running with exact hashes and8CPU, but the
+new producer printed only `RESULT=1`. There is no Render correlation record,
+DMA, Patch, Submit or GPU output receipt; therefore the native graph was never
+tested and no GPU hypothesis is accepted or rejected. Result/evidence/host-log
+SHA256 are
+`5c9f10f59ead959bb5a4f9e99a53c2458f7e6c16726385042eb5713431df3a69`,
+`e34da512780813a0e905c2f61b3e489dacefc6358aac07b91f98bf08970630bd`
+and `b8e928b4892fdcd26d2d7877be808b71839de49d2b7da6e0ae117b001d7762ed`.
+There were no fresh41/1001/129 events.
+
+**EXACT PRE-RENDER OWNER AND FIX.** A portable reproduction of the exact nine
+references/eight relocations makes `AgxWin32TransportBuildDraw` return
+`AppleAgxWin32AbiRelocation` before D3DKMT. Source inspection names the sole
+violated policy: `DescriptorAddress` permitted texture/constant/render-target
+targets but not Vertex. V13_5 VS requires the descriptor to contain the owned
+vertex allocation address. Commit
+`8cb6662b8245a86b05bf6368e0b110197c0712b1` adds only Vertex to that target
+allowlist. It does not add raw addresses or new roles; normal range/access/
+ownership/overlap checks remain. The exact portable command now returns
+success with784 bytes. RED→GREEN shared ABI test and122 adjacent tests pass.
+
+**EXP660-R1 CLEAN RECOVERY 2026-09-09T02:13:54Z.** Evidence was preserved,
+exact oem5/devnode removed, full-owner guest stopped and immutable
+ordinary377/392 restored. Health is Problem28/null INF, no package/service/
+module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP660
+must not be repeated. The next candidate rebuilds KMD and producer with only
+the descriptor-to-Vertex policy fix over the unchanged V13_5 graph.

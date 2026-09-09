@@ -113,6 +113,15 @@ GREEN. KMD/backend remains exact EXP658. Hardware proof is still NO; next run
 must reuse the exact EXP658 package and change only producer/assets, requiring
 non-background output FNV after physical completion.
 
+EXP660 did not reach Render: result1, no correlation/DMA/Patch/Submit. Portable
+reproduction names `AppleAgxWin32AbiRelocation` because DescriptorAddress did
+not allow a Vertex target. Commit `8cb6662b8245a86b05bf6368e0b110197c0712b1`
+adds that one owned-role edge while preserving every validation guard; the
+exact command is now accepted at784 bytes and122 tests pass. EXP660 is removed
+and ordinary377/392 is clean at 2026-09-09T02:13:54Z. Next is a full pinned
+KMD+producer rebuild with this sole guard fix and the unchanged normalized
+V13_5 graph; hardware graph compatibility remains untested.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
