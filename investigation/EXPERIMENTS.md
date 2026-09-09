@@ -40272,3 +40272,46 @@ INF, packages/service/module/SYS/UMD absent, SSH/8CPU/NVMe2/USB5/keyboard1 and
 no fresh41/1001/129. EXP653 will not be repeated. EXP654 must contain only the
 direct-full-frame routing fix over exact EXP653 source and reuse the same
 producer/assets/platform.
+
+# EXP654 — direct full-frame dynamic presentation route
+
+**PREREGISTERED 2026-09-09T00:29:30Z. WHY THIS HYPOTHESIS:** (1) EXP653
+durably reports `Prepatched=1`, proving the full dynamic materializer and DMA
+build passed; (2) its next status is `STATUS_INVALID_ADDRESS` at guard19 and the
+only matching post-materialization source call is
+`AdmissionVisibleAgxResolveDestination`; (3) that helper requires exactly the
+legacy two-allocation shape, while this Draw has10, and the downstream
+full-frame `directFramebuffer` path already consumes the exact render
+destination without companion fields. An executable packet test proves an
+all-zero companion tuple remains exact across capture/adoption and rejects
+partial tuples.
+
+Single variable is commit
+`1a04e8cf5a658a0a996158a40eb354616bab3dfa`: only a dynamic command skips the
+legacy companion resolver. Exact render destination identity, inactive-surface
+validation, allocation lifetime, DMA/overlay, firmware/AGX/completion/DCP and
+all capability bits remain EXP653 controls. 145 focused tests are GREEN.
+
+Exact overlay SHA256
+`b1fc551a0a552ab8148605d7e388bd5121878c26bb5e4d422c43cee53c64f639`
+applies over immutable EXP653 source. Pinned build is WDK/SDK26100,
+MSVC14.44.35207, Release PackageBuild654 VisibleAgxQualification. Analysis,
+Universal, Inf2Cat, TestSign, version and x64 contract gates pass with only
+inherited warnings. SYS/UMD/INF/CAT/ZIP/manifest SHA256 are
+`c50c14c5df2f11a23587bc1f1a0ca52b931db719187763a46c49d05391039bc8`,
+`86ee5f1b195067e0a62e9bc2d1afd4ea36ddd24f007ddddc7ee7839b785f7618`,
+`b1dc05540788c5d3de2f9496adab159bc53996ff20177c2d80a65261411f800e`,
+`3917933b5dca0cf8e2e9f80cf87e8415b1fc4ef08d723b4a5ff9b7c826822cdb`,
+`2cff8c13acf0f73f13a5f3c9ca1dae52677217f48778017ef06cb4245379e4e4`
+and `40075f72848000e2a052765ba23cc0ab953c05301cf0e4c1df1de96b2e255bce`.
+Producer/assets/platform are byte-identical EXP653 controls. Root/m1n1/Mu are
+`15ddec8e3f368bbe1af91d16648dcfed794e5529`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`; unrelated unstaged diff hash stays
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`.
+
+Air is clean ordinary377/392 at 2026-09-09T00:26:14Z. Run, PASS predicates,
+evidence and exact cleanup are unchanged except build654. The first required
+advance is Render success with nonzero DMA/patch and then Patch/Submit. Full
+PASS still requires physical TA/3D, exact fence, nonuniform full-frame output,
+matching latch, HOLD and retirement. Any new guard becomes the sole next owner.
