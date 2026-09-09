@@ -40472,3 +40472,44 @@ Problem28/null INF, packages/service/module/SYS/UMD absent,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP655 will not be
 repeated. EXP656 must test only the atomic varying-count publication with the
 new exact encoder/relocation and otherwise identical graph/platform.
+
+# EXP656 — atomic PPP varying-count publication
+
+**PREREGISTERED 2026-09-09T00:55:00Z. WHY THIS HYPOTHESIS:** (1) EXP655
+proves the full destination is byte-for-byte background after successful
+dynamic TA/3D/fence, so the first failure is no rasterized fragment rather than
+PBE/store/completion; (2) pinned Mesa Gallium emits OUTPUT_SELECT and both
+VARYING_COUNTS words as an atomic PPP invariant; (3) exact EXP655 encoder has
+output select but omits both count header bits/words. The vertex UVS has four
+smooth32 user components, and generated packing reproducibly changes only the
+PPP state size and downstream fragment-pipeline field offset.
+
+Single variable is commit
+`25768ee57bfd5225dab345bb362bd51eaba3acb0`: publish smooth32=4,
+flat32=linear32=0 and zero16 immediately after output select; update the exact
+fragment-pipeline relocation212→220. Shader binaries, USC pipeline, VDM draw,
+destination, PBE/store, dynamic KMD path, diagnostics, platform and caps remain
+controls. Encoder changes228→236 bytes with SHA256
+`9e42df1d6eb345fc7468b3235bb9fe943fb81e5bff91e7e0fef9be371330aec3`.
+
+Exact source overlay SHA256 is
+`85fc164abb6bdd23d20f6c3294afa051ec9d18db4e31b342764069c3ff960c86`
+over immutable EXP655. Pinned WDK26100/MSVC14.44 Release PackageBuild656
+VisibleAgxQualification and ARM64 producer pass analysis, Universal, Inf2Cat,
+TestSign and x64 tests. SYS/UMD/INF/CAT/producer/ZIP/manifest SHA256 are
+`f858af4ceeacadf15ca69a01200d051aa9797e20e2337a2d7e9cc04334491db4`,
+`4381f4945fb9781b43f93154611952505df2dce008661e4095f57fa59b38ba72`,
+`8f1a43d92a9ff47fb1e33fe9354768fb45acc894e228aac1c0cb5e959e9f805f`,
+`f15576a18e06929918123a4a4ad4004397d74fe47e3a2b591ede1c52e38b624c`,
+`7f4b3c7d40fae81d814fcb944e85d62dcc6157584c702c3546a443b87e13eb48`,
+`fa22c6b38d3de9d244a38f2111efb4fcaa564ca2b009cf5e35d7388e55bcdc81`
+and `0b436ccac8a70521bc633ff94e226f02d91df86fad399112685c7fa158db33e3`.
+Root/m1n1/Mu are `d2ca9c71c00a3efc4ba2dc477cdf79d91eb135fd`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000`,
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`.
+
+Air is clean ordinary377/392 at 2026-09-09T00:51:31Z. One exact run only.
+PASS requires physical completion plus nonzero foreground, exact two-colour
+full-frame validation, query, D589, HOLD and retirement. Uniform background or
+a new exact output value rejects this causal fix and drives only the nearest
+PPP/VS contract. Cleanup/recovery remain mandatory.
