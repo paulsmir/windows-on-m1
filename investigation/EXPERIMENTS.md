@@ -42146,3 +42146,34 @@ Code28/null INF, no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next keeps the original
 native instruction stream and substitutes only nonzero FP16 values that round
 to external zero for G/B.
+
+# EXP676 — nonzero FP16 lanes that round to exact red
+
+**PREREGISTERED 2026-09-09T11:03:00Z. WHY THIS HYPOTHESIS:** (1) EXP674 with
+all four nonzero source lanes produces72 exact fragment pixels through the
+same `st_tile`; (2) both the original red shader and EXP675 direct red contain
+two exact-zero G/B source lanes and produce the same zero output; (3) EXP675's
+neutral-instruction construction is rejected, so the strongest remaining
+single difference is zero versus nonzero source-lane values, not XOR routing.
+
+The original native shader and its complete XOR/pixwait/st_tile/control stream
+remain byte-exact. Only the two zero FP16 immediates at file offsets15 and21
+change to the smallest normal half value0x0400. IEEE FP16 0x0400 is
+0.00006103515625; multiplied by255 it is0.01556 and therefore u8norm rounds to
+exact external zero. Expected raw output remains `0xffff0000`, not an
+approximate acceptance colour. Fragment asset SHA256 is
+`71db5836e38a58ad6a6b0d5f378d780e384a87bb8d9fd49baffd3493b74b3fc1`;
+variant manifest SHA256 is
+`72863d72d870181a30ae97a3c65149889fb065b2c416d224e4e5e2b307e1f5ea`.
+Pinned disassembly confirms only `ldimm r1h/r2l,1024` changed.
+
+No source/package/producer or other asset change. Reuse exact signed30.0.673.0
+and air manifest SHA256
+`c7e2d28e537026e080bb9898537733a18b571b7589deb2dfc4ae9133abf6c203`.
+One request only. PASS requires physical TA/3D/fence271-equivalent,72 exact raw
+red pixels,184 exact background pixels, full output verification, unchanged
+store graph and no causal reset. Exact red would confirm the zero-lane quirk
+and provide the minimal functional shader correction. Unchanged zero output
+rejects the hypothesis; because this is the second focused causal attempt after
+EXP674 evidence, no third value probe follows without a fresh architectural
+re-anchor. Cleanup returns ordinary377/392 after evidence.
