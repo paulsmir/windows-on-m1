@@ -42677,3 +42677,20 @@ Exact signed680 ZIP/SYS/UMD/INF/CAT hashes are unchanged from EXP680 freeze.
 Air manifest SHA256d163411f6cdb255947cd9a036b42623830ce9dbb2deb4bf1a89b781a4f8826d4;
 its LedgerCommit retains the reused680 package provenance. Producer source
 commit0fe2f489f94075cea7a0e733fc4a274efebf0c85 is separately exact.
+
+EXP681 ACTUAL 2026-09-09T13:01:54Z — NATIVE_RED_RAW_OUTPUT_PASS. Exact680
+package and preregistered native producer/FS naturally bind Code0/oem5. One
+request completes physical TA3D with stamps7a000100/3d000100 and done2/2,
+Windows fence271, Notify/DPC. Valid1096-byte snapshot contains raw1024 bytes
+identical to immutable native attachment, SHA256
+6443f78f9a269826fbb0d0f8e2148e0629b9f0289fc61bbf421ddfd552d8a7a3.
+72 exact native BGRA redffff0000 and184 backgroundff112233; full tiled spatial
+mask; expected/observed red agree; FNV98b3446c1b0a8215; mismatch none, poison0,
+guard0, bytes examined1024. Snapshot SHA256
+7f487c50a0eaf25ba647eaa69876305d3f28e6cab396eb87bd59f6761fd976fe.
+Terminal SHA256fc6534536b65e46e1a60531640aeba15734105ab3455eedf7031923c8901f18a.
+Device ACTIVE,8CPU/NVMe2/USB5/input; no41/1001; one129 at12:59:56Z is telemetry.
+The earlier red results had the same FNV but flawed scalar oracle; this run
+provides the missing raw proof and supersedes their zero-colour interpretation.
+No Present or desktop PASS. Raw evidence and hardware.log preserved before
+exact package cleanup. Continue to four alternating raw frames after recovery.

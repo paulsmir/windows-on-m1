@@ -1,5 +1,19 @@
 # GPU current state
 
+## Latest boundary — EXP681, 2026-09-09T13:02Z
+
+NATIVE_FRAGMENT_RED_HW_PROVEN=YES; FRAGMENT_OUTPUT_CORRECTNESS_HW_PROVEN=YES
+for the native16x16 workload. Original native FS, unchanged EXP680 KMD,
+physical TA3D/fence271, raw1024-byte image exactly equals EXP659 native
+attachment:72 ffff0000 red and184 ff112233 background, poison0, guard0.
+Independent expected and observed bothffff0000; FNV98b3446c1b0a8215.
+Snapshot SHA2567f487c50a0eaf25ba647eaa69876305d3f28e6cab396eb87bd59f6761fd976fe.
+Evidence: `.local/experiments/EXP681-native-red-oracle/evidence/`.
+Earlier zero-colour scalar claims cannot supersede this raw proof. No race
+claim; no reopening AGX/PBE/VA/UAT/encoder. Exact package removed; ordinary
+recovery underway. Next: four separate red/gray requests using existing
+producers with held distinct allocations and per-fence raw export.
+
 ## Latest execution state — 2026-09-09T12:51Z
 
 EXP680 RAW_OUTPUT_PASS: valid immutable1096-byte snapshot contains exactly
