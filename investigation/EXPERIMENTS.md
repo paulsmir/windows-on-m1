@@ -42316,3 +42316,59 @@ observation into failure or alter later zero results; it supersedes only the
 strong causal claim. The correct next discriminator must use an all-lanes
 colour distinct from poison, background and zero. Context/queue investigation
 is deferred until that fragment write boundary is actually closed.
+
+# EXP678 — non-poison fragment-write discriminator
+
+**PREREGISTERED 2026-09-09T11:47:12Z. WHY THIS HYPOTHESIS:** (1) production
+source fills the whole output with byte0xa5 immediately before publication, so
+EXP674's72 pixels equal to0xa5a5a5a5 cannot distinguish a fragment write from
+untouched poison; (2) EXP673 and EXP677 still prove the exact physical job,
+fence, coverage mask, final graph/store state and full output readback; (3) the
+pinned compiler re-anchor proves the one packed four-half `st_tile` source.
+The nearest missing primitive is therefore a fragment output value visibly
+different from every initial/clear/failure value, not context or queue state.
+
+**WINDOWS CONTRACT:** exact signed package30.0.673.0, producer, request,
+allocation, output verifier, fence and fail-closed no-Present path remain
+unchanged. **AGX/ASAHI CONTRACT:** retain the compiler-generated
+load/permutation/writeout/st_tile instruction stream, exact USC/encoder/
+WorkCommand/PBE graph and one16x16 job. **TRANSLATION:** change only the four
+FP16 immediate payloads from EXP674's0x392d to0x3800. This is exactly0.5 and
+U8NORM rounds each component to0x80. The expected72-pixel foreground
+0x80808080 is distinct from poison0xa5a5a5a5, background0xff112233 and zero.
+**WHAT IS STILL UNKNOWN:** whether the fragment program performs a real tile
+write or leaves the covered samples at their pre-submit sentinel.
+
+The exact112-byte variant SHA256 is
+`76bd43a9fa27e411433955d03614ac5cf21e2a8b020f53ca7e4786f8895d33da`.
+Only offsets2,3,8,9,14,15,20,21 differ from EXP674; all bytes from offset24
+are exact. Variant/Air/workflow SHA256 are
+`966df0fbda928bd3fc330d6f724915f2a747ba72d4e1bd628b28b6439bab4a2d`,
+`1b8e7f3183343d14f43ba52b7fac40db68a8b37c0596aa55d3696f7bfb46805d`,
+and `98cbd217c952dabe42a1ad285c58b30e71f1c4ea749eb940fe172a6f2e8c6d58`.
+The executable variant/oracle gate reports `EXP678_VARIANT_OFFLINE_PASS` and
+derives72 foreground,184 background and exact expected
+FNV0xdd2c90074f6ee435.
+
+No source/package/producer build changes. Reuse ZIP/SYS/UMD/INF/CAT/producer
+SHA256
+`f9d6058d9b3c073592c283dec96752b9b019ab73826ce82a1ba0da2b119ea800`,
+`12da89b0556172cab7653cdb9df4dd923cfa255dcf754b5d6f541b5ce75dc855`,
+`11fe687e3174806e4ebc8b3b7a5749c52453b941e63760ab537aeba70b449991`,
+`4b8db81ebd720aaeb8ffc90b9b9df0863727d1032ea352abd7c0d010c7eed748`,
+`d41656de91cc2eee9f23037bc352137b57119d81d850656639e7cc8c8c5e3c47`,
+and `7ded25f93c7ce78c8b448faedb0778c1c30b083baf91d8e56b36ee8efc2a079e`.
+Source/ledger HEAD is
+`bbb1fe2ddb3a5b4d74c5b965d8c53a112ae7d6c7`; pre-existing dirty diff/name
+hashes remain
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`/
+`66acef7cc629ee044839a3ff535e5e04738f7d0bf7674d45f01e9aef5627c7b4`
+and are excluded.
+
+One natural bind and one request. PASS requires physical TA/3D, exact fence,
+72 exact0x80808080 pixels,184 exact background pixels, full256-pixel FNV
+0xdd2c90074f6ee435, poison0, intact guard and unchanged graph/store/fault
+receipts. Seventy-two0xa5a5a5a5 pixels prove untouched poison;72 zero pixels
+preserve the current failure. Any different value is classified exactly.
+Failure to reach the same execution boundary is INCONCLUSIVE. Evidence precedes
+exact package cleanup and ordinary377/392 recovery.
