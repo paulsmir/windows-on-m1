@@ -41113,3 +41113,38 @@ Artifacts are under `.local/experiments/EXP662-v13_5-vertex-overlay/artifacts`.
 Ordinary377/392 remains live and clean from EXP661-R1. Next commands are exact
 SCP, Stage on Code28 baseline, graceful shutdown, current full-owner launch,
 hash preflight and one Run.
+
+**EXP662 ACTUAL — VERTEX CARRY CONFIRMED, OUTPUT STILL BACKGROUND
+2026-09-09T06:59:02Z.** Exact oem5 natural bind passed Code0/service Running,
+8 CPUs and all installed hashes. The unchanged784-byte/9-reference request
+returned success with queued1. Durable correlation candidate662/boot386268434
+records Render0/DMA3860/prepatched1, Patch0/one patch, Submit0/fence271,
+workerReady, physical completion, QueueDpc1 and matching Notify/DPC timestamps.
+The complete16,384,000-byte output scan then returned STATUS_DATA_ERROR:
+4,096,000 background pixels, changed bytes0, poison0, FNV
+`0xf953759ae5722325`; no Present. Device stayed Problem0/service Running with
+8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Correlation, terminal and
+raw evidence are in `.local/experiments/EXP662-v13_5-vertex-overlay/evidence`;
+raw correlation/terminal SHA256 are
+`80db8c690cf06cbffbe484d8a0644c136a154e1ea92d7496fc0ba62583f85691`
+and `4c284f62b74d6f1156d928b114e7e98f3f32780b7f885e12189c20a517f22daf`.
+
+**VERDICT:** commit d9d3dd3 is hardware-confirmed through the boundary it owns:
+the descriptor-targeted CPU-visible Vertex now survives production
+materialization/DMA/worker and no longer blocks Render. The result does not
+prove or reject exact native geometry compatibility because the control was
+not exact at the WorkCommand boundary. EXP659 `cmdbuf.json` specifies16x16,
+pitch64 and a16KiB attachment, whereas EXP662 producer describes2560x1600,
+pitch10240 and `AppleAgxExp208BindDynamicFramebuffer` expands the captured
+WorkCommand/PBE tiling to that full geometry before queue submission. This is
+the nearest source mismatch; cache flush is not selected because the backing
+is explicitly NON_CACHED and the existing barrier already orders writes.
+
+**EXP662-R1 CLEAN RECOVERY 2026-09-09T07:03:50Z.** Exact oem5 package/devnode
+was removed after evidence, full-owner shut down, and immutable ordinary377/392
+restored. Health is Problem28/null INF, no AppleAgx package/service/module/SYS/
+UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP662 must not be
+repeated. The next atomic contract is an explicit16x16/pitch64/16KiB dynamic
+render area matching EXP659 while reusing the existing captured-small
+WorkCommand and framebuffer owner; AGX firmware, RTKit, queues, PBE encoding,
+DCP and caps remain unchanged.

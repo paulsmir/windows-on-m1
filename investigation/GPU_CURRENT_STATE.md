@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T02:30Z. Main process only; no agents.
+Updated 2026-09-09T07:04Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -134,6 +134,20 @@ not yet proven. EXP661 is removed and ordinary377/392 is clean at
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next is one exact build
 and hardware run of the unchanged V13_5 graph with this vertex carry as the only
 functional variable.
+
+EXP662 hardware validates that translation: the same784-byte request now passes
+Render/Patch/Submit with DMA3860, physical TA/3D, exact fence271, Notify/DPC and
+device ACTIVE. Full output nevertheless remains byte-exact uniform background,
+FNV0xf953759ae5722325, changed0. This does not yet reject the exact native graph:
+EXP659 cmdbuf is16x16/pitch64 with a16KiB attachment, while the production path
+binds the2560x1600 allocation by calling `FramebufferWriteFullGeometry` before
+submission. Thus user graph bytes are native but their WorkCommand/PBE geometry
+is not. Vertex carry is HW_PROVEN; native geometry compatibility remains NO.
+EXP662 is removed and ordinary377/392 is clean at2026-09-09T07:03:50Z with
+Code28/no package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no
+fresh41/1001/129. Next is one bounded, explicit16x16 render-area/attachment
+contract using the existing small EXP208 binding; no firmware/queue/DCP/caps
+change.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
