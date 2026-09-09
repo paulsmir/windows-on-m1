@@ -40735,3 +40735,41 @@ validation, query/D589/HOLD and safe retirement. The same complete background
 snapshot rejects this stage-binding hypothesis. Earlier admission/launch
 failure is inconclusive. Evidence must precede exact cleanup and ordinary
 recovery.
+
+**EXP658 ACTUAL — USC STAGE-BINDING HYPOTHESIS REJECTED
+2026-09-09T01:42:46Z.** Exact30.0.658.0 bound naturally with exact hashes,
+Code0/service Running and8CPU. The928-byte Draw passed Render status0/queued1,
+DMA4020/patch1/prepatched1, Patch/Submit status0, physical TA/3D completion and
+exact Windows fence273. Correlation version3/build658 has valid mask0x7e5,
+worker phase2, synchronize0 and QueueDpc1, proving the canonical stage records
+were part of the executed job rather than rejected before submission.
+
+The 368-byte output snapshot is again semantically identical: backend and
+completion0, expected/observed done2/2, full16,384,000-byte scan, first pixel
+background0xff101820,4,096,000 background pixels, changed0, poison0, centre
+mismatch2,049,280, guard-corrupt1 and FNV0xf953759ae5722325. Present was not
+entered and the producer stopped at strict timeout/preserve. Thus canonical
+binding order and sampler0 remain required source-correct state but are not
+sufficient to produce a fragment. This candidate will not be repeated.
+Snapshot/correlation/result/evidence/host-log SHA256 are
+`f7737bdb964c9c499893b288a00cd9e13acbe303cc1982e5c4ea1a4ae8e81b72`,
+`b0822ba91e2a7d3f2f5fa28750bb4f0d375ea6bd5fae3f4868e4f4bc37e9f1ff`,
+`beb28a3e1100526b8490452e94d862be7d170f757f0a312fa4652408b12e43d8`,
+`8e555d76188df99616587e23161263ac986957b1885be00fe4321a2c87ed51fb`
+and `bd9df091c599d556814591cae4b335b32e36910ff031ac1b2070e020b7f8dbc9`.
+No fresh41/1001/129 event occurred.
+
+**EXP658-R1 CLEAN RECOVERY 2026-09-09T01:44:33Z.** Evidence was saved first;
+exact oem5/devnode and experiment-local stale producer shells were removed,
+full-owner Windows stopped, and immutable ordinary377/392 restored. Final
+health is Problem28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+
+**ANTI-LOOP RE-ANCHOR.** EXP657 and EXP658 are two consecutive complete
+source-correct fixes that did not move the output. Before any EXP659, compare
+the entire materialized production VDM/PPP/USC image and retained queue pointer
+chain against one real native/Mesa geometry draw, not the clear-only EXP208
+skeleton. The next hardware hypothesis must be one difference from that
+comparison or a single discriminator proving which of encoder fetch, VS
+invocation, primitive generation and fragment invocation is zero. No further
+isolated state-bit candidate is justified yet.

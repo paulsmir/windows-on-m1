@@ -80,9 +80,18 @@ pipelines/word counts. Commit `e06c29e8a4e51d39c4622d006f2dd34191c31a7b`
 now emits canonical binding->sampler->shared->shader ordering, an exact sampler
 descriptor with two typed relocations, and4-compact sampler counts. Generated
 unpack, production ABI/materialize/DMA/overlay and121 focused tests are GREEN;
-pipeline/encoder/sampler hashes are fixed. This is OFFLINE_PROVEN only. Next is
-one fresh exact hardware candidate for this atomic USC-stage contract. Caps
-remain0 until AD04 mandatory contract completion.
+pipeline/encoder/sampler hashes are fixed. EXP658 executed that exact contract
+through DMA4020/Patch/Submit, physical TA/3D and fence273, yet the full output
+remained identical background with changed0 and FNV0xf953759ae5722325. The
+contract is retained but rejected as the isolated cause. Exact package is
+removed; ordinary377/392 is clean at 2026-09-09T01:44:33Z with Code28, no
+package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh
+41/1001/129. Because EXP657/658 are two focused fixes without movement, the
+mandatory next action is a focused re-anchor of the entire materialized
+VDM/PPP/USC image and retained queue pointer chain against one real native/Mesa
+geometry draw. No EXP659 is justified until this yields one causal difference
+or a smallest stage-progress discriminator. Caps remain0 until AD04 mandatory
+contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
