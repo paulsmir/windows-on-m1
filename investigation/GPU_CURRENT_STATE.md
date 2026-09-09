@@ -259,8 +259,9 @@ AP0/PXN1/UXN1, while Windows pipeline aliases use AP2/PXN0/UXN1. Commit
 `985e80815e5c6323397e2acdf504a4b0a1e5b405` adds only the exact pipeline leaf
 profile and applies it to four context-63 mappings;16 relevant tests pass.
 EXP670 is the next discriminator. EXP669 evidence is saved and its exact
-package removal/recovery is in progress; do not call ordinary clean until live
-health confirms it.
+package removal is complete. Ordinary377/392 is clean at
+2026-09-09T09:14:50Z: Code28/no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

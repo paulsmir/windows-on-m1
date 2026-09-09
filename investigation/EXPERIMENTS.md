@@ -41749,3 +41749,10 @@ source plus exactly four files. Relevant16 tests GREEN. Pinned build/sign/hash,
 one natural bind, exact active graph receipt/output and cleanup apply. PASS is
 72 red+184 background with physical completion. Zero output rejects leaf
 attributes and requires fault/USC execution evidence, not another mapping edit.
+
+**EXP669-R1 CLEAN RECOVERY 2026-09-09T09:14:50Z.** Evidence was already local
+before SSH disappeared during cleanup. The established control plane showed
+the guest completed shutdown; full-owner stopped and immutable ordinary377/392
+was restored. Live health: Problem28/null INF, no package/service/module/SYS/
+UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP669 must not be
+repeated.
