@@ -107,6 +107,7 @@ static AGX_WIN32_DEVICE_INFO device_info(void) {
 int main(void) {
   static FAKE_PIPE fake;
   AGX_WIN32_SCREEN screen;
+  AGX_WIN32_PIPE_DEVICE device = {0};
   AGX_WIN32_SCREEN_OPERATIONS screenOps = {query, create_class};
   AGX_WIN32_WINSYS_OPERATIONS transportOps = {
       create_general, map, unmap, destroy, fail_submit, fail_wait, retire};
@@ -130,7 +131,8 @@ int main(void) {
   }
   assert(AgxWin32ScreenInitialize(&screen, &fake, 7u, &transportOps,
                                   &screenOps) == AgxWin32ScreenSuccess);
-  pipe = AgxWin32PipeScreenCreate(&screen);
+  assert(AgxWin32PipeDeviceInitialize(&device, &screen));
+  pipe = device.Screen;
   assert(pipe != NULL && pipe->get_screen_fd == NULL);
   assert(strcmp(pipe->get_name(pipe), "Apple AGX G13G (Windows)") == 0);
   assert(strcmp(pipe->get_vendor(pipe), "Mesa") == 0);
@@ -138,8 +140,9 @@ int main(void) {
   assert(pipe->is_format_supported(
       pipe, PIPE_FORMAT_B8G8R8A8_UNORM, PIPE_TEXTURE_2D, 1u, 1u,
       PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW));
-  context = pipe->context_create(pipe, &fake, 0u);
+  context = device.Context;
   assert(context != NULL && context->priv == &fake);
+  assert(!AgxWin32PipeDeviceInitialize(&device, &screen));
 
   memset(&bufferTemplate, 0, sizeof(bufferTemplate));
   bufferTemplate.target = PIPE_BUFFER;
@@ -155,6 +158,8 @@ int main(void) {
   /* Device teardown must retain both objects and their runtime owner while
    * a resource still depends on this screen. */
   assert(!AgxWin32PipeScreenReleaseDevice(pipe, context));
+  assert(!AgxWin32PipeDeviceClose(&device));
+  assert(device.Screen == pipe && device.Context == context);
   assert(context->screen == pipe && screen.Active);
   u_box_1d(0x1000u, 0x2000u, &box);
   address = context->buffer_map(
@@ -201,7 +206,12 @@ int main(void) {
   p_atomic_inc(&pipe->refcnt);
   assert(!AgxWin32PipeScreenReleaseDevice(pipe, context));
   p_atomic_dec(&pipe->refcnt);
-  assert(AgxWin32PipeScreenReleaseDevice(pipe, context));
+  ++screen.Generation;
+  assert(!AgxWin32PipeDeviceClose(&device));
+  --screen.Generation;
+  assert(AgxWin32PipeDeviceClose(&device));
+  assert(device.Screen == NULL && device.Context == NULL && device.Runtime == NULL);
+  assert(AgxWin32PipeDeviceClose(&device));
   assert(screen.Active); /* Windows runtime lifetime belongs to the caller. */
   assert(fake.Creates == 2u && fake.Maps == 2u && fake.Unmaps == 2u &&
          fake.Destroys == 2u);

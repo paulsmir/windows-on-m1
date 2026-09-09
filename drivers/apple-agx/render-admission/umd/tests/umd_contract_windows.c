@@ -15,6 +15,9 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <string.h>
 
 #include "../src/umd.c"
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+#include "agx_win32_pipe_screen.h"
+#endif
 
 typedef struct _TEST_STATE {
   unsigned int Failures;
@@ -153,6 +156,8 @@ static HRESULT APIENTRY TestRender(HANDLE Device, D3DDDICB_RENDER *Render) {
   (void)Device;
   ++State.RenderCalls;
   CHECK(Render != NULL);
+  if (Render == NULL)
+    return E_INVALIDARG;
   CHECK(Render != NULL && Render->hContext == (HANDLE)(UINT_PTR)0x200u);
   CHECK(Render != NULL && Render->CommandOffset == 0u);
   CHECK(Render != NULL && Render->CommandLength == sizeof(State.RenderCommand));
@@ -525,6 +530,9 @@ static VOID APIENTRY BridgeSetError(D3D10DDI_HRTCORELAYER Core, HRESULT Error) {
 static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
                                        D3D10DDIARG_CREATEDEVICE Template) {
   ADMISSION_UMD_DEVICE devices[2];
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+  AGX_WIN32_PIPE_DEVICE pipes[2] = {0};
+#endif
   D3DDDI_DEVICECALLBACKS callbacks = *Template.pKTCallbacks;
   D3D10DDI_CORELAYER_DEVICECALLBACKS core10 = {0};
   D3D11DDI_CORELAYER_DEVICECALLBACKS core11 = {0};
@@ -548,14 +556,39 @@ static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
     CHECK(devices[index].Screen.Context == &devices[index]);
     CHECK(devices[index].CommandBuffer == BridgeCommands[index]);
     CHECK(devices[index].KernelContext == (HANDLE)(UINT_PTR)(0xa00u + index));
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+    CHECK(AgxWin32PipeDeviceInitialize(&pipes[index], &devices[index].Screen));
+    CHECK(pipes[index].Context != NULL);
+    if (pipes[index].Context != NULL)
+      CHECK(pipes[index].Context->priv == &devices[index]);
+#endif
     AdmissionUmdSetError(&devices[index], E_FAIL);
     CHECK(BridgeErrorOwner == 0xb00u + index);
   }
   CHECK(devices[0].Win32Generation != devices[1].Win32Generation);
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+  CHECK(pipes[0].Screen != pipes[1].Screen);
+  CHECK(pipes[0].Context != pipes[1].Context);
+  if (pipes[0].Screen != NULL) {
+    struct pipe_context *extra = pipes[0].Screen->context_create(
+        pipes[0].Screen, &devices[0], 0u);
+    CHECK(extra != NULL);
+    CHECK(!AgxWin32PipeDeviceClose(&pipes[0]));
+    CHECK(devices[0].Screen.Active && BridgeDestroys == 0u);
+    if (extra != NULL) extra->destroy(extra);
+  }
+  CHECK(AgxWin32PipeDeviceClose(&pipes[0]));
+  CHECK(devices[0].Screen.Active && BridgeDestroys == 0u);
+#endif
   AdmissionUmdRuntimeDeviceFinalize(&devices[0]);
   CHECK(devices[0].Magic == 0u && devices[1].Screen.Active);
   AdmissionUmdSetError(&devices[1], E_FAIL);
   CHECK(BridgeErrorOwner == 0xb01u);
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+  if (pipes[1].Context != NULL)
+    CHECK(pipes[1].Context->priv == &devices[1]);
+  CHECK(AgxWin32PipeDeviceClose(&pipes[1]));
+#endif
   AdmissionUmdRuntimeDeviceFinalize(&devices[1]);
   CHECK(BridgeCreates == 2u && BridgeDestroys == 2u);
   Template.hRTDevice.handle = (VOID *)(UINT_PTR)0x900u;

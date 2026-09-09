@@ -399,6 +399,47 @@ struct pipe_screen *AgxWin32PipeScreenCreate(AGX_WIN32_SCREEN *Screen) {
   return &screen->Base;
 }
 
+int AgxWin32PipeDeviceInitialize(AGX_WIN32_PIPE_DEVICE *Device,
+                                AGX_WIN32_SCREEN *Runtime) {
+  AGX_WIN32_PIPE_DEVICE candidate;
+  if (Device == NULL || Runtime == NULL || Runtime->Context == NULL ||
+      Runtime->Generation == 0u ||
+      Device->Runtime != NULL || Device->Screen != NULL ||
+      Device->Context != NULL || Device->Generation != 0u)
+    return 0;
+  memset(&candidate, 0, sizeof(candidate));
+  candidate.Screen = AgxWin32PipeScreenCreate(Runtime);
+  if (candidate.Screen == NULL)
+    return 0;
+  candidate.Context = candidate.Screen->context_create(
+      candidate.Screen, Runtime->Context, 0u);
+  if (candidate.Context == NULL) {
+    candidate.Screen->destroy(candidate.Screen);
+    return 0;
+  }
+  candidate.Runtime = Runtime;
+  candidate.Generation = Runtime->Generation;
+  *Device = candidate;
+  return 1;
+}
+
+int AgxWin32PipeDeviceClose(AGX_WIN32_PIPE_DEVICE *Device) {
+  if (Device == NULL)
+    return 0;
+  if (Device->Runtime == NULL && Device->Screen == NULL &&
+      Device->Context == NULL && Device->Generation == 0u)
+    return 1;
+  if (Device->Runtime == NULL || Device->Screen == NULL ||
+      Device->Context == NULL ||
+      Device->Generation != Device->Runtime->Generation ||
+      Device->Screen->winsys_priv != Device->Runtime ||
+      Device->Context->priv != Device->Runtime->Context ||
+      !AgxWin32PipeScreenReleaseDevice(Device->Screen, Device->Context))
+    return 0;
+  memset(Device, 0, sizeof(*Device));
+  return 1;
+}
+
 AGX_WIN32_SCREEN_BUFFER *AgxWin32PipeResourceBuffer(
     struct pipe_resource *Resource) {
   AGX_WIN32_PIPE_RESOURCE *resource = pipe_resource_cast(Resource);
