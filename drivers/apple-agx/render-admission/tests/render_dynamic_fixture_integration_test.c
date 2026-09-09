@@ -267,16 +267,20 @@ int main(int argc, char **argv) {
   assert(memcmp(image.Objects[71u].Data,
                 dmaView.Storage + encoderObject->StorageOffset,
                 encoderObject->Bytes) == 0);
+  assert(pipelineObject->Bytes > 0x40u);
   assert(memcmp(image.Objects[73u].Data + 0x10000u,
                 dmaView.Storage + pipelineObject->StorageOffset,
-                pipelineObject->Bytes) == 0);
+                0x40u) == 0);
+  assert(memcmp(image.Objects[73u].Data + 0x11000u,
+                dmaView.Storage + pipelineObject->StorageOffset + 0x40u,
+                pipelineObject->Bytes - 0x40u) == 0);
   assert((read_le(image.Objects[71u].Data + 20u, 4u) & ~0x3fULL) ==
          0x30000ULL);
   assert((read_le(image.Objects[71u].Data + 284u, 4u) & ~0x3fULL) ==
-         0x30040ULL);
+         0x31000ULL);
   assert((read_le(image.Objects[73u].Data + 0x10000u + 8u, 8u) >> 24u) ==
          image.Objects[36u].GpuVa + 0x8000u);
-  assert((read_le(image.Objects[73u].Data + 0x10000u + 72u, 8u) >> 24u) ==
+  assert((read_le(image.Objects[73u].Data + 0x11000u + 8u, 8u) >> 24u) ==
          image.Objects[36u].GpuVa + 0x8000u);
   assert((read_le(image.Objects[71u].Data + 4u, 4u) & 0xffULL) ==
          (image.Objects[71u].GpuVa >> 32u));

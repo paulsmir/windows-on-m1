@@ -57,6 +57,7 @@ static void initialize_view(
     references[index].Offset = 0u;
     references[index].Bytes = 0x40u;
   }
+  references[4].Bytes = 0x54u;
   references[0].Role = AppleAgxWin32RoleRenderTarget;
   references[1].Role = AppleAgxWin32RoleVertex;
   references[2].Role = AppleAgxWin32RoleShader;
@@ -104,16 +105,19 @@ static void initialize_job(APPLE_AGX_DYNAMIC_JOB *job,
   job->Version = APPLE_AGX_DYNAMIC_JOB_VERSION;
   job->Generation = view->Header->Generation;
   job->ObjectCount = sizeof(refs) / sizeof(refs[0]);
+  unsigned storage_offset = 0u;
   for (unsigned index = 0u; index < job->ObjectCount; ++index) {
     unsigned reference = refs[index];
+    unsigned bytes = (unsigned)view->References[reference].Bytes;
     job->Objects[index].ReferenceIndex = reference;
     job->Objects[index].Role = view->References[reference].Role;
-    job->Objects[index].StorageOffset = index * 0x40u;
-    job->Objects[index].Bytes = 0x40u;
+    job->Objects[index].StorageOffset = storage_offset;
+    job->Objects[index].Bytes = bytes;
     memset(storage + job->Objects[index].StorageOffset,
-           0x20 + (int)reference, 0x40u);
+           0x20 + (int)reference, bytes);
+    storage_offset += bytes;
   }
-  job->StorageBytes = job->ObjectCount * 0x40u;
+  job->StorageBytes = storage_offset;
   job->MaterializedHash = 0x12345678ULL;
 }
 
@@ -194,8 +198,11 @@ int main(void) {
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x20u, 1u, &address) ==
          AdmissionDynamicOverlaySuccess);
   assert(address == 0x1100030020ULL);
-  assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x40u, 1u, &address) ==
+  assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x3fu, 2u, &address) ==
          AdmissionDynamicOverlayRange);
+  assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x40u, 1u, &address) ==
+         AdmissionDynamicOverlaySuccess);
+  assert(address == 0x1100031000ULL);
 
   {
     APPLE_AGX_EXP208_RELOCATION_OBJECT active[76];
@@ -240,6 +247,7 @@ int main(void) {
   assert(pipeline_bytes[0x20000] == 0x21u);
   assert(encoder_bytes[0] == 0x28u);
   assert(pipeline_bytes[0x10000] == 0x24u);
+  assert(pipeline_bytes[0x11000] == 0x24u);
   assert(pipeline_bytes[0x4000] == 0x22u);
   assert(pipeline_bytes[0x8000] == 0x23u);
   assert(shader_bytes[0x3000] == 0x29u);
@@ -259,7 +267,8 @@ int main(void) {
                                         sizeof(storage), 256u, &state) ==
          AdmissionDynamicOverlaySuccess);
   assert(state.Applied == 0u && encoder_bytes[0] == 0u &&
-         pipeline_bytes[0x10000] == 0u && pipeline_bytes[0x4000] == 0u &&
+         pipeline_bytes[0x10000] == 0u && pipeline_bytes[0x11000] == 0u &&
+         pipeline_bytes[0x4000] == 0u &&
          pipeline_bytes[0x8000] == 0u &&
          descriptor_bytes[0x8000] == 0u && scissor_bytes[0] == 0u &&
          depth_bytes[0] == 0u && pipeline_bytes[0x20000] == 0u &&

@@ -12,6 +12,8 @@
 #define OVERLAY_TA_WORK_OBJECT 19u
 #define OVERLAY_CAPTURED_ENCODER_OBJECT 37u
 #define OVERLAY_TA_ENCODER_OFFSET 0xd0u
+#define OVERLAY_PIPELINE_COMPACT_SPLIT 0x40u
+#define OVERLAY_PIPELINE_NATIVE_SPLIT 0x1000u
 
 typedef struct _ADMISSION_DYNAMIC_OVERLAY_LOCATION {
   APPLE_AGX_U32 ObjectIndex;
@@ -160,6 +162,15 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_add(
       location.ObjectOffset > object->Size ||
       reference->Bytes > object->Size - location.ObjectOffset ||
       object->Data == OVERLAY_NULL)
+    return AdmissionDynamicOverlayRange;
+  if (expectedRole == AppleAgxWin32RoleUscPipeline &&
+      reference->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT &&
+      (location.ObjectOffset > object->Size ||
+       OVERLAY_PIPELINE_NATIVE_SPLIT >
+           object->Size - location.ObjectOffset ||
+       reference->Bytes - OVERLAY_PIPELINE_COMPACT_SPLIT >
+           object->Size - location.ObjectOffset -
+               OVERLAY_PIPELINE_NATIVE_SPLIT))
     return AdmissionDynamicOverlayRange;
   base = location.OriginalGpuAddress ? layouts[location.ObjectIndex].OriginalGpuVa
                                      : object->GpuVa;
@@ -378,6 +389,18 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
     if (relative >= entry->Bytes || Bytes > entry->Bytes - relative ||
         entry->GpuVirtualAddress > ~0ULL - relative)
       return AdmissionDynamicOverlayRange;
+    if (entry->Role == AppleAgxWin32RoleUscPipeline &&
+        entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
+      if (relative < OVERLAY_PIPELINE_COMPACT_SPLIT) {
+        if (Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT - relative)
+          return AdmissionDynamicOverlayRange;
+      } else {
+        relative = OVERLAY_PIPELINE_NATIVE_SPLIT +
+                   relative - OVERLAY_PIPELINE_COMPACT_SPLIT;
+        if (entry->GpuVirtualAddress > ~0ULL - relative)
+          return AdmissionDynamicOverlayRange;
+      }
+    }
     *GpuVirtualAddress = entry->GpuVirtualAddress + relative;
     return AdmissionDynamicOverlaySuccess;
   }
@@ -474,10 +497,35 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_validate_content(
       return AdmissionDynamicOverlayRange;
     source = storage + jobObject->StorageOffset;
     destination = target->Data + entry->ObjectOffset;
-    if (ExpectZero ? !overlay_is_zero(destination, entry->Bytes)
-                   : !overlay_equal(destination, source, entry->Bytes))
+    if (entry->Role == AppleAgxWin32RoleUscPipeline &&
+        entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
+      APPLE_AGX_U32 tail =
+          entry->Bytes - OVERLAY_PIPELINE_COMPACT_SPLIT;
+      unsigned char *tailDestination =
+          destination + OVERLAY_PIPELINE_NATIVE_SPLIT;
+      if (OVERLAY_PIPELINE_NATIVE_SPLIT >
+              target->Size - entry->ObjectOffset ||
+          tail > target->Size - entry->ObjectOffset -
+                     OVERLAY_PIPELINE_NATIVE_SPLIT)
+        return AdmissionDynamicOverlayRange;
+      if (ExpectZero
+              ? (!overlay_is_zero(
+                     destination, OVERLAY_PIPELINE_COMPACT_SPLIT) ||
+                 !overlay_is_zero(tailDestination, tail))
+              : (!overlay_equal(
+                     destination, source,
+                     OVERLAY_PIPELINE_COMPACT_SPLIT) ||
+                 !overlay_equal(
+                     tailDestination,
+                     source + OVERLAY_PIPELINE_COMPACT_SPLIT, tail)))
+        return ExpectZero ? AdmissionDynamicOverlayOccupied
+                          : AdmissionDynamicOverlayContent;
+    } else if (ExpectZero ? !overlay_is_zero(destination, entry->Bytes)
+                          : !overlay_equal(destination, source,
+                                           entry->Bytes)) {
       return ExpectZero ? AdmissionDynamicOverlayOccupied
                         : AdmissionDynamicOverlayContent;
+    }
   }
   return AdmissionDynamicOverlaySuccess;
 }
@@ -502,8 +550,23 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayApply(
     const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry = &Plan->Entries[index];
     const APPLE_AGX_DYNAMIC_JOB_OBJECT *jobObject =
         overlay_job_object(Job, entry->ReferenceIndex);
-    overlay_copy(Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset,
-                 storage + jobObject->StorageOffset, entry->Bytes);
+    if (entry->Role == AppleAgxWin32RoleUscPipeline &&
+        entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
+      overlay_copy(
+          Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset,
+          storage + jobObject->StorageOffset,
+          OVERLAY_PIPELINE_COMPACT_SPLIT);
+      overlay_copy(
+          Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset +
+              OVERLAY_PIPELINE_NATIVE_SPLIT,
+          storage + jobObject->StorageOffset +
+              OVERLAY_PIPELINE_COMPACT_SPLIT,
+          entry->Bytes - OVERLAY_PIPELINE_COMPACT_SPLIT);
+    } else {
+      overlay_copy(
+          Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset,
+          storage + jobObject->StorageOffset, entry->Bytes);
+    }
   }
   State->Applied = 1u;
   State->Fence = Fence;
@@ -534,8 +597,20 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRelease(
     return result;
   for (index = 0u; index < Plan->EntryCount; ++index) {
     const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry = &Plan->Entries[index];
-    overlay_zero(Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset,
-                 entry->Bytes);
+    if (entry->Role == AppleAgxWin32RoleUscPipeline &&
+        entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
+      overlay_zero(
+          Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset,
+          OVERLAY_PIPELINE_COMPACT_SPLIT);
+      overlay_zero(
+          Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset +
+              OVERLAY_PIPELINE_NATIVE_SPLIT,
+          entry->Bytes - OVERLAY_PIPELINE_COMPACT_SPLIT);
+    } else {
+      overlay_zero(
+          Image->Objects[entry->ObjectIndex].Data + entry->ObjectOffset,
+          entry->Bytes);
+    }
   }
   AdmissionDynamicOverlayStateInitialize(State);
   return AdmissionDynamicOverlaySuccess;
