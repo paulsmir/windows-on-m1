@@ -274,6 +274,17 @@ ordinary377/392 is clean at2026-09-09T09:39:36Z with Code28/no package/service/
 module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP672
 is the safe observation-only rerun; active graph and zero-colour boundary stay.
 
+EXP672 safely captures the fault state after physical completion: fence271,
+TA/D3 read1/1, SGX explicit unreadable sentinel, RegionB32/32 zero and
+RegionC6/6 zero. Active graph remains byte-exact and output remains184
+background+72 zero. No mapped firmware fault is present. Current first boundary
+is fragment execution/tile-store state: exact native `st_tile`/fragment USC
+properties/tilebuffer layout versus the active EXP208 PBE attachment/store
+contract. Address, UAT, materialization and completion are closed. EXP672 exact
+package is removed; ordinary377/392 clean at2026-09-09T09:48:18Z with Code28,
+no package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh
+41/1001/129.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

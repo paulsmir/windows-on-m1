@@ -41814,6 +41814,23 @@ pass, version30.0.671.0. SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
 `1b38f16d98743c5ddf1b0f21ee6ca0020da999fc591478ce3404abcbc63096c8`.
 Artifacts: `.local/experiments/EXP671-post-completion-fault/artifacts`.
 
+**EXP672 ACTUAL — NO MAPPED FIRMWARE FAULT 2026-09-09T09:46:13Z.** Exact
+30.0.672.0 completes the same byte-exact active graph and physical TA/3D/
+fence271; output remains184 background+72 zero. The new184-byte fault snapshot
+is valid for fence271, TA/D3 read pointers1/1, SGX explicitly unreadable
+sentinel0xacce5515abad1dea, all32 RegionB words zero and all6 RegionC words
+zero. Thus the established mapped firmware channels record no shader/page
+fault. Evidence: `.local/experiments/EXP672-mapped-fault-snapshot/evidence`;
+fault receipt SHA256
+`ba1f8e9c6f764a013cfac6aedc8de27a708bb6f2e19d7fa489f1b829d3f03917`.
+The current first boundary is fragment execution/tile-store state: compare the
+native `st_tile`/USC fragment properties and tilebuffer layout against the
+active PBE attachment/store contract. Do not return to address/UAT probing.
+
+**EXP672-R1 CLEAN RECOVERY 2026-09-09T09:48:18Z.** Exact oem5/devnode removed,
+full-owner stopped and ordinary377/392 restored: Problem28/null INF, no package/
+service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+
 **EXP671 ACTUAL — INCONCLUSIVE BY DIAGNOSTIC 2026-09-09T09:32Z.** The request
 entered Render and returned success, but the new completed-time SGX MMIO read
 repeatedly caused a guest stage-1 data abort on CPU2: FAR0x204017030,
