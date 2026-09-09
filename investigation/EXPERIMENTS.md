@@ -41869,3 +41869,71 @@ the guest completed shutdown; full-owner stopped and immutable ordinary377/392
 was restored. Live health: Problem28/null INF, no package/service/module/SYS/
 UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP669 must not be
 repeated.
+
+# EXP673 — final active fragment/store graph receipt
+
+**PREREGISTERED 2026-09-09T10:25:05Z. WHY THIS HYPOTHESIS:** (1) EXP669 proves
+the final encoder, vertex/fragment USC records and vertex/fragment shader bytes
+and addresses, but did not capture WorkCommand3D clear/reload/store fields,
+the active PBE descriptor/companion or the microsequence attachment pointer;
+(2) EXP672 proves no mapped firmware fault while the exact72-pixel raster mask
+still becomes zero; (3) the source-first comparison in
+`investigation/EXP672_FRAGMENT_STORE_COMPARISON.md` finds no deterministic
+semantic mismatch after normalizing only owned addresses. The smallest next
+discriminator is therefore the missing final active store state, not another
+rendering change.
+
+**WINDOWS CONTRACT:** the receipt is qualification-only state, captured from
+bounded kernel-owned memory and exported after completion at PASSIVE_LEVEL; it
+must not affect DDI status or queue progress. **AGX/ASAHI CONTRACT:** pinned
+Mesa `7a4f24061fa56ef7eff12132dd7b1461d5a890d8` and EXP659 require fragment
+USC32x32/pixel-stride1, load0x22004, reload0x23004, store0x24004, the tiled
+16x16 format40 BGRA descriptor, companion `{0,~0}`, and store shader
+`0x1100010400`. **TRANSLATION:** capture those final post-`BuildActiveJob`
+fields, page/code hashes and the exact Windows destination/attachment identity
+without changing them. **WHAT IS STILL UNKNOWN:** whether the actual EXP673
+job publishes those exact final values before physical execution.
+
+Single variable: add the 248-byte `Wom1DynamicStoreReceipt`. Render bytes,
+typed assets, destination, shader/UAT mappings, encoder route, firmware,
+queues, DCP and producer are unchanged from EXP672. Source commit
+`8f5d61a5702f769b2ed9cb92e1ec29941d954531`; ledger commit
+`d90f862422f780e5c9f88d1c6a4068147a1d6c17`; branch
+`feature/j313-gpu-acceleration`. Root dirty diff SHA256
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`
+contains pre-existing unrelated work and is excluded by the five-file overlay;
+untracked-name SHA256
+`81e89eb9762f7105549fe43f5474cc1987b5b5f0029aa468b69efa5f17093bb4`.
+m1n1 commit `c6d10e04afdad5314e8ac1e67bc3919b094ab000`, clean diff; Mu commit
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`, dirty diff SHA256
+`7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce`;
+neither is changed or rebuilt.
+
+Build base is immutable FRYZZING `C:\Users\pauls\EXP672-mapped-fault-snapshot\src`.
+Overlay `.local/experiments/EXP673-final-store-graph/upload/source-overlay.tar.gz`
+contains exactly five build-relevant files and has SHA256
+`76ea9db979a8e8538fe8ccee8522570c3807acc4740a078bb34d9dfefe231581`.
+Build command is pinned
+`powershell -ExecutionPolicy Bypass -File C:\Users\pauls\EXP673-final-store-graph\build.ps1`;
+package build673, Release ARM64 VisibleAgxQualification, code analysis,
+Universal/Inf2Cat/signature, x64 UMD contract test and ARM64 producer gates are
+mandatory. Launch/install is the existing hash-gated `workflow.ps1 Stage`,
+full-owner EXP584/EXP406 launcher, `Preflight`, and one `Run`.
+
+Recovery is exact package cleanup through the candidate manifest followed by
+immutable ordinary377/392; emergency immutable377/385 is retained only if the
+GPU-visible ordinary guest cannot be recovered. Evidence paths are
+`.local/experiments/EXP673-final-store-graph/evidence` and the raw device/service
+`Wom1DynamicStoreReceipt` plus decoded JSON, existing graph/terminal/fault
+receipts, producer output and host log.
+
+PASS for the discriminator is physical TA/3D and exact Windows fence plus a
+valid fence-correlated store receipt whose WorkCommand, attachment, normalized
+clear/store page hashes, store shader, RT descriptor and companion values equal
+the offline table. The fragment-colour PASS remains the stricter all256-pixel
+oracle:72 red foreground,184 exact background, intact guard and no causal
+fault/reset. Same184+72-zero output with a fully matching store receipt closes
+the active store graph and moves only to the next fragment-execution scalar.
+Missing/malformed receipt with the intended boundary reached is a diagnostic
+failure; failure to reach physical completion is INCONCLUSIVE, not a shader
+verdict.
