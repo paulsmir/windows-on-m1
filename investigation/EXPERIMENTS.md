@@ -41696,3 +41696,56 @@ CAT/producer/ZIP/air-manifest SHA256:
 `fdc7f7aa75ace3908dc84e8548c164d03c58e0c115721048d654cceddcc7e302`.
 Artifacts: `.local/experiments/EXP669-active-graph-receipt/artifacts`.
 Ordinary377/392 is clean from EXP668-R1; stage then one full-owner run.
+
+**EXP669 ACTUAL — ACTIVE GRAPH BYTE-EXACT; MATERIALIZATION CLOSED
+2026-09-09T09:07:02Z.** Exact30.0.669.0 passed natural-bind preflight and the
+unchanged request completed physical TA/3D/fence271. Output remains184
+background+72 zero pixels with FNV0x98b3446c1b0a8215. The new96-byte
+`Wom1DynamicGraphReceipt` is Valid1/fence271 and reports encoder
+0x1503d78000, user USC0x1100020000/0x1100021000 and shaders
+0x1100064000/0x110006c000. Encoder, vertex USC, fragment USC, VS and FS FNVs
+are respectively0x9fa3bef8f3823c68,0xfe9ba9f6c8bbb266,
+0x67da3d17822e9402,0xc92c86161f19a215 and0x8964d9ebaac8b869.
+Independent reconstruction from the exact immutable assets and typed
+relocations produces every same value. Thus active KMD materialization,
+WorkCommand encoder routing and byte publication are closed; the first unknown
+is GPU consumption under the Windows context-63 mapping contract. Device was
+ACTIVE with8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Evidence:
+`.local/experiments/EXP669-active-graph-receipt/evidence`; receipt SHA256
+`bd3947f8e85b86693fcbf17d31fd80f228c9090d89f54648f124b5f8a9de8a0d`.
+
+**NEXT PRIMARY-SOURCE MISMATCH.** EXP659 `objects.json` and m1n1
+`GPUContext` map pipeline/shader pages with exact UAT leaf attributes
+AP0/PXN1/UXN1/shared-NC. Windows context-63 fixed/alias pages use
+`AppleAgxUatGpuSharedReadWrite`, encoding AP2/PXN0/UXN1. The dynamic bytes and
+addresses now match, so this is the first remaining fetch-layer difference.
+Commit `985e80815e5c6323397e2acdf504a4b0a1e5b405` adds one narrowly named
+`GpuPipelineShared` protection with the exact primary-source bits and applies
+it only to the two fixed pipeline inputs and two shader aliases. The general
+local/aperture mappings, firmware context0, retained root and all graph/PBE/DCP
+state remain unchanged. Descriptor codec test is RED before the case and GREEN
+after; UAT table/range/memory/overlay/composition tests pass.
+
+# EXP670 — native pipeline/shader UAT leaf attributes
+
+**PREREGISTERED 2026-09-09T09:09:00Z. WHY THIS HYPOTHESIS:** (1) EXP669 proves
+the entire active dynamic graph is byte- and address-exact but fragment output
+remains zero; (2) primary m1n1 and hardware evidence agree on AP0/PXN1/UXN1 for
+the working shader/pipeline objects; (3) Windows uses different leaf bits only
+at the now-open GPU fetch boundary. This is the nearest causal difference and
+does not reopen materialization.
+
+**WINDOWS CONTRACT:** only Windows-owned context-63 fixed input and alias pages
+change protection; ownership, physical pages and reverse teardown do not.
+**AGX/ASAHI CONTRACT:** working V13_5 pipeline/shader leaves are shared-NC,
+AP0, PXN1, UXN1 and non-global. **TRANSLATION:** encode that exact leaf profile
+as a dedicated pipeline protection and keep all other memory classes unchanged.
+**WHAT IS STILL UNKNOWN:** whether the GPU fetches and executes the exact red
+fragment shader with native leaf attributes.
+
+Single functional variable is four pipeline/shader leaf descriptors. Source
+commit `985e80815e5c6323397e2acdf504a4b0a1e5b405`; build from immutable EXP669
+source plus exactly four files. Relevant16 tests GREEN. Pinned build/sign/hash,
+one natural bind, exact active graph receipt/output and cleanup apply. PASS is
+72 red+184 background with physical completion. Zero output rejects leaf
+attributes and requires fault/USC execution evidence, not another mapping edit.

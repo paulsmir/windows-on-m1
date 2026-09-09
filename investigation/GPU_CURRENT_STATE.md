@@ -249,6 +249,19 @@ in-memory active graph receipt (encoder/pipeline/shader addresses and hashes),
 exported only by the PASSIVE output worker. EXP669 is observation-only and must
 separate materialization/publication from GPU consumption before the next fix.
 
+EXP669 closes materialization: its post-submit active receipt reports exact
+encoder0x1503d78000, user USC0x1100020000/0x1100021000, shader
+0x1100064000/0x110006c000 and all five FNVs match an independent typed
+relocation reconstruction byte-for-byte. Physical TA3D/fence271 still produce
+184 background+72 zero pixels. Current first unknown is GPU USC consumption,
+not KMD graph construction. Primary m1n1/EXP659 leaves use shared-NC
+AP0/PXN1/UXN1, while Windows pipeline aliases use AP2/PXN0/UXN1. Commit
+`985e80815e5c6323397e2acdf504a4b0a1e5b405` adds only the exact pipeline leaf
+profile and applies it to four context-63 mappings;16 relevant tests pass.
+EXP670 is the next discriminator. EXP669 evidence is saved and its exact
+package removal/recovery is in progress; do not call ordinary clean until live
+health confirms it.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
