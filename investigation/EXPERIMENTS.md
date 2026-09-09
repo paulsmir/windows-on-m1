@@ -42304,3 +42304,15 @@ Exact oem5/package/devnode/service and experiment-local stale state were
 removed, full-owner shut down, and immutable ordinary377/392 restored. Health:
 Code28/null INF, no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+
+**CORRECTION TO EXP674 INTERPRETATION 2026-09-09T11:41:00Z.** The raw EXP674
+observation remains unchanged, but it is insufficient to prove fragment
+immediate consumption or a successful `st_tile` write. Current production
+source at `backend_platform_windows.c` fills the entire bound output with byte
+0xa5 immediately before flushing and publishing the job. EXP674's selected
+colour was also exactly0xa5a5a5a5. Its72 covered pixels therefore cannot
+distinguish a real fragment write from untouched poison. This does not turn the
+observation into failure or alter later zero results; it supersedes only the
+strong causal claim. The correct next discriminator must use an all-lanes
+colour distinct from poison, background and zero. Context/queue investigation
+is deferred until that fragment write boundary is actually closed.

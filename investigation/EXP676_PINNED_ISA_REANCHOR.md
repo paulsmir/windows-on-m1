@@ -80,26 +80,22 @@ expected ownership/publication differences. They do not alter the decoded
 fragment/tile conversion contract, and the exact physical completion path is
 already proven. No source-backed active graph or WorkCommand mismatch remains.
 
-## Remaining falsifiable runtime scalar
+## Correction after EXP677
 
-The hardware evidence has one narrower unresolved split:
+The register and WorkCommand conclusions above remain valid, but the former
+runtime-scalar conclusion did not survive source review. The qualification
+path executes `RtlFillMemory(output->Data, output->Size, 0xa5)` immediately
+before flushing and publishing the job. EXP674 then selected a shader whose
+putative output was exactly `0xa5a5a5a5`. Its72 covered pixels therefore do
+not distinguish a real tile write from untouched pre-submit poison. EXP677
+subsequently rejected the endpoint hypothesis by producing the same zero
+result with values just below1.0.
 
-- EXP674: four FP16 `0x392d` sources convert to 72 exact
-  `0xa5a5a5a5` covered pixels.
-- EXP676: the same native control/permutation with R/A `0x3c00` and G/B
-  `0x0400` converts the 72 covered pixels to exact zero; the G/B values round
-  to external zero.
-- EXP659: the original R/A `0x3c00`, G/B zero program produces native red.
-
-Therefore the smallest remaining scalar is whether the production execution
-path handles the exact normalized endpoint `1.0` differently from a value just
-below it. This is not another register-layout guess. A single EXP676-relative
-change from R/A FP16 `0x3c00` to `0x3bff` preserves the same expected external
-u8norm result: `0x3bff * 255 = 254.875...`, which rounds to 255; G/B remain
-`0x0400`, which round to zero. The expected raw pixel is still exact
-`0xffff0000`.
-
-If this yields red, endpoint conversion/control is confirmed as the first
-runtime boundary. If it yields the same zero, endpoint handling is rejected
-and no further value mutation is justified; the next re-anchor must move to
-the context/job execution owner outside the now byte-exact fragment graph.
+The first unknown is again the fragment write itself. The smallest valid
+discriminator keeps the same all-lanes-equal construction but selects FP16
+0x3800. U8NORM converts it to0x80 per component, which is distinct from poison
+0xa5, background0xff112233 and zero. A full256-pixel result with72 exact
+0x80808080 pixels proves a fragment tile write without depending on channel
+ordering. Seventy-two poison pixels mean the target range was left untouched;
+seventy-two zero pixels preserve the current failure. No context/queue
+hypothesis is justified before that corrected observation.

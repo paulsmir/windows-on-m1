@@ -300,61 +300,25 @@ fragment-only discriminator. EXP673 package/service were removed and ordinary
 377/392 is clean at2026-09-09T10:36:00Z: Code28/null INF, no package/service/
 module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
 
-EXP674 changes only the four FP16 source immediates in the exact native FS to
-0x392d (u8norm0xa5). Hardware returns72 exact `0xa5a5a5a5` poison pixels and
-184 background pixels, FNV0xb9c5833f0c2f7945, with physical TA/3D,
-fence271, the same WorkCommand/PBE/store receipt and no mapped fault. This is
-direct proof that the fragment shader is fetched and invoked and that its
-`st_tile u8norm xyzw` reaches the stored attachment. The former red failure is
-therefore inside the native red value-construction sequence before `st_tile`,
-not fragment invocation, UAT, PBE/store or output visibility. One Event129 was
-recorded as storage telemetry without a GPU-visible interruption. Exact package
-was removed; ordinary377/392 is clean at2026-09-09T10:53:41Z. Next is an
-offline pinned-ISA construction of constant red directly in the final source
-register order, avoiding the XOR permutation chain; no other graph field may
-change.
+EXP674 changed all four FP16 sources to0x392d and observed72 pixels equal to
+0xa5a5a5a5 plus184 background after physical TA/3D/fence271. A later direct
+source review found that production fills the complete destination with byte
+0xa5 immediately before publication. Therefore those72 pixels collide with
+the pre-submit poison sentinel and do not prove that `st_tile` wrote0xa5; the
+former fragment-immediate/st_tile interpretation is superseded. EXP675--677
+remain valid rejected red fixes: their exact shaders all completed physically
+and returned the same184-background/72-zero output, but they cannot inherit an
+unproven EXP674 write premise.
 
-EXP675 rejects that direct-register construction: exact replacement shader
-FNV0xc8164dd27953a4b7 is consumed, physical TA/3D/fence271 and store graph pass,
-but output is byte-identical to the original zero boundary
-FNV0x98b3446c1b0a8215. This does not overturn EXP674; all-nonzero FP16 lanes
-still produce72 exact poison pixels. The remaining nearest discriminator keeps
-the original native XOR/control stream byte-exact and changes only its two zero
-G/B sources to the smallest normal FP16 `0x0400`, which u8norm rounds back to
-zero. EXP675 is removed and ordinary377/392 is clean at2026-09-09T11:01:43Z.
-
-EXP676 keeps the original native XOR/control stream and changes only the two
-zero G/B loads to FP16 0x0400, which u8norm rounds to external zero. Hardware
-still returns the identical zero-boundary FNV0x98b3446c1b0a8215 with physical
-TA/3D/fence271. The zero-lane hypothesis is rejected. After two focused fixes
-EXP675/676 without red, no further value probe is allowed. The required next
-step is a pinned-2022 compiler/ISA re-anchor of the exact encoded `st_tile`
-source/register semantics and native shader creation context, treating the
-2026 disassembler output as advisory rather than proof of the 2022 encoding.
-EXP676 is removed; ordinary377/392 is clean at2026-09-09T11:08:47Z.
-
-The required pinned-2022 re-anchor is complete in
-`EXP676_PINNED_ISA_REANCHOR.md`. The pinned packer and compiler's own post-RA
-IR prove that `st_tile` has one packed four-half source at r0h; the compiler's
-first94 bytes are byte-exact with working EXP659. Schema-aware parsing also
-shows the full stable WorkCommand/Start3D tile geometry, tib_blocks, fragment
-USC and execution scalars match native; no source mismatch remains there. The
-one concrete runtime scalar is normalized endpoint conversion: EXP674 stores
-midrange0xa5 in all lanes, while EXP676 with R/A1.0 and G/B values rounding to
-zero stores zero. EXP677 is limited to R/A0x3bff, which still rounds to exact
-external255, over EXP676's unchanged G/B0x0400 and unchanged graph. Red
-confirms endpoint handling; zero rejects it and forbids further value probes.
-
-EXP677 rejects normalized endpoint handling as the missing cause. With R/A
-changed only from FP16 0x3c00 to0x3bff (still exact external u8norm255) and
-G/B retained at0x0400 (external0), the exact package again completes physical
-TA/3D/fence271 but returns the identical184-background/72-zero output and
-FNV0x98b3446c1b0a8215. No event or mapped fault occurs. Shader payload/value
-probing is closed. The next action is offline comparison of native context23
-and production context63 job/queue command metadata outside the already
-byte-exact user graph, without changing context ID or queue state until one
-source-backed mismatch is found. EXP677 is removed; ordinary377/392 is clean
-at2026-09-09T11:37:30Z.
+The pinned-2022 re-anchor in `EXP676_PINNED_ISA_REANCHOR.md` still proves the
+working shader's one packed four-half `st_tile` source and byte-exact compiler
+output. Schema-aware parsing still closes the stable WorkCommand/Start3D tile
+geometry, tib_blocks and execution scalars. The actual first unknown returns
+to fragment output versus untouched poison. EXP678 must change only the four
+FP16 immediates to0x3800, whose U8NORM result0x80808080 is distinct from poison
+0xa5a5a5a5, background0xff112233 and zero. No context/queue change is justified
+before this corrected discriminator. EXP677 is removed; ordinary377/392 is
+clean at2026-09-09T11:37:30Z.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
