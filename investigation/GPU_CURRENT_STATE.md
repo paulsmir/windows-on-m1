@@ -264,6 +264,16 @@ the existing SGX/RegionB/RegionC post-completion fault snapshot and is built.
 Ordinary377/392 is clean at2026-09-09T09:28:15Z: Code28/no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
 
+EXP671 is INCONCLUSIVE_BY_DIAGNOSTIC: its completed-time SGX MMIO read caused
+repeated guest stage-1 aborts at FAR0x204017030 on CPU2 before evidence export;
+this is not a GPU verdict. Commit
+`4b25f26e0eeab5282136bf40e4a07d405a13d0a2` removes that unsafe read from the
+completed path, uses an explicit unreadable sentinel, and retains only mapped
+RegionB/RegionC plus channel pointers. Emergency377/385 removed exact oem5;
+ordinary377/392 is clean at2026-09-09T09:39:36Z with Code28/no package/service/
+module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP672
+is the safe observation-only rerun; active graph and zero-colour boundary stay.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

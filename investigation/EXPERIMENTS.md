@@ -41814,6 +41814,38 @@ pass, version30.0.671.0. SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
 `1b38f16d98743c5ddf1b0f21ee6ca0020da999fc591478ce3404abcbc63096c8`.
 Artifacts: `.local/experiments/EXP671-post-completion-fault/artifacts`.
 
+**EXP671 ACTUAL — INCONCLUSIVE BY DIAGNOSTIC 2026-09-09T09:32Z.** The request
+entered Render and returned success, but the new completed-time SGX MMIO read
+repeatedly caused a guest stage-1 data abort on CPU2: FAR0x204017030,
+ELR0xfffff80342b24c8c at `ldr x8,[x8]`, ESR0x92000018. This is the exact
+`SgxBase + ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET` diagnostic address and is
+outside the Windows stage-1 mapping. It is not a GPU/shader fault and no output
+or fault verdict is accepted. The stuck launcher was stopped through the
+established control plane; current-compatible GPU-hidden377/385 booted, exact
+oem5 was removed, then ordinary377/392 was restored.
+
+Commit `4b25f26e0eeab5282136bf40e4a07d405a13d0a2` adds an explicit `ReadSgx`
+choice to the existing snapshot. Delayed paths are unchanged; completed-time
+collection records the documented unreadable sentinel0xacce5515abad1dea and
+copies only mapped RegionB/RegionC blocks plus channel pointers. Relevant tests
+and diff checks pass. Ordinary health at2026-09-09T09:39:36Z is Problem28/null
+INF, no package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no
+fresh41/1001/129. EXP671 must not repeat.
+
+# EXP672 — mapped firmware fault blocks after completion
+
+**PREREGISTERED 2026-09-09T09:40:00Z. WHY THIS HYPOTHESIS:** EXP671 proved the
+SGX MMIO read itself unsafe, while RegionB/RegionC fault blocks are already
+mapped and are the remaining established firmware fault transport. The active
+graph and output boundary are unchanged. One observation-only variable removes
+the unsafe MMIO read and uses the existing binary receipt.
+
+Source commit `4b25f26e0eeab5282136bf40e4a07d405a13d0a2`; immutable EXP671 source plus
+one file. PASS for the discriminator is a durable queue fault snapshot with
+sentinel SGX, exact channel pointers and bounded RegionB/RegionC data after the
+same physical completion. Nonzero firmware fault data names its owner; all-zero
+firmware data closes the fault path and moves to tile-store/fragment execution.
+
 **EXP669-R1 CLEAN RECOVERY 2026-09-09T09:14:50Z.** Evidence was already local
 before SSH disappeared during cleanup. The established control plane showed
 the guest completed shutdown; full-owner stopped and immutable ordinary377/392
