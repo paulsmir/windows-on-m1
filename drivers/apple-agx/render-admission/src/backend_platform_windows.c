@@ -261,7 +261,7 @@ static VOID AdmissionTerminalObserve(
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (Output->VerificationKind ==
           AdmissionBackendOutputVerificationTriangle) {
-        ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation;
+        ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {0};
         captured = Output->RenderedBytes ==
                            ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY &&
             Completed != NULL &&
