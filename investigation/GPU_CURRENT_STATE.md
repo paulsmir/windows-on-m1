@@ -238,6 +238,17 @@ paths, and tests exact pages/six pointers/idempotence/DMA/overlay/release.
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP668 tests this one
 pipeline-object invariant; no further address micro-probe is allowed.
 
+EXP668 hardware accepts the coherent native pipeline object and again completes
+physical TA3D/fence20, but output remains byte-identical184 background+72 zero
+pixels. The layout is retained but rejected as sufficient. Exact package is
+removed; ordinary377/392 is clean at2026-09-09T09:00:18Z with Code28/no
+package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh
+41/1001/129. No further functional address probe is justified. Commit
+`9ff575850fddfd98f81f913ecb176d30974d9ba5` adds a bounded post-submit
+in-memory active graph receipt (encoder/pipeline/shader addresses and hashes),
+exported only by the PASSIVE output worker. EXP669 is observation-only and must
+separate materialization/publication from GPU consumption before the next fix.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

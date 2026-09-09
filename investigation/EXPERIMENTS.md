@@ -41629,3 +41629,53 @@ CAT/producer/ZIP/air-manifest SHA256:
 `e883c7f8170fa9fbd21ffa9a8c5c529b5cc9eb1a7d18dfe072c77087f5838346`.
 Artifacts: `.local/experiments/EXP668-coherent-pipeline-layout/artifacts`.
 Ordinary377/392 is clean from EXP667-R1; stage then one full-owner run.
+
+**EXP668 ACTUAL — COHERENT PIPELINE LAYOUT REJECTED AS SUFFICIENT
+2026-09-09T08:52:25Z.** Exact30.0.668.0 passed oem5/Code0/service/hash
+preflight. The unchanged784-byte request returned success/queued1. Durable
+correlation candidate668/boot365979075 records DMA3860, Patch0, Submit0,
+fence20, workerReady2, physical TA/3D completion, QueueDpc1 and Notify/DPC.
+The changed fence is accepted by exact request correlation. Terminal output is
+still byte-identical EXP665–667:184 background+72 zero, poison0, first
+invalid88 and FNV0x98b3446c1b0a8215. The coherent layout is source-correct and
+retained, but rejected as the isolated colour fix. Event129 at08:50:43Z is
+storage telemetry without GPU attribution. Device remained ACTIVE/Code0 with
+8CPU/NVMe2/USB5/keyboard1. Evidence:
+`.local/experiments/EXP668-coherent-pipeline-layout/evidence`; raw correlation
+and terminal SHA256 are
+`e5c61dcd05b1bb49005c394b01694cf6a10423b4cbd53dfa446597e13a9b7f05`
+and `90acae3167657e9d9d6c370c2acefb7da942d11c9bc1452e47afae6a3704117c`.
+
+**EXP668-R1 CLEAN RECOVERY 2026-09-09T09:00:18Z.** Evidence preserved, stale
+Run wrapper stopped, exact oem5/devnode removed, full-owner stopped and
+immutable ordinary377/392 restored. Health: Problem28/null INF, no package/
+service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+EXP668 must not be repeated.
+
+# EXP669 — post-submit active graph identity receipt
+
+**PREREGISTERED 2026-09-09T09:01:00Z. WHY THIS HYPOTHESIS:** (1) four hardware
+runs now produce the same zero-colour output after every source-derived graph
+layout correction; (2) offline composition proves expected bytes but cannot
+prove which active QueueObjects bytes and addresses survived into the exact
+submitted job; (3) the next causal split is materialization/publication versus
+GPU fetch/execution. No further functional address or state change is justified
+until that split is measured.
+
+Commit `9ff575850fddfd98f81f913ecb176d30974d9ba5` adds one bounded in-memory
+active-graph record captured after successful BackendSubmit/TerminalBegin while
+the exact overlay/fence is still active. It records the WorkCommand encoder
+target; vertex/fragment pipeline and shader VAs; and FNV hashes of active
+encoder, both USC records and both shader binaries. The record is exported from
+the existing PASSIVE output worker only after completion, so no registry I/O is
+added to Render/Submit/hardware timing. Invalid/duplicate/missing graph state
+fails closed and never changes functional status. The production helper is
+executable-tested for exact addresses/nonzero hashes and the existing
+composition/output paths remain GREEN.
+
+Single variable is observation only; source and all functional bytes equal
+EXP668. Build from immutable EXP668 source plus exactly six diagnostic files.
+Pinned WDK26100 gates and one natural bind apply. The receipt must match the
+offline materialized graph exactly. Any mismatch names the one causal fix. If
+all fields match and output remains zero, materialization is closed and the
+next boundary is GPU consumption/fault state rather than another layout edit.
