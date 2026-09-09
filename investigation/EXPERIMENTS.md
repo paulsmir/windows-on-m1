@@ -40605,3 +40605,42 @@ full-frame validation, query, D589, HOLD and safe retirement. A complete
 background-only snapshot rejects this batch-init hypothesis. Any earlier guard
 or launch failure is inconclusive. Preserve exact receipts before hash-gated
 package cleanup and ordinary recovery.
+
+**EXP657 ACTUAL — BATCH-INIT HYPOTHESIS REJECTED
+2026-09-09T01:17:38Z.** Exact30.0.657.0 bound naturally with Code0, service
+Running and all preregistered INF/SYS/UMD hashes. The300-byte batch-initialized
+encoder advanced through Render status0/queued1, DMA4004/patch1/prepatched1,
+Patch/Submit status0, physical TA/3D completion and exact Windows fence273.
+Correlation valid mask0x7e5 records worker phase2, synchronize status0,
+QueueDpc1 and output verification entry. Thus the added records were consumed
+as an executable job and did not regress the already-proven dynamic submission
+or completion boundary.
+
+The late output snapshot is version1/368, valid mask0xe3, backend/completion0,
+expected and observed TA/D3 done values2/2 and source polling-event1. It scanned
+all16,384,000 bytes /4,096,000 pixels. First pixel is background0xff101820,
+changed bytes0, poison0, first mismatch centre pixel2,049,280, guard-corrupt1
+and FNV0xf953759ae5722325 — semantically identical to EXP655/656. No Present
+entry occurred and the strict producer stopped at timeout/preserve. Therefore
+the source-correct batch-init contract is retained but is not sufficient to
+rasterize a fragment and this isolated hypothesis will not be repeated.
+
+Output/correlation/result/evidence/host-log SHA256 are
+`b49b48994695f3cb5cd80aac7c4daa60e2ed0eda27a31c54afdaee539796099c`,
+`f50e37dfbca08b946cc9589f4e5e5981f6712129fd414e14b248cf9695015970`,
+`9a334694a33c39c3df9acbcffd8416b99cdc6dff011e31255226fdd86c467e82`,
+`da09fbe518fcb75114a1d90737c40ee6373e1aad6333d479e4508039d0cfdf8d`
+and `55eb0643bce948b5f443c5591e7992faa60bbe88f31bcf3af80691674a80d9d1`.
+There were no fresh41/1001/129 events during the exact run.
+
+**EXP657-R1 CLEAN RECOVERY 2026-09-09T01:20:25Z.** Evidence was copied before
+cleanup. Exact oem5 was uninstalled/deleted, APPL0002 removed, stale producer
+shells holding the result were stopped by exact EXP657 command-line match, and
+full-owner Windows was stopped. The first ordinary chainload attempt exposed
+only the known Homebrew lld/libLLVM mismatch and never launched Windows; the
+already validated project-local LLVM22 wrapper was then used successfully.
+Immutable ordinary377/392 is now clean: Problem28/null INF, no package/service/
+module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. This
+operational retry is not a GPU verdict. Next work is a bounded primary-source
+comparison of the remaining pre-raster VDM/PPP/VS state; PBE, completion, DCP
+and capability bits remain closed controls.

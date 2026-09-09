@@ -63,8 +63,17 @@ OCCLUSION_QUERY_2, OUTPUT_UNKNOWN and VARYING_2 before per-draw state. Commit
 `11f89dd0c116d8b928c34b198bf10463fc5c6579` adds that exact atomic sequence,
 a second typed PPP self-relocation and a300-byte generated encoder; offline
 pack/unpack and production integration pass. EXP656 is removed and ordinary
-377/392 is clean at 2026-09-09T01:08:17Z. Next is EXP657 batch-init hardware.
-Caps remain0 until AD04 mandatory contract completion.
+377/392 was clean at 2026-09-09T01:08:17Z. EXP657 hardware executed that exact
+batch-init stream through DMA4004/Patch/Submit, physical TA/3D and fence273,
+but the full output remained byte-exact background:4,096,000 background pixels,
+changed0, poison0 and FNV0xf953759ae5722325. The batch-init state remains
+source-correct but is rejected as the isolated zero-fragment cause and will not
+be repeated. Exact package is removed and ordinary377/392 is clean again at
+2026-09-09T01:20:25Z: Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current first boundary
+is the nearest remaining pre-raster VDM/PPP/VS contract, determined by a
+bounded pinned-Mesa comparison; PBE/store, completion/fence, DCP and caps are
+closed controls. Caps remain0 until AD04 mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
