@@ -171,8 +171,12 @@ int main(void) {
   assert(find_entry(&plan, 8u)->GpuVirtualAddress == 0x1503d78000ULL);
   assert(find_entry(&plan, 4u)->ObjectIndex == 73u);
   assert(find_entry(&plan, 4u)->GpuVirtualAddress == 0x1100030000ULL);
-  assert(find_entry(&plan, 2u)->GpuVirtualAddress == 0x1100011000ULL);
-  assert(find_entry(&plan, 3u)->GpuVirtualAddress == 0x1100012000ULL);
+  assert(find_entry(&plan, 2u)->ObjectIndex == 73u);
+  assert(find_entry(&plan, 2u)->ObjectOffset == 0x4000u);
+  assert(find_entry(&plan, 2u)->GpuVirtualAddress == 0x1100024000ULL);
+  assert(find_entry(&plan, 3u)->ObjectIndex == 73u);
+  assert(find_entry(&plan, 3u)->ObjectOffset == 0x8000u);
+  assert(find_entry(&plan, 3u)->GpuVirtualAddress == 0x1100028000ULL);
   assert(find_entry(&plan, 9u)->GpuVirtualAddress == 0x1100013000ULL);
   assert(find_entry(&plan, 10u)->GpuVirtualAddress == 0x1100013400ULL);
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x20u, 1u, &address) ==
@@ -189,8 +193,8 @@ int main(void) {
   assert(pipeline_bytes[0x20000] == 0x21u);
   assert(encoder_bytes[0] == 0x28u);
   assert(pipeline_bytes[0x10000] == 0x24u);
-  assert(shader_bytes[0x1000] == 0x22u);
-  assert(shader_bytes[0x2000] == 0x23u);
+  assert(pipeline_bytes[0x4000] == 0x22u);
+  assert(pipeline_bytes[0x8000] == 0x23u);
   assert(shader_bytes[0x3000] == 0x29u);
   assert(shader_bytes[0x3400] == 0x2au);
   assert(descriptor_bytes[0x8000] == 0x25u);
@@ -208,7 +212,8 @@ int main(void) {
                                         sizeof(storage), 256u, &state) ==
          AdmissionDynamicOverlaySuccess);
   assert(state.Applied == 0u && encoder_bytes[0] == 0u &&
-         pipeline_bytes[0x10000] == 0u && shader_bytes[0x1000] == 0u &&
+         pipeline_bytes[0x10000] == 0u && pipeline_bytes[0x4000] == 0u &&
+         pipeline_bytes[0x8000] == 0u &&
          descriptor_bytes[0x8000] == 0u && scissor_bytes[0] == 0u &&
          depth_bytes[0] == 0u && pipeline_bytes[0x20000] == 0u &&
          pipeline_bytes[0x2000] == 0x5au);

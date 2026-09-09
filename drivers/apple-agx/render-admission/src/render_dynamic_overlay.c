@@ -4,7 +4,8 @@
 #define OVERLAY_ENCODER_OBJECT 71u
 #define OVERLAY_PIPELINE_OBJECT 73u
 #define OVERLAY_VERTEX_OBJECT 73u
-#define OVERLAY_SHADER_OBJECT 74u
+#define OVERLAY_SHADER_OBJECT 73u
+#define OVERLAY_RODATA_OBJECT 74u
 #define OVERLAY_DESCRIPTOR_OBJECT 36u
 #define OVERLAY_SCISSOR_OBJECT 38u
 #define OVERLAY_DEPTH_BIAS_OBJECT 39u
@@ -68,23 +69,23 @@ static int overlay_location(APPLE_AGX_U32 ReferenceIndex,
   } else if (ReferenceIndex == Draw->VertexShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x1000u, 0x1000u, APPLE_AGX_TRUE};
+        OVERLAY_SHADER_OBJECT, 0x4000u, 0x4000u, APPLE_AGX_TRUE};
   } else if (ReferenceIndex == Draw->FragmentShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x2000u, 0x1000u, APPLE_AGX_TRUE};
+        OVERLAY_SHADER_OBJECT, 0x8000u, 0x4000u, APPLE_AGX_TRUE};
   } else if (Draw->VertexRodataReference !=
                  APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
              ReferenceIndex == Draw->VertexRodataReference) {
     *ExpectedRole = AppleAgxWin32RoleShaderRodata;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x3000u, 0x400u, APPLE_AGX_TRUE};
+        OVERLAY_RODATA_OBJECT, 0x3000u, 0x400u, APPLE_AGX_TRUE};
   } else if (Draw->FragmentRodataReference !=
                  APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
              ReferenceIndex == Draw->FragmentRodataReference) {
     *ExpectedRole = AppleAgxWin32RoleShaderRodata;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x3400u, 0xc00u, APPLE_AGX_TRUE};
+        OVERLAY_RODATA_OBJECT, 0x3400u, 0xc00u, APPLE_AGX_TRUE};
   } else if (ReferenceIndex == Draw->UscPipelineReference) {
     *ExpectedRole = AppleAgxWin32RoleUscPipeline;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
