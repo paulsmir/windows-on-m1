@@ -40586,8 +40586,11 @@ SYS/UMD/INF/CAT/producer/ZIP/manifest SHA256 are
 `d978845302808168218ec2bcb611c5f4d4618081654f923c2520c23838d26f74`,
 `d2d2d5d2bd132d018bec41efeaf3e92a2ec3731c1dad522e975a9155ced11f60`,
 `4de5654427f995f4903fba69110cae329a22829677c8fa276f51537fdf63f3e8`,
-`e27272bb36f387bdf68f185b08d0a4e939e7953df1a28e3c3e938fd1d0a53308`
+`b6e2a24f916d4afef4f1c0302ec38d709e433c933cbd941c5719e9b9c32a5192`
 and `32e2857ba654f8ec535ccd5258620bf995385efa9829f22fe120fde0341b5d7c`.
+The staged package ZIP is intentionally flat; an initially produced archive
+with a parent `package/` directory was never transferred or installed and is
+superseded by the preregistered ZIP hash above.
 Generated encoder/fixture-manifest SHA256 are
 `7e52bdfaeb2f4298d799f765b916629cd40d3fae5eb85d27622685342e6b8d6f`
 and `960eef5dce1002dbc68e6d17701ab69396d0b979044a05f65010985fa7999251`.
