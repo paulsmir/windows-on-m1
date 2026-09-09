@@ -42125,3 +42125,24 @@ qualification side effect is not evidence for DCP/Present in this EXP and is
 not part of the verdict. Zero rejects the permutation hypothesis; another value
 is classified exactly. Cleanup returns to ordinary377/392 immediately after
 evidence.
+
+**EXP675 ACTUAL — DIRECT-REGISTER RED REJECTED
+2026-09-09T10:59:51Z.** Exact reused30.0.673.0 package and unchanged request
+complete physical TA/3D/fence271. Active FS hash is the preregistered
+0xc8164dd27953a4b7 and every other graph/store field remains exact. Output is
+byte-identical to EXP673: FNV0x98b3446c1b0a8215,184 accepted background,
+first invalid index88/value0, poison0, full1024-byte scan. Terminal/graph/store
+SHA256 are
+`c6610a0ce387de3fcccea93c477bd307807c66a92561784d9d05ba401a003ff7`,
+`c885e4cd46a2d4e7b46f1716ad7ed81659aed448a2ce08c6d949b25ba9361d0d`,
+and `9483d529dcf9fc88d6db4fa373d88eb7c3083f7c6e9c6933a96433cfeb563ad0`.
+No Event41/1001/129 occurred. Verdict: the nine neutral writes/direct-load
+construction is rejected as a red fix. EXP674 remains the positive control
+showing that an all-nonzero source vector reaches `st_tile`.
+
+**EXP675-R1 CLEAN RECOVERY 2026-09-09T11:01:43Z.** Exact package/devnode/
+service removed, full-owner stopped and ordinary377/392 restored. Health is
+Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next keeps the original
+native instruction stream and substitutes only nonzero FP16 values that round
+to external zero for G/B.

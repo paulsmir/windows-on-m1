@@ -314,6 +314,15 @@ offline pinned-ISA construction of constant red directly in the final source
 register order, avoiding the XOR permutation chain; no other graph field may
 change.
 
+EXP675 rejects that direct-register construction: exact replacement shader
+FNV0xc8164dd27953a4b7 is consumed, physical TA/3D/fence271 and store graph pass,
+but output is byte-identical to the original zero boundary
+FNV0x98b3446c1b0a8215. This does not overturn EXP674; all-nonzero FP16 lanes
+still produce72 exact poison pixels. The remaining nearest discriminator keeps
+the original native XOR/control stream byte-exact and changes only its two zero
+G/B sources to the smallest normal FP16 `0x0400`, which u8norm rounds back to
+zero. EXP675 is removed and ordinary377/392 is clean at2026-09-09T11:01:43Z.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
