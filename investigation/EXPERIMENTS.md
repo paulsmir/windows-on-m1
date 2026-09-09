@@ -41612,3 +41612,20 @@ WDK26100 build/analysis/Universal/Inf2Cat/sign/version/hash, one natural bind,
 evidence and cleanup apply. PASS requires physical completion/fence and exact
 72 native red+184 background pixels, poison0. Any failure is compared at the
 first new boundary; no further address-only candidate follows.
+
+**EXP668 BUILD FREEZE 2026-09-09T08:49:10Z.** FRYZZING built exact eight-file
+overlay SHA256
+`2355f6b5efe34c9d27253144a9d5e55a26ba1660c5bf41049a4c294ccab6f2bd`
+from immutable EXP667 source with pinned WDK26100/MSVC14.44. ARM64 KMD/UMD/
+producer analysis, Universal, Inf2Cat, signing and silent x64 UMD test pass;
+only inherited C28251/C6011 warnings remain. Version30.0.668.0. SYS/UMD/INF/
+CAT/producer/ZIP/air-manifest SHA256:
+`8f83e8cb7e5a600936d49e22e0e3e85f36807164d6053ee19f6f2158d81ec171`,
+`e0fd2c40e7d18a5baf947be655cd4ede32e375912a6261026cd7449525b416bd`,
+`9983b02f090f5a14ac6c7e6153fda01549ec2c44b2bed92deee9480a238d28ee`,
+`469b5a2847f14b2f1e379d4fe7497fec9497140ac57192385a184ce1f47bcc91`,
+`ae381585d66797062c41cc45f42c2236f311fd8779f2fe0ab3b2d0ed8a0fd971`,
+`8160469554adebc2cab08d0a51f6524d47ceff5045c4ad4f32f681c4c1d28c01`,
+`e883c7f8170fa9fbd21ffa9a8c5c529b5cc9eb1a7d18dfe072c77087f5838346`.
+Artifacts: `.local/experiments/EXP668-coherent-pipeline-layout/artifacts`.
+Ordinary377/392 is clean from EXP667-R1; stage then one full-owner run.
