@@ -42257,3 +42257,15 @@ first runtime boundary. The same zero result rejects endpoint handling and
 forbids another value probe; the next re-anchor moves outside the byte-exact
 fragment graph. Failure to reach the same execution boundary is INCONCLUSIVE.
 Recovery is evidence first, exact package cleanup, then ordinary377/392.
+
+**EXP677 STAGING CORRECTION 2026-09-09T11:30:23Z.** The first Stage command
+failed before package installation because the workflow's literal manifest
+hash omitted one hexadecimal digit. Local and remote manifest bytes both had
+the preregistered SHA256
+`95ded4b407c75b312a11abb133239296f9bd8ee24a1221c37c460eee9408102a`;
+only the comparison literal was wrong. The literal is corrected without
+changing manifest, package, producer, assets or hardware semantics. Corrected
+workflow SHA256 is
+`8f87cca98dc8ce2446232a79c1f55a47c88c1b608d1caff32401026e8882cd68`.
+Ordinary377/392 remained untouched and clean; repeat only the failed Stage
+operation, not the experiment.
