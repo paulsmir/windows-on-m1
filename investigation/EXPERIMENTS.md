@@ -42436,3 +42436,58 @@ expected image has SHA256
 and raw FNV0xdd2c90074f6ee435. Twenty-nine ABI/DMA/oracle/snapshot/
 composition/submission tests pass. This is offline proof only; EXP679 must use
 the unchanged gray shader and compare the exported raw record to that file.
+
+# EXP679 — immutable raw output and independent tiled oracle
+
+**PREREGISTERED 2026-09-09T12:27:57Z. WHY THIS HYPOTHESIS:** (1) exact
+30.0.673.0 receipt source/layout and device/service bytes exclude a decoder
+offset error in EXP678; (2) the old oracle is source-proven circular and
+layout-wrong: it selected observed output as expected and interpreted the AGX
+tiled attachment as linear; (3) EXP678's raw FNV exactly matches the independent
+gray expected image while its old scalar fields describe zero, so preserving
+and comparing the exact bytes is the smallest discriminator. No allocation
+race or cache defect is assumed.
+
+**WINDOWS CONTRACT:** one optional qualification-only Draw flag carries an
+independent expected foreground colour while ordinary Draw remains valid with
+zero flag/value. Dynamic DMA v3 preserves that value with its content hash.
+**AGX/ASAHI CONTRACT:** the unchanged0x3800 fragment shader, encoder,
+WorkCommand, context, queues, PBE and physical completion are identical to
+EXP678; raw attachment addresses use the pinned m1n1 64x64 Morton layout.
+**TRANSLATION:** after exact fence completion, capture exactly1024 source bytes
+once into transaction-owned storage, verify only that copy after tiled decode,
+keep expected0x80808080 separate from observed colour, and export the same raw
+bytes/fence/generation/source identities. Offline decode additionally requires
+byte-exact equality with the immutable EXP659-derived expected image.
+**WHAT IS STILL UNKNOWN:** which exact1024 bytes were present at the completed
+output boundary and whether they equal the independent gray image.
+
+Source commits are
+`ee43e06a9b0746778340506fcf05ff765cbc5529` and
+`532ee86deca88454e4a1aac0df3f6e3bd7b38efe`; ledger HEAD is
+`2dcc80c8bcce9005a387043dabc9d816865f91a7`. Twenty-nine focused ABI/DMA/
+oracle/snapshot/composition/submission tests and the exact decoder/image gate
+are GREEN. Source overlay contains22 explicitly listed files relative to the
+immutable EXP672 builder base; SHA256
+`4b497f4588a02a5ac3640432c65451120e39f4a59202e6bc84df1f75c700434f`.
+Build script SHA256 is
+`49b5c429d99b93a3d40c57c9ec28140e5f4356ba49b19ff756895730f86b6628`.
+Exact builder command is
+`powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\pauls\EXP679-output-snapshot\build.ps1`
+on pinned FRYZZING WDK26100/MSVC14.44. It requires Release ARM64
+VisibleAgxQualification, analysis, Universal/Inf2Cat/signing, x64 UMD contract
+and ARM64 producer gates. Expected raw image SHA256/FNV are
+`c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393`/
+0xdd2c90074f6ee435. Pre-existing dirty diff/name hashes remain
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`/
+`66acef7cc629ee044839a3ff535e5e04738f7d0bf7674d45f01e9aef5627c7b4`
+and are excluded.
+
+After build freeze and clean ordinary preflight, one natural bind/request.
+PASS requires physical TA/3D, exact Windows fence, valid1096-byte snapshot,
+expected/observed0x80808080,72 exact foreground,184 exact background, raw
+FNV0xdd2c90074f6ee435, byte-exact match with expected-output.bin, intact guard,
+unchanged graph/store/fault receipts and no causal reset. A self-consistent
+different raw buffer is a graphics FAIL with its first differing byte/pixel;
+missing/malformed snapshot is INCONCLUSIVE_BY_DIAGNOSTIC. Evidence precedes
+exact package cleanup and ordinary377/392 recovery.
