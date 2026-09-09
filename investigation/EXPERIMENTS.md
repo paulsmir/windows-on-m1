@@ -42533,3 +42533,60 @@ remains `c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393`.
 Air manifest SHA256 is
 `dad92d75d0efea07daac61f6384a3e16a88f823148b4867f447777e6eecf0708`.
 The candidate is frozen; no rendering semantic changed after preregistration.
+
+**EXP679 ACTUAL 2026-09-09T12:38:34Z — INCONCLUSIVE_BY_DIAGNOSTIC.**
+Exact30.0.679.0 naturally bound as oem5/Code0 with exact SYS/UMD hashes and
+8 CPUs. One784-byte request returned0/queued1; candidate679 correlation
+generation371718305 records DMA3860, Submit/worker, fence271, Notify/DPC and
+PASSIVE output entry/exit. Output exit is0xc0000141. Neither terminal-output
+nor raw-output snapshot was exported; no pixel verdict is possible. Active
+graph/store/mapped-fault hashes match EXP678 exactly. Correlation SHA256 is
+`2c05b6028cc7f9ebba9855b36f2bf3b1d593e6e1153e1b345779a06465651132`.
+Raw records and decoded correlation are in
+`.local/experiments/EXP679-output-snapshot/evidence/`. Four Event129 records
+at12:38:02/12/22/32Z are storage telemetry; no41/1001 or device loss observed.
+The collector's ProducerAlive uses the original executable name although this
+run uses EXP679-Producer.exe; that boolean is not proof of process exit.
+
+**EXP679-R1 2026-09-09T12:41:43Z.** Evidence copied first; exact oem5/package
+and devnode removed, stale Run wrapper stopped using the established scoped
+script, remaining experiment state removed, graceful shutdown and ordinary
+377/392 restored. Code28/null INF; no package/service/module/SYS/UMD;
+SSH/8CPU/NVMe2/USB5/keyboard1; no fresh41/1001/129. Ordinary launcher70813.
+
+**EXP679 OFFLINE OWNER 2026-09-09T12:44:37Z.** Production completion captures
+triangle metadata with ExpectedColor=0, then releases the dynamic overlay,
+which zeros runtime DynamicExpectedForegroundColor. The late worker reads that
+zero and snapshot validation rejects it. This explains a missing snapshot
+without any claim about live pixel races. Commit
+`d146fdaf47ad580dcc7de73ae3c295d5fd9231f6` stores the independent expected
+colour in the existing completed View before release; both late consumers use
+that retained value. Executable compilation of actual Windows metadata/consumer
+expressions with production completed-output and snapshot helpers reproduces
+the rejection before the three-line fix and passes afterward, including retry
+and next-fence isolation. Ten focused tests GREEN.
+
+# EXP680 — retained completed-output oracle
+
+**PREREGISTERED 2026-09-09T12:44:37Z. WHY THIS HYPOTHESIS:** EXP679 reaches
+the output worker but exports no raw snapshot; source ordering proves the
+expected colour is erased by release before the snapshot call; the executable
+composition test reproduces that exact rejection. The single variable is
+retaining independent expected metadata in the already owned completed View.
+Source d146fdaf47ad580dcc7de73ae3c295d5fd9231f6, branch
+feature/j313-gpu-acceleration. Build from immutable EXP679 source with only
+backend_platform_windows.c overlaid; exclude all unrelated dirty files.
+Use pinned FRYZZING WDK26100/MSVC14.44 build/sign/analysis/Universal gates,
+version30.0.680.0. Freeze package hashes before staging.
+
+WINDOWS CONTRACT: existing completed-output transaction owns metadata through
+release and late PASSIVE verification. AGX/ASAHI CONTRACT: unchanged EXP678
+gray graph and tiled64 layout. TRANSLATION: carry workload expected0x80808080
+into completed View and preserve exact fence/generation. WHAT IS STILL UNKNOWN:
+the immutable completed1024 bytes versus the independent expected image.
+Same one16x16 request; full-owner EXP584/EXP406; Stage/Preflight/Run via exact
+hash-gated workflow. PASS requires valid raw snapshot, byte-exact expected
+image SHA256c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393,
+72 gray/184 background, exact hardware completion/fence and intact guard.
+Missing raw remains INCONCLUSIVE, differing raw is an exact output failure.
+Evidence collection precedes exact cleanup and ordinary377/392 recovery.

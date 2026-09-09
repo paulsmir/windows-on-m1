@@ -1,5 +1,20 @@
 # GPU current state
 
+## Latest execution state — 2026-09-09T12:44:37Z
+
+EXP679 is complete and must not repeat. One Render/Submit/worker/fence271,
+Notify/DPC and unchanged graph/store/fault receipts; output verification exit
+0xc0000141 and no exported raw snapshot. Colour verdict INCONCLUSIVE.
+Evidence: `.local/experiments/EXP679-output-snapshot/evidence/`.
+Exact package removed and ordinary377/392 clean at12:41:43Z, launcher70813:
+Code28/null INF, no package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/input,
+no new41/1001/129. Source defect: release zeros runtime expected colour before
+late capture. Commit d146fdaf47ad580dcc7de73ae3c295d5fd9231f6 preserves that
+independent value in transaction-owned CompletedOutput.View. Executable RED/
+GREEN and10 relevant tests pass. EXP680 preregistered: same gray workload,
+three-line metadata lifetime fix, immutable raw vs independent tiled image.
+No live-allocation race is established. Earlier narrative below is historical.
+
 ## Active user-priority roadmap — accelerated desktop first
 
 See [ACCELERATED_DESKTOP_ROADMAP.md](ACCELERATED_DESKTOP_ROADMAP.md).
