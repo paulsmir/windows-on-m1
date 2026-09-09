@@ -69,6 +69,59 @@ static void test_native_16x16_expectation(void) {
       16u, 16u, 80u, BACKGROUND, &expectation));
 }
 
+static void test_completed_output_snapshot(void) {
+  unsigned char bytes[ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY];
+  ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation;
+  ADMISSION_DYNAMIC_OUTPUT_RESULT result;
+  ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT snapshot;
+  unsigned background = BACKGROUND;
+  unsigned foreground = 0x80808080u;
+  for (unsigned y = 0u; y < 16u; ++y)
+    for (unsigned x = 0u; x < 16u; ++x)
+      memcpy(bytes + (y * 16u + x) * 4u,
+             &background, sizeof(background));
+  for (unsigned y = 2u; y <= 12u; ++y) {
+    unsigned left = 2u + (y - 2u + 1u) / 2u;
+    unsigned right = 14u - (y - 2u + 1u) / 2u;
+    for (unsigned x = left; x < right; ++x)
+      memcpy(bytes + (y * 16u + x) * 4u,
+             &foreground, sizeof(foreground));
+  }
+  AdmissionDynamicOutputSnapshotInitialize(&snapshot);
+  assert(AdmissionDynamicOutputSnapshotCapture(
+      &snapshot, 271u, 7u, 0x1500fa0000ULL, 0x9bd140000ULL,
+      bytes, sizeof(bytes)));
+  memset(bytes, 0xa5, sizeof(bytes));
+  assert(snapshot.Version == ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_VERSION &&
+         snapshot.Bytes == sizeof(snapshot) && snapshot.Valid == 1u &&
+         snapshot.Fence == 271u && snapshot.Generation == 7u &&
+         snapshot.DataBytes == sizeof(bytes) && snapshot.Status == 0u &&
+         snapshot.SourceGpuVa == 0x1500fa0000ULL &&
+         snapshot.SourcePhysical == 0x9bd140000ULL &&
+         snapshot.Fnv1a != 0ULL);
+  assert(AdmissionDynamicOutputDescribeExpectation(
+      16u, 16u, 64u, BACKGROUND, &expectation));
+  assert(AdmissionDynamicOutputVerify(
+      snapshot.Data, snapshot.DataBytes, &expectation, 0u,
+      NULL, NULL, &result));
+  assert(result.Valid == 1u && result.ForegroundColor == foreground &&
+         result.ForegroundPixels == 72u && result.BackgroundPixels == 184u &&
+         result.Fnv1a == snapshot.Fnv1a);
+  assert(!AdmissionDynamicOutputSnapshotCapture(
+      &snapshot, 272u, 8u, 0x1500fb0000ULL, 0x9bd150000ULL,
+      bytes, sizeof(bytes)));
+  AdmissionDynamicOutputSnapshotInitialize(&snapshot);
+  assert(!AdmissionDynamicOutputSnapshotCapture(
+      &snapshot, 0u, 7u, 0x1500fa0000ULL, 0x9bd140000ULL,
+      bytes, sizeof(bytes)));
+  assert(!AdmissionDynamicOutputSnapshotCapture(
+      &snapshot, 271u, 0u, 0x1500fa0000ULL, 0x9bd140000ULL,
+      bytes, sizeof(bytes)));
+  assert(!AdmissionDynamicOutputSnapshotCapture(
+      &snapshot, 271u, 7u, 0x1500fa0000ULL, 0x9bd140000ULL,
+      bytes, sizeof(bytes) - 1u));
+}
+
 int main(void) {
   unsigned char *bytes = (unsigned char *)malloc(WIDTH * HEIGHT * 4u);
   ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {
@@ -77,6 +130,7 @@ int main(void) {
       12000u, 14000u, 0xa5u};
   ADMISSION_DYNAMIC_OUTPUT_RESULT result;
   test_native_16x16_expectation();
+  test_completed_output_snapshot();
   assert(bytes != NULL);
   build_triangle(bytes);
   progress_calls = 0u;

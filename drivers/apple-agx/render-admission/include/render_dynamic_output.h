@@ -5,6 +5,24 @@
 
 typedef int (*ADMISSION_DYNAMIC_OUTPUT_PROGRESS)(void *Context);
 
+#define ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_VERSION 1u
+#define ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY 1024u
+
+typedef struct _ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT {
+  APPLE_AGX_U32 Version;
+  APPLE_AGX_U32 Bytes;
+  APPLE_AGX_U32 Valid;
+  APPLE_AGX_U32 Fence;
+  APPLE_AGX_U32 Generation;
+  APPLE_AGX_U32 DataBytes;
+  APPLE_AGX_U32 Status;
+  APPLE_AGX_U32 Reserved;
+  APPLE_AGX_U64 SourceGpuVa;
+  APPLE_AGX_U64 SourcePhysical;
+  APPLE_AGX_U64 Fnv1a;
+  unsigned char Data[ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY];
+} ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT;
+
 typedef struct _ADMISSION_DYNAMIC_OUTPUT_EXPECTATION {
   APPLE_AGX_U32 Width;
   APPLE_AGX_U32 Height;
@@ -44,5 +62,13 @@ int AdmissionDynamicOutputVerify(
     APPLE_AGX_U32 ChunkBytes,
     ADMISSION_DYNAMIC_OUTPUT_PROGRESS Progress, void *ProgressContext,
     ADMISSION_DYNAMIC_OUTPUT_RESULT *Result);
+
+void AdmissionDynamicOutputSnapshotInitialize(
+    ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT *Snapshot);
+int AdmissionDynamicOutputSnapshotCapture(
+    ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 Generation, APPLE_AGX_U64 SourceGpuVa,
+    APPLE_AGX_U64 SourcePhysical, const unsigned char *Source,
+    APPLE_AGX_U32 DataBytes);
 
 #endif

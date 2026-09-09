@@ -15,6 +15,49 @@ static void output_zero(void *Data, APPLE_AGX_U32 Bytes) {
     data[index] = 0u;
 }
 
+void AdmissionDynamicOutputSnapshotInitialize(
+    ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT *Snapshot) {
+  if (Snapshot == OUTPUT_NULL)
+    return;
+  output_zero(Snapshot, (APPLE_AGX_U32)sizeof(*Snapshot));
+  Snapshot->Version = ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_VERSION;
+  Snapshot->Bytes = (APPLE_AGX_U32)sizeof(*Snapshot);
+}
+
+int AdmissionDynamicOutputSnapshotCapture(
+    ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT *Snapshot, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 Generation, APPLE_AGX_U64 SourceGpuVa,
+    APPLE_AGX_U64 SourcePhysical, const unsigned char *Source,
+    APPLE_AGX_U32 DataBytes) {
+  APPLE_AGX_U64 hash = 14695981039346656037ULL;
+  APPLE_AGX_U32 index;
+  if (Snapshot == OUTPUT_NULL || Source == OUTPUT_NULL || Fence == 0u ||
+      Generation == 0u || SourceGpuVa == 0ULL || SourcePhysical == 0ULL ||
+      SourceGpuVa >= (1ULL << 40u) || SourcePhysical >= (1ULL << 40u) ||
+      (SourceGpuVa & 0x3fffULL) != 0ULL ||
+      (SourcePhysical & 0x3fffULL) != 0ULL ||
+      DataBytes != ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY ||
+      Snapshot->Version != ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_VERSION ||
+      Snapshot->Bytes != sizeof(*Snapshot) || Snapshot->Valid != 0u)
+    return 0;
+  for (index = 0u; index < DataBytes; ++index) {
+    unsigned char value = Source[index];
+    Snapshot->Data[index] = value;
+    hash ^= value;
+    hash *= 1099511628211ULL;
+  }
+  Snapshot->Fence = Fence;
+  Snapshot->Generation = Generation;
+  Snapshot->DataBytes = DataBytes;
+  Snapshot->Status = 0u;
+  Snapshot->Reserved = 0u;
+  Snapshot->SourceGpuVa = SourceGpuVa;
+  Snapshot->SourcePhysical = SourcePhysical;
+  Snapshot->Fnv1a = hash;
+  Snapshot->Valid = 1u;
+  return 1;
+}
+
 int AdmissionDynamicOutputDescribeExpectation(
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
     APPLE_AGX_U32 BackgroundColor,

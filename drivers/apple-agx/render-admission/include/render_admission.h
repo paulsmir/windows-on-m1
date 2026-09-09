@@ -750,6 +750,10 @@ VOID AdmissionRecordOutputTerminalSnapshot(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_TERMINAL_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordDynamicOutputSnapshot(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT *Snapshot);
+_IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordDynamicGraph(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt);

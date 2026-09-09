@@ -113,6 +113,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_TERMINAL_RECEIPT TerminalReceipt;
   ADMISSION_DYNAMIC_GRAPH_RECEIPT DynamicGraphReceipt;
   ADMISSION_DYNAMIC_STORE_RECEIPT DynamicStoreReceipt;
+  ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT DynamicOutputSnapshot;
   volatile LONG TerminalSequence;
   volatile LONG CompletedOutputGeneration;
   ADMISSION_COMPLETED_OUTPUT CompletedOutput;
@@ -171,6 +172,7 @@ static VOID AdmissionTerminalBegin(
   AdmissionTerminalReceiptInitialize(&Runtime->TerminalReceipt);
   RtlZeroMemory(&Runtime->DynamicGraphReceipt,
                 sizeof(Runtime->DynamicGraphReceipt));
+  AdmissionDynamicOutputSnapshotInitialize(&Runtime->DynamicOutputSnapshot);
   if (ta->Data == NULL || ta->Size < 548u ||
       d3->Data == NULL || d3->Size < 612u)
     return;
@@ -252,19 +254,28 @@ static VOID AdmissionTerminalObserve(
             Runtime, Output->RenderedCpuAddress, Output->RenderedBytes)) {
       BOOLEAN captured;
       unsigned int foreground = 0u;
+      const UCHAR *verificationBytes =
+          (const UCHAR *)Output->RenderedCpuAddress;
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (Output->VerificationKind ==
           AdmissionBackendOutputVerificationTriangle) {
         ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation;
-        captured =
+        captured = Output->RenderedBytes ==
+                           ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY &&
+            Completed != NULL &&
+            AdmissionDynamicOutputSnapshotCapture(
+                &Runtime->DynamicOutputSnapshot, Fence,
+                Completed->Generation, Output->RenderedGpuAddress,
+                Output->RenderedPhysicalAddress, verificationBytes,
+                Output->RenderedBytes) &&
             AdmissionDynamicOutputDescribeExpectation(
                 Output->RenderWidth, Output->RenderHeight,
                 Output->RenderPitch, Output->BackgroundColor,
                 &expectation) &&
             AdmissionTerminalReceiptCaptureTriangleOutputProgress(
                 &Runtime->TerminalReceipt, Fence,
-                (const UCHAR *)Output->RenderedCpuAddress,
-                Output->RenderedBytes, &expectation,
+                Runtime->DynamicOutputSnapshot.Data,
+                Runtime->DynamicOutputSnapshot.DataBytes, &expectation,
                 ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
                 AdmissionOutputCaptureProgress, Runtime, &foreground)
                 ? TRUE
@@ -306,7 +317,8 @@ static VOID AdmissionTerminalObserve(
             Runtime->VisibleAgxPhysicalAddress =
                 Output->AllocationPhysicalAddress;
           } else {
-            RtlCopyMemory(Runtime->VisibleAgxSource, Output->RenderedCpuAddress,
+            RtlCopyMemory(Runtime->VisibleAgxSource,
+                          Runtime->DynamicOutputSnapshot.Data,
                           sizeof(Runtime->VisibleAgxSource));
             Runtime->VisibleAgxSourceAddress = Runtime->VisibleAgxSource;
             Runtime->VisibleAgxSourceBytes =
@@ -2366,6 +2378,10 @@ static VOID AdmissionOutputProcess(
       AdmissionBackendOutputVerificationTriangle)
     AdmissionRecordOutputTerminalSnapshot(
         runtime->Adapter, &runtime->TerminalReceipt);
+  if (runtime->DynamicOutputSnapshot.Valid == 1u &&
+      runtime->DynamicOutputSnapshot.Fence == fence)
+    AdmissionRecordDynamicOutputSnapshot(
+        runtime->Adapter, &runtime->DynamicOutputSnapshot);
   if (runtime->DynamicGraphReceipt.Valid == 1u &&
       runtime->DynamicGraphReceipt.Fence == fence)
     AdmissionRecordDynamicGraph(

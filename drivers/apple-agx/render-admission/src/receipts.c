@@ -15,6 +15,7 @@ C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_RECEIPT) == 312);
 C_ASSERT(sizeof(ADMISSION_KTRACE_RECEIPT) == 928);
 C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
 C_ASSERT(sizeof(ADMISSION_TERMINAL_RECEIPT) == 368);
+C_ASSERT(sizeof(ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT) == 1080);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_PATTERN_RECEIPT) == 112);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_SCANOUT_RECEIPT) == 216);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_AGX_RECEIPT) == 248);
@@ -204,6 +205,40 @@ _Use_decl_annotations_ VOID AdmissionRecordOutputTerminalSnapshot(
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1OutputTerminalSnapshot", Receipt,
                 sizeof(*Receipt));
+    ZwClose(key);
+  }
+}
+
+_Use_decl_annotations_ VOID AdmissionRecordDynamicOutputSnapshot(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT *Snapshot) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Snapshot == NULL ||
+      Snapshot->Version != ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_VERSION ||
+      Snapshot->Bytes != sizeof(*Snapshot) || Snapshot->Valid != 1u ||
+      Snapshot->Fence == 0u || Snapshot->Generation == 0u ||
+      Snapshot->DataBytes != ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY ||
+      Snapshot->Status != 0u || Snapshot->Reserved != 0u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1DynamicOutputSnapshot", Snapshot,
+                sizeof(*Snapshot));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(
+      &servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1DynamicOutputSnapshot", Snapshot,
+                sizeof(*Snapshot));
     ZwClose(key);
   }
 }
