@@ -42694,3 +42694,49 @@ The earlier red results had the same FNV but flawed scalar oracle; this run
 provides the missing raw proof and supersedes their zero-colour interpretation.
 No Present or desktop PASS. Raw evidence and hardware.log preserved before
 exact package cleanup. Continue to four alternating raw frames after recovery.
+
+EXP681-R1: exact oem5/package and devnode removed after evidence, scoped Run
+wrapper stopped and remaining stale state removed; controlled shutdown and
+ordinary377/392 restored with experiment-local recovery.log.
+
+# EXP682 — four alternating native hardware outputs
+
+PREREGISTERED 2026-09-09T13:05Z. WHY THIS HYPOTHESIS: EXP680 and EXP681 prove
+independent gray/red raw images; production AdmissionTerminalBegin resets the
+snapshot for each job; AdmissionPlatformRuntimeReady requires idle output and
+empty completed transaction before admitting subsequent work. The remaining
+uncertainty is repeated job/fence/output identity with changing contents.
+Single variable: four sequential requests instead of one, using the exact
+existing native-red and gray producers with held distinct allocations.
+WINDOWS CONTRACT: separate normal device/context/allocation lifetimes remain
+alive while evidence is collected; no reuse before retirement.
+AGX/ASAHI CONTRACT: proven native graph and existing completion mechanism.
+TRANSLATION: red/gray/red/gray with unchanged typed ABI and exact680 KMD;
+snapshot generation/fence/context/allocation/VA/PA and image checked per frame.
+WHAT IS STILL UNKNOWN: monotonic repeated physical execution and no stale
+output across four distinct allocation lifetimes.
+
+Reuse package30.0.680.0 with all build/sign/analysis gates and ZIP
+3c6d906db1ae92d891cf93a8f1d74f3a81a7dd403b67dcf6114c6ef9e548e6e6.
+Red producer18cdb422c6d2111cd1654a76b63ec012f80f66f9aa78da76f7698e67b9dfd9bf;
+gray producer ec72aab1fc64d5f93964c437cb874c60243863c88421b3e89f7a6a47517a869a.
+Both exact WDK gates already pass. Expected red image6443f78f9a269826fbb0d0f8e2148e0629b9f0289fc61bbf421ddfd552d8a7a3;
+gray c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393.
+No source rebuild; current HEAD ebc2598 is followed by native-red verdict
+ledger commit c10cffc. Artifacts/scripts/evidence under
+`.local/experiments/EXP682-four-native-frames/`.
+Stage on clean ordinary, current full-owner EXP584/406, exact Preflight,
+workflow Run -Frame1..4 with one evidence export per frame; never relaunch a
+frame. Require each raw image byte-exact,72/184 pixels, poison0,guard0, newer
+fence and generation, distinct allocation/VA/PA, physical stamps/done. A bounded
+15-second HOLD must retain healthy device/8CPU and no crash/reset. Private
+Present failures do not become frame PASS; standard Present remains Phase3.
+Before cleanup collect all evidence, then remove exact package and stop only
+experiment processes; restore ordinary377/392. Abort the sequence on first
+failure and classify it before proposing another candidate.
+
+EXP682 freeze: manifest b8d0f0195b284c96dfaf14e6dc2531797414c15565ec65fdeecd50ea148e88b7;
+workflow bc55b429387dea6e4c6c6c9f06ec48d90b017d889fb8a25f1e933af779299801;
+collector78430173c1b9bfdbf380e78e39fea603a97324a562fec8c733138e62a91873f0.
+Ordinary preflight13:04:53Z clean Code28/no package/service/module/SYS/UMD,
+8CPU/SSH/NVMe2/USB5/keyboard1,no41/1001/129.

@@ -11,7 +11,8 @@ Snapshot SHA2567f487c50a0eaf25ba647eaa69876305d3f28e6cab396eb87bd59f6761fd976fe.
 Evidence: `.local/experiments/EXP681-native-red-oracle/evidence/`.
 Earlier zero-colour scalar claims cannot supersede this raw proof. No race
 claim; no reopening AGX/PBE/VA/UAT/encoder. Exact package removed; ordinary
-recovery underway. Next: four separate red/gray requests using existing
+377/392 clean at13:04:53Z (Code28/no package/service/module,8CPU/SSH/input,
+no41/1001/129), launcher87727. Next: four separate red/gray requests using existing
 producers with held distinct allocations and per-fence raw export.
 
 ## Latest execution state — 2026-09-09T12:51Z
