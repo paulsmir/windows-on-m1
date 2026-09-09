@@ -27,6 +27,7 @@ typedef enum _APPLE_AGX_UAT_PROTECTION {
   AppleAgxUatGpuSharedReadOnly,
   AppleAgxUatGpuSharedWriteOnly,
   AppleAgxUatGpuSharedReadWrite,
+  AppleAgxUatGpuPipelineShared,
 } APPLE_AGX_UAT_PROTECTION;
 
 typedef enum _APPLE_AGX_UAT_HALF {

@@ -378,7 +378,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
       if (AppleAgxUatMap(
               ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
               fixedGpuVa[fixedIndex], fixedPhysical, fixedBytes[fixedIndex],
-              AppleAgxUatGpuSharedReadWrite, &runtime->Residency.Allocator,
+              AppleAgxUatGpuPipelineShared, &runtime->Residency.Allocator,
               &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
         status = STATUS_INVALID_ADDRESS;
         goto Fail;
@@ -426,7 +426,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeStart(
         if (AppleAgxUatMap(
                 ADMISSION_MEMORY_UAT_CONTEXT, &runtime->Residency.Roots,
                 alias->GpuVirtualAddress, aliasPhysical, alias->Bytes,
-                AppleAgxUatGpuSharedReadWrite,
+                AppleAgxUatGpuPipelineShared,
                 &runtime->Residency.Allocator,
                 &runtime->Residency.Inventory) != AppleAgxUatResultOk) {
           status = STATUS_INVALID_ADDRESS;
