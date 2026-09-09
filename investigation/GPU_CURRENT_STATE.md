@@ -106,6 +106,20 @@ CreateDevice owns its common Windows runtime plus existing pipe screen/context.
 Check child resource/context retirement before releasing the runtime owner.
 No new hardware EXP and no capability change from these offline components.
 
+Checked Gallium pair release now implemented at
+a4f0b0f5bf4d2a7333df5b27c6ec9f7a433a98d2:
+AgxWin32PipeScreenReleaseDevice rejects live resources, extra contexts, foreign
+context and extra screen references without mutation. Success releases the
+owned screen/context pair and leaves the borrowed Windows winsys alive.
+Caller serializes teardown. ASan/UBSan and pinned MSVC analysis/test PASS;
+evidence .local/experiments/AD04-pipe-release/evidence/.
+This is CPU object lifetime, not a physical residency guarantee.
+The actual Mesa per-device factory attachment remains unfinished. Its guard
+must use this checked release before Windows runtime finalization, and it must
+not call CreateEmptyShader until required pipe shader/state callbacks exist.
+The current pipe_context exposes mapping/resource operations, not a complete
+D3D graphics pipeline. Keep caps0 and do not launch admission hardware yet.
+
 ## Preserved constraints
 Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
 physical TA3D and completion remain controls. EXP640/651 retain their private

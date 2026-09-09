@@ -42859,3 +42859,25 @@ has0 production warnings/errors; DLL SHA256
 Logs/binaries retained in .local/experiments/AD04-runtime-adapter-bridge/evidence/.
 No package installed and no hardware readiness raised. Next is actual Mesa
 per-device factory attachment with retained child ownership checks.
+
+AD04-PIPE-RELEASE OFFLINE PREREGISTRATION: per-device factory must know whether
+the Gallium children have actually retired before finalizing borrowed Windows
+runtime storage. Existing void screen.destroy silently returns on live children.
+Add checked release of an owned context/screen pair, rejecting foreign context,
+live resource, extra context and extra screen reference without mutation.
+Successful release leaves underlying Windows winsys active for its owner's
+subsequent finalization. Caller serializes teardown; no residency pin is claimed.
+Portable production-function ASan/UBSan test RED missing API then GREEN.
+Pinned MSVC x64 test uses existing AD03 header fixture plus current source
+overlay SHA25604e578bc3ae767566e3a353811e5c64641bf1c01d64674870247dfca42ad9999.
+No hardware run or KMD/capability changes; artifacts AD04-pipe-release.
+
+AD04-PIPE-RELEASE ACTUAL: portable ASan/UBSan test passes and pinned MSVC
+W4/WX/SDL/analysis execution passes. Test binary SHA256
+b61bcce938ef043578c22a62a18727ed1bc1afdf520fd85861eb0541ec6ba11e;
+build log91cd9244b200206f779d68879f72060aa0e5120a48d53c3f86112f4908a73624;
+run log2398ad9292fef46759bf42e7a6ad728c9f3ad1b45d09046d5efe1a944a94f449.
+Current sources over proven Mesa header fixture; local artifacts match builder
+manifest. Commit a4f0b0f5bf4d2a7333df5b27c6ec9f7a433a98d2.
+No new hardware proof and no installed package change. This guard is a factory
+lifetime prerequisite, not a completed Mesa factory or full D3D device claim.
