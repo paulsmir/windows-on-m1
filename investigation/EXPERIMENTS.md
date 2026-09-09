@@ -41525,3 +41525,14 @@ CAT/producer/ZIP/air-manifest SHA256:
 `9415a19c3646f80f7c5cd48a859098ccabd4493b6458547282e55aa2adebb419`.
 Artifacts: `.local/experiments/EXP667-native-shader-aliases/artifacts`.
 Ordinary377/392 is clean from EXP666-R1; stage then one full-owner run.
+
+**EXP667 PRERUN MANIFEST CORRECTION 2026-09-09T08:29:26Z.** The first Stage
+failed closed before package expansion because the handwritten air-manifest
+omitted one `3` from the otherwise correct depth-bias SHA. No package or source
+state changed. Corrected air-manifest SHA256 is
+`d0a69a232239cf82f1e3eeae9081d086ebb63848f7603561c21e1bea80dd916a`;
+the depth-bias artifact remains
+`15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b`.
+The corrected hash-gated Stage published exact oem5 successfully. The earlier
+air-manifest hash above is superseded only by this explicit correction; all
+driver/package hashes remain unchanged.
