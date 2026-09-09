@@ -137,6 +137,27 @@ Remaining production integration is explicit: selected Mesa State.h,
 Adapter.cpp and Device.cpp must use these owners/factory, not the upstream
 adapter-global screen. No DDI table or graphics pipeline readiness has changed.
 
+Lifecycle entry-point derivation is now implemented at
+724d30f8f5c6faf546e91db830c1b12bd5d68d4d. The reproducible preparer verifies
+pinned Mesa/clean frontend/input hashes, preserves pristine source and derives
+State.h/Adapter.cpp/Device.cpp using the Windows owner bridge. Adapter metadata
+and per-device heap owners replace the global screen; busy children remain
+reachable under their adapter. Missing startup shader callbacks fail before
+CreateEmptyShader. Owner composition test passes x64; x64/ARM64 compile checks
+pass with no owned-code warnings. Derived15-unit frontend libraries compile
+for x64/ARM64 with the recorded existing upstream conversion warnings.
+Evidence: .local/experiments/AD04-frontend-owner/evidence/ and
+.local/experiments/AD04-selected-frontend/evidence/{x64-b4,ARM64-b4}/.
+
+IMPORTANT NEXT INTEGRATION: current small AGX_WIN32_PIPE_CONTEXT is not an
+agx_context. Asahi agx_create_shader_state casts to the full agx_context and
+requires full agx_screen/device state. Do not graft its callbacks onto our
+small context. Integrate actual Asahi state/compiler/encoder and Windows BO/
+submit/fence transport as one coherent backend step. Frontend resources/DXGI
+still contain legacy software-oriented paths and NO_REDIRECTION; these are
+unfinished, not a production hardware UMD. No DLL is linked/installed and no
+D3D device or desktop PASS is claimed. Avoid further micro-helper-only EXPs.
+
 ## Preserved constraints
 Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
 physical TA3D and completion remain controls. EXP640/651 retain their private

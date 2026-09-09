@@ -42906,3 +42906,24 @@ Exact build.log/arm64-build.log/test-result.json and binaries are local under
 .local/experiments/AD04-pipe-device-factory/evidence/.
 No installation, hardware EXP, pipeline-cap change or desktop readiness claim.
 Selected Mesa frontend entry-point attachment is still the next integration.
+
+AD04-SELECTED-FRONTEND OFFLINE: commit724d30f8f5c6faf546e91db830c1b12bd5d68d4d
+adds Windows adapter/device owner bridge and deterministic derived frontend.
+Original Mesa checkout remains clean. Input revision9aa1215f and three modified
+source hashes are enforced; output is separate and has a complete source
+manifest. Adapter.cpp and Device.cpp call the checked Windows factory and
+retain per-device ownership. Startup callbacks and allocation failures fail
+closed; GetCaps remains0. Existing NO_REDIRECTION/resource/DXGI behavior is
+explicitly unfinished and no linked production DLL is installed.
+Owner composition RED missing link -> GREEN x64 execution; x64/ARM64 owner
+test targets build/analyze with0 warnings/errors. Test binary x64
+d707a13865c40a5fbf3e007f480d210089bcbfb12f52367425707e1636324417,
+ARM64 compile-only005193f896cf7d6281de0a906307d795a7523bfef47ac1fe7efa511a7f90e4bf.
+Derived frontend final15-unit static libraries:
+x64 e7f4cdcc337330cf07b10f9a030d12e1e81a49f357e3a667da26786d6b57d7c9;
+ARM64 c523b9b9f23804a1ded244c31c577ab767af4d446cd92276f9079d2a4c5417c3.
+Existing upstream conversion warnings remain recorded; not a clean full UMD
+analysis gate. Source review at agx_state.c:agx_create_shader_state proves full
+agx_context/agx_screen layout is required. Next is coherent Asahi backend and
+Windows transport integration, not assigning native callbacks to the small
+resource-control context. No new hardware run or readiness increase.
