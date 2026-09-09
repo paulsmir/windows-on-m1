@@ -41353,3 +41353,68 @@ INF/CAT/producer/ZIP/air-manifest SHA256:
 `06d71c8d88b764b3b5d642cbbf6d145fc9337827ffe884976c278437f93fe24e`,
 `8244e1cf85d966764b2907cf91ba12f273d33e45ab499697d178c53f67497094`.
 Air clean ordinary health is verified; one stage/full-owner run next.
+
+**EXP665 ACTUAL — ACTIVE ENCODER ROUTE CONFIRMED; FRAGMENT OUTPUT ZERO
+2026-09-09T07:42:01Z.** Exact30.0.665.0 passed oem5/Code0/service/hash
+preflight. The784-byte request returned success/queued1. Durable correlation
+candidate665/boot266258262 records DMA3860, prepatched1, Patch0, Submit0,
+fence271, workerReady2, physical TA/3D completion, QueueDpc1 and matching
+Notify/DPC. Terminal output examined the exact1024-byte16x16 target:184 pixels
+retain background0xff112233 and the exact72-pixel triangle mask is zero,
+poison0, first mismatch88 and FNV0x98b3446c1b0a8215. This is not the previous
+uniform-background result: routing object19+0xd0 to object71 made the dynamic
+VDM/PPP/VS graph physically rasterize the expected coverage. Fragment colour
+is the new first boundary; Present is correctly not reached. Device remained
+ACTIVE/Code0 with8CPU/NVMe2/USB5/keyboard1. Two Event129 entries at07:40:53Z
+and07:41:03Z are retained as storage telemetry without GPU attribution.
+Evidence is `.local/experiments/EXP665-active-encoder-route/evidence`; raw
+correlation and terminal SHA256 are
+`3b0b3c0c7f56dfdc8f98ab884d277e903064d68b45f7f9c7ee21c2624928fa59`
+and `505982fc4ee90e385768c3447a63b04791c5f2f6537c19d4274baacc8f83007e`.
+
+**SOURCE MISMATCH / OFFLINE FIX.** Pinned V13_5 native evidence stores the
+fragment USC record on the next16KiB pipeline page: VDM fragment target is
+pipeline base+0x1000. The compact wire graph intentionally stores its first
+64-byte vertex record followed immediately by the fragment record at compact
+offset0x40; the old overlay copied and resolved that tail at hardware VA+0x40.
+Commit `98215e4ae99e9cb5a2e4d026790a769bf0c80b1e` adds a bounded scatter in the
+existing overlay: compact `[0,0x40)` remains at object73+0x10000 and compact
+`[0x40,end)` maps to object73+0x11000. Resolution performs the same transform,
+rejects split-straddling accesses, and Apply/validate/Release cover both spans.
+No DMA/wire growth, shader byte, encoder, AGX, firmware, queue, PBE, DCP or caps
+change is included. RED old fragment VA then GREEN; exact production fixture
+and17 adjacent executable tests pass.
+
+**EXP665-R1 CLEAN RECOVERY 2026-09-09T07:51:55Z.** Evidence was preserved,
+exact oem5/devnode removed, full-owner stopped and immutable ordinary377/392
+restored. Health: Problem28/null INF, no AppleAgx package/service/module/SYS/
+UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP665 must not be
+repeated.
+
+# EXP666 — preserve native fragment-pipeline page separation
+
+**PREREGISTERED 2026-09-09T07:53:00Z. WHY THIS HYPOTHESIS:** (1) EXP665 proves
+the active dynamic encoder and exact triangle raster coverage but every covered
+pixel is zero; (2) the hardware-proven V13_5 graph addresses its fragment USC
+record at pipeline base+0x1000; (3) source proves the Windows overlay instead
+addressed the compact tail at base+0x40. This is the nearest exact difference
+after vertex and raster processing, stronger than changing shader bytes or PBE.
+
+**WINDOWS CONTRACT:** compact immutable pipeline bytes remain owned by the
+submission and are copied into validated zero backend ranges. **AGX/ASAHI
+CONTRACT:** V13_5 USC stage records use the captured page-separated VA layout;
+fragment code itself disassembles to the exact red `[1,0,0,1]` tile store.
+**TRANSLATION:** scatter the compact pipeline at the native page boundary and
+map typed compact offsets through the same transform while retaining exact
+range, ownership, apply and rollback validation. **WHAT IS STILL UNKNOWN:**
+whether the fragment record becomes executable and produces the expected72 red
+pixels through the current Windows-originated physical job.
+
+Single variable is the fragment-pipeline record VA. Source commit is
+`98215e4ae99e9cb5a2e4d026790a769bf0c80b1e`; immutable FRYZZING EXP665 source
+plus only the three committed overlay/test files. Build uses pinned
+WDK26100/MSVC14.44 with analysis/Universal/Inf2Cat/sign/version/hash gates.
+One natural bind. PASS requires physical TA/3D, exact fence271 or its correlated
+successor,256 examined pixels with exact72 red foreground+184 background,
+poison0 and a non-background target hash. Evidence, exact cleanup and ordinary
+recovery follow before the next causal decision.

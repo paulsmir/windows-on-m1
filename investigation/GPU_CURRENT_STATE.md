@@ -188,6 +188,22 @@ bytes unchanged; the next per-submission build remains the rollback owner.
 2026-09-09T07:33:05Z. Next is exact EXP665 hardware validation of this routing;
 no further layout probe precedes it.
 
+EXP665 validates that routing correction and advances the hardware boundary.
+The784-byte Windows request passes DMA3860/Patch/Submit, physical TA/3D and
+fence271. Its16x16 target is no longer uniform: the exact72-pixel triangle mask
+became zero while184 pixels retained background0xff112233, poison0 and
+FNV0x98b3446c1b0a8215. Therefore the dynamic VDM/PPP/VS/raster coverage is
+HW_PROVEN; fragment colour is not. Pinned native evidence addresses the
+fragment USC record at pipeline base+0x1000, while the compact overlay placed
+its tail at base+0x40. Commit `98215e4ae99e9cb5a2e4d026790a769bf0c80b1e`
+adds an ownership-checked compact-to-native scatter and matching typed address
+transform without growing the DMA or changing graph bytes.17 adjacent tests
+are GREEN. EXP665 is removed; ordinary377/392 is clean at
+2026-09-09T07:51:55Z: Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP666 is preregistered
+to test only the fragment pipeline page separation; no AGX/firmware/PBE/DCP/caps
+change is permitted.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
