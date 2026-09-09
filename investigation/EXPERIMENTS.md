@@ -40773,3 +40773,57 @@ skeleton. The next hardware hypothesis must be one difference from that
 comparison or a single discriminator proving which of encoder fetch, VS
 invocation, primitive generation and fragment invocation is zero. No further
 isolated state-bit candidate is justified yet.
+
+# EXP659 — native J313/V13_5 Mesa triangle re-anchor
+
+**PREREGISTERED 2026-09-09T01:50:00Z. WHY THIS HYPOTHESIS:** (1) EXP657 and
+EXP658 both complete TA/3D/fence with the exact same zero-fragment output after
+two current-Mesa source corrections; (2) the production fixture is generated
+from current Mesa `9aa1215f878b504f66159dd2ead4c7973142126e`, while the
+project's only accepted native J313/V13_5 stack and immutable clear fixture use
+hardware-era Mesa `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`; (3) direct
+source comparison finds material V13_5 command-contract differences in PPP
+batch state, region-clip length/layout, shader words and USC stage controls.
+The clear-only EXP208 graph cannot determine which encoding is required for a
+geometry draw.
+
+**WINDOWS CONTRACT:** No Windows contract, package or capability changes in
+this experiment. **AGX/ASAHI CONTRACT:** Run one bounded 16x16 GLES2 triangle
+through the previously validated historical Mesa/m1n1 DRM-shim capture stack,
+require real TA/3D completion and readback, and retain its complete frame/object
+archive. **TRANSLATION:** The resulting encoder, pipeline, shader and cmdbuf
+objects become a read-only byte-exact V13_5 reference for the existing Windows
+translation; they are not copied into production without license/source and
+ownership review. **WHAT IS STILL UNKNOWN:** Whether V13_5 native geometry
+succeeds and which first byte-level production difference explains Windows'
+zero fragments.
+
+Single hardware variable is the workload within the established native capture
+path: clear plus one GLES2 triangle instead of clear only. The test program
+requires red>0, background>0, other=0 after `glFinish/glReadPixels`, prints the
+real GL vendor/renderer/version, saves exact1024-byte RGBA and the shim saves
+the full attachment plus `shim_frame000.agx`. It does not launch Windows or
+modify firmware/m1n1/Mu/DCP.
+
+Exact container image is
+`windows-on-m1-agx-capture@sha256:35134b7c81d65d0c1136975c9f0aaa3ec16f4f81241da248194acb1021ccd896`;
+its Mesa commit is `7a4f24061fa56ef7eff12132dd7b1461d5a890d8`. Triangle source/binary,
+capture runner and shim SHA256 are
+`99cd1ccab09423629c6591aa5d61faade7a1bd08858ad29de9dc025544c7ce22`,
+`5eaf6f9348a606dbe3679a8031d7f6c325d6e93c1eaa0c37b579c4bddb8ed2ed`,
+`26e003c9c82a498cbb717e3552275dc4ac2ae310eb45080b6aab491b3251e740`
+and `0fc9e2ef6e677d4552192eb86fc1ac3fc3c1197ce53452703aaae538d58a0a62`.
+Immutable native m1n1 artifact/SHA256SUMS are
+`.local/recovery/STABLE-j313-8core-native-input-v1/m1n1.macho`
+`3b81d82176b9853228b39eb3bb56ceff018cd0542248e872dd1bc1304c32b82e`
+and `c1ede01b772608cf44cde0005cd8688d3b165a092a88b89c0aae70f5442a9c62`.
+
+Air is clean ordinary377/392 at 2026-09-09T01:44:33Z. Exact launch sequence:
+graceful Windows shutdown; chainload the immutable native m1n1; start a local
+socat bridge on port43159; run the pinned container with repository read-only,
+only `.local/experiments/EXP659-native-triangle/evidence` writable, and exact
+`run-in-container.sh`; preserve producer/frame/attachment/hashes; require the
+runner's fresh-proxy reboot; then restore and verify ordinary377/392. PASS is
+physical native triangle output plus a complete non-clear encoder archive. A
+capture/launch failure is inconclusive and is not evidence about Windows. The
+archive is an analysis reference, not a readiness increase by itself.
