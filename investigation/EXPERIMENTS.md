@@ -42373,6 +42373,14 @@ preserve the current failure. Any different value is classified exactly.
 Failure to reach the same execution boundary is INCONCLUSIVE. Evidence precedes
 exact package cleanup and ordinary377/392 recovery.
 
+**EXP679 BUILD-METADATA CORRECTION 2026-09-09T12:28:42Z.** Before transfer,
+the manifest-only `LedgerCommit` field was advanced from the pre-preregistration
+state to exact preregistration commit
+`32937bfe298073cb135c1e1505ea0fdbec9dcc6d`. No source, build option or
+artifact input changed. Corrected build-script SHA256 is
+`b9f106cb09320b2347fc00754a8ca3400b59e38a07707d4dd6dcc4ec50ac8320`;
+the source-overlay hash remains unchanged.
+
 **EXP678 ACTUAL — INCONCLUSIVE BY TORN OUTPUT OBSERVATION
 2026-09-09T11:51:10Z.** Exact reused30.0.673.0 package naturally bound as
 oem5; the single request completed physical TA/3D and exact fence271 with
