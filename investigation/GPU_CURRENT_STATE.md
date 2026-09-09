@@ -258,9 +258,10 @@ not KMD graph construction. Primary m1n1/EXP659 leaves use shared-NC
 AP0/PXN1/UXN1, while Windows pipeline aliases use AP2/PXN0/UXN1. Commit
 `985e80815e5c6323397e2acdf504a4b0a1e5b405` adds only the exact pipeline leaf
 profile and applies it to four context-63 mappings;16 relevant tests pass.
-EXP670 is the next discriminator. EXP669 evidence is saved and its exact
-package removal is complete. Ordinary377/392 is clean at
-2026-09-09T09:14:50Z: Code28/no package/service/module/SYS/UMD,
+EXP670 rejects that leaf profile as sufficient: active graph stays exact and
+output stays184 background+72 zero. Exact package is removed. EXP671 adds only
+the existing SGX/RegionB/RegionC post-completion fault snapshot and is built.
+Ordinary377/392 is clean at2026-09-09T09:28:15Z: Code28/no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
 
 AD03 Task1 is OFFLINE_PROVEN at commit

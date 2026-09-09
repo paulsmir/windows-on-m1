@@ -41795,6 +41795,25 @@ EXP670 source plus one file. A nonzero fault identifies the exact context/unit/
 address owner; an all-zero snapshot closes page/USC fault and moves the
 boundary to fragment/tile-store execution state.
 
+**EXP670-R1 CLEAN RECOVERY 2026-09-09T09:28:15Z.** Exact package/devnode was
+removed after evidence, full-owner stopped and ordinary377/392 restored.
+Problem28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP670 must not repeat.
+
+**EXP671 BUILD FREEZE 2026-09-09T09:27:10Z.** FRYZZING built the one-file
+observation overlay SHA256
+`b116b95181f69fc39c5aec56eb3524f68797f98dc95fc16652ba5cdf788a8dfa`
+from immutable EXP670 source with pinned WDK26100/MSVC14.44; established gates
+pass, version30.0.671.0. SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
+`24291df7e6ed0119ffc6c6b404b4594b711dbe662b02be29501847bd09cb1af9`,
+`cff0699ce48cccf84cd96157828bcc06b7ea552bb88a77b33d6ddb3c46425d6d`,
+`f4ce3a03db9a181c7ccebb6f13c0f21993940d723037e28ab6f32608c37e871f`,
+`20ae3f19120d2bb25667df4ad2f5b90e72c910cb974bdb0e447b9ee4df36a4a3`,
+`c9657197781164f93a4ff21eca439ed986b8c4b6415af85c507bca1906a937a7`,
+`53450782f2e3f067a2364d05b6cf2f5ee7415411d30258fde1ffccef5f3f4f28`,
+`1b38f16d98743c5ddf1b0f21ee6ca0020da999fc591478ce3404abcbc63096c8`.
+Artifacts: `.local/experiments/EXP671-post-completion-fault/artifacts`.
+
 **EXP669-R1 CLEAN RECOVERY 2026-09-09T09:14:50Z.** Evidence was already local
 before SSH disappeared during cleanup. The established control plane showed
 the guest completed shutdown; full-owner stopped and immutable ordinary377/392
