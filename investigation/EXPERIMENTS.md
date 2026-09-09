@@ -41338,3 +41338,18 @@ are unchanged. Source commit is
 four changed files. Pinned build/sign/hash gates, one natural bind, evidence and
 cleanup apply. PASS requires physical completion/fence and exact72/184 output;
 any different failure becomes the next named boundary.
+
+**EXP665 BUILD FREEZE 2026-09-09T07:37:05Z.** FRYZZING built exact four-file
+overlay SHA256
+`05b1329c073e5b9481bcf1eab305947eefbba8d194584c557bc963d2ab199f7e`
+from immutable EXP664 source with pinned WDK26100/MSVC14.44. Established
+analysis/Universal/Inf2Cat/sign/test gates pass, version30.0.665.0. SYS/UMD/
+INF/CAT/producer/ZIP/air-manifest SHA256:
+`e0edcd9583cba2a958a8fbceb4911da3f2423f7dcb1c204c8a445cdc91fdebef`,
+`b6d8ec5c98941905352ef150eb8c64ecaa8a2049a739e02e7a8ce5ff3a137fa8`,
+`b885f702c3e68fd6c82f20e87e5e52503b6b4e7b27821a00e2943c3d26e3da0a`,
+`2c8b6faeab4e3f3bad38630c8c137ae20051098795613ff6084d95c8212c9be4`,
+`3729e33d73ea606544d8268d09435acf717c51c13a6ee23fcf881cade7092d45`,
+`06d71c8d88b764b3b5d642cbbf6d145fc9337827ffe884976c278437f93fe24e`,
+`8244e1cf85d966764b2907cf91ba12f273d33e45ab499697d178c53f67497094`.
+Air clean ordinary health is verified; one stage/full-owner run next.
