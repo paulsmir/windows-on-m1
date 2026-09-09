@@ -42590,3 +42590,19 @@ image SHA256c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393,
 72 gray/184 background, exact hardware completion/fence and intact guard.
 Missing raw remains INCONCLUSIVE, differing raw is an exact output failure.
 Evidence collection precedes exact cleanup and ordinary377/392 recovery.
+
+**EXP680 BUILD FREEZE 2026-09-09T12:47Z.** Pinned build/analysis/Universal/
+Inf2Cat/sign gates pass, version30.0.680.0. One-file overlay SHA256
+28cc303baf74ae4c6e809c826324237ec5e85223e33033578fb1f4d598856037;
+build script e3b459f7ea90c6315abd9865150902a62b2f1006d817a4182c91c57f15e009cb.
+Local artifacts match builder manifest. Exact package hashes:
+Zip 3c6d906db1ae92d891cf93a8f1d74f3a81a7dd403b67dcf6114c6ef9e548e6e6.
+Sys d43ee92cfa714e3189ca9c044c80cc1c3a89a3647ba1d98c41f5e8d6b73609a3.
+Umd 573842ca0d47a9f062bd41cadd390dec67cbf18fe3354e14279a4de9794629cb.
+Inf 0cefc72803e6401e14709c8a734fad8d4714b717fa95cb04ecf9ae73ca60bb8b.
+Cat 883efa6f12642b20a11e350a70f4e833843a6a196ec7547cfcc0fb35a363f66f.
+Producer ec72aab1fc64d5f93964c437cb874c60243863c88421b3e89f7a6a47517a869a.
+Air manifest 8a007311f717698a3d2e5b1565f57b43b7555be8b31d47f7a3cfe59b06e3d940.
+Commands: EXP680-workflow.ps1 Stage, EXP680 launch.sh full-owner,
+Preflight and one Run; collector exports device/service binaries.
+Recovery uses EXP680-workflow Cleanup/Stale then restore-ordinary.sh.
