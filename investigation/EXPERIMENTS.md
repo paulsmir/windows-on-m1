@@ -42776,3 +42776,16 @@ UMD,SSH8CPU,NVMe2,USB5,keyboard1,no41/1001/129. Full source review of the
 next prerequisite is EXP682_STANDARD_PRESENT_BOUNDARY.md. No new hardware
 candidate is justified until runtime UMD and displayable-resource prerequisites
 are implemented. Existing BLT/exclusive denial experiments must not repeat.
+
+AD04-FRONTEND-B1 PREREGISTERED OFFLINE: compile the selected pinned Mesa
+D3D10 frontend as a static library on FRYZZING MSVC14.44/WDK26100, reusing
+the existing AD03 generated header inventory. Explicitly exclude software
+D3DKMT.cpp and d3d10_gdi.c. No DLL installation or caps change. The library
+is an integration build control, not a working device/renderer claim.
+Pinned clean source9aa1215f878b504f66159dd2ead4c7973142126e, git archive
+SHA256780c2aaf500803a109b9b41bd5e3d49d1100b7cbbac46a79181ea31ee13192c9.
+MIT license and inspected frontend VMware MIT notices retained unchanged;
+external source is compiled in the builder workspace, not copied into owned
+driver code. Script/evidence: .local/experiments/AD04-d3d10-frontend-build/.
+The exact next contract is adapter-scoped frontend to device-scoped Windows
+allocator/context ownership; compilation first establishes actual dependencies.
