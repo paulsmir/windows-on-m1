@@ -152,6 +152,10 @@ int main(void) {
   assert(pipe->can_create_resource(pipe, &bufferTemplate));
   buffer = pipe->resource_create(pipe, &bufferTemplate);
   assert(buffer != NULL && AgxWin32PipeResourceBuffer(buffer) != NULL);
+  /* Device teardown must retain both objects and their runtime owner while
+   * a resource still depends on this screen. */
+  assert(!AgxWin32PipeScreenReleaseDevice(pipe, context));
+  assert(context->screen == pipe && screen.Active);
   u_box_1d(0x1000u, 0x2000u, &box);
   address = context->buffer_map(
       context, buffer, 0u, PIPE_MAP_WRITE, &box, &transfer);
@@ -182,8 +186,23 @@ int main(void) {
   assert(pipe->resource_create(pipe, &invalidTemplate) == NULL);
   pipe->resource_destroy(pipe, texture);
   pipe->resource_destroy(pipe, buffer);
-  context->destroy(context);
-  pipe->destroy(pipe);
+  {
+    struct pipe_context *extra = pipe->context_create(pipe, &fake, 0u);
+    struct pipe_screen *other = AgxWin32PipeScreenCreate(&screen);
+    assert(other != NULL);
+    struct pipe_context *foreign = other->context_create(other, &fake, 0u);
+    assert(extra != NULL && foreign != NULL);
+    assert(!AgxWin32PipeScreenReleaseDevice(pipe, foreign));
+    assert(!AgxWin32PipeScreenReleaseDevice(pipe, context));
+    assert(context->screen == pipe && extra->screen == pipe);
+    assert(AgxWin32PipeScreenReleaseDevice(other, foreign));
+    extra->destroy(extra);
+  }
+  p_atomic_inc(&pipe->refcnt);
+  assert(!AgxWin32PipeScreenReleaseDevice(pipe, context));
+  p_atomic_dec(&pipe->refcnt);
+  assert(AgxWin32PipeScreenReleaseDevice(pipe, context));
+  assert(screen.Active); /* Windows runtime lifetime belongs to the caller. */
   assert(fake.Creates == 2u && fake.Maps == 2u && fake.Unmaps == 2u &&
          fake.Destroys == 2u);
   return 0;

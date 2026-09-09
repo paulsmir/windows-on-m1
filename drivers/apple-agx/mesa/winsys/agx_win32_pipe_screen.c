@@ -361,6 +361,19 @@ static void pipe_screen_destroy(struct pipe_screen *Base) {
   free(screen);
 }
 
+int AgxWin32PipeScreenReleaseDevice(struct pipe_screen *Base,
+                                   struct pipe_context *OwnedContext) {
+  AGX_WIN32_PIPE_SCREEN *screen = pipe_screen_cast(Base);
+  AGX_WIN32_PIPE_CONTEXT *context = pipe_context_cast(OwnedContext);
+  if (screen == NULL || context == NULL || context->Screen != screen ||
+      screen->Contexts != 1u || screen->Resources != 0u ||
+      screen->Base.refcnt != 1)
+    return 0;
+  pipe_context_destroy(OwnedContext);
+  pipe_screen_destroy(Base);
+  return 1;
+}
+
 struct pipe_screen *AgxWin32PipeScreenCreate(AGX_WIN32_SCREEN *Screen) {
   AGX_WIN32_PIPE_SCREEN *screen;
   if (Screen == NULL || !Screen->Active ||
