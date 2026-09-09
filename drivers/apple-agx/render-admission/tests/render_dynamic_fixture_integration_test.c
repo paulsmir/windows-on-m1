@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
   unsigned char materialized[1024];
   unsigned char dma[ADMISSION_DYNAMIC_DMA_MAX_BYTES];
   unsigned char *arena;
-  unsigned char store0[0x2020];
+  unsigned char store0[0x3000];
   unsigned int dmaBytes = 0u;
   const APPLE_AGX_DYNAMIC_JOB_OBJECT *encoderObject = NULL;
   const APPLE_AGX_DYNAMIC_JOB_OBJECT *pipelineObject = NULL;
@@ -220,8 +220,10 @@ int main(int argc, char **argv) {
   assert(AppleAgxRenderTemplateBuildRelocationObjects(
       arena, AppleAgxRenderTemplateBytes(), 0x9d3000000ULL, image.Objects,
       APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+  assert(AppleAgxExp208AdoptNativePipelineLayout(
+      image.Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
   image.Ready = APPLE_AGX_TRUE;
-  memcpy(store0, image.Objects[73u].Data, sizeof(store0));
+  memcpy(store0, image.Objects[73u].Data + 0x2000u, sizeof(store0));
   assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
          AdmissionDynamicOverlaySuccess);
   fixture.Plan = &plan;
@@ -268,23 +270,23 @@ int main(int argc, char **argv) {
                 dmaView.Storage + encoderObject->StorageOffset,
                 encoderObject->Bytes) == 0);
   assert(pipelineObject->Bytes > 0x40u);
-  assert(memcmp(image.Objects[73u].Data + 0x10000u,
+  assert(memcmp(image.Objects[73u].Data,
                 dmaView.Storage + pipelineObject->StorageOffset,
                 0x40u) == 0);
-  assert(memcmp(image.Objects[73u].Data + 0x11000u,
+  assert(memcmp(image.Objects[73u].Data + 0x1000u,
                 dmaView.Storage + pipelineObject->StorageOffset + 0x40u,
                 pipelineObject->Bytes - 0x40u) == 0);
   assert((read_le(image.Objects[71u].Data + 20u, 4u) & ~0x3fULL) ==
-         0x30000ULL);
+         0x20000ULL);
   assert((read_le(image.Objects[71u].Data + 284u, 4u) & ~0x3fULL) ==
-         0x31000ULL);
-  assert((read_le(image.Objects[73u].Data + 0x10000u + 20u, 6u) >> 16u) ==
+         0x21000ULL);
+  assert((read_le(image.Objects[73u].Data + 20u, 6u) >> 16u) ==
          0x64080ULL);
-  assert((read_le(image.Objects[73u].Data + 0x11000u + 20u, 6u) >> 16u) ==
+  assert((read_le(image.Objects[73u].Data + 0x1000u + 20u, 6u) >> 16u) ==
          0x6c000ULL);
-  assert((read_le(image.Objects[73u].Data + 0x10000u + 8u, 8u) >> 24u) ==
+  assert((read_le(image.Objects[73u].Data + 8u, 8u) >> 24u) ==
          image.Objects[36u].GpuVa + 0x8000u);
-  assert((read_le(image.Objects[73u].Data + 0x11000u + 8u, 8u) >> 24u) ==
+  assert((read_le(image.Objects[73u].Data + 0x1000u + 8u, 8u) >> 24u) ==
          image.Objects[36u].GpuVa + 0x8000u);
   assert((read_le(image.Objects[71u].Data + 4u, 4u) & 0xffULL) ==
          (image.Objects[71u].GpuVa >> 32u));
@@ -294,11 +296,13 @@ int main(int argc, char **argv) {
          (image.Objects[71u].GpuVa >> 32u));
   assert(read_le(image.Objects[71u].Data + 40u, 4u) ==
          (unsigned int)(image.Objects[71u].GpuVa + 192u));
-  assert(memcmp(store0, image.Objects[73u].Data, sizeof(store0)) == 0);
+  assert(memcmp(store0, image.Objects[73u].Data + 0x2000u,
+                sizeof(store0)) == 0);
   assert(AdmissionDynamicOverlayRelease(
       &image, &restoredPlan, dmaView.Job, dmaView.Storage,
       dmaView.StorageBytes, 256u, &state) == AdmissionDynamicOverlaySuccess);
-  assert(memcmp(store0, image.Objects[73u].Data, sizeof(store0)) == 0);
+  assert(memcmp(store0, image.Objects[73u].Data + 0x2000u,
+                sizeof(store0)) == 0);
 
   free(arena);
   free(fixture.Objects[10].Bytes);

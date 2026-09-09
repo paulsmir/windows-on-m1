@@ -162,6 +162,10 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 str(driver / "src/render_dynamic_overlay.c"),
                 str(driver / "src/render_dynamic_dma.c"),
                 str(shared / "src/apple_agx_win32_abi.c"),
+                str(shared / "src/apple_agx_exp208_gdi.c"),
+                str(shared / "src/apple_agx_exp208_framebuffer.c"),
+                str(shared / "src/apple_agx_gdi.c"),
+                str(shared / "src/apple_agx_memory.c"),
                 str(shared / "src/apple_agx_render_template.generated.c"),
                 "-o", str(verifier),
             ], cwd=ROOT, check=True)

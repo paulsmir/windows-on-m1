@@ -162,11 +162,13 @@ int main(void) {
   assert(aliases != NULL &&
          alias_count == ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT);
   assert(aliases[0].ObjectIndex == 73u &&
-         aliases[0].ObjectOffset == 0x4000u && aliases[0].Bytes == 0x4000u &&
+         aliases[0].ObjectOffset == 0x10000u &&
+         aliases[0].Bytes == 0x4000u &&
          aliases[0].Reserved == 0u &&
          aliases[0].GpuVirtualAddress == 0x1100064000ULL);
   assert(aliases[1].ObjectIndex == 73u &&
-         aliases[1].ObjectOffset == 0x8000u && aliases[1].Bytes == 0x4000u &&
+         aliases[1].ObjectOffset == 0x14000u &&
+         aliases[1].Bytes == 0x4000u &&
          aliases[1].Reserved == 0u &&
          aliases[1].GpuVirtualAddress == 0x110006c000ULL);
   initialize_view(&view, &header, references, &draw);
@@ -199,23 +201,23 @@ int main(void) {
   assert(find_entry(&plan, 8u)->ObjectIndex == 71u);
   assert(find_entry(&plan, 8u)->GpuVirtualAddress == 0x1503d78000ULL);
   assert(find_entry(&plan, 4u)->ObjectIndex == 73u);
-  assert(find_entry(&plan, 4u)->GpuVirtualAddress == 0x1100030000ULL);
+  assert(find_entry(&plan, 4u)->GpuVirtualAddress == 0x1100020000ULL);
   assert(find_entry(&plan, 2u)->ObjectIndex == 73u);
-  assert(find_entry(&plan, 2u)->ObjectOffset == 0x4000u);
+  assert(find_entry(&plan, 2u)->ObjectOffset == 0x10000u);
   assert(find_entry(&plan, 2u)->GpuVirtualAddress == 0x1100064000ULL);
   assert(find_entry(&plan, 3u)->ObjectIndex == 73u);
-  assert(find_entry(&plan, 3u)->ObjectOffset == 0x8000u);
+  assert(find_entry(&plan, 3u)->ObjectOffset == 0x14000u);
   assert(find_entry(&plan, 3u)->GpuVirtualAddress == 0x110006c000ULL);
   assert(find_entry(&plan, 9u)->GpuVirtualAddress == 0x1100013000ULL);
   assert(find_entry(&plan, 10u)->GpuVirtualAddress == 0x1100013400ULL);
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x20u, 1u, &address) ==
          AdmissionDynamicOverlaySuccess);
-  assert(address == 0x1100030020ULL);
+  assert(address == 0x1100020020ULL);
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x3fu, 2u, &address) ==
          AdmissionDynamicOverlayRange);
   assert(AdmissionDynamicOverlayResolve(&plan, 4u, 0x40u, 1u, &address) ==
          AdmissionDynamicOverlaySuccess);
-  assert(address == 0x1100031000ULL);
+  assert(address == 0x1100021000ULL);
 
   {
     APPLE_AGX_EXP208_RELOCATION_OBJECT active[76];
@@ -259,10 +261,10 @@ int main(void) {
   assert(state.Applied == 1u && state.Fence == 256u);
   assert(pipeline_bytes[0x20000] == 0x21u);
   assert(encoder_bytes[0] == 0x28u);
-  assert(pipeline_bytes[0x10000] == 0x24u);
-  assert(pipeline_bytes[0x11000] == 0x24u);
-  assert(pipeline_bytes[0x4000] == 0x22u);
-  assert(pipeline_bytes[0x8000] == 0x23u);
+  assert(pipeline_bytes[0] == 0x24u);
+  assert(pipeline_bytes[0x1000] == 0x24u);
+  assert(pipeline_bytes[0x10000] == 0x22u);
+  assert(pipeline_bytes[0x14000] == 0x23u);
   assert(shader_bytes[0x3000] == 0x29u);
   assert(shader_bytes[0x3400] == 0x2au);
   assert(descriptor_bytes[0x8000] == 0x25u);
@@ -280,9 +282,9 @@ int main(void) {
                                         sizeof(storage), 256u, &state) ==
          AdmissionDynamicOverlaySuccess);
   assert(state.Applied == 0u && encoder_bytes[0] == 0u &&
-         pipeline_bytes[0x10000] == 0u && pipeline_bytes[0x11000] == 0u &&
-         pipeline_bytes[0x4000] == 0u &&
-         pipeline_bytes[0x8000] == 0u &&
+         pipeline_bytes[0] == 0u && pipeline_bytes[0x1000] == 0u &&
+         pipeline_bytes[0x10000] == 0u &&
+         pipeline_bytes[0x14000] == 0u &&
          descriptor_bytes[0x8000] == 0u && scissor_bytes[0] == 0u &&
          depth_bytes[0] == 0u && pipeline_bytes[0x20000] == 0u &&
          pipeline_bytes[0x2000] == 0x5au);
@@ -298,7 +300,7 @@ int main(void) {
   initialize_job(&job, storage, &view);
   assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
          AdmissionDynamicOverlaySuccess);
-  pipeline_bytes[0x10000] = 1u;
+  pipeline_bytes[0] = 1u;
   AdmissionDynamicOverlayStateInitialize(&state);
   assert(AdmissionDynamicOverlayApply(&image, &plan, &job, storage,
                                       sizeof(storage), 256u, &state) ==

@@ -332,6 +332,54 @@ static void test_generated_exp208_graph_has_one_bindable_output_edge(void) {
   free(arena);
 }
 
+static void test_native_pipeline_layout_frees_user_pipeline_slots_atomically(
+    void) {
+  unsigned char *arena =
+      (unsigned char *)malloc(AppleAgxRenderTemplateBytes());
+  unsigned char clear_page[0x1000];
+  unsigned char reload_page[0x1000];
+  unsigned char store_page[0x1000];
+  APPLE_AGX_RENDER_TEMPLATE_ROOTS roots;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT
+      objects[APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT];
+
+  assert(arena != NULL);
+  assert(AppleAgxRenderTemplateMaterialize(
+      arena, AppleAgxRenderTemplateBytes(), &roots));
+  assert(AppleAgxRenderTemplateBuildRelocationObjects(
+      arena, AppleAgxRenderTemplateBytes(), 0x9d3000000ULL, objects,
+      APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+  memcpy(clear_page, objects[73u].Data, sizeof(clear_page));
+  memcpy(reload_page, objects[73u].Data + 0x1000u, sizeof(reload_page));
+  memcpy(store_page, objects[73u].Data + 0x2000u, sizeof(store_page));
+  assert(read_u64(objects[18u].Data + 0x90u) == 0x20004u);
+  assert(read_u32(objects[18u].Data + 0x3ccu) == 0x22004u);
+  assert(read_u64(objects[18u].Data + 0x618u) == 0x21004u);
+  assert(read_u64(objects[18u].Data + 0x648u) == 0x21004u);
+  assert(read_u32(objects[18u].Data + 0x714u) == 0x22004u);
+  assert(read_u32(objects[18u].Data + 0x734u) == 0x22004u);
+
+  assert(AppleAgxExp208AdoptNativePipelineLayout(
+      objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+  assert(memcmp(objects[73u].Data + 0x2000u,
+                clear_page, sizeof(clear_page)) == 0);
+  assert(memcmp(objects[73u].Data + 0x3000u,
+                reload_page, sizeof(reload_page)) == 0);
+  assert(memcmp(objects[73u].Data + 0x4000u,
+                store_page, sizeof(store_page)) == 0);
+  for (APPLE_AGX_U32 index = 0u; index < 0x2000u; ++index)
+    assert(objects[73u].Data[index] == 0u);
+  assert(read_u64(objects[18u].Data + 0x90u) == 0x22004u);
+  assert(read_u32(objects[18u].Data + 0x3ccu) == 0x24004u);
+  assert(read_u64(objects[18u].Data + 0x618u) == 0x23004u);
+  assert(read_u64(objects[18u].Data + 0x648u) == 0x23004u);
+  assert(read_u32(objects[18u].Data + 0x714u) == 0x24004u);
+  assert(read_u32(objects[18u].Data + 0x734u) == 0x24004u);
+  assert(AppleAgxExp208AdoptNativePipelineLayout(
+      objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
+  free(arena);
+}
+
 static void test_fullscreen_clear_binds_exact_g13_geometry_and_rolls_back(void) {
   const APPLE_AGX_U32 backend_bytes = 0x800000u;
   const APPLE_AGX_U32 surface_bytes = 0xfa0000u;
@@ -679,6 +727,7 @@ int main(void) {
   test_exact_clear_binds_hardware_proven_output_object();
   test_wrong_workload_or_physical_edge_is_rejected_atomically();
   test_generated_exp208_graph_has_one_bindable_output_edge();
+  test_native_pipeline_layout_frees_user_pipeline_slots_atomically();
   test_fullscreen_clear_binds_exact_g13_geometry_and_rolls_back();
   test_fullscreen_rejects_short_backend_without_mutation();
   test_bottom_band_uses_aligned_subregion_and_distinct_fp16_color();

@@ -174,6 +174,10 @@ APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
       (Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES &&
        Packet->DestinationBytes != APPLE_AGX_EXP208_GDI_OUTPUT_BYTES))
     return APPLE_AGX_FALSE;
+  if (!AppleAgxExp208AdoptNativePipelineLayout(
+          Image->Objects,
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT))
+    return APPLE_AGX_FALSE;
   saved_output = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   if (Packet->DestinationBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES) {
     if (!AppleAgxExp208BindDynamicFramebuffer(

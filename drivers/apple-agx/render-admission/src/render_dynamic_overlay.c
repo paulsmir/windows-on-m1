@@ -19,9 +19,9 @@
 
 static const ADMISSION_DYNAMIC_OVERLAY_ALIAS OverlayShaderAliases[
     ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT] = {
-    {OVERLAY_SHADER_OBJECT, 0x4000u, 0x4000u, 0u,
+    {OVERLAY_SHADER_OBJECT, 0x10000u, 0x4000u, 0u,
      OVERLAY_VERTEX_SHADER_GPU_VA},
-    {OVERLAY_SHADER_OBJECT, 0x8000u, 0x4000u, 0u,
+    {OVERLAY_SHADER_OBJECT, 0x14000u, 0x4000u, 0u,
      OVERLAY_FRAGMENT_SHADER_GPU_VA},
 };
 
@@ -107,12 +107,12 @@ static int overlay_location(APPLE_AGX_U32 ReferenceIndex,
   } else if (ReferenceIndex == Draw->VertexShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x4000u, 0x4000u, APPLE_AGX_TRUE,
+        OVERLAY_SHADER_OBJECT, 0x10000u, 0x4000u, APPLE_AGX_TRUE,
         OVERLAY_VERTEX_SHADER_GPU_VA};
   } else if (ReferenceIndex == Draw->FragmentShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_SHADER_OBJECT, 0x8000u, 0x4000u, APPLE_AGX_TRUE,
+        OVERLAY_SHADER_OBJECT, 0x14000u, 0x4000u, APPLE_AGX_TRUE,
         OVERLAY_FRAGMENT_SHADER_GPU_VA};
   } else if (Draw->VertexRodataReference !=
                  APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
@@ -129,7 +129,7 @@ static int overlay_location(APPLE_AGX_U32 ReferenceIndex,
   } else if (ReferenceIndex == Draw->UscPipelineReference) {
     *ExpectedRole = AppleAgxWin32RoleUscPipeline;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
-        OVERLAY_PIPELINE_OBJECT, 0x10000u, 0x10000u, APPLE_AGX_TRUE, 0ULL};
+        OVERLAY_PIPELINE_OBJECT, 0u, 0x2000u, APPLE_AGX_TRUE, 0ULL};
   } else if (ReferenceIndex == Draw->DescriptorReference) {
     *ExpectedRole = AppleAgxWin32RoleDescriptor;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
