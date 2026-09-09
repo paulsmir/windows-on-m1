@@ -287,6 +287,22 @@ static void test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma(void) {
          destination);
   assert(image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Size ==
          APPLE_AGX_EXP208_GDI_OUTPUT_BYTES);
+  assert(read_u64(image.Objects[18u].Data + 0x90u) == 0x22004ULL);
+  assert(read_u64(image.Objects[18u].Data + 0x618u) == 0x23004ULL);
+  assert(read_u64(image.Objects[18u].Data + 0x648u) == 0x23004ULL);
+  assert(read_u64(image.Objects[36u].Data + 0x3000u) ==
+         0x000003c00fc60a22ULL);
+  assert(read_u64(image.Objects[36u].Data + 0x3008u) ==
+         0x1000000150100000ULL);
+  assert(read_u64(image.Objects[36u].Data + 0x3010u) == 0ULL);
+  assert(read_u64(image.Objects[36u].Data + 0x4000u) ==
+         0xffffffff00000000ULL);
+  assert(read_u64(image.Objects[73u].Data + 0x2000u) ==
+         0x1500920000400c1dULL);
+  assert(read_u64(image.Objects[73u].Data + 0x4000u) ==
+         0x15009230001000ddULL);
+  assert(read_u64(image.Objects[73u].Data + 0x4008u) ==
+         0x150092400040041dULL);
   assert(AdmissionAllocationDescribe(
       16u, 256u, 4u, 3u, 21u, 0u, &allocation));
   assert(AdmissionBackendImageCaptureOutput(

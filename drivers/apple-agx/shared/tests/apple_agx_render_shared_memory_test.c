@@ -1,5 +1,6 @@
 #include "apple_agx_render_shared_memory.h"
 #include "apple_agx_exp208_adapter.h"
+#include "apple_agx_exp208_gdi.h"
 #include "apple_agx_relocation.h"
 #include "apple_agx_render_template_rebase.h"
 
@@ -52,6 +53,14 @@ static APPLE_AGX_U64 read_u64(const unsigned char *Address) {
   return value;
 }
 
+static APPLE_AGX_U32 read_u32(const unsigned char *Address) {
+  APPLE_AGX_U32 value = 0u;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 4u; ++index)
+    value |= (APPLE_AGX_U32)Address[index] << (index * 8u);
+  return value;
+}
+
 int main(void) {
   FAKE_MEMORY fake;
   APPLE_AGX_MEMORY_IO io;
@@ -98,6 +107,8 @@ int main(void) {
       source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
       AppleAgxRenderTemplateRelocations(),
       AppleAgxRenderTemplateRelocationCount()));
+  assert(AppleAgxExp208AdoptNativePipelineLayout(
+      source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
 
   assert(AppleAgxRenderSharedMemoryBuild(
              &owner, &io, 0xffffffa001000000ULL) ==
@@ -234,6 +245,20 @@ int main(void) {
       source_objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
       0x1500800000ULL, APPLE_AGX_TRUE, &bindings, &staged_job,
       active_objects, &active_job));
+  assert(read_u64(active_objects[18].Data + 0x90u) == 0x22004ULL);
+  assert(read_u32(active_objects[18].Data + 0x3ccu) == 0x24004u);
+  assert(read_u64(active_objects[18].Data + 0x618u) == 0x23004ULL);
+  assert(read_u64(active_objects[18].Data + 0x648u) == 0x23004ULL);
+  assert(read_u32(active_objects[18].Data + 0x714u) == 0x24004u);
+  assert(read_u32(active_objects[18].Data + 0x734u) == 0x24004u);
+  assert(active_objects[36].Data == source_objects[36].Data &&
+         active_objects[36].GpuVa == source_objects[36].GpuVa &&
+         active_objects[36].PhysicalAddress ==
+             source_objects[36].PhysicalAddress);
+  assert(active_objects[73].Data == source_objects[73].Data &&
+         active_objects[73].GpuVa == source_objects[73].GpuVa &&
+         active_objects[73].PhysicalAddress ==
+             source_objects[73].PhysicalAddress);
   assert(read_u64(active_objects[17].Data + 36u) ==
          bindings.StatsTaOwnerGpuAddress +
              APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET);

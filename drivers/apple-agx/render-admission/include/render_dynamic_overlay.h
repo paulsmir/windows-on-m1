@@ -8,6 +8,8 @@
 #define ADMISSION_DYNAMIC_OVERLAY_VERSION 1u
 #define ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES 10u
 #define ADMISSION_DYNAMIC_OVERLAY_SHADER_ALIAS_COUNT 2u
+#define ADMISSION_DYNAMIC_STORE_RECEIPT_VERSION 1u
+#define ADMISSION_DYNAMIC_STORE_RECEIPT_BYTES 248u
 
 typedef struct _ADMISSION_DYNAMIC_OVERLAY_ALIAS {
   APPLE_AGX_U32 ObjectIndex;
@@ -88,6 +90,45 @@ typedef struct _ADMISSION_DYNAMIC_GRAPH_RECEIPT {
   APPLE_AGX_U64 FragmentShaderFnv1a;
 } ADMISSION_DYNAMIC_GRAPH_RECEIPT;
 
+typedef struct _ADMISSION_DYNAMIC_STORE_RECEIPT {
+  APPLE_AGX_U32 Version;
+  APPLE_AGX_U32 Bytes;
+  APPLE_AGX_U32 Valid;
+  APPLE_AGX_U32 Fence;
+  APPLE_AGX_U32 Generation;
+  APPLE_AGX_U32 DestinationBytes;
+  APPLE_AGX_U32 StorePipeline;
+  APPLE_AGX_U32 PartialStorePipeline0;
+  APPLE_AGX_U32 PartialStorePipeline1;
+  APPLE_AGX_U32 Reserved;
+  APPLE_AGX_U64 DestinationGpuVa;
+  APPLE_AGX_U64 DestinationPhysical;
+  APPLE_AGX_U64 AttachmentGpuVa;
+  APPLE_AGX_U64 PipelineBaseRaw;
+  APPLE_AGX_U64 LoadPipeline;
+  APPLE_AGX_U64 ReloadPipeline0;
+  APPLE_AGX_U64 ReloadPipeline1;
+  APPLE_AGX_U64 ClearPageFnv1a;
+  APPLE_AGX_U64 ReloadPageFnv1a;
+  APPLE_AGX_U64 StorePageFnv1a;
+  APPLE_AGX_U64 ClearUniformWord;
+  APPLE_AGX_U64 StoreTextureWord;
+  APPLE_AGX_U64 StoreUniformWord;
+  APPLE_AGX_U64 StoreShaderGpuVa;
+  APPLE_AGX_U64 StoreShaderFnv1a;
+  APPLE_AGX_U64 RenderTargetGpuVa;
+  APPLE_AGX_U64 RenderTargetQword0;
+  APPLE_AGX_U64 RenderTargetQword1;
+  APPLE_AGX_U64 RenderTargetQword2;
+  APPLE_AGX_U64 RenderTargetFnv1a;
+  APPLE_AGX_U64 CompanionGpuVa;
+  APPLE_AGX_U64 CompanionQword0;
+  APPLE_AGX_U64 CompanionQword1;
+  APPLE_AGX_U64 CompanionQword2;
+  APPLE_AGX_U64 CompanionQword3;
+  APPLE_AGX_U64 CompanionFnv1a;
+} ADMISSION_DYNAMIC_STORE_RECEIPT;
+
 void AdmissionDynamicOverlayStateInitialize(
     ADMISSION_DYNAMIC_OVERLAY_STATE *State);
 const ADMISSION_DYNAMIC_OVERLAY_ALIAS *AdmissionDynamicOverlayShaderAliases(
@@ -119,6 +160,12 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureGraph(
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_U32 ActiveObjectCount, APPLE_AGX_U32 Fence,
     ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureStoreGraph(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_DYNAMIC_OVERLAY_STATE *State,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount, APPLE_AGX_U32 Fence,
+    ADMISSION_DYNAMIC_STORE_RECEIPT *Receipt);
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayApply(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,

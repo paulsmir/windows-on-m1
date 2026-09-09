@@ -98,6 +98,14 @@ static APPLE_AGX_U64 overlay_read_u64(const unsigned char *Data) {
   return value;
 }
 
+static APPLE_AGX_U32 overlay_read_u32(const unsigned char *Data) {
+  APPLE_AGX_U32 value = 0u;
+  APPLE_AGX_U32 index;
+  for (index = 0u; index < 4u; ++index)
+    value |= (APPLE_AGX_U32)Data[index] << (index * 8u);
+  return value;
+}
+
 static void overlay_write_u64(unsigned char *Data, APPLE_AGX_U64 Value) {
   APPLE_AGX_U32 index;
   for (index = 0u; index < 8u; ++index)
@@ -593,6 +601,126 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureGraph(
       Receipt->FragmentShaderFnv1a == 0ULL)
     return AdmissionDynamicOverlayContent;
   Receipt->Valid = 1u;
+  return AdmissionDynamicOverlaySuccess;
+}
+
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureStoreGraph(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_DYNAMIC_OVERLAY_STATE *State,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount, APPLE_AGX_U32 Fence,
+    ADMISSION_DYNAMIC_STORE_RECEIPT *Receipt) {
+  enum {
+    microsequenceIndex = 15u,
+    workIndex = 18u,
+    stateIndex = 36u,
+    outputIndex = 40u,
+    pipelineIndex = 73u,
+    shaderIndex = 74u,
+  };
+  const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *microsequence;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *work;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *stateObject;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *output;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *pipeline;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *shader;
+  ADMISSION_DYNAMIC_STORE_RECEIPT candidate;
+  const unsigned char *renderTarget;
+  const unsigned char *companion;
+  if (Image == OVERLAY_NULL || State == OVERLAY_NULL ||
+      ActiveObjects == OVERLAY_NULL || Receipt == OVERLAY_NULL ||
+      Fence == 0u || Image->Ready != APPLE_AGX_TRUE ||
+      Image->BoundFence != Fence ||
+      State->Magic != ADMISSION_DYNAMIC_OVERLAY_MAGIC ||
+      State->Version != ADMISSION_DYNAMIC_OVERLAY_VERSION ||
+      State->Applied != 1u || State->Fence != Fence ||
+      State->Generation == 0u ||
+      ActiveObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
+    return AdmissionDynamicOverlayState;
+  layouts = AppleAgxRenderTemplateObjectLayouts();
+  if (layouts == OVERLAY_NULL)
+    return AdmissionDynamicOverlayLayout;
+  microsequence = &ActiveObjects[microsequenceIndex];
+  work = &ActiveObjects[workIndex];
+  stateObject = &ActiveObjects[stateIndex];
+  output = &ActiveObjects[outputIndex];
+  pipeline = &ActiveObjects[pipelineIndex];
+  shader = &ActiveObjects[shaderIndex];
+  if (microsequence->Data == OVERLAY_NULL ||
+      microsequence->Size < 156u || work->Data == OVERLAY_NULL ||
+      work->Size < 0x738u || stateObject->Data == OVERLAY_NULL ||
+      stateObject->Size < 0x4020u || output->Data == OVERLAY_NULL ||
+      output->Size == 0u || pipeline->Data == OVERLAY_NULL ||
+      pipeline->Size < 0x5000u || shader->Data == OVERLAY_NULL ||
+      shader->Size < 0x500u)
+    return AdmissionDynamicOverlayRange;
+  if (stateObject->Data != Image->Objects[stateIndex].Data ||
+      stateObject->GpuVa != Image->Objects[stateIndex].GpuVa ||
+      stateObject->PhysicalAddress !=
+          Image->Objects[stateIndex].PhysicalAddress ||
+      pipeline->Data != Image->Objects[pipelineIndex].Data ||
+      pipeline->GpuVa != Image->Objects[pipelineIndex].GpuVa ||
+      pipeline->PhysicalAddress !=
+          Image->Objects[pipelineIndex].PhysicalAddress ||
+      shader->Data != Image->Objects[shaderIndex].Data ||
+      shader->PhysicalAddress != Image->Objects[shaderIndex].PhysicalAddress ||
+      output->Data != Image->Objects[outputIndex].Data ||
+      output->GpuVa != Image->Objects[outputIndex].GpuVa ||
+      output->PhysicalAddress != Image->Objects[outputIndex].PhysicalAddress ||
+      output->GpuVa != Image->Binding.DestinationGpuVa ||
+      output->PhysicalAddress != Image->Binding.DestinationPhysical ||
+      output->Size != Image->Binding.DestinationBytes)
+    return AdmissionDynamicOverlayContent;
+  renderTarget = stateObject->Data + 0x3000u;
+  companion = stateObject->Data + 0x4000u;
+  overlay_zero(&candidate, (APPLE_AGX_U32)sizeof(candidate));
+  candidate.Version = ADMISSION_DYNAMIC_STORE_RECEIPT_VERSION;
+  candidate.Bytes = (APPLE_AGX_U32)sizeof(candidate);
+  candidate.Fence = Fence;
+  candidate.Generation = State->Generation;
+  candidate.DestinationBytes = output->Size;
+  candidate.StorePipeline = overlay_read_u32(work->Data + 0x3ccu);
+  candidate.PartialStorePipeline0 =
+      overlay_read_u32(work->Data + 0x714u);
+  candidate.PartialStorePipeline1 =
+      overlay_read_u32(work->Data + 0x734u);
+  candidate.DestinationGpuVa = output->GpuVa;
+  candidate.DestinationPhysical = output->PhysicalAddress;
+  candidate.AttachmentGpuVa =
+      overlay_read_u64(microsequence->Data + 148u);
+  candidate.PipelineBaseRaw = overlay_read_u64(work->Data + 0x170u);
+  candidate.LoadPipeline = overlay_read_u64(work->Data + 0x90u);
+  candidate.ReloadPipeline0 = overlay_read_u64(work->Data + 0x618u);
+  candidate.ReloadPipeline1 = overlay_read_u64(work->Data + 0x648u);
+  candidate.ClearPageFnv1a =
+      overlay_hash(pipeline->Data + 0x2000u, 0x1000u);
+  candidate.ReloadPageFnv1a =
+      overlay_hash(pipeline->Data + 0x3000u, 0x1000u);
+  candidate.StorePageFnv1a =
+      overlay_hash(pipeline->Data + 0x4000u, 0x1000u);
+  candidate.ClearUniformWord =
+      overlay_read_u64(pipeline->Data + 0x2000u);
+  candidate.StoreTextureWord =
+      overlay_read_u64(pipeline->Data + 0x4000u);
+  candidate.StoreUniformWord =
+      overlay_read_u64(pipeline->Data + 0x4008u);
+  candidate.StoreShaderGpuVa = layouts[shaderIndex].OriginalGpuVa + 0x400u;
+  candidate.StoreShaderFnv1a =
+      overlay_hash(shader->Data + 0x400u, 256u);
+  candidate.RenderTargetGpuVa = stateObject->GpuVa + 0x3000u;
+  candidate.RenderTargetQword0 = overlay_read_u64(renderTarget);
+  candidate.RenderTargetQword1 = overlay_read_u64(renderTarget + 8u);
+  candidate.RenderTargetQword2 = overlay_read_u64(renderTarget + 16u);
+  candidate.RenderTargetFnv1a = overlay_hash(renderTarget, 24u);
+  candidate.CompanionGpuVa = stateObject->GpuVa + 0x4000u;
+  candidate.CompanionQword0 = overlay_read_u64(companion);
+  candidate.CompanionQword1 = overlay_read_u64(companion + 8u);
+  candidate.CompanionQword2 = overlay_read_u64(companion + 16u);
+  candidate.CompanionQword3 = overlay_read_u64(companion + 24u);
+  candidate.CompanionFnv1a = overlay_hash(companion, 32u);
+  candidate.Valid = 1u;
+  *Receipt = candidate;
   return AdmissionDynamicOverlaySuccess;
 }
 

@@ -11,6 +11,9 @@ static unsigned char depth_bytes[0x40];
 static unsigned char encoder_bytes[0x180];
 static unsigned char pipeline_bytes[0x40000];
 static unsigned char shader_bytes[0x4000];
+static unsigned char output_bytes[0x4000];
+static unsigned char store_work_bytes[0x800];
+static unsigned char store_microsequence_bytes[0x200];
 static APPLE_AGX_WIN32_RELOCATION vertex_relocation;
 
 static void initialize_image(ADMISSION_BACKEND_IMAGE *image) {
@@ -141,6 +144,11 @@ static void write_u64(unsigned char *bytes, unsigned long long value) {
     bytes[index] = (unsigned char)(value >> (index * 8u));
 }
 
+static void write_u32(unsigned char *bytes, unsigned value) {
+  for (unsigned index = 0u; index < 4u; ++index)
+    bytes[index] = (unsigned char)(value >> (index * 8u));
+}
+
 int main(void) {
   const ADMISSION_DYNAMIC_OVERLAY_ALIAS *aliases;
   APPLE_AGX_U32 alias_count = 0u;
@@ -156,6 +164,7 @@ int main(void) {
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings;
   ADMISSION_DYNAMIC_OVERLAY_STATE state;
   ADMISSION_DYNAMIC_GRAPH_RECEIPT graph;
+  ADMISSION_DYNAMIC_STORE_RECEIPT store;
   APPLE_AGX_EXP208_RELOCATION_OBJECT active_capture[76];
   unsigned char capture_work[0x100];
   APPLE_AGX_U64 address = 0ULL;
@@ -293,6 +302,97 @@ int main(void) {
          graph.FragmentPipelineFnv1a != 0ULL &&
          graph.VertexShaderFnv1a != 0ULL &&
          graph.FragmentShaderFnv1a != 0ULL);
+  memset(output_bytes, 0, sizeof(output_bytes));
+  memset(store_work_bytes, 0, sizeof(store_work_bytes));
+  memset(store_microsequence_bytes, 0,
+         sizeof(store_microsequence_bytes));
+  image.BoundFence = 256u;
+  image.Binding.DestinationGpuVa = 0x1500fa0000ULL;
+  image.Binding.DestinationPhysical = 0x9bcfd0000ULL;
+  image.Binding.DestinationBytes = sizeof(output_bytes);
+  image.Objects[40u].Data = output_bytes;
+  image.Objects[40u].GpuVa = image.Binding.DestinationGpuVa;
+  image.Objects[40u].PhysicalAddress = image.Binding.DestinationPhysical;
+  image.Objects[40u].Size = sizeof(output_bytes);
+  image.Objects[36u].PhysicalAddress = 0x9d1200000ULL;
+  image.Objects[73u].PhysicalAddress = 0x9d5a80000ULL;
+  image.Objects[74u].PhysicalAddress = 0x9d5e80000ULL;
+  memset(pipeline_bytes + 0x2000u, 0, 0x3000u);
+  write_u64(pipeline_bytes + 0x2000u, 0x1503920000400c1dULL);
+  write_u64(pipeline_bytes + 0x4000u, 0x15039230001000ddULL);
+  write_u64(pipeline_bytes + 0x4008u, 0x150392400040041dULL);
+  pipeline_bytes[0x4010u] = 0x4du;
+  pipeline_bytes[0x4011u] = 0xbdu;
+  pipeline_bytes[0x4012u] = 0x10u;
+  pipeline_bytes[0x4013u] = 0x20u;
+  pipeline_bytes[0x4014u] = 0x0du;
+  pipeline_bytes[0x4015u] = 0x0cu;
+  pipeline_bytes[0x4016u] = 0x00u;
+  pipeline_bytes[0x4017u] = 0x04u;
+  pipeline_bytes[0x4018u] = 0x01u;
+  pipeline_bytes[0x4019u] = 0x00u;
+  for (unsigned index = 0u; index < 256u; ++index)
+    shader_bytes[0x400u + index] = (unsigned char)index;
+  write_u64(descriptor_bytes + 0x3000u, 0x000003c00fc60a22ULL);
+  write_u64(descriptor_bytes + 0x3008u, 0x10000001500fa000ULL);
+  write_u64(descriptor_bytes + 0x3010u, 0ULL);
+  write_u64(descriptor_bytes + 0x4000u, 0xffffffff00000000ULL);
+  write_u64(store_work_bytes + 0x90u, 0x22004ULL);
+  write_u64(store_work_bytes + 0x170u, 0x14000000ULL);
+  write_u32(store_work_bytes + 0x3ccu, 0x24004u);
+  write_u64(store_work_bytes + 0x618u, 0x23004ULL);
+  write_u64(store_work_bytes + 0x648u, 0x23004ULL);
+  write_u32(store_work_bytes + 0x714u, 0x24004u);
+  write_u32(store_work_bytes + 0x734u, 0x24004u);
+  write_u64(store_microsequence_bytes + 148u,
+            image.Binding.DestinationGpuVa);
+  memcpy(active_capture, image.Objects, sizeof(active_capture));
+  active_capture[18u].Data = store_work_bytes;
+  active_capture[18u].Size = sizeof(store_work_bytes);
+  active_capture[15u].Data = store_microsequence_bytes;
+  active_capture[15u].Size = sizeof(store_microsequence_bytes);
+  assert(AdmissionDynamicOverlayCaptureStoreGraph(
+             &image, &state, active_capture, 76u, 256u,
+             &store) == AdmissionDynamicOverlaySuccess);
+  assert(store.Version == ADMISSION_DYNAMIC_STORE_RECEIPT_VERSION &&
+         sizeof(store) == ADMISSION_DYNAMIC_STORE_RECEIPT_BYTES &&
+         store.Bytes == sizeof(store) && store.Valid == 1u &&
+         store.Fence == 256u && store.Generation == 7u);
+  assert(store.DestinationGpuVa == 0x1500fa0000ULL &&
+         store.DestinationPhysical == 0x9bcfd0000ULL &&
+         store.DestinationBytes == 0x4000u &&
+         store.AttachmentGpuVa == 0x1500fa0000ULL);
+  assert(store.PipelineBaseRaw == 0x14000000ULL &&
+         store.LoadPipeline == 0x22004ULL &&
+         store.StorePipeline == 0x24004u &&
+         store.ReloadPipeline0 == 0x23004ULL &&
+         store.ReloadPipeline1 == 0x23004ULL &&
+         store.PartialStorePipeline0 == 0x24004u &&
+         store.PartialStorePipeline1 == 0x24004u);
+  assert(store.ClearUniformWord == 0x1503920000400c1dULL &&
+         store.StoreTextureWord == 0x15039230001000ddULL &&
+         store.StoreUniformWord == 0x150392400040041dULL &&
+         store.StoreShaderGpuVa == 0x1100010400ULL);
+  assert(store.RenderTargetGpuVa == image.Objects[36u].GpuVa + 0x3000u &&
+         store.RenderTargetQword0 == 0x000003c00fc60a22ULL &&
+         store.RenderTargetQword1 == 0x10000001500fa000ULL &&
+         store.RenderTargetQword2 == 0ULL &&
+         store.CompanionGpuVa == image.Objects[36u].GpuVa + 0x4000u &&
+         store.CompanionQword0 == 0xffffffff00000000ULL);
+  assert(store.ClearPageFnv1a != 0ULL &&
+         store.ReloadPageFnv1a != 0ULL &&
+         store.StorePageFnv1a != 0ULL &&
+         store.StoreShaderFnv1a != 0ULL &&
+         store.RenderTargetFnv1a != 0ULL &&
+         store.CompanionFnv1a != 0ULL);
+  {
+    ADMISSION_DYNAMIC_STORE_RECEIPT before = store;
+    assert(AdmissionDynamicOverlayCaptureStoreGraph(
+               &image, &state, active_capture, 76u, 257u,
+               &store) == AdmissionDynamicOverlayState);
+    assert(memcmp(&store, &before, sizeof(store)) == 0);
+  }
+  pipeline_bytes[0x2000u] = 0x5au;
   assert(AdmissionDynamicOverlayApply(&image, &plan, &job, storage,
                                       sizeof(storage), 257u, &state) ==
          AdmissionDynamicOverlayState);

@@ -50,6 +50,8 @@
 
 C_ASSERT(J313_AGX_ABI_ADMISSION_SYNTHETIC_SCANOUT_GUEST_INTID == 889u);
 C_ASSERT((ADMISSION_PLATFORM_CONFIG_WINDOW_BYTES % sizeof(ULONG)) == 0u);
+C_ASSERT(sizeof(ADMISSION_DYNAMIC_STORE_RECEIPT) ==
+         ADMISSION_DYNAMIC_STORE_RECEIPT_BYTES);
 
 typedef struct _ADMISSION_ASC_TRANSPORT {
   volatile UCHAR *Base;
@@ -110,6 +112,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_TERMINAL_RECEIPT TerminalReceipt;
   ADMISSION_DYNAMIC_GRAPH_RECEIPT DynamicGraphReceipt;
+  ADMISSION_DYNAMIC_STORE_RECEIPT DynamicStoreReceipt;
   volatile LONG TerminalSequence;
   volatile LONG CompletedOutputGeneration;
   ADMISSION_COMPLETED_OUTPUT CompletedOutput;
@@ -1807,6 +1810,10 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   RtlZeroMemory(&bindings, sizeof(bindings));
   RtlZeroMemory(&dynamicView, sizeof(dynamicView));
   RtlZeroMemory(&dynamicPlan, sizeof(dynamicPlan));
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  RtlZeroMemory(&runtime->DynamicStoreReceipt,
+                sizeof(runtime->DynamicStoreReceipt));
+#endif
   if (SubmissionBytes != NULL && SubmissionByteCount >= sizeof(ULONG))
     RtlCopyMemory(&submissionMagic, SubmissionBytes, sizeof(submissionMagic));
   if (submissionMagic == ADMISSION_DYNAMIC_DMA_MAGIC) {
@@ -1851,6 +1858,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
            APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) !=
            AdmissionDynamicOverlaySuccess))
     goto BuildFailure;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  if (dynamic)
+    (void)AdmissionDynamicOverlayCaptureStoreGraph(
+        &runtime->Adapter->BackendImage, &runtime->DynamicOverlayState,
+        runtime->QueueObjects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        Submission->Submission.Fence, &runtime->DynamicStoreReceipt);
+#endif
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   {
     APPLE_AGX_EXP208_RELOCATION_OBJECT *output =
@@ -2355,6 +2370,10 @@ static VOID AdmissionOutputProcess(
       runtime->DynamicGraphReceipt.Fence == fence)
     AdmissionRecordDynamicGraph(
         runtime->Adapter, &runtime->DynamicGraphReceipt);
+  if (runtime->DynamicStoreReceipt.Valid == 1u &&
+      runtime->DynamicStoreReceipt.Fence == fence)
+    AdmissionRecordDynamicStore(
+        runtime->Adapter, &runtime->DynamicStoreReceipt);
   {
     volatile APPLE_AGX_BACKEND_U32 *taRead;
     volatile APPLE_AGX_BACKEND_U32 *d3Read;
