@@ -41418,3 +41418,21 @@ One natural bind. PASS requires physical TA/3D, exact fence271 or its correlated
 successor,256 examined pixels with exact72 red foreground+184 background,
 poison0 and a non-background target hash. Evidence, exact cleanup and ordinary
 recovery follow before the next causal decision.
+
+**EXP666 BUILD FREEZE 2026-09-09T07:57:06Z.** FRYZZING built exact three-file
+overlay SHA256
+`c190f6b7d8e35ca4dc90a875f28a444cde109d3268d7f72c9148e2478ff020f1`
+from immutable EXP665 source with pinned WDK26100/MSVC14.44. ARM64 KMD/UMD/
+producer analysis, Universal validation, Inf2Cat, signing and the x64 UMD test
+pass; the silent test's empty receipt hashes to the canonical empty-file SHA.
+Only inherited C28251/C6011 analysis warnings remain. Version30.0.666.0.
+SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
+`7544a51c265c42a48dbc720063bcdd2061a9ecb832c0f6630247f16163588a28`,
+`cb6997954da07edb34da9e18b3b3b0f618979ba5f17edfc5a38609dc773c2a07`,
+`b75e69168c612fe8ce47e7d9e80627779962a94221bf86d875daa71553c52b47`,
+`fc020f91cd0d822c87c4c02d173cee6f1707f940016d75b86b5117ccbe0447b5`,
+`84ca62635df16c0433674a4adfd27ef355ac61627882f7a9101af4a62e5c68a1`,
+`36a7314ef3bc974950fe890ccb300769d18e464fe3dcceac31fb0081d1c6fca0`,
+`3f02f3e2b1f37be22a0d9d8e47477aec8b4b7fd26b5fb8e470abaf752f4f7972`.
+Artifacts are `.local/experiments/EXP666-fragment-pipeline-page/artifacts`.
+Ordinary377/392 is clean from EXP665-R1; stage then one full-owner run.
