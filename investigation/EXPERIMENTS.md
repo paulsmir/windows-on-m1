@@ -42177,3 +42177,23 @@ and provide the minimal functional shader correction. Unchanged zero output
 rejects the hypothesis; because this is the second focused causal attempt after
 EXP674 evidence, no third value probe follows without a fresh architectural
 re-anchor. Cleanup returns ordinary377/392 after evidence.
+
+**EXP676 ACTUAL — ZERO-LANE HYPOTHESIS REJECTED
+2026-09-09T11:06:56Z.** Exact reused30.0.673.0 package completes physical
+TA/3D/fence271. Active FS hash0x6fc792a20f91ec49 proves the exact two-byte
+variant reached the active graph; all other graph/store fields remain exact.
+Output is again byte-identical FNV0x98b3446c1b0a8215 with184 accepted
+background pixels, first invalid index88/value0, poison0 and full1024-byte
+scan. Terminal/graph/store SHA256 are
+`b995e342bd56432757132d461c9c17a3fefca05111d09784018071f066ea52b5`,
+`aed3dd7af3160a0882d38b5f19ee4ca13a2e587f2d1fb30792d21333be7dd8f6`,
+and `eeac3c6d6a3438a1a3acfbb81af4527a77e34691985d9f138d50d8887bf622e4`.
+One stornvme Event129 at11:05:12Z is storage telemetry; no GPU-visible stall,
+41 or1001 occurred. Verdict: nonzero values that round to zero do not restore
+red. Per anti-loop, no third immediate/register probe follows.
+
+**EXP676-R1 CLEAN RECOVERY 2026-09-09T11:08:47Z.** Exact package/devnode/
+service removed, full-owner stopped and ordinary377/392 restored: Code28/null
+INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next is offline
+architecture re-anchor against the pinned2022 packer/RA/ISA, not hardware.

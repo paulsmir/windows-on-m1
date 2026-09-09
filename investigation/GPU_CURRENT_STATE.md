@@ -323,6 +323,16 @@ the original native XOR/control stream byte-exact and changes only its two zero
 G/B sources to the smallest normal FP16 `0x0400`, which u8norm rounds back to
 zero. EXP675 is removed and ordinary377/392 is clean at2026-09-09T11:01:43Z.
 
+EXP676 keeps the original native XOR/control stream and changes only the two
+zero G/B loads to FP16 0x0400, which u8norm rounds to external zero. Hardware
+still returns the identical zero-boundary FNV0x98b3446c1b0a8215 with physical
+TA/3D/fence271. The zero-lane hypothesis is rejected. After two focused fixes
+EXP675/676 without red, no further value probe is allowed. The required next
+step is a pinned-2022 compiler/ISA re-anchor of the exact encoded `st_tile`
+source/register semantics and native shader creation context, treating the
+2026 disassembler output as advisory rather than proof of the 2022 encoding.
+EXP676 is removed; ordinary377/392 is clean at2026-09-09T11:08:47Z.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
