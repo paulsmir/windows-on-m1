@@ -41054,3 +41054,42 @@ no AppleAgx package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and
 no fresh41/1001/129. EXP661 must not be repeated. Next hardware candidate has
 one functional variable: transaction-owned Vertex copy/VA carry for the same
 V13_5 graph.
+
+# EXP662 — relocation-targeted Vertex copy through production overlay
+
+**PREREGISTERED 2026-09-09T02:32:45Z. WHY THIS HYPOTHESIS:** (1) EXP661 proves
+the exact V13_5 request now enters KMD but exits only guard19/Prepare before
+DMA; (2) source shows its descriptor-to-Vertex relocation is the first graph
+edge whose target is absent from `AdmissionDynamicOverlayPlan`; (3) the only
+fallback requires local segment2, while this CPU-visible General allocation is
+allowed in aperture1. The executable test reproduced the missing worker plan
+before commit `d9d3dd39c0b2d5f0a40548eed329e5ca33d2047c` and is GREEN after
+the bounded copy/resolve/carry correction.
+
+**WINDOWS CONTRACT:** the Render snapshot owns an immutable allocation-relative
+Vertex range and no user pointer or raw physical address crosses the command
+ABI. **AGX/ASAHI CONTRACT:** the hardware-proven V13_5 descriptor contains an
+exact40-bit vertex-data address visible to the render context. **TRANSLATION:**
+only a Vertex that is the target of a validated relocation is copy-once read by
+the existing resident reader, placed into the already mapped zero object73
+range `[0x20000,0x30000)`, encoded into the descriptor, carried in version2 DMA
+and released by the existing exact-fence overlay state. **WHAT IS STILL
+UNKNOWN:** whether the unchanged normalized V13_5 graph then passes production
+Render/Patch/Submit and produces any non-background pixel on hardware.
+
+Single functional variable versus EXP661 is the Vertex copy/VA/DMA binding.
+Producer source, normalized assets, render target, V13_5 graph bytes, firmware,
+RTKit, retained root, queues, WorkCommand/PBE/store, output oracle, DCP and caps
+are unchanged. Source commit is
+`d9d3dd39c0b2d5f0a40548eed329e5ca33d2047c`; exact eight-file overlay SHA256 is
+`4397daeba901110765d9303eba0e35d59852e589ae126fa9b597f411ba23b52c`.
+Builder base is immutable FRYZZING `EXP661-v13_5-vertex-relocation/src` with
+pinned WDK26100/MSVC14.44. Required gates are KMD/UMD/producer code analysis,
+Universal, Inf2Cat/signing, x64 UMD tests, exact hashes and clean ordinary
+preflight. Build artifacts and commands will be appended before staging.
+
+One natural-bind run only. PASS requires Render/Patch/Submit, physical TA/3D,
+exact fence and output FNV different from uniform background
+`0xf953759ae5722325`. A guard or launch failure is classified separately and
+does not test graph compatibility. Evidence must be preserved before exact
+package cleanup and ordinary377/392 recovery.
