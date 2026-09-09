@@ -40898,3 +40898,57 @@ The real frame normalizes deterministically, a wrong frame hash is rejected,
 Python compile and121 adjacent production tests are GREEN. This is
 OFFLINE_PROVEN only; next build changes only the producer and reuses exact
 EXP658 KMD package as the control.
+
+# EXP660 — Windows execution of the normalized V13_5 native graph
+
+**PREREGISTERED 2026-09-09T02:07:00Z. WHY THIS HYPOTHESIS:** (1) EXP659
+hardware proves the exact V13_5 graph physically rasterizes72 pixels on this
+G13G while EXP657/658 current-Mesa graphs complete with uniform background;
+(2) byte comparison identifies a versioned VDM/PPP/USC ABI, including native
+word0=0x1002, separate44/68-byte PPP records and combined fragment state;
+(3) the existing typed dynamic overlay already resolves every allocation and
+relocation needed to normalize that graph without native addresses. This is a
+hardware control for command ABI, not a new state-bit probe.
+
+**WINDOWS CONTRACT:** The existing allocation-relative Draw submits nine
+resident allocations and eight validated typed relocations through the
+source-identical EXP658 KMD. **AGX/ASAHI CONTRACT:** Vertex buffer, descriptor,
+VS/FS code, pipelines, encoder and PPP states are byte-derived from the exact
+EXP659 V13_5 native hardware PASS after all addresses are cleared. **TRANSLATION:**
+Windows vertex allocation -> owned descriptor slot -> old VS pipeline; normalized
+shader/pipeline/PPP pointers -> existing object74/73/71 slots; no captured
+physical address or native owner crosses the ABI. **WHAT IS STILL UNKNOWN:**
+Whether the same graph produces any non-background pixel when submitted by the
+Windows backend and rebound to its full-frame target.
+
+Single variable versus EXP658 is producer/assets only. Reuse the exact signed
+EXP658 package unchanged: SYS/UMD/INF/CAT/ZIP SHA256 are
+`c50662658f5f9a9fb870f64a3b65ccd66aa575e401b66818bd3e841f33a5769e`,
+`c68e88b1340c68c73d7ead1bf6efee509760b3a6aaf78cc405a1fa933afb3545`,
+`b352090b979010a62c41897f5014e6e7bee927010ce53e3752f7236d9b44f15b`,
+`89ec4107b8fe3dac7be03cb8f2dc508b7237e09832cc796cd4fbb7f59a881a82`
+and `07b4bd0be86165561a6bac78dd5ed31afade3880be9c4bc0ec132a232b081f0f`.
+The new producer SHA256 is
+`ed835e078d026318bd05754404c9bc84101dec3d18d4e861891716ef21bb5993`;
+its source overlay/build-log/manifest SHA256 are
+`9cdc8c627b1a6a6c4fecb18b547d3919bcc765eb32d5d5f73e2a9835bf7ce187`,
+`41bb35b2982f874616272a397113d95bb9d4877342a8fbfcd87f6a195d94e143`
+and `4c632434ac3265d28f65fa20ecee3cbd98bc43ed66e5f2ff42ea6a5acad8dea3`.
+Source/ledger commits are
+`d691f8331dbc2d7954506387a33820ff3fbc073b` and
+`d56fe43bb95bdba9376aa37f78c66aa05c3a68cb`.
+
+Normalized asset hashes are those recorded above with manifest
+`0df82ba47bdd32f30e81f07c96764d0230e29ed437e47d01bc7338c71d76d188`.
+Pinned producer build passes MSVC14.44 ARM64 code analysis with zero warnings
+and errors. Normalization, fail-closed bad hash and121 adjacent tests are GREEN.
+Air is clean ordinary377/392 at 2026-09-09T02:01:20Z.
+
+One exact run only. The first discriminator PASS is physical TA/3D/fence plus
+an output snapshot whose FNV differs from background-only
+0xf953759ae5722325, proving at least one rasterized native-graph fragment.
+Presentation is not expected because the native16x16 geometry/colour does not
+yet match the full-frame production oracle. Same background FNV rejects the
+V13_5 graph compatibility hypothesis; earlier guard/launch failure is
+inconclusive. Preserve evidence, exact-clean the reused package and restore
+ordinary377/392.
