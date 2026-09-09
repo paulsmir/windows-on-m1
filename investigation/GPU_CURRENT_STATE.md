@@ -89,9 +89,19 @@ package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh
 41/1001/129. Because EXP657/658 are two focused fixes without movement, the
 mandatory next action is a focused re-anchor of the entire materialized
 VDM/PPP/USC image and retained queue pointer chain against one real native/Mesa
-geometry draw. No EXP659 is justified until this yields one causal difference
-or a smallest stage-progress discriminator. Caps remain0 until AD04 mandatory
-contract completion.
+geometry draw. EXP659 completed that re-anchor on J313/G13/V13_5 with pinned
+Mesa7a4f2406: real TA/3D produced72 red and184 background pixels, no third
+colour, with a complete non-clear frame archive. The intended stable m1n1
+chainload was accidentally skipped, so exact stable-profile equivalence is not
+claimed; the narrower hardware command-byte result is valid because the live
+identity was exact J313/V13_5 and Mesa generated the captured user graph.
+Comparison now proves the current graph uses a different command ABI: native
+word0=0x1002, output4/4, separate44-byte viewport PPP and68-byte draw PPP with
+combined fragment record, while current-Mesa uses0x1012/0x1212, output8/8 and
+a merged modern108-byte PPP/split fragment record. Ordinary377/392 is clean at
+2026-09-09T02:01:20Z. Next is a bounded V13_5 graph compatibility control via
+the existing typed dynamic overlay, not another current-Mesa state-bit probe.
+Caps remain0 until AD04 mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

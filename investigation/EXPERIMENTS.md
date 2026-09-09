@@ -40827,3 +40827,45 @@ runner's fresh-proxy reboot; then restore and verify ordinary377/392. PASS is
 physical native triangle output plus a complete non-clear encoder archive. A
 capture/launch failure is inconclusive and is not evidence about Windows. The
 archive is an analysis reference, not a readiness increase by itself.
+
+**EXP659 ACTUAL — NATIVE V13_5 TRIANGLE HARDWARE PASS
+2026-09-09T01:54:30Z.** The pinned historical Mesa
+`7a4f24061fa56ef7eff12132dd7b1461d5a890d8` identified itself as
+`GL_VENDOR=Asahi`, `GL_RENDERER=Apple M1 (G13G B0)` and executed the exact
+16x16 GLES2 draw through native TA/3D completion. Readback contains72 exact red
+and184 exact background pixels, no third colour, FNV0x53a319aa80ccbd95. The
+complete1024-byte RGBA,16-KiB raw attachment, producer log and non-clear frame
+archive SHA256 are
+`243615aa1f06ae5e0e59a489494f36fb5f9a6742114eca761cdcdb8eedf8c0e4`,
+`f8b13b60fe42f8a8a6616688871bac7b22e9dce0bdfb579bd115bff8c8f79d8f`,
+`7689fa8a624896db83e69e03e1168d3bffff7c18c9c8902af553f76640024386`
+and `dc3082ab5bb91cc21b89f124c9922a647b2a275a00d7fe6106a735a26a7529c9`.
+
+The intended immutable-native chainload was skipped by an experiment-shell
+control-flow error (`exit 0` terminated the host shell after endpoint wait), so
+the live proxy was boot-stage m1n1 `b791225`, not the preregistered stable
+artifact. This forbids claiming exact stable-profile equivalence. It does not
+invalidate the narrower result needed by the re-anchor: the captured Mesa
+encoder ran on exact J313/G13/V13_5, its user-space Mesa commit and all generated
+VDM/PPP/USC bytes are fixed, and physical geometry/readback passed. No repeat is
+needed because m1n1 does not generate those user command bytes and the capture
+already distinguishes the Windows zero-fragment graph.
+
+**EXACT CAUSAL DIFFERENCE.** Native V13_5 encoder begins with VDM state and
+contains byte-exact vertex word0 `0x00001002`, output counts4/4, zero vertex
+unknown, a separate44-byte viewport PPP update and a68-byte draw PPP update.
+The Windows/current-Mesa graph uses word0 `0x00001012`/`0x00001212`, output
+counts8/8, current flat-shading bits and a merged modern108-byte PPP payload.
+The native draw PPP uses the hardware-era combined16-byte fragment-shader
+record with word0 `0x00001002`, pipeline0x21000 and output size4. The current
+graph uses split modern fragment words and word0 `0x00001212`. The old/current
+genxml comparison confirms these are versioned command-ABI differences, not
+addresses or output diagnostics. The next correction is therefore a bounded
+V13_5 graph compatibility fixture/control through the existing dynamic overlay,
+not another isolated current-Mesa state bit.
+
+**EXP659-R1 CLEAN RECOVERY 2026-09-09T02:01:20Z.** The capture runner rebooted
+the native proxy, then immutable ordinary377/392 was restored. Health is
+Problem28/null INF, no AppleAgx package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Native capture did not
+install or stage a Windows driver.
