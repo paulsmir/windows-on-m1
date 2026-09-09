@@ -40375,3 +40375,49 @@ Problem28/null INF, packages/service/module/SYS/UMD absent,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no events in the new ordinary boot. EXP654
 will not be repeated. EXP655 is a source-identical output discriminator plus
 the strict producer handshake; it must not change AGX/DCP/caps.
+
+# EXP655 — exact post-completion dynamic output snapshot
+
+**PREREGISTERED 2026-09-09T00:42:00Z. WHY THIS HYPOTHESIS:** (1) EXP654
+hardware-proves the exact dynamic Draw reached physical TA/3D completion,
+interrupt/DPC and fence273; (2) the next exact state is output verification
+`STATUS_DATA_ERROR` with no Present entry, but the existing persisted receipt
+does not contain first pixel/mismatch/count/hash fields; (3) source inspection
+does not distinguish no triangle fragments, poison retention, a third colour
+or out-of-bounds writes without those already computed scalars. One bounded
+post-verification snapshot is therefore the smallest non-speculative
+discriminator before changing the encoder.
+
+There is no functional GPU variable. Commit
+`5b885825640ba21cd2eb0e5489716c60ff8c341f` writes the existing terminal
+output structure to device/service registry once at PASSIVE after dynamic
+verification, without `ZwFlushKey`, and corrects only producer control flow so
+positive `STATUS_TIMEOUT` cannot reach HOLD/retirement. Dynamic DMA3940,
+shaders, encoder, relocations, overlay, output validator, platform and caps are
+byte-identical EXP654 controls. Focused tests are GREEN.
+
+Exact source overlay SHA256 is
+`a471c556a46f490f9838498a24a29dd6d46a53e3175efe43627d629292a62f2c`
+over immutable EXP654. Pinned WDK26100/MSVC14.44 Release PackageBuild655
+VisibleAgxQualification, Universal, Inf2Cat, signing, x64 tests and ARM64
+producer build pass with inherited warnings only. SYS/UMD/INF/CAT/producer/
+ZIP/manifest SHA256 are
+`345815e026349cb05264f38ca7a31fd38a52370a240ea8b95cdfe323766989a6`,
+`e59b4b541ffc56b37cb891f0e1dfe8c8dd5dda1eaea35c111b4cf31fa7c68622`,
+`b5b7246fe4b58114a4dcfc36e85f48b654e45abfb7cb6e9e1f766d491698f7f4`,
+`39bda7446da33098cfa343f0f2d145e26aeb1911acb5f92912729a25dd628f78`,
+`d61cadae77ef332b419b690a7f645539a7966f370e8bb32b8c498302615d428d`,
+`0c0219493decf5763a58b8235aa4a81f954ade46762a506740c2c9743183a7ed`
+and `6a54dd1f635322718841e731c69b8e8e8e08e13f59753c2ced3220972d94b6f8`.
+Assets and full-owner platform remain byte-identical. Root/m1n1/Mu commits are
+`eed7162160d3db51a2de2eb4cc8a4c68d3c6b216`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`.
+
+Air is clean ordinary377/392 at 2026-09-09T00:38:08Z. Run one exact producer.
+The producer must stop in Preserve immediately after the first timeout; no
+false HOLD or retirement is permitted. PASS for this diagnostic is physical
+completion plus a 368-byte `Wom1OutputTerminalSnapshot` whose fence and output
+fields identify the first failed pixel invariant. No pixel/present readiness
+is raised by the diagnostic itself. Evidence, exact cleanup and ordinary
+recovery follow the unchanged workflow.
