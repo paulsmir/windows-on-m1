@@ -345,6 +345,17 @@ zero stores zero. EXP677 is limited to R/A0x3bff, which still rounds to exact
 external255, over EXP676's unchanged G/B0x0400 and unchanged graph. Red
 confirms endpoint handling; zero rejects it and forbids further value probes.
 
+EXP677 rejects normalized endpoint handling as the missing cause. With R/A
+changed only from FP16 0x3c00 to0x3bff (still exact external u8norm255) and
+G/B retained at0x0400 (external0), the exact package again completes physical
+TA/3D/fence271 but returns the identical184-background/72-zero output and
+FNV0x98b3446c1b0a8215. No event or mapped fault occurs. Shader payload/value
+probing is closed. The next action is offline comparison of native context23
+and production context63 job/queue command metadata outside the already
+byte-exact user graph, without changing context ID or queue state until one
+source-backed mismatch is found. EXP677 is removed; ordinary377/392 is clean
+at2026-09-09T11:37:30Z.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

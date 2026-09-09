@@ -42269,3 +42269,38 @@ workflow SHA256 is
 `8f87cca98dc8ce2446232a79c1f55a47c88c1b608d1caff32401026e8882cd68`.
 Ordinary377/392 remained untouched and clean; repeat only the failed Stage
 operation, not the experiment.
+
+**EXP677 ACTUAL — NORMALIZED ENDPOINT REJECTED
+2026-09-09T11:33:42Z.** Exact reused30.0.673.0 package naturally bound as
+oem5 with Code0, service Running, exact SYS/UMD hashes and8 CPUs. The sole
+784-byte request completed physical TA/3D with exact fence271: terminal
+expected/observed stamps are0x7a000100/0x3d000100 and done pointers are2/2;
+correlation valid mask0x7e5 includes Render exit, Submit entry/exit, worker
+entry/exit, Notify and DPC. The active fragment hash is the preregistered
+0xada95ef75f274ec1 while encoder, vertex/fragment USC, VS and final store graph
+remain unchanged.
+
+The full1024-byte output is byte-identical to EXP673/675/676:
+FNV0x98b3446c1b0a8215,184 exact0xff112233 background pixels,72 exact zero
+covered pixels beginning at index88, poison0 and intact destination guard.
+Terminal/graph/store raw SHA256 are
+`73f6fa8f17cdc9fbd1cc898d813eaff707660a8e040d08ce0fc2f7f28184ffff`,
+`3ac4db21919fa6b15082cf4e2537b6cd21dab4c74ea9370fbd1cb529a9306efe`,
+and `d4a67fca3a9e422605b1e05886f1065c10feb755e9df7c88255cd864e33e028f`.
+The mapped fault snapshot is the unchanged zero record
+`ba1f8e9c6f764a013cfac6aedc8de27a708bb6f2e19d7fa489f1b829d3f03917`.
+No Event41/1001/129 occurred and device/CPU/NVMe/xHCI/input remained healthy.
+
+Verdict: the1.0 normalized endpoint hypothesis is REJECTED. Values immediately
+below1.0 that round to exact external255 do not restore red. No further
+immediate/register/value experiment is allowed. Since the shader, pipeline,
+encoder, final WorkCommand/store graph and stable Start3D scalars are now
+source- and hardware-closed, the next offline re-anchor moves to the native
+context/job execution owner: context/queue command metadata and any state not
+owned by the immutable user graph.
+
+**EXP677-R1 CLEAN RECOVERY 2026-09-09T11:37:30Z.** Evidence was saved first.
+Exact oem5/package/devnode/service and experiment-local stale state were
+removed, full-owner shut down, and immutable ordinary377/392 restored. Health:
+Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
