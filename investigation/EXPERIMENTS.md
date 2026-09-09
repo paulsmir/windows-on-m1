@@ -42740,3 +42740,39 @@ workflow bc55b429387dea6e4c6c6c9f06ec48d90b017d889fb8a25f1e933af779299801;
 collector78430173c1b9bfdbf380e78e39fea603a97324a562fec8c733138e62a91873f0.
 Ordinary preflight13:04:53Z clean Code28/no package/service/module/SYS/UMD,
 8CPU/SSH/NVMe2/USB5/keyboard1,no41/1001/129.
+
+EXP682 ACTUAL 2026-09-09T13:11:42Z — FOUR_FRAME_RAW_OUTPUT_PASS and
+HOLD_STABILITY_PASS. Four normal producer lifetimes remained alive with distinct
+allocations. Red/gray/red/gray completed physical TA3D and output with fences
+271/289/308/326 and generations1/2/3/4. GPU VAs1500fa0000/1500fb0000/
+1500fc0000/1500fd0000 and PAs97d190000/97d1a0000/97d1b0000/97d1c0000 differ.
+Each1024-byte raw snapshot matches its independent expected file, full tiled
+72 foreground/184 background, poison0/guard0 and exact physical stamps/done.
+No stale generation/allocation/image accepted. Complete per-frame evidence,
+decoded verified.json and context/allocation identities are under
+`.local/experiments/EXP682-four-native-frames/evidence/frame1..4`.
+Snapshot SHA256:
+3cb86b16339192147fbf874176c295ced0ca59ed3b0bd4565616ac30685a3ba2;
+7eab4ca93e645d448d64a8601c7fa869dbb69859b5cceaae4c9248cc9d2838af;
+fd2ff41e52c54f9e59d102066cbba0d704ca298d13a59424debf2093d9b55d2c;
+2b49bc7eb04689966b312784c0d4a66880aa1067e22373b5c51108220ef74ddd.
+Terminal snapshots precede their Notify/DPC scalar update and contain zeros
+for those fields; do not re-label them as directly recorded four-frame DPC
+evidence. Output processing is reached through existing completion's notified
+transaction guard; first two calls also have the existing bounded correlation.
+
+HOLD13:11:26.829..13:11:41.859Z lasted15.030s, latest snapshot byte-identical,
+four producer processes alive, Code0,8CPU and no41/1001/129. No presentation or
+desktop PASS; small tiled targets have no full-size private scanout destination.
+After all evidence including hold was local, exact oem5/package/devnode removed,
+only four experiment producers and their wrappers stopped, stale state removed,
+graceful shutdown and ordinary recovery started. Standard Present analysis
+must retain EXP644/647 evidence: runtime device/pipeline prerequisite remains;
+do not repeat a denied exclusive ownership or occluded BLT experiment.
+
+EXP682-R1 CLEAN RECOVERY13:13:40Z: exact package/devnode removed before scoped
+producer stops; ordinary377/392 Code28/null INF/no package/service/module/SYS/
+UMD,SSH8CPU,NVMe2,USB5,keyboard1,no41/1001/129. Full source review of the
+next prerequisite is EXP682_STANDARD_PRESENT_BOUNDARY.md. No new hardware
+candidate is justified until runtime UMD and displayable-resource prerequisites
+are implemented. Existing BLT/exclusive denial experiments must not repeat.
