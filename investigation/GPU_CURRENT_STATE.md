@@ -222,6 +222,22 @@ SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP667 is the one exact
 hardware discriminator; if byte-identical, perform a full active-image
 comparison rather than another address probe.
 
+EXP667 hardware-admits the exact separate VS/FS aliases but remains
+byte-identical: physical TA3D/fence271 and184 background+72 zero pixels with
+FNV0x98b3446c1b0a8215. Shader alias identity is rejected as sufficient. A full
+parsed active-image comparison then found the first coherent graph conflict:
+EXP208 load/reload/store pipelines occupy0x20000/0x21000/0x22000, while
+hardware-proven EXP659 uses the first two for vertex/fragment user USC and
+moves PBE pipelines to0x22000/0x23000/0x24000. Their PBE contents and bindings
+otherwise match semantically. Commit
+`0ccbfbfdc22082b2589824dbdc02c5f65e60b388` atomically validates and adopts
+the complete native layout before dynamic bind, retains legacy layout for fixed
+paths, and tests exact pages/six pointers/idempotence/DMA/overlay/release.
+26 tests pass. EXP667 is removed; ordinary377/392 is clean at
+2026-09-09T08:37:39Z with Code28/no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP668 tests this one
+pipeline-object invariant; no further address micro-probe is allowed.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

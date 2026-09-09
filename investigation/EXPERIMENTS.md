@@ -41536,3 +41536,79 @@ the depth-bias artifact remains
 The corrected hash-gated Stage published exact oem5 successfully. The earlier
 air-manifest hash above is superseded only by this explicit correction; all
 driver/package hashes remain unchanged.
+
+**EXP667 ACTUAL — NATIVE SHADER ALIASES REJECTED AS SUFFICIENT
+2026-09-09T08:34:48Z.** Exact30.0.667.0 passed oem5/Code0/service/hash
+preflight and the alias-extended context-63 UAT reached StartDevice. The
+unchanged request returned success/queued1. Durable correlation
+candidate667/boot366645394 records DMA3860, Patch0, Submit0, fence271,
+workerReady2, physical TA/3D completion, QueueDpc1 and Notify/DPC. Terminal
+output is again byte-identical EXP665/666:184 background+72 zero pixels,
+poison0, first invalid88, FNV0x98b3446c1b0a8215. Exact native VS/FS aliases
+are therefore hardware-admitted but rejected as the zero-colour fix. No fresh
+41/1001/129; device stayed ACTIVE/Code0 with8CPU/NVMe2/USB5/keyboard1.
+Evidence: `.local/experiments/EXP667-native-shader-aliases/evidence`;
+correlation and terminal SHA256 are
+`52aaad0ac1e72768173667ba0b97e0e549412d382a0b35f9ef292057c08dadbd`
+and `3bb41726edc9b64c3fc2193e697e3b3d38d4bd3601cb24d4e46e0827978e0188`.
+
+**FULL ACTIVE-IMAGE COMPARISON / COHERENT PIPELINE CONFLICT.** Address probing
+is stopped. Byte and parsed-structure comparison of WorkCommandTA/3D, encoder,
+USC, shaders, descriptor and PBE finds one indivisible layout mismatch. In the
+EXP208 template, load/reload/store pipelines occupy shader-base offsets
+0x20000/0x21000/0x22000. The hardware-proven EXP659 graph uses those first two
+slots for vertex/fragment user USC and places load/reload/store at
+0x22000/0x23000/0x24000. The old hybrid could not address the exact user
+pipeline graph because its PBE owners occupied the same VAs. The corresponding
+PBE bytes and bind values are otherwise semantically identical after pointer
+relocation.
+
+Commit `0ccbfbfdc22082b2589824dbdc02c5f65e60b388` adds one fail-closed atomic
+adoption before dynamic binding: it validates all six old WorkCommand pipeline
+pointers and three exact PBE pages, moves store/reload/clear pages in safe
+order to the native slots, zeroes the two user slots, patches all six pointers,
+and verifies the complete new state. Re-entry accepts only the exact adopted
+state. The GDI binding selects legacy or native offsets from that verified
+state, so non-dynamic fixed tests retain their previous layout. Dynamic user
+USC now occupies exact0x20000/0x21000; VS/FS retain their exact aliases on
+nonoverlapping backend pages. Migration has no fallible operation after the
+prevalidation. RED missing adoption then GREEN exact pages, pointers,
+idempotence, binding, production DMA/overlay/release and26 adjacent tests.
+
+**EXP667-R1 CLEAN RECOVERY 2026-09-09T08:37:39Z.** Evidence preserved; the
+experiment-local Run wrapper was stopped, exact oem5/devnode removed,
+full-owner stopped and immutable ordinary377/392 restored. Health:
+Problem28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP667 must not repeat.
+
+# EXP668 — coherent V13_5 user/PBE pipeline object layout
+
+**PREREGISTERED 2026-09-09T08:40:00Z. WHY THIS HYPOTHESIS:** (1) EXP665–667
+prove active VDM/PPP raster coverage but byte-identical zero fragment colour
+after isolated encoder, fragment page and shader alias corrections; (2) the
+full active-image comparison finds an exact VA collision between EXP208 PBE
+owners and the hardware-proven EXP659 user USC slots; (3) PBE byte semantics
+match, so relocating those three internal pipelines produces the exact native
+coherent layout without changing rendering state. This is stronger than any
+remaining single address probe.
+
+**WINDOWS CONTRACT:** all pages are within the existing Windows-owned backend
+allocation and context-63 mapping lifetime; the migration occurs once before
+dynamic bind and release preserves adopted internal owners. **AGX/ASAHI
+CONTRACT:** pipeline base0x1100000000 addresses user USC at0x20000/0x21000 and
+load/reload/store at0x22000/0x23000/0x24000 in the proven frame.
+**TRANSLATION:** atomically adopt that complete object layout, then apply the
+unchanged typed user graph and exact output binding. **WHAT IS STILL UNKNOWN:**
+whether removing the hybrid pipeline-owner collision allows the known native
+fragment program to store72 red pixels.
+
+**ATOMIC CONTRACT:** three PBE page moves, six WorkCommand pointer updates,
+two user USC slots and shader backing relocation are invalid separately and
+constitute one pipeline-object ownership invariant. Single causal variable is
+the coherent pipeline object layout. Source commit
+`0ccbfbfdc22082b2589824dbdc02c5f65e60b388`; immutable EXP667 builder source
+plus exactly eight committed files.26 focused/adjacent tests GREEN. Pinned
+WDK26100 build/analysis/Universal/Inf2Cat/sign/version/hash, one natural bind,
+evidence and cleanup apply. PASS requires physical completion/fence and exact
+72 native red+184 background pixels, poison0. Any failure is compared at the
+first new boundary; no further address-only candidate follows.
