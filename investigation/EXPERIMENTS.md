@@ -42789,3 +42789,28 @@ external source is compiled in the builder workspace, not copied into owned
 driver code. Script/evidence: .local/experiments/AD04-d3d10-frontend-build/.
 The exact next contract is adapter-scoped frontend to device-scoped Windows
 allocator/context ownership; compilation first establishes actual dependencies.
+
+AD04-FRONTEND-B1 ACTUAL: compile stopped at missing winddk_compat.h because
+the standalone build script omitted Mesa meson.build inc_winddk. Source confirms
+include/winddk owns that header. B2 adds that exact include path and preserves
+the first output in x64 while writing x64-b2. No driver semantics or source
+changed; no hardware verdict follows from this builder error.
+
+AD04-FRONTEND-B2 ACTUAL: x64 selected frontend static library compiles, SHA256
+7399c5bbc0ac1ac1c7e896c69ced6faef17465c9fb11a6a3ffc147b0226975ef.
+Fifteen frontend translation units, software D3DKMT shims and GDI target absent.
+Existing upstream conversion warnings are retained in cpp-build.log; this is
+a compile control, not a clean production analysis gate or full UMD readiness.
+B3 now compiles the identical allowlist as ARM64 with pinned HostX86/arm64
+MSVC14.44 and WDK26100. No DLL install, callback/capability/runtime changes.
+
+AD04-FRONTEND-B3 ACTUAL: ARM64 static compile succeeds with the same recorded
+upstream conversion warnings. Library SHA256
+e957ea442643da32f0bec835edcc867a89e1d52b1dceb34dd8dbf8d3c99b8c7f.
+Local copies match builder hashes. lib.exe /list proves15 members and excludes
+D3DKMT.obj/software target. Source-preserving compile workflow committed as
+b7094b1b6b00991806bc566ac1abf7eb215767bc at
+drivers/apple-agx/mesa/scripts/build-d3d10-frontend-control.ps1.
+No library installation or hardware readiness increase. Next remains device-
+scoped frontend integration over the already existing agx_win32_pipe_screen,
+shared resources and mandatory backend pipeline operations.

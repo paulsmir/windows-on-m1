@@ -63,6 +63,16 @@ No additional BLT patch was made; it would not solve runtime device admission.
 Keep pipeline mask0 until mandatory callbacks/backend invariants pass.
 No next hardware candidate is prepared.
 
+AD04 frontend compile control now passes x64 and ARM64 for15 pinned Mesa
+translation units, excluding D3DKMT.cpp software shims and d3d10_gdi.c.
+This is a static-library build, not a linked hardware UMD or production analysis
+PASS. Upstream conversion warnings remain recorded. Script commit
+b7094b1b6b00991806bc566ac1abf7eb215767bc; artifacts under
+.local/experiments/AD04-d3d10-frontend-build/results/.
+ARM64 library SHA256e957ea442643da32f0bec835edcc867a89e1d52b1dceb34dd8dbf8d3c99b8c7f.
+Existing agx_win32_pipe_screen.c already owns a device-scoped Gallium bridge;
+reuse it and its tested Windows transport rather than introducing a new screen.
+
 ## Preserved constraints
 Retained root/broker, firmware/RTKit, context0 inventory, context63 memory,
 physical TA3D and completion remain controls. EXP640/651 retain their private
