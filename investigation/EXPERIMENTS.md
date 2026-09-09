@@ -41993,3 +41993,63 @@ Exact oem5/package/devnode was removed, the stopped experiment service was
 deleted, full-owner shut down, and immutable ordinary377/392 restored. Health:
 Problem28/null INF, no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+
+# EXP674 — fragment immediate consumption discriminator
+
+**PREREGISTERED 2026-09-09T10:47:31Z. WHY THIS HYPOTHESIS:** (1) EXP673
+hardware confirms the exact final WorkCommand, attachment, clear/reload/store
+pages, store shader, RT descriptor and companion while the fragment-colour
+result remains zero; (2) the active fragment USC record and exact112-byte
+native fragment shader were already closed by EXP669 and mapped faults are zero
+by EXP672; (3) the independent EXP659 raw16KiB attachment contains72 literal
+`0xffff0000` pixels, so zero is not a native raw-layout representation. The
+smallest safe remaining discriminator is whether changing only the fragment
+shader's four immediate source values changes the72 covered output pixels.
+
+**WINDOWS CONTRACT:** package, DDI path, allocation, fence and output verifier
+are unchanged; the intentionally poison-coloured result remains fail-closed and
+must not be presented. **AGX/ASAHI CONTRACT:** the exact EXP659 shader consists
+of four FP16 `ldimm`, the unchanged XOR register permutation, two `pixwait`,
+`st_tile u8norm xyzw`, stop and unreachable trap. **TRANSLATION:** replace only
+the four immediate payloads with FP16 `0x392d`; this rounds to u8norm0xa5 for
+R/G/B/A while every opcode, register, control instruction, address and byte
+after offset21 remains identical. **WHAT IS STILL UNKNOWN:** whether the active
+fragment instruction stream consumes those immediates and reaches `st_tile`.
+
+Single variable is eight changed bytes in `fragment-shader.bin` at offsets
+2,3,8,9,14,15,20,21. Exact disassembly is four `ldimm ... 14637`, unchanged
+XOR/pixwait/st_tile/stop/trap; variant SHA256
+`d3d9800563d95c4fd9953e645e198d638fa1e8205f0a4edb567801bdd8b315d4`,
+base SHA256
+`fa139e95a66a67b921221a3927ccfca209bc9037fdd31156d74894902ab2dd92`.
+Variant manifest is
+`.local/experiments/EXP674-fragment-poison-immediates/variant.json`, SHA256
+`2431a8c90cd8faa4afd1793f3f16a380b5df9cb3f5303396a0fe557439b9e593`.
+Every other asset is byte-identical EXP673.
+
+No source or driver rebuild is allowed. Reuse exact signed30.0.673.0 package
+and producer: ZIP/SYS/UMD/INF/CAT/producer SHA256 are
+`f9d6058d9b3c073592c283dec96752b9b019ab73826ce82a1ba0da2b119ea800`,
+`12da89b0556172cab7653cdb9df4dd923cfa255dcf754b5d6f541b5ce75dc855`,
+`11fe687e3174806e4ebc8b3b7a5749c52453b941e63760ab537aeba70b449991`,
+`4b8db81ebd720aaeb8ffc90b9b9df0863727d1032ea352abd7c0d010c7eed748`,
+`d41656de91cc2eee9f23037bc352137b57119d81d850656639e7cc8c8c5e3c47`,
+`7ded25f93c7ce78c8b448faedb0778c1c30b083baf91d8e56b36ee8efc2a079e`.
+Air manifest SHA256 is
+`9f5bc38fa08258333300641e80f0ecd55d702da81d6e22288551ccfb5e5ff194`.
+Current source/ledger HEAD is
+`81a15ed0911bc126188b6db4a81b59b056802258`; pre-existing dirty diff/name
+hashes remain
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`/
+`81e89eb9762f7105549fe43f5474cc1987b5b5f0029aa468b69efa5f17093bb4`
+and are not part of artifacts.
+
+One natural bind and one request only. A result with72 `0xa5a5a5a5` pixels,
+184 background pixels, exact physical completion/fence and matching store
+receipt confirms fragment immediate consumption plus `st_tile`. The unchanged
+zero-colour FNV rejects immediate values and moves to fragment invocation/code
+visibility, without another value mutation. Any different value is classified
+from the exact full output receipt. Because `0xa5a5a5a5` equals the verifier's
+poison value, successful diagnostic output remains invalid and cannot advance
+to DCP Present. Failure to reach the same physical boundary is INCONCLUSIVE.
+Recovery is exact package cleanup then ordinary377/392.
