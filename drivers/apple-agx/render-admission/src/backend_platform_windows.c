@@ -2353,6 +2353,30 @@ static VOID AdmissionOutputProcess(
       runtime->DynamicGraphReceipt.Fence == fence)
     AdmissionRecordDynamicGraph(
         runtime->Adapter, &runtime->DynamicGraphReceipt);
+  {
+    volatile APPLE_AGX_BACKEND_U32 *taRead;
+    volatile APPLE_AGX_BACKEND_U32 *d3Read;
+    APPLE_AGX_BACKEND_U32 currentTaRead;
+    APPLE_AGX_BACKEND_U32 currentD3Read;
+    ADMISSION_QUEUE_FAULT_SNAPSHOT snapshot;
+    if (runtime->Provider.Channels.Ta.StateCpuAddress != NULL &&
+        runtime->Provider.Channels.D3.StateCpuAddress != NULL) {
+      taRead = (volatile APPLE_AGX_BACKEND_U32 *)(
+          runtime->Provider.Channels.Ta.StateCpuAddress +
+          APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+      d3Read = (volatile APPLE_AGX_BACKEND_U32 *)(
+          runtime->Provider.Channels.D3.StateCpuAddress +
+          APPLE_AGX_PLATFORM_CHANNEL_READ_POINTER_OFFSET);
+      if (runtime->TransportIo.ReadU32(
+              runtime, taRead, &currentTaRead) &&
+          runtime->TransportIo.ReadU32(
+              runtime, d3Read, &currentD3Read) &&
+          AdmissionCaptureQueueFaultSnapshot(
+              runtime, fence, 0u, currentTaRead, currentD3Read, TRUE,
+              &snapshot))
+        AdmissionRecordQueueFaultSnapshot(runtime->Adapter, &snapshot);
+    }
+  }
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (runtime->VisibleAgxValid && runtime->VisibleAgxFence == fence &&
       AdmissionCompletedOutputBeginPresent(
