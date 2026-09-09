@@ -271,11 +271,11 @@ static VOID AdmissionTerminalObserve(
                 Output->RenderedPhysicalAddress, verificationBytes,
                 Output->RenderedBytes,
                 AdmissionDynamicOutputLayoutAgxTiled64,
-                Runtime->DynamicExpectedForegroundColor) &&
+                Output->ExpectedColor) &&
             AdmissionDynamicOutputDescribeExpectation(
                 Output->RenderWidth, Output->RenderHeight,
                 Output->RenderPitch, Output->BackgroundColor,
-                Runtime->DynamicExpectedForegroundColor,
+                Output->ExpectedColor,
                 AdmissionDynamicOutputLayoutAgxTiled64,
                 &expectation) &&
             AdmissionTerminalReceiptCaptureTriangleOutputProgress(
@@ -2251,7 +2251,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
         output.VerificationKind =
             AdmissionBackendOutputVerificationTriangle;
         output.BackgroundColor = runtime->DynamicBackgroundColor;
-        output.ExpectedColor = 0u;
+        output.ExpectedColor = runtime->DynamicExpectedForegroundColor;
       }
       if (!AdmissionCompletedOutputPlatformValid(adapter, &output) ||
           !AdmissionCompletedOutputCapture(
