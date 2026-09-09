@@ -41093,3 +41093,23 @@ exact fence and output FNV different from uniform background
 `0xf953759ae5722325`. A guard or launch failure is classified separately and
 does not test graph compatibility. Evidence must be preserved before exact
 package cleanup and ordinary377/392 recovery.
+
+**EXP662 BUILD FREEZE 2026-09-09T06:56:06Z.** Trusted FRYZZING rebuilt the
+exact overlay from immutable EXP661 source using WDK/SDK26100 and
+MSVC14.44.35207. KMD/UMD/producer code analysis completed; UMD and producer
+have zero warnings, KMD retains only the inherited C28251 annotation warning;
+Universal ApiValidator, Inf2Cat and test-certificate signing pass. The x64 UMD
+contract executable returned zero without output; the established collector
+recorded this explicitly instead of treating the absent file as a test failure.
+Package version is30.0.662.0. SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
+`f39ee288cf650a15f47880687bbfad69a63074bdc5af18a7e47d60768c0bd9db`,
+`3d6b184376fa24e9e264b3cb297ca4a901e674abffd6ca8440e812ba5f060d60`,
+`38ecefe6062961f741377aaba2fa2b5b8402cd65636abf7171d754990fd8f5f7`,
+`741c69d64efd4ea01936c65d2bad4033eba9b6c2c57d9a41513768829c303a5f`,
+`5d4662ca2e6d5dbabaedeede7ed46485af7a4936b1479faf9009f0930f61dbea`,
+`9e4265c36e8bd75fda6f5b1a192836c6dfdd3c60782f79ccb7a4ec4686db2dd8`,
+`c6b4cc533e15dfca6ba80209203c3de791d62d81621c1008ca8a1ec9240a3568`.
+Artifacts are under `.local/experiments/EXP662-v13_5-vertex-overlay/artifacts`.
+Ordinary377/392 remains live and clean from EXP661-R1. Next commands are exact
+SCP, Stage on Code28 baseline, graceful shutdown, current full-owner launch,
+hash preflight and one Run.
