@@ -333,6 +333,18 @@ source/register semantics and native shader creation context, treating the
 2026 disassembler output as advisory rather than proof of the 2022 encoding.
 EXP676 is removed; ordinary377/392 is clean at2026-09-09T11:08:47Z.
 
+The required pinned-2022 re-anchor is complete in
+`EXP676_PINNED_ISA_REANCHOR.md`. The pinned packer and compiler's own post-RA
+IR prove that `st_tile` has one packed four-half source at r0h; the compiler's
+first94 bytes are byte-exact with working EXP659. Schema-aware parsing also
+shows the full stable WorkCommand/Start3D tile geometry, tib_blocks, fragment
+USC and execution scalars match native; no source mismatch remains there. The
+one concrete runtime scalar is normalized endpoint conversion: EXP674 stores
+midrange0xa5 in all lanes, while EXP676 with R/A1.0 and G/B values rounding to
+zero stores zero. EXP677 is limited to R/A0x3bff, which still rounds to exact
+external255, over EXP676's unchanged G/B0x0400 and unchanged graph. Red
+confirms endpoint handling; zero rejects it and forbids further value probes.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
