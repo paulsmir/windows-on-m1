@@ -42510,3 +42510,26 @@ unchanged graph/store/fault receipts and no causal reset. A self-consistent
 different raw buffer is a graphics FAIL with its first differing byte/pixel;
 missing/malformed snapshot is INCONCLUSIVE_BY_DIAGNOSTIC. Evidence precedes
 exact package cleanup and ordinary377/392 recovery.
+
+**EXP679 BUILD FREEZE 2026-09-09T12:34:00Z.** The exact second pinned
+FRYZZING WDK26100/MSVC14.44 build from source commit
+`de398650f383bd791f2261aba0866a7aacceaffa` passed KMD/UMD/producer Release
+ARM64 builds, code analysis, Universal validation, Inf2Cat and test signing.
+The only KMD analysis warning is the unchanged C28251 annotation mismatch on
+`AdmissionPlatformWorker`; the UMD contract build retains its unchanged C6011
+test warning. There are zero build errors. Package version is30.0.679.0.
+
+Exact ZIP/SYS/UMD/INF/CAT/producer SHA256 are
+`07873b477c5af767b899f96fd3698ca52e94c7af868df04949721743337bc354`,
+`b5b8fa5d9202b559c8ad9d7e7e11472853cddd754671cb28c436dd6b7295e360`,
+`36c7be85f5cfbbffe91ca0a8243e59d09f209dade9c48c16fffec6db28446173`,
+`c038a36739f668072fa77c132504dd25ba55280e09869edfd0a60fe7fff69b5b`,
+`bcbca6d01009862d1f4ca01b158c6d383c3b40dc1bc3c052bca75d137864655a`,
+and `aeb384f289cb12f0b2b2c5f27e8ad3bb756af805a704597f7f897c5078f9b9c7`.
+Builder manifest, local recomputation and expanded package agree. Both SYS and
+CAT carry test-signer thumbprint
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`. Immutable expected-output SHA256
+remains `c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393`.
+Air manifest SHA256 is
+`dad92d75d0efea07daac61f6384a3e16a88f823148b4867f447777e6eecf0708`.
+The candidate is frozen; no rendering semantic changed after preregistration.
