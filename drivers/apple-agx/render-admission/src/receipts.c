@@ -208,6 +208,36 @@ _Use_decl_annotations_ VOID AdmissionRecordOutputTerminalSnapshot(
   }
 }
 
+_Use_decl_annotations_ VOID AdmissionRecordDynamicGraph(
+    ADMISSION_CONTEXT *Context,
+    const ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL || Receipt->Version != 1u ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->Valid != 1u ||
+      Receipt->Fence == 0u || KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL &&
+      NT_SUCCESS(IoOpenDeviceRegistryKey(
+          Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE,
+          KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1DynamicGraphReceipt", Receipt,
+                sizeof(*Receipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(
+      &servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
+    WriteBinary(key, L"Wom1DynamicGraphReceipt", Receipt,
+                sizeof(*Receipt));
+    ZwClose(key);
+  }
+}
+
 static VOID AdmissionWritePreSubmitHeartbeat(
     HANDLE Key, APPLE_AGX_RTKIT_SESSION_RESULT Result,
     const APPLE_AGX_RTKIT_SESSION *Session) {

@@ -71,6 +71,23 @@ typedef struct _ADMISSION_DYNAMIC_OVERLAY_STATE {
   APPLE_AGX_U64 MaterializedHash;
 } ADMISSION_DYNAMIC_OVERLAY_STATE;
 
+typedef struct _ADMISSION_DYNAMIC_GRAPH_RECEIPT {
+  APPLE_AGX_U32 Version;
+  APPLE_AGX_U32 Bytes;
+  APPLE_AGX_U32 Valid;
+  APPLE_AGX_U32 Fence;
+  APPLE_AGX_U64 ActiveEncoderAddress;
+  APPLE_AGX_U64 VertexPipelineAddress;
+  APPLE_AGX_U64 FragmentPipelineAddress;
+  APPLE_AGX_U64 VertexShaderAddress;
+  APPLE_AGX_U64 FragmentShaderAddress;
+  APPLE_AGX_U64 EncoderFnv1a;
+  APPLE_AGX_U64 VertexPipelineFnv1a;
+  APPLE_AGX_U64 FragmentPipelineFnv1a;
+  APPLE_AGX_U64 VertexShaderFnv1a;
+  APPLE_AGX_U64 FragmentShaderFnv1a;
+} ADMISSION_DYNAMIC_GRAPH_RECEIPT;
+
 void AdmissionDynamicOverlayStateInitialize(
     ADMISSION_DYNAMIC_OVERLAY_STATE *State);
 const ADMISSION_DYNAMIC_OVERLAY_ALIAS *AdmissionDynamicOverlayShaderAliases(
@@ -95,6 +112,13 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_U32 ActiveObjectCount);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureGraph(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
+    const ADMISSION_DYNAMIC_OVERLAY_STATE *State,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount, APPLE_AGX_U32 Fence,
+    ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt);
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayApply(
     ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,

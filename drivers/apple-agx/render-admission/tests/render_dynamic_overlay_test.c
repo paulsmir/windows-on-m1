@@ -155,6 +155,9 @@ int main(void) {
   ADMISSION_DYNAMIC_OVERLAY_PLAN restored_plan;
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings;
   ADMISSION_DYNAMIC_OVERLAY_STATE state;
+  ADMISSION_DYNAMIC_GRAPH_RECEIPT graph;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT active_capture[76];
+  unsigned char capture_work[0x100];
   APPLE_AGX_U64 address = 0ULL;
 
   initialize_image(&image);
@@ -271,6 +274,25 @@ int main(void) {
   assert(scissor_bytes[0] == 0x26u);
   assert(depth_bytes[0] == 0x27u);
   assert(pipeline_bytes[0x2000] == 0x5au);
+  memcpy(active_capture, image.Objects, sizeof(active_capture));
+  memset(capture_work, 0, sizeof(capture_work));
+  active_capture[19u].Data = capture_work;
+  active_capture[19u].Size = sizeof(capture_work);
+  write_u64(capture_work + 0xd0u, image.Objects[71u].GpuVa);
+  assert(AdmissionDynamicOverlayCaptureGraph(
+             &image, &plan, &state, active_capture, 76u, 256u,
+             &graph) == AdmissionDynamicOverlaySuccess);
+  assert(graph.Valid == 1u && graph.Fence == 256u &&
+         graph.ActiveEncoderAddress == image.Objects[71u].GpuVa &&
+         graph.VertexPipelineAddress == 0x1100020000ULL &&
+         graph.FragmentPipelineAddress == 0x1100021000ULL &&
+         graph.VertexShaderAddress == 0x1100064000ULL &&
+         graph.FragmentShaderAddress == 0x110006c000ULL &&
+         graph.EncoderFnv1a != 0ULL &&
+         graph.VertexPipelineFnv1a != 0ULL &&
+         graph.FragmentPipelineFnv1a != 0ULL &&
+         graph.VertexShaderFnv1a != 0ULL &&
+         graph.FragmentShaderFnv1a != 0ULL);
   assert(AdmissionDynamicOverlayApply(&image, &plan, &job, storage,
                                       sizeof(storage), 257u, &state) ==
          AdmissionDynamicOverlayState);

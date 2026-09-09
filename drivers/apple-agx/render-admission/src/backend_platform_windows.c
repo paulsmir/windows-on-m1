@@ -109,6 +109,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_RENDER_CONTEXT *CompletionContext;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   ADMISSION_TERMINAL_RECEIPT TerminalReceipt;
+  ADMISSION_DYNAMIC_GRAPH_RECEIPT DynamicGraphReceipt;
   volatile LONG TerminalSequence;
   volatile LONG CompletedOutputGeneration;
   ADMISSION_COMPLETED_OUTPUT CompletedOutput;
@@ -165,6 +166,8 @@ static VOID AdmissionTerminalBegin(
   ta = &Runtime->QueueObjects[17u];
   d3 = &Runtime->QueueObjects[15u];
   AdmissionTerminalReceiptInitialize(&Runtime->TerminalReceipt);
+  RtlZeroMemory(&Runtime->DynamicGraphReceipt,
+                sizeof(Runtime->DynamicGraphReceipt));
   if (ta->Data == NULL || ta->Size < 548u ||
       d3->Data == NULL || d3->Size < 612u)
     return;
@@ -2346,6 +2349,10 @@ static VOID AdmissionOutputProcess(
       AdmissionBackendOutputVerificationTriangle)
     AdmissionRecordOutputTerminalSnapshot(
         runtime->Adapter, &runtime->TerminalReceipt);
+  if (runtime->DynamicGraphReceipt.Valid == 1u &&
+      runtime->DynamicGraphReceipt.Fence == fence)
+    AdmissionRecordDynamicGraph(
+        runtime->Adapter, &runtime->DynamicGraphReceipt);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (runtime->VisibleAgxValid && runtime->VisibleAgxFence == fence &&
       AdmissionCompletedOutputBeginPresent(
@@ -2638,6 +2645,12 @@ static VOID AdmissionPlatformWorker(
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalBegin(runtime, &description);
+  if (runtime->DynamicOverlayState.Applied == 1u)
+    (void)AdmissionDynamicOverlayCaptureGraph(
+        &adapter->BackendImage, &runtime->DynamicOverlayPlan,
+        &runtime->DynamicOverlayState, runtime->QueueObjects,
+        APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        description.Fence, &runtime->DynamicGraphReceipt);
 #endif
   RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
   runtime->ProgressValid =

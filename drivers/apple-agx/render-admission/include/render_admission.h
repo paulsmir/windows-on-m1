@@ -749,6 +749,10 @@ _IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordOutputTerminalSnapshot(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_TERMINAL_RECEIPT *Receipt);
+_IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordDynamicGraph(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt);
 VOID AdmissionTerminalReceiptDpcWindows(
     _In_opt_ ADMISSION_CONTEXT *Context, ULONG Fence);
 VOID AdmissionBackendProgressWindows(_In_opt_ ADMISSION_CONTEXT *Context,
@@ -877,6 +881,11 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Receipt);                                                           \
   } while (0)
 #define AdmissionRecordOutputTerminalSnapshot(Context, Receipt)                \
+  do {                                                                         \
+    (void)(Context);                                                           \
+    (void)(Receipt);                                                           \
+  } while (0)
+#define AdmissionRecordDynamicGraph(Context, Receipt)                          \
   do {                                                                         \
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \

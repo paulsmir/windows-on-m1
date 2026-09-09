@@ -77,6 +77,19 @@ static int overlay_is_zero(const void *Data, APPLE_AGX_U32 Bytes) {
   return 1;
 }
 
+static APPLE_AGX_U64 overlay_hash(const void *Data, APPLE_AGX_U32 Bytes) {
+  const unsigned char *data = (const unsigned char *)Data;
+  APPLE_AGX_U64 hash = 14695981039346656037ULL;
+  APPLE_AGX_U32 index;
+  if (Data == OVERLAY_NULL || Bytes == 0u)
+    return 0ULL;
+  for (index = 0u; index < Bytes; ++index) {
+    hash ^= data[index];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
 static APPLE_AGX_U64 overlay_read_u64(const unsigned char *Data) {
   APPLE_AGX_U64 value = 0ULL;
   APPLE_AGX_U32 index;
@@ -479,6 +492,107 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
     return AdmissionDynamicOverlayContent;
   overlay_write_u64(taWork->Data + OVERLAY_TA_ENCODER_OFFSET,
                     encoder->GpuVirtualAddress);
+  return AdmissionDynamicOverlaySuccess;
+}
+
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureGraph(
+    const ADMISSION_BACKEND_IMAGE *Image,
+    const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
+    const ADMISSION_DYNAMIC_OVERLAY_STATE *State,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount, APPLE_AGX_U32 Fence,
+    ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt) {
+  const ADMISSION_DYNAMIC_OVERLAY_ENTRY *encoder = OVERLAY_NULL;
+  const ADMISSION_DYNAMIC_OVERLAY_ENTRY *pipeline = OVERLAY_NULL;
+  const ADMISSION_DYNAMIC_OVERLAY_ENTRY *vertexShader = OVERLAY_NULL;
+  const ADMISSION_DYNAMIC_OVERLAY_ENTRY *fragmentShader = OVERLAY_NULL;
+  const APPLE_AGX_EXP208_RELOCATION_OBJECT *work;
+  const unsigned char *pipelineData;
+  APPLE_AGX_U32 index;
+  if (Receipt != OVERLAY_NULL)
+    overlay_zero(Receipt, (APPLE_AGX_U32)sizeof(*Receipt));
+  if (Image == OVERLAY_NULL || Plan == OVERLAY_NULL ||
+      State == OVERLAY_NULL || ActiveObjects == OVERLAY_NULL ||
+      Receipt == OVERLAY_NULL || Fence == 0u ||
+      Plan->Magic != ADMISSION_DYNAMIC_OVERLAY_MAGIC ||
+      Plan->Version != ADMISSION_DYNAMIC_OVERLAY_VERSION ||
+      State->Magic != ADMISSION_DYNAMIC_OVERLAY_MAGIC ||
+      State->Version != ADMISSION_DYNAMIC_OVERLAY_VERSION ||
+      State->Applied != 1u || State->Fence != Fence ||
+      ActiveObjectCount <= OVERLAY_TA_WORK_OBJECT)
+    return AdmissionDynamicOverlayArgument;
+  for (index = 0u; index < Plan->EntryCount; ++index) {
+    const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry = &Plan->Entries[index];
+    if (entry->Role == AppleAgxWin32RoleEncoder) {
+      if (encoder != OVERLAY_NULL)
+        return AdmissionDynamicOverlayLayout;
+      encoder = entry;
+    } else if (entry->Role == AppleAgxWin32RoleUscPipeline) {
+      if (pipeline != OVERLAY_NULL)
+        return AdmissionDynamicOverlayLayout;
+      pipeline = entry;
+    } else if (entry->Role == AppleAgxWin32RoleShader &&
+               entry->GpuVirtualAddress == OVERLAY_VERTEX_SHADER_GPU_VA) {
+      if (vertexShader != OVERLAY_NULL)
+        return AdmissionDynamicOverlayLayout;
+      vertexShader = entry;
+    } else if (entry->Role == AppleAgxWin32RoleShader &&
+               entry->GpuVirtualAddress == OVERLAY_FRAGMENT_SHADER_GPU_VA) {
+      if (fragmentShader != OVERLAY_NULL)
+        return AdmissionDynamicOverlayLayout;
+      fragmentShader = entry;
+    }
+  }
+  if (encoder == OVERLAY_NULL || pipeline == OVERLAY_NULL ||
+      vertexShader == OVERLAY_NULL || fragmentShader == OVERLAY_NULL ||
+      pipeline->Bytes <= OVERLAY_PIPELINE_COMPACT_SPLIT ||
+      encoder->ObjectIndex >= APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
+      pipeline->ObjectIndex >= APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
+      vertexShader->ObjectIndex >=
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
+      fragmentShader->ObjectIndex >=
+          APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
+    return AdmissionDynamicOverlayLayout;
+  work = &ActiveObjects[OVERLAY_TA_WORK_OBJECT];
+  if (work->Data == OVERLAY_NULL ||
+      work->Size < OVERLAY_TA_ENCODER_OFFSET + 8u ||
+      overlay_read_u64(work->Data + OVERLAY_TA_ENCODER_OFFSET) !=
+          encoder->GpuVirtualAddress)
+    return AdmissionDynamicOverlayContent;
+  pipelineData = Image->Objects[pipeline->ObjectIndex].Data +
+                 pipeline->ObjectOffset;
+  Receipt->Version = 1u;
+  Receipt->Bytes = (APPLE_AGX_U32)sizeof(*Receipt);
+  Receipt->Fence = Fence;
+  Receipt->ActiveEncoderAddress = encoder->GpuVirtualAddress;
+  Receipt->VertexPipelineAddress = pipeline->GpuVirtualAddress;
+  Receipt->FragmentPipelineAddress =
+      pipeline->GpuVirtualAddress + OVERLAY_PIPELINE_NATIVE_SPLIT;
+  Receipt->VertexShaderAddress = vertexShader->GpuVirtualAddress;
+  Receipt->FragmentShaderAddress = fragmentShader->GpuVirtualAddress;
+  Receipt->EncoderFnv1a = overlay_hash(
+      Image->Objects[encoder->ObjectIndex].Data + encoder->ObjectOffset,
+      encoder->Bytes);
+  Receipt->VertexPipelineFnv1a =
+      overlay_hash(pipelineData, OVERLAY_PIPELINE_COMPACT_SPLIT);
+  Receipt->FragmentPipelineFnv1a = overlay_hash(
+      pipelineData + OVERLAY_PIPELINE_NATIVE_SPLIT,
+      pipeline->Bytes - OVERLAY_PIPELINE_COMPACT_SPLIT);
+  Receipt->VertexShaderFnv1a = overlay_hash(
+      Image->Objects[vertexShader->ObjectIndex].Data +
+          vertexShader->ObjectOffset,
+      vertexShader->Bytes);
+  Receipt->FragmentShaderFnv1a = overlay_hash(
+      Image->Objects[fragmentShader->ObjectIndex].Data +
+          fragmentShader->ObjectOffset,
+      fragmentShader->Bytes);
+  if (Receipt->EncoderFnv1a == 0ULL ||
+      Receipt->VertexPipelineFnv1a == 0ULL ||
+      Receipt->FragmentPipelineFnv1a == 0ULL ||
+      Receipt->VertexShaderFnv1a == 0ULL ||
+      Receipt->FragmentShaderFnv1a == 0ULL)
+    return AdmissionDynamicOverlayContent;
+  Receipt->Valid = 1u;
   return AdmissionDynamicOverlaySuccess;
 }
 
