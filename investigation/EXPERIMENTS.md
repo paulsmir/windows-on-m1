@@ -42637,3 +42637,34 @@ and stale experiment state removed after evidence; controlled shutdown,
 ordinary377/392 restored. Code28/null INF, no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1; no41/1001/129 in the recovery boot.
 Ordinary launcher2507; boot evidence in experiment-local recovery.log.
+
+# EXP681 — native-red through the corrected immutable oracle
+
+PREREGISTERED 2026-09-09T12:55Z. WHY THIS HYPOTHESIS: EXP680 proves a real
+gray fragment write and exact immutable comparison; native-red results before
+that used the flawed oracle; immutable EXP659 supplies the exact native
+shader and raw attachment. Single functional variable: restore native-red
+workload with its corresponding independent expected metadata.
+WINDOWS CONTRACT: exact EXP680 KMD/UMD and transaction-owned expected survive
+release. AGX/ASAHI CONTRACT: original112-byte EXP659 native FS and native tiled64
+attachment, red BGRA wordffff0000. TRANSLATION: unchanged typed graph uses
+original FS; producer expectedffff0000; raw image independently copied from
+native attachment first1024 bytes. WHAT IS STILL UNKNOWN: whether the exact
+native-red output passes corrected production verification and raw comparison.
+No changes to snapshot ABI/lifetime/decoder/KMD/PBE/encoder/queue/Present.
+
+Source commit0fe2f489f94075cea7a0e733fc4a274efebf0c85 changes only producer
+expected plus regression test. Exact source SHA256
+a876310ad66c18a9481a6c05611fac484fbb2d3cc88610e2f4772d6f41de0610.
+Immutable native attachment SHA256f8b13b60fe42f8a8a6616688871bac7b22e9dce0bdfb579bd115bff8c8f79d8f;
+expected1024 SHA2566443f78f9a269826fbb0d0f8e2148e0629b9f0289fc61bbf421ddfd552d8a7a3;
+FS SHA256fa139e95a66a67b921221a3927ccfca209bc9037fdd31156d74894902ab2dd92.
+Seven relevant tests GREEN: production verifier accepts actual gray/native
+captures and rejects zero/poison and same histogram with wrong spatial mask.
+Pinned WDK26100/MSVC14.44 producer build uses immutable EXP680 source base;
+KMD package30.0.680.0 and all its build/sign/analysis/Universal gates reused.
+Commands: EXP681 build.ps1 on FRYZZING; exact workflow Stage/Preflight/Run on
+ordinary then full-owner EXP584/406. Freeze final producer/package manifest
+before hardware. Require1024 bytes equal expected,72 red/184 background,
+poison0/guard0, physical TA3D/fence and healthy system. Missing intended
+boundary is INCONCLUSIVE. Evidence precedes exact cleanup and ordinary377/392.
