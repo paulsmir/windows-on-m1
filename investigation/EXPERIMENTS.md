@@ -42381,6 +42381,17 @@ artifact input changed. Corrected build-script SHA256 is
 `b9f106cb09320b2347fc00754a8ca3400b59e38a07707d4dd6dcc4ec50ac8320`;
 the source-overlay hash remains unchanged.
 
+**EXP679 BUILD ATTEMPT 1 — ENVIRONMENT-ONLY FAILURE
+2026-09-09T12:30:00Z.** Pinned WDK26100/MSVC14.44 accepted the UMD, then the
+KMD `/WX` gate stopped before link/artifact because warning C4701 considered
+the local `expectation` potentially uninitialized at the post-short-circuit
+read in `AdmissionTerminalObserve`. No Windows package or hardware candidate
+was produced; this is not a graphics verdict. Commit
+`de398650f383bd791f2261aba0866a7aacceaffa` initializes that local structure
+to zero. Relevant8 tests remain GREEN and no functional branch, expected value,
+layout or rendering state changes. Repeat the same EXP679 build with a new
+overlay hash; do not create EXP680.
+
 **EXP678 ACTUAL — INCONCLUSIVE BY TORN OUTPUT OBSERVATION
 2026-09-09T11:51:10Z.** Exact reused30.0.673.0 package naturally bound as
 oem5; the single request completed physical TA/3D and exact fence271 with
