@@ -40544,3 +40544,61 @@ and `960eef5dce1002dbc68e6d17701ab69396d0b979044a05f65010985fa7999251`.
 service/process state were removed, the full-owner guest stopped and immutable
 ordinary377/392 restored. Health is Problem28/null INF, no package/service/
 module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+
+# EXP657 — mandatory AGX graphics batch initialization
+
+**PREREGISTERED 2026-09-09T01:12:34Z. WHY THIS HYPOTHESIS:** (1) EXP656
+repeats the physical dynamic TA/3D completion and exact fence273 but rejects
+the varying-count-only hypothesis: all4,096,000 pixels remain byte-exact
+background; (2) pinned Mesa `agx_batch_init_state` unconditionally prefixes a
+new graphics batch with a VDM USC-cache invalidation barrier and a base PPP
+update; (3) the EXP656 stream started directly at per-draw VDM/PPP state and
+therefore omitted that indivisible batch contract. The missing batch state is
+causally nearer to a zero-fragment render than PBE/store, completion or DCP,
+which are already hardware-proven.
+
+**WINDOWS CONTRACT:** The unchanged validated Draw command is copied once,
+materialized into exact bounded resident allocation ranges, submitted through
+Render/Patch/Submit and completed at its assigned Windows fence. **AGX/ASAHI
+CONTRACT:** Before the first per-draw state, a new graphics batch requires the
+USC cache barrier plus base PPP W_CLAMP=1e-10, FRAGMENT_OCCLUSION_QUERY_2,
+OUTPUT_UNKNOWN and VARYING_2 state. **TRANSLATION:** Commit
+`11f89dd0c116d8b928c34b198bf10463fc5c6579` adds exactly those generated
+records and one typed PPP self-relocation before the otherwise unchanged draw.
+**WHAT IS STILL UNKNOWN:** Whether that missing batch initialization is the
+first primitive preventing fragment rasterization on this physical G13G path.
+
+Single variable is the atomic batch-init sequence. Encoder size is300 bytes,
+batch PPP is at128, draw PPP at192 and the eight relocations include the exact
+two PPP self-pointers. Shaders, USC pipelines, varying counts, render pass,
+PBE/store, queues, destination, output validator, DCP, platform and capability
+bits are controls. Generated pack/unpack plus the production ABI ->
+materialize -> DMA -> overlay integration suite are GREEN.
+
+Exact source overlay SHA256 is
+`ce27d37c910620e9922464a7626b67bd5ef558788e2f6368479793684ccd245a`
+over immutable EXP656. Pinned WDK26100/MSVC14.44 Release PackageBuild657
+VisibleAgxQualification passed driver/test/producer builds, code analysis,
+Universal validation, Inf2Cat and TestSign with inherited warnings only.
+SYS/UMD/INF/CAT/producer/ZIP/manifest SHA256 are
+`ad8ff0b9040b9c5a930f48251b34c2e163f981161e0dcde423add5d09cf69f57`,
+`c7fd34aa0b2d46cde0a6e3e15f8b2c88305234410bc02ce1937839cc5169c7b9`,
+`d978845302808168218ec2bcb611c5f4d4618081654f923c2520c23838d26f74`,
+`d2d2d5d2bd132d018bec41efeaf3e92a2ec3731c1dad522e975a9155ced11f60`,
+`4de5654427f995f4903fba69110cae329a22829677c8fa276f51537fdf63f3e8`,
+`e27272bb36f387bdf68f185b08d0a4e939e7953df1a28e3c3e938fd1d0a53308`
+and `32e2857ba654f8ec535ccd5258620bf995385efa9829f22fe120fde0341b5d7c`.
+Generated encoder/fixture-manifest SHA256 are
+`7e52bdfaeb2f4298d799f765b916629cd40d3fae5eb85d27622685342e6b8d6f`
+and `960eef5dce1002dbc68e6d17701ab69396d0b979044a05f65010985fa7999251`.
+Root/m1n1/Mu commits are
+`2a3d46abad2e704dbda7a750c47e7b127e03d12b`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`.
+
+Air is clean ordinary377/392 at 2026-09-09T01:08:17Z. Run one exact producer.
+PASS requires physical completion plus nonzero foreground, exact two-colour
+full-frame validation, query, D589, HOLD and safe retirement. A complete
+background-only snapshot rejects this batch-init hypothesis. Any earlier guard
+or launch failure is inconclusive. Preserve exact receipts before hash-gated
+package cleanup and ordinary recovery.
