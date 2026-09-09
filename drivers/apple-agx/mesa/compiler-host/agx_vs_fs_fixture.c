@@ -2,6 +2,7 @@
  * Project-owned fixture that executes pinned Asahi VS/FS driver lowering. */
 #include "asahi/compiler/agx_compile.h"
 #include "asahi/lib/agx_linker.h"
+#include "asahi/lib/agx_helpers.h"
 #include "asahi/lib/agx_ppp.h"
 #include "asahi/lib/agx_uvs.h"
 #include "asahi/lib/agx_usc.h"
@@ -25,10 +26,13 @@
 struct encoder_offsets {
    unsigned vs_pipeline_offset;
    unsigned vs_uniform_offset;
+   unsigned vs_sampler_offset;
    unsigned vs_shader_offset;
    unsigned fs_pipeline_offset;
    unsigned fs_uniform_offset;
+   unsigned fs_sampler_offset;
    unsigned fs_shader_offset;
+   unsigned vdm_word0_offset;
    unsigned vdm_pipeline_offset;
    unsigned batch_init_ppp_state_offset;
    unsigned batch_init_ppp_offset;
@@ -42,6 +46,7 @@ struct encoder_offsets {
    unsigned varying_flat_32;
    unsigned varying_linear_32;
    unsigned varying_total_16;
+   unsigned fragment_word0_offset;
    unsigned fragment_pipeline_offset;
    unsigned draw_offset;
    unsigned terminate_offset;
@@ -279,6 +284,7 @@ build_encoder_objects(const struct agx_shader_part *vs,
                       const struct agx_unlinked_uvs_layout *uvs,
                       unsigned char pipeline[PIPELINE_CAPACITY],
                       unsigned char encoder[ENCODER_CAPACITY],
+                      unsigned char sampler[AGX_SAMPLER_LENGTH],
                       unsigned char scissor[AGX_SCISSOR_LENGTH],
                       unsigned char depth_bias[AGX_DEPTH_BIAS_LENGTH],
                       struct encoder_offsets *offsets)
@@ -292,17 +298,25 @@ build_encoder_objects(const struct agx_shader_part *vs,
    unsigned char *head;
    memset(pipeline, 0, PIPELINE_CAPACITY);
    memset(encoder, 0, ENCODER_CAPACITY);
+   memset(sampler, 0, AGX_SAMPLER_LENGTH);
    memset(offsets, 0, sizeof(*offsets));
    agx_assign_uvs(&varyings, &linked_uvs, 0u, 0u);
+   agx_pack_txf_sampler((struct agx_sampler_packed *)sampler);
 
    offsets->vs_pipeline_offset = 0u;
    usc = agx_usc_builder(pipeline, PIPELINE_CAPACITY);
-   agx_usc_shared_none(&usc);
    if (vs->info.rodata.size_16 != 0u) {
       offsets->vs_uniform_offset = (unsigned)(usc.head - pipeline);
       agx_usc_uniform(&usc, vs->info.rodata.base_uniform,
                       vs->info.rodata.size_16, 0ULL);
    }
+   offsets->vs_sampler_offset = (unsigned)(usc.head - pipeline);
+   agx_usc_pack(&usc, SAMPLER, cfg) {
+      cfg.start = 0u;
+      cfg.count = 1u;
+      cfg.buffer = 0ULL;
+   }
+   agx_usc_shared_non_fragment(&usc, &vs->info, 0u);
    offsets->vs_shader_offset = (unsigned)(usc.head - pipeline);
    agx_usc_pack(&usc, SHADER, cfg) {
       cfg.code = 0u;
@@ -322,6 +336,14 @@ build_encoder_objects(const struct agx_shader_part *vs,
                                                    (pipeline + offsets->fs_pipeline_offset));
       agx_usc_uniform(&usc, fs->info.rodata.base_uniform,
                       fs->info.rodata.size_16, 0ULL);
+   }
+   offsets->fs_sampler_offset =
+      offsets->fs_pipeline_offset +
+      (unsigned)(usc.head - (pipeline + offsets->fs_pipeline_offset));
+   agx_usc_pack(&usc, SAMPLER, cfg) {
+      cfg.start = 0u;
+      cfg.count = 1u;
+      cfg.buffer = 0ULL;
    }
    agx_usc_push_packed(&usc, SHARED, tib.usc);
    offsets->fs_shader_offset =
@@ -371,11 +393,12 @@ build_encoder_objects(const struct agx_shader_part *vs,
       AGX_VDM_STATE_pack((uint32_t *)head, &state);
       head += AGX_VDM_STATE_LENGTH;
    }
+   offsets->vdm_word0_offset = (unsigned)(head - encoder);
    {
       struct AGX_VDM_STATE_VERTEX_SHADER_WORD_0 word = {
          .uniform_register_count = vs->info.push_count,
          .texture_state_register_count = 0u,
-         .sampler_state_register_count = 0u,
+         .sampler_state_register_count = AGX_SAMPLER_STATES_4_COMPACT,
          .preshader_register_count = vs->info.nr_preamble_gprs,
       };
       AGX_VDM_STATE_VERTEX_SHADER_WORD_0_pack((uint32_t *)head, &word);
@@ -544,11 +567,12 @@ build_encoder_objects(const struct agx_shader_part *vs,
    }
    agx_ppp_push(&ppp, CULL_2, cfg)
       cfg.clamp_w = true;
+   offsets->fragment_word0_offset = (unsigned)(ppp.head - encoder);
    agx_ppp_push(&ppp, FRAGMENT_SHADER_WORD_0, cfg) {
       cfg.uniform_register_count = fs->info.push_count;
       cfg.preshader_register_count = 0u;
       cfg.texture_state_register_count = 0u;
-      cfg.sampler_state_register_count = AGX_SAMPLER_STATES_0;
+      cfg.sampler_state_register_count = AGX_SAMPLER_STATES_4_COMPACT;
       cfg.cf_binding_count = 0u;
    }
    offsets->fragment_pipeline_offset = (unsigned)(ppp.head - encoder);
@@ -599,11 +623,15 @@ build_encoder_objects(const struct agx_shader_part *vs,
    }
 
    struct AGX_USC_SHADER usc_shader;
+   struct AGX_USC_SAMPLER usc_sampler;
+   struct AGX_SAMPLER sampler_state;
    struct AGX_VDM_BARRIER batch_barrier;
    struct AGX_PPP_STATE batch_ppp_state;
    struct AGX_VDM_STATE_VERTEX_SHADER_WORD_1 vdm_word;
+   struct AGX_VDM_STATE_VERTEX_SHADER_WORD_0 vdm_word0;
    struct AGX_PPP_STATE ppp_state;
    struct AGX_FRAGMENT_SHADER_WORD_1 fragment_word;
+   struct AGX_FRAGMENT_SHADER_WORD_0 fragment_word0;
    struct AGX_VARYING_COUNTS varying_counts_32;
    struct AGX_VARYING_COUNTS varying_counts_16;
    struct AGX_INDEX_LIST index_list;
@@ -618,12 +646,32 @@ build_encoder_objects(const struct agx_shader_part *vs,
        batch_ppp_state.pointer_hi != 0u ||
        batch_ppp_state.pointer_lo != 0u ||
        batch_ppp_state.size_words != offsets->batch_init_ppp_bytes / 4u ||
+       !AGX_USC_SAMPLER_unpack(NULL, pipeline + offsets->vs_sampler_offset,
+                               &usc_sampler) ||
+       usc_sampler.start != 0u || usc_sampler.count != 1u ||
+       usc_sampler.buffer != 0u ||
        !AGX_USC_SHADER_unpack(NULL, pipeline + offsets->vs_shader_offset,
                               &usc_shader) ||
        usc_shader.code != 0u || usc_shader.unk_2 != 3u ||
+       !AGX_USC_SAMPLER_unpack(NULL, pipeline + offsets->fs_sampler_offset,
+                               &usc_sampler) ||
+       usc_sampler.start != 0u || usc_sampler.count != 1u ||
+       usc_sampler.buffer != 0u ||
        !AGX_USC_SHADER_unpack(NULL, pipeline + offsets->fs_shader_offset,
                               &usc_shader) ||
        usc_shader.code != 0u || usc_shader.unk_2 != 2u ||
+       !AGX_SAMPLER_unpack(NULL, sampler, &sampler_state) ||
+       sampler_state.minimum_lod != 0.0f ||
+       sampler_state.mip_filter != AGX_MIP_FILTER_NEAREST ||
+       sampler_state.wrap_s != AGX_WRAP_CLAMP_TO_BORDER ||
+       sampler_state.wrap_t != AGX_WRAP_CLAMP_TO_BORDER ||
+       sampler_state.wrap_r != AGX_WRAP_CLAMP_TO_BORDER ||
+       sampler_state.border_colour !=
+          AGX_BORDER_COLOUR_TRANSPARENT_BLACK ||
+       !AGX_VDM_STATE_VERTEX_SHADER_WORD_0_unpack(
+          NULL, encoder + offsets->vdm_word0_offset, &vdm_word0) ||
+       vdm_word0.sampler_state_register_count !=
+          AGX_SAMPLER_STATES_4_COMPACT ||
        !AGX_VDM_STATE_VERTEX_SHADER_WORD_1_unpack(
           NULL, encoder + offsets->vdm_pipeline_offset, &vdm_word) ||
        vdm_word.pipeline != 0u ||
@@ -642,6 +690,10 @@ build_encoder_objects(const struct agx_shader_part *vs,
           &varying_counts_16) ||
        varying_counts_16.smooth != 0u || varying_counts_16.flat != 0u ||
        varying_counts_16.linear != 0u ||
+       !AGX_FRAGMENT_SHADER_WORD_0_unpack(
+          NULL, encoder + offsets->fragment_word0_offset, &fragment_word0) ||
+       fragment_word0.sampler_state_register_count !=
+          AGX_SAMPLER_STATES_4_COMPACT ||
        !AGX_FRAGMENT_SHADER_WORD_1_unpack(
           NULL, encoder + offsets->fragment_pipeline_offset,
           &fragment_word) || fragment_word.pipeline != 0u ||
@@ -724,6 +776,7 @@ main(int argc, char **argv)
    struct linked_fragment linked_fs = {0};
    _Alignas(8) unsigned char pipeline[PIPELINE_CAPACITY];
    _Alignas(8) unsigned char encoder[ENCODER_CAPACITY];
+   _Alignas(8) unsigned char sampler[AGX_SAMPLER_LENGTH];
    _Alignas(8) unsigned char scissor[AGX_SCISSOR_LENGTH];
    _Alignas(8) unsigned char depth_bias[AGX_DEPTH_BIAS_LENGTH];
    struct encoder_offsets offsets;
@@ -741,9 +794,10 @@ main(int argc, char **argv)
        !write_disassembly(argv[1], "vertex", &vs) ||
        !write_disassembly(argv[1], "fragment", &fs) ||
        !build_encoder_objects(&vs, &fs, &linked_fs, &uvs, pipeline, encoder,
-                              scissor, depth_bias, &offsets) ||
+                              sampler, scissor, depth_bias, &offsets) ||
        !write_bytes(argv[1], "pipeline", pipeline, offsets.pipeline_bytes) ||
        !write_bytes(argv[1], "encoder", encoder, offsets.encoder_bytes) ||
+       !write_bytes(argv[1], "sampler", sampler, sizeof(sampler)) ||
        !write_bytes(argv[1], "scissor", scissor, sizeof(scissor)) ||
        !write_bytes(argv[1], "depth_bias", depth_bias, sizeof(depth_bias)))
       return 1;
@@ -756,7 +810,7 @@ main(int argc, char **argv)
    };
    if (!write_disassembly(argv[1], "fragment-linked", &linked_fs_part))
       return 1;
-   printf("{\"schema\":2,\"variant\":%u,\"uvs_size\":%u,"
+   printf("{\"schema\":3,\"variant\":%u,\"uvs_size\":%u,"
           "\"uvs_user_size\":%u,\"epilog_loc_written\":%u,"
           "\"pipeline_bytes\":%u,\"encoder_bytes\":%u,\"ppp_bytes\":%u,"
           "\"draw\":{\"topology\":\"triangle-list\","
@@ -770,6 +824,11 @@ main(int argc, char **argv)
           "\"batch_init\":{\"vdm_cache_barrier\":true,"
           "\"w_clamp\":true,\"occlusion_query_2\":true,"
           "\"output_unknown\":true,\"varying_word_2\":true},"
+          "\"sampler_zero\":{\"descriptor_bytes\":%u,"
+          "\"vertex_pipeline_binding\":true,"
+          "\"fragment_pipeline_binding\":true,"
+          "\"vertex_word0\":\"4-compact\","
+          "\"fragment_word0\":\"4-compact\"},"
           "\"render_pass\":{"
           "\"owner\":\"EXP208-hardware-proven-3D-skeleton\","
           "\"dynamic_scope\":\"VDM-PPP-USC\","
@@ -780,10 +839,14 @@ main(int argc, char **argv)
           "\"target\":\"encoder.batch-init-ppp\",\"target_offset\":%u},"
           "{\"kind\":\"UscBufferAddress40\",\"destination\":%u,"
           "\"target\":\"vertex.rodata\"},"
+          "{\"kind\":\"UscBufferAddress40\",\"destination\":%u,"
+          "\"target\":\"sampler-zero\"},"
           "{\"kind\":\"UscShaderOffset32\",\"destination\":%u,"
           "\"target\":\"vertex.main\"},"
           "{\"kind\":\"UscBufferAddress40\",\"destination\":%u,"
           "\"target\":\"fragment.rodata\"},"
+          "{\"kind\":\"UscBufferAddress40\",\"destination\":%u,"
+          "\"target\":\"sampler-zero\"},"
           "{\"kind\":\"UscShaderOffset32\",\"destination\":%u,"
           "\"target\":\"fragment-linked\"},"
           "{\"kind\":\"VdmPipelineOffset32\",\"destination\":%u,"
@@ -797,10 +860,12 @@ main(int argc, char **argv)
           FRAME_WIDTH, FRAME_HEIGHT, offsets.varying_smooth_32,
           offsets.varying_flat_32, offsets.varying_linear_32,
           offsets.varying_total_16,
+          (unsigned)sizeof(sampler),
           offsets.batch_init_ppp_state_offset,
           offsets.batch_init_ppp_offset,
-          offsets.vs_uniform_offset, offsets.vs_shader_offset,
-          offsets.fs_uniform_offset,
+          offsets.vs_uniform_offset, offsets.vs_sampler_offset,
+          offsets.vs_shader_offset, offsets.fs_uniform_offset,
+          offsets.fs_sampler_offset,
           offsets.fs_shader_offset, offsets.vdm_pipeline_offset,
           offsets.vs_pipeline_offset, offsets.ppp_state_address_offset,
           offsets.ppp_offset, offsets.fragment_pipeline_offset,

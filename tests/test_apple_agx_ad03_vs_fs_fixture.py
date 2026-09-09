@@ -38,7 +38,7 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 records.append((json.loads(run.stdout), output))
             first, repeat, changed = records
             self.assertEqual(first[0], repeat[0])
-            self.assertEqual(first[0]["schema"], 2)
+            self.assertEqual(first[0]["schema"], 3)
             self.assertEqual(first[0]["uvs_size"], 8)
             self.assertEqual(first[0]["uvs_user_size"], 4)
             self.assertEqual(first[0]["epilog_loc_written"], 1)
@@ -59,6 +59,13 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 "occlusion_query_2": True,
                 "output_unknown": True,
                 "varying_word_2": True,
+            })
+            self.assertEqual(first[0]["sampler_zero"], {
+                "descriptor_bytes": 8,
+                "vertex_pipeline_binding": True,
+                "fragment_pipeline_binding": True,
+                "vertex_word0": "4-compact",
+                "fragment_word0": "4-compact",
             })
             self.assertEqual(first[0]["draw"], {
                 "topology": "triangle-list",
@@ -82,21 +89,29 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 [entry["kind"] for entry in first[0]["relocations"]],
                 [
                     "PppStateAddress40",
+                    "UscBufferAddress40", "UscBufferAddress40",
+                    "UscShaderOffset32", "UscBufferAddress40",
                     "UscBufferAddress40", "UscShaderOffset32",
-                    "UscBufferAddress40",
-                    "UscShaderOffset32", "VdmPipelineOffset32",
+                    "VdmPipelineOffset32",
                     "PppStateAddress40", "VdmPipelineOffset32",
                 ],
             )
             init_ppp_relocation = first[0]["relocations"][0]
             self.assertEqual(init_ppp_relocation["target"], "encoder.batch-init-ppp")
-            ppp_relocation = first[0]["relocations"][6]
+            ppp_relocation = first[0]["relocations"][8]
             self.assertEqual(ppp_relocation["target"], "encoder.ppp")
             self.assertEqual(
-                first[0]["relocations"][4]["target"], "fragment-linked"
+                first[0]["relocations"][6]["target"], "fragment-linked"
             )
-            self.assertGreater(first[0]["relocations"][7]["destination"], 220)
-            for name in ("pipeline", "encoder", "scissor", "depth_bias"):
+            self.assertEqual(
+                [first[0]["relocations"][2]["target"],
+                 first[0]["relocations"][5]["target"]],
+                ["sampler-zero", "sampler-zero"],
+            )
+            self.assertGreater(first[0]["relocations"][9]["destination"], 220)
+            for name in (
+                "pipeline", "encoder", "sampler", "scissor", "depth_bias"
+            ):
                 self.assertEqual(
                     (first[1] / f"{name}.bin").read_bytes(),
                     (changed[1] / f"{name}.bin").read_bytes(),
@@ -155,7 +170,7 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 str(output / "fragment-linked.bin"),
                 str(output / "fragment.bin"), str(output / "pipeline.bin"),
                 str(output / "encoder.bin"), str(output / "scissor.bin"),
-                str(output / "depth_bias.bin"),
+                str(output / "depth_bias.bin"), str(output / "sampler.bin"),
             ], cwd=ROOT, check=True)
 
 

@@ -14,7 +14,7 @@
 
 #define ALLOCATION_COUNT 10u
 #define REFERENCE_COUNT 11u
-#define RELOCATION_COUNT 8u
+#define RELOCATION_COUNT 10u
 #define INTERNAL_BYTES 0x4000u
 #define FRAMEBUFFER_BYTES (2560u * 1600u * 4u)
 #define BACKGROUND_COLOR 0xff101820u
@@ -159,10 +159,11 @@ static NTSTATUS QueryPresentation(D3DKMT_HANDLE Adapter,
 }
 
 int __cdecl wmain(int argc, wchar_t **argv) {
-  static const wchar_t *assetNames[7] = {
+  static const wchar_t *assetNames[8] = {
       L"vertex.bin", L"fragment-linked.bin", L"fragment.bin",
-      L"pipeline.bin", L"encoder.bin", L"scissor.bin", L"depth_bias.bin"};
-  ASSET assets[7] = {0};
+      L"pipeline.bin", L"encoder.bin", L"scissor.bin", L"depth_bias.bin",
+      L"sampler.bin"};
+  ASSET assets[8] = {0};
   D3DKMT_ENUMADAPTERS3 enumeration = {0};
   D3DKMT_ADAPTERINFO adapters[16] = {0};
   D3DKMT_ADAPTERTYPE adapterType = {0};
@@ -305,7 +306,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   if (!NT_SUCCESS(status)) goto Cleanup;
   status = Upload(device.hDevice, allocations[4], &assets[3]);
   if (!NT_SUCCESS(status)) goto Cleanup;
-  status = Upload(device.hDevice, allocations[5], NULL);
+  status = Upload(device.hDevice, allocations[5], &assets[7]);
   if (!NT_SUCCESS(status)) goto Cleanup;
   status = Upload(device.hDevice, allocations[6], &assets[5]);
   if (!NT_SUCCESS(status)) goto Cleanup;
@@ -330,7 +331,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   SetReference(&references[4], 4u, AppleAgxWin32RoleUscPipeline,
                AppleAgxWin32AccessRead, 0u, assets[3].Size);
   SetReference(&references[5], 5u, AppleAgxWin32RoleDescriptor,
-               AppleAgxWin32AccessRead, 0u, 4u);
+               AppleAgxWin32AccessRead, 0u, assets[7].Size);
   SetReference(&references[6], 6u, AppleAgxWin32RoleScissor,
                AppleAgxWin32AccessRead, 0u, assets[5].Size);
   SetReference(&references[7], 7u, AppleAgxWin32RoleDepthBias,
@@ -346,13 +347,15 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   relocations[i] = (APPLE_AGX_WIN32_RELOCATION){                             \
       kind, width, 0u, dst, target, dstoff, targetoff, 0ULL}
   RELOC(0, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 4u, 128u);
-  RELOC(1, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 9u, 4u, 0u);
-  RELOC(2, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 2u, 12u, 128u);
-  RELOC(3, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 10u, 64u, 0u);
-  RELOC(4, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
-  RELOC(5, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 20u, 0u);
-  RELOC(6, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 36u, 192u);
-  RELOC(7, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 284u, 64u);
+  RELOC(1, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 9u, 0u, 0u);
+  RELOC(2, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 5u, 8u, 0u);
+  RELOC(3, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 2u, 20u, 128u);
+  RELOC(4, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 10u, 64u, 0u);
+  RELOC(5, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 5u, 72u, 0u);
+  RELOC(6, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 84u, 0u);
+  RELOC(7, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 20u, 0u);
+  RELOC(8, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 36u, 192u);
+  RELOC(9, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 284u, 64u);
 #undef RELOC
   ZeroMemory(&request, sizeof(request));
   request.Generation = contextPrivate.Generation;
