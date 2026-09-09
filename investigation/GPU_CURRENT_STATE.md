@@ -1,6 +1,25 @@
 # GPU current state
 
-## Latest execution state — 2026-09-09T12:44:37Z
+## Latest execution state — 2026-09-09T12:51Z
+
+EXP680 RAW_OUTPUT_PASS: valid immutable1096-byte snapshot contains exactly
+1024 bytes matching the independent EXP659-derived gray expected image,
+SHA256 c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393.
+Tiled64 decoded result:72 gray0x80808080 and184 background0xff112233;
+expected and observed separate and equal; verification valid1; fence271,
+physical stamps/done exact; terminal mismatch none, poison0, guard0, bytes1024.
+Snapshot SHA256 dbbfc4d0990687776fcc1f11e743e05243ba76c7f888f0bbd3a5e1330c5d094a.
+Device/service copies match. Evidence and snapshot.json:
+`.local/experiments/EXP680-retained-output-oracle/evidence/`.
+The metadata lifetime correction d146fdaf47ad580dcc7de73ae3c295d5fd9231f6
+is hardware validated. EXP678 race hypothesis remains unproven; the now-correct
+oracle resolves its contradictory observation. Native-red output still lacks
+this independent raw proof. Do not repeat gray or EXP674 poison candidates.
+Qualification present returned0xc0000483; this run does not prove presentation.
+No41/1001/device loss; three Event129 retained as storage telemetry.
+Exact oem5 removed after evidence; ordinary recovery in progress.
+
+## Previous EXP679 state (closed)
 
 EXP679 is complete and must not repeat. One Render/Submit/worker/fence271,
 Notify/DPC and unchanged graph/store/fault receipts; output verification exit

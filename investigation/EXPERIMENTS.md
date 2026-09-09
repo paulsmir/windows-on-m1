@@ -42606,3 +42606,28 @@ Air manifest 8a007311f717698a3d2e5b1565f57b43b7555be8b31d47f7a3cfe59b06e3d940.
 Commands: EXP680-workflow.ps1 Stage, EXP680 launch.sh full-owner,
 Preflight and one Run; collector exports device/service binaries.
 Recovery uses EXP680-workflow Cleanup/Stale then restore-ordinary.sh.
+
+**EXP680 ACTUAL 2026-09-09T12:50:20Z — RAW_OUTPUT_PASS.** Exact package
+30.0.680.0 naturally bound oem5/Code0/service Running with exact hashes.
+One784-byte Windows request produced DMA3860, Submit/worker, physical TA/3D,
+fence271, Notify/DPC. Stamps7a000100/3d000100 and done2/2 match expectations.
+Output verification status0. The1096-byte immutable snapshot is valid and
+contains1024 bytes byte-for-byte equal to independent expected-output.bin,
+SHA256 c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393.
+All256 tiled64 pixels compare:72 foreground80808080,184 backgroundff112233;
+expected and observed80808080, VerificationValid1, FNVdd2c90074f6ee435.
+Terminal mismatchffffffff, poison0, guard0, examined1024; all scalar evidence
+agrees with the raw image. Device/service snapshot bytes are identical.
+Snapshot SHA256 dbbfc4d0990687776fcc1f11e743e05243ba76c7f888f0bbd3a5e1330c5d094a;
+terminal b989a60173188036e8480a2e2746a7d0c24e7fe4643bf71723a8db36fca37bdb.
+Raw binaries, snapshot.json and output.bin are saved under experiment evidence;
+complete launcher log is experiment-local hardware.log. Export and saved bytes
+are proven; no unmeasured registry flush durability guarantee is claimed.
+
+This confirms the gray fragment write and independent immutable observation,
+not native-red correctness or a live-allocation race. Graph/store/fault hashes
+remain exact EXP678. Existing qualification presentation attempted afterward
+and returned0xc0000483; no presentation PASS. Device stayed ACTIVE with8CPU/
+NVMe2/USB5/keyboard1; no41/1001. Three Event129 at12:49:00/10/20Z are preserved
+as storage telemetry without causal attribution. Evidence was copied before
+exact oem5/devnode cleanup; ordinary recovery follows.
