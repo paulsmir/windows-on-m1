@@ -6,10 +6,11 @@
 
 static void make_job(APPLE_AGX_DYNAMIC_JOB *job, unsigned char *storage,
                      APPLE_AGX_U32 storageBytes) {
-  static const APPLE_AGX_U32 references[] = {2u, 3u, 9u, 10u, 4u,
-                                              5u, 6u, 7u, 8u};
+  static const APPLE_AGX_U32 references[] = {1u, 2u, 3u, 9u, 10u,
+                                              4u, 5u, 6u, 7u, 8u};
   static const APPLE_AGX_U32 roles[] = {
-      AppleAgxWin32RoleShader,       AppleAgxWin32RoleShader,
+      AppleAgxWin32RoleVertex,       AppleAgxWin32RoleShader,
+      AppleAgxWin32RoleShader,
       AppleAgxWin32RoleShaderRodata, AppleAgxWin32RoleShaderRodata,
       AppleAgxWin32RoleUscPipeline,  AppleAgxWin32RoleDescriptor,
       AppleAgxWin32RoleScissor,      AppleAgxWin32RoleDepthBias,
@@ -19,7 +20,7 @@ static void make_job(APPLE_AGX_DYNAMIC_JOB *job, unsigned char *storage,
   job->Magic = APPLE_AGX_DYNAMIC_JOB_MAGIC;
   job->Version = APPLE_AGX_DYNAMIC_JOB_VERSION;
   job->Generation = 7u;
-  job->ObjectCount = 9u;
+  job->ObjectCount = 10u;
   job->RelocationCount = 7u;
   job->StorageBytes = storageBytes;
   job->MaterializedHash = AppleAgxDynamicDmaBytesHash(storage, storageBytes);
@@ -45,7 +46,7 @@ int main(void) {
   unsigned char storage[704];
   APPLE_AGX_DYNAMIC_JOB job;
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings = {
-      2u, 3u, 9u, 10u, 4u, 5u, 6u, 7u, 8u};
+      1u, 2u, 3u, 9u, 10u, 4u, 5u, 6u, 7u, 8u};
   ADMISSION_DYNAMIC_DMA_VIEW view;
   ADMISSION_GDI_PREPARED prepared;
   APPLE_AGX_U32 total = 0u;
@@ -63,9 +64,10 @@ int main(void) {
   assert(view.Header->CommandHash == 0x1122334455667788ULL);
   assert(view.Header->DestinationGpuVa == 0x1500120000ULL);
   assert(view.Header->BackgroundColor == 0xff101820u);
-  assert(view.Job->ObjectCount == 9u && view.Job->RelocationCount == 7u);
+  assert(view.Job->ObjectCount == 10u && view.Job->RelocationCount == 7u);
   assert(view.StorageBytes == sizeof(storage));
   assert(memcmp(view.Storage, storage, sizeof(storage)) == 0);
+  assert(view.Bindings->VertexReference == 1u);
   assert(view.Bindings->EncoderReference == 8u);
   assert(AdmissionDynamicDmaDescribePreparedRecord(
       bytes, total, 32u, &prepared));

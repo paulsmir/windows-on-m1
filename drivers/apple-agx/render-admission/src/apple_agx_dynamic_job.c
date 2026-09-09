@@ -125,6 +125,25 @@ static int dynamic_copy_role(APPLE_AGX_U32 Role) {
          Role == AppleAgxWin32RoleDepthBias;
 }
 
+static int dynamic_copy_reference(
+    const APPLE_AGX_WIN32_COMMAND_VIEW *View,
+    APPLE_AGX_U32 ReferenceIndex) {
+  APPLE_AGX_U32 index;
+  if (View == DYNAMIC_NULL || View->References == DYNAMIC_NULL ||
+      View->Draw == DYNAMIC_NULL ||
+      ReferenceIndex >= View->Header->ReferenceCount)
+    return 0;
+  if (dynamic_copy_role(View->References[ReferenceIndex].Role))
+    return 1;
+  if (View->References[ReferenceIndex].Role != AppleAgxWin32RoleVertex ||
+      View->Relocations == DYNAMIC_NULL)
+    return 0;
+  for (index = 0u; index < View->Draw->RelocationCount; ++index)
+    if (View->Relocations[index].TargetReference == ReferenceIndex)
+      return 1;
+  return 0;
+}
+
 static APPLE_AGX_DYNAMIC_JOB_OBJECT *dynamic_object(
     APPLE_AGX_DYNAMIC_JOB *Job, APPLE_AGX_U32 ReferenceIndex) {
   APPLE_AGX_U32 index;
@@ -184,7 +203,7 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
       return dynamic_fail(AppleAgxDynamicJobLayout, Storage, storageBytes, Job);
     reference = &View->References[referenceIndex];
     fact = &Facts[referenceIndex];
-    if (!dynamic_copy_role(reference->Role))
+    if (!dynamic_copy_reference(View, referenceIndex))
       continue;
     object = dynamic_object(Job, referenceIndex);
     if (object != DYNAMIC_NULL)

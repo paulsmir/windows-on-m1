@@ -9,8 +9,9 @@ static unsigned char descriptor_bytes[0x10000];
 static unsigned char scissor_bytes[0x40];
 static unsigned char depth_bytes[0x40];
 static unsigned char encoder_bytes[0x180];
-static unsigned char pipeline_bytes[0x10200];
+static unsigned char pipeline_bytes[0x40000];
 static unsigned char shader_bytes[0x4000];
+static APPLE_AGX_WIN32_RELOCATION vertex_relocation;
 
 static void initialize_image(ADMISSION_BACKEND_IMAGE *image) {
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts =
@@ -47,6 +48,7 @@ static void initialize_view(
   memset(header, 0, sizeof(*header));
   memset(references, 0, REFERENCE_COUNT * sizeof(*references));
   memset(draw, 0, sizeof(*draw));
+  memset(&vertex_relocation, 0, sizeof(vertex_relocation));
   header->Opcode = AppleAgxWin32OpcodeDraw;
   header->Generation = 7u;
   header->ReferenceCount = REFERENCE_COUNT;
@@ -80,15 +82,22 @@ static void initialize_view(
   draw->ScissorReference = 6u;
   draw->DepthBiasReference = 7u;
   draw->EncoderReference = 8u;
+  draw->RelocationCount = 1u;
+  vertex_relocation.Kind = AppleAgxWin32RelocationDescriptorAddress;
+  vertex_relocation.WidthBytes = 8u;
+  vertex_relocation.DestinationReference = 5u;
+  vertex_relocation.TargetReference = 1u;
   view->Header = header;
   view->References = references;
   view->Draw = draw;
+  view->Relocations = &vertex_relocation;
 }
 
 static void initialize_job(APPLE_AGX_DYNAMIC_JOB *job,
                            unsigned char storage[0x300],
                            const APPLE_AGX_WIN32_COMMAND_VIEW *view) {
-  static const unsigned refs[] = {2u, 3u, 9u, 10u, 4u, 5u, 6u, 7u, 8u};
+  static const unsigned refs[] = {1u, 2u, 3u, 9u, 10u,
+                                  4u, 5u, 6u, 7u, 8u};
   memset(job, 0, sizeof(*job));
   memset(storage, 0, 0x300u);
   job->Magic = APPLE_AGX_DYNAMIC_JOB_MAGIC;
@@ -154,7 +163,10 @@ int main(void) {
     assert(restored_plan.Entries[index].GpuVirtualAddress ==
            plan.Entries[index].GpuVirtualAddress);
   }
-  assert(plan.EntryCount == 9u && plan.Generation == 7u);
+  assert(plan.EntryCount == 10u && plan.Generation == 7u);
+  assert(find_entry(&plan, 1u)->ObjectIndex == 73u);
+  assert(find_entry(&plan, 1u)->ObjectOffset == 0x20000u);
+  assert(find_entry(&plan, 1u)->GpuVirtualAddress == 0x1100040000ULL);
   assert(find_entry(&plan, 8u)->ObjectIndex == 71u);
   assert(find_entry(&plan, 8u)->GpuVirtualAddress == 0x1503d78000ULL);
   assert(find_entry(&plan, 4u)->ObjectIndex == 73u);
@@ -174,6 +186,7 @@ int main(void) {
                                       sizeof(storage), 256u, &state) ==
          AdmissionDynamicOverlaySuccess);
   assert(state.Applied == 1u && state.Fence == 256u);
+  assert(pipeline_bytes[0x20000] == 0x21u);
   assert(encoder_bytes[0] == 0x28u);
   assert(pipeline_bytes[0x10000] == 0x24u);
   assert(shader_bytes[0x1000] == 0x22u);
@@ -197,7 +210,8 @@ int main(void) {
   assert(state.Applied == 0u && encoder_bytes[0] == 0u &&
          pipeline_bytes[0x10000] == 0u && shader_bytes[0x1000] == 0u &&
          descriptor_bytes[0x8000] == 0u && scissor_bytes[0] == 0u &&
-         depth_bytes[0] == 0u && pipeline_bytes[0x2000] == 0x5au);
+         depth_bytes[0] == 0u && pipeline_bytes[0x20000] == 0u &&
+         pipeline_bytes[0x2000] == 0x5au);
 
   initialize_image(&image);
   initialize_view(&view, &header, references, &draw);

@@ -3,6 +3,7 @@
 #define OVERLAY_NULL ((void *)0)
 #define OVERLAY_ENCODER_OBJECT 71u
 #define OVERLAY_PIPELINE_OBJECT 73u
+#define OVERLAY_VERTEX_OBJECT 73u
 #define OVERLAY_SHADER_OBJECT 74u
 #define OVERLAY_DESCRIPTOR_OBJECT 36u
 #define OVERLAY_SCISSOR_OBJECT 38u
@@ -60,7 +61,11 @@ static int overlay_location(APPLE_AGX_U32 ReferenceIndex,
     return 0;
   overlay_zero(Location, (APPLE_AGX_U32)sizeof(*Location));
   *ExpectedRole = 0u;
-  if (ReferenceIndex == Draw->VertexShaderReference) {
+  if (ReferenceIndex == Draw->VertexReference) {
+    *ExpectedRole = AppleAgxWin32RoleVertex;
+    *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
+        OVERLAY_VERTEX_OBJECT, 0x20000u, 0x10000u, APPLE_AGX_TRUE};
+  } else if (ReferenceIndex == Draw->VertexShaderReference) {
     *ExpectedRole = AppleAgxWin32RoleShader;
     *Location = (ADMISSION_DYNAMIC_OVERLAY_LOCATION){
         OVERLAY_SHADER_OBJECT, 0x1000u, 0x1000u, APPLE_AGX_TRUE};
@@ -180,6 +185,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlan(
   APPLE_AGX_U32 references[ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES];
   APPLE_AGX_U32 count = 0u;
   APPLE_AGX_U32 index;
+  int includeVertex = 0;
   if (Plan != OVERLAY_NULL)
     overlay_zero(Plan, (APPLE_AGX_U32)sizeof(*Plan));
   if (Image == OVERLAY_NULL || View == OVERLAY_NULL ||
@@ -189,7 +195,17 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlan(
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
       View->Header->Generation == 0u)
     return AdmissionDynamicOverlayArgument;
+  if (View->Relocations != OVERLAY_NULL) {
+    for (index = 0u; index < View->Draw->RelocationCount; ++index)
+      if (View->Relocations[index].TargetReference ==
+          View->Draw->VertexReference) {
+        includeVertex = 1;
+        break;
+      }
+  }
 #define ADD_REFERENCE(Value) references[count++] = (Value)
+  if (includeVertex)
+    ADD_REFERENCE(View->Draw->VertexReference);
   ADD_REFERENCE(View->Draw->VertexShaderReference);
   ADD_REFERENCE(View->Draw->FragmentShaderReference);
   if (View->Draw->VertexRodataReference !=
@@ -232,6 +248,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
       View->Header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
     return AdmissionDynamicOverlayArgument;
   *Bindings = (ADMISSION_DYNAMIC_OVERLAY_BINDINGS){
+      View->Draw->VertexReference,
       View->Draw->VertexShaderReference,
       View->Draw->FragmentShaderReference,
       View->Draw->VertexRodataReference,
@@ -253,9 +270,11 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE
       references[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw;
+  APPLE_AGX_WIN32_RELOCATION vertexRelocation;
   APPLE_AGX_WIN32_COMMAND_VIEW view;
   APPLE_AGX_U32 highest = 0u;
   APPLE_AGX_U32 index;
+  int hasVertex = 0;
   ADMISSION_DYNAMIC_OVERLAY_RESULT result;
   if (Plan != OVERLAY_NULL)
     overlay_zero(Plan, (APPLE_AGX_U32)sizeof(*Plan));
@@ -269,7 +288,10 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
   overlay_zero(&header, (APPLE_AGX_U32)sizeof(header));
   overlay_zero(references, (APPLE_AGX_U32)sizeof(references));
   overlay_zero(&draw, (APPLE_AGX_U32)sizeof(draw));
+  overlay_zero(&vertexRelocation,
+               (APPLE_AGX_U32)sizeof(vertexRelocation));
   overlay_zero(&view, (APPLE_AGX_U32)sizeof(view));
+  draw.VertexReference = Bindings->VertexReference;
   draw.VertexShaderReference = Bindings->VertexShaderReference;
   draw.FragmentShaderReference = Bindings->FragmentShaderReference;
   draw.VertexRodataReference = Bindings->VertexRodataReference;
@@ -286,6 +308,9 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
       return AdmissionDynamicOverlayLayout;
     references[object->ReferenceIndex].Role = object->Role;
     references[object->ReferenceIndex].Bytes = object->Bytes;
+    if (object->ReferenceIndex == Bindings->VertexReference &&
+        object->Role == AppleAgxWin32RoleVertex)
+      hasVertex = 1;
     if (object->ReferenceIndex > highest)
       highest = object->ReferenceIndex;
   }
@@ -295,6 +320,11 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
   view.Header = &header;
   view.References = references;
   view.Draw = &draw;
+  if (hasVertex) {
+    draw.RelocationCount = 1u;
+    vertexRelocation.TargetReference = Bindings->VertexReference;
+    view.Relocations = &vertexRelocation;
+  }
   result = AdmissionDynamicOverlayPlan(Image, &view, Plan);
   if (result != AdmissionDynamicOverlaySuccess)
     return result;

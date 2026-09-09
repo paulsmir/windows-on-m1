@@ -63,7 +63,8 @@ APPLE_AGX_U32 AdmissionDynamicDmaDestinationPatchOffset(void) {
 }
 
 static int dma_role_copied(APPLE_AGX_U32 Role) {
-  return Role == AppleAgxWin32RoleShader ||
+  return Role == AppleAgxWin32RoleVertex ||
+         Role == AppleAgxWin32RoleShader ||
          Role == AppleAgxWin32RoleShaderRodata ||
          Role == AppleAgxWin32RoleUscPipeline ||
          Role == AppleAgxWin32RoleDescriptor ||
