@@ -42631,3 +42631,9 @@ and returned0xc0000483; no presentation PASS. Device stayed ACTIVE with8CPU/
 NVMe2/USB5/keyboard1; no41/1001. Three Event129 at12:49:00/10/20Z are preserved
 as storage telemetry without causal attribution. Evidence was copied before
 exact oem5/devnode cleanup; ordinary recovery follows.
+
+**EXP680-R1 CLEAN RECOVERY 2026-09-09T12:51:56Z.** Exact oem5/package/devnode
+and stale experiment state removed after evidence; controlled shutdown,
+ordinary377/392 restored. Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1; no41/1001/129 in the recovery boot.
+Ordinary launcher2507; boot evidence in experiment-local recovery.log.

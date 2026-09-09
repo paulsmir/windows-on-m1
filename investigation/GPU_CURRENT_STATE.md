@@ -17,7 +17,10 @@ oracle resolves its contradictory observation. Native-red output still lacks
 this independent raw proof. Do not repeat gray or EXP674 poison candidates.
 Qualification present returned0xc0000483; this run does not prove presentation.
 No41/1001/device loss; three Event129 retained as storage telemetry.
-Exact oem5 removed after evidence; ordinary recovery in progress.
+Exact oem5 removed after evidence; ordinary377/392 recovery verified at
+2026-09-09T12:51:56Z: Code28/null INF, no AppleAgx package/service/module/
+SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
+Ordinary launcher session2507; recovery.log preserves its boot output.
 
 ## Previous EXP679 state (closed)
 
