@@ -73,7 +73,16 @@ be repeated. Exact package is removed and ordinary377/392 is clean again at
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current first boundary
 is the nearest remaining pre-raster VDM/PPP/VS contract, determined by a
 bounded pinned-Mesa comparison; PBE/store, completion/fence, DCP and caps are
-closed controls. Caps remain0 until AD04 mandatory contract completion.
+closed controls. That comparison eliminated the empty zero-attribute VS prolog
+offline and found an actual USC mismatch: EXP657 ordered VS SHARED before its
+uniform binding and omitted Mesa's always-reserved txf sampler0 from both stage
+pipelines/word counts. Commit `e06c29e8a4e51d39c4622d006f2dd34191c31a7b`
+now emits canonical binding->sampler->shared->shader ordering, an exact sampler
+descriptor with two typed relocations, and4-compact sampler counts. Generated
+unpack, production ABI/materialize/DMA/overlay and121 focused tests are GREEN;
+pipeline/encoder/sampler hashes are fixed. This is OFFLINE_PROVEN only. Next is
+one fresh exact hardware candidate for this atomic USC-stage contract. Caps
+remain0 until AD04 mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

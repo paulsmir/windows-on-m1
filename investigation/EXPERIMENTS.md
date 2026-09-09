@@ -40644,3 +40644,31 @@ module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. This
 operational retry is not a GPU verdict. Next work is a bounded primary-source
 comparison of the remaining pre-raster VDM/PPP/VS state; PBE, completion, DCP
 and capability bits remain closed controls.
+
+**SOURCE-FIRST CAUSAL DIFFERENCE AFTER EXP657.** A candidate vertex-prolog
+hypothesis was eliminated offline: the pinned Mesa zero-attribute hardware VS
+prolog optimizes to zero bytes, so adding it cannot alter this procedural draw.
+The full USC pipeline comparison then found the first actual byte-level
+difference. EXP657 emits the VS `SHARED` record before its uniform binding and
+omits Mesa's reserved txf sampler0 from both VS and FS pipelines; its VDM/PPP
+shader words consequently advertise zero sampler states. Pinned
+`agx_build_pipeline` instead emits resource bindings first, then `SHARED`, then
+`SHADER/REGISTERS`, and initial stage state always uploads sampler0 and reports
+`AGX_SAMPLER_STATES_4_COMPACT`.
+
+Commit `e06c29e8a4e51d39c4622d006f2dd34191c31a7b` implements that indivisible
+stage contract: a generated eight-byte txf sampler descriptor is referenced by
+two typed40-bit USC relocations, both shader words publish4-compact, and the VS
+pipeline is reordered to binding -> sampler -> shared -> shader. The Draw ABI
+grows only by the two relocations (848->928 bytes); allocations, shaders,
+encoder draw, batch state, PBE/store, queue, output oracle, DCP and caps remain
+unchanged. Generated unpack plus the real ABI -> materialization -> DMA ->
+overlay integration test verify both sampler addresses and the canonical
+ordering. The relevant121 tests are GREEN. New vertex/fragment binaries remain
+byte-identical controls; pipeline/encoder/sampler/manifest SHA256 are
+`b2e5f752c377488fd11a77ebb8dc8c85a1559fe290becb5ec3d4996cac75d3ee`,
+`96803cfb702e770f173aa75668ebbccba3515e9fe08d6db3acd75b2e6beee267`,
+`05d8d2443c555d752b0c64438cc066c8733b466f167d0af2026d1fc9a1a0b563`
+and `3669aa1614bf85b19bee269a71110673c67ccdc7b31db71e0141d124f5f2c296`.
+This is OFFLINE_PROVEN only. A pinned fresh candidate is required before any
+hardware claim.
