@@ -33,6 +33,11 @@ typedef struct _ADMISSION_DYNAMIC_OUTPUT_RESULT {
   APPLE_AGX_U64 Fnv1a;
 } ADMISSION_DYNAMIC_OUTPUT_RESULT;
 
+int AdmissionDynamicOutputDescribeExpectation(
+    APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
+    APPLE_AGX_U32 BackgroundColor,
+    ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation);
+
 int AdmissionDynamicOutputVerify(
     const unsigned char *Bytes, APPLE_AGX_U32 ByteCount,
     const ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation,

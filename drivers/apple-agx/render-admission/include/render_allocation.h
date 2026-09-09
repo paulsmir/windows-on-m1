@@ -33,6 +33,10 @@ int AdmissionAllocationDescribe(unsigned int Width, unsigned int Height,
                                 ADMISSION_ALLOCATION_DESCRIPTION *Description);
 int AdmissionAllocationDescriptionValid(
     const ADMISSION_ALLOCATION_DESCRIPTION *Description);
+int AdmissionAllocationContainsView(
+    const ADMISSION_ALLOCATION_DESCRIPTION *Description,
+    unsigned int Width, unsigned int Height, unsigned int Pitch,
+    unsigned long long ReferencedBytes);
 int AdmissionAllocationAlign64K(unsigned long long Size,
                                 unsigned long long *AlignedSize);
 int AdmissionAllocationCreate(

@@ -171,18 +171,46 @@ APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
       Packet->Fence == 0u || Packet->DestinationCpuToken == 0ULL ||
       Packet->DestinationGpuVa == 0ULL ||
       Packet->DestinationPhysical == 0ULL ||
-      Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES)
+      (Packet->DestinationBytes != APPLE_AGX_EXP208_FRAMEBUFFER_BYTES &&
+       Packet->DestinationBytes != APPLE_AGX_EXP208_GDI_OUTPUT_BYTES))
     return APPLE_AGX_FALSE;
   saved_output = Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
-  if (!AppleAgxExp208BindDynamicFramebuffer(
-          BackgroundColor, Image->ArenaCpuAddress, Image->ArenaGpuAddress,
-          Image->ArenaPhysicalAddress, Image->ArenaCapacity,
-          DestinationCpuAddress, Packet->DestinationGpuVa,
-          Packet->DestinationPhysical, Packet->DestinationBytes,
-          Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
-          AppleAgxRenderTemplateRelocations(),
-          AppleAgxRenderTemplateRelocationCount(), &candidate))
-    return APPLE_AGX_FALSE;
+  if (Packet->DestinationBytes == APPLE_AGX_EXP208_FRAMEBUFFER_BYTES) {
+    if (!AppleAgxExp208BindDynamicFramebuffer(
+            BackgroundColor, Image->ArenaCpuAddress, Image->ArenaGpuAddress,
+            Image->ArenaPhysicalAddress, Image->ArenaCapacity,
+            DestinationCpuAddress, Packet->DestinationGpuVa,
+            Packet->DestinationPhysical, Packet->DestinationBytes,
+            Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+            AppleAgxRenderTemplateRelocations(),
+            AppleAgxRenderTemplateRelocationCount(), &candidate))
+      return APPLE_AGX_FALSE;
+  } else {
+    APPLE_AGX_GDI_COMMAND_DESCRIPTION description = {0};
+    unsigned char dma[sizeof(APPLE_AGX_GDI_DMA_COMMAND)];
+    APPLE_AGX_U32 written = 0u;
+    if (BackgroundColor != APPLE_AGX_EXP208_GDI_COLOR)
+      return APPLE_AGX_FALSE;
+    description.Command.Opcode = AppleAgxGdiColorFill;
+    description.Command.Destination = (APPLE_AGX_GDI_RECT){
+        0u, 0u, APPLE_AGX_EXP208_GDI_WIDTH,
+        APPLE_AGX_EXP208_GDI_HEIGHT};
+    description.Command.DestinationAllocationIndex = 0u;
+    description.Command.DestinationGpuAddress = Packet->DestinationGpuVa;
+    description.Command.DestinationPitch = APPLE_AGX_EXP208_GDI_PITCH;
+    description.Command.Color = BackgroundColor;
+    description.Command.Rop = AppleAgxGdiColorFillPatCopy;
+    if (!AppleAgxGdiEncodeDmaCommand(
+            &description, dma, sizeof(dma), &written) ||
+        written != sizeof(dma) ||
+        !AppleAgxExp208BindGdiColorFill(
+            dma, written, DestinationCpuAddress, Packet->DestinationGpuVa,
+            Packet->DestinationPhysical, Packet->DestinationBytes,
+            Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+            AppleAgxRenderTemplateRelocations(),
+            AppleAgxRenderTemplateRelocationCount(), &candidate))
+      return APPLE_AGX_FALSE;
+  }
   if (!AppleAgxApplyRelocations(
           Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           AppleAgxRenderTemplateRelocations(),

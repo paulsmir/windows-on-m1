@@ -49,9 +49,28 @@ static void test_invalid_create_does_not_mutate(void) {
   assert(memcmp(&allocation, &before, sizeof(allocation)) == 0);
 }
 
+static void test_allocation_contains_bounded_render_view(void) {
+  ADMISSION_ALLOCATION_DESCRIPTION description;
+
+  assert(AdmissionAllocationDescribe(16u, 256u, 4u, 3u, 21u, 0u,
+                                     &description));
+  assert(description.Pitch == 64u && description.Size == 0x4000u);
+  assert(AdmissionAllocationContainsView(
+      &description, 16u, 16u, 64u, 0x4000u));
+  assert(!AdmissionAllocationContainsView(
+      &description, 17u, 16u, 64u, 0x4000u));
+  assert(!AdmissionAllocationContainsView(
+      &description, 16u, 257u, 64u, 0x4000u));
+  assert(!AdmissionAllocationContainsView(
+      &description, 16u, 16u, 80u, 0x4000u));
+  assert(!AdmissionAllocationContainsView(
+      &description, 16u, 16u, 64u, 1023u));
+}
+
 int main(void) {
   test_surface_and_64k_contract();
   test_handle_lifetime_blocks_open_destroy();
   test_invalid_create_does_not_mutate();
+  test_allocation_contains_bounded_render_view();
   return 0;
 }

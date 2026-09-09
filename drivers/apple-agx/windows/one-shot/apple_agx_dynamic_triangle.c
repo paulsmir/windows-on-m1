@@ -16,7 +16,12 @@
 #define REFERENCE_COUNT 9u
 #define RELOCATION_COUNT 8u
 #define INTERNAL_BYTES 0x4000u
-#define FRAMEBUFFER_BYTES (2560u * 1600u * 4u)
+#define TARGET_WIDTH 16u
+#define TARGET_ALLOCATION_HEIGHT 256u
+#define TARGET_RENDER_HEIGHT 16u
+#define TARGET_PITCH 64u
+#define TARGET_BYTES 0x4000u
+#define TARGET_PIXELS (TARGET_WIDTH * TARGET_RENDER_HEIGHT)
 #define BACKGROUND_COLOR 0xff101820u
 
 typedef NTSTATUS(WINAPI *PFN_LOCAL_ENUMADAPTERS3)(D3DKMT_ENUMADAPTERS3 *);
@@ -128,6 +133,7 @@ static void SetReference(APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference,
 static NTSTATUS QueryPresentation(D3DKMT_HANDLE Adapter,
                                   D3DKMT_HANDLE Device,
                                   D3DKMT_HANDLE Context,
+                                  UINT ExpectedPixels,
                                   ADMISSION_PRESENT_QUERY *Result) {
   ULONGLONG deadline = GetTickCount64() + 20000u;
   NTSTATUS status = (NTSTATUS)0x00000103L;
@@ -148,8 +154,8 @@ static NTSTATUS QueryPresentation(D3DKMT_HANDLE Adapter,
       break;
     if (Result->Valid == 1u && Result->Status == 0u &&
         Result->Purpose == AdmissionPresentPurposeRenderFrame &&
-        Result->PixelsExpected == 4096000u &&
-        Result->PixelsVerified == 4096000u &&
+        Result->PixelsExpected == ExpectedPixels &&
+        Result->PixelsVerified == ExpectedPixels &&
         Result->ExpectedColor != BACKGROUND_COLOR &&
         Result->ContentHash != 0ULL)
       return (NTSTATUS)0;
@@ -255,7 +261,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       context.pPatchLocationList == NULL)
     goto Cleanup;
   if (!AdmissionAllocationDescribe(
-          2560u, 1600u, 4u, D3DKMDT_GDISURFACE_TEXTURE,
+          TARGET_WIDTH, TARGET_ALLOCATION_HEIGHT, 4u,
+          D3DKMDT_GDISURFACE_TEXTURE,
           D3DDDIFMT_A8R8G8B8, 0u, &surface))
     goto Cleanup;
   status = CreateAllocation(device.hDevice, &surface, sizeof(surface),
@@ -317,7 +324,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
 
   ZeroMemory(references, sizeof(references));
   SetReference(&references[0], 0u, AppleAgxWin32RoleRenderTarget,
-               AppleAgxWin32AccessWrite, 0u, FRAMEBUFFER_BYTES);
+               AppleAgxWin32AccessWrite, 0u, TARGET_BYTES);
   SetReference(&references[1], 1u, AppleAgxWin32RoleVertex,
                AppleAgxWin32AccessRead, 0u, assets[0].Size);
   SetReference(&references[2], 2u, AppleAgxWin32RoleShader,
@@ -357,9 +364,9 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   request.References = references;
   request.Relocations = relocations;
   request.Draw.Format = AppleAgxWin32FormatBgra8Unorm;
-  request.Draw.SurfaceWidth = 2560u;
-  request.Draw.SurfaceHeight = 1600u;
-  request.Draw.SurfacePitch = 10240u;
+  request.Draw.SurfaceWidth = TARGET_WIDTH;
+  request.Draw.SurfaceHeight = TARGET_RENDER_HEIGHT;
+  request.Draw.SurfacePitch = TARGET_PITCH;
   request.Draw.Topology = AppleAgxWin32TopologyTriangleList;
   request.Draw.VertexCount = 3u;
   request.Draw.InstanceCount = 1u;
@@ -399,7 +406,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   if (status != (NTSTATUS)0)
     goto Preserve;
   status = QueryPresentation(adapters[selected].hAdapter, device.hDevice,
-                             context.hContext, &presentation);
+                             context.hContext, TARGET_PIXELS,
+                             &presentation);
   wprintf(L"DYNAMIC_PRESENT status=0x%08lx valid=%u result=0x%08x "
           L"fence=%u color=0x%08x pixels=%u/%u hash=0x%llx "
           L"sequence=%llu physical=0x%llx\n",
@@ -412,7 +420,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     goto Preserve;
   Sleep(15000u);
   status = QueryPresentation(adapters[selected].hAdapter, device.hDevice,
-                             context.hContext, &held);
+                             context.hContext, TARGET_PIXELS, &held);
   if (status != (NTSTATUS)0 ||
       memcmp(&presentation, &held, sizeof(held)) != 0)
     goto Preserve;

@@ -15,6 +15,45 @@ static void output_zero(void *Data, APPLE_AGX_U32 Bytes) {
     data[index] = 0u;
 }
 
+int AdmissionDynamicOutputDescribeExpectation(
+    APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
+    APPLE_AGX_U32 BackgroundColor,
+    ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation) {
+  ADMISSION_DYNAMIC_OUTPUT_EXPECTATION candidate;
+  if (Expectation == OUTPUT_NULL)
+    return 0;
+  output_zero(&candidate, (APPLE_AGX_U32)sizeof(candidate));
+  candidate.Width = Width;
+  candidate.Height = Height;
+  candidate.Pitch = Pitch;
+  candidate.BackgroundColor = BackgroundColor;
+  candidate.PoisonByte = 0xa5u;
+  if (Width == 2560u && Height == 1600u && Pitch == 10240u) {
+    candidate.InteriorX = 1280u;
+    candidate.InteriorY = 800u;
+    candidate.MinX = 240u;
+    candidate.MinY = 150u;
+    candidate.MaxX = 2320u;
+    candidate.MaxY = 1450u;
+    candidate.MinimumForegroundPixels = 1000000u;
+    candidate.MaximumForegroundPixels = 1600000u;
+  } else if (Width == 16u && Height == 16u && Pitch == 64u) {
+    candidate.InteriorX = 8u;
+    candidate.InteriorY = 5u;
+    candidate.MinX = 2u;
+    candidate.MinY = 2u;
+    candidate.MaxX = 14u;
+    candidate.MaxY = 13u;
+    candidate.MinimumForegroundPixels = 72u;
+    candidate.MaximumForegroundPixels = 72u;
+  } else {
+    output_zero(Expectation, (APPLE_AGX_U32)sizeof(*Expectation));
+    return 0;
+  }
+  *Expectation = candidate;
+  return 1;
+}
+
 int AdmissionDynamicOutputVerify(
     const unsigned char *Bytes, APPLE_AGX_U32 ByteCount,
     const ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation,

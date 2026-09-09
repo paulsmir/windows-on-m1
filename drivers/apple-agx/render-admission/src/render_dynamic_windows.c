@@ -146,6 +146,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
   unsigned char *storage;
   ULONG storageCapacity;
   APPLE_AGX_U32 dmaBytes = 0u;
+  APPLE_AGX_U32 backgroundColor;
   ULONGLONG alignedSize;
   if (Adapter == NULL || Context == NULL || Args == NULL ||
       Snapshot == NULL || Snapshot->View.Header == NULL ||
@@ -195,14 +196,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
       Destination->CpuAddress == NULL ||
       destinationReference->Bytes > Destination->Bytes ||
       Snapshot->View.Draw->Format != AppleAgxWin32FormatBgra8Unorm ||
-      Snapshot->View.Draw->SurfaceWidth !=
-          destinationOpened->Allocation->Description.Width ||
-      Snapshot->View.Draw->SurfaceHeight !=
-          destinationOpened->Allocation->Description.Height ||
-      Snapshot->View.Draw->SurfacePitch !=
-          destinationOpened->Allocation->Description.Pitch)
+      !AdmissionAllocationContainsView(
+          &destinationOpened->Allocation->Description,
+          Snapshot->View.Draw->SurfaceWidth,
+          Snapshot->View.Draw->SurfaceHeight,
+          Snapshot->View.Draw->SurfacePitch,
+          destinationReference->Bytes))
     return STATUS_INVALID_ADDRESS;
   Destination->Bytes = destinationReference->Bytes;
+  backgroundColor =
+      Snapshot->View.Draw->SurfaceWidth == APPLE_AGX_EXP208_GDI_WIDTH &&
+              Snapshot->View.Draw->SurfaceHeight ==
+                  APPLE_AGX_EXP208_GDI_HEIGHT &&
+              Snapshot->View.Draw->SurfacePitch ==
+                  APPLE_AGX_EXP208_GDI_PITCH &&
+              destinationReference->Bytes ==
+                  APPLE_AGX_EXP208_GDI_OUTPUT_BYTES
+          ? APPLE_AGX_EXP208_GDI_COLOR
+          : ADMISSION_DYNAMIC_BACKGROUND_COLOR;
 
   RtlZeroMemory(Args->pDmaBuffer, Args->DmaSize);
   dmaHeader = (ADMISSION_DYNAMIC_DMA_HEADER *)Args->pDmaBuffer;
@@ -223,7 +234,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
           Snapshot->View.Header->ContentHash,
           Destination->GpuVirtualAddress,
           destinationReference->AllocationIndex,
-          ADMISSION_DYNAMIC_BACKGROUND_COLOR, &bindings, job, storage,
+          backgroundColor, &bindings, job, storage,
           job->StorageBytes, Args->pDmaBuffer, Args->DmaSize,
           &dmaBytes) != AdmissionDynamicDmaSuccess)
     return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;

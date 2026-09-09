@@ -249,21 +249,20 @@ static VOID AdmissionTerminalObserve(
       Runtime->TransportIo.MemoryBarrier(Runtime);
       if (Output->VerificationKind ==
           AdmissionBackendOutputVerificationTriangle) {
-        ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {
-            APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH,
-            APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT,
-            APPLE_AGX_EXP208_FRAMEBUFFER_PITCH,
-            Output->BackgroundColor,
-            1280u, 800u, 240u, 150u, 2320u, 1450u,
-            1000000u, 1600000u, 0xa5u};
-        captured = AdmissionTerminalReceiptCaptureTriangleOutputProgress(
-            &Runtime->TerminalReceipt, Fence,
-            (const UCHAR *)Output->RenderedCpuAddress,
-            Output->RenderedBytes, &expectation,
-            ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
-            AdmissionOutputCaptureProgress, Runtime, &foreground)
-                       ? TRUE
-                       : FALSE;
+        ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation;
+        captured =
+            AdmissionDynamicOutputDescribeExpectation(
+                Output->RenderWidth, Output->RenderHeight,
+                Output->RenderPitch, Output->BackgroundColor,
+                &expectation) &&
+            AdmissionTerminalReceiptCaptureTriangleOutputProgress(
+                &Runtime->TerminalReceipt, Fence,
+                (const UCHAR *)Output->RenderedCpuAddress,
+                Output->RenderedBytes, &expectation,
+                ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
+                AdmissionOutputCaptureProgress, Runtime, &foreground)
+                ? TRUE
+                : FALSE;
         if (captured && Completed != NULL)
           Completed->View.ExpectedColor = foreground;
       } else {

@@ -39,6 +39,36 @@ static void build_triangle(unsigned char *bytes) {
   }
 }
 
+static void test_native_16x16_expectation(void) {
+  unsigned char bytes[16u * 16u * 4u];
+  ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation;
+  ADMISSION_DYNAMIC_OUTPUT_RESULT result;
+  unsigned background = BACKGROUND;
+  unsigned foreground = 0xff0000ffu;
+  for (unsigned y = 0u; y < 16u; ++y)
+    for (unsigned x = 0u; x < 16u; ++x) {
+      unsigned char *pixel = bytes + (y * 16u + x) * 4u;
+      memcpy(pixel, &background, sizeof(background));
+    }
+  for (unsigned y = 2u; y <= 12u; ++y) {
+    unsigned left = 2u + (y - 2u + 1u) / 2u;
+    unsigned right = 14u - (y - 2u + 1u) / 2u;
+    for (unsigned x = left; x < right; ++x)
+      memcpy(bytes + (y * 16u + x) * 4u,
+             &foreground, sizeof(foreground));
+  }
+  assert(AdmissionDynamicOutputDescribeExpectation(
+      16u, 16u, 64u, BACKGROUND, &expectation));
+  assert(expectation.MinimumForegroundPixels == 72u &&
+         expectation.MaximumForegroundPixels == 72u);
+  assert(AdmissionDynamicOutputVerify(
+      bytes, sizeof(bytes), &expectation, 0u, NULL, NULL, &result));
+  assert(result.Valid == 1u && result.ForegroundPixels == 72u &&
+         result.ForegroundColor == foreground);
+  assert(!AdmissionDynamicOutputDescribeExpectation(
+      16u, 16u, 80u, BACKGROUND, &expectation));
+}
+
 int main(void) {
   unsigned char *bytes = (unsigned char *)malloc(WIDTH * HEIGHT * 4u);
   ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {
@@ -46,6 +76,7 @@ int main(void) {
       128u, 80u, 24u, 14u, 232u, 146u,
       12000u, 14000u, 0xa5u};
   ADMISSION_DYNAMIC_OUTPUT_RESULT result;
+  test_native_16x16_expectation();
   assert(bytes != NULL);
   build_triangle(bytes);
   progress_calls = 0u;

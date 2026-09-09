@@ -253,6 +253,8 @@ static void test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma(void) {
   ADMISSION_BACKEND_IMAGE image;
   ADMISSION_RENDER_PACKET_DESCRIPTION packet;
   APPLE_AGX_EXP208_GDI_BINDING binding;
+  ADMISSION_ALLOCATION_DESCRIPTION allocation;
+  ADMISSION_BACKEND_OUTPUT_VIEW output;
   assert(storage != NULL && destination != NULL);
   view.CpuAddress = storage;
   view.HostPhysicalAddress = TEST_BACKEND_PHYSICAL;
@@ -273,6 +275,25 @@ static void test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma(void) {
   assert(binding.Framebuffer.ClearColor == 0xff101820u);
   assert(image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data ==
          destination);
+  assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
+
+  packet.Fence = 94u;
+  packet.DestinationBytes = APPLE_AGX_EXP208_GDI_OUTPUT_BYTES;
+  assert(AdmissionBackendImageBindDynamicSubmission(
+      &image, &packet, destination, APPLE_AGX_EXP208_GDI_COLOR, &binding));
+  assert(image.BoundFence == packet.Fence);
+  assert(binding.Framebuffer.Active == APPLE_AGX_FALSE);
+  assert(image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Data ==
+         destination);
+  assert(image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Size ==
+         APPLE_AGX_EXP208_GDI_OUTPUT_BYTES);
+  assert(AdmissionAllocationDescribe(
+      16u, 256u, 4u, 3u, 21u, 0u, &allocation));
+  assert(AdmissionBackendImageCaptureOutput(
+      &image, &packet, &allocation, &output));
+  assert(output.Framebuffer == APPLE_AGX_FALSE);
+  assert(output.RenderWidth == 16u && output.RenderHeight == 16u &&
+         output.RenderPitch == 64u && output.RenderedBytes == 1024u);
   assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
   free(destination);
   free(storage);

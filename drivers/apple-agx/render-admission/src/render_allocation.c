@@ -56,6 +56,25 @@ int AdmissionAllocationDescriptionValid(
          expected.Size == Description->Size;
 }
 
+int AdmissionAllocationContainsView(
+    const ADMISSION_ALLOCATION_DESCRIPTION *Description,
+    unsigned int Width, unsigned int Height, unsigned int Pitch,
+    unsigned long long ReferencedBytes) {
+  unsigned long long rowBytes;
+  unsigned long long viewBytes;
+  if (!AdmissionAllocationDescriptionValid(Description) || Width == 0u ||
+      Height == 0u || Width > Description->Width ||
+      Height > Description->Height || Pitch != Description->Pitch ||
+      ReferencedBytes == 0ULL || ReferencedBytes > Description->Size)
+    return 0;
+  rowBytes = (unsigned long long)Width * Description->BytesPerPixel;
+  if (rowBytes > Pitch || (unsigned long long)Height >
+                            ADMISSION_ALLOCATION_U64_MAX / Pitch)
+    return 0;
+  viewBytes = (unsigned long long)Pitch * Height;
+  return viewBytes <= ReferencedBytes;
+}
+
 int AdmissionAllocationAlign64K(unsigned long long Size,
                                 unsigned long long *AlignedSize) {
   unsigned long long mask = ADMISSION_ALLOCATION_ALIGNMENT - 1ULL;
