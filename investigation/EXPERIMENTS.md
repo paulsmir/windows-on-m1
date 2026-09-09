@@ -40028,3 +40028,102 @@ packages/service/module/SYS/UMD absent, SSH/8CPU/NVMe2/USB5/keyboard1, no fresh
 and `91b6abf9441b1d22ed358ab45d9d9bf85c5550aa2ced0b8e6a37448b709e70c2`.
 AD02 closes here. Next is AD03 source-first compiler/encoder planning; no
 pipeline capability may be enabled by this result alone.
+
+# EXP652 — first source-derived dynamic AGX triangle
+
+**PREREGISTERED 2026-09-09T00:00:30Z. WHY THIS HYPOTHESIS:** (1) EXP651
+hardware-proves the unchanged Windows allocation transport, Render/Patch/Submit,
+physical TA/3D, exact fences, full-frame output verification and DCP
+presentation using the same backend; (2) commits `5e98915`, `08bd67a` and
+`c42b857` now replace only the fixed clear command inputs with a source-derived
+Mesa VS/FS, complete VDM/PPP stream and bounded transaction-owned overlay while
+retaining the proven EXP208 render-pass/store/EOT owner; (3) the real generated
+fixture traverses ABI validation, copy-once materialization, WDDM DMA carry,
+overlay apply/release and the full-frame two-colour output oracle in executable
+offline tests. This makes physical execution of this exact composed Draw the
+smallest remaining discriminator, rather than another capability or loader
+probe.
+
+**WINDOWS CONTRACT:** one explicit D3DKMT producer creates a full-frame BGRA8
+render target and nine bounded classed internal allocations, makes them
+resident, uploads immutable assets, submits one pointer-free Draw graph and
+holds every resource until exact query and explicit display retirement. The
+KMD accepts only current device/context/allocation identities and the sealed
+hash, returns truthful failures, and does not advertise any pipeline capability.
+**AGX/ASAHI CONTRACT:** the pinned Mesa compiler emits source-sensitive VS/FS,
+BGRA8 fragment epilog, USC state, VDM/PPP triangle and terminate. The physical
+queue, RTKit, retained root, PBE, background clear, tilebuffer store and EOT
+remain the EXP651/EXP208 hardware-proven implementation. **TRANSLATION:** KMD
+copies the validated Draw inputs from resident WDDM allocations into exact
+zero-only template slots, patches seven finite 40-bit/relative fields, runs the
+existing StageJob/BuildActiveJob path, verifies the complete 2560x1600 output
+as background plus one bounded foreground colour, then reuses the existing
+presentation/query/lifetime contract. **WHAT IS STILL UNKNOWN:** whether the
+composed VDM/PPP/USC graph is accepted by real G13G firmware/GPU, produces the
+predicted non-uniform triangle, completes its Windows fence and reaches the
+existing physical presentation path.
+
+**ATOMIC CONTRACT:** the Mesa shader binaries, linked epilog, USC pipeline,
+VDM/PPP encoder, scissor/depth arrays, seven relocations, WDDM DMA carry and
+transaction overlay are one executable Draw graph; none is a meaningful
+hardware candidate without the others. The single functional variable versus
+the EXP651 control is therefore `fixed Clear graph -> source-derived triangle
+graph`; firmware, UAT, queues, completion, DCP, scheduler and capability bits
+are unchanged.
+
+Exact implementation commits are
+`c42b8574e8db04fe80aa08295e27f8c81e86b64b` plus build-only exact-type fix
+`7347a9cfc2cad63e8616f43a8aaddddd119a0c22`; ledger commit is
+`b0466a918c97afccfaea5eb0a8ac24d5723b734a`. Repository branch is
+`feature/j313-gpu-acceleration`; current root/m1n1/Mu commits are
+`b0466a918c97afccfaea5eb0a8ac24d5723b734a`,
+`c6d10e04afdad5314e8ac1e67bc3919b094ab000` and
+`f1ef718e08db0e4c30fdb5d8555973513ad9a004`. Unstaged root diff SHA256 is
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`;
+staged diff is empty SHA256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Only the source overlay is used by this build; unrelated dirty files and the
+native-ANS worktree are excluded.
+
+Builder command is pinned WDK/SDK26100 and MSVC14.44.35207:
+`build-driver.ps1 -Configuration Release -PackageBuild 652
+-VisibleAgxQualification`, followed by the real x64 UMD contract test and
+ARM64 `AppleAgxDynamicTriangle.vcxproj` analysis build. Source overlay SHA256 is
+`22b570b8a5b35a1968daa81615e405e3777ed71f20b58fc08c53a9f9d4ae37fd`.
+The exact 30.0.652.0 package passes code analysis, Universal validation,
+Inf2Cat and TestSign; only inherited KMD C28251 and x64-test C6011 remain.
+SYS/UMD/INF/CAT/producer/ZIP/manifest SHA256 are
+`523cbb538dc750db2865b34033cad50a2e9adfde9035717a16bfe300d6a91329`,
+`9414fd12263dfc278e4d447ca54fb00744ed6c417482eed23148f78735196e8e`,
+`e84ac8b5fbea7d5406602369c008f3871235cd114cb021fe7e3941c4e41d02da`,
+`9972a52916420a4eb8e4fac2d343459f9fd9649778861ded06e6fa08e61d24e0`,
+`e4d4289d6117c80972d736906f4c35e53bb102f5a805c17aab3745a3afd04803`,
+`cc449ee0fc3f5b1a0c35141e68b95c4ad95f22be8f879164f48a9740ac56ff8f`
+and `d509fde7262735040bad8acb12a5d5e7e8a00dc82094d70a19e9da76d43893c8`.
+SYS and CAT contain the pinned WDK test signer thumbprint
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`; builder chain verification reports
+only the known untrusted self-signed root, not an absent or mismatched signature.
+Asset hashes are recorded in the experiment artifact directory.
+
+**RUN / RECOVERY:** first restore and verify immutable ordinary377/392, stage
+only the hash-gated EXP652 package/assets/producer, then launch the unchanged
+full-owner physical profile with `WOM1_AGX_G2_POWER_BROKER=1`, immutable
+EXP584 m1n1 and EXP406 Mu. One natural bind and one producer invocation only.
+PASS requires Draw Render/Patch/Submit/worker, physical TA/3D and exact fence,
+4,096,000 examined pixels with nonzero bounded foreground plus unchanged
+background, content hash, one matching A408/D589, 15-second byte-exact HOLD,
+safe explicit retirement and device ACTIVE without immediate TDR/bugcheck.
+Any missing stage or malformed/poison/uniform output is a failure at its first
+exact recorded guard; a launch/recovery failure is inconclusive, not a GPU
+verdict. Evidence paths are
+`.local/experiments/EXP652-dynamic-triangle/{artifacts,hardware.log,evidence}`.
+After evidence, remove only exact oem INF/package and restore immutable
+ordinary377/392. Emergency GPU-hidden recovery remains fallback only.
+
+**PREFLIGHT 2026-09-09T00:00:30Z:** bounded Windows SSH to192.168.1.37 timed
+out and ARP is incomplete. Both expected vUART endpoints
+`/dev/cu.usbmodemC02HDNCCQ6L41` and `...L43` exist and no active
+`run_uefi.py`/chainload launcher was found. This is a Running-proxy operational
+state, not a driver verdict. The preregistered next action is the established
+immutable ordinary377/392 launch, live clean-baseline verification, then
+hash-gated staging; no physical operator action is required.
