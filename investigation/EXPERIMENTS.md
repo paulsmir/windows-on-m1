@@ -40981,3 +40981,41 @@ ordinary377/392 restored. Health is Problem28/null INF, no package/service/
 module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP660
 must not be repeated. The next candidate rebuilds KMD and producer with only
 the descriptor-to-Vertex policy fix over the unchanged V13_5 graph.
+
+# EXP661 — V13_5 Windows graph after Vertex descriptor policy fix
+
+**PREREGISTERED 2026-09-09T02:16:30Z. WHY THIS HYPOTHESIS:** (1) EXP660 did
+not enter Render and the exact portable command returns only
+`AppleAgxWin32AbiRelocation`; (2) source names the missing allowed edge as
+DescriptorAddress -> Vertex, required by the hardware-proven V13_5 vertex
+pipeline; (3) commit `8cb6662b8245a86b05bf6368e0b110197c0712b1`
+makes the same784-byte graph pass without weakening any other guard. Therefore
+the next run finally tests the previously unexecuted V13_5 graph.
+
+Single variable versus EXP660 is the Vertex target in the existing typed
+DescriptorAddress policy. V13_5 assets/geometry, producer request, firmware,
+backend, output target, PBE/store, queues, DCP and caps are unchanged. Source
+overlay SHA256 is
+`e4b9600717ef22676ac32f061d8cd74161b2db58d9bb386f0868cf1eabab8813`;
+source/ledger commits are
+`8cb6662b8245a86b05bf6368e0b110197c0712b1` and
+`e5c7b8d2fe2b793d4282ae44da9336efdd44319a`.
+
+Pinned WDK26100/MSVC14.44 Release PackageBuild661 VisibleAgxQualification
+passes KMD/UMD/producer code analysis, Universal, Inf2Cat/signing and x64 tests
+with inherited warnings only. SYS/UMD/INF/CAT/producer/ZIP/manifest SHA256 are
+`53009d28004fc86e60e016c2148bcd29eb2a494808dfa2a25683f70ec262d349`,
+`2df4b7c87070b254818bf60941a02238cdbf5d81de74f2412593120e7a24e90c`,
+`8e0f6dbf8816ec27cdb25655400a47c35d736e90e4080487bf3ac46d5c4d09e3`,
+`c128959dc06873855a1d27a40db6aab68d048793cd1b318b5719591b612f9f8b`,
+`638794abe703b81cd3d1e1f87a1dd0f16c8c86b29a364d318fea1c36222eae77`,
+`e939b4003bae25593c0531b862327b2702f09d79f537658e61edf0ba5ec8570d`
+and `dbc12915f2f33fa4dae862cc97ad549fb0293b63122e8cf1cf336f15f89e176a`.
+Local exact command, RED→GREEN policy test and122 adjacent tests pass.
+
+Air is clean ordinary377/392 at 2026-09-09T02:13:54Z. One run. PASS requires
+Render/Patch/Submit/physical completion/fence and output FNV different from the
+uniform background0xf953759ae5722325. The native16x16 graph is not expected to
+pass the full-frame presentation oracle yet. Same uniform FNV rejects command
+ABI compatibility; earlier failure is localized separately. Evidence precedes
+exact cleanup and ordinary recovery.
