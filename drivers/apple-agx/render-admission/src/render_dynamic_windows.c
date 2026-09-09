@@ -62,7 +62,6 @@ static int AdmissionDynamicRead(
   const ADMISSION_OPEN_ALLOCATION *opened;
   const DXGK_ALLOCATIONLIST *allocation;
   const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *reference;
-  ADMISSION_LOCAL_MEMORY_VIEW view;
   ULONGLONG alignedSize;
   if (Destination == NULL || Bytes == 0u)
     return 0;
@@ -74,16 +73,14 @@ static int AdmissionDynamicRead(
   if (reference->Role != Role || AllocationToken == 0ULL ||
       AllocationToken != (ULONGLONG)(ULONG_PTR)opened ||
       Offset != reference->Offset || Bytes != reference->Bytes ||
-      allocation->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||
       allocation->PhysicalAddress.QuadPart <= 0 ||
       !AdmissionAllocationAlign64K(opened->Allocation->Description.Size,
                                    &alignedSize) ||
-      !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(
-          build->Adapter, (ULONGLONG)allocation->PhysicalAddress.QuadPart,
-          alignedSize, Offset, &view)) ||
-      view.CpuAddress == NULL || Bytes > view.Bytes)
+      !NT_SUCCESS(AdmissionMemoryRuntimeReadResident(
+          build->Adapter, allocation->SegmentId,
+          (ULONGLONG)allocation->PhysicalAddress.QuadPart,
+          alignedSize, Offset, Destination, Bytes)))
     return 0;
-  RtlCopyMemory(Destination, view.CpuAddress, Bytes);
   return 1;
 }
 

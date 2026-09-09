@@ -520,6 +520,80 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeResolveLocal(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeReadResident(
+    ADMISSION_CONTEXT *Context, ULONG SegmentId,
+    ULONGLONG AllocationSegmentAddress, ULONGLONG AllocationSize,
+    ULONGLONG AllocationOffset, PVOID Destination, ULONG Bytes) {
+  ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);
+  NTSTATUS status = STATUS_SUCCESS;
+  ULONGLONG apertureOffset = 0ULL;
+  ULONGLONG copied = 0ULL;
+
+  if (runtime == NULL || Destination == NULL || Bytes == 0u ||
+      (SegmentId != ADMISSION_MEMORY_APERTURE_SEGMENT &&
+       SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT))
+    return STATUS_INVALID_PARAMETER;
+  if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return STATUS_INVALID_DEVICE_STATE;
+  if (AllocationOffset > AllocationSize ||
+      Bytes > AllocationSize - AllocationOffset)
+    return STATUS_INVALID_ADDRESS;
+  if (SegmentId == ADMISSION_MEMORY_APERTURE_SEGMENT) {
+    if (AllocationSegmentAddress < Context->Memory.Topology.Aperture.Base)
+      return STATUS_INVALID_ADDRESS;
+    apertureOffset =
+        AllocationSegmentAddress - Context->Memory.Topology.Aperture.Base;
+    if (apertureOffset > Context->Memory.Topology.Aperture.Size ||
+        AllocationSize >
+            Context->Memory.Topology.Aperture.Size - apertureOffset)
+      return STATUS_INVALID_ADDRESS;
+  }
+
+  ExAcquireFastMutex(&runtime->PagingLock);
+  if (SegmentId == ADMISSION_MEMORY_LOCAL_SEGMENT) {
+    ADMISSION_LOCAL_MEMORY_VIEW view;
+    status = AdmissionMemoryRuntimeResolveLocal(
+        Context, AllocationSegmentAddress, AllocationSize,
+        AllocationOffset, &view);
+    if (NT_SUCCESS(status)) {
+      if (view.CpuAddress == NULL || Bytes > view.Bytes)
+        status = STATUS_INVALID_ADDRESS;
+      else
+        RtlCopyMemory(Destination, view.CpuAddress, Bytes);
+    }
+  } else {
+    while (copied < Bytes) {
+      ULONGLONG position = apertureOffset + AllocationOffset + copied;
+      ULONGLONG physical;
+      ULONG chunk;
+      SIZE_T actual = 0u;
+      MM_COPY_ADDRESS source;
+      if (AppleAgxSoftwareApertureResolve(
+              &Context->Memory.Aperture, position, &physical) !=
+          AppleAgxSoftwareApertureOk) {
+        status = STATUS_INVALID_ADDRESS;
+        break;
+      }
+      chunk = (ULONG)PAGE_SIZE - (ULONG)(position & (PAGE_SIZE - 1ULL));
+      if (chunk > Bytes - (ULONG)copied)
+        chunk = Bytes - (ULONG)copied;
+      source.PhysicalAddress.QuadPart = (LONGLONG)physical;
+      status = MmCopyMemory(
+          (PUCHAR)Destination + (SIZE_T)copied, source, chunk,
+          MM_COPY_MEMORY_PHYSICAL, &actual);
+      if (!NT_SUCCESS(status) || actual != chunk) {
+        if (NT_SUCCESS(status))
+          status = STATUS_PARTIAL_COPY;
+        break;
+      }
+      copied += chunk;
+    }
+  }
+  KeMemoryBarrier();
+  ExReleaseFastMutex(&runtime->PagingLock);
+  return status;
+}
+
 _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeBorrowIo(
     ADMISSION_CONTEXT *Context, APPLE_AGX_MEMORY_IO *Io) {
   ADMISSION_MEMORY_RUNTIME *runtime = AdmissionMemoryGetRuntime(Context);

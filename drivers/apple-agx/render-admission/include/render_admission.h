@@ -1015,6 +1015,14 @@ NTSTATUS AdmissionMemoryRuntimeResolveLocal(
     _In_ ULONGLONG AllocationSize,
     _In_ ULONGLONG AllocationOffset,
     _Out_ ADMISSION_LOCAL_MEMORY_VIEW *View);
+NTSTATUS AdmissionMemoryRuntimeReadResident(
+    _Inout_ ADMISSION_CONTEXT *Context,
+    _In_ ULONG SegmentId,
+    _In_ ULONGLONG AllocationSegmentAddress,
+    _In_ ULONGLONG AllocationSize,
+    _In_ ULONGLONG AllocationOffset,
+    _Out_writes_bytes_(Bytes) PVOID Destination,
+    _In_ ULONG Bytes);
 NTSTATUS AdmissionMemoryRuntimeBorrowIo(
     _Inout_ ADMISSION_CONTEXT *Context,
     _Out_ APPLE_AGX_MEMORY_IO *Io);
