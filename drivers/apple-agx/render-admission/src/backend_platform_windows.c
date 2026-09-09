@@ -833,7 +833,7 @@ static BOOLEAN AdmissionCaptureKTrace(
 
 static BOOLEAN AdmissionCaptureQueueFaultSnapshot(
     ADMISSION_PLATFORM_RUNTIME *Runtime, ULONG Fence, ULONGLONG ElapsedMs,
-    ULONG TaRead, ULONG D3Read, BOOLEAN AllowEarly,
+    ULONG TaRead, ULONG D3Read, BOOLEAN AllowEarly, BOOLEAN ReadSgx,
     ADMISSION_QUEUE_FAULT_SNAPSHOT *Snapshot) {
   const APPLE_AGX_MEMORY_OBJECT *regionB;
   const APPLE_AGX_MEMORY_OBJECT *regionC;
@@ -859,9 +859,11 @@ static BOOLEAN AdmissionCaptureQueueFaultSnapshot(
   Snapshot->ElapsedMs = ElapsedMs > MAXULONG ? MAXULONG : (ULONG)ElapsedMs;
   Snapshot->TaChannelReadPointer = TaRead;
   Snapshot->D3ChannelReadPointer = D3Read;
-  Snapshot->SgxFaultInfo = READ_REGISTER_ULONG64(
-      (volatile ULONG64 *)(Runtime->SgxBase +
-                           ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET));
+  Snapshot->SgxFaultInfo = ReadSgx
+      ? READ_REGISTER_ULONG64(
+            (volatile ULONG64 *)(Runtime->SgxBase +
+                                 ADMISSION_PLATFORM_SGX_FAULT_INFO_OFFSET))
+      : 0xacce5515abad1deaULL;
   RtlCopyMemory(Snapshot->RegionBFault, regionB->CpuAddress,
                 sizeof(Snapshot->RegionBFault));
   RtlCopyMemory(Snapshot->RegionCFault,
@@ -2372,7 +2374,7 @@ static VOID AdmissionOutputProcess(
           runtime->TransportIo.ReadU32(
               runtime, d3Read, &currentD3Read) &&
           AdmissionCaptureQueueFaultSnapshot(
-              runtime, fence, 0u, currentTaRead, currentD3Read, TRUE,
+              runtime, fence, 0u, currentTaRead, currentD3Read, TRUE, FALSE,
               &snapshot))
         AdmissionRecordQueueFaultSnapshot(runtime->Adapter, &snapshot);
     }
@@ -2754,7 +2756,7 @@ static VOID AdmissionPlatformWorker(
               runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
               AdmissionCaptureQueueFaultSnapshot(
                   runtime, description.Fence, nowMs - queueSubmitMs,
-                  currentTaRead, currentD3Read, TRUE, &snapshot)) {
+                  currentTaRead, currentD3Read, TRUE, TRUE, &snapshot)) {
             AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
             faultSnapshotReported = TRUE;
           }
@@ -2836,7 +2838,7 @@ static VOID AdmissionPlatformWorker(
             runtime->TransportIo.ReadU32(runtime, d3Read, &currentD3Read) &&
             AdmissionCaptureQueueFaultSnapshot(
                 runtime, description.Fence, nowMs - queueSubmitMs,
-                currentTaRead, currentD3Read, FALSE, &snapshot)) {
+                currentTaRead, currentD3Read, FALSE, TRUE, &snapshot)) {
           AdmissionRecordQueueFaultSnapshot(adapter, &snapshot);
           faultSnapshotReported = TRUE;
         }
