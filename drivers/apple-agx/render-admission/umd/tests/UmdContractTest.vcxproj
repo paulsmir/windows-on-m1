@@ -52,6 +52,7 @@
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/external:I"$(MesaSourceRoot)\include" /external:I"$(MesaSourceRoot)\src" /external:I"$(MesaSourceRoot)\src\gallium\include" /external:I"$(MesaSourceRoot)\src\gallium\auxiliary" /external:I"$(MesaGeneratedRoot)\src" %(AdditionalOptions)</AdditionalOptions>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -59,6 +60,7 @@
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_pipe_screen.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

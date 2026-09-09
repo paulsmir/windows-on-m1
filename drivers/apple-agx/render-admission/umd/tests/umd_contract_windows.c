@@ -17,6 +17,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "../src/umd.c"
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 #include "agx_win32_pipe_screen.h"
+#include "agx_d3d10_windows.h"
 #endif
 
 typedef struct _TEST_STATE {
@@ -621,6 +622,52 @@ static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
   CHECK(BridgeCreates == before);
 }
 
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
+  AGX_D3D10_WINDOWS_ADAPTER *adapter = NULL;
+  AGX_D3D10_WINDOWS_DEVICE *first = NULL, *second = NULL;
+  D3D10DDIARG_OPENADAPTER open = {0};
+  D3DDDI_ADAPTERCALLBACKS adapterCallbacks = {0};
+  D3DDDI_DEVICECALLBACKS callbacks = *args.pKTCallbacks;
+  D3D10DDI_CORELAYER_DEVICECALLBACKS core = {0};
+  unsigned closedBefore = BridgeDestroys;
+  adapterCallbacks.pfnQueryAdapterInfoCb = TestQueryAdapterInfo;
+  open.hRTAdapter.handle = (VOID *)(UINT_PTR)0x100u;
+  open.pAdapterCallbacks = &adapterCallbacks;
+  CHECK(AgxD3d10WindowsOpenAdapter(&open, &adapter) == S_OK);
+  callbacks.pfnCreateContextCb = BridgeCreateContext;
+  callbacks.pfnDestroyContextCb = BridgeDestroyContext;
+  core.pfnSetErrorCb = BridgeSetError;
+  args.pKTCallbacks = &callbacks;
+  args.pUMCallbacks = &core;
+  args.Interface = D3D10_0_DDI_INTERFACE_VERSION;
+  args.hRTDevice.handle = (VOID *)(UINT_PTR)0x900u;
+  CHECK(AgxD3d10WindowsCreateDevice(adapter, &args, &first) == S_OK);
+  args.hRTDevice.handle = (VOID *)(UINT_PTR)0x901u;
+  CHECK(AgxD3d10WindowsCreateDevice(adapter, &args, &second) == S_OK);
+  CHECK(FAILED(AgxD3d10WindowsCloseAdapter(&adapter)));
+  if (first != NULL && second != NULL) {
+    struct pipe_context *a = AgxD3d10WindowsContext(first);
+    struct pipe_context *b = AgxD3d10WindowsContext(second);
+    CHECK(a != NULL && b != NULL && a != b);
+    if (a != NULL && b != NULL) {
+      struct pipe_context *extra = a->screen->context_create(a->screen, a->priv, 0u);
+      CHECK(a->screen != b->screen && a->priv != b->priv);
+      CHECK(extra != NULL);
+      CHECK(FAILED(AgxD3d10WindowsCloseDevice(&first)));
+      CHECK(first != NULL && BridgeDestroys == closedBefore);
+      if (extra != NULL) extra->destroy(extra);
+    }
+  }
+  CHECK(AgxD3d10WindowsCloseDevice(&first) == S_OK && first == NULL);
+  CHECK(BridgeDestroys == closedBefore + 1u);
+  CHECK(second != NULL && AgxD3d10WindowsContext(second) != NULL);
+  CHECK(AgxD3d10WindowsCloseDevice(&second) == S_OK && second == NULL);
+  CHECK(BridgeDestroys == closedBefore + 2u);
+  CHECK(AgxD3d10WindowsCloseAdapter(&adapter) == S_OK && adapter == NULL);
+}
+#endif
+
 int main(void) {
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks;
   D3D10_2DDI_ADAPTERFUNCS adapterFunctions;
@@ -1015,5 +1062,8 @@ int main(void) {
                              createDevice);
   CHECK(adapterFunctions.pfnCloseAdapter(openAdapter.hAdapter) == S_OK);
   test_runtime_adapter_bridge();
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+  test_mesa_windows_owners(createDevice);
+#endif
   return State.Failures == 0u ? 0 : (int)State.Failures;
 }
