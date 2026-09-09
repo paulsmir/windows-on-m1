@@ -41937,3 +41937,26 @@ the active store graph and moves only to the next fragment-execution scalar.
 Missing/malformed receipt with the intended boundary reached is a diagnostic
 failure; failure to reach physical completion is INCONCLUSIVE, not a shader
 verdict.
+
+**EXP673 BUILD FREEZE 2026-09-09T10:28:48Z.** FRYZZING built the exact
+five-file overlay SHA256
+`76ea9db979a8e8538fe8ccee8522570c3807acc4740a078bb34d9dfefe231581`
+from immutable EXP672 source using WDK26100/MSVC14.44. Version is
+`30.0.673.0`; Universal validation and Inf2Cat report no errors/warnings,
+KMD/UMD and producer link with `/WX`, x64 UMD contract execution passes, and
+SYS/CAT are signed by pinned thumbprint
+`E9BE15BD2A184BFABA0C8035B3C620C58037A241`. The two pre-existing code-analysis
+warnings are unchanged (`AdmissionPlatformWorker` annotation and the UMD test
+NULL-path false positive).
+
+SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
+`12da89b0556172cab7653cdb9df4dd923cfa255dcf754b5d6f541b5ce75dc855`,
+`11fe687e3174806e4ebc8b3b7a5749c52453b941e63760ab537aeba70b449991`,
+`4b8db81ebd720aaeb8ffc90b9b9df0863727d1032ea352abd7c0d010c7eed748`,
+`d41656de91cc2eee9f23037bc352137b57119d81d850656639e7cc8c8c5e3c47`,
+`7ded25f93c7ce78c8b448faedb0778c1c30b083baf91d8e56b36ee8efc2a079e`,
+`f9d6058d9b3c073592c283dec96752b9b019ab73826ce82a1ba0da2b119ea800`,
+`07568185589977e9d15bd178fa59d0176d0149c3ede8e8774653d028e634b705`.
+Artifacts and complete logs are under
+`.local/experiments/EXP673-final-store-graph`. Candidate-ready is not a
+verdict; clean ordinary preflight precedes staging and one natural bind.
