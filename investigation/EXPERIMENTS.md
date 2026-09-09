@@ -41148,3 +41148,39 @@ repeated. The next atomic contract is an explicit16x16/pitch64/16KiB dynamic
 render area matching EXP659 while reusing the existing captured-small
 WorkCommand and framebuffer owner; AGX firmware, RTKit, queues, PBE encoding,
 DCP and caps remain unchanged.
+
+# EXP663 — exact native16x16 WorkCommand geometry control
+
+**PREREGISTERED 2026-09-09T07:08:00Z. WHY THIS HYPOTHESIS:** (1) EXP662 proves
+all normalized user objects, the relocated Vertex and physical completion now
+reach hardware, yet the output is unchanged; (2) EXP659 hardware-proven
+`cmdbuf.json` and attachment inventory require16x16, pitch64 and16KiB; (3)
+source proves EXP662 called `FramebufferWriteFullGeometry` and changed the
+otherwise captured-native WorkCommand/PBE contract to2560x1600/pitch10240.
+This is the closest remaining difference and is stronger than another command
+bit or cache hypothesis.
+
+**WINDOWS CONTRACT:** a16KiB Windows-owned BGRA allocation contains a bounded
+16x16/pitch64 render view; allocation capacity and render dimensions are
+validated separately and the full reference remains resident through the
+fence. **AGX/ASAHI CONTRACT:** EXP659 uses a16KiB attachment with16x16 tiling,
+pitch64, the captured V13_5 WorkCommand and the exact normalized graph.
+**TRANSLATION:** commit `eb5a181119a6ba12ab65235a9acc12fb10e2883c`
+uses a16x256 backing description solely to express the16KiB capacity, validates
+the16x16 subview, reuses the existing captured-small EXP208 output binding and
+verifies the exact72-foreground-pixel geometry. **WHAT IS STILL UNKNOWN:**
+whether this exact native geometry produces non-background pixels through the
+Windows-originated production queue.
+
+**ATOMIC CONTRACT:** render width16, render height16, pitch64, attachment16KiB,
+captured-small WorkCommand tiling and the matching output oracle change
+together; the EXP659 primary evidence makes any subset invalid. Single causal
+variable versus EXP662 is this geometry contract. V13_5 user objects,
+relocations, Vertex copy, firmware, retained root, queues, events, shaders,
+PBE encoding, DCP and caps are unchanged.26 focused and adjacent executable
+tests are GREEN. Build must use immutable FRYZZING EXP662 source plus only the
+eleven committed files, pinned WDK26100/MSVC14.44, analysis/Universal/Inf2Cat/
+sign/version/hash gates. One natural bind only. PASS requires physical TA/3D,
+exact Windows fence and terminal output with256 pixels,72 foreground,184
+background, poison0 and non-background FNV; any failure is localized before
+another change. Exact cleanup and ordinary recovery follow evidence.

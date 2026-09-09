@@ -149,6 +149,15 @@ fresh41/1001/129. Next is one bounded, explicit16x16 render-area/attachment
 contract using the existing small EXP208 binding; no firmware/queue/DCP/caps
 change.
 
+Commit `eb5a181119a6ba12ab65235a9acc12fb10e2883c` implements that exact
+atomic contract offline. A16x256 BGRA allocation supplies the native16KiB
+attachment while a bounded16x16/pitch64 view drives the unchanged native graph;
+the backend reuses captured-small EXP208 binding instead of expanding
+WorkCommand geometry. The triangle oracle now derives from actual render
+dimensions and requires the exact72-pixel native shape. Full-frame behavior is
+unchanged. RED->GREEN and26 focused/adjacent tests pass. Hardware proof is NO;
+next is one exact EXP663 build/run from the clean ordinary baseline.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
