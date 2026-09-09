@@ -103,6 +103,16 @@ a merged modern108-byte PPP/split fragment record. Ordinary377/392 is clean at
 the existing typed dynamic overlay, not another current-Mesa state-bit probe.
 Caps remain0 until AD04 mandatory contract completion.
 
+Commit `d691f8331dbc2d7954506387a33820ff3fbc073b` now implements the next
+bounded control: a SHA-gated EXP659 normalizer plus qualification producer for
+the exact V13_5 vertex-data/descriptor/VS/FS/pipeline/separate-PPP graph. All
+addresses are resolved through the existing typed allocation-relative ABI;
+captured physical addresses/private ownership are not reused. The real frame
+normalizes deterministically, bad hash fails closed, and121 adjacent tests are
+GREEN. KMD/backend remains exact EXP658. Hardware proof is still NO; next run
+must reuse the exact EXP658 package and change only producer/assets, requiring
+non-background output FNV after physical completion.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

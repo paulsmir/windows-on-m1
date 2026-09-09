@@ -40869,3 +40869,32 @@ the native proxy, then immutable ordinary377/392 was restored. Health is
 Problem28/null INF, no AppleAgx package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Native capture did not
 install or stage a Windows driver.
+
+**V13_5 COMPATIBILITY CONTROL IMPLEMENTED.** Commit
+`d691f8331dbc2d7954506387a33820ff3fbc073b` adds a fail-closed SHA-gated
+normalizer for the exact EXP659 frame and changes only the qualification
+producer graph. The normalizer validates the native VDM word0/output counts,
+two PPP state sizes/headers, fragment record, real72/184 readback and exact
+object map before producing bounded assets. It relocates native vertex data
+through the existing Descriptor role, normalizes the two USC shader pointers,
+places the separate native PPP records inside the owned encoder allocation and
+uses the existing typed relocation kinds. No captured physical address or
+private owner is retained.
+
+The normalized graph has nine allocation references and eight relocations;
+the KMD/backend is source-identical EXP658 and already supports every role and
+relocation. Encoder/pipeline/VS/FS/vertex/descriptor/scissor/depth hashes are
+`0eb5bb7185ada40817a0d8908a3d994542d771b044cdc27005835b2e76fdc643`,
+`dc70502f41e111c617a4b8c88babd7f63d2194b89928af43ca9ee84d36ca2011`,
+`db1832c83fd587b02180fe055a677ede178bb5f131a77f8b6d69c10984e9e18e`,
+`fa139e95a66a67b921221a3927ccfca209bc9037fdd31156d74894902ab2dd92`,
+`b2dbf99fb44343f6109d660ad2463d76b887ba87d75509f8ab903fae50fb749c`,
+`af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc`,
+`2b652c2c1ae191c0f7f7aedf206809082d469b8f0418c0b1cb2ae9562d1d72a6`
+and `15ec7bf0b50732b49f8228e07d24365338f9e3ab994b00af08e5a3bffe55fd8b`.
+Manifest SHA256 is
+`0df82ba47bdd32f30e81f07c96764d0230e29ed437e47d01bc7338c71d76d188`.
+The real frame normalizes deterministically, a wrong frame hash is rejected,
+Python compile and121 adjacent production tests are GREEN. This is
+OFFLINE_PROVEN only; next build changes only the producer and reuses exact
+EXP658 KMD package as the control.
