@@ -40127,3 +40127,51 @@ out and ARP is incomplete. Both expected vUART endpoints
 state, not a driver verdict. The preregistered next action is the established
 immutable ordinary377/392 launch, live clean-baseline verification, then
 hash-gated staging; no physical operator action is required.
+
+**EXP652 ACTUAL — REJECTED BEFORE PATCH/SUBMIT 2026-09-09T00:11:21Z.** The
+immutable ordinary launch first required a local launch-environment repair:
+Homebrew `lld22` had been relinked to incompatible LLVM23. A project-local
+wrapper selected the still-installed LLVM22 and z3-4.16 libraries; no m1n1/Mu
+or hardware artifact changed. After one expected Windows restart, ordinary
+health was Problem28/null INF, packages/service/module/SYS/UMD absent,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no41/1001/129. Exact30.0.652.0 was staged as
+oem5 and the unchanged full-owner profile bound it naturally with Code0,
+Running, exact INF/SYS/UMD hashes and8CPU.
+
+The one producer invocation emitted `DYNAMIC_RENDER_BEGIN bytes=808 refs=11
+allocations=10`, then `DYNAMIC_RENDER_END status=0xc000007b queued=0` and
+entered its bounded-evidence preserve path. Durable correlation v3 build652
+boot296251840 contains exactly one slot, overflow0, validity mask5
+(`ENTRY|EXIT`), Render guard19 `AdmissionUmdRenderGuardPrepare`, exact status
+`STATUS_INVALID_IMAGE_FORMAT`, DMA bytes0, patches0, prepatched0, no Patch,
+Submit, fence, worker or output milestones. Device remained Code0/Running with
+8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Thus no physical TA/3D job
+was submitted and this run says nothing negative about the generated AGX
+encoder or completion hardware. It rejects the claim that the current
+production composition is hardware-ready and localizes the first failure to
+`AdmissionDynamicRenderBuild` before DMA publication.
+
+Source inspection narrows the exact status to either overlay plan/binding or
+`AppleAgxDynamicJobMaterialize`; the real generated offline fixture already
+passes the former with byte-identical assets. The remaining production-only
+difference is resident WDDM placement: internal CPU-visible class allocations
+truthfully support aperture segment1 as well as preferred local segment2, but
+`AdmissionDynamicRead` currently rejects every segment except2 even though it
+only copy-once imports those inputs into the backend overlay. This is a
+deterministic Windows-memory contract mismatch to reproduce and correct
+offline through the existing software-aperture owner before any new hardware
+run; it is not a reason to change AGX/RTKit/UAT/queues/DCP or caps.
+
+Hardware log/correlation/result/evidence JSON SHA256 are
+`b4ceb09a046a73afa59596d3976fb313ef7e37ccb50a8b1059600ad30778b839`,
+`e51946d6a58d559def265091fccaa027c9597f9ff65a3ab343b174ed55889d0f`,
+`1e928c4a4353a5ee555c9ce92d47e9dfe2327c9f12b558bf172c6745efec48fb`
+and `cb5b91457e52406d2cd986b8d0e6e5ac3a076520aafb12f49eefe2aadf4cf2ea`.
+
+**EXP652-R1 CLEAN RECOVERY 2026-09-09T00:14:53Z.** Evidence was copied before
+mutation. Exact hash-matched oem5 was uninstalled/deleted, APPL0002 removed,
+full-owner Windows shut down cleanly and immutable ordinary377/392 was
+relaunched. Final health is Problem28/null INF, packages/service/module/SYS/UMD
+absent, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP652 will not
+be repeated; the next candidate must add one causal aperture-aware copy fix and
+retain all other source/artifacts as controls.
