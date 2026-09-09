@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T02:18Z. Main process only; no agents.
+Updated 2026-09-09T02:28Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -33,9 +33,16 @@ fresh41/1001/129. The first source mismatch is CPU-visible class input placement
 the allocation contract permits aperture1 or preferred local2, while the
 dynamic copy-once reader accepted only local2. Commit
 `8ff2d82444edfc40f1935cf262a369ca145db134` adds one bounded PagingLock-owned
-resident reader using existing local and software-aperture owners; RED→GREEN
-and 144 focused tests pass. Next is its fresh qualification build and one
-hardware rerun as EXP653. Caps remain0 until AD04 mandatory contract completion.
+resident reader using existing local and software-aperture owners. EXP653
+hardware confirms that fix: Render now has `Prepatched=1` and advances to the
+next invalid-address guard, the old exactly-two-allocation visible companion
+resolver. Dynamic full-frame output uses the already proven directFramebuffer
+path and needs no companion tuple. Commit
+`1a04e8cf5a658a0a996158a40eb354616bab3dfa` skips only that legacy resolver for
+dynamic commands; RED→GREEN and 145 focused tests pass. EXP653 package was
+removed and ordinary377/392 is clean at 2026-09-09T00:26:14Z. Next is fresh
+EXP654 build/hardware with this single routing fix. Caps remain0 until AD04
+mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

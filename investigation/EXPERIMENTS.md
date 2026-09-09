@@ -40232,3 +40232,43 @@ inspection stays inside the exact remaining materialize primitive. If it moves,
 the first newly failed stage owns the next fix. Evidence path is
 `.local/experiments/EXP653-aperture-resident-read/`. Exact package cleanup and
 ordinary377/392 restoration remain mandatory after evidence.
+
+**EXP653 ACTUAL — CAUSAL FIX CONFIRMED; NEXT DIRECT-FRAMEBUFFER GUARD
+2026-09-09T00:23:17Z.** Exact30.0.653.0 bound naturally as oem5 with Code0,
+Running, exact INF/SYS/UMD and8CPU. The byte-identical producer again issued
+one808-byte/11-reference/10-allocation Draw. Render returned
+`0xc0000141 STATUS_INVALID_ADDRESS`, queued0, with no Patch/Submit/worker/fence.
+Durable correlation v3 build653 boot372052017 has one ENTRY|EXIT slot,
+overflow0/durable1, guard19, but now `Prepatched=1`. This proves
+`AdmissionDynamicRenderBuild` completed: the EXP652 materializer failure moved
+after the aperture-aware resident read. It also proves no physical AGX job was
+submitted in EXP653.
+
+The sole subsequent guard19 invalid-address path is the visible qualification
+call to `AdmissionVisibleAgxResolveDestination`. That legacy helper calls
+`AdmissionVisibleAgxCompanionIndex`, which accepts exactly the old two-allocation
+producer, while this Draw has10 allocations. The completed-output scanout code
+already selects its proven direct-framebuffer path when the full-frame source
+identity equals the packet destination and explicitly does not consume the
+companion fields. Therefore requiring a companion here is a source-exact
+producer-shape bug, not a DCP or AGX failure.
+
+Hardware log/correlation/result/evidence JSON SHA256 are
+`2657c23045de94f798a60679c3eed8754e1e0d475ea2865d9f1308748d835038`,
+`a2f6c90648e55446b5acb3ce297d2fe0f640de3358fc7691c0ac6c245685ccbe`,
+`1e73a34771a8fc6c32e79ca5e5761f373f4decade33dffea892b0c85c6f63924`
+and `1dbf3ec65d74414aa95aeeff4f78cb4f360b4a8ad7ab6cff23a3a488b712c283`.
+Commit `1a04e8cf5a658a0a996158a40eb354616bab3dfa` skips only the legacy
+two-allocation companion resolution for a dynamic full-frame command. Its
+packet retains the exact render destination and zero companion tuple; the
+existing directFramebuffer scanout identity, overlap, owner, latch and
+retirement guards remain unchanged. An executable packet-lifetime test was RED
+then GREEN and 145 focused tests pass.
+
+**EXP653-R1 CLEAN RECOVERY 2026-09-09T00:26:14Z.** Exact hash-matched oem5 was
+uninstalled/deleted after evidence, APPL0002 removed, full-owner Windows shut
+down and immutable ordinary377/392 restored. Final health is Problem28/null
+INF, packages/service/module/SYS/UMD absent, SSH/8CPU/NVMe2/USB5/keyboard1 and
+no fresh41/1001/129. EXP653 will not be repeated. EXP654 must contain only the
+direct-full-frame routing fix over exact EXP653 source and reuse the same
+producer/assets/platform.
