@@ -41261,3 +41261,18 @@ EXP663 source.17 tests GREEN. Build/sign/hash gates remain identical. One
 natural-bind run; PASS requires256=72 foreground+184 background with physical
 completion/fence. Uniform background rejects alignment as sufficient. Evidence,
 exact cleanup and ordinary recovery are mandatory before the next decision.
+
+**EXP664 BUILD FREEZE 2026-09-09T07:25:54Z.** FRYZZING built exact
+two-file overlay SHA256
+`3db135eebedd51715d16328e0fb8580ce38b076eaf6fd7f33a6d23988e0e2f12`
+from immutable EXP663 source with pinned WDK26100/MSVC14.44. All established
+analysis/Universal/Inf2Cat/sign/test gates pass with inherited warnings only;
+version30.0.664.0. SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
+`e2a6f5258e4f7f20b96194121f4f0343e60d76a0713f464aee50a3fb79d2d034`,
+`98cf67f943b10707465bd614a2fb790c84c459071e083ec18d4e4a6fd0130a32`,
+`e7be5eb79606f40468dcfd020eb697d40ea39fe001aab10af91b28745ec7adcc`,
+`f9d17f54183f74e6185d8dbc2f26ab26f644a516135e7751c8c39abed88da47e`,
+`dce6f9592a8ae03e4defb00d5c630209f40f017bacaaf22e638c16863ca7dfb4`,
+`2fd6f7e6d2a834d75b16fd64bbe5368079e3a73590570428032bc521c30b5d16`,
+`59c0fa117e69589c38e8af159525fbec797007167880951520a321c1a1b44633`.
+Air ordinary377/392 is clean from EXP663-R1; stage and one run next.
