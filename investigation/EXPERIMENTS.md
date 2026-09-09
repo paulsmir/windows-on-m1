@@ -42411,3 +42411,28 @@ ordinary377/392 restored: Code28/null INF, no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next is one fresh build
 and hardware run of the same0x3800 asset with the immutable snapshot as the
 only variable.
+
+**EXP678 INTERPRETATION REFINEMENT 2026-09-09T12:04:00Z.** No
+live-allocation race is established. Exact `ADMISSION_TERMINAL_RECEIPT` source
+layout and both device/service raw records confirm the decoder offsets. The
+source-backed defect is instead the oracle: it interpreted the tiled16x16
+attachment as linear, selected an observed interior pixel as the expected
+foreground, and then wrote that observed value back into
+`Completed->View.ExpectedColor`. Decoding immutable EXP659 raw bytes with the
+pinned m1n1 64x64 Morton mapping yields the real logical mask at y3--13,
+expanding2--12 pixels, not the old synthetic y2--12 shrinking mask.
+
+Commit `532ee86deca88454e4a1aac0df3f6e3bd7b38efe` adds the coherent independent
+oracle contract. The optional private Draw flag carries
+`ExpectedForegroundColor` from the qualification workload through validated
+Draw and dynamic DMA v3; output verification records a separate
+`ObservedForegroundColor`, decodes AGX tiled64 addresses and compares every
+logical pixel against the source-backed72-pixel mask. The snapshot record
+contains expected layout/colour, observed colour, verification validity and
+the exact1024 bytes. Its decoder validates structure/hash and can compare those
+bytes with an independent expected image. The immutable EXP659-derived gray
+expected image has SHA256
+`c0328a8cf1b372ff1d1d86d2a859a964548aaacf602eb5a1aa2aba43400d2393`
+and raw FNV0xdd2c90074f6ee435. Twenty-nine ABI/DMA/oracle/snapshot/
+composition/submission tests pass. This is offline proof only; EXP679 must use
+the unchanged gray shader and compare the exported raw record to that file.

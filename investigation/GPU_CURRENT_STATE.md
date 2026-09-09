@@ -324,12 +324,18 @@ EXP678 reaches physical TA/3D/fence271 with the all-0x3800 fragment variant,
 but its terminal record is internally inconsistent: scalar fields report the
 old72-zero mask while `OutputTargetFnv1a` equals the exact preregistered
 72-gray/184-background oracle0xdd2c90074f6ee435. This is not a fragment PASS
-or FAIL. Commit `ee43e06a9b0746778340506fcf05ff765cbc5529` now captures one
-bounded1024-byte transaction-owned snapshot after completion and verifies/
-exports only that immutable copy. Offline RED to GREEN and decoder/hash tests
-pass. EXP678 is removed; ordinary377/392 is clean at2026-09-09T11:58:04Z.
-Next is build/run EXP679 with unchanged0x3800 asset and snapshot transport as
-the sole variable; no context/queue/render semantic change.
+or FAIL. Exact source-layout decoding confirms the receipt ABI/field offsets;
+no live-allocation race is claimed. The actual oracle treated AGX tiled raw
+bytes as linear and self-selected observed foreground as expected. Commits
+`ee43e06a9b0746778340506fcf05ff765cbc5529` and
+`532ee86deca88454e4a1aac0df3f6e3bd7b38efe` now capture one bounded immutable
+1024-byte record, carry an independent expected foreground from the workload,
+decode the source-backed AGX64 Morton layout and compare against the exact
+EXP659-derived expected image. Observed and expected colours are separate.
+Offline RED to GREEN, exact raw FNV and decoder/image tests pass. EXP678 is
+removed; ordinary377/392 is clean at2026-09-09T11:58:04Z. Next is build/run
+EXP679 with unchanged0x3800 asset and this observation/oracle contract as the
+only variable; no context/queue/render semantic change.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
