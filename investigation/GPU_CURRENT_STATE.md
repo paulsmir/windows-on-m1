@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T02:28Z. Main process only; no agents.
+Updated 2026-09-09T02:41Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -39,10 +39,18 @@ next invalid-address guard, the old exactly-two-allocation visible companion
 resolver. Dynamic full-frame output uses the already proven directFramebuffer
 path and needs no companion tuple. Commit
 `1a04e8cf5a658a0a996158a40eb354616bab3dfa` skips only that legacy resolver for
-dynamic commands; RED→GREEN and 145 focused tests pass. EXP653 package was
-removed and ordinary377/392 is clean at 2026-09-09T00:26:14Z. Next is fresh
-EXP654 build/hardware with this single routing fix. Caps remain0 until AD04
-mandatory contract completion.
+dynamic commands; RED→GREEN and 145 focused tests pass. EXP654 hardware then
+passed Render/Patch/Submit, one real dynamic TA/3D completion, fence273,
+interrupt and DPC. `DYNAMIC_TA3D_COMPLETION_HW_PROVEN=YES` and
+`DYNAMIC_WINDOWS_FENCE_HW_PROVEN=YES` for the exact first Draw. Full-frame
+output verification failed `STATUS_DATA_ERROR` before Present, so geometry/
+pixel correctness and dynamic presentation remain NO. The producer also
+incorrectly accepted positive `STATUS_TIMEOUT` and attempted retirement; that
+is fixed at commit `5b885825640ba21cd2eb0e5489716c60ff8c341f`, which also
+exports one bounded terminal output snapshot after PASSIVE verification without
+changing the GPU graph. EXP654 package is removed and ordinary377/392 is clean
+at 2026-09-09T00:38:08Z. Next is source-identical EXP655 output discriminator.
+Caps remain0 until AD04 mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

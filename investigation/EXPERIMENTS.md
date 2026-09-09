@@ -40315,3 +40315,63 @@ evidence and exact cleanup are unchanged except build654. The first required
 advance is Render success with nonzero DMA/patch and then Patch/Submit. Full
 PASS still requires physical TA/3D, exact fence, nonuniform full-frame output,
 matching latch, HOLD and retirement. Any new guard becomes the sole next owner.
+
+**EXP654 ACTUAL — FIRST DYNAMIC PHYSICAL EXECUTION/FENCE PASS; OUTPUT
+DATA_ERROR 2026-09-09T00:31:38Z.** Exact30.0.654.0 bound naturally as oem5,
+Code0/Running with exact INF/SYS/UMD and8CPU. The unchanged producer submitted
+one808-byte Draw and returned Render status0/queued1. Durable correlation v3
+build654 boot265314043 contains one ordered slot, overflow0/durable1,
+Render guard0/status0, DMA3940, patch count1, prepatched1, Submit entry/exit
+status0, physical fence273, worker entry/exit with final backend phase Ready2,
+Notify and DPC. Late exact `Wom1GdiHardwareReceipt` is stage7 with
+Render/Patch/Submit/backend/completion status0, fence273, opcode Draw2,
+DMA3940, destination16,384,000 bytes at GPU VA0x1500fa0000 / host
+PA0x9bcfd0000, interrupt1, DPC1 and completion fence273. The existing backend
+can reach these states only after real TA/3D queue publication, firmware/GPU
+completion and the exact Windows fence callback. Therefore
+`DYNAMIC_TA3D_COMPLETION_HW_PROVEN=YES` and
+`DYNAMIC_WINDOWS_FENCE_HW_PROVEN=YES` for this one Draw.
+
+The PASS stops there. Output-worker correlation records Entry then Verified
+`0xc000003e STATUS_DATA_ERROR`; PresentEntry/PresentExit are absent and the
+producer's presentation query timed out with Valid0/fence0/pixels0. No dynamic
+frame was presented. This confirms commit1a04e8c removed the companion guard
+and localizes the new first boundary to render-target contents, after physical
+completion and before Present. Four Event129 records occurred at ten-second
+intervals during the failed query; storage/SSH/device remained reachable, so
+they are preserved as concurrent platform telemetry and are not assigned as a
+GPU cause.
+
+The first evidence capture preceded legacy receipt export. A second immutable
+late capture preserved the exact GDI receipt. Hardware/correlation/GDI/result/
+late-JSON SHA256 are
+`d77d0ac6c632d47454ea0b5a1fdb34978d7b061c4712dee9c6bdf0240bf4221c`,
+`cc792e92745303e0ed59f762d6b81b89d34677d634aedd9834702364cbb5b037`,
+`36dea646ee21f7a3bc426ee592d09a72cca013ef15f8b8ea86ce4da10347decb`,
+`a57fb0fc784ea710614f067ecc92dc673c380538a9604b84aea3155bbad1cd41`
+and `0f1691ef5bc9eea7d4c1ce22402059d24a404e27f907dd9d318b1ad498ff2820`.
+
+The EXP652-derived producer contained a separate accepted-handshake defect:
+`STATUS_TIMEOUT` is positive and incorrectly passed `NT_SUCCESS`, causing an
+invalid HOLD message and attempted retirement after both query timeouts. That
+late retirement returned `STATUS_DEVICE_NOT_READY` and is not a presentation
+result. Commit `5b885825640ba21cd2eb0e5489716c60ff8c341f` now requires exact
+`STATUS_SUCCESS` before HOLD/retirement and adds a qualification-only bounded
+`Wom1OutputTerminalSnapshot` after PASSIVE output verification. It reuses the
+existing terminal structure, performs no `ZwFlushKey`, does not change the
+functional GPU graph, and will expose first pixel/mismatch/pixel counts/poison/
+changed bytes/hash for the next source-identical diagnostic run. Focused tests
+are GREEN.
+
+An additional warm-reset read of PA0x9bcfd0000 after package cleanup found
+zeroed memory. Because allocation/runtime ownership had already been destroyed,
+that observation is explicitly not evidence of the pre-cleanup GPU output and
+does not drive the hypothesis.
+
+**EXP654-R1 CLEAN RECOVERY 2026-09-09T00:38:08Z.** Both evidence captures were
+saved first. Exact oem5 was uninstalled/deleted, APPL0002 removed, full-owner
+Windows stopped, and immutable ordinary377/392 restored. Final health is
+Problem28/null INF, packages/service/module/SYS/UMD absent,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no events in the new ordinary boot. EXP654
+will not be repeated. EXP655 is a source-identical output discriminator plus
+the strict producer handshake; it must not change AGX/DCP/caps.
