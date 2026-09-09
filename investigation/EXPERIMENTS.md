@@ -41508,3 +41508,20 @@ analysis/Universal/Inf2Cat/sign/version/hash, one natural bind and exact cleanup
 apply. PASS requires physical TA/3D/fence and256=72 nonzero red+184 background,
 poison0; byte-identical zero rejects alias identity and triggers the next
 full active-image comparison rather than another address micro-probe.
+
+**EXP667 BUILD FREEZE 2026-09-09T08:28:01Z.** FRYZZING built exact five-file
+overlay SHA256
+`1a53cf53df0be8f7ffaafdc4889917ca1a81a5bda55fb5f1f2e05122f7a2ca0f`
+from immutable EXP666 source with pinned WDK26100/MSVC14.44. ARM64 KMD/UMD/
+producer analysis, Universal, Inf2Cat, signing and the silent x64 UMD test pass;
+only inherited C28251/C6011 warnings remain. Version30.0.667.0. SYS/UMD/INF/
+CAT/producer/ZIP/air-manifest SHA256:
+`42dae411490cc4b952f90af84b51fad4ff14f0cca95e035469139d15fcd3b36a`,
+`343a06de164f95d59dd50e56e18da1801fc0e8f80e2daec642c1ed282a32531d`,
+`fadd9fcf9ebd561f9bcbee3f825ec51ed3c17efa718039797c2b39df528a4dce`,
+`4ae9bcfcd77b43122caa996112a5af22d4317bbcdc36fded5e109a8e0ed3926a`,
+`b39954e0973521ab15ffb3c636e487947fc4aaf1aca9804ce8c99fb1ed2be554`,
+`a177c15b0d2f4cb5834c27391a881c7be1b37b4018bda0141da60065468b66fd`,
+`9415a19c3646f80f7c5cd48a859098ccabd4493b6458547282e55aa2adebb419`.
+Artifacts: `.local/experiments/EXP667-native-shader-aliases/artifacts`.
+Ordinary377/392 is clean from EXP666-R1; stage then one full-owner run.
