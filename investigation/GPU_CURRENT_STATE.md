@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T02:02Z. Main process only; no agents.
+Updated 2026-09-09T02:18Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -24,12 +24,18 @@ records were byte-exact. Explicit retirement sequence5/fallback swap12 and all
 teardown statuses0. `TRANSPORT_HW_PROVEN=YES` and
 `DYNAMIC_CLEAR_HW_PROVEN=YES`; D3D pipeline/desktop remain NO.
 
-Exact intermediate package was removed. Ordinary377/392 is clean at
-2026-09-08T21:24Z: Code28/null INF, no AppleAgx package/service/module/SYS/UMD,
-SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Current boundary is AD03
-hardware qualification of the first source-derived triangle through the
-production Render/Patch/Submit/worker path. Caps remain0 until AD04 mandatory
-contract completion.
+EXP652 exact30.0.652.0 reached one Render ENTRY/EXIT but failed guard19
+`AdmissionUmdRenderGuardPrepare` with `STATUS_INVALID_IMAGE_FORMAT` before DMA,
+Patch, Submit, fence or worker. No AGX job executed. Its exact package was
+removed and ordinary377/392 is clean at 2026-09-09T00:14:53Z: Code28/null INF,
+no AppleAgx package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no
+fresh41/1001/129. The first source mismatch is CPU-visible class input placement:
+the allocation contract permits aperture1 or preferred local2, while the
+dynamic copy-once reader accepted only local2. Commit
+`8ff2d82444edfc40f1935cf262a369ca145db134` adds one bounded PagingLock-owned
+resident reader using existing local and software-aperture owners; RED→GREEN
+and 144 focused tests pass. Next is its fresh qualification build and one
+hardware rerun as EXP653. Caps remain0 until AD04 mandatory contract completion.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
