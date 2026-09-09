@@ -10,7 +10,7 @@ pinned dynamic triangle graph with the hardware-proven EXP208 backend.
 This roadmap pointer changes planning priority only, not hardware readiness or
 the last verified machine state recorded below.
 
-Updated 2026-09-09T03:10Z. Main process only; no agents.
+Updated 2026-09-09T02:30Z. Main process only; no agents.
 
 ## Current machine / next boundary
 
@@ -118,9 +118,22 @@ reproduction names `AppleAgxWin32AbiRelocation` because DescriptorAddress did
 not allow a Vertex target. Commit `8cb6662b8245a86b05bf6368e0b110197c0712b1`
 adds that one owned-role edge while preserving every validation guard; the
 exact command is now accepted at784 bytes and122 tests pass. EXP660 is removed
-and ordinary377/392 is clean at 2026-09-09T02:13:54Z. Next is a full pinned
-KMD+producer rebuild with this sole guard fix and the unchanged normalized
-V13_5 graph; hardware graph compatibility remains untested.
+and ordinary377/392 was clean at 2026-09-09T02:13:54Z. EXP661 then entered KMD
+Render with the exact784-byte/9-reference graph, but exited guard19
+`AdmissionUmdRenderGuardPrepare` with `STATUS_INVALID_IMAGE_FORMAT` before DMA,
+Patch or Submit. This proves the ABI edge fix and names the next production
+mismatch: the CPU-visible Vertex target was neither copied into the overlay nor
+resolvable through the local-only fallback. Commit
+`d9d3dd39c0b2d5f0a40548eed329e5ca33d2047c` now copy-once captures only a Vertex
+that is actually targeted by a relocation, places it in bounded zero object73
+range `[0x20000,0x30000)`, carries its reference in version2 DMA and reconstructs
+the same plan in the worker. Vertex-id graphs without such a relocation remain
+unchanged. Focused RED->GREEN and25 adjacent executable tests pass; hardware is
+not yet proven. EXP661 is removed and ordinary377/392 is clean at
+2026-09-09T02:29:19Z: Code28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next is one exact build
+and hardware run of the unchanged V13_5 graph with this vertex carry as the only
+functional variable.
 
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses

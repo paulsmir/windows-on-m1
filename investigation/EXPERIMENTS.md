@@ -41019,3 +41019,38 @@ uniform background0xf953759ae5722325. The native16x16 graph is not expected to
 pass the full-frame presentation oracle yet. Same uniform FNV rejects command
 ABI compatibility; earlier failure is localized separately. Evidence precedes
 exact cleanup and ordinary recovery.
+
+**EXP661 ACTUAL — INCONCLUSIVE BEFORE DMA 2026-09-09T02:21:33Z.** Exact
+natural bind passed preflight as oem5.inf, Problem0, service Running,8 CPUs and
+byte-exact SYS/UMD/INF hashes. The producer issued the unchanged784-byte,
+9-reference Draw and returned `STATUS_INVALID_IMAGE_FORMAT` (`0xC000007B`).
+Crash-durable correlation is candidate661/boot265389123/call1, ENTRY+EXIT,
+command length784, guard19 `AdmissionUmdRenderGuardPrepare`, status0xC000007B,
+DMA0, patches0, prepatched0, fence0 and no Patch/Submit/worker/Notify/DPC.
+Therefore the V13_5 command bytes did not execute and this is not an AGX/PBE/
+DCP/output verdict. Device remained Problem0/service Running with8 CPUs,
+NVMe2/USB5/keyboard1 and no fresh41/1001/129. Evidence:
+`.local/experiments/EXP661-v13_5-vertex-relocation/evidence/`; correlation SHA256
+`2f09fb3c85f1b9dd749ee48250a52c043c5a328c0b9a20cedc2c24467f4cff8e`.
+
+**FIRST SOURCE MISMATCH.** The earlier ABI correction permits a descriptor to
+target Vertex, but the production materializer copied only shader/pipeline/
+descriptor/scissor/depth/encoder roles. `AdmissionDynamicResolve` could resolve
+the targeted Vertex only through an overlay entry or a local-segment fallback;
+the CPU-visible class allocation can reside in aperture1, so this run failed
+before publishing validated allocation facts. Commit
+`d9d3dd39c0b2d5f0a40548eed329e5ca33d2047c` adds one coherent translation:
+only Vertex references actually targeted by a relocation are copy-once captured,
+placed in the existing mapped and zero upper object73 range, carried in a
+version2 DMA binding and reconstructed by the worker. It does not expose raw
+aperture physical pages, change AGX state or affect vertex-id graphs. The
+executable overlay test was RED at PlanFromJob, then GREEN;25 adjacent dynamic
+ABI/DMA/overlay/backend/screen tests pass.
+
+**EXP661-R1 CLEAN RECOVERY 2026-09-09T02:29:19Z.** Evidence was preserved,
+exact oem5 package/devnode removed, full-owner stopped after graceful Windows
+shutdown and immutable ordinary377/392 restored. Health is Problem28/null INF,
+no AppleAgx package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and
+no fresh41/1001/129. EXP661 must not be repeated. Next hardware candidate has
+one functional variable: transaction-owned Vertex copy/VA carry for the same
+V13_5 graph.
