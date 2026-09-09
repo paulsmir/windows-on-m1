@@ -42053,3 +42053,32 @@ from the exact full output receipt. Because `0xa5a5a5a5` equals the verifier's
 poison value, successful diagnostic output remains invalid and cannot advance
 to DCP Present. Failure to reach the same physical boundary is INCONCLUSIVE.
 Recovery is exact package cleanup then ordinary377/392.
+
+**EXP674 ACTUAL — FRAGMENT INVOCATION AND ST_TILE CONFIRMED
+2026-09-09T10:50:54Z.** Exact reused30.0.673.0 package naturally bound and the
+single784-byte request completed physical TA/3D with fence271. Only the eight
+preregistered immediate bytes differ. The active fragment shader FNV changes
+from0x8964d9ebaac8b869 to0x1e3f65fb20873df9 while encoder, vertex pipeline,
+fragment USC, VS and every store-graph scalar/hash remain exact. The output
+changes from FNV0x98b3446c1b0a8215 to0xb9c5833f0c2f7945 and contains72 exact
+`0xa5a5a5a5` poison pixels plus184 background pixels; first covered mismatch
+remains index88 and the full1024 bytes are examined. Because poison is
+intentionally invalid, no render Present occurs.
+
+This confirms fragment code fetch, fragment invocation, immediate consumption
+and `st_tile u8norm xyzw` through the same physical store path. It rejects the
+hypothesis that the shader is not invoked or that tile store suppresses every
+fragment output. The original red failure is now localized to its differing
+value-construction sequence before `st_tile`. Terminal/graph/store SHA256 are
+`3a4ddd71556d9a0c62cb08df406fb7882e8a67a7ba2037c881493a9076dd5395`,
+`45b25f126c287e377afc57bf92d3b232a1b4644c5e2c7303479ca6fe2e4fb2b3`,
+and `9483d529dcf9fc88d6db4fa373d88eb7c3083f7c6e9c6933a96433cfeb563ad0`.
+One stornvme Event129 at10:50:02Z is retained as storage telemetry; device
+remained Code0/ACTIVE with8CPU/NVMe2/USB5/keyboard1 and no41/1001.
+
+**EXP674-R1 CLEAN RECOVERY 2026-09-09T10:53:41Z.** Evidence was saved first,
+exact oem5/package/devnode/service removed, full-owner stopped and immutable
+ordinary377/392 restored. Health is Code28/null INF, no package/service/module/
+SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129 in the ordinary
+boot. Next is offline pinned-ISA direct-register red construction; do not repeat
+EXP674.

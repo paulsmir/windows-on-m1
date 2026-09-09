@@ -300,6 +300,20 @@ fragment-only discriminator. EXP673 package/service were removed and ordinary
 377/392 is clean at2026-09-09T10:36:00Z: Code28/null INF, no package/service/
 module/SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129.
 
+EXP674 changes only the four FP16 source immediates in the exact native FS to
+0x392d (u8norm0xa5). Hardware returns72 exact `0xa5a5a5a5` poison pixels and
+184 background pixels, FNV0xb9c5833f0c2f7945, with physical TA/3D,
+fence271, the same WorkCommand/PBE/store receipt and no mapped fault. This is
+direct proof that the fragment shader is fetched and invoked and that its
+`st_tile u8norm xyzw` reaches the stored attachment. The former red failure is
+therefore inside the native red value-construction sequence before `st_tile`,
+not fragment invocation, UAT, PBE/store or output visibility. One Event129 was
+recorded as storage telemetry without a GPU-visible interruption. Exact package
+was removed; ordinary377/392 is clean at2026-09-09T10:53:41Z. Next is an
+offline pinned-ISA construction of constant red directly in the final source
+register order, avoiding the XOR permutation chain; no other graph field may
+change.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
