@@ -30,6 +30,9 @@ struct encoder_offsets {
    unsigned fs_uniform_offset;
    unsigned fs_shader_offset;
    unsigned vdm_pipeline_offset;
+   unsigned batch_init_ppp_state_offset;
+   unsigned batch_init_ppp_offset;
+   unsigned batch_init_ppp_bytes;
    unsigned ppp_state_address_offset;
    unsigned ppp_offset;
    unsigned ppp_bytes;
@@ -348,6 +351,17 @@ build_encoder_objects(const struct agx_shader_part *vs,
 
    head = encoder;
    {
+      struct AGX_VDM_BARRIER barrier = {.usc_cache_inval = true};
+      AGX_VDM_BARRIER_pack((uint32_t *)head, &barrier);
+      head += AGX_VDM_BARRIER_LENGTH;
+   }
+   offsets->batch_init_ppp_state_offset = (unsigned)(head - encoder);
+   {
+      struct AGX_PPP_STATE state = {0};
+      AGX_PPP_STATE_pack((uint32_t *)head, &state);
+      head += AGX_PPP_STATE_LENGTH;
+   }
+   {
       struct AGX_VDM_STATE state = {
          .vertex_shader_word_0_present = true,
          .vertex_shader_word_1_present = true,
@@ -400,6 +414,36 @@ build_encoder_objects(const struct agx_shader_part *vs,
    offsets->terminate_offset = (unsigned)(head - encoder);
    head = (unsigned char *)agx_vdm_terminate((uint32_t *)head);
 
+   offsets->batch_init_ppp_offset =
+      align_u((unsigned)(head - encoder), 64u);
+   head = encoder + offsets->batch_init_ppp_offset;
+   {
+      struct AGX_PPP_HEADER initial_present = {
+         .w_clamp = true,
+         .occlusion_query_2 = true,
+         .output_unknown = true,
+         .varying_word_2 = true,
+         .viewport_count = 1u,
+      };
+      offsets->batch_init_ppp_bytes =
+         (unsigned)agx_ppp_update_size(&initial_present);
+      struct agx_ptr initial_ptr = {.cpu = head, .gpu = 0u};
+      struct agx_ppp_update initial_ppp =
+         agx_new_ppp_update(initial_ptr, offsets->batch_init_ppp_bytes,
+                            &initial_present);
+      agx_ppp_push(&initial_ppp, W_CLAMP, cfg)
+         cfg.w_clamp = 1e-10f;
+      agx_ppp_push(&initial_ppp, FRAGMENT_OCCLUSION_QUERY_2, cfg)
+         ;
+      agx_ppp_push(&initial_ppp, OUTPUT_UNKNOWN, cfg)
+         ;
+      agx_ppp_push(&initial_ppp, VARYING_2, cfg)
+         ;
+      if ((unsigned)(initial_ppp.head - head) !=
+          offsets->batch_init_ppp_bytes)
+         return 0;
+      head = initial_ppp.head;
+   }
    offsets->ppp_offset = align_u((unsigned)(head - encoder), 64u);
    head = encoder + offsets->ppp_offset;
    struct AGX_PPP_HEADER present = {
@@ -524,6 +568,14 @@ build_encoder_objects(const struct agx_shader_part *vs,
 
    {
       struct AGX_PPP_STATE state = {
+         .size_words = offsets->batch_init_ppp_bytes / 4u,
+      };
+      AGX_PPP_STATE_pack(
+         (uint32_t *)(encoder + offsets->batch_init_ppp_state_offset),
+         &state);
+   }
+   {
+      struct AGX_PPP_STATE state = {
          .size_words = offsets->ppp_bytes / 4u,
       };
       AGX_PPP_STATE_pack(
@@ -547,6 +599,8 @@ build_encoder_objects(const struct agx_shader_part *vs,
    }
 
    struct AGX_USC_SHADER usc_shader;
+   struct AGX_VDM_BARRIER batch_barrier;
+   struct AGX_PPP_STATE batch_ppp_state;
    struct AGX_VDM_STATE_VERTEX_SHADER_WORD_1 vdm_word;
    struct AGX_PPP_STATE ppp_state;
    struct AGX_FRAGMENT_SHADER_WORD_1 fragment_word;
@@ -556,7 +610,15 @@ build_encoder_objects(const struct agx_shader_part *vs,
    struct AGX_INDEX_LIST_COUNT index_count;
    struct AGX_INDEX_LIST_INSTANCES instance_count;
    struct AGX_VDM_STREAM_TERMINATE terminate;
-   if (!AGX_USC_SHADER_unpack(NULL, pipeline + offsets->vs_shader_offset,
+   if (!AGX_VDM_BARRIER_unpack(NULL, encoder, &batch_barrier) ||
+       !batch_barrier.usc_cache_inval ||
+       !AGX_PPP_STATE_unpack(
+          NULL, encoder + offsets->batch_init_ppp_state_offset,
+          &batch_ppp_state) ||
+       batch_ppp_state.pointer_hi != 0u ||
+       batch_ppp_state.pointer_lo != 0u ||
+       batch_ppp_state.size_words != offsets->batch_init_ppp_bytes / 4u ||
+       !AGX_USC_SHADER_unpack(NULL, pipeline + offsets->vs_shader_offset,
                               &usc_shader) ||
        usc_shader.code != 0u || usc_shader.unk_2 != 3u ||
        !AGX_USC_SHADER_unpack(NULL, pipeline + offsets->fs_shader_offset,
@@ -705,12 +767,17 @@ main(int argc, char **argv)
           "\"varying_counts\":{\"published_32\":true,"
           "\"published_16\":true,\"smooth_32\":%u,\"flat_32\":%u,"
           "\"linear_32\":%u,\"total_16\":%u},"
+          "\"batch_init\":{\"vdm_cache_barrier\":true,"
+          "\"w_clamp\":true,\"occlusion_query_2\":true,"
+          "\"output_unknown\":true,\"varying_word_2\":true},"
           "\"render_pass\":{"
           "\"owner\":\"EXP208-hardware-proven-3D-skeleton\","
           "\"dynamic_scope\":\"VDM-PPP-USC\","
           "\"store_pipeline_reused\":true},"
           "\"generated_unpack_valid\":true,"
           "\"relocations\":["
+          "{\"kind\":\"PppStateAddress40\",\"destination\":%u,"
+          "\"target\":\"encoder.batch-init-ppp\",\"target_offset\":%u},"
           "{\"kind\":\"UscBufferAddress40\",\"destination\":%u,"
           "\"target\":\"vertex.rodata\"},"
           "{\"kind\":\"UscShaderOffset32\",\"destination\":%u,"
@@ -730,6 +797,8 @@ main(int argc, char **argv)
           FRAME_WIDTH, FRAME_HEIGHT, offsets.varying_smooth_32,
           offsets.varying_flat_32, offsets.varying_linear_32,
           offsets.varying_total_16,
+          offsets.batch_init_ppp_state_offset,
+          offsets.batch_init_ppp_offset,
           offsets.vs_uniform_offset, offsets.vs_shader_offset,
           offsets.fs_uniform_offset,
           offsets.fs_shader_offset, offsets.vdm_pipeline_offset,

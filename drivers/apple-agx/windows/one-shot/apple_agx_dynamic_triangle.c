@@ -14,7 +14,7 @@
 
 #define ALLOCATION_COUNT 10u
 #define REFERENCE_COUNT 11u
-#define RELOCATION_COUNT 7u
+#define RELOCATION_COUNT 8u
 #define INTERNAL_BYTES 0x4000u
 #define FRAMEBUFFER_BYTES (2560u * 1600u * 4u)
 #define BACKGROUND_COLOR 0xff101820u
@@ -345,13 +345,14 @@ int __cdecl wmain(int argc, wchar_t **argv) {
 #define RELOC(i, kind, width, dst, target, dstoff, targetoff)                \
   relocations[i] = (APPLE_AGX_WIN32_RELOCATION){                             \
       kind, width, 0u, dst, target, dstoff, targetoff, 0ULL}
-  RELOC(0, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 9u, 4u, 0u);
-  RELOC(1, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 2u, 12u, 128u);
-  RELOC(2, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 10u, 64u, 0u);
-  RELOC(3, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
-  RELOC(4, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 8u, 0u);
-  RELOC(5, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 24u, 128u);
-  RELOC(6, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 220u, 64u);
+  RELOC(0, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 4u, 128u);
+  RELOC(1, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 9u, 4u, 0u);
+  RELOC(2, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 2u, 12u, 128u);
+  RELOC(3, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 10u, 64u, 0u);
+  RELOC(4, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
+  RELOC(5, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 20u, 0u);
+  RELOC(6, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 36u, 192u);
+  RELOC(7, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 284u, 64u);
 #undef RELOC
   ZeroMemory(&request, sizeof(request));
   request.Generation = contextPrivate.Generation;

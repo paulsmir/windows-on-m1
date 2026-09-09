@@ -43,7 +43,7 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
             self.assertEqual(first[0]["uvs_user_size"], 4)
             self.assertEqual(first[0]["epilog_loc_written"], 1)
             self.assertGreater(first[0]["pipeline_bytes"], 0)
-            self.assertEqual(first[0]["encoder_bytes"], 236)
+            self.assertEqual(first[0]["encoder_bytes"], 300)
             self.assertEqual(first[0]["ppp_bytes"], 108)
             self.assertEqual(first[0]["varying_counts"], {
                 "published_32": True,
@@ -52,6 +52,13 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
                 "flat_32": 0,
                 "linear_32": 0,
                 "total_16": 0,
+            })
+            self.assertEqual(first[0]["batch_init"], {
+                "vdm_cache_barrier": True,
+                "w_clamp": True,
+                "occlusion_query_2": True,
+                "output_unknown": True,
+                "varying_word_2": True,
             })
             self.assertEqual(first[0]["draw"], {
                 "topology": "triangle-list",
@@ -74,18 +81,21 @@ class AppleAgxAd03VsFsFixtureTests(unittest.TestCase):
             self.assertEqual(
                 [entry["kind"] for entry in first[0]["relocations"]],
                 [
+                    "PppStateAddress40",
                     "UscBufferAddress40", "UscShaderOffset32",
                     "UscBufferAddress40",
                     "UscShaderOffset32", "VdmPipelineOffset32",
                     "PppStateAddress40", "VdmPipelineOffset32",
                 ],
             )
-            ppp_relocation = first[0]["relocations"][5]
+            init_ppp_relocation = first[0]["relocations"][0]
+            self.assertEqual(init_ppp_relocation["target"], "encoder.batch-init-ppp")
+            ppp_relocation = first[0]["relocations"][6]
             self.assertEqual(ppp_relocation["target"], "encoder.ppp")
             self.assertEqual(
-                first[0]["relocations"][3]["target"], "fragment-linked"
+                first[0]["relocations"][4]["target"], "fragment-linked"
             )
-            self.assertEqual(first[0]["relocations"][6]["destination"], 220)
+            self.assertGreater(first[0]["relocations"][7]["destination"], 220)
             for name in ("pipeline", "encoder", "scissor", "depth_bias"):
                 self.assertEqual(
                     (first[1] / f"{name}.bin").read_bytes(),

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #define REF_COUNT 11u
-#define RELOC_COUNT 7u
+#define RELOC_COUNT 8u
 
 typedef struct _DRAW_COMMAND {
   APPLE_AGX_WIN32_COMMAND_HEADER Header;
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
   memset(&facts, 0, sizeof(facts));
   memset(&fixture, 0, sizeof(fixture));
   memset(&image, 0, sizeof(image));
-  assert(sizeof(command) == 808u);
+  assert(sizeof(command) == 848u);
 
   fixture.Objects[2] = load_file(argv[1], 3u);
   fixture.Objects[3] = load_file(argv[2], 4u);
@@ -199,13 +199,14 @@ int main(int argc, char **argv) {
 #define RELOC(i, kind, width, dst, target, dstoff, targetoff)                \
   command.Relocations[i] = (APPLE_AGX_WIN32_RELOCATION){                     \
       kind, width, 0u, dst, target, dstoff, targetoff, 0ULL}
-  RELOC(0, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 9u, 4u, 0u);
-  RELOC(1, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 2u, 12u, 128u);
-  RELOC(2, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 10u, 64u, 0u);
-  RELOC(3, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
-  RELOC(4, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 8u, 0u);
-  RELOC(5, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 24u, 128u);
-  RELOC(6, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 220u, 64u);
+  RELOC(0, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 4u, 128u);
+  RELOC(1, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 9u, 4u, 0u);
+  RELOC(2, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 2u, 12u, 128u);
+  RELOC(3, AppleAgxWin32RelocationUscBufferAddress40, 8u, 4u, 10u, 64u, 0u);
+  RELOC(4, AppleAgxWin32RelocationUscShaderOffset32, 6u, 4u, 3u, 76u, 0u);
+  RELOC(5, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 20u, 0u);
+  RELOC(6, AppleAgxWin32RelocationPppStateAddress40, 8u, 8u, 8u, 36u, 192u);
+  RELOC(7, AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 8u, 4u, 284u, 64u);
 #undef RELOC
   command.Header.ContentHash = AppleAgxWin32CommandHash(&command, sizeof(command));
   assert(AppleAgxWin32CommandValidate(&command, sizeof(command), 7u,
@@ -240,7 +241,7 @@ int main(int argc, char **argv) {
       &view, facts, REF_COUNT, 0x1100000000ULL, read_object,
       resolve_object, &fixture, materialized, sizeof(materialized), &job) ==
       AppleAgxDynamicJobSuccess);
-  assert(job.ObjectCount == 9u && job.RelocationCount == 7u);
+  assert(job.ObjectCount == 9u && job.RelocationCount == 8u);
   assert(AdmissionDynamicOverlayBindingsFromView(&view, &bindings) ==
          AdmissionDynamicOverlaySuccess);
   assert(AdmissionDynamicDmaBuild(
@@ -270,14 +271,18 @@ int main(int argc, char **argv) {
   assert(memcmp(image.Objects[73u].Data + 0x10000u,
                 dmaView.Storage + pipelineObject->StorageOffset,
                 pipelineObject->Bytes) == 0);
-  assert((read_le(image.Objects[71u].Data + 8u, 4u) & ~0x3fULL) ==
+  assert((read_le(image.Objects[71u].Data + 20u, 4u) & ~0x3fULL) ==
          0x30000ULL);
-  assert((read_le(image.Objects[71u].Data + 220u, 4u) & ~0x3fULL) ==
+  assert((read_le(image.Objects[71u].Data + 284u, 4u) & ~0x3fULL) ==
          0x30040ULL);
-  assert((read_le(image.Objects[71u].Data + 24u, 4u) & 0xffULL) ==
+  assert((read_le(image.Objects[71u].Data + 4u, 4u) & 0xffULL) ==
          (image.Objects[71u].GpuVa >> 32u));
-  assert(read_le(image.Objects[71u].Data + 28u, 4u) ==
+  assert(read_le(image.Objects[71u].Data + 8u, 4u) ==
          (unsigned int)(image.Objects[71u].GpuVa + 128u));
+  assert((read_le(image.Objects[71u].Data + 36u, 4u) & 0xffULL) ==
+         (image.Objects[71u].GpuVa >> 32u));
+  assert(read_le(image.Objects[71u].Data + 40u, 4u) ==
+         (unsigned int)(image.Objects[71u].GpuVa + 192u));
   assert(memcmp(store0, image.Objects[73u].Data, sizeof(store0)) == 0);
   assert(AdmissionDynamicOverlayRelease(
       &image, &restoredPlan, dmaView.Job, dmaView.Storage,
