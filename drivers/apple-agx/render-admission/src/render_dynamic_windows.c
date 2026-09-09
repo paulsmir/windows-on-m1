@@ -234,7 +234,12 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
           Snapshot->View.Header->ContentHash,
           Destination->GpuVirtualAddress,
           destinationReference->AllocationIndex,
-          backgroundColor, &bindings, job, storage,
+          backgroundColor,
+          (Snapshot->View.Draw->Flags &
+                   APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND)
+              ? Snapshot->View.Draw->ExpectedForegroundColor
+              : 0u,
+          &bindings, job, storage,
           job->StorageBytes, Args->pDmaBuffer, Args->DmaSize,
           &dmaBytes) != AdmissionDynamicDmaSuccess)
     return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;

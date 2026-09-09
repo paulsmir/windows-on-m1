@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
   assert(AdmissionDynamicOverlayBindingsFromView(&view, &bindings) ==
          AdmissionDynamicOverlaySuccess);
   assert(AdmissionDynamicDmaBuild(
-      7u, command.Header.ContentHash, 0x1501000000ULL, 0u, 0xff101820u,
+      7u, command.Header.ContentHash, 0x1501000000ULL, 0u, 0xff101820u, 0u,
       &bindings, &job, materialized, job.StorageBytes, dma, sizeof(dma),
       &dmaBytes) == AdmissionDynamicDmaSuccess);
   assert(dmaBytes <= sizeof(dma));

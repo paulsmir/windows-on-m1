@@ -299,6 +299,30 @@ static void test_valid_draw_graph(void) {
   assert(view.Clear == NULL);
 }
 
+static void test_draw_expected_foreground_contract(void) {
+  VALID_DRAW_COMMAND command = valid_draw();
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  command.Payload.Flags = APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND;
+  command.Payload.ExpectedForegroundColor = 0x80808080u;
+  seal_draw(&command);
+  assert(validate_draw(&command, &view) == AppleAgxWin32AbiSuccess);
+  assert(view.Draw->ExpectedForegroundColor == 0x80808080u);
+
+  command = valid_draw();
+  command.Payload.Flags = APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND;
+  seal_draw(&command);
+  assert(validate_draw(&command, &view) == AppleAgxWin32AbiPayload);
+  command = valid_draw();
+  command.Payload.ExpectedForegroundColor = 0x80808080u;
+  seal_draw(&command);
+  assert(validate_draw(&command, &view) == AppleAgxWin32AbiFlags);
+  command = valid_draw();
+  command.Payload.Flags = APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND;
+  command.Payload.ExpectedForegroundColor = 0xa5a5a5a5u;
+  seal_draw(&command);
+  assert(validate_draw(&command, &view) == AppleAgxWin32AbiPayload);
+}
+
 static void test_vertex_descriptor_relocation(void) {
   VALID_DRAW_COMMAND command = valid_draw();
   APPLE_AGX_WIN32_COMMAND_VIEW view;
@@ -329,7 +353,7 @@ static void test_draw_graph_rejections(void) {
   REJECT_DRAW(Payload.InstanceCount, 0u, AppleAgxWin32AbiPayload);
   REJECT_DRAW(Payload.IndexReference, 1u, AppleAgxWin32AbiRole);
   REJECT_DRAW(Payload.VertexShaderReference, 1u, AppleAgxWin32AbiRole);
-  REJECT_DRAW(Payload.Flags, 1u, AppleAgxWin32AbiFlags);
+  REJECT_DRAW(Payload.Flags, 2u, AppleAgxWin32AbiFlags);
   REJECT_DRAW(Payload.Reserved[3], 1u, AppleAgxWin32AbiReserved);
   REJECT_DRAW(Payload.RelocationCount, 0u, AppleAgxWin32AbiRelocation);
   REJECT_DRAW(Payload.RelocationsOffset, 120u, AppleAgxWin32AbiLayout);
@@ -386,6 +410,7 @@ int main(void) {
   test_clear_payload_rejections();
   test_snapshot_is_immutable_after_producer_mutation();
   test_valid_draw_graph();
+  test_draw_expected_foreground_contract();
   test_vertex_descriptor_relocation();
   test_draw_graph_rejections();
   return 0;

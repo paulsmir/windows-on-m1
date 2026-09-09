@@ -98,6 +98,7 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   const void *DynamicStorage;
   ULONG DynamicStorageBytes;
   ULONG DynamicBackgroundColor;
+  ULONG DynamicExpectedForegroundColor;
   PIO_WORKITEM WorkItem;
   KEVENT WorkIdle;
   volatile LONG WorkScheduled;
@@ -254,6 +255,7 @@ static VOID AdmissionTerminalObserve(
             Runtime, Output->RenderedCpuAddress, Output->RenderedBytes)) {
       BOOLEAN captured;
       unsigned int foreground = 0u;
+      ADMISSION_DYNAMIC_OUTPUT_RESULT result;
       const UCHAR *verificationBytes =
           (const UCHAR *)Output->RenderedCpuAddress;
       Runtime->TransportIo.MemoryBarrier(Runtime);
@@ -267,21 +269,30 @@ static VOID AdmissionTerminalObserve(
                 &Runtime->DynamicOutputSnapshot, Fence,
                 Completed->Generation, Output->RenderedGpuAddress,
                 Output->RenderedPhysicalAddress, verificationBytes,
-                Output->RenderedBytes) &&
+                Output->RenderedBytes,
+                AdmissionDynamicOutputLayoutAgxTiled64,
+                Runtime->DynamicExpectedForegroundColor) &&
             AdmissionDynamicOutputDescribeExpectation(
                 Output->RenderWidth, Output->RenderHeight,
                 Output->RenderPitch, Output->BackgroundColor,
+                Runtime->DynamicExpectedForegroundColor,
+                AdmissionDynamicOutputLayoutAgxTiled64,
                 &expectation) &&
             AdmissionTerminalReceiptCaptureTriangleOutputProgress(
                 &Runtime->TerminalReceipt, Fence,
                 Runtime->DynamicOutputSnapshot.Data,
                 Runtime->DynamicOutputSnapshot.DataBytes, &expectation,
                 ADMISSION_OUTPUT_CAPTURE_CHUNK_BYTES,
-                AdmissionOutputCaptureProgress, Runtime, &foreground)
+                AdmissionOutputCaptureProgress, Runtime, &foreground,
+                &result)
                 ? TRUE
                 : FALSE;
+        if (captured &&
+            !AdmissionDynamicOutputSnapshotRecordVerification(
+                &Runtime->DynamicOutputSnapshot, &result))
+          captured = FALSE;
         if (captured && Completed != NULL)
-          Completed->View.ExpectedColor = foreground;
+          Completed->View.ExpectedColor = expectation.ExpectedForegroundColor;
       } else {
         captured = AdmissionTerminalReceiptCaptureOutputProgress(
             &Runtime->TerminalReceipt, Fence,
@@ -1923,6 +1934,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     runtime->DynamicStorage = dynamicView.Storage;
     runtime->DynamicStorageBytes = dynamicView.StorageBytes;
     runtime->DynamicBackgroundColor = dynamicView.Header->BackgroundColor;
+    runtime->DynamicExpectedForegroundColor =
+        dynamicView.Header->ExpectedForegroundColor;
   }
   return APPLE_AGX_BACKEND_TRUE;
 
@@ -1958,6 +1971,7 @@ static BOOLEAN AdmissionDynamicOverlayReleaseActive(
   Runtime->DynamicStorage = NULL;
   Runtime->DynamicStorageBytes = 0u;
   Runtime->DynamicBackgroundColor = 0u;
+  Runtime->DynamicExpectedForegroundColor = 0u;
   return TRUE;
 }
 

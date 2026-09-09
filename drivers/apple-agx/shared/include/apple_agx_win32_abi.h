@@ -11,6 +11,7 @@ typedef unsigned short APPLE_AGX_U16;
 #define APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES 16u
 #define APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS 64u
 #define APPLE_AGX_WIN32_OPTIONAL_REFERENCE 0xffffffffu
+#define APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND 0x1u
 
 typedef enum _APPLE_AGX_WIN32_OPCODE {
   AppleAgxWin32OpcodeClear = 1u,
@@ -144,7 +145,8 @@ typedef struct _APPLE_AGX_WIN32_DRAW_PAYLOAD {
   APPLE_AGX_U32 RelocationsOffset;
   APPLE_AGX_U32 RelocationCount;
   APPLE_AGX_U32 Flags;
-  APPLE_AGX_U32 Reserved[5];
+  APPLE_AGX_U32 ExpectedForegroundColor;
+  APPLE_AGX_U32 Reserved[4];
 } APPLE_AGX_WIN32_DRAW_PAYLOAD;
 
 typedef struct _APPLE_AGX_WIN32_RELOCATION {

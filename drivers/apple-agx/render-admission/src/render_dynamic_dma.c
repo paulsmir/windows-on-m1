@@ -127,7 +127,7 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaBuild(
     APPLE_AGX_U32 Generation, APPLE_AGX_U64 CommandHash,
     APPLE_AGX_U64 DestinationGpuVa,
     APPLE_AGX_U32 DestinationAllocationIndex,
-    APPLE_AGX_U32 BackgroundColor,
+    APPLE_AGX_U32 BackgroundColor, APPLE_AGX_U32 ExpectedForegroundColor,
     const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
     const APPLE_AGX_DYNAMIC_JOB *Job, const void *Storage,
     APPLE_AGX_U32 StorageBytes, void *Destination,
@@ -146,6 +146,9 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaBuild(
       Bindings == DYNAMIC_DMA_NULL || Job == DYNAMIC_DMA_NULL ||
       Storage == DYNAMIC_DMA_NULL || StorageBytes == 0u ||
       Destination == DYNAMIC_DMA_NULL || BytesWritten == DYNAMIC_DMA_NULL ||
+      (ExpectedForegroundColor != 0u &&
+       (ExpectedForegroundColor == BackgroundColor ||
+        ExpectedForegroundColor == 0xa5a5a5a5u)) ||
       StorageBytes > ADMISSION_DYNAMIC_DMA_MAX_BYTES ||
       storageOffset > ADMISSION_DYNAMIC_DMA_MAX_BYTES ||
       StorageBytes > ADMISSION_DYNAMIC_DMA_MAX_BYTES - storageOffset)
@@ -161,6 +164,9 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaBuild(
   header.HeaderBytes = sizeof(header);
   header.TotalBytes = total;
   header.Generation = Generation;
+  header.Flags = ExpectedForegroundColor != 0u
+                     ? ADMISSION_DYNAMIC_DMA_FLAG_EXPECTED_FOREGROUND
+                     : 0u;
   header.JobOffset = jobOffset;
   header.JobBytes = sizeof(*Job);
   header.StorageOffset = storageOffset;
@@ -170,6 +176,7 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaBuild(
   header.Bindings = *Bindings;
   header.BackgroundColor = BackgroundColor;
   header.DestinationAllocationIndex = DestinationAllocationIndex;
+  header.ExpectedForegroundColor = ExpectedForegroundColor;
   dma_copy(destination, &header, (APPLE_AGX_U32)sizeof(header));
   dma_copy(destination + jobOffset, Job, (APPLE_AGX_U32)sizeof(*Job));
   dma_copy(destination + storageOffset, Storage, StorageBytes);
@@ -198,7 +205,13 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaOpen(
       header->Version != ADMISSION_DYNAMIC_DMA_VERSION ||
       header->HeaderBytes != sizeof(*header) ||
       header->TotalBytes != ByteCount || header->Generation == 0u ||
-      header->Flags != 0u || header->JobOffset != sizeof(*header) ||
+      (header->Flags & ~ADMISSION_DYNAMIC_DMA_FLAG_EXPECTED_FOREGROUND) != 0u ||
+      (((header->Flags & ADMISSION_DYNAMIC_DMA_FLAG_EXPECTED_FOREGROUND) != 0u) !=
+       (header->ExpectedForegroundColor != 0u)) ||
+      (header->ExpectedForegroundColor != 0u &&
+       (header->ExpectedForegroundColor == header->BackgroundColor ||
+        header->ExpectedForegroundColor == 0xa5a5a5a5u)) ||
+      header->JobOffset != sizeof(*header) ||
       header->JobBytes != sizeof(APPLE_AGX_DYNAMIC_JOB) ||
       header->StorageOffset != header->JobOffset + header->JobBytes ||
       header->StorageBytes == 0u ||

@@ -23,6 +23,7 @@
 #define TARGET_BYTES 0x4000u
 #define TARGET_PIXELS (TARGET_WIDTH * TARGET_RENDER_HEIGHT)
 #define BACKGROUND_COLOR 0xff101820u
+#define EXPECTED_FOREGROUND_COLOR 0x80808080u
 
 typedef NTSTATUS(WINAPI *PFN_LOCAL_ENUMADAPTERS3)(D3DKMT_ENUMADAPTERS3 *);
 
@@ -384,6 +385,8 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   request.Draw.ScissorReference = 6u;
   request.Draw.DepthBiasReference = 7u;
   request.Draw.EncoderReference = 8u;
+  request.Draw.Flags = APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND;
+  request.Draw.ExpectedForegroundColor = EXPECTED_FOREGROUND_COLOR;
   if (AgxWin32TransportBuildDraw(&request, context.pCommandBuffer,
                                  context.CommandBufferSize,
                                  &commandBytes) != AppleAgxWin32AbiSuccess)

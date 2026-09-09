@@ -254,9 +254,16 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       draw->VertexCount > 0x01000000u || draw->InstanceCount != 1u ||
       draw->FirstVertex != 0u || draw->FirstInstance != 0u)
     return AppleAgxWin32AbiPayload;
-  if (draw->Flags != 0u)
+  if ((draw->Flags & ~APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND) != 0u)
     return AppleAgxWin32AbiFlags;
-  for (index = 0u; index < 5u; ++index)
+  if ((draw->Flags & APPLE_AGX_WIN32_DRAW_FLAG_EXPECTED_FOREGROUND) != 0u) {
+    if (draw->ExpectedForegroundColor == 0u ||
+        draw->ExpectedForegroundColor == 0xa5a5a5a5u)
+      return AppleAgxWin32AbiPayload;
+  } else if (draw->ExpectedForegroundColor != 0u) {
+    return AppleAgxWin32AbiFlags;
+  }
+  for (index = 0u; index < 4u; ++index)
     if (draw->Reserved[index] != 0u)
       return AppleAgxWin32AbiReserved;
   if (draw->RelocationsOffset != sizeof(*draw))

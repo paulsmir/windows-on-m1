@@ -15,7 +15,7 @@ C_ASSERT(sizeof(ADMISSION_TA_TEMPORAL_RECEIPT) == 312);
 C_ASSERT(sizeof(ADMISSION_KTRACE_RECEIPT) == 928);
 C_ASSERT(sizeof(ADMISSION_EVENT_DRAIN_RECEIPT) == 96);
 C_ASSERT(sizeof(ADMISSION_TERMINAL_RECEIPT) == 368);
-C_ASSERT(sizeof(ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT) == 1080);
+C_ASSERT(sizeof(ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT) == 1096);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_PATTERN_RECEIPT) == 112);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_SCANOUT_RECEIPT) == 216);
 C_ASSERT(sizeof(ADMISSION_VISIBLE_AGX_RECEIPT) == 248);
@@ -221,6 +221,9 @@ _Use_decl_annotations_ VOID AdmissionRecordDynamicOutputSnapshot(
       Snapshot->Fence == 0u || Snapshot->Generation == 0u ||
       Snapshot->DataBytes != ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT_CAPACITY ||
       Snapshot->Status != 0u || Snapshot->Reserved != 0u ||
+      Snapshot->ExpectedLayout != AdmissionDynamicOutputLayoutAgxTiled64 ||
+      Snapshot->ExpectedForegroundColor == 0u ||
+      Snapshot->VerificationValid == 0u ||
       KeGetCurrentIrql() != PASSIVE_LEVEL)
     return;
   if (Context->PhysicalDeviceObject != NULL &&

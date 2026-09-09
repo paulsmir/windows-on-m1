@@ -5,8 +5,9 @@
 #include "render_gdi.h"
 
 #define ADMISSION_DYNAMIC_DMA_MAGIC 0x4d444741u /* AGDM */
-#define ADMISSION_DYNAMIC_DMA_VERSION 2u
+#define ADMISSION_DYNAMIC_DMA_VERSION 3u
 #define ADMISSION_DYNAMIC_DMA_MAX_BYTES 4096u
+#define ADMISSION_DYNAMIC_DMA_FLAG_EXPECTED_FOREGROUND 0x1u
 
 typedef enum _ADMISSION_DYNAMIC_DMA_RESULT {
   AdmissionDynamicDmaSuccess = 0,
@@ -34,6 +35,7 @@ typedef struct _ADMISSION_DYNAMIC_DMA_HEADER {
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS Bindings;
   APPLE_AGX_U32 BackgroundColor;
   APPLE_AGX_U32 DestinationAllocationIndex;
+  APPLE_AGX_U32 ExpectedForegroundColor;
   APPLE_AGX_U32 Reserved;
 } ADMISSION_DYNAMIC_DMA_HEADER;
 
@@ -57,7 +59,7 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaBuild(
     APPLE_AGX_U32 Generation, APPLE_AGX_U64 CommandHash,
     APPLE_AGX_U64 DestinationGpuVa,
     APPLE_AGX_U32 DestinationAllocationIndex,
-    APPLE_AGX_U32 BackgroundColor,
+    APPLE_AGX_U32 BackgroundColor, APPLE_AGX_U32 ExpectedForegroundColor,
     const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
     const APPLE_AGX_DYNAMIC_JOB *Job, const void *Storage,
     APPLE_AGX_U32 StorageBytes, void *Destination,

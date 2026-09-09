@@ -55,7 +55,8 @@ int main(void) {
   memset(bytes, 0xa5, sizeof(bytes));
   assert(AdmissionDynamicDmaBuild(
              7u, 0x1122334455667788ULL, 0x1500120000ULL,
-             0u, 0xff101820u, &bindings, &job, storage, sizeof(storage),
+             0u, 0xff101820u, 0x80808080u, &bindings, &job, storage,
+             sizeof(storage),
              bytes, sizeof(bytes), &total) == AdmissionDynamicDmaSuccess);
   assert(total <= 4096u && total > sizeof(job));
   assert(AdmissionDynamicDmaOpen(bytes, total, &view) ==
@@ -64,6 +65,8 @@ int main(void) {
   assert(view.Header->CommandHash == 0x1122334455667788ULL);
   assert(view.Header->DestinationGpuVa == 0x1500120000ULL);
   assert(view.Header->BackgroundColor == 0xff101820u);
+  assert(view.Header->Flags == ADMISSION_DYNAMIC_DMA_FLAG_EXPECTED_FOREGROUND);
+  assert(view.Header->ExpectedForegroundColor == 0x80808080u);
   assert(view.Job->ObjectCount == 10u && view.Job->RelocationCount == 7u);
   assert(view.StorageBytes == sizeof(storage));
   assert(memcmp(view.Storage, storage, sizeof(storage)) == 0);
@@ -97,12 +100,12 @@ int main(void) {
   make_job(&job, storage, sizeof(storage));
   job.Objects[8].StorageOffset = sizeof(storage);
   assert(AdmissionDynamicDmaBuild(
-             7u, 1ULL, 0x1500120000ULL, 0u, 0u, &bindings, &job, storage,
+             7u, 1ULL, 0x1500120000ULL, 0u, 0u, 0u, &bindings, &job, storage,
              sizeof(storage), bytes, sizeof(bytes), &total) ==
          AdmissionDynamicDmaJob);
   make_job(&job, storage, sizeof(storage));
   assert(AdmissionDynamicDmaBuild(
-             7u, 1ULL, 0x1500120000ULL, 0u, 0u, &bindings, &job, storage,
+             7u, 1ULL, 0x1500120000ULL, 0u, 0u, 0u, &bindings, &job, storage,
              sizeof(storage), bytes,
              sizeof(ADMISSION_DYNAMIC_DMA_HEADER) + sizeof(job) +
                  sizeof(storage) - 1u,

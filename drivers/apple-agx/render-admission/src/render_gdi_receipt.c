@@ -377,15 +377,19 @@ int AdmissionTerminalReceiptCaptureTriangleOutputProgress(
     const unsigned char *Bytes, unsigned int TargetBytes,
     const ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation,
     unsigned int ChunkBytes, ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress,
-    void *ProgressContext, unsigned int *ForegroundColor) {
+    void *ProgressContext, unsigned int *ObservedForegroundColor,
+    ADMISSION_DYNAMIC_OUTPUT_RESULT *OutputResult) {
   ADMISSION_TERMINAL_RECEIPT candidate;
   ADMISSION_DYNAMIC_OUTPUT_RESULT result;
   unsigned int prefixBytes;
   unsigned int index;
-  if (ForegroundColor != (void *)0)
-    *ForegroundColor = 0u;
+  if (ObservedForegroundColor != (void *)0)
+    *ObservedForegroundColor = 0u;
+  if (OutputResult != (void *)0)
+    AdmissionGdiReceiptZero(OutputResult, sizeof(*OutputResult));
   if (Receipt == (void *)0 || Bytes == (void *)0 ||
-      Expectation == (void *)0 || ForegroundColor == (void *)0 ||
+      Expectation == (void *)0 || ObservedForegroundColor == (void *)0 ||
+      OutputResult == (void *)0 ||
       !(Receipt->ValidMask & ADMISSION_TERMINAL_VALID_TERMINAL) ||
       (Receipt->ValidMask & ADMISSION_TERMINAL_VALID_OUTPUT) ||
       Receipt->Fence != Fence || TargetBytes == 0u ||
@@ -415,7 +419,8 @@ int AdmissionTerminalReceiptCaptureTriangleOutputProgress(
   for (index = 0u; index < prefixBytes; ++index)
     candidate.OutputPrefix[index] = Bytes[index];
   candidate.ValidMask |= ADMISSION_TERMINAL_VALID_OUTPUT;
-  *ForegroundColor = result.ForegroundColor;
+  *ObservedForegroundColor = result.ObservedForegroundColor;
+  *OutputResult = result;
   *Receipt = candidate;
   return 1;
 }

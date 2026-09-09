@@ -366,8 +366,10 @@ static void test_terminal_output_progress_bounds_reads_and_aborts_cleanly(void) 
 static void test_terminal_triangle_receipt_requires_two_colour_geometry(void) {
   ADMISSION_TERMINAL_RECEIPT receipt;
   ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {
-      8u, 8u, 32u, 0xff101820u, 4u, 4u,
+      8u, 8u, 32u, 0xff101820u, 0xff1acc66u,
+      AdmissionDynamicOutputLayoutLinear, 4u, 4u,
       2u, 2u, 6u, 6u, 16u, 16u, 0xa5u};
+  ADMISSION_DYNAMIC_OUTPUT_RESULT outputResult;
   unsigned int output[64];
   unsigned int foreground = 0u;
   for (unsigned int index = 0u; index < 64u; ++index)
@@ -386,8 +388,9 @@ static void test_terminal_triangle_receipt_requires_two_colour_geometry(void) {
       NULL, 0u, 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
   assert(AdmissionTerminalReceiptCaptureTriangleOutputProgress(
       &receipt, 19u, (const unsigned char *)output, sizeof(output),
-      &expectation, 0u, NULL, NULL, &foreground));
+      &expectation, 0u, NULL, NULL, &foreground, &outputResult));
   assert(foreground == 0xff1acc66u);
+  assert(outputResult.ObservedForegroundColor == foreground);
   assert(receipt.OutputPixelsExpected == 64u);
   assert(receipt.OutputChangedBytes == 64u);
   assert(receipt.OutputGuardCorrupt == 0u);
@@ -403,7 +406,7 @@ static void test_terminal_triangle_receipt_requires_two_colour_geometry(void) {
       NULL, 0u, 1u, 0x7a000100u, 2u, 0x3d000100u, 2u));
   assert(AdmissionTerminalReceiptCaptureTriangleOutputProgress(
       &receipt, 20u, (const unsigned char *)output, sizeof(output),
-      &expectation, 0u, NULL, NULL, &foreground));
+      &expectation, 0u, NULL, NULL, &foreground, &outputResult));
   assert(receipt.OutputGuardCorrupt == 1u);
 }
 

@@ -156,6 +156,7 @@ int AdmissionTerminalReceiptCaptureTriangleOutputProgress(
     const unsigned char *Bytes, unsigned int TargetBytes,
     const ADMISSION_DYNAMIC_OUTPUT_EXPECTATION *Expectation,
     unsigned int ChunkBytes, ADMISSION_TERMINAL_OUTPUT_PROGRESS Progress,
-    void *ProgressContext, unsigned int *ForegroundColor);
+    void *ProgressContext, unsigned int *ObservedForegroundColor,
+    ADMISSION_DYNAMIC_OUTPUT_RESULT *OutputResult);
 
 #endif /* APPLE_AGX_RENDER_GDI_RECEIPT_H */
