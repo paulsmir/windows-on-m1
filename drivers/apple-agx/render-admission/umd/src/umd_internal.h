@@ -48,7 +48,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   D3D10DDI_HRTDEVICE RuntimeDevice;
   D3D10DDI_HRTCORELAYER RuntimeCoreLayer;
   const D3DDDI_DEVICECALLBACKS *KernelCallbacks;
-  const D3D11DDI_CORELAYER_DEVICECALLBACKS *UserCallbacks;
+  PFND3D10DDI_SETERROR_CB SetErrorCallback;
   DXGI_DDI_BASE_CALLBACKS *DxgiCallbacks;
   HANDLE KernelContext;
   ULONG Win32Generation;
@@ -83,6 +83,12 @@ VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
 #if defined(__cplusplus)
 extern "C" {
 #endif
+/* Initializes Windows ownership only; does not publish a DDI table or caps.
+ * Storage and callback lifetimes belong to the calling runtime device. */
+HRESULT AdmissionUmdRuntimeDeviceInitialize(
+    ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_ADAPTER *Adapter,
+    const D3D10DDIARG_CREATEDEVICE *Args);
+VOID AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);

@@ -442,6 +442,108 @@ static D3D10DDI_HRESOURCE open_resource(
   return resource;
 }
 
+static unsigned BridgeCreates, BridgeDestroys;
+static BOOL BridgeMalformed, BridgeFailCreate;
+static UINT_PTR BridgeErrorOwner;
+static unsigned char BridgeCommands[2][4096];
+static D3DDDI_ALLOCATIONLIST BridgeAllocations[2][16];
+static D3DDDI_PATCHLOCATIONLIST BridgePatches[2][16];
+
+static HRESULT APIENTRY BridgeCreateContext(HANDLE Device,
+                                             D3DDDICB_CREATECONTEXT *Create) {
+  UINT index = (UINT)((UINT_PTR)Device - 0x900u);
+  CHECK(index < 2u);
+  if (index >= 2u) return E_INVALIDARG;
+  ++BridgeCreates;
+  if (BridgeFailCreate) return E_OUTOFMEMORY;
+  Create->hContext = (HANDLE)(UINT_PTR)(0xa00u + index);
+  Create->pCommandBuffer = BridgeMalformed ? NULL : BridgeCommands[index];
+  Create->CommandBufferSize = sizeof(BridgeCommands[index]);
+  Create->pAllocationList = BridgeAllocations[index];
+  Create->AllocationListSize = ARRAYSIZE(BridgeAllocations[index]);
+  Create->pPatchLocationList = BridgePatches[index];
+  Create->PatchLocationListSize = ARRAYSIZE(BridgePatches[index]);
+  return S_OK;
+}
+
+static HRESULT APIENTRY BridgeDestroyContext(HANDLE Device,
+    const D3DDDICB_DESTROYCONTEXT *Destroy) {
+  CHECK(Destroy->hContext == (HANDLE)((UINT_PTR)Device + 0x100u));
+  ++BridgeDestroys;
+  return S_OK;
+}
+
+static VOID APIENTRY BridgeSetError(D3D10DDI_HRTCORELAYER Core, HRESULT Error) {
+  CHECK(Error == E_FAIL);
+  BridgeErrorOwner = (UINT_PTR)Core.handle;
+}
+
+static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
+                                       D3D10DDIARG_CREATEDEVICE Template) {
+  ADMISSION_UMD_DEVICE devices[2];
+  D3DDDI_DEVICECALLBACKS callbacks = *Template.pKTCallbacks;
+  D3D10DDI_CORELAYER_DEVICECALLBACKS core10 = {0};
+  D3D11DDI_CORELAYER_DEVICECALLBACKS core11 = {0};
+  unsigned before;
+  memset(devices, 0, sizeof(devices));
+  core10.pfnSetErrorCb = BridgeSetError;
+  core11.pfnSetErrorCb = BridgeSetError;
+  callbacks.pfnCreateContextCb = BridgeCreateContext;
+  callbacks.pfnDestroyContextCb = BridgeDestroyContext;
+  Template.pKTCallbacks = &callbacks;
+  for (UINT index = 0u; index < 2u; ++index) {
+    Template.Interface = index == 0u ? D3D10_0_DDI_INTERFACE_VERSION :
+                                      D3DWDDM1_3_DDI_INTERFACE_VERSION;
+    if (index == 0u) Template.pUMCallbacks = &core10;
+    else Template.p11UMCallbacks = &core11;
+    Template.hDrvDevice.pDrvPrivate = &devices[index];
+    Template.hRTDevice.handle = (VOID *)(UINT_PTR)(0x900u + index);
+    Template.hRTCoreLayer.handle = (VOID *)(UINT_PTR)(0xb00u + index);
+    CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[index], Adapter,
+                                              &Template) == S_OK);
+    CHECK(devices[index].Screen.Context == &devices[index]);
+    CHECK(devices[index].CommandBuffer == BridgeCommands[index]);
+    CHECK(devices[index].KernelContext == (HANDLE)(UINT_PTR)(0xa00u + index));
+    AdmissionUmdSetError(&devices[index], E_FAIL);
+    CHECK(BridgeErrorOwner == 0xb00u + index);
+  }
+  CHECK(devices[0].Win32Generation != devices[1].Win32Generation);
+  AdmissionUmdRuntimeDeviceFinalize(&devices[0]);
+  CHECK(devices[0].Magic == 0u && devices[1].Screen.Active);
+  AdmissionUmdSetError(&devices[1], E_FAIL);
+  CHECK(BridgeErrorOwner == 0xb01u);
+  AdmissionUmdRuntimeDeviceFinalize(&devices[1]);
+  CHECK(BridgeCreates == 2u && BridgeDestroys == 2u);
+  Template.hRTDevice.handle = (VOID *)(UINT_PTR)0x900u;
+  BridgeMalformed = TRUE;
+  CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[0], Adapter,
+                                            &Template) == E_FAIL);
+  CHECK(devices[0].Magic == 0u && BridgeDestroys == 3u);
+  BridgeMalformed = FALSE;
+  BridgeFailCreate = TRUE;
+  CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[0], Adapter,
+                                            &Template) == E_OUTOFMEMORY);
+  CHECK(devices[0].Magic == 0u && BridgeDestroys == 3u);
+  BridgeFailCreate = FALSE;
+  {
+    ADMISSION_UMD_ADAPTER invalidAdapter = *Adapter;
+    invalidAdapter.DeviceInfo.BootGeneration = 0u;
+    CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[0], &invalidAdapter,
+                                              &Template) == E_FAIL);
+    CHECK(devices[0].Magic == 0u && BridgeDestroys == 4u);
+  }
+  before = BridgeCreates;
+  Template.Interface = 0u;
+  CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[0], Adapter,
+                                            &Template) == E_INVALIDARG);
+  CHECK(BridgeCreates == before);
+  Template.Interface = D3D10_0_DDI_INTERFACE_VERSION;
+  Template.pUMCallbacks = NULL;
+  CHECK(AdmissionUmdRuntimeDeviceInitialize(&devices[0], Adapter,
+                                            &Template) == E_INVALIDARG);
+  CHECK(BridgeCreates == before);
+}
+
 int main(void) {
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks;
   D3D10_2DDI_ADAPTERFUNCS adapterFunctions;
@@ -832,6 +934,8 @@ int main(void) {
                                             State.OutstandingKernelResources);
   CHECK(State.OutstandingKernelResources == 2u);
   free(device.pDrvPrivate);
+  test_runtime_device_bridge(AdmissionUmdAdapterFromHandle(openAdapter.hAdapter),
+                             createDevice);
   CHECK(adapterFunctions.pfnCloseAdapter(openAdapter.hAdapter) == S_OK);
   return State.Failures == 0u ? 0 : (int)State.Failures;
 }

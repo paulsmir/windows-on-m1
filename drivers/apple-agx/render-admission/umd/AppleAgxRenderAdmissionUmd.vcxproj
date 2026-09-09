@@ -43,6 +43,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\umd.c" />
+    <ClCompile Include="src\umd_runtime_device.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
     <ClCompile Include="src\umd_win32_screen.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
