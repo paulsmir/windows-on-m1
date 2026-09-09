@@ -42197,3 +42197,63 @@ service removed, full-owner stopped and ordinary377/392 restored: Code28/null
 INF, no package/service/module/SYS/UMD,
 SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. Next is offline
 architecture re-anchor against the pinned2022 packer/RA/ISA, not hardware.
+
+# EXP677 — normalized-endpoint fragment discriminator
+
+**PREREGISTERED 2026-09-09T11:27:36Z. WHY THIS HYPOTHESIS:** (1) the completed
+pinned-2022 re-anchor proves with the compiler's own post-RA IR that the
+working shader's one `st_tile` source is the consecutive FP16 vector at r0h,
+and its first94 bytes are byte-exact with EXP659; there is no remaining source
+register or permutation interpretation mismatch; (2) schema-aware parsing of
+the final production WorkCommand shows native-exact tile geometry,
+`tib_blocks=8`, fragment USC, pipeline base and stable execution controls; (3)
+EXP674 converted four midrange FP16 lanes to exact0xa5, while EXP676 kept the
+native control stream and R/A endpoint1.0 but still produced zero. The single
+remaining runtime scalar is normalized endpoint conversion/control.
+
+**WINDOWS CONTRACT:** exact signed package30.0.673.0, producer, request,
+allocation, full256-pixel verifier, fence and no-Present failure path are
+unchanged. **AGX/ASAHI CONTRACT:** the pinned shader consumes one packed
+four-half source, formatU8NORM/maskxyzw; the full graph and store state remain
+the hardware-proven EXP673 values. **TRANSLATION:** relative to EXP676 only the
+R/A FP16 payloads at file offsets2--3 and8--9 change from0x3c00 to0x3bff.
+G/B remain0x0400 and every byte from offset24 onward is exact. FP16 0x3bff is
+0.99951171875 and rounds to external u8norm255;0x0400 rounds to0, so the exact
+expected raw pixel remains0xffff0000. **WHAT IS STILL UNKNOWN:** whether the
+production execution path handles normalized endpoint1.0 differently from
+the largest representable value below it.
+
+The 112-byte fragment variant SHA256 is
+`06526b1a7f37f70d1e19a01e49493cccf2dd5edc55d401a93b80e6b49c0df7e6`;
+variant and Air manifests are
+`.local/experiments/EXP677-subunit-red-endpoints/variant.json` and
+`air-manifest.json`, SHA256
+`e71e57cb950baaf81f39ff22843e35ab567f7d60820b73f75d09cbd0c58e9d59`/
+`95ded4b407c75b312a11abb133239296f9bd8ee24a1221c37c460eee9408102a`.
+The executable offline byte/range/FP16 gate reports
+`EXP677_VARIANT_OFFLINE_PASS`. The pinned compiler IR log SHA256 is
+`126ea755da6fe9138c687e36cb434a6fc994c637f8d864f981b9d877234d4676`.
+
+No source or package build changes are allowed. Reuse ZIP/SYS/UMD/INF/CAT/
+producer SHA256
+`f9d6058d9b3c073592c283dec96752b9b019ab73826ce82a1ba0da2b119ea800`,
+`12da89b0556172cab7653cdb9df4dd923cfa255dcf754b5d6f541b5ce75dc855`,
+`11fe687e3174806e4ebc8b3b7a5749c52453b941e63760ab537aeba70b449991`,
+`4b8db81ebd720aaeb8ffc90b9b9df0863727d1032ea352abd7c0d010c7eed748`,
+`d41656de91cc2eee9f23037bc352137b57119d81d850656639e7cc8c8c5e3c47`,
+`7ded25f93c7ce78c8b448faedb0778c1c30b083baf91d8e56b36ee8efc2a079e`.
+Source/ledger HEAD is
+`aacec8396bb661adcd9b8fb7963001e86212ab2d`; pre-existing dirty diff/name
+hashes are
+`2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb`/
+`66acef7cc629ee044839a3ff535e5e04738f7d0bf7674d45f01e9aef5627c7b4`
+and are excluded from artifacts.
+
+One natural bind and one Windows-originated request. PASS requires physical
+TA/3D, the exact new fence,72 exact raw-red pixels,184 exact background
+pixels, all256 pixels classified, intact guard, matching graph/store receipts
+and no causally related fault/reset. Red confirms endpoint handling as the
+first runtime boundary. The same zero result rejects endpoint handling and
+forbids another value probe; the next re-anchor moves outside the byte-exact
+fragment graph. Failure to reach the same execution boundary is INCONCLUSIVE.
+Recovery is evidence first, exact package cleanup, then ordinary377/392.
