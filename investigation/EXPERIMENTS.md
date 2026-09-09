@@ -41436,3 +41436,75 @@ SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
 `3f02f3e2b1f37be22a0d9d8e47477aec8b4b7fd26b5fb8e470abaf752f4f7972`.
 Artifacts are `.local/experiments/EXP666-fragment-pipeline-page/artifacts`.
 Ordinary377/392 is clean from EXP665-R1; stage then one full-owner run.
+
+**EXP666 ACTUAL — PIPELINE PAGE SEPARATION REJECTED AS SUFFICIENT
+2026-09-09T08:02:36Z.** Exact30.0.666.0 passed oem5/Code0/service/hash
+preflight. The unchanged784-byte request returned success/queued1. Durable
+correlation candidate666/boot272504169 records DMA3860, Patch0, Submit0,
+fence271, workerReady2, physical TA/3D completion, QueueDpc1 and Notify/DPC.
+Terminal output is byte-identical EXP665: exact1024 bytes,184 background
+pixels, the72-pixel triangle mask zero, poison0, first invalid pixel88 and
+FNV0x98b3446c1b0a8215. Therefore native fragment-record page separation is
+retained as source-correct but rejected as the isolated colour fix. Present is
+not reached; device remained ACTIVE/Code0,8CPU/NVMe2/USB5/keyboard1. Event129
+at08:01:29Z is retained as storage telemetry without GPU attribution. Evidence:
+`.local/experiments/EXP666-fragment-pipeline-page/evidence`; correlation and
+terminal SHA256 are
+`108338265403d03bef0f9eb9203e087b35930f647fccd95baec3d3743e3a4f21`
+and `ea9ffa92356c426f6d7c7d8a6eb13366ff5cc178174b203f398778d83da5b9d2`.
+
+**FOCUSED RE-ANCHOR / NEXT DIFFERENCE.** Exact parsing of the EXP208 and EXP659
+WorkCommand3D/PBE records shows their load/reload/store pipeline binds and
+contents are semantically identical after address relocation; PBE is not the
+next variable. The remaining nearest fetch difference is shader mapping
+identity. EXP659 maps16KiB VS/FS objects separately at0x1100064000 and
+0x110006c000; current overlay encoded compressed aliases0x1100024000 and
+0x1100028000 inside the continuously mapped fixed-input BO. Primary m1n1
+`GPUContext`/`GPUAllocator` source confirms pipeline allocations are separate
+16KiB mappings with one guard page. Commit
+`00123c8da29a11d37870a7ab81bdc838632e569f` defines one shared immutable alias
+plan, maps the existing Windows-owned backend physical pages at those exact
+free context-63 VAs, and makes both compact and generated pipeline relocations
+consume the same aliases. Firmware context0, retained root, private ownership,
+shader bytes, encoder, PBE, DCP and caps are unchanged. RED missing alias plan
+then GREEN exact alias/offset/guard geometry;25 focused/adjacent tests pass.
+
+**EXP666-R1 CLEAN RECOVERY 2026-09-09T08:16:53Z.** Evidence was preserved;
+exact oem5/devnode removed. The stale remote `Tee-Object` owner was stopped by
+the established experiment-local process selector before stale-file cleanup.
+Full-owner stopped and immutable ordinary377/392 restored. Health:
+Problem28/null INF, no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP666 must not be
+repeated.
+
+# EXP667 — exact native VS/FS context-63 aliases
+
+**PREREGISTERED 2026-09-09T08:18:00Z. WHY THIS HYPOTHESIS:** (1) EXP665/666
+prove exact raster coverage but zero fragment colour after both active encoder
+and fragment pipeline routing; (2) exact PBE comparison eliminates load/store
+pipeline semantics as the difference; (3) hardware-proven EXP659 and primary
+m1n1 allocator source require separate shader mappings at0x1100064000 and
+0x110006c000, while Windows compressed both into another continuously mapped
+object. Shader fetch mapping identity is therefore the nearest remaining
+difference.
+
+**WINDOWS CONTRACT:** the backend physical pages remain Windows-owned for the
+submission and context-63 UAT lifetime; aliases are mapped before TTBR
+publication and retired by the existing reverse UAT teardown. **AGX/ASAHI
+CONTRACT:** VS/FS code addresses are offsets from pipeline base0x1100000000 and
+the proven frame uses distinct16KiB mappings separated by one guard page.
+**TRANSLATION:** map the existing VS/FS backend pages at the two exact free
+context-63 VAs and encode those aliases through the existing typed shader
+relocations. **WHAT IS STILL UNKNOWN:** whether exact shader mapping identity
+causes the known red fragment shader to replace the72 zero pixels.
+
+**ATOMIC CONTRACT:** the two UAT aliases and their two relocation targets are
+one indivisible mapping identity; publishing addresses without mappings or
+mappings without address use is invalid. Single functional variable versus
+EXP666 is VS/FS context-63 VA identity. Source commit
+`00123c8da29a11d37870a7ab81bdc838632e569f`; immutable EXP666 builder source
+plus exactly five committed files.25 tests are GREEN. Pinned WDK26100 build,
+analysis/Universal/Inf2Cat/sign/version/hash, one natural bind and exact cleanup
+apply. PASS requires physical TA/3D/fence and256=72 nonzero red+184 background,
+poison0; byte-identical zero rejects alias identity and triggers the next
+full active-image comparison rather than another address micro-probe.

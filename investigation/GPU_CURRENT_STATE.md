@@ -204,6 +204,24 @@ SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP666 is preregistered
 to test only the fragment pipeline page separation; no AGX/firmware/PBE/DCP/caps
 change is permitted.
 
+EXP666 preserves that native fragment-record page separation and is
+byte-identical EXP665: DMA3860/Patch/Submit/physical TA3D/fence271 pass, but
+184 background+72 zero pixels and FNV0x98b3446c1b0a8215 remain. The page split
+is retained but rejected as sufficient. Exact WorkCommand/PBE parsing shows
+EXP208 and EXP659 load/reload/store bindings and pipeline semantics match after
+address relocation, so PBE is not reopened. The nearest exact difference is
+VS/FS mapping identity: hardware-proven EXP659 and primary m1n1 allocator source
+use separate16KiB context mappings at0x1100064000/0x110006c000 with a guard
+gap; Windows encoded compressed aliases0x1100024000/0x1100028000. Commit
+`00123c8da29a11d37870a7ab81bdc838632e569f` maps the existing Windows-owned
+backend pages at the native context-63 aliases and makes typed relocations use
+them; retained context0/private ownership, graph bytes/PBE/DCP/caps do not
+change.25 tests pass. EXP666 is removed and ordinary377/392 is clean at
+2026-09-09T08:16:53Z with Code28/no package/service/module/SYS/UMD,
+SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129. EXP667 is the one exact
+hardware discriminator; if byte-identical, perform a full active-image
+comparison rather than another address probe.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows
