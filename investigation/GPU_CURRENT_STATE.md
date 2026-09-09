@@ -172,6 +172,22 @@ Vertex and all graph bytes are unchanged.17 adjacent tests pass; hardware proof
 is pending. EXP663 is removed and ordinary377/392 is clean at
 2026-09-09T07:22:51Z.
 
+EXP664 changes only those aligned shader slots and repeats physical TA/3D,
+fence271 and the exact same256 background pixels/FNV as EXP663. Alignment is
+rejected as sufficient. The required anti-loop active-job comparison then found
+the actual causal graph disconnect: hardware-proven/native WorkCommandTA
+encoder pointer is object19+0xd0 and the generated template relocates it to
+object37; dynamic overlay copied the new encoder into object71 but never changed
+that pointer. Existing object19+0x128->object71 is a different flagged field.
+Thus all prior dynamic completions executed the old EXP208 encoder. Commit
+`e1d0fc74b10db357d895305ca273772b7ccafe23` validates the exact generated
+19+0xd0->37 edge and, only for a dynamic plan, repoints the per-submission active
+WorkCommand to the owned object71 encoder before publication. Failure leaves
+bytes unchanged; the next per-submission build remains the rollback owner.
+14 adjacent tests pass. EXP664 is removed and ordinary377/392 is clean at
+2026-09-09T07:33:05Z. Next is exact EXP665 hardware validation of this routing;
+no further layout probe precedes it.
+
 AD03 Task1 is OFFLINE_PROVEN at commit
 ccf17dbd033d1b16fead79b7ce53529a2ed2aba3: exact pinned source contract reuses
 only Mesa frontend/compiler/encoder and rejects the softpipe/llvmpipe Windows

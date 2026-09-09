@@ -41276,3 +41276,65 @@ version30.0.664.0. SYS/UMD/INF/CAT/producer/ZIP/air-manifest SHA256:
 `2fd6f7e6d2a834d75b16fd64bbe5368079e3a73590570428032bc521c30b5d16`,
 `59c0fa117e69589c38e8af159525fbec797007167880951520a321c1a1b44633`.
 Air ordinary377/392 is clean from EXP663-R1; stage and one run next.
+
+**EXP664 ACTUAL — SHADER ALIGNMENT REJECTED 2026-09-09T07:28:57Z.** Exact
+oem5/Code0/service/hash preflight and the unchanged784-byte request pass.
+Correlation candidate664/boot267116094 records DMA3860, Patch0, Submit0,
+fence271, physical completion and DPC. Terminal output is byte-identical EXP663:
+DestinationBytes16384,1024 bytes examined,256 background0xff112233,
+foreground0, poison0, first missing pixel88 and FNV0x16c4fd3d3ba00d25.
+No Present; device remains ACTIVE with8CPU/NVMe2/USB5/keyboard1 and no fresh
+41/1001/129. Evidence is
+`.local/experiments/EXP664-v13_5-shader-alignment/evidence`; raw correlation and
+terminal SHA256 are
+`34db985bf36afa0e417eecb7ef465405655a52edccfe9b94a862a24f22e6c9f1`
+and `1cc17c49e52d05026ec1396b0333dbf4622ee7e026a9aa881a64030c2339b288`.
+
+**ANTI-LOOP ACTIVE-JOB REANCHOR / CONFIRMED GRAPH DISCONNECT.** The raw
+hardware-era EXP208 materialized WorkCommandTA contains encoder VA
+0x1500044000 at byte offset0xd0. The generated relocation table identifies
+exactly `{source19, offset208, target37, ExactU64}`. Production dynamic overlay
+stores its encoder in object71; it previously changed no object19+0xd0 edge.
+The existing source19+296->object71 flagged relocation is a different
+WorkCommand field. Therefore the GPU completion was running the original
+object37 encoder, causally explaining unchanged clear/background output across
+all overlay state changes.
+
+Commit `e1d0fc74b10db357d895305ca273772b7ccafe23` adds one bounded active-job
+translation after the standard relocation pass and before publication. It
+requires exactly one Encoder plan entry at object71+0, verifies the current
+WorkCommand pointer equals active object37 VA, then writes the plan's object71
+VA. Unknown, already-patched or malformed state fails without mutation. The
+WorkCommand is per-submission and is recopied by the existing owner, providing
+rollback for later build failure. RED missing route then GREEN; exact generated
+relocation identity, success, duplicate, wrong-old-target and17 adjacent tests
+pass.
+
+**EXP664-R1 CLEAN RECOVERY 2026-09-09T07:33:05Z.** Exact package/devnode
+removed after evidence; full-owner stopped and ordinary377/392 restored.
+Problem28/null INF, no package/service/module/SYS/UMD, SSH/8CPU/NVMe2/USB5/
+keyboard1 and no fresh41/1001/129. EXP664 must not be repeated.
+
+# EXP665 — route dynamic encoder into the active TA WorkCommand
+
+**PREREGISTERED 2026-09-09T07:34:00Z. WHY THIS HYPOTHESIS:** (1) exact
+generated/raw source proves active WorkCommand offset0xd0 still targeted the
+old encoder object37; (2) all failed candidates changed only the unreachable
+object71 bytes while physical completion/output stayed identical; (3) commit
+e1d0fc7 makes the new encoder reachable with one validated pointer correction.
+
+**WINDOWS CONTRACT:** the immutable Draw's copied encoder remains owned by the
+exact submission/fence transaction. **AGX/ASAHI CONTRACT:** WorkCommandTA
+`encoder_addr` must address the VDM stream to execute. **TRANSLATION:** after
+the standard active job is built, validate the captured source edge and route
+that per-submission pointer to the already materialized object71 Encoder entry;
+publish only after success. **WHAT IS STILL UNKNOWN:** whether the now-reachable
+byte-exact V13_5 encoder produces the expected72 triangle pixels.
+
+Single variable is WorkCommand encoder reachability. Shader placement remains
+aligned, graph bytes/addresses, geometry, PBE, firmware, queues, DCP and caps
+are unchanged. Source commit is
+`e1d0fc74b10db357d895305ca273772b7ccafe23`; immutable builder base EXP664 plus
+four changed files. Pinned build/sign/hash gates, one natural bind, evidence and
+cleanup apply. PASS requires physical completion/fence and exact72/184 output;
+any different failure becomes the next named boundary.
