@@ -400,7 +400,7 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   status = D3DKMTRender(&render);
   wprintf(L"PHASE DYNAMIC_RENDER_END status=0x%08lx queued=%u\n",
           (ULONG)status, render.QueuedBufferCount);
-  if (!NT_SUCCESS(status))
+  if (status != (NTSTATUS)0)
     goto Preserve;
   status = QueryPresentation(adapters[selected].hAdapter, device.hDevice,
                              context.hContext, &presentation);
@@ -412,12 +412,13 @@ int __cdecl wmain(int argc, wchar_t **argv) {
           presentation.PixelsVerified, presentation.PixelsExpected,
           presentation.ContentHash, presentation.Sequence,
           presentation.PhysicalAddress);
-  if (!NT_SUCCESS(status))
+  if (status != (NTSTATUS)0)
     goto Preserve;
   Sleep(15000u);
   status = QueryPresentation(adapters[selected].hAdapter, device.hDevice,
                              context.hContext, &held);
-  if (!NT_SUCCESS(status) || memcmp(&presentation, &held, sizeof(held)) != 0)
+  if (status != (NTSTATUS)0 ||
+      memcmp(&presentation, &held, sizeof(held)) != 0)
     goto Preserve;
   wprintf(L"PHASE DYNAMIC_HOLD_PASS duration_ms=15000\n");
   retirement.Magic = ADMISSION_RETIREMENT_QUERY_MAGIC;

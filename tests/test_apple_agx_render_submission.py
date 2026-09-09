@@ -50,6 +50,23 @@ class AppleAgxRenderSubmissionTests(unittest.TestCase):
         self.assertNotIn("FAIL2(AdmissionDdiCancelCommand", callbacks)
         self.assertIn("AdmissionRenderPacketDiscardQueued", scheduler)
 
+    def test_dynamic_output_snapshot_is_exported_after_passive_verification(self):
+        backend = (RENDER / "src" / "backend_platform_windows.c").read_text()
+        receipts = (RENDER / "src" / "receipts.c").read_text()
+        output = backend[
+            backend.index("static VOID AdmissionOutputProcess("):
+            backend.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendRetire(")
+        ]
+        observe = output.index("AdmissionTerminalObserve(")
+        export = output.index("AdmissionRecordOutputTerminalSnapshot(")
+        self.assertLess(observe, export)
+        self.assertIn("AdmissionBackendOutputVerificationTriangle", output)
+        self.assertIn("Wom1OutputTerminalSnapshot", receipts)
+        snapshot = receipts[receipts.index("VOID AdmissionRecordOutputTerminalSnapshot("):]
+        self.assertIn("ADMISSION_TERMINAL_VALID_TERMINAL", snapshot)
+        self.assertIn("ADMISSION_TERMINAL_VALID_OUTPUT", snapshot)
+        self.assertNotIn("ZwFlushKey", snapshot[: snapshot.index("static VOID", 10)])
+
 
 if __name__ == "__main__":
     unittest.main()

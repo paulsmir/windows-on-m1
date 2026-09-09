@@ -2338,6 +2338,10 @@ static VOID AdmissionOutputProcess(
       runtime->CompletedOutput.AccessAttempted
           ? runtime->CompletedOutput.AccessStatus
           : (ULONG)STATUS_INVALID_DEVICE_STATE);
+  if (runtime->CompletedOutput.View.VerificationKind ==
+      AdmissionBackendOutputVerificationTriangle)
+    AdmissionRecordOutputTerminalSnapshot(
+        runtime->Adapter, &runtime->TerminalReceipt);
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
   if (runtime->VisibleAgxValid && runtime->VisibleAgxFence == fence &&
       AdmissionCompletedOutputBeginPresent(
