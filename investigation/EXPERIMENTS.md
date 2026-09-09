@@ -41750,6 +41750,22 @@ one natural bind, exact active graph receipt/output and cleanup apply. PASS is
 72 red+184 background with physical completion. Zero output rejects leaf
 attributes and requires fault/USC execution evidence, not another mapping edit.
 
+**EXP670 BUILD FREEZE 2026-09-09T09:17:35Z.** FRYZZING built exact four-file
+overlay SHA256
+`4e89874ddcd92a1adb823fbb996fcdd079dee74b55d1cd85ea06fdc6396392b6`
+from immutable EXP669 source with pinned WDK26100/MSVC14.44. All established
+analysis/Universal/Inf2Cat/sign/x64 UMD gates pass; version30.0.670.0. SYS/UMD/
+INF/CAT/producer/ZIP/air-manifest SHA256:
+`7b2c25a16a3a2135d0b45299b22e6aeef62bbe226b52e215920b8e24ad809b3d`,
+`4036d5f54f38529305f6ae0637a2e2b70a3ee5ba62c3e888896244d7c927f762`,
+`0e84e368572314bcba08ce72e05d9b5112bfdf6dccb6f3d4866b0ddbec8b7d67`,
+`2abd35ab2faacec6f7e3f27c49a638c4b7ff5798ef18771d78fb8030be52c41f`,
+`7f7a5e9e8fc242a522e4d803f3ca6847b1040555fadbfa6a1b4efeb796348def`,
+`165c895639faf81a94101d9c1c90d7e9f21a38a1889d4e6cade2b7fd88631132`,
+`cf674d0e06f2801d013ca87c6b57c74123649f4bed2c0e66a204add43c4ae857`.
+Artifacts: `.local/experiments/EXP670-native-pipeline-uat/artifacts`.
+Ordinary377/392 clean from EXP669-R1; stage then one full-owner run.
+
 **EXP669-R1 CLEAN RECOVERY 2026-09-09T09:14:50Z.** Evidence was already local
 before SSH disappeared during cleanup. The established control plane showed
 the guest completed shutdown; full-owner stopped and immutable ordinary377/392
