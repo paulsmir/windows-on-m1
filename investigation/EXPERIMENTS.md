@@ -42082,3 +42082,46 @@ ordinary377/392 restored. Health is Code28/null INF, no package/service/module/
 SYS/UMD, SSH/8CPU/NVMe2/USB5/keyboard1 and no fresh41/1001/129 in the ordinary
 boot. Next is offline pinned-ISA direct-register red construction; do not repeat
 EXP674.
+
+# EXP675 — direct-register constant red
+
+**PREREGISTERED 2026-09-09T10:56:00Z. WHY THIS HYPOTHESIS:** (1) EXP674 proves
+the fragment shader is fetched and invoked and that changing only its immediate
+sources produces72 exact u8norm pixels through the same `st_tile`; (2) EXP673
+closes every final store and WorkCommand scalar while the original shader's
+red value becomes zero; (3) the only instructions between the original four
+constant loads and `pixwait/st_tile` are a nine-instruction XOR register
+permutation. The nearest causal correction is to load the required final
+`st_tile` source registers directly and remove only that permutation.
+
+**ATOMIC CONTRACT:** direct final-register loads and neutralization of all nine
+old permutation instructions are inseparable: retaining either half would
+transform the intended value again. The replacement uses only source-decoded
+V13_5 ISA instructions of the same six-byte width. **WINDOWS CONTRACT:** package,
+request, allocation, fence, validation and output worker remain unchanged.
+**AGX/ASAHI CONTRACT:** `st_tile` consumes `r0h,r1l,r1h,r2l`; constant red is
+FP16 `{0x3c00,0,0,0x3c00}` in that exact physical order. **TRANSLATION:** load
+those four registers directly and replace each old XOR with `ldimm r3l,0`, an
+unused register write; `pixwait`, `st_tile`, stop, trap, code size, VA, USC and
+all graph objects remain byte-exact. **WHAT IS STILL UNKNOWN:** whether direct
+register construction yields the native raw red value under the Windows job.
+
+The exact fragment asset is112 bytes, SHA256
+`ee3436d38d17080138e2ea7914e6952280fa5a86e13caf83cc6dba596e5c76cd`.
+Pinned ISA disassembly is four direct `ldimm`, nine `ldimm r3l,0`, unchanged
+two `pixwait`, unchanged `st_tile u8norm xyzw`, stop and trap. Bytes at and
+after offset0x4e are byte-identical to EXP659, SHA256
+`6df1df9975b5b5230599dd5e97cc943832599bb93e08fc32df0da18e7602f4db`.
+Variant manifest SHA256 is
+`49390848157dcd0704e5f2f6fe6508f34f6fa1676907cdb022cf3d0a075b19b5`.
+
+No KMD/UMD/producer build changes: reuse exact signed30.0.673.0 artifact and
+all non-FS assets from EXP673. Air manifest SHA256 is
+`64d5ab8446a0ec873f3845d44d69bf6d59930836b33334a7e2451d45c15c35be`.
+One natural bind and one request. Fragment-colour PASS requires physical TA/3D,
+exact fence,72 raw `0xffff0000` pixels,184 exact background pixels, full256
+pixel verification, unchanged store graph and no causal fault/reset. A visible
+qualification side effect is not evidence for DCP/Present in this EXP and is
+not part of the verdict. Zero rejects the permutation hypothesis; another value
+is classified exactly. Cleanup returns to ordinary377/392 immediately after
+evidence.
