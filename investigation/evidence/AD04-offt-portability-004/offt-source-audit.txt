@@ -1,0 +1,8 @@
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h:478:   off_t offset, last_offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:12:   off_t offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_pack.c:1197:   off_t target = fix.skip_to_end ? fix.block->last_offset : fix.block->offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/util/mesa_cache_db.h:27:   off_t offset;
+/Users/pavel/public_windows/.local/reference/mesa/src/util/anon_file.c:243:   ret = ftruncate(fd, (off_t)size);
+/Users/pavel/public_windows/.local/reference/mesa/src/util/anon_file.h:35:/* On win32, off_t is only 32 bit, so always using 64 bit size */
+/Users/pavel/public_windows/.local/reference/mesa/src/util/os_mman.h:70:#define LARGE_OFF_T ((((off_t) 1 << 31) << 31) - 1 + \
+/Users/pavel/public_windows/.local/reference/mesa/src/util/os_mman.h:71:                     (((off_t) 1 << 31) << 31))
