@@ -88,7 +88,7 @@ HARDWARE_USED:
 NO
 
 WORKER_COMMIT:
-PENDING (filled after implementation commit)
+84167157832a136519d88331fa5a5ccab850d723
 
 RAW_EVIDENCE_PATHS:
 investigation/evidence/AD04-util-lut2-portability-005/
