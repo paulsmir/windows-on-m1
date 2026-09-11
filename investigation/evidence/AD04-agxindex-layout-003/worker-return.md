@@ -68,7 +68,7 @@ off_t unknown type name at agx_compiler.h line478. Later UTIL_LUT2 diagnostics
 remain visible and were not modified.
 
 WORKER_COMMIT:
-PENDING (filled after implementation commit)
+d49e6ad93f44f89af64b6c1bee4817624f1b8faf
 
 HARDWARE_USED:
 NO
