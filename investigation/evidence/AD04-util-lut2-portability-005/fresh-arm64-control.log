@@ -1,0 +1,778 @@
+In file included from C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c:13:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1929,11): warning: misleading indentation; statement is not part of the previous 'if' [-Wmisleading-indentation]
+ 1929 |    UNUSED nir_deref_instr *leader_parent = nir_src_as_deref(leader->parent);
+      |           ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1926,4): note: previous statement is here
+ 1926 |    if (leader->parent.ssa == &parent->def)
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1929,28): warning: unused variable 'leader_parent' [-Wunused-variable]
+ 1929 |    UNUSED nir_deref_instr *leader_parent = nir_src_as_deref(leader->parent);
+      |                            ^~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(2209,22): warning: unused variable 'num_components' [-Wunused-variable]
+ 2209 |    ASSERTED unsigned num_components = nir_intrinsic_num_components(decl);
+      |                      ^~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(2210,22): warning: unused variable 'bit_size' [-Wunused-variable]
+ 2210 |    ASSERTED unsigned bit_size = nir_intrinsic_bit_size(decl);
+      |                      ^~~~~~~~
+In file included from C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c:20:
+In file included from C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h:10:
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(54,23): warning: unused variable 'b' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                       ^~~~~~~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(40,38): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                      ^
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(54,23): warning: unused variable 'c' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                       ^~~~~~~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(40,48): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                                ^
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(54,37): warning: unused variable 'a' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                     ^~~~~~~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(40,28): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                            ^
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(54,37): warning: unused variable 'c' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                     ^~~~~~~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(40,48): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                                ^
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(54,51): warning: unused variable 'a' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                                   ^~~~~~~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(40,28): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                            ^
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(54,51): warning: unused variable 'b' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                                   ^~~~~~~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\util/lut.h(40,38): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                      ^
+In file included from C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c:27:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler\nir\nir_builtin_builder.h(114,43): error: use of undeclared identifier 'M_LOG2E'
+  114 |    return nir_fexp2(b, nir_fmul_imm(b, x, M_LOG2E));
+      |                                           ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler\nir\nir_builtin_builder.h(120,50): error: use of undeclared identifier 'M_LOG2E'
+  120 |    return nir_fmul_imm(b, nir_flog2(b, x), 1.0 / M_LOG2E);
+      |                                                  ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler\nir\nir_builtin_builder.h(173,40): error: use of undeclared identifier 'M_PI'
+  173 |    return nir_fmul_imm(b, val, 180.0 / M_PI);
+      |                                        ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler\nir\nir_builtin_builder.h(240,32): error: use of undeclared identifier 'M_PI'
+  240 |    return nir_fmul_imm(b, val, M_PI / 180.0);
+      |                                ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(1323,22): warning: unused variable 'stage' [-Wunused-variable]
+ 1323 |    mesa_shader_stage stage = b->shader->stage;
+      |                      ^~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(1764,22): warning: unused variable 'bitsize' [-Wunused-variable]
+ 1764 |    ASSERTED unsigned bitsize = nir_src_bit_size(src.src);
+      |                      ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(1765,13): warning: unused variable 'comps' [-Wunused-variable]
+ 1765 |    unsigned comps = nir_src_num_components(src.src);
+      |             ^~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(1849,22): warning: unused variable 'comps' [-Wunused-variable]
+ 1849 |    ASSERTED unsigned comps = instr->def.num_components;
+      |                      ^~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2750,40): error: use of undeclared identifier 'M_1_PI'
+ 2750 |    nir_def *turns = nir_fmul_imm(b, x, M_1_PI * 0.5f);
+      |                                        ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2794,7): warning: unused variable '_' [-Wunused-variable]
+ 2794 |       NIR_PASS(progress, nir, nir_opt_copy_prop);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2795,7): warning: unused variable '_' [-Wunused-variable]
+ 2795 |       NIR_PASS(progress, nir, nir_opt_remove_phis);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2796,7): warning: unused variable '_' [-Wunused-variable]
+ 2796 |       NIR_PASS(progress, nir, nir_opt_dce);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2797,7): warning: unused variable '_' [-Wunused-variable]
+ 2797 |       NIR_PASS(progress, nir, nir_opt_dead_cf);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2798,7): warning: unused variable '_' [-Wunused-variable]
+ 2798 |       NIR_PASS(progress, nir, nir_opt_cse);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2804,7): warning: unused variable '_' [-Wunused-variable]
+ 2804 |       NIR_PASS(progress, nir, nir_opt_peephole_select,
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 2805 |                &peephole_select_options);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2806,7): warning: unused variable '_' [-Wunused-variable]
+ 2806 |       NIR_PASS(progress, nir, nir_opt_phi_precision);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2807,7): warning: unused variable '_' [-Wunused-variable]
+ 2807 |       NIR_PASS(progress, nir, nir_opt_algebraic);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2808,7): warning: unused variable '_' [-Wunused-variable]
+ 2808 |       NIR_PASS(progress, nir, nir_opt_constant_folding);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2809,7): warning: unused variable '_' [-Wunused-variable]
+ 2809 |       NIR_PASS(progress, nir, nir_opt_undef);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2810,7): warning: unused variable '_' [-Wunused-variable]
+ 2810 |       NIR_PASS(progress, nir, nir_opt_loop_unroll);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2861,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2861 |    NIR_PASS(_, nir, nir_opt_shrink_stores, true);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2869,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2869 |       NIR_PASS(_, nir, nir_shader_instructions_pass, set_speculate,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2882,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2882 |    NIR_PASS(_, nir, nir_opt_peephole_select, &peephole_select_options);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2884,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2884 |    NIR_PASS(_, nir, nir_opt_load_store_vectorize,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2890,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2890 |    NIR_PASS(_, nir, nir_lower_pack);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2891,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2891 |    NIR_PASS(_, nir, nir_opt_algebraic);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2903,4): warning: unused variable '_' [-Wunused-variable]
+ 2903 |    NIR_PASS(progress, nir, nir_opt_uniform_atomics, true);
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2910,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2910 |    NIR_PASS(_, nir, agx_nir_lower_address);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2912,4): warning: unused variable '_' [-Wunused-variable]
+ 2912 |    NIR_PASS(progress, nir, nir_opt_uniform_subgroup, &subgroups_options);
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2914,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2914 |       NIR_PASS(_, nir, agx_nir_lower_subgroups);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2921,7): warning: unused variable '_' [-Wunused-variable]
+ 2921 |       NIR_PASS(progress, nir, nir_opt_algebraic);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2922,7): warning: unused variable '_' [-Wunused-variable]
+ 2922 |       NIR_PASS(progress, nir, nir_opt_constant_folding);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2923,7): warning: unused variable '_' [-Wunused-variable]
+ 2923 |       NIR_PASS(progress, nir, nir_opt_dce);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2933,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2933 |       NIR_PASS(_, nir, nir_opt_constant_folding);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2934,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2934 |       NIR_PASS(_, nir, nir_opt_dce);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2941,4): warning: unused variable '_' [-Wunused-variable]
+ 2941 |    NIR_PASS(progress, nir, nir_lower_int64);
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2950,10): warning: unused variable '_' [-Wunused-variable]
+ 2950 |          NIR_PASS(progress, nir, nir_opt_algebraic);
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2951,10): warning: unused variable '_' [-Wunused-variable]
+ 2951 |          NIR_PASS(progress, nir, nir_opt_constant_folding);
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2952,10): warning: unused variable '_' [-Wunused-variable]
+ 2952 |          NIR_PASS(progress, nir, nir_opt_dce);
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2966,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2966 |    NIR_PASS(_, nir, agx_nir_lower_fminmax);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(2983,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2983 |       NIR_PASS(_, nir, agx_nir_opt_preamble, sizes);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3002,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3002 |    NIR_PASS(_, nir, nir_opt_peephole_select, &peephole_select_options);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3003,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3003 |    NIR_PASS(_, nir, nir_lower_int64);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3009,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3009 |    NIR_PASS(_, nir, nir_opt_algebraic_late);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3010,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3010 |    NIR_PASS(_, nir, agx_nir_lower_fminmax);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3018,7): warning: unused variable '_' [-Wunused-variable]
+ 3018 |       NIR_PASS(progress, nir, nir_opt_dce);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3019,7): warning: unused variable '_' [-Wunused-variable]
+ 3019 |       NIR_PASS(progress, nir, nir_opt_cse);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3020,7): warning: unused variable '_' [-Wunused-variable]
+ 3020 |       NIR_PASS(progress, nir, agx_nir_fuse_algebraic_late);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3026,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3026 |    NIR_PASS(_, nir, nir_opt_copy_prop);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3027,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3027 |    NIR_PASS(_, nir, nir_opt_dce);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3036,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3036 |    NIR_PASS(_, nir, agx_nir_lower_algebraic_late);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3037,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3037 |    NIR_PASS(_, nir, agx_nir_fuse_selects);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3038,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3038 |    NIR_PASS(_, nir, nir_opt_constant_folding);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3039,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3039 |    NIR_PASS(_, nir, nir_opt_combine_barriers, NULL, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3040,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3040 |    NIR_PASS(_, nir, nir_opt_copy_prop);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3041,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3041 |    NIR_PASS(_, nir, nir_opt_dce);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3042,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3042 |    NIR_PASS(_, nir, nir_opt_cse);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3043,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3043 |    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3044,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3044 |    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3052,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3052 |    NIR_PASS(_, nir, nir_opt_sink, move_all);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3053,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3053 |    NIR_PASS(_, nir, nir_opt_move, move_all);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3054,4): warning: unused variable '_' [-Wunused-variable]
+ 3054 |    NIR_PASS(progress, nir, nir_lower_all_phis_to_scalar);
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3060,7): warning: unused variable '_' [-Wunused-variable]
+ 3060 |       NIR_PASS(progress, nir, nir_opt_copy_prop);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3061,7): warning: unused variable '_' [-Wunused-variable]
+ 3061 |       NIR_PASS(progress, nir, nir_opt_dce);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3511,29): warning: 'fopen' is deprecated: This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details. [-Wdeprecated-declarations]
+ 3511 |       FILE *fp = selftest ? fopen("/dev/null", "w") : stdout;
+      |                             ^
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\ucrt\stdio.h(212,20): note: 'fopen' has been explicitly marked deprecated here
+  212 |     _Check_return_ _CRT_INSECURE_DEPRECATE(fopen_s)
+      |                    ^
+C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.50.35717\include\vcruntime.h(368,55): note: expanded from macro '_CRT_INSECURE_DEPRECATE'
+  368 |         #define _CRT_INSECURE_DEPRECATE(_Replacement) _CRT_DEPRECATE_TEXT(    \
+      |                                                       ^
+C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.50.35717\include\vcruntime.h(358,47): note: expanded from macro '_CRT_DEPRECATE_TEXT'
+  358 | #define _CRT_DEPRECATE_TEXT(_Text) __declspec(deprecated(_Text))
+      |                                               ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3593,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3593 |    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3596,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3596 |    NIR_PASS(_, nir, nir_lower_vars_to_scratch, 256,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3598,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3598 |    NIR_PASS(_, nir, nir_lower_indirect_derefs_to_if_else_trees,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3600,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3600 |    NIR_PASS(_, nir, nir_split_var_copies);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3601,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3601 |    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3602,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3602 |    NIR_PASS(_, nir, nir_lower_var_copies);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3605,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3605 |       NIR_PASS(_, nir, agx_nir_lower_frag_sidefx);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3606,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3606 |       NIR_PASS(_, nir, nir_lower_is_helper_invocation);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3610,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3610 |    NIR_PASS(_, nir, nir_opt_dce);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3612,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3612 |    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3613,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3613 |    NIR_PASS(_, nir, nir_lower_frexp);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3614,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3614 |    NIR_PASS(_, nir, nir_lower_alu);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3615,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3615 |    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3616,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3616 |    NIR_PASS(_, nir, nir_lower_flrp, 16 | 32 | 64, false);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3617,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3617 |    NIR_PASS(_, nir, agx_lower_sincos);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3618,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3618 |    NIR_PASS(_, nir, nir_shader_intrinsics_pass, agx_lower_front_face,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3620,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3620 |    NIR_PASS(_, nir, agx_nir_lower_subgroups);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3621,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3621 |    NIR_PASS(_, nir, nir_lower_all_phis_to_scalar);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3632,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3632 |    NIR_PASS(_, nir, nir_opt_idiv_const, 16);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3638,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3638 |    NIR_PASS(_, nir, nir_lower_idiv, &idiv_options);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3641,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3641 |    NIR_PASS(_, nir, nir_shader_alu_pass, agx_nir_lower_fdiv,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3644,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3644 |    NIR_PASS(_, nir, nir_opt_deref);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3645,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3645 |    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3648,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3648 |    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_all, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3657,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3657 |    NIR_PASS(_, nir, nir_opt_sink, move_all);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3658,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3658 |    NIR_PASS(_, nir, nir_opt_move, move_all);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3659,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3659 |    NIR_PASS(_, nir, agx_nir_lower_shared_bitsize);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3697,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3697 |    NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_printf_buffer,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3700,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3700 |    NIR_PASS(_, nir, nir_lower_frag_coord_to_pixel_coord);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3701,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3701 |    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3710,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3710 |    NIR_PASS(_, nir, nir_lower_mem_access_bit_sizes, &lower_mem_access_options);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3714,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3714 |       NIR_PASS(_, nir, nir_lower_scratch_to_var);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3715,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3715 |       NIR_PASS(_, nir, nir_lower_vars_to_scratch, 256,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3718,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3718 |       NIR_PASS(_, nir, nir_lower_indirect_derefs_to_if_else_trees,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3727,7): warning: unused variable '_' [-Wunused-variable]
+ 3727 |       NIR_PASS(progress, nir, nir_opt_algebraic);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3728,7): warning: unused variable '_' [-Wunused-variable]
+ 3728 |       NIR_PASS(progress, nir, nir_opt_constant_folding);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3729,7): warning: unused variable '_' [-Wunused-variable]
+ 3729 |       NIR_PASS(progress, nir, nir_opt_dce);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5362,7): note: expanded from macro '_PASS'
+ 5362 |       do_pass if (NIR_DEBUG(CLONE))                                     \
+      |       ^~~~~~~
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3732,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3732 |    NIR_PASS(_, nir, nir_lower_bit_size, lower_bit_size_callback, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3735,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3735 |    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3736,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3736 |    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3739,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3739 |    NIR_PASS(_, nir, nir_opt_idiv_const, 16);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3741,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3741 |    NIR_PASS(_, nir, nir_opt_constant_folding);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3742,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3742 |    NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_load_from_texture_handle,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-util-lut2-arm64\compiler\agx_compile.c(3745,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 3745 |    NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_sink_address,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+114 warnings and 5 errors generated.

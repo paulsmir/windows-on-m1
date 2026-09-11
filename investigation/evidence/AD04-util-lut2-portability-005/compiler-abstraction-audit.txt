@@ -1,0 +1,18 @@
+/Users/pavel/public_windows/.local/reference/mesa/src/util/compiler.h:88:#if defined(__has_cpp_attribute) && defined(__clang__)
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:39:#ifndef UTIL_DETECT_CC_H_
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:40:#define UTIL_DETECT_CC_H_
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:47:#define DETECT_CC_GCC 1
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:48:#define DETECT_CC_GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:52: * Meaning of _MSC_VER value:
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:64:#if defined(_MSC_VER) || defined(__MSC__)
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:65:#define DETECT_CC_MSVC 1
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:69:#define DETECT_CC_ICL 1
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:72:#ifndef DETECT_CC_GCC
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:73:#define DETECT_CC_GCC 0
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:76:#ifndef DETECT_CC_GCC_VERSION
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:77:#define DETECT_CC_GCC_VERSION 0
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:80:#ifndef DETECT_CC_MSVC
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:81:#define DETECT_CC_MSVC 0
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:84:#ifndef DETECT_CC_ICL
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:85:#define DETECT_CC_ICL 0
+/Users/pavel/public_windows/.local/reference/mesa/src/util/detect_cc.h:88:#endif /* UTIL_DETECT_CC_H_ */

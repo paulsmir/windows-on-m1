@@ -1,0 +1,5 @@
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_builder.h.py:121:      return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                     \
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_pseudo.c:80:      return agx_bitop_to(b, I->dest[0], I->src[0], agx_zero(), UTIL_LUT2(a));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_lower_pseudo.c:83:      return agx_bitop_to(b, I->dest[0], I->src[0], agx_zero(), UTIL_LUT2(~a));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_optimizer.c:419:       def->truth_table != UTIL_LUT2(a ^ b))
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_optimizer.c:519:         I->truth_table = util_lut2_invert_source(I->truth_table, s);
