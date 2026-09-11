@@ -78,7 +78,7 @@ HARDWARE_USED:
 NO
 
 WORKER_COMMIT:
-PENDING (filled after implementation commit)
+3416c77dded5a543792259254c3625169e84e8e3
 
 RAW_EVIDENCE_PATHS:
 investigation/evidence/AD04-offt-portability-004/
