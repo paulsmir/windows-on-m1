@@ -1,0 +1,26 @@
+﻿clang-cl.exe : C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(47,16): error: static assertion failed due 
+to requirement 'sizeof(agx_index) == 8': pragma agx_index must be 8 bytes
+At C:\Users\pauls\AD04-agxindex-pragma\probe-agxindex-pragma.ps1:11 char:4
++    & $clang /nologo /W3 /std:c11 "/DPROBE_PRAGMA=$Pragma" $source "/F ...
++    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\pauls\...must be 8 bytes:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   47 | _Static_assert(sizeof(agx_index) == 8, "pragma agx_index must be 8 bytes");
+      |                ^~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(47,34): note: expression evaluates to '20 == 8'
+   47 | _Static_assert(sizeof(agx_index) == 8, "pragma agx_index must be 8 bytes");
+      |                ~~~~~~~~~~~~~~~~~~^~~~
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(64,11): warning: implicit truncation from 'int' to 
+bit-field changes value from 2 to -2 [-Wbitfield-constant-conversion]
+   64 |    a.size = PROBE_SIZE_64;
+      |           ^ ~~~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(65,11): warning: implicit truncation from 'int' to 
+bit-field changes value from 5 to -3 [-Wbitfield-constant-conversion]
+   65 |    a.type = PROBE_UNDEF;
+      |           ^ ~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(77,11): warning: implicit truncation from 'int' to 
+bit-field changes value from 4 to -4 [-Wbitfield-constant-conversion]
+   77 |    b.type = PROBE_REGISTER;
+      |           ^ ~~~~~~~~~~~~~~
+3 warnings and 1 error generated.

@@ -1,0 +1,124 @@
+
+*** Dumping AST Record Layout
+         0 | struct _iobuf
+         0 |   void * _Placeholder
+           | [sizeof=8, align=8]
+
+*** Dumping AST Record Layout
+         0 | struct __crt_locale_pointers
+         0 |   struct __crt_locale_data * locinfo
+         8 |   struct __crt_multibyte_data * mbcinfo
+           | [sizeof=16, align=8]
+
+*** Dumping AST Record Layout
+         0 | agx_index
+         0 |   uint32_t value
+     4:0-0 |   _Bool kill
+     4:1-1 |   _Bool cache
+     4:2-2 |   _Bool discard
+     4:3-3 |   _Bool abs
+     4:4-4 |   _Bool neg
+     4:5-5 |   _Bool memory
+     8:0-2 |   unsigned int channels_m1
+     8:3-4 |   enum probe_size size
+     8:5-7 |   enum probe_type type
+    9:0-10 |   unsigned int reg
+    12:0-0 |   _Bool has_reg
+    16:0-5 |   unsigned int padding
+           | [sizeof=20, align=4]
+
+*** Dumping AST Record Layout
+         0 | sentinel_before
+     0:0-0 |   _Bool a
+     4:0-2 |   unsigned int b
+     4:3-5 |   enum probe_type c
+    4:6-16 |   unsigned int d
+           | [sizeof=8, align=4]
+
+*** Dumping AST Record Layout
+         0 | sentinel_after
+     0:0-0 |   _Bool a
+     4:0-2 |   unsigned int b
+     4:3-5 |   enum probe_type c
+    4:6-16 |   unsigned int d
+           | [sizeof=8, align=4]
+
+*** Dumping IRgen Record Layout
+Record: RecordDecl 0x2096cafe4f8 <C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:20:9, line:34:1> line:20:9 struct definition
+|-FieldDecl 0x2096cafe620 <line:21:4, col:13> col:13 referenced value 'uint32_t':'unsigned int'
+|-FieldDecl 0x2096cafe6d0 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:22:16> col:9 referenced kill 'bool'
+| `-ConstantExpr 0x2096cafe6b0 <col:16> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafe678 <col:16> 'int' 1
+|-FieldDecl 0x2096cafe780 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:23:17> col:9 referenced cache 'bool'
+| `-ConstantExpr 0x2096cafe760 <col:17> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafe728 <col:17> 'int' 1
+|-FieldDecl 0x2096cafe830 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:24:19> col:9 referenced discard 'bool'
+| `-ConstantExpr 0x2096cafe810 <col:19> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafe7d8 <col:19> 'int' 1
+|-FieldDecl 0x2096cafe8e0 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:25:15> col:9 referenced abs 'bool'
+| `-ConstantExpr 0x2096cafe8c0 <col:15> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafe888 <col:15> 'int' 1
+|-FieldDecl 0x2096cafe990 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:26:15> col:9 referenced neg 'bool'
+| `-ConstantExpr 0x2096cafe970 <col:15> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafe938 <col:15> 'int' 1
+|-FieldDecl 0x2096cafea40 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:27:18> col:9 referenced memory 'bool'
+| `-ConstantExpr 0x2096cafea20 <col:18> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafe9e8 <col:18> 'int' 1
+|-FieldDecl 0x2096cafeaf8 <line:28:4, col:27> col:13 referenced channels_m1 'unsigned int'
+| `-ConstantExpr 0x2096cafead8 <col:27> 'int'
+|   |-value: Int 3
+|   `-IntegerLiteral 0x2096cafea98 <col:27> 'int' 3
+|-FieldDecl 0x2096cafec00 <line:29:4, col:27> col:20 referenced size 'enum probe_size'
+| `-ConstantExpr 0x2096cafebe0 <col:27> 'int'
+|   |-value: Int 2
+|   `-IntegerLiteral 0x2096cafeb50 <col:27> 'int' 2
+|-FieldDecl 0x2096cafecc0 <line:30:4, col:27> col:20 referenced type 'enum probe_type'
+| `-ConstantExpr 0x2096cafeca0 <col:27> 'int'
+|   |-value: Int 3
+|   `-IntegerLiteral 0x2096cafec58 <col:27> 'int' 3
+|-FieldDecl 0x2096cafed78 <line:31:4, col:19> col:13 referenced reg 'unsigned int'
+| `-ConstantExpr 0x2096cafed58 <col:19> 'int'
+|   |-value: Int 11
+|   `-IntegerLiteral 0x2096cafed18 <col:19> 'int' 11
+|-FieldDecl 0x2096cafee28 <C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\stdbool.h:24:14, C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c:32:19> col:9 referenced has_reg 'bool'
+| `-ConstantExpr 0x2096cafee08 <col:19> 'int'
+|   |-value: Int 1
+|   `-IntegerLiteral 0x2096cafedd0 <col:19> 'int' 1
+`-FieldDecl 0x2096cafeee0 <line:33:4, col:23> col:13 referenced padding 'unsigned int'
+  `-ConstantExpr 0x2096cafeec0 <col:23> 'int'
+    |-value: Int 6
+    `-IntegerLiteral 0x2096cafee80 <col:23> 'int' 6
+
+Layout: <CGRecordLayout
+  LLVMType:%struct.agx_index = type { i32, i8, i32, i8, i32 }
+  IsZeroInitializable:1
+  BitFields:[
+    <CGBitFieldInfo Offset:0 Size:1 IsSigned:0 StorageSize:8 StorageOffset:4 VolatileOffset:0 VolatileStorageSize:0 VolatileStorageOffset:0>
+    <CGBitFieldInfo Offset:1 Size:1 IsSigned:0 StorageSize:8 StorageOffset:4 VolatileOffset:1 VolatileStorageSize:8 VolatileStorageOffset:4>
+    <CGBitFieldInfo Offset:2 Size:1 IsSigned:0 StorageSize:8 StorageOffset:4 VolatileOffset:2 VolatileStorageSize:8 VolatileStorageOffset:4>
+    <CGBitFieldInfo Offset:3 Size:1 IsSigned:0 StorageSize:8 StorageOffset:4 VolatileOffset:3 VolatileStorageSize:8 VolatileStorageOffset:4>
+    <CGBitFieldInfo Offset:4 Size:1 IsSigned:0 StorageSize:8 StorageOffset:4 VolatileOffset:4 VolatileStorageSize:8 VolatileStorageOffset:4>
+    <CGBitFieldInfo Offset:5 Size:1 IsSigned:0 StorageSize:8 StorageOffset:4 VolatileOffset:5 VolatileStorageSize:8 VolatileStorageOffset:4>
+    <CGBitFieldInfo Offset:0 Size:3 IsSigned:0 StorageSize:32 StorageOffset:8 VolatileOffset:0 VolatileStorageSize:0 VolatileStorageOffset:0>
+    <CGBitFieldInfo Offset:3 Size:2 IsSigned:1 StorageSize:32 StorageOffset:8 VolatileOffset:3 VolatileStorageSize:32 VolatileStorageOffset:2>
+    <CGBitFieldInfo Offset:5 Size:3 IsSigned:1 StorageSize:32 StorageOffset:8 VolatileOffset:5 VolatileStorageSize:32 VolatileStorageOffset:2>
+    <CGBitFieldInfo Offset:8 Size:11 IsSigned:0 StorageSize:32 StorageOffset:8 VolatileOffset:8 VolatileStorageSize:32 VolatileStorageOffset:2>
+    <CGBitFieldInfo Offset:0 Size:1 IsSigned:0 StorageSize:8 StorageOffset:12 VolatileOffset:0 VolatileStorageSize:0 VolatileStorageOffset:0>
+    <CGBitFieldInfo Offset:0 Size:6 IsSigned:0 StorageSize:32 StorageOffset:16 VolatileOffset:0 VolatileStorageSize:0 VolatileStorageOffset:0>
+]>
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(64,11): warning: implicit truncation from 'int' to bit-field changes value from 2 to -2 [-Wbitfield-constant-conversion]
+   64 |    a.size = PROBE_SIZE_64;
+      |           ^ ~~~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(65,11): warning: implicit truncation from 'int' to bit-field changes value from 5 to -3 [-Wbitfield-constant-conversion]
+   65 |    a.type = PROBE_UNDEF;
+      |           ^ ~~~~~~~~~~~
+C:\Users\pauls\AD04-agxindex-pragma\agxindex_pragma_probe.c(77,11): warning: implicit truncation from 'int' to bit-field changes value from 4 to -4 [-Wbitfield-constant-conversion]
+   77 |    b.type = PROBE_REGISTER;
+      |           ^ ~~~~~~~~~~~~~~
+3 warnings generated.
