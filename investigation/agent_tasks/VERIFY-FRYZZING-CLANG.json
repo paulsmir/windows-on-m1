@@ -1,0 +1,29 @@
+{
+  "task_id": "VERIFY-FRYZZING-CLANG",
+  "tier": "C",
+  "model": "deterministic-tier-c-runner",
+  "input_commit": "c073bc68f288d55216af0cfb02f424ec29f962a3",
+  "repo": "/Users/pavel/public_windows/.worktrees/verify-fryzzing-clang",
+  "allowed_paths": [
+    "investigation/evidence/"
+  ],
+  "source_change_allowed": false,
+  "hardware_allowed": false,
+  "network_allowed": true,
+  "commands": [
+    "FRYZZING_VERIFY_CLANG"
+  ],
+  "timeout_seconds": 20,
+  "goal": "Verify the preinstalled SHA-verified builder-local clang-cl version only.",
+  "stop_conditions": [
+    "SSH reachability failure",
+    "nonzero version query",
+    "scope violation"
+  ],
+  "required_evidence": [
+    "stdout.log",
+    "stderr.log",
+    "scope.json",
+    "summary.json"
+  ]
+}

@@ -12,6 +12,17 @@ Next: executable compiler/backend integration, first prove internal Asahi layout
 without changing WDK ABI layout, then actual compiler/NIR link+execution.
 No new installable package. Machine state below is last verified, not fresh.
 
+Phase2 Tier-C execution harness is now implemented and tested. Registry command
+IDs are fixed argv only; unknown IDs, arbitrary shell, forbidden mutation,
+timeouts and hardware are fail-closed. Local suite is11/11 GREEN. One remote
+`VERIFY-FRYZZING-CLANG` demonstration used disposable worktree and approved
+SSH command, timed out at20s with empty output, preserved raw evidence, scope
+clean and exact cleanup. This is runner/control-plane INCONCLUSIVE, not a new
+AD04 compiler result. Devstral remains optional text compression and is never a
+shell executor. Do not repeat AD04 compilation. Next architect decision:
+define minimal u_atomic clang-cl compatibility overlay; then create a bounded
+Tier-B task for Spark, limited to that utility portability contract.
+
 2026-09-11 orchestration layer initialized at current HEAD5f42d64: persistent
 Spark implementation/review and Devstral mechanical worktrees are isolated on
 `agent/` branches; contracts/evidence/scope scripts in investigation/agent_tasks

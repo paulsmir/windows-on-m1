@@ -63,6 +63,21 @@ Dedicated worker paths below `.worktrees/` must begin at an explicit commit:
 
 Existing historical worktrees are not deleted or repurposed by this framework.
 
+## Phase 2 runner status — 2026-09-11
+
+`tier_c_runner.py` is the execution authority. It maps a small immutable command
+ID registry to fixed argv arrays; JSON task contracts can only permit IDs and can
+never provide shell strings. It validates input commit/repository/tier, captures
+stdout/stderr/exit code, bounds timeout, checks source/forbidden paths, writes a
+compact summary and never merges/cherry-picks or launches hardware. Devstral is
+optional classification only and receives no shell authority.
+
+Local runner suite: 11/11 PASS. `VERIFY-FRYZZING-CLANG` was then run once from
+a disposable worktree. The fixed SSH version query timed out at20 seconds with
+empty stdout/stderr; scope was clean and worktree cleanup succeeded. This is a
+control-plane INCONCLUSIVE result, not a compiler result. Evidence is under
+`investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/`.
+
 ## Initial verification status — 2026-09-11
 
 The three persistent worktrees were created at

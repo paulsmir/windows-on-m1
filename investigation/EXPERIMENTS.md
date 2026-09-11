@@ -42987,3 +42987,15 @@ no forbidden paths. Raw/compact evidence:
 investigation/evidence/AD04-asahi-windows-compiler/clang-b5-bundle/.
 Verdict: exact portability discriminator FAIL with first real blocker localized;
 no retry/flags/source ABI/hardware. Next causal decision reserved for architect.
+
+## VERIFY-FRYZZING-CLANG — 2026-09-11
+
+Phase2 runner-only control, no GPU/hardware and no AD04 source compilation. A
+disposable worktree from c073bc68f288d55216af0cfb02f424ec29f962a3 was created;
+the allowlisted fixed command ID `FRYZZING_VERIFY_CLANG` invoked only the remote
+clang-cl version query. Runner validation passed task schema/input commit and
+captured stdout/stderr/exit state; the SSH command timed out at20 seconds with
+empty output. Scope verifier reported no changes; exact worktree cleanup passed
+and branch was retained. Verdict: INCONCLUSIVE control-plane timeout, not a
+compiler or GPU result. Evidence:
+investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/.
