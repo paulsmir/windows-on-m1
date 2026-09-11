@@ -216,3 +216,10 @@ Roadmap: ACCELERATED_DESKTOP_ROADMAP.md.
 Selected contract: docs/superpowers/specs/accelerated-desktop-contract.json.
 Mission remains accelerated desktop, then accelerated OpenGL and CS1.6.
 Leave the final accepted working desktop package installed.
+
+Queued Tier-B task: `investigation/agent_tasks/AD04-UATOMIC-PORTABILITY-001.md`.
+It defines a separate hash-pinned clang-cl overlay for only observed u_atomic
+intrinsic spellings; it is not executed because no real Spark code-editing
+endpoint is callable in this session. Plain Ollama remains classification-only.
+Do not implement this patch in the architect checkout or substitute another
+model without a code-capable worker.

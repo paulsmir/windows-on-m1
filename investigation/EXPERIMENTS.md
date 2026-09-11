@@ -42999,3 +42999,9 @@ empty output. Scope verifier reported no changes; exact worktree cleanup passed
 and branch was retained. Verdict: INCONCLUSIVE control-plane timeout, not a
 compiler or GPU result. Evidence:
 investigation/evidence/agent_tasks/VERIFY-FRYZZING-CLANG/.
+
+The next architect decision is recorded in
+`investigation/agent_tasks/AD04-UATOMIC-PORTABILITY-001.md`: a separate
+hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
+Spark dispatch is queued pending a real code-capable endpoint; no source
+implementation or hardware action was performed by Astra.
