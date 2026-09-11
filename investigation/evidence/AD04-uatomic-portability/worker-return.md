@@ -29,7 +29,7 @@ FILES_CHANGED:
 - investigation/evidence/AD04-uatomic-portability/*
 
 WORKER_COMMIT:
-fbf7598b616585cb51817e89048bea7ef82eead2
+ea0e0d8bbc42483b89cfa81bfb5f9e9079aead4f
 
 DIFF_SUMMARY:
 Separate include-first compatibility header aliases four exact Clang/MSVC
