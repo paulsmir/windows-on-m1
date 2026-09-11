@@ -42949,3 +42949,18 @@ AD04_RECAP_AND_CONTINUATION_20260909.md / GPU_ENGINEERING_PROCEDURE.md.
 Verdict: compiler integration incomplete; known initial portability issues
 localized offline, not a GPU verdict. Next: establish correct internal Asahi
 layout and Windows compiler/dependency execution before hardware device testing.
+
+## ORCH-DRY-RUN-001 — 2026-09-11
+
+No GPU or hardware experiment. Persistent worker orchestration was added at
+HEAD5f42d6481661df44c6c114921c514adee50c2988. An isolated temporary branch
+agent/orch-dry-run-001/worktree was created from that exact commit, verified
+clean against permitted evidence prefix, emitted a compact evidence bundle with
+raw log preserved, then exact-cleaned. The branch was deliberately retained; no
+automatic integration occurred. Main dirty state remained pre-existing.
+Persistent `agent/spark-implementation`, `agent/spark-review`, and
+`agent/devstral-mechanical` worktrees begin at exact checkpoint. First real task
+AD04-CLANG-DISCRIMINATOR is preregistered source-read-only/no-hardware. Dispatch
+is pending builder control plane: FRYZZING SSH192.168.1.24 No route to host and
+no local Ollama listener/tunnel at127.0.0.1:11434. Verdict: orchestration dry-run
+PASS; Devstral task BLOCKED_BY_CONTROL_PLANE, not a technical compiler verdict.

@@ -12,6 +12,15 @@ Next: executable compiler/backend integration, first prove internal Asahi layout
 without changing WDK ABI layout, then actual compiler/NIR link+execution.
 No new installable package. Machine state below is last verified, not fresh.
 
+2026-09-11 orchestration layer initialized at current HEAD5f42d64: persistent
+Spark implementation/review and Devstral mechanical worktrees are isolated on
+`agent/` branches; contracts/evidence/scope scripts in investigation/agent_tasks
+and scripts/agent; dry-run PASS. AD04-CLANG-DISCRIMINATOR is prepared but not
+dispatched: FRYZZING SSH had No route to host and local Ollama port11434 absent.
+This is a worker-control-plane blocker, not a compiler/GPU verdict. Do not run
+that task under another model or bypass the closed control plane; revalidate and
+dispatch its exact contract. No hardware action.
+
 Primary goal is now FULL GRAPHICS WINDOWS DESKTOP; OpenGL/CS1.6 are later.
 Full acceptance and current unmet requirements: FULL_GRAPHICS_DESKTOP_ACCEPTANCE.md.
 Goal remains active; all eleven final requirements need integrated hardware proof.
