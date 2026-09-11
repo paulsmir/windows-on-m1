@@ -42964,3 +42964,26 @@ AD04-CLANG-DISCRIMINATOR is preregistered source-read-only/no-hardware. Dispatch
 is pending builder control plane: FRYZZING SSH192.168.1.24 No route to host and
 no local Ollama listener/tunnel at127.0.0.1:11434. Verdict: orchestration dry-run
 PASS; Devstral task BLOCKED_BY_CONTROL_PLANE, not a technical compiler verdict.
+
+## AD04-CLANG-DISCRIMINATOR — 2026-09-11
+
+Tier C, source-read-only/no-hardware contract at input commit
+5f42d6481661df44c6c114921c514adee50c2988. Direct builder-local Ollama Devstral
+was verified through a loopback SSH tunnel, but its OpenAI-compatible API exposes
+no shell/file tool executor; it was not allowed to invent commands. A deterministic
+SSH runner executed the exact preapproved same-source Clang control. Initial b3
+was inconclusive because command quoting left MSVC selected; b4 was inconclusive
+because PowerShell terminating NativeCommandError produced an empty redirected log.
+Both are retained; no result was interpreted from them. b5 fixed only the evidence
+runner's stdout/stderr capture, uses SHA-verified LLVM20.1.8 clang-cl target
+x86_64-pc-windows-msvc, and returns exit1 with source_changed=false/hardware=false.
+First diagnostic: `u_atomic.h` invokes lowercase `_interlockedexchange64`, while
+Clang declares `_InterlockedExchange64`; second matching intrinsic is
+`_interlockedexchangeadd64`. The same output then proves `sizeof(agx_index)` is
+20, not8, unknown `off_t`, and generated builder missing UTIL_LUT2 dependency.
+HAVE_STRUCT_TIMESPEC and derived fourcc header bypass prior timespec/BSD ioccom
+first errors. Scope verifier on agent/devstral-mechanical reports no changes and
+no forbidden paths. Raw/compact evidence:
+investigation/evidence/AD04-asahi-windows-compiler/clang-b5-bundle/.
+Verdict: exact portability discriminator FAIL with first real blocker localized;
+no retry/flags/source ABI/hardware. Next causal decision reserved for architect.

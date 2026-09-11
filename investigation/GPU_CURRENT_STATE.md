@@ -21,6 +21,18 @@ This is a worker-control-plane blocker, not a compiler/GPU verdict. Do not run
 that task under another model or bypass the closed control plane; revalidate and
 dispatch its exact contract. No hardware action.
 
+AD04-CLANG-DISCRIMINATOR completed as a source-read-only/no-hardware Tier C
+control under the exact approved builder command. Devstral local API was verified
+but has no shell/file execution capability, so it was not trusted to invent one;
+a deterministic SSH runner executed the fixed command and evidence was scope
+verified clean. Clang20.1.8 x86_64-pc-windows-msvc exit1 first reaches Mesa
+u_atomic intrinsic spelling (`_interlockedexchange64` undeclared; Clang exposes
+`_InterlockedExchange64`), then reports agx_index20!=8 and unknown off_t.
+timespec and BSD fourcc/ioccom errors are no longer first blockers. Do not add
+compiler flags, remove assertions, or change Mesa/WDK ABI without a new Tier-A
+ownership/portability decision. Evidence: investigation/evidence/
+AD04-asahi-windows-compiler/clang-b5-bundle/summary.json.
+
 Primary goal is now FULL GRAPHICS WINDOWS DESKTOP; OpenGL/CS1.6 are later.
 Full acceptance and current unmet requirements: FULL_GRAPHICS_DESKTOP_ACCEPTANCE.md.
 Goal remains active; all eleven final requirements need integrated hardware proof.
