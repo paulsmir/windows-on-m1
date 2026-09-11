@@ -1,0 +1,11 @@
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_builder.h.py:16:   size += sizeof(agx_index) * nr_dests;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_builder.h.py:17:   size += sizeof(agx_index) * nr_srcs;
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compiler.h:98:static_assert(sizeof(agx_index) == 8, "packed");
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_opt_cse.c:40:   hash = XXH32(I->src, sizeof(agx_index) * I->nr_srcs, hash);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_opt_cse.c:107:   agx_index *replacement = malloc(sizeof(agx_index) * ctx->alloc);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_opt_cse.c:110:      memset(replacement, 0, sizeof(agx_index) * ctx->alloc);
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/test/agx_test.h:60:   if (memcmp(A->src, B->src, A->nr_srcs * sizeof(agx_index)))
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/test/agx_test.h:66:   if (memcmp(A->dest, B->dest, A->nr_dests * sizeof(agx_index)))
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.c:319:agx_index_to_key(agx_index idx)
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.c:338:                                                       agx_index_to_key(vec));
+/Users/pavel/public_windows/.local/reference/mesa/src/asahi/compiler/agx_compile.c:367:   _mesa_hash_table_u64_insert(b->shader->allocated_vec, agx_index_to_key(dst),

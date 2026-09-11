@@ -1,0 +1,1 @@
+sizeof=8 alignof=4 fields=1 gcc_struct=1
