@@ -1,0 +1,31 @@
+import os
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SHARED = ROOT / "drivers" / "apple-agx" / "shared"
+
+
+class AppleAgxBackendMemoryBridgeTests(unittest.TestCase):
+    def test_bridge_separates_private_capacity_from_dma_range_under_sanitizers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "apple_agx_backend_memory_bridge_test"
+            command = [
+                os.environ.get("CC", "clang"), "-std=c11", "-Wall", "-Wextra",
+                "-Werror", "-fsanitize=address,undefined", "-I",
+                str(SHARED / "include"),
+                str(SHARED / "tests" / "apple_agx_backend_memory_bridge_test.c"),
+                str(SHARED / "src" / "apple_agx_backend_memory_bridge.c"),
+                str(SHARED / "src" / "apple_agx_dma_shadow.c"),
+                str(SHARED / "src" / "apple_agx_memory.c"),
+                "-o", str(binary),
+            ]
+            subprocess.run(command, cwd=ROOT, check=True)
+            subprocess.run([str(binary)], cwd=ROOT, check=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

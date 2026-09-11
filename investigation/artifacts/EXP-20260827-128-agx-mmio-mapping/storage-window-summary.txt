@@ -1,0 +1,4 @@
+Preflight recovery: stornvme Event 129 = 0; critical events = 0.
+Candidate: stornvme Event 129 = 0; critical events = 0.
+First rollback recovery: stornvme Event 129 = 6; critical events = 0 (rejected).
+Final cleanup recovery quiet window: stornvme Event 129 = 0; critical events = 0.

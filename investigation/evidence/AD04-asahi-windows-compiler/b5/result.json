@@ -1,0 +1,8 @@
+{
+    "Compiler":  "LLVM clang-cl 20.1.8",
+    "HardwareUsed":  false,
+    "ExitCode":  1,
+    "Source":  "src/asahi/compiler/agx_compile.c",
+    "SourceChanged":  false,
+    "Target":  "x86_64-pc-windows-msvc"
+}

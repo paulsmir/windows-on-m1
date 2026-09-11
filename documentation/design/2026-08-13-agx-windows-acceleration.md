@@ -2,9 +2,16 @@
 
 ## Status
 
-Research and architecture only. No accelerated Windows adapter is implemented
-or claimed by this document. Platform stability and native input remain the
-prerequisites for hardware implementation.
+Approved architecture on 2026-08-25. No accelerated Windows adapter is
+implemented or claimed by this document. The validated J313 eight-core and
+native-input checkpoint is the immutable recovery baseline for every GPU
+experiment.
+
+The initial implementation scope is deliberately staged: G0 captures a
+read-only, versioned J313 AGX resource contract; G1 proves bounded firmware
+start, heartbeat, stop, and cold-reset recovery; G1Q qualifies one assisted
+barrier/no-op queue completion.  No AGX device is published to Windows during
+these gates.  G2 remains the first Windows-owned driver milestone.
 
 ## Why this is not a Mesa DLL port
 
@@ -41,6 +48,12 @@ m1n1 performs the minimum platform work Windows cannot infer:
 
 m1n1 must not become a synchronous command proxy for every draw call.
 
+The diagnostic ownership used by G0, G1, and G1Q is temporary. Beginning with G2,
+the Windows KMD owns runtime queues, address spaces, interrupts, fences, fault
+handling, and reset. m1n1 remains outside the submission and presentation hot
+paths. This is a hard architectural requirement: the final implementation must
+not lose GPU throughput to per-command hypervisor or USB/proxy round trips.
+
 ### Windows KMD
 
 The KMD owns the Windows-facing adapter contract:
@@ -64,15 +77,63 @@ Vulkan stack on Linux is not automatically a Direct3D UMD.
 
 ### G0: Read-only inventory
 
-- Capture live SGX, ASC, DART, firmware, interrupt, and reserved-memory nodes.
-- Generate one versioned contract consumed by m1n1, ACPI, and Windows.
-- Perform no clock, power, MMIO, or DART writes.
+- Capture the live `/arm-io/sgx` and `/arm-io/gfx-asc` ADT nodes, their MMIO
+  ranges, interrupts, power and clock dependencies, firmware generation,
+  RTKit-private region, GPU region, shared region, handoff region, UAT
+  geometry, related DART resources, and DCP relationship.
+- Serialize the inventory as one schema-versioned JSON contract with canonical
+  ordering and a SHA-256 digest. Future m1n1, Mu/ACPI, and Windows components
+  consume generated artifacts from this contract instead of duplicating J313
+  constants.
+- Record the exact root, m1n1, and Mu commits and the source ADT identity in the
+  contract.
+- Perform no clock, power, MMIO, DART, UAT, or interrupt-controller writes.
+- Reject missing, duplicate, overlapping, misaligned, or unsupported resources
+  instead of guessing defaults.
+
+G0 is complete only when the same live machine produces a deterministic
+contract, a fixture-backed host test rejects every malformed boundary, and a
+write-audit proves that inventory performed no hardware mutation.
 
 ### G1: Firmware and reset harness
 
-- Boot or adopt the GPU firmware without exposing a Windows adapter.
-- Record firmware heartbeat and faults.
-- Prove ten bounded resets without affecting NVMe, USB, input, or DCP scanout.
+- Run only in the assisted diagnostic workflow. Production and standalone
+  profiles remain byte-for-byte unchanged.
+- Verify the exact G0 contract and known-good recovery artifact before enabling
+  an AGX dependency.
+- Enable only the contract-declared SGX/GFX-ASC power and clock dependencies.
+- Allocate a private UAT with guard pages and no mapping of arbitrary guest
+  physical memory.
+- Boot or adopt the GPU firmware without exposing a Windows adapter or creating
+  a user render context.
+- Prove a bounded firmware heartbeat and management/event-channel progress.
+- Record firmware state, pending interrupts, fault registers, UAT summary, and
+  every deadline result into a per-run evidence directory.
+- Stop firmware, remove mappings, and perform a bounded reset. Repeat the full
+  start/heartbeat/stop/reset cycle ten times.
+- After the tenth clean cycle, boot the unchanged stable Windows artifact and
+  verify CPU, NVMe, USB, native input, and physical DCP scanout.
+
+Every wait has an explicit deadline. A timeout fails closed: save evidence,
+attempt one bounded reset, and otherwise reboot into the preserved recovery
+artifact. The harness never continues into Windows with AGX ownership or an
+unknown reset state.
+
+### G1Q: Assisted queue qualification
+
+- Run only before guest entry with sole proxy ownership.
+- Create one dedicated non-zero UAT context with guarded gate-owned mappings.
+- Submit one already-satisfied barrier/no-op command on one reviewed queue.
+- Require exact queue progress and one interrupt-backed completion event before
+  a fixed deadline.
+- Capture queue, UAT, event, interrupt, firmware-fault, physical-fault, canary,
+  and deadline evidence.
+- Physically reboot between all ten qualification lifecycles.
+- Keep stable Windows, standalone artifacts, Mu, and ACPI unchanged.
+
+G1Q is diagnostic plumbing qualification, not rendering or acceleration.  Its
+full contract is
+[`2026-08-25-j313-agx-g1q-queue-qualification.md`](2026-08-25-j313-agx-g1q-queue-qualification.md).
 
 ### G2: Render-only KMD prototype
 
@@ -84,6 +145,11 @@ Vulkan stack on Linux is not automatically a Direct3D UMD.
 This is the smallest useful Windows milestone. Microsoft documents render-only
 devices as a supported WDDM shape, while MCDM is an alternative only if the
 initial goal is explicitly compute rather than graphics.
+
+At the G1-to-G2 boundary, ownership is transferred rather than shared. Mu
+publishes a generated ACPI device only after the KMD can bind safely. The KMD
+then owns the runtime AGX lifecycle directly; m1n1 provides reviewed stage-2
+access and interrupt routing but does not interpret or forward submissions.
 
 ### G3: First pixels off-screen
 
@@ -114,6 +180,71 @@ initial goal is explicitly compute rather than graphics.
   recorded on real hardware.
 - No external source is copied into this MIT repository without explicit
   license compatibility review.
+- Never allow m1n1 and the Windows KMD to own AGX firmware, UAT, or interrupts
+  concurrently.
+- Keep the physical DCP framebuffer and Basic Display recovery path independent
+  until the full WDDM adapter passes its release gate.
+
+## Final performance requirements
+
+The diagnostic G0/G1 harness may be slow because it is outside normal guest
+operation. The shipping accelerated path may not be paravirtualized per draw,
+queue submission, fence, page fault, or present.
+
+- Windows UMD writes validated command data directly into KMD-managed queues.
+- The KMD manages residency and per-process GPU virtual address spaces directly
+  through UAT data structures and the firmware ABI.
+- Hardware completion and fault interrupts travel directly through the bounded
+  physical-AIC-to-vGIC route; USB and proxy transports are diagnostics only.
+- Normal rendering requires no host Python process and no synchronous EL2
+  request per submission.
+- Copies between AGX render targets and DCP scanout are eliminated once shared
+  allocations and coherency are proven; any transitional copy path must be
+  measured and removed before the final performance gate.
+- Power and performance states are driven by measured load and firmware
+  telemetry, not held permanently at a diagnostic minimum or maximum.
+
+The performance target is architectural parity with the native direct-submit
+model used by Asahi: remaining differences may come from Windows and API
+overhead, but not from an avoidable m1n1 proxy, framebuffer copy, or serialized
+single-queue design.
+
+## Ownership by gate
+
+| Gate | Initialization | Runtime queues/UAT | IRQ/fault/reset | Display |
+| --- | --- | --- | --- | --- |
+| G0 | none; read-only inventory | none | none | existing DCP/GOP |
+| G1 | assisted m1n1 harness | private diagnostic UAT; no render context | assisted m1n1 harness | existing DCP/GOP |
+| G1Q | assisted m1n1 harness | one private diagnostic context and queue | assisted event/fault capture; cold reboot | existing DCP/GOP |
+| G2-G4 | Windows KMD | Windows KMD | Windows KMD through reviewed stage-2/vGIC routes | existing DCP/GOP |
+| G5 | Windows KMD | Windows KMD | Windows KMD/TDR | WDDM presentation to DCP, GOP fallback retained |
+
+## G0/G1 verification and recovery
+
+Host tests must cover canonical serialization, schema versioning, required ADT
+properties, address alignment, range overlap, interrupt counts, deterministic
+hashing, read-only operation auditing, deadline behavior, evidence manifests,
+and rejection of an artifact or contract mismatch. Tests are written and
+observed failing before implementation.
+
+The real-hardware experiment changes one variable at a time and is entered in
+`investigation/EXPERIMENTS.md` before launch. It records exact commits, dirty
+diff hashes, commands, artifact paths and SHA-256 values, phase timings, all
+ten reset outcomes, and the post-harness Windows health result. The preserved
+`j313-8core-native-input-v1` recovery directory is never overwritten.
+
+## Sources inspected for this design
+
+- live-project m1n1 AGX, AGXASC, UAT, context, channel, event, recovery, and
+  render experiment implementations at the pinned J313 baseline;
+- the J313 Mu DSDT and existing generated-resource pattern used by AppleInput;
+- Asahi's AGX kernel-driver architecture notes and upstream m1n1 AGX firmware
+  structures;
+- Microsoft's WDDM architecture, render-only device model, MCDM guidance,
+  display-miniport installation rules, Basic Display behavior, and official
+  KMDOD sample;
+- the validated J313 eight-core/native-input assisted launch and recovery
+  contract in `documentation/STABLE_8CORE_INPUT.md` and EXP-20260825-072.
 
 ## Acceptance criteria for claiming acceleration
 

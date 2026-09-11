@@ -67,7 +67,6 @@ NTSTATUS AiGpioEnableInputInterrupt(PAI_DEVICE_CONTEXT Context)
 {
     PULONG reg;
     ULONG value;
-    ULONG mask;
 
     if (!Context || !Context->ResourcesValidated || !Context->NubGpioRegisters)
         return STATUS_DEVICE_NOT_READY;
@@ -78,13 +77,30 @@ NTSTATUS AiGpioEnableInputInterrupt(PAI_DEVICE_CONTEXT Context)
     reg = (PULONG)(Context->NubGpioRegisters +
         AiGpioPinOffset((ULONG)J313_APPLE_INPUT_NUB_GPIO_PIN));
     value = READ_REGISTER_NOFENCE_ULONG(reg);
-    mask = AI_GPIO_MODE_MASK | AI_GPIO_GROUP_MASK | AI_GPIO_PERIPH_MASK |
-           AI_GPIO_DATA | AI_GPIO_INPUT_ENABLE;
-    value &= ~mask;
-    value |= AiGpioIrqMode((ULONG)J313_APPLE_INPUT_IRQ_STARTUP_GROUP,
-                           AI_GPIO_MODE_IRQ_LOW) |
-             AI_GPIO_INPUT_ENABLE;
-    WRITE_REGISTER_NOFENCE_ULONG(reg, value);
+    WRITE_REGISTER_NOFENCE_ULONG(
+        reg, AiGpioInputInterruptValue(
+                 value, (ULONG)J313_APPLE_INPUT_IRQ_STARTUP_GROUP, TRUE));
+    AiGpioAcknowledge(Context);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS AiGpioDisableInputInterrupt(PAI_DEVICE_CONTEXT Context)
+{
+    PULONG reg;
+    ULONG value;
+
+    if (!Context || !Context->ResourcesValidated || !Context->NubGpioRegisters)
+        return STATUS_DEVICE_NOT_READY;
+    if (AiGpioPinOffset((ULONG)J313_APPLE_INPUT_NUB_GPIO_PIN) + sizeof(ULONG) >
+            Context->MemoryLength[2])
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+
+    reg = (PULONG)(Context->NubGpioRegisters +
+        AiGpioPinOffset((ULONG)J313_APPLE_INPUT_NUB_GPIO_PIN));
+    value = READ_REGISTER_NOFENCE_ULONG(reg);
+    WRITE_REGISTER_NOFENCE_ULONG(
+        reg, AiGpioInputInterruptValue(
+                 value, (ULONG)J313_APPLE_INPUT_IRQ_STARTUP_GROUP, FALSE));
     AiGpioAcknowledge(Context);
     return STATUS_SUCCESS;
 }

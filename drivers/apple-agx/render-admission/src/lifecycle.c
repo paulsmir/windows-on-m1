@@ -1,0 +1,542 @@
+#include "render_admission.h"
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiAddDevice(
+    PDEVICE_OBJECT PhysicalDeviceObject, PVOID *MiniportDeviceContext) {
+  ADMISSION_CONTEXT *context;
+  if (PhysicalDeviceObject == NULL || MiniportDeviceContext == NULL)
+    return STATUS_INVALID_PARAMETER;
+  AdmissionRecordDevice(PhysicalDeviceObject, AdmissionReceiptAddEntered,
+                        STATUS_PENDING);
+  context = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*context),
+                            ADMISSION_POOL_TAG);
+  if (context == NULL)
+    return STATUS_INSUFFICIENT_RESOURCES;
+  RtlZeroMemory(context, sizeof(*context));
+  AdmissionObjectsInitializeAdapter(&context->ObjectAdapter);
+  context->Win32BootGeneration = (ULONG)KeQueryInterruptTime();
+  if (context->Win32BootGeneration == 0u)
+    context->Win32BootGeneration = 1u;
+  context->FeatureReadyMask =
+      APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
+      APPLE_AGX_WDDM_READY_DEVICE_CONTEXT;
+  context->PhysicalDeviceObject = PhysicalDeviceObject;
+  *MiniportDeviceContext = context;
+  AdmissionRecordDevice(PhysicalDeviceObject, AdmissionReceiptAddSucceeded,
+                        STATUS_SUCCESS);
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiStartDevice(
+    PVOID MiniportDeviceContext, PDXGK_START_INFO DxgkStartInfo,
+    PDXGKRNL_INTERFACE DxgkInterface, PULONG NumberOfVideoPresentSources,
+    PULONG NumberOfChildren) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status;
+
+  if (context == NULL || DxgkStartInfo == NULL || DxgkInterface == NULL ||
+      NumberOfVideoPresentSources == NULL || NumberOfChildren == NULL)
+    return STATUS_INVALID_PARAMETER;
+  *NumberOfVideoPresentSources = 0;
+  *NumberOfChildren = 0;
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartEntered, STATUS_PENDING);
+  AdmissionRecordStartStage(context, AdmissionStartEntered, STATUS_PENDING);
+  context->StartInfo = *DxgkStartInfo;
+  context->Interface = *DxgkInterface;
+  context->InterfaceValid = TRUE;
+  RtlZeroMemory(&context->DeviceInformation,
+                sizeof(context->DeviceInformation));
+  status = context->Interface.DxgkCbGetDeviceInformation(
+      context->Interface.DeviceHandle, &context->DeviceInformation);
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartDeviceInfo, status);
+  AdmissionRecordStartStage(context, AdmissionStartDeviceInfo, status);
+  if (!NT_SUCCESS(status))
+    return status;
+
+  status = AdmissionInterruptStart(context);
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartInterrupt, status);
+  AdmissionRecordStartStage(context, AdmissionStartInterrupt, status);
+  if (!NT_SUCCESS(status))
+    return status;
+
+  status = AdmissionMemoryRuntimeStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartMemory, status);
+  if (!NT_SUCCESS(status)) {
+#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)
+    ADMISSION_MEMORY_QUALIFICATION qualification;
+    NTSTATUS interruptStatus;
+    RtlZeroMemory(&qualification, sizeof(qualification));
+    qualification.Version = ADMISSION_MEMORY_QUALIFICATION_VERSION;
+    qualification.Size = sizeof(qualification);
+    qualification.QualificationStatus = status;
+    qualification.CleanupStatus = context->MemoryRuntime == NULL
+                                      ? STATUS_SUCCESS
+                                      : STATUS_DEVICE_BUSY;
+    qualification.StartStage = (ULONG)InterlockedCompareExchange(
+        &context->MemoryStartStage, 0, 0);
+    interruptStatus = AdmissionInterruptStop(context);
+    AdmissionRecordDevice(context->PhysicalDeviceObject,
+                          AdmissionReceiptMemoryQualified, status);
+    AdmissionRecordMemoryQualification(context->PhysicalDeviceObject,
+                                       &qualification);
+    if (!NT_SUCCESS(interruptStatus))
+      return interruptStatus;
+#else
+    (void)AdmissionInterruptStop(context);
+#endif
+    return status;
+  }
+#if defined(APPLE_AGX_RENDER_MEMORY_QUALIFICATION)
+  {
+    ADMISSION_MEMORY_QUALIFICATION qualification;
+    NTSTATUS cleanupStatus;
+    NTSTATUS interruptStatus;
+
+    status = AdmissionMemoryRuntimeQualify(context, &qualification);
+    cleanupStatus = AdmissionMemoryRuntimeStop(context);
+    qualification.CleanupStatus = cleanupStatus;
+    interruptStatus = AdmissionInterruptStop(context);
+    AdmissionRecordDevice(context->PhysicalDeviceObject,
+                          AdmissionReceiptMemoryQualified, status);
+    AdmissionRecordMemoryQualification(context->PhysicalDeviceObject,
+                                       &qualification);
+    RtlZeroMemory(&context->Interface, sizeof(context->Interface));
+    context->InterfaceValid = FALSE;
+    if (!NT_SUCCESS(status))
+      return status;
+    if (!NT_SUCCESS(cleanupStatus))
+      return cleanupStatus;
+    if (!NT_SUCCESS(interruptStatus))
+      return interruptStatus;
+    return STATUS_NOT_SUPPORTED;
+  }
+#endif
+  status = AdmissionBackendImageStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartBackendImage, status);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+  status = AdmissionSchedulerStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartScheduler, status);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+  status = AdmissionPagingStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartPaging, status);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+  status = AdmissionPlatformRuntimeStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartPlatform, status);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+
+  if (context->Interface.DxgkCbAcquirePostDisplayOwnership == NULL) {
+    AdmissionRecordStartStage(
+        context, AdmissionStartPostDisplay, STATUS_NOT_SUPPORTED);
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return STATUS_NOT_SUPPORTED;
+  }
+  RtlZeroMemory(&context->PostDisplayInformation,
+                sizeof(context->PostDisplayInformation));
+  status = context->Interface.DxgkCbAcquirePostDisplayOwnership(
+      context->Interface.DeviceHandle, &context->PostDisplayInformation);
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartPostDisplay, status);
+  AdmissionRecordStartStage(context, AdmissionStartPostDisplay, status);
+  if (!NT_SUCCESS(status)) {
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+  if (context->PostDisplayInformation.PhysicAddress.QuadPart == 0 ||
+      context->PostDisplayInformation.Width != 2560 ||
+      context->PostDisplayInformation.Height != 1600 ||
+      context->PostDisplayInformation.Pitch != 10240) {
+    AdmissionRecordStartStage(
+        context, AdmissionStartPostDisplay,
+        STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER);
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return STATUS_GRAPHICS_INVALID_DISPLAY_ADAPTER;
+  }
+
+  status = AdmissionScanoutStart(context);
+  AdmissionRecordStartStage(context, AdmissionStartScanout, status);
+  if (!NT_SUCCESS(status)) {
+    /* An uncertain REGISTER/RELEASE result retains every lower memory owner.
+     * PnP teardown may retry AdmissionScanoutStop, but must not unmap a pool
+     * that m1n1/DCP could still own. */
+    if (context->ScanoutRuntime != NULL)
+      return status;
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return status;
+  }
+
+  context->Started = TRUE;
+  if (!AdmissionObjectsStartAdapter(&context->ObjectAdapter)) {
+    AdmissionRecordStartStage(
+        context, AdmissionStartObjects, STATUS_INVALID_DEVICE_STATE);
+    context->Started = FALSE;
+    status = AdmissionScanoutStop(context);
+    if (!NT_SUCCESS(status))
+      return status;
+    (void)AdmissionPlatformRuntimeStop(context);
+    (void)AdmissionPagingStop(context);
+    (void)AdmissionSchedulerStop(context);
+    (void)AdmissionBackendImageStop(context);
+    (void)AdmissionMemoryRuntimeStop(context);
+    (void)AdmissionInterruptStop(context);
+    return STATUS_INVALID_DEVICE_STATE;
+  }
+  AdmissionRecordStartStage(context, AdmissionStartObjects, STATUS_SUCCESS);
+  context->DisplayActive = TRUE;
+  context->SourceVisible = TRUE;
+  context->CommittedWidth = 2560;
+  context->CommittedHeight = 1600;
+  context->CommittedStride = 10240;
+  context->CommittedFormat = D3DDDIFMT_A8R8G8B8;
+  /* QueryAdapterInfo cannot run until StartDevice returns. Publish the complete
+   * immutable implementation vector only after every runtime owner above has
+   * started and the adapter object is live. */
+  InterlockedExchange(&context->FeatureReadyMask,
+                      APPLE_AGX_WDDM_REQUIRED_READY_MASK);
+  AdmissionRecordStartStage(context, AdmissionStartComplete, STATUS_SUCCESS);
+  *NumberOfVideoPresentSources = 1;
+  *NumberOfChildren = 1;
+  AdmissionRecordDevice(context->PhysicalDeviceObject,
+                        AdmissionReceiptStartSucceeded, STATUS_SUCCESS);
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiStopDevice(PVOID MiniportDeviceContext) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  NTSTATUS status;
+  if (context == NULL)
+    return STATUS_INVALID_PARAMETER;
+  AdmissionFlushSourceAddressReceipt(context);
+  AdmissionFlushPresentTransfer(context);
+  AdmissionFlushGdiReceipt(context);
+  AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptStop,
+                        STATUS_SUCCESS);
+  if (context->ObjectAdapter.DeviceCount != 0u)
+    return STATUS_DEVICE_BUSY;
+  status = AdmissionScanoutStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionPagingStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionPlatformRuntimeStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionSchedulerStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionBackendImageStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionMemoryRuntimeStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  status = AdmissionInterruptStop(context);
+  if (!NT_SUCCESS(status))
+    return status;
+  if (!AdmissionObjectsStopAdapter(&context->ObjectAdapter))
+    return STATUS_DEVICE_BUSY;
+  context->Started = FALSE;
+  context->DisplayActive = FALSE;
+  context->SourceVisible = FALSE;
+  InterlockedExchange(
+      &context->FeatureReadyMask,
+      APPLE_AGX_WDDM_READY_WDDM3_IDENTITY |
+          APPLE_AGX_WDDM_READY_DEVICE_CONTEXT);
+  RtlZeroMemory(&context->StartInfo, sizeof(context->StartInfo));
+  RtlZeroMemory(&context->DeviceInformation,
+                sizeof(context->DeviceInformation));
+  RtlZeroMemory(&context->PostDisplayInformation,
+                sizeof(context->PostDisplayInformation));
+  RtlZeroMemory(&context->Interface, sizeof(context->Interface));
+  context->InterfaceValid = FALSE;
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiRemoveDevice(PVOID MiniportDeviceContext) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)MiniportDeviceContext;
+  if (context == NULL)
+    return STATUS_INVALID_PARAMETER;
+  AdmissionFlushSourceAddressReceipt(context);
+  AdmissionFlushPresentTransfer(context);
+  AdmissionFlushGdiReceipt(context);
+  if (context->ScanoutRuntime != NULL &&
+      !NT_SUCCESS(AdmissionScanoutStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (context->PagingWorkItem != NULL &&
+      !NT_SUCCESS(AdmissionPagingStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (context->PlatformRuntime != NULL &&
+      !NT_SUCCESS(AdmissionPlatformRuntimeStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (InterlockedCompareExchange(&context->SchedulerInitialized, 0, 0) != 0 &&
+      !NT_SUCCESS(AdmissionSchedulerStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (context->BackendImage.Ready == APPLE_AGX_TRUE &&
+      !NT_SUCCESS(AdmissionBackendImageStop(context)))
+    return STATUS_DEVICE_BUSY;
+  if (context->MemoryRuntime != NULL &&
+      !NT_SUCCESS(AdmissionMemoryRuntimeStop(context)))
+    return STATUS_DEVICE_BUSY;
+  AdmissionRecordDevice(context->PhysicalDeviceObject, AdmissionReceiptRemove,
+                        STATUS_SUCCESS);
+  ExFreePoolWithTag(context, ADMISSION_POOL_TAG);
+  return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiQueryAdapterInfo(
+    HANDLE Adapter, const DXGKARG_QUERYADAPTERINFO *QueryAdapterInfo) {
+  ADMISSION_CONTEXT *context = (ADMISSION_CONTEXT *)Adapter;
+  NTSTATUS status = STATUS_NOT_SUPPORTED;
+  if (context == NULL || QueryAdapterInfo == NULL)
+    return STATUS_INVALID_PARAMETER;
+
+  switch (QueryAdapterInfo->Type) {
+  case DXGKQAITYPE_UMDRIVERPRIVATE: {
+    AGX_WIN32_DEVICE_INFO *info;
+    if (QueryAdapterInfo->pInputData != NULL ||
+        QueryAdapterInfo->InputDataSize != 0u ||
+        QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize != sizeof(*info)) {
+      status = STATUS_INVALID_PARAMETER;
+      break;
+    }
+    info = (AGX_WIN32_DEVICE_INFO *)QueryAdapterInfo->pOutputData;
+    RtlZeroMemory(info, sizeof(*info));
+    info->Magic = AGX_WIN32_DEVICE_INFO_MAGIC;
+    info->Version = AGX_WIN32_DEVICE_INFO_VERSION;
+    info->Bytes = sizeof(*info);
+    info->BootGeneration = context->Win32BootGeneration;
+    info->GpuGeneration = 13u;
+    info->GpuVariant = AgxWin32GpuG13G;
+    info->PageBytes = 0x4000u;
+    info->ClassCount = AGX_WIN32_BUFFER_CLASS_COUNT;
+    info->Classes[0].ClassId = AgxWin32BufferClassGeneral;
+    info->Classes[0].MinimumAlignment = 0x4000u;
+    info->Classes[0].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    info->Classes[0].Flags = AppleAgxWin32BufferCpuRead |
+        AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead |
+        AppleAgxWin32BufferGpuWrite;
+    info->Classes[1].ClassId = AgxWin32BufferClassShader;
+    info->Classes[1].MinimumAlignment = 0x4000u;
+    info->Classes[1].MaximumBytes = AGX_RR_SHARED_ARENA_BYTES;
+    info->Classes[1].Flags = AppleAgxWin32BufferCpuWrite |
+        AppleAgxWin32BufferGpuRead;
+    info->Classes[2].ClassId = AgxWin32BufferClassEncoder;
+    info->Classes[2].MinimumAlignment = 0x4000u;
+    info->Classes[2].MaximumBytes = AGX_RR_COMMAND_ARENA_BYTES;
+    info->Classes[2].Flags = AppleAgxWin32BufferCpuWrite |
+        AppleAgxWin32BufferGpuRead;
+    status = STATUS_SUCCESS;
+    break;
+  }
+
+  case DXGKQAITYPE_DRIVERCAPS: {
+    DXGK_DRIVERCAPS *caps;
+    APPLE_AGX_WDDM_FEATURE_INPUT featureInput;
+    APPLE_AGX_WDDM_FEATURE_OUTPUT featureOutput;
+    APPLE_AGX_WDDM_FEATURE_CONTRACT_RESULT featureResult;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(caps, sizeof(*caps));
+      caps->HighestAcceptableAddress.QuadPart = -1;
+      /* WDK 26100: must match DXGK_WDDMDEVICECAPS.WDDMVersion. */
+      caps->WDDMVersion = DXGKDDI_WDDMv3_0;
+      RtlZeroMemory(&featureInput, sizeof(featureInput));
+      featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;
+      featureInput.Size = sizeof(featureInput);
+      featureInput.WddmMajor = 3u;
+      featureInput.WddmMinor = 0u;
+      featureInput.NodeCount = 1u;
+      featureInput.ReadyMask = (ULONG)InterlockedCompareExchange(
+          &context->FeatureReadyMask, 0, 0);
+      featureResult = AppleAgxWddmFeatureContractEvaluate(
+          &featureInput, &featureOutput);
+      if (featureResult == AppleAgxWddmFeatureContractIncomplete &&
+          featureOutput.PublishCapsMask == 0u) {
+        status = STATUS_SUCCESS;
+      } else if (featureResult == AppleAgxWddmFeatureContractReady &&
+                 featureOutput.PublishCapsMask ==
+                     APPLE_AGX_WDDM_MANDATORY_CAPS_MASK) {
+        caps->MaxAllocationListSlotId =
+            ADMISSION_GDI_ALLOCATION_LIST_SIZE - 1u;
+        caps->MaxQueuedFlipOnVSync = 1u;
+        caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u;
+        caps->SchedulingCaps.MultiEngineAware = 1u;
+        caps->SchedulingCaps.PreemptionAware = 1u;
+        caps->PreemptionCaps.GraphicsPreemptionGranularity =
+            D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;
+        caps->PreemptionCaps.ComputePreemptionGranularity =
+            D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY;
+        caps->FlipCaps.FlipOnVSyncMmIo = 1u;
+        caps->FlipCaps.FlipIndependent = 1u;
+        caps->SupportNonVGA = TRUE;
+        /* WDDM 1.2+ full graphics requires this even when the only exposed
+         * path transform is the already-supported identity/Offset0 pair. */
+        caps->SupportSmoothRotation = TRUE;
+        caps->SupportPerEngineTDR = TRUE;
+        caps->SupportDirectFlip = TRUE;
+        caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;
+        status = STATUS_SUCCESS;
+      } else {
+        status = STATUS_INVALID_DEVICE_STATE;
+      }
+    }
+    break;
+  }
+
+  case DXGKQAITYPE_WDDMDEVICECAPS: {
+    DXGK_WDDMDEVICECAPS *caps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*caps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      caps = (DXGK_WDDMDEVICECAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(caps, sizeof(*caps));
+      caps->WDDMVersion = DXGKDDI_WDDMv3_0;
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+  case DXGKQAITYPE_QUERYSEGMENT4:
+    status = AdmissionDdiQuerySegment4(context, QueryAdapterInfo);
+    break;
+
+  case DXGKQAITYPE_PHYSICAL_MEMORY_CAPS: {
+    DXGK_PHYSICAL_MEMORY_CAPS *physicalMemoryCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*physicalMemoryCaps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      physicalMemoryCaps =
+          (DXGK_PHYSICAL_MEMORY_CAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(physicalMemoryCaps, sizeof(*physicalMemoryCaps));
+      physicalMemoryCaps->HighestVisibleAddress.QuadPart = 0xFFFFFFFFFFLL;
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+  case DXGKQAITYPE_IOMMU_CAPS: {
+    DXGK_IOMMU_CAPS *iommuCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*iommuCaps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      iommuCaps = (DXGK_IOMMU_CAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(iommuCaps, sizeof(*iommuCaps));
+      iommuCaps->Value = 0;
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+  case DXGKQAITYPE_64BITONLYCAPS: {
+    DXGK_64_BIT_ONLY_CAPS *only64Caps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*only64Caps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      only64Caps = (DXGK_64_BIT_ONLY_CAPS *)QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(only64Caps, sizeof(*only64Caps));
+      only64Caps->SupportsOnly64Bit = 1;
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+  case DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION: {
+    DXGK_DISPLAY_DRIVERCAPS_EXTENSION *displayCaps;
+    if (QueryAdapterInfo->pOutputData == NULL ||
+        QueryAdapterInfo->OutputDataSize < sizeof(*displayCaps)) {
+      status = STATUS_BUFFER_TOO_SMALL;
+    } else {
+      displayCaps = (DXGK_DISPLAY_DRIVERCAPS_EXTENSION *)
+          QueryAdapterInfo->pOutputData;
+      RtlZeroMemory(displayCaps, sizeof(*displayCaps));
+      status = STATUS_SUCCESS;
+    }
+    break;
+  }
+
+  default:
+    status = STATUS_NOT_SUPPORTED;
+    break;
+  }
+  AdmissionRecordQuery(context->PhysicalDeviceObject, QueryAdapterInfo->Type,
+                       QueryAdapterInfo->OutputDataSize, status,
+                       QueryAdapterInfo->pOutputData);
+  return status;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiDispatchIoRequest(
+    PVOID MiniportDeviceContext, ULONG VidPnSourceId,
+    PVIDEO_REQUEST_PACKET VideoRequestPacket) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(VidPnSourceId);
+  UNREFERENCED_PARAMETER(VideoRequestPacket);
+  return STATUS_NOT_SUPPORTED;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDdiSetPowerState(
+    PVOID MiniportDeviceContext, ULONG DeviceUid,
+    DEVICE_POWER_STATE DevicePowerState, POWER_ACTION ActionType) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+  UNREFERENCED_PARAMETER(DeviceUid);
+  UNREFERENCED_PARAMETER(DevicePowerState);
+  UNREFERENCED_PARAMETER(ActionType);
+  return STATUS_SUCCESS;
+}
+
+VOID AdmissionDdiResetDevice(PVOID MiniportDeviceContext) {
+  UNREFERENCED_PARAMETER(MiniportDeviceContext);
+}
+
+VOID AdmissionDdiUnload(VOID) {}

@@ -19,6 +19,17 @@ int main(void)
     assert(AiGpioIrqAckMask(13u) == (1u << 13));
     assert(AiGpioIrqMode(AI_GPIO_IRQ_GROUP_STARTUP, AI_GPIO_MODE_IRQ_LOW) ==
            (AI_GPIO_MODE_IRQ_LOW << AI_GPIO_MODE_SHIFT));
+    assert(AiGpioInputInterruptValue(0xffffffffu, 0u, 0) ==
+           ((0xffffffffu & ~(AI_GPIO_MODE_MASK | AI_GPIO_GROUP_MASK |
+                              AI_GPIO_PERIPH_MASK | AI_GPIO_DATA |
+                              AI_GPIO_INPUT_ENABLE)) |
+            AI_GPIO_INPUT_ENABLE));
+    assert(AiGpioInputInterruptValue(0xffffffffu, 2u, 1) ==
+           ((0xffffffffu & ~(AI_GPIO_MODE_MASK | AI_GPIO_GROUP_MASK |
+                              AI_GPIO_PERIPH_MASK | AI_GPIO_DATA |
+                              AI_GPIO_INPUT_ENABLE)) |
+            AiGpioIrqMode(2u, AI_GPIO_MODE_IRQ_LOW) |
+            AI_GPIO_INPUT_ENABLE));
 
     assert(AiSpiRegisterRangeValid(AI_SPI_REG_CONTROL, sizeof(uint32_t), 0x4000u));
     assert(AiSpiRegisterRangeValid(AI_SPI_REG_DELAY_POST, sizeof(uint32_t), 0x4000u));

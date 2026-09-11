@@ -1,0 +1,116 @@
+#ifndef APPLE_AGX_EXP208_GDI_H
+#define APPLE_AGX_EXP208_GDI_H
+
+#include "apple_agx_exp208_relocation.h"
+#include "apple_agx_exp208_framebuffer.h"
+#include "apple_agx_gdi.h"
+#include "apple_agx_render_template.h"
+
+#define APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT 40u
+#define APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OBJECT 36u
+#define APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_OFFSET 0x3008u
+#define APPLE_AGX_EXP208_GDI_STORE_DESCRIPTOR_ADDRESS_MASK 0xfffffffffULL
+#define APPLE_AGX_EXP208_GDI_CAPTURED_OUTPUT_GPU_VA 0x15001d0000ULL
+#define APPLE_AGX_EXP208_GDI_STORE_PIPELINE_OBJECT 73u
+#define APPLE_AGX_EXP208_GDI_CLEAR_UNIFORM_OFFSET 0x0000u
+#define APPLE_AGX_EXP208_GDI_STORE_TEXTURE_OFFSET 0x2000u
+#define APPLE_AGX_EXP208_GDI_STORE_UNIFORM_OFFSET 0x2008u
+#define APPLE_AGX_EXP208_GDI_NATIVE_CLEAR_UNIFORM_OFFSET 0x2000u
+#define APPLE_AGX_EXP208_GDI_NATIVE_STORE_TEXTURE_OFFSET 0x4000u
+#define APPLE_AGX_EXP208_GDI_NATIVE_STORE_UNIFORM_OFFSET 0x4008u
+#define APPLE_AGX_EXP208_GDI_USC_ADDRESS_SHIFT 27u
+#define APPLE_AGX_EXP208_GDI_USC_ADDRESS_MASK \
+  (0xfffffffffULL << APPLE_AGX_EXP208_GDI_USC_ADDRESS_SHIFT)
+#define APPLE_AGX_EXP208_GDI_CAPTURED_TEXTURE_WORD 0x15000030001000ddULL
+#define APPLE_AGX_EXP208_GDI_CAPTURED_UNIFORM_WORD 0x150000400040041dULL
+#define APPLE_AGX_EXP208_GDI_CAPTURED_CLEAR_UNIFORM_WORD \
+  0x1500000000400c1dULL
+#define APPLE_AGX_EXP208_GDI_TEXTURE_DESCRIPTOR_OFFSET 0x3000u
+#define APPLE_AGX_EXP208_GDI_UNIFORM_DATA_OFFSET 0x4000u
+#define APPLE_AGX_EXP208_GDI_OUTPUT_BYTES 0x4000u
+#define APPLE_AGX_EXP208_GDI_WIDTH 16u
+#define APPLE_AGX_EXP208_GDI_HEIGHT 16u
+#define APPLE_AGX_EXP208_GDI_PITCH 64u
+#define APPLE_AGX_EXP208_GDI_COLOR 0xff112233u
+
+typedef struct _APPLE_AGX_EXP208_GDI_BINDING {
+  APPLE_AGX_U32 OutputObject;
+  APPLE_AGX_U64 DestinationGpuVa;
+  APPLE_AGX_U64 DestinationPhysical;
+  APPLE_AGX_U32 DestinationBytes;
+  APPLE_AGX_U32 StoreDescriptorObject;
+  APPLE_AGX_U32 StoreDescriptorOffset;
+  APPLE_AGX_U64 OriginalOutputGpuVa;
+  APPLE_AGX_U64 OriginalOutputPhysical;
+  APPLE_AGX_U32 OriginalOutputBytes;
+  void *OriginalOutputData;
+  APPLE_AGX_U64 OriginalStoreDescriptor;
+  APPLE_AGX_U64 PatchedStoreDescriptor;
+  APPLE_AGX_U32 StorePipelineObject;
+  APPLE_AGX_U32 ClearUniformOffset;
+  APPLE_AGX_U32 StoreTextureOffset;
+  APPLE_AGX_U32 StoreUniformOffset;
+  APPLE_AGX_U64 OriginalStoreTexture;
+  APPLE_AGX_U64 PatchedStoreTexture;
+  APPLE_AGX_U64 OriginalStoreUniform;
+  APPLE_AGX_U64 PatchedStoreUniform;
+  APPLE_AGX_U64 OriginalClearUniform;
+  APPLE_AGX_U64 PatchedClearUniform;
+  APPLE_AGX_EXP208_FRAMEBUFFER_BINDING Framebuffer;
+} APPLE_AGX_EXP208_GDI_BINDING;
+
+APPLE_AGX_BOOL AppleAgxExp208AdoptNativePipelineLayout(
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount);
+
+APPLE_AGX_BOOL AppleAgxExp208BindGdiColorFill(
+    const unsigned char *SubmissionBytes,
+    APPLE_AGX_U32 SubmissionByteCount,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U64 DestinationGpuVa,
+    APPLE_AGX_U64 DestinationPhysical,
+    APPLE_AGX_U32 DestinationCapacity,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    const APPLE_AGX_EXP208_RELOCATION *Relocations,
+    APPLE_AGX_U32 RelocationCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+APPLE_AGX_BOOL AppleAgxExp208UnbindGdiColorFill(
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    const APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+APPLE_AGX_BOOL AppleAgxExp208BindGdiFramebufferColorFill(
+    const unsigned char *SubmissionBytes,
+    APPLE_AGX_U32 SubmissionByteCount,
+    void *ArenaCpuAddress,
+    APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_U64 ArenaPhysicalAddress,
+    APPLE_AGX_U32 ArenaCapacity,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U64 DestinationGpuVa,
+    APPLE_AGX_U64 DestinationPhysical,
+    APPLE_AGX_U32 DestinationCapacity,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    const APPLE_AGX_EXP208_RELOCATION *Relocations,
+    APPLE_AGX_U32 RelocationCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+APPLE_AGX_BOOL AppleAgxExp208BindDynamicFramebuffer(
+    APPLE_AGX_U32 BackgroundColor,
+    void *ArenaCpuAddress,
+    APPLE_AGX_U64 ArenaGpuAddress,
+    APPLE_AGX_U64 ArenaPhysicalAddress,
+    APPLE_AGX_U32 ArenaCapacity,
+    void *DestinationCpuAddress,
+    APPLE_AGX_U64 DestinationGpuVa,
+    APPLE_AGX_U64 DestinationPhysical,
+    APPLE_AGX_U32 DestinationCapacity,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects,
+    APPLE_AGX_U32 ObjectCount,
+    const APPLE_AGX_EXP208_RELOCATION *Relocations,
+    APPLE_AGX_U32 RelocationCount,
+    APPLE_AGX_EXP208_GDI_BINDING *Binding);
+
+#endif /* APPLE_AGX_EXP208_GDI_H */

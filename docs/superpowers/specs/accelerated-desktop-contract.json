@@ -1,0 +1,1237 @@
+{
+  "schema_version": 1,
+  "goal": "accelerated-windows-desktop",
+  "kmd_model": "WDDM3.0",
+  "umd_ddi": "D3D10_0_DDI_INTERFACE_VERSION",
+  "feature_level": "D3D_FEATURE_LEVEL_10_0",
+  "frontend": "mesa-d3d-reuse",
+  "mesa_commit": "9aa1215f878b504f66159dd2ead4c7973142126e",
+  "mandatory_inventory_reviewed": true,
+  "advertised_pipeline_mask": 0,
+  "selected_pipeline_mask": 1,
+  "selection": {
+    "status": "planning-selected-not-implemented",
+    "accepted": "Reuse Mesa d3d10umd DDI/state translation and replace its software target/DRM winsys with the AppleAgx Windows transport.",
+    "rejected": "thin-d3d-over-mesa",
+    "rejected_reason": "It would duplicate the 101-entry D3D10 DDI/state surface already present in pinned Mesa before reaching the same Gallium/AGX backend.",
+    "caveats": [
+      "Pinned Mesa d3d10umd is currently software-targeted and SUPPORT_D3D11 is disabled.",
+      "Its OpenResource path is unsupported and its current DXGI return disables redirection.",
+      "Asahi BO, syncobj, submit, and fence paths are DRM/fd based and require an owned Windows winsys.",
+      "The Asahi vertex/fragment state path accepts TGSI through tgsi_to_nir; this is source support, not Windows build or hardware proof."
+    ]
+  },
+  "requirements": [
+    {
+      "id": "adapter-open10",
+      "class": "UMD adapter",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDIARG_OPENADAPTER",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
+      "test_id": "ad01-adapter-open10",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "adapter-open10-2",
+      "class": "UMD adapter",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDIARG_OPENADAPTER",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
+      "test_id": "ad01-adapter-open10-2",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "adapter-calc-device",
+      "class": "UMD adapter",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDIARG_OPENADAPTER",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
+      "test_id": "ad01-adapter-calc-device",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "adapter-create-device",
+      "class": "UMD adapter",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDIARG_OPENADAPTER",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
+      "test_id": "ad01-adapter-create-device",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "adapter-close",
+      "class": "UMD adapter",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDIARG_OPENADAPTER",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
+      "test_id": "ad01-adapter-close",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "adapter-version-caps",
+      "class": "UMD adapter",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDIARG_OPENADAPTER",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
+      "test_id": "ad01-adapter-version-caps",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-default-constant-buffer-update-subresource-up",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDefaultConstantBufferUpdateSubresourceUP",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-default-constant-buffer-update-subresource-up",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-vs-set-constant-buffers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnVsSetConstantBuffers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-vs-set-constant-buffers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ps-set-shader-resources",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnPsSetShaderResources",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-ps-set-shader-resources",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ps-set-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnPsSetShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-ps-set-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ps-set-samplers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnPsSetSamplers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-ps-set-samplers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-vs-set-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnVsSetShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-vs-set-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-draw-indexed",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDrawIndexed",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-draw-indexed",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-draw",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDraw",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-draw",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-iabuffer-map-no-overwrite",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicIABufferMapNoOverwrite",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-iabuffer-map-no-overwrite",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-iabuffer-unmap",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicIABufferUnmap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-iabuffer-unmap",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-constant-buffer-map-discard",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicConstantBufferMapDiscard",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-constant-buffer-map-discard",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-iabuffer-map-discard",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicIABufferMapDiscard",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-iabuffer-map-discard",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-constant-buffer-unmap",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicConstantBufferUnmap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-constant-buffer-unmap",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ps-set-constant-buffers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnPsSetConstantBuffers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-ps-set-constant-buffers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ia-set-input-layout",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnIaSetInputLayout",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-ia-set-input-layout",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ia-set-vertex-buffers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnIaSetVertexBuffers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-ia-set-vertex-buffers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ia-set-index-buffer",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnIaSetIndexBuffer",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-ia-set-index-buffer",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-draw-indexed-instanced",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDrawIndexedInstanced",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-draw-indexed-instanced",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-draw-instanced",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDrawInstanced",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-draw-instanced",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-resource-map-discard",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicResourceMapDiscard",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-resource-map-discard",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-dynamic-resource-unmap",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDynamicResourceUnmap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-dynamic-resource-unmap",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-gs-set-constant-buffers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnGsSetConstantBuffers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-gs-set-constant-buffers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-gs-set-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnGsSetShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-gs-set-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-ia-set-topology",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnIaSetTopology",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-ia-set-topology",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-staging-resource-map",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnStagingResourceMap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-staging-resource-map",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-staging-resource-unmap",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnStagingResourceUnmap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-staging-resource-unmap",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-vs-set-shader-resources",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnVsSetShaderResources",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-vs-set-shader-resources",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-vs-set-samplers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnVsSetSamplers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-vs-set-samplers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-gs-set-shader-resources",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnGsSetShaderResources",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-gs-set-shader-resources",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-gs-set-samplers",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnGsSetSamplers",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-gs-set-samplers",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-render-targets",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetRenderTargets",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-render-targets",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-shader-resource-view-read-after-write-hazard",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnShaderResourceViewReadAfterWriteHazard",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-shader-resource-view-read-after-write-hazard",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-read-after-write-hazard",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceReadAfterWriteHazard",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-read-after-write-hazard",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-blend-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetBlendState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-blend-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-depth-stencil-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetDepthStencilState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-depth-stencil-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-rasterizer-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetRasterizerState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-rasterizer-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-query-end",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnQueryEnd",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-query-end",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-query-begin",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnQueryBegin",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-query-begin",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-copy-region",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceCopyRegion",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-copy-region",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-update-subresource-up",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceUpdateSubresourceUP",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-update-subresource-up",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-so-set-targets",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSoSetTargets",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-so-set-targets",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-draw-auto",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDrawAuto",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
+      "test_id": "ad04-draw-auto",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-viewports",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetViewports",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-viewports",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-scissor-rects",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetScissorRects",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-scissor-rects",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-clear-render-target-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnClearRenderTargetView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-clear-render-target-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-clear-depth-stencil-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnClearDepthStencilView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-clear-depth-stencil-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-predication",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetPredication",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-set-predication",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-query-get-data",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnQueryGetData",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-query-get-data",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-flush",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnFlush",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-flush",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-gen-mips",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnGenMips",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-gen-mips",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-copy",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceCopy",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-copy",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-resolve-subresource",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceResolveSubresource",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-resolve-subresource",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-map",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceMap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-map",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-unmap",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceUnmap",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-unmap",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-resource-is-staging-busy",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnResourceIsStagingBusy",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-resource-is-staging-busy",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-relocate-device-funcs",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnRelocateDeviceFuncs",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-relocate-device-funcs",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-resource-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateResourceSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-calc-private-resource-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-opened-resource-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateOpenedResourceSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-calc-private-opened-resource-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-resource",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateResource",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-create-resource",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-open-resource",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnOpenResource",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-open-resource",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-resource",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyResource",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-destroy-resource",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-shader-resource-view-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateShaderResourceViewSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-calc-private-shader-resource-view-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-shader-resource-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateShaderResourceView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-create-shader-resource-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-shader-resource-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyShaderResourceView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-destroy-shader-resource-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-render-target-view-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateRenderTargetViewSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-calc-private-render-target-view-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-render-target-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateRenderTargetView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-create-render-target-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-render-target-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyRenderTargetView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-destroy-render-target-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-depth-stencil-view-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateDepthStencilViewSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-calc-private-depth-stencil-view-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-depth-stencil-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateDepthStencilView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-create-depth-stencil-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-depth-stencil-view",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyDepthStencilView",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-destroy-depth-stencil-view",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-element-layout-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateElementLayoutSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-calc-private-element-layout-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-element-layout",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateElementLayout",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-create-element-layout",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-element-layout",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyElementLayout",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-destroy-element-layout",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-blend-state-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateBlendStateSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-calc-private-blend-state-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-blend-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateBlendState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-create-blend-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-blend-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyBlendState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-destroy-blend-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-depth-stencil-state-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateDepthStencilStateSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-calc-private-depth-stencil-state-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-depth-stencil-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateDepthStencilState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-create-depth-stencil-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-depth-stencil-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyDepthStencilState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-destroy-depth-stencil-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-rasterizer-state-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateRasterizerStateSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-calc-private-rasterizer-state-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-rasterizer-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateRasterizerState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-create-rasterizer-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-rasterizer-state",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyRasterizerState",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-destroy-rasterizer-state",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-shader-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateShaderSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-calc-private-shader-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-vertex-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateVertexShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-create-vertex-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-geometry-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateGeometryShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-create-geometry-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-pixel-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreatePixelShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-create-pixel-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-geometry-shader-with-stream-output",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateGeometryShaderWithStreamOutput",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-calc-private-geometry-shader-with-stream-output",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-geometry-shader-with-stream-output",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateGeometryShaderWithStreamOutput",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-create-geometry-shader-with-stream-output",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-shader",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyShader",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-destroy-shader",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-sampler-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateSamplerSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-calc-private-sampler-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-sampler",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateSampler",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-create-sampler",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-sampler",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroySampler",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad04-destroy-sampler",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-calc-private-query-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCalcPrivateQuerySize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-calc-private-query-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-create-query",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCreateQuery",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-create-query",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-query",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyQuery",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-destroy-query",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-check-format-support",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCheckFormatSupport",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-check-format-support",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-check-multisample-quality-levels",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCheckMultisampleQualityLevels",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-check-multisample-quality-levels",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-check-counter-info",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCheckCounterInfo",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-check-counter-info",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-check-counter",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnCheckCounter",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
+      "test_id": "ad04-check-counter",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-destroy-device",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnDestroyDevice",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
+      "test_id": "ad04-destroy-device",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "ddi-set-text-filter-size",
+      "class": "D3D10 UMD DDI",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10DDI_DEVICEFUNCS/pfnSetTextFilterSize",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
+      "test_id": "ad04-set-text-filter-size",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-present",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnPresent",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-present",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-get-gamma-caps",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnGetGammaCaps",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-get-gamma-caps",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-set-display-mode",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnSetDisplayMode",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-set-display-mode",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-set-resource-priority",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnSetResourcePriority",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-set-resource-priority",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-query-resource-residency",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnQueryResourceResidency",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-query-resource-residency",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-rotate-resource-identities",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnRotateResourceIdentities",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-rotate-resource-identities",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "dxgi-blt",
+      "class": "DXGI DDI",
+      "source": ".local/reference/wdk26100/dxgiddi.h:DXGI_DDI_BASE_FUNCTIONS/pfnBlt",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
+      "test_id": "ad06-blt",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "feature-sm4-vs-ps-gs",
+      "class": "Feature semantics",
+      "source": "Microsoft D3D_FEATURE_LEVEL_10_0 and Shader Model 4 requirements",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad03-shader-model-4",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "feature-resource-limits",
+      "class": "Feature semantics",
+      "source": ".local/reference/wdk26100/d3d10umddi.h:D3D10_REQ_*",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
+      "test_id": "ad04-d3d10-required-limits",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "feature-required-formats",
+      "class": "Feature semantics",
+      "source": "Microsoft Required DXGI Formats documentation",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Format.cpp",
+      "test_id": "ad04-required-dxgi-formats",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "frontend-dxbc-tgsi",
+      "class": "Frontend translation",
+      "source": ".local/reference/mesa/src/gallium/frontends/d3d10umd/Shader.cpp",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
+      "test_id": "ad03-dxbc-to-tgsi",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "backend-tgsi-nir-agx",
+      "class": "Backend translation",
+      "source": ".local/reference/mesa/src/gallium/drivers/asahi/agx_state.c:agx_create_shader_state",
+      "implementation_file": "drivers/apple-agx/mesa/winsys/agx_win32_screen.c",
+      "test_id": "ad03-tgsi-nir-agx",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "backend-windows-winsys",
+      "class": "Windows winsys",
+      "source": ".local/reference/mesa/src/gallium/drivers/asahi/agx_pipe.c:agx_screen_create",
+      "implementation_file": "drivers/apple-agx/mesa/winsys/agx_win32_transport.c",
+      "test_id": "ad02-windows-winsys",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    },
+    {
+      "id": "desktop-cross-process-sharing",
+      "class": "Desktop resource sharing",
+      "source": "Microsoft D3D10 OpenResource and DXGI flip-model contracts",
+      "implementation_file": "drivers/apple-agx/mesa/winsys/agx_win32_transport.c",
+      "test_id": "ad06-cross-process-sharing",
+      "mandatory": true,
+      "implemented": false,
+      "test_passed": false
+    }
+  ]
+}
+

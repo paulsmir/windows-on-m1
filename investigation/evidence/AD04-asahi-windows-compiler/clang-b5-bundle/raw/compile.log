@@ -1,0 +1,143 @@
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.c:8:
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.h:8:
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h:46:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/simple_mtx.h(115,14): error: call to undeclared function '_interlockedexchange64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  115 |          c = p_atomic_xchg(&mtx->val, 2);
+      |              ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(220,38): note: expanded from macro 'p_atomic_xchg'
+  220 |    sizeof *(_v) == sizeof(__int64) ? _interlockedexchange64((__int64 *)(_v), (__int64)(_new)) : \
+      |                                      ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/simple_mtx.h(115,14): note: did you mean '_InterlockedExchange64'?
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(220,38): note: expanded from macro 'p_atomic_xchg'
+  220 |    sizeof *(_v) == sizeof(__int64) ? _interlockedexchange64((__int64 *)(_v), (__int64)(_new)) : \
+      |                                      ^
+C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\intrin0.h(77,9): note: '_InterlockedExchange64' declared here
+   77 | __int64 _InterlockedExchange64(__int64 volatile *_Target, __int64 _Value);
+      |         ^
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.c:8:
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.h:8:
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h:46:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/simple_mtx.h(132,8): error: call to undeclared function '_interlockedexchangeadd64'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  132 |    c = p_atomic_fetch_add(&mtx->val, -1);
+      |        ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(199,38): note: expanded from macro 'p_atomic_fetch_add'
+  199 |    sizeof *(_v) == sizeof(__int64) ? _interlockedexchangeadd64((__int64 *)(_v), (__int64) (_i)) : \
+      |                                      ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/simple_mtx.h(132,8): note: did you mean '_InterlockedExchangeAdd64'?
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/u_atomic.h(199,38): note: expanded from macro 'p_atomic_fetch_add'
+  199 |    sizeof *(_v) == sizeof(__int64) ? _interlockedexchangeadd64((__int64 *)(_v), (__int64) (_i)) : \
+      |                                      ^
+C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\lib\clang\20\include\intrin0.h(78,9): note: '_InterlockedExchangeAdd64' declared here
+   78 | __int64 _InterlockedExchangeAdd64(__int64 volatile *_Addend, __int64 _Value);
+      |         ^
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.c:13:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1929,11): warning: misleading indentation; statement is not part of the previous 'if' [-Wmisleading-indentation]
+ 1929 |    UNUSED nir_deref_instr *leader_parent = nir_src_as_deref(leader->parent);
+      |           ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1926,4): note: previous statement is here
+ 1926 |    if (leader->parent.ssa == &parent->def)
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1929,28): warning: unused variable 'leader_parent' [-Wunused-variable]
+ 1929 |    UNUSED nir_deref_instr *leader_parent = nir_src_as_deref(leader->parent);
+      |                            ^~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(2209,22): warning: unused variable 'num_components' [-Wunused-variable]
+ 2209 |    ASSERTED unsigned num_components = nir_intrinsic_num_components(decl);
+      |                      ^~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(2210,22): warning: unused variable 'bit_size' [-Wunused-variable]
+ 2210 |    ASSERTED unsigned bit_size = nir_intrinsic_bit_size(decl);
+      |                      ^~~~~~~~
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.c:20:
+In file included from C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h:9:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(98,15): error: static assertion failed due to requirement 'sizeof(agx_index) == 8': packed
+   98 | static_assert(sizeof(agx_index) == 8, "packed");
+      |               ^~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(98,33): note: expression evaluates to '20 == 8'
+   98 | static_assert(sizeof(agx_index) == 8, "packed");
+      |               ~~~~~~~~~~~~~~~~~~^~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(157,15): warning: implicit truncation from 'int' to bit-field changes value from 4 to -4 [-Wbitfield-constant-conversion]
+  157 |       .type = AGX_INDEX_REGISTER,
+      |               ^~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(168,15): warning: implicit truncation from 'int' to bit-field changes value from 4 to -4 [-Wbitfield-constant-conversion]
+  168 |       .type = AGX_INDEX_REGISTER,
+      |               ^~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(180,15): warning: implicit truncation from 'int' to bit-field changes value from 4 to -4 [-Wbitfield-constant-conversion]
+  180 |       .type = AGX_INDEX_REGISTER,
+      |               ^~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(196,15): warning: implicit truncation from 'int' to bit-field changes value from 5 to -3 [-Wbitfield-constant-conversion]
+  196 |       .type = AGX_INDEX_UNDEF,
+      |               ^~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compiler.h(478,4): error: unknown type name 'off_t'
+  478 |    off_t offset, last_offset;
+      |    ^
+In file included from C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\asahi\compiler\agx_compile.c:20:
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4618,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4618 | BINOP_BITOP(nor, ~(a | b))
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4618,20): error: use of undeclared identifier 'a'
+ 4618 | BINOP_BITOP(nor, ~(a | b))
+      |                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4619,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4619 | BINOP_BITOP(andn2, a & ~b)
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4619,24): error: invalid argument type 'agx_builder *' to unary expression
+ 4619 | BINOP_BITOP(andn2, a & ~b)
+      |                        ^~
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,398): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                              ^~~~
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4619,20): error: use of undeclared identifier 'a'
+ 4619 | BINOP_BITOP(andn2, a & ~b)
+      |                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4620,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4620 | BINOP_BITOP(andn1, ~a & b)
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4620,21): error: use of undeclared identifier 'a'
+ 4620 | BINOP_BITOP(andn1, ~a & b)
+      |                     ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4621,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4621 | BINOP_BITOP(xor, a ^ b)
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4621,18): error: use of undeclared identifier 'a'
+ 4621 | BINOP_BITOP(xor, a ^ b)
+      |                  ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4622,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4622 | BINOP_BITOP(nand, ~(a & b))
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4622,21): error: use of undeclared identifier 'a'
+ 4622 | BINOP_BITOP(nand, ~(a & b))
+      |                     ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4623,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4623 | BINOP_BITOP(and, a & b)
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4623,18): error: use of undeclared identifier 'a'
+ 4623 | BINOP_BITOP(and, a & b)
+      |                  ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4624,1): error: call to undeclared function 'UTIL_LUT2'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+ 4624 | BINOP_BITOP(xnor, ~a ^ b)
+      | ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4616,388): note: expanded from macro 'BINOP_BITOP'
+ 4616 | #define BINOP_BITOP(name, expr)                                                         static inline agx_instr *                                                            agx_## name ##_to(agx_builder *b, agx_index dst0, agx_index src0, agx_index src1)    {                                                                                       return agx_bitop_to(b, dst0, src0, src1, UTIL_LUT2(expr));                        }                                                                                                                                                                         static inline agx_index                                                              agx_## name (agx_builder *b, agx_index src0, agx_index src1)                         {                                                                                       agx_index tmp = agx_temp(b->shader, src0.size);                                      agx_##name##_to(b, tmp, src0, src1);                                                 return tmp;                                                                       }
+      |                                                                                                                                                                                                                                                                                                                                                                                                    ^
+C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\compiler\agx_builder.h(4624,20): error: use of undeclared identifier 'a'
+ 4624 | BINOP_BITOP(xnor, ~a ^ b)
+      |                    ^
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+8 warnings and 20 errors generated.

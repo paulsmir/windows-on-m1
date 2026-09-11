@@ -26,7 +26,9 @@ The eight-core assisted checkpoint reached the lock screen inside the hardware b
 completed bounded load on all processors, remained responsive during independent SSH probes,
 and retained healthy built-in keyboard and Precision Touchpad devices. It is still an
 experimental checkpoint: standalone cold boot, suspend/resume, long-duration thermal stress,
-and GPU acceleration remain separate qualification gates.
+and GPU acceleration remain separate qualification gates.  The J313 AGX resource
+contract and firmware-only G1 lifecycle now pass their hardware gate, but no render work
+or Windows graphics adapter exists yet.
 
 Only `j313` is currently supported. This is not a general Apple Silicon Windows installer.
 
@@ -89,7 +91,9 @@ Documentation distinguishes three states:
 The physical internal-panel handoff, full-panel 2560x1600 Windows framebuffer, all four
 Icestorm and all four Firestorm guest CPUs, synthetic NVMe bridge, physical USB, and the
 test-signed built-in Apple keyboard and Precision Touchpad driver have been validated together
-in the assisted J313 checkpoint. GPU acceleration remains an implementation milestone.
+in the assisted J313 checkpoint. The firmware-only AGX checkpoint is documented in
+[`documentation/AGX_BRINGUP.md`](documentation/AGX_BRINGUP.md); GPU acceleration remains
+an implementation milestone.
 
 Native built-in input build, installation, diagnostics, and rollback are documented in
 [`documentation/APPLE_INPUT.md`](documentation/APPLE_INPUT.md).

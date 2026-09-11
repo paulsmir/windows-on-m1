@@ -1,0 +1,38 @@
+#include <winver.h>
+#ifndef APPLE_AGX_VERSION_BUILD
+#error Package build version must be supplied by package-version.props
+#endif
+#define AGX_STRING_INNER(x) #x
+#define AGX_STRING(x) AGX_STRING_INNER(x)
+#define AGX_VERSION_STRING "30.0." AGX_STRING(APPLE_AGX_VERSION_BUILD) ".0"
+
+1 VERSIONINFO
+FILEVERSION 30,0,APPLE_AGX_VERSION_BUILD,0
+PRODUCTVERSION 30,0,APPLE_AGX_VERSION_BUILD,0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+#ifdef APPLE_AGX_PACKAGE_DLL
+FILETYPE VFT_DLL
+FILESUBTYPE VFT2_UNKNOWN
+#else
+FILETYPE VFT_DRV
+FILESUBTYPE VFT2_DRV_DISPLAY
+#endif
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName", "Windows on Apple Silicon Project\0"
+      VALUE "FileDescription", "Apple AGX render admission\0"
+      VALUE "FileVersion", AGX_VERSION_STRING "\0"
+      VALUE "ProductName", "Apple AGX render admission\0"
+      VALUE "ProductVersion", AGX_VERSION_STRING "\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM64"><Configuration>Debug</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C62B1A75-612A-4FA7-A0CE-6EF7025C37EA}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>AppleAgxRenderAdmission</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <TargetVersion>Windows10</TargetVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="package-version.props" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_PLATFORM_EXTERNAL_RENDER_ONLY=1;APPLE_AGX_FULL_CONTEXT0_BROKER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4127;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>displib.lib;ntoskrnl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxManagementQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxBackendQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_BACKEND_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxFirmwareQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_FIRMWARE_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxStopAfterEndpoints)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_STOP_AFTER_ENDPOINTS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxRetainedRootQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_RETAINED_ROOT_QUALIFICATION=1;APPLE_AGX_MANAGEMENT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Deliberate terminal qualification branch before queue/backend start. -->
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_RENDER_MEMORY_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Whole-program analysis correctly sees that this diagnostic profile
+           exits StartDevice before every downstream callback implementation. -->
+      <DisableSpecificWarnings>4702;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxSubmitQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxVisibleScanoutQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_VISIBLE_SCANOUT_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxVisibleAgxQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_VISIBLE_AGX_QUALIFICATION=1;APPLE_AGX_SUBMIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(AppleAgxMemoryQualification)'=='true'">
+    <OutDir>$(MSBuildProjectDirectory)\build\memory-qualification\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\build\memory-qualification\obj\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClCompile Include="src\driver.c" />
+    <ClCompile Include="src\lifecycle.c" />
+    <ClCompile Include="src\callbacks.c" />
+    <ClCompile Include="src\display.c" />
+    <ClCompile Include="src\interrupt.c" />
+    <ClCompile Include="src\objects.c" />
+    <ClCompile Include="src\render_memory.c" />
+    <ClCompile Include="src\memory_windows.c" />
+    <ClCompile Include="src\render_allocation.c" />
+    <ClCompile Include="src\allocation_windows.c" />
+    <ClCompile Include="src\render_hvc.c" />
+    <ClCompile Include="src\physical_memory_windows.c" />
+    <ClCompile Include="src\memory_runtime_windows.c" />
+    <ClCompile Include="src\paging_windows.c" />
+    <ClCompile Include="src\render_paging.c" />
+    <ClCompile Include="src\render_gdi.c" />
+    <ClCompile Include="src\render_umd_command.c" />
+    <ClCompile Include="src\render_win32_transport.c" />
+    <ClCompile Include="src\apple_agx_dynamic_job.c" />
+    <ClCompile Include="src\render_dynamic_overlay.c" />
+    <ClCompile Include="src\render_dynamic_dma.c" />
+    <ClCompile Include="src\render_dynamic_windows.c" />
+    <ClCompile Include="src\render_dynamic_output.c" />
+    <ClCompile Include="src\umd_render_windows.c" />
+    <ClCompile Include="src\render_present.c" />
+    <ClCompile Include="src\render_visible_scanout.c" />
+    <ClCompile Include="src\present_windows.c" />
+    <ClCompile Include="src\work_queue_windows.c" />
+    <ClCompile Include="src\gdi_windows.c" />
+    <ClCompile Include="src\render_submission.c" />
+    <ClCompile Include="src\render_gdi_receipt.c" />
+    <ClCompile Include="src\render_call_correlation.c" />
+    <ClCompile Include="src\render_call_correlation_windows.c" />
+    <ClCompile Include="src\gdi_receipt_windows.c" />
+    <ClCompile Include="src\submission_windows.c" />
+    <ClCompile Include="src\submit_trace_windows.c" />
+    <ClCompile Include="src\render_backend_image.c" />
+    <ClCompile Include="src\render_completed_output.c" />
+    <ClCompile Include="src\render_qualification.c" />
+    <ClCompile Include="src\standard_present_windows.c" />
+    <ClCompile Include="src\render_output_queue.c" />
+    <ClCompile Include="src\backend_image_windows.c" />
+    <ClCompile Include="src\backend_platform_windows.c" />
+    <ClCompile Include="src\scanout_windows.c" />
+    <ClCompile Include="src\scheduler_windows.c" />
+    <ClCompile Include="src\receipts.c" />
+    <ClCompile Include="..\shared\src\apple_agx_wddm_feature_contract.c" />
+    <ClCompile Include="..\shared\src\apple_agx_win32_abi.c" />
+    <ClCompile Include="..\shared\src\apple_agx_scheduler.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gdi.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_gdi.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_framebuffer.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_adapter.c" />
+    <ClCompile Include="..\shared\src\apple_agx_exp208_dynamic.c" />
+    <ClCompile Include="..\shared\src\apple_agx_dma_shadow.c" />
+    <ClCompile Include="..\shared\src\apple_agx_software_aperture.c" />
+    <ClCompile Include="..\shared\src\apple_agx_local_segment.c" />
+    <ClCompile Include="..\shared\src\apple_agx_physical_topology.c" />
+    <ClCompile Include="..\shared\src\apple_agx_physical_paging.c" />
+    <ClCompile Include="..\shared\src\apple_agx_aperture.c" />
+    <ClCompile Include="..\shared\src\apple_agx_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_table.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_residency.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_publication.c" />
+    <ClCompile Include="..\shared\src\apple_agx_render_template.generated.c" />
+    <ClCompile Include="..\shared\src\apple_agx_render_template_rebase.c" />
+    <ClCompile Include="..\shared\src\apple_agx_relocation.c" />
+    <ClCompile Include="..\shared\src\apple_agx_backend_runtime.c" />
+    <ClCompile Include="..\shared\src\apple_agx_submission.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware_provider.c" />
+    <ClCompile Include="..\shared\src\apple_agx_asc_transport.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_boot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_session.c" />
+    <ClCompile Include="..\shared\src\apple_agx_gfx_handoff.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_context0_broker.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware_status.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_info.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionb.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionb_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_render_shared_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionc.c" />
+    <ClCompile Include="..\shared\src\apple_agx_device_control.c" />
+    <ClCompile Include="..\shared\src\apple_agx_event_allocator.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_codec.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_queue_runtime.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_queue_provider.c" />
+    <ClCompile Include="..\shared\src\apple_agx_platform_composer.c" />
+    <ClCompile Include="..\shared\src\apple_agx_platform_provider.c" />
+    <ClCompile Include="..\shared\src\apple_agx_power.c" />
+    <ClCompile Include="..\shared\src\apple_agx_config_snapshot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_scanout.c" />
+    <ClCompile Include="..\shared\src\apple_agx_fixed_panel.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\render_admission.h" />
+    <ClInclude Include="include\render_win32_transport.h" />
+    <ClInclude Include="include\apple_agx_dynamic_job.h" />
+    <ClInclude Include="include\render_dynamic_overlay.h" />
+    <ClInclude Include="include\render_dynamic_dma.h" />
+    <ClInclude Include="include\render_dynamic_output.h" />
+    <ClInclude Include="include\render_objects.h" />
+    <ClInclude Include="include\render_memory.h" />
+    <ClInclude Include="include\render_allocation.h" />
+    <ClInclude Include="include\render_hvc.h" />
+    <ClInclude Include="include\render_paging.h" />
+    <ClInclude Include="include\render_gdi.h" />
+    <ClInclude Include="include\render_present.h" />
+    <ClInclude Include="include\render_submission.h" />
+    <ClInclude Include="include\render_gdi_receipt.h" />
+    <ClInclude Include="include\render_submit_trace.h" />
+    <ClInclude Include="include\render_backend_image.h" />
+    <ClInclude Include="include\hv_guest_ipa_pa_abi.h" />
+    <ClInclude Include="..\shared\include\apple_agx_wddm_feature_contract.h" />
+    <ClInclude Include="..\shared\include\apple_agx_win32_abi.h" />
+    <ClInclude Include="..\shared\include\apple_agx_scheduler.h" />
+    <ClInclude Include="..\shared\include\apple_agx_gdi.h" />
+    <ClInclude Include="..\shared\include\apple_agx_exp208_gdi.h" />
+    <ClInclude Include="..\shared\include\apple_agx_exp208_adapter.h" />
+    <ClInclude Include="..\shared\include\apple_agx_exp208_dynamic.h" />
+    <ClInclude Include="..\shared\include\apple_agx_backend_runtime.h" />
+    <ClInclude Include="..\shared\include\apple_agx_submission.h" />
+    <ClInclude Include="..\shared\include\apple_agx_dma_shadow.h" />
+    <ClInclude Include="..\shared\include\apple_agx_software_aperture.h" />
+    <ClInclude Include="..\shared\include\apple_agx_local_segment.h" />
+    <ClInclude Include="..\shared\include\apple_agx_physical_topology.h" />
+    <ClInclude Include="..\shared\include\apple_agx_physical_paging.h" />
+    <ClInclude Include="..\shared\include\apple_agx_aperture.h" />
+    <ClInclude Include="..\shared\include\apple_agx_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_table.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_residency.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_publication.h" />
+    <ClInclude Include="..\shared\include\apple_agx_exp208_relocation.h" />
+    <ClInclude Include="..\shared\include\apple_agx_render_template.h" />
+    <ClInclude Include="..\shared\include\apple_agx_render_template_rebase.h" />
+    <ClInclude Include="..\shared\include\apple_agx_relocation.h" />
+    <ClInclude Include="..\shared\include\apple_agx_scanout.h" />
+    <ClInclude Include="..\shared\include\apple_agx_fixed_panel.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="package-version.rc" />
+    <Inf Include="AppleAgxRenderAdmission.inf" />
+    <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
+    <FilesToPackage Include="AppleAgxRenderAdmissionUmd.dll" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

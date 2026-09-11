@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{2ACF82EF-8F8B-42CB-8E95-C63549FAE71C}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>UmdContractTest</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <EnableInf2cat>false</EnableInf2cat>
+    <ApiValidator_Enable>false</ApiValidator_Enable>
+    <PinnedWindowsKitInclude Condition="'$(PinnedWindowsKitInclude)' == ''">C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0</PinnedWindowsKitInclude>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\include;..\..\include;..\..\..\shared\include;..\..\..\mesa\winsys;$(PinnedWindowsKitInclude)\um;$(PinnedWindowsKitInclude)\shared;$(PinnedWindowsKitInclude)\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>UNICODE;_UNICODE;DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;APPLE_AGX_UMD_ADMISSION_TRACE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>true</SDLCheck>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="umd_contract_windows.c" />
+    <ClCompile Include="..\src\umd_runtime_device.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\src\umd_win32_screen.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\src\umd_resource_lifetime.c" />
+    <ClCompile Include="..\src\direct_flip_contract.c" />
+    <ClCompile Include="..\..\src\render_allocation.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_win32_abi.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_transport.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_screen.c" />
+  </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/external:I"$(MesaSourceRoot)\include" /external:I"$(MesaSourceRoot)\src" /external:I"$(MesaSourceRoot)\src\gallium\include" /external:I"$(MesaSourceRoot)\src\gallium\auxiliary" /external:I"$(MesaGeneratedRoot)\src" %(AdditionalOptions)</AdditionalOptions>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+      <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_pipe_screen.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

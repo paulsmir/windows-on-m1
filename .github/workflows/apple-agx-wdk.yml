@@ -1,0 +1,271 @@
+name: Apple AGX ARM64 WDK
+
+on:
+  push:
+    paths:
+      - ".github/workflows/apple-agx-wdk.yml"
+      - "Directory.Build.props"
+      - "packages.config"
+      - "drivers/apple-agx/**"
+  pull_request:
+    paths:
+      - ".github/workflows/apple-agx-wdk.yml"
+      - "Directory.Build.props"
+      - "packages.config"
+      - "drivers/apple-agx/**"
+  workflow_dispatch:
+
+jobs:
+  build-arm64:
+    name: build-arm64 (${{ matrix.name }})
+    runs-on: windows-2025-vs2026
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-Debug
+          - name: power-qualification
+            qualification: true
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-PowerQualification
+          - name: mmio-qualification
+            qualification: false
+            mmio_qualification: true
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-MmioQualification
+          - name: lifecycle-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: true
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-LifecycleQualification
+          - name: firmware-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: true
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-FirmwareQualification
+          - name: powered-status-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: true
+            rtkit_qualification: false
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-PoweredStatusQualification
+          - name: rtkit-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: true
+            uat_snapshot_qualification: false
+            artifact: AppleAgx-ARM64-RtkitQualification
+          - name: uat-snapshot-qualification
+            qualification: false
+            mmio_qualification: false
+            lifecycle_qualification: false
+            firmware_qualification: false
+            powered_status_qualification: false
+            rtkit_qualification: false
+            uat_snapshot_qualification: true
+            artifact: AppleAgx-ARM64-UatSnapshotQualification
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Add NuGet to PATH
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore official SDK and WDK packages
+        run: nuget restore packages.config -PackagesDirectory packages
+
+      - name: Expose WDK host tools
+        shell: pwsh
+        run: |
+          $stampInf = Get-ChildItem packages -Recurse -Filter stampinf.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (!$stampInf) { throw "stampinf.exe was not found in the restored WDK" }
+          $stampInf.Directory.FullName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build AppleAgx for ARM64
+        run: >-
+          msbuild drivers\apple-agx\windows\AppleAgx.vcxproj
+          /m
+          /t:Clean,Build
+          /p:Configuration=Debug
+          /p:Platform=ARM64
+          /p:RunCodeAnalysis=true
+          /p:AppleAgxPowerQualification=${{ matrix.qualification }}
+          /p:AppleAgxMmioQualification=${{ matrix.mmio_qualification }}
+          /p:AppleAgxLifecycleQualification=${{ matrix.lifecycle_qualification }}
+          /p:AppleAgxFirmwareQualification=${{ matrix.firmware_qualification }}
+          /p:AppleAgxPoweredStatusQualification=${{ matrix.powered_status_qualification }}
+          /p:AppleAgxRtkitQualification=${{ matrix.rtkit_qualification }}
+          /p:AppleAgxUatSnapshotQualification=${{ matrix.uat_snapshot_qualification }}
+
+      - name: Verify WDK qualification signature provenance
+        if: matrix.qualification == true || matrix.mmio_qualification == true || matrix.lifecycle_qualification == true || matrix.firmware_qualification == true || matrix.powered_status_qualification == true || matrix.rtkit_qualification == true || matrix.uat_snapshot_qualification == true
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          Write-Host "Locating the WDK-signed qualification catalog"
+          $catalog = Get-ChildItem drivers/apple-agx/windows/ARM64/Debug -Recurse -Filter appleagx.cat |
+            Select-Object -First 1
+          if (!$catalog) { throw "appleagx.cat was not found" }
+          $debugDirectory = Split-Path $catalog.Directory.FullName -Parent
+          $certificatePath = Join-Path $debugDirectory "AppleAgx.cer"
+          if (!(Test-Path $certificatePath)) {
+            throw "WDK test certificate AppleAgx.cer was not exported"
+          }
+          Write-Host "Reading the catalog signature and exported certificate"
+          $signature = Get-AuthenticodeSignature -FilePath $catalog.FullName
+          $certificate = Get-PfxCertificate -FilePath $certificatePath
+          if (!$signature.SignerCertificate) {
+            throw "appleagx.cat has no Authenticode signer"
+          }
+          if ($signature.Status -in @('NotSigned', 'HashMismatch', 'NotSupported')) {
+            throw "appleagx.cat has an unusable signature: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+            throw "catalog signer does not match AppleAgx.cer"
+          }
+          $provenancePath = Join-Path $debugDirectory "AppleAgx-signature.json"
+          [ordered]@{
+            catalog_sha256 = (Get-FileHash $catalog.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            certificate_sha256 = (Get-FileHash $certificatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            signer_thumbprint = $signature.SignerCertificate.Thumbprint
+            signer_subject = $signature.SignerCertificate.Subject
+            signature_status = [string]$signature.Status
+            github_run_id = $env:GITHUB_RUN_ID
+            source_commit = $env:GITHUB_SHA
+          } | ConvertTo-Json | Set-Content -Path $provenancePath -Encoding utf8
+          Write-Host "Verified WDK signature thumbprint $($certificate.Thumbprint)"
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            drivers/apple-agx/windows/ARM64/Debug/**/*.sys
+            drivers/apple-agx/windows/ARM64/Debug/**/*.inf
+            drivers/apple-agx/windows/ARM64/Debug/**/*.cat
+            drivers/apple-agx/windows/ARM64/Debug/**/*.cer
+            drivers/apple-agx/windows/ARM64/Debug/**/*-signature.json
+            drivers/apple-agx/windows/ARM64/Debug/**/*.pdb
+
+  build-admission-arm64:
+    name: build-admission-arm64
+    runs-on: windows-2025-vs2026
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Add NuGet to PATH
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore official SDK and WDK packages
+        run: nuget restore packages.config -PackagesDirectory packages
+
+      - name: Expose WDK host tools
+        shell: pwsh
+        run: |
+          $stampInf = Get-ChildItem packages -Recurse -Filter stampinf.exe |
+            Where-Object { $_.FullName -match '[\\/]x64[\\/]' } |
+            Select-Object -First 1
+          if (!$stampInf) { throw "stampinf.exe was not found in the restored WDK" }
+          $stampInf.Directory.FullName | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build AppleAgxAdmission for ARM64
+        run: >-
+          msbuild drivers\apple-agx\admission\AppleAgxAdmission.vcxproj
+          /m
+          /t:Clean,Build
+          /p:Configuration=Debug
+          /p:Platform=ARM64
+          /p:RunCodeAnalysis=true
+
+      - name: Verify WDK admission signature provenance
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $catalog = Get-ChildItem drivers/apple-agx/admission/ARM64/Debug -Recurse -Filter appleagxadmission.cat |
+            Select-Object -First 1
+          if (!$catalog) { throw "appleagxadmission.cat was not found" }
+          $debugDirectory = Split-Path $catalog.Directory.FullName -Parent
+          $certificatePath = Join-Path $debugDirectory "AppleAgxAdmission.cer"
+          if (!(Test-Path $certificatePath)) {
+            throw "WDK test certificate AppleAgxAdmission.cer was not exported"
+          }
+          $signature = Get-AuthenticodeSignature -FilePath $catalog.FullName
+          $certificate = Get-PfxCertificate -FilePath $certificatePath
+          if (!$signature.SignerCertificate) {
+            throw "appleagxadmission.cat has no Authenticode signer"
+          }
+          if ($signature.Status -in @('NotSigned', 'HashMismatch', 'NotSupported')) {
+            throw "appleagxadmission.cat has an unusable signature: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+            throw "catalog signer does not match AppleAgxAdmission.cer"
+          }
+          $provenancePath = Join-Path $debugDirectory "AppleAgxAdmission-signature.json"
+          [ordered]@{
+            catalog_sha256 = (Get-FileHash $catalog.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            certificate_sha256 = (Get-FileHash $certificatePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            signer_thumbprint = $signature.SignerCertificate.Thumbprint
+            signer_subject = $signature.SignerCertificate.Subject
+            signature_status = [string]$signature.Status
+            github_run_id = $env:GITHUB_RUN_ID
+            source_commit = $env:GITHUB_SHA
+          } | ConvertTo-Json | Set-Content -Path $provenancePath -Encoding utf8
+          Write-Host "Verified admission signer $($certificate.Thumbprint)"
+
+      - name: Upload admission test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppleAgxAdmission-ARM64-Debug
+          if-no-files-found: error
+          path: |
+            drivers/apple-agx/admission/ARM64/Debug/**/*.sys
+            drivers/apple-agx/admission/ARM64/Debug/**/*.inf
+            drivers/apple-agx/admission/ARM64/Debug/**/*.cat
+            drivers/apple-agx/admission/ARM64/Debug/**/*.cer
+            drivers/apple-agx/admission/ARM64/Debug/**/*-signature.json
+            drivers/apple-agx/admission/ARM64/Debug/**/*.pdb

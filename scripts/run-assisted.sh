@@ -15,6 +15,7 @@ CHAINLOAD=0
 M1N1=
 CONTRACT_OUTPUT=
 FOREGROUND=0
+AGX_POWER_BROKER=0
 BOOTSTRAP_TIMEOUT=${ASSISTED_BOOTSTRAP_TIMEOUT:-45}
 
 usage() {
@@ -22,6 +23,7 @@ usage() {
     echo "          [--display none|physical|virtual|both] [--debug off|uart|full|monitor]" >&2
     echo "          [--ramdisk FILE] [--chainload] [--m1n1 FILE]" >&2
     echo "          [--contract-output FILE]" >&2
+    echo "          [--agx-power-broker]" >&2
     echo "          [--no-low-mem] [--foreground] [--dry-run]" >&2
     exit 2
 }
@@ -39,6 +41,7 @@ while [ "$#" -gt 0 ]; do
         --contract-output) [ "$#" -ge 2 ] || usage; CONTRACT_OUTPUT=$2; shift 2 ;;
         --no-low-mem) LOW_MEM=0; shift ;;
         --foreground) FOREGROUND=1; shift ;;
+        --agx-power-broker) AGX_POWER_BROKER=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage ;;
         *) usage ;;
@@ -109,6 +112,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "firmware: $FIRMWARE"
     [ -z "$RAMDISK" ] || echo "RAM disk: $RAMDISK"
     [ -z "$CONTRACT_OUTPUT" ] || echo "launch contract: $CONTRACT_OUTPUT"
+    [ "$AGX_POWER_BROKER" -eq 0 ] && echo "AGX G2 power broker: disabled" || echo "AGX G2 power broker: enabled"
     [ "$DEBUG" = off ] || echo "logs: $ROOT/hv.log and $ROOT/guest-uart.log"
     exit 0
 fi
@@ -129,6 +133,9 @@ set -- "$PYTHON" "$ROOT/tools/artifact_manifest.py" verify "$MANIFEST" \
     --profile "$MANIFEST_PROFILE" --display "$DISPLAY" --debug "$DEBUG"
 if [ "$CHAINLOAD" -eq 1 ]; then
     set -- "$@" --require-role m1n1.macho=assisted-chainload
+fi
+if [ "$AGX_POWER_BROKER" -eq 1 ]; then
+    set -- "$@" --require-capability agx-g2
 fi
 "$@"
 if [ "$CHAINLOAD" -eq 1 ] && [ "$(dirname "$M1N1")" != "$(dirname "$FIRMWARE")" ]; then
@@ -167,7 +174,7 @@ set -- "$FIRMWARE" --device "$PROXY" --display-mode "$DISPLAY" --debug-mode "$DE
 if [ "$FOREGROUND" -eq 1 ]; then
     echo "runner: foreground (Ctrl-C remains a diagnostic snapshot in debug modes)"
     if [ "$DEBUG" = off ]; then
-        PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+        PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" WOM1_AGX_G2_POWER_BROKER="$AGX_POWER_BROKER" \
             exec "$PYTHON" -u "$ROOT/run_uefi.py" "$@"
     else
         # Keep run_uefi.py as the foreground process (and therefore the direct
@@ -175,17 +182,17 @@ if [ "$FOREGROUND" -eq 1 ]; then
         # single source of truth.  A pipeline would make another process the
         # foreground PID and route
         # diagnostic signals wrongly.
-        PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+        PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" WOM1_AGX_G2_POWER_BROKER="$AGX_POWER_BROKER" \
             exec "$PYTHON" -u "$ROOT/run_uefi.py" "$@" >hv.log 2>&1
     fi
 elif [ "$DEBUG" = off ]; then
     # Release mode disables guest UART, framebuffer streaming and telemetry,
     # but the host bootstrap must remain observable.  Without this log a
     # post-launch failure is indistinguishable from a running Windows guest.
-    PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+    PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" WOM1_AGX_G2_POWER_BROKER="$AGX_POWER_BROKER" \
         nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >assisted-runner.log 2>&1 &
 else
-    PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" \
+    PYTHONUNBUFFERED=1 M1N1DEVICE="$PROXY" WOM1_AGX_G2_POWER_BROKER="$AGX_POWER_BROKER" \
         nohup "$PYTHON" -u "$ROOT/run_uefi.py" "$@" </dev/null >hv.log 2>&1 &
 fi
 RUNNER=$!
@@ -234,6 +241,8 @@ elif grep -q "Apple ANS initialization failed" "$RUNNER_LOG"; then
     HARDWARE_GATE_FAILURE="Apple ANS initialization failed"
 elif grep -q "backend=0" "$RUNNER_LOG"; then
     HARDWARE_GATE_FAILURE="NVMe backend=0"
+elif [ "$AGX_POWER_BROKER" -eq 1 ] && ! grep -q "AGX boot config snapshot v2" "$RUNNER_LOG"; then
+    HARDWARE_GATE_FAILURE="AGX scalar snapshot missing"
 fi
 if [ -n "$HARDWARE_GATE_FAILURE" ]; then
     echo "runner failed a hardware bootstrap gate: $HARDWARE_GATE_FAILURE" >&2

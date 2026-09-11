@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM64"><Configuration>Debug</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{9C35B79F-D727-41EF-9497-2D50679476AC}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>AppleAgx</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <AppleAgxPowerQualification Condition="'$(AppleAgxPowerQualification)'==''">false</AppleAgxPowerQualification>
+    <AppleAgxMmioQualification Condition="'$(AppleAgxMmioQualification)'==''">false</AppleAgxMmioQualification>
+    <AppleAgxLifecycleQualification Condition="'$(AppleAgxLifecycleQualification)'==''">false</AppleAgxLifecycleQualification>
+    <AppleAgxFirmwareQualification Condition="'$(AppleAgxFirmwareQualification)'==''">false</AppleAgxFirmwareQualification>
+    <AppleAgxPoweredStatusQualification Condition="'$(AppleAgxPoweredStatusQualification)'==''">false</AppleAgxPoweredStatusQualification>
+    <AppleAgxRtkitQualification Condition="'$(AppleAgxRtkitQualification)'==''">false</AppleAgxRtkitQualification>
+    <AppleAgxUatSnapshotQualification Condition="'$(AppleAgxUatSnapshotQualification)'==''">false</AppleAgxUatSnapshotQualification>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>WDM</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <TargetVersion>Windows10</TargetVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>include;..\shared\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DXGKDDI_INTERFACE_VERSION=DXGKDDI_INTERFACE_VERSION_WDDM3_0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>displib.lib;ntoskrnl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxPowerQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_POWER_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxMmioQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_MMIO_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxLifecycleQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_LIFECYCLE_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxFirmwareQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_FIRMWARE_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxPoweredStatusQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_POWERED_STATUS_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxRtkitQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_RTKIT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(AppleAgxUatSnapshotQualification)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>APPLE_AGX_G2_UAT_SNAPSHOT_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\driver.c" />
+    <ClCompile Include="src\fail_closed.c" />
+    <ClCompile Include="src\adapter.c" />
+    <ClCompile Include="src\resources.c" />
+    <ClCompile Include="src\power.c" />
+    <ClCompile Include="src\mmio.c" />
+    <ClCompile Include="src\diagnostics.c" />
+    <ClCompile Include="src\driver_diagnostics.c" />
+    <ClCompile Include="src\firmware_transport.c" />
+    <ClCompile Include="src\memory_windows.c" />
+    <ClCompile Include="src\uat_publication_windows.c" />
+    <ClCompile Include="..\shared\src\apple_agx_state.c" />
+    <ClCompile Include="..\shared\src\apple_agx_power.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_boot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_rtkit_session.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware.c" />
+    <ClCompile Include="..\shared\src\apple_agx_mapping.c" />
+    <ClCompile Include="..\shared\src\apple_agx_asc_transport.c" />
+    <ClCompile Include="..\shared\src\apple_agx_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_table.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata.c" />
+    <ClCompile Include="..\shared\src\apple_agx_initdata_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_firmware_status.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_info.c" />
+    <ClCompile Include="..\shared\src\apple_agx_channel_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionb.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionb_memory.c" />
+    <ClCompile Include="..\shared\src\apple_agx_config_snapshot.c" />
+    <ClCompile Include="..\shared\src\apple_agx_regionc.c" />
+    <ClCompile Include="..\shared\src\apple_agx_uat_publication.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\apple_agx_driver.h" />
+    <ClInclude Include="..\shared\include\apple_agx_state.h" />
+    <ClInclude Include="..\shared\include\apple_agx_power.h" />
+    <ClInclude Include="..\shared\include\apple_agx_rtkit.h" />
+    <ClInclude Include="..\shared\include\apple_agx_rtkit_boot.h" />
+    <ClInclude Include="..\shared\include\apple_agx_rtkit_session.h" />
+    <ClInclude Include="..\shared\include\apple_agx_firmware.h" />
+    <ClInclude Include="..\shared\include\apple_agx_mapping.h" />
+    <ClInclude Include="..\shared\include\apple_agx_asc_transport.h" />
+    <ClInclude Include="..\shared\include\apple_agx_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_table.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_initdata.h" />
+    <ClInclude Include="..\shared\include\apple_agx_initdata_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_firmware_status.h" />
+    <ClInclude Include="..\shared\include\apple_agx_channel_info.h" />
+    <ClInclude Include="..\shared\include\apple_agx_channel_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_regionb.h" />
+    <ClInclude Include="..\shared\include\apple_agx_regionb_memory.h" />
+    <ClInclude Include="..\shared\include\apple_agx_config_snapshot.h" />
+    <ClInclude Include="..\shared\include\apple_agx_regionc.h" />
+    <ClInclude Include="..\shared\include\apple_agx_uat_publication.h" />
+    <ClInclude Include="..\shared\include\j313_agx_g2.generated.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="AppleAgx.inf" />
+    <FilesToPackage Include="$(TargetPath)" Condition="'$(ConfigurationType)'=='Driver'" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
