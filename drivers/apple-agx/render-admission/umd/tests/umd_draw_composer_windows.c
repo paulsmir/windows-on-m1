@@ -258,8 +258,17 @@ unsigned AdmissionUmdDrawComposerTests(void) {
       else REQUIRE(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)==S_OK);
       REQUIRE(Composer_calls==1);
       REQUIRE(FAILED(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)));
-      if(attempt!=1) {
+      {
         REQUIRE(FAILED(AdmissionUmdDrawAbort(&Composer_device,&Composer_tx)));
+        if(attempt==0) {
+          HANDLE event=Composer_device.ScreenFences[0].Event;
+          Composer_device.ScreenFences[0].Event=NULL;
+          Composer_device.LastScreenError=S_OK;
+          REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)));
+          REQUIRE(Composer_tx.Phase==AdmissionDrawAccepted);
+          for(i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
+          Composer_device.ScreenFences[0].Event=event;
+        }
         if(attempt==4) {
           REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)==HRESULT_FROM_WIN32(ERROR_TIMEOUT));
           for(i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);

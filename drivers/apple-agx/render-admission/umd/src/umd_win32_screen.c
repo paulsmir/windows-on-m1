@@ -634,8 +634,10 @@ static int AdmissionUmdScreenWaitFence(void *Context, APPLE_AGX_U32 Fence,
   ADMISSION_UMD_SCREEN_FENCE *fence =
       AdmissionUmdScreenFenceFind(device, Fence);
   DWORD waitResult;
-  if (fence == NULL || fence->Event == NULL)
+  if (fence == NULL || fence->Event == NULL) {
+    if (device != NULL) device->LastScreenError = E_INVALIDARG;
     return 0;
+  }
   if (fence->Completed)
     return 1;
   waitResult = WaitForSingleObject(fence->Event, TimeoutMs);
@@ -655,8 +657,10 @@ static int AdmissionUmdScreenRetireFence(void *Context,
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;
   ADMISSION_UMD_SCREEN_FENCE *fence =
       AdmissionUmdScreenFenceFind(device, Fence);
-  if (fence == NULL || fence->Event == NULL)
+  if (fence == NULL || fence->Event == NULL) {
+    if (device != NULL) device->LastScreenError = E_INVALIDARG;
     return 0;
+  }
   if (!CloseHandle(fence->Event)) {
     device->LastScreenError = HRESULT_FROM_WIN32(GetLastError());
     return 0;

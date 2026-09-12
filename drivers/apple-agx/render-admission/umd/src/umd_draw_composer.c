@@ -170,15 +170,16 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
   s->RenderStatus=result;
   if(FAILED(result)) {
-    d->DrawTerminal=TRUE; release(d,s); s->Phase=AdmissionDrawRejected;
-    ReleaseSRWLockExclusive(&d->ScreenBufferLock); return result;
-  }
-  s->Phase=AdmissionDrawAccepted;
-  if(!render.pNewCommandBuffer || !render.NewCommandBufferSize ||
+    /* Callback failure alone is not proof that no work consumed the source.
+     * Preserve identities until an ordered marker or terminal teardown proves
+     * quiescence. Never replay this Render or reuse its command buffers. */
+    d->DrawTerminal=TRUE; d->CommandBuffer=NULL; d->CommandBufferSize=0;
+    s->PostStatus=result;
+  } else if(!render.pNewCommandBuffer || !render.NewCommandBufferSize ||
      !render.pNewAllocationList || !render.NewAllocationListSize ||
      !render.pNewPatchLocationList || !render.NewPatchLocationListSize || result!=S_OK) {
     d->DrawTerminal=TRUE; d->CommandBuffer=NULL; d->CommandBufferSize=0;
-    s->PostStatus=E_FAIL; s->Phase=AdmissionDrawPostError;
+    s->PostStatus=E_FAIL;
   } else {
     d->CommandBuffer=render.pNewCommandBuffer; d->CommandBufferSize=render.NewCommandBufferSize;
     d->AllocationList=render.pNewAllocationList; d->AllocationListSize=render.NewAllocationListSize;
