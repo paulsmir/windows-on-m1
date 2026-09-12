@@ -52,6 +52,13 @@ continues. Hardware runs authorized after exact build/sign/hash/preflight/recove
 gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
 
 ## Current implementation checkpoint
+Latest Tier-A review: agent_tasks/AD04-ASTRA-V2-PROVENANCE-REVIEW.md.
+CHANGES_REQUIRED before native wiring: explicit version selection (reference0
+is valid), reject v2 in legacy overlay consumers, and acquire authoritative
+expected BO identity/source-map lifetime. Current bridge proves caller-address
+arithmetic consistency only. Existing tests do not prove real native provenance
+or v2 KMD composition. Terra Low implements this correction before new factories.
+
 6725ae1b2da94a909c3978905235e00394c14c0f adds device/request-scoped typed capture
 using existing wire ABI and KMD materializer. Host ASan/UBSan and Windows x64
 build/link/execute + ARM64 build/link PASS; current source hashes verified.
