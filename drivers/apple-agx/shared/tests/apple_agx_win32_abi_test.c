@@ -19,6 +19,18 @@ typedef struct _VALID_DRAW_COMMAND {
   APPLE_AGX_WIN32_RELOCATION Relocations[DRAW_RELOCATION_COUNT];
 } VALID_DRAW_COMMAND;
 
+/* v2 keeps the v1 draw payload byte-for-byte.  Reserved[0] is interpreted
+ * only by a v2 header as the independently allocated fragment USC pipeline.
+ */
+#define DRAW_V2_REFERENCE_COUNT 10u
+#define DRAW_V2_RELOCATION_COUNT 8u
+typedef struct _VALID_DRAW_V2_COMMAND {
+  APPLE_AGX_WIN32_COMMAND_HEADER Header;
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE References[DRAW_V2_REFERENCE_COUNT];
+  APPLE_AGX_WIN32_DRAW_PAYLOAD Payload;
+  APPLE_AGX_WIN32_RELOCATION Relocations[DRAW_V2_RELOCATION_COUNT];
+} VALID_DRAW_V2_COMMAND;
+
 static void seal(VALID_CLEAR_COMMAND *command) {
   command->Header.ContentHash = 0ULL;
   command->Header.ContentHash =
@@ -299,6 +311,64 @@ static void test_valid_draw_graph(void) {
   assert(view.Clear == NULL);
 }
 
+static void test_v2_draw_accepts_independent_vertex_and_fragment_pipelines(
+    void) {
+  VALID_DRAW_V2_COMMAND command;
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  VALID_DRAW_COMMAND v1 = valid_draw();
+
+  memset(&command, 0, sizeof(command));
+  memcpy(&command.Header, &v1.Header, sizeof(command.Header));
+  memcpy(command.References, v1.References, sizeof(v1.References));
+  memcpy(&command.Payload, &v1.Payload, sizeof(command.Payload));
+  memcpy(command.Relocations, v1.Relocations, sizeof(v1.Relocations));
+  command.Header.Version = 2u;
+  command.Header.TotalBytes = sizeof(command);
+  command.Header.ReferenceCount = DRAW_V2_REFERENCE_COUNT;
+  command.Header.PayloadOffset =
+      sizeof(command.Header) + sizeof(command.References);
+  command.Header.PayloadBytes = sizeof(command.Payload) +
+                                sizeof(command.Relocations);
+  command.References[9].AllocationIndex = 9u;
+  command.References[9].Access = AppleAgxWin32AccessRead;
+  command.References[9].Role = AppleAgxWin32RoleUscPipeline;
+  command.References[9].Bytes = 0x2c0u;
+  command.Payload.Reserved[0] = 9u;
+  command.Payload.RelocationCount = DRAW_V2_RELOCATION_COUNT;
+  command.Relocations[7].Kind = AppleAgxWin32RelocationVdmPipelineOffset32;
+  command.Relocations[7].WidthBytes = 4u;
+  command.Relocations[7].DestinationReference = 8u;
+  command.Relocations[7].TargetReference = 9u;
+  command.Relocations[7].DestinationOffset = 0x20u;
+  command.Header.ContentHash = 0ULL;
+  command.Header.ContentHash =
+      AppleAgxWin32CommandHash(&command, sizeof(command));
+
+  assert(AppleAgxWin32CommandValidate(&command, sizeof(command), 7u,
+                                      DRAW_V2_REFERENCE_COUNT,
+                                      &view) == AppleAgxWin32AbiSuccess);
+  assert(view.Header->Version == 2u && view.Draw == &command.Payload);
+  assert(view.Draw->UscPipelineReference == 4u &&
+         view.Draw->Reserved[0] == 9u);
+
+  command.Payload.Reserved[0] = command.Payload.UscPipelineReference;
+  command.Header.ContentHash = 0ULL;
+  command.Header.ContentHash =
+      AppleAgxWin32CommandHash(&command, sizeof(command));
+  assert(AppleAgxWin32CommandValidate(&command, sizeof(command), 7u,
+                                      DRAW_V2_REFERENCE_COUNT,
+                                      &view) == AppleAgxWin32AbiPayload);
+
+  command.Payload.Reserved[0] = 9u;
+  command.References[9].Role = AppleAgxWin32RoleDescriptor;
+  command.Header.ContentHash = 0ULL;
+  command.Header.ContentHash =
+      AppleAgxWin32CommandHash(&command, sizeof(command));
+  assert(AppleAgxWin32CommandValidate(&command, sizeof(command), 7u,
+                                      DRAW_V2_REFERENCE_COUNT,
+                                      &view) == AppleAgxWin32AbiRole);
+}
+
 static void test_draw_expected_foreground_contract(void) {
   VALID_DRAW_COMMAND command = valid_draw();
   APPLE_AGX_WIN32_COMMAND_VIEW view;
@@ -354,6 +424,7 @@ static void test_draw_graph_rejections(void) {
   REJECT_DRAW(Payload.IndexReference, 1u, AppleAgxWin32AbiRole);
   REJECT_DRAW(Payload.VertexShaderReference, 1u, AppleAgxWin32AbiRole);
   REJECT_DRAW(Payload.Flags, 2u, AppleAgxWin32AbiFlags);
+  REJECT_DRAW(Payload.Reserved[0], 1u, AppleAgxWin32AbiReserved);
   REJECT_DRAW(Payload.Reserved[3], 1u, AppleAgxWin32AbiReserved);
   REJECT_DRAW(Payload.RelocationCount, 0u, AppleAgxWin32AbiRelocation);
   REJECT_DRAW(Payload.RelocationsOffset, 120u, AppleAgxWin32AbiLayout);
@@ -410,6 +481,7 @@ int main(void) {
   test_clear_payload_rejections();
   test_snapshot_is_immutable_after_producer_mutation();
   test_valid_draw_graph();
+  test_v2_draw_accepts_independent_vertex_and_fragment_pipelines();
   test_draw_expected_foreground_contract();
   test_vertex_descriptor_relocation();
   test_draw_graph_rejections();

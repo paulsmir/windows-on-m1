@@ -154,7 +154,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   header = (const APPLE_AGX_WIN32_COMMAND_HEADER *)bytes;
   if (header->Magic != APPLE_AGX_WIN32_COMMAND_MAGIC)
     return AppleAgxWin32AbiMagic;
-  if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION)
+  if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION &&
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES)
     return AppleAgxWin32AbiVersion;
   if (header->HeaderBytes != sizeof(*header) ||
       header->TotalBytes != CommandBytes)
@@ -206,6 +207,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   }
 
   if (header->Opcode == (APPLE_AGX_U32)AppleAgxWin32OpcodeClear) {
+    if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION)
+      return AppleAgxWin32AbiVersion;
     if (header->ReferenceCount != 1u ||
         header->PayloadBytes != sizeof(APPLE_AGX_WIN32_CLEAR_PAYLOAD))
       return header->ReferenceCount != 1u
@@ -264,7 +267,9 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     return AppleAgxWin32AbiFlags;
   }
   for (index = 0u; index < 4u; ++index)
-    if (draw->Reserved[index] != 0u)
+    if ((header->Version == APPLE_AGX_WIN32_COMMAND_VERSION || index !=
+         APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX) &&
+        draw->Reserved[index] != 0u)
       return AppleAgxWin32AbiReserved;
   if (draw->RelocationsOffset != sizeof(*draw))
     return AppleAgxWin32AbiLayout;
@@ -293,6 +298,18 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   DRAW_REFERENCE(VertexRodataReference, AppleAgxWin32RoleShaderRodata, 1);
   DRAW_REFERENCE(FragmentRodataReference, AppleAgxWin32RoleShaderRodata, 1);
   DRAW_REFERENCE(UscPipelineReference, AppleAgxWin32RoleUscPipeline, 0);
+  if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES) {
+    APPLE_AGX_WIN32_ABI_RESULT referenceResult;
+    APPLE_AGX_U32 fragmentPipelineReference =
+        draw->Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX];
+    if (fragmentPipelineReference == draw->UscPipelineReference)
+      return AppleAgxWin32AbiPayload;
+    referenceResult = AppleAgxWin32DrawReference(
+        fragmentPipelineReference, AppleAgxWin32RoleUscPipeline, 0,
+        references, header->ReferenceCount, reachable);
+    if (referenceResult != AppleAgxWin32AbiSuccess)
+      return referenceResult;
+  }
   DRAW_REFERENCE(DescriptorReference, AppleAgxWin32RoleDescriptor, 0);
   DRAW_REFERENCE(ScissorReference, AppleAgxWin32RoleScissor, 0);
   DRAW_REFERENCE(DepthBiasReference, AppleAgxWin32RoleDepthBias, 0);
