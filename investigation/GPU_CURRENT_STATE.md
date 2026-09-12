@@ -1,7 +1,8 @@
 # GPU current state — 2026-09-13
 
 Worktree: integration/ad04-windows-compiler.
-Implementation checkpoint: 452ce35df96374bde1e3574fe889363659469e8b.
+Composer checkpoint: 452ce35; retirement review correction: f635789.
+Native state/pool Windows compile checkpoint: c4022de.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -33,6 +34,9 @@ Render with later buffer/event failure cannot replay. Retirement may retry an
 event enqueue, waits for the in-order completion marker, then releases holds.
 Timeout preserves them. One active transaction per context in this first slice.
 No exported DDI or optional winsys SubmitDraw provider was enabled.
+f635789 corrects missing-event stale S_OK and preserves holds after any failure
+returned after entry into Render until ordered synchronization proves quiescence.
+Review: agent_tasks/AD04-SUBMISSION-RETIREMENT-REVIEW.md.
 
 ## Fresh verification
 Evidence: evidence/AD04-umd-draw-composer/
@@ -48,6 +52,16 @@ Optional x64 Mesa factory test PASS.
 ARM64 UMD DLL build/link succeeds with code analysis: 27 WDK header SAL warnings,
 not warning-free analysis. No signing/installation/hardware verdict.
 Five relevant host suites GREEN.
+
+## Native producer compilation
+c4022de compiles original pinned agx_state.c and pool.c on Windows x64/ARM64.
+Derived headers retain native state layouts; source reference unchanged.
+Epilog key 256-pattern native/Windows execution proves size/alignment4 and
+byte-exact flags; generated helper wrappers transmit the required zero bytes.
+Evidence/limits: agent_tasks/AD04-NATIVE-STATE-COMPILE.md and
+evidence/AD04-native-asahi-state/. Native draw execution has NOT occurred.
+Next: Windows native BO backend must satisfy the original pool API and capture
+all native graph edges using real owner identities before composer dispatch.
 
 ## First remaining integration
 Use actual native-capture identity sidecar with Seal, dispatch on the supported
