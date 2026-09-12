@@ -1,0 +1,12 @@
+{
+  "applied": true,
+  "automatic_merge": false,
+  "changed_paths": [
+    "drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1"
+  ],
+  "command_results": [],
+  "commands_run": [],
+  "hardware_used": false,
+  "reason": "none",
+  "result": "APPLIED"
+}

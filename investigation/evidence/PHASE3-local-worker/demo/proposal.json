@@ -1,0 +1,10 @@
+{
+  "result": "PATCH_PROPOSED",
+  "rationale": "Adding a harmless marker text file in the allowed path as specified.",
+  "patch": "diff --git a/investigation/agent_tasks/demo.txt b/investigation/agent_tasks/demo.txt\nnew file mode 100644\nindex 0000000..1234567\n--- /dev/null\n+++ b/investigation/agent_tasks/demo.txt\n@@ -0,0 +1 @@\n+runner-marker\n",
+  "requested_command_ids": [
+    "RUN_HARMLESS_CHECK"
+  ],
+  "unresolved": [],
+  "architecture_question": ""
+}

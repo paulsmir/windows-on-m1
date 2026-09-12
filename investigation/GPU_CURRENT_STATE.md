@@ -54,8 +54,17 @@ source owner proven from pinned Mesa meson Windows pre_args and SDK26100
 math.h gate for _USE_MATH_DEFINES -> corecrt_math_defines.h.
 Devstral proposed one shared compiler-arguments change in
 run-phase3-normalized.ps1. Exact-replacement validator applied it in isolated
-task-AD04-MATH-CONSTANTS-006, pending fixed-command validation and local review.
-No math values or Mesa algorithms changed. Do not claim boundary closed yet.
+task-AD04-MATH-CONSTANTS-006. Model worker commit6733dca1d9ce61482271b7f2ffd79e68257b2ed5
+was reviewed and integrated. Hash-gated RUN_MATH_CONTROL validated CRT macro
+bit patterns against native output; x64 and ARM64 agx_compile.c both exit0.
+No newly exposed error in this translation unit. This is not full compiler link
+or backend execution proof. Evidence: investigation/evidence/PHASE3-math/.
+Local review returned PASS with a vague test_coverage QUESTION; Tier A checked
+the actual manifests and accepted only the explicit translation-unit scope.
+The old wrapper expected two compile failures;29d64a corrects exit policy to
+require all five named entries successful (four-case Windows policy test PASS).
+Next boundary: build/link the full Asahi/NIR compiler dependency set and execute
+dynamic shader tests. Do not repeat these translation-unit admission checks.
 
 ## Scope / next gates
 No capabilities changed; chosen D3D10_0/FL10_0 mandatory contract incomplete.

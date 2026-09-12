@@ -13,6 +13,13 @@ MODEL = 'devstral-small-2:24b-instruct-2512-q4_K_M'
 PREFIX = ('You are a bounded Tier C patch proposal worker. You have no shell authority. '
           'Return JSON only. Do not choose the next project action. '
           'Do not invent tools or execution results. Follow the supplied contract.')
+REVIEW_SCHEMA = {
+    'type':'object', 'additionalProperties':False,
+    'required':['review','scope','semantics','test_coverage','unauthorized_expansion','architecture_risk'],
+    'properties': {'review': {'type':'string', 'enum':['PASS','FAIL','QUESTION']},
+                   **{k:{'type':'string'} for k in ['scope','semantics','test_coverage',
+                                                   'unauthorized_expansion','architecture_risk']}}
+}
 
 def gpu_record():
     with urllib.request.urlopen('http://127.0.0.1:11434/api/ps', timeout=5) as response:
@@ -70,6 +77,8 @@ def main():
         request['messages'] = [{'role':'user', 'content':'Reply 1'}]
         request['options']['num_predict'] = 1
         request.pop('format')
+    elif a.review:
+        request['format'] = REVIEW_SCHEMA
     data = json.dumps(request).encode()
     req = urllib.request.Request('http://127.0.0.1:11434/api/chat', data=data,
                                  headers={'Content-Type': 'application/json'})
