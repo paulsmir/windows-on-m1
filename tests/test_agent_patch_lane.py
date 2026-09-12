@@ -120,6 +120,33 @@ class PatchProposalLaneTests(unittest.TestCase):
         self.assertEqual(run("git", "status", "--porcelain", cwd=self.main).stdout, main_status)
         self.assertTrue((self.output / "proposal.json").is_file())
 
+    def test_applies_exact_zero_context_tracked_modification_at_locked_head(self):
+        patch = """diff --git a/allowed/demo.txt b/allowed/demo.txt
+--- a/allowed/demo.txt
++++ b/allowed/demo.txt
+@@ -1 +1 @@
+-before
++correctline
+"""
+        result = self.invoke(proposal=self.proposal(patch))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr + repr(payload))
+        self.assertEqual(payload["result"], "APPLIED")
+        self.assertTrue(payload["applied"])
+        self.assertEqual((self.worktree / "allowed" / "demo.txt").read_text(), "correctline\n")
+        self.assertEqual(run("git", "rev-parse", "HEAD", cwd=self.worktree).stdout.strip(), self.base)
+
+    def test_zero_context_patch_with_fabricated_old_text_is_rejected(self):
+        patch = """diff --git a/allowed/demo.txt b/allowed/demo.txt
+--- a/allowed/demo.txt
++++ b/allowed/demo.txt
+@@ -1 +1 @@
+-fabricated-old-text
++correctline
+"""
+        self.rejected(self.invoke(proposal=self.proposal(patch)), "patch_apply_check_failed")
+        self.assertEqual((self.worktree / "allowed" / "demo.txt").read_text(), "before\n")
+
     def test_fixed_check_failure_records_applied_patch_and_command_evidence(self):
         result = self.invoke(proposal=self.proposal(requested_command_ids=["RUN_HARMLESS_CHECK"]))
         payload = self.payload(result)

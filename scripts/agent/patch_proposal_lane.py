@@ -332,10 +332,10 @@ def main(argv=None):
             if command_id != "RUN_HARMLESS_CHECK":
                 fail("command_id_invalid")
         expected = parse_patch(proposal["patch"], contract, repo)
-        check = git(repo, "apply", "--check", "--whitespace=error-all", "-", input_text=proposal["patch"])
+        check = git(repo, "apply", "--check", "--unidiff-zero", "--whitespace=error-all", "-", input_text=proposal["patch"])
         if check.returncode:
             fail("patch_apply_check_failed")
-        applied = git(repo, "apply", "--whitespace=error-all", "-", input_text=proposal["patch"])
+        applied = git(repo, "apply", "--unidiff-zero", "--whitespace=error-all", "-", input_text=proposal["patch"])
         if applied.returncode:
             fail("patch_apply_failed")
         actual = changed_paths(repo)
