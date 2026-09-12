@@ -84,14 +84,14 @@ def schema(contract, proposal):
 
 
 def no_symlink_ancestors(path):
-    if path.is_symlink():
-        return False
-    path = path.resolve(strict=False)
+    path = path.absolute()
     current = Path(path.anchor)
     for part in path.parts[1:]:
         current /= part
         try:
             if stat.S_ISLNK(os.lstat(current).st_mode):
+                if current == Path("/var") and current.resolve() == Path("/private/var"):
+                    continue
                 return False
         except FileNotFoundError:
             continue
@@ -103,8 +103,8 @@ def no_symlink_ancestors(path):
 def safe_path(raw):
     if not raw or "\\" in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw):
         return False
-    path = PurePosixPath(raw)
-    return not path.is_absolute() and all(part not in {"", ".", "..", ".git"} for part in path.parts)
+    parts = raw.split("/")
+    return not raw.startswith("/") and all(part and part not in {".", ".."} and part.casefold() != ".git" for part in parts)
 
 
 def under(path, rules):
@@ -115,9 +115,12 @@ def safe_target(repo, target):
     current = repo
     for part in PurePosixPath(target).parts:
         current /= part
-        if current.exists() and current.is_symlink():
+        if current.is_symlink():
             fail("patch_symlink_forbidden")
-        if git(repo, "ls-files", "-s", "--", str(current.relative_to(repo))).stdout.startswith("160000 "):
+        result = git(repo, "ls-files", "-s", "--", str(current.relative_to(repo)))
+        if result.returncode:
+            fail("git_query_failed")
+        if result.stdout.startswith("160000 "):
             fail("patch_gitlink_forbidden")
 
 
@@ -136,19 +139,41 @@ def preflight(contract, output):
         pass
     if output.is_relative_to(repo):
         fail("output_inside_repo")
-    if git(repo, "rev-parse", "--is-inside-work-tree").stdout.strip() != "true":
+    inside = git(repo, "rev-parse", "--is-inside-work-tree")
+    if inside.returncode or inside.stdout.strip() != "true":
         fail("repo_invalid")
     if git(repo, "rev-parse", "--verify", f"{contract['input_commit']}^{{commit}}").returncode:
         fail("input_commit_invalid")
-    if git(repo, "rev-parse", "HEAD").stdout.strip() != contract["input_commit"]:
+    head = git(repo, "rev-parse", "HEAD")
+    if head.returncode:
+        fail("git_query_failed")
+    if head.stdout.strip() != contract["input_commit"]:
         fail("worktree_head_mismatch")
-    if git(repo, "branch", "--show-current").stdout.strip() != contract["branch"]:
+    branch = git(repo, "branch", "--show-current")
+    if branch.returncode:
+        fail("git_query_failed")
+    if branch.stdout.strip() != contract["branch"]:
         fail("worktree_branch_mismatch")
-    entries = git(repo, "worktree", "list", "--porcelain").stdout.split("\n\n")
+    gitdir = git(repo, "rev-parse", "--absolute-git-dir")
+    common = git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    superproject = git(repo, "rev-parse", "--show-superproject-working-tree")
+    if gitdir.returncode or common.returncode or superproject.returncode:
+        fail("git_query_failed")
+    if Path(gitdir.stdout.strip()).resolve() == Path(common.stdout.strip()).resolve():
+        fail("worktree_primary_checkout")
+    if superproject.stdout.strip():
+        fail("worktree_superproject_forbidden")
+    listing = git(repo, "worktree", "list", "--porcelain")
+    if listing.returncode:
+        fail("git_query_failed")
+    entries = listing.stdout.split("\n\n")
     matching = [entry for entry in entries if f"worktree {repo.resolve()}\n" in entry and f"branch refs/heads/{contract['branch']}" in entry]
     if len(matching) != 1:
         fail("worktree_not_linked_contract")
-    if git(repo, "status", "--porcelain", "--untracked-files=all", "--ignored").stdout:
+    status = git(repo, "status", "--porcelain", "--untracked-files=all", "--ignored")
+    if status.returncode:
+        fail("git_query_failed")
+    if status.stdout:
         fail("worktree_not_clean")
     return repo
 
@@ -251,9 +276,14 @@ def run_fixed_check(repo, command_id):
 
 
 def changed_paths(repo):
-    tracked = git(repo, "diff", "--name-only", "HEAD", "--").stdout.splitlines()
-    untracked = git(repo, "ls-files", "--others", "--exclude-standard").stdout.splitlines()
-    ignored = git(repo, "ls-files", "--others", "--ignored", "--exclude-standard").stdout.splitlines()
+    tracked_result = git(repo, "diff", "--name-only", "HEAD", "--")
+    untracked_result = git(repo, "ls-files", "--others", "--exclude-standard")
+    ignored_result = git(repo, "ls-files", "--others", "--ignored", "--exclude-standard")
+    if any(result.returncode for result in (tracked_result, untracked_result, ignored_result)):
+        fail("git_query_failed")
+    tracked = tracked_result.stdout.splitlines()
+    untracked = untracked_result.stdout.splitlines()
+    ignored = ignored_result.stdout.splitlines()
     return sorted(set(tracked + untracked + ignored))
 
 

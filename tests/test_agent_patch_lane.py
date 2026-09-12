@@ -18,8 +18,9 @@ def run(*args, cwd=None, check=True):
 class PatchProposalLaneTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.main = Path(self.temp.name) / "main"
-        self.worktree = Path(self.temp.name) / "worker"
+        self.temp_path = Path(self.temp.name).resolve()
+        self.main = self.temp_path / "main"
+        self.worktree = self.temp_path / "worker"
         self.main.mkdir()
         run("git", "init", "-q", cwd=self.main)
         run("git", "config", "user.email", "test@example.invalid", cwd=self.main)
@@ -37,7 +38,7 @@ class PatchProposalLaneTests(unittest.TestCase):
         self.base = run("git", "rev-parse", "HEAD", cwd=self.main).stdout.strip()
         run("git", "worktree", "add", "-q", "-b", "agent/patch-test", str(self.worktree), self.base,
             cwd=self.main)
-        self.output = Path(self.temp.name) / "evidence"
+        self.output = self.temp_path / "evidence"
         self.output_number = 0
 
     def tearDown(self):
@@ -54,7 +55,7 @@ class PatchProposalLaneTests(unittest.TestCase):
             "allowed_command_ids": ["RUN_HARMLESS_CHECK"], "expected_text": "after\n",
         }
         value.update(overrides)
-        path = Path(self.temp.name) / "contract.json"
+        path = self.temp_path / "contract.json"
         path.write_text(json.dumps(value))
         return path
 
@@ -65,7 +66,7 @@ class PatchProposalLaneTests(unittest.TestCase):
             "requested_command_ids": [], "unresolved": [], "architecture_question": None,
         }
         value.update(overrides)
-        path = Path(self.temp.name) / "proposal.json"
+        path = self.temp_path / "proposal.json"
         path.write_text(json.dumps(value))
         return path
 
@@ -80,7 +81,7 @@ class PatchProposalLaneTests(unittest.TestCase):
     def invoke(self, contract=None, proposal=None, output=None):
         if output is None:
             self.output_number += 1
-            output = self.output if self.output_number == 1 else Path(self.temp.name) / f"evidence-{self.output_number}"
+            output = self.output if self.output_number == 1 else self.temp_path / f"evidence-{self.output_number}"
         return run(sys.executable, str(LANE), "--contract", str(contract or self.contract()),
                    "--proposal", str(proposal or self.proposal()), "--output", str(output or self.output),
                    check=False)
@@ -118,7 +119,7 @@ class PatchProposalLaneTests(unittest.TestCase):
     def test_rejects_missing_extra_and_wrong_typed_schema_fields(self):
         value = json.loads(self.proposal().read_text())
         del value["rationale"]
-        path = Path(self.temp.name) / "bad.json"; path.write_text(json.dumps(value))
+        path = self.temp_path / "bad.json"; path.write_text(json.dumps(value))
         self.rejected(self.invoke(proposal=path), "proposal_schema_invalid")
         value = json.loads(self.proposal().read_text()); value["extra"] = True
         path.write_text(json.dumps(value)); self.rejected(self.invoke(proposal=path), "proposal_schema_invalid")
@@ -146,6 +147,9 @@ class PatchProposalLaneTests(unittest.TestCase):
         self.rejected(self.invoke(proposal=self.proposal("not a diff\n")), "patch_malformed")
         traversal = self.good_patch().replace("allowed/demo.txt", "allowed/../forbidden.txt")
         self.rejected(self.invoke(proposal=self.proposal(traversal)), "patch_path_invalid")
+        self.rejected(self.invoke(proposal=self.proposal(self.good_patch().replace("allowed/demo.txt", "allowed//demo.txt"))), "patch_path_invalid")
+        self.rejected(self.invoke(proposal=self.proposal(self.good_patch().replace("allowed/demo.txt", "allowed/./demo.txt"))), "patch_path_invalid")
+        self.rejected(self.invoke(proposal=self.proposal(self.good_patch().replace("allowed/demo.txt", ".Git/config"))), "patch_path_invalid")
         self.rejected(self.invoke(contract=self.contract(max_diff_lines=1)), "patch_line_limit")
         second = self.good_patch() + self.good_patch().replace("demo.txt", "other.txt")
         self.rejected(self.invoke(contract=self.contract(max_files=1, max_diff_lines=10), proposal=self.proposal(second)), "patch_file_limit")
@@ -155,9 +159,16 @@ class PatchProposalLaneTests(unittest.TestCase):
         (self.worktree / "allowed" / "demo.txt").write_text("dirty\n")
         self.rejected(self.invoke(), "worktree_not_clean")
         (self.worktree / "allowed" / "demo.txt").write_text("before\n")
-        link = Path(self.temp.name) / "linked-output"
-        link.symlink_to(Path(self.temp.name) / "real-output")
+        link = self.temp_path / "linked-output"
+        link.symlink_to(self.temp_path / "real-output")
         self.rejected(self.invoke(output=link), "output_path_unsafe")
+
+    def test_rejects_symlink_ancestor_and_primary_checkout_contract(self):
+        wrapper = self.temp_path / "wrapper"
+        wrapper.symlink_to(self.temp_path, target_is_directory=True)
+        self.rejected(self.invoke(contract=self.contract(repo=str(wrapper / "worker"), worktree=str(wrapper / "worker"))), "worktree_unsafe")
+        main_branch = run("git", "branch", "--show-current", cwd=self.main).stdout.strip()
+        self.rejected(self.invoke(contract=self.contract(repo=str(self.main), worktree=str(self.main), branch=main_branch)), "worktree_primary_checkout")
 
     def test_question_never_applies_or_merges(self):
         proposal = self.proposal(result="QUESTION", patch="", architecture_question="Need design", unresolved=["missing fact"])
