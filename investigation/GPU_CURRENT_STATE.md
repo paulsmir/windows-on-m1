@@ -82,6 +82,9 @@ the first unresolved production owner.
 Commit73d91c7 adds the first Windows-native BO lifecycle substrate on existing
 AGX_WIN32_SCREEN buffers. Host lifecycle test PASS. It contains no GPUVA,
 residency or submit semantics and is not installed in Mesa agx_device_ops.
+Commit8fd2343 includes this wrapper in the WDK UMD contract project; x64 build
+and execution PASS. Next unresolved integration: real Mesa agx_bo creation must
+own this buffer and association; current wrapper is not a Mesa device backend.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
