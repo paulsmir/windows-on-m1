@@ -85,6 +85,11 @@ residency or submit semantics and is not installed in Mesa agx_device_ops.
 Commit8fd2343 includes this wrapper in the WDK UMD contract project; x64 build
 and execution PASS. Next unresolved integration: real Mesa agx_bo creation must
 own this buffer and association; current wrapper is not a Mesa device backend.
+Commitb119505 adds construction-address allocation for token/serial/generation
+objects with fail-closed resolve/release behavior. Its host test passes. It is
+intentionally not yet attached to native BO lifecycle because BO destroy must
+release construction identity exactly once. That lifetime link belongs in the
+real native agx_bo backend.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
