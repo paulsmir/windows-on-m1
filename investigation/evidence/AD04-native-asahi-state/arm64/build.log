@@ -1,0 +1,386 @@
+clang-cl: warning: argument unused during compilation: '/Zc:enumTypes' [-Wunused-command-line-argument]
+clang-cl: warning: argument unused during compilation: '/Zc:preprocessor' [-Wunused-command-line-argument]
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c:8:
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.h:16:
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\asahi/lib/agx_device.h:27:
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(26,55): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   26 |    static_assert(__builtin_ctz(1) == AGX_INDEX_SIZE_U8);
+      |                                                       ^
+      |                                                       , ""
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(27,56): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   27 |    static_assert(__builtin_ctz(2) == AGX_INDEX_SIZE_U16);
+      |                                                        ^
+      |                                                        , ""
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(28,56): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   28 |    static_assert(__builtin_ctz(4) == AGX_INDEX_SIZE_U32);
+      |                                                        ^
+      |                                                        , ""
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(237,4): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+  237 |    agx_push_packed(out, launch, CDM_LAUNCH_WORD_0);
+      |    ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(18,49): note: expanded from macro 'agx_push_packed'
+   18 |    static_assert(sizeof(src) == AGX_##T##_LENGTH);                             \
+      |                                                 ^
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c:19:
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi/libagx/compression.h(13,60): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+   13 | static_assert(sizeof(struct libagx_decompress_images) == 48);
+      |                                                            ^
+      |                                                            , ""
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c:63:
+In file included from C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated\src\asahi\libagx\libagx.h:11:
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1929,11): warning: misleading indentation; statement is not part of the previous 'if' [-Wmisleading-indentation]
+ 1929 |    UNUSED nir_deref_instr *leader_parent = nir_src_as_deref(leader->parent);
+      |           ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir_builder.h(1926,4): note: previous statement is here
+ 1926 |    if (leader->parent.ssa == &parent->def)
+      |    ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1458,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1458 |       NIR_PASS(_, nir, agx_nir_lower_interpolation);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1469,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1469 |       NIR_PASS(_, nir, agx_nir_lower_sysvals, stage, true);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1470,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1470 |       NIR_PASS(_, nir, agx_nir_layout_uniforms, compiled,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1531,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1531 |          NIR_PASS(_, nir, poly_nir_lower_tes, key->hw);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1533,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1533 |          NIR_PASS(_, nir, agx_nir_gather_vs_inputs, attrib_components_read);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1534,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1534 |          NIR_PASS(_, nir, agx_nir_lower_vs_input_to_prolog);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1538,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1538 |          NIR_PASS(_, nir, agx_nir_lower_point_size, true);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1539,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1539 |          NIR_PASS(_, nir, nir_lower_clip_halfz_dynamic);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1541,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1541 |          NIR_PASS(_, nir, nir_lower_io_to_scalar, nir_var_shader_out, NULL,
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1543,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1543 |          NIR_PASS(_, nir, agx_nir_lower_cull_distance_vs);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1544,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1544 |          NIR_PASS(_, nir, agx_nir_lower_uvs, &uvs);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1546,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1546 |          NIR_PASS(_, nir, poly_nir_lower_vs_before_gs);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1555,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1555 |       NIR_PASS(_, nir, poly_nir_lower_tcs, true);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1557,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1557 |       NIR_PASS(_, nir, poly_nir_lower_gs, &gs_count, &gs_copy, &pre_gs,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1567,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1567 |       NIR_PASS(_, nir, agx_nir_lower_discard_zs_emit);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1568,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1568 |       NIR_PASS(_, nir, agx_nir_lower_fs_output_to_epilog, &epilog_key);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1582,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1582 |          NIR_PASS(_, nir, agx_nir_lower_tilebuffer, &tib, NULL, &rt_spill, NULL,
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1595,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1595 |          NIR_PASS(_, nir, agx_nir_lower_to_per_sample);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1598,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1598 |       NIR_PASS(_, nir, agx_nir_lower_sample_mask);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1599,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1599 |       NIR_PASS(_, nir, agx_nir_lower_fs_active_samples_to_register);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1602,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1602 |    NIR_PASS(_, nir, agx_nir_lower_multisampled_image_store);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1637,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1637 |       NIR_PASS(_, gs_copy, agx_nir_lower_point_size, false);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1639,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1639 |       NIR_PASS(_, gs_copy, nir_lower_clip_halfz_dynamic);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1641,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1641 |       NIR_PASS(_, gs_copy, nir_lower_io_to_scalar, nir_var_shader_out, NULL,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1643,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1643 |       NIR_PASS(_, gs_copy, agx_nir_lower_cull_distance_vs);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1646,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1646 |       NIR_PASS(_, gs_copy, agx_nir_lower_uvs, &uvs);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1748,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1748 |    NIR_PASS(_, nir, nir_lower_robust_access, should_lower_robustness, &robust);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1751,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1751 |    NIR_PASS(_, nir, agx_nir_lower_texture_early, support_lod_bias);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1756,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1756 |    NIR_PASS(_, nir, agx_nir_lower_bindings, &so->uses_bindless_samplers);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1762,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1762 |    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1787,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1787 |          NIR_PASS(_, nir, nir_lower_mediump_io,
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1802,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1802 |    NIR_PASS(_, nir, nir_lower_alu_to_scalar, NULL, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1803,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1803 |    NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1804,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1804 |    NIR_PASS(_, nir, agx_nir_cleanup_amul);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1805,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1805 |    NIR_PASS(_, nir, nir_opt_constant_folding);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1806,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1806 |    NIR_PASS(_, nir, nir_opt_copy_prop);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1807,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1807 |    NIR_PASS(_, nir, nir_opt_cse);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1808,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1808 |    NIR_PASS(_, nir, nir_opt_dce);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1809,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1809 |    NIR_PASS(_, nir, nir_opt_shrink_vectors, true);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1810,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1810 |    NIR_PASS(_, nir, nir_opt_copy_prop);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1812,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1812 |    NIR_PASS(
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1819,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1819 |    NIR_PASS(_, nir, agx_nir_lower_texture);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1820,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1820 |    NIR_PASS(_, nir, nir_lower_ssbo, NULL);
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1827,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1827 |       NIR_PASS(_, nir, nir_shader_intrinsics_pass,
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1832,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 1832 |       NIR_PASS(_, nir, agx_nir_lower_sample_intrinsics, true);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(2079,4): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2079 |    NIR_PASS(_, b->shader, nir_shader_intrinsics_pass, lower_fs_prolog_abi,
+      |    ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(2582,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2582 |       NIR_PASS(_, b.shader, agx_nir_lower_texture);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(2583,7): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 2583 |       NIR_PASS(_, b.shader, agx_nir_lower_multisampled_image_store);
+      |       ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(3491,7): warning: '_Static_assert' with no message is a C23 extension [-Wc23-extensions]
+ 3491 |       agx_push_packed(out, vs->uvs.vdm, VDM_STATE_VERTEX_OUTPUTS);
+      |       ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(18,49): note: expanded from macro 'agx_push_packed'
+   18 |    static_assert(sizeof(src) == AGX_##T##_LENGTH);                             \
+      |                                                 ^
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(4494,10): warning: variable '_' set but not used [-Wunused-but-set-variable]
+ 4494 |          NIR_PASS(_, nir, nir_lower_system_values);
+      |          ^
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\compiler/nir/nir.h(5391,19): note: expanded from macro 'NIR_PASS'
+ 5391 |       UNUSED bool _;                                                                     \
+      |                   ^
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c:8:
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.h:16:
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\asahi/lib/agx_device.h:27:
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(83,1): warning: unused function 'agx_2d' [-Wunused-function]
+   83 | agx_2d(uint32_t x, uint32_t y)
+      | ^~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\asahi\libagx\libagx_dgc.h(210,1): warning: unused function 'agx_direct_draw_overreads_indices' [-Wunused-function]
+  210 | agx_direct_draw_overreads_indices(struct agx_draw d)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c:8:
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.h(711,1): warning: unused function 'agx_writer_add' [-Wunused-function]
+  711 | agx_writer_add(struct agx_context *ctx, uint8_t batch_index, unsigned handle)
+      | ^~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.h(733,1): warning: unused function 'agx_writer_get' [-Wunused-function]
+  733 | agx_writer_get(struct agx_context *ctx, unsigned handle)
+      | ^~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.h(747,1): warning: unused function 'agx_writer_remove' [-Wunused-function]
+  747 | agx_writer_remove(struct agx_context *ctx, unsigned handle)
+      | ^~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1375,1): warning: unused function 'asahi_vs_shader_key_table_init' [-Wunused-function]
+ 1375 | DERIVE_HASH_TABLE(asahi_vs_shader_key);
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/hash_table.h(219,30): note: expanded from macro 'DERIVE_HASH_TABLE'
+  219 |    static UNUSED inline void T##_table_init(struct hash_table *ht, void *memctx) \
+      |                              ^~~~~~~~~~~~~~
+<scratch space>(89,1): note: expanded from here
+   89 | asahi_vs_shader_key_table_init
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1376,1): warning: unused function 'asahi_fs_shader_key_table_init' [-Wunused-function]
+ 1376 | DERIVE_HASH_TABLE(asahi_fs_shader_key);
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/hash_table.h(219,30): note: expanded from macro 'DERIVE_HASH_TABLE'
+  219 |    static UNUSED inline void T##_table_init(struct hash_table *ht, void *memctx) \
+      |                              ^~~~~~~~~~~~~~
+<scratch space>(97,1): note: expanded from here
+   97 | asahi_fs_shader_key_table_init
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(1377,1): warning: unused function 'agx_fast_link_key_table_init' [-Wunused-function]
+ 1377 | DERIVE_HASH_TABLE(agx_fast_link_key);
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-d3d10-frontend-build\mesa\src\util/hash_table.h(219,30): note: expanded from macro 'DERIVE_HASH_TABLE'
+  219 |    static UNUSED inline void T##_table_init(struct hash_table *ht, void *memctx) \
+      |                              ^~~~~~~~~~~~~~
+<scratch space>(105,1): note: expanded from here
+  105 | agx_fast_link_key_table_init
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-native-state-arm64-001\src\gallium\drivers\asahi\agx_state.c(4406,1): warning: unused function 'util_draw_multi_upload_indirect' [-Wunused-function]
+ 4406 | util_draw_multi_upload_indirect(struct pipe_context *pctx,
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+65 warnings generated.

@@ -1,0 +1,10 @@
+{
+  "exit": 0,
+  "first_error": "",
+  "native_draw_executed": false,
+  "pool_exit": 0,
+  "objects": {
+    "agx_state.obj": "ba407b4698f80a417e92c59bec0df6b18e9bdd5aa94d262a54e300c3f3434bad",
+    "pool.obj": "a15573993266ad8e3178cada1f2d6ace3a1145c922fec740bdc27da5fb866e73"
+  }
+}
