@@ -60,6 +60,11 @@ CopySource and create reservation remain absent. Earlier remote uploads placed
 new tests in src/ instead of tests/; revalidate one immutable current-source build
 including EnableMesaPipeFactoryTest before claiming new close/two-hold coverage.
 Exact remaining steps: AD04-OWNER-SLICE-REVIEW.md follow-up. No new design gate.
+Factory compilation probe after current source reached a builder-input blocker
+before agx_d3d10_windows.cpp: pinned Mesa's u_formats.h requires generated
+util/format/u_format_gen.h, absent from supplied MesaGeneratedRoot. This is not
+a driver verdict. Preserve probe failure; next build input must use the matching
+complete Mesa generated directory before evaluating pipe wrapper/close code.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
