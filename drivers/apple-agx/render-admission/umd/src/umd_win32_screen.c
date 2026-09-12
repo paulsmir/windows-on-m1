@@ -36,6 +36,30 @@ static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFreeSlot(
   return NULL;
 }
 
+static ADMISSION_UMD_SOURCE_HOLD_RECORD *AdmissionUmdScreenFreeHold(
+    ADMISSION_UMD_DEVICE *Device) {
+  UINT index;
+  if (Device == NULL)
+    return NULL;
+  for (index = 0u; index < ADMISSION_UMD_SOURCE_HOLD_LIMIT; ++index)
+    if (!Device->SourceHolds[index].Active)
+      return &Device->SourceHolds[index];
+  return NULL;
+}
+
+static ADMISSION_UMD_SOURCE_HOLD_RECORD *AdmissionUmdScreenFindHold(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 HoldId) {
+  UINT index;
+  if (Device == NULL || HoldId == 0ULL)
+    return NULL;
+  for (index = 0u; index < ADMISSION_UMD_SOURCE_HOLD_LIMIT; ++index) {
+    ADMISSION_UMD_SOURCE_HOLD_RECORD *record = &Device->SourceHolds[index];
+    if (record->Active && record->HoldId == HoldId)
+      return record;
+  }
+  return NULL;
+}
+
 static HRESULT AdmissionUmdScreenSourceFromBuffer(
     const ADMISSION_UMD_DEVICE *Device,
     const ADMISSION_UMD_SCREEN_BUFFER *Buffer, APPLE_AGX_U64 Offset,
@@ -53,6 +77,7 @@ static HRESULT AdmissionUmdScreenSourceFromBuffer(
   Source->Bytes = Bytes;
   Source->Generation = Device->Win32Generation;
   Source->MapEpoch = Buffer->MapEpoch;
+  Source->HoldId = 0ULL;
   Source->Address = (PVOID)((BYTE *)Buffer->LockedBase + (SIZE_T)Offset);
   return S_OK;
 }
@@ -81,6 +106,7 @@ HRESULT AdmissionUmdScreenAcquireSource(
     const ADMISSION_UMD_SCREEN_SOURCE *Expected,
     ADMISSION_UMD_SCREEN_SOURCE *Held) {
   ADMISSION_UMD_SCREEN_BUFFER *buffer;
+  ADMISSION_UMD_SOURCE_HOLD_RECORD *record;
   HRESULT result;
   if (Held != NULL)
     ZeroMemory(Held, sizeof(*Held));
@@ -91,13 +117,35 @@ HRESULT AdmissionUmdScreenAcquireSource(
     return E_INVALIDARG;
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(Device, Expected->Token);
-  if (buffer == NULL || Expected->Generation != Device->Win32Generation ||
+  record = AdmissionUmdScreenFreeHold(Device);
+  if (buffer == NULL || record == NULL || buffer->Transition ||
+      Expected->Generation != Device->Win32Generation ||
       buffer->Serial != Expected->Serial || buffer->MapEpoch != Expected->MapEpoch)
     result = E_FAIL;
   else
     result = AdmissionUmdScreenSourceFromBuffer(Device, buffer,
                                                 Expected->Offset,
                                                 Expected->Bytes, Held);
+  if (SUCCEEDED(result)) {
+    APPLE_AGX_U64 holdId = ++Device->NextSourceHoldId;
+    if (holdId == 0ULL)
+      holdId = ++Device->NextSourceHoldId;
+    if (holdId == 0ULL) {
+      result = E_OUTOFMEMORY;
+      ZeroMemory(Held, sizeof(*Held));
+    } else {
+      ZeroMemory(record, sizeof(*record));
+      record->HoldId = holdId;
+      record->Token = Held->Token;
+      record->Serial = Held->Serial;
+      record->Offset = Held->Offset;
+      record->Bytes = Held->Bytes;
+      record->Generation = Held->Generation;
+      record->MapEpoch = Held->MapEpoch;
+      record->Active = TRUE;
+      Held->HoldId = holdId;
+    }
+  }
   if (SUCCEEDED(result))
     ++buffer->SourceHolds;
   ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
@@ -108,17 +156,24 @@ HRESULT AdmissionUmdScreenReleaseSource(
     ADMISSION_UMD_DEVICE *Device,
     const ADMISSION_UMD_SCREEN_SOURCE *Held) {
   ADMISSION_UMD_SCREEN_BUFFER *buffer;
+  ADMISSION_UMD_SOURCE_HOLD_RECORD *record;
   HRESULT result = E_INVALIDARG;
   if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
       Held == NULL || Held->Token == 0ULL || Held->Serial == 0ULL ||
-      Held->Generation == 0u || Held->MapEpoch == 0u || Held->Bytes == 0ULL)
+      Held->Generation == 0u || Held->MapEpoch == 0u || Held->Bytes == 0ULL ||
+      Held->HoldId == 0ULL)
     return E_INVALIDARG;
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(Device, Held->Token);
-  if (buffer != NULL && Held->Generation == Device->Win32Generation &&
+  record = AdmissionUmdScreenFindHold(Device, Held->HoldId);
+  if (buffer != NULL && record != NULL && Held->Generation == Device->Win32Generation &&
       buffer->Serial == Held->Serial && buffer->MapEpoch == Held->MapEpoch &&
-      buffer->SourceHolds != 0u) {
+      buffer->SourceHolds != 0u && record->Token == Held->Token &&
+      record->Serial == Held->Serial && record->Generation == Held->Generation &&
+      record->MapEpoch == Held->MapEpoch && record->Offset == Held->Offset &&
+      record->Bytes == Held->Bytes) {
     --buffer->SourceHolds;
+    ZeroMemory(record, sizeof(*record));
     result = S_OK;
   }
   ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
@@ -309,23 +364,45 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   D3DDDICB_UNLOCK unlock;
   D3DKMT_HANDLE allocation;
   HRESULT result;
-  if (buffer == NULL || !buffer->Mapped || buffer->SourceHolds != 0u ||
-      device->KernelCallbacks == NULL ||
+  if (device == NULL || device->KernelCallbacks == NULL ||
       device->KernelCallbacks->pfnUnlockCb == NULL)
     return 0;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  if (buffer == NULL || !buffer->Mapped || buffer->Transition ||
+      buffer->SourceHolds != 0u) {
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
   allocation = buffer->KernelAllocation;
+  buffer->Transition = TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   ZeroMemory(&unlock, sizeof(unlock));
   unlock.NumAllocations = 1u;
   unlock.phAllocations = &allocation;
   result = device->KernelCallbacks->pfnUnlockCb(
       device->RuntimeDevice.handle, &unlock);
   if (FAILED(result)) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    buffer = AdmissionUmdScreenFind(device, Token);
+    if (buffer != NULL)
+      buffer->Transition = FALSE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     device->LastScreenError = result;
+    return 0;
+  }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  if (buffer == NULL || buffer->KernelAllocation != allocation) {
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    device->LastScreenError = E_FAIL;
     return 0;
   }
   buffer->LockedBase = NULL;
   buffer->LockedAccess = 0u;
   buffer->Mapped = FALSE;
+  buffer->Transition = FALSE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError = S_OK;
   return 1;
 }
@@ -338,21 +415,42 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
   D3DDDICB_DEALLOCATE deallocate;
   D3DKMT_HANDLE allocation;
   HRESULT result;
-  if (buffer == NULL || buffer->Mapped || buffer->SourceHolds != 0u ||
-      device->KernelCallbacks == NULL ||
+  if (device == NULL || device->KernelCallbacks == NULL ||
       device->KernelCallbacks->pfnDeallocateCb == NULL)
     return 0;
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  if (buffer == NULL || buffer->Mapped || buffer->Transition ||
+      buffer->SourceHolds != 0u) {
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
   allocation = buffer->KernelAllocation;
+  buffer->Transition = TRUE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   ZeroMemory(&deallocate, sizeof(deallocate));
   deallocate.NumAllocations = 1u;
   deallocate.HandleList = &allocation;
   result = device->KernelCallbacks->pfnDeallocateCb(
       device->RuntimeDevice.handle, &deallocate);
   if (FAILED(result)) {
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    buffer = AdmissionUmdScreenFind(device, Token);
+    if (buffer != NULL)
+      buffer->Transition = FALSE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     device->LastScreenError = result;
     return 0;
   }
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  if (buffer == NULL || buffer->KernelAllocation != allocation) {
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    device->LastScreenError = E_FAIL;
+    return 0;
+  }
   ZeroMemory(buffer, sizeof(*buffer));
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError = S_OK;
   return 1;
 }

@@ -714,6 +714,7 @@ int main(void) {
   void *sourceMap = NULL;
   ADMISSION_UMD_SCREEN_SOURCE sourceIdentity;
   ADMISSION_UMD_SCREEN_SOURCE sourceHold;
+  ADMISSION_UMD_SCREEN_SOURCE sourceHoldSecond;
   void *encoderMap = NULL;
   HANDLE failedCompletionEvent = NULL;
   HANDLE teardownCompletionEvent = NULL;
@@ -842,6 +843,10 @@ int main(void) {
   sourceIdentity.Bytes = 0x400u;
   CHECK(AdmissionUmdScreenAcquireSource(deviceState, &sourceIdentity,
                                         &sourceHold) == S_OK);
+  CHECK(AdmissionUmdScreenAcquireSource(deviceState, &sourceIdentity,
+                                        &sourceHoldSecond) == S_OK);
+  CHECK(sourceHold.HoldId != 0ULL &&
+        sourceHoldSecond.HoldId != sourceHold.HoldId);
   CHECK(sourceHold.Address == InternalAllocationData + 0x200u);
   CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
         AgxWin32ScreenCallback);
@@ -849,6 +854,10 @@ int main(void) {
         AgxWin32ScreenState);
   CHECK(AdmissionUmdScreenReleaseSource(deviceState, &sourceHold) == S_OK);
   CHECK(AdmissionUmdScreenReleaseSource(deviceState, &sourceHold) != S_OK);
+  CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
+        AgxWin32ScreenCallback);
+  CHECK(AdmissionUmdScreenReleaseSource(deviceState, &sourceHoldSecond) ==
+        S_OK);
   CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
         AgxWin32ScreenSuccess);
   CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &sourceBuffer) ==
