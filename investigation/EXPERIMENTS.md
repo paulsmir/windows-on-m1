@@ -43005,6 +43005,19 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+# AD04-VIDMM-DOMAIN-GATE — 2026-09-12 — SOURCE ONLY
+
+Input e8e276a; decision eed8ea2f0a70c46ad59a6419ba4dbb7e67a0438d.
+Classic4KiB logical semantics/4K64K page choices do not establish a negotiated
+16KiB-only input guarantee. Explicit16KiB hardware projection note preserved.
+WDK26100 has DXGK_PAGESIZE_16KB in WDDM3_2 page-based declarations; public docs
+are prerelease, full applicable production contract/enablement not established.
+Current driver registersWDDM3.0. Verdict NO for the current-target migration;
+no additional GPUVA implementation. Returned to physical/patch-list typed
+relocation adapter assessment only. No build, code, caps, feature overrides,
+Air, hardware, new agents or push. Prior model PASS remains scoped, not erased.
+Sources and minimal adapter scope: agent_tasks/AD04-VIDMM-INPUT-DOMAIN-GATE.md.
+
 # AD04-GPUVA-MODEL — 2026-09-12 — OFFLINE ONLY
 
 User-approved finite model at c0f25eb1c94e3628549cd7c6fd83664017fc3a3f.

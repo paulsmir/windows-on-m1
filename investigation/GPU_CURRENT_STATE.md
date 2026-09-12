@@ -29,37 +29,25 @@ Closed portability: atomics, agx_index, internal off_t, LUT, math constants,
 assembly forced-include guard, Windows null device, FPCR, alloca include.
 Do not reopen without a new failing input.
 
-## First current boundary — frontend ownership
-Existing Windows device owner and project pipe wrapper are retained.
-Native agx_bo needs GPU VA and a defined validity/lifetime; Windows buffer API
-currently exposes token/bytes/flags/generation and CPU mapping, not GPU binding.
-User approved explicit Windows/VidMm-owned binding separately from residency,
-conditional on current virtual-mode proof; mandatory STOP if physical/patch-list.
-SOURCE VERDICT: physical/patch-list. ContextInfo has allocation/patch lists;
-DRIVERCAPS has no GPU-MMU opt-in; SubmitCommandVirtual/CreateProcess fail closed;
-dynamic Render resolves segment PhysicalAddress to internal AGX mapping.
-Internal UAT addresses are not persistent VidMm process GPUVA.
-User subsequently approved OPTION1 DESIGN ONLY. Source-first study completed:
-GpuMmu migration CONDITIONAL via separate VidMm process TTBR0 roots and untouched
-firmware context0/retained TTBR1, not a shared process aperture in one global root.
-Native Asahi G13 keeps user TTBR1 absent; current broker v4/context63 path lacks
-the required process namespace/slot lifecycle. WDK26100 UpdatePageTable explicitly
-allows16KiB GPU pages, but logical4KiB updates, table placement, physical backing,
-bootstrap and process/private isolation still require proof. No caps/DDI/code change.
-Design: docs/superpowers/specs/2026-09-12-windows-gpummu-retained-root-feasibility.md.
-User authorized offline model; completed c0f25eb1c94e3628549cd7c6fd83664017fc3a3f.
-238 behavior checks pass using unchanged shared UAT functions with ASan/UBSan.
-System paging process + P/Q equal-VA isolation, root movement, slot generations,
-fence domains and binding/residency/eviction/remap pass in the finite model.
-Arbitrary independent4KiB mappings/protections inside16KiB have a concrete
-unrepresentable counterexample; fail-closed detection passes, universal translation
-does NOT. Whether VidMm must produce those inputs for the chosen descriptor/
-segment contract is NOT proved. Migration remains CONDITIONAL, not enabled.
-Evidence: evidence/AD04-gpuva-semantic-model/run-004; results and assumptions:
-agent_tasks/AD04-GPUVA-SEMANTIC-MODEL.md. Minimal production slice designed only:
-docs/superpowers/specs/2026-09-12-gpuva-minimal-migration-slice.md.
-Next: close admissible4K-update domain gate; if mandatory unrepresentable cases
-cannot be supported, stop GPUVA and return to relocation. No production DDIs/Air.
+## First current boundary — physical relocation adapter
+VidMm input-domain gate completed, current-target GPUVA migration NO.
+Do not implement the proposed GPUVA slice or enable new caps.
+Classic has4KiB logical updates and4K/64K page-table choices; the documented
+16KiB hardware projection is not a negotiated16KiB-only input guarantee.
+WDK26100 does contain DXGK_PAGESIZE_16KB underWDDM3_2, consumed by the new
+page-based family. Public16K docs are prerelease; current driver is WDDM3.0,
+with no established supported/negotiated replacement contract. No live Air
+feature query was performed. This is current-target no-go, not a universal
+claim that future/larger-page Windows implementations are impossible.
+Decision/primary sources: agent_tasks/AD04-VIDMM-INPUT-DOMAIN-GATE.md,
+commit eed8ea2f0a70c46ad59a6419ba4dbb7e67a0438d.
+The238-check model remains a scoped PASS with explicit arbitrary4K
+counterexamples; it never proved the VidMm input domain.
+Next assessed direction: existing device owner + real Asahi BO/pool pointer
+provenance -> typed relocation records -> existing physical Render/Patch/
+SubmitCommand and exact fences. Initial offline direct-draw closure only;
+no untracked pointer scanning, no fake GPUVA, no residency inferred from BO.
+No adapter implementation authorized/performed in this source-only step.
 
 ## Machine / hardware
 No Air action this phase. Last verified Air:2026-09-09T13:13:40Z ordinary377/392,

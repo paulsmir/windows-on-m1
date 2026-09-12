@@ -1,18 +1,18 @@
 {
-  "head": "c0f25eb1c94e3628549cd7c6fd83664017fc3a3f",
+  "head": "eed8ea2f0a70c46ad59a6419ba4dbb7e67a0438d",
   "last_pass": "238 offline semantic-model checks, shared UAT, ASan/UBSan; compiler milestone unchanged",
-  "first_error": "UNRESOLVED: all VidMm-admissible updates must fit16KiB representation. Arbitrary4K scatter/mixed permissions have a counterexample; actual required input domain is not proven.",
+  "first_error": "Current-target GPUVA NO: no supported16K-only VidMm input guarantee. Next is source-only assessment of typed physical relocation for native Asahi.",
   "include_or_call_chain": [
-    "normalized4K updates -> merge group -> coarsen -> shared UAT map/walk",
-    "system bootstrap -> user root -> paging publication -> independent residency -> slot/render lease",
-    "fail-closed unsupported translation does not equal successful VidMm mapping"
+    "native BO/pool provenance -> typed address-field relocation records",
+    "Windows allocation/reference list -> physical Render/Patch -> immutable command image -> SubmitCommand/fence",
+    "all nested pointers require closure; current seven kinds are not a full native adapter"
   ],
   "definitions": [
-    "gm_pte4 is a normalized subset, not DXGK_PTE ABI implementation",
-    "gm_coarsen accepts aligned contiguous equally protected groups or complete invalidation",
-    "one16KiB leaf cannot encode independently scattered4KiB backing or mixed protection",
-    "residency and invalidation are explicit abstract events, not real VidMm/EL2 operations",
-    "Migration CONDITIONAL; no unrestricted GPUVA support claim"
+    "classic DXGK_PTE_PAGE_SIZE has4K/64K only;16K hardware projection note is not an input guarantee",
+    "WDK26100 DXGK_PAGESIZE_16KB exists underWDDM3_2; public docs prerelease; driver registersWDDM3.0",
+    "Page-based SlabSize and MMU interfaces cannot silently substitute classic process GPUVA semantics",
+    "internal symbolic BO references are not Windows GPUVA or PA",
+    "residency and all in-flight resource/image lifetimes remain explicit in physical mode"
   ],
   "overlays": [
     "uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR",
@@ -23,27 +23,37 @@
     "agx_spill canonical c99_alloca include"
   ],
   "constraints": [
-    "offline model only; minimal production slice remains gated design",
+    "source-only gate and relocation assessment; no implementation",
     "direct Tier-A; no Devstral/subagents",
     "no hardware/push/architect checkout/native-ANS",
     "no production caps/DDIs firmware/broker changes",
-    "Do not signal mapping success for unrepresentable legal VidMm input; fundamental incompatibility means relocation fallback"
+    "current-target GPUVA is stopped; reassess only with exact supported contract and approved target change"
   ],
   "source": [
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model.c",
-      "start": 67,
-      "text": "enum gm_result gm_coarsen(const gm_pte4 entries[4],uint64_t *pa,unsigned *write) {\n  if(!entries || !pa || !write) return GM_RANGE;\n  unsigned valid=0;\n  for(unsigned i=0;i<4;++i) valid|=entries[i].valid;\n  if(!valid) { *pa=0; *write=0; return GM_UNMAP; }\n  /* One actual UAT leaf has one aligned base and one protection/validity.\n   * No invented aliases, rounding over holes, bounce copies or hidden heap. */\n  if(!entries[0].valid || (entries[0].pa&(GM_PAGE-1)) ||\n     entries[0].pa>=(1ULL<<40) || GM_PAGE>(1ULL<<40)-entries[0].pa)\n    return GM_UNREPRESENTABLE;\n  for(unsigned i=0;i<4;++i)\n    if(entries[i].valid!=1 || entries[i].writable>1 ||\n       entries[i].writable!=entries[0].writable || entries[i].pa!=entries[0].pa+i*0x1000ULL)\n      return GM_UNREPRESENTABLE;\n  *pa=entries[0].pa; *write=entries[0].writable; return GM_OK;\n}\nenum gm_result gm_merge4(const gm_pte4 before[4],unsigned first,unsigned count,\n                        const gm_pte4 *updates,gm_pte4 after[4]) {\n  if(!before || !updates || !after || !count || first>=4 || count>4-first) return GM_RANGE;\n  gm_pte4 candidate[4]; uint64_t pa; unsigned write;\n  memcpy(candidate,before,sizeof(candidate));\n  memcpy(candidate+first,updates,count*sizeof(*updates));\n  enum gm_result r=gm_coarsen(candidate,&pa,&write);\n  if(r==GM_OK || r==GM_UNMAP) memcpy(after,candidate,sizeof(candidate));\n  return r;\n}\nstatic void paging_issue(gm_process *p,gm_fence *f) {\n  ++p->map_gen; ++p->paging_issued;"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/driver.c",
+      "start": 10,
+      "text": "  DRIVER_INITIALIZATION_DATA initialization;\n  NTSTATUS status;\n\n  PAGED_CODE();\n  RtlZeroMemory(&initialization, sizeof(initialization));\n  initialization.Version = DXGKDDI_INTERFACE_VERSION_WDDM3_0;\n  initialization.DxgkDdiAddDevice = AdmissionDdiAddDevice;\n  initialization.DxgkDdiStartDevice = AdmissionDdiStartDevice;\n  initialization.DxgkDdiStopDevice = AdmissionDdiStopDevice;\n  initialization.DxgkDdiRemoveDevice = AdmissionDdiRemoveDevice;\n  initialization.DxgkDdiDispatchIoRequest = AdmissionDdiDispatchIoRequest;"
     },
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model_test.c",
-      "start": 134,
-      "text": "static void translation_domain(void) {\n  gm_pte4 entries[4]; uint64_t pa=0; unsigned write=0;\n  ptes(entries,PA_P); CHECK(gm_coarsen(entries,&pa,&write)==GM_OK && pa==PA_P && write==1);\n  for(unsigned i=0;i<4;++i) entries[i].writable=0;\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_OK && write==0);\n  /* All nontrivial4K validity/protection partitions are not one16K PTE. */\n  for(unsigned mask=1;mask<15;++mask) {\n    ptes(entries,PA_P);\n    for(unsigned i=0;i<4;++i) entries[i].valid=(mask>>i)&1;\n    CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n    ptes(entries,PA_P);\n    for(unsigned i=0;i<4;++i) entries[i].writable=(mask>>i)&1;\n    CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n  }\n  ptes(entries,PA_P); entries[1].pa=0x21001000;\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n  ptes(entries,PA_P+0x1000);\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n  reset(); gm_binding b=ready(0,PA_P); gm_fence f; uint64_t before;\n  CHECK(gm_translate(m,0,VA,&before)==GM_OK && before==PA_P);\n  CHECK(gm_translate(m,0,VA+0x1000,&pa)==GM_OK && pa==PA_P+0x1000);\n  CHECK(pa!=0x21001000ULL); /* Actual shared UAT walk cannot supply scatter target. */\n  CHECK(gm_map(m,b,entries,&f)!=GM_OK);\n  CHECK(gm_translate(m,0,VA,&pa)==GM_OK && pa==before);\n  /* Counterexample is independent of translator: no single aligned base can\n   * simultaneously equal PA_P at offset0 and0x21001000 at offset4096. */\n  CHECK((PA_P+0x1000ULL)!=0x21001000ULL);\n  reset(); CHECK(gm_bootstrap(m,0)==GM_OK); CHECK(gm_reserve(m,0,VA,&b)==GM_OK);\n  ptes(entries,PA_P); entries[1].pa=0x21001000ULL;\n  CHECK(gm_map(m,b,entries,&f)==GM_UNREPRESENTABLE);\n  CHECK(!m->process[0].mapped && m->process[0].paging_issued==0);\n  CHECK(gm_translate(m,0,VA,&pa)!=GM_OK);\n  memset(entries,0,sizeof(entries));\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_UNMAP && pa==0);\n}\nstatic void readonly_projection(void) {\n  reset(); CHECK(gm_bootstrap(m,0)==GM_OK);\n  gm_binding b; gm_fence f; gm_pte4 entries[4];\n  CHECK(gm_reserve(m,0,VA,&b)==GM_OK); ptes(entries,PA_P);\n  for(unsigned i=0;i<4;++i) entries[i].writable=0;\n  CHECK(gm_map(m,b,entries,&f)==GM_OK);\n  unsigned long long pa,descriptor;\n  CHECK(AppleAgxUatResolvePage(1,&m->process[0].roots,VA,&m->process[0].inventory,\n                              &pa,&descriptor)==AppleAgxUatResultOk);\n  CHECK((descriptor&(1ULL<<54))==0); /* Pinned shared readonly encoding, not hardware test. */\n  CHECK(gm_flush(m,0)==GM_OK); CHECK(gm_paging_complete(m,f)==GM_OK);\n  CHECK(gm_evict(m,b,&f)==GM_OK); CHECK(gm_flush(m,0)==GM_OK);\n  CHECK(gm_paging_complete(m,f)==GM_OK); ptes(entries,PA_P);\n  CHECK(gm_map(m,b,entries,&f)==GM_OK);"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/gdi_windows.c",
+      "start": 628,
+      "text": "            Args->SubmissionFenceId) ||\n        !AppleAgxDmaShadowMatchesU64(\n            shadow.Storage, shadow.BytesUsed,\n            patch.PatchOffset, destination.GpuVirtualAddress))\n      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,\n                          STATUS_INVALID_DEVICE_STATE);\n  } else {\n    if ((dynamicDma\n             ? AdmissionDynamicDmaPatchDestination(\n                   (PVOID)view.Bytes, view.DmaBytes,\n                   destination.GpuVirtualAddress) !=\n                   AdmissionDynamicDmaSuccess\n             : !AppleAgxDmaShadowPatchU64(\n                   shadow.Storage, shadow.BytesUsed,\n                   patch.PatchOffset, destination.GpuVirtualAddress)) ||\n        !AppleAgxDmaShadowSeal(&shadow, Args->SubmissionFenceId))\n      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,\n                          STATUS_INVALID_DEVICE_STATE);\n  }\n  if (dynamicDma) {\n    if (AdmissionDynamicDmaPatchDestination(\n            (PUCHAR)Args->pDmaBuffer +\n                Args->DmaBufferSubmissionStartOffset,\n            Args->DmaBufferSubmissionEndOffset -\n                Args->DmaBufferSubmissionStartOffset,\n            destination.GpuVirtualAddress) != AdmissionDynamicDmaSuccess)\n      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardSeal,\n                          STATUS_INVALID_DEVICE_STATE);\n  } else {\n    RtlCopyMemory(\n        (PUCHAR)Args->pDmaBuffer + patch.PatchOffset,\n        &destination.GpuVirtualAddress,\n        sizeof(destination.GpuVirtualAddress));"
     },
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model_test.c",
-      "start": 115,
-      "text": "static void bootstrap_without_render(void) {\n  gm_initialize(m); CHECK(gm_create(m,0)==GM_OK);\n  CHECK(gm_bootstrap(m,0)==GM_DEPENDENCY);\n  reset(); CHECK(m->slot_owner==-1 && m->render_issued==0);\n  (void)ready(0,PA_P);\n  CHECK(m->slot_owner==-1 && m->render_issued==0 && m->process[0].paging_done==1);\n  CHECK(m->process[GM_SYSTEM].roots.Ttbr0PhysicalAddress!=m->process[0].roots.Ttbr0PhysicalAddress);\n  CHECK(gm_destroy(m,GM_SYSTEM)==GM_BUSY);\n}\nstatic void relocated_root_rejects_actual_old_lease(void) {"
+      "path": "/Users/pavel/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c",
+      "start": 2880,
+      "text": "   unsigned constant_push_ranges = DIV_ROUND_UP(cs->b.info.rodata.size_16, 64);\n\n   size_t usc_size =\n      agx_usc_size(constant_push_ranges + cs->push_range_count + 2);\n\n   struct agx_ptr t =\n      agx_pool_alloc_aligned(&batch->pipeline_pool, usc_size, 64);\n\n   struct agx_usc_builder b = agx_usc_builder(t.cpu, usc_size);\n\n   mesa_shader_stage stage = cs->stage;\n\n   if (batch->texture_count[stage]) {\n      agx_usc_pack(&b, TEXTURE, cfg) {\n         cfg.start = 0;\n         cfg.count =\n            MIN2(batch->texture_count[stage], AGX_NUM_TEXTURE_STATE_REGS);\n         cfg.buffer = batch->stage_uniforms[stage].texture_base;\n      }\n   }"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c",
+      "start": 2923,
+      "text": "   }\n\n   if (cs->bo) {\n      agx_usc_immediates(&b, &cs->b.info.rodata, cs->bo->va->addr);\n   }\n\n   uint32_t max_scratch_size =\n      MAX2(cs->b.info.scratch_size, cs->b.info.preamble_scratch_size);\n\n   if (max_scratch_size > 0) {\n      unsigned preamble_size = (cs->b.info.preamble_scratch_size > 0) ? 1 : 0;"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/shared/include/apple_agx_win32_abi.h",
+      "start": 71,
+      "text": "typedef enum _APPLE_AGX_WIN32_RELOCATION_KIND {\n  AppleAgxWin32RelocationEncoderAddress = 1u,\n  AppleAgxWin32RelocationPipelineAddress = 2u,\n  AppleAgxWin32RelocationDescriptorAddress = 3u,\n  AppleAgxWin32RelocationUscShaderOffset32 = 4u,\n  AppleAgxWin32RelocationUscBufferAddress40 = 5u,\n  AppleAgxWin32RelocationVdmPipelineOffset32 = 6u,\n  AppleAgxWin32RelocationPppStateAddress40 = 7u,\n} APPLE_AGX_WIN32_RELOCATION_KIND;\n"
     }
   ]
 }

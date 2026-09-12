@@ -1,13 +1,15 @@
 {
   "last_pass": "238 offline semantic-model checks, shared UAT, ASan/UBSan; compiler milestone unchanged",
-  "first_error": "UNRESOLVED: all VidMm-admissible updates must fit16KiB representation. Arbitrary4K scatter/mixed permissions have a counterexample; actual required input domain is not proven.",
-  "include_or_call_chain": ["normalized4K updates -> merge group -> coarsen -> shared UAT map/walk", "system bootstrap -> user root -> paging publication -> independent residency -> slot/render lease", "fail-closed unsupported translation does not equal successful VidMm mapping"],
-  "definitions": ["gm_pte4 is a normalized subset, not DXGK_PTE ABI implementation", "gm_coarsen accepts aligned contiguous equally protected groups or complete invalidation", "one16KiB leaf cannot encode independently scattered4KiB backing or mixed protection", "residency and invalidation are explicit abstract events, not real VidMm/EL2 operations", "Migration CONDITIONAL; no unrestricted GPUVA support claim"],
+  "first_error": "Current-target GPUVA NO: no supported16K-only VidMm input guarantee. Next is source-only assessment of typed physical relocation for native Asahi.",
+  "include_or_call_chain": ["native BO/pool provenance -> typed address-field relocation records", "Windows allocation/reference list -> physical Render/Patch -> immutable command image -> SubmitCommand/fence", "all nested pointers require closure; current seven kinds are not a full native adapter"],
+  "definitions": ["classic DXGK_PTE_PAGE_SIZE has4K/64K only;16K hardware projection note is not an input guarantee", "WDK26100 DXGK_PAGESIZE_16KB exists underWDDM3_2; public docs prerelease; driver registersWDDM3.0", "Page-based SlabSize and MMU interfaces cannot silently substitute classic process GPUVA semantics", "internal symbolic BO references are not Windows GPUVA or PA", "residency and all in-flight resource/image lifetimes remain explicit in physical mode"],
   "overlays": ["uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR", "agx_index homogeneous internal bitfields", "agx_pack internal off_t storage", "canonical LUT clang guard", "agx_compile Windows NUL debug selftest", "agx_spill canonical c99_alloca include"],
-  "constraints": ["offline model only; minimal production slice remains gated design", "direct Tier-A; no Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "no production caps/DDIs firmware/broker changes", "Do not signal mapping success for unrepresentable legal VidMm input; fundamental incompatibility means relocation fallback"],
+  "constraints": ["source-only gate and relocation assessment; no implementation", "direct Tier-A; no Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "no production caps/DDIs firmware/broker changes", "current-target GPUVA is stopped; reassess only with exact supported contract and approved target change"],
   "source": [
-    {"path":"tests/models/gpuva_semantic_model.c","start":67,"end":94},
-    {"path":"tests/models/gpuva_semantic_model_test.c","start":134,"end":182},
-    {"path":"tests/models/gpuva_semantic_model_test.c","start":115,"end":124}
+    {"path":"drivers/apple-agx/render-admission/src/driver.c","start":10,"end":20},
+    {"path":"drivers/apple-agx/render-admission/src/gdi_windows.c","start":628,"end":660},
+    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c","start":2880,"end":2899},
+    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/gallium/drivers/asahi/agx_state.c","start":2923,"end":2933},
+    {"path":"drivers/apple-agx/shared/include/apple_agx_win32_abi.h","start":71,"end":80}
   ]
 }
