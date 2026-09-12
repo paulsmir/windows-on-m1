@@ -175,7 +175,7 @@ static struct pipe_resource *pipe_resource_create(
   uint64_t allocationBytes;
   uint32_t pitch;
   uint32_t bpp;
-  AGX_WIN32_SCREEN_RESULT result;
+  AGX_WIN32_SCREEN_RESULT result = AgxWin32ScreenState;
   const AGX_WIN32_BUFFER_CLASS_INFO *classInfo = screen == NULL
       ? NULL : pipe_buffer_class(screen->Screen, AgxWin32BufferClassGeneral);
   if (screen == NULL || classInfo == NULL ||
