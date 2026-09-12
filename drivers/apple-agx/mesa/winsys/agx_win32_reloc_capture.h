@@ -44,6 +44,11 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocField(AGX_WIN32_RELOC_CAPTURE *,
 AGX_WIN32_RELOC_RESULT AgxWin32RelocSeal(AGX_WIN32_RELOC_CAPTURE *,
     const APPLE_AGX_WIN32_DRAW_PAYLOAD *, void *Command,
     APPLE_AGX_U32 Capacity, APPLE_AGX_U32 *Bytes);
+/* Legacy seal emits v1. Native stage paths choose v2 explicitly. */
+AGX_WIN32_RELOC_RESULT AgxWin32RelocSealVersion(
+    AGX_WIN32_RELOC_CAPTURE *, APPLE_AGX_U16 CommandVersion,
+    const APPLE_AGX_WIN32_DRAW_PAYLOAD *, void *Command,
+    APPLE_AGX_U32 Capacity, APPLE_AGX_U32 *Bytes);
 AGX_WIN32_RELOC_RESULT AgxWin32RelocSubmitted(AGX_WIN32_RELOC_CAPTURE *, APPLE_AGX_U32 Fence);
 AGX_WIN32_RELOC_RESULT AgxWin32RelocRetire(AGX_WIN32_RELOC_CAPTURE *,
     APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U64 Request, APPLE_AGX_U32 Fence);

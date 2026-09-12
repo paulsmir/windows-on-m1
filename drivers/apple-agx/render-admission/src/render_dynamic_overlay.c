@@ -273,6 +273,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlan(
       View->Draw == OVERLAY_NULL || Plan == OVERLAY_NULL ||
       Image->Ready != APPLE_AGX_TRUE ||
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
+      View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION ||
       View->Header->Generation == 0u)
     return AdmissionDynamicOverlayArgument;
   if (View->Relocations != OVERLAY_NULL) {
@@ -324,6 +325,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
   if (View == OVERLAY_NULL || View->Header == OVERLAY_NULL ||
       View->Draw == OVERLAY_NULL || Bindings == OVERLAY_NULL ||
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
+      View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION ||
       View->Header->ReferenceCount == 0u ||
       View->Header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
     return AdmissionDynamicOverlayArgument;
@@ -395,6 +397,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
       highest = object->ReferenceIndex;
   }
   header.Opcode = AppleAgxWin32OpcodeDraw;
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION;
   header.Generation = Job->Generation;
   header.ReferenceCount = highest + 1u;
   view.Header = &header;

@@ -70,9 +70,10 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildClear(
   return AppleAgxWin32AbiSuccess;
 }
 
-APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
-    const AGX_WIN32_DRAW_REQUEST *Request, void *CommandBuffer,
-    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes) {
+APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
+    const AGX_WIN32_DRAW_REQUEST *Request, APPLE_AGX_U16 CommandVersion,
+    void *CommandBuffer, APPLE_AGX_U32 CommandCapacity,
+    APPLE_AGX_U32 *CommandBytes) {
   APPLE_AGX_U64 storage[
       APPLE_AGX_WIN32_COMMAND_MAX_BYTES / sizeof(APPLE_AGX_U64)];
   unsigned char *bytes = (unsigned char *)storage;
@@ -84,7 +85,9 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
   APPLE_AGX_U32 relocationBytes;
   APPLE_AGX_U32 payloadBytes;
   APPLE_AGX_U32 totalBytes;
-  APPLE_AGX_U16 commandVersion;
+  if (CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
+      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES)
+    return AppleAgxWin32AbiVersion;
   if (Request == NULL || CommandBuffer == NULL || CommandBytes == NULL ||
       Request->Generation == 0u || Request->AllocationCount == 0u ||
       Request->References == NULL || Request->Relocations == NULL ||
@@ -104,16 +107,8 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
     return AppleAgxWin32AbiArgument;
   memset(storage, 0, sizeof(storage));
   header = (APPLE_AGX_WIN32_COMMAND_HEADER *)bytes;
-  /* v1 reserves all draw Reserved words.  A nonzero v2 fragment-pipeline
-   * reference is deliberately versioned here, before the shared validator
-   * sees the command; no caller can accidentally emit a v1 command with it.
-   */
-  commandVersion = Request->Draw.Reserved[
-      APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX] != 0u
-                       ? APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES
-                       : APPLE_AGX_WIN32_COMMAND_VERSION;
   header->Magic = APPLE_AGX_WIN32_COMMAND_MAGIC;
-  header->Version = commandVersion;
+  header->Version = CommandVersion;
   header->HeaderBytes = sizeof(*header);
   header->TotalBytes = totalBytes;
   header->Opcode = AppleAgxWin32OpcodeDraw;
@@ -139,6 +134,14 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
   memcpy(CommandBuffer, bytes, totalBytes);
   *CommandBytes = totalBytes;
   return AppleAgxWin32AbiSuccess;
+}
+
+APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
+    const AGX_WIN32_DRAW_REQUEST *Request, void *CommandBuffer,
+    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes) {
+  return AgxWin32TransportBuildDrawVersion(
+      Request, APPLE_AGX_WIN32_COMMAND_VERSION, CommandBuffer,
+      CommandCapacity, CommandBytes);
 }
 
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysInitialize(

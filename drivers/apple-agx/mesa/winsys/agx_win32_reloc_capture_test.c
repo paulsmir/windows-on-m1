@@ -186,7 +186,9 @@ int main(void) {
   d.Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX]=index;
   assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationVdmPipelineOffset32,
                             8,20,index,0)==AgxRelocOk);
-  assert(AgxWin32RelocSeal(&c,&d,command,sizeof(command),&bytes)==AgxRelocOk);
+  assert(AgxWin32RelocSealVersion(
+      &c, APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES, &d, command,
+      sizeof(command), &bytes)==AgxRelocOk);
   assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==
          AppleAgxWin32AbiSuccess);
   assert(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&

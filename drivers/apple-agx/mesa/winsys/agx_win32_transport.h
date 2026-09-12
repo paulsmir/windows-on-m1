@@ -75,6 +75,12 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildClear(
 APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
     const AGX_WIN32_DRAW_REQUEST *Request, void *CommandBuffer,
     APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);
+/* The legacy entry point always emits v1. Native stage callers select v2
+ * explicitly; no draw payload field is used as an implicit version flag. */
+APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
+    const AGX_WIN32_DRAW_REQUEST *Request, APPLE_AGX_U16 CommandVersion,
+    void *CommandBuffer, APPLE_AGX_U32 CommandCapacity,
+    APPLE_AGX_U32 *CommandBytes);
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysInitialize(
     AGX_WIN32_WINSYS *Winsys, void *Context, APPLE_AGX_U32 Generation,
     const AGX_WIN32_WINSYS_OPERATIONS *Operations);

@@ -53,6 +53,7 @@ static void initialize_view(
   memset(draw, 0, sizeof(*draw));
   memset(&vertex_relocation, 0, sizeof(vertex_relocation));
   header->Opcode = AppleAgxWin32OpcodeDraw;
+  header->Version = APPLE_AGX_WIN32_COMMAND_VERSION;
   header->Generation = 7u;
   header->ReferenceCount = REFERENCE_COUNT;
   for (unsigned index = 0u; index < REFERENCE_COUNT; ++index) {
@@ -185,6 +186,13 @@ int main(void) {
          aliases[1].GpuVirtualAddress == 0x110006c000ULL);
   initialize_view(&view, &header, references, &draw);
   initialize_job(&job, storage, &view);
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES;
+  memset(&plan, 0xa5, sizeof(plan));
+  assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
+         AdmissionDynamicOverlayArgument);
+  assert(AdmissionDynamicOverlayBindingsFromView(&view, &bindings) ==
+         AdmissionDynamicOverlayArgument);
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION;
   pipeline_bytes[0x2000] = 0x5au;
   assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
          AdmissionDynamicOverlaySuccess);

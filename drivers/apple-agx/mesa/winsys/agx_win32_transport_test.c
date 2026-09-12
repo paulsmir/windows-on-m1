@@ -303,6 +303,63 @@ static void test_draw_builder_is_copy_once_and_fail_closed(void) {
   assert(memcmp(bytes, original, sizeof(bytes)) == 0);
 }
 
+static void test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference(
+    void) {
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[10];
+  APPLE_AGX_WIN32_RELOCATION relocations[7];
+  AGX_WIN32_DRAW_REQUEST input = draw_request(references, relocations);
+  unsigned char bytes[APPLE_AGX_WIN32_COMMAND_MAX_BYTES];
+  unsigned char before[APPLE_AGX_WIN32_COMMAND_MAX_BYTES];
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  APPLE_AGX_U32 commandBytes = 0x5a5a5a5au;
+
+  memset(&references[9], 0, sizeof(references[9]));
+  references[9].AllocationIndex = 9u;
+  references[9].Role = AppleAgxWin32RoleRenderTarget;
+  references[9].Access = AppleAgxWin32AccessWrite;
+  references[9].Bytes = 0x1000000ULL;
+  references[0].AllocationIndex = 0u;
+  references[0].Role = AppleAgxWin32RoleUscPipeline;
+  references[0].Access = AppleAgxWin32AccessRead;
+  references[0].Bytes = 0x340ULL;
+  input.AllocationCount = 10u;
+  input.ReferenceCount = 10u;
+  input.RelocationCount = 7u;
+  input.Draw.DestinationReference = 9u;
+  input.Draw.Reserved[
+      APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX] = 0u;
+  relocations[0].TargetReference = 9u;
+  relocations[6] = (APPLE_AGX_WIN32_RELOCATION){
+      AppleAgxWin32RelocationVdmPipelineOffset32, 4u, 0u, 8u, 0u,
+      24u, 0u, 0ULL};
+  assert(AgxWin32TransportBuildDrawVersion(
+             &input, APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES,
+             bytes, sizeof(bytes), &commandBytes) == AppleAgxWin32AbiSuccess);
+  assert(AppleAgxWin32CommandValidate(bytes, commandBytes, 7u, 10u, &view) ==
+         AppleAgxWin32AbiSuccess);
+  assert(view.Header->Version ==
+             APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
+         view.Draw->Reserved[
+             APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX] ==
+             0u);
+
+  memset(bytes, 0xa5, sizeof(bytes));
+  memcpy(before, bytes, sizeof(bytes));
+  commandBytes = 0x5a5a5a5au;
+  input = draw_request(references, relocations);
+  input.Draw.Reserved[0] = 9u;
+  assert(AgxWin32TransportBuildDraw(&input, bytes, sizeof(bytes),
+                                    &commandBytes) == AppleAgxWin32AbiReserved);
+  assert(memcmp(bytes, before, sizeof(bytes)) == 0);
+  assert(commandBytes == 0x5a5a5a5au);
+
+  assert(AgxWin32TransportBuildDrawVersion(&input, 3u, bytes, sizeof(bytes),
+                                           &commandBytes) ==
+         AppleAgxWin32AbiVersion);
+  assert(memcmp(bytes, before, sizeof(bytes)) == 0);
+  assert(commandBytes == 0x5a5a5a5au);
+}
+
 static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   FAKE_WINSYS fake;
   AGX_WIN32_WINSYS_OPERATIONS operations;
@@ -387,6 +444,7 @@ int main(void) {
   test_built_bytes_are_independent_of_request_storage();
   test_two_data_driven_clears_have_distinct_hashes();
   test_draw_builder_is_copy_once_and_fail_closed();
+  test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference();
   test_resource_facing_winsys_has_no_fd_or_physical_contract();
   test_winsys_rejects_stale_and_out_of_range_buffers();
   return 0;
