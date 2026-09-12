@@ -1,0 +1,47 @@
+#ifndef AGX_WIN32_CONSTRUCTION_ADDRESS_H
+#define AGX_WIN32_CONSTRUCTION_ADDRESS_H
+
+#include "apple_agx_state.h"
+
+#define AGX_WIN32_CONSTRUCTION_MAX_OBJECTS 64u
+
+typedef struct _AGX_WIN32_CONSTRUCTION_OBJECT {
+  APPLE_AGX_U64 Token;
+  APPLE_AGX_U64 Serial;
+  APPLE_AGX_U64 Address;
+  APPLE_AGX_U64 Bytes;
+  APPLE_AGX_U32 Generation;
+  APPLE_AGX_BOOL Active;
+} AGX_WIN32_CONSTRUCTION_OBJECT;
+
+typedef struct _AGX_WIN32_CONSTRUCTION_SPACE {
+  APPLE_AGX_U64 Base;
+  APPLE_AGX_U64 Next;
+  APPLE_AGX_U32 Generation;
+  AGX_WIN32_CONSTRUCTION_OBJECT Objects[AGX_WIN32_CONSTRUCTION_MAX_OBJECTS];
+} AGX_WIN32_CONSTRUCTION_SPACE;
+
+typedef enum _AGX_WIN32_CONSTRUCTION_RESULT {
+  AgxWin32ConstructionSuccess = 0,
+  AgxWin32ConstructionArgument,
+  AgxWin32ConstructionState,
+  AgxWin32ConstructionCapacity,
+  AgxWin32ConstructionRange,
+  AgxWin32ConstructionStale
+} AGX_WIN32_CONSTRUCTION_RESULT;
+
+AGX_WIN32_CONSTRUCTION_RESULT AgxWin32ConstructionInitialize(
+    AGX_WIN32_CONSTRUCTION_SPACE *Space, APPLE_AGX_U64 Base,
+    APPLE_AGX_U32 Generation);
+AGX_WIN32_CONSTRUCTION_RESULT AgxWin32ConstructionReserve(
+    AGX_WIN32_CONSTRUCTION_SPACE *Space, APPLE_AGX_U64 Token,
+    APPLE_AGX_U64 Serial, APPLE_AGX_U64 Bytes, APPLE_AGX_U64 *Address);
+AGX_WIN32_CONSTRUCTION_RESULT AgxWin32ConstructionResolve(
+    const AGX_WIN32_CONSTRUCTION_SPACE *Space, APPLE_AGX_U64 Token,
+    APPLE_AGX_U64 Serial, APPLE_AGX_U64 Offset, APPLE_AGX_U64 Bytes,
+    APPLE_AGX_U64 *Address);
+AGX_WIN32_CONSTRUCTION_RESULT AgxWin32ConstructionRelease(
+    AGX_WIN32_CONSTRUCTION_SPACE *Space, APPLE_AGX_U64 Token,
+    APPLE_AGX_U64 Serial);
+
+#endif
