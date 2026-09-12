@@ -1,0 +1,20 @@
+{
+  "task_id": "AD04-MATH-CONSTANTS-PORTABILITY-006",
+  "goal": "Propose minimum correction for missing M_LOG2E/M_PI/M_1_PI in BOTH x64/ARM64 compiler controls based on following exact source evidence. No math literal changes or other flags.",
+  "allowed_path": "drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1",
+  "old_line": "$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))",
+  "source_evidence": "Pinned Mesa meson.build Windows compiler-syntax=msvc adds -D_USE_MATH_DEFINES. SDK26100 ucrt/math.h line13 #ifdef _USE_MATH_DEFINES includes corecrt_math_defines.h, which defines M_LOG2E,M_PI,M_1_PI. Both compiler controls use shared $compileArgs above.",
+  "return_schema": {
+    "result": "PATCH_PROPOSED",
+    "rationale": "brief",
+    "patch": {
+      "path": "drivers/apple-agx/mesa/scripts/run-phase3-normalized.ps1",
+      "old": "exact old_line string",
+      "new": "replacement one line"
+    },
+    "requested_command_ids": [],
+    "unresolved": [],
+    "architecture_question": ""
+  },
+  "instruction": "JSON only; exact replacement. Do not return unified diff. Preserve everything except the one source-backed missing configuration define. Do not claim to have executed anything."
+}

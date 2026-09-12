@@ -1,0 +1,15 @@
+{
+  "task_id": "PHASE3-DEMO-001",
+  "input_commit": "76a1538d672e858cd8e5f0c6d1a7b34e0b48db7d",
+  "repo": "/Users/pavel/public_windows/.worktrees/phase3-demo-001",
+  "worktree": "/Users/pavel/public_windows/.worktrees/phase3-demo-001",
+  "branch": "agent/phase3-demo-001",
+  "allowed_paths": ["investigation/agent_tasks/demo.txt"],
+  "forbidden_paths": ["drivers/", "scripts/", "tests/", "mu/", "m1n1_windows/"],
+  "max_files": 1,
+  "max_diff_lines": 12,
+  "source_allowed": true,
+  "hardware_allowed": false,
+  "allowed_command_ids": ["RUN_HARMLESS_CHECK"],
+  "expected_text": "runner-marker\n"
+}

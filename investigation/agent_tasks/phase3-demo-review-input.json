@@ -1,0 +1,10 @@
+{
+  "task_id": "PHASE3-DEMO-001-REVIEW",
+  "role": "fresh independent read-only reviewer",
+  "contract": "Only add investigation/agent_tasks/demo.txt containing runner-marker followed by newline. Max one file, max12 changed diff lines. No source, scripts or hardware edits. Only RUN_HARMLESS_CHECK permitted.",
+  "patch": "diff --git a/investigation/agent_tasks/demo.txt b/investigation/agent_tasks/demo.txt\nnew file mode 100644\nindex 0000000..1234567\n--- /dev/null\n+++ b/investigation/agent_tasks/demo.txt\n@@ -0,0 +1 @@\n+runner-marker\n",
+  "runner_result": {"result":"APPLIED", "applied":true, "changed_paths":["investigation/agent_tasks/demo.txt"], "commands_run":["RUN_HARMLESS_CHECK"], "command_exit":0, "timed_out":false, "hardware_used":false},
+  "check_definition": "Trusted fixed helper reads exactly this file and requires content == runner-marker\\n; executed outside worker checkout. No model-supplied command executed.",
+  "return": {"review":"PASS/FAIL/QUESTION", "scope":"brief", "semantics":"brief", "test_coverage":"brief", "unauthorized_expansion":"NONE or findings", "architecture_risk":"NONE or findings"},
+  "instruction": "Review only the supplied task/patch/evidence. Do not claim additional tests. Return JSON only."
+}

@@ -1,0 +1,19 @@
+{
+  "task_id": "PHASE3-DEMO-001",
+  "goal": "Propose adding a harmless marker text file in an isolated worktree.",
+  "allowed_paths": ["investigation/agent_tasks/demo.txt"],
+  "input_state": "The allowed file does not exist. No other edits are permitted.",
+  "required_content": "runner-marker\n",
+  "max_files_changed": 1,
+  "max_diff_lines": 12,
+  "allowed_command_ids": ["RUN_HARMLESS_CHECK"],
+  "return_schema": {
+    "result": "PATCH_PROPOSED",
+    "rationale": "brief text",
+    "patch": "standard unified diff using diff --git, --- /dev/null, +++ b/investigation/agent_tasks/demo.txt and a valid hunk",
+    "requested_command_ids": ["RUN_HARMLESS_CHECK"],
+    "unresolved": [],
+    "architecture_question": ""
+  },
+  "stop_condition": "Return only the JSON proposal. You have no execution tools and must not claim tests ran."
+}
