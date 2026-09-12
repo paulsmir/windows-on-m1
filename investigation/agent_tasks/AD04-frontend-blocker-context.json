@@ -1,14 +1,13 @@
 {
-  "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
-  "first_error": "DESIGN CONDITIONAL, not a compile error: prove VidMm-owned process TTBR0 representation, isolation and paging lifetime without changing firmware retained TTBR1.",
-  "include_or_call_chain": ["VidMm per-process VA and tables -> KMD page-table DDIs -> broker validation/host translation", "process root/slot -> firmware work context selector -> AGX", "firmware context0 keeps retained root; current broker v4 still has no process API"],
-  "definitions": ["Native UAT:39-bit VA,16KiB pages,64 slots; current render provider uses63", "Pinned Asahi G13 user slots have no shared kernel TTBR1", "WDK UpdatePageTable documents4KiB logical entries for16KiB GPU pages; contiguity/protection/partial updates still need proof", "VidMm owns process tables and their movement/lifetime; firmware retained root is never one of those allocations", "Binding, paging readiness, residency and render completion are separate domains"],
+  "last_pass": "238 offline semantic-model checks, shared UAT, ASan/UBSan; compiler milestone unchanged",
+  "first_error": "UNRESOLVED: all VidMm-admissible updates must fit16KiB representation. Arbitrary4K scatter/mixed permissions have a counterexample; actual required input domain is not proven.",
+  "include_or_call_chain": ["normalized4K updates -> merge group -> coarsen -> shared UAT map/walk", "system bootstrap -> user root -> paging publication -> independent residency -> slot/render lease", "fail-closed unsupported translation does not equal successful VidMm mapping"],
+  "definitions": ["gm_pte4 is a normalized subset, not DXGK_PTE ABI implementation", "gm_coarsen accepts aligned contiguous equally protected groups or complete invalidation", "one16KiB leaf cannot encode independently scattered4KiB backing or mixed protection", "residency and invalidation are explicit abstract events, not real VidMm/EL2 operations", "Migration CONDITIONAL; no unrestricted GPUVA support claim"],
   "overlays": ["uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR", "agx_index homogeneous internal bitfields", "agx_pack internal off_t storage", "canonical LUT clang guard", "agx_compile Windows NUL debug selftest", "agx_spill canonical c99_alloca include"],
-  "constraints": ["DESIGN ONLY; no executable model implemented", "direct Tier-A; no default Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "no capabilities process stub or firmware/broker changes", "conditional feasibility is not implementation or hardware proof"],
+  "constraints": ["offline model only; minimal production slice remains gated design", "direct Tier-A; no Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "no production caps/DDIs firmware/broker changes", "Do not signal mapping success for unrepresentable legal VidMm input; fundamental incompatibility means relocation fallback"],
   "source": [
-    {"path":"/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/mmu.rs","start":1488,"end":1516},
-    {"path":"/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/gpu.rs","start":663,"end":673},
-    {"path":"/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/pgtable.rs","start":39,"end":63},
-    {"path":"/Users/pavel/public_windows/m1n1_windows/src/hv_agx_retained_root.c","start":138,"end":158}
+    {"path":"tests/models/gpuva_semantic_model.c","start":67,"end":94},
+    {"path":"tests/models/gpuva_semantic_model_test.c","start":134,"end":182},
+    {"path":"tests/models/gpuva_semantic_model_test.c","start":115,"end":124}
   ]
 }

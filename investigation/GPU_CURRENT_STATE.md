@@ -47,8 +47,19 @@ the required process namespace/slot lifecycle. WDK26100 UpdatePageTable explicit
 allows16KiB GPU pages, but logical4KiB updates, table placement, physical backing,
 bootstrap and process/private isolation still require proof. No caps/DDI/code change.
 Design: docs/superpowers/specs/2026-09-12-windows-gpummu-retained-root-feasibility.md.
-Next: bounded offline semantic proof only after implementation authority; no Air.
-Do not treat CONDITIONAL as hardware or implementation readiness.
+User authorized offline model; completed c0f25eb1c94e3628549cd7c6fd83664017fc3a3f.
+238 behavior checks pass using unchanged shared UAT functions with ASan/UBSan.
+System paging process + P/Q equal-VA isolation, root movement, slot generations,
+fence domains and binding/residency/eviction/remap pass in the finite model.
+Arbitrary independent4KiB mappings/protections inside16KiB have a concrete
+unrepresentable counterexample; fail-closed detection passes, universal translation
+does NOT. Whether VidMm must produce those inputs for the chosen descriptor/
+segment contract is NOT proved. Migration remains CONDITIONAL, not enabled.
+Evidence: evidence/AD04-gpuva-semantic-model/run-004; results and assumptions:
+agent_tasks/AD04-GPUVA-SEMANTIC-MODEL.md. Minimal production slice designed only:
+docs/superpowers/specs/2026-09-12-gpuva-minimal-migration-slice.md.
+Next: close admissible4K-update domain gate; if mandatory unrepresentable cases
+cannot be supported, stop GPUVA and return to relocation. No production DDIs/Air.
 
 ## Machine / hardware
 No Air action this phase. Last verified Air:2026-09-09T13:13:40Z ordinary377/392,

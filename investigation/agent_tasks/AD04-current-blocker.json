@@ -1,18 +1,18 @@
 {
-  "head": "05954bcc52cf419d8f95be60b25ae902bf1ed27e",
-  "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
-  "first_error": "DESIGN CONDITIONAL, not a compile error: prove VidMm-owned process TTBR0 representation, isolation and paging lifetime without changing firmware retained TTBR1.",
+  "head": "c0f25eb1c94e3628549cd7c6fd83664017fc3a3f",
+  "last_pass": "238 offline semantic-model checks, shared UAT, ASan/UBSan; compiler milestone unchanged",
+  "first_error": "UNRESOLVED: all VidMm-admissible updates must fit16KiB representation. Arbitrary4K scatter/mixed permissions have a counterexample; actual required input domain is not proven.",
   "include_or_call_chain": [
-    "VidMm per-process VA and tables -> KMD page-table DDIs -> broker validation/host translation",
-    "process root/slot -> firmware work context selector -> AGX",
-    "firmware context0 keeps retained root; current broker v4 still has no process API"
+    "normalized4K updates -> merge group -> coarsen -> shared UAT map/walk",
+    "system bootstrap -> user root -> paging publication -> independent residency -> slot/render lease",
+    "fail-closed unsupported translation does not equal successful VidMm mapping"
   ],
   "definitions": [
-    "Native UAT:39-bit VA,16KiB pages,64 slots; current render provider uses63",
-    "Pinned Asahi G13 user slots have no shared kernel TTBR1",
-    "WDK UpdatePageTable documents4KiB logical entries for16KiB GPU pages; contiguity/protection/partial updates still need proof",
-    "VidMm owns process tables and their movement/lifetime; firmware retained root is never one of those allocations",
-    "Binding, paging readiness, residency and render completion are separate domains"
+    "gm_pte4 is a normalized subset, not DXGK_PTE ABI implementation",
+    "gm_coarsen accepts aligned contiguous equally protected groups or complete invalidation",
+    "one16KiB leaf cannot encode independently scattered4KiB backing or mixed protection",
+    "residency and invalidation are explicit abstract events, not real VidMm/EL2 operations",
+    "Migration CONDITIONAL; no unrestricted GPUVA support claim"
   ],
   "overlays": [
     "uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR",
@@ -23,32 +23,27 @@
     "agx_spill canonical c99_alloca include"
   ],
   "constraints": [
-    "DESIGN ONLY; no executable model implemented",
-    "direct Tier-A; no default Devstral/subagents",
+    "offline model only; minimal production slice remains gated design",
+    "direct Tier-A; no Devstral/subagents",
     "no hardware/push/architect checkout/native-ANS",
-    "no capabilities process stub or firmware/broker changes",
-    "conditional feasibility is not implementation or hardware proof"
+    "no production caps/DDIs firmware/broker changes",
+    "Do not signal mapping success for unrepresentable legal VidMm input; fundamental incompatibility means relocation fallback"
   ],
   "source": [
     {
-      "path": "/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/mmu.rs",
-      "start": 1488,
-      "text": "                let idx = (slot.slot() as usize) + UAT_USER_CTX_START;\n                let ttb = binding.ttb | TTBR_VALID | (idx as u64) << TTBR_ASID_SHIFT;\n\n                let uat_inner = self.inner.lock();\n\n                let ttb1 = if uat_inner.map_kernel_to_user {\n                    uat_inner.kernel_ttb1 | TTBR_VALID | (idx as u64) << TTBR_ASID_SHIFT\n                } else {\n                    0\n                };\n\n                let ttbs = uat_inner.ttbs();\n                uat_inner.handoff().lock();\n                if uat_inner.handoff().current_slot() == Some(idx as u32) {\n                    pr_err!(\n                        \"Vm::bind to slot {}, but it is currently in use by the ASC?\\n\",\n                        idx\n                    );\n                }\n                ttbs[idx].ttb0.store(ttb, Ordering::Release);\n                ttbs[idx].ttb1.store(ttb1, Ordering::Release);\n                uat_inner.handoff().unlock();\n                core::mem::drop(uat_inner);\n\n                // Make sure all TLB entries from the previous owner of this ASID are gone\n                mem::tlbi_asid(idx as u8);\n                mem::sync();\n            }\n"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model.c",
+      "start": 67,
+      "text": "enum gm_result gm_coarsen(const gm_pte4 entries[4],uint64_t *pa,unsigned *write) {\n  if(!entries || !pa || !write) return GM_RANGE;\n  unsigned valid=0;\n  for(unsigned i=0;i<4;++i) valid|=entries[i].valid;\n  if(!valid) { *pa=0; *write=0; return GM_UNMAP; }\n  /* One actual UAT leaf has one aligned base and one protection/validity.\n   * No invented aliases, rounding over holes, bounce copies or hidden heap. */\n  if(!entries[0].valid || (entries[0].pa&(GM_PAGE-1)) ||\n     entries[0].pa>=(1ULL<<40) || GM_PAGE>(1ULL<<40)-entries[0].pa)\n    return GM_UNREPRESENTABLE;\n  for(unsigned i=0;i<4;++i)\n    if(entries[i].valid!=1 || entries[i].writable>1 ||\n       entries[i].writable!=entries[0].writable || entries[i].pa!=entries[0].pa+i*0x1000ULL)\n      return GM_UNREPRESENTABLE;\n  *pa=entries[0].pa; *write=entries[0].writable; return GM_OK;\n}\nenum gm_result gm_merge4(const gm_pte4 before[4],unsigned first,unsigned count,\n                        const gm_pte4 *updates,gm_pte4 after[4]) {\n  if(!before || !updates || !after || !count || first>=4 || count>4-first) return GM_RANGE;\n  gm_pte4 candidate[4]; uint64_t pa; unsigned write;\n  memcpy(candidate,before,sizeof(candidate));\n  memcpy(candidate+first,updates,count*sizeof(*updates));\n  enum gm_result r=gm_coarsen(candidate,&pa,&write);\n  if(r==GM_OK || r==GM_UNMAP) memcpy(after,candidate,sizeof(candidate));\n  return r;\n}\nstatic void paging_issue(gm_process *p,gm_fence *f) {\n  ++p->map_gen; ++p->paging_issued;"
     },
     {
-      "path": "/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/gpu.rs",
-      "start": 663,
-      "text": "    fn make_uat(dev: &AsahiDevice, cfg: &'static hw::HwConfig) -> Result<KBox<mmu::Uat>> {\n        // G14X has a new thing in the Scene structure that unfortunately requires\n        // write access from user contexts. Hopefully it's not security-sensitive.\n        #[ver(G >= G14X)]\n        let map_kernel_to_user = true;\n        #[ver(G < G14X)]\n        let map_kernel_to_user = false;\n\n        Ok(KBox::new(\n            mmu::Uat::new(dev, cfg, map_kernel_to_user)?,\n            GFP_KERNEL,"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model_test.c",
+      "start": 134,
+      "text": "static void translation_domain(void) {\n  gm_pte4 entries[4]; uint64_t pa=0; unsigned write=0;\n  ptes(entries,PA_P); CHECK(gm_coarsen(entries,&pa,&write)==GM_OK && pa==PA_P && write==1);\n  for(unsigned i=0;i<4;++i) entries[i].writable=0;\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_OK && write==0);\n  /* All nontrivial4K validity/protection partitions are not one16K PTE. */\n  for(unsigned mask=1;mask<15;++mask) {\n    ptes(entries,PA_P);\n    for(unsigned i=0;i<4;++i) entries[i].valid=(mask>>i)&1;\n    CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n    ptes(entries,PA_P);\n    for(unsigned i=0;i<4;++i) entries[i].writable=(mask>>i)&1;\n    CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n  }\n  ptes(entries,PA_P); entries[1].pa=0x21001000;\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n  ptes(entries,PA_P+0x1000);\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_UNREPRESENTABLE);\n  reset(); gm_binding b=ready(0,PA_P); gm_fence f; uint64_t before;\n  CHECK(gm_translate(m,0,VA,&before)==GM_OK && before==PA_P);\n  CHECK(gm_translate(m,0,VA+0x1000,&pa)==GM_OK && pa==PA_P+0x1000);\n  CHECK(pa!=0x21001000ULL); /* Actual shared UAT walk cannot supply scatter target. */\n  CHECK(gm_map(m,b,entries,&f)!=GM_OK);\n  CHECK(gm_translate(m,0,VA,&pa)==GM_OK && pa==before);\n  /* Counterexample is independent of translator: no single aligned base can\n   * simultaneously equal PA_P at offset0 and0x21001000 at offset4096. */\n  CHECK((PA_P+0x1000ULL)!=0x21001000ULL);\n  reset(); CHECK(gm_bootstrap(m,0)==GM_OK); CHECK(gm_reserve(m,0,VA,&b)==GM_OK);\n  ptes(entries,PA_P); entries[1].pa=0x21001000ULL;\n  CHECK(gm_map(m,b,entries,&f)==GM_UNREPRESENTABLE);\n  CHECK(!m->process[0].mapped && m->process[0].paging_issued==0);\n  CHECK(gm_translate(m,0,VA,&pa)!=GM_OK);\n  memset(entries,0,sizeof(entries));\n  CHECK(gm_coarsen(entries,&pa,&write)==GM_UNMAP && pa==0);\n}\nstatic void readonly_projection(void) {\n  reset(); CHECK(gm_bootstrap(m,0)==GM_OK);\n  gm_binding b; gm_fence f; gm_pte4 entries[4];\n  CHECK(gm_reserve(m,0,VA,&b)==GM_OK); ptes(entries,PA_P);\n  for(unsigned i=0;i<4;++i) entries[i].writable=0;\n  CHECK(gm_map(m,b,entries,&f)==GM_OK);\n  unsigned long long pa,descriptor;\n  CHECK(AppleAgxUatResolvePage(1,&m->process[0].roots,VA,&m->process[0].inventory,\n                              &pa,&descriptor)==AppleAgxUatResultOk);\n  CHECK((descriptor&(1ULL<<54))==0); /* Pinned shared readonly encoding, not hardware test. */\n  CHECK(gm_flush(m,0)==GM_OK); CHECK(gm_paging_complete(m,f)==GM_OK);\n  CHECK(gm_evict(m,b,&f)==GM_OK); CHECK(gm_flush(m,0)==GM_OK);\n  CHECK(gm_paging_complete(m,f)==GM_OK); ptes(entries,PA_P);\n  CHECK(gm_map(m,b,entries,&f)==GM_OK);"
     },
     {
-      "path": "/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/pgtable.rs",
-      "start": 39,
-      "text": "pub(crate) const UAT_PGBIT: usize = 14;\n/// UAT page size.\npub(crate) const UAT_PGSZ: usize = 1 << UAT_PGBIT;\n/// UAT page offset mask.\npub(crate) const UAT_PGMSK: usize = UAT_PGSZ - 1;\n\ntype Pte = AtomicU64;\n\nconst PTE_BIT: usize = 3; // log2(sizeof(Pte))\nconst PTE_SIZE: usize = 1 << PTE_BIT;\n\n/// Number of PTEs per page.\nconst UAT_NPTE: usize = UAT_PGSZ / size_of::<Pte>();\n\n/// Number of address bits to address a level\nconst UAT_LVBIT: usize = UAT_PGBIT - PTE_BIT;\n/// Number of entries per level\nconst UAT_LVSZ: usize = UAT_NPTE;\n/// Mask of level bits\nconst UAT_LVMSK: u64 = (UAT_LVSZ - 1) as u64;\n\nconst UAT_LEVELS: usize = 3;\n\n/// UAT input address space\npub(crate) const UAT_IAS: usize = 39;"
-    },
-    {
-      "path": "/Users/pavel/public_windows/m1n1_windows/src/hv_agx_retained_root.c",
-      "start": 138,
-      "text": "/* TTBR0 belongs to the broker, and can contain only the exact low alias's\n * slot 0. Retained TTBR1 owns only slot 2; never walk its private slots. */\nstatic int check_tables(struct hv_agx_retained_root *c)\n{\n    unsigned int i, half;\n    APPLE_AGX_UAT_PAGE *root0;\n    unsigned long long slots[2];\n    unsigned char referenced[HV_AGX_RETAINED_MAX_PAGES] = {0};\n    if (c->Tainted || (c->PrefixSaved && !hv_agx_retained_prefix_unchanged(c)))\n        return HV_AGX_RETAINED_TAINTED;\n    if (c->Roots.Ttbr1PhysicalAddress != c->RetainedPa)\n        goto tainted;\n    root0 = owned_child(c, c->Roots.Ttbr0PhysicalAddress | 3ULL, 0);\n    if (!root0)\n        goto tainted;\n    for (i = 1; i < 2048; ++i)\n        if (root0->Entries[i])\n            goto tainted;\n    for (i = 3; i < 2048; ++i)\n        if (c->RetainedEntries[i])\n            goto tainted;"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/models/gpuva_semantic_model_test.c",
+      "start": 115,
+      "text": "static void bootstrap_without_render(void) {\n  gm_initialize(m); CHECK(gm_create(m,0)==GM_OK);\n  CHECK(gm_bootstrap(m,0)==GM_DEPENDENCY);\n  reset(); CHECK(m->slot_owner==-1 && m->render_issued==0);\n  (void)ready(0,PA_P);\n  CHECK(m->slot_owner==-1 && m->render_issued==0 && m->process[0].paging_done==1);\n  CHECK(m->process[GM_SYSTEM].roots.Ttbr0PhysicalAddress!=m->process[0].roots.Ttbr0PhysicalAddress);\n  CHECK(gm_destroy(m,GM_SYSTEM)==GM_BUSY);\n}\nstatic void relocated_root_rejects_actual_old_lease(void) {"
     }
   ]
 }

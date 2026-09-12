@@ -43005,6 +43005,20 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+# AD04-GPUVA-MODEL — 2026-09-12 — OFFLINE ONLY
+
+User-approved finite model at c0f25eb1c94e3628549cd7c6fd83664017fc3a3f.
+238 behavior checks pass under ASan/UBSan with unchanged shared UAT functions.
+System bootstrap, P/Q same VA/different backing, root/slot generations, distinct
+paging/render fences and independent residency pass within model assumptions.
+Arbitrary4K scatter or mixed protection inside16K has a concrete counterexample;
+the model rejects it without partial publication or mapping-success fence.
+VidMm admissibility of such inputs under the undecided table/segment contract
+is unproved: migration remains CONDITIONAL. No general GPUVA acceptance claim.
+Raw outputs/hashes/compiler assumptions: evidence/AD04-gpuva-semantic-model/run-004.
+Earlier runs retained. Minimal production slice is designed only and gated on
+input-domain proof. No production/caps/DDI, hardware, builder, agents or push.
+
 # AD04-GPUMMU-DESIGN — 2026-09-12 — DESIGN ONLY
 
 Input05954bc; source-study commit c0cad2bee25e29b5f384a3a9ae3a3e961e11ce37.
