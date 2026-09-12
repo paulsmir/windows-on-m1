@@ -84,6 +84,7 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
   APPLE_AGX_U32 relocationBytes;
   APPLE_AGX_U32 payloadBytes;
   APPLE_AGX_U32 totalBytes;
+  APPLE_AGX_U16 commandVersion;
   if (Request == NULL || CommandBuffer == NULL || CommandBytes == NULL ||
       Request->Generation == 0u || Request->AllocationCount == 0u ||
       Request->References == NULL || Request->Relocations == NULL ||
@@ -103,8 +104,16 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(
     return AppleAgxWin32AbiArgument;
   memset(storage, 0, sizeof(storage));
   header = (APPLE_AGX_WIN32_COMMAND_HEADER *)bytes;
+  /* v1 reserves all draw Reserved words.  A nonzero v2 fragment-pipeline
+   * reference is deliberately versioned here, before the shared validator
+   * sees the command; no caller can accidentally emit a v1 command with it.
+   */
+  commandVersion = Request->Draw.Reserved[
+      APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX] != 0u
+                       ? APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES
+                       : APPLE_AGX_WIN32_COMMAND_VERSION;
   header->Magic = APPLE_AGX_WIN32_COMMAND_MAGIC;
-  header->Version = APPLE_AGX_WIN32_COMMAND_VERSION;
+  header->Version = commandVersion;
   header->HeaderBytes = sizeof(*header);
   header->TotalBytes = totalBytes;
   header->Opcode = AppleAgxWin32OpcodeDraw;

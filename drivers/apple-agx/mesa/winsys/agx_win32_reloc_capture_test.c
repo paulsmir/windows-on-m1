@@ -174,6 +174,24 @@ int main(void) {
   assert(AgxWin32RelocBegin(&c,77,7,7,&c.Operations,c.Context)==AgxRelocOk);
   assert(AgxWin32RelocReference(&c,1,1,2,0,32,&index)==AgxRelocOk);
   assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  /* A native pool may place independently-sized vertex and fragment USC
+   * streams in disjoint subranges of one retained BO.  v2 carries both
+   * ranges; it must not recreate the v1 compact split. */
+  assert(AgxWin32RelocBegin(&c,77,7,8,&c.Operations,c.Context)==AgxRelocOk);
+  d=capture(&c);
+  assert(AgxWin32RelocReference(&c,5,AppleAgxWin32RoleUscPipeline,1,
+                                0x4000,0x340,&index)==AgxRelocOk);
+  assert(index==9u);
+  d.Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX]=index;
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationVdmPipelineOffset32,
+                            8,20,index,0)==AgxRelocOk);
+  assert(AgxWin32RelocSeal(&c,&d,command,sizeof(command),&bytes)==AgxRelocOk);
+  assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==
+         AppleAgxWin32AbiSuccess);
+  assert(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
+         view.Draw->UscPipelineReference==4u &&
+         view.Draw->Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX]==9u);
+  assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
   for(unsigned i=0;i<9;++i) assert(fixture.Holds[i]==0);
   puts("CAPTURE -> WIRE -> KMD MATERIALIZER: two placements/lifetime PASS");
   return 0;
