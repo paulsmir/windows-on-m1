@@ -1,6 +1,9 @@
 # GPU current state — integration candidate, 2026-09-12
 
 Authoritative integration branch: integration/ad04-windows-compiler.
+Current operating policy: agent_tasks/AD04-LEAN-WORKFLOW.md. One Tier-A,
+one GPU-resident Devstral, deterministic runner; no routine reviewer/subagents.
+Use this continuous integration worktree for small compiler tasks.
 Architect checkout feature/j313-gpu-acceleration remains f90402c.
 No push, hardware action, or architect branch integration authorized/performed.
 Historical long state: agent_tasks/PHASE3-CURRENT-STATE-BEFORE.md.
