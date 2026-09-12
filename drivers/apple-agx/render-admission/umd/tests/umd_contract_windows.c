@@ -848,6 +848,12 @@ int main(void) {
   CHECK(sourceHold.HoldId != 0ULL &&
         sourceHoldSecond.HoldId != sourceHold.HoldId);
   CHECK(sourceHold.Address == InternalAllocationData + 0x200u);
+  {
+    ULONG undeallocated = 0xffffffffu;
+    CHECK(AdmissionUmdScreenFinalize(deviceState, &undeallocated) ==
+          HRESULT_FROM_WIN32(ERROR_BUSY));
+    CHECK(undeallocated == 0u && deviceState->Magic == ADMISSION_UMD_DEVICE_MAGIC);
+  }
   CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
         AgxWin32ScreenCallback);
   CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &sourceBuffer) ==

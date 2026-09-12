@@ -182,6 +182,8 @@ VOID AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device) {
   if (device == NULL)
     return;
   screenResult = AdmissionUmdScreenFinalize(device, &screenUndeallocated);
+  if (screenResult == HRESULT_FROM_WIN32(ERROR_BUSY))
+    return;
   if (FAILED(screenResult) || screenUndeallocated != 0u)
     terminalError = FAILED(screenResult) ? screenResult : E_FAIL;
   AdmissionUmdRetirementFinalize(&device->Retirement, &retirement);

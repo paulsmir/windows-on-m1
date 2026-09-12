@@ -127,6 +127,7 @@ VOID AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);
+BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
                                       APPLE_AGX_U32 *Fence);
 HRESULT AdmissionUmdScreenQuerySource(ADMISSION_UMD_DEVICE *Device,

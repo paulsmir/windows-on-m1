@@ -180,6 +180,21 @@ HRESULT AdmissionUmdScreenReleaseSource(
   return result;
 }
 
+BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device) {
+  UINT index;
+  BOOL live = FALSE;
+  if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC)
+    return FALSE;
+  AcquireSRWLockShared(&Device->ScreenBufferLock);
+  for (index = 0u; index < ADMISSION_UMD_SOURCE_HOLD_LIMIT; ++index)
+    if (Device->SourceHolds[index].Active) {
+      live = TRUE;
+      break;
+    }
+  ReleaseSRWLockShared(&Device->ScreenBufferLock);
+  return live;
+}
+
 static ADMISSION_UMD_SCREEN_FENCE *AdmissionUmdScreenFenceFind(
     ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U32 Token) {
   UINT index;
@@ -581,6 +596,11 @@ HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
   if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
       Undeallocated == NULL)
     return E_INVALIDARG;
+  if (AdmissionUmdScreenHasLiveSources(Device)) {
+    *Undeallocated = 0u;
+    Device->LastScreenError = HRESULT_FROM_WIN32(ERROR_BUSY);
+    return Device->LastScreenError;
+  }
   for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
     if (!buffer->Active)
