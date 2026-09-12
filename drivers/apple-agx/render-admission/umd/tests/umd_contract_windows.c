@@ -57,6 +57,9 @@ typedef struct _TEST_STATE {
   ADMISSION_ALLOCATION_DESCRIPTION InternalDescription;
   unsigned char RenderCommand[128];
   AGX_WIN32_CLEAR_REQUEST *MutatedRequest;
+  ADMISSION_UMD_DEVICE *ReentryDevice;
+  APPLE_AGX_U64 ReentryToken;
+  HRESULT ReentryResult;
 } TEST_STATE;
 
 enum {
@@ -297,6 +300,11 @@ static HRESULT APIENTRY TestLock(HANDLE Device, D3DDDICB_LOCK *Lock) {
   CHECK(Lock->GpuVirtualAddress == 0u);
   State.LastLockedAllocation = Lock->hAllocation;
   ++State.LockCalls;
+  if (State.ReentryDevice != NULL) {
+    ADMISSION_UMD_SCREEN_SOURCE source;
+    State.ReentryResult = AdmissionUmdScreenQuerySource(
+        State.ReentryDevice, State.ReentryToken, &source);
+  }
   Lock->pData = InternalAllocationData;
   return S_OK;
 }
@@ -833,9 +841,15 @@ int main(void) {
             AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
                 AppleAgxWin32BufferGpuRead,
             &sourceBuffer) == AgxWin32ScreenSuccess);
+  State.ReentryDevice = deviceState;
+  State.ReentryToken = sourceBuffer.Transport.Token;
+  State.ReentryResult = S_OK;
   CHECK(AgxWin32ScreenMapBuffer(
             &deviceState->Screen, &sourceBuffer, 0x200u, 0x400u,
             AppleAgxWin32BufferCpuRead, &sourceMap) == AgxWin32ScreenSuccess);
+  CHECK(FAILED(State.ReentryResult));
+  State.ReentryDevice = NULL;
+  State.ReentryToken = 0ULL;
   CHECK(sourceMap == InternalAllocationData + 0x200u);
   CHECK(AdmissionUmdScreenQuerySource(deviceState, sourceBuffer.Transport.Token,
                                       &sourceIdentity) == S_OK);
