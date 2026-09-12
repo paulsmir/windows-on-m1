@@ -87,6 +87,13 @@ VidMm residency, or allocate a template slot. Host suite PASS. Next: introduce
 this bridge at the Windows-native `agx_build_pipeline` callsite through a
 device-owned callback seam, retaining pinned Mesa source semantics and without
 editing the reference tree.
+Pinned FRYZZING validation then compiled the bridge with `/W4 /WX /O2` on x64
+(including executable test) and ARM64 from input archive SHA256
+`2ab542e5bedf0656309aca6316872e6ef312f77143b671b820fb1b5e04b130e1`.
+Evidence: evidence/AD04-native-pool-bridge/windows/
+reloc-capture-8d132f7432b84f39903f1746f553c2a4. The earlier input003 package
+missed a transitive header and is preserved as an environment-only failure;
+input004 is the valid result.
 
 ## Machine / hardware
 No Air boot/install action this phase. User reports Running proxy; passive USB
