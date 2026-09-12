@@ -79,6 +79,9 @@ SHA2565015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba.
 It changes only agx_build_pipeline to use with_bo and expose pipeline_bo.
 No association/capture call has been inserted yet; native Windows BO backend is
 the first unresolved production owner.
+Commit73d91c7 adds the first Windows-native BO lifecycle substrate on existing
+AGX_WIN32_SCREEN buffers. Host lifecycle test PASS. It contains no GPUVA,
+residency or submit semantics and is not installed in Mesa agx_device_ops.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
