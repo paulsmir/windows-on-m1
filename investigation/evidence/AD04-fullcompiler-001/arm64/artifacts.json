@@ -1,0 +1,8 @@
+{
+  "C:\\Users\\pauls\\AD04-fullcompiler-001\\asahi-arm64-37c472b7142e4e52a35fccf1b41da45a\\agx_shader_fixture.exe": "d9abf6a1f378abe10ef513ad371fc9822ac1698defab771fe8cd61b47dde4adc",
+  "C:\\Users\\pauls\\AD04-fullcompiler-001\\nir-arm64\\src\\compiler\\nir\\libnir.a": "61eed2592ac63e9e31b16eb1735a53c76df7a2d518b285a0cd38cf7423275394",
+  "C:\\Users\\pauls\\AD04-fullcompiler-001\\nir-arm64\\src\\compiler\\libcompiler.a": "6f961657e8191a1bf799cd8f3bf9ba7064397240ea32f588b8f15f34e6ced802",
+  "C:\\Users\\pauls\\AD04-fullcompiler-001\\nir-arm64\\src\\util\\libmesa_util.a": "27c5aeae4bb2a4fbf76778fe3189cfb27cc49f1a351a5894c4c321196ffb5215",
+  "C:\\Users\\pauls\\AD04-fullcompiler-001\\nir-arm64\\src\\c11\\impl\\libmesa_util_c11.a": "00e1beb16eb0ceafe92f35773e06ef4974c35af917ca81be371c678e455ed60f",
+  "C:\\Users\\pauls\\AD04-fullcompiler-001\\nir-arm64\\src\\util\\blake3\\libblake3.a": "b07d05034ab3037d86c25c26c36054f4525f07ecc8e184f023072f5351fda8ae"
+}

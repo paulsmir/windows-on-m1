@@ -1,0 +1,1 @@
+{"schema":1,"variant":1,"compute":{"binary_bytes":160,"main_offset":128,"preamble_offset":0,"main_bytes":32,"gprs":2,"preamble_gprs":0,"scratch_bytes":0,"rodata_offset":0,"rodata_halfwords":4,"fnv1a64":"0x3b648eec5debd9dc"}}

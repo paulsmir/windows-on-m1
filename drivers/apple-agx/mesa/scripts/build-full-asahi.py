@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import uuid
+from compact_blocker import first_diagnostic
 
 ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
 MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
@@ -37,8 +38,11 @@ def run(name, args):
     records.append(dict(name=name, arguments=[str(a) for a in args], exit=result.returncode))
     (OUT / 'result.json').write_text(json.dumps(records, indent=2))
     if result.returncode:
+        packet = first_diagnostic(result.stdout.decode(errors='replace').splitlines())
+        packet.update(stage=name, exit=result.returncode, last_pass=records[-2]['name'] if len(records)>1 else None)
+        (OUT / 'first-error.json').write_text(json.dumps(packet, indent=2))
         print('FIRST_FAILURE=' + name + ' EVIDENCE=' + str(OUT), flush=True)
-        print(result.stdout.decode(errors='replace')[-7000:])
+        print(json.dumps(packet))
         raise SystemExit(result.returncode)
 
 def split_windows(command):

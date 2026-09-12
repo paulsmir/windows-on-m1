@@ -13,6 +13,9 @@ $args=@('-C',"$root\nir-$Architecture",'-j','4','-k','1','src/compiler/nir/libni
 $p=Start-Process -FilePath "$root\venv\Scripts\ninja.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$out\stdout.log" -RedirectStandardError "$out\stderr.log"
 @{command='BUILD_NIR_LIBRARIES';exit=$p.ExitCode;output=$out;arguments=$args}|ConvertTo-Json|Set-Content "$out\result.json"
 Write-Output "BUILD_EXIT=$($p.ExitCode) EVIDENCE=$out"
-Get-Content "$out\stdout.log" -Tail 18
-Get-Content "$out\stderr.log" -Tail 4
+if($p.ExitCode -ne 0) {
+  $first=Select-String -Path "$out\stdout.log","$out\stderr.log" -Pattern '\b(fatal )?error( [A-Z]+\d+)?:' | Select-Object -First 1
+  @{stage='NIR dependencies';exit=$p.ExitCode;first_error=$first.Line}|ConvertTo-Json|Set-Content "$out\first-error.json"
+  Get-Content "$out\first-error.json"
+}
 exit $p.ExitCode

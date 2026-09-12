@@ -1,0 +1,48 @@
+{
+  "head": "427f0062f86da31bef0c38c5cebd29c8387a2741",
+  "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
+  "first_error": "No current compiler error. Frontend owner question: native agx_bo requires GPU VA lifetime absent from existing Windows token/CPU-map interface.",
+  "include_or_call_chain": [
+    "AdmissionUmdCreateDevice -> KernelContext",
+    "AgxWin32PipeDeviceInitialize -> project-owned pipe_screen/context",
+    "next: real agx_screen/agx_context -> agx_bo.va -> native GPU references"
+  ],
+  "definitions": [
+    "AGX_WIN32_BUFFER carries Token/Bytes/Generation/Flags/Mapped, not GPU VA",
+    "MapBuffer returns CPU void** through pfnLockCb; not a GPU binding",
+    "native agx_va carries addr/size_B and agx_ptr distinguishes cpu from gpu",
+    "Windows allocation/patch-list mode and GPUVA mode have distinct residency contracts; no model switch approved here"
+  ],
+  "overlays": [
+    "uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR",
+    "agx_index homogeneous internal bitfields",
+    "agx_pack internal off_t storage",
+    "canonical LUT clang guard",
+    "agx_compile Windows NUL debug selftest",
+    "agx_spill canonical c99_alloca include"
+  ],
+  "constraints": [
+    "direct Tier-A; no default Devstral/subagents",
+    "no hardware/push/architect checkout/native-ANS",
+    "do not change ABI/layout/ownership or AGX semantics silently",
+    "no capabilities or firmware/broker changes",
+    "compiler PASS is not standard D3D/desktop PASS"
+  ],
+  "source": [
+    {
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/mesa/winsys/agx_win32_transport.h",
+      "start": 45,
+      "text": "  APPLE_AGX_U64 Bytes;\n  APPLE_AGX_U32 Generation;\n  APPLE_AGX_U32 Flags;\n  APPLE_AGX_BOOL Mapped;\n} AGX_WIN32_BUFFER;\n\ntypedef struct _AGX_WIN32_WINSYS_OPERATIONS {\n  int (*CreateBuffer)(void *Context, APPLE_AGX_U64 Bytes,\n                      APPLE_AGX_U32 Flags, APPLE_AGX_U64 *Token);\n  int (*MapBuffer)(void *Context, APPLE_AGX_U64 Token,\n                   APPLE_AGX_U64 Offset, APPLE_AGX_U64 Bytes,\n                   APPLE_AGX_U32 Access, void **Address);\n  int (*UnmapBuffer)(void *Context, APPLE_AGX_U64 Token);\n  int (*DestroyBuffer)(void *Context, APPLE_AGX_U64 Token);\n  int (*SubmitClear)(void *Context, const AGX_WIN32_CLEAR_REQUEST *Request,\n                     APPLE_AGX_U32 *Fence);\n  int (*WaitFence)(void *Context, APPLE_AGX_U32 Fence,\n                   APPLE_AGX_U32 TimeoutMs);\n  int (*RetireFence)(void *Context, APPLE_AGX_U32 Fence);\n} AGX_WIN32_WINSYS_OPERATIONS;\n\ntypedef struct _AGX_WIN32_WINSYS {\n  void *Context;\n  APPLE_AGX_U32 Generation;\n  AGX_WIN32_WINSYS_OPERATIONS Operations;\n} AGX_WIN32_WINSYS;\n\nAPPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildClear(\n    const AGX_WIN32_CLEAR_REQUEST *Request, void *CommandBuffer,\n    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);\nAPPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(\n    const AGX_WIN32_DRAW_REQUEST *Request, void *CommandBuffer,\n    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);\nAGX_WIN32_WINSYS_RESULT AgxWin32WinsysInitialize(\n    AGX_WIN32_WINSYS *Winsys, void *Context, APPLE_AGX_U32 Generation,\n    const AGX_WIN32_WINSYS_OPERATIONS *Operations);\nAGX_WIN32_WINSYS_RESULT AgxWin32WinsysCreateBuffer(\n    AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U64 Bytes, APPLE_AGX_U32 Flags,"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/agx_bo.h",
+      "start": 45,
+      "text": "\n   /* VA must be fixed, otherwise allocated by the driver. */\n   AGX_VA_FIXED = (1 << 1),\n};\n\nstruct agx_va {\n   enum agx_va_flags flags;\n   uint64_t addr;\n   uint64_t size_B;\n};\n\nstruct agx_ptr {\n   /* If CPU mapped, CPU address. NULL if not mapped */\n   void *cpu;\n\n   /* Mapped GPU address */\n   uint64_t gpu;\n};\n\nstruct agx_bo {"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/umd/src/umd_runtime_device.c",
+      "start": 124,
+      "text": "  ZeroMemory(&createContext, sizeof(createContext));\n  ZeroMemory(&win32Context, sizeof(win32Context));\n  win32Context.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;\n  win32Context.Version = ADMISSION_WIN32_CONTEXT_VERSION;\n  win32Context.Bytes = sizeof(win32Context);\n  win32Context.Generation = device->Win32Generation;\n  createContext.NodeOrdinal = 0u;\n  createContext.EngineAffinity = 1u;\n  createContext.pPrivateDriverData = &win32Context;\n  createContext.PrivateDriverDataSize = sizeof(win32Context);\n  result = device->KernelCallbacks->pfnCreateContextCb(\n      device->RuntimeDevice.handle, &createContext);\n  if (FAILED(result)) {\n    ZeroMemory(device, sizeof(*device));\n    return result;\n  }\n  device->KernelContext = createContext.hContext;\n  if (device->KernelContext == NULL || createContext.pCommandBuffer == NULL ||\n      createContext.CommandBufferSize == 0u ||\n      createContext.pAllocationList == NULL ||\n      createContext.AllocationListSize == 0u ||\n      createContext.pPatchLocationList == NULL ||"
+    }
+  ]
+}

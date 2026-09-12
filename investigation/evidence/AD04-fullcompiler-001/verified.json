@@ -1,0 +1,24 @@
+{
+  "x64": {
+    "compile_units": 45,
+    "link": "PASS",
+    "execution": "PASS"
+  },
+  "arm64": {
+    "compile_units": 45,
+    "link": "PASS",
+    "execution": "NOT_RUN"
+  },
+  "variant0": {
+    "bytes": 160,
+    "native_byte_exact": true,
+    "sha256": "8f5ad95cc59281d81cb6348da1c4f718d2061e549edf5d5a37361ed24a4565d6"
+  },
+  "variant1": {
+    "bytes": 160,
+    "native_byte_exact": true,
+    "sha256": "a6a1a83bb096257cc3949e269c4985a9b83c673e2695dc5c0acb176ffe47d973"
+  },
+  "hardware": "NOT_RUN",
+  "scope": "Full compiler build/link; two compute NIR fixtures, not full shader conformance"
+}
