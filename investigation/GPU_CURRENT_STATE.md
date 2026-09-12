@@ -3,6 +3,7 @@
 Worktree: integration/ad04-windows-compiler.
 Composer checkpoint: 452ce35; retirement review correction: f635789.
 Native state/pool Windows compile checkpoint: c4022de.
+Native BO owner/capture connection: 863bae9.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -62,16 +63,29 @@ Evidence/limits: agent_tasks/AD04-NATIVE-STATE-COMPILE.md and
 evidence/AD04-native-asahi-state/. Native draw execution has NOT occurred.
 Next: Windows native BO backend must satisfy the original pool API and capture
 all native graph edges using real owner identities before composer dispatch.
+863bae9 now executes original pool.c through the Windows UMD owner in controlled
+runtime tests. Actual native BOs receive owner-generated Token/Serial identities;
+two real subranges enter typed capture with one request-local allocation index.
+Capture survives pool cleanup; native collection respects submission holds and
+deallocation failure. Provisional allocation rollback retains explicit ownership.
+x64 execution PASS and ARM64 build/link PASS. These use controlled runtime
+callbacks, not an actual hardware D3D device or native draw submission.
+Details: agent_tasks/AD04-NATIVE-POOL-CAPTURE.md.
 
 ## First remaining integration
 Use actual native-capture identity sidecar with Seal, dispatch on the supported
 runtime thread, and retire via existing completion protocol.
 AGX_WIN32_DRAW_REQUEST alone has no Token/Serial/Owner sidecar; do not infer it
 from persistent slots or old AllocationIndex values.
-Actual native agx_bo association/full typed address capture, source-byte lifetime,
+Complete native state typed address capture, source-byte lifetime,
 shared runtime-buffer serialization and terminal teardown after unrecoverable
 completion must be closed before enabling the native provider. This is an
 implementation phase, not a fundamental blocker.
+Next exact field gaps: USC Preshader Code bits32..63; Texture/Sampler buffer
+bits27..62 shr(3). Existing Shader/Uniform relocations are incompatible with
+these fields. Add explicit versioned types and native-pack tests before hooking
+the full agx_build_pipeline graph. Native Batch pool mixed roles must also be
+reconciled with source allocation classes rather than relabelled silently.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
