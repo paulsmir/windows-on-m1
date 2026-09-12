@@ -1,7 +1,7 @@
 # GPU current state — 2026-09-12
 
 Worktree: integration/ad04-windows-compiler (linked persistent integration tree).
-Compiled source checkpoint:427f0062f86da31bef0c38c5cebd29c8387a2741.
+Compiled source checkpoint:29f41e7c3a9fb4dbe71b2a2a6aac0750a1ccd039.
 Evidence/workflow checkpoint:3d912c03b87d35f6ef36c2ccdfa4ccf7bff96d52.
 Architect feature/j313-gpu-acceleration remains f90402c; no merge or push.
 
@@ -62,11 +62,16 @@ BO retention is not VidMm residency. Capture still must be wired into actual
 native BO/pool/USC/encoder emission and the real agx_screen/context platform seam.
 No standard D3D device or Full Graphics acceptance follows from this checkpoint.
 Evidence/runner repairs/limits: agent_tasks/AD04-TYPED-RELOCATION-RESULT.md.
-New source-backed producer mismatch: v1 overlay assumes a64-byte VS/FS pipeline
-split; native agx_build_pipeline produces independent variable-sized stage data.
-Next owning contract: versioned explicit native stage references/offsets, preserving
-v1, then native pool out_bo provenance and per-device Windows operations replacing
-DRM initialization. Decision: agent_tasks/AD04-NATIVE-PIPELINE-DECISION.md.
+The first ABI slice for the source-backed pipeline mismatch is now implemented:
+29f41e7c adds wire-command v2 for Draw only. It preserves the 128-byte v1 draw
+payload and v1 behavior; v2 interprets Reserved[0] solely as a second, distinct
+fragment USC pipeline reference and validates its typed reachability. Clear stays
+v1. Host deterministic ABI/relocation/overlay/transport suites pass. This does
+not assign arbitrary EXP208 template offsets to either native allocation and does
+not yet wire the v2 bindings into dynamic DMA or a native pool. Next: an
+owner-proven native pool/BO allocation adapter and v2 composition path, then
+per-device Windows agx_screen/agx_context operations. Decision:
+agent_tasks/AD04-NATIVE-PIPELINE-DECISION.md.
 
 ## Machine / hardware
 No Air boot/install action this phase. User reports Running proxy; passive USB

@@ -1,7 +1,7 @@
 {
-  "head": "5827e1caf87ae301b49441f5c15f7e9e2403d849",
-  "last_pass": "Typed capture/transport/materializer at two placements; native USC sizes1..64; host sanitizers; Windows x64 build/link/execute and ARM64 build/link",
-  "first_error": "Source mismatch: v1 overlay hardcodes64-byte compact VS/FS split; native Asahi produces independent variable-sized pipeline allocations. No new runtime failure claimed.",
+  "head": "29f41e7c3a9fb4dbe71b2a2a6aac0750a1ccd039",
+  "last_pass": "v2 Draw command accepts two distinct typed USC pipeline references; v1 rejects the same reserved field; five host ABI/relocation/overlay/transport suites pass",
+  "first_error": "v2 is validated but has no owner-proven native pool/BO composition adapter yet. The existing overlay must not assign a second pipeline to an unproven EXP208 template offset.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",
@@ -9,7 +9,7 @@
   ],
   "definitions": [
     "COMPACT_SPLIT=0x40; NATIVE_SPLIT=0x1000",
-    "v1 Draw has a single UscPipelineReference",
+    "v1 Draw has a single UscPipelineReference; v2 keeps its byte layout and uses Reserved[0] only as a typed fragment USC pipeline reference",
     "native pool allocator can return exact owning BO through out_bo",
     "capture holds BO object refs, not residency",
     "Windows GPUVA migration remains CLOSED/NO"
@@ -26,7 +26,7 @@
     "Tier-A autonomously implements reversible source-backed choices in this worktree",
     "no default Devstral/subagents or push/architect checkout/native-ANS changes",
     "hardware authorized only after exact candidate preregistration/build/sign/hash/preflight and established recovery",
-    "keep v1 proven behavior; no guessed pipeline layout or false caps",
+    "keep v1 proven behavior; v2 must use owner-proven native pool/BO ranges rather than guessed EXP208 template offsets or false caps",
     "Full Graphics desktop goal remains active; no helper-only completion"
   ],
   "source": [
