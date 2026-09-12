@@ -43005,6 +43005,20 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+# AD04-GPUMMU-DESIGN — 2026-09-12 — DESIGN ONLY
+
+Input05954bc; source-study commit c0cad2bee25e29b5f384a3a9ae3a3e961e11ce37.
+Verdict CONDITIONAL: separate VidMm process TTBR0 roots can preserve firmware
+context0 retained TTBR1 identity; one undifferentiated shared aperture cannot
+provide process isolation. Pinned Asahi G13 user TTBR1 is absent. Broker v4 lacks
+process-root/slot lifetime support. WDK26100 explicitly describes16KiB GPU-page
+updates but page-table storage/4KiB partial updates/physical backing and bootstrap
+still require proof. Binding, residency, mapping fences and render fences remain
+distinct. Native relocation comparison: fixed template207 entries is not a full
+dynamic Asahi pointer inventory. No build, executable model, caps/DDI change,
+Air, hardware, new agent or push. Design and next proof obligations:
+docs/superpowers/specs/2026-09-12-windows-gpummu-retained-root-feasibility.md.
+
 # AD04-GPUVA-MODE-GATE — 2026-09-12 — source-only STOP
 
 Conditional explicit-binding approval checked against input b95c54e.
