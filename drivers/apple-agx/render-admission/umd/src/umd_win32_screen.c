@@ -12,6 +12,8 @@ extern "C" {
 #include "umd_internal.h"
 }
 
+static DECLSPEC_ALIGN(8) volatile LONG64 NextOwnerCookie;
+
 static ADMISSION_UMD_SCREEN_BUFFER *AdmissionUmdScreenFind(
     ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Token) {
   UINT index;
@@ -241,6 +243,7 @@ HRESULT AdmissionUmdScreenDetachNativeBo(
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(Device, Token);
   if (buffer != NULL && !buffer->Transition && buffer->SourceHolds == 0u &&
+      buffer->SubmissionHolds == 0u &&
       buffer->NativeBo == NativeBo &&
       buffer->NativeBoSerial == NativeBoSerial) {
     buffer->NativeBo = NULL;
@@ -257,6 +260,10 @@ BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device) {
   if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC)
     return FALSE;
   AcquireSRWLockShared(&Device->ScreenBufferLock);
+  if (Device->DrawSubmission != NULL) {
+    ReleaseSRWLockShared(&Device->ScreenBufferLock);
+    return TRUE;
+  }
   for (index = 0u; index < ADMISSION_UMD_SOURCE_HOLD_LIMIT; ++index)
     if (Device->SourceHolds[index].Active) {
       live = TRUE;
@@ -272,7 +279,7 @@ HRESULT AdmissionUmdScreenBeginClose(ADMISSION_UMD_DEVICE *Device) {
   if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC)
     return E_INVALIDARG;
   AcquireSRWLockExclusive(&Device->ScreenBufferLock);
-  if (Device->ScreenClosing) {
+  if (Device->ScreenClosing || Device->DrawSubmission != NULL) {
     result = HRESULT_FROM_WIN32(ERROR_BUSY);
   } else {
     for (index = 0u; index < ADMISSION_UMD_SOURCE_HOLD_LIMIT; ++index)
@@ -282,7 +289,8 @@ HRESULT AdmissionUmdScreenBeginClose(ADMISSION_UMD_DEVICE *Device) {
       }
     if (SUCCEEDED(result))
       for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index)
-        if (Device->ScreenBuffers[index].Transition) {
+        if (Device->ScreenBuffers[index].Transition ||
+            Device->ScreenBuffers[index].SubmissionHolds) {
           result = HRESULT_FROM_WIN32(ERROR_BUSY);
           break;
         }
@@ -465,7 +473,8 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
     return 0;
   }
   buffer = AdmissionUmdScreenFind(device, Token);
-  if (buffer == NULL || buffer->Mapped || buffer->Transition || Bytes == 0ULL ||
+  if (buffer == NULL || buffer->Mapped || buffer->Transition ||
+      buffer->SubmissionHolds || Bytes == 0ULL ||
       Offset > buffer->Bytes || Bytes > buffer->Bytes - Offset ||
       (Access & buffer->Flags) != Access) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
@@ -525,7 +534,7 @@ static int AdmissionUmdScreenUnmapBuffer(void *Context,
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(device, Token);
   if (buffer == NULL || !buffer->Mapped || buffer->Transition ||
-      buffer->SourceHolds != 0u) {
+      buffer->SourceHolds != 0u || buffer->SubmissionHolds != 0u) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     return 0;
   }
@@ -576,7 +585,7 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(device, Token);
   if (buffer == NULL || buffer->Mapped || buffer->Transition ||
-      buffer->SourceHolds != 0u) {
+      buffer->SourceHolds != 0u || buffer->SubmissionHolds != 0u) {
     ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     return 0;
   }
@@ -662,6 +671,16 @@ HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device) {
   AGX_WIN32_SCREEN_OPERATIONS screen;
   if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC)
     return E_INVALIDARG;
+  if (Device->OwnerCookie != 0ULL || Device->DrawSubmission != NULL)
+    return HRESULT_FROM_WIN32(ERROR_BUSY);
+  for (;;) {
+    LONG64 old = InterlockedCompareExchange64(&NextOwnerCookie, 0, 0);
+    if (old == MAXLONGLONG) return E_OUTOFMEMORY;
+    if (InterlockedCompareExchange64(&NextOwnerCookie, old + 1, old) == old) {
+      Device->OwnerCookie = (APPLE_AGX_U64)(old + 1);
+      break;
+    }
+  }
   ZeroMemory(&transport, sizeof(transport));
   transport.CreateBuffer = AdmissionUmdScreenCreateBuffer;
   transport.MapBuffer = AdmissionUmdScreenMapBuffer;

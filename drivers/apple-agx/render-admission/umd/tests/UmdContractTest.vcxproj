@@ -37,6 +37,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="umd_contract_windows.c" />
+    <ClCompile Include="..\src\umd_draw_composer.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\src\apple_agx_dynamic_job.c" />
+    <ClCompile Include="..\..\src\render_win32_transport.c" />
     <ClCompile Include="..\src\umd_runtime_device.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>

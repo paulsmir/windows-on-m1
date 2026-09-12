@@ -6,6 +6,7 @@
 #include "umd_resource_lifetime.h"
 #include "agx_win32_transport.h"
 #include "agx_win32_screen.h"
+#include "umd_draw_composer.h"
 
 #define ADMISSION_UMD_ADAPTER_MAGIC 0x50414455u /* "UDAP" */
 #define ADMISSION_UMD_DEVICE_MAGIC 0x56454455u  /* "UDEV" */
@@ -28,6 +29,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U32 LockedAccess;
   APPLE_AGX_U32 MapEpoch;
   APPLE_AGX_U32 SourceHolds;
+  APPLE_AGX_U32 SubmissionHolds;
   BOOL Active;
   BOOL Mapped;
   BOOL Transition;
@@ -94,6 +96,9 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 NextScreenSerial;
   APPLE_AGX_U64 NextSourceHoldId;
   APPLE_AGX_U64 OwnerCookie;
+  APPLE_AGX_U64 LastDrawRequest;
+  ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
+  BOOL DrawTerminal;
   BOOL ScreenClosing;
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;

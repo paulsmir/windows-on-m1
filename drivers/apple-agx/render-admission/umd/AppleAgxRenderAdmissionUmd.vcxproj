@@ -50,6 +50,10 @@
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
     <ClCompile Include="src\umd_resource_lifetime.c" />
+    <ClCompile Include="src\umd_draw_composer.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\src\render_win32_transport.c" />
     <ClCompile Include="src\direct_flip_contract.c" />
     <ClCompile Include="..\src\render_allocation.c" />
     <ClCompile Include="..\..\shared\src\apple_agx_win32_abi.c" />

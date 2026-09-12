@@ -15,6 +15,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <string.h>
 
 #include "../src/umd.c"
+#include "umd_draw_composer_windows.c"
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 #include "agx_win32_pipe_screen.h"
 #include "agx_d3d10_windows.h"
@@ -70,6 +71,7 @@ enum {
 };
 
 static TEST_STATE State;
+unsigned AdmissionUmdDrawComposerTests(void);
 static unsigned char CommandBuffer[4096];
 static unsigned char NextCommandBuffer[4096];
 static D3DDDI_ALLOCATIONLIST AllocationList[16];
@@ -1143,5 +1145,6 @@ int main(void) {
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
   test_mesa_windows_owners(createDevice);
 #endif
+  State.Failures += AdmissionUmdDrawComposerTests();
   return State.Failures == 0u ? 0 : (int)State.Failures;
 }
