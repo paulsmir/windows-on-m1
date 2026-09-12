@@ -337,26 +337,46 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
       AdmissionUmdScreenFind(device, Token);
   D3DDDICB_LOCK lock;
   HRESULT result;
-  if (buffer == NULL || Address == NULL || buffer->Mapped || Bytes == 0ULL ||
-      Offset > buffer->Bytes || Bytes > buffer->Bytes - Offset ||
+  if (device == NULL || Address == NULL ||
       (Access & (AppleAgxWin32BufferCpuRead |
                  AppleAgxWin32BufferCpuWrite)) == 0u ||
       (Access & ~(AppleAgxWin32BufferCpuRead |
                   AppleAgxWin32BufferCpuWrite)) != 0u ||
-      (Access & buffer->Flags) != Access ||
       device->KernelCallbacks == NULL ||
       device->KernelCallbacks->pfnLockCb == NULL)
     return 0;
-  ZeroMemory(&lock, sizeof(lock));
-  lock.hAllocation = buffer->KernelAllocation;
-  lock.Flags.LockEntire = 1u;
-  if ((Access & AppleAgxWin32BufferCpuWrite) == 0u)
-    lock.Flags.ReadOnly = 1u;
-  else if ((Access & AppleAgxWin32BufferCpuRead) == 0u)
-    lock.Flags.WriteOnly = 1u;
-  result = device->KernelCallbacks->pfnLockCb(
-      device->RuntimeDevice.handle, &lock);
+  AcquireSRWLockExclusive(&device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(device, Token);
+  if (buffer == NULL || buffer->Mapped || buffer->Transition || Bytes == 0ULL ||
+      Offset > buffer->Bytes || Bytes > buffer->Bytes - Offset ||
+      (Access & buffer->Flags) != Access) {
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
+  buffer->Transition = TRUE;
+  {
+    D3DKMT_HANDLE allocation = buffer->KernelAllocation;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    ZeroMemory(&lock, sizeof(lock));
+    lock.hAllocation = allocation;
+    lock.Flags.LockEntire = 1u;
+    if ((Access & AppleAgxWin32BufferCpuWrite) == 0u)
+      lock.Flags.ReadOnly = 1u;
+    else if ((Access & AppleAgxWin32BufferCpuRead) == 0u)
+      lock.Flags.WriteOnly = 1u;
+    result = device->KernelCallbacks->pfnLockCb(
+        device->RuntimeDevice.handle, &lock);
+    AcquireSRWLockExclusive(&device->ScreenBufferLock);
+    buffer = AdmissionUmdScreenFind(device, Token);
+    if (buffer == NULL || buffer->KernelAllocation != allocation) {
+      ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+      device->LastScreenError = E_FAIL;
+      return 0;
+    }
+  }
   if (FAILED(result) || lock.pData == NULL) {
+    buffer->Transition = FALSE;
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
     device->LastScreenError = FAILED(result) ? result : E_FAIL;
     return 0;
   }
@@ -366,6 +386,8 @@ static int AdmissionUmdScreenMapBuffer(void *Context, APPLE_AGX_U64 Token,
   if (buffer->MapEpoch == 0u)
     ++buffer->MapEpoch;
   buffer->Mapped = TRUE;
+  buffer->Transition = FALSE;
+  ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   device->LastScreenError = S_OK;
   *Address = (PVOID)((BYTE *)lock.pData + (SIZE_T)Offset);
   return 1;
