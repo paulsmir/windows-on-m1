@@ -74,6 +74,11 @@ Asahi agx_screen/context or hardware rendering proof.
 Commit34d62b3 adds existing-slot opaque NativeBo association/query/detach with
 held-detach denial. WDK owner test passes. This is only the owner contract: no
 real Mesa BO allocation has invoked it and agx_build_pipeline remains unchanged.
+Commit290b17c adds an immutable build-local agx_state.c transform pinned to
+SHA2565015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba.
+It changes only agx_build_pipeline to use with_bo and expose pipeline_bo.
+No association/capture call has been inserted yet; native Windows BO backend is
+the first unresolved production owner.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
