@@ -265,14 +265,26 @@ def parse_patch(text, contract, repo):
     return sorted(files)
 
 
+def stream_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    return value
+
+
 def run_fixed_check(repo, command_id):
     if command_id != "RUN_HARMLESS_CHECK":
         fail("command_id_invalid")
     helper = Path(__file__).with_name("harmless_patch_check.py")
-    result = subprocess.run([sys.executable, str(helper), "--repo", str(repo)], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode:
-        fail("fixed_check_failed")
+    argv = [sys.executable, str(helper), "--repo", str(repo)]
+    try:
+        result = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+        return {"command_id": command_id, "argv": argv, "exit_code": result.returncode,
+                "stdout": stream_text(result.stdout), "stderr": stream_text(result.stderr), "timed_out": False}
+    except subprocess.TimeoutExpired as error:
+        return {"command_id": command_id, "argv": argv, "exit_code": None,
+                "stdout": stream_text(error.stdout), "stderr": stream_text(error.stderr), "timed_out": True}
 
 
 def changed_paths(repo):
@@ -307,7 +319,7 @@ def main(argv=None):
         schema(contract, proposal)
         repo = preflight(contract, output)
         if proposal["result"] != "PATCH_PROPOSED":
-            payload = {"result": proposal["result"], "reason": "no_patch_applied", "automatic_merge": False,
+            payload = {"result": proposal["result"], "reason": "no_patch_applied", "applied": False, "automatic_merge": False,
                        "hardware_used": False, "commands_run": []}
             write_output(output, proposal, payload)
             print(json.dumps(payload, sort_keys=True))
@@ -329,15 +341,21 @@ def main(argv=None):
         actual = changed_paths(repo)
         if actual != expected:
             fail("post_apply_scope_mismatch")
-        for command_id in proposal["requested_command_ids"]:
-            run_fixed_check(repo, command_id)
-        payload = {"result": "APPLIED", "reason": "none", "automatic_merge": False, "hardware_used": False,
-                   "commands_run": proposal["requested_command_ids"], "changed_paths": actual}
+        command_results = [run_fixed_check(repo, command_id) for command_id in proposal["requested_command_ids"]]
+        if any(result["timed_out"] or result["exit_code"] != 0 for result in command_results):
+            payload = {"result": "POST_APPLY_CHECK_FAILED", "reason": "fixed_check_failed", "applied": True,
+                       "automatic_merge": False, "hardware_used": False, "commands_run": proposal["requested_command_ids"],
+                       "command_results": command_results, "changed_paths": actual}
+            write_output(output, proposal, payload)
+            print(json.dumps(payload, sort_keys=True))
+            return 1
+        payload = {"result": "APPLIED", "reason": "none", "applied": True, "automatic_merge": False, "hardware_used": False,
+                   "commands_run": proposal["requested_command_ids"], "command_results": command_results, "changed_paths": actual}
         write_output(output, proposal, payload)
         print(json.dumps(payload, sort_keys=True))
         return 0
     except Reject as error:
-        payload = {"result": "REJECTED", "reason": error.reason, "automatic_merge": False, "hardware_used": False}
+        payload = {"result": "REJECTED", "reason": error.reason, "applied": False, "automatic_merge": False, "hardware_used": False}
         try:
             if not output.exists() and output.is_absolute() and no_symlink_ancestors(output):
                 write_output(output, proposal if proposal is not None else {}, payload)

@@ -1,13 +1,18 @@
 import json
+import importlib.util
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 LANE = ROOT / "scripts" / "agent" / "patch_proposal_lane.py"
+SPEC = importlib.util.spec_from_file_location("patch_proposal_lane", LANE)
+LANE_MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(LANE_MODULE)
 
 
 def run(*args, cwd=None, check=True):
@@ -108,9 +113,33 @@ class PatchProposalLaneTests(unittest.TestCase):
         self.assertEqual(payload["result"], "APPLIED")
         self.assertEqual((self.worktree / "investigation" / "agent_tasks" / "demo.txt").read_text(), "runner-marker\n")
         self.assertEqual(payload["commands_run"], ["RUN_HARMLESS_CHECK"])
+        self.assertEqual(payload["command_results"][0]["command_id"], "RUN_HARMLESS_CHECK")
+        self.assertEqual(payload["command_results"][0]["exit_code"], 0)
+        self.assertFalse(payload["command_results"][0]["timed_out"])
         self.assertEqual(run("git", "rev-parse", "HEAD", cwd=self.main).stdout.strip(), self.base)
         self.assertEqual(run("git", "status", "--porcelain", cwd=self.main).stdout, main_status)
         self.assertTrue((self.output / "proposal.json").is_file())
+
+    def test_fixed_check_failure_records_applied_patch_and_command_evidence(self):
+        result = self.invoke(proposal=self.proposal(requested_command_ids=["RUN_HARMLESS_CHECK"]))
+        payload = self.payload(result)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["result"], "POST_APPLY_CHECK_FAILED")
+        self.assertTrue(payload["applied"])
+        self.assertEqual(payload["command_results"][0]["command_id"], "RUN_HARMLESS_CHECK")
+        self.assertEqual(payload["command_results"][0]["exit_code"], 1)
+        self.assertIn("allowed/demo.txt", payload["changed_paths"])
+        self.assertEqual(json.loads((self.output / "summary.json").read_text())["applied"], True)
+
+    def test_fixed_check_timeout_is_bounded_and_captured_with_unit_mock(self):
+        timeout = subprocess.TimeoutExpired(["fixed-helper"], 10, output="partial", stderr="late")
+        with mock.patch.object(LANE_MODULE.subprocess, "run", side_effect=timeout) as runner:
+            record = LANE_MODULE.run_fixed_check(self.worktree, "RUN_HARMLESS_CHECK")
+        self.assertTrue(record["timed_out"])
+        self.assertIsNone(record["exit_code"])
+        self.assertEqual(record["stdout"], "partial")
+        self.assertEqual(record["stderr"], "late")
+        self.assertEqual(runner.call_args.kwargs["timeout"], 10)
 
     def test_rejects_arbitrary_shell_as_command_id(self):
         self.rejected(self.invoke(proposal=self.proposal(requested_command_ids=["sh -c touch pwned"])), "command_id_unapproved")
