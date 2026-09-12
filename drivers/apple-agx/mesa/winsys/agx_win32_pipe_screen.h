@@ -2,6 +2,7 @@
 #define APPLE_AGX_MESA_WIN32_PIPE_SCREEN_H
 
 #include "agx_win32_screen.h"
+#include "agx_win32_native_device.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
 
@@ -14,6 +15,7 @@ typedef struct _AGX_WIN32_PIPE_DEVICE {
   AGX_WIN32_SCREEN *Runtime;
   struct pipe_screen *Screen;
   struct pipe_context *Context;
+  AGX_WIN32_NATIVE_DEVICE Native;
   APPLE_AGX_U32 Generation;
 } AGX_WIN32_PIPE_DEVICE;
 

@@ -13,6 +13,7 @@
 typedef struct _AGX_WIN32_PIPE_SCREEN {
   struct pipe_screen Base;
   AGX_WIN32_SCREEN *Screen;
+  AGX_WIN32_NATIVE_DEVICE *Native;
   uint32_t Magic;
   uint32_t Contexts;
   uint32_t Resources;
@@ -29,6 +30,7 @@ typedef struct _AGX_WIN32_PIPE_RESOURCE {
   struct pipe_resource Base;
   AGX_WIN32_PIPE_SCREEN *Screen;
   AGX_WIN32_SCREEN_BUFFER Buffer;
+  AGX_WIN32_NATIVE_BO NativeBo;
   uint64_t AllocationBytes;
   uint32_t Pitch;
   uint32_t BytesPerPixel;
@@ -183,13 +185,27 @@ static struct pipe_resource *pipe_resource_create(
   resource = (AGX_WIN32_PIPE_RESOURCE *)calloc(1u, sizeof(*resource));
   if (resource == NULL)
     return NULL;
-  result = AgxWin32ScreenCreateBuffer(
-      screen->Screen, AgxWin32BufferClassGeneral, allocationBytes,
-      classInfo->MinimumAlignment,
-      AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
-          AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
-      &resource->Buffer);
-  if (result != AgxWin32ScreenSuccess) {
+  if (screen->Native != NULL) {
+    if (AgxWin32NativeDeviceCreateBo(
+            screen->Native, AgxWin32BufferClassGeneral, allocationBytes,
+            classInfo->MinimumAlignment,
+            AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+                AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
+            &resource->NativeBo) != AgxWin32NativeDeviceSuccess) {
+      screen->LastResult = AgxWin32ScreenState;
+      free(resource);
+      return NULL;
+    }
+    resource->Buffer = resource->NativeBo.Buffer;
+  } else {
+    result = AgxWin32ScreenCreateBuffer(
+        screen->Screen, AgxWin32BufferClassGeneral, allocationBytes,
+        classInfo->MinimumAlignment,
+        AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+            AppleAgxWin32BufferGpuRead | AppleAgxWin32BufferGpuWrite,
+        &resource->Buffer);
+  }
+  if (screen->Native == NULL && result != AgxWin32ScreenSuccess) {
     screen->LastResult = result;
     free(resource);
     return NULL;
@@ -214,7 +230,12 @@ static void pipe_resource_destroy(struct pipe_screen *Base,
   AGX_WIN32_SCREEN_RESULT result;
   if (screen == NULL || resource == NULL || resource->Screen != screen)
     return;
-  result = AgxWin32ScreenDestroyBuffer(screen->Screen, &resource->Buffer);
+  if (screen->Native != NULL)
+    result = AgxWin32NativeDeviceDestroyBo(screen->Native, &resource->NativeBo) ==
+                     AgxWin32NativeDeviceSuccess ? AgxWin32ScreenSuccess :
+                     AgxWin32ScreenState;
+  else
+    result = AgxWin32ScreenDestroyBuffer(screen->Screen, &resource->Buffer);
   screen->LastResult = result;
   if (result != AgxWin32ScreenSuccess)
     return;
@@ -408,6 +429,11 @@ int AgxWin32PipeDeviceInitialize(AGX_WIN32_PIPE_DEVICE *Device,
       Device->Context != NULL || Device->Generation != 0u)
     return 0;
   memset(&candidate, 0, sizeof(candidate));
+  if (AgxWin32NativeDeviceInitialize(&candidate.Native, Runtime,
+                                     0x100000000ULL,
+                                     Runtime->Generation) !=
+      AgxWin32NativeDeviceSuccess)
+    return 0;
   candidate.Screen = AgxWin32PipeScreenCreate(Runtime);
   if (candidate.Screen == NULL)
     return 0;
@@ -420,6 +446,7 @@ int AgxWin32PipeDeviceInitialize(AGX_WIN32_PIPE_DEVICE *Device,
   candidate.Runtime = Runtime;
   candidate.Generation = Runtime->Generation;
   *Device = candidate;
+  ((AGX_WIN32_PIPE_SCREEN *)Device->Screen)->Native = &Device->Native;
   return 1;
 }
 

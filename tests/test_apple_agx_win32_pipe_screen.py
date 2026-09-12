@@ -6,8 +6,11 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MESA = ROOT / ".local/reference/mesa"
-BUILD = ROOT / ".local/accelerated-desktop-ad03/mesa-build"
+COMMON = Path(subprocess.check_output(
+    ['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+    cwd=ROOT, text=True).strip()).parent
+MESA = COMMON / ".local/reference/mesa"
+BUILD = COMMON / ".local/accelerated-desktop-ad03/mesa-build"
 WINSYS = ROOT / "drivers/apple-agx/mesa/winsys"
 SHARED = ROOT / "drivers/apple-agx/shared"
 
@@ -34,6 +37,9 @@ class AppleAgxWin32PipeScreenTests(unittest.TestCase):
                 str(WINSYS / "agx_win32_pipe_screen_test.c"),
                 str(WINSYS / "agx_win32_pipe_screen.c"),
                 str(WINSYS / "agx_win32_screen.c"),
+                str(WINSYS / "agx_win32_native_bo.c"),
+                str(WINSYS / "agx_win32_native_device.c"),
+                str(WINSYS / "agx_win32_construction_address.c"),
                 str(WINSYS / "agx_win32_transport.c"),
                 str(SHARED / "src/apple_agx_win32_abi.c"),
                 "-o", str(binary),
