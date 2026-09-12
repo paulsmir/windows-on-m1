@@ -1,7 +1,7 @@
 {
-  "head": "a9c56bf28544dd238a0ace508188ca141d017f06",
-  "last_pass": "explicit v1/v2 and legacy rejection; sequential WDK source-hold test only, NOT concurrency or full lifetime proof",
-  "first_error": "Complete existing owner design per AD04-OWNER-SLICE-REVIEW.md: shared lifecycle lock, unique hold ids, busy close preserving owner, deterministic callback-reentry and two-hold replay tests. a9c56bf is partial; do not wire native caller yet.",
+  "head": "a8fc3e13bf42ddd141eece4c61d9ce4f5a01f075",
+  "last_pass": "explicit v1/v2 and legacy rejection; WDK x64 source hold test includes unique independent holds and transition reservation",
+  "first_error": "Complete AD04-OWNER-SLICE-REVIEW.md: create/map lifecycle locks and rollback, busy finalization/CloseDevice preserving owner, deterministic callback reentry, NativeBo association and ARM64 gate. Do not wire native caller yet.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",

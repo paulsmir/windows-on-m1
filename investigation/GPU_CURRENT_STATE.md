@@ -54,10 +54,11 @@ gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
 ## Current implementation checkpoint
 Latest concrete owner decision: agent_tasks/AD04-NATIVE-BO-OWNER-DECISION.md.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
-do not share a lock, release A twice can consume live hold B, and finalize still
-clears busy owner storage. WDK sequential test PASS is retained with this narrower
-scope. Complete the already-approved owner state machine, unique holds and actual
-close gating before native wiring; no complete mapping-lifetime proof yet.
+did not share a lock, release A twice could consume live hold B, and finalize
+still clears busy owner storage. Commita8fc3e1 adds unique hold records and
+unmap/deallocate transition reservation; WDK x64 test now covers independent
+holds. Finalization/close busy, create/map transition rollback, callback reentry,
+NativeBo association and ARM64 still remain. No complete mapping-lifetime proof.
 
 Latest Tier-A review: agent_tasks/AD04-ASTRA-V2-PROVENANCE-REVIEW.md.
 Commit01a86f7 closes the first two required corrections: version selection is
