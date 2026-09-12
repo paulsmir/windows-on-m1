@@ -1,0 +1,6 @@
+{
+  "source_sha256": "5015b75863202a170f8d6015eb82a76a70ecd4b92204894fa3d1886b1baa94ba",
+  "function_anchor": "static uint32_t\nagx_build_pipeline(",
+  "old": "   struct agx_ptr t =\n      agx_pool_alloc_aligned(&batch->pipeline_pool, usc_size, 64);",
+  "new": "   struct agx_bo *pipeline_bo = NULL;\n   struct agx_ptr t =\n      agx_pool_alloc_aligned_with_bo(&batch->pipeline_pool, usc_size, 64,\n                                     &pipeline_bo);"
+}
