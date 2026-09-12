@@ -1,7 +1,7 @@
 # GPU current state — 2026-09-12
 
 Worktree: integration/ad04-windows-compiler (linked persistent integration tree).
-Compiled source checkpoint:d2c2ad8f8458254442a385f2d86e4ce30453b5a5.
+Compiled source checkpoint:044b946cf5cbb1ac20cca86bbb55282446e8f1f6.
 Evidence/workflow checkpoint:3d912c03b87d35f6ef36c2ccdfa4ccf7bff96d52.
 Architect feature/j313-gpu-acceleration remains f90402c; no merge or push.
 
@@ -79,6 +79,14 @@ the command validates as v2 and abort releases both holds. This proves the
 wire/capture lifetime invariant only. Native `agx_pool_alloc_aligned_with_bo`
 still needs an explicit Windows device-owner adapter before native emission
 can feed these references.
+Commit044b946 adds that narrow pool-to-capture bridge. It treats the native
+pool result as a BO-bound slice, verifies exact CPU/GPU relative offsets and
+the queried owner/token/serial/generation, then sends only token+offset+bytes
+to typed capture. It explicitly does not export physical addresses, establish
+VidMm residency, or allocate a template slot. Host suite PASS. Next: introduce
+this bridge at the Windows-native `agx_build_pipeline` callsite through a
+device-owned callback seam, retaining pinned Mesa source semantics and without
+editing the reference tree.
 
 ## Machine / hardware
 No Air boot/install action this phase. User reports Running proxy; passive USB

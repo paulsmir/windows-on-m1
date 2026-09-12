@@ -1,7 +1,7 @@
 {
-  "head": "d2c2ad8f8458254442a385f2d86e4ce30453b5a5",
-  "last_pass": "typed capture emits and validates v2 Draw for two disjoint differently-sized USC subranges from one retained BO; abort releases all holds; five host suites pass",
-  "first_error": "v2 capture is validated but native agx_pool_alloc_aligned_with_bo has no Windows device-owner adapter yet. The existing overlay must not assign a second pipeline to an unproven EXP208 template offset.",
+  "head": "044b946cf5cbb1ac20cca86bbb55282446e8f1f6",
+  "last_pass": "native pool slice bridge validates BO CPU/GPU relative offsets and owner/token/serial/generation before typed capture; five host suites pass",
+  "first_error": "the tested native-pool bridge has no device-owned callback seam at the Windows agx_build_pipeline callsite yet. The existing overlay must not assign a second pipeline to an unproven EXP208 template offset.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",
