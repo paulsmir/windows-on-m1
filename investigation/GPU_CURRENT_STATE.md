@@ -57,8 +57,9 @@ Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
 unmap/deallocate transition reservation; WDK x64 test now covers independent
-holds. Finalization/close busy, create/map transition rollback, callback reentry,
-NativeBo association and ARM64 still remain. No complete mapping-lifetime proof.
+holds. Commit0d7cc75 adds busy finalization/CloseDevice preservation. Create/map
+transition rollback, callback reentry, NativeBo association and ARM64 still
+remain. No complete mapping-lifetime proof.
 
 Latest Tier-A review: agent_tasks/AD04-ASTRA-V2-PROVENANCE-REVIEW.md.
 Commit01a86f7 closes the first two required corrections: version selection is
