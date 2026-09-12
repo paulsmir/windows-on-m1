@@ -1,7 +1,7 @@
 {
-  "head": "01a86f788ef312b286b9ed4d3fd71449853094bc",
-  "last_pass": "explicit v1/v2 transport and capture selection plus legacy-v2 overlay rejection; focused host suites pass",
-  "first_error": "Current native pool bridge checks caller arithmetic only. Implement expected identity acquisition and authoritative BO mapping association before real agx_build_pipeline wiring. See AD04-ASTRA-V2-PROVENANCE-REVIEW.md.",
+  "head": "b30bfaaaf7670997162c516a5e41a113997bebd5",
+  "last_pass": "explicit v1/v2 selection legacy-v2 rejection and exact owner-side BO identity acquire; focused host suites pass",
+  "first_error": "Current native pool bridge still receives caller CPU/GPU bases. Design concrete Windows device-owned native BO association and mapping/source lifetime for actual agx_build_pipeline out_bo before native wiring. See AD04-ASTRA-V2-PROVENANCE-REVIEW.md.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",

@@ -55,9 +55,12 @@ gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
 Latest Tier-A review: agent_tasks/AD04-ASTRA-V2-PROVENANCE-REVIEW.md.
 Commit01a86f7 closes the first two required corrections: version selection is
 explicit and legacy overlay/DMA consumers reject v2 before side effects. The
-next required correction is authoritative expected BO identity/source-map
-lifetime. Current bridge proves caller-address arithmetic consistency only.
-Existing tests do not prove real native provenance or v2 KMD composition.
+next correction has two parts. Commitb30bfaa closes exact identity acquisition:
+the bridge uses owner-side RetainExact after matching the expected token/serial/
+generation/size identity. The remaining required boundary is an authoritative
+Windows device-owned native BO association and source-map lifetime; caller bases
+still prove arithmetic only. Existing tests do not prove real native provenance
+or v2 KMD composition.
 
 6725ae1b2da94a909c3978905235e00394c14c0f adds device/request-scoped typed capture
 using existing wire ABI and KMD materializer. Host ASan/UBSan and Windows x64
