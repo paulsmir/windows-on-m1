@@ -9,6 +9,9 @@ typedef struct _AGX_WIN32_NATIVE_BO {
   APPLE_AGX_U32 Generation;
   APPLE_AGX_U32 Flags;
   void *CpuAddress;
+  /* Construction-only identity. This is not a GPUVA or a physical address. */
+  APPLE_AGX_U64 ConstructionSerial;
+  APPLE_AGX_U64 ConstructionAddress;
   APPLE_AGX_BOOL Live;
 } AGX_WIN32_NATIVE_BO;
 

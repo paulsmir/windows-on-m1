@@ -50,6 +50,8 @@
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_transport.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_screen.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_bo.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_construction_address.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_device.c" />
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile>
