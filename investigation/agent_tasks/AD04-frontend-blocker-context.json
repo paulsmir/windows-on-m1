@@ -1,13 +1,16 @@
 {
   "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
-  "first_error": "No current compiler error. Frontend owner question: native agx_bo requires GPU VA lifetime absent from existing Windows token/CPU-map interface.",
-  "include_or_call_chain": ["AdmissionUmdCreateDevice -> KernelContext", "AgxWin32PipeDeviceInitialize -> project-owned pipe_screen/context", "next: real agx_screen/agx_context -> agx_bo.va -> native GPU references"],
-  "definitions": ["AGX_WIN32_BUFFER carries Token/Bytes/Generation/Flags/Mapped, not GPU VA", "MapBuffer returns CPU void** through pfnLockCb; not a GPU binding", "native agx_va carries addr/size_B and agx_ptr distinguishes cpu from gpu", "Windows allocation/patch-list mode and GPUVA mode have distinct residency contracts; no model switch approved here"],
+  "first_error": "ARCHITECTURE_GATE: production is physical/patch-list; user requires STOP before persistent VidMm GPUVA binding.",
+  "include_or_call_chain": ["DriverEntry registers Render/Patch/SubmitCommand", "CreateContext zeroes ContextInfo and assigns allocation/patch-list sizes", "dynamic Render resolves allocation-list PhysicalAddress to internal AGX mapping", "SubmitCommandVirtual and CreateProcess are FAIL2 stubs"],
+  "definitions": ["FAIL2 returns STATUS_NOT_SUPPORTED", "ContextInfo zeroed: no NoPatchingRequired opt-in set", "DRIVERCAPS zeroed then selected fields assigned: no GpuMmu/IoMmu opt-in", "GpuVirtualAddress in internal local view is derived from segment mapping, not proof of VidMm-assigned process GPUVA", "Binding validity and residency are separate; CPU unmap and GPU binding unmap must not be conflated"],
   "overlays": ["uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR", "agx_index homogeneous internal bitfields", "agx_pack internal off_t storage", "canonical LUT clang guard", "agx_compile Windows NUL debug selftest", "agx_spill canonical c99_alloca include"],
   "constraints": ["direct Tier-A; no default Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "do not change ABI/layout/ownership or AGX semantics silently", "no capabilities or firmware/broker changes", "compiler PASS is not standard D3D/desktop PASS"],
   "source": [
-    {"path":"drivers/apple-agx/mesa/winsys/agx_win32_transport.h","start":45,"end":82},
-    {"path":"/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/agx_bo.h","start":45,"end":64},
-    {"path":"drivers/apple-agx/render-admission/umd/src/umd_runtime_device.c","start":124,"end":145}
+    {"path":"drivers/apple-agx/render-admission/src/callbacks.c","start":1,"end":9},
+    {"path":"drivers/apple-agx/render-admission/src/callbacks.c","start":343,"end":360},
+    {"path":"drivers/apple-agx/render-admission/src/callbacks.c","start":433,"end":436},
+    {"path":"drivers/apple-agx/render-admission/src/lifecycle.c","start":386,"end":398},
+    {"path":"drivers/apple-agx/render-admission/src/lifecycle.c","start":407,"end":429},
+    {"path":"drivers/apple-agx/render-admission/src/render_dynamic_windows.c","start":117,"end":128}
   ]
 }

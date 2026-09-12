@@ -1,17 +1,19 @@
 {
-  "head": "427f0062f86da31bef0c38c5cebd29c8387a2741",
+  "head": "b95c54ea7ef339fe3b4e7cb73ed69a28754474dd",
   "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
-  "first_error": "No current compiler error. Frontend owner question: native agx_bo requires GPU VA lifetime absent from existing Windows token/CPU-map interface.",
+  "first_error": "ARCHITECTURE_GATE: production is physical/patch-list; user requires STOP before persistent VidMm GPUVA binding.",
   "include_or_call_chain": [
-    "AdmissionUmdCreateDevice -> KernelContext",
-    "AgxWin32PipeDeviceInitialize -> project-owned pipe_screen/context",
-    "next: real agx_screen/agx_context -> agx_bo.va -> native GPU references"
+    "DriverEntry registers Render/Patch/SubmitCommand",
+    "CreateContext zeroes ContextInfo and assigns allocation/patch-list sizes",
+    "dynamic Render resolves allocation-list PhysicalAddress to internal AGX mapping",
+    "SubmitCommandVirtual and CreateProcess are FAIL2 stubs"
   ],
   "definitions": [
-    "AGX_WIN32_BUFFER carries Token/Bytes/Generation/Flags/Mapped, not GPU VA",
-    "MapBuffer returns CPU void** through pfnLockCb; not a GPU binding",
-    "native agx_va carries addr/size_B and agx_ptr distinguishes cpu from gpu",
-    "Windows allocation/patch-list mode and GPUVA mode have distinct residency contracts; no model switch approved here"
+    "FAIL2 returns STATUS_NOT_SUPPORTED",
+    "ContextInfo zeroed: no NoPatchingRequired opt-in set",
+    "DRIVERCAPS zeroed then selected fields assigned: no GpuMmu/IoMmu opt-in",
+    "GpuVirtualAddress in internal local view is derived from segment mapping, not proof of VidMm-assigned process GPUVA",
+    "Binding validity and residency are separate; CPU unmap and GPU binding unmap must not be conflated"
   ],
   "overlays": [
     "uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR",
@@ -30,19 +32,34 @@
   ],
   "source": [
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/mesa/winsys/agx_win32_transport.h",
-      "start": 45,
-      "text": "  APPLE_AGX_U64 Bytes;\n  APPLE_AGX_U32 Generation;\n  APPLE_AGX_U32 Flags;\n  APPLE_AGX_BOOL Mapped;\n} AGX_WIN32_BUFFER;\n\ntypedef struct _AGX_WIN32_WINSYS_OPERATIONS {\n  int (*CreateBuffer)(void *Context, APPLE_AGX_U64 Bytes,\n                      APPLE_AGX_U32 Flags, APPLE_AGX_U64 *Token);\n  int (*MapBuffer)(void *Context, APPLE_AGX_U64 Token,\n                   APPLE_AGX_U64 Offset, APPLE_AGX_U64 Bytes,\n                   APPLE_AGX_U32 Access, void **Address);\n  int (*UnmapBuffer)(void *Context, APPLE_AGX_U64 Token);\n  int (*DestroyBuffer)(void *Context, APPLE_AGX_U64 Token);\n  int (*SubmitClear)(void *Context, const AGX_WIN32_CLEAR_REQUEST *Request,\n                     APPLE_AGX_U32 *Fence);\n  int (*WaitFence)(void *Context, APPLE_AGX_U32 Fence,\n                   APPLE_AGX_U32 TimeoutMs);\n  int (*RetireFence)(void *Context, APPLE_AGX_U32 Fence);\n} AGX_WIN32_WINSYS_OPERATIONS;\n\ntypedef struct _AGX_WIN32_WINSYS {\n  void *Context;\n  APPLE_AGX_U32 Generation;\n  AGX_WIN32_WINSYS_OPERATIONS Operations;\n} AGX_WIN32_WINSYS;\n\nAPPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildClear(\n    const AGX_WIN32_CLEAR_REQUEST *Request, void *CommandBuffer,\n    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);\nAPPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDraw(\n    const AGX_WIN32_DRAW_REQUEST *Request, void *CommandBuffer,\n    APPLE_AGX_U32 CommandCapacity, APPLE_AGX_U32 *CommandBytes);\nAGX_WIN32_WINSYS_RESULT AgxWin32WinsysInitialize(\n    AGX_WIN32_WINSYS *Winsys, void *Context, APPLE_AGX_U32 Generation,\n    const AGX_WIN32_WINSYS_OPERATIONS *Operations);\nAGX_WIN32_WINSYS_RESULT AgxWin32WinsysCreateBuffer(\n    AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U64 Bytes, APPLE_AGX_U32 Flags,"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/callbacks.c",
+      "start": 1,
+      "text": "#include \"render_admission.h\"\n\n#define UNUSED(value) UNREFERENCED_PARAMETER(value)\n#define FAIL2(name, type1, arg1, type2, arg2)                                 \\\n  _Use_decl_annotations_ NTSTATUS name(type1 arg1, type2 arg2) {             \\\n    UNUSED(arg1);                                                             \\\n    UNUSED(arg2);                                                             \\\n    return STATUS_NOT_SUPPORTED;                                              \\\n  }"
     },
     {
-      "path": "/Users/pavel/public_windows/.local/reference/mesa/src/asahi/lib/agx_bo.h",
-      "start": 45,
-      "text": "\n   /* VA must be fixed, otherwise allocated by the driver. */\n   AGX_VA_FIXED = (1 << 1),\n};\n\nstruct agx_va {\n   enum agx_va_flags flags;\n   uint64_t addr;\n   uint64_t size_B;\n};\n\nstruct agx_ptr {\n   /* If CPU mapped, CPU address. NULL if not mapped */\n   void *cpu;\n\n   /* Mapped GPU address */\n   uint64_t gpu;\n};\n\nstruct agx_bo {"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/callbacks.c",
+      "start": 343,
+      "text": "\n  RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));\n  Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;\n  Args->ContextInfo.DmaBufferSegmentSet = 0u;\n  Args->ContextInfo.DmaBufferPrivateDataSize =\n      ADMISSION_GDI_DMA_PRIVATE_SIZE;\n  if (Args->Flags.GdiContext) {\n    Args->ContextInfo.AllocationListSize =\n        ADMISSION_GDI_ALLOCATION_LIST_SIZE;\n    Args->ContextInfo.PatchLocationListSize =\n        ADMISSION_GDI_PATCH_LIST_SIZE;\n  } else {\n    Args->ContextInfo.AllocationListSize = ADMISSION_ALLOCATION_LIST_SIZE;\n    Args->ContextInfo.PatchLocationListSize = ADMISSION_PATCH_LIST_SIZE;\n  }\n  Args->hContext = context;\n  return STATUS_SUCCESS;\n}"
     },
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/umd/src/umd_runtime_device.c",
-      "start": 124,
-      "text": "  ZeroMemory(&createContext, sizeof(createContext));\n  ZeroMemory(&win32Context, sizeof(win32Context));\n  win32Context.Magic = ADMISSION_WIN32_CONTEXT_MAGIC;\n  win32Context.Version = ADMISSION_WIN32_CONTEXT_VERSION;\n  win32Context.Bytes = sizeof(win32Context);\n  win32Context.Generation = device->Win32Generation;\n  createContext.NodeOrdinal = 0u;\n  createContext.EngineAffinity = 1u;\n  createContext.pPrivateDriverData = &win32Context;\n  createContext.PrivateDriverDataSize = sizeof(win32Context);\n  result = device->KernelCallbacks->pfnCreateContextCb(\n      device->RuntimeDevice.handle, &createContext);\n  if (FAILED(result)) {\n    ZeroMemory(device, sizeof(*device));\n    return result;\n  }\n  device->KernelContext = createContext.hContext;\n  if (device->KernelContext == NULL || createContext.pCommandBuffer == NULL ||\n      createContext.CommandBufferSize == 0u ||\n      createContext.pAllocationList == NULL ||\n      createContext.AllocationListSize == 0u ||\n      createContext.pPatchLocationList == NULL ||"
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/callbacks.c",
+      "start": 433,
+      "text": "FAIL2(AdmissionDdiSubmitCommandVirtual, HANDLE, Adapter,\n      const DXGKARG_SUBMITCOMMANDVIRTUAL *, Args)\nFAIL2(AdmissionDdiCreateProcess, PVOID, MiniportDeviceContext,\n      DXGKARG_CREATEPROCESS *, Args)"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/lifecycle.c",
+      "start": 386,
+      "text": "      caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;\n      RtlZeroMemory(caps, sizeof(*caps));\n      caps->HighestAcceptableAddress.QuadPart = -1;\n      /* WDK 26100: must match DXGK_WDDMDEVICECAPS.WDDMVersion. */\n      caps->WDDMVersion = DXGKDDI_WDDMv3_0;\n      RtlZeroMemory(&featureInput, sizeof(featureInput));\n      featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;\n      featureInput.Size = sizeof(featureInput);\n      featureInput.WddmMajor = 3u;\n      featureInput.WddmMinor = 0u;\n      featureInput.NodeCount = 1u;\n      featureInput.ReadyMask = (ULONG)InterlockedCompareExchange(\n          &context->FeatureReadyMask, 0, 0);"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/lifecycle.c",
+      "start": 407,
+      "text": "        caps->MaxAllocationListSlotId =\n            ADMISSION_GDI_ALLOCATION_LIST_SIZE - 1u;\n        caps->MaxQueuedFlipOnVSync = 1u;\n        caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u;\n        caps->SchedulingCaps.MultiEngineAware = 1u;\n        caps->SchedulingCaps.PreemptionAware = 1u;\n        caps->PreemptionCaps.GraphicsPreemptionGranularity =\n            D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;\n        caps->PreemptionCaps.ComputePreemptionGranularity =\n            D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY;\n        caps->FlipCaps.FlipOnVSyncMmIo = 1u;\n        caps->FlipCaps.FlipIndependent = 1u;\n        caps->SupportNonVGA = TRUE;\n        /* WDDM 1.2+ full graphics requires this even when the only exposed\n         * path transform is the already-supported identity/Offset0 pair. */\n        caps->SupportSmoothRotation = TRUE;\n        caps->SupportPerEngineTDR = TRUE;\n        caps->SupportDirectFlip = TRUE;\n        caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;\n        status = STATUS_SUCCESS;\n      } else {\n        status = STATUS_INVALID_DEVICE_STATE;\n      }"
+    },
+    {
+      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/render_dynamic_windows.c",
+      "start": 117,
+      "text": "      allocation->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||\n      allocation->PhysicalAddress.QuadPart <= 0 ||\n      !AdmissionAllocationAlign64K(opened->Allocation->Description.Size,\n                                   &alignedSize) ||\n      !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(\n          build->Adapter, (ULONGLONG)allocation->PhysicalAddress.QuadPart,\n          alignedSize, Offset, &view)) ||\n      view.GpuVirtualAddress == 0ULL || Bytes > view.Bytes)\n    return 0;\n  *GpuVirtualAddress = view.GpuVirtualAddress;\n  return 1;\n}"
     }
   ]
 }

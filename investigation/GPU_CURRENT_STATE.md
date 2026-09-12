@@ -33,11 +33,16 @@ Do not reopen without a new failing input.
 Existing Windows device owner and project pipe wrapper are retained.
 Native agx_bo needs GPU VA and a defined validity/lifetime; Windows buffer API
 currently exposes token/bytes/flags/generation and CPU mapping, not GPU binding.
-Architecture decision pending: versioned Windows-owned BO binding contract
-versus complete opaque-address relocation adaptation. Never substitute CPU
-pointers/tokens, imply residency pinning, or silently change WDDM memory model.
-No frontend ABI or ownership change implemented.
-80-line source packet: agent_tasks/AD04-current-blocker.json.
+User approved explicit Windows/VidMm-owned binding separately from residency,
+conditional on current virtual-mode proof; mandatory STOP if physical/patch-list.
+SOURCE VERDICT: physical/patch-list. ContextInfo has allocation/patch lists;
+DRIVERCAPS has no GPU-MMU opt-in; SubmitCommandVirtual/CreateProcess fail closed;
+dynamic Render resolves segment PhysicalAddress to internal AGX mapping.
+Internal UAT addresses are not persistent VidMm process GPUVA.
+STOP: no binding ABI, lifetime tests or frontend implementation authorized past
+this gate. Next decision: separate GPUVA migration design versus retained physical
+relocation contract. Details: agent_tasks/AD04-GPUVA-MODE-GATE.md.
+79-line source packet: agent_tasks/AD04-current-blocker.json.
 
 ## Machine / hardware
 No Air action this phase. Last verified Air:2026-09-09T13:13:40Z ordinary377/392,
