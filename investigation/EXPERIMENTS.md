@@ -43005,3 +43005,16 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+# AD04-FULLCOMPILER-001 — 2026-09-12 — compiler-only milestone
+
+No hardware EXP was created or repeated. Full NIR and Asahi compiler compile/link
+on x64/ARM64; two x64 compute fixtures execute and match native160-byte binaries
+exactly. ARM64 execution NOT_RUN. No full shader conformance/desktop claim.
+Compiled source427f006; evidence/workflow3d912c0. Full40+5 units and dependencies,
+debug selftest preserved. Intermediate header/assembler/null-device/FPCR/alloca
+failures and actual causal fixes are indexed in agent_tasks/AD04-FULL-COMPILER-RESULT.md.
+Final evidence: evidence/AD04-fullcompiler-001/verified.json and architecture manifests.
+No Air/recovery/driver install/native-ANS action; no push or architect integration.
+Next: existing device-scoped frontend, pending explicit GPU binding/lifetime
+contract decision. Latest policy is direct Tier-A with compact blocker packets,
+not default Devstral. No automatic conversion of CPU mappings to GPU addresses.
