@@ -1,0 +1,10 @@
+{
+  "command": "RUN_MATH_CONTROL",
+  "approved_sha256": "c1a5d554c941a78c3fa02e77c370e8cbb0e5ecb8291177f277f079a07cd67d13",
+  "remote_root": "C:/Users/pauls/AD04-phase3-math-bd9768f1b06e48cd9fb49e61ff0046ba",
+  "input_root": "C:/Users/pauls/AD04-phase3-normalize-20260912T000001Z/input",
+  "probe_ssh": 0,
+  "compile_ssh": 1,
+  "compile_stdout": "",
+  "compile_stderr": ""
+}
