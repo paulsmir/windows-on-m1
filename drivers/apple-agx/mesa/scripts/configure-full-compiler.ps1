@@ -17,7 +17,7 @@ $args=@('setup',$build,$mesa,'--buildtype=debugoptimized','--wrap-mode=nofallbac
  '-Dplatforms=[]','-Dgallium-drivers=[]','-Dvulkan-drivers=[]','-Dopengl=false',
  '-Dgles1=disabled','-Dgles2=disabled','-Dglx=disabled','-Degl=disabled',
  '-Dgbm=disabled','-Dllvm=disabled','-Dshared-glapi=disabled','-Dxmlconfig=disabled',
- '-Dexpat=disabled','-Dzlib=disabled','-Dzstd=disabled','-Dbuild-tests=false')
+ '-Dexpat=disabled','-Dzlib=disabled','-Dzstd=disabled','-Dbuild-tests=false','-Dc_args=/FI"C:\\Users\\pauls\\AD04-fullcompiler-001\\uatomic_clang_compat.h"','-Dcpp_args=/FI"C:\\Users\\pauls\\AD04-fullcompiler-001\\uatomic_clang_compat.h"')
 $p=Start-Process -FilePath "$root\venv\Scripts\meson.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$root\configure-$Architecture.stdout.log" -RedirectStandardError "$root\configure-$Architecture.stderr.log"
 Write-Output "CONFIGURE_EXIT=$($p.ExitCode)"
 Get-Content "$root\configure-$Architecture.stdout.log" -Tail 12
