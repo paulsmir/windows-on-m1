@@ -39,10 +39,16 @@ SOURCE VERDICT: physical/patch-list. ContextInfo has allocation/patch lists;
 DRIVERCAPS has no GPU-MMU opt-in; SubmitCommandVirtual/CreateProcess fail closed;
 dynamic Render resolves segment PhysicalAddress to internal AGX mapping.
 Internal UAT addresses are not persistent VidMm process GPUVA.
-STOP: no binding ABI, lifetime tests or frontend implementation authorized past
-this gate. Next decision: separate GPUVA migration design versus retained physical
-relocation contract. Details: agent_tasks/AD04-GPUVA-MODE-GATE.md.
-79-line source packet: agent_tasks/AD04-current-blocker.json.
+User subsequently approved OPTION1 DESIGN ONLY. Source-first study completed:
+GpuMmu migration CONDITIONAL via separate VidMm process TTBR0 roots and untouched
+firmware context0/retained TTBR1, not a shared process aperture in one global root.
+Native Asahi G13 keeps user TTBR1 absent; current broker v4/context63 path lacks
+the required process namespace/slot lifecycle. WDK26100 UpdatePageTable explicitly
+allows16KiB GPU pages, but logical4KiB updates, table placement, physical backing,
+bootstrap and process/private isolation still require proof. No caps/DDI/code change.
+Design: docs/superpowers/specs/2026-09-12-windows-gpummu-retained-root-feasibility.md.
+Next: bounded offline semantic proof only after implementation authority; no Air.
+Do not treat CONDITIONAL as hardware or implementation readiness.
 
 ## Machine / hardware
 No Air action this phase. Last verified Air:2026-09-09T13:13:40Z ordinary377/392,

@@ -1,19 +1,18 @@
 {
-  "head": "b95c54ea7ef339fe3b4e7cb73ed69a28754474dd",
+  "head": "05954bcc52cf419d8f95be60b25ae902bf1ed27e",
   "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
-  "first_error": "ARCHITECTURE_GATE: production is physical/patch-list; user requires STOP before persistent VidMm GPUVA binding.",
+  "first_error": "DESIGN CONDITIONAL, not a compile error: prove VidMm-owned process TTBR0 representation, isolation and paging lifetime without changing firmware retained TTBR1.",
   "include_or_call_chain": [
-    "DriverEntry registers Render/Patch/SubmitCommand",
-    "CreateContext zeroes ContextInfo and assigns allocation/patch-list sizes",
-    "dynamic Render resolves allocation-list PhysicalAddress to internal AGX mapping",
-    "SubmitCommandVirtual and CreateProcess are FAIL2 stubs"
+    "VidMm per-process VA and tables -> KMD page-table DDIs -> broker validation/host translation",
+    "process root/slot -> firmware work context selector -> AGX",
+    "firmware context0 keeps retained root; current broker v4 still has no process API"
   ],
   "definitions": [
-    "FAIL2 returns STATUS_NOT_SUPPORTED",
-    "ContextInfo zeroed: no NoPatchingRequired opt-in set",
-    "DRIVERCAPS zeroed then selected fields assigned: no GpuMmu/IoMmu opt-in",
-    "GpuVirtualAddress in internal local view is derived from segment mapping, not proof of VidMm-assigned process GPUVA",
-    "Binding validity and residency are separate; CPU unmap and GPU binding unmap must not be conflated"
+    "Native UAT:39-bit VA,16KiB pages,64 slots; current render provider uses63",
+    "Pinned Asahi G13 user slots have no shared kernel TTBR1",
+    "WDK UpdatePageTable documents4KiB logical entries for16KiB GPU pages; contiguity/protection/partial updates still need proof",
+    "VidMm owns process tables and their movement/lifetime; firmware retained root is never one of those allocations",
+    "Binding, paging readiness, residency and render completion are separate domains"
   ],
   "overlays": [
     "uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR",
@@ -24,42 +23,32 @@
     "agx_spill canonical c99_alloca include"
   ],
   "constraints": [
+    "DESIGN ONLY; no executable model implemented",
     "direct Tier-A; no default Devstral/subagents",
     "no hardware/push/architect checkout/native-ANS",
-    "do not change ABI/layout/ownership or AGX semantics silently",
-    "no capabilities or firmware/broker changes",
-    "compiler PASS is not standard D3D/desktop PASS"
+    "no capabilities process stub or firmware/broker changes",
+    "conditional feasibility is not implementation or hardware proof"
   ],
   "source": [
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/callbacks.c",
-      "start": 1,
-      "text": "#include \"render_admission.h\"\n\n#define UNUSED(value) UNREFERENCED_PARAMETER(value)\n#define FAIL2(name, type1, arg1, type2, arg2)                                 \\\n  _Use_decl_annotations_ NTSTATUS name(type1 arg1, type2 arg2) {             \\\n    UNUSED(arg1);                                                             \\\n    UNUSED(arg2);                                                             \\\n    return STATUS_NOT_SUPPORTED;                                              \\\n  }"
+      "path": "/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/mmu.rs",
+      "start": 1488,
+      "text": "                let idx = (slot.slot() as usize) + UAT_USER_CTX_START;\n                let ttb = binding.ttb | TTBR_VALID | (idx as u64) << TTBR_ASID_SHIFT;\n\n                let uat_inner = self.inner.lock();\n\n                let ttb1 = if uat_inner.map_kernel_to_user {\n                    uat_inner.kernel_ttb1 | TTBR_VALID | (idx as u64) << TTBR_ASID_SHIFT\n                } else {\n                    0\n                };\n\n                let ttbs = uat_inner.ttbs();\n                uat_inner.handoff().lock();\n                if uat_inner.handoff().current_slot() == Some(idx as u32) {\n                    pr_err!(\n                        \"Vm::bind to slot {}, but it is currently in use by the ASC?\\n\",\n                        idx\n                    );\n                }\n                ttbs[idx].ttb0.store(ttb, Ordering::Release);\n                ttbs[idx].ttb1.store(ttb1, Ordering::Release);\n                uat_inner.handoff().unlock();\n                core::mem::drop(uat_inner);\n\n                // Make sure all TLB entries from the previous owner of this ASID are gone\n                mem::tlbi_asid(idx as u8);\n                mem::sync();\n            }\n"
     },
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/callbacks.c",
-      "start": 343,
-      "text": "\n  RtlZeroMemory(&Args->ContextInfo, sizeof(Args->ContextInfo));\n  Args->ContextInfo.DmaBufferSize = ADMISSION_DMA_BUFFER_SIZE;\n  Args->ContextInfo.DmaBufferSegmentSet = 0u;\n  Args->ContextInfo.DmaBufferPrivateDataSize =\n      ADMISSION_GDI_DMA_PRIVATE_SIZE;\n  if (Args->Flags.GdiContext) {\n    Args->ContextInfo.AllocationListSize =\n        ADMISSION_GDI_ALLOCATION_LIST_SIZE;\n    Args->ContextInfo.PatchLocationListSize =\n        ADMISSION_GDI_PATCH_LIST_SIZE;\n  } else {\n    Args->ContextInfo.AllocationListSize = ADMISSION_ALLOCATION_LIST_SIZE;\n    Args->ContextInfo.PatchLocationListSize = ADMISSION_PATCH_LIST_SIZE;\n  }\n  Args->hContext = context;\n  return STATUS_SUCCESS;\n}"
+      "path": "/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/gpu.rs",
+      "start": 663,
+      "text": "    fn make_uat(dev: &AsahiDevice, cfg: &'static hw::HwConfig) -> Result<KBox<mmu::Uat>> {\n        // G14X has a new thing in the Scene structure that unfortunately requires\n        // write access from user contexts. Hopefully it's not security-sensitive.\n        #[ver(G >= G14X)]\n        let map_kernel_to_user = true;\n        #[ver(G < G14X)]\n        let map_kernel_to_user = false;\n\n        Ok(KBox::new(\n            mmu::Uat::new(dev, cfg, map_kernel_to_user)?,\n            GFP_KERNEL,"
     },
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/callbacks.c",
-      "start": 433,
-      "text": "FAIL2(AdmissionDdiSubmitCommandVirtual, HANDLE, Adapter,\n      const DXGKARG_SUBMITCOMMANDVIRTUAL *, Args)\nFAIL2(AdmissionDdiCreateProcess, PVOID, MiniportDeviceContext,\n      DXGKARG_CREATEPROCESS *, Args)"
+      "path": "/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/pgtable.rs",
+      "start": 39,
+      "text": "pub(crate) const UAT_PGBIT: usize = 14;\n/// UAT page size.\npub(crate) const UAT_PGSZ: usize = 1 << UAT_PGBIT;\n/// UAT page offset mask.\npub(crate) const UAT_PGMSK: usize = UAT_PGSZ - 1;\n\ntype Pte = AtomicU64;\n\nconst PTE_BIT: usize = 3; // log2(sizeof(Pte))\nconst PTE_SIZE: usize = 1 << PTE_BIT;\n\n/// Number of PTEs per page.\nconst UAT_NPTE: usize = UAT_PGSZ / size_of::<Pte>();\n\n/// Number of address bits to address a level\nconst UAT_LVBIT: usize = UAT_PGBIT - PTE_BIT;\n/// Number of entries per level\nconst UAT_LVSZ: usize = UAT_NPTE;\n/// Mask of level bits\nconst UAT_LVMSK: u64 = (UAT_LVSZ - 1) as u64;\n\nconst UAT_LEVELS: usize = 3;\n\n/// UAT input address space\npub(crate) const UAT_IAS: usize = 39;"
     },
     {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/lifecycle.c",
-      "start": 386,
-      "text": "      caps = (DXGK_DRIVERCAPS *)QueryAdapterInfo->pOutputData;\n      RtlZeroMemory(caps, sizeof(*caps));\n      caps->HighestAcceptableAddress.QuadPart = -1;\n      /* WDK 26100: must match DXGK_WDDMDEVICECAPS.WDDMVersion. */\n      caps->WDDMVersion = DXGKDDI_WDDMv3_0;\n      RtlZeroMemory(&featureInput, sizeof(featureInput));\n      featureInput.Version = APPLE_AGX_WDDM_FEATURE_CONTRACT_VERSION;\n      featureInput.Size = sizeof(featureInput);\n      featureInput.WddmMajor = 3u;\n      featureInput.WddmMinor = 0u;\n      featureInput.NodeCount = 1u;\n      featureInput.ReadyMask = (ULONG)InterlockedCompareExchange(\n          &context->FeatureReadyMask, 0, 0);"
-    },
-    {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/lifecycle.c",
-      "start": 407,
-      "text": "        caps->MaxAllocationListSlotId =\n            ADMISSION_GDI_ALLOCATION_LIST_SIZE - 1u;\n        caps->MaxQueuedFlipOnVSync = 1u;\n        caps->GpuEngineTopology.NbAsymetricProcessingNodes = 1u;\n        caps->SchedulingCaps.MultiEngineAware = 1u;\n        caps->SchedulingCaps.PreemptionAware = 1u;\n        caps->PreemptionCaps.GraphicsPreemptionGranularity =\n            D3DKMDT_GRAPHICS_PREEMPTION_DMA_BUFFER_BOUNDARY;\n        caps->PreemptionCaps.ComputePreemptionGranularity =\n            D3DKMDT_COMPUTE_PREEMPTION_DMA_BUFFER_BOUNDARY;\n        caps->FlipCaps.FlipOnVSyncMmIo = 1u;\n        caps->FlipCaps.FlipIndependent = 1u;\n        caps->SupportNonVGA = TRUE;\n        /* WDDM 1.2+ full graphics requires this even when the only exposed\n         * path transform is the already-supported identity/Offset0 pair. */\n        caps->SupportSmoothRotation = TRUE;\n        caps->SupportPerEngineTDR = TRUE;\n        caps->SupportDirectFlip = TRUE;\n        caps->PresentationCaps.SupportKernelModeCommandBuffer = 1u;\n        status = STATUS_SUCCESS;\n      } else {\n        status = STATUS_INVALID_DEVICE_STATE;\n      }"
-    },
-    {
-      "path": "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/drivers/apple-agx/render-admission/src/render_dynamic_windows.c",
-      "start": 117,
-      "text": "      allocation->SegmentId != ADMISSION_MEMORY_LOCAL_SEGMENT ||\n      allocation->PhysicalAddress.QuadPart <= 0 ||\n      !AdmissionAllocationAlign64K(opened->Allocation->Description.Size,\n                                   &alignedSize) ||\n      !NT_SUCCESS(AdmissionMemoryRuntimeResolveLocal(\n          build->Adapter, (ULONGLONG)allocation->PhysicalAddress.QuadPart,\n          alignedSize, Offset, &view)) ||\n      view.GpuVirtualAddress == 0ULL || Bytes > view.Bytes)\n    return 0;\n  *GpuVirtualAddress = view.GpuVirtualAddress;\n  return 1;\n}"
+      "path": "/Users/pavel/public_windows/m1n1_windows/src/hv_agx_retained_root.c",
+      "start": 138,
+      "text": "/* TTBR0 belongs to the broker, and can contain only the exact low alias's\n * slot 0. Retained TTBR1 owns only slot 2; never walk its private slots. */\nstatic int check_tables(struct hv_agx_retained_root *c)\n{\n    unsigned int i, half;\n    APPLE_AGX_UAT_PAGE *root0;\n    unsigned long long slots[2];\n    unsigned char referenced[HV_AGX_RETAINED_MAX_PAGES] = {0};\n    if (c->Tainted || (c->PrefixSaved && !hv_agx_retained_prefix_unchanged(c)))\n        return HV_AGX_RETAINED_TAINTED;\n    if (c->Roots.Ttbr1PhysicalAddress != c->RetainedPa)\n        goto tainted;\n    root0 = owned_child(c, c->Roots.Ttbr0PhysicalAddress | 3ULL, 0);\n    if (!root0)\n        goto tainted;\n    for (i = 1; i < 2048; ++i)\n        if (root0->Entries[i])\n            goto tainted;\n    for (i = 3; i < 2048; ++i)\n        if (c->RetainedEntries[i])\n            goto tainted;"
     }
   ]
 }

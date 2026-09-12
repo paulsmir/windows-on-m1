@@ -1,16 +1,14 @@
 {
   "last_pass": "Full Asahi/NIR x64+ARM64 build/link; x64 compute variants0/1 execute and match native bytes; verified.json",
-  "first_error": "ARCHITECTURE_GATE: production is physical/patch-list; user requires STOP before persistent VidMm GPUVA binding.",
-  "include_or_call_chain": ["DriverEntry registers Render/Patch/SubmitCommand", "CreateContext zeroes ContextInfo and assigns allocation/patch-list sizes", "dynamic Render resolves allocation-list PhysicalAddress to internal AGX mapping", "SubmitCommandVirtual and CreateProcess are FAIL2 stubs"],
-  "definitions": ["FAIL2 returns STATUS_NOT_SUPPORTED", "ContextInfo zeroed: no NoPatchingRequired opt-in set", "DRIVERCAPS zeroed then selected fields assigned: no GpuMmu/IoMmu opt-in", "GpuVirtualAddress in internal local view is derived from segment mapping, not proof of VidMm-assigned process GPUVA", "Binding validity and residency are separate; CPU unmap and GPU binding unmap must not be conflated"],
+  "first_error": "DESIGN CONDITIONAL, not a compile error: prove VidMm-owned process TTBR0 representation, isolation and paging lifetime without changing firmware retained TTBR1.",
+  "include_or_call_chain": ["VidMm per-process VA and tables -> KMD page-table DDIs -> broker validation/host translation", "process root/slot -> firmware work context selector -> AGX", "firmware context0 keeps retained root; current broker v4 still has no process API"],
+  "definitions": ["Native UAT:39-bit VA,16KiB pages,64 slots; current render provider uses63", "Pinned Asahi G13 user slots have no shared kernel TTBR1", "WDK UpdatePageTable documents4KiB logical entries for16KiB GPU pages; contiguity/protection/partial updates still need proof", "VidMm owns process tables and their movement/lifetime; firmware retained root is never one of those allocations", "Binding, paging readiness, residency and render completion are separate domains"],
   "overlays": ["uatomic spelling/add wrappers + assembly guard + SDK ARM64_FPCR", "agx_index homogeneous internal bitfields", "agx_pack internal off_t storage", "canonical LUT clang guard", "agx_compile Windows NUL debug selftest", "agx_spill canonical c99_alloca include"],
-  "constraints": ["direct Tier-A; no default Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "do not change ABI/layout/ownership or AGX semantics silently", "no capabilities or firmware/broker changes", "compiler PASS is not standard D3D/desktop PASS"],
+  "constraints": ["DESIGN ONLY; no executable model implemented", "direct Tier-A; no default Devstral/subagents", "no hardware/push/architect checkout/native-ANS", "no capabilities process stub or firmware/broker changes", "conditional feasibility is not implementation or hardware proof"],
   "source": [
-    {"path":"drivers/apple-agx/render-admission/src/callbacks.c","start":1,"end":9},
-    {"path":"drivers/apple-agx/render-admission/src/callbacks.c","start":343,"end":360},
-    {"path":"drivers/apple-agx/render-admission/src/callbacks.c","start":433,"end":436},
-    {"path":"drivers/apple-agx/render-admission/src/lifecycle.c","start":386,"end":398},
-    {"path":"drivers/apple-agx/render-admission/src/lifecycle.c","start":407,"end":429},
-    {"path":"drivers/apple-agx/render-admission/src/render_dynamic_windows.c","start":117,"end":128}
+    {"path":"/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/mmu.rs","start":1488,"end":1516},
+    {"path":"/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/gpu.rs","start":663,"end":673},
+    {"path":"/Users/pavel/public_windows/.local/reference/asahi-linux-asahi/drivers/gpu/drm/asahi/pgtable.rs","start":39,"end":63},
+    {"path":"/Users/pavel/public_windows/m1n1_windows/src/hv_agx_retained_root.c","start":138,"end":158}
   ]
 }
