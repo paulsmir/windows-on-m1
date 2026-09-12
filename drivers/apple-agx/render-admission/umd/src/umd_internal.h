@@ -15,6 +15,7 @@
 
 typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Token;
+  APPLE_AGX_U64 Serial;
   D3DKMT_HANDLE KernelAllocation;
   APPLE_AGX_U64 Bytes;
   APPLE_AGX_U64 Alignment;
@@ -22,9 +23,21 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U32 ClassId;
   APPLE_AGX_U32 Flags;
   APPLE_AGX_U32 LockedAccess;
+  APPLE_AGX_U32 MapEpoch;
+  APPLE_AGX_U32 SourceHolds;
   BOOL Active;
   BOOL Mapped;
 } ADMISSION_UMD_SCREEN_BUFFER;
+
+typedef struct _ADMISSION_UMD_SCREEN_SOURCE {
+  APPLE_AGX_U64 Token;
+  APPLE_AGX_U64 Serial;
+  APPLE_AGX_U64 Offset;
+  APPLE_AGX_U64 Bytes;
+  APPLE_AGX_U32 Generation;
+  APPLE_AGX_U32 MapEpoch;
+  PVOID Address;
+} ADMISSION_UMD_SCREEN_SOURCE;
 
 typedef struct _ADMISSION_UMD_SCREEN_FENCE {
   HANDLE Event;
@@ -62,6 +75,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   ADMISSION_UMD_SCREEN_BUFFER ScreenBuffers[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
   ADMISSION_UMD_SCREEN_FENCE ScreenFences[ADMISSION_UMD_SCREEN_FENCE_LIMIT];
   APPLE_AGX_U64 NextScreenToken;
+  APPLE_AGX_U64 NextScreenSerial;
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
@@ -69,6 +83,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   ULONG RetirementErrorCount;
   ULONG RetirementUndeallocated;
   BOOL RetirementTerminal;
+  SRWLOCK ScreenBufferLock;
 } ADMISSION_UMD_DEVICE;
 
 typedef struct _ADMISSION_UMD_RESOURCE {
@@ -97,6 +112,16 @@ HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);
 HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
                                       APPLE_AGX_U32 *Fence);
+HRESULT AdmissionUmdScreenQuerySource(ADMISSION_UMD_DEVICE *Device,
+                                      APPLE_AGX_U64 Token,
+                                      ADMISSION_UMD_SCREEN_SOURCE *Source);
+HRESULT AdmissionUmdScreenAcquireSource(
+    ADMISSION_UMD_DEVICE *Device,
+    const ADMISSION_UMD_SCREEN_SOURCE *Expected,
+    ADMISSION_UMD_SCREEN_SOURCE *Held);
+HRESULT AdmissionUmdScreenReleaseSource(
+    ADMISSION_UMD_DEVICE *Device,
+    const ADMISSION_UMD_SCREEN_SOURCE *Held);
 #if defined(__cplusplus)
 }
 #endif

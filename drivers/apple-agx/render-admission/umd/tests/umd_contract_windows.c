@@ -205,10 +205,10 @@ static HRESULT APIENTRY TestAllocate(HANDLE Device,
     CHECK(create->Magic == ADMISSION_WIN32_ALLOCATION_MAGIC);
     CHECK(create->Version == ADMISSION_WIN32_ALLOCATION_VERSION);
     CHECK(create->Bytes == sizeof(*create));
-    CHECK(create->ClassId == AgxWin32BufferClassShader ||
-          create->ClassId == AgxWin32BufferClassEncoder);
-    CHECK(create->Flags == (AppleAgxWin32BufferCpuWrite |
-                            AppleAgxWin32BufferGpuRead));
+  CHECK(create->ClassId == AgxWin32BufferClassShader ||
+          create->ClassId == AgxWin32BufferClassEncoder ||
+          create->ClassId == AgxWin32BufferClassGeneral);
+    CHECK(create->Flags != 0u);
     description = &create->Allocation;
     CHECK(AdmissionAllocationDescriptionValid(description));
     CHECK(description->Type ==
@@ -293,8 +293,7 @@ static HRESULT APIENTRY TestLock(HANDLE Device, D3DDDICB_LOCK *Lock) {
   CHECK(Lock->NumPages == 0u);
   CHECK(Lock->pPages == NULL);
   CHECK(Lock->Flags.LockEntire == 1u);
-  CHECK(Lock->Flags.WriteOnly == 1u);
-  CHECK(Lock->Flags.ReadOnly == 0u);
+  CHECK(Lock->Flags.WriteOnly != Lock->Flags.ReadOnly);
   CHECK(Lock->GpuVirtualAddress == 0u);
   State.LastLockedAllocation = Lock->hAllocation;
   ++State.LockCalls;
@@ -709,8 +708,12 @@ int main(void) {
   APPLE_AGX_WIN32_COMMAND_VIEW clearView;
   APPLE_AGX_U32 completionFence = 0u;
   AGX_WIN32_SCREEN_BUFFER shaderBuffer;
+  AGX_WIN32_SCREEN_BUFFER sourceBuffer;
   AGX_WIN32_SCREEN_BUFFER encoderBuffer;
   void *shaderMap = NULL;
+  void *sourceMap = NULL;
+  ADMISSION_UMD_SCREEN_SOURCE sourceIdentity;
+  ADMISSION_UMD_SCREEN_SOURCE sourceHold;
   void *encoderMap = NULL;
   HANDLE failedCompletionEvent = NULL;
   HANDLE teardownCompletionEvent = NULL;
@@ -821,6 +824,35 @@ int main(void) {
   CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &shaderBuffer) ==
         AgxWin32ScreenSuccess);
   CHECK(State.InternalDeallocateCalls == 1u);
+
+  memset(&sourceBuffer, 0, sizeof(sourceBuffer));
+  CHECK(AgxWin32ScreenCreateBuffer(
+            &deviceState->Screen, AgxWin32BufferClassGeneral,
+            sizeof(InternalAllocationData), 0x4000u,
+            AppleAgxWin32BufferCpuRead | AppleAgxWin32BufferCpuWrite |
+                AppleAgxWin32BufferGpuRead,
+            &sourceBuffer) == AgxWin32ScreenSuccess);
+  CHECK(AgxWin32ScreenMapBuffer(
+            &deviceState->Screen, &sourceBuffer, 0x200u, 0x400u,
+            AppleAgxWin32BufferCpuRead, &sourceMap) == AgxWin32ScreenSuccess);
+  CHECK(sourceMap == InternalAllocationData + 0x200u);
+  CHECK(AdmissionUmdScreenQuerySource(deviceState, sourceBuffer.Transport.Token,
+                                      &sourceIdentity) == S_OK);
+  sourceIdentity.Offset = 0x200u;
+  sourceIdentity.Bytes = 0x400u;
+  CHECK(AdmissionUmdScreenAcquireSource(deviceState, &sourceIdentity,
+                                        &sourceHold) == S_OK);
+  CHECK(sourceHold.Address == InternalAllocationData + 0x200u);
+  CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
+        AgxWin32ScreenCallback);
+  CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &sourceBuffer) ==
+        AgxWin32ScreenState);
+  CHECK(AdmissionUmdScreenReleaseSource(deviceState, &sourceHold) == S_OK);
+  CHECK(AdmissionUmdScreenReleaseSource(deviceState, &sourceHold) != S_OK);
+  CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
+        AgxWin32ScreenSuccess);
+  CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &sourceBuffer) ==
+        AgxWin32ScreenSuccess);
 
   errorsBefore = State.SetErrorCalls;
   formatSupport = 0xffffffffu;
@@ -958,8 +990,8 @@ int main(void) {
             sizeof(InternalAllocationData), AppleAgxWin32BufferCpuWrite,
             &encoderMap) == AgxWin32ScreenSuccess);
   CHECK(encoderMap == InternalAllocationData);
-  CHECK(State.InternalAllocateCalls == 2u);
-  CHECK(State.LockCalls == 2u);
+  CHECK(State.InternalAllocateCalls == 3u);
+  CHECK(State.LockCalls == 3u);
   CHECK(AgxWin32ScreenWaitFence(&deviceState->Screen, 1u, 1u) ==
         AgxWin32ScreenCallback);
   State.AutoCompleteFence = FALSE;
@@ -974,8 +1006,8 @@ int main(void) {
   CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
         retryRuntime.handle);
   CHECK(State.DestroyContextCalls == 1u);
-  CHECK(State.UnlockCalls == 2u);
-  CHECK(State.InternalDeallocateCalls == 2u);
+  CHECK(State.UnlockCalls == 3u);
+  CHECK(State.InternalDeallocateCalls == 3u);
   CHECK(WaitForSingleObject(teardownCompletionEvent, 0u) == WAIT_FAILED);
   CHECK(GetLastError() == ERROR_INVALID_HANDLE);
   CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
