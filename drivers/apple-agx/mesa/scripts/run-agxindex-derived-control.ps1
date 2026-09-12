@@ -10,7 +10,7 @@ $uatomic = 'C:\Users\pauls\AD04-uatomic\uatomic_clang_compat.h'
 $overlayInput = 'C:\Users\pauls\agx_compiler_derived_input.h'
 $overlay = Join-Path $Root 'compiler\agx_compiler.h'
 $source = Join-Path $derivedCompiler 'agx_compile.c'
-if (Test-Path $Root) { Remove-Item -Recurse -Force $Root }
+if (Test-Path $Root) { throw "refusing to reuse existing output root: $Root" }
 New-Item -ItemType Directory -Force $derivedCompiler | Out-Null
 Copy-Item "$sourceCompiler\*" $derivedCompiler -Recurse -Force
 if (!(Test-Path $overlayInput)) { throw 'derived agx_compiler.h overlay input missing' }

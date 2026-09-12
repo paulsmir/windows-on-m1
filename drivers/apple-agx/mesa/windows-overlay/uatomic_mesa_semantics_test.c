@@ -1,4 +1,5 @@
 #include "util/u_atomic.h"
+#include <limits.h>
 
 int main(void)
 {
@@ -14,6 +15,12 @@ int main(void)
       return 4;
    if (p_atomic_add_return(&value, -5) != 8 || value != 8)
       return 5;
+
+   value = INT64_MAX;
+   if (p_atomic_add_return(&value, 1) != INT64_MIN || value != INT64_MIN)
+      return 6;
+   if (p_atomic_add_return(&value, -1) != INT64_MAX || value != INT64_MAX)
+      return 7;
 
    return 0;
 }

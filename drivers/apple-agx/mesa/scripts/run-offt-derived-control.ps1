@@ -10,7 +10,7 @@ $packInput = 'C:\Users\pauls\agx_pack_offt_input.c'
 $header = Join-Path $Root 'compiler\agx_compiler.h'
 $pack = Join-Path $Root 'compiler\agx_pack.c'
 $source = Join-Path $derivedCompiler 'agx_compile.c'
-if (Test-Path $Root) { Remove-Item -Recurse -Force $Root }
+if (Test-Path $Root) { throw "refusing to reuse existing output root: $Root" }
 New-Item -ItemType Directory -Force $derivedCompiler | Out-Null
 Copy-Item "$sourceCompiler\*" $derivedCompiler -Recurse -Force
 Copy-Item $headerInput $header -Force

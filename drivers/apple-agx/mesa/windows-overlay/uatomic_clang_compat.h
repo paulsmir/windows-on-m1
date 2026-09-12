@@ -8,6 +8,8 @@
  * provide aliases only for the exact observed 64-bit spellings.
  */
 #include <intrin.h>
+#include <stdint.h>
+#include <string.h>
 
 #define _interlockedexchange64 _InterlockedExchange64
 #define _interlockedexchangeadd64 _InterlockedExchangeAdd64
@@ -19,7 +21,22 @@
 static __inline__ __int64
 apple_agx_interlockedadd64(__int64 volatile *addend, __int64 value)
 {
-   return _InterlockedExchangeAdd64(addend, value) + value;
+   /*
+    * ExchangeAdd returns the pre-update signed value.  Computing the result
+    * as signed arithmetic would make the MSVC two's-complement wrap contract
+    * undefined at INT64_MAX + 1 and INT64_MIN - 1.  Use uint64_t for the
+    * modulo-2^64 addition and copy the resulting representation back to the
+    * signed return type without a value-changing conversion.
+    */
+   __int64 previous = _InterlockedExchangeAdd64(addend, value);
+   uint64_t previous_bits, value_bits, updated_bits;
+   __int64 updated;
+
+   memcpy(&previous_bits, &previous, sizeof(previous_bits));
+   memcpy(&value_bits, &value, sizeof(value_bits));
+   updated_bits = previous_bits + value_bits;
+   memcpy(&updated, &updated_bits, sizeof(updated));
+   return updated;
 }
 
 #define _interlockedadd64 apple_agx_interlockedadd64
