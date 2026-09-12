@@ -67,6 +67,14 @@ names = re.findall(r"'([^']+\.c)'", sources)
 assert len(names) == 40, len(names)
 compiler = OUT / 'src/asahi/compiler'
 shutil.copytree(MESA / 'src/asahi/compiler', compiler)
+null_device = json.loads((INPUT / 'agx-null-device.json').read_text())
+compile_source = compiler / 'agx_compile.c'
+if digest(compile_source) != null_device['source_sha256']:
+    raise SystemExit('Pinned agx_compile.c hash mismatch')
+text = compile_source.read_text()
+if text.count(null_device['old']) != 1:
+    raise SystemExit('Null-device replacement anchor mismatch')
+compile_source.write_text(text.replace(null_device['old'], null_device['new']))
 for name, sha in [('agx_compiler.h', 'c41df12679c1692cc50617e81d57eb03cf906d8c5fbada482b89fc6dde0c7741'),
                   ('agx_pack.c', 'f594448db4ccfe5d4f98f849c3f1e08b662264702f5de40a4c97d34be180cf00')]:
     if digest(compiler / name) != sha:
