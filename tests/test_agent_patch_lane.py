@@ -136,6 +136,41 @@ class PatchProposalLaneTests(unittest.TestCase):
         self.assertEqual((self.worktree / "allowed" / "demo.txt").read_text(), "correctline\n")
         self.assertEqual(run("git", "rev-parse", "HEAD", cwd=self.worktree).stdout.strip(), self.base)
 
+    def test_structured_exact_replacement_applies_literal_text_and_preserves_canonical_diff(self):
+        structured = {"path": "allowed/demo.txt", "old": "before", "new": "after"}
+        result = self.invoke(proposal=self.proposal(structured))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr + repr(payload))
+        self.assertEqual(payload["result"], "APPLIED")
+        self.assertEqual((self.worktree / "allowed" / "demo.txt").read_text(), "after\n")
+        self.assertEqual(payload["changed_paths"], ["allowed/demo.txt"])
+        self.assertTrue((self.output / "canonical.diff").is_file())
+        self.assertEqual(json.loads((self.output / "proposal.json").read_text())["patch"], structured)
+
+    def test_structured_exact_replacement_rejects_missing_duplicate_and_unsafe_targets(self):
+        self.rejected(self.invoke(proposal=self.proposal({"path": "allowed/demo.txt", "old": "absent", "new": "after"})), "structured_old_missing")
+        (self.worktree / "allowed" / "demo.txt").write_text("before before\n")
+        run("git", "add", "allowed/demo.txt", cwd=self.worktree)
+        run("git", "commit", "-qm", "duplicate fixture", cwd=self.worktree)
+        duplicate_base = run("git", "rev-parse", "HEAD", cwd=self.worktree).stdout.strip()
+        self.rejected(self.invoke(contract=self.contract(input_commit=duplicate_base), proposal=self.proposal({"path": "allowed/demo.txt", "old": "before", "new": "after"})), "structured_old_not_unique")
+        self.rejected(self.invoke(contract=self.contract(input_commit=duplicate_base), proposal=self.proposal({"path": "forbidden.txt", "old": "base", "new": "after"})), "structured_path_forbidden")
+        self.rejected(self.invoke(contract=self.contract(input_commit=duplicate_base), proposal=self.proposal({"path": "allowed/linked.txt", "old": "before", "new": "after"})), "patch_symlink_forbidden")
+
+    def test_structured_exact_replacement_obeys_limits_and_never_executes_text(self):
+        structured = {"path": "allowed/demo.txt", "old": "before", "new": "$(touch structured-pwned)"}
+        self.rejected(self.invoke(contract=self.contract(max_diff_lines=1), proposal=self.proposal(structured)), "patch_line_limit")
+        result = self.invoke(proposal=self.proposal(structured))
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual((self.worktree / "allowed" / "demo.txt").read_text(), "$(touch structured-pwned)\n")
+        self.assertFalse((self.worktree / "structured-pwned").exists())
+
+    def test_structured_exact_replacement_rejects_extra_typed_and_oversized_values(self):
+        self.rejected(self.invoke(proposal=self.proposal({"path": "allowed/demo.txt", "old": "before", "new": "after", "extra": True})), "proposal_schema_invalid")
+        self.rejected(self.invoke(proposal=self.proposal({"path": "allowed/demo.txt", "old": ["before"], "new": "after"})), "proposal_schema_invalid")
+        oversized = {"path": "allowed/demo.txt", "old": "before", "new": "x" * 65537}
+        self.rejected(self.invoke(proposal=self.proposal(oversized)), "structured_text_limit")
+
     def test_zero_context_patch_with_fabricated_old_text_is_rejected(self):
         patch = """diff --git a/allowed/demo.txt b/allowed/demo.txt
 --- a/allowed/demo.txt

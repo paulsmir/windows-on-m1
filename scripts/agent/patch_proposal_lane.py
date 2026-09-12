@@ -5,6 +5,7 @@ This is a policy validator, not an operating-system sandbox.  It intentionally
 never interprets proposal text as a shell command and has one fixed check only.
 """
 import argparse
+import difflib
 import json
 import os
 import re
@@ -31,6 +32,10 @@ class Reject(Exception):
 def git(repo, *args, input_text=None):
     return subprocess.run(["git", "-C", str(repo), *args], input=input_text, text=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def git_bytes(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def fail(reason):
@@ -74,7 +79,11 @@ def schema(contract, proposal):
         fail("contract_schema_invalid")
     if set(proposal) != PROPOSAL_KEYS or proposal.get("result") not in RESULTS:
         fail("proposal_schema_invalid")
-    if (not all(isinstance(proposal[key], str) for key in ("rationale", "patch"))
+    patch = proposal["patch"]
+    patch_is_valid = isinstance(patch, str) or (
+        isinstance(patch, dict) and set(patch) == {"path", "old", "new"}
+        and all(isinstance(value, str) for value in patch.values()))
+    if (not isinstance(proposal["rationale"], str) or not patch_is_valid
             or not is_string_list(proposal["requested_command_ids"])
             or not is_string_list(proposal["unresolved"])
             or proposal["architecture_question"] is not None and not isinstance(proposal["architecture_question"], str)):
@@ -122,6 +131,46 @@ def safe_target(repo, target):
             fail("git_query_failed")
         if result.stdout.startswith("160000 "):
             fail("patch_gitlink_forbidden")
+
+
+def structured_diff(repo, replacement, contract):
+    path, old, new = (replacement[key] for key in ("path", "old", "new"))
+    try:
+        if max(len(old.encode("utf-8")), len(new.encode("utf-8"))) > 65536:
+            fail("structured_text_limit")
+    except UnicodeEncodeError:
+        fail("structured_schema_invalid")
+    if not old:
+        fail("structured_old_empty")
+    if old == new:
+        fail("structured_no_change")
+    if not safe_path(path):
+        fail("structured_path_invalid")
+    if not under(path, contract["allowed_paths"]) or under(path, contract["forbidden_paths"]):
+        fail("structured_path_forbidden")
+    safe_target(repo, path)
+    tree = git(repo, "ls-tree", "HEAD", "--", path)
+    if tree.returncode:
+        fail("git_query_failed")
+    fields = tree.stdout.rstrip("\n").split(None, 3)
+    if len(fields) != 4 or fields[0] != "100644" or fields[1] != "blob":
+        fail("structured_target_not_regular")
+    source_result = git_bytes(repo, "show", f"HEAD:{path}")
+    if source_result.returncode:
+        fail("git_query_failed")
+    try:
+        source = source_result.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        fail("structured_target_not_text")
+    occurrences = source.count(old)
+    if not occurrences:
+        fail("structured_old_missing")
+    if occurrences != 1:
+        fail("structured_old_not_unique")
+    changed = source.replace(old, new, 1)
+    diff = difflib.unified_diff(source.splitlines(keepends=True), changed.splitlines(keepends=True),
+                                fromfile=f"a/{path}", tofile=f"b/{path}", n=0, lineterm="\n")
+    return f"diff --git a/{path} b/{path}\n" + "".join(diff)
 
 
 def preflight(contract, output):
@@ -299,9 +348,11 @@ def changed_paths(repo):
     return sorted(set(tracked + untracked + ignored))
 
 
-def write_output(output, proposal, payload):
+def write_output(output, proposal, payload, canonical_diff=None):
     output.mkdir(parents=True, exist_ok=False)
     (output / "proposal.json").write_text(json.dumps(proposal, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if canonical_diff is not None:
+        (output / "canonical.diff").write_text(canonical_diff, encoding="utf-8")
     (output / "summary.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -313,6 +364,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     output = args.output
     proposal = None
+    canonical_diff = None
     try:
         contract = load_object(args.contract, "contract")
         proposal = load_object(args.proposal, "proposal")
@@ -331,11 +383,15 @@ def main(argv=None):
                 fail("command_id_unapproved")
             if command_id != "RUN_HARMLESS_CHECK":
                 fail("command_id_invalid")
-        expected = parse_patch(proposal["patch"], contract, repo)
-        check = git(repo, "apply", "--check", "--unidiff-zero", "--whitespace=error-all", "-", input_text=proposal["patch"])
+        patch_text = proposal["patch"]
+        if isinstance(patch_text, dict):
+            canonical_diff = structured_diff(repo, patch_text, contract)
+            patch_text = canonical_diff
+        expected = parse_patch(patch_text, contract, repo)
+        check = git(repo, "apply", "--check", "--unidiff-zero", "--whitespace=error-all", "-", input_text=patch_text)
         if check.returncode:
             fail("patch_apply_check_failed")
-        applied = git(repo, "apply", "--unidiff-zero", "--whitespace=error-all", "-", input_text=proposal["patch"])
+        applied = git(repo, "apply", "--unidiff-zero", "--whitespace=error-all", "-", input_text=patch_text)
         if applied.returncode:
             fail("patch_apply_failed")
         actual = changed_paths(repo)
@@ -346,19 +402,19 @@ def main(argv=None):
             payload = {"result": "POST_APPLY_CHECK_FAILED", "reason": "fixed_check_failed", "applied": True,
                        "automatic_merge": False, "hardware_used": False, "commands_run": proposal["requested_command_ids"],
                        "command_results": command_results, "changed_paths": actual}
-            write_output(output, proposal, payload)
+            write_output(output, proposal, payload, canonical_diff)
             print(json.dumps(payload, sort_keys=True))
             return 1
         payload = {"result": "APPLIED", "reason": "none", "applied": True, "automatic_merge": False, "hardware_used": False,
                    "commands_run": proposal["requested_command_ids"], "command_results": command_results, "changed_paths": actual}
-        write_output(output, proposal, payload)
+        write_output(output, proposal, payload, canonical_diff)
         print(json.dumps(payload, sort_keys=True))
         return 0
     except Reject as error:
         payload = {"result": "REJECTED", "reason": error.reason, "applied": False, "automatic_merge": False, "hardware_used": False}
         try:
             if not output.exists() and output.is_absolute() and no_symlink_ancestors(output):
-                write_output(output, proposal if proposal is not None else {}, payload)
+                write_output(output, proposal if proposal is not None else {}, payload, canonical_diff)
         except OSError:
             pass
         print(json.dumps(payload, sort_keys=True))
