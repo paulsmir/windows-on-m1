@@ -18,6 +18,8 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
+    <NativeMesaArchitecture Condition="'$(Platform)' == 'ARM64'">arm64</NativeMesaArchitecture>
+    <NativeMesaArchitecture Condition="'$(Platform)' != 'ARM64'">x64</NativeMesaArchitecture>
     <EnableInf2cat>false</EnableInf2cat>
     <ApiValidator_Enable>false</ApiValidator_Enable>
     <PinnedWindowsKitInclude Condition="'$(PinnedWindowsKitInclude)' == ''">C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0</PinnedWindowsKitInclude>
@@ -64,6 +66,14 @@
       <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+    <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_reloc_capture.c" />
+  </ItemGroup>
   <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_pipe_screen.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />

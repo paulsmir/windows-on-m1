@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--windows-platform-declarations', action='store_true')
 parser.add_argument('--architecture', choices=('x64','arm64'), default='x64')
+parser.add_argument('--project',type=Path)
 args = parser.parse_args()
 out = args.output
 out.mkdir(exist_ok=False)
@@ -56,7 +57,9 @@ if args.windows_platform_declarations:
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#else\n#include <stddef.h>\n#include "c11/threads.h"\ntypedef ptrdiff_t ssize_t;\n#endif'),
         ('#include "vdrm.h"\n\n#include "asahi_proto.h"',
          '#ifndef _WIN32\n#include "vdrm.h"\n#include "asahi_proto.h"\n#else\nstruct vdrm_device;\nstruct asahi_ccmd_submit_res;\n#endif'),
-        ('   pthread_mutex_t bo_map_lock;', '#ifdef _WIN32\n   mtx_t bo_map_lock;\n#else\n   pthread_mutex_t bo_map_lock;\n#endif')])
+        ('   pthread_mutex_t bo_map_lock;', '#ifdef _WIN32\n   mtx_t bo_map_lock;\n#else\n   pthread_mutex_t bo_map_lock;\n#endif'),
+        ('   struct u_printf_ctx printf;\n};',
+         '   struct u_printf_ctx printf;\n#ifdef _WIN32\n   void *windows_private; /* Windows native allocation owner, never a GPU address */\n#endif\n};')])
     change('include/drm-uapi/drm.h',
         '1617ef3ed0c0ceb7c1d37f828d529306478313c4363c0d6d597e11503e025f07',[
         ('#if defined(__GNU__)\n#include <sys/ioctl.h>',
@@ -80,6 +83,17 @@ if args.windows_platform_declarations:
         'ab8db337b1c95bec23aebcbf92521a98f862a4fb7b23a0f2828e20ffd336eecc',[
         ('   uint range_B = d.index_buffer_range_B;',
          '   uint32_t range_B = d.index_buffer_range_B;')])
+    if args.project:
+        change('src/asahi/lib/pool.c',
+            '1420e8cbc883bad80bc014a285a922fffe47da92597f1671c6ebe8f4df8ab4ed',[
+            ('   util_dynarray_append(&pool->bos, bo);',
+             '   if (!bo) return NULL;\n   util_dynarray_append(&pool->bos, bo);'),
+            ('   assert(alignment == util_next_power_of_two(alignment));',
+             '   assert(alignment == util_next_power_of_two(alignment));\n   if (out_bo) *out_bo = NULL;'),
+            ('   pool->transient_offset = offset + sz;\n\n   struct agx_ptr ret = {\n      .cpu = agx_bo_map(bo) + offset,',
+             '   if (!bo) return (struct agx_ptr){0};\n   void *mapped = agx_bo_map(bo);\n   if (!mapped) return (struct agx_ptr){0};\n   pool->transient_offset = offset + sz;\n\n   struct agx_ptr ret = {\n      .cpu = (char *)mapped + offset,'),
+            ('   memcpy(transfer.cpu, data, sz);',
+             '   if (!transfer.cpu) return 0;\n   memcpy(transfer.cpu, data, sz);')])
     # Canonical helper has no arguments. Windows cannot represent the GNU
     # zero-sized host record: keep an opaque host placeholder and explicitly
     # dispatch the source-declared zero byte payload. Other generated argument
@@ -131,6 +145,9 @@ includes = [build/'src', build/'include', mesa/'include', mesa/'src',
 if args.windows_platform_declarations:
     includes=[out/'include',out/'src',out/'src/asahi/lib',out/'src/asahi/layout',
               out/'src/asahi/compiler',out/'src/asahi/libagx',*includes]
+if args.project:
+    includes += [args.project/'drivers/apple-agx/mesa/winsys',
+                 args.project/'drivers/apple-agx/shared/include']
 env = os.environ.copy()
 env['INCLUDE'] = ';'.join(str(p) for p in [vc/'include',
     sdk/'Include/10.0.26100.0/ucrt',sdk/'Include/10.0.26100.0/shared',
@@ -197,6 +214,18 @@ if run.returncode==0 and args.windows_platform_declarations:
     else:
         result['objects']={name:hashlib.sha256((out/name).read_bytes()).hexdigest()
                            for name in ('agx_state.obj','pool.obj')}
+        if args.project:
+            for name in ('agx_win32_asahi_bo','agx_win32_asahi_capture','agx_win32_asahi_pool_test'):
+                src=args.project/'drivers/apple-agx/mesa/winsys'/(name+'.c')
+                command=[str(llvm/'clang-cl.exe'),*flags,*('/I'+str(p) for p in includes),
+                         '/c',str(src),'/Fo'+str(out/(name+'.obj'))]
+                built=subprocess.run(command,cwd=build,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+                (out/(name+'.log')).write_bytes(built.stdout)
+                if built.returncode:
+                    result['exit']=built.returncode
+                    result['first_error']=built.stdout.decode(errors='replace')[-3000:]
+                    break
+                result['objects'][name+'.obj']=hashlib.sha256((out/(name+'.obj')).read_bytes()).hexdigest()
 (out/'result.json').write_text(json.dumps(result,indent=2))
 print(json.dumps(result,indent=2))
 raise SystemExit(result['exit'])

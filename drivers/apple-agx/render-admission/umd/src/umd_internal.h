@@ -19,6 +19,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Token;
   APPLE_AGX_U64 Serial;
   const void *NativeBo;
+  const void *NativeBackend;
   APPLE_AGX_U64 NativeBoSerial;
   D3DKMT_HANDLE KernelAllocation;
   APPLE_AGX_U64 Bytes;
@@ -99,6 +100,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 LastDrawRequest;
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
+  APPLE_AGX_U32 NativeBackendCount;
   BOOL ScreenClosing;
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;

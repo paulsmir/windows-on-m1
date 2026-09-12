@@ -16,6 +16,9 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
 #include "../src/umd.c"
 #include "umd_draw_composer_windows.c"
+#if defined(ADMISSION_UMD_NATIVE_POOL_TEST)
+#include "umd_asahi_pool_windows.c"
+#endif
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 #include "agx_win32_pipe_screen.h"
 #include "agx_d3d10_windows.h"
@@ -1146,5 +1149,8 @@ int main(void) {
   test_mesa_windows_owners(createDevice);
 #endif
   State.Failures += AdmissionUmdDrawComposerTests();
+#if defined(ADMISSION_UMD_NATIVE_POOL_TEST)
+  State.Failures += TestAsahiNativePoolOwner();
+#endif
   return State.Failures == 0u ? 0 : (int)State.Failures;
 }

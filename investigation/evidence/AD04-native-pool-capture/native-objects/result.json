@@ -1,0 +1,14 @@
+{
+  "exit": 0,
+  "first_error": "",
+  "native_draw_executed": false,
+  "architecture": "x64",
+  "pool_exit": 0,
+  "objects": {
+    "agx_state.obj": "60d8f76d0e10ad6b26bc85c43c93c92daab0943e8eb7d46f0c70cfc180a0b1bf",
+    "pool.obj": "42de18565271458c6e530aafdcc775d65f851805509716d487ea5e5f126d9a35",
+    "agx_win32_asahi_bo.obj": "eea62af384d6c6bfc10398f44265f598b0cd47bd156575750ab1ee035eeee6ea",
+    "agx_win32_asahi_capture.obj": "0050c5f9de4a498630e17c9fed25da775d34cde90f809a8744a99d7f23dd5ac0",
+    "agx_win32_asahi_pool_test.obj": "194b2a425b5ccd4fb0e4142944e525e647d17e42f3801f7b345f405809ed9403"
+  }
+}
