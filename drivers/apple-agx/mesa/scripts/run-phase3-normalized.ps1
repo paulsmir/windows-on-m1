@@ -42,5 +42,8 @@ $entries += Invoke-Captured 'agx-compile-x64' $clang $compileArgs $false
 $entries += Invoke-Captured 'agx-compile-arm64' $clang ($compileArgs + '/clang:--target=aarch64-pc-windows-msvc') $false
 $manifest = [ordered]@{ compiler=$clang; mesa=$mesa; generated=$generated; input_root=$InputRoot; result_root=$ResultRoot; work_root=$work; entries=$entries }
 $manifest | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $ResultRoot 'manifest.json')
+$required = @('uatomic-x64', 'lut-derived-x64', 'agxindex-actual-x64', 'agx-compile-x64', 'agx-compile-arm64')
+$actual = @($entries | ForEach-Object { $_.name })
+if (Compare-Object $required $actual) { exit 1 }
 $bad = $entries | Where-Object { $_.exit_code -ne 0 -or ($_.Contains('run_exit_code') -and $_.run_exit_code -ne 0) }
-if ($bad.Count -ne 2 -or $bad[0].name -ne 'agx-compile-x64' -or $bad[1].name -ne 'agx-compile-arm64') { exit 1 }
+if ($bad.Count -ne 0) { exit 1 }
