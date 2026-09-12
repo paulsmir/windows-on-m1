@@ -62,8 +62,11 @@ BO retention is not VidMm residency. Capture still must be wired into actual
 native BO/pool/USC/encoder emission and the real agx_screen/context platform seam.
 No standard D3D device or Full Graphics acceptance follows from this checkpoint.
 Evidence/runner repairs/limits: agent_tasks/AD04-TYPED-RELOCATION-RESULT.md.
-Next: native pool out_bo provenance + device-scoped Windows operations, replacing
-DRM-dependent native initialization without fake fd/global lookup or second backend.
+New source-backed producer mismatch: v1 overlay assumes a64-byte VS/FS pipeline
+split; native agx_build_pipeline produces independent variable-sized stage data.
+Next owning contract: versioned explicit native stage references/offsets, preserving
+v1, then native pool out_bo provenance and per-device Windows operations replacing
+DRM initialization. Decision: agent_tasks/AD04-NATIVE-PIPELINE-DECISION.md.
 
 ## Machine / hardware
 No Air boot/install action this phase. User reports Running proxy; passive USB
