@@ -4,6 +4,7 @@ No driver installation, hardware access, model-provided commands or renderer.
 Keep each attempt and stop at the first failed translation unit/link/run.
 """
 import ctypes
+import argparse
 import hashlib
 import json
 import os
@@ -15,11 +16,14 @@ import uuid
 
 ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
 MESA = Path(r'C:\Users\pauls\AD04-d3d10-frontend-build\mesa')
-BUILD = ROOT / 'nir-x64'
+parser = argparse.ArgumentParser()
+parser.add_argument('--architecture', choices=('x64', 'arm64'), default='x64')
+ARCH = parser.parse_args().architecture
+BUILD = ROOT / ('nir-' + ARCH)
 GENERATED = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated')
 CLANG = Path(r'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin')
 INPUT = ROOT / 'asahi-input'
-OUT = ROOT / ('asahi-' + uuid.uuid4().hex)
+OUT = ROOT / ('asahi-' + ARCH + '-' + uuid.uuid4().hex)
 OUT.mkdir()
 records = []
 
@@ -105,7 +109,12 @@ libraries = [BUILD / p for p in ('src/compiler/nir/libnir.a', 'src/compiler/libc
                                 'src/util/blake3/libblake3.a')]
 exe = OUT / 'agx_shader_fixture.exe'
 run('link', [CLANG / 'clang-cl.exe', '/nologo', '/MD', *objects, *libraries,
+             *(['--target=aarch64-pc-windows-msvc'] if ARCH == 'arm64' else []),
              '/Fe' + str(exe), '/link', 'synchronization.lib', 'advapi32.lib', 'user32.lib'])
+if ARCH == 'arm64':
+    (OUT / 'artifacts.json').write_text(json.dumps({str(p): digest(p) for p in [exe, *libraries]}, indent=2))
+    print('ARM64_BUILD_LINK_PASS EXECUTION=NOT_RUN EVIDENCE=' + str(OUT), flush=True)
+    raise SystemExit(0)
 for variant in (0, 1):
     target = OUT / ('variant' + str(variant))
     target.mkdir()
