@@ -41,4 +41,16 @@ apple_agx_interlockedadd64(__int64 volatile *addend, __int64 value)
 
 #define _interlockedadd64 apple_agx_interlockedadd64
 
+static __inline__ long
+apple_agx_interlockedadd32(long volatile *addend, long value)
+{
+   long previous = _InterlockedExchangeAdd(addend, value);
+   uint32_t updated_bits = (uint32_t)previous + (uint32_t)value;
+   long updated;
+   memcpy(&updated, &updated_bits, sizeof(updated));
+   return updated;
+}
+
+#define _interlockedadd apple_agx_interlockedadd32
+
 #endif /* APPLE_AGX_UATOMIC_CLANG_COMPAT_H */
