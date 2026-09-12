@@ -1,7 +1,7 @@
 {
-  "head": "417f375b60bc13c547c79bb387ea7ccec4c5367f",
-  "last_pass": "native pool slice bridge validates BO CPU/GPU relative offsets and owner/token/serial/generation before typed capture; five host suites pass",
-  "first_error": "Astra review CHANGES_REQUIRED: implicit version selection cannot express FS reference0; legacy overlay silently loses v2 stage; bridge does not authenticate mapping provenance. Implement explicit version wrappers and legacy rejection first. See AD04-ASTRA-V2-PROVENANCE-REVIEW.md.",
+  "head": "01a86f788ef312b286b9ed4d3fd71449853094bc",
+  "last_pass": "explicit v1/v2 transport and capture selection plus legacy-v2 overlay rejection; focused host suites pass",
+  "first_error": "Current native pool bridge checks caller arithmetic only. Implement expected identity acquisition and authoritative BO mapping association before real agx_build_pipeline wiring. See AD04-ASTRA-V2-PROVENANCE-REVIEW.md.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",
