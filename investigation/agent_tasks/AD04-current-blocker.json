@@ -1,7 +1,7 @@
 {
-  "head": "3dd8ea0a4246a342a77ce655cb57cd996ae3e112",
-  "last_pass": "factory-enabled UMD wrapper x64 build/execution reported PASS; native Asahi factory and full owner concurrency not covered",
-  "first_error": "Finish execution checklist at top of AD04-OWNER-SLICE-REVIEW.md in one tested owner slice. Allocate has no reserved slot; direct Finalize bypasses BeginClose; owner/id/copy/native association gaps remain. No further owner architecture question required.",
+  "head": "34d62b3398a2851772362e2ec2db7780a36c3158",
+  "last_pass": "current UMD factory x64 controlled execution and opaque NativeBo association owner test PASS",
+  "first_error": "Actual Mesa Windows BO backend must create/associate real agx_bo and pinned agx_build_pipeline must request out_bo then look it up before typed capture. Owner checklist remains incomplete for reserved allocation/direct finalize/copy and fresh immutable whole-source gates.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",

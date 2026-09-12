@@ -71,6 +71,9 @@ AD04-umd-owner-004-generated, with u_format_gen.h SHA256
 EnableMesaPipeFactoryTest current x64 build/link/execution now PASS and includes
 agx_d3d10_windows.cpp. It remains a controlled pipe wrapper test, not real
 Asahi agx_screen/context or hardware rendering proof.
+Commit34d62b3 adds existing-slot opaque NativeBo association/query/detach with
+held-detach denial. WDK owner test passes. This is only the owner contract: no
+real Mesa BO allocation has invoked it and agx_build_pipeline remains unchanged.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
