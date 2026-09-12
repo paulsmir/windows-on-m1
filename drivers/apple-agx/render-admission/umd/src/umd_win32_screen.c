@@ -184,6 +184,73 @@ HRESULT AdmissionUmdScreenReleaseSource(
   return result;
 }
 
+HRESULT AdmissionUmdScreenAssociateNativeBo(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Token,
+    const void *NativeBo, APPLE_AGX_U64 NativeBoSerial) {
+  ADMISSION_UMD_SCREEN_BUFFER *buffer;
+  HRESULT result = E_INVALIDARG;
+  if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
+      Token == 0ULL || NativeBo == NULL || NativeBoSerial == 0ULL)
+    return E_INVALIDARG;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(Device, Token);
+  if (buffer != NULL && !Device->ScreenClosing && !buffer->Transition &&
+      buffer->NativeBo == NULL) {
+    buffer->NativeBo = NativeBo;
+    buffer->NativeBoSerial = NativeBoSerial;
+    result = S_OK;
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  return result;
+}
+
+HRESULT AdmissionUmdScreenQueryNativeBo(
+    ADMISSION_UMD_DEVICE *Device, const void *NativeBo,
+    APPLE_AGX_U64 NativeBoSerial, ADMISSION_UMD_SCREEN_SOURCE *Source) {
+  UINT index;
+  HRESULT result = E_INVALIDARG;
+  if (Source != NULL)
+    ZeroMemory(Source, sizeof(*Source));
+  if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
+      NativeBo == NULL || NativeBoSerial == 0ULL || Source == NULL)
+    return E_INVALIDARG;
+  AcquireSRWLockShared(&Device->ScreenBufferLock);
+  if (!Device->ScreenClosing)
+    for (index = 0u; index < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++index) {
+      ADMISSION_UMD_SCREEN_BUFFER *buffer = &Device->ScreenBuffers[index];
+      if (buffer->Active && !buffer->Transition &&
+          buffer->NativeBo == NativeBo &&
+          buffer->NativeBoSerial == NativeBoSerial) {
+        result = AdmissionUmdScreenSourceFromBuffer(
+            Device, buffer, 0ULL, buffer->Bytes, Source);
+        break;
+      }
+    }
+  ReleaseSRWLockShared(&Device->ScreenBufferLock);
+  return result;
+}
+
+HRESULT AdmissionUmdScreenDetachNativeBo(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Token,
+    const void *NativeBo, APPLE_AGX_U64 NativeBoSerial) {
+  ADMISSION_UMD_SCREEN_BUFFER *buffer;
+  HRESULT result = E_INVALIDARG;
+  if (Device == NULL || Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
+      Token == 0ULL || NativeBo == NULL || NativeBoSerial == 0ULL)
+    return E_INVALIDARG;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  buffer = AdmissionUmdScreenFind(Device, Token);
+  if (buffer != NULL && !buffer->Transition && buffer->SourceHolds == 0u &&
+      buffer->NativeBo == NativeBo &&
+      buffer->NativeBoSerial == NativeBoSerial) {
+    buffer->NativeBo = NULL;
+    buffer->NativeBoSerial = 0ULL;
+    result = S_OK;
+  }
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  return result;
+}
+
 BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device) {
   UINT index;
   BOOL live = FALSE;

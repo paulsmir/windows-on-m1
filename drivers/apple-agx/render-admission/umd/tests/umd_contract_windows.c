@@ -726,6 +726,7 @@ int main(void) {
   void *encoderMap = NULL;
   HANDLE failedCompletionEvent = NULL;
   HANDLE teardownCompletionEvent = NULL;
+  int nativeBoSentinel = 0;
 
   memset(&State, 0, sizeof(State));
   State.AutoCompleteFence = TRUE;
@@ -851,6 +852,14 @@ int main(void) {
   State.ReentryDevice = NULL;
   State.ReentryToken = 0ULL;
   CHECK(sourceMap == InternalAllocationData + 0x200u);
+  CHECK(AdmissionUmdScreenAssociateNativeBo(
+            deviceState, sourceBuffer.Transport.Token, &nativeBoSentinel,
+            77u) == S_OK);
+  CHECK(AdmissionUmdScreenAssociateNativeBo(
+            deviceState, sourceBuffer.Transport.Token, &nativeBoSentinel,
+            77u) != S_OK);
+  CHECK(AdmissionUmdScreenQueryNativeBo(deviceState, &nativeBoSentinel, 77u,
+                                        &sourceIdentity) == S_OK);
   CHECK(AdmissionUmdScreenQuerySource(deviceState, sourceBuffer.Transport.Token,
                                       &sourceIdentity) == S_OK);
   sourceIdentity.Offset = 0x200u;
@@ -861,6 +870,9 @@ int main(void) {
                                         &sourceHoldSecond) == S_OK);
   CHECK(sourceHold.HoldId != 0ULL &&
         sourceHoldSecond.HoldId != sourceHold.HoldId);
+  CHECK(AdmissionUmdScreenDetachNativeBo(
+            deviceState, sourceBuffer.Transport.Token, &nativeBoSentinel,
+            77u) != S_OK);
   CHECK(sourceHold.Address == InternalAllocationData + 0x200u);
   {
     ULONG undeallocated = 0xffffffffu;
@@ -878,6 +890,11 @@ int main(void) {
         AgxWin32ScreenCallback);
   CHECK(AdmissionUmdScreenReleaseSource(deviceState, &sourceHoldSecond) ==
         S_OK);
+  CHECK(AdmissionUmdScreenDetachNativeBo(
+            deviceState, sourceBuffer.Transport.Token, &nativeBoSentinel,
+            77u) == S_OK);
+  CHECK(AdmissionUmdScreenQueryNativeBo(deviceState, &nativeBoSentinel, 77u,
+                                        &sourceIdentity) != S_OK);
   CHECK(AgxWin32ScreenUnmapBuffer(&deviceState->Screen, &sourceBuffer) ==
         AgxWin32ScreenSuccess);
   CHECK(AgxWin32ScreenDestroyBuffer(&deviceState->Screen, &sourceBuffer) ==

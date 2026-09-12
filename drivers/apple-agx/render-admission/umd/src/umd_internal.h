@@ -17,6 +17,8 @@
 typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Token;
   APPLE_AGX_U64 Serial;
+  const void *NativeBo;
+  APPLE_AGX_U64 NativeBoSerial;
   D3DKMT_HANDLE KernelAllocation;
   APPLE_AGX_U64 Bytes;
   APPLE_AGX_U64 Alignment;
@@ -143,6 +145,15 @@ HRESULT AdmissionUmdScreenAcquireSource(
 HRESULT AdmissionUmdScreenReleaseSource(
     ADMISSION_UMD_DEVICE *Device,
     const ADMISSION_UMD_SCREEN_SOURCE *Held);
+HRESULT AdmissionUmdScreenAssociateNativeBo(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Token,
+    const void *NativeBo, APPLE_AGX_U64 NativeBoSerial);
+HRESULT AdmissionUmdScreenQueryNativeBo(
+    ADMISSION_UMD_DEVICE *Device, const void *NativeBo,
+    APPLE_AGX_U64 NativeBoSerial, ADMISSION_UMD_SCREEN_SOURCE *Source);
+HRESULT AdmissionUmdScreenDetachNativeBo(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Token,
+    const void *NativeBo, APPLE_AGX_U64 NativeBoSerial);
 #if defined(__cplusplus)
 }
 #endif
