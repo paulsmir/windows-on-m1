@@ -8,6 +8,12 @@
  * provide aliases only for the exact observed 64-bit spellings.
  */
 #include <intrin.h>
+#ifdef _M_ARM64
+// SDK26100 shared/ksarm64.h line1214 defines ARM64_FPCR 0x5a20
+#if !defined(ARM64_FPCR)
+#define ARM64_FPCR 0x5a20
+#endif
+#endif
 #include <stdint.h>
 #include <string.h>
 
