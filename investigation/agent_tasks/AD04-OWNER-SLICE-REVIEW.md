@@ -1,5 +1,49 @@
 # Owner slice review — a9c56bf is incomplete
 
+## Follow-up at59dd662 — finish existing design before native integration
+
+The same requirements remain open, not a new design question:
+
+- HasLiveSources only observes and releases the lock. It cannot reserve close.
+  Implement BeginClose under the shared lifecycle lock: check holds AND pending
+  transitions, then mark Closing before releasing. Acquire/Query/Create/Map must
+  reject Closing. Internal teardown unmap/deallocate remains permitted. CancelClose
+  restores admission if PipeDeviceClose reports busy without teardown. Runtime
+  finalization uses this reservation too, with callback reentry unable to recursively
+  finalize the same owner. Caller-serialized CloseDevice owns that reservation;
+  do not treat an arbitrary repeated BeginClose as a second teardown authorization.
+- TestLock's QuerySource currently fails because Mapped is false even if transition
+  code is removed. This is a map-publication check only. Add TestUnlock reentry
+  with previously valid source identity: it must reject Acquire because Transition
+  is set even though the buffer remains mapped until callback return. Add callback
+  attempts at Finalize during allocation/map/unmap and require busy without clearing
+  context/storage. Force callback failure and verify original identity/epoch intact.
+- Unique IDs must reject exhaustion before increment, never skip zero after wrap.
+  OwnerCookie must be populated and checked, including held-record lookup; currently
+  it exists only as an unused Device field. Query/Acquire failure preserves output;
+  explicitly handle Expected==Held before clearing or writing output. CopySource and
+  create slot reservation are still absent. These are prior approved requirements.
+- Previous upload commands placed newer umd_contract_windows.c in remote src/ while
+  the vcxproj compiles tests/umd_contract_windows.c. Those earlier binaries cannot
+  establish the claimed new two-hold/busy tests without a matching input manifest.
+  The latest test upload used tests/ correctly. Capture the full current source set
+  into a NEW immutable input directory and fresh output. Compile the optional
+  EnableMesaPipeFactoryTest configuration to cover agx_d3d10_windows.cpp; default
+  UmdContractTest does not include that file. No old binary claims cover new code.
+
+Next step is Terra implementation, not further Astra redesign. Complete these
+requirements and the original checklist with one exact end-to-end owner test
+result before asking for native integration review. Do not self-send a new task
+message or finish after each helper/build; use direct tools for the whole slice.
+
+Native association shape is already approved: internal backend-owned create
+associates a live native BO key with its existing ScreenBuffer; borrowed lookup
+never dereferences unknown keys. Add associate/query/detach operations there with
+owner/serial checks, holds and Closing guards. This is an internal API, not a
+security boundary within one process. No claim of actual native BO creation until
+that caller is compiled. Do not invent GPU construction addresses or change v2
+placement during this owner slice.
+
 Baseline3f94397f451974802ab77fae799d728a3585ff81.
 The existing AD04-NATIVE-BO-OWNER-DECISION remains the architecture. This review
 is a correction of implementation/proof claims, not a new architecture gate.

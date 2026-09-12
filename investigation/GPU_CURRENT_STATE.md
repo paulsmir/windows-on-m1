@@ -53,6 +53,13 @@ gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
 
 ## Current implementation checkpoint
 Latest concrete owner decision: agent_tasks/AD04-NATIVE-BO-OWNER-DECISION.md.
+Current review at59dd662: finish existing owner slice before native integration.
+HasLiveSources lacks a close reservation; TestLock reentry only checks not-yet-
+mapped state and does not discriminate Transition. OwnerCookie checks, no-wrap,
+CopySource and create reservation remain absent. Earlier remote uploads placed
+new tests in src/ instead of tests/; revalidate one immutable current-source build
+including EnableMesaPipeFactoryTest before claiming new close/two-hold coverage.
+Exact remaining steps: AD04-OWNER-SLICE-REVIEW.md follow-up. No new design gate.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
