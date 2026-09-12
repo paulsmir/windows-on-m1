@@ -10,7 +10,7 @@ $env:INCLUDE="$tool\include;$kit\Include\10.0.26100.0\ucrt;$kit\Include\10.0.261
 $out=Join-Path $base ('reloc-capture-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $out | Out-Null
 if((Get-FileHash "$InputRoot\native\agx_pack.h" -Algorithm SHA256).Hash -ne 'aedee39dd8eb0305acdd21512c1334f2923b4b3a99db0dd2ef61912471415ce8'){throw 'native pack header mismatch'}
-$files=@('agx_win32_reloc_capture_test.c','agx_win32_reloc_capture.c','agx_win32_transport.c','apple_agx_win32_abi.c','apple_agx_dynamic_job.c')
+$files=@('agx_win32_reloc_capture_test.c','agx_win32_reloc_capture.c','agx_win32_native_pool_bridge.c','agx_win32_transport.c','apple_agx_win32_abi.c','apple_agx_dynamic_job.c')
 $results=@()
 function Invoke-ExactProcess([string]$File,[string[]]$Arguments,[string]$Log) {
   $process=New-Object System.Diagnostics.Process
