@@ -1,4 +1,5 @@
 #include "agx_win32_reloc_capture.h"
+#include "agx_win32_native_pool_bridge.h"
 #include "apple_agx_dynamic_job.h"
 #include "agx_pack.h"
 #include <assert.h>
@@ -192,6 +193,21 @@ int main(void) {
          view.Draw->UscPipelineReference==4u &&
          view.Draw->Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX]==9u);
   assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  {
+    AGX_WIN32_NATIVE_POOL_SLICE slice={
+        77u,5u,104u,7u,fixture.Data[4],
+        fixture.Placement+5u*0x10000u,0x10000u,
+        fixture.Data[4]+0x200u,fixture.Placement+5u*0x10000u+0x200u,0x240u};
+    assert(AgxWin32RelocBegin(&c,77,7,9,&c.Operations,c.Context)==AgxRelocOk);
+    assert(AgxWin32NativePoolReference(&c,&slice,AppleAgxWin32RoleUscPipeline,
+                                       AppleAgxWin32AccessRead,&index)==AgxRelocOk);
+    assert(index==0u && c.References[index].Offset==0x200u &&
+           c.References[index].Bytes==0x240u);
+    slice.SliceGpu++;
+    assert(AgxWin32NativePoolReference(&c,&slice,AppleAgxWin32RoleUscPipeline,
+                                       AppleAgxWin32AccessRead,&index)==AgxRelocRange);
+    assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  }
   for(unsigned i=0;i<9;++i) assert(fixture.Holds[i]==0);
   puts("CAPTURE -> WIRE -> KMD MATERIALIZER: two placements/lifetime PASS");
   return 0;

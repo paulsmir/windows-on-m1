@@ -21,7 +21,7 @@ class RelocCaptureTests(unittest.TestCase):
                 '-I',str(winsys),'-I',str(kmd/'include'),
                 '-isystem',str(generated),'-isystem',str(mesa/'src'),'-isystem',str(mesa/'include'),
                 str(winsys/'agx_win32_reloc_capture_test.c'),
-                str(winsys/'agx_win32_reloc_capture.c'),str(winsys/'agx_win32_transport.c'),
+                str(winsys/'agx_win32_reloc_capture.c'),str(winsys/'agx_win32_native_pool_bridge.c'),str(winsys/'agx_win32_transport.c'),
                 str(shared/'src/apple_agx_win32_abi.c'),str(kmd/'src/apple_agx_dynamic_job.c'),
                 '-o',str(exe)]
             result=subprocess.run(command,capture_output=True,text=True)
