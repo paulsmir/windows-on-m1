@@ -65,6 +65,12 @@ before agx_d3d10_windows.cpp: pinned Mesa's u_formats.h requires generated
 util/format/u_format_gen.h, absent from supplied MesaGeneratedRoot. This is not
 a driver verdict. Preserve probe failure; next build input must use the matching
 complete Mesa generated directory before evaluating pipe wrapper/close code.
+Resolution: complete AD03 generated tree staged at FRYZZING path
+AD04-umd-owner-004-generated, with u_format_gen.h SHA256
+3d659e5135249d5a0a116aa209015949912e22045bf4b13ea0ab41fd743c7dc4.
+EnableMesaPipeFactoryTest current x64 build/link/execution now PASS and includes
+agx_d3d10_windows.cpp. It remains a controlled pipe wrapper test, not real
+Asahi agx_screen/context or hardware rendering proof.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
