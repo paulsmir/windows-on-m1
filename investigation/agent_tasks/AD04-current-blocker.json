@@ -1,7 +1,7 @@
 {
-  "head": "b30bfaaaf7670997162c516a5e41a113997bebd5",
-  "last_pass": "explicit v1/v2 selection legacy-v2 rejection and exact owner-side BO identity acquire; focused host suites pass",
-  "first_error": "Owner design approved in AD04-NATIVE-BO-OWNER-DECISION.md: implement association and source holds in existing UMD ScreenBuffers/LockedBase, with real unmap/destroy/finalize gating and callback rollback. RetainExact callback contract alone does not prove atomicity. Then compile actual native BO/pool caller.",
+  "head": "a9c56bf28544dd238a0ace508188ca141d017f06",
+  "last_pass": "explicit v1/v2 selection legacy rejection exact identity callback plus WDK-proven UMD LockedBase source hold blocks unmap/deallocate",
+  "first_error": "Map source hold is implemented. Attach actual native struct agx_bo pointer association to existing ScreenBuffers and route real agx_pool_alloc_aligned_with_bo caller through it; finalization busy handling and v2 owned composition remain open. See AD04-NATIVE-BO-OWNER-DECISION.md.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",

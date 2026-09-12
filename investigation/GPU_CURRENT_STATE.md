@@ -53,11 +53,12 @@ gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
 
 ## Current implementation checkpoint
 Latest concrete owner decision: agent_tasks/AD04-NATIVE-BO-OWNER-DECISION.md.
-Use existing UMD ScreenBuffers and LockedBase; add real lock/association/source
-holds to map/unmap/destroy/finalize. RetainExact currently specifies callback
-requirements only; real Windows-owner atomicity and native wiring remain unproven.
-Next Terra slice executes real UMD owner functions in the existing Windows test
-harness before compiling the native BO/pool caller. No new generic device layer.
+Commita9c56bf implements the mapping/source part in existing UMD ScreenBuffers:
+LockedBase is authoritative, with serial/map epoch/source hold checks; real unmap
+and deallocate reject active holds. WDK contract executable PASS. NativeBo pointer
+association, exact owner-side RetainExact bridge, finalization busy semantics and
+actual Mesa pool caller remain unproven. Next Terra slice connects association to
+real native BO allocation without a parallel registry.
 
 Latest Tier-A review: agent_tasks/AD04-ASTRA-V2-PROVENANCE-REVIEW.md.
 Commit01a86f7 closes the first two required corrections: version selection is
