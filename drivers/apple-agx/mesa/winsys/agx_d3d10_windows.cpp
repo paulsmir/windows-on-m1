@@ -96,10 +96,13 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
 HRESULT AgxD3d10WindowsCloseDevice(AGX_D3D10_WINDOWS_DEVICE **Device) {
   if (Device == NULL || *Device == NULL) return E_INVALIDARG;
   AGX_D3D10_WINDOWS_DEVICE *owner = *Device;
-  if (AdmissionUmdScreenHasLiveSources(&owner->Runtime))
+  HRESULT result = AdmissionUmdScreenBeginClose(&owner->Runtime);
+  if (FAILED(result))
+    return result;
+  if (!AgxWin32PipeDeviceClose(&owner->Pipe)) {
+    AdmissionUmdScreenCancelClose(&owner->Runtime);
     return HRESULT_FROM_WIN32(ERROR_BUSY);
-  if (!AgxWin32PipeDeviceClose(&owner->Pipe))
-    return HRESULT_FROM_WIN32(ERROR_BUSY);
+  }
   AdmissionUmdRuntimeDeviceFinalize(&owner->Runtime);
   AcquireSRWLockExclusive(&owner->Adapter->Lock);
   AGX_D3D10_WINDOWS_DEVICE **link = &owner->Adapter->Owners;

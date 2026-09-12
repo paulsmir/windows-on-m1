@@ -92,6 +92,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 NextScreenSerial;
   APPLE_AGX_U64 NextSourceHoldId;
   APPLE_AGX_U64 OwnerCookie;
+  BOOL ScreenClosing;
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;
   ADMISSION_UMD_RETIREMENT_QUEUE Retirement;
@@ -128,6 +129,8 @@ HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);
 BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device);
+HRESULT AdmissionUmdScreenBeginClose(ADMISSION_UMD_DEVICE *Device);
+VOID AdmissionUmdScreenCancelClose(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
                                       APPLE_AGX_U32 *Fence);
 HRESULT AdmissionUmdScreenQuerySource(ADMISSION_UMD_DEVICE *Device,
