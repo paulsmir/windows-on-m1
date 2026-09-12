@@ -14,6 +14,8 @@ typedef struct {
   int (*Query)(void *, APPLE_AGX_U64, AGX_WIN32_RELOC_ALLOCATION *);
   int (*Retain)(void *, APPLE_AGX_U64, APPLE_AGX_U64);
   void (*Release)(void *, APPLE_AGX_U64, APPLE_AGX_U64);
+  /* Owner-side atomic acquire for a previously observed exact identity. */
+  int (*RetainExact)(void *, const AGX_WIN32_RELOC_ALLOCATION *);
 } AGX_WIN32_RELOC_OPERATIONS;
 typedef enum {
   AgxRelocOk, AgxRelocArgument, AgxRelocState, AgxRelocStale,
@@ -38,6 +40,10 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocBegin(AGX_WIN32_RELOC_CAPTURE *,
 AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *,
     APPLE_AGX_U64 Token, APPLE_AGX_U32 Role, APPLE_AGX_U32 Access,
     APPLE_AGX_U64 Offset, APPLE_AGX_U64 Bytes, APPLE_AGX_U32 *Index);
+AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
+    AGX_WIN32_RELOC_CAPTURE *, const AGX_WIN32_RELOC_ALLOCATION *Expected,
+    APPLE_AGX_U32 Role, APPLE_AGX_U32 Access, APPLE_AGX_U64 Offset,
+    APPLE_AGX_U64 Bytes, APPLE_AGX_U32 *Index);
 AGX_WIN32_RELOC_RESULT AgxWin32RelocField(AGX_WIN32_RELOC_CAPTURE *,
     APPLE_AGX_U32 Kind, APPLE_AGX_U32 Destination, APPLE_AGX_U64 DestinationOffset,
     APPLE_AGX_U32 Target, APPLE_AGX_U64 TargetOffset);

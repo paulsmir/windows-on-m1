@@ -7,7 +7,7 @@
 #include <string.h>
 typedef struct {
   AGX_WIN32_RELOC_ALLOCATION Bo[9];
-  unsigned Holds[9], Releases, FailRetain;
+  unsigned Holds[9], Releases, FailRetain, FailRetainExact;
   unsigned char Data[9][0x10000];
   APPLE_AGX_U64 Placement;
 } FIXTURE;
@@ -18,6 +18,12 @@ static int query(void *ctx,APPLE_AGX_U64 token,AGX_WIN32_RELOC_ALLOCATION *bo) {
 static int retain(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U64 serial) {
   FIXTURE *f=ctx; if(f->FailRetain || !token || token>9 || f->Bo[token-1].Serial!=serial) return 0;
   ++f->Holds[token-1]; return 1;
+}
+static int retain_exact(void *ctx,const AGX_WIN32_RELOC_ALLOCATION *expected) {
+  FIXTURE *f=ctx;
+  if(!expected || f->FailRetainExact || !expected->Token || expected->Token>9 ||
+      memcmp(&f->Bo[expected->Token-1],expected,sizeof(*expected))) return 0;
+  ++f->Holds[expected->Token-1]; return 1;
 }
 static void release(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U64 serial) {
   FIXTURE *f=ctx; assert(token && token<=9 && serial && f->Holds[token-1]);
@@ -39,7 +45,7 @@ static int resolve_object(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
 static APPLE_AGX_U64 read_le(const unsigned char *b,unsigned n) {
   APPLE_AGX_U64 v=0; for(unsigned i=0;i<n;++i) v|=(APPLE_AGX_U64)b[i]<<(8*i); return v;
 }
-static const AGX_WIN32_RELOC_OPERATIONS ops={query,retain,release};
+static const AGX_WIN32_RELOC_OPERATIONS ops={query,retain,release,retain_exact};
 static void setup(void) {
   memset(&fixture,0,sizeof(fixture)); fixture.Placement=0x1100000000ULL;
   for(unsigned i=0;i<9;++i) {
@@ -200,7 +206,7 @@ int main(void) {
         77u,5u,104u,7u,fixture.Data[4],
         fixture.Placement+5u*0x10000u,0x10000u,
         fixture.Data[4]+0x200u,fixture.Placement+5u*0x10000u+0x200u,0x240u};
-    assert(AgxWin32RelocBegin(&c,77,7,9,&c.Operations,c.Context)==AgxRelocOk);
+  assert(AgxWin32RelocBegin(&c,77,7,9,&c.Operations,c.Context)==AgxRelocOk);
     assert(AgxWin32NativePoolReference(&c,&slice,AppleAgxWin32RoleUscPipeline,
                                        AppleAgxWin32AccessRead,&index)==AgxRelocOk);
     assert(index==0u && c.References[index].Offset==0x200u &&
@@ -208,6 +214,28 @@ int main(void) {
     slice.SliceGpu++;
     assert(AgxWin32NativePoolReference(&c,&slice,AppleAgxWin32RoleUscPipeline,
                                        AppleAgxWin32AccessRead,&index)==AgxRelocRange);
+    assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  }
+  {
+    AGX_WIN32_RELOC_ALLOCATION expected=fixture.Bo[4];
+    assert(AgxWin32RelocBegin(&c,77,7,10,&c.Operations,c.Context)==AgxRelocOk);
+    assert(AgxWin32RelocReferenceExpected(
+        &c,&expected,AppleAgxWin32RoleUscPipeline,AppleAgxWin32AccessRead,
+        0x200,0x240,&index)==AgxRelocOk);
+    assert(index==0u && fixture.Holds[4]==1u);
+    assert(AgxWin32RelocAbort(&c)==AgxRelocOk && fixture.Holds[4]==0u);
+    ++fixture.Bo[4].Serial;
+    assert(AgxWin32RelocBegin(&c,77,7,11,&c.Operations,c.Context)==AgxRelocOk);
+    assert(AgxWin32RelocReferenceExpected(
+        &c,&expected,AppleAgxWin32RoleUscPipeline,AppleAgxWin32AccessRead,
+        0x200,0x240,&index)==AgxRelocStale);
+    assert(c.ReferenceCount==0u && fixture.Holds[4]==0u);
+    expected=fixture.Bo[4]; fixture.FailRetainExact=1;
+    assert(AgxWin32RelocReferenceExpected(
+        &c,&expected,AppleAgxWin32RoleUscPipeline,AppleAgxWin32AccessRead,
+        0x200,0x240,&index)==AgxRelocCallback);
+    assert(c.ReferenceCount==0u && fixture.Holds[4]==0u);
+    fixture.FailRetainExact=0;
     assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
   }
   for(unsigned i=0;i<9;++i) assert(fixture.Holds[i]==0);

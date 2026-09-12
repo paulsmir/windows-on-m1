@@ -63,6 +63,40 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
   c->References[n]=(APPLE_AGX_WIN32_ALLOCATION_REFERENCE){a.AllocationIndex,access,role,0,offset,bytes};
   *index=n; return AgxRelocOk;
 }
+AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
+    AGX_WIN32_RELOC_CAPTURE *c, const AGX_WIN32_RELOC_ALLOCATION *expected,
+    APPLE_AGX_U32 role, APPLE_AGX_U32 access, APPLE_AGX_U64 offset,
+    APPLE_AGX_U64 bytes, APPLE_AGX_U32 *index) {
+  AGX_WIN32_RELOC_ALLOCATION current={0};
+  if(!c || !expected || !expected->Owner || !expected->Token ||
+      !expected->Serial || !expected->Generation || !index || !access ||
+      access&~7u || role<1 || role>12) return AgxRelocArgument;
+  if(c->State!=RECORDING) return AgxRelocState;
+  if(expected->Owner!=c->Owner || expected->Generation!=c->Generation ||
+      expected->AllocationIndex==~0u) return AgxRelocStale;
+  if(!c->Operations.Query(c->Context,expected->Token,&current)) return AgxRelocCallback;
+  if(!same(&current,expected)) return AgxRelocStale;
+  if(!bytes || offset>expected->Bytes || bytes>expected->Bytes-offset ||
+      (access&expected->Access)!=access) return AgxRelocRange;
+  for(unsigned i=0;i<c->ReferenceCount;++i) {
+    const AGX_WIN32_RELOC_ALLOCATION *old=&c->Allocations[i];
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *ref=&c->References[i];
+    if(old->Token==expected->Token || old->AllocationIndex==expected->AllocationIndex) {
+      if(!same(old,expected)) return AgxRelocStale;
+      if(ref->Role==role && ref->Access==access && ref->Offset==offset && ref->Bytes==bytes) {
+        *index=i; return AgxRelocOk;
+      }
+      if(overlap(ref->Offset,ref->Bytes,offset,bytes)) return AgxRelocOverlap;
+    }
+  }
+  if(c->ReferenceCount>=APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) return AgxRelocCapacity;
+  if(!c->Operations.RetainExact ||
+      !c->Operations.RetainExact(c->Context,expected)) return AgxRelocCallback;
+  unsigned n=c->ReferenceCount++;
+  c->Allocations[n]=*expected;
+  c->References[n]=(APPLE_AGX_WIN32_ALLOCATION_REFERENCE){expected->AllocationIndex,access,role,0,offset,bytes};
+  *index=n; return AgxRelocOk;
+}
 AGX_WIN32_RELOC_RESULT AgxWin32RelocField(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U32 kind,APPLE_AGX_U32 dest,APPLE_AGX_U64 destoff,
     APPLE_AGX_U32 target,APPLE_AGX_U64 targetoff) {

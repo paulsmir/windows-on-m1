@@ -41,6 +41,6 @@ AGX_WIN32_RELOC_RESULT AgxWin32NativePoolReference(
       allocation.Bytes != Slice->BoBytes)
     return AgxRelocStale;
 
-  return AgxWin32RelocReference(Capture, Slice->Token, Role, Access, offset,
-                                Slice->SliceBytes, Index);
+  return AgxWin32RelocReferenceExpected(Capture, &allocation, Role, Access,
+                                        offset, Slice->SliceBytes, Index);
 }
