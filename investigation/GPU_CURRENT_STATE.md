@@ -52,6 +52,13 @@ continues. Hardware runs authorized after exact build/sign/hash/preflight/recove
 gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
 
 ## Current implementation checkpoint
+Latest concrete owner decision: agent_tasks/AD04-NATIVE-BO-OWNER-DECISION.md.
+Use existing UMD ScreenBuffers and LockedBase; add real lock/association/source
+holds to map/unmap/destroy/finalize. RetainExact currently specifies callback
+requirements only; real Windows-owner atomicity and native wiring remain unproven.
+Next Terra slice executes real UMD owner functions in the existing Windows test
+harness before compiling the native BO/pool caller. No new generic device layer.
+
 Latest Tier-A review: agent_tasks/AD04-ASTRA-V2-PROVENANCE-REVIEW.md.
 Commit01a86f7 closes the first two required corrections: version selection is
 explicit and legacy overlay/DMA consumers reject v2 before side effects. The
