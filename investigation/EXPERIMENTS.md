@@ -43005,6 +43005,17 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+# AD04-GPUVA-MODE-GATE — 2026-09-12 — source-only STOP
+
+Conditional explicit-binding approval checked against input b95c54e.
+Production remains physical/patch-list: virtual submit/process stubs reject;
+contexts allocate patch lists; caps lack GPU-MMU opt-in; internal AGX VA is
+resolved from segment allocation addresses. No new hardware EXP/build/test.
+79-line packet and primary reference: agent_tasks/AD04-GPUVA-MODE-GATE.md.
+Conclusion fefbe8842ad71329e7023368f8e11abe2d12f937: STOP before persistent
+VidMm GPUVA implementation; return architecture question on migration versus
+retaining physical relocation. Existing compiler/hardware PASS unchanged.
+
 # AD04-FULLCOMPILER-001 — 2026-09-12 — compiler-only milestone
 
 No hardware EXP was created or repeated. Full NIR and Asahi compiler compile/link
