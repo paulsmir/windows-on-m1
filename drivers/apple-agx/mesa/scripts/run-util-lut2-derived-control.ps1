@@ -6,7 +6,7 @@ $derivedCompiler = Join-Path $Root 'compiler'
 $generated = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated'
 $clang = 'C:\Users\pauls\AD04-asahi-windows-compiler\llvm20\bin\clang-cl.exe'
 $rootInput = 'C:\Users\pauls\ad04-util-lut2-inputs'
-if (Test-Path $Root) { Remove-Item -Recurse -Force $Root }
+if (Test-Path $Root) { throw "refusing to reuse existing output root: $Root" }
 New-Item -ItemType Directory -Force $derivedCompiler, (Join-Path $Root 'util') | Out-Null
 Copy-Item "$sourceCompiler\*" $derivedCompiler -Recurse -Force
 Copy-Item "$rootInput\agx_compiler.h" (Join-Path $Root 'compiler\agx_compiler.h') -Force

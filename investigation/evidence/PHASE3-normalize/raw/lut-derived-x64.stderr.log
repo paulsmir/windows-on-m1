@@ -1,0 +1,56 @@
+In file included from C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\lut_semantics_test.c:4:
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(54,23): warning: unused variable 'b' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                       ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,38): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                      ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(54,23): warning: unused variable 'c' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                       ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,48): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                                ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(54,37): warning: unused variable 'a' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                     ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,28): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                            ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(54,37): warning: unused variable 'c' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                     ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,48): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                                ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(54,51): warning: unused variable 'a' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                                   ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,28): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                            ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(54,51): warning: unused variable 'b' [-Wunused-variable]
+   54 |    uint8_t masks[] = {UTIL_LUT3(a), UTIL_LUT3(b), UTIL_LUT3(c)};
+      |                                                   ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,38): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                      ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\lut_semantics_test.c(54,25): warning: unused variable 'b' [-Wunused-variable]
+   54 |       UTIL_LUT2(a | b), UTIL_LUT2(a), UTIL_LUT2(~a), UTIL_LUT2(a ^ b),
+      |                         ^~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(45,16): note: expanded from macro 'UTIL_LUT2'
+   45 |    (util_lut2) UTIL_LUT3((expr_involving_a_b) & ~c)
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,38): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                      ^
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\lut_semantics_test.c(54,39): warning: unused variable 'b' [-Wunused-variable]
+   54 |       UTIL_LUT2(a | b), UTIL_LUT2(a), UTIL_LUT2(~a), UTIL_LUT2(a ^ b),
+      |                                       ^~~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(45,16): note: expanded from macro 'UTIL_LUT2'
+   45 |    (util_lut2) UTIL_LUT3((expr_involving_a_b) & ~c)
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+C:\Users\pauls\AD04-phase3-normalize-20260912T000001Z\input\util/lut.h(40,38): note: expanded from macro 'UTIL_LUT3'
+   40 |       UNUSED const uint8_t a = 0xAA, b = 0xCC, c = 0xF0;                       \
+      |                                      ^
+8 warnings generated.
