@@ -85,7 +85,9 @@ static int dynamic_patch(void *Destination,
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
       return 0;
     current = dynamic_read_le(Destination, 8u);
-    encoded = (current & 0xffffffULL) | (GpuAddress << 24u);
+    /* Native USC UNIFORM size_halfs occupies bits20..25. The aligned
+     * address contributes bits26..63; bits24/25 are not disposable. */
+    encoded = (current & 0x3ffffffULL) | (GpuAddress << 24u);
     dynamic_write_le(Destination, encoded, 8u);
     *EncodedValue = GpuAddress;
     return 1;

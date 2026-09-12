@@ -12,7 +12,10 @@ All earlier cloud workers have returned. Do not redispatch them routinely.
 Use the continuous integration/ad04-windows-compiler worktree for this phase.
 Record/checkpoint the exact clean input HEAD per task; do not create another
 agent or worktree for each include, guard, constant or dependency correction.
-Architect checkout and native-ANS remain untouched. No push/hardware authority.
+Architect checkout and native-ANS remain untouched. No push authority.
+Latest user authorization: hardware runs may proceed autonomously after exact
+source/build/sign/hash/preflight/ledger gates, using established recovery.
+Air operator reports Running proxy; USB uartproxy was independently observed.
 
 Routine flow:
 compact blocker packet -> direct minimal causal correction -> deterministic
@@ -25,10 +28,12 @@ the last 7000 raw log bytes. Raw logs remain evidence, opened only when needed.
 Avoid a separate architect conversational gate after a successful mechanical
 step. Keep per-task changes causal; do not opportunistically fix later errors.
 
-Reviewer required only for ABI/layout, AGX/NIR semantic change, >2 production
-files, behavior not fully validated deterministically, low worker confidence,
-or an explicitly architectural task. This condition takes precedence over
-token-saving pressure; ordinary compiler blockers do not trigger review alone.
+Tier-A makes ordinary reversible architecture/ownership/compiler/frontend choices
+locally: alternatives -> primary evidence -> minimal reversible decision ->
+ARCHITECT_DECISION in repo -> implementation/tests/checkpoint. Architecture
+questions are internal reasoning, not user stop gates. Use focused self-review;
+no routine extra agents. Stop for inaccessible resources, unapproved irreversible
+or destructive actions, fundamental no-path blocker, or unavoidable physical action.
 
 Raw evidence remains on disk. Read it only for failed tests, conflicting results,
 scope expansion or ambiguous architecture. Compact results must distinguish
