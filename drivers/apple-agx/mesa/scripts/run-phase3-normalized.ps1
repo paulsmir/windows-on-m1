@@ -37,7 +37,7 @@ $overlay = Join-Path $InputRoot 'uatomic_clang_compat.h'
 $entries += Invoke-Captured 'uatomic-x64' $clang @('/nologo','/W3','/std:c11','/FI',$overlay,(Join-Path $InputRoot 'uatomic_semantics_test.c'),"/Fe:$(Join-Path $work 'uatomic.exe')") $true
 $entries += Invoke-Captured 'lut-derived-x64' $clang @('/nologo','/W3','/std:c11','/I',$InputRoot,(Join-Path $InputRoot 'lut_semantics_test.c'),"/Fe:$(Join-Path $work 'lut.exe')") $true
 $entries += Invoke-Captured 'agxindex-actual-x64' $clang @('/nologo','/W3','/std:c11','/I',(Join-Path $InputRoot 'actual'),(Join-Path $InputRoot 'agxindex_fragment_corpus.c'),"/Fe:$(Join-Path $work 'agx-actual.exe')") $true
-$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))
+$compileArgs = @('/nologo','/c','/std:c11','/W3','/DNDEBUG','/DHAVE_STRUCT_TIMESPEC','/DMESA_DEBUG=0','/DBUILDING_MESA','/D_USE_MATH_DEFINES','/FI',$overlay) + $include + @((Join-Path $compilerWork 'agx_compile.c'))
 $entries += Invoke-Captured 'agx-compile-x64' $clang $compileArgs $false
 $entries += Invoke-Captured 'agx-compile-arm64' $clang ($compileArgs + '/clang:--target=aarch64-pc-windows-msvc') $false
 $manifest = [ordered]@{ compiler=$clang; mesa=$mesa; generated=$generated; input_root=$InputRoot; result_root=$ResultRoot; work_root=$work; entries=$entries }
