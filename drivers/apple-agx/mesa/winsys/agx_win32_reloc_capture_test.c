@@ -211,7 +211,7 @@ int main(void) {
                                        AppleAgxWin32AccessRead,&index)==AgxRelocOk);
     assert(index==0u && c.References[index].Offset==0x200u &&
            c.References[index].Bytes==0x240u);
-    slice.SliceGpu++;
+    slice.SliceConstruction++;
     assert(AgxWin32NativePoolReference(&c,&slice,AppleAgxWin32RoleUscPipeline,
                                        AppleAgxWin32AccessRead,&index)==AgxRelocRange);
     assert(AgxWin32RelocAbort(&c)==AgxRelocOk);

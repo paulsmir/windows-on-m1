@@ -15,8 +15,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32NativePoolReference(
   if (Capture == NULL || Slice == NULL || Index == NULL ||
       Slice->Owner == 0ULL || Slice->Token == 0ULL || Slice->Serial == 0ULL ||
       Slice->Generation == 0u || Slice->CpuBase == NULL ||
-      Slice->SliceCpu == NULL || Slice->GpuBase == 0ULL ||
-      Slice->SliceGpu == 0ULL || Slice->BoBytes == 0ULL ||
+      Slice->SliceCpu == NULL || Slice->ConstructionBase == 0ULL ||
+      Slice->SliceConstruction == 0ULL || Slice->BoBytes == 0ULL ||
       Slice->SliceBytes == 0ULL || Capture->Context == NULL ||
       Capture->Operations.Query == NULL)
     return AgxRelocArgument;
@@ -28,10 +28,11 @@ AGX_WIN32_RELOC_RESULT AgxWin32NativePoolReference(
   sliceCpu = (uintptr_t)Slice->SliceCpu;
   if (sliceCpu < cpuBase || (APPLE_AGX_U64)(sliceCpu - cpuBase) > Slice->BoBytes ||
       Slice->SliceBytes > Slice->BoBytes - (APPLE_AGX_U64)(sliceCpu - cpuBase) ||
-      Slice->SliceGpu < Slice->GpuBase ||
-      Slice->SliceGpu - Slice->GpuBase != (APPLE_AGX_U64)(sliceCpu - cpuBase))
+      Slice->SliceConstruction < Slice->ConstructionBase ||
+      Slice->SliceConstruction - Slice->ConstructionBase !=
+          (APPLE_AGX_U64)(sliceCpu - cpuBase))
     return AgxRelocRange;
-  offset = Slice->SliceGpu - Slice->GpuBase;
+  offset = Slice->SliceConstruction - Slice->ConstructionBase;
 
   if (!Capture->Operations.Query(Capture->Context, Slice->Token, &allocation))
     return AgxRelocCallback;
