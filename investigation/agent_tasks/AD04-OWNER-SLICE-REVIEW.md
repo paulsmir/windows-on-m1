@@ -1,5 +1,51 @@
 # Owner slice review — a9c56bf is incomplete
 
+## Execution checkpoint at3dd8ea0
+
+Factory build PASS covers the existing controlled wrapper. It does not clear this
+checklist: CreateClassBuffer still releases its Closing check before choosing a
+free slot/calling AllocateCb; direct ScreenFinalize still calls HasLiveSources
+instead of reserving close. QuerySource checks Closing outside its lock; owner
+cookie remains unused; hold id wraps; CopySource/NativeBo are still absent.
+
+Finish this one integration slice with a verified acceptance table:
+
+| Required behavior | Discriminating test in actual UMD owner |
+| --- | --- |
+| Allocate reserves slot before callback | AllocateCb reentry BeginClose must be busy; second creation cannot reuse reserved slot |
+| Lock/unlock/deallocate reserve transition | Each callback attempts BeginClose; UnlockCb attempts Acquire with valid pre-unlock identity |
+| Failure restores prior identity | Force each callback failure and retry; unchanged map epoch after failed lock/unlock |
+| Close reservation is exclusive | BeginClose then acquire/create/query fail; repeated BeginClose busy; only cancelling caller reopens |
+| Direct finalize uses reservation | Callback-recursive Finalize cannot clear device or destroy context |
+| Hold identity includes actual owner | Two device instances with equal numeric generation/token cannot cross-release |
+| Holds do not wrap/replay | Id exhaustion rejects unchanged output; A/B double release leaves B live |
+| Copy uses live source | CopySource ignores a forged Address, reads owner-derived range; stale hold rejected |
+| Input/output failure contract | Alias rejects before writes, wrong identity/range leaves outputs unchanged |
+| Native association belongs to BO creation | Internal associate/query/detach enforce unique key+serial; held detach denied |
+| D3D owner closes/retries correctly | Optional factory test exercises busy source and extra context, then retry close |
+
+Native key is `const struct agx_bo *` (forward declaration, no wire representation).
+ScreenBuffer stores that key and its association serial. Associate is called only
+by the native Windows BO allocation backend after a real allocation succeeds;
+not by agx_build_pipeline. The stage's with_bo result LOOKS UP this association,
+acquires source from authoritative LockedBase, and records token-relative range.
+Unknown key is compared only, never dereferenced. Internal same-process association
+is not a security boundary against arbitrary producer C code. All public command
+input still uses validated wire references. Source flags require CpuRead; no
+silent read from a WriteOnly mapping or global class/caps expansion.
+
+Do not attach an existing Linux BO to a Windows slot just because addresses look
+equal. Native Windows BO allocation must own its native struct storage and use
+the Windows-created token. Full agx_bo_create/agx_pool source port is the next
+integration contract AFTER this table, including construction-address relocation
+and real failure propagation. No additional owner design document is needed.
+
+Verification must build a fresh archive of tracked HEAD plus explicit dirty diff,
+verify source hashes at the exact project paths, preserve logs and binaries, run
+x64 default+factory tests and ARM64 build. A source manifest must cover tests/
+umd_contract_windows.c AND mesa/winsys/agx_d3d10_windows.cpp; no src/ duplicates.
+Do not repeat full compiler/AGX hardware controls for this UMD-only change.
+
 ## Follow-up at59dd662 — finish existing design before native integration
 
 The same requirements remain open, not a new design question:

@@ -1,7 +1,7 @@
 {
-  "head": "a8fc3e13bf42ddd141eece4c61d9ce4f5a01f075",
-  "last_pass": "explicit v1/v2 and legacy rejection; WDK x64 source hold test includes unique independent holds and transition reservation",
-  "first_error": "Complete AD04-OWNER-SLICE-REVIEW.md: create/map lifecycle locks and rollback, busy finalization/CloseDevice preserving owner, deterministic callback reentry, NativeBo association and ARM64 gate. Do not wire native caller yet.",
+  "head": "3dd8ea0a4246a342a77ce655cb57cd996ae3e112",
+  "last_pass": "factory-enabled UMD wrapper x64 build/execution reported PASS; native Asahi factory and full owner concurrency not covered",
+  "first_error": "Finish execution checklist at top of AD04-OWNER-SLICE-REVIEW.md in one tested owner slice. Allocate has no reserved slot; direct Finalize bypasses BeginClose; owner/id/copy/native association gaps remain. No further owner architecture question required.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",
