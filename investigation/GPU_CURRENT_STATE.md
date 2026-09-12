@@ -90,6 +90,21 @@ objects with fail-closed resolve/release behavior. Its host test passes. It is
 intentionally not yet attached to native BO lifecycle because BO destroy must
 release construction identity exactly once. That lifetime link belongs in the
 real native agx_bo backend.
+Commit6e830c9 adds the next device-scoped bridge: `AGX_WIN32_NATIVE_DEVICE`
+owns construction serial allocation and pairs each newly created
+Windows-backed native BO with exactly one token/serial construction reservation.
+Destroy resolves the exact live identity, destroys the Windows BO, then releases
+that exact construction record; a copied pre-destroy identity resolves stale.
+This is construction provenance only: no GPUVA, PA, VidMm residency, Mesa
+`struct agx_bo`, `agx_device_ops`, or submit claim. Fresh immutable archive
+SHA256 `81874b11da40bac688e98368d470269e6c046dfb38dc6706824d399fbdb86be3`
+builds on FRYZZING WDK26100/MSVC14.44: x64 build/link/execution PASS
+SHA256 `9730d25782ad09b10725b0daaad8b477acbc260556fd83da98c623623abba513`;
+ARM64 build/link PASS SHA256 `600f946677c8f2cb344fffb1737b548cf536fb310776681f55f750cf53633fcc`.
+Next unchanged owner boundary: bind this device-scoped BO backend to actual
+native Mesa `agx_bo` creation, then let the hash-gated `agx_build_pipeline`
+overlay query its real pool BO before typed capture. Do not attach by address
+arithmetic or call a construction address a hardware address.
 Review AD04-OWNER-SLICE-REVIEW.md finds a9c56bf PARTIAL: acquisition and unmap
 did not share a lock, release A twice could consume live hold B, and finalize
 still clears busy owner storage. Commita8fc3e1 adds unique hold records and
