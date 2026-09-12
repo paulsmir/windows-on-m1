@@ -47,10 +47,29 @@ Next assessed direction: existing device owner + real Asahi BO/pool pointer
 provenance -> typed relocation records -> existing physical Render/Patch/
 SubmitCommand and exact fences. Initial offline direct-draw closure only;
 no untracked pointer scanning, no fake GPUVA, no residency inferred from BO.
-No adapter implementation authorized/performed in this source-only step.
+Latest user stop-policy: Tier-A decides reversible architecture internally and
+continues. Hardware runs authorized after exact build/sign/hash/preflight/recovery
+gates; do not ask at ordinary architecture checkpoints. GPUVA remains CLOSED/NO.
+
+## Current implementation checkpoint
+6725ae1b2da94a909c3978905235e00394c14c0f adds device/request-scoped typed capture
+using existing wire ABI and KMD materializer. Host ASan/UBSan and Windows x64
+build/link/execute + ARM64 build/link PASS; current source hashes verified.
+Native USC pack/unpack revealed a real production defect: address relocation
+discarded uniform size bits24/25. Mask now preserves26 low bits; native counts
+1..64 pass at two placements, with unchanged non-address bytes and first image.
+BO retention is not VidMm residency. Capture still must be wired into actual
+native BO/pool/USC/encoder emission and the real agx_screen/context platform seam.
+No standard D3D device or Full Graphics acceptance follows from this checkpoint.
+Evidence/runner repairs/limits: agent_tasks/AD04-TYPED-RELOCATION-RESULT.md.
+Next: native pool out_bo provenance + device-scoped Windows operations, replacing
+DRM-dependent native initialization without fake fd/global lookup or second backend.
 
 ## Machine / hardware
-No Air action this phase. Last verified Air:2026-09-09T13:13:40Z ordinary377/392,
+No Air boot/install action this phase. User reports Running proxy; passive USB
+confirmed m1n1 uartproxy and expected two serial endpoints on2026-09-12.
+No current Windows SSH/package preflight yet. Last verified Windows health:
+2026-09-09T13:13:40Z ordinary377/392,
 Code28, no AppleAgx package/service/module; SSH8CPU/NVMe/USB/input healthy then.
 Do not describe that old check as current live health.
 EXP680–682 exact native-derived outputs/TA3D/fences remain closed.

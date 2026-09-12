@@ -43005,6 +43005,19 @@ The next architect decision is recorded in
 hash-pinned Windows clang-cl overlay for only observed u_atomic spellings.
 Spark dispatch is queued pending a real code-capable endpoint; no source
 implementation or hardware action was performed by Astra.
+# AD04-TYPED-RELOC — 2026-09-12 — OFFLINE/BUILDER
+
+Checkpoint6725ae1: typed capture -> existing wire validation -> production KMD
+materializer at two placements. Actual native USC pack exposed size48 corruption
+from discarded bits24/25; low26 mask correction passes all64 uniform counts.
+Host ASan/UBSan and Windows x64 build/link/execute + ARM64 build/link PASS.
+Evidence: evidence/AD04-typed-reloc/windows; source/limitations and builder-only
+repairs: agent_tasks/AD04-TYPED-RELOCATION-RESULT.md. No hardware EXP, install,
+Air boot or package cleanup. Passive USB confirmed reported Running proxy.
+Current source is not yet a native producer integration or hardware candidate.
+User now authorizes autonomous reversible decisions and gated hardware runs;
+Full Graphics desktop remains the active end goal, not this helper checkpoint.
+
 # AD04-VIDMM-DOMAIN-GATE — 2026-09-12 — SOURCE ONLY
 
 Input e8e276a; decision eed8ea2f0a70c46ad59a6419ba4dbb7e67a0438d.
