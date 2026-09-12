@@ -1,7 +1,7 @@
 # GPU current state — 2026-09-12
 
 Worktree: integration/ad04-windows-compiler (linked persistent integration tree).
-Compiled source checkpoint:29f41e7c3a9fb4dbe71b2a2a6aac0750a1ccd039.
+Compiled source checkpoint:d2c2ad8f8458254442a385f2d86e4ce30453b5a5.
 Evidence/workflow checkpoint:3d912c03b87d35f6ef36c2ccdfa4ccf7bff96d52.
 Architect feature/j313-gpu-acceleration remains f90402c; no merge or push.
 
@@ -72,6 +72,13 @@ not yet wire the v2 bindings into dynamic DMA or a native pool. Next: an
 owner-proven native pool/BO allocation adapter and v2 composition path, then
 per-device Windows agx_screen/agx_context operations. Decision:
 agent_tasks/AD04-NATIVE-PIPELINE-DECISION.md.
+Follow-up d2c2ad8 makes the existing typed capture/transport carry that v2
+command when a distinct fragment USC reference is present. Its deterministic
+test models two disjoint, differently-sized subranges retained from one BO;
+the command validates as v2 and abort releases both holds. This proves the
+wire/capture lifetime invariant only. Native `agx_pool_alloc_aligned_with_bo`
+still needs an explicit Windows device-owner adapter before native emission
+can feed these references.
 
 ## Machine / hardware
 No Air boot/install action this phase. User reports Running proxy; passive USB

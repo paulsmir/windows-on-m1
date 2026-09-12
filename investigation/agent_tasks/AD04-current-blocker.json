@@ -1,7 +1,7 @@
 {
-  "head": "29f41e7c3a9fb4dbe71b2a2a6aac0750a1ccd039",
-  "last_pass": "v2 Draw command accepts two distinct typed USC pipeline references; v1 rejects the same reserved field; five host ABI/relocation/overlay/transport suites pass",
-  "first_error": "v2 is validated but has no owner-proven native pool/BO composition adapter yet. The existing overlay must not assign a second pipeline to an unproven EXP208 template offset.",
+  "head": "d2c2ad8f8458254442a385f2d86e4ce30453b5a5",
+  "last_pass": "typed capture emits and validates v2 Draw for two disjoint differently-sized USC subranges from one retained BO; abort releases all holds; five host suites pass",
+  "first_error": "v2 capture is validated but native agx_pool_alloc_aligned_with_bo has no Windows device-owner adapter yet. The existing overlay must not assign a second pipeline to an unproven EXP208 template offset.",
   "include_or_call_chain": [
     "native agx_build_pipeline -> pool allocation with BO provenance",
     "typed capture -> Win32 draw version/validation -> dynamic overlay layout -> materializer",
