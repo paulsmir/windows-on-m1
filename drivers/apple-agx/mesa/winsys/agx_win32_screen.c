@@ -163,6 +163,15 @@ AGX_WIN32_SCREEN_RESULT AgxWin32ScreenDestroyBuffer(
   return result;
 }
 
+AGX_WIN32_SCREEN_RESULT AgxWin32ScreenSubmitDraw(
+    AGX_WIN32_SCREEN *Screen, const AGX_WIN32_DRAW_REQUEST *Request,
+    APPLE_AGX_U32 *Fence) {
+  if (Screen == NULL || !Screen->Active)
+    return AgxWin32ScreenState;
+  return translate(AgxWin32WinsysSubmitDraw(&Screen->Transport, Request,
+                                             Fence));
+}
+
 AGX_WIN32_SCREEN_RESULT AgxWin32ScreenWaitFence(
     AGX_WIN32_SCREEN *Screen, APPLE_AGX_U32 Fence,
     APPLE_AGX_U32 TimeoutMs) {

@@ -9,6 +9,7 @@ typedef struct _FAKE_WINSYS {
   APPLE_AGX_U32 Unmaps;
   APPLE_AGX_U32 Destroys;
   APPLE_AGX_U32 Submits;
+  APPLE_AGX_U32 DrawSubmits;
   APPLE_AGX_U32 Waits;
   APPLE_AGX_U32 RetiredFences;
 } FAKE_WINSYS;
@@ -54,6 +55,15 @@ static int fake_submit(void *context, const AGX_WIN32_CLEAR_REQUEST *clear,
   FAKE_WINSYS *fake = (FAKE_WINSYS *)context;
   assert(clear->Generation == 7u && clear->Color == 0xffabcdefu);
   ++fake->Submits;
+  *fence = 44u;
+  return 1;
+}
+
+static int fake_submit_draw(void *context, const AGX_WIN32_DRAW_REQUEST *draw,
+                            APPLE_AGX_U32 *fence) {
+  FAKE_WINSYS *fake = (FAKE_WINSYS *)context;
+  assert(draw->Generation == 7u && draw->AllocationCount == 0u);
+  ++fake->DrawSubmits;
   *fence = 44u;
   return 1;
 }
@@ -375,6 +385,7 @@ static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   operations.UnmapBuffer = fake_unmap;
   operations.DestroyBuffer = fake_destroy;
   operations.SubmitClear = fake_submit;
+  operations.SubmitDraw = fake_submit_draw;
   operations.WaitFence = fake_wait;
   operations.RetireFence = fake_retire_fence;
   assert(AgxWin32WinsysInitialize(&winsys, &fake, 7u, &operations) ==
@@ -394,6 +405,14 @@ static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   assert(AgxWin32WinsysSubmitClear(&winsys, &clear, &fence) ==
          AgxWin32WinsysSuccess);
   assert(fence == 44u);
+  {
+    AGX_WIN32_DRAW_REQUEST draw;
+    memset(&draw, 0, sizeof(draw));
+    draw.Generation = 7u;
+    assert(AgxWin32WinsysSubmitDraw(&winsys, &draw, &fence) ==
+           AgxWin32WinsysSuccess);
+    assert(fence == 44u);
+  }
   assert(AgxWin32WinsysWaitFence(&winsys, fence, 1000u) ==
          AgxWin32WinsysSuccess);
   assert(AgxWin32WinsysRetireFence(&winsys, fence) ==
@@ -402,7 +421,7 @@ static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
          AgxWin32WinsysSuccess);
   assert(buffer.Token == 0ULL);
   assert(fake.Creates == 1u && fake.Maps == 1u && fake.Unmaps == 1u &&
-         fake.Submits == 1u && fake.Waits == 1u &&
+         fake.Submits == 1u && fake.DrawSubmits == 1u && fake.Waits == 1u &&
          fake.RetiredFences == 1u && fake.Destroys == 1u);
 }
 

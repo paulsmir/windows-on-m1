@@ -253,6 +253,23 @@ AGX_WIN32_WINSYS_RESULT AgxWin32WinsysSubmitClear(
   return AgxWin32WinsysSuccess;
 }
 
+AGX_WIN32_WINSYS_RESULT AgxWin32WinsysSubmitDraw(
+    AGX_WIN32_WINSYS *Winsys, const AGX_WIN32_DRAW_REQUEST *Request,
+    APPLE_AGX_U32 *Fence) {
+  APPLE_AGX_U32 fence = 0u;
+  if (Winsys == NULL || Request == NULL || Fence == NULL ||
+      Winsys->Generation == 0u)
+    return AgxWin32WinsysArgument;
+  if (Request->Generation != Winsys->Generation)
+    return AgxWin32WinsysStaleGeneration;
+  if (Winsys->Operations.SubmitDraw == NULL ||
+      !Winsys->Operations.SubmitDraw(Winsys->Context, Request, &fence) ||
+      fence == 0u)
+    return AgxWin32WinsysCallback;
+  *Fence = fence;
+  return AgxWin32WinsysSuccess;
+}
+
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysWaitFence(
     AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U32 Fence,
     APPLE_AGX_U32 TimeoutMs) {

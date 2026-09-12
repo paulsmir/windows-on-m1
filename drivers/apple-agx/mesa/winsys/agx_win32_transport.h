@@ -61,6 +61,8 @@ typedef struct _AGX_WIN32_WINSYS_OPERATIONS {
   int (*WaitFence)(void *Context, APPLE_AGX_U32 Fence,
                    APPLE_AGX_U32 TimeoutMs);
   int (*RetireFence)(void *Context, APPLE_AGX_U32 Fence);
+  int (*SubmitDraw)(void *Context, const AGX_WIN32_DRAW_REQUEST *Request,
+                    APPLE_AGX_U32 *Fence);
 } AGX_WIN32_WINSYS_OPERATIONS;
 
 typedef struct _AGX_WIN32_WINSYS {
@@ -97,6 +99,9 @@ AGX_WIN32_WINSYS_RESULT AgxWin32WinsysDestroyBuffer(
     AGX_WIN32_WINSYS *Winsys, AGX_WIN32_BUFFER *Buffer);
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysSubmitClear(
     AGX_WIN32_WINSYS *Winsys, const AGX_WIN32_CLEAR_REQUEST *Request,
+    APPLE_AGX_U32 *Fence);
+AGX_WIN32_WINSYS_RESULT AgxWin32WinsysSubmitDraw(
+    AGX_WIN32_WINSYS *Winsys, const AGX_WIN32_DRAW_REQUEST *Request,
     APPLE_AGX_U32 *Fence);
 AGX_WIN32_WINSYS_RESULT AgxWin32WinsysWaitFence(
     AGX_WIN32_WINSYS *Winsys, APPLE_AGX_U32 Fence,

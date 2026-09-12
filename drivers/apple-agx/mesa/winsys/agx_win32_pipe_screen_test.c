@@ -110,7 +110,7 @@ int main(void) {
   AGX_WIN32_PIPE_DEVICE device = {0};
   AGX_WIN32_SCREEN_OPERATIONS screenOps = {query, create_class};
   AGX_WIN32_WINSYS_OPERATIONS transportOps = {
-      create_general, map, unmap, destroy, fail_submit, fail_wait, retire};
+      create_general, map, unmap, destroy, fail_submit, fail_wait, retire, NULL};
   struct pipe_screen *pipe;
   struct pipe_context *context;
   struct pipe_resource bufferTemplate;
