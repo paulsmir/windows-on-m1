@@ -75,6 +75,23 @@ static int AdmissionWin32RangesOverlap(
   return Left->Offset < rightEnd && Right->Offset < leftEnd;
 }
 
+/* Version 3 captures Mesa native source streams byte-exactly. Offsets remain
+ * word aligned: only the final span may end mid-word. This is source-copy
+ * metadata, not a widened register, pointer or destination alignment rule. */
+static int AdmissionWin32ExactNativeSpan(
+    const APPLE_AGX_WIN32_COMMAND_VIEW *View,
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference) {
+  if (View == ADMISSION_WIN32_NULL || View->Header == ADMISSION_WIN32_NULL ||
+      Reference == ADMISSION_WIN32_NULL ||
+      View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
+      View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC ||
+      Reference->Access != AppleAgxWin32AccessRead)
+    return 0;
+  return Reference->Role == AppleAgxWin32RoleConstant ||
+         Reference->Role == AppleAgxWin32RoleShaderRodata ||
+         Reference->Role == AppleAgxWin32RoleUscPipeline;
+}
+
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference,
     const ADMISSION_WIN32_ALLOCATION_FACT *Fact, APPLE_AGX_U16 CommandVersion) {
@@ -192,7 +209,8 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
     if (local[index].Generation != ExpectedGeneration)
       return AdmissionWin32TransportStaleGeneration;
     if ((reference->Offset & 3ULL) != 0ULL ||
-        (reference->Bytes & 3ULL) != 0ULL)
+        ((reference->Bytes & 3ULL) != 0ULL &&
+         !AdmissionWin32ExactNativeSpan(View, reference)))
       return AdmissionWin32TransportAlignment;
     if (reference->Bytes == 0ULL || reference->Offset > local[index].Bytes ||
         reference->Bytes > local[index].Bytes - reference->Offset)

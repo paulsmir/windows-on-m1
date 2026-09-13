@@ -509,6 +509,73 @@ static void test_v3_general_table_sources_are_narrowly_accepted(void) {
   }
 }
 
+/* Native USC records are packed 8+4+6+4+8+8 = 38 bytes. Compiler rodata is
+ * 16-bit data whose final range may be two bytes; neither needs fake padding. */
+static void test_v3_exact_native_source_spans_are_not_word_rounded(void) {
+  APPLE_AGX_WIN32_COMMAND_HEADER header = {0};
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[4] = {{0}};
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw = {0};
+  APPLE_AGX_WIN32_RELOCATION relocation = {0};
+  APPLE_AGX_WIN32_COMMAND_VIEW view = {0};
+  ADMISSION_WIN32_ALLOCATION_FACT facts[4] = {{0}};
+  TEST_LOOKUP lookup = {0};
+  header.Opcode = AppleAgxWin32OpcodeDraw;
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  header.Generation = 7u;
+  header.ReferenceCount = 4u;
+  view.Header = &header; view.References = references;
+  view.Draw = &draw; view.Relocations = &relocation;
+  references[0] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      0u, AppleAgxWin32AccessWrite, AppleAgxWin32RoleRenderTarget,
+      0u, 0u, 0x4000ULL};
+  references[1] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      1u, AppleAgxWin32AccessRead, AppleAgxWin32RoleUscPipeline,
+      0u, 0x40ULL, 38ULL};
+  references[2] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      2u, AppleAgxWin32AccessRead, AppleAgxWin32RoleShaderRodata,
+      0u, 4ULL, 2ULL};
+  references[3] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      3u, AppleAgxWin32AccessRead, AppleAgxWin32RoleConstant,
+      0u, 8ULL, 6ULL};
+  lookup.ExpectedOwner = 0x1111ULL; lookup.Count = 4u;
+  for (unsigned i = 0u; i < 4u; ++i) {
+    lookup.Allocations[i].Index = i;
+    lookup.Allocations[i].Owner = lookup.ExpectedOwner;
+    lookup.Allocations[i].Fact.AllocationToken = 0xa200ULL + i;
+    lookup.Allocations[i].Fact.Bytes = 0x10000ULL;
+    lookup.Allocations[i].Fact.Generation = 7u;
+    lookup.Allocations[i].Fact.Writable = 1u;
+    lookup.Allocations[i].Fact.Flags = AppleAgxWin32BufferCpuWrite |
+                                        AppleAgxWin32BufferGpuRead;
+  }
+  lookup.Allocations[0].Fact.ClassId = 0u;
+  lookup.Allocations[1].Fact.ClassId = AgxWin32BufferClassEncoder;
+  lookup.Allocations[2].Fact.ClassId = AgxWin32BufferClassShader;
+  lookup.Allocations[3].Fact.ClassId = AgxWin32BufferClassGeneral;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 4u) ==
+      AdmissionWin32TransportSuccess);
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 4u) ==
+      AdmissionWin32TransportAlignment);
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  references[1].Offset = 0x42ULL;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 4u) ==
+      AdmissionWin32TransportAlignment);
+  references[1].Offset = 0x40ULL;
+  references[1].Role = AppleAgxWin32RoleDescriptor;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 4u) ==
+      AdmissionWin32TransportAlignment);
+  references[1].Role = AppleAgxWin32RoleUscPipeline;
+  references[1].Access = AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite;
+  assert(AdmissionWin32ValidateReferences(
+      &view, 7u, lookup_allocation, &lookup, facts, 4u) ==
+      AdmissionWin32TransportAlignment);
+}
+
 int main(void) {
   test_valid_noncontiguous_index_and_range();
   test_owner_generation_and_access_rejections();
@@ -519,5 +586,6 @@ int main(void) {
   test_class_allocation_contract();
   test_draw_role_class_and_relocation_ownership();
   test_v3_general_table_sources_are_narrowly_accepted();
+  test_v3_exact_native_source_spans_are_not_word_rounded();
   return 0;
 }
