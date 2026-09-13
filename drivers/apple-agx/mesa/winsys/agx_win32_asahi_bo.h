@@ -41,5 +41,10 @@ int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
 int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
     APPLE_AGX_U32 Generation, APPLE_AGX_U64 Address, APPLE_AGX_U64 Bytes,
     struct agx_bo **Bo, APPLE_AGX_U64 *Offset);
+/* Validates an exact mapped CPU interval against the same current owner and
+ * returns its construction coordinate. It never scans emitted command bytes. */
+int AgxWin32AsahiFindCpuAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
+    APPLE_AGX_U32 Generation, const void *Cpu, APPLE_AGX_U64 Bytes,
+    struct agx_bo **Bo, APPLE_AGX_U64 *Address, APPLE_AGX_U64 *Offset);
 
 #endif

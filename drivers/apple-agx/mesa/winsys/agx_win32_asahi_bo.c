@@ -200,3 +200,50 @@ int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *b,APPLE_AGX_U64 owner,
   *out=found; *offset=found_offset;
   return 1;
 }
+
+int AgxWin32AsahiFindCpuAddress(AGX_WIN32_ASAHI_BACKEND *b,
+    APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,const void *cpu,
+    APPLE_AGX_U64 bytes,struct agx_bo **out,APPLE_AGX_U64 *address,
+    APPLE_AGX_U64 *offset) {
+  APPLE_AGX_U32 cursor=0,seen=0;
+  struct agx_bo *found=NULL;
+  APPLE_AGX_U64 found_offset=0,found_address=0;
+  const void *key;
+  if(out) *out=NULL;
+  if(address) *address=0;
+  if(offset) *offset=0;
+  if(!b || !b->Native || b->Failed || !cpu || !bytes || !out || !address ||
+     !offset || !owner || !generation || generation!=b->Buffers.Generation ||
+     !b->Buffers.Screen || !b->Buffers.Screen->Active ||
+     b->Buffers.Screen->Generation!=generation) return 0;
+  for(;;) {
+    APPLE_AGX_U32 previous=cursor;
+    key=b->Ops.NextBo(b->Owner,&cursor);
+    if(!key) break;
+    if(cursor<=previous || ++seen>b->LiveBos) return 0;
+    AGX_WIN32_RELOC_ALLOCATION identity;
+    if(!AgxWin32AsahiIdentity(b,(struct agx_bo *)key,&identity) ||
+       identity.Owner!=owner || identity.Generation!=generation) continue;
+    struct windows_bo *bo=(struct windows_bo *)key;
+    APPLE_AGX_U64 base=0;
+    if(!bo->Base._map ||
+       AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,0,
+         bo->Backing.Bytes,&base)!=AgxWin32NativeDeviceSuccess ||
+       bo->Base.va==NULL || bo->Base.va->addr!=base ||
+       bo->Base.size!=identity.Bytes || bo->Backing.Bytes!=identity.Bytes ||
+       (uintptr_t)cpu<(uintptr_t)bo->Base._map ||
+       (uintptr_t)cpu-(uintptr_t)bo->Base._map>=identity.Bytes ||
+       bytes>identity.Bytes-((uintptr_t)cpu-(uintptr_t)bo->Base._map)) continue;
+    if(found) return 0;
+    found=&bo->Base;
+    found_offset=(uintptr_t)cpu-(uintptr_t)bo->Base._map;
+    found_address=base+found_offset;
+  }
+  if(!found || !AgxWin32AsahiFindAddress(b,owner,generation,found_address,
+      bytes,out,offset) || *out!=found || *offset!=found_offset) {
+    if(out) *out=NULL; if(address) *address=0; if(offset) *offset=0;
+    return 0;
+  }
+  *address=found_address;
+  return 1;
+}

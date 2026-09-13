@@ -84,3 +84,14 @@ AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureAddress(AGX_WIN32_ASAHI_CAPTURE *c,
    * unlocked lookup/retain protocol for concurrent native producers. */
   return AgxWin32AsahiCaptureReference(c,bo,role,access,offset,bytes,index);
 }
+
+AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureCpuRange(AGX_WIN32_ASAHI_CAPTURE *c,
+    const void *cpu,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,
+    APPLE_AGX_U32 role,APPLE_AGX_U32 access,APPLE_AGX_U32 *index) {
+  struct agx_bo *bo=NULL; APPLE_AGX_U64 actual=0,offset=0;
+  if(index) *index=~0u;
+  if(!c || !c->Backend || !cpu || !address || !bytes || !index) return AgxRelocArgument;
+  if(!AgxWin32AsahiFindCpuAddress(c->Backend,c->Capture.Owner,c->Capture.Generation,
+      cpu,bytes,&bo,&actual,&offset) || actual!=address) return AgxRelocStale;
+  return AgxWin32AsahiCaptureReference(c,bo,role,access,offset,bytes,index);
+}
