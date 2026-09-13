@@ -29,6 +29,10 @@ int AgxWin32AsahiEmissionBegin(struct agx_device *native,void *cpu,
        ((AGX_WIN32_ASAHI_PIPELINE *)b->ActiveEmission)->Capture!=c) ||
      (uintptr_t)bo->_map>UINTPTR_MAX-offset ||
      (uintptr_t)cpu!=(uintptr_t)bo->_map+offset) return 0;
+  APPLE_AGX_U32 classId=0;
+  if(role==AppleAgxWin32RoleEncoder &&
+     (!AgxWin32AsahiClass(b,bo,&classId) || classId!=AgxWin32BufferClassEncoder))
+    return 0;
   unsigned previous=c->Capture.ReferenceCount;
   if(AgxWin32AsahiCaptureReference(c,bo,role,
       AppleAgxWin32AccessRead,offset,capacity,&reference)!=AgxRelocOk) return 0;
@@ -37,6 +41,16 @@ int AgxWin32AsahiEmissionBegin(struct agx_device *native,void *cpu,
   s->Capacity=capacity; s->Reference=reference; s->Role=role;
   s->PreviousEmission=b->ActiveEmission;
   b->ActiveEmission=s; return 1;
+}
+int AgxWin32AsahiEmissionBeginCpu(struct agx_device *native,void *cpu,
+    APPLE_AGX_U32 capacity,APPLE_AGX_U32 role,AGX_WIN32_ASAHI_PIPELINE *s) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  AGX_WIN32_ASAHI_CAPTURE *c=b?b->ActiveCapture:NULL;
+  struct agx_bo *bo=NULL; APPLE_AGX_U64 address=0,offset=0;
+  if(!b || !c || !cpu || !capacity || !role ||
+     !AgxWin32AsahiFindCpuAddress(b,c->Capture.Owner,c->Capture.Generation,
+       cpu,capacity,&bo,&address,&offset)) return 0;
+  return AgxWin32AsahiEmissionBegin(native,cpu,address,capacity,role,s);
 }
 int AgxWin32AsahiPipelineBegin(struct agx_device *native,void *cpu,
     APPLE_AGX_U64 address,APPLE_AGX_U32 capacity,AGX_WIN32_ASAHI_PIPELINE *s) {

@@ -18,6 +18,8 @@ int AgxWin32AsahiPipelineBegin(struct agx_device *,void *,APPLE_AGX_U64,
  * command parser: callers provide role/address/range at the emitting site. */
 int AgxWin32AsahiEmissionBegin(struct agx_device *,void *,APPLE_AGX_U64,
     APPLE_AGX_U32,APPLE_AGX_U32,AGX_WIN32_ASAHI_PIPELINE *);
+int AgxWin32AsahiEmissionBeginCpu(struct agx_device *,void *,APPLE_AGX_U32,
+    APPLE_AGX_U32,AGX_WIN32_ASAHI_PIPELINE *);
 void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *,const void *End,
     APPLE_AGX_U32 Kind,APPLE_AGX_U64 Target,APPLE_AGX_U64 Bytes,
     APPLE_AGX_U32 Role);

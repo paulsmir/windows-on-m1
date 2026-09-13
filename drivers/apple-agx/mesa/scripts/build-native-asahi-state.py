@@ -263,6 +263,39 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
             'after':hashlib.sha256(inc.read_bytes()).hexdigest()}
         change('src/gallium/drivers/asahi/agx_state.c',digest,
             [(original,'#include "agx_win32_pipeline.inc"\n')])
+        # State emission is captured only in an active Windows request. The
+        # original no-capture path remains byte-for-byte behaviorally native.
+        state_target=out/'src/gallium/drivers/asahi/agx_state.c'
+        state_text=state_target.read_text()
+        state_begin=state_text.index('static uint8_t *\nagx_encode_state(')
+        state_end=state_text.index('\n}\n\nstatic enum agx_primitive',state_begin)+3
+        state_body=state_text[state_begin:state_end]
+        state_body=state_body.replace(
+            '   if (!ctx->dirty)\n      return out;',
+            '''   if (!ctx->dirty)
+      return out;
+
+   AGX_WIN32_ASAHI_PIPELINE state_capture = {0};
+   AGX_WIN32_ASAHI_BACKEND *windows_backend = dev->windows_private;
+   bool capture_active = windows_backend && windows_backend->ActiveCapture;
+   if (capture_active && !AgxWin32AsahiEmissionBeginCpu(
+           dev, out, (APPLE_AGX_U32)(batch->vdm.end - out),
+           AppleAgxWin32RoleEncoder, &state_capture)) {
+      windows_backend->Failed = 1;
+      return out;
+   }''',1)
+        state_body=state_body.replace(
+            '   assert(ppp_updates <= MAX_PPP_UPDATES);\n   return out;',
+            '''   assert(ppp_updates <= MAX_PPP_UPDATES);
+   if (capture_active && !AgxWin32AsahiPipelineFinish(&state_capture, out)) {
+      windows_backend->Failed = 1;
+      return out;
+   }
+   return out;''',1)
+        if state_body==state_text[state_begin:state_end]:
+            raise SystemExit('Native state emission capture anchors missing')
+        state_target.write_text(state_text[:state_begin]+state_body+state_text[state_end:])
+        overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         (out/'native_pipeline_contract.c').write_text(
             '#include "gallium/drivers/asahi/agx_state.h"\n'
             '#include "agx_usc.h"\n#include "agx_linker.h"\n'
