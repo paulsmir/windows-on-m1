@@ -77,7 +77,7 @@ static int AdmissionWin32RangesOverlap(
 
 static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference,
-    const ADMISSION_WIN32_ALLOCATION_FACT *Fact) {
+    const ADMISSION_WIN32_ALLOCATION_FACT *Fact, APPLE_AGX_U16 CommandVersion) {
   APPLE_AGX_U32 requiredClass;
   if (Reference == ADMISSION_WIN32_NULL || Fact == ADMISSION_WIN32_NULL)
     return AdmissionWin32TransportArgument;
@@ -98,10 +98,17 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
     requiredClass = AgxWin32BufferClassShader;
     break;
   case AppleAgxWin32RoleDescriptor:
-  case AppleAgxWin32RoleUscPipeline:
-  case AppleAgxWin32RoleEncoder:
   case AppleAgxWin32RoleScissor:
   case AppleAgxWin32RoleDepthBias:
+    if (Fact->ClassId == AgxWin32BufferClassGeneral &&
+        CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+        Reference->Access == AppleAgxWin32AccessRead)
+      requiredClass = AgxWin32BufferClassGeneral;
+    else
+      requiredClass = AgxWin32BufferClassEncoder;
+    break;
+  case AppleAgxWin32RoleUscPipeline:
+  case AppleAgxWin32RoleEncoder:
     requiredClass = AgxWin32BufferClassEncoder;
     break;
   default:
@@ -200,7 +207,8 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
       return AdmissionWin32TransportActiveDisplay;
     if (View->Header->Opcode == AppleAgxWin32OpcodeDraw) {
       ADMISSION_WIN32_TRANSPORT_RESULT classResult =
-          AdmissionWin32ReferenceClass(reference, &local[index]);
+          AdmissionWin32ReferenceClass(reference, &local[index],
+                                       View->Header->Version);
       if (classResult != AdmissionWin32TransportSuccess)
         return classResult;
     }

@@ -192,6 +192,11 @@ int main(void) {
          AdmissionDynamicOverlayArgument);
   assert(AdmissionDynamicOverlayBindingsFromView(&view, &bindings) ==
          AdmissionDynamicOverlayArgument);
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
+         AdmissionDynamicOverlayArgument);
+  assert(AdmissionDynamicOverlayBindingsFromView(&view, &bindings) ==
+         AdmissionDynamicOverlayArgument);
   header.Version = APPLE_AGX_WIN32_COMMAND_VERSION;
   pipeline_bytes[0x2000] = 0x5au;
   assert(AdmissionDynamicOverlayPlan(&image, &view, &plan) ==
