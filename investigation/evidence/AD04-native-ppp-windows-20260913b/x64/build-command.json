@@ -1,0 +1,12 @@
+[
+    "C:/Users/pauls/AD04-native-ppp-windows-20260913b\\drivers\\apple-agx\\render-admission\\umd\\tests\\UmdContractTest.vcxproj",
+    "/t:Build",
+    "/nr:false",
+    "/m:2",
+    "/p:Configuration=Release",
+    "/p:Platform=x64",
+    "/p:EnableNativePoolTest=true",
+    "/p:NativeObjectRoot=C:/Users/pauls/AD04-native-ppp-windows-20260913b-native-x64",
+    "/p:IntDir=C:/Users/pauls/AD04-native-ppp-windows-20260913b-x64\\obj\\",
+    "/p:OutDir=C:/Users/pauls/AD04-native-ppp-windows-20260913b-x64\\"
+]

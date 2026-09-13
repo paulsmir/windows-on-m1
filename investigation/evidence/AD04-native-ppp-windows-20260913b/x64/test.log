@@ -1,0 +1,5 @@
+UMD COMPOSER: Composer_failures=0
+UMD ASAHI BATCH ADAPTER: failures=0
+NATIVE_POOL_WINDOWS_OWNER: errors=0
+NATIVE_PPP_CAPTURE: errors=0 (native PPP helpers and USC emitter; no draw or GPU execution)
+ACTUAL_NATIVE_BUILD_PIPELINE: errors=0 (controlled shader input; no GPU execution)
