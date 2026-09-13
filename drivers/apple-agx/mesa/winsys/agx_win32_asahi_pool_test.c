@@ -13,7 +13,7 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
     const AGX_WIN32_ASAHI_OWNER_OPS *ops,void *owner,
     AGX_WIN32_ASAHI_BACKEND *backend,void (*holds)(void *,int)) {
   struct agx_device native={0};
-  struct agx_pool pool;
+  struct agx_pool pool, state_pool;
   struct agx_bo *first=NULL,*second=NULL;
   AGX_WIN32_RELOC_ALLOCATION identity;
   AGX_WIN32_ASAHI_CAPTURE capture={0};
@@ -22,10 +22,13 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
 #define CHECK_NATIVE(x) do { if(!(x)) { ++errors; fprintf(stderr,"NATIVE_POOL line=%u %s\n",(unsigned)__LINE__,#x); } } while(0)
   CHECK_NATIVE(AgxWin32AsahiAttach(backend,&native,screen,ops,owner,0x1100000000ULL));
   agx_pool_init(&pool,&native,"Windows native pipeline",AGX_BO_LOW_VA,false);
+  agx_pool_init(&state_pool,&native,"Windows state source",0,false);
   struct agx_ptr a=agx_pool_alloc_aligned_with_bo(&pool,64,64,&first);
   struct agx_ptr b=agx_pool_alloc_aligned_with_bo(&pool,128,64,&second);
+  struct agx_ptr state_bytes=agx_pool_alloc_aligned(&state_pool,128,64);
   CHECK_NATIVE(first && first==second && first->dev==&native);
   CHECK_NATIVE(a.cpu && b.cpu && (char *)b.cpu-(char *)a.cpu==64);
+  CHECK_NATIVE(state_bytes.cpu && state_bytes.gpu != a.gpu);
   CHECK_NATIVE(b.gpu-a.gpu==64 && first->va->addr==a.gpu);
   if(a.cpu) memset(a.cpu,0x37,64);
   CHECK_NATIVE(AgxWin32AsahiIdentity(backend,first,&identity));
@@ -45,7 +48,7 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
     CHECK_NATIVE(!AgxWin32AsahiFindAddress(backend,identity.Owner,identity.Generation,
         a.gpu+0x3ffff,2,&found,&offset));
     CHECK_NATIVE(!AgxWin32AsahiFindAddress(backend,identity.Owner,identity.Generation,
-        a.gpu+0x40000,1,&found,&offset));
+        a.gpu+0x1000000,1,&found,&offset));
     CHECK_NATIVE(!AgxWin32AsahiFindAddress(backend,identity.Owner,identity.Generation,
         ~(APPLE_AGX_U64)0-7,16,&found,&offset));
     CHECK_NATIVE(!AgxWin32AsahiFindAddress(backend,identity.Owner,identity.Generation,
@@ -62,7 +65,7 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
     CHECK_NATIVE(AgxWin32AsahiFindCpuAddress(backend,identity.Owner,identity.Generation,
         b.cpu,128,&found,&address,&offset) && found==first && address==b.gpu && offset==64);
     CHECK_NATIVE(!AgxWin32AsahiFindCpuAddress(backend,identity.Owner,identity.Generation,
-        (char *)b.cpu+0x3ffff,2,&found,&address,&offset));
+        (char *)b.cpu+0x1000000,2,&found,&address,&offset));
     CHECK_NATIVE(!AgxWin32AsahiFindCpuAddress(backend,identity.Owner,identity.Generation+1,
         b.cpu,128,&found,&address,&offset));
     CHECK_NATIVE(!AgxWin32AsahiFindCpuAddress(backend,identity.Owner,identity.Generation,
@@ -76,7 +79,7 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
       AppleAgxWin32RoleUscPipeline,AppleAgxWin32AccessRead,&reference)==AgxRelocOk && reference==0);
   CHECK_NATIVE(AgxWin32AsahiCaptureCpuRange(&capture,a.cpu,a.gpu+4,64,
       AppleAgxWin32RoleUscPipeline,AppleAgxWin32AccessRead,&reference)==AgxRelocStale);
-  CHECK_NATIVE(AgxWin32AsahiCaptureAddress(&capture,a.gpu+0x40000,128,
+  CHECK_NATIVE(AgxWin32AsahiCaptureAddress(&capture,a.gpu+0x1000000,128,
       AppleAgxWin32RoleUscPipeline,AppleAgxWin32AccessRead,&reference)!=AgxRelocOk);
   CHECK_NATIVE(first->refcnt==3 && capture.Capture.ReferenceCount==2);
   CHECK_NATIVE(capture.Count==1 && capture.Capture.ReferenceCount==2 &&
@@ -104,7 +107,24 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
   CHECK_NATIVE(AgxWin32AsahiCaptureDeactivate(&capture));
   CHECK_NATIVE(!AgxWin32AsahiPipelineBegin(&native,a.cpu,a.gpu,64,&emission));
   CHECK_NATIVE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
+  /* A state/VDM range may surround a nested USC emission. Scope restoration
+   * must preserve the parent rather than treating nesting as a second request. */
   CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,3)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureActivate(&capture));
+  AGX_WIN32_ASAHI_PIPELINE state={0};
+  CHECK_NATIVE(AgxWin32AsahiEmissionBegin(&native,state_bytes.cpu,state_bytes.gpu,128,
+      AppleAgxWin32RoleDescriptor,&state));
+  CHECK_NATIVE(AgxWin32AsahiPipelineBegin(&native,a.cpu,a.gpu,64,&emission));
+  agx_pack(a.cpu,USC_TEXTURE,cfg) { cfg.start=0; cfg.count=1; cfg.buffer=b.gpu; }
+  AgxWin32AsahiPipelineRecord(&emission,(char *)a.cpu+8,
+      AppleAgxWin32RelocationUscTableAddress39,b.gpu,64,AppleAgxWin32RoleDescriptor);
+  CHECK_NATIVE(AgxWin32AsahiPipelineFinish(&emission,(char *)a.cpu+8));
+  CHECK_NATIVE(state.Capture==&capture && backend->ActiveEmission==&state);
+  CHECK_NATIVE(AgxWin32AsahiPipelineFinish(&state,(char *)state_bytes.cpu+128));
+  CHECK_NATIVE(capture.Capture.ReferenceCount==3 && capture.Capture.RelocationCount==1);
+  CHECK_NATIVE(AgxWin32AsahiCaptureDeactivate(&capture));
+  CHECK_NATIVE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,4)==AgxRelocOk);
   CHECK_NATIVE(AgxWin32AsahiCaptureActivate(&capture));
   CHECK_NATIVE(!AgxWin32AsahiPipelineBegin(&native,b.cpu,a.gpu,64,&emission));
   CHECK_NATIVE(capture.Capture.ReferenceCount==0);
@@ -116,16 +136,17 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
   CHECK_NATIVE(!AgxWin32AsahiPipelineFinish(&emission,(char *)a.cpu+8));
   CHECK_NATIVE(capture.Capture.State==0 && first->refcnt==1);
   CHECK_NATIVE(AgxWin32AsahiCaptureDeactivate(&capture));
-  CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,4)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,5)==AgxRelocOk);
   CHECK_NATIVE(AgxWin32AsahiCaptureReference(&capture,first,AppleAgxWin32RoleUscPipeline,
       AppleAgxWin32AccessRead,0,64,&reference)==AgxRelocOk);
   CHECK_NATIVE(AgxWin32AsahiCaptureReference(&capture,first,AppleAgxWin32RoleDescriptor,
       AppleAgxWin32AccessRead,64,128,&reference)==AgxRelocOk);
   holds(owner,1);
   agx_pool_cleanup(&pool);
+  agx_pool_cleanup(&state_pool);
   CHECK_NATIVE(first->refcnt==2);
   CHECK_NATIVE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
-  CHECK_NATIVE(backend->LiveBos==1 && !AgxWin32AsahiCollect(backend));
+  CHECK_NATIVE(backend->LiveBos==2 && !AgxWin32AsahiCollect(backend));
   CHECK_NATIVE(!AgxWin32AsahiIdentity(backend,first,&identity));
   {
     struct agx_bo *found=NULL; APPLE_AGX_U64 offset=0;
