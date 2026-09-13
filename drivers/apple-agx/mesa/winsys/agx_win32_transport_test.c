@@ -365,9 +365,39 @@ static void test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference(
 
   assert(AgxWin32TransportBuildDrawVersion(&input, 4u, bytes, sizeof(bytes),
                                            &commandBytes) ==
-         AppleAgxWin32AbiVersion);
+         AppleAgxWin32AbiArgument);
   assert(memcmp(bytes, before, sizeof(bytes)) == 0);
   assert(commandBytes == 0x5a5a5a5au);
+}
+
+static void test_v4_metadata_is_appended_after_the_draw_prefix(void) {
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[9];
+  APPLE_AGX_WIN32_RELOCATION relocations[6];
+  APPLE_AGX_WIN32_NATIVE_BATCH_METADATA metadata = {0};
+  AGX_WIN32_DRAW_REQUEST input = draw_request(references, relocations);
+  unsigned char bytes[APPLE_AGX_WIN32_COMMAND_MAX_BYTES];
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  APPLE_AGX_U32 commandBytes = 0u;
+  metadata.Background.UscReference = 4u;
+  metadata.PartialBackground.UscReference = 4u;
+  metadata.EndOfTile.UscReference = 4u;
+  metadata.Background.PackedCounts = 0x11223344u;
+  metadata.PartialBackground.PackedCounts = 0x55667788u;
+  metadata.EndOfTile.PackedCounts = 0x99aabbccu;
+  metadata.Background.UscFlags = metadata.PartialBackground.UscFlags =
+      metadata.EndOfTile.UscFlags = 4u;
+  metadata.Samples = metadata.Layers = metadata.SampleSizeBytes = 1u;
+  metadata.UtileWidth = metadata.UtileHeight = 32u;
+  metadata.PppControl = 0x202u;
+  input.NativeBatch = &metadata;
+  input.Draw.Reserved[0] = APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  assert(AgxWin32TransportBuildDrawVersion(&input,
+      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH,bytes,sizeof(bytes),
+      &commandBytes)==AppleAgxWin32AbiSuccess);
+  assert(AppleAgxWin32CommandValidate(bytes,commandBytes,7u,9u,&view)==
+         AppleAgxWin32AbiSuccess);
+  assert(view.NativeBatch != NULL && view.NativeBatch->StructBytes ==
+         sizeof(metadata) && view.NativeBatch->PppControl == 0x202u);
 }
 
 static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
@@ -464,6 +494,7 @@ int main(void) {
   test_two_data_driven_clears_have_distinct_hashes();
   test_draw_builder_is_copy_once_and_fail_closed();
   test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference();
+  test_v4_metadata_is_appended_after_the_draw_prefix();
   test_resource_facing_winsys_has_no_fd_or_physical_contract();
   test_winsys_rejects_stale_and_out_of_range_buffers();
   return 0;

@@ -81,24 +81,46 @@
           Condition="'$(EnableNativeStateTest)' == 'true' and '$(EnableNativePoolTest)' != 'true'">
     <Error Text="EnableNativeStateTest requires EnableNativePoolTest and the full native runtime link closure." />
   </Target>
-  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
     <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
     <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
-  <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+  <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
     <Object Include="$(NativeObjectRoot)\agx_state.obj" Condition="'$(EnableNativeStateTest)' == 'true'" />
     <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline.obj" />
     <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline_test.obj" />
     <Object Include="$(NativeObjectRoot)\native_pipeline_contract.obj" />
     <Object Include="$(NativeObjectRoot)\native_batch_encoder_contract.obj" />
-    <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+
   </ItemGroup>
-  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true' and '$(EnableNativeRuntimeTest)' != 'true'">
     <Link><OptimizeReferences>true</OptimizeReferences></Link>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_pipe_screen.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />
+  </ItemGroup>
+  <Import Project="$(NativeRuntimeProps)" Condition="'$(EnableNativeRuntimeTest)' == 'true'" />
+  <ItemDefinitionGroup Condition="'$(EnableNativeRuntimeTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;ADMISSION_UMD_NATIVE_RUNTIME_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><OptimizeReferences>true</OptimizeReferences></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableNativeRuntimeTest)' == 'true'">
+    <ClCompile Include="..\..\src\render_dynamic_overlay.c" />
+    <ClCompile Include="..\..\src\render_dynamic_dma.c" />
+    <ClCompile Include="..\..\src\render_backend_image.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_render_template.generated.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_render_template_rebase.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_relocation.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_gdi.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_framebuffer.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_gdi.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_memory.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_adapter.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_exp208_dynamic.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

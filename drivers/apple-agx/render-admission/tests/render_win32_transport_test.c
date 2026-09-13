@@ -178,7 +178,7 @@ static void test_v3_general_ppp_reference_class(void) {
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE reference = {0};
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw = {0};
   APPLE_AGX_WIN32_RELOCATION relocation = {0};
-  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header, &reference, NULL, &draw, &relocation};
+  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header, &reference, NULL, &draw, &relocation, NULL};
   TEST_LOOKUP lookup = make_lookup();
   ADMISSION_WIN32_ALLOCATION_FACT facts[1];
   header.Opcode = AppleAgxWin32OpcodeDraw;
@@ -211,6 +211,41 @@ static void test_v3_general_ppp_reference_class(void) {
   header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES;
   assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
                                           facts,1u)==AdmissionWin32TransportClass);
+}
+
+static void test_v4_exact_shader_source_span(void) {
+  APPLE_AGX_WIN32_COMMAND_HEADER header = {0};
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE reference = {0};
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw = {0};
+  APPLE_AGX_WIN32_RELOCATION relocation = {0};
+  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header,&reference,NULL,&draw,&relocation,NULL};
+  TEST_LOOKUP lookup = make_lookup();
+  ADMISSION_WIN32_ALLOCATION_FACT facts[1];
+  header.Opcode=AppleAgxWin32OpcodeDraw;
+  header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  header.Generation=7u; header.ReferenceCount=1u;
+  reference.AllocationIndex=1u;
+  reference.Access=AppleAgxWin32AccessRead|AppleAgxWin32AccessExecute;
+  reference.Role=AppleAgxWin32RoleShader; reference.Bytes=50u;
+  lookup.Count=1u; lookup.Allocations[0]=lookup.Allocations[1];
+  lookup.Allocations[0].Index=1u;
+  lookup.Allocations[0].Fact.ClassId=AgxWin32BufferClassShader;
+  lookup.Allocations[0].Fact.Flags=AppleAgxWin32BufferGpuRead;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+      facts,1u)==AdmissionWin32TransportSuccess);
+  reference.Bytes=34u;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+      facts,1u)==AdmissionWin32TransportSuccess);
+  reference.Bytes=51u;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+      facts,1u)==AdmissionWin32TransportAlignment);
+  reference.Bytes=50u; header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+      facts,1u)==AdmissionWin32TransportAlignment);
+  header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  reference.Offset=2u;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+      facts,1u)==AdmissionWin32TransportAlignment);
 }
 
 static void test_failed_validation_does_not_publish_partial_facts(void) {
@@ -512,8 +547,9 @@ static void test_v3_general_table_sources_are_narrowly_accepted(void) {
     assert(result == AdmissionWin32TransportSuccess);
     /* Legacy command versions and non-read source uses keep failing closed. */
     for (APPLE_AGX_U16 version = APPLE_AGX_WIN32_COMMAND_VERSION;
-         version <= 4u; ++version) {
-      if (version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+         version <= 5u; ++version) {
+      if (version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC ||
+          version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
         continue;
       header.Version = version;
       assert(AdmissionWin32ValidateReferences(
@@ -624,7 +660,7 @@ static void test_v3_encoder_native_termination_span(void) {
   APPLE_AGX_WIN32_ALLOCATION_REFERENCE reference = {0};
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw = {0};
   APPLE_AGX_WIN32_RELOCATION relocation = {0};
-  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header,&reference,NULL,&draw,&relocation};
+  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header,&reference,NULL,&draw,&relocation,NULL};
   ADMISSION_WIN32_ALLOCATION_FACT fact;
   TEST_LOOKUP lookup = make_lookup();
   header.Opcode=AppleAgxWin32OpcodeDraw;
@@ -678,6 +714,7 @@ int main(void) {
   test_owner_generation_and_access_rejections();
   test_alignment_capacity_and_lookup_rejections();
   test_v3_general_ppp_reference_class();
+  test_v4_exact_shader_source_span();
   test_failed_validation_does_not_publish_partial_facts();
   test_overlapping_writable_ranges_are_rejected();
   test_context_generation_contract();

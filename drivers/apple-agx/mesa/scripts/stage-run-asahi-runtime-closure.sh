@@ -14,6 +14,7 @@ evidence_dir="$repo_root/investigation/evidence/AD04-runtime-closure/$run_id"
 remote_source="C:/Users/pauls/AD04-runtime-src-${run_id}"
 remote_archive="C:/Users/pauls/AD04-runtime-${run_id}.tar.gz"
 remote_output="C:/Users/pauls/AD04-fullcompiler-001/asahi-runtime-${architecture}-${run_id}"
+remote_native="C:/Users/pauls/AD04-fullcompiler-001/asahi-native-${architecture}-${run_id}"
 if [[ -e "$evidence_dir" ]]; then
   echo "Fresh local evidence path required: $evidence_dir" >&2
   exit 64
@@ -23,19 +24,21 @@ git -C "$repo_root" ls-files -co --exclude-standard drivers/apple-agx | \
   tar -C "$repo_root" -czf "$archive" -T -
 archive_sha256=$(shasum -a 256 "$archive" | awk '{print $1}')
 cp "$archive" "$evidence_dir/source.tar.gz"
+git -C "$repo_root" rev-parse HEAD > "$evidence_dir/source-head.txt"
+git -C "$repo_root" diff --binary HEAD -- drivers/apple-agx | shasum -a 256 > "$evidence_dir/tracked-diff.sha256"
 printf '{"run_id":"%s","architecture":"%s","archive_sha256":"%s"}\n' \
   "$run_id" "$architecture" "$archive_sha256" > "$evidence_dir/stage-input.json"
-preflight=$(python3 - "$remote_source" "$remote_archive" "$remote_output" <<'PY'
+preflight=$(python3 - "$remote_source" "$remote_archive" "$remote_output" "$remote_native" <<'PY'
 import base64, sys
-source, archive, output = sys.argv[1:]
+source, archive, output, native = sys.argv[1:]
 script = f'''$ErrorActionPreference='Stop'
-foreach($path in @('{source}','{archive}','{output}')){{
+foreach($path in @('{source}','{archive}','{output}','{native}')){{
   if(Test-Path $path){{throw "Fresh remote path required: $path"}}
 }}'''
 print(base64.b64encode(script.encode('utf-16le')).decode())
 PY
 )
-ssh -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
+ssh -o ConnectTimeout=8 -o BatchMode=yes -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
   powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand "$preflight"
 scp -i /Users/pavel/.ssh/windows_builder "$archive" "pauls@192.168.1.24:${remote_archive}"
 encoded=$(python3 - "$remote_source" "$remote_archive" "$run_id" "$architecture" "$archive_sha256" <<'PY'
@@ -55,7 +58,7 @@ print(base64.b64encode(script.encode('utf-16le')).decode())
 PY
 )
 set +e
-ssh -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
+ssh -o ConnectTimeout=8 -o BatchMode=yes -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
   powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand "$encoded" \
   > "$evidence_dir/remote-console.log" 2>&1
 remote_exit=$?

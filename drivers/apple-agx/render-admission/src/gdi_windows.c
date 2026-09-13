@@ -602,6 +602,17 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
           Args->AllocationListSize, &patch, &destination)))
     PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate,
                         STATUS_INVALID_ADDRESS);
+  if (dynamicDma) {
+    ADMISSION_DYNAMIC_DMA_VIEW nativeView;
+    if (AdmissionDynamicDmaOpen(view.Bytes, view.DmaBytes, &nativeView) != AdmissionDynamicDmaSuccess)
+      PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate, STATUS_INVALID_USER_BUFFER);
+    if (nativeView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+      if (!nativeView.Bindings->DestinationBytes ||
+          nativeView.Bindings->DestinationBytes > destination.Bytes)
+        PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate, STATUS_INVALID_ADDRESS);
+      destination.Bytes = nativeView.Bindings->DestinationBytes;
+    }
+  }
   opened = (ADMISSION_OPEN_ALLOCATION *)
       Args->pAllocationList[patch.AllocationIndex]
           .hDeviceSpecificAllocation;

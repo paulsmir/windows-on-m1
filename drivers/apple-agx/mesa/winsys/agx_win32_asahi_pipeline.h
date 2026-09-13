@@ -57,5 +57,12 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *,const void *End,
  * Never infer a span from the next pool allocation or the containing BO. */
 void AgxWin32AsahiPipelineRecordCaptured(AGX_WIN32_ASAHI_PIPELINE *,const void *End,
     APPLE_AGX_U32 Kind,APPLE_AGX_U64 Target,APPLE_AGX_U32 Role);
+void AgxWin32AsahiPipelineRecordRange(AGX_WIN32_ASAHI_PIPELINE *,const void *End,
+    APPLE_AGX_U32 Kind,APPLE_AGX_U64 Target,APPLE_AGX_U64 Bytes,
+    APPLE_AGX_U32 Role);
+struct agx_batch;
+/* Defined alongside native state by the full lifecycle source projection. */
+int AgxWin32AsahiCaptureUniformBlock(struct agx_batch *,void *,APPLE_AGX_U64,
+    APPLE_AGX_U32 Table);
 int AgxWin32AsahiPipelineFinish(AGX_WIN32_ASAHI_PIPELINE *,const void *End);
 #endif

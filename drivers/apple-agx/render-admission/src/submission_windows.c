@@ -188,12 +188,16 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   else if (dynamicDma &&
            (dynamicView.Header->DestinationGpuVa !=
                 Context->RenderPacket.Description.DestinationGpuVa ||
-            !AdmissionBackendImageBindDynamicSubmission(
+            !(dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+              AdmissionBackendImageBindNativeSubmission(&Context->BackendImage,
+                &Context->RenderPacket.Description,
+                (PVOID)(ULONG_PTR)Context->RenderPacket.Description.DestinationCpuToken,
+                dynamicView.Bindings, &binding) : AdmissionBackendImageBindDynamicSubmission(
                 &Context->BackendImage,
                 &Context->RenderPacket.Description,
                 (PVOID)(ULONG_PTR)Context->RenderPacket.Description
                     .DestinationCpuToken,
-                dynamicView.Header->BackgroundColor, &binding)))
+                dynamicView.Header->BackgroundColor, &binding))))
     packet_guard = AdmissionSubmitPacketGuardBind;
   else if (!dynamicDma &&
            !AdmissionBackendImageBindSubmission(

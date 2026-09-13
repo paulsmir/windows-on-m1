@@ -1,4 +1,5 @@
 #include "render_backend_image.h"
+#include "render_dynamic_overlay.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -433,6 +434,37 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
   free(storage);
 }
 
+static void test_native_binding_preserves_logical_attachment(void) {
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES), *target=malloc(0x1000);
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_LOCAL_MEMORY_VIEW view={0};
+  ADMISSION_RENDER_PACKET_DESCRIPTION packet={0};
+  ADMISSION_DYNAMIC_OVERLAY_BINDINGS native={0};
+  APPLE_AGX_EXP208_GDI_BINDING binding;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT original;
+  assert(arena && target);
+  memset(target,0x6a,0x1000);
+  view.CpuAddress=arena; view.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
+  view.GpuVirtualAddress=TEST_BACKEND_GPU; view.Bytes=TEST_BACKEND_BYTES;
+  assert(AdmissionBackendImagePrepare(&image,&view));
+  original=image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
+  packet.Fence=61; packet.DestinationGpuVa=0x1500200000ULL;
+  packet.DestinationPhysical=0x890200000ULL; packet.DestinationBytes=0x1000;
+  packet.DestinationCpuToken=(unsigned long long)(uintptr_t)target;
+  native.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  native.SurfaceWidth=16; native.SurfaceHeight=16; native.SurfacePitch=64;
+  native.DestinationBytes=0x1000;
+  assert(AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  assert(image.NativeBound && image.Objects[40].Data==target && image.Objects[40].Size==0x1000);
+  for(unsigned i=0;i<0x1000;++i) assert(target[i]==0x6a);
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
+  assert(!image.NativeBound && memcmp(&image.Objects[40],&original,sizeof(original))==0);
+  packet.DestinationBytes=0x2000;
+  assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
+  free(target); free(arena);
+}
+
 int main(void) {
   test_materializes_and_relocates_exact_rebased_image();
   test_rejects_invalid_tail_atomically();
@@ -440,5 +472,6 @@ int main(void) {
   test_restart_queue_lifetime_resets_only_firmware_sequence();
   test_dynamic_packet_reuses_framebuffer_owner_without_gdi_dma();
   test_fullscreen_packet_repoints_tiling_graph_and_restores_template();
+  test_native_binding_preserves_logical_attachment();
   return 0;
 }

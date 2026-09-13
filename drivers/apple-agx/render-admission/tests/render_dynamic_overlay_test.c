@@ -15,6 +15,7 @@ static unsigned char output_bytes[0x4000];
 static unsigned char store_work_bytes[0x800];
 static unsigned char store_microsequence_bytes[0x200];
 static APPLE_AGX_WIN32_RELOCATION vertex_relocation;
+static void test_native_graph(void);
 
 static void initialize_image(ADMISSION_BACKEND_IMAGE *image) {
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts =
@@ -441,5 +442,84 @@ int main(void) {
                                       sizeof(storage), 256u, &state) ==
          AdmissionDynamicOverlayOccupied);
   assert(state.Applied == 0u && encoder_bytes[0] == 0u);
+  test_native_graph();
   return 0;
+}
+
+static void test_native_graph(void) {
+  static unsigned char ta_bytes[0x600], native_storage[4096];
+  ADMISSION_BACKEND_IMAGE image;
+  ADMISSION_DYNAMIC_OVERLAY_PLAN plan,worker;
+  ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings;
+  ADMISSION_DYNAMIC_OVERLAY_STATE state;
+  APPLE_AGX_DYNAMIC_JOB job={0};
+  APPLE_AGX_WIN32_COMMAND_HEADER header={0};
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw={0};
+  APPLE_AGX_WIN32_NATIVE_BATCH_METADATA native={0};
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE refs[16]={{0}};
+  APPLE_AGX_WIN32_RELOCATION reloc={0};
+  APPLE_AGX_WIN32_COMMAND_VIEW view={0};
+  const unsigned roles[16]={1,2,6,6,9,9,9,9,9,7,7,7,13,14,11,10};
+  initialize_image(&image);
+  memset(store_work_bytes,0,sizeof(store_work_bytes));
+  memset(ta_bytes,0,sizeof(ta_bytes));
+  memset(store_microsequence_bytes,0,sizeof(store_microsequence_bytes));
+  memset(native_storage,0x51,sizeof(native_storage));
+  image.Objects[18].Data=store_work_bytes; image.Objects[18].Size=sizeof(store_work_bytes);
+  image.Objects[19].Data=ta_bytes; image.Objects[19].Size=sizeof(ta_bytes);
+  image.Objects[15].Data=store_microsequence_bytes; image.Objects[15].Size=sizeof(store_microsequence_bytes);
+  image.Objects[37].GpuVa=0x1503960000ULL;
+  image.Objects[40].Data=output_bytes; image.Objects[40].Size=0x1000;
+  header.Version=4; header.Opcode=2; header.Generation=7; header.ReferenceCount=16;
+  draw.EncoderReference=15; draw.ScissorReference=14; draw.DepthBiasReference=0xffffffffu;
+  draw.SurfaceWidth=16; draw.SurfaceHeight=16; draw.SurfacePitch=64; draw.RelocationCount=1;
+  native.StructBytes=sizeof(native); native.Samples=1; native.Layers=1;
+  native.SampleSizeBytes=8; native.UtileWidth=32; native.UtileHeight=32;
+  native.PppControl=0x202; native.PppMultisampleControl=0x88;
+  native.RenderFlags=APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES;
+  native.Background=(APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT){6,0x1112,4};
+  native.PartialBackground=(APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT){7,0x2222,4};
+  native.EndOfTile=(APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT){8,0x3332,4};
+  for(unsigned i=0;i<16;++i) {refs[i].Role=roles[i]; refs[i].Bytes=i==0?0x1000:(i==15?85:32);}
+  reloc.Kind=AppleAgxWin32RelocationPppCfBindingsOffset32; reloc.TargetReference=9;
+  view.Header=&header; view.Draw=&draw; view.References=refs; view.Relocations=&reloc; view.NativeBatch=&native;
+  assert(AdmissionDynamicOverlayPlan(&image,&view,&plan)==AdmissionDynamicOverlaySuccess);
+  assert(AdmissionDynamicOverlayBindingsFromView(&view,&bindings)==AdmissionDynamicOverlaySuccess);
+  assert(plan.EntryCount==15 && plan.CommandVersion==4);
+  job.Magic=APPLE_AGX_DYNAMIC_JOB_MAGIC; job.Version=APPLE_AGX_DYNAMIC_JOB_VERSION;
+  job.Generation=7; job.ObjectCount=15; job.RelocationCount=1; job.StorageBytes=sizeof(native_storage);
+  job.MaterializedHash=0x1234;
+  job.Relocations[0].Kind=reloc.Kind; job.Relocations[0].TargetReference=9;
+  for(unsigned i=0;i<15;++i) {
+    job.Objects[i].ReferenceIndex=i+1; job.Objects[i].Role=refs[i+1].Role;
+    job.Objects[i].StorageOffset=i*256; job.Objects[i].Bytes=(unsigned)refs[i+1].Bytes;
+  }
+  assert(AdmissionDynamicOverlayPlanFromJob(&image,&bindings,&job,&worker)==AdmissionDynamicOverlaySuccess);
+  for(unsigned i=0;i<15;++i) {
+    assert(worker.Entries[i].GpuVirtualAddress==plan.Entries[i].GpuVirtualAddress);
+    assert(worker.Entries[i].ObjectOffset==plan.Entries[i].ObjectOffset);
+  }
+  assert(plan.Entries[8].Role==AppleAgxWin32RoleDescriptor && plan.Entries[8].ObjectIndex==73);
+  AdmissionDynamicOverlayStateInitialize(&state);
+  assert(AdmissionDynamicOverlayApply(&image,&plan,&job,native_storage,sizeof(native_storage),9,&state)==AdmissionDynamicOverlaySuccess);
+  assert(pipeline_bytes[0x20000]==0x51 && pipeline_bytes[0x10000]==0);
+  {
+    unsigned long long base=0x1100000000ULL, enc=image.Objects[37].GpuVa;
+    memcpy(store_work_bytes+0x1c0,&base,8); memcpy(ta_bytes+0x120,&base,8); memcpy(ta_bytes+0xd0,&enc,8);
+  }
+  assert(AdmissionDynamicOverlayRouteNative(&plan,&bindings,image.Objects,76)==AdmissionDynamicOverlaySuccess);
+  {
+    unsigned counts,blocks,samples;
+    unsigned long long address,dbias;
+    memcpy(&counts,store_work_bytes+0x88,4); memcpy(&address,store_work_bytes+0x90,8);
+    assert(counts==native.Background.PackedCounts);
+    assert(address==((plan.Entries[5].GpuVirtualAddress-0x1100000000ULL)|4));
+    memcpy(&blocks,store_work_bytes+0x3f4,4); memcpy(&samples,store_work_bytes+0x748,4);
+    memcpy(&dbias,store_work_bytes+0xa8,8);
+    assert(blocks==4 && samples==8 && dbias==0);
+  }
+  assert(AdmissionDynamicOverlayRelease(&image,&plan,&job,native_storage,sizeof(native_storage),9,&state)==AdmissionDynamicOverlaySuccess);
+  assert(pipeline_bytes[0x20000]==0 && descriptor_bytes[0x8000]==0);
+  refs[2].Bytes=0x10001;
+  assert(AdmissionDynamicOverlayPlan(&image,&view,&plan)==AdmissionDynamicOverlayRange);
 }

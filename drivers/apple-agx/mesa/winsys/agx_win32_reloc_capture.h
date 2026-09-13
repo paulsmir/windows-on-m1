@@ -25,6 +25,8 @@ typedef enum {
 typedef struct {
   APPLE_AGX_U64 Owner, Request, LastRequest;
   APPLE_AGX_U32 Generation, State, Fence, ReferenceCount, RelocationCount;
+  APPLE_AGX_U16 CommandVersion;
+  APPLE_AGX_U16 MaxReferences, MaxRelocations;
   void *Context;
   AGX_WIN32_RELOC_OPERATIONS Operations;
   AGX_WIN32_RELOC_ALLOCATION Allocations[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
@@ -37,6 +39,10 @@ typedef struct {
 AGX_WIN32_RELOC_RESULT AgxWin32RelocBegin(AGX_WIN32_RELOC_CAPTURE *,
     APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U64 Request,
     const AGX_WIN32_RELOC_OPERATIONS *, void *Context);
+AGX_WIN32_RELOC_RESULT AgxWin32RelocBeginVersion(AGX_WIN32_RELOC_CAPTURE *,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U64 Request,
+    APPLE_AGX_U16 CommandVersion, const AGX_WIN32_RELOC_OPERATIONS *,
+    void *Context);
 AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *,
     APPLE_AGX_U64 Token, APPLE_AGX_U32 Role, APPLE_AGX_U32 Access,
     APPLE_AGX_U64 Offset, APPLE_AGX_U64 Bytes, APPLE_AGX_U32 *Index);

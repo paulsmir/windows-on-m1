@@ -46,7 +46,8 @@ int main(void) {
   unsigned char storage[704];
   APPLE_AGX_DYNAMIC_JOB job;
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings = {
-      1u, 2u, 3u, 9u, 10u, 4u, 5u, 6u, 7u, 8u};
+      1u, 2u, 3u, 9u, 10u, 4u, 5u, 6u, 7u, 8u,
+      0u, 0u, 0u, 0u, 0u, 0u, 0ULL, {0}};
   ADMISSION_DYNAMIC_DMA_VIEW view;
   ADMISSION_GDI_PREPARED prepared;
   APPLE_AGX_U32 total = 0u;
@@ -58,7 +59,7 @@ int main(void) {
              0u, 0xff101820u, 0x80808080u, &bindings, &job, storage,
              sizeof(storage),
              bytes, sizeof(bytes), &total) == AdmissionDynamicDmaSuccess);
-  assert(total <= 4096u && total > sizeof(job));
+  assert(total <= ADMISSION_DYNAMIC_DMA_MAX_BYTES && total > sizeof(job));
   assert(AdmissionDynamicDmaOpen(bytes, total, &view) ==
          AdmissionDynamicDmaSuccess);
   assert(view.Header->Generation == 7u);
@@ -111,5 +112,39 @@ int main(void) {
                  sizeof(storage) - 1u,
              &total) ==
          AdmissionDynamicDmaCapacity);
+  /* Real invariant: Patch can move the sole external attachment after Render.
+   * Both packed descriptor kinds must follow it, including interior offsets. */
+  make_job(&job,storage,sizeof(storage));
+  bindings.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  bindings.DestinationReference=0;
+  bindings.DestinationBytes=0x1000;
+  job.RelocationCount=2;
+  for(unsigned i=0;i<2;++i) {
+    job.Relocations[i].Kind=i?AppleAgxWin32RelocationPbeAddress40:AppleAgxWin32RelocationTextureAddress40;
+    job.Relocations[i].DestinationReference=5;
+    job.Relocations[i].DestinationOffset=8+i*16;
+    job.Relocations[i].TargetReference=0;
+    job.Relocations[i].TargetOffset=32+i*32;
+  }
+  assert(AdmissionDynamicDmaBuild(7,0x1122,0x1500120000ULL,0,0xff101820,0,
+      &bindings,&job,storage,sizeof(storage),bytes,sizeof(bytes),&total)==AdmissionDynamicDmaSuccess);
+  assert(AdmissionDynamicDmaPatchDestination(bytes,total,0x1500320000ULL)==AdmissionDynamicDmaSuccess);
+  assert(AdmissionDynamicDmaOpen(bytes,total,&view)==AdmissionDynamicDmaSuccess);
+  for(unsigned i=0;i<2;++i) {
+    unsigned offset=6*64+8+i*16;
+    unsigned long long raw=0,mask=i?((1ULL<<36)-1):(((1ULL<<36)-1)<<2);
+    for(unsigned j=0;j<8;++j) raw|=(unsigned long long)view.Storage[offset+j]<<(8*j);
+    assert((raw&~mask)==(0x5a5a5a5a5a5a5a5aULL&~mask));
+    assert((i?(raw&mask)<<4:((raw&mask)>>2)<<4)==0x1500320000ULL+32+i*32);
+    assert(view.Job->Relocations[i].ResolvedAddress==0x1500320000ULL+32+i*32);
+  }
+  assert(storage[6*64+8]==0x5a);
+  {
+    unsigned long long hash=view.Header->ContentHash;
+    assert(AdmissionDynamicDmaPatchDestination(bytes,total,0x1500320000ULL)==AdmissionDynamicDmaSuccess);
+    assert(view.Header->ContentHash==hash);
+    ((ADMISSION_DYNAMIC_DMA_HEADER *)bytes)->Version=3;
+    assert(AdmissionDynamicDmaOpen(bytes,total,&view)==AdmissionDynamicDmaLayout);
+  }
   return 0;
 }

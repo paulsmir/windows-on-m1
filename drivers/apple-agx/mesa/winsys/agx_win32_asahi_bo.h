@@ -27,6 +27,8 @@ typedef struct {
   void *UnpublishedBo; /* single failed-create rollback, never exposed to Mesa */
   struct _AGX_WIN32_ASAHI_CAPTURE *ActiveCapture;
   void *ActiveEmission;
+  const void *BatchOps; /* existing UMD transaction callbacks, caller-owned */
+  void *BatchOwner;
   int EncoderAllocationIntent;
   int Failed;
 } AGX_WIN32_ASAHI_BACKEND;

@@ -1,3 +1,6 @@
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+#include <stdio.h>
+#endif
 #include "agx_win32_transport.h"
 
 #include <string.h>
@@ -79,6 +82,7 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   unsigned char *bytes = (unsigned char *)storage;
   APPLE_AGX_WIN32_COMMAND_HEADER *header;
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw;
+  APPLE_AGX_WIN32_NATIVE_BATCH_METADATA nativeBatch;
   APPLE_AGX_WIN32_COMMAND_VIEW view;
   APPLE_AGX_WIN32_ABI_RESULT result;
   APPLE_AGX_U32 referenceBytes;
@@ -87,21 +91,33 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   APPLE_AGX_U32 totalBytes;
   if (CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
       CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
-      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     return AppleAgxWin32AbiVersion;
   if (Request == NULL || CommandBuffer == NULL || CommandBytes == NULL ||
       Request->Generation == 0u || Request->AllocationCount == 0u ||
       Request->References == NULL || Request->Relocations == NULL ||
       Request->ReferenceCount == 0u ||
-      Request->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+      Request->ReferenceCount >
+          (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES :
+           APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_REFERENCES) ||
       Request->RelocationCount == 0u ||
-      Request->RelocationCount > APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS)
+      Request->RelocationCount >
+          (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS :
+           APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS))
     return AppleAgxWin32AbiArgument;
   referenceBytes = Request->ReferenceCount *
       (APPLE_AGX_U32)sizeof(APPLE_AGX_WIN32_ALLOCATION_REFERENCE);
   relocationBytes = Request->RelocationCount *
       (APPLE_AGX_U32)sizeof(APPLE_AGX_WIN32_RELOCATION);
   payloadBytes = (APPLE_AGX_U32)sizeof(draw) + relocationBytes;
+  if (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+    if (Request->NativeBatch == NULL)
+      return AppleAgxWin32AbiArgument;
+    payloadBytes += (APPLE_AGX_U32)sizeof(nativeBatch);
+  }
   totalBytes = (APPLE_AGX_U32)sizeof(*header) + referenceBytes + payloadBytes;
   if (totalBytes > APPLE_AGX_WIN32_COMMAND_MAX_BYTES ||
       CommandCapacity < totalBytes)
@@ -122,16 +138,32 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
          referenceBytes);
   draw = Request->Draw;
   draw.StructBytes = sizeof(draw);
-  draw.RelocationsOffset = sizeof(draw);
+  draw.RelocationsOffset = sizeof(draw) +
+      (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+       sizeof(nativeBatch) : 0u);
   draw.RelocationCount = Request->RelocationCount;
   memcpy(bytes + header->PayloadOffset, &draw, sizeof(draw));
-  memcpy(bytes + header->PayloadOffset + sizeof(draw), Request->Relocations,
+  if (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+    nativeBatch = *Request->NativeBatch;
+    nativeBatch.StructBytes = sizeof(nativeBatch);
+    memcpy(bytes + header->PayloadOffset + sizeof(draw), &nativeBatch,
+           sizeof(nativeBatch));
+  }
+  memcpy(bytes + header->PayloadOffset + sizeof(draw) +
+             (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+              sizeof(nativeBatch) : 0u), Request->Relocations,
          relocationBytes);
   header->ContentHash = AppleAgxWin32CommandHash(bytes, totalBytes);
   result = AppleAgxWin32CommandValidate(
       bytes, totalBytes, Request->Generation, Request->AllocationCount, &view);
-  if (result != AppleAgxWin32AbiSuccess)
+  if (result != AppleAgxWin32AbiSuccess) {
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+    fprintf(stderr,"NATIVE_WIRE_REJECT: result=%u bytes=%u\n",(unsigned)result,totalBytes);
+    FILE *dump=fopen("native-failed-command.bin","wb");
+    if(dump) { fwrite(bytes,1,totalBytes,dump); fclose(dump); }
+#endif
     return result;
+  }
   memcpy(CommandBuffer, bytes, totalBytes);
   *CommandBytes = totalBytes;
   return AppleAgxWin32AbiSuccess;

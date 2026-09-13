@@ -7,14 +7,16 @@
 #define APPLE_AGX_U32_MAX_VALUE (~(APPLE_AGX_U32)0u)
 
 static int AppleAgxWin32ReferencePolicy(
-    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference) {
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference,
+    APPLE_AGX_U16 Version) {
   if (Reference == APPLE_AGX_WIN32_NULL)
     return 0;
   switch (Reference->Role) {
   case AppleAgxWin32RoleRenderTarget:
     return Reference->Access == AppleAgxWin32AccessWrite ||
-           Reference->Access ==
-               (AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite);
+           (Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+            Reference->Access ==
+                (AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite));
   case AppleAgxWin32RoleShader:
     return Reference->Access ==
            (AppleAgxWin32AccessRead | AppleAgxWin32AccessExecute);
@@ -29,6 +31,7 @@ static int AppleAgxWin32ReferencePolicy(
   case AppleAgxWin32RoleScissor:
   case AppleAgxWin32RoleDepthBias:
   case AppleAgxWin32RolePppState:
+  case AppleAgxWin32RoleUniform:
     return Reference->Access == AppleAgxWin32AccessRead;
   default:
     return 0;
@@ -97,23 +100,37 @@ static int AppleAgxWin32RelocationPolicy(
            (targetRole == AppleAgxWin32RoleShaderRodata ||
             targetRole == AppleAgxWin32RoleDescriptor ||
             targetRole == AppleAgxWin32RoleConstant ||
-            targetRole == AppleAgxWin32RoleTexture);
+            targetRole == AppleAgxWin32RoleTexture ||
+            (Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+             targetRole == AppleAgxWin32RoleUniform));
   case AppleAgxWin32RelocationVdmPipelineOffset32:
     return destinationRole == AppleAgxWin32RoleEncoder &&
            targetRole == AppleAgxWin32RoleUscPipeline;
   case AppleAgxWin32RelocationPppStateAddress40:
     return destinationRole == AppleAgxWin32RoleEncoder &&
            (targetRole == AppleAgxWin32RoleEncoder ||
-            (Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+            (Version >= APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
              targetRole == AppleAgxWin32RolePppState));
   case AppleAgxWin32RelocationPppPipelineOffset32:
-    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+    return Version >= APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
            destinationRole == AppleAgxWin32RolePppState &&
            targetRole == AppleAgxWin32RoleUscPipeline;
   case AppleAgxWin32RelocationPppCfBindingsOffset32:
-    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+    return Version >= APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
            destinationRole == AppleAgxWin32RolePppState &&
            targetRole == AppleAgxWin32RoleDescriptor;
+  case AppleAgxWin32RelocationUniformAddress64:
+    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+           destinationRole == AppleAgxWin32RoleUniform &&
+           (targetRole == AppleAgxWin32RoleUniform ||
+            targetRole == AppleAgxWin32RoleVertex ||
+            targetRole == AppleAgxWin32RoleConstant ||
+            targetRole == AppleAgxWin32RoleDescriptor);
+  case AppleAgxWin32RelocationTextureAddress40:
+  case AppleAgxWin32RelocationPbeAddress40:
+    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+           destinationRole == AppleAgxWin32RoleDescriptor &&
+           targetRole == AppleAgxWin32RoleRenderTarget;
   default:
     return 0;
   }
@@ -167,14 +184,19 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   View->References = APPLE_AGX_WIN32_NULL;
   View->Clear = APPLE_AGX_WIN32_NULL;
   View->Draw = APPLE_AGX_WIN32_NULL;
+  View->NativeBatch = APPLE_AGX_WIN32_NULL;
   View->Relocations = APPLE_AGX_WIN32_NULL;
   header = (const APPLE_AGX_WIN32_COMMAND_HEADER *)bytes;
   if (header->Magic != APPLE_AGX_WIN32_COMMAND_MAGIC)
     return AppleAgxWin32AbiMagic;
   if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION &&
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
-      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     return AppleAgxWin32AbiVersion;
+  if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      CommandBytes > APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_BYTES)
+    return AppleAgxWin32AbiArgument;
   if (header->HeaderBytes != sizeof(*header) ||
       header->TotalBytes != CommandBytes)
     return AppleAgxWin32AbiLayout;
@@ -183,7 +205,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   if (header->Generation != ExpectedGeneration)
     return AppleAgxWin32AbiStaleGeneration;
   if (header->ReferenceCount == 0u ||
-      header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
+      header->ReferenceCount >
+          (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES :
+           APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_REFERENCES))
     return AppleAgxWin32AbiReferenceCount;
   if (header->Opcode != (APPLE_AGX_U32)AppleAgxWin32OpcodeClear &&
       header->Opcode != (APPLE_AGX_U32)AppleAgxWin32OpcodeDraw)
@@ -209,10 +234,14 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     if (references[index].AllocationIndex >= AllocationCount)
       return AppleAgxWin32AbiAllocationIndex;
     if (references[index].Role < AppleAgxWin32RoleRenderTarget ||
-        references[index].Role > AppleAgxWin32RolePppState)
+        references[index].Role > AppleAgxWin32RoleUniform)
       return AppleAgxWin32AbiRole;
     if (references[index].Role == AppleAgxWin32RolePppState &&
-        header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+        header->Version < APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+        header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+      return AppleAgxWin32AbiRole;
+    if (references[index].Role == AppleAgxWin32RoleUniform &&
+        header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
       return AppleAgxWin32AbiRole;
     if (references[index].Access == 0u ||
         (references[index].Access &
@@ -264,7 +293,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   if (header->PayloadBytes < sizeof(APPLE_AGX_WIN32_DRAW_PAYLOAD))
     return AppleAgxWin32AbiLayout;
   for (index = 0u; index < header->ReferenceCount; ++index)
-    if (!AppleAgxWin32ReferencePolicy(&references[index]))
+    if (!AppleAgxWin32ReferencePolicy(&references[index], header->Version))
       return AppleAgxWin32AbiAccess;
   draw = (const APPLE_AGX_WIN32_DRAW_PAYLOAD *)(bytes +
                                                 header->PayloadOffset);
@@ -292,14 +321,43 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
          APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX) &&
         draw->Reserved[index] != 0u)
       return AppleAgxWin32AbiReserved;
-  if (draw->RelocationsOffset != sizeof(*draw))
+  if (draw->RelocationsOffset != sizeof(*draw) +
+          (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+           sizeof(APPLE_AGX_WIN32_NATIVE_BATCH_METADATA) : 0u))
     return AppleAgxWin32AbiLayout;
   if (draw->RelocationCount == 0u ||
-      draw->RelocationCount > APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS)
+      draw->RelocationCount >
+          (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS :
+           APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS))
     return AppleAgxWin32AbiRelocation;
   if (header->PayloadBytes != sizeof(*draw) +
+      (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+       sizeof(APPLE_AGX_WIN32_NATIVE_BATCH_METADATA) : 0u) +
       draw->RelocationCount * sizeof(APPLE_AGX_WIN32_RELOCATION))
     return AppleAgxWin32AbiLayout;
+  if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+    const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *native =
+        (const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *)
+            ((const unsigned char *)draw + sizeof(*draw));
+    APPLE_AGX_U32 root;
+    if (native->StructBytes != sizeof(*native) || native->Samples == 0u ||
+        native->Layers == 0u || native->SampleSizeBytes == 0u ||
+        native->UtileWidth == 0u || native->UtileHeight == 0u ||
+        (native->RenderFlags & ~APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES) != 0u)
+      return AppleAgxWin32AbiPayload;
+    for (root = 0u; root < 3u; ++root) {
+      const APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT *pipeline =
+          root == 0u ? &native->Background :
+          root == 1u ? &native->PartialBackground : &native->EndOfTile;
+      APPLE_AGX_WIN32_ABI_RESULT rootResult = AppleAgxWin32DrawReference(
+          pipeline->UscReference, AppleAgxWin32RoleUscPipeline, 0, references,
+          header->ReferenceCount, reachable);
+      if (rootResult != AppleAgxWin32AbiSuccess)
+        return rootResult;
+    }
+    View->NativeBatch = native;
+  }
 
 #define DRAW_REFERENCE(Field, Role, Optional)                                \
   do {                                                                       \
@@ -310,7 +368,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       return referenceResult;                                                \
   } while (0)
   DRAW_REFERENCE(DestinationReference, AppleAgxWin32RoleRenderTarget, 0);
-  DRAW_REFERENCE(VertexReference, AppleAgxWin32RoleVertex, 0);
+  DRAW_REFERENCE(VertexReference, AppleAgxWin32RoleVertex,
+                 header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH);
   DRAW_REFERENCE(IndexReference, AppleAgxWin32RoleIndex, 1);
   DRAW_REFERENCE(ConstantReference, AppleAgxWin32RoleConstant, 1);
   DRAW_REFERENCE(TextureReference, AppleAgxWin32RoleTexture, 1);
@@ -319,11 +378,13 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   DRAW_REFERENCE(VertexRodataReference, AppleAgxWin32RoleShaderRodata, 1);
   DRAW_REFERENCE(FragmentRodataReference, AppleAgxWin32RoleShaderRodata, 1);
   DRAW_REFERENCE(UscPipelineReference, AppleAgxWin32RoleUscPipeline, 0);
-  if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES ||
-      header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC) {
+  if (header->Version >= APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES) {
     APPLE_AGX_WIN32_ABI_RESULT referenceResult;
     APPLE_AGX_U32 fragmentPipelineReference =
         draw->Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX];
+    if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+        fragmentPipelineReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE)
+      goto fragment_pipeline_done;
     if (fragmentPipelineReference == draw->UscPipelineReference)
       return AppleAgxWin32AbiPayload;
     referenceResult = AppleAgxWin32DrawReference(
@@ -331,12 +392,46 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
         references, header->ReferenceCount, reachable);
     if (referenceResult != AppleAgxWin32AbiSuccess)
       return referenceResult;
+fragment_pipeline_done:
+    ;
   }
-  DRAW_REFERENCE(DescriptorReference, AppleAgxWin32RoleDescriptor, 0);
+  DRAW_REFERENCE(DescriptorReference, AppleAgxWin32RoleDescriptor,
+                 header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH);
   DRAW_REFERENCE(ScissorReference, AppleAgxWin32RoleScissor, 0);
-  DRAW_REFERENCE(DepthBiasReference, AppleAgxWin32RoleDepthBias, 0);
+  DRAW_REFERENCE(DepthBiasReference, AppleAgxWin32RoleDepthBias,
+                 header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH);
   DRAW_REFERENCE(EncoderReference, AppleAgxWin32RoleEncoder, 0);
 #undef DRAW_REFERENCE
+
+  if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+    const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *native = View->NativeBatch;
+    APPLE_AGX_WIN32_ABI_RESULT rootResult;
+    APPLE_AGX_U32 root;
+    for (index = 0u; index < header->ReferenceCount; ++index)
+      reachable[index] = 0u;
+    rootResult = AppleAgxWin32DrawReference(draw->DestinationReference,
+        AppleAgxWin32RoleRenderTarget,0,references,header->ReferenceCount,reachable);
+    if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+    rootResult = AppleAgxWin32DrawReference(draw->EncoderReference,
+        AppleAgxWin32RoleEncoder,0,references,header->ReferenceCount,reachable);
+    if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+    rootResult = AppleAgxWin32DrawReference(draw->ScissorReference,
+        AppleAgxWin32RoleScissor,0,references,header->ReferenceCount,reachable);
+    if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+    if (draw->DepthBiasReference != APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+      rootResult = AppleAgxWin32DrawReference(draw->DepthBiasReference,
+          AppleAgxWin32RoleDepthBias,0,references,header->ReferenceCount,reachable);
+      if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+    }
+    for (root = 0u; root < 3u; ++root) {
+      const APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT *pipeline =
+          root == 0u ? &native->Background : root == 1u ?
+          &native->PartialBackground : &native->EndOfTile;
+      rootResult = AppleAgxWin32DrawReference(pipeline->UscReference,
+          AppleAgxWin32RoleUscPipeline,0,references,header->ReferenceCount,reachable);
+      if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+    }
+  }
 
   for (index = 0u; index < header->ReferenceCount; ++index)
     directedReachable[index] = reachable[index];
@@ -348,7 +443,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     APPLE_AGX_U32 other;
     if (relocation->Reserved != 0u)
       return AppleAgxWin32AbiReserved;
-    if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+    if (header->Version < APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
         (relocation->Kind == AppleAgxWin32RelocationUscPreshaderOffset32 ||
          relocation->Kind == AppleAgxWin32RelocationUscTableAddress39 ||
          relocation->Kind == AppleAgxWin32RelocationPppPipelineOffset32 ||

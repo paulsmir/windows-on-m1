@@ -172,6 +172,10 @@ int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
   b->Native->ops.bo_mmap=NULL;
   b->Ops.Leave(b->Owner);
   b->Native=NULL;
+  /* Failed detach returns above with the original transaction owner intact.
+   * A completed detach may reuse this backend for another native screen. */
+  b->BatchOps=NULL;
+  b->BatchOwner=NULL;
   return 1;
 }
 int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
@@ -269,4 +273,20 @@ int AgxWin32AsahiFindCpuAddress(AGX_WIN32_ASAHI_BACKEND *b,
   }
   *address=found_address;
   return 1;
+}
+
+/* Native handle lookup uses the same authoritative Windows BO association
+ * already used for capture; Linux sparse-array/GEM slots do not exist here. */
+struct agx_bo *AgxWin32AsahiLookupBo(struct agx_device *native,uint32_t handle) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  APPLE_AGX_U32 cursor=0;
+  const void *key;
+  if(!b || !handle) return NULL;
+  while((key=b->Ops.NextBo(b->Owner,&cursor))!=NULL) {
+    struct agx_bo *bo=(struct agx_bo *)key;
+    AGX_WIN32_RELOC_ALLOCATION id;
+    if(bo->dev==native && bo->handle==handle && bo->refcnt>0 &&
+        AgxWin32AsahiIdentity(b,bo,&id)) return bo;
+  }
+  b->Failed=1;return NULL;
 }

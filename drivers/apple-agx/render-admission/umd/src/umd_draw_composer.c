@@ -1,3 +1,9 @@
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+#include <stdio.h>
+#define SEAL_REJECT() do { fprintf(stderr,"NATIVE_COMPOSER_REJECT: line=%u\n",(unsigned)__LINE__); goto done; } while(0)
+#else
+#define SEAL_REJECT() goto done
+#endif
 #include <windows.h>
 #include <wingdi.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
@@ -60,9 +66,33 @@ static BOOL validate(ADMISSION_UMD_DEVICE *d, const ADMISSION_UMD_DRAW_SUBMISSIO
   APPLE_AGX_WIN32_COMMAND_VIEW view;
   ADMISSION_WIN32_ALLOCATION_FACT facts[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   ComposerLookup context={d,s};
-  return AppleAgxWin32CommandValidate(s->Command,s->CommandBytes,s->Generation,s->Count,&view)
-    ==AppleAgxWin32AbiSuccess && AdmissionWin32ValidateReferences(&view,s->Generation,
-         lookup,&context,facts,ARRAYSIZE(facts))==AdmissionWin32TransportSuccess;
+  if(AppleAgxWin32CommandValidate(s->Command,s->CommandBytes,s->Generation,s->Count,&view)
+      !=AppleAgxWin32AbiSuccess) return FALSE;
+  ADMISSION_WIN32_TRANSPORT_RESULT result=AdmissionWin32ValidateReferences(&view,s->Generation,
+      lookup,&context,facts,ARRAYSIZE(facts));
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+  if(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+    FILE *wire=NULL; (void)fopen_s(&wire,"native-producer-command.bin","wb");
+    if(wire) { fwrite(s->Command,1,s->CommandBytes,wire); fclose(wire); }
+    FILE *allocation=NULL; (void)fopen_s(&allocation,"native-producer-facts.bin","wb");
+    for(unsigned i=0;i<s->Count;++i) {
+      ADMISSION_WIN32_ALLOCATION_FACT fact={0};
+      lookup(&context,i,&fact);
+      if(allocation) fwrite(&fact,1,sizeof(fact),allocation);
+    }
+    if(allocation) fclose(allocation);
+    if(result!=AdmissionWin32TransportSuccess) {
+      fprintf(stderr,"NATIVE_REFERENCE_REJECT: result=%u\n",(unsigned)result);
+      for(unsigned i=0;i<view.Header->ReferenceCount;++i) {
+        const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *r=&view.References[i];
+        ADMISSION_WIN32_ALLOCATION_FACT fact={0};lookup(&context,r->AllocationIndex,&fact);
+        fprintf(stderr,"NATIVE_REFERENCE: index=%u role=%u class=%u access=%u offset=%llu bytes=%llu allocation=%u\n",
+            i,r->Role,fact.ClassId,r->Access,r->Offset,r->Bytes,r->AllocationIndex);
+      }
+    }
+  }
+#endif
+  return result==AdmissionWin32TransportSuccess;
 }
 
 HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
@@ -83,11 +113,11 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
   CopyMemory(refs,input->References,input->ReferenceCount*sizeof(refs[0]));
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
   if(d->DrawSubmission || d->ScreenClosing || d->DrawTerminal) {
-    result=HRESULT_FROM_WIN32(ERROR_BUSY); goto done;
+    result=HRESULT_FROM_WIN32(ERROR_BUSY); SEAL_REJECT();
   }
   if(!d->Screen.Active || !d->OwnerCookie || !d->KernelContext ||
      request.Generation!=d->Win32Generation || requestId<=d->LastDrawRequest)
-    goto done;
+    SEAL_REJECT();
   candidate.Owner=d->OwnerCookie; candidate.Generation=d->Win32Generation;
   candidate.Context=d->KernelContext; candidate.RequestId=requestId;
   for(UINT i=0;i<request.ReferenceCount;++i) {
@@ -101,10 +131,10 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
          !(b->Flags & AppleAgxWin32BufferGpuRead)) ||
        ((access & AppleAgxWin32AccessWrite) && !(b->Flags & AppleAgxWin32BufferGpuWrite)) ||
        ((access & AppleAgxWin32AccessExecute) && b->ClassId!=AgxWin32BufferClassShader))
-      goto done;
+      SEAL_REJECT();
     for(index=0;index<candidate.Count;++index) {
       if(candidate.Identities[index].Token==a->Token) break;
-      if(candidate.Allocations[index].hAllocation==b->KernelAllocation) goto done;
+      if(candidate.Allocations[index].hAllocation==b->KernelAllocation) SEAL_REJECT();
     }
     if(index==candidate.Count) {
       candidate.Identities[index]=*a;
@@ -112,7 +142,7 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
       candidate.Allocations[index].hAllocation=b->KernelAllocation;
       ++candidate.Count;
     } else if(candidate.Identities[index].Serial!=a->Serial ||
-              candidate.Identities[index].Bytes!=a->Bytes) goto done;
+              candidate.Identities[index].Bytes!=a->Bytes) SEAL_REJECT();
     if(access & AppleAgxWin32AccessWrite)
       candidate.Allocations[index].WriteOperation=1;
     refs[i].AllocationIndex=index;
@@ -120,8 +150,8 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
   request.References=refs; request.AllocationCount=candidate.Count;
   if(AgxWin32TransportBuildDrawVersion(&request,version,candidate.Command,
       sizeof(candidate.Command),&candidate.CommandBytes)!=AppleAgxWin32AbiSuccess)
-    goto done;
-  if(!validate(d,&candidate)) goto done;
+    SEAL_REJECT();
+  if(!validate(d,&candidate)) SEAL_REJECT();
   for(UINT i=0;i<candidate.Count;++i)
     ++find(d,candidate.Identities[i].Token)->SubmissionHolds;
   candidate.Phase=AdmissionDrawSealed;

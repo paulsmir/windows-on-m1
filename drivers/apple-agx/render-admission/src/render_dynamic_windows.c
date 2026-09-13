@@ -127,15 +127,15 @@ static int AdmissionDynamicResolve(
   return 1;
 }
 
-_Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
+static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
     ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
     DXGKARG_RENDER *Args,
     const ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot,
     ADMISSION_OPEN_ALLOCATION **Opened,
     ADMISSION_LOCAL_MEMORY_VIEW *Destination,
     ADMISSION_GDI_PREPARED *Prepared,
-    ULONGLONG *AllocationOffset, ULONGLONG *AllocationBytes) {
-  ADMISSION_DYNAMIC_OVERLAY_PLAN plan;
+    ULONGLONG *AllocationOffset, ULONGLONG *AllocationBytes,
+    ADMISSION_DYNAMIC_OVERLAY_PLAN *plan) {
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS bindings;
   ADMISSION_DYNAMIC_BUILD_CONTEXT build;
   const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *destinationReference;
@@ -163,7 +163,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
   *AllocationOffset = 0ULL;
   *AllocationBytes = 0ULL;
   if (AdmissionDynamicOverlayPlan(
-          &Adapter->BackendImage, &Snapshot->View, &plan) !=
+          &Adapter->BackendImage, &Snapshot->View, plan) !=
           AdmissionDynamicOverlaySuccess ||
       AdmissionDynamicOverlayBindingsFromView(
           &Snapshot->View, &bindings) != AdmissionDynamicOverlaySuccess)
@@ -173,7 +173,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
   build.Context = Context;
   build.Args = Args;
   build.Snapshot = Snapshot;
-  build.Plan = &plan;
+  build.Plan = plan;
   if (!AdmissionDynamicOpenReference(
           &build, Snapshot->View.Draw->DestinationReference,
           &destinationOpened, &destinationAllocation,
@@ -196,12 +196,18 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
       Destination->CpuAddress == NULL ||
       destinationReference->Bytes > Destination->Bytes ||
       Snapshot->View.Draw->Format != AppleAgxWin32FormatBgra8Unorm ||
-      !AdmissionAllocationContainsView(
+      (Snapshot->View.Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       !AdmissionAllocationContainsView(
           &destinationOpened->Allocation->Description,
           Snapshot->View.Draw->SurfaceWidth,
           Snapshot->View.Draw->SurfaceHeight,
           Snapshot->View.Draw->SurfacePitch,
-          destinationReference->Bytes))
+          destinationReference->Bytes)))
+    return STATUS_INVALID_ADDRESS;
+  if (Snapshot->View.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      (!Snapshot->View.NativeBatch || Snapshot->View.Draw->SurfaceWidth!=16u ||
+       Snapshot->View.Draw->SurfaceHeight!=16u || Snapshot->View.Draw->SurfacePitch!=64u ||
+       destinationReference->Bytes<16u*16u*4u))
     return STATUS_INVALID_ADDRESS;
   Destination->Bytes = destinationReference->Bytes;
   backgroundColor =
@@ -222,6 +228,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
   storage = (PUCHAR)job + sizeof(*job);
   storageCapacity = Args->DmaSize -
                     (ULONG)(storage - (PUCHAR)Args->pDmaBuffer);
+  if (storageCapacity > APPLE_AGX_DYNAMIC_JOB_MAX_STORAGE_BYTES)
+    storageCapacity = APPLE_AGX_DYNAMIC_JOB_MAX_STORAGE_BYTES;
   if (AppleAgxDynamicJobMaterialize(
           &Snapshot->View, Snapshot->Facts,
           Snapshot->View.Header->ReferenceCount,
@@ -258,4 +266,20 @@ _Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
   *AllocationOffset = destinationReference->Offset;
   *AllocationBytes = destinationReference->Bytes;
   return STATUS_SUCCESS;
+}
+
+_Use_decl_annotations_ NTSTATUS AdmissionDynamicRenderBuild(
+    ADMISSION_CONTEXT *Adapter, ADMISSION_RENDER_CONTEXT *Context,
+    DXGKARG_RENDER *Args, const ADMISSION_WIN32_RENDER_SNAPSHOT *Snapshot,
+    ADMISSION_OPEN_ALLOCATION **Opened, ADMISSION_LOCAL_MEMORY_VIEW *Destination,
+    ADMISSION_GDI_PREPARED *Prepared, ULONGLONG *AllocationOffset,
+    ULONGLONG *AllocationBytes) {
+  ADMISSION_DYNAMIC_OVERLAY_PLAN *plan = ExAllocatePool2(
+      POOL_FLAG_NON_PAGED, sizeof(*plan), 'p4gA');
+  NTSTATUS status;
+  if (!plan) return STATUS_INSUFFICIENT_RESOURCES;
+  status = AdmissionDynamicRenderBuildWithPlan(Adapter, Context, Args, Snapshot,
+      Opened, Destination, Prepared, AllocationOffset, AllocationBytes, plan);
+  ExFreePoolWithTag(plan, 'p4gA');
+  return status;
 }

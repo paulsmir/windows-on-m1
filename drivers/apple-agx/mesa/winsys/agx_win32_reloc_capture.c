@@ -9,7 +9,10 @@ static unsigned width(unsigned kind) {
     case AppleAgxWin32RelocationUscBufferAddress40:
     case AppleAgxWin32RelocationUscPreshaderOffset32:
     case AppleAgxWin32RelocationUscTableAddress39:
-    case AppleAgxWin32RelocationPppStateAddress40: return 8;
+    case AppleAgxWin32RelocationPppStateAddress40:
+    case AppleAgxWin32RelocationUniformAddress64:
+    case AppleAgxWin32RelocationTextureAddress40:
+    case AppleAgxWin32RelocationPbeAddress40: return 8;
     case AppleAgxWin32RelocationUscShaderOffset32: return 6;
     case AppleAgxWin32RelocationVdmPipelineOffset32: return 4;
     case AppleAgxWin32RelocationPppPipelineOffset32:
@@ -28,20 +31,33 @@ static int overlap(APPLE_AGX_U64 a,APPLE_AGX_U64 na,APPLE_AGX_U64 b,APPLE_AGX_U6
 AGX_WIN32_RELOC_RESULT AgxWin32RelocBegin(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,APPLE_AGX_U64 request,
     const AGX_WIN32_RELOC_OPERATIONS *ops,void *context) {
+  return AgxWin32RelocBeginVersion(c,owner,generation,request,
+      APPLE_AGX_WIN32_COMMAND_VERSION,ops,context);
+}
+AGX_WIN32_RELOC_RESULT AgxWin32RelocBeginVersion(AGX_WIN32_RELOC_CAPTURE *c,
+    APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,APPLE_AGX_U64 request,
+    APPLE_AGX_U16 version,const AGX_WIN32_RELOC_OPERATIONS *ops,void *context) {
   if(!c || !owner || !generation || !request || !ops || !context ||
       !ops->Query || !ops->Retain || !ops->Release) return AgxRelocArgument;
+  if(version < APPLE_AGX_WIN32_COMMAND_VERSION ||
+      version > APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) return AgxRelocArgument;
   if(c->State) return AgxRelocState;
   if(request<=c->LastRequest) return AgxRelocStale;
   AGX_WIN32_RELOC_OPERATIONS saved_ops=*ops;
   memset(c,0,sizeof(*c)); c->Owner=owner; c->Generation=generation;
   c->Request=c->LastRequest=request; c->Operations=saved_ops; c->Context=context;
+  c->CommandVersion=version;
+  c->MaxReferences=version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES : APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_REFERENCES;
+  c->MaxRelocations=version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+      APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS : APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS;
   c->State=RECORDING; return AgxRelocOk;
 }
 AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U64 token,APPLE_AGX_U32 role,APPLE_AGX_U32 access,
     APPLE_AGX_U64 offset,APPLE_AGX_U64 bytes,APPLE_AGX_U32 *index) {
   AGX_WIN32_RELOC_ALLOCATION a={0};
-  if(!c || !token || !index || !access || access&~7u || role<1 || role>13) return AgxRelocArgument;
+  if(!c || !token || !index || !access || access&~7u || role<1 || role>14) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(!c->Operations.Query(c->Context,token,&a)) return AgxRelocCallback;
   if(a.Owner!=c->Owner || a.Generation!=c->Generation || a.Token!=token || !a.Serial ||
@@ -60,7 +76,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
       if(overlap(ref->Offset,ref->Bytes,offset,bytes)) return AgxRelocOverlap;
     }
   }
-  if(c->ReferenceCount>=APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) return AgxRelocCapacity;
+  if(c->ReferenceCount>=c->MaxReferences) return AgxRelocCapacity;
   if(!c->Operations.Retain(c->Context,token,a.Serial)) return AgxRelocCallback;
   unsigned n=c->ReferenceCount++;
   c->Allocations[n]=a;
@@ -74,7 +90,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
   AGX_WIN32_RELOC_ALLOCATION current={0};
   if(!c || !expected || !expected->Owner || !expected->Token ||
       !expected->Serial || !expected->Generation || !index || !access ||
-      access&~7u || role<1 || role>13) return AgxRelocArgument;
+      access&~7u || role<1 || role>14) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(expected->Owner!=c->Owner || expected->Generation!=c->Generation ||
       expected->AllocationIndex==~0u) return AgxRelocStale;
@@ -93,7 +109,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
       if(overlap(ref->Offset,ref->Bytes,offset,bytes)) return AgxRelocOverlap;
     }
   }
-  if(c->ReferenceCount>=APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) return AgxRelocCapacity;
+  if(c->ReferenceCount>=c->MaxReferences) return AgxRelocCapacity;
   if(!c->Operations.RetainExact ||
       !c->Operations.RetainExact(c->Context,expected)) return AgxRelocCallback;
   unsigned n=c->ReferenceCount++;
@@ -115,7 +131,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocField(AGX_WIN32_RELOC_CAPTURE *c,
     if(r->DestinationReference==dest && overlap(r->DestinationOffset,r->WidthBytes,destoff,w))
       return AgxRelocOverlap;
   }
-  if(c->RelocationCount>=APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS) return AgxRelocCapacity;
+  if(c->RelocationCount>=c->MaxRelocations) return AgxRelocCapacity;
   c->Relocations[c->RelocationCount++]=(APPLE_AGX_WIN32_RELOCATION){kind,(APPLE_AGX_U16)w,0,
       dest,target,destoff,targetoff,0};
   return AgxRelocOk;
@@ -127,7 +143,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocSealVersion(
   if(!c || !draw || !command || !bytes) return AgxRelocArgument;
   if(commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
       commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
-      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     return AgxRelocCommand;
   if(c->State!=RECORDING) return AgxRelocState;
   AGX_WIN32_DRAW_REQUEST request={0}; request.Generation=c->Generation;
@@ -149,7 +166,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocPrepareDraw(
   if(!c || !draw || !request) return AgxRelocArgument;
   if(commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
       commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
-      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     return AgxRelocCommand;
   if(c->State!=RECORDING) return AgxRelocState;
   memset(request,0,sizeof(*request));

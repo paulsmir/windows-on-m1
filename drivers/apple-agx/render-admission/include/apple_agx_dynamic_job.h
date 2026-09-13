@@ -33,6 +33,7 @@ typedef struct _APPLE_AGX_DYNAMIC_JOB_RELOCATION {
   APPLE_AGX_U32 TargetReference;
   APPLE_AGX_U32 Reserved;
   APPLE_AGX_U64 DestinationOffset;
+  APPLE_AGX_U64 TargetOffset;
   APPLE_AGX_U64 ResolvedAddress;
   APPLE_AGX_U64 EncodedValue;
 } APPLE_AGX_DYNAMIC_JOB_RELOCATION;

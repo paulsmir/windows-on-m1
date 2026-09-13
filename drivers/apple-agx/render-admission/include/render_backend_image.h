@@ -27,6 +27,8 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_U32 JobFence;
   APPLE_AGX_BOOL JobReady;
   APPLE_AGX_BOOL Ready;
+  APPLE_AGX_BOOL NativeBound;
+  APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
 } ADMISSION_BACKEND_IMAGE;
 
 typedef enum _ADMISSION_BACKEND_OUTPUT_VERIFICATION {
@@ -75,6 +77,11 @@ APPLE_AGX_BOOL AdmissionBackendImageBindDynamicSubmission(
     void *DestinationCpuAddress,
     APPLE_AGX_U32 BackgroundColor,
     APPLE_AGX_EXP208_GDI_BINDING *Binding);
+struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS;
+APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
+    ADMISSION_BACKEND_IMAGE *, const ADMISSION_RENDER_PACKET_DESCRIPTION *,
+    void *, const struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS *,
+    APPLE_AGX_EXP208_GDI_BINDING *);
 
 APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
     const ADMISSION_BACKEND_IMAGE *Image,

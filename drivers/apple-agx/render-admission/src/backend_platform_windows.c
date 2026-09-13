@@ -1821,7 +1821,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   APPLE_AGX_BACKEND_JOB_IMAGE staged;
   APPLE_AGX_RENDER_RUNTIME_BINDINGS bindings;
   ADMISSION_DYNAMIC_DMA_VIEW dynamicView;
-  ADMISSION_DYNAMIC_OVERLAY_PLAN dynamicPlan;
+  ADMISSION_DYNAMIC_OVERLAY_PLAN *dynamicPlan;
   BOOLEAN dynamic = FALSE;
   BOOLEAN overlayApplied = FALSE;
   ULONG submissionMagic = 0u;
@@ -1832,7 +1832,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   RtlZeroMemory(&staged, sizeof(staged));
   RtlZeroMemory(&bindings, sizeof(bindings));
   RtlZeroMemory(&dynamicView, sizeof(dynamicView));
-  RtlZeroMemory(&dynamicPlan, sizeof(dynamicPlan));
+  if (runtime->DynamicOverlayState.Applied != 0u) return APPLE_AGX_BACKEND_FALSE;
+  dynamicPlan = &runtime->DynamicOverlayPlan;
+  RtlZeroMemory(dynamicPlan, sizeof(*dynamicPlan));
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   RtlZeroMemory(&runtime->DynamicStoreReceipt,
                 sizeof(runtime->DynamicStoreReceipt));
@@ -1847,11 +1849,11 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
             runtime->Adapter->RenderPacket.Description.DestinationGpuVa ||
         AdmissionDynamicOverlayPlanFromJob(
             &runtime->Adapter->BackendImage, dynamicView.Bindings,
-            dynamicView.Job, &dynamicPlan) !=
+            dynamicView.Job, dynamicPlan) !=
             AdmissionDynamicOverlaySuccess ||
         runtime->DynamicOverlayState.Applied != 0u ||
         AdmissionDynamicOverlayApply(
-            &runtime->Adapter->BackendImage, &dynamicPlan,
+            &runtime->Adapter->BackendImage, dynamicPlan,
             dynamicView.Job, dynamicView.Storage,
             dynamicView.StorageBytes, Submission->Submission.Fence,
             &runtime->DynamicOverlayState) !=
@@ -1876,13 +1878,15 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
           &bindings, &staged, runtime->QueueObjects, Job) ||
       (dynamic &&
-       AdmissionDynamicOverlayRouteEncoder(
-           &dynamicPlan, runtime->QueueObjects,
-           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) !=
+       (dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+          AdmissionDynamicOverlayRouteNative(dynamicPlan, dynamicView.Bindings,
+             runtime->QueueObjects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) :
+          AdmissionDynamicOverlayRouteEncoder(dynamicPlan, runtime->QueueObjects,
+             APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) !=
            AdmissionDynamicOverlaySuccess))
     goto BuildFailure;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  if (dynamic)
+  if (dynamic && dynamicView.Bindings->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     (void)AdmissionDynamicOverlayCaptureStoreGraph(
         &runtime->Adapter->BackendImage, &runtime->DynamicOverlayState,
         runtime->QueueObjects,
@@ -1903,6 +1907,15 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       goto BuildFailure;
   }
 #endif
+  if (dynamic && dynamicPlan->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+    for (index = 0u; index < dynamicPlan->EntryCount; ++index) {
+      const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry=&dynamicPlan->Entries[index];
+      const APPLE_AGX_EXP208_RELOCATION_OBJECT *object=
+          &runtime->Adapter->BackendImage.Objects[entry->ObjectIndex];
+      if (!runtime->TransportIo.FlushForDevice(runtime,
+              object->Data + entry->ObjectOffset, entry->Bytes)) goto BuildFailure;
+    }
+  }
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index) {
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *object =
@@ -1929,7 +1942,6 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
   }
   runtime->TransportIo.MemoryBarrier(runtime);
   if (dynamic) {
-    runtime->DynamicOverlayPlan = dynamicPlan;
     runtime->DynamicJob = dynamicView.Job;
     runtime->DynamicStorage = dynamicView.Storage;
     runtime->DynamicStorageBytes = dynamicView.StorageBytes;
@@ -1942,7 +1954,7 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
 BuildFailure:
   if (overlayApplied)
     (void)AdmissionDynamicOverlayRelease(
-        &runtime->Adapter->BackendImage, &dynamicPlan, dynamicView.Job,
+        &runtime->Adapter->BackendImage, dynamicPlan, dynamicView.Job,
         dynamicView.Storage, dynamicView.StorageBytes,
         Submission->Submission.Fence, &runtime->DynamicOverlayState);
   return APPLE_AGX_BACKEND_FALSE;
@@ -2720,7 +2732,8 @@ static VOID AdmissionPlatformWorker(
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalBegin(runtime, &description);
-  if (runtime->DynamicOverlayState.Applied == 1u)
+  if (runtime->DynamicOverlayState.Applied == 1u &&
+      runtime->DynamicOverlayPlan.CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     (void)AdmissionDynamicOverlayCaptureGraph(
         &adapter->BackendImage, &runtime->DynamicOverlayPlan,
         &runtime->DynamicOverlayState, runtime->QueueObjects,

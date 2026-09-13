@@ -42,17 +42,23 @@ static void release(void *context,APPLE_AGX_U64 token,APPLE_AGX_U64 serial) {
     }
   c->Backend->Failed=1;
 }
-AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureBegin(AGX_WIN32_ASAHI_CAPTURE *c,
+AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureBeginVersion(AGX_WIN32_ASAHI_CAPTURE *c,
     AGX_WIN32_ASAHI_BACKEND *backend,APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,
-    APPLE_AGX_U64 request) {
+    APPLE_AGX_U64 request,APPLE_AGX_U16 version) {
   const AGX_WIN32_RELOC_OPERATIONS ops={query,retain,release,retain_exact};
   if(!c || !backend || !backend->Native || backend->Failed ||
      backend->ActiveCapture || backend->ActiveEmission) return AgxRelocArgument;
-  AGX_WIN32_RELOC_RESULT result=AgxWin32RelocBegin(&c->Capture,owner,generation,request,&ops,c);
+  AGX_WIN32_RELOC_RESULT result=AgxWin32RelocBeginVersion(&c->Capture,owner,generation,request,version,&ops,c);
   if(result!=AgxRelocOk) return result;
   c->Backend=backend; c->Count=0; c->EncoderRoot=NULL;
   memset(c->Bos,0,sizeof(c->Bos)); memset(c->Identities,0,sizeof(c->Identities));
   return AgxRelocOk;
+}
+AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureBegin(AGX_WIN32_ASAHI_CAPTURE *c,
+    AGX_WIN32_ASAHI_BACKEND *backend,APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,
+    APPLE_AGX_U64 request) {
+  return AgxWin32AsahiCaptureBeginVersion(c,backend,owner,generation,request,
+      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC);
 }
 AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureReference(AGX_WIN32_ASAHI_CAPTURE *c,
     struct agx_bo *bo,APPLE_AGX_U32 role,APPLE_AGX_U32 access,
@@ -94,4 +100,29 @@ AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureCpuRange(AGX_WIN32_ASAHI_CAPTURE *c,
   if(!AgxWin32AsahiFindCpuAddress(c->Backend,c->Capture.Owner,c->Capture.Generation,
       cpu,bytes,&bo,&actual,&offset) || actual!=address) return AgxRelocStale;
   return AgxWin32AsahiCaptureReference(c,bo,role,access,offset,bytes,index);
+}
+
+int AgxWin32AsahiCaptureFind(AGX_WIN32_ASAHI_CAPTURE *c,APPLE_AGX_U64 address,
+    APPLE_AGX_U64 bytes,APPLE_AGX_U32 role,APPLE_AGX_U32 *index,
+    APPLE_AGX_U64 *targetOffset) {
+  struct agx_bo *bo=NULL;
+  APPLE_AGX_U64 offset=0;
+  AGX_WIN32_RELOC_ALLOCATION identity;
+  if(index) *index=~0u;
+  if(targetOffset) *targetOffset=0;
+  if(!c || !c->Backend || !index || !targetOffset || !bytes ||
+     c->Capture.State!=1u ||
+     !AgxWin32AsahiFindAddress(c->Backend,c->Capture.Owner,c->Capture.Generation,
+       address,bytes,&bo,&offset) || !AgxWin32AsahiIdentity(c->Backend,bo,&identity)) return 0;
+  for(unsigned i=0;i<c->Capture.ReferenceCount;++i) {
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *r=&c->Capture.References[i];
+    const AGX_WIN32_RELOC_ALLOCATION *a=&c->Capture.Allocations[i];
+    if(r->Role==role && a->Owner==identity.Owner &&
+       a->Generation==identity.Generation && a->Token==identity.Token &&
+       a->Serial==identity.Serial && r->Offset<=offset &&
+       offset-r->Offset<=r->Bytes && bytes<=r->Bytes-(offset-r->Offset)) {
+      *index=i; *targetOffset=offset-r->Offset; return 1;
+    }
+  }
+  return 0;
 }

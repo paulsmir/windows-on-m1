@@ -291,7 +291,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ADMISSION_RENDER_CONTEXT *context = (ADMISSION_RENDER_CONTEXT *)Context;
   ADMISSION_CONTEXT *adapter;
   ADMISSION_UMD_COLOR_FILL_COMMAND command;
-  ADMISSION_WIN32_RENDER_SNAPSHOT win32Snapshot = {0};
+  /* Request-owned nonpaged scratch: v4 snapshots exceed safe kernel stack use. */
+  ADMISSION_WIN32_RENDER_SNAPSHOT *win32Snapshot = NULL;
   const ADMISSION_OPEN_ALLOCATION *opened;
   ADMISSION_GDI_COLOR_FILL_INPUT input;
   ADMISSION_GDI_PREPARED prepared;
@@ -327,6 +328,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     AdmissionRenderCorrelationExitWindows(                                  \
         adapter, correlationSequence, (guard), renderStatus,                 \
         traceDmaBytes, tracePatches, prepatched);                            \
+    if (win32Snapshot != NULL) ExFreePoolWithTag(win32Snapshot, ADMISSION_POOL_TAG); \
     return renderStatus;                                                     \
   } while (0)
 
@@ -393,30 +395,34 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
                       STATUS_INVALID_PARAMETER);
 
   if (context->Win32Transport) {
+    win32Snapshot = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(*win32Snapshot), ADMISSION_POOL_TAG);
+    if (win32Snapshot == NULL)
+      UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy, STATUS_INSUFFICIENT_RESOURCES);
+    RtlZeroMemory(win32Snapshot, sizeof(*win32Snapshot));
     if (!NT_SUCCESS(AdmissionWin32SnapshotRenderCommand(
-            context, Args, &win32Snapshot)))
+            context, Args, win32Snapshot)))
       UMD_RENDER_RETURN(AdmissionUmdRenderGuardUserCopy,
                         STATUS_INVALID_USER_BUFFER);
-    if (win32Snapshot.View.Draw != NULL) {
+    if (win32Snapshot->View.Draw != NULL) {
       ADMISSION_OPEN_ALLOCATION *dynamicOpened = NULL;
       NTSTATUS dynamicStatus = AdmissionDynamicRenderBuild(
-          adapter, context, Args, &win32Snapshot, &dynamicOpened,
+          adapter, context, Args, win32Snapshot, &dynamicOpened,
           &destination, &prepared, &allocationOffset, &allocationBytes);
       if (!NT_SUCCESS(dynamicStatus))
         UMD_RENDER_RETURN(AdmissionUmdRenderGuardPrepare, dynamicStatus);
       opened = dynamicOpened;
       allocation = &Args->pAllocationList[
-          win32Snapshot.View.References[
-              win32Snapshot.View.Draw->DestinationReference]
+          win32Snapshot->View.References[
+              win32Snapshot->View.Draw->DestinationReference]
               .AllocationIndex];
       RtlZeroMemory(&command, sizeof(command));
       command.Opcode = (ULONG)AppleAgxWin32OpcodeDraw;
       command.DestinationAllocationIndex =
-          win32Snapshot.View.References[
-              win32Snapshot.View.Draw->DestinationReference]
+          win32Snapshot->View.References[
+              win32Snapshot->View.Draw->DestinationReference]
               .AllocationIndex;
       command.Color = 0xff101820u;
-      commandHash = win32Snapshot.View.Header->ContentHash;
+      commandHash = win32Snapshot->View.Header->ContentHash;
       win32Command = TRUE;
       dynamicCommand = TRUE;
       prepatched = TRUE;
@@ -427,26 +433,26 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
     command.Version = ADMISSION_UMD_COMMAND_VERSION;
     command.Bytes = sizeof(command);
     command.Opcode = AdmissionUmdOpcodeColorFill;
-    command.Destination.Left = win32Snapshot.View.Clear->Left;
-    command.Destination.Top = win32Snapshot.View.Clear->Top;
-    command.Destination.Right = win32Snapshot.View.Clear->Right;
-    command.Destination.Bottom = win32Snapshot.View.Clear->Bottom;
+    command.Destination.Left = win32Snapshot->View.Clear->Left;
+    command.Destination.Top = win32Snapshot->View.Clear->Top;
+    command.Destination.Right = win32Snapshot->View.Clear->Right;
+    command.Destination.Bottom = win32Snapshot->View.Clear->Bottom;
     command.DestinationAllocationIndex =
-        win32Snapshot.View.References[
-            win32Snapshot.View.Clear->DestinationReference]
+        win32Snapshot->View.References[
+            win32Snapshot->View.Clear->DestinationReference]
             .AllocationIndex;
-    command.Color = win32Snapshot.View.Clear->Color;
+    command.Color = win32Snapshot->View.Clear->Color;
     command.Rop = AdmissionUmdRopPatCopy;
     command.Rop3 = 0u;
     allocationOffset =
-        win32Snapshot.View.References[
-            win32Snapshot.View.Clear->DestinationReference]
+        win32Snapshot->View.References[
+            win32Snapshot->View.Clear->DestinationReference]
             .Offset;
     allocationBytes =
-        win32Snapshot.View.References[
-            win32Snapshot.View.Clear->DestinationReference]
+        win32Snapshot->View.References[
+            win32Snapshot->View.Clear->DestinationReference]
             .Bytes;
-    commandHash = win32Snapshot.View.Header->ContentHash;
+    commandHash = win32Snapshot->View.Header->ContentHash;
     win32Command = TRUE;
   } else {
     __try {
@@ -474,13 +480,13 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   if (!win32Command)
     allocationBytes = opened->Allocation->Description.Size;
   if (win32Command &&
-      (win32Snapshot.View.Clear->Format !=
+      (win32Snapshot->View.Clear->Format !=
            (ULONG)AppleAgxWin32FormatBgra8Unorm ||
-       win32Snapshot.View.Clear->SurfaceWidth !=
+       win32Snapshot->View.Clear->SurfaceWidth !=
            opened->Allocation->Description.Width ||
-       win32Snapshot.View.Clear->SurfaceHeight !=
+       win32Snapshot->View.Clear->SurfaceHeight !=
            opened->Allocation->Description.Height ||
-       win32Snapshot.View.Clear->SurfacePitch !=
+       win32Snapshot->View.Clear->SurfacePitch !=
            opened->Allocation->Description.Pitch ||
        allocationOffset > MAXULONG || allocationBytes > MAXULONG))
     UMD_RENDER_RETURN(AdmissionUmdRenderGuardBounds,

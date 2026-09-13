@@ -101,6 +101,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
   APPLE_AGX_U32 NativeBackendCount;
+  void *NativeBatchTransaction;
+  APPLE_AGX_U64 LastNativeRequest;
   BOOL ScreenClosing;
   APPLE_AGX_U32 NextScreenFence;
   HRESULT LastScreenError;

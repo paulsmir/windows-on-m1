@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "agx_device.h"
 #include "asahi/genxml/agx_pack.h"
 #include "agx_win32_asahi_pipeline.h"
@@ -200,8 +201,9 @@ static APPLE_AGX_U64 read_le(const unsigned char *p,unsigned bytes) {
   for(unsigned i=0;i<bytes;++i) value|=(APPLE_AGX_U64)p[i]<<(8*i);
   return value;
 }
-void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
-    APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,APPLE_AGX_U32 role) {
+static void pipeline_record(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
+    APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,
+    APPLE_AGX_U32 role,int existing) {
   APPLE_AGX_U32 width=kind==AppleAgxWin32RelocationUscShaderOffset32?6:
       (kind==AppleAgxWin32RelocationVdmPipelineOffset32 ||
        kind==AppleAgxWin32RelocationPppPipelineOffset32 ||
@@ -228,7 +230,7 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
     encoded=(raw>>26)<<2;
     valid=(record[0]==0x1d || record[0]==0x3d) &&
       (role==AppleAgxWin32RoleConstant || role==AppleAgxWin32RoleDescriptor ||
-       role==AppleAgxWin32RoleShaderRodata); break;
+       role==AppleAgxWin32RoleShaderRodata || role==AppleAgxWin32RoleUniform); break;
   case AppleAgxWin32RelocationUscTableAddress39:
     encoded=((raw>>27)&0xfffffffffULL)<<3;
     valid=(record[0]==0xdd || record[0]==0x9d) && role==AppleAgxWin32RoleDescriptor; break;
@@ -246,13 +248,39 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
     valid=role==AppleAgxWin32RolePppState && s->Role==AppleAgxWin32RoleEncoder &&
       ((raw>>29)&7ULL)==AGX_VDM_BLOCK_TYPE_PPP_STATE_UPDATE &&
       ((raw>>8)&0xffULL)*4==bytes; break;
+  case AppleAgxWin32RelocationUniformAddress64:
+    encoded=raw;
+    valid=s->Role==AppleAgxWin32RoleUniform; break;
+  case AppleAgxWin32RelocationTextureAddress40:
+    encoded=((raw>>2)&0xfffffffffULL)<<4;
+    valid=s->Role==AppleAgxWin32RoleDescriptor && role==AppleAgxWin32RoleRenderTarget; break;
+  case AppleAgxWin32RelocationPbeAddress40:
+    encoded=(raw&0xfffffffffULL)<<4;
+    valid=s->Role==AppleAgxWin32RoleDescriptor && role==AppleAgxWin32RoleRenderTarget; break;
   default: break;
   }
-  if(!valid || encoded!=address || AgxWin32AsahiCaptureAddress(c,address,bytes,role,
-      role==AppleAgxWin32RoleShader?AppleAgxWin32AccessRead|AppleAgxWin32AccessExecute:
-      AppleAgxWin32AccessRead,&index)!=AgxRelocOk ||
-     AgxWin32RelocField(&c->Capture,kind,s->Reference,offset+s->RootOffset,index,0)!=AgxRelocOk)
+  if(!valid || encoded!=address) { fprintf(stderr,"NATIVE_EDGE_FAILURE: kind=%u valid=%u encoded=%llu address=%llu\n",kind,valid,(unsigned long long)encoded,(unsigned long long)address); s->Failed=1; return; }
+  APPLE_AGX_U64 targetOffset=0;
+  int target=existing ? AgxWin32AsahiCaptureFind(c,address,bytes,role,&index,&targetOffset) :
+      AgxWin32AsahiCaptureAddress(c,address,bytes,role,
+        role==AppleAgxWin32RoleShader?AppleAgxWin32AccessRead|AppleAgxWin32AccessExecute:
+        (role==AppleAgxWin32RoleRenderTarget?AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite:
+         AppleAgxWin32AccessRead),&index)==AgxRelocOk;
+  AGX_WIN32_RELOC_RESULT result=target ?
+      AgxWin32RelocField(&c->Capture,kind,s->Reference,offset+s->RootOffset,index,targetOffset) : AgxRelocArgument;
+  if(!target || result!=AgxRelocOk) {
+    fprintf(stderr,"NATIVE_FIELD_FAILURE: kind=%u target=%u result=%u ref=%u role=%u bytes=%llu\n",
+        kind,target,(unsigned)result,s->Reference,role,(unsigned long long)bytes);
     s->Failed=1;
+  }
+}
+void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
+    APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,APPLE_AGX_U32 role) {
+  pipeline_record(s,end,kind,address,bytes,role,0);
+}
+void AgxWin32AsahiPipelineRecordRange(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
+    APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,APPLE_AGX_U32 role) {
+  pipeline_record(s,end,kind,address,bytes,role,1);
 }
 void AgxWin32AsahiPipelineRecordCaptured(AGX_WIN32_ASAHI_PIPELINE *s,
     const void *end,APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U32 role) {
@@ -303,7 +331,7 @@ int AgxWin32AsahiPipelineFinish(AGX_WIN32_ASAHI_PIPELINE *s,const void *end) {
       s->Failed=1;
   }
   c->Backend->ActiveEmission=s->PreviousEmission;
-  if(s->Failed) { (void)AgxWin32RelocAbort(&c->Capture); s->Capture=NULL; return 0; }
+  if(s->Failed) { fprintf(stderr,"NATIVE_SCOPE_FAILURE: ref=%u length=%llu capacity=%u state=%u refs=%u relocs=%u\n",s->Reference,(unsigned long long)length,s->Capacity,c->Capture.State,c->Capture.ReferenceCount,c->Capture.RelocationCount); (void)AgxWin32RelocAbort(&c->Capture); s->Capture=NULL; return 0; }
   if(s->Root) s->Root->CompletedEnd=s->RootOffset+(APPLE_AGX_U32)length;
   else c->Capture.References[s->Reference].Bytes=length;
   s->Capture=NULL; return 1;

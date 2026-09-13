@@ -145,6 +145,26 @@ static int dynamic_patch(void *Destination,
     dynamic_write_le(Destination, encoded, 4u);
     *EncodedValue = relative;
     return 1;
+  case AppleAgxWin32RelocationUniformAddress64:
+    if (Relocation->WidthBytes != 8u)
+      return 0;
+    dynamic_write_u64(Destination, GpuAddress);
+    *EncodedValue = GpuAddress;
+    return 1;
+  case AppleAgxWin32RelocationTextureAddress40:
+  case AppleAgxWin32RelocationPbeAddress40:
+    if (Relocation->WidthBytes != 8u || (GpuAddress & 15ULL) != 0ULL ||
+        GpuAddress >= DYNAMIC_40_BIT_LIMIT)
+      return 0;
+    current = dynamic_read_le(Destination, 8u);
+    if (Relocation->Kind == AppleAgxWin32RelocationTextureAddress40)
+      encoded = (current & ~(((1ULL << 36u) - 1ULL) << 2u)) |
+                ((GpuAddress >> 4u) << 2u);
+    else
+      encoded = (current & ~((1ULL << 36u) - 1ULL)) | (GpuAddress >> 4u);
+    dynamic_write_le(Destination, encoded, 8u);
+    *EncodedValue = GpuAddress;
+    return 1;
   case AppleAgxWin32RelocationPppStateAddress40:
     if (Relocation->WidthBytes != 8u || (GpuAddress & 3ULL) != 0ULL ||
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
@@ -160,11 +180,15 @@ static int dynamic_patch(void *Destination,
   }
 }
 
-static int dynamic_copy_role(APPLE_AGX_U32 Role) {
+static int dynamic_copy_role(const APPLE_AGX_WIN32_COMMAND_VIEW *View,
+                             APPLE_AGX_U32 Role) {
   return Role == AppleAgxWin32RoleShader ||
          Role == AppleAgxWin32RoleShaderRodata ||
          Role == AppleAgxWin32RoleEncoder ||
          Role == AppleAgxWin32RolePppState ||
+         Role == AppleAgxWin32RoleUniform ||
+         (Role == AppleAgxWin32RoleConstant &&
+          View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) ||
          Role == AppleAgxWin32RoleUscPipeline ||
          Role == AppleAgxWin32RoleDescriptor ||
          Role == AppleAgxWin32RoleScissor ||
@@ -179,7 +203,7 @@ static int dynamic_copy_reference(
       View->Draw == DYNAMIC_NULL ||
       ReferenceIndex >= View->Header->ReferenceCount)
     return 0;
-  if (dynamic_copy_role(View->References[ReferenceIndex].Role))
+  if (dynamic_copy_role(View, View->References[ReferenceIndex].Role))
     return 1;
   if (View->References[ReferenceIndex].Role != AppleAgxWin32RoleVertex ||
       View->Relocations == DYNAMIC_NULL)
@@ -321,6 +345,7 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
     resolved->DestinationReference = relocation->DestinationReference;
     resolved->TargetReference = relocation->TargetReference;
     resolved->DestinationOffset = relocation->DestinationOffset;
+    resolved->TargetOffset = relocation->TargetOffset;
     resolved->ResolvedAddress = gpuAddress;
   }
 
