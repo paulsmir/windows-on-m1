@@ -43083,3 +43083,124 @@ No Air/recovery/driver install/native-ANS action; no push or architect integrati
 Next: existing device-scoped frontend, pending explicit GPU binding/lifetime
 contract decision. Latest policy is direct Tier-A with compact blocker packets,
 not default Devstral. No automatic conversion of CPU mappings to GPU addresses.
+
+
+## EXP-20260913-683-native-batch — real Asahi batch through Windows KMT (preregistered)
+
+UTC preregistration:2026-09-13T23:54:40Z. Status: BUILD/PREFLIGHT ONLY;
+no installation/launch is authorized until all artifact and live-baseline gates
+below are recorded PASS. This entry does not claim hardware readiness.
+
+WHY THIS HYPOTHESIS:
+1. Final i-x64 invokes real Asahi resource/NIR/state/clear/draw/flush, then the
+   existing owner/composer/KMD plan/DMA/root route at two placements and ordered
+   retirement:30refs/126edges/29objects,137encoder,36496source,44952DMA bytes.
+   This excludes missing native capture/materialization as the starting unknown.
+2. ARM64 library/test/client link; qualification-enabled99-object KMD analysis;
+   residency, immediate marker, stale receipt and completed-output lease gates
+   pass. The client imports realKMT APIs and preserves actual residency/ownership.
+3. EXP680–682 already proved native-derived TA/3D/fences/output with the retained
+   root and VisibleAgxQualification profile. The same validated launch/recovery
+   artifacts are retained; no GPUVA, platform, IRQ or power redesign is proposed.
+
+WINDOWS CONTRACT: FULL GRAPHICS physical/patch-list context; existing runtime
+owner with KMT-backed allocation/Lock/Unlock/Render/ordered CPU-event callbacks.
+One explicit residency contribution per ScreenBuffer, balanced after unmap and
+retirement. No IgnoreSync, fake event, replay, process-global resource registry,
+or false Direct3D feature-level advertisement. This is KMT qualification;
+installed pipeline mask0 remains, not runtime-created D3D/DWM acceptance.
+
+AGX/ASAHI CONTRACT: actual native G13G one-cluster scene, single uncompressed
+BGRA8 16x16 target, clear plus direct3-vertex triangle, complete PPP/uniform/
+attachment/BG/partial/EOT graph and exact encoder tail. Pinned native compilation
+and existing retained context0/context63 mapping/queue protocol are reused.
+
+TRANSLATION: native typed v4 graph -> request-owned immutable copy -> existing
+UMD composer/pfnRenderCb -> realKMT Render -> existing KMD Render/Patch/Submit.
+Source32-bit tagged USC coordinates and flags are translated explicitly. Native
+readback is copied after physical completion under the existing output lease
+and cache synchronization. Client checks newer baseline-relative snapshot,
+command hash+Win32 generation+build+boot, roots/counts and source-scene pixels.
+
+WHAT IS STILL UNKNOWN: actual VidMM residency/map/Render behavior for these
+real native allocations, and actual AGX/firmware execution of the complete new
+native graph/output. Offline source mapping is implemented; hardware verifies it.
+
+Single independently observable variable: complete real native batch producer
+and its indivisible v4 request replace legacy fixed/asset packet construction.
+ATOMIC CONTRACT: native v4 metadata roots, exact source graph/relocations,
+immutable KMD placement/patch and native root routing form one request contract;
+none can submit a partial graph independently. Existing scheduler, context,
+power, interrupts and physical memory model are unchanged. Supporting sources
+and exact fields: AD04-NATIVE-LIFECYCLE-INTEGRATION.md and
+AD04-NATIVE-KMT-CALLBACK-CONTRACT.md under investigation/agent_tasks/.
+
+Source identity:
+- integration/ad04-windows-compiler HEAD 6c5f3a2bfcea9354d71f7d86376970343827f986, clean code.
+- source archive /Users/pavel/public_windows/.local/experiments/EXP-20260913-683-native-batch/source.tar.gz; SHA256 e3ab2cd90ffc0c310216c823cd1eb97c7754a3c2d25908e83cd5cc567d1251d9.
+- root HEAD f90402c7589236ec9e8a030f4b825b5a36280866, tracked diff SHA256
+  2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb.
+- m1n1 HEAD c6d10e04afdad5314e8ac1e67bc3919b094ab000, tracked diff SHA256
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+- Mu HEAD f1ef718e08db0e4c30fdb5d8555973513ad9a004, tracked diff SHA256
+  7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+Root preexisting run_uefi ramdisk-chunk change does not enter the non-ramdisk
+launch commands. Mu dirty sources are NOT built; immutable FD artifacts used.
+No ANS worktree operation. Full source manifest is experiment-local.
+
+Exact planned build command on trusted builder, fresh hash-verified source root:
+`powershell -NoProfile -ExecutionPolicy Bypass -File C:/Users/pauls/EXP-20260913-683-native-batch/src/drivers/apple-agx/render-admission/scripts/build-driver.ps1 -Configuration Release -VisibleAgxQualification -PackageBuild 683`.
+Uses pinned26100 WDK properties, analysis and Universal/Inf2Cat gates from the
+existing script. Native ARM64 client is linked from this same source/runtime
+closure with `/p:EnableNativeBatch=true /p:AdmissionExpectedBuild=683`.
+Output package path: source root drivers/apple-agx/render-admission/ARM64/Release/
+AppleAgxRenderAdmission. Output SHA256/signatures/manifest are PENDING build;
+record them before staging/installation. Existing catalog is
+AppleAgxRenderAdmission.cat (not the unrelated generic AppleAgx.cat helper).
+
+Exact planned staging/bind commands on Air after current baseline and hashes:
+`pnputil /add-driver C:\Users\pavel\EXP-20260913-683-native-batch\package\AppleAgxRenderAdmission.inf`
+then one natural bind/boot using the unchanged verified GPU-enabled profile.
+Client command, once only from the fresh evidence directory:
+`C:\Users\pavel\EXP-20260913-683-native-batch\AppleAgxD3dKmRender.exe --native-batch`.
+No rerun of a failed/inconclusive request without causal review/new registration.
+
+GPU launch artifacts (reuse, no rebuild):
+- .local/experiments/EXP584-kmd-output/m1n1.macho
+  SHA25612f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3.
+- .local/experiments/EXP-20260904-406-coherent-abi-admission/J313_EFI-exp406.fd
+  SHA256c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Launch under root cwd: M1N1DEVICE=/dev/cu.usbmodemC02HDNCCQ6L41,
+WOM1_AGX_G2_POWER_BROKER=1, LLDDIR=.local/toolchain22/;
+`./proxyenv/bin/python m1n1_windows/proxyclient/tools/chainload.py <m1n1 above>`;
+`./proxyenv/bin/python -u run_uefi.py <FD above> --device /dev/cu.usbmodemC02HDNCCQ6L41 --display-mode physical --debug-mode off --low-mem --contract-output .local/experiments/EXP-20260913-683-native-batch/contract.bin`.
+
+Primary recovery: ordinary GPU-visible377/392, broker disabled, one inert
+APPL0002, no exact AppleAgx package/service/module/signer. Artifacts:
+- EXP-20260903-377-secondary-cpu-receipt/assisted-boot/m1n1.macho,
+  SHA256fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a.
+- EXP-20260903-392-current-gpu-mu-publication/assisted-boot/J313_EFI.fd,
+  SHA25616c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Use the corresponding same chainload/run_uefi commands with broker unset and
+ordinary-contract.bin. Emergency golden/offline cleanup is only the playbook's
+validated fallback if ordinary visible guest cannot recover. Preserve evidence
+first, then exact package cleanup via cleanup-appleagx-online.ps1; never guess OEM.
+
+Required live gates before staging: bounded WindowsSSH plus USB/proxy/launcher
+inspection; current8CPUs/NVMe/xHCI/input/SSH; exactlyone inertAPPL0002/Code28;
+noAppleAgx package/service/module/signer/stageddriver or fresh41/1001/129 errors;
+matching ARM64 VCRUNTIME140/UCRT loader dependencies. Current SSH address is
+being clarified; USB41/43 observed, no active launcher observed. These are not
+substitutes for fresh Windows/proxy health. No physical action has been requested.
+
+Expected hardware checkpoint: actual30-reference native command, KMD native
+roots/target receipts, physicalTA+3D completion, real orderedWindows event,
+fresh full16KiB rawtarget snapshot with128pixel-centre triangle/clear image,
+and balanced ordinary cleanup. Any build/signature/hash/loader/mapping/callback/
+queue/fence/receipt/pixel/recovery failure is a failure or INCONCLUSIVE boundary,
+never proof of accelerateddesktop. Timeout preserves process/resources.
+Evidence: experiment-local builder/air/console/contract/ETW/events/registry/dumps,
+raw submitted wire and native-output receipt binary. Record elapsed boot phases,
+stop code/parameters, CPU/IRQ/timer state and display/input/SSH/storage/allCPU health
+and final verdict after the run. StandardD3D, Present/DWM and desktop acceptance
+remain later mission obligations.
