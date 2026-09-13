@@ -226,6 +226,34 @@ if run.returncode==0 and args.windows_platform_declarations:
                     result['first_error']=built.stdout.decode(errors='replace')[-3000:]
                     break
                 result['objects'][name+'.obj']=hashlib.sha256((out/(name+'.obj')).read_bytes()).hexdigest()
+            if result['exit']==0:
+                # Same source-level ABI/native-pack/materializer proof on the
+                # Windows target. Assertions must remain enabled in this test.
+                winsys=args.project/'drivers/apple-agx/mesa/winsys'
+                shared=args.project/'drivers/apple-agx/shared'
+                kmd=args.project/'drivers/apple-agx/render-admission'
+                sources=[winsys/(n+'.c') for n in ('agx_win32_reloc_capture_test',
+                    'agx_win32_reloc_capture','agx_win32_native_pool_bridge','agx_win32_transport')]
+                sources += [shared/'src/apple_agx_win32_abi.c',kmd/'src/apple_agx_dynamic_job.c']
+                command=[str(llvm/'clang-cl.exe'),*flags,'/UNDEBUG',
+                    *('/I'+str(p) for p in includes),'/I'+str(kmd/'include'),
+                    *(str(s) for s in sources),'/Fe'+str(out/'reloc_capture_test.exe')]
+                (out/'reloc-command.json').write_text(json.dumps(command,indent=2))
+                built=subprocess.run(command,cwd=out,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+                (out/'reloc-build.log').write_bytes(built.stdout)
+                result['reloc_build_exit']=built.returncode
+                if built.returncode:
+                    result['exit']=built.returncode
+                    result['first_error']=built.stdout.decode(errors='replace')[-3000:]
+                else:
+                    result['reloc_exe_sha256']=hashlib.sha256((out/'reloc_capture_test.exe').read_bytes()).hexdigest()
+                    result['reloc_execution']='NOT_RUN'
+                    if args.architecture=='x64':
+                        tested=subprocess.run([str(out/'reloc_capture_test.exe')],
+                            cwd=out,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+                        (out/'reloc-test.log').write_bytes(tested.stdout)
+                        result['reloc_execution']=tested.returncode
+                        result['exit']=tested.returncode
 (out/'result.json').write_text(json.dumps(result,indent=2))
 print(json.dumps(result,indent=2))
 raise SystemExit(result['exit'])

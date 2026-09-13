@@ -363,7 +363,7 @@ static void test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference(
   assert(memcmp(bytes, before, sizeof(bytes)) == 0);
   assert(commandBytes == 0x5a5a5a5au);
 
-  assert(AgxWin32TransportBuildDrawVersion(&input, 3u, bytes, sizeof(bytes),
+  assert(AgxWin32TransportBuildDrawVersion(&input, 4u, bytes, sizeof(bytes),
                                            &commandBytes) ==
          AppleAgxWin32AbiVersion);
   assert(memcmp(bytes, before, sizeof(bytes)) == 0);

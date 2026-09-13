@@ -86,7 +86,8 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   APPLE_AGX_U32 payloadBytes;
   APPLE_AGX_U32 totalBytes;
   if (CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
-      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES)
+      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
+      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
     return AppleAgxWin32AbiVersion;
   if (Request == NULL || CommandBuffer == NULL || CommandBytes == NULL ||
       Request->Generation == 0u || Request->AllocationCount == 0u ||

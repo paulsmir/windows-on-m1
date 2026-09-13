@@ -84,8 +84,12 @@ static int AppleAgxWin32RelocationPolicy(
            targetRole == AppleAgxWin32RoleConstant ||
            targetRole == AppleAgxWin32RoleRenderTarget;
   case AppleAgxWin32RelocationUscShaderOffset32:
+  case AppleAgxWin32RelocationUscPreshaderOffset32:
     return destinationRole == AppleAgxWin32RoleUscPipeline &&
            targetRole == AppleAgxWin32RoleShader;
+  case AppleAgxWin32RelocationUscTableAddress39:
+    return destinationRole == AppleAgxWin32RoleUscPipeline &&
+           targetRole == AppleAgxWin32RoleDescriptor;
   case AppleAgxWin32RelocationUscBufferAddress40:
     return destinationRole == AppleAgxWin32RoleUscPipeline &&
            (targetRole == AppleAgxWin32RoleShaderRodata ||
@@ -155,7 +159,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   if (header->Magic != APPLE_AGX_WIN32_COMMAND_MAGIC)
     return AppleAgxWin32AbiMagic;
   if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION &&
-      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES)
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
     return AppleAgxWin32AbiVersion;
   if (header->HeaderBytes != sizeof(*header) ||
       header->TotalBytes != CommandBytes)
@@ -298,7 +303,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   DRAW_REFERENCE(VertexRodataReference, AppleAgxWin32RoleShaderRodata, 1);
   DRAW_REFERENCE(FragmentRodataReference, AppleAgxWin32RoleShaderRodata, 1);
   DRAW_REFERENCE(UscPipelineReference, AppleAgxWin32RoleUscPipeline, 0);
-  if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES) {
+  if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES ||
+      header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC) {
     APPLE_AGX_WIN32_ABI_RESULT referenceResult;
     APPLE_AGX_U32 fragmentPipelineReference =
         draw->Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX];
@@ -323,6 +329,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     APPLE_AGX_U32 other;
     if (relocation->Reserved != 0u)
       return AppleAgxWin32AbiReserved;
+    if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+        (relocation->Kind == AppleAgxWin32RelocationUscPreshaderOffset32 ||
+         relocation->Kind == AppleAgxWin32RelocationUscTableAddress39))
+      return AppleAgxWin32AbiRelocation;
     if (relocation->AddressFlags != 0ULL ||
         relocation->DestinationReference >= header->ReferenceCount ||
         relocation->TargetReference >= header->ReferenceCount ||

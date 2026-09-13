@@ -10,6 +10,7 @@ typedef struct {
   unsigned Holds[9], Releases, FailRetain, FailRetainExact;
   unsigned char Data[9][0x10000];
   APPLE_AGX_U64 Placement;
+  APPLE_AGX_U64 PreshaderOverride;
 } FIXTURE;
 static FIXTURE fixture;
 static int query(void *ctx,APPLE_AGX_U64 token,AGX_WIN32_RELOC_ALLOCATION *bo) {
@@ -32,15 +33,16 @@ static void release(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U64 serial) {
 static int read_object(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U32 ref,
     APPLE_AGX_U32 role,APPLE_AGX_U64 offset,APPLE_AGX_U32 bytes,void *out) {
   FIXTURE *f=ctx; (void)role;
-  if(!token || token>9 || ref!=token-1 || offset>0x10000 || bytes>0x10000-offset) return 0;
+  if(!token || token>9 || (ref!=token-1 && !(ref==9 && token==5 && offset>=0x4000)) || offset>0x10000 || bytes>0x10000-offset) return 0;
   memcpy(out,f->Data[token-1]+offset,bytes); return 1;
 }
 static int resolve_object(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
     APPLE_AGX_U32 ref,APPLE_AGX_U32 role,APPLE_AGX_U64 offset,APPLE_AGX_U32 bytes,
     APPLE_AGX_U64 *out) {
   FIXTURE *f=ctx; (void)cls; (void)role;
-  if(!token || token>9 || ref!=token-1 || bytes!=1 || offset>=0x10000) return 0;
-  *out=f->Placement+token*0x10000+offset; return 1;
+  if(!token || token>9 || (ref!=token-1 && !(ref==9 && token==5 && offset>=0x4000)) || bytes!=1 || offset>=0x10000) return 0;
+  *out=(f->PreshaderOverride && token==4 && offset==0x80) ?
+      f->PreshaderOverride : f->Placement+token*0x10000+offset; return 1;
 }
 static APPLE_AGX_U64 read_le(const unsigned char *b,unsigned n) {
   APPLE_AGX_U64 v=0; for(unsigned i=0;i<n;++i) v|=(APPLE_AGX_U64)b[i]<<(8*i); return v;
@@ -86,7 +88,111 @@ static APPLE_AGX_WIN32_DRAW_PAYLOAD capture(AGX_WIN32_RELOC_CAPTURE *c) {
       d.FragmentRodataReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
   return d;
 }
+/* Catches using SHADER/UNIFORM bit layouts for native PRESHADER/table records. */
+static void native_usc_fields(void) {
+  setup(); AGX_WIN32_RELOC_CAPTURE c={0}; unsigned index,bytes=0;
+  assert(AgxWin32RelocBegin(&c,77,7,1,&ops,&fixture)==AgxRelocOk);
+  APPLE_AGX_WIN32_DRAW_PAYLOAD d=capture(&c);
+  assert(AgxWin32RelocReference(&c,5,AppleAgxWin32RoleUscPipeline,1,
+                               0x4000,0x340,&index)==AgxRelocOk && index==9);
+  d.Reserved[0]=9;
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationVdmPipelineOffset32,
+                           8,20,9,0)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,8u,9,2,3,0x80)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,9u,9,10,5,0x100)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,9u,9,18,5,0x180)==AgxRelocOk);
+  APPLE_AGX_U64 command[512]={0}; APPLE_AGX_WIN32_COMMAND_VIEW view;
+  assert(AgxWin32RelocSealVersion(&c,3u,&d,command,sizeof(command),&bytes)==AgxRelocOk);
+  assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==AppleAgxWin32AbiSuccess);
+  ADMISSION_WIN32_ALLOCATION_FACT facts[10]={0};
+  for(unsigned i=0;i<9;++i) {facts[i].AllocationToken=i+1;facts[i].Bytes=0x10000;}
+  facts[9]=facts[4];
+  static unsigned char image[0x40000]; APPLE_AGX_DYNAMIC_JOB job;
+  for(unsigned placement=0;placement<2;++placement) {
+    fixture.Placement=0x1100000000ULL+placement*0x100000;
+    for(unsigned count=0;count<128;++count) {
+      uint32_t packed[2];
+      struct AGX_USC_PRESHADER pre={.code=0x76543210};
+      struct AGX_USC_TEXTURE tex={.start=23,.count=count,.buffer=0x12345678};
+      struct AGX_USC_SAMPLER sampler={.start=17,.count=count,.buffer=0x23456788};
+      AGX_USC_PRESHADER_pack(packed,&pre); memcpy(fixture.Data[4]+0x4002,packed,8);
+      AGX_USC_TEXTURE_pack(packed,&tex); memcpy(fixture.Data[4]+0x400a,packed,8);
+      AGX_USC_SAMPLER_pack(packed,&sampler); memcpy(fixture.Data[4]+0x4012,packed,8);
+      assert(AppleAgxDynamicJobMaterialize(&view,facts,10,0x1100000000ULL,read_object,
+          resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobSuccess);
+      unsigned found=0;
+      for(unsigned i=0;i<job.ObjectCount;++i) if(job.Objects[i].ReferenceIndex==9) {
+        unsigned char *out=image+job.Objects[i].StorageOffset; ++found;
+        struct AGX_USC_PRESHADER p; struct AGX_USC_TEXTURE t; struct AGX_USC_SAMPLER s;
+        /* Native decoder requires uint32 alignment; packed stream does not. */
+        memcpy(packed,out+2,8); assert(AGX_USC_PRESHADER_unpack(stderr,(void *)packed,&p));
+        memcpy(packed,out+10,8); assert(AGX_USC_TEXTURE_unpack(stderr,(void *)packed,&t));
+        memcpy(packed,out+18,8); assert(AGX_USC_SAMPLER_unpack(stderr,(void *)packed,&s));
+        assert(p.code==0x40080u+placement*0x100000u);
+        assert(t.buffer==0x1100060100ULL+placement*0x100000 && t.start==23 && t.count==count);
+        assert(s.buffer==0x1100060180ULL+placement*0x100000 && s.start==17 && s.count==count);
+        pre.code=p.code; AGX_USC_PRESHADER_pack(packed,&pre); assert(!memcmp(packed,out+2,8));
+        tex.buffer=t.buffer; AGX_USC_TEXTURE_pack(packed,&tex); assert(!memcmp(packed,out+10,8));
+        sampler.buffer=s.buffer; AGX_USC_SAMPLER_pack(packed,&sampler); assert(!memcmp(packed,out+18,8));
+        assert(out[0]==0xa4 && out[1]==0xa4 && out[26]==0xa4);
+      }
+      assert(found==1);
+      /* Materialization never alters the native source stream. */
+      assert(read_le(fixture.Data[4]+0x4002,8)>>32==0x76543210);
+    }
+  }
+  APPLE_AGX_WIN32_COMMAND_HEADER *h=(void *)command;
+  APPLE_AGX_WIN32_RELOCATION *r=(void *)view.Relocations;
+  for(unsigned version=1;version<=2;++version) {
+    h->Version=version;
+    ((APPLE_AGX_WIN32_DRAW_PAYLOAD *)view.Draw)->Reserved[0]=(version==1 ? 0 : 9);
+    h->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+    APPLE_AGX_WIN32_COMMAND_VIEW invalid;
+    assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&invalid)==AppleAgxWin32AbiRelocation);
+  }
+  h->Version=3; ((APPLE_AGX_WIN32_DRAW_PAYLOAD *)view.Draw)->Reserved[0]=9;
+  for(unsigned which=7;which<10;++which) {
+    APPLE_AGX_WIN32_RELOCATION saved=r[which];
+    r[which].WidthBytes=6;
+    h->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+    APPLE_AGX_WIN32_COMMAND_VIEW invalid;
+    assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&invalid)==AppleAgxWin32AbiRelocation);
+    r[which]=saved; r[which].TargetReference=0;
+    h->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+    assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&invalid)==AppleAgxWin32AbiRelocation);
+    r[which]=saved;
+  }
+  h->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+  assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==AppleAgxWin32AbiSuccess);
+  r[8].TargetOffset=0x104; /* Valid range, invalid native table address alignment. */
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,10,0x1100000000ULL,read_object,
+      resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobRelocation);
+  r[8].TargetOffset=0x100;
+  fixture.Placement=0x8000000000ULL;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,10,fixture.Placement,read_object,
+      resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobRelocation);
+  fixture.Placement=0x1100000000ULL;
+  /* Isolate preshader underflow/overflow from earlier shader relocations. */
+  fixture.PreshaderOverride=0x10ffffffffULL;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,10,0x1100000000ULL,read_object,
+      resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobRelocation);
+  fixture.PreshaderOverride=0x1200000000ULL;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,10,0x1100000000ULL,read_object,
+      resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobRelocation);
+  fixture.PreshaderOverride=0;
+  /* Reserved bit63 is not an address bit. No native unpack of this intentionally
+   * reserved pattern; assert exact preservation without claiming a legal USC. */
+  fixture.Data[4][0x4011]|=0x80;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,10,0x1100000000ULL,read_object,
+      resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobSuccess);
+  for(unsigned i=0;i<job.ObjectCount;++i) if(job.Objects[i].ReferenceIndex==9)
+    assert(image[job.Objects[i].StorageOffset+17]&0x80);
+  assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  for(unsigned i=0;i<9;++i) assert(!fixture.Holds[i]);
+  puts("NATIVE USC v3: preshader/texture/sampler two placements, all counts PASS");
+}
 int main(void) {
+  native_usc_fields();
   setup(); AGX_WIN32_RELOC_CAPTURE c={0};
   assert(AgxWin32RelocBegin(&c,77,7,1,&ops,&fixture)==AgxRelocOk);
   APPLE_AGX_WIN32_DRAW_PAYLOAD d=capture(&c);

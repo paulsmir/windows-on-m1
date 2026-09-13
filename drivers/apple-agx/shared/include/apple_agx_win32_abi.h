@@ -8,6 +8,7 @@ typedef unsigned short APPLE_AGX_U16;
 #define APPLE_AGX_WIN32_COMMAND_MAGIC 0x43474157u /* "WAGC" */
 #define APPLE_AGX_WIN32_COMMAND_VERSION 1u
 #define APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES 2u
+#define APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC 3u
 #define APPLE_AGX_WIN32_COMMAND_MAX_BYTES 4096u
 #define APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES 16u
 #define APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS 64u
@@ -78,6 +79,9 @@ typedef enum _APPLE_AGX_WIN32_RELOCATION_KIND {
   AppleAgxWin32RelocationUscBufferAddress40 = 5u,
   AppleAgxWin32RelocationVdmPipelineOffset32 = 6u,
   AppleAgxWin32RelocationPppStateAddress40 = 7u,
+  /* v3 only; retains the v2 draw layout and separate fragment USC. */
+  AppleAgxWin32RelocationUscPreshaderOffset32 = 8u,
+  AppleAgxWin32RelocationUscTableAddress39 = 9u,
 } APPLE_AGX_WIN32_RELOCATION_KIND;
 
 typedef struct _APPLE_AGX_WIN32_COMMAND_HEADER {

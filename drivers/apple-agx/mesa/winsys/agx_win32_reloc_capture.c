@@ -7,6 +7,8 @@ static unsigned width(unsigned kind) {
     case AppleAgxWin32RelocationPipelineAddress:
     case AppleAgxWin32RelocationDescriptorAddress:
     case AppleAgxWin32RelocationUscBufferAddress40:
+    case AppleAgxWin32RelocationUscPreshaderOffset32:
+    case AppleAgxWin32RelocationUscTableAddress39:
     case AppleAgxWin32RelocationPppStateAddress40: return 8;
     case AppleAgxWin32RelocationUscShaderOffset32: return 6;
     case AppleAgxWin32RelocationVdmPipelineOffset32: return 4;
@@ -122,7 +124,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocSealVersion(
     APPLE_AGX_U32 capacity, APPLE_AGX_U32 *bytes) {
   if(!c || !draw || !command || !bytes) return AgxRelocArgument;
   if(commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
-      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES)
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
     return AgxRelocCommand;
   if(c->State!=RECORDING) return AgxRelocState;
   AGX_WIN32_DRAW_REQUEST request={0}; request.Generation=c->Generation;

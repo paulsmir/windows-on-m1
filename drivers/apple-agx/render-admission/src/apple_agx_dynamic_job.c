@@ -80,6 +80,27 @@ static int dynamic_patch(void *Destination,
     dynamic_write_le(Destination, encoded, 6u);
     *EncodedValue = relative;
     return 1;
+  case AppleAgxWin32RelocationUscPreshaderOffset32:
+    if (Relocation->WidthBytes != 8u || GpuAddress < ShaderBase ||
+        GpuAddress - ShaderBase > 0xffffffffULL)
+      return 0;
+    relative = GpuAddress - ShaderBase;
+    current = dynamic_read_le(Destination, 8u);
+    encoded = (current & 0xffffffffULL) | (relative << 32u);
+    dynamic_write_le(Destination, encoded, 8u);
+    *EncodedValue = relative;
+    return 1;
+  case AppleAgxWin32RelocationUscTableAddress39:
+    if (Relocation->WidthBytes != 8u || (GpuAddress & 7ULL) != 0ULL ||
+        GpuAddress >= (1ULL << 39u))
+      return 0;
+    current = dynamic_read_le(Destination, 8u);
+    /* Native TEXTURE/SAMPLER count occupies bits20..26; address is
+     * bits27..62 (shr3). Preserve all non-address bits, including bit63. */
+    encoded = (current & ~0x7ffffffff8000000ULL) | (GpuAddress << 24u);
+    dynamic_write_le(Destination, encoded, 8u);
+    *EncodedValue = GpuAddress;
+    return 1;
   case AppleAgxWin32RelocationUscBufferAddress40:
     if (Relocation->WidthBytes != 8u || (GpuAddress & 3ULL) != 0ULL ||
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
