@@ -7,6 +7,7 @@ Native BO owner/capture connection: 863bae9.
 Native USC versioned relocation fields: 00c5bdb.
 Construction address -> live Windows owner/capture: a7c9e6d.
 Actual native pipeline emitter capture: f287e58.
+Native v3 General table source gate: e512912.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -110,6 +111,12 @@ Descriptor/Scissor/DepthBias refs; preserve shader/USC/encoder class restriction
 Decision: agent_tasks/AD04-NATIVE-SOURCE-CLASS-DECISION.md. Separately resolve the
 legacy reference-length multiple4 rule (actual USC38/62 and rodata2 are exposed);
 do not silently pad/reclassify or bundle that independent invariant.
+e512912 closes the narrowly versioned General table-source gate with x64 execution
+and ARM64 build/link evidence. The current first invariant is now only byte-range
+representability: native USC streams can be 38/62 bytes and final rodata can be
+2 bytes, while transport universally requires Reference.Bytes multiple4.
+Source-first decision required before implementation; no synthetic padding or
+spurious source range expansion is accepted.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
