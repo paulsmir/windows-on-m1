@@ -11,6 +11,7 @@ Native v3 General table source gate: e512912.
 Native v3 exact source spans: 02b8dbf.
 Native CPU-to-construction source bridge: 1821585.
 Nested native emission scope: 04e9340.
+Initial native encoder Windows intent: 5ecf767.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
