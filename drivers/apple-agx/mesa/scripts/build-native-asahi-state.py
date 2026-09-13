@@ -94,6 +94,29 @@ if args.windows_platform_declarations:
              '   if (!bo) return (struct agx_ptr){0};\n   void *mapped = agx_bo_map(bo);\n   if (!mapped) return (struct agx_ptr){0};\n   pool->transient_offset = offset + sz;\n\n   struct agx_ptr ret = {\n      .cpu = (char *)mapped + offset,'),
             ('   memcpy(transfer.cpu, data, sz);',
              '   if (!transfer.cpu) return 0;\n   memcpy(transfer.cpu, data, sz);')])
+        # The initial VDM/CDM allocation is a source-defined encoder intent.
+        # Keep the shared Batch pool unchanged: continuation streams remain a
+        # separate General-backed/unsupported contract.
+        change('src/gallium/drivers/asahi/agx_batch.c',
+            'b99fac69d414e0f34420ef38243d31da644745f62d88a50835d734e627997778',[
+            ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#endif'),
+            ('#include "agx_state.h"', '#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"'),
+            ('struct agx_bo *bo = agx_bo_create(dev, 0x80000, 0, 0, "Encoder");',
+             'struct agx_bo *bo = AgxWin32AsahiEncoderCreate(dev, 0x80000, 0, "Encoder");')])
+        batch_source=(out/'src/gallium/drivers/asahi/agx_batch.c').read_text()
+        batch_begin=batch_source.index('struct agx_encoder\nagx_encoder_allocate(')
+        batch_end=batch_source.index('\n}\n',batch_begin)+3
+        batch_body=batch_source[batch_begin:batch_end]
+        (out/'native_batch_encoder_contract.c').write_text(
+            '#include "gallium/drivers/asahi/agx_state.h"\n'
+            '#include "agx_win32_asahi_bo.h"\n'+batch_body+
+            '\nstruct agx_encoder AgxWin32NativeEncoderAllocateTest('
+            'struct agx_batch *batch, struct agx_device *dev) {\n'
+            '  return agx_encoder_allocate(batch, dev);\n}\n')
+        overlays['src/gallium/drivers/asahi/agx_batch.c']={
+            'before':'b99fac69d414e0f34420ef38243d31da644745f62d88a50835d734e627997778',
+            'after':hashlib.sha256((out/'src/gallium/drivers/asahi/agx_batch.c').read_bytes()).hexdigest(),
+            'focused_encoder_body_sha256':hashlib.sha256(batch_body.encode()).hexdigest()}
     # Canonical helper has no arguments. Windows cannot represent the GNU
     # zero-sized host record: keep an opaque host placeholder and explicitly
     # dispatch the source-declared zero byte payload. Other generated argument
@@ -347,8 +370,23 @@ if run.returncode==0 and args.windows_platform_declarations:
         result['objects']={name:hashlib.sha256((out/name).read_bytes()).hexdigest()
                            for name in ('agx_state.obj','pool.obj')}
         if args.project:
-            for name in ('agx_win32_asahi_bo','agx_win32_asahi_capture','agx_win32_asahi_pipeline','agx_win32_asahi_pool_test','agx_win32_asahi_pipeline_test','native_pipeline_contract'):
-                src=(out/(name+'.c')) if name=='native_pipeline_contract' else args.project/'drivers/apple-agx/mesa/winsys'/(name+'.c')
+            batch=out/'src/gallium/drivers/asahi/agx_batch.c'
+            batch_command=[str(llvm/'clang-cl.exe'),*flags,*('/I'+str(p) for p in includes),
+                           '/c',str(batch),'/Fo'+str(out/'agx_batch.obj')]
+            batch_run=subprocess.run(batch_command,cwd=build,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+            (out/'batch-build.log').write_bytes(batch_run.stdout)
+            result['batch_exit']=batch_run.returncode
+            if batch_run.returncode:
+                # Linux DRM/virtio tail is intentionally outside this focused
+                # Windows encoder-allocation unit. Preserve its first error as
+                # evidence without suppressing the independently executable
+                # original agx_encoder_allocate contract below.
+                result['batch_first_error']=batch_run.stdout.decode(errors='replace')[-3000:]
+            else:
+                result['objects']['agx_batch.obj']=hashlib.sha256((out/'agx_batch.obj').read_bytes()).hexdigest()
+        if args.project and result['exit']==0:
+            for name in ('agx_win32_asahi_bo','agx_win32_asahi_capture','agx_win32_asahi_pipeline','agx_win32_asahi_pool_test','agx_win32_asahi_pipeline_test','native_pipeline_contract','native_batch_encoder_contract'):
+                src=(out/(name+'.c')) if name in ('native_pipeline_contract','native_batch_encoder_contract') else args.project/'drivers/apple-agx/mesa/winsys'/(name+'.c')
                 command=[str(llvm/'clang-cl.exe'),*flags,*('/I'+str(p) for p in includes),
                          '/c',str(src),'/Fo'+str(out/(name+'.obj'))]
                 built=subprocess.run(command,cwd=build,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)

@@ -25,7 +25,7 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
     return 0;
   }
   b->Native=native; b->Ops=*ops; b->Owner=owner; b->LiveBos=0; b->Failed=0; b->UnpublishedBo=NULL;
-  b->ActiveCapture=NULL; b->ActiveEmission=NULL;
+  b->ActiveCapture=NULL; b->ActiveEmission=NULL; b->EncoderAllocationIntent=0;
   native->windows_private=b; native->shader_base=base;
   native->ops.bo_mmap=native_map;
   return 1;
@@ -64,7 +64,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   if(align<0x4000) align=0x4000;
   if(align!=0x4000) return NULL; /* construction allocator currently guarantees 16 KiB */
   cls=(flags&AGX_BO_EXEC)?AgxWin32BufferClassShader:
-      ((flags&AGX_BO_LOW_VA)?AgxWin32BufferClassEncoder:AgxWin32BufferClassGeneral);
+      ((flags&AGX_BO_LOW_VA || b->EncoderAllocationIntent)?AgxWin32BufferClassEncoder:AgxWin32BufferClassGeneral);
   access=AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead;
   if(cls==AgxWin32BufferClassGeneral) {
     access|=AppleAgxWin32BufferCpuRead;
@@ -102,6 +102,29 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   }
   ++b->LiveBos;
   return &bo->Base;
+}
+
+struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *native,
+    size_t bytes,unsigned align,const char *label) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  struct agx_bo *bo;
+  if(!b || b->Native!=native || b->Failed || b->EncoderAllocationIntent) return NULL;
+  b->EncoderAllocationIntent=1;
+  bo=agx_bo_create(native,bytes,align,0,label);
+  b->EncoderAllocationIntent=0;
+  return bo;
+}
+
+int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
+    APPLE_AGX_U32 *classId) {
+  struct windows_bo *bo=(struct windows_bo *)base;
+  AGX_WIN32_RELOC_ALLOCATION identity;
+  if(classId) *classId=0;
+  if(!b || !base || !classId || !AgxWin32AsahiIdentity(b,base,&identity) ||
+     bo->Backing.Buffer.ClassId<AgxWin32BufferClassGeneral ||
+     bo->Backing.Buffer.ClassId>AgxWin32BufferClassEncoder) return 0;
+  *classId=bo->Backing.Buffer.ClassId;
+  return 1;
 }
 
 static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed) {

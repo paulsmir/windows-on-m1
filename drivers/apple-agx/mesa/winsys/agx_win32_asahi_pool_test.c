@@ -1,4 +1,5 @@
 #include "agx_device.h"
+#include "gallium/drivers/asahi/agx_state.h"
 #include "pool.h"
 #include "agx_win32_asahi_bo.h"
 #include "agx_win32_asahi_capture.h"
@@ -6,6 +7,8 @@
 #include "agx_pack.h"
 #include <stdio.h>
 #include <string.h>
+
+struct agx_encoder AgxWin32NativeEncoderAllocateTest(struct agx_batch *,struct agx_device *);
 
 /* Calls the original native pool implementation; only Windows runtime callbacks
  * are controlled by the enclosing UMD owner test. No draw packet is fabricated. */
@@ -21,6 +24,16 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
   unsigned errors=0;
 #define CHECK_NATIVE(x) do { if(!(x)) { ++errors; fprintf(stderr,"NATIVE_POOL line=%u %s\n",(unsigned)__LINE__,#x); } } while(0)
   CHECK_NATIVE(AgxWin32AsahiAttach(backend,&native,screen,ops,owner,0x1100000000ULL));
+  {
+    struct agx_batch batch={0};
+    struct agx_encoder native_encoder=AgxWin32NativeEncoderAllocateTest(&batch,&native);
+    struct agx_bo *encoder=native_encoder.bo;
+    APPLE_AGX_U32 classId=0;
+    CHECK_NATIVE(encoder && AgxWin32AsahiClass(backend,encoder,&classId) &&
+                 classId==AgxWin32BufferClassEncoder && native_encoder.current &&
+                 native_encoder.end-native_encoder.current==0x80000);
+    agx_bo_unreference(&native,encoder);
+  }
   agx_pool_init(&pool,&native,"Windows native pipeline",AGX_BO_LOW_VA,false);
   agx_pool_init(&state_pool,&native,"Windows state source",0,false);
   struct agx_ptr a=agx_pool_alloc_aligned_with_bo(&pool,64,64,&first);

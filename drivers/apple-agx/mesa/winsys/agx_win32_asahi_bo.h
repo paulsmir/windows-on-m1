@@ -27,6 +27,7 @@ typedef struct {
   void *UnpublishedBo; /* single failed-create rollback, never exposed to Mesa */
   struct _AGX_WIN32_ASAHI_CAPTURE *ActiveCapture;
   void *ActiveEmission;
+  int EncoderAllocationIntent;
   int Failed;
 } AGX_WIN32_ASAHI_BACKEND;
 
@@ -46,5 +47,11 @@ int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
 int AgxWin32AsahiFindCpuAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
     APPLE_AGX_U32 Generation, const void *Cpu, APPLE_AGX_U64 Bytes,
     struct agx_bo **Bo, APPLE_AGX_U64 *Address, APPLE_AGX_U64 *Offset);
+/* Explicit source-level intent for native initial VDM/CDM allocation. This
+ * must be called only by the transformed agx_encoder_allocate site. */
+struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *, size_t,
+    unsigned, const char *);
+int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
+    APPLE_AGX_U32 *ClassId);
 
 #endif

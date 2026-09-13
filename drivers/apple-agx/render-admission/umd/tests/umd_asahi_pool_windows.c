@@ -91,7 +91,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   AdmissionUmdAsahiOwnerOperations(&ops);
   PoolErrors+=AgxWin32AsahiPoolTest(&PoolDevice.Screen,&ops,&owner,&backend,PoolHolds);
   PoolErrors+=AgxWin32AsahiPipelineTest(&PoolDevice.Screen,&ops,&owner,&backend);
-  if(PoolCreates!=6 || PoolMaps!=6 || PoolUnlocks!=6 || PoolDeletes!=6 || PoolDevice.NativeBackendCount)
+  if(PoolCreates!=7 || PoolMaps!=7 || PoolUnlocks!=7 || PoolDeletes!=7 || PoolDevice.NativeBackendCount)
     ++PoolErrors;
   for(unsigned i=0;i<8;++i) if(PoolMemory[i]) ++PoolErrors;
   return PoolErrors;

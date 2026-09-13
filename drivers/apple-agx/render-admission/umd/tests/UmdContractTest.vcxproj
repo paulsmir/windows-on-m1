@@ -74,6 +74,7 @@
     <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline.obj" />
     <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline_test.obj" />
     <Object Include="$(NativeObjectRoot)\native_pipeline_contract.obj" />
+    <Object Include="$(NativeObjectRoot)\native_batch_encoder_contract.obj" />
     <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
