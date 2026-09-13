@@ -71,9 +71,15 @@
     <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+    <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline.obj" />
+    <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline_test.obj" />
+    <Object Include="$(NativeObjectRoot)\native_pipeline_contract.obj" />
     <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+    <Link><OptimizeReferences>true</OptimizeReferences></Link>
+  </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_pipe_screen.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />

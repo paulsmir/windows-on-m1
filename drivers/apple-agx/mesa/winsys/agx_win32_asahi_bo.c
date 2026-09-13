@@ -25,6 +25,7 @@ int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
     return 0;
   }
   b->Native=native; b->Ops=*ops; b->Owner=owner; b->LiveBos=0; b->Failed=0; b->UnpublishedBo=NULL;
+  b->ActiveCapture=NULL; b->ActiveEmission=NULL;
   native->windows_private=b; native->shader_base=base;
   native->ops.bo_mmap=native_map;
   return 1;
@@ -143,7 +144,7 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *b) {
   return b->LiveBos==0 && b->UnpublishedBo==NULL;
 }
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *b) {
-  if(!b || !b->Native || !AgxWin32AsahiCollect(b)) return 0;
+  if(!b || !b->Native || b->ActiveCapture || b->ActiveEmission || !AgxWin32AsahiCollect(b)) return 0;
   b->Native->windows_private=NULL;
   b->Native->ops.bo_mmap=NULL;
   b->Ops.Leave(b->Owner);

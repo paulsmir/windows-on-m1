@@ -6,6 +6,7 @@
 
 struct agx_device;
 struct agx_bo;
+struct _AGX_WIN32_ASAHI_CAPTURE;
 typedef struct {
   int (*Enter)(void *, AGX_WIN32_SCREEN *);
   void (*Leave)(void *);
@@ -24,6 +25,8 @@ typedef struct {
   void *Owner;
   APPLE_AGX_U32 LiveBos;
   void *UnpublishedBo; /* single failed-create rollback, never exposed to Mesa */
+  struct _AGX_WIN32_ASAHI_CAPTURE *ActiveCapture;
+  void *ActiveEmission;
   int Failed;
 } AGX_WIN32_ASAHI_BACKEND;
 

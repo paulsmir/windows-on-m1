@@ -114,6 +114,136 @@ if args.windows_platform_declarations:
     target.write_text(text)
     overlays['src/asahi/lib/libagx_shaders.h']['after']=hashlib.sha256(target.read_bytes()).hexdigest()
     source=out/'src/gallium/drivers/asahi/agx_state.c'
+    if args.project:
+        # Register edges at the actual native emission points. The immutable
+        # source is hash checked; no replacement state producer is introduced.
+        state=source.read_text()
+        begin=state.index('static uint32_t\nagx_build_pipeline(')
+        end=state.index('\nstatic void\nagx_launch_internal(',begin)
+        original=state[begin:end]
+        pipeline=original
+        def emit_replace(old,new):
+            global pipeline
+            if pipeline.count(old)!=1: raise SystemExit('Ambiguous native pipeline capture anchor')
+            pipeline=pipeline.replace(old,new)
+        emit_replace('   struct agx_usc_builder b = agx_usc_builder(t.cpu, usc_size);',
+            '''   AGX_WIN32_ASAHI_PIPELINE capture;
+   if (!AgxWin32AsahiPipelineBegin(dev, t.cpu, t.gpu, usc_size, &capture))
+      return 0;
+   struct agx_usc_builder b = agx_usc_builder(t.cpu, usc_size);''')
+        emit_replace('         cfg.buffer = batch->stage_uniforms[stage].texture_base;\n      }',
+            '''         cfg.buffer = batch->stage_uniforms[stage].texture_base;
+      }
+      AgxWin32AsahiPipelineRecord(&capture, b.head,
+         AppleAgxWin32RelocationUscTableAddress39,
+         batch->stage_uniforms[stage].texture_base,
+         MIN2(batch->texture_count[stage], AGX_NUM_TEXTURE_STATE_REGS) * AGX_TEXTURE_LENGTH,
+         AppleAgxWin32RoleDescriptor);''')
+        emit_replace('         cfg.buffer = batch->samplers[stage];\n      }',
+            '''         cfg.buffer = batch->samplers[stage];
+      }
+      AgxWin32AsahiPipelineRecord(&capture, b.head,
+         AppleAgxWin32RelocationUscTableAddress39, batch->samplers[stage],
+         batch->sampler_count[stage] * (AGX_SAMPLER_LENGTH +
+            (ctx->stage[stage].custom_borders ? AGX_BORDER_LENGTH : 0)),
+         AppleAgxWin32RoleDescriptor);''')
+        emit_replace('                      table_ptr + cs->push[i].offset);',
+            '''                      table_ptr + cs->push[i].offset);
+      AgxWin32AsahiPipelineRecord(&capture, b.head,
+         AppleAgxWin32RelocationUscBufferAddress40,
+         table_ptr + cs->push[i].offset, cs->push[i].length * 2,
+         AppleAgxWin32RoleConstant);''')
+        emit_replace('      agx_usc_immediates(&b, &cs->b.info.rodata, cs->bo->va->addr);',
+            '''      uint8_t *rodata_begin = b.head;
+      agx_usc_immediates(&b, &cs->b.info.rodata, cs->bo->va->addr);
+      for (unsigned range = 0; range < constant_push_ranges; ++range) {
+         unsigned offset = range * 64;
+         AgxWin32AsahiPipelineRecord(&capture,
+            rodata_begin + (range + 1) * AGX_USC_UNIFORM_LENGTH,
+            AppleAgxWin32RelocationUscBufferAddress40,
+            cs->bo->va->addr + cs->b.info.rodata.offset + offset * 2,
+            MIN2(64, cs->b.info.rodata.size_16 - offset) * 2,
+            AppleAgxWin32RoleShaderRodata);
+      }''')
+        # Scratch is not a captured graph yet. Reject before allocating or
+        # publishing it; do not supply a successful scratch placeholder.
+        scratch_start=pipeline.index('   if (max_scratch_size > 0) {')
+        scratch_end=pipeline.index('\n   if (stage == MESA_SHADER_FRAGMENT)',scratch_start)
+        pipeline=pipeline[:scratch_start]+'''   bool linked_scratch_unsupported = false;
+   if (linked) {
+      uint32_t packed_regs;
+      struct AGX_USC_REGISTERS regs;
+      memcpy(&packed_regs, &linked->regs, sizeof(packed_regs));
+      linked_scratch_unsupported =
+         !AGX_USC_REGISTERS_unpack(NULL, (const uint8_t *)&packed_regs, &regs) ||
+         regs.spill_size != 0;
+   }
+   if (max_scratch_size > 0 || linked_scratch_unsupported) {
+      capture.Failed = 1;
+      (void)AgxWin32AsahiPipelineFinish(&capture, b.head);
+      return 0;
+   }
+'''+pipeline[scratch_end:]
+        emit_replace('      agx_usc_push_packed(&b, SHADER, linked->shader);',
+            '''      agx_usc_push_packed(&b, SHADER, linked->shader);
+      AgxWin32AsahiPipelineRecord(&capture, b.head,
+         AppleAgxWin32RelocationUscShaderOffset32, linked->bo->va->addr,
+         linked->bo->size, AppleAgxWin32RoleShader);''')
+        emit_replace('         cfg.unk_2 = 3;\n      }',
+            '''         cfg.unk_2 = 3;
+      }
+      AgxWin32AsahiPipelineRecord(&capture, b.head,
+         AppleAgxWin32RelocationUscShaderOffset32,
+         cs->bo->va->addr + cs->b.info.main_offset,
+         cs->b.info.main_size,
+         AppleAgxWin32RoleShader);''')
+        emit_replace('         cfg.spill_size = cs->b.info.scratch_size\n                             ? agx_scratch_get_bucket(cs->b.info.scratch_size)\n                             : 0;',
+            '         cfg.spill_size = 0; /* Nonzero scratch rejected above. */')
+        emit_replace('            agx_usc_addr(dev, cs->bo->va->addr + cs->b.info.preamble_offset);\n      }',
+            '''            agx_usc_addr(dev, cs->bo->va->addr + cs->b.info.preamble_offset);
+      }
+      unsigned preamble_end = cs->b.info.binary_size;
+      if (cs->b.info.main_offset > cs->b.info.preamble_offset)
+         preamble_end = MIN2(preamble_end, cs->b.info.main_offset);
+      if (cs->b.info.rodata.size_16 &&
+          cs->b.info.rodata.offset > cs->b.info.preamble_offset)
+         preamble_end = MIN2(preamble_end, cs->b.info.rodata.offset);
+      AgxWin32AsahiPipelineRecord(&capture, b.head,
+         AppleAgxWin32RelocationUscPreshaderOffset32,
+         cs->bo->va->addr + cs->b.info.preamble_offset,
+         cs->b.info.preamble_offset < preamble_end ?
+            preamble_end - cs->b.info.preamble_offset : 0,
+         AppleAgxWin32RoleShader);''')
+        emit_replace('   return agx_usc_addr(dev, t.gpu);',
+            '''   if (!AgxWin32AsahiPipelineFinish(&capture, b.head))
+      return 0;
+   return agx_usc_addr(dev, t.gpu);''')
+        # Only this original function is exported to the controlled contract
+        # test. No replacement function body or renderer is compiled there.
+        pipeline+='''
+#ifdef AGX_WIN32_NATIVE_PIPELINE_TEST
+uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
+   struct agx_compiled_shader *cs, struct agx_linked_shader *linked,
+   mesa_shader_stage stage) {
+   return agx_build_pipeline(batch, cs, linked, stage, 0, 0);
+}
+#endif
+'''
+        # One shared body is compiled both by the native state unit and the
+        # focused contract unit. This avoids resolving unrelated Gallium/NIR
+        # functions just to execute this function with MSVC's linker.
+        inc=out/'src/gallium/drivers/asahi/agx_win32_pipeline.inc'
+        inc.write_text(state[:state.index('#include')]+
+            '#include "agx_win32_asahi_pipeline.h"\n'+pipeline)
+        overlays['src/gallium/drivers/asahi/agx_win32_pipeline.inc']={
+            'source_function_sha256':hashlib.sha256(original.encode()).hexdigest(),
+            'after':hashlib.sha256(inc.read_bytes()).hexdigest()}
+        change('src/gallium/drivers/asahi/agx_state.c',digest,
+            [(original,'#include "agx_win32_pipeline.inc"\n')])
+        (out/'native_pipeline_contract.c').write_text(
+            '#include "gallium/drivers/asahi/agx_state.h"\n'
+            '#include "agx_usc.h"\n#include "agx_linker.h"\n'
+            '#include "gallium/drivers/asahi/agx_win32_pipeline.inc"\n')
 
 entry = next(e for e in json.loads((build/'compile_commands.json').read_text())
              if e['file'].replace('\\','/').endswith('/nir.c'))
@@ -131,6 +261,8 @@ flags = [a for a in flags if not a.startswith(('-I','/I','/Fo','/Fd'))
 # Meson command comes from the MSVC NIR graph. This invocation uses clang-cl,
 # whose packed attribute is required by native shared GPU parameter structs.
 flags.append('/DHAVE_FUNC_ATTRIBUTE_PACKED=1')
+if args.project:
+    flags += ['/Gy','/DAGX_WIN32_NATIVE_PIPELINE_TEST=1']
 if args.architecture=='arm64': flags.append('--target=aarch64-pc-windows-msvc')
 includes = [build/'src', build/'include', mesa/'include', mesa/'src',
     mesa/'src/gallium/include', mesa/'src/gallium/auxiliary',
@@ -215,8 +347,8 @@ if run.returncode==0 and args.windows_platform_declarations:
         result['objects']={name:hashlib.sha256((out/name).read_bytes()).hexdigest()
                            for name in ('agx_state.obj','pool.obj')}
         if args.project:
-            for name in ('agx_win32_asahi_bo','agx_win32_asahi_capture','agx_win32_asahi_pool_test'):
-                src=args.project/'drivers/apple-agx/mesa/winsys'/(name+'.c')
+            for name in ('agx_win32_asahi_bo','agx_win32_asahi_capture','agx_win32_asahi_pipeline','agx_win32_asahi_pool_test','agx_win32_asahi_pipeline_test','native_pipeline_contract'):
+                src=(out/(name+'.c')) if name=='native_pipeline_contract' else args.project/'drivers/apple-agx/mesa/winsys'/(name+'.c')
                 command=[str(llvm/'clang-cl.exe'),*flags,*('/I'+str(p) for p in includes),
                          '/c',str(src),'/Fo'+str(out/(name+'.obj'))]
                 built=subprocess.run(command,cwd=build,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)

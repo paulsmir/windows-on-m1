@@ -2,6 +2,8 @@
 #include "pool.h"
 #include "agx_win32_asahi_bo.h"
 #include "agx_win32_asahi_capture.h"
+#include "agx_win32_asahi_pipeline.h"
+#include "agx_pack.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -67,6 +69,43 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
       capture.Capture.Allocations[1].Serial==identity.Serial &&
       capture.Capture.References[0].AllocationIndex==0 &&
       capture.Capture.References[1].AllocationIndex==0);
+  /* Native USC emission into real pool memory: metadata comes from its live
+   * Windows owner, not a synthetic token table. */
+  CHECK_NATIVE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,2)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureActivate(&capture));
+  CHECK_NATIVE(!AgxWin32AsahiCaptureActivate(&capture));
+  AGX_WIN32_ASAHI_PIPELINE emission={0};
+  CHECK_NATIVE(AgxWin32AsahiPipelineBegin(&native,a.cpu,a.gpu,64,&emission));
+  CHECK_NATIVE(!AgxWin32AsahiCaptureDeactivate(&capture));
+  agx_pack(a.cpu,USC_TEXTURE,cfg) { cfg.start=0; cfg.count=1; cfg.buffer=b.gpu; }
+  AgxWin32AsahiPipelineRecord(&emission,(char *)a.cpu+8,
+      AppleAgxWin32RelocationUscTableAddress39,b.gpu,AGX_TEXTURE_LENGTH,
+      AppleAgxWin32RoleDescriptor);
+  CHECK_NATIVE(AgxWin32AsahiPipelineFinish(&emission,(char *)a.cpu+8));
+  CHECK_NATIVE(capture.Capture.ReferenceCount==2 && capture.Capture.RelocationCount==1 &&
+      capture.Capture.References[0].Bytes==8 && capture.Capture.References[1].Offset==64 &&
+      capture.Capture.Relocations[0].TargetReference==1);
+  CHECK_NATIVE(AgxWin32AsahiCaptureDeactivate(&capture));
+  CHECK_NATIVE(!AgxWin32AsahiPipelineBegin(&native,a.cpu,a.gpu,64,&emission));
+  CHECK_NATIVE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,3)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureActivate(&capture));
+  CHECK_NATIVE(!AgxWin32AsahiPipelineBegin(&native,b.cpu,a.gpu,64,&emission));
+  CHECK_NATIVE(capture.Capture.ReferenceCount==0);
+  CHECK_NATIVE(AgxWin32AsahiPipelineBegin(&native,a.cpu,a.gpu,64,&emission));
+  agx_pack(a.cpu,USC_TEXTURE,cfg) { cfg.count=1; cfg.buffer=b.gpu+8; }
+  AgxWin32AsahiPipelineRecord(&emission,(char *)a.cpu+8,
+      AppleAgxWin32RelocationUscTableAddress39,b.gpu,AGX_TEXTURE_LENGTH,
+      AppleAgxWin32RoleDescriptor);
+  CHECK_NATIVE(!AgxWin32AsahiPipelineFinish(&emission,(char *)a.cpu+8));
+  CHECK_NATIVE(capture.Capture.State==0 && first->refcnt==1);
+  CHECK_NATIVE(AgxWin32AsahiCaptureDeactivate(&capture));
+  CHECK_NATIVE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,4)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureReference(&capture,first,AppleAgxWin32RoleUscPipeline,
+      AppleAgxWin32AccessRead,0,64,&reference)==AgxRelocOk);
+  CHECK_NATIVE(AgxWin32AsahiCaptureReference(&capture,first,AppleAgxWin32RoleDescriptor,
+      AppleAgxWin32AccessRead,64,128,&reference)==AgxRelocOk);
   holds(owner,1);
   agx_pool_cleanup(&pool);
   CHECK_NATIVE(first->refcnt==2);

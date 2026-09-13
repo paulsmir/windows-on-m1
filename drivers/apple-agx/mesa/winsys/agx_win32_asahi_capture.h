@@ -2,7 +2,7 @@
 #define AGX_WIN32_ASAHI_CAPTURE_H
 #include "agx_win32_asahi_bo.h"
 
-typedef struct {
+typedef struct _AGX_WIN32_ASAHI_CAPTURE {
   AGX_WIN32_RELOC_CAPTURE Capture;
   AGX_WIN32_ASAHI_BACKEND *Backend;
   APPLE_AGX_U32 Count;

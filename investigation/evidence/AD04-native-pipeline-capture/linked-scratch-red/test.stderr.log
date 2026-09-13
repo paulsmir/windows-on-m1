@@ -1,0 +1,2 @@
+NATIVE_PIPELINE line=108 AgxWin32NativeBuildPipelineTest(&batch,&cs,&linked,MESA_SHADER_VERTEX)==0
+NATIVE_PIPELINE line=109 capture.Capture.State==0

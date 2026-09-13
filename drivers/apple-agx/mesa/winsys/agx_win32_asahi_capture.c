@@ -46,7 +46,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureBegin(AGX_WIN32_ASAHI_CAPTURE *c,
     AGX_WIN32_ASAHI_BACKEND *backend,APPLE_AGX_U64 owner,APPLE_AGX_U32 generation,
     APPLE_AGX_U64 request) {
   const AGX_WIN32_RELOC_OPERATIONS ops={query,retain,release,retain_exact};
-  if(!c || !backend || !backend->Native || backend->Failed) return AgxRelocArgument;
+  if(!c || !backend || !backend->Native || backend->Failed ||
+     backend->ActiveCapture || backend->ActiveEmission) return AgxRelocArgument;
   AGX_WIN32_RELOC_RESULT result=AgxWin32RelocBegin(&c->Capture,owner,generation,request,&ops,c);
   if(result!=AgxRelocOk) return result;
   c->Backend=backend; c->Count=0;

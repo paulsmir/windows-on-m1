@@ -26,13 +26,16 @@ if ($buildExit -eq 0) {
     $exe="$ResultRoot\UmdContractTest.exe"
     $result.exe_sha256=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
     if($Architecture -eq 'x64') {
-        & $exe *> "$ResultRoot\test.log"
-        $result.execution=$LASTEXITCODE
+        # Native stderr is test evidence, not a PowerShell terminating error.
+        $test=Start-Process -FilePath $exe -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$ResultRoot\test.log" -RedirectStandardError "$ResultRoot\test.stderr.log"
+        $result.execution=$test.ExitCode
     }
 }
 $result | ConvertTo-Json | Set-Content "$ResultRoot\result.json"
 $result | ConvertTo-Json
 if($buildExit) { Get-Content "$ResultRoot\build.log" -Tail 40; exit $buildExit }
 if($result.execution -ne 'NOT_RUN' -and $result.execution -ne 0) {
-    Get-Content "$ResultRoot\test.log" -Tail 40; exit $result.execution
+    Get-Content "$ResultRoot\test.log" -Tail 40
+    Get-Content "$ResultRoot\test.stderr.log" -Tail 40
+    exit $result.execution
 }

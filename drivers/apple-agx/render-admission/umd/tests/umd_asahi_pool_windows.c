@@ -2,7 +2,9 @@
 static ADMISSION_UMD_DEVICE PoolDevice;
 static ADMISSION_UMD_ADAPTER PoolAdapter;
 static D3DDDI_DEVICECALLBACKS PoolCallbacks;
-static void *PoolMemory;
+static void *PoolMemory[8];
+static D3DKMT_HANDLE PoolHandles[8];
+static unsigned PoolNextHandle;
 static unsigned PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,PoolErrors;
 static int PoolFailAllocation;
 static unsigned PoolFailDeallocation;
@@ -10,28 +12,38 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
   const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
   (void)h;
   if(PoolFailAllocation) return E_OUTOFMEMORY;
-  if(PoolMemory || a->NumAllocations!=1 || desc->Allocation.Size!=0x40000 ||
-     desc->ClassId!=AgxWin32BufferClassEncoder) return E_INVALIDARG;
-  PoolMemory=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,(SIZE_T)desc->Allocation.Size);
-  if(!PoolMemory) return E_OUTOFMEMORY;
-  ++PoolCreates; a->pAllocationInfo->hAllocation=0x701;
+  if(a->NumAllocations!=1 || !desc->Allocation.Size || desc->Allocation.Size>0x100000 ||
+     (desc->Allocation.Size&0x3fff) || desc->ClassId<AgxWin32BufferClassGeneral ||
+     desc->ClassId>AgxWin32BufferClassEncoder) return E_INVALIDARG;
+  unsigned slot;
+  for(slot=0;slot<8 && PoolMemory[slot];++slot) {}
+  if(slot==8) return E_OUTOFMEMORY;
+  PoolMemory[slot]=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,(SIZE_T)desc->Allocation.Size);
+  if(!PoolMemory[slot]) return E_OUTOFMEMORY;
+  ++PoolCreates; PoolHandles[slot]=0x700+(++PoolNextHandle);
+  a->pAllocationInfo->hAllocation=PoolHandles[slot];
   /* Allocation must already reserve the UMD slot against callback reentry. */
   if(AdmissionUmdScreenBeginClose(&PoolDevice)!=HRESULT_FROM_WIN32(ERROR_BUSY)) ++PoolErrors;
   return S_OK;
 }
 static HRESULT APIENTRY PoolLock(HANDLE h,D3DDDICB_LOCK *a) {
   (void)h;
-  if(a->hAllocation!=0x701 || !PoolMemory) return E_INVALIDARG;
-  a->pData=PoolMemory; ++PoolMaps; return S_OK;
+  for(unsigned slot=0;slot<8;++slot) if(PoolMemory[slot] && a->hAllocation==PoolHandles[slot]) {
+    a->pData=PoolMemory[slot]; ++PoolMaps; return S_OK;
+  }
+  return E_INVALIDARG;
 }
 static HRESULT APIENTRY PoolUnlock(HANDLE h,const D3DDDICB_UNLOCK *a) {
   (void)h; (void)a; ++PoolUnlocks; return S_OK;
 }
 static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   (void)h;
-  if(a->NumAllocations!=1 || a->HandleList[0]!=0x701 || !PoolMemory) return E_INVALIDARG;
+  if(a->NumAllocations!=1) return E_INVALIDARG;
+  unsigned slot;
+  for(slot=0;slot<8;++slot) if(PoolMemory[slot] && a->HandleList[0]==PoolHandles[slot]) break;
+  if(slot==8) return E_INVALIDARG;
   if(PoolFailDeallocation) { --PoolFailDeallocation; return E_FAIL; }
-  HeapFree(GetProcessHeap(),0,PoolMemory); PoolMemory=NULL; ++PoolDeletes; return S_OK;
+  HeapFree(GetProcessHeap(),0,PoolMemory[slot]); PoolMemory[slot]=NULL; ++PoolDeletes; return S_OK;
 }
 static void PoolHolds(void *context,int active) {
   ADMISSION_UMD_ASAHI_OWNER *c=context;
@@ -47,6 +59,8 @@ static void PoolHolds(void *context,int active) {
 }
 unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *,const AGX_WIN32_ASAHI_OWNER_OPS *,
     void *,AGX_WIN32_ASAHI_BACKEND *,void (*)(void *,int));
+unsigned AgxWin32AsahiPipelineTest(AGX_WIN32_SCREEN *,const AGX_WIN32_ASAHI_OWNER_OPS *,
+    void *,AGX_WIN32_ASAHI_BACKEND *);
 static unsigned TestAsahiNativePoolOwner(void) {
   AGX_WIN32_ASAHI_BACKEND backend={0};
   AGX_WIN32_ASAHI_OWNER_OPS ops;
@@ -54,6 +68,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   memset(&PoolDevice,0,sizeof(PoolDevice)); memset(&PoolAdapter,0,sizeof(PoolAdapter));
   memset(&PoolCallbacks,0,sizeof(PoolCallbacks));
   PoolErrors=PoolCreates=PoolMaps=PoolUnlocks=PoolDeletes=0;
+  PoolNextHandle=0; memset(PoolMemory,0,sizeof(PoolMemory)); memset(PoolHandles,0,sizeof(PoolHandles));
   PoolFailAllocation=0;
   PoolFailDeallocation=0;
   PoolDevice.Magic=ADMISSION_UMD_DEVICE_MAGIC; PoolDevice.Win32Generation=27;
@@ -75,7 +90,9 @@ static unsigned TestAsahiNativePoolOwner(void) {
   if(AdmissionUmdScreenInitialize(&PoolDevice)!=S_OK) return 1;
   AdmissionUmdAsahiOwnerOperations(&ops);
   PoolErrors+=AgxWin32AsahiPoolTest(&PoolDevice.Screen,&ops,&owner,&backend,PoolHolds);
-  if(PoolCreates!=1 || PoolMaps!=1 || PoolUnlocks!=1 || PoolDeletes!=1 || PoolMemory || PoolDevice.NativeBackendCount)
+  PoolErrors+=AgxWin32AsahiPipelineTest(&PoolDevice.Screen,&ops,&owner,&backend);
+  if(PoolCreates!=5 || PoolMaps!=5 || PoolUnlocks!=5 || PoolDeletes!=5 || PoolDevice.NativeBackendCount)
     ++PoolErrors;
+  for(unsigned i=0;i<8;++i) if(PoolMemory[i]) ++PoolErrors;
   return PoolErrors;
 }

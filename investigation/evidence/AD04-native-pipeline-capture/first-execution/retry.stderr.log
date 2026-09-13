@@ -1,0 +1,20 @@
+NATIVE_PIPELINE line=44 pipeline!=0 && AgxWin32AsahiCaptureDeactivate(&capture)
+NATIVE_PIPELINE line=45 capture.Count==2 && capture.Capture.ReferenceCount==5 && capture.Capture.RelocationCount==4
+NATIVE_PIPELINE line=47 capture.Capture.References[0].Role==AppleAgxWin32RoleUscPipeline && capture.Capture.References[0].Bytes==38
+NATIVE_PIPELINE line=56 r->Kind==kinds[i] && r->DestinationReference==0 && r->DestinationOffset==offsets[i]
+NATIVE_PIPELINE line=58 ref->Offset==target_offsets[i] && capture.Capture.Allocations[r->TargetReference].Token==identity.Token && capture.Capture.Allocations[r->TargetReference].Serial==identity.Serial
+NATIVE_PIPELINE line=56 r->Kind==kinds[i] && r->DestinationReference==0 && r->DestinationOffset==offsets[i]
+NATIVE_PIPELINE line=58 ref->Offset==target_offsets[i] && capture.Capture.Allocations[r->TargetReference].Token==identity.Token && capture.Capture.Allocations[r->TargetReference].Serial==identity.Serial
+NATIVE_PIPELINE line=60 AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk
+NATIVE_PIPELINE line=41 AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,pass+1)==AgxRelocOk
+NATIVE_PIPELINE line=42 AgxWin32AsahiCaptureActivate(&capture)
+NATIVE_PIPELINE line=44 pipeline!=0 && AgxWin32AsahiCaptureDeactivate(&capture)
+NATIVE_PIPELINE line=45 capture.Count==2 && capture.Capture.ReferenceCount==5 && capture.Capture.RelocationCount==4
+NATIVE_PIPELINE line=47 capture.Capture.References[0].Role==AppleAgxWin32RoleUscPipeline && capture.Capture.References[0].Bytes==38
+NATIVE_PIPELINE line=56 r->Kind==kinds[i] && r->DestinationReference==0 && r->DestinationOffset==offsets[i]
+NATIVE_PIPELINE line=58 ref->Offset==target_offsets[i] && capture.Capture.Allocations[r->TargetReference].Token==identity.Token && capture.Capture.Allocations[r->TargetReference].Serial==identity.Serial
+NATIVE_PIPELINE line=56 r->Kind==kinds[i] && r->DestinationReference==0 && r->DestinationOffset==offsets[i]
+NATIVE_PIPELINE line=58 ref->Offset==target_offsets[i] && capture.Capture.Allocations[r->TargetReference].Token==identity.Token && capture.Capture.Allocations[r->TargetReference].Serial==identity.Serial
+NATIVE_PIPELINE line=60 AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk
+NATIVE_PIPELINE line=65 AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,identity.Generation,3)==AgxRelocOk
+NATIVE_PIPELINE line=66 AgxWin32AsahiCaptureActivate(&capture)
