@@ -5,6 +5,7 @@ Composer checkpoint: 452ce35; retirement review correction: f635789.
 Native state/pool Windows compile checkpoint: c4022de.
 Native BO owner/capture connection: 863bae9.
 Native USC versioned relocation fields: 00c5bdb.
+Construction address -> live Windows owner/capture: a7c9e6d.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -90,6 +91,11 @@ v1-only overlay or widen dynamic DMA validation. Next hook the actual
 agx_build_pipeline emitter with owner-tracked source references. Mixed native
 Batch pool roles/source allocation classes and full native graph/overlay remain
 explicit integration work, not hardware proof.
+a7c9e6d resolves construction subranges through the existing Windows NativeBo
+registry and construction allocator before CaptureReference/RetainExact. Wrong
+owner/generation, overflow, unknown/stale/retired ranges fail closed. Windows
+x64 native pool/owner execution PASS, ARM64 build/link PASS. Caller-serialized
+lookup is not residency. Plan: docs/superpowers/plans/2026-09-13-native-pipeline-capture.md.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
