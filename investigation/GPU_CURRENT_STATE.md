@@ -10,6 +10,7 @@ Actual native pipeline emitter capture: f287e58.
 Native v3 General table source gate: e512912.
 Native v3 exact source spans: 02b8dbf.
 Native CPU-to-construction source bridge: 1821585.
+Nested native emission scope: 04e9340.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -131,6 +132,10 @@ native draw path, active from state generation through finalization, while
 explicitly rejecting General-backed encoder rollover and unsupported resource
 graph modes. No runtime dispatch or hardware candidate before its complete
 source/lifetime contract.
+04e9340 permits a source-defined parent state/VDM interval to surround nested
+USC construction without losing capture ownership. x64 Windows execution PASS.
+Next still requires the actual state/VDM emitter hook, explicit initial encoder
+intent, and separate fail-closed rollover handling before a full request exists.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
