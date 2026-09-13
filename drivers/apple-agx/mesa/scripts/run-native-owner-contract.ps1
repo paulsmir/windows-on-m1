@@ -2,13 +2,16 @@ param(
     [Parameter(Mandatory=$true)][string]$Project,
     [Parameter(Mandatory=$true)][string]$NativeRoot,
     [Parameter(Mandatory=$true)][string]$ResultRoot,
-    [ValidateSet('x64','arm64')][string]$Architecture='x64'
+    [ValidateSet('x64','arm64')][string]$Architecture='x64',
+    [switch]$EnableNativeStateTest
 )
 $ErrorActionPreference='Stop'
 if ((Test-Path $NativeRoot) -or (Test-Path $ResultRoot)) { throw 'Use fresh result paths' }
 [void](New-Item -ItemType Directory $ResultRoot)
 $python='C:\Users\pauls\AD04-fullcompiler-001\venv\Scripts\python.exe'
-& $python "$Project\drivers\apple-agx\mesa\scripts\build-native-asahi-state.py" --output $NativeRoot --windows-platform-declarations --project $Project --architecture $Architecture *> "$ResultRoot\native.log"
+$nativeStateArgs=@()
+if($EnableNativeStateTest){$nativeStateArgs+= '--native-state-test'}
+& $python "$Project\drivers\apple-agx\mesa\scripts\build-native-asahi-state.py" --output $NativeRoot --windows-platform-declarations --project $Project --architecture $Architecture @nativeStateArgs *> "$ResultRoot\native.log"
 if ($LASTEXITCODE) { Get-Content "$ResultRoot\native.log" -Tail 50; exit $LASTEXITCODE }
 $vswhere='C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
 $msbuild=& $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
@@ -18,6 +21,7 @@ $arguments=@("$Project\drivers\apple-agx\render-admission\umd\tests\UmdContractT
     '/t:Build','/nr:false','/m:2','/p:Configuration=Release',"/p:Platform=$platform",
     '/p:EnableNativePoolTest=true',"/p:NativeObjectRoot=$NativeRoot",
     "/p:IntDir=$ResultRoot\obj\","/p:OutDir=$ResultRoot\")
+if($EnableNativeStateTest){$arguments+= '/p:EnableNativeStateTest=true'}
 $arguments | ConvertTo-Json | Set-Content "$ResultRoot\build-command.json"
 & $msbuild @arguments *> "$ResultRoot\build.log"
 $buildExit=$LASTEXITCODE

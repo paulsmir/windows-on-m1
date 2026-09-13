@@ -16,6 +16,7 @@ import subprocess
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', required=True, type=Path)
 parser.add_argument('--windows-platform-declarations', action='store_true')
+parser.add_argument('--native-state-test', action='store_true')
 parser.add_argument('--architecture', choices=('x64','arm64'), default='x64')
 parser.add_argument('--project',type=Path)
 args = parser.parse_args()
@@ -294,7 +295,15 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
    return out;''',1)
         if state_body==state_text[state_begin:state_end]:
             raise SystemExit('Native state emission capture anchors missing')
-        state_target.write_text(state_text[:state_begin]+state_body+state_text[state_end:])
+        # Export only a test wrapper around the exact transformed native body.
+        # The fixture does not reproduce or reinterpret state emission.
+        state_wrapper='''\n#ifdef AGX_WIN32_NATIVE_PIPELINE_TEST
+uint8_t *AgxWin32NativeEncodeStateTest(struct agx_batch *batch, uint8_t *out) {
+   return agx_encode_state(batch, out);
+}
+#endif
+'''
+        state_target.write_text(state_text[:state_begin]+state_body+state_wrapper+state_text[state_end:])
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         (out/'native_pipeline_contract.c').write_text(
             '#include "gallium/drivers/asahi/agx_state.h"\n'
@@ -319,6 +328,7 @@ flags = [a for a in flags if not a.startswith(('-I','/I','/Fo','/Fd'))
 flags.append('/DHAVE_FUNC_ATTRIBUTE_PACKED=1')
 if args.project:
     flags += ['/Gy','/DAGX_WIN32_NATIVE_PIPELINE_TEST=1']
+if args.native_state_test: flags.append('/DAGX_WIN32_NATIVE_STATE_TEST=1')
 if args.architecture=='arm64': flags.append('--target=aarch64-pc-windows-msvc')
 includes = [build/'src', build/'include', mesa/'include', mesa/'src',
     mesa/'src/gallium/include', mesa/'src/gallium/auxiliary',

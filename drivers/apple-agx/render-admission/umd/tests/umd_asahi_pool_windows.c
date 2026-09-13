@@ -61,6 +61,8 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *,const AGX_WIN32_ASAHI_OWNER_OP
     void *,AGX_WIN32_ASAHI_BACKEND *,void (*)(void *,int));
 unsigned AgxWin32AsahiPipelineTest(AGX_WIN32_SCREEN *,const AGX_WIN32_ASAHI_OWNER_OPS *,
     void *,AGX_WIN32_ASAHI_BACKEND *);
+unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *,
+    const AGX_WIN32_ASAHI_OWNER_OPS *,void *,AGX_WIN32_ASAHI_BACKEND *);
 static unsigned TestAsahiNativePoolOwner(void) {
   AGX_WIN32_ASAHI_BACKEND backend={0};
   AGX_WIN32_ASAHI_OWNER_OPS ops;
@@ -91,7 +93,14 @@ static unsigned TestAsahiNativePoolOwner(void) {
   AdmissionUmdAsahiOwnerOperations(&ops);
   PoolErrors+=AgxWin32AsahiPoolTest(&PoolDevice.Screen,&ops,&owner,&backend,PoolHolds);
   PoolErrors+=AgxWin32AsahiPipelineTest(&PoolDevice.Screen,&ops,&owner,&backend);
-  if(PoolCreates!=7 || PoolMaps!=7 || PoolUnlocks!=7 || PoolDeletes!=7 || PoolDevice.NativeBackendCount)
+  unsigned expectedCreates=7;
+#ifdef ADMISSION_UMD_NATIVE_STATE_TEST
+  /* Opt-in until the real state emitter runtime closure is linked. */
+  PoolErrors+=AgxWin32AsahiStateDirtyZeroTest(&PoolDevice.Screen,&ops,&owner,&backend);
+  ++expectedCreates;
+#endif
+  if(PoolCreates!=expectedCreates || PoolMaps!=expectedCreates ||
+     PoolUnlocks!=expectedCreates || PoolDeletes!=expectedCreates || PoolDevice.NativeBackendCount)
     ++PoolErrors;
   for(unsigned i=0;i<8;++i) if(PoolMemory[i]) ++PoolErrors;
   return PoolErrors;

@@ -141,6 +141,30 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocSealVersion(
     return AgxRelocCommand;
   c->State=SEALED; return AgxRelocOk;
 }
+AGX_WIN32_RELOC_RESULT AgxWin32RelocPrepareDraw(
+    AGX_WIN32_RELOC_CAPTURE *c, APPLE_AGX_U16 commandVersion,
+    const APPLE_AGX_WIN32_DRAW_PAYLOAD *draw, AGX_WIN32_DRAW_REQUEST *request) {
+  if(!c || !draw || !request) return AgxRelocArgument;
+  if(commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
+    return AgxRelocCommand;
+  if(c->State!=RECORDING) return AgxRelocState;
+  memset(request,0,sizeof(*request));
+  request->Generation=c->Generation;
+  request->ReferenceCount=c->ReferenceCount;
+  request->RelocationCount=c->RelocationCount;
+  request->References=c->References;
+  request->Relocations=c->Relocations;
+  request->Draw=*draw;
+  for(unsigned i=0;i<c->ReferenceCount;++i) {
+    AGX_WIN32_RELOC_ALLOCATION current={0};
+    if(!c->Operations.Query(c->Context,c->Allocations[i].Token,&current)) return AgxRelocCallback;
+    if(!same(&current,&c->Allocations[i])) return AgxRelocStale;
+  }
+  c->State=SEALED;
+  return AgxRelocOk;
+}
 AGX_WIN32_RELOC_RESULT AgxWin32RelocSeal(AGX_WIN32_RELOC_CAPTURE *c,
     const APPLE_AGX_WIN32_DRAW_PAYLOAD *draw,void *command,
     APPLE_AGX_U32 capacity,APPLE_AGX_U32 *bytes) {

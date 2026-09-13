@@ -40,6 +40,7 @@
   <ItemGroup>
     <ClCompile Include="umd_contract_windows.c" />
     <ClCompile Include="..\src\umd_draw_composer.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\src\umd_asahi_batch_adapter.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
     <ClCompile Include="..\..\src\apple_agx_dynamic_job.c" />
     <ClCompile Include="..\..\src\render_win32_transport.c" />
     <ClCompile Include="..\src\umd_runtime_device.c">
@@ -57,6 +58,7 @@
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_bo.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_construction_address.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_device.c" />
+    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
     <ClCompile>
@@ -66,17 +68,26 @@
       <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <!-- Real state-emitter test is retained separately: it requires the full
+       native runtime/compiler link closure, not merely pool/pipeline objects. -->
+  <ItemDefinitionGroup Condition="'$(EnableNativeStateTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_STATE_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateNativeStateTest" BeforeTargets="PrepareForBuild"
+          Condition="'$(EnableNativeStateTest)' == 'true' and '$(EnableNativePoolTest)' != 'true'">
+    <Error Text="EnableNativeStateTest requires EnableNativePoolTest and the full native runtime link closure." />
+  </Target>
   <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true'">
     <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_NATIVE_POOL_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
     <Link><AdditionalDependencies>$(NativeObjectRoot)\pool.obj;$(NativeObjectRoot)\agx_win32_asahi_bo.obj;$(NativeObjectRoot)\agx_win32_asahi_capture.obj;$(NativeObjectRoot)\agx_win32_asahi_pool_test.obj;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\util\libmesa_util.a;C:\Users\pauls\AD04-fullcompiler-001\nir-$(NativeMesaArchitecture)\src\c11\impl\libmesa_util_c11.a;synchronization.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableNativePoolTest)' == 'true'">
+    <Object Include="$(NativeObjectRoot)\agx_state.obj" Condition="'$(EnableNativeStateTest)' == 'true'" />
     <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline.obj" />
     <Object Include="$(NativeObjectRoot)\agx_win32_asahi_pipeline_test.obj" />
     <Object Include="$(NativeObjectRoot)\native_pipeline_contract.obj" />
     <Object Include="$(NativeObjectRoot)\native_batch_encoder_contract.obj" />
     <ClCompile Include="..\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
-    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
   <ItemDefinitionGroup Condition="'$(EnableNativePoolTest)' == 'true'">
     <Link><OptimizeReferences>true</OptimizeReferences></Link>

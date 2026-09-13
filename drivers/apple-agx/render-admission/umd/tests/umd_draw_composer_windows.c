@@ -7,6 +7,8 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(pop)
 #include "../src/umd_internal.h"
 #include "apple_agx_dynamic_job.h"
+#include "agx_win32_reloc_capture.h"
+#include "umd_asahi_batch_adapter.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -67,7 +69,7 @@ static int Composer_lookup(void *ctx, APPLE_AGX_U32 index, ADMISSION_WIN32_ALLOC
 }
 static HRESULT APIENTRY Composer_render(HANDLE h, D3DDDICB_RENDER *r) {
   APPLE_AGX_WIN32_COMMAND_VIEW view;
-  ADMISSION_WIN32_ALLOCATION_FACT facts[9];
+  ADMISSION_WIN32_ALLOCATION_FACT facts[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   unsigned i;
   (void)h; ++Composer_calls;
   REQUIRE(r->hContext == Composer_device.KernelContext && r->CommandOffset == 0);
@@ -101,10 +103,10 @@ static HRESULT APIENTRY Composer_render(HANDLE h, D3DDDICB_RENDER *r) {
       Composer_device.Win32Generation, 8, &view) == AppleAgxWin32AbiSuccess);
   REQUIRE(view.References[2].AllocationIndex == view.References[3].AllocationIndex);
   REQUIRE(AdmissionWin32ValidateReferences(&view,Composer_device.Win32Generation,
-      Composer_lookup,&Composer_device,facts,9)==AdmissionWin32TransportSuccess);
+      Composer_lookup,&Composer_device,facts,ARRAYSIZE(facts))==AdmissionWin32TransportSuccess);
   for(i=0; i<2; ++i) {
     Composer_placement=0x1100000000ULL + i*0x100000;
-    REQUIRE(AppleAgxDynamicJobMaterialize(&view, facts, 9, 0x1100000000ULL,
+    REQUIRE(AppleAgxDynamicJobMaterialize(&view, facts, ARRAYSIZE(facts), 0x1100000000ULL,
         Composer_read_source, Composer_resolve_source, &Composer_device, Composer_output[i], sizeof(Composer_output[i]),
         &Composer_jobs[i]) == AppleAgxDynamicJobSuccess);
   }
@@ -305,4 +307,151 @@ unsigned AdmissionUmdDrawComposerTests(void) {
   }
   printf("UMD COMPOSER: Composer_failures=%u\n",Composer_failures);
   return Composer_failures;
+}
+
+/* The adapter is deliberately tested against the public typed-capture contract,
+ * rather than any Linux batch or sync object.  Native Asahi capture embeds this
+ * exact object, so the same source-hold rules apply when the real hook lands. */
+typedef struct _COMPOSER_CAPTURE_OWNER {
+  unsigned Holds, Releases;
+} COMPOSER_CAPTURE_OWNER;
+static int Composer_capture_query(void *context, APPLE_AGX_U64 token,
+                                  AGX_WIN32_RELOC_ALLOCATION *out) {
+  COMPOSER_CAPTURE_OWNER *owner=(COMPOSER_CAPTURE_OWNER *)context;
+  unsigned slot;
+  (void)owner;
+  if(!out || token<10 || token>17) return 0;
+  slot=(unsigned)(token-10);
+  if(!Composer_device.ScreenBuffers[slot].Active) return 0;
+  *out=(AGX_WIN32_RELOC_ALLOCATION){Composer_device.OwnerCookie,token,
+    20+slot,0x8000,Composer_device.Win32Generation,slot,
+    slot==2 ? (AppleAgxWin32AccessRead|AppleAgxWin32AccessExecute) :
+              (AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite)};
+  return 1;
+}
+static int Composer_capture_retain(void *context, APPLE_AGX_U64 token,
+                                   APPLE_AGX_U64 serial) {
+  COMPOSER_CAPTURE_OWNER *owner=(COMPOSER_CAPTURE_OWNER *)context;
+  AGX_WIN32_RELOC_ALLOCATION current;
+  if(!Composer_capture_query(context,token,&current) || current.Serial!=serial)
+    return 0;
+  ++owner->Holds;
+  return 1;
+}
+static int Composer_capture_retain_exact(void *context,
+    const AGX_WIN32_RELOC_ALLOCATION *expected) {
+  AGX_WIN32_RELOC_ALLOCATION current;
+  if(!expected || !Composer_capture_query(context,expected->Token,&current) ||
+     memcmp(&current,expected,sizeof(current))) return 0;
+  return Composer_capture_retain(context,expected->Token,expected->Serial);
+}
+static void Composer_capture_release(void *context, APPLE_AGX_U64 token,
+                                     APPLE_AGX_U64 serial) {
+  COMPOSER_CAPTURE_OWNER *owner=(COMPOSER_CAPTURE_OWNER *)context;
+  AGX_WIN32_RELOC_ALLOCATION current;
+  if(!Composer_capture_query(context,token,&current) || current.Serial!=serial ||
+     !owner->Holds) { ++Composer_failures; return; }
+  --owner->Holds; ++owner->Releases;
+}
+
+unsigned AdmissionUmdAsahiBatchAdapterTests(void) {
+  COMPOSER_CAPTURE_OWNER owner={0};
+  AGX_WIN32_RELOC_CAPTURE capture={0};
+  const AGX_WIN32_RELOC_OPERATIONS ops={Composer_capture_query,
+    Composer_capture_retain,Composer_capture_release,Composer_capture_retain_exact};
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw={0};
+  APPLE_AGX_U32 refs[10];
+  ADMISSION_UMD_ASAHI_BATCH *batch=(ADMISSION_UMD_ASAHI_BATCH *)HeapAlloc(
+      GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*batch));
+  unsigned failuresBefore=Composer_failures;
+  REQUIRE(batch!=NULL);
+  if(!batch) return 1;
+  /* Real invariant: after entry into Render, enqueue failure and timeout must
+   * preserve native and Windows holds, permit only retirement, and never replay. */
+  for(unsigned attempt=0;attempt<5;++attempt) {
+  Composer_setup();
+  memset(batch,0,sizeof(*batch)); memset(&capture,0,sizeof(capture));
+  memset(&owner,0,sizeof(owner));
+  REQUIRE(AgxWin32RelocBegin(&capture,Composer_device.OwnerCookie,
+      Composer_device.Win32Generation,77,&ops,&owner)==AgxRelocOk);
+  for(unsigned i=0;i<10;++i) {
+    static const unsigned roles[]={1,2,6,6,9,7,11,12,10,9};
+    static const unsigned slots[]={0,1,2,2,3,4,5,6,7,7};
+    unsigned access=i==0?AppleAgxWin32AccessWrite:
+      ((i==2||i==3)?(AppleAgxWin32AccessRead|AppleAgxWin32AccessExecute):AppleAgxWin32AccessRead);
+    REQUIRE(AgxWin32RelocReference(&capture,10+slots[i],roles[i],access,
+      (i==3 || i==9)?0x4000:0,0x4000,&refs[i])==AgxRelocOk);
+  }
+  REQUIRE(AgxWin32RelocField(&capture,AppleAgxWin32RelocationEncoderAddress,
+      refs[8],0,refs[0],0)==AgxRelocOk);
+  REQUIRE(AgxWin32RelocField(&capture,AppleAgxWin32RelocationEncoderAddress,
+      refs[8],8,refs[1],0)==AgxRelocOk);
+  REQUIRE(AgxWin32RelocField(&capture,AppleAgxWin32RelocationVdmPipelineOffset32,
+      refs[8],16,refs[4],0)==AgxRelocOk);
+  REQUIRE(AgxWin32RelocField(&capture,AppleAgxWin32RelocationUscShaderOffset32,
+      refs[4],0,refs[2],0)==AgxRelocOk);
+  REQUIRE(AgxWin32RelocField(&capture,AppleAgxWin32RelocationUscShaderOffset32,
+      refs[4],8,refs[3],0)==AgxRelocOk);
+  REQUIRE(AgxWin32RelocField(&capture,AppleAgxWin32RelocationUscBufferAddress40,
+      refs[4],16,refs[5],0)==AgxRelocOk);
+  draw.StructBytes=sizeof(draw); draw.Format=AppleAgxWin32FormatBgra8Unorm;
+  draw.SurfaceWidth=16; draw.SurfaceHeight=16; draw.SurfacePitch=64;
+  draw.Topology=AppleAgxWin32TopologyTriangleList; draw.VertexCount=3; draw.InstanceCount=1;
+  draw.DestinationReference=refs[0]; draw.VertexReference=refs[1];
+  draw.VertexShaderReference=refs[2]; draw.FragmentShaderReference=refs[3];
+  draw.UscPipelineReference=refs[4]; draw.DescriptorReference=refs[5];
+  draw.ScissorReference=refs[6]; draw.DepthBiasReference=refs[7]; draw.EncoderReference=refs[8];
+  draw.Reserved[APPLE_AGX_WIN32_DRAW_V2_FRAGMENT_USC_PIPELINE_RESERVED_INDEX]=refs[9];
+  draw.IndexReference=draw.ConstantReference=draw.TextureReference=
+    draw.VertexRodataReference=draw.FragmentRodataReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  {
+    AGX_WIN32_DRAW_REQUEST preflight={0}; APPLE_AGX_U64 command[512]; APPLE_AGX_U32 bytes=0;
+    preflight.Generation=capture.Generation; preflight.AllocationCount=8;
+    preflight.ReferenceCount=capture.ReferenceCount; preflight.RelocationCount=capture.RelocationCount;
+    preflight.References=capture.References; preflight.Relocations=capture.Relocations; preflight.Draw=draw;
+    APPLE_AGX_WIN32_ABI_RESULT abi=AgxWin32TransportBuildDrawVersion(&preflight,
+        APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC,command,sizeof(command),&bytes);
+    if(abi!=AppleAgxWin32AbiSuccess) fprintf(stderr,"ASAHI_BATCH preflight_abi=%u\n",(unsigned)abi);
+    REQUIRE(abi==AppleAgxWin32AbiSuccess);
+  }
+  HRESULT seal=AdmissionUmdAsahiBatchSeal(&Composer_device,&capture,77,
+      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC,&draw,batch);
+  REQUIRE(seal==S_OK);
+  REQUIRE(owner.Holds==10 && owner.Releases==0);
+  Composer_mode=attempt;
+  HRESULT dispatched=AdmissionUmdAsahiBatchDispatch(&Composer_device,batch);
+  REQUIRE(attempt>0 && attempt<4 ? FAILED(dispatched) : dispatched==S_OK);
+  REQUIRE(batch->Phase==AdmissionAsahiBatchSubmitted);
+  REQUIRE(Composer_calls==1 && Composer_tx.Phase==AdmissionDrawEmpty);
+  REQUIRE(AdmissionUmdAsahiBatchDispatch(&Composer_device,batch)==HRESULT_FROM_WIN32(ERROR_BUSY));
+  REQUIRE(FAILED(AdmissionUmdAsahiBatchAbort(&Composer_device,batch)));
+  REQUIRE(Composer_calls==1 && owner.Holds==10 && owner.Releases==0);
+  for(unsigned i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
+  if(attempt==3) {
+    REQUIRE(batch->Submission.Fence==0 && capture.Fence==0);
+    REQUIRE(FAILED(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)));
+    REQUIRE(batch->Phase==AdmissionAsahiBatchSubmitted);
+    REQUIRE(Composer_calls==1 && owner.Holds==10 && owner.Releases==0);
+    for(unsigned i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
+    /* Retry enqueues an unsignalled event: acquiring a fence alone is not
+     * completion and must not release either ownership set. */
+    Composer_mode=4;
+  }
+  if(attempt==3 || attempt==4) {
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+    REQUIRE(batch->Phase==AdmissionAsahiBatchSubmitted);
+    REQUIRE(batch->Submission.Fence!=0 && capture.Fence==batch->Submission.Fence);
+    REQUIRE(Composer_calls==1 && owner.Holds==10 && owner.Releases==0);
+    for(unsigned i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
+    SetEvent(Composer_device.ScreenFences[0].Event);
+  }
+  Composer_mode=0;
+  REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==S_OK);
+  REQUIRE(owner.Holds==0 && owner.Releases==10 && Composer_calls==1);
+  for(unsigned i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==0);
+  REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+  }
+  HeapFree(GetProcessHeap(),0,batch);
+  printf("UMD ASAHI BATCH ADAPTER: failures=%u\n",Composer_failures-failuresBefore);
+  return Composer_failures-failuresBefore;
 }

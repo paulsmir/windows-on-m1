@@ -75,6 +75,7 @@ enum {
 
 static TEST_STATE State;
 unsigned AdmissionUmdDrawComposerTests(void);
+unsigned AdmissionUmdAsahiBatchAdapterTests(void);
 static unsigned char CommandBuffer[4096];
 static unsigned char NextCommandBuffer[4096];
 static D3DDDI_ALLOCATIONLIST AllocationList[16];
@@ -1149,6 +1150,7 @@ int main(void) {
   test_mesa_windows_owners(createDevice);
 #endif
   State.Failures += AdmissionUmdDrawComposerTests();
+  State.Failures += AdmissionUmdAsahiBatchAdapterTests();
 #if defined(ADMISSION_UMD_NATIVE_POOL_TEST)
   State.Failures += TestAsahiNativePoolOwner();
 #endif

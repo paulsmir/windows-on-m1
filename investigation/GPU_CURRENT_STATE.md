@@ -27,6 +27,28 @@ Current focus is the request-scoped UMD draw composer and its native producer.
 No WGL/softpipe diversion. Tier-A decides reversible contracts; deterministic
 tests/builds execute directly in this integration worktree. Native-ANS untouched.
 
+## Reviewed continuation checkpoint (2026-09-13)
+User accepted dirty HEAD8d6ad14 checkpoint for review; no reset/stash/checkout.
+Review: agent_tasks/AD04-BATCH-CHECKPOINT-REVIEW.md.
+Native batch adapter + PrepareDraw now have fresh Windows x64 execution PASS
+and ARM64 build/link PASS, with native pool and actual pipeline controlled tests.
+Source archive: evidence/AD04-batch-checkpoint-review/green2-source.tar.gz;
+SHA256 c21cabdd4a765fc5032fa79d233c8a4672f910d03af5b533115a0560ef893fe4.
+Missing-event-after-Render defect reproduced (x64 16 assertions) then fixed:
+adapter stays Submitted, prohibits replay/abort, retries the ordered marker,
+retains both ownership sets across timeout, retires on the same fence.
+Five adapter scenarios pass; no production provider activation or hardware proof.
+The new dirty-zero agx_encode_state fixture exposed 140 unresolved runtime
+symbols. Preserved under explicit EnableNativeStateTest; NOT_LINKED/NOT_EXECUTED.
+Pool/pipeline gate success must not be described as full state-emitter execution.
+Next causal target: typed PPP General-pool and CF-binding source contract, then
+complete initial/state/draw/final VDM and attachment/uniform/BG-EOT graph capture,
+then Windows replacement at real agx_flush_render/agx_flush_batch finalization.
+The adapter must never consume a partial graph. Runtime-closure probe is separate
+and may report expected Linux-tail failure pending the Windows implementation.
+Root investigation/GPU_CONTINUATION_PLAYBOOK.md is the operative playbook;
+current user instruction puts accelerated desktop acceptance before OpenGL/CS1.6.
+
 ## New implemented boundary
 452ce35 implements AdmissionUmdDrawSeal/Dispatch/Abort/Retire, compiled into UMD.
 Identity: OwnerCookie + Generation + Token + Serial. The existing ScreenBuffers

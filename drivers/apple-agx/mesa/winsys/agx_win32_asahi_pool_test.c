@@ -9,6 +9,7 @@
 #include <string.h>
 
 struct agx_encoder AgxWin32NativeEncoderAllocateTest(struct agx_batch *,struct agx_device *);
+uint8_t *AgxWin32NativeEncodeStateTest(struct agx_batch *,uint8_t *);
 
 /* Calls the original native pool implementation; only Windows runtime callbacks
  * are controlled by the enclosing UMD owner test. No draw packet is fabricated. */
@@ -184,3 +185,42 @@ unsigned AgxWin32AsahiPoolTest(AGX_WIN32_SCREEN *screen,
   printf("NATIVE_POOL_WINDOWS_OWNER: errors=%u\n",errors);
   return errors;
 }
+
+#ifdef AGX_WIN32_NATIVE_STATE_TEST
+/* Catches a missing test export or a state hook that mutates capture on the
+ * native dirty-zero fast path. The initial Encoder is allocated by the exact
+ * transformed native batch helper, and capture remains active throughout. */
+unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *screen,
+    const AGX_WIN32_ASAHI_OWNER_OPS *ops,void *owner,
+    AGX_WIN32_ASAHI_BACKEND *backend) {
+  struct agx_device native={0};
+  struct agx_context ctx={0};
+  struct agx_batch batch={0};
+  AGX_WIN32_ASAHI_CAPTURE capture={0};
+  AGX_WIN32_RELOC_ALLOCATION identity;
+  unsigned errors=0;
+#define CHECK_STATE(x) do { if(!(x)) { ++errors; fprintf(stderr,"NATIVE_STATE line=%u %s\n",(unsigned)__LINE__,#x); } } while(0)
+  CHECK_STATE(AgxWin32AsahiAttach(backend,&native,screen,ops,owner,0x1100000000ULL));
+  batch.ctx=&ctx;
+  struct agx_encoder encoder=AgxWin32NativeEncoderAllocateTest(&batch,&native);
+  APPLE_AGX_U32 classId=0;
+  CHECK_STATE(encoder.bo && encoder.current &&
+      AgxWin32AsahiClass(backend,encoder.bo,&classId) &&
+      classId==AgxWin32BufferClassEncoder && encoder.end-encoder.current==0x80000);
+  CHECK_STATE(AgxWin32AsahiIdentity(backend,encoder.bo,&identity));
+  CHECK_STATE(AgxWin32AsahiCaptureBegin(&capture,backend,identity.Owner,
+      identity.Generation,5)==AgxRelocOk && AgxWin32AsahiCaptureActivate(&capture));
+  ctx.dirty=0;
+  CHECK_STATE(AgxWin32NativeEncodeStateTest(&batch,encoder.current)==encoder.current);
+  CHECK_STATE(capture.Capture.ReferenceCount==0 &&
+      capture.Capture.RelocationCount==0 && backend->ActiveCapture==&capture &&
+      backend->ActiveEmission==NULL && !backend->Failed);
+  CHECK_STATE(AgxWin32AsahiCaptureDeactivate(&capture));
+  CHECK_STATE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
+  if(encoder.bo) agx_bo_unreference(&native,encoder.bo);
+  CHECK_STATE(AgxWin32AsahiDetach(backend));
+  printf("ACTUAL_NATIVE_ENCODE_STATE_DIRTY_ZERO: errors=%u (no native state bytes emitted)\n",errors);
+  return errors;
+}
+
+#endif /* AGX_WIN32_NATIVE_STATE_TEST */
