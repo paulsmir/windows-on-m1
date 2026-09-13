@@ -6,6 +6,7 @@ Native state/pool Windows compile checkpoint: c4022de.
 Native BO owner/capture connection: 863bae9.
 Native USC versioned relocation fields: 00c5bdb.
 Construction address -> live Windows owner/capture: a7c9e6d.
+Actual native pipeline emitter capture: f287e58.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -63,8 +64,8 @@ Epilog key 256-pattern native/Windows execution proves size/alignment4 and
 byte-exact flags; generated helper wrappers transmit the required zero bytes.
 Evidence/limits: agent_tasks/AD04-NATIVE-STATE-COMPILE.md and
 evidence/AD04-native-asahi-state/. Native draw execution has NOT occurred.
-Next: Windows native BO backend must satisfy the original pool API and capture
-all native graph edges using real owner identities before composer dispatch.
+Windows native BO backend now satisfies the original pool API; complete native
+graph capture remains required before runtime composer dispatch.
 863bae9 now executes original pool.c through the Windows UMD owner in controlled
 runtime tests. Actual native BOs receive owner-generated Token/Serial identities;
 two real subranges enter typed capture with one request-local allocation index.
@@ -96,6 +97,19 @@ registry and construction allocator before CaptureReference/RetainExact. Wrong
 owner/generation, overflow, unknown/stale/retired ranges fail closed. Windows
 x64 native pool/owner execution PASS, ARM64 build/link PASS. Caller-serialized
 lookup is not residency. Plan: docs/superpowers/plans/2026-09-13-native-pipeline-capture.md.
+f287e58 executes original agx_build_pipeline with Windows-owned native BO/pools
+and typed USC capture: unlinked/linked, texture/sampler/custom-border/push/rodata,
+exact ranges/identities, rejected untracked table and linked-only scratch.
+Shared generated function body is used by native agx_state and focused test TU.
+Windows x64 execution PASS; ARM64 build/link PASS; eight host suites PASS.
+Controlled shader/descriptor inputs and external runtime callbacks: NOT an
+actual NIR draw, pfnRenderCb, physical rendering or hardware-ready candidate.
+Details: agent_tasks/AD04-NATIVE-PIPELINE-CAPTURE.md.
+NEXT: implement accepted v3-only General source-class alternative for exact-Read
+Descriptor/Scissor/DepthBias refs; preserve shader/USC/encoder class restrictions.
+Decision: agent_tasks/AD04-NATIVE-SOURCE-CLASS-DECISION.md. Separately resolve the
+legacy reference-length multiple4 rule (actual USC38/62 and rodata2 are exposed);
+do not silently pad/reclassify or bundle that independent invariant.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.

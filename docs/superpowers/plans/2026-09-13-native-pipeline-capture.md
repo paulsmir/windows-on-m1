@@ -20,26 +20,26 @@ sources; KMD resolves physical facts. Firmware/broker/MMIO/display unchanged.
 
 ## 1. Exact address-to-owner bridge
 
-- [ ] Extend agx_win32_asahi_bo.[ch] with AgxWin32AsahiFindAddress(backend,
+- [x] Extend agx_win32_asahi_bo.[ch] with AgxWin32AsahiFindAddress(backend,
   owner, generation, address, bytes, bo_out, offset_out). Enumerate NextBo,
   validate owner registry membership/namespace/generation first, check live
   native identity and bounded construction range, reject ambiguous matches.
-- [ ] Extend agx_win32_asahi_capture.[ch] with CaptureAddress using this resolver
+- [x] Extend agx_win32_asahi_capture.[ch] with CaptureAddress using this resolver
   and existing CaptureReference/RetainExact. No second persistent registry.
-- [ ] Extend real pool/Windows-owner executable tests: exact base/subrange,
+- [x] Extend real pool/Windows-owner executable tests: exact base/subrange,
   cross-end/overflow/unknown address, wrong owner/generation, retired BO, and
   unchanged capture counts/holds after rejected lookup. Run RED then GREEN.
-- [ ] x64 execute and ARM64 compile/link; commit with raw evidence and ledger.
+- [x] x64 execute and ARM64 compile/link; commit with raw evidence and ledger.
 
 ## 2. Actual native pipeline emitter
 
-- [ ] Connect bounded per-call capture scope to original agx_build_pipeline in
+- [x] Connect bounded per-call capture scope to original agx_build_pipeline in
   the hash-checked build-local source projection, not the immutable reference.
   Capture texture/sampler, push uniforms, shader rodata, linked/unlinked shader,
   preshader edges with exact native record offsets and native source extents.
-- [ ] Full source-pointer ownership must survive original pool cleanup. Scope
+- [x] Full source-pointer ownership must survive original pool cleanup. Scope
   failure aborts the request; unknown references cannot become successful draw.
-- [ ] Exercise original function with actual Windows-backed native allocations.
+- [x] Exercise original function with actual Windows-backed native allocations.
   Keep incomplete descriptor/resource/scratch graph and legacy overlay disabled.
 
 No hardware before complete native graph, source-class/placement contract,
