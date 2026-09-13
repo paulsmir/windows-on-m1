@@ -4,6 +4,7 @@ Worktree: integration/ad04-windows-compiler.
 Composer checkpoint: 452ce35; retirement review correction: f635789.
 Native state/pool Windows compile checkpoint: c4022de.
 Native BO owner/capture connection: 863bae9.
+Native USC versioned relocation fields: 00c5bdb.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -81,11 +82,14 @@ Complete native state typed address capture, source-byte lifetime,
 shared runtime-buffer serialization and terminal teardown after unrecoverable
 completion must be closed before enabling the native provider. This is an
 implementation phase, not a fundamental blocker.
-Next exact field gaps: USC Preshader Code bits32..63; Texture/Sampler buffer
-bits27..62 shr(3). Existing Shader/Uniform relocations are incompatible with
-these fields. Add explicit versioned types and native-pack tests before hooking
-the full agx_build_pipeline graph. Native Batch pool mixed roles must also be
-reconciled with source allocation classes rather than relabelled silently.
+00c5bdb closes USC Preshader Code bits32..63 and Texture/Sampler buffer
+bits27..62 shr(3) via explicit v3 kinds. Native-pack/KMD materializer tests cover
+two placements and all table counts; Windows x64 executes, ARM64 build/links.
+Details: agent_tasks/AD04-NATIVE-USC-V3.md. This does not enable the legacy
+v1-only overlay or widen dynamic DMA validation. Next hook the actual
+agx_build_pipeline emitter with owner-tracked source references. Mixed native
+Batch pool roles/source allocation classes and full native graph/overlay remain
+explicit integration work, not hardware proof.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
