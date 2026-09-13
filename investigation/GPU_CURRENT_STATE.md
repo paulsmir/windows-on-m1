@@ -9,6 +9,7 @@ Construction address -> live Windows owner/capture: a7c9e6d.
 Actual native pipeline emitter capture: f287e58.
 Native v3 General table source gate: e512912.
 Native v3 exact source spans: 02b8dbf.
+Native CPU-to-construction source bridge: 1821585.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -124,6 +125,12 @@ Windows x64 execution PASS and ARM64 build/link PASS. Next: complete capture of
 native encoder, scissor/depth-bias, vertex/index/render-target and nested resource
 edges, then connect a complete request to the existing composer. No hardware
 candidate is ready while that graph/source lifetime/retirement work is incomplete.
+1821585 closes the validated CPU range resolver needed for actual VDM/PPP source
+intervals. Next coherent slice: typed state/encoder emission capture from actual
+native draw path, active from state generation through finalization, while
+explicitly rejecting General-backed encoder rollover and unsupported resource
+graph modes. No runtime dispatch or hardware candidate before its complete
+source/lifetime contract.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
