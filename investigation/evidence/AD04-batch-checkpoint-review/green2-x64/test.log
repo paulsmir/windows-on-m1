@@ -1,0 +1,4 @@
+UMD COMPOSER: Composer_failures=0
+UMD ASAHI BATCH ADAPTER: failures=0
+NATIVE_POOL_WINDOWS_OWNER: errors=0
+ACTUAL_NATIVE_BUILD_PIPELINE: errors=0 (controlled shader input; no GPU execution)
