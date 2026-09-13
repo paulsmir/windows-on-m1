@@ -320,7 +320,45 @@ static void native_usc_fields(void) {
   for(unsigned i=0;i<9;++i) assert(!fixture.Holds[i]);
   puts("NATIVE USC v3: preshader/texture/sampler two placements, all counts PASS");
 }
+
+/* Source-defined finalization tail: agx_flush_render emits 5+64 bytes at
+ * current. Materialize all 69 exactly, without inventing a rounded source span. */
+static void native_encoder_tail_exact(void) {
+  setup(); AGX_WIN32_RELOC_CAPTURE c={0}; unsigned index,bytes=0;
+  APPLE_AGX_U64 command[512]={0}; APPLE_AGX_WIN32_COMMAND_VIEW view;
+  const unsigned char stop[5+64]={0,0,0,0xc0,0};
+  assert(AgxWin32RelocBegin(&c,77,7,14,&ops,&fixture)==AgxRelocOk);
+  APPLE_AGX_WIN32_DRAW_PAYLOAD d=capture(&c);
+  assert(AgxWin32RelocReference(&c,5,AppleAgxWin32RoleUscPipeline,
+      AppleAgxWin32AccessRead,0x4000,0x340,&index)==AgxRelocOk);
+  d.Reserved[0]=index;
+  c.References[8].Bytes=32+sizeof(stop);
+  memcpy(fixture.Data[8]+32,stop,sizeof(stop));
+  fixture.Data[8][32+sizeof(stop)]=0xec;
+  assert(AgxWin32RelocSealVersion(&c,3,&d,command,sizeof(command),&bytes)==AgxRelocOk);
+  assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==AppleAgxWin32AbiSuccess);
+  ADMISSION_WIN32_ALLOCATION_FACT facts[10]={0};
+  for(unsigned i=0;i<9;++i) {facts[i].AllocationToken=i+1;facts[i].Bytes=0x10000;}
+  facts[9]=facts[4];
+  static unsigned char image[0x40000]; APPLE_AGX_DYNAMIC_JOB job;
+  for(unsigned placement=0;placement<2;++placement) {
+    fixture.Placement=0x1100000000ULL+placement*0x100000ULL;
+    assert(AppleAgxDynamicJobMaterialize(&view,facts,10,0x1100000000ULL,
+        read_object,resolve_object,&fixture,image,sizeof(image),&job)==AppleAgxDynamicJobSuccess);
+    unsigned found=0;
+    for(unsigned i=0;i<job.ObjectCount;++i) if(job.Objects[i].ReferenceIndex==8) {
+      ++found; assert(job.Objects[i].Bytes==32+sizeof(stop));
+      assert(!memcmp(image+job.Objects[i].StorageOffset+32,stop,sizeof(stop)));
+    }
+    assert(found==1 && fixture.Data[8][32+sizeof(stop)]==0xec);
+    assert(!memcmp(fixture.Data[8]+32,stop,sizeof(stop)));
+  }
+  assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  puts("NATIVE ENCODER: exact 69-byte termination at two placements PASS");
+}
+
 int main(void) {
+  native_encoder_tail_exact();
   disconnected_extra_encoder_ppp_rejected();
   native_ppp_fields();
   native_usc_fields();

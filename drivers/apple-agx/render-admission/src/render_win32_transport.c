@@ -87,6 +87,15 @@ static int AdmissionWin32ExactNativeSpan(
       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC ||
       Reference->Access != AppleAgxWin32AccessRead)
     return 0;
+  if (Reference->Role == AppleAgxWin32RoleEncoder) {
+    /* Only the designated final root carries native word-aligned VDM followed
+     * by the exact 5-byte stop and 64-byte overread tail. */
+    return View->Draw != ADMISSION_WIN32_NULL &&
+           View->References != ADMISSION_WIN32_NULL &&
+           View->Draw->EncoderReference < View->Header->ReferenceCount &&
+           Reference == &View->References[View->Draw->EncoderReference] &&
+           Reference->Bytes >= 69ULL && ((Reference->Bytes - 69ULL) & 3ULL) == 0ULL;
+  }
   return Reference->Role == AppleAgxWin32RoleConstant ||
          Reference->Role == AppleAgxWin32RoleShaderRodata ||
          Reference->Role == AppleAgxWin32RoleUscPipeline;

@@ -93,12 +93,15 @@ static unsigned TestAsahiNativePoolOwner(void) {
   AdmissionUmdAsahiOwnerOperations(&ops);
   PoolErrors+=AgxWin32AsahiPoolTest(&PoolDevice.Screen,&ops,&owner,&backend,PoolHolds);
   PoolErrors+=AgxWin32AsahiPipelineTest(&PoolDevice.Screen,&ops,&owner,&backend);
-  unsigned expectedCreates=7;
+  /* Original pool/pipeline seven plus dedicated root and reserve BOs. */
+  unsigned expectedCreates=9;
 #ifdef ADMISSION_UMD_NATIVE_STATE_TEST
   /* Opt-in until the real state emitter runtime closure is linked. */
   PoolErrors+=AgxWin32AsahiStateDirtyZeroTest(&PoolDevice.Screen,&ops,&owner,&backend);
   ++expectedCreates;
 #endif
+  printf("NATIVE_OWNER_BALANCE: creates=%u maps=%u unlocks=%u deletes=%u expected=%u backends=%u\n",
+      PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,expectedCreates,PoolDevice.NativeBackendCount);
   if(PoolCreates!=expectedCreates || PoolMaps!=expectedCreates ||
      PoolUnlocks!=expectedCreates || PoolDeletes!=expectedCreates || PoolDevice.NativeBackendCount)
     ++PoolErrors;

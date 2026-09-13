@@ -32,13 +32,53 @@ static unsigned TestNativePppCapture(struct agx_batch *batch,
   CHECK_PPP(vdm.cpu && ppp_source.cpu && cf.cpu);
   if(!vdm.cpu || !ppp_source.cpu || !cf.cpu) return errors+1;
   memset(cf.cpu,0,cf_bytes);
-  for(unsigned pass=0;pass<6;++pass) {
+  struct agx_bo *root_bo=AgxWin32AsahiEncoderCreate(dev,0x4000,0x4000,"persistent root test");
+  CHECK_PPP(root_bo && agx_bo_map(root_bo));
+  if(!root_bo || !root_bo->_map) return errors+1;
+  for(unsigned pass=0;pass<7;++pass) {
     AGX_WIN32_ASAHI_CAPTURE c={0};
     AGX_WIN32_ASAHI_PIPELINE encoder={0},ppp_scope={0};
+    AGX_WIN32_ASAHI_ENCODER_ROOT root={0},other={0};
     CHECK_PPP(AgxWin32AsahiCaptureBegin(&c,backend,identity->Owner,identity->Generation,pass+1)==AgxRelocOk);
     CHECK_PPP(AgxWin32AsahiCaptureActivate(&c));
     uint8_t *out=vdm.cpu;
-    CHECK_PPP(AgxWin32AsahiEmissionBegin(dev,vdm.cpu,vdm.gpu,64,AppleAgxWin32RoleEncoder,&encoder));
+    uint8_t *root_cpu=(uint8_t *)root_bo->_map+64;
+    APPLE_AGX_U64 root_address=root_bo->va->addr+64;
+    int root_refs=root_bo->refcnt;
+    if(pass==6) {
+      CHECK_PPP(AgxWin32AsahiEncoderRootBegin(dev,root_cpu,root_address,256,&root));
+      CHECK_PPP(root_bo->refcnt==root_refs+1 && c.Capture.ReferenceCount==1 && !backend->ActiveEmission);
+      CHECK_PPP(!AgxWin32AsahiEmissionBegin(dev,vdm.cpu,vdm.gpu,64,
+          AppleAgxWin32RoleEncoder,&encoder));
+      CHECK_PPP(!AgxWin32AsahiEncoderEmissionBeginCpu(dev,root_cpu+16,64,&encoder));
+      CHECK_PPP(c.Capture.ReferenceCount==1 && root_bo->refcnt==root_refs+1);
+      CHECK_PPP(!AgxWin32AsahiEncoderRootBegin(dev,root_cpu,root_address,256,&other));
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu+1,root_address,256,&root));
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address+64,256,&root));
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,255,&root));
+      AGX_WIN32_ASAHI_ENCODER_ROOT copy=root;
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&copy));
+      c.Capture.Owner++;
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&root));
+      c.Capture.Owner--;
+      void *map=root_bo->_map; root_bo->_map=(uint8_t *)map+4;
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&root));
+      root_bo->_map=map;
+      CHECK_PPP(AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&root));
+      CHECK_PPP(!AgxWin32AsahiEmissionBegin(dev,vdm.cpu,vdm.gpu,64,
+          AppleAgxWin32RoleEncoder,&encoder));
+      CHECK_PPP(c.Capture.ReferenceCount==1 && root_bo->refcnt==root_refs+1);
+      CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&root));
+      CHECK_PPP(!AgxWin32AsahiEncoderRootFinalize(&root,root_cpu+128));
+      CHECK_PPP(!AgxWin32AsahiEncoderEmissionBeginCpu(dev,root_cpu+252,8,&encoder));
+      CHECK_PPP(!AgxWin32AsahiEmissionBegin(dev,root_cpu+16,root_address+16,64,
+          AppleAgxWin32RoleEncoder,&encoder));
+      out=root_cpu+16;
+      CHECK_PPP(AgxWin32AsahiEncoderEmissionBeginCpu(dev,out,64,&encoder));
+      CHECK_PPP(!AgxWin32AsahiEncoderRootLeave(&root));
+      CHECK_PPP(!AgxWin32AsahiEncoderEmissionBeginCpu(dev,out+32,16,&ppp_scope));
+      CHECK_PPP(root_bo->refcnt==root_refs+1 && c.Capture.ReferenceCount==1);
+    } else CHECK_PPP(AgxWin32AsahiEmissionBegin(dev,vdm.cpu,vdm.gpu,64,AppleAgxWin32RoleEncoder,&encoder));
     shader.stage=shader.b.info.stage=MESA_SHADER_VERTEX;
     uint32_t vs=AgxWin32NativeBuildPipelineTest(batch,&shader,NULL,MESA_SHADER_VERTEX);
     CHECK_PPP(vs && backend->ActiveEmission==&encoder);
@@ -77,30 +117,57 @@ static unsigned TestNativePppCapture(struct agx_batch *batch,
             AppleAgxWin32RolePppState,&wrong));
       }
       int finished=AgxWin32AsahiPipelineFinish(&encoder,out);
-      CHECK_PPP(finished==(pass==0 || pass==4));
+      CHECK_PPP(finished==(pass==0 || pass==4 || pass==6));
       if(finished) {
         unsigned saw_vs=0,saw_fs=0,saw_cf=0,saw_ppp=0;
-        CHECK_PPP(c.Capture.References[encoder.Reference].Bytes==12);
+        CHECK_PPP(c.Capture.References[encoder.Reference].Bytes==(pass==6?256u:12u));
         for(unsigned i=0;i<c.Capture.RelocationCount;++i) {
           const APPLE_AGX_WIN32_RELOCATION *r=&c.Capture.Relocations[i];
           const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *target=&c.Capture.References[r->TargetReference];
           if(r->Kind==AppleAgxWin32RelocationVdmPipelineOffset32) {
             ++saw_vs; CHECK_PPP(target->Bytes==38 && r->DestinationReference==encoder.Reference);
+            CHECK_PPP(r->DestinationOffset==(pass==6?16u:0u));
           } else if(r->Kind==AppleAgxWin32RelocationPppPipelineOffset32) {
             ++saw_fs; CHECK_PPP(target->Bytes==38 && r->DestinationReference==ppp_scope.Reference);
           } else if(r->Kind==AppleAgxWin32RelocationPppCfBindingsOffset32) {
             ++saw_cf; CHECK_PPP(target->Bytes==cf_bytes && r->DestinationReference==ppp_scope.Reference);
           } else if(r->Kind==AppleAgxWin32RelocationPppStateAddress40) {
             ++saw_ppp; CHECK_PPP(target->Role==AppleAgxWin32RolePppState && target->Bytes==ppp_bytes);
+            CHECK_PPP(r->DestinationOffset==(pass==6?20u:4u));
           }
         }
         CHECK_PPP(saw_vs==1 && saw_fs==1 && saw_cf==1 && saw_ppp==1);
+        if(pass==6) {
+          CHECK_PPP(root.CompletedEnd==28 && root_bo->refcnt==root_refs+1);
+          CHECK_PPP(!AgxWin32AsahiEncoderEmissionBeginCpu(dev,root_cpu+16,64,&encoder));
+          CHECK_PPP(AgxWin32AsahiEncoderRootLeave(&root));
+          CHECK_PPP(AgxWin32AsahiCaptureDeactivate(&c) && !backend->ActiveEmission);
+          CHECK_PPP(AgxWin32AsahiCaptureActivate(&c));
+          CHECK_PPP(AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&root));
+          CHECK_PPP(AgxWin32AsahiEncoderEmissionBeginCpu(dev,root_cpu+32,64,&encoder));
+          memset(root_cpu+32,0,4);
+          CHECK_PPP(AgxWin32AsahiPipelineFinish(&encoder,root_cpu+36));
+          CHECK_PPP(c.Capture.References[root.Scope.Reference].Bytes==256 && root_bo->refcnt==root_refs+1);
+          CHECK_PPP(AgxWin32AsahiEncoderRootLeave(&root));
+          CHECK_PPP(!AgxWin32AsahiEncoderRootFinalize(&root,root_cpu+35));
+          CHECK_PPP(!AgxWin32AsahiEncoderRootFinalize(&root,root_cpu+257));
+          uint8_t stop[5+64]={0,0,0,0xc0,0};
+          memcpy(root_cpu+36,stop,sizeof(stop));
+          CHECK_PPP(AgxWin32AsahiEncoderRootFinalize(&root,root_cpu+36+sizeof(stop)));
+          CHECK_PPP(c.Capture.References[root.Scope.Reference].Offset==64 &&
+              c.Capture.References[root.Scope.Reference].Bytes==105);
+          CHECK_PPP(!AgxWin32AsahiEncoderRootFinalize(&root,root_cpu+108));
+          CHECK_PPP(!AgxWin32AsahiEncoderRootEnter(dev,root_cpu,root_address,256,&root));
+          CHECK_PPP(!AgxWin32AsahiEncoderRootBegin(dev,root_cpu,root_address,256,&root));
+        }
       } else CHECK_PPP(c.Capture.State==0 && c.Capture.ReferenceCount==0);
     }
     CHECK_PPP(AgxWin32AsahiCaptureDeactivate(&c));
     if(c.Capture.State) CHECK_PPP(AgxWin32RelocAbort(&c.Capture)==AgxRelocOk);
+    CHECK_PPP(root_bo->refcnt==root_refs);
     CHECK_PPP(!backend->ActiveEmission && !backend->Failed);
   }
+  agx_bo_unreference(dev,root_bo);
   batch->texture_count[MESA_SHADER_VERTEX]=saved_textures[0];
   batch->texture_count[MESA_SHADER_FRAGMENT]=saved_textures[1];
   batch->sampler_count[MESA_SHADER_VERTEX]=saved_samplers[0];
@@ -108,6 +175,53 @@ static unsigned TestNativePppCapture(struct agx_batch *batch,
   printf("NATIVE_PPP_CAPTURE: errors=%u (native PPP helpers and USC emitter; no draw or GPU execution)\n",errors);
   return errors;
 #undef CHECK_PPP
+}
+
+/* Real invariant: native draw reserve must fail before a pool allocation,
+ * command jump, or caller write when the one Encoder root cannot contain it. */
+static unsigned TestEncoderRootReserve(AGX_WIN32_ASAHI_BACKEND *backend,
+    const AGX_WIN32_RELOC_ALLOCATION *identity) {
+  unsigned errors=0;
+  struct agx_device *dev=backend->Native;
+#define CHECK_ROOT(x) do { if(!(x)) { ++errors; fprintf(stderr,"ENCODER_ROOT line=%u %s\n",(unsigned)__LINE__,#x); } } while(0)
+  struct agx_bo *bo=AgxWin32AsahiEncoderCreate(dev,0x4000,0x4000,"root reserve test");
+  CHECK_ROOT(bo && agx_bo_map(bo));
+  if(!bo || !bo->_map) return errors+1;
+  uint8_t *cpu=(uint8_t *)bo->_map+64;
+  APPLE_AGX_U64 address=bo->va->addr+64;
+  const unsigned capacity=0x3000,tail=AGX_VDM_STREAM_LINK_LENGTH+0x800;
+  CHECK_ROOT(AgxWin32AsahiEncoderDrawPreflight(dev,NULL,NULL,NULL,UINT64_MAX));
+  for(unsigned pass=0;pass<8;++pass) {
+    AGX_WIN32_ASAHI_CAPTURE c={0};
+    AGX_WIN32_ASAHI_ENCODER_ROOT root={0};
+    int holds=bo->refcnt;
+    CHECK_ROOT(AgxWin32AsahiCaptureBegin(&c,backend,identity->Owner,identity->Generation,pass+1)==AgxRelocOk);
+    CHECK_ROOT(AgxWin32AsahiCaptureActivate(&c));
+    CHECK_ROOT(AgxWin32AsahiEncoderRootBegin(dev,cpu,address,capacity,&root));
+    if(pass!=6) CHECK_ROOT(AgxWin32AsahiEncoderRootEnter(dev,cpu,address,capacity,&root));
+    const uint8_t *current=cpu+32,*end=cpu+capacity;
+    APPLE_AGX_U64 bytes=capacity-32-tail;
+    if(pass==1) ++bytes;
+    if(pass==2) bytes=UINT64_MAX;
+    if(pass==3) --end;
+    if(pass==5) current=cpu-1;
+    if(pass==7) c.Capture.Allocations[root.Scope.Reference].Serial++;
+    memset(cpu+32,0xa5,16);
+    unsigned references=c.Capture.ReferenceCount;
+    CHECK_ROOT(AgxWin32AsahiEncoderDrawPreflight(dev,pass==4?NULL:bo,current,end,bytes)==(pass==0));
+    CHECK_ROOT(backend->Failed==(pass!=0));
+    for(unsigned i=0;i<16;++i) CHECK_ROOT(cpu[32+i]==0xa5);
+    CHECK_ROOT(bo->refcnt==holds+1 && c.Capture.State==1 && c.Capture.ReferenceCount==references);
+    if(pass!=6) CHECK_ROOT(AgxWin32AsahiEncoderRootLeave(&root));
+    CHECK_ROOT(!backend->ActiveEmission && AgxWin32AsahiCaptureDeactivate(&c));
+    if(pass==7) c.Capture.Allocations[root.Scope.Reference].Serial--;
+    CHECK_ROOT(AgxWin32RelocAbort(&c.Capture)==AgxRelocOk && bo->refcnt==holds);
+    backend->Failed=0;
+  }
+  agx_bo_unreference(dev,bo);
+  printf("NATIVE_ENCODER_ROOT_RESERVE: errors=%u (root owner contract; no native draw execution)\n",errors);
+  return errors;
+#undef CHECK_ROOT
 }
 
 /* Executes the original native pipeline function, not a second materializer.
@@ -205,6 +319,7 @@ unsigned AgxWin32AsahiPipelineTest(AGX_WIN32_SCREEN *screen,
     CHECK_PIPE(AgxWin32RelocAbort(&capture.Capture)==AgxRelocOk);
   }
   errors+=TestNativePppCapture(&batch,&cs,backend,&identity);
+  errors+=TestEncoderRootReserve(backend,&identity);
   /* Linked prolog/epilog scratch need not appear in cs's main/preamble info. */
   agx_pack(&linked.regs,USC_REGISTERS,cfg) { cfg.register_count=8; cfg.spill_size=1; }
   CHECK_PIPE(cs.b.info.scratch_size==0 && cs.b.info.preamble_scratch_size==0);

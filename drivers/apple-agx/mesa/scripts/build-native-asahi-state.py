@@ -279,9 +279,9 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
    AGX_WIN32_ASAHI_PIPELINE state_capture = {0};
    AGX_WIN32_ASAHI_BACKEND *windows_backend = dev->windows_private;
    bool capture_active = windows_backend && windows_backend->ActiveCapture;
-   if (capture_active && !AgxWin32AsahiEmissionBeginCpu(
+   if (capture_active && !AgxWin32AsahiEncoderEmissionBeginCpu(
            dev, out, (APPLE_AGX_U32)(batch->vdm.end - out),
-           AppleAgxWin32RoleEncoder, &state_capture)) {
+           &state_capture)) {
       windows_backend->Failed = 1;
       return out;
    }''',1)
@@ -359,7 +359,37 @@ uint8_t *AgxWin32NativeEncodeStateTest(struct agx_batch *batch, uint8_t *out) {
 }
 #endif
 '''
-        state_target.write_text(state_text[:state_begin]+state_body+state_wrapper+state_text[state_end:])
+        state_text=state_text[:state_begin]+state_body+state_wrapper+state_text[state_end:]
+        # Guard the actual void draw caller, not the void reserve helper: a
+        # failed helper must never fall through to state/draw writes. Preserve
+        # the source-defined draw estimate and check before alloc/pool jump.
+        reserve_start=state_text.index('   agx_ensure_cmdbuf_has_space(\n      batch, &batch->vdm,')
+        reserve_end=state_text.index(');',reserve_start)+2
+        reserve=state_text[reserve_start:reserve_end]
+        estimate=reserve.split('batch, &batch->vdm,\n',1)[1][:-2].strip()
+        guard='''   if (!AgxWin32AsahiEncoderDrawPreflight(
+          agx_device(ctx->base.screen), batch->vdm.bo,
+          batch->vdm.current, batch->vdm.end,
+          %s))
+      return;
+
+''' % estimate
+        state_text=state_text[:reserve_start]+guard+state_text[reserve_start:]
+        encode_call='   uint8_t *out = agx_encode_state(batch, batch->vdm.current);'
+        if state_text.count(encode_call)!=1:
+            raise SystemExit('Ambiguous native draw state failure propagation anchor')
+        state_text=state_text.replace(encode_call,'''   AGX_WIN32_ASAHI_BACKEND *windows_draw_backend =
+      agx_device(ctx->base.screen)->windows_private;
+   AGX_WIN32_ASAHI_CAPTURE *windows_draw_capture = windows_draw_backend ?
+      windows_draw_backend->ActiveCapture : NULL;
+   uint8_t *out = agx_encode_state(batch, batch->vdm.current);
+   if (windows_draw_capture &&
+       (windows_draw_backend->ActiveCapture != windows_draw_capture ||
+        windows_draw_backend->Failed || windows_draw_capture->Capture.State != 1u)) {
+      windows_draw_backend->Failed = 1;
+      return;
+   }''',1)
+        state_target.write_text(state_text)
         overlays['src/gallium/drivers/asahi/agx_state.c']['after_state_capture']=hashlib.sha256(state_target.read_bytes()).hexdigest()
         (out/'native_pipeline_contract.c').write_text(
             '#include "gallium/drivers/asahi/agx_state.h"\n'

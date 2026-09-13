@@ -616,7 +616,64 @@ static void test_v3_exact_native_source_spans_are_not_word_rounded(void) {
       AdmissionWin32TransportAlignment);
 }
 
+
+/* agx_flush_render writes a 5-byte stop plus 64 zero bytes, without rounding
+ * the source range. Only read-only v3 Encoder sources may end mid-word. */
+static void test_v3_encoder_native_termination_span(void) {
+  APPLE_AGX_WIN32_COMMAND_HEADER header = {0};
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE reference = {0};
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw = {0};
+  APPLE_AGX_WIN32_RELOCATION relocation = {0};
+  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header,&reference,NULL,&draw,&relocation};
+  ADMISSION_WIN32_ALLOCATION_FACT fact;
+  TEST_LOOKUP lookup = make_lookup();
+  header.Opcode=AppleAgxWin32OpcodeDraw;
+  header.Generation=7; header.ReferenceCount=1;
+  header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  reference.AllocationIndex=1; reference.Access=AppleAgxWin32AccessRead;
+  reference.Role=AppleAgxWin32RoleEncoder; reference.Offset=64;
+  reference.Bytes=32+69;
+  lookup.Count=1; lookup.Allocations[0]=lookup.Allocations[1];
+  lookup.Allocations[0].Index=1;
+  lookup.Allocations[0].Fact.ClassId=AgxWin32BufferClassEncoder;
+  lookup.Allocations[0].Fact.Flags=AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead;
+  assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportSuccess);
+  for(unsigned version=1;version<=2;++version) {
+    header.Version=(APPLE_AGX_U16)version;
+    assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportAlignment);
+  }
+  header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  for(unsigned length=1;length<=3;++length) {
+    reference.Bytes=length;
+    assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportAlignment);
+  }
+  reference.Bytes=70;
+  assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportAlignment);
+  reference.Bytes=32+69;
+  draw.EncoderReference=1;
+  assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportAlignment);
+  draw.EncoderReference=0;
+  {
+    APPLE_AGX_WIN32_ALLOCATION_REFERENCE refs[2]={reference,reference};
+    ADMISSION_WIN32_ALLOCATION_FACT pair[2];
+    refs[1].Offset=256;
+    header.ReferenceCount=2; view.References=refs; draw.EncoderReference=1;
+    assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,pair,2)==AdmissionWin32TransportAlignment);
+    refs[0].Bytes=4;
+    assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,pair,2)==AdmissionWin32TransportSuccess);
+    header.ReferenceCount=1; view.References=&reference; draw.EncoderReference=0;
+  }
+  reference.Offset=65;
+  assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportAlignment);
+  reference.Offset=64; reference.Access=AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite;
+  assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportAlignment);
+  reference.Access=AppleAgxWin32AccessRead;
+  lookup.Allocations[0].Fact.ClassId=AgxWin32BufferClassGeneral;
+  assert(AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportClass);
+}
+
 int main(void) {
+  test_v3_encoder_native_termination_span();
   test_valid_noncontiguous_index_and_range();
   test_owner_generation_and_access_rejections();
   test_alignment_capacity_and_lookup_rejections();

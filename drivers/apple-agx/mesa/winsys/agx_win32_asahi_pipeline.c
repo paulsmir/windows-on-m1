@@ -14,6 +14,133 @@ int AgxWin32AsahiCaptureDeactivate(AGX_WIN32_ASAHI_CAPTURE *c) {
     return 0;
   c->Backend->ActiveCapture=NULL; return 1;
 }
+static int encoder_root_valid(AGX_WIN32_ASAHI_ENCODER_ROOT *r) {
+  AGX_WIN32_ASAHI_CAPTURE *c=r?r->Scope.Capture:NULL;
+  struct agx_bo *bo=NULL; APPLE_AGX_U64 offset=0;
+  AGX_WIN32_RELOC_ALLOCATION identity;
+  APPLE_AGX_U32 class_id=0;
+  if(!c || c->EncoderRoot!=r || r->Scope.Root!=r || r->Finalized || r->Scope.Failed || !c->Backend ||
+     c->Backend->Failed || c->Backend->ActiveCapture!=c || c->Capture.State!=1u ||
+     c->Capture.Request!=r->Request || c->Capture.Owner!=r->Identity.Owner ||
+     c->Capture.Generation!=r->Identity.Generation ||
+     r->Scope.Reference>=c->Capture.ReferenceCount ||
+     !AgxWin32AsahiFindAddress(c->Backend,c->Capture.Owner,c->Capture.Generation,
+       r->Address,r->Scope.Capacity,&bo,&offset) ||
+     offset!=r->AllocationOffset || !bo->_map ||
+     (uintptr_t)bo->_map>UINTPTR_MAX-offset ||
+     (uintptr_t)r->Scope.Cpu!=(uintptr_t)bo->_map+offset ||
+     !AgxWin32AsahiClass(c->Backend,bo,&class_id) || class_id!=AgxWin32BufferClassEncoder ||
+     !AgxWin32AsahiIdentity(c->Backend,bo,&identity) ||
+     identity.Owner!=r->Identity.Owner || identity.Generation!=r->Identity.Generation ||
+     identity.Token!=r->Identity.Token || identity.Serial!=r->Identity.Serial ||
+     identity.Bytes!=r->Identity.Bytes || identity.Access!=r->Identity.Access ||
+     r->Identity.AllocationIndex>=c->Count ||
+     c->Bos[r->Identity.AllocationIndex]!=bo) return 0;
+  for(unsigned i=0;i<c->Capture.ReferenceCount;++i)
+    if(i!=r->Scope.Reference && c->Capture.References[i].Role==AppleAgxWin32RoleEncoder)
+      return 0;
+  const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *ref=&c->Capture.References[r->Scope.Reference];
+  const AGX_WIN32_RELOC_ALLOCATION *a=&c->Capture.Allocations[r->Scope.Reference];
+  return ref->Role==AppleAgxWin32RoleEncoder && ref->Access==AppleAgxWin32AccessRead &&
+    ref->Offset==offset && ref->Bytes==r->Scope.Capacity &&
+    a->Owner==identity.Owner && a->Generation==identity.Generation &&
+    a->Token==identity.Token && a->Serial==identity.Serial &&
+    a->Bytes==identity.Bytes && a->Access==identity.Access &&
+    a->AllocationIndex==r->Identity.AllocationIndex;
+}
+int AgxWin32AsahiEncoderRootBegin(struct agx_device *native,void *cpu,
+    APPLE_AGX_U64 address,APPLE_AGX_U32 capacity,AGX_WIN32_ASAHI_ENCODER_ROOT *r) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  AGX_WIN32_ASAHI_CAPTURE *c=b?b->ActiveCapture:NULL;
+  if(!r || r->Scope.Capture || r->Finalized || !c || c->EncoderRoot || b->ActiveEmission) return 0;
+  /* A request owns exactly one persistent Encoder interval. This also keeps
+   * completed standalone intervals from being silently subsumed by a root. */
+  for(unsigned i=0;i<c->Capture.ReferenceCount;++i)
+    if(c->Capture.References[i].Role==AppleAgxWin32RoleEncoder) return 0;
+  if(!AgxWin32AsahiEmissionBegin(native,cpu,address,capacity,
+       AppleAgxWin32RoleEncoder,&r->Scope)) return 0;
+  r->Scope.Root=r;
+  r->Identity=c->Capture.Allocations[r->Scope.Reference];
+  r->AllocationOffset=c->Capture.References[r->Scope.Reference].Offset;
+  r->Request=c->Capture.Request; r->Address=address; r->CompletedEnd=0;
+  c->EncoderRoot=r;
+  b->ActiveEmission=NULL;
+  return 1;
+}
+int AgxWin32AsahiEncoderRootEnter(struct agx_device *native,void *cpu,
+    APPLE_AGX_U64 address,APPLE_AGX_U32 capacity,AGX_WIN32_ASAHI_ENCODER_ROOT *r) {
+  if(!encoder_root_valid(r) || r->Scope.Capture->Backend->Native!=native ||
+     r->Scope.Capture->Backend->ActiveEmission || cpu!=r->Scope.Cpu ||
+     address!=r->Address || capacity!=r->Scope.Capacity) return 0;
+  r->Scope.Capture->Backend->ActiveEmission=&r->Scope; return 1;
+}
+int AgxWin32AsahiEncoderRootLeave(AGX_WIN32_ASAHI_ENCODER_ROOT *r) {
+  if(!r || !r->Scope.Capture ||
+     r->Scope.Capture->Backend->ActiveEmission!=&r->Scope) return 0;
+  /* Always permit unwinding the stable root after an inner failure/abort. */
+  r->Scope.Capture->Backend->ActiveEmission=NULL; return 1;
+}
+int AgxWin32AsahiEncoderRootFinalize(AGX_WIN32_ASAHI_ENCODER_ROOT *r,const void *end) {
+  if(!encoder_root_valid(r) || r->Scope.Capture->Backend->ActiveEmission ||
+     (uintptr_t)end<(uintptr_t)r->Scope.Cpu) return 0;
+  APPLE_AGX_U64 length=(uintptr_t)end-(uintptr_t)r->Scope.Cpu;
+  if(!length || length>r->Scope.Capacity || length<r->CompletedEnd) return 0;
+  AGX_WIN32_RELOC_CAPTURE *c=&r->Scope.Capture->Capture;
+  for(unsigned i=0;i<c->RelocationCount;++i) {
+    const APPLE_AGX_WIN32_RELOCATION *rel=&c->Relocations[i];
+    if(rel->DestinationReference==r->Scope.Reference &&
+       (rel->DestinationOffset>length || rel->WidthBytes>length-rel->DestinationOffset))
+      return 0;
+  }
+  c->References[r->Scope.Reference].Bytes=length;
+  r->Finalized=1; return 1;
+}
+int AgxWin32AsahiEncoderDrawPreflight(struct agx_device *native,struct agx_bo *bo,
+    const void *current,const void *end,APPLE_AGX_U64 bytes) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  if(!b || !b->ActiveCapture) return 1;
+  AGX_WIN32_ASAHI_PIPELINE *active=b->ActiveEmission;
+  AGX_WIN32_ASAHI_ENCODER_ROOT *r=active?active->Root:NULL;
+  AGX_WIN32_RELOC_ALLOCATION identity;
+  const APPLE_AGX_U64 tail=AGX_VDM_STREAM_LINK_LENGTH+0x800ULL;
+  if(!r || active!=&r->Scope || !encoder_root_valid(r) || !bo ||
+     !AgxWin32AsahiIdentity(b,bo,&identity) || identity.Token!=r->Identity.Token ||
+     identity.Serial!=r->Identity.Serial || identity.Owner!=r->Identity.Owner ||
+     identity.Generation!=r->Identity.Generation ||
+     (uintptr_t)r->Scope.Cpu>UINTPTR_MAX-r->Scope.Capacity ||
+     (uintptr_t)end!=(uintptr_t)r->Scope.Cpu+r->Scope.Capacity ||
+     (uintptr_t)current<(uintptr_t)r->Scope.Cpu ||
+     (uintptr_t)current>(uintptr_t)end ||
+     (uintptr_t)current-(uintptr_t)r->Scope.Cpu<r->CompletedEnd ||
+     bytes>UINT64_MAX-tail || bytes+tail>(uintptr_t)end-(uintptr_t)current) {
+    b->Failed=1; return 0;
+  }
+  return 1;
+}
+int AgxWin32AsahiEncoderEmissionBeginCpu(struct agx_device *native,void *cpu,
+    APPLE_AGX_U32 capacity,AGX_WIN32_ASAHI_PIPELINE *s) {
+  AGX_WIN32_ASAHI_BACKEND *b=native?native->windows_private:NULL;
+  AGX_WIN32_ASAHI_PIPELINE *active=b?b->ActiveEmission:NULL;
+  AGX_WIN32_ASAHI_ENCODER_ROOT *r=NULL;
+  for(AGX_WIN32_ASAHI_PIPELINE *p=active;p;p=p->PreviousEmission) {
+    if(p==s) return 0;
+    if(p->Root) r=p->Root;
+  }
+  AGX_WIN32_ASAHI_CAPTURE *capture=b?b->ActiveCapture:NULL;
+  if(!r && capture && capture->EncoderRoot) return 0;
+  if(!r) return AgxWin32AsahiEmissionBeginCpu(native,cpu,capacity,
+      AppleAgxWin32RoleEncoder,s);
+  if(!s || !cpu || !capacity || active!=&r->Scope || !encoder_root_valid(r) ||
+     (uintptr_t)cpu<(uintptr_t)r->Scope.Cpu) return 0;
+  APPLE_AGX_U64 offset=(uintptr_t)cpu-(uintptr_t)r->Scope.Cpu;
+  if(offset<r->CompletedEnd || offset>r->Scope.Capacity ||
+     capacity>r->Scope.Capacity-offset) return 0;
+  memset(s,0,sizeof(*s));
+  s->Capture=r->Scope.Capture; s->Cpu=cpu; s->Capacity=capacity;
+  s->Reference=r->Scope.Reference; s->Role=AppleAgxWin32RoleEncoder;
+  s->PreviousEmission=active; s->Root=r; s->RootOffset=(APPLE_AGX_U32)offset;
+  b->ActiveEmission=s; return 1;
+}
 int AgxWin32AsahiEmissionBegin(struct agx_device *native,void *cpu,
     APPLE_AGX_U64 address,APPLE_AGX_U32 capacity,APPLE_AGX_U32 role,
     AGX_WIN32_ASAHI_PIPELINE *s) {
@@ -21,6 +148,9 @@ int AgxWin32AsahiEmissionBegin(struct agx_device *native,void *cpu,
   AGX_WIN32_ASAHI_CAPTURE *c=b?b->ActiveCapture:NULL;
   struct agx_bo *bo=NULL; APPLE_AGX_U64 offset=0;
   APPLE_AGX_U32 reference=0;
+  if(c && c->EncoderRoot && role==AppleAgxWin32RoleEncoder) return 0;
+  for(AGX_WIN32_ASAHI_PIPELINE *p=b?b->ActiveEmission:NULL;p;p=p->PreviousEmission)
+    if(p==s) return 0;
   if(!b || !c || !s || !cpu || !capacity || !role ||
      c->Capture.State!=1u || !AgxWin32AsahiFindAddress(b,c->Capture.Owner,
         c->Capture.Generation,address,capacity,&bo,&offset) || !bo->_map ||
@@ -79,6 +209,7 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
   if(!s || !s->Capture || s->Failed) return;
   AGX_WIN32_ASAHI_CAPTURE *c=s->Capture;
   if(c->Backend->ActiveEmission!=s || c->Backend->ActiveCapture!=c ||
+     (s->Root && !encoder_root_valid(s->Root)) ||
      c->Capture.State!=1u || (uintptr_t)end<(uintptr_t)s->Cpu ||
      (uintptr_t)end-(uintptr_t)s->Cpu<width ||
      (uintptr_t)end-(uintptr_t)s->Cpu>s->Capacity) { s->Failed=1; return; }
@@ -120,7 +251,7 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
   if(!valid || encoded!=address || AgxWin32AsahiCaptureAddress(c,address,bytes,role,
       role==AppleAgxWin32RoleShader?AppleAgxWin32AccessRead|AppleAgxWin32AccessExecute:
       AppleAgxWin32AccessRead,&index)!=AgxRelocOk ||
-     AgxWin32RelocField(&c->Capture,kind,s->Reference,offset,index,0)!=AgxRelocOk)
+     AgxWin32RelocField(&c->Capture,kind,s->Reference,offset+s->RootOffset,index,0)!=AgxRelocOk)
     s->Failed=1;
 }
 void AgxWin32AsahiPipelineRecordCaptured(AGX_WIN32_ASAHI_PIPELINE *s,
@@ -157,18 +288,23 @@ void AgxWin32AsahiPipelineRecordCaptured(AGX_WIN32_ASAHI_PIPELINE *s,
 }
 int AgxWin32AsahiPipelineFinish(AGX_WIN32_ASAHI_PIPELINE *s,const void *end) {
   if(!s || !s->Capture || s->Capture->Backend->ActiveEmission!=s) return 0;
+  if(s->Root && s==&s->Root->Scope) return 0;
   AGX_WIN32_ASAHI_CAPTURE *c=s->Capture;
   APPLE_AGX_U64 length=(uintptr_t)end-(uintptr_t)s->Cpu;
-  if((uintptr_t)end<(uintptr_t)s->Cpu || !length || length>s->Capacity ||
+  if((s->Root && !encoder_root_valid(s->Root)) ||
+     (uintptr_t)end<(uintptr_t)s->Cpu || !length || length>s->Capacity ||
      c->Capture.State!=1u) s->Failed=1;
   for(unsigned i=0;i<c->Capture.RelocationCount;++i) {
     const APPLE_AGX_WIN32_RELOCATION *r=&c->Capture.Relocations[i];
     if(r->DestinationReference==s->Reference &&
-       (r->DestinationOffset>length || r->WidthBytes>length-r->DestinationOffset))
+       r->DestinationOffset>=s->RootOffset &&
+       (r->DestinationOffset-s->RootOffset>length ||
+        r->WidthBytes>length-(r->DestinationOffset-s->RootOffset)))
       s->Failed=1;
   }
   c->Backend->ActiveEmission=s->PreviousEmission;
   if(s->Failed) { (void)AgxWin32RelocAbort(&c->Capture); s->Capture=NULL; return 0; }
-  c->Capture.References[s->Reference].Bytes=length;
+  if(s->Root) s->Root->CompletedEnd=s->RootOffset+(APPLE_AGX_U32)length;
+  else c->Capture.References[s->Reference].Bytes=length;
   s->Capture=NULL; return 1;
 }

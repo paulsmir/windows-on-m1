@@ -43,6 +43,24 @@ warnings/errors; native compiler warnings recorded separately. Nine host tests P
 Native PPP fixture uses original PPP helpers and actual USC emitter with controlled
 shader inputs. Whole agx_encode_state and full native draw execution NOT_PROVEN.
 
+## Persistent encoder root verified
+Result/contract: agent_tasks/AD04-ENCODER-ROOT-RESULT.md and
+agent_tasks/AD04-ENCODER-ROOT-PLAN.md.
+Caller-owned root has one Encoder reference/hold, detached Begin/Enter/Leave,
+root-relative borrowed state scopes and once-only exact Finalize. Private capture
+association prevents a second generic Encoder even while detached. Reentry checks
+full identity/map/base/capacity. Child Finish cannot shorten the root.
+Actual draw projection preflights native reserve before rollover alloc/jump and
+propagates capture/state failure before subsequent draw writes.
+Exact-span rule: designated v3 Read Encoder root only, length69+4n; no rounding,
+no offset/class/pointer relaxation. Final object size admission stays unchanged.
+Final evidence: evidence/AD04-native-encoder-root-20260913b/.
+Source SHA256 34043fad8acb277b71082b27fbccb51e8532b0a7f55e6d1a5199c338543695cc.
+x64 native/relocation/UMD execution PASS; ARM64 build/link PASS, execution NOT_RUN.
+Nine host tests PASS; owner balance9 create/map/unlock/delete, backends0.
+First Windows snapshot a failed old fixture count7; retained as failure evidence.
+No actual native draw or production batch capsule proof.
+
 ## Lifetime and preserved software contracts
 Identity = OwnerCookie + Generation + Token + Serial; existing ScreenBuffers are
 authoritative, no second resource registry. Composer assigns dense request-local
@@ -60,23 +78,19 @@ Relevant records: AD04-NATIVE-POOL-CAPTURE.md, AD04-NATIVE-PIPELINE-CAPTURE.md,
 AD04-NATIVE-USC-V3.md under agent_tasks/. Full compiler/NIR control is preserved.
 
 ## Exact next causal target
-One persistent native batch/request Encoder root, with temporary borrowed emission
-subspans using root-relative offsets. Current separate state Encoder refs cannot
-later be overlapped by a whole final encoder capture. Keep overlap rejection.
-Root storage must survive draw return, flush and retirement; stack-local scopes
-must be unwound before return. Create after initial encoder allocation, before
-initial state; finalize once after initial/state/direct-draw/native termination.
-Native agx_pipe.c agx_flush_render writes 69 termination bytes without advancing
-vdm.current. Exact final end is current+sizeof(stop); derive/test v3 Read Encoder
-exact-byte-span admission separately, preserving offsets/classes and no padding.
-Reject rollover before native pool allocation/jump and prevent caller writes.
-
-Then close initial/viewport PPP, nested uniform/VBO/resource edges, attachment
-texture/PBE descriptors, BG/partial/EOT pipelines and final scissor/depth-bias roots.
-Complete Windows-only finalization belongs at agx_flush_render/agx_flush_batch;
-do not import drmSyncobj/virtio/shared-BO/Linux ioctl semantics.
-Only a complete graph with stable source/capsule lifetime may enter adapter Seal.
-Production native provider and broader dynamic DMA/legacy overlay remain disabled.
+Wire stable root/capture/adapter storage into the real Windows native batch/request
+lifetime. The root API is now tested, but production RootBegin/Enter/Leave/Finalize
+calls at initial encoder allocation/draw/flush are not connected. Preserve storage
+through native call returns and ordered retirement; no stack-local persistent state.
+Cover initial/viewport PPP and complete direct draw/termination in the one root.
+Native agx_flush_render writes69 bytes without advancing current; final end is
+current+sizeof(stop). The exact-span rule and pre-rollover guard are implemented.
+Then close nested uniform/VBO/resource edges, attachment texture/PBE descriptors,
+BG/partial/EOT pipelines and final scissor/depth-bias roots.
+Windows-only finalization belongs at agx_flush_render/agx_flush_batch; do not
+import drmSyncobj/virtio/shared-BO/Linux ioctl semantics. Only a complete graph
+with frozen source bytes and stable capsule lifetime may enter adapter Seal.
+Production provider and broader dynamic DMA/legacy overlay remain disabled.
 
 ## Unresolved runtime closure and machine state
 Full state-emitter fixture retained under EnableNativeStateTest; 140 unresolved
