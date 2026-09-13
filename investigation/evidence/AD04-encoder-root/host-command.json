@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "tests.test_apple_agx_win32_abi",
+    "tests.test_apple_agx_reloc_capture",
+    "tests.test_apple_agx_render_win32_transport",
+    "tests.test_apple_agx_dynamic_job",
+    "tests.test_apple_agx_mesa_win32_transport",
+    "tests.test_apple_agx_native_bo",
+    "tests.test_apple_agx_native_device",
+    "tests.test_change_ledger"
+  ],
+  "exit": 0
+}

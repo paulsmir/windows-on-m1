@@ -1,0 +1,19 @@
+Assertion failed: (AdmissionWin32ValidateReferences(&view,7,lookup_allocation,&lookup,&fact,1)==AdmissionWin32TransportSuccess), function test_v3_encoder_native_termination_span, file render_win32_transport_test.c, line 640.
+E
+======================================================================
+ERROR: test_device_owned_allocation_ranges_are_validated_atomically (tests.test_apple_agx_render_win32_transport.AppleAgxRenderWin32TransportTests.test_device_owned_allocation_ranges_are_validated_atomically)
+Catches using a wrong, stale, active, read-only or partial allocation.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler/tests/test_apple_agx_render_win32_transport.py", line 40, in test_device_owned_allocation_ranges_are_validated_atomically
+    subprocess.run([str(binary)], check=True, cwd=ROOT)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/var/folders/s5/sgnkc7ws7cs5ctyqdwh_6qm40000gp/T/tmpvldsq86n/render_win32_transport_test']' died with <Signals.SIGABRT: 6>.
+
+----------------------------------------------------------------------
+Ran 1 test in 0.457s
+
+FAILED (errors=1)
