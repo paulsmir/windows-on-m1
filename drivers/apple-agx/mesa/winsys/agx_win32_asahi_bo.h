@@ -33,5 +33,10 @@ int AgxWin32AsahiCollect(AGX_WIN32_ASAHI_BACKEND *);
 int AgxWin32AsahiDetach(AGX_WIN32_ASAHI_BACKEND *);
 int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
     AGX_WIN32_RELOC_ALLOCATION *);
+/* Caller-serialized native construction lookup; never a PA/GPUVA resolver.
+ * Returned BO is borrowed until caller immediately registers/retains it. */
+int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *, APPLE_AGX_U64 Owner,
+    APPLE_AGX_U32 Generation, APPLE_AGX_U64 Address, APPLE_AGX_U64 Bytes,
+    struct agx_bo **Bo, APPLE_AGX_U64 *Offset);
 
 #endif

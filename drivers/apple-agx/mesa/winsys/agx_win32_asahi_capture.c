@@ -70,3 +70,16 @@ AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureReference(AGX_WIN32_ASAHI_CAPTURE *c,
   if(result!=AgxRelocOk && added) { --c->Count; c->Bos[i]=NULL; }
   return result;
 }
+
+AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureAddress(AGX_WIN32_ASAHI_CAPTURE *c,
+    APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,APPLE_AGX_U32 role,
+    APPLE_AGX_U32 access,APPLE_AGX_U32 *index) {
+  struct agx_bo *bo=NULL; APPLE_AGX_U64 offset=0;
+  if(index) *index=~0u;
+  if(!c || !c->Backend || !index) return AgxRelocArgument;
+  if(!AgxWin32AsahiFindAddress(c->Backend,c->Capture.Owner,c->Capture.Generation,
+                              address,bytes,&bo,&offset)) return AgxRelocStale;
+  /* Caller serialization covers lookup through RetainExact; this is not an
+   * unlocked lookup/retain protocol for concurrent native producers. */
+  return AgxWin32AsahiCaptureReference(c,bo,role,access,offset,bytes,index);
+}

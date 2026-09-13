@@ -159,3 +159,43 @@ int AgxWin32AsahiIdentity(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
     return 0;
   return b->Ops.Identity(b->Owner,base,bo->Backing.ConstructionSerial,out);
 }
+
+int AgxWin32AsahiFindAddress(AGX_WIN32_ASAHI_BACKEND *b,APPLE_AGX_U64 owner,
+    APPLE_AGX_U32 generation,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,
+    struct agx_bo **out,APPLE_AGX_U64 *offset) {
+  APPLE_AGX_U32 cursor=0,seen=0;
+  APPLE_AGX_U64 found_offset=0;
+  struct agx_bo *found=NULL;
+  const void *key;
+  if(out) *out=NULL;
+  if(offset) *offset=0;
+  if(!b || !b->Native || b->Failed || !out || !offset || !owner || !generation ||
+     generation!=b->Buffers.Generation || !bytes || !address || bytes>~address ||
+     !b->Buffers.Screen || !b->Buffers.Screen->Active ||
+     b->Buffers.Screen->Generation!=generation) return 0;
+  for(;;) {
+    APPLE_AGX_U32 previous=cursor;
+    key=b->Ops.NextBo(b->Owner,&cursor);
+    if(!key) break;
+    if(cursor<=previous || ++seen>b->LiveBos) return 0;
+    AGX_WIN32_RELOC_ALLOCATION identity;
+    /* The owner validates membership before any native pointer dereference.
+     * A retired zero-ref BO awaiting collection is not an eligible source. */
+    if(!AgxWin32AsahiIdentity(b,(struct agx_bo *)key,&identity)) continue;
+    if(identity.Owner!=owner || identity.Generation!=generation) continue;
+    struct windows_bo *bo=(struct windows_bo *)key;
+    APPLE_AGX_U64 base=0,resolved=0;
+    if(AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,0,bo->Backing.Bytes,&base)
+         !=AgxWin32NativeDeviceSuccess || !bo->Base.va ||
+       bo->Base.va->addr!=base || bo->Base.size!=identity.Bytes ||
+       bo->Backing.Bytes!=identity.Bytes) return 0;
+    if(address<base || address-base>=identity.Bytes || bytes>identity.Bytes-(address-base))
+      continue;
+    if(found || AgxWin32NativeDeviceResolveBo(&b->Buffers,&bo->Backing,address-base,
+        bytes,&resolved)!=AgxWin32NativeDeviceSuccess || resolved!=address) return 0;
+    found=&bo->Base; found_offset=address-base;
+  }
+  if(!found) return 0;
+  *out=found; *offset=found_offset;
+  return 1;
+}
