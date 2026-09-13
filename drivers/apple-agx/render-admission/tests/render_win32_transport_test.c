@@ -173,6 +173,46 @@ static void test_alignment_capacity_and_lookup_rejections(void) {
          AdmissionWin32TransportLookup);
 }
 
+static void test_v3_general_ppp_reference_class(void) {
+  APPLE_AGX_WIN32_COMMAND_HEADER header = {0};
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE reference = {0};
+  APPLE_AGX_WIN32_DRAW_PAYLOAD draw = {0};
+  APPLE_AGX_WIN32_RELOCATION relocation = {0};
+  APPLE_AGX_WIN32_COMMAND_VIEW view = {&header, &reference, NULL, &draw, &relocation};
+  TEST_LOOKUP lookup = make_lookup();
+  ADMISSION_WIN32_ALLOCATION_FACT facts[1];
+  header.Opcode = AppleAgxWin32OpcodeDraw;
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+  header.Generation = 7u;
+  header.ReferenceCount = 1u;
+  reference.AllocationIndex = 1u;
+  reference.Access = AppleAgxWin32AccessRead;
+  reference.Role = AppleAgxWin32RolePppState;
+  reference.Bytes = 4u;
+  lookup.Count = 1u;
+  lookup.Allocations[0] = lookup.Allocations[1];
+  lookup.Allocations[0].Index = 1u;
+  lookup.Allocations[0].Fact.ClassId = AgxWin32BufferClassGeneral;
+  lookup.Allocations[0].Fact.Flags = AppleAgxWin32BufferCpuWrite |
+                                     AppleAgxWin32BufferGpuRead;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+                                          facts,1u)==AdmissionWin32TransportSuccess);
+  lookup.Allocations[0].Fact.ClassId = AgxWin32BufferClassEncoder;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+                                          facts,1u)==AdmissionWin32TransportClass);
+  lookup.Allocations[0].Fact.ClassId = AgxWin32BufferClassGeneral;
+  reference.Access = AppleAgxWin32AccessWrite;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+                                          facts,1u)==AdmissionWin32TransportClass);
+  reference.Access = AppleAgxWin32AccessExecute;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+                                          facts,1u)==AdmissionWin32TransportClass);
+  reference.Access = AppleAgxWin32AccessRead;
+  header.Version = APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES;
+  assert(AdmissionWin32ValidateReferences(&view,7u,lookup_allocation,&lookup,
+                                          facts,1u)==AdmissionWin32TransportClass);
+}
+
 static void test_failed_validation_does_not_publish_partial_facts(void) {
   TEST_COMMAND command = make_command();
   TEST_LOOKUP lookup = make_lookup();
@@ -580,6 +620,7 @@ int main(void) {
   test_valid_noncontiguous_index_and_range();
   test_owner_generation_and_access_rejections();
   test_alignment_capacity_and_lookup_rejections();
+  test_v3_general_ppp_reference_class();
   test_failed_validation_does_not_publish_partial_facts();
   test_overlapping_writable_ranges_are_rejected();
   test_context_generation_contract();

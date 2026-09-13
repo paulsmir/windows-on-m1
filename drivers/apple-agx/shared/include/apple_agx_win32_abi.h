@@ -40,6 +40,7 @@ typedef enum _APPLE_AGX_WIN32_ROLE {
   AppleAgxWin32RoleEncoder = 10u,
   AppleAgxWin32RoleScissor = 11u,
   AppleAgxWin32RoleDepthBias = 12u,
+  AppleAgxWin32RolePppState = 13u,
 } APPLE_AGX_WIN32_ROLE;
 
 typedef enum _APPLE_AGX_WIN32_FORMAT {
@@ -82,6 +83,8 @@ typedef enum _APPLE_AGX_WIN32_RELOCATION_KIND {
   /* v3 only; retains the v2 draw layout and separate fragment USC. */
   AppleAgxWin32RelocationUscPreshaderOffset32 = 8u,
   AppleAgxWin32RelocationUscTableAddress39 = 9u,
+  AppleAgxWin32RelocationPppPipelineOffset32 = 10u,
+  AppleAgxWin32RelocationPppCfBindingsOffset32 = 11u,
 } APPLE_AGX_WIN32_RELOCATION_KIND;
 
 typedef struct _APPLE_AGX_WIN32_COMMAND_HEADER {

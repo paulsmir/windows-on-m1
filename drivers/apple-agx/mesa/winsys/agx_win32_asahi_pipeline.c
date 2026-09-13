@@ -1,4 +1,5 @@
 #include "agx_device.h"
+#include "asahi/genxml/agx_pack.h"
 #include "agx_win32_asahi_pipeline.h"
 #include <string.h>
 
@@ -33,6 +34,9 @@ int AgxWin32AsahiEmissionBegin(struct agx_device *native,void *cpu,
   if(role==AppleAgxWin32RoleEncoder &&
      (!AgxWin32AsahiClass(b,bo,&classId) || classId!=AgxWin32BufferClassEncoder))
     return 0;
+  if(role==AppleAgxWin32RolePppState &&
+     (!AgxWin32AsahiClass(b,bo,&classId) || classId!=AgxWin32BufferClassGeneral ||
+      ((offset|capacity)&3ULL))) return 0;
   unsigned previous=c->Capture.ReferenceCount;
   if(AgxWin32AsahiCaptureReference(c,bo,role,
       AppleAgxWin32AccessRead,offset,capacity,&reference)!=AgxRelocOk) return 0;
@@ -68,7 +72,10 @@ static APPLE_AGX_U64 read_le(const unsigned char *p,unsigned bytes) {
 }
 void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
     APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U64 bytes,APPLE_AGX_U32 role) {
-  APPLE_AGX_U32 width=kind==AppleAgxWin32RelocationUscShaderOffset32?6:8,index;
+  APPLE_AGX_U32 width=kind==AppleAgxWin32RelocationUscShaderOffset32?6:
+      (kind==AppleAgxWin32RelocationVdmPipelineOffset32 ||
+       kind==AppleAgxWin32RelocationPppPipelineOffset32 ||
+       kind==AppleAgxWin32RelocationPppCfBindingsOffset32)?4:8,index;
   if(!s || !s->Capture || s->Failed) return;
   AGX_WIN32_ASAHI_CAPTURE *c=s->Capture;
   if(c->Backend->ActiveEmission!=s || c->Backend->ActiveCapture!=c ||
@@ -94,6 +101,20 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
   case AppleAgxWin32RelocationUscTableAddress39:
     encoded=((raw>>27)&0xfffffffffULL)<<3;
     valid=(record[0]==0xdd || record[0]==0x9d) && role==AppleAgxWin32RoleDescriptor; break;
+  case AppleAgxWin32RelocationVdmPipelineOffset32:
+  case AppleAgxWin32RelocationPppPipelineOffset32:
+    encoded=(raw&~0x3fULL)+c->Backend->Native->shader_base;
+    valid=role==AppleAgxWin32RoleUscPipeline &&
+      s->Role==(kind==AppleAgxWin32RelocationVdmPipelineOffset32?
+        AppleAgxWin32RoleEncoder:AppleAgxWin32RolePppState); break;
+  case AppleAgxWin32RelocationPppCfBindingsOffset32:
+    encoded=(raw&~3ULL)+c->Backend->Native->shader_base;
+    valid=role==AppleAgxWin32RoleDescriptor && s->Role==AppleAgxWin32RolePppState; break;
+  case AppleAgxWin32RelocationPppStateAddress40:
+    encoded=((raw&0xffULL)<<32)|(raw>>32);
+    valid=role==AppleAgxWin32RolePppState && s->Role==AppleAgxWin32RoleEncoder &&
+      ((raw>>29)&7ULL)==AGX_VDM_BLOCK_TYPE_PPP_STATE_UPDATE &&
+      ((raw>>8)&0xffULL)*4==bytes; break;
   default: break;
   }
   if(!valid || encoded!=address || AgxWin32AsahiCaptureAddress(c,address,bytes,role,
@@ -101,6 +122,38 @@ void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
       AppleAgxWin32AccessRead,&index)!=AgxRelocOk ||
      AgxWin32RelocField(&c->Capture,kind,s->Reference,offset,index,0)!=AgxRelocOk)
     s->Failed=1;
+}
+void AgxWin32AsahiPipelineRecordCaptured(AGX_WIN32_ASAHI_PIPELINE *s,
+    const void *end,APPLE_AGX_U32 kind,APPLE_AGX_U64 address,APPLE_AGX_U32 role) {
+  struct agx_bo *bo=NULL;
+  APPLE_AGX_U64 offset=0;
+  AGX_WIN32_RELOC_ALLOCATION identity;
+  if(!s || !s->Capture || s->Failed) return;
+  AGX_WIN32_ASAHI_CAPTURE *c=s->Capture;
+  if(c->Backend->ActiveEmission!=s || c->Backend->ActiveCapture!=c ||
+     c->Capture.State!=1u ||
+     (role!=AppleAgxWin32RoleUscPipeline && role!=AppleAgxWin32RolePppState) ||
+     !AgxWin32AsahiFindAddress(c->Backend,c->Capture.Owner,c->Capture.Generation,
+       address,1,&bo,&offset) || !AgxWin32AsahiIdentity(c->Backend,bo,&identity)) {
+    s->Failed=1; return;
+  }
+  for(unsigned i=0;i<c->Capture.ReferenceCount;++i) {
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *r=&c->Capture.References[i];
+    const AGX_WIN32_RELOC_ALLOCATION *a=&c->Capture.Allocations[i];
+    if(r->Role==role && r->Offset==offset && r->Access==AppleAgxWin32AccessRead &&
+       a->Token==identity.Token && a->Serial==identity.Serial &&
+       a->Owner==identity.Owner && a->Generation==identity.Generation) {
+      /* Only completed child intervals qualify. An ancestor's provisional
+       * capacity is not an exact source span, even if it has the same role. */
+      for(AGX_WIN32_ASAHI_PIPELINE *active=s;active;
+          active=(AGX_WIN32_ASAHI_PIPELINE *)active->PreviousEmission) {
+        if(active->Capture==c && active->Reference==i) { s->Failed=1; return; }
+      }
+      AgxWin32AsahiPipelineRecord(s,end,kind,address,r->Bytes,role);
+      return;
+    }
+  }
+  s->Failed=1;
 }
 int AgxWin32AsahiPipelineFinish(AGX_WIN32_ASAHI_PIPELINE *s,const void *end) {
   if(!s || !s->Capture || s->Capture->Backend->ActiveEmission!=s) return 0;

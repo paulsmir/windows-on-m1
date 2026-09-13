@@ -28,6 +28,7 @@ static int AppleAgxWin32ReferencePolicy(
   case AppleAgxWin32RoleEncoder:
   case AppleAgxWin32RoleScissor:
   case AppleAgxWin32RoleDepthBias:
+  case AppleAgxWin32RolePppState:
     return Reference->Access == AppleAgxWin32AccessRead;
   default:
     return 0;
@@ -50,7 +51,8 @@ static APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32DrawReference(
 
 static int AppleAgxWin32RelocationPolicy(
     const APPLE_AGX_WIN32_RELOCATION *Relocation,
-    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *References) {
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *References,
+    APPLE_AGX_U16 Version) {
   APPLE_AGX_U32 destinationRole =
       References[Relocation->DestinationReference].Role;
   APPLE_AGX_U32 targetRole = References[Relocation->TargetReference].Role;
@@ -101,7 +103,17 @@ static int AppleAgxWin32RelocationPolicy(
            targetRole == AppleAgxWin32RoleUscPipeline;
   case AppleAgxWin32RelocationPppStateAddress40:
     return destinationRole == AppleAgxWin32RoleEncoder &&
-           targetRole == AppleAgxWin32RoleEncoder;
+           (targetRole == AppleAgxWin32RoleEncoder ||
+            (Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+             targetRole == AppleAgxWin32RolePppState));
+  case AppleAgxWin32RelocationPppPipelineOffset32:
+    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+           destinationRole == AppleAgxWin32RolePppState &&
+           targetRole == AppleAgxWin32RoleUscPipeline;
+  case AppleAgxWin32RelocationPppCfBindingsOffset32:
+    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
+           destinationRole == AppleAgxWin32RolePppState &&
+           targetRole == AppleAgxWin32RoleDescriptor;
   default:
     return 0;
   }
@@ -140,6 +152,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   const APPLE_AGX_WIN32_DRAW_PAYLOAD *draw;
   const APPLE_AGX_WIN32_RELOCATION *relocations;
   unsigned char reachable[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES] = {0};
+  unsigned char directedReachable[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES] = {0};
   APPLE_AGX_U32 referenceBytes;
   APPLE_AGX_U32 payloadOffset;
   APPLE_AGX_U32 minimumPitch;
@@ -196,7 +209,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     if (references[index].AllocationIndex >= AllocationCount)
       return AppleAgxWin32AbiAllocationIndex;
     if (references[index].Role < AppleAgxWin32RoleRenderTarget ||
-        references[index].Role > AppleAgxWin32RoleDepthBias)
+        references[index].Role > AppleAgxWin32RolePppState)
+      return AppleAgxWin32AbiRole;
+    if (references[index].Role == AppleAgxWin32RolePppState &&
+        header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC)
       return AppleAgxWin32AbiRole;
     if (references[index].Access == 0u ||
         (references[index].Access &
@@ -322,6 +338,9 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   DRAW_REFERENCE(EncoderReference, AppleAgxWin32RoleEncoder, 0);
 #undef DRAW_REFERENCE
 
+  for (index = 0u; index < header->ReferenceCount; ++index)
+    directedReachable[index] = reachable[index];
+
   relocations = (const APPLE_AGX_WIN32_RELOCATION *)(
       (const unsigned char *)draw + draw->RelocationsOffset);
   for (index = 0u; index < draw->RelocationCount; ++index) {
@@ -331,23 +350,36 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       return AppleAgxWin32AbiReserved;
     if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
         (relocation->Kind == AppleAgxWin32RelocationUscPreshaderOffset32 ||
-         relocation->Kind == AppleAgxWin32RelocationUscTableAddress39))
+         relocation->Kind == AppleAgxWin32RelocationUscTableAddress39 ||
+         relocation->Kind == AppleAgxWin32RelocationPppPipelineOffset32 ||
+         relocation->Kind == AppleAgxWin32RelocationPppCfBindingsOffset32))
       return AppleAgxWin32AbiRelocation;
     if (relocation->AddressFlags != 0ULL ||
         relocation->DestinationReference >= header->ReferenceCount ||
         relocation->TargetReference >= header->ReferenceCount ||
-        !AppleAgxWin32RelocationPolicy(relocation, references))
+        !AppleAgxWin32RelocationPolicy(relocation, references,
+                                       header->Version))
       return AppleAgxWin32AbiRelocation;
     if ((relocation->Kind == AppleAgxWin32RelocationUscShaderOffset32 &&
          relocation->WidthBytes != 6u) ||
         (relocation->Kind == AppleAgxWin32RelocationVdmPipelineOffset32 &&
          relocation->WidthBytes != 4u) ||
+        ((relocation->Kind == AppleAgxWin32RelocationPppPipelineOffset32 ||
+          relocation->Kind == AppleAgxWin32RelocationPppCfBindingsOffset32) &&
+         relocation->WidthBytes != 4u) ||
         (relocation->Kind != AppleAgxWin32RelocationUscShaderOffset32 &&
          relocation->Kind != AppleAgxWin32RelocationVdmPipelineOffset32 &&
+         relocation->Kind != AppleAgxWin32RelocationPppPipelineOffset32 &&
+         relocation->Kind != AppleAgxWin32RelocationPppCfBindingsOffset32 &&
          relocation->WidthBytes != 8u))
       return AppleAgxWin32AbiRelocation;
     if ((relocation->Kind == AppleAgxWin32RelocationVdmPipelineOffset32 &&
          (relocation->DestinationOffset & 3ULL) != 0ULL) ||
+        ((relocation->Kind == AppleAgxWin32RelocationPppPipelineOffset32 ||
+          relocation->Kind == AppleAgxWin32RelocationPppCfBindingsOffset32) &&
+         (relocation->DestinationOffset & 3ULL) != 0ULL) ||
+        (relocation->Kind == AppleAgxWin32RelocationPppCfBindingsOffset32 &&
+         (relocation->TargetOffset & 3ULL) != 0ULL) ||
         (relocation->Kind == AppleAgxWin32RelocationPppStateAddress40 &&
          (((relocation->DestinationOffset | relocation->TargetOffset) &
            3ULL) != 0ULL)) ||
@@ -376,6 +408,20 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   }
   for (index = 0u; index < header->ReferenceCount; ++index)
     if (!reachable[index])
+      return AppleAgxWin32AbiReachability;
+  for (index = 0u; index < header->ReferenceCount; ++index) {
+    APPLE_AGX_U32 relocationIndex;
+    for (relocationIndex = 0u; relocationIndex < draw->RelocationCount;
+         ++relocationIndex) {
+      const APPLE_AGX_WIN32_RELOCATION *relocation =
+          &relocations[relocationIndex];
+      if (directedReachable[relocation->DestinationReference])
+        directedReachable[relocation->TargetReference] = 1u;
+    }
+  }
+  for (index = 0u; index < header->ReferenceCount; ++index)
+    if (references[index].Role == AppleAgxWin32RolePppState &&
+        !directedReachable[index])
       return AppleAgxWin32AbiReachability;
 
   View->Header = header;

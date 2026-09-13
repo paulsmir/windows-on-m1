@@ -23,5 +23,9 @@ int AgxWin32AsahiEmissionBeginCpu(struct agx_device *,void *,APPLE_AGX_U32,
 void AgxWin32AsahiPipelineRecord(AGX_WIN32_ASAHI_PIPELINE *,const void *End,
     APPLE_AGX_U32 Kind,APPLE_AGX_U64 Target,APPLE_AGX_U64 Bytes,
     APPLE_AGX_U32 Role);
+/* A completed native USC/PPP interval supplies its exact recorded length.
+ * Never infer a span from the next pool allocation or the containing BO. */
+void AgxWin32AsahiPipelineRecordCaptured(AGX_WIN32_ASAHI_PIPELINE *,const void *End,
+    APPLE_AGX_U32 Kind,APPLE_AGX_U64 Target,APPLE_AGX_U32 Role);
 int AgxWin32AsahiPipelineFinish(AGX_WIN32_ASAHI_PIPELINE *,const void *End);
 #endif

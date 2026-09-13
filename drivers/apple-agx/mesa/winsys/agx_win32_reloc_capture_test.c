@@ -11,6 +11,7 @@ typedef struct {
   unsigned char Data[9][0x10000];
   APPLE_AGX_U64 Placement;
   APPLE_AGX_U64 PreshaderOverride;
+  APPLE_AGX_U64 CfOverride;
 } FIXTURE;
 static FIXTURE fixture;
 static int query(void *ctx,APPLE_AGX_U64 token,AGX_WIN32_RELOC_ALLOCATION *bo) {
@@ -33,16 +34,24 @@ static void release(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U64 serial) {
 static int read_object(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U32 ref,
     APPLE_AGX_U32 role,APPLE_AGX_U64 offset,APPLE_AGX_U32 bytes,void *out) {
   FIXTURE *f=ctx; (void)role;
-  if(!token || token>9 || (ref!=token-1 && !(ref==9 && token==5 && offset>=0x4000)) || offset>0x10000 || bytes>0x10000-offset) return 0;
+  if(!token || token>9 ||
+      (ref!=token-1 && !((ref==9 && token==5 && offset>=0x4000) ||
+                          (ref==10 && token==1 && offset>=0x8000))) ||
+      offset>0x10000 || bytes>0x10000-offset) return 0;
   memcpy(out,f->Data[token-1]+offset,bytes); return 1;
 }
 static int resolve_object(void *ctx,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
     APPLE_AGX_U32 ref,APPLE_AGX_U32 role,APPLE_AGX_U64 offset,APPLE_AGX_U32 bytes,
     APPLE_AGX_U64 *out) {
   FIXTURE *f=ctx; (void)cls; (void)role;
-  if(!token || token>9 || (ref!=token-1 && !(ref==9 && token==5 && offset>=0x4000)) || bytes!=1 || offset>=0x10000) return 0;
+  if(!token || token>9 ||
+      (ref!=token-1 && !((ref==9 && token==5 && offset>=0x4000) ||
+                          (ref==10 && token==1 && offset>=0x8000))) ||
+      bytes!=1 || offset>=0x10000) return 0;
   *out=(f->PreshaderOverride && token==4 && offset==0x80) ?
-      f->PreshaderOverride : f->Placement+token*0x10000+offset; return 1;
+      f->PreshaderOverride :
+      (f->CfOverride && token==6 && offset==0x104) ? f->CfOverride :
+      f->Placement+token*0x10000+offset; return 1;
 }
 static APPLE_AGX_U64 read_le(const unsigned char *b,unsigned n) {
   APPLE_AGX_U64 v=0; for(unsigned i=0;i<n;++i) v|=(APPLE_AGX_U64)b[i]<<(8*i); return v;
@@ -87,6 +96,126 @@ static APPLE_AGX_WIN32_DRAW_PAYLOAD capture(AGX_WIN32_RELOC_CAPTURE *c) {
   d.IndexReference=d.ConstantReference=d.TextureReference=d.VertexRodataReference=
       d.FragmentRodataReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
   return d;
+}
+/* Every node has a valid role edge, but the second Encoder is not a draw root.
+ * The v3 ABI must not turn undirected relocation adjacency into reachability. */
+static void disconnected_extra_encoder_ppp_rejected(void) {
+  AGX_WIN32_RELOC_CAPTURE c={0}; APPLE_AGX_U32 index,bytes=0;
+  APPLE_AGX_U64 command[512]={0};
+  setup();
+  assert(AgxWin32RelocBegin(&c,77,7,13,&ops,&fixture)==AgxRelocOk);
+  APPLE_AGX_WIN32_DRAW_PAYLOAD d=capture(&c);
+  assert(AgxWin32RelocReference(&c,5,AppleAgxWin32RoleUscPipeline,
+                                AppleAgxWin32AccessRead,0x4000,0x340,
+                                &index)==AgxRelocOk && index==9u);
+  d.Reserved[0]=9u;
+  assert(AgxWin32RelocReference(&c,1,AppleAgxWin32RolePppState,
+                                AppleAgxWin32AccessRead,0x8000,0x40,
+                                &index)==AgxRelocOk && index==10u);
+  assert(AgxWin32RelocReference(&c,9,AppleAgxWin32RoleEncoder,
+                                AppleAgxWin32AccessRead,0x4000,0x100,
+                                &index)==AgxRelocOk && index==11u);
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationPppStateAddress40,
+                            11,0,10,0)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationPppPipelineOffset32,
+                            10,0,4,0x40)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationPppCfBindingsOffset32,
+                            10,4,5,0x104)==AgxRelocOk);
+  assert(AgxWin32RelocSealVersion(&c,APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC,
+                                  &d,command,sizeof(command),&bytes)==AgxRelocCommand);
+  assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  puts("NATIVE PPP v3: disconnected extra Encoder rejected");
+}
+/* PPP is a General-backed native batch-pool subrange. Its two relative fields
+ * deliberately retain native low control bits across two request placements. */
+static void native_ppp_fields(void) {
+  setup(); AGX_WIN32_RELOC_CAPTURE c={0}; unsigned index,bytes=0;
+  assert(AgxWin32RelocBegin(&c,77,7,12,&ops,&fixture)==AgxRelocOk);
+  APPLE_AGX_WIN32_DRAW_PAYLOAD d=capture(&c);
+  assert(AgxWin32RelocReference(&c,5,AppleAgxWin32RoleUscPipeline,
+                                AppleAgxWin32AccessRead,0x4000,0x340,
+                                &index)==AgxRelocOk && index==9u);
+  d.Reserved[0]=9u;
+  assert(AgxWin32RelocReference(&c,1,AppleAgxWin32RolePppState,AppleAgxWin32AccessRead,
+                                0x8000,0x40,&index)==AgxRelocOk && index==10u);
+  {
+    uint32_t packed[2];
+    struct AGX_PPP_STATE state={.pointer_hi=0,.size_words=16,.pointer_lo=0};
+    AGX_PPP_STATE_pack(packed,&state);
+    memcpy(fixture.Data[8]+24,packed,8);
+  }
+  ((uint32_t *)(void *)(fixture.Data[0]+0x8000))[0]=0x2du;
+  ((uint32_t *)(void *)(fixture.Data[0]+0x8004))[0]=0x3u;
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationPppStateAddress40,
+                            8,24,10,0)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationPppPipelineOffset32,
+                            10,0,4,0x40)==AgxRelocOk);
+  assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationPppCfBindingsOffset32,
+                            10,4,5,0x104)==AgxRelocOk);
+  APPLE_AGX_U64 command[512]={0}; APPLE_AGX_WIN32_COMMAND_VIEW view;
+  assert(AgxWin32RelocSealVersion(&c,3u,&d,command,sizeof(command),&bytes)==AgxRelocOk);
+  assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==AppleAgxWin32AbiSuccess);
+  {
+    APPLE_AGX_WIN32_COMMAND_HEADER *header=(void *)command;
+    APPLE_AGX_WIN32_RELOCATION *relocations=(void *)view.Relocations;
+    relocations[6].TargetReference=8u;
+    header->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+    assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==
+           AppleAgxWin32AbiReachability);
+    relocations[6].TargetReference=10u;
+    header->Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES;
+    header->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+    assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==
+           AppleAgxWin32AbiRole);
+    header->Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC;
+    header->ContentHash=AppleAgxWin32CommandHash(command,bytes);
+    assert(AppleAgxWin32CommandValidate(command,bytes,7,9,&view)==AppleAgxWin32AbiSuccess);
+  }
+  ADMISSION_WIN32_ALLOCATION_FACT facts[11]={0};
+  for(unsigned i=0;i<9;++i) { facts[i].AllocationToken=i+1; facts[i].Bytes=0x10000; }
+  facts[9]=facts[4]; facts[10]=facts[0];
+  static unsigned char first[0x40000],second[0x40000],saved[0x40000];
+  APPLE_AGX_DYNAMIC_JOB a,b;
+  for(unsigned placement=0;placement<2;++placement) {
+    fixture.Placement=0x1100000000ULL+placement*0x100000ULL;
+    assert(AppleAgxDynamicJobMaterialize(&view,facts,11,0x1100000000ULL,
+        read_object,resolve_object,&fixture,placement?second:first,sizeof(first),
+        placement?&b:&a)==AppleAgxDynamicJobSuccess);
+    APPLE_AGX_DYNAMIC_JOB *job=placement?&b:&a;
+    unsigned char *image=placement?second:first;
+    unsigned ppp=0,encoder=0;
+    for(unsigned i=0;i<job->ObjectCount;++i) {
+      if(job->Objects[i].ReferenceIndex==10u) ppp=i+1u;
+      if(job->Objects[i].ReferenceIndex==8u) encoder=i+1u;
+    }
+    assert(ppp && encoder);
+    unsigned char *p=image+job->Objects[ppp-1u].StorageOffset;
+    unsigned char *e=image+job->Objects[encoder-1u].StorageOffset;
+    uint32_t packed[2]; struct AGX_PPP_STATE state;
+    memcpy(packed,e+24,8); assert(AGX_PPP_STATE_unpack(stderr,(void *)packed,&state));
+    assert((((APPLE_AGX_U64)state.pointer_hi<<32)|state.pointer_lo)==
+           fixture.Placement+0x18000ULL && state.size_words==16u);
+    assert((read_le(p,4)&0x3fULL)==0x2dULL &&
+           (read_le(p,4)&~0x3fULL)==0x50040ULL+placement*0x100000ULL);
+    assert((read_le(p+4,4)&3ULL)==3ULL &&
+           (read_le(p+4,4)&~3ULL)==0x60104ULL+placement*0x100000ULL);
+    if(!placement) memcpy(saved,first,a.StorageBytes);
+    else assert(!memcmp(first,saved,a.StorageBytes));
+  }
+  assert(read_le(fixture.Data[0]+0x8000,4)==0x2dULL &&
+         read_le(fixture.Data[0]+0x8004,4)==3ULL);
+  fixture.CfOverride=0x10ffffffffULL;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,12,0x1100000000ULL,
+      read_object,resolve_object,&fixture,first,sizeof(first),&a)==AppleAgxDynamicJobRelocation);
+  fixture.CfOverride=0x1200000000ULL;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,12,0x1100000000ULL,
+      read_object,resolve_object,&fixture,first,sizeof(first),&a)==AppleAgxDynamicJobRelocation);
+  fixture.CfOverride=0x1100060105ULL;
+  assert(AppleAgxDynamicJobMaterialize(&view,facts,12,0x1100000000ULL,
+      read_object,resolve_object,&fixture,first,sizeof(first),&a)==AppleAgxDynamicJobRelocation);
+  fixture.CfOverride=0;
+  assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+  puts("NATIVE PPP v3: two placements/masked relative fields PASS");
 }
 /* Catches using SHADER/UNIFORM bit layouts for native PRESHADER/table records. */
 static void native_usc_fields(void) {
@@ -192,6 +321,8 @@ static void native_usc_fields(void) {
   puts("NATIVE USC v3: preshader/texture/sampler two placements, all counts PASS");
 }
 int main(void) {
+  disconnected_extra_encoder_ppp_rejected();
+  native_ppp_fields();
   native_usc_fields();
   setup(); AGX_WIN32_RELOC_CAPTURE c={0};
   assert(AgxWin32RelocBegin(&c,77,7,1,&ops,&fixture)==AgxRelocOk);

@@ -12,6 +12,8 @@ static unsigned width(unsigned kind) {
     case AppleAgxWin32RelocationPppStateAddress40: return 8;
     case AppleAgxWin32RelocationUscShaderOffset32: return 6;
     case AppleAgxWin32RelocationVdmPipelineOffset32: return 4;
+    case AppleAgxWin32RelocationPppPipelineOffset32:
+    case AppleAgxWin32RelocationPppCfBindingsOffset32: return 4;
     default: return 0;
   }
 }
@@ -39,7 +41,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U64 token,APPLE_AGX_U32 role,APPLE_AGX_U32 access,
     APPLE_AGX_U64 offset,APPLE_AGX_U64 bytes,APPLE_AGX_U32 *index) {
   AGX_WIN32_RELOC_ALLOCATION a={0};
-  if(!c || !token || !index || !access || access&~7u || role<1 || role>12) return AgxRelocArgument;
+  if(!c || !token || !index || !access || access&~7u || role<1 || role>13) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(!c->Operations.Query(c->Context,token,&a)) return AgxRelocCallback;
   if(a.Owner!=c->Owner || a.Generation!=c->Generation || a.Token!=token || !a.Serial ||
@@ -72,7 +74,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
   AGX_WIN32_RELOC_ALLOCATION current={0};
   if(!c || !expected || !expected->Owner || !expected->Token ||
       !expected->Serial || !expected->Generation || !index || !access ||
-      access&~7u || role<1 || role>12) return AgxRelocArgument;
+      access&~7u || role<1 || role>13) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(expected->Owner!=c->Owner || expected->Generation!=c->Generation ||
       expected->AllocationIndex==~0u) return AgxRelocStale;

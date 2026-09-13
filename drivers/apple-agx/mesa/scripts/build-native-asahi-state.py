@@ -293,6 +293,62 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
       return out;
    }
    return out;''',1)
+        def state_replace(old,new):
+            global state_body
+            if state_body.count(old)!=1:
+                raise SystemExit('Ambiguous native PPP/state capture anchor')
+            state_body=state_body.replace(old,new,1)
+        state_replace('      agx_push(out, VDM_STATE_VERTEX_SHADER_WORD_1, cfg) {\n         cfg.pipeline =',
+            """      uint32_t windows_vs_pipeline = 0;
+      agx_push(out, VDM_STATE_VERTEX_SHADER_WORD_1, cfg) {
+         cfg.pipeline = windows_vs_pipeline =""")
+        state_replace('                               MESA_SHADER_VERTEX, 0, 0);\n      }',
+            """                               MESA_SHADER_VERTEX, 0, 0);
+      }
+      if (capture_active)
+         AgxWin32AsahiPipelineRecordCaptured(&state_capture, out,
+            AppleAgxWin32RelocationVdmPipelineOffset32,
+            dev->shader_base + windows_vs_pipeline, AppleAgxWin32RoleUscPipeline);""")
+        state_replace('   struct agx_ppp_update ppp = agx_new_ppp_update(T, size, &dirty);',
+            """   struct agx_ppp_update ppp = agx_new_ppp_update(T, size, &dirty);
+   AGX_WIN32_ASAHI_PIPELINE ppp_capture = {0};
+   if (capture_active && !AgxWin32AsahiEmissionBegin(dev, T.cpu, T.gpu,
+           (APPLE_AGX_U32)size, AppleAgxWin32RolePppState, &ppp_capture)) {
+      state_capture.Failed = 1;
+      (void)AgxWin32AsahiPipelineFinish(&state_capture, out);
+      windows_backend->Failed = 1;
+      return out;
+   }""")
+        state_replace('      agx_ppp_push(&ppp, FRAGMENT_SHADER_WORD_1, cfg) {\n         cfg.pipeline = agx_build_pipeline',
+            """      uint32_t windows_fs_pipeline = 0;
+      agx_ppp_push(&ppp, FRAGMENT_SHADER_WORD_1, cfg) {
+         cfg.pipeline = windows_fs_pipeline = agx_build_pipeline""")
+        state_replace('                                           MESA_SHADER_FRAGMENT, 0, 0);\n      }',
+            """                                           MESA_SHADER_FRAGMENT, 0, 0);
+      }
+      if (capture_active)
+         AgxWin32AsahiPipelineRecordCaptured(&ppp_capture, ppp.head,
+            AppleAgxWin32RelocationPppPipelineOffset32,
+            dev->shader_base + windows_fs_pipeline, AppleAgxWin32RoleUscPipeline);""")
+        state_replace('         cfg.cf_bindings = batch->varyings;\n      }',
+            """         cfg.cf_bindings = batch->varyings;
+      }
+      if (capture_active && ctx->linked.fs->cf.nr_bindings)
+         AgxWin32AsahiPipelineRecord(&ppp_capture, ppp.head,
+            AppleAgxWin32RelocationPppCfBindingsOffset32,
+            dev->shader_base + batch->varyings,
+            AGX_CF_BINDING_HEADER_LENGTH +
+               ctx->linked.fs->cf.nr_bindings * AGX_CF_BINDING_LENGTH,
+            AppleAgxWin32RoleDescriptor);
+      else if (capture_active && batch->varyings)
+         ppp_capture.Failed = 1;""")
+        state_replace('   agx_ppp_fini(&out, &ppp);',
+            """   if (capture_active && !AgxWin32AsahiPipelineFinish(&ppp_capture, ppp.head))
+      state_capture.Failed = 1;
+   agx_ppp_fini(&out, &ppp);
+   if (capture_active)
+      AgxWin32AsahiPipelineRecordCaptured(&state_capture, out,
+         AppleAgxWin32RelocationPppStateAddress40, T.gpu, AppleAgxWin32RolePppState);""")
         if state_body==state_text[state_begin:state_end]:
             raise SystemExit('Native state emission capture anchors missing')
         # Export only a test wrapper around the exact transformed native body.

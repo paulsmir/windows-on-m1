@@ -128,6 +128,12 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
   case AppleAgxWin32RoleEncoder:
     requiredClass = AgxWin32BufferClassEncoder;
     break;
+  case AppleAgxWin32RolePppState:
+    if (CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC ||
+        Reference->Access != AppleAgxWin32AccessRead)
+      return AdmissionWin32TransportClass;
+    requiredClass = AgxWin32BufferClassGeneral;
+    break;
   default:
     return AdmissionWin32TransportClass;
   }

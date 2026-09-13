@@ -43,6 +43,10 @@
     <ClCompile Include="..\src\umd_asahi_batch_adapter.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
     <ClCompile Include="..\..\src\apple_agx_dynamic_job.c" />
     <ClCompile Include="..\..\src\render_win32_transport.c" />
+    <ClCompile Include="..\..\tests\render_win32_transport_test.c">
+      <PreprocessorDefinitions>main=AdmissionWin32ReferenceContractTests;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <UndefinePreprocessorDefinitions>NDEBUG;%(UndefinePreprocessorDefinitions)</UndefinePreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="..\src\umd_runtime_device.c">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>

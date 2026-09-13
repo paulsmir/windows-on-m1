@@ -123,6 +123,28 @@ static int dynamic_patch(void *Destination,
     dynamic_write_le(Destination, encoded, 4u);
     *EncodedValue = relative;
     return 1;
+  case AppleAgxWin32RelocationPppPipelineOffset32:
+    if (Relocation->WidthBytes != 4u || GpuAddress < ShaderBase ||
+        GpuAddress - ShaderBase > 0xffffffffULL ||
+        ((GpuAddress - ShaderBase) & 0x3fULL) != 0ULL)
+      return 0;
+    relative = GpuAddress - ShaderBase;
+    current = dynamic_read_le(Destination, 4u);
+    encoded = (current & 0x3fULL) | relative;
+    dynamic_write_le(Destination, encoded, 4u);
+    *EncodedValue = relative;
+    return 1;
+  case AppleAgxWin32RelocationPppCfBindingsOffset32:
+    if (Relocation->WidthBytes != 4u || GpuAddress < ShaderBase ||
+        GpuAddress - ShaderBase > 0xffffffffULL ||
+        ((GpuAddress - ShaderBase) & 3ULL) != 0ULL)
+      return 0;
+    relative = GpuAddress - ShaderBase;
+    current = dynamic_read_le(Destination, 4u);
+    encoded = (current & 3ULL) | relative;
+    dynamic_write_le(Destination, encoded, 4u);
+    *EncodedValue = relative;
+    return 1;
   case AppleAgxWin32RelocationPppStateAddress40:
     if (Relocation->WidthBytes != 8u || (GpuAddress & 3ULL) != 0ULL ||
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
@@ -142,6 +164,7 @@ static int dynamic_copy_role(APPLE_AGX_U32 Role) {
   return Role == AppleAgxWin32RoleShader ||
          Role == AppleAgxWin32RoleShaderRodata ||
          Role == AppleAgxWin32RoleEncoder ||
+         Role == AppleAgxWin32RolePppState ||
          Role == AppleAgxWin32RoleUscPipeline ||
          Role == AppleAgxWin32RoleDescriptor ||
          Role == AppleAgxWin32RoleScissor ||
