@@ -46,6 +46,12 @@ complete initial/state/draw/final VDM and attachment/uniform/BG-EOT graph captur
 then Windows replacement at real agx_flush_render/agx_flush_batch finalization.
 The adapter must never consume a partial graph. Runtime-closure probe is separate
 and may report expected Linux-tail failure pending the Windows implementation.
+Runtime probe repaired and executed: evidence/AD04-runtime-closure/cp-review-20260913b/.
+Fresh staged archive SHA256 31beb6eda1ef71901ef14d68c8ad2bb81ad59551392a5c35d2b57eeb5ce95845.
+Pinned native helper/epilog layout projections pass their former assertions;
+agx_batch.c still fails at Linux drmSyncobj/virtio tail (exit1). This is an
+expected unresolved runtime boundary, NOT runtime closure PASS. Runner records
+architecture, exact compiler argv/source hashes and fetches failure evidence.
 Root investigation/GPU_CONTINUATION_PLAYBOOK.md is the operative playbook;
 current user instruction puts accelerated desktop acceptance before OpenGL/CS1.6.
 
