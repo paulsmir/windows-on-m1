@@ -682,6 +682,10 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
 }
 #endif
 
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+unsigned AgxKmtNativeBridgeResidencyContractTest(void);
+unsigned AgxKmtNativeQualificationFreshnessContractTest(void);
+#endif
 int main(void) {
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks;
   D3D10_2DDI_ADAPTERFUNCS adapterFunctions;
@@ -1149,6 +1153,10 @@ int main(void) {
   test_runtime_adapter_bridge();
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
   test_mesa_windows_owners(createDevice);
+#endif
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+  State.Failures += AgxKmtNativeBridgeResidencyContractTest();
+  State.Failures += AgxKmtNativeQualificationFreshnessContractTest();
 #endif
   State.Failures += AdmissionUmdDrawComposerTests();
   State.Failures += AdmissionUmdAsahiBatchAdapterTests();

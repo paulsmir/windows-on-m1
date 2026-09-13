@@ -115,6 +115,9 @@ typedef struct _ADMISSION_PLATFORM_RUNTIME {
   ADMISSION_DYNAMIC_GRAPH_RECEIPT DynamicGraphReceipt;
   ADMISSION_DYNAMIC_STORE_RECEIPT DynamicStoreReceipt;
   ADMISSION_DYNAMIC_OUTPUT_SNAPSHOT DynamicOutputSnapshot;
+  ADMISSION_NATIVE_GRAPH_RECEIPT NativeGraphReceipt;
+  APPLE_AGX_U64 NativeCommandHash;
+  ADMISSION_DYNAMIC_OVERLAY_BINDINGS NativeBindings;
   volatile LONG TerminalSequence;
   volatile LONG CompletedOutputGeneration;
   ADMISSION_COMPLETED_OUTPUT CompletedOutput;
@@ -173,6 +176,7 @@ static VOID AdmissionTerminalBegin(
   AdmissionTerminalReceiptInitialize(&Runtime->TerminalReceipt);
   RtlZeroMemory(&Runtime->DynamicGraphReceipt,
                 sizeof(Runtime->DynamicGraphReceipt));
+  RtlZeroMemory(&Runtime->NativeGraphReceipt,sizeof(Runtime->NativeGraphReceipt));
   AdmissionDynamicOutputSnapshotInitialize(&Runtime->DynamicOutputSnapshot);
   if (ta->Data == NULL || ta->Size < 548u ||
       d3->Data == NULL || d3->Size < 612u)
@@ -259,7 +263,27 @@ static VOID AdmissionTerminalObserve(
       const UCHAR *verificationBytes =
           (const UCHAR *)Output->RenderedCpuAddress;
       Runtime->TransportIo.MemoryBarrier(Runtime);
-      if (Output->VerificationKind ==
+      if (Output->VerificationKind == AdmissionBackendOutputVerificationNativeCapture) {
+        /* CPU access is protected by the captured allocation lease. The
+         * physical-completion fence and cache synchronization precede copying;
+         * no legacy color/72-pixel oracle applies to this native allocation. */
+        captured = Status == AppleAgxBackendCompletionSuccess && Completed != NULL &&
+            Completed->Phase == AdmissionCompletedOutputNotified && !Completed->AccessAttempted &&
+            AdmissionDynamicOverlayCaptureNativeOutput(&Runtime->NativeGraphReceipt,Fence,
+                Completed->Generation,Output->RenderedGpuAddress,Output->RenderedPhysicalAddress,
+                Output->RenderedCpuAddress,Output->RenderedBytes) == AdmissionDynamicOverlaySuccess;
+        accessRecorded = AdmissionCompletedOutputRecordAccess(Completed,Fence,
+            (ULONG)(captured ? STATUS_SUCCESS : STATUS_INVALID_ADDRESS)) ? TRUE : FALSE;
+        if (!accessRecorded) {
+          Runtime->NativeGraphReceipt.ReadbackAvailable=0;
+          Runtime->NativeGraphReceipt.ReadbackBytes=0;
+          Runtime->NativeGraphReceipt.ReadbackFnv1a=0;
+          Runtime->NativeGraphReceipt.SnapshotGeneration=0;
+        }
+#if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
+        Runtime->VisibleAgxValid=FALSE;
+#endif
+      } else if (Output->VerificationKind ==
           AdmissionBackendOutputVerificationTriangle) {
         ADMISSION_DYNAMIC_OUTPUT_EXPECTATION expectation = {0};
         captured = Output->RenderedBytes ==
@@ -304,7 +328,7 @@ static VOID AdmissionTerminalObserve(
                        ? TRUE
                        : FALSE;
       }
-      if (captured) {
+      if (captured && Output->VerificationKind != AdmissionBackendOutputVerificationNativeCapture) {
         BOOLEAN outputValid =
             Runtime->TerminalReceipt.OutputPixelsExpected ==
                 Output->RenderedBytes / 4u &&
@@ -1948,6 +1972,12 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     runtime->DynamicBackgroundColor = dynamicView.Header->BackgroundColor;
     runtime->DynamicExpectedForegroundColor =
         dynamicView.Header->ExpectedForegroundColor;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    runtime->NativeCommandHash = dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+        dynamicView.Header->CommandHash : 0ULL;
+    if (runtime->NativeCommandHash) runtime->NativeBindings=*dynamicView.Bindings;
+    else RtlZeroMemory(&runtime->NativeBindings,sizeof(runtime->NativeBindings));
+#endif
   }
   return APPLE_AGX_BACKEND_TRUE;
 
@@ -1984,6 +2014,10 @@ static BOOLEAN AdmissionDynamicOverlayReleaseActive(
   Runtime->DynamicStorageBytes = 0u;
   Runtime->DynamicBackgroundColor = 0u;
   Runtime->DynamicExpectedForegroundColor = 0u;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  Runtime->NativeCommandHash=0;
+  RtlZeroMemory(&Runtime->NativeBindings,sizeof(Runtime->NativeBindings));
+#endif
   return TRUE;
 }
 
@@ -2260,10 +2294,14 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       }
       if (runtime->DynamicOverlayState.Applied == 1u &&
           runtime->DynamicOverlayState.Fence == Fence) {
-        output.VerificationKind =
-            AdmissionBackendOutputVerificationTriangle;
-        output.BackgroundColor = runtime->DynamicBackgroundColor;
-        output.ExpectedColor = runtime->DynamicExpectedForegroundColor;
+        if (runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+          output.VerificationKind=AdmissionBackendOutputVerificationNativeCapture;
+          output.BackgroundColor=output.ExpectedColor=0;
+        } else {
+          output.VerificationKind=AdmissionBackendOutputVerificationTriangle;
+          output.BackgroundColor=runtime->DynamicBackgroundColor;
+          output.ExpectedColor=runtime->DynamicExpectedForegroundColor;
+        }
       }
       if (!AdmissionCompletedOutputPlatformValid(adapter, &output) ||
           !AdmissionCompletedOutputCapture(
@@ -2416,6 +2454,9 @@ static VOID AdmissionOutputProcess(
       runtime->DynamicStoreReceipt.Fence == fence)
     AdmissionRecordDynamicStore(
         runtime->Adapter, &runtime->DynamicStoreReceipt);
+  if (runtime->CompletedOutput.View.VerificationKind == AdmissionBackendOutputVerificationNativeCapture &&
+      runtime->NativeGraphReceipt.Valid == 1u && runtime->NativeGraphReceipt.Fence == fence)
+    AdmissionRecordNativeGraph(runtime->Adapter,&runtime->NativeGraphReceipt);
   {
     volatile APPLE_AGX_BACKEND_U32 *taRead;
     volatile APPLE_AGX_BACKEND_U32 *d3Read;
@@ -2441,7 +2482,8 @@ static VOID AdmissionOutputProcess(
     }
   }
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
-  if (runtime->VisibleAgxValid && runtime->VisibleAgxFence == fence &&
+  if (runtime->CompletedOutput.View.VerificationKind != AdmissionBackendOutputVerificationNativeCapture &&
+      runtime->VisibleAgxValid && runtime->VisibleAgxFence == fence &&
       AdmissionCompletedOutputBeginPresent(
           &runtime->CompletedOutput, fence)) {
     NTSTATUS presentStatus;
@@ -2732,6 +2774,14 @@ static VOID AdmissionPlatformWorker(
   }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalBegin(runtime, &description);
+  if (runtime->DynamicOverlayState.Applied == 1u &&
+      runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      AdmissionDynamicOverlayCaptureNativeGraph(&runtime->NativeBindings,&runtime->DynamicOverlayPlan,
+          runtime->DynamicJob,runtime->QueueObjects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+          runtime->NativeCommandHash,description.Fence,&runtime->NativeGraphReceipt)==AdmissionDynamicOverlaySuccess) {
+    runtime->NativeGraphReceipt.CandidateBuild=APPLE_AGX_VERSION_BUILD;
+    runtime->NativeGraphReceipt.BootGeneration=adapter->Win32BootGeneration;
+  }
   if (runtime->DynamicOverlayState.Applied == 1u &&
       runtime->DynamicOverlayPlan.CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
     (void)AdmissionDynamicOverlayCaptureGraph(
@@ -3601,6 +3651,11 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeReset(
   runtime->DynamicJob = NULL;
   runtime->DynamicStorage = NULL;
   runtime->DynamicStorageBytes = 0u;
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  runtime->NativeCommandHash=0;
+  RtlZeroMemory(&runtime->NativeBindings,sizeof(runtime->NativeBindings));
+  RtlZeroMemory(&runtime->NativeGraphReceipt,sizeof(runtime->NativeGraphReceipt));
+#endif
   runtime->CompletionContext = NULL;
   RtlZeroMemory(&runtime->Progress, sizeof(runtime->Progress));
   runtime->ProgressValid = FALSE;

@@ -758,6 +758,10 @@ VOID AdmissionRecordDynamicGraph(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt);
 _IRQL_requires_(PASSIVE_LEVEL)
+VOID AdmissionRecordNativeGraph(
+    _In_opt_ ADMISSION_CONTEXT *Context,
+    _In_ const ADMISSION_NATIVE_GRAPH_RECEIPT *Receipt);
+_IRQL_requires_(PASSIVE_LEVEL)
 VOID AdmissionRecordDynamicStore(
     _In_opt_ ADMISSION_CONTEXT *Context,
     _In_ const ADMISSION_DYNAMIC_STORE_RECEIPT *Receipt);
@@ -903,6 +907,8 @@ VOID AdmissionFlushGdiReceipt(_In_ ADMISSION_CONTEXT *Context);
     (void)(Context);                                                           \
     (void)(Receipt);                                                           \
   } while (0)
+#define AdmissionRecordNativeGraph(Context, Receipt)                           \
+  do { (void)(Context); (void)(Receipt); } while (0)
 #define AdmissionTerminalReceiptDpcWindows(Context, Fence)                     \
   do {                                                                         \
     (void)(Context);                                                           \

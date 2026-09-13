@@ -106,6 +106,14 @@
     <Link><OptimizeReferences>true</OptimizeReferences></Link>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableNativeRuntimeTest)' == 'true'">
+    <ClCompile Include="..\..\..\windows\one-shot\agx_kmt_native_qualification.c">
+      <PreprocessorDefinitions>AGX_KMT_NATIVE_QUALIFICATION_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="..\..\..\windows\one-shot\agx_kmt_native_bridge.c">
+      <CompileAs>CompileAsCpp</CompileAs>
+      <PreprocessorDefinitions>AGX_KMT_NATIVE_BRIDGE_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="..\..\src\render_dynamic_overlay.c" />
     <ClCompile Include="..\..\src\render_dynamic_dma.c" />
     <ClCompile Include="..\..\src\render_backend_image.c" />

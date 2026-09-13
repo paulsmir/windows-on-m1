@@ -37,6 +37,7 @@ OS_UNITS = {'agx_bo.c', 'agx_device.c', 'agx_device_virtio.c', 'agx_va.c'}
 OS_GALLIUM_UNITS = {'agx_fence.c'}
 BRIDGES = ('agx_win32_asahi_bo.c', 'agx_win32_asahi_capture.c',
            'agx_win32_asahi_pipeline.c', 'agx_win32_asahi_batch.c',
+           'agx_win32_asahi_scene.c',
            'agx_win32_asahi_runtime_test.c')
 # Actual Gallium helpers required by native context/resource/state construction.
 # Further additions must follow real compile/link diagnostics, not dummy symbols.

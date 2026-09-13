@@ -1,5 +1,6 @@
 #include "render_backend_image.h"
 #include "render_dynamic_overlay.h"
+#include "render_completed_output.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -435,31 +436,59 @@ static void test_fullscreen_packet_repoints_tiling_graph_and_restores_template(v
 }
 
 static void test_native_binding_preserves_logical_attachment(void) {
-  unsigned char *arena=malloc(TEST_BACKEND_BYTES), *target=malloc(0x1000);
+  unsigned char *arena=malloc(TEST_BACKEND_BYTES), *target=malloc(0x4000);
   ADMISSION_BACKEND_IMAGE image;
   ADMISSION_LOCAL_MEMORY_VIEW view={0};
   ADMISSION_RENDER_PACKET_DESCRIPTION packet={0};
   ADMISSION_DYNAMIC_OVERLAY_BINDINGS native={0};
   APPLE_AGX_EXP208_GDI_BINDING binding;
   APPLE_AGX_EXP208_RELOCATION_OBJECT original;
+  ADMISSION_BACKEND_OUTPUT_VIEW output;
+  ADMISSION_ALLOCATION_DESCRIPTION description;
+  ADMISSION_ALLOCATION_OBJECT allocation;
+  ADMISSION_COMPLETED_OUTPUT completed;
   assert(arena && target);
-  memset(target,0x6a,0x1000);
+  memset(target,0x6a,0x4000);
   view.CpuAddress=arena; view.HostPhysicalAddress=TEST_BACKEND_PHYSICAL;
   view.GpuVirtualAddress=TEST_BACKEND_GPU; view.Bytes=TEST_BACKEND_BYTES;
   assert(AdmissionBackendImagePrepare(&image,&view));
   original=image.Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
   packet.Fence=61; packet.DestinationGpuVa=0x1500200000ULL;
-  packet.DestinationPhysical=0x890200000ULL; packet.DestinationBytes=0x1000;
+  packet.DestinationPhysical=0x890200000ULL; packet.DestinationBytes=0x4000;
   packet.DestinationCpuToken=(unsigned long long)(uintptr_t)target;
   native.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
   native.SurfaceWidth=16; native.SurfaceHeight=16; native.SurfacePitch=64;
-  native.DestinationBytes=0x1000;
+  native.DestinationBytes=0x4000;
   assert(AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
-  assert(image.NativeBound && image.Objects[40].Data==target && image.Objects[40].Size==0x1000);
-  for(unsigned i=0;i<0x1000;++i) assert(target[i]==0x6a);
+  assert(image.NativeBound && image.Objects[40].Data==target && image.Objects[40].Size==0x4000);
+  for(unsigned i=0;i<0x4000;++i) assert(target[i]==0x6a);
+  /* Real native allocation is a byte buffer; preserve that allocation owner
+   * while separately describing the 16x16 image and its entire tiled span. */
+  assert(AdmissionAllocationDescribe(0x4000,1,1,ADMISSION_WIN32_ALLOCATION_STAGING_CPUVISIBLE,
+      ADMISSION_WIN32_ALLOCATION_FORMAT_A8,1,&description));
+  assert(AdmissionAllocationCreate(&description,&allocation));
+  assert(AdmissionBackendImageCaptureOutput(&image,&packet,&description,&output));
+  assert(output.VerificationKind==AdmissionBackendOutputVerificationNativeCapture && !output.Framebuffer);
+  assert(output.AllocationWidth==0x4000 && output.AllocationHeight==1 && output.AllocationPitch==0x4000);
+  assert(output.RenderWidth==16 && output.RenderHeight==16 && output.RenderPitch==64 && output.RenderedBytes==0x4000);
+  assert(!output.ExpectedColor && !output.BackgroundColor && output.RenderedCpuAddress==target);
+  AdmissionCompletedOutputInitialize(&completed);
+  assert(AdmissionCompletedOutputPlatformRangeValid(&output,target,packet.DestinationGpuVa,
+      packet.DestinationPhysical,0x4000));
+  assert(AdmissionCompletedOutputCapture(&completed,37,packet.Fence,&output,&allocation));
+  assert(!AdmissionAllocationDestroy(&allocation));
   assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
   assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
   assert(!image.NativeBound && memcmp(&image.Objects[40],&original,sizeof(original))==0);
+  assert(completed.View.RenderedCpuAddress==target && completed.View.RenderedBytes==0x4000);
+  assert(AdmissionCompletedOutputMarkReleased(&completed,packet.Fence));
+  assert(AdmissionCompletedOutputMarkPacketRetired(&completed,packet.Fence));
+  assert(!AdmissionCompletedOutputRecordAccess(&completed,packet.Fence,0));
+  assert(AdmissionCompletedOutputMarkNotified(&completed,packet.Fence));
+  assert(AdmissionCompletedOutputRecordAccess(&completed,packet.Fence,0));
+  assert(!completed.PresentationAttempted);
+  assert(AdmissionCompletedOutputAbort(&completed,packet.Fence));
+  assert(AdmissionAllocationDestroy(&allocation));
   packet.DestinationBytes=0x2000;
   assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
   free(target); free(arena);

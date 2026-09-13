@@ -102,8 +102,10 @@ def project_sources(out,project,overlays):
    agx_batch_mark_submitted(batch);
    if (ctx->batch == batch) ctx->batch = NULL;
    if (!entered) ctx->any_faults = true;
-   /* Preserve submitted slot and all native pools on a pending marker. */
-   (void)agx_cleanup_batches(ctx);''')
+   /* The event may already be signalled before flush returns. Keep the
+    * capsule until explicit Windows retirement so the owner can snapshot the
+    * exact completed graph and submission result without a dangling pointer.
+    * Normal explicit sync/next-native cleanup paths still perform retirement. */''')
     s=body(s,'agx_sync_batch','''   if (agx_batch_is_active(batch)) agx_flush_batch(ctx, batch);
    if (!agx_batch_is_submitted(batch)) return;
    if (!AgxWin32AsahiBatchPoll(batch, 1000)) { ctx->any_faults = true; return; }

@@ -11,6 +11,9 @@
 #include "apple_agx_exp208_gdi.h"
 #include "apple_agx_scanout.h"
 #include "render_qualification.h"
+#if defined(APPLE_AGX_NATIVE_BATCH_QUALIFICATION)
+#include "agx_kmt_native_qualification.h"
+#endif
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
@@ -383,6 +386,9 @@ int __cdecl wmain(int argc, wchar_t **argv) {
   BOOL standardPresentMode = FALSE;
   BOOL standardBltMode = FALSE;
   BOOL win32TransportMode = FALSE;
+#if defined(APPLE_AGX_NATIVE_BATCH_QUALIFICATION)
+  BOOL nativeBatchMode = FALSE;
+#endif
 
   (void)setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -419,13 +425,20 @@ int __cdecl wmain(int argc, wchar_t **argv) {
     retireAfterSignal = TRUE;
     targetFrames = 2u;
   }
+#if defined(APPLE_AGX_NATIVE_BATCH_QUALIFICATION)
+  else if (argc == 2 && wcscmp(argv[1], L"--native-batch") == 0) nativeBatchMode = TRUE;
+#endif
   else if (argc != 1) {
     fwprintf(stderr,
              L"usage: AppleAgxD3dKmRender.exe "
              L"[--engine-tdr|--observe-one-pass|--hold-no-cleanup|"
              L"--retire-after-signal|--repeat-retire-after-signal|"
              L"--standard-present-hold|--standard-blt-present-hold|"
-             L"--win32-transport-two-frame]\n");
+             L"--win32-transport-two-frame"
+#if defined(APPLE_AGX_NATIVE_BATCH_QUALIFICATION)
+             L"|--native-batch"
+#endif
+             L"]\n");
     return 2;
   }
   if (standardBltMode) {
@@ -494,6 +507,17 @@ int __cdecl wmain(int argc, wchar_t **argv) {
       createPagingQueue.hPagingQueue == 0u ||
       createPagingQueue.FenceValueCPUVirtualAddress == NULL)
     goto cleanup;
+
+#if defined(APPLE_AGX_NATIVE_BATCH_QUALIFICATION)
+  if (nativeBatchMode) {
+    result=AgxKmtNativeQualificationRun(adapters[selectedAdapter].hAdapter,
+        createDevice.hDevice,createPagingQueue.hPagingQueue,
+        createPagingQueue.FenceValueCPUVirtualAddress,
+        ADMISSION_EXPECTED_CANDIDATE_BUILD);
+    if(result==2) goto preserve_resources;
+    goto cleanup;
+  }
+#endif
 
   createContext.hDevice = createDevice.hDevice;
   createContext.NodeOrdinal = 0u;

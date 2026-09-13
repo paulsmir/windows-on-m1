@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^[A-Za-z0-9-]+$ || ( $# -eq 2 && "$2" != x64 && "$2" != arm64 ) ]]; then
-  echo "usage: $0 RUN_ID [x64|arm64]" >&2
+if [[ $# -lt 1 || $# -gt 3 || ! "$1" =~ ^[A-Za-z0-9-]+$ || ( $# -ge 2 && "$2" != x64 && "$2" != arm64 ) || ( $# -eq 3 && ! "$3" =~ ^[0-9]+$ ) ]]; then
+  echo "usage: $0 RUN_ID [x64|arm64] [EXPECTED_CANDIDATE_BUILD]" >&2
   exit 64
 fi
 run_id="$1"
 architecture="${2:-x64}"
+expected_build="${3:-0}"
 repo_root=$(git rev-parse --show-toplevel)
 stage_dir=$(mktemp -d /tmp/ad04-runtime-stage.XXXXXX)
 archive="$stage_dir/source.tar.gz"
@@ -41,9 +42,9 @@ PY
 ssh -o ConnectTimeout=8 -o BatchMode=yes -i /Users/pavel/.ssh/windows_builder pauls@192.168.1.24 \
   powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand "$preflight"
 scp -i /Users/pavel/.ssh/windows_builder "$archive" "pauls@192.168.1.24:${remote_archive}"
-encoded=$(python3 - "$remote_source" "$remote_archive" "$run_id" "$architecture" "$archive_sha256" <<'PY'
+encoded=$(python3 - "$remote_source" "$remote_archive" "$run_id" "$architecture" "$archive_sha256" "$expected_build" <<'PY'
 import base64, sys
-src, archive, run_id, architecture, archive_sha256 = sys.argv[1:]
+src, archive, run_id, architecture, archive_sha256, expected_build = sys.argv[1:]
 script = f'''$ErrorActionPreference='Stop'
 if(Test-Path '{src}'){{throw 'Fresh source path required'}}
 [void](New-Item -ItemType Directory '{src}')
@@ -52,7 +53,7 @@ if((Get-FileHash -LiteralPath '{archive}' -Algorithm SHA256).Hash.ToLowerInvaria
 }}
 tar -xf '{archive}' -C '{src}'
 if($LASTEXITCODE){{exit $LASTEXITCODE}}
-& '{src}\\drivers\\apple-agx\\mesa\\scripts\\run-asahi-runtime-closure.ps1' -Project '{src}' -RunId '{run_id}' -Architecture '{architecture}' -ArchiveSha256 '{archive_sha256}'
+& '{src}\\drivers\\apple-agx\\mesa\\scripts\\run-asahi-runtime-closure.ps1' -Project '{src}' -RunId '{run_id}' -Architecture '{architecture}' -ArchiveSha256 '{archive_sha256}' -ExpectedCandidateBuild {expected_build}
 exit $LASTEXITCODE'''
 print(base64.b64encode(script.encode('utf-16le')).decode())
 PY

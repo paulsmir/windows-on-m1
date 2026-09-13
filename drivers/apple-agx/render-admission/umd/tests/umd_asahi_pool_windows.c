@@ -68,6 +68,7 @@ unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *,
 #include "render_dynamic_dma.h"
 static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
 static HANDLE RuntimeMarker;
+static unsigned RuntimeImmediateMarker;
 static unsigned RuntimeTeardownDeletes,RuntimeTeardownUnlocks;
 static const void *RuntimeTeardownBo;
 static APPLE_AGX_U64 RuntimeCommand[APPLE_AGX_WIN32_COMMAND_MAX_BYTES/8];
@@ -270,6 +271,17 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     result=AdmissionDynamicOverlayRouteNative(&consumer->WorkerPlan,consumer->Dma.Bindings,
         consumer->Backend.Objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT);
     if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("native-roots",i,result);
+    ADMISSION_NATIVE_GRAPH_RECEIPT receipt;
+    result=AdmissionDynamicOverlayCaptureNativeGraph(consumer->Dma.Bindings,&consumer->WorkerPlan,
+        consumer->Dma.Job,consumer->Backend.Objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
+        consumer->Dma.Header->CommandHash,RuntimeConsumerFence,&receipt);
+    if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("native-receipt",i,result);
+    RUNTIME_REQUIRE(receipt.Valid && receipt.Fence==RuntimeConsumerFence &&
+        receipt.CommandHash==view.Header->ContentHash &&
+        receipt.GraphObjectCount==consumer->Dma.Job->ObjectCount &&
+        receipt.GraphEdgeCount==consumer->Dma.Job->RelocationCount && !receipt.ReadbackAvailable &&
+        receipt.RenderTargetGpuVa==consumer->DestinationGpu &&
+        receipt.RenderTargetPhysical==packet.DestinationPhysical);
     for(unsigned e=0;e<consumer->Dma.Job->RelocationCount;++e) {
       const APPLE_AGX_DYNAMIC_JOB_RELOCATION *edge=&consumer->Dma.Job->Relocations[e];
       if(edge->TargetReference==target)
@@ -293,11 +305,14 @@ static HRESULT APIENTRY RuntimeSignal(HANDLE h,const D3DDDICB_SIGNALSYNCHRONIZAT
   (void)h;++RuntimeSignals;
   RUNTIME_REQUIRE(signal->hContext==PoolDevice.KernelContext && signal->Flags.EnqueueCpuEvent);
   RUNTIME_REQUIRE(PoolDevice.NextScreenFence==RuntimeConsumerFence);
-  RuntimeMarker=signal->CpuEventHandle;return S_OK; /* deliberately pending */
+  RuntimeMarker=signal->CpuEventHandle;
+  if(RuntimeImmediateMarker) RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
+  return S_OK; /* first case deliberately pending; second signals in callback */
 }
 static void RuntimeCheckpoint(void *context,unsigned phase) {
   ADMISSION_UMD_ASAHI_OWNER *owner=context;
-  if(phase==1) {
+  if(phase==1 || phase==6) {
+    if(phase==6) RUNTIME_REQUIRE(RuntimeImmediateMarker && WaitForSingleObject(RuntimeMarker,0)==WAIT_OBJECT_0);
     RUNTIME_REQUIRE(RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 && RuntimeConsumerGates==2 && RuntimeMarker);
     RUNTIME_REQUIRE(owner->Device->NativeBatchTransaction && owner->Device->DrawSubmission);
     unsigned holds=0;
@@ -325,6 +340,20 @@ static void RuntimeCheckpoint(void *context,unsigned phase) {
      * is released after the consumer's retirement, never at native call return. */
     RUNTIME_REQUIRE(AdmissionUmdScreenBeginClose(owner->Device)==HRESULT_FROM_WIN32(ERROR_BUSY));
     RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
+  } else if(phase==5) {
+    RUNTIME_REQUIRE(!owner->Device->NativeBatchTransaction && !owner->Device->DrawSubmission &&
+        RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 &&
+        RuntimeConsumerGates==2 && RuntimeConsumerRetirements==2);
+    for(unsigned i=0;i<2;++i) {
+      RUNTIME_CONSUMER *consumer=&RuntimeConsumers[i];
+      RUNTIME_REQUIRE(!consumer->State.Applied && !consumer->Backend.BoundFence);
+      if(consumer->Arena && !consumer->State.Applied && !consumer->Backend.BoundFence)
+        HeapFree(GetProcessHeap(),0,consumer->Arena);
+    }
+    memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+    RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+    RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+    RuntimeMarker=NULL;RuntimeImmediateMarker=1;
   } else if(phase==3) {
     RUNTIME_REQUIRE(!owner->Device->NativeBatchTransaction && !owner->Device->DrawSubmission &&
         owner->Device->NativeBackendCount==1 && owner->Backend->Native && owner->Backend->LiveBos==1);
@@ -399,7 +428,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   if(AdmissionUmdScreenInitialize(&PoolDevice)!=S_OK) return 1;
   AdmissionUmdAsahiOwnerOperations(&ops);
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
-  RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+  RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeImmediateMarker=0;
   RuntimeTeardownBo=NULL;RuntimeTeardownDeletes=RuntimeTeardownUnlocks=0;
   RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
   memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
@@ -420,7 +449,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
     }
     RUNTIME_REQUIRE(!consumer->Arena);
   }
-  if(!PoolErrors && RuntimeRenders==1 && RuntimeMaterializations==2 && RuntimeConsumerGates==2 && RuntimeConsumerRetirements==2)
+  if(!PoolErrors && RuntimeRenders==1 && RuntimeMaterializations==2 && RuntimeConsumerGates==2 && RuntimeConsumerRetirements==2 && RuntimeImmediateMarker)
     printf("NATIVE_RUNTIME_EXECUTION: actual_producer=PASS materializer=PASS kmd_plan=PASS dma_patch=PASS native_roots=PASS retirement=PASS\n");
 #else
   PoolErrors+=AgxWin32AsahiPoolTest(&PoolDevice.Screen,&ops,&owner,&backend,PoolHolds);

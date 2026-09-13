@@ -470,8 +470,10 @@ static void test_native_graph(void) {
   image.Objects[15].Data=store_microsequence_bytes; image.Objects[15].Size=sizeof(store_microsequence_bytes);
   image.Objects[37].GpuVa=0x1503960000ULL;
   image.Objects[40].Data=output_bytes; image.Objects[40].Size=0x1000;
+  image.Objects[40].GpuVa=0x1100800000ULL; image.Objects[40].PhysicalAddress=0x88000000ULL;
   header.Version=4; header.Opcode=2; header.Generation=7; header.ReferenceCount=16;
-  draw.EncoderReference=15; draw.ScissorReference=14; draw.DepthBiasReference=0xffffffffu;
+  draw.VertexReference=1; draw.VertexShaderReference=2; draw.FragmentShaderReference=3;
+  draw.UscPipelineReference=4; draw.EncoderReference=15; draw.ScissorReference=14; draw.DepthBiasReference=0xffffffffu;
   draw.SurfaceWidth=16; draw.SurfaceHeight=16; draw.SurfacePitch=64; draw.RelocationCount=1;
   native.StructBytes=sizeof(native); native.Samples=1; native.Layers=1;
   native.SampleSizeBytes=8; native.UtileWidth=32; native.UtileHeight=32;
@@ -508,6 +510,25 @@ static void test_native_graph(void) {
     memcpy(store_work_bytes+0x1c0,&base,8); memcpy(ta_bytes+0x120,&base,8); memcpy(ta_bytes+0xd0,&enc,8);
   }
   assert(AdmissionDynamicOverlayRouteNative(&plan,&bindings,image.Objects,76)==AdmissionDynamicOverlaySuccess);
+  {
+    ADMISSION_NATIVE_GRAPH_RECEIPT receipt;
+    memset(output_bytes,0x5a,sizeof(output_bytes));
+    assert(AdmissionDynamicOverlayCaptureNativeGraph(&bindings,&plan,&job,image.Objects,76,
+        0x123456789abcdef0ULL,9,&receipt)==AdmissionDynamicOverlaySuccess);
+    assert(receipt.Valid==1u && receipt.ReadbackAvailable==0u &&
+        receipt.Fence==9u && receipt.CommandHash==0x123456789abcdef0ULL &&
+        receipt.RenderTargetGpuVa==image.Objects[40].GpuVa &&
+        receipt.RenderTargetPhysical==image.Objects[40].PhysicalAddress &&
+        receipt.RenderTargetBytes==0x1000u);
+    assert(AdmissionDynamicOverlayCaptureNativeOutput(&receipt,9,17u,
+        image.Objects[40].GpuVa,image.Objects[40].PhysicalAddress,output_bytes,0x1000u)==AdmissionDynamicOverlaySuccess);
+    assert(receipt.ReadbackAvailable==1u && receipt.SnapshotGeneration==17u &&
+        receipt.ReadbackBytes==0x1000u && receipt.ReadbackData[0]==0x5a);
+    assert(AdmissionDynamicOverlayCaptureNativeOutput(&receipt,8,18u,
+        image.Objects[40].GpuVa,image.Objects[40].PhysicalAddress,output_bytes,0x1000u)==AdmissionDynamicOverlayArgument);
+    assert(AdmissionDynamicOverlayCaptureNativeOutput(&receipt,9,18u,
+        image.Objects[40].GpuVa,image.Objects[40].PhysicalAddress,output_bytes,0x1001u)==AdmissionDynamicOverlayArgument);
+  }
   {
     unsigned counts,blocks,samples;
     unsigned long long address,dbias;

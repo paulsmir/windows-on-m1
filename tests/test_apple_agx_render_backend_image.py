@@ -22,6 +22,7 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
                 "-I", str(SHARED / "include"),
                 str(RENDER / "tests" / "render_backend_image_test.c"),
                 str(RENDER / "src" / "render_backend_image.c"),
+                str(RENDER / "src" / "render_completed_output.c"),
                 str(RENDER / "src" / "render_allocation.c"),
                 str(SHARED / "src" / "apple_agx_render_template.generated.c"),
                 str(SHARED / "src" / "apple_agx_render_template_rebase.c"),

@@ -249,7 +249,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
       !Packet->Fence || !Packet->DestinationGpuVa || !Packet->DestinationPhysical ||
       Native->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
       Native->SurfaceWidth!=16 || Native->SurfaceHeight!=16 || Native->SurfacePitch!=64 ||
-      Native->DestinationBytes<1024 || Native->DestinationBytes!=Packet->DestinationBytes ||
+      Native->DestinationBytes<1024 || Native->DestinationBytes>0x4000u ||
+      Native->DestinationBytes!=Packet->DestinationBytes ||
       Native->DestinationBytes>0xffffffffULL ||
       Packet->DestinationGpuVa>=(1ULL<<40) ||
       Packet->DestinationPhysical>=(1ULL<<40) ||
@@ -275,6 +276,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   candidate.DestinationPhysical=Packet->DestinationPhysical;
   candidate.DestinationBytes=Packet->DestinationBytes;
   Image->NativeOriginalOutput=saved; Image->NativeBound=APPLE_AGX_TRUE;
+  Image->NativeWidth=Native->SurfaceWidth;
+  Image->NativeHeight=Native->SurfaceHeight;
+  Image->NativePitch=Native->SurfacePitch;
   Image->Binding=candidate; Image->BoundFence=Packet->Fence;
   *Binding=candidate;
   return APPLE_AGX_TRUE;
@@ -303,7 +307,9 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
       Packet->DestinationCpuToken == 0ULL ||
       Packet->DestinationGpuVa == 0ULL ||
       Packet->DestinationPhysical == 0ULL ||
-      Packet->DestinationBytes != Allocation->Size ||
+      (Image->NativeBound ? (Packet->DestinationBytes > Allocation->Size ||
+                            Allocation->Size > 0xffffffffULL) :
+                           Packet->DestinationBytes != Allocation->Size) ||
       Packet->DestinationBytes > 0xffffffffULL)
     return APPLE_AGX_FALSE;
   object = &Image->Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT];
@@ -327,7 +333,11 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
       gpu_offset > Packet->DestinationBytes ||
       object->Size > Packet->DestinationBytes - gpu_offset)
     return APPLE_AGX_FALSE;
-  if (framebuffer == APPLE_AGX_TRUE) {
+  if (Image->NativeBound) {
+    if(framebuffer || gpu_offset || object->Size>0x4000u ||
+        !Image->NativeWidth || !Image->NativeHeight || !Image->NativePitch)
+      return APPLE_AGX_FALSE;
+  } else if (framebuffer == APPLE_AGX_TRUE) {
     if (Allocation->Width != APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH ||
         Allocation->Height != APPLE_AGX_EXP208_FRAMEBUFFER_HEIGHT ||
         Allocation->Pitch != APPLE_AGX_EXP208_FRAMEBUFFER_PITCH ||
@@ -349,29 +359,30 @@ APPLE_AGX_BOOL AdmissionBackendImageCaptureOutput(
       (void *)(unsigned long long)Packet->DestinationCpuToken;
   candidate.AllocationGpuAddress = Packet->DestinationGpuVa;
   candidate.AllocationPhysicalAddress = Packet->DestinationPhysical;
-  candidate.AllocationBytes = Packet->DestinationBytes;
+  candidate.AllocationBytes = Image->NativeBound ? (APPLE_AGX_U32)Allocation->Size : Packet->DestinationBytes;
   candidate.RenderedCpuAddress = object->Data;
   candidate.RenderedGpuAddress = object->GpuVa;
   candidate.RenderedPhysicalAddress = object->PhysicalAddress;
   candidate.RenderedOffset = (APPLE_AGX_U32)gpu_offset;
-  candidate.RenderedBytes = framebuffer == APPLE_AGX_TRUE
+  candidate.RenderedBytes = (Image->NativeBound || framebuffer == APPLE_AGX_TRUE)
       ? object->Size
       : APPLE_AGX_EXP208_GDI_WIDTH * APPLE_AGX_EXP208_GDI_HEIGHT * 4u;
   candidate.AllocationWidth = Allocation->Width;
   candidate.AllocationHeight = Allocation->Height;
   candidate.AllocationPitch = Allocation->Pitch;
   candidate.AllocationFormat = Allocation->Format;
-  candidate.RenderWidth = framebuffer == APPLE_AGX_TRUE
+  candidate.RenderWidth = Image->NativeBound ? Image->NativeWidth : framebuffer == APPLE_AGX_TRUE
       ? APPLE_AGX_EXP208_FRAMEBUFFER_WIDTH : APPLE_AGX_EXP208_GDI_WIDTH;
-  candidate.RenderHeight = framebuffer == APPLE_AGX_TRUE
+  candidate.RenderHeight = Image->NativeBound ? Image->NativeHeight : framebuffer == APPLE_AGX_TRUE
       ? Image->Binding.Framebuffer.RenderHeight : APPLE_AGX_EXP208_GDI_HEIGHT;
-  candidate.RenderPitch = framebuffer == APPLE_AGX_TRUE
+  candidate.RenderPitch = Image->NativeBound ? Image->NativePitch : framebuffer == APPLE_AGX_TRUE
       ? APPLE_AGX_EXP208_FRAMEBUFFER_PITCH : APPLE_AGX_EXP208_GDI_PITCH;
-  candidate.ExpectedColor = framebuffer == APPLE_AGX_TRUE
+  candidate.ExpectedColor = Image->NativeBound ? 0u : framebuffer == APPLE_AGX_TRUE
       ? Image->Binding.Framebuffer.ClearColor
       : APPLE_AGX_EXP208_GDI_COLOR;
   candidate.BackgroundColor = candidate.ExpectedColor;
-  candidate.VerificationKind = AdmissionBackendOutputVerificationUniform;
+  candidate.VerificationKind = Image->NativeBound ? AdmissionBackendOutputVerificationNativeCapture :
+      AdmissionBackendOutputVerificationUniform;
   candidate.Framebuffer = framebuffer;
   *Output = candidate;
   return APPLE_AGX_TRUE;
@@ -394,6 +405,7 @@ APPLE_AGX_BOOL AdmissionBackendImageReleaseSubmission(
         output->Size!=Image->Binding.DestinationBytes) return APPLE_AGX_FALSE;
     *output=Image->NativeOriginalOutput;
     Image->NativeBound=APPLE_AGX_FALSE;
+    Image->NativeWidth=Image->NativeHeight=Image->NativePitch=0;
   } else if (!AppleAgxExp208UnbindGdiColorFill(
           Image->Objects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           &Image->Binding)) return APPLE_AGX_FALSE;

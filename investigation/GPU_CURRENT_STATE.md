@@ -15,6 +15,37 @@ Real Asahi graph -> typed capture -> immutable request materialization -> existi
 UMD composer/pfnRenderCb -> existing KMD Render/Patch/Submit -> AGX completion.
 No native ANS work, no merge/push, no platform/recovery redesign.
 
+## Verified qualification implementation
+Base native lifecycle checkpoint36ae38d (implementation9829689). The next coherent
+slice adds a shared production scene, actualKMT bridge/client, reference-counted
+residency in existing ScreenBuffers, fresh-output correlation and native KMD
+completion/rawreadback receipts. The installed UMD pipeline mask remains0.
+Source contract: agent_tasks/AD04-NATIVE-KMT-CALLBACK-CONTRACT.md.
+Final evidence: AD04-runtime-closure/native-kmt-final-20260914i-x64 and
+native-kmt-final-20260914j-arm64. x64 actual2scenes/2placements, pending/immediate
+markers, residency accounting, stale-receipt rejection, cleanup/recreate PASS.
+Both contracttest and realKMT client build/link PASS onARM64 (execution NOT_RUN).
+i sourceSHA be10756af046c0dacf6b6288b81f9f86340c410157e3bb7dd21c9f95d039304c;
+i clientSHA e7e6cec8a17359fd6e7c005539d49924cf26de959f11bc52f16de4eaa640a328.
+j sourceSHA 8aa7baceed972d8e25686bda287ed90f210cb2b325ba0a28ceaf3701e0120d16;
+j clientSHA 4ebcf1b951292483372844900166e29512e36f19e07826aae2b874557065a69e.
+Clients above use expectedbuild0 and refuse qualification; full native callgraph
+is linked (12MB), build expectation passed at runtime from the compiled caller.
+Native scene compilation/BOupload stays synchronous on the owning thread.
+ARM64 imports realKMT APIs andVCRUNTIME140/UCRT; target availability unverified.
+PE/source review: evidence/AD04-native-client-pe-20260914j.
+16hosttests + qualification-enabled KMD ClCompile/codeanalysis99objects PASS:
+evidence/AD04-native-qualification-host-20260914b and
+AD04-native-qualification-kmd-20260914a. KMDsourceSHA
+ a772df95611046914d45accc45af71bf7f58dbf7f6b2c7cac15ff6d76c7a910e.
+Only later package-script pinning changed outside compiledsources; actualWindows
+PowerShell parser PASS, two pinnedMSBuild invocations:
+evidence/AD04-package-script-parse-20260914c.
+No SYS/package/sign/install/hardware run yet; next is preregistered package683
+VisibleAgxQualification build (sameprofile asEXP682), then livebaseline and one
+nativeKMT request. Askfor no routineconfirmation. AirSSH address clarification is
+pending; both expectedUSBendpoints were observed, no active launcher observed.
+
 ## Verified native lifecycle slice
 The real native screen/context/resource/NIR shader/state/clear/draw/flush path
 now executes through stable batch-owned root/capture/adapter storage and the

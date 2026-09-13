@@ -276,6 +276,37 @@ _Use_decl_annotations_ VOID AdmissionRecordDynamicGraph(
   }
 }
 
+_Use_decl_annotations_ VOID AdmissionRecordNativeGraph(
+    ADMISSION_CONTEXT *Context, const ADMISSION_NATIVE_GRAPH_RECEIPT *Receipt) {
+  HANDLE key = NULL;
+  OBJECT_ATTRIBUTES attributes;
+  UNICODE_STRING servicePath;
+  if (Context == NULL || Receipt == NULL || Receipt->Version != 1u ||
+      Receipt->Bytes != sizeof(*Receipt) || Receipt->Valid != 1u ||
+      !Receipt->Fence || !Receipt->Generation || !Receipt->CommandHash ||
+      Receipt->CandidateBuild != APPLE_AGX_VERSION_BUILD ||
+      Receipt->BootGeneration != Context->Win32BootGeneration ||
+      Receipt->ReadbackAvailable > 1u ||
+      (Receipt->ReadbackAvailable && (!Receipt->SnapshotGeneration ||
+          !Receipt->ReadbackFnv1a || Receipt->ReadbackBytes != Receipt->RenderTargetBytes ||
+          Receipt->ReadbackBytes > sizeof(Receipt->ReadbackData))) ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  if (Context->PhysicalDeviceObject != NULL && NT_SUCCESS(IoOpenDeviceRegistryKey(
+      Context->PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key))) {
+    WriteBinary(key, L"Wom1NativeGraphReceipt", Receipt, sizeof(*Receipt));
+    ZwClose(key);
+  }
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes,&servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,NULL,NULL);
+  if (NT_SUCCESS(ZwOpenKey(&key,KEY_SET_VALUE,&attributes))) {
+    WriteBinary(key,L"Wom1NativeGraphReceipt",Receipt,sizeof(*Receipt));
+    ZwClose(key);
+  }
+}
+
 _Use_decl_annotations_ VOID AdmissionRecordDynamicStore(
     ADMISSION_CONTEXT *Context,
     const ADMISSION_DYNAMIC_STORE_RECEIPT *Receipt) {

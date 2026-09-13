@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
     <ProjectConfiguration Include="Release|ARM64"><Configuration>Release</Configuration><Platform>ARM64</Platform></ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -17,6 +18,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
+    <PinnedWindowsKitInclude Condition="'$(PinnedWindowsKitInclude)' == ''">C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0</PinnedWindowsKitInclude>
     <AdmissionExpectedBuild Condition="'$(AdmissionExpectedBuild)'==''">0</AdmissionExpectedBuild>
   </PropertyGroup>
   <ItemDefinitionGroup>
@@ -46,6 +48,32 @@
     <ClInclude Include="..\..\render-admission\include\render_win32_transport.h" />
     <ClInclude Include="..\..\shared\include\apple_agx_win32_abi.h" />
     <ClInclude Include="..\..\mesa\winsys\agx_win32_transport.h" />
+  </ItemGroup>
+  <Import Project="$(NativeRuntimeProps)" Condition="'$(EnableNativeBatch)' == 'true'" />
+  <ItemDefinitionGroup Condition="'$(EnableNativeBatch)' == 'true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\..\render-admission\umd\include;..\..\render-admission\umd\src;$(PinnedWindowsKitInclude)\um;$(PinnedWindowsKitInclude)\shared;$(PinnedWindowsKitInclude)\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>APPLE_AGX_NATIVE_BATCH_QUALIFICATION=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link><OptimizeReferences>true</OptimizeReferences></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableNativeBatch)' == 'true'">
+    <ClCompile Include="agx_kmt_native_bridge.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="agx_kmt_native_qualification.c" />
+    <ClCompile Include="..\..\render-admission\umd\src\umd_runtime_device.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\render-admission\umd\src\umd_win32_screen.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\render-admission\umd\src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\render-admission\umd\src\umd_asahi_batch_adapter.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\render-admission\umd\src\umd_draw_composer.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\render-admission\umd\src\umd_resource_lifetime.c" />
+    <ClCompile Include="..\..\render-admission\umd\src\direct_flip_contract.c" />
+    <ClCompile Include="..\..\render-admission\src\render_win32_transport.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_screen.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_native_bo.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_native_device.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_construction_address.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_reloc_capture.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

@@ -98,6 +98,23 @@ typedef struct _ADMISSION_DYNAMIC_GRAPH_RECEIPT {
   APPLE_AGX_U64 FragmentShaderFnv1a;
 } ADMISSION_DYNAMIC_GRAPH_RECEIPT;
 
+typedef struct _ADMISSION_NATIVE_GRAPH_RECEIPT {
+  APPLE_AGX_U32 Version, Bytes, Valid, Fence, Generation, CandidateBuild, BootGeneration;
+  APPLE_AGX_U32 GraphObjectCount, GraphEdgeCount, ReadbackAvailable;
+  APPLE_AGX_U32 EncoderReference, VertexShaderReference, FragmentShaderReference;
+  APPLE_AGX_U32 BackgroundReference, PartialBackgroundReference, EndOfTileReference;
+  APPLE_AGX_U32 BackgroundCounts, PartialBackgroundCounts, EndOfTileCounts;
+  APPLE_AGX_U32 BackgroundFlags, PartialBackgroundFlags, EndOfTileFlags;
+  APPLE_AGX_U32 RenderTargetReference, RenderTargetBytes;
+  APPLE_AGX_U64 EncoderGpuVa, VertexShaderGpuVa, FragmentShaderGpuVa;
+  APPLE_AGX_U64 BackgroundGpuVa, PartialBackgroundGpuVa, EndOfTileGpuVa;
+  APPLE_AGX_U64 EncoderFnv1a, VertexShaderFnv1a, FragmentShaderFnv1a;
+  APPLE_AGX_U64 RenderTargetGpuVa, RenderTargetPhysical;
+  APPLE_AGX_U64 CommandHash, SnapshotGeneration, ReadbackFnv1a;
+  APPLE_AGX_U32 ReadbackBytes;
+  unsigned char ReadbackData[0x4000];
+} ADMISSION_NATIVE_GRAPH_RECEIPT;
+
 typedef struct _ADMISSION_DYNAMIC_STORE_RECEIPT {
   APPLE_AGX_U32 Version;
   APPLE_AGX_U32 Bytes;
@@ -172,6 +189,14 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureGraph(
     const APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_U32 ActiveObjectCount, APPLE_AGX_U32 Fence,
     ADMISSION_DYNAMIC_GRAPH_RECEIPT *Receipt);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureNativeGraph(
+    const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *, const ADMISSION_DYNAMIC_OVERLAY_PLAN *,
+    const APPLE_AGX_DYNAMIC_JOB *, const APPLE_AGX_EXP208_RELOCATION_OBJECT *,
+    APPLE_AGX_U32, APPLE_AGX_U64, APPLE_AGX_U32, ADMISSION_NATIVE_GRAPH_RECEIPT *);
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureNativeOutput(
+    ADMISSION_NATIVE_GRAPH_RECEIPT *, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 SnapshotGeneration, APPLE_AGX_U64 GpuVa,
+    APPLE_AGX_U64 Physical, const void *Data, APPLE_AGX_U32 Bytes);
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureStoreGraph(
     const ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_DYNAMIC_OVERLAY_STATE *State,

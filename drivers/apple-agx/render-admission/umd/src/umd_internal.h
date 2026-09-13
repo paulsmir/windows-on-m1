@@ -22,6 +22,10 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   const void *NativeBackend;
   APPLE_AGX_U64 NativeBoSerial;
   D3DKMT_HANDLE KernelAllocation;
+  /* Explicit residency contribution owned only by the KMT qualification
+   * callbacks. Zeroed with this authoritative slot; never another handle map. */
+  BOOL KmtResidencyHeld;
+  ULONGLONG KmtPagingFence;
   APPLE_AGX_U64 Bytes;
   APPLE_AGX_U64 Alignment;
   PVOID LockedBase;

@@ -1,0 +1,228 @@
+#include "gallium/drivers/asahi/agx_state.h"
+#include "compiler/nir/nir_builder.h"
+#include "util/u_inlines.h"
+#include "util/format/u_format.h"
+#include "drm-uapi/drm_fourcc.h"
+#include "agx_win32_asahi_scene.h"
+#include <string.h>
+
+struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
+    const AGX_WIN32_ASAHI_OWNER_OPS *,void *,const AGX_WIN32_ASAHI_BATCH_OPS *,
+    const struct drm_asahi_params_global *);
+
+struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND *backend,
+    AGX_WIN32_SCREEN *windows,const AGX_WIN32_ASAHI_OWNER_OPS *owners,void *owner,
+    const AGX_WIN32_ASAHI_BATCH_OPS *batches) {
+  if(!backend || !windows || !windows->Active || !windows->Generation ||
+      !AgxWin32DeviceInfoValid(&windows->Info) || !owners || !owner || !batches) return NULL;
+  struct drm_asahi_params_global params={0};
+  params.gpu_generation=windows->Info.GpuGeneration;
+  params.gpu_variant='G';
+  /* KMD lifecycle.c exposes the compiled G13G/16-KiB contract, not measured
+   * topology. Pinned Asahi hw/t8103.rs (77cb8f24c238...) defines G13G, one die,
+   * max_num_clusters=1. This adapter implements that one-cluster model only.
+   * Core masks, revision and timestamp frequency are not invented. */
+  params.num_clusters_total=1;
+  params.num_dies=1;
+  params.features=0; /* Optional soft faults are deliberately not enabled. */
+  if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
+  return AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);
+}
+
+struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *screen,void *owner) {
+  return screen && screen->context_create ? screen->context_create(screen,owner,0) : NULL;
+}
+int AgxWin32AsahiContextDestroy(struct pipe_context *ctx) {
+  if(!ctx || !ctx->destroy) return 0;
+  struct agx_context *native=agx_context(ctx);
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i)
+    if(native->batches.slots[i].windows_batch || BITSET_TEST(native->batches.active,i) ||
+       BITSET_TEST(native->batches.submitted,i)) return 0;
+  ctx->destroy(ctx);
+  return 1;
+}
+int AgxWin32AsahiScreenDestroy(struct pipe_screen *screen) {
+  if(!screen || !screen->destroy) return 0;
+  AGX_WIN32_ASAHI_BACKEND *backend=agx_device(screen)->windows_private;
+  if(!backend || backend->Native!=agx_device(screen)) return 0;
+  screen->destroy(screen);
+  return backend->Native==NULL;
+}
+
+static AGX_WIN32_ASAHI_BACKEND *scene_backend(const AGX_WIN32_ASAHI_SCENE *s) {
+  return s && s->Screen && s->Context && s->Context->screen==s->Screen ?
+      agx_device(s->Screen)->windows_private : NULL;
+}
+/* One source of truth for real native shader/clear inputs and CPU pixel
+ * expectations. The canonical pack is never injected into a GPU command. */
+static const float scene_background[4]={0.05f,0.05f,0.05f,1.0f};
+static const float scene_foreground[4]={0.9f,0.2f,0.1f,1.0f};
+static APPLE_AGX_U32 scene_bgra8(const float color[4]) {
+  unsigned char pixel[4];
+  util_format_pack_rgba(PIPE_FORMAT_B8G8R8A8_UNORM,pixel,color,1);
+  return (APPLE_AGX_U32)pixel[0] | ((APPLE_AGX_U32)pixel[1]<<8) |
+      ((APPLE_AGX_U32)pixel[2]<<16) | ((APPLE_AGX_U32)pixel[3]<<24);
+}
+static nir_shader *scene_shader(mesa_shader_stage stage) {
+  nir_builder b=nir_builder_init_simple_shader(stage,&agx_nir_options,"Windows native scene");
+  nir_variable *out=nir_variable_create(b.shader,nir_var_shader_out,glsl_vec4_type(),"out");
+  out->data.location=stage==MESA_SHADER_VERTEX?VARYING_SLOT_POS:FRAG_RESULT_DATA0;
+  out->data.driver_location=0;
+  if(stage==MESA_SHADER_VERTEX) {
+    nir_variable *in=nir_variable_create(b.shader,nir_var_shader_in,glsl_vec4_type(),"position");
+    in->data.location=VERT_ATTRIB_GENERIC0;in->data.driver_location=0;
+    nir_store_var(&b,out,nir_load_var(&b,in),0xf);
+  } else nir_store_var(&b,out,nir_imm_vec4(&b,scene_foreground[0],scene_foreground[1],scene_foreground[2],scene_foreground[3]),0xf);
+  nir_shader_gather_info(b.shader,nir_shader_get_entrypoint(b.shader));
+  return b.shader;
+}
+int AgxWin32AsahiSceneInit(AGX_WIN32_ASAHI_SCENE *s,struct pipe_screen *screen,struct pipe_context *ctx) {
+  if(!s || s->Phase!=AgxAsahiSceneEmpty || !screen || !ctx || ctx->screen!=screen) return 0;
+  struct agx_context *native=agx_context(ctx);
+  AGX_WIN32_ASAHI_BACKEND *backend=agx_device(screen)->windows_private;
+  if(!backend || backend->Native!=agx_device(screen) || backend->Failed || !backend->BatchOps ||
+     backend->ActiveCapture || backend->ActiveEmission || native->any_faults) return 0;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i)
+    if(native->batches.slots[i].windows_batch || BITSET_TEST(native->batches.active,i) ||
+       BITSET_TEST(native->batches.submitted,i)) return 0;
+  s->Screen=screen;s->Context=ctx;s->Phase=AgxAsahiScenePreparing;
+  struct pipe_resource rt_info={0},vb_info={0};
+  rt_info.target=PIPE_TEXTURE_2D;rt_info.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  rt_info.width0=16;rt_info.height0=16;rt_info.depth0=1;rt_info.array_size=1;
+  rt_info.bind=PIPE_BIND_RENDER_TARGET;rt_info.usage=PIPE_USAGE_DEFAULT;
+  vb_info.target=PIPE_BUFFER;vb_info.format=PIPE_FORMAT_R8_UNORM;
+  vb_info.width0=48;vb_info.height0=vb_info.depth0=vb_info.array_size=1;
+  vb_info.bind=PIPE_BIND_VERTEX_BUFFER;vb_info.usage=PIPE_USAGE_DEFAULT;
+  const uint64_t modifier=DRM_FORMAT_MOD_APPLE_GPU_TILED;
+  s->Target=screen->resource_create_with_modifiers(screen,&rt_info,&modifier,1);
+  s->VertexBuffer=screen->resource_create(screen,&vb_info);
+  if(!s->Target || !s->VertexBuffer) goto rejected;
+  struct agx_resource *target=agx_resource(s->Target);
+  if(!AgxWin32AsahiIdentity(backend,target->bo,&s->Receipt.TargetIdentity)) goto rejected;
+  s->Receipt.TargetConstructionAddress=agx_map_gpu(target);
+  s->Receipt.TargetBytes=target->layout.size_B;
+  s->Receipt.TargetLayerStride=target->layout.layer_stride_B;
+  s->Receipt.Width=16;s->Receipt.Height=16;
+  s->Receipt.ExpectedBackgroundBgra8=scene_bgra8(scene_background);
+  s->Receipt.ExpectedForegroundBgra8=scene_bgra8(scene_foreground);
+  s->Receipt.Tiling=target->layout.tiling;s->Receipt.Format=AppleAgxWin32FormatBgra8Unorm;
+  s->Receipt.BootGeneration=backend->Buffers.Screen->Info.BootGeneration;
+  s->Receipt.PageBytes=backend->Buffers.Screen->Info.PageBytes;
+  const float vertices[12]={-1,-1,0,1,1,-1,0,1,0,1,0,1};
+  ctx->buffer_subdata(ctx,s->VertexBuffer,PIPE_MAP_WRITE,0,sizeof(vertices),vertices);
+  struct pipe_framebuffer_state fb={0};fb.width=16;fb.height=16;fb.nr_cbufs=1;
+  fb.cbufs[0].texture=s->Target;fb.cbufs[0].format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  ctx->set_framebuffer_state(ctx,&fb);
+  struct pipe_shader_state vs={0},fs={0};vs.type=fs.type=PIPE_SHADER_IR_NIR;
+  vs.ir.nir=scene_shader(MESA_SHADER_VERTEX);fs.ir.nir=scene_shader(MESA_SHADER_FRAGMENT);
+  s->VertexShader=ctx->create_vs_state(ctx,&vs);s->FragmentShader=ctx->create_fs_state(ctx,&fs);
+  /* Native agx_create_shader_state returns before consuming NIR if its initial
+   * state allocation fails; a successful call consumes/frees its input. */
+  if(!s->VertexShader) ralloc_free(vs.ir.nir);
+  if(!s->FragmentShader) ralloc_free(fs.ir.nir);
+  if(!s->VertexShader || !s->FragmentShader) goto rejected;
+  ctx->bind_vs_state(ctx,s->VertexShader);ctx->bind_fs_state(ctx,s->FragmentShader);
+  struct pipe_blend_state blend={0};blend.rt[0].colormask=0xf;
+  s->Blend=ctx->create_blend_state(ctx,&blend);if(!s->Blend) goto rejected;
+  ctx->bind_blend_state(ctx,s->Blend);
+  struct pipe_rasterizer_state raster={0};
+  raster.fill_front=raster.fill_back=PIPE_POLYGON_MODE_FILL;
+  raster.depth_clip_near=raster.depth_clip_far=true;raster.half_pixel_center=true;
+  raster.point_size=1;raster.line_width=1;
+  s->Rasterizer=ctx->create_rasterizer_state(ctx,&raster);if(!s->Rasterizer) goto rejected;
+  ctx->bind_rasterizer_state(ctx,s->Rasterizer);
+  struct pipe_depth_stencil_alpha_state depth={0};
+  s->Depth=ctx->create_depth_stencil_alpha_state(ctx,&depth);if(!s->Depth) goto rejected;
+  ctx->bind_depth_stencil_alpha_state(ctx,s->Depth);
+  struct pipe_vertex_element element={0};element.src_format=PIPE_FORMAT_R32G32B32A32_FLOAT;element.src_stride=16;
+  s->Elements=ctx->create_vertex_elements_state(ctx,1,&element);if(!s->Elements) goto rejected;
+  ctx->bind_vertex_elements_state(ctx,s->Elements);
+  struct pipe_vertex_buffer vertex_buffer={0};vertex_buffer.buffer.resource=s->VertexBuffer;
+  ctx->set_vertex_buffers(ctx,1,&vertex_buffer);
+  struct pipe_viewport_state vp={0};vp.scale[0]=vp.scale[1]=8;vp.scale[2]=1;
+  vp.translate[0]=vp.translate[1]=8;ctx->set_viewport_states(ctx,0,1,&vp);
+  struct pipe_scissor_state scissor={0};scissor.maxx=scissor.maxy=16;ctx->set_scissor_states(ctx,0,1,&scissor);
+  if(backend->Failed || native->any_faults) goto rejected;
+  s->Phase=AgxAsahiScenePrepared;return 1;
+rejected:
+  s->Phase=AgxAsahiSceneRejected;return 0;
+}
+int AgxWin32AsahiSceneDraw(AGX_WIN32_ASAHI_SCENE *s) {
+  AGX_WIN32_ASAHI_BACKEND *backend=scene_backend(s);
+  if(!backend || s->Phase!=AgxAsahiScenePrepared) return 0;
+  struct pipe_context *ctx=s->Context;
+  struct agx_context *native=agx_context(ctx);
+  union pipe_color_union clear;
+  memcpy(clear.f,scene_background,sizeof(scene_background));
+  ctx->clear(ctx,PIPE_CLEAR_COLOR0,0xf,0,NULL,&clear,0,0);
+  s->Batch=native->batch;
+  if(backend->Failed || native->any_faults || !s->Batch) goto rejected;
+  struct pipe_draw_info info={0};info.mode=MESA_PRIM_TRIANGLES;info.instance_count=1;
+  struct pipe_draw_start_count_bias draw={0};draw.count=3;
+  ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);
+  if(backend->Failed || native->any_faults || native->batch!=s->Batch ||
+      s->Batch->draws!=1 || !s->Batch->windows_batch) goto rejected;
+  s->Phase=AgxAsahiSceneDrawn;return 1;
+rejected:
+  s->Phase=AgxAsahiSceneRejected;return 0;
+}
+int AgxWin32AsahiSceneSubmit(AGX_WIN32_ASAHI_SCENE *s) {
+  if(!scene_backend(s) || s->Phase!=AgxAsahiSceneDrawn || !s->Batch) return 0;
+  s->Context->flush(s->Context,NULL,0);
+  AGX_WIN32_ASAHI_BATCH *c=s->Batch->windows_batch;
+  if(!c || !c->Submitted) {s->Phase=AgxAsahiSceneRejected;s->SubmitStatus=c?c->Status:-1;return 0;}
+  /* Explicit Windows retirement keeps this capsule stable through flush even
+   * if the ordered event was signalled before the callback returned. */
+  s->Receipt.Request=c->Request;
+  s->Receipt.CommandVersion=c->Capture.Capture.CommandVersion;
+  s->Receipt.References=c->Capture.Capture.ReferenceCount;
+  s->Receipt.Relocations=c->Capture.Capture.RelocationCount;
+  s->Receipt.EncoderBytes=c->Capture.Capture.References[c->Draw.EncoderReference].Bytes;
+  s->Receipt.NativeRoots=c->Render;
+  s->SubmitStatus=c->Status;s->Phase=AgxAsahiSceneSubmitted;
+  return s->SubmitStatus>=0;
+}
+int AgxWin32AsahiSceneRetire(AGX_WIN32_ASAHI_SCENE *s,APPLE_AGX_U32 timeout) {
+  if(!scene_backend(s)) return 0;
+  if(s->Phase==AgxAsahiSceneRetired) return 1;
+  if(s->Phase!=AgxAsahiSceneSubmitted || !s->Batch || !s->Receipt.Request) return 0;
+  AGX_WIN32_ASAHI_BATCH *c=s->Batch->windows_batch;
+  if(!c || !c->Submitted || c->Request!=s->Receipt.Request) return 0;
+  int complete=AgxWin32AsahiBatchPoll(s->Batch,timeout);
+  s->RetireStatus=c->Status;
+  if(!complete) return 0;
+  /* Poll proved the same transaction retired. The normal native cleanup now
+   * releases its pools/writer records; it cannot enqueue or replay a draw. */
+  agx_sync_batch(agx_context(s->Context),s->Batch);
+  if(s->Batch->windows_batch || agx_batch_is_active(s->Batch) || agx_batch_is_submitted(s->Batch)) return 0;
+  s->Batch=NULL;s->Phase=AgxAsahiSceneRetired;return 1;
+}
+int AgxWin32AsahiSceneCleanup(AGX_WIN32_ASAHI_SCENE *s,APPLE_AGX_U32 timeout) {
+  if(!s) return 0;
+  if(s->Phase==AgxAsahiSceneReleased) return 1;
+  if(s->Phase==AgxAsahiSceneEmpty) {s->Phase=AgxAsahiSceneReleased;return 1;}
+  if(!scene_backend(s)) return 0;
+  if(s->Phase==AgxAsahiSceneSubmitted && !AgxWin32AsahiSceneRetire(s,timeout)) return 0;
+  struct agx_context *native=agx_context(s->Context);
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *b=&native->batches.slots[i];
+    AGX_WIN32_ASAHI_BATCH *c=b->windows_batch;
+    if(c && c->Submitted && !c->Retired) return 0;
+    if(c || BITSET_TEST(native->batches.active,i) || BITSET_TEST(native->batches.submitted,i))
+      agx_batch_reset(native,b);
+    if(b->windows_batch || BITSET_TEST(native->batches.active,i) || BITSET_TEST(native->batches.submitted,i)) return 0;
+  }
+  struct pipe_context *ctx=s->Context;
+  ctx->bind_vs_state(ctx,NULL);ctx->bind_fs_state(ctx,NULL);
+  if(s->VertexShader) ctx->delete_vs_state(ctx,s->VertexShader);
+  if(s->FragmentShader) ctx->delete_fs_state(ctx,s->FragmentShader);
+  ctx->bind_vertex_elements_state(ctx,NULL);if(s->Elements) ctx->delete_vertex_elements_state(ctx,s->Elements);
+  ctx->bind_blend_state(ctx,NULL);if(s->Blend) ctx->delete_blend_state(ctx,s->Blend);
+  ctx->bind_rasterizer_state(ctx,NULL);if(s->Rasterizer) ctx->delete_rasterizer_state(ctx,s->Rasterizer);
+  ctx->bind_depth_stencil_alpha_state(ctx,NULL);if(s->Depth) ctx->delete_depth_stencil_alpha_state(ctx,s->Depth);
+  ctx->set_vertex_buffers(ctx,0,NULL);
+  struct pipe_framebuffer_state fb={0};ctx->set_framebuffer_state(ctx,&fb);
+  pipe_resource_reference(&s->VertexBuffer,NULL);pipe_resource_reference(&s->Target,NULL);
+  s->VertexShader=s->FragmentShader=s->Elements=s->Blend=s->Rasterizer=s->Depth=NULL;
+  s->Batch=NULL;s->Phase=AgxAsahiSceneReleased;return 1;
+}

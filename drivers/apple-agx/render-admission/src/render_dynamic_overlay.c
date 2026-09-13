@@ -730,6 +730,87 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   return AdmissionDynamicOverlaySuccess;
 }
 
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureNativeGraph(
+    const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
+    const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan, const APPLE_AGX_DYNAMIC_JOB *Job,
+    const APPLE_AGX_EXP208_RELOCATION_OBJECT *Objects, APPLE_AGX_U32 ObjectCount,
+    APPLE_AGX_U64 CommandHash, APPLE_AGX_U32 Fence, ADMISSION_NATIVE_GRAPH_RECEIPT *Receipt) {
+  const APPLE_AGX_U32 refs[6] = {Bindings ? Bindings->EncoderReference : 0u,
+      Bindings ? Bindings->VertexShaderReference : 0u,
+      Bindings ? Bindings->FragmentShaderReference : 0u,
+      Bindings ? Bindings->NativeBatch.Background.UscReference : 0u,
+      Bindings ? Bindings->NativeBatch.PartialBackground.UscReference : 0u,
+      Bindings ? Bindings->NativeBatch.EndOfTile.UscReference : 0u};
+  ADMISSION_DYNAMIC_OVERLAY_ENTRY const *entries[6] = {0};
+  APPLE_AGX_U32 i,j;
+  if (!Receipt) return AdmissionDynamicOverlayArgument;
+  overlay_zero(Receipt,(APPLE_AGX_U32)sizeof(*Receipt));
+  if (!Bindings || !Plan || !Job || !Objects || !Fence || !CommandHash ||
+      Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      Plan->Magic!=ADMISSION_DYNAMIC_OVERLAY_MAGIC ||
+      Plan->Version!=ADMISSION_DYNAMIC_OVERLAY_VERSION ||
+      !Plan->Generation || Plan->EntryCount>ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES ||
+      Job->Magic!=APPLE_AGX_DYNAMIC_JOB_MAGIC || Job->Version!=APPLE_AGX_DYNAMIC_JOB_VERSION ||
+      Job->ObjectCount>APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+      Job->RelocationCount>APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS ||
+      Job->Generation != Plan->Generation)
+    return AdmissionDynamicOverlayArgument;
+  for(i=0;i<6u;++i) for(j=0;j<Plan->EntryCount;++j)
+    if(Plan->Entries[j].ReferenceIndex==refs[i]) entries[i]=&Plan->Entries[j];
+  for(i=0;i<6u;++i) if(!entries[i] || !entries[i]->GpuVirtualAddress)
+    return AdmissionDynamicOverlayLayout;
+  Receipt->Version=1u; Receipt->Bytes=sizeof(*Receipt); Receipt->Fence=Fence;
+  Receipt->Generation=Plan->Generation; Receipt->CommandHash=CommandHash; Receipt->GraphObjectCount=Job->ObjectCount;
+  Receipt->GraphEdgeCount=Job->RelocationCount; Receipt->EncoderReference=refs[0];
+  Receipt->VertexShaderReference=refs[1]; Receipt->FragmentShaderReference=refs[2];
+  Receipt->BackgroundReference=refs[3]; Receipt->PartialBackgroundReference=refs[4];
+  Receipt->EndOfTileReference=refs[5]; Receipt->EncoderGpuVa=entries[0]->GpuVirtualAddress;
+  Receipt->VertexShaderGpuVa=entries[1]->GpuVirtualAddress;
+  Receipt->FragmentShaderGpuVa=entries[2]->GpuVirtualAddress;
+  Receipt->BackgroundGpuVa=entries[3]->GpuVirtualAddress;
+  Receipt->PartialBackgroundGpuVa=entries[4]->GpuVirtualAddress;
+  Receipt->EndOfTileGpuVa=entries[5]->GpuVirtualAddress;
+  Receipt->BackgroundCounts=Bindings->NativeBatch.Background.PackedCounts;
+  Receipt->PartialBackgroundCounts=Bindings->NativeBatch.PartialBackground.PackedCounts;
+  Receipt->EndOfTileCounts=Bindings->NativeBatch.EndOfTile.PackedCounts;
+  Receipt->BackgroundFlags=Bindings->NativeBatch.Background.UscFlags;
+  Receipt->PartialBackgroundFlags=Bindings->NativeBatch.PartialBackground.UscFlags;
+  Receipt->EndOfTileFlags=Bindings->NativeBatch.EndOfTile.UscFlags;
+  for(i=0;i<Job->ObjectCount;++i) {
+    const APPLE_AGX_DYNAMIC_JOB_OBJECT *o=&Job->Objects[i];
+    if(o->ReferenceIndex==refs[0]) Receipt->EncoderFnv1a=o->SourceHash;
+    if(o->ReferenceIndex==refs[1]) Receipt->VertexShaderFnv1a=o->SourceHash;
+    if(o->ReferenceIndex==refs[2]) Receipt->FragmentShaderFnv1a=o->SourceHash;
+  }
+  if (APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT >= ObjectCount ||
+      !Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].GpuVa ||
+      !Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].PhysicalAddress ||
+      Bindings->DestinationBytes > Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].Size)
+    return AdmissionDynamicOverlayRange;
+  Receipt->RenderTargetReference=Bindings->DestinationReference;
+  Receipt->RenderTargetBytes=(APPLE_AGX_U32)Bindings->DestinationBytes;
+  Receipt->RenderTargetGpuVa=Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].GpuVa;
+  Receipt->RenderTargetPhysical=Objects[APPLE_AGX_EXP208_GDI_OUTPUT_OBJECT].PhysicalAddress;
+  Receipt->Valid=1u; return AdmissionDynamicOverlaySuccess;
+}
+
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureNativeOutput(
+    ADMISSION_NATIVE_GRAPH_RECEIPT *Receipt, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 SnapshotGeneration, APPLE_AGX_U64 GpuVa,
+    APPLE_AGX_U64 Physical, const void *Data, APPLE_AGX_U32 Bytes) {
+  if(!Receipt || !Receipt->Valid || !Fence || Fence!=Receipt->Fence ||
+     !SnapshotGeneration || !GpuVa || GpuVa!=Receipt->RenderTargetGpuVa ||
+     !Physical || Physical!=Receipt->RenderTargetPhysical || !Data ||
+     Bytes!=Receipt->RenderTargetBytes || Bytes>sizeof(Receipt->ReadbackData))
+    return AdmissionDynamicOverlayArgument;
+  overlay_copy(Receipt->ReadbackData,Data,Bytes);
+  Receipt->SnapshotGeneration=SnapshotGeneration;
+  Receipt->ReadbackBytes=Bytes;
+  Receipt->ReadbackFnv1a=overlay_hash(Receipt->ReadbackData,Bytes);
+  Receipt->ReadbackAvailable=Receipt->ReadbackFnv1a ? 1u : 0u;
+  return Receipt->ReadbackAvailable ? AdmissionDynamicOverlaySuccess : AdmissionDynamicOverlayContent;
+}
+
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureGraph(
     const ADMISSION_BACKEND_IMAGE *Image,
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,

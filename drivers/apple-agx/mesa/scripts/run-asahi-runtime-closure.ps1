@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory=$true)][string]$RunId,
   [ValidateSet('x64','arm64')][string]$Architecture='x64',
   [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{64}$')][string]$ArchiveSha256,
-  [string]$NativeSource
+  [string]$NativeSource,
+  [uint32]$ExpectedCandidateBuild=0
 )
 $ErrorActionPreference='Stop'
 if($RunId -notmatch '^[A-Za-z0-9-]+$'){ throw 'Invalid RunId' }
@@ -80,6 +81,24 @@ sys.exit(0 if code==0 else 1)
       throw 'Actual native runtime execution receipt missing'
     }
   }
+  # Build the existing real-KMT client against this exact native archive. This
+  # is a link gate only; never execute its hardware mode on the builder.
+  $clientRoot=Join-Path $output 'native-client'
+  [void](New-Item -ItemType Directory $clientRoot)
+  $clientArguments=@("$Project\drivers\apple-agx\windows\one-shot\AppleAgxD3dKmRender.vcxproj",
+    '/t:Build','/nr:false','/m:2','/p:Configuration=Release',"/p:Platform=$platform",
+    '/p:EnableNativeBatch=true',"/p:NativeRuntimeProps=$props",
+    "/p:AdmissionExpectedBuild=$ExpectedCandidateBuild",
+    "/p:IntDir=$clientRoot\obj\","/p:OutDir=$clientRoot\")
+  $clientArguments | ConvertTo-Json | Set-Content (Join-Path $output 'native-client-build-command.json')
+  & $msbuild @clientArguments *> (Join-Path $output 'native-client-build.log')
+  $summary.native_client_build_exit=$LASTEXITCODE
+  $summary.native_client_expected_build=$ExpectedCandidateBuild
+  $summary.native_client_execution='NOT_RUN'
+  if($LASTEXITCODE){throw "Native KMT client link failed: $LASTEXITCODE"}
+  $clientExe=Join-Path $clientRoot 'AppleAgxD3dKmRender.exe'
+  $summary.native_client_sha256=(Get-FileHash -LiteralPath $clientExe -Algorithm SHA256).Hash.ToLowerInvariant()
+  $summary.native_client_path=$clientExe
   $exit=0
 } catch {
   $summary.error=$_.Exception.Message
@@ -99,7 +118,7 @@ sys.exit(0 if code==0 else 1)
   $summary | ConvertTo-Json
 }
 if($exit) {
-  foreach($name in @('prepare.log','runner.log','build.log','test.log','test.stderr.log')) {
+  foreach($name in @('prepare.log','runner.log','build.log','test.log','test.stderr.log','native-client-build.log')) {
     $path=Join-Path $output $name
     if(Test-Path $path){Get-Content -LiteralPath $path -Tail 35}
   }

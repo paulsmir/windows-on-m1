@@ -28,12 +28,14 @@ typedef struct _ADMISSION_BACKEND_IMAGE {
   APPLE_AGX_BOOL JobReady;
   APPLE_AGX_BOOL Ready;
   APPLE_AGX_BOOL NativeBound;
+  APPLE_AGX_U32 NativeWidth, NativeHeight, NativePitch;
   APPLE_AGX_EXP208_RELOCATION_OBJECT NativeOriginalOutput;
 } ADMISSION_BACKEND_IMAGE;
 
 typedef enum _ADMISSION_BACKEND_OUTPUT_VERIFICATION {
   AdmissionBackendOutputVerificationUniform = 1u,
   AdmissionBackendOutputVerificationTriangle = 2u,
+  AdmissionBackendOutputVerificationNativeCapture = 3u,
 } ADMISSION_BACKEND_OUTPUT_VERIFICATION;
 
 typedef struct _ADMISSION_BACKEND_OUTPUT_VIEW {

@@ -50,9 +50,15 @@ if ($null -ne $msbuildCommand) {
 }
 
 $umdAdmissionTraceValue = if ($UmdAdmissionTrace) { "true" } else { "false" }
+$pinnedWindowsSdkDir = 'C:\Program Files (x86)\Windows Kits\10\'
+$pinnedWdkProperties = @(
+    '/p:WindowsTargetPlatformVersion=10.0.26100.0',
+    "/p:WDKContentRoot=$pinnedWindowsSdkDir",
+    "/p:WindowsSdkDir=$pinnedWindowsSdkDir"
+)
 & $msbuild $umdProject /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild" `
-    "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue"
+    "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue" @pinnedWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 UMD build failed with exit code $LASTEXITCODE"
 }
@@ -82,7 +88,8 @@ $visibleAgxQualificationValue = if ($VisibleAgxQualification) { "true" } else { 
     "/p:AppleAgxBackendQualification=$backendQualificationValue" `
     "/p:AppleAgxSubmitQualification=$submitQualificationValue" `
     "/p:AppleAgxVisibleScanoutQualification=$visibleScanoutQualificationValue" `
-    "/p:AppleAgxVisibleAgxQualification=$visibleAgxQualificationValue"
+    "/p:AppleAgxVisibleAgxQualification=$visibleAgxQualificationValue" `
+    @pinnedWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 WDK build failed with exit code $LASTEXITCODE"
 }
