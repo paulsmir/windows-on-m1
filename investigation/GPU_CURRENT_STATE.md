@@ -8,6 +8,7 @@ Native USC versioned relocation fields: 00c5bdb.
 Construction address -> live Windows owner/capture: a7c9e6d.
 Actual native pipeline emitter capture: f287e58.
 Native v3 General table source gate: e512912.
+Native v3 exact source spans: 02b8dbf.
 No merge/push or Air action in this implementation phase.
 
 ## Objective and operating contract
@@ -117,6 +118,12 @@ representability: native USC streams can be 38/62 bytes and final rodata can be
 2 bytes, while transport universally requires Reference.Bytes multiple4.
 Source-first decision required before implementation; no synthetic padding or
 spurious source range expansion is accepted.
+02b8dbf closes that v3 exact-span admission issue for read-only Constant,
+ShaderRodata and UscPipeline only; offset/pointer alignment rules stay strict.
+Windows x64 execution PASS and ARM64 build/link PASS. Next: complete capture of
+native encoder, scissor/depth-bias, vertex/index/render-target and nested resource
+edges, then connect a complete request to the existing composer. No hardware
+candidate is ready while that graph/source lifetime/retirement work is incomplete.
 
 ## Preserved proofs / machine state
 Full Asahi/NIR compiler x64 execution matches control; ARM64 cross-build proved.
