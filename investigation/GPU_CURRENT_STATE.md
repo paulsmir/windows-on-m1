@@ -120,6 +120,35 @@ Independent readback FNV9219a8781a475585 and Morton pixel verification:
 129/4101 during run. Exact package and8055signer removed after evidence.
 This validates KMT native lifecycle only; standardD3D/Present/DWM remain open.
 
+## Verified runtime-owned native private factory
+
+Implementation0e4dcf7 replaces the map-only AGX_D3D10_WINDOWS_DEVICE with the
+existing authoritative Runtime+AsahiOwner+Backend+nativeScreen+primaryContext.
+The stable heap owner is linked before callbacks. Stages are Allocated,
+RuntimeReady,NativeScreenReady,NativeContextReady,Ready,Closing,
+NativeContextReleased,NativeScreenReleased,RuntimeReleased,Freed. Initial create
+failure and cleanup status remain separate; failed cleanup returns an unusable
+nonnull private cleanup token, while clean failure returnsNULL. Context accessor
+returns only atReady.
+
+Close blocks new native work, preserves active/submitted batch ownership, tracks
+all direct screen context_create/destroy calls, destroys the primary context once,
+retries screen BO detach/deallocation, and only after native detach calls
+ScreenBeginClose plus explicit RuntimeDeviceFinalize(HRESULT,Consumed). No owner
+is freed unlessConsumed. Projected Asahi rodata creation now validates BO/map
+before va access and retains retryable screen cleanup when deallocation fails.
+
+TDD: map-only RED native-factory-map-only-red-20260914a failed only real shader/
+state/framebuffer/clear/draw/flush operations. Final x64 sourceSHA
+782a319ea3ae51c3d99407adf20a031f8d9a632d2fc250df6e6683f7f80098ca
+executes shared factory scene through actual RuntimeRender/Signal and existing
+30/126/9/29 consumer; pending marker and extra context returnBUSY; two-device
+isolation and cleanup retries PASS. Failure matrix covers explicit finalizerBUSY,
+clean alloc/map failure, retained creation token, and screen-deallocation retry.
+ARM64 closure build/link0warnings/errors. Installed ARM64 UMD `/analyze` compiles
+changedumd.c/runtime_device.c and all units0warnings/errors; evidence
+AD04-native-factory-installed-umd-20260914a. Pipeline mask and exports unchanged.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -186,11 +215,11 @@ root upload; global Asahi scratch semantics remain unchanged.
 ## Exact next target
 Continue production integration from
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
-AgxD3d10WindowsCreateDevice still uses a map-only pipe. Replace that factory owner
-with real native screen/context after runtime callback initialization; defer Mesa
-frontend screen creation to CreateDevice and link this same closure into UMD.
-Preserve retryable native teardown and two-device isolation. Exercise the actual
-frontend/producer path through runtime-supplied callbacks, not another KMT helper.
+private factory now owns the real native screen/context after runtime callbacks.
+Next project the pinned Mesa d3d10umd frontend so OpenAdapter holds metadata only
+and actual CreateDevice borrows this factory context. Exercise real Shader/Draw/
+Resource/Flush DDI entry points into the same producer/consumer path. Do not use
+another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
 
