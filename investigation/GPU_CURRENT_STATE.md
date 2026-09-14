@@ -41,10 +41,19 @@ AD04-native-qualification-kmd-20260914a. KMDsourceSHA
 Only later package-script pinning changed outside compiledsources; actualWindows
 PowerShell parser PASS, two pinnedMSBuild invocations:
 evidence/AD04-package-script-parse-20260914c.
-No SYS/package/sign/install/hardware run yet; next is preregistered package683
-VisibleAgxQualification build (sameprofile asEXP682), then livebaseline and one
-nativeKMT request. Askfor no routineconfirmation. AirSSH address clarification is
-pending; both expectedUSBendpoints were observed, no active launcher observed.
+EXP683 is preregistered at HEAD6954cac (native qualification implementation85a2623,
+ledger6c5f3a2). Package30.0.683.0 VisibleAgxQualification build04 passes complete
+UMD/KMD build and analysis with0warnings/errors. Source archive
+f2526540fab82b8f5f72003cc08a4ba3725cf8efb67c5409c76db07f20621b10.
+Build environment fixes pin stableVS and26100 UCRT/UM paths; worker SAL definition
+matches declaration. Default WDK cert lacks DigitalSignature: rejected, not staged.
+Final package uses experiment-scoped nonexportable signing cert thumbprint
+1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03. SYS/DLL/CAT signatures and binary catalog
+membership independently PASS; Windows INF membership found but builder chain is
+untrusted. No candidate package/trust installed on Air. Expected683 ARM64 client
+build is pending; app-local ARM64 VC runtime needed. Hardware readiness NOT claimed.
+Evidence/artifacts: main-root .local/experiments/EXP-20260913-683-native-batch;
+append-only EXP683 ledger records builds/signing/preflight and exact hashes.
 
 ## Verified native lifecycle slice
 The real native screen/context/resource/NIR shader/state/clear/draw/flush path
@@ -115,7 +124,16 @@ Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
 
 ## Preserved hardware/recovery boundary
-Air health NOT checked this turn; historical health is not current health.
+Air ordinary377/392 recovery boot is running, broker disabled. Live baseline
+2026-09-14T00:33:53Z: J313-WIN ARM64 admin,8CPUs,one inert APPL0002 Code28,
+no AppleAgx package/service/module/SYS/UMD, NVMe/USB/keyboard OK, no fresh41/1001/129.
+Two generic historical WDK roots exist (pauls/runneradmin); preserve until scoped
+causal review, do not remove unrelated trust. No EXP683 signer installed.
+SSH pavel@192.168.1.37 with key ~/.ssh/air and STRICT pinned known-hosts file
+main-root .local/experiments/EXP641-standard-present/air_known_hosts. Default user
+known_hosts is stale; do not change it. No operator IP reply needed.
+Active ordinary launcher owns proxy/vUART; do not concurrently access bareproxy.
+Emergency WinPE/FD/golden files exist. Verify hashes before relying on them.
 Retained-root/firmware/AGX output/fence proofs remain closed; compact reference:
 agent_tasks/AD04-PRE-COMPOSER-STATE.md. Ordinary377/392 GPU-visible recovery must
 retain one inert APPL0002 and no AppleAgx package/service/module/signer/staged driver.

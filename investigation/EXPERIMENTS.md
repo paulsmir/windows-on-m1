@@ -43204,3 +43204,193 @@ raw submitted wire and native-output receipt binary. Record elapsed boot phases,
 stop code/parameters, CPU/IRQ/timer state and display/input/SSH/storage/allCPU health
 and final verdict after the run. StandardD3D, Present/DWM and desktop acceptance
 remain later mission obligations.
+
+
+### EXP-20260913-683-native-batch — package build attempt1 result
+
+The preregistered builder invocation exited1 before any compilation: MSB1008
+"Only one project can be specified", Switch: Files. Captured full command shows
+legacy PowerShell quoting of trailing-backslash WDK root paths. It also selected
+VS18 Insiders due existing -prerelease discovery; this differs from the verified
+stableVS2022/MSVC14.44 toolchain. Verdict: environment-only build failure;
+no SYS/package/sign/install/launch or Air/GPU operation occurred.
+Evidence: .local/experiments/EXP-20260913-683-native-batch/package-build.log,
+package-build-result.json and builder-console.log. No stop code/IRQ/CPU result;
+Windows/display/input/storage health not measured by this build.
+Next: repair only package-tool invocation (forward-slash pinnedKit paths and
+stableMSBuild selection), stage a fresh source hash/path, rerun sameprofile/build.
+Hardware installation/launch remains gated; no hypothesis/driver behavior change.
+
+
+### EXP-20260913-683-native-batch — package build attempt2 preregistration
+
+Same native hypothesis/profile/build683, environment-only invocation repair.
+Source HEAD 6954cac66d96f9bd118ad59ddfc22d10a685eb46; driver-scoped dirtydiff SHA256 56219607bc132597343f5e696b778972dbc9106fcc0007a44f8dc86ee61c3f64.
+Fresh source-build02.tar.gz SHA256 995090844cf230f4d68fbf2ac9fcadaf70f30e0e566f1cb65b86e0be32033704; remote root
+C:/Users/pauls/EXP-20260913-683-native-batch/build02/src. Exact build command is the prior command with this
+new source root, same -Configuration Release -VisibleAgxQualification -PackageBuild683.
+No installation or hardware launch allowed before resultinghash/sign/version gates.
+
+
+### EXP-20260913-683-native-batch — control-plane preflight preregistration
+
+Read-only preflight alongside package build: attempt bounded SSH to hostname
+`pavel@air` with existing ~/.ssh/air (actual IP clarification pending), inventory
+expected USB41/43 and active launcher, then query only m1n1 protocol NOP/base/
+bootargs/ADT metadata if no launcher owns the endpoint. No setup.py import
+(it resets PMU panic counters), no PMU/MMIO/power writes, no chainload or guest
+launch. Read scripts/logs live under experiment control-plane/. A hostname/DNS
+failure does not establish Windows IP reachability. A valid proxy reply can
+establish that the machine is already at proxy; no physical request on that basis.
+
+
+### EXP-20260913-683-native-batch — control-plane preflight result
+
+Bounded `pavel@air` SSH exited255: hostname not resolvable; this is NOT proof
+about an unknown Windows IP. Both expected USB41/43 endpoints present and no
+active Python run_uefi/chainload launcher. Bare proxy NOP/base/bootargs/ADT read
+completed0 in0.14s: proxy RESPONDING, bootargs revision2, base0x8059c4000,
+J313AP/MacBookAir10,1, chip0x8103, board38, GPUcompatible gpu,t8103,
+ADT interrupts563/564/565/566/579 parent99. Live ADT376832bytes SHA256
+0beb53c923680e24414591a811ee4ee12b3622d1b1736af3ac30c7f4cfc1f75f.
+Memorybase0x802078000/8009613312bytes; rawADT and JSON under experiment
+control-plane/. Verdict: already at proxy, no physical action needed/requested.
+No setup.py, PMU reset, MMIO/power write, chainload, boot or GPU operation.
+Windows livebaseline/loader/package state remains unmeasured until ordinaryboot.
+
+
+### EXP-20260913-683-native-batch — build attempt2 result and cause
+
+Attempt2 exits1 in ARM64 UMD compilation, C1083 corecrt.h missing. StableVS2022
+and pinnedWDK selection now work. Read-only MSBuild property dump identifies
+UniversalCRTSdkDir pointing to NuGet Microsoft.Windows.SDK.CPP.10.0.28000.2526,
+while include version is26100: that composedUCRT path does not exist. Verdict:
+environment-only build failure; no SYS/package/sign/install/Air launch.
+Evidence build02.log/build02-result.json. Next invocation adds explicit
+UniversalCRTSdkDir equal to the already-pinned installedWindowsKit root.
+
+
+### EXP-20260913-683-native-batch — build attempt3 preregistration
+
+Samehypothesis/profile/build683; pin derivedUCRT includes/libraries andUM libraries
+to installed26100 after evaluated properties proved NuGet28000 overrides.
+Onlypackage-invocation script changes; no GPU/runtime behavior change.
+Freshsource-build03.tar.gz SHA256 2a3cb4a4265ba9876897b465b8b9baf79fbeccb9787750ff0b55fe37a9a87afd; driver-scoped dirtydiffSHA256 115d1b4b81c16f6fe9c96823f434d89dedc84890aa38755cddf1500f1acad2c0.
+SourceHEAD6954cac66d96f9bd118ad59ddfc22d10a685eb46, rootC:/Users/pauls/EXP-20260913-683-native-batch/build03/src.
+Exactbuild command: thisroot/drivers/apple-agx/render-admission/scripts/build-driver.ps1
+-Configuration Release -VisibleAgxQualification -PackageBuild683.
+No installation/launch until resultinghashes/signature/livebaseline gatespass.
+
+
+### EXP-20260913-683-native-batch — ordinary baseline launch preregistration
+
+UTC 2026-09-14T00:16:57.245381+00:00. Proxy is responding onverifiedJ313;
+no active launcher; candidate package is not installed. Launch only the known
+ordinary377/392 recovery profile, brokerDISABLED, as the required livebaseline
+gate. This is not the native candidate/GPU test. Exact commands/artifact hashes
+are the primaryrecovery commands alreadyrecordedabove; log ordinary-boot.log,
+contract ordinary-contract.bin. Hostrun_uefi SHA256
+910064b62858f569d231f0fcb9258717fca8ff977b829577fa1a281b3d78c83a;
+pureunusedramdisk module SHA256 c1a14f92b72d37e904aeb2132bb3ce327acb8eda3d98be7d33463422e0df71f9;
+chainload.py SHA256 a0e6ae5016aaae955601087398af07b9999a01b8183bc63929777dfcfd91c75e.
+ExpectedWindows8CPU/NVMe/USB/SSH andoneinertAPPL0002. Collect any bootfailure
+first; no experimentalpackage installation orphysicalrequest follows automatically.
+
+
+### EXP-20260913-683-native-batch — build attempt3 result
+
+Attempt3 builds/signs UMD,SYS,CAT, completes Inf2Cat signability and coherent
+30.0.683.0 versions. UMD0warnings/errors; fullKMD build1SAL warning C28251
+(definition AdmissionPlatformWorker omitted declaration's _In_/_In_opt_). This
+is exposed by fullRunNativeCodeAnalysis, not previousClCompile-only gate.
+Fix onlymatching annotations; no runtime behavior change. No installallowedyet.
+All three signed artifacts use WDKTestCert pauls,134323177413862410,
+thumbprintE9BE15BD2A184BFABA0C8035B3C620C58037A241; chain ends in untrustedroot
+onbuilder (not an absent/invalid signature). Trust/catalog gates pending.
+Attempt3 hashes (not installableaccepted): SYS0832C3114DFC48E435FA639110D7DADF0F488F33C5F1FD2921C96CB017A24918,
+UMD2A74C1B5390046861FA88419EAC23F2AFD3B2666A9C5049CB0649B69014901C2,
+INF40EE76071716D265C9BF6A1C9EE7A66AB4D5EE04A9186A794C44E78F7A8545E0,
+CATDCFB99FBBE9B1625E6E6065B54AEAB628424CA8C6B1C2A1786F0D0EB6C129DCE.
+Evidence build03.log/build03-package-inspection.log/build03-signatures.log.
+NativeGPUtest NOT_RUN. Ordinaryrecovery guest reached runtime/8CPU entries;
+SSH/IP and fullWindowsbaseline remainpending, no candidatepackage staged.
+Next: freshsameprofile/build after SAL annotation correction, explicitpublic
+certificate trust verification and exactcatalog/hash/package gates.
+
+
+### EXP-20260913-683-native-batch — test certificate verification preregistration
+
+Export only the already-recorded signer's PUBLIC certificate (thumbprint
+E9BE15BD2A184BFABA0C8035B3C620C58037A241) to experiment artifacts, hash it,
+and trust that exact public certificate in builderCurrentUser Root/TrustedPublisher
+only if absent, to perform Authenticode/catalog verification. No private key
+export orAircertificate operation. Record priorstorepresence and restore task-added
+buildertrust afterverification. Air remains unstaged; its trust operation, if
+needed, is only afterlivebaseline andexactfinalpackage/cert hashes are verified.
+
+
+### EXP-20260913-683-native-batch — builder certificate trust result
+
+PUBLICcertificate exported; CurrentUserRoot import rejected in headlessSSH:
+Import-Certificate says UI notallowed; supported certutil-user attempt returns
+ERROR_NOT_SUPPORTED. No successful storechange; no LocalMachine escalation.
+Record signatures as signed but defaultbuilderchain untrusted, not Valid.
+Next verification uses osslsigncode with explicit pinned PUBLIC certificate and
+required leafhash to validate Authenticode/catalog membership in an isolated
+verification context (official upstream verify -CAfile/-catalog interface).
+No systemtrust replacement or signature-ignore flags. Airtestsigning/trust remains
+its own pre-install gate; no nativehardwaretest has run.
+
+
+### EXP-20260913-683-native-batch — build attempt4 preregistration
+
+Sameprofile/683/nativehypothesis; onlymatchingworkerSAL annotation added after
+attempt3 fullanalysis warning. Freshsource-build04.tar.gz SHA256 f2526540fab82b8f5f72003cc08a4ba3725cf8efb67c5409c76db07f20621b10;
+driver-scoped dirtydiff SHA256 4dd84ab63fc9a45792afdd64d2d72fb3d6ba1b0fe816eb89d68aee462ac8ae2a; sourceHEAD6954cac66d96f9bd118ad59ddfc22d10a685eb46.
+Freshremote build04/src root; exactsame build-driver.ps1 -Configuration Release
+-VisibleAgxQualification -PackageBuild683. No signature/analysis waivers.
+Install/launch remainsblocked untilfinalartifact+liveWindowsbaseline gatespass.
+
+
+### EXP-20260913-683-native-batch — Windows baseline and signing discriminator
+
+Pinned air_known_hosts from operativeAD04 recap matches currentED25519
+SHA256:KvLuoYZgaoezKcmYvN+++APmS2cpH50SbZglonktF68. Defaultknown_hosts held
+obsoleteidentity; it was NOT changed/disabled. SSH currentJ313-WIN succeeds.
+2026-09-14T00:33:53Z livebaseline:ARM64/admin/8CPU, oneAPPL0002 Code28 noINF,
+noAppleAgx package/service/module/SYS/UMD; NVMe andUSB/xHCI/keyboardOK; nofresh
+41/1001/129. TestsigningYes. VCRUNTIME140.dll absent, so app-local ARM64runtime
+mustbe included/hashverified andloader-tested beforecandidate. Genericpreexisting
+WDKtest roots E9BE15... and71CD0A... observed; no truststore deletion performed.
+Full baseline/control-plane logs are experiment-local.
+
+Isolated osslsigncode2.14 verification confirms PE/page hashes and requiredleaf
+hash but rejects oldWDKcert KeyUsage (KeyEncipherment/DataEncipherment only,
+missingDigitalSignature). Do not waive this. Preservepackage04; create a fresh
+experiment-scoped CodeSigning certificate withDigitalSignature/SHA256, sign a
+new package copy, regeneratecatalog afterembeddedfile signing, and verifyagainst
+that explicitpubliccertificate. Privatekey stays onbuilder, neverexported.
+All final hashes/cert mustbe recorded beforeAir trust/staging. This is signing
+repair only; noGPU/runtime behavior change or nativehardwareexecution.
+
+
+### EXP-20260913-683-native-batch — corrected signing/catalog preregistration
+
+Fresh nonexportable builderMy CodeSigning cert: CN=AppleAgx EXP683 Test Signing,
+DigitalSignature/SHA256/RSA3072; thumbprint1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03,
+PUBLIC DER SHA256EC2CC8922E0A8F9C68254A515F835455FD212CA9F572D537932AC4E2E6872F66.
+Preserve build04 package. Copy it to experiment package-final, replace embedded
+SYS/DLL signatures with this exactcert, regeneratecatalog using pinned26100
+Inf2Cat /os:10_CO_ARM64,10_NI_ARM64,10_GE_ARM64 /uselocaltime, then signcatalog.
+These target IDs are confirmed by installedInf2Cat help (desktopWindows11ARM64),
+instead of relying only on defaultServer10_ARM64 catalog selection.
+Verify using explicitpublicCA and requiredleafhash; no truststore/signature bypass.
+Privatekey neverleavesbuilder. Record allfinalhashes beforeAircopy/staging.
+
+### EXP683-NATIVE-CLIENT-ARM64-001 preregistration
+UTC: 2026-09-14T00:45:34.771634+00:00. Offline builder-only client build, no Air execution/install.
+WHY THIS HYPOTHESIS: prior j ARM64 client links real KMT/native closure but expectedbuild0 refuses qualification; current source build04 already passes full package analysis. Single variable: expected candidate build683 on the existing client; package SAL/build environment fixes are recorded separately.
+Command: run-asahi-runtime-closure.ps1 -Project <fresh staged current source> -RunId native-client-683-20260914a -Architecture arm64 -ExpectedCandidateBuild 683. Record actual archive path/hash, exact invocation and client SHA in results. Failure: nonzero build/link, missing receipt, test-only hardware substitutions. No execution on builder; no hardware readiness claim. Preserve previous j-arm64 archive.
+
+### EXP683 final signature verification result
+New scoped signing thumbprint1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03: SYS/DLL embedded signatures, CAT signature and SYS/DLL catalog membership independently pass osslsigncode with explicit certificate CA and SHA256 leaf pin. Evidence: .local/experiments/EXP-20260913-683-native-batch/final-signature-verification.json. INF catalog check is NOT VERIFIED: osslsigncode rejects INF input type before verification; use Windows catalog verification for this remaining gate. No package staged. All three documented emergency artifacts exist; their content hashes remain to be recorded.
