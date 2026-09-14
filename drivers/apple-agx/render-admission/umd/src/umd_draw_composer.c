@@ -30,7 +30,25 @@ static BOOL identity(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_SCREEN_BUFFER *b,
 }
 static BOOL owns(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMISSION *s) {
   if(d->DrawSubmission!=s || s->Owner!=d->OwnerCookie ||
-     s->Generation!=d->Win32Generation || s->Context!=d->KernelContext)
+     s->Generation!=d->Win32Generation || d->KernelContextQuiesced ||
+     s->Context!=d->KernelContext)
+    return FALSE;
+  for(UINT i=0;i<s->Count;++i) {
+    ADMISSION_UMD_SCREEN_BUFFER *b=find(d,s->Identities[i].Token);
+    if(!identity(d,b,&s->Identities[i]) || !b->SubmissionHolds ||
+       b->KernelAllocation!=s->Allocations[i].hAllocation) return FALSE;
+  }
+  return TRUE;
+}
+static BOOL owns_quiesced_retirement(ADMISSION_UMD_DEVICE *d,
+                                     ADMISSION_UMD_DRAW_SUBMISSION *s) {
+  if(!d->KernelContextQuiesced || d->KernelContext ||
+     !d->QuiescedKernelContext || s->Context!=d->QuiescedKernelContext ||
+     d->DrawSubmission!=s || !d->NativeBatchTransaction || !s->Fence ||
+     s->Owner!=d->OwnerCookie || s->Generation!=d->Win32Generation ||
+     s->RequestId!=d->LastDrawRequest || s->RequestId!=d->LastNativeRequest ||
+     (s->Phase!=AdmissionDrawAccepted && s->Phase!=AdmissionDrawPostError &&
+      s->Phase!=AdmissionDrawRetiring))
     return FALSE;
   for(UINT i=0;i<s->Count;++i) {
     ADMISSION_UMD_SCREEN_BUFFER *b=find(d,s->Identities[i].Token);
@@ -226,17 +244,19 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
 }
 
 HRESULT AdmissionUmdDrawRetire(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMISSION *s,
-                              DWORD timeout) {
+                              DWORD timeout, BOOL quiescedRetirement) {
   HRESULT result;
   ADMISSION_UMD_DRAW_PHASE prior;
   if(!d || !s || d->Magic!=ADMISSION_UMD_DEVICE_MAGIC) return E_INVALIDARG;
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
-  BOOL valid=owns(d,s) && (s->Phase==AdmissionDrawAccepted || s->Phase==AdmissionDrawPostError);
+  BOOL valid=(quiescedRetirement?owns_quiesced_retirement(d,s):owns(d,s)) &&
+      (s->Phase==AdmissionDrawAccepted || s->Phase==AdmissionDrawPostError);
   prior=s->Phase;
   if(valid) s->Phase=AdmissionDrawRetiring;
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);
   if(!valid) return E_INVALIDARG;
   if(!s->Fence) {
+    if(quiescedRetirement) { result=E_INVALIDARG;goto pending; }
     result=AdmissionUmdScreenSignalFence(d,&s->Fence);
     if(FAILED(result)) goto pending;
   }
@@ -247,7 +267,7 @@ HRESULT AdmissionUmdDrawRetire(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMI
     result=d->LastScreenError; goto pending;
   }
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
-  if(!owns(d,s)) result=E_FAIL;
+  if(!(quiescedRetirement?owns_quiesced_retirement(d,s):owns(d,s))) result=E_FAIL;
   else { release(d,s); s->Phase=AdmissionDrawRetired; result=S_OK; }
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);
   return result;

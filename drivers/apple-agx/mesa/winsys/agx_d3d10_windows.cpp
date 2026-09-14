@@ -25,11 +25,19 @@ enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
   AgxD3d10DeviceFreed
 };
 
+typedef struct _AGX_D3D10_WINDOWS_TERMINAL {
+  struct _AGX_D3D10_WINDOWS_TERMINAL *Next;
+  HRESULT Error;
+  ULONG Stage,ActiveBuffers,NativeContexts,LiveBos;
+  BOOL KernelQuiesced;
+} AGX_D3D10_WINDOWS_TERMINAL;
+
 struct AGX_D3D10_WINDOWS_ADAPTER {
   ADMISSION_UMD_ADAPTER Runtime;
   SRWLOCK Lock;
   ULONG Devices;
   AGX_D3D10_WINDOWS_DEVICE *Owners;
+  AGX_D3D10_WINDOWS_TERMINAL *Terminal;
 };
 struct AGX_D3D10_WINDOWS_DEVICE {
   ADMISSION_UMD_DEVICE Runtime;
@@ -43,10 +51,10 @@ struct AGX_D3D10_WINDOWS_DEVICE {
   AGX_D3D10_WINDOWS_DEVICE_STAGE Stage;
   HRESULT InitialFailure;
   HRESULT CleanupStatus;
+  BOOL KernelQuiesced;
 };
 
-static void unlink_and_free(AGX_D3D10_WINDOWS_DEVICE **inout) {
-  AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
+static void unlink_owner(AGX_D3D10_WINDOWS_DEVICE *owner) {
   AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
   AcquireSRWLockExclusive(&adapter->Lock);
   AGX_D3D10_WINDOWS_DEVICE **link=&adapter->Owners;
@@ -54,9 +62,19 @@ static void unlink_and_free(AGX_D3D10_WINDOWS_DEVICE **inout) {
   if(*link==owner) *link=owner->Next;
   if(adapter->Devices) --adapter->Devices;
   ReleaseSRWLockExclusive(&adapter->Lock);
+}
+
+static void unlink_and_free(AGX_D3D10_WINDOWS_DEVICE **inout) {
+  AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
+  unlink_owner(owner);
   owner->Stage=AgxD3d10DeviceFreed;
   HeapFree(GetProcessHeap(),0,owner);
   *inout=NULL;
+}
+
+static HRESULT native_close_error(const AGX_D3D10_WINDOWS_DEVICE *owner) {
+  return FAILED(owner->Runtime.LastScreenError) ? owner->Runtime.LastScreenError
+                                                : HRESULT_FROM_WIN32(ERROR_BUSY);
 }
 
 static HRESULT close_device(AGX_D3D10_WINDOWS_DEVICE **inout) {
@@ -72,14 +90,16 @@ static HRESULT close_device(AGX_D3D10_WINDOWS_DEVICE **inout) {
   if(owner->Stage==AgxD3d10DeviceClosing) {
     if(owner->Backend.ContextCount>(owner->Context?1u:0u))
       return owner->CleanupStatus=HRESULT_FROM_WIN32(ERROR_BUSY);
+    owner->Runtime.LastScreenError=S_OK;
     if(owner->Context && !AgxWin32AsahiContextDestroy(owner->Context))
-      return owner->CleanupStatus=HRESULT_FROM_WIN32(ERROR_BUSY);
+      return owner->CleanupStatus=native_close_error(owner);
     owner->Context=NULL;
     owner->Stage=AgxD3d10DeviceNativeContextReleased;
   }
   if(owner->Stage==AgxD3d10DeviceNativeContextReleased) {
+    owner->Runtime.LastScreenError=S_OK;
     if(owner->Screen && !AgxWin32AsahiScreenDestroy(owner->Screen))
-      return owner->CleanupStatus=HRESULT_FROM_WIN32(ERROR_BUSY);
+      return owner->CleanupStatus=native_close_error(owner);
     owner->Screen=NULL;
     owner->Stage=AgxD3d10DeviceNativeScreenReleased;
   }
@@ -122,6 +142,11 @@ HRESULT AgxD3d10WindowsCloseAdapter(AGX_D3D10_WINDOWS_ADAPTER **Adapter) {
     return HRESULT_FROM_WIN32(ERROR_BUSY);
   }
   ReleaseSRWLockExclusive(&owner->Lock);
+  while(owner->Terminal) {
+    AGX_D3D10_WINDOWS_TERMINAL *record=owner->Terminal;
+    owner->Terminal=record->Next;
+    HeapFree(GetProcessHeap(),0,record);
+  }
   /* As with the runtime adapter handle, the caller serializes CloseAdapter
    * against new calls using that handle. Device callbacks run outside Lock. */
   HeapFree(GetProcessHeap(), 0, owner);
@@ -191,6 +216,56 @@ HRESULT AgxD3d10WindowsCloseDevice(AGX_D3D10_WINDOWS_DEVICE **Device) {
   return close_device(Device);
 }
 
+static HRESULT terminalize_device(AGX_D3D10_WINDOWS_DEVICE **inout,HRESULT error) {
+  AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
+  AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
+  ULONG stage=owner->Stage,activeBuffers=0;
+  ULONG nativeContexts=owner->Backend.ContextCount,liveBos=owner->Backend.LiveBos;
+  BOOL kernelQuiesced=owner->KernelQuiesced;
+  static_assert(sizeof(*owner)>=sizeof(AGX_D3D10_WINDOWS_TERMINAL),
+                "terminal record must fit the consumed owner allocation");
+  if(SUCCEEDED(error)) error=E_FAIL;
+  AdmissionUmdSetError(&owner->Runtime,error);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+    if(owner->Runtime.ScreenBuffers[i].Active) ++activeBuffers;
+  unlink_owner(owner);
+  ZeroMemory(owner,sizeof(*owner));
+  AGX_D3D10_WINDOWS_TERMINAL *record=(AGX_D3D10_WINDOWS_TERMINAL *)owner;
+  record->Error=error;record->Stage=stage;record->ActiveBuffers=activeBuffers;
+  record->NativeContexts=nativeContexts;record->LiveBos=liveBos;
+  record->KernelQuiesced=kernelQuiesced;
+  AcquireSRWLockExclusive(&adapter->Lock);
+  record->Next=adapter->Terminal;
+  adapter->Terminal=record;
+  ReleaseSRWLockExclusive(&adapter->Lock);
+  *inout=NULL;
+  return error;
+}
+
+HRESULT AgxD3d10WindowsDestroyDeviceDdi(AGX_D3D10_WINDOWS_DEVICE **Device,
+                                       BOOL *Consumed) {
+  AGX_D3D10_WINDOWS_DEVICE *owner;
+  BOOL destroyed=FALSE;
+  HRESULT result;
+  if(Consumed) *Consumed=FALSE;
+  if(!Device || !*Device || !Consumed) return E_INVALIDARG;
+  owner=*Device;
+  if(owner->Stage<AgxD3d10DeviceClosing) owner->Stage=AgxD3d10DeviceClosing;
+  owner->Backend.Closing=1;
+  if(owner->Backend.ContextCount>(owner->Context?1u:0u))
+    return terminalize_device(Device,HRESULT_FROM_WIN32(ERROR_BUSY));
+  result=AdmissionUmdRuntimeDeviceDestroyKernelContext(&owner->Runtime,&destroyed);
+  if(FAILED(result) || !destroyed)
+    return terminalize_device(Device,FAILED(result)?result:E_FAIL);
+  owner->KernelQuiesced=TRUE;
+  if(owner->Context && !AgxWin32AsahiContextRetire(owner->Context,INFINITE))
+    return terminalize_device(Device,E_FAIL);
+  result=close_device(Device);
+  if(*Device) return terminalize_device(Device,FAILED(result)?result:E_FAIL);
+  *Consumed=TRUE;
+  return result;
+}
+
 struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device) {
   return Device != NULL && Device->Stage==AgxD3d10DeviceReady ? Device->Context : NULL;
 }
@@ -203,5 +278,29 @@ ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *De
 void *AgxD3d10WindowsOwnerForTest(AGX_D3D10_WINDOWS_DEVICE *Device) {
   return Device && Device->Stage>=AgxD3d10DeviceNativeScreenReady &&
       Device->Stage<AgxD3d10DeviceNativeScreenReleased ? &Device->Owner : NULL;
+}
+BOOL AgxD3d10WindowsTerminalReceiptForTest(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
+    AGX_D3D10_WINDOWS_TERMINAL_RECEIPT *Receipt) {
+  if(!Adapter || !Receipt) return FALSE;
+  ZeroMemory(Receipt,sizeof(*Receipt));
+  Receipt->CallbacksCleared=TRUE;
+  AcquireSRWLockShared(&Adapter->Lock);
+  for(AGX_D3D10_WINDOWS_TERMINAL *record=Adapter->Terminal;record;record=record->Next) {
+    AGX_D3D10_WINDOWS_DEVICE *former=(AGX_D3D10_WINDOWS_DEVICE *)record;
+    ++Receipt->Count;Receipt->ActiveBuffers+=record->ActiveBuffers;
+    Receipt->NativeContexts+=record->NativeContexts;Receipt->LiveBos+=record->LiveBos;
+    Receipt->Quiesced+=record->KernelQuiesced?1u:0u;
+    if(SUCCEEDED(record->Error) || former->Runtime.KernelCallbacks ||
+       former->Runtime.SetErrorCallback || former->Owner.Device ||
+       former->Owner.Backend || former->Backend.Ops.Enter ||
+       former->Backend.Ops.Leave || former->Backend.Ops.Associate ||
+       former->Backend.Ops.Detach || former->Backend.Ops.Identity ||
+       former->Backend.Ops.NextBo || former->Backend.ContextCreate ||
+       former->Backend.ContextDestroy || former->Backend.BatchOps ||
+       former->Backend.BatchOwner)
+      Receipt->CallbacksCleared=FALSE;
+  }
+  ReleaseSRWLockShared(&Adapter->Lock);
+  return TRUE;
 }
 #endif

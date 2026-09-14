@@ -18,11 +18,22 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
 /* Busy leaves the owner reachable from Adapter. Terminal Windows cleanup
  * errors follow the shared runtime's error-callback policy. */
 HRESULT AgxD3d10WindowsCloseDevice(AGX_D3D10_WINDOWS_DEVICE **Device);
+/* Void-DDI teardown: consumes the owner synchronously on success. On terminal
+ * failure it disables callbacks and records CPU-only obligations on Adapter;
+ * no retryable Device token survives the invocation. */
+HRESULT AgxD3d10WindowsDestroyDeviceDdi(AGX_D3D10_WINDOWS_DEVICE **Device,
+                                       BOOL *Consumed);
 struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device);
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 struct _ADMISSION_UMD_DEVICE;
 struct _ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *);
 void *AgxD3d10WindowsOwnerForTest(AGX_D3D10_WINDOWS_DEVICE *);
+typedef struct _AGX_D3D10_WINDOWS_TERMINAL_RECEIPT {
+  ULONG Count,ActiveBuffers,NativeContexts,LiveBos,Quiesced;
+  BOOL CallbacksCleared;
+} AGX_D3D10_WINDOWS_TERMINAL_RECEIPT;
+BOOL AgxD3d10WindowsTerminalReceiptForTest(AGX_D3D10_WINDOWS_ADAPTER *,
+    AGX_D3D10_WINDOWS_TERMINAL_RECEIPT *);
 #endif
 #ifdef __cplusplus
 }

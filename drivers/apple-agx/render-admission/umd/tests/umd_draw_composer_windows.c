@@ -122,7 +122,7 @@ static HRESULT APIENTRY Composer_render(HANDLE h, D3DDDICB_RENDER *r) {
 }
 static HRESULT APIENTRY Composer_signal_event(HANDLE h, const D3DDDICB_SIGNALSYNCHRONIZATIONOBJECT2 *s) {
   (void)h; ++Composer_signals;
-  REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)));
+  REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0,FALSE)));
   if(Composer_mode==3) return E_FAIL;
   REQUIRE(s->hContext==Composer_device.KernelContext && s->Flags.EnqueueCpuEvent);
   if(Composer_mode!=4) SetEvent(s->CpuEventHandle);
@@ -266,19 +266,19 @@ unsigned AdmissionUmdDrawComposerTests(void) {
           HANDLE event=Composer_device.ScreenFences[0].Event;
           Composer_device.ScreenFences[0].Event=NULL;
           Composer_device.LastScreenError=S_OK;
-          REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)));
+          REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0,FALSE)));
           REQUIRE(Composer_tx.Phase==AdmissionDrawAccepted);
           for(i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
           Composer_device.ScreenFences[0].Event=event;
         }
         if(attempt==4) {
-          REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)==HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+          REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0,FALSE)==HRESULT_FROM_WIN32(ERROR_TIMEOUT));
           for(i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
           SetEvent(Composer_device.ScreenFences[0].Event);
         }
         Composer_mode=0;
-        REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)==S_OK);
-        REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)));
+        REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0,FALSE)==S_OK);
+        REQUIRE(FAILED(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0,FALSE)));
         if(attempt==0) {
           APPLE_AGX_WIN32_COMMAND_VIEW view;
           APPLE_AGX_WIN32_ALLOCATION_REFERENCE temp;
@@ -298,7 +298,7 @@ unsigned AdmissionUmdDrawComposerTests(void) {
           Composer_reordered=TRUE;
           REQUIRE(AdmissionUmdDrawDispatch(&Composer_device,&Composer_tx)==S_OK);
           REQUIRE(Composer_tx.Fence==2);
-          REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0)==S_OK);
+          REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&Composer_tx,0,FALSE)==S_OK);
           REQUIRE(Composer_calls==2 && Composer_signals==2);
         }
       }
@@ -427,6 +427,47 @@ unsigned AdmissionUmdAsahiBatchAdapterTests(void) {
   REQUIRE(FAILED(AdmissionUmdAsahiBatchAbort(&Composer_device,batch)));
   REQUIRE(Composer_calls==1 && owner.Holds==10 && owner.Releases==0);
   for(unsigned i=0;i<8;++i) REQUIRE(Composer_device.ScreenBuffers[i].SubmissionHolds==1);
+  if(attempt==0) {
+    HANDLE live=Composer_device.KernelContext;
+    APPLE_AGX_U64 savedOwner=batch->Owner,savedRequest=batch->RequestId;
+    APPLE_AGX_U32 savedGeneration=batch->Generation;
+    unsigned signals=Composer_signals;
+    Composer_device.QuiescedKernelContext=live;
+    Composer_device.KernelContextQuiesced=TRUE;
+    Composer_device.KernelContext=NULL;
+    Composer_device.NativeBatchTransaction=batch;
+    Composer_device.LastNativeRequest=batch->RequestId;
+    REQUIRE(FAILED(AdmissionUmdDrawDispatch(&Composer_device,&batch->Submission)));
+    batch->Submission.Context=(HANDLE)(UINT_PTR)10;
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+    batch->Submission.Context=live;
+    batch->Owner++;
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+    batch->Owner=savedOwner;
+    batch->Generation++;
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+    batch->Generation=savedGeneration;
+    batch->RequestId++;
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+    batch->RequestId=savedRequest;
+    Composer_device.NativeBatchTransaction=&Composer_tx;
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+    Composer_device.NativeBatchTransaction=batch;
+    {
+      APPLE_AGX_U32 fence=batch->Submission.Fence;
+      ADMISSION_UMD_DRAW_PHASE phase=batch->Submission.Phase;
+      batch->Submission.Fence=0;
+      REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&batch->Submission,0,TRUE)==E_INVALIDARG);
+      REQUIRE(Composer_signals==signals && batch->Submission.Phase==phase);
+      batch->Submission.Fence=fence;
+      batch->Submission.Phase=AdmissionDrawSealed;
+      REQUIRE(AdmissionUmdDrawRetire(&Composer_device,&batch->Submission,0,TRUE)==E_INVALIDARG);
+      batch->Submission.Phase=phase;
+    }
+    Composer_device.KernelContext=live;
+    REQUIRE(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)==E_INVALIDARG);
+    Composer_device.KernelContext=NULL;
+  }
   if(attempt==3) {
     REQUIRE(batch->Submission.Fence==0 && capture.Fence==0);
     REQUIRE(FAILED(AdmissionUmdAsahiBatchRetire(&Composer_device,batch,0)));

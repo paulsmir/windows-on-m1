@@ -8,6 +8,7 @@ static unsigned PoolNextHandle;
 static unsigned PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,PoolErrors;
 static int PoolFailAllocation;
 static int PoolFailMap;
+static unsigned PoolFailUnlock;
 static unsigned PoolFailDeallocation;
 static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
   const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
@@ -37,7 +38,9 @@ static HRESULT APIENTRY PoolLock(HANDLE h,D3DDDICB_LOCK *a) {
   return E_INVALIDARG;
 }
 static HRESULT APIENTRY PoolUnlock(HANDLE h,const D3DDDICB_UNLOCK *a) {
-  (void)h; (void)a; ++PoolUnlocks; return S_OK;
+  (void)h; (void)a; ++PoolUnlocks;
+  if(PoolFailUnlock) { --PoolFailUnlock; return E_FAIL; }
+  return S_OK;
 }
 static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   (void)h;
@@ -73,6 +76,7 @@ static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
 static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
 static unsigned RuntimeImmediateMarker;
+static unsigned RuntimeFailSignals;
 static unsigned RuntimeTeardownDeletes,RuntimeTeardownUnlocks;
 static const void *RuntimeTeardownBo;
 static APPLE_AGX_U64 RuntimeCommand[APPLE_AGX_WIN32_COMMAND_MAX_BYTES/8];
@@ -344,6 +348,7 @@ static HRESULT APIENTRY RuntimeSignal(HANDLE h,const D3DDDICB_SIGNALSYNCHRONIZAT
   RUNTIME_REQUIRE(device && h==device->RuntimeDevice.handle &&
       signal->hContext==device->KernelContext && signal->Flags.EnqueueCpuEvent);
   RUNTIME_REQUIRE(device && device->NextScreenFence==RuntimeConsumerFence);
+  if(RuntimeFailSignals) { --RuntimeFailSignals; return E_FAIL; }
   RuntimeMarker=signal->CpuEventHandle;
   if(RuntimeImmediateMarker) RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
   return S_OK; /* first case deliberately pending; second signals in callback */

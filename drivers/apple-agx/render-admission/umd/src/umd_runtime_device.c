@@ -173,14 +173,40 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
   return S_OK;
 }
 
+HRESULT AdmissionUmdRuntimeDeviceDestroyKernelContext(
+    ADMISSION_UMD_DEVICE *device, BOOL *destroyed) {
+  D3DDDICB_DESTROYCONTEXT destroyContext;
+  HANDLE liveContext;
+  HRESULT result;
+  if(destroyed) *destroyed=FALSE;
+  if(!device || !destroyed || device->Magic!=ADMISSION_UMD_DEVICE_MAGIC)
+    return E_INVALIDARG;
+  if(!device->KernelContext) { *destroyed=TRUE;return S_OK; }
+  if(!device->KernelCallbacks || !device->KernelCallbacks->pfnDestroyContextCb)
+    return E_INVALIDARG;
+  liveContext=device->KernelContext;
+  ZeroMemory(&destroyContext,sizeof(destroyContext));
+  destroyContext.hContext=liveContext;
+  result=device->KernelCallbacks->pfnDestroyContextCb(
+      device->RuntimeDevice.handle,&destroyContext);
+  if(FAILED(result)) return result;
+  device->QuiescedKernelContext=liveContext;
+  device->KernelContextQuiesced=TRUE;
+  device->KernelContext=NULL;
+  device->CommandBuffer=NULL;device->CommandBufferSize=0;
+  device->AllocationList=NULL;device->AllocationListSize=0;
+  device->PatchList=NULL;device->PatchListSize=0;
+  *destroyed=TRUE;
+  return S_OK;
+}
+
 HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
                                            BOOL *consumed) {
   ADMISSION_UMD_RETIREMENT_FINALIZE_RESULT retirement;
-  D3DDDICB_DESTROYCONTEXT destroyContext;
   HRESULT screenResult;
   HRESULT terminalError = S_OK;
   ULONG screenUndeallocated = 0u;
-  HRESULT destroyResult = S_OK;
+  BOOL contextDestroyed=FALSE;
   if (consumed != NULL)
     *consumed = FALSE;
   if (device == NULL || consumed == NULL ||
@@ -198,15 +224,13 @@ HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *device,
     if (SUCCEEDED(terminalError))
       terminalError = retirement.FirstError;
   }
-  if (device->KernelContext != NULL && device->KernelCallbacks != NULL &&
-      device->KernelCallbacks->pfnDestroyContextCb != NULL) {
-    ZeroMemory(&destroyContext, sizeof(destroyContext));
-    destroyContext.hContext = device->KernelContext;
-    destroyResult = device->KernelCallbacks->pfnDestroyContextCb(
-        device->RuntimeDevice.handle, &destroyContext);
-    if (FAILED(destroyResult))
-      return destroyResult;
-  }
+  screenResult=AdmissionUmdRuntimeDeviceDestroyKernelContext(device,&contextDestroyed);
+  if(FAILED(screenResult) || !contextDestroyed)
+    return FAILED(screenResult)?screenResult:E_FAIL;
+  if(device->DrawSubmission || device->NativeBatchTransaction)
+    return HRESULT_FROM_WIN32(ERROR_BUSY);
+  device->QuiescedKernelContext=NULL;
+  device->KernelContextQuiesced=FALSE;
   if (FAILED(terminalError))
     AdmissionUmdSetError(device, terminalError);
   ZeroMemory(device, sizeof(*device));

@@ -28,6 +28,8 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
 EXTERN_C HRESULT APIENTRY MesaD3d10OpenAdapter10(D3D10DDIARG_OPENADAPTER *);
+EXTERN_C AGX_D3D10_WINDOWS_ADAPTER *APIENTRY
+MesaD3d10FrontendAdapterForTest(D3D10DDI_HADAPTER);
 EXTERN_C HRESULT APIENTRY MesaD3d10FrontendCleanupResult(D3D10DDI_HDEVICE);
 EXTERN_C ADMISSION_UMD_DEVICE *APIENTRY MesaD3d10FrontendRuntimeForTest(D3D10DDI_HDEVICE);
 EXTERN_C void *APIENTRY MesaD3d10FrontendOwnerForTest(D3D10DDI_HDEVICE);
@@ -773,8 +775,24 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
 static HRESULT FrontendLastError;
 static unsigned FrontendErrors;
+static ADMISSION_UMD_ASAHI_OWNER *FrontendDestroyOwner;
+static unsigned FrontendDestroyCalls,FrontendPostReturnCallbacks;
+static BOOL FrontendCallbacksInvalid;
+static UINT_PTR FrontendFailDestroyDevice;
 static VOID APIENTRY FrontendSetError(D3D10DDI_HRTCORELAYER core,HRESULT error) {
-  (void)core;FrontendLastError=error;++FrontendErrors;
+  (void)core;if(FrontendCallbacksInvalid) ++FrontendPostReturnCallbacks;
+  FrontendLastError=error;++FrontendErrors;
+}
+static HRESULT APIENTRY FrontendDestroyContext(HANDLE device,
+    const D3DDDICB_DESTROYCONTEXT *destroy) {
+  if(FrontendCallbacksInvalid) ++FrontendPostReturnCallbacks;
+  ++FrontendDestroyCalls;
+  CHECK(destroy->hContext==(HANDLE)((UINT_PTR)device+0x100u));
+  if((UINT_PTR)device==FrontendFailDestroyDevice) return E_FAIL;
+  if((UINT_PTR)device==0x904u && RuntimeMarker && FrontendDestroyOwner)
+    RuntimeCheckpoint(FrontendDestroyOwner,1u);
+  ++BridgeDestroys;
+  return S_OK;
 }
 static void test_mesa_d3d10_frontend_open(void) {
   D3D10DDIARG_OPENADAPTER open={0};
@@ -799,7 +817,7 @@ static void test_mesa_d3d10_frontend_open(void) {
   PoolNextHandle=0;PoolFailAllocation=0;PoolFailMap=0;PoolFailDeallocation=0;
   memset(PoolMemory,0,sizeof(PoolMemory));memset(PoolHandles,0,sizeof(PoolHandles));
   callbacks.pfnCreateContextCb=FactoryCreateContext;
-  callbacks.pfnDestroyContextCb=BridgeDestroyContext;
+  callbacks.pfnDestroyContextCb=FrontendDestroyContext;
   callbacks.pfnAllocateCb=PoolAllocate;callbacks.pfnDeallocateCb=PoolDeallocate;
   callbacks.pfnLockCb=PoolLock;callbacks.pfnUnlockCb=PoolUnlock;
   callbacks.pfnRenderCb=RuntimeRender;
@@ -959,6 +977,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     FRONTEND_STAGE("bound-clear");
     RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
     ADMISSION_UMD_ASAHI_OWNER *frontendOwner=MesaD3d10FrontendOwnerForTest(device);
+    FrontendDestroyOwner=frontendOwner;
     RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeImmediateMarker=0;
     RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
     memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
@@ -969,9 +988,6 @@ static void test_mesa_d3d10_frontend_open(void) {
     FRONTEND_STAGE("draw-flush");
     CHECK(RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 &&
           RuntimeConsumerGates==2 && RuntimeMarker);
-    if(frontendOwner) RuntimeCheckpoint(frontendOwner,1u);
-    CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),1000u));
-    if(frontendOwner) RuntimeCheckpoint(frontendOwner,5u);
     deviceFunctions.pfnSetRenderTargets(device,NULL,0,1,(D3D10DDI_HDEPTHSTENCILVIEW){0});
     deviceFunctions.pfnIaSetVertexBuffers(device,0,0,NULL,NULL,NULL);
     deviceFunctions.pfnVsSetShader(device,(D3D10DDI_HSHADER){0});deviceFunctions.pfnPsSetShader(device,(D3D10DDI_HSHADER){0});
@@ -982,17 +998,6 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyResource(device,rt);
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
     free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);free(rt.pDrvPrivate);
-    {
-      D3D10DDI_HRESOURCE failedHandle={0};D3D10DDI_HRTRESOURCE failedRuntime={0};
-      failedHandle.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&rtCreate));
-      unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
-      PoolFailAllocation=1;
-      deviceFunctions.pfnCreateResource(device,&rtCreate,failedHandle,failedRuntime);
-      PoolFailAllocation=0;
-      CHECK(FrontendErrors==errorsBefore+1 && FrontendLastError==E_OUTOFMEMORY &&
-            PoolCreates==createsBefore);
-      deviceFunctions.pfnDestroyResource(device,failedHandle);free(failedHandle.pDrvPrivate);
-    }
 #undef FRONTEND_IMM4
 #undef FRONTEND_REG
 #undef FRONTEND_OP
@@ -1025,11 +1030,84 @@ static void test_mesa_d3d10_frontend_open(void) {
     PoolFailAllocation=0;
     CHECK(MesaD3d10FrontendCleanupResult(failedDevice)==E_OUTOFMEMORY);
     free(failedDevice.pDrvPrivate);
+    failedDevice.pDrvPrivate=calloc(1,bytes);failedCreate.hDrvDevice=failedDevice;
+    failedCreate.hRTDevice.handle=(VOID *)(UINT_PTR)0x90au;
+    failedCreate.hRTCoreLayer.handle=(VOID *)(UINT_PTR)0xb0au;
+    unsigned errorsBefore=FrontendErrors;
+    PoolFailMap=1;PoolFailDeallocation=32;
+    CHECK(FAILED(functions.pfnCreateDevice(open.hAdapter,&failedCreate)));
+    HRESULT failedCleanup=MesaD3d10FrontendCleanupResult(failedDevice);
+    CHECK(failedCleanup==E_FAIL && FrontendErrors==errorsBefore+1u &&
+          FrontendLastError==failedCleanup);
+    CHECK(MesaD3d10FrontendRuntimeForTest(failedDevice)==NULL &&
+          MesaD3d10FrontendOwnerForTest(failedDevice)==NULL &&
+          MesaD3d10FrontendContextForTest(failedDevice)==NULL);
+    PoolFailMap=0;PoolFailDeallocation=0;
+    memset(failedDevice.pDrvPrivate,0xdd,bytes);free(failedDevice.pDrvPrivate);
   }
+  unsigned mainDestroyBefore=FrontendDestroyCalls;
   if(deviceFunctions.pfnDestroyDevice) deviceFunctions.pfnDestroyDevice(device);
-  CHECK(MesaD3d10FrontendCleanupResult(device)==S_OK);
-  free(device.pDrvPrivate);
+  HRESULT mainCleanup=MesaD3d10FrontendCleanupResult(device);
+  CHECK(mainCleanup==S_OK && FrontendDestroyCalls==mainDestroyBefore+1u &&
+        RuntimeRenders==1u && RuntimeSignals==1u &&
+        RuntimeConsumerRetirements==2u);
+  CHECK(MesaD3d10FrontendRuntimeForTest(device)==NULL &&
+        MesaD3d10FrontendOwnerForTest(device)==NULL &&
+        MesaD3d10FrontendContextForTest(device)==NULL);
+  for(unsigned failure=0;failure<4;++failure) {
+    D3D10DDI_HDEVICE doomed={0};D3D10DDI_DEVICEFUNCS doomedFunctions={0};
+    DXGI_DDI_BASE_FUNCTIONS doomedDxgi={0};D3D10DDIARG_CREATEDEVICE doomedCreate=create;
+    UINT_PTR handle=0x907u+failure;
+    doomed.pDrvPrivate=calloc(1,bytes);doomedCreate.hDrvDevice=doomed;
+    doomedCreate.hRTDevice.handle=(VOID *)handle;
+    doomedCreate.hRTCoreLayer.handle=(VOID *)(handle+0x200u);
+    doomedCreate.pDeviceFuncs=&doomedFunctions;
+    doomedCreate.DXGIBaseDDI.pDXGIDDIBaseFunctions=&doomedDxgi;
+    CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&doomedCreate)));
+    unsigned errorsBefore=FrontendErrors;
+    unsigned destroysBefore=FrontendDestroyCalls;
+    if(failure==0) FrontendFailDestroyDevice=handle;
+    if(failure==1) PoolFailUnlock=32;
+    if(failure==2) PoolFailDeallocation=32;
+    if(failure==3) {
+      AGX_WIN32_ASAHI_SCENE doomedScene={0};
+      struct pipe_context *doomedContext=MesaD3d10FrontendContextForTest(doomed);
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(doomed);
+      ADMISSION_UMD_ASAHI_OWNER *doomedOwner=MesaD3d10FrontendOwnerForTest(doomed);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+      RuntimeMarker=NULL;RuntimeImmediateMarker=0;RuntimeFailSignals=1;
+      memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      CHECK(doomedContext && doomedOwner &&
+            AgxWin32AsahiSceneInit(&doomedScene,doomedContext->screen,doomedContext) &&
+            AgxWin32AsahiSceneDraw(&doomedScene) &&
+            !AgxWin32AsahiSceneSubmit(&doomedScene));
+      CHECK(RuntimeRenders==1u && RuntimeSignals==1u && !RuntimeMarker);
+    }
+    doomedFunctions.pfnDestroyDevice(doomed);
+    HRESULT cleanup=MesaD3d10FrontendCleanupResult(doomed);
+    CHECK(cleanup==E_FAIL && FrontendErrors==errorsBefore+1u &&
+          FrontendLastError==cleanup &&
+          FrontendDestroyCalls==destroysBefore+1u);
+    CHECK(MesaD3d10FrontendRuntimeForTest(doomed)==NULL &&
+          MesaD3d10FrontendOwnerForTest(doomed)==NULL &&
+          MesaD3d10FrontendContextForTest(doomed)==NULL);
+    FrontendFailDestroyDevice=0;PoolFailUnlock=0;PoolFailDeallocation=0;
+    RuntimeFailSignals=0;
+    memset(doomed.pDrvPrivate,0xdd,bytes);free(doomed.pDrvPrivate);
+  }
+  if(mainCleanup==S_OK) {
+    FrontendCallbacksInvalid=TRUE;
+    memset(device.pDrvPrivate,0xdd,bytes);free(device.pDrvPrivate);device.pDrvPrivate=NULL;
+  }
+  AGX_D3D10_WINDOWS_TERMINAL_RECEIPT terminal={0};
+  CHECK(AgxD3d10WindowsTerminalReceiptForTest(
+            MesaD3d10FrontendAdapterForTest(open.hAdapter),&terminal) &&
+        terminal.Count==5u && terminal.ActiveBuffers>0u &&
+        terminal.NativeContexts>0u && terminal.LiveBos>0u &&
+        terminal.Quiesced==4u && terminal.CallbacksCleared);
   CHECK(functions.pfnCloseAdapter(open.hAdapter)==S_OK);
+  CHECK(FrontendPostReturnCallbacks==0u);
 }
 #endif
 

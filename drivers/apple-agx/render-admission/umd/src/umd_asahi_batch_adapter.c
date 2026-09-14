@@ -79,7 +79,12 @@ extern "C" HRESULT AdmissionUmdAsahiBatchDispatch(ADMISSION_UMD_DEVICE *d,
 extern "C" HRESULT AdmissionUmdAsahiBatchRetire(ADMISSION_UMD_DEVICE *d,
     ADMISSION_UMD_ASAHI_BATCH *b,DWORD timeoutMs) {
   if(!valid(d,b) || b->Phase!=AdmissionAsahiBatchSubmitted) return E_INVALIDARG;
-  HRESULT hr=AdmissionUmdDrawRetire(d,&b->Submission,timeoutMs);
+  BOOL quiesced=d->KernelContextQuiesced && !d->KernelContext &&
+      d->QuiescedKernelContext && d->NativeBatchTransaction==b &&
+      d->DrawSubmission==&b->Submission &&
+      b->Submission.Context==d->QuiescedKernelContext &&
+      b->RequestId==d->LastNativeRequest;
+  HRESULT hr=AdmissionUmdDrawRetire(d,&b->Submission,timeoutMs,quiesced);
   /* DrawRetire may acquire the previously missing fence and then time out.
    * Bind capture to that same fence without dropping its holds; completion is
    * proved only when DrawRetire succeeds. No second Render is issued. */

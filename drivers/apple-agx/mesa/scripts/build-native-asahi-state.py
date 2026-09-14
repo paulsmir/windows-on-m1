@@ -80,6 +80,16 @@ if args.windows_platform_declarations:
    free(pAdapter);'''),
         ('EXTERN_C HRESULT APIENTRY\nOpenAdapter10(',
          'EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10('),
+        ('EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10(',
+         '''EXTERN_C AGX_D3D10_WINDOWS_ADAPTER *APIENTRY
+MesaD3d10FrontendAdapterForTest(D3D10DDI_HADAPTER hAdapter)
+{
+   Adapter *pAdapter = CastAdapter(hAdapter);
+   return pAdapter ? pAdapter->windows : NULL;
+}
+
+EXTERN_C HRESULT APIENTRY
+MesaD3d10OpenAdapter10('''),
         ('EXTERN_C HRESULT APIENTRY\nOpenAdapter10_2(',
          'EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10_2(')])
     change('src/gallium/frontends/d3d10umd/State.h',
@@ -100,17 +110,27 @@ if args.windows_platform_declarations:
    pDevice->cso = cso_create_context(pipe, CSO_NO_VBUF);''','''   HRESULT result = AgxD3d10WindowsCreateDevice(
       pAdapter->windows, pCreateData, &pDevice->windows);
    pDevice->cleanup_result = result;
-   if (FAILED(result)) return result;
+   if (FAILED(result)) {
+      HRESULT initial = result;
+      if (pDevice->windows) {
+         BOOL consumed = FALSE;
+         HRESULT cleanup = AgxD3d10WindowsDestroyDeviceDdi(&pDevice->windows, &consumed);
+         if (FAILED(cleanup)) pDevice->cleanup_result = cleanup;
+      }
+      return initial;
+   }
    struct pipe_context *pipe = AgxD3d10WindowsContext(pDevice->windows);
    if (!pipe) {
-      pDevice->cleanup_result = AgxD3d10WindowsCloseDevice(&pDevice->windows);
+      BOOL consumed = FALSE;
+      pDevice->cleanup_result = AgxD3d10WindowsDestroyDeviceDdi(&pDevice->windows, &consumed);
       return E_FAIL;
    }
    struct pipe_screen *screen = pipe->screen;
    pDevice->pipe = pipe;
    pDevice->cso = cso_create_context(pipe, CSO_NO_VBUF);
    if (!pDevice->cso) {
-      pDevice->cleanup_result = AgxD3d10WindowsCloseDevice(&pDevice->windows);
+      BOOL consumed = FALSE;
+      pDevice->cleanup_result = AgxD3d10WindowsDestroyDeviceDdi(&pDevice->windows, &consumed);
       pDevice->pipe = NULL;
       return E_OUTOFMEMORY;
    }'''),
@@ -121,7 +141,9 @@ if args.windows_platform_declarations:
       return S_OK;'''),
         ('   pipe->destroy(pipe);','''   pDevice->frontend_ready = false;
    pDevice->pipe = NULL;
-   pDevice->cleanup_result = AgxD3d10WindowsCloseDevice(&pDevice->windows);'''),
+   BOOL consumed = FALSE;
+   pDevice->cleanup_result = AgxD3d10WindowsDestroyDeviceDdi(
+      &pDevice->windows, &consumed);'''),
         ('''void APIENTRY
 RelocateDeviceFuncs(''','''EXTERN_C HRESULT APIENTRY
 MesaD3d10FrontendCleanupResult(D3D10DDI_HDEVICE hDevice)

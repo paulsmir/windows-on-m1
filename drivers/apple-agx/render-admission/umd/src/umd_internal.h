@@ -87,6 +87,8 @@ typedef struct _ADMISSION_UMD_DEVICE {
   PFND3D10DDI_SETERROR_CB SetErrorCallback;
   DXGI_DDI_BASE_CALLBACKS *DxgiCallbacks;
   HANDLE KernelContext;
+  HANDLE QuiescedKernelContext;
+  BOOL KernelContextQuiesced;
   ULONG Win32Generation;
   PVOID CommandBuffer;
   UINT CommandBufferSize;
@@ -139,6 +141,11 @@ HRESULT AdmissionUmdRuntimeAdapterInitialize(
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_ADAPTER *Adapter,
     const D3D10DDIARG_CREATEDEVICE *Args);
+/* Synchronously quiesces and destroys the runtime kernel context while its
+ * callback table is still valid. Success clears the context and borrowed
+ * command/list pointers so finalization cannot call it twice. */
+HRESULT AdmissionUmdRuntimeDeviceDestroyKernelContext(
+    ADMISSION_UMD_DEVICE *Device, BOOL *Destroyed);
 /* Consumed is true only after the kernel context and all device-owned storage
  * have been released and Device has been cleared. A failed, unconsumed result
  * leaves the same storage reachable for retry. */

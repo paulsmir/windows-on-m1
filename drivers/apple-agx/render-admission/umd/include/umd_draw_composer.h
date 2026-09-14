@@ -37,6 +37,7 @@ HRESULT AdmissionUmdDrawAbort(struct _ADMISSION_UMD_DEVICE *Device,
 /* A failed event enqueue may be retried here, but Render is NEVER replayed.
  * A timeout retains ownership; only a signalled marker permits retirement. */
 HRESULT AdmissionUmdDrawRetire(struct _ADMISSION_UMD_DEVICE *Device,
-    ADMISSION_UMD_DRAW_SUBMISSION *Submission, DWORD TimeoutMs);
+    ADMISSION_UMD_DRAW_SUBMISSION *Submission, DWORD TimeoutMs,
+    BOOL QuiescedRetirement);
 
 #endif
