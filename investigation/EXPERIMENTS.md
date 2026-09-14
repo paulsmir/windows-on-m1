@@ -43627,3 +43627,149 @@ It binds all package/client/certificate/desktopCRT/signtool hashes, expected
 30/126/9/29 graph census, destination8/count9,44952 DMA and16384 target bytes,
 plus immutable launch/recovery artifact hashes. No Air copy, trust, staging,
 GPU-enabled launch or native hardware execution has occurred yet.
+
+### EXP684 fresh ordinary baseline and target-copy gate
+
+2026-09-14T08:06:29.9499451Z pinned-SSH baseline PASS:8CPUs, exactly one
+APPL0002 Code28/noINF, NVMe/xHCI/keyboard and AppleInputRunning, no AppleAgx
+package/service/module/SYS/UMD/EXP684 signer, no current-boot41/1001/129.
+AppleInput71CD0A trust remains. TESTSIGNING Yes. Operator-disabled
+VerifiedAndReputableDesktop remains IsEnforced=false/IsAuthorized=false;
+assistant changed no BCD or SAC policy. Both expected USB endpoints and active
+ordinary377/392 launcher98912 observed; no bare-proxy access. Evidence
+main-root EXP684/ordinary-baseline.json.
+
+Copy only frozen `air-input` into a fresh
+`C:/Users/pavel/EXP-20260914-684-native-packet-bounds/air-input`. Before any
+trust or staging verify manifest SHA79e9e78a... and every member hash. Run the
+same source-proven loader-only `--help` gate; expected usage and exit2 before
+adapter/KMT access. Then import only exact public8055D207... to LocalMachine
+Root/TrustedPublisher, verify SYS/DLL/CAT/desktopCRT and Microsoft signtool
+Authenticode, and use the hash-pinned ARM64 signtool to verify exact INF catalog
+membership. Stop before staging on any mismatch. No GPU work in these gates.
+
+### EXP684 target preflight result and staging preregistration
+
+First preflight script parse failed before execution because PowerShell parsed
+`$name:` as a drive-qualified variable. No loader, trust or package action ran.
+Only the diagnostic interpolation was changed to `${name}:`; same file/member
+hash contract and checks were retained.
+
+Corrected target preflight PASS at2026-09-14T08:07:55Z. Manifest and every member
+hash match; loader-only emitted native-batch usage and exit2 before adapter/KMT.
+Exact8055D207... public cert was imported to Root/TrustedPublisher. SYS/DLL/CAT
+are Valid with exact signer; desktop ARM64 CRT and ARM64 signtool are Valid with
+Microsoft signers. Signtool verified exact INF in exact CAT:1success,0warnings,
+0errors. Hardware remains NOT_RUN. Evidence air-preflight02.log.
+
+Before staging require the same ordinary health except that exactEXP684 signer
+is now expected. Stage only manifest-bound INF with
+`pnputil /add-driver .../air-input/AppleAgxRenderAdmission.inf`, no `/install`,
+and record the published OEM name. Do not launch the client in ordinary recovery.
+Then request controlled Windows reboot, wait for SSH loss/old-launcher exit and
+both USB endpoints plus read-only Running proxy before the preregistered
+EXP584/406 broker-enabled natural bind.
+
+### EXP684 staging result and GPU-enabled launch preregistration
+
+The first compact pre-stage command stopped before mutation because `Test-Path`
+was tokenized without a separating space. A standalone script retained the same
+hash and baseline gates. Corrected pre-stage PASS; exact manifest-bound package
+staged successfully as oem5.inf with pnputil exit0 and no `/install`. Evidence
+air-stage.log and air-stage02.log. Native hardware remains NOT_RUN.
+
+Issue controlled `shutdown.exe /r /t 0` to the ordinary guest. Require bounded
+SSH loss, old ordinary launcher98912 exit, both USB endpoints and read-only
+Running proxy before launch. Then run the exact immutable preregistered
+EXP584 m1n1 and EXP406 FD with WOM1_AGX_G2_POWER_BROKER=1, physical display,
+debug off and low-mem, writing fresh EXP684 gpu-boot.log and contract.bin.
+No source/firmware rebuild. After SSH returns require APPL0002 Code0,
+oem5.inf, Running service,8CPUs and exact installed INF/SYS/UMD hashes before
+the one attached client invocation.
+
+### EXP684 bound preflight PASS and single native request start
+
+2026-09-14T08:11:33.7646605Z: GPU-enabled Windows returned with8CPUs,
+APPL0002 Code0/OK boundoem5.inf, AppleAgxAdmissionRunning. Installed INF
+4e41f4d7...,SYS7ba5d090...,UMD91726a6c... exactly match frozen manifest.
+No existing AppleAgxD3dKmRender process or native-run directory. Console reached
+guest-runtime-ready and existing power/D589 checkpoints; these are launch health,
+not native completion. Evidence bound-preflight.json and gpu-boot.log.
+
+Run exactly once from fresh `native-run` using the manifest-bound expected684
+client SHAe37bef25... and direct synchronous invocation in the SSH PowerShell
+process: no Start-Process, so the session remains attached through client exit.
+The client itself records the pre-submit registry baseline, real producer census,
+durable command dump, Render/event/receipt/readback and balanced cleanup. On SSH
+loss/reset preserve gpu-boot, durable command and crash evidence; do not replay.
+
+### EXP684 hardware result — native KMT qualification PASS
+
+Single attached client started2026-09-14T08:12:17.1231840Z and exited0 at
+08:12:17.4700848Z. It executed the actual Asahi resource/NIR/state/clear/draw/
+flush producer and submitted exactly one native request through real KMT callbacks,
+existing UMD composer and KMD Render/Patch/Submit. Actual graph:30references,
+126relocations,9allocations,29materialized objects,137encoder bytes,36496 source
+bytes,44952 DMA bytes,target16384. Destination reference23/index8/count9 was
+accepted. Command hash9105be4676f0f94f,Win32 generation235405313.
+
+Durable command dump `native-kmt-command-0e080001-9105be4676f0f94f.bin` is
+6248bytes,952nonzero bytes, header begins57414743, SHA256
+55240d0d3475eb82f5f10eb08427c398ce19e28ef483b18e08efa8af42a7a89d.
+Dump receipt stage6 complete,error0,bytes6248 before D3DKMTRender.
+
+KMD produced fresh native receipt build684,boot294088076,generation235405313,
+kernel fence293,snapshot1,command hash match,readback available16384. Registry
+Wom1NativeGraphReceipt is byte-identical to the client's16600-byte native-output
+file, SHA256881820cb5f30bb92d159701c028b7e0ce80daa5114d423616ab1c580f0cca473.
+Independent parse confirms Version1/Valid1,objects29/edges126,target reference23,
+all native BG/partial/EOT roots and readback FNV9219a8781a475585. Independent
+Morton-tiled pixel check finds0 mismatches and128 triangle foreground centres;
+background0xff0d0d0d,foreground0xffe5331a. Client reports allocations/deallocations
+12/12 and locks/unlocks11/11. No native process remains. Post-run system has8CPU,
+Code0/running driver,NVMe/xHCI/keyboard and no System41/1001/129/4101.
+
+Verdict: packet-bound hypothesis CONFIRMED and native KMT qualification VALIDATED.
+EXP683's legacy index<2 Submit failure is closed. This is not standard D3D runtime,
+DXGI Present,DWM or Full Graphics desktop acceptance. DWM continues separate
+0x889800b0/dwmcore crashes before and after the client; old WER BlueScreen reports
+were reprocessed after boot. Do not interpret them as native-client failures or
+desktop success. Evidence: main-root EXP684/native-run,post-run-evidence,
+post-run-summary.log,gpu-boot.log,contract.bin and manifest.
+
+Recovery next: evidence is preserved, so remove exact boundoem5 package by verified
+INF hash4e41f4d7... with pnputil `/delete-driver oem5.inf /uninstall`, no force.
+Remove only stale exact APPL0002 devnode if it remains, scan, require package/SYS/
+UMD/module absence, delete only stopped stale AppleAgxAdmission service, then remove
+only EXP684 signer8055D207... while preserving AppleInput71CD0A. Reboot to ordinary
+377/392 broker-disabled and verify the stable one-Code28 recovery baseline.
+
+### EXP684 exact cleanup result and ordinary restore preregistration
+
+Evidence collection completed before mutation. Exact boundoem5 INF hash matched;
+pnputil uninstall/delete PASS without force, exact APPL0002 devnode removed and
+scan completed. Stopped stale AppleAgxAdmission service was deleted. AppleAgx
+package/service/module/SYS/UMD and exact8055D207 signer are absent; AppleInput is
+Running and71CD0A trust remains. Cleanup completed2026-09-14T08:16:02Z, evidence
+cleanup.log. Frozen experiment inputs/evidence remain in the user experiment
+directory and do not constitute a staged driver package.
+
+Issue controlled Windows reboot, require GPU launcher exit plus both USB endpoints
+and Running proxy, then run immutable ordinary377/392 pair with broker unset,
+physical display/debug off/low-mem. Write fresh ordinary-restore-boot.log and
+ordinary-restore-contract.bin. Final health must prove8CPUs,one inert APPL0002
+Code28,SSH/NVMe/xHCI/keyboard, no AppleAgx package/service/module/files/signer and
+no current-boot41/1001/129. Preserve operator's TESTSIGNING and SAC settings.
+
+### EXP684 final ordinary recovery result
+
+Controlled reboot returned both USB endpoints and read-only Running proxy; the
+immutable ordinary377/392 broker-disabled pair was launched without rebuild.
+Final health at2026-09-14T08:17:54.5201701Z PASS:8CPUs,exactly one APPL0002
+Code28,SSH,NVMe/xHCI/keyboard and AppleInputRunning; no AppleAgx package/service/
+module/SYS/UMD/8055 signer and no current-boot System41/1001/129. AppleInput
+71CD0A trust remains,TESTSIGNINGYes,operator-disabled SAC remains unenforced.
+Evidence final-health.json,ordinary-restore-boot.log and contract. EXP684 hardware
+qualification and cleanup are complete; ordinary GPU-visible recovery remains
+active. Do not rerun KMT qualification. Next causal target is production runtime
+CreateDevice/native frontend ownership and then standard Present/DWM acceptance.

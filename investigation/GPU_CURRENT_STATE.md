@@ -97,9 +97,9 @@ a035eda36ce2e7b39222982ae5096feb1c56a65eadc01d0f9d31273e0b891435
 with six cases and actual producer PASS. ARM64 sourceSHA
 8c9d9b8de519dc8339c96a82c5c7ff35c4f8e1383d13375f9e988432f3ebef13,
 clientSHA8ed89c3a57ed441a16b69f9ab3fe56d9b9ac866ad69b4cb68943a3ae9e121b2a;
-build/link0warnings0errors. Fixed client remainsNOT hardwaretested.
+build/link0warnings0errors.
 
-EXP684 exactcandidate is built butNOT copied/staged/run onAir. CleanHEADd0b2045
+EXP684 exactcandidate hardware KMT qualification PASS. CleanHEADd0b2045
 source archive SHAe0cb364151dfa38107a81d1f980bc8a0c2aa74d511d0927433a31480e152035d.
 Package684 fullbuild/analysis0warnings0errors; INF/SYS/UMD30.0.684.0. Fresh
 nonexportable EXP684 signer thumb8055D20754EF031B539B5499170A7EEDD6E5FE8C,
@@ -110,8 +110,15 @@ clientSHAe37bef254b2142f7338a12e87355b02ebec16dea1eba395282d42f7b9ce19814.
 Same candidate sourceSHA90d8fb801481941e843761b644339a407d70422c96f4fde47c2c86f2e3f74ba5
 x64actualproducerPASS and ARM64build/linkPASS0warnings/errors. Frozen target
 manifestSHA79e9e78a3765c446c03e1b9f325a856861e5473bec333a64d983735538d78ed6.
-Next gates: freshordinaryhealth, hashverifiedAircopy, loader/sign/catalog checks,
-stageexactpackage and one attached nativehardware request per EXP684 prereg.
+Single attached client exit0 in347ms. Actual30refs/126relocs/9allocs/29objects,
+destination23/index8/count9,137encoder,36496source,44952DMA and16KiB target.
+Durable6248-byte command hash9105be4676f0f94f has952nonzero bytes; dump stage6,
+error0. Fresh registry/client receipt build684,boot294088076,generation235405313,
+fence293,snapshot1; registry and client receipt files byte-identicalSHA881820cb....
+Independent readback FNV9219a8781a475585 and Morton pixel verification:
+0mismatches,128foreground. Alloc/free12/12,lock/unlock11/11. NoSystem41/1001/
+129/4101 during run. Exact package and8055signer removed after evidence.
+This validates KMT native lifecycle only; standardD3D/Present/DWM remain open.
 
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
@@ -177,29 +184,26 @@ No-query scratch slots are unused by admitted VS/FS and canonicalized only at
 root upload; global Asahi scratch semantics remain unchanged.
 
 ## Exact next target
-Prepare next nativequalification candidate with verified packetboundsfix and
-verified durablecommanddump flush. Build exactpackage/client684 from cleanHEAD,
-use a new experiment-scoped signing identity, and keep SSHparent attached untilclientexit;
-preservefailed/pendingresources. New hardware requires exact684package/client,
-fullgates/sign/hash and freshordinarybaseline; no stale683package onAir.
-
-Continue production integration in parallel with that boundary:
+Continue production integration from
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
 AgxD3d10WindowsCreateDevice still uses a map-only pipe. Replace that factory owner
 with real native screen/context after runtime callback initialization; defer Mesa
 frontend screen creation to CreateDevice and link this same closure into UMD.
+Preserve retryable native teardown and two-device isolation. Exercise the actual
+frontend/producer path through runtime-supplied callbacks, not another KMT helper.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
 
 ## Preserved hardware/recovery boundary
 Currentordinary377/392 GPU-visible recovery is healthy,brokerdisabled,oneinert
 APPL0002Code28,noAppleAgx package/service/module/files/signer. Exacthealth evidence
-main-root EXP683/ordinary-final-health.json at2026-09-14T06:46:01Z.
+main-root EXP684/final-health.json at2026-09-14T08:17:54Z:8CPU,SSH/NVMe/xHCI/
+keyboardOK,no currentboot41/1001/129.
 AppleInput71CD0A trust anddriver preserved;TESTSIGNINGYes. Operator's SACchange
 was verified; assistant didnotchangeSAC/BCD. EXP683-specific1F20 trust removed.
 SSH pavel@192.168.1.37, key ~/.ssh/air, STRICT known-hosts main-root
 .local/experiments/EXP641-standard-present/air_known_hosts. Defaultknown_hosts
-isstale;do notchangeit. Activeordinary-final launcher ownsproxy/vUART.
+isstale;do notchangeit. ActiveEXP684 ordinary-restore launcher ownsproxy/vUART.
 Emergency377/385hiddenDISKboot is proven recovery exception only; EXP378WinPE
 contains automatic oldcleanup,so preferdocumentedhiddenDISKboot for evidencefirst.
 Emergencyartifacthashes: main-rootEXP683/emergency-recovery-hashes.json.
