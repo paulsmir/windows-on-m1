@@ -73,11 +73,19 @@ actualproducer census. Preserve originals. DWM0x889800b0 existedbeforeclient;
 Event129 also recorded, neither attributed to nativegraph withoutcausalproof.
 Guesttimestampsrewind acrossfirmwareboots; correlate dump addresses/receipts.
 
-Active offline causal target: render_submission.c packetPrepare still has legacy
-DestinationIndex>=2 rejection. Verify actualnative targetindex in existingproducer
-and extend its test through PrepatchedCapture/Adopt/PacketPrepare. Carry actual
-AllocationListSize in existingdescription if proven; no arbitrarylimitrelaxation,
-newallocator/composer orGPUVA. No newhardware until RED/GREEN, fullgates+prereg.
+Offlinefixc8245eb confirmed: actualproducer targetreference23/index8/count9
+fails legacyDestinationIndex>=2 in RED, passes capturedAllocationCount bounds in
+GREEN. Existing packetdescription uses padding, oldfieldoffsets preserved;
+Render/Patch supply actualAllocationListSize, Patch preservesvalidatedtargetindex.
+Capture/Adopt/Prepare/Matches enforcecount; no arbitraryconstant widening.
+Final x64native-submit-index-green-20260914b PASS actual2placements+retirement+
+recreate, sourceSHA9750c6130d4e1e84584c6afa700ae97c1fbfca64c13cd15bd70dbf5eaa7c3702.
+ARM64native-submit-index-final-20260914c-arm64 build/linkPASS,
+sourceSHAd9eb8c81099706a427022ca5496ce726a3a3ebed50920282e969fbb059b0100c.
+15focusedhosttests and99KMDobjects analysis0warnings/errors PASS;
+KMDsourceSHA060e8cc4bb362ff4e8dd18064b8494edf81773b885e32c27d28778a1544b9c8d.
+Fixedcandidate stillNOT hardwaretested. Next add durablecommanddump flush before
+Render (EXP683 cachedfile lost onreset), then new684build/sign/hash/prereg gates.
 
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
@@ -143,11 +151,10 @@ No-query scratch slots are unused by admitted VS/FS and canonicalized only at
 root upload; global Asahi scratch semantics remain unchanged.
 
 ## Exact next target
-Finish source-first KMD submit failure review and deterministic realproducer RED/GREEN
-at the packetPrepare destination index/count boundary described above. Existing
-materializer/physicalPatch/Submit architecture remains fixed. PreserveEXP683 reset
-evidence and do not replay its zero-filled recoveredwire. Next hardware candidate
-requires new source/build/sign/hash gates and preregistration after offlinefix.
+Prepare next nativequalification candidate with verified packetboundsfix and
+explicit durablecommanddump flush. Keep SSHparent attached untilclientexit;
+preservefailed/pendingresources. New hardware requires exact684package/client,
+fullgates/sign/hash and freshordinarybaseline; no stale683package onAir.
 
 Continue production integration in parallel with that boundary:
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
