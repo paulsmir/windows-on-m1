@@ -99,6 +99,20 @@ with six cases and actual producer PASS. ARM64 sourceSHA
 clientSHA8ed89c3a57ed441a16b69f9ab3fe56d9b9ac866ad69b4cb68943a3ae9e121b2a;
 build/link0warnings0errors. Fixed client remainsNOT hardwaretested.
 
+EXP684 exactcandidate is built butNOT copied/staged/run onAir. CleanHEADd0b2045
+source archive SHAe0cb364151dfa38107a81d1f980bc8a0c2aa74d511d0927433a31480e152035d.
+Package684 fullbuild/analysis0warnings0errors; INF/SYS/UMD30.0.684.0. Fresh
+nonexportable EXP684 signer thumb8055D20754EF031B539B5499170A7EEDD6E5FE8C,
+publicSHA0ad4dd9a95d74dd0c5d9cdc01e46ff71f9948b0370fb2b372b9b500a58a64f64.
+Finalpackage INF4e41f4d7...,SYS7ba5d090...,UMD91726a6c...,CAT4a5c25e0...;
+explicit-cert embedded/catalog verificationPASS. Exact ARM64 expectedbuild684
+clientSHAe37bef254b2142f7338a12e87355b02ebec16dea1eba395282d42f7b9ce19814.
+Same candidate sourceSHA90d8fb801481941e843761b644339a407d70422c96f4fde47c2c86f2e3f74ba5
+x64actualproducerPASS and ARM64build/linkPASS0warnings/errors. Frozen target
+manifestSHA79e9e78a3765c446c03e1b9f325a856861e5473bec333a64d983735538d78ed6.
+Next gates: freshordinaryhealth, hashverifiedAircopy, loader/sign/catalog checks,
+stageexactpackage and one attached nativehardware request per EXP684 prereg.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.

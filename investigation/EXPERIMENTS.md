@@ -43485,3 +43485,145 @@ UTC 2026-09-14T06:41:48.454586+00:00. Exactoem5 INFhash verified;pnputil uninsta
 
 ### EXP683 final ordinary recovery PASS
 2026-09-14T06:46:01.5576486Z:8CPUs,exactlyonepresentAPPL0002Code28,SSH,NVMe/xHCI/keyboardOK,AppleInputRunning;AppleAgx package/service/module/SYS/UMD/1F20signerabsent;no currentbootSystem41/1001/129;TESTSIGNINGYes. Evidenceordinary-final-health.json. EmergencyGPUhiddenbranchclosed,ordinary377/392remainsrunning. NativequalificationFAILED atSubmit0x119;notdesktopacceptance. Offlineowninglayer packetPrepare index/count regression inprogress; no nextGPUcandidateyet.
+
+## EXP-20260914-684-native-packet-bounds — preregistration
+
+UTC preregistration: 2026-09-14. Status: PACKAGE/CLIENT BUILD ONLY until all
+artifact, signing, target baseline and control-plane gates below pass.
+
+WHY THIS HYPOTHESIS:
+1. EXP683's real producer reached a 30-reference/126-relocation request and
+   dxgmms2 reported VIDEO_SCHEDULER_INTERNAL_ERROR 0x119 Arg1=2 with the KMD
+   returning STATUS_INVALID_HANDLE at Submit. The dump records the expected
+   44952-byte DMA submission and fence295, before AGX completion.
+2. The actual producer deterministically reproduced the nearest owning-layer
+   defect offline: destination reference23 maps to allocation index8 of9, while
+   the shared packet admission retained the legacy index<2 invariant.
+3. Commit c8245eb carries the actual Render/Patch AllocationListSize through
+   Capture/Adopt/Prepare and final x64 real-producer execution now passes both
+   KMD placement variants. Commit803a7c2 additionally makes the exact command
+   dump durable and fail-closed before D3DKMTRender; it does not change GPU work.
+
+WINDOWS CONTRACT: the runtime's current allocation list bounds every referenced
+allocation. A prepared packet may name any destination index strictly below that
+actual list size. Submit must preserve the same captured count and destination.
+The qualification client remains attached to its SSH parent until exit.
+
+AGX/ASAHI CONTRACT: unchanged G13G one-cluster native scene; one 16x16 BGRA8
+target, direct 3-vertex triangle, 30 references,126 relocations,29 materialized
+objects,137 encoder bytes,36496 source bytes and44952 DMA bytes. Existing
+physical/patch-list materialization, roots, queues and completion are unchanged.
+
+TRANSLATION: real Asahi graph -> typed capture -> immutable materialization ->
+existing UMD composer/pfnRenderCb -> KMD Render/Patch -> packet description with
+DestinationIndex8/AllocationCount9 -> Submit -> existing physical AGX path.
+
+WHAT IS STILL UNKNOWN: whether the corrected actual bound permits dxgmms2 Submit
+to reach physical AGX completion and whether the complete command produces the
+fresh native output receipt/readback. Hardware is required only for that result.
+
+Single behavioral variable from EXP683: replace the legacy packet destination
+bound with the actual captured allocation-list bound. Durable dump flush is an
+evidence/recovery invariant and rejects before submission if it cannot preserve
+the request. No GPUVA, allocator, composer, scheduler, power, IRQ, firmware or
+presentation change. Unsupported operations remain rejected before submission.
+
+Source identity: integration HEAD d0b204505c097774a96d0d4e1befd47953eb403d,
+clean tracked diff SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+Source archive `.local/experiments/EXP-20260914-684-native-packet-bounds/source.tar.gz`
+SHA256 e0cb364151dfa38107a81d1f980bc8a0c2aa74d511d0927433a31480e152035d.
+Root HEAD f90402c7589236ec9e8a030f4b825b5a36280866 tracked diff SHA256
+2e04cded9123c36fb63ecbced4586a5d829d63b0d4986e00b159f035a94e82eb.
+m1n1 HEAD c6d10e04afdad5314e8ac1e67bc3919b094ab000 tracked diff empty.
+Mu HEAD f1ef718e08db0e4c30fdb5d8555973513ad9a004 tracked diff SHA256
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce.
+No root/m1n1/Mu source is built for this candidate; immutable launch artifacts
+remain EXP584 m1n1 SHA12f18f6f... and EXP406 FD SHAc7ddcfb2....
+
+Offline gates already PASS: final x64 actual-producer source archive
+SHAa035eda36ce2e7b39222982ae5096feb1c56a65eadc01d0f9d31273e0b891435;
+ARM64 native closure source SHA8c9d9b8de519dc8339c96a82c5c7ff35c4f8e1383d13375f9e988432f3ebef13;
+six-case durable dump test and actual producer PASS; ARM64 build/link0warnings/
+0errors; packet-bound15hosttests and99-object KMD analysis PASS.
+
+Exact package build on fresh trusted-builder directory:
+`build-driver.ps1 -Configuration Release -VisibleAgxQualification -PackageBuild 684`.
+Use pinned26100 WDK paths and full code analysis. Create a fresh nonexportable
+experiment-scoped CodeSigning certificate for EXP684, sign SYS/DLL, regenerate
+the desktop ARM64 catalog with `10_CO_ARM64,10_NI_ARM64,10_GE_ARM64`, sign CAT,
+and independently verify embedded signatures plus catalog membership. Build the
+existing ARM64 AppleAgxD3dKmRender project with EnableNativeBatch=true and
+AdmissionExpectedBuild=684 from this exact source closure. Record all hashes.
+
+Only after those gates: verify ordinary377/392 baseline again (8CPU, NVMe, xHCI,
+input, SSH, one inert APPL0002 Code28, no AppleAgx package/service/module/files/
+experiment signer and no fresh41/1001/129), stage exactly one hash-verified INF,
+perform one natural bind with unchanged EXP584/406 broker-enabled launch, verify
+Code0 and exact installed hashes, then run the attached client once with
+`--native-batch`. Expected checkpoint: durable nonzero command dump matching the
+client command hash; KMD physical completion; fresh correlated native receipt;
+16KiB readback with the preregistered clear/triangle pixel census; balanced
+retirement. Any reset, TDR, timeout, receipt/hash/pixel mismatch or retained
+resource is failure/inconclusive and forbids replay before causal review.
+
+Recovery: preserve evidence first, exact candidate package cleanup, then ordinary
+GPU-visible377/392. If ordinary recovery is unreachable, use only the proven
+377/385 GPU-hidden disk boot to collect evidence and remove the exact package,
+then restore ordinary. Emergency WinPE is not the normal path. Full Graphics,
+Present/DWM and desktop acceptance remain open regardless of this qualification.
+
+### EXP684 package build and signing result
+
+Trusted-builder build01 verified source archive SHA256
+e0cb364151dfa38107a81d1f980bc8a0c2aa74d511d0927433a31480e152035d,
+then ran the preregistered package command for build684. Full UMD and KMD builds
+both report Build succeeded,0warnings,0errors. INF/SYS/UMD versions are all
+30.0.684.0. Hardware remains NOT_RUN.
+
+Fresh nonexportable builder CurrentUser/My signing identity:
+CN=AppleAgx EXP684 Test Signing, thumbprint
+8055D20754EF031B539B5499170A7EEDD6E5FE8C, RSA3072/SHA256,
+DigitalSignature/CodeSigning, public DER SHA256
+0ad4dd9a95d74dd0c5d9cdc01e46ff71f9948b0370fb2b372b9b500a58a64f64,
+valid2026-09-14T07:51:22Z through2026-12-14T08:01:22Z. Private key was not
+exported. SYS/DLL were signed, desktop ARM64 CAT regenerated with pinned26100
+Inf2Cat targets10_CO_ARM64,10_NI_ARM64,10_GE_ARM64, then CAT signed.
+Independent osslsigncode explicit-public-cert/leaf verification PASS for all
+three embedded signatures and SYS/DLL catalog membership. Builder store does
+not trust this self-signed leaf and reports UnknownError; target trust plus exact
+INF catalog verification remain mandatory before staging.
+
+Final package hashes: INF
+4e41f4d7eeaa992b7c1f3015da19d70ce6212b12e439c13dafcdc659761b0489;
+SYS7ba5d0908292ccbcb5b3c61b64e4d783a4196494587d6388444e53a3321668c4;
+UMD91726a6cf58e021665dec13cde0b42b55f4f8d5dbe0cd5fa792254cd46e1202c;
+CAT4a5c25e054864ebbb7c45660126147dedd331c5c7c91a3bbb3181a47458804ee.
+Evidence and immutable package copy are under main-root
+`.local/experiments/EXP-20260914-684-native-packet-bounds/`. Exact expected684
+ARM64 client and same-source x64 executable proof are still running; no target
+copy, trust, package staging or hardware execution has occurred.
+
+### EXP684 exact client and deployment manifest result
+
+Daybreak-blue checked both candidate closures from committed clean HEADd0b2045.
+Their identical full drivers/apple-agx source archive SHA256 is
+90d8fb801481941e843761b644339a407d70422c96f4fde47c2c86f2e3f74ba5;
+all468 non-AppleDouble files match HEAD byte-for-byte. ARM64 run
+native-packet-bounds-candidate-20260914a-arm64 build/link PASS0warnings0errors,
+execution NOT_RUN; UmdContractTest SHA
+326af816210273076b960fe6972e9c99664d2b9a37414cc30ae390338f5cf278;
+expectedbuild684 client SHA
+e37bef254b2142f7338a12e87355b02ebec16dea1eba395282d42f7b9ce19814.
+x64 run native-packet-bounds-candidate-20260914b-x64 build/link and actual
+UmdContractTest execution PASS; command-dump six cases and real producer PASS;
+client was NOT_RUN. Client commands use EnableNativeBatch=true and
+AdmissionExpectedBuild=684 with no native test macros/properties.
+
+Frozen target input directory is main-root
+`.local/experiments/EXP-20260914-684-native-packet-bounds/air-input`.
+Manifest SHA256 is
+79e9e78a3765c446c03e1b9f325a856861e5473bec333a64d983735538d78ed6.
+It binds all package/client/certificate/desktopCRT/signtool hashes, expected
+30/126/9/29 graph census, destination8/count9,44952 DMA and16384 target bytes,
+plus immutable launch/recovery artifact hashes. No Air copy, trust, staging,
+GPU-enabled launch or native hardware execution has occurred yet.
