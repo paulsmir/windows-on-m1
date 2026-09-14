@@ -202,6 +202,29 @@ installed ARM64 UMD ClCompile/analyze0warnings/errors. Five terminal records,
 four quiesced identities,zero callback/destructor pointers and obligationsPASS.
 Installed export table/pipeline mask remainunchanged.
 
+## Verified projected D3D10 capability/dispatch safety
+
+Implementation756ae6d keeps101/101 ordinaryD3D10 slots and7/7 baseDXGI slots
+nonnull in the contract executable but removes unsafe reachability/false success.
+Query create/begin/end/getdata/predication/destroy,SO/DrawAuto,GS-with-SO,
+ClearDepth,GenMips,Copy/CopyRegion/Resolve reject E_NOTIMPL before storage/hook/
+resource/native mutation. All7 projectedDXGI callbacks reject through one helper
+before flush/resource/output mutation; gamma/residency outputs remainunchanged.
+
+CheckFormatSupport now reports only BGRA8 RT|BLENDABLE; XR_BIAS returns the sole
+WDK NOT_SUPPORTED flag; all other formats0. Multisample quality is1 only for
+BGRA8 samplecount1 and0 otherwise. This matches currentCreateResource subset and
+does not claim vertex-format/sample/SRV/depth/shared/primary/present support.
+Every negative call proves zero allocation/Render/Signal delta; actualfrontend
+triangle/seconddevice/synchronousDestroy remainPASS.
+
+REDs reproduced nullhook crashes forQuery/ClearDepth/Present/SO/GenMips/GS-SO,
+silentResolve/DrawAuto and sixDXGI false-success plus five format mismatches.
+Final x64 archiveSHA5f903f88e7f5f71e9876aa0cdf561d6c00a444fc8fa3112f61998b12c71ad483,
+exeSHA08c9c9d4529870a40c74cd196d59fa347b1930ad52f8fd8fec5fa4786bc514dc,
+execution0. ARM64 archive26774b4b...,exe1e38b9f...,build/link0warnings/errors;
+content manifest73480793... equal. Installedumd.c/table/pipeline unchanged.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -275,6 +298,10 @@ pipeline level0. Map every required callback/format/resource/state path to
 implemented or fail-closed status, complete the smallest truthful atomic table,
 then link this same projected closure into installed UMD. Advertise a pipeline
 only after all required functions and companion invariants are implemented.
+Next functional unit is D3D10DDI_QUERY_EVENT over the existing ordered completion
+owner:Create/End/GetData/Destroy,DO_NOT_FLUSH,pending/completed/empty-stream and
+device-destroy semantics. It must not reuse the fail-closed query storage as a
+fake completion or require newKMD/query hardware. Keep other query types rejected.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
