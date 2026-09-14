@@ -259,6 +259,35 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     packet.DestinationPhysical=0x9d0200000ULL+i*0x10000000ULL;
     packet.DestinationBytes=(unsigned)consumer->Bindings.DestinationBytes;
     packet.DestinationCpuToken=(APPLE_AGX_U64)(UINT_PTR)((unsigned char *)PoolMemory[targetSlot]+view.References[target].Offset);
+    /* The real producer's allocation list must survive the same prepatched
+     * adoption and packet admission used between KMD Render and Submit. */
+    {
+      ADMISSION_PREPATCHED_RENDER pending;
+      ADMISSION_RENDER_PACKET admitted;
+      ADMISSION_RENDER_PACKET_DESCRIPTION adopted;
+      packet.Fence=0;
+      packet.ContextToken=(APPLE_AGX_U64)(UINT_PTR)PoolDevice.KernelContext;
+      packet.AllocationToken=facts[target].AllocationToken;
+      packet.PrivateDataToken=(APPLE_AGX_U64)(UINT_PTR)RuntimeDma[i];
+      packet.PrivateDataBytes=consumer->DmaBytes;
+      packet.PrivateDataEnd=consumer->DmaBytes;
+      packet.DmaEnd=consumer->DmaBytes;
+      packet.PatchOffset=AdmissionDynamicDmaDestinationPatchOffset();
+      packet.DestinationIndex=view.References[target].AllocationIndex;
+      packet.AllocationCount=r->NumAllocations;
+      printf("NATIVE_PACKET_ADMISSION: destination_reference=%u destination_index=%u allocation_count=%u\n",
+          target,packet.DestinationIndex,r->NumAllocations);
+      AdmissionPrepatchedInitialize(&pending);
+      AdmissionRenderPacketInitialize(&admitted);
+      if(!AdmissionPrepatchedCapture(&pending,&packet))
+        return RuntimeConsumerFailure("packet-capture",i,packet.DestinationIndex);
+      if(!AdmissionPrepatchedAdopt(&pending,RuntimeConsumerFence,packet.ContextToken,
+          packet.PrivateDataToken,packet.DmaStart,packet.DmaEnd,&adopted))
+        return RuntimeConsumerFailure("packet-adopt",i,packet.DestinationIndex);
+      if(!AdmissionRenderPacketPrepare(&admitted,&adopted))
+        return RuntimeConsumerFailure("packet-prepare",i,packet.DestinationIndex);
+      packet=adopted;
+    }
     if(!AdmissionBackendImageBindNativeSubmission(&consumer->Backend,&packet,
         (void *)(UINT_PTR)packet.DestinationCpuToken,consumer->Dma.Bindings,&outputBinding))
       return RuntimeConsumerFailure("native-output-bind",i,0);

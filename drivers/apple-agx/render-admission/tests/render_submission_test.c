@@ -33,6 +33,7 @@ static ADMISSION_RENDER_PACKET_DESCRIPTION packet_description(
   description.DestinationPhysical = 0x9d0010000ULL;
   description.DestinationBytes = 0x10000u;
   description.DestinationIndex = 1u;
+  description.AllocationCount = 2u;
   description.VisibleDestinationCpuToken = 0x5000ULL;
   description.VisibleDestinationGpuVa = 0x1500100000ULL;
   description.VisibleDestinationPhysical = 0x9d0100000ULL;
@@ -190,6 +191,52 @@ static void test_prepare_rejects_missing_identity_and_bad_intervals(void) {
   description = packet_description(13u);
   description.DmaStart = description.DmaEnd;
   assert(!AdmissionRenderPacketPrepare(&packet, &description));
+}
+
+static void test_destination_uses_captured_allocation_list_bounds(void) {
+  ADMISSION_PREPATCHED_RENDER pending;
+  ADMISSION_RENDER_PACKET packet;
+  ADMISSION_RENDER_PACKET_DESCRIPTION captured = packet_description(0u);
+  ADMISSION_RENDER_PACKET_DESCRIPTION adopted;
+  ADMISSION_RENDER_PACKET_DESCRIPTION changed;
+
+  /* EXP683's real native producer uses RT allocation 8 of 9. The actual
+   * producer regression separately derives these values from its command. */
+  captured.DestinationIndex = 8u;
+  captured.AllocationCount = 9u;
+  AdmissionPrepatchedInitialize(&pending);
+  AdmissionRenderPacketInitialize(&packet);
+  assert(AdmissionPrepatchedCapture(&pending, &captured));
+  assert(AdmissionPrepatchedAdopt(
+      &pending, 295u, captured.ContextToken, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd, &adopted));
+  assert(adopted.DestinationIndex == 8u && adopted.AllocationCount == 9u);
+  assert(AdmissionRenderPacketPrepare(&packet, &adopted));
+  changed = adopted;
+  changed.AllocationCount = 10u;
+  assert(!AdmissionRenderPacketMatches(
+      &packet, &changed, AdmissionRenderPacketPrepared));
+
+  AdmissionRenderPacketInitialize(&packet);
+  adopted.AllocationCount = 8u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &adopted));
+  adopted.DestinationIndex = 0u;
+  adopted.AllocationCount = 0u;
+  assert(!AdmissionRenderPacketPrepare(&packet, &adopted));
+  captured.AllocationCount = 8u;
+  assert(!AdmissionPrepatchedCapture(&pending, &captured));
+  captured.DestinationIndex = 0u;
+  captured.AllocationCount = 0u;
+  assert(!AdmissionPrepatchedCapture(&pending, &captured));
+
+  captured.DestinationIndex = 8u;
+  captured.AllocationCount = 9u;
+  assert(AdmissionPrepatchedCapture(&pending, &captured));
+  pending.Description.AllocationCount = 8u;
+  assert(!AdmissionPrepatchedAdopt(
+      &pending, 295u, captured.ContextToken, captured.PrivateDataToken,
+      captured.DmaStart, captured.DmaEnd, &adopted));
+  assert(!AdmissionPrepatchedActive(&pending));
 }
 
 static void test_cancel_and_preemption_never_synthesize_completion(void) {
@@ -416,6 +463,7 @@ int main(void) {
   test_direct_framebuffer_needs_no_companion_identity();
   test_prepatched_rejects_incomplete_or_cross_context_state();
   test_prepare_rejects_missing_identity_and_bad_intervals();
+  test_destination_uses_captured_allocation_list_bounds();
   test_cancel_and_preemption_never_synthesize_completion();
   test_active_reset_requires_backend_quiesce();
   test_nonpaging_private_range_uses_full_buffer_when_subrange_empty();

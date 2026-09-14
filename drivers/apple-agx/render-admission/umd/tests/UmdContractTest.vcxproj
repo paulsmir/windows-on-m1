@@ -116,6 +116,7 @@
     </ClCompile>
     <ClCompile Include="..\..\src\render_dynamic_overlay.c" />
     <ClCompile Include="..\..\src\render_dynamic_dma.c" />
+    <ClCompile Include="..\..\src\render_submission.c" />
     <ClCompile Include="..\..\src\render_backend_image.c" />
     <ClCompile Include="..\..\..\shared\src\apple_agx_render_template.generated.c" />
     <ClCompile Include="..\..\..\shared\src\apple_agx_render_template_rebase.c" />

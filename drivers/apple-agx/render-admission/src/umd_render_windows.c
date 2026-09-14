@@ -598,6 +598,7 @@ CommandPrepared:
     prepatchedDescription.DestinationBytes = (UINT)destination.Bytes;
     prepatchedDescription.DestinationIndex =
         command.DestinationAllocationIndex;
+    prepatchedDescription.AllocationCount = Args->AllocationListSize;
 #if defined(APPLE_AGX_VISIBLE_AGX_QUALIFICATION)
     prepatchedDescription.VisibleDestinationCpuToken =
         (ULONGLONG)(ULONG_PTR)visibleDestination.CpuAddress;

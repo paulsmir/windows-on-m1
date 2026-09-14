@@ -175,7 +175,9 @@ static NTSTATUS AdmissionGdiPreparePacket(
   description.DestinationPhysical =
       Destination->HostPhysicalAddress;
   description.DestinationBytes = (UINT)Destination->Bytes;
-  description.DestinationIndex = 0u;
+  description.DestinationIndex = Args->pPatchLocationList[
+      Args->PatchLocationListSubmissionStart].AllocationIndex;
+  description.AllocationCount = Args->AllocationListSize;
   if (VisibleDestination != NULL) {
     if (VisibleDestination->CpuAddress == NULL ||
         VisibleDestination->GpuVirtualAddress == 0ULL ||

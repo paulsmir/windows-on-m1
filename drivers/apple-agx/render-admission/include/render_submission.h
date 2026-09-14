@@ -12,6 +12,7 @@ typedef enum _ADMISSION_RENDER_PACKET_STATE {
 
 typedef struct _ADMISSION_RENDER_PACKET_DESCRIPTION {
   unsigned int Fence;
+  unsigned int AllocationCount;
   unsigned long long ContextToken;
   unsigned long long AllocationToken;
   unsigned long long PrivateDataToken;

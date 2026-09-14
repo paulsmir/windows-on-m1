@@ -76,7 +76,8 @@ int AdmissionRenderPacketPrepare(
       Description->DestinationCpuToken == 0ULL ||
       Description->DestinationGpuVa == 0ULL ||
       Description->DestinationPhysical == 0ULL ||
-      Description->DestinationBytes == 0u || Description->DestinationIndex >= 2u)
+      Description->DestinationBytes == 0u ||
+      Description->DestinationIndex >= Description->AllocationCount)
     return 0;
   Packet->Description = *Description;
   Packet->State = AdmissionRenderPacketPrepared;
@@ -115,6 +116,7 @@ int AdmissionRenderPacketMatches(
          current->DestinationBytes ==
              Description->DestinationBytes &&
          current->DestinationIndex == Description->DestinationIndex &&
+         current->AllocationCount == Description->AllocationCount &&
          current->VisibleDestinationCpuToken ==
              Description->VisibleDestinationCpuToken &&
          current->VisibleDestinationGpuVa ==
@@ -235,6 +237,7 @@ int AdmissionPrepatchedCapture(
       Description->DestinationGpuVa == 0ULL ||
       Description->DestinationPhysical == 0ULL ||
       Description->DestinationBytes == 0u ||
+      Description->DestinationIndex >= Description->AllocationCount ||
       !AdmissionVisibleDescriptionComplete(Description)) {
     if (State != ADMISSION_RENDER_NULL)
       AdmissionPrepatchedClear(State);
@@ -265,6 +268,7 @@ int AdmissionPrepatchedAdopt(
           captured.Fence == 0u && captured.ContextToken == ContextToken &&
           captured.PrivateDataToken == PrivateDataToken &&
           captured.DmaStart == DmaStart && captured.DmaEnd == DmaEnd &&
+          captured.DestinationIndex < captured.AllocationCount &&
           AdmissionVisibleDescriptionComplete(&captured);
   AdmissionPrepatchedClear(State);
   if (!valid)
