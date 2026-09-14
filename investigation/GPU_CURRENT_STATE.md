@@ -174,6 +174,34 @@ build/link0warnings/errors. Negative RT/allocator/IA/two-device/create-rollback/
 destroy tests PASS. Pinned Meson trace/index generators and primary CSO/u_vbuf/
 translate/rtasm closure are hash-recorded; no stubs/new renderer.
 
+## Verified synchronous projected D3D10 destruction
+
+Implementation7224f76 closes voidDestroyDevice lifetime offline. Runtime
+DestroyKernelContext calls pfnDestroyContextCb exactlyonce whilecallbacksvalid;
+success preserves exactQuiescedKernelContext and clears live handle/command/lists,
+then retirement accepts only the same already-entered native capsule. Ordinary
+ownership/newwork reject quiesced state. Retirement matches owner,generation,
+context,request,fence,phase,active transaction and all allocation identities/holds;
+it cannot create/recover a missingmarker or replayRender. Final consumption clears
+the token and never destroys kernel context twice.
+
+Projected DDI Destroy releases frontend state, blocks in kernel-context destroy,
+retires ordered marker/consumer, then destroys native context/screen/runtime in
+one invocation. Persistent context/marker/unlock/deallocate/create failures call
+SetError with actualHRESULT before callback invalidation. Unresolved heap owner
+is converted in-place after fullZeroMemory to a smaller CPU terminal record; no
+new allocation can lose it and CloseAdapter only frees CPU records.
+
+RED native-d3d10-destroy-red-20260914a: pendingdraw leftBUSY/noDestroyContext.
+IdentityGREEN43667d5d...; HRESULT REDa753af4a... exposed threeBUSY substitutions;
+GREEN1e4e4821... propagatesE_FAIL. Final x64 archive
+SHA92aec7cf607744afe1e4a420bf346edd116429db79eeb62486420cc4f5d3d62c,
+exeSHA6d68de4c558c8c2c478412df150e9a5bbbd42dc24ced163b206281463d1eb281,
+execution0. ARM64 content manifest454256a9...,build/link0warnings/errors;
+installed ARM64 UMD ClCompile/analyze0warnings/errors. Five terminal records,
+four quiesced identities,zero callback/destructor pointers and obligationsPASS.
+Installed export table/pipeline mask remainunchanged.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -241,10 +269,12 @@ root upload; global Asahi scratch semantics remain unchanged.
 Continue production integration from
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
 private factory and pinned frontend actual DDI path are complete offline. Next
-resolve installed-export activation: void DDI DestroyDevice cannot returnBUSY or
-retain failed hDrvDevice storage. Derive a synchronous clean-destroy contract or
-documented terminal removal owner before linking/advertising the frontend. Then
-complete exact D3D10_0/FL10_0 DDI inventory and only advertise truthful pipeline.
+complete exact D3D10_0/FL10_0 DDI inventory and activation packaging. Synchronous
+Destroy lifetime is closed, but the one-triangle subset does not authorize
+pipeline level0. Map every required callback/format/resource/state path to
+implemented or fail-closed status, complete the smallest truthful atomic table,
+then link this same projected closure into installed UMD. Advertise a pipeline
+only after all required functions and companion invariants are implemented.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
