@@ -251,6 +251,35 @@ exeSHAe27601d6cdce6c1fccfbf6fe18da681a8d44173621d71197a614c131ebb192cd,
 execution0. ARM64 archive8b0acb9b...,exe51efe9ca...,build/link0warnings/errors;
 installedARM64 UMD ClCompile/analyze0warnings/errors. Exports/pipeline unchanged.
 
+## Verified resource-backed D3D10 constant buffers
+
+Implementation7205b67 admits default resource-backed BUFFER/DXGI_UNKNOWN with
+CONSTANT_BUFFER-only bind,16-byte aligned16..65536bytes,slot0 VS/PS only. Binding
+validates exact frontend device/owner/generation/logicalsize before mutation;
+null unbinds touchedslots. Default update accepts subresource0/no box and copies
+exact logical bytes only after synchronous native flush+retire; failed ordering
+leaves oldbytes/requestholds intact. No user buffer/rename/newallocator.
+
+Stage-uniform capture validates actualubo_base=construction+offset andubo_size,
+registers RoleConstant read interval and UniformAddress64 edge, preserves USC
+edges and source/submission holds. Pinned agx_set_cbuf_uniforms now zeros all UBO
+base/size entries before active mask population, closing stale unbound addresses.
+Same CB VS/PS uses one identity; separate buffers remain separate references.
+
+Test-only sidecar512 measured mandatory graphs without changing production seal:
+baselineclear126,PS clear128/load130,VS load131,same VS+PS load133. All distinct;
+combined command worstcase64refs/133edges7616<8192. Central v4 max is133; legacy64
+and command8192 unchanged. Exact133 succeeds,134rejects,overlap precedescapacity.
+Old HEAD6d4b2af validator explicitly rejects full current133-edge wire/result16
+withouttruncation; evidenceAD04-v4-legacy-validator.
+
+Final x64 archiveSHA554ceaf2afc3e8bd0eb9d0b59f9b582d9d29a6efb3168c35108e8cd880e09820,
+exeSHAed28c44b84f5fbba6a9c8a6d3dd8ccd574b4b89c5214ce2cd437737e04e52640,
+execution0. Actual same-CB clear31/131 and separateVS/PS load32/133 bothKMD
+placements, immutable firstcommand/images/DMA,EVENT query/DestroyPASS. ARM64
+archive5ad272b8...,exe9cd879c7...,build/link0warnings/errors. Installed UMD and
+KMD ARM64 ClCompile/analyze0warnings/errors. Exports/pipeline unchanged.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -324,9 +353,10 @@ pipeline level0. Map every required callback/format/resource/state path to
 implemented or fail-closed status, complete the smallest truthful atomic table,
 then link this same projected closure into installed UMD. Advertise a pipeline
 only after all required functions and companion invariants are implemented.
-Next choose the strongest remaining mandatory FL10 unit from the exact inventory;
-likely indexed/instanced IA draw or constant-buffer execution. Derive its complete
-DDI-to-Asahi mapping before editing. Other query types remain rejected.
+Next mandatory unit is indexed IA/DrawIndexed: derive the absent typed VDM index
+buffer address relocation plus index size/range/base-vertex/restart semantics end
+to end before lifting index rejection. Keep instancing,other query types and
+unsupported topologies rejected until independently proven.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
