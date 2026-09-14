@@ -568,7 +568,9 @@ HRESULT AgxKmtNativeBridgeClose(AGX_KMT_NATIVE_BRIDGE **inout) {
      * which intentionally clears its storage after reporting a terminal error. */
     result=AdmissionUmdScreenFinalize(&b->Device,&remaining);
     if(FAILED(result) || remaining) return FAILED(result)?result:E_FAIL;
-    AdmissionUmdRuntimeDeviceFinalize(&b->Device);
+    BOOL consumed=FALSE;
+    result=AdmissionUmdRuntimeDeviceFinalize(&b->Device,&consumed);
+    if(!consumed) return FAILED(result)?result:E_FAIL;
   }
   if(b->ContextHandle) {
     result=destroy_context_handle(b,b->ContextHandle);

@@ -19,6 +19,11 @@ HRESULT AgxD3d10WindowsCreateDevice(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
  * errors follow the shared runtime's error-callback policy. */
 HRESULT AgxD3d10WindowsCloseDevice(AGX_D3D10_WINDOWS_DEVICE **Device);
 struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device);
+#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
+struct _ADMISSION_UMD_DEVICE;
+struct _ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *);
+void *AgxD3d10WindowsOwnerForTest(AGX_D3D10_WINDOWS_DEVICE *);
+#endif
 #ifdef __cplusplus
 }
 #endif

@@ -271,6 +271,35 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    windows_caps->max_stream_output_buffers = 0;
    windows_caps->stream_output_pause_resume = false;
    windows_caps->stream_output_interleave_buffers = false;''')
+    original=replace(original,'''      struct agx_bo *bo =
+         agx_bo_create(&agx_screen->dev, 16384, 0, 0, "Rodata");
+
+      agx_pack_txf_sampler((struct agx_sampler_packed *)agx_bo_map(bo));
+
+      agx_pack(&agx_screen->dev.txf_sampler, USC_SAMPLER, cfg) {
+         cfg.start = 0;
+         cfg.count = 1;
+         cfg.buffer = bo->va->addr;
+      }
+
+      agx_screen->rodata = bo;''','''      struct agx_bo *bo =
+         agx_bo_create(&agx_screen->dev, 16384, 0, 0, "Rodata");
+      void *map = bo ? agx_bo_map(bo) : NULL;
+      if (!bo || !map) {
+         if (bo) agx_bo_unreference(&agx_screen->dev, bo);
+         screen->destroy(screen);
+         return NULL;
+      }
+
+      agx_pack_txf_sampler((struct agx_sampler_packed *)map);
+
+      agx_pack(&agx_screen->dev.txf_sampler, USC_SAMPLER, cfg) {
+         cfg.start = 0;
+         cfg.count = 1;
+         cfg.buffer = bo->va->addr;
+      }
+
+      agx_screen->rodata = bo;''')
     s=s[:decl]+signature+original+s[b:]
     a,b=function(s,'agx_destroy_screen');part=s[a:b]
     part=part.replace('   drmSyncobjDestroy(screen->dev.fd, screen->flush_syncobj);','')

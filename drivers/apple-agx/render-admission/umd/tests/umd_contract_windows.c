@@ -20,8 +20,10 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "umd_asahi_pool_windows.c"
 #endif
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
-#include "agx_win32_pipe_screen.h"
+#include "pipe/p_context.h"
+#include "pipe/p_screen.h"
 #include "agx_d3d10_windows.h"
+#include "agx_win32_asahi_scene.h"
 #endif
 
 typedef struct _TEST_STATE {
@@ -530,6 +532,20 @@ static HRESULT APIENTRY BridgeCreateContext(HANDLE Device,
   return S_OK;
 }
 
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+static HRESULT APIENTRY FactoryCreateContext(HANDLE Device,D3DDDICB_CREATECONTEXT *Create) {
+  ++BridgeCreates;
+  Create->hContext=(HANDLE)((UINT_PTR)Device+0x100u);
+  Create->pCommandBuffer=RuntimeCommand;
+  Create->CommandBufferSize=sizeof(RuntimeCommand);
+  Create->pAllocationList=RuntimeAllocations;
+  Create->AllocationListSize=ARRAYSIZE(RuntimeAllocations);
+  Create->pPatchLocationList=RuntimePatches;
+  Create->PatchLocationListSize=ARRAYSIZE(RuntimePatches);
+  return S_OK;
+}
+#endif
+
 static HRESULT APIENTRY BridgeDestroyContext(HANDLE Device,
     const D3DDDICB_DESTROYCONTEXT *Destroy) {
   CHECK(Destroy->hContext == (HANDLE)((UINT_PTR)Device + 0x100u));
@@ -545,9 +561,6 @@ static VOID APIENTRY BridgeSetError(D3D10DDI_HRTCORELAYER Core, HRESULT Error) {
 static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
                                        D3D10DDIARG_CREATEDEVICE Template) {
   ADMISSION_UMD_DEVICE devices[2];
-#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
-  AGX_WIN32_PIPE_DEVICE pipes[2] = {0};
-#endif
   D3DDDI_DEVICECALLBACKS callbacks = *Template.pKTCallbacks;
   D3D10DDI_CORELAYER_DEVICECALLBACKS core10 = {0};
   D3D11DDI_CORELAYER_DEVICECALLBACKS core11 = {0};
@@ -571,40 +584,31 @@ static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
     CHECK(devices[index].Screen.Context == &devices[index]);
     CHECK(devices[index].CommandBuffer == BridgeCommands[index]);
     CHECK(devices[index].KernelContext == (HANDLE)(UINT_PTR)(0xa00u + index));
-#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
-    CHECK(AgxWin32PipeDeviceInitialize(&pipes[index], &devices[index].Screen));
-    CHECK(pipes[index].Context != NULL);
-    if (pipes[index].Context != NULL)
-      CHECK(pipes[index].Context->priv == &devices[index]);
-#endif
     AdmissionUmdSetError(&devices[index], E_FAIL);
     CHECK(BridgeErrorOwner == 0xb00u + index);
   }
   CHECK(devices[0].Win32Generation != devices[1].Win32Generation);
-#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
-  CHECK(pipes[0].Screen != pipes[1].Screen);
-  CHECK(pipes[0].Context != pipes[1].Context);
-  if (pipes[0].Screen != NULL) {
-    struct pipe_context *extra = pipes[0].Screen->context_create(
-        pipes[0].Screen, &devices[0], 0u);
-    CHECK(extra != NULL);
-    CHECK(!AgxWin32PipeDeviceClose(&pipes[0]));
-    CHECK(devices[0].Screen.Active && BridgeDestroys == 0u);
-    if (extra != NULL) extra->destroy(extra);
+  {
+    BOOL consumed = TRUE;
+    devices[0].NativeBackendCount = 1u;
+    CHECK(AdmissionUmdRuntimeDeviceFinalize(&devices[0], &consumed) ==
+          HRESULT_FROM_WIN32(ERROR_BUSY));
+    CHECK(!consumed && devices[0].Magic == ADMISSION_UMD_DEVICE_MAGIC);
+    devices[0].NativeBackendCount = 0u;
   }
-  CHECK(AgxWin32PipeDeviceClose(&pipes[0]));
-  CHECK(devices[0].Screen.Active && BridgeDestroys == 0u);
-#endif
-  AdmissionUmdRuntimeDeviceFinalize(&devices[0]);
+  {
+    BOOL consumed = FALSE;
+    CHECK(AdmissionUmdRuntimeDeviceFinalize(&devices[0], &consumed) == S_OK);
+    CHECK(consumed);
+  }
   CHECK(devices[0].Magic == 0u && devices[1].Screen.Active);
   AdmissionUmdSetError(&devices[1], E_FAIL);
   CHECK(BridgeErrorOwner == 0xb01u);
-#if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
-  if (pipes[1].Context != NULL)
-    CHECK(pipes[1].Context->priv == &devices[1]);
-  CHECK(AgxWin32PipeDeviceClose(&pipes[1]));
-#endif
-  AdmissionUmdRuntimeDeviceFinalize(&devices[1]);
+  {
+    BOOL consumed = FALSE;
+    CHECK(AdmissionUmdRuntimeDeviceFinalize(&devices[1], &consumed) == S_OK);
+    CHECK(consumed);
+  }
   CHECK(BridgeCreates == 2u && BridgeDestroys == 2u);
   Template.hRTDevice.handle = (VOID *)(UINT_PTR)0x900u;
   BridgeMalformed = TRUE;
@@ -644,13 +648,29 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks = {0};
   D3DDDI_DEVICECALLBACKS callbacks = *args.pKTCallbacks;
   D3D10DDI_CORELAYER_DEVICECALLBACKS core = {0};
+  AGX_WIN32_ASAHI_SCENE scene = {0};
   unsigned closedBefore = BridgeDestroys;
+  unsigned poolCreatesBefore, poolDeletesBefore;
+  PoolErrors=PoolCreates=PoolMaps=PoolUnlocks=PoolDeletes=0;
+  PoolNextHandle=0;PoolFailAllocation=0;PoolFailMap=0;PoolFailDeallocation=0;
+  memset(PoolMemory,0,sizeof(PoolMemory));memset(PoolHandles,0,sizeof(PoolHandles));
+  poolCreatesBefore=PoolCreates;poolDeletesBefore=PoolDeletes;
   adapterCallbacks.pfnQueryAdapterInfoCb = TestQueryAdapterInfo;
   open.hRTAdapter.handle = (VOID *)(UINT_PTR)0x100u;
   open.pAdapterCallbacks = &adapterCallbacks;
   CHECK(AgxD3d10WindowsOpenAdapter(&open, &adapter) == S_OK);
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+  callbacks.pfnCreateContextCb = FactoryCreateContext;
+  callbacks.pfnRenderCb = RuntimeRender;
+  callbacks.pfnSignalSynchronizationObject2Cb = RuntimeSignal;
+#else
   callbacks.pfnCreateContextCb = BridgeCreateContext;
+#endif
   callbacks.pfnDestroyContextCb = BridgeDestroyContext;
+  callbacks.pfnAllocateCb = PoolAllocate;
+  callbacks.pfnDeallocateCb = PoolDeallocate;
+  callbacks.pfnLockCb = PoolLock;
+  callbacks.pfnUnlockCb = PoolUnlock;
   core.pfnSetErrorCb = BridgeSetError;
   args.pKTCallbacks = &callbacks;
   args.pUMCallbacks = &core;
@@ -665,19 +685,77 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
     struct pipe_context *b = AgxD3d10WindowsContext(second);
     CHECK(a != NULL && b != NULL && a != b);
     if (a != NULL && b != NULL) {
-      struct pipe_context *extra = a->screen->context_create(a->screen, a->priv, 0u);
+      /* The production private factory must expose the real native producer,
+       * not the map-only compatibility pipe used by the old fixture. */
+      CHECK(a->create_vs_state != NULL && a->create_fs_state != NULL &&
+            a->create_blend_state != NULL && a->set_framebuffer_state != NULL &&
+            a->clear != NULL && a->draw_vbo != NULL && a->flush != NULL);
+      CHECK(b->create_vs_state != NULL && b->create_fs_state != NULL &&
+            b->clear != NULL && b->draw_vbo != NULL && b->flush != NULL);
       CHECK(a->screen != b->screen && a->priv != b->priv);
-      CHECK(extra != NULL);
+#if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+      RuntimeActiveDevice=AgxD3d10WindowsRuntimeForTest(first);
+      ADMISSION_UMD_ASAHI_OWNER *nativeOwner=AgxD3d10WindowsOwnerForTest(first);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+      RuntimeMarker=NULL;RuntimeImmediateMarker=0;
+      memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      CHECK(RuntimeActiveDevice != NULL && nativeOwner != NULL);
+      CHECK(AgxWin32AsahiSceneInit(&scene,a->screen,a));
+      CHECK(AgxWin32AsahiSceneDraw(&scene));
+      CHECK(AgxWin32AsahiSceneSubmit(&scene));
+      CHECK(scene.Receipt.References==30u && scene.Receipt.Relocations==126u &&
+            scene.Receipt.EncoderBytes==137u);
+      CHECK(!AgxWin32AsahiSceneRetire(&scene,0u));
       CHECK(FAILED(AgxD3d10WindowsCloseDevice(&first)));
-      CHECK(first != NULL && BridgeDestroys == closedBefore);
-      if (extra != NULL) extra->destroy(extra);
+      CHECK(first != NULL && AgxD3d10WindowsContext(first)==NULL &&
+            AgxD3d10WindowsContext(second)==b && BridgeDestroys==closedBefore);
+      if(nativeOwner) RuntimeCheckpoint(nativeOwner,1u);
+      CHECK(AgxWin32AsahiSceneRetire(&scene,0u));
+      CHECK(AgxWin32AsahiSceneCleanup(&scene,1000u));
+      if(nativeOwner) RuntimeCheckpoint(nativeOwner,5u);
+#endif
     }
   }
   CHECK(AgxD3d10WindowsCloseDevice(&first) == S_OK && first == NULL);
   CHECK(BridgeDestroys == closedBefore + 1u);
   CHECK(second != NULL && AgxD3d10WindowsContext(second) != NULL);
+  if(second != NULL) {
+    struct pipe_context *primary=AgxD3d10WindowsContext(second);
+    struct pipe_context *extra=primary?primary->screen->context_create(primary->screen,primary->priv,0u):NULL;
+    CHECK(extra != NULL);
+    CHECK(FAILED(AgxD3d10WindowsCloseDevice(&second)) && second != NULL);
+    if(extra) extra->destroy(extra);
+    PoolFailDeallocation=32u;
+    fprintf(stderr,"FACTORY_DEALLOC_INJECT: before creates=%u deletes=%u unlocks=%u remaining=%u\n",
+        PoolCreates,PoolDeletes,PoolUnlocks,PoolFailDeallocation);
+    HRESULT injectedClose=AgxD3d10WindowsCloseDevice(&second);
+    fprintf(stderr,"FACTORY_DEALLOC_INJECT: after result=0x%08lx owner=%u creates=%u deletes=%u unlocks=%u remaining=%u\n",
+        (ULONG)injectedClose,second!=NULL,PoolCreates,PoolDeletes,PoolUnlocks,PoolFailDeallocation);
+    CHECK(FAILED(injectedClose) && second != NULL);
+    CHECK(AgxD3d10WindowsContext(second)==NULL &&
+          BridgeDestroys==closedBefore+1u);
+    PoolFailDeallocation=0u;
+  }
   CHECK(AgxD3d10WindowsCloseDevice(&second) == S_OK && second == NULL);
   CHECK(BridgeDestroys == closedBefore + 2u);
+  CHECK(PoolErrors==0u && PoolCreates>poolCreatesBefore &&
+        PoolCreates-poolCreatesBefore==PoolDeletes-poolDeletesBefore &&
+        PoolMaps==PoolUnlocks);
+  {
+    AGX_D3D10_WINDOWS_DEVICE *failed=NULL;
+    args.hRTDevice.handle=(VOID *)(UINT_PTR)0x902u;
+    PoolFailAllocation=1;
+    CHECK(FAILED(AgxD3d10WindowsCreateDevice(adapter,&args,&failed)) && failed==NULL);
+    PoolFailAllocation=0;
+    PoolFailMap=1;
+    CHECK(FAILED(AgxD3d10WindowsCreateDevice(adapter,&args,&failed)) && failed==NULL);
+    PoolFailDeallocation=32u;
+    CHECK(FAILED(AgxD3d10WindowsCreateDevice(adapter,&args,&failed)) && failed!=NULL);
+    CHECK(failed!=NULL && AgxD3d10WindowsContext(failed)==NULL);
+    PoolFailMap=0;PoolFailDeallocation=0u;
+    CHECK(AgxD3d10WindowsCloseDevice(&failed)==S_OK && failed==NULL);
+  }
   CHECK(AgxD3d10WindowsCloseAdapter(&adapter) == S_OK && adapter == NULL);
 }
 #endif

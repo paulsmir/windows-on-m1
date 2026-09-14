@@ -512,7 +512,11 @@ static BOOL APIENTRY AdmissionUmdFlush(D3D10DDI_HDEVICE DeviceHandle,
 }
 
 static VOID APIENTRY AdmissionUmdDestroyDevice(D3D10DDI_HDEVICE DeviceHandle) {
-  AdmissionUmdRuntimeDeviceFinalize(AdmissionUmdDeviceFromHandle(DeviceHandle));
+  ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
+  BOOL consumed = FALSE;
+  HRESULT result = AdmissionUmdRuntimeDeviceFinalize(device, &consumed);
+  if (FAILED(result) && !consumed)
+    AdmissionUmdSetError(device, result);
 }
 
 

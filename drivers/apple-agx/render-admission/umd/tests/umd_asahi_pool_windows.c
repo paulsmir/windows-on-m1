@@ -7,6 +7,7 @@ static D3DKMT_HANDLE PoolHandles[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
 static unsigned PoolNextHandle;
 static unsigned PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,PoolErrors;
 static int PoolFailAllocation;
+static int PoolFailMap;
 static unsigned PoolFailDeallocation;
 static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
   const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
@@ -23,11 +24,13 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
   ++PoolCreates; PoolHandles[slot]=0x700+(++PoolNextHandle);
   a->pAllocationInfo->hAllocation=PoolHandles[slot];
   /* Allocation must already reserve the UMD slot against callback reentry. */
-  if(AdmissionUmdScreenBeginClose(&PoolDevice)!=HRESULT_FROM_WIN32(ERROR_BUSY)) ++PoolErrors;
+  if(PoolDevice.Magic==ADMISSION_UMD_DEVICE_MAGIC &&
+     AdmissionUmdScreenBeginClose(&PoolDevice)!=HRESULT_FROM_WIN32(ERROR_BUSY)) ++PoolErrors;
   return S_OK;
 }
 static HRESULT APIENTRY PoolLock(HANDLE h,D3DDDICB_LOCK *a) {
   (void)h;
+  if(PoolFailMap) return E_OUTOFMEMORY;
   for(unsigned slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot) if(PoolMemory[slot] && a->hAllocation==PoolHandles[slot]) {
     a->pData=PoolMemory[slot]; ++PoolMaps; return S_OK;
   }
@@ -67,6 +70,7 @@ unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *,
 #include "apple_agx_dynamic_job.h"
 #include "render_dynamic_dma.h"
 static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
+static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
 static unsigned RuntimeImmediateMarker;
 static unsigned RuntimeTeardownDeletes,RuntimeTeardownUnlocks;
@@ -92,26 +96,28 @@ static RUNTIME_CONSUMER RuntimeConsumers[2];
 static APPLE_AGX_U32 RuntimeConsumerFence;
 static unsigned RuntimeConsumerGates,RuntimeConsumerRetirements;
 #define RUNTIME_REQUIRE(x) do { if(!(x)) {++PoolErrors;fprintf(stderr,"RUNTIME_OWNER line=%u %s\n",(unsigned)__LINE__,#x);} } while(0)
-static ADMISSION_UMD_SCREEN_BUFFER *RuntimeBuffer(APPLE_AGX_U64 token) {
+static ADMISSION_UMD_SCREEN_BUFFER *RuntimeBuffer(ADMISSION_UMD_DEVICE *device,APPLE_AGX_U64 token) {
+  if(!device) return NULL;
   for(unsigned i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
-    if(PoolDevice.ScreenBuffers[i].Active && PoolDevice.ScreenBuffers[i].KernelAllocation==token)
-      return &PoolDevice.ScreenBuffers[i];
+    if(device->ScreenBuffers[i].Active && device->ScreenBuffers[i].KernelAllocation==token)
+      return &device->ScreenBuffers[i];
   return NULL;
 }
 static int RuntimeLookup(void *context,APPLE_AGX_U32 index,ADMISSION_WIN32_ALLOCATION_FACT *fact) {
   (void)context;
-  if(index>=PoolDevice.DrawSubmission->Count) return 0;
-  ADMISSION_UMD_SCREEN_BUFFER *b=RuntimeBuffer(PoolDevice.AllocationList[index].hAllocation);
+  ADMISSION_UMD_DEVICE *device=RuntimeActiveDevice;
+  if(!device || index>=device->DrawSubmission->Count) return 0;
+  ADMISSION_UMD_SCREEN_BUFFER *b=RuntimeBuffer(device,device->AllocationList[index].hAllocation);
   if(!b) return 0;
   memset(fact,0,sizeof(*fact));fact->AllocationToken=b->KernelAllocation;fact->Bytes=b->Bytes;
-  fact->Generation=PoolDevice.Win32Generation;fact->ClassId=b->ClassId;
+  fact->Generation=device->Win32Generation;fact->ClassId=b->ClassId;
   fact->Flags=b->Flags;fact->Writable=(b->Flags&AppleAgxWin32BufferGpuWrite)!=0;
   return 1;
 }
 static int RuntimeRead(void *context,APPLE_AGX_U64 token,APPLE_AGX_U32 ref,
     APPLE_AGX_U32 role,APPLE_AGX_U64 offset,APPLE_AGX_U32 bytes,void *out) {
   (void)context;(void)ref;(void)role;
-  ADMISSION_UMD_SCREEN_BUFFER *b=RuntimeBuffer(token);
+  ADMISSION_UMD_SCREEN_BUFFER *b=RuntimeBuffer(RuntimeActiveDevice,token);
   if(!b || offset>b->Bytes || bytes>b->Bytes-offset) return 0;
   for(unsigned i=0;i<ARRAYSIZE(PoolMemory);++i) if(PoolMemory[i] && PoolHandles[i]==token) {
     memcpy(out,(unsigned char *)PoolMemory[i]+offset,bytes);return 1;
@@ -122,7 +128,7 @@ static int RuntimeResolve(void *context,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
     APPLE_AGX_U32 ref,APPLE_AGX_U32 role,APPLE_AGX_U64 offset,APPLE_AGX_U32 bytes,APPLE_AGX_U64 *out) {
   RUNTIME_CONSUMER *consumer=context;
   (void)cls;
-  ADMISSION_UMD_SCREEN_BUFFER *b=RuntimeBuffer(token);
+  ADMISSION_UMD_SCREEN_BUFFER *b=RuntimeBuffer(RuntimeActiveDevice,token);
   if(!consumer || !consumer->Source || !b || !bytes || offset>b->Bytes || bytes>b->Bytes-offset) return 0;
   if(role==AppleAgxWin32RoleRenderTarget && ref==consumer->Bindings.DestinationReference) {
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *source=&consumer->Source->References[ref];
@@ -139,16 +145,18 @@ static HRESULT RuntimeConsumerFailure(const char *stage,unsigned placement,unsig
   return E_INVALIDARG;
 }
 static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
-  (void)h;++RuntimeRenders;
+  ADMISSION_UMD_DEVICE *device=RuntimeActiveDevice;
+  ++RuntimeRenders;
   APPLE_AGX_WIN32_COMMAND_VIEW view;
   ADMISSION_WIN32_ALLOCATION_FACT facts[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
-  RUNTIME_REQUIRE(r->hContext==PoolDevice.KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
-  if(AppleAgxWin32CommandValidate(PoolDevice.CommandBuffer,r->CommandLength,
-      PoolDevice.Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
+  RUNTIME_REQUIRE(device && h==device->RuntimeDevice.handle &&
+      r->hContext==device->KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
+  if(!device || AppleAgxWin32CommandValidate(device->CommandBuffer,r->CommandLength,
+      device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
   RUNTIME_REQUIRE(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH && view.NativeBatch);
-  if(AdmissionWin32ValidateReferences(&view,PoolDevice.Win32Generation,RuntimeLookup,NULL,
+  if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
-  RuntimeConsumerFence=PoolDevice.NextScreenFence+1;
+  RuntimeConsumerFence=device->NextScreenFence+1;
   if(!RuntimeConsumerFence) return RuntimeConsumerFailure("fence-range",0,0);
   printf("NATIVE_KMD_INPUT: references=%u relocations=%u allocations=%u encoder_bytes=%llu rt_bytes=%llu\n",
       view.Header->ReferenceCount,view.Draw->RelocationCount,r->NumAllocations,
@@ -266,7 +274,7 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       ADMISSION_RENDER_PACKET admitted;
       ADMISSION_RENDER_PACKET_DESCRIPTION adopted;
       packet.Fence=0;
-      packet.ContextToken=(APPLE_AGX_U64)(UINT_PTR)PoolDevice.KernelContext;
+      packet.ContextToken=(APPLE_AGX_U64)(UINT_PTR)device->KernelContext;
       packet.AllocationToken=facts[target].AllocationToken;
       packet.PrivateDataToken=(APPLE_AGX_U64)(UINT_PTR)RuntimeDma[i];
       packet.PrivateDataBytes=consumer->DmaBytes;
@@ -322,7 +330,7 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
         i,consumer->WorkerPlan.EntryCount,consumer->Dma.StorageBytes,consumer->DmaBytes,
         view.References[view.Draw->EncoderReference].Bytes);
   }
-  RUNTIME_REQUIRE(AdmissionUmdScreenBeginClose(&PoolDevice)==HRESULT_FROM_WIN32(ERROR_BUSY));
+  RUNTIME_REQUIRE(AdmissionUmdScreenBeginClose(device)==HRESULT_FROM_WIN32(ERROR_BUSY));
   printf("NATIVE_RUNTIME_GRAPH: references=%u relocations=%u allocations=%u objects=%u bytes=%u\n",
       view.Header->ReferenceCount,view.Draw->RelocationCount,r->NumAllocations,RuntimeJobs[0].ObjectCount,RuntimeJobs[0].StorageBytes);
   r->pNewCommandBuffer=RuntimeCommand;r->NewCommandBufferSize=sizeof(RuntimeCommand);
@@ -331,9 +339,11 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
   return S_OK;
 }
 static HRESULT APIENTRY RuntimeSignal(HANDLE h,const D3DDDICB_SIGNALSYNCHRONIZATIONOBJECT2 *signal) {
-  (void)h;++RuntimeSignals;
-  RUNTIME_REQUIRE(signal->hContext==PoolDevice.KernelContext && signal->Flags.EnqueueCpuEvent);
-  RUNTIME_REQUIRE(PoolDevice.NextScreenFence==RuntimeConsumerFence);
+  ADMISSION_UMD_DEVICE *device=RuntimeActiveDevice;
+  ++RuntimeSignals;
+  RUNTIME_REQUIRE(device && h==device->RuntimeDevice.handle &&
+      signal->hContext==device->KernelContext && signal->Flags.EnqueueCpuEvent);
+  RUNTIME_REQUIRE(device && device->NextScreenFence==RuntimeConsumerFence);
   RuntimeMarker=signal->CpuEventHandle;
   if(RuntimeImmediateMarker) RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
   return S_OK; /* first case deliberately pending; second signals in callback */
@@ -437,6 +447,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   PoolErrors=PoolCreates=PoolMaps=PoolUnlocks=PoolDeletes=0;
   PoolNextHandle=0; memset(PoolMemory,0,sizeof(PoolMemory)); memset(PoolHandles,0,sizeof(PoolHandles));
   PoolFailAllocation=0;
+  PoolFailMap=0;
   PoolFailDeallocation=0;
   PoolDevice.Magic=ADMISSION_UMD_DEVICE_MAGIC; PoolDevice.Win32Generation=27;
   PoolDevice.Adapter=&PoolAdapter; PoolDevice.KernelCallbacks=&PoolCallbacks;
@@ -457,6 +468,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   if(AdmissionUmdScreenInitialize(&PoolDevice)!=S_OK) return 1;
   AdmissionUmdAsahiOwnerOperations(&ops);
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
+  RuntimeActiveDevice=&PoolDevice;
   RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeImmediateMarker=0;
   RuntimeTeardownBo=NULL;RuntimeTeardownDeletes=RuntimeTeardownUnlocks=0;
   RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;

@@ -4,11 +4,43 @@
 #include "util/format/u_format.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
+#include <stddef.h>
 #include <string.h>
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
     const AGX_WIN32_ASAHI_OWNER_OPS *,void *,const AGX_WIN32_ASAHI_BATCH_OPS *,
     const struct drm_asahi_params_global *);
+
+static int context_idle(struct pipe_context *ctx) {
+  struct agx_context *native=ctx?agx_context(ctx):NULL;
+  if(!native) return 0;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i)
+    if(native->batches.slots[i].windows_batch || BITSET_TEST(native->batches.active,i) ||
+       BITSET_TEST(native->batches.submitted,i)) return 0;
+  return 1;
+}
+static void tracked_context_destroy(struct pipe_context *ctx) {
+  AGX_WIN32_ASAHI_BACKEND *backend=ctx && ctx->screen?
+      agx_device(ctx->screen)->windows_private:NULL;
+  if(!backend || !backend->ContextDestroy || !backend->ContextCount || !context_idle(ctx)) return;
+  void (*destroy)(struct pipe_context *)=backend->ContextDestroy;
+  ctx->destroy=destroy;
+  destroy(ctx);
+  --backend->ContextCount;
+}
+static struct pipe_context *tracked_context_create(struct pipe_screen *screen,void *owner,unsigned flags) {
+  AGX_WIN32_ASAHI_BACKEND *backend=screen?agx_device(screen)->windows_private:NULL;
+  if(!backend || backend->Closing || !backend->ContextCreate || backend->ContextCount==UINT32_MAX) return NULL;
+  struct pipe_context *ctx=backend->ContextCreate(screen,owner,flags);
+  if(!ctx || !ctx->destroy) return NULL;
+  if(backend->ContextDestroy && backend->ContextDestroy!=ctx->destroy) {
+    ctx->destroy(ctx);return NULL;
+  }
+  backend->ContextDestroy=ctx->destroy;
+  ctx->destroy=tracked_context_destroy;
+  ++backend->ContextCount;
+  return ctx;
+}
 
 struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND *backend,
     AGX_WIN32_SCREEN *windows,const AGX_WIN32_ASAHI_OWNER_OPS *owners,void *owner,
@@ -26,7 +58,22 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(AGX_WIN32_ASAHI_BACKEND 
   params.num_dies=1;
   params.features=0; /* Optional soft faults are deliberately not enabled. */
   if(windows->Info.PageBytes!=AIL_PAGESIZE) return NULL;
-  return AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);
+  struct pipe_screen *screen=AgxWin32AsahiScreenCreate(backend,windows,owners,owner,batches,&params);
+  if(screen) {
+    backend->ContextCreate=screen->context_create;
+    backend->ContextDestroy=NULL;
+    backend->ContextCount=0;
+    backend->Closing=0;
+    screen->context_create=tracked_context_create;
+  }
+  return screen;
+}
+
+struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *backend) {
+  struct agx_screen *screen=backend && backend->Native ?
+      (struct agx_screen *)((unsigned char *)backend->Native-
+          offsetof(struct agx_screen,dev)) : NULL;
+  return screen ? &screen->pscreen : NULL;
 }
 
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *screen,void *owner) {
@@ -34,19 +81,18 @@ struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *screen,void 
 }
 int AgxWin32AsahiContextDestroy(struct pipe_context *ctx) {
   if(!ctx || !ctx->destroy) return 0;
-  struct agx_context *native=agx_context(ctx);
-  for(unsigned i=0;i<AGX_MAX_BATCHES;++i)
-    if(native->batches.slots[i].windows_batch || BITSET_TEST(native->batches.active,i) ||
-       BITSET_TEST(native->batches.submitted,i)) return 0;
+  if(!context_idle(ctx)) return 0;
   ctx->destroy(ctx);
   return 1;
 }
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *screen) {
   if(!screen || !screen->destroy) return 0;
   AGX_WIN32_ASAHI_BACKEND *backend=agx_device(screen)->windows_private;
-  if(!backend || backend->Native!=agx_device(screen)) return 0;
+  if(!backend || backend->Native!=agx_device(screen) || backend->ContextCount) return 0;
   screen->destroy(screen);
-  return backend->Native==NULL;
+  if(backend->Native) return 0;
+  backend->ContextCreate=NULL;backend->ContextDestroy=NULL;backend->Closing=0;
+  return 1;
 }
 
 static AGX_WIN32_ASAHI_BACKEND *scene_backend(const AGX_WIN32_ASAHI_SCENE *s) {
@@ -80,7 +126,7 @@ int AgxWin32AsahiSceneInit(AGX_WIN32_ASAHI_SCENE *s,struct pipe_screen *screen,s
   if(!s || s->Phase!=AgxAsahiSceneEmpty || !screen || !ctx || ctx->screen!=screen) return 0;
   struct agx_context *native=agx_context(ctx);
   AGX_WIN32_ASAHI_BACKEND *backend=agx_device(screen)->windows_private;
-  if(!backend || backend->Native!=agx_device(screen) || backend->Failed || !backend->BatchOps ||
+  if(!backend || backend->Native!=agx_device(screen) || backend->Failed || backend->Closing || !backend->BatchOps ||
      backend->ActiveCapture || backend->ActiveEmission || native->any_faults) return 0;
   for(unsigned i=0;i<AGX_MAX_BATCHES;++i)
     if(native->batches.slots[i].windows_batch || BITSET_TEST(native->batches.active,i) ||
@@ -149,7 +195,7 @@ rejected:
 }
 int AgxWin32AsahiSceneDraw(AGX_WIN32_ASAHI_SCENE *s) {
   AGX_WIN32_ASAHI_BACKEND *backend=scene_backend(s);
-  if(!backend || s->Phase!=AgxAsahiScenePrepared) return 0;
+  if(!backend || backend->Closing || s->Phase!=AgxAsahiScenePrepared) return 0;
   struct pipe_context *ctx=s->Context;
   struct agx_context *native=agx_context(ctx);
   union pipe_color_union clear;
@@ -167,7 +213,8 @@ rejected:
   s->Phase=AgxAsahiSceneRejected;return 0;
 }
 int AgxWin32AsahiSceneSubmit(AGX_WIN32_ASAHI_SCENE *s) {
-  if(!scene_backend(s) || s->Phase!=AgxAsahiSceneDrawn || !s->Batch) return 0;
+  AGX_WIN32_ASAHI_BACKEND *backend=scene_backend(s);
+  if(!backend || backend->Closing || s->Phase!=AgxAsahiSceneDrawn || !s->Batch) return 0;
   s->Context->flush(s->Context,NULL,0);
   AGX_WIN32_ASAHI_BATCH *c=s->Batch->windows_batch;
   if(!c || !c->Submitted) {s->Phase=AgxAsahiSceneRejected;s->SubmitStatus=c?c->Status:-1;return 0;}

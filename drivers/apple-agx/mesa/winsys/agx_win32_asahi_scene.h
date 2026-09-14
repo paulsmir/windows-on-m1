@@ -53,6 +53,9 @@ extern "C" {
 struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(
     AGX_WIN32_ASAHI_BACKEND *, AGX_WIN32_SCREEN *,
     const AGX_WIN32_ASAHI_OWNER_OPS *, void *, const AGX_WIN32_ASAHI_BATCH_OPS *);
+/* Returns a constructor-owned screen retained solely for retryable cleanup
+ * after ScreenCreate returned NULL. It is never a usable factory result. */
+struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *);
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
 /* False retains caller storage; retry only after pending ownership is resolved.
  * All contexts must be destroyed before their screen is destroyed. */

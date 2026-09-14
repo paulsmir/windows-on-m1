@@ -6,6 +6,8 @@
 
 struct agx_device;
 struct agx_bo;
+struct pipe_screen;
+struct pipe_context;
 struct _AGX_WIN32_ASAHI_CAPTURE;
 typedef struct {
   int (*Enter)(void *, AGX_WIN32_SCREEN *);
@@ -31,6 +33,10 @@ typedef struct {
   void *BatchOwner;
   int EncoderAllocationIntent;
   int Failed;
+  struct pipe_context *(*ContextCreate)(struct pipe_screen *, void *, unsigned);
+  void (*ContextDestroy)(struct pipe_context *);
+  APPLE_AGX_U32 ContextCount;
+  int Closing;
 } AGX_WIN32_ASAHI_BACKEND;
 
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *, struct agx_device *,

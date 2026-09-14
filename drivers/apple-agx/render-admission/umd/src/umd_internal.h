@@ -139,7 +139,11 @@ HRESULT AdmissionUmdRuntimeAdapterInitialize(
 HRESULT AdmissionUmdRuntimeDeviceInitialize(
     ADMISSION_UMD_DEVICE *Device, ADMISSION_UMD_ADAPTER *Adapter,
     const D3D10DDIARG_CREATEDEVICE *Args);
-VOID AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *Device);
+/* Consumed is true only after the kernel context and all device-owned storage
+ * have been released and Device has been cleared. A failed, unconsumed result
+ * leaves the same storage reachable for retry. */
+HRESULT AdmissionUmdRuntimeDeviceFinalize(ADMISSION_UMD_DEVICE *Device,
+                                          BOOL *Consumed);
 HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,
                                    ULONG *Undeallocated);

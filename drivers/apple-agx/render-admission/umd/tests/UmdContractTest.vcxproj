@@ -97,7 +97,6 @@
     <Link><OptimizeReferences>true</OptimizeReferences></Link>
   </ItemDefinitionGroup>
   <ItemGroup Condition="'$(EnableMesaPipeFactoryTest)' == 'true'">
-    <ClCompile Include="..\..\..\mesa\winsys\agx_win32_pipe_screen.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_d3d10_windows.cpp" />
   </ItemGroup>
   <Import Project="$(NativeRuntimeProps)" Condition="'$(EnableNativeRuntimeTest)' == 'true'" />
