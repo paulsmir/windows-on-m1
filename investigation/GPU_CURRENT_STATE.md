@@ -87,6 +87,18 @@ KMDsourceSHA060e8cc4bb362ff4e8dd18064b8494edf81773b885e32c27d28778a1544b9c8d.
 Fixedcandidate stillNOT hardwaretested. Next add durablecommanddump flush before
 Render (EXP683 cachedfile lost onreset), then new684build/sign/hash/prereg gates.
 
+Durable evidence fix803a7c2 is complete offline. Existing bridge CREATE_NEW name
+is unchanged; full write, FlushFileBuffers and CloseHandle now complete before
+D3DKMTRender. Create/write/short-write/flush/close errors preserve operation,
+Win32 error and bytes in the bridge receipt and reject before KMT Render.
+TDD evidence: behavior-preserving refactor bb08f047..., behavioral RED
+b1dd83f7... execution38/errors38, final x64 GREEN sourceSHA
+a035eda36ce2e7b39222982ae5096feb1c56a65eadc01d0f9d31273e0b891435
+with six cases and actual producer PASS. ARM64 sourceSHA
+8c9d9b8de519dc8339c96a82c5c7ff35c4f8e1383d13375f9e988432f3ebef13,
+clientSHA8ed89c3a57ed441a16b69f9ab3fe56d9b9ac866ad69b4cb68943a3ae9e121b2a;
+build/link0warnings0errors. Fixed client remainsNOT hardwaretested.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -152,7 +164,8 @@ root upload; global Asahi scratch semantics remain unchanged.
 
 ## Exact next target
 Prepare next nativequalification candidate with verified packetboundsfix and
-explicit durablecommanddump flush. Keep SSHparent attached untilclientexit;
+verified durablecommanddump flush. Build exactpackage/client684 from cleanHEAD,
+use a new experiment-scoped signing identity, and keep SSHparent attached untilclientexit;
 preservefailed/pendingresources. New hardware requires exact684package/client,
 fullgates/sign/hash and freshordinarybaseline; no stale683package onAir.
 
