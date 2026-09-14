@@ -2623,7 +2623,7 @@ static VOID AdmissionPlatformWorkerFinished(
 }
 
 static VOID AdmissionPlatformWorker(
-    PDEVICE_OBJECT DeviceObject, PVOID Context) {
+    _In_ PDEVICE_OBJECT DeviceObject, _In_opt_ PVOID Context) {
   ADMISSION_CONTEXT *adapter = Context;
   ADMISSION_PLATFORM_RUNTIME *runtime;
   ADMISSION_RENDER_PACKET_DESCRIPTION description;

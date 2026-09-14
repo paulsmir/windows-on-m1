@@ -42,7 +42,7 @@ if ($null -ne $msbuildCommand) {
     if (-not (Test-Path $vswhere)) {
         throw "MSBuild is not on PATH and vswhere.exe was not found"
     }
-    $msbuild = & $vswhere -latest -prerelease -products * -requires Microsoft.Component.MSBuild `
+    $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild `
         -find "MSBuild\**\Bin\amd64\MSBuild.exe" | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($msbuild)) {
         throw "A Visual Studio installation with ARM64 MSBuild support was not found"
@@ -50,11 +50,15 @@ if ($null -ne $msbuildCommand) {
 }
 
 $umdAdmissionTraceValue = if ($UmdAdmissionTrace) { "true" } else { "false" }
-$pinnedWindowsSdkDir = 'C:\Program Files (x86)\Windows Kits\10\'
+$pinnedWindowsSdkDir = 'C:/Program Files (x86)/Windows Kits/10/'
 $pinnedWdkProperties = @(
     '/p:WindowsTargetPlatformVersion=10.0.26100.0',
     "/p:WDKContentRoot=$pinnedWindowsSdkDir",
-    "/p:WindowsSdkDir=$pinnedWindowsSdkDir"
+    "/p:WindowsSdkDir=$pinnedWindowsSdkDir",
+    "/p:UniversalCRTSdkDir=$pinnedWindowsSdkDir",
+    ("/p:UniversalCRT_IncludePath={0}Include/10.0.26100.0/ucrt" -f $pinnedWindowsSdkDir),
+    ("/p:UniversalCRT_LibraryPath_arm64={0}Lib/10.0.26100.0/ucrt/arm64" -f $pinnedWindowsSdkDir),
+    ("/p:WindowsSDK_LibraryPath_ARM64={0}Lib/10.0.26100.0/um/arm64" -f $pinnedWindowsSdkDir)
 )
 & $msbuild $umdProject /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild" `
