@@ -180,7 +180,62 @@ MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER hShader)
 }
 
 void APIENTRY
- RelocateDeviceFuncs(''')])
+ RelocateDeviceFuncs('''),
+        ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
+   struct pipe_screen *screen = pipe->screen;
+
+   *pFormatCaps = 0;
+
+   enum pipe_format format = FormatTranslate(Format, false);
+   if (format == PIPE_FORMAT_NONE) {
+      *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
+      return;
+   }
+
+   if (Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) {
+      /*
+       * We only need to support creation.
+       * http://msdn.microsoft.com/en-us/library/windows/hardware/ff552818.aspx
+       */
+      return;
+   }
+
+   if (screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 0, 0,
+                                   PIPE_BIND_RENDER_TARGET)) {
+      *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET;
+      *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
+
+#if SUPPORT_MSAA
+      if (screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 4, 4,
+                                      PIPE_BIND_RENDER_TARGET)) {
+         *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_RENDERTARGET;
+      }
+#endif
+   }
+
+   if (screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 0, 0,
+                                   PIPE_BIND_SAMPLER_VIEW)) {
+      *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_SHADER_SAMPLE;
+
+#if SUPPORT_MSAA
+      if (screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 4, 4,
+                                      PIPE_BIND_RENDER_TARGET)) {
+         *pFormatCaps |= D3D10_DDI_FORMAT_SUPPORT_MULTISAMPLE_LOAD;
+      }
+#endif
+   }''','''   (void)hDevice;
+   if (Format == DXGI_FORMAT_B8G8R8A8_UNORM) {
+      *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
+                     D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
+   } else if (Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) {
+      *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
+   } else {
+      *pFormatCaps = 0;
+   }'''),
+        ('''   /* XXX: Disable MSAA */
+   *pNumQualityLevels = 0;''','''   (void)hDevice;
+   *pNumQualityLevels =
+      Format == DXGI_FORMAT_B8G8R8A8_UNORM && SampleCount == 1 ? 1 : 0;''')])
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
         ('''   pipe->clear_render_target(pipe,
@@ -219,7 +274,201 @@ void APIENTRY
       return;
    }
    pipe->clear(pipe, PIPE_CLEAR_COLOR0, 0xf, 0, NULL,
-               &clear_color, 0.0, 0);''')])
+               &clear_color, 0.0, 0);'''),
+        ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
+   struct pipe_surface *surface = CastPipeDepthStencilView(hDepthStencilView);
+
+   unsigned flags = 0;
+   if (Flags & D3D10_DDI_CLEAR_DEPTH) {
+      flags |= PIPE_CLEAR_DEPTH;
+   }
+   if (Flags & D3D10_DDI_CLEAR_STENCIL) {
+      flags |= PIPE_CLEAR_STENCIL;
+   }
+
+   pipe->clear_depth_stencil(pipe,
+                             surface,
+                             flags,
+                             Depth,
+                             Stencil,
+                             0, 0,
+                             pipe_surface_width(surface),
+                             pipe_surface_height(surface),
+                             true);''','''   (void)hDepthStencilView;
+   (void)Flags;
+   (void)Depth;
+   (void)Stencil;
+   SetError(hDevice, E_NOTIMPL);''')])
+    change('src/gallium/frontends/d3d10umd/Query.cpp',
+        '8456801b1614e79ad9ce307035a76a5f5f642eb83a40e4c066a8946f44d620b4',[
+        ('''   Device *pDevice = CastDevice(hDevice);
+   struct pipe_context *pipe = pDevice->pipe;
+
+   Query *pQuery = CastQuery(hQuery);
+   memset(pQuery, 0, sizeof *pQuery);
+
+   pQuery->Type = pCreateQuery->Query;
+   pQuery->Flags = pCreateQuery->MiscFlags;
+
+   pQuery->pipe_type = TranslateQueryType(pCreateQuery->Query);
+   if (pQuery->pipe_type < PIPE_QUERY_TYPES) {
+      pQuery->handle = pipe->create_query(pipe, pQuery->pipe_type, 0);
+   }''','''   (void)pCreateQuery;
+   (void)hQuery;
+   (void)hRTQuery;
+   SetError(hDevice, E_NOTIMPL);'''),
+        ('''DestroyQuery(D3D10DDI_HDEVICE hDevice, // IN
+             D3D10DDI_HQUERY hQuery)   // IN
+{
+   LOG_ENTRYPOINT();''','''DestroyQuery(D3D10DDI_HDEVICE hDevice, // IN
+             D3D10DDI_HQUERY hQuery)   // IN
+{
+   (void)hQuery;
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''QueryBegin(D3D10DDI_HDEVICE hDevice,   // IN
+           D3D10DDI_HQUERY hQuery)     // IN
+{
+   LOG_ENTRYPOINT();''','''QueryBegin(D3D10DDI_HDEVICE hDevice,   // IN
+           D3D10DDI_HQUERY hQuery)     // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''QueryEnd(D3D10DDI_HDEVICE hDevice,  // IN
+         D3D10DDI_HQUERY hQuery)    // IN
+{
+   LOG_ENTRYPOINT();''','''QueryEnd(D3D10DDI_HDEVICE hDevice,  // IN
+         D3D10DDI_HQUERY hQuery)    // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''QueryGetData(D3D10DDI_HDEVICE hDevice,                      // IN
+             D3D10DDI_HQUERY hQuery,                        // IN
+             __out_bcount_full_opt (DataSize) void *pData,  // OUT
+             UINT DataSize,                                 // IN
+             UINT Flags)                                    // IN
+{
+   LOG_ENTRYPOINT();''','''QueryGetData(D3D10DDI_HDEVICE hDevice,                      // IN
+             D3D10DDI_HQUERY hQuery,                        // IN
+             __out_bcount_full_opt (DataSize) void *pData,  // OUT
+             UINT DataSize,                                 // IN
+             UINT Flags)                                    // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''SetPredication(D3D10DDI_HDEVICE hDevice,  // IN
+               D3D10DDI_HQUERY hQuery,    // IN
+               BOOL PredicateValue)       // IN
+{
+   LOG_ENTRYPOINT();''','''SetPredication(D3D10DDI_HDEVICE hDevice,  // IN
+               D3D10DDI_HQUERY hQuery,    // IN
+               BOOL PredicateValue)       // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;''')])
+    change('src/gallium/frontends/d3d10umd/DxgiFns.cpp',
+        'ecdfee2a652cab9d0604ff3ddcf0fb196778f41d367398aa4fcd080776a47f40',[
+        ('HRESULT APIENTRY\n_Present(', '''static HRESULT
+UnsupportedDxgi(DXGI_DDI_HDEVICE dxgiDevice)
+{
+   D3D10DDI_HDEVICE hDevice = {};
+   hDevice.pDrvPrivate = reinterpret_cast<void *>(dxgiDevice);
+   SetError(hDevice, E_NOTIMPL);
+   return E_NOTIMPL;
+}
+
+HRESULT APIENTRY
+_Present('''),
+        ('''   struct Device *device = CastDevice(pPresentData->hDevice);
+   Resource *pSrcResource = CastResource(pPresentData->hSurfaceToPresent);
+
+   device->pipe->flush(device->pipe, NULL, 0);
+   device->pipe->screen->flush_frontbuffer(device->pipe->screen, device->pipe,\x20
+      pSrcResource->resource, 0, 0, pPresentData->pDXGIContext, 0, NULL);
+
+   return S_OK;''','''   return UnsupportedDxgi(pPresentData->hDevice);'''),
+        ('''_GetGammaCaps( DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS *GetCaps )
+{
+   LOG_ENTRYPOINT();''','''_GetGammaCaps( DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS *GetCaps )
+{
+   return UnsupportedDxgi(GetCaps->hDevice);'''),
+        ('''_SetDisplayMode( DXGI_DDI_ARG_SETDISPLAYMODE *SetDisplayMode )
+{
+   LOG_UNSUPPORTED_ENTRYPOINT();''','''_SetDisplayMode( DXGI_DDI_ARG_SETDISPLAYMODE *SetDisplayMode )
+{
+   return UnsupportedDxgi(SetDisplayMode->hDevice);'''),
+        ('''_SetResourcePriority( DXGI_DDI_ARG_SETRESOURCEPRIORITY *SetResourcePriority )
+{
+   LOG_ENTRYPOINT();''','''_SetResourcePriority( DXGI_DDI_ARG_SETRESOURCEPRIORITY *SetResourcePriority )
+{
+   return UnsupportedDxgi(SetResourcePriority->hDevice);'''),
+        ('''_QueryResourceResidency( DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *QueryResourceResidency )
+{
+   LOG_ENTRYPOINT();''','''_QueryResourceResidency( DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *QueryResourceResidency )
+{
+   return UnsupportedDxgi(QueryResourceResidency->hDevice);'''),
+        ('''_RotateResourceIdentities( DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *RotateResourceIdentities )
+{
+   LOG_ENTRYPOINT();''','''_RotateResourceIdentities( DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *RotateResourceIdentities )
+{
+   return UnsupportedDxgi(RotateResourceIdentities->hDevice);'''),
+        ('''_Blt(DXGI_DDI_ARG_BLT *Blt)
+{
+   LOG_UNSUPPORTED_ENTRYPOINT();''','''_Blt(DXGI_DDI_ARG_BLT *Blt)
+{
+   return UnsupportedDxgi(Blt->hDevice);''')])
+    change('src/gallium/frontends/d3d10umd/Shader.cpp',
+        '48a7de2a42b25abac677cd903c10f21fc91b86aef167266a32a6d7d9da21097c',[
+        ('''{
+   unsigned i;
+
+   LOG_ENTRYPOINT();
+
+   Device *pDevice = CastDevice(hDevice);
+   struct pipe_context *pipe = pDevice->pipe;
+
+   assert(SOTargets + ClearTargets <= PIPE_MAX_SO_BUFFERS);''','''{
+   SetError(hDevice, E_NOTIMPL);
+   return;
+
+   unsigned i;
+   Device *pDevice = CastDevice(hDevice);
+   struct pipe_context *pipe = pDevice->pipe;
+
+   assert(SOTargets + ClearTargets <= PIPE_MAX_SO_BUFFERS);'''),
+        ('''GenMips(D3D10DDI_HDEVICE hDevice,                           // IN
+        D3D10DDI_HSHADERRESOURCEVIEW hShaderResourceView)   // IN
+{
+   LOG_ENTRYPOINT();''','''GenMips(D3D10DDI_HDEVICE hDevice,                           // IN
+        D3D10DDI_HSHADERRESOURCEVIEW hShaderResourceView)   // IN
+{
+   (void)hShaderResourceView;
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''CreateGeometryShaderWithStreamOutput(
+   D3D10DDI_HDEVICE hDevice,                                                                             // IN
+   __in const D3D10DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT *pData,   // IN
+   D3D10DDI_HSHADER hShader,                                                                             // IN
+   D3D10DDI_HRTSHADER hRTShader,                                                                         // IN
+   __in const D3D10DDIARG_STAGE_IO_SIGNATURES *pSignatures)                                              // IN
+{
+   LOG_ENTRYPOINT();''','''CreateGeometryShaderWithStreamOutput(
+   D3D10DDI_HDEVICE hDevice,                                                                             // IN
+   __in const D3D10DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT *pData,   // IN
+   D3D10DDI_HSHADER hShader,                                                                             // IN
+   D3D10DDI_HRTSHADER hRTShader,                                                                         // IN
+   __in const D3D10DDIARG_STAGE_IO_SIGNATURES *pSignatures)                                              // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;''')])
+    change('src/gallium/frontends/d3d10umd/Draw.cpp',
+        'da5904f2ac6b8a79373bcc60d2cef0546e8da0bc1ba92d21812aff3ea2338f7e',[
+        ('''DrawAuto(D3D10DDI_HDEVICE hDevice)  // IN
+{
+   LOG_ENTRYPOINT();''','''DrawAuto(D3D10DDI_HDEVICE hDevice)  // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;''')])
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
         ('#include "util/u_surface.h"',
@@ -257,7 +506,55 @@ void APIENTRY
       DebugPrintf("%s: failed to create resource\\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
-   }''')])
+   }'''),
+        ('''ResourceCopy(D3D10DDI_HDEVICE hDevice,          // IN
+             D3D10DDI_HRESOURCE hDstResource,   // IN
+             D3D10DDI_HRESOURCE hSrcResource)   // IN
+{
+   LOG_ENTRYPOINT();''','''ResourceCopy(D3D10DDI_HDEVICE hDevice,          // IN
+             D3D10DDI_HRESOURCE hDstResource,   // IN
+             D3D10DDI_HRESOURCE hSrcResource)   // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''ResourceCopyRegion(D3D10DDI_HDEVICE hDevice,                // IN
+                   D3D10DDI_HRESOURCE hDstResource,         // IN
+                   UINT DstSubResource,                     // IN
+                   UINT DstX,                               // IN
+                   UINT DstY,                               // IN
+                   UINT DstZ,                               // IN
+                   D3D10DDI_HRESOURCE hSrcResource,         // IN
+                   UINT SrcSubResource,                     // IN
+                   __in_opt const D3D10_DDI_BOX *pSrcBox)   // IN (optional)
+{
+   LOG_ENTRYPOINT();''','''ResourceCopyRegion(D3D10DDI_HDEVICE hDevice,                // IN
+                   D3D10DDI_HRESOURCE hDstResource,         // IN
+                   UINT DstSubResource,                     // IN
+                   UINT DstX,                               // IN
+                   UINT DstY,                               // IN
+                   UINT DstZ,                               // IN
+                   D3D10DDI_HRESOURCE hSrcResource,         // IN
+                   UINT SrcSubResource,                     // IN
+                   __in_opt const D3D10_DDI_BOX *pSrcBox)   // IN (optional)
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;'''),
+        ('''ResourceResolveSubResource(D3D10DDI_HDEVICE hDevice,        // IN
+                           D3D10DDI_HRESOURCE hDstResource, // IN
+                           UINT DstSubResource,             // IN
+                           D3D10DDI_HRESOURCE hSrcResource, // IN
+                           UINT SrcSubResource,             // IN
+                           DXGI_FORMAT ResolveFormat)       // IN
+{
+   LOG_UNSUPPORTED_ENTRYPOINT();''','''ResourceResolveSubResource(D3D10DDI_HDEVICE hDevice,        // IN
+                           D3D10DDI_HRESOURCE hDstResource, // IN
+                           UINT DstSubResource,             // IN
+                           D3D10DDI_HRESOURCE hSrcResource, // IN
+                           UINT SrcSubResource,             // IN
+                           DXGI_FORMAT ResolveFormat)       // IN
+{
+   SetError(hDevice, E_NOTIMPL);
+   return;''')])
     change('src/gallium/frontends/d3d10umd/InputAssembly.cpp',
         '210b330c3327042d230a65ff5a7242df89ddb385d50f61bcacfc996d39c55bbd',[
         ('   static const float dummy[4] = {0.0f, 0.0f, 0.0f, 0.0f};\n\n',''),

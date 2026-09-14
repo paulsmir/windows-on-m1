@@ -836,10 +836,107 @@ static void test_mesa_d3d10_frontend_open(void) {
   create.DXGIBaseDDI.pDXGIBaseCallbacks=&dxgiCallbacks;
   create.DXGIBaseDDI.pDXGIDDIBaseFunctions=&dxgiFunctions;
   CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&create)));
+  unsigned ordinarySlots=(unsigned)(sizeof(deviceFunctions)/sizeof(void *));
+  unsigned dxgiSlots=(unsigned)(sizeof(dxgiFunctions)/sizeof(void *));
+  unsigned ordinaryPresent=0,dxgiPresent=0;
+  for(unsigned i=0;i<ordinarySlots;++i)
+    if(((void **)&deviceFunctions)[i]) ++ordinaryPresent;
+  for(unsigned i=0;i<dxgiSlots;++i)
+    if(((void **)&dxgiFunctions)[i]) ++dxgiPresent;
+  CHECK(ordinarySlots==101u && ordinaryPresent==101u &&
+        dxgiSlots==7u && dxgiPresent==7u);
   CHECK(deviceFunctions.pfnDraw && deviceFunctions.pfnFlush &&
         deviceFunctions.pfnCreateVertexShader && deviceFunctions.pfnCreatePixelShader &&
         deviceFunctions.pfnCreateResource && deviceFunctions.pfnDestroyDevice);
+  CHECK(deviceFunctions.pfnCreateQuery && deviceFunctions.pfnDestroyQuery &&
+        deviceFunctions.pfnQueryBegin && deviceFunctions.pfnQueryEnd &&
+        deviceFunctions.pfnQueryGetData && deviceFunctions.pfnSetPredication &&
+        deviceFunctions.pfnSoSetTargets && deviceFunctions.pfnDrawAuto &&
+        deviceFunctions.pfnCreateGeometryShaderWithStreamOutput &&
+        deviceFunctions.pfnClearDepthStencilView && deviceFunctions.pfnGenMips &&
+        deviceFunctions.pfnResourceCopy && deviceFunctions.pfnResourceCopyRegion &&
+        deviceFunctions.pfnResourceResolveSubresource &&
+        deviceFunctions.pfnCheckFormatSupport &&
+        deviceFunctions.pfnCheckMultisampleQualityLevels && dxgiFunctions.pfnPresent);
   if(deviceFunctions.pfnDraw && deviceFunctions.pfnFlush) {
+    UINT formatCaps=~0u,quality=~0u;
+    deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_B8G8R8A8_UNORM,&formatCaps);
+    CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
+                       D3D10_DDI_FORMAT_SUPPORT_BLENDABLE));
+    deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R32G32B32A32_FLOAT,&formatCaps);
+    CHECK(formatCaps==0u);
+    deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R8G8B8A8_UNORM,&formatCaps);
+    CHECK(formatCaps==0u);
+    deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM,&formatCaps);
+    CHECK(formatCaps==D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED);
+    deviceFunctions.pfnCheckMultisampleQualityLevels(
+        device,DXGI_FORMAT_B8G8R8A8_UNORM,1,&quality);
+    CHECK(quality==1u);
+    deviceFunctions.pfnCheckMultisampleQualityLevels(
+        device,DXGI_FORMAT_B8G8R8A8_UNORM,2,&quality);
+    CHECK(quality==0u);
+    deviceFunctions.pfnCheckMultisampleQualityLevels(
+        device,DXGI_FORMAT_R32G32B32A32_FLOAT,1,&quality);
+    CHECK(quality==0u);
+    D3D10DDIARG_CREATEQUERY unsupportedQuery={0};
+    D3D10DDI_HQUERY unsupportedQueryHandle={0};
+    D3D10DDI_HRTQUERY unsupportedQueryRuntime={0};
+    unsupportedQuery.Query=D3D10DDI_QUERY_EVENT;
+    SIZE_T unsupportedQueryBytes=deviceFunctions.pfnCalcPrivateQuerySize(
+        device,&unsupportedQuery);
+    unsupportedQueryHandle.pDrvPrivate=malloc(unsupportedQueryBytes);
+    CHECK(unsupportedQueryHandle.pDrvPrivate!=NULL);
+    if(unsupportedQueryHandle.pDrvPrivate) {
+      memset(unsupportedQueryHandle.pDrvPrivate,0x5a,unsupportedQueryBytes);
+      unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+      unsigned rendersBefore=RuntimeRenders,signalsBefore=RuntimeSignals;
+      deviceFunctions.pfnCreateQuery(device,&unsupportedQuery,
+          unsupportedQueryHandle,unsupportedQueryRuntime);
+      CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+            PoolCreates==createsBefore && RuntimeRenders==rendersBefore &&
+            RuntimeSignals==signalsBefore);
+      unsigned char *queryBytes=(unsigned char *)unsupportedQueryHandle.pDrvPrivate;
+      for(SIZE_T i=0;i<unsupportedQueryBytes;++i) CHECK(queryBytes[i]==0x5a);
+#define FRONTEND_QUERY_REJECT(call) do { \
+        unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates; \
+        unsigned beforeRenders=RuntimeRenders,beforeSignals=RuntimeSignals; \
+        call; \
+        CHECK(FrontendErrors==beforeErrors+1u && FrontendLastError==E_NOTIMPL && \
+              PoolCreates==beforeCreates && RuntimeRenders==beforeRenders && \
+              RuntimeSignals==beforeSignals); \
+        for(SIZE_T qi=0;qi<unsupportedQueryBytes;++qi) CHECK(queryBytes[qi]==0x5a); \
+      } while(0)
+      FRONTEND_QUERY_REJECT(deviceFunctions.pfnQueryBegin(
+          device,unsupportedQueryHandle));
+      FRONTEND_QUERY_REJECT(deviceFunctions.pfnQueryEnd(
+          device,unsupportedQueryHandle));
+      UINT64 queryResult=0x8877665544332211ULL;
+      FRONTEND_QUERY_REJECT(deviceFunctions.pfnQueryGetData(
+          device,unsupportedQueryHandle,&queryResult,sizeof(queryResult),0));
+      CHECK(queryResult==0x8877665544332211ULL);
+      FRONTEND_QUERY_REJECT(deviceFunctions.pfnSetPredication(
+          device,unsupportedQueryHandle,FALSE));
+      FRONTEND_QUERY_REJECT(deviceFunctions.pfnDestroyQuery(
+          device,unsupportedQueryHandle));
+#undef FRONTEND_QUERY_REJECT
+      free(unsupportedQueryHandle.pDrvPrivate);
+    }
+    D3D10DDIARG_CREATEDEPTHSTENCILVIEW unsupportedDepthDesc={0};
+    D3D10DDI_HDEPTHSTENCILVIEW unsupportedDepth={0};
+    unsupportedDepth.pDrvPrivate=calloc(1,
+        deviceFunctions.pfnCalcPrivateDepthStencilViewSize(
+            device,&unsupportedDepthDesc));
+    CHECK(unsupportedDepth.pDrvPrivate!=NULL);
+    if(unsupportedDepth.pDrvPrivate) {
+      unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+      unsigned rendersBefore=RuntimeRenders,signalsBefore=RuntimeSignals;
+      deviceFunctions.pfnClearDepthStencilView(device,unsupportedDepth,
+          D3D10_DDI_CLEAR_DEPTH,1.0f,0);
+      CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+            PoolCreates==createsBefore && RuntimeRenders==rendersBefore &&
+            RuntimeSignals==signalsBefore);
+      free(unsupportedDepth.pDrvPrivate);
+    }
 #define FRONTEND_STAGE(name) do { fprintf(stderr,"D3D10_FRONTEND_STAGE: %s\n",name);fflush(stderr); } while(0)
 #define FRONTEND_OP(op,len) (ENCODE_D3D10_SB_OPCODE_TYPE(op)|ENCODE_D3D10_SB_TOKENIZED_INSTRUCTION_LENGTH(len))
 #define FRONTEND_REG(type,selection,components) (ENCODE_D3D10_SB_OPERAND_NUM_COMPONENTS(D3D10_SB_OPERAND_4_COMPONENT)|ENCODE_D3D10_SB_OPERAND_4_COMPONENT_SELECTION_MODE(selection)|components|ENCODE_D3D10_SB_OPERAND_TYPE(type)|ENCODE_D3D10_SB_OPERAND_INDEX_DIMENSION(D3D10_SB_OPERAND_INDEX_1D)|ENCODE_D3D10_SB_OPERAND_INDEX_REPRESENTATION(0,D3D10_SB_OPERAND_INDEX_IMMEDIATE32))
@@ -893,17 +990,128 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(rt.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&rtCreate,rt,rtRuntime);
     FRONTEND_STAGE("rt-resource");
+    DXGI_DDI_ARG_PRESENT unsupportedPresent={0};
+    unsupportedPresent.hDevice=(UINT_PTR)device.pDrvPrivate;
+    unsupportedPresent.hSurfaceToPresent=(UINT_PTR)rt.pDrvPrivate;
+    unsigned presentErrorsBefore=FrontendErrors,presentCreatesBefore=PoolCreates;
+    unsigned presentRendersBefore=RuntimeRenders,presentSignalsBefore=RuntimeSignals;
+    CHECK(dxgiFunctions.pfnPresent(&unsupportedPresent)==E_NOTIMPL &&
+          FrontendErrors==presentErrorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+          PoolCreates==presentCreatesBefore && RuntimeRenders==presentRendersBefore &&
+          RuntimeSignals==presentSignalsBefore);
+#define FRONTEND_DXGI_REJECT(call) do { \
+      unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates; \
+      unsigned beforeRenders=RuntimeRenders,beforeSignals=RuntimeSignals; \
+      CHECK((call)==E_NOTIMPL); \
+      CHECK(FrontendErrors==beforeErrors+1u && FrontendLastError==E_NOTIMPL && \
+            PoolCreates==beforeCreates && RuntimeRenders==beforeRenders && \
+            RuntimeSignals==beforeSignals); \
+    } while(0)
+    DXGI_DDI_HRESOURCE dxgiRt=(UINT_PTR)rt.pDrvPrivate;
+    DXGI_DDI_ARG_SETDISPLAYMODE unsupportedMode={0};
+    unsupportedMode.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedMode.hResource=dxgiRt;
+    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnSetDisplayMode(&unsupportedMode));
+    DXGI_DDI_ARG_SETRESOURCEPRIORITY unsupportedPriority={0};
+    unsupportedPriority.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedPriority.hResource=dxgiRt;
+    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority));
+    DXGI_DDI_RESIDENCY residency=(DXGI_DDI_RESIDENCY)0x5a;
+    DXGI_DDI_ARG_QUERYRESOURCERESIDENCY unsupportedResidency={0};
+    unsupportedResidency.hDevice=(UINT_PTR)device.pDrvPrivate;
+    unsupportedResidency.pResources=&dxgiRt;unsupportedResidency.pStatus=&residency;
+    unsupportedResidency.Resources=1;
+    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnQueryResourceResidency(&unsupportedResidency));
+    CHECK(residency==(DXGI_DDI_RESIDENCY)0x5a);
+    DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES unsupportedRotate={0};
+    unsupportedRotate.hDevice=(UINT_PTR)device.pDrvPrivate;
+    unsupportedRotate.pResources=&dxgiRt;unsupportedRotate.Resources=1;
+    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnRotateResourceIdentities(&unsupportedRotate));
+    DXGI_GAMMA_CONTROL_CAPABILITIES gamma;
+    memset(&gamma,0x5a,sizeof(gamma));
+    DXGI_GAMMA_CONTROL_CAPABILITIES gammaBefore=gamma;
+    DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS unsupportedGamma={0};
+    unsupportedGamma.hDevice=(UINT_PTR)device.pDrvPrivate;
+    unsupportedGamma.pGammaCapabilities=&gamma;
+    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnGetGammaCaps(&unsupportedGamma));
+    CHECK(memcmp(&gamma,&gammaBefore,sizeof(gamma))==0);
+    DXGI_DDI_ARG_BLT unsupportedBlt={0};
+    unsupportedBlt.hDevice=(UINT_PTR)device.pDrvPrivate;
+    unsupportedBlt.hDstResource=dxgiRt;unsupportedBlt.hSrcResource=dxgiRt;
+    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnBlt(&unsupportedBlt));
+#undef FRONTEND_DXGI_REJECT
+    D3D10DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT unsupportedGsSo={0};
+    D3D10DDI_HSHADER unsupportedGsSoHandle={0};
+    D3D10DDI_HRTSHADER unsupportedGsSoRuntime={0};
+    SIZE_T unsupportedGsSoBytes=
+        deviceFunctions.pfnCalcPrivateGeometryShaderWithStreamOutput(
+            device,&unsupportedGsSo,NULL);
+    unsupportedGsSoHandle.pDrvPrivate=malloc(unsupportedGsSoBytes);
+    CHECK(unsupportedGsSoHandle.pDrvPrivate!=NULL);
+    if(unsupportedGsSoHandle.pDrvPrivate) {
+      memset(unsupportedGsSoHandle.pDrvPrivate,0x5a,unsupportedGsSoBytes);
+      unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+      unsigned rendersBefore=RuntimeRenders,signalsBefore=RuntimeSignals;
+      deviceFunctions.pfnCreateGeometryShaderWithStreamOutput(device,
+          &unsupportedGsSo,unsupportedGsSoHandle,unsupportedGsSoRuntime,NULL);
+      CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+            PoolCreates==createsBefore && RuntimeRenders==rendersBefore &&
+            RuntimeSignals==signalsBefore);
+      unsigned char *gsBytes=(unsigned char *)unsupportedGsSoHandle.pDrvPrivate;
+      for(SIZE_T i=0;i<unsupportedGsSoBytes;++i) CHECK(gsBytes[i]==0x5a);
+      free(unsupportedGsSoHandle.pDrvPrivate);
+    }
     vbMip.TexelWidth=sizeof(vertices);vbMip.TexelHeight=vbMip.TexelDepth=1;
     vbInitial.pSysMem=vertices;vbInitial.SysMemPitch=sizeof(vertices);vbInitial.SysMemSlicePitch=sizeof(vertices);
     vbCreate.pMipInfoList=&vbMip;vbCreate.pInitialDataUP=&vbInitial;
     vbCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;vbCreate.Usage=D3D10_DDI_USAGE_IMMUTABLE;
     vbCreate.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER;vbCreate.Format=DXGI_FORMAT_UNKNOWN;
     vbCreate.SampleDesc.Count=1;vbCreate.MipLevels=1;vbCreate.ArraySize=1;
-    vb.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&vbCreate));
+    SIZE_T vbPrivateBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&vbCreate);
+    vb.pDrvPrivate=calloc(1,vbPrivateBytes);
     vbRuntime.handle=(VOID *)(UINT_PTR)0xd02u;
     CHECK(vb.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&vbCreate,vb,vbRuntime);
     FRONTEND_STAGE("vb-resource");
+    if(vb.pDrvPrivate) {
+      void *vbSnapshot=malloc(vbPrivateBytes);
+      CHECK(vbSnapshot!=NULL);
+      if(vbSnapshot) {
+        memcpy(vbSnapshot,vb.pDrvPrivate,vbPrivateBytes);
+        UINT soOffset=0;
+        unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+        unsigned rendersBefore=RuntimeRenders,signalsBefore=RuntimeSignals;
+        deviceFunctions.pfnSoSetTargets(device,1,0,&vb,&soOffset);
+        CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+              PoolCreates==createsBefore && RuntimeRenders==rendersBefore &&
+              RuntimeSignals==signalsBefore &&
+              memcmp(vbSnapshot,vb.pDrvPrivate,vbPrivateBytes)==0);
+        free(vbSnapshot);
+      }
+    }
+#define FRONTEND_UNSUPPORTED_REJECT(call) do { \
+      unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates; \
+      unsigned beforeRenders=RuntimeRenders,beforeSignals=RuntimeSignals; \
+      call; \
+      CHECK(FrontendErrors==beforeErrors+1u && FrontendLastError==E_NOTIMPL && \
+            PoolCreates==beforeCreates && RuntimeRenders==beforeRenders && \
+            RuntimeSignals==beforeSignals); \
+    } while(0)
+    FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnResourceResolveSubresource(
+        device,rt,0,rt,0,DXGI_FORMAT_B8G8R8A8_UNORM));
+    FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnDrawAuto(device));
+    D3D10DDIARG_CREATESHADERRESOURCEVIEW unsupportedSrvDesc={0};
+    D3D10DDI_HSHADERRESOURCEVIEW unsupportedSrv={0};
+    unsupportedSrv.pDrvPrivate=calloc(1,
+        deviceFunctions.pfnCalcPrivateShaderResourceViewSize(
+            device,&unsupportedSrvDesc));
+    CHECK(unsupportedSrv.pDrvPrivate!=NULL);
+    if(unsupportedSrv.pDrvPrivate) {
+      FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnGenMips(device,unsupportedSrv));
+      free(unsupportedSrv.pDrvPrivate);
+    }
+    FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnResourceCopy(device,rt,rt));
+    FRONTEND_UNSUPPORTED_REJECT(deviceFunctions.pfnResourceCopyRegion(
+        device,rt,0,0,0,0,rt,0,NULL));
+#undef FRONTEND_UNSUPPORTED_REJECT
     D3D10DDIARG_CREATERENDERTARGETVIEW rtvCreate={0};
     D3D10DDI_HRENDERTARGETVIEW rtv={0};D3D10DDI_HRTRENDERTARGETVIEW rtvRuntime={0};
     rtvCreate.hDrvResource=rt;rtvCreate.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
