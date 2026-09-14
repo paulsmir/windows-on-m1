@@ -60,6 +60,8 @@ struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
 /* False retains caller storage; retry only after pending ownership is resolved.
  * All contexts must be destroyed before their screen is destroyed. */
 int AgxWin32AsahiContextDestroy(struct pipe_context *);
+int AgxWin32AsahiContextRetire(struct pipe_context *, APPLE_AGX_U32 TimeoutMs);
+int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
 
 int AgxWin32AsahiSceneInit(AGX_WIN32_ASAHI_SCENE *, struct pipe_screen *, struct pipe_context *);

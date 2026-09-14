@@ -5,6 +5,7 @@
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
@@ -84,6 +85,31 @@ int AgxWin32AsahiContextDestroy(struct pipe_context *ctx) {
   if(!context_idle(ctx)) return 0;
   ctx->destroy(ctx);
   return 1;
+}
+int AgxWin32AsahiContextRetire(struct pipe_context *ctx,APPLE_AGX_U32 timeout) {
+  if(!ctx) return 0;
+  struct agx_context *native=agx_context(ctx);
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *batch=&native->batches.slots[i];
+    if(batch->windows_batch) {
+      if(!AgxWin32AsahiBatchPoll(batch,timeout)) return 0;
+      agx_sync_batch(native,batch);
+    }
+    if(batch->windows_batch || BITSET_TEST(native->batches.active,i) ||
+       BITSET_TEST(native->batches.submitted,i)) return 0;
+  }
+  return 1;
+}
+int AgxWin32AsahiContextDrawReceipt(struct pipe_context *ctx) {
+  if(!ctx) return 0;
+  struct agx_context *native=agx_context(ctx);
+  AGX_WIN32_ASAHI_BACKEND *backend=agx_device(ctx->screen)->windows_private;
+  struct agx_batch *batch=native->batch;
+  fprintf(stderr,"D3D10_NATIVE_DRAW: batch=%u draws=%u capsule=%u failed=%u faults=%u\n",
+      batch!=NULL,batch?batch->draws:0,batch && batch->windows_batch,
+      backend?backend->Failed:1,native->any_faults);
+  return batch && batch->draws==1 && batch->windows_batch && backend &&
+      !backend->Failed && !native->any_faults;
 }
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *screen) {
   if(!screen || !screen->destroy) return 0;

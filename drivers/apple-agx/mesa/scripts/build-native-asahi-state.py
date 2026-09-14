@@ -42,7 +42,8 @@ overlays = {}
 if args.windows_platform_declarations:
     # All copied sources retain upstream MIT/BSD notices. This compile-only
     # projection excludes Linux APIs; no successful substitute API is defined.
-    for directory in ('src/asahi', 'src/gallium/drivers/asahi', 'include/drm-uapi'):
+    for directory in ('src/asahi', 'src/gallium/drivers/asahi',
+                      'src/gallium/frontends/d3d10umd', 'include/drm-uapi'):
         shutil.copytree(mesa/directory, out/directory)
     def change(path, sha, replacements):
         target=out/path
@@ -58,6 +59,217 @@ if args.windows_platform_declarations:
     change('src/gallium/drivers/asahi/agx_state.h',
         '6d5e7f85849bce3c3f2e5569373a24f6c0d692217a8e493754298750b755e7ab',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#endif')])
+    change('src/gallium/frontends/d3d10umd/Adapter.cpp',
+        'e6a8e473d3574ce46970a045bf21136ce30eb206ac97d0cea34028427688f70b',[
+        ('EXTERN_C struct pipe_screen *\nd3d10_create_screen(void);\n\n\n',''),
+        ('''   pAdaptor->screen = d3d10_create_screen();
+   if (!pAdaptor->screen) {
+      free(pAdaptor);
+      --numAdapters;
+      return E_OUTOFMEMORY;
+   }''','''   HRESULT result = AgxD3d10WindowsOpenAdapter(pOpenData, &pAdaptor->windows);
+   if (FAILED(result)) {
+      free(pAdaptor);
+      --numAdapters;
+      return result;
+   }'''),
+        ('''   struct pipe_screen *screen = pAdapter->screen;
+   screen->destroy(screen);
+   free(pAdapter);''','''   HRESULT result = AgxD3d10WindowsCloseAdapter(&pAdapter->windows);
+   if (FAILED(result)) return result;
+   free(pAdapter);'''),
+        ('EXTERN_C HRESULT APIENTRY\nOpenAdapter10(',
+         'EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10('),
+        ('EXTERN_C HRESULT APIENTRY\nOpenAdapter10_2(',
+         'EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10_2(')])
+    change('src/gallium/frontends/d3d10umd/State.h',
+        '4280c406ca8c1c199d09a0d062f8b52fb0baaec43a2ca7482e0d1a3acc7c4dd3',[
+        ('#include "DriverIncludes.h"',
+         '#include "DriverIncludes.h"\n#include "agx_d3d10_windows.h"'),
+        ('struct pipe_screen *screen;',
+         'AGX_D3D10_WINDOWS_ADAPTER *windows;'),
+        ('struct pipe_context *pipe;','''struct pipe_context *pipe;
+   AGX_D3D10_WINDOWS_DEVICE *windows;
+   HRESULT cleanup_result;
+   bool frontend_ready;''')])
+    change('src/gallium/frontends/d3d10umd/Device.cpp',
+        'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
+        ('''   struct pipe_screen *screen = pAdapter->screen;
+   struct pipe_context *pipe = screen->context_create(screen, NULL, 0);
+   pDevice->pipe = pipe;
+   pDevice->cso = cso_create_context(pipe, CSO_NO_VBUF);''','''   HRESULT result = AgxD3d10WindowsCreateDevice(
+      pAdapter->windows, pCreateData, &pDevice->windows);
+   pDevice->cleanup_result = result;
+   if (FAILED(result)) return result;
+   struct pipe_context *pipe = AgxD3d10WindowsContext(pDevice->windows);
+   if (!pipe) {
+      pDevice->cleanup_result = AgxD3d10WindowsCloseDevice(&pDevice->windows);
+      return E_FAIL;
+   }
+   struct pipe_screen *screen = pipe->screen;
+   pDevice->pipe = pipe;
+   pDevice->cso = cso_create_context(pipe, CSO_NO_VBUF);
+   if (!pDevice->cso) {
+      pDevice->cleanup_result = AgxD3d10WindowsCloseDevice(&pDevice->windows);
+      pDevice->pipe = NULL;
+      return E_OUTOFMEMORY;
+   }'''),
+        ('''   if (0) {
+      return S_OK;''','''   pDevice->frontend_ready = true;
+   pDevice->cleanup_result = S_OK;
+   if (0) {
+      return S_OK;'''),
+        ('   pipe->destroy(pipe);','''   pDevice->frontend_ready = false;
+   pDevice->pipe = NULL;
+   pDevice->cleanup_result = AgxD3d10WindowsCloseDevice(&pDevice->windows);'''),
+        ('''void APIENTRY
+RelocateDeviceFuncs(''','''EXTERN_C HRESULT APIENTRY
+MesaD3d10FrontendCleanupResult(D3D10DDI_HDEVICE hDevice)
+{
+   Device *pDevice = CastDevice(hDevice);
+   return pDevice ? pDevice->cleanup_result : E_INVALIDARG;
+}
+
+EXTERN_C struct _ADMISSION_UMD_DEVICE *APIENTRY
+MesaD3d10FrontendRuntimeForTest(D3D10DDI_HDEVICE hDevice)
+{
+   Device *pDevice = CastDevice(hDevice);
+   return pDevice ? AgxD3d10WindowsRuntimeForTest(pDevice->windows) : NULL;
+}
+
+EXTERN_C void *APIENTRY
+MesaD3d10FrontendOwnerForTest(D3D10DDI_HDEVICE hDevice)
+{
+   Device *pDevice = CastDevice(hDevice);
+   return pDevice ? AgxD3d10WindowsOwnerForTest(pDevice->windows) : NULL;
+}
+
+EXTERN_C struct pipe_context *APIENTRY
+MesaD3d10FrontendContextForTest(D3D10DDI_HDEVICE hDevice)
+{
+   Device *pDevice = CastDevice(hDevice);
+   return pDevice ? pDevice->pipe : NULL;
+}
+
+EXTERN_C BOOL APIENTRY
+MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER hShader)
+{
+   return CastPipeShader(hShader) != NULL;
+}
+
+void APIENTRY
+ RelocateDeviceFuncs(''')])
+    change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
+        'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
+        ('''   pipe->clear_render_target(pipe,
+                             surface,
+                             &clear_color,
+                             0, 0,
+                             pipe_surface_width(surface),
+                             pipe_surface_height(surface),
+                             true);''','''   if (pipe->clear_render_target) {
+      pipe->clear_render_target(pipe,
+                                surface,
+                                &clear_color,
+                                0, 0,
+                                pipe_surface_width(surface),
+                                pipe_surface_height(surface),
+                                true);
+      return;
+   }
+   Device *pDevice = CastDevice(hDevice);
+   struct pipe_resource *resource = surface ? surface->texture : NULL;
+   struct pipe_surface *bound = pDevice && pDevice->fb.nr_cbufs == 1 ?
+      &pDevice->fb.cbufs[0] : NULL;
+   if (!pipe->clear || !surface || !resource ||
+       resource->target != PIPE_TEXTURE_2D ||
+       resource->format != PIPE_FORMAT_B8G8R8A8_UNORM ||
+       resource->nr_samples != 1 || resource->array_size != 1 ||
+       resource->last_level != 0 || surface->format != resource->format ||
+       surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
+       !bound || pDevice->fb.zsbuf.texture || bound->texture != resource ||
+       bound->format != surface->format || bound->level != surface->level ||
+       bound->first_layer != surface->first_layer || bound->last_layer != surface->last_layer ||
+       pDevice->fb.width != pipe_surface_width(surface) ||
+       pDevice->fb.height != pipe_surface_height(surface)) {
+      LOG_UNSUPPORTED("ClearRenderTargetView requires one full BGRA8 target");
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   pipe->clear(pipe, PIPE_CLEAR_COLOR0, 0xf, 0, NULL,
+               &clear_color, 0.0, 0);''')])
+    change('src/gallium/frontends/d3d10umd/Resource.cpp',
+        'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
+        ('#include "util/u_surface.h"',
+         '#include "util/u_surface.h"\n#include "drm-uapi/drm_fourcc.h"'),
+        ('''   pResource->resource = screen->resource_create(screen, &templat);
+   if (!pResource) {
+      DebugPrintf("%s: failed to create resource\\n", __func__);
+      SetError(hDevice, E_OUTOFMEMORY);
+      return;
+   }''','''   if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
+      const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
+      bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+         pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM &&
+         pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
+         mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
+         mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
+         ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight * 4) <= 0x100000 &&
+         pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
+         pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
+         pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET &&
+         pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
+         !pCreateResource->pInitialDataUP;
+      if (!private_rt || !screen->resource_create_with_modifiers) {
+         LOG_UNSUPPORTED("Only a private uncompressed BGRA8 render target is admitted");
+         SetError(hDevice, E_NOTIMPL);
+         return;
+      }
+      const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;
+      pResource->resource = screen->resource_create_with_modifiers(
+         screen, &templat, &modifier, 1);
+   } else {
+      pResource->resource = screen->resource_create(screen, &templat);
+   }
+   if (!pResource->resource) {
+      DebugPrintf("%s: failed to create resource\\n", __func__);
+      SetError(hDevice, E_OUTOFMEMORY);
+      return;
+   }''')])
+    change('src/gallium/frontends/d3d10umd/InputAssembly.cpp',
+        '210b330c3327042d230a65ff5a7242df89ddb385d50f61bcacfc996d39c55bbd',[
+        ('   static const float dummy[4] = {0.0f, 0.0f, 0.0f, 0.0f};\n\n',''),
+        ('''      else {
+         pDevice->vertex_strides[StartBuffer + i] = 0;
+         vb->buffer_offset = 0;
+         if (!vb->is_user_buffer) {
+            pipe_resource_reference(&vb->buffer.resource, NULL);
+            vb->is_user_buffer = true;
+         }
+         vb->buffer.user = dummy;
+      }''','''      else {
+         pDevice->vertex_strides[StartBuffer + i] = 0;
+         vb->buffer_offset = 0;
+         if (vb->is_user_buffer) {
+            vb->buffer.user = NULL;
+            vb->is_user_buffer = false;
+         } else {
+            pipe_resource_reference(&vb->buffer.resource, NULL);
+         }
+      }'''),
+        ('''   for (i = 0; i < PIPE_MAX_ATTRIBS; ++i) {
+      struct pipe_vertex_buffer *vb = &pDevice->vertex_buffers[i];
+
+      /* XXX this is odd... */
+      if (!vb->is_user_buffer && !vb->buffer.resource) {
+         pDevice->vertex_strides[i] = 0;
+         vb->buffer_offset = 0;
+         vb->is_user_buffer = true;
+         vb->buffer.user = dummy;
+      }
+   }
+
+''','')])
     change('src/asahi/lib/agx_device.h',
         'e6ba76e16b2aace0ebf8b1ff2348cb800ad6cc254cef633d490de5bc203bfda3',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#else\n#include <stddef.h>\n#include "c11/threads.h"\ntypedef ptrdiff_t ssize_t;\n#endif'),

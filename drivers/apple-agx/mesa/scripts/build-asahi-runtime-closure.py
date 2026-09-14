@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(r'C:\Users\pauls\AD04-fullcompiler-001')
@@ -39,6 +40,10 @@ BRIDGES = ('agx_win32_asahi_bo.c', 'agx_win32_asahi_capture.c',
            'agx_win32_asahi_pipeline.c', 'agx_win32_asahi_batch.c',
            'agx_win32_asahi_scene.c',
            'agx_win32_asahi_runtime_test.c')
+FRONTEND_CPP = ('Adapter.cpp','Debug.cpp','Device.cpp','Draw.cpp','DxgiFns.cpp',
+                'Format.cpp','InputAssembly.cpp','OutputMerger.cpp','Query.cpp',
+                'Rasterizer.cpp','Resource.cpp','Shader.cpp','ShaderDump.cpp')
+FRONTEND_C = ('ShaderParse.c','ShaderTGSI.c')
 # Actual Gallium helpers required by native context/resource/state construction.
 # Further additions must follow real compile/link diagnostics, not dummy symbols.
 AUX_UNITS = ('util/u_framebuffer.c', 'util/u_helpers.c', 'util/u_prim.c',
@@ -247,7 +252,10 @@ def main():
                     evidence / 'src', evidence / 'src/asahi/compiler',
                     build / 'src', build / 'include', build / 'src/compiler',
                     build / 'src/compiler/nir', MESA / 'include', MESA / 'src',
+                    MESA / 'include/winddk',
                     MESA / 'src/gallium/include', MESA / 'src/gallium/auxiliary',
+                    MESA / 'src/gallium/auxiliary/driver_trace',
+                    MESA / 'src/gallium/auxiliary/util',
                     MESA / 'src/compiler', MESA / 'src/compiler/nir',
                     GENERATED / 'src/asahi/compiler', GENERATED / 'src/asahi/libagx',
                     OWNER_GENERATED / 'src', OWNER_GENERATED / 'src/asahi/genxml',
@@ -257,6 +265,36 @@ def main():
                                 'sha256': record(CLANG / 'clang-cl.exe', kind='toolchain'),
                                 'c_flags': c_flags, 'cpp_flags': cpp_flags,
                                 'includes': list(map(str, includes))}
+        trace_generated = out / 'generated-trace'
+        trace_generated.mkdir()
+        trace_generator = MESA / 'src/gallium/auxiliary/driver_trace/enums2names.py'
+        trace_inputs = [MESA / 'src/gallium/include/pipe/p_defines.h',
+                        MESA / 'src/gallium/include/pipe/p_video_enums.h',
+                        MESA / 'src/util/blend.h']
+        for path in [trace_generator, *trace_inputs]:
+            record(path, kind='native-meson-generated-input')
+        trace_c = trace_generated / 'tr_util.c'
+        trace_h = trace_generated / 'tr_util.h'
+        generated_result = subprocess.run(
+            [sys.executable, trace_generator, *trace_inputs,
+             '-C', trace_c, '-H', trace_h], stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        (out / 'tr-util-generate.log').write_bytes(generated_result.stdout)
+        if generated_result.returncode:
+            raise RuntimeError('Pinned tr_util generation failed')
+        record(trace_c, kind='native-meson-generated-source')
+        record(trace_h, kind='native-meson-generated-header')
+        includes.append(trace_generated)
+        indices_generator = MESA / 'src/gallium/auxiliary/indices/u_indices_gen.py'
+        record(indices_generator, kind='native-meson-generated-input')
+        indices_c = trace_generated / 'u_indices_gen.c'
+        indices_result = subprocess.run(
+            [sys.executable, indices_generator, indices_c],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        (out / 'u-indices-generate.log').write_bytes(indices_result.stdout)
+        if indices_result.returncode:
+            raise RuntimeError('Pinned u_indices generation failed')
+        record(indices_c, kind='native-meson-generated-source')
         runtime = []
         for relative, variable in [('src/gallium/drivers/asahi', 'files_asahi'),
                                    ('src/asahi/lib', 'libasahi_lib_files'),
@@ -270,6 +308,8 @@ def main():
                 runtime.append(native / relative / name)
         runtime.append(native / 'src/asahi/lib/agx_win32_device_key.c')
         runtime += [args.project / 'drivers/apple-agx/mesa/winsys' / name for name in BRIDGES]
+        runtime += [native / 'src/gallium/frontends/d3d10umd' / name
+                    for name in FRONTEND_CPP + FRONTEND_C]
         generated_c = OWNER_GENERATED / 'src/asahi/lib/libagx_shaders.c'
         record(generated_c, kind='native-generated-source')
         # Quoted includes must resolve beside the accepted projected header,
@@ -282,8 +322,19 @@ def main():
         # normal Gallium/TGSI utility definitions. Keep their primary sources.
         for relative in ('util/u_screen.c','util/u_sample_positions.c','util/u_sampler.c',
                          'util/u_dump_state.c','util/u_dump_defines.c','util/u_texture.c',
-                         'util/u_simple_shaders.c','nir/tgsi_to_nir.c'):
+                         'util/u_simple_shaders.c','util/u_gen_mipmap.c',
+                         'util/u_vbuf.c','cso_cache/cso_context.c',
+                         'indices/u_primconvert.c','translate/translate.c',
+                         'translate/translate_cache.c',
+                         'translate/translate_generic.c','translate/translate_sse.c',
+                         'rtasm/rtasm_execmem.c','rtasm/rtasm_x86sse.c',
+                         'nir/tgsi_to_nir.c'):
             runtime.append(MESA / 'src/gallium/auxiliary' / relative)
+        runtime += [MESA / 'src/gallium/auxiliary/driver_trace' / name
+                    for name in ('tr_context.c','tr_dump.c','tr_dump_state.c',
+                                 'tr_screen.c','tr_texture.c','tr_video.c')]
+        runtime.append(trace_c)
+        runtime.append(indices_c)
         for relative in ('tgsi/tgsi_build.c','tgsi/tgsi_parse.c','tgsi/tgsi_scan.c',
                          'tgsi/tgsi_info.c','tgsi/tgsi_util.c','tgsi/tgsi_ureg.c',
                          'tgsi/tgsi_dump.c','tgsi/tgsi_text.c','tgsi/tgsi_strings.c',
@@ -312,6 +363,8 @@ def main():
             # Actual-body test exports live in agx_state; no duplicate fixture
             # definition is included in this archive or its dependency list.
             exports = ['/DAGX_WIN32_NATIVE_PIPELINE_TEST=1'] if source.name == 'agx_state.c' else []
+            if 'frontends/d3d10umd' in source.as_posix():
+                exports.append('/DADMISSION_UMD_PIPE_FACTORY_TEST=1')
             run(name, [CLANG / 'clang-cl.exe', *flags, *exports,
                        *('/I' + str(p) for p in includes), '/c', source, '/Fo' + str(obj)])
             manifest['units'][-1].update(source_sha256=source_hash, object=str(obj), object_sha256=sha256(obj))

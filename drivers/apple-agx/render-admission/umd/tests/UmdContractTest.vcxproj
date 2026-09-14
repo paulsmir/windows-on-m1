@@ -72,6 +72,9 @@
       <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(EnableMesaD3d10FrontendTest)' == 'true'">
+    <ClCompile><PreprocessorDefinitions>ADMISSION_UMD_D3D10_FRONTEND_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+  </ItemDefinitionGroup>
   <!-- Real state-emitter test is retained separately: it requires the full
        native runtime/compiler link closure, not merely pool/pipeline objects. -->
   <ItemDefinitionGroup Condition="'$(EnableNativeStateTest)' == 'true'">

@@ -48,7 +48,8 @@ try {
   [void](New-Item -ItemType Directory $exeRoot)
   $arguments=@("$Project\drivers\apple-agx\render-admission\umd\tests\UmdContractTest.vcxproj",
     '/t:Build','/nr:false','/m:2','/p:Configuration=Release',"/p:Platform=$platform",
-    '/p:EnableNativeRuntimeTest=true','/p:EnableMesaPipeFactoryTest=true',"/p:NativeRuntimeProps=$props",
+    '/p:EnableNativeRuntimeTest=true','/p:EnableMesaPipeFactoryTest=true',
+    '/p:EnableMesaD3d10FrontendTest=true',"/p:NativeRuntimeProps=$props",
     '/p:MesaSourceRoot=C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
     '/p:MesaGeneratedRoot=C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
     "/p:NativeObjectRoot=$NativeSource","/p:IntDir=$exeRoot\obj\","/p:OutDir=$exeRoot\")
