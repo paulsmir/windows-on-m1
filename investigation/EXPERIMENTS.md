@@ -43436,3 +43436,6 @@ All308registered system-driver binaries inspected; no missing image, none signed
 
 ### EXP683 scoped recovery cleanup result
 ExactE9BE public cert exported from both stores, SHA97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda; removed onlyE9BE Root/TrustedPublisher. AppleInput remainsRunning with71CD0A trust; newEXP683 cert absent. Evidence old-signer-cleanup.log and old-signer public exports, copied toMac. Candidate files are hashverified ordinary user-directory inputs only, not staged drivers. Ordinary377/392 remains active. Hardware verdict remainsNOT_RUN due independently established SAC admission block.
+
+### EXP683 post-gate live health
+2026-09-14T00:56:08.1414288Z SSH read-only check:8CPUs;oneAPPL0002 Code28;AppleAgx packages/service/module false;AppleInputRunning;oldE9BE/new1F20 Root signer absent;nativeclientprocess absent;no freshSystem41/1001/129. Evidence control-plane/post-gate-health.json. Ordinary broker-disabled377/392 remains running. No driver installation, GPU-enabled launch or native submission occurred.
