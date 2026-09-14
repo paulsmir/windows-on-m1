@@ -50,8 +50,17 @@ matches declaration. Default WDK cert lacks DigitalSignature: rejected, not stag
 Final package uses experiment-scoped nonexportable signing cert thumbprint
 1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03. SYS/DLL/CAT signatures and binary catalog
 membership independently PASS; Windows INF membership found but builder chain is
-untrusted. No candidate package/trust installed on Air. Expected683 ARM64 client
-build is pending; app-local ARM64 VC runtime needed. Hardware readiness NOT claimed.
+untrusted. No candidate package/trust installed on Air. Expected683 ARM64 client build/link
+PASS: native-client-683-20260914a, SHA31ce32fd386525afabb4af3774349a54eced3b26a024a406ba09b7f13265af2f.
+Desktop ARM64 CRT14.44.35211.0 app-local and hashverified. Frozen input manifest
+SHA71b07f6708e42d87b2f691226e030cc166ba47cfe42ddf05d173f8c75e46d645.
+HARDWARE GATE BLOCKED: loader-only --help was rejected before process entry by
+Smart App Control VerifiedAndReputableDesktop, policy0283ac0f-fff1-49ae-ada1-8a933130cad6,
+CI3033/3077. No native submission/process, no GPU-enabled launch/package stage.
+Official Microsoft signing guidance requires trusted-provider signing; test cert
+alone does not satisfy SAC. Asked whether project has trusted signing service.
+Do not disable/bypass policy or replay native client. Independent production
+factory/frontend offline integration remains authorized. Hardware readiness NOT claimed.
 Evidence/artifacts: main-root .local/experiments/EXP-20260913-683-native-batch;
 append-only EXP683 ledger records builds/signing/preflight and exact hashes.
 
@@ -127,13 +136,15 @@ Standard Present/shared resources/redirection/DWM and desktop stability remain o
 Air ordinary377/392 recovery boot is running, broker disabled. Live baseline
 2026-09-14T00:33:53Z: J313-WIN ARM64 admin,8CPUs,one inert APPL0002 Code28,
 no AppleAgx package/service/module/SYS/UMD, NVMe/USB/keyboard OK, no fresh41/1001/129.
-Two generic historical WDK roots exist (pauls/runneradmin); preserve until scoped
-causal review, do not remove unrelated trust. No EXP683 signer installed.
+Stale AppleAgx signer E9BE removed only from Root/TrustedPublisher after export,
+5-package catalog and308registered-driver signature inventory. No driver used it.
+AppleInput running/valid71CD0A trust preserved in both stores. NewEXP683 signer
+not imported. Evidence old-signer-cleanup.log and control-plane signer inventories.
 SSH pavel@192.168.1.37 with key ~/.ssh/air and STRICT pinned known-hosts file
 main-root .local/experiments/EXP641-standard-present/air_known_hosts. Default user
 known_hosts is stale; do not change it. No operator IP reply needed.
 Active ordinary launcher owns proxy/vUART; do not concurrently access bareproxy.
-Emergency WinPE/FD/golden files exist. Verify hashes before relying on them.
+Emergency WinPE/FD/golden existence and hashes recorded in emergency-recovery-hashes.json.
 Retained-root/firmware/AGX output/fence proofs remain closed; compact reference:
 agent_tasks/AD04-PRE-COMPOSER-STATE.md. Ordinary377/392 GPU-visible recovery must
 retain one inert APPL0002 and no AppleAgx package/service/module/signer/staged driver.

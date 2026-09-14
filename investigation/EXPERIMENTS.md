@@ -43394,3 +43394,45 @@ Command: run-asahi-runtime-closure.ps1 -Project <fresh staged current source> -R
 
 ### EXP683 final signature verification result
 New scoped signing thumbprint1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03: SYS/DLL embedded signatures, CAT signature and SYS/DLL catalog membership independently pass osslsigncode with explicit certificate CA and SHA256 leaf pin. Evidence: .local/experiments/EXP-20260913-683-native-batch/final-signature-verification.json. INF catalog check is NOT VERIFIED: osslsigncode rejects INF input type before verification; use Windows catalog verification for this remaining gate. No package staged. All three documented emergency artifacts exist; their content hashes remain to be recorded.
+
+### EXP683 exact client/package manifest and loader-only gate preregistration
+Expected683 fresh ARM64 closure run native-client-683-20260914a PASS build/link0 warnings/errors; execution NOT_RUN. Actual command: bash drivers/apple-agx/mesa/scripts/stage-run-asahi-runtime-closure.sh native-client-683-20260914a arm64 683. SourceSHA15380710fc79944823e9da55531ed940881eaf75396c43fb52b749e8631f305e.
+Frozen air-input/manifest.json SHA25671b07f6708e42d87b2f691226e030cc166ba47cfe42ddf05d173f8c75e46d645. Contents:
+```json
+{
+  "Experiment": "EXP-20260913-683-native-batch",
+  "PackageBuild": 683,
+  "Profile": "VisibleAgxQualification",
+  "CertificateThumbprint": "1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03",
+  "Files": {
+    "AppleAgxD3dKmRender.exe": "31ce32fd386525afabb4af3774349a54eced3b26a024a406ba09b7f13265af2f",
+    "AppleAgxRenderAdmission.inf": "40ee76071716d265c9bf6a1c9ee7a66ab4d5ee04a9186a794c44e78f7a8545e0",
+    "AppleAgxRenderAdmission.sys": "92a0cff474e049f3cc3c5267764a4d47af609222619095ca42315e63ad82bc7d",
+    "AppleAgxRenderAdmissionUmd.dll": "51682d885805900e90598b5b65b85c12e8b2ce4975ae8e0af0c110a38db7f2ef",
+    "VCRUNTIME140.dll": "d8a8513921544569837e400d37cc71302819967ae6defa932266a7ecb41dbaf9",
+    "appleagxrenderadmission.cat": "8c80f8d30588f0553c080c231ac59f4e2cdb3d276e60f7ecf08d6158ba7f61da",
+    "exp683-public.cer": "ec2cc8922e0a8f9c68254a515f835455fd212ca9f572d537932ac4e2e6872f66"
+  },
+  "NativeCommand": "AppleAgxD3dKmRender.exe --native-batch",
+  "Hardware": "NOT_RUN",
+  "RecoveryHashes": {
+    ".local/experiments/EXP-20260903-378-offline-appleagx-boot-recovery/winpe-exp378.img": "1a2a146fe5d80bae89ae4032a35b3434ce3881f66ff8c26458df8970923fcccf",
+    ".local/experiments/EXP-20260903-385-hvc-single-page/recovery/J313_EFI-no-agx-autoboot.fd": "279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c",
+    ".local/recovery/J313-GOLDEN-20260903/J313-AppleAgx-Recovery.img": "5bc762a6130dd9f0655a39d768381191f9ba18b369e30d55c7932260f9fc1e8a"
+  }
+}
+```
+Copy only to fresh C:/Users/pavel/EXP-20260913-683-native-batch/air-input. Hash every file before any execution. Loader-only command: AppleAgxD3dKmRender.exe --help; source wmain rejects this argument with usage and return2 before adapter enumeration or KMT calls. Expected exit2 with native-batch in usage; no GPU submission. Failure: loader error or different result, stop and diagnose. No package install/stage or signer import in this step.
+CHANGES bookkeeping correction: build04 source archive is source-build04.tar.gz (not build04/source.tar.gz); recorded SHA unchanged.
+
+### EXP683 loader preflight path correction
+First loader gate stopped before execution: SCP created the previously absent experiment directory with input files directly inside it, not the requested air-input child. All files preserved; create absent air-input then move exactly manifest-listed files and manifest into it after root manifest hash check, and repeat original loader-only gate. No binary ran and no package/trust changed.
+### EXP683 scoped signer normalization preregistration
+Read-only catalog inventory5packages plus service-binary inventory308drivers proves71CD0A belongs running AppleInput and must remain. No installed package or registered driver usesE9BE. E9BE is positively attributed to old AppleAgx signing. Export publicE9BE from exact LocalMachine Root/TrustedPublisher stores to experiment evidence, then remove only E9BE from those stores. Verify AppleInput71CD0A trust and runningdriver remain. Next import exact hashverified publicEXP683 cert1F20D29FFD6905597AE3D8F5F25B0B31E10C7C03 to Root/TrustedPublisher; private key stays builder. Verify Windows Authenticode statusValid for exactSYS/DLL/CAT and Microsoft CRT. No package stage/native execution during trust gate. Rollback removes only newEXP683 cert after exactpackage cleanup; unrelatedInputtrust preserved.
+
+### EXP683 loader policy verdict and trust scope amendment
+Loader-only02 never entered process: Windows Application Control blocked EXE; no process remains. CI3033/3077 with policy0283ac0f-fff1-49ae-ada1-8a933130cad6, enforced VerifiedAndReputableDesktop (Smart App Control). Evidence air-code-integrity.json. Verdict: environment admission BLOCKED, native hardware NOT_RUN. Official Microsoft signing guidance requires trusted-provider certificate; selfsigned WDK cert is insufficient. No policy changes, exception injection, or alternate execution path. User asked about available project trusted signing service; independent offline production work can continue.
+All308registered system-driver binaries inspected; no missing image, none signedE9BE; AppleInput running and valid71CD0A. Normalize only staleE9BE trust as preregistered, exporting public cert first. DEFER newEXP683 cert import/package staging because loader gate is blocked. This supersedes import portion of preceding trust preregistration; no trust change has yet occurred.
+
+### EXP683 scoped recovery cleanup result
+ExactE9BE public cert exported from both stores, SHA97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda; removed onlyE9BE Root/TrustedPublisher. AppleInput remainsRunning with71CD0A trust; newEXP683 cert absent. Evidence old-signer-cleanup.log and old-signer public exports, copied toMac. Candidate files are hashverified ordinary user-directory inputs only, not staged drivers. Ordinary377/392 remains active. Hardware verdict remainsNOT_RUN due independently established SAC admission block.
