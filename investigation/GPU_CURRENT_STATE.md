@@ -225,6 +225,32 @@ exeSHA08c9c9d4529870a40c74cd196d59fa347b1930ad52f8fd8fec5fa4786bc514dc,
 execution0. ARM64 archive26774b4b...,exe1e38b9f...,build/link0warnings/errors;
 content manifest73480793... equal. Installedumd.c/table/pipeline unchanged.
 
+## Verified D3D10 EVENT query
+
+Implementation1f89245 supports onlyD3D10DDI_QUERY_EVENT/MiscFlags0 over the
+existing ScreenFences owner. Query storage holds magic,device/owner/generation,
+issue serial,fence token,phase,error; noGallium query/nativebatch pointer. Begin
+is identity-validated no-op. End detaches oldissue,collects completed detached
+slots,flushes prior native work once,checks exact active Render/PostStatus,then
+enqueues a distinct ordered query marker even for emptylocalstream.
+
+GetData accepts only(NULL,0) or(BOOL*,sizeofBOOL),flags0/DO_NOT_FLUSH. Both poll
+timeout0; pending preserves output+SetError(WASSTILLDRAWING),completion consumes
+once/writesTRUE/caches,repeat has no callbacks. Reissue gets newtoken; pending
+Destroy clears runtime Query while pointer-free slot survives for collection.
+Device finalization closes all attached/detachedquery events; terminal records
+count query markers through explicit boundedpackedfield. Otherqueries/predication
+remainE_NOTIMPL; invalid/cross/stale operationsE_INVALIDARG.
+
+RED EVENTCreate63afed63... andDraw-End6df30857...; final lifetimeGREEN includes
+actualRender+separate draw/querymarkers,pending/completed/repeat,bothflagmodes,
+70reissues,empty stream,pendingDestroy,deviceDestroy,stale/cross-device,enqueue
+anddraw-flush failures with no falsequery marker. Final x64 archive
+SHAe56a07e9c0fe0806a74335d56aca85ddaeb2cc23cdfc4eaf6c3b045f873a2b56,
+exeSHAe27601d6cdce6c1fccfbf6fe18da681a8d44173621d71197a614c131ebb192cd,
+execution0. ARM64 archive8b0acb9b...,exe51efe9ca...,build/link0warnings/errors;
+installedARM64 UMD ClCompile/analyze0warnings/errors. Exports/pipeline unchanged.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -298,10 +324,9 @@ pipeline level0. Map every required callback/format/resource/state path to
 implemented or fail-closed status, complete the smallest truthful atomic table,
 then link this same projected closure into installed UMD. Advertise a pipeline
 only after all required functions and companion invariants are implemented.
-Next functional unit is D3D10DDI_QUERY_EVENT over the existing ordered completion
-owner:Create/End/GetData/Destroy,DO_NOT_FLUSH,pending/completed/empty-stream and
-device-destroy semantics. It must not reuse the fail-closed query storage as a
-fake completion or require newKMD/query hardware. Keep other query types rejected.
+Next choose the strongest remaining mandatory FL10 unit from the exact inventory;
+likely indexed/instanced IA draw or constant-buffer execution. Derive its complete
+DDI-to-Asahi mapping before editing. Other query types remain rejected.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
