@@ -145,6 +145,30 @@ struct Query
    QueryPhase Phase;
    HRESULT LastError;
 };'''),
+        ('''struct Resource
+{
+   DXGI_FORMAT Format;
+   UINT MipLevels;
+   UINT NumSubResources;
+   bool buffer;
+   struct pipe_resource *resource;
+   struct pipe_transfer **transfers;
+   struct pipe_stream_output_target *so_target;
+};''','''struct Resource
+{
+   DXGI_FORMAT Format;
+   UINT MipLevels;
+   UINT NumSubResources;
+   bool buffer;
+   struct pipe_resource *resource;
+   struct pipe_transfer **transfers;
+   struct pipe_stream_output_target *so_target;
+   bool constant_buffer;
+   UINT logical_bytes;
+   Device *owner_device;
+   ULONGLONG owner_cookie;
+   ULONG device_generation;
+};'''),
         ('''   Query *pQuery = CastQuery(hQuery);
    return pQuery ? pQuery->handle : NULL;''','''   (void)hQuery;
    return NULL;''')])
@@ -689,6 +713,48 @@ _Present('''),
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   Device *pDevice = CastDevice(hDevice);
+   ULONGLONG owner = 0;
+   ULONG generation = 0;
+   bool valid = pDevice && (NumBuffers == 0 || phBuffers) &&
+      StartBuffer <= PIPE_MAX_CONSTANT_BUFFERS &&
+      NumBuffers <= PIPE_MAX_CONSTANT_BUFFERS - StartBuffer &&
+      AgxD3d10WindowsIdentity(pDevice->windows, &owner, &generation);
+   for (UINT i = 0; valid && i < NumBuffers; ++i) {
+      Resource *resource = CastResource(phBuffers[i]);
+      if (!resource) continue;
+      unsigned slot = StartBuffer + i;
+      valid = (shader_type == MESA_SHADER_VERTEX ||
+               shader_type == MESA_SHADER_FRAGMENT) && slot == 0 &&
+         resource->constant_buffer && resource->owner_device == pDevice &&
+         resource->owner_cookie == owner &&
+         resource->device_generation == generation && resource->resource &&
+         resource->resource->target == PIPE_BUFFER &&
+         (resource->resource->bind & PIPE_BIND_CONSTANT_BUFFER) &&
+         !(resource->resource->bind &
+           ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+         resource->logical_bytes >= 16 && resource->logical_bytes <= 65536 &&
+         (resource->logical_bytes & 15) == 0 &&
+         resource->resource->width0 == resource->logical_bytes;
+   }
+   if (!valid) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   for (UINT i = 0; i < NumBuffers; ++i) {
+      Resource *resource = CastResource(phBuffers[i]);
+      if (!resource) {
+         pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
+                                             StartBuffer + i, NULL);
+         continue;
+      }
+      struct pipe_constant_buffer cb = {};
+      cb.buffer = resource->resource;
+      cb.buffer_offset = 0;
+      cb.buffer_size = resource->logical_bytes;
+      pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
+                                          StartBuffer + i, &cb);
+   }''')
     change('src/gallium/frontends/d3d10umd/Draw.cpp',
         'da5904f2ac6b8a79373bcc60d2cef0546e8da0bc1ba92d21812aff3ea2338f7e',[
         ('''DrawAuto(D3D10DDI_HDEVICE hDevice)  // IN
@@ -701,12 +767,46 @@ _Present('''),
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
         ('#include "util/u_surface.h"',
          '#include "util/u_surface.h"\n#include "drm-uapi/drm_fourcc.h"'),
+        ('''   Resource *pResource = CastResource(hResource);
+
+   memset(pResource, 0, sizeof *pResource);''','''   Resource *pResource = CastResource(hResource);
+   Device *pDevice = CastDevice(hDevice);
+   ULONGLONG resourceOwner = 0;
+   ULONG resourceGeneration = 0;
+   const D3D10DDI_MIPINFO *resourceMip = pCreateResource->pMipInfoList;
+   bool wantsConstant =
+      (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
+   bool validConstant = wantsConstant && pResource && resourceMip &&
+      pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
+      pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
+      pCreateResource->BindFlags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
+      pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
+      pCreateResource->MapFlags == 0 && pCreateResource->MiscFlags == 0 &&
+      !pCreateResource->pPrimaryDesc && pCreateResource->MipLevels == 1 &&
+      pCreateResource->ArraySize == 1 && resourceMip[0].TexelHeight == 1 &&
+      resourceMip[0].TexelDepth == 1 && resourceMip[0].TexelWidth >= 16 &&
+      resourceMip[0].TexelWidth <= 65536 &&
+      (resourceMip[0].TexelWidth & 15) == 0 &&
+      pCreateResource->SampleDesc.Count == 1 &&
+      pCreateResource->SampleDesc.Quality == 0 &&
+      (!pCreateResource->pInitialDataUP ||
+       pCreateResource->pInitialDataUP[0].pSysMem) && pDevice &&
+      AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
+                              &resourceGeneration);
+   if (wantsConstant && !validConstant) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+
+   memset(pResource, 0, sizeof *pResource);'''),
         ('''   pResource->resource = screen->resource_create(screen, &templat);
    if (!pResource) {
       DebugPrintf("%s: failed to create resource\\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
-   }''','''   if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
+   }''','''   if (wantsConstant) {
+      pResource->resource = screen->resource_create(screen, &templat);
+   } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
       bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
          pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM &&
@@ -734,6 +834,13 @@ _Present('''),
       DebugPrintf("%s: failed to create resource\\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
+   }
+   if (wantsConstant) {
+      pResource->constant_buffer = true;
+      pResource->logical_bytes = resourceMip[0].TexelWidth;
+      pResource->owner_device = pDevice;
+      pResource->owner_cookie = resourceOwner;
+      pResource->device_generation = resourceGeneration;
    }'''),
         ('''ResourceCopy(D3D10DDI_HDEVICE hDevice,          // IN
              D3D10DDI_HRESOURCE hDstResource,   // IN
@@ -783,6 +890,44 @@ _Present('''),
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUpdateSubResourceUP','''   Device *pDevice = CastDevice(hDevice);
+   Resource *resource = CastResource(hDstResource);
+   ULONGLONG owner = 0;
+   ULONG generation = 0;
+   bool identity = pDevice && AgxD3d10WindowsIdentity(
+      pDevice->windows, &owner, &generation);
+   bool valid = pDevice && resource && resource->constant_buffer &&
+      resource->owner_device == pDevice && DstSubResource == 0 && !pDstBox &&
+      pSysMemUP && resource->resource && resource->resource->target == PIPE_BUFFER &&
+      (resource->resource->bind & PIPE_BIND_CONSTANT_BUFFER) &&
+      !(resource->resource->bind &
+        ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+      resource->logical_bytes >= 16 && resource->logical_bytes <= 65536 &&
+      (resource->logical_bytes & 15) == 0 &&
+      resource->resource->width0 == resource->logical_bytes &&
+      identity &&
+      resource->owner_cookie == owner && resource->device_generation == generation;
+   if (!valid) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   HRESULT result = AgxD3d10WindowsFlushRetire(pDevice->windows);
+   if (FAILED(result)) {
+      SetError(hDevice, result);
+      return;
+   }
+   struct pipe_box box = {0, 0, 0, (int)resource->logical_bytes, 1, 1};
+   struct pipe_transfer *transfer = NULL;
+   void *map = pDevice->pipe->buffer_map(pDevice->pipe, resource->resource, 0,
+                                          PIPE_MAP_WRITE, &box, &transfer);
+   if (!map || !transfer) {
+      SetError(hDevice, E_OUTOFMEMORY);
+      return;
+   }
+   memcpy(map, pSysMemUP, resource->logical_bytes);
+   pipe_buffer_unmap(pDevice->pipe, transfer);
+   (void)RowPitch;
+   (void)DepthPitch;''')
     change('src/gallium/frontends/d3d10umd/InputAssembly.cpp',
         '210b330c3327042d230a65ff5a7242df89ddb385d50f61bcacfc996d39c55bbd',[
         ('   static const float dummy[4] = {0.0f, 0.0f, 0.0f, 0.0f};\n\n',''),

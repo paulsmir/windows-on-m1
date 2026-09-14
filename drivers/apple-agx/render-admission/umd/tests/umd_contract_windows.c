@@ -972,35 +972,36 @@ static void test_mesa_d3d10_frontend_open(void) {
 #define FRONTEND_STAGE(name) do { fprintf(stderr,"D3D10_FRONTEND_STAGE: %s\n",name);fflush(stderr); } while(0)
 #define FRONTEND_OP(op,len) (ENCODE_D3D10_SB_OPCODE_TYPE(op)|ENCODE_D3D10_SB_TOKENIZED_INSTRUCTION_LENGTH(len))
 #define FRONTEND_REG(type,selection,components) (ENCODE_D3D10_SB_OPERAND_NUM_COMPONENTS(D3D10_SB_OPERAND_4_COMPONENT)|ENCODE_D3D10_SB_OPERAND_4_COMPONENT_SELECTION_MODE(selection)|components|ENCODE_D3D10_SB_OPERAND_TYPE(type)|ENCODE_D3D10_SB_OPERAND_INDEX_DIMENSION(D3D10_SB_OPERAND_INDEX_1D)|ENCODE_D3D10_SB_OPERAND_INDEX_REPRESENTATION(0,D3D10_SB_OPERAND_INDEX_IMMEDIATE32))
+#define FRONTEND_CB (ENCODE_D3D10_SB_OPERAND_NUM_COMPONENTS(D3D10_SB_OPERAND_4_COMPONENT)|ENCODE_D3D10_SB_OPERAND_4_COMPONENT_SELECTION_MODE(D3D10_SB_OPERAND_4_COMPONENT_SWIZZLE_MODE)|D3D10_SB_OPERAND_4_COMPONENT_NOSWIZZLE|ENCODE_D3D10_SB_OPERAND_TYPE(D3D10_SB_OPERAND_TYPE_CONSTANT_BUFFER)|ENCODE_D3D10_SB_OPERAND_INDEX_DIMENSION(D3D10_SB_OPERAND_INDEX_2D)|ENCODE_D3D10_SB_OPERAND_INDEX_REPRESENTATION(0,D3D10_SB_OPERAND_INDEX_IMMEDIATE32)|ENCODE_D3D10_SB_OPERAND_INDEX_REPRESENTATION(1,D3D10_SB_OPERAND_INDEX_IMMEDIATE32))
 #define FRONTEND_IMM4 (ENCODE_D3D10_SB_OPERAND_NUM_COMPONENTS(D3D10_SB_OPERAND_4_COMPONENT)|ENCODE_D3D10_SB_OPERAND_4_COMPONENT_SELECTION_MODE(D3D10_SB_OPERAND_4_COMPONENT_SWIZZLE_MODE)|D3D10_SB_OPERAND_4_COMPONENT_NOSWIZZLE|ENCODE_D3D10_SB_OPERAND_TYPE(D3D10_SB_OPERAND_TYPE_IMMEDIATE32)|ENCODE_D3D10_SB_OPERAND_INDEX_DIMENSION(D3D10_SB_OPERAND_INDEX_0D))
     UINT vs[]={
-      ENCODE_D3D10_SB_TOKENIZED_PROGRAM_VERSION_TOKEN(D3D10_SB_VERTEX_SHADER,4,0),15,
+      ENCODE_D3D10_SB_TOKENIZED_PROGRAM_VERSION_TOKEN(D3D10_SB_VERTEX_SHADER,4,0),22,
       FRONTEND_OP(D3D10_SB_OPCODE_DCL_INPUT,3),
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_INPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
       FRONTEND_OP(D3D10_SB_OPCODE_DCL_OUTPUT_SIV,4),
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
       ENCODE_D3D10_SB_NAME(D3D10_SB_NAME_POSITION),
-      FRONTEND_OP(D3D10_SB_OPCODE_MOV,5),
+      FRONTEND_OP(D3D10_SB_OPCODE_DCL_CONSTANT_BUFFER,4),FRONTEND_CB,0,1,
+      FRONTEND_OP(D3D10_SB_OPCODE_ADD,8),
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_INPUT,D3D10_SB_OPERAND_4_COMPONENT_SWIZZLE_MODE,D3D10_SB_OPERAND_4_COMPONENT_NOSWIZZLE),0,
+      FRONTEND_CB,0,0,
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
     UINT ps[]={
-      ENCODE_D3D10_SB_TOKENIZED_PROGRAM_VERSION_TOKEN(D3D10_SB_PIXEL_SHADER,4,0),14,
+      ENCODE_D3D10_SB_TOKENIZED_PROGRAM_VERSION_TOKEN(D3D10_SB_PIXEL_SHADER,4,0),16,
       FRONTEND_OP(D3D10_SB_OPCODE_DCL_OUTPUT,3),
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
-      FRONTEND_OP(D3D10_SB_OPCODE_MOV,8),
+      FRONTEND_OP(D3D10_SB_OPCODE_DCL_CONSTANT_BUFFER,4),FRONTEND_CB,0,1,
+      FRONTEND_OP(D3D10_SB_OPCODE_MOV,6),
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
-      FRONTEND_IMM4,0,0,0,0,
+      FRONTEND_CB,0,0,
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
-    union { float f; UINT u; } color;
-    color.f=0.9f;ps[9]=color.u;color.f=0.2f;ps[10]=color.u;
-    color.f=0.1f;ps[11]=color.u;color.f=1.0f;ps[12]=color.u;
     float vertices[12]={-1,-1,0,1,1,-1,0,1,0,1,0,1};
-    D3D10DDI_MIPINFO rtMip={0},vbMip={0};
-    D3D10_DDIARG_SUBRESOURCE_UP vbInitial={0};
-    D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0};
-    D3D10DDI_HRESOURCE rt={0},vb={0};
-    D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0};
+    D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0};
+    D3D10_DDIARG_SUBRESOURCE_UP vbInitial={0},cbInitial={0};
+    D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0},cbCreate={0};
+    D3D10DDI_HRESOURCE rt={0},vb={0},cb={0},vsCb={0};
+    D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0},cbRuntime={0},vsCbRuntime={0};
     rtMip.TexelWidth=16;rtMip.TexelHeight=16;rtMip.TexelDepth=1;
     rtCreate.pMipInfoList=&rtMip;rtCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
     rtCreate.Usage=D3D10_DDI_USAGE_DEFAULT;rtCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
@@ -1103,6 +1104,70 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(vb.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&vbCreate,vb,vbRuntime);
     FRONTEND_STAGE("vb-resource");
+    float cbValues[4]={0.9f,0.2f,0.1f,1.0f};
+    cbMip.TexelWidth=sizeof(cbValues);cbMip.TexelHeight=cbMip.TexelDepth=1;
+    cbInitial.pSysMem=cbValues;cbInitial.SysMemPitch=1;cbInitial.SysMemSlicePitch=1;
+    cbCreate.pMipInfoList=&cbMip;cbCreate.pInitialDataUP=&cbInitial;
+    cbCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+    cbCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
+    cbCreate.BindFlags=D3D10_DDI_BIND_CONSTANT_BUFFER;
+    cbCreate.Format=DXGI_FORMAT_UNKNOWN;cbCreate.SampleDesc.Count=1;
+    cbCreate.MipLevels=1;cbCreate.ArraySize=1;
+    cb.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cbCreate));
+    cbRuntime.handle=(VOID *)(UINT_PTR)0xd0au;
+    CHECK(cb.pDrvPrivate!=NULL);
+    unsigned cbErrorsBefore=FrontendErrors;
+    deviceFunctions.pfnCreateResource(device,&cbCreate,cb,cbRuntime);
+    CHECK(FrontendErrors==cbErrorsBefore);
+    float vsCbValues[4]={0.0f,0.0f,0.0f,0.0f};
+    cbInitial.pSysMem=vsCbValues;
+    vsCb.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cbCreate));
+    vsCbRuntime.handle=(VOID *)(UINT_PTR)0xd0bu;
+    CHECK(vsCb.pDrvPrivate!=NULL);
+    deviceFunctions.pfnCreateResource(device,&cbCreate,vsCb,vsCbRuntime);
+    CHECK(FrontendErrors==cbErrorsBefore);
+    cbInitial.pSysMem=cbValues;
+    for(unsigned invalidCase=0;invalidCase<14u;++invalidCase) {
+      D3D10DDIARG_CREATERESOURCE invalid=cbCreate;
+      D3D10DDI_MIPINFO invalidMip=cbMip;
+      D3D10_DDIARG_SUBRESOURCE_UP invalidInitial=cbInitial;
+      invalid.pMipInfoList=&invalidMip;
+      invalid.pInitialDataUP=&invalidInitial;
+      switch(invalidCase) {
+      case 0: invalidMip.TexelWidth=15; break;
+      case 1: invalidMip.TexelWidth=65552; break;
+      case 2: invalid.BindFlags|=D3D10_DDI_BIND_VERTEX_BUFFER; break;
+      case 3: invalid.Usage=D3D10_DDI_USAGE_IMMUTABLE; break;
+      case 4: invalid.MapFlags=1; break;
+      case 5: invalid.MiscFlags=1; break;
+      case 6: invalid.MipLevels=2; break;
+      case 7: invalid.ArraySize=2; break;
+      case 8: invalidMip.TexelHeight=2; break;
+      case 9: invalidMip.TexelDepth=2; break;
+      case 10: invalid.SampleDesc.Count=2; break;
+      case 11: invalid.SampleDesc.Quality=1; break;
+      case 12: invalid.Format=DXGI_FORMAT_R32_FLOAT; break;
+      default: invalidInitial.pSysMem=NULL; break;
+      }
+      SIZE_T invalidBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&invalid);
+      D3D10DDI_HRESOURCE invalidHandle={0};
+      D3D10DDI_HRTRESOURCE invalidRuntime={0};
+      invalidHandle.pDrvPrivate=calloc(1,invalidBytes);
+      invalidRuntime.handle=(VOID *)(UINT_PTR)(0xe00u+invalidCase);
+      CHECK(invalidHandle.pDrvPrivate!=NULL);
+      if(invalidHandle.pDrvPrivate) {
+        memset(invalidHandle.pDrvPrivate,0x5a,invalidBytes);
+        unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+        unsigned rendersBefore=RuntimeRenders,signalsBefore=RuntimeSignals;
+        deviceFunctions.pfnCreateResource(device,&invalid,invalidHandle,invalidRuntime);
+        CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+              PoolCreates==createsBefore && RuntimeRenders==rendersBefore &&
+              RuntimeSignals==signalsBefore);
+        unsigned char *invalidStorage=invalidHandle.pDrvPrivate;
+        for(SIZE_T i=0;i<invalidBytes;++i) CHECK(invalidStorage[i]==0x5a);
+        free(invalidHandle.pDrvPrivate);
+      }
+    }
     if(vb.pDrvPrivate) {
       void *vbSnapshot=malloc(vbPrivateBytes);
       CHECK(vbSnapshot!=NULL);
@@ -1194,6 +1259,32 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(depth.pDrvPrivate!=NULL);deviceFunctions.pfnCreateDepthStencilState(device,&depthDesc,depth,depthRuntime);
     FRONTEND_STAGE("states");
     deviceFunctions.pfnVsSetShader(device,vsh);deviceFunctions.pfnPsSetShader(device,psh);
+    unsigned cbBindErrors=FrontendErrors;
+    D3D10DDI_HRESOURCE invalidRange[2]={cb,cb};
+    deviceFunctions.pfnVsSetConstantBuffers(device,0,2,invalidRange);
+    CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
+    deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&cb);
+    CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
+    deviceFunctions.pfnPsSetConstantBuffers(device,1,1,&cb);
+    CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
+    D3D10DDI_HRESOURCE nullConstantSlot={0};
+    deviceFunctions.pfnVsSetConstantBuffers(device,1,1,&nullConstantSlot);
+    deviceFunctions.pfnPsSetConstantBuffers(device,0,0,NULL);
+    CHECK(FrontendErrors==cbBindErrors);
+    deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&cb);
+    deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&cb);
+    CHECK(FrontendErrors==cbBindErrors);
+    D3D10_DDI_BOX invalidConstantBox={0,0,0,16,1,1};
+    unsigned invalidUpdateErrors=FrontendErrors;
+    deviceFunctions.pfnDefaultConstantBufferUpdateSubresourceUP(
+        device,cb,1,NULL,cbValues,0,0);
+    CHECK(FrontendErrors==++invalidUpdateErrors && FrontendLastError==E_INVALIDARG);
+    deviceFunctions.pfnDefaultConstantBufferUpdateSubresourceUP(
+        device,cb,0,&invalidConstantBox,cbValues,0,0);
+    CHECK(FrontendErrors==++invalidUpdateErrors && FrontendLastError==E_INVALIDARG);
+    deviceFunctions.pfnDefaultConstantBufferUpdateSubresourceUP(
+        device,cb,0,NULL,NULL,0,0);
+    CHECK(FrontendErrors==++invalidUpdateErrors && FrontendLastError==E_INVALIDARG);
     FRONTEND_STAGE("bind-shaders");
     deviceFunctions.pfnIaSetInputLayout(device,layout);
     UINT stride=16,offset=0;D3D10DDI_HRESOURCE nullBuffer={0};
@@ -1267,6 +1358,42 @@ static void test_mesa_d3d10_frontend_open(void) {
           sizeof(eventResult),D3D10_DDI_GET_DATA_DO_NOT_FLUSH);
       CHECK(FrontendErrors==completedErrors && eventResult==TRUE &&
             RuntimeRenders==1u && RuntimeSignals==2u);
+      RuntimeCheckpoint(frontendOwner,1u);
+      void *firstCommand=malloc(sizeof(RuntimeCommand));
+      void *firstImages=malloc(sizeof(RuntimeImages));
+      void *firstDma=malloc(sizeof(RuntimeDma));
+      CHECK(firstCommand && firstImages && firstDma);
+      if(firstCommand && firstImages && firstDma) {
+        memcpy(firstCommand,RuntimeCommand,sizeof(RuntimeCommand));
+        memcpy(firstImages,RuntimeImages,sizeof(RuntimeImages));
+        memcpy(firstDma,RuntimeDma,sizeof(RuntimeDma));
+      }
+      float cbValues2[4]={0.2f,0.8f,0.3f,1.0f};
+      unsigned updateErrors=FrontendErrors;
+      deviceFunctions.pfnDefaultConstantBufferUpdateSubresourceUP(
+          device,cb,0,NULL,cbValues2,1,1);
+      CHECK(FrontendErrors==updateErrors &&
+            (!firstCommand || !memcmp(firstCommand,RuntimeCommand,sizeof(RuntimeCommand))) &&
+            (!firstImages || !memcmp(firstImages,RuntimeImages,sizeof(RuntimeImages))) &&
+            (!firstDma || !memcmp(firstDma,RuntimeDma,sizeof(RuntimeDma))));
+      free(firstCommand);free(firstImages);free(firstDma);
+      RuntimeCheckpoint(frontendOwner,5u);
+      RuntimeImmediateMarker=0;
+      deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&vsCb);
+      deviceFunctions.pfnDraw(device,3,0);
+      CHECK(AgxWin32AsahiContextDrawReceipt(
+          MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnQueryEnd(device,orderedEvent);
+      CHECK(FrontendErrors==updateErrors && RuntimeRenders==1u &&
+            RuntimeSignals==2u && RuntimeQueryMarkerCount==1u &&
+            RuntimeMarker && RuntimeQueryMarkers[0]);
+      CHECK(SetEvent(RuntimeQueryMarkers[0]));
+      eventResult=FALSE;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),0);
+      CHECK(FrontendErrors==updateErrors && eventResult==TRUE &&
+            RuntimeRenders==1u && RuntimeSignals==2u);
+      completedErrors=FrontendErrors;
       unsigned invalidDataErrors=FrontendErrors;
       eventResult=FALSE;
       deviceFunctions.pfnQueryGetData(device,orderedEvent,NULL,sizeof(BOOL),0);
@@ -1412,15 +1539,22 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnSetRenderTargets(device,NULL,0,1,(D3D10DDI_HDEPTHSTENCILVIEW){0});
     deviceFunctions.pfnIaSetVertexBuffers(device,0,0,NULL,NULL,NULL);
     deviceFunctions.pfnVsSetShader(device,(D3D10DDI_HSHADER){0});deviceFunctions.pfnPsSetShader(device,(D3D10DDI_HSHADER){0});
+    D3D10DDI_HRESOURCE nullConstant={0};
+    deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&nullConstant);
+    deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
     deviceFunctions.pfnDestroyRenderTargetView(device,rtv);deviceFunctions.pfnDestroyResource(device,vb);
+    deviceFunctions.pfnDestroyResource(device,vsCb);
+    deviceFunctions.pfnDestroyResource(device,cb);
     deviceFunctions.pfnDestroyResource(device,rt);
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
-    free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);free(rt.pDrvPrivate);
+    free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);
+    free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(rt.pDrvPrivate);
 #undef FRONTEND_IMM4
 #undef FRONTEND_REG
+#undef FRONTEND_CB
 #undef FRONTEND_OP
 #undef FRONTEND_STAGE
   }

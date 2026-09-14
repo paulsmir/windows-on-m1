@@ -12,6 +12,7 @@ extern "C" {
 }
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d10_windows.h"
+#include "pipe/p_context.h"
 
 enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
   AgxD3d10DeviceAllocated,
@@ -314,6 +315,18 @@ HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
   if(!Device->Backend.Failed && !Device->Runtime.DrawTerminal) return S_OK;
   return FAILED(Device->Runtime.LastScreenError)?
       Device->Runtime.LastScreenError:E_FAIL;
+}
+
+HRESULT AgxD3d10WindowsFlushRetire(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Device->Context)
+    return E_INVALIDARG;
+  Device->Context->flush(Device->Context,NULL,0);
+  HRESULT result=AgxD3d10WindowsFlushStatus(Device);
+  if(FAILED(result)) return result;
+  if(!AgxWin32AsahiContextRetire(Device->Context,INFINITE))
+    return FAILED(Device->Runtime.LastScreenError)?
+        Device->Runtime.LastScreenError:HRESULT_FROM_WIN32(ERROR_BUSY);
+  return S_OK;
 }
 
 HRESULT AgxD3d10WindowsQuerySignal(AGX_D3D10_WINDOWS_DEVICE *Device,

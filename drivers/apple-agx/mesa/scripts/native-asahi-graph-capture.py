@@ -104,11 +104,45 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
                           sizeof(batch->ctx->poly_stipple), AppleAgxWin32RoleConstant);
    } else {
       struct agx_stage_uniforms *u = cpu;
-      /* No application textures/UBOs/SSBOs in the first native subset. Native
-       * dirty-state initialization still installs its real zero SSBO sink. */
+      /* Application UBOs are admitted only from resource-backed slot zero in
+       * the VS/FS tables. Native dirty-state initialization still installs
+       * its real zero SSBO sink. */
       if (u->texture_base) { fprintf(stderr,"NATIVE_UNIFORM_TEXTURE: table=%u base=%llu\n",table,(unsigned long long)u->texture_base); scope.Failed = 1; }
-      for (unsigned i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; ++i)
-         if (u->ubo_base[i] || u->ubo_size[i]) scope.Failed = 1;
+      bool app_stage = table == AGX_SYSVAL_TABLE_VS ||
+                       table == AGX_SYSVAL_TABLE_FS;
+      mesa_shader_stage stage = app_stage ?
+         (mesa_shader_stage)(table - AGX_SYSVAL_TABLE_VS) : MESA_SHADER_STAGES;
+      struct agx_stage *native_stage = app_stage ? &batch->ctx->stage[stage] : NULL;
+      for (unsigned i = 0; i < PIPE_MAX_CONSTANT_BUFFERS; ++i) {
+         uint64_t base = u->ubo_base[i];
+         uint32_t size = u->ubo_size[i];
+         if (!base && !size) continue;
+         if (!app_stage || i != 0 || !base || !size ||
+             !(native_stage->cb_mask & BITFIELD_BIT(i))) {
+            scope.Failed = 1; break;
+         }
+         struct pipe_constant_buffer *cb = &native_stage->cb[i];
+         if (!cb->buffer || cb->user_buffer || cb->buffer_offset ||
+             cb->buffer_size != size) { scope.Failed = 1; break; }
+         struct agx_resource *rsrc = agx_resource(cb->buffer);
+         if (rsrc->base.target != PIPE_BUFFER ||
+             !(rsrc->base.bind & PIPE_BIND_CONSTANT_BUFFER) ||
+             (rsrc->base.bind &
+              ~(PIPE_BIND_CONSTANT_BUFFER | PIPE_BIND_SHADER_IMAGE)) ||
+             rsrc->base.width0 != size ||
+             base != agx_map_gpu(rsrc) + cb->buffer_offset) {
+            scope.Failed = 1; break;
+         }
+         unsigned constant_index;
+         if (AgxWin32AsahiCaptureReference(capture, rsrc->bo,
+                AppleAgxWin32RoleConstant, AppleAgxWin32AccessRead,
+                cb->buffer_offset, size, &constant_index) != AgxRelocOk ||
+             !windows_graph_field(&scope, &u->ubo_base[i], base, size,
+                                  AppleAgxWin32RoleConstant)) {
+            scope.Failed = 1; break;
+         }
+         (void)constant_index;
+      }
       for (unsigned i = 0; i < PIPE_MAX_SHADER_BUFFERS; ++i) {
          if (u->ssbo_size[i]) { scope.Failed = 1; break; }
          windows_graph_field(&scope, &u->ssbo_base[i], u->ssbo_base[i], 16,
@@ -201,8 +235,10 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
          valid = false;
    for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i) {
       struct agx_stage *stage = &ctx->stage[i];
+      bool app_stage = i == MESA_SHADER_VERTEX || i == MESA_SHADER_FRAGMENT;
       if (stage->texture_count || stage->image_mask || stage->ssbo_mask ||
-          stage->cb_mask || stage->sampler_count || stage->custom_borders)
+          (app_stage ? (stage->cb_mask & ~BITFIELD_BIT(0)) : stage->cb_mask) ||
+          stage->sampler_count || stage->custom_borders)
          valid = false;
    }
    if (!valid) backend->Failed = 1;
@@ -341,6 +377,17 @@ def project_sources(out, project, overlays):
         raise RuntimeError('Pinned native uniforms source mismatch')
     uniforms = replace(uniforms.decode(), '#include "pool.h"',
                        '#include "pool.h"\n#include "agx_win32_asahi_pipeline.h"')
+    uniforms = replace(uniforms,
+        '''   struct agx_stage_uniforms *unif = &batch->stage_uniforms[stage];
+
+   u_foreach_bit(cb, st->cb_mask) {''',
+        '''   struct agx_stage_uniforms *unif = &batch->stage_uniforms[stage];
+
+   for (unsigned cb = 0; cb < PIPE_MAX_CONSTANT_BUFFERS; ++cb) {
+      unif->ubo_base[cb] = 0;
+      unif->ubo_size[cb] = 0;
+   }
+   u_foreach_bit(cb, st->cb_mask) {''')
     uniforms = replace(uniforms, '   memcpy(root_ptr.cpu, &batch->uniforms, sizeof(batch->uniforms));',
         '''   if (!root_ptr.cpu) return;
    memcpy(root_ptr.cpu, &batch->uniforms, sizeof(batch->uniforms));
