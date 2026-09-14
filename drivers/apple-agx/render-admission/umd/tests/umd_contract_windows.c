@@ -684,6 +684,7 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
 
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
 unsigned AgxKmtNativeBridgeResidencyContractTest(void);
+unsigned AgxKmtNativeBridgeCommandDumpContractTest(void);
 unsigned AgxKmtNativeQualificationFreshnessContractTest(void);
 #endif
 int main(void) {
@@ -1156,6 +1157,7 @@ int main(void) {
 #endif
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
   State.Failures += AgxKmtNativeBridgeResidencyContractTest();
+  State.Failures += AgxKmtNativeBridgeCommandDumpContractTest();
   State.Failures += AgxKmtNativeQualificationFreshnessContractTest();
 #endif
   State.Failures += AdmissionUmdDrawComposerTests();

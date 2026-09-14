@@ -20,6 +20,19 @@ extern "C" {
 #define KMT_STATUS_INVALID_STATE ((NTSTATUS)0xc0000184L)
 #define KMT_STATUS_TIMEOUT ((NTSTATUS)0x00000102L)
 
+typedef struct _AGX_KMT_NATIVE_DUMP_OPS {
+  HANDLE (WINAPI *Create)(LPCWSTR,DWORD,DWORD,LPSECURITY_ATTRIBUTES,DWORD,DWORD,HANDLE);
+  BOOL (WINAPI *Write)(HANDLE,LPCVOID,DWORD,LPDWORD,LPOVERLAPPED);
+  BOOL (WINAPI *Flush)(HANDLE);
+  BOOL (WINAPI *Close)(HANDLE);
+} AGX_KMT_NATIVE_DUMP_OPS;
+
+typedef NTSTATUS (APIENTRY *AGX_KMT_NATIVE_RENDER_OP)(D3DKMT_RENDER *);
+
+static const AGX_KMT_NATIVE_DUMP_OPS NativeDumpOperations={
+  CreateFileW,WriteFile,FlushFileBuffers,CloseHandle
+};
+
 struct _AGX_KMT_NATIVE_BRIDGE {
   UINT Magic;
   DWORD Thread, TimeoutMs;
@@ -61,6 +74,74 @@ static HRESULT record(AGX_KMT_NATIVE_BRIDGE *b, AGX_KMT_NATIVE_STAGE stage,
 
 static HRESULT reject(AGX_KMT_NATIVE_BRIDGE *b,AGX_KMT_NATIVE_STAGE stage) {
   return record(b,stage,KMT_STATUS_INVALID_PARAMETER,FALSE,0,0);
+}
+
+/* Keep the exact command identity and CREATE_NEW collision behavior together
+ * with the render boundary. The qualification test substitutes only the
+ * external Win32/KMT operations; production always supplies the table above. */
+static HRESULT dump_command(AGX_KMT_NATIVE_BRIDGE *b,const void *command,
+    DWORD commandBytes,const AGX_KMT_NATIVE_DUMP_OPS *operations) {
+  wchar_t name[128];
+  HANDLE file;
+  DWORD written=0,error=0;
+  AGX_KMT_NATIVE_DUMP_STAGE stage=AgxKmtNativeDumpName;
+  if(swprintf_s(name,ARRAYSIZE(name),L"native-kmt-command-%08x-%016llx.bin",
+      b->Receipt.Win32Generation,b->Receipt.CommandHash)<0) {
+    error=ERROR_INVALID_NAME;
+  } else {
+    stage=AgxKmtNativeDumpCreate;
+    file=operations->Create(name,GENERIC_WRITE,FILE_SHARE_READ,NULL,
+        CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+    if(file==INVALID_HANDLE_VALUE) {
+      error=GetLastError();
+    } else {
+      stage=AgxKmtNativeDumpWrite;
+      if(!operations->Write(file,command,commandBytes,&written,NULL)) {
+        error=GetLastError();
+      } else if(written!=commandBytes) {
+        error=ERROR_WRITE_FAULT;
+      } else {
+        stage=AgxKmtNativeDumpFlush;
+        if(!operations->Flush(file)) error=GetLastError();
+      }
+      if(!operations->Close(file) && !error) {
+        stage=AgxKmtNativeDumpClose;
+        error=GetLastError();
+      }
+    }
+  }
+  if(!error) stage=AgxKmtNativeDumpComplete;
+  b->Receipt.CommandDumpStage=stage;
+  b->Receipt.CommandDumpError=error;
+  b->Receipt.CommandDumpBytes=written;
+  printf("NATIVE_KMT_COMMAND_DUMP: stage=%u error=%lu bytes=%lu\n",
+      (unsigned)stage,error,written);
+  fflush(stdout);
+  if(error) {
+    HRESULT result=HRESULT_FROM_WIN32(error);
+    b->Receipt.Stage=AgxKmtNativeCommandDump;
+    b->Receipt.Status=KMT_STATUS_INVALID_STATE;
+    b->Receipt.Result=result;
+    b->Receipt.CalledKmt=FALSE;
+    b->Receipt.Handle=b->ContextHandle;
+    b->Receipt.Count=written;
+    ++b->Receipt.Sequence;
+    printf("NATIVE_KMT_COMMAND_DUMP_REJECT: sequence=%llu operation=%u error=%lu result=0x%08lx bytes=%lu\n",
+        b->Receipt.Sequence,(unsigned)stage,error,(ULONG)result,written);
+    fflush(stdout);
+    return result;
+  }
+  return S_OK;
+}
+
+static HRESULT dump_then_render(AGX_KMT_NATIVE_BRIDGE *b,const void *command,
+    DWORD commandBytes,D3DKMT_RENDER *request,const AGX_KMT_NATIVE_DUMP_OPS *dumpOperations,
+    AGX_KMT_NATIVE_RENDER_OP renderOperation) {
+  HRESULT result=dump_command(b,command,commandBytes,dumpOperations);
+  if(FAILED(result)) return result;
+  ++b->Receipt.Renders;
+  return record(b,AgxKmtNativeRender,renderOperation(request),
+      renderOperation==D3DKMTRender,b->ContextHandle,request->AllocationCount);
 }
 
 /* The existing device's ScreenBuffers are the authoritative allocation table.
@@ -377,30 +458,14 @@ static HRESULT APIENTRY render(HANDLE context,D3DDDICB_RENDER *args) {
   printf("NATIVE_KMT_COMMAND: hash=0x%016llx generation=%u references=%u relocations=%u bytes=%u context=%u\n",
       b->Receipt.CommandHash,b->Receipt.Win32Generation,b->Receipt.References,
       b->Receipt.Relocations,b->Receipt.CommandBytes,b->ContextHandle);
-  {
-    wchar_t name[128];
-    if(swprintf_s(name,ARRAYSIZE(name),L"native-kmt-command-%08x-%016llx.bin",
-        b->Receipt.Win32Generation,b->Receipt.CommandHash)>=0) {
-      HANDLE file=CreateFileW(name,GENERIC_WRITE,FILE_SHARE_READ,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
-      DWORD written=0,error=0;
-      if(file==INVALID_HANDLE_VALUE) error=GetLastError();
-      else {
-        if(!WriteFile(file,(unsigned char *)b->Device.CommandBuffer+args->CommandOffset,
-            args->CommandLength,&written,NULL)) error=GetLastError();
-        else if(written!=args->CommandLength) error=ERROR_WRITE_FAULT;
-        (void)CloseHandle(file);
-      }
-      printf("NATIVE_KMT_COMMAND_DUMP: error=%lu bytes=%lu\n",error,written);
-    }
-  }
   request.hContext=b->ContextHandle;request.CommandOffset=args->CommandOffset;
   request.CommandLength=args->CommandLength;request.AllocationCount=args->NumAllocations;
   request.PatchLocationCount=args->NumPatchLocations;
   request.NewCommandBufferSize=args->NewCommandBufferSize;
   request.NewAllocationListSize=args->NewAllocationListSize;
   request.NewPatchLocationListSize=args->NewPatchLocationListSize;
-  ++b->Receipt.Renders;
-  result=record(b,AgxKmtNativeRender,D3DKMTRender(&request),TRUE,b->ContextHandle,args->NumAllocations);
+  result=dump_then_render(b,(unsigned char *)b->Device.CommandBuffer+args->CommandOffset,
+      args->CommandLength,&request,&NativeDumpOperations,D3DKMTRender);
   args->pNewCommandBuffer=request.pNewCommandBuffer;args->NewCommandBufferSize=request.NewCommandBufferSize;
   args->pNewAllocationList=request.pNewAllocationList;args->NewAllocationListSize=request.NewAllocationListSize;
   args->pNewPatchLocationList=request.pNewPatchLocationList;args->NewPatchLocationListSize=request.NewPatchLocationListSize;
@@ -569,6 +634,130 @@ unsigned AgxKmtNativeBridgeResidencyContractTest(void) {
       b->Receipt.ResidencyAcquires,b->Receipt.ResidencyReuses,b->Receipt.ResidencyEvicts);
 #undef RESIDENCY_CHECK
   HeapFree(GetProcessHeap(),0,b);
+  return errors;
+}
+
+typedef struct _AGX_KMT_NATIVE_DUMP_TEST_STATE {
+  AGX_KMT_NATIVE_DUMP_STAGE Failure;
+  BOOL ShortWrite;
+  UINT Order,Violations,RenderCalls;
+  const void *Command;
+  DWORD CommandBytes;
+} AGX_KMT_NATIVE_DUMP_TEST_STATE;
+
+static AGX_KMT_NATIVE_DUMP_TEST_STATE DumpTest;
+
+static HANDLE WINAPI dump_test_create(LPCWSTR name,DWORD access,DWORD share,
+    LPSECURITY_ATTRIBUTES security,DWORD disposition,DWORD attributes,HANDLE templateFile) {
+  DumpTest.Order=DumpTest.Order*10u+1u;
+  if(wcscmp(name,L"native-kmt-command-1234abcd-0123456789abcdef.bin") ||
+      access!=GENERIC_WRITE || share!=FILE_SHARE_READ || security ||
+      disposition!=CREATE_NEW || attributes!=FILE_ATTRIBUTE_NORMAL || templateFile)
+    ++DumpTest.Violations;
+  if(DumpTest.Failure==AgxKmtNativeDumpCreate) {
+    SetLastError(ERROR_ACCESS_DENIED);
+    return INVALID_HANDLE_VALUE;
+  }
+  return (HANDLE)(UINT_PTR)0x1234u;
+}
+
+static BOOL WINAPI dump_test_write(HANDLE file,LPCVOID data,DWORD bytes,
+    LPDWORD written,LPOVERLAPPED overlapped) {
+  DumpTest.Order=DumpTest.Order*10u+2u;
+  if(file!=(HANDLE)(UINT_PTR)0x1234u || data!=DumpTest.Command ||
+      bytes!=DumpTest.CommandBytes || !written || overlapped)
+    ++DumpTest.Violations;
+  if(DumpTest.Failure==AgxKmtNativeDumpWrite) {
+    *written=0;
+    SetLastError(ERROR_WRITE_FAULT);
+    return FALSE;
+  }
+  *written=DumpTest.ShortWrite ? bytes-1u : bytes;
+  return TRUE;
+}
+
+static BOOL WINAPI dump_test_flush(HANDLE file) {
+  DumpTest.Order=DumpTest.Order*10u+3u;
+  if(file!=(HANDLE)(UINT_PTR)0x1234u) ++DumpTest.Violations;
+  if(DumpTest.Failure==AgxKmtNativeDumpFlush) {
+    SetLastError(ERROR_GEN_FAILURE);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static BOOL WINAPI dump_test_close(HANDLE file) {
+  DumpTest.Order=DumpTest.Order*10u+4u;
+  if(file!=(HANDLE)(UINT_PTR)0x1234u) ++DumpTest.Violations;
+  if(DumpTest.Failure==AgxKmtNativeDumpClose) {
+    SetLastError(ERROR_INVALID_HANDLE);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static NTSTATUS APIENTRY dump_test_render(D3DKMT_RENDER *request) {
+  ++DumpTest.RenderCalls;
+  if(!request || request->hContext!=77u || request->AllocationCount!=1u)
+    ++DumpTest.Violations;
+  return 0;
+}
+
+unsigned AgxKmtNativeBridgeCommandDumpContractTest(void) {
+  static const struct {
+    AGX_KMT_NATIVE_DUMP_STAGE Failure;
+    BOOL ShortWrite;
+    AGX_KMT_NATIVE_DUMP_STAGE ExpectedStage;
+    DWORD ExpectedError,ExpectedBytes;
+    UINT ExpectedOrder,ExpectedRenderCalls;
+  } Cases[]={
+    {AgxKmtNativeDumpNone,FALSE,AgxKmtNativeDumpComplete,ERROR_SUCCESS,4u,1234u,1u},
+    {AgxKmtNativeDumpCreate,FALSE,AgxKmtNativeDumpCreate,ERROR_ACCESS_DENIED,0u,1u,0u},
+    {AgxKmtNativeDumpWrite,FALSE,AgxKmtNativeDumpWrite,ERROR_WRITE_FAULT,0u,124u,0u},
+    {AgxKmtNativeDumpNone,TRUE,AgxKmtNativeDumpWrite,ERROR_WRITE_FAULT,3u,124u,0u},
+    {AgxKmtNativeDumpFlush,FALSE,AgxKmtNativeDumpFlush,ERROR_GEN_FAILURE,4u,1234u,0u},
+    {AgxKmtNativeDumpClose,FALSE,AgxKmtNativeDumpClose,ERROR_INVALID_HANDLE,4u,1234u,0u}
+  };
+  static const AGX_KMT_NATIVE_DUMP_OPS Operations={
+    dump_test_create,dump_test_write,dump_test_flush,dump_test_close
+  };
+  static const unsigned char Command[4]={0x41u,0x47u,0x58u,0x21u};
+  unsigned errors=0;
+#define DUMP_CHECK(x) do { if(!(x)) { ++errors;printf("NATIVE_KMT_DUMP_TEST_FAIL: line=%u case=%u %s\n",(unsigned)__LINE__,i,#x); } } while(0)
+  for(UINT i=0;i<ARRAYSIZE(Cases);++i) {
+    AGX_KMT_NATIVE_BRIDGE b={0};
+    D3DKMT_RENDER request={0};
+    HRESULT result;
+    b.ContextHandle=77u;
+    b.Receipt.Bytes=sizeof(b.Receipt);
+    b.Receipt.CommandHash=0x0123456789abcdefull;
+    b.Receipt.Win32Generation=0x1234abcdu;
+    request.hContext=77u;
+    request.AllocationCount=1u;
+    ZeroMemory(&DumpTest,sizeof(DumpTest));
+    DumpTest.Failure=Cases[i].Failure;
+    DumpTest.ShortWrite=Cases[i].ShortWrite;
+    DumpTest.Command=Command;
+    DumpTest.CommandBytes=sizeof(Command);
+    result=dump_then_render(&b,Command,sizeof(Command),&request,&Operations,dump_test_render);
+    DUMP_CHECK(DumpTest.Order==Cases[i].ExpectedOrder);
+    DUMP_CHECK(DumpTest.Violations==0u);
+    DUMP_CHECK(DumpTest.RenderCalls==Cases[i].ExpectedRenderCalls);
+    DUMP_CHECK(b.Receipt.CommandDumpStage==Cases[i].ExpectedStage);
+    DUMP_CHECK(b.Receipt.CommandDumpError==Cases[i].ExpectedError);
+    DUMP_CHECK(b.Receipt.CommandDumpBytes==Cases[i].ExpectedBytes);
+    if(Cases[i].ExpectedError) {
+      DUMP_CHECK(result==HRESULT_FROM_WIN32(Cases[i].ExpectedError));
+      DUMP_CHECK(b.Receipt.Stage==AgxKmtNativeCommandDump);
+      DUMP_CHECK(!b.Receipt.CalledKmt && b.Receipt.Renders==0u);
+    } else {
+      DUMP_CHECK(result==S_OK);
+      DUMP_CHECK(b.Receipt.Stage==AgxKmtNativeRender);
+      DUMP_CHECK(b.Receipt.Renders==1u);
+    }
+  }
+  printf("NATIVE_KMT_COMMAND_DUMP_TEST: errors=%u cases=%u\n",errors,(unsigned)ARRAYSIZE(Cases));
+#undef DUMP_CHECK
   return errors;
 }
 #endif

@@ -28,8 +28,14 @@ typedef enum _AGX_KMT_NATIVE_STAGE {
   AgxKmtNativeAllocate, AgxKmtNativeResident, AgxKmtNativePagingWait,
   AgxKmtNativeLock, AgxKmtNativeUnlock, AgxKmtNativeDeallocate,
   AgxKmtNativeRender, AgxKmtNativeSignal, AgxKmtNativeContextDestroy,
-  AgxKmtNativeOwnerError, AgxKmtNativeEvict
+  AgxKmtNativeOwnerError, AgxKmtNativeEvict, AgxKmtNativeCommandDump
 } AGX_KMT_NATIVE_STAGE;
+
+typedef enum _AGX_KMT_NATIVE_DUMP_STAGE {
+  AgxKmtNativeDumpNone, AgxKmtNativeDumpName, AgxKmtNativeDumpCreate,
+  AgxKmtNativeDumpWrite, AgxKmtNativeDumpFlush, AgxKmtNativeDumpClose,
+  AgxKmtNativeDumpComplete
+} AGX_KMT_NATIVE_DUMP_STAGE;
 
 typedef struct _AGX_KMT_NATIVE_RECEIPT {
   UINT Bytes;
@@ -44,6 +50,8 @@ typedef struct _AGX_KMT_NATIVE_RECEIPT {
   UINT ResidencyAcquires, ResidencyReuses, ResidencyEvicts;
   ULONGLONG CommandHash;
   UINT Win32Generation, References, Relocations, CommandBytes;
+  AGX_KMT_NATIVE_DUMP_STAGE CommandDumpStage;
+  DWORD CommandDumpError, CommandDumpBytes;
 } AGX_KMT_NATIVE_RECEIPT;
 
 #ifdef __cplusplus
@@ -66,6 +74,7 @@ HRESULT AgxKmtNativeBridgeClose(AGX_KMT_NATIVE_BRIDGE **);
 /* Deterministic residency accounting only, in the existing UmdContractTest.
  * Never compiled into or called by the hardware qualification client. */
 unsigned AgxKmtNativeBridgeResidencyContractTest(void);
+unsigned AgxKmtNativeBridgeCommandDumpContractTest(void);
 #endif
 #ifdef __cplusplus
 }
