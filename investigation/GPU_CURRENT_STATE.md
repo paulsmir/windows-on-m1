@@ -32,7 +32,7 @@ j clientSHA 4ebcf1b951292483372844900166e29512e36f19e07826aae2b874557065a69e.
 Clients above use expectedbuild0 and refuse qualification; full native callgraph
 is linked (12MB), build expectation passed at runtime from the compiled caller.
 Native scene compilation/BOupload stays synchronous on the owning thread.
-ARM64 imports realKMT APIs andVCRUNTIME140/UCRT; target availability unverified.
+ARM64 imports realKMT APIs andVCRUNTIME140/UCRT; sameEXE loader and realKMT entry verified onAir.
 PE/source review: evidence/AD04-native-client-pe-20260914j.
 16hosttests + qualification-enabled KMD ClCompile/codeanalysis99objects PASS:
 evidence/AD04-native-qualification-host-20260914b and
@@ -54,15 +54,43 @@ untrusted. No candidate package/trust installed on Air. Expected683 ARM64 client
 PASS: native-client-683-20260914a, SHA31ce32fd386525afabb4af3774349a54eced3b26a024a406ba09b7f13265af2f.
 Desktop ARM64 CRT14.44.35211.0 app-local and hashverified. Frozen input manifest
 SHA71b07f6708e42d87b2f691226e030cc166ba47cfe42ddf05d173f8c75e46d645.
-HARDWARE GATE BLOCKED: loader-only --help was rejected before process entry by
-Smart App Control VerifiedAndReputableDesktop, policy0283ac0f-fff1-49ae-ada1-8a933130cad6,
-CI3033/3077. No native submission/process, no GPU-enabled launch/package stage.
-Official Microsoft signing guidance requires trusted-provider signing; test cert
-alone does not satisfy SAC. Asked whether project has trusted signing service.
-Do not disable/bypass policy or replay native client. Independent production
-factory/frontend offline integration remains authorized. Hardware readiness NOT claimed.
-Evidence/artifacts: main-root .local/experiments/EXP-20260913-683-native-batch;
-append-only EXP683 ledger records builds/signing/preflight and exact hashes.
+## EXP683 actual hardware boundary — 2026-09-14
+Operator disabled SAC; read-only CiTool confirms policy no longer enforced,
+TESTSIGNING Yes retained. SameEXE loader-onlyPASS; exact1F20 testcert trust and
+SYS/DLL/CAT/INFcatalog verification PASS. Package683 stagedoem5 then naturalbind
+Code0 on immutableEXP584/406 GPU-enabled launch. No desktop acceptance.
+First detachedSSH launcher killedchild beforegraph; harmless5-secondchild test
+confirmed parentexit killschild, parentWaitForExit completes. Corrected attached
+native-run02 then constructed REAL30refs126relocs6248-bytecommand, nativeDMA44952.
+Client printed commandhash4aaaa637f4c32ec4, generation127664129; Windows reset in
+KMD submit. Bugcheck0x119/Arg1=2/STATUS_INVALID_HANDLE c0000008; otherparameters
+fffff5845fdafa00,ffffc004ecc2ac00. No nativecompletion/readback proven.
+Dump091426-10750-01.dmp SHA1d9155da06d0d128e2db09a6bfe329365c17830c4403333babfd72bd6f28436a;
+source/pinnedPDB analysis identifies dxgmms2 VidSchiSendToExecutionQueue,
+Submit fence295 and44952DMA bytes. Context/private heap unavailable in minidump.
+Recovered commandfile6248bytes is allzero (not replay evidence); stdout records
+actualproducer census. Preserve originals. DWM0x889800b0 existedbeforeclient;
+Event129 also recorded, neither attributed to nativegraph withoutcausalproof.
+Guesttimestampsrewind acrossfirmwareboots; correlate dump addresses/receipts.
+
+Active offline causal target: render_submission.c packetPrepare still has legacy
+DestinationIndex>=2 rejection. Verify actualnative targetindex in existingproducer
+and extend its test through PrepatchedCapture/Adopt/PacketPrepare. Carry actual
+AllocationListSize in existingdescription if proven; no arbitrarylimitrelaxation,
+newallocator/composer orGPUVA. No newhardware until RED/GREEN, fullgates+prereg.
+
+Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
+SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
+(noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
+Saved System/Applicationevtx,rawregistry,native-run02,small dump BEFOREcleanup.
+Exactoem5 uninstalled/deleted;staleAPPL0002removed;stoppedserviceexplicitlydeleted;
+SYS/UMD/module/package absent;exact1F20cert removed;AppleInput71CD0A preserved.
+Ordinary377/392 brokerunset has been relaunched to restoreoneinertCode28;
+finalhealthPASS2026-09-14T06:46:01Z:8CPU,oneCode28,SSH/NVMe/xHCI/keyboardOK,
+noAppleAgx package/service/module/files/signer,no fresh41/1001/129;TESTSIGNINGYes.
+Active launcher logordinary-final-boot.log.
+All EXP683 artifacts under main-root .local/experiments/EXP-20260913-683-native-batch;
+append-only EXP683 ledger records exactcommands/hashes/recovery/results.
 
 ## Verified native lifecycle slice
 The real native screen/context/resource/NIR shader/state/clear/draw/flush path
@@ -115,14 +143,11 @@ No-query scratch slots are unused by admitted VS/FS and canonicalized only at
 root upload; global Asahi scratch semantics remain unchanged.
 
 ## Exact next target
-Do not stop at this offline proof. Prepare a truthful native hardware qualification
-in the existing AppleAgxD3dKmRender project using real KMT allocation/context/
-Render/ordered CPU-event callbacks and this same owner/composer/native lifecycle.
-No mock KMD, SetEvent completion, manually built capture or teardown injection on
-hardware. This is KMT qualification, not runtime-supplied Direct3D pKTCallbacks.
-Source parameters must derive from verified J313/device facts, not the offline
-fixture. Preregister the actual native graph and exact package after remaining
-client/package/sign/hash and live-baseline gates; no hardware readiness yet.
+Finish source-first KMD submit failure review and deterministic realproducer RED/GREEN
+at the packetPrepare destination index/count boundary described above. Existing
+materializer/physicalPatch/Submit architecture remains fixed. PreserveEXP683 reset
+evidence and do not replay its zero-filled recoveredwire. Next hardware candidate
+requires new source/build/sign/hash gates and preregistration after offlinefix.
 
 Continue production integration in parallel with that boundary:
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
@@ -133,22 +158,17 @@ Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
 
 ## Preserved hardware/recovery boundary
-Air ordinary377/392 recovery boot is running, broker disabled. Live baseline
-2026-09-14T00:33:53Z: J313-WIN ARM64 admin,8CPUs,one inert APPL0002 Code28,
-no AppleAgx package/service/module/SYS/UMD, NVMe/USB/keyboard OK, no fresh41/1001/129.
-Stale AppleAgx signer E9BE removed only from Root/TrustedPublisher after export,
-5-package catalog and308registered-driver signature inventory. No driver used it.
-AppleInput running/valid71CD0A trust preserved in both stores. NewEXP683 signer
-not imported. Evidence old-signer-cleanup.log and control-plane signer inventories.
-SSH pavel@192.168.1.37 with key ~/.ssh/air and STRICT pinned known-hosts file
-main-root .local/experiments/EXP641-standard-present/air_known_hosts. Default user
-known_hosts is stale; do not change it. No operator IP reply needed.
-Active ordinary launcher owns proxy/vUART; do not concurrently access bareproxy.
-Emergency WinPE/FD/golden existence and hashes recorded in emergency-recovery-hashes.json.
-Retained-root/firmware/AGX output/fence proofs remain closed; compact reference:
-agent_tasks/AD04-PRE-COMPOSER-STATE.md. Ordinary377/392 GPU-visible recovery must
-retain one inert APPL0002 and no AppleAgx package/service/module/signer/staged driver.
-Before physical requests check both bounded Windows SSH and proxy/vUART/launcher.
-Before any hardware build/run preregister exact hypotheses, source/package hashes,
-commands, receipts and recovery in EXPERIMENTS; collect evidence then exact-package
-rollback according to the root playbook. Do not use GPU-hidden routine recovery.
+Currentordinary377/392 GPU-visible recovery is healthy,brokerdisabled,oneinert
+APPL0002Code28,noAppleAgx package/service/module/files/signer. Exacthealth evidence
+main-root EXP683/ordinary-final-health.json at2026-09-14T06:46:01Z.
+AppleInput71CD0A trust anddriver preserved;TESTSIGNINGYes. Operator's SACchange
+was verified; assistant didnotchangeSAC/BCD. EXP683-specific1F20 trust removed.
+SSH pavel@192.168.1.37, key ~/.ssh/air, STRICT known-hosts main-root
+.local/experiments/EXP641-standard-present/air_known_hosts. Defaultknown_hosts
+isstale;do notchangeit. Activeordinary-final launcher ownsproxy/vUART.
+Emergency377/385hiddenDISKboot is proven recovery exception only; EXP378WinPE
+contains automatic oldcleanup,so preferdocumentedhiddenDISKboot for evidencefirst.
+Emergencyartifacthashes: main-rootEXP683/emergency-recovery-hashes.json.
+Beforehardware recordhypothesis/commands/source/packagehashes inEXPERIMENTS,
+checkbothcontrolplanes, preserveknownrecovery,collectevidence thenexactcleanup.
+No routineGPUhiddenboot. Neverrequestphysicalaction beforebothcontrolplanechecks.
