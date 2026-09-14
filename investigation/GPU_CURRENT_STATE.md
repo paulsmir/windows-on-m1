@@ -149,6 +149,31 @@ ARM64 closure build/link0warnings/errors. Installed ARM64 UMD `/analyze` compile
 changedumd.c/runtime_device.c and all units0warnings/errors; evidence
 AD04-native-factory-installed-umd-20260914a. Pipeline mask and exports unchanged.
 
+## Verified pinned D3D10 frontend projection
+
+Implementation7e119c8 projects pinnedMesa9aa1215 d3d10umd sources build-locally;
+pinned checkout remainsunchanged and every overlay is gated by exact upstream
+hash/one replacement. Adapter OpenAdapter owns metadata only; Device CreateDevice
+uses privatefactory runtime callbacks/native context before CSO/default shaders.
+Exports are test-renamed; installedumd.c/pipeline mask remainunchanged.
+
+Actual DDI test uses Resource.cpp/InputAssembly/Shader/OutputMerger/Draw/Flush:
+privateBGRA8 RT uses soleAPPLE_GPU_TILED modifier (uncompressed), boundedfull-view
+ClearRTV maps to native pipe->clear only for the exact bound singleRT/noZS view,
+and nullIA slots remain genuine unbound non-user buffers. All mismatch paths
+reject before allocation/clear/Render; genericVB initial data remainsoriginalpath.
+Actual frontend Clear/Draw(3)/Flush produces30refs/126relocs/9allocs/29objects,
+137encoder/36496source/44952DMA, both KMD placements and orderedretirement.
+
+TDD REDs localized upstreamOpenAdapter screen ownership, missingclear_render_target,
+compressedgenericRT and dummyuserbuffers. Final sourceSHA
+3694a9837ca816e93803ebcb00928d68ee3c49146c773bca3c2c7436b1a186e5;
+x64exeSHA638a3d89d7dc05b52da2a7b03d33f26afdd51aa27e7f52d020d0359ea741e897
+execution0. ARM64exeSHA214f0726b6c716495e700014b9162cd482782f2be9454abd025d2361f34bc4a8,
+build/link0warnings/errors. Negative RT/allocator/IA/two-device/create-rollback/
+destroy tests PASS. Pinned Meson trace/index generators and primary CSO/u_vbuf/
+translate/rtasm closure are hash-recorded; no stubs/new renderer.
+
 Recovery: ordinary377/392 withpackageinstalled remainedSSHunavailable>180sec;
 SIGINTsnapshotCPU/timersalive. Documented emergency377/385 GPU-hidden DISK boot
 (noRAMdisk), compatibility scopedEXP491-R2/emergency.sh, recoveredSSH/evidence.
@@ -215,11 +240,12 @@ root upload; global Asahi scratch semantics remain unchanged.
 ## Exact next target
 Continue production integration from
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
-private factory now owns the real native screen/context after runtime callbacks.
-Next project the pinned Mesa d3d10umd frontend so OpenAdapter holds metadata only
-and actual CreateDevice borrows this factory context. Exercise real Shader/Draw/
-Resource/Flush DDI entry points into the same producer/consumer path. Do not use
-another KMT helper or adapter-global rendering context.
+private factory and pinned frontend actual DDI path are complete offline. Next
+resolve installed-export activation: void DDI DestroyDevice cannot returnBUSY or
+retain failed hDrvDevice storage. Derive a synchronous clean-destroy contract or
+documented terminal removal owner before linking/advertising the frontend. Then
+complete exact D3D10_0/FL10_0 DDI inventory and only advertise truthful pipeline.
+Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
 
