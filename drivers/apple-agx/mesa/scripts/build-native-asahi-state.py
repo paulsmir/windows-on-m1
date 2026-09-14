@@ -56,6 +56,23 @@ if args.windows_platform_declarations:
             text=text.replace(old,new)
         target.write_text(text)
         overlays[path]={'before':sha,'after':hashlib.sha256(target.read_bytes()).hexdigest()}
+    def replace_function_body(path, name, body):
+        target=out/path
+        text=target.read_text()
+        marker='\n'+name+'('
+        if text.count(marker)!=1:
+            raise SystemExit('Ambiguous function anchor: '+path+':'+name)
+        start=text.index('{',text.index(marker))+1
+        depth=1
+        end=start
+        while depth and end<len(text):
+            if text[end]=='{': depth+=1
+            elif text[end]=='}': depth-=1
+            end+=1
+        if depth:
+            raise SystemExit('Unclosed function: '+path+':'+name)
+        target.write_text(text[:start]+'\n'+body+'\n'+text[end-1:])
+        overlays[path]['after']=hashlib.sha256(target.read_bytes()).hexdigest()
     change('src/gallium/drivers/asahi/agx_state.h',
         '6d5e7f85849bce3c3f2e5569373a24f6c0d692217a8e493754298750b755e7ab',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#endif')])
@@ -101,7 +118,36 @@ MesaD3d10OpenAdapter10('''),
         ('struct pipe_context *pipe;','''struct pipe_context *pipe;
    AGX_D3D10_WINDOWS_DEVICE *windows;
    HRESULT cleanup_result;
-   bool frontend_ready;''')])
+   bool frontend_ready;'''),
+        ('''struct Query
+{
+   D3D10DDI_QUERY Type;
+   UINT Flags;
+
+   unsigned pipe_type;
+   struct pipe_query *handle;
+   INT SeqNo;
+   UINT GetDataCount;
+
+   D3D10_DDI_QUERY_DATA_PIPELINE_STATISTICS Statistics;
+};''','''enum QueryPhase {
+   QueryCreated, QueryIssued, QuerySignaled, QueryFailed, QueryDestroyed
+};
+
+struct Query
+{
+   UINT Magic;
+   Device *OwnerDevice;
+   uint64_t OwnerCookie;
+   UINT DeviceGeneration;
+   UINT IssueSerial;
+   UINT FenceToken;
+   QueryPhase Phase;
+   HRESULT LastError;
+};'''),
+        ('''   Query *pQuery = CastQuery(hQuery);
+   return pQuery ? pQuery->handle : NULL;''','''   (void)hQuery;
+   return NULL;''')])
     change('src/gallium/frontends/d3d10umd/Device.cpp',
         'dcf950aec993d40743671e1f208655e151158a9b4647bc3581dcd134962086aa',[
         ('''   struct pipe_screen *screen = pAdapter->screen;
@@ -236,6 +282,14 @@ void APIENTRY
    *pNumQualityLevels = 0;''','''   (void)hDevice;
    *pNumQualityLevels =
       Format == DXGI_FORMAT_B8G8R8A8_UNORM && SampleCount == 1 ? 1 : 0;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
+   HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   if (SUCCEEDED(result)) {
+      pDevice->pipe->flush(pDevice->pipe, NULL, 0);
+      result = AgxD3d10WindowsFlushStatus(pDevice->windows);
+   }
+   if (SUCCEEDED(result)) result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   if (FAILED(result)) SetError(hDevice, result);''')
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
         ('''   pipe->clear_render_target(pipe,
@@ -301,6 +355,30 @@ void APIENTRY
    SetError(hDevice, E_NOTIMPL);''')])
     change('src/gallium/frontends/d3d10umd/Query.cpp',
         '8456801b1614e79ad9ce307035a76a5f5f642eb83a40e4c066a8946f44d620b4',[
+        ('#include "State.h"', '''#include "State.h"
+
+#define AGX_EVENT_QUERY_MAGIC 0x51564541u
+
+static bool
+EventQueryValid(Device *device, Query *query)
+{
+   ULONGLONG owner = 0;
+   ULONG generation = 0;
+   return device && query && query->Magic == AGX_EVENT_QUERY_MAGIC &&
+      AgxD3d10WindowsIdentity(device->windows, &owner, &generation) &&
+      query->OwnerDevice == device && query->OwnerCookie == owner &&
+      query->DeviceGeneration == generation && query->Phase != QueryDestroyed;
+}
+
+EXTERN_C ULONG APIENTRY
+MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
+                                                ULONG generation)
+{
+   Query *query = CastQuery(hQuery);
+   ULONG prior = query ? query->DeviceGeneration : 0;
+   if (query) query->DeviceGeneration = generation;
+   return prior;
+}'''),
         ('''   Device *pDevice = CastDevice(hDevice);
    struct pipe_context *pipe = pDevice->pipe;
 
@@ -313,18 +391,48 @@ void APIENTRY
    pQuery->pipe_type = TranslateQueryType(pCreateQuery->Query);
    if (pQuery->pipe_type < PIPE_QUERY_TYPES) {
       pQuery->handle = pipe->create_query(pipe, pQuery->pipe_type, 0);
-   }''','''   (void)pCreateQuery;
-   (void)hQuery;
-   (void)hRTQuery;
-   SetError(hDevice, E_NOTIMPL);'''),
+   }''','''   Device *pDevice = CastDevice(hDevice);
+   Query *pQuery = CastQuery(hQuery);
+   ULONGLONG owner = 0;
+   ULONG generation = 0;
+   if (!pCreateQuery || pCreateQuery->Query != D3D10DDI_QUERY_EVENT ||
+       pCreateQuery->MiscFlags || !pQuery) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   if (!pDevice || !AgxD3d10WindowsIdentity(
+          pDevice->windows, &owner, &generation)) {
+      SetError(hDevice, E_FAIL);
+      return;
+   }
+   Query candidate = {};
+   candidate.Magic = AGX_EVENT_QUERY_MAGIC;
+   candidate.OwnerDevice = pDevice;
+   candidate.OwnerCookie = owner;
+   candidate.DeviceGeneration = generation;
+   candidate.Phase = QueryCreated;
+   candidate.LastError = S_OK;
+   *pQuery = candidate;
+   (void)hRTQuery;'''),
         ('''DestroyQuery(D3D10DDI_HDEVICE hDevice, // IN
              D3D10DDI_HQUERY hQuery)   // IN
 {
    LOG_ENTRYPOINT();''','''DestroyQuery(D3D10DDI_HDEVICE hDevice, // IN
              D3D10DDI_HQUERY hQuery)   // IN
 {
-   (void)hQuery;
-   SetError(hDevice, E_NOTIMPL);
+   Device *pDevice = CastDevice(hDevice);
+   Query *pQuery = CastQuery(hQuery);
+   if (!EventQueryValid(pDevice, pQuery)) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   pQuery->Magic = 0;
+   pQuery->OwnerDevice = NULL;
+   pQuery->OwnerCookie = 0;
+   pQuery->DeviceGeneration = 0;
+   pQuery->FenceToken = 0;
+   pQuery->Phase = QueryDestroyed;
+   pQuery->LastError = S_OK;
    return;'''),
         ('''QueryBegin(D3D10DDI_HDEVICE hDevice,   // IN
            D3D10DDI_HQUERY hQuery)     // IN
@@ -366,6 +474,126 @@ void APIENTRY
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','DestroyQuery','''   Device *pDevice = CastDevice(hDevice);
+   Query *pQuery = CastQuery(hQuery);
+   if (!EventQueryValid(pDevice, pQuery)) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   HRESULT result = S_OK;
+   if (pQuery->FenceToken) {
+      result = AgxD3d10WindowsQueryDetach(pDevice->windows,
+         pQuery->OwnerCookie, pQuery->DeviceGeneration, pQuery->IssueSerial,
+         pQuery->FenceToken);
+      if (SUCCEEDED(result))
+         result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   }
+   pQuery->Magic = 0;
+   pQuery->OwnerDevice = NULL;
+   pQuery->OwnerCookie = 0;
+   pQuery->DeviceGeneration = 0;
+   pQuery->FenceToken = 0;
+   pQuery->Phase = QueryDestroyed;
+   pQuery->LastError = result;
+   if (FAILED(result)) SetError(hDevice, result);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryBegin','''   Device *pDevice = CastDevice(hDevice);
+   Query *pQuery = CastQuery(hQuery);
+   if (!EventQueryValid(pDevice, pQuery)) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   if (pQuery->Phase == QueryFailed)
+      SetError(hDevice, FAILED(pQuery->LastError) ? pQuery->LastError : E_FAIL);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryEnd','''   Device *pDevice = CastDevice(hDevice);
+   Query *pQuery = CastQuery(hQuery);
+   if (!EventQueryValid(pDevice, pQuery)) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   if (pQuery->Phase == QueryFailed || pQuery->IssueSerial == UINT_MAX) {
+      HRESULT error = pQuery->Phase == QueryFailed && FAILED(pQuery->LastError) ?
+         pQuery->LastError : E_OUTOFMEMORY;
+      SetError(hDevice, error);
+      return;
+   }
+   HRESULT result = S_OK;
+   if (pQuery->FenceToken) {
+      result = AgxD3d10WindowsQueryDetach(pDevice->windows,
+         pQuery->OwnerCookie, pQuery->DeviceGeneration, pQuery->IssueSerial,
+         pQuery->FenceToken);
+      pQuery->FenceToken = 0;
+   }
+   if (SUCCEEDED(result)) result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   UINT issue = pQuery->IssueSerial + 1;
+   if (SUCCEEDED(result)) {
+      pDevice->pipe->flush(pDevice->pipe, NULL, 0);
+      result = AgxD3d10WindowsFlushStatus(pDevice->windows);
+   }
+   if (SUCCEEDED(result)) result = AgxD3d10WindowsQueryCollect(pDevice->windows);
+   ULONG fence = 0;
+   if (SUCCEEDED(result)) result = AgxD3d10WindowsQuerySignal(pDevice->windows,
+      pQuery->OwnerCookie, pQuery->DeviceGeneration, issue, &fence);
+   pQuery->IssueSerial = issue;
+   pQuery->LastError = result;
+   if (FAILED(result) || !fence) {
+      pQuery->Phase = QueryFailed;
+      SetError(hDevice, FAILED(result) ? result : E_FAIL);
+      return;
+   }
+   pQuery->FenceToken = fence;
+   pQuery->Phase = QueryIssued;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','QueryGetData','''   Device *pDevice = CastDevice(hDevice);
+   Query *pQuery = CastQuery(hQuery);
+   if (!EventQueryValid(pDevice, pQuery) ||
+       !((pData == NULL && DataSize == 0) ||
+         (pData != NULL && DataSize == sizeof(BOOL))) ||
+       (Flags & ~D3D10_DDI_GET_DATA_DO_NOT_FLUSH)) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   if (pQuery->Phase == QuerySignaled) {
+      if (pData) *(BOOL *)pData = TRUE;
+      return;
+   }
+   if (pQuery->Phase == QueryFailed) {
+      SetError(hDevice, FAILED(pQuery->LastError) ? pQuery->LastError : E_FAIL);
+      return;
+   }
+   if (pQuery->Phase != QueryIssued || !pQuery->FenceToken) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   BOOL completed = FALSE;
+   HRESULT result = AgxD3d10WindowsQueryPoll(pDevice->windows,
+      pQuery->OwnerCookie, pQuery->DeviceGeneration, pQuery->IssueSerial,
+      pQuery->FenceToken, &completed);
+   if (FAILED(result)) {
+      pQuery->Phase = QueryFailed;
+      pQuery->LastError = result;
+      SetError(hDevice, result);
+      return;
+   }
+   if (!completed) {
+      SetError(hDevice, DXGI_DDI_ERR_WASSTILLDRAWING);
+      return;
+   }
+   result = AgxD3d10WindowsQueryConsume(pDevice->windows,
+      pQuery->OwnerCookie, pQuery->DeviceGeneration, pQuery->IssueSerial,
+      pQuery->FenceToken);
+   if (FAILED(result)) {
+      pQuery->Phase = QueryFailed;
+      pQuery->LastError = result;
+      SetError(hDevice, result);
+      return;
+   }
+   pQuery->FenceToken = 0;
+   pQuery->Phase = QuerySignaled;
+   pQuery->LastError = S_OK;
+   if (pData) *(BOOL *)pData = TRUE;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','SetPredication','''   (void)hQuery;
+   (void)PredicateValue;
+   SetError(hDevice, E_NOTIMPL);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','CheckPredicate','''   return pDevice && pDevice->pPredicate == NULL;''')
     change('src/gallium/frontends/d3d10umd/DxgiFns.cpp',
         'ecdfee2a652cab9d0604ff3ddcf0fb196778f41d367398aa4fcd080776a47f40',[
         ('HRESULT APIENTRY\n_Present(', '''static HRESULT

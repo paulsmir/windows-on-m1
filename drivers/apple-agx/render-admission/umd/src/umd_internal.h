@@ -64,10 +64,20 @@ typedef struct _ADMISSION_UMD_SOURCE_HOLD_RECORD {
 
 typedef struct _ADMISSION_UMD_SCREEN_FENCE {
   HANDLE Event;
+  APPLE_AGX_U64 QueryOwner;
+  APPLE_AGX_U32 QueryGeneration;
+  APPLE_AGX_U32 QueryIssue;
   APPLE_AGX_U32 Token;
+  APPLE_AGX_U32 Kind;
   BOOL Active;
   BOOL Completed;
 } ADMISSION_UMD_SCREEN_FENCE;
+
+enum {
+  AdmissionUmdFenceDraw = 0u,
+  AdmissionUmdFenceQueryAttached = 1u,
+  AdmissionUmdFenceQueryDetached = 2u
+};
 
 typedef struct _ADMISSION_UMD_ADAPTER {
   ULONG Magic;
@@ -159,6 +169,20 @@ HRESULT AdmissionUmdScreenBeginClose(ADMISSION_UMD_DEVICE *Device);
 VOID AdmissionUmdScreenCancelClose(ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
                                       APPLE_AGX_U32 *Fence);
+HRESULT AdmissionUmdScreenSignalQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 *Fence);
+HRESULT AdmissionUmdScreenPollQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 Fence, BOOL *Completed);
+HRESULT AdmissionUmdScreenConsumeQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 Fence);
+HRESULT AdmissionUmdScreenDetachQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 Fence);
+HRESULT AdmissionUmdScreenCollectDetachedQueryFences(
+    ADMISSION_UMD_DEVICE *Device);
 HRESULT AdmissionUmdScreenQuerySource(ADMISSION_UMD_DEVICE *Device,
                                       APPLE_AGX_U64 Token,
                                       ADMISSION_UMD_SCREEN_SOURCE *Source);

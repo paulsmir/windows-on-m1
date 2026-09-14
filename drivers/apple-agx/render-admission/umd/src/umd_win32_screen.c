@@ -720,8 +720,10 @@ HRESULT AdmissionUmdScreenInitialize(ADMISSION_UMD_DEVICE *Device) {
              : E_FAIL;
 }
 
-HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
-                                      APPLE_AGX_U32 *Fence) {
+static HRESULT AdmissionUmdScreenSignalFenceTagged(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U32 Kind,
+    APPLE_AGX_U64 QueryOwner, APPLE_AGX_U32 QueryGeneration,
+    APPLE_AGX_U32 QueryIssue, APPLE_AGX_U32 *Fence) {
   ADMISSION_UMD_SCREEN_FENCE *slot;
   D3DDDICB_SIGNALSYNCHRONIZATIONOBJECT2 signal;
   APPLE_AGX_U32 token;
@@ -756,11 +758,102 @@ HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
   }
   ZeroMemory(slot, sizeof(*slot));
   slot->Event = eventHandle;
+  slot->QueryOwner = QueryOwner;
+  slot->QueryGeneration = QueryGeneration;
+  slot->QueryIssue = QueryIssue;
   slot->Token = token;
+  slot->Kind = Kind;
   slot->Active = TRUE;
   Device->LastScreenError = S_OK;
   *Fence = token;
   return S_OK;
+}
+
+HRESULT AdmissionUmdScreenSignalFence(ADMISSION_UMD_DEVICE *Device,
+                                      APPLE_AGX_U32 *Fence) {
+  return AdmissionUmdScreenSignalFenceTagged(Device, AdmissionUmdFenceDraw,
+                                              0u, 0u, 0u, Fence);
+}
+
+HRESULT AdmissionUmdScreenSignalQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 *Fence) {
+  if(Device == NULL || Owner == 0u || Owner != Device->OwnerCookie ||
+     Generation == 0u || Generation != Device->Win32Generation || Issue == 0u)
+    return E_INVALIDARG;
+  return AdmissionUmdScreenSignalFenceTagged(Device,
+      AdmissionUmdFenceQueryAttached, Owner, Generation, Issue, Fence);
+}
+
+static ADMISSION_UMD_SCREEN_FENCE *AdmissionUmdScreenQueryFence(
+    ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Owner,
+    APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue, APPLE_AGX_U32 Fence,
+    APPLE_AGX_U32 Kind) {
+  ADMISSION_UMD_SCREEN_FENCE *slot=AdmissionUmdScreenFenceFind(Device,Fence);
+  return slot && slot->Kind==Kind && slot->QueryOwner==Owner &&
+      slot->QueryGeneration==Generation && slot->QueryIssue==Issue ? slot : NULL;
+}
+
+HRESULT AdmissionUmdScreenPollQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 Fence, BOOL *Completed) {
+  DWORD waitResult;
+  if(Completed) *Completed=FALSE;
+  if(!Device || !Completed || Device->Magic!=ADMISSION_UMD_DEVICE_MAGIC)
+    return E_INVALIDARG;
+  ADMISSION_UMD_SCREEN_FENCE *slot=AdmissionUmdScreenQueryFence(Device,Owner,
+      Generation,Issue,Fence,AdmissionUmdFenceQueryAttached);
+  if(!slot || !slot->Event) return E_INVALIDARG;
+  if(slot->Completed) { *Completed=TRUE;return S_OK; }
+  waitResult=WaitForSingleObject(slot->Event,0u);
+  if(waitResult==WAIT_TIMEOUT) { Device->LastScreenError=S_OK;return S_OK; }
+  if(waitResult!=WAIT_OBJECT_0) {
+    Device->LastScreenError=HRESULT_FROM_WIN32(GetLastError());
+    return Device->LastScreenError;
+  }
+  slot->Completed=TRUE;Device->LastScreenError=S_OK;*Completed=TRUE;
+  return S_OK;
+}
+
+HRESULT AdmissionUmdScreenConsumeQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 Fence) {
+  ADMISSION_UMD_SCREEN_FENCE *slot=AdmissionUmdScreenQueryFence(Device,Owner,
+      Generation,Issue,Fence,AdmissionUmdFenceQueryAttached);
+  if(!slot || !slot->Completed) return E_INVALIDARG;
+  return AdmissionUmdScreenRetireFence(Device,Fence) ? S_OK :
+      (FAILED(Device->LastScreenError)?Device->LastScreenError:E_FAIL);
+}
+
+HRESULT AdmissionUmdScreenDetachQueryFence(ADMISSION_UMD_DEVICE *Device,
+    APPLE_AGX_U64 Owner, APPLE_AGX_U32 Generation, APPLE_AGX_U32 Issue,
+    APPLE_AGX_U32 Fence) {
+  ADMISSION_UMD_SCREEN_FENCE *slot=AdmissionUmdScreenQueryFence(Device,Owner,
+      Generation,Issue,Fence,AdmissionUmdFenceQueryAttached);
+  if(!slot) return E_INVALIDARG;
+  slot->Kind=AdmissionUmdFenceQueryDetached;
+  return S_OK;
+}
+
+HRESULT AdmissionUmdScreenCollectDetachedQueryFences(
+    ADMISSION_UMD_DEVICE *Device) {
+  HRESULT first=S_OK;
+  if(!Device || Device->Magic!=ADMISSION_UMD_DEVICE_MAGIC) return E_INVALIDARG;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_FENCE_LIMIT;++i) {
+    ADMISSION_UMD_SCREEN_FENCE *slot=&Device->ScreenFences[i];
+    if(!slot->Active || slot->Kind!=AdmissionUmdFenceQueryDetached) continue;
+    DWORD waitResult=slot->Completed?WAIT_OBJECT_0:WaitForSingleObject(slot->Event,0u);
+    if(waitResult==WAIT_TIMEOUT) continue;
+    if(waitResult!=WAIT_OBJECT_0) {
+      HRESULT error=HRESULT_FROM_WIN32(GetLastError());
+      if(SUCCEEDED(first)) first=error;
+      continue;
+    }
+    slot->Completed=TRUE;
+    if(!AdmissionUmdScreenRetireFence(Device,slot->Token) && SUCCEEDED(first))
+      first=FAILED(Device->LastScreenError)?Device->LastScreenError:E_FAIL;
+  }
+  return first;
 }
 
 HRESULT AdmissionUmdScreenFinalize(ADMISSION_UMD_DEVICE *Device,

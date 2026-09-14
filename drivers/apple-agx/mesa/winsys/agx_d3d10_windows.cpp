@@ -8,6 +8,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 extern "C" {
 #include "umd_internal.h"
 #include "umd_asahi_owner.h"
+#include "umd_asahi_batch_adapter.h"
 }
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d10_windows.h"
@@ -28,9 +29,17 @@ enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
 typedef struct _AGX_D3D10_WINDOWS_TERMINAL {
   struct _AGX_D3D10_WINDOWS_TERMINAL *Next;
   HRESULT Error;
-  ULONG Stage,ActiveBuffers,NativeContexts,LiveBos;
+  ULONG Stage,ActiveBuffersAndQueryMarkers,NativeContexts,LiveBos;
   BOOL KernelQuiesced;
 } AGX_D3D10_WINDOWS_TERMINAL;
+enum {
+  AgxD3d10TerminalCountMask=0xffu,
+  AgxD3d10TerminalQueryShift=8u
+};
+static_assert(ADMISSION_UMD_SCREEN_BUFFER_LIMIT<=AgxD3d10TerminalCountMask,
+              "terminal active-buffer field is too small");
+static_assert(ADMISSION_UMD_SCREEN_FENCE_LIMIT<=AgxD3d10TerminalCountMask,
+              "terminal query-marker field is too small");
 
 struct AGX_D3D10_WINDOWS_ADAPTER {
   ADMISSION_UMD_ADAPTER Runtime;
@@ -219,19 +228,32 @@ HRESULT AgxD3d10WindowsCloseDevice(AGX_D3D10_WINDOWS_DEVICE **Device) {
 static HRESULT terminalize_device(AGX_D3D10_WINDOWS_DEVICE **inout,HRESULT error) {
   AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
   AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
-  ULONG stage=owner->Stage,activeBuffers=0;
+  ULONG stage=owner->Stage,activeBuffers=0,queryMarkers=0;
   ULONG nativeContexts=owner->Backend.ContextCount,liveBos=owner->Backend.LiveBos;
   BOOL kernelQuiesced=owner->KernelQuiesced;
   static_assert(sizeof(*owner)>=sizeof(AGX_D3D10_WINDOWS_TERMINAL),
                 "terminal record must fit the consumed owner allocation");
   if(SUCCEEDED(error)) error=E_FAIL;
-  AdmissionUmdSetError(&owner->Runtime,error);
   for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
     if(owner->Runtime.ScreenBuffers[i].Active) ++activeBuffers;
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_FENCE_LIMIT;++i)
+    if(owner->Runtime.ScreenFences[i].Active &&
+       owner->Runtime.ScreenFences[i].Kind!=AdmissionUmdFenceDraw)
+      ++queryMarkers;
+  ULONG packedCounts=0;
+  if(activeBuffers<=AgxD3d10TerminalCountMask &&
+     queryMarkers<=AgxD3d10TerminalCountMask) {
+    packedCounts=activeBuffers|
+        (queryMarkers<<AgxD3d10TerminalQueryShift);
+  } else {
+    error=E_FAIL;
+  }
+  AdmissionUmdSetError(&owner->Runtime,error);
   unlink_owner(owner);
   ZeroMemory(owner,sizeof(*owner));
   AGX_D3D10_WINDOWS_TERMINAL *record=(AGX_D3D10_WINDOWS_TERMINAL *)owner;
-  record->Error=error;record->Stage=stage;record->ActiveBuffers=activeBuffers;
+  record->Error=error;record->Stage=stage;
+  record->ActiveBuffersAndQueryMarkers=packedCounts;
   record->NativeContexts=nativeContexts;record->LiveBos=liveBos;
   record->KernelQuiesced=kernelQuiesced;
   AcquireSRWLockExclusive(&adapter->Lock);
@@ -270,6 +292,64 @@ struct pipe_context *AgxD3d10WindowsContext(AGX_D3D10_WINDOWS_DEVICE *Device) {
   return Device != NULL && Device->Stage==AgxD3d10DeviceReady ? Device->Context : NULL;
 }
 
+BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
+                             ULONGLONG *OwnerCookie,
+                             ULONG *DeviceGeneration) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady ||
+     !OwnerCookie || !DeviceGeneration || !Device->Runtime.OwnerCookie ||
+     !Device->Runtime.Win32Generation) return FALSE;
+  *OwnerCookie=Device->Runtime.OwnerCookie;
+  *DeviceGeneration=Device->Runtime.Win32Generation;
+  return TRUE;
+}
+
+HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  ADMISSION_UMD_ASAHI_BATCH *batch=
+      (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
+  if(batch && (FAILED(batch->Submission.RenderStatus) ||
+               FAILED(batch->Submission.PostStatus)))
+    return FAILED(batch->Submission.PostStatus)?batch->Submission.PostStatus:
+        batch->Submission.RenderStatus;
+  if(!Device->Backend.Failed && !Device->Runtime.DrawTerminal) return S_OK;
+  return FAILED(Device->Runtime.LastScreenError)?
+      Device->Runtime.LastScreenError:E_FAIL;
+}
+
+HRESULT AgxD3d10WindowsQuerySignal(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG *Fence) {
+  APPLE_AGX_U32 token=0;
+  if(Fence) *Fence=0;
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Fence) return E_INVALIDARG;
+  HRESULT result=AdmissionUmdScreenSignalQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,&token);
+  if(SUCCEEDED(result)) *Fence=token;
+  return result;
+}
+HRESULT AgxD3d10WindowsQueryPoll(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG Fence,
+    BOOL *Completed) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenPollQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,Fence,Completed);
+}
+HRESULT AgxD3d10WindowsQueryConsume(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG Fence) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenConsumeQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,Fence);
+}
+HRESULT AgxD3d10WindowsQueryDetach(AGX_D3D10_WINDOWS_DEVICE *Device,
+    ULONGLONG OwnerCookie, ULONG DeviceGeneration, ULONG Issue, ULONG Fence) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenDetachQueryFence(&Device->Runtime,OwnerCookie,
+      DeviceGeneration,Issue,Fence);
+}
+HRESULT AgxD3d10WindowsQueryCollect(AGX_D3D10_WINDOWS_DEVICE *Device) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  return AdmissionUmdScreenCollectDetachedQueryFences(&Device->Runtime);
+}
+
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *Device) {
   return Device && Device->Stage>=AgxD3d10DeviceRuntimeReady &&
@@ -287,8 +367,11 @@ BOOL AgxD3d10WindowsTerminalReceiptForTest(AGX_D3D10_WINDOWS_ADAPTER *Adapter,
   AcquireSRWLockShared(&Adapter->Lock);
   for(AGX_D3D10_WINDOWS_TERMINAL *record=Adapter->Terminal;record;record=record->Next) {
     AGX_D3D10_WINDOWS_DEVICE *former=(AGX_D3D10_WINDOWS_DEVICE *)record;
-    ++Receipt->Count;Receipt->ActiveBuffers+=record->ActiveBuffers;
+    ++Receipt->Count;Receipt->ActiveBuffers+=
+        record->ActiveBuffersAndQueryMarkers&AgxD3d10TerminalCountMask;
     Receipt->NativeContexts+=record->NativeContexts;Receipt->LiveBos+=record->LiveBos;
+    Receipt->QueryMarkers+=(record->ActiveBuffersAndQueryMarkers>>
+        AgxD3d10TerminalQueryShift)&AgxD3d10TerminalCountMask;
     Receipt->Quiesced+=record->KernelQuiesced?1u:0u;
     if(SUCCEEDED(record->Error) || former->Runtime.KernelCallbacks ||
        former->Runtime.SetErrorCallback || former->Owner.Device ||

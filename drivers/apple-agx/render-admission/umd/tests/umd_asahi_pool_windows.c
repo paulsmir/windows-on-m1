@@ -75,8 +75,11 @@ unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *,
 static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
 static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
+static HANDLE RuntimeQueryMarkers[ADMISSION_UMD_SCREEN_FENCE_LIMIT*2];
+static unsigned RuntimeQueryMarkerCount;
 static unsigned RuntimeImmediateMarker;
 static unsigned RuntimeFailSignals;
+static unsigned RuntimeFailedSignalCalls;
 static unsigned RuntimeTeardownDeletes,RuntimeTeardownUnlocks;
 static const void *RuntimeTeardownBo;
 static APPLE_AGX_U64 RuntimeCommand[APPLE_AGX_WIN32_COMMAND_MAX_BYTES/8];
@@ -347,17 +350,28 @@ static HRESULT APIENTRY RuntimeSignal(HANDLE h,const D3DDDICB_SIGNALSYNCHRONIZAT
   ++RuntimeSignals;
   RUNTIME_REQUIRE(device && h==device->RuntimeDevice.handle &&
       signal->hContext==device->KernelContext && signal->Flags.EnqueueCpuEvent);
-  RUNTIME_REQUIRE(device && device->NextScreenFence==RuntimeConsumerFence);
-  if(RuntimeFailSignals) { --RuntimeFailSignals; return E_FAIL; }
-  RuntimeMarker=signal->CpuEventHandle;
-  if(RuntimeImmediateMarker) RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
+  if(RuntimeFailSignals) {
+    --RuntimeFailSignals;++RuntimeFailedSignalCalls;return E_FAIL;
+  }
+  if(device && device->DrawSubmission && !device->DrawSubmission->Fence) {
+    RUNTIME_REQUIRE(device->NextScreenFence==
+        RuntimeConsumerFence+RuntimeFailedSignalCalls);
+    RuntimeMarker=signal->CpuEventHandle;
+    if(RuntimeImmediateMarker) RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
+  } else {
+    RUNTIME_REQUIRE(RuntimeQueryMarkerCount<ARRAYSIZE(RuntimeQueryMarkers));
+    if(RuntimeQueryMarkerCount<ARRAYSIZE(RuntimeQueryMarkers))
+      RuntimeQueryMarkers[RuntimeQueryMarkerCount++]=signal->CpuEventHandle;
+  }
   return S_OK; /* first case deliberately pending; second signals in callback */
 }
 static void RuntimeCheckpoint(void *context,unsigned phase) {
   ADMISSION_UMD_ASAHI_OWNER *owner=context;
   if(phase==1 || phase==6) {
     if(phase==6) RUNTIME_REQUIRE(RuntimeImmediateMarker && WaitForSingleObject(RuntimeMarker,0)==WAIT_OBJECT_0);
-    RUNTIME_REQUIRE(RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 && RuntimeConsumerGates==2 && RuntimeMarker);
+    RUNTIME_REQUIRE(RuntimeRenders==1 &&
+        RuntimeSignals==1+RuntimeQueryMarkerCount+RuntimeFailedSignalCalls && RuntimeMaterializations==2 &&
+        RuntimeConsumerGates==2 && RuntimeMarker);
     RUNTIME_REQUIRE(owner->Device->NativeBatchTransaction && owner->Device->DrawSubmission);
     unsigned holds=0;
     for(unsigned i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) holds+=owner->Device->ScreenBuffers[i].SubmissionHolds;
@@ -386,7 +400,7 @@ static void RuntimeCheckpoint(void *context,unsigned phase) {
     RUNTIME_REQUIRE(SetEvent(RuntimeMarker));
   } else if(phase==5) {
     RUNTIME_REQUIRE(!owner->Device->NativeBatchTransaction && !owner->Device->DrawSubmission &&
-        RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 &&
+        RuntimeRenders==1 && RuntimeSignals==1+RuntimeQueryMarkerCount+RuntimeFailedSignalCalls && RuntimeMaterializations==2 &&
         RuntimeConsumerGates==2 && RuntimeConsumerRetirements==2);
     for(unsigned i=0;i<2;++i) {
       RUNTIME_CONSUMER *consumer=&RuntimeConsumers[i];
@@ -397,7 +411,9 @@ static void RuntimeCheckpoint(void *context,unsigned phase) {
     memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
     RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
     RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
-    RuntimeMarker=NULL;RuntimeImmediateMarker=1;
+    RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+    memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));RuntimeFailedSignalCalls=0;
+    RuntimeImmediateMarker=1;
   } else if(phase==3) {
     RUNTIME_REQUIRE(!owner->Device->NativeBatchTransaction && !owner->Device->DrawSubmission &&
         owner->Device->NativeBackendCount==1 && owner->Backend->Native && owner->Backend->LiveBos==1);
@@ -474,7 +490,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   AdmissionUmdAsahiOwnerOperations(&ops);
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
   RuntimeActiveDevice=&PoolDevice;
-  RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeImmediateMarker=0;
+  RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
   RuntimeTeardownBo=NULL;RuntimeTeardownDeletes=RuntimeTeardownUnlocks=0;
   RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
   memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));

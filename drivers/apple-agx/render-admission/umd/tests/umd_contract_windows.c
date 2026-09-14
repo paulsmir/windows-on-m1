@@ -35,6 +35,8 @@ EXTERN_C ADMISSION_UMD_DEVICE *APIENTRY MesaD3d10FrontendRuntimeForTest(D3D10DDI
 EXTERN_C void *APIENTRY MesaD3d10FrontendOwnerForTest(D3D10DDI_HDEVICE);
 EXTERN_C struct pipe_context *APIENTRY MesaD3d10FrontendContextForTest(D3D10DDI_HDEVICE);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER);
+EXTERN_C ULONG APIENTRY MesaD3d10FrontendEventQuerySetGenerationForTest(
+    D3D10DDI_HQUERY,ULONG);
 EXTERN_C struct pipe_screen *d3d10_create_screen(void) { return NULL; }
 #endif
 
@@ -710,7 +712,7 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
       ADMISSION_UMD_ASAHI_OWNER *nativeOwner=AgxD3d10WindowsOwnerForTest(first);
       RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
       RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
-      RuntimeMarker=NULL;RuntimeImmediateMarker=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
       memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
       CHECK(RuntimeActiveDevice != NULL && nativeOwner != NULL);
       CHECK(AgxWin32AsahiSceneInit(&scene,a->screen,a));
@@ -806,6 +808,10 @@ static void test_mesa_d3d10_frontend_open(void) {
   D3D10DDIARG_CALCPRIVATEDEVICESIZE sizeArgs={0};
   D3D10DDIARG_CREATEDEVICE create={0};
   D3D10DDI_HDEVICE device={0};
+  void *pendingDeviceQueryStorage=NULL;
+  SIZE_T pendingDeviceQueryBytes=0;
+  void *crossDeviceQueryStorage=NULL;
+  SIZE_T crossDeviceQueryBytes=0;
   adapterCallbacks.pfnQueryAdapterInfoCb=TestQueryAdapterInfo;
   open.hRTAdapter.handle=(VOID *)(UINT_PTR)0x100u;
   open.Interface=D3D10_0_DDI_INTERFACE_VERSION;
@@ -878,10 +884,29 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCheckMultisampleQualityLevels(
         device,DXGI_FORMAT_R32G32B32A32_FLOAT,1,&quality);
     CHECK(quality==0u);
+    D3D10DDIARG_CREATEQUERY eventQuery={0};
+    D3D10DDI_HQUERY eventQueryHandle={0};
+    D3D10DDI_HRTQUERY eventQueryRuntime={0};
+    eventQuery.Query=D3D10DDI_QUERY_EVENT;
+    SIZE_T eventQueryBytes=deviceFunctions.pfnCalcPrivateQuerySize(
+        device,&eventQuery);
+    eventQueryHandle.pDrvPrivate=calloc(1,eventQueryBytes);
+    CHECK(eventQueryHandle.pDrvPrivate!=NULL);
+    if(eventQueryHandle.pDrvPrivate) {
+      unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+      deviceFunctions.pfnCreateQuery(device,&eventQuery,
+          eventQueryHandle,eventQueryRuntime);
+      CHECK(FrontendErrors==errorsBefore && PoolCreates==createsBefore);
+      if(FrontendErrors==errorsBefore) {
+        deviceFunctions.pfnDestroyQuery(device,eventQueryHandle);
+        CHECK(FrontendErrors==errorsBefore);
+      }
+      free(eventQueryHandle.pDrvPrivate);
+    }
     D3D10DDIARG_CREATEQUERY unsupportedQuery={0};
     D3D10DDI_HQUERY unsupportedQueryHandle={0};
     D3D10DDI_HRTQUERY unsupportedQueryRuntime={0};
-    unsupportedQuery.Query=D3D10DDI_QUERY_EVENT;
+    unsupportedQuery.Query=D3D10DDI_QUERY_OCCLUSION;
     SIZE_T unsupportedQueryBytes=deviceFunctions.pfnCalcPrivateQuerySize(
         device,&unsupportedQuery);
     unsupportedQueryHandle.pDrvPrivate=malloc(unsupportedQueryBytes);
@@ -897,27 +922,34 @@ static void test_mesa_d3d10_frontend_open(void) {
             RuntimeSignals==signalsBefore);
       unsigned char *queryBytes=(unsigned char *)unsupportedQueryHandle.pDrvPrivate;
       for(SIZE_T i=0;i<unsupportedQueryBytes;++i) CHECK(queryBytes[i]==0x5a);
-#define FRONTEND_QUERY_REJECT(call) do { \
+#define FRONTEND_QUERY_REJECT(call,expected) do { \
         unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates; \
         unsigned beforeRenders=RuntimeRenders,beforeSignals=RuntimeSignals; \
         call; \
-        CHECK(FrontendErrors==beforeErrors+1u && FrontendLastError==E_NOTIMPL && \
+        CHECK(FrontendErrors==beforeErrors+1u && FrontendLastError==(expected) && \
               PoolCreates==beforeCreates && RuntimeRenders==beforeRenders && \
               RuntimeSignals==beforeSignals); \
         for(SIZE_T qi=0;qi<unsupportedQueryBytes;++qi) CHECK(queryBytes[qi]==0x5a); \
       } while(0)
       FRONTEND_QUERY_REJECT(deviceFunctions.pfnQueryBegin(
-          device,unsupportedQueryHandle));
+          device,unsupportedQueryHandle),E_INVALIDARG);
       FRONTEND_QUERY_REJECT(deviceFunctions.pfnQueryEnd(
-          device,unsupportedQueryHandle));
+          device,unsupportedQueryHandle),E_INVALIDARG);
       UINT64 queryResult=0x8877665544332211ULL;
       FRONTEND_QUERY_REJECT(deviceFunctions.pfnQueryGetData(
-          device,unsupportedQueryHandle,&queryResult,sizeof(queryResult),0));
+          device,unsupportedQueryHandle,&queryResult,sizeof(queryResult),0),E_INVALIDARG);
       CHECK(queryResult==0x8877665544332211ULL);
       FRONTEND_QUERY_REJECT(deviceFunctions.pfnSetPredication(
-          device,unsupportedQueryHandle,FALSE));
-      FRONTEND_QUERY_REJECT(deviceFunctions.pfnDestroyQuery(
-          device,unsupportedQueryHandle));
+          device,unsupportedQueryHandle,FALSE),E_NOTIMPL);
+      {
+        unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates;
+        unsigned beforeRenders=RuntimeRenders,beforeSignals=RuntimeSignals;
+        deviceFunctions.pfnDestroyQuery(device,unsupportedQueryHandle);
+        CHECK(FrontendErrors==beforeErrors+1u && FrontendLastError==E_INVALIDARG &&
+              PoolCreates==beforeCreates && RuntimeRenders==beforeRenders &&
+              RuntimeSignals==beforeSignals);
+        for(SIZE_T qi=0;qi<unsupportedQueryBytes;++qi) CHECK(queryBytes[qi]==0x5a);
+      }
 #undef FRONTEND_QUERY_REJECT
       free(unsupportedQueryHandle.pDrvPrivate);
     }
@@ -1186,16 +1218,197 @@ static void test_mesa_d3d10_frontend_open(void) {
     RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
     ADMISSION_UMD_ASAHI_OWNER *frontendOwner=MesaD3d10FrontendOwnerForTest(device);
     FrontendDestroyOwner=frontendOwner;
-    RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeImmediateMarker=0;
+    RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
     RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
     memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
     CHECK(RuntimeActiveDevice && frontendOwner);
+    D3D10DDIARG_CREATEQUERY orderedEventDesc={0};
+    D3D10DDI_HQUERY orderedEvent={0};D3D10DDI_HRTQUERY orderedEventRuntime={0};
+    orderedEventDesc.Query=D3D10DDI_QUERY_EVENT;
+    SIZE_T orderedEventBytes=deviceFunctions.pfnCalcPrivateQuerySize(
+        device,&orderedEventDesc);
+    orderedEvent.pDrvPrivate=calloc(1,orderedEventBytes);
+    CHECK(orderedEvent.pDrvPrivate!=NULL);
+    unsigned eventErrorsBefore=FrontendErrors;
+    deviceFunctions.pfnCreateQuery(device,&orderedEventDesc,
+        orderedEvent,orderedEventRuntime);
+    CHECK(FrontendErrors==eventErrorsBefore);
+    deviceFunctions.pfnQueryBegin(device,orderedEvent);
+    CHECK(FrontendErrors==eventErrorsBefore);
     deviceFunctions.pfnDraw(device,3,0);
     CHECK(AgxWin32AsahiContextDrawReceipt(MesaD3d10FrontendContextForTest(device)));
-    deviceFunctions.pfnFlush(device);
-    FRONTEND_STAGE("draw-flush");
-    CHECK(RuntimeRenders==1 && RuntimeSignals==1 && RuntimeMaterializations==2 &&
-          RuntimeConsumerGates==2 && RuntimeMarker);
+    deviceFunctions.pfnQueryEnd(device,orderedEvent);
+    BOOL eventEndSubmitted=FrontendErrors==eventErrorsBefore &&
+        RuntimeRenders==1u && RuntimeSignals==2u && RuntimeQueryMarkerCount==1u;
+    CHECK(eventEndSubmitted && RuntimeMaterializations==2 &&
+          RuntimeConsumerGates==2 && RuntimeMarker && RuntimeQueryMarkers[0]);
+    if(eventEndSubmitted) {
+      BOOL eventResult=(BOOL)0x5a5a5a5a;
+      unsigned pendingErrors=FrontendErrors;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),D3D10_DDI_GET_DATA_DO_NOT_FLUSH);
+      CHECK(FrontendErrors==pendingErrors+1u &&
+            FrontendLastError==DXGI_DDI_ERR_WASSTILLDRAWING &&
+            eventResult==(BOOL)0x5a5a5a5a && RuntimeRenders==1u && RuntimeSignals==2u);
+      pendingErrors=FrontendErrors;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),0);
+      CHECK(FrontendErrors==pendingErrors+1u &&
+            FrontendLastError==DXGI_DDI_ERR_WASSTILLDRAWING &&
+            eventResult==(BOOL)0x5a5a5a5a && RuntimeRenders==1u && RuntimeSignals==2u);
+      CHECK(SetEvent(RuntimeQueryMarkers[0]));
+      unsigned completedErrors=FrontendErrors;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),0);
+      CHECK(FrontendErrors==completedErrors && eventResult==TRUE &&
+            RuntimeRenders==1u && RuntimeSignals==2u);
+      eventResult=FALSE;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),D3D10_DDI_GET_DATA_DO_NOT_FLUSH);
+      CHECK(FrontendErrors==completedErrors && eventResult==TRUE &&
+            RuntimeRenders==1u && RuntimeSignals==2u);
+      unsigned invalidDataErrors=FrontendErrors;
+      eventResult=FALSE;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,NULL,sizeof(BOOL),0);
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,1,0);
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),2u);
+      CHECK(FrontendErrors==invalidDataErrors+3u &&
+            FrontendLastError==E_INVALIDARG && !eventResult);
+      unsigned reissueErrors=FrontendErrors;
+      deviceFunctions.pfnQueryEnd(device,orderedEvent);
+      CHECK(FrontendErrors==reissueErrors && RuntimeRenders==1u &&
+            RuntimeSignals==3u && RuntimeQueryMarkerCount==2u);
+      deviceFunctions.pfnQueryBegin(device,orderedEvent);
+      CHECK(FrontendErrors==reissueErrors);
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,NULL,0,
+          D3D10_DDI_GET_DATA_DO_NOT_FLUSH);
+      CHECK(FrontendErrors==reissueErrors+1u &&
+            FrontendLastError==DXGI_DDI_ERR_WASSTILLDRAWING &&
+            RuntimeRenders==1u && RuntimeSignals==3u);
+      unsigned repeatedEndErrors=FrontendErrors;
+      deviceFunctions.pfnQueryEnd(device,orderedEvent);
+      CHECK(FrontendErrors==repeatedEndErrors && RuntimeRenders==1u &&
+            RuntimeSignals==4u && RuntimeQueryMarkerCount==3u);
+      CHECK(SetEvent(RuntimeQueryMarkers[1]));
+      deviceFunctions.pfnFlush(device);
+      CHECK(RuntimeRenders==1u && RuntimeSignals==4u);
+      CHECK(SetEvent(RuntimeQueryMarkers[2]));
+      unsigned reissueCompleteErrors=FrontendErrors;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,NULL,0,0);
+      CHECK(FrontendErrors==reissueCompleteErrors);
+      eventResult=FALSE;
+      deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
+          sizeof(eventResult),D3D10_DDI_GET_DATA_DO_NOT_FLUSH);
+      CHECK(FrontendErrors==reissueCompleteErrors && eventResult==TRUE &&
+            RuntimeRenders==1u && RuntimeSignals==4u);
+      D3D10DDI_HQUERY detachedQuery={0};
+      detachedQuery.pDrvPrivate=calloc(1,orderedEventBytes);
+      CHECK(detachedQuery.pDrvPrivate!=NULL);
+      if(detachedQuery.pDrvPrivate) {
+        deviceFunctions.pfnCreateQuery(device,&orderedEventDesc,
+            detachedQuery,orderedEventRuntime);
+        unsigned detachedErrors=FrontendErrors;
+        deviceFunctions.pfnQueryEnd(device,detachedQuery);
+        CHECK(FrontendErrors==detachedErrors && RuntimeSignals==5u &&
+              RuntimeQueryMarkerCount==4u);
+        deviceFunctions.pfnDestroyQuery(device,detachedQuery);
+        CHECK(FrontendErrors==detachedErrors);
+        memset(detachedQuery.pDrvPrivate,0xdd,orderedEventBytes);
+        free(detachedQuery.pDrvPrivate);
+        CHECK(SetEvent(RuntimeQueryMarkers[3]));
+        deviceFunctions.pfnFlush(device);
+        CHECK(FrontendErrors==detachedErrors && RuntimeSignals==5u);
+      }
+      D3D10DDI_HQUERY cyclingQuery={0};
+      cyclingQuery.pDrvPrivate=calloc(1,orderedEventBytes);
+      CHECK(cyclingQuery.pDrvPrivate!=NULL);
+      if(cyclingQuery.pDrvPrivate) {
+        deviceFunctions.pfnCreateQuery(device,&orderedEventDesc,
+            cyclingQuery,orderedEventRuntime);
+        unsigned cycleErrors=FrontendErrors;
+        unsigned cycleMarkerBase=RuntimeQueryMarkerCount;
+        unsigned cycleSignalBase=RuntimeSignals;
+        for(unsigned cycle=0;cycle<70u;++cycle) {
+          deviceFunctions.pfnQueryEnd(device,cyclingQuery);
+          CHECK(FrontendErrors==cycleErrors &&
+                RuntimeQueryMarkerCount==cycleMarkerBase+cycle+1u &&
+                RuntimeSignals==cycleSignalBase+cycle+1u &&
+                RuntimeQueryMarkers[cycleMarkerBase+cycle]);
+          CHECK(SetEvent(RuntimeQueryMarkers[cycleMarkerBase+cycle]));
+        }
+        deviceFunctions.pfnDestroyQuery(device,cyclingQuery);
+        CHECK(FrontendErrors==cycleErrors);
+        free(cyclingQuery.pDrvPrivate);
+      }
+      D3D10DDI_HQUERY failedMarkerQuery={0};
+      failedMarkerQuery.pDrvPrivate=calloc(1,orderedEventBytes);
+      CHECK(failedMarkerQuery.pDrvPrivate!=NULL);
+      if(failedMarkerQuery.pDrvPrivate) {
+        deviceFunctions.pfnCreateQuery(device,&orderedEventDesc,
+            failedMarkerQuery,orderedEventRuntime);
+        unsigned failedMarkerErrors=FrontendErrors;
+        unsigned markersBefore=RuntimeQueryMarkerCount,signalsBefore=RuntimeSignals;
+        RuntimeFailSignals=1;
+        deviceFunctions.pfnQueryEnd(device,failedMarkerQuery);
+        CHECK(FrontendErrors==failedMarkerErrors+1u && FrontendLastError==E_FAIL &&
+              RuntimeSignals==signalsBefore+1u &&
+              RuntimeFailedSignalCalls==1u &&
+              RuntimeQueryMarkerCount==markersBefore);
+        failedMarkerErrors=FrontendErrors;
+        BOOL falseCompletion=FALSE;
+        deviceFunctions.pfnQueryGetData(device,failedMarkerQuery,
+            &falseCompletion,sizeof(falseCompletion),0);
+        CHECK(FrontendErrors==failedMarkerErrors+1u && FrontendLastError==E_FAIL &&
+              !falseCompletion && RuntimeQueryMarkerCount==markersBefore);
+        failedMarkerErrors=FrontendErrors;
+        deviceFunctions.pfnDestroyQuery(device,failedMarkerQuery);
+        CHECK(FrontendErrors==failedMarkerErrors);
+        free(failedMarkerQuery.pDrvPrivate);
+      }
+      D3D10DDI_HQUERY devicePendingQuery={0};
+      devicePendingQuery.pDrvPrivate=calloc(1,orderedEventBytes);
+      CHECK(devicePendingQuery.pDrvPrivate!=NULL);
+      if(devicePendingQuery.pDrvPrivate) {
+        deviceFunctions.pfnCreateQuery(device,&orderedEventDesc,
+            devicePendingQuery,orderedEventRuntime);
+        unsigned devicePendingErrors=FrontendErrors;
+        unsigned pendingSignalsBefore=RuntimeSignals;
+        unsigned pendingMarkersBefore=RuntimeQueryMarkerCount;
+        deviceFunctions.pfnQueryEnd(device,devicePendingQuery);
+        CHECK(FrontendErrors==devicePendingErrors &&
+              RuntimeSignals==pendingSignalsBefore+1u &&
+              RuntimeQueryMarkerCount==pendingMarkersBefore+1u);
+        pendingDeviceQueryStorage=devicePendingQuery.pDrvPrivate;
+        pendingDeviceQueryBytes=orderedEventBytes;
+      }
+    } else {
+      deviceFunctions.pfnFlush(device);
+    }
+    FRONTEND_STAGE("draw-query-end");
+    unsigned destroyEventErrors=FrontendErrors;
+    deviceFunctions.pfnDestroyQuery(device,orderedEvent);
+    CHECK(FrontendErrors==destroyEventErrors);
+    free(orderedEvent.pDrvPrivate);
+    D3D10DDI_HQUERY crossDeviceQuery={0};
+    crossDeviceQuery.pDrvPrivate=calloc(1,orderedEventBytes);
+    CHECK(crossDeviceQuery.pDrvPrivate!=NULL);
+    if(crossDeviceQuery.pDrvPrivate) {
+      deviceFunctions.pfnCreateQuery(device,&orderedEventDesc,
+          crossDeviceQuery,orderedEventRuntime);
+      unsigned staleErrors=FrontendErrors;
+      ULONG validGeneration=MesaD3d10FrontendEventQuerySetGenerationForTest(
+          crossDeviceQuery,0);
+      deviceFunctions.pfnQueryBegin(device,crossDeviceQuery);
+      CHECK(FrontendErrors==staleErrors+1u && FrontendLastError==E_INVALIDARG);
+      CHECK(MesaD3d10FrontendEventQuerySetGenerationForTest(
+          crossDeviceQuery,validGeneration)==0u);
+      staleErrors=FrontendErrors;
+      deviceFunctions.pfnQueryBegin(device,crossDeviceQuery);
+      CHECK(FrontendErrors==staleErrors);
+      crossDeviceQueryStorage=crossDeviceQuery.pDrvPrivate;
+      crossDeviceQueryBytes=orderedEventBytes;
+    }
     deviceFunctions.pfnSetRenderTargets(device,NULL,0,1,(D3D10DDI_HDEPTHSTENCILVIEW){0});
     deviceFunctions.pfnIaSetVertexBuffers(device,0,0,NULL,NULL,NULL);
     deviceFunctions.pfnVsSetShader(device,(D3D10DDI_HSHADER){0});deviceFunctions.pfnPsSetShader(device,(D3D10DDI_HSHADER){0});
@@ -1223,6 +1436,23 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&secondCreate)));
     CHECK(MesaD3d10FrontendContextForTest(secondDevice)!=NULL &&
           MesaD3d10FrontendContextForTest(secondDevice)!=MesaD3d10FrontendContextForTest(device));
+    if(crossDeviceQueryStorage) {
+      D3D10DDI_HQUERY crossDeviceQuery={crossDeviceQueryStorage};
+      BOOL crossResult=(BOOL)0x5a5a5a5a;
+      unsigned crossErrors=FrontendErrors;
+      secondFunctions.pfnQueryBegin(secondDevice,crossDeviceQuery);
+      secondFunctions.pfnQueryEnd(secondDevice,crossDeviceQuery);
+      secondFunctions.pfnQueryGetData(secondDevice,crossDeviceQuery,&crossResult,
+          sizeof(crossResult),D3D10_DDI_GET_DATA_DO_NOT_FLUSH);
+      secondFunctions.pfnDestroyQuery(secondDevice,crossDeviceQuery);
+      CHECK(FrontendErrors==crossErrors+4u && FrontendLastError==E_INVALIDARG &&
+            crossResult==(BOOL)0x5a5a5a5a);
+      crossErrors=FrontendErrors;
+      deviceFunctions.pfnDestroyQuery(device,crossDeviceQuery);
+      CHECK(FrontendErrors==crossErrors);
+      memset(crossDeviceQueryStorage,0xdd,crossDeviceQueryBytes);
+      free(crossDeviceQueryStorage);crossDeviceQueryStorage=NULL;
+    }
     secondFunctions.pfnDestroyDevice(secondDevice);
     CHECK(MesaD3d10FrontendCleanupResult(secondDevice)==S_OK &&
           BridgeDestroys==destroysBefore+1u);
@@ -1257,11 +1487,16 @@ static void test_mesa_d3d10_frontend_open(void) {
   if(deviceFunctions.pfnDestroyDevice) deviceFunctions.pfnDestroyDevice(device);
   HRESULT mainCleanup=MesaD3d10FrontendCleanupResult(device);
   CHECK(mainCleanup==S_OK && FrontendDestroyCalls==mainDestroyBefore+1u &&
-        RuntimeRenders==1u && RuntimeSignals==1u &&
+        RuntimeRenders==1u && RuntimeSignals==1u+RuntimeQueryMarkerCount+
+        RuntimeFailedSignalCalls &&
         RuntimeConsumerRetirements==2u);
   CHECK(MesaD3d10FrontendRuntimeForTest(device)==NULL &&
         MesaD3d10FrontendOwnerForTest(device)==NULL &&
         MesaD3d10FrontendContextForTest(device)==NULL);
+  if(pendingDeviceQueryStorage) {
+    memset(pendingDeviceQueryStorage,0xdd,pendingDeviceQueryBytes);
+    free(pendingDeviceQueryStorage);pendingDeviceQueryStorage=NULL;
+  }
   for(unsigned failure=0;failure<4;++failure) {
     D3D10DDI_HDEVICE doomed={0};D3D10DDI_DEVICEFUNCS doomedFunctions={0};
     DXGI_DDI_BASE_FUNCTIONS doomedDxgi={0};D3D10DDIARG_CREATEDEVICE doomedCreate=create;
@@ -1274,7 +1509,26 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(SUCCEEDED(functions.pfnCreateDevice(open.hAdapter,&doomedCreate)));
     unsigned errorsBefore=FrontendErrors;
     unsigned destroysBefore=FrontendDestroyCalls;
-    if(failure==0) FrontendFailDestroyDevice=handle;
+    if(failure==0) {
+      FrontendFailDestroyDevice=handle;
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(doomed);
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeFailedSignalCalls=0;RuntimeFailSignals=0;
+      D3D10DDIARG_CREATEQUERY pendingDesc={D3D10DDI_QUERY_EVENT,0};
+      D3D10DDI_HQUERY pendingQuery={0};D3D10DDI_HRTQUERY pendingRuntime={0};
+      SIZE_T pendingBytes=doomedFunctions.pfnCalcPrivateQuerySize(doomed,&pendingDesc);
+      pendingQuery.pDrvPrivate=calloc(1,pendingBytes);
+      CHECK(pendingQuery.pDrvPrivate!=NULL);
+      if(pendingQuery.pDrvPrivate) {
+        doomedFunctions.pfnCreateQuery(doomed,&pendingDesc,pendingQuery,pendingRuntime);
+        doomedFunctions.pfnQueryEnd(doomed,pendingQuery);
+        CHECK(RuntimeQueryMarkerCount==1u && RuntimeQueryMarkers[0]);
+        doomedFunctions.pfnDestroyQuery(doomed,pendingQuery);
+        memset(pendingQuery.pDrvPrivate,0xdd,pendingBytes);
+        free(pendingQuery.pDrvPrivate);
+      }
+    }
     if(failure==1) PoolFailUnlock=32;
     if(failure==2) PoolFailDeallocation=32;
     if(failure==3) {
@@ -1284,17 +1538,32 @@ static void test_mesa_d3d10_frontend_open(void) {
       ADMISSION_UMD_ASAHI_OWNER *doomedOwner=MesaD3d10FrontendOwnerForTest(doomed);
       RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
       RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
-      RuntimeMarker=NULL;RuntimeImmediateMarker=0;RuntimeFailSignals=1;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;RuntimeFailSignals=1;
       memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
       CHECK(doomedContext && doomedOwner &&
             AgxWin32AsahiSceneInit(&doomedScene,doomedContext->screen,doomedContext) &&
-            AgxWin32AsahiSceneDraw(&doomedScene) &&
-            !AgxWin32AsahiSceneSubmit(&doomedScene));
-      CHECK(RuntimeRenders==1u && RuntimeSignals==1u && !RuntimeMarker);
+            AgxWin32AsahiSceneDraw(&doomedScene));
+      D3D10DDIARG_CREATEQUERY flushDesc={D3D10DDI_QUERY_EVENT,0};
+      D3D10DDI_HQUERY flushQuery={0};D3D10DDI_HRTQUERY flushRuntime={0};
+      SIZE_T flushBytes=doomedFunctions.pfnCalcPrivateQuerySize(doomed,&flushDesc);
+      flushQuery.pDrvPrivate=calloc(1,flushBytes);
+      CHECK(flushQuery.pDrvPrivate!=NULL);
+      if(flushQuery.pDrvPrivate) {
+        doomedFunctions.pfnCreateQuery(doomed,&flushDesc,flushQuery,flushRuntime);
+        doomedFunctions.pfnQueryEnd(doomed,flushQuery);
+        CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_FAIL &&
+              RuntimeRenders==1u && RuntimeSignals==1u &&
+              RuntimeFailedSignalCalls==1u && !RuntimeMarker &&
+              RuntimeQueryMarkerCount==0u);
+        unsigned flushErrors=FrontendErrors;
+        doomedFunctions.pfnDestroyQuery(doomed,flushQuery);
+        CHECK(FrontendErrors==flushErrors);
+        free(flushQuery.pDrvPrivate);
+      }
     }
     doomedFunctions.pfnDestroyDevice(doomed);
     HRESULT cleanup=MesaD3d10FrontendCleanupResult(doomed);
-    CHECK(cleanup==E_FAIL && FrontendErrors==errorsBefore+1u &&
+    CHECK(cleanup==E_FAIL && FrontendErrors==errorsBefore+(failure==3?2u:1u) &&
           FrontendLastError==cleanup &&
           FrontendDestroyCalls==destroysBefore+1u);
     CHECK(MesaD3d10FrontendRuntimeForTest(doomed)==NULL &&
@@ -1313,6 +1582,7 @@ static void test_mesa_d3d10_frontend_open(void) {
             MesaD3d10FrontendAdapterForTest(open.hAdapter),&terminal) &&
         terminal.Count==5u && terminal.ActiveBuffers>0u &&
         terminal.NativeContexts>0u && terminal.LiveBos>0u &&
+        terminal.QueryMarkers>0u &&
         terminal.Quiesced==4u && terminal.CallbacksCleared);
   CHECK(functions.pfnCloseAdapter(open.hAdapter)==S_OK);
   CHECK(FrontendPostReturnCallbacks==0u);
