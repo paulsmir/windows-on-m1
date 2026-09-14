@@ -127,3 +127,26 @@ Standard allocation-backed DXGI Present/shared-resource/redirection behavior,
 accelerated DWM, desktop stability/reset and the compact-state acceptance
 criteria remain later required work. This plan does not reopen KMD/platform
 architecture or authorize capability advertising based on the one-draw subset.
+
+## 2026-09-14 bounded source recheck during EXP683 loader block
+Native constructor wrapper and scene now exist in agx_win32_asahi_scene.c; use
+AgxWin32AsahiScreenCreateForWindows rather than the old fixture constructor.
+Current agx_d3d10_windows.cpp still owns AGX_WIN32_PIPE_DEVICE. Its error unwind
+calls void RuntimeDeviceFinalize then frees owner, and CloseDevice calls
+ScreenBeginClose before pipe teardown. These orders must not be transferred
+unchanged to native ownership: owner.Enter contributes NativeBackendCount,
+ContextDestroy refuses live batch slots, and ScreenDestroy can retain the native
+backend when detach fails. Native initialization failure with retained resources
+must leave a reachable owner until cleanup succeeds; no speculative force-free.
+Existing UmdContractTest factory case covers two devices and extra context, but
+EnableMesaPipeFactoryTest is not currently enabled by the native closure runner.
+Next coherent implementation must connect that existing case to native closure,
+exercise actual producer through runtime callbacks, and preserve isolation plus
+busy/retry teardown. No new helper project or pipeline advertisement.
+Source rechecked: agx_d3d10_windows.cpp/.h; agx_win32_asahi_scene.c/.h;
+umd_runtime_device.c; umd_asahi_owner.c; umd_contract_windows.c factory case;
+UmdContractTest.vcxproj; pinned Mesa Adapter.cpp and Device.cpp. Microsoft D3D10
+initialization documentation confirms pKTCallbacks arrive at CreateDevice,
+whereas pinned Mesa currently creates screen at OpenAdapter.
+This is source review only; production factory/frontend have not been changed.
+EXP683 frozen native qualification inputs remain separate from this next unit.
