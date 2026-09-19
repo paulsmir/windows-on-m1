@@ -10,7 +10,7 @@
   "advertised_pipeline_mask": 0,
   "selected_pipeline_mask": 1,
   "selection": {
-    "status": "planning-selected-not-implemented",
+    "status": "implementation-in-progress-pipeline-not-advertised",
     "accepted": "Reuse Mesa d3d10umd DDI/state translation and replace its software target/DRM winsys with the AppleAgx Windows transport.",
     "rejected": "thin-d3d-over-mesa",
     "rejected_reason": "It would duplicate the 101-entry D3D10 DDI/state surface already present in pinned Mesa before reaching the same Gallium/AGX backend.",
@@ -1099,8 +1099,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-present",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-primary-render-final-20260919k-x64"
     },
     {
       "id": "dxgi-get-gamma-caps",
@@ -1119,8 +1120,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-set-display-mode",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-present-created-20260919i-x64"
     },
     {
       "id": "dxgi-set-resource-priority",
@@ -1149,8 +1151,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-rotate-resource-identities",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-present-rotate-20260919o-x64"
     },
     {
       "id": "dxgi-blt",
@@ -1234,4 +1237,3 @@
     }
   ]
 }
-

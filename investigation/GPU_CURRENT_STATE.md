@@ -505,6 +505,28 @@ native-primary-default-20260919n-arm64. Neither package was staged, installed
 or hardware-run; conditional native option remains default-off and pipeline
 mask0.
 
+## Verified native presentation identity rotation
+Implementation 3f39a1cb604a0b980bcc044ea59911e3e59b4008 implements the
+base-DXGI RotateResourceIdentities callback for typed native presentation
+resources. After the existing ordered retirement gate it rotates the allocation
+identity atomically across the presentation record, its retirement record and
+the authoritative borrowed ScreenBuffer slot. Native BO tokens and Asahi
+resource objects remain stable; subsequent capture therefore resolves the
+rotated kernel allocation without a copy or secondary handle table.
+
+The executable rotates the runtime-opened and UMD-created desktop resources in
+both directions, then performs the same real desktop draw/Present proof and
+verifies original allocation0x775 and retirement. X64 executionPASS:
+native-present-rotate-20260919o-x64,
+archiveSHA4e7ed2fd0dd2649cb88a6ed46524c5a6e82225058b49b18d4b5b53d34288c2d7.
+ARM64 closure build/linkPASS: native-present-rotate-20260919p-arm64,
+archiveSHA27060642dd2d0527fda56435847e57b825afa6a425336357a72a633df3657dbb.
+Conditional package699 build/analyze0warnings0errors and Universal API
+validationPASS: native-present-rotate-20260919q-arm64;
+DLLSHA191c090858ca62b520eaeb63c11a257e2448edee91e3374c063802fc8624fe8e.
+It was not staged, installed or hardware-run; native option remains default-off
+and pipeline mask0.
+
 ## Exact next target
 Continue production integration from
 investigation/agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
