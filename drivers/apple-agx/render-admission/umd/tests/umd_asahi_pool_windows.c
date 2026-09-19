@@ -22,6 +22,13 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
        present->Width!=2560u || present->Height!=1600u ||
        present->Pitch!=10240u || present->Size!=0xfa0000ULL)
       return E_INVALIDARG;
+    unsigned slot;
+    for(slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT && PoolMemory[slot];++slot) {}
+    if(slot==ADMISSION_UMD_SCREEN_BUFFER_LIMIT) return E_OUTOFMEMORY;
+    PoolMemory[slot]=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,
+                              (SIZE_T)present->Size);
+    if(!PoolMemory[slot]) return E_OUTOFMEMORY;
+    PoolHandles[slot]=0x775u;++PoolCreates;
     a->pAllocationInfo->hAllocation=0x775u;
     a->hKMResource=0x776u;
     return S_OK;
@@ -60,6 +67,13 @@ static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   if(a->NumAllocations==0 &&
      (a->hResource==(HANDLE)(UINT_PTR)0x773u ||
       a->hResource==(HANDLE)(UINT_PTR)0x777u)) {
+    if(a->hResource==(HANDLE)(UINT_PTR)0x777u) {
+      for(unsigned slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot)
+        if(PoolMemory[slot] && PoolHandles[slot]==0x775u) {
+          HeapFree(GetProcessHeap(),0,PoolMemory[slot]);
+          PoolMemory[slot]=NULL;PoolHandles[slot]=0;break;
+        }
+    }
     ++PoolPresentationDeletes; return S_OK;
   }
   if(a->NumAllocations!=1) return E_INVALIDARG;
@@ -91,6 +105,8 @@ unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *,
 #include "apple_agx_dynamic_job.h"
 #include "render_dynamic_dma.h"
 static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
+static D3DKMT_HANDLE RuntimeExpectedTargetAllocation;
+static APPLE_AGX_U64 RuntimeExpectedTargetBytes;
 static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
 static HANDLE RuntimeQueryMarkers[ADMISSION_UMD_SCREEN_FENCE_LIMIT*2];
@@ -183,6 +199,14 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       view.NativeBatch);
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
+  if(RuntimeExpectedTargetAllocation) {
+    unsigned target=view.Draw->DestinationReference;
+    RUNTIME_REQUIRE(target<view.Header->ReferenceCount &&
+        view.References[target].AllocationIndex<r->NumAllocations &&
+        device->AllocationList[view.References[target].AllocationIndex].hAllocation==
+            RuntimeExpectedTargetAllocation &&
+        view.References[target].Bytes==RuntimeExpectedTargetBytes);
+  }
   RuntimeConsumerFence=device->NextScreenFence+1;
   if(!RuntimeConsumerFence) return RuntimeConsumerFailure("fence-range",0,0);
   printf("NATIVE_KMD_INPUT: references=%u relocations=%u allocations=%u encoder_bytes=%llu rt_bytes=%llu\n",

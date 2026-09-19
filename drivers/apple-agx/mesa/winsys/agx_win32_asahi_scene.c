@@ -4,8 +4,10 @@
 #include "util/format/u_format.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
+#include "agx_win32_asahi_bo.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct pipe_screen *AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *,AGX_WIN32_SCREEN *,
@@ -79,6 +81,48 @@ struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *backend)
 
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *screen,void *owner) {
   return screen && screen->context_create ? screen->context_create(screen,owner,0) : NULL;
+}
+struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
+    struct pipe_screen *screen,const AGX_WIN32_SCREEN_BUFFER *buffer,
+    APPLE_AGX_U32 width,APPLE_AGX_U32 height,APPLE_AGX_U32 pitch,
+    APPLE_AGX_U64 bytes) {
+  AGX_WIN32_ASAHI_BACKEND *backend=screen?
+      agx_device(screen)->windows_private:NULL;
+  if(!screen || !buffer || !width || !height ||
+     pitch!=(APPLE_AGX_U64)width*4ULL || bytes!=(APPLE_AGX_U64)pitch*height ||
+     !backend || buffer->Transport.Bytes!=bytes ||
+     buffer->Transport.Generation!=backend->Buffers.Generation)
+    return NULL;
+  struct pipe_resource info={0};
+  info.target=PIPE_TEXTURE_2D;info.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  info.width0=width;info.height0=height;info.depth0=1;info.array_size=1;
+  info.nr_samples=1;info.nr_storage_samples=1;
+  info.bind=PIPE_BIND_RENDER_TARGET;info.usage=PIPE_USAGE_DEFAULT;
+  struct agx_resource *resource=calloc(1,sizeof(*resource));
+  if(!resource) return NULL;
+  resource->base=info;resource->base.screen=screen;
+  resource->modifier=DRM_FORMAT_MOD_LINEAR;
+  resource->layout=(struct ail_layout){
+      .tiling=AIL_TILING_LINEAR,.format=PIPE_FORMAT_B8G8R8A8_UNORM,
+      .width_px=width,.height_px=height,.depth_px=1,.sample_count_sa=1,
+      .levels=1,.renderable=true,.linear_stride_B=pitch};
+  pipe_reference_init(&resource->base.reference,1);
+  ail_make_miptree(&resource->layout);
+  if(resource->layout.size_B!=bytes ||
+     ail_get_linear_stride_B(&resource->layout,0)!=pitch ||
+     resource->layout.level_offsets_B[0]!=0) {
+    free(resource);return NULL;
+  }
+  struct agx_bo *imported=AgxWin32AsahiImportBo(backend,buffer,"Display primary");
+  if(!imported) {free(resource);return NULL;}
+  resource->bo=imported;
+  if(backend->Failed) {
+    agx_bo_unreference(agx_device(screen),imported);free(resource);return NULL;
+  }
+  return &resource->base;
+}
+void AgxWin32AsahiResourceRelease(struct pipe_resource **resource) {
+  if(resource) pipe_resource_reference(resource,NULL);
 }
 int AgxWin32AsahiContextDestroy(struct pipe_context *ctx) {
   if(!ctx || !ctx->destroy) return 0;

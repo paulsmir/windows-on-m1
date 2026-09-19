@@ -38,6 +38,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   BOOL Active;
   BOOL Mapped;
   BOOL Transition;
+  BOOL Borrowed;
 } ADMISSION_UMD_SCREEN_BUFFER;
 
 typedef struct _ADMISSION_UMD_SCREEN_SOURCE {
@@ -201,6 +202,13 @@ HRESULT AdmissionUmdScreenDetachQueryFence(ADMISSION_UMD_DEVICE *Device,
     APPLE_AGX_U32 Fence);
 HRESULT AdmissionUmdScreenCollectDetachedQueryFences(
     ADMISSION_UMD_DEVICE *Device);
+HRESULT AdmissionUmdScreenAdoptAllocation(
+    ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation,
+    APPLE_AGX_U64 Bytes, APPLE_AGX_U64 Alignment,
+    APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags,
+    AGX_WIN32_SCREEN_BUFFER *Buffer);
+BOOL AdmissionUmdScreenAllocationRegistered(
+    ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation);
 HRESULT AdmissionUmdScreenQuerySource(ADMISSION_UMD_DEVICE *Device,
                                       APPLE_AGX_U64 Token,
                                       ADMISSION_UMD_SCREEN_SOURCE *Source);

@@ -69,6 +69,33 @@ AGX_WIN32_NATIVE_DEVICE_RESULT AgxWin32NativeDeviceCreateBo(
   return AgxWin32NativeDeviceSuccess;
 }
 
+AGX_WIN32_NATIVE_DEVICE_RESULT AgxWin32NativeDeviceImportBo(
+    AGX_WIN32_NATIVE_DEVICE *Device,
+    const AGX_WIN32_SCREEN_BUFFER *Buffer,
+    AGX_WIN32_NATIVE_BO *Bo) {
+  APPLE_AGX_U64 serial,address=0ULL;
+  AGX_WIN32_CONSTRUCTION_RESULT reserved;
+  if(!Device || !Buffer || !Bo || !Device->Active || !Device->Screen ||
+     !Device->Screen->Active || Device->Generation!=Device->Screen->Generation ||
+     Buffer->Transport.Generation!=Device->Generation ||
+     !Buffer->Transport.Token || !Buffer->Transport.Bytes ||
+     !Buffer->Transport.Flags || !Buffer->ClassId || !Buffer->Alignment ||
+     Bo->Live || Device->NextSerial==~0ULL)
+    return AgxWin32NativeDeviceState;
+  serial=Device->NextSerial+1ULL;
+  reserved=AgxWin32ConstructionReserve(&Device->Construction,
+      Buffer->Transport.Token,serial,Buffer->Transport.Bytes,&address);
+  if(reserved!=AgxWin32ConstructionSuccess)
+    return construction_result(reserved);
+  memset(Bo,0,sizeof(*Bo));
+  Bo->Buffer=*Buffer;Bo->Bytes=Buffer->Transport.Bytes;
+  Bo->Generation=Buffer->Transport.Generation;
+  Bo->Flags=Buffer->Transport.Flags;Bo->Live=APPLE_AGX_TRUE;
+  Bo->ConstructionSerial=serial;Bo->ConstructionAddress=address;
+  Device->NextSerial=serial;
+  return AgxWin32NativeDeviceSuccess;
+}
+
 AGX_WIN32_NATIVE_DEVICE_RESULT AgxWin32NativeDeviceResolveBo(
     const AGX_WIN32_NATIVE_DEVICE *Device, const AGX_WIN32_NATIVE_BO *Bo,
     APPLE_AGX_U64 Offset, APPLE_AGX_U64 Bytes, APPLE_AGX_U64 *Address) {

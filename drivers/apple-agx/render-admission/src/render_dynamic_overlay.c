@@ -675,20 +675,27 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   const APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT *roots[3];
   APPLE_AGX_U32 pipeline[3],i,j,blocks,tileConfig,utile;
   APPLE_AGX_U64 scissor=0,dbias=0;
+  APPLE_AGX_BOOL qualification,desktop;
   unsigned char *work,*ta,*micro;
+  qualification=Bindings && Bindings->SurfaceWidth==16u &&
+      Bindings->SurfaceHeight==16u && Bindings->SurfacePitch==64u &&
+      Bindings->DestinationBytes>=1024u && Bindings->DestinationBytes<=0x4000u;
+  desktop=Bindings && Bindings->SurfaceWidth==2560u &&
+      Bindings->SurfaceHeight==1600u && Bindings->SurfacePitch==10240u &&
+      Bindings->DestinationBytes==0xfa0000ULL;
   if(!Plan || !Bindings || !Objects || Count<APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       Plan->Magic!=ADMISSION_DYNAMIC_OVERLAY_MAGIC || Plan->Version!=ADMISSION_DYNAMIC_OVERLAY_VERSION ||
       !Plan->Generation || !Plan->EntryCount || Plan->EntryCount>ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES ||
       (Plan->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
        Plan->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
       Bindings->CommandVersion!=Plan->CommandVersion ||
-      Bindings->SurfaceWidth!=16u || Bindings->SurfaceHeight!=16u || Bindings->SurfacePitch!=64u ||
+      (!qualification && !desktop) ||
       !Bindings->DestinationBytes || Bindings->DestinationBytes>0xffffffffULL-127ULL)
     return AdmissionDynamicOverlayArgument;
   n=&Bindings->NativeBatch;
-  /* First native producer shares the proven one-tile geometry. The current
-   * Asahi tilebuffer contract derives the sample/utile scalars; no old shader
-   * or pipeline payload is substituted. */
+  /* The native encoder owns surface geometry. The Asahi tilebuffer contract
+   * supplies the sample/utile scalars; no old shader or pipeline payload is
+   * substituted. */
   if(n->StructBytes!=sizeof(*n) || n->Samples!=1 || n->Layers!=1 ||
       (n->SampleSizeBytes!=8 && n->SampleSizeBytes!=16) ||
       n->UtileWidth!=32 || n->UtileHeight!=32 || n->PppControl!=0x202u ||

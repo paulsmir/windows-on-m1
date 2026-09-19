@@ -57,6 +57,11 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(
  * after ScreenCreate returned NULL. It is never a usable factory result. */
 struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *);
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
+struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
+    struct pipe_screen *, const AGX_WIN32_SCREEN_BUFFER *,
+    APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
+    APPLE_AGX_U64 Bytes);
+void AgxWin32AsahiResourceRelease(struct pipe_resource **);
 /* False retains caller storage; retry only after pending ownership is resolved.
  * All contexts must be destroyed before their screen is destroyed. */
 int AgxWin32AsahiContextDestroy(struct pipe_context *);

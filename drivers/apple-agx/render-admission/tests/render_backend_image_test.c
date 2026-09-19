@@ -489,6 +489,24 @@ static void test_native_binding_preserves_logical_attachment(void) {
   assert(!completed.PresentationAttempted);
   assert(AdmissionCompletedOutputAbort(&completed,packet.Fence));
   assert(AdmissionAllocationDestroy(&allocation));
+  {
+    unsigned char *desktop=realloc(target,0xfa0000);
+    assert(desktop);target=desktop;
+    packet.Fence=62;packet.DestinationBytes=0xfa0000;
+    native.SurfaceWidth=2560;native.SurfaceHeight=1600;
+    native.SurfacePitch=10240;native.DestinationBytes=0xfa0000;
+    assert(AdmissionBackendImageBindNativeSubmission(
+        &image,&packet,target,&native,&binding));
+    assert(image.NativeBound && image.Objects[40].Data==target &&
+           image.Objects[40].Size==0xfa0000);
+    assert(AdmissionAllocationDescribe(2560,1600,4,1,1,0,&description));
+    assert(AdmissionBackendImageCaptureOutput(
+        &image,&packet,&description,&output));
+    assert(output.RenderWidth==2560 && output.RenderHeight==1600 &&
+           output.RenderPitch==10240 && output.RenderedBytes==0xfa0000 &&
+           output.AllocationBytes==0xfa0000);
+    assert(AdmissionBackendImageReleaseSubmission(&image,packet.Fence));
+  }
   packet.DestinationBytes=0x2000;
   assert(!AdmissionBackendImageBindNativeSubmission(&image,&packet,target,&native,&binding));
   free(target); free(arena);

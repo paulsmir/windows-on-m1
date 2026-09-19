@@ -448,6 +448,65 @@ static int AdmissionUmdScreenCreateClassBuffer(
   return 1;
 }
 
+HRESULT AdmissionUmdScreenAdoptAllocation(
+    ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation,
+    APPLE_AGX_U64 Bytes, APPLE_AGX_U64 Alignment,
+    APPLE_AGX_U32 ClassId, APPLE_AGX_U32 Flags,
+    AGX_WIN32_SCREEN_BUFFER *Buffer) {
+  const AGX_WIN32_BUFFER_CLASS_INFO *classInfo;
+  ADMISSION_UMD_SCREEN_BUFFER *slot;
+  APPLE_AGX_U64 token;
+  if(Buffer) ZeroMemory(Buffer,sizeof(*Buffer));
+  if(!Device || Device->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !Buffer ||
+     !KernelAllocation || !Bytes || !Alignment ||
+     (Alignment&(Alignment-1ULL))!=0ULL ||
+     (Bytes&(Device->Screen.Info.PageBytes-1ULL))!=0ULL)
+    return E_INVALIDARG;
+  classInfo=AdmissionUmdScreenClass(Device,ClassId);
+  if(!classInfo || Bytes>classInfo->MaximumBytes ||
+     Alignment<classInfo->MinimumAlignment || !Flags ||
+     (Flags&~classInfo->Flags)!=0u)
+    return E_INVALIDARG;
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  slot=AdmissionUmdScreenFreeSlot(Device);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+    if(Device->ScreenBuffers[i].Active &&
+       Device->ScreenBuffers[i].KernelAllocation==KernelAllocation)
+      slot=NULL;
+  if(!slot || Device->ScreenClosing || Device->NextScreenToken==~0ULL ||
+     Device->NextScreenSerial==~0ULL) {
+    ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+    return HRESULT_FROM_WIN32(ERROR_BUSY);
+  }
+  token=++Device->NextScreenToken;
+  ZeroMemory(slot,sizeof(*slot));
+  slot->Token=token;slot->Serial=++Device->NextScreenSerial;
+  slot->KernelAllocation=KernelAllocation;slot->Bytes=Bytes;
+  slot->Alignment=Alignment;slot->ClassId=ClassId;slot->Flags=Flags;
+  slot->Active=TRUE;slot->Borrowed=TRUE;
+  Buffer->Transport.Token=token;Buffer->Transport.Bytes=Bytes;
+  Buffer->Transport.Generation=Device->Win32Generation;
+  Buffer->Transport.Flags=Flags;Buffer->ClassId=ClassId;
+  Buffer->Alignment=Alignment;
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  Device->LastScreenError=S_OK;
+  return S_OK;
+}
+
+BOOL AdmissionUmdScreenAllocationRegistered(
+    ADMISSION_UMD_DEVICE *Device, D3DKMT_HANDLE KernelAllocation) {
+  BOOL found=FALSE;
+  if(!Device || !KernelAllocation) return FALSE;
+  AcquireSRWLockShared(&Device->ScreenBufferLock);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i)
+    if(Device->ScreenBuffers[i].Active &&
+       Device->ScreenBuffers[i].KernelAllocation==KernelAllocation) {
+      found=TRUE;break;
+    }
+  ReleaseSRWLockShared(&Device->ScreenBufferLock);
+  return found;
+}
+
 static int AdmissionUmdScreenCreateBuffer(void *Context,
                                            APPLE_AGX_U64 Bytes,
                                            APPLE_AGX_U32 Flags,
@@ -591,8 +650,7 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
   D3DDDICB_DEALLOCATE deallocate;
   D3DKMT_HANDLE allocation;
   HRESULT result;
-  if (device == NULL || device->KernelCallbacks == NULL ||
-      device->KernelCallbacks->pfnDeallocateCb == NULL)
+  if (device == NULL)
     return 0;
   AcquireSRWLockExclusive(&device->ScreenBufferLock);
   buffer = AdmissionUmdScreenFind(device, Token);
@@ -602,6 +660,17 @@ static int AdmissionUmdScreenDestroyBuffer(void *Context,
     return 0;
   }
   allocation = buffer->KernelAllocation;
+  if(buffer->Borrowed) {
+    ZeroMemory(buffer,sizeof(*buffer));
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    device->LastScreenError=S_OK;
+    return 1;
+  }
+  if(device->KernelCallbacks==NULL ||
+     device->KernelCallbacks->pfnDeallocateCb==NULL) {
+    ReleaseSRWLockExclusive(&device->ScreenBufferLock);
+    return 0;
+  }
   buffer->Transition = TRUE;
   ReleaseSRWLockExclusive(&device->ScreenBufferLock);
   ZeroMemory(&deallocate, sizeof(deallocate));

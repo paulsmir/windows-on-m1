@@ -115,6 +115,37 @@ struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *native,
   return bo;
 }
 
+struct agx_bo *AgxWin32AsahiImportBo(
+    AGX_WIN32_ASAHI_BACKEND *b,const AGX_WIN32_SCREEN_BUFFER *buffer,
+    const char *label) {
+  struct windows_bo *bo;
+  if(!b || !b->Native || !buffer || !buffer->Transport.Token ||
+     buffer->Transport.Token>UINT32_MAX || b->Failed)
+    return NULL;
+  bo=calloc(1,sizeof(*bo));
+  if(!bo) return NULL;
+  bo->Backend=b;
+  if(AgxWin32NativeDeviceImportBo(&b->Buffers,buffer,&bo->Backing)!=
+     AgxWin32NativeDeviceSuccess) {
+    free(bo);return NULL;
+  }
+  bo->Base.dev=b->Native;bo->Base.size=buffer->Transport.Bytes;
+  bo->Base.handle=(uint32_t)buffer->Transport.Token;
+  bo->Base.align=(unsigned)buffer->Alignment;bo->Base.prime_fd=-1;
+  bo->Base.refcnt=1;bo->Base.label=label;
+  bo->Coordinate.addr=bo->Backing.ConstructionAddress;
+  bo->Coordinate.size_B=buffer->Transport.Bytes;bo->Base.va=&bo->Coordinate;
+  if(!b->Ops.Associate(b->Owner,buffer->Transport.Token,&bo->Base,
+                       bo->Backing.ConstructionSerial)) {
+    if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
+       AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
+    else free(bo);
+    b->Failed=1;return NULL;
+  }
+  ++b->LiveBos;
+  return &bo->Base;
+}
+
 int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
     APPLE_AGX_U32 *classId) {
   struct windows_bo *bo=(struct windows_bo *)base;

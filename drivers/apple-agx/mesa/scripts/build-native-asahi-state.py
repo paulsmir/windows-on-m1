@@ -914,6 +914,14 @@ _Present('''),
          return;
       }
       pResource->owner_device = pDevice;
+      pResource->resource = AgxD3d10WindowsPresentationPipeResource(
+         pResource->presentation);
+      if (!pResource->resource) {
+         AgxD3d10WindowsPresentationDestroy(
+            pDevice->windows, &pResource->presentation);
+         SetError(hDevice, E_FAIL);
+         return;
+      }
       pResource->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
       pResource->MipLevels = 1;
       pResource->NumSubResources = 1;
@@ -1032,6 +1040,14 @@ _Present('''),
       return;
    }
    pResource->owner_device = pDevice;
+   pResource->resource = AgxD3d10WindowsPresentationPipeResource(
+      pResource->presentation);
+   if (!pResource->resource) {
+      AgxD3d10WindowsPresentationDestroy(
+         pDevice->windows, &pResource->presentation);
+      SetError(hDevice, E_FAIL);
+      return;
+   }
    pResource->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
    pResource->MipLevels = 1;
    pResource->NumSubResources = 1;''')

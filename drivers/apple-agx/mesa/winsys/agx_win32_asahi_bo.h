@@ -61,5 +61,8 @@ struct agx_bo *AgxWin32AsahiEncoderCreate(struct agx_device *, size_t,
     unsigned, const char *);
 int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *, struct agx_bo *,
     APPLE_AGX_U32 *ClassId);
+struct agx_bo *AgxWin32AsahiImportBo(
+    AGX_WIN32_ASAHI_BACKEND *, const AGX_WIN32_SCREEN_BUFFER *,
+    const char *Label);
 
 #endif

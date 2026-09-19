@@ -1383,7 +1383,8 @@ static void test_mesa_d3d10_frontend_open(void) {
 #undef FRONTEND_UNSUPPORTED_REJECT
     D3D10DDIARG_CREATERENDERTARGETVIEW rtvCreate={0};
     D3D10DDI_HRENDERTARGETVIEW rtv={0};D3D10DDI_HRTRENDERTARGETVIEW rtvRuntime={0};
-    rtvCreate.hDrvResource=rt;rtvCreate.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+    rtvCreate.hDrvResource=createdPresentResource;
+    rtvCreate.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
     rtvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
     rtvCreate.Tex2D.ArraySize=1;
     rtv.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateRenderTargetViewSize(device,&rtvCreate));
@@ -1473,8 +1474,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     FLOAT blendFactor[4]={0};deviceFunctions.pfnSetBlendState(device,blend,blendFactor,~0u);
     deviceFunctions.pfnSetRasterizerState(device,raster);deviceFunctions.pfnSetDepthStencilState(device,depth,0);
     FRONTEND_STAGE("bind-fixed-state");
-    D3D10_DDI_VIEWPORT viewport={0,0,16,16,0,1};deviceFunctions.pfnSetViewports(device,1,0,&viewport);
-    D3D10_DDI_RECT rect={0,0,16,16};deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+    D3D10_DDI_VIEWPORT viewport={0,0,2560,1600,0,1};deviceFunctions.pfnSetViewports(device,1,0,&viewport);
+    D3D10_DDI_RECT rect={0,0,2560,1600};deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
     FRONTEND_STAGE("viewport-scissor");
     FLOAT clear[4]={0.05f,0.05f,0.05f,1.0f};deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
     FRONTEND_STAGE("bound-clear");
@@ -1482,6 +1483,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     ADMISSION_UMD_ASAHI_OWNER *frontendOwner=MesaD3d10FrontendOwnerForTest(device);
     FrontendDestroyOwner=frontendOwner;
     RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
+    RuntimeExpectedTargetAllocation=0x775u;
+    RuntimeExpectedTargetBytes=0xfa0000ULL;
     RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
     memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
     CHECK(RuntimeActiveDevice && frontendOwner);
@@ -1501,6 +1504,19 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDraw(device,3,0);
     CHECK(AgxWin32AsahiContextDrawReceipt(MesaD3d10FrontendContextForTest(device)));
     deviceFunctions.pfnQueryEnd(device,orderedEvent);
+    {
+      DXGI_DDI_ARG_PRESENT primaryPresent={0};
+      primaryPresent.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      primaryPresent.hSurfaceToPresent=(DXGI_DDI_HRESOURCE)(UINT_PTR)
+          createdPresentResource.pDrvPrivate;
+      primaryPresent.Flags.Value=0x2u;
+      primaryPresent.FlipInterval=DXGI_DDI_FLIP_INTERVAL_ONE;
+      primaryPresent.pDXGIContext=(PVOID)(UINT_PTR)0x778u;
+      FrontendPresentAllocation=0x775u;
+      FrontendPresentContext=primaryPresent.pDXGIContext;
+      CHECK(dxgiFunctions.pfnPresent(&primaryPresent)==S_OK &&
+            FrontendPresentCalls==2u);
+    }
     BOOL eventEndSubmitted=FrontendErrors==eventErrorsBefore &&
         RuntimeRenders==1u && RuntimeSignals==2u && RuntimeQueryMarkerCount==1u;
     CHECK(eventEndSubmitted && RuntimeMaterializations==2 &&
@@ -1738,6 +1754,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyResource(device,cb);
     deviceFunctions.pfnDestroyResource(device,ib);
     deviceFunctions.pfnDestroyResource(device,rt);
+    RuntimeExpectedTargetAllocation=0;
+    RuntimeExpectedTargetBytes=0;
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
     free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);
     free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(ib.pDrvPrivate);

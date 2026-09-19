@@ -4,6 +4,7 @@
 /* Include after the pinned WDK declarations. These are private UMD objects,
  * not a new command ABI or a second renderer. */
 struct pipe_context;
+struct pipe_resource;
 typedef struct AGX_D3D10_WINDOWS_ADAPTER AGX_D3D10_WINDOWS_ADAPTER;
 typedef struct AGX_D3D10_WINDOWS_DEVICE AGX_D3D10_WINDOWS_DEVICE;
 typedef struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE
@@ -60,6 +61,8 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
     PVOID DxgiContext);
 HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
     AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
+struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 struct _ADMISSION_UMD_DEVICE;
