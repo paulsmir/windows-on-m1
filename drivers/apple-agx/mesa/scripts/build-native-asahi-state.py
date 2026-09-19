@@ -670,9 +670,12 @@ MesaD3d10FrontendEventQuerySetGenerationForTest(D3D10DDI_HQUERY hQuery,
    pQuery->Phase = QuerySignaled;
    pQuery->LastError = S_OK;
    if (pData) *(BOOL *)pData = TRUE;''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','SetPredication','''   (void)hQuery;
-   (void)PredicateValue;
-   SetError(hDevice, E_NOTIMPL);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','SetPredication','''   Device *device = CastDevice(hDevice);
+   if (!device || hQuery.pDrvPrivate || PredicateValue) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   device->pPredicate = NULL;
+   device->PredicateValue = FALSE;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Query.cpp','CheckPredicate','''   return pDevice && pDevice->pPredicate == NULL;''')
     change('src/gallium/frontends/d3d10umd/DxgiFns.cpp',
         'ecdfee2a652cab9d0604ff3ddcf0fb196778f41d367398aa4fcd080776a47f40',[
@@ -935,6 +938,18 @@ _Present('''),
    }
    pDevice->pipe->sampler_view_release(pDevice->pipe, view->handle);
    view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SoSetTargets','''   Device *device = CastDevice(hDevice);
+   if (!device || SOTargets || ClearTargets) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   (void)phResource; (void)pOffsets;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device = CastDevice(hDevice);
+   ShaderResourceView *view = CastShaderResourceView(hShaderResourceView);
+   if (!device || !view || view->owner_device != device || !view->handle ||
+       !view->owner_resource || view->owner_resource->owner_device != device ||
+       view->owner_resource->MipLevels != 1) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   Device *pDevice = CastDevice(hDevice);
    ULONGLONG owner = 0;
    ULONG generation = 0;

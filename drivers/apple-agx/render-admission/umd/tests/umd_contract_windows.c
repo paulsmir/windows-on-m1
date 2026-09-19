@@ -1053,6 +1053,10 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(queryResult==0x8877665544332211ULL);
       FRONTEND_QUERY_REJECT(deviceFunctions.pfnSetPredication(
           device,unsupportedQueryHandle,FALSE),E_NOTIMPL);
+      D3D10DDI_HQUERY nullPredicate={0};
+      unsigned nullPredicateErrors=FrontendErrors;
+      deviceFunctions.pfnSetPredication(device,nullPredicate,FALSE);
+      CHECK(FrontendErrors==nullPredicateErrors);
       {
         unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates;
         unsigned beforeRenders=RuntimeRenders,beforeSignals=RuntimeSignals;
@@ -1241,6 +1245,8 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnVsSetSamplers(device,0,1,&appSampler);
       deviceFunctions.pfnGsSetShaderResources(device,0,1,&appSrv);
       deviceFunctions.pfnGsSetSamplers(device,0,1,&appSampler);
+      CHECK(FrontendErrors==textureErrors);
+      deviceFunctions.pfnGenMips(device,appSrv);
       CHECK(FrontendErrors==textureErrors);
       deviceFunctions.pfnShaderResourceViewReadAfterWriteHazard(
           device,appSrv,presentResource);
@@ -1567,6 +1573,11 @@ static void test_mesa_d3d10_frontend_open(void) {
               memcmp(vbSnapshot,vb.pDrvPrivate,vbPrivateBytes)==0);
         free(vbSnapshot);
       }
+    }
+    {
+      unsigned soErrors=FrontendErrors;
+      deviceFunctions.pfnSoSetTargets(device,0,0,NULL,NULL);
+      CHECK(FrontendErrors==soErrors);
     }
 #define FRONTEND_UNSUPPORTED_REJECT(call) do { \
       unsigned beforeErrors=FrontendErrors,beforeCreates=PoolCreates; \

@@ -768,3 +768,16 @@ evidence/AD04-runtime-closure/native-instanced-entry-20260920ck-arm64/; source
 archive SHA-256 1b0af6d2105d13cd1ea0129f8c6688c3fa1ddc3e6ac306fecfa4c44f71de17f9.
 Inventory is 104 of 121 mandatory rows proven, with 17 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+## Verified no-work D3D10 companion forms (2026-09-20)
+Null predication, zero-target stream-output unbind and GenMips on a one-level
+same-device SRV now complete without backend mutation.  Non-null predicates,
+active SO targets and multi-level mip generation remain fail-closed and are not
+counted as feature support. X64 execution PASS:
+evidence/AD04-runtime-closure/native-noop-companions-20260920cn-x64/; source
+archive SHA-256 7fbcbff1de5ab8dfbd38154306c80b208fc36aec9f57afea61c94ac77e96ba81.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-noop-companions-20260920co-arm64/; source
+archive SHA-256 a52e535c16f12d68a70d08056e7437fa9a1d86e40e1131316817c11685573c97.
+Inventory is 107 of 121 mandatory rows proven, with 14 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.

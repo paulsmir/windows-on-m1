@@ -534,8 +534,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-so-set-targets",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-noop-companions-20260920cn-x64"
     },
     {
       "id": "ddi-draw-auto",
@@ -597,8 +598,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-set-predication",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-noop-companions-20260920cn-x64"
     },
     {
       "id": "ddi-query-get-data",
@@ -629,8 +631,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-gen-mips",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-noop-companions-20260920cn-x64"
     },
     {
       "id": "ddi-resource-copy",
