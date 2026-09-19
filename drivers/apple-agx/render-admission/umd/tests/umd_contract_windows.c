@@ -1196,12 +1196,12 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(dxgiFunctions.pfnRotateResourceIdentities(&unsupportedRotate)==E_INVALIDARG);
     DXGI_GAMMA_CONTROL_CAPABILITIES gamma;
     memset(&gamma,0x5a,sizeof(gamma));
-    DXGI_GAMMA_CONTROL_CAPABILITIES gammaBefore=gamma;
     DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS unsupportedGamma={0};
     unsupportedGamma.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedGamma.pGammaCapabilities=&gamma;
-    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnGetGammaCaps(&unsupportedGamma));
-    CHECK(memcmp(&gamma,&gammaBefore,sizeof(gamma))==0);
+    CHECK(dxgiFunctions.pfnGetGammaCaps(&unsupportedGamma)==S_OK);
+    DXGI_GAMMA_CONTROL_CAPABILITIES zeroGamma={0};
+    CHECK(memcmp(&gamma,&zeroGamma,sizeof(gamma))==0);
     DXGI_DDI_ARG_BLT unsupportedBlt={0};
     unsupportedBlt.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedBlt.hDstResource=dxgiRt;unsupportedBlt.hSrcResource=dxgiRt;

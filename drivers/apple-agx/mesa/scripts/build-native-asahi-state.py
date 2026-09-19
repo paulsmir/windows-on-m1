@@ -691,7 +691,12 @@ _Present('''),
 {
    LOG_ENTRYPOINT();''','''_GetGammaCaps( DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS *GetCaps )
 {
-   return UnsupportedDxgi(GetCaps->hDevice);'''),
+   if (!GetCaps || !GetCaps->pGammaCapabilities ||
+       !CastDevice(GetCaps->hDevice))
+      return E_INVALIDARG;
+   ZeroMemory(GetCaps->pGammaCapabilities,
+              sizeof(*GetCaps->pGammaCapabilities));
+   return S_OK;'''),
         ('''_SetDisplayMode( DXGI_DDI_ARG_SETDISPLAYMODE *SetDisplayMode )
 {
    LOG_UNSUPPORTED_ENTRYPOINT();''','''_SetDisplayMode( DXGI_DDI_ARG_SETDISPLAYMODE *SetDisplayMode )
