@@ -436,6 +436,36 @@ Default-off package693PASS: native-present-open-default-20260919g-arm64. Neither
 package was staged,installed or hardware-run; native option remains default-off
 and pipeline mask0.
 
+## Verified UMD-created primary and SetDisplayMode bridge
+Implementation 8c9c58e5d0329fa382376c278b3cab58b013e766 extends the same
+typed presentation owner to a D3D10-created displayable primary. The Mesa
+resource keeps only its opaque presentation record; the Windows owner calls the
+existing AdmissionUmdCreateResource/DestroyResource and SetDisplayMode paths,
+so allocation identity, callback ownership and retirement remain in the
+physical/patch-list architecture.
+
+Admitted slice: one BGRA8 2560x1600 texture2D primary, pitch10240,
+size0xfa0000, one mip, one array slice and sample count1. Creation reaches the
+existing runtime allocation callback and records kernel allocation0x775;
+SetDisplayMode submits that exact allocation on the owning device. Wrong
+subresource, cross-device or ordinary private resources reject before callback.
+Teardown proves independent retirement of both the runtime-opened resource and
+the UMD-created primary. Present1 and identity rotation remain closed rather
+than being inferred from base D3D10 Present.
+
+Fresh x64 full producer executionPASS: native-present-created-20260919i-x64,
+archiveSHAcefc0fe1cad938bda7026778f1a6a2b6c3e64e366080a088cecce8d0bb619afe,
+EXESHA45f34ce4f8a8c63a3f4978ba80062e5dab51cf02522a56097d9c9453ee89f48b.
+Fresh ARM64 build/linkPASS: native-present-created-20260919j-arm64,
+archiveSHA582664033e3a5a5afe550bcdf7cb6846a7fcf7e63fa6a3e9e71a316546685382.
+Conditional package694 build/analyze0warnings0errors, Universal validationPASS,
+one export and typed Create/SetDisplayMode symbols retained in the link map:
+native-present-created-20260919k-arm64;
+DLLSHA82c9bdbac8382d974c167ad4d882c42aa3f86af408b18a627ff2c58f6764ac8b.
+Default-off package695PASS: native-present-created-default-20260919l-arm64.
+Neither package was staged, installed or hardware-run; native option remains
+default-off and pipeline mask0.
+
 ## Exact next target
 Continue production integration from
 investigation/agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
@@ -449,10 +479,15 @@ format,resource,state and DXGI path to implemented or fail-closed status and
 close the smallest truthful atomic table. Advertise a pipeline or enable native
 packaging by default only after all required companion invariants pass. Keep
 instancing,other query types,application textures/depth and unsupported
-topologies rejected until independently proven. The next presentation unit is
-typed UMD-created displayable resource allocation plus Present1/SetDisplayMode;
-desktop-sized AGX rendering is separate and must not be inferred from the
-current16x16 native draw.
+topologies rejected until independently proven. The typed UMD-created
+displayable allocation and SetDisplayMode unit is now closed. Next bind that
+primary to the real producer as a desktop-sized render attachment and prove the
+resulting attachment/BG-EOT references through capture, immutable
+materialization, composer, KMD plan and retirement. Keep Present1 and
+RotateResourceIdentities closed unless the selected base D3D10 runtime actually
+invokes and requires them; do not upgrade the interface to manufacture
+coverage. Desktop-sized AGX rendering must not be inferred from the current
+16x16 native draw.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
