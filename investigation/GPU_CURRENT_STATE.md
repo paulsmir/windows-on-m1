@@ -667,3 +667,18 @@ The same final executable also directly proves the pinned DXBC-to-TGSI
 frontend, TGSI-to-NIR-to-AGX backend and device-owned Windows winsys aggregate
 rows.  Inventory is therefore 82 of 121 mandatory rows proven, with 39
 unresolved; pipeline mask remains zero.
+
+## Verified D3D10 primary copy callbacks (2026-09-20)
+ResourceCopy and full-box ResourceCopyRegion now route two distinct typed
+presentation resources through the existing native textured Blt lifecycle.
+Subresource, offset, partial-box and non-presentation forms remain fail-closed.
+Each callback has its own x64 Render/Present/retirement transaction:
+evidence/AD04-runtime-closure/native-resource-copy-region-20260920bu-x64/;
+source archive SHA-256
+d5412e4899e8f717cc38ec2416e7f20751b2d51c303d41b18a4c4c101c674f2b.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-resource-copy-region-20260920bv-arm64/;
+source archive SHA-256
+dea25abf38c37149649cdaf79be528b0d7987466b6ac3d5d70f6aba01087cb63.
+Inventory is 84 of 121 mandatory rows proven, with 37 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.

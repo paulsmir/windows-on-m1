@@ -1910,6 +1910,78 @@ static void test_mesa_d3d10_frontend_open(void) {
       RuntimeExpectedTargetAllocation=0;
       RuntimeExpectedTargetBytes=0;
     }
+    {
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      ADMISSION_UMD_ASAHI_OWNER *copyOwner=
+          MesaD3d10FrontendOwnerForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
+      RuntimeExpectedTargetAllocation=0x775u;
+      RuntimeExpectedTargetBytes=0xfa0000ULL;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      unsigned copyErrors=FrontendErrors;
+      deviceFunctions.pfnResourceCopy(device,createdPresentResource,presentResource);
+      CHECK(FrontendErrors==copyErrors && RuntimeRenders==0u);
+      DXGI_DDI_ARG_PRESENT copyPresent={0};
+      copyPresent.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      copyPresent.hSurfaceToPresent=(DXGI_DDI_HRESOURCE)(UINT_PTR)
+          createdPresentResource.pDrvPrivate;
+      copyPresent.Flags.Value=0x2u;
+      copyPresent.FlipInterval=DXGI_DDI_FLIP_INTERVAL_ONE;
+      copyPresent.pDXGIContext=(PVOID)(UINT_PTR)0x77cu;
+      FrontendPresentAllocation=0x775u;
+      FrontendPresentContext=copyPresent.pDXGIContext;
+      CHECK(dxgiFunctions.pfnPresent(&copyPresent)==S_OK &&
+            FrontendPresentCalls==4u && RuntimeRenders==1u &&
+            RuntimeSignals==1u && RuntimeMaterializations==2u &&
+            RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
+      RuntimeCheckpoint(copyOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(copyOwner,5u);
+      RuntimeExpectedTargetAllocation=0;
+      RuntimeExpectedTargetBytes=0;
+    }
+    {
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      ADMISSION_UMD_ASAHI_OWNER *copyRegionOwner=
+          MesaD3d10FrontendOwnerForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
+      RuntimeExpectedTargetAllocation=0x775u;
+      RuntimeExpectedTargetBytes=0xfa0000ULL;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      D3D10_DDI_BOX fullBox={0,0,0,2560,1600,1};
+      unsigned copyRegionErrors=FrontendErrors;
+      deviceFunctions.pfnResourceCopyRegion(device,createdPresentResource,
+          0,0,0,0,presentResource,0,&fullBox);
+      CHECK(FrontendErrors==copyRegionErrors && RuntimeRenders==0u);
+      DXGI_DDI_ARG_PRESENT copyRegionPresent={0};
+      copyRegionPresent.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      copyRegionPresent.hSurfaceToPresent=(DXGI_DDI_HRESOURCE)(UINT_PTR)
+          createdPresentResource.pDrvPrivate;
+      copyRegionPresent.Flags.Value=0x2u;
+      copyRegionPresent.FlipInterval=DXGI_DDI_FLIP_INTERVAL_ONE;
+      copyRegionPresent.pDXGIContext=(PVOID)(UINT_PTR)0x77du;
+      FrontendPresentAllocation=0x775u;
+      FrontendPresentContext=copyRegionPresent.pDXGIContext;
+      CHECK(dxgiFunctions.pfnPresent(&copyRegionPresent)==S_OK &&
+            FrontendPresentCalls==5u && RuntimeRenders==1u &&
+            RuntimeSignals==1u && RuntimeMaterializations==2u &&
+            RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
+      RuntimeCheckpoint(copyRegionOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(copyRegionOwner,5u);
+      RuntimeExpectedTargetAllocation=0;
+      RuntimeExpectedTargetBytes=0;
+    }
     unsigned destroyEventErrors=FrontendErrors;
     deviceFunctions.pfnDestroyQuery(device,orderedEvent);
     CHECK(FrontendErrors==destroyEventErrors);

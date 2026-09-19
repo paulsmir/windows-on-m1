@@ -496,8 +496,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-copy-region",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-resource-copy-region-20260920bu-x64"
     },
     {
       "id": "ddi-resource-update-subresource-up",
@@ -621,8 +622,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-copy",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-resource-copy-region-20260920bu-x64"
     },
     {
       "id": "ddi-resource-resolve-subresource",

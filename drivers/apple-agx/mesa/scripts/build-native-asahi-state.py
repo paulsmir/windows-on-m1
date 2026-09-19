@@ -1187,6 +1187,32 @@ _Present('''),
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopy','''   Device *device = CastDevice(hDevice);
+   Resource *destination = CastResource(hDstResource);
+   Resource *source = CastResource(hSrcResource);
+   if (!device || !destination || !source || destination == source ||
+       destination->owner_device != device || source->owner_device != device ||
+       !destination->presentation || !source->presentation) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   HRESULT result = AgxD3d10WindowsPresentationBlt(device->windows,
+      destination->presentation, source->presentation);
+   if (FAILED(result)) SetError(hDevice, result);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Device *device = CastDevice(hDevice);
+   Resource *destination = CastResource(hDstResource);
+   Resource *source = CastResource(hSrcResource);
+   bool whole = !pSrcBox || (pSrcBox->left == 0 && pSrcBox->top == 0 &&
+      pSrcBox->front == 0 && pSrcBox->right == 2560 &&
+      pSrcBox->bottom == 1600 && pSrcBox->back == 1);
+   if (!device || !destination || !source || destination == source ||
+       destination->owner_device != device || source->owner_device != device ||
+       !destination->presentation || !source->presentation ||
+       DstSubResource || SrcSubResource || DstX || DstY || DstZ || !whole) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   HRESULT result = AgxD3d10WindowsPresentationBlt(device->windows,
+      destination->presentation, source->presentation);
+   if (FAILED(result)) SetError(hDevice, result);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','OpenResource','''   Device *pDevice = CastDevice(hDevice);
    Resource *pResource = CastResource(hResource);
    if (!pDevice || !pResource || !pOpenResource || !hRTResource.handle) {
