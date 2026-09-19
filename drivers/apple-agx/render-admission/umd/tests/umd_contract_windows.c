@@ -1413,7 +1413,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(FrontendErrors==mapErrors && mappedStaging.pData!=NULL);
     if(mappedStaging.pData) memcpy(mappedStaging.pData,vertices,sizeof(vertices));
     deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
-    CHECK(FrontendErrors==mapErrors);
+    CHECK(FrontendErrors==mapErrors &&
+          !deviceFunctions.pfnResourceIsStagingBusy(device,staging));
     memset(&mappedStaging,0,sizeof(mappedStaging));
     deviceFunctions.pfnStagingResourceMap(device,staging,0,
         D3D10_DDI_MAP_READ,0,&mappedStaging);

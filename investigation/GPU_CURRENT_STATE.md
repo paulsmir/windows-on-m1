@@ -735,3 +735,10 @@ evidence/AD04-runtime-closure/native-staging-map-20260920ce-arm64/; source archi
 SHA-256 73175af3082b44c5d7127683331d4e9cf0d75db11292f237815049f15f476497.
 Inventory is 96 of 121 mandatory rows proven, with 25 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+ResourceIsStagingBusy now has direct evidence that a matched-unmapped staging
+resource reports not busy without mutating ownership. X64 full execution PASS:
+evidence/AD04-runtime-closure/native-staging-busy-20260920cf-x64/; source archive
+SHA-256 8a8758c8f5800cdc29497f58ee1abe7df4c1d23b44d4f22885a6c68d8934b810.
+Inventory is 97 of 121 mandatory rows proven, with 24 unresolved; pipeline mask
+remains zero.

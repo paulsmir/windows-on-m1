@@ -675,8 +675,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-is-staging-busy",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-staging-busy-20260920cf-x64"
     },
     {
       "id": "ddi-relocate-device-funcs",
