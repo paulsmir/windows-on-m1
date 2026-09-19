@@ -742,3 +742,16 @@ evidence/AD04-runtime-closure/native-staging-busy-20260920cf-x64/; source archiv
 SHA-256 8a8758c8f5800cdc29497f58ee1abe7df4c1d23b44d4f22885a6c68d8934b810.
 Inventory is 97 of 121 mandatory rows proven, with 24 unresolved; pipeline mask
 remains zero.
+
+## Verified VS/GS stage binding callbacks (2026-09-20)
+Device-owned constant buffers, SRVs and samplers now admit exact slot-zero
+bind/unbind lifecycles for VS and GS as well as the previously proven PS path.
+Invalid ranges/counts remain fail-closed, and every GS binding is removed before
+draw; geometry execution remains unadvertised. X64 execution PASS:
+evidence/AD04-runtime-closure/native-stage-bindings-20260920ch-x64/; source
+archive SHA-256 73968da0df15b884e6849fbe7ed9c90906ad5790c0cc1a4c0baf9b01fd4a1eb5.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-stage-bindings-20260920ci-arm64/; source
+archive SHA-256 43aa0e9504a4d8b25f06d79d01c2854d9ca263f2b6dce7ab21feaf26df9014f7.
+Inventory is 102 of 121 mandatory rows proven, with 19 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.

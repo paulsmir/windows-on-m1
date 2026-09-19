@@ -894,7 +894,9 @@ _Present('''),
  *
  * CreateShaderResourceView1 --''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
-   bool valid = pDevice && shader_type == MESA_SHADER_FRAGMENT && Offset == 0 &&
+   bool valid = pDevice &&
+      (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
+       shader_type == MESA_SHADER_GEOMETRY) && Offset == 0 &&
       NumSamplers <= 1 && (NumSamplers == 0 || phSamplers);
    for (UINT i = 0; valid && i < NumSamplers; ++i) {
       SamplerState *sampler = CastSamplerState(phSamplers[i]);
@@ -905,7 +907,9 @@ _Present('''),
    pDevice->samplers[shader_type][0] = sampler;
    pDevice->pipe->bind_sampler_states(pDevice->pipe, shader_type, 0, 1, &sampler);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetShaderResources','''   Device *pDevice = CastDevice(hDevice);
-   bool valid = pDevice && shader_type == MESA_SHADER_FRAGMENT && Offset == 0 &&
+   bool valid = pDevice &&
+      (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
+       shader_type == MESA_SHADER_GEOMETRY) && Offset == 0 &&
       NumViews <= 1 && (NumViews == 0 || phShaderResourceViews);
    for (UINT i = 0; valid && i < NumViews; ++i) {
       ShaderResourceView *view = CastShaderResourceView(phShaderResourceViews[i]);
@@ -943,7 +947,8 @@ _Present('''),
       if (!resource) continue;
       unsigned slot = StartBuffer + i;
       valid = (shader_type == MESA_SHADER_VERTEX ||
-               shader_type == MESA_SHADER_FRAGMENT) && slot == 0 &&
+               shader_type == MESA_SHADER_FRAGMENT ||
+               shader_type == MESA_SHADER_GEOMETRY) && slot == 0 &&
          resource->constant_buffer && resource->owner_device == pDevice &&
          resource->owner_cookie == owner &&
          resource->device_generation == generation && resource->resource &&

@@ -1237,6 +1237,10 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(FrontendErrors==textureErrors);
       deviceFunctions.pfnPsSetShaderResources(device,0,1,&appSrv);
       deviceFunctions.pfnPsSetSamplers(device,0,1,&appSampler);
+      deviceFunctions.pfnVsSetShaderResources(device,0,1,&appSrv);
+      deviceFunctions.pfnVsSetSamplers(device,0,1,&appSampler);
+      deviceFunctions.pfnGsSetShaderResources(device,0,1,&appSrv);
+      deviceFunctions.pfnGsSetSamplers(device,0,1,&appSampler);
       CHECK(FrontendErrors==textureErrors);
       deviceFunctions.pfnShaderResourceViewReadAfterWriteHazard(
           device,appSrv,presentResource);
@@ -1261,6 +1265,10 @@ static void test_mesa_d3d10_frontend_open(void) {
       D3D10DDI_HSAMPLER nullSampler={0};
       deviceFunctions.pfnPsSetShaderResources(device,0,1,&nullSrv);
       deviceFunctions.pfnPsSetSamplers(device,0,1,&nullSampler);
+      deviceFunctions.pfnVsSetShaderResources(device,0,1,&nullSrv);
+      deviceFunctions.pfnVsSetSamplers(device,0,1,&nullSampler);
+      deviceFunctions.pfnGsSetShaderResources(device,0,1,&nullSrv);
+      deviceFunctions.pfnGsSetSamplers(device,0,1,&nullSampler);
       CHECK(FrontendErrors==textureErrors);
     }
     DXGI_DDI_ARG_PRESENT unsupportedPresent={0};
@@ -1453,6 +1461,10 @@ static void test_mesa_d3d10_frontend_open(void) {
     if(mappedCb.pData) memcpy(mappedCb.pData,vsCbValues,sizeof(vsCbValues));
     deviceFunctions.pfnDynamicConstantBufferUnmap(device,vsCb,0);
     CHECK(FrontendErrors==cbErrorsBefore);
+    D3D10DDI_HRESOURCE nullCb={0};
+    deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&vsCb);
+    deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&nullCb);
+    CHECK(FrontendErrors==cbErrorsBefore);
     UINT16 ibValues[4]={0u,1u,2u,0u};
     ibMip.TexelWidth=sizeof(ibValues);ibMip.TexelHeight=ibMip.TexelDepth=1;
     ibInitial.pSysMem=ibValues;ibInitial.SysMemPitch=sizeof(ibValues);
@@ -1637,7 +1649,10 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnVsSetConstantBuffers(device,0,2,invalidRange);
     CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
     deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&cb);
-    CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
+    CHECK(FrontendErrors==cbBindErrors);
+    D3D10DDI_HRESOURCE nullGsConstant={0};
+    deviceFunctions.pfnGsSetConstantBuffers(device,0,1,&nullGsConstant);
+    CHECK(FrontendErrors==cbBindErrors);
     deviceFunctions.pfnPsSetConstantBuffers(device,1,1,&cb);
     CHECK(FrontendErrors==++cbBindErrors && FrontendLastError==E_NOTIMPL);
     D3D10DDI_HRESOURCE nullConstantSlot={0};

@@ -324,8 +324,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-gs-set-constant-buffers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-stage-bindings-20260920ch-x64"
     },
     {
       "id": "ddi-gs-set-shader",
@@ -377,8 +378,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-vs-set-shader-resources",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-stage-bindings-20260920ch-x64"
     },
     {
       "id": "ddi-vs-set-samplers",
@@ -387,8 +389,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-vs-set-samplers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-stage-bindings-20260920ch-x64"
     },
     {
       "id": "ddi-gs-set-shader-resources",
@@ -397,8 +400,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-gs-set-shader-resources",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-stage-bindings-20260920ch-x64"
     },
     {
       "id": "ddi-gs-set-samplers",
@@ -407,8 +411,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-gs-set-samplers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-stage-bindings-20260920ch-x64"
     },
     {
       "id": "ddi-set-render-targets",
