@@ -1278,8 +1278,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad03-dxbc-to-tgsi",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "backend-tgsi-nir-agx",
@@ -1288,8 +1289,9 @@
       "implementation_file": "drivers/apple-agx/mesa/winsys/agx_win32_screen.c",
       "test_id": "ad03-tgsi-nir-agx",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "backend-windows-winsys",
@@ -1298,8 +1300,9 @@
       "implementation_file": "drivers/apple-agx/mesa/winsys/agx_win32_transport.c",
       "test_id": "ad02-windows-winsys",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "desktop-cross-process-sharing",

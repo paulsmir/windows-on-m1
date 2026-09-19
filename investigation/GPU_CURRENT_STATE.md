@@ -662,3 +662,8 @@ archive SHA-256
 55c02ae78ac41a4b52f5ebade0cd65d2a01f6eb86fa50411af4b30771c7a0192.
 The machine-readable inventory is 79 of 121 mandatory rows proven, with 42
 unresolved. Pipeline mask remains zero.
+
+The same final executable also directly proves the pinned DXBC-to-TGSI
+frontend, TGSI-to-NIR-to-AGX backend and device-owned Windows winsys aggregate
+rows.  Inventory is therefore 82 of 121 mandatory rows proven, with 39
+unresolved; pipeline mask remains zero.
