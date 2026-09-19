@@ -466,6 +466,45 @@ Default-off package695PASS: native-present-created-default-20260919l-arm64.
 Neither package was staged, installed or hardware-run; native option remains
 default-off and pipeline mask0.
 
+## Verified desktop-primary native render and Present lifecycle
+Implementation d25eff54a13440955c0f3cae6713823a2829829d registers the
+existing runtime-created primary allocation as one borrowed ScreenBuffer and
+wraps that same token in the native Asahi BO/resource graph. It does not create
+a scanout copy, second allocation owner or second composer. The exact
+2560x1600 BGRA8 linear allocation, pitch10240 and size0xfa0000 is the color
+attachment seen by BG/partial/EOT capture and the destination allocation seen
+by the physical/patch-list KMD path.
+
+The actual projected D3D10 producer now executes Create primary -> RTV/state ->
+clear/draw -> native batch finalization -> immutable capture/materialization ->
+UMD composer/pfnRenderCb -> KMD plan/DMA/native roots -> DXGI Present. The x64
+execution proves destination kernel allocation0x775, desktop destination bytes,
+two independent KMD placements and deferred retirement. D3D DestroyResource
+drops its owner reference without blocking; an in-flight Gallium reference
+keeps the borrowed allocation registered until the ordered batch retires, then
+the existing primary retirement releases the runtime hResource.
+
+The pre-change executable RED built and linked but faulted before Render because
+the presentation resource had no Asahi backing:
+native-primary-render-red-20260919a-x64. Intermediate gates then exposed and
+closed the old 16x16-only backend binding and native-root routing guards plus an
+incorrect synchronous teardown wait. Final x64 actual executionPASS:
+native-primary-render-final-20260919k-x64,
+archiveSHAea511fcc391dd98a347958dc6d9b0b5163a58cff28bf7a3939deabfee027983f,
+EXESHAd7c341ecf1fd067bbb30ee3108a55ae263e114d25f8cd98edfa6353dcad5027a.
+Final ARM64 closure build/linkPASS:
+native-primary-render-final-20260919l-arm64,
+archiveSHAf689d88d5eebd044bc89b4705f7c2cbffaee5c5eb91a692dca8d798aa259f030.
+
+Conditional package697 build/analyze0warnings0errors and Universal API
+validationPASS: native-primary-package-20260919m-arm64;
+DLLSHA24141827239944b2939ca06325ef7a1d8afaf6e015b5f53a09872de6cbc2717b.
+Its link map retains the primary import BO/resource and deferred presentation
+collector. Default-off package698PASS:
+native-primary-default-20260919n-arm64. Neither package was staged, installed
+or hardware-run; conditional native option remains default-off and pipeline
+mask0.
+
 ## Exact next target
 Continue production integration from
 investigation/agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
@@ -480,14 +519,14 @@ close the smallest truthful atomic table. Advertise a pipeline or enable native
 packaging by default only after all required companion invariants pass. Keep
 instancing,other query types,application textures/depth and unsupported
 topologies rejected until independently proven. The typed UMD-created
-displayable allocation and SetDisplayMode unit is now closed. Next bind that
-primary to the real producer as a desktop-sized render attachment and prove the
-resulting attachment/BG-EOT references through capture, immutable
-materialization, composer, KMD plan and retirement. Keep Present1 and
+displayable allocation, desktop-sized native render, SetDisplayMode, Present
+and retirement chain is now closed offline. Next finish the exact
+D3D10_0/FL10_0 machine-readable admission inventory and implement the smallest
+truthful missing companion callbacks needed before setting a pipeline bit or
+enabling the native frontend by default. Keep Present1 and
 RotateResourceIdentities closed unless the selected base D3D10 runtime actually
 invokes and requires them; do not upgrade the interface to manufacture
-coverage. Desktop-sized AGX rendering must not be inferred from the current
-16x16 native draw.
+coverage.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
