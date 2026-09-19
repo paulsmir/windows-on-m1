@@ -781,3 +781,12 @@ evidence/AD04-runtime-closure/native-noop-companions-20260920co-arm64/; source
 archive SHA-256 a52e535c16f12d68a70d08056e7437fa9a1d86e40e1131316817c11685573c97.
 Inventory is 107 of 121 mandatory rows proven, with 14 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+## Verified depth-stencil view lifecycle (2026-09-20)
+A device-owned 16x16 D32 resource now has direct CalcPrivate/Create/Destroy DSV
+lifecycle evidence, followed by resource teardown with no render side effects.
+Depth clear and depth attachment execution remain unresolved. X64 full execution
+PASS: evidence/AD04-runtime-closure/native-depth-view-20260920cp-x64/; source
+archive SHA-256 09a7d3da61f52e1e804f17180bb323b6718d0a4af418ef729f10ec8623381ba1.
+Inventory is 110 of 121 mandatory rows proven, with 11 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.

@@ -1140,6 +1140,48 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCreateResource(device,&rtCreate,rt,rtRuntime);
     FRONTEND_STAGE("rt-resource");
     {
+      D3D10DDI_MIPINFO depthMip={0};
+      D3D10DDIARG_CREATERESOURCE depthCreate={0};
+      D3D10DDI_HRESOURCE depthResource={0};
+      D3D10DDI_HRTRESOURCE depthRuntimeResource={0};
+      D3D10DDIARG_CREATEDEPTHSTENCILVIEW depthViewCreate={0};
+      D3D10DDI_HDEPTHSTENCILVIEW depthView={0};
+      D3D10DDI_HRTDEPTHSTENCILVIEW depthViewRuntime={0};
+      depthMip.TexelWidth=16;depthMip.TexelHeight=16;depthMip.TexelDepth=1;
+      depthCreate.pMipInfoList=&depthMip;
+      depthCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      depthCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
+      depthCreate.BindFlags=D3D10_DDI_BIND_DEPTH_STENCIL;
+      depthCreate.Format=DXGI_FORMAT_D32_FLOAT;
+      depthCreate.SampleDesc.Count=1;depthCreate.MipLevels=1;
+      depthCreate.ArraySize=1;
+      depthResource.pDrvPrivate=calloc(1,
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&depthCreate));
+      depthRuntimeResource.handle=(VOID *)(UINT_PTR)0xd0du;
+      unsigned depthErrors=FrontendErrors;
+      deviceFunctions.pfnCreateResource(device,&depthCreate,depthResource,
+          depthRuntimeResource);
+      CHECK(depthResource.pDrvPrivate && FrontendErrors==depthErrors);
+      depthViewCreate.hDrvResource=depthResource;
+      depthViewCreate.Format=DXGI_FORMAT_D32_FLOAT;
+      depthViewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      depthViewCreate.Tex2D.MipSlice=0;
+      depthViewCreate.Tex2D.FirstArraySlice=0;
+      depthViewCreate.Tex2D.ArraySize=1;
+      SIZE_T depthViewBytes=deviceFunctions.pfnCalcPrivateDepthStencilViewSize(
+          device,&depthViewCreate);
+      depthView.pDrvPrivate=calloc(1,depthViewBytes);
+      depthViewRuntime.handle=(VOID *)(UINT_PTR)0xd0eu;
+      deviceFunctions.pfnCreateDepthStencilView(device,&depthViewCreate,
+          depthView,depthViewRuntime);
+      CHECK(depthView.pDrvPrivate && depthViewBytes &&
+            FrontendErrors==depthErrors);
+      deviceFunctions.pfnDestroyDepthStencilView(device,depthView);
+      deviceFunctions.pfnDestroyResource(device,depthResource);
+      CHECK(FrontendErrors==depthErrors);
+      free(depthView.pDrvPrivate);free(depthResource.pDrvPrivate);
+    }
+    {
       D3D10DDIARG_OPENRESOURCE presentOpen={0};
       D3DDDI_OPENALLOCATIONINFO presentInfo={0};
       ADMISSION_ALLOCATION_DESCRIPTION presentDescription={0};
