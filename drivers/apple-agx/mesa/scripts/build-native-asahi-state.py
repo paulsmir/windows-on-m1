@@ -108,7 +108,42 @@ MesaD3d10FrontendAdapterForTest(D3D10DDI_HADAPTER hAdapter)
 EXTERN_C HRESULT APIENTRY
 MesaD3d10OpenAdapter10('''),
         ('EXTERN_C HRESULT APIENTRY\nOpenAdapter10_2(',
-         'EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10_2(')])
+         'EXTERN_C HRESULT APIENTRY\nMesaD3d10OpenAdapter10_2('),
+        ('''static const UINT64
+SupportedDDIInterfaceVersions[] = {
+   D3D10_0_DDI_SUPPORTED,
+   D3D10_0_x_DDI_SUPPORTED,
+   D3D10_0_7_DDI_SUPPORTED,
+#if SUPPORT_D3D10_1
+   D3D10_1_DDI_SUPPORTED,
+   D3D10_1_x_DDI_SUPPORTED,
+   D3D10_1_7_DDI_SUPPORTED,
+#endif
+#if SUPPORT_D3D11
+   D3D11_0_DDI_SUPPORTED,
+   D3D11_0_7_DDI_SUPPORTED,
+#endif
+};''','''static const UINT64
+SupportedDDIInterfaceVersions[] = {
+   D3D10_0_DDI_SUPPORTED,
+};''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Adapter.cpp','GetCaps','''   Adapter *pAdapter = CastAdapter(hAdapter);
+   if (!pAdapter || !pData || !pData->pData)
+      return E_INVALIDARG;
+   switch (pData->Type) {
+   case D3D11DDICAPS_THREADING:
+      if (pData->DataSize != sizeof(D3D11DDI_THREADING_CAPS))
+         return E_INVALIDARG;
+      ((D3D11DDI_THREADING_CAPS *)pData->pData)->Caps = 0;
+      return S_OK;
+   case D3D11DDICAPS_3DPIPELINESUPPORT:
+      if (pData->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
+         return E_INVALIDARG;
+      ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)pData->pData)->Caps = 0;
+      return S_OK;
+   default:
+      return E_NOTIMPL;
+   }''')
     change('src/gallium/frontends/d3d10umd/State.h',
         '4280c406ca8c1c199d09a0d062f8b52fb0baaec43a2ca7482e0d1a3acc7c4dd3',[
         ('#include "DriverIncludes.h"',

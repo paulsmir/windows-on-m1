@@ -11,6 +11,10 @@ param(
     [switch]$VisibleScanoutQualification,
     [switch]$VisibleAgxQualification,
     [switch]$UmdAdmissionTrace,
+    [switch]$NativeFrontend,
+    [string]$NativeRuntimeProps,
+    [string]$MesaSourceRoot = 'C:\Users\pauls\AD04-d3d10-frontend-build\mesa',
+    [string]$MesaGeneratedRoot = 'C:\Users\pauls\AD04-asahi-windows-compiler\b5\generated',
     [ValidateRange(0,65535)]
     [int]$PackageBuild = 461
 )
@@ -50,6 +54,14 @@ if ($null -ne $msbuildCommand) {
 }
 
 $umdAdmissionTraceValue = if ($UmdAdmissionTrace) { "true" } else { "false" }
+$nativeFrontendValue = if ($NativeFrontend) { "true" } else { "false" }
+if ($NativeFrontend -and
+    ([string]::IsNullOrWhiteSpace($NativeRuntimeProps) -or
+     -not (Test-Path -LiteralPath $NativeRuntimeProps) -or
+     -not (Test-Path -LiteralPath $MesaSourceRoot) -or
+     -not (Test-Path -LiteralPath $MesaGeneratedRoot))) {
+    throw "NativeFrontend requires existing NativeRuntimeProps, MesaSourceRoot, and MesaGeneratedRoot"
+}
 $pinnedWindowsSdkDir = 'C:/Program Files (x86)/Windows Kits/10/'
 $pinnedWdkProperties = @(
     '/p:WindowsTargetPlatformVersion=10.0.26100.0',
@@ -62,7 +74,11 @@ $pinnedWdkProperties = @(
 )
 & $msbuild $umdProject /m /t:Clean,Build "/p:Configuration=$Configuration" `
     /p:Platform=ARM64 /p:RunCodeAnalysis=true "/p:AppleAgxVersionBuild=$PackageBuild" `
-    "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue" @pinnedWdkProperties
+    "/p:AppleAgxUmdAdmissionTrace=$umdAdmissionTraceValue" `
+    "/p:EnableNativeFrontend=$nativeFrontendValue" `
+    "/p:NativeRuntimeProps=$NativeRuntimeProps" `
+    "/p:MesaSourceRoot=$MesaSourceRoot" "/p:MesaGeneratedRoot=$MesaGeneratedRoot" `
+    @pinnedWdkProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Clean render-admission ARM64 UMD build failed with exit code $LASTEXITCODE"
 }

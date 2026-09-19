@@ -12,6 +12,11 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include "direct_flip_contract.h"
 #include "umd_internal.h"
 
+#if defined(APPLE_AGX_UMD_NATIVE_FRONTEND)
+HRESULT APIENTRY MesaD3d10OpenAdapter10_2(
+    D3D10DDIARG_OPENADAPTER *OpenAdapter);
+#endif
+
 #if defined(APPLE_AGX_UMD_ADMISSION_TRACE)
 #define ADMISSION_UMD_TRACE(Text)                                             \
   OutputDebugStringW(L"AppleAgxUMD: " Text L"\n")
@@ -204,6 +209,9 @@ BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved) {
 
 HRESULT APIENTRY OpenAdapter10_2(
     D3D10DDIARG_OPENADAPTER *OpenAdapter) {
+#if defined(APPLE_AGX_UMD_NATIVE_FRONTEND)
+  return MesaD3d10OpenAdapter10_2(OpenAdapter);
+#else
   ADMISSION_UMD_ADAPTER *adapter;
   D3D10_2DDI_ADAPTERFUNCS functions;
   HRESULT queryResult;
@@ -229,6 +237,7 @@ HRESULT APIENTRY OpenAdapter10_2(
   *OpenAdapter->pAdapterFuncs_2 = functions;
   OpenAdapter->hAdapter.pDrvPrivate = adapter;
   return S_OK;
+#endif
 }
 
 static SIZE_T APIENTRY AdmissionUmdCalcPrivateDeviceSize(

@@ -23,7 +23,9 @@
   <PropertyGroup>
     <EnableInf2cat>false</EnableInf2cat>
     <ApiValidator_Enable>false</ApiValidator_Enable>
+    <EnableNativeFrontend Condition="'$(EnableNativeFrontend)' == ''">false</EnableNativeFrontend>
     <AppleAgxUmdAdmissionTraceDefinition Condition="'$(AppleAgxUmdAdmissionTrace)' == 'true'">APPLE_AGX_UMD_ADMISSION_TRACE=1;</AppleAgxUmdAdmissionTraceDefinition>
+    <AppleAgxNativeFrontendDefinition Condition="'$(EnableNativeFrontend)' == 'true'">APPLE_AGX_UMD_NATIVE_FRONTEND=1;</AppleAgxNativeFrontendDefinition>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ResourceCompile>
@@ -31,7 +33,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>include;..\include;..\..\shared\include;..\..\mesa\winsys;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(AppleAgxUmdAdmissionTraceDefinition)$(AppleAgxNativeFrontendDefinition)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <TreatWarningAsError>true</TreatWarningAsError>
       <SDLCheck>true</SDLCheck>
@@ -60,6 +62,29 @@
     <ClCompile Include="..\..\mesa\winsys\agx_win32_transport.c" />
     <ClCompile Include="..\..\mesa\winsys\agx_win32_screen.c" />
   </ItemGroup>
+  <ItemDefinitionGroup Condition="'$(EnableNativeFrontend)' == 'true'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>ADMISSION_UMD_PIPE_FACTORY_TEST=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/external:I&quot;$(MesaSourceRoot)\include&quot; /external:I&quot;$(MesaSourceRoot)\src&quot; /external:I&quot;$(MesaSourceRoot)\src\gallium\include&quot; /external:I&quot;$(MesaSourceRoot)\src\gallium\auxiliary&quot; /external:I&quot;$(MesaGeneratedRoot)\src&quot; %(AdditionalOptions)</AdditionalOptions>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
+    </ClCompile>
+    <Link>
+      <OptimizeReferences>true</OptimizeReferences>
+      <IgnoreSpecificDefaultLibraries>msvcrt.lib</IgnoreSpecificDefaultLibraries>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapFileName>$(OutDir)AppleAgxRenderAdmissionUmd.map</MapFileName>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(EnableNativeFrontend)' == 'true'">
+    <ClCompile Include="..\..\mesa\winsys\agx_d3d10_windows.cpp" />
+    <ClCompile Include="src\umd_asahi_batch_adapter.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="src\umd_asahi_owner.c"><CompileAs>CompileAsCpp</CompileAs></ClCompile>
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_native_bo.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_construction_address.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_native_device.c" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_reloc_capture.c" />
+  </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\direct_flip_contract.h" />
     <ClInclude Include="include\umd_resource_lifetime.h" />
@@ -73,5 +98,6 @@
     <ResourceCompile Include="..\package-version.rc" />
     <None Include="AppleAgxRenderAdmissionUmd.def" />
   </ItemGroup>
+  <Import Project="$(NativeRuntimeProps)" Condition="'$(EnableNativeFrontend)' == 'true'" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

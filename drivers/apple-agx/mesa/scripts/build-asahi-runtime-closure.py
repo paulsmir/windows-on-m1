@@ -222,6 +222,10 @@ def main():
         cpp_entry = next(c for c in commands if c['file'].replace('\\', '/').endswith('/gtest-all.cc'))
         c_flags = compiler_flags(c_entry, args.architecture)
         cpp_flags = compiler_flags(cpp_entry, args.architecture)
+        windows_crt_aliases = ['/Daccess=_access', '/Dunlink=_unlink',
+                               '/Dstrdup=_strdup', '/Dstricmp=_stricmp']
+        c_flags += windows_crt_aliases
+        cpp_flags += windows_crt_aliases
         toolchain = Path(r'C:\VS2022Community\VC\Tools\MSVC\14.44.35207')
         sdk = Path(r'C:\Program Files (x86)\Windows Kits\10')
         env = os.environ.copy()

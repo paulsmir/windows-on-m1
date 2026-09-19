@@ -28,6 +28,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 
 #if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
 EXTERN_C HRESULT APIENTRY MesaD3d10OpenAdapter10(D3D10DDIARG_OPENADAPTER *);
+EXTERN_C HRESULT APIENTRY MesaD3d10OpenAdapter10_2(D3D10DDIARG_OPENADAPTER *);
 EXTERN_C AGX_D3D10_WINDOWS_ADAPTER *APIENTRY
 MesaD3d10FrontendAdapterForTest(D3D10DDI_HADAPTER);
 EXTERN_C HRESULT APIENTRY MesaD3d10FrontendCleanupResult(D3D10DDI_HDEVICE);
@@ -38,6 +39,7 @@ EXTERN_C BOOL APIENTRY MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER);
 EXTERN_C ULONG APIENTRY MesaD3d10FrontendEventQuerySetGenerationForTest(
     D3D10DDI_HQUERY,ULONG);
 EXTERN_C struct pipe_screen *d3d10_create_screen(void) { return NULL; }
+
 #endif
 
 typedef struct _TEST_STATE {
@@ -142,6 +144,38 @@ static HRESULT APIENTRY TestQueryAdapterInfo(
       AppleAgxWin32BufferCpuWrite | AppleAgxWin32BufferGpuRead};
   return S_OK;
 }
+
+#if defined(ADMISSION_UMD_D3D10_FRONTEND_TEST)
+static void test_mesa_d3d10_adapter2_contract(void) {
+  D3D10DDIARG_OPENADAPTER open={0};
+  D3DDDI_ADAPTERCALLBACKS callbacks={0};
+  D3D10_2DDI_ADAPTERFUNCS functions={0};
+  UINT32 entries=0;
+  UINT64 version=0;
+  D3D10_2DDIARG_GETCAPS caps={0};
+  D3D11DDI_THREADING_CAPS threading={~0u};
+  D3D11DDI_3DPIPELINESUPPORT_CAPS pipeline={~0u};
+  callbacks.pfnQueryAdapterInfoCb=TestQueryAdapterInfo;
+  open.hRTAdapter.handle=(VOID *)(UINT_PTR)0x100u;
+  open.Interface=D3D10_0_DDI_INTERFACE_VERSION;
+  open.pAdapterCallbacks=&callbacks;
+  open.pAdapterFuncs_2=&functions;
+  CHECK(MesaD3d10OpenAdapter10_2(&open)==S_OK && open.hAdapter.pDrvPrivate);
+  CHECK(functions.pfnGetSupportedVersions(open.hAdapter,&entries,NULL)==S_OK &&
+        entries==1u);
+  CHECK(functions.pfnGetSupportedVersions(open.hAdapter,&entries,&version)==S_OK &&
+        entries==1u && version==D3D10_0_DDI_SUPPORTED);
+  caps.Type=D3D11DDICAPS_THREADING;caps.pData=&threading;caps.DataSize=sizeof(threading);
+  CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==S_OK && threading.Caps==0u);
+  caps.DataSize=sizeof(threading)-1u;
+  CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==E_INVALIDARG);
+  caps.Type=D3D11DDICAPS_3DPIPELINESUPPORT;caps.pData=&pipeline;caps.DataSize=sizeof(pipeline);
+  CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==S_OK && pipeline.Caps==0u);
+  caps.Type=(D3D10_2DDICAPS_TYPE)0xffffffffu;
+  CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==E_NOTIMPL);
+  CHECK(functions.pfnCloseAdapter(open.hAdapter)==S_OK);
+}
+#endif
 
 static HRESULT APIENTRY TestCreateContext(HANDLE Device,
                                           D3DDDICB_CREATECONTEXT *Create) {
@@ -797,6 +831,7 @@ static HRESULT APIENTRY FrontendDestroyContext(HANDLE device,
   return S_OK;
 }
 static void test_mesa_d3d10_frontend_open(void) {
+  test_mesa_d3d10_adapter2_contract();
   D3D10DDIARG_OPENADAPTER open={0};
   D3D10DDI_ADAPTERFUNCS functions={0};
   D3DDDI_ADAPTERCALLBACKS adapterCallbacks={0};
