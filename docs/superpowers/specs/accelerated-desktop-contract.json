@@ -1036,8 +1036,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-calc-private-geometry-shader-with-stream-output",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-noop-companions-20260920cn-x64"
     },
     {
       "id": "ddi-create-geometry-shader-with-stream-output",

@@ -790,3 +790,9 @@ PASS: evidence/AD04-runtime-closure/native-depth-view-20260920cp-x64/; source
 archive SHA-256 09a7d3da61f52e1e804f17180bb323b6718d0a4af418ef729f10ec8623381ba1.
 Inventory is 110 of 121 mandatory rows proven, with 11 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+CalcPrivateGeometryShaderWithStreamOutput already has direct executable size and
+storage-preservation evidence from the GS-with-SO rejection matrix. The size
+callback is now recorded separately from the still-unimplemented Create path.
+Inventory is 111 of 121 mandatory rows proven, with 10 unresolved; pipeline
+mask remains zero.
