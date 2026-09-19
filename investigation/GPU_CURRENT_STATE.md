@@ -639,3 +639,15 @@ b30045146ed2b74a921c3914d186ece7b24f752f18712cceed7b4b4dfaf9d49a.
 The machine-readable FL10_0 inventory is now 21 of 121 implemented/tested,
 with 100 mandatory rows unresolved.  Pipeline mask remains zero; no package was
 staged, installed or hardware-run.
+
+## Reconciled D3D10_0 callback inventory (2026-09-20)
+The machine-readable inventory was reconciled against direct successful calls
+in the final x64 projected-runtime executable rather than callback pointer
+presence.  Adapter, resource, RTV, element-layout, blend/depth/raster state,
+VS/PS shader, constant-buffer, IA, Draw/DrawIndexed, EVENT query, format/MSAA,
+flush and device teardown rows now carry exact execution evidence.  The matrix
+is 73 of 121 mandatory rows implemented/tested, with 48 unresolved.  The
+remaining rows are actual contracts: dynamic/staging mapping, instancing,
+geometry stage, copy/resolve, depth views, predication/mips, hazards/counters,
+required feature formats/limits, translation/winsys and cross-process sharing.
+Pipeline mask remains zero.

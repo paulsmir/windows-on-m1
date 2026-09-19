@@ -95,8 +95,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-default-constant-buffer-update-subresource-up",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-vs-set-constant-buffers",
@@ -105,8 +106,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-vs-set-constant-buffers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-ps-set-shader-resources",
@@ -126,8 +128,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-ps-set-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-ps-set-samplers",
@@ -147,8 +150,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-vs-set-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-draw-indexed",
@@ -157,8 +161,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-draw-indexed",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-draw",
@@ -167,8 +172,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-draw",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-dynamic-iabuffer-map-no-overwrite",
@@ -227,8 +233,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-ps-set-constant-buffers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-ia-set-input-layout",
@@ -237,8 +244,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-ia-set-input-layout",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-ia-set-vertex-buffers",
@@ -247,8 +255,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-ia-set-vertex-buffers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-ia-set-index-buffer",
@@ -257,8 +266,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-ia-set-index-buffer",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-draw-indexed-instanced",
@@ -327,8 +337,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-ia-set-topology",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-staging-resource-map",
@@ -397,8 +408,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-render-targets",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-shader-resource-view-read-after-write-hazard",
@@ -427,8 +439,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-blend-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-set-depth-stencil-state",
@@ -437,8 +450,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-depth-stencil-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-set-rasterizer-state",
@@ -447,8 +461,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-rasterizer-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-query-end",
@@ -457,8 +472,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-query-end",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-query-begin",
@@ -467,8 +483,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-query-begin",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-resource-copy-region",
@@ -517,8 +534,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-viewports",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-set-scissor-rects",
@@ -527,8 +545,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-scissor-rects",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-clear-render-target-view",
@@ -537,8 +556,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-clear-render-target-view",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-clear-depth-stencil-view",
@@ -567,8 +587,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-query-get-data",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-flush",
@@ -577,8 +598,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-flush",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-gen-mips",
@@ -657,8 +679,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-calc-private-resource-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-opened-resource-size",
@@ -667,8 +690,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-calc-private-opened-resource-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-resource",
@@ -677,8 +701,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-create-resource",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-open-resource",
@@ -687,8 +712,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-open-resource",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-resource",
@@ -697,8 +723,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-destroy-resource",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-shader-resource-view-size",
@@ -740,8 +767,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-calc-private-render-target-view-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-render-target-view",
@@ -750,8 +778,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-create-render-target-view",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-render-target-view",
@@ -760,8 +789,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-destroy-render-target-view",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-depth-stencil-view-size",
@@ -800,8 +830,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-calc-private-element-layout-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-element-layout",
@@ -810,8 +841,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-create-element-layout",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-element-layout",
@@ -820,8 +852,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-destroy-element-layout",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-blend-state-size",
@@ -830,8 +863,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-calc-private-blend-state-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-blend-state",
@@ -840,8 +874,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-create-blend-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-blend-state",
@@ -850,8 +885,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-destroy-blend-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-depth-stencil-state-size",
@@ -860,8 +896,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-calc-private-depth-stencil-state-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-depth-stencil-state",
@@ -870,8 +907,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-create-depth-stencil-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-depth-stencil-state",
@@ -880,8 +918,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-destroy-depth-stencil-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-rasterizer-state-size",
@@ -890,8 +929,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-calc-private-rasterizer-state-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-rasterizer-state",
@@ -900,8 +940,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-create-rasterizer-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-rasterizer-state",
@@ -910,8 +951,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-destroy-rasterizer-state",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-shader-size",
@@ -920,8 +962,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-calc-private-shader-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-vertex-shader",
@@ -930,8 +973,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-create-vertex-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-geometry-shader",
@@ -950,8 +994,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-create-pixel-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-geometry-shader-with-stream-output",
@@ -980,8 +1025,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-destroy-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-calc-private-sampler-size",
@@ -1023,8 +1069,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-calc-private-query-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-create-query",
@@ -1033,8 +1080,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-create-query",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-destroy-query",
@@ -1043,8 +1091,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-destroy-query",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-check-format-support",
@@ -1053,8 +1102,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-check-format-support",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-check-multisample-quality-levels",
@@ -1063,8 +1113,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-check-multisample-quality-levels",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-check-counter-info",
@@ -1093,8 +1144,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-destroy-device",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-set-text-filter-size",
