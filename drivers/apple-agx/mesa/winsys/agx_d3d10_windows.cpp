@@ -528,6 +528,51 @@ struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
   return Resource ? Resource->RenderResource : NULL;
 }
 
+HRESULT AgxD3d10WindowsPresentationRotate(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resources,UINT Count) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resources || Count<2u)
+    return E_INVALIDARG;
+  HRESULT result=AgxD3d10WindowsFlushRetire(Device);
+  if(FAILED(result)) return result;
+  AcquireSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
+  for(UINT i=0;i<Count;++i) {
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *r=Resources[i];
+    ADMISSION_UMD_SCREEN_BUFFER *slot=NULL;
+    if(!r || r->Device!=Device ||
+       r->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+       !r->Resource.Retirement || !r->RenderBuffer.Transport.Token) {
+      ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);return E_INVALIDARG;
+    }
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
+      if(Device->Runtime.ScreenBuffers[j].Active &&
+         Device->Runtime.ScreenBuffers[j].Token==r->RenderBuffer.Transport.Token)
+        slot=&Device->Runtime.ScreenBuffers[j];
+    if(!slot || !slot->Borrowed || slot->Transition || slot->SubmissionHolds ||
+       slot->SourceHolds || slot->KernelAllocation!=r->Resource.KernelAllocation) {
+      ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
+      return HRESULT_FROM_WIN32(ERROR_BUSY);
+    }
+  }
+  D3DKMT_HANDLE saved=Resources[0]->Resource.KernelAllocation;
+  for(UINT i=0;i+1u<Count;++i) {
+    Resources[i]->Resource.KernelAllocation=
+        Resources[i+1u]->Resource.KernelAllocation;
+    Resources[i]->Resource.Retirement->KernelAllocation=
+        Resources[i+1u]->Resource.KernelAllocation;
+  }
+  Resources[Count-1u]->Resource.KernelAllocation=saved;
+  Resources[Count-1u]->Resource.Retirement->KernelAllocation=saved;
+  for(UINT i=0;i<Count;++i)
+    for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
+      if(Device->Runtime.ScreenBuffers[j].Active &&
+         Device->Runtime.ScreenBuffers[j].Token==Resources[i]->RenderBuffer.Transport.Token)
+        Device->Runtime.ScreenBuffers[j].KernelAllocation=
+            Resources[i]->Resource.KernelAllocation;
+  ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
+  return S_OK;
+}
+
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *Device) {
   return Device && Device->Stage>=AgxD3d10DeviceRuntimeReady &&

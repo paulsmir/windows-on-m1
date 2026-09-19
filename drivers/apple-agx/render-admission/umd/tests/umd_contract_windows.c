@@ -1149,6 +1149,16 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
             FrontendSetModeCalls==1u);
     }
+    {
+      DXGI_DDI_HRESOURCE rotating[2]={
+          (DXGI_DDI_HRESOURCE)(UINT_PTR)presentResource.pDrvPrivate,
+          (DXGI_DDI_HRESOURCE)(UINT_PTR)createdPresentResource.pDrvPrivate};
+      DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES rotate={0};
+      rotate.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      rotate.pResources=rotating;rotate.Resources=2;
+      CHECK(dxgiFunctions.pfnRotateResourceIdentities(&rotate)==S_OK);
+      CHECK(dxgiFunctions.pfnRotateResourceIdentities(&rotate)==S_OK);
+    }
     DXGI_DDI_ARG_PRESENT unsupportedPresent={0};
     unsupportedPresent.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedPresent.hSurfaceToPresent=(UINT_PTR)rt.pDrvPrivate;
@@ -1183,7 +1193,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES unsupportedRotate={0};
     unsupportedRotate.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedRotate.pResources=&dxgiRt;unsupportedRotate.Resources=1;
-    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnRotateResourceIdentities(&unsupportedRotate));
+    CHECK(dxgiFunctions.pfnRotateResourceIdentities(&unsupportedRotate)==E_INVALIDARG);
     DXGI_GAMMA_CONTROL_CAPABILITIES gamma;
     memset(&gamma,0x5a,sizeof(gamma));
     DXGI_GAMMA_CONTROL_CAPABILITIES gammaBefore=gamma;

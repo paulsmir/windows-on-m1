@@ -719,7 +719,30 @@ _Present('''),
 {
    LOG_ENTRYPOINT();''','''_RotateResourceIdentities( DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *RotateResourceIdentities )
 {
-   return UnsupportedDxgi(RotateResourceIdentities->hDevice);'''),
+   if (!RotateResourceIdentities || RotateResourceIdentities->Resources < 2 ||
+       !RotateResourceIdentities->pResources)
+      return E_INVALIDARG;
+   Device *device = CastDevice(RotateResourceIdentities->hDevice);
+   if (!device) return E_INVALIDARG;
+   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **records =
+      (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **)HeapAlloc(
+         GetProcessHeap(), HEAP_ZERO_MEMORY,
+         sizeof(*records) * RotateResourceIdentities->Resources);
+   if (!records) return E_OUTOFMEMORY;
+   HRESULT result = S_OK;
+   for (UINT i = 0; i < RotateResourceIdentities->Resources; ++i) {
+      Resource *resource = CastResource(RotateResourceIdentities->pResources[i]);
+      if (!resource || resource->owner_device != device ||
+          !resource->presentation) {
+         result = E_INVALIDARG;
+         break;
+      }
+      records[i] = resource->presentation;
+   }
+   if (SUCCEEDED(result)) result = AgxD3d10WindowsPresentationRotate(
+      device->windows, records, RotateResourceIdentities->Resources);
+   HeapFree(GetProcessHeap(), 0, records);
+   return result;'''),
         ('''_Blt(DXGI_DDI_ARG_BLT *Blt)
 {
    LOG_UNSUPPORTED_ENTRYPOINT();''','''_Blt(DXGI_DDI_ARG_BLT *Blt)

@@ -64,6 +64,10 @@ HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
 struct pipe_resource *AgxD3d10WindowsPresentationPipeResource(
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource);
+HRESULT AgxD3d10WindowsPresentationRotate(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resources,
+    UINT Count);
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 struct _ADMISSION_UMD_DEVICE;
 struct _ADMISSION_UMD_DEVICE *AgxD3d10WindowsRuntimeForTest(AGX_D3D10_WINDOWS_DEVICE *);
