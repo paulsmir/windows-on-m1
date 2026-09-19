@@ -1271,12 +1271,18 @@ _Present('''),
       (resource->bind_flags == D3D10_DDI_BIND_VERTEX_BUFFER ||
        resource->bind_flags == D3D10_DDI_BIND_INDEX_BUFFER ||
        resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER);
+   bool stagingBuffer = resource && resource->usage == D3D10_DDI_USAGE_STAGING &&
+      resource->bind_flags == 0;
+   bool mapMode = dynamicBuffer ?
+      (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ||
+       DDIMap == D3D10_DDI_MAP_WRITE_NOOVERWRITE) :
+      stagingBuffer && (DDIMap == D3D10_DDI_MAP_READ ||
+                        DDIMap == D3D10_DDI_MAP_WRITE ||
+                        DDIMap == D3D10_DDI_MAP_READWRITE);
    if (!device || !resource || resource->owner_device != device ||
        !resource->resource || !resource->buffer || !resource->transfers ||
-       SubResource != 0 || Flags != 0 || !pMappedSubResource || !dynamicBuffer ||
+       SubResource != 0 || Flags != 0 || !pMappedSubResource || !mapMode ||
        resource->transfers[0] ||
-       (DDIMap != D3D10_DDI_MAP_WRITE_DISCARD &&
-        DDIMap != D3D10_DDI_MAP_WRITE_NOOVERWRITE) ||
        (resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
         DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
       SetError(hDevice, E_INVALIDARG); return;
@@ -1284,8 +1290,10 @@ _Present('''),
    HRESULT status = AgxD3d10WindowsFlushRetire(device->windows);
    if (FAILED(status)) { SetError(hDevice, status); return; }
    struct pipe_box box = {0,0,0,(int)resource->resource->width0,1,1};
-   unsigned usage = PIPE_MAP_WRITE |
-      (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ?
+   unsigned usage = DDIMap == D3D10_DDI_MAP_READ ? PIPE_MAP_READ :
+      DDIMap == D3D10_DDI_MAP_WRITE ? PIPE_MAP_WRITE :
+      DDIMap == D3D10_DDI_MAP_READWRITE ? PIPE_MAP_READ|PIPE_MAP_WRITE :
+      PIPE_MAP_WRITE | (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ?
        PIPE_MAP_DISCARD_WHOLE_RESOURCE : PIPE_MAP_UNSYNCHRONIZED);
    void *map = device->pipe->buffer_map(device->pipe,resource->resource,0,usage,
                                          &box,&resource->transfers[0]);

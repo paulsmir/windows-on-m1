@@ -1109,11 +1109,11 @@ static void test_mesa_d3d10_frontend_open(void) {
       FRONTEND_CB,0,0,
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
     float vertices[12]={-1,-1,0,1,1,-1,0,1,0,1,0,1};
-    D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0},ibMip={0};
+    D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0},ibMip={0},stagingMip={0};
     D3D10_DDIARG_SUBRESOURCE_UP cbInitial={0},ibInitial={0};
-    D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0},cbCreate={0},ibCreate={0};
-    D3D10DDI_HRESOURCE rt={0},vb={0},cb={0},vsCb={0},ib={0};
-    D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0},cbRuntime={0},vsCbRuntime={0},ibRuntime={0};
+    D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0},cbCreate={0},ibCreate={0},stagingCreate={0};
+    D3D10DDI_HRESOURCE rt={0},vb={0},cb={0},vsCb={0},ib={0},staging={0};
+    D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0},cbRuntime={0},vsCbRuntime={0},ibRuntime={0},stagingRuntime={0};
     rtMip.TexelWidth=16;rtMip.TexelHeight=16;rtMip.TexelDepth=1;
     rtCreate.pMipInfoList=&rtMip;rtCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
     rtCreate.Usage=D3D10_DDI_USAGE_DEFAULT;rtCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
@@ -1392,6 +1392,34 @@ static void test_mesa_d3d10_frontend_open(void) {
         D3D10_DDI_MAP_WRITE_NOOVERWRITE,0,&mappedVb);
     CHECK(FrontendErrors==mapErrors && mappedVb.pData!=NULL);
     deviceFunctions.pfnResourceUnmap(device,vb,0);
+    CHECK(FrontendErrors==mapErrors);
+    stagingMip.TexelWidth=sizeof(vertices);
+    stagingMip.TexelHeight=stagingMip.TexelDepth=1;
+    stagingCreate.pMipInfoList=&stagingMip;
+    stagingCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+    stagingCreate.Usage=D3D10_DDI_USAGE_STAGING;
+    stagingCreate.Format=DXGI_FORMAT_UNKNOWN;
+    stagingCreate.SampleDesc.Count=1;stagingCreate.MipLevels=1;
+    stagingCreate.ArraySize=1;
+    staging.pDrvPrivate=calloc(1,
+        deviceFunctions.pfnCalcPrivateResourceSize(device,&stagingCreate));
+    stagingRuntime.handle=(VOID *)(UINT_PTR)0xd0cu;
+    CHECK(staging.pDrvPrivate!=NULL);
+    deviceFunctions.pfnCreateResource(device,&stagingCreate,staging,stagingRuntime);
+    CHECK(FrontendErrors==mapErrors);
+    D3D10DDI_MAPPED_SUBRESOURCE mappedStaging={0};
+    deviceFunctions.pfnStagingResourceMap(device,staging,0,
+        D3D10_DDI_MAP_WRITE,0,&mappedStaging);
+    CHECK(FrontendErrors==mapErrors && mappedStaging.pData!=NULL);
+    if(mappedStaging.pData) memcpy(mappedStaging.pData,vertices,sizeof(vertices));
+    deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
+    CHECK(FrontendErrors==mapErrors);
+    memset(&mappedStaging,0,sizeof(mappedStaging));
+    deviceFunctions.pfnStagingResourceMap(device,staging,0,
+        D3D10_DDI_MAP_READ,0,&mappedStaging);
+    CHECK(FrontendErrors==mapErrors && mappedStaging.pData &&
+          !memcmp(mappedStaging.pData,vertices,sizeof(vertices)));
+    deviceFunctions.pfnStagingResourceUnmap(device,staging,0);
     CHECK(FrontendErrors==mapErrors);
     FRONTEND_STAGE("vb-resource");
     float cbValues[4]={0.9f,0.2f,0.1f,1.0f};
@@ -2065,6 +2093,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyResource(device,cb);
     deviceFunctions.pfnDestroyResource(device,ib);
     deviceFunctions.pfnDestroyResource(device,rt);
+    deviceFunctions.pfnDestroyResource(device,staging);
     RuntimeExpectedTargetAllocation=0;
     RuntimeExpectedTargetBytes=0;
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
@@ -2072,6 +2101,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(ib.pDrvPrivate);
     free(presentResource.pDrvPrivate);free(createdPresentResource.pDrvPrivate);
     free(rt.pDrvPrivate);
+    free(staging.pDrvPrivate);
 #undef FRONTEND_IMM4
 #undef FRONTEND_REG
 #undef FRONTEND_CB

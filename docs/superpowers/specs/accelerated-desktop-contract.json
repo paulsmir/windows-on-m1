@@ -355,8 +355,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-staging-resource-map",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-staging-map-20260920cd-x64"
     },
     {
       "id": "ddi-staging-resource-unmap",
@@ -365,8 +366,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-staging-resource-unmap",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-staging-map-20260920cd-x64"
     },
     {
       "id": "ddi-vs-set-shader-resources",

@@ -722,3 +722,16 @@ source archive SHA-256
 a2d022cef29c3aa015f4db04203ef3116b7f4715f81e4ad83dcd9b662f128514.
 Inventory is 94 of 121 mandatory rows proven, with 27 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+## Verified staging buffer mapping (2026-09-20)
+The shared resource map owner now admits bindless staging buffers for exact
+READ, WRITE or READWRITE modes while preserving dynamic-buffer restrictions.
+A deterministic write/unmap/read round trip verified the authoritative Windows
+BO bytes.  X64 execution PASS:
+evidence/AD04-runtime-closure/native-staging-map-20260920cd-x64/; source archive
+SHA-256 62fe7cd00df78ee071c70aa1b0d3e6fe3bf07f3ed0a75dd424a7b92b7c94ef2a.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-staging-map-20260920ce-arm64/; source archive
+SHA-256 73175af3082b44c5d7127683331d4e9cf0d75db11292f237815049f15f476497.
+Inventory is 96 of 121 mandatory rows proven, with 25 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.
