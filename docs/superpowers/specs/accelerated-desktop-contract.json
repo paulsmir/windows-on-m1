@@ -282,8 +282,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-draw-indexed-instanced",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-instanced-entry-20260920cj-x64"
     },
     {
       "id": "ddi-draw-instanced",
@@ -292,8 +293,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-draw-instanced",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-instanced-entry-20260920cj-x64"
     },
     {
       "id": "ddi-dynamic-resource-map-discard",

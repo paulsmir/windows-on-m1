@@ -1720,7 +1720,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(FrontendErrors==eventErrorsBefore);
     deviceFunctions.pfnQueryBegin(device,orderedEvent);
     CHECK(FrontendErrors==eventErrorsBefore);
-    deviceFunctions.pfnDraw(device,3,0);
+    deviceFunctions.pfnDrawInstanced(device,3,1,0,0);
     CHECK(AgxWin32AsahiContextDrawReceipt(MesaD3d10FrontendContextForTest(device)));
     deviceFunctions.pfnQueryEnd(device,orderedEvent);
     {
@@ -1804,7 +1804,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
       deviceFunctions.pfnDrawIndexed(device,3,0,-1);
       CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
-      deviceFunctions.pfnDrawIndexed(device,3,0,0);
+      deviceFunctions.pfnDrawIndexedInstanced(device,3,1,0,0,0);
       CHECK(AgxWin32AsahiContextDrawReceipt(
           MesaD3d10FrontendContextForTest(device)));
       deviceFunctions.pfnQueryEnd(device,orderedEvent);

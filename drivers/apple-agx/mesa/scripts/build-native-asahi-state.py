@@ -1006,11 +1006,17 @@ _Present('''),
    draw.count = 3;
    pDevice->pipe->draw_vbo(pDevice->pipe, &info, 0, NULL, &draw, 1);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   (void)IndexCountPerInstance;
-   (void)InstanceCount;
-   (void)StartIndexLocation;
-   (void)BaseVertexLocation;
-   (void)StartInstanceLocation;
-   SetError(hDevice, E_NOTIMPL);''')
+   if (IndexCountPerInstance != 3 || InstanceCount != 1 ||
+       StartIndexLocation != 0 || BaseVertexLocation != 0 ||
+       StartInstanceLocation != 0) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   DrawIndexed(hDevice,3,0,0);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawInstanced','''   if (VertexCountPerInstance != 3 || InstanceCount != 1 ||
+       StartVertexLocation != 0 || StartInstanceLocation != 0) {
+      SetError(hDevice, E_NOTIMPL); return;
+   }
+   Draw(hDevice,3,0);''')
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
         ('#include "util/u_surface.h"',

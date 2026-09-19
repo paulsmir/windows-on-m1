@@ -755,3 +755,16 @@ evidence/AD04-runtime-closure/native-stage-bindings-20260920ci-arm64/; source
 archive SHA-256 43aa0e9504a4d8b25f06d79d01c2854d9ca263f2b6dce7ab21feaf26df9014f7.
 Inventory is 102 of 121 mandatory rows proven, with 19 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+## Verified one-instance D3D10 entrypoints (2026-09-20)
+DrawInstanced and DrawIndexedInstanced now admit exactly one instance at start
+instance zero and delegate to the already proven non-indexed/indexed native
+producer contracts.  Multi-instance and nonzero-start forms remain fail-closed
+and are still covered by aggregate resource-limit semantics. X64 execution PASS:
+evidence/AD04-runtime-closure/native-instanced-entry-20260920cj-x64/; source
+archive SHA-256 14c8215e2b209e42b59fc8e820968dfec4792e3721cfeccd304350b2aeab4c7c.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-instanced-entry-20260920ck-arm64/; source
+archive SHA-256 1b0af6d2105d13cd1ea0129f8c6688c3fa1ddc3e6ac306fecfa4c44f71de17f9.
+Inventory is 104 of 121 mandatory rows proven, with 17 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.
