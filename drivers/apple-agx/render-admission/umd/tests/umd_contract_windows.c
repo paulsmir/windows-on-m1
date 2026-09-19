@@ -1410,13 +1410,20 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCreateResource(device,&cbCreate,cb,cbRuntime);
     CHECK(FrontendErrors==cbErrorsBefore);
     float vsCbValues[4]={0.0f,0.0f,0.0f,0.0f};
-    cbInitial.pSysMem=vsCbValues;
+    cbCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
+    cbCreate.pInitialDataUP=NULL;
     vsCb.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&cbCreate));
     vsCbRuntime.handle=(VOID *)(UINT_PTR)0xd0bu;
     CHECK(vsCb.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&cbCreate,vsCb,vsCbRuntime);
     CHECK(FrontendErrors==cbErrorsBefore);
-    cbInitial.pSysMem=cbValues;
+    D3D10DDI_MAPPED_SUBRESOURCE mappedCb={0};
+    deviceFunctions.pfnDynamicConstantBufferMapDiscard(device,vsCb,0,
+        D3D10_DDI_MAP_WRITE_DISCARD,0,&mappedCb);
+    CHECK(FrontendErrors==cbErrorsBefore && mappedCb.pData!=NULL);
+    if(mappedCb.pData) memcpy(mappedCb.pData,vsCbValues,sizeof(vsCbValues));
+    deviceFunctions.pfnDynamicConstantBufferUnmap(device,vsCb,0);
+    CHECK(FrontendErrors==cbErrorsBefore);
     UINT16 ibValues[4]={0u,1u,2u,0u};
     ibMip.TexelWidth=sizeof(ibValues);ibMip.TexelHeight=ibMip.TexelDepth=1;
     ibInitial.pSysMem=ibValues;ibInitial.SysMemPitch=sizeof(ibValues);

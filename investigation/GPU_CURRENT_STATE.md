@@ -708,3 +708,17 @@ source archive SHA-256
 019c02e7781799b9ffbb3d0cb1fc1af8dc400883decec5a9418e003e569ed638.
 Inventory is 92 of 121 mandatory rows proven, with 29 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+## Verified dynamic constant-buffer mapping (2026-09-20)
+The resource owner admits exact device-owned dynamic constant buffers for
+WRITE_DISCARD only; no-overwrite remains rejected.  Mapped bytes feed the
+subsequent VS constant binding and real native draw.  X64 execution PASS:
+evidence/AD04-runtime-closure/native-dynamic-constant-20260920cb-x64/;
+source archive SHA-256
+7126e9acb5a462555444544aaa813ab84230171afdc38f8119ce77d320c76f89.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-dynamic-constant-20260920cc-arm64/;
+source archive SHA-256
+a2d022cef29c3aa015f4db04203ef3116b7f4715f81e4ad83dcd9b662f128514.
+Inventory is 94 of 121 mandatory rows proven, with 27 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.

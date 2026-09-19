@@ -205,8 +205,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-constant-buffer-map-discard",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-constant-20260920cb-x64"
     },
     {
       "id": "ddi-dynamic-iabuffer-map-discard",
@@ -226,8 +227,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-constant-buffer-unmap",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-constant-20260920cb-x64"
     },
     {
       "id": "ddi-ps-set-constant-buffers",

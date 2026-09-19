@@ -1027,7 +1027,8 @@ _Present('''),
       pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
       pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
       pCreateResource->BindFlags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
-      pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
+      (pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT ||
+       pCreateResource->Usage == D3D10_DDI_USAGE_DYNAMIC) &&
       pCreateResource->MapFlags == 0 && pCreateResource->MiscFlags == 0 &&
       !pCreateResource->pPrimaryDesc && pCreateResource->MipLevels == 1 &&
       pCreateResource->ArraySize == 1 && resourceMip[0].TexelHeight == 1 &&
@@ -1266,15 +1267,18 @@ _Present('''),
     overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceMap','''   Device *device = CastDevice(hDevice);
    Resource *resource = CastResource(hResource);
-   bool dynamicIa = resource && resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
+   bool dynamicBuffer = resource && resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
       (resource->bind_flags == D3D10_DDI_BIND_VERTEX_BUFFER ||
-       resource->bind_flags == D3D10_DDI_BIND_INDEX_BUFFER);
+       resource->bind_flags == D3D10_DDI_BIND_INDEX_BUFFER ||
+       resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER);
    if (!device || !resource || resource->owner_device != device ||
        !resource->resource || !resource->buffer || !resource->transfers ||
-       SubResource != 0 || Flags != 0 || !pMappedSubResource || !dynamicIa ||
+       SubResource != 0 || Flags != 0 || !pMappedSubResource || !dynamicBuffer ||
        resource->transfers[0] ||
        (DDIMap != D3D10_DDI_MAP_WRITE_DISCARD &&
-        DDIMap != D3D10_DDI_MAP_WRITE_NOOVERWRITE)) {
+        DDIMap != D3D10_DDI_MAP_WRITE_NOOVERWRITE) ||
+       (resource->bind_flags == D3D10_DDI_BIND_CONSTANT_BUFFER &&
+        DDIMap != D3D10_DDI_MAP_WRITE_DISCARD)) {
       SetError(hDevice, E_INVALIDARG); return;
    }
    HRESULT status = AgxD3d10WindowsFlushRetire(device->windows);
