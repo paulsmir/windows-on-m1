@@ -1110,7 +1110,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
     float vertices[12]={-1,-1,0,1,1,-1,0,1,0,1,0,1};
     D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0},ibMip={0};
-    D3D10_DDIARG_SUBRESOURCE_UP vbInitial={0},cbInitial={0},ibInitial={0};
+    D3D10_DDIARG_SUBRESOURCE_UP cbInitial={0},ibInitial={0};
     D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0},cbCreate={0},ibCreate={0};
     D3D10DDI_HRESOURCE rt={0},vb={0},cb={0},vsCb={0},ib={0};
     D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0},cbRuntime={0},vsCbRuntime={0},ibRuntime={0};
@@ -1356,9 +1356,8 @@ static void test_mesa_d3d10_frontend_open(void) {
       free(unsupportedGsSoHandle.pDrvPrivate);
     }
     vbMip.TexelWidth=sizeof(vertices);vbMip.TexelHeight=vbMip.TexelDepth=1;
-    vbInitial.pSysMem=vertices;vbInitial.SysMemPitch=sizeof(vertices);vbInitial.SysMemSlicePitch=sizeof(vertices);
-    vbCreate.pMipInfoList=&vbMip;vbCreate.pInitialDataUP=&vbInitial;
-    vbCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;vbCreate.Usage=D3D10_DDI_USAGE_IMMUTABLE;
+    vbCreate.pMipInfoList=&vbMip;
+    vbCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;vbCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
     vbCreate.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER;vbCreate.Format=DXGI_FORMAT_UNKNOWN;
     vbCreate.SampleDesc.Count=1;vbCreate.MipLevels=1;vbCreate.ArraySize=1;
     SIZE_T vbPrivateBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&vbCreate);
@@ -1366,6 +1365,34 @@ static void test_mesa_d3d10_frontend_open(void) {
     vbRuntime.handle=(VOID *)(UINT_PTR)0xd02u;
     CHECK(vb.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&vbCreate,vb,vbRuntime);
+    D3D10DDI_MAPPED_SUBRESOURCE mappedVb={0};
+    unsigned mapErrors=FrontendErrors;
+    deviceFunctions.pfnDynamicIABufferMapDiscard(device,vb,0,
+        D3D10_DDI_MAP_WRITE_DISCARD,0,&mappedVb);
+    CHECK(FrontendErrors==mapErrors && mappedVb.pData!=NULL);
+    if(mappedVb.pData) memcpy(mappedVb.pData,vertices,sizeof(vertices));
+    deviceFunctions.pfnDynamicIABufferUnmap(device,vb,0);
+    CHECK(FrontendErrors==mapErrors);
+    memset(&mappedVb,0,sizeof(mappedVb));
+    deviceFunctions.pfnDynamicIABufferMapNoOverwrite(device,vb,0,
+        D3D10_DDI_MAP_WRITE_NOOVERWRITE,0,&mappedVb);
+    CHECK(FrontendErrors==mapErrors && mappedVb.pData!=NULL);
+    if(mappedVb.pData) ((float *)mappedVb.pData)[0]=vertices[0];
+    deviceFunctions.pfnDynamicIABufferUnmap(device,vb,0);
+    CHECK(FrontendErrors==mapErrors);
+    memset(&mappedVb,0,sizeof(mappedVb));
+    deviceFunctions.pfnDynamicResourceMapDiscard(device,vb,0,
+        D3D10_DDI_MAP_WRITE_DISCARD,0,&mappedVb);
+    CHECK(FrontendErrors==mapErrors && mappedVb.pData!=NULL);
+    if(mappedVb.pData) memcpy(mappedVb.pData,vertices,sizeof(vertices));
+    deviceFunctions.pfnDynamicResourceUnmap(device,vb,0);
+    CHECK(FrontendErrors==mapErrors);
+    memset(&mappedVb,0,sizeof(mappedVb));
+    deviceFunctions.pfnResourceMap(device,vb,0,
+        D3D10_DDI_MAP_WRITE_NOOVERWRITE,0,&mappedVb);
+    CHECK(FrontendErrors==mapErrors && mappedVb.pData!=NULL);
+    deviceFunctions.pfnResourceUnmap(device,vb,0);
+    CHECK(FrontendErrors==mapErrors);
     FRONTEND_STAGE("vb-resource");
     float cbValues[4]={0.9f,0.2f,0.1f,1.0f};
     cbMip.TexelWidth=sizeof(cbValues);cbMip.TexelHeight=cbMip.TexelDepth=1;

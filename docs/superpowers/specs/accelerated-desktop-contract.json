@@ -183,8 +183,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-iabuffer-map-no-overwrite",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-dynamic-iabuffer-unmap",
@@ -193,8 +194,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-iabuffer-unmap",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-dynamic-constant-buffer-map-discard",
@@ -213,8 +215,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-iabuffer-map-discard",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-dynamic-constant-buffer-unmap",
@@ -297,8 +300,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-resource-map-discard",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-dynamic-resource-unmap",
@@ -307,8 +311,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-dynamic-resource-unmap",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-gs-set-constant-buffers",
@@ -644,8 +649,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-map",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-resource-unmap",
@@ -654,8 +660,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-unmap",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-dynamic-map-aliases-20260920ca-x64"
     },
     {
       "id": "ddi-resource-is-staging-busy",

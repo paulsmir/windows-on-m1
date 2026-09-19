@@ -201,6 +201,8 @@ struct Query
    bool constant_buffer;
    bool index_buffer;
    UINT logical_bytes;
+   UINT usage;
+   UINT bind_flags;
    Device *owner_device;
    ULONGLONG owner_cookie;
    ULONG device_generation;
@@ -1074,6 +1076,8 @@ _Present('''),
          return;
       }
       pResource->owner_device = pDevice;
+      pResource->usage = pCreateResource->Usage;
+      pResource->bind_flags = pCreateResource->BindFlags;
       pResource->resource = AgxD3d10WindowsPresentationPipeResource(
          pResource->presentation);
       if (!pResource->resource) {
@@ -1126,6 +1130,8 @@ _Present('''),
       return;
    }
    pResource->owner_device = pDevice;
+   pResource->usage = pCreateResource->Usage;
+   pResource->bind_flags = pCreateResource->BindFlags;
    if (wantsConstant) {
       pResource->constant_buffer = true;
       pResource->logical_bytes = resourceMip[0].TexelWidth;
@@ -1258,6 +1264,40 @@ _Present('''),
         raise SystemExit('Ambiguous presentation DestroyResource anchor')
     resource_path.write_text(resource_text.replace(destroy_anchor,destroy_replacement))
     overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceMap','''   Device *device = CastDevice(hDevice);
+   Resource *resource = CastResource(hResource);
+   bool dynamicIa = resource && resource->usage == D3D10_DDI_USAGE_DYNAMIC &&
+      (resource->bind_flags == D3D10_DDI_BIND_VERTEX_BUFFER ||
+       resource->bind_flags == D3D10_DDI_BIND_INDEX_BUFFER);
+   if (!device || !resource || resource->owner_device != device ||
+       !resource->resource || !resource->buffer || !resource->transfers ||
+       SubResource != 0 || Flags != 0 || !pMappedSubResource || !dynamicIa ||
+       resource->transfers[0] ||
+       (DDIMap != D3D10_DDI_MAP_WRITE_DISCARD &&
+        DDIMap != D3D10_DDI_MAP_WRITE_NOOVERWRITE)) {
+      SetError(hDevice, E_INVALIDARG); return;
+   }
+   HRESULT status = AgxD3d10WindowsFlushRetire(device->windows);
+   if (FAILED(status)) { SetError(hDevice, status); return; }
+   struct pipe_box box = {0,0,0,(int)resource->resource->width0,1,1};
+   unsigned usage = PIPE_MAP_WRITE |
+      (DDIMap == D3D10_DDI_MAP_WRITE_DISCARD ?
+       PIPE_MAP_DISCARD_WHOLE_RESOURCE : PIPE_MAP_UNSYNCHRONIZED);
+   void *map = device->pipe->buffer_map(device->pipe,resource->resource,0,usage,
+                                         &box,&resource->transfers[0]);
+   if (!map || !resource->transfers[0]) { SetError(hDevice,E_FAIL); return; }
+   pMappedSubResource->pData=map;
+   pMappedSubResource->RowPitch=resource->transfers[0]->stride;
+   pMappedSubResource->DepthPitch=resource->transfers[0]->layer_stride;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUnmap','''   Device *device = CastDevice(hDevice);
+   Resource *resource = CastResource(hResource);
+   if (!device || !resource || resource->owner_device != device ||
+       !resource->resource || !resource->buffer || !resource->transfers ||
+       SubResource != 0 || !resource->transfers[0]) {
+      SetError(hDevice, E_INVALIDARG); return;
+   }
+   pipe_buffer_unmap(device->pipe,resource->transfers[0]);
+   resource->transfers[0]=NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUpdateSubResourceUP','''   Device *pDevice = CastDevice(hDevice);
    Resource *resource = CastResource(hDstResource);
    ULONGLONG owner = 0;

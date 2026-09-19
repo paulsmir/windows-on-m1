@@ -690,3 +690,21 @@ source archive SHA-256
 0875eccf48e6dda1299936147e9af5a80b6983d1bd818db973910aef3d4595d7.
 Inventory is 85 of 121 mandatory rows proven, with 36 unresolved; pipeline mask
 remains zero.
+
+## Verified dynamic IA and resource mapping (2026-09-20)
+Resource records now retain their D3D usage/bind contract.  The shared map owner
+admits only a device-owned dynamic IA buffer at subresource zero with exact
+WRITE_DISCARD or WRITE_NOOVERWRITE semantics, flushes prior native ownership,
+and rejects invalid state before mapping.  The same validated implementation is
+called directly through DynamicIABuffer, DynamicResource and generic Resource
+map/unmap table entries.  The mapped vertex bytes feed the subsequent real draw.
+X64 execution PASS:
+evidence/AD04-runtime-closure/native-dynamic-map-aliases-20260920ca-x64/;
+source archive SHA-256
+6f1993e21e105fd85d2fdd63b41a2caf98cffc894638acf45b836eae520a580f.
+ARM64 product closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-dynamic-ia-20260920bz-arm64/;
+source archive SHA-256
+019c02e7781799b9ffbb3d0cb1fc1af8dc400883decec5a9418e003e569ed638.
+Inventory is 92 of 121 mandatory rows proven, with 29 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.
