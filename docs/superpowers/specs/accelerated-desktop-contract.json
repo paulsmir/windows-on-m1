@@ -507,8 +507,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-update-subresource-up",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-resource-update-20260920bw-x64"
     },
     {
       "id": "ddi-so-set-targets",

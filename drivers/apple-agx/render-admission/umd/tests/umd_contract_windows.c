@@ -1708,6 +1708,11 @@ static void test_mesa_d3d10_frontend_open(void) {
       free(firstCommand);free(firstImages);free(firstDma);
       RuntimeCheckpoint(frontendOwner,5u);
       RuntimeImmediateMarker=0;
+      float genericCbValues[4]={0.7f,0.1f,0.6f,1.0f};
+      unsigned genericUpdateErrors=FrontendErrors;
+      deviceFunctions.pfnResourceUpdateSubresourceUP(
+          device,cb,0,NULL,genericCbValues,1,1);
+      CHECK(FrontendErrors==genericUpdateErrors);
       deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&vsCb);
       unsigned indexedErrors=FrontendErrors;
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R32_UINT,0);

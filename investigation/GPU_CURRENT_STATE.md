@@ -682,3 +682,11 @@ source archive SHA-256
 dea25abf38c37149649cdaf79be528b0d7987466b6ac3d5d70f6aba01087cb63.
 Inventory is 84 of 121 mandatory rows proven, with 37 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+Generic ResourceUpdateSubresourceUP is now directly proven for the exact
+device-owned constant-buffer contract after prior draw retirement. X64 full
+execution PASS: evidence/AD04-runtime-closure/native-resource-update-20260920bw-x64/;
+source archive SHA-256
+0875eccf48e6dda1299936147e9af5a80b6983d1bd818db973910aef3d4595d7.
+Inventory is 85 of 121 mandatory rows proven, with 36 unresolved; pipeline mask
+remains zero.
