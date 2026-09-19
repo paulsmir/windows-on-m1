@@ -1110,8 +1110,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-get-gamma-caps",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-gamma-caps-20260919r-x64"
     },
     {
       "id": "dxgi-set-display-mode",

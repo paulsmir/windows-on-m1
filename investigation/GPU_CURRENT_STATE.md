@@ -569,3 +569,16 @@ Emergencyartifacthashes: main-rootEXP683/emergency-recovery-hashes.json.
 Beforehardware recordhypothesis/commands/source/packagehashes inEXPERIMENTS,
 checkbothcontrolplanes, preserveknownrecovery,collectevidence thenexactcleanup.
 No routineGPUhiddenboot. Neverrequestphysicalaction beforebothcontrolplanechecks.
+
+## Verified truthful zero gamma capabilities
+Implementation 2e7963d3db0790e2b09d9e49ae159cb2c35f7683 returns a successful
+zeroed DXGI gamma capability structure. This matches the existing KMD display
+contract, which accepts only the default gamma ramp; no programmable control
+points, scale or offset are advertised. X64 actual producer executionPASS:
+native-gamma-caps-20260919r-x64. ARM64 closure build/linkPASS:
+native-gamma-caps-20260919s-arm64. Conditional package700 build/analyze and
+Universal API validationPASS: native-gamma-caps-20260919t-arm64;
+DLLSHA10edc88c41c4e3625315f624272d7c97f524afa23f8ab0e6f67b8a5bec9a02cd.
+It was not staged, installed or hardware-run; native option remains default-off
+and pipeline mask0. Next inventory targets are resource priority, residency and
+Blt; none may return success until their actual ownership semantics exist.
