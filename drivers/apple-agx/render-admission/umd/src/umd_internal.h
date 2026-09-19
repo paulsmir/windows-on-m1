@@ -144,11 +144,18 @@ VOID APIENTRY AdmissionUmdOpenResource(
     const D3D10DDIARG_OPENRESOURCE *OpenResource,
     D3D10DDI_HRESOURCE ResourceHandle,
     D3D10DDI_HRTRESOURCE RuntimeResource);
+VOID APIENTRY AdmissionUmdCreateResource(
+    D3D10DDI_HDEVICE DeviceHandle,
+    const D3D11DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRESOURCE ResourceHandle,
+    D3D10DDI_HRTRESOURCE RuntimeResource);
 VOID APIENTRY AdmissionUmdDestroyResource(
     D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle);
 HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
                                   ADMISSION_UMD_RESOURCE *Source,
                                   PVOID DxgiContext);
+HRESULT APIENTRY AdmissionUmdSetDisplayMode(
+    DXGI_DDI_ARG_SETDISPLAYMODE *Args);
 
 #if defined(__cplusplus)
 extern "C" {

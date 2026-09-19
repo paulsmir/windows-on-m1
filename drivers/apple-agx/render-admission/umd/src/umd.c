@@ -41,7 +41,7 @@ static SIZE_T APIENTRY AdmissionUmdCalcPrivateResourceSize(
 static SIZE_T APIENTRY AdmissionUmdCalcPrivateOpenedResourceSize(
     D3D10DDI_HDEVICE Device,
     const D3D10DDIARG_OPENRESOURCE *OpenResource);
-static VOID APIENTRY AdmissionUmdCreateResource(
+VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HDEVICE Device,
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE Resource, D3D10DDI_HRTRESOURCE RuntimeResource);
@@ -61,7 +61,7 @@ static VOID APIENTRY AdmissionUmdCheckDirectFlipSupport(
     D3D10DDI_HRESOURCE CandidateResource, UINT Flags, BOOL *Supported);
 static HRESULT APIENTRY AdmissionUmdPresent(DXGI_DDI_ARG_PRESENT *Args);
 static HRESULT APIENTRY AdmissionUmdPresent1(DXGI_DDI_ARG_PRESENT1 *Args);
-static HRESULT APIENTRY AdmissionUmdSetDisplayMode(
+HRESULT APIENTRY AdmissionUmdSetDisplayMode(
     DXGI_DDI_ARG_SETDISPLAYMODE *Args);
 static HRESULT APIENTRY AdmissionUmdRotateResourceIdentities(
     DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *Args);
@@ -359,7 +359,7 @@ static SIZE_T APIENTRY AdmissionUmdCalcPrivateOpenedResourceSize(
              : 0u;
 }
 
-static VOID APIENTRY AdmissionUmdCreateResource(
+VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HDEVICE DeviceHandle,
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE ResourceHandle,
@@ -594,7 +594,7 @@ static HRESULT APIENTRY AdmissionUmdPresent1(DXGI_DDI_ARG_PRESENT1 *Args) {
   return AdmissionUmdSubmitPresent(device, source, Args->pDXGIContext);
 }
 
-static HRESULT APIENTRY AdmissionUmdSetDisplayMode(
+HRESULT APIENTRY AdmissionUmdSetDisplayMode(
     DXGI_DDI_ARG_SETDISPLAYMODE *Args) {
   ADMISSION_UMD_DEVICE *device;
   ADMISSION_UMD_RESOURCE *resource;

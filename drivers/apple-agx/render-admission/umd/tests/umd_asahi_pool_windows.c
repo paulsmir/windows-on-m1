@@ -12,9 +12,21 @@ static int PoolFailMap;
 static unsigned PoolFailUnlock;
 static unsigned PoolFailDeallocation;
 static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
-  const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
   (void)h;
   if(PoolFailAllocation) return E_OUTOFMEMORY;
+  if(a->NumAllocations==1 && a->pAllocationInfo &&
+     a->pAllocationInfo->PrivateDriverDataSize==sizeof(ADMISSION_ALLOCATION_DESCRIPTION)) {
+    const ADMISSION_ALLOCATION_DESCRIPTION *present=
+        (const ADMISSION_ALLOCATION_DESCRIPTION *)a->pAllocationInfo->pPrivateDriverData;
+    if(!AdmissionAllocationDescriptionValid(present) ||
+       present->Width!=2560u || present->Height!=1600u ||
+       present->Pitch!=10240u || present->Size!=0xfa0000ULL)
+      return E_INVALIDARG;
+    a->pAllocationInfo->hAllocation=0x775u;
+    a->hKMResource=0x776u;
+    return S_OK;
+  }
+  const ADMISSION_WIN32_ALLOCATION_CREATE *desc=a->pAllocationInfo->pPrivateDriverData;
   if(a->NumAllocations!=1 || !desc->Allocation.Size || desc->Allocation.Size>0x100000 ||
      (desc->Allocation.Size&0x3fff) || desc->ClassId<AgxWin32BufferClassGeneral ||
      desc->ClassId>AgxWin32BufferClassEncoder) return E_INVALIDARG;
@@ -45,7 +57,9 @@ static HRESULT APIENTRY PoolUnlock(HANDLE h,const D3DDDICB_UNLOCK *a) {
 }
 static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   (void)h;
-  if(a->NumAllocations==0 && a->hResource==(HANDLE)(UINT_PTR)0x773u) {
+  if(a->NumAllocations==0 &&
+     (a->hResource==(HANDLE)(UINT_PTR)0x773u ||
+      a->hResource==(HANDLE)(UINT_PTR)0x777u)) {
     ++PoolPresentationDeletes; return S_OK;
   }
   if(a->NumAllocations!=1) return E_INVALIDARG;

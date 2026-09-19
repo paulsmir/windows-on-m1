@@ -817,6 +817,7 @@ static unsigned FrontendDestroyCalls,FrontendPostReturnCallbacks;
 static unsigned FrontendPresentCalls;
 static D3DKMT_HANDLE FrontendPresentAllocation;
 static PVOID FrontendPresentContext;
+static unsigned FrontendSetModeCalls;
 static BOOL FrontendCallbacksInvalid;
 static UINT_PTR FrontendFailDestroyDevice;
 static VOID APIENTRY FrontendSetError(D3D10DDI_HRTCORELAYER core,HRESULT error) {
@@ -831,6 +832,12 @@ static HRESULT APIENTRY FrontendPresent(HANDLE device,DXGIDDICB_PRESENT *present
         present->pDXGIContext==FrontendPresentContext);
   ++FrontendPresentCalls;
   return S_OK;
+}
+static HRESULT APIENTRY FrontendSetDisplayMode(
+    HANDLE device,const D3DDDICB_SETDISPLAYMODE *mode) {
+  CHECK(device==(HANDLE)(UINT_PTR)0x904u && mode &&
+        mode->hPrimaryAllocation==0x775u);
+  ++FrontendSetModeCalls;return S_OK;
 }
 static HRESULT APIENTRY FrontendDestroyContext(HANDLE device,
     const D3DDDICB_DESTROYCONTEXT *destroy) {
@@ -857,6 +864,7 @@ static void test_mesa_d3d10_frontend_open(void) {
   D3D10DDIARG_CREATEDEVICE create={0};
   D3D10DDI_HDEVICE device={0};
   D3D10DDI_HRESOURCE presentResource={0};
+  D3D10DDI_HRESOURCE createdPresentResource={0};
   void *pendingDeviceQueryStorage=NULL;
   SIZE_T pendingDeviceQueryBytes=0;
   void *crossDeviceQueryStorage=NULL;
@@ -877,6 +885,7 @@ static void test_mesa_d3d10_frontend_open(void) {
   callbacks.pfnLockCb=PoolLock;callbacks.pfnUnlockCb=PoolUnlock;
   callbacks.pfnRenderCb=RuntimeRender;
   callbacks.pfnSignalSynchronizationObject2Cb=RuntimeSignal;
+  callbacks.pfnSetDisplayModeCb=FrontendSetDisplayMode;
   dxgiCallbacks.pfnPresentCb=FrontendPresent;
   core.pfnSetErrorCb=FrontendSetError;
   sizeArgs.Interface=D3D10_0_DDI_INTERFACE_VERSION;
@@ -1106,6 +1115,40 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
             FrontendPresentCalls==1u);
     }
+    {
+      D3D10DDIARG_CREATERESOURCE createPresent={0};
+      D3D10DDI_MIPINFO presentMip={0};
+      DXGI_DDI_PRIMARY_DESC primary={0};
+      D3D10DDI_HRTRESOURCE presentRuntime={0};
+      presentMip.TexelWidth=2560u;presentMip.TexelHeight=1600u;
+      presentMip.TexelDepth=1u;
+      createPresent.pMipInfoList=&presentMip;
+      createPresent.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      createPresent.Usage=D3D10_DDI_USAGE_DEFAULT;
+      createPresent.BindFlags=D3D10_DDI_BIND_PRESENT;
+      createPresent.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+      createPresent.SampleDesc.Count=1u;createPresent.MipLevels=1u;
+      createPresent.ArraySize=1u;createPresent.pPrimaryDesc=&primary;
+      presentRuntime.handle=(VOID *)(UINT_PTR)0x777u;
+      SIZE_T presentBytes=deviceFunctions.pfnCalcPrivateResourceSize(
+          device,&createPresent);
+      createdPresentResource.pDrvPrivate=calloc(1,presentBytes);
+      CHECK(createdPresentResource.pDrvPrivate && presentBytes);
+      unsigned createPresentErrors=FrontendErrors;
+      deviceFunctions.pfnCreateResource(device,&createPresent,
+          createdPresentResource,presentRuntime);
+      CHECK(FrontendErrors==createPresentErrors);
+      DXGI_DDI_ARG_SETDISPLAYMODE mode={0};
+      mode.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      mode.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)
+          createdPresentResource.pDrvPrivate;
+      FrontendSetModeCalls=0;
+      CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==S_OK &&
+            FrontendSetModeCalls==1u);
+      mode.SubResourceIndex=1u;
+      CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
+            FrontendSetModeCalls==1u);
+    }
     DXGI_DDI_ARG_PRESENT unsupportedPresent={0};
     unsupportedPresent.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedPresent.hSurfaceToPresent=(UINT_PTR)rt.pDrvPrivate;
@@ -1126,7 +1169,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     DXGI_DDI_HRESOURCE dxgiRt=(UINT_PTR)rt.pDrvPrivate;
     DXGI_DDI_ARG_SETDISPLAYMODE unsupportedMode={0};
     unsupportedMode.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedMode.hResource=dxgiRt;
-    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnSetDisplayMode(&unsupportedMode));
+    CHECK(dxgiFunctions.pfnSetDisplayMode(&unsupportedMode)==E_INVALIDARG);
     DXGI_DDI_ARG_SETRESOURCEPRIORITY unsupportedPriority={0};
     unsupportedPriority.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedPriority.hResource=dxgiRt;
     FRONTEND_DXGI_REJECT(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority));
@@ -1690,6 +1733,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
     deviceFunctions.pfnDestroyRenderTargetView(device,rtv);deviceFunctions.pfnDestroyResource(device,vb);
     deviceFunctions.pfnDestroyResource(device,presentResource);
+    deviceFunctions.pfnDestroyResource(device,createdPresentResource);
     deviceFunctions.pfnDestroyResource(device,vsCb);
     deviceFunctions.pfnDestroyResource(device,cb);
     deviceFunctions.pfnDestroyResource(device,ib);
@@ -1697,7 +1741,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
     free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);
     free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(ib.pDrvPrivate);
-    free(presentResource.pDrvPrivate);free(rt.pDrvPrivate);
+    free(presentResource.pDrvPrivate);free(createdPresentResource.pDrvPrivate);
+    free(rt.pDrvPrivate);
 #undef FRONTEND_IMM4
 #undef FRONTEND_REG
 #undef FRONTEND_CB
@@ -1769,7 +1814,7 @@ static void test_mesa_d3d10_frontend_open(void) {
   CHECK(mainCleanup==S_OK && FrontendDestroyCalls==mainDestroyBefore+1u &&
         RuntimeRenders==1u && RuntimeSignals==1u+RuntimeQueryMarkerCount+
         RuntimeFailedSignalCalls &&
-        RuntimeConsumerRetirements==2u && PoolPresentationDeletes==1u);
+        RuntimeConsumerRetirements==2u && PoolPresentationDeletes==2u);
   CHECK(MesaD3d10FrontendRuntimeForTest(device)==NULL &&
         MesaD3d10FrontendOwnerForTest(device)==NULL &&
         MesaD3d10FrontendContextForTest(device)==NULL);

@@ -696,7 +696,15 @@ _Present('''),
 {
    LOG_UNSUPPORTED_ENTRYPOINT();''','''_SetDisplayMode( DXGI_DDI_ARG_SETDISPLAYMODE *SetDisplayMode )
 {
-   return UnsupportedDxgi(SetDisplayMode->hDevice);'''),
+   if (!SetDisplayMode || SetDisplayMode->SubResourceIndex != 0)
+      return E_INVALIDARG;
+   struct Device *device = CastDevice(SetDisplayMode->hDevice);
+   Resource *resource = CastResource(SetDisplayMode->hResource);
+   if (!device || !resource || resource->owner_device != device ||
+       !resource->presentation)
+      return E_INVALIDARG;
+   return AgxD3d10WindowsPresentationSetDisplayMode(
+      device->windows, resource->presentation);'''),
         ('''_SetResourcePriority( DXGI_DDI_ARG_SETRESOURCEPRIORITY *SetResourcePriority )
 {
    LOG_ENTRYPOINT();''','''_SetResourcePriority( DXGI_DDI_ARG_SETRESOURCEPRIORITY *SetResourcePriority )
@@ -851,6 +859,8 @@ _Present('''),
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
    bool wantsIndex =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_INDEX_BUFFER) != 0;
+   bool wantsPresentation = pCreateResource->pPrimaryDesc != NULL ||
+      (pCreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0;
    bool validConstant = wantsConstant && pResource && resourceMip &&
       pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
       pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
@@ -887,6 +897,26 @@ _Present('''),
                                          &resourceGeneration);
    if ((wantsConstant && !validConstant) || (wantsIndex && !validIndex)) {
       SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+
+   if (wantsPresentation) {
+      if (!pDevice || !pResource) {
+         SetError(hDevice, E_INVALIDARG);
+         return;
+      }
+      memset(pResource, 0, sizeof(*pResource));
+      HRESULT result = AgxD3d10WindowsPresentationCreate(
+         pDevice->windows, pCreateResource, hRTResource,
+         &pResource->presentation);
+      if (FAILED(result)) {
+         SetError(hDevice, result);
+         return;
+      }
+      pResource->owner_device = pDevice;
+      pResource->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+      pResource->MipLevels = 1;
+      pResource->NumSubResources = 1;
       return;
    }
 

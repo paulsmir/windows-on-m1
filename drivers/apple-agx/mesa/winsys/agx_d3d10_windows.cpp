@@ -392,6 +392,37 @@ HRESULT AgxD3d10WindowsPresentationOpen(
   record->Device=Device;*Resource=record;return S_OK;
 }
 
+HRESULT AgxD3d10WindowsPresentationCreate(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    const D3D10DDIARG_CREATERESOURCE *CreateResource,
+    D3D10DDI_HRTRESOURCE RuntimeResource,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !CreateResource ||
+     !Resource || *Resource || !RuntimeResource.handle) return E_INVALIDARG;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=
+      (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *)HeapAlloc(
+          GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*record));
+  if(!record) return E_OUTOFMEMORY;
+  D3D11DDIARG_CREATERESOURCE create={0};
+  create.pMipInfoList=CreateResource->pMipInfoList;
+  create.pInitialDataUP=CreateResource->pInitialDataUP;
+  create.ResourceDimension=CreateResource->ResourceDimension;
+  create.Usage=CreateResource->Usage;create.BindFlags=CreateResource->BindFlags;
+  create.MapFlags=CreateResource->MapFlags;create.MiscFlags=CreateResource->MiscFlags;
+  create.Format=CreateResource->Format;create.SampleDesc=CreateResource->SampleDesc;
+  create.MipLevels=CreateResource->MipLevels;create.ArraySize=CreateResource->ArraySize;
+  create.pPrimaryDesc=CreateResource->pPrimaryDesc;
+  D3D10DDI_HDEVICE deviceHandle={0};D3D10DDI_HRESOURCE resourceHandle={0};
+  deviceHandle.pDrvPrivate=&Device->Runtime;resourceHandle.pDrvPrivate=&record->Resource;
+  AdmissionUmdCreateResource(deviceHandle,&create,resourceHandle,RuntimeResource);
+  if(record->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     !record->Resource.Retirement) {
+    HeapFree(GetProcessHeap(),0,record);
+    return E_INVALIDARG;
+  }
+  record->Device=Device;*Resource=record;return S_OK;
+}
+
 HRESULT AgxD3d10WindowsPresentationDestroy(
     AGX_D3D10_WINDOWS_DEVICE *Device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
@@ -417,6 +448,19 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
      Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC)
     return E_INVALIDARG;
   return AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
+}
+
+HRESULT AgxD3d10WindowsPresentationSetDisplayMode(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resource ||
+     Resource->Device!=Device ||
+     Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC)
+    return E_INVALIDARG;
+  DXGI_DDI_ARG_SETDISPLAYMODE args={0};
+  args.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)&Device->Runtime;
+  args.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)&Resource->Resource;
+  return AdmissionUmdSetDisplayMode(&args);
 }
 
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
