@@ -97,7 +97,8 @@ struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
   info.target=PIPE_TEXTURE_2D;info.format=PIPE_FORMAT_B8G8R8A8_UNORM;
   info.width0=width;info.height0=height;info.depth0=1;info.array_size=1;
   info.nr_samples=1;info.nr_storage_samples=1;
-  info.bind=PIPE_BIND_RENDER_TARGET;info.usage=PIPE_USAGE_DEFAULT;
+  info.bind=PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW;
+  info.usage=PIPE_USAGE_DEFAULT;
   struct agx_resource *resource=calloc(1,sizeof(*resource));
   if(!resource) return NULL;
   resource->base=info;resource->base.screen=screen;
@@ -124,6 +125,15 @@ struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
 void AgxWin32AsahiResourceRelease(struct pipe_resource **resource) {
   if(resource) pipe_resource_reference(resource,NULL);
 }
+int AgxWin32AsahiResourceIdentity(
+    struct pipe_resource *resource,AGX_WIN32_RELOC_ALLOCATION *identity) {
+  if(identity) memset(identity,0,sizeof(*identity));
+  if(!resource || !resource->screen || !identity) return 0;
+  AGX_WIN32_ASAHI_BACKEND *backend=agx_device(resource->screen)->windows_private;
+  struct agx_resource *native=agx_resource(resource);
+  return backend && native->bo &&
+      AgxWin32AsahiIdentity(backend,native->bo,identity);
+}
 int AgxWin32AsahiContextDestroy(struct pipe_context *ctx) {
   if(!ctx || !ctx->destroy) return 0;
   if(!context_idle(ctx)) return 0;
@@ -149,11 +159,29 @@ int AgxWin32AsahiContextDrawReceipt(struct pipe_context *ctx) {
   struct agx_context *native=agx_context(ctx);
   AGX_WIN32_ASAHI_BACKEND *backend=agx_device(ctx->screen)->windows_private;
   struct agx_batch *batch=native->batch;
-  fprintf(stderr,"D3D10_NATIVE_DRAW: batch=%u draws=%u capsule=%u failed=%u faults=%u\n",
-      batch!=NULL,batch?batch->draws:0,batch && batch->windows_batch,
-      backend?backend->Failed:1,native->any_faults);
   return batch && batch->draws==1 && batch->windows_batch && backend &&
       !backend->Failed && !native->any_faults;
+}
+int AgxWin32AsahiContextFaulted(struct pipe_context *ctx) {
+  return !ctx || agx_context(ctx)->any_faults;
+}
+int AgxWin32AsahiContextFlushForPresent(struct pipe_context *ctx) {
+  if(!ctx) return 0;
+  struct agx_context *native=agx_context(ctx);
+  struct agx_batch *batch=native->batch;
+  int drawn=0;
+  for(unsigned i=0;i<AGX_MAX_BATCHES;++i) {
+    struct agx_batch *slot=&native->batches.slots[i];
+    if(slot->windows_batch && slot->draws) { drawn=1; break; }
+  }
+  if(drawn) {
+    ctx->flush(ctx,NULL,0);
+    return !native->any_faults;
+  }
+  if(!batch) return !native->any_faults;
+  if(!AgxWin32AsahiBatchAbort(batch)) return 0;
+  agx_batch_reset(native,batch);
+  return !native->any_faults && native->batch==NULL;
 }
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *screen) {
   if(!screen || !screen->destroy) return 0;

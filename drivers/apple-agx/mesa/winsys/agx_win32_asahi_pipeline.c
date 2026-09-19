@@ -258,7 +258,9 @@ static void pipeline_record(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
     valid=s->Role==AppleAgxWin32RoleUniform; break;
   case AppleAgxWin32RelocationTextureAddress40:
     encoded=((raw>>2)&0xfffffffffULL)<<4;
-    valid=s->Role==AppleAgxWin32RoleDescriptor && role==AppleAgxWin32RoleRenderTarget; break;
+    valid=s->Role==AppleAgxWin32RoleDescriptor &&
+      (role==AppleAgxWin32RoleRenderTarget || role==AppleAgxWin32RoleTexture);
+    break;
   case AppleAgxWin32RelocationPbeAddress40:
     encoded=(raw&0xfffffffffULL)<<4;
     valid=s->Role==AppleAgxWin32RoleDescriptor && role==AppleAgxWin32RoleRenderTarget; break;

@@ -238,6 +238,22 @@ static HRESULT APIENTRY TestRender(HANDLE Device, D3DDDICB_RENDER *Render) {
   return S_OK;
 }
 
+static HRESULT APIENTRY TestSetPriority(
+    HANDLE Device,D3DDDICB_SETPRIORITY *Priority) {
+  (void)Device;
+  return Priority && !Priority->hResource && Priority->NumAllocations==1u &&
+      Priority->HandleList && Priority->pPriorities ? S_OK : E_INVALIDARG;
+}
+
+static HRESULT APIENTRY TestQueryResidency(
+    HANDLE Device,const D3DDDICB_QUERYRESIDENCY *Query) {
+  (void)Device;
+  if(!Query || Query->hResource || Query->NumAllocations!=1u ||
+     !Query->HandleList || !Query->pResidencyStatus) return E_INVALIDARG;
+  Query->pResidencyStatus[0]=D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY;
+  return S_OK;
+}
+
 static HRESULT APIENTRY TestAllocate(HANDLE Device,
                                      D3DDDICB_ALLOCATE *Allocate) {
   (void)Device;
@@ -720,6 +736,8 @@ static void test_mesa_windows_owners(D3D10DDIARG_CREATEDEVICE args) {
   callbacks.pfnDeallocateCb = PoolDeallocate;
   callbacks.pfnLockCb = PoolLock;
   callbacks.pfnUnlockCb = PoolUnlock;
+  callbacks.pfnSetPriorityCb = TestSetPriority;
+  callbacks.pfnQueryResidencyCb = TestQueryResidency;
   core.pfnSetErrorCb = BridgeSetError;
   args.pKTCallbacks = &callbacks;
   args.pUMCallbacks = &core;
@@ -818,6 +836,11 @@ static unsigned FrontendPresentCalls;
 static D3DKMT_HANDLE FrontendPresentAllocation;
 static PVOID FrontendPresentContext;
 static unsigned FrontendSetModeCalls;
+static unsigned FrontendPriorityCalls,FrontendResidencyCalls;
+static D3DKMT_HANDLE FrontendPriorityAllocation;
+static UINT FrontendPriorityValue;
+static HRESULT FrontendPriorityResult;
+static unsigned FrontendResidencyFailAt;
 static BOOL FrontendCallbacksInvalid;
 static UINT_PTR FrontendFailDestroyDevice;
 static VOID APIENTRY FrontendSetError(D3D10DDI_HRTCORELAYER core,HRESULT error) {
@@ -838,6 +861,32 @@ static HRESULT APIENTRY FrontendSetDisplayMode(
   CHECK(device==(HANDLE)(UINT_PTR)0x904u && mode &&
         mode->hPrimaryAllocation==0x775u);
   ++FrontendSetModeCalls;return S_OK;
+}
+static HRESULT APIENTRY FrontendSetPriority(
+    HANDLE device,D3DDDICB_SETPRIORITY *priority) {
+  CHECK(device==(HANDLE)(UINT_PTR)0x904u && priority &&
+        !priority->hResource && priority->NumAllocations==1u &&
+        priority->HandleList && priority->pPriorities);
+  if(priority && priority->HandleList && priority->pPriorities) {
+    FrontendPriorityAllocation=priority->HandleList[0];
+    FrontendPriorityValue=priority->pPriorities[0];
+  }
+  ++FrontendPriorityCalls;return FrontendPriorityResult;
+}
+static HRESULT APIENTRY FrontendQueryResidency(
+    HANDLE device,const D3DDDICB_QUERYRESIDENCY *query) {
+  CHECK(device==(HANDLE)(UINT_PTR)0x904u && query && !query->hResource &&
+        query->NumAllocations==1u && query->HandleList &&
+        query->pResidencyStatus);
+  if(!query || !query->HandleList || !query->pResidencyStatus)
+    return E_INVALIDARG;
+  if(FrontendResidencyFailAt==FrontendResidencyCalls+1u) {
+    ++FrontendResidencyCalls;return E_FAIL;
+  }
+  query->pResidencyStatus[0]=query->HandleList[0]==0x771u ?
+      D3DDDI_RESIDENCYSTATUS_RESIDENTINSHAREDMEMORY :
+      D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY;
+  ++FrontendResidencyCalls;return S_OK;
 }
 static HRESULT APIENTRY FrontendDestroyContext(HANDLE device,
     const D3DDDICB_DESTROYCONTEXT *destroy) {
@@ -886,6 +935,8 @@ static void test_mesa_d3d10_frontend_open(void) {
   callbacks.pfnRenderCb=RuntimeRender;
   callbacks.pfnSignalSynchronizationObject2Cb=RuntimeSignal;
   callbacks.pfnSetDisplayModeCb=FrontendSetDisplayMode;
+  callbacks.pfnSetPriorityCb=FrontendSetPriority;
+  callbacks.pfnQueryResidencyCb=FrontendQueryResidency;
   dxgiCallbacks.pfnPresentCb=FrontendPresent;
   core.pfnSetErrorCb=FrontendSetError;
   sizeArgs.Interface=D3D10_0_DDI_INTERFACE_VERSION;
@@ -1182,14 +1233,37 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(dxgiFunctions.pfnSetDisplayMode(&unsupportedMode)==E_INVALIDARG);
     DXGI_DDI_ARG_SETRESOURCEPRIORITY unsupportedPriority={0};
     unsupportedPriority.hDevice=(UINT_PTR)device.pDrvPrivate;unsupportedPriority.hResource=dxgiRt;
-    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority));
-    DXGI_DDI_RESIDENCY residency=(DXGI_DDI_RESIDENCY)0x5a;
+    unsupportedPriority.Priority=0x12345678u;
+    FrontendPriorityCalls=0;FrontendPriorityAllocation=0;FrontendPriorityValue=0;
+    FrontendPriorityResult=S_OK;
+    CHECK(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority)==S_OK &&
+          FrontendPriorityCalls==1u && FrontendPriorityAllocation!=0u &&
+          FrontendPriorityValue==unsupportedPriority.Priority);
+    FrontendPriorityResult=E_FAIL;
+    CHECK(dxgiFunctions.pfnSetResourcePriority(&unsupportedPriority)==E_FAIL &&
+          FrontendPriorityCalls==2u);
+    FrontendPriorityResult=S_OK;
+    DXGI_DDI_HRESOURCE residencyResources[2]={dxgiRt,
+        (DXGI_DDI_HRESOURCE)(UINT_PTR)presentResource.pDrvPrivate};
+    DXGI_DDI_RESIDENCY residency[2]={(DXGI_DDI_RESIDENCY)0x5a,
+                                    (DXGI_DDI_RESIDENCY)0x5a};
     DXGI_DDI_ARG_QUERYRESOURCERESIDENCY unsupportedResidency={0};
     unsupportedResidency.hDevice=(UINT_PTR)device.pDrvPrivate;
-    unsupportedResidency.pResources=&dxgiRt;unsupportedResidency.pStatus=&residency;
-    unsupportedResidency.Resources=1;
-    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnQueryResourceResidency(&unsupportedResidency));
-    CHECK(residency==(DXGI_DDI_RESIDENCY)0x5a);
+    unsupportedResidency.pResources=residencyResources;
+    unsupportedResidency.pStatus=residency;unsupportedResidency.Resources=2;
+    FrontendResidencyCalls=0;FrontendResidencyFailAt=0;
+    CHECK(dxgiFunctions.pfnQueryResourceResidency(&unsupportedResidency)==
+          AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY &&
+          FrontendResidencyCalls==2u &&
+          residency[0]==DXGI_DDI_RESIDENCY_FULLY_RESIDENT &&
+          residency[1]==DXGI_DDI_RESIDENCY_RESIDENT_IN_SHARED_MEMORY);
+    residency[0]=residency[1]=(DXGI_DDI_RESIDENCY)0x5a;
+    FrontendResidencyCalls=0;FrontendResidencyFailAt=2;
+    CHECK(dxgiFunctions.pfnQueryResourceResidency(&unsupportedResidency)==E_FAIL &&
+          FrontendResidencyCalls==2u &&
+          residency[0]==(DXGI_DDI_RESIDENCY)0x5a &&
+          residency[1]==(DXGI_DDI_RESIDENCY)0x5a);
+    FrontendResidencyFailAt=0;
     DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES unsupportedRotate={0};
     unsupportedRotate.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedRotate.pResources=&dxgiRt;unsupportedRotate.Resources=1;
@@ -1205,7 +1279,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     DXGI_DDI_ARG_BLT unsupportedBlt={0};
     unsupportedBlt.hDevice=(UINT_PTR)device.pDrvPrivate;
     unsupportedBlt.hDstResource=dxgiRt;unsupportedBlt.hSrcResource=dxgiRt;
-    FRONTEND_DXGI_REJECT(dxgiFunctions.pfnBlt(&unsupportedBlt));
+    CHECK(dxgiFunctions.pfnBlt(&unsupportedBlt)==E_INVALIDARG);
 #undef FRONTEND_DXGI_REJECT
     D3D10DDIARG_CREATEGEOMETRYSHADERWITHSTREAMOUTPUT unsupportedGsSo={0};
     D3D10DDI_HSHADER unsupportedGsSoHandle={0};
@@ -1480,14 +1554,18 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnIaSetTopology(device,D3D10_DDI_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     FRONTEND_STAGE("bind-input");
     deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,(D3D10DDI_HDEPTHSTENCILVIEW){0});
+    CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
     FRONTEND_STAGE("bind-target");
     FLOAT blendFactor[4]={0};deviceFunctions.pfnSetBlendState(device,blend,blendFactor,~0u);
     deviceFunctions.pfnSetRasterizerState(device,raster);deviceFunctions.pfnSetDepthStencilState(device,depth,0);
+    CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
     FRONTEND_STAGE("bind-fixed-state");
     D3D10_DDI_VIEWPORT viewport={0,0,2560,1600,0,1};deviceFunctions.pfnSetViewports(device,1,0,&viewport);
     D3D10_DDI_RECT rect={0,0,2560,1600};deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+    CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
     FRONTEND_STAGE("viewport-scissor");
     FLOAT clear[4]={0.05f,0.05f,0.05f,1.0f};deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
+    CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
     FRONTEND_STAGE("bound-clear");
     RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
     ADMISSION_UMD_ASAHI_OWNER *frontendOwner=MesaD3d10FrontendOwnerForTest(device);
@@ -1723,6 +1801,62 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnFlush(device);
     }
     FRONTEND_STAGE("draw-query-end");
+    if(RuntimeMarker) {
+      RuntimeCheckpoint(frontendOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(frontendOwner,5u);
+    }
+    {
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      ADMISSION_UMD_ASAHI_OWNER *bltOwner=
+          MesaD3d10FrontendOwnerForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
+      RuntimeExpectedTargetAllocation=0x775u;
+      RuntimeExpectedTargetBytes=0xfa0000ULL;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      CHECK(RuntimeActiveDevice && bltOwner);
+      DXGI_DDI_ARG_BLT blt={0};
+      blt.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      blt.hDstResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)
+          createdPresentResource.pDrvPrivate;
+      blt.hSrcResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)presentResource.pDrvPrivate;
+      blt.DstRight=2560;blt.DstBottom=1600;blt.Flags.Value=0x8u;
+      blt.Rotate=DXGI_DDI_MODE_ROTATION_IDENTITY;
+      CHECK(dxgiFunctions.pfnBlt(&blt)==S_OK);
+      CHECK(!AgxWin32AsahiContextFaulted(
+          MesaD3d10FrontendContextForTest(device)));
+      CHECK(RuntimeRenders==0u && RuntimeSignals==0u &&
+          RuntimeMaterializations==0u);
+      DXGI_DDI_ARG_PRESENT bltPresent={0};
+      bltPresent.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      bltPresent.hSurfaceToPresent=blt.hDstResource;
+      bltPresent.Flags.Value=0x2u;
+      bltPresent.FlipInterval=DXGI_DDI_FLIP_INTERVAL_ONE;
+      bltPresent.pDXGIContext=(PVOID)(UINT_PTR)0x779u;
+      FrontendPresentAllocation=0x775u;
+      FrontendPresentContext=bltPresent.pDXGIContext;
+      CHECK(dxgiFunctions.pfnPresent(&bltPresent)==S_OK &&
+            FrontendPresentCalls==3u && RuntimeRenders==1u &&
+            RuntimeSignals==1u && RuntimeMaterializations==2u &&
+            RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
+      CHECK(!AgxWin32AsahiContextFaulted(
+          MesaD3d10FrontendContextForTest(device)));
+      RuntimeCheckpoint(bltOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      CHECK(!AgxWin32AsahiContextFaulted(
+          MesaD3d10FrontendContextForTest(device)));
+      RuntimeCheckpoint(bltOwner,5u);
+      CHECK(!AgxWin32AsahiContextFaulted(
+          MesaD3d10FrontendContextForTest(device)));
+      RuntimeExpectedTargetAllocation=0;
+      RuntimeExpectedTargetBytes=0;
+    }
     unsigned destroyEventErrors=FrontendErrors;
     deviceFunctions.pfnDestroyQuery(device,orderedEvent);
     CHECK(FrontendErrors==destroyEventErrors);
@@ -1840,9 +1974,8 @@ static void test_mesa_d3d10_frontend_open(void) {
   if(deviceFunctions.pfnDestroyDevice) deviceFunctions.pfnDestroyDevice(device);
   HRESULT mainCleanup=MesaD3d10FrontendCleanupResult(device);
   CHECK(mainCleanup==S_OK && FrontendDestroyCalls==mainDestroyBefore+1u &&
-        RuntimeRenders==1u && RuntimeSignals==1u+RuntimeQueryMarkerCount+
-        RuntimeFailedSignalCalls &&
-        RuntimeConsumerRetirements==2u && PoolPresentationDeletes==2u);
+        RuntimeRenders==0u && RuntimeSignals==0u &&
+        RuntimeConsumerRetirements==0u && PoolPresentationDeletes==2u);
   CHECK(MesaD3d10FrontendRuntimeForTest(device)==NULL &&
         MesaD3d10FrontendOwnerForTest(device)==NULL &&
         MesaD3d10FrontendContextForTest(device)==NULL);
@@ -2046,6 +2179,8 @@ int main(void) {
   kernelCallbacks.pfnRenderCb = TestRender;
   kernelCallbacks.pfnLockCb = TestLock;
   kernelCallbacks.pfnUnlockCb = TestUnlock;
+  kernelCallbacks.pfnSetPriorityCb = TestSetPriority;
+  kernelCallbacks.pfnQueryResidencyCb = TestQueryResidency;
   kernelCallbacks.pfnSignalSynchronizationObject2Cb =
       TestSignalSynchronizationObject2;
   memset(&userCallbacks, 0, sizeof(userCallbacks));

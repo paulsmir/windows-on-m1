@@ -553,6 +553,45 @@ Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
 
+## Verified standard DXGI Blt native producer boundary (2026-09-20)
+The projected D3D10 frontend now implements resource priority/residency callbacks
+and the selected base-DXGI Blt: two distinct allocation-backed linear BGRA8
+2560x1600 primaries, whole-source/full-destination, identity rotation and the
+exact Present flag.  The real Mesa util_blitter graphics path performs the
+texture-sampling draw; unsupported forms fail before native submission.
+
+The native textured command is ABI version 6.  Its final complete graph is
+exactly 36 references and 136 relocations: the pre-finalization 35-reference
+census gains the mandatory scissor root.  TextureReference is mandatory,
+IndexReference is optional, and VdmIndexBufferAddress40 remains version-5-only.
+The source texture remains an external physical allocation resolved through the
+existing KMD local-segment path; it is not copied into the overlay arena.
+Vertex capture now materializes only the exact three-vertex attribute span,
+instead of the lazy uploader's full 1 MiB backing BO.  Present flush scans real
+active batch slots, including a util_blitter batch detached from ctx->batch,
+before calling the standard runtime Present callback.  Retirement remains tied
+to the same ordered completion marker.
+
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/native-textured-v6-final-20260919bm-x64/;
+source archive SHA-256
+adcbbd5e1822d65c6da8c6731941c38842b1cef219a7a85db65c1110ab695dba,
+EXE SHA-256 52799c32ddc71ed47db631f6557703beaf5b7c37be89305476b56070786f4309.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-textured-v6-final-20260920bn-arm64/;
+source archive SHA-256
+a07eebcf15c2d2cf076605701a42abb5c97e8340c5900dcb26bab3c81e17ad10.
+The deterministic relocation/capture gate is GREEN for x64 execution and
+ARM64 build-link under
+evidence/AD04-runtime-closure/native-v6-reloc-final-20260920bo/.
+
+The machine-readable D3D10_0/FL10_0 inventory now records priority, residency
+and Blt evidence.  It has 121 mandatory rows, 7 implemented/tested rows and 114
+unresolved rows.  Installed pipeline mask remains 0; no native package was
+staged, installed or hardware-run.  The next causal boundary is source-first
+reconciliation and implementation of the remaining mandatory FL10_0 admission
+contract, followed by final ARM64/package/sign/hash gates and preregistration.
+
 ## Preserved hardware/recovery boundary
 Currentordinary377/392 GPU-visible recovery is healthy,brokerdisabled,oneinert
 APPL0002Code28,noAppleAgx package/service/module/files/signer. Exacthealth evidence

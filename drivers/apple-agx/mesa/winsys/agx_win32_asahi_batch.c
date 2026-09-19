@@ -2,7 +2,6 @@
 #include "agx_win32_asahi_batch.h"
 #include "agx_usc.h"
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) {
@@ -29,8 +28,11 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   c->Transaction=c->Ops->Create(c->Owner,&c->Request);
   if(!c->Transaction || !c->Request) { free(c); return 0; }
   b->windows_batch=c;
+  APPLE_AGX_U16 version=b->ctx->stage[MESA_SHADER_FRAGMENT].texture_count ?
+      APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH :
+      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
   if(AgxWin32AsahiCaptureBeginVersion(&c->Capture,d,id.Owner,id.Generation,c->Request,
-      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)!=AgxRelocOk ||
+      version)!=AgxRelocOk ||
       !AgxWin32AsahiCaptureActivate(&c->Capture) ||
       !AgxWin32AsahiEncoderRootBegin(d->Native,b->vdm.bo->_map,b->vdm.bo->va->addr,
         (APPLE_AGX_U32)b->vdm.bo->size,&c->Root)) {
@@ -72,6 +74,7 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_start_count_bias *draws,unsigned count) {
   if(!ctx || ctx->any_faults || !info || !draws || count!=1 || drawid || indirect ||
       info->mode!=MESA_PRIM_TRIANGLES || (info->index_size && info->index_size!=2) ||
+      (ctx->stage[MESA_SHADER_FRAGMENT].texture_count && info->index_size) ||
       info->primitive_restart || info->instance_count!=1 ||
       info->start_instance || draws->start || draws->count!=3 || draws->index_bias ||
       ctx->framebuffer.nr_cbufs!=1 || ctx->framebuffer.zsbuf.texture ||
@@ -102,21 +105,16 @@ static int pipeline(AGX_WIN32_ASAHI_BATCH *c,uint64_t usc,uint32_t counts,
   return find_root(c,base+(usc&~63ULL),AppleAgxWin32RoleUscPipeline,&out->UscReference);
 }
 static int batch_reject(AGX_WIN32_ASAHI_BATCH *c,unsigned line) {
-  fprintf(stderr,"NATIVE_FINALIZE_REJECT: line=%u state=%u refs=%u relocs=%u finalized=%u\n",line,
-      c?c->Capture.Capture.State:0,c?c->Capture.Capture.ReferenceCount:0,
-      c?c->Capture.Capture.RelocationCount:0,c?c->Root.Finalized:0);
+  (void)c; (void)line;
   return 0;
 }
 int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_render *r) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b); AGX_WIN32_ASAHI_BACKEND *d=backend(b);
-  if(r) fprintf(stderr,"NATIVE_FINALIZE_INPUT: samples=%u layers=%u flags=%u depth=%llu stencil=%llu query=%llu sampler=%llu refs=%u relocs=%u\n",
-      r->samples,r->layers,r->flags,(unsigned long long)r->depth.base,(unsigned long long)r->stencil.base,
-      (unsigned long long)r->isp_oclqry_base,(unsigned long long)r->sampler_heap,
-      c?c->Capture.Capture.ReferenceCount:0,c?c->Capture.Capture.RelocationCount:0);
   if(!c || !d || !r || d->Failed || b->ctx->any_faults || c->Submitted || c->Rejected ||
       b->draws!=1 || b->cdm.bo || b->vs_scratch || b->fs_scratch ||
       agx_tilebuffer_spills(&b->tilebuffer_layout) || r->samples!=1 || r->layers!=1 ||
-      r->depth.base || r->stencil.base || r->isp_oclqry_base || r->sampler_heap ||
+      r->depth.base || r->stencil.base || r->isp_oclqry_base ||
+      r->sampler_heap || r->sampler_count ||
       (r->flags & ~(unsigned)DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES) ||
       r->ppp_multisamplectl>UINT32_MAX || r->vdm_ctrl_stream_base!=c->Root.Address)
     return batch_reject(c,__LINE__);
@@ -150,6 +148,12 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
       c->Draw.Reserved[0]=edge->TargetReference;
     if(edge->Kind==AppleAgxWin32RelocationVdmIndexBufferAddress40)
       c->Draw.IndexReference=edge->TargetReference;
+    if(edge->Kind==AppleAgxWin32RelocationTextureAddress40 &&
+       c->Capture.Capture.References[edge->TargetReference].Role==AppleAgxWin32RoleTexture) {
+      if(c->Draw.TextureReference!=APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
+         c->Draw.TextureReference!=edge->TargetReference) return batch_reject(c,__LINE__);
+      c->Draw.TextureReference=edge->TargetReference;
+    }
   }
   for(unsigned i=0;i<c->Capture.Capture.RelocationCount;++i) {
     const APPLE_AGX_WIN32_RELOCATION *edge=&c->Capture.Capture.Relocations[i];
@@ -160,7 +164,6 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
   if(!AgxWin32AsahiCaptureDeactivate(&c->Capture)) return batch_reject(c,__LINE__);
   int entered=0;
   c->Status=c->Ops->Submit(c->Owner,c->Transaction,&c->Capture.Capture,&c->Draw,&c->Render,&entered);
-  fprintf(stderr,"NATIVE_ADAPTER_RESULT: status=%08x entered=%u\n",(unsigned)c->Status,entered);
   c->Submitted=entered!=0; c->Rejected=!entered;
   return c->Submitted;
 }

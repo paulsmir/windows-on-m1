@@ -86,8 +86,7 @@ static int AdmissionWin32ExactNativeSpan(
   if (View != ADMISSION_WIN32_NULL && View->Header != ADMISSION_WIN32_NULL &&
       Reference != ADMISSION_WIN32_NULL &&
       View->Header->Opcode == AppleAgxWin32OpcodeDraw &&
-      (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
-       View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) &&
+      (APPLE_AGX_WIN32_COMMAND_IS_NATIVE(View->Header->Version)) &&
       Reference->Role == AppleAgxWin32RoleShader &&
       Reference->Access == (AppleAgxWin32AccessRead | AppleAgxWin32AccessExecute))
     return Reference->Bytes != 0ULL && (Reference->Bytes & 1ULL) == 0ULL;
@@ -95,8 +94,7 @@ static int AdmissionWin32ExactNativeSpan(
       Reference == ADMISSION_WIN32_NULL ||
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
       (View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
-       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
-       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
+       !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(View->Header->Version)) ||
       Reference->Access != AppleAgxWin32AccessRead)
     return 0;
   if (Reference->Role == AppleAgxWin32RoleEncoder) {
@@ -141,8 +139,7 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
   case AppleAgxWin32RoleDepthBias:
     if (Fact->ClassId == AgxWin32BufferClassGeneral &&
         (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC ||
-         CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
-         CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) &&
+         APPLE_AGX_WIN32_COMMAND_IS_NATIVE(CommandVersion)) &&
         Reference->Access == AppleAgxWin32AccessRead)
       requiredClass = AgxWin32BufferClassGeneral;
     else
@@ -154,15 +151,13 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
     break;
   case AppleAgxWin32RolePppState:
     if ((CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
-         CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
-         CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
+         !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(CommandVersion)) ||
         Reference->Access != AppleAgxWin32AccessRead)
       return AdmissionWin32TransportClass;
     requiredClass = AgxWin32BufferClassGeneral;
     break;
   case AppleAgxWin32RoleUniform:
-    if ((CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
-         CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
+    if ((!APPLE_AGX_WIN32_COMMAND_IS_NATIVE(CommandVersion)) ||
         Reference->Access != AppleAgxWin32AccessRead)
       return AdmissionWin32TransportClass;
     requiredClass = AgxWin32BufferClassGeneral;
@@ -233,9 +228,7 @@ ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ValidateReferences(
       ExpectedGeneration == 0u || Lookup == ADMISSION_WIN32_NULL ||
       Facts == ADMISSION_WIN32_NULL || View->Header->ReferenceCount == 0u ||
       View->Header->ReferenceCount >
-          (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
-           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
+          APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(View->Header->Version) ||
       FactCapacity < View->Header->ReferenceCount)
     return AdmissionWin32TransportArgument;
   if (View->Header->Generation != ExpectedGeneration)

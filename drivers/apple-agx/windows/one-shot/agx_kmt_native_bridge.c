@@ -445,7 +445,7 @@ static HRESULT APIENTRY render(HANDLE context,D3DDDICB_RENDER *args) {
     return reject(b,AgxKmtNativeRender);
   if(AppleAgxWin32CommandValidate((unsigned char *)b->Device.CommandBuffer+args->CommandOffset,
       args->CommandLength,b->Device.Win32Generation,args->NumAllocations,&view)!=AppleAgxWin32AbiSuccess ||
-      view.Header->Version!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH || !view.Draw || !view.NativeBatch)
+      !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(view.Header->Version) || !view.Draw || !view.NativeBatch)
     return reject(b,AgxKmtNativeRender);
   for(UINT i=0;i<args->NumAllocations;++i) handles[i]=b->Device.AllocationList[i].hAllocation;
   result=make_resident(b,handles,args->NumAllocations);

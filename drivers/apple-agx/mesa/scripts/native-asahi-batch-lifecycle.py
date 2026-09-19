@@ -315,4 +315,21 @@ AgxWin32AsahiScreenCreate(AGX_WIN32_ASAHI_BACKEND *backend, AGX_WIN32_SCREEN *wi
    pscreen->transfer_helper = NULL;
    glsl_type_singleton_decref();''')
     s=s[:a]+part+s[b:]
+    s=replace(s,'static struct pipe_context *\nagx_create_context(','''static void
+agx_windows_set_active_query_state(struct pipe_context *pctx, bool enable)
+{
+   (void)pctx; (void)enable;
+}
+
+static struct pipe_context *
+agx_create_context(''')
+    s=replace(s,'   ctx->blitter = util_blitter_create(pctx);','''   ctx->blitter = util_blitter_create(pctx);
+   pctx->set_active_query_state = agx_windows_set_active_query_state;
+   if (ctx->blitter) ctx->blitter->use_single_triangle = true;''')
     save(pp,s)
+
+    blit_path='src/gallium/drivers/asahi/agx_blit.c'
+    blit=(out/blit_path).read_text()
+    blit=replace(blit,'   if (asahi_compute_blit_supported(info)) {','''   if (!agx_device(pipe->screen)->windows_private &&
+       asahi_compute_blit_supported(info)) {''')
+    save(blit_path,blit)

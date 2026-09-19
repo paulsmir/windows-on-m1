@@ -203,8 +203,7 @@ static int dynamic_copy_role(const APPLE_AGX_WIN32_COMMAND_VIEW *View,
          (Role == AppleAgxWin32RoleIndex &&
           View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
          (Role == AppleAgxWin32RoleConstant &&
-          (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
-           View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)) ||
+          (APPLE_AGX_WIN32_COMMAND_IS_NATIVE(View->Header->Version))) ||
          Role == AppleAgxWin32RoleUscPipeline ||
          Role == AppleAgxWin32RoleDescriptor ||
          Role == AppleAgxWin32RoleScissor ||
@@ -270,15 +269,11 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
       View->Header->Generation == 0u ||
       View->Header->ReferenceCount == 0u ||
       View->Header->ReferenceCount >
-          (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
-           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
+          APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(View->Header->Version) ||
       View->Header->ReferenceCount > FactCount ||
       View->Draw->RelocationCount == 0u ||
       View->Draw->RelocationCount >
-          (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
-           APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS) ||
+          APPLE_AGX_WIN32_COMMAND_RELOCATION_LIMIT(View->Header->Version) ||
       StorageCapacity == 0u ||
       StorageCapacity > APPLE_AGX_DYNAMIC_JOB_MAX_STORAGE_BYTES ||
       ShaderBase == 0ULL || ShaderBase >= DYNAMIC_40_BIT_LIMIT)

@@ -13,6 +13,7 @@ extern "C" {
 #include "agx_win32_asahi_scene.h"
 #include "agx_d3d10_windows.h"
 #include "pipe/p_context.h"
+#include "pipe/p_state.h"
 
 enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
   AgxD3d10DeviceAllocated,
@@ -504,7 +505,7 @@ HRESULT AgxD3d10WindowsPresentationSubmit(
      Resource->Device!=Device ||
      Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC)
     return E_INVALIDARG;
-  Device->Context->flush(Device->Context,NULL,0);
+  if(!AgxWin32AsahiContextFlushForPresent(Device->Context)) return E_FAIL;
   HRESULT result=AgxD3d10WindowsFlushStatus(Device);
   if(FAILED(result)) return result;
   return AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
@@ -571,6 +572,98 @@ HRESULT AgxD3d10WindowsPresentationRotate(
             Resources[i]->Resource.KernelAllocation;
   ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
   return S_OK;
+}
+
+static HRESULT resource_allocation(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation,
+    struct pipe_resource *resource,D3DKMT_HANDLE *allocation) {
+  if(allocation) *allocation=0;
+  if(!device || device->Stage!=AgxD3d10DeviceReady || !allocation)
+    return E_INVALIDARG;
+  if(presentation) {
+    if(presentation->Device!=device ||
+       presentation->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+       !presentation->Resource.KernelAllocation) return E_INVALIDARG;
+    *allocation=presentation->Resource.KernelAllocation;return S_OK;
+  }
+  AGX_WIN32_RELOC_ALLOCATION identity={0};
+  if(!resource || !AgxWin32AsahiResourceIdentity(resource,&identity))
+    return E_INVALIDARG;
+  AcquireSRWLockShared(&device->Runtime.ScreenBufferLock);
+  for(UINT i=0;i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
+    ADMISSION_UMD_SCREEN_BUFFER *slot=&device->Runtime.ScreenBuffers[i];
+    if(slot->Active && !slot->Transition && slot->Token==identity.Token &&
+       slot->Serial==identity.Serial && slot->Bytes==identity.Bytes) {
+      *allocation=slot->KernelAllocation;break;
+    }
+  }
+  ReleaseSRWLockShared(&device->Runtime.ScreenBufferLock);
+  return *allocation ? S_OK : E_INVALIDARG;
+}
+
+HRESULT AgxD3d10WindowsSetResourcePriority(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation,
+    struct pipe_resource *resource,UINT priority) {
+  D3DKMT_HANDLE allocation=0;D3DDDICB_SETPRIORITY args={0};
+  HRESULT result=resource_allocation(device,presentation,resource,&allocation);
+  if(FAILED(result) || !device->Runtime.KernelCallbacks ||
+     !device->Runtime.KernelCallbacks->pfnSetPriorityCb) return E_INVALIDARG;
+  args.NumAllocations=1;args.HandleList=&allocation;args.pPriorities=&priority;
+  return device->Runtime.KernelCallbacks->pfnSetPriorityCb(
+      device->Runtime.RuntimeDevice.handle,&args);
+}
+
+HRESULT AgxD3d10WindowsQueryResourceResidency(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation,
+    struct pipe_resource *resource,DXGI_DDI_RESIDENCY *status) {
+  D3DKMT_HANDLE allocation=0;D3DDDI_RESIDENCYSTATUS kernelStatus;
+  D3DDDICB_QUERYRESIDENCY args={0};
+  if(status) *status=(DXGI_DDI_RESIDENCY)0;
+  HRESULT result=resource_allocation(device,presentation,resource,&allocation);
+  if(FAILED(result) || !status || !device->Runtime.KernelCallbacks ||
+     !device->Runtime.KernelCallbacks->pfnQueryResidencyCb) return E_INVALIDARG;
+  args.NumAllocations=1;args.HandleList=&allocation;
+  args.pResidencyStatus=&kernelStatus;
+  result=device->Runtime.KernelCallbacks->pfnQueryResidencyCb(
+      device->Runtime.RuntimeDevice.handle,&args);
+  if(FAILED(result)) return result;
+  switch(kernelStatus) {
+  case D3DDDI_RESIDENCYSTATUS_RESIDENTINGPUMEMORY:
+    *status=DXGI_DDI_RESIDENCY_FULLY_RESIDENT;return S_OK;
+  case D3DDDI_RESIDENCYSTATUS_RESIDENTINSHAREDMEMORY:
+    *status=DXGI_DDI_RESIDENCY_RESIDENT_IN_SHARED_MEMORY;
+    return AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY;
+  case D3DDDI_RESIDENCYSTATUS_NOTRESIDENT:
+    *status=DXGI_DDI_RESIDENCY_EVICTED_TO_DISK;
+    return AGX_DXGI_STATUS_NOT_RESIDENT;
+  default: return E_FAIL;
+  }
+}
+
+HRESULT AgxD3d10WindowsPresentationBlt(
+    AGX_D3D10_WINDOWS_DEVICE *device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *destination,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *source) {
+  if(!device || device->Stage!=AgxD3d10DeviceReady || !destination || !source ||
+     destination==source || destination->Device!=device || source->Device!=device ||
+     !destination->RenderResource || !source->RenderResource ||
+     destination->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     source->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     !device->Context || !device->Context->blit)
+    return E_INVALIDARG;
+  struct pipe_blit_info info={0};
+  info.dst.resource=destination->RenderResource;info.dst.level=0;
+  info.dst.box.x=0;info.dst.box.y=0;info.dst.box.z=0;
+  info.dst.box.width=2560;info.dst.box.height=1600;info.dst.box.depth=1;
+  info.dst.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  info.src.resource=source->RenderResource;info.src.level=0;
+  info.src.box=info.dst.box;info.src.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
+  device->Context->blit(device->Context,&info);
+  return AgxD3d10WindowsFlushStatus(device);
 }
 
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)

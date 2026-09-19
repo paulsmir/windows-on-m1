@@ -714,12 +714,53 @@ _Present('''),
 {
    LOG_ENTRYPOINT();''','''_SetResourcePriority( DXGI_DDI_ARG_SETRESOURCEPRIORITY *SetResourcePriority )
 {
-   return UnsupportedDxgi(SetResourcePriority->hDevice);'''),
+   if (!SetResourcePriority) return E_INVALIDARG;
+   Device *device = CastDevice(SetResourcePriority->hDevice);
+   Resource *resource = CastResource(SetResourcePriority->hResource);
+   if (!device || !resource || resource->owner_device != device)
+      return E_INVALIDARG;
+   return AgxD3d10WindowsSetResourcePriority(device->windows,
+      resource->presentation, resource->resource,
+      SetResourcePriority->Priority);'''),
         ('''_QueryResourceResidency( DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *QueryResourceResidency )
 {
    LOG_ENTRYPOINT();''','''_QueryResourceResidency( DXGI_DDI_ARG_QUERYRESOURCERESIDENCY *QueryResourceResidency )
 {
-   return UnsupportedDxgi(QueryResourceResidency->hDevice);'''),
+   if (!QueryResourceResidency || !QueryResourceResidency->Resources ||
+       !QueryResourceResidency->pResources || !QueryResourceResidency->pStatus ||
+       QueryResourceResidency->Resources > ((SIZE_T)-1) /
+          sizeof(DXGI_DDI_RESIDENCY))
+      return E_INVALIDARG;
+   Device *device = CastDevice(QueryResourceResidency->hDevice);
+   if (!device) return E_INVALIDARG;
+   DXGI_DDI_RESIDENCY *statuses = (DXGI_DDI_RESIDENCY *)HeapAlloc(
+      GetProcessHeap(), HEAP_ZERO_MEMORY,
+      QueryResourceResidency->Resources * sizeof(*statuses));
+   if (!statuses) return E_OUTOFMEMORY;
+   HRESULT result = S_OK;
+   for (SIZE_T i = 0; i < QueryResourceResidency->Resources; ++i) {
+      Resource *resource = CastResource(QueryResourceResidency->pResources[i]);
+      if (!resource || resource->owner_device != device) {
+         result = E_INVALIDARG;
+         break;
+      }
+   }
+   for (SIZE_T i = 0; SUCCEEDED(result) &&
+        i < QueryResourceResidency->Resources; ++i) {
+      Resource *resource = CastResource(QueryResourceResidency->pResources[i]);
+      HRESULT one = AgxD3d10WindowsQueryResourceResidency(device->windows,
+         resource->presentation, resource->resource, &statuses[i]);
+      if (FAILED(one)) { result = one; break; }
+      if (one == AGX_DXGI_STATUS_NOT_RESIDENT)
+         result = AGX_DXGI_STATUS_NOT_RESIDENT;
+      else if (one == AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY &&
+               result == S_OK)
+         result = AGX_DXGI_STATUS_RESIDENT_IN_SHARED_MEMORY;
+   }
+   if (SUCCEEDED(result)) memcpy(QueryResourceResidency->pStatus, statuses,
+      QueryResourceResidency->Resources * sizeof(*statuses));
+   HeapFree(GetProcessHeap(), 0, statuses);
+   return result;'''),
         ('''_RotateResourceIdentities( DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *RotateResourceIdentities )
 {
    LOG_ENTRYPOINT();''','''_RotateResourceIdentities( DXGI_DDI_ARG_ROTATE_RESOURCE_IDENTITIES *RotateResourceIdentities )
@@ -752,7 +793,22 @@ _Present('''),
 {
    LOG_UNSUPPORTED_ENTRYPOINT();''','''_Blt(DXGI_DDI_ARG_BLT *Blt)
 {
-   return UnsupportedDxgi(Blt->hDevice);''')])
+   if (!Blt || Blt->DstSubresource || Blt->SrcSubresource ||
+       Blt->DstLeft || Blt->DstTop || Blt->DstRight != 2560 ||
+       Blt->DstBottom != 1600 || (Blt->Flags.Value & ~0xfu))
+      return E_INVALIDARG;
+   Device *device = CastDevice(Blt->hDevice);
+   Resource *destination = CastResource(Blt->hDstResource);
+   Resource *source = CastResource(Blt->hSrcResource);
+   if (!device || !destination || !source || destination == source ||
+       destination->owner_device != device || source->owner_device != device ||
+       !destination->presentation || !source->presentation)
+      return E_INVALIDARG;
+   if (Blt->Flags.Value != 0x8u ||
+       Blt->Rotate != DXGI_DDI_MODE_ROTATION_IDENTITY)
+      return E_NOTIMPL;
+   return AgxD3d10WindowsPresentationBlt(device->windows,
+      destination->presentation, source->presentation);''')])
     change('src/gallium/frontends/d3d10umd/Shader.cpp',
         '48a7de2a42b25abac677cd903c10f21fc91b86aef167266a32a6d7d9da21097c',[
         ('''{
@@ -993,6 +1049,7 @@ _Present('''),
       SetError(hDevice, E_OUTOFMEMORY);
       return;
    }
+   pResource->owner_device = pDevice;
    if (wantsConstant) {
       pResource->constant_buffer = true;
       pResource->logical_bytes = resourceMip[0].TexelWidth;

@@ -89,31 +89,22 @@ APPLE_AGX_WIN32_ABI_RESULT AgxWin32TransportBuildDrawVersion(
   APPLE_AGX_U32 relocationBytes;
   APPLE_AGX_U32 payloadBytes;
   APPLE_AGX_U32 totalBytes;
-  int native = CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
-               CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
+  int native = APPLE_AGX_WIN32_COMMAND_IS_NATIVE(CommandVersion);
   if (CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
       CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
       CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
-      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
-      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
+      !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(CommandVersion) &&
+      CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH)
     return AppleAgxWin32AbiVersion;
   if (Request == NULL || CommandBuffer == NULL || CommandBytes == NULL ||
       Request->Generation == 0u || Request->AllocationCount == 0u ||
       Request->References == NULL || Request->Relocations == NULL ||
       Request->ReferenceCount == 0u ||
       Request->ReferenceCount >
-          (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
-           CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES :
-           APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_REFERENCES) ||
+          APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(CommandVersion) ||
       Request->RelocationCount == 0u ||
       Request->RelocationCount >
-          (CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
-           CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
-           APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS :
-           APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS))
+          APPLE_AGX_WIN32_COMMAND_RELOCATION_LIMIT(CommandVersion))
     return AppleAgxWin32AbiArgument;
   referenceBytes = Request->ReferenceCount *
       (APPLE_AGX_U32)sizeof(APPLE_AGX_WIN32_ALLOCATION_REFERENCE);

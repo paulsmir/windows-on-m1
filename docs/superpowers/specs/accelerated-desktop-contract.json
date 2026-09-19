@@ -1132,8 +1132,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-set-resource-priority",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-priority-residency-20260919v-x64"
     },
     {
       "id": "dxgi-query-resource-residency",
@@ -1142,8 +1143,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-query-resource-residency",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-priority-residency-20260919v-x64"
     },
     {
       "id": "dxgi-rotate-resource-identities",
@@ -1163,8 +1165,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/DxgiFns.cpp",
       "test_id": "ad06-blt",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "feature-sm4-vs-ps-gs",

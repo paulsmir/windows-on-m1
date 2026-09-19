@@ -44,8 +44,7 @@ extern "C" HRESULT AdmissionUmdAsahiBatchSealNative(ADMISSION_UMD_DEVICE *d,
     const APPLE_AGX_WIN32_DRAW_PAYLOAD *draw,
     const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *native,ADMISSION_UMD_ASAHI_BATCH *b) {
   if(!native || !c ||
-     (c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
-      c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH))
+     (!APPLE_AGX_WIN32_COMMAND_IS_NATIVE(c->CommandVersion)))
     return E_INVALIDARG;
   return seal_native(d,c,requestId,c->CommandVersion,draw,native,b);
 }

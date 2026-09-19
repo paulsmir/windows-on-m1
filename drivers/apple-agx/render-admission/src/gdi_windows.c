@@ -608,8 +608,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiPatch(
     ADMISSION_DYNAMIC_DMA_VIEW nativeView;
     if (AdmissionDynamicDmaOpen(view.Bytes, view.DmaBytes, &nativeView) != AdmissionDynamicDmaSuccess)
       PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate, STATUS_INVALID_USER_BUFFER);
-    if (nativeView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
-        nativeView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) {
+    if (APPLE_AGX_WIN32_COMMAND_IS_NATIVE(nativeView.Bindings->CommandVersion)) {
       if (!nativeView.Bindings->DestinationBytes ||
           nativeView.Bindings->DestinationBytes > destination.Bytes)
         PATCH_RENDER_RETURN(AdmissionPatchRenderGuardTranslate, STATUS_INVALID_ADDRESS);

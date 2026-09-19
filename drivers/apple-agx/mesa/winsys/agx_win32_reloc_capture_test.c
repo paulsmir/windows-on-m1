@@ -569,6 +569,26 @@ int main(void) {
     assert(AgxWin32RelocPromoteIndexed(&c)==AgxRelocState);
     puts("NATIVE v5 diagnostic promotion: state/kind policy PASS");
   }
+  {
+    unsigned destination,target;
+    assert(AgxWin32RelocBeginVersion(&c,77,7,14,
+        APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH,
+        &c.Operations,c.Context)==AgxRelocOk);
+    assert(AgxWin32RelocReference(&c,1,AppleAgxWin32RoleUniform,
+        AppleAgxWin32AccessRead,0,0x1000,&destination)==AgxRelocOk);
+    assert(AgxWin32RelocReference(&c,2,AppleAgxWin32RoleConstant,
+        AppleAgxWin32AccessRead,0,16,&target)==AgxRelocOk);
+    for(unsigned i=0;i<APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_RELOCATIONS;++i)
+      assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationUniformAddress64,
+          destination,i*8,target,0)==AgxRelocOk);
+    assert(c.RelocationCount==APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_RELOCATIONS);
+    assert(AgxWin32RelocField(&c,AppleAgxWin32RelocationUniformAddress64,
+        destination,APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_RELOCATIONS*8u,target,0)==
+        AgxRelocCapacity);
+    assert(AgxWin32RelocPromoteIndexed(&c)==AgxRelocState);
+    assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+    puts("NATIVE v6 relocation bound and non-indexed policy PASS");
+  }
   for(unsigned i=0;i<9;++i) assert(fixture.Holds[i]==0);
   puts("CAPTURE -> WIRE -> KMD MATERIALIZER: two placements/lifetime PASS");
   return 0;

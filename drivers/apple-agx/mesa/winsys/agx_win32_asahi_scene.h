@@ -62,11 +62,15 @@ struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
     APPLE_AGX_U64 Bytes);
 void AgxWin32AsahiResourceRelease(struct pipe_resource **);
+int AgxWin32AsahiResourceIdentity(
+    struct pipe_resource *, AGX_WIN32_RELOC_ALLOCATION *);
 /* False retains caller storage; retry only after pending ownership is resolved.
  * All contexts must be destroyed before their screen is destroyed. */
 int AgxWin32AsahiContextDestroy(struct pipe_context *);
 int AgxWin32AsahiContextRetire(struct pipe_context *, APPLE_AGX_U32 TimeoutMs);
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);
+int AgxWin32AsahiContextFaulted(struct pipe_context *);
+int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
 
 int AgxWin32AsahiSceneInit(AGX_WIN32_ASAHI_SCENE *, struct pipe_screen *, struct pipe_context *);

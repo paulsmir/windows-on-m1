@@ -94,6 +94,8 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
       Args->pKTCallbacks->pfnDeallocateCb == NULL ||
       Args->pKTCallbacks->pfnLockCb == NULL ||
       Args->pKTCallbacks->pfnUnlockCb == NULL ||
+      Args->pKTCallbacks->pfnSetPriorityCb == NULL ||
+      Args->pKTCallbacks->pfnQueryResidencyCb == NULL ||
       Args->pKTCallbacks->pfnSignalSynchronizationObject2Cb == NULL ||
       Args->pKTCallbacks->pfnRenderCb == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL)

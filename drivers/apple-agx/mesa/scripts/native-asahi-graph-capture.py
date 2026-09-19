@@ -77,23 +77,52 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
              i == AGX_SYSVAL_TABLE_PARAMS ? AppleAgxWin32RoleConstant :
                                            AppleAgxWin32RoleUniform);
       }
+      APPLE_AGX_U64 vb_start[PIPE_MAX_ATTRIBS], vb_end[PIPE_MAX_ATTRIBS];
+      struct agx_resource *vb_resource[PIPE_MAX_ATTRIBS] = {0};
+      for (unsigned vb = 0; vb < PIPE_MAX_ATTRIBS; ++vb) {
+         vb_start[vb] = UINT64_MAX; vb_end[vb] = 0;
+      }
       for (unsigned i = 0; i < PIPE_MAX_ATTRIBS; ++i) {
          if (!u->attrib_base[i]) continue;
          unsigned vb = batch->ctx->attributes->buffers[i];
-         struct pipe_resource *resource = batch->ctx->vertex_buffers[vb].buffer.resource;
+         struct pipe_resource *resource = vb < PIPE_MAX_ATTRIBS ?
+            batch->ctx->vertex_buffers[vb].buffer.resource : NULL;
          if (!resource) { fprintf(stderr,"NATIVE_ROOT_VBO: attrib=%u vb=%u missing\n",i,vb); scope.Failed = 1; break; }
          struct agx_resource *rsrc = agx_resource(resource);
-         unsigned index;
-         if (AgxWin32AsahiCaptureReference(capture, rsrc->bo, AppleAgxWin32RoleVertex,
-                AppleAgxWin32AccessRead, 0, rsrc->layout.size_B, &index) != AgxRelocOk) {
-            fprintf(stderr,"NATIVE_ROOT_VBO: attrib=%u vb=%u capture-failed bytes=%llu\n",i,vb,(unsigned long long)rsrc->layout.size_B);
+         APPLE_AGX_U64 gpu = agx_map_gpu(rsrc);
+         APPLE_AGX_U64 element = util_format_get_blocksize(
+            batch->ctx->attributes->key[i].format);
+         APPLE_AGX_U64 stride = batch->ctx->attributes->key[i].stride;
+         if (!gpu || u->attrib_base[i] < gpu || !element ||
+             stride > (UINT64_MAX - element) / 2u) {
             scope.Failed = 1; break;
          }
-         /* The native vertex lowering owns attribute offsets/clamps. Keep its
-          * pointer into the exact VBO range, including nonzero offsets. */
-         windows_graph_field(&scope, &u->attrib_base[i], u->attrib_base[i], 1,
-                             AppleAgxWin32RoleVertex);
+         APPLE_AGX_U64 start = u->attrib_base[i] - gpu;
+         APPLE_AGX_U64 end = start + stride * 2u + element;
+         if (end < start || end > rsrc->layout.size_B ||
+             (vb_resource[vb] && vb_resource[vb] != rsrc)) {
+            scope.Failed = 1; break;
+         }
+         vb_resource[vb] = rsrc;
+         if (start < vb_start[vb]) vb_start[vb] = start;
+         if (end > vb_end[vb]) vb_end[vb] = end;
       }
+      for (unsigned vb = 0; !scope.Failed && vb < PIPE_MAX_ATTRIBS; ++vb) {
+         if (!vb_resource[vb]) continue;
+         unsigned index;
+         if (AgxWin32AsahiCaptureReference(capture, vb_resource[vb]->bo,
+                AppleAgxWin32RoleVertex, AppleAgxWin32AccessRead,
+                vb_start[vb], vb_end[vb] - vb_start[vb], &index) != AgxRelocOk) {
+            fprintf(stderr,"NATIVE_ROOT_VBO: vb=%u capture-failed offset=%llu bytes=%llu\n",
+                vb,(unsigned long long)vb_start[vb],
+                (unsigned long long)(vb_end[vb]-vb_start[vb]));
+            scope.Failed = 1;
+         }
+      }
+      for (unsigned i = 0; !scope.Failed && i < PIPE_MAX_ATTRIBS; ++i)
+         if (u->attrib_base[i])
+            windows_graph_field(&scope, &u->attrib_base[i], u->attrib_base[i], 1,
+                                AppleAgxWin32RoleVertex);
       for (unsigned i = 0; i < PIPE_STAT_QUERY_MS_INVOCATIONS; ++i)
          if (u->pipeline_statistics[i]) { fprintf(stderr,"NATIVE_ROOT_QUERY: index=%u address=%llu\n",i,(unsigned long long)u->pipeline_statistics[i]); scope.Failed = 1; }
       if (u->vertex_params || u->tess_params || u->geometry_params) {
@@ -107,7 +136,13 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
       /* Application UBOs are admitted only from resource-backed slot zero in
        * the VS/FS tables. Native dirty-state initialization still installs
        * its real zero SSBO sink. */
-      if (u->texture_base) { fprintf(stderr,"NATIVE_UNIFORM_TEXTURE: table=%u base=%llu\n",table,(unsigned long long)u->texture_base); scope.Failed = 1; }
+      if (u->texture_base) {
+         if (table != AGX_SYSVAL_TABLE_FS ||
+             !windows_graph_field(&scope, &u->texture_base, u->texture_base,
+                                  AGX_TEXTURE_LENGTH,
+                                  AppleAgxWin32RoleDescriptor))
+            scope.Failed = 1;
+      }
       bool app_stage = table == AGX_SYSVAL_TABLE_VS ||
                        table == AGX_SYSVAL_TABLE_FS;
       mesa_shader_stage stage = app_stage ?
@@ -196,6 +231,44 @@ windows_graph_attachment(struct agx_batch *batch, struct agx_ptr ptr,
       windows_graph_fail(batch);
 }
 
+static int
+windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
+                            mesa_shader_stage stage, unsigned count)
+{
+   AGX_WIN32_ASAHI_CAPTURE *capture = windows_graph_capture(batch);
+   if (!capture) return 1;
+   if (stage != MESA_SHADER_FRAGMENT || count != 1 || !ptr.cpu || !ptr.gpu) {
+      windows_graph_fail(batch); return 0;
+   }
+   struct agx_sampler_view *view = batch->ctx->stage[stage].textures[0];
+   struct agx_resource *rsrc = view ? view->rsrc : NULL;
+   AGX_WIN32_ASAHI_PIPELINE scope = {0};
+   unsigned index;
+   if (!rsrc || rsrc->base.target != PIPE_TEXTURE_2D ||
+       rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM ||
+       rsrc->layout.compressed || rsrc->layout.level_offsets_B[0] ||
+       rsrc->base.last_level || rsrc->base.array_size != 1 ||
+       !AgxWin32AsahiEmissionBegin(capture->Backend->Native, ptr.cpu, ptr.gpu,
+          AGX_TEXTURE_LENGTH, AppleAgxWin32RoleDescriptor, &scope)) {
+      windows_graph_fail(batch); return 0;
+   }
+   AGX_WIN32_RELOC_RESULT texture_result = AgxWin32AsahiCaptureReference(
+      capture, rsrc->bo, AppleAgxWin32RoleTexture, AppleAgxWin32AccessRead,
+      0, rsrc->layout.size_B, &index);
+   if (texture_result != AgxRelocOk) {
+      scope.Failed = 1;
+   }
+   AgxWin32AsahiPipelineRecordRange(&scope, (uint8_t *)ptr.cpu + 16,
+      AppleAgxWin32RelocationTextureAddress40,
+      agx_map_texture_gpu(rsrc, 0), rsrc->layout.size_B,
+      AppleAgxWin32RoleTexture);
+   if (!AgxWin32AsahiPipelineFinish(&scope,
+          (uint8_t *)ptr.cpu + AGX_TEXTURE_LENGTH)) {
+      windows_graph_fail(batch); return 0;
+   }
+   return 1;
+}
+
 static bool
 windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
                          const struct pipe_draw_info *info, uint64_t address,
@@ -277,9 +350,13 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
    for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i) {
       struct agx_stage *stage = &ctx->stage[i];
       bool app_stage = i == MESA_SHADER_VERTEX || i == MESA_SHADER_FRAGMENT;
-      if (stage->texture_count || stage->image_mask || stage->ssbo_mask ||
+      bool blit_texture = i == MESA_SHADER_FRAGMENT &&
+         stage->texture_count == 1 && stage->sampler_count == 1 &&
+         stage->textures[0] && stage->textures[0]->rsrc;
+      if ((!blit_texture && (stage->texture_count || stage->sampler_count)) ||
+          stage->image_mask || stage->ssbo_mask ||
           (app_stage ? (stage->cb_mask & ~BITFIELD_BIT(0)) : stage->cb_mask) ||
-          stage->sampler_count || stage->custom_borders)
+          stage->custom_borders)
          valid = false;
    }
    if (!valid) backend->Failed = 1;
@@ -320,7 +397,10 @@ def project_sources(out, project, overlays):
     # descriptor object at that cursor; canonicalize the absent table at its
     # owning emission site, keeping every nonempty table subject to capture.
     state = replace(state, '   batch->stage_uniforms[stage].texture_base = T_tex.gpu;',
-                    '   batch->stage_uniforms[stage].texture_base = nr_tex_descriptors ? T_tex.gpu : 0;')
+                    '''   batch->stage_uniforms[stage].texture_base = nr_tex_descriptors ? T_tex.gpu : 0;
+   if (nr_tex_descriptors &&
+       !windows_graph_texture_table(batch, T_tex, stage, nr_tex_descriptors))
+      return;''')
     # In this admitted no-query draw, all counter consumers are absent: FS
     # statistics key and IA dispatch depend on nonnull query objects. Do not
     # carry Linux's unused fixed scratch sentinel into the Windows graph.

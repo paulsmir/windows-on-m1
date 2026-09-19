@@ -178,6 +178,14 @@ static int RuntimeResolve(void *context,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
     *out=consumer->DestinationGpu+offset-source->Offset;
     return 1;
   }
+  if(role==AppleAgxWin32RoleTexture && consumer->Source->Draw &&
+     ref==consumer->Source->Draw->TextureReference) {
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *source=&consumer->Source->References[ref];
+    if(offset<source->Offset || offset-source->Offset>=source->Bytes ||
+       bytes>source->Bytes-(offset-source->Offset)) return 0;
+    *out=consumer->DestinationGpu+0x2000000ULL+offset-source->Offset;
+    return 1;
+  }
   return AdmissionDynamicOverlayResolve(&consumer->Plan,ref,offset,bytes,out)==AdmissionDynamicOverlaySuccess;
 }
 static HRESULT RuntimeConsumerFailure(const char *stage,unsigned placement,unsigned result) {
@@ -194,8 +202,7 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       r->hContext==device->KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
   if(!device || AppleAgxWin32CommandValidate(device->CommandBuffer,r->CommandLength,
       device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
-  RUNTIME_REQUIRE((view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
-      view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) &&
+  RUNTIME_REQUIRE((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(view.Header->Version)) &&
       view.NativeBatch);
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
