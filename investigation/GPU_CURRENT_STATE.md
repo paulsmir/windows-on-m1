@@ -378,17 +378,47 @@ Full pinned-WDK ARM64 UMD/KMD build/code-analysis/package685 PASS0warnings/
 certificate and was not staged,installed or hardware-run. Installed exports,
 UMD project and pipeline mask remain unchanged.
 
+## Verified installed native UMD link seam
+Implementation b75336dfde5b5bf63459801bb06cb762b3ce28ab adds a default-off
+`EnableNativeFrontend` package build. When selected it imports the exact
+hash-recorded `NativeRuntime.props`, compiles the existing per-device factory,
+owner,batch-adapter and relocation-owner units, and routes the sole exported
+`OpenAdapter10_2` to the complete projected Mesa adapter family. Legacy and Mesa
+adapter/device/resource private layouts are never mixed. The default package
+path remains unchanged when the option is false.
+
+The installed projection advertises exactly `D3D10_0_DDI_SUPPORTED`; THREADING
+and 3DPIPELINESUPPORT return exact zero caps,wrong sizes returnE_INVALIDARG and
+unknown caps returnE_NOTIMPL. Pipeline mask remains0. X64 exact `_2` route plus
+the full Draw/DrawIndexed/lifetime closure executesPASS:
+native-installed-umd-seam-20260919aa-x64. Fresh ARM64 closure/build/linkPASS:
+native-installed-umd-seam-20260919af-arm64.
+
+Conditional ARM64 package690 build/analyze0warnings0errors,Inf2CatNone and
+Universal API validationPASS: native-installed-umd-seam-20260919ag-arm64.
+DLLSHA9f688813bc67f55dfcdecd58c9da29ded69c8127f6b89d33bf7a7ef7c24c0405.
+Export table contains exactlyOpenAdapter10_2. Link map proves reachable
+MesaD3d10OpenAdapter10_2,AgxD3d10WindowsOpenAdapter/CreateDevice,
+AgxWin32AsahiScreenCreateForWindows,AgxWin32AsahiBatchFinish and UMD composer.
+Imports are system API-set UCRT/synchronization plusKERNEL32; no msvcrt or
+vcruntime DLL dependency. Default-off package691 from the same source snapshot
+also builds/analyzes0warnings0errors: native-installed-umd-default-20260919ah-
+arm64. Both packages were test-signed offline only; neither was staged,installed
+or hardware-run. The conditional remains disabled in the normal build and does
+not authorize D3D runtime admission or a pipeline bit.
+
 ## Exact next target
 Continue production integration from
-agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
+investigation/agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
 private factory,pinned frontend actual DDI path,EVENT query,constant-buffer and
-minimum indexed IA/DrawIndexed slice are complete offline. Next complete the
-exact D3D10_0/FL10_0 DDI inventory and activation packaging. Synchronous Destroy
-lifetime is closed, but this bounded draw subset does not authorize pipeline
-level0. Map every required callback/format/resource/state path to implemented or
-fail-closed status, complete the smallest truthful atomic table, then link this
-same projected closure into the installed UMD. Advertise a pipeline only after
-all required functions and companion invariants are implemented. Keep
+minimum indexed IA/DrawIndexed slice are complete offline, and the same closure
+now has a conditional installed-UMD link proof. Next complete and update the
+exact D3D10_0/FL10_0 machine-readable inventory. Synchronous Destroy lifetime is
+closed, but this bounded draw subset does not authorize pipeline level0 or
+enabling the installed native option by default. Map every required callback,
+format,resource,state and DXGI path to implemented or fail-closed status and
+close the smallest truthful atomic table. Advertise a pipeline or enable native
+packaging by default only after all required companion invariants pass. Keep
 instancing,other query types,application textures/depth and unsupported
 topologies rejected until independently proven.
 Do not use another KMT helper or adapter-global rendering context.
