@@ -914,6 +914,8 @@ static void test_mesa_d3d10_frontend_open(void) {
   D3D10DDI_HDEVICE device={0};
   D3D10DDI_HRESOURCE presentResource={0};
   D3D10DDI_HRESOURCE createdPresentResource={0};
+  D3D10DDI_HSHADERRESOURCEVIEW appSrv={0};
+  D3D10DDI_HSAMPLER appSampler={0};
   void *pendingDeviceQueryStorage=NULL;
   SIZE_T pendingDeviceQueryBytes=0;
   void *crossDeviceQueryStorage=NULL;
@@ -1209,6 +1211,38 @@ static void test_mesa_d3d10_frontend_open(void) {
       rotate.pResources=rotating;rotate.Resources=2;
       CHECK(dxgiFunctions.pfnRotateResourceIdentities(&rotate)==S_OK);
       CHECK(dxgiFunctions.pfnRotateResourceIdentities(&rotate)==S_OK);
+    }
+    {
+      D3D10DDIARG_CREATESHADERRESOURCEVIEW srv={0};
+      D3D10DDI_HRTSHADERRESOURCEVIEW runtimeSrv={0};
+      D3D10_DDI_SAMPLER_DESC sampler={0};
+      D3D10DDI_HRTSAMPLER runtimeSampler={0};
+      srv.hDrvResource=presentResource;srv.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+      srv.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      srv.Tex2D.MostDetailedMip=0;srv.Tex2D.MipLevels=1;
+      srv.Tex2D.FirstArraySlice=0;srv.Tex2D.ArraySize=1;
+      runtimeSrv.handle=(VOID *)(UINT_PTR)0x77au;
+      SIZE_T srvBytes=deviceFunctions.pfnCalcPrivateShaderResourceViewSize(device,&srv);
+      appSrv.pDrvPrivate=calloc(1,srvBytes);
+      sampler.Filter=D3D10_DDI_FILTER_MIN_MAG_MIP_POINT;
+      sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D10_DDI_TEXTURE_ADDRESS_CLAMP;
+      sampler.ComparisonFunc=D3D10_DDI_COMPARISON_NEVER;
+      runtimeSampler.handle=(VOID *)(UINT_PTR)0x77bu;
+      SIZE_T samplerBytes=deviceFunctions.pfnCalcPrivateSamplerSize(device,&sampler);
+      appSampler.pDrvPrivate=calloc(1,samplerBytes);
+      CHECK(appSrv.pDrvPrivate && appSampler.pDrvPrivate && srvBytes && samplerBytes);
+      unsigned textureErrors=FrontendErrors;
+      deviceFunctions.pfnCreateShaderResourceView(device,&srv,appSrv,runtimeSrv);
+      deviceFunctions.pfnCreateSampler(device,&sampler,appSampler,runtimeSampler);
+      CHECK(FrontendErrors==textureErrors);
+      deviceFunctions.pfnPsSetShaderResources(device,0,1,&appSrv);
+      deviceFunctions.pfnPsSetSamplers(device,0,1,&appSampler);
+      CHECK(FrontendErrors==textureErrors);
+      D3D10DDI_HSHADERRESOURCEVIEW nullSrv={0};
+      D3D10DDI_HSAMPLER nullSampler={0};
+      deviceFunctions.pfnPsSetShaderResources(device,0,1,&nullSrv);
+      deviceFunctions.pfnPsSetSamplers(device,0,1,&nullSampler);
+      CHECK(FrontendErrors==textureErrors);
     }
     DXGI_DDI_ARG_PRESENT unsupportedPresent={0};
     unsupportedPresent.hDevice=(UINT_PTR)device.pDrvPrivate;
@@ -1892,6 +1926,9 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
     deviceFunctions.pfnDestroyRenderTargetView(device,rtv);deviceFunctions.pfnDestroyResource(device,vb);
+    deviceFunctions.pfnDestroyShaderResourceView(device,appSrv);
+    deviceFunctions.pfnDestroySampler(device,appSampler);
+    free(appSrv.pDrvPrivate);free(appSampler.pDrvPrivate);
     deviceFunctions.pfnDestroyResource(device,presentResource);
     deviceFunctions.pfnDestroyResource(device,createdPresentResource);
     deviceFunctions.pfnDestroyResource(device,vsCb);

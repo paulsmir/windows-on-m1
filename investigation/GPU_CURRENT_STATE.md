@@ -621,3 +621,21 @@ DLLSHA10edc88c41c4e3625315f624272d7c97f524afa23f8ab0e6f67b8a5bec9a02cd.
 It was not staged, installed or hardware-run; native option remains default-off
 and pipeline mask0. Next inventory targets are resource priority, residency and
 Blt; none may return success until their actual ownership semantics exist.
+
+## Verified application PS texture binding group (2026-09-20)
+The projected D3D10 frontend now keeps shader-resource views and sampler states
+owned by their creating device and admits the exact minimum fragment slot-zero
+create/bind/unbind/destroy lifecycle.  Cross-stage, multi-slot and extended
+forms remain fail-closed.  This reuses Mesa's existing SRV/sampler objects and
+the already proven typed TextureReference path; it adds no allocator or
+composer.  X64 full execution PASS:
+evidence/AD04-runtime-closure/native-texture-ddi-lifecycle-20260920bq-x64/;
+source archive SHA-256
+79feabc004eefbb8d0b45e0f81be238825657763a16d0d8c528f88587d76e4bc.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-texture-ddi-lifecycle-20260920br-arm64/;
+source archive SHA-256
+b30045146ed2b74a921c3914d186ece7b24f752f18712cceed7b4b4dfaf9d49a.
+The machine-readable FL10_0 inventory is now 21 of 121 implemented/tested,
+with 100 mandatory rows unresolved.  Pipeline mask remains zero; no package was
+staged, installed or hardware-run.

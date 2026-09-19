@@ -29,8 +29,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
       "test_id": "ad01-adapter-open10",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "adapter-open10-2",
@@ -39,8 +40,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
       "test_id": "ad01-adapter-open10-2",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "adapter-calc-device",
@@ -49,8 +51,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
       "test_id": "ad01-adapter-calc-device",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "adapter-create-device",
@@ -59,8 +62,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
       "test_id": "ad01-adapter-create-device",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "adapter-close",
@@ -69,8 +73,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
       "test_id": "ad01-adapter-close",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "adapter-version-caps",
@@ -79,8 +84,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Adapter.cpp",
       "test_id": "ad01-adapter-version-caps",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-textured-v6-final-20260919bm-x64"
     },
     {
       "id": "ddi-default-constant-buffer-update-subresource-up",
@@ -109,8 +115,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-ps-set-shader-resources",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-ps-set-shader",
@@ -129,8 +136,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-ps-set-samplers",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-vs-set-shader",
@@ -699,8 +707,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-calc-private-shader-resource-view-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-create-shader-resource-view",
@@ -709,8 +718,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-create-shader-resource-view",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-destroy-shader-resource-view",
@@ -719,8 +729,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-destroy-shader-resource-view",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-calc-private-render-target-view-size",
@@ -979,8 +990,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-calc-private-sampler-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-create-sampler",
@@ -989,8 +1001,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-create-sampler",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-destroy-sampler",
@@ -999,8 +1012,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-destroy-sampler",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-texture-ddi-lifecycle-20260920bq-x64"
     },
     {
       "id": "ddi-calc-private-query-size",

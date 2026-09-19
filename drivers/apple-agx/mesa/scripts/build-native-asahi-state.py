@@ -206,6 +206,23 @@ struct Query
    ULONG device_generation;
    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation;
 };'''),
+        ('''struct SamplerState
+{
+   void *handle;
+};''','''struct SamplerState
+{
+   void *handle;
+   Device *owner_device;
+};'''),
+        ('''struct ShaderResourceView
+{
+   struct pipe_sampler_view *handle;
+};''','''struct ShaderResourceView
+{
+   struct pipe_sampler_view *handle;
+   Device *owner_device;
+   Resource *owner_resource;
+};'''),
         ('''   Query *pQuery = CastQuery(hQuery);
    return pQuery ? pQuery->handle : NULL;''','''   (void)hQuery;
    return NULL;''')])
@@ -852,7 +869,66 @@ _Present('''),
    __in const D3D10DDIARG_STAGE_IO_SIGNATURES *pSignatures)                                              // IN
 {
    SetError(hDevice, E_NOTIMPL);
-   return;''')])
+   return;'''),
+        ('''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);''',
+         '''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);
+   pSamplerState->owner_device = CastDevice(hDevice);'''),
+        ('''   pSRView->handle = pipe->create_sampler_view(pipe, resource, &desc);
+}
+
+
+/*
+ * ----------------------------------------------------------------------
+ *
+ * CreateShaderResourceView1 --''',
+         '''   pSRView->handle = pipe->create_sampler_view(pipe, resource, &desc);
+   pSRView->owner_device = CastDevice(hDevice);
+   pSRView->owner_resource = CastResource(pCreateSRView->hDrvResource);
+}
+
+
+/*
+ * ----------------------------------------------------------------------
+ *
+ * CreateShaderResourceView1 --''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
+   bool valid = pDevice && shader_type == MESA_SHADER_FRAGMENT && Offset == 0 &&
+      NumSamplers <= 1 && (NumSamplers == 0 || phSamplers);
+   for (UINT i = 0; valid && i < NumSamplers; ++i) {
+      SamplerState *sampler = CastSamplerState(phSamplers[i]);
+      valid = !sampler || (sampler->owner_device == pDevice && sampler->handle);
+   }
+   if (!valid) { SetError(hDevice, E_NOTIMPL); return; }
+   void *sampler = NumSamplers ? CastPipeSamplerState(phSamplers[0]) : NULL;
+   pDevice->samplers[shader_type][0] = sampler;
+   pDevice->pipe->bind_sampler_states(pDevice->pipe, shader_type, 0, 1, &sampler);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetShaderResources','''   Device *pDevice = CastDevice(hDevice);
+   bool valid = pDevice && shader_type == MESA_SHADER_FRAGMENT && Offset == 0 &&
+      NumViews <= 1 && (NumViews == 0 || phShaderResourceViews);
+   for (UINT i = 0; valid && i < NumViews; ++i) {
+      ShaderResourceView *view = CastShaderResourceView(phShaderResourceViews[i]);
+      valid = !view || (view->owner_device == pDevice && view->owner_resource &&
+         view->owner_resource->owner_device == pDevice && view->handle);
+   }
+   if (!valid) { SetError(hDevice, E_NOTIMPL); return; }
+   struct pipe_sampler_view *view = NumViews ?
+      CastPipeShaderResourceView(phShaderResourceViews[0]) : NULL;
+   pDevice->sampler_views[shader_type][0] = view;
+   pDevice->pipe->set_sampler_views(pDevice->pipe, shader_type, 0, 1, 0, &view);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','DestroySampler','''   Device *pDevice = CastDevice(hDevice);
+   SamplerState *sampler = CastSamplerState(hSampler);
+   if (!pDevice || !sampler || sampler->owner_device != pDevice || !sampler->handle) {
+      SetError(hDevice, E_INVALIDARG); return;
+   }
+   pDevice->pipe->delete_sampler_state(pDevice->pipe, sampler->handle);
+   sampler->handle = NULL; sampler->owner_device = NULL;''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','DestroyShaderResourceView','''   Device *pDevice = CastDevice(hDevice);
+   ShaderResourceView *view = CastShaderResourceView(hShaderResourceView);
+   if (!pDevice || !view || view->owner_device != pDevice || !view->handle) {
+      SetError(hDevice, E_INVALIDARG); return;
+   }
+   pDevice->pipe->sampler_view_release(pDevice->pipe, view->handle);
+   view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetConstantBuffers','''   Device *pDevice = CastDevice(hDevice);
    ULONGLONG owner = 0;
    ULONG generation = 0;
