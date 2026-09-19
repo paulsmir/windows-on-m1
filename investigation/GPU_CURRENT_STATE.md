@@ -343,20 +343,54 @@ AD04-native-blend-abi disproves NIR layout mismatch. No NIR assertion disabled.
 No-query scratch slots are unused by admitted VS/FS and canonicalized only at
 root upload; global Asahi scratch semantics remain unchanged.
 
+## Verified indexed native batch slice
+Implementation a8f338046227c8be8ad386837fe11f729b5fbce5 extends the same
+pinned D3D10 producer and existing physical/patch-list path with one exact direct
+R16 indexed triangle. Resource creation admits only an8-byte DEFAULT sole-index
+buffer containing little-endian `{0,1,2,0}`; IA offset0/R16 and DrawIndexed
+count3/start0/base0/oneinstance/triangle-list are the only accepted indexed
+operation. Restart,indirect,user indices,R32,instancing and other shapes remain
+rejected before submission.
+
+The real `agx_vdm_draw` INDEX_LIST is24bytes. Version5 relocation kind15 owns
+the packed40-bit index address from Encoder offset52 to one read-only RoleIndex
+object. Producer validation preserves header bits and requires tag3,U16,
+count3,instances1,start0,size2,address4-aligned/<2^40. Materialization copies
+immutable Encoder/Index/Constant sources, patches request-scoped bytes only and
+validates exact index contents. Old versions reject kind15. Measured final v5
+bounds are34references/134relocations; v4 remains64/133, legacy64 and command
+8192 unchanged. The pre-finalization census33/134 was superseded by the exact
+post-scissor/native-root count34/134.
+
+Fresh x64 actual producer closure PASS:
+evidence/AD04-runtime-closure/native-d3d10-indexed-production-20260919n-x64/.
+ArchiveSHA4a4d26b95c47b6ae3f5fadcf0956888762b96f12d0a804d225e801d4acfe048d;
+EXESHAa88c2c9c3c570d5fba9a3d466ac0faf1087ea01b2f24042b686be1d83b988c8e.
+Receipt:34refs,134relocs,13allocations,33objects,145encoder bytes,36656source
+bytes; both placements,materializer,KMD plan,DMA patch,native roots,query marker
+and ordered retirement PASS. Fresh ARM64 build/link PASS,executionNOT_RUN:
+native-d3d10-indexed-production-20260919o-arm64; archiveSHA8c4c591078eee61a
+582445a9f7cffe43d6fbe8e715085cea0c43c4c0d6def0b5,EXESHA
+b841374aa9dde5e2861e6831876d1c63a00910dacfd3cec1e03e648da8232311.
+Full pinned-WDK ARM64 UMD/KMD build/code-analysis/package685 PASS0warnings/
+0errors; Inf2Cat errors/warningsNone. Evidence native-d3d10-indexed-analysis-
+20260919q-arm64. Package was test-signed offline with the existing WDK test
+certificate and was not staged,installed or hardware-run. Installed exports,
+UMD project and pipeline mask remain unchanged.
+
 ## Exact next target
 Continue production integration from
 agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
-private factory and pinned frontend actual DDI path are complete offline. Next
-complete exact D3D10_0/FL10_0 DDI inventory and activation packaging. Synchronous
-Destroy lifetime is closed, but the one-triangle subset does not authorize
-pipeline level0. Map every required callback/format/resource/state path to
-implemented or fail-closed status, complete the smallest truthful atomic table,
-then link this same projected closure into installed UMD. Advertise a pipeline
-only after all required functions and companion invariants are implemented.
-Next mandatory unit is indexed IA/DrawIndexed: derive the absent typed VDM index
-buffer address relocation plus index size/range/base-vertex/restart semantics end
-to end before lifting index rejection. Keep instancing,other query types and
-unsupported topologies rejected until independently proven.
+private factory,pinned frontend actual DDI path,EVENT query,constant-buffer and
+minimum indexed IA/DrawIndexed slice are complete offline. Next complete the
+exact D3D10_0/FL10_0 DDI inventory and activation packaging. Synchronous Destroy
+lifetime is closed, but this bounded draw subset does not authorize pipeline
+level0. Map every required callback/format/resource/state path to implemented or
+fail-closed status, complete the smallest truthful atomic table, then link this
+same projected closure into the installed UMD. Advertise a pipeline only after
+all required functions and companion invariants are implemented. Keep
+instancing,other query types,application textures/depth and unsupported
+topologies rejected until independently proven.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
