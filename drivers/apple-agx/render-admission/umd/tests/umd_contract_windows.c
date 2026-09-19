@@ -1238,6 +1238,25 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnPsSetShaderResources(device,0,1,&appSrv);
       deviceFunctions.pfnPsSetSamplers(device,0,1,&appSampler);
       CHECK(FrontendErrors==textureErrors);
+      deviceFunctions.pfnShaderResourceViewReadAfterWriteHazard(
+          device,appSrv,presentResource);
+      deviceFunctions.pfnResourceReadAfterWriteHazard(device,presentResource);
+      D3D10DDI_COUNTER_INFO counterInfo;
+      memset(&counterInfo,0x5a,sizeof(counterInfo));
+      deviceFunctions.pfnCheckCounterInfo(device,&counterInfo);
+      CHECK(FrontendErrors==textureErrors &&
+          counterInfo.LastDeviceDependentCounter==0 &&
+          counterInfo.NumSimultaneousCounters==0 &&
+          counterInfo.NumDetectableParallelUnits==0);
+      unsigned counterErrors=FrontendErrors;
+      deviceFunctions.pfnCheckCounter(device,(D3D10DDI_QUERY)0x1234,
+          NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+      CHECK(FrontendErrors==counterErrors+1u &&
+          FrontendLastError==DXGI_DDI_ERR_UNSUPPORTED);
+      textureErrors=FrontendErrors;
+      deviceFunctions.pfnRelocateDeviceFuncs(device,&deviceFunctions);
+      deviceFunctions.pfnSetTextFilterSize(device,1,1);
+      CHECK(FrontendErrors==textureErrors);
       D3D10DDI_HSHADERRESOURCEVIEW nullSrv={0};
       D3D10DDI_HSAMPLER nullSampler={0};
       deviceFunctions.pfnPsSetShaderResources(device,0,1,&nullSrv);

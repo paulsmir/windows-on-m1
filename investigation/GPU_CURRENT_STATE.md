@@ -651,3 +651,14 @@ remaining rows are actual contracts: dynamic/staging mapping, instancing,
 geometry stage, copy/resolve, depth views, predication/mips, hazards/counters,
 required feature formats/limits, translation/winsys and cross-process sharing.
 Pipeline mask remains zero.
+
+## Verified small D3D10 companion callbacks (2026-09-20)
+Valid resource/SRV hazard notifications preserve Mesa's intentional no-op
+semantics; counter info reports zero device counters and CheckCounter rejects the
+unsupported namespace; device-function relocation is pointer-independent; the
+required 1x1 text-filter size is accepted.  X64 executable evidence:
+evidence/AD04-runtime-closure/native-companion-ddi-20260920bs-x64/; source
+archive SHA-256
+55c02ae78ac41a4b52f5ebade0cd65d2a01f6eb86fa50411af4b30771c7a0192.
+The machine-readable inventory is 79 of 121 mandatory rows proven, with 42
+unresolved. Pipeline mask remains zero.

@@ -419,8 +419,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-shader-resource-view-read-after-write-hazard",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-companion-ddi-20260920bs-x64"
     },
     {
       "id": "ddi-resource-read-after-write-hazard",
@@ -429,8 +430,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-read-after-write-hazard",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-companion-ddi-20260920bs-x64"
     },
     {
       "id": "ddi-set-blend-state",
@@ -669,8 +671,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Device.cpp",
       "test_id": "ad04-relocate-device-funcs",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-companion-ddi-20260920bs-x64"
     },
     {
       "id": "ddi-calc-private-resource-size",
@@ -1124,8 +1127,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-check-counter-info",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-companion-ddi-20260920bs-x64"
     },
     {
       "id": "ddi-check-counter",
@@ -1134,8 +1138,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Query.cpp",
       "test_id": "ad04-check-counter",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-companion-ddi-20260920bs-x64"
     },
     {
       "id": "ddi-destroy-device",
@@ -1155,8 +1160,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-set-text-filter-size",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-companion-ddi-20260920bs-x64"
     },
     {
       "id": "dxgi-present",
