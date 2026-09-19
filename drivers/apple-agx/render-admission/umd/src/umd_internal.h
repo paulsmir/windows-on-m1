@@ -139,6 +139,17 @@ typedef struct _ADMISSION_UMD_RESOURCE {
   ADMISSION_UMD_RETIREMENT *Retirement;
 } ADMISSION_UMD_RESOURCE;
 
+VOID APIENTRY AdmissionUmdOpenResource(
+    D3D10DDI_HDEVICE DeviceHandle,
+    const D3D10DDIARG_OPENRESOURCE *OpenResource,
+    D3D10DDI_HRESOURCE ResourceHandle,
+    D3D10DDI_HRTRESOURCE RuntimeResource);
+VOID APIENTRY AdmissionUmdDestroyResource(
+    D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle);
+HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
+                                  ADMISSION_UMD_RESOURCE *Source,
+                                  PVOID DxgiContext);
+
 #if defined(__cplusplus)
 extern "C" {
 #endif

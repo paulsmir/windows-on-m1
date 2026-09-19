@@ -45,11 +45,11 @@ static VOID APIENTRY AdmissionUmdCreateResource(
     D3D10DDI_HDEVICE Device,
     const D3D11DDIARG_CREATERESOURCE *CreateResource,
     D3D10DDI_HRESOURCE Resource, D3D10DDI_HRTRESOURCE RuntimeResource);
-static VOID APIENTRY AdmissionUmdOpenResource(
+VOID APIENTRY AdmissionUmdOpenResource(
     D3D10DDI_HDEVICE Device,
     const D3D10DDIARG_OPENRESOURCE *OpenResource,
     D3D10DDI_HRESOURCE Resource, D3D10DDI_HRTRESOURCE RuntimeResource);
-static VOID APIENTRY AdmissionUmdDestroyResource(
+VOID APIENTRY AdmissionUmdDestroyResource(
     D3D10DDI_HDEVICE Device, D3D10DDI_HRESOURCE Resource);
 static VOID APIENTRY AdmissionUmdCheckFormatSupport(
     D3D10DDI_HDEVICE Device, DXGI_FORMAT Format, UINT *FormatSupport);
@@ -413,7 +413,7 @@ static VOID APIENTRY AdmissionUmdCreateResource(
   resource->Retirement = retirement;
 }
 
-static VOID APIENTRY AdmissionUmdOpenResource(
+VOID APIENTRY AdmissionUmdOpenResource(
     D3D10DDI_HDEVICE DeviceHandle,
     const D3D10DDIARG_OPENRESOURCE *OpenResource,
     D3D10DDI_HRESOURCE ResourceHandle,
@@ -468,7 +468,7 @@ static VOID APIENTRY AdmissionUmdOpenResource(
   resource->Retirement = retirement;
 }
 
-static VOID APIENTRY AdmissionUmdDestroyResource(
+VOID APIENTRY AdmissionUmdDestroyResource(
     D3D10DDI_HDEVICE DeviceHandle, D3D10DDI_HRESOURCE ResourceHandle) {
   ADMISSION_UMD_DEVICE *device = AdmissionUmdDeviceFromHandle(DeviceHandle);
   ADMISSION_UMD_RESOURCE *resource =
@@ -549,7 +549,7 @@ static VOID APIENTRY AdmissionUmdCheckDirectFlipSupport(
                    : FALSE;
 }
 
-static HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
+HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
                                          ADMISSION_UMD_RESOURCE *Source,
                                          PVOID DxgiContext) {
   DXGIDDICB_PRESENT present;

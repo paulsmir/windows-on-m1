@@ -204,6 +204,7 @@ struct Query
    Device *owner_device;
    ULONGLONG owner_cookie;
    ULONG device_generation;
+   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation;
 };'''),
         ('''   Query *pQuery = CastQuery(hQuery);
    return pQuery ? pQuery->handle : NULL;''','''   (void)hQuery;
@@ -674,7 +675,18 @@ _Present('''),
    device->pipe->screen->flush_frontbuffer(device->pipe->screen, device->pipe,\x20
       pSrcResource->resource, 0, 0, pPresentData->pDXGIContext, 0, NULL);
 
-   return S_OK;''','''   return UnsupportedDxgi(pPresentData->hDevice);'''),
+   return S_OK;''','''   if (!pPresentData || pPresentData->hDstResource != 0 ||
+       pPresentData->SrcSubResourceIndex != 0 ||
+       pPresentData->Flags.Value != 0x2u ||
+       pPresentData->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE)
+      return E_INVALIDARG;
+   struct Device *device = CastDevice(pPresentData->hDevice);
+   Resource *resource = CastResource(pPresentData->hSurfaceToPresent);
+   if (!device || !resource || resource->owner_device != device ||
+       !resource->presentation)
+      return E_INVALIDARG;
+   return AgxD3d10WindowsPresentationSubmit(
+      device->windows, resource->presentation, pPresentData->pDXGIContext);'''),
         ('''_GetGammaCaps( DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS *GetCaps )
 {
    LOG_ENTRYPOINT();''','''_GetGammaCaps( DXGI_DDI_ARG_GET_GAMMA_CONTROL_CAPS *GetCaps )
@@ -976,6 +988,43 @@ _Present('''),
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','OpenResource','''   Device *pDevice = CastDevice(hDevice);
+   Resource *pResource = CastResource(hResource);
+   if (!pDevice || !pResource || !pOpenResource || !hRTResource.handle) {
+      SetError(hDevice, E_INVALIDARG);
+      return;
+   }
+   memset(pResource, 0, sizeof(*pResource));
+   HRESULT result = AgxD3d10WindowsPresentationOpen(
+      pDevice->windows, pOpenResource, hRTResource, &pResource->presentation);
+   if (FAILED(result)) {
+      SetError(hDevice, result);
+      return;
+   }
+   pResource->owner_device = pDevice;
+   pResource->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+   pResource->MipLevels = 1;
+   pResource->NumSubResources = 1;''')
+    resource_path=out/'src/gallium/frontends/d3d10umd/Resource.cpp'
+    resource_text=resource_path.read_text()
+    destroy_anchor='''   Resource *pResource = CastResource(hResource);
+
+   if (pResource->so_target) {'''
+    destroy_replacement='''   Device *pDevice = CastDevice(hDevice);
+   Resource *pResource = CastResource(hResource);
+
+   if (pResource && pResource->presentation) {
+      HRESULT result = AgxD3d10WindowsPresentationDestroy(
+         pDevice->windows, &pResource->presentation);
+      if (FAILED(result)) SetError(hDevice, result);
+      return;
+   }
+
+   if (pResource->so_target) {'''
+    if resource_text.count(destroy_anchor)!=1:
+        raise SystemExit('Ambiguous presentation DestroyResource anchor')
+    resource_path.write_text(resource_text.replace(destroy_anchor,destroy_replacement))
+    overlays['src/gallium/frontends/d3d10umd/Resource.cpp']['after']=hashlib.sha256(resource_path.read_bytes()).hexdigest()
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceUpdateSubResourceUP','''   Device *pDevice = CastDevice(hDevice);
    Resource *resource = CastResource(hDstResource);
    ULONGLONG owner = 0;

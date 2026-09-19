@@ -6,6 +6,7 @@ static void *PoolMemory[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
 static D3DKMT_HANDLE PoolHandles[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
 static unsigned PoolNextHandle;
 static unsigned PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,PoolErrors;
+static unsigned PoolPresentationDeletes;
 static int PoolFailAllocation;
 static int PoolFailMap;
 static unsigned PoolFailUnlock;
@@ -44,6 +45,9 @@ static HRESULT APIENTRY PoolUnlock(HANDLE h,const D3DDDICB_UNLOCK *a) {
 }
 static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   (void)h;
+  if(a->NumAllocations==0 && a->hResource==(HANDLE)(UINT_PTR)0x773u) {
+    ++PoolPresentationDeletes; return S_OK;
+  }
   if(a->NumAllocations!=1) return E_INVALIDARG;
   unsigned slot;
   for(slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot) if(PoolMemory[slot] && a->HandleList[0]==PoolHandles[slot]) break;

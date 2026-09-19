@@ -63,6 +63,10 @@ struct AGX_D3D10_WINDOWS_DEVICE {
   HRESULT CleanupStatus;
   BOOL KernelQuiesced;
 };
+struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE {
+  AGX_D3D10_WINDOWS_DEVICE *Device;
+  ADMISSION_UMD_RESOURCE Resource;
+};
 
 static void unlink_owner(AGX_D3D10_WINDOWS_DEVICE *owner) {
   AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
@@ -361,6 +365,58 @@ HRESULT AgxD3d10WindowsQueryDetach(AGX_D3D10_WINDOWS_DEVICE *Device,
 HRESULT AgxD3d10WindowsQueryCollect(AGX_D3D10_WINDOWS_DEVICE *Device) {
   if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
   return AdmissionUmdScreenCollectDetachedQueryFences(&Device->Runtime);
+}
+
+HRESULT AgxD3d10WindowsPresentationOpen(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    const D3D10DDIARG_OPENRESOURCE *OpenResource,
+    D3D10DDI_HRTRESOURCE RuntimeResource,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !OpenResource ||
+     !Resource || *Resource || !RuntimeResource.handle) return E_INVALIDARG;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=
+      (AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *)HeapAlloc(
+          GetProcessHeap(),HEAP_ZERO_MEMORY,sizeof(*record));
+  if(!record) return E_OUTOFMEMORY;
+  D3D10DDI_HDEVICE deviceHandle={0};
+  D3D10DDI_HRESOURCE resourceHandle={0};
+  deviceHandle.pDrvPrivate=&Device->Runtime;
+  resourceHandle.pDrvPrivate=&record->Resource;
+  AdmissionUmdOpenResource(deviceHandle,OpenResource,resourceHandle,RuntimeResource);
+  if(record->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
+     !record->Resource.Retirement) {
+    HeapFree(GetProcessHeap(),0,record);
+    return FAILED(Device->Runtime.LastScreenError)?
+        Device->Runtime.LastScreenError:E_INVALIDARG;
+  }
+  record->Device=Device;*Resource=record;return S_OK;
+}
+
+HRESULT AgxD3d10WindowsPresentationDestroy(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **Resource) {
+  if(!Device || !Resource || !*Resource || (*Resource)->Device!=Device ||
+     Device->Stage<AgxD3d10DeviceRuntimeReady ||
+     Device->Stage>=AgxD3d10DeviceRuntimeReleased) return E_INVALIDARG;
+  AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record=*Resource;
+  D3D10DDI_HDEVICE deviceHandle={0};
+  D3D10DDI_HRESOURCE resourceHandle={0};
+  deviceHandle.pDrvPrivate=&Device->Runtime;
+  resourceHandle.pDrvPrivate=&record->Resource;
+  AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
+  HeapFree(GetProcessHeap(),0,record);*Resource=NULL;
+  return S_OK;
+}
+
+HRESULT AgxD3d10WindowsPresentationSubmit(
+    AGX_D3D10_WINDOWS_DEVICE *Device,
+    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Resource,
+    PVOID DxgiContext) {
+  if(!Device || Device->Stage!=AgxD3d10DeviceReady || !Resource ||
+     Resource->Device!=Device ||
+     Resource->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC)
+    return E_INVALIDARG;
+  return AdmissionUmdSubmitPresent(&Device->Runtime,&Resource->Resource,DxgiContext);
 }
 
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
