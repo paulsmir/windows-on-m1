@@ -994,6 +994,9 @@ static void test_mesa_d3d10_frontend_open(void) {
         device,DXGI_FORMAT_B8G8R8A8_UNORM,2,&quality);
     CHECK(quality==0u);
     deviceFunctions.pfnCheckMultisampleQualityLevels(
+        device,DXGI_FORMAT_B8G8R8A8_UNORM,4,&quality);
+    CHECK(quality==0u);
+    deviceFunctions.pfnCheckMultisampleQualityLevels(
         device,DXGI_FORMAT_R32G32B32A32_FLOAT,1,&quality);
     CHECK(quality==0u);
     D3D10DDIARG_CREATEQUERY eventQuery={0};
@@ -1123,6 +1126,21 @@ static void test_mesa_d3d10_frontend_open(void) {
     rtCreate.Usage=D3D10_DDI_USAGE_DEFAULT;rtCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
     rtCreate.Format=DXGI_FORMAT_B8G8R8A8_UNORM;rtCreate.SampleDesc.Count=1;
     rtCreate.MipLevels=1;rtCreate.ArraySize=1;
+    {
+      D3D10DDIARG_CREATERESOURCE rejectedMsaa=rtCreate;
+      D3D10DDI_HRESOURCE rejectedHandle={0};
+      D3D10DDI_HRTRESOURCE rejectedRuntime={0};
+      rejectedMsaa.SampleDesc.Count=2;
+      rejectedHandle.pDrvPrivate=calloc(1,
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&rejectedMsaa));
+      unsigned errorsBefore=FrontendErrors,createsBefore=PoolCreates;
+      deviceFunctions.pfnCreateResource(device,&rejectedMsaa,
+          rejectedHandle,rejectedRuntime);
+      CHECK(FrontendErrors==errorsBefore+1u && FrontendLastError==E_NOTIMPL &&
+            PoolCreates==createsBefore);
+      deviceFunctions.pfnDestroyResource(device,rejectedHandle);
+      free(rejectedHandle.pDrvPrivate);
+    }
     {
       D3D10DDIARG_CREATERESOURCE rejected=rtCreate;
       D3D10DDI_HRESOURCE rejectedHandle={0};D3D10DDI_HRTRESOURCE rejectedRuntime={0};

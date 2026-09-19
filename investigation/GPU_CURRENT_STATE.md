@@ -796,3 +796,15 @@ storage-preservation evidence from the GS-with-SO rejection matrix. The size
 callback is now recorded separately from the still-unimplemented Create path.
 Inventory is 111 of 121 mandatory rows proven, with 10 unresolved; pipeline
 mask remains zero.
+
+## Verified single-sample/no-MSAA contract (2026-09-20)
+The selected FL10_0 contract advertises no multisample count above one. BGRA8
+sample count one reports one quality level; counts two and four report zero;
+multisampled resource creation is rejected before allocation; direct Resolve is
+deterministically rejected without side effects. Resolve is therefore a proven
+unsupported callback under a coherent no-MSAA contract, not implemented MSAA.
+X64 execution PASS:
+evidence/AD04-runtime-closure/native-no-msaa-contract-20260920cq-x64/; source
+archive SHA-256 4c6edc5b7119fa11e2f77c72fdde119da27f76cd7cb370a3d1bfddccab92fd3c.
+Inventory is 112 of 121 mandatory rows proven, with 9 unresolved. Pipeline mask
+remains zero; no package was staged, installed or hardware-run.

@@ -653,8 +653,10 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-resource-resolve-subresource",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-no-msaa-contract-20260920cq-x64",
+      "notes": "Deterministic unsupported callback under coherent single-sample contract; no MSAA/resolve capability advertised"
     },
     {
       "id": "ddi-resource-map",
