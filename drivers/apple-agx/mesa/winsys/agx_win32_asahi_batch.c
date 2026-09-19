@@ -71,14 +71,22 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_indirect_info *indirect,
     const struct pipe_draw_start_count_bias *draws,unsigned count) {
   if(!ctx || ctx->any_faults || !info || !draws || count!=1 || drawid || indirect ||
-      info->mode!=MESA_PRIM_TRIANGLES || info->index_size || info->instance_count!=1 ||
+      info->mode!=MESA_PRIM_TRIANGLES || (info->index_size && info->index_size!=2) ||
+      info->primitive_restart || info->instance_count!=1 ||
       info->start_instance || draws->start || draws->count!=3 || draws->index_bias ||
       ctx->framebuffer.nr_cbufs!=1 || ctx->framebuffer.zsbuf.texture ||
       !ctx->framebuffer.cbufs[0].texture || (ctx->batch && ctx->batch->draws)) return 0;
   struct agx_resource *rt=agx_resource(ctx->framebuffer.cbufs[0].texture);
-  return rt->base.target==PIPE_TEXTURE_2D && rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM &&
+  int valid=rt->base.target==PIPE_TEXTURE_2D && rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM &&
       !rt->layout.compressed && rt->base.last_level==0 && rt->base.depth0==1 &&
       rt->base.array_size==1 && rt->base.nr_samples<=1;
+  if(valid && info->index_size) {
+    struct pipe_resource *resource=info->index.resource;
+    struct agx_resource *index=resource?agx_resource(resource):NULL;
+    valid=resource && resource->target==PIPE_BUFFER && resource->width0==8 &&
+        (resource->bind&PIPE_BIND_INDEX_BUFFER) && index->bo;
+  }
+  return valid;
 }
 static int find_root(AGX_WIN32_ASAHI_BATCH *c, uint64_t address,unsigned role,unsigned *index) {
   APPLE_AGX_U64 offset=0;
@@ -140,6 +148,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
       c->Draw.UscPipelineReference=edge->TargetReference;
     if(edge->Kind==AppleAgxWin32RelocationPppPipelineOffset32)
       c->Draw.Reserved[0]=edge->TargetReference;
+    if(edge->Kind==AppleAgxWin32RelocationVdmIndexBufferAddress40)
+      c->Draw.IndexReference=edge->TargetReference;
   }
   for(unsigned i=0;i<c->Capture.Capture.RelocationCount;++i) {
     const APPLE_AGX_WIN32_RELOCATION *edge=&c->Capture.Capture.Relocations[i];

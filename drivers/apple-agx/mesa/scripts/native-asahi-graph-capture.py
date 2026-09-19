@@ -197,6 +197,37 @@ windows_graph_attachment(struct agx_batch *batch, struct agx_ptr ptr,
 }
 
 static bool
+windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
+                         const struct pipe_draw_info *info, uint64_t address,
+                         size_t extent)
+{
+   AGX_WIN32_ASAHI_CAPTURE *capture = windows_graph_capture(batch);
+   if (!capture || !info || info->index_size != 2 || !info->index.resource ||
+       !start || end != start + 24 || extent != 8 || (address & 3) ||
+       address >= (1ULL << 40)) return false;
+   uint32_t *words = (uint32_t *)start;
+   uint64_t encoded = ((uint64_t)(words[0] & 0xffu) << 32) | words[1];
+   if ((words[0] & 0xffffff00u) != 0x61f20600u || words[2] != 3u ||
+       words[3] != 1u || words[4] != 0u || words[5] != 2u ||
+       encoded != address) return false;
+   struct agx_resource *rsrc = agx_resource(info->index.resource);
+   if (!rsrc->bo || address != agx_map_gpu(rsrc) ||
+       AgxWin32RelocPromoteIndexed(&capture->Capture) != AgxRelocOk)
+      return false;
+   unsigned index;
+   AGX_WIN32_ASAHI_PIPELINE scope = {0};
+   if (AgxWin32AsahiCaptureReference(capture,rsrc->bo,
+          AppleAgxWin32RoleIndex,AppleAgxWin32AccessRead,0,8,&index) !=
+          AgxRelocOk ||
+       !AgxWin32AsahiEncoderEmissionBeginCpu(
+          capture->Backend->Native,start,24,&scope)) return false;
+   AgxWin32AsahiPipelineRecordRange(&scope,start+8,
+       AppleAgxWin32RelocationVdmIndexBufferAddress40,address,8,
+       AppleAgxWin32RoleIndex);
+   return AgxWin32AsahiPipelineFinish(&scope,end) != 0;
+}
+
+static bool
 windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_info *info,
                              const struct pipe_draw_indirect_info *indirect,
                              const struct pipe_draw_start_count_bias *draws,
@@ -205,9 +236,10 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
    struct agx_device *dev = agx_device(ctx->base.screen);
    AGX_WIN32_ASAHI_BACKEND *backend = dev->windows_private;
    if (!backend) return true;
+   bool indexed = info && info->index_size != 0;
    bool valid = !backend->Failed && (!ctx->batch || !ctx->batch->draws) &&
       info && draws && !indirect && num_draws == 1 &&
-      info->mode == MESA_PRIM_TRIANGLES && !info->index_size &&
+      info->mode == MESA_PRIM_TRIANGLES &&
       !info->primitive_restart && info->instance_count == 1 &&
       !info->start_instance && draws->start == 0 && draws->count == 3 &&
       !draws->index_bias && ctx->framebuffer.nr_cbufs == 1 &&
@@ -220,6 +252,15 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       !ctx->stage[MESA_SHADER_TESS_CTRL].shader && !ctx->stage[MESA_SHADER_TESS_EVAL].shader &&
       ctx->stage[MESA_SHADER_VERTEX].shader && ctx->stage[MESA_SHADER_FRAGMENT].shader &&
       ctx->rast && !ctx->rast->depth_bias && ctx->attributes;
+   if (valid && indexed) {
+      struct pipe_resource *index = info->index.resource;
+      struct agx_resource *rsrc = index ? agx_resource(index) : NULL;
+      valid = info->index_size == 2 && index &&
+              index->target == PIPE_BUFFER && index->width0 == 8 &&
+              (index->bind & PIPE_BIND_INDEX_BUFFER) &&
+              !(index->bind & ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+              rsrc->bo;
+   }
    if (valid) {
       struct agx_resource *rt = agx_resource(ctx->framebuffer.cbufs[0].texture);
       valid = !rt->layout.compressed && rt->base.target == PIPE_TEXTURE_2D &&
@@ -291,6 +332,16 @@ def project_sources(out, project, overlays):
     state = state[:end] + '''
    if (!windows_graph_draw_supported(ctx, info, indirect, draws, num_draws)) return;
 ''' + state[end:]
+    state = replace(state,
+        '''   out = (void *)agx_vdm_draw((uint32_t *)out, 0 /* ignored for now */, draw,
+                              agx_primitive_for_pipe(info->mode));''',
+        '''   uint8_t *windows_index_list = out;
+   out = (void *)agx_vdm_draw((uint32_t *)out, 0 /* ignored for now */, draw,
+                              agx_primitive_for_pipe(info->mode));
+   if (info->index_size && !windows_graph_index_list(
+          batch,windows_index_list,out,info,ib,ib_extent)) {
+      windows_graph_fail(batch); return;
+   }''')
     # BG/partial/EOT preserve the real native compiler and builder.
     start = state.index('struct asahi_bg_eot\nagx_build_bg_eot(')
     end = state.index('\n/*\n * Return the standard sample positions', start)

@@ -247,7 +247,8 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   if(!Image || !Packet || !DestinationCpuAddress || !Native || !Binding ||
       Image->Ready!=APPLE_AGX_TRUE || Image->BoundFence || Image->NativeBound ||
       !Packet->Fence || !Packet->DestinationGpuVa || !Packet->DestinationPhysical ||
-      Native->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      (Native->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       Native->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
       Native->SurfaceWidth!=16 || Native->SurfaceHeight!=16 || Native->SurfacePitch!=64 ||
       Native->DestinationBytes<1024 || Native->DestinationBytes>0x4000u ||
       Native->DestinationBytes!=Packet->DestinationBytes ||

@@ -188,7 +188,8 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiSubmitRender(
   else if (dynamicDma &&
            (dynamicView.Header->DestinationGpuVa !=
                 Context->RenderPacket.Description.DestinationGpuVa ||
-            !(dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+            !((dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+               dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ?
               AdmissionBackendImageBindNativeSubmission(&Context->BackendImage,
                 &Context->RenderPacket.Description,
                 (PVOID)(ULONG_PTR)Context->RenderPacket.Description.DestinationCpuToken,

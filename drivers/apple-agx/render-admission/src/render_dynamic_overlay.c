@@ -161,8 +161,9 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_add(
   return AdmissionDynamicOverlaySuccess;
 }
 
-static int overlay_native_copied(APPLE_AGX_U32 role) {
+static int overlay_native_copied(APPLE_AGX_U32 role,int indexed) {
   return role == AppleAgxWin32RoleVertex || role == AppleAgxWin32RoleConstant ||
+      (indexed && role == AppleAgxWin32RoleIndex) ||
       role == AppleAgxWin32RoleUniform || role == AppleAgxWin32RoleShader ||
       role == AppleAgxWin32RoleShaderRodata || role == AppleAgxWin32RoleUscPipeline ||
       role == AppleAgxWin32RoleDescriptor || role == AppleAgxWin32RolePppState ||
@@ -174,18 +175,25 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_plan_view(
     const ADMISSION_BACKEND_IMAGE *image, const APPLE_AGX_WIN32_COMMAND_VIEW *view,
     ADMISSION_DYNAMIC_OVERLAY_PLAN *plan) {
   APPLE_AGX_U32 lowUsed = 0, generalUsed = 0, i, j;
+  APPLE_AGX_U32 referenceLimit =
+      view->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES;
   if (!view->NativeBatch || !view->Relocations || !view->References ||
-      !view->Header->ReferenceCount || view->Header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
+      !view->Header->ReferenceCount || view->Header->ReferenceCount > referenceLimit)
     return AdmissionDynamicOverlayArgument;
   plan->Magic=ADMISSION_DYNAMIC_OVERLAY_MAGIC; plan->Version=ADMISSION_DYNAMIC_OVERLAY_VERSION;
-  plan->Generation=view->Header->Generation; plan->CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  plan->Generation=view->Header->Generation;
+  plan->CommandVersion=view->Header->Version;
   for (i=0;i<view->Header->ReferenceCount;++i) {
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *r=&view->References[i];
     int low=r->Role==AppleAgxWin32RoleShader || r->Role==AppleAgxWin32RoleShaderRodata ||
         r->Role==AppleAgxWin32RoleUscPipeline;
     ADMISSION_DYNAMIC_OVERLAY_RESULT result;
     if (r->Role==AppleAgxWin32RoleRenderTarget) continue;
-    if (!overlay_native_copied(r->Role)) return AdmissionDynamicOverlayLayout;
+    if (!overlay_native_copied(r->Role,
+        view->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH))
+      return AdmissionDynamicOverlayLayout;
     for (j=0;j<view->Draw->RelocationCount;++j)
       if (view->Relocations[j].Kind==AppleAgxWin32RelocationPppCfBindingsOffset32 &&
           view->Relocations[j].TargetReference==i) low=1;
@@ -357,10 +365,12 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlan(
       Image->Ready != APPLE_AGX_TRUE ||
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
       (View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION &&
-       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) ||
+       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
       View->Header->Generation == 0u)
     return AdmissionDynamicOverlayArgument;
-  if (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+  if (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) {
     ADMISSION_DYNAMIC_OVERLAY_RESULT result=overlay_native_plan_view(Image,View,Plan);
     if(result!=AdmissionDynamicOverlaySuccess) overlay_zero(Plan,sizeof(*Plan));
     return result;
@@ -416,9 +426,13 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
       View->Draw == OVERLAY_NULL || Bindings == OVERLAY_NULL ||
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
       (View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION &&
-       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) ||
+       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       View->Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
       View->Header->ReferenceCount == 0u ||
-      View->Header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
+      View->Header->ReferenceCount >
+          (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES))
     return AdmissionDynamicOverlayArgument;
   Bindings->VertexReference=View->Draw->VertexReference;
   Bindings->VertexShaderReference=View->Draw->VertexShaderReference;
@@ -437,7 +451,8 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayBindingsFromView(
   Bindings->SurfacePitch=View->Draw->SurfacePitch;
   if (View->References && View->Draw->DestinationReference<View->Header->ReferenceCount)
     Bindings->DestinationBytes=View->References[View->Draw->DestinationReference].Bytes;
-  if (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+  if (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) {
     if (!View->NativeBatch) return AdmissionDynamicOverlayArgument;
     Bindings->NativeBatch=*View->NativeBatch;
   }
@@ -524,22 +539,34 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
     const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
     const APPLE_AGX_DYNAMIC_JOB *Job, ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan) {
   APPLE_AGX_U32 lowUsed=0,generalUsed=0,i,j;
-  if (!Bindings || Bindings->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+  APPLE_AGX_U32 referenceLimit=Bindings &&
+      Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES;
+  if (!Bindings ||
+      (Bindings->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       Bindings->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH))
     return overlay_legacy_plan_from_job(Image,Bindings,Job,Plan);
   if (!Image || !Job || !Plan || Image->Ready!=APPLE_AGX_TRUE ||
       Job->Magic!=APPLE_AGX_DYNAMIC_JOB_MAGIC || Job->Version!=APPLE_AGX_DYNAMIC_JOB_VERSION ||
-      !Job->Generation || !Job->ObjectCount || Job->ObjectCount>ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES ||
-      !Job->RelocationCount || Job->RelocationCount>APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS)
+      !Job->Generation || !Job->ObjectCount ||
+      Job->ObjectCount>(Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+          APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES : ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES) ||
+      !Job->RelocationCount ||
+      Job->RelocationCount>(Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+          APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS : APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS))
     return AdmissionDynamicOverlayArgument;
   overlay_zero(Plan,sizeof(*Plan));
   Plan->Magic=ADMISSION_DYNAMIC_OVERLAY_MAGIC; Plan->Version=ADMISSION_DYNAMIC_OVERLAY_VERSION;
-  Plan->Generation=Job->Generation; Plan->CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  Plan->Generation=Job->Generation; Plan->CommandVersion=Bindings->CommandVersion;
   for(i=0;i<Job->ObjectCount;++i) {
     const APPLE_AGX_DYNAMIC_JOB_OBJECT *r=&Job->Objects[i];
     int low=r->Role==AppleAgxWin32RoleShader || r->Role==AppleAgxWin32RoleShaderRodata ||
         r->Role==AppleAgxWin32RoleUscPipeline;
     ADMISSION_DYNAMIC_OVERLAY_RESULT result;
-    if (!overlay_native_copied(r->Role) || r->ReferenceIndex>=APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+    if (!overlay_native_copied(r->Role,
+          Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
+        r->ReferenceIndex>=referenceLimit ||
         (i && r->ReferenceIndex<=Job->Objects[i-1].ReferenceIndex)) return AdmissionDynamicOverlayLayout;
     for(j=0;j<Job->RelocationCount;++j)
       if(Job->Relocations[j].Kind==AppleAgxWin32RelocationPppCfBindingsOffset32 &&
@@ -576,6 +603,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
         entry->GpuVirtualAddress > ~0ULL - relative)
       return AdmissionDynamicOverlayRange;
     if (Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+        Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
         entry->Role == AppleAgxWin32RoleUscPipeline &&
         entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
       if (relative < OVERLAY_PIPELINE_COMPACT_SPLIT) {
@@ -651,7 +679,8 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   if(!Plan || !Bindings || !Objects || Count<APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT ||
       Plan->Magic!=ADMISSION_DYNAMIC_OVERLAY_MAGIC || Plan->Version!=ADMISSION_DYNAMIC_OVERLAY_VERSION ||
       !Plan->Generation || !Plan->EntryCount || Plan->EntryCount>ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES ||
-      Plan->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      (Plan->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       Plan->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
       Bindings->CommandVersion!=Plan->CommandVersion ||
       Bindings->SurfaceWidth!=16u || Bindings->SurfaceHeight!=16u || Bindings->SurfacePitch!=64u ||
       !Bindings->DestinationBytes || Bindings->DestinationBytes>0xffffffffULL-127ULL)
@@ -746,13 +775,16 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayCaptureNativeGraph(
   if (!Receipt) return AdmissionDynamicOverlayArgument;
   overlay_zero(Receipt,(APPLE_AGX_U32)sizeof(*Receipt));
   if (!Bindings || !Plan || !Job || !Objects || !Fence || !CommandHash ||
-      Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      (Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
       Plan->Magic!=ADMISSION_DYNAMIC_OVERLAY_MAGIC ||
       Plan->Version!=ADMISSION_DYNAMIC_OVERLAY_VERSION ||
       !Plan->Generation || Plan->EntryCount>ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES ||
       Job->Magic!=APPLE_AGX_DYNAMIC_JOB_MAGIC || Job->Version!=APPLE_AGX_DYNAMIC_JOB_VERSION ||
-      Job->ObjectCount>APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
-      Job->RelocationCount>APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS ||
+      Job->ObjectCount>(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+          APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES : APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
+      Job->RelocationCount>(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+          APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS : APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS) ||
       Job->Generation != Plan->Generation)
     return AdmissionDynamicOverlayArgument;
   for(i=0;i<6u;++i) for(j=0;j<Plan->EntryCount;++j)
@@ -1078,6 +1110,7 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_validate_content(
     source = storage + jobObject->StorageOffset;
     destination = target->Data + entry->ObjectOffset;
     if (Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+        Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
         entry->Role == AppleAgxWin32RoleUscPipeline &&
         entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
       APPLE_AGX_U32 tail =
@@ -1132,6 +1165,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayApply(
     const APPLE_AGX_DYNAMIC_JOB_OBJECT *jobObject =
         overlay_job_object(Job, entry->ReferenceIndex);
     if (Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+        Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
         entry->Role == AppleAgxWin32RoleUscPipeline &&
         entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
       overlay_copy(
@@ -1180,6 +1214,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRelease(
   for (index = 0u; index < Plan->EntryCount; ++index) {
     const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry = &Plan->Entries[index];
     if (Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+        Plan->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
         entry->Role == AppleAgxWin32RoleUscPipeline &&
         entry->Bytes > OVERLAY_PIPELINE_COMPACT_SPLIT) {
       overlay_zero(

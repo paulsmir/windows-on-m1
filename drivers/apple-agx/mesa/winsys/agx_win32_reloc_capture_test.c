@@ -540,6 +540,35 @@ int main(void) {
            APPLE_AGX_WIN32_COMMAND_MAX_BYTES);
     puts("NATIVE v4 relocation bound: 133 pass, 134 reject, overlap priority PASS");
   }
+  {
+    unsigned encoder,indexBuffer;
+    APPLE_AGX_WIN32_DRAW_PAYLOAD indexedDraw={0};
+    assert(AgxWin32RelocBeginVersion(&c,77,7,13,
+        APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH,
+        &c.Operations,c.Context)==AgxRelocOk);
+    assert(AgxWin32RelocReference(&c,1,AppleAgxWin32RoleEncoder,
+        AppleAgxWin32AccessRead,0,24,&encoder)==AgxRelocOk);
+    assert(AgxWin32RelocReference(&c,2,AppleAgxWin32RoleIndex,
+        AppleAgxWin32AccessRead,0,8,&indexBuffer)==AgxRelocOk);
+    assert(AgxWin32RelocField(&c,
+        AppleAgxWin32RelocationVdmIndexBufferAddress40,
+        encoder,0,indexBuffer,0)==AgxRelocArgument);
+    assert(AgxWin32RelocPromoteIndexed(&c)==AgxRelocOk);
+    assert(c.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH);
+    assert(AgxWin32RelocPromoteIndexed(&c)==AgxRelocState);
+    assert(AgxWin32RelocField(&c,
+        AppleAgxWin32RelocationVdmIndexBufferAddress40,
+        encoder,0,indexBuffer,8)==AgxRelocRange);
+    assert(AgxWin32RelocField(&c,
+        AppleAgxWin32RelocationVdmIndexBufferAddress40,
+        encoder,0,indexBuffer,0)==AgxRelocOk);
+    assert(AgxWin32RelocSealVersion(&c,
+        APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH,&indexedDraw,
+        command,sizeof(command),&bytes)==AgxRelocCommand);
+    assert(AgxWin32RelocAbort(&c)==AgxRelocOk);
+    assert(AgxWin32RelocPromoteIndexed(&c)==AgxRelocState);
+    puts("NATIVE v5 diagnostic promotion: state/kind policy PASS");
+  }
   for(unsigned i=0;i<9;++i) assert(fixture.Holds[i]==0);
   puts("CAPTURE -> WIRE -> KMD MATERIALIZER: two placements/lifetime PASS");
   return 0;

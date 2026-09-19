@@ -12,7 +12,8 @@ static unsigned width(unsigned kind) {
     case AppleAgxWin32RelocationPppStateAddress40:
     case AppleAgxWin32RelocationUniformAddress64:
     case AppleAgxWin32RelocationTextureAddress40:
-    case AppleAgxWin32RelocationPbeAddress40: return 8;
+    case AppleAgxWin32RelocationPbeAddress40:
+    case AppleAgxWin32RelocationVdmIndexBufferAddress40: return 8;
     case AppleAgxWin32RelocationUscShaderOffset32: return 6;
     case AppleAgxWin32RelocationVdmPipelineOffset32: return 4;
     case AppleAgxWin32RelocationPppPipelineOffset32:
@@ -40,18 +41,32 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocBeginVersion(AGX_WIN32_RELOC_CAPTURE *c,
   if(!c || !owner || !generation || !request || !ops || !context ||
       !ops->Query || !ops->Retain || !ops->Release) return AgxRelocArgument;
   if(version < APPLE_AGX_WIN32_COMMAND_VERSION ||
-      version > APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) return AgxRelocArgument;
+      version > APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) return AgxRelocArgument;
   if(c->State) return AgxRelocState;
   if(request<=c->LastRequest) return AgxRelocStale;
   AGX_WIN32_RELOC_OPERATIONS saved_ops=*ops;
   memset(c,0,sizeof(*c)); c->Owner=owner; c->Generation=generation;
   c->Request=c->LastRequest=request; c->Operations=saved_ops; c->Context=context;
   c->CommandVersion=version;
-  c->MaxReferences=version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+  c->MaxReferences=version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+      version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
       APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES : APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_REFERENCES;
-  c->MaxRelocations=version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+  c->MaxRelocations=version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
+      version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
       APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS : APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS;
   c->State=RECORDING; return AgxRelocOk;
+}
+AGX_WIN32_RELOC_RESULT AgxWin32RelocPromoteIndexed(
+    AGX_WIN32_RELOC_CAPTURE *c) {
+  if(!c || c->State!=RECORDING || c->Fence ||
+     c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+    return AgxRelocState;
+  c->CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
+  c->MaxReferences=APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES;
+  c->MaxRelocations=APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS;
+  return AgxRelocOk;
 }
 AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U64 token,APPLE_AGX_U32 role,APPLE_AGX_U32 access,
@@ -123,6 +138,9 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocField(AGX_WIN32_RELOC_CAPTURE *c,
   unsigned w=width(kind);
   if(!c || !w) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
+  if(kind==AppleAgxWin32RelocationVdmIndexBufferAddress40 &&
+     c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
+    return AgxRelocArgument;
   if(dest>=c->ReferenceCount || target>=c->ReferenceCount ||
       destoff>c->References[dest].Bytes || w>c->References[dest].Bytes-destoff ||
       targetoff>=c->References[target].Bytes) return AgxRelocRange;
@@ -144,7 +162,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocSealVersion(
   if(commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
       commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
       commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
-      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
     return AgxRelocCommand;
   if(c->State!=RECORDING) return AgxRelocState;
   AGX_WIN32_DRAW_REQUEST request={0}; request.Generation=c->Generation;
@@ -167,7 +186,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocPrepareDraw(
   if(commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION &&
       commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_PIPELINES &&
       commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
-      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      commandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
     return AgxRelocCommand;
   if(c->State!=RECORDING) return AgxRelocState;
   memset(request,0,sizeof(*request));

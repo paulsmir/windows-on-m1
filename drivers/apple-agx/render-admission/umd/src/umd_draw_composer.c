@@ -89,7 +89,8 @@ static BOOL validate(ADMISSION_UMD_DEVICE *d, const ADMISSION_UMD_DRAW_SUBMISSIO
   ADMISSION_WIN32_TRANSPORT_RESULT result=AdmissionWin32ValidateReferences(&view,s->Generation,
       lookup,&context,facts,ARRAYSIZE(facts));
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
-  if(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+  if(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+     view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) {
     FILE *wire=NULL; (void)fopen_s(&wire,"native-producer-command.bin","wb");
     if(wire) { fwrite(s->Command,1,s->CommandBytes,wire); fclose(wire); }
     FILE *allocation=NULL; (void)fopen_s(&allocation,"native-producer-facts.bin","wb");
@@ -124,8 +125,12 @@ HRESULT AdmissionUmdDrawSeal(ADMISSION_UMD_DEVICE *d,
   if(!d || d->Magic!=ADMISSION_UMD_DEVICE_MAGIC || !input || !ids || !s ||
      s->Phase!=AdmissionDrawEmpty || !requestId || !input->References ||
      !input->Relocations || !input->ReferenceCount ||
-     input->ReferenceCount>APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
-     input->RelocationCount>APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS)
+     input->ReferenceCount>(version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+         APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+         APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
+     input->RelocationCount>(version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+         APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
+         APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS))
     return E_INVALIDARG;
   request=*input;
   CopyMemory(refs,input->References,input->ReferenceCount*sizeof(refs[0]));

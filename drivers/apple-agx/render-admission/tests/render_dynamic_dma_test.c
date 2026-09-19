@@ -146,5 +146,39 @@ int main(void) {
     ((ADMISSION_DYNAMIC_DMA_HEADER *)bytes)->Version=3;
     assert(AdmissionDynamicDmaOpen(bytes,total,&view)==AdmissionDynamicDmaLayout);
   }
+  {
+    make_job(&job,storage,sizeof(storage));
+    bindings.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
+    job.ObjectCount=11;
+    job.Objects[10].ReferenceIndex=11;
+    job.Objects[10].Role=AppleAgxWin32RoleIndex;
+    job.Objects[10].StorageOffset=640;
+    job.Objects[10].Bytes=8;
+    storage[640]=0;storage[641]=0;storage[642]=1;storage[643]=0;
+    storage[644]=2;storage[645]=0;storage[646]=0;storage[647]=0;
+    job.RelocationCount=8;
+    job.Relocations[7].Kind=AppleAgxWin32RelocationVdmIndexBufferAddress40;
+    job.Relocations[7].DestinationReference=8;
+    job.Relocations[7].TargetReference=11;
+    job.Relocations[7].DestinationOffset=56;
+    job.Relocations[7].ResolvedAddress=0x1500400000ULL;
+    job.Relocations[7].EncodedValue=0x1500400000ULL;
+    job.MaterializedHash=AppleAgxDynamicDmaBytesHash(storage,sizeof(storage));
+    assert(AdmissionDynamicDmaBuild(7,0x1122,0x1500120000ULL,0,0,0,
+        &bindings,&job,storage,sizeof(storage),bytes,sizeof(bytes),&total)==
+        AdmissionDynamicDmaSuccess);
+    assert(AdmissionDynamicDmaOpen(bytes,total,&view)==
+        AdmissionDynamicDmaSuccess);
+    assert(view.Bindings->CommandVersion==
+        APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+        view.Job->ObjectCount==11 &&
+        view.Job->Objects[10].Role==AppleAgxWin32RoleIndex &&
+        view.Job->Relocations[7].Kind==
+            AppleAgxWin32RelocationVdmIndexBufferAddress40);
+    bindings.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+    assert(AdmissionDynamicDmaBuild(7,0x1122,0x1500120000ULL,0,0,0,
+        &bindings,&job,storage,sizeof(storage),bytes,sizeof(bytes),&total)==
+        AdmissionDynamicDmaJob);
+  }
   return 0;
 }

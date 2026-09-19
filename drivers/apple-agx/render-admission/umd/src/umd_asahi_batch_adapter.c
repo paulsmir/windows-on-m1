@@ -43,8 +43,11 @@ extern "C" HRESULT AdmissionUmdAsahiBatchSealNative(ADMISSION_UMD_DEVICE *d,
     AGX_WIN32_RELOC_CAPTURE *c,APPLE_AGX_U64 requestId,
     const APPLE_AGX_WIN32_DRAW_PAYLOAD *draw,
     const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *native,ADMISSION_UMD_ASAHI_BATCH *b) {
-  if(!native) return E_INVALIDARG;
-  return seal_native(d,c,requestId,APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH,draw,native,b);
+  if(!native || !c ||
+     (c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH))
+    return E_INVALIDARG;
+  return seal_native(d,c,requestId,c->CommandVersion,draw,native,b);
 }
 
 extern "C" HRESULT AdmissionUmdAsahiBatchAbort(ADMISSION_UMD_DEVICE *d,

@@ -62,8 +62,9 @@ APPLE_AGX_U32 AdmissionDynamicDmaDestinationPatchOffset(void) {
                                 DestinationGpuVa);
 }
 
-static int dma_role_copied(APPLE_AGX_U32 Role, int Native) {
+static int dma_role_copied(APPLE_AGX_U32 Role, int Native, int Indexed) {
   return Role == AppleAgxWin32RoleVertex ||
+         (Indexed && Role == AppleAgxWin32RoleIndex) ||
          Role == AppleAgxWin32RoleShader ||
          Role == AppleAgxWin32RoleShaderRodata ||
          Role == AppleAgxWin32RoleUscPipeline ||
@@ -82,15 +83,24 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
                          const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings) {
   APPLE_AGX_U32 index;
   APPLE_AGX_U32 other;
-  int native=Bindings && Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  APPLE_AGX_U32 indexRelocations=0u;
+  int indexed=Bindings && Bindings->CommandVersion==
+      APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
+  int native=Bindings &&
+      (Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH || indexed);
+  APPLE_AGX_U32 referenceLimit=indexed ?
+      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES;
   if (Job == DYNAMIC_DMA_NULL || Storage == DYNAMIC_DMA_NULL ||
       Generation == 0u || Job->Magic != APPLE_AGX_DYNAMIC_JOB_MAGIC ||
       Job->Version != APPLE_AGX_DYNAMIC_JOB_VERSION ||
       Job->Generation != Generation || Job->ObjectCount == 0u ||
-      Job->ObjectCount > (native ? ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES :
+      Job->ObjectCount > (indexed ? APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+                         native ? ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES :
                          ADMISSION_DYNAMIC_OVERLAY_LEGACY_MAX_ENTRIES) ||
       Job->RelocationCount == 0u ||
-      Job->RelocationCount > (native ? APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS :
+      Job->RelocationCount > (indexed ? APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
+                             native ? APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS :
                              APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS) ||
       Job->StorageBytes != StorageBytes ||
       Job->Reserved[0] != 0u || Job->Reserved[1] != 0u ||
@@ -99,8 +109,8 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
     return 0;
   for (index = 0u; index < Job->ObjectCount; ++index) {
     const APPLE_AGX_DYNAMIC_JOB_OBJECT *object = &Job->Objects[index];
-    if (object->ReferenceIndex >= APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
-        !dma_role_copied(object->Role,native) || object->Bytes == 0u ||
+    if (object->ReferenceIndex >= referenceLimit ||
+        !dma_role_copied(object->Role,native,indexed) || object->Bytes == 0u ||
         object->StorageOffset > StorageBytes ||
         object->Bytes > StorageBytes - object->StorageOffset)
       return 0;
@@ -116,17 +126,33 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
     const APPLE_AGX_DYNAMIC_JOB_RELOCATION *relocation =
         &Job->Relocations[index];
     if (relocation->Kind < AppleAgxWin32RelocationEncoderAddress ||
-        relocation->Kind > (APPLE_AGX_U32)(native ? AppleAgxWin32RelocationPbeAddress40 :
+        relocation->Kind > (APPLE_AGX_U32)(indexed ? AppleAgxWin32RelocationVdmIndexBufferAddress40 :
+                            native ? AppleAgxWin32RelocationPbeAddress40 :
                             AppleAgxWin32RelocationPppStateAddress40) ||
-        relocation->DestinationReference >=
-            APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
-        relocation->TargetReference >=
-            APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+        relocation->DestinationReference >= referenceLimit ||
+        relocation->TargetReference >= referenceLimit ||
         relocation->Reserved != 0u ||
         relocation->ResolvedAddress == 0ULL ||
         relocation->ResolvedAddress >= DYNAMIC_DMA_40_BIT_LIMIT)
       return 0;
+    if(relocation->Kind==AppleAgxWin32RelocationVdmIndexBufferAddress40) {
+      const APPLE_AGX_DYNAMIC_JOB_OBJECT *destination=DYNAMIC_DMA_NULL;
+      const APPLE_AGX_DYNAMIC_JOB_OBJECT *target=DYNAMIC_DMA_NULL;
+      ++indexRelocations;
+      for(other=0u;other<Job->ObjectCount;++other) {
+        if(Job->Objects[other].ReferenceIndex==relocation->DestinationReference)
+          destination=&Job->Objects[other];
+        if(Job->Objects[other].ReferenceIndex==relocation->TargetReference)
+          target=&Job->Objects[other];
+      }
+      if(!indexed || !destination || !target ||
+         destination->Role!=AppleAgxWin32RoleEncoder ||
+         target->Role!=AppleAgxWin32RoleIndex || target->Bytes!=8u ||
+         (relocation->ResolvedAddress&3ULL)!=0ULL)
+        return 0;
+    }
   }
+  if(indexed ? indexRelocations!=1u : indexRelocations!=0u) return 0;
   return 1;
 }
 
@@ -148,7 +174,10 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaBuild(
     *BytesWritten = 0u;
   if (Generation == 0u || CommandHash == 0ULL ||
       DestinationGpuVa == 0ULL || (DestinationGpuVa & 0x3fffULL) != 0ULL ||
-      DestinationAllocationIndex >= APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+      DestinationAllocationIndex >=
+          (Bindings && Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
       DestinationGpuVa >= DYNAMIC_DMA_40_BIT_LIMIT ||
       Bindings == DYNAMIC_DMA_NULL || Bindings->Reserved != 0u || Job == DYNAMIC_DMA_NULL ||
       Storage == DYNAMIC_DMA_NULL || StorageBytes == 0u ||
@@ -229,7 +258,9 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaOpen(
       (header->DestinationGpuVa & 0x3fffULL) != 0ULL ||
       header->DestinationGpuVa >= DYNAMIC_DMA_40_BIT_LIMIT ||
       header->DestinationAllocationIndex >=
-          APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+          (header->Bindings.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
       header->Reserved != 0u || header->Bindings.Reserved != 0u)
     return AdmissionDynamicDmaLayout;
   if (AppleAgxDynamicDmaRecordHash(Bytes, ByteCount) != header->ContentHash)
@@ -260,7 +291,8 @@ ADMISSION_DYNAMIC_DMA_RESULT AdmissionDynamicDmaPatchDestination(
   if (result != AdmissionDynamicDmaSuccess)
     return result;
   header = (ADMISSION_DYNAMIC_DMA_HEADER *)Bytes;
-  if(header->Bindings.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+  if(header->Bindings.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+     header->Bindings.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) {
     APPLE_AGX_DYNAMIC_JOB *job=(APPLE_AGX_DYNAMIC_JOB *)((unsigned char *)Bytes+header->JobOffset);
     unsigned char *storage=(unsigned char *)Bytes+header->StorageOffset;
     APPLE_AGX_U32 i,j,pass;

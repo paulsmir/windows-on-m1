@@ -549,7 +549,8 @@ static void test_v3_general_table_sources_are_narrowly_accepted(void) {
     for (APPLE_AGX_U16 version = APPLE_AGX_WIN32_COMMAND_VERSION;
          version <= 5u; ++version) {
       if (version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC ||
-          version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+          version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+          version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
         continue;
       header.Version = version;
       assert(AdmissionWin32ValidateReferences(

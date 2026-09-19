@@ -165,6 +165,19 @@ static int dynamic_patch(void *Destination,
     dynamic_write_le(Destination, encoded, 8u);
     *EncodedValue = GpuAddress;
     return 1;
+  case AppleAgxWin32RelocationVdmIndexBufferAddress40:
+    if (Relocation->WidthBytes != 8u || (GpuAddress & 3ULL) != 0ULL ||
+        GpuAddress >= DYNAMIC_40_BIT_LIMIT)
+      return 0;
+    current = dynamic_read_le(Destination, 8u);
+    if ((current & 0xffffff00ULL) != 0x61f20600ULL)
+      return 0;
+    encoded = (current & 0xffffff00ULL) |
+              ((GpuAddress >> 32u) & 0xffULL) |
+              ((GpuAddress & 0xffffffffULL) << 32u);
+    dynamic_write_le(Destination, encoded, 8u);
+    *EncodedValue = GpuAddress;
+    return 1;
   case AppleAgxWin32RelocationPppStateAddress40:
     if (Relocation->WidthBytes != 8u || (GpuAddress & 3ULL) != 0ULL ||
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
@@ -187,8 +200,11 @@ static int dynamic_copy_role(const APPLE_AGX_WIN32_COMMAND_VIEW *View,
          Role == AppleAgxWin32RoleEncoder ||
          Role == AppleAgxWin32RolePppState ||
          Role == AppleAgxWin32RoleUniform ||
+         (Role == AppleAgxWin32RoleIndex &&
+          View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
          (Role == AppleAgxWin32RoleConstant &&
-          View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) ||
+          (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+           View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)) ||
          Role == AppleAgxWin32RoleUscPipeline ||
          Role == AppleAgxWin32RoleDescriptor ||
          Role == AppleAgxWin32RoleScissor ||
@@ -253,15 +269,36 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
       View->Header->Opcode != AppleAgxWin32OpcodeDraw ||
       View->Header->Generation == 0u ||
       View->Header->ReferenceCount == 0u ||
-      View->Header->ReferenceCount > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES ||
+      View->Header->ReferenceCount >
+          (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
+           APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES) ||
       View->Header->ReferenceCount > FactCount ||
       View->Draw->RelocationCount == 0u ||
-      View->Draw->RelocationCount > APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS ||
+      View->Draw->RelocationCount >
+          (View->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
+           APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
+           APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS) ||
       StorageCapacity == 0u ||
       StorageCapacity > APPLE_AGX_DYNAMIC_JOB_MAX_STORAGE_BYTES ||
       ShaderBase == 0ULL || ShaderBase >= DYNAMIC_40_BIT_LIMIT)
     return dynamic_fail(AppleAgxDynamicJobArgument, Storage, 0u, Job);
   dynamic_zero(Job, (APPLE_AGX_U32)sizeof(*Job));
+  {
+    APPLE_AGX_U32 indexRelocations = 0u;
+    for (index = 0u; index < View->Draw->RelocationCount; ++index)
+      if (View->Relocations[index].Kind ==
+          AppleAgxWin32RelocationVdmIndexBufferAddress40)
+        ++indexRelocations;
+    if ((View->Header->Version ==
+             APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+         (View->Draw->IndexReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||
+          indexRelocations != 1u)) ||
+        (View->Header->Version !=
+             APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+         indexRelocations != 0u))
+      return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, 0u, Job);
+  }
 
   for (index = 0u; index < View->Header->ReferenceCount; ++index) {
     APPLE_AGX_U32 referenceIndex = index;
@@ -323,6 +360,41 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
                           Job);
     target = &View->References[relocation->TargetReference];
     targetFact = &Facts[relocation->TargetReference];
+    if (relocation->Kind == AppleAgxWin32RelocationVdmIndexBufferAddress40 &&
+        (View->Header->Version !=
+             APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ||
+         relocation->DestinationReference != View->Draw->EncoderReference ||
+         relocation->TargetReference != View->Draw->IndexReference ||
+         View->References[relocation->DestinationReference].Role !=
+             AppleAgxWin32RoleEncoder ||
+         target->Role != AppleAgxWin32RoleIndex ||
+         target->Access != AppleAgxWin32AccessRead || target->Offset != 0ULL ||
+         target->Bytes != 8ULL || relocation->TargetOffset != 0ULL ||
+         dynamic_object(Job,relocation->TargetReference) == DYNAMIC_NULL ||
+         dynamic_object(Job,relocation->TargetReference)->Bytes != 8u ||
+         dynamic_read_le(storage +
+             dynamic_object(Job,relocation->TargetReference)->StorageOffset,
+             8u) != 0x0000000200010000ULL ||
+         (relocation->DestinationOffset & 3ULL) != 0ULL ||
+         relocation->DestinationOffset > destination->Bytes ||
+         24u > destination->Bytes - relocation->DestinationOffset ||
+         (dynamic_read_le(storage + destination->StorageOffset +
+                              (APPLE_AGX_U32)relocation->DestinationOffset,
+                          4u) & 0xffffff00ULL) != 0x61f20600ULL ||
+         dynamic_read_le(storage + destination->StorageOffset +
+                             (APPLE_AGX_U32)relocation->DestinationOffset + 8u,
+                         4u) != 3ULL ||
+         dynamic_read_le(storage + destination->StorageOffset +
+                             (APPLE_AGX_U32)relocation->DestinationOffset + 12u,
+                         4u) != 1ULL ||
+         dynamic_read_le(storage + destination->StorageOffset +
+                             (APPLE_AGX_U32)relocation->DestinationOffset + 16u,
+                         4u) != 0ULL ||
+         dynamic_read_le(storage + destination->StorageOffset +
+                             (APPLE_AGX_U32)relocation->DestinationOffset + 20u,
+                         4u) != 2ULL))
+      return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, storageBytes,
+                          Job);
     if (target->Offset > targetFact->Bytes ||
         relocation->TargetOffset >= target->Bytes ||
         target->Bytes > targetFact->Bytes - target->Offset)

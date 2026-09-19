@@ -160,7 +160,9 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       r->hContext==device->KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
   if(!device || AppleAgxWin32CommandValidate(device->CommandBuffer,r->CommandLength,
       device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
-  RUNTIME_REQUIRE(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH && view.NativeBatch);
+  RUNTIME_REQUIRE((view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+      view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) &&
+      view.NativeBatch);
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
   RuntimeConsumerFence=device->NextScreenFence+1;

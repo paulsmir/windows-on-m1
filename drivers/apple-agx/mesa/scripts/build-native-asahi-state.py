@@ -164,6 +164,7 @@ struct Query
    struct pipe_transfer **transfers;
    struct pipe_stream_output_target *so_target;
    bool constant_buffer;
+   bool index_buffer;
    UINT logical_bytes;
    Device *owner_device;
    ULONGLONG owner_cookie;
@@ -763,6 +764,31 @@ _Present('''),
 {
    SetError(hDevice, E_NOTIMPL);
    return;''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
+   if (!pDevice || IndexCount != 3 || StartIndexLocation != 0 ||
+       BaseVertexLocation != 0 || pDevice->primitive != MESA_PRIM_TRIANGLES ||
+       !pDevice->index_buffer || pDevice->index_size != 2 ||
+       pDevice->ib_offset != 0) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   ResolveState(pDevice);
+   struct pipe_draw_info info;
+   struct pipe_draw_start_count_bias draw = {};
+   util_draw_init_info(&info);
+   info.index_size = 2;
+   info.mode = MESA_PRIM_TRIANGLES;
+   info.index.resource = pDevice->index_buffer;
+   info.instance_count = 1;
+   info.primitive_restart = false;
+   draw.count = 3;
+   pDevice->pipe->draw_vbo(pDevice->pipe, &info, 0, NULL, &draw, 1);''')
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexedInstanced','''   (void)IndexCountPerInstance;
+   (void)InstanceCount;
+   (void)StartIndexLocation;
+   (void)BaseVertexLocation;
+   (void)StartInstanceLocation;
+   SetError(hDevice, E_NOTIMPL);''')
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
         ('#include "util/u_surface.h"',
@@ -776,6 +802,8 @@ _Present('''),
    const D3D10DDI_MIPINFO *resourceMip = pCreateResource->pMipInfoList;
    bool wantsConstant =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
+   bool wantsIndex =
+      (pCreateResource->BindFlags & D3D10_DDI_BIND_INDEX_BUFFER) != 0;
    bool validConstant = wantsConstant && pResource && resourceMip &&
       pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
       pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
@@ -793,7 +821,24 @@ _Present('''),
        pCreateResource->pInitialDataUP[0].pSysMem) && pDevice &&
       AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
                               &resourceGeneration);
-   if (wantsConstant && !validConstant) {
+   static const unsigned char expectedIndex[8] = {0,0,1,0,2,0,0,0};
+   bool validIndex = wantsIndex && pResource && resourceMip &&
+      pCreateResource->ResourceDimension == D3D10DDIRESOURCE_BUFFER &&
+      pCreateResource->Format == DXGI_FORMAT_UNKNOWN &&
+      pCreateResource->BindFlags == D3D10_DDI_BIND_INDEX_BUFFER &&
+      pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
+      pCreateResource->MapFlags == 0 && pCreateResource->MiscFlags == 0 &&
+      !pCreateResource->pPrimaryDesc && pCreateResource->MipLevels == 1 &&
+      pCreateResource->ArraySize == 1 && resourceMip[0].TexelWidth == 8 &&
+      resourceMip[0].TexelHeight == 1 && resourceMip[0].TexelDepth == 1 &&
+      pCreateResource->SampleDesc.Count == 1 &&
+      pCreateResource->SampleDesc.Quality == 0 &&
+      pCreateResource->pInitialDataUP &&
+      pCreateResource->pInitialDataUP[0].pSysMem &&
+      memcmp(pCreateResource->pInitialDataUP[0].pSysMem,expectedIndex,8)==0 &&
+      pDevice && AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
+                                         &resourceGeneration);
+   if ((wantsConstant && !validConstant) || (wantsIndex && !validIndex)) {
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -804,7 +849,7 @@ _Present('''),
       DebugPrintf("%s: failed to create resource\\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
-   }''','''   if (wantsConstant) {
+   }''','''   if (wantsConstant || wantsIndex) {
       pResource->resource = screen->resource_create(screen, &templat);
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
@@ -838,6 +883,12 @@ _Present('''),
    if (wantsConstant) {
       pResource->constant_buffer = true;
       pResource->logical_bytes = resourceMip[0].TexelWidth;
+      pResource->owner_device = pDevice;
+      pResource->owner_cookie = resourceOwner;
+      pResource->device_generation = resourceGeneration;
+   } else if (wantsIndex) {
+      pResource->index_buffer = true;
+      pResource->logical_bytes = 8;
       pResource->owner_device = pDevice;
       pResource->owner_cookie = resourceOwner;
       pResource->device_generation = resourceGeneration;
@@ -962,6 +1013,36 @@ _Present('''),
    }
 
 ''','')])
+    replace_function_body('src/gallium/frontends/d3d10umd/InputAssembly.cpp','IaSetIndexBuffer','''   Device *pDevice = CastDevice(hDevice);
+   Resource *resource = CastResource(hBuffer);
+   if (!resource) {
+      pipe_resource_reference(&pDevice->index_buffer, NULL);
+      pDevice->index_size = 0;
+      pDevice->restart_index = 0;
+      pDevice->ib_offset = 0;
+      return;
+   }
+   ULONGLONG owner = 0;
+   ULONG generation = 0;
+   bool valid = pDevice && Format == DXGI_FORMAT_R16_UINT && Offset == 0 &&
+      resource->index_buffer && resource->logical_bytes == 8 &&
+      resource->owner_device == pDevice && resource->resource &&
+      resource->resource->target == PIPE_BUFFER &&
+      (resource->resource->bind & PIPE_BIND_INDEX_BUFFER) &&
+      !(resource->resource->bind &
+        ~(PIPE_BIND_INDEX_BUFFER | PIPE_BIND_SHADER_IMAGE)) &&
+      resource->resource->width0 == 8 &&
+      AgxD3d10WindowsIdentity(pDevice->windows,&owner,&generation) &&
+      resource->owner_cookie == owner &&
+      resource->device_generation == generation;
+   if (!valid) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   pDevice->ib_offset = 0;
+   pDevice->index_size = 2;
+   pDevice->restart_index = 0;
+   pipe_resource_reference(&pDevice->index_buffer, resource->resource);''')
     change('src/asahi/lib/agx_device.h',
         'e6ba76e16b2aace0ebf8b1ff2348cb800ad6cc254cef633d490de5bc203bfda3',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#else\n#include <stddef.h>\n#include "c11/threads.h"\ntypedef ptrdiff_t ssize_t;\n#endif'),

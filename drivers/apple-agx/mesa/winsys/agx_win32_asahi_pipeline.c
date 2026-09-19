@@ -248,6 +248,11 @@ static void pipeline_record(AGX_WIN32_ASAHI_PIPELINE *s,const void *end,
     valid=role==AppleAgxWin32RolePppState && s->Role==AppleAgxWin32RoleEncoder &&
       ((raw>>29)&7ULL)==AGX_VDM_BLOCK_TYPE_PPP_STATE_UPDATE &&
       ((raw>>8)&0xffULL)*4==bytes; break;
+  case AppleAgxWin32RelocationVdmIndexBufferAddress40:
+    encoded=((raw&0xffULL)<<32)|(raw>>32);
+    valid=c->Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+      role==AppleAgxWin32RoleIndex && s->Role==AppleAgxWin32RoleEncoder &&
+      (raw&0xffffff00ULL)==0x61f20600ULL && bytes==8; break;
   case AppleAgxWin32RelocationUniformAddress64:
     encoded=raw;
     valid=s->Role==AppleAgxWin32RoleUniform; break;

@@ -371,8 +371,8 @@ static void test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference(
 }
 
 static void test_v4_metadata_is_appended_after_the_draw_prefix(void) {
-  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[9];
-  APPLE_AGX_WIN32_RELOCATION relocations[6];
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[10];
+  APPLE_AGX_WIN32_RELOCATION relocations[7];
   APPLE_AGX_WIN32_NATIVE_BATCH_METADATA metadata = {0};
   AGX_WIN32_DRAW_REQUEST input = draw_request(references, relocations);
   unsigned char bytes[APPLE_AGX_WIN32_COMMAND_MAX_BYTES];
@@ -398,6 +398,28 @@ static void test_v4_metadata_is_appended_after_the_draw_prefix(void) {
          AppleAgxWin32AbiSuccess);
   assert(view.NativeBatch != NULL && view.NativeBatch->StructBytes ==
          sizeof(metadata) && view.NativeBatch->PppControl == 0x202u);
+  ((APPLE_AGX_WIN32_RELOCATION *)(void *)view.Relocations)[0].Kind =
+      AppleAgxWin32RelocationVdmIndexBufferAddress40;
+  ((APPLE_AGX_WIN32_COMMAND_HEADER *)(void *)view.Header)->ContentHash = 0ULL;
+  ((APPLE_AGX_WIN32_COMMAND_HEADER *)(void *)view.Header)->ContentHash =
+      AppleAgxWin32CommandHash(bytes,commandBytes);
+  assert(AppleAgxWin32CommandValidate(bytes,commandBytes,7u,9u,&view)==
+         AppleAgxWin32AbiRelocation);
+  references[9]=(APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      9u,AppleAgxWin32AccessRead,AppleAgxWin32RoleIndex,0u,0u,8u};
+  relocations[6]=(APPLE_AGX_WIN32_RELOCATION){
+      AppleAgxWin32RelocationVdmIndexBufferAddress40,8u,0u,8u,9u,52u,0u,0u};
+  input.AllocationCount=10u;input.ReferenceCount=10u;
+  input.RelocationCount=7u;input.Draw.IndexReference=9u;
+  assert(AgxWin32TransportBuildDrawVersion(&input,
+      APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH,bytes,sizeof(bytes),
+      &commandBytes)==AppleAgxWin32AbiSuccess);
+  assert(AppleAgxWin32CommandValidate(bytes,commandBytes,7u,10u,&view)==
+         AppleAgxWin32AbiSuccess);
+  assert(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+         view.Header->ReferenceCount==10u && view.Draw->IndexReference==9u &&
+         view.Draw->RelocationCount==7u &&
+         view.Relocations[6].Kind==AppleAgxWin32RelocationVdmIndexBufferAddress40);
 }
 
 static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {

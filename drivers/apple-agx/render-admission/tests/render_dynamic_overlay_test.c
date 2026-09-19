@@ -456,7 +456,7 @@ static void test_native_graph(void) {
   APPLE_AGX_WIN32_COMMAND_HEADER header={0};
   APPLE_AGX_WIN32_DRAW_PAYLOAD draw={0};
   APPLE_AGX_WIN32_NATIVE_BATCH_METADATA native={0};
-  APPLE_AGX_WIN32_ALLOCATION_REFERENCE refs[16]={{0}};
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE refs[17]={{0}};
   APPLE_AGX_WIN32_RELOCATION reloc={0};
   APPLE_AGX_WIN32_COMMAND_VIEW view={0};
   const unsigned roles[16]={1,2,6,6,9,9,9,9,9,7,7,7,13,14,11,10};
@@ -541,6 +541,52 @@ static void test_native_graph(void) {
   }
   assert(AdmissionDynamicOverlayRelease(&image,&plan,&job,native_storage,sizeof(native_storage),9,&state)==AdmissionDynamicOverlaySuccess);
   assert(pipeline_bytes[0x20000]==0 && descriptor_bytes[0x8000]==0);
+  {
+    ADMISSION_DYNAMIC_OVERLAY_PLAN indexedPlan,indexedWorker;
+    ADMISSION_DYNAMIC_OVERLAY_BINDINGS indexedBindings;
+    APPLE_AGX_DYNAMIC_JOB indexedJob={0};
+    APPLE_AGX_U64 direct=0;
+    header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
+    header.ReferenceCount=17;
+    refs[4].Bytes=0x340;
+    refs[16].Role=AppleAgxWin32RoleIndex;
+    refs[16].Bytes=8;
+    draw.IndexReference=16;
+    assert(AdmissionDynamicOverlayPlan(&image,&view,&indexedPlan)==
+           AdmissionDynamicOverlaySuccess);
+    assert(AdmissionDynamicOverlayBindingsFromView(&view,&indexedBindings)==
+           AdmissionDynamicOverlaySuccess);
+    assert(indexedPlan.CommandVersion==
+           APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+           indexedPlan.EntryCount==16 && find_entry(&indexedPlan,16) &&
+           find_entry(&indexedPlan,16)->Role==AppleAgxWin32RoleIndex);
+    indexedJob.Magic=APPLE_AGX_DYNAMIC_JOB_MAGIC;
+    indexedJob.Version=APPLE_AGX_DYNAMIC_JOB_VERSION;
+    indexedJob.Generation=7;indexedJob.ObjectCount=16;
+    indexedJob.RelocationCount=1;
+    indexedJob.Relocations[0].Kind=AppleAgxWin32RelocationPppCfBindingsOffset32;
+    indexedJob.Relocations[0].TargetReference=9;
+    for(unsigned i=0;i<16;++i) {
+      indexedJob.Objects[i].ReferenceIndex=i+1;
+      indexedJob.Objects[i].Role=refs[i+1].Role;
+      indexedJob.Objects[i].StorageOffset=i*16;
+      indexedJob.Objects[i].Bytes=(unsigned)refs[i+1].Bytes;
+    }
+    assert(AdmissionDynamicOverlayPlanFromJob(&image,&indexedBindings,
+        &indexedJob,&indexedWorker)==AdmissionDynamicOverlaySuccess);
+    assert(indexedWorker.CommandVersion==
+           APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+           find_entry(&indexedWorker,16) &&
+           AdmissionDynamicOverlayResolve(&indexedWorker,4,0x80,1,&direct)==
+              AdmissionDynamicOverlaySuccess &&
+           direct==find_entry(&indexedWorker,4)->GpuVirtualAddress+0x80);
+    indexedBindings.CommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+    assert(AdmissionDynamicOverlayPlanFromJob(&image,&indexedBindings,
+        &indexedJob,&indexedWorker)==AdmissionDynamicOverlayLayout);
+    header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+    assert(AdmissionDynamicOverlayPlan(&image,&view,&indexedPlan)==
+           AdmissionDynamicOverlayLayout);
+  }
   refs[2].Bytes=0x10001;
   assert(AdmissionDynamicOverlayPlan(&image,&view,&plan)==AdmissionDynamicOverlayRange);
 }

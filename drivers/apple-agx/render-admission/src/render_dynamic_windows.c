@@ -197,6 +197,7 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
       destinationReference->Bytes > Destination->Bytes ||
       Snapshot->View.Draw->Format != AppleAgxWin32FormatBgra8Unorm ||
       (Snapshot->View.Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+       Snapshot->View.Header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
        !AdmissionAllocationContainsView(
           &destinationOpened->Allocation->Description,
           Snapshot->View.Draw->SurfaceWidth,
@@ -204,7 +205,8 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
           Snapshot->View.Draw->SurfacePitch,
           destinationReference->Bytes)))
     return STATUS_INVALID_ADDRESS;
-  if (Snapshot->View.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+  if ((Snapshot->View.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+       Snapshot->View.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) &&
       (!Snapshot->View.NativeBatch || Snapshot->View.Draw->SurfaceWidth!=16u ||
        Snapshot->View.Draw->SurfaceHeight!=16u || Snapshot->View.Draw->SurfacePitch!=64u ||
        destinationReference->Bytes<16u*16u*4u))

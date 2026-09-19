@@ -429,6 +429,9 @@ static void test_draw_graph_rejections(void) {
   REJECT_DRAW(Payload.RelocationCount, 0u, AppleAgxWin32AbiRelocation);
   REJECT_DRAW(Payload.RelocationsOffset, 120u, AppleAgxWin32AbiLayout);
   REJECT_DRAW(Relocations[0].Kind, 99u, AppleAgxWin32AbiRelocation);
+  REJECT_DRAW(Relocations[0].Kind,
+              AppleAgxWin32RelocationVdmIndexBufferAddress40,
+              AppleAgxWin32AbiRelocation);
   REJECT_DRAW(Relocations[0].WidthBytes, 4u, AppleAgxWin32AbiRelocation);
   REJECT_DRAW(Relocations[0].Reserved, 1u, AppleAgxWin32AbiReserved);
   REJECT_DRAW(Relocations[0].DestinationReference, 4u,

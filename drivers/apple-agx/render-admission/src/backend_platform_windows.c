@@ -1902,7 +1902,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
           runtime->Adapter->BackendImage.ArenaGpuAddress, Plan->IncludeInitBm,
           &bindings, &staged, runtime->QueueObjects, Job) ||
       (dynamic &&
-       (dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+       ((dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+         dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ?
           AdmissionDynamicOverlayRouteNative(dynamicPlan, dynamicView.Bindings,
              runtime->QueueObjects, APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT) :
           AdmissionDynamicOverlayRouteEncoder(dynamicPlan, runtime->QueueObjects,
@@ -1910,7 +1911,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
            AdmissionDynamicOverlaySuccess))
     goto BuildFailure;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-  if (dynamic && dynamicView.Bindings->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+  if (dynamic && dynamicView.Bindings->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      dynamicView.Bindings->CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
     (void)AdmissionDynamicOverlayCaptureStoreGraph(
         &runtime->Adapter->BackendImage, &runtime->DynamicOverlayState,
         runtime->QueueObjects,
@@ -1931,7 +1933,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
       goto BuildFailure;
   }
 #endif
-  if (dynamic && dynamicPlan->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+  if (dynamic && (dynamicPlan->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+                  dynamicPlan->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)) {
     for (index = 0u; index < dynamicPlan->EntryCount; ++index) {
       const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry=&dynamicPlan->Entries[index];
       const APPLE_AGX_EXP208_RELOCATION_OBJECT *object=
@@ -1973,7 +1976,9 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
     runtime->DynamicExpectedForegroundColor =
         dynamicView.Header->ExpectedForegroundColor;
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
-    runtime->NativeCommandHash = dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
+    runtime->NativeCommandHash =
+        (dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+         dynamicView.Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ?
         dynamicView.Header->CommandHash : 0ULL;
     if (runtime->NativeCommandHash) runtime->NativeBindings=*dynamicView.Bindings;
     else RtlZeroMemory(&runtime->NativeBindings,sizeof(runtime->NativeBindings));
@@ -2294,7 +2299,8 @@ static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete(
       }
       if (runtime->DynamicOverlayState.Applied == 1u &&
           runtime->DynamicOverlayState.Fence == Fence) {
-        if (runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH) {
+        if (runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+            runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) {
           output.VerificationKind=AdmissionBackendOutputVerificationNativeCapture;
           output.BackgroundColor=output.ExpectedColor=0;
         } else {
@@ -2775,7 +2781,8 @@ static VOID AdmissionPlatformWorker(
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   AdmissionTerminalBegin(runtime, &description);
   if (runtime->DynamicOverlayState.Applied == 1u &&
-      runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      (runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ||
+       runtime->DynamicOverlayPlan.CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) &&
       AdmissionDynamicOverlayCaptureNativeGraph(&runtime->NativeBindings,&runtime->DynamicOverlayPlan,
           runtime->DynamicJob,runtime->QueueObjects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           runtime->NativeCommandHash,description.Fence,&runtime->NativeGraphReceipt)==AdmissionDynamicOverlaySuccess) {
@@ -2783,7 +2790,8 @@ static VOID AdmissionPlatformWorker(
     runtime->NativeGraphReceipt.BootGeneration=adapter->Win32BootGeneration;
   }
   if (runtime->DynamicOverlayState.Applied == 1u &&
-      runtime->DynamicOverlayPlan.CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH)
+      runtime->DynamicOverlayPlan.CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+      runtime->DynamicOverlayPlan.CommandVersion != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
     (void)AdmissionDynamicOverlayCaptureGraph(
         &adapter->BackendImage, &runtime->DynamicOverlayPlan,
         &runtime->DynamicOverlayState, runtime->QueueObjects,

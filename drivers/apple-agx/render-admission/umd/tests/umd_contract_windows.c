@@ -997,11 +997,11 @@ static void test_mesa_d3d10_frontend_open(void) {
       FRONTEND_CB,0,0,
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
     float vertices[12]={-1,-1,0,1,1,-1,0,1,0,1,0,1};
-    D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0};
-    D3D10_DDIARG_SUBRESOURCE_UP vbInitial={0},cbInitial={0};
-    D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0},cbCreate={0};
-    D3D10DDI_HRESOURCE rt={0},vb={0},cb={0},vsCb={0};
-    D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0},cbRuntime={0},vsCbRuntime={0};
+    D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0},ibMip={0};
+    D3D10_DDIARG_SUBRESOURCE_UP vbInitial={0},cbInitial={0},ibInitial={0};
+    D3D10DDIARG_CREATERESOURCE rtCreate={0},vbCreate={0},cbCreate={0},ibCreate={0};
+    D3D10DDI_HRESOURCE rt={0},vb={0},cb={0},vsCb={0},ib={0};
+    D3D10DDI_HRTRESOURCE rtRuntime={0},vbRuntime={0},cbRuntime={0},vsCbRuntime={0},ibRuntime={0};
     rtMip.TexelWidth=16;rtMip.TexelHeight=16;rtMip.TexelDepth=1;
     rtCreate.pMipInfoList=&rtMip;rtCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
     rtCreate.Usage=D3D10_DDI_USAGE_DEFAULT;rtCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
@@ -1127,6 +1127,52 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCreateResource(device,&cbCreate,vsCb,vsCbRuntime);
     CHECK(FrontendErrors==cbErrorsBefore);
     cbInitial.pSysMem=cbValues;
+    UINT16 ibValues[4]={0u,1u,2u,0u};
+    ibMip.TexelWidth=sizeof(ibValues);ibMip.TexelHeight=ibMip.TexelDepth=1;
+    ibInitial.pSysMem=ibValues;ibInitial.SysMemPitch=sizeof(ibValues);
+    ibInitial.SysMemSlicePitch=sizeof(ibValues);
+    ibCreate.pMipInfoList=&ibMip;ibCreate.pInitialDataUP=&ibInitial;
+    ibCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;
+    ibCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
+    ibCreate.BindFlags=D3D10_DDI_BIND_INDEX_BUFFER;
+    ibCreate.Format=DXGI_FORMAT_UNKNOWN;ibCreate.SampleDesc.Count=1;
+    ibCreate.MipLevels=1;ibCreate.ArraySize=1;
+    ib.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&ibCreate));
+    ibRuntime.handle=(VOID *)(UINT_PTR)0xd0cu;
+    CHECK(ib.pDrvPrivate!=NULL);
+    deviceFunctions.pfnCreateResource(device,&ibCreate,ib,ibRuntime);
+    CHECK(FrontendErrors==cbErrorsBefore);
+    for(unsigned invalidIndex=0;invalidIndex<8u;++invalidIndex) {
+      D3D10DDIARG_CREATERESOURCE invalid=ibCreate;
+      D3D10DDI_MIPINFO mip=ibMip;
+      D3D10_DDIARG_SUBRESOURCE_UP initial=ibInitial;
+      UINT16 badPadding[4]={0u,1u,2u,1u};
+      invalid.pMipInfoList=&mip;invalid.pInitialDataUP=&initial;
+      switch(invalidIndex) {
+      case 0: mip.TexelWidth=6; break;
+      case 1: mip.TexelWidth=10; break;
+      case 2: invalid.BindFlags|=D3D10_DDI_BIND_VERTEX_BUFFER; break;
+      case 3: invalid.Usage=D3D10_DDI_USAGE_IMMUTABLE; break;
+      case 4: invalid.Format=DXGI_FORMAT_R16_UINT; break;
+      case 5: invalid.pInitialDataUP=NULL; break;
+      case 6: initial.pSysMem=NULL; break;
+      default: initial.pSysMem=badPadding; break;
+      }
+      SIZE_T privateBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&invalid);
+      D3D10DDI_HRESOURCE handle={0};D3D10DDI_HRTRESOURCE runtime={0};
+      handle.pDrvPrivate=malloc(privateBytes);runtime.handle=(VOID *)(UINT_PTR)(0xf00u+invalidIndex);
+      CHECK(handle.pDrvPrivate!=NULL);
+      if(handle.pDrvPrivate) {
+        memset(handle.pDrvPrivate,0x5a,privateBytes);
+        unsigned errors=FrontendErrors,creates=PoolCreates,renders=RuntimeRenders;
+        deviceFunctions.pfnCreateResource(device,&invalid,handle,runtime);
+        CHECK(FrontendErrors==errors+1u && FrontendLastError==E_NOTIMPL &&
+              PoolCreates==creates && RuntimeRenders==renders);
+        unsigned char *storage=handle.pDrvPrivate;
+        for(SIZE_T i=0;i<privateBytes;++i) CHECK(storage[i]==0x5a);
+        free(handle.pDrvPrivate);
+      }
+    }
     for(unsigned invalidCase=0;invalidCase<14u;++invalidCase) {
       D3D10DDIARG_CREATERESOURCE invalid=cbCreate;
       D3D10DDI_MIPINFO invalidMip=cbMip;
@@ -1380,18 +1426,30 @@ static void test_mesa_d3d10_frontend_open(void) {
       RuntimeCheckpoint(frontendOwner,5u);
       RuntimeImmediateMarker=0;
       deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&vsCb);
-      deviceFunctions.pfnDraw(device,3,0);
+      unsigned indexedErrors=FrontendErrors;
+      deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R32_UINT,0);
+      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,2);
+      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R16_UINT,0);
+      deviceFunctions.pfnDrawIndexed(device,4,0,0);
+      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      deviceFunctions.pfnDrawIndexed(device,3,1,0);
+      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      deviceFunctions.pfnDrawIndexed(device,3,0,-1);
+      CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
+      deviceFunctions.pfnDrawIndexed(device,3,0,0);
       CHECK(AgxWin32AsahiContextDrawReceipt(
           MesaD3d10FrontendContextForTest(device)));
       deviceFunctions.pfnQueryEnd(device,orderedEvent);
-      CHECK(FrontendErrors==updateErrors && RuntimeRenders==1u &&
+      CHECK(FrontendErrors==indexedErrors && RuntimeRenders==1u &&
             RuntimeSignals==2u && RuntimeQueryMarkerCount==1u &&
             RuntimeMarker && RuntimeQueryMarkers[0]);
       CHECK(SetEvent(RuntimeQueryMarkers[0]));
       eventResult=FALSE;
       deviceFunctions.pfnQueryGetData(device,orderedEvent,&eventResult,
           sizeof(eventResult),0);
-      CHECK(FrontendErrors==updateErrors && eventResult==TRUE &&
+      CHECK(FrontendErrors==indexedErrors && eventResult==TRUE &&
             RuntimeRenders==1u && RuntimeSignals==2u);
       completedErrors=FrontendErrors;
       unsigned invalidDataErrors=FrontendErrors;
@@ -1540,6 +1598,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnIaSetVertexBuffers(device,0,0,NULL,NULL,NULL);
     deviceFunctions.pfnVsSetShader(device,(D3D10DDI_HSHADER){0});deviceFunctions.pfnPsSetShader(device,(D3D10DDI_HSHADER){0});
     D3D10DDI_HRESOURCE nullConstant={0};
+    deviceFunctions.pfnIaSetIndexBuffer(device,(D3D10DDI_HRESOURCE){0},
+                                        DXGI_FORMAT_UNKNOWN,0);
     deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
@@ -1548,10 +1608,11 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyRenderTargetView(device,rtv);deviceFunctions.pfnDestroyResource(device,vb);
     deviceFunctions.pfnDestroyResource(device,vsCb);
     deviceFunctions.pfnDestroyResource(device,cb);
+    deviceFunctions.pfnDestroyResource(device,ib);
     deviceFunctions.pfnDestroyResource(device,rt);
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
     free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);
-    free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(rt.pDrvPrivate);
+    free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(ib.pDrvPrivate);free(rt.pDrvPrivate);
 #undef FRONTEND_IMM4
 #undef FRONTEND_REG
 #undef FRONTEND_CB
