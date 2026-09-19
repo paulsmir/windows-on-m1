@@ -407,6 +407,35 @@ arm64. Both packages were test-signed offline only; neither was staged,installed
 or hardware-run. The conditional remains disabled in the normal build and does
 not authorize D3D runtime admission or a pipeline bit.
 
+## Verified opened-resource DXGI Present bridge
+Implementation d87c37987ab33c35e5a2e678c7f9ce4c79f70f85 reuses the
+existing legacy allocation description,retirement queue and runtime Present
+callback without casting Mesa private handles to legacy resources. A Mesa
+Resource stores an opaque presentation record owned by its exact
+AGX_D3D10_WINDOWS_DEVICE; that owner fabricates internal handles only while
+calling the same AdmissionUmdOpenResource/DestroyResource/SubmitPresent logic.
+
+Admitted slice: one runtime-opened allocation with exact valid A8R8G8B8
+2560x1600/pitch10240/size0xfa0000 description,one subresource,nonzero kernel
+allocation,FlipIntervalOne,flags0x2,no destination and one owning device.
+Present sends the exact kernel allocation,authoritative kernel context and
+opaque DXGI context to pfnPresentCb. Wrong flags,subresource or ordinary private
+render target reject before callback. Destroy queues the existing hResource
+retirement and device teardown proves exactly one deallocation. Present1,
+SetDisplayMode,rotation,UMD-created displayable resources and desktop-sized AGX
+render remain closed.
+
+Fresh x64 full closure executionPASS: native-present-open-20260919d-x64,
+archiveSHA87b481906354eea6370d85934704d7d132b44334f5ecf129a44f6b8d57121607,
+EXESHA1d803e56c5b399232c3ec9c00c1dc7946e868149945854b810c557e40cac8295.
+Fresh ARM64 build/linkPASS: native-present-open-20260919e-arm64. Conditional
+package692 build/analyze0warnings0errors,Universal validationPASS,one export and
+typed Present bridge symbols retained in map: native-present-open-20260919f-
+arm64; DLLSHA07b03aa4e157ec00fc11ba259ac1041715f555f6cfe78ec835c60802b1e370a5.
+Default-off package693PASS: native-present-open-default-20260919g-arm64. Neither
+package was staged,installed or hardware-run; native option remains default-off
+and pipeline mask0.
+
 ## Exact next target
 Continue production integration from
 investigation/agent_tasks/AD04-NATIVE-RUNTIME-ACTIVATION-NEXT.md. Existing
@@ -420,7 +449,10 @@ format,resource,state and DXGI path to implemented or fail-closed status and
 close the smallest truthful atomic table. Advertise a pipeline or enable native
 packaging by default only after all required companion invariants pass. Keep
 instancing,other query types,application textures/depth and unsupported
-topologies rejected until independently proven.
+topologies rejected until independently proven. The next presentation unit is
+typed UMD-created displayable resource allocation plus Present1/SetDisplayMode;
+desktop-sized AGX rendering is separate and must not be inferred from the
+current16x16 native draw.
 Do not use another KMT helper or adapter-global rendering context.
 Installed pipeline mask remains0 until the selected DDI/FL contract is truthful.
 Standard Present/shared resources/redirection/DWM and desktop stability remain open.
