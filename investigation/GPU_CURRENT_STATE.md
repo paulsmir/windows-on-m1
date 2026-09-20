@@ -1798,3 +1798,10 @@ md/me test builds exposed missing test include, shadowed name and typed handle;
 fixed without production changes. Package/sign/hash and final EXP694
 preregistration are next, then immediate Air run with the required physical
 mostly-black/partial-caption observation. No expanded inventory is pending.
+
+## EXP694 package710 ready for exact preregistered test
+Native RGBA source843665a2; package710 passes analysis/Universal/Inf2Cat and
+catalog membership. Immutable archive SHAb219c80f4616e985a85a8c86a1458add5848e326906ca190bb30dd39a0873807.
+Air-side trust verification remains required during stage; no policy toggle.
+Next exact stage/full-owner bind and once-only standard runtime experiment.
+Physical mostly-black/isolated-caption observation is explicitly preregistered.

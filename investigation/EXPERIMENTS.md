@@ -44391,3 +44391,25 @@ and actual scanout. Present S_OK alone is not physical rendering proof.
 Expected checkpoint: CreateSwapChain/GetBuffer/RTV succeeds, then draw/completion/
 Present. Preserve exact failing stage; do not infer later stages executed.
 Evidence main-root .local/experiments/EXP694-live.
+
+### EXP694 finalized artifact gate — 2026-09-20T19:59:27.779569+00:00
+UMD/KMD analysis0 warnings/0 errors; Universal and Inf2Cat PASS.
+Standard-client build repaired by explicit pinned SDK roots (no source change).
+Builder certificate is the same self-signed test identity and intentionally not
+trusted in builder Root; all signatures match E9BE15 and each INF/SYS/UMD is a
+catalog member. Air must verify Valid after exact certificate import, before
+staging; this does not change TESTSIGNING/SAC/WDAC.
+package/AppleAgxRenderAdmission.inf: 7256c6eb4c8543a6c2012425fe9ba71cc04fb8a69d7c92289f12a895984ac23c
+package/AppleAgxRenderAdmission.sys: dcc4d35b16084cba62a62af71100a864d4664d7d1f3b85ec3e53d039656500f3
+package/AppleAgxRenderAdmissionUmd.dll: e4c2a68e56819123fab0fe704753b083a8d3937a7b5f6f66da4fdb867c09a88b
+package/appleagxrenderadmission.cat: 835660cc1b8eb2af196fea5ce0e55536acee87c38da12334ef77840d3dbf7b52
+qualification/AppleAgxD3d10Standard.exe: c157ff8e1af5e6b85f05b0c068f11226ade41d45fc93261d573aa5c9ee52d4fc
+qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable artifact .local/experiments/EXP694-rgba-standard-runtime-710.zip SHA b219c80f4616e985a85a8c86a1458add5848e326906ca190bb30dd39a0873807.
+Manifest native-frontend-full-production, version30.0.710.0, source843665a2.
+Install: verified archive expand; pnputil /add-driver exact manifest INF without
+/install; controlled shutdown and unchanged full-owner EXP584/406 launch with
+LLDDIR=.local/toolchain22, broker1, physical/debug-off/low-mem. Require bound
+Code0/Running Start12/Platform14 status0 and installed hashes. Clear temporary
+authorized autologon, run once through interactive task120s and collect exact
+client exit/log, registry, fresh events and physical symptom report. No replay.
