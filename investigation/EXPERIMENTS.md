@@ -44684,3 +44684,40 @@ photos are not reused as this run's physical verdict.
 Next discriminator routes native state before/after clear/resolve/draw and
 flush, request seal/dispatch, and exact pfnRenderCb result into the existing
 bounded per-client UMD file. Rendering behavior and guards remain unchanged.
+
+## EXP698 — native draw/Flush boundary receipts
+UTC build preregistration 2026-09-20T22:23:25.600689+00:00.
+Source f79d66329260097e641af41d544859c8234d03d2; clean implementation checkpoint.
+WHY THIS HYPOTHESIS: EXP697 standard device/swap-chain/import succeeds but Flush
+returns E_FAIL; native stderr is absent. The same all16-default-sampler producer
+is GREEN offline, so remaining actual state/emission versus seal/dispatch cannot
+be separated from the existing HRESULT. File receipts distinguish these seams.
+WINDOWS CONTRACT: retain base D3D10 state and Flush/Present ordering and HRESULTs.
+AGX/ASAHI CONTRACT: existing native batch lifetime/capture/materialization and
+retirement unchanged; snapshot already-owned context and batch state only.
+TRANSLATION: existing bounded opt-in UMD logger receives clear/resolve/draw/flush
+state and existing adapter/composer seal/dispatch/pfnRenderCb results.
+WHAT IS STILL UNKNOWN: exact first failing native lifecycle seam under actual
+standard-runtime state on Air. No claimed physical draw completion yet.
+Single variable: diagnostic observations only. No capability, shader, sampler,
+allocator, guard, scheduler or rendering change.
+Gates: native-seam-20260921mt x64 execution0 and ARM64 link0; trace-enabled x64
+execution0 with128 bounded records; source archives match current driver files.
+Build /tmp/build-package714.ps1 -SourceCommit f79d66329260097e641af41d544859c8234d03d2: pinned
+build-driver.ps1 Release NativeFrontend PackageBuild714, mt ARM64 props, pinned
+26100 standard client, same E9BE15 signer; output
+native-package714-native-seam-20260921mu-arm64. No install before finalized hashes.
+Root/m1n1/Mu commits/diff and full-owner584/406 plus recovery377/392 identities
+unchanged from EXP697/EXP694. Current Air baseline read-only Code28/no INF/service/
+SYS/UMD/cert,8CPU/NVMe/xHCI/input, no fresh monitored events.
+Stage exact hash-verified package without /install; authorized temporary login;
+full-owner natural bind physical/debug-off/low-mem/broker1; verify installed
+hashes/Code0/Running/Start12/Platform14 and clear temporary login.
+One interactive client task120s with APPLE_AGX_UMD_TRACE_FILE. No replay.
+Expected checkpoint: diagnostic file locates first failure or records successful
+submission; no receipt is interpreted as physical completion without evidence.
+Failure criterion: missing diagnostic seam yields INCONCLUSIVE; preserve output.
+Evidence main-root .local/experiments/EXP698-live: bound health, stdout/exit,
+UMD trace, registry/events, physical observation if supplied. Record EXP696
+black-to-wallpaper-to-white/black/flickering-icons comparator separately.
+Collect before exact package/task/trust cleanup and ordinary377/392 recovery.
