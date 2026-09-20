@@ -402,12 +402,33 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       if ((native->DepthCompressionReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
           (native->DepthCompressionStride == 0u))
         return AppleAgxWin32AbiPayload;
+      depthResult = AppleAgxWin32DrawReference(native->StencilReference,
+          AppleAgxWin32RoleDepthAttachment, 1, references,
+          header->ReferenceCount, reachable);
+      if (depthResult != AppleAgxWin32AbiSuccess)
+        return depthResult;
+      depthResult = AppleAgxWin32DrawReference(
+          native->StencilCompressionReference,
+          AppleAgxWin32RoleDescriptor, 1, references,
+          header->ReferenceCount, reachable);
+      if (depthResult != AppleAgxWin32AbiSuccess)
+        return depthResult;
+      if ((native->StencilReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+              (native->StencilStride == 0u) ||
+          (native->StencilCompressionReference ==
+              APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+              (native->StencilCompressionStride == 0u))
+        return AppleAgxWin32AbiPayload;
     } else if ((native->RenderFlags &
                 APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT) != 0u ||
                native->DepthReference != 0u ||
                native->DepthCompressionReference != 0u ||
                native->DepthStride != 0u ||
                native->DepthCompressionStride != 0u ||
+               native->StencilReference != 0u ||
+               native->StencilCompressionReference != 0u ||
+               native->StencilStride != 0u ||
+               native->StencilCompressionStride != 0u ||
                native->ZlsControl != 0ULL || native->IspZlsPixels != 0ULL ||
                native->IspBgobjDepth != 0u || native->IspBgobjValues != 0u) {
       return AppleAgxWin32AbiReserved;
@@ -516,6 +537,18 @@ fragment_pipeline_done:
       if (native->DepthCompressionReference != APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
         rootResult = AppleAgxWin32DrawReference(
             native->DepthCompressionReference,AppleAgxWin32RoleDescriptor,0,
+            references,header->ReferenceCount,reachable);
+        if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+      }
+      if (native->StencilReference != APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+        rootResult = AppleAgxWin32DrawReference(native->StencilReference,
+            AppleAgxWin32RoleDepthAttachment,0,references,
+            header->ReferenceCount,reachable);
+        if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+      }
+      if (native->StencilCompressionReference != APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+        rootResult = AppleAgxWin32DrawReference(
+            native->StencilCompressionReference,AppleAgxWin32RoleDescriptor,0,
             references,header->ReferenceCount,reachable);
         if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
       }

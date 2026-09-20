@@ -1167,3 +1167,30 @@ a62368945d39267ee50709e3ad26c71ae2ebab82be2f199d4fb682a922d82bf9.
 Inventory remains 120 of 121 and pipeline mask zero.  The next required depth
 family is D24_UNORM_S8_UINT, which needs explicit separate-stencil ownership;
 it must not be collapsed into the single D16/D32 depth reference.
+
+## Required-format closure in progress: D24S8 separate stencil (2026-09-20)
+D24_UNORM_S8_UINT now follows Asahi's real split ownership: the logical D24S8
+resource has a physical uncompressed Z32_FLOAT parent and a separate physical
+S8_UINT stencil resource.  Native batch capture records the two immutable
+attachment identities independently, and Windows finalization resolves both
+through the existing allocation list.  The depth-v7 overlay patches the exact
+G13 initial and reload stencil load/store addresses, strides, compression fields
+and BG-object stencil values; uncompressed compression addresses and strides
+remain zero.  Combined depth+stencil clear is admitted only for the exact
+producer form already emitted by the D3D10 frontend.  Unsupported clear and
+resource forms still fault before submission.
+
+Fresh x64 full producer execution PASS, including exact materialized stencil
+field assertions at both independent KMD placements:
+evidence/AD04-runtime-closure/required-d24s8-final-20260920hx-x64/;
+source archive SHA-256
+edb4a56201f65dfb2acae6879133066f03ef50311cbe4e1f6f74dc28dea2f4dc.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-d24s8-final-20260920hy-arm64/;
+source archive SHA-256
+e0c1804b95709ab8b68c1dac43cb4bea90bfe25422f33713e5e37a39ed81577b.
+
+Inventory remains 120 of 121 and pipeline mask zero.  The remaining work is
+strictly inside the frozen feature-required-formats row: mandatory color/typed,
+BC and packed-format families.  Do not expand the pre-hardware inventory unless
+the pinned WDK or a standard-runtime causal RED proves another prerequisite.

@@ -462,6 +462,7 @@ void APIENTRY
        Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_D32_FLOAT ||
        Format == DXGI_FORMAT_D16_UNORM ||
+       Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
@@ -537,12 +538,19 @@ void APIENTRY
    struct pipe_resource *resource = surface ? surface->texture : NULL;
    struct pipe_surface *bound = pDevice && pDevice->fb.zsbuf.texture ?
       &pDevice->fb.zsbuf : NULL;
+   bool packed_depth_stencil = resource &&
+      resource->format == PIPE_FORMAT_Z24_UNORM_S8_UINT;
+   unsigned clear_flags = packed_depth_stencil ?
+      PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL : PIPE_CLEAR_DEPTH;
    if (!pipe || !pipe->clear || !surface || !resource || !bound ||
-       Flags != D3D10_DDI_CLEAR_DEPTH || Stencil != 0 ||
+       Flags != (packed_depth_stencil ?
+          D3D10_DDI_CLEAR_DEPTH | D3D10_DDI_CLEAR_STENCIL :
+          D3D10_DDI_CLEAR_DEPTH) || (!packed_depth_stencil && Stencil != 0) ||
        Depth < 0.0f || Depth > 1.0f ||
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_Z32_FLOAT &&
-        resource->format != PIPE_FORMAT_Z16_UNORM) ||
+        resource->format != PIPE_FORMAT_Z16_UNORM &&
+        resource->format != PIPE_FORMAT_Z24_UNORM_S8_UINT) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 ||
@@ -552,13 +560,13 @@ void APIENTRY
        bound->last_layer != surface->last_layer ||
        pDevice->fb.width != pipe_surface_width(surface) ||
        pDevice->fb.height != pipe_surface_height(surface)) {
-      LOG_UNSUPPORTED("ClearDepthStencilView requires one bound full D16/D32 depth target");
+      LOG_UNSUPPORTED("ClearDepthStencilView requires one bound full admitted depth target");
       SetError(hDevice, E_NOTIMPL);
       return;
    }
    union pipe_color_union color;
    memset(&color, 0, sizeof(color));
-   pipe->clear(pipe, PIPE_CLEAR_DEPTH, 0, 0, NULL, &color, Depth, 0);''')])
+   pipe->clear(pipe, clear_flags, 0, 0, NULL, &color, Depth, Stencil);''')])
     change('src/gallium/frontends/d3d10umd/Query.cpp',
         '8456801b1614e79ad9ce307035a76a5f5f642eb83a40e4c066a8946f44d620b4',[
         ('#include "State.h"', '''#include "State.h"
@@ -1208,6 +1216,7 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
         ('#include "util/u_surface.h"',
          '''#include "util/u_surface.h"
 #include "drm-uapi/drm_fourcc.h"
+#include "agx_win32_asahi_scene.h"
 
 static bool
 AgxD3d10ResourceWithinRequiredLimits(
@@ -1413,7 +1422,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       bool private_depth =
          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
          (pCreateResource->Format == DXGI_FORMAT_D32_FLOAT ||
-          pCreateResource->Format == DXGI_FORMAT_D16_UNORM) &&
+          pCreateResource->Format == DXGI_FORMAT_D16_UNORM ||
+          pCreateResource->Format == DXGI_FORMAT_D24_UNORM_S8_UINT) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
@@ -1431,9 +1441,14 @@ AgxD3d10ResourceWithinRequiredLimits(
          SetError(hDevice, E_NOTIMPL);
          return;
       }
-      const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;
-      pResource->resource = screen->resource_create_with_modifiers(
-         screen, &templat, &modifier, 1);
+      if(pCreateResource->Format==DXGI_FORMAT_D24_UNORM_S8_UINT) {
+         pResource->resource=AgxWin32AsahiCreateUncompressedD24S8(
+            screen,&templat);
+      } else {
+         const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;
+         pResource->resource = screen->resource_create_with_modifiers(
+            screen, &templat, &modifier, 1);
+      }
    } else {
       pResource->resource = screen->resource_create(screen, &templat);
    }

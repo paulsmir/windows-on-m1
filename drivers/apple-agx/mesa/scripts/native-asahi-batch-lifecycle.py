@@ -244,7 +244,12 @@ def project_sources(out,project,overlays):
                       stencil_clear_mask == 0;
    bool depth_clear = buffers == PIPE_CLEAR_DEPTH && color_clear_mask == 0 &&
                       stencil_clear_mask == 0 && depth >= 0.0 && depth <= 1.0;
-   if (ctx->any_faults || (!color_clear && !depth_clear) || !color ||
+   bool depth_stencil_clear =
+      buffers == (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL) &&
+      color_clear_mask == 0 && stencil_clear_mask == 0 &&
+      depth >= 0.0 && depth <= 1.0;
+   if (ctx->any_faults ||
+       (!color_clear && !depth_clear && !depth_stencil_clear) || !color ||
        scissor_state) { ctx->any_faults = true; return; }
    struct agx_batch *batch = agx_get_batch(ctx);
    if (!batch || !AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults = true; return; }

@@ -242,6 +242,10 @@ typedef struct _APPLE_AGX_WIN32_NATIVE_BATCH_METADATA {
   APPLE_AGX_U32 DepthCompressionReference;
   APPLE_AGX_U32 DepthStride;
   APPLE_AGX_U32 DepthCompressionStride;
+  APPLE_AGX_U32 StencilReference;
+  APPLE_AGX_U32 StencilCompressionReference;
+  APPLE_AGX_U32 StencilStride;
+  APPLE_AGX_U32 StencilCompressionStride;
   APPLE_AGX_U64 ZlsControl;
   APPLE_AGX_U64 IspZlsPixels;
   APPLE_AGX_U32 IspBgobjDepth;

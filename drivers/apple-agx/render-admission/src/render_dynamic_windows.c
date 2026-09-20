@@ -270,6 +270,35 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
               &bindings.DepthCompressionGpuVirtualAddress))
         return STATUS_INVALID_ADDRESS;
     }
+    if (native->StencilReference != APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+      const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *stencil;
+      if (native->StencilReference >= Snapshot->View.Header->ReferenceCount)
+        return STATUS_INVALID_IMAGE_FORMAT;
+      stencil = &Snapshot->View.References[native->StencilReference];
+      if (!AdmissionDynamicResolve(
+              &build, Snapshot->Facts[native->StencilReference].AllocationToken,
+              Snapshot->Facts[native->StencilReference].ClassId,
+              native->StencilReference, AppleAgxWin32RoleDepthAttachment,
+              stencil->Offset, 1u, &bindings.StencilGpuVirtualAddress))
+        return STATUS_INVALID_ADDRESS;
+    }
+    if (native->StencilCompressionReference !=
+        APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+      const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *compression;
+      if (native->StencilCompressionReference >=
+          Snapshot->View.Header->ReferenceCount)
+        return STATUS_INVALID_IMAGE_FORMAT;
+      compression = &Snapshot->View.References[
+          native->StencilCompressionReference];
+      if (!AdmissionDynamicResolve(
+              &build,
+              Snapshot->Facts[native->StencilCompressionReference].AllocationToken,
+              Snapshot->Facts[native->StencilCompressionReference].ClassId,
+              native->StencilCompressionReference, AppleAgxWin32RoleDescriptor,
+              compression->Offset, 1u,
+              &bindings.StencilCompressionGpuVirtualAddress))
+        return STATUS_INVALID_ADDRESS;
+    }
   }
   if (AdmissionDynamicDmaBuild(
           Snapshot->View.Header->Generation,

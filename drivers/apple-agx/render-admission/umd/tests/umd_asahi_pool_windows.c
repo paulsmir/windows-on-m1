@@ -188,11 +188,14 @@ static int RuntimeResolve(void *context,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
     return 1;
   }
   if(role==AppleAgxWin32RoleDepthAttachment && consumer->Source->NativeBatch &&
-     ref==consumer->Source->NativeBatch->DepthReference) {
+     (ref==consumer->Source->NativeBatch->DepthReference ||
+      ref==consumer->Source->NativeBatch->StencilReference)) {
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *source=&consumer->Source->References[ref];
     if(offset<source->Offset || offset-source->Offset>=source->Bytes ||
        bytes>source->Bytes-(offset-source->Offset)) return 0;
-    *out=consumer->DestinationGpu+0x4000000ULL+offset-source->Offset;
+    *out=consumer->DestinationGpu+
+        (ref==consumer->Source->NativeBatch->DepthReference ?
+          0x4000000ULL : 0x6000000ULL)+offset-source->Offset;
     return 1;
   }
   return AdmissionDynamicOverlayResolve(&consumer->Plan,ref,offset,bytes,out)==AdmissionDynamicOverlaySuccess;
@@ -261,6 +264,14 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
           depth,AppleAgxWin32RoleDepthAttachment,reference->Offset,1u,
           &consumer->Bindings.DepthGpuVirtualAddress))
         return RuntimeConsumerFailure("depth-resolve",i,0);
+      if(view.NativeBatch->StencilReference!=APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+        unsigned stencil=view.NativeBatch->StencilReference;
+        reference=&view.References[stencil];
+        if(!RuntimeResolve(consumer,facts[stencil].AllocationToken,
+            facts[stencil].ClassId,stencil,AppleAgxWin32RoleDepthAttachment,
+            reference->Offset,1u,&consumer->Bindings.StencilGpuVirtualAddress))
+          return RuntimeConsumerFailure("stencil-resolve",i,0);
+      }
     }
     result=AppleAgxDynamicJobMaterialize(&view,facts,ARRAYSIZE(facts),0x1100000000ULL,
         RuntimeRead,RuntimeResolve,consumer,RuntimeImages[i],sizeof(RuntimeImages[i]),&RuntimeJobs[i]);
@@ -380,6 +391,11 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     result=AdmissionDynamicOverlayApply(&consumer->Backend,&consumer->WorkerPlan,
         consumer->Dma.Job,consumer->Dma.Storage,consumer->Dma.StorageBytes,RuntimeConsumerFence,&consumer->State);
     if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("overlay-apply",i,result);
+    if(!AdmissionBackendImageStageJob(&consumer->Backend,RuntimeConsumerFence,0,1,2,2,APPLE_AGX_TRUE,&staged))
+      return RuntimeConsumerFailure("stage-job",i,0);
+    result=AdmissionDynamicOverlayRouteNative(&consumer->WorkerPlan,consumer->Dma.Bindings,
+        consumer->Backend.Objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT);
+    if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("native-roots",i,result);
     if(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
       APPLE_AGX_U32 initialIsp=0,reloadIsp=0;
       const unsigned char *work=consumer->Backend.Objects[18].Data;
@@ -389,12 +405,42 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
           ((view.NativeBatch->RenderFlags&
             APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)?0x40000u:0u);
       RUNTIME_REQUIRE(initialIsp==expectedIsp && reloadIsp==expectedIsp);
+      if(view.NativeBatch->StencilReference!=APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+        APPLE_AGX_U64 initialLoad=0,initialStore=0,initialLoadStride=0,
+            initialStoreStride=0,initialLoadCompression=0,
+            initialLoadCompressionStride=0,initialStoreCompression=0,
+            initialStoreCompressionStride=0,reloadLoad=0,reloadStride=0,
+            reloadCompressionStride=0,reloadStore=0,reloadPartial=0,
+            reloadCompression=0;
+        APPLE_AGX_U32 initialValues=0,reloadValues=0;
+        memcpy(&initialLoad,work+0xf0u,8); memcpy(&initialStore,work+0xf8u,8);
+        memcpy(&initialLoadStride,work+0x110u,8);
+        memcpy(&initialStoreStride,work+0x118u,8);
+        memcpy(&initialLoadCompression,work+0x140u,8);
+        memcpy(&initialLoadCompressionStride,work+0x148u,8);
+        memcpy(&initialStoreCompression,work+0x150u,8);
+        memcpy(&initialStoreCompressionStride,work+0x158u,8);
+        memcpy(&reloadLoad,work+0x690u,8); memcpy(&reloadStride,work+0x698u,8);
+        memcpy(&reloadCompressionStride,work+0x6a0u,8);
+        memcpy(&reloadStore,work+0x6a8u,8); memcpy(&reloadPartial,work+0x6b0u,8);
+        memcpy(&reloadCompression,work+0x6b8u,8);
+        memcpy(&initialValues,work+0x3fcu,4); memcpy(&reloadValues,work+0x744u,4);
+        RUNTIME_REQUIRE(initialLoad==consumer->Bindings.StencilGpuVirtualAddress &&
+            initialStore==consumer->Bindings.StencilGpuVirtualAddress &&
+            initialLoadStride==view.NativeBatch->StencilStride &&
+            initialStoreStride==view.NativeBatch->StencilStride &&
+            !initialLoadCompression && !initialLoadCompressionStride &&
+            !initialStoreCompression && !initialStoreCompressionStride &&
+            reloadLoad==consumer->Bindings.StencilGpuVirtualAddress &&
+            reloadStride==view.NativeBatch->StencilStride &&
+            !reloadCompressionStride &&
+            reloadStore==consumer->Bindings.StencilGpuVirtualAddress &&
+            reloadPartial==consumer->Bindings.StencilGpuVirtualAddress &&
+            !reloadCompression &&
+            initialValues==(view.NativeBatch->IspBgobjValues|0x400u) &&
+            reloadValues==view.NativeBatch->IspBgobjValues);
+      }
     }
-    if(!AdmissionBackendImageStageJob(&consumer->Backend,RuntimeConsumerFence,0,1,2,2,APPLE_AGX_TRUE,&staged))
-      return RuntimeConsumerFailure("stage-job",i,0);
-    result=AdmissionDynamicOverlayRouteNative(&consumer->WorkerPlan,consumer->Dma.Bindings,
-        consumer->Backend.Objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT);
-    if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("native-roots",i,result);
     ADMISSION_NATIVE_GRAPH_RECEIPT receipt;
     result=AdmissionDynamicOverlayCaptureNativeGraph(consumer->Dma.Bindings,&consumer->WorkerPlan,
         consumer->Dma.Job,consumer->Backend.Objects,APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,

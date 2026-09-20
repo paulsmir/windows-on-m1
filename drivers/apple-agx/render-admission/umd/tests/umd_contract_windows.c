@@ -1036,6 +1036,8 @@ static void test_mesa_d3d10_frontend_open(void) {
           MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT_R8G8B8A8_UNORM) &&
           MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT_D32_FLOAT) &&
           MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT_D16_UNORM) &&
+          MesaD3d10FrontendFormatMappedForTest(
+              DXGI_FORMAT_D24_UNORM_S8_UINT) &&
           !MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT_UNKNOWN));
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_B8G8R8A8_UNORM,&formatCaps);
     CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
@@ -2038,6 +2040,74 @@ static void test_mesa_d3d10_frontend_open(void) {
         deviceFunctions.pfnDestroyDepthStencilView(device,d16View);
         deviceFunctions.pfnDestroyResource(device,d16);
         free(d16View.pDrvPrivate);free(d16.pDrvPrivate);
+        deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,
+            (D3D10DDI_HDEPTHSTENCILVIEW){0});
+        deviceFunctions.pfnSetViewports(device,1,0,&viewport);
+        deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+      }
+      {
+        D3D10DDI_MIPINFO dsMip={0};D3D10DDIARG_CREATERESOURCE dsCreate={0};
+        D3D10DDI_HRESOURCE ds={0};D3D10DDI_HRTRESOURCE dsRuntime={0};
+        D3D10DDIARG_CREATEDEPTHSTENCILVIEW dsViewCreate={0};
+        D3D10DDI_HDEPTHSTENCILVIEW dsView={0};
+        D3D10DDI_HRTDEPTHSTENCILVIEW dsViewRuntime={0};
+        dsMip.TexelWidth=dsMip.TexelHeight=16;dsMip.TexelDepth=1;
+        dsCreate.pMipInfoList=&dsMip;
+        dsCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        dsCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
+        dsCreate.BindFlags=D3D10_DDI_BIND_DEPTH_STENCIL;
+        dsCreate.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
+        dsCreate.SampleDesc.Count=1;dsCreate.MipLevels=1;dsCreate.ArraySize=1;
+        SIZE_T dsBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&dsCreate);
+        ds.pDrvPrivate=calloc(1,dsBytes);dsRuntime.handle=(VOID *)(UINT_PTR)0xd34u;
+        CHECK(ds.pDrvPrivate!=NULL);
+        unsigned dsErrors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&dsCreate,ds,dsRuntime);
+        CHECK(FrontendErrors==dsErrors);
+        dsViewCreate.hDrvResource=ds;dsViewCreate.Format=DXGI_FORMAT_D24_UNORM_S8_UINT;
+        dsViewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        dsViewCreate.Tex2D.MipSlice=0;dsViewCreate.Tex2D.FirstArraySlice=0;
+        dsViewCreate.Tex2D.ArraySize=1;
+        SIZE_T dsViewBytes=deviceFunctions.pfnCalcPrivateDepthStencilViewSize(
+            device,&dsViewCreate);
+        dsView.pDrvPrivate=calloc(1,dsViewBytes);
+        dsViewRuntime.handle=(VOID *)(UINT_PTR)0xd35u;
+        CHECK(dsView.pDrvPrivate!=NULL);
+        deviceFunctions.pfnCreateDepthStencilView(
+            device,&dsViewCreate,dsView,dsViewRuntime);
+        CHECK(FrontendErrors==dsErrors);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+        RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+        memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+        RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH;
+        D3D10_DDI_VIEWPORT dsViewport={0,0,16,16,0,1};
+        D3D10_DDI_RECT dsRect={0,0,16,16};
+        deviceFunctions.pfnSetRenderTargets(device,&depthColorRtv,1,0,dsView);
+        deviceFunctions.pfnSetViewports(device,1,0,&dsViewport);
+        deviceFunctions.pfnSetScissorRects(device,1,0,&dsRect);
+        deviceFunctions.pfnClearDepthStencilView(device,dsView,
+            D3D10_DDI_CLEAR_DEPTH|D3D10_DDI_CLEAR_STENCIL,0.75f,0x5au);
+        CHECK(FrontendErrors==dsErrors && !AgxWin32AsahiContextFaulted(
+            MesaD3d10FrontendContextForTest(device)));
+        deviceFunctions.pfnDraw(device,3,0);
+        CHECK(FrontendErrors==dsErrors && AgxWin32AsahiContextDrawReceipt(
+            MesaD3d10FrontendContextForTest(device)));
+        deviceFunctions.pfnFlush(device);
+        CHECK(RuntimeRenders==1u && RuntimeSignals==1u &&
+              RuntimeMaterializations==2u && RuntimeConsumerGates==2u &&
+              RuntimeMarker!=NULL);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(depthOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(
+              MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(depthOwner,5u);
+        }
+        RuntimeExpectedCommandVersion=0;
+        deviceFunctions.pfnDestroyDepthStencilView(device,dsView);
+        deviceFunctions.pfnDestroyResource(device,ds);
+        free(dsView.pDrvPrivate);free(ds.pDrvPrivate);
         deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,
             (D3D10DDI_HDEPTHSTENCILVIEW){0});
         deviceFunctions.pfnSetViewports(device,1,0,&viewport);

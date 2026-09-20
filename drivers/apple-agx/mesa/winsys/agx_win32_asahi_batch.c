@@ -70,8 +70,11 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   ABSENT(DescriptorReference); ABSENT(ScissorReference); ABSENT(DepthBiasReference);
 #undef ABSENT
   c->Draw.Reserved[0]=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
-  if(has_depth)
+  if(has_depth) {
     c->Render.DepthCompressionReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+    c->Render.StencilReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+    c->Render.StencilCompressionReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  }
   return 1;
 }
 int AgxWin32AsahiBatchEnter(struct agx_batch *b) {
@@ -154,13 +157,25 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     struct agx_resource *depth=agx_resource(zs->texture);
     valid=!ctx->stage[MESA_SHADER_FRAGMENT].texture_count && !info->index_size &&
         (zs->format==PIPE_FORMAT_Z32_FLOAT ||
-         zs->format==PIPE_FORMAT_Z16_UNORM) && !zs->level &&
+         zs->format==PIPE_FORMAT_Z16_UNORM ||
+         zs->format==PIPE_FORMAT_Z24_UNORM_S8_UINT) && !zs->level &&
         !zs->first_layer && !zs->last_layer &&
         depth->base.target==PIPE_TEXTURE_2D &&
         (depth->base.format==PIPE_FORMAT_Z32_FLOAT ||
-         depth->base.format==PIPE_FORMAT_Z16_UNORM) && !depth->layout.compressed &&
+         depth->base.format==PIPE_FORMAT_Z16_UNORM ||
+         depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT) &&
+        !depth->layout.compressed &&
         depth->base.last_level==0 && depth->base.depth0==1 &&
         depth->base.array_size==1 && depth->base.nr_samples<=1 && depth->bo;
+    if(valid && depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+      struct agx_resource *stencil=depth->separate_stencil?
+          agx_resource(depth->separate_stencil):NULL;
+      valid=depth->layout.format==PIPE_FORMAT_Z32_FLOAT && stencil &&
+          stencil->layout.format==PIPE_FORMAT_S8_UINT &&
+          !stencil->layout.compressed && stencil->base.last_level==0 &&
+          stencil->base.depth0==1 && stencil->base.array_size==1 &&
+          stencil->base.nr_samples<=1 && stencil->bo;
+    }
   }
   if(valid && info->index_size) {
     struct pipe_resource *resource=info->index.resource;
@@ -192,7 +207,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
   if(!c || !d || !r || d->Failed || b->ctx->any_faults || c->Submitted || c->Rejected ||
       b->draws!=1 || b->vs_scratch || b->fs_scratch ||
       agx_tilebuffer_spills(&b->tilebuffer_layout) || r->samples!=1 || r->layers!=1 ||
-      r->stencil.base || r->isp_oclqry_base ||
+      r->isp_oclqry_base ||
       r->sampler_heap || r->sampler_count ||
       (r->flags & ~((unsigned)DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES |
                     (unsigned)DRM_ASAHI_RENDER_DBIAS_IS_INT)) ||
@@ -208,9 +223,14 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
   if(c->Capture.Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
     struct pipe_surface *zs=&b->key.zsbuf;
     struct agx_resource *depth=zs->texture?agx_resource(zs->texture):NULL;
+    struct agx_resource *stencil=depth&&depth->separate_stencil?
+        agx_resource(depth->separate_stencil):NULL;
+    int has_stencil=depth&&depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT;
     uint64_t depth_address=depth ? agx_map_texture_gpu(depth,0)+
         ail_get_level_offset_B(&depth->layout,0) : 0;
     if(!depth || depth->layout.compressed || !r->depth.base ||
+       (has_stencil && (depth->layout.format!=PIPE_FORMAT_Z32_FLOAT ||
+                        !stencil || stencil->layout.format!=PIPE_FORMAT_S8_UINT)) ||
        (((r->flags & DRM_ASAHI_RENDER_DBIAS_IS_INT)!=0) !=
         (depth->base.format==PIPE_FORMAT_Z16_UNORM)) ||
        r->depth.base!=depth_address || r->depth.comp_base || r->depth.comp_stride ||
@@ -221,6 +241,24 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
           AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite,
           &c->Render.DepthReference)!=AgxRelocOk)
       return batch_reject(c,__LINE__);
+    if(has_stencil) {
+      uint64_t stencil_address=stencil?agx_map_texture_gpu(stencil,0)+
+          ail_get_level_offset_B(&stencil->layout,0):0;
+      if(!stencil || stencil->layout.compressed || !r->stencil.base ||
+         r->stencil.base!=stencil_address || r->stencil.comp_base ||
+         r->stencil.comp_stride || !stencil->layout.layer_stride_B ||
+         stencil->layout.layer_stride_B>UINT32_MAX ||
+         AgxWin32AsahiCaptureAddress(&c->Capture,r->stencil.base,
+            (APPLE_AGX_U32)stencil->layout.layer_stride_B,
+            AppleAgxWin32RoleDepthAttachment,
+            AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite,
+            &c->Render.StencilReference)!=AgxRelocOk)
+        return batch_reject(c,__LINE__);
+      c->Render.StencilStride=r->stencil.stride;
+      c->Render.StencilCompressionStride=0;
+    } else if(r->stencil.base || r->stencil.comp_base || r->stencil.comp_stride) {
+      return batch_reject(c,__LINE__);
+    }
     c->Render.DepthStride=r->depth.stride;
     c->Render.DepthCompressionStride=0;
     c->Render.ZlsControl=r->zls_ctrl;
@@ -228,6 +266,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
     c->Render.IspBgobjDepth=r->isp_bgobjdepth;
     c->Render.IspBgobjValues=r->isp_bgobjvals;
   } else if(r->depth.base || r->depth.comp_base || r->depth.comp_stride ||
+            r->stencil.base || r->stencil.comp_base || r->stencil.comp_stride ||
             r->zls_ctrl || r->isp_zls_pixels ||
             r->isp_bgobjdepth || r->isp_bgobjvals!=0x300u) {
     return batch_reject(c,__LINE__);

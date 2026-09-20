@@ -116,10 +116,18 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
         Bindings->DepthGpuVirtualAddress == 0ULL ||
         ((Bindings->NativeBatch.DepthCompressionReference ==
           APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
-         (Bindings->DepthCompressionGpuVirtualAddress == 0ULL)))
+         (Bindings->DepthCompressionGpuVirtualAddress == 0ULL)) ||
+        ((Bindings->NativeBatch.StencilReference ==
+          APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+         (Bindings->StencilGpuVirtualAddress == 0ULL)) ||
+        ((Bindings->NativeBatch.StencilCompressionReference ==
+          APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+         (Bindings->StencilCompressionGpuVirtualAddress == 0ULL)))
       return 0;
   } else if (Bindings->DepthGpuVirtualAddress != 0ULL ||
-             Bindings->DepthCompressionGpuVirtualAddress != 0ULL) {
+             Bindings->DepthCompressionGpuVirtualAddress != 0ULL ||
+             Bindings->StencilGpuVirtualAddress != 0ULL ||
+             Bindings->StencilCompressionGpuVirtualAddress != 0ULL) {
     return 0;
   }
   for (index = 0u; index < Job->ObjectCount; ++index) {

@@ -59,6 +59,8 @@ typedef struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS {
   APPLE_AGX_U64 DestinationBytes;
   APPLE_AGX_U64 DepthGpuVirtualAddress;
   APPLE_AGX_U64 DepthCompressionGpuVirtualAddress;
+  APPLE_AGX_U64 StencilGpuVirtualAddress;
+  APPLE_AGX_U64 StencilCompressionGpuVirtualAddress;
   APPLE_AGX_WIN32_NATIVE_BATCH_METADATA NativeBatch;
 } ADMISSION_DYNAMIC_OVERLAY_BINDINGS;
 

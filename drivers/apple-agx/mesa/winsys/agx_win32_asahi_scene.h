@@ -65,6 +65,8 @@ struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
 void AgxWin32AsahiResourceRelease(struct pipe_resource **);
 int AgxWin32AsahiResourceIdentity(
     struct pipe_resource *, AGX_WIN32_RELOC_ALLOCATION *);
+struct pipe_resource *AgxWin32AsahiCreateUncompressedD24S8(
+    struct pipe_screen *,const struct pipe_resource *);
 /* False retains caller storage; retry only after pending ownership is resolved.
  * All contexts must be destroyed before their screen is destroyed. */
 int AgxWin32AsahiContextDestroy(struct pipe_context *);

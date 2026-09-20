@@ -733,10 +733,18 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
        !Bindings->DepthGpuVirtualAddress || !n->DepthStride ||
        !n->ZlsControl || !n->IspZlsPixels || !n->IspBgobjValues ||
        ((n->DepthCompressionReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
-        (Bindings->DepthCompressionGpuVirtualAddress==0ULL)))
+        (Bindings->DepthCompressionGpuVirtualAddress==0ULL)) ||
+       ((n->StencilReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+        (Bindings->StencilGpuVirtualAddress==0ULL)) ||
+       ((n->StencilCompressionReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+        (Bindings->StencilCompressionGpuVirtualAddress==0ULL)) ||
+       ((n->StencilReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+        (n->StencilStride==0u)))
       return AdmissionDynamicOverlayLayout;
   } else if(Bindings->DepthGpuVirtualAddress ||
-            Bindings->DepthCompressionGpuVirtualAddress) {
+            Bindings->DepthCompressionGpuVirtualAddress ||
+            Bindings->StencilGpuVirtualAddress ||
+            Bindings->StencilCompressionGpuVirtualAddress) {
     return AdmissionDynamicOverlayLayout;
   }
   roots[0]=&n->Background; roots[1]=&n->PartialBackground; roots[2]=&n->EndOfTile;
@@ -789,6 +797,9 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   if(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
     const APPLE_AGX_U64 depth=Bindings->DepthGpuVirtualAddress;
     const APPLE_AGX_U64 compression=Bindings->DepthCompressionGpuVirtualAddress;
+    const APPLE_AGX_U64 stencil=Bindings->StencilGpuVirtualAddress;
+    const APPLE_AGX_U64 stencilCompression=
+        Bindings->StencilCompressionGpuVirtualAddress;
     overlay_write_u64(work+0xc8u,n->IspZlsPixels);
     overlay_write_u64(work+0xd8u,n->ZlsControl);
     overlay_write_u64(work+0xe0u,depth); overlay_write_u64(work+0xe8u,depth);
@@ -798,6 +809,13 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
     overlay_write_u64(work+0x128u,n->DepthCompressionStride);
     overlay_write_u64(work+0x130u,compression);
     overlay_write_u64(work+0x138u,n->DepthCompressionStride);
+    overlay_write_u64(work+0xf0u,stencil); overlay_write_u64(work+0xf8u,stencil);
+    overlay_write_u64(work+0x110u,n->StencilStride);
+    overlay_write_u64(work+0x118u,n->StencilStride);
+    overlay_write_u64(work+0x140u,stencilCompression);
+    overlay_write_u64(work+0x148u,n->StencilCompressionStride);
+    overlay_write_u64(work+0x150u,stencilCompression);
+    overlay_write_u64(work+0x158u,n->StencilCompressionStride);
     overlay_write_u32(work+0x3f8u,n->IspBgobjDepth);
     overlay_write_u32(work+0x3fcu,n->IspBgobjValues|0x400u);
     overlay_write_u64(work+0x650u,n->ZlsControl);
@@ -807,6 +825,12 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
     overlay_write_u64(work+0x678u,depth);
     overlay_write_u64(work+0x680u,depth);
     overlay_write_u64(work+0x688u,compression);
+    overlay_write_u64(work+0x690u,stencil);
+    overlay_write_u64(work+0x698u,n->StencilStride);
+    overlay_write_u64(work+0x6a0u,n->StencilCompressionStride);
+    overlay_write_u64(work+0x6a8u,stencil);
+    overlay_write_u64(work+0x6b0u,stencil);
+    overlay_write_u64(work+0x6b8u,stencilCompression);
     overlay_write_u32(work+0x740u,n->IspBgobjDepth);
     overlay_write_u32(work+0x744u,n->IspBgobjValues);
     overlay_write_u64(work+0x768u,n->IspZlsPixels);

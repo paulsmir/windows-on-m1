@@ -466,14 +466,25 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       struct agx_resource *depth = agx_resource(zs->texture);
       valid = !indexed && !ctx->stage[MESA_SHADER_FRAGMENT].texture_count &&
               (zs->format == PIPE_FORMAT_Z32_FLOAT ||
-               zs->format == PIPE_FORMAT_Z16_UNORM) && !zs->level &&
+               zs->format == PIPE_FORMAT_Z16_UNORM ||
+               zs->format == PIPE_FORMAT_Z24_UNORM_S8_UINT) && !zs->level &&
               !zs->first_layer && !zs->last_layer &&
               depth->base.target == PIPE_TEXTURE_2D &&
               (depth->base.format == PIPE_FORMAT_Z32_FLOAT ||
-               depth->base.format == PIPE_FORMAT_Z16_UNORM) &&
+               depth->base.format == PIPE_FORMAT_Z16_UNORM ||
+               depth->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT) &&
               !depth->layout.compressed && depth->base.last_level == 0 &&
               depth->base.depth0 == 1 && depth->base.array_size == 1 &&
               util_res_sample_count(&depth->base) == 1 && depth->bo;
+      if (valid && depth->base.format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+         struct agx_resource *stencil = depth->separate_stencil ?
+            agx_resource(depth->separate_stencil) : NULL;
+         valid = depth->layout.format == PIPE_FORMAT_Z32_FLOAT && stencil &&
+            stencil->layout.format == PIPE_FORMAT_S8_UINT &&
+            !stencil->layout.compressed && stencil->base.last_level == 0 &&
+            stencil->base.depth0 == 1 && stencil->base.array_size == 1 &&
+            util_res_sample_count(&stencil->base) == 1 && stencil->bo;
+      }
    }
    /* active_queries is an enable switch initialized true, not a query count.
     * Reject real bound query objects before any unsupported producer work. */
