@@ -44788,3 +44788,17 @@ One exact staged package, natural full-owner bind, verify installed hashes and
 Code0/Start12/Platform14; clear authorized temporary login; client task120s once.
 Evidence main-root .local/experiments/EXP699-live. Physical comparator EXP698
 PERSISTS; independently record new operator observation if available.
+
+### EXP699 finalized artifact gate — 2026-09-20T22:36:56.298500+00:00
+Committed exact source c0af47f6aab26f46b3caf939fef83e2594dd2acc matches staged source archive.
+Build manifest preserves preregistered precommit HEAD+diff; final manifest uses
+verified equivalent implementation commit. Analysis0/0 Universal/Inf2Cat/catalog
+PASS; same E9BE15 signer and expected builder root-not-trusted condition.
+package/AppleAgxRenderAdmission.inf: 85ce21b6c35dfacf9cc3e9e9ab801946a8f8d36c45959a98ccc57fd1d0ff41fe
+package/AppleAgxRenderAdmission.sys: 9a680a2ea936276e1212d70bd4499c8c449bf493205102c824a75b6044d59b30
+package/AppleAgxRenderAdmissionUmd.dll: ce52e86e02954de363a5437b08fe9aa47562a8aa69a65283243186b3c5f6923c
+package/appleagxrenderadmission.cat: b481fa3799d493955fbad0a17470b23c427f6e45a8fd1d38b7c1666d02d215b0
+qualification/AppleAgxD3d10Standard.exe: 39cf8b7ca801971de48611acff465423d570f0c9819d2d9d69352d9f9339b217
+qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable .local/experiments/EXP699-kmd-render-715.zip SHA 9b61bcab92a1b969d35aad43f68db18d7cd4100de3ce53c756990a5395611254.
+Air must verify Valid signatures and exact hashes before stage/bind.
