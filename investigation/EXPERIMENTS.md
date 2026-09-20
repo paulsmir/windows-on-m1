@@ -44198,3 +44198,36 @@ Run once in authenticated console after Code0; exact recovery unchanged.
 ### EXP690 continuation recovery and evidence correction — 2026-09-20T19:01:42.333880+00:00
 
 Client returned E_INVALIDARG again; therefore interface-variant causality is unconfirmed. Prior statements that runtime reached CreateDevice or rejected a specific callback were hypotheses, not observed facts. No UMD entry/exit receipt was captured. Cleanup output reports exact package/service/signer removal; final recovery was not verified. Bounded SSH now times out, both proxy USB endpoints exist, and no launcher runs. Next recovery uses unchanged immutable ordinary377/392, broker disabled, with output in main-root .local/experiments/EXP690-live/ordinary-recovery-continuation. Verify Code28/no package/service/files/signer and guest health before further hardware.
+
+## EXP691 — split standard device/swap-chain admission discriminator
+UTC preregistration 2026-09-20, before any staging. Source implementation
+883c2429 (full hash in CHANGES.csv); driver package remains exact EXP690 build709.
+WHY THIS HYPOTHESIS: EXP688–690 supplied only a combined creation HRESULT;
+no adapter line does not prove the native CreateDevice failed. Splitting the two
+standard APIs distinguishes device creation from swap-chain validation with one
+client change and no driver policy changes.
+WINDOWS CONTRACT: D3D10CreateDevice followed by the adapter's parent
+IDXGIFactory::CreateSwapChain uses the standard runtime and existing native UMD.
+AGX/ASAHI CONTRACT: unchanged actual producer, physical/patch-list submission.
+TRANSLATION: identical scene and swap-chain description after separate creation.
+WHAT IS STILL UNKNOWN: which creation API returns E_INVALIDARG; UMD stage remains
+unknown if D3D10CreateDevice fails. Do not infer callback absence from HRESULT.
+Build: existing AppleAgxD3dKmRender.vcxproj EnableStandardRuntimeClient=true,
+Release x64 and ARM64, pinned SDK26100; both 0 warnings/errors. Signed client SHA
+8ff9cedbb6a5ac29a3529614be6fdddfbe2efda8d3e9696c197367e5df1b9d78.
+Artifact .local/experiments/EXP691-split-admission.zip SHA
+841c94792c352037863e4a3f68dc601f088898764a158eda61ac934820141660.
+INF/SYS/UMD/CAT and E9BE15 signer are exact EXP690 identities, reinstalled fresh.
+Recovery ordinary377/392 verified no AppleAgx package/service/files/signer,
+Code28 after reenumeration, 8CPU/NVMe/xHCI/input and no fresh 41/1001/129/4101.
+Launch unchanged EXP584 m1n1 plus EXP406 FD, physical/debug-off/low-mem,
+WOM1_AGX_G2_POWER_BROKER=1; source and firmware identities unchanged from EXP690.
+Stage manifest-checked archive with pnputil /add-driver (without /install),
+then controlled reboot; require installed hashes, Code0 and Running service.
+Use authenticated console with temporary operator-authorized autologon removed
+before client. Execute one Interactive task with 120s bound and durable logs.
+Evidence main-root .local/experiments/EXP691-live; collect registry, events,
+client logs and exit before exact package/task/signer removal and ordinary
+recovery. PASS discriminator: separate create-device/create-swap-chain HRESULT.
+Rendering success additionally requires native submission/completion evidence;
+client Present success alone is insufficient. No replay within this experiment.
