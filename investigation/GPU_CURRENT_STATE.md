@@ -1693,3 +1693,6 @@ hardware path changes. EXP689 cleaned; next run requires fresh gates/package.
 D3D10_0 interface variants pass fresh x64 execution and ARM64/package709 gates.
 Immutable SHA ff1a4bb3226726d68eb76bd227648fe7a375eb64ee3f2210200775e3a5de62a1.
 Next stage exact package and run once in authenticated console.
+
+## Current proven boundary correction after EXP690
+EXP690 returned E_INVALIDARG from the combined D3D10CreateDeviceAndSwapChain call. Neither UMD CreateDevice entry nor rejection of any particular interface/callback is proven. Earlier causal claims about pipeline/interface rejection are superseded by this uncertainty; retain those source changes but do not weaken callback guards speculatively. Recovery continuation verified SSH, 8 CPUs, NVMe/xHCI/input, no service/SYS/UMD/signer and no fresh critical/storage/display events. Re-enumerate the unbound stale Code0 devnode to Code28 before staging. Next discriminator splits standard D3D10CreateDevice from IDXGIFactory::CreateSwapChain and logs HRESULT at both boundaries. Client x64/ARM64 builds are 0 warnings/errors; signed ARM64 SHA8ff9cedbb6a5ac29a3529614be6fddddfbe2efda8d3e9696c197367e5df1b9d78 (see actual hash manifest for authoritative value). Driver package709 stays byte-identical.

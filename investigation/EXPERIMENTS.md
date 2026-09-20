@@ -44194,3 +44194,7 @@ b6113ed41a780969e3b597fd13043d7cbdc37b4b19a1319392918a34478fe87f,
 fb1a9f9076600364c2a4ad45ea9ffa47617969b2195ddfc3e38dcb9229928774.
 Immutable archive SHA ff1a4bb3226726d68eb76bd227648fe7a375eb64ee3f2210200775e3a5de62a1.
 Run once in authenticated console after Code0; exact recovery unchanged.
+
+### EXP690 continuation recovery and evidence correction — 2026-09-20T19:01:42.333880+00:00
+
+Client returned E_INVALIDARG again; therefore interface-variant causality is unconfirmed. Prior statements that runtime reached CreateDevice or rejected a specific callback were hypotheses, not observed facts. No UMD entry/exit receipt was captured. Cleanup output reports exact package/service/signer removal; final recovery was not verified. Bounded SSH now times out, both proxy USB endpoints exist, and no launcher runs. Next recovery uses unchanged immutable ordinary377/392, broker disabled, with output in main-root .local/experiments/EXP690-live/ordinary-recovery-continuation. Verify Code28/no package/service/files/signer and guest health before further hardware.
