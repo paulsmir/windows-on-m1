@@ -861,3 +861,26 @@ The frozen inventory is 114 of 121 mandatory rows proven, with 7 unresolved.
 Pipeline mask remains zero; no package was staged, installed or hardware-run.
 The current causal target is the source-derived G13/V13_5 compute work object,
 compute queue and CP-to-TA dependency required by the real Asahi GS producer.
+
+## Verified source-derived G13/V13_5 RunCompute image foundation (2026-09-20)
+The frozen GS/stream-output group requires the real Asahi mixed CDM-to-VDM
+producer.  The first request-owned KMD foundation now builds the exact packed
+G13/V13_5 RunCompute image from validated inputs: command tag/counter/VM slot,
+notifier, the 0x7fa0-byte compute preemption allocation and all five derived
+pointers, CDM start/end, USC base, optional helper fields, microsequence root,
+and CP stamp/event lineage.  It rejects malformed or inconsistent inputs before
+mutating destination bytes.  A compiler layout mirror asserts the selected
+pinned Asahi Rust offsets and total 0x31c-byte image.
+
+Fresh x64 full runtime execution PASS:
+evidence/AD04-runtime-closure/native-g13-compute-work-20260920dj-x64/;
+source archive SHA-256
+592f6a962c127421aaf5926e0d373988995fcd8c4c4940dc04ba10adfebfa060.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-g13-compute-work-20260920dk-arm64/;
+source archive SHA-256
+de1db2efa04949806c83b738565cba805bfe49136d1856ad89d02a6053b4eb02.
+This is an internal prerequisite and does not close a frozen inventory row.
+Inventory remains 114 of 121 and pipeline mask remains zero.  Next is the
+source-derived StartCompute/WaitForIdle/FinalizeCompute/RetireStamp
+microsequence and a distinct compute queue/stamp owner before TA/3D.

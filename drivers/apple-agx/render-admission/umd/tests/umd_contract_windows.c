@@ -9,6 +9,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(pop)
 
 #include "direct_flip_contract.h"
+#include "apple_agx_g13_compute_work.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,6 +112,35 @@ static unsigned char InternalAllocationData[0x8000];
       ++State.Failures;                                                       \
     }                                                                         \
   } while (0)
+
+static ULONGLONG ComputeWorkRead64(const unsigned char *p) {
+  ULONGLONG value=0;
+  for(unsigned i=0;i<8u;++i)value|=(ULONGLONG)p[i]<<(i*8u);
+  return value;
+}
+static void test_g13_compute_work_contract(void) {
+  APPLE_AGX_G13_COMPUTE_WORK_INPUT input={0};
+  unsigned char work[APPLE_AGX_G13_COMPUTE_WORK_BYTES];
+  input.Counter=7;input.VmSlot=2;input.NotifierGpuAddress=0x1500010000ULL;
+  input.PreemptionGpuAddress=0x1500020000ULL;
+  input.CdmStreamBase=0x1500030000ULL;input.CdmStreamEnd=0x1500030200ULL;
+  input.UscExecutionBase=0x1100000000ULL;
+  input.MicrosequenceGpuAddress=0x1500040000ULL;input.MicrosequenceBytes=0x100;
+  input.StampGpuAddress=0x1500050000ULL;
+  input.FirmwareStampGpuAddress=0x1500051000ULL;
+  input.StampValue=9;input.StampSlot=3;input.EventControlIndex=4;
+  input.EventSequence=11;input.ClientSequence=5;
+  CHECK(AppleAgxG13ComputeWorkBuild(&input,work));
+  CHECK(ComputeWorkRead64(work+0x70)==input.PreemptionGpuAddress &&
+        ComputeWorkRead64(work+0x78)==input.CdmStreamBase &&
+        ComputeWorkRead64(work+0x224)==input.PreemptionGpuAddress &&
+        ComputeWorkRead64(work+0x22c)==input.CdmStreamEnd &&
+        ComputeWorkRead64(work+0x288)==input.StampGpuAddress &&
+        ComputeWorkRead64(work+0x290)==input.FirmwareStampGpuAddress &&
+        work[0x2d8]==5u && work[sizeof(work)-1]==0u);
+  memset(work,0x5a,sizeof(work));input.CdmStreamEnd=input.CdmStreamBase;
+  CHECK(!AppleAgxG13ComputeWorkBuild(&input,work) && work[0]==0x5a);
+}
 
 static HRESULT APIENTRY TestQueryAdapterInfo(
     HANDLE Adapter, const D3DDDICB_QUERYADAPTERINFO *Query) {
@@ -2485,6 +2515,7 @@ int main(void) {
 
   memset(&State, 0, sizeof(State));
   State.AutoCompleteFence = TRUE;
+  test_g13_compute_work_contract();
   memset(&adapterCallbacks, 0, sizeof(adapterCallbacks));
   adapterCallbacks.pfnQueryAdapterInfoCb = TestQueryAdapterInfo;
   memset(&adapterFunctions, 0, sizeof(adapterFunctions));
