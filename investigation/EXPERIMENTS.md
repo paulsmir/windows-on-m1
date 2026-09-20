@@ -44231,3 +44231,24 @@ client logs and exit before exact package/task/signer removal and ordinary
 recovery. PASS discriminator: separate create-device/create-swap-chain HRESULT.
 Rendering success additionally requires native submission/completion evidence;
 client Present success alone is insufficient. No replay within this experiment.
+
+### EXP691 actual result — standard device admission confirmed
+2026-09-20 UTC. Full-owner boot bound exact oem5.inf/package709; installed INF,
+SYS, UMD and client hashes matched preregistration. Code0, service Running,
+Start12/status0, Platform14/status0, active console. Temporary autologon cleared
+before client; absence of password verified. Initial chainload failed locally
+with unpinned linker; explicit LLDDIR toolchain22 succeeded before guest launch.
+One boot Event129 occurred; disks recovered Healthy/Online and no repeat or
+41/1001/153/157/4101 was observed before client. This is a storage observation,
+not evidence of a GPU cause.
+One interactive client execution: create-device S_OK, adapter vendor4c505041 /
+device32303030, followed by client-side DXGI_ERROR_UNSUPPORTED and process exit1.
+Source line70 rejects any vendor except PCI106b, so swap-chain was NOT_RUN.
+Verdict: device admission confirmed; identity guard defect confirmed; no draw,
+physical execution or Present claim. Evidence main-root .local/experiments/
+EXP691-live/{bound.json,evidence.json,client-result.txt,post-client.json}.
+Collected before exact hash-checked oem5 uninstall, stopped-service removal,
+task and E9BE15 trust removal. Ordinary377/392 recovered; final health receipt
+confirms Code28, no INF/service/SYS/UMD/cert, 8CPU, healthy NVMe/xHCI/input and
+no fresh monitored events. Next: exact ACPI identity guard regression/fix and
+new client-only experiment; retain unchanged driver bytes.

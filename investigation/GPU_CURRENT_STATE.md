@@ -1696,3 +1696,23 @@ Next stage exact package and run once in authenticated console.
 
 ## Current proven boundary correction after EXP690
 EXP690 returned E_INVALIDARG from the combined D3D10CreateDeviceAndSwapChain call. Neither UMD CreateDevice entry nor rejection of any particular interface/callback is proven. Earlier causal claims about pipeline/interface rejection are superseded by this uncertainty; retain those source changes but do not weaken callback guards speculatively. Recovery continuation verified SSH, 8 CPUs, NVMe/xHCI/input, no service/SYS/UMD/signer and no fresh critical/storage/display events. Re-enumerate the unbound stale Code0 devnode to Code28 before staging. Next discriminator splits standard D3D10CreateDevice from IDXGIFactory::CreateSwapChain and logs HRESULT at both boundaries. Client x64/ARM64 builds are 0 warnings/errors; signed ARM64 SHA8ff9cedbb6a5ac29a3529614be6fdddfbe2efda8d3e9696c197367e5df1b9d78. Driver package709 stays byte-identical.
+
+## EXP691 standard D3D10 device admission PASS
+Standard D3D10CreateDevice returned S_OK on actual Apple AGX. Client then
+rejected measured ACPI identity vendor4c505041/device32303030 because it wrongly
+required PCI vendor106b. Swap-chain/draw/Present NOT_RUN. Exact package709
+cleanup and ordinary377/392 recovery verified Code28/no package/service/files/
+trust, 8CPU/NVMe/input and no fresh monitored events. One recovered Event129 in
+the full-owner boot remains unassigned, with evidence preserved. Next change
+is client-only exact ACPI pair guard with executable positive/negative test.
+
+HARDWARE ROADMAP
+[PASS] Frozen native/ARM64 gates, KMD firmware startup and now standard D3D10
+device admission (EXP691 S_OK).
+[NOW] Client identity guard: measured ACPI pair accepted and foreign IDs
+rejected by deterministic executable regression; complete fresh x64/ARM64 build.
+[NEXT] Sign/hash exact client, preregister with unchanged package709 and proceed
+directly to Air; entirely offline until launch.
+[HW] Standard swap-chain, native draw, physical completion and DXGI Present
+remain unproven; hardware evidence required.
+POST-HARDWARE: accelerated desktop stability and desktop acceptance.

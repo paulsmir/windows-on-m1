@@ -67,7 +67,8 @@ int wmain(void) {
   result=IDXGIAdapter_GetDesc(adapter,&adapterDesc);if(FAILED(result)) goto done;
   wprintf(L"STANDARD_ADAPTER vendor=0x%04x device=0x%04x desc=%ls\n",
       adapterDesc.VendorId,adapterDesc.DeviceId,adapterDesc.Description);
-  if(adapterDesc.VendorId!=0x106bu){result=DXGI_ERROR_UNSUPPORTED;goto done;}
+  /* EXP691: DXGI reports the ACPI APPL0002 identity, not a PCI vendor ID. */
+  if(adapterDesc.VendorId!=0x4c505041u || adapterDesc.DeviceId!=0x32303030u){result=DXGI_ERROR_UNSUPPORTED;goto done;}
   stage="adapter-factory";
   result=IDXGIAdapter_GetParent(adapter,&IID_IDXGIFactory,(void **)&factory);
   if(FAILED(result)) goto done;
