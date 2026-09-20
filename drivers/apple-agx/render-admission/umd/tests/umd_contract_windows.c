@@ -1575,6 +1575,17 @@ static void test_mesa_d3d10_frontend_open(void) {
       deviceFunctions.pfnVsSetSamplers(device,0,1,&nullSampler);
       deviceFunctions.pfnGsSetShaderResources(device,0,1,&nullSrv);
       deviceFunctions.pfnGsSetSamplers(device,0,1,&nullSampler);
+      deviceFunctions.pfnPsSetSamplers(device,15,1,&appSampler);
+      deviceFunctions.pfnVsSetSamplers(device,15,1,&appSampler);
+      deviceFunctions.pfnGsSetSamplers(device,15,1,&appSampler);
+      CHECK(FrontendErrors==textureErrors);
+      D3D10DDI_HSAMPLER emptySamplerRange[16]={0}; /* pinned base D3D10 */
+      deviceFunctions.pfnPsSetSamplers(device,0,D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT,
+          emptySamplerRange);
+      deviceFunctions.pfnVsSetSamplers(device,0,D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT,
+          emptySamplerRange);
+      deviceFunctions.pfnGsSetSamplers(device,0,D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT,
+          emptySamplerRange);
       CHECK(FrontendErrors==textureErrors);
     }
     DXGI_DDI_ARG_PRESENT unsupportedPresent={0};
@@ -2396,11 +2407,24 @@ static void test_mesa_d3d10_frontend_open(void) {
         CHECK(FrontendErrors==rgbaErrors);
         deviceFunctions.pfnSetScissorRects(device,1,0,&rgbaRect);
         CHECK(FrontendErrors==rgbaErrors);
+        /* Known additional RED from sampler-ranges-20260920mk. Keep this
+         * explicit probe available without making an unobserved higher-slot
+         * draw a new pre-hardware requirement for the minimal runtime client. */
+        BOOL probeUnusedHighSampler=GetEnvironmentVariableW(
+            L"APPLE_AGX_TEST_UNUSED_HIGH_SAMPLER",NULL,0)!=0;
+        if(probeUnusedHighSampler)
+          deviceFunctions.pfnPsSetSamplers(device,15,1,&appSampler);
+        CHECK(FrontendErrors==rgbaErrors);
         deviceFunctions.pfnClearRenderTargetView(device,rgbaView,clear);
         CHECK(FrontendErrors==rgbaErrors);
         deviceFunctions.pfnDraw(device,3,0);
-        CHECK(FrontendErrors==rgbaErrors && AgxWin32AsahiContextDrawReceipt(
-            MesaD3d10FrontendContextForTest(device)));
+        BOOL rgbaDrawAccepted=FrontendErrors==rgbaErrors &&
+            AgxWin32AsahiContextDrawReceipt(MesaD3d10FrontendContextForTest(device));
+        CHECK(rgbaDrawAccepted);
+        if(probeUnusedHighSampler && !rgbaDrawAccepted) {
+          FRONTEND_STAGE("POST_HARDWARE_UNUSED_HIGH_SAMPLER_RED");
+          return; /* Preserve the first failure instead of cascading into an AV. */
+        }
         deviceFunctions.pfnFlush(device);
         CHECK(RuntimeRenders==1u && RuntimeSignals==1u &&
               RuntimeMaterializations==2u && RuntimeConsumerGates==2u &&
@@ -2411,6 +2435,9 @@ static void test_mesa_d3d10_frontend_open(void) {
               MesaD3d10FrontendContextForTest(device),0u));
           RuntimeCheckpoint(depthOwner,5u);
         }
+        D3D10DDI_HSAMPLER clearHighSampler={0};
+        deviceFunctions.pfnPsSetSamplers(device,15,1,&clearHighSampler);
+        CHECK(FrontendErrors==rgbaErrors);
         RuntimeExpectedCommandVersion=0;
         CHECK(AgxD3d10FormatViewCompatible(
             DXGI_FORMAT_R8G8B8A8_TYPELESS,

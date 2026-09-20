@@ -44493,3 +44493,29 @@ Interactive once-only cmd sets trace path to qualification/umd-diagnostics.log,
 executes client, retains standard stdout/stderr and process exit. Require Code0/
 Running/Start12/Platform14 and exact installed hashes before task. Collect all
 receipts first, then exact package/task/trust cleanup and ordinary377/392.
+
+### EXP695 actual discriminator and physical observation
+Standard device S_OK, RGBA format S_OK, CreateSwapChain887a0005. Runtime removed
+reason887a0020 (DRIVER_INTERNAL_ERROR). Exact process-local trace contains four
+SetSamplers E_NOTIMPL (80004001) records and no frontend-create record. Therefore
+actual sampler-binding rejection is proven; the exact Offset/Count/handles were
+not recorded and are not claimed. Source restricts Offset0/NumSamplers<=1 despite
+base-D3D10 range semantics. Microsoft PFND3D10DDI_SETSAMPLERS documents errors
+other than DEVICE_REMOVED as critical, matching this runtime removal result.
+No draw/Present. Evidence .local/experiments/EXP695-live/client-result.txt and
+post-client.json (main root). Exact oem5/package711/task/service/trust cleanup
+completed after evidence; recovery verification follows below.
+Physical verdict CHANGED, operator-confirmed: initially black screen, later
+visible cactus/flower desktop wallpaper with black taskbar and open Start menu.
+Operator identifies those black areas as taskbar/Start and states image appeared
+before the SetSamplers-error commentary (thus before package cleanup). It may
+have appeared upon pressing Start; this causal association is tentative.
+Photo .local/experiments/EXP695-live/operator-screen.png SHA
+e12f2b548ae63cef6032a324f5adbbed70020e6d94a20acea62248be778e95ac.
+This is not normal desktop rendering or proof of accelerated draw/Present.
+EXP694 remains UNOBSERVED; this later photo does not retroactively change it.
+
+### EXP695 recovery verification
+Ordinary377/392 final health confirms Code28, no INF/service/SYS/UMD/test trust,
+eight CPUs, NVMe/xHCI/keyboards OK and no fresh monitored events. Receipt is
+main-root .local/experiments/EXP695-live/recovery/health-final.json.

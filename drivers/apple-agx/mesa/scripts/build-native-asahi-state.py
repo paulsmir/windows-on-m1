@@ -1178,18 +1178,32 @@ _Present('''),
  *
  * CreateShaderResourceView1 --''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetSamplers','''   Device *pDevice = CastDevice(hDevice);
-   bool valid = pDevice &&
+   const UINT slots = D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT;
+   static_assert(PIPE_MAX_SAMPLERS >= D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT,
+                 "D3D10 sampler state must fit the native array");
+   bool valid = pDevice && pDevice->pipe &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||
-       shader_type == MESA_SHADER_GEOMETRY) && Offset == 0 &&
-      NumSamplers <= 1 && (NumSamplers == 0 || phSamplers);
+       shader_type == MESA_SHADER_GEOMETRY) && Offset <= slots &&
+      NumSamplers <= slots - Offset && (NumSamplers == 0 || phSamplers);
+   void *states[D3D10_COMMONSHADER_SAMPLER_SLOT_COUNT] = {};
+   UINT nonnull = 0;
    for (UINT i = 0; valid && i < NumSamplers; ++i) {
       SamplerState *sampler = CastSamplerState(phSamplers[i]);
-      valid = !sampler || (sampler->owner_device == pDevice && sampler->handle);
+      if (sampler) {
+         nonnull |= 1u << (Offset + i);
+         valid = sampler->owner_device == pDevice && sampler->handle;
+         if (valid) states[i] = sampler->handle;
+      }
    }
+   const UINT receipt[] = {(UINT)shader_type, Offset, NumSamplers, nonnull};
+   AgxD3d10WindowsDiagnostic("sampler-range", valid ? S_OK : E_NOTIMPL,
+                             receipt, 4);
    if (!valid) { SetError(hDevice, E_NOTIMPL); return; }
-   void *sampler = NumSamplers ? CastPipeSamplerState(phSamplers[0]) : NULL;
-   pDevice->samplers[shader_type][0] = sampler;
-   pDevice->pipe->bind_sampler_states(pDevice->pipe, shader_type, 0, 1, &sampler);''')
+   if (NumSamplers == 0) return;
+   for (UINT i = 0; i < NumSamplers; ++i)
+      pDevice->samplers[shader_type][Offset + i] = states[i];
+   pDevice->pipe->bind_sampler_states(pDevice->pipe, shader_type, Offset,
+                                     NumSamplers, states);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SetShaderResources','''   Device *pDevice = CastDevice(hDevice);
    bool valid = pDevice &&
       (shader_type == MESA_SHADER_VERTEX || shader_type == MESA_SHADER_FRAGMENT ||

@@ -1842,3 +1842,57 @@ Package711 source2341240c, analysis/Universal/Inf2Cat/catalog gates PASS.
 Immutable archive SHA8c9b621755b9779a5745c32cafdf45d2645b8e050902459f17d4beba5d02e965.
 Next stage exact package and once-only trace-enabled standard client after
 full-owner bound/hash gate. No resource policy change.
+
+## EXP695 identifies sampler-binding error; physical partial UI observed
+Exact standard process emits SetSamplers E_NOTIMPL four times, before any
+frontend-create trace; runtime device reason887a0020. No resource shape or
+Offset/Count is yet measured. Source range restriction (Offset0/count<=1) is
+incompatible with ordinary D3D10 sampler-state ranges; review/fix this state
+contract with deterministic range/no-mutation tests, not resource guard changes.
+Physical CHANGED: operator saw initially black screen, then wallpaper with black
+taskbar/open Start menu, before error commentary and before package cleanup.
+May have appeared on pressing Start (tentative). Photo/hash are in EXP695 ledger.
+No normal/accelerated desktop claim. EXP694 remains explicitly unobserved.
+
+## Sampler range correction in verification
+Source inspected: Microsoft PFND3D10DDI_SETSAMPLERS critical-error contract and
+D3D10 16-slot API; pinned Mesa Shader.cpp/State.h range storage and Asahi
+agx_bind_sampler_states valid-mask/count update. FULL GRAPHICS state contract;
+no new texture-rendering capability or initialization/power owner change.
+Actual EXP695 proves the rejecting function, not its unlogged parameter values.
+The projection now prevalidates the entire legal range/ownership, updates only
+that range and makes zero count a no-op. Existing diagnostics add stage/offset/
+count/absolute non-null mask for the next observation. Native draw validators
+remain unchanged. Executed host projection RED then GREEN; actual frontend
+PS/VS/GS full null reset and non-textured draw with unused slot15 added to the
+existing suite. sampler-ranges-20260920mj x64/ARM64 gates currently running.
+Air recovery after EXP695 verified Code28/no package/service/files/trust,
+8CPU/NVMe/input and no fresh events. Physical photo remains preserved as CHANGED.
+
+## Scope decision after sampler-ranges-mk additional probe
+Binding/reset correction compiles x64/ARM64. A newly added non-sampling draw
+with an explicitly owned sampler in slot15 failed the actual x64 DrawReceipt,
+then the old test continued into an AV. Preserve mk archive
+aed94b4f76c62eb659806c036ebe48fe85a0a67817fe922529a92d7e55fbb751 and its logs.
+One trace-enabled reproduction ended at sampler-range S_OK offset15/count1/
+mask8000 and Flush E_FAIL; no exact emitter cause established. No validator,
+count clamping, logical-state clearing or missing-edge suppression was applied.
+This additional draw is not made a pre-hardware gate without evidence that the
+selected standard runtime requires it. The client has no explicit sampler bind.
+It remains an explicit APPLE_AGX_TEST_UNUSED_HIGH_SAMPLER opt-in RED probe;
+first failure now stops that test instead of causing later unrelated faults.
+Default gate retains actual high-slot binding followed by full null reset and
+the original minimal draw/capture/retirement path. Host range/atomicity regression
+passes. sampler-ranges-20260920mm x64/ARM64 gates are running. Next hardware must
+record actual runtime ranges/non-null masks; if it reaches this draw limitation,
+promote it to the current causal requirement. Do not claim high-slot draw support.
+
+## Sampler binding/reset selected-path gates PASS
+sampler-ranges-20260920mm x64 actual execution and ARM64 link PASS on source
+archivebb6b6c2afb65e7fde9d9240a2e2d0b36e9d15c324bfbf73683c61bb6b14477dc.
+Actual PS/VS/GS high-slot binding then full null resets preserve the original
+minimal producer/materializer/KMD plan/patch/retirement path. This excludes the
+explicit opt-in known-RED unused-high-slot draw and does not claim it supported.
+Host range/zero-count/atomic-rejection tests and direct scanout guards pass.
+Next package712/sign/hash and EXP696, retaining diagnostics to measure actual
+runtime Offset/Count/absolute non-null mask. No further inventory expansion.
