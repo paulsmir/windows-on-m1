@@ -38,6 +38,7 @@ static int AppleAgxWin32ReferencePolicy(
   case AppleAgxWin32RoleUniform:
     return Reference->Access == AppleAgxWin32AccessRead;
   case AppleAgxWin32RoleDepthAttachment:
+  case AppleAgxWin32RoleSharedGeometry:
     return Reference->Access ==
            (AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite);
   default:
@@ -128,11 +129,15 @@ static int AppleAgxWin32RelocationPolicy(
            targetRole == AppleAgxWin32RoleDescriptor;
   case AppleAgxWin32RelocationUniformAddress64:
     return AppleAgxWin32NativeVersion(Version) &&
-           destinationRole == AppleAgxWin32RoleUniform &&
+           (destinationRole == AppleAgxWin32RoleUniform ||
+            (Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
+             destinationRole == AppleAgxWin32RoleSharedGeometry)) &&
            (targetRole == AppleAgxWin32RoleUniform ||
             targetRole == AppleAgxWin32RoleVertex ||
             targetRole == AppleAgxWin32RoleConstant ||
-            targetRole == AppleAgxWin32RoleDescriptor);
+            targetRole == AppleAgxWin32RoleDescriptor ||
+            (Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
+             targetRole == AppleAgxWin32RoleSharedGeometry));
   case AppleAgxWin32RelocationTextureAddress40:
     return AppleAgxWin32NativeVersion(Version) &&
            destinationRole == AppleAgxWin32RoleDescriptor &&
@@ -144,9 +149,11 @@ static int AppleAgxWin32RelocationPolicy(
            destinationRole == AppleAgxWin32RoleDescriptor &&
            targetRole == AppleAgxWin32RoleRenderTarget;
   case AppleAgxWin32RelocationVdmIndexBufferAddress40:
-    return Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+    return APPLE_AGX_WIN32_COMMAND_HAS_INDEX(Version) &&
            destinationRole == AppleAgxWin32RoleEncoder &&
-           targetRole == AppleAgxWin32RoleIndex;
+           targetRole == (APPLE_AGX_U32)
+             (Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex);
   default:
     return 0;
   }
@@ -212,7 +219,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH &&
-      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH)
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH &&
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH)
     return AppleAgxWin32AbiVersion;
   if (!AppleAgxWin32NativeVersion(header->Version) &&
       CommandBytes > APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_BYTES)
@@ -252,7 +260,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     if (references[index].AllocationIndex >= AllocationCount)
       return AppleAgxWin32AbiAllocationIndex;
     if (references[index].Role < AppleAgxWin32RoleRenderTarget ||
-        references[index].Role > AppleAgxWin32RoleDepthAttachment)
+        references[index].Role > AppleAgxWin32RoleSharedGeometry)
       return AppleAgxWin32AbiRole;
     if (references[index].Role == AppleAgxWin32RolePppState &&
         header->Version < APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
@@ -399,6 +407,21 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
                native->IspBgobjDepth != 0u || native->IspBgobjValues != 0u) {
       return AppleAgxWin32AbiReserved;
     }
+    if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH) {
+      APPLE_AGX_WIN32_ABI_RESULT computeResult;
+      if (native->ComputeEncoderBytes == 0u)
+        return AppleAgxWin32AbiPayload;
+      computeResult=AppleAgxWin32DrawReference(
+          native->ComputeEncoderReference,AppleAgxWin32RoleEncoder,0,
+          references,header->ReferenceCount,reachable);
+      if(computeResult!=AppleAgxWin32AbiSuccess) return computeResult;
+      if(references[native->ComputeEncoderReference].Bytes!=
+         native->ComputeEncoderBytes)
+        return AppleAgxWin32AbiPayload;
+    } else if(native->ComputeEncoderReference!=0u ||
+              native->ComputeEncoderBytes!=0u) {
+      return AppleAgxWin32AbiReserved;
+    }
     View->NativeBatch = native;
   }
 
@@ -413,8 +436,10 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   DRAW_REFERENCE(DestinationReference, AppleAgxWin32RoleRenderTarget, 0);
   DRAW_REFERENCE(VertexReference, AppleAgxWin32RoleVertex,
                  AppleAgxWin32NativeVersion(header->Version));
-  DRAW_REFERENCE(IndexReference, AppleAgxWin32RoleIndex,
-                 header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH);
+  DRAW_REFERENCE(IndexReference,
+                 header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                   AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex,
+                 !APPLE_AGX_WIN32_COMMAND_HAS_INDEX(header->Version));
   DRAW_REFERENCE(ConstantReference, AppleAgxWin32RoleConstant, 1);
   DRAW_REFERENCE(TextureReference, AppleAgxWin32RoleTexture, 1);
   if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH &&
@@ -490,6 +515,11 @@ fragment_pipeline_done:
         if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
       }
     }
+    if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH) {
+      rootResult=AppleAgxWin32DrawReference(native->ComputeEncoderReference,
+          AppleAgxWin32RoleEncoder,0,references,header->ReferenceCount,reachable);
+      if(rootResult!=AppleAgxWin32AbiSuccess) return rootResult;
+    }
   }
 
   for (index = 0u; index < header->ReferenceCount; ++index)
@@ -505,12 +535,18 @@ fragment_pipeline_done:
     if (relocation->Kind ==
         AppleAgxWin32RelocationVdmIndexBufferAddress40) {
       ++indexRelocations;
-      if (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ||
+      if (!APPLE_AGX_WIN32_COMMAND_HAS_INDEX(header->Version) ||
           relocation->DestinationReference != draw->EncoderReference ||
           relocation->TargetReference != draw->IndexReference ||
-          relocation->TargetOffset != 0ULL ||
-          references[draw->IndexReference].Offset != 0ULL ||
-          references[draw->IndexReference].Bytes != 8ULL)
+          (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+           (references[draw->IndexReference].Offset != 0ULL ||
+            references[draw->IndexReference].Bytes != 8ULL ||
+            relocation->TargetOffset != 0ULL)) ||
+          (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
+           (relocation->TargetOffset >
+                references[draw->IndexReference].Bytes ||
+            16ULL > references[draw->IndexReference].Bytes -
+                relocation->TargetOffset)))
         return AppleAgxWin32AbiRelocation;
     }
     if (header->Version < APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
@@ -573,9 +609,9 @@ fragment_pipeline_done:
     reachable[relocation->DestinationReference] = 1u;
     reachable[relocation->TargetReference] = 1u;
   }
-  if ((header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+  if ((APPLE_AGX_WIN32_COMMAND_HAS_INDEX(header->Version) &&
        indexRelocations != 1u) ||
-      (header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+      (!APPLE_AGX_WIN32_COMMAND_HAS_INDEX(header->Version) &&
        indexRelocations != 0u))
     return AppleAgxWin32AbiRelocation;
   for (index = 0u; index < header->ReferenceCount; ++index)

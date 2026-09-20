@@ -45,6 +45,11 @@ if args.windows_platform_declarations:
     for directory in ('src/asahi', 'src/gallium/drivers/asahi',
                       'src/gallium/frontends/d3d10umd', 'include/drm-uapi'):
         shutil.copytree(mesa/directory, out/directory)
+    (out/'src/gallium/auxiliary/nir').mkdir(parents=True,exist_ok=True)
+    shutil.copy2(mesa/'src/gallium/auxiliary/nir/tgsi_to_nir.c',
+                 out/'src/gallium/auxiliary/nir/tgsi_to_nir.c')
+    shutil.copy2(mesa/'src/gallium/auxiliary/nir/tgsi_to_nir.h',
+                 out/'src/gallium/auxiliary/nir/tgsi_to_nir.h')
     def change(path, sha, replacements):
         target=out/path
         raw=target.read_bytes()
@@ -73,6 +78,95 @@ if args.windows_platform_declarations:
             raise SystemExit('Unclosed function: '+path+':'+name)
         target.write_text(text[:start]+'\n'+body+'\n'+text[end-1:])
         overlays[path]['after']=hashlib.sha256(target.read_bytes()).hexdigest()
+    change('src/gallium/auxiliary/nir/tgsi_to_nir.c',
+        '755f85617fa4f38923c759d1f27029c078c2bc47aead66abbb79130fea3f9b17',[
+        ('''            } else {
+               assert(!decl->Declaration.Semantic);
+               var->data.location = VERT_ATTRIB_GENERIC0 + idx;
+            }''','''            } else if (c->scan->processor == MESA_SHADER_GEOMETRY) {
+               var->data.location = tgsi_varying_semantic_to_slot(
+                  decl->Semantic.Name, decl->Semantic.Index);
+            } else {
+               assert(!decl->Declaration.Semantic);
+               var->data.location = VERT_ATTRIB_GENERIC0 + idx;
+            }'''),
+        ('''         var->type = glsl_vec4_type();
+         if (is_array)
+            var->type = glsl_array_type(var->type, array_size, 0);
+
+         switch (file) {''','''         var->type = glsl_vec4_type();
+         if (c->scan->processor == MESA_SHADER_GEOMETRY &&
+             file == TGSI_FILE_INPUT)
+            var->type = glsl_array_type(var->type,
+                                        b->shader->info.gs.vertices_in, 0);
+         else if (is_array)
+            var->type = glsl_array_type(var->type, array_size, 0);
+
+         switch (file) {'''),
+        ('''      } else {
+         /* Indirection on input arrays isn't supported by TTN. */
+         assert(!dim);
+         nir_deref_instr *deref = nir_build_deref_var(&c->build,
+                                                      c->inputs[index]);
+         return nir_src_for_ssa(nir_load_deref(&c->build, deref));
+      }''','''      } else {
+         nir_deref_instr *deref = nir_build_deref_var(&c->build,
+                                                      c->inputs[index]);
+         if (dim) {
+            assert(c->scan->processor == MESA_SHADER_GEOMETRY &&
+                   !dim->Indirect);
+            deref = nir_build_deref_array_imm(&c->build, deref, dim->Index);
+         }
+         return nir_src_for_ssa(nir_load_deref(&c->build, deref));
+      }'''),
+        ('''   case TGSI_OPCODE_RET:
+      /* NIR returns must be at the end of the block, while TGSI returns may not''','''   case TGSI_OPCODE_EMIT:
+      nir_emit_vertex(b, 0);
+      break;
+
+   case TGSI_OPCODE_ENDPRIM:
+      nir_end_primitive(b, 0);
+      break;
+
+   case TGSI_OPCODE_RET:
+      /* NIR returns must be at the end of the block, while TGSI returns may not'''),
+        ('''         if (parser.FullToken.FullInstruction.Instruction.Opcode == TGSI_OPCODE_RET) {
+            /* We have to be conservative and add output stores before each return.
+             * Hopefully stores will be optimized out later if not actually required */
+            ttn_add_output_stores(c);
+         }''','''         unsigned opcode = parser.FullToken.FullInstruction.Instruction.Opcode;
+         if (opcode == TGSI_OPCODE_EMIT ||
+             (opcode == TGSI_OPCODE_RET &&
+              c->build.shader->info.stage != MESA_SHADER_GEOMETRY)) {
+            /* GS output registers are committed at each EmitVertex. Other
+             * stages retain the conservative stores before return. */
+            ttn_add_output_stores(c);
+         }'''),
+        ('''   ttn_parse_tgsi(c, tgsi_tokens);
+   ttn_add_output_stores(c);''','''   ttn_parse_tgsi(c, tgsi_tokens);
+   if (s->info.stage != MESA_SHADER_GEOMETRY)
+      ttn_add_output_stores(c);'''),
+        ('''      case TGSI_PROPERTY_FS_COORD_ORIGIN:
+         if (s->info.stage == MESA_SHADER_FRAGMENT)''','''      case TGSI_PROPERTY_GS_INPUT_PRIM:
+         if (s->info.stage == MESA_SHADER_GEOMETRY) {
+            s->info.gs.input_primitive = value;
+            s->info.gs.vertices_in = mesa_vertices_per_prim(value);
+         }
+         break;
+      case TGSI_PROPERTY_GS_OUTPUT_PRIM:
+         if (s->info.stage == MESA_SHADER_GEOMETRY)
+            s->info.gs.output_primitive = value;
+         break;
+      case TGSI_PROPERTY_GS_MAX_OUTPUT_VERTICES:
+         if (s->info.stage == MESA_SHADER_GEOMETRY)
+            s->info.gs.vertices_out = value;
+         break;
+      case TGSI_PROPERTY_GS_INVOCATIONS:
+         if (s->info.stage == MESA_SHADER_GEOMETRY)
+            s->info.gs.invocations = value;
+         break;
+      case TGSI_PROPERTY_FS_COORD_ORIGIN:
+         if (s->info.stage == MESA_SHADER_FRAGMENT)''')])
     change('src/gallium/drivers/asahi/agx_state.h',
         '6d5e7f85849bce3c3f2e5569373a24f6c0d692217a8e493754298750b755e7ab',[
         ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#endif')])

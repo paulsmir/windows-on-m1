@@ -41,7 +41,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocBeginVersion(AGX_WIN32_RELOC_CAPTURE *c,
   if(!c || !owner || !generation || !request || !ops || !context ||
       !ops->Query || !ops->Retain || !ops->Release) return AgxRelocArgument;
   if(version < APPLE_AGX_WIN32_COMMAND_VERSION ||
-      version > APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) return AgxRelocArgument;
+      version > APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH) return AgxRelocArgument;
   if(c->State) return AgxRelocState;
   if(request<=c->LastRequest) return AgxRelocStale;
   AGX_WIN32_RELOC_OPERATIONS saved_ops=*ops;
@@ -66,7 +66,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U64 token,APPLE_AGX_U32 role,APPLE_AGX_U32 access,
     APPLE_AGX_U64 offset,APPLE_AGX_U64 bytes,APPLE_AGX_U32 *index) {
   AGX_WIN32_RELOC_ALLOCATION a={0};
-  if(!c || !token || !index || !access || access&~7u || role<1 || role>15) return AgxRelocArgument;
+  if(!c || !token || !index || !access || access&~7u || role<1 || role>16) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(!c->Operations.Query(c->Context,token,&a)) return AgxRelocCallback;
   if(a.Owner!=c->Owner || a.Generation!=c->Generation || a.Token!=token || !a.Serial ||
@@ -99,7 +99,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
   AGX_WIN32_RELOC_ALLOCATION current={0};
   if(!c || !expected || !expected->Owner || !expected->Token ||
       !expected->Serial || !expected->Generation || !index || !access ||
-      access&~7u || role<1 || role>15) return AgxRelocArgument;
+      access&~7u || role<1 || role>16) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(expected->Owner!=c->Owner || expected->Generation!=c->Generation ||
       expected->AllocationIndex==~0u) return AgxRelocStale;
@@ -133,7 +133,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocField(AGX_WIN32_RELOC_CAPTURE *c,
   if(!c || !w) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(kind==AppleAgxWin32RelocationVdmIndexBufferAddress40 &&
-     c->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH)
+     !APPLE_AGX_WIN32_COMMAND_HAS_INDEX(c->CommandVersion))
     return AgxRelocArgument;
   if(dest>=c->ReferenceCount || target>=c->ReferenceCount ||
       destoff>c->References[dest].Bytes || w>c->References[dest].Bytes-destoff ||

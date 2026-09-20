@@ -121,7 +121,8 @@ static void overlay_write_u32(unsigned char *Data, APPLE_AGX_U32 Value) {
 static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_add(
     const ADMISSION_BACKEND_IMAGE *image, APPLE_AGX_U32 reference,
     APPLE_AGX_U32 role, APPLE_AGX_U64 sourceOffset, APPLE_AGX_U64 bytes,
-    int low, APPLE_AGX_U32 *lowUsed, APPLE_AGX_U32 *generalUsed,
+    int low, int forceGeneral, APPLE_AGX_U32 *lowUsed,
+    APPLE_AGX_U32 *generalUsed,
     ADMISSION_DYNAMIC_OVERLAY_PLAN *plan) {
   const APPLE_AGX_RENDER_TEMPLATE_OBJECT_LAYOUT *layouts = AppleAgxRenderTemplateObjectLayouts();
   APPLE_AGX_U32 object, offset, capacity;
@@ -130,7 +131,7 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_add(
   if (!bytes || bytes > 0xffffffffULL || !layouts ||
       plan->EntryCount >= ADMISSION_DYNAMIC_OVERLAY_MAX_ENTRIES)
     return AdmissionDynamicOverlayRange;
-  if (role == AppleAgxWin32RoleEncoder) {
+  if (role == AppleAgxWin32RoleEncoder && !forceGeneral) {
     object = OVERLAY_ENCODER_OBJECT; offset = 0; capacity = 0x180u;
   } else if (role == AppleAgxWin32RoleScissor) {
     object = OVERLAY_SCISSOR_OBJECT; offset = 0; capacity = 0x4000u;
@@ -168,7 +169,8 @@ static int overlay_native_copied(APPLE_AGX_U32 role,int indexed) {
       role == AppleAgxWin32RoleShaderRodata || role == AppleAgxWin32RoleUscPipeline ||
       role == AppleAgxWin32RoleDescriptor || role == AppleAgxWin32RolePppState ||
       role == AppleAgxWin32RoleEncoder || role == AppleAgxWin32RoleScissor ||
-      role == AppleAgxWin32RoleDepthBias;
+      role == AppleAgxWin32RoleDepthBias ||
+      role == AppleAgxWin32RoleSharedGeometry;
 }
 
 static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_plan_view(
@@ -193,12 +195,15 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_plan_view(
         (view->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH &&
          r->Role==AppleAgxWin32RoleTexture)) continue;
     if (!overlay_native_copied(r->Role,
-        view->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH))
+        APPLE_AGX_WIN32_COMMAND_HAS_INDEX(view->Header->Version)))
       return AdmissionDynamicOverlayLayout;
     for (j=0;j<view->Draw->RelocationCount;++j)
       if (view->Relocations[j].Kind==AppleAgxWin32RelocationPppCfBindingsOffset32 &&
           view->Relocations[j].TargetReference==i) low=1;
-    result=overlay_native_add(image,i,r->Role,r->Offset,r->Bytes,low,&lowUsed,&generalUsed,plan);
+    result=overlay_native_add(image,i,r->Role,r->Offset,r->Bytes,low,
+        view->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
+        i==view->NativeBatch->ComputeEncoderReference,
+        &lowUsed,&generalUsed,plan);
     if (result!=AdmissionDynamicOverlaySuccess) return result;
   }
   return AdmissionDynamicOverlaySuccess;
@@ -556,13 +561,16 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayPlanFromJob(
         r->Role==AppleAgxWin32RoleUscPipeline;
     ADMISSION_DYNAMIC_OVERLAY_RESULT result;
     if (!overlay_native_copied(r->Role,
-          Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
+          APPLE_AGX_WIN32_COMMAND_HAS_INDEX(Bindings->CommandVersion)) ||
         r->ReferenceIndex>=referenceLimit ||
         (i && r->ReferenceIndex<=Job->Objects[i-1].ReferenceIndex)) return AdmissionDynamicOverlayLayout;
     for(j=0;j<Job->RelocationCount;++j)
       if(Job->Relocations[j].Kind==AppleAgxWin32RelocationPppCfBindingsOffset32 &&
           Job->Relocations[j].TargetReference==r->ReferenceIndex) low=1;
-    result=overlay_native_add(Image,r->ReferenceIndex,r->Role,0,r->Bytes,low,&lowUsed,&generalUsed,Plan);
+    result=overlay_native_add(Image,r->ReferenceIndex,r->Role,0,r->Bytes,low,
+        Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
+        r->ReferenceIndex==Bindings->NativeBatch.ComputeEncoderReference,
+        &lowUsed,&generalUsed,Plan);
     if(result!=AdmissionDynamicOverlaySuccess) return result;
   }
   return AdmissionDynamicOverlaySuccess;
@@ -612,8 +620,9 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayResolve(
   return AdmissionDynamicOverlayLayout;
 }
 
-ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
+static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_route_encoder_reference(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
+    APPLE_AGX_U32 EncoderReference,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
     APPLE_AGX_U32 ActiveObjectCount) {
   const ADMISSION_DYNAMIC_OVERLAY_ENTRY *encoder = OVERLAY_NULL;
@@ -627,7 +636,8 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
       ActiveObjectCount < APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)
     return AdmissionDynamicOverlayArgument;
   for (index = 0u; index < Plan->EntryCount; ++index) {
-    if (Plan->Entries[index].Role != AppleAgxWin32RoleEncoder)
+    if (Plan->Entries[index].Role != AppleAgxWin32RoleEncoder ||
+        Plan->Entries[index].ReferenceIndex != EncoderReference)
       continue;
     if (encoder != OVERLAY_NULL)
       return AdmissionDynamicOverlayLayout;
@@ -657,6 +667,21 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
   return AdmissionDynamicOverlaySuccess;
 }
 
+ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteEncoder(
+    const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
+    APPLE_AGX_EXP208_RELOCATION_OBJECT *ActiveObjects,
+    APPLE_AGX_U32 ActiveObjectCount) {
+  APPLE_AGX_U32 index,reference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE,count=0u;
+  if(!Plan) return AdmissionDynamicOverlayArgument;
+  for(index=0u;index<Plan->EntryCount;++index)
+    if(Plan->Entries[index].Role==AppleAgxWin32RoleEncoder) {
+      reference=Plan->Entries[index].ReferenceIndex; ++count;
+    }
+  if(count!=1u) return AdmissionDynamicOverlayLayout;
+  return overlay_route_encoder_reference(Plan,reference,ActiveObjects,
+      ActiveObjectCount);
+}
+
 ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
     const ADMISSION_DYNAMIC_OVERLAY_PLAN *Plan,
     const ADMISSION_DYNAMIC_OVERLAY_BINDINGS *Bindings,
@@ -664,6 +689,7 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *n;
   const APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT *roots[3];
   APPLE_AGX_U32 pipeline[3],i,j,blocks,tileConfig,utile;
+  const ADMISSION_DYNAMIC_OVERLAY_ENTRY *computeEncoder=OVERLAY_NULL;
   APPLE_AGX_U64 scissor=0,dbias=0;
   APPLE_AGX_BOOL qualification,desktop;
   unsigned char *work,*ta,*micro;
@@ -682,6 +708,16 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
       !Bindings->DestinationBytes || Bindings->DestinationBytes>0xffffffffULL-127ULL)
     return AdmissionDynamicOverlayArgument;
   n=&Bindings->NativeBatch;
+  if(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH) {
+    for(i=0u;i<Plan->EntryCount;++i)
+      if(Plan->Entries[i].ReferenceIndex==n->ComputeEncoderReference)
+        computeEncoder=&Plan->Entries[i];
+    if(!computeEncoder || computeEncoder->Role!=AppleAgxWin32RoleEncoder ||
+       computeEncoder->ReferenceIndex==Bindings->EncoderReference ||
+       computeEncoder->Bytes!=n->ComputeEncoderBytes ||
+       computeEncoder->ObjectIndex==OVERLAY_ENCODER_OBJECT)
+      return AdmissionDynamicOverlayLayout;
+  }
   /* The native encoder owns surface geometry. The Asahi tilebuffer contract
    * supplies the sample/utile scalars; no old shader or pipeline payload is
    * substituted. */
@@ -730,7 +766,8 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   if(overlay_read_u64(work+0x1c0u)!=0x1100000000ULL ||
       overlay_read_u64(ta+0x120u)!=0x1100000000ULL)
     return AdmissionDynamicOverlayContent;
-  if(AdmissionDynamicOverlayRouteEncoder(Plan,Objects,Count)!=AdmissionDynamicOverlaySuccess)
+  if(overlay_route_encoder_reference(Plan,Bindings->EncoderReference,
+       Objects,Count)!=AdmissionDynamicOverlaySuccess)
     return AdmissionDynamicOverlayContent;
   /* G13/V13_5 fields from m1n1 microsequence.py; corresponding current Asahi
    * queue/render.rs JobParameters1/2/3 owns all duplicated BG/EOT fields. */

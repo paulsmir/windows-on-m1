@@ -1171,6 +1171,14 @@ static void test_mesa_d3d10_frontend_open(void) {
       FRONTEND_REG(D3D10_SB_OPERAND_TYPE_OUTPUT,D3D10_SB_OPERAND_4_COMPONENT_MASK_MODE,D3D10_SB_OPERAND_4_COMPONENT_MASK_ALL),0,
       FRONTEND_CB,0,0,
       FRONTEND_OP(D3D10_SB_OPCODE_RET,1)};
+    UINT gs[]={
+      0x00020040u,0x00000025u,0x05000061u,0x002010f2u,0x00000003u,0x00000000u,
+      0x00000001u,0x0100185du,0x0100285cu,0x04000067u,0x001020f2u,0x00000000u,
+      0x00000001u,0x0200005eu,0x00000003u,0x06000036u,0x001020f2u,0x00000000u,
+      0x00201e46u,0x00000000u,0x00000000u,0x01000013u,0x06000036u,0x001020f2u,
+      0x00000000u,0x00201e46u,0x00000001u,0x00000000u,0x01000013u,0x06000036u,
+      0x001020f2u,0x00000000u,0x00201e46u,0x00000002u,0x00000000u,0x01000013u,
+      0x0100003eu};
     float vertices[12]={-1,-1,0,1,1,-1,0,1,0,1,0,1};
     D3D10DDI_MIPINFO rtMip={0},vbMip={0},cbMip={0},ibMip={0},stagingMip={0};
     D3D10_DDIARG_SUBRESOURCE_UP cbInitial={0},ibInitial={0};
@@ -1752,15 +1760,19 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(layout.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateElementLayout(device,&layoutCreate,layout,layoutRuntime);
     FRONTEND_STAGE("element-layout");
-    D3D10DDI_HSHADER vsh={0},psh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0};
+    D3D10DDI_HSHADER vsh={0},psh={0},gsh={0};D3D10DDI_HRTSHADER vsRuntime={0},psRuntime={0},gsRuntime={0};
     vsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,vs,NULL));
     psh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,ps,NULL));
+    gsh.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateShaderSize(device,gs,NULL));
     vsRuntime.handle=(VOID *)(UINT_PTR)0xd05u;psRuntime.handle=(VOID *)(UINT_PTR)0xd06u;
-    CHECK(vsh.pDrvPrivate && psh.pDrvPrivate);
+    gsRuntime.handle=(VOID *)(UINT_PTR)0xd10u;
+    CHECK(vsh.pDrvPrivate && psh.pDrvPrivate && gsh.pDrvPrivate);
     deviceFunctions.pfnCreateVertexShader(device,vs,vsh,vsRuntime,NULL);
     deviceFunctions.pfnCreatePixelShader(device,ps,psh,psRuntime,NULL);
+    deviceFunctions.pfnCreateGeometryShader(device,gs,gsh,gsRuntime,NULL);
     CHECK(MesaD3d10FrontendShaderValidForTest(vsh) &&
-          MesaD3d10FrontendShaderValidForTest(psh));
+          MesaD3d10FrontendShaderValidForTest(psh) &&
+          MesaD3d10FrontendShaderValidForTest(gsh));
     FRONTEND_STAGE("shaders");
     D3D10_DDI_BLEND_DESC blendDesc={0};D3D10DDI_HBLENDSTATE blend={0};D3D10DDI_HRTBLENDSTATE blendRuntime={0};
     blendDesc.RenderTargetWriteMask[0]=D3D10_DDI_COLOR_WRITE_ENABLE_ALL;
@@ -1872,6 +1884,8 @@ static void test_mesa_d3d10_frontend_open(void) {
           (D3D10DDI_HDEPTHSTENCILVIEW){0});
       deviceFunctions.pfnSetViewports(device,1,0,&viewport);
       deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+      deviceFunctions.pfnGsSetShader(device,gsh);
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH;
       deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
       CHECK(!AgxWin32AsahiContextFaulted(
           MesaD3d10FrontendContextForTest(device)));
@@ -1972,6 +1986,10 @@ static void test_mesa_d3d10_frontend_open(void) {
           device,cb,0,NULL,genericCbValues,1,1);
       CHECK(FrontendErrors==genericUpdateErrors);
       deviceFunctions.pfnVsSetConstantBuffers(device,0,1,&vsCb);
+      /* The mixed v8 GS experiment is complete. Keep the following existing
+       * indexed admission checks on their independent v5 producer path. */
+      deviceFunctions.pfnGsSetShader(device,(D3D10DDI_HSHADER){0});
+      RuntimeExpectedCommandVersion=0;
       unsigned indexedErrors=FrontendErrors;
       deviceFunctions.pfnIaSetIndexBuffer(device,ib,DXGI_FORMAT_R32_UINT,0);
       CHECK(FrontendErrors==++indexedErrors && FrontendLastError==E_NOTIMPL);
@@ -2123,6 +2141,8 @@ static void test_mesa_d3d10_frontend_open(void) {
           MesaD3d10FrontendContextForTest(device),0u));
       RuntimeCheckpoint(frontendOwner,5u);
     }
+    RuntimeExpectedCommandVersion=0;
+    deviceFunctions.pfnGsSetShader(device,(D3D10DDI_HSHADER){0});
     {
       RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
       ADMISSION_UMD_ASAHI_OWNER *bltOwner=
@@ -2271,6 +2291,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnSetRenderTargets(device,NULL,0,1,(D3D10DDI_HDEPTHSTENCILVIEW){0});
     deviceFunctions.pfnIaSetVertexBuffers(device,0,0,NULL,NULL,NULL);
     deviceFunctions.pfnVsSetShader(device,(D3D10DDI_HSHADER){0});deviceFunctions.pfnPsSetShader(device,(D3D10DDI_HSHADER){0});
+    deviceFunctions.pfnGsSetShader(device,(D3D10DDI_HSHADER){0});
     D3D10DDI_HRESOURCE nullConstant={0};
     deviceFunctions.pfnIaSetIndexBuffer(device,(D3D10DDI_HRESOURCE){0},
                                         DXGI_FORMAT_UNKNOWN,0);
@@ -2278,6 +2299,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnPsSetConstantBuffers(device,0,1,&nullConstant);
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
+    deviceFunctions.pfnDestroyShader(device,gsh);
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
     deviceFunctions.pfnDestroyDepthStencilView(device,depthView);
     deviceFunctions.pfnDestroyRenderTargetView(device,depthColorRtv);
@@ -2295,7 +2317,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyResource(device,staging);
     RuntimeExpectedTargetAllocation=0;
     RuntimeExpectedTargetBytes=0;
-    free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
+    free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);free(gsh.pDrvPrivate);
     free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);
     free(depthColorRtv.pDrvPrivate);free(depthView.pDrvPrivate);
     free(depthResource.pDrvPrivate);free(vb.pDrvPrivate);

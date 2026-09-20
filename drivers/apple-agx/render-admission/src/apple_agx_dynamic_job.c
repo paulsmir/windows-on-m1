@@ -170,7 +170,8 @@ static int dynamic_patch(void *Destination,
         GpuAddress >= DYNAMIC_40_BIT_LIMIT)
       return 0;
     current = dynamic_read_le(Destination, 8u);
-    if ((current & 0xffffff00ULL) != 0x61f20600ULL)
+    if ((current & 0xffffff00ULL) != 0x61f20600ULL &&
+        (current & 0xffffff00ULL) != 0x61f50900ULL)
       return 0;
     encoded = (current & 0xffffff00ULL) |
               ((GpuAddress >> 32u) & 0xffULL) |
@@ -200,8 +201,9 @@ static int dynamic_copy_role(const APPLE_AGX_WIN32_COMMAND_VIEW *View,
          Role == AppleAgxWin32RoleEncoder ||
          Role == AppleAgxWin32RolePppState ||
          Role == AppleAgxWin32RoleUniform ||
+         Role == AppleAgxWin32RoleSharedGeometry ||
          (Role == AppleAgxWin32RoleIndex &&
-          View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH) ||
+          APPLE_AGX_WIN32_COMMAND_HAS_INDEX(View->Header->Version)) ||
          (Role == AppleAgxWin32RoleConstant &&
           (APPLE_AGX_WIN32_COMMAND_IS_NATIVE(View->Header->Version))) ||
          Role == AppleAgxWin32RoleUscPipeline ||
@@ -285,12 +287,10 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
       if (View->Relocations[index].Kind ==
           AppleAgxWin32RelocationVdmIndexBufferAddress40)
         ++indexRelocations;
-    if ((View->Header->Version ==
-             APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+    if ((APPLE_AGX_WIN32_COMMAND_HAS_INDEX(View->Header->Version) &&
          (View->Draw->IndexReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||
           indexRelocations != 1u)) ||
-        (View->Header->Version !=
-             APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+        (!APPLE_AGX_WIN32_COMMAND_HAS_INDEX(View->Header->Version) &&
          indexRelocations != 0u))
       return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, 0u, Job);
   }
@@ -356,29 +356,43 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
     target = &View->References[relocation->TargetReference];
     targetFact = &Facts[relocation->TargetReference];
     if (relocation->Kind == AppleAgxWin32RelocationVdmIndexBufferAddress40 &&
-        (View->Header->Version !=
-             APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ||
+        (!APPLE_AGX_WIN32_COMMAND_HAS_INDEX(View->Header->Version) ||
          relocation->DestinationReference != View->Draw->EncoderReference ||
          relocation->TargetReference != View->Draw->IndexReference ||
          View->References[relocation->DestinationReference].Role !=
              AppleAgxWin32RoleEncoder ||
-         target->Role != AppleAgxWin32RoleIndex ||
-         target->Access != AppleAgxWin32AccessRead || target->Offset != 0ULL ||
-         target->Bytes != 8ULL || relocation->TargetOffset != 0ULL ||
+         target->Role != (APPLE_AGX_U32)
+             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex) ||
+         target->Access != (APPLE_AGX_U32)
+             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                (AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite) :
+                AppleAgxWin32AccessRead) ||
+         (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+          (target->Offset != 0ULL || target->Bytes != 8ULL ||
+           relocation->TargetOffset != 0ULL)) ||
+         (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH &&
+          (relocation->TargetOffset > target->Bytes ||
+           16ULL > target->Bytes-relocation->TargetOffset)) ||
          dynamic_object(Job,relocation->TargetReference) == DYNAMIC_NULL ||
-         dynamic_object(Job,relocation->TargetReference)->Bytes != 8u ||
-         dynamic_read_le(storage +
+         (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+          (dynamic_object(Job,relocation->TargetReference)->Bytes != 8u ||
+           dynamic_read_le(storage +
              dynamic_object(Job,relocation->TargetReference)->StorageOffset,
-             8u) != 0x0000000200010000ULL ||
+             8u) != 0x0000000200010000ULL)) ||
          (relocation->DestinationOffset & 3ULL) != 0ULL ||
          relocation->DestinationOffset > destination->Bytes ||
          24u > destination->Bytes - relocation->DestinationOffset ||
          (dynamic_read_le(storage + destination->StorageOffset +
                               (APPLE_AGX_U32)relocation->DestinationOffset,
-                          4u) & 0xffffff00ULL) != 0x61f20600ULL ||
+                          4u) & 0xffffff00ULL) !=
+             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                0x61f50900ULL : 0x61f20600ULL) ||
          dynamic_read_le(storage + destination->StorageOffset +
                              (APPLE_AGX_U32)relocation->DestinationOffset + 8u,
-                         4u) != 3ULL ||
+                         4u) !=
+             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                4ULL : 3ULL) ||
          dynamic_read_le(storage + destination->StorageOffset +
                              (APPLE_AGX_U32)relocation->DestinationOffset + 12u,
                          4u) != 1ULL ||
@@ -387,7 +401,9 @@ APPLE_AGX_DYNAMIC_JOB_RESULT AppleAgxDynamicJobMaterialize(
                          4u) != 0ULL ||
          dynamic_read_le(storage + destination->StorageOffset +
                              (APPLE_AGX_U32)relocation->DestinationOffset + 20u,
-                         4u) != 2ULL))
+                         4u) !=
+             (View->Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+                0x10000ULL : 2ULL)))
       return dynamic_fail(AppleAgxDynamicJobRelocation, Storage, storageBytes,
                           Job);
     if (target->Offset > targetFact->Bytes ||

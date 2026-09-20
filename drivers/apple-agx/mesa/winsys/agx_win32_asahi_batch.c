@@ -28,13 +28,22 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   c->Transaction=c->Ops->Create(c->Owner,&c->Request);
   if(!c->Transaction || !c->Request) { free(c); return 0; }
   b->windows_batch=c;
+  const int has_geometry=b->ctx->stage[MESA_SHADER_GEOMETRY].shader!=NULL;
   const int has_depth=b->key.zsbuf.texture!=NULL;
   const int has_texture=b->ctx->stage[MESA_SHADER_FRAGMENT].texture_count!=0;
-  if(has_depth && has_texture) {
+  if(!has_geometry) {
+    b->uniforms.tables[AGX_SYSVAL_TABLE_GRID]=0;
+    b->uniforms.tables[AGX_SYSVAL_TABLE_GS]=0;
+    b->uniforms.vertex_params=0;
+    b->uniforms.geometry_params=0;
+    b->uniforms.vertex_outputs=0;
+  }
+  if((has_depth && has_texture) || (has_geometry && (has_depth||has_texture))) {
     (void)AgxWin32AsahiBatchAbort(b); (void)AgxWin32AsahiBatchRelease(b);
     return 0;
   }
-  APPLE_AGX_U16 version=has_depth ?
+  APPLE_AGX_U16 version=has_geometry ?
+      APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH : has_depth ?
       APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH :
       has_texture ? APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH :
                     APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
@@ -76,6 +85,51 @@ int AgxWin32AsahiBatchLeave(struct agx_batch *b) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b);
   if(!c || !c->Entered || !AgxWin32AsahiEncoderRootLeave(&c->Root)) return 0;
   c->Entered=0; return 1;
+}
+int AgxWin32AsahiBatchComputeEnter(struct agx_batch *b) {
+  AGX_WIN32_ASAHI_BATCH *c=capsule(b);AGX_WIN32_ASAHI_BACKEND *d=backend(b);
+  if(!c||!d||c->Capture.Capture.CommandVersion!=
+      APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH||
+      c->ComputeEntered||!b->cdm.bo||!b->cdm.bo->_map)
+    return 0;
+  if(c->Entered && !AgxWin32AsahiBatchLeave(b)) return 0;
+  if((!c->ComputePrepared && !AgxWin32AsahiComputeEncoderRootBegin(
+      d->Native,b->cdm.bo->_map,b->cdm.bo->va->addr,
+      (APPLE_AGX_U32)b->cdm.bo->size,&c->ComputeRoot)) ||
+     !AgxWin32AsahiEncoderRootEnter(d->Native,b->cdm.bo->_map,
+      b->cdm.bo->va->addr,(APPLE_AGX_U32)b->cdm.bo->size,&c->ComputeRoot))
+    return 0;
+  c->ComputeEntered=1;return 1;
+}
+int AgxWin32AsahiBatchComputeLeave(struct agx_batch *b) {
+  AGX_WIN32_ASAHI_BATCH *c=capsule(b);AGX_WIN32_ASAHI_BACKEND *d=backend(b);
+  if(!c||!d||!c->ComputeEntered||
+     !AgxWin32AsahiEncoderRootLeave(&c->ComputeRoot)) return 0;
+  c->ComputeEntered=0;c->ComputePrepared=1;
+  if(!AgxWin32AsahiEncoderRootEnter(d->Native,b->vdm.bo->_map,b->vdm.bo->va->addr,
+      (APPLE_AGX_U32)b->vdm.bo->size,&c->Root)) return 0;
+  c->Entered=1;return 1;
+}
+int AgxWin32AsahiBatchComputeFinalize(struct agx_batch *b,const void *end) {
+  AGX_WIN32_ASAHI_BATCH *c=capsule(b);AGX_WIN32_ASAHI_BACKEND *d=backend(b);
+  if(!c||!c->ComputePrepared||c->ComputeEntered||!end||
+     !d) return 0;
+  int restore_vdm=c->Entered!=0;
+  if(restore_vdm && !AgxWin32AsahiBatchLeave(b)) return 0;
+  if(!AgxWin32AsahiEncoderRootFinalize(&c->ComputeRoot,end)) {
+    if(restore_vdm && AgxWin32AsahiEncoderRootEnter(d->Native,
+        b->vdm.bo->_map,b->vdm.bo->va->addr,(APPLE_AGX_U32)b->vdm.bo->size,
+        &c->Root)) c->Entered=1;
+    return 0;
+  }
+  c->Render.ComputeEncoderReference=c->ComputeRoot.Scope.Reference;
+  c->Render.ComputeEncoderBytes=c->ComputeRoot.CompletedEnd;
+  if(restore_vdm) {
+    if(!AgxWin32AsahiEncoderRootEnter(d->Native,b->vdm.bo->_map,
+        b->vdm.bo->va->addr,(APPLE_AGX_U32)b->vdm.bo->size,&c->Root)) return 0;
+    c->Entered=1;
+  }
+  return c->Render.ComputeEncoderBytes!=0u;
 }
 int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     const struct pipe_draw_info *info,unsigned drawid,
@@ -131,12 +185,15 @@ static int batch_reject(AGX_WIN32_ASAHI_BATCH *c,unsigned line) {
 int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_render *r) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b); AGX_WIN32_ASAHI_BACKEND *d=backend(b);
   if(!c || !d || !r || d->Failed || b->ctx->any_faults || c->Submitted || c->Rejected ||
-      b->draws!=1 || b->cdm.bo || b->vs_scratch || b->fs_scratch ||
+      b->draws!=1 || b->vs_scratch || b->fs_scratch ||
       agx_tilebuffer_spills(&b->tilebuffer_layout) || r->samples!=1 || r->layers!=1 ||
       r->stencil.base || r->isp_oclqry_base ||
       r->sampler_heap || r->sampler_count ||
       (r->flags & ~(unsigned)DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES) ||
       r->ppp_multisamplectl>UINT32_MAX || r->vdm_ctrl_stream_base!=c->Root.Address)
+    return batch_reject(c,__LINE__);
+  if((c->Capture.Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH)!=
+       (b->cdm.bo!=NULL) || (b->cdm.bo && !c->Render.ComputeEncoderBytes))
     return batch_reject(c,__LINE__);
   if(c->Entered && !AgxWin32AsahiBatchLeave(b)) return batch_reject(c,__LINE__);
   if(!AgxWin32AsahiEncoderRootFinalize(&c->Root,b->vdm.current+69)) return batch_reject(c,__LINE__);
@@ -225,6 +282,8 @@ int AgxWin32AsahiBatchAbort(struct agx_batch *b) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b); AGX_WIN32_ASAHI_BACKEND *d=backend(b);
   if(!c) return 1;
   if(c->Submitted && !c->Retired) return 0;
+  if(c->ComputeEntered && !AgxWin32AsahiEncoderRootLeave(&c->ComputeRoot)) return 0;
+  c->ComputeEntered=0;
   if(c->Entered && !AgxWin32AsahiBatchLeave(b)) return 0;
   if(d->ActiveCapture==&c->Capture && !AgxWin32AsahiCaptureDeactivate(&c->Capture)) return 0;
   if(c->Capture.Capture.State && AgxWin32RelocAbort(&c->Capture.Capture)!=AgxRelocOk) return 0;
@@ -233,7 +292,8 @@ int AgxWin32AsahiBatchAbort(struct agx_batch *b) {
 int AgxWin32AsahiBatchRelease(struct agx_batch *b) {
   AGX_WIN32_ASAHI_BATCH *c=capsule(b);
   if(!c) return 1;
-  if((!c->Retired && !c->Rejected) || c->Entered || c->Capture.Capture.State ||
+  if((!c->Retired && !c->Rejected) || c->Entered || c->ComputeEntered ||
+      c->Capture.Capture.State ||
       !c->Ops->Destroy(c->Owner,c->Transaction)) return 0;
   b->windows_batch=NULL; free(c); return 1;
 }

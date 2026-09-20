@@ -71,6 +71,7 @@ static int dma_role_copied(APPLE_AGX_U32 Role, int Native, int Indexed) {
          Role == AppleAgxWin32RoleDescriptor ||
          Role == AppleAgxWin32RoleScissor ||
          Role == AppleAgxWin32RoleDepthBias ||
+         Role == AppleAgxWin32RoleSharedGeometry ||
          Role == AppleAgxWin32RoleEncoder ||
          (Native && (Role == AppleAgxWin32RoleUniform ||
                      Role == AppleAgxWin32RoleConstant || Role == AppleAgxWin32RolePppState));
@@ -84,8 +85,8 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
   APPLE_AGX_U32 index;
   APPLE_AGX_U32 other;
   APPLE_AGX_U32 indexRelocations=0u;
-  int indexed=Bindings && Bindings->CommandVersion==
-      APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH;
+  int indexed=Bindings &&
+      APPLE_AGX_WIN32_COMMAND_HAS_INDEX(Bindings->CommandVersion);
   int native=Bindings &&
       APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Bindings->CommandVersion);
   APPLE_AGX_U32 referenceLimit=Bindings ?
@@ -159,7 +160,11 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
       }
       if(!indexed || !destination || !target ||
          destination->Role!=AppleAgxWin32RoleEncoder ||
-         target->Role!=AppleAgxWin32RoleIndex || target->Bytes!=8u ||
+         target->Role!=(APPLE_AGX_U32)(Bindings->CommandVersion==
+             APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ?
+               AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex) ||
+         (Bindings->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
+          target->Bytes!=8u) ||
          (relocation->ResolvedAddress&3ULL)!=0ULL)
         return 0;
     }

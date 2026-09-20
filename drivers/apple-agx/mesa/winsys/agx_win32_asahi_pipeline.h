@@ -27,6 +27,10 @@ typedef struct _AGX_WIN32_ASAHI_ENCODER_ROOT {
 } AGX_WIN32_ASAHI_ENCODER_ROOT;
 int AgxWin32AsahiEncoderRootBegin(struct agx_device *,void *,APPLE_AGX_U64,
     APPLE_AGX_U32,AGX_WIN32_ASAHI_ENCODER_ROOT *);
+/* A mixed v8 request owns one additional CDM root. Earlier command versions
+ * retain the single-root contract. */
+int AgxWin32AsahiComputeEncoderRootBegin(struct agx_device *,void *,APPLE_AGX_U64,
+    APPLE_AGX_U32,AGX_WIN32_ASAHI_ENCODER_ROOT *);
 int AgxWin32AsahiEncoderRootEnter(struct agx_device *,void *,APPLE_AGX_U64,
     APPLE_AGX_U32,AGX_WIN32_ASAHI_ENCODER_ROOT *);
 int AgxWin32AsahiEncoderRootLeave(AGX_WIN32_ASAHI_ENCODER_ROOT *);

@@ -331,9 +331,9 @@ def main():
                          'indices/u_primconvert.c','translate/translate.c',
                          'translate/translate_cache.c',
                          'translate/translate_generic.c','translate/translate_sse.c',
-                         'rtasm/rtasm_execmem.c','rtasm/rtasm_x86sse.c',
-                         'nir/tgsi_to_nir.c'):
+                         'rtasm/rtasm_execmem.c','rtasm/rtasm_x86sse.c'):
             runtime.append(MESA / 'src/gallium/auxiliary' / relative)
+        runtime.append(native / 'src/gallium/auxiliary/nir/tgsi_to_nir.c')
         runtime += [MESA / 'src/gallium/auxiliary/driver_trace' / name
                     for name in ('tr_context.c','tr_dump.c','tr_dump_state.c',
                                  'tr_screen.c','tr_texture.c','tr_video.c')]

@@ -927,3 +927,38 @@ This is an internal GS prerequisite. Inventory remains 114 of 121, pipeline mask
 zero, and no package or hardware run occurred. The next causal target is the
 real Mesa mixed graphics batch: capture and finalize its CDM encoder and shared
 geometry objects into the existing request before enabling GS DDIs.
+
+## Verified real mixed GS producer through KMD materialization (2026-09-20)
+The projected D3D10 frontend now creates and binds a real SM4 passthrough
+geometry shader and executes the upstream Asahi mixed graphics lifecycle.  One
+request owns ordered VDM and CDM encoder roots, the real GRID system-value
+table, geometry parameter/output-index shared objects and all native shader,
+uniform, PPP, attachment and BG/EOT references.  ABI version 8 carries a
+32 KiB command envelope, two exact encoder roots and the source-derived
+32-bit GS-copy index edge into the same read/write shared geometry allocation.
+
+The Windows flush path finalizes the 72-byte CDM root before restoring and
+finalizing VDM.  The existing UMD composer and KMD validator/materializer admit
+the immutable request at two placements; the render root stays in the existing
+template encoder object while the compute root receives a distinct mapped
+general span.  Retirement clears GS-only GRID/table/parameter state before the
+next independent batch.  Unsupported GS combinations still reject before
+submission.
+
+Fresh diagnostic-free x64 real producer execution PASS:
+evidence/AD04-runtime-closure/mixed-v8-real-gs-final-20260920fd-x64/;
+source archive SHA-256
+32924fe14140fb1473f3e5e0b2112893a97d12165e7458449f48226d299361cb,
+EXE SHA-256 9e7a66e3a707838c852f5e8613cbcc2e4adf8956702a074ca6c808bdb25d5936.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/mixed-v8-real-gs-final-20260920fe-arm64/;
+source archive SHA-256
+27c5bd3d56081b96dbba42944d37a665a3cf20d4d83211c94238985aa297992d,
+EXE SHA-256 a4d487d1ae00b08b5af6792890b2836618fca9a1f0d0eb3f5f0a64e8a0a5a6de.
+
+This closes the real producer/materializer boundary but not production compute
+queue publication, so the frozen inventory deliberately remains 114 of 121 and
+the pipeline mask remains zero.  The next causal target is to build the existing
+G13 compute work and microsequence from the materialized CDM root, publish it on
+the distinct compute queue, accept its exact completion, and only then publish
+the existing TA/3D render work under the same fence.

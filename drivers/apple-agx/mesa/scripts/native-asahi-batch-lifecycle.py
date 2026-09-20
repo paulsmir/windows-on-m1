@@ -97,7 +97,9 @@ def project_sources(out,project,overlays):
    return -1;''')
     a,b=function(s,'agx_get_in_sync');start=s.rfind('static int',0,a)
     s=s[:start]+'#ifndef _WIN32\n'+s[start:b]+'\n#endif\n'+s[b:]
-    s=body(s,'agx_batch_submit','''   bool entered = !compute && render && AgxWin32AsahiBatchFinish(batch, render);
+    s=body(s,'agx_batch_submit','''   bool entered = render &&
+      ((compute != NULL) == (batch->cdm.bo != NULL)) &&
+      AgxWin32AsahiBatchFinish(batch, render);
    if (!entered && !AgxWin32AsahiBatchAbort(batch)) { ctx->any_faults = true; return; }
    agx_batch_mark_submitted(batch);
    if (ctx->batch == batch) ctx->batch = NULL;
@@ -151,6 +153,24 @@ def project_sources(out,project,overlays):
 }
 '''
     s=s[:decl]+signature.rstrip()+';\n'+renamed+s[a:b]+'\n'+wrapper+s[b:]
+    # A graphics GS batch temporarily owns the real CDM encoder. Switch the
+    # active capture scope only around the upstream preraster launches.
+    a,b=function(s,'agx_launch_gs_prerast');part=s[a:b]
+    part=replace(part,'''   if (!batch->cdm.bo) {
+      batch->cdm = agx_encoder_allocate(batch, dev);
+   }
+''','''   if (!batch->cdm.bo) {
+      batch->cdm = agx_encoder_allocate(batch, dev);
+   }
+   if (!AgxWin32AsahiBatchComputeEnter(batch)) {
+      ctx->any_faults = true; return;
+   }
+''')
+    part=part[:-1]+'''   if (!AgxWin32AsahiBatchComputeLeave(batch)) {
+      ctx->any_faults = true;
+   }
+}'''
+    s=s[:a]+part+s[b:]
     save(sp,s)
     pp='src/gallium/drivers/asahi/agx_pipe.c';s=(out/pp).read_text()
     s=s.replace('#include <xf86drm.h>','/* Windows synchronization belongs to UMD. */')
@@ -176,12 +196,26 @@ def project_sources(out,project,overlays):
     # Flush still calls the original native render finalization and cmdbuf
     # constructor. The internal DRM-named value is never sent to Linux APIs.
     s=body(s,'agx_flush_batch','''   if (!agx_batch_is_active(batch) || agx_batch_is_submitted(batch)) return;
-   if (ctx->any_faults || !batch->vdm.bo || batch->cdm.bo || !batch->initialized || !batch->draws) {
+   if (ctx->any_faults || !batch->vdm.bo || !batch->initialized || !batch->draws) {
       ctx->any_faults = true;
       if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
       return;
    }
-   if (!AgxWin32AsahiBatchEnter(batch)) {
+   struct drm_asahi_cmd_compute compute_storage;
+   struct drm_asahi_cmd_compute *compute = NULL;
+   if (batch->cdm.bo) {
+      if (!AgxWin32AsahiBatchComputeEnter(batch)) {
+         ctx->any_faults = true; return;
+      }
+      agx_flush_compute(ctx, batch, &compute_storage);
+      if (!AgxWin32AsahiBatchComputeLeave(batch)) {
+         ctx->any_faults = true; return;
+      }
+      if (!AgxWin32AsahiBatchComputeFinalize(batch,batch->cdm.current)) {
+         ctx->any_faults = true; return;
+      }
+      compute = &compute_storage;
+   } else if (!AgxWin32AsahiBatchEnter(batch)) {
       ctx->any_faults = true;
       if (AgxWin32AsahiBatchAbort(batch)) agx_batch_reset(ctx, batch);
       return;
@@ -189,7 +223,7 @@ def project_sources(out,project,overlays):
    struct drm_asahi_cmd_render render;
    agx_flush_render(ctx, batch, &render);
    if (!AgxWin32AsahiBatchLeave(batch)) { ctx->any_faults = true; return; }
-   agx_batch_submit(ctx, batch, NULL, &render);''')
+   agx_batch_submit(ctx, batch, compute, &render);''')
     s=body(s,'agx_flush','''   struct agx_context *ctx = agx_context(pctx);
    if (fence) { ctx->any_faults = true; *fence = NULL; return; }
    (void)flags;

@@ -8,6 +8,7 @@ typedef struct _AGX_WIN32_ASAHI_CAPTURE {
   /* Stable caller-owned request scope; association survives native detachment.
    * Reset only by a successful new capture begin after abort/retirement. */
   struct _AGX_WIN32_ASAHI_ENCODER_ROOT *EncoderRoot;
+  struct _AGX_WIN32_ASAHI_ENCODER_ROOT *ComputeEncoderRoot;
   APPLE_AGX_U32 Count;
   struct agx_bo *Bos[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   AGX_WIN32_RELOC_ALLOCATION Identities[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];

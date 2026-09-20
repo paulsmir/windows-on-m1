@@ -49,6 +49,55 @@ windows_graph_field(AGX_WIN32_ASAHI_PIPELINE *scope, const void *field,
    return !scope->Failed;
 }
 
+static int
+windows_graph_shared_field(AGX_WIN32_ASAHI_PIPELINE *scope,const void *field,
+                           uint64_t address,uint64_t bytes)
+{
+   if (!address) return 1;
+   unsigned index; uint64_t offset;
+   if (!AgxWin32AsahiCaptureFind(scope->Capture,address,bytes,
+          AppleAgxWin32RoleSharedGeometry,&index,&offset) &&
+       AgxWin32AsahiCaptureAddress(scope->Capture,address,bytes,
+          AppleAgxWin32RoleSharedGeometry,
+          AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite,&index)!=AgxRelocOk) {
+      scope->Failed=1; return 0;
+   }
+   AgxWin32AsahiPipelineRecordRange(scope,(const uint8_t *)field+8,
+      AppleAgxWin32RelocationUniformAddress64,address,bytes,
+      AppleAgxWin32RoleSharedGeometry);
+   return !scope->Failed;
+}
+
+static int
+windows_graph_geometry_params(struct agx_batch *batch,
+                              struct poly_geometry_params *params,
+                              uint64_t address, size_t index_bytes)
+{
+   AGX_WIN32_ASAHI_CAPTURE *capture=windows_graph_capture(batch);
+   if (!capture) return 1;
+   if (capture->Capture.CommandVersion !=
+          APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ||
+       !batch->geom_params_bo || !batch->geom_params_bo->_map ||
+       address < batch->geom_params_bo->va->addr || !index_bytes ||
+       !params->output_index_buffer) return 0;
+   uint64_t offset=address-batch->geom_params_bo->va->addr;
+   if (offset > batch->geom_params_bo->size ||
+       sizeof(*params) > batch->geom_params_bo->size-offset) return 0;
+   unsigned output_reference;
+   if (AgxWin32AsahiCaptureAddress(capture,params->output_index_buffer,index_bytes,
+          AppleAgxWin32RoleSharedGeometry,
+          AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite,
+          &output_reference) != AgxRelocOk) return 0;
+   struct poly_geometry_params *uploaded=
+       (struct poly_geometry_params *)((uint8_t *)batch->geom_params_bo->_map+offset);
+   AGX_WIN32_ASAHI_PIPELINE scope={0};
+   if (!AgxWin32AsahiEmissionBegin(capture->Backend->Native,uploaded,address,
+          sizeof(*uploaded),AppleAgxWin32RoleSharedGeometry,&scope)) return 0;
+   windows_graph_shared_field(&scope,&uploaded->output_index_buffer,
+       uploaded->output_index_buffer,index_bytes);
+   return AgxWin32AsahiPipelineFinish(&scope,(uint8_t *)uploaded+sizeof(*uploaded));
+}
+
 int
 AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
                                 uint64_t address, unsigned table)
@@ -67,14 +116,16 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
       for (unsigned i = 0; i < AGX_NUM_SYSVAL_TABLES; ++i) {
          if (!u->tables[i]) continue;
          if (i != AGX_SYSVAL_TABLE_ROOT && i != AGX_SYSVAL_TABLE_VS &&
-             i != AGX_SYSVAL_TABLE_FS && i != AGX_SYSVAL_TABLE_PARAMS) {
-            fprintf(stderr,"NATIVE_ROOT_TABLE: index=%u address=%llu\n",i,(unsigned long long)u->tables[i]);
+             i != AGX_SYSVAL_TABLE_GS && i != AGX_SYSVAL_TABLE_FS &&
+             i != AGX_SYSVAL_TABLE_PARAMS && i != AGX_SYSVAL_TABLE_GRID) {
             scope.Failed = 1; break;
          }
          size_t table_bytes = i == AGX_SYSVAL_TABLE_ROOT ? sizeof(*u) :
-             i == AGX_SYSVAL_TABLE_PARAMS ? 8 : sizeof(struct agx_stage_uniforms);
+             i == AGX_SYSVAL_TABLE_PARAMS ? 8 :
+             i == AGX_SYSVAL_TABLE_GRID ? 12 : sizeof(struct agx_stage_uniforms);
          windows_graph_field(&scope, &u->tables[i], u->tables[i], table_bytes,
-             i == AGX_SYSVAL_TABLE_PARAMS ? AppleAgxWin32RoleConstant :
+             (i == AGX_SYSVAL_TABLE_PARAMS || i == AGX_SYSVAL_TABLE_GRID) ?
+                                           AppleAgxWin32RoleConstant :
                                            AppleAgxWin32RoleUniform);
       }
       APPLE_AGX_U64 vb_start[PIPE_MAX_ATTRIBS], vb_end[PIPE_MAX_ATTRIBS];
@@ -125,10 +176,11 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
                                 AppleAgxWin32RoleVertex);
       for (unsigned i = 0; i < PIPE_STAT_QUERY_MS_INVOCATIONS; ++i)
          if (u->pipeline_statistics[i]) { fprintf(stderr,"NATIVE_ROOT_QUERY: index=%u address=%llu\n",i,(unsigned long long)u->pipeline_statistics[i]); scope.Failed = 1; }
-      if (u->vertex_params || u->tess_params || u->geometry_params) {
-         fprintf(stderr,"NATIVE_ROOT_PARAMS: vertex=%llu tess=%llu geometry=%llu\n",(unsigned long long)u->vertex_params,(unsigned long long)u->tess_params,(unsigned long long)u->geometry_params);
-         scope.Failed = 1;
-      }
+      if (u->tess_params) scope.Failed=1;
+      if (u->vertex_params && !windows_graph_shared_field(
+             &scope,&u->vertex_params,u->vertex_params,64)) scope.Failed=1;
+      if (u->geometry_params && !windows_graph_shared_field(
+             &scope,&u->geometry_params,u->geometry_params,316)) scope.Failed=1;
       windows_graph_field(&scope, &u->polygon_stipple, u->polygon_stipple,
                           sizeof(batch->ctx->poly_stipple), AppleAgxWin32RoleConstant);
    } else {
@@ -140,10 +192,12 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
          if (table != AGX_SYSVAL_TABLE_FS ||
              !windows_graph_field(&scope, &u->texture_base, u->texture_base,
                                   AGX_TEXTURE_LENGTH,
-                                  AppleAgxWin32RoleDescriptor))
+                                  AppleAgxWin32RoleDescriptor)) {
             scope.Failed = 1;
+         }
       }
       bool app_stage = table == AGX_SYSVAL_TABLE_VS ||
+                       table == AGX_SYSVAL_TABLE_GS ||
                        table == AGX_SYSVAL_TABLE_FS;
       mesa_shader_stage stage = app_stage ?
          (mesa_shader_stage)(table - AGX_SYSVAL_TABLE_VS) : MESA_SHADER_STAGES;
@@ -179,9 +233,25 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
          (void)constant_index;
       }
       for (unsigned i = 0; i < PIPE_MAX_SHADER_BUFFERS; ++i) {
-         if (u->ssbo_size[i]) { scope.Failed = 1; break; }
-         windows_graph_field(&scope, &u->ssbo_base[i], u->ssbo_base[i], 16,
-                             AppleAgxWin32RoleConstant);
+         if (u->ssbo_size[i]) {
+            if (table != AGX_SYSVAL_TABLE_GS || !native_stage ||
+                capture->Capture.CommandVersion !=
+                   APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH ||
+                !(native_stage->ssbo_writable_mask & BITFIELD_BIT(i))) {
+               scope.Failed=1; break;
+            }
+            struct pipe_shader_buffer *sb=&native_stage->ssbo[i];
+            struct agx_resource *rsrc=sb->buffer?agx_resource(sb->buffer):NULL;
+            if (!rsrc || !rsrc->bo || sb->buffer_size!=u->ssbo_size[i] ||
+                u->ssbo_base[i]!=agx_map_gpu(rsrc)+sb->buffer_offset ||
+                !windows_graph_shared_field(&scope,&u->ssbo_base[i],
+                    u->ssbo_base[i],u->ssbo_size[i])) {
+               scope.Failed=1; break;
+            }
+         } else if (!windows_graph_field(&scope,&u->ssbo_base[i],
+                       u->ssbo_base[i],16,AppleAgxWin32RoleConstant)) {
+            scope.Failed=1;break;
+         }
       }
    }
    if (AgxWin32AsahiPipelineFinish(&scope, (uint8_t *)cpu + bytes)) return 1;
@@ -275,28 +345,47 @@ windows_graph_index_list(struct agx_batch *batch, uint8_t *start, uint8_t *end,
                          size_t extent)
 {
    AGX_WIN32_ASAHI_CAPTURE *capture = windows_graph_capture(batch);
-   if (!capture || !info || info->index_size != 2 || !info->index.resource ||
-       !start || end != start + 24 || extent != 8 || (address & 3) ||
+   bool mixed = capture && capture->Capture.CommandVersion ==
+       APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH;
+   if (!capture || !info || !info->index.resource ||
+       info->index_size != (mixed ? 4u : 2u) ||
+       !start || end != start + 24 ||
+       (mixed ? extent < 16 : extent != 8) || (address & 3) ||
        address >= (1ULL << 40)) return false;
    uint32_t *words = (uint32_t *)start;
    uint64_t encoded = ((uint64_t)(words[0] & 0xffu) << 32) | words[1];
-   if ((words[0] & 0xffffff00u) != 0x61f20600u || words[2] != 3u ||
-       words[3] != 1u || words[4] != 0u || words[5] != 2u ||
+   if ((words[0] & 0xffffff00u) !=
+          (mixed ? 0x61f50900u : 0x61f20600u) ||
+       words[2] != (mixed ? 4u : 3u) || words[3] != 1u ||
+       words[4] != 0u || words[5] != (mixed ? 0x10000u : 2u) ||
        encoded != address) return false;
    struct agx_resource *rsrc = agx_resource(info->index.resource);
-   if (!rsrc->bo || address != agx_map_gpu(rsrc) ||
-       AgxWin32RelocPromoteIndexed(&capture->Capture) != AgxRelocOk)
+   uint64_t resource_base = rsrc->bo ? agx_map_gpu(rsrc) : 0;
+   unsigned index=0;
+   uint64_t target_offset=0;
+   int shared_found = mixed && AgxWin32AsahiCaptureFind(capture,address,16,
+       AppleAgxWin32RoleSharedGeometry,&index,&target_offset);
+   if (!rsrc->bo ||
+       (mixed ? (address < resource_base ||
+                  address - resource_base > extent ||
+                  16 > extent - (address - resource_base)) :
+                address != resource_base) ||
+       (capture->Capture.CommandVersion ==
+            APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
+        AgxWin32RelocPromoteIndexed(&capture->Capture) != AgxRelocOk) ||
+       !APPLE_AGX_WIN32_COMMAND_HAS_INDEX(capture->Capture.CommandVersion))
       return false;
-   unsigned index;
    AGX_WIN32_ASAHI_PIPELINE scope = {0};
-   if (AgxWin32AsahiCaptureReference(capture,rsrc->bo,
-          AppleAgxWin32RoleIndex,AppleAgxWin32AccessRead,0,8,&index) !=
-          AgxRelocOk ||
+   if ((mixed ?
+          !shared_found :
+          AgxWin32AsahiCaptureReference(capture,rsrc->bo,
+             AppleAgxWin32RoleIndex,AppleAgxWin32AccessRead,0,8,&index) !=
+             AgxRelocOk) ||
        !AgxWin32AsahiEncoderEmissionBeginCpu(
           capture->Backend->Native,start,24,&scope)) return false;
    AgxWin32AsahiPipelineRecordRange(&scope,start+8,
-       AppleAgxWin32RelocationVdmIndexBufferAddress40,address,8,
-       AppleAgxWin32RoleIndex);
+       AppleAgxWin32RelocationVdmIndexBufferAddress40,address,mixed ? 16 : 8,
+       mixed ? AppleAgxWin32RoleSharedGeometry : AppleAgxWin32RoleIndex);
    return AgxWin32AsahiPipelineFinish(&scope,end) != 0;
 }
 
@@ -321,7 +410,7 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       !ctx->framebuffer.cbufs[0].level && !ctx->framebuffer.cbufs[0].first_layer &&
       !ctx->framebuffer.cbufs[0].last_layer && !ctx->streamout.num_targets &&
       !ctx->cond_query && !ctx->occlusion_query && !ctx->time_elapsed &&
-      !ctx->tf_any_overflow && !ctx->stage[MESA_SHADER_GEOMETRY].shader &&
+      !ctx->tf_any_overflow &&
       !ctx->stage[MESA_SHADER_TESS_CTRL].shader && !ctx->stage[MESA_SHADER_TESS_EVAL].shader &&
       ctx->stage[MESA_SHADER_VERTEX].shader && ctx->stage[MESA_SHADER_FRAGMENT].shader &&
       ctx->rast && !ctx->rast->depth_bias && ctx->attributes;
@@ -392,6 +481,24 @@ def project_sources(out, project, overlays):
     include.write_text(GRAPH_HELPERS)
     state = replace(state, 'static void\nagx_set_shader_images(',
                     '#include "agx_win32_graph.inc"\n\nstatic void\nagx_set_shader_images(')
+    state = replace(state, '   struct poly_geometry_params params;\n',
+                    '   struct poly_geometry_params params;\n   size_t windows_index_bytes = 0;\n')
+    state = replace(state,
+        '''         batch->geom_index = params.output_index_buffer;
+      }''',
+        '''         batch->geom_index = params.output_index_buffer;
+         windows_index_bytes = idx_size * 4;
+      }''')
+    state = replace(state,
+        '''   return agx_pool_upload_aligned_with_bo(&batch->pool, &params, sizeof(params),
+                                          8, &batch->geom_params_bo);''',
+        '''   uint64_t windows_params = agx_pool_upload_aligned_with_bo(
+      &batch->pool, &params, sizeof(params), 8, &batch->geom_params_bo);
+   if (!windows_params || !windows_graph_geometry_params(
+          batch,&params,windows_params,windows_index_bytes)) {
+      windows_graph_fail(batch); return 0;
+   }
+   return windows_params;''')
     state = replace(state, '   agx_ppp_fini(out, &ppp);',
                     '   agx_ppp_fini(out, &ppp);\n   windows_graph_ppp(batch, T, size, *out);')
     # The dirty PPP has its own capture already. Only the initial PPP remains.

@@ -50,7 +50,8 @@ AGX_WIN32_RELOC_RESULT AgxWin32AsahiCaptureBeginVersion(AGX_WIN32_ASAHI_CAPTURE 
      backend->ActiveCapture || backend->ActiveEmission) return AgxRelocArgument;
   AGX_WIN32_RELOC_RESULT result=AgxWin32RelocBeginVersion(&c->Capture,owner,generation,request,version,&ops,c);
   if(result!=AgxRelocOk) return result;
-  c->Backend=backend; c->Count=0; c->EncoderRoot=NULL;
+  c->Backend=backend; c->Count=0;
+  c->EncoderRoot=NULL; c->ComputeEncoderRoot=NULL;
   memset(c->Bos,0,sizeof(c->Bos)); memset(c->Identities,0,sizeof(c->Identities));
   return AgxRelocOk;
 }
