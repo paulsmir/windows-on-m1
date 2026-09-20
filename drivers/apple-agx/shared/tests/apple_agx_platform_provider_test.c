@@ -492,11 +492,11 @@ static APPLE_AGX_PLATFORM_PROVIDER_CONFIG provider_config(
 static void prepare_render_shared_memory(
     APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
     unsigned char Storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT]
-                         [0x8000]) {
+                         [0x10000]) {
   unsigned int index;
   memset(Owner, 0, sizeof(*Owner));
   memset(Storage, 0,
-         APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT * 0x8000u);
+         APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT * 0x10000u);
   Owner->Initialized = APPLE_AGX_TRUE;
   Owner->Built = APPLE_AGX_TRUE;
   Owner->ObjectCount = APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
@@ -504,7 +504,8 @@ static void prepare_render_shared_memory(
        ++index) {
     Owner->Objects[index].CpuAddress = Storage[index];
     Owner->Objects[index].DeviceAddress = 0x50000000ULL + index * 0x10000ULL;
-    Owner->Objects[index].Length = 0x8000u;
+    Owner->Objects[index].Length = index==
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR ? 0x10000u : 0x8000u;
     Owner->Objects[index].Context = 0u;
     Owner->Objects[index].State = AppleAgxMemoryGpuMapped;
     Owner->VirtualAddresses[index] =
@@ -528,7 +529,7 @@ static void test_persistent_owner_and_bounded_event_drain(void) {
   APPLE_AGX_BACKEND_U32 completed = 0u;
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
   static unsigned char
-      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x10000];
   APPLE_AGX_BACKEND_JOB_IMAGE job;
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION built_submission;
 
@@ -645,7 +646,7 @@ static void test_bounded_poll_checks_timeout_after_empty_event_ring(void) {
   unsigned char storage[35][0x4000];
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
   static unsigned char
-      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x10000];
   APPLE_AGX_BACKEND_U32 drained = 99u;
   APPLE_AGX_BACKEND_U32 completed = 99u;
   volatile APPLE_AGX_BACKEND_U32 *event_read;
@@ -689,7 +690,7 @@ static void test_poll_records_exact_failure_owner(void) {
   unsigned char storage[35][0x4000];
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
   static unsigned char
-      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x10000];
   APPLE_AGX_BACKEND_U32 drained = 99u;
   APPLE_AGX_BACKEND_U32 completed = 99u;
   volatile APPLE_AGX_BACKEND_U32 *event_read;
@@ -767,7 +768,7 @@ static void test_external_rebased_image_mode_uses_exact_job_and_ranges(void) {
   unsigned char storage[35][0x4000];
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
   static unsigned char
-      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+      render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x10000];
   unsigned char command[32] = {1u};
 
   memset(&provider, 0, sizeof(provider));
@@ -813,7 +814,7 @@ static void test_deferred_bind_does_not_authorize_queue_creation(void) {
   FAKE_COMPONENTS components = {0};
   unsigned char storage[35][0x4000];
   APPLE_AGX_RENDER_SHARED_MEMORY_OWNER render_shared;
-  static unsigned char render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x8000];
+  static unsigned char render_storage[APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT][0x10000];
   unsigned int i;
   prepare_channel_memory(&owner, storage);
   prepare_render_shared_memory(&render_shared, render_storage);

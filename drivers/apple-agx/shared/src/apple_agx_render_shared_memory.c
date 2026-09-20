@@ -62,7 +62,7 @@ static APPLE_AGX_BOOL runtime_bindings_valid(
 static APPLE_AGX_BOOL storage_empty(
     const APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner) {
   APPLE_AGX_U32 index;
-  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {
     if (Owner->Objects[index].State != AppleAgxMemoryEmpty)
       return APPLE_AGX_FALSE;
@@ -265,6 +265,23 @@ AppleAgxRenderSharedMemoryApplyQueueArenas(
       return AppleAgxRenderSharedMemoryResultInvalidArgument;
     proposed[index] = mapping_va;
   }
+  {
+    APPLE_AGX_U64 next=SharedVa;
+    for(index=20u;index<=27u;++index) {
+      APPLE_AGX_U64 end=proposed[index]+Owner->Objects[index].Length;
+      if(end>next) next=end;
+    }
+    next=align_up(next,RENDER_SHARED_VA_ALIGNMENT);
+    for(index=APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO;
+        index<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++index) {
+      APPLE_AGX_U64 bytes=Owner->Objects[index].Length;
+      if(next<SharedVa || next>SharedVa+SharedBytes ||
+         bytes>SharedVa+SharedBytes-next)
+        return AppleAgxRenderSharedMemoryResultInvalidArgument;
+      proposed[index]=next;
+      next=align_up(next+bytes,RENDER_SHARED_VA_ALIGNMENT);
+    }
+  }
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
        ++index)
     Owner->VirtualAddresses[index] = proposed[index];
@@ -305,18 +322,21 @@ APPLE_AGX_RENDER_SHARED_MEMORY_RESULT AppleAgxRenderSharedMemoryBuild(
        ++index) {
     APPLE_AGX_U64 allocation_bytes;
     APPLE_AGX_U64 object_offset;
-    if (layouts[index].OriginalIndex != index || layouts[index].ContextId != 0u ||
-        layouts[index].Size == 0u)
-      return rollback(Owner,
-                      AppleAgxRenderSharedMemoryResultInvalidArgument);
-    object_offset = layouts[index].OriginalGpuVa & RENDER_SHARED_PAGE_MASK;
-    if (object_offset > APPLE_AGX_MEMORY_PAGE_SIZE ||
-        layouts[index].Size > APPLE_AGX_MEMORY_PAGE_SIZE - object_offset)
-      return rollback(Owner,
-                      AppleAgxRenderSharedMemoryResultInvalidArgument);
-    allocation_bytes = align_up(
-        object_offset + (APPLE_AGX_U64)layouts[index].Size,
-        APPLE_AGX_MEMORY_PAGE_SIZE);
+    if(index<APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT) {
+      if (layouts[index].OriginalIndex != index || layouts[index].ContextId != 0u ||
+          layouts[index].Size == 0u)
+        return rollback(Owner,AppleAgxRenderSharedMemoryResultInvalidArgument);
+      object_offset = layouts[index].OriginalGpuVa & RENDER_SHARED_PAGE_MASK;
+      if (object_offset > APPLE_AGX_MEMORY_PAGE_SIZE ||
+          layouts[index].Size > APPLE_AGX_MEMORY_PAGE_SIZE - object_offset)
+        return rollback(Owner,AppleAgxRenderSharedMemoryResultInvalidArgument);
+      allocation_bytes=align_up(object_offset+(APPLE_AGX_U64)layouts[index].Size,
+                                APPLE_AGX_MEMORY_PAGE_SIZE);
+    } else {
+      object_offset=0ULL;
+      allocation_bytes=index==APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR ?
+          0x10000ULL : APPLE_AGX_MEMORY_PAGE_SIZE;
+    }
     if (AppleAgxMemoryAllocate(MemoryIo, allocation_bytes,
                                &Owner->Objects[index]) !=
         AppleAgxMemoryResultOk)
@@ -371,10 +391,10 @@ static APPLE_AGX_BOOL bind_relocation_objects(
       TemplateArena == RENDER_SHARED_NULL ||
       TemplateArenaBytes < AppleAgxRenderTemplateBytes() ||
       RelocationObjects == RENDER_SHARED_NULL ||
-      RelocationObjectCapacity < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT)
+      RelocationObjectCapacity < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT)
     return APPLE_AGX_FALSE;
   layouts = AppleAgxRenderTemplateObjectLayouts();
-  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {
     APPLE_AGX_U32 byte;
     const unsigned char *source =
@@ -561,7 +581,15 @@ static APPLE_AGX_BOOL queue_config(
       !queue_object_valid(Owner, d3_pointers, 0x44u, Prepared) ||
       !queue_object_valid(Owner, ta_pointers, 0x44u, Prepared) ||
       !queue_object_valid(Owner, ta_stamp, 4u, Prepared) ||
-      !queue_object_valid(Owner, d3_stamp, 4u, Prepared))
+      !queue_object_valid(Owner, d3_stamp, 4u, Prepared) ||
+      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO,
+                          184u,Prepared) ||
+      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING,
+                          APPLE_AGX_G13_RING_CAPACITY*8ULL,Prepared) ||
+      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS,
+                          0x84u,Prepared) ||
+      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
+                          0x10000u,Prepared))
     return APPLE_AGX_FALSE;
 
   zero_bytes(Config, (APPLE_AGX_U64)sizeof(*Config));
@@ -602,6 +630,20 @@ static APPLE_AGX_BOOL queue_config(
       (volatile APPLE_AGX_U32 *)((unsigned char *)
           Owner->Objects[d3_stamp].CpuAddress + Owner->ObjectOffsets[d3_stamp]);
   Config->D3.EventNumber = 1u;
+  Config->HasCompute=APPLE_AGX_TRUE;
+  Config->Compute.QueueType=(APPLE_AGX_U32)AppleAgxG13QueueCompute;
+  Config->Compute.QueueInfoGpuAddress=Owner->VirtualAddresses[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO];
+  Config->Compute.RingCpuAddress=(APPLE_AGX_U64 *)Owner->Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING].CpuAddress;
+  Config->Compute.RingCapacity=APPLE_AGX_G13_RING_CAPACITY;
+  Config->Compute.GpuDonePointer=(volatile APPLE_AGX_U32 *)Owner->Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress;
+  Config->Compute.CpuWritePointer=(volatile APPLE_AGX_U32 *)((unsigned char *)
+      Owner->Objects[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x40u);
+  Config->Compute.Stamp=(volatile APPLE_AGX_U32 *)((unsigned char *)
+      Owner->Objects[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x80u);
+  Config->Compute.EventNumber=2u;
   Config->TimeoutTicks = TimeoutTicks;
   return APPLE_AGX_TRUE;
 }

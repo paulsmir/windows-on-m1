@@ -994,3 +994,20 @@ test and full platform-provider test PASS.  Inventory remains 114 of 121 and
 pipeline mask zero.  The next causal target is to add mapped compute
 QueueInfo/ring/pointers/stamp storage to the existing render-shared-memory
 owner, then enable HasCompute with the owned compute event and CL_1 transport.
+
+## Verified mapped compute queue memory ownership (2026-09-20)
+The existing render-shared-memory owner now allocates, maps, validates and
+rolls back four additional context-0 objects for compute: CommandQueueInfo, the
+firmware work-address ring, combined CPU-write/GPU-done/stamp storage and a
+64 KiB request sidecar.  Production queue-arena placement assigns them
+non-overlapping addresses inside the existing shared arena after the render
+queue objects.  BuildQueueConfig enables HasCompute only when all four objects
+are mapped with the exact capacities and derives every CPU/GPU pointer from
+their owned mappings.
+
+The full render-shared-memory test and platform-provider test compile with
+Windows LLVM /W4 /WX and execute PASS.  Inventory remains 114 of 121 and
+pipeline mask zero.  Next is to partition the sidecar into the source-derived
+0x7fa0 preemption allocation, 0x31c RunCompute work, 0x1f0 microsequence and
+small notifier/statistics roots, then fill Submission.Compute from the
+materialized v8 CDM encoder.

@@ -189,9 +189,22 @@ int main(void) {
   assert(queue_config.Ta.Stamp ==
          (volatile APPLE_AGX_U32 *)((unsigned char *)
              owner.Objects[26].CpuAddress + owner.ObjectOffsets[26]));
+  assert(queue_config.HasCompute);
+  assert(queue_config.Compute.QueueInfoGpuAddress==owner.VirtualAddresses[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO]);
+  assert(queue_config.Compute.RingCpuAddress==(APPLE_AGX_U64 *)owner.Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING].CpuAddress);
+  assert(queue_config.Compute.GpuDonePointer==(volatile APPLE_AGX_U32 *)
+      owner.Objects[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress);
+  assert(queue_config.Compute.CpuWritePointer==(volatile APPLE_AGX_U32 *)
+      ((unsigned char *)owner.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x40u));
+  assert(queue_config.Compute.Stamp==(volatile APPLE_AGX_U32 *)
+      ((unsigned char *)owner.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x80u));
   assert(queue_config.TimeoutTicks == 500u);
   layouts = AppleAgxRenderTemplateObjectLayouts();
-  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {
     APPLE_AGX_U64 object_offset =
         layouts[index].OriginalGpuVa & (APPLE_AGX_MEMORY_PAGE_SIZE - 1ULL);
