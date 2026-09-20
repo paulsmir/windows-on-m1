@@ -884,3 +884,24 @@ This is an internal prerequisite and does not close a frozen inventory row.
 Inventory remains 114 of 121 and pipeline mask remains zero.  Next is the
 source-derived StartCompute/WaitForIdle/FinalizeCompute/RetireStamp
 microsequence and a distinct compute queue/stamp owner before TA/3D.
+
+## Verified minimal G13/V13_5 compute microsequence (2026-09-20)
+The source-derived RunCompute foundation now builds its exact minimal firmware
+microsequence: StartCompute, WaitForIdle on the compute pipe, FinalizeCompute,
+and RetireStamp.  All inner RunCompute pointers, queue-info/statistics roots,
+notifier state, event generation/sequence, counter, firmware stamp and restart
+branch are request-derived and validated before destination mutation. Optional
+timestamps and attachments remain absent in this selected form.
+
+Fresh x64 full runtime execution PASS:
+evidence/AD04-runtime-closure/native-g13-compute-microseq-20260920dl-x64/;
+source archive SHA-256
+8d1938340477e6d46e1e01ab47f12895ae64fcaf534c2bd98578c74b2014b077.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-g13-compute-microseq-20260920dm-arm64/;
+source archive SHA-256
+68fdf9c734c34a83fda5d8e6e376c28e57e4ae3cc559cadb9d8021104b0aee6a.
+This remains an internal GS prerequisite: inventory is 114 of 121, pipeline
+mask is zero, and no package or hardware run occurred. Next is the distinct
+compute queue/event/stamp phase that must complete before existing TA/3D
+publication under the same Windows transaction.

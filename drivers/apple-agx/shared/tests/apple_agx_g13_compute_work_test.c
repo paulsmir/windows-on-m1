@@ -91,6 +91,23 @@ unsigned AppleAgxG13ComputeWorkContractTests(void) {
     assert(!AppleAgxG13ComputeWorkBuild(&i,work));
     assert(!memcmp(work,before,sizeof(work)));
   }
+  {
+    APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT m={0};
+    unsigned char seq[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES];
+    m.WorkGpuAddress=0x1500100000ULL;m.StatisticsGpuAddress=0x1500200000ULL;
+    m.QueueInfoGpuAddress=0x1500300000ULL;
+    m.NotifierBufferGpuAddress=0x1500400000ULL;
+    m.FirmwareStampGpuAddress=0x1500500000ULL;
+    m.Counter=7;m.EventSequence=11;m.EventGeneration=13;m.VmSlot=2;
+    m.StampValue=9;
+    assert(AppleAgxG13ComputeMicrosequenceBuild(&m,seq));
+    assert(get32(seq)==0x29 && get64(seq+0xc)==m.WorkGpuAddress+0x70);
+    assert(get32(seq+0x16c)==0x00800001u && get32(seq+0x170)==0x2a);
+    assert(get64(seq+0x198)==m.FirmwareStampGpuAddress);
+    assert(get32(seq+0x1c8)==0xfffffe90u);
+    assert(get64(seq+0x1dd)==m.WorkGpuAddress+0x305);
+    assert(get32(seq+0x1ec)==0x40000018u);
+  }
   return failures;
 }
 

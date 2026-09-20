@@ -140,6 +140,23 @@ static void test_g13_compute_work_contract(void) {
         work[0x2d8]==5u && work[sizeof(work)-1]==0u);
   memset(work,0x5a,sizeof(work));input.CdmStreamEnd=input.CdmStreamBase;
   CHECK(!AppleAgxG13ComputeWorkBuild(&input,work) && work[0]==0x5a);
+  {
+    APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT micro={0};
+    unsigned char sequence[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES];
+    micro.WorkGpuAddress=0x1500100000ULL;
+    micro.StatisticsGpuAddress=0x1500200000ULL;
+    micro.QueueInfoGpuAddress=0x1500300000ULL;
+    micro.NotifierBufferGpuAddress=0x1500400000ULL;
+    micro.FirmwareStampGpuAddress=0x1500500000ULL;
+    micro.Counter=7;micro.EventSequence=11;micro.EventGeneration=13;
+    micro.VmSlot=2;micro.StampValue=9;
+    CHECK(AppleAgxG13ComputeMicrosequenceBuild(&micro,sequence));
+    CHECK(ComputeWorkRead64(sequence+0x0c)==micro.WorkGpuAddress+0x70 &&
+          ComputeWorkRead64(sequence+0x198)==micro.FirmwareStampGpuAddress &&
+          ComputeWorkRead64(sequence+0x1dd)==micro.WorkGpuAddress+0x305 &&
+          sequence[0x16c]==1u && sequence[0x170]==0x2au &&
+          sequence[0x1ec]==0x18u);
+  }
 }
 
 static HRESULT APIENTRY TestQueryAdapterInfo(

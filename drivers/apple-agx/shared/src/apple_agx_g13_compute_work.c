@@ -73,3 +73,46 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeWorkBuild(
   work[0x2d8u]=(unsigned char)i->ClientSequence;
   return APPLE_AGX_BACKEND_TRUE;
 }
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13ComputeMicrosequenceBuild(
+    const APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_INPUT *i,
+    unsigned char seq[APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES]) {
+  const APPLE_AGX_BACKEND_U32 finalize=0x170u;
+  if(!i||!seq||!aligned(i->WorkGpuAddress,4u)||
+     !aligned(i->StatisticsGpuAddress,4u)||
+     !aligned(i->QueueInfoGpuAddress,8u)||
+     !aligned(i->NotifierBufferGpuAddress,8u)||
+     !aligned(i->FirmwareStampGpuAddress,4u)||!i->Counter||
+     !i->EventSequence||!i->EventGeneration||i->VmSlot>=0x10u||
+     !i->StampValue||i->WorkGpuAddress>~0ULL-0x309u)
+    return APPLE_AGX_BACKEND_FALSE;
+  zero(seq,APPLE_AGX_G13_COMPUTE_MICROSEQUENCE_BYTES);
+  /* StartCompute::ver<G13,V13_5>, no attachments or timestamps. */
+  put32(seq+0x000u,0x29u);
+  put64(seq+0x004u,i->WorkGpuAddress+0x1cu);
+  put64(seq+0x00cu,i->WorkGpuAddress+0x70u);
+  put64(seq+0x014u,i->StatisticsGpuAddress);
+  put64(seq+0x01cu,i->QueueInfoGpuAddress);
+  put32(seq+0x024u,i->VmSlot);put32(seq+0x028u,1u);
+  put32(seq+0x02cu,i->EventGeneration);
+  put64(seq+0x030u,i->EventSequence);
+  put64(seq+0x03cu,i->WorkGpuAddress+0x1fcu);
+  put64(seq+0x154u,i->WorkGpuAddress+0x305u);
+  put64(seq+0x15cu,i->Counter);
+  put64(seq+0x164u,i->NotifierBufferGpuAddress);
+  /* WaitForIdle(Compute). */
+  put32(seq+0x16cu,0x00800001u);
+  /* FinalizeCompute::ver<G13,V13_5>. */
+  put32(seq+finalize+0x00u,0x2au);
+  put64(seq+finalize+0x04u,i->StatisticsGpuAddress);
+  put64(seq+finalize+0x0cu,i->QueueInfoGpuAddress);
+  put32(seq+finalize+0x14u,i->VmSlot);
+  put64(seq+finalize+0x18u,i->WorkGpuAddress+0x1fcu);
+  put64(seq+finalize+0x28u,i->FirmwareStampGpuAddress);
+  put32(seq+finalize+0x30u,i->StampValue);
+  put32(seq+finalize+0x58u,(APPLE_AGX_BACKEND_U32)(0u-finalize));
+  put64(seq+finalize+0x6du,i->WorkGpuAddress+0x305u);
+  /* RetireStamp with the source-defined 0x40000000 argument. */
+  put32(seq+0x1ecu,0x40000018u);
+  return APPLE_AGX_BACKEND_TRUE;
+}
