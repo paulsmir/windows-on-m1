@@ -1505,3 +1505,30 @@ inventory expansion is permitted without pinned-WDK evidence or a causal
 standard-runtime RED.  The next boundary is installed native UMD standard-
 runtime admission, followed by the exact ARM64 package/sign/hash and hardware
 preregistration gates.
+
+## Exact standard-runtime qualification client built (2026-09-20)
+The existing `AppleAgxD3dKmRender.vcxproj` now has a mutually exclusive
+`EnableStandardRuntimeClient` mode; it does not create another helper project or
+alter the direct-KMT/native-batch build.  That mode builds
+AppleAgxD3d10Standard.exe, which uses only the standard D3D10/DXGI APIs:
+D3D10CreateDeviceAndSwapChain, Apple vendor-id verification, runtime HLSL
+compilation, RTV/vertex-buffer/shader state, ClearRenderTargetView, Draw, Flush
+and IDXGISwapChain::Present.  It reports PASS only after standard Present
+returns success.
+
+Fresh source archive SHA-256:
+9f047853c096ade828c26f2014cb196739651a8bf3e9061b9fa9bcaf8c0365f5.
+The same snapshot passed the complete x64 real-producer closure and direct native
+client link under
+`evidence/AD04-runtime-closure/standard-client-source-20260920kh-x64/`.
+Standard client builds:
+- x64 0 warnings/0 errors, EXE SHA-256
+  746b2a88b169de6a5e4907f9e49e748bdc3d4c5dcc4a988e2b21f888cb6e1451;
+- ARM64 0 warnings/0 errors, PE machine AA64, EXE SHA-256
+  41db196ab80277c095043cf107843f0e31daad3cdd7b5731f0183bcd3076549a.
+Evidence is under `evidence/AD04-standard-runtime-client/standard-client-20260920ki-*`.
+The client was not executed on the builder, which has no installed target Apple
+adapter/UMD.  Its first execution belongs to the preregistered Air experiment.
+
+The next boundary is the final native-enabled ARM64 package build/sign/hash and
+preregistration; no additional frontend requirement is implied.

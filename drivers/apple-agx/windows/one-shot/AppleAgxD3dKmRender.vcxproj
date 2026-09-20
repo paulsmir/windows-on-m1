@@ -20,6 +20,8 @@
   <PropertyGroup>
     <PinnedWindowsKitInclude Condition="'$(PinnedWindowsKitInclude)' == ''">C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0</PinnedWindowsKitInclude>
     <AdmissionExpectedBuild Condition="'$(AdmissionExpectedBuild)'==''">0</AdmissionExpectedBuild>
+    <EnableStandardRuntimeClient Condition="'$(EnableStandardRuntimeClient)'==''">false</EnableStandardRuntimeClient>
+    <TargetName Condition="'$(EnableStandardRuntimeClient)'=='true'">AppleAgxD3d10Standard</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -31,15 +33,16 @@
       <SDLCheck>true</SDLCheck>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
-    <Link><AdditionalDependencies>gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
+    <Link><AdditionalDependencies Condition="'$(EnableStandardRuntimeClient)'!='true'">gdi32.lib;%(AdditionalDependencies)</AdditionalDependencies><AdditionalDependencies Condition="'$(EnableStandardRuntimeClient)'=='true'">d3d10.lib;dxgi.lib;dxguid.lib;d3dcompiler.lib;user32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="apple_agx_d3dkmt_render.c" />
-    <ClCompile Include="..\..\render-admission\src\render_allocation.c" />
-    <ClCompile Include="..\..\render-admission\src\render_umd_command.c" />
-    <ClCompile Include="..\..\render-admission\src\render_qualification.c" />
-    <ClCompile Include="..\..\shared\src\apple_agx_win32_abi.c" />
-    <ClCompile Include="..\..\mesa\winsys\agx_win32_transport.c" />
+    <ClCompile Include="apple_agx_d3d10_standard.c" Condition="'$(EnableStandardRuntimeClient)'=='true'" />
+    <ClCompile Include="apple_agx_d3dkmt_render.c" Condition="'$(EnableStandardRuntimeClient)'!='true'" />
+    <ClCompile Include="..\..\render-admission\src\render_allocation.c" Condition="'$(EnableStandardRuntimeClient)'!='true'" />
+    <ClCompile Include="..\..\render-admission\src\render_umd_command.c" Condition="'$(EnableStandardRuntimeClient)'!='true'" />
+    <ClCompile Include="..\..\render-admission\src\render_qualification.c" Condition="'$(EnableStandardRuntimeClient)'!='true'" />
+    <ClCompile Include="..\..\shared\src\apple_agx_win32_abi.c" Condition="'$(EnableStandardRuntimeClient)'!='true'" />
+    <ClCompile Include="..\..\mesa\winsys\agx_win32_transport.c" Condition="'$(EnableStandardRuntimeClient)'!='true'" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\render-admission\include\render_allocation.h" />
