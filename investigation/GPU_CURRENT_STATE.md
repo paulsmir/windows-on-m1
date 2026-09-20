@@ -1666,3 +1666,12 @@ d9bff6e8d23de341641bdf028306846fe35c05e2b84df7adec7c9b432d422d39.
 After full-owner Code0 the operator must log into the Windows desktop; then run
 the client once via an Interactive scheduled task. This manual login is the only
 current blocker to the first truthful standard-runtime draw/Present.
+
+## EXP688 standard-runtime admission RED (2026-09-20)
+Interactive launch succeeded, but D3D10CreateDeviceAndSwapChain returned
+E_INVALIDARG before adapter reporting/draw. Driver remained full PASS and KMD
+Type0 query succeeded. Installed native OpenAdapter delegates to projected Mesa
+Adapter.cpp, whose 3D pipeline GetCaps still advertised0; the fallback UMD mask1
+was unreachable. Source RED requires mask1 in the real projection and updates
+the real Mesa adapter contract. EXP688 was run once, cleaned exactly, and must
+not be replayed. Next build a clean candidate from this projection fix.

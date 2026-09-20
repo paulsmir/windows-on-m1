@@ -233,7 +233,9 @@ SupportedDDIInterfaceVersions[] = {
    case D3D11DDICAPS_3DPIPELINESUPPORT:
       if (pData->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
          return E_INVALIDARG;
-      ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)pData->pData)->Caps = 0;
+      ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)pData->pData)->Caps =
+         D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(
+            D3D11DDI_3DPIPELINELEVEL_10_0);
       return S_OK;
    default:
       return E_NOTIMPL;

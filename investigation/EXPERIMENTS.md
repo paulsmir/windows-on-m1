@@ -44017,6 +44017,24 @@ stale APPL0002/service and E9BE15 trust; preserve AppleInput71CD0A, TESTSIGNING
 and SAC; restore ordinary377/392 one-Code28. Use hidden377/385 only if ordinary
 Windows is unreachable.
 
+### EXP688 actual result — 2026-09-20T18:15:00Z
+
+Verdict: **STANDARD-RUNTIME ADMISSION RED; NO DRAW**. Interactive console user
+`J313-WIN\pavel` and Explorer were active. After natural re-enumeration the
+unchanged package707 again reached Code0, Start12/Platform14, BackendStart0 and
+context0 207/207. The interactive task ran the client exactly once and exited1
+with `E_INVALIDARG (0x80070057)` before the adapter line; no render submission
+occurred. KMD recorded successful QueryAdapterInfo Type0 size0x68.
+
+Source-first review found the installed native build delegates OpenAdapter10_2
+to projected Mesa Adapter.cpp. Its native `GetCaps` still returned 3D pipeline
+mask0, while the mask1 correction existed only in the fallback UMD function
+that native builds never call. The standard runtime therefore rejected device
+creation. A deterministic source RED now requires the proven FL10_0 bit in the
+projected producer path; production projection and the real Mesa adapter test
+are changed together. Exact task/package/signer cleanup completed and ordinary
+recovery was relaunched. A new clean package and preregistration are required.
+
 ### EXP686 actual result — 2026-09-20T17:56:17Z
 
 Verdict: **STAGE-9 CORRECTION CONFIRMED; CANDIDATE REJECTED AT LATER BOUND

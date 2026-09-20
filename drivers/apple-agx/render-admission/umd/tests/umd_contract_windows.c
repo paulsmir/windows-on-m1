@@ -224,7 +224,8 @@ static void test_mesa_d3d10_adapter2_contract(void) {
   caps.DataSize=sizeof(threading)-1u;
   CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==E_INVALIDARG);
   caps.Type=D3D11DDICAPS_3DPIPELINESUPPORT;caps.pData=&pipeline;caps.DataSize=sizeof(pipeline);
-  CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==S_OK && pipeline.Caps==0u);
+  CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==S_OK && pipeline.Caps==
+      D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_10_0));
   caps.Type=(D3D10_2DDICAPS_TYPE)0xffffffffu;
   CHECK(functions.pfnGetCaps(open.hAdapter,&caps)==E_NOTIMPL);
   CHECK(functions.pfnCloseAdapter(open.hAdapter)==S_OK);
