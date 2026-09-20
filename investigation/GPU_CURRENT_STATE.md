@@ -1268,3 +1268,26 @@ cf0525391657403d270e7e6efef50aed3260dc655fc2373442d14be244176b0c.
 Inventory remains 120 of 121 and pipeline mask zero.  Remaining frozen format
 work is compatible typed/typeless and sRGB interpretation, BC block storage and
 packed formats.
+
+## Required-format closure in progress: typeless storage and typed RTV (2026-09-20)
+R8G8B8A8_TYPELESS storage now uses the existing physical RGBA8 allocation and
+real producer through a compatible R8G8B8A8_UNORM RTV.  A shared logical-family
+predicate accepts the UNORM, sRGB, UINT, SNORM and SINT view family and rejects
+an equal-sized R16G16 view.  RTV creation validates ordinary resource ownership
+and RT bind before creating the pipe surface while preserving the existing
+exact BGRA imported-presentation exception required by standard DXGI.
+
+The causal RED series isolated two integration errors: an ambiguous source
+projection anchor and a missing presentation-owner exception in the RTV guard.
+The final x64 producer execution PASS is:
+evidence/AD04-runtime-closure/required-typeless-rtv-final-20260920it-x64/;
+source archive SHA-256
+b523ea2b4487675c3592a76d25ff0e70487159b9b0df6442c51eb2777509cda6.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-typeless-rtv-final-20260920iu-arm64/;
+source archive SHA-256
+6457a6d3cdf374838bf781b0b3d50867c81acaaa3fe1dc4eb27c788fae72e9ad.
+
+Inventory remains 120 of 121 and pipeline mask zero.  Combined RT|SRV lifetime
+and actual typed/sRGB sampling remain fail-closed and are the next compatible-
+view boundary; BC block storage and packed formats follow.

@@ -38,6 +38,8 @@ EXTERN_C void *APIENTRY MesaD3d10FrontendOwnerForTest(D3D10DDI_HDEVICE);
 EXTERN_C struct pipe_context *APIENTRY MesaD3d10FrontendContextForTest(D3D10DDI_HDEVICE);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT);
+EXTERN_C BOOL AgxD3d10FormatViewCompatible(
+    DXGI_FORMAT,DXGI_FORMAT,BOOL);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendSetSoOffsetForTest(
     D3D10DDI_HDEVICE,D3D10DDI_HRESOURCE,UINT);
 EXTERN_C ULONG APIENTRY MesaD3d10FrontendEventQuerySetGenerationForTest(
@@ -2219,7 +2221,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         rgbaCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
         rgbaCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
         rgbaCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
-        rgbaCreate.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+        rgbaCreate.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
         rgbaCreate.SampleDesc.Count=1;rgbaCreate.MipLevels=1;
         rgbaCreate.ArraySize=1;
         SIZE_T rgbaBytes=deviceFunctions.pfnCalcPrivateResourceSize(
@@ -2275,6 +2277,12 @@ static void test_mesa_d3d10_frontend_open(void) {
           RuntimeCheckpoint(depthOwner,5u);
         }
         RuntimeExpectedCommandVersion=0;
+        CHECK(AgxD3d10FormatViewCompatible(
+            DXGI_FORMAT_R8G8B8A8_TYPELESS,
+            DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,FALSE));
+        CHECK(!AgxD3d10FormatViewCompatible(
+            DXGI_FORMAT_R8G8B8A8_TYPELESS,
+            DXGI_FORMAT_R16G16_FLOAT,FALSE));
         deviceFunctions.pfnDestroyRenderTargetView(device,rgbaView);
         deviceFunctions.pfnDestroyResource(device,rgba);
         free(rgbaView.pDrvPrivate);free(rgba.pDrvPrivate);

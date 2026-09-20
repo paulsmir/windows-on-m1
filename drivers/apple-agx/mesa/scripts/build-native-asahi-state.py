@@ -482,6 +482,21 @@ void APIENTRY
    if (FAILED(result)) SetError(hDevice, result);''')
     change('src/gallium/frontends/d3d10umd/OutputMerger.cpp',
         'fefcbe8754fd1042b7bf091feab767844cc71a8fe4cbe9f0b41d76dc9dd4fd04',[
+        ('''   LOG_ENTRYPOINT();
+
+   struct pipe_resource *resource = CastPipeResource(pCreateRenderTargetView->hDrvResource);''',
+         '''   LOG_ENTRYPOINT();
+
+   Device *windowsDevice=CastDevice(hDevice);
+   Resource *windowsResource=CastResource(pCreateRenderTargetView->hDrvResource);
+   if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
+      (!windowsResource->presentation&&
+       !(windowsResource->bind_flags&D3D10_DDI_BIND_RENDER_TARGET))||
+      !AgxD3d10FormatViewCompatible(windowsResource->Format,
+          pCreateRenderTargetView->Format,FALSE)) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   struct pipe_resource *resource = windowsResource->resource;'''),
         ('''   pipe->clear_render_target(pipe,
                              surface,
                              &clear_color,
@@ -1155,9 +1170,33 @@ _Present('''),
       pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
                                           StartBuffer + i, &cb);
    }''')
+    change('src/gallium/frontends/d3d10umd/Format.h',
+        'e6118737e8a3f3f92e2d30043a648e7b79b31d969aa835d85de3f2b71c7db4dd',[
+        ('const char *\nFormatToName(DXGI_FORMAT Format);',
+         '''const char *
+FormatToName(DXGI_FORMAT Format);
+
+#ifdef __cplusplus
+extern "C"
+#endif
+BOOL AgxD3d10FormatViewCompatible(
+   DXGI_FORMAT ResourceFormat, DXGI_FORMAT ViewFormat, BOOL Depth);''')])
     change('src/gallium/frontends/d3d10umd/Format.cpp',
         '26215278ae7e566dc5973fb932daaa9142b7b11bd5dcfff8c574f37991e8fdf0',[
         ('#include "Format.h"','''#include "Format.h"
+
+extern "C" BOOL AgxD3d10FormatViewCompatible(
+   DXGI_FORMAT resource, DXGI_FORMAT view, BOOL depth)
+{
+   if (resource == view) return FormatTranslate(view, depth) != PIPE_FORMAT_NONE;
+   if (resource == DXGI_FORMAT_R8G8B8A8_TYPELESS)
+      return view == DXGI_FORMAT_R8G8B8A8_UNORM ||
+             view == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB ||
+             view == DXGI_FORMAT_R8G8B8A8_UINT ||
+             view == DXGI_FORMAT_R8G8B8A8_SNORM ||
+             view == DXGI_FORMAT_R8G8B8A8_SINT;
+   return FALSE;
+}
 
 extern "C" BOOL APIENTRY
 MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
@@ -1425,12 +1464,14 @@ AgxD3d10ResourceWithinRequiredLimits(
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
       bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
-         AgxD3d10ColorBytes(pCreateResource->Format) != 0 &&
+         (AgxD3d10ColorBytes(pCreateResource->Format) != 0 ||
+          pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
          ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight *
-          AgxD3d10ColorBytes(pCreateResource->Format)) <=
+          (pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS ? 4u :
+           AgxD3d10ColorBytes(pCreateResource->Format))) <=
             0x100000 &&
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
