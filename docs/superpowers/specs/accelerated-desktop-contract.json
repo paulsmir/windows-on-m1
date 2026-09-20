@@ -7,7 +7,7 @@
   "frontend": "mesa-d3d-reuse",
   "mesa_commit": "9aa1215f878b504f66159dd2ead4c7973142126e",
   "mandatory_inventory_reviewed": true,
-  "advertised_pipeline_mask": 0,
+  "advertised_pipeline_mask": 1,
   "selected_pipeline_mask": 1,
   "selection": {
     "status": "implementation-in-progress-pipeline-not-advertised",
@@ -1303,11 +1303,11 @@
       "id": "feature-required-formats",
       "class": "Feature semantics",
       "source": "Microsoft Required DXGI Formats documentation",
-      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Format.cpp",
-      "test_id": "ad04-required-dxgi-formats",
+      "implementation_file": "drivers/apple-agx/mesa/d3d10umd/required-formats-fl10.json",
+      "test_id": "ad04-required-dxgi-formats-93",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true
     },
     {
       "id": "frontend-dxbc-tgsi",

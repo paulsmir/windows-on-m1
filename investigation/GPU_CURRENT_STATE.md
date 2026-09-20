@@ -1483,3 +1483,25 @@ eaf8603da770118dbc2ba6c93417c9989a9f6d9e3c1fbac6ba4e5dcb654c6e25.
 Inventory deliberately remains 120 of 121 and pipeline mask zero until the
 exhaustive required-format contract validator passes against this exact source
 and all referenced evidence.
+
+## Frozen FL10_0 admission inventory complete (2026-09-20)
+The final feature-required-formats row is now backed by
+`drivers/apple-agx/mesa/d3d10umd/required-formats-fl10.json`: 93 unique mandatory
+DXGI entries with required uses, compatible families, native or explicit lowered
+representation and concrete executable evidence.  The validator requires the
+exact format set, pinned Mesa commit, permitted use vocabulary, the exact seven
+lowered logical formats, disabled optional MSAA/XR_BIAS, existing evidence paths
+and bounded subresource evidence.  It rejects missing entries, optional-policy
+drift and invented lowerings.
+
+Current deterministic results:
+- required-format validator PASS: 93 formats, 7 lowerings;
+- desktop contract validator PASS: 121 mandatory requirements complete;
+- exact advertised pipeline mask equals selected mask 1;
+- 14 required-format, desktop-contract and change-ledger tests PASS.
+
+The frozen machine-readable inventory is now 121 of 121.  No new pre-hardware
+inventory expansion is permitted without pinned-WDK evidence or a causal
+standard-runtime RED.  The next boundary is installed native UMD standard-
+runtime admission, followed by the exact ARM64 package/sign/hash and hardware
+preregistration gates.

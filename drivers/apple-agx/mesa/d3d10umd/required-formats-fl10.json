@@ -959,7 +959,7 @@
         "rgb32"
       ],
       "representations": [
-        "logical-storage"
+        "rgba32-lowered"
       ],
       "required_uses": [
         "storage",
@@ -1747,5 +1747,7 @@
       ]
     }
   ],
-  "subresource_evidence": "investigation/evidence/AD04-runtime-closure/required-subresource-final-20260920jz-x64"
+  "subresource_evidence": "investigation/evidence/AD04-runtime-closure/required-subresource-final-20260920jz-x64",
+  "mesa_commit": "9aa1215f878b504f66159dd2ead4c7973142126e",
+  "mapping_source": "src/gallium/frontends/d3d10umd/Format.cpp plus Windows projection"
 }
