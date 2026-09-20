@@ -215,6 +215,7 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
   s->Phase=AdmissionDrawCalling;
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);
   result=d->KernelCallbacks->pfnRenderCb(d->RuntimeDevice.handle,&render);
+  AdmissionUmdDiagnostic("native-render-callback",result,NULL,0);
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
   s->RenderStatus=result;
   if(FAILED(result)) {

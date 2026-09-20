@@ -16,6 +16,7 @@ extern "C" {
 #endif
 VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
                               const UINT *Values, UINT Count);
+VOID AgxD3d10WindowsDiagnosticState(AGX_D3D10_WINDOWS_DEVICE *, PCSTR Stage);
 VOID AgxD3d10WindowsDiagnosticResource(
     PCSTR Stage, const D3D10DDIARG_CREATERESOURCE *Resource);
 HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,

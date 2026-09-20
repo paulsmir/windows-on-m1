@@ -133,7 +133,11 @@ static int32_t native_submit(void *context,void *transaction,AGX_WIN32_RELOC_CAP
   if(!owner || !owner->Device || !b || !entered ||
       owner->Device->NativeBatchTransaction!=b) return E_INVALIDARG;
   HRESULT hr=AdmissionUmdAsahiBatchSealNative(owner->Device,capture,b->RequestId,draw,metadata,b);
-  if(SUCCEEDED(hr)) hr=AdmissionUmdAsahiBatchDispatch(owner->Device,b);
+  AdmissionUmdDiagnostic("native-seal",hr,NULL,0);
+  if(SUCCEEDED(hr)) {
+    hr=AdmissionUmdAsahiBatchDispatch(owner->Device,b);
+    AdmissionUmdDiagnostic("native-dispatch",hr,NULL,0);
+  }
   *entered=b->Phase==AdmissionAsahiBatchSubmitted;
   return hr;
 }

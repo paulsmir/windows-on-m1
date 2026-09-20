@@ -1951,3 +1951,22 @@ Source6083eca5, full-default-sampler native gates and package gates PASS.
 Immutable SHAae721222d228a707740e760762857f52dc7ea8e974181d29d097fa3cf4ad5c46. Next exact stage/full-owner
 preflight and once-only standard runtime draw/Present test; no readiness claim
 for physical completion before its evidence.
+
+## EXP697 remaining actual Flush seam
+Package713 still returns Flush E_FAIL/Present887a0005 after successful standard
+swap-chain and allocation/import. Do not assume the now-GREEN default-sampler
+guard is the remaining cause. Native stderr did not appear in the client log.
+No hardware completion or new physical-screen verdict claimed. Exact cleanup
+and ordinary Code28 recovery verified. Next diagnostic-only slice sends native
+state/bindings/capacities before/after clear/resolve/draw and flush, seal/dispatch
+and pfnRenderCb HRESULT to the established bounded UMD file. Source review found
+no behavior-changing issue; native-seam-20260920mr x64/ARM64 gates running.
+
+## Native seam diagnostics verified offline
+native-seam-20260921mt x64 real producer execution0 and ARM64 link0.
+Diagnostic-enabled x64 execution0; bounded128 records include native state.
+Both archives match all473 current driver source files; archive container hashes
+differ from tar metadata only. ARM64 archive853f8f8876232230b88c2b1e9112bd27134e7119931e6eeb6a133600f37085ee.
+mr failed only on diagnostic enum-to-UINT narrowing; explicit cast resolves it.
+Air fresh read-only health:Code28/no package/service/files/trust,8CPU/NVMe/input,
+no fresh monitored events. Next diagnostic-only package714 and EXP698.

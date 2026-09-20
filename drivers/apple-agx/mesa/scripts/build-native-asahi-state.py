@@ -537,7 +537,9 @@ void APIENTRY
                              0, 0,
                              pipe_surface_width(surface),
                              pipe_surface_height(surface),
-                             true);''','''   if (pipe->clear_render_target) {
+                             true);''','''   Device *traceDevice = CastDevice(hDevice);
+   if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-before");
+   if (pipe->clear_render_target) {
       pipe->clear_render_target(pipe,
                                 surface,
                                 &clear_color,
@@ -545,6 +547,7 @@ void APIENTRY
                                 pipe_surface_width(surface),
                                 pipe_surface_height(surface),
                                 true);
+      if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-after");
       return;
    }
    Device *pDevice = CastDevice(hDevice);
@@ -575,7 +578,8 @@ void APIENTRY
       return;
    }
    pipe->clear(pipe, PIPE_CLEAR_COLOR0, 0xf, 0, NULL,
-               &clear_color, 0.0, 0);'''),
+               &clear_color, 0.0, 0);
+   if (traceDevice) AgxD3d10WindowsDiagnosticState(traceDevice->windows, "clear-after");'''),
         ('''   struct pipe_context *pipe = CastPipeContext(hDevice);
    struct pipe_surface *surface = CastPipeDepthStencilView(hDepthStencilView);
 
@@ -1378,6 +1382,16 @@ MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
       SetError(hDevice,E_NOTIMPL);return;
    }
    LOG_ENTRYPOINT();''')])
+    replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','Draw','''   LOG_ENTRYPOINT();
+   Device *pDevice = CastDevice(hDevice);
+   AgxD3d10WindowsDiagnosticState(pDevice->windows, "resolve-before");
+   ResolveState(pDevice);
+   assert(pDevice->primitive < MESA_PRIM_COUNT);
+   const UINT args[] = {VertexCount, StartVertexLocation, static_cast<UINT>(pDevice->primitive)};
+   AgxD3d10WindowsDiagnostic("draw-args", S_OK, args, 3);
+   AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-before");
+   util_draw_arrays(pDevice->pipe, pDevice->primitive, StartVertexLocation, VertexCount);
+   AgxD3d10WindowsDiagnosticState(pDevice->windows, "draw-after");''')
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
    if (!pDevice || IndexCount != 3 || StartIndexLocation != 0 ||
        BaseVertexLocation != 0 || pDevice->primitive != MESA_PRIM_TRIANGLES ||

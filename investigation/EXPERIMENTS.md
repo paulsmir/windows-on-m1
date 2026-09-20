@@ -44666,3 +44666,21 @@ hashes/Code0/Running/Start12/Platform14 and clear authorized temporary autologon
 One interactive standard-client task120s, same per-process resource/sampler trace.
 Collect exact exit, native/UMD logs, registry/events and any physical observations
 before exact package/task/trust cleanup and ordinary377/392. No replay.
+
+### EXP697 actual result — remaining Flush seam unresolved
+Exact package713 bound/hash preflight PASS (Code0/Running Start12/Platform14),
+active console and temporary autologon cleared. One standard client: device and
+swap-chain S_OK, full16-owned sampler ranges S_OK, allocation/import S_OK, then
+Flush E_FAIL and Present887a0005/device reason887a0020, exit1. The prior graph
+classification fix is proven offline but this HRESULT does not establish that
+the remaining hardware failure has the same cause. Native stderr diagnostics
+were not present in the standard client output. No physical GPU completion is
+claimed. Evidence main-root .local/experiments/EXP697-live/client-result.txt,
+pre-client.json, post-client.json and post-health.json. Exact package/task/trust/
+stopped-service cleanup completed and ordinary recovery health verified Code28,
+no package/files/cert,8CPU/NVMe/input and no fresh monitored events.
+No new physical-screen observation was supplied for EXP697; earlier EXP696
+photos are not reused as this run's physical verdict.
+Next discriminator routes native state before/after clear/resolve/draw and
+flush, request seal/dispatch, and exact pfnRenderCb result into the existing
+bounded per-client UMD file. Rendering behavior and guards remain unchanged.

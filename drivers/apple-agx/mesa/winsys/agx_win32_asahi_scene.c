@@ -182,6 +182,43 @@ int AgxWin32AsahiContextRetire(struct pipe_context *ctx,APPLE_AGX_U32 timeout) {
   }
   return 1;
 }
+void AgxWin32AsahiContextDiagnostic(struct pipe_context *ctx,
+    APPLE_AGX_U32 state[16],APPLE_AGX_U32 bindings[16]) {
+  memset(state,0,16*sizeof(*state));memset(bindings,0,16*sizeof(*bindings));
+  if(!ctx) return;
+  struct agx_context *n=agx_context(ctx);
+  AGX_WIN32_ASAHI_BACKEND *d=agx_device(ctx->screen)->windows_private;
+  struct agx_batch *b=n->batch;
+  AGX_WIN32_ASAHI_BATCH *c=b?b->windows_batch:NULL;
+  state[0]=n->any_faults;state[1]=d?d->Failed:0;state[2]=b!=NULL;
+  state[3]=b?b->draws:0;state[4]=b?b->initialized:0;
+  state[5]=c?c->Capture.Capture.State:0;state[6]=c?c->Root.Scope.Failed:0;
+  state[7]=c?c->Entered:0;state[8]=c?c->Submitted:0;state[9]=c?c->Rejected:0;
+  state[10]=c?c->Capture.Capture.ReferenceCount:0;
+  state[11]=c?c->Capture.Capture.RelocationCount:0;
+  state[12]=d?d->LiveBos:0;state[13]=n->framebuffer.nr_cbufs;
+  state[14]=n->framebuffer.cbufs[0].format;state[15]=b?b->sampler_heap.count:0;
+  bindings[0]=n->rast!=NULL;bindings[1]=n->rast?n->rast->depth_bias:0;
+  bindings[2]=n->attributes!=NULL;
+  bindings[3]=n->stage[MESA_SHADER_VERTEX].shader!=NULL;
+  bindings[4]=n->stage[MESA_SHADER_FRAGMENT].shader!=NULL;
+  bindings[5]=(n->stage[MESA_SHADER_GEOMETRY].shader?1u:0u)|
+      (n->stage[MESA_SHADER_TESS_CTRL].shader?2u:0u)|
+      (n->stage[MESA_SHADER_TESS_EVAL].shader?4u:0u)|
+      (n->cond_query?8u:0u)|(n->occlusion_query?16u:0u)|(n->time_elapsed?32u:0u);
+  bindings[6]=n->stage[MESA_SHADER_VERTEX].texture_count;
+  bindings[7]=n->stage[MESA_SHADER_FRAGMENT].texture_count;
+  bindings[8]=n->stage[MESA_SHADER_VERTEX].sampler_count;
+  bindings[9]=n->stage[MESA_SHADER_FRAGMENT].sampler_count;
+  bindings[10]=n->stage[MESA_SHADER_VERTEX].cb_mask;
+  bindings[11]=n->stage[MESA_SHADER_FRAGMENT].cb_mask;
+  bindings[12]=n->stage[MESA_SHADER_GEOMETRY].cb_mask;
+  for(unsigned i=0;i<MESA_SHADER_STAGES;++i) {
+    bindings[13]|=n->stage[i].image_mask;
+    bindings[14]|=n->stage[i].ssbo_mask;
+    if(n->stage[i].custom_borders) bindings[15]|=1u<<i;
+  }
+}
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *ctx) {
   if(!ctx) return 0;
   struct agx_context *native=agx_context(ctx);

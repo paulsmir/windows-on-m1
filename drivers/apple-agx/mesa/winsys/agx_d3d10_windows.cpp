@@ -98,6 +98,21 @@ struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE {
   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Next;
 };
 
+VOID AgxD3d10WindowsDiagnosticState(AGX_D3D10_WINDOWS_DEVICE *d,PCSTR stage) {
+  if(!d || d->Stage!=AgxD3d10DeviceReady) return;
+  UINT state[16],bindings[16];
+  AgxWin32AsahiContextDiagnostic(d->Context,state,bindings);
+  AdmissionUmdDiagnostic(stage,d->Runtime.LastScreenError,state,16);
+  AdmissionUmdDiagnostic("native-bindings",S_OK,bindings,16);
+  ADMISSION_UMD_ASAHI_BATCH *b=(ADMISSION_UMD_ASAHI_BATCH *)d->Runtime.NativeBatchTransaction;
+  UINT runtime[12]={ (UINT)d->Runtime.DrawTerminal,d->Runtime.CommandBufferSize,
+      d->Runtime.AllocationListSize,d->Runtime.PatchListSize,b!=NULL,
+      b?(UINT)b->Phase:0,b?(UINT)b->Submission.Phase:0,
+      b?(UINT)b->Submission.RenderStatus:0,b?(UINT)b->Submission.PostStatus:0,
+      b?b->Submission.CommandBytes:0,b?b->Submission.Count:0,
+      b?b->Submission.Fence:0 };
+  AdmissionUmdDiagnostic("native-runtime",d->Runtime.LastScreenError,runtime,12);
+}
 static BOOL presentation_linear_format(D3DDDIFORMAT windowsFormat,
                                        AGX_WIN32_ASAHI_LINEAR_FORMAT *format) {
   if(!format) return FALSE;
@@ -410,6 +425,7 @@ BOOL AgxD3d10WindowsIdentity(AGX_D3D10_WINDOWS_DEVICE *Device,
 
 HRESULT AgxD3d10WindowsFlushStatus(AGX_D3D10_WINDOWS_DEVICE *Device) {
   if(!Device || Device->Stage!=AgxD3d10DeviceReady) return E_INVALIDARG;
+  AgxD3d10WindowsDiagnosticState(Device,"flush-state");
   ADMISSION_UMD_ASAHI_BATCH *batch=
       (ADMISSION_UMD_ASAHI_BATCH *)Device->Runtime.NativeBatchTransaction;
   if(batch && (FAILED(batch->Submission.RenderStatus) ||
