@@ -134,10 +134,11 @@ int AgxWin32AsahiResourceIdentity(
   return backend && native->bo &&
       AgxWin32AsahiIdentity(backend,native->bo,identity);
 }
-struct pipe_resource *AgxWin32AsahiCreateUncompressedD24S8(
+struct pipe_resource *AgxWin32AsahiCreateUncompressedDepthStencil(
     struct pipe_screen *screen,const struct pipe_resource *templ) {
   if(!screen||!templ||!screen->resource_create_with_modifiers||
-     templ->format!=PIPE_FORMAT_Z24_UNORM_S8_UINT) return NULL;
+     (templ->format!=PIPE_FORMAT_Z24_UNORM_S8_UINT &&
+      templ->format!=PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)) return NULL;
   const uint64_t modifier=DRM_FORMAT_MOD_APPLE_GPU_TILED;
   struct pipe_resource depth_info=*templ,stencil_info=*templ;
   depth_info.format=PIPE_FORMAT_Z32_FLOAT;
@@ -149,7 +150,7 @@ struct pipe_resource *AgxWin32AsahiCreateUncompressedD24S8(
       screen,&stencil_info,&modifier,1);
   if(!stencil) { screen->resource_destroy(screen,depth); return NULL; }
   struct agx_resource *native_depth=agx_resource(depth);
-  native_depth->base.format=PIPE_FORMAT_Z24_UNORM_S8_UINT;
+  native_depth->base.format=templ->format;
   native_depth->separate_stencil=agx_resource(stencil);
   return depth;
 }

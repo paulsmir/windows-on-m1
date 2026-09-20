@@ -1246,3 +1246,25 @@ Inventory remains 120 of 121 and pipeline mask zero.  Storage width is no longer
 the active color blocker.  Continue inside feature-required-formats with typed
 numeric/sRGB and compatible typeless views, then D32S8, BC block storage and
 packed formats.
+
+## Required-format closure in progress: D32S8 split stencil (2026-09-20)
+D32_FLOAT_S8X24_UINT now reuses the proven split depth/stencil owner.  The
+common constructor preserves the logical D32S8 parent while allocating physical
+Z32_FLOAT and independent S8_UINT resources.  Existing depth-v7 capture,
+allocation-list resolution, exact initial/reload stencil patching and retirement
+apply unchanged.
+
+Causal RED rejected sample-one and resource/view admission:
+evidence/AD04-runtime-closure/required-d32s8-red-20260920ig-x64/.
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/required-d32s8-green-20260920ih-x64/;
+source archive SHA-256
+7d4567f78fadf5948483a7b9ee3950f5becf8ebc668cb304e9ad88113884feaf.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-d32s8-green-20260920ii-arm64/;
+source archive SHA-256
+cf0525391657403d270e7e6efef50aed3260dc655fc2373442d14be244176b0c.
+
+Inventory remains 120 of 121 and pipeline mask zero.  Remaining frozen format
+work is compatible typed/typeless and sRGB interpretation, BC block storage and
+packed formats.

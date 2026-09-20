@@ -466,6 +466,7 @@ void APIENTRY
        Format == DXGI_FORMAT_D32_FLOAT ||
        Format == DXGI_FORMAT_D16_UNORM ||
        Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+       Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
        Format == DXGI_FORMAT_R8_UNORM ||
        Format == DXGI_FORMAT_R16_FLOAT ||
@@ -549,7 +550,8 @@ void APIENTRY
    struct pipe_surface *bound = pDevice && pDevice->fb.zsbuf.texture ?
       &pDevice->fb.zsbuf : NULL;
    bool packed_depth_stencil = resource &&
-      resource->format == PIPE_FORMAT_Z24_UNORM_S8_UINT;
+      (resource->format == PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+       resource->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
    unsigned clear_flags = packed_depth_stencil ?
       PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL : PIPE_CLEAR_DEPTH;
    if (!pipe || !pipe->clear || !surface || !resource || !bound ||
@@ -560,7 +562,8 @@ void APIENTRY
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_Z32_FLOAT &&
         resource->format != PIPE_FORMAT_Z16_UNORM &&
-        resource->format != PIPE_FORMAT_Z24_UNORM_S8_UINT) ||
+        resource->format != PIPE_FORMAT_Z24_UNORM_S8_UINT &&
+        resource->format != PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 ||
@@ -1448,12 +1451,15 @@ AgxD3d10ResourceWithinRequiredLimits(
          pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
          (pCreateResource->Format == DXGI_FORMAT_D32_FLOAT ||
           pCreateResource->Format == DXGI_FORMAT_D16_UNORM ||
-          pCreateResource->Format == DXGI_FORMAT_D24_UNORM_S8_UINT) &&
+          pCreateResource->Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+          pCreateResource->Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
          ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight *
-          (pCreateResource->Format == DXGI_FORMAT_D16_UNORM ? 2u : 4u)) <= 0x100000 &&
+          (pCreateResource->Format == DXGI_FORMAT_D16_UNORM ? 2u :
+           pCreateResource->Format == DXGI_FORMAT_D32_FLOAT_S8X24_UINT ? 8u : 4u)) <=
+            0x100000 &&
          pCreateResource->SampleDesc.Count == 1 &&
          pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
@@ -1466,8 +1472,9 @@ AgxD3d10ResourceWithinRequiredLimits(
          SetError(hDevice, E_NOTIMPL);
          return;
       }
-      if(pCreateResource->Format==DXGI_FORMAT_D24_UNORM_S8_UINT) {
-         pResource->resource=AgxWin32AsahiCreateUncompressedD24S8(
+      if(pCreateResource->Format==DXGI_FORMAT_D24_UNORM_S8_UINT ||
+         pCreateResource->Format==DXGI_FORMAT_D32_FLOAT_S8X24_UINT) {
+         pResource->resource=AgxWin32AsahiCreateUncompressedDepthStencil(
             screen,&templat);
       } else {
          const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;

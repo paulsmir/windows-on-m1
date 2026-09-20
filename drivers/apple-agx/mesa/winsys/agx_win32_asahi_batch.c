@@ -178,16 +178,19 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     valid=!ctx->stage[MESA_SHADER_FRAGMENT].texture_count && !info->index_size &&
         (zs->format==PIPE_FORMAT_Z32_FLOAT ||
          zs->format==PIPE_FORMAT_Z16_UNORM ||
-         zs->format==PIPE_FORMAT_Z24_UNORM_S8_UINT) && !zs->level &&
+         zs->format==PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+         zs->format==PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) && !zs->level &&
         !zs->first_layer && !zs->last_layer &&
         depth->base.target==PIPE_TEXTURE_2D &&
         (depth->base.format==PIPE_FORMAT_Z32_FLOAT ||
          depth->base.format==PIPE_FORMAT_Z16_UNORM ||
-         depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT) &&
+         depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+         depth->base.format==PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) &&
         !depth->layout.compressed &&
         depth->base.last_level==0 && depth->base.depth0==1 &&
         depth->base.array_size==1 && depth->base.nr_samples<=1 && depth->bo;
-    if(valid && depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT) {
+    if(valid && (depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+                 depth->base.format==PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)) {
       struct agx_resource *stencil=depth->separate_stencil?
           agx_resource(depth->separate_stencil):NULL;
       valid=depth->layout.format==PIPE_FORMAT_Z32_FLOAT && stencil &&
@@ -245,7 +248,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
     struct agx_resource *depth=zs->texture?agx_resource(zs->texture):NULL;
     struct agx_resource *stencil=depth&&depth->separate_stencil?
         agx_resource(depth->separate_stencil):NULL;
-    int has_stencil=depth&&depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT;
+    int has_stencil=depth&&(depth->base.format==PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+        depth->base.format==PIPE_FORMAT_Z32_FLOAT_S8X24_UINT);
     uint64_t depth_address=depth ? agx_map_texture_gpu(depth,0)+
         ail_get_level_offset_B(&depth->layout,0) : 0;
     if(!depth || depth->layout.compressed || !r->depth.base ||
