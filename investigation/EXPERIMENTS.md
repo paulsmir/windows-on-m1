@@ -44252,3 +44252,31 @@ task and E9BE15 trust removal. Ordinary377/392 recovered; final health receipt
 confirms Code28, no INF/service/SYS/UMD/cert, 8CPU, healthy NVMe/xHCI/input and
 no fresh monitored events. Next: exact ACPI identity guard regression/fix and
 new client-only experiment; retain unchanged driver bytes.
+
+## EXP692 — exact ACPI adapter identity in standard runtime client
+UTC preregistration 2026-09-20. Source 61c7010630a5e7d37c5d306cd14fd02b2cf21f43; clean implementation.
+WHY THIS HYPOTHESIS: EXP691 proved D3D10CreateDevice S_OK and reported
+4c505041/32303030; client source rejects this pair before CreateSwapChain.
+Executable regression reproduces rejection then passes with exact-pair guard.
+Single variable: client adapter identity guard. Driver709 bytes unchanged.
+WINDOWS CONTRACT: standard D3D10 device then adapter factory CreateSwapChain.
+AGX/ASAHI CONTRACT: unchanged native graph and physical/patch-list KMD.
+TRANSLATION: recognize actual ACPI APPL0002 identity; no capability changes.
+WHAT IS STILL UNKNOWN: CreateSwapChain and subsequent real draw/completion/
+Present on hardware; no inference from the previous combined HRESULT.
+Build existing standard client project Release x64/ARM64 SDK26100, 0 warnings/
+errors; signed ARM64 SHA 3fe7cfa6f92d6bf20fd5345e9739f4f258aa883bfce953e7d6835d7f38d13d60.
+Archive .local/experiments/EXP692-acpi-identity.zip SHA af93a3474e42b9f40ad49664c92b14b82863236d33503af4685b9e1a1af1413b.
+Manifest pins driver source b4edf2fec0e5896279c77e4b79db48bca1485857 and
+exact INF/SYS/UMD/CAT hashes from EXP691; signer E9BE15BD2A184BFABA0C8035B3C620C58037A241.
+Recovery ordinary377/392 verified Code28, no package/service/files/cert and
+8CPU/NVMe/input with no fresh events. Launch exact EXP584 m1n1/EXP406 FD with
+WOM1_AGX_G2_POWER_BROKER=1, physical/debug-off/low-mem, pinned LLDDIR.
+Stage verified manifest with pnputil /add-driver without /install, controlled
+shutdown then full-owner boot; require Code0 Running Start12/Platform14 and
+installed hashes. Clear temporary authorized autologon before one console
+Interactive task bounded120sec. No replay. Expected: identity gate passes and
+CreateSwapChain HRESULT recorded. Draw success requires physical submission/
+completion receipts, not client log alone. Collect registry/client/events in
+main-root .local/experiments/EXP692-live before exact package/task/trust cleanup
+and ordinary377/392 recovery. A nonzero stage result falsifies that boundary.
