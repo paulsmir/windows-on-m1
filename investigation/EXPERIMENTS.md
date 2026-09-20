@@ -44436,3 +44436,41 @@ Next single variable is bounded opt-in UMD diagnostics at actual frontend
 resource/error, allocation callback and native import, plus runtime's device-
 removed reason. It must preserve all resource guards/results and be gated before
 another once-only preregistered run. No replay of EXP694.
+
+## EXP695 — actual resource rejection diagnostic
+UTC build preregistration 2026-09-20T20:16:03.578797+00:00.
+Source 2341240cf6010230a2fe8684f95d314eaffe0311; archive e01ead729e5068b68893c4e7fc401722eb23bfc2d373818c8718f8625f11b0f6.
+WHY THIS HYPOTHESIS: EXP694 standard device succeeded, but RGBA swap-chain
+returned DeviceRemoved with KMD still Code0 and no fresh system errors. Existing
+receipts cannot identify resource inputs or the UMD SetError origin.
+WINDOWS CONTRACT: unchanged base D3D10 RGBA chain; SetError HRESULT and actual
+resource argument evidence plus GetDeviceRemovedReason distinguish rejection.
+AGX/ASAHI CONTRACT: unchanged native resource/draw/capture/retirement path.
+TRANSLATION: no guard or allocation change; per-client environment opt-in logs
+actual create/error/allocation/import/open boundaries. Last-error preserved.
+WHAT IS STILL UNKNOWN: actual failing DDI/callback, arguments and HRESULT below
+DXGI_ERROR_DEVICE_REMOVED. This is runtime behavior requiring measurement.
+Single variable: bounded diagnostic observations. Package version711 and
+client labels do not change resource policy. x64 and ARM64 gates pass; enabled
+x64 trace produces128 records including frontend-create with test exit0.
+Build pinned build-driver.ps1 Release NativeFrontend PackageBuild711 with
+asahi-runtime-arm64-resource-trace-20260920mh-arm64/NativeRuntime.props.
+Existing standard client project ARM64 with explicit pinned26100 SDK roots;
+same test signer E9BE15BD2A184BFABA0C8035B3C620C58037A241. Output
+native-package711-resource-trace-20260920mi-arm64. No install until finalized
+analysis/Universal/Inf2Cat/sign/catalog/hash table is appended.
+Root/m1n1/Mu identities, dirty hashes and immutable EXP584/406 full-owner and
+377/392 recovery hashes are unchanged from EXP694 final preregistration.
+Current Air: verified ordinary Code28/no package/service/files/trust, eight CPUs,
+NVMe/input and no fresh monitored events after exact EXP694 cleanup.
+Next exact stage without /install, full-owner natural bind and installed hash/
+Code0/Running/Start12/Platform14 gate. Clear authorized temporary autologon.
+One interactive task120s: set APPLE_AGX_UMD_TRACE_FILE only in its cmd process,
+then execute standard client once. Log under qualification/umd-diagnostics.log.
+No replay. Main-root .local/experiments/EXP695-live collects diagnostic/client
+logs, registry and events before exact package/task/trust cleanup and ordinary
+recovery. Expected discriminator is actual rejecting call with parameter record;
+any missing receipt is inconclusive rather than a guessed resource policy.
+Physical black-screen/caption symptom remains a requested separate observation;
+EXP694 was UNOBSERVED because operator was away. Do not infer physical contents
+from runtime success/failure or service state.
