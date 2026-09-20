@@ -14,6 +14,8 @@ APPLE_AGX_U32 AppleAgxWin32FormatBytesPerPixel(APPLE_AGX_U32 Format) {
   switch (Format) {
   case AppleAgxWin32FormatBgra8Unorm:
   case AppleAgxWin32FormatRgba8Unorm:
+  case AppleAgxWin32FormatRgb10A2Unorm:
+  case AppleAgxWin32FormatR11G11B10Float:
     return 4u;
   case AppleAgxWin32FormatRgba16Float:
     return 8u;

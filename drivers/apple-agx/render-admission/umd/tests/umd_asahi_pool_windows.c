@@ -42,7 +42,9 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
   if(slot==ADMISSION_UMD_SCREEN_BUFFER_LIMIT) return E_OUTOFMEMORY;
   PoolMemory[slot]=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,(SIZE_T)desc->Allocation.Size);
   if(!PoolMemory[slot]) return E_OUTOFMEMORY;
-  ++PoolCreates; PoolHandles[slot]=0x700+(++PoolNextHandle);
+  ++PoolCreates;
+  do { PoolHandles[slot]=0x700+(++PoolNextHandle); }
+  while(PoolHandles[slot]>=0x771u && PoolHandles[slot]<=0x777u);
   a->pAllocationInfo->hAllocation=PoolHandles[slot];
   /* Allocation must already reserve the UMD slot against callback reentry. */
   if(PoolDevice.Magic==ADMISSION_UMD_DEVICE_MAGIC &&

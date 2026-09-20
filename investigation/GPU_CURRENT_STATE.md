@@ -1361,3 +1361,31 @@ dfc1beee4639a2b709b9a06a8da2885be05c6d80334e05f45ac1f709dad2b450.
 
 Inventory remains 120 of 121 and pipeline mask zero.  Packed formats and the
 complete frozen format-use descriptor-table gate remain before aggregate PASS.
+
+## Required-format closure in progress: packed render and sampling (2026-09-20)
+R10G10B10A2_UNORM and R11G11B10_FLOAT now use the proven four-byte color
+resource/RTV/clear/native-draw path with distinct wire format identities while
+Mesa owns their PBE encodings.  R9G9B9E5_SHAREDEXP samples natively through the
+shared texture path.  The two required packed-pair formats are not native Asahi
+textures: initial uploads are explicitly expanded to physical RGBA8 using their
+source byte layouts, then sampled through the same version-6 graph.  The
+logical DXGI identity remains on the Windows resource owner.  The pair lowering
+requires an even width and is not exposed as generic hardware support.
+
+Expanded format coverage crossed the host fixture's synthetic handle namespace;
+the fake allocator now skips the reserved 0x771-0x777 presentation/KM range so
+distinct allocation identities cannot alias.  The production composer continues
+to reject any such alias.
+
+Fresh x64 full packed suite PASS:
+evidence/AD04-runtime-closure/required-packed-final-20260920jn-x64/;
+source archive SHA-256
+6b55ba3d437c10e1a17a41a71dcdf26f0a8d411ac58651fa4d6038c8a16bdf8b.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-packed-final-20260920jo-arm64/;
+source archive SHA-256
+93334ebdcc632aea25fdfb9db97e4b75c5229b153c44249bed4f24de0f0e05ea.
+
+Inventory remains 120 of 121 and pipeline mask zero.  The remaining frozen
+format work is the complete data-driven required-use table, Windows 8 B5/B4
+family and nonzero mip/layer range proof before aggregate admission.

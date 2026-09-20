@@ -449,7 +449,9 @@ void APIENTRY
        Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
        Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
-       Format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
+       Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
+       Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
+       Format == DXGI_FORMAT_R11G11B10_FLOAT) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
    } else if (Format == DXGI_FORMAT_D32_FLOAT) {
@@ -472,6 +474,8 @@ void APIENTRY
        Format == DXGI_FORMAT_R8_UNORM ||
        Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
+       Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
+       Format == DXGI_FORMAT_R11G11B10_FLOAT ||
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
@@ -525,7 +529,9 @@ void APIENTRY
         resource->format != PIPE_FORMAT_R16G16B16A16_FLOAT &&
         resource->format != PIPE_FORMAT_R8_UNORM &&
         resource->format != PIPE_FORMAT_R16_FLOAT &&
-        resource->format != PIPE_FORMAT_R32G32B32A32_FLOAT) ||
+        resource->format != PIPE_FORMAT_R32G32B32A32_FLOAT &&
+        resource->format != PIPE_FORMAT_R10G10B10A2_UNORM &&
+        resource->format != PIPE_FORMAT_R11G11B10_FLOAT) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
@@ -1067,7 +1073,14 @@ _Present('''),
    LOG_ENTRYPOINT();
 
    struct pipe_context *pipe = CastPipeContext(hDevice);
-   ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);''',
+   ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);
+   struct pipe_resource *resource;
+   enum pipe_format format;
+
+   struct pipe_sampler_view desc;
+   memset(&desc, 0, sizeof desc);
+   resource = CastPipeResource(pCreateSRView->hDrvResource);
+   format = FormatTranslate(pCreateSRView->Format, false);''',
          '''CreateShaderResourceView(
    D3D10DDI_HDEVICE hDevice,                                                     // IN
    __in const D3D10DDIARG_CREATESHADERRESOURCEVIEW *pCreateSRView,   // IN
@@ -1086,7 +1099,17 @@ _Present('''),
       SetError(hDevice,E_NOTIMPL);return;
    }
    struct pipe_context *pipe = CastPipeContext(hDevice);
-   ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);'''),
+   ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);
+   struct pipe_resource *resource;
+   enum pipe_format format;
+
+   struct pipe_sampler_view desc;
+   memset(&desc, 0, sizeof desc);
+   resource = CastPipeResource(pCreateSRView->hDrvResource);
+   format = FormatTranslate(pCreateSRView->Format, false);
+   if (windowsResource->Format == DXGI_FORMAT_R8G8_B8G8_UNORM ||
+       windowsResource->Format == DXGI_FORMAT_G8R8_G8B8_UNORM)
+      format = PIPE_FORMAT_R8G8B8A8_UNORM;'''),
         ('''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);''',
          '''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);
    pSamplerState->owner_device = CastDevice(hDevice);'''),
@@ -1310,6 +1333,38 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
         draw_path.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
+        ('''   } else {
+      BOOL bindDepthStencil = !!(pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL);
+      templat.format = FormatTranslate(pCreateResource->Format, bindDepthStencil);
+   }''',
+         '''   } else {
+      BOOL bindDepthStencil = !!(pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL);
+      templat.format = FormatTranslate(pCreateResource->Format, bindDepthStencil);
+   }
+   enum pipe_format upload_format = templat.format;
+   if (pCreateResource->Format == DXGI_FORMAT_R8G8_B8G8_UNORM ||
+       pCreateResource->Format == DXGI_FORMAT_G8R8_G8B8_UNORM)
+      templat.format = PIPE_FORMAT_R8G8B8A8_UNORM;'''),
+        ('''                  util_copy_rect(dst,
+                                 templat.format,
+                                 transfer->stride,
+                                 0, 0, box.width, box.height,
+                                 src,
+                                 pInitialDataUP->SysMemPitch,
+                                 0, 0);''',
+         '''                  if (upload_format == templat.format) {
+                     util_copy_rect(dst, templat.format, transfer->stride,
+                                    0, 0, box.width, box.height, src,
+                                    pInitialDataUP->SysMemPitch, 0, 0);
+                  } else if (!AgxD3d10ExpandPackedPair(
+                                upload_format,dst,transfer->stride,src,
+                                pInitialDataUP->SysMemPitch,box.width,box.height) &&
+                             !util_format_translate(
+                                templat.format, dst, transfer->stride, 0, 0,
+                                upload_format, src, pInitialDataUP->SysMemPitch,
+                                0, 0, box.width, box.height)) {
+                     SetError(hDevice, E_NOTIMPL);
+                  }'''),
         ('#include "util/u_surface.h"',
          '''#include "util/u_surface.h"
 #include "drm-uapi/drm_fourcc.h"
@@ -1322,11 +1377,39 @@ AgxD3d10ColorBytes(DXGI_FORMAT format)
    case DXGI_FORMAT_R8_UNORM: return 1;
    case DXGI_FORMAT_R16_FLOAT: return 2;
    case DXGI_FORMAT_B8G8R8A8_UNORM:
-   case DXGI_FORMAT_R8G8B8A8_UNORM: return 4;
+   case DXGI_FORMAT_R8G8B8A8_UNORM:
+   case DXGI_FORMAT_R10G10B10A2_UNORM:
+   case DXGI_FORMAT_R11G11B10_FLOAT: return 4;
    case DXGI_FORMAT_R16G16B16A16_FLOAT: return 8;
    case DXGI_FORMAT_R32G32B32A32_FLOAT: return 16;
    default: return 0;
    }
+}
+
+static bool
+AgxD3d10ExpandPackedPair(enum pipe_format format, void *destination,
+                         unsigned destinationStride, const void *source,
+                         unsigned sourceStride, unsigned width,
+                         unsigned height)
+{
+   if ((format != PIPE_FORMAT_R8G8_B8G8_UNORM &&
+        format != PIPE_FORMAT_G8R8_G8B8_UNORM) || (width & 1u))
+      return false;
+   for (unsigned y = 0; y < height; ++y) {
+      const uint8_t *src = (const uint8_t *)source + y * sourceStride;
+      uint8_t *dst = (uint8_t *)destination + y * destinationStride;
+      for (unsigned x = 0; x < width; x += 2, src += 4, dst += 8) {
+         uint8_t r, g0, b, g1;
+         if (format == PIPE_FORMAT_R8G8_B8G8_UNORM) {
+            r=src[0];g0=src[1];b=src[2];g1=src[3];
+         } else {
+            g0=src[0];r=src[1];g1=src[2];b=src[3];
+         }
+         dst[0]=r;dst[1]=g0;dst[2]=b;dst[3]=255;
+         dst[4]=r;dst[5]=g1;dst[6]=b;dst[7]=255;
+      }
+   }
+   return true;
 }
 
 static bool
@@ -1664,6 +1747,9 @@ AgxD3d10ResourceWithinRequiredLimits(
    } else {
       struct pipe_resource *dst=destination->resource,*src=source->resource;
       enum pipe_format sample=FormatTranslate(source->sample_format,false);
+      if(source->Format==DXGI_FORMAT_R8G8_B8G8_UNORM||
+         source->Format==DXGI_FORMAT_G8R8_G8B8_UNORM)
+        sample=PIPE_FORMAT_R8G8B8A8_UNORM;
       bool valid=dst&&src&&!destination->presentation&&!source->presentation&&
          (destination->bind_flags&D3D10_DDI_BIND_RENDER_TARGET)&&
          (source->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE)&&
