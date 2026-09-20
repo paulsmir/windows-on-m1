@@ -45094,3 +45094,37 @@ cert 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
 Immutable .local/experiments/EXP702-render-sequence-717.zip SHA256
 308816af6bb056293cab4acdc917e85ee69616f82d3b268bb556d59d3de1012e.
 Next exact Air stage/bind/preflight and one client; no replay.
+
+### EXP702 actual result — RenderCBSequence hypothesis rejected on Air
+Exact package717 bound with correct hashes, Valid signatures, Code0/Running and
+Start12/Platform14. The pre-client gate had8CPU/NVMe/input and no monitored
+events. One standard client (PID912/TID888) created device/swap chain and reached
+native seal, but pfnRenderCb remained E_FAIL80004005; Present887a0005 and device
+reason887a0020. No KMD Render slot was retained in device, Device Parameters or
+service keys. No fresh monitored event appeared in this run. The mandatory
+sequence fix remains implemented but is rejected as the cause of EXP701/702's
+hardware failure. No physical screen observation was supplied.
+
+Evidence main-root .local/experiments/EXP702-live/{client-result.txt,
+pre-client.json,post-client.json,post-health.json,receipt-enum.json,cleanup.txt}.
+Exact oem5/package/task/trust/stopped-service cleanup succeeded; ordinary377/392
+recovery launched. Next diagnostic is opt-in only: official Microsoft docs permit
+pfnQueryResidencyCb at any time, so query each exact submitted allocation handle
+immediately before Render and log per-handle HRESULT/status. Do not mutate the
+allocation list, make residency, retry Render, or infer a KMD result from absence.
+
+### Per-allocation residency diagnostic gate
+Diagnostic-only implementation uses the existing opt-in process trace. When
+enabled, it invokes the official pfnQueryResidencyCb once for each deduplicated
+submitted allocation immediately before Render and logs the exact handle/status/
+HRESULT without rejecting or making resident. Callback context/sequence/count/
+command bytes are logged with the unchanged Render result. Diagnostics disabled
+adds no callback.
+
+render-residency-20260921nk x64 execution0 and ARM64 link0, exact archive SHA
+cbb1d2d093feede8d1da9bad7060d62527aa5104bdb5ee2d5e54b00bb446c4b5.
+Trace-enabled x64 execution0 produced9 native-residency records and1
+native-render-callback record within the fixed128 cap; trace SHA
+6a6e25e6d0046c8c65e0d6b6bf0e3f664cd0b43eaeb07328221b021431363886.
+Normal producer/materializer/KMD-plan/patch/retirement/remap/teardown and host7
+remain PASS. Hardware NOT_RUN for this diagnostic.

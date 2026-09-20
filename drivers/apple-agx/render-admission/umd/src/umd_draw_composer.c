@@ -63,6 +63,24 @@ static void release(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUBMISSION *s) {
   d->DrawSubmission=NULL;
 }
 
+static VOID diagnose_residency(
+    ADMISSION_UMD_DEVICE *d, const ADMISSION_UMD_DRAW_SUBMISSION *s) {
+  if(!AdmissionUmdDiagnosticEnabled() || !d || !s || !d->KernelCallbacks ||
+     !d->KernelCallbacks->pfnQueryResidencyCb) return;
+  for(UINT index=0;index<s->Count;++index) {
+    D3DKMT_HANDLE handle=s->Allocations[index].hAllocation;
+    D3DDDI_RESIDENCYSTATUS status=(D3DDDI_RESIDENCYSTATUS)0;
+    D3DDDICB_QUERYRESIDENCY query={};
+    query.NumAllocations=1u;
+    query.HandleList=&handle;
+    query.pResidencyStatus=&status;
+    HRESULT result=d->KernelCallbacks->pfnQueryResidencyCb(
+        d->RuntimeDevice.handle,&query);
+    UINT values[4]={index,(UINT)handle,s->Allocations[index].Value,(UINT)status};
+    AdmissionUmdDiagnostic("native-residency",result,values,ARRAYSIZE(values));
+  }
+}
+
 struct ComposerLookup {
   ADMISSION_UMD_DEVICE *Device;
   const ADMISSION_UMD_DRAW_SUBMISSION *Submission;
@@ -233,12 +251,18 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
     ReleaseSRWLockExclusive(&d->ScreenBufferLock);
     return E_FAIL;
   }
+  diagnose_residency(d,s);
   render.hContext=s->Context; render.CommandLength=s->CommandBytes;
   render.NumAllocations=s->Count;
   s->Phase=AdmissionDrawCalling;
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);
   result=d->KernelCallbacks->pfnRenderCb(d->RuntimeDevice.handle,&render);
-  AdmissionUmdDiagnostic("native-render-callback",result,NULL,0);
+  {
+    UINT_PTR context=(UINT_PTR)render.hContext;
+    UINT values[5]={render.RenderCBSequence,(UINT)context,
+        (UINT)(context>>32),render.NumAllocations,render.CommandLength};
+    AdmissionUmdDiagnostic("native-render-callback",result,values,5u);
+  }
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
   s->RenderStatus=result;
   if(FAILED(result)) {

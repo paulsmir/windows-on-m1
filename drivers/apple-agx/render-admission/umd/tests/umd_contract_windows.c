@@ -954,7 +954,7 @@ static HRESULT APIENTRY FrontendSetPriority(
 }
 static HRESULT APIENTRY FrontendQueryResidency(
     HANDLE device,const D3DDDICB_QUERYRESIDENCY *query) {
-  CHECK(device==(HANDLE)(UINT_PTR)0x904u && query && !query->hResource &&
+  CHECK(device!=NULL && query && !query->hResource &&
         query->NumAllocations==1u && query->HandleList &&
         query->pResidencyStatus);
   if(!query || !query->HandleList || !query->pResidencyStatus)

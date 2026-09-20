@@ -27,6 +27,15 @@ static ULONG AdmissionUmdNextGeneration(VOID) {
 
 /* Opt-in, process-local diagnostics for standard-runtime admission. Never
  * change the caller's last-error state or any graphics result. */
+BOOL AdmissionUmdDiagnosticEnabled(VOID) {
+  DWORD saved = GetLastError();
+  WCHAR path[MAX_PATH];
+  DWORD length = GetEnvironmentVariableW(
+      L"APPLE_AGX_UMD_TRACE_FILE", path, ARRAYSIZE(path));
+  SetLastError(saved);
+  return length != 0u && length < ARRAYSIZE(path);
+}
+
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count) {
   static volatile LONG records;

@@ -2127,3 +2127,43 @@ Universal/Inf2Cat/catalog gates PASS; immutable archive SHA
 308816af6bb056293cab4acdc917e85ee69616f82d3b268bb556d59d3de1012e.
 Air recovery is clean. Next exact Valid-signature stage, full-owner bind and one
 standard client. Physical KMD/AGX/Present advancement remains unproven.
+
+## EXP702 rejects RenderCBSequence causality; allocation residency is NOW
+Clean package717 pre-client gate and one standard client still return
+pfnRenderCb E_FAIL/Present887a0005 after native seal. No KMD Render slot is
+retained and no fresh monitored event occurred. Mandatory sequence remains a
+correct contract fix but did not advance hardware. Exact cleanup is complete;
+ordinary recovery is running. No EXP702 physical-screen observation supplied.
+
+The official pfnQueryResidencyCb contract permits querying an allocation list at
+any time. The next diagnostic-only discriminator queries each of the nine exact
+submission handles immediately before Render and logs HRESULT/status/handle,
+plus context/sequence/count. This separates invalid or stale allocation handles
+from context/runtime rejection without changing submission data or KMD policy.
+HARDWARE ROADMAP
+[PASS] Native graph/capture/seal, unlock lifecycle, mandatory RenderCBSequence;
+EXP702 clean standard attempt and exact cleanup.
+[NOW] Opt-in per-allocation residency diagnostics at the pfnRenderCb boundary.
+Offline gate: existing producer remains GREEN and trace records are bounded.
+[NEXT] Exact diagnostic package and one Air discriminator.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## Per-allocation residency diagnostics offline PASS
+The opt-in standard-runtime trace now queries each submitted allocation handle
+individually immediately before pfnRenderCb and records index, handle, allocation
+flags, residency status and HRESULT. It also records context, mandatory sequence,
+allocation count and command bytes with the callback result. With diagnostics
+disabled there are no added callbacks. nk x64 execution0 and ARM64 link0, archive
+cbb1d2d093feede8d1da9bad7060d62527aa5104bdb5ee2d5e54b00bb446c4b5;
+trace-enabled x64 execution0 writes9 residency records and1 callback record in
+the bounded128 log, SHA6a6e25e6d0046c8c65e0d6b6bf0e3f664cd0b43eaeb07328221b021431363886.
+Air recovery after EXP702 is clean Code28/no package/service/files/trust,
+8CPU/NVMe/input/no events. Next exact diagnostic package and one Air run.
+HARDWARE ROADMAP
+[PASS] Native graph/capture/seal, unlock lifecycle, RenderCBSequence, bounded
+per-allocation residency diagnostic, x64 actual producer and ARM64 link.
+[NOW] Exact diagnostic package/sign/hash/preregistration.
+[NEXT] One Air client to identify invalid/stale handle versus context/runtime.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.

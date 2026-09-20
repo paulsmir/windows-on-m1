@@ -165,6 +165,7 @@ extern "C" {
 #endif
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);
+BOOL AdmissionUmdDiagnosticEnabled(VOID);
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
 BOOL AdmissionUmdNextRenderSequence(
     ADMISSION_UMD_DEVICE *Device, UINT *Sequence);
