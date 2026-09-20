@@ -63,6 +63,12 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
     c->Draw.Format=AppleAgxWin32FormatRgba8Unorm; break;
   case PIPE_FORMAT_R16G16B16A16_FLOAT:
     c->Draw.Format=AppleAgxWin32FormatRgba16Float; break;
+  case PIPE_FORMAT_R8_UNORM:
+    c->Draw.Format=AppleAgxWin32FormatR8Unorm; break;
+  case PIPE_FORMAT_R16_FLOAT:
+    c->Draw.Format=AppleAgxWin32FormatR16Float; break;
+  case PIPE_FORMAT_R32G32B32A32_FLOAT:
+    c->Draw.Format=AppleAgxWin32FormatRgba32Float; break;
   default:
     (void)AgxWin32AsahiBatchAbort(b); (void)AgxWin32AsahiBatchRelease(b);
     return 0;
@@ -160,7 +166,10 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
   int valid=rt->base.target==PIPE_TEXTURE_2D &&
       (rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM ||
        rt->base.format==PIPE_FORMAT_R8G8B8A8_UNORM ||
-       rt->base.format==PIPE_FORMAT_R16G16B16A16_FLOAT) &&
+       rt->base.format==PIPE_FORMAT_R16G16B16A16_FLOAT ||
+       rt->base.format==PIPE_FORMAT_R8_UNORM ||
+       rt->base.format==PIPE_FORMAT_R16_FLOAT ||
+       rt->base.format==PIPE_FORMAT_R32G32B32A32_FLOAT) &&
       !rt->layout.compressed && rt->base.last_level==0 && rt->base.depth0==1 &&
       rt->base.array_size==1 && rt->base.nr_samples<=1;
   if(valid && ctx->framebuffer.zsbuf.texture) {

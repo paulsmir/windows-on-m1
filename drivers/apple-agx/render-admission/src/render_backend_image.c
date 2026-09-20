@@ -248,7 +248,9 @@ APPLE_AGX_BOOL AdmissionBackendImageBindNativeSubmission(
   APPLE_AGX_BOOL desktop;
   if(!Native) return APPLE_AGX_FALSE;
   qualification=Native->SurfaceWidth==16 && Native->SurfaceHeight==16 &&
-      (Native->SurfacePitch==64 || Native->SurfacePitch==128) &&
+      (Native->SurfacePitch==16 || Native->SurfacePitch==32 ||
+       Native->SurfacePitch==64 || Native->SurfacePitch==128 ||
+       Native->SurfacePitch==256) &&
       Native->DestinationBytes>=1024 &&
       Native->DestinationBytes<=0x4000u;
   desktop=Native->SurfaceWidth==2560 && Native->SurfaceHeight==1600 &&

@@ -446,7 +446,9 @@ void APIENTRY
    }''','''   (void)hDevice;
    if (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
        Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-       Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+       Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
+       Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
+       Format == DXGI_FORMAT_R32G32B32A32_FLOAT) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
    } else if (Format == DXGI_FORMAT_D32_FLOAT) {
@@ -465,6 +467,8 @@ void APIENTRY
        Format == DXGI_FORMAT_D16_UNORM ||
        Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
        Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
+       Format == DXGI_FORMAT_R8_UNORM ||
+       Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
@@ -500,8 +504,11 @@ void APIENTRY
    if (!pipe->clear || !surface || !resource ||
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
-        resource->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
-        resource->format != PIPE_FORMAT_R16G16B16A16_FLOAT) ||
+       resource->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+        resource->format != PIPE_FORMAT_R16G16B16A16_FLOAT &&
+        resource->format != PIPE_FORMAT_R8_UNORM &&
+        resource->format != PIPE_FORMAT_R16_FLOAT &&
+        resource->format != PIPE_FORMAT_R32G32B32A32_FLOAT) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
@@ -1221,6 +1228,20 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
 #include "drm-uapi/drm_fourcc.h"
 #include "agx_win32_asahi_scene.h"
 
+static unsigned
+AgxD3d10ColorBytes(DXGI_FORMAT format)
+{
+   switch (format) {
+   case DXGI_FORMAT_R8_UNORM: return 1;
+   case DXGI_FORMAT_R16_FLOAT: return 2;
+   case DXGI_FORMAT_B8G8R8A8_UNORM:
+   case DXGI_FORMAT_R8G8B8A8_UNORM: return 4;
+   case DXGI_FORMAT_R16G16B16A16_FLOAT: return 8;
+   case DXGI_FORMAT_R32G32B32A32_FLOAT: return 16;
+   default: return 0;
+   }
+}
+
 static bool
 AgxD3d10ResourceWithinRequiredLimits(
    const D3D10DDIARG_CREATERESOURCE *resource)
@@ -1401,14 +1422,12 @@ AgxD3d10ResourceWithinRequiredLimits(
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
       bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
-         (pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-          pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
-          pCreateResource->Format == DXGI_FORMAT_R16G16B16A16_FLOAT) &&
+         AgxD3d10ColorBytes(pCreateResource->Format) != 0 &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
          ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight *
-          (pCreateResource->Format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8u : 4u)) <=
+          AgxD3d10ColorBytes(pCreateResource->Format)) <=
             0x100000 &&
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&

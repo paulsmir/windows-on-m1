@@ -1220,3 +1220,29 @@ cfeb6c2fe69dc23cc5a296ad27f05ddafec292407e3c2875a3a0773da1ad1895.
 Inventory remains 120 of 121 and pipeline mask zero.  Continue the same frozen
 feature-required-formats row with representative 1/2/16-byte typed color and
 compatible-view interpretation, then D32S8, BC block storage and packed formats.
+
+## Required-format closure in progress: ordinary color storage widths (2026-09-20)
+The shared uncompressed color path now covers representative one-, two-, four-,
+eight- and sixteen-byte pixels.  R8_UNORM, R16_FLOAT and
+R32G32B32A32_FLOAT each pass real resource/RTV creation, clear, native draw,
+immutable capture, both KMD placements and retirement.  The wire format remains
+explicit for every interpretation while one bytes-per-pixel contract owns
+pitch and minimum-span validation; Mesa/Asahi continues to emit all format-
+specific PBE and BG/EOT state.
+
+Causal RED rejected the new capability/sample-one queries and all three private
+resources before draw:
+evidence/AD04-runtime-closure/required-color-widths-red-20260920ic-x64/.
+Fresh diagnostic-clean x64 producer execution PASS:
+evidence/AD04-runtime-closure/required-color-widths-final-20260920ie-x64/;
+source archive SHA-256
+4303d08039298525c4490985fba9c78eba71b20d3b8699ce25b624cf0eae5b01.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-color-widths-final-20260920if-arm64/;
+source archive SHA-256
+0ab2a88761dd829ec206b8cb112fce529d78e4bc9e81ac112d1cafad5725061c.
+
+Inventory remains 120 of 121 and pipeline mask zero.  Storage width is no longer
+the active color blocker.  Continue inside feature-required-formats with typed
+numeric/sRGB and compatible typeless views, then D32S8, BC block storage and
+packed formats.

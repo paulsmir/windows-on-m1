@@ -1045,7 +1045,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_D32_FLOAT,&formatCaps);
     CHECK(formatCaps==0u); /* Depth support is base-assumed by this DDI. */
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R32G32B32A32_FLOAT,&formatCaps);
-    CHECK(formatCaps==0u);
+    CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
+                       D3D10_DDI_FORMAT_SUPPORT_BLENDABLE));
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R8G8B8A8_UNORM,&formatCaps);
     CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
                        D3D10_DDI_FORMAT_SUPPORT_BLENDABLE));
@@ -1073,6 +1074,18 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCheckMultisampleQualityLevels(
         device,DXGI_FORMAT_R16G16B16A16_FLOAT,1,&quality);
     CHECK(quality==1u);
+    const DXGI_FORMAT requiredColorWidths[]={DXGI_FORMAT_R8_UNORM,
+        DXGI_FORMAT_R16_FLOAT,DXGI_FORMAT_R32G32B32A32_FLOAT};
+    for(unsigned colorIndex=0;colorIndex<ARRAYSIZE(requiredColorWidths);++colorIndex) {
+      formatCaps=0;quality=0;
+      deviceFunctions.pfnCheckFormatSupport(
+          device,requiredColorWidths[colorIndex],&formatCaps);
+      CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
+                         D3D10_DDI_FORMAT_SUPPORT_BLENDABLE));
+      deviceFunctions.pfnCheckMultisampleQualityLevels(
+          device,requiredColorWidths[colorIndex],1,&quality);
+      CHECK(quality==1u);
+    }
     deviceFunctions.pfnCheckMultisampleQualityLevels(
         device,DXGI_FORMAT_D32_FLOAT,1,&quality);
     CHECK(quality==1u);
@@ -2271,6 +2284,86 @@ static void test_mesa_d3d10_frontend_open(void) {
             (D3D10DDI_HDEPTHSTENCILVIEW){0});
         deviceFunctions.pfnSetViewports(device,1,0,&viewport);
         deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+      }
+      {
+        const DXGI_FORMAT typedFormats[]={DXGI_FORMAT_R8_UNORM,
+            DXGI_FORMAT_R16_FLOAT,DXGI_FORMAT_R32G32B32A32_FLOAT};
+        for(unsigned typedIndex=0;typedIndex<ARRAYSIZE(typedFormats);++typedIndex) {
+        D3D10DDI_MIPINFO typedMip={0};
+        D3D10DDIARG_CREATERESOURCE typedCreate={0};
+        D3D10DDI_HRESOURCE typed={0};D3D10DDI_HRTRESOURCE typedRuntime={0};
+        D3D10DDIARG_CREATERENDERTARGETVIEW typedViewCreate={0};
+        D3D10DDI_HRENDERTARGETVIEW typedView={0};
+        D3D10DDI_HRTRENDERTARGETVIEW typedViewRuntime={0};
+        typedMip.TexelWidth=typedMip.TexelHeight=16;typedMip.TexelDepth=1;
+        typedCreate.pMipInfoList=&typedMip;
+        typedCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        typedCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
+        typedCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
+        typedCreate.Format=typedFormats[typedIndex];
+        typedCreate.SampleDesc.Count=1;typedCreate.MipLevels=1;
+        typedCreate.ArraySize=1;
+        SIZE_T typedBytes=deviceFunctions.pfnCalcPrivateResourceSize(
+            device,&typedCreate);
+        typed.pDrvPrivate=calloc(1,typedBytes);
+        typedRuntime.handle=(VOID *)(UINT_PTR)(0xd40u+typedIndex*2u);
+        CHECK(typed.pDrvPrivate!=NULL);
+        unsigned typedErrors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&typedCreate,typed,typedRuntime);
+        CHECK(FrontendErrors==typedErrors);
+        typedViewCreate.hDrvResource=typed;
+        typedViewCreate.Format=typedFormats[typedIndex];
+        typedViewCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        typedViewCreate.Tex2D.MipSlice=0;
+        typedViewCreate.Tex2D.FirstArraySlice=0;
+        typedViewCreate.Tex2D.ArraySize=1;
+        SIZE_T typedViewBytes=deviceFunctions.pfnCalcPrivateRenderTargetViewSize(
+            device,&typedViewCreate);
+        typedView.pDrvPrivate=calloc(1,typedViewBytes);
+        typedViewRuntime.handle=(VOID *)(UINT_PTR)(0xd41u+typedIndex*2u);
+        CHECK(typedView.pDrvPrivate!=NULL);
+        deviceFunctions.pfnCreateRenderTargetView(
+            device,&typedViewCreate,typedView,typedViewRuntime);
+        CHECK(FrontendErrors==typedErrors);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+        RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+        memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+        RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+        D3D10_DDI_VIEWPORT typedViewport={0,0,16,16,0,1};
+        D3D10_DDI_RECT typedRect={0,0,16,16};
+        deviceFunctions.pfnSetRenderTargets(device,&typedView,1,0,
+            (D3D10DDI_HDEPTHSTENCILVIEW){0});
+        CHECK(FrontendErrors==typedErrors);
+        deviceFunctions.pfnSetViewports(device,1,0,&typedViewport);
+        CHECK(FrontendErrors==typedErrors);
+        deviceFunctions.pfnSetScissorRects(device,1,0,&typedRect);
+        CHECK(FrontendErrors==typedErrors);
+        deviceFunctions.pfnClearRenderTargetView(device,typedView,clear);
+        CHECK(FrontendErrors==typedErrors);
+        deviceFunctions.pfnDraw(device,3,0);
+        CHECK(FrontendErrors==typedErrors && AgxWin32AsahiContextDrawReceipt(
+            MesaD3d10FrontendContextForTest(device)));
+        deviceFunctions.pfnFlush(device);
+        CHECK(RuntimeRenders==1u && RuntimeSignals==1u &&
+              RuntimeMaterializations==2u && RuntimeConsumerGates==2u &&
+              RuntimeMarker!=NULL);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(depthOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(
+              MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(depthOwner,5u);
+        }
+        RuntimeExpectedCommandVersion=0;
+        deviceFunctions.pfnDestroyRenderTargetView(device,typedView);
+        deviceFunctions.pfnDestroyResource(device,typed);
+        free(typedView.pDrvPrivate);free(typed.pDrvPrivate);
+        deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,
+            (D3D10DDI_HDEPTHSTENCILVIEW){0});
+        deviceFunctions.pfnSetViewports(device,1,0,&viewport);
+        deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+        }
       }
       deviceFunctions.pfnGsSetShader(device,soGsh);
       UINT activeSoOffset=0;

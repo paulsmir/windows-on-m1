@@ -103,6 +103,9 @@ typedef enum _APPLE_AGX_WIN32_FORMAT {
   AppleAgxWin32FormatBgra8Unorm = 1u,
   AppleAgxWin32FormatRgba8Unorm = 2u,
   AppleAgxWin32FormatRgba16Float = 3u,
+  AppleAgxWin32FormatR8Unorm = 4u,
+  AppleAgxWin32FormatR16Float = 5u,
+  AppleAgxWin32FormatRgba32Float = 6u,
 } APPLE_AGX_WIN32_FORMAT;
 
 typedef enum _APPLE_AGX_WIN32_ABI_RESULT {
