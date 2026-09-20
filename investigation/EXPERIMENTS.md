@@ -44294,3 +44294,31 @@ stopped service, task and trust removed; ordinary377/392 Code28 recovery
 verified with no package/files/trust, healthy8CPU/NVMe/input and no fresh events.
 Next diagnostic reads runtime format/sample support before unchanged swap-chain;
 no speculative UMD capability or interface changes.
+
+## EXP693 — standard runtime format support discriminator
+UTC preregistration 2026-09-20; implementation ab99a2e1720b4573448772b76eb2a4eddbab099f.
+WHY THIS HYPOTHESIS: EXP692 proves device S_OK and swap-chain E_INVALIDARG.
+Projected native adapter advertises only base D3D10; client requests BGRA,
+whose extended-format guarantees are separate in Microsoft documentation.
+Actual runtime format queries distinguish filtering from later resource failure.
+WINDOWS CONTRACT: unchanged standard D3D10/base DXGI; CheckFormatSupport and
+CheckMultisampleQualityLevels read support without changing capabilities.
+AGX/ASAHI CONTRACT: unchanged native producer and physical patch-list path.
+TRANSLATION: same BGRA scene, no request fallback or guard weakening.
+WHAT IS STILL UNKNOWN: runtime BGRA support and internal swap-chain rejection.
+Single variable: two read-only format/sample receipts in existing client.
+Build existing client project x64/ARM64 Release SDK26100, both0 warnings/errors.
+Client signed E9BE15BD2A184BFABA0C8035B3C620C58037A241 SHA 653f5d3129e57c5be27335dc7c24816e84a1829b4a8a73519efa6829f2c9a8d3.
+Archive .local/experiments/EXP693-format-support.zip SHA 35e85e7c140f6402c1e2b9154c27f2d5364e79ec299152b34b28c7cc2ecda7c9.
+Driver709 source b4edf2fec0e5896279c77e4b79db48bca1485857 unchanged; all
+INF/SYS/UMD/CAT hashes retained in manifest and prior EXP692.
+Recovery ordinary377/392 Code28/no package/service/files/trust, 8CPU/NVMe/input,
+no fresh events verified after EXP692. Exact stage via pnputil /add-driver
+without /install then shutdown; EXP584 m1n1 + EXP406 FD full-owner broker1
+physical/debug-off/low-mem pinned LLDDIR. Require Code0 Running Start12/Platform14
+and installed hashes. Authorized temporary autologon cleared before once-only
+interactive task120s. Evidence main-root .local/experiments/EXP693-live.
+Expected discriminator: support HRESULT/masks for BGRA87 and RGBA28 plus same
+swap-chain HRESULT. No rendering success without physical completion receipts.
+Collect client/registry/events then exact package/task/trust cleanup and ordinary
+377/392 recovery. No repeat within this experiment.
