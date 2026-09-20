@@ -1688,3 +1688,8 @@ before adapter reporting/draw. Native owner accepted only exact D3D10_0 although
 the projected upstream entry accepts D3D10_0, _x and _7. Current fix admits the
 three documented variants through the same D3D10 core callbacks; no feature or
 hardware path changes. EXP689 cleaned; next run requires fresh gates/package.
+
+## EXP690 preregistered (2026-09-20)
+D3D10_0 interface variants pass fresh x64 execution and ARM64/package709 gates.
+Immutable SHA ff1a4bb3226726d68eb76bd227648fe7a375eb64ee3f2210200775e3a5de62a1.
+Next stage exact package and run once in authenticated console.

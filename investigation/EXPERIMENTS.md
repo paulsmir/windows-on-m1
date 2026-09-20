@@ -44177,3 +44177,20 @@ WDDM1_3). A modern D3D10 runtime variant is consequently rejected by the native
 owner. The minimal correction routes all documented D3D10_0 variants through
 pUMCallbacks; tests use D3D10_0_7. No draw occurred. Exact cleanup/recovery was
 started; EXP689 must not be replayed.
+
+## EXP690 — preregistered D3D10 interface-variant interactive run
+
+UTC 2026-09-20T19:00:00Z; hardware NOT_RUN. Single variable: commit5f3ce1ec
+admits D3D10_0 base, _x and _7 through the same pUMCallbacks contract.
+Clean HEAD b4edf2fec0e5896279c77e4b79db48bca1485857; source SHA
+b32064042ff72570cf256114943be501619c64fc7f99d715107da728ea121d81.
+x64 execution PASS cda2a011e6812a9a07ae0213cb56dad9f055f81478e95d8bd3f6def9458d8399;
+ARM64 closure PASS 4775295c1373de0273100a5ca40089c8c77e09a6c17e46f55c3df56dc1e21442.
+Package709 analysis0/0, Universal/Inf2Cat/catalog PASS. INF/SYS/UMD/CAT/client:
+b6917d80c1cc3746cd2dd17accf4ac9116103eda4d02dae8671660525f3c96f4,
+c3d93a6a54c6e59c77cc74ca674cd07cfb4e498ed0379a9c812fae5f6c2f14de,
+172cffe21f758eb4e3744386d360dad6c05dc10b0bf55473fd7afc4a798bf58d,
+b6113ed41a780969e3b597fd13043d7cbdc37b4b19a1319392918a34478fe87f,
+fb1a9f9076600364c2a4ad45ea9ffa47617969b2195ddfc3e38dcb9229928774.
+Immutable archive SHA ff1a4bb3226726d68eb76bd227648fe7a375eb64ee3f2210200775e3a5de62a1.
+Run once in authenticated console after Code0; exact recovery unchanged.
