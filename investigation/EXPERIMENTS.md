@@ -44474,3 +44474,22 @@ any missing receipt is inconclusive rather than a guessed resource policy.
 Physical black-screen/caption symptom remains a requested separate observation;
 EXP694 was UNOBSERVED because operator was away. Do not infer physical contents
 from runtime success/failure or service state.
+
+### EXP695 finalized artifact gate — 2026-09-20T20:19:48.167474+00:00
+UMD/KMD analysis0/0, Universal/Inf2Cat and catalog membership PASS.
+Same expected self-signed builder trust condition; require Valid signatures on
+Air after exact certificate import and before pnputil staging.
+package/AppleAgxRenderAdmission.inf: 8020dd5c5479529a4d898ae149fe9ae4509519d6afb1c0e4b358890776629798
+package/AppleAgxRenderAdmission.sys: c789cd6e2eef02faa7f2513a95874390e2814692f422efa08856b45526f90135
+package/AppleAgxRenderAdmissionUmd.dll: 0dff3e05b5e1554b4afd0ae9615d4c5b565b79ea9b2f7e561f6a44eb0e601b63
+package/appleagxrenderadmission.cat: 8fbd1dd61c1856a2899bd8ffc63d7aadc88a380f792cac9dd0ce0e4f046b6e9d
+qualification/AppleAgxD3d10Standard.exe: 825e5c45608a8634a351623918ebf68867caf4c70162693df746fbfe798b4071
+qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable .local/experiments/EXP695-resource-trace-711.zip SHA 8c9b621755b9779a5745c32cafdf45d2645b8e050902459f17d4beba5d02e965.
+Native full-production profile with per-client APPLE_AGX_UMD_TRACE_FILE.
+Exact stage: manifest/hash/signature check then pnputil /add-driver manifest INF
+without /install. Full-owner launch and recovery unchanged from EXP694.
+Interactive once-only cmd sets trace path to qualification/umd-diagnostics.log,
+executes client, retains standard stdout/stderr and process exit. Require Code0/
+Running/Start12/Platform14 and exact installed hashes before task. Collect all
+receipts first, then exact package/task/trust cleanup and ordinary377/392.
