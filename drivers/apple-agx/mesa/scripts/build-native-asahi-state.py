@@ -1057,6 +1057,35 @@ _Present('''),
       SetError(hDevice,E_NOTIMPL);return;
    }
    LOG_ENTRYPOINT();'''),
+        ('''CreateShaderResourceView(
+   D3D10DDI_HDEVICE hDevice,                                                     // IN
+   __in const D3D10DDIARG_CREATESHADERRESOURCEVIEW *pCreateSRView,   // IN
+   D3D10DDI_HSHADERRESOURCEVIEW hShaderResourceView,                             // IN
+   D3D10DDI_HRTSHADERRESOURCEVIEW hRTShaderResourceView)                         // IN
+{
+   LOG_ENTRYPOINT();
+
+   struct pipe_context *pipe = CastPipeContext(hDevice);
+   ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);''',
+         '''CreateShaderResourceView(
+   D3D10DDI_HDEVICE hDevice,                                                     // IN
+   __in const D3D10DDIARG_CREATESHADERRESOURCEVIEW *pCreateSRView,   // IN
+   D3D10DDI_HSHADERRESOURCEVIEW hShaderResourceView,                             // IN
+   D3D10DDI_HRTSHADERRESOURCEVIEW hRTShaderResourceView)                         // IN
+{
+   LOG_ENTRYPOINT();
+
+   Device *windowsDevice=CastDevice(hDevice);
+   Resource *windowsResource=CastResource(pCreateSRView->hDrvResource);
+   if(!windowsDevice||!windowsResource||windowsResource->owner_device!=windowsDevice||
+      (!windowsResource->presentation&&
+       !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
+      !AgxD3d10FormatViewCompatible(windowsResource->Format,
+          pCreateSRView->Format,FALSE)) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   struct pipe_context *pipe = CastPipeContext(hDevice);
+   ShaderResourceView *pSRView = CastShaderResourceView(hShaderResourceView);'''),
         ('''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);''',
          '''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);
    pSamplerState->owner_device = CastDevice(hDevice);'''),
@@ -1475,7 +1504,10 @@ AgxD3d10ResourceWithinRequiredLimits(
             0x100000 &&
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
-         pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET &&
+         (pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET ||
+          (pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_TYPELESS &&
+           pCreateResource->BindFlags == (D3D10_DDI_BIND_RENDER_TARGET |
+              D3D10_DDI_BIND_SHADER_RESOURCE))) &&
          pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
          !pCreateResource->pInitialDataUP;
       if (!private_rt || !screen->resource_create_with_modifiers) {

@@ -2220,7 +2220,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         rgbaCreate.pMipInfoList=&rgbaMip;
         rgbaCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
         rgbaCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
-        rgbaCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET;
+        rgbaCreate.BindFlags=D3D10_DDI_BIND_RENDER_TARGET|
+            D3D10_DDI_BIND_SHADER_RESOURCE;
         rgbaCreate.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
         rgbaCreate.SampleDesc.Count=1;rgbaCreate.MipLevels=1;
         rgbaCreate.ArraySize=1;
@@ -2283,6 +2284,29 @@ static void test_mesa_d3d10_frontend_open(void) {
         CHECK(!AgxD3d10FormatViewCompatible(
             DXGI_FORMAT_R8G8B8A8_TYPELESS,
             DXGI_FORMAT_R16G16_FLOAT,FALSE));
+        D3D10DDIARG_CREATESHADERRESOURCEVIEW rgbaSrvCreate={0};
+        D3D10DDI_HSHADERRESOURCEVIEW rgbaSrv={0};
+        D3D10DDI_HRTSHADERRESOURCEVIEW rgbaSrvRuntime={0};
+        rgbaSrvCreate.hDrvResource=rgba;
+        rgbaSrvCreate.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        rgbaSrvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        rgbaSrvCreate.Tex2D.MostDetailedMip=0;rgbaSrvCreate.Tex2D.MipLevels=1;
+        rgbaSrvCreate.Tex2D.FirstArraySlice=0;rgbaSrvCreate.Tex2D.ArraySize=1;
+        SIZE_T rgbaSrvBytes=deviceFunctions.pfnCalcPrivateShaderResourceViewSize(
+            device,&rgbaSrvCreate);
+        rgbaSrv.pDrvPrivate=calloc(1,rgbaSrvBytes);
+        rgbaSrvRuntime.handle=(VOID *)(UINT_PTR)0xd62u;
+        CHECK(rgbaSrv.pDrvPrivate && rgbaSrvBytes);
+        deviceFunctions.pfnCreateShaderResourceView(
+            device,&rgbaSrvCreate,rgbaSrv,rgbaSrvRuntime);
+        CHECK(FrontendErrors==rgbaErrors);
+        deviceFunctions.pfnPsSetShaderResources(device,0,1,&rgbaSrv);
+        CHECK(FrontendErrors==rgbaErrors);
+        D3D10DDI_HSHADERRESOURCEVIEW nullRgbaSrv={0};
+        deviceFunctions.pfnPsSetShaderResources(device,0,1,&nullRgbaSrv);
+        CHECK(FrontendErrors==rgbaErrors);
+        deviceFunctions.pfnDestroyShaderResourceView(device,rgbaSrv);
+        free(rgbaSrv.pDrvPrivate);
         deviceFunctions.pfnDestroyRenderTargetView(device,rgbaView);
         deviceFunctions.pfnDestroyResource(device,rgba);
         free(rgbaView.pDrvPrivate);free(rgba.pDrvPrivate);

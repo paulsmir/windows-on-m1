@@ -1291,3 +1291,24 @@ source archive SHA-256
 Inventory remains 120 of 121 and pipeline mask zero.  Combined RT|SRV lifetime
 and actual typed/sRGB sampling remain fail-closed and are the next compatible-
 view boundary; BC block storage and packed formats follow.
+
+## Required-format closure in progress: combined typeless RTV/SRV lifetime (2026-09-20)
+The same R8G8B8A8_TYPELESS owner now admits the exact combined RT|SRV bind.  A
+real typed UNORM RTV draw is flushed and retired before an sRGB SRV is created,
+bound and unbound at PS slot zero, destroyed, and finally followed by the
+existing query/present lifecycle.  Both RTV and SRV callbacks validate owner,
+bind and logical view family before constructing Mesa pipe views.  Imported
+presentation RTV/SRV remains an explicit exact-BGRA exception.
+
+Fresh x64 full suite and real producer execution PASS:
+evidence/AD04-runtime-closure/required-typeless-srv-life-20260920iv-x64/;
+source archive SHA-256
+6c1999811ab28abca8fed2efd409401745dbb177a980654b7831b61f4d2a12e5.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-typeless-srv-life-20260920iw-arm64/;
+source archive SHA-256
+b1a5ec657118eceb589f64f67ca83910d05081eb954fb607d22a8a3b5a672fa7.
+
+Inventory remains 120 of 121 and pipeline mask zero.  The next compatible-view
+discriminator is actual typed/sRGB sampling plus mip/layer range capture; view
+object lifetime alone is not sufficient to close the format aggregate.
