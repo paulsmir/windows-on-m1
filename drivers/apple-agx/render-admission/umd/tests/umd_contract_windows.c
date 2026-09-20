@@ -2302,6 +2302,23 @@ static void test_mesa_d3d10_frontend_open(void) {
         CHECK(FrontendErrors==rgbaErrors);
         deviceFunctions.pfnPsSetShaderResources(device,0,1,&rgbaSrv);
         CHECK(FrontendErrors==rgbaErrors);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+        RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+        memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+        RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+        deviceFunctions.pfnResourceCopy(device,rt,rgba);
+        CHECK(FrontendErrors==rgbaErrors && RuntimeRenders==1u &&
+              RuntimeSignals==1u && RuntimeMaterializations==2u &&
+              RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(depthOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(
+              MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(depthOwner,5u);
+        }
+        RuntimeExpectedCommandVersion=0;
         D3D10DDI_HSHADERRESOURCEVIEW nullRgbaSrv={0};
         deviceFunctions.pfnPsSetShaderResources(device,0,1,&nullRgbaSrv);
         CHECK(FrontendErrors==rgbaErrors);

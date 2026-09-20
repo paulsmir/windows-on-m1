@@ -300,6 +300,7 @@ struct Query
    Device *owner_device;
    ULONGLONG owner_cookie;
    ULONG device_generation;
+   DXGI_FORMAT sample_format;
    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation;
 };'''),
         ('''struct SamplerState
@@ -1100,6 +1101,7 @@ _Present('''),
          '''   pSRView->handle = pipe->create_sampler_view(pipe, resource, &desc);
    pSRView->owner_device = CastDevice(hDevice);
    pSRView->owner_resource = CastResource(pCreateSRView->hDrvResource);
+   pSRView->owner_resource->sample_format = pCreateSRView->Format;
 }
 
 
@@ -1148,6 +1150,7 @@ _Present('''),
       SetError(hDevice, E_INVALIDARG); return;
    }
    pDevice->pipe->sampler_view_release(pDevice->pipe, view->handle);
+   if (view->owner_resource) view->owner_resource->sample_format = DXGI_FORMAT_UNKNOWN;
    view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device = CastDevice(hDevice);
    ShaderResourceView *view = CastShaderResourceView(hShaderResourceView);
@@ -1634,12 +1637,37 @@ AgxD3d10ResourceWithinRequiredLimits(
    Resource *destination = CastResource(hDstResource);
    Resource *source = CastResource(hSrcResource);
    if (!device || !destination || !source || destination == source ||
-       destination->owner_device != device || source->owner_device != device ||
-       !destination->presentation || !source->presentation) {
+       destination->owner_device != device || source->owner_device != device) {
       SetError(hDevice, E_NOTIMPL); return;
    }
-   HRESULT result = AgxD3d10WindowsPresentationBlt(device->windows,
-      destination->presentation, source->presentation);
+   HRESULT result;
+   if (destination->presentation && source->presentation) {
+      result = AgxD3d10WindowsPresentationBlt(device->windows,
+         destination->presentation, source->presentation);
+   } else {
+      struct pipe_resource *dst=destination->resource,*src=source->resource;
+      enum pipe_format sample=FormatTranslate(source->sample_format,false);
+      bool valid=dst&&src&&!destination->presentation&&!source->presentation&&
+         (destination->bind_flags&D3D10_DDI_BIND_RENDER_TARGET)&&
+         (source->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE)&&
+         sample!=PIPE_FORMAT_NONE&&dst->target==PIPE_TEXTURE_2D&&
+         src->target==PIPE_TEXTURE_2D&&dst->width0==16&&dst->height0==16&&
+         src->width0==16&&src->height0==16&&dst->depth0==1&&src->depth0==1&&
+         !dst->last_level&&!src->last_level&&dst->array_size==1&&
+         src->array_size==1&&dst->nr_samples<=1&&src->nr_samples<=1&&
+         (dst->format==PIPE_FORMAT_B8G8R8A8_UNORM||
+          dst->format==PIPE_FORMAT_R8G8B8A8_UNORM);
+      if(!valid) { SetError(hDevice,E_NOTIMPL);return; }
+      struct pipe_blit_info info={};
+      info.src.resource=src;info.src.level=0;info.src.format=sample;
+      info.src.box.width=info.src.box.height=16;info.src.box.depth=1;
+      info.dst.resource=dst;info.dst.level=0;info.dst.format=dst->format;
+      info.dst.box.width=info.dst.box.height=16;info.dst.box.depth=1;
+      info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
+      device->pipe->blit(device->pipe,&info);
+      device->pipe->flush(device->pipe,NULL,0);
+      result=AgxD3d10WindowsFlushStatus(device->windows);
+   }
    if (FAILED(result)) SetError(hDevice, result);''')
     replace_function_body('src/gallium/frontends/d3d10umd/Resource.cpp','ResourceCopyRegion','''   Device *device = CastDevice(hDevice);
    Resource *destination = CastResource(hDstResource);

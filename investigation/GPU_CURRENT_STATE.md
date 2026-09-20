@@ -1312,3 +1312,28 @@ b1a5ec657118eceb589f64f67ca83910d05081eb954fb607d22a8a3b5a672fa7.
 Inventory remains 120 of 121 and pipeline mask zero.  The next compatible-view
 discriminator is actual typed/sRGB sampling plus mip/layer range capture; view
 object lifetime alone is not sufficient to close the format aggregate.
+
+## Required-format closure in progress: real typed/sRGB sampling (2026-09-20)
+The typeless RGBA8 resource now participates in an actual version-6 textured
+producer after its typed RTV transaction retires.  Its compatible sRGB SRV
+records the selected sample interpretation on the resource owner; the existing
+ResourceCopy DDI admits only an exact 16x16 private shader-resource to proven
+color-target copy and calls Mesa pipe->blit.  Mesa util-blitter and Asahi emit
+the texture descriptor, shaders, PBE and BG/EOT state.  Windows captures and
+materializes the resulting 36-reference/136-relocation graph without a second
+renderer.  Presentation-to-presentation ResourceCopy remains on its existing
+standard DXGI path; all other copy forms stay fail-closed.
+
+Fresh x64 full producer execution PASS with the additional version-6 graph:
+evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920ix-x64/;
+source archive SHA-256
+b84a38e39a38f9dc3209bcae1a8ff14a6cdd345cdf8de44ef8255f32eecc65fb.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-typeless-srgb-sample-20260920iy-arm64/;
+source archive SHA-256
+ce8a89c90d88f19690f3039025f99bbd94a5f47cded3332c66942a97ae6c9810.
+
+Inventory remains 120 of 121 and pipeline mask zero.  The next format boundary
+is block-aware BC resource/upload/view arithmetic and sampling; mip/layer range
+validation must be carried by that shared texture implementation rather than a
+second texture path.
