@@ -1532,3 +1532,22 @@ adapter/UMD.  Its first execution belongs to the preregistered Air experiment.
 
 The next boundary is the final native-enabled ARM64 package build/sign/hash and
 preregistration; no additional frontend requirement is implied.
+
+## Native pipeline advertisement and package-analysis correction (2026-09-20)
+The installed UMD GetCaps now reports exactly
+D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(D3D11DDI_3DPIPELINELEVEL_10_0), mask 1,
+only when APPLE_AGX_UMD_NATIVE_FRONTEND is compiled.  Default-off packages retain
+zero.  THREADING caps and all higher feature levels remain disabled.
+
+Native package702 proved Universal/Inf2Cat but was rejected for one UMD code-
+analysis C6011 at the device-owner unlink helper.  The helper now validates its
+owner/inout and Adapter before dereference.  Fresh ARM64 native closure for
+expected build703 PASS (archive SHA-256
+2ceea9c711b9e33bb70e62a29b74f858417bb4bb7ac3a28cf63edafc30201b4a),
+and package703 then built/analyzed with 0 warnings/0 errors; Universal and
+Inf2Cat PASS.  It was signed by the preserved WDK test certificate
+E9BE15BD2A184BFABA0C8035B3C620C58037A241 and never staged.
+
+Package703 is not the hardware candidate because its source snapshot contained
+these changes as a dirty diff.  Rebuild from the next clean HEAD as package704;
+do not stage 702 or 703.

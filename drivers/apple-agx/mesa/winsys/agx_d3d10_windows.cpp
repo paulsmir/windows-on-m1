@@ -114,6 +114,7 @@ static HRESULT attach_presentation_render_resource(
 }
 
 static void unlink_owner(AGX_D3D10_WINDOWS_DEVICE *owner) {
+  if(!owner || !owner->Adapter) return;
   AGX_D3D10_WINDOWS_ADAPTER *adapter=owner->Adapter;
   AcquireSRWLockExclusive(&adapter->Lock);
   AGX_D3D10_WINDOWS_DEVICE **link=&adapter->Owners;
@@ -124,6 +125,7 @@ static void unlink_owner(AGX_D3D10_WINDOWS_DEVICE *owner) {
 }
 
 static void unlink_and_free(AGX_D3D10_WINDOWS_DEVICE **inout) {
+  if(!inout || !*inout) return;
   AGX_D3D10_WINDOWS_DEVICE *owner=*inout;
   unlink_owner(owner);
   owner->Stage=AgxD3d10DeviceFreed;

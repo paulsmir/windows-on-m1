@@ -332,8 +332,15 @@ static HRESULT APIENTRY AdmissionUmdGetCaps(
   case D3D11DDICAPS_3DPIPELINESUPPORT:
     if (Caps->DataSize != sizeof(D3D11DDI_3DPIPELINESUPPORT_CAPS))
       return E_INVALIDARG;
+#if defined(APPLE_AGX_UMD_NATIVE_FRONTEND)
+    ADMISSION_UMD_TRACE(L"GetCaps PIPELINE: D3D10_0");
+    ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)Caps->pData)->Caps =
+        D3D11DDI_ENCODE_3DPIPELINESUPPORT_CAP(
+            D3D11DDI_3DPIPELINELEVEL_10_0);
+#else
     ADMISSION_UMD_TRACE(L"GetCaps PIPELINE: no implemented level");
     ((D3D11DDI_3DPIPELINESUPPORT_CAPS *)Caps->pData)->Caps = 0u;
+#endif
     return S_OK;
   default:
     return E_NOTIMPL;
