@@ -44339,3 +44339,55 @@ no fresh monitored events. Next causal unit: truthful RGBA backbuffer through
 existing native presentation owner, keeping physical BGRA scanout conversion
 and direct-scanout guards honest. No extended DDI advertisement without all
 companion invariants.
+
+## EXP694 — base-D3D10 RGBA backbuffer candidate
+UTC build preregistration 2026-09-20T19:53:52.690807+00:00.
+Integration source 843665a25a551562cb92e50740343a4e944aff85; changes verified before commit, clean source.
+WHY THIS HYPOTHESIS: EXP693 actual runtime rejects BGRA87 and admits RGBA28.
+The old presentation owner forced BGRA; new exact RGBA create/open/import/RTV
+and native-blit argument tests now pass without extended-format advertisement.
+ATOMIC CONTRACT: client RGBA request, D3DDDIFMT_A8B8G8R8 allocation, matching
+PIPE/AIL R8G8B8A8, retained logical resource format and independent source/dest
+blit formats are one byte-layout invariant. Changing only one misdescribes
+storage or rejects an admitted resource. Microsoft DXGI_DDI_BASE_FUNCTIONS
+pfnBlt conversion contract and pinned Mesa9aa1215 agx_pipe.c/agx_blit.c support
+this mapping. This is FULL GRAPHICS; no DISPLAY_ONLY admission assumptions.
+WINDOWS CONTRACT: base D3D10/FL10_0, windowed single-sample RGBA DISCARD chain;
+existing DXGI conversion/flush-before-present ordering.
+AGX/ASAHI CONTRACT: real native RGBA render target and existing native blit to
+BGRA destination, retained until same fence; physical BGRA scanout unchanged.
+TRANSLATION: existing allocation/composer/patch-list path with actual format
+metadata. No parallel allocator, GPUVA, extended DDI, power or IRQ change.
+WHAT IS STILL UNKNOWN: runtime swap-chain resource shape and presentation
+route, actual AGX execution/completion and physical screen contents.
+Single changed variable from EXP693: truthful admitted RGBA backbuffer contract.
+Package identity version710 is experiment-local; client stage labels only
+report failure boundaries, without extra API operations or altered behavior.
+Offline source archive63fc78284d3393c6f8a999676087665488a4195e877aeae9ad3b22615458c505;
+x64 execution and ARM64 link PASS in rgba-present-20260920mf runs.
+Build command: pinned build-driver.ps1 -Configuration Release -NativeFrontend
+-NativeRuntimeProps asahi-runtime-arm64-rgba-present-20260920mf-arm64/NativeRuntime.props
+-PackageBuild710; existing standard-client project ARM64, signing E9BE15BD2A184BFABA0C8035B3C620C58037A241.
+Build output native-package710-rgba-20260920mg-arm64. Install/launch prohibited
+until package analysis/Universal/catalog/signature/hash results appended below.
+Root checkout f90402c7589236ec9e8a030f4b825b5a36280866 (diff SHA
+a9982f92025589df2274aeda23fdc86acfe9d33d263863ea480af1c0a690006e);
+m1n1 c6d10e04afdad5314e8ac1e67bc3919b094ab000 clean; Mu
+f1ef718e08db0e4c30fdb5d8555973513ad9a004 (diff SHA
+7febae89f21b2caf1dacb7ac3429544009858628e794cb00d5dd7e4ed278f9ce).
+Immutable full-owner artifacts: EXP584 m1n1 SHA
+12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3;
+EXP406 FD SHA c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Recovery377 m1n1 SHA fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+recovery392 FD SHA16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+Air baseline Code28/no package/service/files/trust, 8CPU/NVMe/input and no fresh
+events verified after EXP693. Next exact stage, natural bind, bound preflight,
+one interactive client with120s bound; no replay. Collect registry/events/client
+logs and physical observations before exact cleanup and recovery377/392.
+Physical observation required: compare prior mostly-black screen/isolated caption
+controls before client, after Present attempt, after window interaction. Record
+persists/disappears/changes or unobserved; distinguish operator report, screenshot
+and actual scanout. Present S_OK alone is not physical rendering proof.
+Expected checkpoint: CreateSwapChain/GetBuffer/RTV succeeds, then draw/completion/
+Present. Preserve exact failing stage; do not infer later stages executed.
+Evidence main-root .local/experiments/EXP694-live.
