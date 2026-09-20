@@ -195,8 +195,7 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
           alignedSize, destinationReference->Offset, Destination)) ||
       Destination->CpuAddress == NULL ||
       destinationReference->Bytes > Destination->Bytes ||
-      (Snapshot->View.Draw->Format != AppleAgxWin32FormatBgra8Unorm &&
-       Snapshot->View.Draw->Format != AppleAgxWin32FormatRgba8Unorm) ||
+      AppleAgxWin32FormatBytesPerPixel(Snapshot->View.Draw->Format) == 0u ||
       (!APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Snapshot->View.Header->Version) &&
        !AdmissionAllocationContainsView(
           &destinationOpened->Allocation->Description,
@@ -207,8 +206,11 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
     return STATUS_INVALID_ADDRESS;
   if ((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Snapshot->View.Header->Version)) &&
       (!Snapshot->View.NativeBatch || Snapshot->View.Draw->SurfaceWidth!=16u ||
-       Snapshot->View.Draw->SurfaceHeight!=16u || Snapshot->View.Draw->SurfacePitch!=64u ||
-       destinationReference->Bytes<16u*16u*4u))
+       Snapshot->View.Draw->SurfaceHeight!=16u ||
+       Snapshot->View.Draw->SurfacePitch!=16u*AppleAgxWin32FormatBytesPerPixel(
+          Snapshot->View.Draw->Format) ||
+       destinationReference->Bytes<(APPLE_AGX_U64)16u*16u*
+          AppleAgxWin32FormatBytesPerPixel(Snapshot->View.Draw->Format)))
     return STATUS_INVALID_ADDRESS;
   Destination->Bytes = destinationReference->Bytes;
   backgroundColor =

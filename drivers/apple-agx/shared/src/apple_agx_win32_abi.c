@@ -10,6 +10,18 @@ static int AppleAgxWin32NativeVersion(APPLE_AGX_U16 Version) {
   return APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Version);
 }
 
+APPLE_AGX_U32 AppleAgxWin32FormatBytesPerPixel(APPLE_AGX_U32 Format) {
+  switch (Format) {
+  case AppleAgxWin32FormatBgra8Unorm:
+  case AppleAgxWin32FormatRgba8Unorm:
+    return 4u;
+  case AppleAgxWin32FormatRgba16Float:
+    return 8u;
+  default:
+    return 0u;
+  }
+}
+
 static int AppleAgxWin32ReferencePolicy(
     const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *Reference,
     APPLE_AGX_U16 Version) {
@@ -323,12 +335,11 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       return AppleAgxWin32AbiAccess;
   draw = (const APPLE_AGX_WIN32_DRAW_PAYLOAD *)(bytes +
                                                 header->PayloadOffset);
-  if (draw->StructBytes != sizeof(*draw) ||
-      (draw->Format != (APPLE_AGX_U32)AppleAgxWin32FormatBgra8Unorm &&
-       draw->Format != (APPLE_AGX_U32)AppleAgxWin32FormatRgba8Unorm) ||
+  minimumPitch = AppleAgxWin32FormatBytesPerPixel(draw->Format);
+  if (draw->StructBytes != sizeof(*draw) || minimumPitch == 0u ||
       draw->SurfaceWidth == 0u || draw->SurfaceHeight == 0u ||
-      draw->SurfaceWidth > APPLE_AGX_U32_MAX_VALUE / 4u ||
-      draw->SurfacePitch < draw->SurfaceWidth * 4u ||
+      draw->SurfaceWidth > APPLE_AGX_U32_MAX_VALUE / minimumPitch ||
+      draw->SurfacePitch < draw->SurfaceWidth * minimumPitch ||
       draw->Topology != AppleAgxWin32TopologyTriangleList ||
       draw->VertexCount == 0u || (draw->VertexCount % 3u) != 0u ||
       draw->VertexCount > 0x01000000u || draw->InstanceCount != 1u ||

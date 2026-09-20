@@ -445,7 +445,8 @@ void APIENTRY
 #endif
    }''','''   (void)hDevice;
    if (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-       Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
+       Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+       Format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
    } else if (Format == DXGI_FORMAT_D32_FLOAT) {
@@ -463,6 +464,7 @@ void APIENTRY
        Format == DXGI_FORMAT_D32_FLOAT ||
        Format == DXGI_FORMAT_D16_UNORM ||
        Format == DXGI_FORMAT_D24_UNORM_S8_UINT ||
+       Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
@@ -498,7 +500,8 @@ void APIENTRY
    if (!pipe->clear || !surface || !resource ||
        resource->target != PIPE_TEXTURE_2D ||
        (resource->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
-        resource->format != PIPE_FORMAT_R8G8B8A8_UNORM) ||
+        resource->format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+        resource->format != PIPE_FORMAT_R16G16B16A16_FLOAT) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
@@ -507,7 +510,7 @@ void APIENTRY
        bound->first_layer != surface->first_layer || bound->last_layer != surface->last_layer ||
        pDevice->fb.width != pipe_surface_width(surface) ||
        pDevice->fb.height != pipe_surface_height(surface)) {
-      LOG_UNSUPPORTED("ClearRenderTargetView requires one full RGBA8/BGRA8 target");
+      LOG_UNSUPPORTED("ClearRenderTargetView requires one full admitted color target");
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -1399,18 +1402,21 @@ AgxD3d10ResourceWithinRequiredLimits(
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
       bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
          (pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-          pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM) &&
+          pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+          pCreateResource->Format == DXGI_FORMAT_R16G16B16A16_FLOAT) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
-         ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight * 4) <= 0x100000 &&
+         ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight *
+          (pCreateResource->Format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8u : 4u)) <=
+            0x100000 &&
          pCreateResource->SampleDesc.Count == 1 && pCreateResource->SampleDesc.Quality == 0 &&
          pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT && pCreateResource->MapFlags == 0 &&
          pCreateResource->BindFlags == D3D10_DDI_BIND_RENDER_TARGET &&
          pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
          !pCreateResource->pInitialDataUP;
       if (!private_rt || !screen->resource_create_with_modifiers) {
-         LOG_UNSUPPORTED("Only a private uncompressed BGRA8 render target is admitted");
+         LOG_UNSUPPORTED("Only a private uncompressed admitted render target is supported");
          SetError(hDevice, E_NOTIMPL);
          return;
       }

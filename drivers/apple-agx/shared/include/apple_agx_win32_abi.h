@@ -102,6 +102,7 @@ typedef enum _APPLE_AGX_WIN32_ROLE {
 typedef enum _APPLE_AGX_WIN32_FORMAT {
   AppleAgxWin32FormatBgra8Unorm = 1u,
   AppleAgxWin32FormatRgba8Unorm = 2u,
+  AppleAgxWin32FormatRgba16Float = 3u,
 } APPLE_AGX_WIN32_FORMAT;
 
 typedef enum _APPLE_AGX_WIN32_ABI_RESULT {
@@ -276,6 +277,7 @@ typedef struct _APPLE_AGX_WIN32_COMMAND_VIEW {
 
 APPLE_AGX_U64 AppleAgxWin32CommandHash(const void *Command,
                                        APPLE_AGX_U32 CommandBytes);
+APPLE_AGX_U32 AppleAgxWin32FormatBytesPerPixel(APPLE_AGX_U32 Format);
 APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     const void *Command, APPLE_AGX_U32 CommandBytes,
     APPLE_AGX_U32 ExpectedGeneration, APPLE_AGX_U32 AllocationCount,

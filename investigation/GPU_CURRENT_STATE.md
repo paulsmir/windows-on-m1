@@ -1194,3 +1194,29 @@ Inventory remains 120 of 121 and pipeline mask zero.  The remaining work is
 strictly inside the frozen feature-required-formats row: mandatory color/typed,
 BC and packed-format families.  Do not expand the pre-hardware inventory unless
 the pinned WDK or a standard-runtime causal RED proves another prerequisite.
+
+## Required-format closure in progress: shared FP16 color storage (2026-09-20)
+R16G16B16A16_FLOAT is the first non-four-byte color target on the real native
+path.  One shared wire helper now derives bytes per pixel for color payload
+validation and batch pitch construction; resource, clear, graph and KMD gates
+admit the exact 8-byte format while Mesa/Asahi remains the owner of the emitted
+PBE and BG/EOT encodings.  The 16x16 discriminator therefore uses pitch 128 and
+proves that the Windows path no longer assumes all color storage is width*4.
+Unsupported formats remain rejected before submission.
+
+The preregistered RED failed format capability/sample-one checks and private
+resource admission before any valid FP16 draw:
+evidence/AD04-runtime-closure/required-fp16-red-20260920hz-x64/.
+Fresh x64 real producer execution PASS through both KMD placements and ordered
+retirement:
+evidence/AD04-runtime-closure/required-fp16-green-20260920ia-x64/;
+source archive SHA-256
+34ecf0e51b512f46b03525f4df04d3304dea87aac498e9668ae29f0b49a71d33.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-fp16-green-20260920ib-arm64/;
+source archive SHA-256
+cfeb6c2fe69dc23cc5a296ad27f05ddafec292407e3c2875a3a0773da1ad1895.
+
+Inventory remains 120 of 121 and pipeline mask zero.  Continue the same frozen
+feature-required-formats row with representative 1/2/16-byte typed color and
+compatible-view interpretation, then D32S8, BC block storage and packed formats.

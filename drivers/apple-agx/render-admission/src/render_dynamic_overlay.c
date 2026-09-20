@@ -694,7 +694,8 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   APPLE_AGX_BOOL qualification,desktop;
   unsigned char *work,*ta,*micro;
   qualification=Bindings && Bindings->SurfaceWidth==16u &&
-      Bindings->SurfaceHeight==16u && Bindings->SurfacePitch==64u &&
+      Bindings->SurfaceHeight==16u &&
+      (Bindings->SurfacePitch==64u || Bindings->SurfacePitch==128u) &&
       Bindings->DestinationBytes>=1024u && Bindings->DestinationBytes<=0x4000u;
   desktop=Bindings && Bindings->SurfaceWidth==2560u &&
       Bindings->SurfaceHeight==1600u && Bindings->SurfacePitch==10240u &&
