@@ -100,7 +100,9 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
       Args->pKTCallbacks->pfnRenderCb == NULL ||
       Args->DXGIBaseDDI.pDXGIBaseCallbacks == NULL)
     return E_INVALIDARG;
-  if (Args->Interface == D3D10_0_DDI_INTERFACE_VERSION) {
+  if (Args->Interface == D3D10_0_DDI_INTERFACE_VERSION ||
+      Args->Interface == D3D10_0_x_DDI_INTERFACE_VERSION ||
+      Args->Interface == D3D10_0_7_DDI_INTERFACE_VERSION) {
     if (Args->pUMCallbacks == NULL)
       return E_INVALIDARG;
     errorCallback = Args->pUMCallbacks->pfnSetErrorCb;

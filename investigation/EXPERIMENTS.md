@@ -44164,3 +44164,16 @@ ce3b247e7f4f176a7aaea8310adc20a5c8b93f8c5aa23bbcc19b04fe7b2ed77e,
 40de384f57ba58612e144713983bb1d6dff763c2fc6097b0f49f43e48bba40d9.
 Immutable EXP689 archive SHAec50f1b84fc3fc12e3571c4dd8a722911dc1e7bb2c3e83571705c832307aa075.
 Run only once in authenticated console after Code0; exact recovery unchanged.
+
+### EXP689 actual result — 2026-09-20T18:45:00Z
+
+Interactive console, Code0 and service gates passed; temporary autologon secret
+was erased before execution. Client ran once and again returned E_INVALIDARG
+before adapter reporting/draw. Mask1 is therefore hardware-reached but not the
+last CreateDevice invariant. The projected upstream Device.cpp accepts all
+D3D10_0, D3D10_0_x and D3D10_0_7 interface variants, while
+AdmissionUmdRuntimeDeviceInitialize accepted only exact D3D10_0 (plus unrelated
+WDDM1_3). A modern D3D10 runtime variant is consequently rejected by the native
+owner. The minimal correction routes all documented D3D10_0 variants through
+pUMCallbacks; tests use D3D10_0_7. No draw occurred. Exact cleanup/recovery was
+started; EXP689 must not be replayed.

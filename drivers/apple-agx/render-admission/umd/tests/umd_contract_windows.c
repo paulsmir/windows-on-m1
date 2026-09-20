@@ -691,7 +691,7 @@ static void test_runtime_device_bridge(ADMISSION_UMD_ADAPTER *Adapter,
   callbacks.pfnDestroyContextCb = BridgeDestroyContext;
   Template.pKTCallbacks = &callbacks;
   for (UINT index = 0u; index < 2u; ++index) {
-    Template.Interface = index == 0u ? D3D10_0_DDI_INTERFACE_VERSION :
+    Template.Interface = index == 0u ? D3D10_0_7_DDI_INTERFACE_VERSION :
                                       D3DWDDM1_3_DDI_INTERFACE_VERSION;
     if (index == 0u) Template.pUMCallbacks = &core10;
     else Template.p11UMCallbacks = &core11;

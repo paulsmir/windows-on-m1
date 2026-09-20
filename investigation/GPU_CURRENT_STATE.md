@@ -1681,3 +1681,10 @@ Projected native FL10 mask1 passes fresh x64 execution, ARM64 closure and
 package708 gates. Immutable archive SHA
 ec50f1b84fc3fc12e3571c4dd8a722911dc1e7bb2c3e83571705c832307aa075.
 Next stage exact package, boot Code0 and run once in authenticated console.
+
+## EXP689 CreateDevice interface RED (2026-09-20)
+Mask1 reached interactive runtime but CreateDevice still returned E_INVALIDARG
+before adapter reporting/draw. Native owner accepted only exact D3D10_0 although
+the projected upstream entry accepts D3D10_0, _x and _7. Current fix admits the
+three documented variants through the same D3D10 core callbacks; no feature or
+hardware path changes. EXP689 cleaned; next run requires fresh gates/package.
