@@ -1628,3 +1628,18 @@ Current Air state is healthy ordinary377/392 Code28 recovery. EXP686 is NOT_RUN.
 Next perform its exact stage/reboot/full-owner bound preflight; execute the
 standard client once only if APPL0002 reaches Code0 and
 StartStage12/PlatformStage14. No inventory expansion precedes it.
+
+## EXP686 hardware result and context-0 fix (2026-09-20)
+EXP686 exact package706 confirmed the stage-9 fix: Platform advanced to stage12.
+Bound preflight still failed Code43, so standard client remains NOT_RUN. Receipts
+are BackendStartResult6/FirmwareResult5/ProviderFailurePhase2 and
+Context0MapResult1 with zero leaves; retained prepare/activate and firmware IO
+passed. Exact cleanup restored ordinary377/392 Code28 with no package/service/
+files/E9BE15 signer and healthy 8CPU/NVMe/input.
+
+The next cause is deterministic: context0 broker retained literal 90/200 guards
+after the authoritative graph became 94 mappings/207 leaves. The dormant broker
+test now executes in worktrees and REDs at Map; GREEN derives leaf count from the
+validated inventory and passes every one of 207 injected MAP failures, QUERY,
+retire/retry and second-lifetime cleanup. Current fix is offline-only and must be
+committed, rebuilt and preregistered before the next hardware preflight.

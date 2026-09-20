@@ -64,7 +64,7 @@ static void peer_write32(void *ctx,unsigned offset,unsigned value) {
 }
 int main(void) {
   unsigned fail;
-  for(fail=0;fail<=201;++fail) {
+  for(fail=0;fail<=208;++fail) {
     struct peer p={0}; FAKE_MEMORY memory; APPLE_AGX_MEMORY_IO memory_io;
     APPLE_AGX_INITDATA_MEMORY_GRAPH graph;
     APPLE_AGX_CONFIG_SNAPSHOT snapshot=physical_snapshot();
@@ -74,12 +74,12 @@ int main(void) {
     init_fixture(&memory,&memory_io,&graph); windows_memory=&memory;
     assert(AppleAgxInitdataMemoryPrepareBroker(&graph,&memory_io,&snapshot)==0);
     start(&p.native); p.native.core.Ops.TranslateGuest=guest_translate;
-    p.fail_map=fail<=200?fail:0; p.fail_query=fail==201;
+    p.fail_map=fail<=207?fail:0; p.fail_query=fail==208;
     result=AppleAgxContext0BrokerMap(&journal,&graph,&io,1,ROOT_PA,resolve_ipa,0);
-    if(fail==201) assert(result==AppleAgxContext0QueryFailed && journal.Count==1);
+    if(fail==208) assert(result==AppleAgxContext0QueryFailed && journal.Count==1);
     else if(fail) assert(result!=0 && journal.Count==fail-1);
     else {
-      assert(result==0 && journal.Count==200 && graph.MappingsReady);
+      assert(result==0 && journal.Count==207 && graph.MappingsReady);
       assert(AppleAgxContext0BrokerVerify(&journal)==0);
       p.fail_unmap=1;
       assert(AppleAgxContext0BrokerRetire(&journal)!=0);
@@ -87,7 +87,7 @@ int main(void) {
       p.fail_unmap=0;
       p.fail_absent=1;
       assert(AppleAgxContext0BrokerRetire(&journal)!=0);
-      assert(journal.Count==200 && p.native.core.MappingCount==199);
+      assert(journal.Count==207 && p.native.core.MappingCount==206);
       assert(AppleAgxInitdataMemoryDestroy(&graph)!=0 && memory.FreeCount==0);
       p.fail_absent=0;
     }
@@ -96,7 +96,7 @@ int main(void) {
     check_prefix(&p.native);
     assert(p.native.core.SystemBytes==0x4000);
     assert(hv_agx_retained_close(&p.native.core,1,1)==0 && !p.native.live);
-    assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && memory.FreeCount==89);
+    assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && memory.FreeCount==93);
     assert(!graph.Roots.Ttbr0PhysicalAddress && !graph.Roots.Ttbr1PhysicalAddress);
     if(!fail) {
       memset(&memory,0,sizeof(memory));
@@ -109,7 +109,7 @@ int main(void) {
       assert(AppleAgxContext0BrokerRetire(&journal)==0);
       check_prefix(&p.native);
       assert(hv_agx_retained_close(&p.native.core,2,1)==0 && !p.native.live);
-      assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && memory.FreeCount==89);
+      assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && memory.FreeCount==93);
     }
   }
   return 0;

@@ -44016,3 +44016,37 @@ Recovery: evidence first, then remove only the exact hash-matched OEM package,
 stale APPL0002/service and E9BE15 trust; preserve AppleInput71CD0A, TESTSIGNING
 and SAC; restore ordinary377/392 one-Code28. Use hidden377/385 only if ordinary
 Windows is unreachable.
+
+### EXP686 actual result — 2026-09-20T17:56:17Z
+
+Verdict: **STAGE-9 CORRECTION CONFIRMED; CANDIDATE REJECTED AT LATER BOUND
+PREFLIGHT**. The standard D3D10 client was **NOT_RUN**.
+
+The exact archive, all members and signer verified on Air; package706 staged as
+oem5.inf without install. After the controlled full-owner boot, all installed
+INF/SYS/UMD/client hashes matched. Windows remained SSH-live with eight CPUs,
+NVMe/input and no current-boot 41/1001/129/4101, but APPL0002 was Code43 and the
+service stopped.
+
+The failure advanced from EXP685 PlatformStage9 to PlatformStage12. Durable
+receipts: StartStage8/Status0xC0000483, PlatformStage12/Status0xC0000483,
+BackendStartResult6 (`FirmwareFailed`), FirmwareResult5 (`TransportFailed`),
+ProviderBootFailurePhase2, Context0MapResult1 (`Invalid`), zero mapped/verified
+leaves and no uncertain range. Retained root prepare/activate and firmware IO/
+hwdata receipts succeeded. This confirms the stage-9 Prepared/count correction
+on hardware and isolates the next prerequisite before any context-0 MAP.
+
+Source review found the context-0 broker still required literal 90 mappings and
+200 leaves while the authoritative graph now contains 94 mappings/207 leaves.
+A previously dormant host test was made executable, moved to the same 207-leaf
+inventory and produced an exact RED at Context0BrokerMap. The minimal GREEN
+derives expected leaves from the fully validated mapping inventory while
+retaining the 256-leaf bound and all object/range/protection/overlap checks; all
+207 injected MAP failures, QUERY failure, retire retry and two-lifetime cleanup
+paths pass.
+
+Evidence is under main-root `.local/experiments/EXP686-live/`. Exact oem5,
+service/devnode residue and only E9BE15 trust were removed before ordinary
+recovery. Final ordinary377/392 health is one APPL0002 Code28/null INF, no
+AppleAgx package/service/SYS/UMD/signer, eight CPUs, NVMe and keyboard alive.
+A new clean candidate and preregistration are required; never replay EXP686.

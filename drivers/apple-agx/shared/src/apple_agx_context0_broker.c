@@ -13,12 +13,27 @@ static unsigned char exchange(APPLE_AGX_CONTEXT0_BROKER *j,unsigned op,
           (AGX_RR_FLAG_ACTIVE|AGX_RR_FLAG_PREFIX_UNCHANGED);
 }
 
+static unsigned graph_leaf_count(const APPLE_AGX_INITDATA_MEMORY_GRAPH *g) {
+  unsigned i,total=0;
+  if(!g || g->Inventory.MappingCount!=
+      APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY-1u) return 0;
+  for(i=0;i<g->Inventory.MappingCount;++i) {
+    const APPLE_AGX_UAT_MAPPING *m=&g->UatMappings[i];
+    unsigned leaves;
+    if(!m->Length || (m->Length&0x3fff)) return 0;
+    leaves=(unsigned)(m->Length/0x4000);
+    if(leaves>APPLE_AGX_CONTEXT0_MAX_LEAVES-total) return 0;
+    total+=leaves;
+  }
+  return total;
+}
+
 static unsigned char graph_valid(const APPLE_AGX_INITDATA_MEMORY_GRAPH *g) {
-  unsigned i,k,total=0;
+  unsigned i,k,total=0,expected=graph_leaf_count(g);
   if(!g || !g->Initialized || !g->Built || !g->BrokerOnly || g->MappingsReady ||
       g->BrokerOutstanding || g->Roots.Ttbr0PhysicalAddress || g->Roots.Ttbr1PhysicalAddress ||
       g->TtbrPair.Ttbr0 || g->TtbrPair.Ttbr1 || g->Inventory.PageCount ||
-      g->Inventory.MappingCount!=90) return 0;
+      !expected) return 0;
   for(i=0;i<g->Inventory.MappingCount;++i) {
     const APPLE_AGX_UAT_MAPPING *m=&g->UatMappings[i];
     const APPLE_AGX_MEMORY_OBJECT *o=g->MappingObjects[i];
@@ -40,7 +55,7 @@ static unsigned char graph_valid(const APPLE_AGX_INITDATA_MEMORY_GRAPH *g) {
          p->PhysicalAddress<m->PhysicalAddress+m->Length) return 0;
     }
   }
-  return total==200;
+  return total==expected;
 }
 
 int AppleAgxContext0BrokerMap(APPLE_AGX_CONTEXT0_BROKER *j,
@@ -87,8 +102,10 @@ int AppleAgxContext0BrokerMap(APPLE_AGX_CONTEXT0_BROKER *j,
 }
 
 int AppleAgxContext0BrokerVerify(APPLE_AGX_CONTEXT0_BROKER *j) {
-  unsigned i;
-  if(!j || !j->Graph || !j->Graph->MappingsReady || j->Uncertain || j->Count!=200)
+  unsigned i,expected;
+  if(!j || !j->Graph) return AppleAgxContext0Invalid;
+  expected=graph_leaf_count(j->Graph);
+  if(!j->Graph->MappingsReady || j->Uncertain || !expected || j->Count!=expected)
     return AppleAgxContext0Invalid;
   for(i=0;i<j->Count;++i)
     if(j->Leaves[i].State!=1 || !exchange(j,AGX_RR_QUERY,&j->Leaves[i]) ||
