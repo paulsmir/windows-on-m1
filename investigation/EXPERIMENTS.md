@@ -44561,3 +44561,21 @@ DDI/device-reason/client exit plus registry/events before exact cleanup/recovery
 Physical comparison: EXP695 operator saw wallpaper with black taskbar/Start
 after initially black display. Record current observation separately; absent
 operator evidence means unobserved, never inferred physical success.
+
+### EXP696 finalized artifact gate — 2026-09-20T20:58:40.331646+00:00
+UMD/KMD analysis0/0, Universal/Inf2Cat and catalog membership PASS.
+Same E9BE15 signer; builder self-signed root untrusted as expected. Require
+Valid on Air after exact public-cert import before staging.
+package/AppleAgxRenderAdmission.inf: cdf9fc84dd7066d546361e6fec5ab2fd282a7fd53fa94e48a58aae6ba271fb7a
+package/AppleAgxRenderAdmission.sys: 9a563e1056e71e6f8ec4afeb4a7aa40e4156a125cab585b85d78a6ae4c53e6e0
+package/AppleAgxRenderAdmissionUmd.dll: d3a8aaba7c58a74f3c9b7c7d4589506f7cbc58b6e50dd86d5c28747ecfdf8aec
+package/appleagxrenderadmission.cat: 0eef721f8b901758bc91cf730c27ddec4f4ad38d06a420bf5c75f1183aed8d45
+qualification/AppleAgxD3d10Standard.exe: ce5f0256b7b3de4f35a0c0113aa7b86d4f556c85031a993f28937358afe3fb40
+qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable .local/experiments/EXP696-sampler-ranges-712.zip SHA 5c841936cd4ae2757447dbca31bac9cbe72c38cd726bd2811279f2fcda3f4e60.
+Exact manifest stage without /install; same full-owner584/406 and recovery
+377/392. Require installed hashes/Code0/Running/Start12/Platform14; clear
+authorized temporary autologon and execute standard client once in console
+with APPLE_AGX_UMD_TRACE_FILE, bounded120s. Record actual sampler-range fields
+and next failure or physical completion; no replay. Collect all evidence in
+main-root .local/experiments/EXP696-live then exact cleanup/recovery.

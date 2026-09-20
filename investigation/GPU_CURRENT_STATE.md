@@ -1896,3 +1896,9 @@ explicit opt-in known-RED unused-high-slot draw and does not claim it supported.
 Host range/zero-count/atomic-rejection tests and direct scanout guards pass.
 Next package712/sign/hash and EXP696, retaining diagnostics to measure actual
 runtime Offset/Count/absolute non-null mask. No further inventory expansion.
+
+## EXP696 package712 preregistered
+Source51a4201c selected-path x64/ARM64 and package gates PASS. Immutable archive
+SHA5c841936cd4ae2757447dbca31bac9cbe72c38cd726bd2811279f2fcda3f4e60. Next exact stage and once-only standard
+runtime test with actual sampler-range receipts. Known optional slot15 draw RED
+remains documented; no claim of support or physical rendering yet.
