@@ -1337,3 +1337,27 @@ Inventory remains 120 of 121 and pipeline mask zero.  The next format boundary
 is block-aware BC resource/upload/view arithmetic and sampling; mip/layer range
 validation must be carried by that shared texture implementation rather than a
 second texture path.
+
+## Required-format closure in progress: BC1-BC5 block storage (2026-09-20)
+The shared texture resource/view/blit path now uses block-aware size accounting:
+for every mip it computes rounded block width and height before multiplying by
+block bytes, depth and array size.  BC1 sRGB proves an 8-byte block, BC3 sRGB a
+16-byte block, and BC5 SNORM signed 16-byte interpretation.  Each uses a 7x5
+initial upload (2x2 blocks), compatible typed SRV, real version-6 Mesa
+util-blitter draw, both KMD placements and ordered retirement.  BC2 and BC4 are
+covered by the same explicit compatible-view family table and storage classes.
+
+The causal executable RED rejected BC1 at SRV family admission before
+submission:
+evidence/AD04-runtime-closure/required-bc1-red-20260920ja-x64/.
+Fresh x64 BC1/BC3/BC5 producer suite PASS:
+evidence/AD04-runtime-closure/required-bc-family-green-20260920jc-x64/;
+source archive SHA-256
+6972e712c6fc2c42fe1b3d47be0f8980df9ac8a03788e53018268866c08496d3.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-bc-family-green-20260920jd-arm64/;
+source archive SHA-256
+dfc1beee4639a2b709b9a06a8da2885be05c6d80334e05f45ac1f709dad2b450.
+
+Inventory remains 120 of 121 and pipeline mask zero.  Packed formats and the
+complete frozen format-use descriptor-table gate remain before aggregate PASS.

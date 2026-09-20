@@ -325,7 +325,10 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
    unsigned index;
    if (!rsrc || rsrc->base.target != PIPE_TEXTURE_2D ||
        (rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_R8G8B8A8_UNORM) ||
+        rsrc->base.format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+        rsrc->base.format != PIPE_FORMAT_DXT1_RGBA &&
+        rsrc->base.format != PIPE_FORMAT_DXT5_RGBA &&
+        rsrc->base.format != PIPE_FORMAT_RGTC2_UNORM) ||
        rsrc->layout.compressed || rsrc->layout.level_offsets_B[0] ||
        rsrc->base.last_level || rsrc->base.array_size != 1 ||
        !AgxWin32AsahiEmissionBegin(capture->Backend->Native, ptr.cpu, ptr.gpu,

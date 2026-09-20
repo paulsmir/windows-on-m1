@@ -1227,6 +1227,19 @@ extern "C" BOOL AgxD3d10FormatViewCompatible(
              view == DXGI_FORMAT_R8G8B8A8_UINT ||
              view == DXGI_FORMAT_R8G8B8A8_SNORM ||
              view == DXGI_FORMAT_R8G8B8A8_SINT;
+   if (resource == DXGI_FORMAT_BC1_TYPELESS)
+      return view == DXGI_FORMAT_BC1_UNORM ||
+             view == DXGI_FORMAT_BC1_UNORM_SRGB;
+   if (resource == DXGI_FORMAT_BC2_TYPELESS)
+      return view == DXGI_FORMAT_BC2_UNORM ||
+             view == DXGI_FORMAT_BC2_UNORM_SRGB;
+   if (resource == DXGI_FORMAT_BC3_TYPELESS)
+      return view == DXGI_FORMAT_BC3_UNORM ||
+             view == DXGI_FORMAT_BC3_UNORM_SRGB;
+   if (resource == DXGI_FORMAT_BC4_TYPELESS)
+      return view == DXGI_FORMAT_BC4_UNORM || view == DXGI_FORMAT_BC4_SNORM;
+   if (resource == DXGI_FORMAT_BC5_TYPELESS)
+      return view == DXGI_FORMAT_BC5_UNORM || view == DXGI_FORMAT_BC5_SNORM;
    return FALSE;
 }
 
@@ -1362,21 +1375,25 @@ AgxD3d10ResourceWithinRequiredLimits(
 
    enum pipe_format format = FormatTranslate(resource->Format, false);
    uint64_t element = util_format_get_blocksize(format);
+   uint64_t blockWidth = util_format_get_blockwidth(format);
+   uint64_t blockHeight = util_format_get_blockheight(format);
    uint64_t maximum =
       (uint64_t)D3D10_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
-   if (!element) return false;
+   if (!element || !blockWidth || !blockHeight) return false;
    uint64_t total = 0;
    for (unsigned level = 0; level < resource->MipLevels; ++level) {
       uint64_t levelWidth = MAX2(1ULL, width >> level);
       uint64_t levelHeight = MAX2(1ULL, height >> level);
       uint64_t levelDepth = MAX2(1ULL, depth >> level);
-      if (levelWidth > maximum / levelHeight ||
-          levelWidth * levelHeight > maximum / levelDepth ||
-          levelWidth * levelHeight * levelDepth > maximum / array ||
-          levelWidth * levelHeight * levelDepth * array >
+      uint64_t blocksWide = (levelWidth + blockWidth - 1) / blockWidth;
+      uint64_t blocksHigh = (levelHeight + blockHeight - 1) / blockHeight;
+      if (blocksWide > maximum / blocksHigh ||
+          blocksWide * blocksHigh > maximum / levelDepth ||
+          blocksWide * blocksHigh * levelDepth > maximum / array ||
+          blocksWide * blocksHigh * levelDepth * array >
              (maximum - total) / element)
          return false;
-      total += levelWidth * levelHeight * levelDepth * array * element;
+      total += blocksWide * blocksHigh * levelDepth * array * element;
    }
    return true;
 }'''),
@@ -1652,7 +1669,8 @@ AgxD3d10ResourceWithinRequiredLimits(
          (source->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE)&&
          sample!=PIPE_FORMAT_NONE&&dst->target==PIPE_TEXTURE_2D&&
          src->target==PIPE_TEXTURE_2D&&dst->width0==16&&dst->height0==16&&
-         src->width0==16&&src->height0==16&&dst->depth0==1&&src->depth0==1&&
+         src->width0&&src->width0<=16&&src->height0&&src->height0<=16&&
+         dst->depth0==1&&src->depth0==1&&
          !dst->last_level&&!src->last_level&&dst->array_size==1&&
          src->array_size==1&&dst->nr_samples<=1&&src->nr_samples<=1&&
          (dst->format==PIPE_FORMAT_B8G8R8A8_UNORM||
@@ -1660,7 +1678,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       if(!valid) { SetError(hDevice,E_NOTIMPL);return; }
       struct pipe_blit_info info={};
       info.src.resource=src;info.src.level=0;info.src.format=sample;
-      info.src.box.width=info.src.box.height=16;info.src.box.depth=1;
+      info.src.box.width=src->width0;info.src.box.height=src->height0;
+      info.src.box.depth=1;
       info.dst.resource=dst;info.dst.level=0;info.dst.format=dst->format;
       info.dst.box.width=info.dst.box.height=16;info.dst.box.depth=1;
       info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
