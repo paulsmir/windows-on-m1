@@ -29,10 +29,11 @@ static void leave(void *context) {
   ReleaseSRWLockExclusive(&c->Device->ScreenBufferLock);
 }
 
-static int associate(void *context,APPLE_AGX_U64 token,const void *key,APPLE_AGX_U64 serial) {
+static int associate(void *context,APPLE_AGX_U64 token,const void *key,
+    APPLE_AGX_U64 serial,AGX_WIN32_ASAHI_MAP_RELEASE releaseMap) {
   ADMISSION_UMD_ASAHI_OWNER *c=(ADMISSION_UMD_ASAHI_OWNER *)context;
   int result=0;
-  if(!c || !c->Device || !c->Backend || !key || !serial) return 0;
+  if(!c || !c->Device || !c->Backend || !key || !serial || !releaseMap) return 0;
   ADMISSION_UMD_DEVICE *d=c->Device;
   AcquireSRWLockExclusive(&d->ScreenBufferLock);
   if(!d->ScreenClosing) {
@@ -42,7 +43,8 @@ static int associate(void *context,APPLE_AGX_U64 token,const void *key,APPLE_AGX
     for(UINT i=0;!duplicate && i<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++i) {
       ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
       if(b->Active && b->Token==token && !b->Transition && !b->NativeBo && !b->SubmissionHolds) {
-        b->NativeBo=key; b->NativeBoSerial=serial; b->NativeBackend=c->Backend; result=1; break;
+        b->NativeBo=key; b->NativeBoSerial=serial; b->NativeBackend=c->Backend;
+        b->NativeMapRelease=releaseMap; result=1; break;
       }
     }
   }
@@ -58,7 +60,8 @@ static int detach(void *context,APPLE_AGX_U64 token,const void *key,APPLE_AGX_U6
     ADMISSION_UMD_SCREEN_BUFFER *b=&d->ScreenBuffers[i];
     if(b->Active && b->Token==token && b->NativeBo==key && b->NativeBoSerial==serial &&
        b->NativeBackend==c->Backend && !b->Transition && !b->SubmissionHolds && !b->SourceHolds) {
-      b->NativeBo=NULL; b->NativeBoSerial=0; b->NativeBackend=NULL; result=1; break;
+      b->NativeBo=NULL; b->NativeBoSerial=0; b->NativeBackend=NULL;
+      b->NativeMapRelease=NULL; result=1; break;
     }
   }
   ReleaseSRWLockExclusive(&d->ScreenBufferLock);

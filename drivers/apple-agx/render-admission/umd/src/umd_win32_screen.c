@@ -254,6 +254,107 @@ HRESULT AdmissionUmdScreenDetachNativeBo(
   return result;
 }
 
+HRESULT AdmissionUmdScreenPrepareSubmissionMaps(
+    ADMISSION_UMD_DEVICE *Device,
+    const ADMISSION_UMD_DRAW_SUBMISSION *Submission) {
+  ADMISSION_UMD_SCREEN_BUFFER *buffers[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  D3DKMT_HANDLE allocations[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  PVOID addresses[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
+  D3DDDICB_UNLOCK unlock;
+  UINT index, slot, count = 0u;
+  HRESULT result = E_INVALIDARG;
+  if (Device == NULL || Submission == NULL ||
+      Device->Magic != ADMISSION_UMD_DEVICE_MAGIC ||
+      Device->KernelCallbacks == NULL ||
+      Device->KernelCallbacks->pfnUnlockCb == NULL)
+    return E_INVALIDARG;
+
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  if (Device->DrawSubmission != Submission ||
+      Submission->Phase != AdmissionDrawSealed ||
+      Submission->Count == 0u ||
+      Submission->Count > APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES)
+    goto locked_done;
+
+  /* Validate the whole transition before changing any slot. The captured
+   * identities are immutable and Submission->Count is allocation-deduplicated. */
+  for (index = 0u; index < Submission->Count; ++index) {
+    const AGX_WIN32_RELOC_ALLOCATION *identity =
+        &Submission->Identities[index];
+    ADMISSION_UMD_SCREEN_BUFFER *buffer = NULL;
+    for (slot = 0u; slot < ADMISSION_UMD_SCREEN_BUFFER_LIMIT; ++slot) {
+      ADMISSION_UMD_SCREEN_BUFFER *candidate = &Device->ScreenBuffers[slot];
+      if (candidate->Active && candidate->Token == identity->Token) {
+        buffer = candidate;
+        break;
+      }
+    }
+    if (buffer == NULL || buffer->Serial != identity->Serial ||
+        buffer->Bytes != identity->Bytes || buffer->Transition ||
+        buffer->KernelAllocation != Submission->Allocations[index].hAllocation)
+      goto locked_done;
+    if (!buffer->Mapped)
+      continue;
+    if (buffer->NativeBo == NULL || buffer->NativeMapRelease == NULL ||
+        buffer->LockedBase == NULL ||
+        !buffer->NativeMapRelease(
+            buffer->NativeBo, buffer->LockedBase, FALSE))
+      goto locked_done;
+    buffers[count] = buffer;
+    allocations[count] = buffer->KernelAllocation;
+    addresses[count] = buffer->LockedBase;
+    ++count;
+  }
+  if (count == 0u) {
+    result = S_OK;
+    goto locked_done;
+  }
+  for (index = 0u; index < count; ++index)
+    buffers[index]->Transition = TRUE;
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+
+  ZeroMemory(&unlock, sizeof(unlock));
+  unlock.NumAllocations = count;
+  unlock.phAllocations = allocations;
+  result = Device->KernelCallbacks->pfnUnlockCb(
+      Device->RuntimeDevice.handle, &unlock);
+
+  AcquireSRWLockExclusive(&Device->ScreenBufferLock);
+  if (FAILED(result)) {
+    for (index = 0u; index < count; ++index)
+      buffers[index]->Transition = FALSE;
+    goto locked_done;
+  }
+  for (index = 0u; index < count; ++index) {
+    ADMISSION_UMD_SCREEN_BUFFER *buffer = buffers[index];
+    if (!buffer->Active || !buffer->Transition || !buffer->Mapped ||
+        buffer->KernelAllocation != allocations[index] ||
+        buffer->LockedBase != addresses[index] ||
+        !buffer->NativeMapRelease(
+            buffer->NativeBo, addresses[index], TRUE)) {
+      Device->DrawTerminal = TRUE;
+      result = E_FAIL;
+      break;
+    }
+    buffer->LockedBase = NULL;
+    buffer->LockedAccess = 0u;
+    buffer->Mapped = FALSE;
+    buffer->Transition = FALSE;
+  }
+  if (FAILED(result)) {
+    for (; index < count; ++index)
+      buffers[index]->Transition = FALSE;
+  } else {
+    Device->LastScreenError = S_OK;
+  }
+
+locked_done:
+  ReleaseSRWLockExclusive(&Device->ScreenBufferLock);
+  if (FAILED(result))
+    Device->LastScreenError = result;
+  return result;
+}
+
 BOOL AdmissionUmdScreenHasLiveSources(ADMISSION_UMD_DEVICE *Device) {
   UINT index;
   BOOL live = FALSE;

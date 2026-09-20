@@ -12,6 +12,18 @@ struct windows_bo {
   AGX_WIN32_ASAHI_BACKEND *Backend;
 };
 static void native_map(struct agx_device *,struct agx_bo *,void *);
+static int release_map(const void *key,const void *expected,int commit) {
+  struct windows_bo *bo=(struct windows_bo *)key;
+  if(!bo || !expected || bo->Base._map!=expected ||
+     bo->Backing.CpuAddress!=expected ||
+     !bo->Backing.Buffer.Transport.Mapped) return 0;
+  if(commit) {
+    bo->Base._map=NULL;
+    bo->Backing.CpuAddress=NULL;
+    bo->Backing.Buffer.Transport.Mapped=APPLE_AGX_FALSE;
+  }
+  return 1;
+}
 
 int AgxWin32AsahiAttach(AGX_WIN32_ASAHI_BACKEND *b, struct agx_device *native,
     AGX_WIN32_SCREEN *screen, const AGX_WIN32_ASAHI_OWNER_OPS *ops, void *owner,
@@ -43,7 +55,7 @@ static int dispose(struct windows_bo *bo) {
                    bo->Backing.ConstructionSerial)) return 0;
   if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=AgxWin32NativeDeviceSuccess) {
     if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
-                        bo->Backing.ConstructionSerial)) b->Failed=1;
+                        bo->Backing.ConstructionSerial,release_map)) b->Failed=1;
     return 0;
   }
   --b->LiveBos;
@@ -94,7 +106,7 @@ struct agx_bo *agx_bo_create(struct agx_device *native,size_t bytes,unsigned ali
   bo->Coordinate.flags=(flags&AGX_BO_LOW_VA)?AGX_VA_USC:0;
   bo->Base.va=&bo->Coordinate;
   if(!b->Ops.Associate(b->Owner,bo->Backing.Buffer.Transport.Token,&bo->Base,
-                      bo->Backing.ConstructionSerial)) {
+                      bo->Backing.ConstructionSerial,release_map)) {
     if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=AgxWin32NativeDeviceSuccess)
       b->UnpublishedBo=bo;
     else free(bo);
@@ -136,7 +148,7 @@ struct agx_bo *AgxWin32AsahiImportBo(
   bo->Coordinate.addr=bo->Backing.ConstructionAddress;
   bo->Coordinate.size_B=buffer->Transport.Bytes;bo->Base.va=&bo->Coordinate;
   if(!b->Ops.Associate(b->Owner,buffer->Transport.Token,&bo->Base,
-                       bo->Backing.ConstructionSerial)) {
+                      bo->Backing.ConstructionSerial,release_map)) {
     if(AgxWin32NativeDeviceDestroyBo(&b->Buffers,&bo->Backing)!=
        AgxWin32NativeDeviceSuccess) b->UnpublishedBo=bo;
     else free(bo);
@@ -157,7 +169,6 @@ int AgxWin32AsahiClass(AGX_WIN32_ASAHI_BACKEND *b,struct agx_bo *base,
   *classId=bo->Backing.Buffer.ClassId;
   return 1;
 }
-
 static void native_map(struct agx_device *native,struct agx_bo *base,void *fixed) {
   struct windows_bo *bo=(struct windows_bo *)base;
   void *address=NULL;

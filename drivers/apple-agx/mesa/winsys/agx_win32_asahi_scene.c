@@ -228,12 +228,13 @@ int AgxWin32AsahiContextDrawReceipt(struct pipe_context *ctx) {
       !backend->Failed && !native->any_faults;
 }
 int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
-    struct pipe_stream_output_target *base,APPLE_AGX_U32 value) {
+  struct pipe_stream_output_target *base,APPLE_AGX_U32 value) {
   struct agx_streamout_target *target=base?agx_so_target(base):NULL;
   struct agx_resource *offset=target&&target->offset?agx_resource(target->offset):NULL;
-  if(!target||!offset||!offset->bo||!offset->bo->_map)
+  void *map=offset&&offset->bo?agx_bo_map(offset->bo):NULL;
+  if(!target||!offset||!offset->bo||!map)
     return 0;
-  memcpy(offset->bo->_map,&value,sizeof(value));
+  memcpy(map,&value,sizeof(value));
   util_range_add(&offset->base,&offset->valid_buffer_range,0,sizeof(value));
   return 1;
 }

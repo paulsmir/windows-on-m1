@@ -62,7 +62,9 @@ static HRESULT APIENTRY PoolLock(HANDLE h,D3DDDICB_LOCK *a) {
   return E_INVALIDARG;
 }
 static HRESULT APIENTRY PoolUnlock(HANDLE h,const D3DDDICB_UNLOCK *a) {
-  (void)h; (void)a; ++PoolUnlocks;
+  (void)h;
+  if(!a || !a->NumAllocations || !a->phAllocations) return E_INVALIDARG;
+  PoolUnlocks+=a->NumAllocations;
   if(PoolFailUnlock) { --PoolFailUnlock; return E_FAIL; }
   return S_OK;
 }
@@ -224,6 +226,16 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
   ADMISSION_WIN32_ALLOCATION_FACT facts[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   RUNTIME_REQUIRE(device && h==device->RuntimeDevice.handle &&
       r->hContext==device->KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
+  if(device) for(unsigned allocation=0;allocation<r->NumAllocations;++allocation) {
+    ADMISSION_UMD_SCREEN_BUFFER *buffer=NULL;
+    for(unsigned slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot)
+      if(device->ScreenBuffers[slot].Active &&
+         device->ScreenBuffers[slot].KernelAllocation==
+             device->AllocationList[allocation].hAllocation) {
+        buffer=&device->ScreenBuffers[slot];break;
+      }
+    RUNTIME_REQUIRE(buffer && (!buffer->NativeBo || !buffer->Mapped));
+  }
   if(!device || AppleAgxWin32CommandValidate(device->CommandBuffer,r->CommandLength,
       device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
   RUNTIME_REQUIRE((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(view.Header->Version)) &&

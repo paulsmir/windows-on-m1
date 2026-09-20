@@ -2000,3 +2000,57 @@ producer; archive6e386d3c840b96410fd416e5e66a0be1128b50bae048ecc75fd013f71ce409f
 Recovery after698 verified Code28/no package/service/files/trust,8CPU/NVMe/input.
 Next exact signed715 standard client once; missing matching receipt alone remains
 inconclusive. Physical damage EXP698 operator verdict PERSISTS.
+
+## EXP699 and current locked-allocation boundary
+Package715 repeats native seal S_OK then pfnRenderCb E_FAIL; no matching KMD
+receipt is retained in device, Device Parameters, or service keys. Exact SYS
+contains the logger, but write availability is unproven, so absence remains
+inconclusive. Operator reports corruption PERSISTS; photo SHA03ff5ac4d80090c459241df4982236c24a7c2a43e3f03b46c899b7369f7a0926.
+Exact cleanup and ordinary377/392 recovery after rescan are verified Code28/no
+package/service/files/trust,8CPU/NVMe/input/no events.
+
+Microsoft's lock callback contract requires the UMD normally to unlock cached
+allocation mappings before Render. Current native BOs remain mapped across
+pfnRenderCb. Actual producer RED render-unlock-red-20260921mw-x64 exit17 proves
+17 participating native allocations are still mapped at the callback boundary.
+Implement request-scoped unlock after immutable capture/seal, invalidate the
+native cached pointer atomically, and allow lazy remap only after submission
+holds retire. Do not infer local-memory placement or exact HRESULT from the
+contract conflict alone.
+HARDWARE ROADMAP
+[PASS] Standard runtime native draw/capture/seal on Air; exact EXP699 cleanup
+and recovery; deterministic mapped-allocation RED at Render.
+[NOW] Unlock submitted native allocations before pfnRenderCb while preserving
+capture holds, lazy remap and same-fence retirement; x64 execution+ARM64 link.
+[NEXT] Exact package/sign/hash/preregister, then immediate Air discriminator.
+[HW] Successful KMD Render/Patch/Submit, physical completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## Submitted native allocations unlocked before Render — offline PASS
+Microsoft's lock contract and the mw RED identified the exact deterministic
+violation: submitted native allocations retained pfnLockCb mappings at the
+pfnRenderCb boundary. The request-scoped fix validates every deduplicated
+allocation identity, performs one pfnUnlockCb before Render, atomically clears
+UMD, native-BO and transport mapping state, and preserves source/submission
+holds until the existing fence retirement. Persistent BOs remap lazily only
+after retirement. No allocator, command composer, physical mapping, capability
+or submission architecture changed.
+
+The first GREEN attempt exposed a mirrored Transport.Mapped teardown defect;
+clearing it with the same successful unlock restored zero-ref collection.
+The frontend stream-output fixture now performs its CPU update after retirement
+and proves the real lazy-remap path. render-unlock-20260921ne x64 execution0 and
+ARM64 link0; both source archives match all473 current driver files. x64 archive
+9be2e77ec1b7c5c102a11ce986bc6a81d6b1a424fa07e3ca8be00cbbd7a6c545;
+ARM64 archive75d95f0d94b40208c572747189645e49435aea09622ae4578c366e05906d3072.
+Host transport/correlation/sampler/change-ledger tests7 PASS. Next exact package
+build/sign/hash and preregistered Air run; physical Render acceptance remains
+unproven.
+HARDWARE ROADMAP
+[PASS] Actual standard draw/capture/seal; documented unlock-before-Render full
+offline lifecycle including retirement, lazy remap and teardown; ARM64 link.
+[NOW] Exact package analysis/sign/hash and preregistration for Air.
+[NEXT] One standard-runtime Air discriminator; if Render advances, collect
+KMD Render/Patch/Submit/completion/Present evidence before any new scope.
+[HW] Successful physical KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.

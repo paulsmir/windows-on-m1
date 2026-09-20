@@ -210,6 +210,24 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
   }
   CopyMemory(d->CommandBuffer,s->Command,s->CommandBytes);
   CopyMemory(d->AllocationList,s->Allocations,s->Count*sizeof(s->Allocations[0]));
+  ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+  result=AdmissionUmdScreenPrepareSubmissionMaps(d,s);
+  AcquireSRWLockExclusive(&d->ScreenBufferLock);
+  if(FAILED(result)) {
+    if(owns(d,s) && s->Phase==AdmissionDrawSealed) {
+      release(d,s); s->Phase=AdmissionDrawRejected;
+    }
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    return result;
+  }
+  if(!owns(d,s) || s->Phase!=AdmissionDrawSealed || d->ScreenClosing ||
+     d->DrawTerminal) {
+    if(owns(d,s) && s->Phase==AdmissionDrawSealed) {
+      release(d,s); s->Phase=AdmissionDrawRejected;
+    }
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    return E_FAIL;
+  }
   render.hContext=s->Context; render.CommandLength=s->CommandBytes;
   render.NumAllocations=s->Count;
   s->Phase=AdmissionDrawCalling;

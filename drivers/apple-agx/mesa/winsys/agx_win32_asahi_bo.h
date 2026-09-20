@@ -9,10 +9,13 @@ struct agx_bo;
 struct pipe_screen;
 struct pipe_context;
 struct _AGX_WIN32_ASAHI_CAPTURE;
+typedef int (*AGX_WIN32_ASAHI_MAP_RELEASE)(
+    const void *NativeBo, const void *ExpectedAddress, int Commit);
 typedef struct {
   int (*Enter)(void *, AGX_WIN32_SCREEN *);
   void (*Leave)(void *);
-  int (*Associate)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64);
+  int (*Associate)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64,
+                   AGX_WIN32_ASAHI_MAP_RELEASE);
   int (*Detach)(void *, APPLE_AGX_U64, const void *, APPLE_AGX_U64);
   int (*Identity)(void *, const void *, APPLE_AGX_U64, AGX_WIN32_RELOC_ALLOCATION *);
   const void *(*NextBo)(void *, APPLE_AGX_U32 *);

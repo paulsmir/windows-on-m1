@@ -3496,10 +3496,12 @@ static void test_mesa_d3d10_frontend_open(void) {
     FRONTEND_STAGE("draw-query-end");
     if(RuntimeMarker) {
       RuntimeCheckpoint(frontendOwner,1u);
-      CHECK(MesaD3d10FrontendSetSoOffsetForTest(device,soBuffer,48u));
       CHECK(AgxWin32AsahiContextRetire(
           MesaD3d10FrontendContextForTest(device),0u));
       RuntimeCheckpoint(frontendOwner,5u);
+      /* A submitted native BO is unlocked for pfnRenderCb and may be lazily
+       * remapped only after the same fence retires and releases its holds. */
+      CHECK(MesaD3d10FrontendSetSoOffsetForTest(device,soBuffer,48u));
     }
     {
       deviceFunctions.pfnGsSetShader(device,(D3D10DDI_HSHADER){0});

@@ -44802,3 +44802,67 @@ qualification/AppleAgxD3d10Standard.exe: 39cf8b7ca801971de48611acff465423d570f0c
 qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
 Immutable .local/experiments/EXP699-kmd-render-715.zip SHA 9b61bcab92a1b969d35aad43f68db18d7cd4100de3ce53c756990a5395611254.
 Air must verify Valid signatures and exact hashes before stage/bind.
+
+### EXP699 actual result — Render callback failure precedes any retained KMD receipt
+Package715 exact bound/hash preflight passed with Code0, Running service,
+Start12/Platform14 and Valid Air signatures. One standard client (PID6624,
+TID1204) again created the device and swap chain, completed native draw/capture
+and native seal, then received pfnRenderCb E_FAIL80004005; Present returned
+887a0005 with device reason887a0020. No Wom1UmdRenderSlot value was retained in
+the APPL0002 instance key, Device Parameters key, or AppleAgxAdmission service
+key. The exact SYS contains the receipt format string, but diagnostic write
+availability was not independently proven, so missing receipt alone remains
+INCONCLUSIVE rather than proof that DxgkDdiRender was not entered. No fresh
+monitored system event occurred.
+
+The operator reports the prior display corruption PERSISTS. The supplied photo
+shows wallpaper with a central lower black rectangle, tall right black strip,
+and thin light borders. Its exact capture time relative to cleanup is unknown;
+operator-screen.png SHA256
+03ff5ac4d80090c459241df4982236c24a7c2a43e3f03b46c899b7369f7a0926.
+This physical observation remains separate from the callback result.
+
+Exact oem5/package/task/trust/stopped-service cleanup succeeded. Ordinary
+377/392 recovery was relaunched and re-enumerated the stale unbound devnode.
+Final health is Code28/no INF/service/SYS/UMD/cert,8CPU/NVMe/xHCI/input and no
+fresh monitored events. Evidence is under main-root
+.local/experiments/EXP699-live, including client-result.txt, receipt-enum.json,
+operator-observation.json, operator-screen.png, cleanup.txt and
+recovery/health-final-after-rescan.json.
+
+Primary-source follow-up: Microsoft PFND3DDDI_LOCKCB documentation says a UMD
+normally uncaches allocation pointers with pfnUnlockCb before pfnRenderCb; a
+locked allocation can force eviction or make Render fail. The current native
+path retains pfnLockCb mappings across pfnRenderCb. A real-producer RED gate
+render-unlock-red-20260921mw-x64 reports 17 mapped native allocations at the
+Render boundary (exit17, archive
+d91e841c852fbfed2d03d7691d879f13fa79fe56c288c7e96939fc3d6801b397).
+This deterministic contract conflict, rather than the absent diagnostic slot,
+is the next causal target. CpuVisible allocations may have a system/aperture
+fallback, so EXP699 does not by itself prove the exact HRESULT cause.
+
+### Post-EXP699 deterministic correction gate
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH: Windows allocation pointers
+cached through pfnLockCb must not remain locked when the same allocations are
+submitted through pfnRenderCb. render-unlock-red-20260921mw-x64 exercised the
+real producer and failed17 mapped native allocation checks at the callback.
+
+The correction validates the immutable deduplicated submission identities,
+unlocks mapped native allocations once before Render, and invalidates the UMD,
+native wrapper and transport mapped state together. Source/submission holds and
+fence retirement remain unchanged; persistent BOs can remap only after the
+same fence retires. A first implementation reached Render but exposed the
+mirrored Transport.Mapped bit during zero-ref teardown; the final implementation
+clears it atomically. A stream-output CPU fixture was reordered after retirement
+and exercises lazy remap rather than using a stale pointer.
+
+Final render-unlock-20260921ne x64 execution0 and ARM64 link0. Both archives
+match all473 current driver files. x64 archive SHA256
+9be2e77ec1b7c5c102a11ce986bc6a81d6b1a424fa07e3ca8be00cbbd7a6c545,
+executable bac6bcf18090eef478c6b90ad33b15d5c18eb63a28364f8904b055f0dc3d2bf0;
+ARM64 archive SHA256
+75d95f0d94b40208c572747189645e49435aea09622ae4578c366e05906d3072,
+executable 8d75e2278740066daf32cafc6c06d9609dd5a2bed2e3b3323e0444bbe6aa8cbc.
+The real producer, materializer, KMD plan/patch simulation, retirement, remap and
+teardown all pass. Hardware is NOT_RUN for this correction; do not claim it
+explains EXP699 until the preregistered Air discriminator.

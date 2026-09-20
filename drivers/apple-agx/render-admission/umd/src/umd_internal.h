@@ -20,6 +20,7 @@ typedef struct _ADMISSION_UMD_SCREEN_BUFFER {
   APPLE_AGX_U64 Serial;
   const void *NativeBo;
   const void *NativeBackend;
+  int (*NativeMapRelease)(const void *, const void *, int);
   APPLE_AGX_U64 NativeBoSerial;
   D3DKMT_HANDLE KernelAllocation;
   /* Explicit residency contribution owned only by the KMT qualification
@@ -230,6 +231,9 @@ HRESULT AdmissionUmdScreenQueryNativeBo(
 HRESULT AdmissionUmdScreenDetachNativeBo(
     ADMISSION_UMD_DEVICE *Device, APPLE_AGX_U64 Token,
     const void *NativeBo, APPLE_AGX_U64 NativeBoSerial);
+HRESULT AdmissionUmdScreenPrepareSubmissionMaps(
+    ADMISSION_UMD_DEVICE *Device,
+    const ADMISSION_UMD_DRAW_SUBMISSION *Submission);
 #if defined(__cplusplus)
 }
 #endif
