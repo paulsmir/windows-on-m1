@@ -34,6 +34,7 @@ typedef struct {
 } AGX_WIN32_ASAHI_BATCH;
 
 int AgxWin32AsahiBatchConfigure(AGX_WIN32_ASAHI_BACKEND *,const AGX_WIN32_ASAHI_BATCH_OPS *,void *);
+void AgxWin32AsahiBatchTraceDraw(struct agx_context *, struct agx_batch *, unsigned);
 int AgxWin32AsahiBatchBegin(struct agx_batch *);
 int AgxWin32AsahiBatchEnter(struct agx_batch *);
 int AgxWin32AsahiBatchLeave(struct agx_batch *);

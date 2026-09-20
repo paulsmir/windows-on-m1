@@ -2,6 +2,7 @@
 #include "agx_win32_asahi_batch.h"
 #include "agx_usc.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) {
@@ -9,6 +10,21 @@ static AGX_WIN32_ASAHI_BACKEND *backend(struct agx_batch *b) {
 }
 static AGX_WIN32_ASAHI_BATCH *capsule(struct agx_batch *b) {
   return b ? b->windows_batch : NULL;
+}
+void AgxWin32AsahiBatchTraceDraw(struct agx_context *ctx,struct agx_batch *b,
+                                unsigned phase) {
+  AGX_WIN32_ASAHI_BATCH *c=capsule(b);
+  AGX_WIN32_ASAHI_BACKEND *d=ctx?agx_device(ctx->base.screen)->windows_private:NULL;
+  if(phase==3u && ctx && b && c && d && b->draws &&
+      !ctx->any_faults && !d->Failed) return;
+  fprintf(stderr,"NATIVE_DRAW_BOUNDARY: phase=%u faults=%u backend=%u draws=%u current_draws=%u same=%u initialized=%u capture=%u root_failed=%u entered=%u vs_samplers=%u fs_samplers=%u\n",
+      phase,ctx?(unsigned)ctx->any_faults:0u,d?(unsigned)d->Failed:0u,
+      b?b->draws:0u,ctx&&ctx->batch?ctx->batch->draws:0u,
+      ctx?(unsigned)(ctx->batch==b):0u,b?(unsigned)b->initialized:0u,
+      c?c->Capture.Capture.State:0u,c?(unsigned)c->Root.Scope.Failed:0u,
+      c?(unsigned)c->Entered:0u,
+      ctx?ctx->stage[MESA_SHADER_VERTEX].sampler_count:0u,
+      ctx?ctx->stage[MESA_SHADER_FRAGMENT].sampler_count:0u);
 }
 int AgxWin32AsahiBatchConfigure(AGX_WIN32_ASAHI_BACKEND *b,
     const AGX_WIN32_ASAHI_BATCH_OPS *ops,void *owner) {

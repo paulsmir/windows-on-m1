@@ -533,7 +533,13 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       bool blit_texture = i == MESA_SHADER_FRAGMENT &&
          stage->texture_count == 1 && stage->sampler_count == 1 &&
          stage->textures[0] && stage->textures[0]->rsrc;
-      if ((!blit_texture && (stage->texture_count || stage->sampler_count)) ||
+      /* Runtime default samplers are binding state, not texture resources.
+       * Ordinary sampler descriptors contain no GPU addresses; the existing
+       * USC table capture retains their complete emitted span, including txf.
+       * Keep actual texture/image/SSBO and custom-border restrictions intact. */
+      if ((!blit_texture && stage->texture_count) ||
+          stage->sampler_count > 16 ||
+          (stage->valid_samplers & ~BITFIELD_MASK(16)) ||
           stage->image_mask || stage->ssbo_mask ||
           (app_stage ? (stage->cb_mask & ~BITFIELD_BIT(0)) : stage->cb_mask) ||
           stage->custom_borders)

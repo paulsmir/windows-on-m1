@@ -44579,3 +44579,30 @@ authorized temporary autologon and execute standard client once in console
 with APPLE_AGX_UMD_TRACE_FILE, bounded120s. Record actual sampler-range fields
 and next failure or physical completion; no replay. Collect all evidence in
 main-root .local/experiments/EXP696-live then exact cleanup/recovery.
+
+### EXP696 actual result — standard swap-chain PASS, default samplers reach draw
+Exact package712 and installed hashes matched; Code0/Running Start12/Platform14,
+active console with temporary autologon removed, no fresh monitored system events.
+One standard execution: device S_OK, RGBA support S_OK, CreateSwapChain S_OK.
+Backbuffer/RTV/shader/layout/vertex-buffer creation advanced to present stage.
+Sampler receipts prove VS(stage0), GS3, PS4 each Offset0 Count16 nonnullmaskFFFF,
+all S_OK. Presentation resource is RGBA28, Texture2D, 2560x1600, non-primary;
+allocation/import both S_OK. Vertex buffer48 bytes created. Flush emits E_FAIL;
+Present returns887a0005, device reason887a0020, exit1. No physical completion
+is proven. Later cleanup unbinds all16 with mask0 successfully.
+This promotes the previously additional full-owned-sampler draw RED to a
+mandatory pre-hardware reproduction; it is now observed in the selected runtime.
+Main-root evidence: .local/experiments/EXP696-live/client-result.txt,
+pre-client.json, post-client.json, post-final.json and post-health.json.
+Exact package/task/stopped-service/test-trust cleanup completed; ordinary377/392
+final recovery confirms Code28/no package/service/files/cert, 8CPU/NVMe/input,
+no fresh monitored events (recovery/health-final.json).
+Physical symptom persists and changes with input, per operator/photos: initially
+black after driver activation; Start exposes wallpaper with black taskbar/menu;
+further input including AltTab yields pale/white regions with black rectangle;
+flicker sometimes exposes desktop icons (icons visible in photo2). This does
+not prove those desktop effects have the same immediate cause as client Flush.
+operator-observation.json stores source/timing qualification and photo hashes:
+operator-screen-1.png 2f110b7e7c9706189eb5c4a87bdfb74a45694137ed7d1c19d58b2abf7e86452e;
+operator-screen-2.png f8b7145e6809540a3132c0b8f48dc3a6f0670ed90c7856ccceafa59366f46539;
+operator-screen-3.png 2588e193366d8045e0b4b055dc7c49dcf6aaa85ad0b7ac4653eb228f5376e8e3.

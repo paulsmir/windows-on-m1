@@ -2407,13 +2407,13 @@ static void test_mesa_d3d10_frontend_open(void) {
         CHECK(FrontendErrors==rgbaErrors);
         deviceFunctions.pfnSetScissorRects(device,1,0,&rgbaRect);
         CHECK(FrontendErrors==rgbaErrors);
-        /* Known additional RED from sampler-ranges-20260920mk. Keep this
-         * explicit probe available without making an unobserved higher-slot
-         * draw a new pre-hardware requirement for the minimal runtime client. */
-        BOOL probeUnusedHighSampler=GetEnvironmentVariableW(
-            L"APPLE_AGX_TEST_UNUSED_HIGH_SAMPLER",NULL,0)!=0;
-        if(probeUnusedHighSampler)
-          deviceFunctions.pfnPsSetSamplers(device,15,1,&appSampler);
+        /* EXP696 measured all sixteen owned default sampler bindings in
+         * every stage. This is now a mandatory actual-producer reproduction. */
+        D3D10DDI_HSAMPLER runtimeSamplers[16];
+        for(UINT slot=0;slot<16;++slot) runtimeSamplers[slot]=appSampler;
+        deviceFunctions.pfnVsSetSamplers(device,0,16,runtimeSamplers);
+        deviceFunctions.pfnGsSetSamplers(device,0,16,runtimeSamplers);
+        deviceFunctions.pfnPsSetSamplers(device,0,16,runtimeSamplers);
         CHECK(FrontendErrors==rgbaErrors);
         deviceFunctions.pfnClearRenderTargetView(device,rgbaView,clear);
         CHECK(FrontendErrors==rgbaErrors);
@@ -2421,8 +2421,8 @@ static void test_mesa_d3d10_frontend_open(void) {
         BOOL rgbaDrawAccepted=FrontendErrors==rgbaErrors &&
             AgxWin32AsahiContextDrawReceipt(MesaD3d10FrontendContextForTest(device));
         CHECK(rgbaDrawAccepted);
-        if(probeUnusedHighSampler && !rgbaDrawAccepted) {
-          FRONTEND_STAGE("POST_HARDWARE_UNUSED_HIGH_SAMPLER_RED");
+        if(!rgbaDrawAccepted) {
+          FRONTEND_STAGE("RUNTIME_DEFAULT_SAMPLERS_DRAW_RED");
           return; /* Preserve the first failure instead of cascading into an AV. */
         }
         deviceFunctions.pfnFlush(device);
@@ -2435,8 +2435,10 @@ static void test_mesa_d3d10_frontend_open(void) {
               MesaD3d10FrontendContextForTest(device),0u));
           RuntimeCheckpoint(depthOwner,5u);
         }
-        D3D10DDI_HSAMPLER clearHighSampler={0};
-        deviceFunctions.pfnPsSetSamplers(device,15,1,&clearHighSampler);
+        memset(runtimeSamplers,0,sizeof(runtimeSamplers));
+        deviceFunctions.pfnVsSetSamplers(device,0,16,runtimeSamplers);
+        deviceFunctions.pfnGsSetSamplers(device,0,16,runtimeSamplers);
+        deviceFunctions.pfnPsSetSamplers(device,0,16,runtimeSamplers);
         CHECK(FrontendErrors==rgbaErrors);
         RuntimeExpectedCommandVersion=0;
         CHECK(AgxD3d10FormatViewCompatible(

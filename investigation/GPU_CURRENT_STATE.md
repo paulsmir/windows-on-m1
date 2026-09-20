@@ -1902,3 +1902,46 @@ Source51a4201c selected-path x64/ARM64 and package gates PASS. Immutable archive
 SHA5c841936cd4ae2757447dbca31bac9cbe72c38cd726bd2811279f2fcda3f4e60. Next exact stage and once-only standard
 runtime test with actual sampler-range receipts. Known optional slot15 draw RED
 remains documented; no claim of support or physical rendering yet.
+
+## EXP696 standard swap-chain PASS; full default sampler state mandatory
+Actual runtime binds16 non-null samplers in VS/GS/PS (maskFFFF), all bindings now
+S_OK. CreateSwapChain S_OK; RGBA allocation/import, RTV/shaders/vertex buffer
+advance to Draw/Flush. Flush E_FAIL then Present887a0005/device reason887a0020.
+No physical completion proven. The former additional high-slot draw limitation
+is now mandatory and its reproduction is always enabled with all16 owned states.
+Physical partial UI persists/changes under Start/AltTab; three operator photos
+and hashes are preserved in EXP696, separately from the client's Flush failure.
+Exact cleanup and ordinary377/392 Code28 recovery are verified.
+
+One bounded native receipt (default-sampler-boundary-20260920mo-x64) localized
+failure to native draw body: backendFailed1, draws0, capture recording/root clean,
+VS/FS sampler counts16. Source windows_graph_draw_supported explicitly rejects
+any sampler_count without its one-texture special case. That pre-emission
+classification, not USC packing overflow or sampler heap, is the exact defect.
+Pinned XML ordinary Sampler fields contain no GPU addresses; full native table
+span including reservedtxf is already captured by the USC table relocation.
+Narrow fix permits ordinary no-texture sampler state up to16 with bounded valid
+mask; keeps texture/image/SSBO/CB/custom-border guards and all capture/materializer
+validation. Native emission/logical state unchanged; no clamp/drop/filter.
+Source review found this correction justified. default-sampler-table-20260920mp
+x64/ARM64 gates are running, with the measured all-owned16 draw mandatory.
+HARDWARE ROADMAP
+[PASS] Standard device, sampler-range state, swap-chain and resource creation on
+Air (EXP696); prior selected producer/ARM64/package gates.
+[NOW] Actual full-default-sampler native draw/flush/retirement gate with corrected
+preflight classification. Required by runtime maskFFFF; deterministic offline.
+[NEXT] Package713 analysis/sign/hash and preregistration, then immediate Air run.
+[HW] First physical native draw/completion and successful standard DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## Measured full-default-sampler native gate GREEN
+The same always-enabled all16-owned VS/GS/PS reproduction is now GREEN after
+only the proven preflight classification fix: native draw, flush/materializer,
+KMD plan/patch, completion simulation and retirement pass. No optional bypass
+remains for this measured case. default-sampler-table-20260920mp x64 exit0 and
+ARM64 link0; source archive550d2649f1fdb9b3bd81dc499a7b39c973253e90ac5ab4d2d1cf15f3e3f03c35.
+x64 exe5b25a794b649ed48761aeb3cfaac404aea65cb0e31436991997d9b69c6e2b3d5;
+ARM64 exed617245af5cb141b43c173a089d3c91dfcd6691e4c639ada0de5c3d85e446e68.
+Next package713/sign/hash/preregistration and immediate Air standard-runtime run.
+Physical GPU completion/Present remain unproven; partial desktop photos remain
+separate evidence rather than accelerated-rendering proof.

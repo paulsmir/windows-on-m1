@@ -152,12 +152,20 @@ def project_sources(out,project,overlays):
       return;
    }
    if (!AgxWin32AsahiBatchDrawAllowed(ctx, info, drawid_offset, indirect, draws, num_draws)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, ctx->batch, 1u);
       ctx->any_faults = true; return;
    }
    struct agx_batch *batch = agx_get_batch(ctx);
-   if (!batch || !AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults = true; return; }
+   if (!batch || !AgxWin32AsahiBatchEnter(batch)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 2u);
+      ctx->any_faults = true; return;
+   }
    agx_draw_vbo_windows_body(pctx, info, drawid_offset, indirect, draws, num_draws);
-   if (!AgxWin32AsahiBatchLeave(batch)) ctx->any_faults = true;
+   AgxWin32AsahiBatchTraceDraw(ctx, batch, 3u);
+   if (!AgxWin32AsahiBatchLeave(batch)) {
+      AgxWin32AsahiBatchTraceDraw(ctx, batch, 4u);
+      ctx->any_faults = true;
+   }
 }
 '''
     s=s[:decl]+signature.rstrip()+';\n'+renamed+s[a:b]+'\n'+wrapper+s[b:]
