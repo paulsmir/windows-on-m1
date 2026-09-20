@@ -444,11 +444,12 @@ void APIENTRY
       }
 #endif
    }''','''   (void)hDevice;
-   if (Format == DXGI_FORMAT_B8G8R8A8_UNORM) {
+   if (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+       Format == DXGI_FORMAT_R8G8B8A8_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
    } else if (Format == DXGI_FORMAT_D32_FLOAT) {
-      *pFormatCaps = D3D10_FORMAT_SUPPORT_DEPTH_STENCIL;
+      *pFormatCaps = 0; /* Depth support is base-assumed, not an optional DDI bit. */
    } else if (Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
    } else {
@@ -458,7 +459,10 @@ void APIENTRY
    *pNumQualityLevels = 0;''','''   (void)hDevice;
    *pNumQualityLevels =
       (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
-       Format == DXGI_FORMAT_D32_FLOAT) && SampleCount == 1 ? 1 : 0;''')])
+       Format == DXGI_FORMAT_R8G8B8A8_UNORM ||
+       Format == DXGI_FORMAT_D32_FLOAT ||
+       Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
+       Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    if (SUCCEEDED(result)) {
@@ -491,7 +495,8 @@ void APIENTRY
       &pDevice->fb.cbufs[0] : NULL;
    if (!pipe->clear || !surface || !resource ||
        resource->target != PIPE_TEXTURE_2D ||
-       resource->format != PIPE_FORMAT_B8G8R8A8_UNORM ||
+       (resource->format != PIPE_FORMAT_B8G8R8A8_UNORM &&
+        resource->format != PIPE_FORMAT_R8G8B8A8_UNORM) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
@@ -500,7 +505,7 @@ void APIENTRY
        bound->first_layer != surface->first_layer || bound->last_layer != surface->last_layer ||
        pDevice->fb.width != pipe_surface_width(surface) ||
        pDevice->fb.height != pipe_surface_height(surface)) {
-      LOG_UNSUPPORTED("ClearRenderTargetView requires one full BGRA8 target");
+      LOG_UNSUPPORTED("ClearRenderTargetView requires one full RGBA8/BGRA8 target");
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -1127,6 +1132,15 @@ _Present('''),
       pDevice->pipe->set_constant_buffer(pDevice->pipe, shader_type,
                                           StartBuffer + i, &cb);
    }''')
+    change('src/gallium/frontends/d3d10umd/Format.cpp',
+        '26215278ae7e566dc5973fb932daaa9142b7b11bd5dcfff8c574f37991e8fdf0',[
+        ('#include "Format.h"','''#include "Format.h"
+
+extern "C" BOOL APIENTRY
+MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT format)
+{
+   return FormatTranslate(format, false) != PIPE_FORMAT_NONE ? TRUE : FALSE;
+}''')])
     change('src/gallium/frontends/d3d10umd/Draw.cpp',
         'da5904f2ac6b8a79373bcc60d2cef0546e8da0bc1ba92d21812aff3ea2338f7e',[
         ('#include "State.h"',
@@ -1373,7 +1387,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
       bool private_rt = pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
-         pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM &&
+         (pCreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+          pCreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM) &&
          pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
          mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
          mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&

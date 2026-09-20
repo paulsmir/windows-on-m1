@@ -437,7 +437,8 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       !info->start_instance && draws->start == 0 && draws->count == 3 &&
       !draws->index_bias && ctx->framebuffer.nr_cbufs == 1 &&
       ctx->framebuffer.cbufs[0].texture &&
-      ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM &&
+      (ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM ||
+       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R8G8B8A8_UNORM) &&
       !ctx->framebuffer.cbufs[0].level && !ctx->framebuffer.cbufs[0].first_layer &&
       !ctx->framebuffer.cbufs[0].last_layer && ctx->streamout.num_targets<=1u &&
       !ctx->cond_query && !ctx->occlusion_query && !ctx->time_elapsed &&

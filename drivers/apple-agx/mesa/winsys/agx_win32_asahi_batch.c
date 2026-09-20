@@ -56,7 +56,8 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   }
   /* Capture remains associated with its real native batch between calls. */
   c->Draw.StructBytes=sizeof(c->Draw);
-  c->Draw.Format=AppleAgxWin32FormatBgra8Unorm;
+  c->Draw.Format=b->key.cbufs[0].format==PIPE_FORMAT_R8G8B8A8_UNORM ?
+      AppleAgxWin32FormatRgba8Unorm:AppleAgxWin32FormatBgra8Unorm;
   c->Draw.SurfaceWidth=b->key.width; c->Draw.SurfaceHeight=b->key.height;
   c->Draw.SurfacePitch=b->key.width*4;
   c->Draw.Topology=AppleAgxWin32TopologyTriangleList;
@@ -143,7 +144,9 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
       ctx->framebuffer.nr_cbufs!=1 ||
       !ctx->framebuffer.cbufs[0].texture || (ctx->batch && ctx->batch->draws)) return 0;
   struct agx_resource *rt=agx_resource(ctx->framebuffer.cbufs[0].texture);
-  int valid=rt->base.target==PIPE_TEXTURE_2D && rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM &&
+  int valid=rt->base.target==PIPE_TEXTURE_2D &&
+      (rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM ||
+       rt->base.format==PIPE_FORMAT_R8G8B8A8_UNORM) &&
       !rt->layout.compressed && rt->base.last_level==0 && rt->base.depth0==1 &&
       rt->base.array_size==1 && rt->base.nr_samples<=1;
   if(valid && ctx->framebuffer.zsbuf.texture) {

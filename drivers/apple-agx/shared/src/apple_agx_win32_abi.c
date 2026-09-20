@@ -324,7 +324,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
   draw = (const APPLE_AGX_WIN32_DRAW_PAYLOAD *)(bytes +
                                                 header->PayloadOffset);
   if (draw->StructBytes != sizeof(*draw) ||
-      draw->Format != (APPLE_AGX_U32)AppleAgxWin32FormatBgra8Unorm ||
+      (draw->Format != (APPLE_AGX_U32)AppleAgxWin32FormatBgra8Unorm &&
+       draw->Format != (APPLE_AGX_U32)AppleAgxWin32FormatRgba8Unorm) ||
       draw->SurfaceWidth == 0u || draw->SurfaceHeight == 0u ||
       draw->SurfaceWidth > APPLE_AGX_U32_MAX_VALUE / 4u ||
       draw->SurfacePitch < draw->SurfaceWidth * 4u ||

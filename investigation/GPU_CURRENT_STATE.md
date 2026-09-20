@@ -1114,3 +1114,33 @@ source archive SHA-256
 
 The frozen inventory is now 120 of 121 and pipeline mask remains zero.  The
 only remaining pre-hardware inventory row is feature-required-formats.
+
+## Required-format closure in progress: RGBA8 family (2026-09-20)
+The final aggregate row remains RED after source-first review: FL10_0 base
+format requirements cannot be withdrawn by returning zero optional bits from
+the D3D10 CheckFormatSupport DDI.  The previous D32 result incorrectly returned
+the API-level 0x10000 depth flag, which is not a valid base D3D10 optional DDI
+bit; D32 now returns zero optional bits.  SampleCount one now returns the
+required single quality level for every currently mapped hardware-candidate
+format, while counts above one remain zero.
+
+The first missing mandatory family is now implemented through production.
+R8G8B8A8_UNORM resource, RTV, clear and draw use the existing uncompressed
+32-bit tiled color path with a distinct typed wire format.  The native Asahi
+producer supplies its own PBE/BG-EOT state; the existing composer, both KMD
+materialization placements and ordered retirement accept it without a second
+renderer or allocator.  BGRA8 remains the presentation/scanout format.
+
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/required-rgba8-final-20260920hg-x64/;
+source archive SHA-256
+96dde0f6ed55f28186c6293c17ebb53b1b4048426179258147f8ed0a737081b4.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-rgba8-final-20260920hh-arm64/;
+source archive SHA-256
+010fd6c6417fcb82b6076bbba2e0a7ba2d30b41226535e7730700a3aaad142c2.
+
+Inventory deliberately remains 120 of 121 and pipeline mask zero.  Remaining
+work inside feature-required-formats includes the other mandatory color/typed,
+depth-stencil, BC and packed-format families.  The next causal family is
+D16_UNORM plus D24_UNORM_S8_UINT and their compatible resource/view ownership.

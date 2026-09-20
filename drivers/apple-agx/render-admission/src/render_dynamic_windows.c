@@ -195,7 +195,8 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
           alignedSize, destinationReference->Offset, Destination)) ||
       Destination->CpuAddress == NULL ||
       destinationReference->Bytes > Destination->Bytes ||
-      Snapshot->View.Draw->Format != AppleAgxWin32FormatBgra8Unorm ||
+      (Snapshot->View.Draw->Format != AppleAgxWin32FormatBgra8Unorm &&
+       Snapshot->View.Draw->Format != AppleAgxWin32FormatRgba8Unorm) ||
       (!APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Snapshot->View.Header->Version) &&
        !AdmissionAllocationContainsView(
           &destinationOpened->Allocation->Description,
