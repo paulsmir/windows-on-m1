@@ -905,3 +905,25 @@ This remains an internal GS prerequisite: inventory is 114 of 121, pipeline
 mask is zero, and no package or hardware run occurred. Next is the distinct
 compute queue/event/stamp phase that must complete before existing TA/3D
 publication under the same Windows transaction.
+
+## Verified CP-before-render queue phase (2026-09-20)
+The existing G13 queue runtime now optionally owns a distinct compute binding.
+When enabled, one request publishes and runs the CP work object first. TA/3D
+events cannot complete it: only the exact compute event, expected stamp and done
+pointer move the request to ComputeComplete. The same fence owner must then
+explicitly begin the existing TA/3D phase. Timeouts, cancellation, quiesce and
+reset include the compute queue. HasCompute defaults false, preserving every
+previous render-only publication and completion contract.
+
+Fresh x64 full runtime execution PASS:
+evidence/AD04-runtime-closure/native-g13-compute-queue-20260920dn-x64/;
+source archive SHA-256
+37927c8013369774a570e5596e559d28019b65d694ef5b8a5ca07c270435a4e6.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-g13-compute-queue-20260920do-arm64/;
+source archive SHA-256
+dafe10ec311bbc5df96040fa8b58875ee32b43b6aa4f2698819b2531efd662d5.
+This is an internal GS prerequisite. Inventory remains 114 of 121, pipeline mask
+zero, and no package or hardware run occurred. The next causal target is the
+real Mesa mixed graphics batch: capture and finalize its CDM encoder and shared
+geometry objects into the existing request before enabling GS DDIs.

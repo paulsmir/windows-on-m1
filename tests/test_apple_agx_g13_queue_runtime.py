@@ -20,6 +20,7 @@ class AppleAgxG13QueueRuntimeTests(unittest.TestCase):
                 "-Werror",
                 "-fsanitize=address,undefined",
                 "-fno-omit-frame-pointer",
+                "-DAPPLE_AGX_G13_QUEUE_RUNTIME_STANDALONE=1",
                 "-I",
                 str(SHARED / "include"),
                 str(SHARED / "tests" / "apple_agx_g13_queue_runtime_test.c"),

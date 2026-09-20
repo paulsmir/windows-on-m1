@@ -102,6 +102,9 @@ static void AppleAgxG13ClearPending(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   AppleAgxG13QueueRuntimeZero(
       &Runtime->D3Pending,
       (APPLE_AGX_BACKEND_U32)sizeof(Runtime->D3Pending));
+  AppleAgxG13QueueRuntimeZero(
+      &Runtime->ComputePending,
+      (APPLE_AGX_BACKEND_U32)sizeof(Runtime->ComputePending));
 }
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(
@@ -112,6 +115,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(
   APPLE_AGX_BACKEND_U32 ta_done;
   APPLE_AGX_BACKEND_U32 d3_write;
   APPLE_AGX_BACKEND_U32 d3_done;
+  APPLE_AGX_BACKEND_U32 compute_write=0u;
+  APPLE_AGX_BACKEND_U32 compute_done=0u;
 
   if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
       Config == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
@@ -120,18 +125,29 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(
           &Config->Ta, (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueTa) ||
       !AppleAgxG13QueueBindingValid(
           &Config->D3, (APPLE_AGX_BACKEND_U32)AppleAgxG13Queue3d) ||
-      Config->Ta.EventNumber == Config->D3.EventNumber)
+      (Config->HasCompute && !AppleAgxG13QueueBindingValid(
+          &Config->Compute,(APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute)) ||
+      Config->Ta.EventNumber == Config->D3.EventNumber ||
+      (Config->HasCompute &&
+       (Config->Compute.EventNumber==Config->Ta.EventNumber ||
+        Config->Compute.EventNumber==Config->D3.EventNumber)))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
 
   if (!Io->ReadU32(Io->Context, Config->Ta.CpuWritePointer, &ta_write) ||
       !Io->ReadU32(Io->Context, Config->Ta.GpuDonePointer, &ta_done) ||
       !Io->ReadU32(Io->Context, Config->D3.CpuWritePointer, &d3_write) ||
-      !Io->ReadU32(Io->Context, Config->D3.GpuDonePointer, &d3_done))
+      !Io->ReadU32(Io->Context, Config->D3.GpuDonePointer, &d3_done) ||
+      (Config->HasCompute &&
+       (!Io->ReadU32(Io->Context,Config->Compute.CpuWritePointer,&compute_write) ||
+        !Io->ReadU32(Io->Context,Config->Compute.GpuDonePointer,&compute_done))))
     return AppleAgxG13QueueRuntimeResultTransportFailed;
   if (ta_write >= Config->Ta.RingCapacity ||
       ta_done >= Config->Ta.RingCapacity ||
       d3_write >= Config->D3.RingCapacity ||
-      d3_done >= Config->D3.RingCapacity)
+      d3_done >= Config->D3.RingCapacity ||
+      (Config->HasCompute &&
+       (compute_write>=Config->Compute.RingCapacity ||
+        compute_done>=Config->Compute.RingCapacity)))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
 
   AppleAgxG13QueueRuntimeZero(Runtime,
@@ -140,6 +156,7 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeInitialize(
   Runtime->Io = *Io;
   Runtime->TaFirstRun = APPLE_AGX_BACKEND_TRUE;
   Runtime->D3FirstRun = APPLE_AGX_BACKEND_TRUE;
+  Runtime->ComputeFirstRun = APPLE_AGX_BACKEND_TRUE;
   Runtime->Phase = AppleAgxG13QueueRuntimeReady;
   return AppleAgxG13QueueRuntimeResultOk;
 }
@@ -205,6 +222,71 @@ static APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13SubmitFailure(
   }
   AppleAgxG13ClearPending(Runtime);
   return Result;
+}
+
+APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmitCompute(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime,
+    const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *Submission) {
+  APPLE_AGX_G13_QUEUE_BATCH_PUBLICATION publication;
+  APPLE_AGX_G13_RUN_COMMAND run;
+  unsigned char message[APPLE_AGX_G13_RUN_MESSAGE_SIZE];
+  APPLE_AGX_BACKEND_BOOL visible=APPLE_AGX_BACKEND_FALSE;
+  APPLE_AGX_BACKEND_U32 index;
+  if(Runtime==APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
+     Submission==APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
+     !Runtime->Config.HasCompute || Runtime->Phase!=AppleAgxG13QueueRuntimeReady ||
+     !Submission->Fence || !Submission->NowTicks ||
+     !AppleAgxG13WorkValid(&Submission->Compute) ||
+     Submission->Compute.GpuAddressCount!=1u)
+    return AppleAgxG13QueueRuntimeResultInvalidArgument;
+  if(!AppleAgxG13PrepareQueue(Runtime,&Runtime->Config.Compute,
+       &Submission->Compute,Runtime->ComputeFirstRun,Submission->Timestamp,
+       &publication,&run) || !AppleAgxG13EncodeRunCommand(&run,message))
+    return AppleAgxG13QueueRuntimeResultBusy;
+  Runtime->PendingFence=Submission->Fence;
+  Runtime->DeadlineTicks=Submission->NowTicks+Runtime->Config.TimeoutTicks;
+  if(!AppleAgxG13PublishPreparedWork(Runtime,&Submission->Compute))
+    return AppleAgxG13SubmitFailure(Runtime,
+        AppleAgxG13QueueRuntimeResultMemoryFailed,visible);
+  for(index=0u;index<Submission->Compute.GpuAddressCount;++index) {
+    Runtime->Config.Compute.RingCpuAddress[publication.RingIndices[index]]=
+        Submission->Compute.GpuAddresses[index];
+    if(!Runtime->Io.FlushForDevice(Runtime->Io.Context,
+        &Runtime->Config.Compute.RingCpuAddress[publication.RingIndices[index]],
+        APPLE_AGX_G13_RING_SLOT_SIZE))
+      return AppleAgxG13SubmitFailure(Runtime,
+          AppleAgxG13QueueRuntimeResultMemoryFailed,visible);
+  }
+  Runtime->Io.MemoryBarrier(Runtime->Io.Context);
+  if(!Runtime->Io.PublishU32(Runtime->Io.Context,
+      Runtime->Config.Compute.CpuWritePointer,publication.NextWritePointer))
+    return AppleAgxG13SubmitFailure(Runtime,
+        AppleAgxG13QueueRuntimeResultMemoryFailed,visible);
+  visible=APPLE_AGX_BACKEND_TRUE;
+  Runtime->Io.MemoryBarrier(Runtime->Io.Context);
+  if(!Runtime->Io.SendRunMessage(Runtime->Io.Context,
+      (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute,message))
+    return AppleAgxG13SubmitFailure(Runtime,
+        AppleAgxG13QueueRuntimeResultTransportFailed,visible);
+  Runtime->ComputePending.EventNumber=Runtime->Config.Compute.EventNumber;
+  Runtime->ComputePending.ExpectedStamp=Submission->Compute.ExpectedStamp;
+  Runtime->ComputePending.ExpectedDonePointer=publication.ExpectedDonePointer;
+  Runtime->ComputeFirstRun=APPLE_AGX_BACKEND_FALSE;
+  Runtime->Phase=AppleAgxG13QueueRuntimeComputeSubmitted;
+  return AppleAgxG13QueueRuntimeResultOk;
+}
+
+APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueRuntimeBeginRenderAfterCompute(
+    APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence) {
+  if(!Runtime || !Fence || Runtime->PendingFence!=Fence ||
+     Runtime->Phase!=AppleAgxG13QueueRuntimeComputeComplete ||
+     !Runtime->ComputePending.Complete)
+    return APPLE_AGX_BACKEND_FALSE;
+  Runtime->PendingFence=0u;Runtime->DeadlineTicks=0ULL;
+  AppleAgxG13QueueRuntimeZero(&Runtime->ComputePending,
+      (APPLE_AGX_BACKEND_U32)sizeof(Runtime->ComputePending));
+  Runtime->Phase=AppleAgxG13QueueRuntimeReady;
+  return APPLE_AGX_BACKEND_TRUE;
 }
 
 APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeSubmit(
@@ -367,7 +449,27 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeHandleEvent(
   if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL ||
       Message == APPLE_AGX_G13_QUEUE_RUNTIME_NULL)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
-  if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted)
+  if (Runtime->Phase == AppleAgxG13QueueRuntimeComputeSubmitted) {
+    APPLE_AGX_G13_EVENT computeEvent;
+    if (!AppleAgxG13DecodeEvent(Message,MessageBytes,&computeEvent))
+      return AppleAgxG13QueueRuntimeResultInvalidArgument;
+    if (computeEvent.TerminalFault)
+      return AppleAgxG13TerminalFailure(
+          Runtime,AppleAgxG13QueueCompletionFaulted,
+          AppleAgxG13QueueRuntimeResultFaulted);
+    if (computeEvent.Kind != (APPLE_AGX_BACKEND_U32)AppleAgxG13EventFlag)
+      return AppleAgxG13QueueRuntimeResultOk;
+    if (!AppleAgxG13ObserveQueue(Runtime,&computeEvent,
+            &Runtime->Config.Compute,&Runtime->ComputePending))
+      return AppleAgxG13TerminalFailure(
+          Runtime,AppleAgxG13QueueCompletionFaulted,
+          AppleAgxG13QueueRuntimeResultTransportFailed);
+    if (Runtime->ComputePending.Complete)
+      Runtime->Phase=AppleAgxG13QueueRuntimeComputeComplete;
+    return AppleAgxG13QueueRuntimeResultOk;
+  }
+  if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted &&
+      Runtime->Phase != AppleAgxG13QueueRuntimeComputeSubmitted)
     return AppleAgxG13QueueRuntimeResultInvalidState;
   if (!AppleAgxG13DecodeEvent(Message, MessageBytes, &event))
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
@@ -409,7 +511,8 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT AppleAgxG13QueueRuntimeCancel(
     APPLE_AGX_G13_QUEUE_RUNTIME *Runtime, APPLE_AGX_BACKEND_U32 Fence) {
   if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL || Fence == 0u)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
-  if (Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted ||
+  if ((Runtime->Phase != AppleAgxG13QueueRuntimeSubmitted &&
+       Runtime->Phase != AppleAgxG13QueueRuntimeComputeSubmitted) ||
       Runtime->PendingFence != Fence)
     return AppleAgxG13QueueRuntimeResultInvalidState;
   return AppleAgxG13TerminalFailure(
@@ -421,24 +524,34 @@ APPLE_AGX_G13_QUEUE_RUNTIME_RESULT
 AppleAgxG13QueueRuntimeReset(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   APPLE_AGX_BACKEND_U32 ta_done;
   APPLE_AGX_BACKEND_U32 d3_done;
+  APPLE_AGX_BACKEND_U32 compute_done=0u;
 
   if (Runtime == APPLE_AGX_G13_QUEUE_RUNTIME_NULL)
     return AppleAgxG13QueueRuntimeResultInvalidArgument;
   if (Runtime->Phase == AppleAgxG13QueueRuntimeCompletionPending)
     return AppleAgxG13QueueRuntimeResultInvalidState;
-  if (Runtime->Phase == AppleAgxG13QueueRuntimeSubmitted &&
+  if ((Runtime->Phase == AppleAgxG13QueueRuntimeSubmitted ||
+       Runtime->Phase == AppleAgxG13QueueRuntimeComputeSubmitted) &&
       !Runtime->Io.Quiesce(Runtime->Io.Context, Runtime->PendingFence))
     return AppleAgxG13QueueRuntimeResultResetFailed;
   if (!Runtime->Io.ReadU32(Runtime->Io.Context,
                            Runtime->Config.Ta.GpuDonePointer, &ta_done) ||
       !Runtime->Io.ReadU32(Runtime->Io.Context,
                            Runtime->Config.D3.GpuDonePointer, &d3_done) ||
+      (Runtime->Config.HasCompute && !Runtime->Io.ReadU32(
+          Runtime->Io.Context,Runtime->Config.Compute.GpuDonePointer,
+          &compute_done)) ||
       ta_done >= Runtime->Config.Ta.RingCapacity ||
       d3_done >= Runtime->Config.D3.RingCapacity ||
+      (Runtime->Config.HasCompute &&
+       compute_done>=Runtime->Config.Compute.RingCapacity) ||
       !Runtime->Io.PublishU32(Runtime->Io.Context,
                               Runtime->Config.Ta.CpuWritePointer, ta_done) ||
       !Runtime->Io.PublishU32(Runtime->Io.Context,
-                              Runtime->Config.D3.CpuWritePointer, d3_done)) {
+                              Runtime->Config.D3.CpuWritePointer, d3_done) ||
+      (Runtime->Config.HasCompute && !Runtime->Io.PublishU32(
+          Runtime->Io.Context,Runtime->Config.Compute.CpuWritePointer,
+          compute_done))) {
     Runtime->Phase = AppleAgxG13QueueRuntimeFaulted;
     return AppleAgxG13QueueRuntimeResultResetFailed;
   }
@@ -446,6 +559,7 @@ AppleAgxG13QueueRuntimeReset(APPLE_AGX_G13_QUEUE_RUNTIME *Runtime) {
   AppleAgxG13ClearPending(Runtime);
   Runtime->TaFirstRun = APPLE_AGX_BACKEND_TRUE;
   Runtime->D3FirstRun = APPLE_AGX_BACKEND_TRUE;
+  Runtime->ComputeFirstRun = APPLE_AGX_BACKEND_TRUE;
   Runtime->BufferManagerInitialized = APPLE_AGX_BACKEND_FALSE;
   Runtime->Phase = AppleAgxG13QueueRuntimeReady;
   return AppleAgxG13QueueRuntimeResultOk;

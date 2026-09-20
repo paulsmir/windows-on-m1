@@ -58,6 +58,9 @@
     <ClCompile Include="..\..\src\render_allocation.c" />
     <ClCompile Include="..\..\..\shared\src\apple_agx_win32_abi.c" />
     <ClCompile Include="..\..\..\shared\src\apple_agx_g13_compute_work.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_g13_codec.c" />
+    <ClCompile Include="..\..\..\shared\src\apple_agx_g13_queue_runtime.c" />
+    <ClCompile Include="..\..\..\shared\tests\apple_agx_g13_queue_runtime_test.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_transport.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_screen.c" />
     <ClCompile Include="..\..\..\mesa\winsys\agx_win32_native_bo.c" />

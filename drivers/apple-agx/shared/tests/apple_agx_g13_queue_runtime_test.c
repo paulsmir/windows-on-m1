@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+static unsigned int QueueRuntimeFailures;
+#undef assert
+#define assert(x) do { if (!(x)) ++QueueRuntimeFailures; } while (0)
+
 typedef struct _TEST_IO {
   unsigned int Sequence;
   unsigned int WorkFlushes;
@@ -84,16 +88,19 @@ typedef struct _TEST_FIXTURE {
   APPLE_AGX_G13_QUEUE_RUNTIME Runtime;
   unsigned long long TaRing[APPLE_AGX_G13_RING_CAPACITY];
   unsigned long long D3Ring[APPLE_AGX_G13_RING_CAPACITY];
+  unsigned long long ComputeRing[APPLE_AGX_G13_RING_CAPACITY];
   volatile APPLE_AGX_BACKEND_U32 TaWrite;
   volatile APPLE_AGX_BACKEND_U32 D3Write;
   volatile APPLE_AGX_BACKEND_U32 TaDone;
   volatile APPLE_AGX_BACKEND_U32 D3Done;
   volatile APPLE_AGX_BACKEND_U32 TaStamp;
   volatile APPLE_AGX_BACKEND_U32 D3Stamp;
+  volatile APPLE_AGX_BACKEND_U32 ComputeWrite,ComputeDone,ComputeStamp;
   unsigned char TaDestination[64];
   unsigned char D3Destination[64];
   unsigned char TaSource[64];
   unsigned char D3Source[64];
+  unsigned char ComputeDestination[64],ComputeSource[64];
 } TEST_FIXTURE;
 
 static void TestInitialize(TEST_FIXTURE *Fixture) {
@@ -135,6 +142,19 @@ static void TestInitialize(TEST_FIXTURE *Fixture) {
          AppleAgxG13QueueRuntimeResultOk);
 }
 
+static void TestEnableCompute(TEST_FIXTURE *f) {
+  APPLE_AGX_G13_QUEUE_BINDING *c=&f->Runtime.Config.Compute;
+  memset(c,0,sizeof(*c));
+  c->QueueType=(APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute;
+  c->QueueInfoGpuAddress=0x1500030000ULL;c->RingCpuAddress=f->ComputeRing;
+  c->RingCapacity=APPLE_AGX_G13_RING_CAPACITY;
+  c->CpuWritePointer=&f->ComputeWrite;c->GpuDonePointer=&f->ComputeDone;
+  c->Stamp=&f->ComputeStamp;c->EventNumber=11u;
+  f->Runtime.Config.HasCompute=APPLE_AGX_BACKEND_TRUE;
+  f->Runtime.ComputeFirstRun=APPLE_AGX_BACKEND_TRUE;
+  memset(f->ComputeSource,0x3c,sizeof(f->ComputeSource));
+}
+
 static APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION
 TestSubmission(TEST_FIXTURE *Fixture, APPLE_AGX_BACKEND_U32 Fence) {
   APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION submission;
@@ -157,6 +177,41 @@ TestSubmission(TEST_FIXTURE *Fixture, APPLE_AGX_BACKEND_U32 Fence) {
   submission.D3.GpuAddressCount = 2u;
   submission.D3.ExpectedStamp = 0x300u;
   return submission;
+}
+
+static void TestCompleteSubmission(
+    TEST_FIXTURE *,const APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION *);
+static void TestEvent(unsigned char [APPLE_AGX_G13_EVENT_MESSAGE_SIZE],
+                      unsigned int,unsigned int);
+
+static void TestComputeThenRenderDependency(void) {
+  TEST_FIXTURE f;APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION s;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  TestInitialize(&f);TestEnableCompute(&f);s=TestSubmission(&f,60u);
+  s.Compute.Source=f.ComputeSource;s.Compute.Destination=f.ComputeDestination;
+  s.Compute.Bytes=sizeof(f.ComputeSource);
+  s.Compute.GpuAddresses[0]=0x1500300000ULL;
+  s.Compute.GpuAddressCount=1u;s.Compute.ExpectedStamp=0x600u;
+  assert(AppleAgxG13QueueRuntimeSubmitCompute(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultOk);
+  assert(f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted &&
+         f.ComputeRing[0]==s.Compute.GpuAddresses[0] && f.ComputeWrite==1u &&
+         f.IoState.Sends==1u &&
+         f.IoState.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute);
+  TestEvent(event,7u,9u);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeSubmitted);
+  f.ComputeStamp=s.Compute.ExpectedStamp;f.ComputeDone=f.ComputeWrite;
+  TestEvent(event,11u,APPLE_AGX_G13_EVENT_COUNT);
+  assert(AppleAgxG13QueueRuntimeHandleEvent(&f.Runtime,event,sizeof(event))==
+         AppleAgxG13QueueRuntimeResultOk &&
+         f.Runtime.Phase==AppleAgxG13QueueRuntimeComputeComplete);
+  assert(!AppleAgxG13QueueRuntimeBeginRenderAfterCompute(&f.Runtime,59u));
+  assert(AppleAgxG13QueueRuntimeBeginRenderAfterCompute(&f.Runtime,60u));
+  assert(AppleAgxG13QueueRuntimeSubmit(&f.Runtime,&s)==
+         AppleAgxG13QueueRuntimeResultOk);
+  TestCompleteSubmission(&f,&s);
 }
 
 static void PutU32(unsigned char *Destination, unsigned int Value) {
@@ -567,7 +622,8 @@ static void TestReadFailureCannotMasqueradeAsZeroPointer(void) {
   assert(fixture.IoState.Sends == 0u);
 }
 
-int main(void) {
+unsigned AppleAgxG13QueueRuntimeContractTests(void) {
+  TestComputeThenRenderDependency();
   TestJoinedPublishAndExactCompletion();
   TestPreparedRangesNeedNoCopy();
   TestFirstAndLaterTaPublicationContract();
@@ -579,6 +635,13 @@ int main(void) {
   TestTimeoutAndCancelRequireQuiescence();
   TestPartialTransportFailureFaultsWithoutFence();
   TestReadFailureCannotMasqueradeAsZeroPointer();
-  puts("apple_agx_g13_queue_runtime_test: ok");
-  return 0;
+  return QueueRuntimeFailures;
 }
+
+#if defined(APPLE_AGX_G13_QUEUE_RUNTIME_STANDALONE)
+int main(void) {
+  unsigned failures=AppleAgxG13QueueRuntimeContractTests();
+  if(!failures) puts("apple_agx_g13_queue_runtime_test: ok");
+  return (int)failures;
+}
+#endif
