@@ -12,10 +12,11 @@ typedef struct _FIXTURE {
   APPLE_AGX_BACKEND_JOB_IMAGE Job;
   APPLE_AGX_BACKEND_U64 TaRing[APPLE_AGX_G13_RING_CAPACITY];
   APPLE_AGX_BACKEND_U64 D3Ring[APPLE_AGX_G13_RING_CAPACITY];
-  volatile APPLE_AGX_BACKEND_U32 TaWrite, D3Write, TaDone, D3Done;
-  volatile APPLE_AGX_BACKEND_U32 TaStamp, D3Stamp;
-  unsigned char TaSrc[32], D3Src[32], TaDst[32], D3Dst[32];
-  unsigned int Flushes, Publishes, Sends, SendOrder[2], Quiesces, Reads;
+  APPLE_AGX_BACKEND_U64 ComputeRing[APPLE_AGX_G13_RING_CAPACITY];
+  volatile APPLE_AGX_BACKEND_U32 TaWrite,D3Write,ComputeWrite,TaDone,D3Done,ComputeDone;
+  volatile APPLE_AGX_BACKEND_U32 TaStamp,D3Stamp,ComputeStamp;
+  unsigned char TaSrc[32],D3Src[32],ComputeSrc[32],TaDst[32],D3Dst[32];
+  unsigned int Flushes, Publishes, Sends, SendOrder[3], Quiesces, Reads;
   unsigned int FailQuiesce, FailReads;
 } FIXTURE;
 
@@ -51,7 +52,7 @@ static APPLE_AGX_BACKEND_BOOL Send(
     void *Context, APPLE_AGX_BACKEND_U32 QueueType,
     const unsigned char Message[APPLE_AGX_G13_RUN_MESSAGE_SIZE]) {
   FIXTURE *f = Context;
-  assert(Message != NULL && f->Sends < 2u);
+  assert(Message != NULL && f->Sends < 3u);
   f->SendOrder[f->Sends++] = QueueType;
   return APPLE_AGX_BACKEND_TRUE;
 }
@@ -89,6 +90,14 @@ static APPLE_AGX_BACKEND_BOOL Build(
   Submission->D3.GpuAddresses[1] = Job->D3WorkAddresses[1];
   Submission->D3.GpuAddressCount = Job->D3WorkAddressCount;
   Submission->D3.ExpectedStamp = Job->D3ExpectedStamp;
+  if(f->Config.HasCompute) {
+    Submission->Compute.PreparedRanges[0].Address=f->ComputeSrc;
+    Submission->Compute.PreparedRanges[0].Bytes=sizeof(f->ComputeSrc);
+    Submission->Compute.PreparedRangeCount=1u;
+    Submission->Compute.GpuAddresses[0]=0x1500300000ULL;
+    Submission->Compute.GpuAddressCount=1u;
+    Submission->Compute.ExpectedStamp=0x600u;
+  }
   return APPLE_AGX_BACKEND_TRUE;
 }
 static void PutU32(unsigned char *p, unsigned int v) {
@@ -105,7 +114,7 @@ static void Event(unsigned char *message, unsigned int number) {
   firing[number/64u] |= 1ULL << (number%64u);
   PutU64(message+4, firing[0]); PutU64(message+12, firing[1]);
 }
-static void Init(FIXTURE *f) {
+static void InitMode(FIXTURE *f,int compute) {
   memset(f, 0, sizeof(*f));
   f->Config.Ta.QueueType = (APPLE_AGX_BACKEND_U32)AppleAgxG13QueueTa;
   f->Config.Ta.QueueInfoGpuAddress = 0x1500010000ULL;
@@ -121,6 +130,17 @@ static void Init(FIXTURE *f) {
   f->Config.D3.CpuWritePointer=&f->D3Write;
   f->Config.D3.GpuDonePointer=&f->D3Done;
   f->Config.D3.Stamp=&f->D3Stamp; f->Config.D3.EventNumber=9u;
+  if(compute) {
+    f->Config.HasCompute=APPLE_AGX_BACKEND_TRUE;
+    f->Config.Compute.QueueType=(APPLE_AGX_BACKEND_U32)AppleAgxG13QueueCompute;
+    f->Config.Compute.QueueInfoGpuAddress=0x1500030000ULL;
+    f->Config.Compute.RingCpuAddress=f->ComputeRing;
+    f->Config.Compute.RingCapacity=APPLE_AGX_G13_RING_CAPACITY;
+    f->Config.Compute.CpuWritePointer=&f->ComputeWrite;
+    f->Config.Compute.GpuDonePointer=&f->ComputeDone;
+    f->Config.Compute.Stamp=&f->ComputeStamp;
+    f->Config.Compute.EventNumber=11u;
+  }
   f->Config.TimeoutTicks=100u;
   f->RuntimeIo.Context=f; f->RuntimeIo.FlushForDevice=Flush;
   f->RuntimeIo.MemoryBarrier=Barrier; f->RuntimeIo.PublishU32=Publish;
@@ -141,6 +161,7 @@ static void Init(FIXTURE *f) {
   memset(&f->Io, 0, sizeof(f->Io)); f->Io.Context=&f->Provider;
   assert(AppleAgxG13QueueProviderInstall(&f->Io));
 }
+static void Init(FIXTURE *f) { InitMode(f,0); }
 static void Submit(FIXTURE *f) {
   assert(f->Io.Queues.Create(f->Io.Context));
   assert(f->Io.Queues.Run3d(f->Io.Context, &f->Job, 41u));
@@ -401,6 +422,32 @@ static void TestProgressReceiptFailsClosedForInvalidStateAndRead(void) {
   assert(!AppleAgxG13QueueProviderQueryProgress(&f.Provider, &progress));
   assert(memcmp(&f.Provider, &before, sizeof(before)) == 0);
 }
+static void TestComputeCompletesBeforeRenderPublication(void) {
+  FIXTURE f;
+  APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
+  unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
+  InitMode(&f,1);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context,&f.Job,41u));
+  assert(f.Io.Queues.RunTa(f.Io.Context,&f.Job,41u));
+  assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeSubmitted);
+  assert(f.Sends==1u && f.SendOrder[0]==(unsigned)AppleAgxG13QueueCompute);
+  assert(f.ComputeWrite==1u && f.TaWrite==0u && f.D3Write==0u);
+  Event(event,9u);
+  assert(AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider,event,sizeof(event),&batch));
+  assert(f.Provider.Phase==AppleAgxG13QueueProviderComputeSubmitted &&
+         f.Sends==1u && batch.CompletedFence==0u);
+  f.ComputeStamp=0x600u; f.ComputeDone=1u; Event(event,11u);
+  assert(AppleAgxG13QueueProviderIngestEvent(
+      &f.Provider,event,sizeof(event),&batch));
+  assert(f.Provider.Phase==AppleAgxG13QueueProviderSubmitted);
+  assert(f.Sends==3u &&
+         f.SendOrder[1]==(unsigned)AppleAgxG13Queue3d &&
+         f.SendOrder[2]==(unsigned)AppleAgxG13QueueTa);
+  assert(f.TaWrite==2u && f.D3Write==2u && batch.CompletedFence==0u);
+  Complete(&f);
+}
 int main(void) {
   TestAtomicStagingAndOrder(); TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();
@@ -413,5 +460,6 @@ int main(void) {
   TestProgressReceiptDetectsAdvancingSample();
   TestProgressReceiptRejectsUnchangedSampleAsNotAdvanced();
   TestProgressReceiptFailsClosedForInvalidStateAndRead();
+  TestComputeCompletesBeforeRenderPublication();
   puts("apple_agx_g13_queue_provider_test: ok"); return 0;
 }

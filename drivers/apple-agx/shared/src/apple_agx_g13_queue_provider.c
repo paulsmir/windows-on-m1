@@ -15,6 +15,8 @@ static void AppleAgxG13ProviderClearStaged(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider) {
   AppleAgxG13ProviderZero(&Provider->Staged3d,
                           (APPLE_AGX_BACKEND_U32)sizeof(Provider->Staged3d));
+  AppleAgxG13ProviderZero(&Provider->StagedSubmission,
+      (APPLE_AGX_BACKEND_U32)sizeof(Provider->StagedSubmission));
   Provider->PendingFence = 0u;
   Provider->FailureQuiesced = APPLE_AGX_BACKEND_FALSE;
 }
@@ -320,7 +322,16 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
     submission.Ta.GpuAddressCount = Job->TaWorkAddressCount;
   }
   submission.Ta.ExpectedStamp = Job->TaExpectedStamp;
-  result = AppleAgxG13QueueRuntimeSubmit(&provider->Runtime, &submission);
+  if(provider->Config.HasCompute && submission.Compute.GpuAddressCount!=0u) {
+    result=AppleAgxG13QueueRuntimeSubmitCompute(&provider->Runtime,&submission);
+    if(result==AppleAgxG13QueueRuntimeResultOk) {
+      provider->StagedSubmission=submission;
+      provider->Phase=AppleAgxG13QueueProviderComputeSubmitted;
+      return APPLE_AGX_BACKEND_TRUE;
+    }
+  } else {
+    result = AppleAgxG13QueueRuntimeSubmit(&provider->Runtime, &submission);
+  }
   if (result != AppleAgxG13QueueRuntimeResultOk) {
     if (provider->Runtime.Phase == AppleAgxG13QueueRuntimeFaulted) {
       provider->FailureQuiesced =
@@ -383,7 +394,8 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderStop(
       return APPLE_AGX_BACKEND_FALSE;
     return AppleAgxG13ProviderRestoreAfterQuiesce(provider);
   }
-  if (provider->Phase != AppleAgxG13QueueProviderSubmitted)
+  if (provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+      provider->Phase != AppleAgxG13QueueProviderComputeSubmitted)
     return APPLE_AGX_BACKEND_FALSE;
   result = AppleAgxG13QueueRuntimeCancel(&provider->Runtime, Fence);
   if (result == AppleAgxG13QueueRuntimeResultResetFailed) {
@@ -416,6 +428,7 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderReset(
       !AppleAgxG13ProviderEnsureFailureQuiesced(provider))
     return APPLE_AGX_BACKEND_FALSE;
   if (provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+      provider->Phase != AppleAgxG13QueueProviderComputeSubmitted &&
       provider->Phase != AppleAgxG13QueueProviderFaulted)
     return APPLE_AGX_BACKEND_FALSE;
   return AppleAgxG13ProviderRestoreAfterQuiesce(provider);
@@ -494,9 +507,30 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderIngestEvent(
   if (Provider == APPLE_AGX_G13_PROVIDER_NULL ||
       Message == APPLE_AGX_G13_PROVIDER_NULL ||
       Batch == APPLE_AGX_G13_PROVIDER_NULL ||
-      Provider->Phase != AppleAgxG13QueueProviderSubmitted)
+      (Provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+       Provider->Phase != AppleAgxG13QueueProviderComputeSubmitted))
     return APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(Batch, (APPLE_AGX_BACKEND_U32)sizeof(*Batch));
+  if(Provider->Phase==AppleAgxG13QueueProviderComputeSubmitted) {
+    result=AppleAgxG13QueueRuntimeHandleEvent(&Provider->Runtime,Message,
+                                               MessageBytes);
+    Provider->LastIngestGuard=AppleAgxG13QueueProviderIngestGuardRuntime;
+    Provider->LastIngestRuntimeResult=(APPLE_AGX_BACKEND_U32)result;
+    if(result!=AppleAgxG13QueueRuntimeResultOk)
+      return APPLE_AGX_BACKEND_FALSE;
+    if(Provider->Runtime.Phase!=AppleAgxG13QueueRuntimeComputeComplete)
+      return APPLE_AGX_BACKEND_TRUE;
+    if(!AppleAgxG13QueueRuntimeBeginRenderAfterCompute(
+          &Provider->Runtime,Provider->PendingFence) ||
+       AppleAgxG13QueueRuntimeSubmit(&Provider->Runtime,
+          &Provider->StagedSubmission)!=AppleAgxG13QueueRuntimeResultOk) {
+      Provider->Phase=AppleAgxG13QueueProviderFaulted;
+      return APPLE_AGX_BACKEND_FALSE;
+    }
+    Provider->Phase=AppleAgxG13QueueProviderSubmitted;
+    Provider->LastIngestGuard=AppleAgxG13QueueProviderIngestGuardOk;
+    return APPLE_AGX_BACKEND_TRUE;
+  }
   d3WasComplete = Provider->Runtime.D3Pending.Complete;
   taWasComplete = Provider->Runtime.TaPending.Complete;
   result = AppleAgxG13QueueRuntimeHandleEvent(&Provider->Runtime, Message,
@@ -563,7 +597,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderCheckTimeout(
 
   if (Provider == APPLE_AGX_G13_PROVIDER_NULL || NowTicks == 0ULL ||
       Batch == APPLE_AGX_G13_PROVIDER_NULL ||
-      Provider->Phase != AppleAgxG13QueueProviderSubmitted)
+      (Provider->Phase != AppleAgxG13QueueProviderSubmitted &&
+       Provider->Phase != AppleAgxG13QueueProviderComputeSubmitted))
     return APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(Batch, (APPLE_AGX_BACKEND_U32)sizeof(*Batch));
   result = AppleAgxG13QueueRuntimeCheckTimeout(&Provider->Runtime, NowTicks);

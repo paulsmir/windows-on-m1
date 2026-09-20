@@ -962,3 +962,21 @@ the pipeline mask remains zero.  The next causal target is to build the existing
 G13 compute work and microsequence from the materialized CDM root, publish it on
 the distinct compute queue, accept its exact completion, and only then publish
 the existing TA/3D render work under the same fence.
+
+## Verified provider compute-before-render transition (2026-09-20)
+The production G13 queue provider now preserves the already built render
+submission while publishing its optional Compute work first.  A mixed request
+enters a distinct ComputeSubmitted provider phase; unrelated TA/3D events cannot
+open render.  Only the exact compute event plus expected stamp and done pointer
+lets the existing queue runtime transition through BeginRenderAfterCompute and
+publish the unchanged D3 then TA work under the same fence.  Stop, reset and
+timeout paths include the compute-submitted phase, while HasCompute false keeps
+the prior render-only behavior unchanged.
+
+The existing provider host test now exercises the complete transition and
+passes under Windows LLVM /W4 /WX.  This is an internal GS prerequisite and
+does not yet raise the frozen inventory: it still remains 114 of 121 with
+pipeline mask zero.  The next causal target is for the production backend
+BuildSubmission path to build the G13 RunCompute image and microsequence from
+the materialized v8 compute encoder and populate the provider's Compute
+prepared ranges and GPU work addresses.

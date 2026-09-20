@@ -9,6 +9,7 @@ typedef enum _APPLE_AGX_G13_QUEUE_PROVIDER_PHASE {
   AppleAgxG13QueueProviderInitialized = 0,
   AppleAgxG13QueueProviderCreated,
   AppleAgxG13QueueProvider3dStaged,
+  AppleAgxG13QueueProviderComputeSubmitted,
   AppleAgxG13QueueProviderSubmitted,
   AppleAgxG13QueueProviderFaulted,
 } APPLE_AGX_G13_QUEUE_PROVIDER_PHASE;
@@ -76,6 +77,7 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER {
   APPLE_AGX_G13_QUEUE_PROVIDER_IO ProviderIo;
   APPLE_AGX_G13_QUEUE_RUNTIME Runtime;
   APPLE_AGX_G13_QUEUE_PROVIDER_STAGED_3D Staged3d;
+  APPLE_AGX_G13_QUEUE_RUNTIME_SUBMISSION StagedSubmission;
   APPLE_AGX_BACKEND_U32 PendingFence;
   APPLE_AGX_BACKEND_BOOL FailureQuiesced;
   APPLE_AGX_BACKEND_U32 LastIngestGuard;
