@@ -1190,10 +1190,81 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
         ('#include "util/u_surface.h"',
-         '#include "util/u_surface.h"\n#include "drm-uapi/drm_fourcc.h"'),
+         '''#include "util/u_surface.h"
+#include "drm-uapi/drm_fourcc.h"
+
+static bool
+AgxD3d10ResourceWithinRequiredLimits(
+   const D3D10DDIARG_CREATERESOURCE *resource)
+{
+   if (!resource || !resource->pMipInfoList || !resource->MipLevels ||
+       resource->MipLevels > D3D10_REQ_MIP_LEVELS || !resource->ArraySize)
+      return false;
+
+   const D3D10DDI_MIPINFO *mip = resource->pMipInfoList;
+   uint64_t width = mip[0].TexelWidth;
+   uint64_t height = mip[0].TexelHeight;
+   uint64_t depth = mip[0].TexelDepth;
+   uint64_t array = resource->ArraySize;
+   if (!width || !height || !depth)
+      return false;
+
+   switch (resource->ResourceDimension) {
+   case D3D10DDIRESOURCE_BUFFER:
+      return resource->MipLevels == 1 && array == 1 && height == 1 && depth == 1 &&
+         width <= (1ULL << D3D10_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP) &&
+         width <= (uint64_t)D3D10_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
+   case D3D10DDIRESOURCE_TEXTURE1D:
+      if (width > D3D10_REQ_TEXTURE1D_U_DIMENSION || height != 1 || depth != 1 ||
+          array > D3D10_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION) return false;
+      break;
+   case D3D10DDIRESOURCE_TEXTURE2D:
+      if (width > D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+          height > D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION || depth != 1 ||
+          array > D3D10_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return false;
+      break;
+   case D3D10DDIRESOURCE_TEXTURE3D:
+      if (width > D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION ||
+          height > D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION ||
+          depth > D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION || array != 1)
+         return false;
+      break;
+   case D3D10DDIRESOURCE_TEXTURECUBE:
+      if (width != height || width > D3D10_REQ_TEXTURECUBE_DIMENSION || depth != 1 ||
+          array > D3D10_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return false;
+      break;
+   default:
+      return false;
+   }
+
+   enum pipe_format format = FormatTranslate(resource->Format, false);
+   uint64_t element = util_format_get_blocksize(format);
+   uint64_t maximum =
+      (uint64_t)D3D10_REQ_RESOURCE_SIZE_IN_MEGABYTES * 1024u * 1024u;
+   if (!element) return false;
+   uint64_t total = 0;
+   for (unsigned level = 0; level < resource->MipLevels; ++level) {
+      uint64_t levelWidth = MAX2(1ULL, width >> level);
+      uint64_t levelHeight = MAX2(1ULL, height >> level);
+      uint64_t levelDepth = MAX2(1ULL, depth >> level);
+      if (levelWidth > maximum / levelHeight ||
+          levelWidth * levelHeight > maximum / levelDepth ||
+          levelWidth * levelHeight * levelDepth > maximum / array ||
+          levelWidth * levelHeight * levelDepth * array >
+             (maximum - total) / element)
+         return false;
+      total += levelWidth * levelHeight * levelDepth * array * element;
+   }
+   return true;
+}'''),
         ('''   Resource *pResource = CastResource(hResource);
 
    memset(pResource, 0, sizeof *pResource);''','''   Resource *pResource = CastResource(hResource);
+   if (!AgxD3d10ResourceWithinRequiredLimits(pCreateResource)) {
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+
    Device *pDevice = CastDevice(hDevice);
    ULONGLONG resourceOwner = 0;
    ULONG resourceGeneration = 0;

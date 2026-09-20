@@ -1497,6 +1497,50 @@ static void test_mesa_d3d10_frontend_open(void) {
     vbCreate.ResourceDimension=D3D10DDIRESOURCE_BUFFER;vbCreate.Usage=D3D10_DDI_USAGE_DYNAMIC;
     vbCreate.BindFlags=D3D10_DDI_BIND_VERTEX_BUFFER;vbCreate.Format=DXGI_FORMAT_UNKNOWN;
     vbCreate.SampleDesc.Count=1;vbCreate.MipLevels=1;vbCreate.ArraySize=1;
+    for(unsigned limitCase=0;limitCase<6u;++limitCase) {
+      D3D10DDIARG_CREATERESOURCE invalid=vbCreate;
+      D3D10DDI_MIPINFO mip=vbMip;
+      invalid.pMipInfoList=&mip;invalid.Usage=D3D10_DDI_USAGE_DEFAULT;
+      invalid.BindFlags=0;invalid.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+      switch(limitCase) {
+      case 0: invalid.ResourceDimension=D3D10DDIRESOURCE_TEXTURE1D;
+              mip.TexelWidth=D3D10_REQ_TEXTURE1D_U_DIMENSION+1u;break;
+      case 1: invalid.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+              mip.TexelWidth=D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION+1u;break;
+      case 2: invalid.ResourceDimension=D3D10DDIRESOURCE_TEXTURE3D;
+              mip.TexelWidth=D3D10_REQ_TEXTURE3D_U_V_OR_W_DIMENSION+1u;break;
+      case 3: invalid.ResourceDimension=D3D10DDIRESOURCE_TEXTURECUBE;
+              mip.TexelWidth=D3D10_REQ_TEXTURECUBE_DIMENSION+1u;break;
+      case 4: invalid.ResourceDimension=D3D10DDIRESOURCE_TEXTURE1D;
+              mip.TexelWidth=1;invalid.ArraySize=
+                D3D10_REQ_TEXTURE1D_ARRAY_AXIS_DIMENSION+1u;break;
+      default: invalid.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+               mip.TexelWidth=mip.TexelHeight=1;
+               invalid.MipLevels=D3D10_REQ_MIP_LEVELS+1u;break;
+      }
+      SIZE_T limitPrivateBytes=
+          deviceFunctions.pfnCalcPrivateResourceSize(device,&invalid);
+      D3D10DDI_HRESOURCE handle={0};D3D10DDI_HRTRESOURCE runtime={0};
+      handle.pDrvPrivate=malloc(limitPrivateBytes);
+      runtime.handle=(VOID *)(UINT_PTR)(0xd20u+limitCase);
+      CHECK(handle.pDrvPrivate!=NULL);
+      if(handle.pDrvPrivate) {
+        memset(handle.pDrvPrivate,0x5a,limitPrivateBytes);
+        unsigned errors=FrontendErrors,creates=PoolCreates;
+        unsigned renders=RuntimeRenders,signals=RuntimeSignals;
+        deviceFunctions.pfnCreateResource(device,&invalid,handle,runtime);
+        CHECK(FrontendErrors==errors+1u && FrontendLastError==E_NOTIMPL &&
+              PoolCreates==creates && RuntimeRenders==renders &&
+              RuntimeSignals==signals);
+        if(FrontendErrors==errors)
+          deviceFunctions.pfnDestroyResource(device,handle);
+        else {
+          unsigned char *storage=handle.pDrvPrivate;
+          for(SIZE_T i=0;i<limitPrivateBytes;++i) CHECK(storage[i]==0x5a);
+        }
+        free(handle.pDrvPrivate);
+      }
+    }
     SIZE_T vbPrivateBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&vbCreate);
     vb.pDrvPrivate=calloc(1,vbPrivateBytes);
     vbRuntime.handle=(VOID *)(UINT_PTR)0xd02u;

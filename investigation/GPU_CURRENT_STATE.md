@@ -1089,3 +1089,28 @@ composer, both KMD materialization placements and ordered retirement.  Pipeline
 mask remains zero.  The only remaining frozen rows are feature-resource-limits
 and feature-required-formats; no broader pre-hardware inventory expansion is
 permitted without a pinned-WDK requirement or a causal standard-runtime RED.
+
+## Verified FL10_0 resource-limit admission (2026-09-20)
+The projected Resource.cpp now applies one common pinned-WDK limit gate before
+any resource private-state write or native allocation.  It checks the 14-level
+mip cap, 128 MiB total mip-chain cap, 8192 1D/2D/cube dimensions, 2048 3D
+dimensions, 512 array axes and the 2^27 buffer-texel bound with overflow-safe
+arithmetic.  This does not add resource classes: the existing exact buffer,
+attachment and presentation admission remains authoritative after the common
+envelope, and unsupported forms return E_NOTIMPL without mutation.
+
+The deterministic regression sends six boundary+1 descriptors through the real
+D3D10 CreateResource callback and proves no allocator, Render or Signal delta
+and no private-storage mutation.  RED
+resource-limits-red-20260920gt-x64 reached downstream allocation/failure paths;
+GREEN x64 full producer execution PASS:
+evidence/AD04-runtime-closure/resource-limits-green-20260920gu-x64/;
+source archive SHA-256
+13c01ecc0762928f51b4723b3a1b2c7d71b495a0140e01245f9fa4f439e2152e.
+ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/resource-limits-green-20260920gv-arm64/;
+source archive SHA-256
+0821e7c80e8650c9da6d67a83859324a40d55cc4e8bad19c894c22571d18b69c.
+
+The frozen inventory is now 120 of 121 and pipeline mask remains zero.  The
+only remaining pre-hardware inventory row is feature-required-formats.

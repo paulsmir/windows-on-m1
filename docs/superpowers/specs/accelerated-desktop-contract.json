@@ -1295,8 +1295,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Resource.cpp",
       "test_id": "ad04-d3d10-required-limits",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "resource-limits-green-20260920gu-x64"
     },
     {
       "id": "feature-required-formats",
