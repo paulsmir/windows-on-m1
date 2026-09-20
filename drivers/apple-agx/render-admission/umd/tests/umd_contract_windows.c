@@ -302,6 +302,7 @@ static HRESULT APIENTRY TestRender(HANDLE Device, D3DDDICB_RENDER *Render) {
   CHECK(Render != NULL && Render->CommandLength == sizeof(State.RenderCommand));
   CHECK(Render != NULL && Render->NumAllocations == 1u);
   CHECK(Render != NULL && Render->NumPatchLocations == 0u);
+  CHECK(Render != NULL && Render->RenderCBSequence == 1u);
   CHECK(AllocationList[0].hAllocation == 0x801u);
   CHECK(AllocationList[0].WriteOperation == 1u);
   memcpy(State.RenderCommand, CommandBuffer, sizeof(State.RenderCommand));

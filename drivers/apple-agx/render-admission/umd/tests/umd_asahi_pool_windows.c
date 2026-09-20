@@ -226,6 +226,8 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
   ADMISSION_WIN32_ALLOCATION_FACT facts[APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES];
   RUNTIME_REQUIRE(device && h==device->RuntimeDevice.handle &&
       r->hContext==device->KernelContext && r->CommandOffset==0 && r->NumPatchLocations==0);
+  RUNTIME_REQUIRE(r && r->RenderCBSequence!=0u &&
+      (r->RenderCBSequence&0x80000000u)==0u);
   if(device) for(unsigned allocation=0;allocation<r->NumAllocations;++allocation) {
     ADMISSION_UMD_SCREEN_BUFFER *buffer=NULL;
     for(unsigned slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot)

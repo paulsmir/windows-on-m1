@@ -228,6 +228,11 @@ HRESULT AdmissionUmdDrawDispatch(ADMISSION_UMD_DEVICE *d, ADMISSION_UMD_DRAW_SUB
     ReleaseSRWLockExclusive(&d->ScreenBufferLock);
     return E_FAIL;
   }
+  if(!AdmissionUmdNextRenderSequence(d,&render.RenderCBSequence)) {
+    release(d,s); s->Phase=AdmissionDrawRejected;
+    ReleaseSRWLockExclusive(&d->ScreenBufferLock);
+    return E_FAIL;
+  }
   render.hContext=s->Context; render.CommandLength=s->CommandBytes;
   render.NumAllocations=s->Count;
   s->Phase=AdmissionDrawCalling;

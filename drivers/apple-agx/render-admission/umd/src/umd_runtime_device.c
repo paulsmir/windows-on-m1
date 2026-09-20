@@ -72,6 +72,26 @@ VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error) {
     Device->SetErrorCallback(Device->RuntimeCoreLayer, Error);
 }
 
+BOOL AdmissionUmdNextRenderSequence(
+    ADMISSION_UMD_DEVICE *Device, UINT *Sequence) {
+  LONG next;
+  if (Sequence != NULL)
+    *Sequence = 0u;
+  if (Device == NULL || Sequence == NULL ||
+      Device->Magic != ADMISSION_UMD_DEVICE_MAGIC)
+    return FALSE;
+  /* Threading caps are zero: this is the single-threaded sequence range.
+   * Interlocked increment also makes callback reentry observationally unique. */
+  next = InterlockedIncrement(&Device->RenderCbSequence);
+  if (next <= 0) {
+    Device->DrawTerminal = TRUE;
+    Device->LastScreenError = E_FAIL;
+    return FALSE;
+  }
+  *Sequence = (UINT)next;
+  return TRUE;
+}
+
 static HRESULT APIENTRY AdmissionUmdDeallocateResource(
     void *Context, HANDLE RuntimeResource) {
   ADMISSION_UMD_DEVICE *device = (ADMISSION_UMD_DEVICE *)Context;

@@ -44990,3 +44990,52 @@ Then create and run exactly one interactive standard client task with bounded
 diagnostics. No replay. Collect installed hashes, client output/exit, UMD/KMD
 receipts, current-boot events and physical observation under main-root
 .local/experiments/EXP701-live before exact cleanup and ordinary recovery.
+
+### EXP701 actual result — unlock hypothesis rejected on Air
+The repeat full-owner pre-client gate was clean: exact package716 hashes,
+Code0/Running, Start12/Platform14,8CPU/NVMe/input and no fresh monitored event.
+One standard client (PID6868/TID1184) created the device and swap chain, completed
+native draw/capture and native seal, then pfnRenderCb again returned E_FAIL
+80004005. Present returned887a0005 and device reason887a0020. The unlock-before-
+Render lifecycle is proven offline but did not advance the physical boundary;
+therefore it is not the causal explanation for EXP699/701's callback failure.
+
+No Wom1UmdRenderSlot value was retained in the APPL0002 instance, Device
+Parameters, or AppleAgxAdmission service key. This repeats the evidence that the
+failure is before a retained KMD Render guard, while logger-write failure remains
+a stated alternative. Four stornvme Event129 records appeared after the client
+at roughly ten-second intervals. They are correlated with this attempt but are
+not attributed to GPU without an independent causal contract. No new physical
+screen observation was supplied for EXP701.
+
+Evidence: main-root .local/experiments/EXP701-live/{client-result.txt,
+pre-client.json,post-client.json,post-health.json,receipt-enum.json,cleanup.txt}.
+Exact oem5/package/task/trust/stopped-service cleanup succeeded. Ordinary377/392
+recovery after guarded rescan is Code28/no package/service/SYS/UMD/cert,
+8CPU/NVMe/xHCI/input and no events.
+
+Pinned WDK/official D3DDDICB_RENDER evidence now exposes the next deterministic
+violation: RenderCBSequence is mandatory, starts at1 for single-threaded UMD
+contexts, and increments for every pfnRenderCb. This UMD advertises threading
+Caps=0 but zero-initializes every RenderCBSequence. A zero sequence can be
+rejected by dxgkrnl before KMD, matching the observed boundary. This requirement
+is added to pre-hardware scope because the pinned WDK and official documentation
+explicitly require it for the exact callback in use.
+
+### RenderCBSequence deterministic gate PASS
+WHAT REAL BUG OR INVARIANT WILL THIS TEST CATCH: a zero or repeated sequence can
+make dxgkrnl reject pfnRenderCb before KMD. render-sequence-red-20260921ng-x64
+failed the legacy clear, composer and actual native callback checks because all
+received zero (exit15, archive
+ca9fb66b4a7c98c060abf728671c90e543d04e05e1b0f993266e42c7faa3f8b9).
+
+The UMD device now owns one interlocked single-thread sequence. Threading caps
+remain zero; the first callback receives1, each subsequent callback increments,
+and wrap fails terminally rather than reusing an identifier. Both pfnRenderCb
+call sites use the same source of truth. render-sequence-20260921nh x64
+execution0 and ARM64 link0; both exact source archives SHA256
+b4e353906c1e8e2247899d954816b1809ed0ca9c78bb63480112e0078803a44f and match
+all473 current driver files. x64 executable
+dc195a07448adfd6189874a83d9ae1c36266d33db2350f1d1a34f110d26bad7e.
+Actual producer/materializer/KMD-plan/patch/retirement/remap/teardown and host7
+tests PASS. Hardware NOT_RUN for this correction.

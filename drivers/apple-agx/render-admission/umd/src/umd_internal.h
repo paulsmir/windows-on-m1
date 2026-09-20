@@ -118,6 +118,7 @@ typedef struct _ADMISSION_UMD_DEVICE {
   APPLE_AGX_U64 LastDrawRequest;
   ADMISSION_UMD_DRAW_SUBMISSION *DrawSubmission;
   BOOL DrawTerminal;
+  volatile LONG RenderCbSequence;
   APPLE_AGX_U32 NativeBackendCount;
   void *NativeBatchTransaction;
   APPLE_AGX_U64 LastNativeRequest;
@@ -165,6 +166,8 @@ extern "C" {
 VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
                             const UINT *Values, UINT Count);
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
+BOOL AdmissionUmdNextRenderSequence(
+    ADMISSION_UMD_DEVICE *Device, UINT *Sequence);
 /* Populates validated metadata only. Caller owns stable adapter storage. */
 HRESULT AdmissionUmdRuntimeAdapterInitialize(
     ADMISSION_UMD_ADAPTER *Adapter, const D3D10DDIARG_OPENADAPTER *Args);

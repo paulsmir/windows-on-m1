@@ -2080,3 +2080,43 @@ boundary and continue causally.
 [BLOCKED] Only if the pre-client storage reset repeats.
 [HW] Successful physical KMD Render/Patch/Submit, AGX completion and DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP701 rejects locked-allocation causality; RenderCBSequence is NOW
+Clean pre-client package716 gate and one standard client reproduce native seal
+S_OK then pfnRenderCb E_FAIL/Present887a0005. No KMD Render slot is retained.
+Four stornvme129 events follow the client at ~10s intervals; correlation is
+recorded without GPU attribution. Exact cleanup and ordinary recovery after
+rescan are verified Code28/no package/service/files/trust,8CPU/NVMe/input/no
+events. No EXP701 physical-screen observation was supplied.
+
+The pinned WDK and official D3DDDICB_RENDER contract require a unique
+RenderCBSequence: single-threaded UMD contexts start at1 and increment for each
+pfnRenderCb. This UMD advertises threading Caps0 but currently submits zero.
+That is the nearest deterministic dxgkrnl-side rejection cause and is mandatory
+for the selected callback; add no broader contract inventory.
+HARDWARE ROADMAP
+[PASS] Native producer/capture/seal; correct unlock/retirement/remap lifecycle;
+ARM64/package gates; exact EXP701 cleanup and recovery.
+[NOW] Implement monotonic single-thread RenderCBSequence for every pfnRenderCb.
+Offline gate: actual clear/composer/native callbacks see1 then increment without
+wrap; x64 execution and ARM64 link. Fully offline until package verification.
+[NEXT] Exact package/sign/hash/preregister, then one Air client directly.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## Mandatory RenderCBSequence offline PASS
+The exact callback now receives the pinned-WDK-required single-thread sequence:
+first value1 and monotonic increment for every pfnRenderCb from one UMD device.
+Threading Caps remain0; wrap is terminal. Both legacy clear and native composer
+share the counter. ng RED exit15 proved zero on real callbacks; nh x64 execution0
+and ARM64 link0 share archive
+b4e353906c1e8e2247899d954816b1809ed0ca9c78bb63480112e0078803a44f, matching
+all473 current driver files. Actual producer through retirement/remap/teardown
+and host7 PASS. Next package/sign/hash/preregister and direct Air discriminator.
+HARDWARE ROADMAP
+[PASS] Native graph/capture/seal, unlock lifecycle, mandatory RenderCBSequence,
+x64 real producer and ARM64 link.
+[NOW] Exact package analysis/sign/hash and preregistration.
+[NEXT] One Air client; collect first KMD/AGX/Present boundary and storage events.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.

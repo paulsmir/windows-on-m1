@@ -208,6 +208,8 @@ static HRESULT AdmissionUmdSubmitClear(
   render.NumAllocations = 1u;
   render.NumPatchLocations = 0u;
   render.hContext = Device->KernelContext;
+  if (!AdmissionUmdNextRenderSequence(Device, &render.RenderCBSequence))
+    return E_FAIL;
   result = Device->KernelCallbacks->pfnRenderCb(
       Device->RuntimeDevice.handle, &render);
   if (FAILED(result))

@@ -74,6 +74,7 @@ static HRESULT APIENTRY Composer_render(HANDLE h, D3DDDICB_RENDER *r) {
   (void)h; ++Composer_calls;
   REQUIRE(r->hContext == Composer_device.KernelContext && r->CommandOffset == 0);
   REQUIRE(r->NumAllocations == 8 && r->NumPatchLocations == 0);
+  REQUIRE(r->RenderCBSequence == Composer_calls);
   REQUIRE(AdmissionUmdDrawDispatch(&Composer_device, &Composer_tx) == HRESULT_FROM_WIN32(ERROR_BUSY));
   REQUIRE(AdmissionUmdScreenBeginClose(&Composer_device) == HRESULT_FROM_WIN32(ERROR_BUSY));
   {
