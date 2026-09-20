@@ -45039,3 +45039,44 @@ all473 current driver files. x64 executable
 dc195a07448adfd6189874a83d9ae1c36266d33db2350f1d1a34f110d26bad7e.
 Actual producer/materializer/KMD-plan/patch/retirement/remap/teardown and host7
 tests PASS. Hardware NOT_RUN for this correction.
+
+## EXP702 — mandatory RenderCBSequence on standard callback
+UTC build preregistration 2026-09-20T23:43:36Z. Integration HEAD
+9bdef119ba524ff3f7c166f8feb74c193ea10b40; implementation
+f4b1e98766fbf8fa94c6679c5de37163272b0766. Exact nh ARM64 source archive SHA
+b4e353906c1e8e2247899d954816b1809ed0ca9c78bb63480112e0078803a44f.
+
+WHY THIS HYPOTHESIS: EXP701 remains at pfnRenderCb E_FAIL with no retained KMD
+Render receipt after the lock-lifetime fix, so that hypothesis is rejected.
+Pinned WDK and official Microsoft documentation require a unique
+RenderCBSequence starting at1 for this single-threaded UMD. ng proves all actual
+call sites supplied zero; nh makes the same actual callbacks and full producer
+GREEN with the mandatory sequence.
+WINDOWS CONTRACT: threading Caps0 selects the single-thread sequence range;
+every pfnRenderCb from one UMD device has a unique incrementing identifier.
+AGX/ASAHI CONTRACT: construction, capture, unlock, materialization, physical
+patch-list submission and same-fence retirement are unchanged.
+TRANSLATION: assign the sequence immediately before each real Render callback
+from one device-owned counter; zero/wrap fails terminally. No marker payload,
+free-threading, GPUVA, command, allocation, patch or scheduler change.
+WHAT IS STILL UNKNOWN: whether zero sequence caused dxgkrnl's pre-KMD E_FAIL;
+first KMD Render/Patch/Submit result, physical AGX completion and Present.
+
+Single variable: mandatory RenderCBSequence. Existing bounded diagnostics remain.
+Offline nh x64 execution0 and ARM64 link0; source matches all473 driver files;
+host7 PASS. Build package717 with build-driver.ps1 Release NativeFrontend and
+asahi-runtime-arm64-render-sequence-20260921nh-arm64/NativeRuntime.props,
+pinned26100 standard ARM64 client and same E9BE15 signer. Output
+native-package717-render-sequence-20260921ni-arm64. Finalize analysis, Universal,
+Inf2Cat, catalog membership, signatures and hashes before Air staging.
+
+Root/m1n1/Mu commits/diffs, full-owner584/406 and recovery377/392 identities are
+unchanged. Air recovery after EXP701 is Code28/no package/service/files/trust,
+8CPU/NVMe/input/no monitored events. Stage exact package without /install,
+verify Valid Air signatures and exact hashes, full-owner natural bind and clean
+pre-client gate. Run one interactive standard client only. Collect stdout/exit,
+UMD and KMD receipts, current-boot events, installed hashes and physical screen
+observation under main-root .local/experiments/EXP702-live before exact cleanup.
+Expected discriminator: pfnRenderCb advances to a retained KMD guard or a new
+earlier boundary. If stornvme129 appears only after the client, preserve it as a
+correlated symptom without attribution; do not replay the client.
