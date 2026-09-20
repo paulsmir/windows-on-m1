@@ -44413,3 +44413,26 @@ LLDDIR=.local/toolchain22, broker1, physical/debug-off/low-mem. Require bound
 Code0/Running Start12/Platform14 status0 and installed hashes. Clear temporary
 authorized autologon, run once through interactive task120s and collect exact
 client exit/log, registry, fresh events and physical symptom report. No replay.
+
+### EXP694 actual result — swap-chain device-removal boundary
+Exact package710 and client hashes matched; signatures Valid on Air; bound
+Code0/Running Start12/Platform14 status0. Active console, temporary autologon
+cleared; 8CPU/NVMe/input and no fresh monitored events before or after client.
+One execution: device S_OK; BGRA format query rejected, RGBA query S_OK; RGBA
+CreateSwapChain returned DXGI_ERROR_DEVICE_REMOVED (887a0005), process exit1.
+No GetBuffer/draw/Present. KMD remained Code0; no fresh41/1001/129/153/157/4101.
+Only display-DDI receipt timestamp changed. This does not identify a failing
+UMD DDI or prove hardware removal/TDR. Verdict: new runtime boundary observed;
+underlying error/actual resource shape still unknown, no guard relaxation.
+Evidence main-root .local/experiments/EXP694-live: bound.json, pre-client.json,
+client-result.txt, post-client.json, post-health.json, post-final.json.
+Physical display verdict UNOBSERVED: operator explicitly reports being away
+from the computer during this run. Persistence/disappearance/change of the
+mostly-black/isolated-caption symptom is not established.
+Exact oem5 package, stopped service, task and test trust removed after evidence.
+Ordinary377/392 recovery verified Code28/no package/service/files/cert, 8CPU/
+NVMe/input and no fresh events; recovery/health-final.json is the final receipt.
+Next single variable is bounded opt-in UMD diagnostics at actual frontend
+resource/error, allocation callback and native import, plus runtime's device-
+removed reason. It must preserve all resource guards/results and be gated before
+another once-only preregistered run. No replay of EXP694.

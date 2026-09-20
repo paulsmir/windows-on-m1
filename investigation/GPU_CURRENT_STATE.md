@@ -1805,3 +1805,22 @@ catalog membership. Immutable archive SHAb219c80f4616e985a85a8c86a1458add5848e32
 Air-side trust verification remains required during stage; no policy toggle.
 Next exact stage/full-owner bind and once-only standard runtime experiment.
 Physical mostly-black/isolated-caption observation is explicitly preregistered.
+
+## EXP694 runtime DeviceRemoved; next diagnostic boundary
+Package710 hardware startup PASS, standard device S_OK, RGBA format support
+S_OK, but RGBA CreateSwapChain returns887a0005. No draw or Present. KMD remains
+Code0 with no fresh monitored errors. Do not infer which resource guard/callback
+failed. Actual caller parameters and SetError origin are now the causal target.
+Physical mostly-black/isolated-caption observation is UNOBSERVED: operator was
+away. No claim about symptom persistence or resolution is supported.
+Exact cleanup and ordinary377/392 Code28 recovery verified after evidence.
+HARDWARE ROADMAP
+[PASS] Frozen contracts, RGBA offline create/open/RTV/blit and x64/ARM64/package
+710 gates, actual KMD/device startup and runtime RGBA support.
+[NOW] Diagnose actual swap-chain DDI rejection using bounded opt-in records and
+GetDeviceRemovedReason. No guard/capability change. Existing executable gates
+confirm behavior preservation; diagnostic file is then collected on Air.
+[NEXT] Fix only the identified cause with deterministic proof where possible;
+exact sign/hash/preregistration then immediate once-only hardware test.
+[HW] Standard swap-chain, real draw, physical completion and DXGI Present.
+POST-HARDWARE: accelerated desktop stability and desktop acceptance.
