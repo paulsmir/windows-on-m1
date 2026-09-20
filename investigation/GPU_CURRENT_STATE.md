@@ -1437,3 +1437,28 @@ Inventory remains 120 of 121 and pipeline mask zero.  Representative execution
 now covers every selected physical/lowered storage and subresource family.  The
 last gate is the exhaustive machine-readable required-format/use descriptor
 contract that binds all mandatory DXGI entries to these production families.
+
+## Required-format closure in progress: A8 and RGB32 texture lowering (2026-09-20)
+The two explicit pinned-Asahi texture exceptions now use one frontend-owned
+representation function across allocation, SRV and blit.  A8_UNORM uploads to
+physical RGBA8 while preserving alpha, and R32G32B32 FLOAT/UINT/SINT upload to
+the corresponding physical RGBA32 representation with alpha supplied by Mesa
+format conversion.  Logical DXGI identity remains on the Windows owner; native
+capture sees only the supported physical resource.  Real A8 and RGB32_FLOAT
+sampling execute through the existing version-6 graph, both KMD placements and
+retirement.
+
+Causal RED reached the Asahi non-native format rejection before submission:
+evidence/AD04-runtime-closure/required-lowered-textures-red-20260920kb-x64/.
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kc-x64/;
+source archive SHA-256
+eddb288c84ad1984db9a272d9d03649681b567bdcf54741724e5393033d21b70.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-lowered-textures-green-20260920kd-arm64/;
+source archive SHA-256
+b35ef38fc5aaa5cd1a1e2d8d079f17746e085521b6b8a232892a2a9c94a184bd.
+
+Inventory remains 120 of 121 and pipeline mask zero pending the exhaustive
+machine-readable required-format/use table.  No physical/lowered storage family
+remains without representative executable evidence.

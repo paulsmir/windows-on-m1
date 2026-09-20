@@ -2815,6 +2815,112 @@ static void test_mesa_d3d10_frontend_open(void) {
         free(mipSrv.pDrvPrivate);free(mipResource.pDrvPrivate);
       }
       {
+        static unsigned char a8Data[35]={
+          0xff,0xff,0,0,0,0,0,0, 0,0,0xff,0xff,0,0,0,0,
+          0,0,0xff,0xff,0,0,0,0, 0xff,0xff,0,0,0,0,0,0};
+        D3D10DDI_MIPINFO a8Mip={0};
+        D3D10_DDIARG_SUBRESOURCE_UP a8Upload={0};
+        D3D10DDIARG_CREATERESOURCE a8Create={0};
+        D3D10DDI_HRESOURCE a8={0};D3D10DDI_HRTRESOURCE a8Runtime={0};
+        a8Mip.TexelWidth=7;a8Mip.TexelHeight=5;a8Mip.TexelDepth=1;
+        a8Upload.pSysMem=a8Data;a8Upload.SysMemPitch=7;
+        a8Upload.SysMemSlicePitch=35;
+        a8Create.pMipInfoList=&a8Mip;a8Create.pInitialDataUP=&a8Upload;
+        a8Create.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        a8Create.Usage=D3D10_DDI_USAGE_DEFAULT;
+        a8Create.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
+        a8Create.Format=DXGI_FORMAT_A8_UNORM;
+        a8Create.SampleDesc.Count=1;a8Create.MipLevels=1;a8Create.ArraySize=1;
+        SIZE_T a8Bytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&a8Create);
+        a8.pDrvPrivate=calloc(1,a8Bytes);a8Runtime.handle=(VOID *)(UINT_PTR)0xd82u;
+        CHECK(a8.pDrvPrivate && a8Bytes);
+        unsigned a8Errors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&a8Create,a8,a8Runtime);
+        CHECK(FrontendErrors==a8Errors);
+        D3D10DDIARG_CREATESHADERRESOURCEVIEW a8SrvCreate={0};
+        D3D10DDI_HSHADERRESOURCEVIEW a8Srv={0};
+        D3D10DDI_HRTSHADERRESOURCEVIEW a8SrvRuntime={0};
+        a8SrvCreate.hDrvResource=a8;a8SrvCreate.Format=DXGI_FORMAT_A8_UNORM;
+        a8SrvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        a8SrvCreate.Tex2D.MostDetailedMip=0;a8SrvCreate.Tex2D.MipLevels=1;
+        a8SrvCreate.Tex2D.FirstArraySlice=0;a8SrvCreate.Tex2D.ArraySize=1;
+        SIZE_T a8SrvBytes=deviceFunctions.pfnCalcPrivateShaderResourceViewSize(device,&a8SrvCreate);
+        a8Srv.pDrvPrivate=calloc(1,a8SrvBytes);a8SrvRuntime.handle=(VOID *)(UINT_PTR)0xd83u;
+        CHECK(a8Srv.pDrvPrivate && a8SrvBytes);
+        deviceFunctions.pfnCreateShaderResourceView(device,&a8SrvCreate,a8Srv,a8SrvRuntime);
+        CHECK(FrontendErrors==a8Errors);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+        RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+        memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+        deviceFunctions.pfnResourceCopy(device,rt,a8);
+        CHECK(FrontendErrors==a8Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
+              RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(depthOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(depthOwner,5u);
+        }
+        RuntimeExpectedCommandVersion=0;
+        deviceFunctions.pfnDestroyShaderResourceView(device,a8Srv);
+        deviceFunctions.pfnDestroyResource(device,a8);
+        free(a8Srv.pDrvPrivate);free(a8.pDrvPrivate);
+      }
+      {
+        static unsigned char rgb32Data[420]={
+          0xff,0xff,0,0,0,0,0,0, 0,0,0xff,0xff,0,0,0,0,
+          0,0,0xff,0xff,0,0,0,0, 0xff,0xff,0,0,0,0,0,0};
+        D3D10DDI_MIPINFO rgb32Mip={0};
+        D3D10_DDIARG_SUBRESOURCE_UP rgb32Upload={0};
+        D3D10DDIARG_CREATERESOURCE rgb32Create={0};
+        D3D10DDI_HRESOURCE rgb32={0};D3D10DDI_HRTRESOURCE rgb32Runtime={0};
+        rgb32Mip.TexelWidth=7;rgb32Mip.TexelHeight=5;rgb32Mip.TexelDepth=1;
+        rgb32Upload.pSysMem=rgb32Data;rgb32Upload.SysMemPitch=84;
+        rgb32Upload.SysMemSlicePitch=420;
+        rgb32Create.pMipInfoList=&rgb32Mip;rgb32Create.pInitialDataUP=&rgb32Upload;
+        rgb32Create.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        rgb32Create.Usage=D3D10_DDI_USAGE_DEFAULT;
+        rgb32Create.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
+        rgb32Create.Format=DXGI_FORMAT_R32G32B32_FLOAT;
+        rgb32Create.SampleDesc.Count=1;rgb32Create.MipLevels=1;rgb32Create.ArraySize=1;
+        SIZE_T rgb32Bytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&rgb32Create);
+        rgb32.pDrvPrivate=calloc(1,rgb32Bytes);rgb32Runtime.handle=(VOID *)(UINT_PTR)0xd84u;
+        CHECK(rgb32.pDrvPrivate && rgb32Bytes);
+        unsigned rgb32Errors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&rgb32Create,rgb32,rgb32Runtime);
+        CHECK(FrontendErrors==rgb32Errors);
+        D3D10DDIARG_CREATESHADERRESOURCEVIEW rgb32SrvCreate={0};
+        D3D10DDI_HSHADERRESOURCEVIEW rgb32Srv={0};
+        D3D10DDI_HRTSHADERRESOURCEVIEW rgb32SrvRuntime={0};
+        rgb32SrvCreate.hDrvResource=rgb32;rgb32SrvCreate.Format=DXGI_FORMAT_R32G32B32_FLOAT;
+        rgb32SrvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        rgb32SrvCreate.Tex2D.MostDetailedMip=0;rgb32SrvCreate.Tex2D.MipLevels=1;
+        rgb32SrvCreate.Tex2D.FirstArraySlice=0;rgb32SrvCreate.Tex2D.ArraySize=1;
+        SIZE_T rgb32SrvBytes=deviceFunctions.pfnCalcPrivateShaderResourceViewSize(device,&rgb32SrvCreate);
+        rgb32Srv.pDrvPrivate=calloc(1,rgb32SrvBytes);rgb32SrvRuntime.handle=(VOID *)(UINT_PTR)0xd85u;
+        CHECK(rgb32Srv.pDrvPrivate && rgb32SrvBytes);
+        deviceFunctions.pfnCreateShaderResourceView(device,&rgb32SrvCreate,rgb32Srv,rgb32SrvRuntime);
+        CHECK(FrontendErrors==rgb32Errors);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+        RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+        memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+        deviceFunctions.pfnResourceCopy(device,rt,rgb32);
+        CHECK(FrontendErrors==rgb32Errors && RuntimeRenders==1u && RuntimeSignals==1u &&
+              RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(depthOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(depthOwner,5u);
+        }
+        RuntimeExpectedCommandVersion=0;
+        deviceFunctions.pfnDestroyShaderResourceView(device,rgb32Srv);
+        deviceFunctions.pfnDestroyResource(device,rgb32);
+        free(rgb32Srv.pDrvPrivate);free(rgb32.pDrvPrivate);
+      }
+      {
         D3D10DDI_MIPINFO fp16Mip={0};
         D3D10DDIARG_CREATERESOURCE fp16Create={0};
         D3D10DDI_HRESOURCE fp16={0};D3D10DDI_HRTRESOURCE fp16Runtime={0};

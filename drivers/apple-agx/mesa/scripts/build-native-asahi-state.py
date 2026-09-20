@@ -1117,9 +1117,8 @@ _Present('''),
    memset(&desc, 0, sizeof desc);
    resource = CastPipeResource(pCreateSRView->hDrvResource);
    format = FormatTranslate(pCreateSRView->Format, false);
-   if (windowsResource->Format == DXGI_FORMAT_R8G8_B8G8_UNORM ||
-       windowsResource->Format == DXGI_FORMAT_G8R8_G8B8_UNORM)
-      format = PIPE_FORMAT_R8G8B8A8_UNORM;'''),
+   enum pipe_format lowered=AgxD3d10LoweredTextureFormat(pCreateSRView->Format);
+   if(lowered!=PIPE_FORMAT_NONE) format=lowered;'''),
         ('''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);''',
          '''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);
    pSamplerState->owner_device = CastDevice(hDevice);'''),
@@ -1250,7 +1249,12 @@ FormatToName(DXGI_FORMAT Format);
 extern "C"
 #endif
 BOOL AgxD3d10FormatViewCompatible(
-   DXGI_FORMAT ResourceFormat, DXGI_FORMAT ViewFormat, BOOL Depth);''')])
+   DXGI_FORMAT ResourceFormat, DXGI_FORMAT ViewFormat, BOOL Depth);
+
+#ifdef __cplusplus
+extern "C"
+#endif
+enum pipe_format AgxD3d10LoweredTextureFormat(DXGI_FORMAT Format);''')])
     change('src/gallium/frontends/d3d10umd/Format.cpp',
         '26215278ae7e566dc5973fb932daaa9142b7b11bd5dcfff8c574f37991e8fdf0',[
         ('''   case DXGI_FORMAT_B5G6R5_UNORM:
@@ -1285,6 +1289,25 @@ extern "C" BOOL AgxD3d10FormatViewCompatible(
    if (resource == DXGI_FORMAT_BC5_TYPELESS)
       return view == DXGI_FORMAT_BC5_UNORM || view == DXGI_FORMAT_BC5_SNORM;
    return FALSE;
+}
+
+extern "C" enum pipe_format
+AgxD3d10LoweredTextureFormat(DXGI_FORMAT format)
+{
+   switch(format) {
+   case DXGI_FORMAT_R8G8_B8G8_UNORM:
+   case DXGI_FORMAT_G8R8_G8B8_UNORM:
+   case DXGI_FORMAT_A8_UNORM:
+      return PIPE_FORMAT_R8G8B8A8_UNORM;
+   case DXGI_FORMAT_R32G32B32_FLOAT:
+      return PIPE_FORMAT_R32G32B32A32_FLOAT;
+   case DXGI_FORMAT_R32G32B32_UINT:
+      return PIPE_FORMAT_R32G32B32A32_UINT;
+   case DXGI_FORMAT_R32G32B32_SINT:
+      return PIPE_FORMAT_R32G32B32A32_SINT;
+   default:
+      return PIPE_FORMAT_NONE;
+   }
 }
 
 extern "C" BOOL APIENTRY
@@ -1363,9 +1386,9 @@ MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
       templat.format = FormatTranslate(pCreateResource->Format, bindDepthStencil);
    }
    enum pipe_format upload_format = templat.format;
-   if (pCreateResource->Format == DXGI_FORMAT_R8G8_B8G8_UNORM ||
-       pCreateResource->Format == DXGI_FORMAT_G8R8_G8B8_UNORM)
-      templat.format = PIPE_FORMAT_R8G8B8A8_UNORM;'''),
+   enum pipe_format lowered_format=AgxD3d10LoweredTextureFormat(
+      pCreateResource->Format);
+   if(lowered_format!=PIPE_FORMAT_NONE) templat.format=lowered_format;'''),
         ('''                  util_copy_rect(dst,
                                  templat.format,
                                  transfer->stride,
@@ -1769,9 +1792,8 @@ AgxD3d10ResourceWithinRequiredLimits(
    } else {
       struct pipe_resource *dst=destination->resource,*src=source->resource;
       enum pipe_format sample=FormatTranslate(source->sample_format,false);
-      if(source->Format==DXGI_FORMAT_R8G8_B8G8_UNORM||
-         source->Format==DXGI_FORMAT_G8R8_G8B8_UNORM)
-        sample=PIPE_FORMAT_R8G8B8A8_UNORM;
+      enum pipe_format lowered=AgxD3d10LoweredTextureFormat(source->sample_format);
+      if(lowered!=PIPE_FORMAT_NONE) sample=lowered;
       unsigned sampleLevel=source->sample_level,sampleLayer=source->sample_layer;
       unsigned sampleWidth=src?u_minify(src->width0,sampleLevel):0;
       unsigned sampleHeight=src?u_minify(src->height0,sampleLevel):0;

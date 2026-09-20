@@ -338,6 +338,9 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
                  rsrc->base.target != PIPE_TEXTURE_2D_ARRAY) ||
        (rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_R8G8B8A8_UNORM &&
+        rsrc->base.format != PIPE_FORMAT_R32G32B32A32_FLOAT &&
+        rsrc->base.format != PIPE_FORMAT_R32G32B32A32_UINT &&
+        rsrc->base.format != PIPE_FORMAT_R32G32B32A32_SINT &&
         rsrc->base.format != PIPE_FORMAT_DXT1_RGBA &&
         rsrc->base.format != PIPE_FORMAT_DXT5_RGBA &&
         rsrc->base.format != PIPE_FORMAT_RGTC2_UNORM &&
