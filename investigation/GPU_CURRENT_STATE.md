@@ -1551,3 +1551,30 @@ E9BE15BD2A184BFABA0C8035B3C620C58037A241 and never staged.
 Package703 is not the hardware candidate because its source snapshot contained
 these changes as a dirty diff.  Rebuild from the next clean HEAD as package704;
 do not stage 702 or 703.
+
+## EXP685 standard-runtime hardware candidate preregistered (2026-09-20)
+Clean integration HEAD 097573751bb341d6c54fc0c8e428dbb65b5529c0 produced
+native ARM64 package build704.  Fresh runtime closure/client link PASS, archive
+SHA-256 7441daf2e5f2e93a3cd070d81151a88d7e0a73a3608dd7e368bb61bc1b14fc4b.
+UMD and KMD code analysis are 0 warnings/0 errors; Universal validation and
+Inf2Cat pass with 0 warnings/0 errors.  Signed package hashes: INF
+55107e16f01c3d213404f9ae952c5c021a54e0d022c7726fadd68c454a1cb29e,
+SYS c3eb32020145c4207a532392caf038f212f4b3e9ffae31418aae5dfdd4b8386a,
+UMD 7bc8a5de3fdf0f086a8d968d20a6a60925513a0f654e9367ea2a74fc3c933285,
+CAT b1032dfb8ddafca4e8ae6a5e7f1192e377a7ddec06725175267840fd070bf773.
+The preserved signer is E9BE15BD2A184BFABA0C8035B3C620C58037A241.
+
+The clean-source ARM64 standard client builds with 0 warnings/0 errors and is
+signed by that same signer; EXE SHA-256
+edbc48c789d39ea924c8de2f0c631747040a0226597970764e5e1cc9b3f780fe.
+Immutable hardware artifact is
+`.local/experiments/EXP685-standard-runtime-704.zip`, SHA-256
+`df82dd136dc2e841aa97cc989e5287dc5aa2704f84dea532fd8ed4c4ded5431b`.
+EXP685 preregistration is committed in the experiment ledger with exact
+hypothesis, atomic contract, commands, evidence and ordinary377/392 recovery.
+
+Hardware has NOT_RUN.  Two bounded control-plane audits found Air SSH
+192.168.1.37 unreachable, no expected proxy/vUART USB endpoints and no active
+m1n1/full-owner launcher.  No signer was imported, no package staged and no
+reboot/launch performed.  Manual action is required to place the Air at the
+ordinary GPU-visible Windows baseline or Running proxy before work can continue.
