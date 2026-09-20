@@ -44606,3 +44606,45 @@ operator-observation.json stores source/timing qualification and photo hashes:
 operator-screen-1.png 2f110b7e7c9706189eb5c4a87bdfb74a45694137ed7d1c19d58b2abf7e86452e;
 operator-screen-2.png f8b7145e6809540a3132c0b8f48dc3a6f0670ed90c7856ccceafa59366f46539;
 operator-screen-3.png 2588e193366d8045e0b4b055dc7c49dcf6aaa85ad0b7ac4653eb228f5376e8e3.
+
+## EXP697 — captured default samplers on the standard native draw
+UTC build preregistration 2026-09-20T21:32:13.868153+00:00.
+Source 6083eca543728c35879d057a2c6c57951d6f2a07; archive550d2649f1fdb9b3bd81dc499a7b39c973253e90ac5ab4d2d1cf15f3e3f03c35.
+WHY THIS HYPOTHESIS: EXP696 proves full16-owned defaults in VS/GS/PS and successful
+swap-chain creation followed by Flush E_FAIL. mo actual-producer receipt shows
+backendFailed1 with a clean recording capture before draw emission; exact source
+preflight rejects any sampler_count without a texture. Corrected condition makes
+the same full-owned16 producer/flush/materializer/retirement reproduction GREEN.
+WINDOWS CONTRACT: base D3D10 default samplers remain bound even for a non-textured
+shader; logical state alone is not a texture resource access.
+AGX/ASAHI CONTRACT: ordinary sampler descriptors have no GPU addresses (pinned
+cmdbuf.xml Sampler); native upload includes reservedtxf and full USC table span.
+TRANSLATION: accept bounded16 sampler state without textures, retain existing
+USC relocation/source-span capture and every actual resource guard. No logical
+state clearing, shader-use filtering, count clamp, new allocator or cap change.
+WHAT IS STILL UNKNOWN: actual standard native draw hardware submission/completion
+and DXGI Present after the proven pre-emission rejection is removed.
+Single variable: native preflight classification of ordinary default sampler
+tables. Existing bounded diagnostics retained; native failure receipt is read-only.
+Mandatory x64 default-sampler-table-mp execution exit0 and ARM64 link0, including
+all-owned16 draw and retirement. No optional bypass remains for that case.
+Build pinned build-driver.ps1 Release NativeFrontend PackageBuild713 with
+asahi-runtime-arm64-default-sampler-table-20260920mp-arm64/NativeRuntime.props,
+standard ARM64 client/pinned26100 roots/same E9BE15 signer. Output
+native-package713-default-sampler-20260920mq-arm64. No install until finalized
+analysis/Universal/Inf2Cat/catalog/signature/hash records below.
+Root/m1n1/Mu source/diff and full-owner584/406 plus recovery377/392 artifact
+identities are unchanged from EXP694. Air baseline after EXP696 verified Code28
+without package/service/files/trust, 8CPU/NVMe/input and no fresh events.
+Exact stage without /install, full-owner natural bind, installed hashes/Code0/
+Running/Start12/Platform14, remove authorized temporary autologon, one console
+interactive task120s with per-client resource trace. No replay.
+Evidence main-root .local/experiments/EXP697-live: client/native trace, exact exit,
+registry/events, physical observations if available; collect before exact
+package/task/trust cleanup and ordinary377/392 recovery.
+Expected checkpoint: actual draw/flush progresses beyond preflight, then physical
+completion and standard Present. Any failure retains exact boundary; client PASS
+alone does not establish physical completion or normal desktop composition.
+Physical comparator is EXP696's interaction-dependent partial wallpaper/white
+regions/black Start and taskbar with flickering icons; record separately from
+the standard client's result and do not assume the causes are identical.
