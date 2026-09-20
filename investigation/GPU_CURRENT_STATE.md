@@ -1603,3 +1603,28 @@ render-shared/initdata/compute queue/provider tests are GREEN.  Next: commit thi
 correction, rebuild a clean ARM64 native package with a new version/signer/hash,
 preregister one replacement experiment, then repeat bound preflight and proceed
 directly to the standard client only if StartDevice is complete.
+
+## EXP686 replacement candidate preregistered (2026-09-20)
+Implementation d657ec07 and ledger0a4f304d form the clean source boundary.
+Production-order stage-9 and 94-mapping/207-leaf REDs are GREEN; focused host,
+platform, render-admission, package and ledger tests pass. Fresh ARM64 runtime
+closure `package706-stage9-20260920ko-arm64` and expected-build706 direct-KMT
+client link pass from clean archive SHA
+74754930a168f8e1268b13313fa7256a987295b41237ef28b766e9d754445fdf.
+
+Package706 version30.0.706.0 passes UMD/KMD analysis0/0, Universal and Inf2Cat.
+Hashes: INF b42ab9628a1651e963a8c6ab44e30d9d27c784a55c783f9b6820299c739902e3;
+SYS bee53de5bbedbf09f22c70a829c597b35dca1eb29aa0ed7e7cca2da1c624ce8c;
+UMD b49612ed7d4c7814d77a488da1aa55dc481df55cbc471fe68580b419016e5592;
+CAT eed0a30f235e87cca81896d89f3e897cf67667aa35e52a895da6aadbabffff27;
+standard client a4be15615ab77cfd936c96840365a20c3092ffa9fde8af7076c73df20413bb05;
+certificate97145866...; signer E9BE15BD2A184BFABA0C8035B3C620C58037A241.
+All three package files are catalog members. Immutable EXP686 archive SHA
+76ee8964e044f277d4d48193ca500cf851c5df3805c0b9b0aa1bd5263276387c.
+Builder chain status is untrusted-self-signed-root as expected; Air verification
+must become trusted only after exact experiment certificate import.
+
+Current Air state is healthy ordinary377/392 Code28 recovery. EXP686 is NOT_RUN.
+Next perform its exact stage/reboot/full-owner bound preflight; execute the
+standard client once only if APPL0002 reaches Code0 and
+StartStage12/PlatformStage14. No inventory expansion precedes it.

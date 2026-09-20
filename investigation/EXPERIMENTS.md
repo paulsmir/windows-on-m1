@@ -43926,3 +43926,93 @@ both failures; the minimal corrections accept only prepared initialization and
 derive the broker mapping count from the authoritative capacity.  A new clean
 candidate, package identity and experiment preregistration are required before
 another hardware run.
+
+## EXP686 — preregistered stage-9-corrected standard-runtime experiment
+
+UTC preregistration: 2026-09-20T17:46:51Z. Hardware status: **NOT_RUN**.
+
+**WHY THIS HYPOTHESIS:**
+1. EXP685 reached the exact clean package and failed deterministically at
+   StartStage8/PlatformStage9 with `STATUS_INVALID_IMAGE_FORMAT`; the standard
+   client was never invoked, excluding UMD/runtime/Present as the cause of that
+   result.
+2. A production-order host RED reproduces the first stage-9 rejection because
+   compute queue initialization required `GpuMapped` even though PrepareBroker
+   intentionally leaves all queue objects `Prepared` until context-0 import.
+3. A second RED proves the same 36-to-40 object expansion produces 94 broker
+   mappings and 207 leaves while broker arena/binding code retained literal 90
+   checks. Both REDs pass after the minimal owner-state/derived-count correction.
+
+Single changed variable relative to EXP685: implementation
+d657ec07bf926cde9f2b5f2c5fd11567f490dce9 corrects the compute queue's
+broker-owned startup invariant. Initial queue metadata writes require Prepared,
+and broker mapping admission derives its exact count from
+`APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY - 1u`. Allocators, UMD, composer,
+physical/patch-list KMD translation, firmware, platform and recovery are
+unchanged. Package build number706 is identity metadata only.
+
+**WINDOWS CONTRACT:** StartDevice must finish all existing memory/backend,
+platform, post-display, scanout and adapter-object stages before dxgkrnl admits
+the adapter. On Code0 the standard D3D10CreateDeviceAndSwapChain client selects
+Apple vendor106B, creates the FL10_0 pipeline, draws, flushes and calls standard
+IDXGISwapChain::Present. No direct-KMT client is executed.
+
+**AGX/ASAHI CONTRACT:** PrepareBroker owns the immutable context-0 mapping
+inventory while queue metadata is CPU initialized in Prepared memory. Firmware
+import later makes those exact mappings live. The real Mesa/Asahi producer, UMD
+composer, KMD materializer, TA/3D submission, completion and retirement remain
+the selected architecture. GPUVA migration remains closed/no.
+
+**TRANSLATION:** the authoritative 40-object shared-memory inventory generates
+94 broker mappings and 207 16-KiB leaves; initial compute queue metadata is
+written before mapping, then the existing broker maps the same objects and
+BuildQueueConfig requires their live GpuMapped identity. Standard D3D10/DXGI
+then enters the existing native batch path without a parallel allocator.
+
+**WHAT IS STILL UNKNOWN:** whether build706 now completes StartDevice on the
+Air, and, only after that preflight, whether the actual Windows standard runtime
+admits the installed native UMD and completes the first physical draw/Present.
+
+Source identity: clean HEAD
+0a4f304d06cdca18bdebb4b6b8ff9db2126d5806; exact clean source archive SHA-256
+74754930a168f8e1268b13313fa7256a987295b41237ef28b766e9d754445fdf.
+Pinned root/m1n1/Mu and full-owner/recovery firmware identities are unchanged
+from EXP685.
+
+Fresh ARM64 native runtime closure `package706-stage9-20260920ko-arm64` passed
+archive, build and real-KMT client link gates; integrated EXE SHA-256
+f5a8cef04fe0e49de5821ade901bb8c529ed4211e5b2074186da49fd60e68152,
+expected-build706 native client SHA-256
+1414180cd917b99f532109b307689696b67ada686500c8f25379f91820f65c58.
+Package706 UMD/KMD analysis passed 0 warnings/0 errors; Universal validation and
+Inf2Cat passed without errors/warnings; version is 30.0.706.0. INF/SYS/UMD are
+catalog members. Embedded/catalog signer identity is the preserved
+E9BE15BD2A184BFABA0C8035B3C620C58037A241. The builder does not trust this
+self-signed root; trusted-chain verification belongs to the Air after importing
+only the packaged public certificate, as in EXP685.
+
+Exact hashes: INF b42ab9628a1651e963a8c6ab44e30d9d27c784a55c783f9b6820299c739902e3;
+SYS bee53de5bbedbf09f22c70a829c597b35dca1eb29aa0ed7e7cca2da1c624ce8c;
+UMD b49612ed7d4c7814d77a488da1aa55dc481df55cbc471fe68580b419016e5592;
+CAT eed0a30f235e87cca81896d89f3e897cf67667aa35e52a895da6aadbabffff27;
+signed standard client a4be15615ab77cfd936c96840365a20c3092ffa9fde8af7076c73df20413bb05;
+certificate 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable `.local/experiments/EXP686-standard-runtime-706.zip` SHA-256 is
+76ee8964e044f277d4d48193ca500cf851c5df3805c0b9b0aa1bd5263276387c.
+
+Exact run: verify ordinary377/392 Code28 baseline; transfer/re-hash archive;
+import only E9BE15 into LocalMachine Root and TrustedPublisher; verify members
+and signer; stage only INF without `/install`; controlled reboot and immutable
+EXP584/EXP406 full-owner launch. Bound preflight requires 8 CPUs, APPL0002 Code0,
+exact OEM INF/version/hashes and Running service. Only then run the standard
+client once, attached, with 120-second outer timeout and collect all receipts.
+
+PASS requires StartStage12/PlatformStage14 success followed by
+`STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS`, vendor106B, fresh
+build706 native graph/physical completion, exit0 and healthy SSH/8CPU/NVMe/xHCI/
+input with no fresh 41/1001/129/4101. Non-Code0 preflight aborts before client.
+
+Recovery: evidence first, then remove only the exact hash-matched OEM package,
+stale APPL0002/service and E9BE15 trust; preserve AppleInput71CD0A, TESTSIGNING
+and SAC; restore ordinary377/392 one-Code28. Use hidden377/385 only if ordinary
+Windows is unreachable.
