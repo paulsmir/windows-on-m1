@@ -44734,3 +44734,22 @@ qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d6624
 Immutable .local/experiments/EXP698-native-seam-714.zip SHA ca88d3b4c5cb6556802b3cc0b0b8fdaeecac91f2282ad398a28b719ab5584c9c.
 Exact stage/hash/signature preflight, full-owner584/406 natural bind and one
 interactive120s client. Collect before exact cleanup and ordinary377/392.
+
+### EXP698 actual result — native draw and seal PASS; Render callback fails
+One client exit1. Standard device/swap-chain/import S_OK. Native draw emits1
+with18 references/117 relocations and clean capture/root/backend. native-seal
+S_OK; actual pfnRenderCb returns80004005, native-dispatch same; Present887a0005
+removed reason887a0020. Command0x18a8 and9 allocations within runtime buffers.
+No fresh monitored system events; only display receipt changes. Production
+compiles out existing UMD Render guard/correlation diagnostics, so absence of
+KMD receipts does not establish absent KMD entry. WDK/source review found no
+deterministic UMD callback argument mismatch. Do not alter flags/patch counts
+without evidence. Next discriminator is existing KMD Render guard export with
+client correlation in production-derived build, without qualification behavior.
+Physical operator response for this exact run: previous damage PERSISTS after
+Start/AltTab. Stored operator-observation.json; separate from callback verdict.
+Evidence main-root .local/experiments/EXP698-live/{client-result.txt,pre-client.json,
+post-client.json,post-health.json,operator-observation.json,cleanup.txt}.
+Exactoem5/hash package/task/trust/stopped-service cleanup succeeded; ordinary
+377/392 recovery launched. SSH/NVMe/input/8CPU alive before cleanup; RDP untested.
+No bugcheck or physical native completion claimed.

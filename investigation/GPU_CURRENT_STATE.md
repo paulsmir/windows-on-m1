@@ -1970,3 +1970,20 @@ differ from tar metadata only. ARM64 archive853f8f8876232230b88c2b1e9112bd27134e
 mr failed only on diagnostic enum-to-UINT narrowing; explicit cast resolves it.
 Air fresh read-only health:Code28/no package/service/files/trust,8CPU/NVMe/input,
 no fresh monitored events. Next diagnostic-only package714 and EXP698.
+
+## EXP698 exact native-to-Windows handoff boundary
+Package714: real draw emits1, capture18refs/117relocs clean; native seal S_OK.
+Actual pfnRenderCb E_FAIL80004005 is first failed measured seam; Present887a0005
+reason887a0020. Existing KMD guard/correlation compiled out in production, so no
+KMD entry conclusion from absent receipt. Source/WDK review finds UMD arguments
+coherent. Next diagnostic-only task exposes existing KMD Render guard/result
+with bounded client correlation; do not change composer or enable qualification
+behavior. Physical operator confirms EXP698 damage PERSISTS. Exact cleanup done;
+ordinary377/392 recovery launched.
+HARDWARE ROADMAP
+[PASS] Actual standard runtime native draw/capture/seal EXP698; offline producer
+retirement, ARM64 and exact package gates.
+[NOW] KMD Render entry/guard discriminator for actual pfnRenderCb E_FAIL.
+[NEXT] Causal owner fix after receipts; deterministic gate and exact package.
+[HW] Successful Render/Patch/Submit, physical completion and standard Present.
+POST-HARDWARE: complete desktop composition and acceptance.
