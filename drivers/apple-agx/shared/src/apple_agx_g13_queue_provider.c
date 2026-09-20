@@ -133,6 +133,11 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderPlanJob(
           Provider, &Provider->Config.D3, APPLE_AGX_BACKEND_QUEUE_WORK_COUNT,
           &candidate.D3ExpectedDonePointer))
     return APPLE_AGX_BACKEND_FALSE;
+  candidate.ComputeExpectedDonePointer=0u;
+  if(Provider->Config.HasCompute &&
+     !AppleAgxG13ProviderNextDone(Provider,&Provider->Config.Compute,1u,
+                                  &candidate.ComputeExpectedDonePointer))
+    return APPLE_AGX_BACKEND_FALSE;
   *Plan = candidate;
   return APPLE_AGX_BACKEND_TRUE;
 }
@@ -287,7 +292,13 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
       Fence != provider->PendingFence ||
       !AppleAgxG13Provider3dMatches(provider, Job) ||
       !AppleAgxG13Provider3dValid(provider, Job) ||
-      !AppleAgxG13ProviderTaValid(provider, Job))
+      !AppleAgxG13ProviderTaValid(provider, Job) ||
+      (Job->ComputeWorkAddressCount!=0u &&
+       (!provider->Config.HasCompute||Job->ComputeWorkAddressCount!=1u||
+        Job->ComputeEvent!=provider->Config.Compute.EventNumber||
+        !Job->ComputeExpectedStamp||
+        !AppleAgxG13ProviderExpectedDone(provider,&provider->Config.Compute,1u,
+                                         Job->ComputeExpectedDonePointer))))
     return APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(&submission,
                           (APPLE_AGX_BACKEND_U32)sizeof(submission));

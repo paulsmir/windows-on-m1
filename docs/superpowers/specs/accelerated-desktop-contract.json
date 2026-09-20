@@ -337,8 +337,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-gs-set-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "mixed-v8-compute-provider-20260920ff-x64"
     },
     {
       "id": "ddi-ia-set-topology",
@@ -1018,8 +1019,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-create-geometry-shader",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "mixed-v8-compute-provider-20260920ff-x64"
     },
     {
       "id": "ddi-create-pixel-shader",
@@ -1280,8 +1282,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad03-shader-model-4",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "mixed-v8-compute-provider-20260920ff-x64"
     },
     {
       "id": "feature-resource-limits",

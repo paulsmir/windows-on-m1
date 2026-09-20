@@ -5,6 +5,7 @@
 #include "apple_agx_g13_queue_runtime.h"
 #include "apple_agx_render_template.h"
 #include "apple_agx_retained_root_abi.h"
+#include "apple_agx_g13_compute_work.h"
 
 #define APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT 36u
 #define APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO 36u
@@ -14,6 +15,27 @@
 #define APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT 40u
 #define APPLE_AGX_RENDER_STATS_TA_FIELD_OFFSET 4u
 #define APPLE_AGX_RENDER_STATS_3D_FIELD_OFFSET 8u
+#define APPLE_AGX_COMPUTE_PREEMPT_OFFSET 0x0000u
+#define APPLE_AGX_COMPUTE_WORK_OFFSET 0x8000u
+#define APPLE_AGX_COMPUTE_MICROSEQUENCE_OFFSET 0x8400u
+#define APPLE_AGX_COMPUTE_STATISTICS_OFFSET 0x8600u
+#define APPLE_AGX_COMPUTE_NOTIFIER_OFFSET 0x8700u
+#define APPLE_AGX_COMPUTE_FIRMWARE_STAMP_OFFSET 0x8780u
+#define APPLE_AGX_COMPUTE_GPU_BUFFER_OFFSET 0xc000u
+
+typedef struct _APPLE_AGX_RENDER_COMPUTE_INPUT {
+  APPLE_AGX_U64 CdmStreamBase;
+  APPLE_AGX_U32 CdmStreamBytes;
+  APPLE_AGX_U64 Counter;
+  APPLE_AGX_U64 UscExecutionBase;
+  APPLE_AGX_U32 VmSlot,EventNumber,StampValue,EventSequence,ClientSequence;
+} APPLE_AGX_RENDER_COMPUTE_INPUT;
+
+typedef struct _APPLE_AGX_RENDER_COMPUTE_OUTPUT {
+  APPLE_AGX_U64 WorkGpuAddress,SidecarGpuAddress;
+  const void *SidecarCpuAddress;
+  APPLE_AGX_U32 SidecarBytes;
+} APPLE_AGX_RENDER_COMPUTE_OUTPUT;
 
 typedef struct _APPLE_AGX_RENDER_RUNTIME_BINDINGS {
   APPLE_AGX_U64 StatsTaOwnerGpuAddress;
@@ -68,6 +90,12 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBindRelocationObjects(
     APPLE_AGX_U32 TemplateArenaBytes,
     APPLE_AGX_EXP208_RELOCATION_OBJECT *RelocationObjects,
     APPLE_AGX_U32 RelocationObjectCapacity);
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner);
+APPLE_AGX_BOOL AppleAgxRenderSharedMemoryBuildCompute(
+    APPLE_AGX_RENDER_SHARED_MEMORY_OWNER *Owner,
+    const APPLE_AGX_RENDER_COMPUTE_INPUT *Input,
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT *Output);
 
 /* Refresh the firmware-visible context-0 objects from the dynamically patched
  * template arena, then build the job from that active relocation graph. */

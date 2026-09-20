@@ -1011,3 +1011,46 @@ pipeline mask zero.  Next is to partition the sidecar into the source-derived
 0x7fa0 preemption allocation, 0x31c RunCompute work, 0x1f0 microsequence and
 small notifier/statistics roots, then fill Submission.Compute from the
 materialized v8 CDM encoder.
+
+## Verified production mixed compute-to-render submission (2026-09-20)
+The physical KMD path now owns the complete source-derived compute lifecycle.
+Render shared memory creates a firmware-compatible CL_1 CommandQueueInfo by
+copying the proven common queue template and replacing only its compute
+pointers, ring, shared job-list and private 0x2c18 GPU buffer roots.  The 64 KiB
+sidecar contains the exact 0x7fa0 preemption allocation, 0x31c RunCompute work,
+0x1f0 StartCompute/WaitForIdle/FinalizeCompute/RetireStamp microsequence and
+request-owned statistics, notifier and firmware-stamp roots.
+
+AdmissionExternalBuildJob derives CDM start/end from the materialized v8
+compute encoder, uses the request fence for monotonic counter/stamp/sequence
+lineage and publishes one already-relocated sidecar range plus one RunCompute
+work address.  The production provider submits it on CL_1, accepts only its
+owned compute event/stamp/done pointer, then publishes the unchanged D3 and TA
+work under the same fence.  Render-only command versions remain unchanged.
+
+Fresh x64 full real-producer execution PASS:
+evidence/AD04-runtime-closure/mixed-v8-compute-provider-20260920ff-x64/;
+source archive SHA-256
+93c5c959704abc49c2d553de7b17ac740342d673508537ade9bda5d1058a9cf3.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/mixed-v8-compute-provider-20260920fg-arm64/;
+source archive SHA-256
+f7d971e1e2099394b0d86f934de73fb831217728628454d8b26ef1e4995705e1.
+Strict Windows LLVM provider, render-memory and platform tests PASS.
+
+Pinned-WDK ARM64 package701 build/code analysis PASS with 0 warnings and
+0 errors; Universal API validation and Inf2Cat pass with no warnings/errors:
+evidence/AD04-runtime-closure/mixed-v8-compute-kmd-20260920fh-arm64/.
+Package hashes: SYS
+7c2c15e548bab43a7a3c3c2476bca3056ba85319d2cec9d8102dc42fbf54e379;
+UMD 4261546326367f020bcdeaf1e52ff4bceb0abbb9deb4b557a62967cf01106d19;
+CAT ececbbe434998858c1e334faa6e16938432306ea89a2b0b0682826afa1872e6f;
+INF d33842928210f25087fc0c80559a4590f9c5c065b606a028e9051f58ed06439d.
+The existing WDK test certificate thumbprint
+E9BE15BD2A184BFABA0C8035B3C620C58037A241 was preserved.  This package was not
+staged, installed or hardware-run.
+
+The frozen inventory is now 117 of 121: CreateGeometryShader, GsSetShader and
+the minimal SM4 VS/PS/GS execution contract are proven offline.  Pipeline mask
+remains zero.  The next causal target is active stream-output shader creation,
+target/offset capture and DrawAuto over the same mixed lifecycle.

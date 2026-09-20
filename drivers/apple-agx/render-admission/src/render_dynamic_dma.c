@@ -85,28 +85,30 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
   APPLE_AGX_U32 index;
   APPLE_AGX_U32 other;
   APPLE_AGX_U32 indexRelocations=0u;
-  int indexed=Bindings &&
-      APPLE_AGX_WIN32_COMMAND_HAS_INDEX(Bindings->CommandVersion);
-  int native=Bindings &&
-      APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Bindings->CommandVersion);
-  APPLE_AGX_U32 referenceLimit=Bindings ?
-      APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(Bindings->CommandVersion) :
-      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES;
+  int indexed;
+  int native;
+  APPLE_AGX_U32 referenceLimit;
   if (Job == DYNAMIC_DMA_NULL || Storage == DYNAMIC_DMA_NULL ||
+      Bindings == DYNAMIC_DMA_NULL ||
       Generation == 0u || Job->Magic != APPLE_AGX_DYNAMIC_JOB_MAGIC ||
       Job->Version != APPLE_AGX_DYNAMIC_JOB_VERSION ||
       Job->Generation != Generation || Job->ObjectCount == 0u ||
-      Job->ObjectCount > (native ? referenceLimit :
-                         ADMISSION_DYNAMIC_OVERLAY_LEGACY_MAX_ENTRIES) ||
       Job->RelocationCount == 0u ||
-      Job->RelocationCount > (native ?
-                             APPLE_AGX_WIN32_COMMAND_RELOCATION_LIMIT(Bindings->CommandVersion) :
-                             APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS) ||
       Job->StorageBytes != StorageBytes ||
       Job->Reserved[0] != 0u || Job->Reserved[1] != 0u ||
       AppleAgxDynamicDmaBytesHash(Storage, StorageBytes) !=
           Job->MaterializedHash)
     return 0;
+  indexed=APPLE_AGX_WIN32_COMMAND_HAS_INDEX(Bindings->CommandVersion);
+  native=APPLE_AGX_WIN32_COMMAND_IS_NATIVE(Bindings->CommandVersion);
+  referenceLimit=native ?
+      APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(Bindings->CommandVersion) :
+      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES;
+  if(Job->ObjectCount>(native ? referenceLimit :
+       ADMISSION_DYNAMIC_OVERLAY_LEGACY_MAX_ENTRIES) ||
+     Job->RelocationCount>(native ?
+       APPLE_AGX_WIN32_COMMAND_RELOCATION_LIMIT(Bindings->CommandVersion) :
+       APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS)) return 0;
   if (Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
     if (Bindings->NativeBatch.DepthReference ==
             APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||

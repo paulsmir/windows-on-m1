@@ -226,6 +226,23 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxPlatformBuildSubmission(
   Submission->D3.GpuAddressCount = APPLE_AGX_BACKEND_QUEUE_WORK_COUNT;
   Submission->D3.PreparedRangeCount = APPLE_AGX_BACKEND_QUEUE_WORK_COUNT;
   Submission->D3.ExpectedStamp = Job->D3ExpectedStamp;
+  if(Job->ComputeWorkAddressCount!=0u) {
+    const APPLE_AGX_MEMORY_OBJECT *sidecar=&provider->RenderSharedMemory->Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR];
+    if(!provider->QueueProvider.Config.HasCompute||
+       Job->ComputeWorkAddressCount!=1u||!Job->ComputeWorkAddresses[0]||
+       Job->ComputeEvent!=provider->QueueProvider.Config.Compute.EventNumber||
+       !Job->ComputeExpectedStamp||
+       Job->ComputeExpectedDonePointer>=APPLE_AGX_G13_RING_CAPACITY||
+       sidecar->CpuAddress==PLATFORM_NULL||sidecar->Length<0x10000u)
+      return APPLE_AGX_BACKEND_FALSE;
+    Submission->Compute.GpuAddresses[0]=Job->ComputeWorkAddresses[0];
+    Submission->Compute.GpuAddressCount=1u;
+    Submission->Compute.PreparedRanges[0].Address=sidecar->CpuAddress;
+    Submission->Compute.PreparedRanges[0].Bytes=0x10000u;
+    Submission->Compute.PreparedRangeCount=1u;
+    Submission->Compute.ExpectedStamp=Job->ComputeExpectedStamp;
+  }
   return APPLE_AGX_BACKEND_TRUE;
 }
 

@@ -100,9 +100,11 @@ APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderInitialize(
          ProviderIo != NULL);
   assert(Config->Ta.EventNumber == 0u);
   assert(Config->D3.EventNumber == 1u);
+  assert(Config->HasCompute && Config->Compute.EventNumber==2u);
   assert(RuntimeIo->Context != NULL && RuntimeIo->SendRunMessage != NULL);
   g_components->CapturedProviderIo = *ProviderIo;
   memset(Provider, 0, sizeof(*Provider));
+  Provider->Config=*Config;
   Provider->Phase = AppleAgxG13QueueProviderInitialized;
   ++g_components->QueueInitializeCalls;
   return APPLE_AGX_BACKEND_TRUE;
@@ -573,6 +575,20 @@ static void test_persistent_owner_and_bounded_event_drain(void) {
          render_shared.Objects[14].CpuAddress);
   assert(built_submission.D3.PreparedRanges[1].Address ==
          render_shared.Objects[18].CpuAddress);
+  job.ComputeWorkAddresses[0]=render_shared.VirtualAddresses[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+APPLE_AGX_COMPUTE_WORK_OFFSET;
+  job.ComputeWorkAddressCount=1u;
+  job.ComputeEvent=provider.EventPair.Compute;
+  job.ComputeExpectedStamp=0x600u;job.ComputeExpectedDonePointer=1u;
+  assert(components.CapturedProviderIo.BuildSubmission(
+      components.CapturedProviderIo.Context,&job,77u,&built_submission));
+  assert(built_submission.Compute.GpuAddressCount==1u &&
+      built_submission.Compute.GpuAddresses[0]==job.ComputeWorkAddresses[0] &&
+      built_submission.Compute.PreparedRangeCount==1u &&
+      built_submission.Compute.PreparedRanges[0].Address==render_shared.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress &&
+      built_submission.Compute.PreparedRanges[0].Bytes==0x10000u &&
+      built_submission.Compute.ExpectedStamp==0x600u);
 
   event_read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[26] + 0x00u);
   event_write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[26] + 0x20u);

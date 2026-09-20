@@ -43,6 +43,7 @@ typedef struct _APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH {
 typedef struct _APPLE_AGX_G13_QUEUE_JOB_PLAN {
   APPLE_AGX_BACKEND_U32 TaExpectedDonePointer;
   APPLE_AGX_BACKEND_U32 D3ExpectedDonePointer;
+  APPLE_AGX_BACKEND_U32 ComputeExpectedDonePointer;
   APPLE_AGX_BACKEND_BOOL IncludeInitBm;
 } APPLE_AGX_G13_QUEUE_JOB_PLAN;
 

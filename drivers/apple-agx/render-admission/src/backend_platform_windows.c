@@ -1909,6 +1909,36 @@ static APPLE_AGX_BACKEND_BOOL AdmissionExternalBuildJob(
              APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT)) !=
            AdmissionDynamicOverlaySuccess))
     goto BuildFailure;
+  if(dynamic && dynamicView.Bindings->CommandVersion==
+       APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH) {
+    const ADMISSION_DYNAMIC_OVERLAY_ENTRY *compute=NULL;
+    APPLE_AGX_RENDER_COMPUTE_INPUT input;
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT output;
+    for(index=0u;index<dynamicPlan->EntryCount;++index)
+      if(dynamicPlan->Entries[index].ReferenceIndex==
+           dynamicView.Bindings->NativeBatch.ComputeEncoderReference)
+        compute=&dynamicPlan->Entries[index];
+    RtlZeroMemory(&input,sizeof(input));RtlZeroMemory(&output,sizeof(output));
+    if(!compute||compute->Role!=AppleAgxWin32RoleEncoder||
+       compute->Bytes!=dynamicView.Bindings->NativeBatch.ComputeEncoderBytes)
+      goto BuildFailure;
+    input.CdmStreamBase=compute->GpuVirtualAddress;
+    input.CdmStreamBytes=compute->Bytes;
+    input.Counter=Submission->Submission.Fence;
+    input.UscExecutionBase=0x1100000000ULL;
+    input.VmSlot=ADMISSION_MEMORY_UAT_CONTEXT;
+    input.EventNumber=runtime->Provider.QueueProvider.Config.Compute.EventNumber;
+    input.StampValue=Submission->Submission.Fence;
+    input.EventSequence=Submission->Submission.Fence;
+    input.ClientSequence=Submission->Submission.Fence&0xffu;
+    if(!AppleAgxRenderSharedMemoryBuildCompute(
+         &runtime->Initdata.RenderSharedMemory,&input,&output)) goto BuildFailure;
+    Job->ComputeWorkAddresses[0]=output.WorkGpuAddress;
+    Job->ComputeWorkAddressCount=1u;
+    Job->ComputeEvent=input.EventNumber;
+    Job->ComputeExpectedStamp=input.StampValue;
+    Job->ComputeExpectedDonePointer=Plan->ComputeExpectedDonePointer;
+  }
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   if (dynamic && !APPLE_AGX_WIN32_COMMAND_IS_NATIVE(dynamicView.Bindings->CommandVersion))
     (void)AdmissionDynamicOverlayCaptureStoreGraph(
@@ -3327,7 +3357,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionPlatformRuntimeStart(
           runtime->QueueObjects,
           APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT,
           AppleAgxRenderTemplateRelocations(),
-          AppleAgxRenderTemplateRelocationCount())) {
+          AppleAgxRenderTemplateRelocationCount()) ||
+      !AppleAgxRenderSharedMemoryInitializeComputeQueue(
+          &runtime->Initdata.RenderSharedMemory)) {
     status = STATUS_INVALID_IMAGE_FORMAT;
     AdmissionRecordPlatformStage(Context, AdmissionPlatformInitdata, status);
     goto Fail;

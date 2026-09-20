@@ -180,6 +180,7 @@
     <ClCompile Include="..\shared\src\apple_agx_device_control.c" />
     <ClCompile Include="..\shared\src\apple_agx_event_allocator.c" />
     <ClCompile Include="..\shared\src\apple_agx_g13_codec.c" />
+    <ClCompile Include="..\shared\src\apple_agx_g13_compute_work.c" />
     <ClCompile Include="..\shared\src\apple_agx_g13_queue_runtime.c" />
     <ClCompile Include="..\shared\src\apple_agx_g13_queue_provider.c" />
     <ClCompile Include="..\shared\src\apple_agx_platform_composer.c" />

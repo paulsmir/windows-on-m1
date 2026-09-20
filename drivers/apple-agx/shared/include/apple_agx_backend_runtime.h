@@ -77,14 +77,19 @@ typedef struct _APPLE_AGX_BACKEND_SUBMISSION {
 typedef struct _APPLE_AGX_BACKEND_JOB_IMAGE {
   APPLE_AGX_U64 TaWorkAddresses[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
   APPLE_AGX_U64 D3WorkAddresses[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
+  APPLE_AGX_U64 ComputeWorkAddresses[APPLE_AGX_BACKEND_QUEUE_WORK_COUNT];
   APPLE_AGX_U32 TaWorkAddressCount;
   APPLE_AGX_U32 D3WorkAddressCount;
+  APPLE_AGX_U32 ComputeWorkAddressCount;
   APPLE_AGX_U32 TaEvent;
   APPLE_AGX_U32 D3Event;
+  APPLE_AGX_U32 ComputeEvent;
   APPLE_AGX_U32 TaExpectedStamp;
   APPLE_AGX_U32 D3ExpectedStamp;
+  APPLE_AGX_U32 ComputeExpectedStamp;
   APPLE_AGX_U32 TaExpectedDonePointer;
   APPLE_AGX_U32 D3ExpectedDonePointer;
+  APPLE_AGX_U32 ComputeExpectedDonePointer;
 } APPLE_AGX_BACKEND_JOB_IMAGE;
 
 typedef struct _APPLE_AGX_BACKEND_OBSERVATION {

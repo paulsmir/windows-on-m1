@@ -158,6 +158,13 @@ int main(void) {
                                        owner.VirtualAddresses[index]) ==
            AppleAgxMemoryResultOk);
   }
+  assert(AppleAgxRenderSharedMemoryInitializeComputeQueue(&owner));
+  assert(*(APPLE_AGX_U64 *)owner.Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO].CpuAddress==
+      owner.VirtualAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS]);
+  assert(*(APPLE_AGX_U64 *)((unsigned char *)owner.Objects[
+      APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO].CpuAddress+8u)==
+      owner.VirtualAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING]);
   memset(&queue_config, 0, sizeof(queue_config));
   assert(AppleAgxRenderSharedMemoryBuildQueueConfig(
       &owner, 500u, &queue_config));
@@ -203,6 +210,23 @@ int main(void) {
       ((unsigned char *)owner.Objects[
         APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS].CpuAddress+0x80u));
   assert(queue_config.TimeoutTicks == 500u);
+  {
+    APPLE_AGX_RENDER_COMPUTE_INPUT input={0};
+    APPLE_AGX_RENDER_COMPUTE_OUTPUT output={0};
+    input.CdmStreamBase=0x1500400000ULL;input.CdmStreamBytes=72u;
+    input.Counter=7u;input.UscExecutionBase=0x1100000000ULL;
+    input.VmSlot=2u;input.EventNumber=2u;input.StampValue=9u;
+    input.EventSequence=11u;input.ClientSequence=5u;
+    assert(AppleAgxRenderSharedMemoryBuildCompute(&owner,&input,&output));
+    assert(output.WorkGpuAddress==owner.VirtualAddresses[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR]+
+        APPLE_AGX_COMPUTE_WORK_OFFSET);
+    assert(output.SidecarCpuAddress==owner.Objects[
+        APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR].CpuAddress &&
+        output.SidecarBytes==0x10000u);
+    assert(((const unsigned char *)output.SidecarCpuAddress)[
+        APPLE_AGX_COMPUTE_WORK_OFFSET]==APPLE_AGX_G13_COMPUTE_TAG);
+  }
   layouts = AppleAgxRenderTemplateObjectLayouts();
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_TEMPLATE_OBJECT_COUNT;
        ++index) {

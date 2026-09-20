@@ -156,6 +156,12 @@ static void InitMode(FIXTURE *f,int compute) {
   f->Job.TaEvent=7u; f->Job.D3Event=9u;
   f->Job.TaExpectedStamp=0x200u; f->Job.D3ExpectedStamp=0x300u;
   f->Job.TaExpectedDonePointer=2u; f->Job.D3ExpectedDonePointer=2u;
+  if(compute) {
+    f->Job.ComputeWorkAddresses[0]=0x1500300000ULL;
+    f->Job.ComputeWorkAddressCount=1u;
+    f->Job.ComputeEvent=11u;f->Job.ComputeExpectedStamp=0x600u;
+    f->Job.ComputeExpectedDonePointer=1u;
+  }
   assert(AppleAgxG13QueueProviderInitialize(&f->Provider, &f->Config,
                                              &f->RuntimeIo, &f->ProviderIo));
   memset(&f->Io, 0, sizeof(f->Io)); f->Io.Context=&f->Provider;
