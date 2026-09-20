@@ -44721,3 +44721,16 @@ Evidence main-root .local/experiments/EXP698-live: bound health, stdout/exit,
 UMD trace, registry/events, physical observation if supplied. Record EXP696
 black-to-wallpaper-to-white/black/flickering-icons comparator separately.
 Collect before exact package/task/trust cleanup and ordinary377/392 recovery.
+
+### EXP698 finalized artifact gate — 2026-09-20T22:24:59.840547+00:00
+UMD/KMD analysis0/0; Universal/Inf2Cat/catalog membership PASS. Same E9BE15
+signer and expected builder root-not-trusted; require Air signatures Valid.
+package/AppleAgxRenderAdmission.inf: 563097f2df76c22219e24986942c4eddc72600d150beb945996a7559d746540e
+package/AppleAgxRenderAdmission.sys: c46fcc58b9170d53cc26ebdea04cde0afc35ff70fb4615acafc6aefb54c68d47
+package/AppleAgxRenderAdmissionUmd.dll: b98fbfa4a0abe95dc30af24ef083d9e10980769e055d460b1d6cf1e7e087ee65
+package/appleagxrenderadmission.cat: 74f1a2361d42f31af7bcadb73af61ff26339956866a3b42d651ee5c44e668694
+qualification/AppleAgxD3d10Standard.exe: 7ba518fd4b87e09cbf39a01eab50e305dfa3874ca5d49d35c45de28c61530f19
+qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable .local/experiments/EXP698-native-seam-714.zip SHA ca88d3b4c5cb6556802b3cc0b0b8fdaeecac91f2282ad398a28b719ab5584c9c.
+Exact stage/hash/signature preflight, full-owner584/406 natural bind and one
+interactive120s client. Collect before exact cleanup and ordinary377/392.
