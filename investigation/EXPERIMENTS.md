@@ -44519,3 +44519,45 @@ EXP694 remains UNOBSERVED; this later photo does not retroactively change it.
 Ordinary377/392 final health confirms Code28, no INF/service/SYS/UMD/test trust,
 eight CPUs, NVMe/xHCI/keyboards OK and no fresh monitored events. Receipt is
 main-root .local/experiments/EXP695-live/recovery/health-final.json.
+
+## EXP696 — legal sampler range state for standard runtime
+UTC build preregistration 2026-09-20T20:54:33.747085+00:00.
+Source 51a4201c7510979209efabad6f907d79626d921e; archive bb6b6c2afb65e7fde9d9240a2e2d0b36e9d15c324bfbf73683c61bb6b14477dc.
+WHY THIS HYPOTHESIS: EXP695 proves four SetSamplers E_NOTIMPL callbacks and
+DRIVER_INTERNAL_ERROR before any resource-create record. Source rejects legal
+ranges >1 or nonzero offsets; deterministic range test reproduces this defect.
+WINDOWS CONTRACT: FULL GRAPHICS base-D3D10 has16 sampler slots; complete range
+updates preserve neighbors and zero count is a no-op. Microsoft documents
+non-DEVICE_REMOVED errors from SetSamplers as critical.
+AGX/ASAHI CONTRACT: native bind_sampler_states updates a bounded range and its
+valid mask/count without submission; logical binding is distinct from draw
+capture admission. Existing native draw validators remain unchanged.
+TRANSLATION: validate full range/ownership before mutation, update exact slots
+and forward same range to native state. No cap, GPUVA or allocator change.
+WHAT IS STILL UNKNOWN: actual runtime ranges/masks and whether the corrected
+callback removes the observed critical error and admits swap-chain creation.
+Single variable: SetSamplers range semantics (PS/VS/GS same shared function).
+Existing diagnostics now include shader-stage/offset/count/absolute nonnull mask.
+x64 selected-path execution and ARM64 link pass in sampler-ranges-20260920mm.
+Known additional RED preserved: explicit owned slot15 during a non-textured draw
+fails in mk host probe (archiveaed94b4f76c62eb659806c036ebe48fe85a0a67817fe922529a92d7e55fbb751).
+The standard client has no explicit sampler binding; no evidence yet requires
+that additional draw. It is not claimed supported. Opt-in probe remains and
+will become causal scope if the actual runtime reaches it. No capture guard
+was weakened or descriptor edge discarded.
+Build pinned build-driver.ps1 Release NativeFrontend PackageBuild712 using
+asahi-runtime-arm64-sampler-ranges-20260920mm-arm64/NativeRuntime.props.
+Standard client uses pinned26100 roots and same E9BE15 test signer. Output
+native-package712-sampler-ranges-20260920mn-arm64. No install before finalized
+analysis/Universal/Inf2Cat/sign/catalog/hash records.
+Root/m1n1/Mu commits/diff hashes and immutable full-owner584/406 and recovery
+377/392 identities remain as EXP694. Air baseline after EXP695 Code28/no package/
+service/files/trust with8CPU/NVMe/input and no fresh events. Exact stage without
+/install, full-owner bind, installed hashes/Code0/Running/Start12/Platform14.
+Clear temporary authorized autologon, run one interactive task120s with
+APPLE_AGX_UMD_TRACE_FILE set only for its standard client. No replay.
+Main-root .local/experiments/EXP696-live collects sampler-range/first failing
+DDI/device-reason/client exit plus registry/events before exact cleanup/recovery.
+Physical comparison: EXP695 operator saw wallpaper with black taskbar/Start
+after initially black display. Record current observation separately; absent
+operator evidence means unobserved, never inferred physical success.
