@@ -1462,3 +1462,24 @@ b35ef38fc5aaa5cd1a1e2d8d079f17746e085521b6b8a232892a2a9c94a184bd.
 Inventory remains 120 of 121 and pipeline mask zero pending the exhaustive
 machine-readable required-format/use table.  No physical/lowered storage family
 remains without representative executable evidence.
+
+## Required-format closure in progress: A8 render and RGB32 typeless storage (2026-09-20)
+The common lowering contract now also admits A8_UNORM as a logical render target
+on physical RGBA8.  Typed A8 SRVs force RGB to zero and preserve physical alpha,
+so extra representation channels are not observable.  R32G32B32_TYPELESS now
+allocates physical RGBA32_UNORM storage and compatible typed FLOAT/UINT/SINT
+views select the matching physical interpretation.  A8 real clear/draw and the
+existing A8/RGB32 sampling gates pass through the same producer/KMD lifecycle.
+
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/required-a8-typeless-final-20260920kf-x64/;
+source archive SHA-256
+569a877c1e818ce875379e96c8e7475074e8c0a0f0b81a3a999ecb68f3da5a03.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-a8-typeless-final-20260920kg-arm64/;
+source archive SHA-256
+eaf8603da770118dbc2ba6c93417c9989a9f6d9e3c1fbac6ba4e5dcb654c6e25.
+
+Inventory deliberately remains 120 of 121 and pipeline mask zero until the
+exhaustive required-format contract validator passes against this exact source
+and all referenced evidence.

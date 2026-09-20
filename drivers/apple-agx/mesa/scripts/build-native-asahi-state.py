@@ -454,7 +454,7 @@ void APIENTRY
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
        Format == DXGI_FORMAT_R11G11B10_FLOAT ||
-       Format == DXGI_FORMAT_B5G6R5_UNORM) {
+       Format == DXGI_FORMAT_B5G6R5_UNORM || Format == DXGI_FORMAT_A8_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
    } else if (Format == DXGI_FORMAT_D32_FLOAT) {
@@ -480,6 +480,7 @@ void APIENTRY
        Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
        Format == DXGI_FORMAT_R11G11B10_FLOAT ||
        Format == DXGI_FORMAT_B5G6R5_UNORM ||
+       Format == DXGI_FORMAT_A8_UNORM ||
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
@@ -506,6 +507,11 @@ void APIENTRY
       SetError(hDevice,E_NOTIMPL);return;
    }
    struct pipe_resource *resource = windowsResource->resource;'''),
+        ('''   desc.format = FormatTranslate(pCreateRenderTargetView->Format, false);''',
+         '''   desc.format = FormatTranslate(pCreateRenderTargetView->Format, false);
+   enum pipe_format lowered=AgxD3d10LoweredTextureFormat(
+      pCreateRenderTargetView->Format);
+   if(lowered!=PIPE_FORMAT_NONE) desc.format=lowered;'''),
         ('''   pipe->clear_render_target(pipe,
                              surface,
                              &clear_color,
@@ -1085,7 +1091,11 @@ _Present('''),
    struct pipe_sampler_view desc;
    memset(&desc, 0, sizeof desc);
    resource = CastPipeResource(pCreateSRView->hDrvResource);
-   format = FormatTranslate(pCreateSRView->Format, false);''',
+   format = FormatTranslate(pCreateSRView->Format, false);
+
+   u_sampler_view_default_template(&desc,
+                                   resource,
+                                   format);''',
          '''CreateShaderResourceView(
    D3D10DDI_HDEVICE hDevice,                                                     // IN
    __in const D3D10DDIARG_CREATESHADERRESOURCEVIEW *pCreateSRView,   // IN
@@ -1118,7 +1128,12 @@ _Present('''),
    resource = CastPipeResource(pCreateSRView->hDrvResource);
    format = FormatTranslate(pCreateSRView->Format, false);
    enum pipe_format lowered=AgxD3d10LoweredTextureFormat(pCreateSRView->Format);
-   if(lowered!=PIPE_FORMAT_NONE) format=lowered;'''),
+   if(lowered!=PIPE_FORMAT_NONE) format=lowered;
+   u_sampler_view_default_template(&desc, resource, format);
+   if(pCreateSRView->Format==DXGI_FORMAT_A8_UNORM) {
+      desc.swizzle_r=PIPE_SWIZZLE_0;desc.swizzle_g=PIPE_SWIZZLE_0;
+      desc.swizzle_b=PIPE_SWIZZLE_0;desc.swizzle_a=PIPE_SWIZZLE_W;
+   }'''),
         ('''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);''',
          '''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);
    pSamplerState->owner_device = CastDevice(hDevice);'''),
@@ -1305,6 +1320,8 @@ AgxD3d10LoweredTextureFormat(DXGI_FORMAT format)
       return PIPE_FORMAT_R32G32B32A32_UINT;
    case DXGI_FORMAT_R32G32B32_SINT:
       return PIPE_FORMAT_R32G32B32A32_SINT;
+   case DXGI_FORMAT_R32G32B32_TYPELESS:
+      return PIPE_FORMAT_R32G32B32A32_UNORM;
    default:
       return PIPE_FORMAT_NONE;
    }
@@ -1423,6 +1440,7 @@ AgxD3d10ColorBytes(DXGI_FORMAT format)
    case DXGI_FORMAT_B5G6R5_UNORM: return 2;
    case DXGI_FORMAT_B8G8R8A8_UNORM:
    case DXGI_FORMAT_R8G8B8A8_UNORM:
+   case DXGI_FORMAT_A8_UNORM:
    case DXGI_FORMAT_R10G10B10A2_UNORM:
    case DXGI_FORMAT_R11G11B10_FLOAT: return 4;
    case DXGI_FORMAT_R16G16B16A16_FLOAT: return 8;

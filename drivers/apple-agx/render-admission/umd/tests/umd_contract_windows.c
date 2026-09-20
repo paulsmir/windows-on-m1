@@ -1082,7 +1082,7 @@ static void test_mesa_d3d10_frontend_open(void) {
     const DXGI_FORMAT requiredColorWidths[]={DXGI_FORMAT_R8_UNORM,
         DXGI_FORMAT_R16_FLOAT,DXGI_FORMAT_R32G32B32A32_FLOAT,
         DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R11G11B10_FLOAT,
-        DXGI_FORMAT_B5G6R5_UNORM};
+        DXGI_FORMAT_B5G6R5_UNORM,DXGI_FORMAT_A8_UNORM};
     for(unsigned colorIndex=0;colorIndex<ARRAYSIZE(requiredColorWidths);++colorIndex) {
       formatCaps=0;quality=0;
       deviceFunctions.pfnCheckFormatSupport(
@@ -3000,7 +3000,7 @@ static void test_mesa_d3d10_frontend_open(void) {
         const DXGI_FORMAT typedFormats[]={DXGI_FORMAT_R8_UNORM,
             DXGI_FORMAT_R16_FLOAT,DXGI_FORMAT_R32G32B32A32_FLOAT,
             DXGI_FORMAT_R10G10B10A2_UNORM,DXGI_FORMAT_R11G11B10_FLOAT,
-            DXGI_FORMAT_B5G6R5_UNORM};
+            DXGI_FORMAT_B5G6R5_UNORM,DXGI_FORMAT_A8_UNORM};
         for(unsigned typedIndex=0;typedIndex<ARRAYSIZE(typedFormats);++typedIndex) {
         D3D10DDI_MIPINFO typedMip={0};
         D3D10DDIARG_CREATERESOURCE typedCreate={0};
