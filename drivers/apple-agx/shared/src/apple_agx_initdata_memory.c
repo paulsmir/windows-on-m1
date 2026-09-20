@@ -384,7 +384,8 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyRenderArenas(
   unsigned int mapping, object;
   if (!Graph || !Graph->Initialized || !Graph->Built || !Graph->BrokerOnly ||
       Graph->MappingsReady || Graph->BrokerOutstanding ||
-      Graph->Inventory.MappingCount != 90u ||
+      Graph->Inventory.MappingCount !=
+          APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY - 1u ||
       Graph->RenderSharedMemory.ClassArenasApplied)
     return AppleAgxInitdataMemoryResultInvalidArgument;
   for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
@@ -429,7 +430,8 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyCommandArena(
   unsigned int mapping, object;
   if (!Graph || !Graph->Initialized || !Graph->Built || !Graph->BrokerOnly ||
       Graph->MappingsReady || Graph->BrokerOutstanding ||
-      Graph->Inventory.MappingCount != 90u ||
+      Graph->Inventory.MappingCount !=
+          APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY - 1u ||
       Graph->RenderSharedMemory.ClassArenasApplied)
     return AppleAgxInitdataMemoryResultInvalidArgument;
   for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
@@ -475,7 +477,8 @@ APPLE_AGX_INITDATA_MEMORY_RESULT AppleAgxInitdataMemoryApplyQueueArenas(
   unsigned int mapping, object;
   if (!Graph || !Graph->Initialized || !Graph->Built || !Graph->BrokerOnly ||
       Graph->MappingsReady || Graph->BrokerOutstanding ||
-      Graph->Inventory.MappingCount != 90u ||
+      Graph->Inventory.MappingCount !=
+          APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY - 1u ||
       Graph->RenderSharedMemory.ClassArenasApplied)
     return AppleAgxInitdataMemoryResultInvalidArgument;
   for (object = 0u; object < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT; ++object)
@@ -536,7 +539,8 @@ APPLE_AGX_BOOL AppleAgxInitdataMemoryGetRenderBindings(
   unsigned int leaves = 0u;
   if (!Graph || !Bindings || !Graph->Initialized || !Graph->Built ||
       !Graph->BrokerOnly || !Graph->MappingsReady ||
-      Graph->Inventory.MappingCount != 90u)
+      Graph->Inventory.MappingCount !=
+          APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY - 1u)
     return APPLE_AGX_FALSE;
   for (index = 0u; index < Graph->Inventory.MappingCount; ++index) {
     const APPLE_AGX_UAT_MAPPING *mapping = &Graph->UatMappings[index];

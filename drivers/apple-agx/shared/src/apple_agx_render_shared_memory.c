@@ -440,13 +440,13 @@ APPLE_AGX_BOOL AppleAgxRenderSharedMemoryInitializeComputeQueue(
   const unsigned char *ta;
   if(!Owner||!Owner->Initialized||!Owner->Built||
      Owner->ObjectCount!=APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT||
-     !queue_object_valid(Owner,3u,184u,APPLE_AGX_FALSE)||
+     !queue_object_valid(Owner,3u,184u,APPLE_AGX_TRUE)||
      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO,
-                         184u,APPLE_AGX_FALSE)||
+                         184u,APPLE_AGX_TRUE)||
      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_POINTERS,
-                         0x60u,APPLE_AGX_FALSE)||
+                         0x60u,APPLE_AGX_TRUE)||
      !queue_object_valid(Owner,APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_SIDECAR,
-                         0xec18u,APPLE_AGX_FALSE))
+                         0xec18u,APPLE_AGX_TRUE))
     return APPLE_AGX_FALSE;
   ta=(const unsigned char *)Owner->Objects[3u].CpuAddress+Owner->ObjectOffsets[3u];
   info=(unsigned char *)Owner->Objects[

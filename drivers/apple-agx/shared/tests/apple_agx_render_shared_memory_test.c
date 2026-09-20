@@ -151,13 +151,11 @@ int main(void) {
       &owner, arena, APPLE_AGX_EXP208_ARENA_BYTES, objects,
       APPLE_AGX_RENDER_TEMPLATE_RUNTIME_OBJECT_COUNT));
   for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
-       ++index) {
+       ++index)
     assert(AppleAgxMemoryMarkPrepared(&owner.Objects[index]) ==
            AppleAgxMemoryResultOk);
-    assert(AppleAgxMemoryMarkGpuMapped(&owner.Objects[index], 0u,
-                                       owner.VirtualAddresses[index]) ==
-           AppleAgxMemoryResultOk);
-  }
+  /* Production initializes the compute queue immediately after the broker
+   * graph is prepared, before the context-0 mappings become live. */
   assert(AppleAgxRenderSharedMemoryInitializeComputeQueue(&owner));
   assert(*(APPLE_AGX_U64 *)owner.Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO].CpuAddress==
@@ -165,6 +163,12 @@ int main(void) {
   assert(*(APPLE_AGX_U64 *)((unsigned char *)owner.Objects[
       APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO].CpuAddress+8u)==
       owner.VirtualAddresses[APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_RING]);
+  for (index = 0u; index < APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;
+       ++index) {
+    assert(AppleAgxMemoryMarkGpuMapped(&owner.Objects[index], 0u,
+                                       owner.VirtualAddresses[index]) ==
+           AppleAgxMemoryResultOk);
+  }
   memset(&queue_config, 0, sizeof(queue_config));
   assert(AppleAgxRenderSharedMemoryBuildQueueConfig(
       &owner, 500u, &queue_config));

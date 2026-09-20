@@ -27,6 +27,7 @@ class AppleAgxInitdataMemoryTests(unittest.TestCase):
                 str(SHARED / "src" / "apple_agx_regionb.c"),
                 str(SHARED / "src" / "apple_agx_regionb_memory.c"),
                 str(SHARED / "src" / "apple_agx_render_shared_memory.c"),
+                str(SHARED / "src" / "apple_agx_g13_compute_work.c"),
                 str(SHARED / "src" / "apple_agx_relocation.c"),
                 str(SHARED / "src" / "apple_agx_render_template.generated.c"),
                 str(SHARED / "src" / "apple_agx_regionc.c"),

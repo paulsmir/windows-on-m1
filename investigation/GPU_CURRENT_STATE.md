@@ -1573,8 +1573,33 @@ Immutable hardware artifact is
 EXP685 preregistration is committed in the experiment ledger with exact
 hypothesis, atomic contract, commands, evidence and ordinary377/392 recovery.
 
-Hardware has NOT_RUN.  Two bounded control-plane audits found Air SSH
-192.168.1.37 unreachable, no expected proxy/vUART USB endpoints and no active
-m1n1/full-owner launcher.  No signer was imported, no package staged and no
-reboot/launch performed.  Manual action is required to place the Air at the
-ordinary GPU-visible Windows baseline or Running proxy before work can continue.
+At preregistration hardware had NOT_RUN: two bounded control-plane audits found
+Air SSH and proxy/vUART unavailable, so no signer/package/reboot/launch occurred
+until the later EXP685 execution recorded below.
+
+## EXP685 bound-preflight failure and offline correction (2026-09-20)
+The Air control planes returned and EXP685 executed only through bound preflight.
+Exact package704 and signer hashes matched, but APPL0002 ended Code43 before the
+standard client. Durable device receipts are StartStage8/PlatformStage9 with
+`0xC000007B` (`STATUS_INVALID_IMAGE_FORMAT`); DriverEntry/DxgkInitialize passed.
+Therefore the standard D3D10 client remains NOT_RUN and EXP685 is rejected as a
+hardware candidate rather than classified as a runtime/Present result.
+
+Evidence-first exact cleanup is complete. Ordinary377/392 broker-disabled is
+active with one APPL0002 Code28, ACPI-only stack, no AppleAgx package/service/
+SYS/UMD/E9BE15 signer, eight CPUs, NVMe/input and TESTSIGNING Yes; no fresh
+41/1001/129/4101. Evidence is under main-root
+`.local/experiments/EXP685-live/{failure-evidence,ordinary-recovery}`.
+
+The stage-9 OR-chain was reconstructed in production order.  Compute queue
+metadata is initialized after `PrepareBroker`, while all 40 render objects are
+Prepared and before the context-0 broker makes them GpuMapped.  The initializer
+incorrectly required GpuMapped.  The same 36-to-40 object expansion left four
+literal broker checks at 90 mappings even though the authoritative derived count
+is now 94 and 207 leaves.  Deterministic REDs reproduce both exact failures.
+The minimal fix requires Prepared for initial CPU writes and derives broker
+mapping count from `APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY - 1u`; focused
+render-shared/initdata/compute queue/provider tests are GREEN.  Next: commit this
+correction, rebuild a clean ARM64 native package with a new version/signer/hash,
+preregister one replacement experiment, then repeat bound preflight and proceed
+directly to the standard client only if StartDevice is complete.

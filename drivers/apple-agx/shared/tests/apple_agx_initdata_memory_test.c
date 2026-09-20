@@ -5,7 +5,7 @@
 #include <string.h>
 
 #define TEST_ALLOCATION_COUNT 128u
-#define TEST_GRAPH_ALLOCATION_COUNT 97u
+#define TEST_GRAPH_ALLOCATION_COUNT 101u
 
 typedef struct _FAKE_ALLOCATION {
   void *Storage;
@@ -150,7 +150,8 @@ static void test_builds_exact_graph_and_releases(void) {
   assert(graph.RenderSharedMemory.ObjectCount ==
          APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT);
   assert(graph.Inventory.PageCount == 7u);
-  assert(graph.Inventory.MappingCount == 91u);
+  assert(graph.Inventory.MappingCount ==
+         APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY);
   assert(fake.AllocateCount == TEST_GRAPH_ALLOCATION_COUNT);
   assert(graph.VirtualAddresses[AppleAgxInitdataMemoryEnvelope] ==
          J313_AGX_G2_KERNEL_VA_BASE);
@@ -230,9 +231,9 @@ static void test_builds_exact_graph_and_releases(void) {
   assert(graph.RegionCManifest.NonzeroWordCount == 81u);
   assert(graph.RegionCManifest.OracleFnv1a64 ==
          0xc3bc91a9acf61290ULL);
-  assert(graph.Inventory.Mappings[90].VirtualAddress ==
+  assert(graph.Inventory.Mappings[graph.Inventory.MappingCount-1u].VirtualAddress ==
          J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA);
-  assert(graph.Inventory.Mappings[90].PhysicalAddress ==
+  assert(graph.Inventory.Mappings[graph.Inventory.MappingCount-1u].PhysicalAddress ==
          graph.RegionBMemory.Objects[AppleAgxRegionBMemoryBufferManager]
              .DeviceAddress);
 
@@ -438,14 +439,16 @@ int main(void) {
         AppleAgxRenderTemplateObjectLayouts();
     init_fixture(&fake,&io,&graph);
     assert(AppleAgxInitdataMemoryPrepareBroker(&graph,&io,&snapshot)==0);
-    assert(fake.AllocateCount==89 && graph.DataObjectCount==7);
+    assert(fake.AllocateCount==93 && graph.DataObjectCount==7);
     assert(graph.BrokerOnly && graph.Roots.Ttbr0PhysicalAddress==0 &&
            graph.Roots.Ttbr1PhysicalAddress==0 && graph.Inventory.PageCount==0);
     assert(graph.TtbrPair.Ttbr0==0 && graph.TtbrPair.Ttbr1==0);
-    assert(graph.Inventory.MappingCount==90 && !graph.MappingsReady);
-    assert(graph.UatMappings[89].VirtualAddress ==
+    assert(graph.Inventory.MappingCount==
+           APPLE_AGX_INITDATA_MEMORY_MAPPING_CAPACITY-1u &&
+           !graph.MappingsReady);
+    assert(graph.UatMappings[graph.Inventory.MappingCount-1u].VirtualAddress ==
            J313_AGX_G2_REGIONB_BUFFER_MGR_GPU_VA);
-    assert(graph.UatMappings[89].Protection ==
+    assert(graph.UatMappings[graph.Inventory.MappingCount-1u].Protection ==
            AppleAgxUatFirmwareGpuSharedReadWrite);
     for(i=0;i<APPLE_AGX_RENDER_SHARED_MEMORY_OBJECT_COUNT;++i)
       original_vas[i]=graph.RenderSharedMemory.VirtualAddresses[i];
@@ -480,6 +483,13 @@ int main(void) {
         assert(graph.RenderSharedMemory.VirtualAddresses[i]+
                graph.RenderSharedMemory.ObjectOffsets[i] ==
                layouts[i].OriginalGpuVa+0x01000000ULL);
+      else if(i>=APPLE_AGX_RENDER_SHARED_MEMORY_COMPUTE_QUEUE_INFO)
+        assert(graph.RenderSharedMemory.VirtualAddresses[i]>=
+                   AGX_RR_SHARED_ARENA_VA &&
+               graph.RenderSharedMemory.VirtualAddresses[i]+
+                   graph.RenderSharedMemory.Objects[i].Length<=
+                   AGX_RR_SHARED_ARENA_VA+AGX_RR_SHARED_ARENA_BYTES &&
+               graph.RenderSharedMemory.VirtualAddresses[i]!=original_vas[i]);
       else
         assert(graph.RenderSharedMemory.VirtualAddresses[i]==original_vas[i]);
     }
@@ -487,7 +497,7 @@ int main(void) {
         &graph,AGX_RR_COMMAND_ARENA_VA,AGX_RR_COMMAND_ARENA_BYTES,
         AGX_RR_SHARED_ARENA_VA,AGX_RR_SHARED_ARENA_BYTES) ==
         AppleAgxInitdataMemoryResultInvalidArgument);
-    assert(leaves==200);
+    assert(leaves==207);
     memset(&bindings,0,sizeof(bindings));
     assert(!AppleAgxInitdataMemoryGetRenderBindings(&graph,&bindings));
     graph.MappingsReady=1;
@@ -515,7 +525,7 @@ int main(void) {
     assert(AppleAgxInitdataMemoryDestroy(&graph)==AppleAgxInitdataMemoryResultReleaseFailed);
     assert(fake.FreeCount==0);
     graph.BrokerOutstanding=0;
-    assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && fake.FreeCount==89);
+    assert(AppleAgxInitdataMemoryDestroy(&graph)==0 && fake.FreeCount==93);
   }
   test_import_mapping_failures_free_only_owned_pages();
   test_live_prefix_before_mappings_and_owned_cleanup();

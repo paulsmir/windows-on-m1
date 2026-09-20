@@ -43883,3 +43883,46 @@ out after the bounded attempt, and this host showed neither expected proxy/vUART
 USB endpoints nor an active m1n1/full-owner launcher.  No certificate, package,
 reboot or hardware launch has been performed.  Staging is prohibited until the
 ordinary GPU-visible baseline is reachable and verified.
+
+### EXP685 actual result — 2026-09-20T17:32:43Z
+
+Hardware candidate verdict: **REJECTED AT BOUND PREFLIGHT**.  The standard D3D10
+client was **NOT_RUN**, so this is not a standard-runtime or Present result.
+
+After the operator restored USB, both proxy/vUART endpoints and Windows SSH were
+reachable.  The first ordinary377/392 baseline had fresh stornvme Event129
+receipts; a controlled reboot with no package mutation produced the required
+stable baseline: eight CPUs, one inert APPL0002, NVMe/input alive, TESTSIGNING
+Yes, and zero current-boot 41/1001/129/4101 after the observation interval.
+
+The immutable EXP685 archive and every staged/installed member matched the
+preregistered hashes.  Only signer E9BE15BD2A184BFABA0C8035B3C620C58037A241
+was imported, the exact package staged as oem5.inf, and immutable EXP584/EXP406
+was launched with the AGX power broker enabled.  Bound preflight then found
+APPL0002 Code43 / CM_PROB_FAILED_POST_START with AppleAgxAdmission stopped.
+Durable receipts prove `Wom1StartStage=8`, `Wom1StartStatus=0xC000007B`,
+`Wom1PlatformStage=9` (`AdmissionPlatformInitdata`) and
+`Wom1PlatformStatus=0xC000007B` (`STATUS_INVALID_IMAGE_FORMAT`).  DriverEntry
+and DxgkInitialize both returned success.  No current-boot critical, bugcheck,
+stornvme129 or display4101 event accompanied the failure.
+
+Evidence was collected before cleanup under main-root
+`.local/experiments/EXP685-live/failure-evidence/`, including exact installed
+hashes, PnP properties, device/service registry receipts, SetupAPI tail and
+launcher log.  The exact oem5 package, stale service/devnode state and only the
+E9BE15 signer were removed.  Ordinary377/392 broker-disabled recovery is again
+active with one APPL0002 Code28 / CM_PROB_FAILED_INSTALL, ACPI-only stack, no
+AppleAgx package/service/SYS/UMD/signer, eight CPUs, NVMe/input alive,
+TESTSIGNING Yes, and zero fresh 41/1001/129/4101.  Recovery evidence is under
+`.local/experiments/EXP685-live/ordinary-recovery/`.
+
+Offline causal reproduction identified two stale state/count assumptions in the
+same compute-queue initdata integration.  Startup initializes compute queue
+metadata while the broker-owned objects are `Prepared`, before context-0 maps
+become live, but the initializer required `GpuMapped`.  The render object count
+also grew from 36 to 40 while broker arena/binding checks still required the old
+literal 90 mappings rather than the derived 94.  Production-order REDs reproduce
+both failures; the minimal corrections accept only prepared initialization and
+derive the broker mapping count from the authoritative capacity.  A new clean
+candidate, package identity and experiment preregistration are required before
+another hardware run.

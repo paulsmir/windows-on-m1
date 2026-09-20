@@ -49,7 +49,9 @@ static unsigned long long get64(const unsigned char *p) {
   return v;
 }
 static unsigned get32(const unsigned char *p) {
-  return (unsigned)get64(p)&0xffffffffu;
+  unsigned v=0;
+  for(unsigned i=0;i<4;++i)v|=(unsigned)p[i]<<(8u*i);
+  return v;
 }
 unsigned AppleAgxG13ComputeWorkContractTests(void) {
   unsigned failures=0;
