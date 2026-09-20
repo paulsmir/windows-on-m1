@@ -380,6 +380,16 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     result=AdmissionDynamicOverlayApply(&consumer->Backend,&consumer->WorkerPlan,
         consumer->Dma.Job,consumer->Dma.Storage,consumer->Dma.StorageBytes,RuntimeConsumerFence,&consumer->State);
     if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("overlay-apply",i,result);
+    if(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+      APPLE_AGX_U32 initialIsp=0,reloadIsp=0;
+      const unsigned char *work=consumer->Backend.Objects[18].Data;
+      memcpy(&initialIsp,work+0xb0u,sizeof(initialIsp));
+      memcpy(&reloadIsp,work+0x6d8u,sizeof(reloadIsp));
+      APPLE_AGX_U32 expectedIsp=0xc000u |
+          ((view.NativeBatch->RenderFlags&
+            APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)?0x40000u:0u);
+      RUNTIME_REQUIRE(initialIsp==expectedIsp && reloadIsp==expectedIsp);
+    }
     if(!AdmissionBackendImageStageJob(&consumer->Backend,RuntimeConsumerFence,0,1,2,2,APPLE_AGX_TRUE,&staged))
       return RuntimeConsumerFailure("stage-job",i,0);
     result=AdmissionDynamicOverlayRouteNative(&consumer->WorkerPlan,consumer->Dma.Bindings,

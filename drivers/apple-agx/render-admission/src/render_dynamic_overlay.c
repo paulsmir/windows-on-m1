@@ -725,7 +725,8 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
       (n->SampleSizeBytes!=8 && n->SampleSizeBytes!=16) ||
       n->UtileWidth!=32 || n->UtileHeight!=32 || n->PppControl!=0x202u ||
       n->PppMultisampleControl!=0x88u ||
-      (n->RenderFlags&~APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES))
+      (n->RenderFlags&~(APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES |
+                        APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)))
     return AdmissionDynamicOverlayLayout;
   if(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
     if(n->DepthReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||
@@ -813,6 +814,10 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   utile=((n->UtileWidth/16u)<<12)|((n->UtileHeight/16u)<<14);
   blocks=(n->SampleSizeBytes*n->UtileWidth*n->UtileHeight+2047u)/2048u;
   tileConfig=0x280u|((n->RenderFlags&APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES)?0x10000u:0u);
+  overlay_write_u32(work+0xb0u,0xc000u |
+      ((n->RenderFlags&APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)?0x40000u:0u));
+  overlay_write_u32(work+0x6d8u,0xc000u |
+      ((n->RenderFlags&APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)?0x40000u:0u));
   overlay_write_u32(work+0x80u,utile); overlay_write_u32(ta+0x88u,utile);
   overlay_write_u64(work+0x48u,n->PppMultisampleControl);
   overlay_write_u64(work+0x98u,n->PppMultisampleControl);

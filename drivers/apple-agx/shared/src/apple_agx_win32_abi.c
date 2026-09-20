@@ -369,7 +369,9 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     if (native->StructBytes != sizeof(*native) || native->Samples == 0u ||
         native->Layers == 0u || native->SampleSizeBytes == 0u ||
         native->UtileWidth == 0u || native->UtileHeight == 0u ||
-        (native->RenderFlags & ~APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES) != 0u)
+        (native->RenderFlags &
+         ~(APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES |
+           APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT)) != 0u)
       return AppleAgxWin32AbiPayload;
     for (root = 0u; root < 3u; ++root) {
       const APPLE_AGX_WIN32_NATIVE_PIPELINE_ROOT *pipeline =
@@ -400,7 +402,9 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       if ((native->DepthCompressionReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
           (native->DepthCompressionStride == 0u))
         return AppleAgxWin32AbiPayload;
-    } else if (native->DepthReference != 0u ||
+    } else if ((native->RenderFlags &
+                APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT) != 0u ||
+               native->DepthReference != 0u ||
                native->DepthCompressionReference != 0u ||
                native->DepthStride != 0u ||
                native->DepthCompressionStride != 0u ||

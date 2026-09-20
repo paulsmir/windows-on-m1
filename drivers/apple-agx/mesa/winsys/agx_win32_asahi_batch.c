@@ -153,10 +153,12 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
     struct pipe_surface *zs=&ctx->framebuffer.zsbuf;
     struct agx_resource *depth=agx_resource(zs->texture);
     valid=!ctx->stage[MESA_SHADER_FRAGMENT].texture_count && !info->index_size &&
-        zs->format==PIPE_FORMAT_Z32_FLOAT && !zs->level &&
+        (zs->format==PIPE_FORMAT_Z32_FLOAT ||
+         zs->format==PIPE_FORMAT_Z16_UNORM) && !zs->level &&
         !zs->first_layer && !zs->last_layer &&
         depth->base.target==PIPE_TEXTURE_2D &&
-        depth->base.format==PIPE_FORMAT_Z32_FLOAT && !depth->layout.compressed &&
+        (depth->base.format==PIPE_FORMAT_Z32_FLOAT ||
+         depth->base.format==PIPE_FORMAT_Z16_UNORM) && !depth->layout.compressed &&
         depth->base.last_level==0 && depth->base.depth0==1 &&
         depth->base.array_size==1 && depth->base.nr_samples<=1 && depth->bo;
   }
@@ -192,7 +194,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
       agx_tilebuffer_spills(&b->tilebuffer_layout) || r->samples!=1 || r->layers!=1 ||
       r->stencil.base || r->isp_oclqry_base ||
       r->sampler_heap || r->sampler_count ||
-      (r->flags & ~(unsigned)DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES) ||
+      (r->flags & ~((unsigned)DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES |
+                    (unsigned)DRM_ASAHI_RENDER_DBIAS_IS_INT)) ||
       r->ppp_multisamplectl>UINT32_MAX || r->vdm_ctrl_stream_base!=c->Root.Address)
     return batch_reject(c,__LINE__);
   if((c->Capture.Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_MIXED_BATCH)!=
@@ -208,6 +211,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
     uint64_t depth_address=depth ? agx_map_texture_gpu(depth,0)+
         ail_get_level_offset_B(&depth->layout,0) : 0;
     if(!depth || depth->layout.compressed || !r->depth.base ||
+       (((r->flags & DRM_ASAHI_RENDER_DBIAS_IS_INT)!=0) !=
+        (depth->base.format==PIPE_FORMAT_Z16_UNORM)) ||
        r->depth.base!=depth_address || r->depth.comp_base || r->depth.comp_stride ||
        !depth->layout.layer_stride_B || depth->layout.layer_stride_B>UINT32_MAX ||
        AgxWin32AsahiCaptureAddress(&c->Capture,r->depth.base,
@@ -244,6 +249,8 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
   c->Render.PppControl=r->ppp_ctrl; c->Render.PppMultisampleControl=(uint32_t)r->ppp_multisamplectl;
   c->Render.RenderFlags=(r->flags & DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES) ?
       APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES : 0;
+  if(r->flags & DRM_ASAHI_RENDER_DBIAS_IS_INT)
+    c->Render.RenderFlags|=APPLE_AGX_WIN32_NATIVE_RENDER_DEPTH_BIAS_IS_INT;
   /* Receipt aliases come from emitted typed edges, not pool positions. */
   for(unsigned i=0;i<c->Capture.Capture.RelocationCount;++i) {
     const APPLE_AGX_WIN32_RELOCATION *edge=&c->Capture.Capture.Relocations[i];

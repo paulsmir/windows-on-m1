@@ -465,10 +465,12 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       struct pipe_surface *zs = &ctx->framebuffer.zsbuf;
       struct agx_resource *depth = agx_resource(zs->texture);
       valid = !indexed && !ctx->stage[MESA_SHADER_FRAGMENT].texture_count &&
-              zs->format == PIPE_FORMAT_Z32_FLOAT && !zs->level &&
+              (zs->format == PIPE_FORMAT_Z32_FLOAT ||
+               zs->format == PIPE_FORMAT_Z16_UNORM) && !zs->level &&
               !zs->first_layer && !zs->last_layer &&
               depth->base.target == PIPE_TEXTURE_2D &&
-              depth->base.format == PIPE_FORMAT_Z32_FLOAT &&
+              (depth->base.format == PIPE_FORMAT_Z32_FLOAT ||
+               depth->base.format == PIPE_FORMAT_Z16_UNORM) &&
               !depth->layout.compressed && depth->base.last_level == 0 &&
               depth->base.depth0 == 1 && depth->base.array_size == 1 &&
               util_res_sample_count(&depth->base) == 1 && depth->bo;

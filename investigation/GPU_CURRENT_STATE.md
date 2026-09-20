@@ -1144,3 +1144,26 @@ Inventory deliberately remains 120 of 121 and pipeline mask zero.  Remaining
 work inside feature-required-formats includes the other mandatory color/typed,
 depth-stencil, BC and packed-format families.  The next causal family is
 D16_UNORM plus D24_UNORM_S8_UINT and their compatible resource/view ownership.
+
+## Required-format closure in progress: D16 depth (2026-09-20)
+D16_UNORM now shares the existing single-plane uncompressed depth owner from
+resource/DSV creation through ClearDepthStencilView, native Asahi draw capture,
+depth-v7 wire metadata, both KMD placements and retirement.  Its producer sets
+the source-defined integer-depth-bias flag even with zero depth bias.  The
+request ABI translates that flag to the G13 hardware bit only at the two exact
+WorkCommand3D AuxFBInfo copies: initial +0x0b0 and reload +0x6d8.  D32 materializes
+0x0000c000 at both; D16 materializes 0x0004c000 at both.  Producer format/flag
+mismatch and use of the flag outside depth-v7 reject before submission.
+
+Fresh x64 full producer execution PASS with both ISP_CTL copies asserted:
+evidence/AD04-runtime-closure/required-d16-validated-20260920hn-x64/;
+source archive SHA-256
+88053539e4b440cc85eb15757b68e045a8e7194d095a98796f6e6052ebb3975f.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-d16-validated-20260920ho-arm64/;
+source archive SHA-256
+a62368945d39267ee50709e3ad26c71ae2ebab82be2f199d4fb682a922d82bf9.
+
+Inventory remains 120 of 121 and pipeline mask zero.  The next required depth
+family is D24_UNORM_S8_UINT, which needs explicit separate-stencil ownership;
+it must not be collapsed into the single D16/D32 depth reference.
