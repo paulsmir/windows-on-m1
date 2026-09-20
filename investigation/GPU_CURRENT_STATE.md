@@ -1675,3 +1675,9 @@ Adapter.cpp, whose 3D pipeline GetCaps still advertised0; the fallback UMD mask1
 was unreachable. Source RED requires mask1 in the real projection and updates
 the real Mesa adapter contract. EXP688 was run once, cleaned exactly, and must
 not be replayed. Next build a clean candidate from this projection fix.
+
+## EXP689 preregistered (2026-09-20)
+Projected native FL10 mask1 passes fresh x64 execution, ARM64 closure and
+package708 gates. Immutable archive SHA
+ec50f1b84fc3fc12e3571c4dd8a722911dc1e7bb2c3e83571705c832307aa075.
+Next stage exact package, boot Code0 and run once in authenticated console.

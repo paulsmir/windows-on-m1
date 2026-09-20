@@ -44142,3 +44142,25 @@ session and redirect stdout/stderr to experiment files. PASS remains standard
 create/draw/physical completion/Present. Absence of an interactive user blocks
 client execution rather than producing another diagnostic run. Cleanup remains
 exact package/signer then ordinary377/392 Code28.
+
+### EXP688 actual result and EXP689 preregistration
+
+EXP688 interactive task ran exactly once and returned E_INVALIDARG before the
+adapter line/draw. KMD Type0 size0x68 succeeded; driver startup remained full
+PASS. Actual projected Mesa GetCaps advertised pipeline0 because fallback UMD
+mask1 was unreachable. Exact cleanup completed.
+
+EXP689 UTC preregistration 2026-09-20T18:30:00Z; hardware NOT_RUN. Single
+variable is projected native pipeline mask0->the sole proven FL10_0 bit in
+commit00e5f26. Clean HEAD27092c0c8bf8cd149b502a066add8c6e05851835;
+source archive SHA05071121992ffb916ba648dd4b692a844a219b3803eda3f69d9b938f36725437.
+Fresh x64 projected execution PASS SHA040e6b7e1360ff01d7199f1885bae1c1a9c018935b507309f0d528a7e4a9c628;
+ARM64 closure PASS SHAf1f8bc47958fccc0192fab8c31802482a4af73ef796a6b52bd6193d32777c53c.
+Package708 analysis0/0, Universal/Inf2Cat/catalog PASS. INF/SYS/UMD/CAT/client
+hashes are ecfb5b52b1ed4dc82061de7369920625b389f26da526a4bc1df5938860a8449d,
+99f251faf9826d7a9fcb710158d585322347cf98a620c22d0c8000aaf2aa93b4,
+ce3b247e7f4f176a7aaea8310adc20a5c8b93f8c5aa23bbcc19b04fe7b2ed77e,
+2496e8f0c3deb586037a581c76f0c2f4ab79339e5f3fb5d5c0c15d81ba84b200,
+40de384f57ba58612e144713983bb1d6dff763c2fc6097b0f49f43e48bba40d9.
+Immutable EXP689 archive SHAec50f1b84fc3fc12e3571c4dd8a722911dc1e7bb2c3e83571705c832307aa075.
+Run only once in authenticated console after Code0; exact recovery unchanged.
