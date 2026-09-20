@@ -44086,3 +44086,41 @@ Run/recovery procedure and PASS/failure criteria are identical to EXP686 with
 build707 hashes above. Bound preflight must reach Code0/StartStage12/
 PlatformStage14 before running the standard client; otherwise collect evidence,
 cleanup exact package/signer and return ordinary377/392 Code28.
+
+### EXP687 actual result — 2026-09-20T18:10:00Z
+
+Driver/startup verdict: **PASS**. Standard-runtime verdict: **INCONCLUSIVE,
+NON-INTERACTIVE SESSION**. Package707 reached APPL0002 Code0, Running service,
+StartStage12/PlatformStage14 status0, BackendStartResult0, firmware completed
+mask0x1ff and context0 207 mapped/207 verified with no uncertainty. This is the
+first full native KMD admission for the compute-expanded graph.
+
+The standard client was invoked exactly once through SSH and returned
+`0x887A0022 DXGI_ERROR_NOT_CURRENTLY_AVAILABLE` before adapter creation; it
+printed no adapter line and produced no render receipt. Read-only session
+evidence showed no logged-in user/Explorer and only DWM session1. Therefore this
+does not reject the UMD or draw path; DXGI requires an interactive console
+session. Exact package/signer cleanup completed and ordinary recovery was
+relaunched. Never replay EXP687.
+
+## EXP688 — preregistered interactive-console standard-runtime experiment
+
+UTC preregistration: 2026-09-20T18:12:00Z. Hardware status: **NOT_RUN**.
+
+**WHY THIS HYPOTHESIS:** EXP687 proved Code0 and every firmware/context0 startup
+receipt, while its sole client failure was DXGI_ERROR_NOT_CURRENTLY_AVAILABLE
+with no interactive Windows user session. The unchanged client must run in the
+authenticated console desktop where DXGI is available.
+
+Single variable: launch context only. Use the same package707 binaries, signer,
+source and all hashes preregistered in EXP687; do not change driver or client.
+Immutable archive `.local/experiments/EXP688-interactive-standard-runtime-707.zip`
+SHA-256 d9bff6e8d23de341641bdf028306846fe35c05e2b84df7adec7c9b432d422d39.
+
+Procedure: stage exact package, boot full-owner, require Code0 and all EXP687
+startup receipts, then require an active authenticated console user with
+Explorer. Register/run the client once with Interactive logon in that existing
+session and redirect stdout/stderr to experiment files. PASS remains standard
+create/draw/physical completion/Present. Absence of an interactive user blocks
+client execution rather than producing another diagnostic run. Cleanup remains
+exact package/signer then ordinary377/392 Code28.

@@ -1652,3 +1652,17 @@ membership. Immutable archive SHA is
 exact member hashes are recorded in EXP687. Current Air is ordinary377/392
 Code28 and EXP687 is NOT_RUN. Next stage exact package and require Code0 before
 the single standard-runtime execution.
+
+## EXP687 admission PASS; interactive DXGI boundary (2026-09-20)
+Package707 hardware startup PASS: Code0, service Running, Start12/Platform14,
+BackendStart0, firmware mask0x1ff and context0 207/207. The once-only SSH client
+returned DXGI_ERROR_NOT_CURRENTLY_AVAILABLE before adapter creation because no
+interactive user/Explorer session existed. No draw was attempted. Exact cleanup
+and ordinary recovery are in progress/complete.
+
+EXP688 freezes the same package/client and changes only launch context to an
+authenticated interactive console. Archive SHA
+d9bff6e8d23de341641bdf028306846fe35c05e2b84df7adec7c9b432d422d39.
+After full-owner Code0 the operator must log into the Windows desktop; then run
+the client once via an Interactive scheduled task. This manual login is the only
+current blocker to the first truthful standard-runtime draw/Present.
