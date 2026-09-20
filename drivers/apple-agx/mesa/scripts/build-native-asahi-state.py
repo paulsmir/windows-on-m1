@@ -961,11 +961,23 @@ _Present('''),
    struct pipe_context *pipe = pDevice->pipe;
 
    assert(SOTargets + ClearTargets <= PIPE_MAX_SO_BUFFERS);''','''{
-   SetError(hDevice, E_NOTIMPL);
-   return;
-
    unsigned i;
-   Device *pDevice = CastDevice(hDevice);
+   Device *windows_device=CastDevice(hDevice);
+   if(!windows_device) { SetError(hDevice,E_INVALIDARG); return; }
+   Resource *windows_resource=(SOTargets==1u&&ClearTargets==0u&&phResource)?
+      CastResource(phResource[0]):NULL;
+   if(SOTargets==1u&&ClearTargets==0u) {
+      if(!windows_resource||!pOffsets||pOffsets[0]!=0u||
+         windows_resource->owner_device!=windows_device||
+         windows_resource->bind_flags!=
+           (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_STREAM_OUTPUT)||
+         !windows_resource->resource) { SetError(hDevice,E_NOTIMPL); return; }
+   } else if(!((SOTargets==0u&&ClearTargets==0u)||
+               (SOTargets==0u&&ClearTargets==1u))) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+
+   Device *pDevice = windows_device;
    struct pipe_context *pipe = pDevice->pipe;
 
    assert(SOTargets + ClearTargets <= PIPE_MAX_SO_BUFFERS);'''),
@@ -992,8 +1004,16 @@ _Present('''),
    D3D10DDI_HRTSHADER hRTShader,                                                                         // IN
    __in const D3D10DDIARG_STAGE_IO_SIGNATURES *pSignatures)                                              // IN
 {
-   SetError(hDevice, E_NOTIMPL);
-   return;'''),
+   Device *windows_device=CastDevice(hDevice);
+   if(!windows_device||!pData||!pData->pShaderCode||
+      !pData->pOutputStreamDecl||pData->NumEntries!=1u||
+      pData->StreamOutputStrideInBytes!=16u||
+      pData->pOutputStreamDecl[0].OutputSlot!=0u||
+      pData->pOutputStreamDecl[0].RegisterIndex!=0u||
+      pData->pOutputStreamDecl[0].RegisterMask!=0xfu) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   LOG_ENTRYPOINT();'''),
         ('''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);''',
          '''   pSamplerState->handle = pipe->create_sampler_state(pipe, &state);
    pSamplerState->owner_device = CastDevice(hDevice);'''),
@@ -1057,11 +1077,6 @@ _Present('''),
    }
    pDevice->pipe->sampler_view_release(pDevice->pipe, view->handle);
    view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
-    replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','SoSetTargets','''   Device *device = CastDevice(hDevice);
-   if (!device || SOTargets || ClearTargets) {
-      SetError(hDevice, E_NOTIMPL); return;
-   }
-   (void)phResource; (void)pOffsets;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device = CastDevice(hDevice);
    ShaderResourceView *view = CastShaderResourceView(hShaderResourceView);
    if (!device || !view || view->owner_device != device || !view->handle ||
@@ -1114,12 +1129,17 @@ _Present('''),
    }''')
     change('src/gallium/frontends/d3d10umd/Draw.cpp',
         'da5904f2ac6b8a79373bcc60d2cef0546e8da0bc1ba92d21812aff3ea2338f7e',[
+        ('#include "State.h"',
+         '#include "State.h"\n#include "agx_win32_asahi_scene.h"'),
         ('''DrawAuto(D3D10DDI_HDEVICE hDevice)  // IN
 {
    LOG_ENTRYPOINT();''','''DrawAuto(D3D10DDI_HDEVICE hDevice)  // IN
 {
-   SetError(hDevice, E_NOTIMPL);
-   return;''')])
+   Device *windows_device=CastDevice(hDevice);
+   if(!windows_device||!windows_device->draw_so_target) {
+      SetError(hDevice,E_NOTIMPL);return;
+   }
+   LOG_ENTRYPOINT();''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Draw.cpp','DrawIndexed','''   Device *pDevice = CastDevice(hDevice);
    if (!pDevice || IndexCount != 3 || StartIndexLocation != 0 ||
        BaseVertexLocation != 0 || pDevice->primitive != MESA_PRIM_TRIANGLES ||
@@ -1151,6 +1171,22 @@ _Present('''),
       SetError(hDevice, E_NOTIMPL); return;
    }
    Draw(hDevice,3,0);''')
+    draw_path=out/'src/gallium/frontends/d3d10umd/Draw.cpp'
+    draw_text=draw_path.read_text()+'''\nextern "C" BOOL APIENTRY
+MesaD3d10FrontendSetSoOffsetForTest(D3D10DDI_HDEVICE hDevice,
+                                    D3D10DDI_HRESOURCE hResource,
+                                    UINT value)
+{
+   Device *device=CastDevice(hDevice);
+   Resource *resource=CastResource(hResource);
+   return device&&resource&&resource->owner_device==device&&resource->so_target&&
+      AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
+         resource->so_target,value) ? TRUE : FALSE;
+}
+'''
+    draw_path.write_text(draw_text)
+    overlays['src/gallium/frontends/d3d10umd/Draw.cpp']['after']=hashlib.sha256(
+        draw_path.read_bytes()).hexdigest()
     change('src/gallium/frontends/d3d10umd/Resource.cpp',
         'ae2d60a798ff0d9da6e55171013f133d1d99bc91ef2760875d126aa5b96fcf48',[
         ('#include "util/u_surface.h"',
@@ -1166,6 +1202,8 @@ _Present('''),
       (pCreateResource->BindFlags & D3D10_DDI_BIND_CONSTANT_BUFFER) != 0;
    bool wantsIndex =
       (pCreateResource->BindFlags & D3D10_DDI_BIND_INDEX_BUFFER) != 0;
+   bool wantsStream =
+      (pCreateResource->BindFlags & D3D10_DDI_BIND_STREAM_OUTPUT) != 0;
    bool wantsPresentation = pCreateResource->pPrimaryDesc != NULL ||
       (pCreateResource->BindFlags & D3D10_DDI_BIND_PRESENT) != 0;
    bool validConstant = wantsConstant && pResource && resourceMip &&
@@ -1203,7 +1241,22 @@ _Present('''),
       memcmp(pCreateResource->pInitialDataUP[0].pSysMem,expectedIndex,8)==0 &&
       pDevice && AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
                                          &resourceGeneration);
-   if ((wantsConstant && !validConstant) || (wantsIndex && !validIndex)) {
+   bool validStream=wantsStream&&pResource&&resourceMip&&
+      pCreateResource->ResourceDimension==D3D10DDIRESOURCE_BUFFER&&
+      pCreateResource->Format==DXGI_FORMAT_UNKNOWN&&
+      pCreateResource->BindFlags==
+        (D3D10_DDI_BIND_VERTEX_BUFFER|D3D10_DDI_BIND_STREAM_OUTPUT)&&
+      pCreateResource->Usage==D3D10_DDI_USAGE_DEFAULT&&
+      pCreateResource->MapFlags==0&&pCreateResource->MiscFlags==0&&
+      !pCreateResource->pPrimaryDesc&&pCreateResource->MipLevels==1&&
+      pCreateResource->ArraySize==1&&resourceMip[0].TexelWidth==256&&
+      resourceMip[0].TexelHeight==1&&resourceMip[0].TexelDepth==1&&
+      pCreateResource->SampleDesc.Count==1&&
+      pCreateResource->SampleDesc.Quality==0&&!pCreateResource->pInitialDataUP&&
+      pDevice&&AgxD3d10WindowsIdentity(pDevice->windows,&resourceOwner,
+                                       &resourceGeneration);
+   if ((wantsConstant && !validConstant) || (wantsIndex && !validIndex) ||
+       (wantsStream && !validStream)) {
       SetError(hDevice, E_NOTIMPL);
       return;
    }
@@ -1244,7 +1297,7 @@ _Present('''),
       DebugPrintf("%s: failed to create resource\\n", __func__);
       SetError(hDevice, E_OUTOFMEMORY);
       return;
-   }''','''   if (wantsConstant || wantsIndex) {
+   }''','''   if (wantsConstant || wantsIndex || wantsStream) {
       pResource->resource = screen->resource_create(screen, &templat);
    } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_RENDER_TARGET) {
       const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
@@ -1312,6 +1365,10 @@ _Present('''),
       pResource->index_buffer = true;
       pResource->logical_bytes = 8;
       pResource->owner_device = pDevice;
+      pResource->owner_cookie = resourceOwner;
+      pResource->device_generation = resourceGeneration;
+   } else if (wantsStream) {
+      pResource->logical_bytes = 256;
       pResource->owner_cookie = resourceOwner;
       pResource->device_generation = resourceGeneration;
    }'''),
@@ -1631,7 +1688,9 @@ _Present('''),
             ('#include <xf86drm.h>', '#ifndef _WIN32\n#include <xf86drm.h>\n#endif'),
             ('#include "agx_state.h"', '#include "agx_state.h"\n#include "agx_win32_asahi_bo.h"'),
             ('struct agx_bo *bo = agx_bo_create(dev, 0x80000, 0, 0, "Encoder");',
-             'struct agx_bo *bo = AgxWin32AsahiEncoderCreate(dev, 0x80000, 0, "Encoder");')])
+             'struct agx_bo *bo = AgxWin32AsahiEncoderCreate(dev, 0x80000, 0, "Encoder");'),
+            ('   batch->uniforms.tables[AGX_SYSVAL_TABLE_PARAMS] = 0;',
+             '   memset(batch->uniforms.tables, 0, sizeof(batch->uniforms.tables));')])
         batch_source=(out/'src/gallium/drivers/asahi/agx_batch.c').read_text()
         batch_begin=batch_source.index('struct agx_encoder\nagx_encoder_allocate(')
         batch_end=batch_source.index('\n}\n',batch_begin)+3
@@ -1796,6 +1855,50 @@ uint32_t AgxWin32NativeBuildPipelineTest(struct agx_batch *batch,
         # original no-capture path remains byte-for-byte behaviorally native.
         state_target=out/'src/gallium/drivers/asahi/agx_state.c'
         state_text=state_target.read_text()
+        shader_ir='''   nir_shader *nir = cso->type == PIPE_SHADER_IR_NIR
+                        ? cso->ir.nir
+                        : tgsi_to_nir(cso->tokens, pctx->screen, false);'''
+        if state_text.count(shader_ir)!=1:
+            raise SystemExit('Ambiguous native TGSI stream-output anchor')
+        state_text=state_text.replace(shader_ir,shader_ir+'''
+
+   /* The D3D10 frontend carries stream output beside TGSI.  Preserve the
+    * exact admitted FL10_0 declaration when converting TGSI to NIR so Asahi
+    * owns both XFB emission and the DrawAuto byte-stride contract. */
+   if (cso->stream_output.num_outputs != 0 && !nir->xfb_info) {
+      const struct pipe_stream_output_info *pipe_xfb = &cso->stream_output;
+      const struct pipe_stream_output *pipe_out = &pipe_xfb->output[0];
+      bool exact_windows_xfb =
+         pipe_xfb->num_outputs == 1 && pipe_xfb->stride[0] == 4 &&
+         pipe_out->output_buffer == 0 && pipe_out->register_index == 0 &&
+         pipe_out->start_component == 0 && pipe_out->num_components == 4 &&
+         pipe_out->dst_offset == 0 && pipe_out->stream == 0;
+      if (!exact_windows_xfb) {
+         ralloc_free(nir);
+         ralloc_free(so);
+         return NULL;
+      }
+
+      nir_xfb_info *xfb = rzalloc_size(nir, nir_xfb_info_size(1));
+      if (!xfb) {
+         ralloc_free(nir);
+         ralloc_free(so);
+         return NULL;
+      }
+      xfb->buffers_written = BITFIELD_BIT(0);
+      xfb->streams_written = BITFIELD_BIT(0);
+      xfb->buffers[0].stride = pipe_xfb->stride[0] * 4;
+      xfb->buffers[0].varying_count = 1;
+      xfb->buffer_to_stream[0] = 0;
+      xfb->output_count = 1;
+      xfb->outputs[0].buffer = 0;
+      xfb->outputs[0].offset = 0;
+      xfb->outputs[0].location = pipe_out->register_index;
+      xfb->outputs[0].component_mask = BITFIELD_MASK(4);
+      xfb->outputs[0].component_offset = 0;
+      nir->xfb_info = xfb;
+      nir->info.xfb_stride[0] = pipe_xfb->stride[0];
+   }''',1)
         state_begin=state_text.index('static uint8_t *\nagx_encode_state(')
         state_end=state_text.index('\n}\n\nstatic enum agx_primitive',state_begin)+3
         state_body=state_text[state_begin:state_end]

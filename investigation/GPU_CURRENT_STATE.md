@@ -1054,3 +1054,38 @@ The frozen inventory is now 117 of 121: CreateGeometryShader, GsSetShader and
 the minimal SM4 VS/PS/GS execution contract are proven offline.  Pipeline mask
 remains zero.  The next causal target is active stream-output shader creation,
 target/offset capture and DrawAuto over the same mixed lifecycle.
+
+## Verified native stream output and DrawAuto producer lifecycle (2026-09-20)
+The projected D3D10 frontend now admits one exact FL10_0 GS-with-stream-output
+declaration: slot/register zero, float4 mask, 16-byte stride and one 256-byte
+VERTEX_BUFFER|STREAM_OUTPUT target.  The TGSI-to-NIR boundary materializes the
+matching native XFB metadata instead of losing the sideband pipe declaration.
+The real Asahi GS producer writes the target and offset resource, captures the
+internal CS system-value table and completes the existing mixed VDM/CDM
+submission before retirement.  New batch initialization clears stale native
+stage-table pointers before a later independent draw.
+
+DrawAuto remains the upstream two-stage producer path.  The exact
+count-from-stream-output request is validated before any batch exists; Asahi
+reads the completed offset, divides by the native target stride and recursively
+emits the resulting direct draw through the ordinary lifecycle/graph gates.
+Unsupported indirect forms still fault before submission.  The selected mixed
+draw requires 69 typed references, 445 relocations, 17 physical allocations and
+68 materialized objects, so mixed-v8 storage and overlay limits are fixed to
+those measured minima while native-v4 remains capped at 64 references.
+
+Fresh diagnostic-free x64 full producer execution PASS:
+evidence/AD04-runtime-closure/real-so-draw-auto-clean-20260920gq-x64/;
+source archive SHA-256
+4d56126248b9698b50efaea64599cd25f2360b57b36061cd47f269332972fc74.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/real-so-draw-auto-clean-20260920gr-arm64/;
+source archive SHA-256
+82d5030897b9281588151e2a4cb411c303ca9f337ac4e1563fe425a7b99a46a5.
+
+The frozen inventory is now 119 of 121: DrawAuto and
+CreateGeometryShaderWithStreamOutput are proven through the real producer,
+composer, both KMD materialization placements and ordered retirement.  Pipeline
+mask remains zero.  The only remaining frozen rows are feature-resource-limits
+and feature-required-formats; no broader pre-hardware inventory expansion is
+permitted without a pinned-WDK requirement or a causal standard-runtime RED.

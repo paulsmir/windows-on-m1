@@ -162,6 +162,16 @@ int AgxWin32AsahiContextDrawReceipt(struct pipe_context *ctx) {
   return batch && batch->draws==1 && batch->windows_batch && backend &&
       !backend->Failed && !native->any_faults;
 }
+int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
+    struct pipe_stream_output_target *base,APPLE_AGX_U32 value) {
+  struct agx_streamout_target *target=base?agx_so_target(base):NULL;
+  struct agx_resource *offset=target&&target->offset?agx_resource(target->offset):NULL;
+  if(!target||!offset||!offset->bo||!offset->bo->_map)
+    return 0;
+  memcpy(offset->bo->_map,&value,sizeof(value));
+  util_range_add(&offset->base,&offset->valid_buffer_range,0,sizeof(value));
+  return 1;
+}
 int AgxWin32AsahiContextFaulted(struct pipe_context *ctx) {
   return !ctx || agx_context(ctx)->any_faults;
 }

@@ -95,6 +95,14 @@ windows_graph_geometry_params(struct agx_batch *batch,
           sizeof(*uploaded),AppleAgxWin32RoleSharedGeometry,&scope)) return 0;
    windows_graph_shared_field(&scope,&uploaded->output_index_buffer,
        uploaded->output_index_buffer,index_bytes);
+   for(unsigned so=0;so<POLY_MAX_SO_BUFFERS;++so) {
+      if(uploaded->xfb_base_original[so])
+         windows_graph_shared_field(&scope,&uploaded->xfb_base_original[so],
+             uploaded->xfb_base_original[so],uploaded->xfb_size[so]);
+      if(uploaded->xfb_offs_ptrs[so]!=AGX_ZERO_PAGE_ADDRESS)
+         windows_graph_shared_field(&scope,&uploaded->xfb_offs_ptrs[so],
+             uploaded->xfb_offs_ptrs[so],4u);
+   }
    return AgxWin32AsahiPipelineFinish(&scope,(uint8_t *)uploaded+sizeof(*uploaded));
 }
 
@@ -117,6 +125,7 @@ AgxWin32AsahiCaptureUniformBlock(struct agx_batch *batch, void *cpu,
          if (!u->tables[i]) continue;
          if (i != AGX_SYSVAL_TABLE_ROOT && i != AGX_SYSVAL_TABLE_VS &&
              i != AGX_SYSVAL_TABLE_GS && i != AGX_SYSVAL_TABLE_FS &&
+             i != AGX_SYSVAL_TABLE_CS &&
              i != AGX_SYSVAL_TABLE_PARAMS && i != AGX_SYSVAL_TABLE_GRID) {
             scope.Failed = 1; break;
          }
@@ -398,6 +407,28 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
    struct agx_device *dev = agx_device(ctx->base.screen);
    AGX_WIN32_ASAHI_BACKEND *backend = dev->windows_private;
    if (!backend) return true;
+   if (indirect && indirect->count_from_stream_output) {
+      struct agx_streamout_target *so =
+         agx_so_target(indirect->count_from_stream_output);
+      struct pipe_resource *buffer = so ? so->base.buffer : NULL;
+      struct agx_resource *offset =
+         so && so->offset ? agx_resource(so->offset) : NULL;
+      bool draw_auto = !backend->Failed && info && !draws && num_draws == 1 &&
+         info->mode == MESA_PRIM_TRIANGLES && !info->index_size &&
+         !info->primitive_restart && info->instance_count == 1 &&
+         !info->start_instance && ctx->streamout.num_targets == 0 &&
+         !indirect->buffer && !indirect->indirect_draw_count &&
+         !indirect->offset && !indirect->stride && !indirect->draw_count &&
+         !indirect->indirect_draw_count_offset && so && so->stride == 16 &&
+         buffer && buffer->target == PIPE_BUFFER && buffer->width0 == 256 &&
+         (buffer->bind & (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_STREAM_OUTPUT)) ==
+            (PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_STREAM_OUTPUT) &&
+         !(buffer->bind & ~(PIPE_BIND_VERTEX_BUFFER | PIPE_BIND_STREAM_OUTPUT |
+                            PIPE_BIND_SHADER_IMAGE)) &&
+         offset && offset->bo;
+      if (!draw_auto) backend->Failed = 1;
+      return draw_auto;
+   }
    bool indexed = info && info->index_size != 0;
    bool valid = !backend->Failed && (!ctx->batch || !ctx->batch->draws) &&
       info && draws && !indirect && num_draws == 1 &&
@@ -408,7 +439,7 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       ctx->framebuffer.cbufs[0].texture &&
       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM &&
       !ctx->framebuffer.cbufs[0].level && !ctx->framebuffer.cbufs[0].first_layer &&
-      !ctx->framebuffer.cbufs[0].last_layer && !ctx->streamout.num_targets &&
+      !ctx->framebuffer.cbufs[0].last_layer && ctx->streamout.num_targets<=1u &&
       !ctx->cond_query && !ctx->occlusion_query && !ctx->time_elapsed &&
       !ctx->tf_any_overflow &&
       !ctx->stage[MESA_SHADER_TESS_CTRL].shader && !ctx->stage[MESA_SHADER_TESS_EVAL].shader &&

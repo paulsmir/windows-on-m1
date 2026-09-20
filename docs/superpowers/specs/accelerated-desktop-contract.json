@@ -546,8 +546,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Draw.cpp",
       "test_id": "ad04-draw-auto",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "real-so-draw-auto-clean-20260920gq-x64"
     },
     {
       "id": "ddi-set-viewports",
@@ -1052,8 +1053,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/Shader.cpp",
       "test_id": "ad04-create-geometry-shader-with-stream-output",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "real-so-draw-auto-clean-20260920gq-x64"
     },
     {
       "id": "ddi-destroy-shader",

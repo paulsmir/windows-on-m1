@@ -143,6 +143,14 @@ def project_sources(out,project,overlays):
     renamed=signature.replace('agx_draw_vbo(','agx_draw_vbo_windows_body(')
     wrapper=signature+'''{
    struct agx_context *ctx = agx_context(pctx);
+   if (indirect && indirect->count_from_stream_output) {
+      /* DrawAuto is expanded by upstream Asahi into a direct draw.  The graph
+       * gate validates the exact count-from-XFB form before the CPU read; the
+       * recursive direct call below owns normal batch creation and entry. */
+      agx_draw_vbo_windows_body(pctx, info, drawid_offset, indirect, draws,
+                                num_draws);
+      return;
+   }
    if (!AgxWin32AsahiBatchDrawAllowed(ctx, info, drawid_offset, indirect, draws, num_draws)) {
       ctx->any_faults = true; return;
    }
@@ -249,7 +257,7 @@ def project_sources(out,project,overlays):
     start=part.index('   enum drm_asahi_priority');end=part.index('   pctx->destroy',start)
     part=part[:start]+'   /* Existing Windows context owns queue and synchronization. */\n'+part[end:]
     part=part.replace('   int ret;','')
-    for line in ('   pctx->create_fence_fd = agx_create_fence_fd;','   pctx->fence_server_sync = agx_fence_server_sync;','   agx_init_query_functions(pctx);','   agx_init_streamout_functions(pctx);'):
+    for line in ('   pctx->create_fence_fd = agx_create_fence_fd;','   pctx->fence_server_sync = agx_fence_server_sync;','   agx_init_query_functions(pctx);'):
         part=part.replace(line,'')
     start=part.index('   struct agx_device *dev = agx_device(screen);');end=part.index('   /* By default all samples',start)
     part=part[:start]+'   ctx->in_sync_fd = -1;\n'+part[end:]

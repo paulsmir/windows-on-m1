@@ -6,6 +6,7 @@
 struct pipe_screen;
 struct pipe_context;
 struct pipe_resource;
+struct pipe_stream_output_target;
 
 typedef enum {
   AgxAsahiSceneEmpty, AgxAsahiScenePreparing, AgxAsahiScenePrepared,
@@ -69,6 +70,8 @@ int AgxWin32AsahiResourceIdentity(
 int AgxWin32AsahiContextDestroy(struct pipe_context *);
 int AgxWin32AsahiContextRetire(struct pipe_context *, APPLE_AGX_U32 TimeoutMs);
 int AgxWin32AsahiContextDrawReceipt(struct pipe_context *);
+int AgxWin32AsahiSetStreamOutputTargetOffsetForTest(
+    struct pipe_stream_output_target *,APPLE_AGX_U32);
 int AgxWin32AsahiContextFaulted(struct pipe_context *);
 int AgxWin32AsahiContextFlushForPresent(struct pipe_context *);
 int AgxWin32AsahiScreenDestroy(struct pipe_screen *);
