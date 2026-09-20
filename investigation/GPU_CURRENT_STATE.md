@@ -980,3 +980,17 @@ pipeline mask zero.  The next causal target is for the production backend
 BuildSubmission path to build the G13 RunCompute image and microsequence from
 the materialized v8 compute encoder and populate the provider's Compute
 prepared ranges and GPU work addresses.
+
+## Verified CL_1 compute transport ownership (2026-09-20)
+The platform provider now binds the source-defined group-1 compute command
+channel: m1n1 ChannelInfo index 5 (CL_1), RunCmdQueue type 2 and doorbell 6.
+Its state/ring mappings are validated alongside TA_1 and 3D_1, and RunCompute
+messages can no longer be sent through a render channel.  The provider event
+lease now owns three distinct events (TA, D3 and Compute) atomically; release
+and exhaustion remain fail-closed and reuse all three slots together.
+
+Strict Windows LLVM /W4 /WX builds and executions of both the event allocator
+test and full platform-provider test PASS.  Inventory remains 114 of 121 and
+pipeline mask zero.  The next causal target is to add mapped compute
+QueueInfo/ring/pointers/stamp storage to the existing render-shared-memory
+owner, then enable HasCompute with the owned compute event and CL_1 transport.

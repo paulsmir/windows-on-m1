@@ -35,6 +35,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(
   const APPLE_AGX_MEMORY_OBJECT *ta_ring;
   const APPLE_AGX_MEMORY_OBJECT *d3_state;
   const APPLE_AGX_MEMORY_OBJECT *d3_ring;
+  const APPLE_AGX_MEMORY_OBJECT *compute_state;
+  const APPLE_AGX_MEMORY_OBJECT *compute_ring;
   const APPLE_AGX_MEMORY_OBJECT *event_state;
   const APPLE_AGX_MEMORY_OBJECT *event_ring;
 
@@ -55,6 +57,12 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(
   d3_ring = &ChannelMemory->Objects[
       AppleAgxChannelMemoryCommandRingBase +
       APPLE_AGX_PLATFORM_D3_CHANNEL_INDEX];
+  compute_state = &ChannelMemory->Objects[
+      AppleAgxChannelMemoryCommandStateBase +
+      APPLE_AGX_PLATFORM_COMPUTE_CHANNEL_INDEX];
+  compute_ring = &ChannelMemory->Objects[
+      AppleAgxChannelMemoryCommandRingBase +
+      APPLE_AGX_PLATFORM_COMPUTE_CHANNEL_INDEX];
   event_state =
       &ChannelMemory->Objects[AppleAgxChannelMemoryEventState];
   event_ring = &ChannelMemory->Objects[AppleAgxChannelMemoryEventRing];
@@ -67,6 +75,10 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(
           d3_state, J313_AGX_G2_CHANNEL_STATE_STRIDE) ||
       !AppleAgxPlatformObjectValid(
           d3_ring, J313_AGX_G2_CMD_QUEUE_RING_SIZE) ||
+      !AppleAgxPlatformObjectValid(
+          compute_state,J313_AGX_G2_CHANNEL_STATE_STRIDE) ||
+      !AppleAgxPlatformObjectValid(
+          compute_ring,J313_AGX_G2_CMD_QUEUE_RING_SIZE) ||
       !AppleAgxPlatformObjectValid(
           event_state, J313_AGX_G2_CHANNEL_STATE_STRIDE) ||
       !AppleAgxPlatformObjectValid(
@@ -93,6 +105,15 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderBindChannels(
       AppleAgxChannelMemoryCommandRingBase +
       APPLE_AGX_PLATFORM_D3_CHANNEL_INDEX];
   Bindings->D3.Doorbell = APPLE_AGX_PLATFORM_D3_DOORBELL;
+  Bindings->Compute.StateCpuAddress=compute_state->CpuAddress;
+  Bindings->Compute.RingCpuAddress=compute_ring->CpuAddress;
+  Bindings->Compute.StateGpuAddress=ChannelMemory->VirtualAddresses[
+      AppleAgxChannelMemoryCommandStateBase+
+      APPLE_AGX_PLATFORM_COMPUTE_CHANNEL_INDEX];
+  Bindings->Compute.RingGpuAddress=ChannelMemory->VirtualAddresses[
+      AppleAgxChannelMemoryCommandRingBase+
+      APPLE_AGX_PLATFORM_COMPUTE_CHANNEL_INDEX];
+  Bindings->Compute.Doorbell=APPLE_AGX_PLATFORM_COMPUTE_DOORBELL;
   Bindings->Event.StateCpuAddress = event_state->CpuAddress;
   Bindings->Event.RingCpuAddress = event_ring->CpuAddress;
   Bindings->Event.StateGpuAddress =
@@ -228,6 +249,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderPublishRun(
     binding = &Bindings->Ta;
   else if (QueueType == AppleAgxG13Queue3d)
     binding = &Bindings->D3;
+  else if (QueueType == AppleAgxG13QueueCompute)
+    binding = &Bindings->Compute;
   else
     return APPLE_AGX_BACKEND_FALSE;
   if (binding->StateCpuAddress == PLATFORM_NULL ||
@@ -576,6 +599,8 @@ APPLE_AGX_BACKEND_BOOL AppleAgxPlatformProviderInitialize(
   }
   queue_config.Ta.EventNumber = Provider->EventPair.Ta;
   queue_config.D3.EventNumber = Provider->EventPair.D3;
+  if(queue_config.HasCompute)
+    queue_config.Compute.EventNumber=Provider->EventPair.Compute;
   AppleAgxPlatformZero(&queue_io,
                        (APPLE_AGX_BACKEND_U32)sizeof(queue_io));
   queue_io.Context = Provider;

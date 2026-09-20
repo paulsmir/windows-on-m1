@@ -348,6 +348,7 @@ static void prepare_channel_memory(APPLE_AGX_CHANNEL_MEMORY_OWNER *Owner,
   }
   Owner->Objects[AppleAgxChannelMemoryCommandRingBase + 3u].Length = 0x3000u;
   Owner->Objects[AppleAgxChannelMemoryCommandRingBase + 4u].Length = 0x3000u;
+  Owner->Objects[AppleAgxChannelMemoryCommandRingBase + 5u].Length = 0x3000u;
   Owner->Objects[AppleAgxChannelMemoryEventRing].Length = 0x3800u;
 }
 
@@ -369,6 +370,11 @@ static void test_exact_group1_bindings(void) {
   assert(bindings.D3.StateGpuAddress == owner.VirtualAddresses[4]);
   assert(bindings.D3.RingGpuAddress == owner.VirtualAddresses[16]);
   assert(bindings.D3.Doorbell == 5u);
+  assert(bindings.Compute.StateCpuAddress == storage[5]);
+  assert(bindings.Compute.RingCpuAddress == storage[17]);
+  assert(bindings.Compute.StateGpuAddress == owner.VirtualAddresses[5]);
+  assert(bindings.Compute.RingGpuAddress == owner.VirtualAddresses[17]);
+  assert(bindings.Compute.Doorbell == 6u);
   assert(bindings.Event.StateCpuAddress == storage[26]);
   assert(bindings.Event.RingCpuAddress == storage[27]);
   assert(bindings.Event.StateGpuAddress == owner.VirtualAddresses[26]);
@@ -419,11 +425,21 @@ static void test_exact_run_channel_publication(void) {
                 sizeof(message)) == 0);
   assert(fake.LastDoorbell == 5u);
 
+  read=(volatile APPLE_AGX_BACKEND_U32 *)(storage[5]+0x00u);
+  write=(volatile APPLE_AGX_BACKEND_U32 *)(storage[5]+0x20u);
+  *read=0u; *write=0u;
+  assert(AppleAgxPlatformProviderPublishRun(
+      &bindings,&io,AppleAgxG13QueueCompute,message));
+  assert(*write==1u && memcmp(storage[17],message,sizeof(message))==0);
+  assert(fake.LastDoorbell==6u);
+
+  read = (volatile APPLE_AGX_BACKEND_U32 *)(storage[4] + 0x00u);
+  write = (volatile APPLE_AGX_BACKEND_U32 *)(storage[4] + 0x20u);
   *read = 1u;
   *write = 0u;
   assert(!AppleAgxPlatformProviderPublishRun(
       &bindings, &io, AppleAgxG13Queue3d, message));
-  assert(fake.DoorbellCalls == 2u);
+  assert(fake.DoorbellCalls == 3u);
 
   io.FlushForDevice = NULL;
   assert(!AppleAgxPlatformProviderPublishRun(
@@ -529,7 +545,8 @@ static void test_persistent_owner_and_bounded_event_drain(void) {
 
   assert(AppleAgxPlatformProviderInitialize(&provider, &config, &io));
   assert(provider.Initialized);
-  assert(provider.EventPair.Ta == 0u && provider.EventPair.D3 == 1u);
+  assert(provider.EventPair.Ta == 0u && provider.EventPair.D3 == 1u &&
+         provider.EventPair.Compute==2u);
   assert(components.QueueInitializeCalls == 1u);
   assert(components.QueueInstallCalls == 1u);
   assert(components.ComposerInitializeCalls == 1u);

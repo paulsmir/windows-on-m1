@@ -12,10 +12,9 @@ static void test_pair_lifetime_is_unique_and_reusable(void) {
   memset(&allocator, 0xa5, sizeof(allocator));
   assert(AppleAgxEventAllocatorInitialize(&allocator));
   assert(AppleAgxEventAllocatorReservePair(&allocator, &first));
-  assert(first.Ta == 0u && first.D3 == 1u);
-  assert(first.Ta != first.D3);
+  assert(first.Ta == 0u && first.D3 == 1u && first.Compute == 2u);
   assert(AppleAgxEventAllocatorReservePair(&allocator, &second));
-  assert(second.Ta == 2u && second.D3 == 3u);
+  assert(second.Ta == 3u && second.D3 == 4u && second.Compute == 5u);
   {
     APPLE_AGX_EVENT_PAIR forged = first;
     forged.D3 = second.D3;
@@ -23,24 +22,25 @@ static void test_pair_lifetime_is_unique_and_reusable(void) {
   }
   assert(AppleAgxEventAllocatorReleasePair(&allocator, &first));
   assert(AppleAgxEventAllocatorReservePair(&allocator, &first));
-  assert(first.Ta == 0u && first.D3 == 1u);
+  assert(first.Ta == 0u && first.D3 == 1u && first.Compute == 2u);
 }
 
 static void test_exhaustion_never_returns_partial_pair(void) {
   APPLE_AGX_EVENT_ALLOCATOR allocator;
-  APPLE_AGX_EVENT_PAIR pairs[APPLE_AGX_EVENT_COUNT / 2u];
-  APPLE_AGX_EVENT_PAIR rejected = {0x55u, 0xaau, 0x1234u};
+  APPLE_AGX_EVENT_PAIR pairs[APPLE_AGX_EVENT_COUNT / 3u];
+  APPLE_AGX_EVENT_PAIR rejected = {0x55u,0xaau,0xccu,0x1234u};
   unsigned int index;
 
   assert(AppleAgxEventAllocatorInitialize(&allocator));
-  for (index = 0u; index < APPLE_AGX_EVENT_COUNT / 2u; ++index)
+  for (index = 0u; index < APPLE_AGX_EVENT_COUNT / 3u; ++index)
     assert(AppleAgxEventAllocatorReservePair(&allocator, &pairs[index]));
   assert(!AppleAgxEventAllocatorReservePair(&allocator, &rejected));
   assert(rejected.Ta == 0x55u && rejected.D3 == 0xaau &&
+         rejected.Compute == 0xccu &&
          rejected.Lease == 0x1234u);
   assert(AppleAgxEventAllocatorReleasePair(&allocator, &pairs[17]));
   assert(AppleAgxEventAllocatorReservePair(&allocator, &rejected));
-  assert(rejected.Ta == 34u && rejected.D3 == 35u);
+  assert(rejected.Ta == 51u && rejected.D3 == 52u && rejected.Compute == 53u);
 }
 
 int main(void) {

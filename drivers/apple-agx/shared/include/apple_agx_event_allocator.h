@@ -9,6 +9,7 @@
 typedef struct _APPLE_AGX_EVENT_PAIR {
   APPLE_AGX_U32 Ta;
   APPLE_AGX_U32 D3;
+  APPLE_AGX_U32 Compute;
   APPLE_AGX_U32 Lease;
 } APPLE_AGX_EVENT_PAIR;
 

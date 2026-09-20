@@ -41,35 +41,42 @@ APPLE_AGX_BOOL AppleAgxEventAllocatorReservePair(
   APPLE_AGX_EVENT_PAIR candidate;
   APPLE_AGX_U32 first;
   APPLE_AGX_U32 second;
+  APPLE_AGX_U32 third;
   if (Allocator == APPLE_AGX_EVENT_NULL || Pair == APPLE_AGX_EVENT_NULL ||
       !Allocator->Initialized)
     return APPLE_AGX_FALSE;
 
   first = APPLE_AGX_EVENT_COUNT;
   second = APPLE_AGX_EVENT_COUNT;
+  third = APPLE_AGX_EVENT_COUNT;
   for (candidate.Ta = 0u; candidate.Ta < APPLE_AGX_EVENT_COUNT;
        ++candidate.Ta) {
     if (AppleAgxEventReserved(Allocator, candidate.Ta))
       continue;
     if (first == APPLE_AGX_EVENT_COUNT)
       first = candidate.Ta;
-    else {
+    else if (second == APPLE_AGX_EVENT_COUNT) {
       second = candidate.Ta;
+    } else {
+      third = candidate.Ta;
       break;
     }
   }
-  if (second == APPLE_AGX_EVENT_COUNT)
+  if (third == APPLE_AGX_EVENT_COUNT)
     return APPLE_AGX_FALSE;
 
   if (Allocator->NextLease == 0u)
     Allocator->NextLease = 1u;
   candidate.Ta = first;
   candidate.D3 = second;
+  candidate.Compute = third;
   candidate.Lease = Allocator->NextLease++;
   AppleAgxEventSetReserved(Allocator, first, APPLE_AGX_TRUE);
   AppleAgxEventSetReserved(Allocator, second, APPLE_AGX_TRUE);
+  AppleAgxEventSetReserved(Allocator, third, APPLE_AGX_TRUE);
   Allocator->Leases[first] = candidate.Lease;
   Allocator->Leases[second] = candidate.Lease;
+  Allocator->Leases[third] = candidate.Lease;
   *Pair = candidate;
   return APPLE_AGX_TRUE;
 }
@@ -78,16 +85,23 @@ APPLE_AGX_BOOL AppleAgxEventAllocatorReleasePair(
     APPLE_AGX_EVENT_ALLOCATOR *Allocator, const APPLE_AGX_EVENT_PAIR *Pair) {
   if (Allocator == APPLE_AGX_EVENT_NULL || Pair == APPLE_AGX_EVENT_NULL ||
       !Allocator->Initialized || Pair->Ta >= APPLE_AGX_EVENT_COUNT ||
-      Pair->D3 >= APPLE_AGX_EVENT_COUNT || Pair->Ta == Pair->D3 ||
+      Pair->D3 >= APPLE_AGX_EVENT_COUNT ||
+      Pair->Compute >= APPLE_AGX_EVENT_COUNT || Pair->Ta == Pair->D3 ||
+      Pair->Ta == Pair->Compute || Pair->D3 == Pair->Compute ||
       Pair->Lease == 0u || !AppleAgxEventReserved(Allocator, Pair->Ta) ||
       !AppleAgxEventReserved(Allocator, Pair->D3) ||
       Allocator->Leases[Pair->Ta] != Pair->Lease ||
       Allocator->Leases[Pair->D3] != Pair->Lease)
     return APPLE_AGX_FALSE;
+  if (!AppleAgxEventReserved(Allocator, Pair->Compute) ||
+      Allocator->Leases[Pair->Compute] != Pair->Lease)
+    return APPLE_AGX_FALSE;
   AppleAgxEventSetReserved(Allocator, Pair->Ta, APPLE_AGX_FALSE);
   AppleAgxEventSetReserved(Allocator, Pair->D3, APPLE_AGX_FALSE);
+  AppleAgxEventSetReserved(Allocator, Pair->Compute, APPLE_AGX_FALSE);
   Allocator->Leases[Pair->Ta] = 0u;
   Allocator->Leases[Pair->D3] = 0u;
+  Allocator->Leases[Pair->Compute] = 0u;
   return APPLE_AGX_TRUE;
 }
 
