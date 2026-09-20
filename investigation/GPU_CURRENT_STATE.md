@@ -2120,3 +2120,10 @@ x64 real producer and ARM64 link.
 [NEXT] One Air client; collect first KMD/AGX/Present boundary and storage events.
 [HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP702 package717 ready
+Mandatory RenderCBSequence implementation f4b1e987 is packaged. Package analysis,
+Universal/Inf2Cat/catalog gates PASS; immutable archive SHA
+308816af6bb056293cab4acdc917e85ee69616f82d3b268bb556d59d3de1012e.
+Air recovery is clean. Next exact Valid-signature stage, full-owner bind and one
+standard client. Physical KMD/AGX/Present advancement remains unproven.

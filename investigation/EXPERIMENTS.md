@@ -45080,3 +45080,17 @@ observation under main-root .local/experiments/EXP702-live before exact cleanup.
 Expected discriminator: pfnRenderCb advances to a retained KMD guard or a new
 earlier boundary. If stornvme129 appears only after the client, preserve it as a
 correlated symptom without attribution; do not replay the client.
+
+### EXP702 finalized artifact gate
+Package717 analysis0/0, Universal validation, Inf2Cat and catalog membership
+PASS. Same E9BE15 signer; builder reports only expected untrusted self-signed
+root. Air must report Valid after exact import.
+INF dd7d7907acd951ebb5849a9d75872f47181bb3f3c024fe9bbc71b3c4f4745833;
+SYS 5523f9fdb05597bcb4cba91efed2b3a640e28e10d56ffddfad7d6386c66b8d91;
+UMD 0cba439992694cdfd4f72d0785f9f57869ce48272b1b1fb208dc12374dfda18d;
+CAT 851fa99af7233f520869357dfad6f10fbbb4e5bb4027f580d08677d2cf85bcd4;
+client f59f63fc4895231cfed252bbb21cbb5e728c548d234375f6e456bd072c6eab24;
+cert 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable .local/experiments/EXP702-render-sequence-717.zip SHA256
+308816af6bb056293cab4acdc917e85ee69616f82d3b268bb556d59d3de1012e.
+Next exact Air stage/bind/preflight and one client; no replay.
