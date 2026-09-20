@@ -44866,3 +44866,60 @@ executable 8d75e2278740066daf32cafc6c06d9609dd5a2bed2e3b3323e0444bbe6aa8cbc.
 The real producer, materializer, KMD plan/patch simulation, retirement, remap and
 teardown all pass. Hardware is NOT_RUN for this correction; do not claim it
 explains EXP699 until the preregistered Air discriminator.
+
+## EXP700 — unlock native allocations before Windows Render
+UTC build preregistration 2026-09-20T23:18:08Z.
+Integration HEAD e3eda9ef9a658b6e73f5e276329dd0039254ebb4; implementation
+ffc5e6cdc1f3eb8ee6c3e6d810f0135ecf623b9c. Exact driver source is proven by
+render-unlock-20260921ne ARM64 archive
+75d95f0d94b40208c572747189645e49435aea09622ae4578c366e05906d3072;
+x64 and ARM64 archives match all473 current driver files.
+
+WHY THIS HYPOTHESIS: EXP699 reaches native seal and pfnRenderCb returns E_FAIL
+without a retained KMD receipt. Microsoft documents that cached pfnLockCb
+allocation mappings should normally be unlocked before pfnRenderCb and that
+locked rendering can force eviction or fail. The real-producer mw RED proves
+17 participating native allocations were still mapped at Render; the same
+producer is GREEN after request-scoped unlock and coherent pointer invalidation.
+WINDOWS CONTRACT: pfnUnlockCb releases cached allocation mappings before
+pfnRenderCb; application-visible mapping, command contents, allocation handles,
+Render flags and callback ordering otherwise remain unchanged.
+AGX/ASAHI CONTRACT: immutable capture and typed references are complete before
+unlock. Allocation identities and source/submission holds survive until the
+same existing fence retires. A persistent BO remaps lazily only after retirement.
+TRANSLATION: validate the sealed deduplicated allocation set, unlock only its
+mapped native BOs, clear the UMD/native/transport mapping state atomically, call
+the existing composer/Render callback, then use the unchanged retirement path.
+WHAT IS STILL UNKNOWN: whether retained locks caused EXP699's exact E_FAIL;
+whether dxgkrnl now enters KMD Render; physical AGX submission/completion and
+successful standard Present. CpuVisible placement means eviction may have been
+possible, so this run is a discriminator rather than a predeclared confirmation.
+
+Single variable: unlock submitted native allocations before pfnRenderCb. The
+existing bounded UMD and KMD receipt diagnostics remain. No new capability,
+allocator, composer, command format, patch model, scheduler or GPUVA behavior.
+Offline gates: ne x64 execution0 with actual producer/materializer/KMD-plan/
+patch/retirement/lazy-remap/teardown PASS; ARM64 link0; host7 PASS. Build exact
+source via build-driver.ps1 Release NativeFrontend PackageBuild716 with
+asahi-runtime-arm64-render-unlock-20260921ne-arm64/NativeRuntime.props and the
+pinned26100 standard ARM64 client; same E9BE15 signer. Output
+native-package716-render-unlock-20260921nf-arm64. Finalize analysis, Universal,
+Inf2Cat, catalog membership, signatures and member/archive hashes before stage.
+
+Root/m1n1/Mu commits/diffs, full-owner584/406 and recovery377/392 identities are
+unchanged from EXP699. Current Air recovery is verified Code28/no package,
+service, SYS, UMD or signer,8CPU/NVMe/xHCI/input and no monitored events.
+After artifact finalization: stage exact package without /install; verify Air
+signatures Valid and member hashes; authorized temporary console login; natural
+full-owner bind with physical/debug-off/low-mem/broker1; verify Code0/Running/
+Start12/Platform14 and clear temporary login. Run the standard client exactly
+once with the bounded UMD trace. No replay.
+
+Expected checkpoint: pfnRenderCb advances beyond EXP699 E_FAIL, ideally with a
+matching KMD guard and Render/Patch/Submit/completion/Present evidence. Failure
+criterion: the exact first new boundary is retained without widening scope.
+Collect stdout/exit, UMD diagnostics, KMD/device/service receipts, current-boot
+events, installed hashes and physical observation under main-root
+.local/experiments/EXP700-live before exact package/task/trust cleanup and
+ordinary377/392 recovery. Prior visual comparator is EXP699 PERSISTS with photo
+SHA03ff5ac4d80090c459241df4982236c24a7c2a43e3f03b46c899b7369f7a0926.
