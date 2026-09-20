@@ -323,7 +323,19 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
    struct agx_resource *rsrc = view ? view->rsrc : NULL;
    AGX_WIN32_ASAHI_PIPELINE scope = {0};
    unsigned index;
-   if (!rsrc || rsrc->base.target != PIPE_TEXTURE_2D ||
+   unsigned level=view?view->base.u.tex.first_level:0;
+   unsigned layer=view?view->base.u.tex.first_layer:0;
+   unsigned last_layer=view?view->base.u.tex.last_layer:0;
+   int range=rsrc&&view&&level<=rsrc->base.last_level&&
+      layer<=last_layer&&last_layer<rsrc->base.array_size&&
+      view->base.u.tex.last_level==level;
+   uint64_t address=range ? agx_map_texture_gpu(rsrc,layer) : 0;
+   uint64_t offset=rsrc&&rsrc->bo ? address-rsrc->bo->va->addr : 0;
+   uint64_t span=range ? (uint64_t)(last_layer-layer)*
+      rsrc->layout.layer_stride_B+ail_get_level_offset_B(&rsrc->layout,level)+
+      ail_get_level_size_B(&rsrc->layout,level) : 0;
+   if (!rsrc || (rsrc->base.target != PIPE_TEXTURE_2D &&
+                 rsrc->base.target != PIPE_TEXTURE_2D_ARRAY) ||
        (rsrc->base.format != PIPE_FORMAT_B8G8R8A8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_R8G8B8A8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_DXT1_RGBA &&
@@ -334,21 +346,21 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
         rsrc->base.format != PIPE_FORMAT_G8R8_G8B8_UNORM &&
         rsrc->base.format != PIPE_FORMAT_B5G5R5A1_UNORM &&
         rsrc->base.format != PIPE_FORMAT_B4G4R4A4_UNORM) ||
-       rsrc->layout.compressed || rsrc->layout.level_offsets_B[0] ||
-       rsrc->base.last_level || rsrc->base.array_size != 1 ||
+       rsrc->layout.compressed || !range || !span ||
+       offset>rsrc->bo->size || span>rsrc->bo->size-offset ||
        !AgxWin32AsahiEmissionBegin(capture->Backend->Native, ptr.cpu, ptr.gpu,
           AGX_TEXTURE_LENGTH, AppleAgxWin32RoleDescriptor, &scope)) {
       windows_graph_fail(batch); return 0;
    }
    AGX_WIN32_RELOC_RESULT texture_result = AgxWin32AsahiCaptureReference(
       capture, rsrc->bo, AppleAgxWin32RoleTexture, AppleAgxWin32AccessRead,
-      0, rsrc->layout.size_B, &index);
+      offset, span, &index);
    if (texture_result != AgxRelocOk) {
       scope.Failed = 1;
    }
    AgxWin32AsahiPipelineRecordRange(&scope, (uint8_t *)ptr.cpu + 16,
       AppleAgxWin32RelocationTextureAddress40,
-      agx_map_texture_gpu(rsrc, 0), rsrc->layout.size_B,
+      address, span,
       AppleAgxWin32RoleTexture);
    if (!AgxWin32AsahiPipelineFinish(&scope,
           (uint8_t *)ptr.cpu + AGX_TEXTURE_LENGTH)) {

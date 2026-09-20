@@ -40,6 +40,7 @@ EXTERN_C BOOL APIENTRY MesaD3d10FrontendShaderValidForTest(D3D10DDI_HSHADER);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendFormatMappedForTest(DXGI_FORMAT);
 EXTERN_C BOOL AgxD3d10FormatViewCompatible(
     DXGI_FORMAT,DXGI_FORMAT,BOOL);
+void AdmissionUmdRuntimeExpectTextureSubresource(int);
 EXTERN_C BOOL APIENTRY MesaD3d10FrontendSetSoOffsetForTest(
     D3D10DDI_HDEVICE,D3D10DDI_HRESOURCE,UINT);
 EXTERN_C ULONG APIENTRY MesaD3d10FrontendEventQuerySetGenerationForTest(
@@ -2757,6 +2758,61 @@ static void test_mesa_d3d10_frontend_open(void) {
         deviceFunctions.pfnDestroyShaderResourceView(device,b4444Srv);
         deviceFunctions.pfnDestroyResource(device,b4444);
         free(b4444Srv.pDrvPrivate);free(b4444.pDrvPrivate);
+      }
+      {
+        static unsigned char mipPixels[4][256];
+        D3D10DDI_MIPINFO mipInfo[2]={{8,8,1,0},{4,4,1,0}};
+        D3D10_DDIARG_SUBRESOURCE_UP mipUpload[4]={0};
+        for(unsigned sub=0;sub<4;++sub) {
+          unsigned level=sub&1u;
+          mipUpload[sub].pSysMem=mipPixels[sub];
+          mipUpload[sub].SysMemPitch=level?16u:32u;
+          mipUpload[sub].SysMemSlicePitch=level?64u:256u;
+        }
+        D3D10DDIARG_CREATERESOURCE mipCreate={0};
+        D3D10DDI_HRESOURCE mipResource={0};D3D10DDI_HRTRESOURCE mipRuntime={0};
+        mipCreate.pMipInfoList=mipInfo;mipCreate.pInitialDataUP=mipUpload;
+        mipCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        mipCreate.Usage=D3D10_DDI_USAGE_DEFAULT;
+        mipCreate.BindFlags=D3D10_DDI_BIND_SHADER_RESOURCE;
+        mipCreate.Format=DXGI_FORMAT_R8G8B8A8_TYPELESS;
+        mipCreate.SampleDesc.Count=1;mipCreate.MipLevels=2;mipCreate.ArraySize=2;
+        SIZE_T mipBytes=deviceFunctions.pfnCalcPrivateResourceSize(device,&mipCreate);
+        mipResource.pDrvPrivate=calloc(1,mipBytes);mipRuntime.handle=(VOID *)(UINT_PTR)0xd80u;
+        CHECK(mipResource.pDrvPrivate && mipBytes);
+        unsigned mipErrors=FrontendErrors;
+        deviceFunctions.pfnCreateResource(device,&mipCreate,mipResource,mipRuntime);
+        CHECK(FrontendErrors==mipErrors);
+        D3D10DDIARG_CREATESHADERRESOURCEVIEW mipSrvCreate={0};
+        D3D10DDI_HSHADERRESOURCEVIEW mipSrv={0};D3D10DDI_HRTSHADERRESOURCEVIEW mipSrvRuntime={0};
+        mipSrvCreate.hDrvResource=mipResource;mipSrvCreate.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+        mipSrvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        mipSrvCreate.Tex2D.MostDetailedMip=1;mipSrvCreate.Tex2D.MipLevels=1;
+        mipSrvCreate.Tex2D.FirstArraySlice=1;mipSrvCreate.Tex2D.ArraySize=1;
+        SIZE_T mipSrvBytes=deviceFunctions.pfnCalcPrivateShaderResourceViewSize(device,&mipSrvCreate);
+        mipSrv.pDrvPrivate=calloc(1,mipSrvBytes);mipSrvRuntime.handle=(VOID *)(UINT_PTR)0xd81u;
+        CHECK(mipSrv.pDrvPrivate && mipSrvBytes);
+        deviceFunctions.pfnCreateShaderResourceView(device,&mipSrvCreate,mipSrv,mipSrvRuntime);
+        CHECK(FrontendErrors==mipErrors);
+        RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;RuntimeMarker=NULL;
+        RuntimeQueryMarkerCount=0;memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+        RuntimeConsumerGates=RuntimeConsumerRetirements=0;RuntimeConsumerFence=0;
+        memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+        RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH;
+        AdmissionUmdRuntimeExpectTextureSubresource(1);
+        deviceFunctions.pfnResourceCopy(device,rt,mipResource);
+        AdmissionUmdRuntimeExpectTextureSubresource(0);
+        CHECK(FrontendErrors==mipErrors && RuntimeRenders==1u && RuntimeSignals==1u &&
+              RuntimeMaterializations==2u && RuntimeConsumerGates==2u && RuntimeMarker);
+        if(RuntimeMarker) {
+          RuntimeCheckpoint(depthOwner,1u);
+          CHECK(AgxWin32AsahiContextRetire(MesaD3d10FrontendContextForTest(device),0u));
+          RuntimeCheckpoint(depthOwner,5u);
+        }
+        RuntimeExpectedCommandVersion=0;
+        deviceFunctions.pfnDestroyShaderResourceView(device,mipSrv);
+        deviceFunctions.pfnDestroyResource(device,mipResource);
+        free(mipSrv.pDrvPrivate);free(mipResource.pDrvPrivate);
       }
       {
         D3D10DDI_MIPINFO fp16Mip={0};

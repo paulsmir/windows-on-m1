@@ -139,6 +139,10 @@ typedef struct {
 static RUNTIME_CONSUMER RuntimeConsumers[2];
 static APPLE_AGX_U32 RuntimeConsumerFence;
 static unsigned RuntimeConsumerGates,RuntimeConsumerRetirements;
+static int RuntimeExpectedTextureSubresource;
+void AdmissionUmdRuntimeExpectTextureSubresource(int enabled) {
+  RuntimeExpectedTextureSubresource=enabled;
+}
 #define RUNTIME_REQUIRE(x) do { if(!(x)) {++PoolErrors;fprintf(stderr,"RUNTIME_OWNER line=%u %s\n",(unsigned)__LINE__,#x);} } while(0)
 static ADMISSION_UMD_SCREEN_BUFFER *RuntimeBuffer(ADMISSION_UMD_DEVICE *device,APPLE_AGX_U64 token) {
   if(!device) return NULL;
@@ -222,6 +226,12 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     RUNTIME_REQUIRE(view.Header->Version==RuntimeExpectedCommandVersion);
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
+  if(RuntimeExpectedTextureSubresource) {
+    unsigned texture=view.Draw->TextureReference;
+    RUNTIME_REQUIRE(texture!=APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
+        texture<view.Header->ReferenceCount && view.References[texture].Bytes>0 &&
+        view.References[texture].Bytes<facts[texture].Bytes);
+  }
   if(RuntimeExpectedTargetAllocation) {
     unsigned target=view.Draw->DestinationReference;
     RUNTIME_REQUIRE(target<view.Header->ReferenceCount &&

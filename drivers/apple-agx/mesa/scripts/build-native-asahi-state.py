@@ -301,6 +301,8 @@ struct Query
    ULONGLONG owner_cookie;
    ULONG device_generation;
    DXGI_FORMAT sample_format;
+   UINT sample_level;
+   UINT sample_layer;
    AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *presentation;
 };'''),
         ('''struct SamplerState
@@ -1098,7 +1100,12 @@ _Present('''),
       (!windowsResource->presentation&&
        !(windowsResource->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE))||
       !AgxD3d10FormatViewCompatible(windowsResource->Format,
-          pCreateSRView->Format,FALSE)) {
+          pCreateSRView->Format,FALSE)||
+      pCreateSRView->ResourceDimension!=D3D10DDIRESOURCE_TEXTURE2D||
+      pCreateSRView->Tex2D.MipLevels!=1u||pCreateSRView->Tex2D.ArraySize!=1u||
+      pCreateSRView->Tex2D.MostDetailedMip>=windowsResource->MipLevels||
+      pCreateSRView->Tex2D.FirstArraySlice>=
+         windowsResource->NumSubResources/windowsResource->MipLevels) {
       SetError(hDevice,E_NOTIMPL);return;
    }
    struct pipe_context *pipe = CastPipeContext(hDevice);
@@ -1128,6 +1135,8 @@ _Present('''),
    pSRView->owner_device = CastDevice(hDevice);
    pSRView->owner_resource = CastResource(pCreateSRView->hDrvResource);
    pSRView->owner_resource->sample_format = pCreateSRView->Format;
+   pSRView->owner_resource->sample_level = pCreateSRView->Tex2D.MostDetailedMip;
+   pSRView->owner_resource->sample_layer = pCreateSRView->Tex2D.FirstArraySlice;
 }
 
 
@@ -1176,7 +1185,10 @@ _Present('''),
       SetError(hDevice, E_INVALIDARG); return;
    }
    pDevice->pipe->sampler_view_release(pDevice->pipe, view->handle);
-   if (view->owner_resource) view->owner_resource->sample_format = DXGI_FORMAT_UNKNOWN;
+   if (view->owner_resource) {
+      view->owner_resource->sample_format = DXGI_FORMAT_UNKNOWN;
+      view->owner_resource->sample_level = view->owner_resource->sample_layer = 0;
+   }
    view->handle = NULL; view->owner_device = NULL; view->owner_resource = NULL;''')
     replace_function_body('src/gallium/frontends/d3d10umd/Shader.cpp','GenMips','''   Device *device = CastDevice(hDevice);
    ShaderResourceView *view = CastShaderResourceView(hShaderResourceView);
@@ -1760,22 +1772,27 @@ AgxD3d10ResourceWithinRequiredLimits(
       if(source->Format==DXGI_FORMAT_R8G8_B8G8_UNORM||
          source->Format==DXGI_FORMAT_G8R8_G8B8_UNORM)
         sample=PIPE_FORMAT_R8G8B8A8_UNORM;
+      unsigned sampleLevel=source->sample_level,sampleLayer=source->sample_layer;
+      unsigned sampleWidth=src?u_minify(src->width0,sampleLevel):0;
+      unsigned sampleHeight=src?u_minify(src->height0,sampleLevel):0;
       bool valid=dst&&src&&!destination->presentation&&!source->presentation&&
          (destination->bind_flags&D3D10_DDI_BIND_RENDER_TARGET)&&
          (source->bind_flags&D3D10_DDI_BIND_SHADER_RESOURCE)&&
          sample!=PIPE_FORMAT_NONE&&dst->target==PIPE_TEXTURE_2D&&
-         src->target==PIPE_TEXTURE_2D&&dst->width0==16&&dst->height0==16&&
-         src->width0&&src->width0<=16&&src->height0&&src->height0<=16&&
+         (src->target==PIPE_TEXTURE_2D||src->target==PIPE_TEXTURE_2D_ARRAY)&&
+         dst->width0==16&&dst->height0==16&&
+         sampleWidth&&sampleWidth<=16&&sampleHeight&&sampleHeight<=16&&
+         sampleLevel<=src->last_level&&sampleLayer<src->array_size&&
          dst->depth0==1&&src->depth0==1&&
-         !dst->last_level&&!src->last_level&&dst->array_size==1&&
-         src->array_size==1&&dst->nr_samples<=1&&src->nr_samples<=1&&
+         !dst->last_level&&dst->array_size==1&&
+         dst->nr_samples<=1&&src->nr_samples<=1&&
          (dst->format==PIPE_FORMAT_B8G8R8A8_UNORM||
           dst->format==PIPE_FORMAT_R8G8B8A8_UNORM);
       if(!valid) { SetError(hDevice,E_NOTIMPL);return; }
       struct pipe_blit_info info={};
-      info.src.resource=src;info.src.level=0;info.src.format=sample;
-      info.src.box.width=src->width0;info.src.box.height=src->height0;
-      info.src.box.depth=1;
+      info.src.resource=src;info.src.level=sampleLevel;info.src.format=sample;
+      info.src.box.z=sampleLayer;info.src.box.width=sampleWidth;
+      info.src.box.height=sampleHeight;info.src.box.depth=1;
       info.dst.resource=dst;info.dst.level=0;info.dst.format=dst->format;
       info.dst.box.width=info.dst.box.height=16;info.dst.box.depth=1;
       info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;

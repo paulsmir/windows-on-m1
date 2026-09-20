@@ -1412,3 +1412,28 @@ Inventory remains 120 of 121 and pipeline mask zero.  All distinct physical or
 lowered storage families selected before hardware now have representative
 executable evidence.  The remaining gate is the complete machine-readable
 format/use descriptor contract plus nonzero mip/layer range validation.
+
+## Required-format closure in progress: bounded mip/array texture capture (2026-09-20)
+A two-mip/two-layer typeless RGBA8 resource now creates a typed SRV selecting
+mip1/layer1 and drives the real version-6 native blit.  Mesa util-blitter's
+internal sampler view exposes mip1 across layers0-1 while shader coordinates
+select layer1.  Capture therefore preserves the source-authentic layer-base
+address and bounds the immutable TextureReference to the descriptor-visible
+layer range through the end of mip1; it does not copy or expose the remainder
+of the allocation.  The host KMD consumer verifies the texture span is nonzero
+and strictly smaller than the validated allocation size before both placements.
+Multi-mip SRVs remain rejected by the chosen pre-hardware slice.
+
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/required-subresource-final-20260920jz-x64/;
+source archive SHA-256
+e72e980b43b2cdaa94529cbccad657df37206e8c661d9e828598f8387e34fb36.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-subresource-final-20260920ka-arm64/;
+source archive SHA-256
+3730e1e1a3a848d28362ccd7ec20e6698853b7a4706bf3ba5ea5a058621c56ee.
+
+Inventory remains 120 of 121 and pipeline mask zero.  Representative execution
+now covers every selected physical/lowered storage and subresource family.  The
+last gate is the exhaustive machine-readable required-format/use descriptor
+contract that binds all mandatory DXGI entries to these production families.
