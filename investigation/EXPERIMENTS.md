@@ -44923,3 +44923,25 @@ events, installed hashes and physical observation under main-root
 .local/experiments/EXP700-live before exact package/task/trust cleanup and
 ordinary377/392 recovery. Prior visual comparator is EXP699 PERSISTS with photo
 SHA03ff5ac4d80090c459241df4982236c24a7c2a43e3f03b46c899b7369f7a0926.
+
+### EXP700 finalized artifact gate — 2026-09-20T23:20:50Z
+Package716 KMD/UMD analysis0/0, Universal validation, Inf2Cat and catalog
+membership PASS. The same E9BE15 signer is present on SYS, UMD, catalog and
+standard client; the builder reports only the expected untrusted self-signed
+root condition. Air must report Valid after exact certificate import.
+package/AppleAgxRenderAdmission.inf:
+16af0addad2d1582ed75d03b5df0c7d58d4ad1d7130384929601601ef1febeae
+package/AppleAgxRenderAdmission.sys:
+8748222c400f5ec207b658242e867b9d22759d745b8f1bd30dc77c545cfa529e
+package/AppleAgxRenderAdmissionUmd.dll:
+4989951de6e391c6ff4e81cc2d12cec45144838a3e8a6066b1930ed945c2bda9
+package/appleagxrenderadmission.cat:
+228c6d92e9b7ecc659ba9530ee268a6ef299612d24601d91dc33114efd48f9c6
+qualification/AppleAgxD3d10Standard.exe:
+dff3c871a9ebc94bc5775308a43e8a8aeba6cbf897b3234e4f3b1682da624e3f
+qualification/AppleAgx-WDKTestCert.cer:
+97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable .local/experiments/EXP700-render-unlock-716.zip SHA256
+2e48f9996ed9ae756814a2fcab78901381f9e58aad1c3c2e3e016b41cbdb15db.
+Next: exact stage/hash/signature preflight in clean recovery, full-owner natural
+bind, one standard client, evidence before exact cleanup. No replay.

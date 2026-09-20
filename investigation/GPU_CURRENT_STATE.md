@@ -2054,3 +2054,11 @@ offline lifecycle including retirement, lazy remap and teardown; ARM64 link.
 KMD Render/Patch/Submit/completion/Present evidence before any new scope.
 [HW] Successful physical KMD Render/Patch/Submit, AGX completion and DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP700 exact package716 ready
+Implementation ffc5e6cd and render-unlock ne gates are packaged. Package716
+analysis/Universal/Inf2Cat/catalog PASS; immutable archive SHA
+2e48f9996ed9ae756814a2fcab78901381f9e58aad1c3c2e3e016b41cbdb15db.
+Current Air recovery baseline is Code28/no package/service/files/trust,
+8CPU/NVMe/input/no events. Next exact stage/Valid-signature check, full-owner
+bind and one standard client. No physical Render/Present claim before evidence.
