@@ -44280,3 +44280,17 @@ CreateSwapChain HRESULT recorded. Draw success requires physical submission/
 completion receipts, not client log alone. Collect registry/client/events in
 main-root .local/experiments/EXP692-live before exact package/task/trust cleanup
 and ordinary377/392 recovery. A nonzero stage result falsifies that boundary.
+
+### EXP692 actual result
+2026-09-20 UTC: exact package709 Code0/Running, Start12/Platform14 status0,
+8CPU/NVMe/input, no fresh monitored events, installed member/client hashes
+match. Active console; temporary autologon cleared. One client: device S_OK,
+exact AGX identity accepted, CreateSwapChain E_INVALIDARG (80070057), exit1.
+No draw/completion/Present. Verdict: client identity fix confirmed; original
+rejection localized to swap-chain creation, internal cause unknown. Main-root
+.local/experiments/EXP692-live contains bound.json, client-result.txt,
+post-client.json, cleanup.txt and recovery receipts. Exact oem5/package709,
+stopped service, task and trust removed; ordinary377/392 Code28 recovery
+verified with no package/files/trust, healthy8CPU/NVMe/input and no fresh events.
+Next diagnostic reads runtime format/sample support before unchanged swap-chain;
+no speculative UMD capability or interface changes.

@@ -1716,3 +1716,24 @@ directly to Air; entirely offline until launch.
 [HW] Standard swap-chain, native draw, physical completion and DXGI Present
 remain unproven; hardware evidence required.
 POST-HARDWARE: accelerated desktop stability and desktop acceptance.
+
+## EXP692 — swap-chain creation is current boundary
+Device S_OK and actual ACPI adapter accepted; CreateSwapChain E_INVALIDARG.
+No draw or Present. Full-owner preflight and ordinary Code28 recovery were
+healthy with no fresh monitored events. Current hypothesis: BGRA format is
+filtered under advertised base D3D10 DDI; not proven. Actual resource allocation
+is an alternative. Next client adds only standard CheckFormatSupport/sample
+quality receipts for BGRA and RGBA before the identical swap-chain call.
+Microsoft Extended Format Aware Requirements and projected Adapter.cpp base-only
+DDI list inspected; do not advertise extended DDI without companion invariants.
+Debug runtime DLLs absent on Air; no environment installation is needed for
+these ordinary API receipts.
+HARDWARE ROADMAP
+[PASS] Frozen native/package gates; firmware startup; standard device and AGX
+identity on hardware (EXP692).
+[NOW] Runtime swap-chain admission: discriminate format filtering from resource
+allocation using read-only standard queries; x64/ARM64 compile gates then Air.
+[NEXT] Causal fix and focused deterministic verification, sign/hash and immediate
+preregistered hardware run; do not expand the frozen feature inventory.
+[HW] Swap-chain, real native draw, physical completion and standard Present.
+POST-HARDWARE: accelerated desktop stability and desktop acceptance.

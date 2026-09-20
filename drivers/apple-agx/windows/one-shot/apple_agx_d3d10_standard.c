@@ -72,6 +72,18 @@ int wmain(void) {
   stage="adapter-factory";
   result=IDXGIAdapter_GetParent(adapter,&IID_IDXGIFactory,(void **)&factory);
   if(FAILED(result)) goto done;
+  /* Read-only runtime evidence: do not infer support from the UMD table. */
+  const DXGI_FORMAT probeFormats[]={DXGI_FORMAT_B8G8R8A8_UNORM,
+                                    DXGI_FORMAT_R8G8B8A8_UNORM};
+  for(UINT i=0;i<2u;++i) {
+    UINT support=0,quality=0;
+    HRESULT formatResult=ID3D10Device_CheckFormatSupport(device,probeFormats[i],&support);
+    HRESULT sampleResult=ID3D10Device_CheckMultisampleQualityLevels(
+        device,probeFormats[i],1,&quality);
+    fprintf(stderr,"STANDARD_FORMAT format=%u hr=0x%08lx support=0x%08x sample_hr=0x%08lx quality=%u\n",
+        (UINT)probeFormats[i],(ULONG)formatResult,support,(ULONG)sampleResult,quality);
+  }
+  fflush(stderr);
   stage="create-swap-chain";
   result=IDXGIFactory_CreateSwapChain(factory,(IUnknown *)device,&sd,&swap);
   fprintf(stderr,"STANDARD_STAGE stage=%s hr=0x%08lx\n",stage,(ULONG)result);
