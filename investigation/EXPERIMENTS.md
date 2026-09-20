@@ -44753,3 +44753,38 @@ post-client.json,post-health.json,operator-observation.json,cleanup.txt}.
 Exactoem5/hash package/task/trust/stopped-service cleanup succeeded; ordinary
 377/392 recovery launched. SSH/NVMe/input/8CPU alive before cleanup; RDP untested.
 No bugcheck or physical native completion claimed.
+
+## EXP699 — production KMD Render guard discriminator
+UTC build preregistration 2026-09-20T22:34:30.585136+00:00.
+Source HEAD 8215ed05c84d55b7e6da68d4c3190cca27e5dfa2 plus driver diff
+5c497afbf4ea1072fdd15106ce9d05328d05220a9b6be9102e2c57a58091ff32; archive
+6e386d3c840b96410fd416e5e66a0be1128b50bae048ecc75fd013f71ce409f7.
+WHY THIS HYPOTHESIS: EXP698 native draw/capture/seal succeeds and exact runtime
+pfnRenderCb returns E_FAIL. Source/WDK callback review found arguments coherent.
+Production compiled out existing KMD guard export, preventing causal localization.
+WINDOWS CONTRACT: FULL GRAPHICS DxgkDdiRender is PASSIVE_LEVEL and converts
+UMD commands to DMA; preserve current input/output and returned NTSTATUS.
+Source: pinned WDK d3dkmddi and Microsoft DXGKDDI_RENDER documentation.
+AGX/ASAHI CONTRACT: native producer/materializer/lifetime unchanged and mt tested.
+TRANSLATION: only expose existing KMD guard/result through bounded32 per-process
+64-byte registry slots, immutable entry scalars and process/thread/call sequence.
+No SubmitQualification define and no capability/composer/submission change.
+WHAT IS STILL UNKNOWN: exact KMD entry/guard and NTSTATUS behind RenderCb E_FAIL.
+Missing receipt alone is INCONCLUSIVE (slot exhaustion/PID reuse/write failure/
+process-context differences); never infer absent KMD entry solely from absence.
+Sources inspected: umd_render_windows.c, receipts.c, render_admission.h, composer,
+runtime context creation, official Render/RenderCb docs. Driver owns diagnostics;
+all platform/AGX/power/IRQ/DMA/recovery ownership unchanged.
+Smallest checkpoint: one same standard client, match its PID to KMD receipt;
+collect device and service values plus UMD trace, then exact cleanup377/392.
+Host transport/correlation/decoder tests4 PASS; source review handle-open result
+correction applied. Native mt x64 execution/ARM64 link remain exact unchanged
+inputs. Build fresh mv source with existing hash-pinned mt ARM64 native props;
+package715 Release NativeFrontend + standard ARM64 client via build-package715.ps1.
+Finalize analysis/Universal/Inf2Cat/catalog/sign/hash before installation.
+Recovery after EXP698 is verified Code28/no INF/service/files/cert,8CPU/NVMe/input
+and no events. Root/m1n1/Mu commits/diff and584/406 plus377/392 hashes unchanged.
+One exact staged package, natural full-owner bind, verify installed hashes and
+Code0/Start12/Platform14; clear authorized temporary login; client task120s once.
+Evidence main-root .local/experiments/EXP699-live. Physical comparator EXP698
+PERSISTS; independently record new operator observation if available.

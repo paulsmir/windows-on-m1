@@ -1987,3 +1987,16 @@ retirement, ARM64 and exact package gates.
 [NEXT] Causal owner fix after receipts; deterministic gate and exact package.
 [HW] Successful Render/Patch/Submit, physical completion and standard Present.
 POST-HARDWARE: complete desktop composition and acceptance.
+
+## EXP699 bounded KMD receipt candidate gates PASS
+Existing Render guard export moved outside qualification-only compile guard.
+Fixed32 process-owned slots preserve client against DWM writes; entry16ULONG
+scalars captured once, exit overlays guard/status. PASSIVE check, checked
+registry handle open, service fallback for earliest invalid context/device.
+No Render decision/capability change. Source review correction applied.
+Host transport/correlation/decoder4 PASS; package715 UMD/KMD analysis0/0,
+Universal/Inf2Cat/catalog PASS. Native/UMD inputs unchanged from mt verified
+producer; archive6e386d3c840b96410fd416e5e66a0be1128b50bae048ecc75fd013f71ce409f7.
+Recovery after698 verified Code28/no package/service/files/trust,8CPU/NVMe/input.
+Next exact signed715 standard client once; missing matching receipt alone remains
+inconclusive. Physical damage EXP698 operator verdict PERSISTS.

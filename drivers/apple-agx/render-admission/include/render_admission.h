@@ -456,6 +456,11 @@ typedef struct _ADMISSION_OPEN_ALLOCATION {
   ULONG Win32Flags;
 } ADMISSION_OPEN_ALLOCATION;
 
+/* Observational only; fixed process slots preserve the standard client's result. */
+VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
+                                   _In_reads_(16) const ULONG *Snapshot,
+                                   _In_ ULONG Guard,
+                                   _In_ NTSTATUS Status);
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
 NTSTATUS AdmissionStandardPresentTraceQueryWindows(
     _Inout_ ADMISSION_CONTEXT *Context,
@@ -465,9 +470,6 @@ VOID AdmissionStandardPresentTraceRecordWindows(
     _In_ const ADMISSION_STANDARD_PRESENT_EVENT *Event);
 VOID AdmissionUmdRenderTraceArm(_In_ ADMISSION_CONTEXT *Context);
 VOID AdmissionUmdRenderTraceDisarm(_In_ ADMISSION_CONTEXT *Context);
-VOID AdmissionRecordUmdRenderGuard(_In_opt_ ADMISSION_CONTEXT *Context,
-                                   _In_ ULONG Guard,
-                                   _In_ NTSTATUS Status);
 NTSTATUS AdmissionRenderCorrelationStartWindows(
     _Inout_ ADMISSION_CONTEXT *Context);
 NTSTATUS AdmissionRenderCorrelationStopWindows(

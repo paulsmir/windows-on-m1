@@ -260,8 +260,6 @@ static VOID AdmissionUmdRenderTraceResult(
       Context, AdmissionUmdRenderTracePrepatched, Prepatched ? 1u : 0u);
 }
 #else
-#define AdmissionRecordUmdRenderGuard(Context, Guard, Status)                 \
-  ((void)(Context), (void)(Guard), (void)(Status))
 #define AdmissionUmdRenderTraceAdapterGet() ((ADMISSION_CONTEXT *)NULL)
 #define AdmissionUmdRenderTraceBegin(Context, RenderContext, Args)            \
   ((void)(Context), (void)(RenderContext), (void)(Args), FALSE)
@@ -318,11 +316,24 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
   ULONG tracePatches = 0u;
   ULONG correlationSequence = 0u;
   ULONGLONG allocationTokens[2] = {0ULL, 0ULL};
+  static volatile LONG receiptSequence;
+  /* Snapshot input scalars once: Render may mutate output fields later. */
+  ULONG renderReceipt[16] = {1u, 16u * sizeof(ULONG),
+      (ULONG)InterlockedIncrement(&receiptSequence),
+      HandleToULong(PsGetCurrentProcessId()), HandleToULong(PsGetCurrentThreadId()),
+      MAXULONG, (ULONG)STATUS_PENDING,
+      Args ? Args->CommandLength : 0u, Args ? Args->DmaSize : 0u,
+      Args ? Args->DmaBufferPrivateDataSize : 0u,
+      Args ? Args->AllocationListSize : 0u,
+      Args ? Args->PatchLocationListInSize : 0u,
+      Args ? Args->PatchLocationListOutSize : 0u,
+      Args ? Args->MultipassOffset : 0u, (ULONG)KeGetCurrentIrql(), MAXULONG};
 
 #define UMD_RENDER_RETURN(guard, value)                                      \
   do {                                                                       \
     NTSTATUS renderStatus = (value);                                         \
-    AdmissionRecordUmdRenderGuard(adapter, (guard), renderStatus);           \
+    AdmissionRecordUmdRenderGuard(                                           \
+        adapter, renderReceipt, (guard), renderStatus);                       \
     AdmissionUmdRenderTraceResult(adapter, trace, (guard), renderStatus,     \
                                   traceDmaBytes, tracePatches, prepatched);   \
     AdmissionRenderCorrelationExitWindows(                                  \
@@ -345,7 +356,9 @@ _Use_decl_annotations_ NTSTATUS AdmissionDdiRender(
                       STATUS_INVALID_PARAMETER);
   adapter = CONTAINING_RECORD(context->Object.Device->Adapter,
                               ADMISSION_CONTEXT, ObjectAdapter);
-  AdmissionRecordUmdRenderGuard(adapter, MAXULONG, STATUS_PENDING);
+  renderReceipt[15] = context->Object.Flags |
+      (context->Win32Transport ? 0x80000000u : 0u);
+  AdmissionRecordUmdRenderGuard(adapter, renderReceipt, MAXULONG, STATUS_PENDING);
   correlationSequence = AdmissionRenderCorrelationBeginWindows(
       adapter, context, Args);
   trace = AdmissionUmdRenderTraceBegin(adapter, context, Args);

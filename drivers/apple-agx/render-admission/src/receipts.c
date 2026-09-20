@@ -619,19 +619,55 @@ _Use_decl_annotations_ VOID AdmissionRecordQueueFaultSnapshot(
   }
 }
 
-_Use_decl_annotations_ VOID AdmissionRecordUmdRenderGuard(
-    ADMISSION_CONTEXT *Context, ULONG Guard, NTSTATUS Status) {
-  HANDLE key = NULL;
-  if (Context == NULL || Context->PhysicalDeviceObject == NULL ||
-      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
-          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
-    return;
-  WriteDword(key, L"Wom1UmdRenderGuard", Guard);
-  WriteDword(key, L"Wom1UmdRenderStatus", (ULONG)Status);
-  ZwClose(key);
-}
 
 #endif
+
+
+/* At most 32 process-owned values per driver lifetime. A process never evicts
+ * another process: DWM cannot overwrite the one-shot client's receipt. Multiple
+ * calls in one process retain only its last observation, not a complete trace. */
+_Use_decl_annotations_ VOID AdmissionRecordUmdRenderGuard(
+    ADMISSION_CONTEXT *Context, const ULONG *Snapshot,
+    ULONG Guard, NTSTATUS Status) {
+  static volatile LONG processIds[32];
+  HANDLE key = NULL;
+  ULONG receipt[16], slot;
+  WCHAR valueName[40];
+  UNICODE_STRING servicePath;
+  OBJECT_ATTRIBUTES attributes;
+  if (Snapshot == NULL || Snapshot[3] == 0u ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL)
+    return;
+  for (slot = 0u; slot < ARRAYSIZE(processIds); ++slot) {
+    LONG owner = InterlockedCompareExchange(&processIds[slot],
+        (LONG)Snapshot[3], 0);
+    if (owner == 0 || (ULONG)owner == Snapshot[3]) break;
+  }
+  if (slot == ARRAYSIZE(processIds)) return;
+  RtlCopyMemory(receipt, Snapshot, sizeof(receipt));
+  receipt[5] = Guard;
+  receipt[6] = (ULONG)Status;
+  if (!NT_SUCCESS(RtlStringCchPrintfW(valueName, ARRAYSIZE(valueName),
+                                     L"Wom1UmdRenderSlot%02u", slot)))
+    return;
+  if (Context != NULL && Context->PhysicalDeviceObject != NULL &&
+      !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
+          PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
+    key = NULL;
+  if (key == NULL) {
+    RtlInitUnicodeString(&servicePath,
+        L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+    InitializeObjectAttributes(&attributes, &servicePath,
+        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) return;
+  }
+  WriteBinary(key, valueName, receipt, sizeof(receipt));
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+  WriteDword(key, L"Wom1UmdRenderGuard", Guard);
+  WriteDword(key, L"Wom1UmdRenderStatus", (ULONG)Status);
+#endif
+  ZwClose(key);
+}
 
 _Use_decl_annotations_ void AdmissionRecordContext0Inventory(
     ADMISSION_CONTEXT *Context, ULONG Stage, ULONG Result,
