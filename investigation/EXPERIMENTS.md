@@ -43773,3 +43773,113 @@ Evidence final-health.json,ordinary-restore-boot.log and contract. EXP684 hardwa
 qualification and cleanup are complete; ordinary GPU-visible recovery remains
 active. Do not rerun KMT qualification. Next causal target is production runtime
 CreateDevice/native frontend ownership and then standard Present/DWM acceptance.
+
+## EXP685 — preregistered standard-runtime D3D10/DXGI hardware experiment
+
+UTC preregistration: 2026-09-20T11:00:43Z. Hardware status: **NOT_RUN**.
+
+**WHY THIS HYPOTHESIS:**
+1. EXP684 proved the same physical AGX/KMD Render/Patch/Submit and completion path with one real native Mesa/Asahi batch, so the physical queue path is no longer the nearest unknown.
+2. The frozen D3D10_0/FL10_0 inventory is now 121/121 and native-enabled installed UMD GetCaps advertises only pipeline mask 1; complete x64 producer execution and ARM64 build/link/package gates pass.
+3. The exact standard client imports D3D10/DXGI, verifies Apple vendor 0x106B, creates the pipeline, draws and calls IDXGISwapChain::Present; no direct KMT construction or manual capture remains in the client.
+
+**ATOMIC CONTRACT:** native UMD export OpenAdapter10_2, D3D10_0 supported version,
+3D pipeline mask1, required D3D10 callbacks, resource/view ownership and standard
+DXGI Present are the indivisible Microsoft runtime admission contract.  The
+single hardware discriminator is entry through the standard runtime rather than
+the already-validated direct-KMT qualification client.  Optional MSAA, XR_BIAS,
+OpenGL, CS1.6 and broader desktop stability remain excluded.
+
+**WINDOWS CONTRACT:** standard D3D10CreateDeviceAndSwapChain selects the Apple
+adapter and installed OpenAdapter10_2 UMD; runtime-created resources and DDIs
+produce one native draw, KMD receives Render/Patch/Submit, completion permits
+Flush/Present, and IDXGISwapChain::Present returns S_OK.  Package version is
+30.0.704.0 and native GetCaps advertises exactly D3D10_0 pipeline mask1.
+
+**AGX/ASAHI CONTRACT:** the real Mesa/Asahi producer owns NIR compilation,
+resource layout, PBE/BG-EOT, encoder and immutable capture.  The existing UMD
+composer and physical/patch-list KMD materialize the graph, submit TA/3D and
+retire only after the owned AGX completion event.  GPUVA migration remains
+closed/no.
+
+**TRANSLATION:** D3D10 runtime callbacks -> installed native UMD per-device
+factory/resource/batch owner -> real Mesa/Asahi draw -> immutable request -> UMD
+composer -> KMD Render/Patch/Submit -> physical AGX completion -> standard DXGI
+Present.  No parallel allocator, renderer, composer or KMT client is used.
+
+**WHAT IS STILL UNKNOWN:** whether the actual Windows standard runtime admits
+this exact installed FL10_0 UMD contract on the Air, whether the resulting real
+batch completes physically under the full-owner platform, and whether the first
+standard Present succeeds.  These are hardware/runtime observations and cannot
+be distinguished further offline.
+
+Single changed variable relative to validated EXP684: the producer enters via
+standard D3D10/DXGI and the installed native UMD rather than the direct native
+KMT qualification client.  The required UMD admission fields/DDIs change as the
+atomic contract above; platform, physical KMD architecture and recovery remain
+unchanged.
+
+Source identity: repository public_windows, branch
+integration/ad04-windows-compiler, clean commit
+097573751bb341d6c54fc0c8e428dbb65b5529c0.  Clean ARM64 native archive SHA-256
+7441daf2e5f2e93a3cd070d81151a88d7e0a73a3608dd7e368bb61bc1b14fc4b.
+Pinned platform identities: root commit
+5dff6898d76ebe78aa4b58ccd02a3b1d51b6bb68; m1n1_windows commit
+d703f87e7031717a3dc56d0cd6b8c3827eff8c54 and immutable m1n1 SHA-256
+fae3444cc289cf52ea12b81b9db8f3d8bf24bd084f899a751321d2048d9a525a;
+Mu commit 5acdb4a7459d6de20bccea5cc1cf14c9f9dea06b with immutable EXP392
+J313_EFI.fd SHA-256
+16c177182e96b63eac852dcfb185cebba9c1d91943c6402106a640848ddc5e06.
+The full-owner launch uses the already validated immutable EXP584/EXP406
+physical-display profile with WOM1_AGX_G2_POWER_BROKER=1; no firmware rebuild.
+
+Pinned build gates: ARM64 runtime closure/client link PASS; UMD/KMD code analysis
+0 warnings/0 errors; Universal validation PASS; Inf2Cat 0 warnings/0 errors.
+Preserved signer thumbprint:
+E9BE15BD2A184BFABA0C8035B3C620C58037A241.  Package hashes: INF
+55107e16f01c3d213404f9ae952c5c021a54e0d022c7726fadd68c454a1cb29e;
+SYS c3eb32020145c4207a532392caf038f212f4b3e9ffae31418aae5dfdd4b8386a;
+UMD 7bc8a5de3fdf0f086a8d968d20a6a60925513a0f654e9367ea2a74fc3c933285;
+CAT b1032dfb8ddafca4e8ae6a5e7f1192e377a7ddec06725175267840fd070bf773.
+Exact signed ARM64 qualification EXE SHA-256
+edbc48c789d39ea924c8de2f0c631747040a0226597970764e5e1cc9b3f780fe;
+public certificate SHA-256
+97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable artifact:
+.local/experiments/EXP685-standard-runtime-704.zip, SHA-256
+df82dd136dc2e841aa97cc989e5287dc5aa2704f84dea532fd8ed4c4ded5431b.
+
+Exact sequence after ordinary baseline PASS:
+1. Transfer and re-hash the immutable archive; import only the manifest-bound
+   public E9BE15 certificate into LocalMachine Root and TrustedPublisher.
+2. Verify every manifest member and Authenticode signer; stage only the exact INF
+   with `pnputil /add-driver AppleAgxRenderAdmission.inf`, without `/install`.
+3. Controlled reboot; require SSH loss, old launcher exit, both USB endpoints and
+   read-only Running proxy.  Launch immutable EXP584/EXP406 full-owner once.
+4. Bound preflight requires eight CPUs, one APPL0002 Code0, exact OEM package,
+   Running AppleAgxAdmission and installed INF/SYS/UMD hashes above.
+5. Invoke `AppleAgxD3d10Standard.exe` exactly once, attached, with a 120-second
+   outer timeout.  Preserve stdout/stderr, KMD receipts, System/Application
+   events, dumps, boot log and package state before any cleanup.
+
+Expected checkpoint: `STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS`,
+Apple vendor 0x106B, fresh KMD native graph receipt with matching build704 and
+physical completion, client exit0, SSH/8CPU/NVMe/xHCI/input alive and no fresh
+41/1001/129/4101.  Failure criterion: any hash/signer/package mismatch aborts
+before staging; otherwise client nonzero/timeout, missing UMD/KMD receipt,
+missing completion, failed Present, TDR, bugcheck or SSH loss is a failed or
+inconclusive run according to the last reached receipt.  Never replay the client.
+
+Recovery artifact and path: collect evidence first, identify the exact bound OEM
+INF by installed INF hash, then `pnputil /delete-driver <exact-oem>.inf /uninstall`
+without force; remove only the experiment APPL0002 stale devnode/service and the
+E9BE15 experiment trust, preserve AppleInput 71CD0A trust and existing
+TESTSIGNING/SAC settings, then restore immutable ordinary377/392 broker-disabled
+one-Code28 baseline.  Use immutable GPU-hidden377/385 only if ordinary Windows
+cannot be reached.
+
+Current control-plane preflight at preregistration: Air SSH 192.168.1.37 timed
+out after the bounded attempt, and this host showed neither expected proxy/vUART
+USB endpoints nor an active m1n1/full-owner launcher.  No certificate, package,
+reboot or hardware launch has been performed.  Staging is prohibited until the
+ordinary GPU-visible baseline is reachable and verified.
