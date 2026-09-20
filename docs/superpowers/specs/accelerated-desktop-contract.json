@@ -1343,8 +1343,9 @@
       "implementation_file": "drivers/apple-agx/mesa/winsys/agx_win32_transport.c",
       "test_id": "ad06-cross-process-sharing",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-cross-device-share-20260920de-x64"
     }
   ]
 }

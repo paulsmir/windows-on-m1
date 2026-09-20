@@ -2736,16 +2736,58 @@ int main(void) {
   nonPrimaryRuntime.handle = (VOID *)(UINT_PTR)0x360u;
   nonPrimary = create_resource(&deviceFunctions, device, nonPrimaryRuntime,
                                FALSE, FALSE);
+  {
+    D3D10DDI_HDEVICE peer={0};
+    D3DWDDM1_3DDI_DEVICEFUNCS peerFunctions={0};
+    DXGI1_3_DDI_BASE_FUNCTIONS peerDxgi={0};
+    D3D10DDIARG_CREATEDEVICE peerCreate=createDevice;
+    D3D10DDI_HRTRESOURCE peerRuntime={(VOID *)(UINT_PTR)0x351u};
+    D3D10DDI_HRESOURCE peerOpened={0};
+    ADMISSION_UMD_RESOURCE *sharedState=(ADMISSION_UMD_RESOURCE *)shared.pDrvPrivate;
+    peer.pDrvPrivate=calloc(1u,deviceBytes);
+    peerCreate.hRTDevice.handle=(VOID *)(UINT_PTR)0x103u;
+    peerCreate.hRTCoreLayer.handle=(VOID *)(UINT_PTR)0x104u;
+    peerCreate.hDrvDevice=peer;
+    peerCreate.pWDDM1_3DeviceFuncs=&peerFunctions;
+    peerCreate.DXGIBaseDDI.pDXGIDDIBaseFunctions4=&peerDxgi;
+    CHECK(peer.pDrvPrivate && sharedState &&
+          sharedState->Magic==ADMISSION_UMD_RESOURCE_MAGIC &&
+          sharedState->Retirement && sharedState->Retirement->Shared &&
+          adapterFunctions.pfnCreateDevice(openAdapter.hAdapter,&peerCreate)==S_OK);
+    if(peer.pDrvPrivate && sharedState &&
+       sharedState->Magic==ADMISSION_UMD_RESOURCE_MAGIC) {
+      D3DKMT_HANDLE sharedAllocation=sharedState->KernelAllocation;
+      peerOpened=open_resource(&peerFunctions,peer,peerRuntime,
+          sharedAllocation,0xa50u);
+      ADMISSION_UMD_RESOURCE *peerState=
+          (ADMISSION_UMD_RESOURCE *)peerOpened.pDrvPrivate;
+      CHECK(peerState && peerState->Magic==ADMISSION_UMD_RESOURCE_MAGIC &&
+            peerState->KernelAllocation==sharedAllocation &&
+            peerState->Retirement && peerState->Retirement->Shared &&
+            peerState->DirectFlip.Allocation.Size==
+                sharedState->DirectFlip.Allocation.Size);
+      deallocationsBefore=State.DeallocateCalls;
+      deviceFunctions.pfnDestroyResource(device,shared);
+      CHECK(deviceFunctions.pfnFlush(device,0u) &&
+            State.DeallocateCalls==deallocationsBefore+1u &&
+            peerState->Magic==ADMISSION_UMD_RESOURCE_MAGIC &&
+            peerState->KernelAllocation==sharedAllocation);
+      deallocationsBefore=State.DeallocateCalls;
+      peerFunctions.pfnDestroyResource(peer,peerOpened);
+      CHECK(peerFunctions.pfnFlush(peer,0u) &&
+            State.DeallocateCalls==deallocationsBefore+1u);
+      free(peerOpened.pDrvPrivate);
+      peerFunctions.pfnDestroyDevice(peer);
+      free(peer.pDrvPrivate);
+    }
+  }
   deallocationsBefore = State.DeallocateCalls;
-  if (shared.pDrvPrivate != NULL)
-    deviceFunctions.pfnDestroyResource(device, shared);
   if (nonPrimary.pDrvPrivate != NULL)
     deviceFunctions.pfnDestroyResource(device, nonPrimary);
   CHECK(State.DeallocateCalls == deallocationsBefore);
   CHECK(deviceFunctions.pfnFlush(device, 0u));
-  CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
-  CHECK(State.DeallocateResources[deallocationsBefore] == sharedRuntime.handle);
-  CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
+  CHECK(State.DeallocateCalls == deallocationsBefore + 1u);
+  CHECK(State.DeallocateResources[deallocationsBefore] ==
         nonPrimaryRuntime.handle);
   free(shared.pDrvPrivate);
   free(nonPrimary.pDrvPrivate);
@@ -2808,7 +2850,7 @@ int main(void) {
   CHECK(State.DeallocateCalls == deallocationsBefore + 2u);
   CHECK(State.DeallocateResources[deallocationsBefore + 1u] ==
         retryRuntime.handle);
-  CHECK(State.DestroyContextCalls == 1u);
+  CHECK(State.DestroyContextCalls == 2u);
   CHECK(State.UnlockCalls == 3u);
   CHECK(State.InternalDeallocateCalls == 3u);
   CHECK(WaitForSingleObject(teardownCompletionEvent, 0u) == WAIT_FAILED);
@@ -2888,7 +2930,7 @@ int main(void) {
   CHECK(State.SetErrors[errorsBefore] == E_FAIL);
   CHECK(State.SetErrorDdis[errorsBefore] == TEST_DDI_DESTROY_DEVICE);
   CHECK(State.RuntimeTerminal);
-  CHECK(State.DestroyContextCalls == 3u);
+  CHECK(State.DestroyContextCalls == 4u);
   CHECK(State.CreatedKernelResources == State.ReleasedKernelResources +
                                             State.OutstandingKernelResources);
   CHECK(State.OutstandingKernelResources == 2u);

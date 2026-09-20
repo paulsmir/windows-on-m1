@@ -836,3 +836,28 @@ The frozen machine-readable inventory is now 113 of 121 mandatory rows proven,
 with 8 unresolved. Pipeline mask remains zero; no package was staged, installed
 or hardware-run. The next causal group is real geometry shader/stream-output
 execution and DrawAuto over the existing native producer/submission lifetime.
+
+## Verified cross-device shared-resource identity and lifetime (2026-09-20)
+The existing D3D10 shared create/open path now has direct cross-device evidence.
+A shared primary allocated by one runtime device was opened by a second runtime
+device using the exact same kernel allocation identity and validated allocation
+description. Destroying and flushing the creator released only its runtime
+resource; the peer object retained the same allocation identity and remained
+valid until its own independent destroy/flush. This uses the existing runtime
+allocation/resource ownership and retirement queue without a parallel sharing
+registry or allocator.
+
+Fresh x64 full runtime execution PASS:
+evidence/AD04-runtime-closure/native-cross-device-share-20260920de-x64/;
+source archive SHA-256
+e723f61648e8ba493b2395382502206872a496bd28069dc1af53f3c6fc190898,
+EXE SHA-256 a43819919d8a3224262d3728f6ce72ebf893f7db28c316c69b94ffd86f5a4d98.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-cross-device-share-20260920df-arm64/;
+source archive SHA-256
+f36c3675499dec67615c8bd0e23500f74cf4bcf1ce5eefec27a4cafbea9cfc4a,
+EXE SHA-256 cc66471de45d20d1f37261de2d86531b9643c835d3ce1d814dd4939bbf9565c2.
+The frozen inventory is 114 of 121 mandatory rows proven, with 7 unresolved.
+Pipeline mask remains zero; no package was staged, installed or hardware-run.
+The current causal target is the source-derived G13/V13_5 compute work object,
+compute queue and CP-to-TA dependency required by the real Asahi GS producer.
