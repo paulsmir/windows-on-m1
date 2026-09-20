@@ -44945,3 +44945,48 @@ Immutable .local/experiments/EXP700-render-unlock-716.zip SHA256
 2e48f9996ed9ae756814a2fcab78901381f9e58aad1c3c2e3e016b41cbdb15db.
 Next: exact stage/hash/signature preflight in clean recovery, full-owner natural
 bind, one standard client, evidence before exact cleanup. No replay.
+
+### EXP700 actual result — pre-client environment gate INCONCLUSIVE
+Package716 staged and bound with exact installed INF/SYS/UMD/client hashes,
+Code0, Running service, Start12/Platform14 and Valid Air signatures. Before any
+standard client task was created or executed, the current-boot health gate found
+one stornvme Event129 (Reset to device, Device RaidPort0, was issued) at
+2026-09-21 local boot time. Client attempts remained zero. This result neither
+tests nor rejects the Render-unlock correction, and the storage event is not
+attributed to the GPU without reproducible causal evidence.
+
+Evidence: main-root .local/experiments/EXP700-live/{bound.json,
+pre-client-failed.json,pre-client-health.json,cleanup-preflight.txt}. Exact oem5
+hash verification, package uninstall/delete, stopped service deletion and signer
+cleanup succeeded before shutdown. Ordinary377/392 recovery was relaunched;
+after the guarded devnode rescan final health is Code28/no INF/service/SYS/UMD/
+cert,8CPU/NVMe/xHCI/input and no monitored events. Evidence:
+.local/experiments/EXP700-live/recovery/health-final.json. No physical screen
+verdict is assigned because the intended standard-runtime attempt never ran.
+
+## EXP701 — exact retry after transient pre-client storage event
+UTC preregistration 2026-09-20T23:26:00Z. Reuse the immutable, already-finalized
+package716 archive SHA
+2e48f9996ed9ae756814a2fcab78901381f9e58aad1c3c2e3e016b41cbdb15db,
+implementation ffc5e6cdc1f3eb8ee6c3e6d810f0135ecf623b9c and all EXP700 offline/package
+gates. No artifact or code change.
+
+WHY THIS HYPOTHESIS: EXP700 was stopped before the client solely because one
+fresh stornvme129 appeared during the full-owner boot. Exact cleanup followed by
+ordinary recovery has no monitored events, and prior full-owner experiments did
+not establish a repeatable storage reset. One exact retry distinguishes a
+transient boot event from a reproducible preflight blocker without changing the
+driver candidate. If Event129 recurs before the client, stop without a second
+retry and retain it as the current environment blocker.
+WINDOWS CONTRACT, AGX/ASAHI CONTRACT and TRANSLATION are identical to EXP700:
+unlock sealed participating native allocations before pfnRenderCb, retain exact
+identities/holds until the existing fence, and lazy-remap only after retirement.
+WHAT IS STILL UNKNOWN: EXP700's intended Render/KMD/AGX/Present behavior was not
+executed; transient versus reproducible pre-client storage reset is also unknown.
+
+Single experimental candidate remains package716. First require clean ordinary
+baseline and a full-owner bound pre-client gate with no fresh41/1001/129/4101.
+Then create and run exactly one interactive standard client task with bounded
+diagnostics. No replay. Collect installed hashes, client output/exit, UMD/KMD
+receipts, current-boot events and physical observation under main-root
+.local/experiments/EXP701-live before exact cleanup and ordinary recovery.

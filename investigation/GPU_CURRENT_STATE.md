@@ -2062,3 +2062,21 @@ analysis/Universal/Inf2Cat/catalog PASS; immutable archive SHA
 Current Air recovery baseline is Code28/no package/service/files/trust,
 8CPU/NVMe/input/no events. Next exact stage/Valid-signature check, full-owner
 bind and one standard client. No physical Render/Present claim before evidence.
+
+## EXP700 pre-client environment failure; EXP701 exact retry
+Package716 exact bind/Code0/Start12/Platform14/signature gates passed, but one
+fresh stornvme129 appeared before the client. No client task was created or run,
+so Render-unlock hardware remains untested. Exact cleanup and ordinary377/392
+recovery after rescan are verified Code28/no package/service/files/trust,
+8CPU/NVMe/input and no events. EXP701 reuses the same immutable package once;
+if the pre-client Event129 recurs, stop the retry path and treat the environment
+as the current blocker. Otherwise run the single preregistered client directly.
+HARDWARE ROADMAP
+[PASS] Offline Render unlock lifecycle, ARM64/package/sign/hash; exact EXP700
+cleanup and clean ordinary recovery.
+[NOW] EXP701 full-owner pre-client health discriminator with unchanged package716.
+[NEXT] If clean, one standard client; then locate the first Render/KMD/AGX/Present
+boundary and continue causally.
+[BLOCKED] Only if the pre-client storage reset repeats.
+[HW] Successful physical KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
