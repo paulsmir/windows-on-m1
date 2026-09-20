@@ -15,6 +15,31 @@ extern "C" {
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 
+VOID AgxD3d10WindowsDiagnostic(PCSTR Stage,HRESULT Status,
+                               const UINT *Values,UINT Count) {
+  AdmissionUmdDiagnostic(Stage,Status,Values,Count);
+}
+
+VOID AgxD3d10WindowsDiagnosticResource(
+    PCSTR Stage,const D3D10DDIARG_CREATERESOURCE *r) {
+  UINT values[16]={0};
+  if(r) {
+    values[0]=(UINT)r->Format;values[1]=(UINT)r->ResourceDimension;
+    values[2]=(UINT)r->Usage;values[3]=r->BindFlags;
+    values[4]=r->MapFlags;values[5]=r->MiscFlags;
+    values[6]=r->MipLevels;values[7]=r->ArraySize;
+    values[8]=r->SampleDesc.Count;values[9]=r->SampleDesc.Quality;
+    values[10]=r->pPrimaryDesc!=NULL;values[11]=r->pInitialDataUP!=NULL;
+    if(r->pMipInfoList && r->MipLevels) {
+      values[12]=r->pMipInfoList[0].TexelWidth;
+      values[13]=r->pMipInfoList[0].TexelHeight;
+      values[14]=r->pMipInfoList[0].TexelDepth;
+    }
+    values[15]=r->pMipInfoList!=NULL;
+  }
+  AdmissionUmdDiagnostic(Stage,r?S_OK:E_INVALIDARG,values,16u);
+}
+
 enum AGX_D3D10_WINDOWS_DEVICE_STAGE {
   AgxD3d10DeviceAllocated,
   AgxD3d10DeviceRuntimeReady,
@@ -466,6 +491,7 @@ HRESULT AgxD3d10WindowsPresentationOpen(
         Device->Runtime.LastScreenError:E_INVALIDARG;
   }
   HRESULT result=attach_presentation_render_resource(Device,record);
+  AdmissionUmdDiagnostic("presentation-import",result,NULL,0u);
   if(FAILED(result)) {
     AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
     HeapFree(GetProcessHeap(),0,record);return result;
@@ -502,6 +528,7 @@ HRESULT AgxD3d10WindowsPresentationCreate(
     return E_INVALIDARG;
   }
   HRESULT result=attach_presentation_render_resource(Device,record);
+  AdmissionUmdDiagnostic("presentation-import",result,NULL,0u);
   if(FAILED(result)) {
     AdmissionUmdDestroyResource(deviceHandle,resourceHandle);
     HeapFree(GetProcessHeap(),0,record);return result;

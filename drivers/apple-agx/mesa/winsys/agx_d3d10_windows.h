@@ -14,6 +14,10 @@ typedef struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE
 #ifdef __cplusplus
 extern "C" {
 #endif
+VOID AgxD3d10WindowsDiagnostic(PCSTR Stage, HRESULT Status,
+                              const UINT *Values, UINT Count);
+VOID AgxD3d10WindowsDiagnosticResource(
+    PCSTR Stage, const D3D10DDIARG_CREATERESOURCE *Resource);
 HRESULT AgxD3d10WindowsOpenAdapter(const D3D10DDIARG_OPENADAPTER *Args,
                                   AGX_D3D10_WINDOWS_ADAPTER **Adapter);
 HRESULT AgxD3d10WindowsCloseAdapter(AGX_D3D10_WINDOWS_ADAPTER **Adapter);

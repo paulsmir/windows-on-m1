@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <wingdi.h>
+#include <stdio.h>
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #pragma warning(push)
 #pragma warning(disable : 4201)
@@ -24,7 +25,49 @@ static ULONG AdmissionUmdNextGeneration(VOID) {
   return generation == 0u ? 1u : generation;
 }
 
+/* Opt-in, process-local diagnostics for standard-runtime admission. Never
+ * change the caller's last-error state or any graphics result. */
+VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
+                            const UINT *Values, UINT Count) {
+  static volatile LONG records;
+  DWORD saved = GetLastError();
+  WCHAR path[MAX_PATH];
+  char line[512];
+  HANDLE file = INVALID_HANDLE_VALUE;
+  DWORD length, written;
+  int used;
+  UINT i;
+  if (Stage == NULL || Count > 16u || (Count != 0u && Values == NULL))
+    goto done;
+  length = GetEnvironmentVariableW(L"APPLE_AGX_UMD_TRACE_FILE", path,
+                                    ARRAYSIZE(path));
+  if (length == 0u || length >= ARRAYSIZE(path) ||
+      InterlockedCompareExchange(&records, 0, 0) >= 128 ||
+      InterlockedIncrement(&records) > 128)
+    goto done;
+  used = _snprintf_s(line, sizeof(line), _TRUNCATE,
+      "%s hr=0x%08lx pid=%lu tid=%lu", Stage, (ULONG)Status,
+      GetCurrentProcessId(), GetCurrentThreadId());
+  if (used < 0) goto done;
+  for (i = 0u; i < Count; ++i) {
+    int added = _snprintf_s(line + used, sizeof(line) - (SIZE_T)used,
+                           _TRUNCATE, " %08x", Values[i]);
+    if (added < 0) goto done;
+    used += added;
+  }
+  if ((SIZE_T)used + 1u >= sizeof(line)) goto done;
+  line[used++] = '\n';
+  file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                     NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file != INVALID_HANDLE_VALUE)
+    (void)WriteFile(file, line, (DWORD)used, &written, NULL);
+ done:
+  if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+  SetLastError(saved);
+}
+
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error) {
+  AdmissionUmdDiagnostic("runtime-set-error", Error, NULL, 0u);
   if (Device != NULL && Device->SetErrorCallback != NULL)
     Device->SetErrorCallback(Device->RuntimeCoreLayer, Error);
 }

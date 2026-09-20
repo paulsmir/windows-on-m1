@@ -1824,3 +1824,15 @@ confirm behavior preservation; diagnostic file is then collected on Air.
 exact sign/hash/preregistration then immediate once-only hardware test.
 [HW] Standard swap-chain, real draw, physical completion and DXGI Present.
 POST-HARDWARE: accelerated desktop stability and desktop acceptance.
+
+## Resource diagnostic offline gate PASS
+Opt-in APPLE_AGX_UMD_TRACE_FILE records actual projected CreateResource inputs,
+originating frontend SetError, downstream allocation/import/open and runtime
+SetError; max128 attempts/process and saved last-error restored. Client reports
+GetDeviceRemovedReason after failure without replacing original HRESULT.
+resource-trace-20260920mh x64 execution and ARM64 link PASS, same source archive
+e01ead729e5068b68893c4e7fc401722eb23bfc2d373818c8718f8625f11b0f6.
+Additional x64 trace-enabled execution exit0, 128 records, actual frontend-create
+seen. Existing resource/capability decisions unchanged; no artificial RED added
+for receipt-only instrumentation. Source review found no behavior-changing issue.
+Next commit/package711, exact preregistered EXP695 with per-client log enabled.

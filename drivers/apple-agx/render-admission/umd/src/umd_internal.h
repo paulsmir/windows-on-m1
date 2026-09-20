@@ -161,6 +161,8 @@ HRESULT APIENTRY AdmissionUmdSetDisplayMode(
 #if defined(__cplusplus)
 extern "C" {
 #endif
+VOID AdmissionUmdDiagnostic(PCSTR Stage, HRESULT Status,
+                            const UINT *Values, UINT Count);
 VOID AdmissionUmdSetError(ADMISSION_UMD_DEVICE *Device, HRESULT Error);
 /* Populates validated metadata only. Caller owns stable adapter storage. */
 HRESULT AdmissionUmdRuntimeAdapterInitialize(

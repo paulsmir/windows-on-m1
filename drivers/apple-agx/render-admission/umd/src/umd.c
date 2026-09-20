@@ -428,6 +428,7 @@ VOID APIENTRY AdmissionUmdCreateResource(
   allocate.pAllocationInfo = &allocationInfo;
   result = device->KernelCallbacks->pfnAllocateCb(
       device->RuntimeDevice.handle, &allocate);
+  AdmissionUmdDiagnostic("presentation-allocate",result,NULL,0u);
   if (FAILED(result) || allocationInfo.hAllocation == 0u) {
     AdmissionUmdRetirementFree(retirement);
     AdmissionUmdSetError(device, FAILED(result) ? result : E_FAIL);
@@ -457,6 +458,20 @@ VOID APIENTRY AdmissionUmdOpenResource(
   const D3DDDI_OPENALLOCATIONINFO *info;
   const ADMISSION_ALLOCATION_DESCRIPTION *description;
   ADMISSION_UMD_RETIREMENT *retirement;
+  if (OpenResource != NULL && OpenResource->NumAllocations != 0u &&
+      OpenResource->pOpenAllocationInfo != NULL) {
+    const D3DDDI_OPENALLOCATIONINFO *input = OpenResource->pOpenAllocationInfo;
+    UINT values[8] = { OpenResource->NumAllocations,
+                      input->PrivateDriverDataSize, 0u, 0u, 0u, 0u, 0u, 0u };
+    if (input->pPrivateDriverData != NULL &&
+        input->PrivateDriverDataSize == sizeof(ADMISSION_ALLOCATION_DESCRIPTION)) {
+      const ADMISSION_ALLOCATION_DESCRIPTION *d =
+          (const ADMISSION_ALLOCATION_DESCRIPTION *)input->pPrivateDriverData;
+      values[2] = d->Format;values[3] = d->Width;values[4] = d->Height;
+      values[5] = d->Pitch;values[6] = d->BytesPerPixel;values[7] = d->Type;
+    }
+    AdmissionUmdDiagnostic("presentation-open", S_OK, values, ARRAYSIZE(values));
+  }
   if (device == NULL || resource == NULL || OpenResource == NULL ||
       RuntimeResource.handle == NULL ||
       OpenResource->NumAllocations != 1u ||

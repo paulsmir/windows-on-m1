@@ -250,6 +250,23 @@ SupportedDDIInterfaceVersions[] = {
    AGX_D3D10_WINDOWS_DEVICE *windows;
    HRESULT cleanup_result;
    bool frontend_ready;'''),
+        ('''static inline void
+SetError(D3D10DDI_HDEVICE hDevice, HRESULT hr)
+{
+   if (FAILED(hr)) {
+      Device *pDevice = CastDevice(hDevice);
+      pDevice->UMCallbacks.pfnSetErrorCb(pDevice->hRTCoreLayer, hr);
+   }
+}''','''static inline void
+AgxSetErrorWithOrigin(D3D10DDI_HDEVICE hDevice, HRESULT hr, const char *origin)
+{
+   if (FAILED(hr)) {
+      AgxD3d10WindowsDiagnostic(origin, hr, NULL, 0);
+      Device *pDevice = CastDevice(hDevice);
+      pDevice->UMCallbacks.pfnSetErrorCb(pDevice->hRTCoreLayer, hr);
+   }
+}
+#define SetError(device, hr) AgxSetErrorWithOrigin((device), (hr), __func__)'''),
         ('''struct Query
 {
    D3D10DDI_QUERY Type;
@@ -1548,6 +1565,7 @@ AgxD3d10ResourceWithinRequiredLimits(
         ('''   Resource *pResource = CastResource(hResource);
 
    memset(pResource, 0, sizeof *pResource);''','''   Resource *pResource = CastResource(hResource);
+   AgxD3d10WindowsDiagnosticResource("frontend-create", pCreateResource);
    if (!AgxD3d10ResourceWithinRequiredLimits(pCreateResource)) {
       SetError(hDevice, E_NOTIMPL);
       return;

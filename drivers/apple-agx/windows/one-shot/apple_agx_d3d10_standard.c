@@ -129,6 +129,10 @@ int wmain(void) {
   result=IDXGISwapChain_Present(swap,0,0);if(FAILED(result)) goto done;
   puts("STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS");
  done:
+  if(FAILED(result) && device) {
+    HRESULT removed=ID3D10Device_GetDeviceRemovedReason(device);
+    fprintf(stderr,"STANDARD_DEVICE_REASON hr=0x%08lx\n",(ULONG)removed);
+  }
   if(FAILED(result)) fprintf(stderr,"STANDARD_RUNTIME_FAIL stage=%s hr=0x%08lx\n",stage,(ULONG)result);
   RELEASE_IF(vb,ID3D10Buffer);RELEASE_IF(layout,ID3D10InputLayout);
   RELEASE_IF(ps,ID3D10PixelShader);RELEASE_IF(vs,ID3D10VertexShader);
