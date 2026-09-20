@@ -120,7 +120,10 @@ static BOOLEAN AdmissionUmdDescribePrimary(
   if (CreateResource == NULL || Description == NULL ||
       CreateResource->pMipInfoList == NULL ||
       CreateResource->ResourceDimension != D3D10DDIRESOURCE_TEXTURE2D ||
-      CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM ||
+      (CreateResource->Format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+       CreateResource->Format != DXGI_FORMAT_R8G8B8A8_UNORM) ||
+      (CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM &&
+       CreateResource->pPrimaryDesc != NULL) ||
       CreateResource->pMipInfoList[0].TexelWidth != 2560u ||
       CreateResource->pMipInfoList[0].TexelHeight != 1600u ||
       CreateResource->MipLevels != 1u || CreateResource->ArraySize != 1u ||
@@ -134,11 +137,14 @@ static BOOLEAN AdmissionUmdDescribePrimary(
   Description->Version = ADMISSION_UMD_DIRECT_FLIP_RESOURCE_VERSION;
   if (!AdmissionAllocationDescribe(
           2560u, 1600u, 4u, (UINT)D3DKMDT_GDISURFACE_TEXTURE,
-          (UINT)D3DDDIFMT_A8R8G8B8, 0u, &Description->Allocation))
+          CreateResource->Format == DXGI_FORMAT_R8G8B8A8_UNORM
+              ? (UINT)D3DDDIFMT_A8B8G8R8 : (UINT)D3DDDIFMT_A8R8G8B8,
+          0u, &Description->Allocation))
     return FALSE;
   Description->SegmentId = 2u;
   Description->Linear = 1u;
-  Description->Displayable = 1u;
+  Description->Displayable =
+      CreateResource->Format == DXGI_FORMAT_B8G8R8A8_UNORM ? 1u : 0u;
   return TRUE;
 }
 
@@ -150,6 +156,26 @@ static BOOLEAN AdmissionUmdResourceIsExact(
                      (UINT)D3DDDIFMT_A8R8G8B8)
              ? TRUE
              : FALSE;
+}
+
+/* Backbuffers may require DXGI conversion; scanout eligibility stays separate. */
+static BOOLEAN AdmissionUmdResourceIsPresentable(
+    const ADMISSION_UMD_RESOURCE *Resource) {
+  const ADMISSION_UMD_DIRECT_FLIP_RESOURCE *r;
+  const ADMISSION_ALLOCATION_DESCRIPTION *a;
+  if (Resource == NULL || Resource->Magic != ADMISSION_UMD_RESOURCE_MAGIC ||
+      Resource->KernelAllocation == 0u)
+    return FALSE;
+  r = &Resource->DirectFlip;
+  a = &r->Allocation;
+  return r->Magic == ADMISSION_UMD_DIRECT_FLIP_RESOURCE_MAGIC &&
+      r->Version == ADMISSION_UMD_DIRECT_FLIP_RESOURCE_VERSION &&
+      r->SegmentId == 2u && r->Linear == 1u && r->Reserved == 0u &&
+      AdmissionAllocationDescriptionValid(a) &&
+      a->Width == 2560u && a->Height == 1600u && a->Pitch == 10240u &&
+      a->BytesPerPixel == 4u && a->Size == 0xfa0000ULL && a->CpuVisible == 0u &&
+      ((a->Format == (UINT)D3DDDIFMT_A8R8G8B8 && r->Displayable == 1u) ||
+       (a->Format == (UINT)D3DDDIFMT_A8B8G8R8 && r->Displayable == 0u));
 }
 
 static HRESULT AdmissionUmdSubmitClear(
@@ -449,7 +475,8 @@ VOID APIENTRY AdmissionUmdOpenResource(
   if (description == NULL ||
       info->PrivateDriverDataSize != sizeof(*description) ||
       !AdmissionAllocationDescriptionValid(description) ||
-      description->Format != (UINT)D3DDDIFMT_A8R8G8B8 ||
+      (description->Format != (UINT)D3DDDIFMT_A8R8G8B8 &&
+       description->Format != (UINT)D3DDDIFMT_A8B8G8R8) ||
       description->Width != 2560u || description->Height != 1600u ||
       description->Pitch != 10240u || description->BytesPerPixel != 4u ||
       description->Size != 0xfa0000ULL || info->hAllocation == 0u) {
@@ -466,7 +493,8 @@ VOID APIENTRY AdmissionUmdOpenResource(
   resource->DirectFlip.Allocation = *description;
   resource->DirectFlip.SegmentId = 2u;
   resource->DirectFlip.Linear = 1u;
-  resource->DirectFlip.Displayable = 1u;
+  resource->DirectFlip.Displayable =
+      description->Format == (UINT)D3DDDIFMT_A8R8G8B8 ? 1u : 0u;
   retirement->RuntimeResource = RuntimeResource.handle;
   retirement->KernelResource = OpenResource->hKMResource.handle;
   retirement->KernelAllocation = info->hAllocation;
@@ -560,7 +588,7 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
                                          ADMISSION_UMD_RESOURCE *Source,
                                          PVOID DxgiContext) {
   DXGIDDICB_PRESENT present;
-  if (Device == NULL || !AdmissionUmdResourceIsExact(Source) ||
+  if (Device == NULL || !AdmissionUmdResourceIsPresentable(Source) ||
       Device->DxgiCallbacks == NULL ||
       Device->DxgiCallbacks->pfnPresentCb == NULL ||
       Device->KernelContext == NULL)

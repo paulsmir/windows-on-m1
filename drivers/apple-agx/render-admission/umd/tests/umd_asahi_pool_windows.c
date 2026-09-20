@@ -7,6 +7,7 @@ static D3DKMT_HANDLE PoolHandles[ADMISSION_UMD_SCREEN_BUFFER_LIMIT];
 static unsigned PoolNextHandle;
 static unsigned PoolCreates,PoolMaps,PoolUnlocks,PoolDeletes,PoolErrors;
 static unsigned PoolPresentationDeletes;
+static unsigned PoolLastPresentationFormat;
 static int PoolFailAllocation;
 static int PoolFailMap;
 static unsigned PoolFailUnlock;
@@ -28,8 +29,9 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
     PoolMemory[slot]=HeapAlloc(GetProcessHeap(),HEAP_ZERO_MEMORY,
                               (SIZE_T)present->Size);
     if(!PoolMemory[slot]) return E_OUTOFMEMORY;
-    PoolHandles[slot]=0x775u;++PoolCreates;
-    a->pAllocationInfo->hAllocation=0x775u;
+    PoolHandles[slot]=a->hResource==(HANDLE)(UINT_PTR)0x778u ? 0x778u : 0x775u;
+    PoolLastPresentationFormat=present->Format;++PoolCreates;
+    a->pAllocationInfo->hAllocation=PoolHandles[slot];
     a->hKMResource=0x776u;
     return S_OK;
   }
@@ -44,7 +46,7 @@ static HRESULT APIENTRY PoolAllocate(HANDLE h,D3DDDICB_ALLOCATE *a) {
   if(!PoolMemory[slot]) return E_OUTOFMEMORY;
   ++PoolCreates;
   do { PoolHandles[slot]=0x700+(++PoolNextHandle); }
-  while(PoolHandles[slot]>=0x771u && PoolHandles[slot]<=0x777u);
+  while(PoolHandles[slot]>=0x771u && PoolHandles[slot]<=0x782u);
   a->pAllocationInfo->hAllocation=PoolHandles[slot];
   /* Allocation must already reserve the UMD slot against callback reentry. */
   if(PoolDevice.Magic==ADMISSION_UMD_DEVICE_MAGIC &&
@@ -68,10 +70,14 @@ static HRESULT APIENTRY PoolDeallocate(HANDLE h,const D3DDDICB_DEALLOCATE *a) {
   (void)h;
   if(a->NumAllocations==0 &&
      (a->hResource==(HANDLE)(UINT_PTR)0x773u ||
-      a->hResource==(HANDLE)(UINT_PTR)0x777u)) {
-    if(a->hResource==(HANDLE)(UINT_PTR)0x777u) {
+      a->hResource==(HANDLE)(UINT_PTR)0x777u ||
+      a->hResource==(HANDLE)(UINT_PTR)0x778u ||
+      a->hResource==(HANDLE)(UINT_PTR)0x782u)) {
+    if(a->hResource==(HANDLE)(UINT_PTR)0x777u ||
+       a->hResource==(HANDLE)(UINT_PTR)0x778u) {
+      D3DKMT_HANDLE expected=a->hResource==(HANDLE)(UINT_PTR)0x778u ? 0x778u : 0x775u;
       for(unsigned slot=0;slot<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++slot)
-        if(PoolMemory[slot] && PoolHandles[slot]==0x775u) {
+        if(PoolMemory[slot] && PoolHandles[slot]==expected) {
           HeapFree(GetProcessHeap(),0,PoolMemory[slot]);
           PoolMemory[slot]=NULL;PoolHandles[slot]=0;break;
         }

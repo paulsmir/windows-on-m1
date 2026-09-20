@@ -73,6 +73,29 @@ struct AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE {
   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *Next;
 };
 
+static BOOL presentation_linear_format(D3DDDIFORMAT windowsFormat,
+                                       AGX_WIN32_ASAHI_LINEAR_FORMAT *format) {
+  if(!format) return FALSE;
+  switch(windowsFormat) {
+  case D3DDDIFMT_A8R8G8B8:
+    *format=AgxWin32AsahiLinearFormatBgra8Unorm;return TRUE;
+  case D3DDDIFMT_A8B8G8R8:
+    *format=AgxWin32AsahiLinearFormatRgba8Unorm;return TRUE;
+  default: return FALSE;
+  }
+}
+
+static BOOL presentation_pipe_format(const struct pipe_resource *resource,
+                                     enum pipe_format *format) {
+  if(!resource || !format) return FALSE;
+  switch(resource->format) {
+  case PIPE_FORMAT_B8G8R8A8_UNORM:
+  case PIPE_FORMAT_R8G8B8A8_UNORM:
+    *format=resource->format;return TRUE;
+  default: return FALSE;
+  }
+}
+
 static BOOL collect_presentations(AGX_D3D10_WINDOWS_DEVICE *device) {
   AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE **link=&device->PendingPresentations;
   while(*link) {
@@ -96,6 +119,9 @@ static HRESULT attach_presentation_render_resource(
     AGX_D3D10_WINDOWS_DEVICE *device,
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *record) {
   const ADMISSION_ALLOCATION_DESCRIPTION *desc=&record->Resource.DirectFlip.Allocation;
+  AGX_WIN32_ASAHI_LINEAR_FORMAT format;
+  if(!presentation_linear_format((D3DDDIFORMAT)desc->Format,&format))
+    return E_INVALIDARG;
   const APPLE_AGX_U32 access=AppleAgxWin32BufferCpuRead|
       AppleAgxWin32BufferCpuWrite|AppleAgxWin32BufferGpuRead|
       AppleAgxWin32BufferGpuWrite;
@@ -103,8 +129,8 @@ static HRESULT attach_presentation_render_resource(
       record->Resource.KernelAllocation,desc->Size,device->Runtime.Screen.Info.PageBytes,
       AgxWin32BufferClassGeneral,access,&record->RenderBuffer);
   if(FAILED(result)) return result;
-  record->RenderResource=AgxWin32AsahiImportLinearBgra8(device->Screen,
-      &record->RenderBuffer,desc->Width,desc->Height,desc->Pitch,desc->Size);
+  record->RenderResource=AgxWin32AsahiImportLinearColor32(device->Screen,
+      &record->RenderBuffer,desc->Width,desc->Height,desc->Pitch,desc->Size,format);
   if(!record->RenderResource) {
     (void)AgxWin32ScreenDestroyBuffer(&device->Runtime.Screen,&record->RenderBuffer);
     ZeroMemory(&record->RenderBuffer,sizeof(record->RenderBuffer));
@@ -538,15 +564,20 @@ HRESULT AgxD3d10WindowsPresentationRotate(
     return E_INVALIDARG;
   HRESULT result=AgxD3d10WindowsFlushRetire(Device);
   if(FAILED(result)) return result;
+  enum pipe_format rotationFormat=PIPE_FORMAT_NONE;
   AcquireSRWLockExclusive(&Device->Runtime.ScreenBufferLock);
   for(UINT i=0;i<Count;++i) {
     AGX_D3D10_WINDOWS_PRESENTATION_RESOURCE *r=Resources[i];
     ADMISSION_UMD_SCREEN_BUFFER *slot=NULL;
+    enum pipe_format format;
     if(!r || r->Device!=Device ||
        r->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
-       !r->Resource.Retirement || !r->RenderBuffer.Transport.Token) {
+       !r->Resource.Retirement || !r->RenderBuffer.Transport.Token ||
+       !presentation_pipe_format(r->RenderResource,&format) ||
+       (i && format!=rotationFormat)) {
       ReleaseSRWLockExclusive(&Device->Runtime.ScreenBufferLock);return E_INVALIDARG;
     }
+    if(!i) rotationFormat=format;
     for(UINT j=0;j<ADMISSION_UMD_SCREEN_BUFFER_LIMIT;++j)
       if(Device->Runtime.ScreenBuffers[j].Active &&
          Device->Runtime.ScreenBuffers[j].Token==r->RenderBuffer.Transport.Token)
@@ -656,13 +687,17 @@ HRESULT AgxD3d10WindowsPresentationBlt(
      source->Resource.Magic!=ADMISSION_UMD_RESOURCE_MAGIC ||
      !device->Context || !device->Context->blit)
     return E_INVALIDARG;
+  enum pipe_format destinationFormat,sourceFormat;
+  if(!presentation_pipe_format(destination->RenderResource,&destinationFormat) ||
+     !presentation_pipe_format(source->RenderResource,&sourceFormat))
+    return E_INVALIDARG;
   struct pipe_blit_info info={0};
   info.dst.resource=destination->RenderResource;info.dst.level=0;
   info.dst.box.x=0;info.dst.box.y=0;info.dst.box.z=0;
   info.dst.box.width=2560;info.dst.box.height=1600;info.dst.box.depth=1;
-  info.dst.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  info.dst.format=destinationFormat;
   info.src.resource=source->RenderResource;info.src.level=0;
-  info.src.box=info.dst.box;info.src.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  info.src.box=info.dst.box;info.src.format=sourceFormat;
   info.mask=PIPE_MASK_RGBA;info.filter=PIPE_TEX_FILTER_NEAREST;
   device->Context->blit(device->Context,&info);
   return AgxD3d10WindowsFlushStatus(device);

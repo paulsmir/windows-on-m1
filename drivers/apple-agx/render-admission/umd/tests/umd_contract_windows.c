@@ -22,6 +22,7 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #endif
 #if defined(ADMISSION_UMD_PIPE_FACTORY_TEST)
 #include "pipe/p_context.h"
+#include "pipe/p_state.h"
 #include "pipe/p_screen.h"
 #include "agx_d3d10_windows.h"
 #include "agx_win32_asahi_scene.h"
@@ -46,6 +47,28 @@ EXTERN_C BOOL APIENTRY MesaD3d10FrontendSetSoOffsetForTest(
 EXTERN_C ULONG APIENTRY MesaD3d10FrontendEventQuerySetGenerationForTest(
     D3D10DDI_HQUERY,ULONG);
 EXTERN_C struct pipe_screen *d3d10_create_screen(void) { return NULL; }
+
+/* The projection must preserve the imported byte layouts until pipe blit sees
+ * them. Reverting either D3D format mapping to BGRA makes this observation
+ * fail without executing a native copy. */
+static unsigned FrontendCapturedBltCalls;
+static enum pipe_format FrontendCapturedBltSourceFormat;
+static enum pipe_format FrontendCapturedBltDestinationFormat;
+static enum pipe_format FrontendCapturedBltSourceResourceFormat;
+static enum pipe_format FrontendCapturedBltDestinationResourceFormat;
+static void FrontendCaptureBlt(struct pipe_context *context,
+                               const struct pipe_blit_info *info) {
+  (void)context;
+  ++FrontendCapturedBltCalls;
+  if(info) {
+    FrontendCapturedBltSourceFormat=info->src.format;
+    FrontendCapturedBltDestinationFormat=info->dst.format;
+    FrontendCapturedBltSourceResourceFormat=
+        info->src.resource ? info->src.resource->format : PIPE_FORMAT_NONE;
+    FrontendCapturedBltDestinationResourceFormat=
+        info->dst.resource ? info->dst.resource->format : PIPE_FORMAT_NONE;
+  }
+}
 
 #endif
 
@@ -1375,6 +1398,113 @@ static void test_mesa_d3d10_frontend_open(void) {
       mode.SubResourceIndex=1u;
       CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
             FrontendSetModeCalls==1u);
+    }
+    {
+      /* EXP693: the admitted base-runtime format must survive real frontend
+       * presentation creation and RTV creation, without becoming scanout. */
+      D3D10DDI_MIPINFO mip={0};
+      D3D10DDIARG_CREATERESOURCE desc={0};
+      D3D10DDI_HRESOURCE rgba={0};D3D10DDI_HRTRESOURCE runtime={0};
+      D3D10DDIARG_CREATERENDERTARGETVIEW viewDesc={0};
+      D3D10DDI_HRENDERTARGETVIEW view={0};
+      D3D10DDI_HRTRENDERTARGETVIEW runtimeView={0};
+      mip.TexelWidth=2560;mip.TexelHeight=1600;mip.TexelDepth=1;
+      desc.pMipInfoList=&mip;desc.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+      desc.Usage=D3D10_DDI_USAGE_DEFAULT;
+      desc.BindFlags=D3D10_DDI_BIND_PRESENT|D3D10_DDI_BIND_RENDER_TARGET;
+      desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+      desc.SampleDesc.Count=1;desc.MipLevels=1;desc.ArraySize=1;
+      runtime.handle=(VOID *)(UINT_PTR)0x778u;
+      rgba.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateResourceSize(device,&desc));
+      CHECK(rgba.pDrvPrivate!=NULL);
+      unsigned errors=FrontendErrors;
+      deviceFunctions.pfnCreateResource(device,&desc,rgba,runtime);
+      CHECK(FrontendErrors==errors &&
+            PoolLastPresentationFormat==(UINT)D3DDDIFMT_A8B8G8R8);
+      viewDesc.hDrvResource=rgba;viewDesc.Format=desc.Format;
+      viewDesc.ResourceDimension=desc.ResourceDimension;viewDesc.Tex2D.ArraySize=1;
+      view.pDrvPrivate=calloc(1,deviceFunctions.pfnCalcPrivateRenderTargetViewSize(device,&viewDesc));
+      runtimeView.handle=(VOID *)(UINT_PTR)0x779u;
+      CHECK(view.pDrvPrivate!=NULL);
+      deviceFunctions.pfnCreateRenderTargetView(device,&viewDesc,view,runtimeView);
+      CHECK(FrontendErrors==errors);
+      DXGI_DDI_ARG_SETDISPLAYMODE mode={0};
+      mode.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+      mode.hResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)rgba.pDrvPrivate;
+      unsigned modeCalls=FrontendSetModeCalls;
+      CHECK(dxgiFunctions.pfnSetDisplayMode(&mode)==E_INVALIDARG &&
+            FrontendSetModeCalls==modeCalls);
+      {
+        /* A non-primary RGBA allocation is opened through the same projected
+         * DDI path as a shared runtime surface. The capture below observes the
+         * resulting native import and its distinct conversion source format. */
+        D3D10DDIARG_OPENRESOURCE rgbaOpen={0};
+        D3DDDI_OPENALLOCATIONINFO allocation={0};
+        ADMISSION_ALLOCATION_DESCRIPTION description={0};
+        D3D10DDI_HRESOURCE opened={0};D3D10DDI_HRTRESOURCE openedRuntime={0};
+        CHECK(AdmissionAllocationDescribe(2560u,1600u,4u,
+            (unsigned int)D3DKMDT_GDISURFACE_TEXTURE,
+            (unsigned int)D3DDDIFMT_A8B8G8R8,0u,&description));
+        allocation.hAllocation=0x780u;
+        allocation.pPrivateDriverData=&description;
+        allocation.PrivateDriverDataSize=sizeof(description);
+        rgbaOpen.NumAllocations=1;rgbaOpen.pOpenAllocationInfo=&allocation;
+        rgbaOpen.hKMResource.handle=0x781u;
+        openedRuntime.handle=(VOID *)(UINT_PTR)0x782u;
+        SIZE_T openedBytes=deviceFunctions.pfnCalcPrivateOpenedResourceSize(
+            device,&rgbaOpen);
+        opened.pDrvPrivate=calloc(1,openedBytes);
+        CHECK(opened.pDrvPrivate!=NULL && openedBytes);
+        deviceFunctions.pfnOpenResource(device,&rgbaOpen,opened,openedRuntime);
+        CHECK(FrontendErrors==errors);
+        D3D10DDIARG_CREATERENDERTARGETVIEW openedViewDesc={0};
+        D3D10DDI_HRENDERTARGETVIEW openedView={0};
+        D3D10DDI_HRTRENDERTARGETVIEW openedRuntimeView={0};
+        openedViewDesc.hDrvResource=opened;
+        openedViewDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
+        openedViewDesc.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+        openedViewDesc.Tex2D.ArraySize=1u;
+        SIZE_T openedViewBytes=deviceFunctions.pfnCalcPrivateRenderTargetViewSize(
+            device,&openedViewDesc);
+        openedView.pDrvPrivate=calloc(1,openedViewBytes);
+        openedRuntimeView.handle=(VOID *)(UINT_PTR)0x783u;
+        CHECK(openedView.pDrvPrivate!=NULL && openedViewBytes);
+        deviceFunctions.pfnCreateRenderTargetView(device,&openedViewDesc,
+            openedView,openedRuntimeView);
+        CHECK(FrontendErrors==errors);
+        struct pipe_context *context=MesaD3d10FrontendContextForTest(device);
+        void (*savedBlt)(struct pipe_context *,const struct pipe_blit_info *)=
+            context ? context->blit : NULL;
+        FrontendCapturedBltCalls=0;
+        FrontendCapturedBltSourceFormat=FrontendCapturedBltDestinationFormat=
+            FrontendCapturedBltSourceResourceFormat=
+            FrontendCapturedBltDestinationResourceFormat=PIPE_FORMAT_NONE;
+        if(context) context->blit=FrontendCaptureBlt;
+        DXGI_DDI_ARG_BLT blt={0};
+        blt.hDevice=(DXGI_DDI_HDEVICE)(UINT_PTR)device.pDrvPrivate;
+        blt.hDstResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)
+            createdPresentResource.pDrvPrivate;
+        blt.hSrcResource=(DXGI_DDI_HRESOURCE)(UINT_PTR)opened.pDrvPrivate;
+        blt.DstRight=2560;blt.DstBottom=1600;blt.Flags.Value=0x8u;
+        blt.Rotate=DXGI_DDI_MODE_ROTATION_IDENTITY;
+        HRESULT bltResult=dxgiFunctions.pfnBlt(&blt);
+        if(context) context->blit=savedBlt;
+        CHECK(bltResult==S_OK && FrontendCapturedBltCalls==1u &&
+              FrontendCapturedBltSourceFormat==PIPE_FORMAT_R8G8B8A8_UNORM &&
+              FrontendCapturedBltDestinationFormat==PIPE_FORMAT_B8G8R8A8_UNORM &&
+              FrontendCapturedBltSourceResourceFormat==PIPE_FORMAT_R8G8B8A8_UNORM &&
+              FrontendCapturedBltDestinationResourceFormat==PIPE_FORMAT_B8G8R8A8_UNORM);
+        deviceFunctions.pfnDestroyRenderTargetView(device,openedView);
+        free(openedView.pDrvPrivate);
+        deviceFunctions.pfnDestroyResource(device,opened);
+        CHECK(FrontendErrors==errors);
+        free(opened.pDrvPrivate);
+      }
+      deviceFunctions.pfnDestroyRenderTargetView(device,view);
+      deviceFunctions.pfnDestroyResource(device,rgba);
+      CHECK(FrontendErrors==errors);
+      free(view.pDrvPrivate);free(rgba.pDrvPrivate);
+      FRONTEND_STAGE("rgba-presentation-resource");
     }
     {
       DXGI_DDI_HRESOURCE rotating[2]={
@@ -3625,7 +3755,7 @@ static void test_mesa_d3d10_frontend_open(void) {
   HRESULT mainCleanup=MesaD3d10FrontendCleanupResult(device);
   CHECK(mainCleanup==S_OK && FrontendDestroyCalls==mainDestroyBefore+1u &&
         RuntimeRenders==0u && RuntimeSignals==0u &&
-        RuntimeConsumerRetirements==0u && PoolPresentationDeletes==2u);
+        RuntimeConsumerRetirements==0u && PoolPresentationDeletes==4u);
   CHECK(MesaD3d10FrontendRuntimeForTest(device)==NULL &&
         MesaD3d10FrontendOwnerForTest(device)==NULL &&
         MesaD3d10FrontendContextForTest(device)==NULL);

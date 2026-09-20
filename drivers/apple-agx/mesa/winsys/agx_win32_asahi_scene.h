@@ -14,6 +14,14 @@ typedef enum {
   AgxAsahiSceneRejected, AgxAsahiSceneReleased
 } AGX_WIN32_ASAHI_SCENE_PHASE;
 
+/* The byte layout of a linear Windows allocation. Keep this distinct from
+ * Windows' A8R8G8B8/A8B8G8R8 names so the import owns the matching Gallium
+ * and AIL format rather than relabelling the allocation. */
+typedef enum {
+  AgxWin32AsahiLinearFormatBgra8Unorm,
+  AgxWin32AsahiLinearFormatRgba8Unorm
+} AGX_WIN32_ASAHI_LINEAR_FORMAT;
+
 typedef struct {
   AGX_WIN32_RELOC_ALLOCATION TargetIdentity;
   APPLE_AGX_U64 TargetConstructionAddress, TargetBytes, TargetLayerStride;
@@ -58,10 +66,10 @@ struct pipe_screen *AgxWin32AsahiScreenCreateForWindows(
  * after ScreenCreate returned NULL. It is never a usable factory result. */
 struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *);
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *, void *);
-struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
+struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     struct pipe_screen *, const AGX_WIN32_SCREEN_BUFFER *,
     APPLE_AGX_U32 Width, APPLE_AGX_U32 Height, APPLE_AGX_U32 Pitch,
-    APPLE_AGX_U64 Bytes);
+    APPLE_AGX_U64 Bytes, AGX_WIN32_ASAHI_LINEAR_FORMAT);
 void AgxWin32AsahiResourceRelease(struct pipe_resource **);
 int AgxWin32AsahiResourceIdentity(
     struct pipe_resource *, AGX_WIN32_RELOC_ALLOCATION *);

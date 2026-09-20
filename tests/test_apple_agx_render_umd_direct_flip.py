@@ -31,7 +31,7 @@ class AppleAgxRenderUmdDirectFlipTests(unittest.TestCase):
     def test_umd_wires_the_exact_predicate_into_a_real_present_device(self):
         source = (UMD / "src" / "umd.c").read_text()
         project = (UMD / "AppleAgxRenderAdmissionUmd.vcxproj").read_text()
-        open_start = source.index("OpenAdapter10_2(")
+        open_start = source.index("HRESULT APIENTRY OpenAdapter10_2(")
         open_adapter = source[
             open_start:source.index(
                 "static SIZE_T APIENTRY AdmissionUmdCalcPrivateDeviceSize(",

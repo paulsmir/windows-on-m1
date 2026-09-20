@@ -1757,3 +1757,44 @@ with distinct R/B values plus x64 execution and ARM64 closure; entirely offline.
 [NEXT] Exact package/sign/hash and preregistration, then immediate Air run.
 [HW] Standard RGBA swap-chain, real native draw, AGX completion, DXGI Present.
 POST-HARDWARE: accelerated desktop stability and desktop acceptance.
+
+## Required visual observation at the next standard-runtime run
+Operator reports prior installed-driver display was predominantly black; input
+could reveal isolated window-caption controls (minimize/maximize/close). This is
+an operator observation, not yet causally attributed or tied to a specific EXP.
+Next standard-runtime preregistration must record the symptom before the client,
+after Present attempt and after window interaction. Verdict: persists,
+disappears, changes, or unobserved; distinguish physical display observation
+from desktop capture/Present HRESULT. Do not infer a normal display from S_OK.
+
+## RGBA backbuffer implementation checkpoint (offline, uncommitted)
+Source-first review: pinned Mesa9aa1215 agx_pipe.c sets AIL format from actual
+pipe format; agx_blit.c keys source/destination formats independently. Inspected
+current umd.c create/open/present/scanout predicates, native Windows bridge,
+projection and existing frontend tests. Microsoft DXGI_DDI_BASE_FUNCTIONS
+assigns backbuffer-to-DWM conversion to pfnBlt and flush-before-present ordering.
+Classification FULL GRAPHICS. UMD owns logical format/import/view/lifetime; KMD
+retains physical allocation/patch/DMA/fence ownership. Firmware, power and IRQ
+owners and recovery stay unchanged. No Asahi source copied.
+Actual x64 closure rgba-present-20260920mc-x64 PASS (archive641d7c769596e546e661ff08418c68bd30079128d481c2eac8efcf20cd482a80),
+including real producer/materializer/KMD plan/retirement and new RGBA create/RTV.
+Initial mb test failed because fixture reused one allocation handle; mc gives
+RGBA a distinct identity and verifies cleanup. Direct-scanout guard executable
+and RGBA descriptor RED/GREEN pass. Open/blit changed-branch tests and ARM64/
+package remain pending. KMD RGBA buffered-BLT conversion is deferred until the
+runtime actually selects that route; current unsupported path remains rejected.
+Smallest next hardware checkpoint: standard RGBA CreateSwapChain/GetBuffer/RTV,
+then same draw/Present; ordinary377/392 exact-package cleanup is recovery.
+
+## RGBA offline gates complete; package710 next
+Final rgba-present-20260920mf x64 execution PASS and ARM64 build/link PASS,
+same source archive63fc78284d3393c6f8a999676087665488a4195e877aeae9ad3b22615458c505.
+x64 executable5310c07ffdc32c9fe7dbc8a351c3df46c2b8b6a20e89db6042ff1598c6b0d15b;
+ARM64 executable8fec9a465d828ba332841246434434a6c0a8fb75d4b2c3015ca5be35b2538bf4.
+Actual frontend RGBA create/open/RTV succeeds; observed native blit arguments
+are RGBA source/BGRA destination; direct display mode rejects RGBA. Native
+producer/materializer/KMD plan/patch/retirement gate remains PASS. Intermediate
+md/me test builds exposed missing test include, shadowed name and typed handle;
+fixed without production changes. Package/sign/hash and final EXP694
+preregistration are next, then immediate Air run with the required physical
+mostly-black/partial-caption observation. No expanded inventory is pending.

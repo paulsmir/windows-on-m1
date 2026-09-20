@@ -50,7 +50,7 @@ int wmain(void) {
   if(!window) goto done;
   ShowWindow(window,SW_SHOW);UpdateWindow(window);
   DXGI_SWAP_CHAIN_DESC sd={0};sd.BufferDesc.Width=2560;sd.BufferDesc.Height=1600;
-  sd.BufferDesc.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+  sd.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;
   sd.SampleDesc.Count=1;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
   sd.BufferCount=1;sd.OutputWindow=window;sd.Windowed=TRUE;
   sd.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
@@ -92,21 +92,28 @@ int wmain(void) {
   stage="back-buffer";
   result=IDXGISwapChain_GetBuffer(swap,0,&IID_ID3D10Texture2D,(void **)&back);
   if(FAILED(result)) goto done;
+  stage="render-target-view";
   result=ID3D10Device_CreateRenderTargetView(device,(ID3D10Resource *)back,NULL,&rtv);
   if(FAILED(result)) goto done;
+  stage="compile-vertex-shader";
   result=CompileShader(vsSource,"vs_4_0",&vsBytes);if(FAILED(result)) goto done;
+  stage="compile-pixel-shader";
   result=CompileShader(psSource,"ps_4_0",&psBytes);if(FAILED(result)) goto done;
+  stage="vertex-shader";
   result=ID3D10Device_CreateVertexShader(device,ID3D10Blob_GetBufferPointer(vsBytes),
       ID3D10Blob_GetBufferSize(vsBytes),&vs);if(FAILED(result)) goto done;
+  stage="pixel-shader";
   result=ID3D10Device_CreatePixelShader(device,ID3D10Blob_GetBufferPointer(psBytes),
       ID3D10Blob_GetBufferSize(psBytes),&ps);if(FAILED(result)) goto done;
   D3D10_INPUT_ELEMENT_DESC element={"POSITION",0,DXGI_FORMAT_R32G32B32A32_FLOAT,
       0,0,D3D10_INPUT_PER_VERTEX_DATA,0};
+  stage="input-layout";
   result=ID3D10Device_CreateInputLayout(device,&element,1,
       ID3D10Blob_GetBufferPointer(vsBytes),ID3D10Blob_GetBufferSize(vsBytes),&layout);
   if(FAILED(result)) goto done;
   D3D10_BUFFER_DESC bd={sizeof(vertices),D3D10_USAGE_DEFAULT,
       D3D10_BIND_VERTEX_BUFFER,0,0};D3D10_SUBRESOURCE_DATA init={vertices,0,0};
+  stage="vertex-buffer";
   result=ID3D10Device_CreateBuffer(device,&bd,&init,&vb);if(FAILED(result)) goto done;
   UINT stride=16,offset=0;D3D10_VIEWPORT viewport={0,0,2560,1600,0.0f,1.0f};
   ID3D10Device_OMSetRenderTargets(device,1,&rtv,NULL);

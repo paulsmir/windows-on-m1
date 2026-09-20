@@ -82,10 +82,10 @@ struct pipe_screen *AgxWin32AsahiScreenRecover(AGX_WIN32_ASAHI_BACKEND *backend)
 struct pipe_context *AgxWin32AsahiContextCreate(struct pipe_screen *screen,void *owner) {
   return screen && screen->context_create ? screen->context_create(screen,owner,0) : NULL;
 }
-struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
+struct pipe_resource *AgxWin32AsahiImportLinearColor32(
     struct pipe_screen *screen,const AGX_WIN32_SCREEN_BUFFER *buffer,
     APPLE_AGX_U32 width,APPLE_AGX_U32 height,APPLE_AGX_U32 pitch,
-    APPLE_AGX_U64 bytes) {
+    APPLE_AGX_U64 bytes,AGX_WIN32_ASAHI_LINEAR_FORMAT format) {
   AGX_WIN32_ASAHI_BACKEND *backend=screen?
       agx_device(screen)->windows_private:NULL;
   if(!screen || !buffer || !width || !height ||
@@ -93,8 +93,16 @@ struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
      !backend || buffer->Transport.Bytes!=bytes ||
      buffer->Transport.Generation!=backend->Buffers.Generation)
     return NULL;
+  enum pipe_format pipe_format;
+  switch(format) {
+  case AgxWin32AsahiLinearFormatBgra8Unorm:
+    pipe_format=PIPE_FORMAT_B8G8R8A8_UNORM;break;
+  case AgxWin32AsahiLinearFormatRgba8Unorm:
+    pipe_format=PIPE_FORMAT_R8G8B8A8_UNORM;break;
+  default: return NULL;
+  }
   struct pipe_resource info={0};
-  info.target=PIPE_TEXTURE_2D;info.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+  info.target=PIPE_TEXTURE_2D;info.format=pipe_format;
   info.width0=width;info.height0=height;info.depth0=1;info.array_size=1;
   info.nr_samples=1;info.nr_storage_samples=1;
   info.bind=PIPE_BIND_RENDER_TARGET|PIPE_BIND_SAMPLER_VIEW;
@@ -104,7 +112,7 @@ struct pipe_resource *AgxWin32AsahiImportLinearBgra8(
   resource->base=info;resource->base.screen=screen;
   resource->modifier=DRM_FORMAT_MOD_LINEAR;
   resource->layout=(struct ail_layout){
-      .tiling=AIL_TILING_LINEAR,.format=PIPE_FORMAT_B8G8R8A8_UNORM,
+      .tiling=AIL_TILING_LINEAR,.format=pipe_format,
       .width_px=width,.height_px=height,.depth_px=1,.sample_count_sa=1,
       .levels=1,.renderable=true,.linear_stride_B=pitch};
   pipe_reference_init(&resource->base.reference,1);

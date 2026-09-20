@@ -1644,7 +1644,7 @@ AgxD3d10ResourceWithinRequiredLimits(
          SetError(hDevice, E_FAIL);
          return;
       }
-      pResource->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+      pResource->Format = pCreateResource->Format;
       pResource->MipLevels = 1;
       pResource->NumSubResources = 1;
       return;
@@ -1880,7 +1880,8 @@ AgxD3d10ResourceWithinRequiredLimits(
       SetError(hDevice, E_FAIL);
       return;
    }
-   pResource->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+   pResource->Format = pResource->resource->format == PIPE_FORMAT_R8G8B8A8_UNORM
+      ? DXGI_FORMAT_R8G8B8A8_UNORM : DXGI_FORMAT_B8G8R8A8_UNORM;
    pResource->MipLevels = 1;
    pResource->NumSubResources = 1;''')
     resource_path=out/'src/gallium/frontends/d3d10umd/Resource.cpp'
