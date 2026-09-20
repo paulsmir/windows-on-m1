@@ -1643,3 +1643,12 @@ test now executes in worktrees and REDs at Map; GREEN derives leaf count from th
 validated inventory and passes every one of 207 injected MAP failures, QUERY,
 retire/retry and second-lifetime cleanup. Current fix is offline-only and must be
 committed, rebuilt and preregistered before the next hardware preflight.
+
+## EXP687 preregistered (2026-09-20)
+Clean HEAD b1135ad6 includes the derived 207-leaf context0 broker fix. Fresh
+ARM64 closure/package707 passes analysis0/0, Universal, Inf2Cat and catalog
+membership. Immutable archive SHA is
+557cf818c740a08a93e5c99f4a97644a256601db7f987274628b9f47dede79ad;
+exact member hashes are recorded in EXP687. Current Air is ordinary377/392
+Code28 and EXP687 is NOT_RUN. Next stage exact package and require Code0 before
+the single standard-runtime execution.

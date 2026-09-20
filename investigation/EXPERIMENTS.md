@@ -44050,3 +44050,39 @@ service/devnode residue and only E9BE15 trust were removed before ordinary
 recovery. Final ordinary377/392 health is one APPL0002 Code28/null INF, no
 AppleAgx package/service/SYS/UMD/signer, eight CPUs, NVMe and keyboard alive.
 A new clean candidate and preregistration are required; never replay EXP686.
+
+## EXP687 — preregistered derived context-0 inventory experiment
+
+UTC preregistration: 2026-09-20T18:05:00Z. Hardware status: **NOT_RUN**.
+
+**WHY THIS HYPOTHESIS:** EXP686 hardware-proved initdata stage9 and reached
+BackendStart, then recorded Context0MapResult Invalid with zero leaves. Current
+source still required obsolete 90/200 inventory while the validated graph is
+94/207. The exact production broker test REDs at Map and GREEN maps, queries and
+retires all 207 leaves while preserving every injected failure path.
+
+Single changed variable: implementation
+32ed02619cac39a940a2f1b33570ad6750ef2985 derives the context-0 leaf count from
+the validated mapping inventory. Windows/AGX contracts, UMD, allocator,
+composer, platform and recovery are unchanged. The expected sequence remains
+StartDevice completion, then exactly one standard D3D10 draw/Present.
+
+Clean HEAD b1135ad654d525607dfdaa1d16488a4874d19a35; source archive SHA
+cd104fda9000022b1655eb90c7d020c13cca42a9b6ce2f87902734ce31be6bef.
+Fresh ARM64 runtime closure/client link PASS; integrated EXE SHA
+3fab4fd6c4cae1b16b0d929ee77d4170b7d24ac117785978bb2cbaa43670031c.
+Package707 version30.0.707.0 passes UMD/KMD analysis0/0, Universal, Inf2Cat and
+catalog membership. Signer remains E9BE15BD2A184BFABA0C8035B3C620C58037A241.
+Hashes: INF fcf7581b55c40babd40611bd222944853001de61a9b4dcffec0b7bb5ea667aaf;
+SYS 166559f1e3c3d2981d95a3d432e3b41b0228fef15e74b8731257cc94e34e55b6;
+UMD 32d0fc9116d03f0d9d7535001f9976d121b933340e9b283de9becf639cd274fc;
+CAT 0d5a0b451f3f43faf3242ca132e0721af7fd01170640d5bec285ee22439702e5;
+client ff2c4304c0dbd5815bafde5da79818dcca7aea24b13b83bdbb84cce68655ef3d;
+certificate97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable `.local/experiments/EXP687-standard-runtime-707.zip` SHA
+557cf818c740a08a93e5c99f4a97644a256601db7f987274628b9f47dede79ad.
+
+Run/recovery procedure and PASS/failure criteria are identical to EXP686 with
+build707 hashes above. Bound preflight must reach Code0/StartStage12/
+PlatformStage14 before running the standard client; otherwise collect evidence,
+cleanup exact package/signer and return ordinary377/392 Code28.
