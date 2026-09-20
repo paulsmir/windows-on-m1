@@ -1945,3 +1945,9 @@ ARM64 exed617245af5cb141b43c173a089d3c91dfcd6691e4c639ada0de5c3d85e446e68.
 Next package713/sign/hash/preregistration and immediate Air standard-runtime run.
 Physical GPU completion/Present remain unproven; partial desktop photos remain
 separate evidence rather than accelerated-rendering proof.
+
+## EXP697 exact package713 ready
+Source6083eca5, full-default-sampler native gates and package gates PASS.
+Immutable SHAae721222d228a707740e760762857f52dc7ea8e974181d29d097fa3cf4ad5c46. Next exact stage/full-owner
+preflight and once-only standard runtime draw/Present test; no readiness claim
+for physical completion before its evidence.

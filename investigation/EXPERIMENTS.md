@@ -44648,3 +44648,21 @@ alone does not establish physical completion or normal desktop composition.
 Physical comparator is EXP696's interaction-dependent partial wallpaper/white
 regions/black Start and taskbar with flickering icons; record separately from
 the standard client's result and do not assume the causes are identical.
+
+### EXP697 finalized artifact gate — 2026-09-20T21:38:58.489530+00:00
+UMD/KMD analysis0/0, Universal/Inf2Cat, catalog membership PASS; same E9BE15
+signer, expected builder self-signed-root trust condition. Air must verify
+Valid signatures after exact cert import and before staging.
+package/AppleAgxRenderAdmission.inf: 031f7f68c6a9c28d930c989ad804e396a21b84021ec8fe063c2bb24466a422a1
+package/AppleAgxRenderAdmission.sys: e003c2bb1af68ff8bd9097e168f3799096d72a44f4c7d6183fa5384ab0cbfda1
+package/AppleAgxRenderAdmissionUmd.dll: 38d3a2b9de022dabf76f7bfa7be11ad243ed465313e24881084ecfc259c9e31d
+package/appleagxrenderadmission.cat: 89eeed12a3f87be76a5dbce499e424eea10822a198465bf97cc3eb135656372d
+qualification/AppleAgxD3d10Standard.exe: 81e531cef004a556dc8a3d519793be84c0b35420d98de3c69bf03b463c4f533c
+qualification/AppleAgx-WDKTestCert.cer: 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
+Immutable .local/experiments/EXP697-default-sampler-713.zip SHA ae721222d228a707740e760762857f52dc7ea8e974181d29d097fa3cf4ad5c46.
+Stage manifest/hash verified INF with pnputil /add-driver without /install;
+unchanged full-owner584/406, physical/debug-off/low-mem/broker1. Require installed
+hashes/Code0/Running/Start12/Platform14 and clear authorized temporary autologon.
+One interactive standard-client task120s, same per-process resource/sampler trace.
+Collect exact exit, native/UMD logs, registry/events and any physical observations
+before exact package/task/trust cleanup and ordinary377/392. No replay.
