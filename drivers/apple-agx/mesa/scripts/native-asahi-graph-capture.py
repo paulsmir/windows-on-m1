@@ -331,7 +331,9 @@ windows_graph_texture_table(struct agx_batch *batch, struct agx_ptr ptr,
         rsrc->base.format != PIPE_FORMAT_RGTC2_UNORM &&
         rsrc->base.format != PIPE_FORMAT_R9G9B9E5_FLOAT &&
         rsrc->base.format != PIPE_FORMAT_R8G8_B8G8_UNORM &&
-        rsrc->base.format != PIPE_FORMAT_G8R8_G8B8_UNORM) ||
+        rsrc->base.format != PIPE_FORMAT_G8R8_G8B8_UNORM &&
+        rsrc->base.format != PIPE_FORMAT_B5G5R5A1_UNORM &&
+        rsrc->base.format != PIPE_FORMAT_B4G4R4A4_UNORM) ||
        rsrc->layout.compressed || rsrc->layout.level_offsets_B[0] ||
        rsrc->base.last_level || rsrc->base.array_size != 1 ||
        !AgxWin32AsahiEmissionBegin(capture->Backend->Native, ptr.cpu, ptr.gpu,
@@ -451,7 +453,8 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R16_FLOAT ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R32G32B32A32_FLOAT ||
        ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R10G10B10A2_UNORM ||
-       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R11G11B10_FLOAT) &&
+       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_R11G11B10_FLOAT ||
+       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B5G6R5_UNORM) &&
       !ctx->framebuffer.cbufs[0].level && !ctx->framebuffer.cbufs[0].first_layer &&
       !ctx->framebuffer.cbufs[0].last_layer && ctx->streamout.num_targets<=1u &&
       !ctx->cond_query && !ctx->occlusion_query && !ctx->time_elapsed &&

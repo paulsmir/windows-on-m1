@@ -1389,3 +1389,26 @@ source archive SHA-256
 Inventory remains 120 of 121 and pipeline mask zero.  The remaining frozen
 format work is the complete data-driven required-use table, Windows 8 B5/B4
 family and nonzero mip/layer range proof before aggregate admission.
+
+## Required-format closure in progress: Windows 8 B5/B4 family (2026-09-20)
+B5G6R5_UNORM now uses the existing two-byte color target path through real
+clear/draw, capture, both KMD placements and retirement.  B5G5R5A1_UNORM and
+B4G4R4A4_UNORM use the shared uploaded texture/SRV/native-blit path.  The pinned
+D3D10 translator lacked B4G4R4A4; the projection now maps it to the matching
+Mesa/Asahi physical format.  No optional uses were enabled for B5G5R5A1 or B4.
+
+Causal RED rejected the missing formats before submission:
+evidence/AD04-runtime-closure/required-win8-formats-red-20260920jp-x64/.
+Fresh x64 full producer execution PASS:
+evidence/AD04-runtime-closure/required-win8-formats-green-20260920jq-x64/;
+source archive SHA-256
+e3f4b7769a82d7ac1873f8dcfa3facdf389786d76a74a362981db3dd9c1f9de6.
+Fresh ARM64 closure/client build-link PASS:
+evidence/AD04-runtime-closure/required-win8-formats-green-20260920jr-arm64/;
+source archive SHA-256
+a9fb0f3dd384d6ace26e0dfbc13ed2369d5a2a995879d16bcbc3531138657710.
+
+Inventory remains 120 of 121 and pipeline mask zero.  All distinct physical or
+lowered storage families selected before hardware now have representative
+executable evidence.  The remaining gate is the complete machine-readable
+format/use descriptor contract plus nonzero mip/layer range validation.

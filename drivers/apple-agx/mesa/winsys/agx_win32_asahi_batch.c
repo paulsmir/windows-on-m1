@@ -73,6 +73,8 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
     c->Draw.Format=AppleAgxWin32FormatRgb10A2Unorm; break;
   case PIPE_FORMAT_R11G11B10_FLOAT:
     c->Draw.Format=AppleAgxWin32FormatR11G11B10Float; break;
+  case PIPE_FORMAT_B5G6R5_UNORM:
+    c->Draw.Format=AppleAgxWin32FormatBgr565Unorm; break;
   default:
     (void)AgxWin32AsahiBatchAbort(b); (void)AgxWin32AsahiBatchRelease(b);
     return 0;
@@ -175,7 +177,8 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
        rt->base.format==PIPE_FORMAT_R16_FLOAT ||
        rt->base.format==PIPE_FORMAT_R32G32B32A32_FLOAT ||
        rt->base.format==PIPE_FORMAT_R10G10B10A2_UNORM ||
-       rt->base.format==PIPE_FORMAT_R11G11B10_FLOAT) &&
+       rt->base.format==PIPE_FORMAT_R11G11B10_FLOAT ||
+       rt->base.format==PIPE_FORMAT_B5G6R5_UNORM) &&
       !rt->layout.compressed && rt->base.last_level==0 && rt->base.depth0==1 &&
       rt->base.array_size==1 && rt->base.nr_samples<=1;
   if(valid && ctx->framebuffer.zsbuf.texture) {

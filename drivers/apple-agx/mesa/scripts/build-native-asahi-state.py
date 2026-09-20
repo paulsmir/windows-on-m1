@@ -451,7 +451,8 @@ void APIENTRY
        Format == DXGI_FORMAT_R8_UNORM || Format == DXGI_FORMAT_R16_FLOAT ||
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
-       Format == DXGI_FORMAT_R11G11B10_FLOAT) {
+       Format == DXGI_FORMAT_R11G11B10_FLOAT ||
+       Format == DXGI_FORMAT_B5G6R5_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
    } else if (Format == DXGI_FORMAT_D32_FLOAT) {
@@ -476,6 +477,7 @@ void APIENTRY
        Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
        Format == DXGI_FORMAT_R10G10B10A2_UNORM ||
        Format == DXGI_FORMAT_R11G11B10_FLOAT ||
+       Format == DXGI_FORMAT_B5G6R5_UNORM ||
        Format == DXGI_FORMAT_R16_UINT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
@@ -531,7 +533,8 @@ void APIENTRY
         resource->format != PIPE_FORMAT_R16_FLOAT &&
         resource->format != PIPE_FORMAT_R32G32B32A32_FLOAT &&
         resource->format != PIPE_FORMAT_R10G10B10A2_UNORM &&
-        resource->format != PIPE_FORMAT_R11G11B10_FLOAT) ||
+        resource->format != PIPE_FORMAT_R11G11B10_FLOAT &&
+        resource->format != PIPE_FORMAT_B5G6R5_UNORM) ||
        resource->nr_samples != 1 || resource->array_size != 1 ||
        resource->last_level != 0 || surface->format != resource->format ||
        surface->level != 0 || surface->first_layer != 0 || surface->last_layer != 0 ||
@@ -1238,6 +1241,12 @@ BOOL AgxD3d10FormatViewCompatible(
    DXGI_FORMAT ResourceFormat, DXGI_FORMAT ViewFormat, BOOL Depth);''')])
     change('src/gallium/frontends/d3d10umd/Format.cpp',
         '26215278ae7e566dc5973fb932daaa9142b7b11bd5dcfff8c574f37991e8fdf0',[
+        ('''   case DXGI_FORMAT_B5G6R5_UNORM:
+      return PIPE_FORMAT_B5G6R5_UNORM;''',
+         '''   case DXGI_FORMAT_B4G4R4A4_UNORM:
+      return PIPE_FORMAT_B4G4R4A4_UNORM;
+   case DXGI_FORMAT_B5G6R5_UNORM:
+      return PIPE_FORMAT_B5G6R5_UNORM;'''),
         ('#include "Format.h"','''#include "Format.h"
 
 extern "C" BOOL AgxD3d10FormatViewCompatible(
@@ -1375,7 +1384,8 @@ AgxD3d10ColorBytes(DXGI_FORMAT format)
 {
    switch (format) {
    case DXGI_FORMAT_R8_UNORM: return 1;
-   case DXGI_FORMAT_R16_FLOAT: return 2;
+   case DXGI_FORMAT_R16_FLOAT:
+   case DXGI_FORMAT_B5G6R5_UNORM: return 2;
    case DXGI_FORMAT_B8G8R8A8_UNORM:
    case DXGI_FORMAT_R8G8B8A8_UNORM:
    case DXGI_FORMAT_R10G10B10A2_UNORM:
