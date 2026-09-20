@@ -353,6 +353,8 @@ void APIENTRY
    if (Format == DXGI_FORMAT_B8G8R8A8_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET |
                      D3D10_DDI_FORMAT_SUPPORT_BLENDABLE;
+   } else if (Format == DXGI_FORMAT_D32_FLOAT) {
+      *pFormatCaps = D3D10_FORMAT_SUPPORT_DEPTH_STENCIL;
    } else if (Format == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM) {
       *pFormatCaps = D3D10_DDI_FORMAT_SUPPORT_NOT_SUPPORTED;
    } else {
@@ -361,7 +363,8 @@ void APIENTRY
         ('''   /* XXX: Disable MSAA */
    *pNumQualityLevels = 0;''','''   (void)hDevice;
    *pNumQualityLevels =
-      Format == DXGI_FORMAT_B8G8R8A8_UNORM && SampleCount == 1 ? 1 : 0;''')])
+      (Format == DXGI_FORMAT_B8G8R8A8_UNORM ||
+       Format == DXGI_FORMAT_D32_FLOAT) && SampleCount == 1 ? 1 : 0;''')])
     replace_function_body('src/gallium/frontends/d3d10umd/Device.cpp','Flush','''   Device *pDevice = CastDevice(hDevice);
    HRESULT result = AgxD3d10WindowsQueryCollect(pDevice->windows);
    if (SUCCEEDED(result)) {
@@ -428,11 +431,33 @@ void APIENTRY
                              0, 0,
                              pipe_surface_width(surface),
                              pipe_surface_height(surface),
-                             true);''','''   (void)hDepthStencilView;
-   (void)Flags;
-   (void)Depth;
-   (void)Stencil;
-   SetError(hDevice, E_NOTIMPL);''')])
+                             true);''','''   Device *pDevice = CastDevice(hDevice);
+   struct pipe_context *pipe = CastPipeContext(hDevice);
+   struct pipe_surface *surface = CastPipeDepthStencilView(hDepthStencilView);
+   struct pipe_resource *resource = surface ? surface->texture : NULL;
+   struct pipe_surface *bound = pDevice && pDevice->fb.zsbuf.texture ?
+      &pDevice->fb.zsbuf : NULL;
+   if (!pipe || !pipe->clear || !surface || !resource || !bound ||
+       Flags != D3D10_DDI_CLEAR_DEPTH || Stencil != 0 ||
+       Depth < 0.0f || Depth > 1.0f ||
+       resource->target != PIPE_TEXTURE_2D ||
+       resource->format != PIPE_FORMAT_Z32_FLOAT ||
+       resource->nr_samples != 1 || resource->array_size != 1 ||
+       resource->last_level != 0 || surface->format != resource->format ||
+       surface->level != 0 || surface->first_layer != 0 ||
+       surface->last_layer != 0 || bound->texture != resource ||
+       bound->format != surface->format || bound->level != surface->level ||
+       bound->first_layer != surface->first_layer ||
+       bound->last_layer != surface->last_layer ||
+       pDevice->fb.width != pipe_surface_width(surface) ||
+       pDevice->fb.height != pipe_surface_height(surface)) {
+      LOG_UNSUPPORTED("ClearDepthStencilView requires one bound full D32 depth target");
+      SetError(hDevice, E_NOTIMPL);
+      return;
+   }
+   union pipe_color_union color;
+   memset(&color, 0, sizeof(color));
+   pipe->clear(pipe, PIPE_CLEAR_DEPTH, 0, 0, NULL, &color, Depth, 0);''')])
     change('src/gallium/frontends/d3d10umd/Query.cpp',
         '8456801b1614e79ad9ce307035a76a5f5f642eb83a40e4c066a8946f44d620b4',[
         ('#include "State.h"', '''#include "State.h"
@@ -1142,6 +1167,30 @@ _Present('''),
          !pCreateResource->pInitialDataUP;
       if (!private_rt || !screen->resource_create_with_modifiers) {
          LOG_UNSUPPORTED("Only a private uncompressed BGRA8 render target is admitted");
+         SetError(hDevice, E_NOTIMPL);
+         return;
+      }
+      const uint64_t modifier = DRM_FORMAT_MOD_APPLE_GPU_TILED;
+      pResource->resource = screen->resource_create_with_modifiers(
+         screen, &templat, &modifier, 1);
+   } else if (pCreateResource->BindFlags & D3D10_DDI_BIND_DEPTH_STENCIL) {
+      const D3D10DDI_MIPINFO *mip = pCreateResource->pMipInfoList;
+      bool private_depth =
+         pCreateResource->ResourceDimension == D3D10DDIRESOURCE_TEXTURE2D &&
+         pCreateResource->Format == DXGI_FORMAT_D32_FLOAT &&
+         pCreateResource->MipLevels == 1 && pCreateResource->ArraySize == 1 && mip &&
+         mip[0].TexelWidth > 0 && mip[0].TexelHeight > 0 && mip[0].TexelDepth == 1 &&
+         mip[0].TexelWidth <= 4096 && mip[0].TexelHeight <= 4096 &&
+         ((uint64_t)mip[0].TexelWidth * mip[0].TexelHeight * 4) <= 0x100000 &&
+         pCreateResource->SampleDesc.Count == 1 &&
+         pCreateResource->SampleDesc.Quality == 0 &&
+         pCreateResource->Usage == D3D10_DDI_USAGE_DEFAULT &&
+         pCreateResource->MapFlags == 0 &&
+         pCreateResource->BindFlags == D3D10_DDI_BIND_DEPTH_STENCIL &&
+         pCreateResource->MiscFlags == 0 && !pCreateResource->pPrimaryDesc &&
+         !pCreateResource->pInitialDataUP;
+      if (!private_depth || !screen->resource_create_with_modifiers) {
+         LOG_UNSUPPORTED("Only a private uncompressed D32 depth target is admitted");
          SetError(hDevice, E_NOTIMPL);
          return;
       }

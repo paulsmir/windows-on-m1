@@ -469,6 +469,63 @@ static void test_v6_requires_and_preserves_external_texture_reference(void) {
       &commandBytes) == AppleAgxWin32AbiRelocation);
 }
 
+static void test_v7_requires_and_preserves_external_depth_reference(void) {
+  APPLE_AGX_WIN32_ALLOCATION_REFERENCE references[10];
+  APPLE_AGX_WIN32_RELOCATION relocations[6];
+  APPLE_AGX_WIN32_NATIVE_BATCH_METADATA metadata = {0};
+  AGX_WIN32_DRAW_REQUEST input = draw_request(references, relocations);
+  unsigned char bytes[APPLE_AGX_WIN32_COMMAND_MAX_BYTES];
+  APPLE_AGX_WIN32_COMMAND_VIEW view;
+  APPLE_AGX_U32 commandBytes = 0u;
+  metadata.Background.UscReference = 4u;
+  metadata.PartialBackground.UscReference = 4u;
+  metadata.EndOfTile.UscReference = 4u;
+  metadata.Samples = metadata.Layers = metadata.SampleSizeBytes = 1u;
+  metadata.UtileWidth = metadata.UtileHeight = 32u;
+  metadata.PppControl = 0x202u;
+  metadata.PppMultisampleControl = 0x88u;
+  metadata.DepthReference = 9u;
+  metadata.DepthCompressionReference = APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  metadata.DepthStride = 1u;
+  metadata.ZlsControl = 0x80000ULL;
+  metadata.IspZlsPixels = 0x00100010ULL;
+  metadata.IspBgobjDepth = 0x3f000000u;
+  metadata.IspBgobjValues = 0x300u;
+  references[9] = (APPLE_AGX_WIN32_ALLOCATION_REFERENCE){
+      9u, AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite,
+      AppleAgxWin32RoleDepthAttachment, 0u, 0u, 0x4000u};
+  input.AllocationCount = 10u;
+  input.ReferenceCount = 10u;
+  input.NativeBatch = &metadata;
+  input.Draw.Reserved[0] = APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  input.Draw.DepthBiasReference = APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  assert(AgxWin32TransportBuildDrawVersion(&input,
+      APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH, bytes, sizeof(bytes),
+      &commandBytes) == AppleAgxWin32AbiSuccess);
+  assert(AppleAgxWin32CommandValidate(bytes, commandBytes, 7u, 10u, &view) ==
+         AppleAgxWin32AbiSuccess);
+  assert(view.Header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH &&
+         view.NativeBatch->DepthReference == 9u &&
+         view.NativeBatch->DepthCompressionReference ==
+             APPLE_AGX_WIN32_OPTIONAL_REFERENCE &&
+         view.NativeBatch->DepthStride == 1u &&
+         view.NativeBatch->ZlsControl == 0x80000ULL);
+
+  metadata.DepthReference = APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  assert(AgxWin32TransportBuildDrawVersion(&input,
+      APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH, bytes, sizeof(bytes),
+      &commandBytes) == AppleAgxWin32AbiRole);
+  metadata.DepthReference = 9u;
+  references[9].Access = AppleAgxWin32AccessRead;
+  assert(AgxWin32TransportBuildDrawVersion(&input,
+      APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH, bytes, sizeof(bytes),
+      &commandBytes) == AppleAgxWin32AbiAccess);
+  references[9].Access = AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite;
+  assert(AgxWin32TransportBuildDrawVersion(&input,
+      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH, bytes, sizeof(bytes),
+      &commandBytes) == AppleAgxWin32AbiReserved);
+}
+
 static void test_resource_facing_winsys_has_no_fd_or_physical_contract(void) {
   FAKE_WINSYS fake;
   AGX_WIN32_WINSYS_OPERATIONS operations;
@@ -565,6 +622,7 @@ int main(void) {
   test_draw_version_is_explicit_and_zero_is_a_valid_v2_reference();
   test_v4_metadata_is_appended_after_the_draw_prefix();
   test_v6_requires_and_preserves_external_texture_reference();
+  test_v7_requires_and_preserves_external_depth_reference();
   test_resource_facing_winsys_has_no_fd_or_physical_contract();
   test_winsys_rejects_stale_and_out_of_range_buffers();
   return 0;

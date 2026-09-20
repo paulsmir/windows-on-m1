@@ -542,6 +542,73 @@ static void test_native_graph(void) {
   assert(AdmissionDynamicOverlayRelease(&image,&plan,&job,native_storage,sizeof(native_storage),9,&state)==AdmissionDynamicOverlaySuccess);
   assert(pipeline_bytes[0x20000]==0 && descriptor_bytes[0x8000]==0);
   {
+    unsigned depth32,bgdepth,bgvalues;
+    unsigned long long depth64,zls,pixels,duplicate,stride64,compression;
+    header.Version=APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH;
+    header.ReferenceCount=17;
+    refs[16].Role=AppleAgxWin32RoleDepthAttachment;
+    refs[16].Access=AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite;
+    refs[16].Bytes=0x4000;
+    native.DepthReference=16;
+    native.DepthCompressionReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+    native.DepthStride=0x4001u;
+    native.ZlsControl=0x80000ULL;
+    native.IspZlsPixels=0x00100010ULL;
+    native.IspBgobjDepth=0x3f000000u;
+    native.IspBgobjValues=0x300u;
+    assert(AdmissionDynamicOverlayPlan(&image,&view,&plan)==
+           AdmissionDynamicOverlaySuccess);
+    assert(AdmissionDynamicOverlayBindingsFromView(&view,&bindings)==
+           AdmissionDynamicOverlaySuccess);
+    bindings.DepthGpuVirtualAddress=0x1507000000ULL;
+    assert(plan.EntryCount==15 && !find_entry(&plan,16));
+    assert(AdmissionDynamicOverlayRouteNative(&plan,&bindings,image.Objects,76)==
+           AdmissionDynamicOverlaySuccess);
+    memcpy(&pixels,store_work_bytes+0xc8,8);
+    memcpy(&zls,store_work_bytes+0xd8,8);
+    memcpy(&depth64,store_work_bytes+0xe0,8);
+    memcpy(&depth32,store_work_bytes+0x100,4);
+    memcpy(&bgdepth,store_work_bytes+0x3f8,4);
+    memcpy(&bgvalues,store_work_bytes+0x3fc,4);
+    assert(pixels==native.IspZlsPixels && zls==native.ZlsControl &&
+           depth64==bindings.DepthGpuVirtualAddress &&
+           depth32==native.DepthStride && bgdepth==native.IspBgobjDepth &&
+           bgvalues==(native.IspBgobjValues|0x400u));
+    memcpy(&duplicate,store_work_bytes+0xe8,8);
+    memcpy(&stride64,store_work_bytes+0x108,8);
+    memcpy(&compression,store_work_bytes+0x120,8);
+    assert(duplicate==bindings.DepthGpuVirtualAddress &&
+           stride64==native.DepthStride && compression==0);
+    memcpy(&stride64,store_work_bytes+0x128,8);
+    memcpy(&compression,store_work_bytes+0x130,8);
+    memcpy(&duplicate,store_work_bytes+0x138,8);
+    assert(stride64==0 && compression==0 && duplicate==0);
+    memcpy(&zls,store_work_bytes+0x650,8);
+    memcpy(&depth64,store_work_bytes+0x660,8);
+    memcpy(&depth32,store_work_bytes+0x668,4);
+    memcpy(&bgdepth,store_work_bytes+0x740,4);
+    memcpy(&pixels,store_work_bytes+0x768,8);
+    assert(zls==native.ZlsControl && depth64==bindings.DepthGpuVirtualAddress &&
+           depth32==native.DepthStride && bgdepth==native.IspBgobjDepth &&
+           pixels==native.IspZlsPixels);
+    memcpy(&stride64,store_work_bytes+0x670,8);
+    memcpy(&duplicate,store_work_bytes+0x678,8);
+    memcpy(&compression,store_work_bytes+0x680,8);
+    assert(stride64==0 && duplicate==bindings.DepthGpuVirtualAddress &&
+           compression==bindings.DepthGpuVirtualAddress);
+    memcpy(&compression,store_work_bytes+0x688,8);
+    memcpy(&bgvalues,store_work_bytes+0x744,4);
+    assert(compression==0 && bgvalues==native.IspBgobjValues);
+    native.DepthReference=0;
+    native.DepthCompressionReference=0;
+    native.DepthStride=0;
+    native.ZlsControl=0;
+    native.IspZlsPixels=0;
+    native.IspBgobjDepth=0;
+    native.IspBgobjValues=0;
+    memset(&refs[16],0,sizeof(refs[16]));
+  }
+  {
     ADMISSION_DYNAMIC_OVERLAY_PLAN indexedPlan,indexedWorker;
     ADMISSION_DYNAMIC_OVERLAY_BINDINGS indexedBindings;
     APPLE_AGX_DYNAMIC_JOB indexedJob={0};

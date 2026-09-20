@@ -28,11 +28,18 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   c->Transaction=c->Ops->Create(c->Owner,&c->Request);
   if(!c->Transaction || !c->Request) { free(c); return 0; }
   b->windows_batch=c;
-  APPLE_AGX_U16 version=b->ctx->stage[MESA_SHADER_FRAGMENT].texture_count ?
-      APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH :
-      APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
-  if(AgxWin32AsahiCaptureBeginVersion(&c->Capture,d,id.Owner,id.Generation,c->Request,
-      version)!=AgxRelocOk ||
+  const int has_depth=b->key.zsbuf.texture!=NULL;
+  const int has_texture=b->ctx->stage[MESA_SHADER_FRAGMENT].texture_count!=0;
+  if(has_depth && has_texture) {
+    (void)AgxWin32AsahiBatchAbort(b); (void)AgxWin32AsahiBatchRelease(b);
+    return 0;
+  }
+  APPLE_AGX_U16 version=has_depth ?
+      APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH :
+      has_texture ? APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH :
+                    APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH;
+  if(AgxWin32AsahiCaptureBeginVersion(&c->Capture,d,id.Owner,id.Generation,
+      c->Request,version)!=AgxRelocOk ||
       !AgxWin32AsahiCaptureActivate(&c->Capture) ||
       !AgxWin32AsahiEncoderRootBegin(d->Native,b->vdm.bo->_map,b->vdm.bo->va->addr,
         (APPLE_AGX_U32)b->vdm.bo->size,&c->Root)) {
@@ -53,6 +60,8 @@ int AgxWin32AsahiBatchBegin(struct agx_batch *b) {
   ABSENT(DescriptorReference); ABSENT(ScissorReference); ABSENT(DepthBiasReference);
 #undef ABSENT
   c->Draw.Reserved[0]=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
+  if(has_depth)
+    c->Render.DepthCompressionReference=APPLE_AGX_WIN32_OPTIONAL_REFERENCE;
   return 1;
 }
 int AgxWin32AsahiBatchEnter(struct agx_batch *b) {
@@ -77,12 +86,23 @@ int AgxWin32AsahiBatchDrawAllowed(struct agx_context *ctx,
       (ctx->stage[MESA_SHADER_FRAGMENT].texture_count && info->index_size) ||
       info->primitive_restart || info->instance_count!=1 ||
       info->start_instance || draws->start || draws->count!=3 || draws->index_bias ||
-      ctx->framebuffer.nr_cbufs!=1 || ctx->framebuffer.zsbuf.texture ||
+      ctx->framebuffer.nr_cbufs!=1 ||
       !ctx->framebuffer.cbufs[0].texture || (ctx->batch && ctx->batch->draws)) return 0;
   struct agx_resource *rt=agx_resource(ctx->framebuffer.cbufs[0].texture);
   int valid=rt->base.target==PIPE_TEXTURE_2D && rt->base.format==PIPE_FORMAT_B8G8R8A8_UNORM &&
       !rt->layout.compressed && rt->base.last_level==0 && rt->base.depth0==1 &&
       rt->base.array_size==1 && rt->base.nr_samples<=1;
+  if(valid && ctx->framebuffer.zsbuf.texture) {
+    struct pipe_surface *zs=&ctx->framebuffer.zsbuf;
+    struct agx_resource *depth=agx_resource(zs->texture);
+    valid=!ctx->stage[MESA_SHADER_FRAGMENT].texture_count && !info->index_size &&
+        zs->format==PIPE_FORMAT_Z32_FLOAT && !zs->level &&
+        !zs->first_layer && !zs->last_layer &&
+        depth->base.target==PIPE_TEXTURE_2D &&
+        depth->base.format==PIPE_FORMAT_Z32_FLOAT && !depth->layout.compressed &&
+        depth->base.last_level==0 && depth->base.depth0==1 &&
+        depth->base.array_size==1 && depth->base.nr_samples<=1 && depth->bo;
+  }
   if(valid && info->index_size) {
     struct pipe_resource *resource=info->index.resource;
     struct agx_resource *index=resource?agx_resource(resource):NULL;
@@ -113,7 +133,7 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
   if(!c || !d || !r || d->Failed || b->ctx->any_faults || c->Submitted || c->Rejected ||
       b->draws!=1 || b->cdm.bo || b->vs_scratch || b->fs_scratch ||
       agx_tilebuffer_spills(&b->tilebuffer_layout) || r->samples!=1 || r->layers!=1 ||
-      r->depth.base || r->stencil.base || r->isp_oclqry_base ||
+      r->stencil.base || r->isp_oclqry_base ||
       r->sampler_heap || r->sampler_count ||
       (r->flags & ~(unsigned)DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES) ||
       r->ppp_multisamplectl>UINT32_MAX || r->vdm_ctrl_stream_base!=c->Root.Address)
@@ -122,6 +142,31 @@ int AgxWin32AsahiBatchFinish(struct agx_batch *b,const struct drm_asahi_cmd_rend
   if(!AgxWin32AsahiEncoderRootFinalize(&c->Root,b->vdm.current+69)) return batch_reject(c,__LINE__);
   struct agx_resource *rt=agx_resource(b->key.cbufs[0].texture);
   if(!find_root(c,agx_map_gpu(rt),AppleAgxWin32RoleRenderTarget,&c->Draw.DestinationReference)) return batch_reject(c,__LINE__);
+  if(c->Capture.Capture.CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+    struct pipe_surface *zs=&b->key.zsbuf;
+    struct agx_resource *depth=zs->texture?agx_resource(zs->texture):NULL;
+    uint64_t depth_address=depth ? agx_map_texture_gpu(depth,0)+
+        ail_get_level_offset_B(&depth->layout,0) : 0;
+    if(!depth || depth->layout.compressed || !r->depth.base ||
+       r->depth.base!=depth_address || r->depth.comp_base || r->depth.comp_stride ||
+       !depth->layout.layer_stride_B || depth->layout.layer_stride_B>UINT32_MAX ||
+       AgxWin32AsahiCaptureAddress(&c->Capture,r->depth.base,
+          (APPLE_AGX_U32)depth->layout.layer_stride_B,
+          AppleAgxWin32RoleDepthAttachment,
+          AppleAgxWin32AccessRead|AppleAgxWin32AccessWrite,
+          &c->Render.DepthReference)!=AgxRelocOk)
+      return batch_reject(c,__LINE__);
+    c->Render.DepthStride=r->depth.stride;
+    c->Render.DepthCompressionStride=0;
+    c->Render.ZlsControl=r->zls_ctrl;
+    c->Render.IspZlsPixels=r->isp_zls_pixels;
+    c->Render.IspBgobjDepth=r->isp_bgobjdepth;
+    c->Render.IspBgobjValues=r->isp_bgobjvals;
+  } else if(r->depth.base || r->depth.comp_base || r->depth.comp_stride ||
+            r->zls_ctrl || r->isp_zls_pixels ||
+            r->isp_bgobjdepth || r->isp_bgobjvals!=0x300u) {
+    return batch_reject(c,__LINE__);
+  }
   if(!b->scissor.size || AgxWin32AsahiCaptureAddress(&c->Capture,r->isp_scissor_base,
       b->scissor.size,AppleAgxWin32RoleScissor,AppleAgxWin32AccessRead,
       &c->Draw.ScissorReference)!=AgxRelocOk) return batch_reject(c,__LINE__);

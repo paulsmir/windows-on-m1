@@ -106,6 +106,19 @@ static int dma_job_valid(const APPLE_AGX_DYNAMIC_JOB *Job,
       AppleAgxDynamicDmaBytesHash(Storage, StorageBytes) !=
           Job->MaterializedHash)
     return 0;
+  if (Bindings->CommandVersion == APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+    if (Bindings->NativeBatch.DepthReference ==
+            APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||
+        Bindings->NativeBatch.DepthReference >= referenceLimit ||
+        Bindings->DepthGpuVirtualAddress == 0ULL ||
+        ((Bindings->NativeBatch.DepthCompressionReference ==
+          APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+         (Bindings->DepthCompressionGpuVirtualAddress == 0ULL)))
+      return 0;
+  } else if (Bindings->DepthGpuVirtualAddress != 0ULL ||
+             Bindings->DepthCompressionGpuVirtualAddress != 0ULL) {
+    return 0;
+  }
   for (index = 0u; index < Job->ObjectCount; ++index) {
     const APPLE_AGX_DYNAMIC_JOB_OBJECT *object = &Job->Objects[index];
     if (object->ReferenceIndex >= referenceLimit ||

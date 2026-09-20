@@ -189,6 +189,7 @@ static ADMISSION_DYNAMIC_OVERLAY_RESULT overlay_native_plan_view(
         r->Role==AppleAgxWin32RoleUscPipeline;
     ADMISSION_DYNAMIC_OVERLAY_RESULT result;
     if (r->Role==AppleAgxWin32RoleRenderTarget ||
+        r->Role==AppleAgxWin32RoleDepthAttachment ||
         (view->Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH &&
          r->Role==AppleAgxWin32RoleTexture)) continue;
     if (!overlay_native_copied(r->Role,
@@ -690,6 +691,17 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
       n->PppMultisampleControl!=0x88u ||
       (n->RenderFlags&~APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES))
     return AdmissionDynamicOverlayLayout;
+  if(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+    if(n->DepthReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE ||
+       !Bindings->DepthGpuVirtualAddress || !n->DepthStride ||
+       !n->ZlsControl || !n->IspZlsPixels || !n->IspBgobjValues ||
+       ((n->DepthCompressionReference==APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+        (Bindings->DepthCompressionGpuVirtualAddress==0ULL)))
+      return AdmissionDynamicOverlayLayout;
+  } else if(Bindings->DepthGpuVirtualAddress ||
+            Bindings->DepthCompressionGpuVirtualAddress) {
+    return AdmissionDynamicOverlayLayout;
+  }
   roots[0]=&n->Background; roots[1]=&n->PartialBackground; roots[2]=&n->EndOfTile;
   for(i=0;i<3u;++i) {
     const ADMISSION_DYNAMIC_OVERLAY_ENTRY *entry=OVERLAY_NULL;
@@ -736,6 +748,31 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   overlay_write_u32(work+0x734u,pipeline[2]);
   overlay_write_u64(work+0xa0u,scissor); overlay_write_u64(work+0x4c8u,scissor);
   overlay_write_u64(work+0xa8u,dbias); overlay_write_u64(work+0x4b8u,dbias);
+  if(Plan->CommandVersion==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+    const APPLE_AGX_U64 depth=Bindings->DepthGpuVirtualAddress;
+    const APPLE_AGX_U64 compression=Bindings->DepthCompressionGpuVirtualAddress;
+    overlay_write_u64(work+0xc8u,n->IspZlsPixels);
+    overlay_write_u64(work+0xd8u,n->ZlsControl);
+    overlay_write_u64(work+0xe0u,depth); overlay_write_u64(work+0xe8u,depth);
+    overlay_write_u64(work+0x100u,n->DepthStride);
+    overlay_write_u64(work+0x108u,n->DepthStride);
+    overlay_write_u64(work+0x120u,compression);
+    overlay_write_u64(work+0x128u,n->DepthCompressionStride);
+    overlay_write_u64(work+0x130u,compression);
+    overlay_write_u64(work+0x138u,n->DepthCompressionStride);
+    overlay_write_u32(work+0x3f8u,n->IspBgobjDepth);
+    overlay_write_u32(work+0x3fcu,n->IspBgobjValues|0x400u);
+    overlay_write_u64(work+0x650u,n->ZlsControl);
+    overlay_write_u64(work+0x660u,depth);
+    overlay_write_u64(work+0x668u,n->DepthStride);
+    overlay_write_u64(work+0x670u,n->DepthCompressionStride);
+    overlay_write_u64(work+0x678u,depth);
+    overlay_write_u64(work+0x680u,depth);
+    overlay_write_u64(work+0x688u,compression);
+    overlay_write_u32(work+0x740u,n->IspBgobjDepth);
+    overlay_write_u32(work+0x744u,n->IspBgobjValues);
+    overlay_write_u64(work+0x768u,n->IspZlsPixels);
+  }
   utile=((n->UtileWidth/16u)<<12)|((n->UtileHeight/16u)<<14);
   blocks=(n->SampleSizeBytes*n->UtileWidth*n->UtileHeight+2047u)/2048u;
   tileConfig=0x280u|((n->RenderFlags&APPLE_AGX_WIN32_NATIVE_RENDER_PROCESS_EMPTY_TILES)?0x10000u:0u);
@@ -748,8 +785,10 @@ ADMISSION_DYNAMIC_OVERLAY_RESULT AdmissionDynamicOverlayRouteNative(
   overlay_write_u32(work+0x3f4u,blocks); overlay_write_u32(work+0x6d0u,blocks);
   overlay_write_u32(work+0x748u,n->SampleSizeBytes);
   overlay_write_u64(work+0x180u,tileConfig); overlay_write_u64(work+0x6f0u,tileConfig);
-  /* No depth/stencil attachment: native isp_bgobjvals is 0x300. */
-  overlay_write_u32(work+0x3fcu,0x300u); overlay_write_u32(work+0x744u,0x300u);
+  if(Plan->CommandVersion!=APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+    /* No depth/stencil attachment: native isp_bgobjvals is 0x300. */
+    overlay_write_u32(work+0x3fcu,0x700u); overlay_write_u32(work+0x744u,0x300u);
+  }
   overlay_write_u32(micro+156u,(APPLE_AGX_U32)((Bindings->DestinationBytes+127u)/128u));
   return AdmissionDynamicOverlaySuccess;
 }

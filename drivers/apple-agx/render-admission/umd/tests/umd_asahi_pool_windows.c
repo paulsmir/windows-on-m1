@@ -107,6 +107,7 @@ unsigned AgxWin32AsahiStateDirtyZeroTest(AGX_WIN32_SCREEN *,
 static unsigned RuntimeRenders,RuntimeSignals,RuntimeMaterializations;
 static D3DKMT_HANDLE RuntimeExpectedTargetAllocation;
 static APPLE_AGX_U64 RuntimeExpectedTargetBytes;
+static APPLE_AGX_U32 RuntimeExpectedCommandVersion;
 static ADMISSION_UMD_DEVICE *RuntimeActiveDevice;
 static HANDLE RuntimeMarker;
 static HANDLE RuntimeQueryMarkers[ADMISSION_UMD_SCREEN_FENCE_LIMIT*2];
@@ -186,6 +187,14 @@ static int RuntimeResolve(void *context,APPLE_AGX_U64 token,APPLE_AGX_U32 cls,
     *out=consumer->DestinationGpu+0x2000000ULL+offset-source->Offset;
     return 1;
   }
+  if(role==AppleAgxWin32RoleDepthAttachment && consumer->Source->NativeBatch &&
+     ref==consumer->Source->NativeBatch->DepthReference) {
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *source=&consumer->Source->References[ref];
+    if(offset<source->Offset || offset-source->Offset>=source->Bytes ||
+       bytes>source->Bytes-(offset-source->Offset)) return 0;
+    *out=consumer->DestinationGpu+0x4000000ULL+offset-source->Offset;
+    return 1;
+  }
   return AdmissionDynamicOverlayResolve(&consumer->Plan,ref,offset,bytes,out)==AdmissionDynamicOverlaySuccess;
 }
 static HRESULT RuntimeConsumerFailure(const char *stage,unsigned placement,unsigned result) {
@@ -204,6 +213,8 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
       device->Win32Generation,r->NumAllocations,&view)!=AppleAgxWin32AbiSuccess) return E_INVALIDARG;
   RUNTIME_REQUIRE((APPLE_AGX_WIN32_COMMAND_IS_NATIVE(view.Header->Version)) &&
       view.NativeBatch);
+  if(RuntimeExpectedCommandVersion)
+    RUNTIME_REQUIRE(view.Header->Version==RuntimeExpectedCommandVersion);
   if(AdmissionWin32ValidateReferences(&view,device->Win32Generation,RuntimeLookup,NULL,
       facts,ARRAYSIZE(facts))!=AdmissionWin32TransportSuccess) return E_INVALIDARG;
   if(RuntimeExpectedTargetAllocation) {
@@ -243,6 +254,14 @@ static HRESULT APIENTRY RuntimeRender(HANDLE h,D3DDDICB_RENDER *r) {
     if(result!=AdmissionDynamicOverlaySuccess) return RuntimeConsumerFailure("bindings",i,result);
     consumer->Source=&view;
     consumer->DestinationGpu=0x1500200000ULL+i*0x10000000ULL;
+    if(view.Header->Version==APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+      unsigned depth=view.NativeBatch->DepthReference;
+      const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *reference=&view.References[depth];
+      if(!RuntimeResolve(consumer,facts[depth].AllocationToken,facts[depth].ClassId,
+          depth,AppleAgxWin32RoleDepthAttachment,reference->Offset,1u,
+          &consumer->Bindings.DepthGpuVirtualAddress))
+        return RuntimeConsumerFailure("depth-resolve",i,0);
+    }
     result=AppleAgxDynamicJobMaterialize(&view,facts,ARRAYSIZE(facts),0x1100000000ULL,
         RuntimeRead,RuntimeResolve,consumer,RuntimeImages[i],sizeof(RuntimeImages[i]),&RuntimeJobs[i]);
     if(result!=AppleAgxDynamicJobSuccess) return RuntimeConsumerFailure("materializer",i,result);

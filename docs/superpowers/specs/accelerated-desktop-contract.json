@@ -588,8 +588,9 @@
       "implementation_file": "drivers/apple-agx/mesa/d3d10umd/State.cpp",
       "test_id": "ad04-clear-depth-stencil-view",
       "mandatory": true,
-      "implemented": false,
-      "test_passed": false
+      "implemented": true,
+      "test_passed": true,
+      "evidence": "native-depth-v7-final-20260920dc-x64"
     },
     {
       "id": "ddi-set-predication",

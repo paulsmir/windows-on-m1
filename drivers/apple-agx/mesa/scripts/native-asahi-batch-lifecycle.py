@@ -198,7 +198,12 @@ def project_sources(out,project,overlays):
     a,b=function(s,'agx_clear');decl=s.rfind('static void',0,a);signature=s[decl:a]
     wrapper=signature+'''{
    struct agx_context *ctx = agx_context(pctx);
-   if (ctx->any_faults || buffers & ~(PIPE_CLEAR_COLOR0) || !color || scissor_state) { ctx->any_faults = true; return; }
+   bool color_clear = buffers == PIPE_CLEAR_COLOR0 && color_clear_mask == 0xf &&
+                      stencil_clear_mask == 0;
+   bool depth_clear = buffers == PIPE_CLEAR_DEPTH && color_clear_mask == 0 &&
+                      stencil_clear_mask == 0 && depth >= 0.0 && depth <= 1.0;
+   if (ctx->any_faults || (!color_clear && !depth_clear) || !color ||
+       scissor_state) { ctx->any_faults = true; return; }
    struct agx_batch *batch = agx_get_batch(ctx);
    if (!batch || !AgxWin32AsahiBatchEnter(batch)) { ctx->any_faults = true; return; }
    agx_clear_windows_body(pctx, buffers, color_clear_mask, stencil_clear_mask, scissor_state, color, depth, stencil);

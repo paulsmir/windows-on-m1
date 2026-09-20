@@ -316,7 +316,7 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       !info->primitive_restart && info->instance_count == 1 &&
       !info->start_instance && draws->start == 0 && draws->count == 3 &&
       !draws->index_bias && ctx->framebuffer.nr_cbufs == 1 &&
-      !ctx->framebuffer.zsbuf.texture && ctx->framebuffer.cbufs[0].texture &&
+      ctx->framebuffer.cbufs[0].texture &&
       ctx->framebuffer.cbufs[0].format == PIPE_FORMAT_B8G8R8A8_UNORM &&
       !ctx->framebuffer.cbufs[0].level && !ctx->framebuffer.cbufs[0].first_layer &&
       !ctx->framebuffer.cbufs[0].last_layer && !ctx->streamout.num_targets &&
@@ -339,6 +339,18 @@ windows_graph_draw_supported(struct agx_context *ctx, const struct pipe_draw_inf
       valid = !rt->layout.compressed && rt->base.target == PIPE_TEXTURE_2D &&
               util_res_sample_count(&rt->base) == 1 && rt->base.array_size == 1 &&
               rt->base.last_level == 0;
+   }
+   if (valid && ctx->framebuffer.zsbuf.texture) {
+      struct pipe_surface *zs = &ctx->framebuffer.zsbuf;
+      struct agx_resource *depth = agx_resource(zs->texture);
+      valid = !indexed && !ctx->stage[MESA_SHADER_FRAGMENT].texture_count &&
+              zs->format == PIPE_FORMAT_Z32_FLOAT && !zs->level &&
+              !zs->first_layer && !zs->last_layer &&
+              depth->base.target == PIPE_TEXTURE_2D &&
+              depth->base.format == PIPE_FORMAT_Z32_FLOAT &&
+              !depth->layout.compressed && depth->base.last_level == 0 &&
+              depth->base.depth0 == 1 && depth->base.array_size == 1 &&
+              util_res_sample_count(&depth->base) == 1 && depth->bo;
    }
    /* active_queries is an enable switch initialized true, not a query count.
     * Reject real bound query objects before any unsupported producer work. */

@@ -128,6 +128,7 @@ static ADMISSION_WIN32_TRANSPORT_RESULT AdmissionWin32ReferenceClass(
   case AppleAgxWin32RoleIndex:
   case AppleAgxWin32RoleConstant:
   case AppleAgxWin32RoleTexture:
+  case AppleAgxWin32RoleDepthAttachment:
     requiredClass = AgxWin32BufferClassGeneral;
     break;
   case AppleAgxWin32RoleShader:

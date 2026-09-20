@@ -237,6 +237,39 @@ static NTSTATUS AdmissionDynamicRenderBuildWithPlan(
           AdmissionDynamicResolve, &build, storage, storageCapacity,
           job) != AppleAgxDynamicJobSuccess)
     return STATUS_INVALID_IMAGE_FORMAT;
+  if (Snapshot->View.Header->Version ==
+      APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+    const APPLE_AGX_WIN32_NATIVE_BATCH_METADATA *native =
+        Snapshot->View.NativeBatch;
+    const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *depth;
+    if (native == NULL ||
+        native->DepthReference >= Snapshot->View.Header->ReferenceCount)
+      return STATUS_INVALID_IMAGE_FORMAT;
+    depth = &Snapshot->View.References[native->DepthReference];
+    if (!AdmissionDynamicResolve(
+            &build, Snapshot->Facts[native->DepthReference].AllocationToken,
+            Snapshot->Facts[native->DepthReference].ClassId,
+            native->DepthReference, AppleAgxWin32RoleDepthAttachment,
+            depth->Offset, 1u, &bindings.DepthGpuVirtualAddress))
+      return STATUS_INVALID_ADDRESS;
+    if (native->DepthCompressionReference !=
+        APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+      const APPLE_AGX_WIN32_ALLOCATION_REFERENCE *compression;
+      if (native->DepthCompressionReference >=
+          Snapshot->View.Header->ReferenceCount)
+        return STATUS_INVALID_IMAGE_FORMAT;
+      compression = &Snapshot->View.References[
+          native->DepthCompressionReference];
+      if (!AdmissionDynamicResolve(
+              &build,
+              Snapshot->Facts[native->DepthCompressionReference].AllocationToken,
+              Snapshot->Facts[native->DepthCompressionReference].ClassId,
+              native->DepthCompressionReference, AppleAgxWin32RoleDescriptor,
+              compression->Offset, 1u,
+              &bindings.DepthCompressionGpuVirtualAddress))
+        return STATUS_INVALID_ADDRESS;
+    }
+  }
   if (AdmissionDynamicDmaBuild(
           Snapshot->View.Header->Generation,
           Snapshot->View.Header->ContentHash,

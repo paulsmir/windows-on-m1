@@ -981,6 +981,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_B8G8R8A8_UNORM,&formatCaps);
     CHECK(formatCaps==(D3D10_DDI_FORMAT_SUPPORT_RENDERTARGET|
                        D3D10_DDI_FORMAT_SUPPORT_BLENDABLE));
+    deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_D32_FLOAT,&formatCaps);
+    CHECK(formatCaps==0x00010000u); /* D3D10_FORMAT_SUPPORT_DEPTH_STENCIL */
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R32G32B32A32_FLOAT,&formatCaps);
     CHECK(formatCaps==0u);
     deviceFunctions.pfnCheckFormatSupport(device,DXGI_FORMAT_R8G8B8A8_UNORM,&formatCaps);
@@ -995,6 +997,12 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(quality==0u);
     deviceFunctions.pfnCheckMultisampleQualityLevels(
         device,DXGI_FORMAT_B8G8R8A8_UNORM,4,&quality);
+    CHECK(quality==0u);
+    deviceFunctions.pfnCheckMultisampleQualityLevels(
+        device,DXGI_FORMAT_D32_FLOAT,1,&quality);
+    CHECK(quality==1u);
+    deviceFunctions.pfnCheckMultisampleQualityLevels(
+        device,DXGI_FORMAT_D32_FLOAT,2,&quality);
     CHECK(quality==0u);
     deviceFunctions.pfnCheckMultisampleQualityLevels(
         device,DXGI_FORMAT_R32G32B32A32_FLOAT,1,&quality);
@@ -1157,14 +1165,14 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(rt.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateResource(device,&rtCreate,rt,rtRuntime);
     FRONTEND_STAGE("rt-resource");
+    D3D10DDI_HRESOURCE depthResource={0};
+    D3D10DDI_HRTRESOURCE depthRuntimeResource={0};
+    D3D10DDI_HDEPTHSTENCILVIEW depthView={0};
+    D3D10DDI_HRTDEPTHSTENCILVIEW depthViewRuntime={0};
     {
       D3D10DDI_MIPINFO depthMip={0};
       D3D10DDIARG_CREATERESOURCE depthCreate={0};
-      D3D10DDI_HRESOURCE depthResource={0};
-      D3D10DDI_HRTRESOURCE depthRuntimeResource={0};
       D3D10DDIARG_CREATEDEPTHSTENCILVIEW depthViewCreate={0};
-      D3D10DDI_HDEPTHSTENCILVIEW depthView={0};
-      D3D10DDI_HRTDEPTHSTENCILVIEW depthViewRuntime={0};
       depthMip.TexelWidth=16;depthMip.TexelHeight=16;depthMip.TexelDepth=1;
       depthCreate.pMipInfoList=&depthMip;
       depthCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
@@ -1194,10 +1202,7 @@ static void test_mesa_d3d10_frontend_open(void) {
           depthView,depthViewRuntime);
       CHECK(depthView.pDrvPrivate && depthViewBytes &&
             FrontendErrors==depthErrors);
-      deviceFunctions.pfnDestroyDepthStencilView(device,depthView);
-      deviceFunctions.pfnDestroyResource(device,depthResource);
       CHECK(FrontendErrors==depthErrors);
-      free(depthView.pDrvPrivate);free(depthResource.pDrvPrivate);
     }
     {
       D3D10DDIARG_OPENRESOURCE presentOpen={0};
@@ -1675,6 +1680,20 @@ static void test_mesa_d3d10_frontend_open(void) {
     CHECK(rtv.pDrvPrivate!=NULL);
     deviceFunctions.pfnCreateRenderTargetView(device,&rtvCreate,rtv,rtvRuntime);
     FRONTEND_STAGE("rt-view");
+    D3D10DDIARG_CREATERENDERTARGETVIEW depthColorRtvCreate={0};
+    D3D10DDI_HRENDERTARGETVIEW depthColorRtv={0};
+    D3D10DDI_HRTRENDERTARGETVIEW depthColorRtvRuntime={0};
+    depthColorRtvCreate.hDrvResource=rt;
+    depthColorRtvCreate.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
+    depthColorRtvCreate.ResourceDimension=D3D10DDIRESOURCE_TEXTURE2D;
+    depthColorRtvCreate.Tex2D.ArraySize=1;
+    depthColorRtv.pDrvPrivate=calloc(1,
+        deviceFunctions.pfnCalcPrivateRenderTargetViewSize(
+            device,&depthColorRtvCreate));
+    depthColorRtvRuntime.handle=(VOID *)(UINT_PTR)0xd0fu;
+    CHECK(depthColorRtv.pDrvPrivate!=NULL);
+    deviceFunctions.pfnCreateRenderTargetView(device,&depthColorRtvCreate,
+        depthColorRtv,depthColorRtvRuntime);
     D3D10DDIARG_INPUT_ELEMENT_DESC element={0};D3D10DDIARG_CREATEELEMENTLAYOUT layoutCreate={0};
     D3D10DDI_HELEMENTLAYOUT layout={0};D3D10DDI_HRTELEMENTLAYOUT layoutRuntime={0};
     element.InputSlot=0;element.InputRegister=0;element.Format=DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -1766,9 +1785,51 @@ static void test_mesa_d3d10_frontend_open(void) {
     D3D10_DDI_RECT rect={0,0,2560,1600};deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
     CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
     FRONTEND_STAGE("viewport-scissor");
-    FLOAT clear[4]={0.05f,0.05f,0.05f,1.0f};deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
-    CHECK(!AgxWin32AsahiContextFaulted(MesaD3d10FrontendContextForTest(device)));
-    FRONTEND_STAGE("bound-clear");
+    FLOAT clear[4]={0.05f,0.05f,0.05f,1.0f};
+    {
+      unsigned depthErrors=FrontendErrors;
+      RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
+      ADMISSION_UMD_ASAHI_OWNER *depthOwner=MesaD3d10FrontendOwnerForTest(device);
+      RuntimeRenders=RuntimeSignals=RuntimeMaterializations=0;
+      RuntimeMarker=NULL;RuntimeQueryMarkerCount=0;
+      memset(RuntimeQueryMarkers,0,sizeof(RuntimeQueryMarkers));
+      RuntimeFailedSignalCalls=0;RuntimeImmediateMarker=0;
+      RuntimeExpectedTargetAllocation=0;RuntimeExpectedTargetBytes=0;
+      RuntimeExpectedCommandVersion=APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH;
+      RuntimeConsumerGates=RuntimeConsumerRetirements=0;
+      RuntimeConsumerFence=0;memset(RuntimeConsumers,0,sizeof(RuntimeConsumers));
+      CHECK(RuntimeActiveDevice && depthOwner);
+      deviceFunctions.pfnSetRenderTargets(device,&depthColorRtv,1,0,depthView);
+      D3D10_DDI_VIEWPORT depthViewport={0,0,16,16,0,1};
+      D3D10_DDI_RECT depthRect={0,0,16,16};
+      deviceFunctions.pfnSetViewports(device,1,0,&depthViewport);
+      deviceFunctions.pfnSetScissorRects(device,1,0,&depthRect);
+      deviceFunctions.pfnClearDepthStencilView(device,depthView,
+          D3D10_DDI_CLEAR_DEPTH,0.5f,0);
+      CHECK(FrontendErrors==depthErrors && !AgxWin32AsahiContextFaulted(
+          MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnDraw(device,3,0);
+      CHECK(FrontendErrors==depthErrors && AgxWin32AsahiContextDrawReceipt(
+          MesaD3d10FrontendContextForTest(device)));
+      deviceFunctions.pfnFlush(device);
+      CHECK(FrontendErrors==depthErrors && RuntimeRenders==1u &&
+            RuntimeSignals==1u && RuntimeMaterializations==2u &&
+            RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
+      RuntimeCheckpoint(depthOwner,1u);
+      CHECK(AgxWin32AsahiContextRetire(
+          MesaD3d10FrontendContextForTest(device),0u));
+      RuntimeCheckpoint(depthOwner,5u);
+      RuntimeExpectedCommandVersion=0;
+      deviceFunctions.pfnSetRenderTargets(device,&rtv,1,0,
+          (D3D10DDI_HDEPTHSTENCILVIEW){0});
+      deviceFunctions.pfnSetViewports(device,1,0,&viewport);
+      deviceFunctions.pfnSetScissorRects(device,1,0,&rect);
+      deviceFunctions.pfnClearRenderTargetView(device,rtv,clear);
+      CHECK(!AgxWin32AsahiContextFaulted(
+          MesaD3d10FrontendContextForTest(device)));
+      FRONTEND_STAGE("depth-clear-draw");
+      FRONTEND_STAGE("bound-clear");
+    }
     RuntimeActiveDevice=MesaD3d10FrontendRuntimeForTest(device);
     ADMISSION_UMD_ASAHI_OWNER *frontendOwner=MesaD3d10FrontendOwnerForTest(device);
     FrontendDestroyOwner=frontendOwner;
@@ -2170,6 +2231,8 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyDepthStencilState(device,depth);deviceFunctions.pfnDestroyRasterizerState(device,raster);
     deviceFunctions.pfnDestroyBlendState(device,blend);deviceFunctions.pfnDestroyShader(device,psh);
     deviceFunctions.pfnDestroyShader(device,vsh);deviceFunctions.pfnDestroyElementLayout(device,layout);
+    deviceFunctions.pfnDestroyDepthStencilView(device,depthView);
+    deviceFunctions.pfnDestroyRenderTargetView(device,depthColorRtv);
     deviceFunctions.pfnDestroyRenderTargetView(device,rtv);deviceFunctions.pfnDestroyResource(device,vb);
     deviceFunctions.pfnDestroyShaderResourceView(device,appSrv);
     deviceFunctions.pfnDestroySampler(device,appSampler);
@@ -2179,12 +2242,15 @@ static void test_mesa_d3d10_frontend_open(void) {
     deviceFunctions.pfnDestroyResource(device,vsCb);
     deviceFunctions.pfnDestroyResource(device,cb);
     deviceFunctions.pfnDestroyResource(device,ib);
+    deviceFunctions.pfnDestroyResource(device,depthResource);
     deviceFunctions.pfnDestroyResource(device,rt);
     deviceFunctions.pfnDestroyResource(device,staging);
     RuntimeExpectedTargetAllocation=0;
     RuntimeExpectedTargetBytes=0;
     free(depth.pDrvPrivate);free(raster.pDrvPrivate);free(blend.pDrvPrivate);free(psh.pDrvPrivate);
-    free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);free(vb.pDrvPrivate);
+    free(vsh.pDrvPrivate);free(layout.pDrvPrivate);free(rtv.pDrvPrivate);
+    free(depthColorRtv.pDrvPrivate);free(depthView.pDrvPrivate);
+    free(depthResource.pDrvPrivate);free(vb.pDrvPrivate);
     free(vsCb.pDrvPrivate);free(cb.pDrvPrivate);free(ib.pDrvPrivate);
     free(presentResource.pDrvPrivate);free(createdPresentResource.pDrvPrivate);
     free(rt.pDrvPrivate);

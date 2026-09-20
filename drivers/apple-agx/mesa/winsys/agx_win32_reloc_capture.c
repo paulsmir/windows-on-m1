@@ -41,25 +41,15 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocBeginVersion(AGX_WIN32_RELOC_CAPTURE *c,
   if(!c || !owner || !generation || !request || !ops || !context ||
       !ops->Query || !ops->Retain || !ops->Release) return AgxRelocArgument;
   if(version < APPLE_AGX_WIN32_COMMAND_VERSION ||
-      version > APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH) return AgxRelocArgument;
+      version > APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) return AgxRelocArgument;
   if(c->State) return AgxRelocState;
   if(request<=c->LastRequest) return AgxRelocStale;
   AGX_WIN32_RELOC_OPERATIONS saved_ops=*ops;
   memset(c,0,sizeof(*c)); c->Owner=owner; c->Generation=generation;
   c->Request=c->LastRequest=request; c->Operations=saved_ops; c->Context=context;
   c->CommandVersion=version;
-  c->MaxReferences=version==APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH ?
-      APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_REFERENCES :
-      version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_REFERENCES :
-      version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
-      APPLE_AGX_WIN32_COMMAND_MAX_REFERENCES : APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_REFERENCES;
-  c->MaxRelocations=version==APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH ?
-      APPLE_AGX_WIN32_COMMAND_TEXTURED_MAX_RELOCATIONS :
-      version==APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH ?
-      APPLE_AGX_WIN32_COMMAND_INDEXED_MAX_RELOCATIONS :
-      version==APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH ?
-      APPLE_AGX_WIN32_COMMAND_MAX_RELOCATIONS : APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_RELOCATIONS;
+  c->MaxReferences=APPLE_AGX_WIN32_COMMAND_REFERENCE_LIMIT(version);
+  c->MaxRelocations=APPLE_AGX_WIN32_COMMAND_RELOCATION_LIMIT(version);
   c->State=RECORDING; return AgxRelocOk;
 }
 AGX_WIN32_RELOC_RESULT AgxWin32RelocPromoteIndexed(
@@ -76,7 +66,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReference(AGX_WIN32_RELOC_CAPTURE *c,
     APPLE_AGX_U64 token,APPLE_AGX_U32 role,APPLE_AGX_U32 access,
     APPLE_AGX_U64 offset,APPLE_AGX_U64 bytes,APPLE_AGX_U32 *index) {
   AGX_WIN32_RELOC_ALLOCATION a={0};
-  if(!c || !token || !index || !access || access&~7u || role<1 || role>14) return AgxRelocArgument;
+  if(!c || !token || !index || !access || access&~7u || role<1 || role>15) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(!c->Operations.Query(c->Context,token,&a)) return AgxRelocCallback;
   if(a.Owner!=c->Owner || a.Generation!=c->Generation || a.Token!=token || !a.Serial ||
@@ -109,7 +99,7 @@ AGX_WIN32_RELOC_RESULT AgxWin32RelocReferenceExpected(
   AGX_WIN32_RELOC_ALLOCATION current={0};
   if(!c || !expected || !expected->Owner || !expected->Token ||
       !expected->Serial || !expected->Generation || !index || !access ||
-      access&~7u || role<1 || role>14) return AgxRelocArgument;
+      access&~7u || role<1 || role>15) return AgxRelocArgument;
   if(c->State!=RECORDING) return AgxRelocState;
   if(expected->Owner!=c->Owner || expected->Generation!=c->Generation ||
       expected->AllocationIndex==~0u) return AgxRelocStale;

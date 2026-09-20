@@ -57,6 +57,8 @@ typedef struct _ADMISSION_DYNAMIC_OVERLAY_BINDINGS {
   APPLE_AGX_U32 SurfaceWidth, SurfaceHeight, SurfacePitch;
   APPLE_AGX_U32 Reserved;
   APPLE_AGX_U64 DestinationBytes;
+  APPLE_AGX_U64 DepthGpuVirtualAddress;
+  APPLE_AGX_U64 DepthCompressionGpuVirtualAddress;
   APPLE_AGX_WIN32_NATIVE_BATCH_METADATA NativeBatch;
 } ADMISSION_DYNAMIC_OVERLAY_BINDINGS;
 

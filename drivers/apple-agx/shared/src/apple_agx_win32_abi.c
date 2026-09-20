@@ -37,6 +37,9 @@ static int AppleAgxWin32ReferencePolicy(
   case AppleAgxWin32RolePppState:
   case AppleAgxWin32RoleUniform:
     return Reference->Access == AppleAgxWin32AccessRead;
+  case AppleAgxWin32RoleDepthAttachment:
+    return Reference->Access ==
+           (AppleAgxWin32AccessRead | AppleAgxWin32AccessWrite);
   default:
     return 0;
   }
@@ -208,7 +211,8 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_BATCH &&
       header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_INDEXED_BATCH &&
-      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH)
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_TEXTURED_BATCH &&
+      header->Version != APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH)
     return AppleAgxWin32AbiVersion;
   if (!AppleAgxWin32NativeVersion(header->Version) &&
       CommandBytes > APPLE_AGX_WIN32_COMMAND_LEGACY_MAX_BYTES)
@@ -248,7 +252,7 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
     if (references[index].AllocationIndex >= AllocationCount)
       return AppleAgxWin32AbiAllocationIndex;
     if (references[index].Role < AppleAgxWin32RoleRenderTarget ||
-        references[index].Role > AppleAgxWin32RoleUniform)
+        references[index].Role > AppleAgxWin32RoleDepthAttachment)
       return AppleAgxWin32AbiRole;
     if (references[index].Role == AppleAgxWin32RolePppState &&
         header->Version < APPLE_AGX_WIN32_COMMAND_VERSION_NATIVE_USC &&
@@ -368,6 +372,33 @@ APPLE_AGX_WIN32_ABI_RESULT AppleAgxWin32CommandValidate(
       if (rootResult != AppleAgxWin32AbiSuccess)
         return rootResult;
     }
+    if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+      APPLE_AGX_WIN32_ABI_RESULT depthResult;
+      if (native->DepthStride == 0u || native->ZlsControl == 0ULL ||
+          native->IspZlsPixels == 0ULL || native->IspBgobjValues == 0u)
+        return AppleAgxWin32AbiPayload;
+      depthResult = AppleAgxWin32DrawReference(native->DepthReference,
+          AppleAgxWin32RoleDepthAttachment, 0, references,
+          header->ReferenceCount, reachable);
+      if (depthResult != AppleAgxWin32AbiSuccess)
+        return depthResult;
+      depthResult = AppleAgxWin32DrawReference(
+          native->DepthCompressionReference,
+          AppleAgxWin32RoleDescriptor, 1, references,
+          header->ReferenceCount, reachable);
+      if (depthResult != AppleAgxWin32AbiSuccess)
+        return depthResult;
+      if ((native->DepthCompressionReference == APPLE_AGX_WIN32_OPTIONAL_REFERENCE) !=
+          (native->DepthCompressionStride == 0u))
+        return AppleAgxWin32AbiPayload;
+    } else if (native->DepthReference != 0u ||
+               native->DepthCompressionReference != 0u ||
+               native->DepthStride != 0u ||
+               native->DepthCompressionStride != 0u ||
+               native->ZlsControl != 0ULL || native->IspZlsPixels != 0ULL ||
+               native->IspBgobjDepth != 0u || native->IspBgobjValues != 0u) {
+      return AppleAgxWin32AbiReserved;
+    }
     View->NativeBatch = native;
   }
 
@@ -446,6 +477,18 @@ fragment_pipeline_done:
       rootResult = AppleAgxWin32DrawReference(pipeline->UscReference,
           AppleAgxWin32RoleUscPipeline,0,references,header->ReferenceCount,reachable);
       if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+    }
+    if (header->Version == APPLE_AGX_WIN32_COMMAND_VERSION_DEPTH_BATCH) {
+      rootResult = AppleAgxWin32DrawReference(native->DepthReference,
+          AppleAgxWin32RoleDepthAttachment,0,references,
+          header->ReferenceCount,reachable);
+      if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+      if (native->DepthCompressionReference != APPLE_AGX_WIN32_OPTIONAL_REFERENCE) {
+        rootResult = AppleAgxWin32DrawReference(
+            native->DepthCompressionReference,AppleAgxWin32RoleDescriptor,0,
+            references,header->ReferenceCount,reachable);
+        if (rootResult != AppleAgxWin32AbiSuccess) return rootResult;
+      }
     }
   }
 

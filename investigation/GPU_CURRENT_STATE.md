@@ -808,3 +808,31 @@ evidence/AD04-runtime-closure/native-no-msaa-contract-20260920cq-x64/; source
 archive SHA-256 4c6edc5b7119fa11e2f77c72fdde119da27f76cd7cb370a3d1bfddccab92fd3c.
 Inventory is 112 of 121 mandatory rows proven, with 9 unresolved. Pipeline mask
 remains zero; no package was staged, installed or hardware-run.
+
+## Verified D32 depth clear and depth-attached native batch (2026-09-20)
+The projected D3D10 frontend now advertises the exact single-sample D32 format,
+creates an uncompressed Apple-tiled private depth resource, binds its DSV,
+executes a real depth-only clear and emits a depth-attached native draw. Native
+command ABI version 7 carries the external read/write depth allocation plus the
+producer's exact depth stride, ZLS control, pixel dimensions and clear values.
+The request-local KMD materializer resolves the physical/local-segment depth
+address without copying the resource into the overlay arena and routes every
+G13/V13_5 initial/reload depth duplicate, including the load-only BGOBJVALS
+0x400 bit. Unsupported stencil, compressed depth, multisample and combined
+texture/depth forms remain fail-closed.
+
+Fresh x64 real producer execution, two-placement materialization, DMA/native
+route and retirement PASS:
+evidence/AD04-runtime-closure/native-depth-v7-final-20260920dc-x64/;
+source archive SHA-256
+3dec03e91d0a6d9083130ddc583136528b69278a8600f2fc212890ae1bd0b545,
+EXE SHA-256 cc29fcd76830d8850c964d001258bd832bab5bb8178939cdea570372faf9a89a.
+Fresh ARM64 full closure/client build-link PASS:
+evidence/AD04-runtime-closure/native-depth-v7-final-20260920dd-arm64/;
+source archive SHA-256
+44aef59e62ad221de29abdd73b956ae4c9ffa142be8b85ef85cff520e41816a2,
+EXE SHA-256 9edcbc5bc8132cc553aab944e9d39aa4d710d6ed94cfbffdd0777060de8c538f.
+The frozen machine-readable inventory is now 113 of 121 mandatory rows proven,
+with 8 unresolved. Pipeline mask remains zero; no package was staged, installed
+or hardware-run. The next causal group is real geometry shader/stream-output
+execution and DrawAuto over the existing native producer/submission lifetime.
