@@ -45128,3 +45128,31 @@ native-render-callback record within the fixed128 cap; trace SHA
 6a6e25e6d0046c8c65e0d6b6bf0e3f664cd0b43eaeb07328221b021431363886.
 Normal producer/materializer/KMD-plan/patch/retirement/remap/teardown and host7
 remain PASS. Hardware NOT_RUN for this diagnostic.
+
+## EXP703 — per-allocation residency at rejected Render callback
+UTC build preregistration 2026-09-20T23:58:36Z. Integration HEAD
+7a8aaeddcd622c425116ce185c5e23321491fa87; implementation
+08c71ca70e7b46de3d20b3a73257d58646edb06e; source archive
+cbb1d2d093feede8d1da9bad7060d62527aa5104bdb5ee2d5e54b00bb446c4b5.
+WHY THIS HYPOTHESIS: EXP702 retains pfnRenderCb E_FAIL with no KMD guard after
+mandatory RenderCBSequence; pre-client and post-client monitored events are
+clean. The next dxgkrnl validation input is the nine allocation handles. Official
+Microsoft documentation permits pfnQueryResidencyCb on an allocation list at
+any time. Per-handle query distinguishes invalid/stale handles from context or
+other runtime rejection without modifying the submitted list.
+WINDOWS CONTRACT: query each exact handle individually and observe one aggregate
+status/HRESULT; do not make resident or change allocation flags. Submit the same
+Render data once afterward.
+AGX/ASAHI CONTRACT and TRANSLATION are unchanged from EXP702. Diagnostics are
+enabled only by the standard client's existing process-local trace environment.
+WHAT IS STILL UNKNOWN: validity/residency of each actual handle, whether the
+context is rejected independently, KMD Render entry and physical execution.
+
+Single variable: read-only residency/context receipts. nk x64 execution0,
+ARM64 link0 and trace-enabled x64 execution0 with9 residency/1 callback records.
+Build package718 Release NativeFrontend with nk ARM64 props, pinned26100 client
+and same signer; output native-package718-render-residency-20260921nl-arm64.
+Finalize all package/sign/hash gates. Air recovery after EXP702 is clean Code28,
+no package/service/files/trust,8CPU/NVMe/input/no events. Then exact stage/bind,
+clean pre-client gate, one client, no replay; collect under main-root
+.local/experiments/EXP703-live before exact cleanup and ordinary recovery.
