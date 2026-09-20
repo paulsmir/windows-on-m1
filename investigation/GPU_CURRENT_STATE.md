@@ -1737,3 +1737,23 @@ allocation using read-only standard queries; x64/ARM64 compile gates then Air.
 preregistered hardware run; do not expand the frozen feature inventory.
 [HW] Swap-chain, real native draw, physical completion and standard Present.
 POST-HARDWARE: accelerated desktop stability and desktop acceptance.
+
+## EXP693 format discriminator confirms current blocker
+Actual base D3D10 runtime rejects BGRA87: E_FAIL/support0, sample1 E_INVALIDARG.
+RGBA28 passes S_OK/support001ef3f3 and quality1. Same BGRA swap-chain returns
+E_INVALIDARG. Source shows presentation owner hardcodes BGRA at UMD descriptor,
+Mesa import and projected metadata; this must carry actual RGBA for minimal
+base-D3D10 backbuffer. Existing native pfnBlt is the conversion owner into BGRA
+primary/DWM; do not relabel bytes or loosen direct scanout format guards.
+All EXP693 evidence collected and exact cleanup followed by ordinary377/392
+Code28 recovery verified; no installed package/files/trust or fresh events.
+HARDWARE ROADMAP
+[PASS] Frozen producer/package gates, KMD firmware startup, standard device
+admission and actual RGBA runtime support (EXP693).
+[NOW] Carry true RGBA backbuffer format through existing allocation/import/
+metadata and native presentation BLT. Required because BGRA is unavailable in
+selected runtime contract. Gate: actual frontend resource create/open/BLT tests
+with distinct R/B values plus x64 execution and ARM64 closure; entirely offline.
+[NEXT] Exact package/sign/hash and preregistration, then immediate Air run.
+[HW] Standard RGBA swap-chain, real native draw, AGX completion, DXGI Present.
+POST-HARDWARE: accelerated desktop stability and desktop acceptance.

@@ -44322,3 +44322,20 @@ Expected discriminator: support HRESULT/masks for BGRA87 and RGBA28 plus same
 swap-chain HRESULT. No rendering success without physical completion receipts.
 Collect client/registry/events then exact package/task/trust cleanup and ordinary
 377/392 recovery. No repeat within this experiment.
+
+### EXP693 actual result — runtime rejects BGRA under base D3D10
+Exact package709/client hashes and Code0 Running Start12/Platform14 status0
+verified; active console, temporary autologon cleared, no fresh monitored events.
+One client execution: device S_OK; BGRA87 format query E_FAIL/support0 and
+sample1 E_INVALIDARG/quality0; RGBA28 S_OK/support001ef3f3 and sample1 S_OK/
+quality1; same BGRA CreateSwapChain E_INVALIDARG, exit1. Verdict: runtime BGRA
+filtering confirmed, not UMD CreateDevice rejection. No draw/Present occurred.
+Evidence main-root .local/experiments/EXP693-live/{bound.json,client-result.txt,
+post-client.json,cleanup.txt}. Exact oem5/package/service/task/trust cleanup
+completed. First recovery chainload found USB endpoint temporarily absent
+during reconnect; retry after endpoint returned succeeded with same377/392.
+Final recovery health: Code28/no INF/service/SYS/UMD/cert, 8CPU/NVMe/input,
+no fresh monitored events. Next causal unit: truthful RGBA backbuffer through
+existing native presentation owner, keeping physical BGRA scanout conversion
+and direct-scanout guards honest. No extended DDI advertisement without all
+companion invariants.
