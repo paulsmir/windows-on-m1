@@ -45223,6 +45223,24 @@ client514a8df743bc31de8f67f1195c4a7cde55507ad195e5220a885ec63b55a38fd6;
 cert97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
 Next exact stage/bind/preflight and one client.
 
+### EXP705 actual result — package did not bind; client INCONCLUSIVE
+The staged package720 archive and signatures were exact, but the full-owner
+pre-client receipt had APPL0002 Inf=null, no AppleAgxAdmission service/SYS/UMD,
+and no Start/Platform stages. The intended bind gate therefore failed. A client
+was mistakenly launched before this receipt was manually assessed; it selected
+Microsoft Basic Render Driver (vendor1414/device008c) and returned
+DXGI_ERROR_UNSUPPORTED at device-adapter. This is not a package720, residency,
+KMD or AGX result and must never be reinterpreted as one.
+
+The staged oem5.inf was identified by exact SHA
+4fbfddaaf54abce8fa626744fcd15ac5983d5e3b84a706f3565be144fdd5c73f,
+then deleted with the task and exact signer trust before shutdown. Ordinary
+377/392 recovery was launched. Evidence: main-root
+.local/experiments/EXP705-live/{bound.json,client-result.txt,cleanup.txt}.
+Next attempt must verify Code0/Running/Start12/Platform14 and installed SYS/UMD
+hashes before creating the client task; reuse package720 only after a fresh
+preregistered bind discriminator.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)

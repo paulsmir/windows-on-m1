@@ -1934,6 +1934,20 @@ preflight classification. Required by runtime maskFFFF; deterministic offline.
 [HW] First physical native draw/completion and successful standard DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
 
+## EXP705 INCONCLUSIVE — package720 did not bind
+Full-owner preflight showed Inf=null, no service/SYS/UMD or start stages. The
+client was launched too early and used Microsoft Basic Render Driver; discard
+its result. Exact staged oem5/task/trust cleanup completed and ordinary recovery
+launched. Async residency-wait fix remains hardware-untested. Next causal target
+is one fresh exact package720 bind with mandatory Code0/Running/Start12/
+Platform14 and installed-hash gate before any client.
+HARDWARE ROADMAP
+[PASS] Offline explicit residency and async paging-fence wait; ARM64/package720.
+[NOW] Restore verified Code28 recovery, then preregister exact package720 bind.
+[NEXT] Only after bound preflight PASS, one standard client.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
 ## Measured full-default-sampler native gate GREEN
 The same always-enabled all16-owned VS/GS/PS reproduction is now GREEN after
 only the proven preflight classification fix: native draw, flush/materializer,
