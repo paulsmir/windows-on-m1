@@ -45194,6 +45194,23 @@ fence wait permits Render. Actual producer/materializer/KMD-plan/patch,
 completion-fence retirement, paired Evict, remap and teardown PASS. Hardware
 NOT_RUN for the wait fix.
 
+## EXP705 — wait asynchronous paging before Render
+UTC preregistration 2026-09-21T00:36:03Z. Integration HEAD
+ed79db0e8a157f552c7d61aa529881a248823af0; implementation
+ecc469d2f23ba8e22be1fa094b122412d57c1abe; source archive
+e7ed6a3a58bc13ffbf02ca19595288e32aa056166b03df3799c79d42b2980595.
+WHY THIS HYPOTHESIS: EXP704 accepted all9 allocations into the residency list
+and returned E_PENDING/fence0x1b61, then stopped only because the UMD failed to
+wait. Official contract requires waiting that fence before Render. Forced-async
+offline gate proves correct wait and paired post-completion Evict.
+WINDOWS CONTRACT: wait PagingSyncObject to PagingFenceValue on E_PENDING;
+Render only after S_OK wait. AGX/ASAHI and physical patch-list contracts remain
+unchanged. WHAT IS STILL UNKNOWN: physical paging completion, KMD Render/Patch/
+Submit, AGX completion and Present.
+Single variable: mandatory paging-fence wait. Build package720 with nq ARM64
+props, Release NativeFrontend, pinned26100 client and same signer. Finalize gates,
+then exact Air bind/preflight and one client; evidence EXP705-live, no replay.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
