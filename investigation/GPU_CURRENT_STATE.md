@@ -2611,3 +2611,18 @@ ordering correction. Offline gate; after PASS proceed directly to Air.
 only the first new causal status if Present is still rejected.
 [HW] First successful standard DXGI Present with a physical result.
 POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.
+
+## EXP718 package732 ready — completion-visible backend Ready
+Implementation60cbd916 and ARM64/package gates PASS. Package732 uses the same
+frozen installed frontend closure as package731; the only behavioral source
+change publishes backend Ready during the exact Windows completion callback and
+rolls back on rejection. Archive SHA
+4e58062e1d3288e1bdc1092b8a28d513aa974e7ce2e01844731a73610eed59ae.
+HARDWARE ROADMAP
+[PASS] Standard producer through physical completion/DPC; exact ordering fix;
+ARM64 build, analysis, signature, catalog, hash and preregistration gates.
+[NOW] EXP718 exact stage/bind/quiet gate and one standard-runtime Air client.
+[NEXT] If Present still rejects, use only the first new bounded UMD/KMD/runtime
+receipt; if it succeeds, record physical result and move to post-hardware work.
+[HW] First successful standard DXGI Present with a physical result.
+POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.

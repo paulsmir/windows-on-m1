@@ -45732,3 +45732,75 @@ ACPI\\APPL0002 Code28 with no AppleAgx package, service, module, files or signer
 Next: package only commit60cbd916, which publishes TerminalNextPhase during the
 completion ownership callback and restores the prior phase if the callback
 rejects; verify with one exact standard-runtime run.
+
+## EXP718 — backend Ready before Windows completion publication
+Preregistered 2026-09-21T12:34:53Z.
+
+WHY THIS HYPOTHESIS:
+1. EXP717 completed TA and 3D physically, reported fence283 and ran scheduler
+   DPC with SchedulerFaulted0, yet the post-DPC receipt still exposed
+   BackendPhase3 Submitted after CompletionPhase5 Reported.
+2. Source tracing shows AppleAgxBackendRuntimeAcknowledgeCompletion calls the
+   Windows Io.Complete callback before AppleAgxBackendClearPending and before
+   setting TerminalNextPhase Ready; that callback emits DXGK_INTERRUPT_DMA_COMPLETED.
+3. The deterministic callback-observation test fails on Submitted at the old
+   implementation and passes on Ready at commit60cbd916; a rejected callback
+   restores Submitted and retains the exact pending fence for retry.
+
+WINDOWS CONTRACT:
+A DMA_COMPLETED notification is the irreversible scheduler-visible completion
+for the exact fence. State queried from that completion/DPC path must not still
+advertise the same backend submission as in flight.
+
+AGX/ASAHI CONTRACT:
+The shared backend reaches terminal success only after both TA and 3D exact
+queue receipts and CPU visibility flush. Pending job ownership may be cleared
+only after the platform completion callback accepts the exact fence.
+
+TRANSLATION:
+For success only, expose TerminalNextPhase Ready while invoking Io.Complete.
+If the callback returns FALSE, restore the prior Submitted phase and keep every
+pending field for retry. On TRUE, clear pending ownership exactly as before.
+No allocator, composer, capture, queue, hardware command or Present DDI changes.
+
+WHAT IS STILL UNKNOWN:
+Whether dxgkrnl accepts the now coherent completion state and enters the existing
+UMD/KMD Present path; if not, the first new bounded UMD/KMD/runtime receipt.
+
+Single variable: completion-visible backend phase ordering from commit
+60cbd916d284c55636d711139031bdc7c152fb3f. Repository HEAD
+82fd0bd5864fb1553e9351daf860961c3ca1bd8b; tracked and untracked diff hashes
+both e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.
+m1n1 source c6d10e04afdad5314e8ac1e67bc3919b094ab000; exact full-owner m1n1 SHA
+12f18f6fa3883387c2f80fa2a92c0eeb2a1c941c672c64db634b717399b3ffd3;
+Mu/FD SHA c7ddcfb256ad20788b0a8a54ab87c42d42b4cbe7a94f701da632da6a079bf4a0.
+Recovery FD SHA279bd36ad3bbb1ee5e2393fa965343ea856b4c2b0dd4df2b2add6a8010e3f32c.
+
+Offline gates: callback-phase RED/GREEN and exact retry PASS; ARM64 runtime
+closure/link PASS; KMD and UMD Release ARM64 analysis builds each0 warnings/0
+errors; standard client0 warnings/0 errors; package version30.0.732.0; signer
+E9BE15BD2A184BFABA0C8035B3C620C58037A241; SYS/UMD/CAT/EXE embedded signer and
+INF/SYS/UMD catalog membership PASS. Source archive SHA
+a8b13b05df45ed27975ad30961f623ce919dd7ab6b8b031880b4c5d2d9a153e2.
+Artifact `.local/experiments/EXP718-backend-ready-732.zip` SHA
+4e58062e1d3288e1bdc1092b8a28d513aa974e7ce2e01844731a73610eed59ae.
+INF b6ed2820c8db21571404b3e9c82407d98e452581fe6eed5d82289508a35dda79;
+SYS916aad346af8ef1f87e32a959954633dc51a407414fa979f29d509cef08028cd;
+UMD291433608a7a38554b06bee4b8e24a5839f42bde354a780d2b86b1fd85fc5683;
+CAT2c5e5bc3839d410bafc04b86053c7d10538636f58f594f2f81201249252d4072;
+client ae24c8863b4c197b6a61a3a5dd4b2920e6edecce6ad67c5f9b9bde698fcd9dea.
+
+Exact build command is the pinned `build-driver.ps1 -Configuration Release
+-SubmitQualification -UmdAdmissionTrace -NativeFrontend -PackageBuild 732`
+with frozen postwait-residency ARM64 NativeRuntime.props, followed by the
+standard-client ARM64 project and recorded signing/catalog verification.
+Exact launch: stage only the hash-verified package/certificate/client in the
+ordinary Code28 guest, verify quiet state and hashes, shut down, launch immutable
+EXP584/406 with `WOM1_AGX_G2_POWER_BROKER=1`, run one scheduled exact standard
+client, collect stdout/UMD/KMD/GDI health receipts, then clean the exact package
+and restore ordinary Code28 recovery.
+Expected checkpoint: UMD Present entry, KMD StandardPresentTrace and successful
+DXGI Present after fence completion. Failure: device-removed result or any new
+bounded causal status. Evidence paths: `.local/experiments/EXP718-*`, Air
+`C:\Windows\Temp\EXP718-*`, System/Application event exports and exact receipts.
+One client, no replay.
