@@ -45235,3 +45235,15 @@ Finalize package gates. Current ordinary Air recovery after EXP703 is Code28/no
 package/service/files/trust,8CPU/NVMe/input/no events. Then exact stage/bind and
 one standard client only; retain make-resident/evict/KMD/event evidence under
 main-root .local/experiments/EXP704-live before exact cleanup and recovery.
+
+### EXP704 finalized artifact gate
+Package719 analysis0/0, Universal/Inf2Cat/catalog membership PASS. Same signer;
+Air must verify Valid. INF221a2988f1d218b3ffd36166852ca888e0fbdd4e8ae5da0c6be47913964788e7;
+SYS537be2eb2aecb510b015c89aa4dbad693095ce93b45364f82b97329153e2c7cb;
+UMDe19769eadbc9f531a5ea9f5cbad81770fb9ee535c3dd7083896409004a4cdf01;
+CAT08c0b5506465223a2dff1b21e0d8adafc304aedbefb6a261e3c597cd38e6ffe0;
+client73ca61832743474b1eb4ddb41730201b77a5ecb879e5d6e70aa27ee8b9b95246;
+cert97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable EXP704-explicit-residency-719.zip SHA
+8dd203bf40d0f625fa2061dffc473670887801d2ef3d5f5f1abc6d0f1380afed.
+Next exact stage/bind/preflight and one client; no replay.

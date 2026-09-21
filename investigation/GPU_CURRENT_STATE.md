@@ -2217,3 +2217,10 @@ residency proof and explicit MakeResident/Evict offline lifecycle; ARM64 link.
 [NEXT] One Air client; collect KMD paging/Render/Patch/Submit/completion/Present.
 [HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP704 package719 ready
+Explicit residency implementation214d23be packaged. Analysis, Universal,
+Inf2Cat and catalog gates PASS; immutable archive SHA
+8dd203bf40d0f625fa2061dffc473670887801d2ef3d5f5f1abc6d0f1380afed.
+Air recovery clean. Next exact stage/Valid signatures/full-owner bind and one
+standard client; physical paging/KMD/AGX/Present remain unproven.
