@@ -1966,6 +1966,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2575,5 +2577,14 @@ HARDWARE ROADMAP
 [PASS] Physical completion, interrupt and DPC.
 [NOW] Finalize package731 artifact and rerun the same post-DPC discriminator.
 [NEXT] Fix the exact health-state violation and retest Present.
+[HW] First UMD/KMD Present entry and successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP717 package731 ready — ordered post-DPC health
+Package731 gates PASS; archive SHA9aa6ae1ca9599469da5e156c22c9f7362c75565cae338364b52618fc45a2839c.
+HARDWARE ROADMAP
+[PASS] Physical completion/interrupt/DPC and ordered health exporter.
+[NOW] One EXP717 client reads exact post-DPC health.
+[NEXT] Fix exact unhealthy field and immediately retest Present.
 [HW] First UMD/KMD Present entry and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

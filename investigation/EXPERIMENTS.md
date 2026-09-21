@@ -45450,6 +45450,17 @@ snapshot. No behavioral verdict was taken. Exact cleanup completed. Fix
 existing exporter, which also flushes the GDI/health receipts at PASSIVE_LEVEL.
 Package731 ARM64 builds pass; artifact finalization is next.
 
+## EXP717 — ordered post-DPC health export
+Preregistered 2026-09-21. Implementation9bfb8ba6 orders scheduler DPC snapshot
+before the existing PASSIVE exporter. Package731 gates PASS. INF
+1380f44fba03a33a628af260a305fba8963ae18e84fb70d8ba70fec21d408cb3; SYS
+102807c697813fce9abfaabd0411710f88a0138035508e6d04a9c5c84640f8c0;
+UMDcf05f0d4d2e9667b6b4491de239da735ed7899c11bd8c447e1ef6bf83dc79a89;
+CAT82729f83da474c30fb4ccc34e8dec0941e13fba030fdd3bdd3b794ac33224a94;
+client2912d5489533466e9ead7ebb234f7be92da429ba925127cd4470a169847f697b.
+Archive SHA9aa6ae1ca9599469da5e156c22c9f7362c75565cae338364b52618fc45a2839c.
+One exact client, no replay.
+
 ## EXP715 — exact RunTa guard
 Preregistered 2026-09-21. Implementation e3fa0698 records only the RunTa guard
 and queue-runtime result. Single variable; one client, no replay. Package729
