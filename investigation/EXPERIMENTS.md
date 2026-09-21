@@ -45430,6 +45430,17 @@ prove Run3d staged successfully and RunTa rejected. Exact cleanup completed.
 Next diagnostic records the bounded RunTa rejection guard and queue-runtime
 result without changing queue behavior.
 
+## EXP716 — post-DPC device health
+Preregistered 2026-09-21. Implementation b7b3d36d captures bounded nonpaged
+post-DPC state and exports it only at PASSIVE level. Package730 gates PASS. INF
+644291dab39242611204e902468dfda8ddacc9534fce44d25c0d24c38f8d5426; SYS
+b73d553b63ddda3f7f97f8288e853a005f83b0aeefc39d966e729c119da395c6;
+UMDbf86323920c74aef0b85db4fc24f39a0616f67c7b3a828c0d8a2c04b6b8946f3;
+CAT98b2554b67f2cacf6d3420cc1406c469922391d5de92c87bd5716fe88fe76f12;
+clientf7c2d896284070975f9c8db58f2f0f14b7a25a391eec339466e26b529c5675df.
+Archive SHA266b93bbb7f7f84bfe4370a3412e958736ecfaf270b2b147ceffc706192869df.
+One exact client, no replay.
+
 ## EXP715 — exact RunTa guard
 Preregistered 2026-09-21. Implementation e3fa0698 records only the RunTa guard
 and queue-runtime result. Single variable; one client, no replay. Package729

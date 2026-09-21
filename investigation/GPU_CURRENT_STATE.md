@@ -1962,6 +1962,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2550,5 +2552,14 @@ HARDWARE ROADMAP
 [PASS] Render, Run3d, RunTa, physical AGX completion, interrupt and DPC.
 [NOW] Post-DPC scheduler/device-health receipt; fully offline instrumentation.
 [NEXT] Fix the exact fault transition, then standard Present entry.
+[HW] First UMD/KMD Present entry and successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP716 package730 ready — post-DPC health
+Package730 gates PASS; archive SHA266b93bbb7f7f84bfe4370a3412e958736ecfaf270b2b147ceffc706192869df.
+HARDWARE ROADMAP
+[PASS] Physical completion/interrupt/DPC.
+[NOW] One EXP716 client reads post-DPC health owner.
+[NEXT] Fix exact fault transition and retest Present.
 [HW] First UMD/KMD Present entry and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
