@@ -46076,3 +46076,32 @@ client9d5e2ac176032f4941f13b150c3dbc88a419111de0f2b4201ca7bddebc1e85b2.
 Use reliable recovery install/full-owner boot, one guarded client, logical
 screenshots and operator Start/Alt+Tab observation. Expected nonblack complete
 desktop and stable updates; failure is missing/incomplete frame or copy fault.
+
+### EXP724 actual — full copy PASS, multipass ABI rejected
+Package738 completed one full2560x1600 transfer: status0, BytesCopied16384000,
+NotifyInterrupt1 and NotifyDpc1. The client subsequently received device removed.
+The synthetic command contained one rect and reported MultipassOffset1, while
+the original DWM dirty list contained more entries; returning success with that
+incomplete original-list position violates the Present DDI contract.
+
+## EXP725 — atomically consume original dirty list after full copy
+Preregistered 2026-09-21. WHY THIS HYPOTHESIS: content transfer and completion
+are proven; only the runtime-visible multipass position remains inconsistent.
+WINDOWS CONTRACT: successful Present consumes all submitted dirty rectangles.
+AGX/ASAHI CONTRACT: one synthetic full-frame command already subsumes them.
+TRANSLATION: commitda84569ed59e6857b41c879421f58fc1b5abc435 reports the
+original SubRectCnt after successful full initialization. WHAT IS STILL UNKNOWN:
+whether this is the last device-removal cause and whether the copied frame is
+visually complete.
+
+Package739 gates PASS0 warnings/errors. Source SHA
+4ccca3795bacbbc9b9ea61dd0c64c24e6f101a68b9a65f6684f215904ba81792.
+Artifact `.local/experiments/EXP725-full-primary-multipass-739.zip` SHA
+8734b99f6364085bcf3cc85477e948a7558f68da1bb9bb921d37dd492789ba30.
+INFc07e6ca6299741ad2495cf514c9833dd33df00259d9af15651a51c9c5ea2b29a;
+SYSb1f47e63a00aa5d22a88b8d2d812ee81360619545335db2915474f63fa124877;
+UMDe08edcbdae6b17282707fd7dc36a26275cefb6a20dba1bf0189f85612140651e;
+CAT931cb65ec1cd1026365302e1508f4a671d145f6b15d12680ba40bbf144b3b548;
+client32f2c47978f7f8bb305444aea58571dfe6d2fdd2261b511087aafaae4969a98b.
+Use the proven recovery install/restage/full-owner workflow, one client, logical
+screenshots and physical Start/Alt+Tab observation, then exact cleanup.

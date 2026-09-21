@@ -2751,6 +2751,16 @@ HARDWARE ROADMAP
 [HW] Stable correct Air picture remains pending.
 POST-HARDWARE: optimize copy cost and longer acceptance, broader D3D/OpenGL/CS1.6.
 
+## EXP725 package739 ready — full primary multipass completion
+Package739 gates PASS; archive SHA
+8734b99f6364085bcf3cc85477e948a7558f68da1bb9bb921d37dd492789ba30.
+HARDWARE ROADMAP
+[PASS] Full frame content copy and interrupt/DPC proven.
+[NOW] Reliable install verifies coherent original dirty-list completion.
+[NEXT] Present success plus logical/physical stable frame observation.
+[HW] Stable correct Air picture remains pending.
+POST-HARDWARE: optimize copy cost and longer acceptance, broader D3D/OpenGL/CS1.6.
+
 ## EXP723 package737 ready — ordinary display-memory map
 Package737 gates PASS; archive SHA
 2acd84573f9bdd8e67809b7e8d3a103211d87d6a7443bfee9398bbf84c03a050.
