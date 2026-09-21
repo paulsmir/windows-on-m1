@@ -62,23 +62,26 @@ Independent live baseline at17:15:23Z: Code28/nullINF, no package/service/module
 SYS/UMD or signer;8CPU; AutoAdminLogon0 and no DefaultPassword. Receipt under
 the evidence directory: independent-baseline-20260921T171523Z.json. No login armed.
 
-## Next causal action (already architect-reviewed)
-Reproduce successful EXP727 installation environment, correcting only the console
-workload setup: clean ordinary -> orderly exit -> full-owner584/406 with AGX
-package absent -> exact741 explicit /install THERE -> orderly fresh full-owner
-boot and actual physical-console login -> first DWM diagnostic or one client.
-Do NOT reinstall741 in the ordinary broker-disabled guest. No new GPU code yet.
-Use the previously authorized temporary autologon; clear DefaultPassword and
-AutoAdminLogon immediately after login/failure. Never log a credential.
-Require active physical console user, Explorer and DWM in the same nonzero
-session. Interactive-token task only, never direct SSH/Session0. If login itself
-produces the first compute failure, collect it and do not launch another client.
-Scripts: EXP728-console-compute/{arm-console-autologon,clear-console-autologon,
-run-console-client,EXP728-task-runner}.ps1. Parser-tested, runtime flow not yet
-validated. Verify hashes and paths; never execute task-runner for preflight.
-Client path C:\Users\pavel\EXP728\AppleAgxD3d10Standard.exe;
-runner path C:\Users\pavel\EXP728-task-runner.ps1. Preserve one-shot result guard.
-
+## Current causal result / next action
+EXP729 is a valid Session1 console run: CreateDevice/SwapChain PASS, Present
+887a0005/reason887a0020. Pair184bytes matches device/service; fence335, version4,
+MixedBranch0. Compute count4181787912 and event2433204898 are already garbage in
+Build and unchanged at RunTa; job/provider identities match. Guard6/subguard2.
+AppleAgxExp208BuildJob copies an uninitialized local candidate's compute fields
+while filling only TA/3D. Commit5eaa15da2ecafa7d540f25e31059f7a7f6231d9a initializes
+that candidate. Deterministic nonzero-stack-pattern regression RED -> GREEN;
+6 related tests PASS. Fixture CPU token updated after realloc in test only.
+Raw/decoded evidence and two unchanged-corruption photos: EXP729-console-identity.
+Independent ordinary baseline17:37:12Z: Code28, no package/service/module/files/
+signer;8CPU; autologon0/no password. Candidate742 build/package next; fix NOT yet
+hardware validated. Single variable: constructor initialization, retain diagnostic.
+Reuse successful sequence: ordinary clean -> orderly exit -> full-owner584/406
+WITHOUT package -> explicit install THERE -> temporary autologon -> orderly fresh
+full-owner -> clear password/autologon -> console user/Explorer/DWM checks ->
+first failure or ONE Interactive-token client. Never install in ordinary broker-OFF.
+EXP729/{full-owner.sh,ordinary.sh,install.ps1,cleanup.ps1,capture.ps1,after-login.ps1}
+now provides executed recipes under artifact directory. Rehash candidate inputs
+and isolate task/result names for the next experiment; no direct SSH client.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -120,7 +123,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] Clean baseline and reproduce successful full-owner installation + console login.
-[NEXT] First DWM/interactive-client receipt selects the exact compute owner.
-[HW] Valid paired compute identity experiment; stable correct picture unproven.
+[NOW] Build/sign/hash candidate742 constructor initialization.
+[NEXT] Same console experiment verifies zero spurious compute metadata and Present.
+[HW] Candidate742 physical validation; stable correct picture remains unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
