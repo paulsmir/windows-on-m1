@@ -94,11 +94,18 @@ RawETL4MB, eventsLost0; DXGI also reports no swapchain output, but mixed-binary
 setup must be fixed before attributing that. D3D10 version events absent.
 Evidence EXP734-runtime-etw/{EXP734-loaded-shadow.json,image-identity-match.json,
 umd-image-events.json,EXP734-runtime.etl,client-events.json}.
-Next EXP735: SAME744 and SAMEclient in C:\Users\pavel\EXP735-client containing
-NO DLLs; workingdirectorySystem32; preserve ETW to prove actual loadedSystem32
-UMD checksum/version. Existing counter scripts/process trace reused, no rebuild.
-Clean ordinary recovery verified in EXP734-runtime-etw/recovery-baseline.json.
-Reuse full-owner/install/autologon/cleanup workflow; one console Interactive client.
+EXP735 isolates unchangedclient with noDLLs/System32cwd. ETW confirms client4636
+loads System32744 (checksum12317640/timestamp1790017552); shadow excluded.
+_Present now ENTERS: flags1(Blt), interval0, srcindex0,dsthandle0,src/context valid.
+It returns80070057 at Flip-only guard (expected2). This is the measured blocker.
+Fix75bc5baff3b638e5d5f483686153cca523738117 admits exactly1or2; rejectsboth3,
+unknownflags/intervals and other invalidargs. Actual real-DDI RED->GREEN,
+x64producer/materializer/retirementPASS; both nativearchives compile; onlyDxgiFns
+changes in prepared trees. Candidate745 package/hardware next, no queue/caps change.
+Evidence EXP735-system-umd/{loaded-umd-proof.json,EXP735-umd-trace.txt};
+EXP736-blt-present/{red,green,projection-comparison.json}.
+Exact744cleanup succeeded and ordinary recovery restored; verify finalbaseline.
+Keep isolatedclient, ETWloadedmoduleproof, full-ownerinstall and orderlyboots.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -140,7 +147,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] EXP735 isolated client / actual loaded744 UMD verification.
-[NEXT] Measure Present with coherent KMD/UMD; prior app-local shadow excluded.
+[NOW] Candidate745 observedBlt-present correction package gates.
+[NEXT] Verify runtime callback/KMD presentation with correct loaded745 UMD.
 [HW] Standard Present and stable complete physical image remain unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
