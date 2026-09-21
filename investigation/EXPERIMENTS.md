@@ -45185,6 +45185,22 @@ key mirroring of the existing fixed Render guard receipt. Exact bind and one
 client after clean preflight; if service slot remains absent, classify rejection
 as pre-KMD. If present, decode exact guard/status. No replay.
 
+### EXP709 finalized artifact gate
+Package722 Release ARM64 build and qualification client build both completed
+with zero errors. Driver analysis, Universal/Inf2Cat and catalog membership
+gates PASS. The known WDK test signer is intentionally not trusted on the build
+host; exact Air verification must report Valid before bind. INF
+c4174b7130c2e7e4b171646d0d63ed090d72afb32daa26a7a77fdd0106096eae; SYS
+0d6571534827f67d0396e5cdfc0d83cdb5c3a6d15e3cc62c8bbd75fe2218956a; UMD
+8b4657a48ba998a772794a39dd271326a635eff0f087c734d47e331df4dafdc6; CAT
+2cfa0000014f3676e6d5ff7a2c9359dfe086932f0d3db6895ccdeab10d496196;
+client ab676bbe6ba0c5825adb01f5dad3328a5c9d991733eeb2f393d93014be11ac49;
+certificate 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable EXP709-kmd-render-guard-722.zip SHA
+1f9dbc9355352273cebf50c77d007cc626253d37267efefe4b0a58d24b518e52.
+Next: verify the ordinary recovery baseline, exact stage/signature/bind gate,
+then run the standard client once and collect the mirrored service receipt.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

@@ -1934,6 +1934,8 @@ preflight classification. Required by runtime maskFFFF; deterministic offline.
 [HW] First physical native draw/completion and successful standard DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2290,4 +2292,29 @@ mandatory async paging-fence wait offline; ARM64 link.
 [NOW] Exact package/sign/hash/preregister.
 [NEXT] One Air client; expected first KMD Render/Patch/Submit evidence.
 [HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP709 package722 ready — reliable KMD Render guard discriminator
+EXP708 proved all nine exact submitted handles become
+RESIDENTINGPUMEMORY after the mandatory paging-fence wait, yet pfnRenderCb still
+returns E_FAIL and no retained device-key KMD receipt is visible. Allocation
+identity, unlock, sequence, explicit residency and paging synchronization are
+therefore closed. Diagnostic-only implementation6101b6da always mirrors the
+existing fixed KMD Render guard receipt into the service key independently of
+the device-key write; it changes no validation or submission behavior.
+
+Package722 ARM64 driver/client builds are zero-error and analysis, Universal,
+Inf2Cat and catalog membership gates PASS. Immutable archive SHA
+1f9dbc9355352273cebf50c77d007cc626253d37267efefe4b0a58d24b518e52. Next
+verify clean ordinary recovery, exact package hashes and Valid signatures, then
+one standard client. A service slot identifies the exact KMD guard/status; an
+absent slot proves the rejection occurs before KMD entry. No replay.
+HARDWARE ROADMAP
+[PASS] Real native producer/capture/seal, unlock lifetime, RenderCBSequence,
+valid handles, explicit residency, paging wait and post-wait GPU residency;
+ARM64 package/sign/hash gate for the diagnostic.
+[NOW] One EXP709 Air discriminator for pre-KMD versus exact KMD guard failure.
+[NEXT] Fix the resulting exact runtime/KMD invariant, then immediately verify
+KMD Render/Patch/Submit, AGX completion and standard DXGI Present.
+[HW] Successful physical KMD Render/Patch/Submit, AGX completion and DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
