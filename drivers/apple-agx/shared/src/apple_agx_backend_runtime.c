@@ -277,6 +277,7 @@ static APPLE_AGX_BOOL AppleAgxBackendStampReached(APPLE_AGX_U32 Actual,
 APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeAcknowledgeCompletion(
     APPLE_AGX_BACKEND_RUNTIME *Runtime) {
   APPLE_AGX_BACKEND_RUNTIME_RESULT result;
+  APPLE_AGX_BACKEND_RUNTIME_PHASE previousPhase;
   APPLE_AGX_BACKEND_RUNTIME_PHASE nextPhase;
   APPLE_AGX_U32 fence;
   APPLE_AGX_U32 node;
@@ -290,6 +291,9 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeAcknowledgeCompletion(
   fence = Runtime->PendingSubmission.Submission.Fence;
   node = Runtime->PendingSubmission.Submission.NodeOrdinal;
   engine = Runtime->PendingSubmission.Submission.EngineOrdinal;
+  result = Runtime->TerminalResult;
+  previousPhase = Runtime->Phase;
+  nextPhase = Runtime->TerminalNextPhase;
   if (Runtime->TerminalStatus == AppleAgxBackendCompletionSuccess &&
       !Runtime->TerminalCpuFlushed) {
     if (!Runtime->Io.Memory.FlushForCpu(Runtime->Io.Context,
@@ -301,12 +305,14 @@ APPLE_AGX_BACKEND_RUNTIME_RESULT AppleAgxBackendRuntimeAcknowledgeCompletion(
   if (Runtime->TerminalStatus == AppleAgxBackendCompletionCancelled) {
     if (!Runtime->Io.Retire(Runtime->Io.Context, fence, node, engine))
       return AppleAgxBackendRuntimeResultBusy;
-  } else if (!Runtime->Io.Complete(Runtime->Io.Context, fence, node, engine,
-                                   Runtime->TerminalStatus)) {
-    return AppleAgxBackendRuntimeResultBusy;
+  } else {
+    Runtime->Phase = nextPhase;
+    if (!Runtime->Io.Complete(Runtime->Io.Context, fence, node, engine,
+                              Runtime->TerminalStatus)) {
+      Runtime->Phase = previousPhase;
+      return AppleAgxBackendRuntimeResultBusy;
+    }
   }
-  result = Runtime->TerminalResult;
-  nextPhase = Runtime->TerminalNextPhase;
   AppleAgxBackendClearPending(Runtime);
   Runtime->Phase = nextPhase;
   return result;

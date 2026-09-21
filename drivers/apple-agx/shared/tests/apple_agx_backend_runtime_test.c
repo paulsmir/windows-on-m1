@@ -40,6 +40,8 @@ typedef struct _FAKE_BACKEND {
   unsigned int LastRelocatedFence;
   unsigned int FailStop;
   unsigned int FailRun3d;
+  APPLE_AGX_BACKEND_RUNTIME *Runtime;
+  APPLE_AGX_BACKEND_RUNTIME_PHASE CompletionObservedPhase;
 } FAKE_BACKEND;
 
 static APPLE_AGX_BOOL Record(FAKE_BACKEND *Fake, unsigned int Operation) {
@@ -267,6 +269,8 @@ static APPLE_AGX_BOOL Complete(
     APPLE_AGX_BACKEND_COMPLETION_STATUS Status) {
   FAKE_BACKEND *fake = (FAKE_BACKEND *)Context;
   ++fake->CompletionAttempts;
+  if (fake->Runtime != NULL)
+    fake->CompletionObservedPhase = fake->Runtime->Phase;
   if (fake->RejectedBridgeRetireAttempts != 0u) {
     --fake->RejectedBridgeRetireAttempts;
     return APPLE_AGX_FALSE;
@@ -351,6 +355,7 @@ static void TestJoinedCompletion(void) {
   io = BackendIo(&fake);
   submission = Submission(&fake);
   AppleAgxBackendRuntimeInitialize(&runtime, 3ULL);
+  fake.Runtime = &runtime;
   assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
          AppleAgxBackendRuntimeResultOk);
   assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
@@ -374,6 +379,7 @@ static void TestJoinedCompletion(void) {
   assert(runtime.Phase == AppleAgxBackendRuntimeReady);
   assert(fake.CompletionCount == 1u && fake.CompletionFence == 77u);
   assert(fake.CompletionStatus == AppleAgxBackendCompletionSuccess);
+  assert(fake.CompletionObservedPhase == AppleAgxBackendRuntimeReady);
   assert(fake.Operations[fake.OperationCount - 2u] == OP_FLUSH_CPU);
   assert(fake.Operations[fake.OperationCount - 1u] == OP_COMPLETE);
   assert(AppleAgxBackendRuntimeStop(&runtime) ==
@@ -417,6 +423,7 @@ static void TestResetCompletesExactFenceOnce(void) {
   io = BackendIo(&fake);
   submission = Submission(&fake);
   AppleAgxBackendRuntimeInitialize(&runtime, 3ULL);
+  fake.Runtime = &runtime;
   assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
          AppleAgxBackendRuntimeResultOk);
   assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
@@ -462,6 +469,7 @@ static void TestRejectedCompletionRetainsExactFenceForRetry(void) {
   fake.WindowsQueue = &queue;
   fake.RejectedBridgeRetireAttempts = 1u;
   AppleAgxBackendRuntimeInitialize(&runtime, 3ULL);
+  fake.Runtime = &runtime;
   assert(AppleAgxBackendRuntimeStart(&runtime, &io) ==
          AppleAgxBackendRuntimeResultOk);
   assert(AppleAgxBackendRuntimeSubmit(&runtime, &submission) ==
@@ -485,6 +493,7 @@ static void TestRejectedCompletionRetainsExactFenceForRetry(void) {
   assert(runtime.TerminalPending);
   assert(runtime.PendingSubmission.Submission.Fence == 77u);
   assert(fake.CompletionAttempts == 1u);
+  assert(fake.CompletionObservedPhase == AppleAgxBackendRuntimeReady);
   assert(fake.CompletionCount == 0u);
   assert(fake.WindowsNotificationCount == 0u);
   assert(fake.WindowsNotifiedFence == 0u);
@@ -498,6 +507,7 @@ static void TestRejectedCompletionRetainsExactFenceForRetry(void) {
   assert(!runtime.TerminalPending);
   assert(runtime.PendingSubmission.Submission.Fence == 0u);
   assert(fake.CompletionAttempts == 2u);
+  assert(fake.CompletionObservedPhase == AppleAgxBackendRuntimeReady);
   assert(fake.CompletionCount == 1u);
   assert(fake.CompletionFence == 77u);
   assert(fake.WindowsNotificationCount == 1u);
