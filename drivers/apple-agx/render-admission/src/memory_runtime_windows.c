@@ -706,9 +706,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
     ADMISSION_CONTEXT *Context,
     const DXGK_DISPLAY_INFORMATION *PostDisplay) {
   ADMISSION_SCANOUT_MEMORY_VIEW destination;
-  MM_COPY_ADDRESS source;
-  SIZE_T copied = 0u;
+  DXGKARGCB_MAPFRAMEBUFFERPOINTER map;
+  DXGKARGCB_UNMAPFRAMEBUFFERPOINTER unmap;
   NTSTATUS status;
+  NTSTATUS unmapStatus;
   if (Context == NULL || PostDisplay == NULL ||
       KeGetCurrentIrql() != PASSIVE_LEVEL ||
       PostDisplay->PhysicAddress.QuadPart <= 0 ||
@@ -727,17 +728,31 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
   if (destination.GuestIpaAddress ==
       (ULONGLONG)PostDisplay->PhysicAddress.QuadPart)
     return STATUS_SUCCESS;
-  source.PhysicalAddress = PostDisplay->PhysicAddress;
-  status = MmCopyMemory(
-      destination.CpuAddress, source,
-      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE,
-      MM_COPY_MEMORY_PHYSICAL, &copied);
-  if (!NT_SUCCESS(status))
-    return status;
-  if (copied != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
-    return STATUS_PARTIAL_COPY;
+  if (!Context->InterfaceValid || Context->Interface.DeviceHandle == NULL ||
+      Context->Interface.DxgkCbMapFrameBufferPointer == NULL ||
+      Context->Interface.DxgkCbUnmapFrameBufferPointer == NULL)
+    return STATUS_NOT_SUPPORTED;
+  RtlZeroMemory(&map, sizeof(map));
+  map.PhysicalAdapterIndex = 0u;
+  map.Size = APPLE_AGX_SCANOUT_J313_SURFACE_SIZE;
+  map.Offset = 0u;
+  status = Context->Interface.DxgkCbMapFrameBufferPointer(
+      Context->Interface.DeviceHandle, &map);
+  if (!NT_SUCCESS(status) || map.pBaseAddress == NULL ||
+      map.Offset > map.Size ||
+      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE > map.Size - map.Offset)
+    return NT_SUCCESS(status) ? STATUS_INVALID_ADDRESS : status;
+  RtlCopyMemory(
+      destination.CpuAddress,
+      (const UCHAR *)map.pBaseAddress + map.Offset,
+      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE);
   KeMemoryBarrier();
-  return STATUS_SUCCESS;
+  RtlZeroMemory(&unmap, sizeof(unmap));
+  unmap.PhysicalAdapterIndex = 0u;
+  unmap.pBaseAddress = map.pBaseAddress;
+  unmapStatus = Context->Interface.DxgkCbUnmapFrameBufferPointer(
+      Context->Interface.DeviceHandle, &unmap);
+  return NT_SUCCESS(unmapStatus) ? STATUS_SUCCESS : unmapStatus;
 }
 
 static ULONGLONG AdmissionMemoryReadU64(
