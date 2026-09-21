@@ -70,6 +70,8 @@ class AppleAgxRenderPlatformTests(unittest.TestCase):
             platform.index("AdmissionGdiReceiptCompleteWindows", platform.index("static APPLE_AGX_BACKEND_BOOL AdmissionBackendComplete"))
         )
         self.assertIn("AdmissionGdiReceiptProgressWindows", platform)
+        self.assertIn("failedProgress.Fence = description.Fence", platform)
+        self.assertIn("(ULONG)runtime->Backend.Phase", platform)
         self.assertIn("AdmissionGdiReceiptDpcWindows", scheduler)
         self.assertIn("AdmissionFlushGdiReceipt", lifecycle)
         self.assertIn(r"src\render_gdi_receipt.c", project)

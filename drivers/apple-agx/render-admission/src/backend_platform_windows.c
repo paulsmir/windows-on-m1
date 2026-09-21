@@ -2796,6 +2796,14 @@ static VOID AdmissionPlatformWorker(
       result == AppleAgxBackendRuntimeResultOk
           ? &runtime->Backend.PendingJob : NULL);
   if (result != AppleAgxBackendRuntimeResultOk) {
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    APPLE_AGX_G13_QUEUE_PROGRESS failedProgress;
+    RtlZeroMemory(&failedProgress, sizeof(failedProgress));
+    failedProgress.Fence = description.Fence;
+    AdmissionGdiReceiptProgressWindows(
+        adapter, description.Fence, &failedProgress,
+        (ULONG)runtime->Backend.Phase);
+#endif
     InterlockedExchange(&adapter->SchedulerFaulted, 1);
     AdmissionFlushGdiReceipt(adapter);
     AdmissionRenderCorrelationWorkerWindows(
