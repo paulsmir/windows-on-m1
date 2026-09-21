@@ -45275,6 +45275,40 @@ Recovery artifact remains 377/392. Exact clean recovery, stage/Valid signatures,
 full-owner bind, quiet preflight and one client; no replay. Collect guard,
 Patch/Submit/completion/Present evidence before exact cleanup.
 
+### EXP710 actual — Render S_OK; no retirement; unexpected guest reset
+Recovery, exact package723 signatures/hashes, Code0/Running/Start12/Platform14,
+console login with immediate autologon secret removal, and 65s quiet interval
+all passed. One standard client PID9668/TID9672 reached native seal, all-nine
+MakeResident E_PENDING, successful paging-fence wait and aggregate
+RESIDENTINGPUMEMORY. Unlike EXP709, `native-render-callback` and
+`native-dispatch` both returned S_OK. The returned command bytes were0x141,
+allocation count9 and fence1; submission phase3 is AdmissionDrawAccepted.
+
+The client produced no exit file, no retirement and no native-evict record.
+The launcher then observed a PSCI system reset. Before reset it observed D589
+latches for swap_id9 and10, but those latches are not attributed to successful
+AGX presentation because no fence completion/Present receipt exists. Recovery
+later reported an unexpected-shutdown Event41/6008; no new Event1001 or crash
+dump was written. UMD trace SHA
+829b9bc00c9aeb1a35b31a9054848e38e8f8bd28bccc29d0e20fa4334c0ce949;
+System.evtx SHA a44459037e87d79ced7f910463cbe598ce9afae6c5c2cc28314afa58206da7e8.
+The standard log contains no completed output and no physical-screen
+observation was supplied.
+
+Ordinary GPU-visible recovery with package723 retained did not restore SSH in
+180s, so the documented immutable emergency377/385 GPU-hidden recovery was
+used for evidence and exact cleanup. Package oem5 with the preregistered INF
+hash was uninstalled/deleted, stopped service deleted and exact cert removed.
+Ordinary377/392 recovery is again clean Code28/no package/service/files/trust,
+8CPU/NVMe/input/no events.
+
+EXP710 proves Render admission and UMD dispatch but cannot distinguish Patch,
+Submit, backend launch or physical completion because production broker traces
+were disabled and registry receipts did not survive the reset. The next single
+variable is the existing diagnostic-only AppleAgxSubmitQualification profile,
+with launcher output captured durably from before client start. No behavioral
+submission change and no replay of package723.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

@@ -1940,6 +1940,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2369,4 +2371,28 @@ correction; host regression and ARM64 package/sign/hash gates.
 [NEXT] If Render advances, collect Patch/Submit and completion receipts and fix
 only the first remaining causal guard; then standard DXGI Present.
 [HW] First successful KMD Render/Patch/Submit and physical AGX completion.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP710 advances through Render; submit/completion trace is NOW
+Package723 exact gate and one client prove the real native request reaches
+pfnRenderCb S_OK and native-dispatch S_OK. UMD phase3 is AdmissionDrawAccepted,
+command0x141, allocations9 and fence1. No retirement, Evict or client exit was
+recorded before a PSCI guest reset. D589 latches9/10 occurred but are not AGX
+Present proof without completion. Recovery has Event41/6008, no new dump or
+Event1001. Exact emergency evidence/cleanup and ordinary recovery are complete.
+
+The remaining current uncertainty is strictly Patch/Submit/backend/completion.
+Use the already implemented diagnostic-only AppleAgxSubmitQualification broker
+trace and capture launcher stdout durably before the one client. It reports the
+Patch guard, Submit guard/packet guard, backend launch result, queue progress,
+terminal observation and completion fence without changing the physical
+patch-list submission path.
+HARDWARE ROADMAP
+[PASS] Standard runtime, native producer/capture/seal/residency, KMD Render
+admission and pfnRenderCb S_OK; exact EXP710 recovery/cleanup.
+[NOW] Build/preregister the existing submit-qualification diagnostic profile;
+offline gate is behavior-equivalent ARM64 build plus trace decoder tests.
+[NEXT] One Air run with durable launcher trace to identify Patch, Submit,
+backend launch or completion as the first missing stage; fix that exact owner.
+[HW] Successful completion fence and standard DXGI Present without guest reset.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
