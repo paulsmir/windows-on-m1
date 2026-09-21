@@ -2707,6 +2707,23 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## EXP721 rejects physical copy; dxgkrnl framebuffer mapping is NOW
+Package735 naturally bound from stage-only recovery, then failed StartDevice at
+PostDisplay stage9 with STATUS_INVALID_ADDRESS before ScanoutStart. This proves
+MmCopyMemory cannot read the protected/inherited framebuffer as ordinary RAM.
+Pinned WDK26100 and Microsoft WDDM2.4 define DxgkCbMapFrameBufferPointer and
+UnmapFrameBufferPointer for the framebuffer section under IOMMU isolation.
+Implementationbe2b8400 keeps the same seed behavior but maps physical-adapter0
+through those callbacks, validates returned bounds, copies exactly one surface,
+and always unmaps. Focused26 tests PASS.
+HARDWARE ROADMAP
+[PASS] Initial primary seed remains the causal target; unsupported copy API
+identified exactly.
+[NOW] ARM64/package gate for official framebuffer-section mapping.
+[NEXT] One Air run verifies admission and complete inherited desktop contents.
+[HW] Stable correct physical picture remains pending.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
 ## EXP721 package735 ready — inherited primary seed
 Package735 gates PASS; archive SHA
 0a47030e1f876ac99dc013ad047c9bee2d014003a572e04e43dc891747d842a3.
