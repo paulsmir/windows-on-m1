@@ -1422,9 +1422,14 @@ static void test_mesa_d3d10_frontend_open(void) {
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==S_OK &&
             FrontendPresentCalls==1u);
       /* The standard runtime client uses Present(0, 0), not a v-sync wait. */
+      presentArgs.Flags.Value=0x1u; /* Observed windowed Blt, not Flip. */
       presentArgs.FlipInterval=DXGI_DDI_FLIP_INTERVAL_IMMEDIATE;
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==S_OK &&
             FrontendPresentCalls==2u);
+      presentArgs.Flags.Value=0x3u;
+      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
+            FrontendPresentCalls==2u);
+      presentArgs.Flags.Value=0x1u;
       presentArgs.FlipInterval=(DXGI_DDI_FLIP_INTERVAL_TYPE)0xffffffffu;
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
             FrontendPresentCalls==2u);

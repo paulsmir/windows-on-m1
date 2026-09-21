@@ -912,7 +912,7 @@ _Present('''),
       pPresentData ? S_OK : E_INVALIDARG, presentValues, 6u);
    if (!pPresentData || pPresentData->hDstResource != 0 ||
        pPresentData->SrcSubResourceIndex != 0 ||
-       pPresentData->Flags.Value != 0x2u ||
+       (pPresentData->Flags.Value != 0x1u && pPresentData->Flags.Value != 0x2u) ||
        (pPresentData->FlipInterval != DXGI_DDI_FLIP_INTERVAL_IMMEDIATE &&
         pPresentData->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE))
       return E_INVALIDARG;
