@@ -18,27 +18,22 @@ OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdic
 
 ## Current source / candidate
 Integration worktree: /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler.
-Compiled fix boundary: 5eaa15da2ecafa7d540f25e31059f7a7f6231d9a (package742).
-Diagnostic 34e2498581855cbfe168bf4b64197ab8a4607f90; WDK fix fbd96fae;
-original compute done predicate restored749e7154, regression tests27bd1369 PASS.
-Latest prior bookkeeping HEAD f4016d36cedb1e6e9312b502112b10a65d74ab04.
-Package742 is current;741 is the preserved pre-fix reference. All artifact paths below are rooted at
-/Users/pavel/public_windows/.local/experiments (NOT the worktree's .local).
-Candidate: EXP730-initialized-compute-742/builder/package. Unchanged client/cert
-remain in EXP726-compute-identity-package741/{qualification,pinned.cer}.
-Fresh742 source archive EXP730-initialized-compute-742/source.tar from clean
-f5adda26, SHA29be05f0700ab6c231f06a1ea1dba643f262816e07779b1714d46f3aa39de1bd.
-Build/analysis0warnings0errors; frozen native runtime props reused unchanged.
-SYS 1758a4927ce4cf322a30703404f572675115625b927da7446feacf0415dda644
-UMD bcb17e54233083500d2354db6b23d8e148a6a93fd9edcecb10567629db3ccf0e
-INF 2c26b7e5cc6a3518df4f080893e78f2136b63f83e20509101004e867b45ee6bc
-CAT 3697d73de96bc83263d01bfe66a5540296343e4acdc8f49e67a345de28fb453c
+Current unchanged candidate744: EXP733-dxgi-boundary/package-build/package.
+All artifact paths are under /Users/pavel/public_windows/.local/experiments,
+NOT the worktree's .local. Native source/archive/projection/test evidence there.
+Kernel job initialization5eaa15da hardware-confirmed; IMMEDIATE705738ee offline
+confirmed only; d07c803f adds opt-in seven-callback DXGI transcript.
+744 build source fb32c6ec; native props asahi-runtime-arm64-dxgi-boundary-20260921.
+SYS 858bf3fc0b30b89e9f0767249e98d84e08870f0277ec6c473bba28181d03714d
+UMD 4d59acd61a2f060d856066d6ee5c81c84e86a05d75509d8d6dfc0540a424c121
+INF 5ade131442735f0f645f2ab0b96537db77c4e5d5f0e4cf068824f0ece32aaadc
+CAT 5fa1b306a9159cb8b676879467dda7b2cc874e533ad5c0ca11f33c446cb508b8
+Unchanged client/cert in EXP726-compute-identity-package741/qualification and pinned.cer.
 Client ec0adf38e1963d9eb8ec13ec9b998e15bdb570c6add4d8087a77a05afce9bf15
 Cert 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
-Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241. Existing TESTSIGNING and exact
-Root/TrustedPublisher trust reproduce native catalog PASS on Air. /kp Microsoft
-root rejection and extra osslsigncode keyUsage rejection are recorded limitations,
-not newly added gates. Do not change signer/security or repeat signing archaeology.
+Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241. Preserve TESTSIGNING and exact
+experiment trust; native target catalog/pa and membership are established gates.
+/kp production-root and extra osslsigncode rejections are not new test gates.
 
 ## Proven boundary and recent outcomes
 EXP725/739: full16384000-byte primary copy status0/interrupt1/DPC1; subsequent
@@ -87,19 +82,23 @@ native libraries built; ONLY DxgiFns.cpp differs in prepared source comparisons.
 EXP732/743 valid Session1 still fails Present and NEVER enters _Present (new
 entry record absent, trace unsaturated). IMMEDIATE fix remains offline-correct,
 not established as the current live cause. No frontend SetError origin either.
-EXP733/744 full DXGI boundary diagnostic: native render/dispatch/flush S_OK;
-NONE of seven registered DXGI callback entries/returns appears in45-line trace.
-No frontend SetError either. Client9136/Session1 stillPresent887a0005/reason887a0020.
-Do not change another callback guard without new evidence. Candidate744 unchanged.
-Next EXP734: bounded temporary ETW session (DXGI/D3D10/DxgKrnl + image loads)
-around ONE console client. Measure actual UMDeviceVersion/loaded UMD path and
-first system failure. D3D10 debug layer absent; no component/security install.
-Existing provider metadata in EXP733-dxgi-boundary/EXP733-etw-metadata.json;
-DxgKrnl metadata in EXP733-os-diagnostics.json. WDK IS_DXGI1_1_BASE_FUNCTIONS
-uses runtimeVersion low bits; actual requirement is unknown until measured.
-Clean ordinary baseline19:32:22Z: Code28/no residues/signer,8CPU,no autologon.
-Reuse full-owner/install/autologon/capture/cleanup recipes; package install ONLY
-in driver-absent full-owner584/406; orderly exit; one console Interactive client.
+EXP734 ETW PROVES client2768 loaded APP-LOCAL stale741 UMD from
+C:\Users\pavel\EXP728\AppleAgxRenderAdmissionUmd.dll, while KMD/System32 were744.
+ETW checksum12348141/timestamp1790005671 match741 UMDSHAe8edb942... and live
+fileVersion30.0.741.0. Intended744 System32SHA4d59acd61a2f060d856066d6ee5c81c84e86a05d75509d8d6dfc0540a424c121.
+Hash-checked shadow quarantined as EXP734-shadow-UMD-741.dll.saved (not deleted).
+CORRECTION: EXP732/733 absence-of-new-callback conclusions are invalid without
+loaded-UMD identity; do not patch another DXGI guard based on them. Kernel job
+initialization fix remains separately validated; IMMEDIATE fix hardware pending.
+RawETL4MB, eventsLost0; DXGI also reports no swapchain output, but mixed-binary
+setup must be fixed before attributing that. D3D10 version events absent.
+Evidence EXP734-runtime-etw/{EXP734-loaded-shadow.json,image-identity-match.json,
+umd-image-events.json,EXP734-runtime.etl,client-events.json}.
+Next EXP735: SAME744 and SAMEclient in C:\Users\pavel\EXP735-client containing
+NO DLLs; workingdirectorySystem32; preserve ETW to prove actual loadedSystem32
+UMD checksum/version. Existing counter scripts/process trace reused, no rebuild.
+Clean ordinary recovery verified in EXP734-runtime-etw/recovery-baseline.json.
+Reuse full-owner/install/autologon/cleanup workflow; one console Interactive client.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -141,7 +140,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] EXP734 bounded OS ETW diagnostic on unchanged744.
-[NEXT] Identify runtime/DDI or kernel failure before all DXGI callbacks.
+[NOW] EXP735 isolated client / actual loaded744 UMD verification.
+[NEXT] Measure Present with coherent KMD/UMD; prior app-local shadow excluded.
 [HW] Standard Present and stable complete physical image remain unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
