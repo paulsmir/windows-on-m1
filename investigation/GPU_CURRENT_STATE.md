@@ -2707,6 +2707,24 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## Protected POST memory closed; first composed-frame initialization is NOW
+Package737 returns STATUS_INVALID_PARAMETER at PostDisplay stage9: ordinary
+DxgkCbMapMemory also rejects the inherited framebuffer. Combined with EXP721/
+EXP722, direct POST pixel access is closed for this isolated WDDM target.
+
+The legal DWM source allocation is already full2560x1600 even when its first
+dirty rect is only66x68. Implementation97a9d9f6 removes every rejected seed
+path. For a distinct exact full-size BGRA source->primary BLT at multipass0 it
+encodes one full-surface copy, initializing the empty primary from Windows-owned
+composed content. Later behavior is unchanged. Actual Present callback partial
+input RED then full-frame GREEN; relevant28 tests PASS.
+HARDWARE ROADMAP
+[PASS] Direct inherited framebuffer access conclusively closed.
+[NOW] ARM64/package gate for first composed-frame full primary copy.
+[NEXT] Reliable Air install; compare logical/physical Start and Alt+Tab frames.
+[HW] Stable correct physical picture remains pending.
+POST-HARDWARE: optimize copy cost, longer acceptance, broader D3D/OpenGL/CS1.6.
+
 ## EXP723 package737 ready — ordinary display-memory map
 Package737 gates PASS; archive SHA
 2acd84573f9bdd8e67809b7e8d3a103211d87d6a7443bfee9398bbf84c03a050.
