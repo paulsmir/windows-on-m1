@@ -638,7 +638,7 @@ _Use_decl_annotations_ VOID AdmissionRecordComputeIdentityDiagnostic(
   }
   RtlInitUnicodeString(&servicePath,
       L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
-  InitializeObjectAttributes(&attributes,
+  InitializeObjectAttributes(&attributes, &servicePath,
       OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
   if (NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) {
     WriteBinary(key, L"Wom1ComputeIdentityDiagnostic", Diagnostic,

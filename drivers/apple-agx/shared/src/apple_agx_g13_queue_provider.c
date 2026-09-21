@@ -1,5 +1,4 @@
 #include "apple_agx_g13_queue_provider.h"
-#include <stdint.h>
 
 #define APPLE_AGX_G13_PROVIDER_NULL ((void *)0)
 #define APPLE_AGX_G13_TA_WORK_ROOT_INDEX 1u
@@ -66,12 +65,9 @@ static void AppleAgxG13ProviderCaptureComputeIdentity(
   APPLE_AGX_BACKEND_BOOL current_valid = APPLE_AGX_BACKEND_FALSE;
   AppleAgxG13ProviderZero(Snapshot,
                           (APPLE_AGX_BACKEND_U32)sizeof(*Snapshot));
-  Snapshot->ContextIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)
-      (unsigned long long)(uintptr_t)Context;
-  Snapshot->ProviderIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)
-      (unsigned long long)(uintptr_t)Provider;
-  Snapshot->JobIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)
-      (unsigned long long)(uintptr_t)Job;
+  Snapshot->ContextIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)Context;
+  Snapshot->ProviderIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)Provider;
+  Snapshot->JobIdentity = (APPLE_AGX_BACKEND_U64)(unsigned long long)Job;
   Snapshot->Fence = Fence;
   Snapshot->PendingFence = Provider->PendingFence;
   Snapshot->ProviderPhase = (APPLE_AGX_BACKEND_U32)Provider->Phase;
