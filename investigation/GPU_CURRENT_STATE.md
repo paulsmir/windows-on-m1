@@ -1956,6 +1956,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2513,4 +2515,15 @@ HARDWARE ROADMAP
 [NOW] One EXP714 client records exact UMD Present callback result.
 [NEXT] Fix the rejected callback invariant and immediately retest.
 [HW] First DxgkDdiPresent entry and successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP714 confirms RunTa rejection before UMD Present
+No UMD Present entry occurred. Backend result8 with phase5 proves Run3d passed
+and RunTa failed. Diagnostic e3fa0698 records exact RunTa guard: phase/fence,
+D3 match/valid, TA valid, compute, BuildSubmission, or queue runtime result.
+HARDWARE ROADMAP
+[PASS] Render/Submit and Run3d staging; physical completion proven in EXP713.
+[NOW] Package bounded RunTa guard receipt; host provider tests PASS.
+[NEXT] One Air discriminator, then fix the exact RunTa invariant.
+[HW] Stable TA submission/completion followed by successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

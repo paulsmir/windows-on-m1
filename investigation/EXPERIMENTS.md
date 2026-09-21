@@ -45421,6 +45421,15 @@ client98d40e44ea523384bac844e5288b43eab62d8bb0b13dd8c64786b5aba3010dd0.
 Archive SHA7f06e89e345a1c6d82f86c6c4ab7a892760edccbddda12fc2fbc086021e8eefb.
 One exact client, no replay; evidence then exact cleanup.
 
+### EXP714 actual — UMD Present never entered; RunTa rejection confirmed
+Exact package728 and one client again returned Present887a0005/reason887a0020.
+Neither present-entry nor present-callback appeared and KMD Present trace stayed
+empty: device removal precedes UMD Present. Correlation reports accepted Render
+and Submit, worker status8. GDI receipt stage4/result8 and WorkerFinalPhase5
+prove Run3d staged successfully and RunTa rejected. Exact cleanup completed.
+Next diagnostic records the bounded RunTa rejection guard and queue-runtime
+result without changing queue behavior.
+
 ### EXP713 actual — physical AGX completion PASS; Present still pre-KMD
 Exact package727 and one client completed without reset. Contrary to EXP712's
 QueueFailed, the durable receipt reached stage7 with BackendSubmitResult0,
