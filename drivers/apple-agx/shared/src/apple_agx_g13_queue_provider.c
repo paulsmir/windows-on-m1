@@ -360,7 +360,9 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
       subguard = AppleAgxG13ComputeGuardEvent;
     else if (!compute.JobExpectedStamp)
       subguard = AppleAgxG13ComputeGuardStamp;
-    else if (compute.JobExpectedDonePointer != compute.ExpectedNextDone)
+    else if (!AppleAgxG13ProviderExpectedDone(
+                 provider, &provider->Config.Compute, 1u,
+                 Job->ComputeExpectedDonePointer))
       subguard = AppleAgxG13ComputeGuardDonePointer;
     if (subguard != AppleAgxG13ComputeGuardNone) {
       compute.Guard = AppleAgxG13SubmitGuardCompute;
