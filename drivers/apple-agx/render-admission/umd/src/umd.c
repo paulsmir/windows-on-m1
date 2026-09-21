@@ -614,14 +614,24 @@ HRESULT AdmissionUmdSubmitPresent(ADMISSION_UMD_DEVICE *Device,
   present.hSrcAllocation = Source->KernelAllocation;
   present.pDXGIContext = DxgiContext;
   present.hContext = Device->KernelContext;
-  return Device->DxgiCallbacks->pfnPresentCb(
+  HRESULT result=Device->DxgiCallbacks->pfnPresentCb(
       Device->RuntimeDevice.handle, &present);
+  UINT values[4]={(UINT)present.hSrcAllocation,
+      (UINT)(ULONG_PTR)present.hContext,
+      (UINT)(ULONG_PTR)present.pDXGIContext,
+      (UINT)((ULONGLONG)(ULONG_PTR)present.pDXGIContext>>32)};
+  AdmissionUmdDiagnostic("present-callback",result,values,ARRAYSIZE(values));
+  return result;
 }
 
 static HRESULT APIENTRY AdmissionUmdPresent(DXGI_DDI_ARG_PRESENT *Args) {
   ADMISSION_UMD_DEVICE *device;
   ADMISSION_UMD_RESOURCE *source;
-  if (Args == NULL || Args->hDstResource != 0u ||
+  if (Args == NULL) return E_INVALIDARG;
+  UINT values[4]={(UINT)Args->Flags.Value,(UINT)Args->FlipInterval,
+      (UINT)Args->SrcSubResourceIndex,(UINT)(ULONG_PTR)Args->hDstResource};
+  AdmissionUmdDiagnostic("present-entry",S_OK,values,ARRAYSIZE(values));
+  if (Args->hDstResource != 0u ||
       Args->SrcSubResourceIndex != 0u || Args->Flags.Value != 0x2u ||
       Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE)
     return E_INVALIDARG;
