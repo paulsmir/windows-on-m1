@@ -45710,3 +45710,25 @@ cert97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
 Immutable EXP704-explicit-residency-719.zip SHA
 8dd203bf40d0f625fa2061dffc473670887801d2ef3d5f5f1abc6d0f1380afed.
 Next exact stage/bind/preflight and one client; no replay.
+
+### EXP717 actual — rejected; completion published while backend remained submitted
+Completed 2026-09-21. Exact package731 and one standard client ran on the
+preregistered full-owner EXP584/406 launch. The client reached native Render and
+dispatch, all nine residency releases succeeded, and physical completion again
+reported fence283 with NotifyInterrupt1 and NotifyDpc1. DXGI Present returned
+0x887a0005 with device reason0x887a0020 before either the UMD Present entry or
+KMD StandardPresentTrace; the operator did not report a new display observation
+for this run. The ordered Wom1PostDpcHealth receipt decoded as version1/64 bytes,
+fence283, SchedulerFaulted0, CurrentFence283, ActiveFence0, DispatchedFence0,
+RenderPacketState0, BackendPhase3 Submitted, ProviderPhase1,
+CompletionPhase5 Reported, CompletedOutputPhase3 PacketRetired,
+OutputThreadPhase1, WorkScheduled1, WorkersActive1, DpcPending0.
+Verdict: the exporter correction is confirmed, and the behavioral hypothesis is
+rejected for package731. Source tracing proves Io.Complete reports the Windows
+DMA fence before AppleAgxBackendRuntimeAcknowledgeCompletion transitions from
+Submitted to Ready. Exact oem5/package731, task and signer were removed after
+evidence; the ordinary GPU-visible guest was restored and rescanned to one inert
+ACPI\\APPL0002 Code28 with no AppleAgx package, service, module, files or signer.
+Next: package only commit60cbd916, which publishes TerminalNextPhase during the
+completion ownership callback and restores the prior phase if the callback
+rejects; verify with one exact standard-runtime run.

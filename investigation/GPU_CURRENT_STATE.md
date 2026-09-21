@@ -2588,3 +2588,26 @@ HARDWARE ROADMAP
 [NEXT] Fix exact unhealthy field and immediately retest Present.
 [HW] First UMD/KMD Present entry and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP717 proves premature completion publication; package732 fix is NOW
+The ordered health receipt is valid and shows fence283, SchedulerFaulted0 and
+CurrentFence283, but CompletionReported while BackendPhase remains Submitted.
+Source tracing found the exact inversion: shared runtime calls Io.Complete, whose
+Windows implementation emits DMA_COMPLETED and queues DPC, before clearing the
+pending submission and setting TerminalNextPhase Ready. EXP717 remains
+pre-UMD/pre-KMD Present with0x887a0005/reason0x887a0020. Exact cleanup and
+ordinary one-Code28 recovery are complete.
+
+Implementation60cbd916 publishes TerminalNextPhase only around the success
+completion ownership callback, rolls back to the previous phase on FALSE, and
+clears pending state only after TRUE. Deterministic RED observed Submitted in
+the callback; GREEN observes Ready and preserves the exact fence for retry.
+HARDWARE ROADMAP
+[PASS] Standard producer, Render/Patch/Submit, Run3d/RunTa, physical AGX
+completion, interrupt/DPC, and exact premature-backend-phase diagnosis.
+[NOW] ARM64 package732 build/sign/hash and preregistration for the completion
+ordering correction. Offline gate; after PASS proceed directly to Air.
+[NEXT] One standard-runtime Air run must reach UMD Present and KMD Present; fix
+only the first new causal status if Present is still rejected.
+[HW] First successful standard DXGI Present with a physical result.
+POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.
