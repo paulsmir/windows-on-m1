@@ -174,6 +174,13 @@ static void test_exact_packet_binds_output_and_reapplies_relocations(void) {
     assert(job.D3Event == 2u);
     assert(job.TaExpectedStamp == 0x7a000100u);
     assert(job.D3ExpectedStamp == 0x3d000100u);
+    /* A TA/3D template must not manufacture a compute dispatch from stack data. */
+    assert(job.ComputeWorkAddressCount == 0u);
+    assert(job.ComputeEvent == 0u);
+    assert(job.ComputeExpectedStamp == 0u);
+    assert(job.ComputeExpectedDonePointer == 0u);
+    for (index = 0u; index < APPLE_AGX_BACKEND_QUEUE_WORK_COUNT; ++index)
+      assert(job.ComputeWorkAddresses[index] == 0ULL);
   }
   assert(!AdmissionBackendImageReleaseSubmission(&image, 18u));
   assert(AdmissionBackendImageReleaseSubmission(&image, packet.Fence));
@@ -492,6 +499,7 @@ static void test_native_binding_preserves_logical_attachment(void) {
   {
     unsigned char *desktop=realloc(target,0xfa0000);
     assert(desktop);target=desktop;
+    packet.DestinationCpuToken=(unsigned long long)(uintptr_t)target;
     packet.Fence=62;packet.DestinationBytes=0xfa0000;
     native.SurfaceWidth=2560;native.SurfaceHeight=1600;
     native.SurfacePitch=10240;native.DestinationBytes=0xfa0000;

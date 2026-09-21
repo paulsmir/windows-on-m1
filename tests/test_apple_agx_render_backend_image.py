@@ -17,6 +17,8 @@ class AppleAgxRenderBackendImageTests(unittest.TestCase):
             subprocess.run([
                 os.environ.get("CC", "clang"),
                 "-std=c11", "-Wall", "-Wextra", "-Werror",
+                # Nonzero automatic storage makes omitted job fields reproducible.
+                "-ftrivial-auto-var-init=pattern",
                 "-fsanitize=address,undefined",
                 "-I", str(RENDER / "include"),
                 "-I", str(SHARED / "include"),

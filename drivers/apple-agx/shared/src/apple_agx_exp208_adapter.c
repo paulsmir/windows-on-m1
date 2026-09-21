@@ -200,7 +200,7 @@ APPLE_AGX_BACKEND_BOOL AppleAgxExp208BuildJob(
     const APPLE_AGX_EXP208_RELOCATION *Relocations,
     APPLE_AGX_BACKEND_U32 RelocationCount,
     APPLE_AGX_BACKEND_JOB_IMAGE *Job) {
-  APPLE_AGX_BACKEND_JOB_IMAGE candidate;
+  APPLE_AGX_BACKEND_JOB_IMAGE candidate = {0};
 
   if (Job == APPLE_AGX_EXP208_NULL ||
       !AppleAgxExp208ParametersValid(Parameters) ||
