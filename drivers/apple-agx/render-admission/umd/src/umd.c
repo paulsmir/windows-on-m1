@@ -633,7 +633,8 @@ static HRESULT APIENTRY AdmissionUmdPresent(DXGI_DDI_ARG_PRESENT *Args) {
   AdmissionUmdDiagnostic("present-entry",S_OK,values,ARRAYSIZE(values));
   if (Args->hDstResource != 0u ||
       Args->SrcSubResourceIndex != 0u || Args->Flags.Value != 0x2u ||
-      Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE)
+      (Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_IMMEDIATE &&
+       Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE))
     return E_INVALIDARG;
   device = AdmissionUmdDeviceFromDxgi(Args->hDevice);
   source = AdmissionUmdResourceFromDxgi(Args->hSurfaceToPresent);
@@ -647,7 +648,8 @@ static HRESULT APIENTRY AdmissionUmdPresent1(DXGI_DDI_ARG_PRESENT1 *Args) {
       Args->SurfacesToPresent != 1u || Args->phSurfacesToPresent == NULL ||
       Args->phSurfacesToPresent[0].SubResourceIndex != 0u ||
       Args->Flags.Value != 0x2u ||
-      Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE ||
+      (Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_IMMEDIATE &&
+       Args->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE) ||
       Args->Reserved != 0u || Args->DirtyRects != 0u)
     return E_INVALIDARG;
   device = AdmissionUmdDeviceFromDxgi(Args->hDevice);

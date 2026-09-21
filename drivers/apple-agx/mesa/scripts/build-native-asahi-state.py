@@ -900,10 +900,20 @@ _Present('''),
    device->pipe->screen->flush_frontbuffer(device->pipe->screen, device->pipe,\x20
       pSrcResource->resource, 0, 0, pPresentData->pDXGIContext, 0, NULL);
 
-   return S_OK;''','''   if (!pPresentData || pPresentData->hDstResource != 0 ||
+   return S_OK;''','''   UINT presentValues[6] = {
+      pPresentData ? pPresentData->Flags.Value : ~0u,
+      pPresentData ? (UINT)pPresentData->FlipInterval : ~0u,
+      pPresentData ? pPresentData->SrcSubResourceIndex : ~0u,
+      pPresentData && pPresentData->hDstResource != 0,
+      pPresentData && pPresentData->hSurfaceToPresent != 0,
+      pPresentData && pPresentData->pDXGIContext != NULL};
+   AgxD3d10WindowsDiagnostic("native-present-entry",
+      pPresentData ? S_OK : E_INVALIDARG, presentValues, 6u);
+   if (!pPresentData || pPresentData->hDstResource != 0 ||
        pPresentData->SrcSubResourceIndex != 0 ||
        pPresentData->Flags.Value != 0x2u ||
-       pPresentData->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE)
+       (pPresentData->FlipInterval != DXGI_DDI_FLIP_INTERVAL_IMMEDIATE &&
+        pPresentData->FlipInterval != DXGI_DDI_FLIP_INTERVAL_ONE))
       return E_INVALIDARG;
    struct Device *device = CastDevice(pPresentData->hDevice);
    Resource *resource = CastResource(pPresentData->hSurfaceToPresent);

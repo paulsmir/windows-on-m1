@@ -1421,12 +1421,20 @@ static void test_mesa_d3d10_frontend_open(void) {
       FrontendPresentContext=presentArgs.pDXGIContext;
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==S_OK &&
             FrontendPresentCalls==1u);
+      /* The standard runtime client uses Present(0, 0), not a v-sync wait. */
+      presentArgs.FlipInterval=DXGI_DDI_FLIP_INTERVAL_IMMEDIATE;
+      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==S_OK &&
+            FrontendPresentCalls==2u);
+      presentArgs.FlipInterval=(DXGI_DDI_FLIP_INTERVAL_TYPE)0xffffffffu;
+      CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
+            FrontendPresentCalls==2u);
+      presentArgs.FlipInterval=DXGI_DDI_FLIP_INTERVAL_ONE;
       presentArgs.SrcSubResourceIndex=1u;
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
-            FrontendPresentCalls==1u);
+            FrontendPresentCalls==2u);
       presentArgs.SrcSubResourceIndex=0u;presentArgs.Flags.Value=0u;
       CHECK(dxgiFunctions.pfnPresent(&presentArgs)==E_INVALIDARG &&
-            FrontendPresentCalls==1u);
+            FrontendPresentCalls==2u);
     }
     {
       D3D10DDIARG_CREATERESOURCE createPresent={0};
@@ -3349,7 +3357,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=primaryPresent.pDXGIContext;
       CHECK(dxgiFunctions.pfnPresent(&primaryPresent)==S_OK &&
-            FrontendPresentCalls==2u);
+            FrontendPresentCalls==3u);
     }
     BOOL eventEndSubmitted=FrontendErrors==eventErrorsBefore &&
         RuntimeRenders==1u && RuntimeSignals==2u && RuntimeQueryMarkerCount==1u;
@@ -3628,7 +3636,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=bltPresent.pDXGIContext;
       CHECK(dxgiFunctions.pfnPresent(&bltPresent)==S_OK &&
-            FrontendPresentCalls==3u && RuntimeRenders==1u &&
+            FrontendPresentCalls==4u && RuntimeRenders==1u &&
             RuntimeSignals==1u && RuntimeMaterializations==2u &&
             RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
       CHECK(!AgxWin32AsahiContextFaulted(
@@ -3669,7 +3677,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=copyPresent.pDXGIContext;
       CHECK(dxgiFunctions.pfnPresent(&copyPresent)==S_OK &&
-            FrontendPresentCalls==4u && RuntimeRenders==1u &&
+            FrontendPresentCalls==5u && RuntimeRenders==1u &&
             RuntimeSignals==1u && RuntimeMaterializations==2u &&
             RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
       RuntimeCheckpoint(copyOwner,1u);
@@ -3706,7 +3714,7 @@ static void test_mesa_d3d10_frontend_open(void) {
       FrontendPresentAllocation=0x775u;
       FrontendPresentContext=copyRegionPresent.pDXGIContext;
       CHECK(dxgiFunctions.pfnPresent(&copyRegionPresent)==S_OK &&
-            FrontendPresentCalls==5u && RuntimeRenders==1u &&
+            FrontendPresentCalls==6u && RuntimeRenders==1u &&
             RuntimeSignals==1u && RuntimeMaterializations==2u &&
             RuntimeConsumerGates==2u && RuntimeMarker!=NULL);
       RuntimeCheckpoint(copyRegionOwner,1u);
