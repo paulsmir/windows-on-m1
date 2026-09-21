@@ -45169,6 +45169,21 @@ Immutable EXP703-render-residency-718.zip SHA
 b214b8658dfac4f1dc643b9406e9034866b0543100c0fc714ee2604044daf927.
 Next exact stage/bind/preflight and one client; no replay.
 
+## EXP706 — exact package720 bind retry before paging-wait client
+UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
+f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,
+implementation ecc469d2f23ba8e22be1fa094b122412d57c1abe and all nq/package
+gates. WHY THIS HYPOTHESIS: EXP705 never bound and therefore did not test the
+driver. Exact cleanup plus ordinary recovery is clean after rescan. One fresh
+natural bind distinguishes a transient PnP bind miss from a reproducible package
+blocker. No driver or artifact change.
+
+Pre-client admission is strict: exact installed INF/SYS/UMD/client hashes,
+Code0, Running service, Start12/Platform14 and no monitored events. If any field
+fails, do not create the client task and stop this retry path. If all pass, run
+the standard client exactly once and collect paging wait, KMD and physical
+evidence under main-root .local/experiments/EXP706-live before exact cleanup.
+
 ### EXP704 actual result — MakeResident accepted asynchronously
 Exact package719, signatures, Code0/Start12/Platform14 and clean pre-client gate.
 One standard client (PID9880/TID9884) queried all9 valid handles as NOTRESIDENT.
