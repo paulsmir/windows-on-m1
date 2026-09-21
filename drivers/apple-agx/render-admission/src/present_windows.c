@@ -24,6 +24,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   ADMISSION_OPEN_ALLOCATION *source, *destination;
   APPLE_AGX_DMA_SHADOW shadow;
   D3DDDI_PATCHLOCATIONLIST *patch;
+  BOOLEAN fullPrimary = FALSE;
   UINT capacity, bytes, next;
   if (Device == NULL || Context == NULL || Present == NULL ||
       Present->Flags.Value != 1u || Present->pDmaBuffer == NULL ||
@@ -68,6 +69,7 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
     input.Rects = &fullPrimaryRect;
     input.RectCount = 1u;
     input.MultipassOffset = 0u;
+    fullPrimary = TRUE;
   } else {
     RtlCopyMemory(&input.Command.SourceRect, &Present->SrcRect, sizeof(RECT));
     RtlCopyMemory(&input.Command.DestinationRect, &Present->DstRect,
@@ -110,9 +112,10 @@ _Use_decl_annotations_ NTSTATUS AdmissionPresentBlt(
   Present->pDmaBuffer = (PUCHAR)Present->pDmaBuffer + bytes;
   Present->pPatchLocationListOut += 2u;
   Present->PatchLocationListOutSize -= 2u;
-  Present->MultipassOffset = next;
-  return next == input.RectCount ? STATUS_SUCCESS
-                                 : STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
+  Present->MultipassOffset = fullPrimary ? Present->SubRectCnt : next;
+  return fullPrimary || next == input.RectCount
+             ? STATUS_SUCCESS
+             : STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
 }
 
 static BOOLEAN AdmissionPresentPrivateView(PVOID Data, UINT Bytes,
