@@ -2167,3 +2167,9 @@ per-allocation residency diagnostic, x64 actual producer and ARM64 link.
 [NEXT] One Air client to identify invalid/stale handle versus context/runtime.
 [HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP703 package718 ready
+Residency/context diagnostic implementation08c71ca7 packaged; package analysis,
+Universal/Inf2Cat/catalog PASS. Immutable archive SHA
+b214b8658dfac4f1dc643b9406e9034866b0543100c0fc714ee2604044daf927.
+Air recovery is clean. Next exact stage/Valid-signature bind and one client.
