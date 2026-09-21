@@ -117,6 +117,16 @@ static LONG InterlockedIncrement(volatile LONG *p){return __atomic_add_fetch(p,1
         self.assertIn("AdmissionStandardPresentTraceAcceptPresent", producer)
         self.assertIn("PHASE STANDARD_BLT_HOLD_PASS", producer)
 
+    def test_standard_runtime_arms_and_reads_the_exact_adapter_trace(self):
+        client = (
+            ROOT / "drivers/apple-agx/windows/one-shot/apple_agx_d3d10_standard.c"
+        ).read_text()
+        self.assertIn("D3DKMTOpenAdapterFromLuid", client)
+        self.assertIn("open.AdapterLuid=adapterDesc.AdapterLuid", client)
+        self.assertIn("AdmissionStandardPresentTraceArm", client)
+        self.assertIn("AdmissionStandardPresentTraceRead", client)
+        self.assertIn("STANDARD_EVENT index=", client)
+
 
 if __name__ == "__main__":
     unittest.main()

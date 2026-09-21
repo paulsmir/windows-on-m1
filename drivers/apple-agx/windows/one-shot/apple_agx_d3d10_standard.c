@@ -2,8 +2,11 @@
 #include <windows.h>
 #include <d3d10.h>
 #include <d3dcompiler.h>
+#include <d3dkmthk.h>
 #include <dxgi.h>
 #include <stdio.h>
+
+#include "render_qualification.h"
 
 #define RELEASE_IF(p, T) do { if (p) { T##_Release(p); (p)=NULL; } } while (0)
 
@@ -25,6 +28,33 @@ static HRESULT CompileShader(const char *source, const char *target,
   return result;
 }
 
+static NTSTATUS StandardPresentTraceQuery(D3DKMT_HANDLE adapter,
+    ADMISSION_STANDARD_PRESENT_TRACE_COMMAND command,
+    ADMISSION_STANDARD_PRESENT_TRACE *trace) {
+  D3DKMT_ESCAPE escape={0};
+  if(!adapter || !trace) return (NTSTATUS)0xc000000dL;
+  AdmissionStandardPresentTraceInitialize(trace,command,0u,0u);
+  escape.hAdapter=adapter;escape.Type=D3DKMT_ESCAPE_DRIVERPRIVATE;
+  escape.pPrivateDriverData=trace;escape.PrivateDriverDataSize=sizeof(*trace);
+  return D3DKMTEscape(&escape);
+}
+
+static void StandardPresentTracePrint(const ADMISSION_STANDARD_PRESENT_TRACE *trace,
+                                      NTSTATUS status) {
+  if(!trace) return;
+  fprintf(stderr,"STANDARD_TRACE query=0x%08lx build=%u boot=%u events=%u overflow=%u\n",
+      (ULONG)status,trace->CandidateBuild,trace->BootGeneration,
+      trace->EventCount,trace->Overflow);
+  for(UINT i=0;i<trace->EventCount && i<ADMISSION_STANDARD_PRESENT_TRACE_CAPACITY;++i) {
+    const ADMISSION_STANDARD_PRESENT_EVENT *e=&trace->Events[i];
+    fprintf(stderr,"STANDARD_EVENT index=%u valid=%u kind=%u phase=%u sequence=%u status=0x%08x irql=%u flags=0x%x context=0x%llx allocation=0x%llx source=%u segment=%u address=0x%llx src_count=%u dst_count=%u\n",
+        i,e->Valid,e->Kind,e->Phase,e->Sequence,e->Status,e->Irql,e->Flags,
+        e->ContextToken,e->AllocationToken,e->SourceId,e->Segment,
+        e->PrimaryAddress,e->NumSrc,e->NumDst);
+  }
+  fflush(stderr);
+}
+
 int wmain(void) {
   static const char vsSource[]=
       "float4 main(float4 p:POSITION):SV_POSITION{return p;}";
@@ -40,6 +70,8 @@ int wmain(void) {
   ID3D10InputLayout *layout=NULL; ID3D10Buffer *vb=NULL;
   IDXGIDevice *dxgiDevice=NULL; IDXGIAdapter *adapter=NULL;
   IDXGIFactory *factory=NULL;
+  D3DKMT_HANDLE traceAdapter=0u;
+  ADMISSION_STANDARD_PRESENT_TRACE presentTrace={0};
   const char *stage="window";
   HRESULT result=E_FAIL; DXGI_ADAPTER_DESC adapterDesc={0};
   wc.lpfnWndProc=StandardWindowProc;wc.hInstance=GetModuleHandleW(NULL);
@@ -69,6 +101,17 @@ int wmain(void) {
       adapterDesc.VendorId,adapterDesc.DeviceId,adapterDesc.Description);
   /* EXP691: DXGI reports the ACPI APPL0002 identity, not a PCI vendor ID. */
   if(adapterDesc.VendorId!=0x4c505041u || adapterDesc.DeviceId!=0x32303030u){result=DXGI_ERROR_UNSUPPORTED;goto done;}
+  {
+    D3DKMT_OPENADAPTERFROMLUID open={0};
+    open.AdapterLuid=adapterDesc.AdapterLuid;
+    NTSTATUS status=D3DKMTOpenAdapterFromLuid(&open);
+    if(status>=0) {
+      traceAdapter=open.hAdapter;
+      status=StandardPresentTraceQuery(traceAdapter,
+          AdmissionStandardPresentTraceArm,&presentTrace);
+    }
+    StandardPresentTracePrint(&presentTrace,status);
+  }
   stage="adapter-factory";
   result=IDXGIAdapter_GetParent(adapter,&IID_IDXGIFactory,(void **)&factory);
   if(FAILED(result)) goto done;
@@ -129,6 +172,11 @@ int wmain(void) {
   result=IDXGISwapChain_Present(swap,0,0);if(FAILED(result)) goto done;
   puts("STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS");
  done:
+  if(traceAdapter) {
+    NTSTATUS traceStatus=StandardPresentTraceQuery(traceAdapter,
+        AdmissionStandardPresentTraceRead,&presentTrace);
+    StandardPresentTracePrint(&presentTrace,traceStatus);
+  }
   if(FAILED(result) && device) {
     HRESULT removed=ID3D10Device_GetDeviceRemovedReason(device);
     fprintf(stderr,"STANDARD_DEVICE_REASON hr=0x%08lx\n",(ULONG)removed);
@@ -141,6 +189,7 @@ int wmain(void) {
   RELEASE_IF(factory,IDXGIFactory);
   RELEASE_IF(adapter,IDXGIAdapter);RELEASE_IF(dxgiDevice,IDXGIDevice);
   RELEASE_IF(device,ID3D10Device);RELEASE_IF(swap,IDXGISwapChain);
+  if(traceAdapter) {D3DKMT_CLOSEADAPTER close={traceAdapter};D3DKMTCloseAdapter(&close);}
   if(window) DestroyWindow(window);
   return FAILED(result)?1:0;
 }
