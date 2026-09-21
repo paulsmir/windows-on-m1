@@ -2659,3 +2659,25 @@ signature, catalog, hash and preregistration gates.
 Ready ordering and standard Present.
 [HW] First successful standard DXGI Present with physical result.
 POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.
+
+## EXP719 VALIDATES first standard-runtime hardware Present
+Exact package733 valid launch selected Apple AGX vendor4c505041, build733 and
+completed `STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS`. The
+full-owner physical path independently recorded A408 applied and exact D589
+latch for swap12. This is the first proven standard Windows D3D10/DXGI Present
+through native UMD, real Mesa/Asahi draw, KMD physical submission and AGX/DCP.
+The completion-visible Ready correction60cbd916 is hardware validated by this
+successful downstream Present.
+
+A later DWM submission ended at queue guard2/fence293. It is POST-HARDWARE
+stability work and does not invalidate the completed minimum Present. Exact
+cleanup is complete; ordinary recovery is one Code28 with no AppleAgx state.
+HARDWARE ROADMAP
+[PASS] Standard Windows D3D runtime -> native UMD -> real Mesa/Asahi draw ->
+KMD Render/Patch/Submit -> physical AGX execution/completion -> standard DXGI
+Present -> exact physical D589 latch. Evidence EXP719 package733.
+[NOW] First-hardware roadmap complete.
+[NEXT] none before first hardware Present.
+[HW] [PASS] First real standard-runtime hardware Present.
+POST-HARDWARE: sustained DWM/desktop stability beginning with later queue guard2;
+broader D3D; OpenGL; CS1.6.

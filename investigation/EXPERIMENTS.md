@@ -45868,3 +45868,32 @@ exact hashes, run one standard client, collect GDI receipt, clean exact package.
 Expected: aggregate guard6 plus runtime subguard1..5. Failure: no new bounded
 receipt. Evidence `.local/experiments/EXP719-*` and Air Windows Temp/registry.
 One client, no replay.
+
+### EXP719 actual — validated first standard DXGI Present and physical DCP latch
+Completed 2026-09-21. One initial launch was excluded before AppleAgx execution:
+the package had not survived the bind reset, the guarded runner did not accept an
+INF, and the client selected Microsoft Basic Render Driver vendor1414. Staging
+was repaired by requiring exact bound INF/hash before the one-shot can start.
+This is recorded as invalid setup evidence, not an Apple hardware verdict.
+
+The valid launch bound oem5 INF
+b7dec2d14857055c8879afec948a0831953a7ed22bfa823dd744d4b34ebfdec3,
+reported Apple adapter vendor4c505041/device32303030 and build733, and executed
+one standard client. The exact result was:
+`STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS`.
+The unchanged full-owner launcher independently recorded `A408 APPLIED
+swap_id=12` followed by `exact D589 latch swap_id=12` (and a later swap13 latch).
+This validates the standard Windows D3D runtime -> native UMD -> real Mesa/Asahi
+draw -> physical KMD/AGX completion -> standard DXGI Present -> physical DCP
+latch chain for the selected minimum draw. No System41/1001/129/4101 occurred
+in the valid run.
+
+The last GDI receipt after the successful client belongs to subsequent desktop
+work and ends Backend QueueFailed guard2 at fence293. It does not invalidate the
+completed client Present; it proves sustained DWM/desktop stability remains
+POST-HARDWARE. The compute subguard diagnostic was not exercised in the valid
+client result. Exact package733, task, signer and hash-verified copied SYS/UMD
+were removed after evidence. Ordinary recovery is one inert APPL0002 Code28
+with8 CPUs, SSH/NVMe/xHCI/input healthy and no AppleAgx package/service/module/
+files/signer. Verdict: VALIDATED for first standard hardware Present; not full
+desktop acceptance.
