@@ -2626,3 +2626,24 @@ ARM64 build, analysis, signature, catalog, hash and preregistration gates.
 receipt; if it succeeds, record physical result and move to post-hardware work.
 [HW] First successful standard DXGI Present with a physical result.
 POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.
+
+## EXP718 reaches RunTa compute guard; exact subguard is NOW
+Package732 ran one standard client. CreateDevice/CreateSwapChain and KMD
+Render/Patch/Submit passed at fence316, but backend QueueFailed phase5 with
+LastSubmitGuard6 Compute/runtime0 before any completion or Present DDI. Thus the
+completion-visible Ready correction was not exercised. Exact cleanup and
+ordinary one-Code28 recovery are complete.
+
+Implementationf35c4fb9 changes diagnostics only: the existing runtime-result
+field now distinguishes compute unavailable, count, event, stamp and expected
+queue-done mismatches under aggregate guard6. Successful queue behavior is
+unchanged; focused provider tests PASS.
+HARDWARE ROADMAP
+[PASS] Standard producer through KMD Submit; EXP718 exact compute-boundary
+receipt and recovery; deterministic subguard test.
+[NOW] ARM64 package733 build/sign/hash/preregister for the bounded compute
+subguard. Offline, then immediately Air.
+[NEXT] One Air run selects the exact compute invariant; fix that owner and return
+directly to completion-visible Ready and standard Present.
+[HW] First successful standard DXGI Present with a physical result.
+POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.

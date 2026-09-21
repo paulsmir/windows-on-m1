@@ -45804,3 +45804,25 @@ DXGI Present after fence completion. Failure: device-removed result or any new
 bounded causal status. Evidence paths: `.local/experiments/EXP718-*`, Air
 `C:\Windows\Temp\EXP718-*`, System/Application event exports and exact receipts.
 One client, no replay.
+
+### EXP718 actual — rejected before completion at RunTa compute guard
+Completed 2026-09-21. Package732 exact hashes and signer passed stage/bind. The
+ordinary guest restarted during immediate display bind before the initial task
+registration; after the unchanged full-owner launch, evidence proved client
+execution count remained zero, so the same preregistered one-shot standard
+client was registered and started once in the existing interactive session.
+CreateDevice and CreateSwapChain returned S_OK. KMD Render, Patch and Submit
+statuses were zero, fence316. Backend result8 QueueFailed, phase5 Failed,
+LastSubmitGuard6 Compute and runtime result0 occurred before completion. Present
+returned0x887a0005/reason0x887a0020; UMD/KMD Present events remained zero. No
+System41/1001/129/4101 occurred. The completion-order change was therefore not
+exercised. Verdict rejected for Present and inconclusive for commit60cbd916.
+Exact package732/task/certificate were removed after evidence; exact copied
+SYS/UMD files were hash-verified and removed, and ordinary recovery is one
+APPL0002 Code28 with no package/service/module/files/signer.
+
+Next discriminator f35c4fb9 preserves aggregate guard6 and records one of five
+bounded compute subguards in the existing runtime-result field: unavailable,
+count, event, stamp or expected-done mismatch. Host provider tests prove the
+successful path unchanged and exact event mismatch code. One package, one
+client, no replay.
