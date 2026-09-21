@@ -21,6 +21,8 @@ static HRESULT APIENTRY TestDestroyPagingQueue(
     HANDLE, const D3DDDI_DESTROYPAGINGQUEUE *);
 static HRESULT APIENTRY TestMakeResident(HANDLE, D3DDDI_MAKERESIDENT *);
 static HRESULT APIENTRY TestEvict(HANDLE, D3DDDICB_EVICT *);
+static HRESULT APIENTRY TestWaitPaging(
+    HANDLE, const D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *);
 
 #include "../src/umd.c"
 #include "umd_draw_composer_windows.c"
@@ -366,7 +368,17 @@ static HRESULT APIENTRY TestMakeResident(
     return E_INVALIDARG;
   Make->PagingFenceValue=++TestPagingFence;
   Make->NumBytesToTrim=0u;
-  return S_OK;
+  return E_PENDING;
+}
+static HRESULT APIENTRY TestWaitPaging(
+    HANDLE Device,
+    const D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU *Wait) {
+  CHECK(Device!=NULL && Wait && Wait->ObjectCount==1u &&
+        Wait->ObjectHandleArray && Wait->ObjectHandleArray[0]==0x602u &&
+        Wait->FenceValueArray && Wait->FenceValueArray[0]!=0u &&
+        Wait->FenceValueArray[0]<=TestPagingFence && !Wait->hAsyncEvent &&
+        Wait->Flags.Value==0u);
+  return Wait && Wait->ObjectCount==1u?S_OK:E_INVALIDARG;
 }
 static HRESULT APIENTRY TestEvict(
     HANDLE Device,D3DDDICB_EVICT *Evict) {
@@ -1067,6 +1079,7 @@ static void test_mesa_d3d10_frontend_open(void) {
   callbacks.pfnDestroyPagingQueueCb=TestDestroyPagingQueue;
   callbacks.pfnMakeResidentCb=TestMakeResident;
   callbacks.pfnEvictCb=TestEvict;
+  callbacks.pfnWaitForSynchronizationObjectFromCpuCb=TestWaitPaging;
   dxgiCallbacks.pfnPresentCb=FrontendPresent;
   core.pfnSetErrorCb=FrontendSetError;
   sizeArgs.Interface=D3D10_0_DDI_INTERFACE_VERSION;
@@ -4047,6 +4060,7 @@ int main(void) {
   kernelCallbacks.pfnDestroyPagingQueueCb = TestDestroyPagingQueue;
   kernelCallbacks.pfnMakeResidentCb = TestMakeResident;
   kernelCallbacks.pfnEvictCb = TestEvict;
+  kernelCallbacks.pfnWaitForSynchronizationObjectFromCpuCb = TestWaitPaging;
   kernelCallbacks.pfnSignalSynchronizationObject2Cb =
       TestSignalSynchronizationObject2;
   memset(&userCallbacks, 0, sizeof(userCallbacks));

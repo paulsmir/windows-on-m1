@@ -171,6 +171,7 @@ HRESULT AdmissionUmdRuntimeDeviceInitialize(
       Args->pKTCallbacks->pfnSignalSynchronizationObject2Cb == NULL ||
       Args->pKTCallbacks->pfnMakeResidentCb == NULL ||
       Args->pKTCallbacks->pfnEvictCb == NULL ||
+      Args->pKTCallbacks->pfnWaitForSynchronizationObjectFromCpuCb == NULL ||
       Args->pKTCallbacks->pfnCreatePagingQueueCb == NULL ||
       Args->pKTCallbacks->pfnDestroyPagingQueueCb == NULL ||
       Args->pKTCallbacks->pfnRenderCb == NULL ||

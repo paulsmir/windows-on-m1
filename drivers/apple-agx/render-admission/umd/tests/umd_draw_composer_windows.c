@@ -154,9 +154,11 @@ static void Composer_setup(void) {
   Composer_device.KernelContext=(HANDLE)(UINT_PTR)9; Composer_device.KernelCallbacks=&Composer_callbacks;
   Composer_device.RuntimeDevice.handle=(VOID *)(UINT_PTR)8;
   Composer_device.PagingQueue=0x601u;
+  Composer_device.PagingSyncObject=0x602u;
   Composer_callbacks.pfnRenderCb=Composer_render;
   Composer_callbacks.pfnMakeResidentCb=TestMakeResident;
   Composer_callbacks.pfnEvictCb=TestEvict;
+  Composer_callbacks.pfnWaitForSynchronizationObjectFromCpuCb=TestWaitPaging;
   Composer_callbacks.pfnLockCb=Composer_lock;
   Composer_callbacks.pfnUnlockCb=Composer_unlock;
   Composer_callbacks.pfnDeallocateCb=Composer_deallocate;

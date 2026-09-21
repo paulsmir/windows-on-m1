@@ -125,6 +125,30 @@ static HRESULT make_resident(
   UINT values[5]={requested,make.NumAllocations,(UINT)make.PagingFenceValue,
       (UINT)(make.PagingFenceValue>>32),(UINT)make.NumBytesToTrim};
   AdmissionUmdDiagnostic("native-make-resident",result,values,ARRAYSIZE(values));
+  if(result==E_PENDING) {
+    D3DDDICB_WAITFORSYNCHRONIZATIONOBJECTFROMCPU wait={};
+    D3DKMT_HANDLE object=d->PagingSyncObject;
+    UINT64 fence=make.PagingFenceValue;
+    if(!object || !fence ||
+       !d->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb) {
+      (void)evict_residency(d,s,requested);
+      return E_FAIL;
+    }
+    wait.ObjectCount=1u;
+    wait.ObjectHandleArray=&object;
+    wait.FenceValueArray=&fence;
+    HRESULT waitResult=
+        d->KernelCallbacks->pfnWaitForSynchronizationObjectFromCpuCb(
+            d->RuntimeDevice.handle,&wait);
+    UINT waitValues[3]={(UINT)object,(UINT)fence,(UINT)(fence>>32)};
+    AdmissionUmdDiagnostic("native-residency-wait",waitResult,
+        waitValues,ARRAYSIZE(waitValues));
+    if(FAILED(waitResult)) {
+      (void)evict_residency(d,s,requested);
+      return waitResult;
+    }
+    result=S_OK;
+  }
   if(FAILED(result) || make.NumAllocations!=requested) {
     UINT partial=make.NumAllocations<requested?make.NumAllocations:requested;
     if(partial && FAILED(evict_residency(d,s,partial))) d->DrawTerminal=TRUE;

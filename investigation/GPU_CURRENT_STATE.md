@@ -2224,3 +2224,19 @@ Inf2Cat and catalog gates PASS; immutable archive SHA
 8dd203bf40d0f625fa2061dffc473670887801d2ef3d5f5f1abc6d0f1380afed.
 Air recovery clean. Next exact stage/Valid signatures/full-owner bind and one
 standard client; physical paging/KMD/AGX/Present remain unproven.
+
+## EXP704 accepts residency; paging-fence wait offline PASS
+All9 allocations entered the residency list; MakeResident returned E_PENDING
+with fence0x1b61. The candidate evicted and stopped before Render, so no KMD
+result. Official required wait is implemented using PagingSyncObject and
+PagingFenceValue. nq x64 execution0 and ARM64 link0, archive
+e7ed6a3a58bc13ffbf02ca19595288e32aa056166b03df3799c79d42b2980595;
+forced-async mock proves wait before Render and paired post-render Evict.
+Exact cleanup complete; recovery launched.
+HARDWARE ROADMAP
+[PASS] Native graph/capture/seal, unlock, sequence, explicit residency and
+mandatory async paging-fence wait offline; ARM64 link.
+[NOW] Exact package/sign/hash/preregister.
+[NEXT] One Air client; expected first KMD Render/Patch/Submit evidence.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.

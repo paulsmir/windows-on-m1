@@ -650,6 +650,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   PoolCallbacks.pfnDestroyPagingQueueCb=TestDestroyPagingQueue;
   PoolCallbacks.pfnMakeResidentCb=TestMakeResident;
   PoolCallbacks.pfnEvictCb=TestEvict;
+  PoolCallbacks.pfnWaitForSynchronizationObjectFromCpuCb=TestWaitPaging;
   if(AdmissionUmdScreenInitialize(&PoolDevice)!=S_OK) return 1;
   AdmissionUmdAsahiOwnerOperations(&ops);
 #if defined(ADMISSION_UMD_NATIVE_RUNTIME_TEST)
@@ -661,6 +662,7 @@ static unsigned TestAsahiNativePoolOwner(void) {
   PoolDevice.KernelContext=(HANDLE)(UINT_PTR)0x707;
   PoolDevice.RuntimeDevice.handle=(VOID *)(UINT_PTR)0x706;
   PoolDevice.PagingQueue=0x601u;
+  PoolDevice.PagingSyncObject=0x602u;
   PoolDevice.CommandBuffer=RuntimeCommand;PoolDevice.CommandBufferSize=sizeof(RuntimeCommand);
   PoolDevice.AllocationList=RuntimeAllocations;PoolDevice.AllocationListSize=ARRAYSIZE(RuntimeAllocations);
   PoolDevice.PatchList=RuntimePatches;PoolDevice.PatchListSize=ARRAYSIZE(RuntimePatches);

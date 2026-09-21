@@ -45169,6 +45169,31 @@ Immutable EXP703-render-residency-718.zip SHA
 b214b8658dfac4f1dc643b9406e9034866b0543100c0fc714ee2604044daf927.
 Next exact stage/bind/preflight and one client; no replay.
 
+### EXP704 actual result — MakeResident accepted asynchronously
+Exact package719, signatures, Code0/Start12/Platform14 and clean pre-client gate.
+One standard client (PID9880/TID9884) queried all9 valid handles as NOTRESIDENT.
+pfnMakeResidentCb accepted all9 and returned E_PENDING8000000a with paging fence
+0x1b61 and zero bytes to trim. The implementation treated E_PENDING as failure,
+evicted all9 successfully, and did not call Render. Present remained887a0005/
+reason887a0020. This proves explicit residency acquisition works and identifies
+the missing mandatory wait; it is not a KMD Render result. No fresh monitored
+events or physical screen observation.
+
+Official docs require waiting PagingFenceValue on the monitored fence object
+associated with the paging queue before submitting referenced commands. The
+implementation now uses pfnWaitForSynchronizationObjectFromCpuCb on the stored
+PagingSyncObject/fence. Offline mocks force E_PENDING and Render asserts the wait
+completed before ResidencyHeld. Exact cleanup succeeded; ordinary recovery
+launched. Evidence main-root .local/experiments/EXP704-live.
+
+### Paging-fence wait deterministic gate PASS
+explicit-residency-wait-20260921nq x64 execution0 and ARM64 link0, exact archive
+SHA e7ed6a3a58bc13ffbf02ca19595288e32aa056166b03df3799c79d42b2980595.
+The mock MakeResident always returns E_PENDING; only the correct sync object and
+fence wait permits Render. Actual producer/materializer/KMD-plan/patch,
+completion-fence retirement, paired Evict, remap and teardown PASS. Hardware
+NOT_RUN for the wait fix.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
