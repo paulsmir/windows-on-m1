@@ -45826,3 +45826,45 @@ bounded compute subguards in the existing runtime-result field: unavailable,
 count, event, stamp or expected-done mismatch. Host provider tests prove the
 successful path unchanged and exact event mismatch code. One package, one
 client, no replay.
+
+## EXP719 — exact RunTa compute subguard
+Preregistered 2026-09-21T12:52Z.
+
+WHY THIS HYPOTHESIS:
+1. EXP718 passed KMD Render/Patch/Submit at fence316 and failed only at aggregate
+   RunTa guard6 Compute, before completion and Present.
+2. The guard contains exactly five deterministic comparisons: compute support,
+   address count, event, nonzero stamp and expected done pointer; runtime result0
+   did not identify which one failed.
+3. Commitf35c4fb9 records those five cases in the already exported runtime-result
+   field and changes no success or queue behavior; host event-mismatch RED/GREEN
+   and provider/platform tests PASS.
+
+WINDOWS CONTRACT:
+No completion may be reported for a job rejected before queue submission.
+AGX/ASAHI CONTRACT:
+A mixed native batch may enter compute only when its queue metadata matches the
+initialized compute queue exactly.
+TRANSLATION:
+Keep aggregate guard6 and report only its first exact subcondition through the
+existing bounded receipt.
+WHAT IS STILL UNKNOWN:
+Which one of the five actual mixed-batch values violates the initialized queue.
+
+Single diagnostic variable f35c4fb96446e8f6c84a14556292d3b9c0badac3; source
+HEAD8dcd9e139a2c915322e80a164c814ae9afb5c1e1 clean. ARM64 closure and package
+builds PASS with0 warnings/errors, version30.0.733.0 and signer
+E9BE15BD2A184BFABA0C8035B3C620C58037A241. Source archive SHA
+8aeee2c2102ffe1e23ca9d0b5e680fb3623bf49e482d2668a5de67ebd618a7f7.
+Artifact `.local/experiments/EXP719-compute-subguard-733.zip` SHA
+eb342e0c45c840e3111adc46b90d0f9a853476103b3cd9f5da02eb7fd7b1df5c.
+INF b7dec2d14857055c8879afec948a0831953a7ed22bfa823dd744d4b34ebfdec3;
+SYS0df4c5c2f5161b485450c27acd5ba51c2827e41957f9bd54370cb92c5f12f6f6;
+UMDd2bb916ebaa587e747b4743b2d8f813e00761b3e373d19571c3392e771b405d7;
+CAT6a50b747deac9185b8c18ae3bc9231b3bbd40a663f6839e7cd7404295eb9394b;
+client ebcec84228ff642d4f708997480826d1ab5f313f8f455dd423c33df8ed0d1212.
+Use unchanged EXP584/406 full-owner and ordinary/emergency recovery. Stage only
+exact hashes, run one standard client, collect GDI receipt, clean exact package.
+Expected: aggregate guard6 plus runtime subguard1..5. Failure: no new bounded
+receipt. Evidence `.local/experiments/EXP719-*` and Air Windows Temp/registry.
+One client, no replay.

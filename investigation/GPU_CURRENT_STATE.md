@@ -2647,3 +2647,15 @@ subguard. Offline, then immediately Air.
 directly to completion-visible Ready and standard Present.
 [HW] First successful standard DXGI Present with a physical result.
 POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.
+
+## EXP719 package733 ready — exact compute subguard
+Package733 gates PASS; archive SHA
+eb342e0c45c840e3111adc46b90d0f9a853476103b3cd9f5da02eb7fd7b1df5c.
+HARDWARE ROADMAP
+[PASS] EXP718 compute boundary; exact subguard implementation; ARM64 package,
+signature, catalog, hash and preregistration gates.
+[NOW] One EXP719 Air client selects compute subguard1..5.
+[NEXT] Fix the selected queue metadata owner, then immediately retest completion
+Ready ordering and standard Present.
+[HW] First successful standard DXGI Present with physical result.
+POST-HARDWARE: desktop/DWM stability, broader D3D, OpenGL and CS1.6.
