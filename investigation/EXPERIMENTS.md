@@ -45275,6 +45275,14 @@ pre-KMD Render E_FAIL. Single variable: one aggregate QueryResidency after the
 wait and before unchanged Render. Build package721, finalize/sign/hash, exact
 bind preflight, one client, no replay; evidence EXP707-live before cleanup.
 
+Package721 gates PASS. Immutable EXP707-postwait-residency-721.zip SHA
+dc46293b76baa3014b7ece2b0a2c0bb323044f068c23ae96f2ef76f25e79ba1a.
+INFc6a151e39c86fcc86c5b581321fa17c6e81dcd3f1f359ede9349475be2ba4312;
+SYS3b13e929a47cc3074e89ff64cb4905ff380ec6e5fa3036d6cadb4b287af8fd80;
+UMDcd6057d532344b8323cf81dbc785c76a681edb9bb858e566d64290f5e164e3a3;
+CAT2193c3eeb55a5b8830914f269ab4b5ef731b5f2d4ddf55ab075de2faee10eb68;
+clientb8b8f7c064d6eabcf557254938525acbb5f96df020cf8ddb1883d1e6da6bd235.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
