@@ -45178,6 +45178,13 @@ No retained KMD Render slot. Exact cleanup succeeded. Next diagnostic mirrors
 every existing KMD Render guard receipt into the service key independently of
 the device-key write, without Render behavior change.
 
+## EXP709 — reliable KMD Render entry/guard mirror
+Preregistered diagnostic-only implementation6101b6da275b49b0e1a920c23681a1c56260e762.
+Reuse full producer/runtime inputs; build package722. Single variable is service-
+key mirroring of the existing fixed Render guard receipt. Exact bind and one
+client after clean preflight; if service slot remains absent, classify rejection
+as pre-KMD. If present, decode exact guard/status. No replay.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,
