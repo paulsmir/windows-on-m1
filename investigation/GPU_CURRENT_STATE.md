@@ -17,95 +17,55 @@ KMD Render/Patch/Submit -> AGX. Do not redesign these layers or expand features.
 OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdicts.
 
 ## Current source / candidate
-Integration worktree: /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler.
-Current unchanged candidate744: EXP733-dxgi-boundary/package-build/package.
-All artifact paths are under /Users/pavel/public_windows/.local/experiments,
-NOT the worktree's .local. Native source/archive/projection/test evidence there.
-Kernel job initialization5eaa15da hardware-confirmed; IMMEDIATE705738ee offline
-confirmed only; d07c803f adds opt-in seven-callback DXGI transcript.
-744 build source fb32c6ec; native props asahi-runtime-arm64-dxgi-boundary-20260921.
-SYS 858bf3fc0b30b89e9f0767249e98d84e08870f0277ec6c473bba28181d03714d
-UMD 4d59acd61a2f060d856066d6ee5c81c84e86a05d75509d8d6dfc0540a424c121
-INF 5ade131442735f0f645f2ab0b96537db77c4e5d5f0e4cf068824f0ece32aaadc
-CAT 5fa1b306a9159cb8b676879467dda7b2cc874e533ad5c0ca11f33c446cb508b8
-Unchanged client/cert in EXP726-compute-identity-package741/qualification and pinned.cer.
+Integration HEAD before this evidence checkpoint:59aa1672d3e30d4085dc0d19275b5e0af8c978f2.
+Implementation75bc5baff3b638e5d5f483686153cca523738117 accepts exact Blt1 orFlip2.
+EXP736 package745 under /Users/pavel/public_windows/.local/experiments/EXP736-blt-present/package-build/package.
+SYS d352215b5d641c527481f16bb0d985803e6a8791d3dadec3674b2f30ee6e72a5
+UMD c620fad0950a6ff7e110e6df2e3a1cf245a68b79692ae01e3528be953b029528
+INF fc3fb2417b29498ee9961da14ad17cb7d891447a583a81cca3282f71d46c2366
+CAT 2421a016a37e9f80b91d974a19e596759f5ff522ae115b5c19de45aaa5317c39
 Client ec0adf38e1963d9eb8ec13ec9b998e15bdb570c6add4d8087a77a05afce9bf15
-Cert 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
-Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241. Preserve TESTSIGNING and exact
-experiment trust; native target catalog/pa and membership are established gates.
-/kp production-root and extra osslsigncode rejections are not new test gates.
+Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241; preserve existing TESTSIGNING.
+Artifacts are rooted at main repository .local, NOT worktree .local.
 
-## Proven boundary and recent outcomes
-EXP725/739: full16384000-byte primary copy status0/interrupt1/DPC1; subsequent
-result8 phase5 fence304 compute guard6/subguard3. Event mismatch is measured,
-but its operands were not captured at the failing decision. Source-backed next
-discriminator is741's paired Build/RunTa job/provider/event/fence/stamp/done/work.
-Evidence: EXP725-hardware/{evidence.json,client.txt}.
-EXP726/740: invalid overlapping installation after failed cleanup; no compute verdict.
-EXP727/741: successful install in FULL-OWNER584/406, then orderly fresh boot:
-Code0, matching binaries and signer persistence. Client ran in SSH Session0,
-CreateDevicePASS then CreateSwapChain887a0022/reason0; no user/Explorer and no
-compute diagnostic. This is invalid desktop-session setup, not a GPU defect.
-Evidence: EXP727-compute-identity; clean recovery receipt finalbaseline.json.
-EXP728: no console workload. A prematurely invoked runner had no executable;
-no client process. Corrected runner now requires nonzero ExpectedSession.
-Installing741 in ordinary377/392 broker-OFF guest preceded a reset; ordinary
-recovery also reset before SSH. Cause remains UNPROVEN (41/6008 only; historical
-0x133 dump is not correlated). Immutable hidden377/385 recovered Windows;
-exact741 was removed and ordinary377/392 returned. Evidence:
-EXP728-console-compute/recovery/evidence/{EXP728-System.evtx,EXP728-092126-38078-01.dmp}.
-Independent live baseline at17:15:23Z: Code28/nullINF, no package/service/module,
-SYS/UMD or signer;8CPU; AutoAdminLogon0 and no DefaultPassword. Receipt under
-the evidence directory: independent-baseline-20260921T171523Z.json. No login armed.
+## Proven boundary / current causal target
+EXP729 paired Build/RunTa exposed already-uninitialized compute fields in a TA3D
+job. Constructor fix5eaa15da initializes candidate={0}; deterministic pattern
+regression RED->GREEN,6 related testsPASS. EXP730 physically validated completion,
+matching TA/3D stamps and done2/2, interrupt/DPC1/1. Do not reopen compute dispatch.
+EXP734 ETW exposed app-local stale741 UMD in EXP728 client directory; it was
+hash-checked and quarantined as EXP734-shadow-UMD-741.dll.saved. EXP732/733
+absence-of-new-callback conclusions invalid. Always isolate EXE without DLLs,
+System32 workingdirectory, ETW actual loaded-module path/checksum/timestamp proof.
+EXP735 coherent744 measured flags1/Blt, interval0, sourceindex0,destination0,
+valid source/context rejected by Flip-only guard. Fix75bc5baf realDDI RED->GREEN,
+x64 producer/materializer/retirementPASS; both native archives; onlyDxgiFns diff.
+IMMEDIATE fix705738ee also retained; no newcaps/queue/allocator/composer.
+EXP736 client1028 Session1 with exact loaded System32745 checksum12328883,
+timestamp1790021801 returned STANDARD_RUNTIME_PASS create=PASS draw=PASS present=PASS.
+Trace native-render-callback/native-dispatch/flush-state/_Present/present-callback
+allS_OK; observedBlt1/interval0. One client only; no replay allowed.
+Service GDI receipt fence300 stage7 status0 submit/completion0 interrupt/DPC1/1;
+TA/3D expected/observed match and done2/2. PresentTransfer fence253 is earlier:
+do NOT assert that receipt belongs to client1028 without causal correlation.
+User explicitly reports physical black/white corruption PERSISTS on745.
+Current Application events prove repeated dwm.exe/dwmcore.dll26100.9278 crashes,
+exception889800b0 offset27bde4 since boot; Explorer5236 remainsSession1, DWM PIDs
+change. ETW records DWM exits/restarts. Desktop acceptance remainsFAILED.
+Evidence EXP736-blt-present/{EXP736-dwm-state.json,dwm-etw-selected.json,
+dwm-runtime-events.json,physical-observation.json,loaded-umd-proof.json,
+EXP736-umd-trace.txt,EXP736-client.json,EXP736-runtime.etl}.
+WER Temp current dump disappeared before copy. Preserved dump SHA6874779fff450e759d21604c8de570f77cf67ea3b31061fdae6d9f0b06ef4203
+predates EXP736 boot: historical ONLY; dump-validity.json explicitly rejects
+current attribution. Its matching-code stack points to CreateD3D11Device;
+this is a lead, not current causal proof. Current Report.wer/Application.evtx saved.
+NEXT: source-first DWM device-creation admission diagnosis; obtain current first
+HRESULT/DDI failure before a semantic fix. No evidence justifies AGX queue changes.
+Exact745 oem5.inf uninstall/delete succeeded20:32:31Z. Orderly shutdown completed;
+ordinary377/392 recovery verified20:34:01Z: Code28/nullINF, no packages/service/
+modules/SYS/UMD/signer,8CPU,autologon0/no password; session71264 active.
+No password/autologon left. No extra client or new experimental package installed.
 
-## Current causal result / next action
-EXP729 valid Session1 run exposed garbage compute fields already in Build,
-unchanged at RunTa (same job/provider, command4/MixedBranch0/fence335).
-AppleAgxExp208BuildJob copied an uninitialized candidate. Fix5eaa15da initializes
-it; pattern regression RED->GREEN,6 related tests PASS. EXP730 candidate742 is
-hardware-validated for this fix: fence298 BackendSubmitResult0, CompletionStatus0,
-TA/3D observed stamps match expected0x7a000100/0x3d000100 and done2/2;
-NotifyInterrupt/Dpc1/1. No compute rejection. Standard client PID4876/Session1
-still returns Present887a0005/reason887a0020 after CreateDevice/SwapChain0.
-Do not call this stable desktop or diagnose firmware from normal fault-snapshot.
-Evidence EXP730-initialized-compute-742/{EXP730-client.json,EXP730-client.stdout.txt}.
-Clean ordinary baseline17:59:48Z: Code28/no package/service/module/files/signer,
-8CPU; autologon0/no password. Candidate742 package remains immutable.
-EXP731 process-local UMD trace: render-callback/native-dispatch/flush-state S_OK,
-no present-callback; make-residentE_PENDING followed by waitS_OK (not a failure).
-Source client Present(0,0) conflicts with native _Present accepting onlyONE.
-Real Mesa DDI IMMEDIATE regression RED -> GREEN with705738eedf7692e45010649b22c9014ee5974cfb.
-Native/generic guards now accept IMMEDIATE orONE; invalid intervals/other args
-remain rejected. Existing opt-in native-present-entry records live args next run.
-x64 actual producer/2placements/retirement + DDI suite exit0. Fresh x64/ARM64
-native libraries built; ONLY DxgiFns.cpp differs in prepared source comparisons.
-EXP732/743 valid Session1 still fails Present and NEVER enters _Present (new
-entry record absent, trace unsaturated). IMMEDIATE fix remains offline-correct,
-not established as the current live cause. No frontend SetError origin either.
-EXP734 ETW PROVES client2768 loaded APP-LOCAL stale741 UMD from
-C:\Users\pavel\EXP728\AppleAgxRenderAdmissionUmd.dll, while KMD/System32 were744.
-ETW checksum12348141/timestamp1790005671 match741 UMDSHAe8edb942... and live
-fileVersion30.0.741.0. Intended744 System32SHA4d59acd61a2f060d856066d6ee5c81c84e86a05d75509d8d6dfc0540a424c121.
-Hash-checked shadow quarantined as EXP734-shadow-UMD-741.dll.saved (not deleted).
-CORRECTION: EXP732/733 absence-of-new-callback conclusions are invalid without
-loaded-UMD identity; do not patch another DXGI guard based on them. Kernel job
-initialization fix remains separately validated; IMMEDIATE fix hardware pending.
-RawETL4MB, eventsLost0; DXGI also reports no swapchain output, but mixed-binary
-setup must be fixed before attributing that. D3D10 version events absent.
-Evidence EXP734-runtime-etw/{EXP734-loaded-shadow.json,image-identity-match.json,
-umd-image-events.json,EXP734-runtime.etl,client-events.json}.
-EXP735 isolates unchangedclient with noDLLs/System32cwd. ETW confirms client4636
-loads System32744 (checksum12317640/timestamp1790017552); shadow excluded.
-_Present now ENTERS: flags1(Blt), interval0, srcindex0,dsthandle0,src/context valid.
-It returns80070057 at Flip-only guard (expected2). This is the measured blocker.
-Fix75bc5baff3b638e5d5f483686153cca523738117 admits exactly1or2; rejectsboth3,
-unknownflags/intervals and other invalidargs. Actual real-DDI RED->GREEN,
-x64producer/materializer/retirementPASS; both nativearchives compile; onlyDxgiFns
-changes in prepared trees. Candidate745 package/hardware next, no queue/caps change.
-Evidence EXP735-system-umd/{loaded-umd-proof.json,EXP735-umd-trace.txt};
-EXP736-blt-present/{red,green,projection-comparison.json}.
-Exact744cleanup succeeded and ordinary recovery restored; verify finalbaseline.
-Keep isolatedclient, ETWloadedmoduleproof, full-ownerinstall and orderlyboots.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -146,8 +106,8 @@ Do not count planning, transfers or an empty output as completed work. Verify
 on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
-[PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] Candidate745 observedBlt-present correction package gates.
-[NEXT] Verify runtime callback/KMD presentation with correct loaded745 UMD.
-[HW] Standard Present and stable complete physical image remain unproven.
-POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
+[PASS] EXP736 exact745 standard runtime Create/Draw/Present and native callbackS_OK.
+[NOW] DWM repeat889800b0 failures; physical corruption persists per operator.
+[NEXT] Identify first DWM creation HRESULT/contract; deterministic gate when reproducible.
+[HW] Only a justified DWM discriminator/fix run; original first-runtime-test target met.
+POST-HARDWARE: correct stable accelerated desktop; OpenGL/CS1.6 only afterward.
