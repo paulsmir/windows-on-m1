@@ -18,20 +18,21 @@ OpenGL/CS1.6 follow desktop acceptance. Ordinary setup errors are not GPU verdic
 
 ## Current source / candidate
 Integration worktree: /Users/pavel/public_windows/.worktrees/integration-ad04-windows-compiler.
-Compiled production boundary: 749e7154720688dfcf42fbf09ce81a7a1574808e.
+Compiled fix boundary: 5eaa15da2ecafa7d540f25e31059f7a7f6231d9a (package742).
 Diagnostic 34e2498581855cbfe168bf4b64197ab8a4607f90; WDK fix fbd96fae;
 original compute done predicate restored749e7154, regression tests27bd1369 PASS.
 Latest prior bookkeeping HEAD f4016d36cedb1e6e9312b502112b10a65d74ab04.
-Package741 is unchanged. All artifact paths below are rooted at
+Package742 is current;741 is the preserved pre-fix reference. All artifact paths below are rooted at
 /Users/pavel/public_windows/.local/experiments (NOT the worktree's .local).
-Candidate: EXP726-compute-identity-package741/{package,qualification,pinned.cer}.
+Candidate: EXP730-initialized-compute-742/builder/package. Unchanged client/cert
+remain in EXP726-compute-identity-package741/{qualification,pinned.cer}.
 Manifest/provenance-final.json plus builder-all-input-summary.json record335/336
 matching files; the sole mismatch is an uncompiled host test. Original source
 archive is unavailable; recorded integration archive is explicitly post-build.
-SYS b0b4c86e53545853ba1b6827d1d2b4ab15db7014e1d87c2a8781379f35428203
-UMD e8edb9423617497293da38e1f2dcb9216e212aa29c9b8618b8697bd5e40caa38
-INF d9c004ac3785ff5fd5e621ba1e4bb9d7143d3b276c8b29bd4d691cff93c5b305
-CAT c0c07ae50ded732cdb4e0ce8e0a363eb837163a89eec00901d29ac49646f5ed1
+SYS 1758a4927ce4cf322a30703404f572675115625b927da7446feacf0415dda644
+UMD bcb17e54233083500d2354db6b23d8e148a6a93fd9edcecb10567629db3ccf0e
+INF 2c26b7e5cc6a3518df4f080893e78f2136b63f83e20509101004e867b45ee6bc
+CAT 3697d73de96bc83263d01bfe66a5540296343e4acdc8f49e67a345de28fb453c
 Client ec0adf38e1963d9eb8ec13ec9b998e15bdb570c6add4d8087a77a05afce9bf15
 Cert 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda
 Signer E9BE15BD2A184BFABA0C8035B3C620C58037A241. Existing TESTSIGNING and exact
@@ -63,25 +64,27 @@ SYS/UMD or signer;8CPU; AutoAdminLogon0 and no DefaultPassword. Receipt under
 the evidence directory: independent-baseline-20260921T171523Z.json. No login armed.
 
 ## Current causal result / next action
-EXP729 is a valid Session1 console run: CreateDevice/SwapChain PASS, Present
-887a0005/reason887a0020. Pair184bytes matches device/service; fence335, version4,
-MixedBranch0. Compute count4181787912 and event2433204898 are already garbage in
-Build and unchanged at RunTa; job/provider identities match. Guard6/subguard2.
-AppleAgxExp208BuildJob copies an uninitialized local candidate's compute fields
-while filling only TA/3D. Commit5eaa15da2ecafa7d540f25e31059f7a7f6231d9a initializes
-that candidate. Deterministic nonzero-stack-pattern regression RED -> GREEN;
-6 related tests PASS. Fixture CPU token updated after realloc in test only.
-Raw/decoded evidence and two unchanged-corruption photos: EXP729-console-identity.
-Independent ordinary baseline17:37:12Z: Code28, no package/service/module/files/
-signer;8CPU; autologon0/no password. Candidate742 build/package next; fix NOT yet
-hardware validated. Single variable: constructor initialization, retain diagnostic.
-Reuse successful sequence: ordinary clean -> orderly exit -> full-owner584/406
-WITHOUT package -> explicit install THERE -> temporary autologon -> orderly fresh
-full-owner -> clear password/autologon -> console user/Explorer/DWM checks ->
-first failure or ONE Interactive-token client. Never install in ordinary broker-OFF.
-EXP729/{full-owner.sh,ordinary.sh,install.ps1,cleanup.ps1,capture.ps1,after-login.ps1}
-now provides executed recipes under artifact directory. Rehash candidate inputs
-and isolate task/result names for the next experiment; no direct SSH client.
+EXP729 valid Session1 run exposed garbage compute fields already in Build,
+unchanged at RunTa (same job/provider, command4/MixedBranch0/fence335).
+AppleAgxExp208BuildJob copied an uninitialized candidate. Fix5eaa15da initializes
+it; pattern regression RED->GREEN,6 related tests PASS. EXP730 candidate742 is
+hardware-validated for this fix: fence298 BackendSubmitResult0, CompletionStatus0,
+TA/3D observed stamps match expected0x7a000100/0x3d000100 and done2/2;
+NotifyInterrupt/Dpc1/1. No compute rejection. Standard client PID4876/Session1
+still returns Present887a0005/reason887a0020 after CreateDevice/SwapChain0.
+Do not call this stable desktop or diagnose firmware from normal fault-snapshot.
+Evidence EXP730-initialized-compute-742/{EXP730-client.json,EXP730-client.stdout.txt}.
+Clean ordinary baseline17:59:48Z: Code28/no package/service/module/files/signer,
+8CPU; autologon0/no password. Candidate742 package remains immutable.
+Next EXP731: only process-local APPLE_AGX_UMD_TRACE_FILE for unchanged client742
+experiment. Existing diagnostic covers native dispatch, render/flush status and
+pfnPresentCb and adds read-only residency queries. Need FIRST failed user-mode
+operation after physical completion; no new semantic patch before that evidence.
+Source: mesa/winsys/agx_d3d10_windows.cpp PresentationSubmit/FlushStatus;
+umd/src/umd_runtime_device.c Diagnostic; umd_draw_composer.c dispatch/retire.
+Reuse EXP730 executed full-owner/install/autologon/capture/cleanup recipes.
+Install only in full-owner584/406 after clean ordinary; orderly exit BEFORE
+chainload; one console Interactive-token client, no direct SSH client.
 ## Fixed execution recipe — do not rediscover
 Git: /opt/homebrew/bin/git (system Git hits unaccepted Xcode license).
 Host cwd /Users/pavel/public_windows; Python proxyenv/bin/python.
@@ -123,7 +126,7 @@ on-disk artifacts/tool exits directly. No repeated "continue" handoff loops.
 
 HARDWARE ROADMAP
 [PASS] Native stack has prior execution evidence;741 paired diagnostic/offline gates.
-[NOW] Build/sign/hash candidate742 constructor initialization.
-[NEXT] Same console experiment verifies zero spurious compute metadata and Present.
-[HW] Candidate742 physical validation; stable correct picture remains unproven.
+[NOW] EXP731 existing UMD trace selects first failure after successful completion.
+[NEXT] Correct the measured flush/presentation owner, then repeat same console test.
+[HW] Standard Present and stable complete physical image remain unproven.
 POST-HARDWARE: sustained correct desktop, longer acceptance; OpenGL/CS1.6 later.
