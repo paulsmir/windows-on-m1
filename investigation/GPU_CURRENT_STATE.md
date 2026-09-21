@@ -1936,6 +1936,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2317,4 +2319,31 @@ ARM64 package/sign/hash gate for the diagnostic.
 [NEXT] Fix the resulting exact runtime/KMD invariant, then immediately verify
 KMD Render/Patch/Submit, AGX completion and standard DXGI Present.
 [HW] Successful physical KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP709 proves KMD Render entry; native target bounds are NOW
+Exact package722 and one standard client passed all admission, residency and
+paging-wait gates. KMD retained device slot00 for PID4000/TID8632/sequence1:
+guard19 AdmissionUmdRenderGuardPrepare, status0xc0000141
+STATUS_INVALID_ADDRESS, command0x18a8, DMA0x50000, private0x51000,
+allocations9, patch-out64 and Win32 context. Thus Render reached KMD and failed
+inside AdmissionDynamicRenderBuild before Patch/Submit. The service mirror was
+absent but the existing fixed device receipt is authoritative. No monitored
+event and no new physical observation. Exact cleanup completed.
+
+The actual standard client and Asahi batch use the 2560x1600 swap-chain render
+target. The dynamic KMD path still hardcodes native targets to 16x16 even though
+the existing allocation-view validator already bounds width, height, pitch and
+referenced bytes against the allocation description. Remove only that stale
+fixture restriction and apply the existing bounded view contract to native
+targets. Offline gate: 2560x1600 native view accepted, malformed/oversize views
+rejected, real x64 producer and ARM64 link.
+HARDWARE ROADMAP
+[PASS] Standard runtime through native producer/capture/seal, residency and
+paging wait into KMD Render; exact guard/status receipt from EXP709.
+[NOW] Replace stale 16x16 native-target gate with the bounded allocation-view
+contract. Completely offline through x64 execution and ARM64 link.
+[NEXT] Exact package and one Air run; require Render/Patch/Submit and AGX
+completion before assessing standard DXGI Present.
+[HW] KMD Render acceptance and first physical AGX completion remain unproven.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

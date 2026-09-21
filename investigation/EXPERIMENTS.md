@@ -45201,6 +45201,33 @@ Immutable EXP709-kmd-render-guard-722.zip SHA
 Next: verify the ordinary recovery baseline, exact stage/signature/bind gate,
 then run the standard client once and collect the mirrored service receipt.
 
+### EXP709 actual — KMD Render entry; native target rejected as invalid address
+Recovery was clean after the required rescan: one inert APPL0002 Code28, no
+package/service/files/trust, 8 CPUs, NVMe and input healthy, no monitored events.
+Package722 exact hashes and all four Air signatures were Valid; full-owner bind
+reached Code0, Running, Start12/Platform14. The post-login exact gate and 65s
+quiet interval were clean. One standard client PID4000/TID8632 reached real
+producer seal, all-nine MakeResident E_PENDING, successful fence0x1b61 wait and
+post-wait RESIDENTINGPUMEMORY, then pfnRenderCb E_FAIL. The fixed device-key
+receipt is `[1,64,1,4000,8632,19,0xc0000141,0x18a8,0x50000,0x51000,9,0,64,0,0,0x80000000]`:
+guard19 is AdmissionUmdRenderGuardPrepare and status0xc0000141 is
+STATUS_INVALID_ADDRESS. Therefore KMD Render entry is proven and the failure is
+inside AdmissionDynamicRenderBuild before Patch/Submit. The attempted service-
+key mirror was absent, but the pre-existing device slot was retained and is the
+authoritative result. No monitored event occurred; no new physical observation
+was supplied. Evidence hashes: receipt compact
+ec8b06cb1d1ca12b4ed2b7c687448dedd0045a0165d00c7cb669c537739acdec;
+UMD trace a12f6ab91f2d18d9f0af1cd2e2c1ca8bae5d6f5631aaa16d5674ff1bf57c07a8.
+Exact package cleanup completed before shutdown.
+
+The standard client and native batch both select a 2560x1600 target, while
+AdmissionDynamicRenderBuild still rejects every native target except 16x16.
+That stale host-fixture restriction is a deterministic causal failure before
+the general allocation/view bounds check. Next change removes only the 16x16
+restriction and applies the existing bounded allocation-view contract to the
+native target as well; no allocator, composer, physical mapping or scheduler
+change.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,
