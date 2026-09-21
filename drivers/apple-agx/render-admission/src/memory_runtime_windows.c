@@ -702,6 +702,44 @@ _Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeScanoutView(
   return STATUS_SUCCESS;
 }
 
+_Use_decl_annotations_ NTSTATUS AdmissionMemoryRuntimeSeedPostDisplay(
+    ADMISSION_CONTEXT *Context,
+    const DXGK_DISPLAY_INFORMATION *PostDisplay) {
+  ADMISSION_SCANOUT_MEMORY_VIEW destination;
+  MM_COPY_ADDRESS source;
+  SIZE_T copied = 0u;
+  NTSTATUS status;
+  if (Context == NULL || PostDisplay == NULL ||
+      KeGetCurrentIrql() != PASSIVE_LEVEL ||
+      PostDisplay->PhysicAddress.QuadPart <= 0 ||
+      PostDisplay->Width != APPLE_AGX_SCANOUT_J313_WIDTH ||
+      PostDisplay->Height != APPLE_AGX_SCANOUT_J313_HEIGHT ||
+      PostDisplay->Pitch != APPLE_AGX_SCANOUT_J313_STRIDE ||
+      (PostDisplay->ColorFormat != D3DDDIFMT_A8R8G8B8 &&
+       PostDisplay->ColorFormat != D3DDDIFMT_X8R8G8B8))
+    return STATUS_INVALID_PARAMETER;
+  status = AdmissionMemoryRuntimeScanoutView(Context, &destination);
+  if (!NT_SUCCESS(status))
+    return status;
+  if (destination.CpuAddress == NULL ||
+      destination.Bytes < APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+    return STATUS_INVALID_BUFFER_SIZE;
+  if (destination.GuestIpaAddress ==
+      (ULONGLONG)PostDisplay->PhysicAddress.QuadPart)
+    return STATUS_SUCCESS;
+  source.PhysicalAddress = PostDisplay->PhysicAddress;
+  status = MmCopyMemory(
+      destination.CpuAddress, source,
+      APPLE_AGX_SCANOUT_J313_SURFACE_SIZE,
+      MM_COPY_MEMORY_PHYSICAL, &copied);
+  if (!NT_SUCCESS(status))
+    return status;
+  if (copied != APPLE_AGX_SCANOUT_J313_SURFACE_SIZE)
+    return STATUS_PARTIAL_COPY;
+  KeMemoryBarrier();
+  return STATUS_SUCCESS;
+}
+
 static ULONGLONG AdmissionMemoryReadU64(
     _In_reads_(8) volatile const unsigned char *Address) {
   ULONGLONG value = 0ULL;
