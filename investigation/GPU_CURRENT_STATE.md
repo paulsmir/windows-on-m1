@@ -1964,6 +1964,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2561,5 +2563,17 @@ HARDWARE ROADMAP
 [PASS] Physical completion/interrupt/DPC.
 [NOW] One EXP716 client reads post-DPC health owner.
 [NEXT] Fix exact fault transition and retest Present.
+[HW] First UMD/KMD Present entry and successful DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP716 inconclusive; package731 export-order fix built
+The health snapshot was absent because the PASSIVE correlation exporter raced
+ahead of scheduler DPC snapshot creation. Fix9bfb8ba6 orders snapshot before
+export and flushes receipts from the existing PASSIVE worker. ARM64 package731
+build is zero-warning/error; immutable hash/sign/preregistration remains.
+HARDWARE ROADMAP
+[PASS] Physical completion, interrupt and DPC.
+[NOW] Finalize package731 artifact and rerun the same post-DPC discriminator.
+[NEXT] Fix the exact health-state violation and retest Present.
 [HW] First UMD/KMD Present entry and successful DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.

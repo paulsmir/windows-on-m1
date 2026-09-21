@@ -45441,6 +45441,15 @@ clientf7c2d896284070975f9c8db58f2f0f14b7a25a391eec339466e26b529c5675df.
 Archive SHA266b93bbb7f7f84bfe4370a3412e958736ecfaf270b2b147ceffc706192869df.
 One exact client, no replay.
 
+### EXP716 actual — receipt export raced DPC snapshot
+Package730 exact run reproduced successful native dispatch/retirement and
+Present887a0005. Wom1PostDpcHealth was absent. Source review proved the existing
+correlation PASSIVE exporter could run before AdmissionSchedulerDpc created the
+snapshot. No behavioral verdict was taken. Exact cleanup completed. Fix
+9bfb8ba6 captures the fence, executes scheduler DPC/snapshot, then queues the
+existing exporter, which also flushes the GDI/health receipts at PASSIVE_LEVEL.
+Package731 ARM64 builds pass; artifact finalization is next.
+
 ## EXP715 — exact RunTa guard
 Preregistered 2026-09-21. Implementation e3fa0698 records only the RunTa guard
 and queue-runtime result. Single variable; one client, no replay. Package729
