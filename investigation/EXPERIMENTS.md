@@ -45309,6 +45309,49 @@ variable is the existing diagnostic-only AppleAgxSubmitQualification profile,
 with launcher output captured durably from before client start. No behavioral
 submission change and no replay of package723.
 
+## EXP711 — durable Patch/Submit/completion discriminator
+UTC preregistration 2026-09-21. Reuse implementation070b1481 and the exact
+EXP710 producer. Single variable: enable the existing diagnostic-only
+AppleAgxSubmitQualification broker trace; submission behavior and all physical
+interfaces remain unchanged. Capture full launcher stdout to an immutable file
+before client start so a reset cannot erase Patch/Submit/backend evidence.
+
+WHY THIS HYPOTHESIS:
+1. EXP710 proves pfnRenderCb and native-dispatch S_OK, then no retirement/evict
+   or client exit before a guest reset.
+2. UMD phase AdmissionDrawAccepted places the first unknown boundary after
+   Render, among Patch, Submit, backend launch and completion.
+3. Existing submit-qualification fields already distinguish these stages over
+   the broker; registry receipts were unavailable after the reset.
+
+WINDOWS CONTRACT: dxgkrnl must Patch and Submit the accepted physical patch-list
+DMA buffer, then receive DXGK_INTERRUPT_DMA_COMPLETED and DPC notification for
+the same fence.
+
+AGX/ASAHI CONTRACT: the existing backend launches TA/3D queues and reports the
+physical completion/event state for that fence.
+
+TRANSLATION: retain the unchanged physical allocation and patch-list path;
+observe exact Patch/Submit guards, backend phase, queue progress and completion
+fence through the existing broker trace.
+
+WHAT IS STILL UNKNOWN: the first stage not completed after Render S_OK. One run
+with durable trace answers it; no client replay.
+
+Package724 SubmitQualification ARM64 build, analysis, Universal, Inf2Cat and
+catalog membership PASS with zero warnings/errors. INF
+6f0903e0ccf73c4c5ffa4f3cce146a02ff5518725a6c06e04c927e5dc7b5197d; SYS
+521fcc27ad14d05001f2a0dbd603ba0d49c0dbc691bea641eb98216d3f13eb07; UMD
+2500304f37880c9c33f9968e9d121a34924a7c8d52e642d09104c435e1e45342; CAT
+beb217339acf0aeba586e27e16db3993a0514ca90276ce11cc72f74e8189e83;
+client d5c1fa398717a4aca5c755042ea69306e1a0c23b6f5268ea5820370f07a15ecb;
+certificate 97145866a1530003077eacd8457f1a7a644d662423278fd94e450f903c85cbda.
+Immutable EXP711-submit-trace-724.zip SHA
+e448b828d4336b527cc037f93b1dbf6197167856c2de75ad1128abc0fff98237.
+Use clean ordinary recovery, exact stage/signature/bind/quiet gates, one client,
+then evidence-first exact cleanup. Recovery artifact remains377/392 with385
+GPU-hidden emergency only if ordinary recovery cannot restore SSH.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

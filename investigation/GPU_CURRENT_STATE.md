@@ -1942,6 +1942,8 @@ POST-HARDWARE: complete desktop composition and desktop acceptance.
 
 
 
+
+
 ## EXP708 resident set proven; reliable KMD entry receipt NOW
 All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
 no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
@@ -2395,4 +2397,21 @@ offline gate is behavior-equivalent ARM64 build plus trace decoder tests.
 [NEXT] One Air run with durable launcher trace to identify Patch, Submit,
 backend launch or completion as the first missing stage; fix that exact owner.
 [HW] Successful completion fence and standard DXGI Present without guest reset.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
+## EXP711 package724 ready — durable submit/completion trace
+The existing diagnostic-only SubmitQualification profile is packaged over the
+unchanged EXP710 implementation. ARM64 driver/client builds, analysis,
+Universal, Inf2Cat and catalog gates PASS. Immutable archive SHA
+e448b828d4336b527cc037f93b1dbf6197167856c2de75ad1128abc0fff98237.
+The one run will capture launcher stdout durably before client start and identify
+the first missing stage after Render S_OK. No behavioral submission change and
+no replay.
+HARDWARE ROADMAP
+[PASS] Render acceptance S_OK; exact recovery; SubmitQualification ARM64
+package/sign/hash gate.
+[NOW] EXP711 exact stage/bind/quiet gate and one durably traced Air client.
+[NEXT] Fix only the first missing Patch/Submit/backend/completion invariant
+shown by the trace, then immediately return to one hardware verification.
+[HW] Successful completion fence and standard DXGI Present without reset.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
