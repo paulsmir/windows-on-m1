@@ -45944,3 +45944,40 @@ first bounded DWM UMD stage/error that precedes the black composition. Failure:
 no UMD trace despite a reproduced black desktop. Same full-owner/recovery and
 package hashes as EXP720. Evidence `C:\Windows\Temp\EXP720-D1-umd.log` and
 `.local/experiments/EXP720-hardware/`.
+
+### EXP720-D1 actual — UMD hypothesis rejected; primary seed selected
+The fresh DWM process did not load AppleAgxRenderAdmissionUmd.dll and produced
+no UMD trace. KMD receipts instead proved the first successful desktop transfer
+was only66x68/17952bytes from aperture segment1 into the new local primary base
+0x1500000000, followed by successful SetVidPnSourceAddress and physical latches.
+This directly explains the black initial primary plus isolated dirty UI edges.
+
+## EXP721 — seed local primary from inherited POST framebuffer
+Preregistered 2026-09-21. WHY THIS HYPOTHESIS: operator photo and three identical
+logical screenshots prove the malformed surface exists before DCP; KMD transfer
+receipt proves Windows begins with a small dirty rectangle; source inspection
+proves AcquirePostDisplayOwnership framebuffer pixels are validated but discarded.
+Microsoft documents this callback as the current POST/previous-driver framebuffer
+for seamless initial display transition.
+
+WINDOWS CONTRACT: preserve the current display state across PnP ownership and
+initial mode transition. AGX/ASAHI CONTRACT: DCP scans the existing local primary
+pool; later presents can update dirty rectangles only. TRANSLATION: commit
+7b33cb5101ab3e9aed9bc858297645b10323bce2 physically copies the exact inherited
+2560x1600x4 framebuffer into local primary before ScanoutStart. Partial copies
+fail StartDevice. WHAT IS STILL UNKNOWN: whether VidMM preserves the seeded
+contents until the first local-primary latch.
+
+Package735 ARM64 build/analyze and client gates pass with0 warnings/errors.
+Source archive SHA169af98829d68d97c70dd46f93b31fd310f21c94c229ed9760bb22f48b1709cf.
+Artifact `.local/experiments/EXP721-postdisplay-seed-735.zip` SHA
+0a47030e1f876ac99dc013ad047c9bee2d014003a572e04e43dc891747d842a3.
+INFbc7d2957e685b61770b91f62159bb71982bd26447823ab34bda3c96964e8a3dc;
+SYS35ed11e395e15fc7d6e700336c01c828fd47eaa21d3801855d4fadf8ba31bcb7;
+UMDd8a344e04944464d7f326b9fe109aae0f3e6f1eee719bc36aa59426b7841fb8b;
+CAT24575408a5cfb6a2bc69713ac8a72c39cd36c9eabddd1d720ce8132fba81e942;
+client97af9c8cf6aca16606fd672de40a0b07b9ac926581f15b3ef9a29b20146551ab.
+Stage-only package in recovery without binding, boot full-owner once, verify
+natural exact bind, capture logical and physical screen after Start/Alt+Tab,
+then exact cleanup. Expected complete inherited desktop plus stable dirty updates;
+failure is black/partial surface or StartDevice rejection. One client, no replay.

@@ -2707,6 +2707,19 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## EXP721 package735 ready — inherited primary seed
+Package735 gates PASS; archive SHA
+0a47030e1f876ac99dc013ad047c9bee2d014003a572e04e43dc891747d842a3.
+Recovery will stage without `/install`; one full-owner boot activates the exact
+package, reducing the binary-test loop to one required Windows boot.
+HARDWARE ROADMAP
+[PASS] Black surface caused by lost inherited primary before partial dirty blits.
+[NOW] One EXP721 Air run verifies seeded initial desktop and dirty updates.
+[NEXT] If seed survives, validate physical stability; otherwise identify the
+first owner that overwrites local primary after seed.
+[HW] Stable correct physical picture remains the acceptance point.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
 ## Post-display primary seeding is NOW
 EXP720-D1 produced no DWM UMD module/trace. Existing KMD receipts instead expose
 the exact initialization gap: source address points scanout at the new local
