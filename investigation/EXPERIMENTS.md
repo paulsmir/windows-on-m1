@@ -45169,6 +45169,15 @@ Immutable EXP703-render-residency-718.zip SHA
 b214b8658dfac4f1dc643b9406e9034866b0543100c0fc714ee2604044daf927.
 Next exact stage/bind/preflight and one client; no replay.
 
+### EXP708 actual — full set resident; Render still pre-receipt EFAIL
+Exact package721 bound and dedicated65s interval clean. One client: MakeResident
+all9 E_PENDING/fence0x1b61, wait S_OK, aggregate post-wait QueryResidency
+S_OK/RESIDENTINGPUMEMORY, then sequence1 pfnRenderCb EFAIL; paired Evict S_OK.
+Allocation validity, locking, residency and paging synchronization are closed.
+No retained KMD Render slot. Exact cleanup succeeded. Next diagnostic mirrors
+every existing KMD Render guard receipt into the service key independently of
+the device-key write, without Render behavior change.
+
 ## EXP706 — exact package720 bind retry before paging-wait client
 UTC preregistration 2026-09-21. Reuse immutable package720 archive SHA
 f6643bf150d2ec97a9e5e1bac83d270e6f0e912e9896dbf90063f9052fb18b48,

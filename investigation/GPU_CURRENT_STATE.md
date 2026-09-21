@@ -1934,6 +1934,17 @@ preflight classification. Required by runtime maskFFFF; deterministic offline.
 [HW] First physical native draw/completion and successful standard DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
 
+## EXP708 resident set proven; reliable KMD entry receipt NOW
+All9 are RESIDENTINGPUMEMORY after successful wait, then pfnRenderCb EFAIL with
+no KMD slot; Evict S_OK. Residency is closed. Cleanup complete. KMD Render guard
+now mirrors synchronously to service key on every path; host tests5 PASS.
+HARDWARE ROADMAP
+[PASS] Native graph, locks, sequence, handles, residency and paging wait on Air.
+[NOW] Package diagnostic-only KMD service-key guard mirror.
+[NEXT] One Air client: obtain exact KMD guard or prove pre-KMD rejection.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
 ## EXP707 pre-client storage reset; EXP708 stable-interval retry
 Exact package721 bound but two stornvme129 events occurred before the client, so
 no diagnostic run. Cleanup complete and recovery launched. EXP708 may reuse the

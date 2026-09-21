@@ -654,13 +654,20 @@ _Use_decl_annotations_ VOID AdmissionRecordUmdRenderGuard(
       !NT_SUCCESS(IoOpenDeviceRegistryKey(Context->PhysicalDeviceObject,
           PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &key)))
     key = NULL;
-  if (key == NULL) {
-    RtlInitUnicodeString(&servicePath,
-        L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
-    InitializeObjectAttributes(&attributes, &servicePath,
-        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-    if (!NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) return;
+  if (key != NULL) {
+    WriteBinary(key, valueName, receipt, sizeof(receipt));
+#if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
+    WriteDword(key, L"Wom1UmdRenderGuard", Guard);
+    WriteDword(key, L"Wom1UmdRenderStatus", (ULONG)Status);
+#endif
+    ZwClose(key);
   }
+  key = NULL;
+  RtlInitUnicodeString(&servicePath,
+      L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\AppleAgxAdmission");
+  InitializeObjectAttributes(&attributes, &servicePath,
+      OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+  if (!NT_SUCCESS(ZwOpenKey(&key, KEY_SET_VALUE, &attributes))) return;
   WriteBinary(key, valueName, receipt, sizeof(receipt));
 #if defined(APPLE_AGX_SUBMIT_QUALIFICATION)
   WriteDword(key, L"Wom1UmdRenderGuard", Guard);
