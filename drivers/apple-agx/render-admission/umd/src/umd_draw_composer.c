@@ -154,6 +154,19 @@ static HRESULT make_resident(
     if(partial && FAILED(evict_residency(d,s,partial))) d->DrawTerminal=TRUE;
     return FAILED(result)?result:E_FAIL;
   }
+  if(AdmissionUmdDiagnosticEnabled()) {
+    D3DDDI_RESIDENCYSTATUS status=(D3DDDI_RESIDENCYSTATUS)0;
+    D3DDDICB_QUERYRESIDENCY query={};
+    query.NumAllocations=requested;
+    query.HandleList=handles;
+    query.pResidencyStatus=&status;
+    HRESULT queryResult=d->KernelCallbacks->pfnQueryResidencyCb(
+        d->RuntimeDevice.handle,&query);
+    UINT queryValues[4]={requested,(UINT)status,
+        (UINT)make.PagingFenceValue,(UINT)(make.PagingFenceValue>>32)};
+    AdmissionUmdDiagnostic("native-residency-after",queryResult,
+        queryValues,ARRAYSIZE(queryValues));
+  }
   s->ResidencyHeld=TRUE;
   return S_OK;
 }
