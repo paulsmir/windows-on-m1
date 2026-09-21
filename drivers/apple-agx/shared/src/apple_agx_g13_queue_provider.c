@@ -292,8 +292,14 @@ static APPLE_AGX_BACKEND_BOOL AppleAgxG13ProviderRunTa(
   provider->LastSubmitRuntimeResult=0u;
 #define SUBMIT_REJECT(g) do { provider->LastSubmitGuard=(g); return APPLE_AGX_BACKEND_FALSE; } while(0)
   if (Job == APPLE_AGX_G13_PROVIDER_NULL) SUBMIT_REJECT(AppleAgxG13SubmitGuardArguments);
-  if (provider->Phase != AppleAgxG13QueueProvider3dStaged ||
-      Fence != provider->PendingFence) SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
+  if (provider->Phase != AppleAgxG13QueueProvider3dStaged) {
+    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardPhase;
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
+  }
+  if (Fence != provider->PendingFence) {
+    provider->LastSubmitRuntimeResult = AppleAgxG13PhaseFenceGuardFence;
+    SUBMIT_REJECT(AppleAgxG13SubmitGuardPhaseFence);
+  }
   if (!AppleAgxG13Provider3dMatches(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Match);
   if (!AppleAgxG13Provider3dValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardD3Valid);
   if (!AppleAgxG13ProviderTaValid(provider, Job)) SUBMIT_REJECT(AppleAgxG13SubmitGuardTaValid);

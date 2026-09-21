@@ -236,6 +236,23 @@ static void TestComputeRejectReportsExactInvariant(void) {
   assert(f.Provider.LastSubmitRuntimeResult ==
          AppleAgxG13ComputeGuardEvent);
 }
+static void TestPhaseFenceRejectReportsExactInvariant(void) {
+  FIXTURE f;
+  Init(&f);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(!f.Io.Queues.RunTa(f.Io.Context, &f.Job, 41u));
+  assert(f.Provider.LastSubmitGuard == AppleAgxG13SubmitGuardPhaseFence);
+  assert(f.Provider.LastSubmitRuntimeResult ==
+         AppleAgxG13PhaseFenceGuardPhase);
+
+  Init(&f);
+  assert(f.Io.Queues.Create(f.Io.Context));
+  assert(f.Io.Queues.Run3d(f.Io.Context, &f.Job, 41u));
+  assert(!f.Io.Queues.RunTa(f.Io.Context, &f.Job, 42u));
+  assert(f.Provider.LastSubmitGuard == AppleAgxG13SubmitGuardPhaseFence);
+  assert(f.Provider.LastSubmitRuntimeResult ==
+         AppleAgxG13PhaseFenceGuardFence);
+}
 static void TestExactCompletion(void) {
   FIXTURE f; APPLE_AGX_G13_QUEUE_PROVIDER_EVENT_BATCH batch;
   unsigned char event[APPLE_AGX_G13_EVENT_MESSAGE_SIZE];
@@ -469,6 +486,7 @@ static void TestComputeCompletesBeforeRenderPublication(void) {
 }
 int main(void) {
   TestAtomicStagingAndOrder(); TestComputeRejectReportsExactInvariant();
+  TestPhaseFenceRejectReportsExactInvariant();
   TestExactCompletion(); TestFailClosedQuiesce();
   TestIngestFailureNamesDecoderOwner();
   TestReadOnlyJobPlanTracksQueueLifetime();

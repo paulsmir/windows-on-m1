@@ -108,6 +108,12 @@ enum {
   AppleAgxG13ComputeGuardDonePointer,
 };
 
+enum {
+  AppleAgxG13PhaseFenceGuardNone = 0u,
+  AppleAgxG13PhaseFenceGuardPhase = 0x100u,
+  AppleAgxG13PhaseFenceGuardFence,
+};
+
 APPLE_AGX_BACKEND_BOOL AppleAgxG13QueueProviderInitialize(
     APPLE_AGX_G13_QUEUE_PROVIDER *Provider,
     const APPLE_AGX_G13_QUEUE_RUNTIME_CONFIG *Config,
