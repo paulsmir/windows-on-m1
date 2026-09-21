@@ -2707,6 +2707,26 @@ ARM64 package/sign/hash gates.
 [HW] Stable visually correct Air display with GPU driver.
 POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
 
+## Post-display primary seeding is NOW
+EXP720-D1 produced no DWM UMD module/trace. Existing KMD receipts instead expose
+the exact initialization gap: source address points scanout at the new local
+primary base, while the first successful desktop present copies only a66x68
+dirty rectangle (17952bytes). Operator photo and CopyFromScreen therefore show
+the same empty black primary plus updated UI edges.
+
+Microsoft's post-display ownership and seamless-transition contract identifies
+the returned physical framebuffer as the current POST/previous-driver surface.
+Implementation7b33cb51 validates its exact J313 geometry/format and copies the
+full surface into the existing noncached local primary after ownership acquire
+and before ScanoutStart. Partial copy fails StartDevice; no render, allocator,
+queue, composer or Present behavior changes. Focused26 tests PASS.
+HARDWARE ROADMAP
+[PASS] Failure localized to lost initial primary contents before dirty blits.
+[NOW] ARM64 build/package gate for full post-display primary seed.
+[NEXT] One Air run must show a complete initial desktop and stable dirty updates.
+[HW] Stable correct physical picture remains pending.
+POST-HARDWARE: longer acceptance, broader D3D, OpenGL and CS1.6.
+
 ## EXP720 physical/logical image localizes failure before scanout
 Operator photo and three DWM CopyFromScreen captures match: an almost-black
 2560x1600 desktop with only white UI edges; Start/Alt+Tab captures are identical.
