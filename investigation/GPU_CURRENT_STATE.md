@@ -1934,6 +1934,18 @@ preflight classification. Required by runtime maskFFFF; deterministic offline.
 [HW] First physical native draw/completion and successful standard DXGI Present.
 POST-HARDWARE: complete desktop composition and desktop acceptance.
 
+## EXP707 pre-client storage reset; EXP708 stable-interval retry
+Exact package721 bound but two stornvme129 events occurred before the client, so
+no diagnostic run. Cleanup complete and recovery launched. EXP708 may reuse the
+same artifact once only after a 60s event-free interval with healthy NVMe; any
+recurrence becomes the current environment blocker.
+HARDWARE ROADMAP
+[PASS] Offline post-wait aggregate diagnostic and package721.
+[NOW] Restore Code28 recovery; then exact bind plus 60s stable storage gate.
+[NEXT] If stable, one client; otherwise environment blocker.
+[HW] Successful KMD Render/Patch/Submit, AGX completion and DXGI Present.
+POST-HARDWARE: complete desktop composition and desktop acceptance.
+
 ## EXP706 paging wait succeeds; Render remains current boundary
 Valid package720 run: MakeResident all9 E_PENDING fence0x1b61, monitored-fence
 wait S_OK, then sequence1 pfnRenderCb E_FAIL with no retained KMD receipt; paired

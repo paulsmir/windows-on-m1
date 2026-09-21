@@ -45283,6 +45283,22 @@ UMDcd6057d532344b8323cf81dbc785c76a681edb9bb858e566d64290f5e164e3a3;
 CAT2193c3eeb55a5b8830914f269ab4b5ef731b5f2d4ddf55ab075de2faee10eb68;
 clientb8b8f7c064d6eabcf557254938525acbb5f96df020cf8ddb1883d1e6da6bd235.
 
+### EXP707 actual — pre-client storage gate INCONCLUSIVE
+Package721 bound with exact hashes/Code0/Running/Start12/Platform14, but two
+stornvme129 resets occurred at approximately boot+10s and boot+20s before any
+client task. Per preregistration no client was created. Exact package/task/trust
+cleanup succeeded and ordinary recovery launched. The diagnostic remains
+hardware-untested. Evidence EXP707-live/{bound.json,pre-client-failed.json,
+cleanup.txt}. No GPU attribution.
+
+## EXP708 — exact package721 retry with stable storage gate
+Reuse identical archive dc46293b76baa3014b7ece2b0a2c0bb323044f068c23ae96f2ef76f25e79ba1a.
+Single purpose: distinguish transient full-owner boot storage reset from a
+stable blocker. Require exact bind and a new 60-second interval with healthy NVMe
+and no additional 129/153/157/41/1001/4101 before creating one client. If any
+event recurs in that interval, stop without client or further retry. No code or
+artifact change. If stable, run once and capture post-wait aggregate residency.
+
 ### EXP703 actual result — valid handles are all nonresident
 Exact package718 bound with Valid signatures, correct hashes, Code0/Running and
 Start12/Platform14. Clean pre-client gate. One standard client (PID3664/TID2908)
